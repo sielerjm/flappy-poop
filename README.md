@@ -2,3 +2,5 @@
 
 Clone of Flappy Bird game with a gut microbiome twist.
 [](Javascript/flappy-poop/img/Flappy_Poop.png)
+
+Original source: https://github.com/Chloeiii/FlappyBird
