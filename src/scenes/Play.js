@@ -8,6 +8,10 @@ import {
   createBestStore,
   createSettingsStore,
   vibrate,
+  rollItem,
+  itemGapY,
+  scoreAfterItem,
+  createEffects,
 } from '../logic.js';
 import { unlock, attachGame, setMuted, isMuted, sfx } from '../sound.js';
 import { createTray } from '../ui/tray.js';
@@ -38,12 +42,14 @@ export class Play extends Phaser.Scene {
     this.diff = difficulty(0, T);
     this.state = 'ready'; // 'ready' | 'playing' | 'paused' | 'dead'
     this.flapLockedUntil = 0;
+    this.effects = createEffects(T);
     attachGame(this.game);
     setMuted(!this.settings.load().sound);
 
     // Scrolling layers
     this.bg = this.add.tileSprite(0, 0, GAME_WIDTH, GAME_HEIGHT, 'bg').setOrigin(0, 0);
     this.pipes = this.physics.add.group({ allowGravity: false, immovable: true });
+    this.items = this.physics.add.group({ allowGravity: false, immovable: true });
     this.ground = this.add
       .tileSprite(0, GAME_HEIGHT - T.groundHeight, GAME_WIDTH, T.groundHeight, 'ground')
       .setOrigin(0, 0)
@@ -57,6 +63,8 @@ export class Play extends Phaser.Scene {
 
     // HUD
     this.scoreText = this.add.text(GAME_WIDTH / 2, 40, '0', { ...TEXT_STYLE, fontSize: '40px' }).setOrigin(0.5).setDepth(20);
+    this.probioticIcon = this.add.image(GAME_WIDTH / 2 - 18, 78, 'probiotic').setScale(0.55).setDepth(20).setVisible(false);
+    this.probioticText = this.add.text(GAME_WIDTH / 2 + 10, 78, '', { ...TEXT_STYLE, fontSize: '18px' }).setOrigin(0, 0.5).setDepth(20).setVisible(false);
     this.readyText = this.add
       .text(GAME_WIDTH / 2, GAME_HEIGHT * 0.3, 'FLAPPY POOP\n\ntap to flap', { ...TEXT_STYLE, fontSize: '26px' })
       .setOrigin(0.5)
@@ -78,6 +86,7 @@ export class Play extends Phaser.Scene {
 
     // Collisions
     this.physics.add.overlap(this.poop, this.pipes, () => this.die(), undefined, this);
+    this.physics.add.overlap(this.poop, this.items, (_poop, item) => this.collectItem(item), undefined, this);
 
     // Input: any pointer (touch/mouse) or Space/Up. Tray taps are ignored by y-band.
     this.input.on('pointerdown', (pointer) => this.flap(pointer));
@@ -192,18 +201,73 @@ export class Play extends Phaser.Scene {
     // Only the top pipe carries the "passed" flag so a pair scores once.
     top.setData('scoring', true);
     top.setData('passed', false);
+
+    const kind = rollItem(this.rng, this.score, T);
+    if (kind) {
+      const y = itemGapY(gapY, gapH, this.rng, kind);
+      const item = this.items.create(x, y, kind);
+      item.setDepth(8);
+      item.body.setCircle(
+        T.items.itemRadius,
+        item.width / 2 - T.items.itemRadius,
+        item.height / 2 - T.items.itemRadius,
+      );
+      item.setVelocityX(-this.diff.pipeSpeed);
+      item.setData('kind', kind);
+    }
   }
 
   applyDifficulty() {
     this.diff = difficulty(this.score, T);
     for (const pipe of this.pipes.getChildren()) pipe.setVelocityX(-this.diff.pipeSpeed);
+    for (const item of this.items.getChildren()) item.setVelocityX(-this.diff.pipeSpeed);
+  }
+
+  refreshProbioticHud() {
+    const n = this.effects.pipesLeft();
+    const show = n > 0;
+    this.probioticIcon.setVisible(show);
+    this.probioticText.setVisible(show);
+    if (show) this.probioticText.setText(`×${n}`);
+  }
+
+  collectItem(item) {
+    if (this.state !== 'playing' || !item.active) return;
+    const kind = item.getData('kind');
+    const ghost = this.add.image(item.x, item.y, kind).setDepth(12);
+    this.tweens.add({ targets: ghost, scale: 1.4, alpha: 0, duration: 180, onComplete: () => ghost.destroy() });
+    item.destroy();
+    if (kind === 'fiber') {
+      this.score = scoreAfterItem(this.score, kind, T);
+      this.scoreText.setText(String(this.score));
+      this.applyDifficulty();
+      sfx.pickup();
+    } else if (kind === 'probiotic') {
+      this.effects.applyProbiotic();
+      this.refreshProbioticHud();
+      sfx.pickup();
+    } else if (kind === 'bacteria') {
+      if (this.effects.hasProbiotic()) {
+        this.effects.consumeProbiotic();
+        this.refreshProbioticHud();
+        this.cameras.main.flash(100, 180, 255, 180);
+        sfx.shield();
+      } else {
+        this.score = scoreAfterItem(this.score, kind, T);
+        this.scoreText.setText(String(this.score));
+        this.applyDifficulty();
+        sfx.hazard();
+      }
+    }
   }
 
   die() {
     if (this.state !== 'playing') return;
     this.state = 'dead';
     this.spawnTimer?.remove();
+    this.poop.setTexture('poop-dead');
     for (const pipe of this.pipes.getChildren()) pipe.setVelocityX(0);
+    for (const item of this.items.getChildren()) item.setVelocityX(0);
     this.pauseShade.setVisible(false);
     this.pauseText.setVisible(false);
     this.cameras.main.shake(200, 0.01);
@@ -256,10 +320,15 @@ export class Play extends Phaser.Scene {
         pipe.setData('passed', true);
         this.score += 1;
         this.scoreText.setText(String(this.score));
+        this.effects.onPipePassed();
+        this.refreshProbioticHud();
         sfx.score();
         this.applyDifficulty();
       }
       if (pipe.x < -T.pipeWidth) pipe.destroy();
+    }
+    for (const item of this.items.getChildren()) {
+      if (item.x < -T.pipeWidth) item.destroy();
     }
   }
 }
