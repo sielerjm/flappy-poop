@@ -83,3 +83,64 @@ export function createBestStore(storage, key = 'flappy-poop:best') {
     },
   };
 }
+
+const SETTINGS_DEFAULTS = { sound: true, music: true, haptics: true };
+
+function normalizeSettings(raw) {
+  const out = { ...SETTINGS_DEFAULTS };
+  if (!raw || typeof raw !== 'object') return out;
+  for (const key of Object.keys(SETTINGS_DEFAULTS)) {
+    if (typeof raw[key] === 'boolean') out[key] = raw[key];
+  }
+  return out;
+}
+
+/**
+ * Settings store around a Storage-like object. Same throw-guard as
+ * createBestStore: private browsing must not take the game down. Unknown keys
+ * in storage are ignored; missing keys get defaults.
+ */
+export function createSettingsStore(storage, key = 'flappy-poop:settings') {
+  let memory = { ...SETTINGS_DEFAULTS };
+  return {
+    load() {
+      try {
+        const raw = storage?.getItem(key);
+        if (raw == null) {
+          memory = { ...SETTINGS_DEFAULTS };
+          return { ...memory };
+        }
+        memory = normalizeSettings(JSON.parse(raw));
+        return { ...memory };
+      } catch {
+        memory = { ...SETTINGS_DEFAULTS };
+        return { ...memory };
+      }
+    },
+    /** Merge a patch of known keys, persist, and return the new settings. */
+    set(patch) {
+      const current = this.load();
+      memory = normalizeSettings({ ...current, ...(patch && typeof patch === 'object' ? patch : {}) });
+      try {
+        storage?.setItem(key, JSON.stringify(memory));
+      } catch {
+        /* storage unavailable: still return the in-memory settings */
+      }
+      return { ...memory };
+    },
+  };
+}
+
+/**
+ * Call navigatorLike.vibrate(pattern) if the API exists. Returns true when the
+ * call was made, false when it no-ops (missing API or a throw).
+ */
+export function vibrate(navigatorLike, pattern) {
+  if (typeof navigatorLike?.vibrate !== 'function') return false;
+  try {
+    navigatorLike.vibrate(pattern);
+    return true;
+  } catch {
+    return false;
+  }
+}

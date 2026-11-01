@@ -24,4 +24,8 @@ export const TUNING = {
   maxPipeSpeed: 200,
   minGapHeight: 130,
   bestKey: 'flappy-poop:best', // localStorage key
+  settingsKey: 'flappy-poop:settings', // localStorage key
+  vibrateOnDieMs: 60, // ms buzz on death (Android / Chrome only)
+  trayHeight: 56, // px band at the bottom reserved for the control tray
+  pauseResumeLockoutMs: 300, // ms after resume during which a tap must not flap
 };
