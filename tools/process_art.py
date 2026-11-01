@@ -1,35 +1,69 @@
 #!/usr/bin/env python3
-"""process_art.py — crop, knock out white, and resize Michael's drawings
-into the gameplay art-contract PNGs.
+"""process_art.py — crop, knock out background white, and resize Michael's
+drawings into the gameplay art-contract PNGs.
 
 Created by Michael Sieler. Last updated: 2026-11-01.
 
 Input:  assets/src/{Poop_Emoji_Alive,Poop_Emoji_Dead,Fiber,Good_Bacteria,Bad_Bacteria}.png
 Output: assets/{poop,poop-dead,fiber,probiotic,bacteria}.png at 48x48 RGBA.
 
-Alive and dead poop share one trimmed canvas (union of both bounding boxes)
-so the sprite does not jump on death. Items are trimmed independently.
+Only white connected to the image border is made transparent, so eyes and
+mouths stay white. Alive and dead poop share one trimmed canvas (union of
+both bounding boxes) so the sprite does not jump on death. Items are
+trimmed independently.
 """
+from collections import deque
 from pathlib import Path
-from PIL import Image, ImageChops
+from PIL import Image
 
 ROOT = Path(__file__).resolve().parent.parent
 SRC = ROOT / "assets" / "src"
 OUT = ROOT / "assets"
 SIZE = 48
-WHITE_CUTOFF = 245  # RGB at or above this (and not already transparent) becomes alpha 0
+WHITE_CUTOFF = 245  # near-white on the border is treated as background
 PAD = 4  # px of source padding kept around the ink after trim
 
 
-def knock_white(im: Image.Image) -> Image.Image:
+def knock_background(im: Image.Image) -> Image.Image:
+    """Make near-white pixels transparent only if they touch the border."""
     im = im.convert("RGBA")
-    r, g, b, a = im.split()
+    w, h = im.size
+    px = im.load()
 
-    def cut(ch):
-        return ch.point(lambda v: 255 if v >= WHITE_CUTOFF else 0)
+    def is_bg(x, y):
+        r, g, b, a = px[x, y]
+        return a > 0 and r >= WHITE_CUTOFF and g >= WHITE_CUTOFF and b >= WHITE_CUTOFF
 
-    white = ImageChops.multiply(ImageChops.multiply(cut(r), cut(g)), cut(b))
-    return Image.merge("RGBA", (r, g, b, ImageChops.subtract(a, white)))
+    seen = bytearray(w * h)
+    q = deque()
+
+    def push(x, y):
+        i = y * w + x
+        if seen[i] or not is_bg(x, y):
+            return
+        seen[i] = 1
+        q.append((x, y))
+
+    for x in range(w):
+        push(x, 0)
+        push(x, h - 1)
+    for y in range(1, h - 1):
+        push(0, y)
+        push(w - 1, y)
+
+    while q:
+        x, y = q.popleft()
+        r, g, b, _ = px[x, y]
+        px[x, y] = (r, g, b, 0)
+        if x:
+            push(x - 1, y)
+        if x + 1 < w:
+            push(x + 1, y)
+        if y:
+            push(x, y - 1)
+        if y + 1 < h:
+            push(x, y + 1)
+    return im
 
 
 def content_bbox(im: Image.Image):
@@ -57,8 +91,8 @@ def scale_to(im: Image.Image, size: int) -> Image.Image:
 
 
 def process_pair(alive_path: Path, dead_path: Path):
-    alive = knock_white(Image.open(alive_path))
-    dead = knock_white(Image.open(dead_path))
+    alive = knock_background(Image.open(alive_path))
+    dead = knock_background(Image.open(dead_path))
     ba = content_bbox(alive)
     bd = content_bbox(dead)
     if not ba or not bd:
@@ -80,7 +114,7 @@ def process_pair(alive_path: Path, dead_path: Path):
 
 
 def process_item(src: Path, dest_name: str):
-    im = knock_white(Image.open(src))
+    im = knock_background(Image.open(src))
     bbox = content_bbox(im)
     if not bbox:
         raise SystemExit(f"{src.name} has no visible ink")

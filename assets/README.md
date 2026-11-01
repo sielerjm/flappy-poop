@@ -2,7 +2,7 @@
 
 Gameplay sprites are listed below. `npm test` checks that the sizes in this table match the PNG files, so if you change a size, update this table and the scene code that positions it.
 
-The player and items are Michael's drawings. Put a new source PNG in `assets/src/` and run `python3 tools/process_art.py` (Pillow) to crop, knock out white, and write the 48×48 contract files. Do not list source files in this table.
+The player and items are Michael's drawings. Put a new source PNG in `assets/src/` and run `python3 tools/process_art.py` (Pillow) to crop, knock out **background** white (not eyes or mouths), and write the 48×48 contract files. Do not list source files in this table.
 
 `pipe.png`, `bg.png`, `ground.png`, and the icons are still placeholders from `tools/make_placeholders.py`. That script must **not** overwrite `poop.png`.
 
