@@ -45,3 +45,41 @@ export function angleForVelocity(vy, { maxRiseAngle, maxFallAngle }) {
 export function canRestart(openedAt, now, lockoutMs) {
   return now - openedAt >= lockoutMs;
 }
+
+/** Pipe speed and gap height for a given score: linear ramp to a cap, then flat. */
+export function difficulty(score, t) {
+  const f = Math.min(Math.max(score, 0) / t.rampEndScore, 1);
+  return {
+    pipeSpeed: t.pipeSpeed + (t.maxPipeSpeed - t.pipeSpeed) * f,
+    gapHeight: t.gapHeight + (t.minGapHeight - t.gapHeight) * f,
+  };
+}
+
+/**
+ * Best-score store around a Storage-like object (localStorage). Every call is
+ * guarded: private browsing modes and blocked storage throw, and that must not
+ * take the game down. Missing or corrupt values read as 0.
+ */
+export function createBestStore(storage, key = 'flappy-poop:best') {
+  return {
+    load() {
+      try {
+        const n = Number.parseInt(storage?.getItem(key) ?? '0', 10);
+        return Number.isFinite(n) && n > 0 ? n : 0;
+      } catch {
+        return 0;
+      }
+    },
+    /** Saves if score beats the stored best; returns the resulting best. */
+    save(score) {
+      const best = this.load();
+      if (score <= best) return best;
+      try {
+        storage?.setItem(key, String(score));
+      } catch {
+        /* storage unavailable: still return the in-memory best */
+      }
+      return score;
+    },
+  };
+}

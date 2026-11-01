@@ -1,5 +1,6 @@
 import { GAME_WIDTH, GAME_HEIGHT, TUNING as T } from '../config.js';
-import { createRng, pipeGapY, hasPassed, angleForVelocity } from '../logic.js';
+import { createRng, pipeGapY, hasPassed, angleForVelocity, difficulty, createBestStore } from '../logic.js';
+import { unlock, sfx } from '../sound.js';
 
 const TEXT_STYLE = {
   fontFamily: 'sans-serif',
@@ -18,6 +19,8 @@ export class Play extends Phaser.Scene {
   create() {
     this.rng = createRng(Date.now() & 0xffffffff);
     this.score = 0;
+    this.best = createBestStore(globalThis.localStorage, T.bestKey);
+    this.diff = difficulty(0, T);
     this.state = 'ready'; // 'ready' | 'playing' | 'dead'
 
     // Scrolling layers
@@ -61,34 +64,42 @@ export class Play extends Phaser.Scene {
   }
 
   flap() {
+    unlock();
     if (this.state === 'ready') this.start();
     if (this.state !== 'playing') return;
     this.poop.setVelocityY(T.flapVelocity);
+    sfx.flap();
   }
 
   spawnPipePair() {
     const gapY = pipeGapY(this.rng, {
       gameHeight: GAME_HEIGHT,
       groundHeight: T.groundHeight,
-      gapHeight: T.gapHeight,
+      gapHeight: this.diff.gapHeight,
       gapMargin: T.gapMargin,
     });
+    const gapH = this.diff.gapHeight;
     const x = GAME_WIDTH + T.pipeWidth;
 
     // Top pipe hangs down: cap must face the gap, so flip the sprite and anchor its bottom.
-    const top = this.pipes.create(x, gapY - T.gapHeight / 2, 'pipe');
+    const top = this.pipes.create(x, gapY - gapH / 2, 'pipe');
     top.setOrigin(0.5, 1).setFlipY(true);
     // Bottom pipe stands up from the gap: cap already at the top of the image.
-    const bottom = this.pipes.create(x, gapY + T.gapHeight / 2, 'pipe');
+    const bottom = this.pipes.create(x, gapY + gapH / 2, 'pipe');
     bottom.setOrigin(0.5, 0);
 
     for (const p of [top, bottom]) {
       p.body.setSize(p.width, p.height);
-      p.setVelocityX(-T.pipeSpeed);
+      p.setVelocityX(-this.diff.pipeSpeed);
     }
     // Only the top pipe carries the "passed" flag so a pair scores once.
     top.setData('scoring', true);
     top.setData('passed', false);
+  }
+
+  applyDifficulty() {
+    this.diff = difficulty(this.score, T);
+    for (const pipe of this.pipes.getChildren()) pipe.setVelocityX(-this.diff.pipeSpeed);
   }
 
   die() {
@@ -98,6 +109,8 @@ export class Play extends Phaser.Scene {
     for (const pipe of this.pipes.getChildren()) pipe.setVelocityX(0);
     this.cameras.main.shake(200, 0.01);
     this.cameras.main.flash(120, 255, 120, 160);
+    sfx.die();
+    const best = this.best.save(this.score);
 
     // Tumble: keep gravity so the poop falls, stop it at the ground, spin it.
     this.poop.setVelocityY(Math.max(this.poop.body.velocity.y, 0));
@@ -106,7 +119,7 @@ export class Play extends Phaser.Scene {
 
     this.time.delayedCall(T.deathToOverMs, () => {
       this.physics.pause();
-      this.scene.launch('Over', { score: this.score });
+      this.scene.launch('Over', { score: this.score, best });
     });
   }
 
@@ -114,8 +127,8 @@ export class Play extends Phaser.Scene {
     const dt = delta / 1000;
     const scrolling = this.state !== 'dead';
     if (scrolling) {
-      this.bg.tilePositionX += T.pipeSpeed * 0.25 * dt;
-      this.ground.tilePositionX += T.pipeSpeed * dt;
+      this.bg.tilePositionX += this.diff.pipeSpeed * 0.25 * dt;
+      this.ground.tilePositionX += this.diff.pipeSpeed * dt;
     }
 
     if (this.state === 'playing') {
@@ -139,6 +152,8 @@ export class Play extends Phaser.Scene {
         pipe.setData('passed', true);
         this.score += 1;
         this.scoreText.setText(String(this.score));
+        sfx.score();
+        this.applyDifficulty();
       }
       if (pipe.x < -T.pipeWidth) pipe.destroy();
     }

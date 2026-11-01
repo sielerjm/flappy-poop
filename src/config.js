@@ -19,4 +19,9 @@ export const TUNING = {
   maxRiseAngle: -25, // degrees nose-up right after a flap
   deathToOverMs: 700, // tumble time before the game-over panel appears
   retryLockoutMs: 400, // ignore taps on the panel for this long so a death tap can't restart
+  // Difficulty ramp: from base values at score 0 to the "max" values at rampEndScore, then flat.
+  rampEndScore: 30,
+  maxPipeSpeed: 200,
+  minGapHeight: 130,
+  bestKey: 'flappy-poop:best', // localStorage key
 };

@@ -105,11 +105,26 @@ def ground(path, w=360, h=64):
     img.save(path)
 
 
+def icon(path, size):
+    """App icon: poop on a pink rounded square (maskable-safe: content within the inner 80 %)."""
+    img = Image.new("RGBA", (size, size), PINK)
+    d = ImageDraw.Draw(img)
+    d.rounded_rectangle((0, 0, size - 1, size - 1), radius=size // 5, fill=PINK)
+    tmp = OUT / "_icon_poop.png"
+    poop(tmp, int(size * 0.62))
+    sprite = Image.open(tmp)
+    tmp.unlink()
+    img.paste(sprite, ((size - sprite.width) // 2, (size - sprite.height) // 2), sprite)
+    img.save(path)
+
+
 if __name__ == "__main__":
     poop(OUT / "poop.png")
+    icon(OUT / "icon-192.png", 192)
+    icon(OUT / "icon-512.png", 512)
     pipe(OUT / "pipe.png")
     bg(OUT / "bg.png")
     ground(OUT / "ground.png")
-    for f in ["poop.png", "pipe.png", "bg.png", "ground.png"]:
+    for f in ["poop.png", "pipe.png", "bg.png", "ground.png", "icon-192.png", "icon-512.png"]:
         im = Image.open(OUT / f)
         print(f"{f}: {im.width}x{im.height}")

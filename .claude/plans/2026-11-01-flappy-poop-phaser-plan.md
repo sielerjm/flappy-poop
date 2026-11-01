@@ -74,13 +74,14 @@ flappy-poop/
 - Verify: `npm test` with `tests/logic.test.js` additions for the pure retry lockout helper `canRestart(deathTime, now, lockoutMs)`; `node --check`. Manual on phone: full cycle ready → play → die → over → retry twice without reload.
 - Commit: `feat(step 5/7): ready/over scenes and retry lockout`
 - Rollback: `git checkout -- .`
-- Result: node --check 7/7; npm test 15/15 pass (canRestart boundaries, lockout tuning range). Full cycle on a phone: MANUAL, not verified here.
+- Result (commit `5ec7c54`): node --check 7/7; npm test 15/15 pass (canRestart boundaries, lockout tuning range). Full cycle on a phone: MANUAL, not verified here.
 
-### Step 6/7 — Best score, difficulty ramp, sound, install-ability  [pending]
+### Step 6/7 — Best score, difficulty ramp, sound, install-ability  [done]
 - Change: `src/logic.js` — `difficulty(score)` (gap and speed tighten linearly to a cap), `bestStore(storage)` adapter with try/catch (private mode / blocked storage → 0). `Play.js` uses them. WebAudio blips generated in code (flap, score, death; no audio files). `manifest.webmanifest` + 192/512 px icons so "Add to Home Screen" launches standalone; `<link rel="icon">`.
 - Verify: `npm test` with `tests/difficulty.test.js` (gap non-increasing, speed non-decreasing, equal to cap at and beyond cap, `difficulty(0)` equals base) and `tests/store.test.js` (fake storage; throwing storage yields 0 and does not propagate); `python3 -c "import json;json.load(open('manifest.webmanifest'))"`; assets test extended to manifest icons. Manual: install to home screen on iOS/Android opens full-screen; sound plays after first tap.
 - Commit: `feat(step 6/7): best score, difficulty ramp, generated sounds, PWA manifest`
 - Rollback: `git checkout -- . && git clean -fd`
+- Result: node --check 8/8; npm test 25/25 pass (ramp monotonic + capped, store survives throwing/missing storage, manifest JSON + icon sizes, html links). Sound and home-screen install: MANUAL, not verified here.
 
 ### Step 7/7 — Documentation and deploy  [pending]
 - Change: `README.md` — what it is, play link, controls, run locally (`npm start` → http://localhost:8000; `npm test`), repo tree, how to replace art (points at `assets/README.md`), Phaser version and how to bump it, credit to the original joke version. Mark this plan complete.

@@ -55,3 +55,20 @@ test('assets/README.md table lists every PNG in assets/ with its real size', () 
     assert.ok(pngs.includes(r.file), `README lists ${r.file} but it does not exist`);
   }
 });
+
+test('manifest.webmanifest is valid JSON and its icons exist', () => {
+  const manifest = JSON.parse(readFileSync(join(root, 'manifest.webmanifest'), 'utf8'));
+  assert.equal(manifest.display, 'fullscreen');
+  assert.ok(Array.isArray(manifest.icons) && manifest.icons.length >= 2);
+  for (const icon of manifest.icons) {
+    assert.ok(existsSync(join(root, icon.src)), `manifest icon ${icon.src} missing`);
+    const real = pngSize(join(root, icon.src));
+    assert.equal(`${real.w}x${real.h}`, icon.sizes, `${icon.src} size does not match manifest`);
+  }
+});
+
+test('index.html links the manifest and an icon', () => {
+  const html = readFileSync(join(root, 'index.html'), 'utf8');
+  assert.match(html, /<link rel="manifest" href="manifest\.webmanifest">/);
+  assert.match(html, /<link rel="icon"[^>]*href="assets\/icon-192\.png"/);
+});
