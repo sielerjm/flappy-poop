@@ -135,6 +135,72 @@ export function createSettingsStore(storage, key = 'flappy-poop:settings') {
  * Call navigatorLike.vibrate(pattern) if the API exists. Returns true when the
  * call was made, false when it no-ops (missing API or a throw).
  */
+export const ITEM_KINDS = ['fiber', 'probiotic', 'bacteria'];
+
+/** null or an ITEM_KINDS value. Bacteria weight is 0 below hazardStartScore. */
+export function rollItem(rng, score, t) {
+  const items = t.items;
+  if (score < items.startScore) return null;
+  if (rng() >= items.chancePerGap) return null;
+  const weights = { ...items.weights };
+  if (score < items.hazardStartScore) weights.bacteria = 0;
+  const total = ITEM_KINDS.reduce((sum, k) => sum + Math.max(0, weights[k] ?? 0), 0);
+  if (total <= 0) return null;
+  let pick = rng() * total;
+  for (const kind of ITEM_KINDS) {
+    pick -= Math.max(0, weights[kind] ?? 0);
+    if (pick < 0) return kind;
+  }
+  return ITEM_KINDS[ITEM_KINDS.length - 1];
+}
+
+/**
+ * Y of an item inside a pipe gap. Fiber and probiotic sit near the centre
+ * (±20 %); bacteria sits in the top or bottom third so there is always a path.
+ */
+export function itemGapY(gapY, gapHeight, rng, kind) {
+  if (kind === 'bacteria') {
+    const third = gapHeight / 3;
+    const top = rng() < 0.5;
+    const lo = top ? gapY - gapHeight / 2 : gapY + gapHeight / 2 - third;
+    return lo + rng() * third;
+  }
+  return gapY + (rng() * 2 - 1) * gapHeight * 0.2;
+}
+
+/** New score after collecting an item. Probiotic is inventory-only. Floor 0. */
+export function scoreAfterItem(score, kind, t) {
+  if (kind === 'fiber') return score + t.items.fiberPoints;
+  if (kind === 'bacteria') return Math.max(0, score - t.items.bacteriaPenalty);
+  return score;
+}
+
+/** Inventory for a one-hit probiotic that lasts probioticPipes scored pipes. */
+export function createEffects(t) {
+  let probioticPipesLeft = 0;
+  const max = t.items.probioticPipes;
+  return {
+    applyProbiotic() {
+      probioticPipesLeft = max;
+    },
+    hasProbiotic() {
+      return probioticPipesLeft > 0;
+    },
+    consumeProbiotic() {
+      if (probioticPipesLeft <= 0) return false;
+      probioticPipesLeft = 0;
+      return true;
+    },
+    onPipePassed() {
+      if (probioticPipesLeft > 0) probioticPipesLeft -= 1;
+      return probioticPipesLeft;
+    },
+    pipesLeft() {
+      return probioticPipesLeft;
+    },
+  };
+}
+
 /**
  * Three tray button centres along the bottom-right of the field. Hit boxes are
  * trayHitMin square and at least that far apart, all inside the field.
