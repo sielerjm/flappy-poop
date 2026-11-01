@@ -1,6 +1,6 @@
 import { GAME_WIDTH, GAME_HEIGHT, TUNING as T } from '../config.js';
 import { createRng, pipeGapY, hasPassed, angleForVelocity, difficulty, createBestStore } from '../logic.js';
-import { unlock, sfx } from '../sound.js';
+import { unlock, attachGame, sfx } from '../sound.js';
 
 const TEXT_STYLE = {
   fontFamily: 'sans-serif',
@@ -22,6 +22,7 @@ export class Play extends Phaser.Scene {
     this.best = createBestStore(globalThis.localStorage, T.bestKey);
     this.diff = difficulty(0, T);
     this.state = 'ready'; // 'ready' | 'playing' | 'dead'
+    attachGame(this.game);
 
     // Scrolling layers
     this.bg = this.add.tileSprite(0, 0, GAME_WIDTH, GAME_HEIGHT, 'bg').setOrigin(0, 0);
@@ -109,7 +110,11 @@ export class Play extends Phaser.Scene {
     for (const pipe of this.pipes.getChildren()) pipe.setVelocityX(0);
     this.cameras.main.shake(200, 0.01);
     this.cameras.main.flash(120, 255, 120, 160);
-    sfx.die();
+    if (this.cache.audio.exists('fart')) {
+      this.sound.play('fart', { volume: T.fartVolume });
+    } else {
+      sfx.die();
+    }
     const best = this.best.save(this.score);
 
     // Tumble: keep gravity so the poop falls, stop it at the ground, spin it.

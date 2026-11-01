@@ -1,21 +1,46 @@
-// Tiny WebAudio synth: no audio files, nothing to license. The AudioContext is
-// created on the first call, which must come from a user gesture (iOS rule), so
-// call unlock() from the first tap handler.
+// WebAudio synth blips plus a mute gate that also drives Phaser's sound
+// manager (the death fart MP3). The AudioContext is created on the first
+// unlock() call, which must come from a user gesture (iOS rule).
 
 let ctx = null;
+let muted = false;
+let game = null;
+
+function audioContextCtor() {
+  const w = typeof globalThis !== 'undefined' ? globalThis : undefined;
+  return w?.AudioContext || w?.webkitAudioContext;
+}
+
+export function attachGame(g) {
+  game = g ?? null;
+  if (game?.sound) game.sound.mute = muted;
+}
+
+export function setMuted(bool) {
+  muted = Boolean(bool);
+  if (game?.sound) game.sound.mute = muted;
+}
+
+export function isMuted() {
+  return muted;
+}
 
 export function unlock() {
+  if (muted) {
+    if (ctx?.state === 'suspended') ctx.resume();
+    return;
+  }
   if (ctx) {
     if (ctx.state === 'suspended') ctx.resume();
     return;
   }
-  const AC = window.AudioContext || window.webkitAudioContext;
+  const AC = audioContextCtor();
   if (!AC) return;
   ctx = new AC();
 }
 
 function blip({ freq = 440, to = freq, type = 'square', duration = 0.08, gain = 0.08 }) {
-  if (!ctx) return;
+  if (muted || !ctx) return;
   const t0 = ctx.currentTime;
   const osc = ctx.createOscillator();
   const amp = ctx.createGain();
@@ -29,8 +54,35 @@ function blip({ freq = 440, to = freq, type = 'square', duration = 0.08, gain = 
   osc.stop(t0 + duration + 0.02);
 }
 
+function noiseSquelch({ duration = 0.14, gain = 0.1 }) {
+  if (muted || !ctx) return;
+  const t0 = ctx.currentTime;
+  const frames = Math.max(1, Math.floor(ctx.sampleRate * duration));
+  const buffer = ctx.createBuffer(1, frames, ctx.sampleRate);
+  const data = buffer.getChannelData(0);
+  for (let i = 0; i < frames; i++) data[i] = Math.random() * 2 - 1;
+  const src = ctx.createBufferSource();
+  src.buffer = buffer;
+  const filter = ctx.createBiquadFilter();
+  filter.type = 'lowpass';
+  filter.frequency.setValueAtTime(400, t0);
+  filter.frequency.exponentialRampToValueAtTime(90, t0 + duration);
+  const amp = ctx.createGain();
+  amp.gain.setValueAtTime(gain, t0);
+  amp.gain.exponentialRampToValueAtTime(0.0001, t0 + duration);
+  src.connect(filter).connect(amp).connect(ctx.destination);
+  src.start(t0);
+  src.stop(t0 + duration + 0.02);
+}
+
 export const sfx = {
   flap: () => blip({ freq: 520, to: 780, type: 'square', duration: 0.07 }),
   score: () => blip({ freq: 880, to: 1320, type: 'triangle', duration: 0.12, gain: 0.1 }),
   die: () => blip({ freq: 300, to: 60, type: 'sawtooth', duration: 0.35, gain: 0.12 }),
+  pickup: () => blip({ freq: 660, to: 1320, type: 'triangle', duration: 0.1, gain: 0.1 }),
+  shield: () => noiseSquelch({ duration: 0.14, gain: 0.1 }),
+  hazard: () => {
+    blip({ freq: 90, to: 50, type: 'square', duration: 0.08, gain: 0.12 });
+    blip({ freq: 70, to: 40, type: 'square', duration: 0.1, gain: 0.1 });
+  },
 };

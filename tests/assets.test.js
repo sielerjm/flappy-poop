@@ -72,3 +72,31 @@ test('index.html links the manifest and an icon', () => {
   assert.match(html, /<link rel="manifest" href="manifest\.webmanifest">/);
   assert.match(html, /<link rel="icon"[^>]*href="assets\/icon-192\.png"/);
 });
+
+const audioLoads = srcFiles.flatMap((f) => {
+  const src = readFileSync(f, 'utf8');
+  return [...src.matchAll(/this\.load\.audio\(\s*['"]([^'"]+)['"]\s*,\s*['"]([^'"]+)['"]/g)].map((m) => ({
+    key: m[1],
+    path: m[2],
+    file: f,
+  }));
+});
+
+test('every this.load.audio() in src/ points at an existing file', () => {
+  assert.ok(audioLoads.length > 0, 'no load.audio calls found in src/');
+  for (const l of audioLoads) {
+    assert.ok(existsSync(join(root, l.path)), `${l.file}: ${l.path} missing`);
+  }
+});
+
+test('every file under assets/sfx/ is named in CREDITS.md with a URL', () => {
+  const sfxDir = join(root, 'assets/sfx');
+  assert.ok(existsSync(sfxDir), 'assets/sfx/ is missing');
+  const files = readdirSync(sfxDir).filter((n) => !n.startsWith('.'));
+  assert.ok(files.length > 0, 'assets/sfx/ has no sound files');
+  const credits = readFileSync(join(root, 'CREDITS.md'), 'utf8');
+  for (const name of files) {
+    assert.match(credits, new RegExp(name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')), `${name} is not named in CREDITS.md`);
+  }
+  assert.match(credits, /https?:\/\/\S+/, 'CREDITS.md has no URL');
+});

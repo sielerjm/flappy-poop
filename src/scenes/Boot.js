@@ -10,6 +10,7 @@ export class Boot extends Phaser.Scene {
     this.load.image('pipe', 'assets/pipe.png');
     this.load.image('bg', 'assets/bg.png');
     this.load.image('ground', 'assets/ground.png');
+    this.load.audio('fart', 'assets/sfx/fart.mp3');
   }
 
   create() {
