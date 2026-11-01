@@ -119,12 +119,12 @@ def icon(path, size):
 
 
 if __name__ == "__main__":
-    poop(OUT / "poop.png")
+    # poop.png is Michael's drawing (tools/process_art.py). Do not overwrite it.
     icon(OUT / "icon-192.png", 192)
     icon(OUT / "icon-512.png", 512)
     pipe(OUT / "pipe.png")
     bg(OUT / "bg.png")
     ground(OUT / "ground.png")
-    for f in ["poop.png", "pipe.png", "bg.png", "ground.png", "icon-192.png", "icon-512.png"]:
+    for f in ["pipe.png", "bg.png", "ground.png", "icon-192.png", "icon-512.png"]:
         im = Image.open(OUT / f)
         print(f"{f}: {im.width}x{im.height}")
