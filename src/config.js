@@ -17,4 +17,6 @@ export const TUNING = {
   poopRadius: 17, // circular hitbox (~70 % of the 48 px sprite)
   maxFallAngle: 90, // degrees nose-down at terminal fall
   maxRiseAngle: -25, // degrees nose-up right after a flap
+  deathToOverMs: 700, // tumble time before the game-over panel appears
+  retryLockoutMs: 400, // ignore taps on the panel for this long so a death tap can't restart
 };

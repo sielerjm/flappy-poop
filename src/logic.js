@@ -40,3 +40,8 @@ export function angleForVelocity(vy, { maxRiseAngle, maxFallAngle }) {
   const t = Math.min(vy / 600, 1);
   return maxRiseAngle + (maxFallAngle - maxRiseAngle) * t;
 }
+
+/** Retry is allowed once lockoutMs have elapsed since the game-over screen opened. */
+export function canRestart(openedAt, now, lockoutMs) {
+  return now - openedAt >= lockoutMs;
+}

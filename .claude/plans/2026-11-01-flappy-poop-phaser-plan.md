@@ -67,13 +67,14 @@ flappy-poop/
 - Verify: `npm test` with `tests/logic.test.js`: `pipeGap` output always within `[minY, maxY]` over 10 000 draws; same seed → same sequence; `node --check` green. Manual on phone: tap flaps, pipes scroll, score increments once per pipe, hitting anything ends the run.
 - Commit: `feat(step 4/7): flap physics, pipe spawning, collision, scoring`
 - Rollback: `git checkout -- .`
-- Result: node --check 7/7; npm test 13/13 pass (gap bounds over 10k draws, seed determinism, hasPassed edge, angle clamp). Tuning moved to `src/config.js` so Node can import it. Phone play: MANUAL, not verified here.
+- Result (commit `d58ed99`): node --check 7/7; npm test 13/13 pass (gap bounds over 10k draws, seed determinism, hasPassed edge, angle clamp). Tuning moved to `src/config.js` so Node can import it. Phone play: MANUAL, not verified here.
 
-### Step 5/7 — Game states: ready → playing → dead → retry  [pending]
+### Step 5/7 — Game states: ready → playing → dead → retry  [done]
 - Change: ready state in `Play.js` (poop bobs, gravity off, "TAP" text; first tap starts physics); on death: camera shake + flash, pipes stop, poop tumbles, then launch `Over` scene after ~600 ms (input lockout so the death tap doesn't restart). `Over.js` shows score, best, "tap to retry" → restarts `Play`. Keyboard Space mirrors tap for desktop.
 - Verify: `npm test` with `tests/logic.test.js` additions for the pure retry lockout helper `canRestart(deathTime, now, lockoutMs)`; `node --check`. Manual on phone: full cycle ready → play → die → over → retry twice without reload.
 - Commit: `feat(step 5/7): ready/over scenes and retry lockout`
 - Rollback: `git checkout -- .`
+- Result: node --check 7/7; npm test 15/15 pass (canRestart boundaries, lockout tuning range). Full cycle on a phone: MANUAL, not verified here.
 
 ### Step 6/7 — Best score, difficulty ramp, sound, install-ability  [pending]
 - Change: `src/logic.js` — `difficulty(score)` (gap and speed tighten linearly to a cap), `bestStore(storage)` adapter with try/catch (private mode / blocked storage → 0). `Play.js` uses them. WebAudio blips generated in code (flap, score, death; no audio files). `manifest.webmanifest` + 192/512 px icons so "Add to Home Screen" launches standalone; `<link rel="icon">`.

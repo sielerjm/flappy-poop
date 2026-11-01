@@ -1,6 +1,15 @@
 import { GAME_WIDTH, GAME_HEIGHT, TUNING as T } from '../config.js';
 import { createRng, pipeGapY, hasPassed, angleForVelocity } from '../logic.js';
 
+const TEXT_STYLE = {
+  fontFamily: 'sans-serif',
+  fontStyle: 'bold',
+  color: '#ffffff',
+  stroke: '#5a2a44',
+  strokeThickness: 6,
+  align: 'center',
+};
+
 export class Play extends Phaser.Scene {
   constructor() {
     super('Play');
@@ -9,7 +18,7 @@ export class Play extends Phaser.Scene {
   create() {
     this.rng = createRng(Date.now() & 0xffffffff);
     this.score = 0;
-    this.alive = true;
+    this.state = 'ready'; // 'ready' | 'playing' | 'dead'
 
     // Scrolling layers
     this.bg = this.add.tileSprite(0, 0, GAME_WIDTH, GAME_HEIGHT, 'bg').setOrigin(0, 0);
@@ -19,21 +28,16 @@ export class Play extends Phaser.Scene {
       .setOrigin(0, 0)
       .setDepth(5);
 
-    // Player
+    // Player: no gravity until the first tap
     this.poop = this.physics.add.sprite(T.poopX, GAME_HEIGHT / 2, 'poop').setDepth(10);
     this.poop.body.setCircle(T.poopRadius, this.poop.width / 2 - T.poopRadius, this.poop.height / 2 - T.poopRadius);
-    this.poop.body.setGravityY(T.gravity);
+    this.poop.body.setAllowGravity(false);
+    this.bob = this.tweens.add({ targets: this.poop, y: '+=12', duration: 500, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
 
-    // Score HUD
-    this.scoreText = this.add
-      .text(GAME_WIDTH / 2, 40, '0', {
-        fontFamily: 'sans-serif',
-        fontSize: '40px',
-        fontStyle: 'bold',
-        color: '#ffffff',
-        stroke: '#5a2a44',
-        strokeThickness: 6,
-      })
+    // HUD
+    this.scoreText = this.add.text(GAME_WIDTH / 2, 40, '0', { ...TEXT_STYLE, fontSize: '40px' }).setOrigin(0.5).setDepth(20);
+    this.readyText = this.add
+      .text(GAME_WIDTH / 2, GAME_HEIGHT * 0.3, 'FLAPPY POOP\n\ntap to flap', { ...TEXT_STYLE, fontSize: '26px' })
       .setOrigin(0.5)
       .setDepth(20);
 
@@ -44,18 +48,21 @@ export class Play extends Phaser.Scene {
     this.input.on('pointerdown', () => this.flap());
     this.input.keyboard?.on('keydown-SPACE', () => this.flap());
     this.input.keyboard?.on('keydown-UP', () => this.flap());
+  }
 
-    // Spawn pipes
-    this.spawnTimer = this.time.addEvent({
-      delay: T.spawnEveryMs,
-      loop: true,
-      callback: () => this.spawnPipePair(),
-    });
+  start() {
+    this.state = 'playing';
+    this.bob.stop();
+    this.readyText.setVisible(false);
+    this.poop.body.setAllowGravity(true);
+    this.poop.body.setGravityY(T.gravity);
+    this.spawnTimer = this.time.addEvent({ delay: T.spawnEveryMs, loop: true, callback: () => this.spawnPipePair() });
     this.spawnPipePair();
   }
 
   flap() {
-    if (!this.alive) return;
+    if (this.state === 'ready') this.start();
+    if (this.state !== 'playing') return;
     this.poop.setVelocityY(T.flapVelocity);
   }
 
@@ -85,32 +92,50 @@ export class Play extends Phaser.Scene {
   }
 
   die() {
-    if (!this.alive) return;
-    this.alive = false;
-    this.physics.pause();
-    this.spawnTimer.remove();
+    if (this.state !== 'playing') return;
+    this.state = 'dead';
+    this.spawnTimer?.remove();
+    for (const pipe of this.pipes.getChildren()) pipe.setVelocityX(0);
     this.cameras.main.shake(200, 0.01);
     this.cameras.main.flash(120, 255, 120, 160);
-    // Step 5 replaces this with the Over scene and a retry lockout.
-    this.time.delayedCall(900, () => this.scene.restart());
+
+    // Tumble: keep gravity so the poop falls, stop it at the ground, spin it.
+    this.poop.setVelocityY(Math.max(this.poop.body.velocity.y, 0));
+    this.poop.body.setCollideWorldBounds(false);
+    this.tweens.add({ targets: this.poop, angle: 180, duration: T.deathToOverMs, ease: 'Quad.easeIn' });
+
+    this.time.delayedCall(T.deathToOverMs, () => {
+      this.physics.pause();
+      this.scene.launch('Over', { score: this.score });
+    });
   }
 
   update(_time, delta) {
     const dt = delta / 1000;
-    if (this.alive) {
+    const scrolling = this.state !== 'dead';
+    if (scrolling) {
       this.bg.tilePositionX += T.pipeSpeed * 0.25 * dt;
       this.ground.tilePositionX += T.pipeSpeed * dt;
-      this.poop.setAngle(angleForVelocity(this.poop.body.velocity.y, T));
+    }
 
-      // Ceiling and floor
+    if (this.state === 'playing') {
+      this.poop.setAngle(angleForVelocity(this.poop.body.velocity.y, T));
       if (this.poop.y - T.poopRadius < 0 || this.poop.y + T.poopRadius > GAME_HEIGHT - T.groundHeight) {
         this.die();
-        return;
+      }
+    }
+
+    if (this.state === 'dead') {
+      // Pin the tumbling poop to the ground instead of letting it fall off-screen.
+      const floor = GAME_HEIGHT - T.groundHeight - T.poopRadius;
+      if (this.poop.y > floor) {
+        this.poop.y = floor;
+        this.poop.setVelocityY(0);
       }
     }
 
     for (const pipe of this.pipes.getChildren()) {
-      if (this.alive && pipe.getData('scoring') && !pipe.getData('passed') && hasPassed(pipe.x, T.pipeWidth, this.poop.x)) {
+      if (this.state === 'playing' && pipe.getData('scoring') && !pipe.getData('passed') && hasPassed(pipe.x, T.pipeWidth, this.poop.x)) {
         pipe.setData('passed', true);
         this.score += 1;
         this.scoreText.setText(String(this.score));
