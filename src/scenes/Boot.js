@@ -6,11 +6,14 @@ export class Boot extends Phaser.Scene {
   }
 
   preload() {
-    // Assets are added in Step 3.
+    this.load.image('poop', 'assets/poop.png');
+    this.load.image('pipe', 'assets/pipe.png');
+    this.load.image('bg', 'assets/bg.png');
+    this.load.image('ground', 'assets/ground.png');
   }
 
   create() {
-    console.log('[Boot] ready', GAME_WIDTH, GAME_HEIGHT);
+    console.log('[Boot] assets loaded', GAME_WIDTH, GAME_HEIGHT);
     this.scene.start('Play');
   }
 }

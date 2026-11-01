@@ -53,13 +53,14 @@ flappy-poop/
 - Verify: `node --check` on all `src/**/*.js`; `tests/html.test.js` asserts `index.html` contains the viewport meta, `touch-action:none`, and a Phaser script tag pinned to an exact version (regex `phaser@\d+\.\d+\.\d+/`). Manual: open on phone → black canvas fills screen, no scroll, console shows scene names.
 - Commit: `feat(step 2/7): Phaser 4 boot with mobile scale config`
 - Rollback: `git checkout -- .`
-- Result: node --check 6/6 files; npm test 5/5 pass; phaser@4.2.1 npm tarball confirmed to contain dist/phaser.min.js with Scale.FIT, autoCenter, activePointers. Phone render: MANUAL, not verified here.
+- Result (commit `41b0989`): node --check 6/6 files; npm test 5/5 pass; phaser@4.2.1 npm tarball confirmed to contain dist/phaser.min.js with Scale.FIT, autoCenter, activePointers. Phone render: MANUAL, not verified here.
 
-### Step 3/7 — Placeholder asset contract  [pending]
+### Step 3/7 — Placeholder asset contract  [done]
 - Change: Python script `tools/make_placeholders.py` (Pillow) generating `assets/poop.png` (48x48, emoji rendered), `assets/pipe.png` (64x480 pink column, cap baked in at top; flipped in code for the bottom), `assets/bg.png` (360x640 placeholder: pink villi band top/bottom, purple mucosa middle — tile-able horizontally), `assets/ground.png` (360x64, tile-able). `assets/README.md`: table of file → size → what it is → how to replace. `Boot.js` preloads them.
 - Verify: `python3 tools/make_placeholders.py && npm test` with `tests/assets.test.js`: every `this.load.image('key','assets/x.png')` in `src/` points at an existing file, and each file's PNG header dimensions match the table in `assets/README.md` (parsed). Success: all pass; test fails if a size is edited in the README without regenerating.
 - Commit: `feat(step 3/7): placeholder assets and asset contract`
 - Rollback: `git checkout -- . && git clean -fd assets tools`
+- Result: 4 PNGs generated at contract sizes; npm test 7/7 pass; README size mismatch correctly fails (6/1). Placeholder bg has a visible horizontal seam — fine for a placeholder, the contract tells the artist to make it tile.
 
 ### Step 4/7 — Core loop: flap, pipes, collision, score  [pending]
 - Change: `Play.js` — poop as arcade sprite (gravity ~1200, flap velocity ~ -380, angle tweened to velocity, body hitbox inset ~20 %); pipe pairs spawned on a timer as a physics group moving left at constant speed, recycled when off-screen; invisible score trigger per pair (overlap → `score += 1` once, flag on the pair); collide with pipes/ground/ceiling → `die()`. `src/logic.js` — `pipeGap(rng, config)` returns a gap centre inside safe bounds; `createRng(seed)` (mulberry32). Score text pinned to the camera.
