@@ -135,6 +135,25 @@ export function createSettingsStore(storage, key = 'flappy-poop:settings') {
  * Call navigatorLike.vibrate(pattern) if the API exists. Returns true when the
  * call was made, false when it no-ops (missing API or a throw).
  */
+/**
+ * Three tray button centres along the bottom-right of the field. Hit boxes are
+ * trayHitMin square and at least that far apart, all inside the field.
+ */
+export function trayLayout(width, height, t) {
+  const size = t.trayHitMin;
+  const spacing = size + 8;
+  const y = height - t.trayHeight / 2;
+  const ids = ['pause', 'mute', 'settings'];
+  const right = width - size / 2 - 8;
+  const buttons = ids.map((id, i) => ({
+    id,
+    x: right - (ids.length - 1 - i) * spacing,
+    y,
+    size,
+  }));
+  return { buttons, y, height: t.trayHeight };
+}
+
 export function vibrate(navigatorLike, pattern) {
   if (typeof navigatorLike?.vibrate !== 'function') return false;
   try {

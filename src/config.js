@@ -27,6 +27,8 @@ export const TUNING = {
   settingsKey: 'flappy-poop:settings', // localStorage key
   vibrateOnDieMs: 60, // ms buzz on death (Android / Chrome only)
   trayHeight: 56, // px band at the bottom reserved for the control tray
+  trayAlpha: 0.6, // 0–1 idle alpha of tray buttons
+  trayHitMin: 44, // px minimum tray button hit size
   pauseResumeLockoutMs: 300, // ms after resume during which a tap must not flap
   fartVolume: 0.6, // 0–1 Phaser volume for the death fart sample
 };

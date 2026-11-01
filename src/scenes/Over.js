@@ -1,5 +1,11 @@
 import { GAME_WIDTH, GAME_HEIGHT, TUNING as T } from '../config.js';
 import { canRestart } from '../logic.js';
+import { isMuted } from '../sound.js';
+import { createTray } from '../ui/tray.js';
+
+function inTrayBand(y) {
+  return y > GAME_HEIGHT - T.trayHeight;
+}
 
 export class Over extends Phaser.Scene {
   constructor() {
@@ -22,12 +28,21 @@ export class Over extends Phaser.Scene {
     this.tweens.add({ targets: this.retryText, alpha: 1, delay: T.retryLockoutMs, duration: 200 });
     this.tweens.add({ targets: panel, scale: { from: 0.8, to: 1 }, duration: 180, ease: 'Back.easeOut' });
 
-    const retry = () => {
+    const play = this.scene.get('Play');
+    this.tray = createTray(this, {
+      onPause: () => {},
+      onMute: () => play?.toggleMute?.(),
+      onSettings: () => this.scene.launch('Settings', { resumeOnClose: false }),
+      muted: isMuted(),
+    });
+
+    const retry = (pointer) => {
+      if (pointer && inTrayBand(pointer.y)) return;
       if (!canRestart(this.openedAt, this.time.now, T.retryLockoutMs)) return;
       this.scene.stop('Over');
       this.scene.get('Play').scene.restart();
     };
     this.input.on('pointerdown', retry);
-    this.input.keyboard?.on('keydown-SPACE', retry);
+    this.input.keyboard?.on('keydown-SPACE', () => retry());
   }
 }

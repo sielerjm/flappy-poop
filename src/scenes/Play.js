@@ -1,6 +1,16 @@
 import { GAME_WIDTH, GAME_HEIGHT, TUNING as T } from '../config.js';
-import { createRng, pipeGapY, hasPassed, angleForVelocity, difficulty, createBestStore } from '../logic.js';
-import { unlock, attachGame, sfx } from '../sound.js';
+import {
+  createRng,
+  pipeGapY,
+  hasPassed,
+  angleForVelocity,
+  difficulty,
+  createBestStore,
+  createSettingsStore,
+  vibrate,
+} from '../logic.js';
+import { unlock, attachGame, setMuted, isMuted, sfx } from '../sound.js';
+import { createTray } from '../ui/tray.js';
 
 const TEXT_STYLE = {
   fontFamily: 'sans-serif',
@@ -11,6 +21,10 @@ const TEXT_STYLE = {
   align: 'center',
 };
 
+function inTrayBand(y) {
+  return y > GAME_HEIGHT - T.trayHeight;
+}
+
 export class Play extends Phaser.Scene {
   constructor() {
     super('Play');
@@ -20,9 +34,12 @@ export class Play extends Phaser.Scene {
     this.rng = createRng(Date.now() & 0xffffffff);
     this.score = 0;
     this.best = createBestStore(globalThis.localStorage, T.bestKey);
+    this.settings = createSettingsStore(globalThis.localStorage, T.settingsKey);
     this.diff = difficulty(0, T);
-    this.state = 'ready'; // 'ready' | 'playing' | 'dead'
+    this.state = 'ready'; // 'ready' | 'playing' | 'paused' | 'dead'
+    this.flapLockedUntil = 0;
     attachGame(this.game);
+    setMuted(!this.settings.load().sound);
 
     // Scrolling layers
     this.bg = this.add.tileSprite(0, 0, GAME_WIDTH, GAME_HEIGHT, 'bg').setOrigin(0, 0);
@@ -45,13 +62,42 @@ export class Play extends Phaser.Scene {
       .setOrigin(0.5)
       .setDepth(20);
 
+    this.pauseShade = this.add.rectangle(GAME_WIDTH / 2, GAME_HEIGHT / 2, GAME_WIDTH, GAME_HEIGHT, 0x000000, 0.45).setDepth(25).setVisible(false);
+    this.pauseText = this.add
+      .text(GAME_WIDTH / 2, GAME_HEIGHT * 0.42, 'PAUSED — tap to resume', { ...TEXT_STYLE, fontSize: '22px' })
+      .setOrigin(0.5)
+      .setDepth(26)
+      .setVisible(false);
+
+    this.tray = createTray(this, {
+      onPause: () => this.togglePause(),
+      onMute: () => this.toggleMute(),
+      onSettings: () => this.openSettings(),
+      muted: isMuted(),
+    });
+
     // Collisions
     this.physics.add.overlap(this.poop, this.pipes, () => this.die(), undefined, this);
 
-    // Input: any pointer (touch/mouse) or Space/Up
-    this.input.on('pointerdown', () => this.flap());
+    // Input: any pointer (touch/mouse) or Space/Up. Tray taps are ignored by y-band.
+    this.input.on('pointerdown', (pointer) => this.flap(pointer));
     this.input.keyboard?.on('keydown-SPACE', () => this.flap());
     this.input.keyboard?.on('keydown-UP', () => this.flap());
+    this.input.keyboard?.on('keydown-M', () => this.toggleMute());
+    this.input.keyboard?.on('keydown-P', () => this.togglePause());
+    this.input.keyboard?.on('keydown-ESC', () => this.togglePause());
+    this.input.keyboard?.on('keydown-S', () => this.openSettings());
+
+    this.onHidden = () => {
+      if (typeof document !== 'undefined' && document.hidden) this.autoPause();
+    };
+    this.onBlur = () => this.autoPause();
+    if (typeof document !== 'undefined') document.addEventListener('visibilitychange', this.onHidden);
+    this.game.events.on('blur', this.onBlur);
+    this.events.once('shutdown', () => {
+      if (typeof document !== 'undefined') document.removeEventListener('visibilitychange', this.onHidden);
+      this.game.events.off('blur', this.onBlur);
+    });
   }
 
   start() {
@@ -64,12 +110,62 @@ export class Play extends Phaser.Scene {
     this.spawnPipePair();
   }
 
-  flap() {
+  flap(pointer) {
     unlock();
+    if (pointer && inTrayBand(pointer.y)) return;
+    if (this.state === 'paused') {
+      this.resumePlay();
+      return;
+    }
     if (this.state === 'ready') this.start();
     if (this.state !== 'playing') return;
+    if (this.time.now < this.flapLockedUntil) return;
     this.poop.setVelocityY(T.flapVelocity);
     sfx.flap();
+  }
+
+  toggleMute() {
+    const next = !this.settings.load().sound;
+    this.settings.set({ sound: next });
+    setMuted(!next);
+    this.tray?.setMuted(!next);
+    this.scene.get('Over')?.tray?.setMuted(!next);
+  }
+
+  togglePause() {
+    if (this.state === 'playing') this.pausePlay();
+    else if (this.state === 'paused') this.resumePlay();
+  }
+
+  autoPause() {
+    if (this.state === 'playing') this.pausePlay();
+  }
+
+  pausePlay() {
+    if (this.state !== 'playing') return;
+    this.state = 'paused';
+    this.physics.pause();
+    if (this.spawnTimer) this.spawnTimer.paused = true;
+    this.bob.pause();
+    this.pauseShade.setVisible(true);
+    this.pauseText.setVisible(true);
+  }
+
+  resumePlay() {
+    if (this.state !== 'paused') return;
+    this.state = 'playing';
+    this.physics.resume();
+    if (this.spawnTimer) this.spawnTimer.paused = false;
+    this.bob.resume();
+    this.pauseShade.setVisible(false);
+    this.pauseText.setVisible(false);
+    this.flapLockedUntil = this.time.now + T.pauseResumeLockoutMs;
+  }
+
+  openSettings() {
+    const wasPlaying = this.state === 'playing';
+    if (wasPlaying) this.pausePlay();
+    this.scene.launch('Settings', { resumeOnClose: wasPlaying });
   }
 
   spawnPipePair() {
@@ -108,8 +204,11 @@ export class Play extends Phaser.Scene {
     this.state = 'dead';
     this.spawnTimer?.remove();
     for (const pipe of this.pipes.getChildren()) pipe.setVelocityX(0);
+    this.pauseShade.setVisible(false);
+    this.pauseText.setVisible(false);
     this.cameras.main.shake(200, 0.01);
     this.cameras.main.flash(120, 255, 120, 160);
+    if (this.settings.load().haptics) vibrate(globalThis.navigator, T.vibrateOnDieMs);
     if (this.cache.audio.exists('fart')) {
       this.sound.play('fart', { volume: T.fartVolume });
     } else {
@@ -130,7 +229,7 @@ export class Play extends Phaser.Scene {
 
   update(_time, delta) {
     const dt = delta / 1000;
-    const scrolling = this.state !== 'dead';
+    const scrolling = this.state === 'ready' || this.state === 'playing';
     if (scrolling) {
       this.bg.tilePositionX += this.diff.pipeSpeed * 0.25 * dt;
       this.ground.tilePositionX += this.diff.pipeSpeed * dt;
