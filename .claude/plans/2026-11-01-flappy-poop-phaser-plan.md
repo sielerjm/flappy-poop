@@ -60,13 +60,14 @@ flappy-poop/
 - Verify: `python3 tools/make_placeholders.py && npm test` with `tests/assets.test.js`: every `this.load.image('key','assets/x.png')` in `src/` points at an existing file, and each file's PNG header dimensions match the table in `assets/README.md` (parsed). Success: all pass; test fails if a size is edited in the README without regenerating.
 - Commit: `feat(step 3/7): placeholder assets and asset contract`
 - Rollback: `git checkout -- . && git clean -fd assets tools`
-- Result: 4 PNGs generated at contract sizes; npm test 7/7 pass; README size mismatch correctly fails (6/1). Placeholder bg has a visible horizontal seam — fine for a placeholder, the contract tells the artist to make it tile.
+- Result (commit `53c4565`): 4 PNGs generated at contract sizes; npm test 7/7 pass; README size mismatch correctly fails (6/1). Placeholder bg has a visible horizontal seam — fine for a placeholder, the contract tells the artist to make it tile.
 
-### Step 4/7 — Core loop: flap, pipes, collision, score  [pending]
+### Step 4/7 — Core loop: flap, pipes, collision, score  [done]
 - Change: `Play.js` — poop as arcade sprite (gravity ~1200, flap velocity ~ -380, angle tweened to velocity, body hitbox inset ~20 %); pipe pairs spawned on a timer as a physics group moving left at constant speed, recycled when off-screen; invisible score trigger per pair (overlap → `score += 1` once, flag on the pair); collide with pipes/ground/ceiling → `die()`. `src/logic.js` — `pipeGap(rng, config)` returns a gap centre inside safe bounds; `createRng(seed)` (mulberry32). Score text pinned to the camera.
 - Verify: `npm test` with `tests/logic.test.js`: `pipeGap` output always within `[minY, maxY]` over 10 000 draws; same seed → same sequence; `node --check` green. Manual on phone: tap flaps, pipes scroll, score increments once per pipe, hitting anything ends the run.
 - Commit: `feat(step 4/7): flap physics, pipe spawning, collision, scoring`
 - Rollback: `git checkout -- .`
+- Result: node --check 7/7; npm test 13/13 pass (gap bounds over 10k draws, seed determinism, hasPassed edge, angle clamp). Tuning moved to `src/config.js` so Node can import it. Phone play: MANUAL, not verified here.
 
 ### Step 5/7 — Game states: ready → playing → dead → retry  [pending]
 - Change: ready state in `Play.js` (poop bobs, gravity off, "TAP" text; first tap starts physics); on death: camera shake + flash, pipes stop, poop tumbles, then launch `Over` scene after ~600 ms (input lockout so the death tap doesn't restart). `Over.js` shows score, best, "tap to retry" → restarts `Play`. Keyboard Space mirrors tap for desktop.
