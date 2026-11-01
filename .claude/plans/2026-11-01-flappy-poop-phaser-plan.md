@@ -1,6 +1,6 @@
 # Plan: Flappy Poop — fresh build on Phaser 4 (mobile-first browser game)
 - Created: 2026-11-01
-- Status: in progress
+- Status: complete
 - Baseline commit: none yet — Step 1 runs `git init` in a new, empty repo (old sielerjm/flappy-poop is reference only)
 - Whole-suite verification: `npm test` (Node 22 built-in `node --test`, zero dependencies) — created in Step 1
 - Golden output: n/a (new project)
@@ -81,15 +81,18 @@ flappy-poop/
 - Verify: `npm test` with `tests/difficulty.test.js` (gap non-increasing, speed non-decreasing, equal to cap at and beyond cap, `difficulty(0)` equals base) and `tests/store.test.js` (fake storage; throwing storage yields 0 and does not propagate); `python3 -c "import json;json.load(open('manifest.webmanifest'))"`; assets test extended to manifest icons. Manual: install to home screen on iOS/Android opens full-screen; sound plays after first tap.
 - Commit: `feat(step 6/7): best score, difficulty ramp, generated sounds, PWA manifest`
 - Rollback: `git checkout -- . && git clean -fd`
-- Result: node --check 8/8; npm test 25/25 pass (ramp monotonic + capped, store survives throwing/missing storage, manifest JSON + icon sizes, html links). Sound and home-screen install: MANUAL, not verified here.
+- Result (commit `5f4f6f0`): node --check 8/8; npm test 25/25 pass (ramp monotonic + capped, store survives throwing/missing storage, manifest JSON + icon sizes, html links). Sound and home-screen install: MANUAL, not verified here.
 
-### Step 7/7 — Documentation and deploy  [pending]
+### Step 7/7 — Documentation and deploy  [done]
 - Change: `README.md` — what it is, play link, controls, run locally (`npm start` → http://localhost:8000; `npm test`), repo tree, how to replace art (points at `assets/README.md`), Phaser version and how to bump it, credit to the original joke version. Mark this plan complete.
 - Verify: `for f in $(git ls-files src assets tests tools); do grep -q "$(basename $f)" README.md assets/README.md || echo MISSING $f; done` prints nothing; `npm test` green. Manual after push: `curl -sI https://<user>.github.io/<repo>/ | head -1` → `200`, Pages set to `main` / root.
 - Commit: `docs(step 7/7): README, art-replacement guide, mark plan complete`
 - Rollback: `git checkout -- .`
+- Result: every tracked file under src/, assets/, tests/, tools/ is named in README.md or assets/README.md; no stale references; npm test 25/25. Pages 200 check: MANUAL after you push.
 
 ## Completion summary
-(filled in when done)
+Seven commits on `main` (see `git log --oneline`). Per-step verification: Node tests grew 1 -> 25, all green; `node --check` on every source file at every step; Phaser 4.2.1 build confirmed in the npm tarball.
+Not verified here (no browser in the build environment): rendering, touch, sound, home-screen install, and the live Pages URL. First thing to do after pushing: open it on a phone and play through ready -> play -> die -> retry twice.
+Roll back: `git checkout <hash>` to inspect a step, `git reset --hard <hash>` to go back (discards later work). Step hashes are recorded on each step above.
 ## Stop report (only if stopped)
 (filled in if a step fails three times)
