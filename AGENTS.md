@@ -7,10 +7,11 @@ guide; this file is the map for anyone changing the code.
 ## What this is
 
 Flappy Poop is a Flappy Bird clone for phone browsers: a poop emoji flaps through
-the gut dodging pink intestinal-fold pipes. One point per pipe pair passed; hit a
-pipe, the ceiling, or the floor and the run ends. Best score is kept in
-`localStorage`. Difficulty ramps (faster pipes, narrower gap) until score 30, then
-stays flat.
+the gut dodging pink intestinal-fold pipes. One point per pipe pair passed; fiber
+is +1, bad bacteria is −2 (floor 0), and a probiotic blocks one bacteria hit for
+up to 5 pipes. Hit a pipe, the ceiling, or the floor and the run ends (dead-poop
+face). Best score and settings are kept in `localStorage`. Difficulty ramps
+(faster pipes, narrower gap) until score 30, then stays flat.
 
 It is a side project by Michael Sieler (gut-microbiome researcher), hence the
 theme. It is deliberately small: plain ES modules, no bundler, no npm
@@ -21,8 +22,7 @@ dependencies, Phaser 4 loaded from a CDN, deployed to GitHub Pages straight from
   to live there was replaced wholesale; nothing from it survives).
 - Engine: Phaser **4.2.1**, pinned by exact version in `index.html`.
 - Runtime: any modern mobile/desktop browser. Tests need Node 22+ (built-in
-  `node --test`). `tools/` needs Python 3 + Pillow, and only for regenerating
-  placeholder art.
+  `node --test`). `tools/` needs Python 3 + Pillow for art scripts.
 
 ## Repo map
 
@@ -31,57 +31,70 @@ index.html                  Entry page. Viewport/touch CSS, <script> for Phaser 
                             jsDelivr, then <script type=module src=src/main.js>.
 manifest.webmanifest        PWA "Add to Home Screen" metadata (fullscreen, portrait).
 package.json                Only `npm test` and `npm start`; no dependencies.
+CREDITS.md                  Phaser + every assets/sfx/ file with a URL.
 
 src/
   main.js                   new Phaser.Game(...): 360x640 logical field, Scale.FIT,
-                            arcade physics, scene order [Boot, Play, Over].
+                            arcade physics, scene order [Boot, Play, Over, Settings].
   config.js                 GAME_WIDTH / GAME_HEIGHT and the TUNING object. Every
                             feel-related number lives here. Pure data, Node-safe.
   logic.js                  Pure functions, NO Phaser/DOM: rng, gap placement,
-                            scoring, sprite angle, retry lockout, difficulty ramp,
-                            best-score store. Fully unit-tested.
-  sound.js                  WebAudio synth blips (flap/score/die). No audio files.
+                            scoring, items, sprite angle, retry lockout, difficulty,
+                            best-score store, settings store, vibrate helper,
+                            trayLayout. Fully unit-tested.
+  sound.js                  WebAudio synth blips + setMuted/isMuted/attachGame.
+                            setMuted also sets game.sound.mute (the fart MP3).
                             unlock() must be called from a user gesture (iOS).
+  ui/
+    tray.js                 Phaser wrapper around trayLayout: pause / mute / settings.
   scenes/
-    Boot.js                 preload() the four gameplay PNGs, then start Play.
-    Play.js                 The game. State machine: 'ready' -> 'playing' -> 'dead'.
-                            Spawns pipe pairs, scores, applies difficulty, dies,
+    Boot.js                 preload() gameplay PNGs + fart.mp3, then start Play.
+    Play.js                 State machine: 'ready' -> 'playing' -> 'paused'/'dead'.
+                            Spawns pipes and items, tray, auto-pause, haptics, dies,
                             then launches Over as an overlay scene.
     Over.js                 Game-over panel (score, best, "tap to retry") with a
-                            tap lockout so the death tap can't restart the run.
+                            tap lockout and its own tray (mute still works).
+    Settings.js             Overlay: sound, haptics (Android only), music coming
+                            soon, credits, version.
 
-assets/                     All art. Placeholders for now; Michael will replace
-                            them with his own drawings.
-  README.md                 THE ART CONTRACT: file name, pixel size, orientation
-                            rules per image. tests/assets.test.js enforces it.
-  poop.png pipe.png bg.png ground.png     gameplay sprites
-  icon-192.png icon-512.png               PWA / Apple touch icons
+assets/                     Contract PNGs + README.md (the art contract).
+  README.md                 File name, pixel size, orientation rules. tests enforce it.
+  poop.png poop-dead.png fiber.png probiotic.png bacteria.png
+  pipe.png bg.png ground.png
+  icon-192.png icon-512.png
+  src/                      Original drawings; not in the size table.
+  sfx/fart.mp3              Death sample.
 
 tests/                      node --test, zero deps. Each file is self-describing:
   html.test.js              index.html invariants (viewport, no scroll, pinned Phaser)
-  assets.test.js            every load.image() exists; README size table == PNG headers
+  assets.test.js            load.image / load.audio paths; README sizes; sfx credits
   logic.test.js             gap bounds, rng determinism, hasPassed, angle
   difficulty.test.js        ramp is monotonic, caps, tightest gap still fits the poop
   state.test.js             retry lockout
   store.test.js             best-score store incl. throwing/missing storage
+  settings.test.js          settings store + vibrate helper
+  sound.test.js             sfx keys, mute, Node import
+  tray.test.js              trayHeight / trayLayout geometry
+  items.test.js             rollItem, itemGapY, scoreAfterItem, probiotic inventory
+  tuning.test.js            item / fartVolume sanity bounds
   smoke.test.js             logic.js imports and exports VERSION
 
 tools/
-  make_placeholders.py      Regenerates every PNG in assets/ (Pillow). Run only
-                            when you intentionally change placeholder art.
+  make_placeholders.py      Regenerates pipe / bg / ground / icons only. Must not
+                            overwrite poop.png. Run only when you intend to.
+  process_art.py            Crops assets/src/ drawings into 48x48 contract PNGs.
 
-.claude/plans/              The checkpointed build plan this repo was made from
-                            (2026-11-01). Historical record + decision log
-                            (why Phaser over Kaplay/Godot, etc.). Don't edit;
-                            add a new plan file for new multi-step work.
+.claude/plans/              Checkpointed build plans (2026-11-01). Historical record
+                            + decision log. Don't edit completed plans; add a new
+                            plan file for new multi-step work.
 ```
 
 ## Rules the code depends on
 
 1. **Phaser-free logic stays in `src/logic.js`.** Anything that can be a pure
    function (maths, state decisions, storage adapters) goes there with a test.
-   Scenes in `src/scenes/` are thin wrappers that call it. This is what makes
-   the game testable in Node, where Phaser cannot run.
+   Scenes in `src/scenes/` and `src/ui/` are thin wrappers that call it. This is
+   what makes the game testable in Node, where Phaser cannot run.
 2. **Tune numbers in `src/config.js`, never inline.** Scenes import `TUNING as T`.
    If you add a feel-related constant, add it to `TUNING` with a short comment
    and units (px, px/s, ms).
@@ -89,7 +102,8 @@ tools/
    `assets/README.md`. Change a size only if you update that table AND the scene
    code that positions the sprite. `npm test` fails otherwise. The pipe image has
    its cap at the top and is flipped vertically for the top pipe; `bg.png` and
-   `ground.png` must tile horizontally.
+   `ground.png` must tile horizontally. Player/item redraws go through
+   `assets/src/` + `tools/process_art.py`.
 4. **Phaser stays pinned.** `index.html` loads `phaser@4.2.1` from jsDelivr.
    Bump it by changing that one tag; `tests/html.test.js` only checks the pin is
    an exact version. Phaser is a global (`Phaser.Scene`, `Phaser.Game`), not an
@@ -98,12 +112,12 @@ tools/
    root by GitHub Pages. Don't add a bundler, TypeScript, or npm packages without
    a strong reason; if you do, the deploy story has to change too.
 6. **Mobile first.** Touch is the primary input (`pointerdown`); keyboard
-   (Space / Up) is a convenience. Keep `touch-action: none`, the viewport meta,
-   and the WebAudio unlock-on-gesture. Test on a real phone when you touch
-   input, scaling, or audio.
+   (Space / Up / M / P / Esc / S) is a convenience. Keep `touch-action: none`,
+   the viewport meta, and the WebAudio unlock-on-gesture. Test on a real phone
+   when you touch input, scaling, or audio.
 7. **Storage can throw.** Private-mode Safari and blocked storage throw on
-   `localStorage` access. Go through `createBestStore()`; never touch
-   `localStorage` directly in scenes.
+   `localStorage` access. Go through `createBestStore()` or
+   `createSettingsStore()`; never touch `localStorage` directly in scenes.
 
 ## How to work on it
 
@@ -111,7 +125,8 @@ tools/
 npm test          # run everything; must pass before committing
 npm start         # http://localhost:8000 — then open on a phone on the same Wi-Fi
                   # via http://<laptop-ip>:8000 for real touch testing
-python3 tools/make_placeholders.py   # only to regenerate placeholder PNGs
+python3 tools/process_art.py         # rebuild poop/items from assets/src/ (Pillow)
+python3 tools/make_placeholders.py   # pipe / bg / ground / icons only
 ```
 
 Scene behaviour (physics, rendering, audio) cannot be verified in Node. When you
@@ -124,8 +139,14 @@ Commits so far follow `type(scope): summary` (`feat`, `docs`, `chore`); keep it.
 
 - New game mechanic → pure parts in `src/logic.js` + test in `tests/`, wiring in
   `src/scenes/Play.js`, knobs in `src/config.js`.
-- New art → `assets/`, add a row to `assets/README.md`, load it in `src/scenes/Boot.js`.
-- New sound → a `blip()` preset in `src/sound.js`.
+- New art → gameplay sprites via `assets/src/` + `tools/process_art.py` + a row
+  in `assets/README.md` + `load.image()` in `src/scenes/Boot.js`. Remaining
+  placeholders still go through `make_placeholders.py`, which must not overwrite
+  `poop.png`.
+- New sound → a `blip()` preset in `src/sound.js`, **or** a file in `assets/sfx/`
+  plus a `CREDITS.md` row with a URL plus `this.load.audio()` in Boot.
 - New scene → `src/scenes/`, register in the `scene:` array in `src/main.js`.
+- New UI chrome → `src/ui/` (Phaser wrapper) with any pure layout helper in
+  `src/logic.js`.
 - Multi-step work worth planning → a dated markdown plan in `.claude/plans/`.
 - Repo-wide conventions → this file. Player-facing docs → `README.md`.

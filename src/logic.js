@@ -1,7 +1,7 @@
 // Pure game logic with no Phaser or DOM dependency, so it can be tested in Node.
 // Everything Phaser-specific lives in src/scenes/.
 
-export const VERSION = '0.1.0';
+export const VERSION = '0.2.0';
 
 /** Deterministic PRNG (mulberry32). Returns a function in [0, 1). */
 export function createRng(seed = 1) {

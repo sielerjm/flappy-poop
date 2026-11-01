@@ -20,3 +20,11 @@ The player and items are Michael's drawings. Put a new source PNG in `assets/src
 | `icon-512.png` | 512x512 | Home-screen icon (large) | Same drawing as `icon-192.png`. Also used as the Apple touch icon. |
 
 Image format: PNG with alpha. The logical playfield is 360x640; draw at 1x (or 2x and let the game scale — set the `scale` when loading if you do).
+
+## Sounds
+
+Audio files live in `assets/sfx/`. Every file there must be named in `CREDITS.md` with a URL; `npm test` fails otherwise. Synth blips (flap, score, pickup, shield, hazard, and the die fallback) stay in `src/sound.js` and need no file.
+
+| File | What it is |
+|---|---|
+| `sfx/fart.mp3` | Death fart. "fart" by MacKaffee (Freesound) via Pixabay. See `CREDITS.md`. |
