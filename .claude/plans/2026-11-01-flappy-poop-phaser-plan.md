@@ -46,12 +46,14 @@ flappy-poop/
 - Verify: `npm test` → `# pass 1 / # fail 0`.
 - Commit: `chore(step 1/7): scaffold repo, test runner, plan`
 - Rollback: delete the directory (nothing else is touched).
+- Result: npm test 1/1 pass; wrong assertion correctly fails; commit `0b14cad`
 
-### Step 2/7 — Phaser boots: blank scene at phone size  [pending]
+### Step 2/7 — Phaser boots: blank scene at phone size  [done]
 - Change: `index.html` (`<meta viewport ... viewport-fit=cover>`, `touch-action:none`, `overscroll-behavior:none`, black letterbox background, `<script src="https://cdn.jsdelivr.net/npm/phaser@4.2.1/dist/phaser.min.js">`); `src/main.js` with `new Phaser.Game({ width:360, height:640, scale:{mode:FIT, autoCenter:CENTER_BOTH}, physics:{default:'arcade'}, scene:[Boot, Play, Over] })`; empty scenes that log their name.
 - Verify: `node --check` on all `src/**/*.js`; `tests/html.test.js` asserts `index.html` contains the viewport meta, `touch-action:none`, and a Phaser script tag pinned to an exact version (regex `phaser@\d+\.\d+\.\d+/`). Manual: open on phone → black canvas fills screen, no scroll, console shows scene names.
 - Commit: `feat(step 2/7): Phaser 4 boot with mobile scale config`
 - Rollback: `git checkout -- .`
+- Result: node --check 6/6 files; npm test 5/5 pass; phaser@4.2.1 npm tarball confirmed to contain dist/phaser.min.js with Scale.FIT, autoCenter, activePointers. Phone render: MANUAL, not verified here.
 
 ### Step 3/7 — Placeholder asset contract  [pending]
 - Change: Python script `tools/make_placeholders.py` (Pillow) generating `assets/poop.png` (48x48, emoji rendered), `assets/pipe.png` (64x480 pink column, cap baked in at top; flipped in code for the bottom), `assets/bg.png` (360x640 placeholder: pink villi band top/bottom, purple mucosa middle — tile-able horizontally), `assets/ground.png` (360x64, tile-able). `assets/README.md`: table of file → size → what it is → how to replace. `Boot.js` preloads them.
