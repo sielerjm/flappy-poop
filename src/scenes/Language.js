@@ -17,30 +17,30 @@ export class Language extends Phaser.Scene {
 
     const cx = GAME_WIDTH / 2;
     const cy = GAME_HEIGHT / 2;
-    const panel = { x: cx, y: cy, width: 280, height: 260 };
+    const panel = { x: cx, y: cy, width: 560, height: 520 };
     const dimmer = this.add.rectangle(GAME_WIDTH / 2, GAME_HEIGHT / 2, GAME_WIDTH, GAME_HEIGHT, 0x000000, 0.55).setInteractive();
     dimmer.on('pointerdown', (pointer) => {
       if (overlayOutsideHit(pointer.x, pointer.y, panel)) this.close();
     });
-    this.add.rectangle(cx, cy, panel.width, panel.height, 0x1a0b14, 0.95).setStrokeStyle(4, 0xe85e96);
+    this.add.rectangle(cx, cy, panel.width, panel.height, 0x1a0b14, 0.95).setStrokeStyle(8, 0xe85e96);
 
-    this.add.text(cx, cy - 95, t(locale, 'languageTitle'), { ...STYLE, fontSize: '26px', color: '#f8a0c8' }).setOrigin(0.5);
+    this.add.text(cx, cy - 190, t(locale, 'languageTitle'), { ...STYLE, fontSize: '52px', color: '#f8a0c8' }).setOrigin(0.5);
 
     const rows = [
-      { id: 'en', label: t(locale, 'langEnglish'), y: cy - 25 },
-      { id: 'zh-Hans', label: t(locale, 'langChinese'), y: cy + 45 },
+      { id: 'en', label: t(locale, 'langEnglish'), y: cy - 50 },
+      { id: 'zh-Hans', label: t(locale, 'langChinese'), y: cy + 90 },
     ];
     for (const row of rows) {
       const mark = row.id === locale ? '✓  ' : '    ';
       const label = this.add
-        .text(cx, row.y, `${mark}${row.label}`, { ...STYLE, fontSize: '22px' })
+        .text(cx, row.y, `${mark}${row.label}`, { ...STYLE, fontSize: '44px' })
         .setOrigin(0.5)
         .setInteractive({ useHandCursor: true });
       label.on('pointerdown', () => this.pick(row.id));
     }
 
     this.add
-      .text(cx, cy + 105, `v${VERSION}`, {
+      .text(cx, cy + 210, `v${VERSION}`, {
         ...STYLE,
         fontSize: metaFontSize(locale),
         color: '#6a5a74',
@@ -48,7 +48,7 @@ export class Language extends Phaser.Scene {
       })
       .setOrigin(0.5);
 
-    const close = this.add.text(cx + 118, cy - 108, '✕', { ...STYLE, fontSize: '24px' }).setOrigin(0.5).setInteractive({ useHandCursor: true });
+    const close = this.add.text(cx + 236, cy - 216, '✕', { ...STYLE, fontSize: '48px' }).setOrigin(0.5).setInteractive({ useHandCursor: true });
     close.on('pointerdown', () => this.close());
     this.input.keyboard?.on('keydown-ESC', () => {
       if (this.scene.isActive('Feedback')) return;

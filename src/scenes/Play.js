@@ -28,7 +28,7 @@ const TEXT_STYLE = {
   fontStyle: 'bold',
   color: '#ffffff',
   stroke: '#5a2a44',
-  strokeThickness: 6,
+  strokeThickness: 12,
   align: 'center',
 };
 
@@ -65,42 +65,42 @@ export class Play extends Phaser.Scene {
     const poopBody = scaledCircleBody(this.poop.frame.width, T.spriteDisplayScale, T.poopRadius);
     this.poop.body.setCircle(poopBody.radius, poopBody.offset, poopBody.offset);
     this.poop.body.setAllowGravity(false);
-    this.bob = this.tweens.add({ targets: this.poop, y: '+=12', duration: 500, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+    this.bob = this.tweens.add({ targets: this.poop, y: '+=24', duration: 500, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
 
     // HUD
-    this.scoreText = this.add.text(GAME_WIDTH / 2, 40, '0', { ...TEXT_STYLE, fontSize: '40px' }).setOrigin(0.5).setDepth(20);
+    this.scoreText = this.add.text(GAME_WIDTH / 2, 80, '0', { ...TEXT_STYLE, fontSize: '80px' }).setOrigin(0.5).setDepth(20);
     this.probioticIcon = this.add
-      .image(GAME_WIDTH / 2 - 28, 78, 'probiotic')
+      .image(GAME_WIDTH / 2 - 56, 156, 'probiotic')
       .setDisplaySize(T.hudProbioticSize, T.hudProbioticSize)
       .setDepth(20)
       .setVisible(false);
-    this.probioticText = this.add.text(GAME_WIDTH / 2 + 8, 78, '', { ...TEXT_STYLE, fontSize: '20px' }).setOrigin(0, 0.5).setDepth(20).setVisible(false);
+    this.probioticText = this.add.text(GAME_WIDTH / 2 + 16, 156, '', { ...TEXT_STYLE, fontSize: '40px' }).setOrigin(0, 0.5).setDepth(20).setVisible(false);
     this.readyTitle = this.add
-      .text(GAME_WIDTH / 2, GAME_HEIGHT * 0.3, t(this.locale, 'readyTitle'), { ...TEXT_STYLE, fontSize: '26px' })
+      .text(GAME_WIDTH / 2, GAME_HEIGHT * 0.3, t(this.locale, 'readyTitle'), { ...TEXT_STYLE, fontSize: '52px' })
       .setOrigin(0.5)
       .setDepth(20);
     const howTo = howToLayout(GAME_WIDTH, GAME_HEIGHT, T);
     this.howToLabel = this.add
-      .text(howTo.x, howTo.y, t(this.locale, 'howToPlay'), { ...TEXT_STYLE, fontSize: '20px', color: '#f8a0c8' })
+      .text(howTo.x, howTo.y, t(this.locale, 'howToPlay'), { ...TEXT_STYLE, fontSize: '40px', color: '#f8a0c8' })
       .setOrigin(0.5)
       .setDepth(20);
     this.readyHint = this.add
-      .text(GAME_WIDTH / 2, howTo.y + howTo.height / 2 + 28, t(this.locale, 'tapToFlap'), { ...TEXT_STYLE, fontSize: '22px' })
+      .text(GAME_WIDTH / 2, howTo.y + howTo.height / 2 + 56, t(this.locale, 'tapToFlap'), { ...TEXT_STYLE, fontSize: '44px' })
       .setOrigin(0.5)
       .setDepth(20);
 
     this.pauseShade = this.add.rectangle(GAME_WIDTH / 2, GAME_HEIGHT / 2, GAME_WIDTH, GAME_HEIGHT, 0x000000, 0.45).setDepth(25).setVisible(false);
     const [pauseTitle, pauseHint] = pauseBannerText(this.locale).split('\n');
     this.pauseText = this.add
-      .text(GAME_WIDTH / 2, GAME_HEIGHT * 0.40, pauseTitle, { ...TEXT_STYLE, fontSize: '26px' })
+      .text(GAME_WIDTH / 2, GAME_HEIGHT * 0.40, pauseTitle, { ...TEXT_STYLE, fontSize: '52px' })
       .setOrigin(0.5)
       .setDepth(26)
       .setVisible(false);
     this.pauseHint = this.add
-      .text(GAME_WIDTH / 2, GAME_HEIGHT * 0.40 + 36, pauseHint, {
+      .text(GAME_WIDTH / 2, GAME_HEIGHT * 0.40 + 72, pauseHint, {
         ...TEXT_STYLE,
-        fontSize: '18px',
-        wordWrap: { width: GAME_WIDTH - 32, useAdvancedWrap: true },
+        fontSize: '36px',
+        wordWrap: { width: GAME_WIDTH - 64, useAdvancedWrap: true },
       })
       .setOrigin(0.5)
       .setDepth(26)

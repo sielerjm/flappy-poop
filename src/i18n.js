@@ -143,9 +143,9 @@ export function pauseBannerText(locale) {
   return `${t(locale, 'pauseTitle')}\n${t(locale, 'pauseHint')}`;
 }
 
-/** Small meta lines (version, Updated, haptics hint): 14px in Chinese, 12px in English. */
+/** Small meta lines (version, Updated, haptics hint): 28px in Chinese, 24px in English (2x field). */
 export function metaFontSize(locale) {
-  return locale === 'zh-Hans' ? '14px' : '12px';
+  return locale === 'zh-Hans' ? '28px' : '24px';
 }
 
 /** Toggle label like "Sound   ON". */

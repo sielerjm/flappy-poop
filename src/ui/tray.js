@@ -22,11 +22,11 @@ export function createTray(scene, { muted }) {
 
   for (const b of [...buttons, info, lang, feedback]) {
     const r = b.size / 2;
-    const circle = scene.add.circle(b.x, b.y, r, 0x1a0b14, 1).setStrokeStyle(2, 0xe85e96).setDepth(30).setAlpha(T.trayAlpha);
+    const circle = scene.add.circle(b.x, b.y, r, 0x1a0b14, 1).setStrokeStyle(4, 0xe85e96).setDepth(30).setAlpha(T.trayAlpha);
     const label = scene.add
       .text(b.x, b.y, b.id === 'mute' ? (muted ? LABELS.muteOn : LABELS.muteOff) : LABELS[b.id], {
         fontFamily: 'sans-serif',
-        fontSize: '22px',
+        fontSize: '44px',
       })
       .setOrigin(0.5)
       .setDepth(31)

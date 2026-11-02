@@ -14,41 +14,41 @@ export class About extends Phaser.Scene {
     const locale = this.scene.get('Play')?.getLocale?.() ?? 'en';
     const cx = GAME_WIDTH / 2;
     const cy = GAME_HEIGHT / 2;
-    const panel = { x: cx, y: cy, width: 300, height: 500 };
+    const panel = { x: cx, y: cy, width: 600, height: 1000 };
     const dimmer = this.add.rectangle(GAME_WIDTH / 2, GAME_HEIGHT / 2, GAME_WIDTH, GAME_HEIGHT, 0x000000, 0.55).setInteractive();
     dimmer.on('pointerdown', (pointer) => {
       if (overlayOutsideHit(pointer.x, pointer.y, panel)) this.close();
     });
-    this.add.rectangle(cx, cy, panel.width, panel.height, 0x1a0b14, 0.95).setStrokeStyle(4, 0xe85e96);
+    this.add.rectangle(cx, cy, panel.width, panel.height, 0x1a0b14, 0.95).setStrokeStyle(8, 0xe85e96);
 
-    this.add.text(cx, cy - 220, t(locale, 'aboutTitle'), { ...STYLE, fontSize: '26px', color: '#f8a0c8' }).setOrigin(0.5);
+    this.add.text(cx, cy - 440, t(locale, 'aboutTitle'), { ...STYLE, fontSize: '52px', color: '#f8a0c8' }).setOrigin(0.5);
     this.add
-      .text(cx, cy + 8, t(locale, 'aboutBody'), {
+      .text(cx, cy + 16, t(locale, 'aboutBody'), {
         ...STYLE,
-        fontSize: '14px',
+        fontSize: '28px',
         color: '#c9b8dc',
         fontStyle: 'normal',
-        wordWrap: { width: 260, useAdvancedWrap: true },
-        lineSpacing: 3,
+        wordWrap: { width: 520, useAdvancedWrap: true },
+        lineSpacing: 6,
       })
       .setOrigin(0.5);
 
     const howTo = this.add
-      .text(cx, cy + 160, t(locale, 'howToPlay'), { ...STYLE, fontSize: '20px', color: '#f8a0c8' })
+      .text(cx, cy + 320, t(locale, 'howToPlay'), { ...STYLE, fontSize: '40px', color: '#f8a0c8' })
       .setOrigin(0.5)
       .setInteractive({ useHandCursor: true });
     howTo.on('pointerdown', () => this.scene.get('Play')?.handleChrome('howto'));
 
     const feedback = this.add
-      .text(cx, cy + 190, t(locale, 'feedbackLink'), { ...STYLE, fontSize: '18px', color: '#f8a0c8' })
+      .text(cx, cy + 380, t(locale, 'feedbackLink'), { ...STYLE, fontSize: '36px', color: '#f8a0c8' })
       .setOrigin(0.5)
       .setInteractive({ useHandCursor: true });
     feedback.on('pointerdown', () => this.scene.get('Play')?.handleChrome('feedback'));
 
     const metaSize = metaFontSize(locale);
-    this.add.text(cx, cy + 220, `v${VERSION}`, { ...STYLE, fontSize: metaSize, color: '#6a5a74', fontStyle: 'normal' }).setOrigin(0.5);
+    this.add.text(cx, cy + 440, `v${VERSION}`, { ...STYLE, fontSize: metaSize, color: '#6a5a74', fontStyle: 'normal' }).setOrigin(0.5);
     this.add
-      .text(cx, cy + 242, `${t(locale, 'updatedPrefix')} ${LAST_UPDATED}`, {
+      .text(cx, cy + 484, `${t(locale, 'updatedPrefix')} ${LAST_UPDATED}`, {
         ...STYLE,
         fontSize: metaSize,
         color: '#6a5a74',
@@ -56,7 +56,7 @@ export class About extends Phaser.Scene {
       })
       .setOrigin(0.5);
 
-    const close = this.add.text(cx + 128, cy - 228, '✕', { ...STYLE, fontSize: '24px' }).setOrigin(0.5).setInteractive({ useHandCursor: true });
+    const close = this.add.text(cx + 256, cy - 456, '✕', { ...STYLE, fontSize: '48px' }).setOrigin(0.5).setInteractive({ useHandCursor: true });
     close.on('pointerdown', () => this.close());
     this.input.keyboard?.on('keydown-ESC', () => {
       if (this.scene.isActive('HowTo') || this.scene.isActive('Feedback')) return;

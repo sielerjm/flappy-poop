@@ -18,12 +18,12 @@ export class Over extends Phaser.Scene {
 
     const cx = GAME_WIDTH / 2;
     const cy = GAME_HEIGHT / 2;
-    const panel = this.add.rectangle(cx, cy, 260, 220, 0x1a0b14, 0.85).setStrokeStyle(4, 0xe85e96);
+    const panel = this.add.rectangle(cx, cy, 520, 440, 0x1a0b14, 0.85).setStrokeStyle(8, 0xe85e96);
     const style = { fontFamily: 'sans-serif', fontStyle: 'bold', color: '#ffffff', align: 'center' };
-    this.add.text(cx, cy - 70, t(locale, 'gameOver'), { ...style, fontSize: '32px', color: '#f8a0c8' }).setOrigin(0.5);
-    this.add.text(cx, cy - 15, `${t(locale, 'scoreLabel')}  ${score}`, { ...style, fontSize: '24px' }).setOrigin(0.5);
-    this.add.text(cx, cy + 25, `${t(locale, 'bestLabel')}  ${best}`, { ...style, fontSize: '20px', color: '#c9b8dc' }).setOrigin(0.5);
-    this.retryText = this.add.text(cx, cy + 75, t(locale, 'tapToRetry'), { ...style, fontSize: '20px' }).setOrigin(0.5).setAlpha(0);
+    this.add.text(cx, cy - 140, t(locale, 'gameOver'), { ...style, fontSize: '64px', color: '#f8a0c8' }).setOrigin(0.5);
+    this.add.text(cx, cy - 30, `${t(locale, 'scoreLabel')}  ${score}`, { ...style, fontSize: '48px' }).setOrigin(0.5);
+    this.add.text(cx, cy + 50, `${t(locale, 'bestLabel')}  ${best}`, { ...style, fontSize: '40px', color: '#c9b8dc' }).setOrigin(0.5);
+    this.retryText = this.add.text(cx, cy + 150, t(locale, 'tapToRetry'), { ...style, fontSize: '40px' }).setOrigin(0.5).setAlpha(0);
     this.tweens.add({ targets: this.retryText, alpha: 1, delay: T.retryLockoutMs, duration: 200 });
     this.tweens.add({ targets: panel, scale: { from: 0.8, to: 1 }, duration: 180, ease: 'Back.easeOut' });
 

@@ -224,17 +224,17 @@ export function createEffects(t) {
  */
 export function trayLayout(width, height, t) {
   const size = t.trayHitMin;
-  const spacing = size + 8;
+  const spacing = size + 16;
   const y = height - t.trayHeight / 2;
   const ids = ['pause', 'mute', 'settings'];
-  const right = width - size / 2 - 8;
+  const right = width - size / 2 - 16;
   const buttons = ids.map((id, i) => ({
     id,
     x: right - (ids.length - 1 - i) * spacing,
     y,
     size,
   }));
-  const info = { id: 'info', x: size / 2 + 8, y, size };
+  const info = { id: 'info', x: size / 2 + 16, y, size };
   const lang = { id: 'lang', x: info.x + spacing, y, size };
   const feedback = { id: 'feedback', x: lang.x + spacing, y, size };
   return { buttons, info, lang, feedback, y, height: t.trayHeight };
@@ -273,12 +273,12 @@ export function scaledCircleBody(frameSize, displayScale, logicalRadius) {
  * trayHitMin tall so a thumb can tap it without starting the run.
  */
 export function howToLayout(width, height, t) {
-  const boxW = 200;
-  const boxH = Math.max(44, t.trayHitMin);
+  const boxW = 400;
+  const boxH = Math.max(88, t.trayHitMin);
   return {
     id: 'howto',
     x: width / 2,
-    y: height * 0.3 + 52,
+    y: height * 0.3 + 104,
     width: boxW,
     height: boxH,
   };
