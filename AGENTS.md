@@ -43,7 +43,7 @@ src/
                             scoring, items, sprite angle, retry lockout, difficulty,
                             best-score store, settings store, vibrate helper,
                             trayLayout, trayHit, howToLayout, howToHit,
-                            ABOUT_TEXT, HOW_TO_PLAY_TEXT, chromeIntent.
+                            ABOUT_TEXT, HOW_TO_PLAY_TEXT, LAST_UPDATED, chromeIntent.
                             Fully unit-tested.
   sound.js                  WebAudio synth blips + setMuted/isMuted/attachGame.
                             setMuted also sets game.sound.mute (the fart MP3).
@@ -59,17 +59,20 @@ src/
     Play.js                 State machine: 'ready' -> 'playing' -> 'paused'/'dead'.
                             Spawns pipes and items, tray, auto-pause, haptics, dies,
                             then launches Over as an overlay scene. Tray / keyboard
-                            go through chromeIntent. Opening Settings, About, or
-                            HowTo while playing pauses; closing them does not resume.
+                            go through chromeIntent. Overlay order is howto >
+                            about > settings. Opening Settings, About, or HowTo
+                            while playing pauses; closing them does not resume.
                             Unpause applies flapVelocity as a recovery bounce.
     Over.js                 Game-over panel (score, best, "tap to retry") with a
                             tap lockout and its own tray (mute still works).
     Settings.js             Overlay: sound, haptics (Android only), music coming
                             soon, About link, version.
-    About.js                Overlay: author, LLM note, engine/art/sound credits.
+    About.js                Overlay: author, LLM note, engine/art/sound credits,
+                            How to play link, LAST_UPDATED under the version.
     HowTo.js                Overlay: flap/pipe rules plus fiber / probiotic /
                             bacteria sprites. Ready-screen How to play uses
-                            howToHit() so it does not start a run.
+                            howToHit() so it does not start a run. Opened from
+                            About, X/Esc closes HowTo and About together.
 
 assets/                     Contract PNGs + README.md (the art contract).
   README.md                 File name, pixel size, orientation rules. tests enforce it.
@@ -92,7 +95,8 @@ tests/                      node --test, zero deps. Each file is self-describing
                             trayHit centre hits vs miss in the tray gap
   items.test.js             rollItem, itemGapY, scoreAfterItem, probiotic inventory
   tuning.test.js            item / fartVolume sanity bounds
-  about.test.js             ABOUT_TEXT names author, LLM, Phaser, JS, sound
+  about.test.js             ABOUT_TEXT names author, LLM, Phaser, JS, sound;
+                            LAST_UPDATED has a year and a time
   howto.test.js             HOW_TO copy, howToLayout / howToHit geometry
   chrome.test.js            chromeIntent matrix across state x overlay x input
   smoke.test.js             logic.js imports and exports VERSION
@@ -101,7 +105,8 @@ tests/                      node --test, zero deps. Each file is self-describing
 tools/
   make_placeholders.py      Regenerates pipe / bg / ground / icons only. Must not
                             overwrite poop.png. Run only when you intend to.
-  process_art.py            Crops assets/src/ drawings into 48x48 contract PNGs.
+  process_art.py            Crops assets/src/ drawings into 96x96 contract PNGs
+                            (drawn at spriteDisplayScale 0.5).
   serve.py                  npm start: bind 0.0.0.0:8000, print laptop + phone URLs.
 
 .claude/plans/              Checkpointed build plans. Historical record + decision

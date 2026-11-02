@@ -1,6 +1,6 @@
 # Flappy Poop 💩
 
-A poop emoji flaps through the gut, dodging pink intestinal folds. A Flappy Bird clone for phone browsers, built on [Phaser 4](https://phaser.io) with no build step. Version **0.2.3**.
+A poop emoji flaps through the gut, dodging pink intestinal folds. A Flappy Bird clone for phone browsers, built on [Phaser 4](https://phaser.io) with no build step. Version **0.2.4**.
 
 **Play:** push this repo to GitHub, enable Pages (Settings → Pages → Deploy from branch → `main` / root), then open `https://<you>.github.io/<repo>/`. Add it to your home screen for a full-screen, app-like launch.
 
@@ -19,8 +19,8 @@ The probiotic does **not** save you from a pipe.
 ## Controls
 
 - **Tap / Space / ↑** — flap. The first tap also starts the run. After closing Settings or About during a run, tap or Space resumes; that tap does not flap. Unpausing from the pause banner bounces (same lift as a flap) so you can recover.
-- **How to play** (ready screen) — overlay with flap/pipe rules and what fiber, probiotic, and bad bacteria do. Tapping it does not start the run.
-- **Bottom-left (i)** — About (credits, author, LLM note). Independent of Settings.
+- **How to play** (ready screen, also linked from About) — overlay with flap/pipe rules and what fiber, probiotic, and bad bacteria do. Tapping it does not start the run. Closing How to play that was opened from About also closes About, leaving a paused run if info was opened mid-play.
+- **Bottom-left (i)** — About (credits, author, LLM note, last-updated stamp, How to play link). Independent of Settings.
 - **Bottom-right tray** — pause, mute/unmute, settings. Tray taps never flap, and on the game-over screen they never retry.
 - **P** or **Esc** — pause / resume (during a run). Ignored while Settings, About, or How to play is open; Esc then closes the top overlay.
 - **M** — mute / unmute. Persists across reload. Still works while an overlay is open.
@@ -39,7 +39,7 @@ npm test       # Node 22 built-in test runner, zero dependencies
 
 ## Replacing the art
 
-The player and items are drawings processed by `tools/process_art.py` from `assets/src/`. Drop a new source PNG in `assets/src/` and re-run that script (needs Pillow) to crop, knock out white, and write the 48×48 contract files.
+The player and items are drawings processed by `tools/process_art.py` from `assets/src/`. Drop a new source PNG in `assets/src/` and re-run that script (needs Pillow) to crop, knock out white, and write the 96×96 contract files (drawn at 0.5 scale).
 
 Pipe, background, ground, and icons are still placeholders from `tools/make_placeholders.py`. That script must **not** overwrite `poop.png`. Overwrite any contract file at the same name and size; `assets/README.md` has the table and `npm test` enforces it.
 
@@ -60,8 +60,8 @@ src/
     Play.js             ready -> playing -> paused -> dead; items; tray
     Over.js             game-over panel; tray mute still works
     Settings.js         sound / haptics overlay; About link
-    About.js            credits, author, LLM note overlay
-    HowTo.js            How to play overlay (ready-screen button)
+    About.js            credits, author, LLM note, How to play link, last-updated
+    HowTo.js            How to play overlay (ready screen and About link)
 assets/                 contract PNGs + README.md (the art contract)
   poop.png poop-dead.png fiber.png probiotic.png bacteria.png
   pipe.png bg.png ground.png icon-192.png icon-512.png
