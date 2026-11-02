@@ -71,7 +71,7 @@ export class Play extends Phaser.Scene {
 
     this.pauseShade = this.add.rectangle(GAME_WIDTH / 2, GAME_HEIGHT / 2, GAME_WIDTH, GAME_HEIGHT, 0x000000, 0.45).setDepth(25).setVisible(false);
     this.pauseText = this.add
-      .text(GAME_WIDTH / 2, GAME_HEIGHT * 0.42, 'PAUSED — tap to resume', { ...TEXT_STYLE, fontSize: '22px' })
+      .text(GAME_WIDTH / 2, GAME_HEIGHT * 0.42, 'PAUSED — tap anywhere to resume', { ...TEXT_STYLE, fontSize: '22px' })
       .setOrigin(0.5)
       .setDepth(26)
       .setVisible(false);
@@ -213,7 +213,10 @@ export class Play extends Phaser.Scene {
     this.bob.resume();
     this.pauseShade.setVisible(false);
     this.pauseText.setVisible(false);
-    this.flapLockedUntil = this.time.now + T.pauseResumeLockoutMs;
+    // Recovery bounce on the resume tap. Do not set flapLockedUntil: chrome
+    // already maps that tap to resume, not flap; a lockout delays the next flap.
+    this.poop.setVelocityY(T.flapVelocity);
+    sfx.flap();
   }
 
   armResumeLockout() {
