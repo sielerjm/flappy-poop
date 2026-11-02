@@ -45,8 +45,8 @@ src/
                             scoring, items, sprite angle, retry lockout, difficulty,
                             best-score store, settings store (incl. locale), vibrate
                             helper, trayLayout, trayHit, howToLayout, howToHit,
-                            LAST_UPDATED, issueUrl, chromeIntent, overlayOutsideHit,
-                            scaledCircleBody. Fully unit-tested.
+                            LAST_UPDATED, issueUrl, openExternalUrl, chromeIntent,
+                            overlayOutsideHit, scaledCircleBody. Fully unit-tested.
   i18n.js                   en / zh-Hans string catalog, t(), initialLocale,
                             howToItems, pauseBannerText, metaFontSize. Player copy
                             lives here (not in logic.js). See TRANSLATION_NOTES.md.
@@ -88,7 +88,8 @@ src/
     Language.js             Overlay: English / 简体中文 picker (🌐 or L).
     Feedback.js             Overlay: Bug / Feature request chooser (💬, F, or links
                             from About/HowTo). Buttons open GitHub issue forms via
-                            issueUrl(); closing leaves any parent overlay open.
+                            issueUrl() + openExternalUrl(); closing leaves any
+                            parent overlay open.
 
 assets/                     Contract PNGs + README.md (the art contract).
   README.md                 File name, pixel size, orientation rules. tests enforce it.
@@ -114,7 +115,8 @@ tests/                      node --test, zero deps. Each file is self-describing
   about.test.js             About copy (both locales) names author, LLM, Phaser, JS, sound;
                             LAST_UPDATED has a year and a time
   howto.test.js             HOW_TO copy, pause banner, howToLayout / howToHit geometry
-  feedback.test.js          issueUrl bug/feature templates; feedback i18n keys
+  feedback.test.js          issueUrl bug/feature templates; openExternalUrl paths;
+                            feedback i18n keys
   i18n.test.js              catalog key parity, zh≠en (allowlist), TRANSLATION_NOTES
                             key coverage, scene English denylist, initialLocale
   overlay.test.js           overlayOutsideHit inside vs 1px outside HowTo/Settings panels

@@ -18,6 +18,43 @@ export function issueUrl(kind) {
   throw new Error(`issueUrl: unknown kind ${kind}`);
 }
 
+/**
+ * Open an external URL from a canvas gesture. Mobile browsers often block
+ * window.open; prefer a temporary <a> click, then open, then same-tab assign.
+ * @param {string} url
+ * @param {object} [api=globalThis] injectable for tests
+ * @returns {'anchor'|'window'|'navigate'|'none'}
+ */
+export function openExternalUrl(url, api = globalThis) {
+  const doc = api.document;
+  if (doc?.createElement) {
+    const a = doc.createElement('a');
+    a.href = url;
+    a.target = '_blank';
+    a.rel = 'noopener noreferrer';
+    doc.body?.appendChild(a);
+    a.click();
+    a.remove?.();
+    return 'anchor';
+  }
+  if (typeof api.open === 'function') {
+    const win = api.open(url, '_blank');
+    if (win) {
+      try {
+        win.opener = null;
+      } catch {
+        /* ignore */
+      }
+      return 'window';
+    }
+  }
+  if (api.location && typeof api.location.assign === 'function') {
+    api.location.assign(url);
+    return 'navigate';
+  }
+  return 'none';
+}
+
 /** Deterministic PRNG (mulberry32). Returns a function in [0, 1). */
 export function createRng(seed = 1) {
   let a = seed >>> 0;

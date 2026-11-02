@@ -1,5 +1,5 @@
 import { GAME_WIDTH, GAME_HEIGHT } from '../config.js';
-import { VERSION, chromeIntent, overlayOutsideHit, issueUrl } from '../logic.js';
+import { VERSION, chromeIntent, overlayOutsideHit, issueUrl, openExternalUrl } from '../logic.js';
 import { t, metaFontSize } from '../i18n.js';
 
 const STYLE = { fontFamily: 'sans-serif', fontStyle: 'bold', color: '#ffffff', align: 'center' };
@@ -60,10 +60,7 @@ export class Feedback extends Phaser.Scene {
   }
 
   openIssue(kind) {
-    const url = issueUrl(kind);
-    if (typeof globalThis.open === 'function') {
-      globalThis.open(url, '_blank', 'noopener,noreferrer');
-    }
+    openExternalUrl(issueUrl(kind));
   }
 
   close() {
