@@ -19,24 +19,15 @@ export function issueUrl(kind) {
 }
 
 /**
- * Open an external URL from a canvas gesture. Mobile browsers often block
- * window.open; prefer a temporary <a> click, then open, then same-tab assign.
+ * Open an external URL from a canvas gesture. Prefer window.open; if that is
+ * blocked (common on mobile / PWA), fall back to same-tab location.assign.
+ * A synthetic <a> click is not used: browsers often ignore it silently and we
+ * cannot detect failure to fall through.
  * @param {string} url
  * @param {object} [api=globalThis] injectable for tests
- * @returns {'anchor'|'window'|'navigate'|'none'}
+ * @returns {'window'|'navigate'|'none'}
  */
 export function openExternalUrl(url, api = globalThis) {
-  const doc = api.document;
-  if (doc?.createElement) {
-    const a = doc.createElement('a');
-    a.href = url;
-    a.target = '_blank';
-    a.rel = 'noopener noreferrer';
-    doc.body?.appendChild(a);
-    a.click();
-    a.remove?.();
-    return 'anchor';
-  }
   if (typeof api.open === 'function') {
     const win = api.open(url, '_blank');
     if (win) {

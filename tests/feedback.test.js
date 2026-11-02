@@ -12,54 +12,18 @@ test('issueUrl returns GitHub new-issue template URLs for bug and feature', () =
   assert.throws(() => issueUrl('other'), /unknown kind/);
 });
 
-test('openExternalUrl prefers a temporary anchor click', () => {
-  const clicks = [];
-  const removed = [];
-  const appended = [];
-  const a = {
-    href: '',
-    target: '',
-    rel: '',
-    click() {
-      clicks.push(this.href);
-    },
-    remove() {
-      removed.push(true);
-    },
-  };
-  const api = {
-    document: {
-      createElement(tag) {
-        assert.equal(tag, 'a');
-        return a;
-      },
-      body: {
-        appendChild(el) {
-          appended.push(el);
-        },
-      },
-    },
-    open() {
-      assert.fail('open should not run when document is available');
-    },
-  };
-  const url = issueUrl('bug');
-  assert.equal(openExternalUrl(url, api), 'anchor');
-  assert.equal(a.href, url);
-  assert.equal(a.target, '_blank');
-  assert.equal(a.rel, 'noopener noreferrer');
-  assert.deepEqual(appended, [a]);
-  assert.deepEqual(clicks, [url]);
-  assert.deepEqual(removed, [true]);
-});
-
-test('openExternalUrl uses window.open when document is missing', () => {
+test('openExternalUrl uses window.open when it returns a window', () => {
   let opened = null;
   const win = { opener: 'parent' };
   const api = {
     open(url, target) {
       opened = { url, target };
       return win;
+    },
+    location: {
+      assign() {
+        assert.fail('assign should not run when open succeeds');
+      },
     },
   };
   const url = issueUrl('feature');
