@@ -22,6 +22,15 @@ test('every sfx returns without throwing when muted and when no AudioContext exi
   assert.doesNotThrow(() => unlock());
 });
 
+test('unlock calls Phaser sound.unlock when a game is attached', () => {
+  let unlocked = false;
+  const game = { sound: { mute: false, unlock() { unlocked = true; } } };
+  attachGame(game);
+  assert.doesNotThrow(() => unlock());
+  assert.equal(unlocked, true);
+  attachGame(null);
+});
+
 test('setMuted(true) on a fake game sets game.sound.mute', () => {
   const game = { sound: { mute: false } };
   attachGame(game);

@@ -26,17 +26,12 @@ export function isMuted() {
 }
 
 export function unlock() {
-  if (muted) {
-    if (ctx?.state === 'suspended') ctx.resume();
-    return;
+  if (!ctx) {
+    const AC = audioContextCtor();
+    if (AC) ctx = new AC();
   }
-  if (ctx) {
-    if (ctx.state === 'suspended') ctx.resume();
-    return;
-  }
-  const AC = audioContextCtor();
-  if (!AC) return;
-  ctx = new AC();
+  if (ctx?.state === 'suspended') ctx.resume();
+  game?.sound?.unlock?.();
 }
 
 function blip({ freq = 440, to = freq, type = 'square', duration = 0.08, gain = 0.08 }) {
