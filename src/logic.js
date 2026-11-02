@@ -266,6 +266,15 @@ export function trayHit(x, y, layout) {
 }
 
 /**
+ * Arcade circle body in Phaser source pixels. setCircle() takes unscaled
+ * texture units; the world radius is radius * displayScale.
+ */
+export function scaledCircleBody(frameSize, displayScale, logicalRadius) {
+  const radius = logicalRadius / displayScale;
+  return { radius, offset: frameSize / 2 - radius };
+}
+
+/**
  * Ready-screen How to play hit box, centred under the title. At least
  * trayHitMin tall so a thumb can tap it without starting the run.
  */
