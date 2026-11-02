@@ -50,7 +50,10 @@ export class Language extends Phaser.Scene {
 
     const close = this.add.text(cx + 118, cy - 108, '✕', { ...STYLE, fontSize: '24px' }).setOrigin(0.5).setInteractive({ useHandCursor: true });
     close.on('pointerdown', () => this.close());
-    this.input.keyboard?.on('keydown-ESC', () => this.close());
+    this.input.keyboard?.on('keydown-ESC', () => {
+      if (this.scene.isActive('Feedback')) return;
+      this.close();
+    });
   }
 
   pick(next) {
@@ -60,6 +63,7 @@ export class Language extends Phaser.Scene {
   }
 
   close() {
+    if (this.scene.isActive('Feedback')) return;
     const play = this.scene.get('Play');
     const result = chromeIntent({
       state: play?.state ?? 'ready',

@@ -122,6 +122,7 @@ export class Play extends Phaser.Scene {
     this.input.keyboard?.on('keydown-S', () => this.handleChrome('settings'));
     this.input.keyboard?.on('keydown-I', () => this.handleChrome('info'));
     this.input.keyboard?.on('keydown-L', () => this.handleChrome('lang'));
+    this.input.keyboard?.on('keydown-F', () => this.handleChrome('feedback'));
 
     this.onHidden = () => {
       if (typeof document !== 'undefined' && document.hidden) this.autoPause();
@@ -200,11 +201,23 @@ export class Play extends Phaser.Scene {
     const howto = this.scene.isActive('HowTo');
     const settings = this.scene.isActive('Settings');
     const language = this.scene.isActive('Language');
+    const feedback = this.scene.isActive('Feedback');
     return {
       state: this.state,
-      overlay: language ? 'language' : howto ? 'howto' : about ? 'about' : settings ? 'settings' : null,
+      overlay: feedback
+        ? 'feedback'
+        : language
+          ? 'language'
+          : howto
+            ? 'howto'
+            : about
+              ? 'about'
+              : settings
+                ? 'settings'
+                : null,
       stackedSettings: about && settings,
       stackedAbout: howto && about,
+      stackedUnder: feedback && (about || howto || settings || language),
       input,
       resumeLocked: this.time.now < this.flapLockedUntil,
     };
@@ -244,6 +257,11 @@ export class Play extends Phaser.Scene {
         if (result.pause) this.pausePlay();
         if (!this.scene.isActive('Language')) this.scene.launch('Language');
         this.scene.bringToTop('Language');
+        break;
+      case 'openFeedback':
+        if (result.pause) this.pausePlay();
+        if (!this.scene.isActive('Feedback')) this.scene.launch('Feedback');
+        this.scene.bringToTop('Feedback');
         break;
       case 'start':
         this.start();

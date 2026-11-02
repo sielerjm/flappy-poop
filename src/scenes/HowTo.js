@@ -49,8 +49,14 @@ export class HowTo extends Phaser.Scene {
         .setOrigin(0, 0.5);
     });
 
+    const feedback = this.add
+      .text(cx, cy + 195, t(locale, 'feedbackLink'), { ...STYLE, fontSize: '18px', color: '#f8a0c8' })
+      .setOrigin(0.5)
+      .setInteractive({ useHandCursor: true });
+    feedback.on('pointerdown', () => this.scene.get('Play')?.handleChrome('feedback'));
+
     this.add
-      .text(cx, cy + 220, `v${VERSION}`, {
+      .text(cx, cy + 230, `v${VERSION}`, {
         ...STYLE,
         fontSize: metaFontSize(locale),
         color: '#6a5a74',
@@ -60,10 +66,14 @@ export class HowTo extends Phaser.Scene {
 
     const close = this.add.text(cx + 128, cy - 228, '✕', { ...STYLE, fontSize: '24px' }).setOrigin(0.5).setInteractive({ useHandCursor: true });
     close.on('pointerdown', () => this.close());
-    this.input.keyboard?.on('keydown-ESC', () => this.close());
+    this.input.keyboard?.on('keydown-ESC', () => {
+      if (this.scene.isActive('Feedback')) return;
+      this.close();
+    });
   }
 
   close() {
+    if (this.scene.isActive('Feedback')) return;
     const play = this.scene.get('Play');
     const stackedAbout = this.scene.isActive('About');
     const result = chromeIntent({

@@ -1,0 +1,26 @@
+name: Feature request
+description: An idea to improve Flappy Poop
+title: "[Feature] "
+labels: ["enhancement"]
+body:
+  - type: input
+    id: summary
+    attributes:
+      label: Short summary
+      description: One line for the idea.
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: What would you like?
+      description: Describe the feature and how it would work in the game.
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: Why does this help?
+      description: Optional. Who benefits and why it matters.
+    validations:
+      required: false

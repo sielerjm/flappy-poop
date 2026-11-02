@@ -34,15 +34,21 @@ export class About extends Phaser.Scene {
       .setOrigin(0.5);
 
     const howTo = this.add
-      .text(cx, cy + 175, t(locale, 'howToPlay'), { ...STYLE, fontSize: '20px', color: '#f8a0c8' })
+      .text(cx, cy + 160, t(locale, 'howToPlay'), { ...STYLE, fontSize: '20px', color: '#f8a0c8' })
       .setOrigin(0.5)
       .setInteractive({ useHandCursor: true });
     howTo.on('pointerdown', () => this.scene.get('Play')?.handleChrome('howto'));
 
+    const feedback = this.add
+      .text(cx, cy + 190, t(locale, 'feedbackLink'), { ...STYLE, fontSize: '18px', color: '#f8a0c8' })
+      .setOrigin(0.5)
+      .setInteractive({ useHandCursor: true });
+    feedback.on('pointerdown', () => this.scene.get('Play')?.handleChrome('feedback'));
+
     const metaSize = metaFontSize(locale);
-    this.add.text(cx, cy + 205, `v${VERSION}`, { ...STYLE, fontSize: metaSize, color: '#6a5a74', fontStyle: 'normal' }).setOrigin(0.5);
+    this.add.text(cx, cy + 220, `v${VERSION}`, { ...STYLE, fontSize: metaSize, color: '#6a5a74', fontStyle: 'normal' }).setOrigin(0.5);
     this.add
-      .text(cx, cy + 228, `${t(locale, 'updatedPrefix')} ${LAST_UPDATED}`, {
+      .text(cx, cy + 242, `${t(locale, 'updatedPrefix')} ${LAST_UPDATED}`, {
         ...STYLE,
         fontSize: metaSize,
         color: '#6a5a74',
@@ -53,13 +59,13 @@ export class About extends Phaser.Scene {
     const close = this.add.text(cx + 128, cy - 228, '✕', { ...STYLE, fontSize: '24px' }).setOrigin(0.5).setInteractive({ useHandCursor: true });
     close.on('pointerdown', () => this.close());
     this.input.keyboard?.on('keydown-ESC', () => {
-      if (this.scene.isActive('HowTo')) return;
+      if (this.scene.isActive('HowTo') || this.scene.isActive('Feedback')) return;
       this.close();
     });
   }
 
   close() {
-    if (this.scene.isActive('HowTo')) return;
+    if (this.scene.isActive('HowTo') || this.scene.isActive('Feedback')) return;
     const play = this.scene.get('Play');
     const result = chromeIntent({
       state: play?.state ?? 'ready',

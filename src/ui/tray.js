@@ -8,6 +8,7 @@ const LABELS = {
   settings: '⚙',
   info: 'i',
   lang: '🌐',
+  feedback: '💬',
 };
 
 /**
@@ -15,11 +16,11 @@ const LABELS = {
  * trayHit() in the scene so they do not depend on Phaser hit-area origin.
  */
 export function createTray(scene, { muted }) {
-  const { buttons, info, lang } = trayLayout(GAME_WIDTH, GAME_HEIGHT, T);
+  const { buttons, info, lang, feedback } = trayLayout(GAME_WIDTH, GAME_HEIGHT, T);
   const nodes = [];
   let muteLabel;
 
-  for (const b of [...buttons, info, lang]) {
+  for (const b of [...buttons, info, lang, feedback]) {
     const r = b.size / 2;
     const circle = scene.add.circle(b.x, b.y, r, 0x1a0b14, 1).setStrokeStyle(2, 0xe85e96).setDepth(30).setAlpha(T.trayAlpha);
     const label = scene.add

@@ -9,6 +9,15 @@ export const VERSION = '0.2.7';
 /** Player-facing stamp on the About overlay. Bump with VERSION. */
 export const LAST_UPDATED = '2 Nov 2026, 17:02';
 
+const ISSUE_BASE = 'https://github.com/sielerjm/flappy-poop/issues/new';
+
+/** GitHub new-issue URL for a feedback kind (`bug` or `feature`). */
+export function issueUrl(kind) {
+  if (kind === 'bug') return `${ISSUE_BASE}?template=bug.yml`;
+  if (kind === 'feature') return `${ISSUE_BASE}?template=feature.yml`;
+  throw new Error(`issueUrl: unknown kind ${kind}`);
+}
+
 /** Deterministic PRNG (mulberry32). Returns a function in [0, 1). */
 export function createRng(seed = 1) {
   let a = seed >>> 0;
@@ -210,8 +219,8 @@ export function createEffects(t) {
 
 /**
  * Tray button centres: pause / mute / settings along the bottom-right, plus
- * info and language at the bottom-left. Hit boxes are trayHitMin square and at
- * least that far apart, all inside the field.
+ * info, language, and feedback at the bottom-left. Hit boxes are trayHitMin
+ * square and at least that far apart, all inside the field.
  */
 export function trayLayout(width, height, t) {
   const size = t.trayHitMin;
@@ -227,7 +236,8 @@ export function trayLayout(width, height, t) {
   }));
   const info = { id: 'info', x: size / 2 + 8, y, size };
   const lang = { id: 'lang', x: info.x + spacing, y, size };
-  return { buttons, info, lang, y, height: t.trayHeight };
+  const feedback = { id: 'feedback', x: lang.x + spacing, y, size };
+  return { buttons, info, lang, feedback, y, height: t.trayHeight };
 }
 
 /**
@@ -239,6 +249,7 @@ export function trayHit(x, y, layout) {
   const targets = [...(layout.buttons ?? [])];
   if (layout.info) targets.push(layout.info);
   if (layout.lang) targets.push(layout.lang);
+  if (layout.feedback) targets.push(layout.feedback);
   for (const b of targets) {
     const r = b.size / 2;
     const dx = x - b.x;
@@ -298,10 +309,11 @@ export function overlayOutsideHit(x, y, panel) {
  * result; this function is Phaser-free so the matrix can be tested in Node.
  *
  * @param {'ready'|'playing'|'paused'|'dead'} state
- * @param {null|'settings'|'about'|'howto'|'language'} overlay topmost overlay (pause is a state)
+ * @param {null|'settings'|'about'|'howto'|'language'|'feedback'} overlay topmost overlay (pause is a state)
  * @param {boolean} stackedSettings true when About sits on top of Settings
  * @param {boolean} stackedAbout true when HowTo sits on top of About
- * @param {'pause'|'mute'|'settings'|'info'|'howto'|'lang'|'tap'|'esc'|'close'} input
+ * @param {boolean} stackedUnder true when Feedback sits on top of another overlay
+ * @param {'pause'|'mute'|'settings'|'info'|'howto'|'lang'|'feedback'|'tap'|'esc'|'close'} input
  * @param {boolean} resumeLocked true during pauseResumeLockoutMs after overlay close
  * @returns {{ do: string, pause?: boolean, armResumeLockout?: boolean, closeAbout?: boolean }}
  */
@@ -310,6 +322,7 @@ export function chromeIntent({
   overlay = null,
   stackedSettings = false,
   stackedAbout = false,
+  stackedUnder = false,
   input,
   resumeLocked = false,
 }) {
@@ -320,8 +333,12 @@ export function chromeIntent({
       if (overlay === 'howto' && stackedAbout) {
         return { do: 'closeTop', closeAbout: true, armResumeLockout: true };
       }
+      if (overlay === 'feedback') {
+        return { do: 'closeTop', armResumeLockout: !stackedUnder };
+      }
       return { do: 'closeTop', armResumeLockout: !(overlay === 'about' && stackedSettings) };
     }
+    if (input === 'feedback') return { do: 'openFeedback', pause: false };
     if (input === 'info' && overlay === 'settings') return { do: 'openAbout', pause: false };
     if (input === 'howto' && overlay === 'about') return { do: 'openHowTo', pause: false };
     return { do: 'ignore' };
@@ -336,6 +353,7 @@ export function chromeIntent({
   if (input === 'info') return { do: 'openAbout', pause: state === 'playing' };
   if (input === 'howto') return { do: 'openHowTo', pause: state === 'playing' };
   if (input === 'lang') return { do: 'openLanguage', pause: state === 'playing' };
+  if (input === 'feedback') return { do: 'openFeedback', pause: state === 'playing' };
   if (input === 'tap') {
     if (state === 'playing') return { do: 'flap' };
     if (state === 'paused') return resumeLocked ? { do: 'ignore' } : { do: 'resume' };

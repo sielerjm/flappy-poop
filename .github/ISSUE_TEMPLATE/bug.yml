@@ -1,0 +1,42 @@
+name: Bug report
+description: Something is broken or unexpected in Flappy Poop
+title: "[Bug] "
+labels: ["bug"]
+body:
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: Steps to reproduce and what you saw.
+      placeholder: 1. Open the game… 2. Tap… 3. …
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect?
+    validations:
+      required: true
+  - type: input
+    id: device
+    attributes:
+      label: Device / browser
+      description: e.g. iPhone 15 Safari, Android Chrome, desktop Firefox
+      placeholder: Phone or desktop, browser name
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Game version
+      description: Shown on About / Settings (e.g. v0.2.7)
+      placeholder: v0.2.7
+    validations:
+      required: false
+  - type: textarea
+    id: extras
+    attributes:
+      label: Screenshots or extra notes
+      description: Optional. Paste image links or more detail.
+    validations:
+      required: false
