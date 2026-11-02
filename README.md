@@ -30,11 +30,11 @@ The probiotic does **not** save you from a pipe.
 ## Run locally
 
 ```bash
-npm start      # serves on http://localhost:8000 (python3 -m http.server)
+npm start      # serves on 0.0.0.0:8000 and prints laptop + phone URLs
 npm test       # Node 22 built-in test runner, zero dependencies
 ```
 
-To test on your phone: run `npm start` on your laptop, then open `http://<laptop-ip>:8000` from the phone on the same Wi-Fi.
+`npm start` prints `http://localhost:8000` for the laptop and `http://<LAN-IP>:8000` for a phone on the same Wi-Fi. Do not open localhost on the phone — that is the phone itself, not this laptop.
 
 ## Replacing the art
 
@@ -67,8 +67,9 @@ assets/                 contract PNGs + README.md (the art contract)
   sfx/fart.mp3          death sample
 tools/make_placeholders.py   pipe / bg / ground / icons only (needs Pillow)
 tools/process_art.py         crop Michael's sources into contract PNGs
+tools/serve.py               npm start: bind 0.0.0.0:8000, print phone URL
 tests/                  node --test: html assets logic state difficulty store smoke
-                        settings sound tray items tuning about chrome
+                        settings sound tray items tuning about chrome serve
 .claude/plans/          checkpointed build plans
 ```
 

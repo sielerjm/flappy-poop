@@ -84,11 +84,13 @@ tests/                      node --test, zero deps. Each file is self-describing
   about.test.js             ABOUT_TEXT names author, LLM, Phaser, JS, sound
   chrome.test.js            chromeIntent matrix across state x overlay x input
   smoke.test.js             logic.js imports and exports VERSION
+  serve.test.js             npm start points at tools/serve.py; bind + URL print
 
 tools/
   make_placeholders.py      Regenerates pipe / bg / ground / icons only. Must not
                             overwrite poop.png. Run only when you intend to.
   process_art.py            Crops assets/src/ drawings into 48x48 contract PNGs.
+  serve.py                  npm start: bind 0.0.0.0:8000, print laptop + phone URLs.
 
 .claude/plans/              Checkpointed build plans. Historical record + decision
                             log. Don't edit completed plans; add a new plan file
@@ -129,8 +131,9 @@ tools/
 
 ```bash
 npm test          # run everything; must pass before committing
-npm start         # http://localhost:8000 — then open on a phone on the same Wi-Fi
-                  # via http://<laptop-ip>:8000 for real touch testing
+npm start         # tools/serve.py: http://localhost:8000 plus a printed
+                  # http://<LAN-IP>:8000 for a phone on the same Wi-Fi
+                  # (localhost on the phone is the phone, not the laptop)
 python3 tools/process_art.py         # rebuild poop/items from assets/src/ (Pillow)
 python3 tools/make_placeholders.py   # pipe / bg / ground / icons only
 ```
