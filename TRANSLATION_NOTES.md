@@ -40,7 +40,7 @@ Keep these three consistent everywhere (How to play rows, future copy).
 ## Tone
 
 Short, playful, clear. Fit a 720×1280 logical field; How to play / About body wrap at
-~260 px with per-character wrap for Chinese. Prefer everyday words over clinical jargon.
+~520 px with per-character wrap for Chinese. Prefer everyday words over clinical jargon.
 
 ## Full string table
 
@@ -48,7 +48,7 @@ Short, playful, clear. Fit a 720×1280 logical field; How to play / About body w
 |---|---|---|
 | readyTitle | FLAPPY POOP | FLAPPY POOP |
 | howToPlay | How to play | 玩法说明 |
-| tapToFlap | tap to flap | 点击飞扑 |
+| tapToFlap | tap to flap | 点击起飞 |
 | pauseTitle | PAUSED | 已暂停 |
 | pauseHint | tap anywhere to resume game | 点击任意处继续游戏 |
 | gameOver | GAME OVER | 游戏结束 |
@@ -60,7 +60,7 @@ Short, playful, clear. Fit a 720×1280 logical field; How to play / About body w
 | haptics | Haptics | 震动 |
 | on | ON | 开 |
 | off | OFF | 关 |
-| hapticsHint | Android only — iPhone has no vibrate | 仅 Android — iPhone 无法震动 |
+| hapticsHint | Android only — iPhone has no vibrate | 仅限 Android——iPhone 不支持震动 |
 | musicComingSoon | Music   coming soon | 音乐   即将推出 |
 | aboutLink | About | 关于 |
 | aboutTitle | ABOUT | 关于 |
@@ -74,7 +74,7 @@ Short, playful, clear. Fit a 720×1280 logical field; How to play / About body w
 | itemFiberName | Fiber | 纤维 |
 | itemFiberDetail | +1 point | +1 分 |
 | itemProbioticName | Probiotic | 益生菌 |
-| itemProbioticDetail | Blocks one bacteria hit for 5 pipes | 可抵挡一次有害细菌，持续 5 根管道 |
+| itemProbioticDetail | Blocks one bacteria hit for 5 pipes | 抵挡一次有害细菌攻击，持续 5 道管道 |
 | itemBacteriaName | Bad bacteria | 有害细菌 |
 | itemBacteriaDetail | −2 points (score never below 0). Does not kill. | −2 分（分数不低于 0）。不会致死。 |
 | updatedPrefix | Updated | 更新于 |
@@ -82,7 +82,7 @@ Short, playful, clear. Fit a 720×1280 logical field; How to play / About body w
 | langEnglish | English | English |
 | langChinese | 简体中文 | 简体中文 |
 | feedbackTitle | FEEDBACK | 反馈 |
-| feedbackBody | Report a bug or suggest a feature. Opens GitHub in your browser — you need a GitHub account to submit. | 报告问题或提出功能建议。将在浏览器中打开 GitHub — 提交需要 GitHub 账号。 |
+| feedbackBody | Report a bug or suggest a feature. Opens GitHub in your browser — you need a GitHub account to submit. | 报告问题或提出功能建议。将在浏览器中打开 GitHub——提交需要 GitHub 账号。 |
 | bugReport | Bug | 问题反馈 |
 | featureRequest | Feature request | 功能建议 |
 | feedbackLink | Bug or feature request? | 问题或功能建议？ |
@@ -111,5 +111,5 @@ Inspired by Flappy Bird
 2. Glossary: 纤维 / 益生菌 / 有害细菌 used consistently.
 3. Silent mode: hardware 静音模式, not software mute.
 4. Untranslated tokens still present in About.
-5. Length: How to play body and About still readable in a 260 px wrap on a phone.
+5. Length: How to play body and About still readable in a 520 px wrap on a phone.
 6. Pause / game over lines stay short (one or two lines).
