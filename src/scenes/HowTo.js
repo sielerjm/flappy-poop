@@ -52,14 +52,16 @@ export class HowTo extends Phaser.Scene {
 
   close() {
     const play = this.scene.get('Play');
+    const stackedAbout = this.scene.isActive('About');
     const result = chromeIntent({
       state: play?.state ?? 'ready',
       overlay: 'howto',
-      stackedSettings: false,
+      stackedAbout,
       input: 'close',
     });
     if (result.do !== 'closeTop') return;
     this.scene.stop();
+    if (result.closeAbout) this.scene.stop('About');
     if (result.armResumeLockout) play?.armResumeLockout?.();
   }
 }

@@ -1,5 +1,5 @@
 import { GAME_WIDTH, GAME_HEIGHT } from '../config.js';
-import { ABOUT_TEXT, VERSION, chromeIntent } from '../logic.js';
+import { ABOUT_TEXT, VERSION, LAST_UPDATED, chromeIntent } from '../logic.js';
 
 const STYLE = { fontFamily: 'sans-serif', fontStyle: 'bold', color: '#ffffff', align: 'center' };
 
@@ -26,14 +26,28 @@ export class About extends Phaser.Scene {
         lineSpacing: 3,
       })
       .setOrigin(0.5);
-    this.add.text(cx, cy + 220, `v${VERSION}`, { ...STYLE, fontSize: '12px', color: '#6a5a74', fontStyle: 'normal' }).setOrigin(0.5);
+
+    const howTo = this.add
+      .text(cx, cy + 175, 'How to play', { ...STYLE, fontSize: '20px', color: '#f8a0c8' })
+      .setOrigin(0.5)
+      .setInteractive({ useHandCursor: true });
+    howTo.on('pointerdown', () => this.scene.get('Play')?.handleChrome('howto'));
+
+    this.add.text(cx, cy + 205, `v${VERSION}`, { ...STYLE, fontSize: '12px', color: '#6a5a74', fontStyle: 'normal' }).setOrigin(0.5);
+    this.add
+      .text(cx, cy + 228, `Updated ${LAST_UPDATED}`, { ...STYLE, fontSize: '12px', color: '#6a5a74', fontStyle: 'normal' })
+      .setOrigin(0.5);
 
     const close = this.add.text(cx + 128, cy - 228, '✕', { ...STYLE, fontSize: '24px' }).setOrigin(0.5).setInteractive({ useHandCursor: true });
     close.on('pointerdown', () => this.close());
-    this.input.keyboard?.on('keydown-ESC', () => this.close());
+    this.input.keyboard?.on('keydown-ESC', () => {
+      if (this.scene.isActive('HowTo')) return;
+      this.close();
+    });
   }
 
   close() {
+    if (this.scene.isActive('HowTo')) return;
     const play = this.scene.get('Play');
     const result = chromeIntent({
       state: play?.state ?? 'ready',
