@@ -70,7 +70,7 @@ Short, playful, clear. Fit a 720×1280 logical field; How to play / About body w
 | aboutCreditsTitle | Credits | 致谢 |
 | aboutCredits | *(see block below)* | *(see block below)* |
 | howToTitle | HOW TO PLAY | 玩法说明 |
-| howToBody | Tap to flap. Pass a pipe pair for a point. Hit a pipe, the ceiling, or the floor and the run ends. On iPhone, Silent mode mutes the game — turn it off to hear sound. | 点击飞扑。穿过一对管道得一分。撞到管道、天花板或地面则本局结束。在 iPhone 上，静音模式会让游戏无声——关闭静音即可听到声音。 |
+| howToBody | Tap to flap. Pass a pipe pair for a point. Hit a pipe, the ceiling, or the floor and the run ends. On iPhone, Silent mode mutes the game — turn it off to hear sound. | 点击起飞。穿过一对管道得一分。撞到管道、天花板或地面则本局结束。在 iPhone 上，静音模式会让游戏无声——关闭静音即可听到声音。 |
 | itemFiberName | Fiber | 纤维 |
 | itemFiberDetail | +1 point | +1 分 |
 | itemProbioticName | Probiotic | 益生菌 |

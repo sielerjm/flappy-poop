@@ -82,7 +82,7 @@ Inspired by Flappy Bird`,
 灵感来自 Flappy Bird`,
     howToTitle: '玩法说明',
     howToBody:
-      '点击飞扑。穿过一对管道得一分。撞到管道、天花板或地面则本局结束。在 iPhone 上，静音模式会让游戏无声——关闭静音即可听到声音。',
+      '点击起飞。穿过一对管道得一分。撞到管道、天花板或地面则本局结束。在 iPhone 上，静音模式会让游戏无声——关闭静音即可听到声音。',
     itemFiberName: '纤维',
     itemFiberDetail: '+1 分',
     itemProbioticName: '益生菌',
