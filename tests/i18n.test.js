@@ -118,8 +118,8 @@ test('howToItems and pauseBannerText resolve for both locales', () => {
 });
 
 test('metaFontSize is larger for Chinese', () => {
-  assert.equal(metaFontSize('en'), '12px');
-  assert.equal(metaFontSize('zh-Hans'), '14px');
+  assert.equal(metaFontSize('en'), '24px');
+  assert.equal(metaFontSize('zh-Hans'), '28px');
 });
 
 test('both About bodies keep untranslated brand and credit tokens', () => {

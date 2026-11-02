@@ -34,7 +34,8 @@ package.json                Only `npm test` and `npm start`; no dependencies.
 CREDITS.md                  Phaser + every assets/sfx/ file with a URL.
 
 src/
-  main.js                   new Phaser.Game(...): 360x640 logical field, Scale.FIT,
+  main.js                   new Phaser.Game(...): 720x1280 logical field, Scale.FIT,
+                            roundPixels,
                             arcade physics, scene order
                             [Boot, Play, Over, Settings, About, HowTo, Language,
                             Feedback].
@@ -128,9 +129,9 @@ tests/                      node --test, zero deps. Each file is self-describing
 tools/
   make_placeholders.py      Regenerates pipe / bg / ground / icons only. Must not
                             overwrite poop.png. Run only when you intend to.
-  process_art.py            Crops assets/src/ drawings into 192x192 contract PNGs
-                            (drawn at spriteDisplayScale 0.25). Arcade circles
-                            use scaledCircleBody (Phaser source pixels).
+  process_art.py            Crops assets/src/ drawings into 384x384 contract PNGs
+                            (drawn at spriteDisplayScale 0.25 → 96 logical px).
+                            Arcade circles use scaledCircleBody (Phaser source pixels).
   serve.py                  npm start: bind 0.0.0.0:8000, print laptop + phone URLs.
 
 .claude/plans/              Checkpointed build plans. Historical record + decision

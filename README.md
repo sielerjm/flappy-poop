@@ -47,7 +47,7 @@ npm test       # Node 22 built-in test runner, zero dependencies
 
 ## Replacing the art
 
-The player and items are drawings processed by `tools/process_art.py` from `assets/src/`. Drop a new source PNG in `assets/src/` and re-run that script (needs Pillow) to crop, knock out white, and write the 192×192 contract files (drawn at 0.25 scale).
+The player and items are drawings processed by `tools/process_art.py` from `assets/src/`. Drop a new source PNG in `assets/src/` and re-run that script (needs Pillow) to crop, knock out white, and write the 384×384 contract files (drawn at 0.25 scale → 96 logical px on the 720×1280 field).
 
 Pipe, background, ground, and icons are still placeholders from `tools/make_placeholders.py`. That script must **not** overwrite `poop.png`. Overwrite any contract file at the same name and size; `assets/README.md` has the table and `npm test` enforces it.
 
@@ -58,7 +58,7 @@ index.html              viewport/touch setup, loads Phaser + src/main.js
 manifest.webmanifest    "Add to Home Screen" metadata
 CREDITS.md              Phaser + fart-sample attribution, author/art/LLM note
 src/
-  main.js               Phaser.Game config: 360x640, Scale.FIT, [Boot, Play, Over, Settings, About, HowTo, Language, Feedback]
+  main.js               Phaser.Game config: 720x1280, Scale.FIT, roundPixels, [Boot, Play, Over, Settings, About, HowTo, Language, Feedback]
   config.js             GAME_WIDTH/HEIGHT and TUNING
   logic.js              pure functions: rng, gaps, scoring, items, settings store, tray layout, issueUrl, chromeIntent
   i18n.js               en / zh-Hans catalog + t() / initialLocale

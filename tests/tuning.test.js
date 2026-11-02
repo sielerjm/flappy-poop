@@ -14,7 +14,7 @@ test('fiber and bacteria score deltas are the locked contract', () => {
 
 test('probiotic duration and item hitbox stay playable', () => {
   assert.ok(T.items.probioticPipes >= 3 && T.items.probioticPipes <= 8, `probioticPipes ${T.items.probioticPipes}`);
-  assert.ok(T.items.itemRadius >= 12 && T.items.itemRadius <= 20, `itemRadius ${T.items.itemRadius}`);
+  assert.ok(T.items.itemRadius >= 24 && T.items.itemRadius <= 40, `itemRadius ${T.items.itemRadius}`);
 });
 
 test('every item weight is ≥ 0 and the sum is > 0', () => {
@@ -34,7 +34,7 @@ test('fartVolume is audible but not clipping', () => {
 });
 
 test('HUD probiotic icon is at least as large as the world item sprite', () => {
-  const worldPx = 192 * T.spriteDisplayScale;
+  const worldPx = 384 * T.spriteDisplayScale;
   assert.ok(T.hudProbioticSize >= worldPx, `hudProbioticSize ${T.hudProbioticSize} < world ${worldPx}`);
-  assert.ok(T.hudProbioticSize <= 64, `hudProbioticSize ${T.hudProbioticSize} too tall for the score band`);
+  assert.ok(T.hudProbioticSize <= 128, `hudProbioticSize ${T.hudProbioticSize} too tall for the score band`);
 });

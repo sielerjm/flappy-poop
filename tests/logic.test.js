@@ -44,6 +44,7 @@ test('angleForVelocity is nose-up when rising and clamps nose-down when falling 
   assert.equal(angleForVelocity(-300, T), T.maxRiseAngle);
   assert.equal(angleForVelocity(0, T), T.maxRiseAngle);
   assert.equal(angleForVelocity(10_000, T), T.maxFallAngle);
-  const mid = angleForVelocity(300, T);
+  const mid = angleForVelocity(T.angleFallRefVy / 2, T);
+  assert.ok(Number.isInteger(mid), 'tilt is quantized to whole degrees');
   assert.ok(mid > T.maxRiseAngle && mid < T.maxFallAngle);
 });

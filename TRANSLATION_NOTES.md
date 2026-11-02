@@ -39,7 +39,7 @@ Keep these three consistent everywhere (How to play rows, future copy).
 
 ## Tone
 
-Short, playful, clear. Fit a 360×640 logical field; How to play / About body wrap at
+Short, playful, clear. Fit a 720×1280 logical field; How to play / About body wrap at
 ~260 px with per-character wrap for Chinese. Prefer everyday words over clinical jargon.
 
 ## Full string table
