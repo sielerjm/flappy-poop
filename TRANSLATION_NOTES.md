@@ -77,6 +77,11 @@ Short, playful, clear. Fit a 360×640 logical field; How to play / About body wr
 | languageTitle | Language | 语言 |
 | langEnglish | English | English |
 | langChinese | 简体中文 | 简体中文 |
+| feedbackTitle | FEEDBACK | 反馈 |
+| feedbackBody | Report a bug or suggest a feature. Opens GitHub in your browser — you need a GitHub account to submit. | 报告问题或提出功能建议。将在浏览器中打开 GitHub — 提交需要 GitHub 账号。 |
+| bugReport | Bug | 问题反馈 |
+| featureRequest | Feature request | 功能建议 |
+| feedbackLink | Bug or feature request? | 问题或功能建议？ |
 
 ### aboutBody (English)
 

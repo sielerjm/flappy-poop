@@ -108,7 +108,8 @@ tests/                      node --test, zero deps. Each file is self-describing
   about.test.js             About copy (both locales) names author, LLM, Phaser, JS, sound;
                             LAST_UPDATED has a year and a time
   howto.test.js             HOW_TO copy, pause banner, howToLayout / howToHit geometry
-  i18n.test.js              catalog key parity, t() fallback, initialLocale, glossary tokens
+  i18n.test.js              catalog key parity, zh≠en (allowlist), TRANSLATION_NOTES
+                            key coverage, scene English denylist, initialLocale
   overlay.test.js           overlayOutsideHit inside vs 1px outside HowTo/Settings panels
   hitbox.test.js            scaledCircleBody source radius/offset for 2x and 4x
   chrome.test.js            chromeIntent matrix across state x overlay x input
@@ -158,6 +159,12 @@ tools/
 7. **Storage can throw.** Private-mode Safari and blocked storage throw on
    `localStorage` access. Go through `createBestStore()` or
    `createSettingsStore()`; never touch `localStorage` directly in scenes.
+8. **Player-facing copy is multi-locale.** Change UI strings only in
+   `src/i18n.js` for **every** locale (`en` and `zh-Hans`), update matching
+   rows in `TRANSLATION_NOTES.md`, and do not hardcode English in scenes.
+   If a string must stay identical across locales (brand, language names),
+   add its key to the allowlist in `tests/i18n.test.js`. `npm test` fails
+   when a locale or the notes file lags; run it before every commit and push.
 
 ## How to work on it
 
@@ -189,6 +196,9 @@ Commits so far follow `type(scope): summary` (`feat`, `docs`, `chore`); keep it.
 - New scene → `src/scenes/`, register in the `scene:` array in `src/main.js`.
 - New UI chrome → `src/ui/` (Phaser wrapper) with any pure layout helper in
   `src/logic.js`.
+- New UI string → both locales in `src/i18n.js` + a row in `TRANSLATION_NOTES.md`
+  (+ allowlist in `tests/i18n.test.js` only if intentionally identical). Scenes
+  call `t(locale, key)`; never hardcode player English.
 - Multi-step work worth planning → a dated markdown plan in `.claude/plans/`.
 - Repo-wide conventions → this file. Player-facing docs → `README.md`.
 - Locale copy review for LLMs → `TRANSLATION_NOTES.md` (keep in sync with `src/i18n.js`).
