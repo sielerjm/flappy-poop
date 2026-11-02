@@ -150,8 +150,9 @@ export class Play extends Phaser.Scene {
     const settings = this.scene.isActive('Settings');
     return {
       state: this.state,
-      overlay: about ? 'about' : howto ? 'howto' : settings ? 'settings' : null,
+      overlay: howto ? 'howto' : about ? 'about' : settings ? 'settings' : null,
       stackedSettings: about && settings,
+      stackedAbout: howto && about,
       input,
       resumeLocked: this.time.now < this.flapLockedUntil,
     };

@@ -294,18 +294,30 @@ export function howToHit(x, y, layout) {
  * @param {'ready'|'playing'|'paused'|'dead'} state
  * @param {null|'settings'|'about'|'howto'} overlay topmost overlay (pause is a state)
  * @param {boolean} stackedSettings true when About sits on top of Settings
+ * @param {boolean} stackedAbout true when HowTo sits on top of About
  * @param {'pause'|'mute'|'settings'|'info'|'howto'|'tap'|'esc'|'close'} input
  * @param {boolean} resumeLocked true during pauseResumeLockoutMs after overlay close
- * @returns {{ do: string, pause?: boolean, armResumeLockout?: boolean }}
+ * @returns {{ do: string, pause?: boolean, armResumeLockout?: boolean, closeAbout?: boolean }}
  */
-export function chromeIntent({ state, overlay = null, stackedSettings = false, input, resumeLocked = false }) {
+export function chromeIntent({
+  state,
+  overlay = null,
+  stackedSettings = false,
+  stackedAbout = false,
+  input,
+  resumeLocked = false,
+}) {
   if (input === 'mute') return { do: 'toggleMute' };
 
   if (overlay) {
     if (input === 'close') {
+      if (overlay === 'howto' && stackedAbout) {
+        return { do: 'closeTop', closeAbout: true, armResumeLockout: true };
+      }
       return { do: 'closeTop', armResumeLockout: !(overlay === 'about' && stackedSettings) };
     }
     if (input === 'info' && overlay === 'settings') return { do: 'openAbout', pause: false };
+    if (input === 'howto' && overlay === 'about') return { do: 'openHowTo', pause: false };
     return { do: 'ignore' };
   }
 

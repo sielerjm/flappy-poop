@@ -9,6 +9,7 @@ function intent(partial) {
     state: 'ready',
     overlay: null,
     stackedSettings: false,
+    stackedAbout: false,
     resumeLocked: false,
     ...partial,
   });
@@ -57,10 +58,12 @@ test('no overlay: close does nothing', () => {
 test('overlay open: pause, tap, esc, and settings are ignored', () => {
   for (const state of STATES) {
     for (const overlay of ['settings', 'about', 'howto']) {
-      for (const input of ['pause', 'tap', 'esc', 'settings', 'howto']) {
+      for (const input of ['pause', 'tap', 'esc', 'settings']) {
         assert.deepEqual(intent({ state, overlay, input }), { do: 'ignore' }, `${state} ${overlay} ${input}`);
       }
     }
+    assert.deepEqual(intent({ state, overlay: 'settings', input: 'howto' }), { do: 'ignore' });
+    assert.deepEqual(intent({ state, overlay: 'howto', input: 'howto' }), { do: 'ignore' });
   }
 });
 
@@ -68,6 +71,13 @@ test('info while Settings is top opens About; info while About is top is ignored
   for (const state of STATES) {
     assert.deepEqual(intent({ state, overlay: 'settings', input: 'info' }), { do: 'openAbout', pause: false });
     assert.deepEqual(intent({ state, overlay: 'about', input: 'info' }), { do: 'ignore' });
+  }
+});
+
+test('howto while About is top opens HowTo; howto while HowTo is top is ignored', () => {
+  for (const state of STATES) {
+    assert.deepEqual(intent({ state, overlay: 'about', input: 'howto' }), { do: 'openHowTo', pause: false });
+    assert.deepEqual(intent({ state, overlay: 'howto', input: 'howto' }), { do: 'ignore' });
   }
 });
 
@@ -85,8 +95,13 @@ test('close top overlay arms resume lockout unless Settings remains under About'
       do: 'closeTop',
       armResumeLockout: false,
     });
-    assert.deepEqual(intent({ state, overlay: 'howto', input: 'close' }), {
+    assert.deepEqual(intent({ state, overlay: 'howto', stackedAbout: false, input: 'close' }), {
       do: 'closeTop',
+      armResumeLockout: true,
+    });
+    assert.deepEqual(intent({ state, overlay: 'howto', stackedAbout: true, input: 'close' }), {
+      do: 'closeTop',
+      closeAbout: true,
       armResumeLockout: true,
     });
   }
