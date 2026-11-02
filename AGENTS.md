@@ -35,27 +35,31 @@ CREDITS.md                  Phaser + every assets/sfx/ file with a URL.
 
 src/
   main.js                   new Phaser.Game(...): 360x640 logical field, Scale.FIT,
-                            arcade physics, scene order [Boot, Play, Over, Settings].
+                            arcade physics, scene order [Boot, Play, Over, Settings, About].
   config.js                 GAME_WIDTH / GAME_HEIGHT and the TUNING object. Every
                             feel-related number lives here. Pure data, Node-safe.
   logic.js                  Pure functions, NO Phaser/DOM: rng, gap placement,
                             scoring, items, sprite angle, retry lockout, difficulty,
                             best-score store, settings store, vibrate helper,
-                            trayLayout. Fully unit-tested.
+                            trayLayout, ABOUT_TEXT, chromeIntent. Fully unit-tested.
   sound.js                  WebAudio synth blips + setMuted/isMuted/attachGame.
                             setMuted also sets game.sound.mute (the fart MP3).
                             unlock() must be called from a user gesture (iOS).
   ui/
-    tray.js                 Phaser wrapper around trayLayout: pause / mute / settings.
+    tray.js                 Phaser wrapper around trayLayout: pause / mute / settings
+                            plus bottom-left info.
   scenes/
     Boot.js                 preload() gameplay PNGs + fart.mp3, then start Play.
     Play.js                 State machine: 'ready' -> 'playing' -> 'paused'/'dead'.
                             Spawns pipes and items, tray, auto-pause, haptics, dies,
-                            then launches Over as an overlay scene.
+                            then launches Over as an overlay scene. Tray / keyboard
+                            go through chromeIntent. Opening Settings or About while
+                            playing pauses; closing them does not resume.
     Over.js                 Game-over panel (score, best, "tap to retry") with a
                             tap lockout and its own tray (mute still works).
     Settings.js             Overlay: sound, haptics (Android only), music coming
-                            soon, credits, version.
+                            soon, About link, version.
+    About.js                Overlay: author, LLM note, engine/art/sound credits.
 
 assets/                     Contract PNGs + README.md (the art contract).
   README.md                 File name, pixel size, orientation rules. tests enforce it.
@@ -74,9 +78,11 @@ tests/                      node --test, zero deps. Each file is self-describing
   store.test.js             best-score store incl. throwing/missing storage
   settings.test.js          settings store + vibrate helper
   sound.test.js             sfx keys, mute, Node import
-  tray.test.js              trayHeight / trayLayout geometry
+  tray.test.js              trayHeight / trayLayout geometry including info
   items.test.js             rollItem, itemGapY, scoreAfterItem, probiotic inventory
   tuning.test.js            item / fartVolume sanity bounds
+  about.test.js             ABOUT_TEXT names author, LLM, Phaser, JS, sound
+  chrome.test.js            chromeIntent matrix across state x overlay x input
   smoke.test.js             logic.js imports and exports VERSION
 
 tools/
@@ -84,9 +90,9 @@ tools/
                             overwrite poop.png. Run only when you intend to.
   process_art.py            Crops assets/src/ drawings into 48x48 contract PNGs.
 
-.claude/plans/              Checkpointed build plans (2026-11-01). Historical record
-                            + decision log. Don't edit completed plans; add a new
-                            plan file for new multi-step work.
+.claude/plans/              Checkpointed build plans. Historical record + decision
+                            log. Don't edit completed plans; add a new plan file
+                            for new multi-step work.
 ```
 
 ## Rules the code depends on

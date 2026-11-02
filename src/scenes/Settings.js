@@ -10,6 +10,7 @@ export class Settings extends Phaser.Scene {
   }
 
   create() {
+    this.scene.bringToTop();
     this.settings = createSettingsStore(globalThis.localStorage, T.settingsKey);
     const cur = this.settings.load();
 
@@ -77,7 +78,7 @@ export class Settings extends Phaser.Scene {
       input: 'close',
     });
     if (result.do !== 'closeTop') return;
-    this.scene.stop('Settings');
+    this.scene.stop();
     if (result.armResumeLockout) play?.armResumeLockout?.();
   }
 }

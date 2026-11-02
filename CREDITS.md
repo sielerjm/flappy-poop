@@ -1,5 +1,10 @@
 # Credits
 
+## Author
+
+- Idea, game design, and all art by Michael Sieler.
+- Code is JavaScript (ES modules) on Phaser 4.2.1, written with LLM assistance.
+
 ## Engine
 
 - [Phaser](https://phaser.io) 4.2.1 — © Phaser Studio Inc. MIT License.

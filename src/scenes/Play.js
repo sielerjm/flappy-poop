@@ -158,10 +158,12 @@ export class Play extends Phaser.Scene {
       case 'openSettings':
         if (result.pause) this.pausePlay();
         if (!this.scene.isActive('Settings')) this.scene.launch('Settings');
+        this.scene.bringToTop('Settings');
         break;
       case 'openAbout':
         if (result.pause) this.pausePlay();
         if (!this.scene.isActive('About')) this.scene.launch('About');
+        this.scene.bringToTop('About');
         break;
       case 'start':
         this.start();

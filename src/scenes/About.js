@@ -9,6 +9,7 @@ export class About extends Phaser.Scene {
   }
 
   create() {
+    this.scene.bringToTop();
     this.add.rectangle(GAME_WIDTH / 2, GAME_HEIGHT / 2, GAME_WIDTH, GAME_HEIGHT, 0x000000, 0.55).setInteractive();
     const cx = GAME_WIDTH / 2;
     const cy = GAME_HEIGHT / 2;
@@ -41,7 +42,7 @@ export class About extends Phaser.Scene {
       input: 'close',
     });
     if (result.do !== 'closeTop') return;
-    this.scene.stop('About');
+    this.scene.stop();
     if (result.armResumeLockout) play?.armResumeLockout?.();
   }
 }
