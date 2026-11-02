@@ -41,13 +41,16 @@ src/
   logic.js                  Pure functions, NO Phaser/DOM: rng, gap placement,
                             scoring, items, sprite angle, retry lockout, difficulty,
                             best-score store, settings store, vibrate helper,
-                            trayLayout, ABOUT_TEXT, chromeIntent. Fully unit-tested.
+                            trayLayout, trayHit, ABOUT_TEXT, chromeIntent.
+                            Fully unit-tested.
   sound.js                  WebAudio synth blips + setMuted/isMuted/attachGame.
                             setMuted also sets game.sound.mute (the fart MP3).
-                            unlock() must be called from a user gesture (iOS).
+                            unlock() must run from a user gesture: create +
+                            resume() the AudioContext and game.sound.unlock().
   ui/
     tray.js                 Phaser wrapper around trayLayout: pause / mute / settings
-                            plus bottom-left info.
+                            plus bottom-left info. Chrome taps use trayHit() in
+                            Play/Over, not GameObject pointer handlers.
   scenes/
     Boot.js                 preload() gameplay PNGs + fart.mp3, then start Play.
     Play.js                 State machine: 'ready' -> 'playing' -> 'paused'/'dead'.
@@ -78,7 +81,8 @@ tests/                      node --test, zero deps. Each file is self-describing
   store.test.js             best-score store incl. throwing/missing storage
   settings.test.js          settings store + vibrate helper
   sound.test.js             sfx keys, mute, Node import
-  tray.test.js              trayHeight / trayLayout geometry including info
+  tray.test.js              trayHeight / trayLayout geometry including info;
+                            trayHit centre hits vs miss in the tray gap
   items.test.js             rollItem, itemGapY, scoreAfterItem, probiotic inventory
   tuning.test.js            item / fartVolume sanity bounds
   about.test.js             ABOUT_TEXT names author, LLM, Phaser, JS, sound

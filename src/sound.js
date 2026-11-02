@@ -1,6 +1,7 @@
 // WebAudio synth blips plus a mute gate that also drives Phaser's sound
-// manager (the death fart MP3). The AudioContext is created on the first
-// unlock() call, which must come from a user gesture (iOS rule).
+// manager (the death fart MP3). unlock() must run from a user gesture: it
+// creates the AudioContext, resume()s it (iOS starts suspended), and
+// unlocks Phaser's sound manager for the fart MP3.
 
 let ctx = null;
 let muted = false;
