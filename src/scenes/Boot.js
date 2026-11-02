@@ -1,4 +1,8 @@
 import { GAME_WIDTH, GAME_HEIGHT } from '../config.js';
+import { VERSION } from '../logic.js';
+
+// Cache-bust so browsers pick up new PNGs after art/contract bumps.
+const V = `?v=${VERSION}`;
 
 export class Boot extends Phaser.Scene {
   constructor() {
@@ -6,15 +10,15 @@ export class Boot extends Phaser.Scene {
   }
 
   preload() {
-    this.load.image('poop', 'assets/poop.png');
-    this.load.image('poop-dead', 'assets/poop-dead.png');
-    this.load.image('fiber', 'assets/fiber.png');
-    this.load.image('probiotic', 'assets/probiotic.png');
-    this.load.image('bacteria', 'assets/bacteria.png');
-    this.load.image('pipe', 'assets/pipe.png');
-    this.load.image('bg', 'assets/bg.png');
-    this.load.image('ground', 'assets/ground.png');
-    this.load.audio('fart', 'assets/sfx/fart.mp3');
+    this.load.image('poop', 'assets/poop.png' + V);
+    this.load.image('poop-dead', 'assets/poop-dead.png' + V);
+    this.load.image('fiber', 'assets/fiber.png' + V);
+    this.load.image('probiotic', 'assets/probiotic.png' + V);
+    this.load.image('bacteria', 'assets/bacteria.png' + V);
+    this.load.image('pipe', 'assets/pipe.png' + V);
+    this.load.image('bg', 'assets/bg.png' + V);
+    this.load.image('ground', 'assets/ground.png' + V);
+    this.load.audio('fart', 'assets/sfx/fart.mp3' + V);
   }
 
   create() {

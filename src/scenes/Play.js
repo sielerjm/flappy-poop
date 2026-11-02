@@ -50,14 +50,23 @@ export class Play extends Phaser.Scene {
     attachGame(this.game);
     setMuted(!this.settings.load().sound);
 
-    // Scrolling layers
+    // Scrolling layers. Tile-scale maps one texture copy onto the playfield so a
+    // stale shorter bg cannot vertically repeat into a mid-screen fold band.
     this.bg = this.add.tileSprite(0, 0, GAME_WIDTH, GAME_HEIGHT, 'bg').setOrigin(0, 0);
+    {
+      const f = this.bg.frame;
+      this.bg.setTileScale(GAME_WIDTH / f.width, GAME_HEIGHT / f.height);
+    }
     this.pipes = this.physics.add.group({ allowGravity: false, immovable: true });
     this.items = this.physics.add.group({ allowGravity: false, immovable: true });
     this.ground = this.add
       .tileSprite(0, GAME_HEIGHT - T.groundHeight, GAME_WIDTH, T.groundHeight, 'ground')
       .setOrigin(0, 0)
       .setDepth(5);
+    {
+      const f = this.ground.frame;
+      this.ground.setTileScale(GAME_WIDTH / f.width, T.groundHeight / f.height);
+    }
 
     // Player: no gravity until the first tap
     this.poop = this.physics.add.sprite(T.poopX, GAME_HEIGHT / 2, 'poop').setDepth(10);
@@ -337,14 +346,20 @@ export class Play extends Phaser.Scene {
     const x = GAME_WIDTH + T.pipeWidth;
 
     // Top pipe hangs down: cap must face the gap, so flip the sprite and anchor its bottom.
-    const top = this.pipes.create(x, gapY - gapH / 2, 'pipe');
+    const gapTop = gapY - gapH / 2;
+    const gapBot = gapY + gapH / 2;
+    const top = this.pipes.create(x, gapTop, 'pipe');
     top.setOrigin(0.5, 1).setFlipY(true);
+    // Stretch if needed so the column always reaches the ceiling (stale short textures too).
+    top.setDisplaySize(T.pipeWidth, Math.max(top.frame.height, gapTop + 4));
     // Bottom pipe stands up from the gap: cap already at the top of the image.
-    const bottom = this.pipes.create(x, gapY + gapH / 2, 'pipe');
+    const bottom = this.pipes.create(x, gapBot, 'pipe');
     bottom.setOrigin(0.5, 0);
+    bottom.setDisplaySize(T.pipeWidth, Math.max(bottom.frame.height, GAME_HEIGHT - gapBot + 4));
 
     for (const p of [top, bottom]) {
-      p.body.setSize(p.width, p.height);
+      // Body uses unscaled frame units; scale comes from setDisplaySize.
+      p.body.setSize(p.frame.width, p.frame.height);
       p.setVelocityX(-this.diff.pipeSpeed);
     }
     // Only the top pipe carries the "passed" flag so a pair scores once.
