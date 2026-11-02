@@ -4,11 +4,11 @@ import { trayLayout } from '../logic.js';
 const LABELS = { pause: '⏸', muteOn: '🔇', muteOff: '🔊', settings: '⚙', info: 'i' };
 
 /**
- * Phaser-only tray. Layout maths live in trayLayout(); this just draws it.
+ * Phaser-only tray. Layout maths live in trayLayout(); chrome hits go through
+ * trayHit() in the scene so they do not depend on Phaser hit-area origin.
  */
-export function createTray(scene, { onPause, onMute, onSettings, onInfo, muted }) {
+export function createTray(scene, { muted }) {
   const { buttons, info } = trayLayout(GAME_WIDTH, GAME_HEIGHT, T);
-  const handlers = { pause: onPause, mute: onMute, settings: onSettings, info: onInfo };
   const nodes = [];
   let muteLabel;
 
@@ -24,12 +24,11 @@ export function createTray(scene, { onPause, onMute, onSettings, onInfo, muted }
       .setDepth(31)
       .setAlpha(T.trayAlpha);
     if (b.id === 'mute') muteLabel = label;
-    circle.setInteractive(new Phaser.Geom.Circle(0, 0, r), Phaser.Geom.Circle.Contains);
-    circle.on('pointerdown', (_pointer, _lx, _ly, event) => {
-      event?.stopPropagation();
+    // Hit origin is top-left of the Game Object, so centre the geom at (r, r).
+    circle.setInteractive(new Phaser.Geom.Circle(r, r, r), Phaser.Geom.Circle.Contains);
+    circle.on('pointerdown', () => {
       circle.setAlpha(1);
       label.setAlpha(1);
-      handlers[b.id]?.();
     });
     circle.on('pointerup', () => {
       circle.setAlpha(T.trayAlpha);

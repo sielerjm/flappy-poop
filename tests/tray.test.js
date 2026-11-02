@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { GAME_WIDTH, GAME_HEIGHT, TUNING as T } from '../src/config.js';
-import { trayLayout } from '../src/logic.js';
+import { trayLayout, trayHit } from '../src/logic.js';
 
 test('trayHeight is at least 44 px', () => {
   assert.ok(T.trayHeight >= 44, `trayHeight ${T.trayHeight} < 44`);
@@ -39,4 +39,13 @@ test('trayLayout places an info button at the bottom-left that does not overlap 
     assert.ok(dist >= 44, `info overlaps ${b.id} (${dist} px)`);
     assert.ok(info.x + info.size / 2 < b.x - b.size / 2, `info collides horizontally with ${b.id}`);
   }
+});
+
+test('trayHit returns the button id at its centre and null in the gap', () => {
+  const layout = trayLayout(GAME_WIDTH, GAME_HEIGHT, T);
+  for (const b of [...layout.buttons, layout.info]) {
+    assert.equal(trayHit(b.x, b.y, layout), b.id, `centre of ${b.id}`);
+  }
+  assert.equal(trayHit(GAME_WIDTH / 2, layout.y, layout), null);
+  assert.equal(trayHit(GAME_WIDTH / 2, GAME_HEIGHT / 2, layout), null);
 });

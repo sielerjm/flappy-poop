@@ -236,6 +236,23 @@ export function trayLayout(width, height, t) {
 }
 
 /**
+ * Which tray button contains (x, y), or null. Radius is size/2 around each
+ * button centre. Scene pointerdown uses this so taps do not depend on Phaser
+ * hit-area origin (which is top-left of the Game Object).
+ */
+export function trayHit(x, y, layout) {
+  const targets = [...(layout.buttons ?? [])];
+  if (layout.info) targets.push(layout.info);
+  for (const b of targets) {
+    const r = b.size / 2;
+    const dx = x - b.x;
+    const dy = y - b.y;
+    if (dx * dx + dy * dy <= r * r) return b.id;
+  }
+  return null;
+}
+
+/**
  * Decide what a tray / keyboard / overlay event should do. Scenes execute the
  * result; this function is Phaser-free so the matrix can be tested in Node.
  *

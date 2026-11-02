@@ -1,11 +1,7 @@
 import { GAME_WIDTH, GAME_HEIGHT, TUNING as T } from '../config.js';
-import { canRestart, chromeIntent } from '../logic.js';
-import { isMuted } from '../sound.js';
+import { canRestart, chromeIntent, trayLayout, trayHit } from '../logic.js';
+import { isMuted, unlock } from '../sound.js';
 import { createTray } from '../ui/tray.js';
-
-function inTrayBand(y) {
-  return y > GAME_HEIGHT - T.trayHeight;
-}
 
 export class Over extends Phaser.Scene {
   constructor() {
@@ -29,16 +25,17 @@ export class Over extends Phaser.Scene {
     this.tweens.add({ targets: panel, scale: { from: 0.8, to: 1 }, duration: 180, ease: 'Back.easeOut' });
 
     const play = this.scene.get('Play');
-    this.tray = createTray(this, {
-      onPause: () => play?.handleChrome('pause'),
-      onMute: () => play?.handleChrome('mute'),
-      onSettings: () => play?.handleChrome('settings'),
-      onInfo: () => play?.handleChrome('info'),
-      muted: isMuted(),
-    });
+    this.tray = createTray(this, { muted: isMuted() });
 
     const retry = (pointer) => {
-      if (pointer && inTrayBand(pointer.y)) return;
+      unlock();
+      if (pointer) {
+        const id = trayHit(pointer.x, pointer.y, trayLayout(GAME_WIDTH, GAME_HEIGHT, T));
+        if (id) {
+          play?.handleChrome(id);
+          return;
+        }
+      }
       const result = chromeIntent(play.chromeArgs('tap'));
       if (result.do !== 'retry') return;
       if (!canRestart(this.openedAt, this.time.now, T.retryLockoutMs)) return;

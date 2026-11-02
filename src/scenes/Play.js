@@ -13,6 +13,8 @@ import {
   scoreAfterItem,
   createEffects,
   chromeIntent,
+  trayLayout,
+  trayHit,
 } from '../logic.js';
 import { unlock, attachGame, setMuted, isMuted, sfx } from '../sound.js';
 import { createTray } from '../ui/tray.js';
@@ -25,10 +27,6 @@ const TEXT_STYLE = {
   strokeThickness: 6,
   align: 'center',
 };
-
-function inTrayBand(y) {
-  return y > GAME_HEIGHT - T.trayHeight;
-}
 
 export class Play extends Phaser.Scene {
   constructor() {
@@ -78,19 +76,13 @@ export class Play extends Phaser.Scene {
       .setDepth(26)
       .setVisible(false);
 
-    this.tray = createTray(this, {
-      onPause: () => this.handleChrome('pause'),
-      onMute: () => this.handleChrome('mute'),
-      onSettings: () => this.handleChrome('settings'),
-      onInfo: () => this.handleChrome('info'),
-      muted: isMuted(),
-    });
+    this.tray = createTray(this, { muted: isMuted() });
 
     // Collisions
     this.physics.add.overlap(this.poop, this.pipes, () => this.die(), undefined, this);
     this.physics.add.overlap(this.poop, this.items, (_poop, item) => this.collectItem(item), undefined, this);
 
-    // Input: any pointer (touch/mouse) or Space/Up. Tray taps are ignored by y-band.
+    // Input: any pointer (touch/mouse) or Space/Up. Tray taps go through trayHit.
     this.input.on('pointerdown', (pointer) => this.flap(pointer));
     this.input.keyboard?.on('keydown-SPACE', () => this.flap());
     this.input.keyboard?.on('keydown-UP', () => this.flap());
@@ -124,7 +116,14 @@ export class Play extends Phaser.Scene {
 
   flap(pointer) {
     unlock();
-    if (pointer && inTrayBand(pointer.y)) return;
+    if (this.state === 'dead') return;
+    if (pointer) {
+      const id = trayHit(pointer.x, pointer.y, trayLayout(GAME_WIDTH, GAME_HEIGHT, T));
+      if (id) {
+        this.handleChrome(id);
+        return;
+      }
+    }
     this.handleChrome('tap');
   }
 
