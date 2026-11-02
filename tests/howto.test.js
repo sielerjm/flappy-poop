@@ -1,31 +1,46 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { GAME_WIDTH, GAME_HEIGHT, TUNING as T } from '../src/config.js';
-import { HOW_TO_PLAY_TEXT, HOW_TO_ITEMS, PAUSE_BANNER_TEXT, howToLayout, howToHit } from '../src/logic.js';
+import { howToLayout, howToHit } from '../src/logic.js';
+import { t, howToItems, pauseBannerText, LOCALES } from '../src/i18n.js';
 
 test('HOW_TO_PLAY_TEXT explains flapping and pipes', () => {
-  assert.match(HOW_TO_PLAY_TEXT, /flap/i);
-  assert.match(HOW_TO_PLAY_TEXT, /pipe/i);
-  assert.match(HOW_TO_PLAY_TEXT, /ceiling/i);
-  assert.match(HOW_TO_PLAY_TEXT, /floor/i);
-  assert.match(HOW_TO_PLAY_TEXT, /Silent/);
-  assert.match(HOW_TO_PLAY_TEXT, /iPhone/);
+  const en = t('en', 'howToBody');
+  assert.match(en, /flap/i);
+  assert.match(en, /pipe/i);
+  assert.match(en, /ceiling/i);
+  assert.match(en, /floor/i);
+  assert.match(en, /Silent/);
+  assert.match(en, /iPhone/);
+  const zh = t('zh-Hans', 'howToBody');
+  assert.match(zh, /静音/);
+  assert.match(zh, /iPhone/);
 });
 
 test('PAUSE_BANNER_TEXT is two centered lines, not a clipped em-dash row', () => {
-  assert.match(PAUSE_BANNER_TEXT, /\n/);
-  assert.match(PAUSE_BANNER_TEXT, /PAUSED/);
-  assert.match(PAUSE_BANNER_TEXT, /resume game/);
-  assert.equal(PAUSE_BANNER_TEXT.includes('—'), false);
+  for (const locale of LOCALES) {
+    const banner = pauseBannerText(locale);
+    assert.match(banner, /\n/);
+    assert.equal(banner.includes('—'), false);
+  }
+  assert.match(pauseBannerText('en'), /PAUSED/);
+  assert.match(pauseBannerText('en'), /resume game/);
 });
 
 test('HOW_TO_ITEMS names fiber, probiotic, and bacteria with their effects', () => {
-  const keys = HOW_TO_ITEMS.map((item) => item.key);
-  assert.deepEqual(keys, ['fiber', 'probiotic', 'bacteria']);
-  const blob = HOW_TO_ITEMS.map((item) => `${item.name} ${item.detail}`).join('\n');
+  const items = howToItems('en');
+  assert.deepEqual(
+    items.map((item) => item.key),
+    ['fiber', 'probiotic', 'bacteria'],
+  );
+  const blob = items.map((item) => `${item.name} ${item.detail}`).join('\n');
   assert.match(blob, /\+1/);
   assert.match(blob, /5 pipes/);
   assert.match(blob, /−2|-2/);
+  const zh = howToItems('zh-Hans');
+  assert.match(zh.map((i) => i.name).join(' '), /纤维/);
+  assert.match(zh.map((i) => i.name).join(' '), /益生菌/);
+  assert.match(zh.map((i) => i.name).join(' '), /有害细菌/);
 });
 
 test('howToLayout is at least 44 px tall, under the title, and inside the field', () => {

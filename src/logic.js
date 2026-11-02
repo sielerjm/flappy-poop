@@ -1,37 +1,13 @@
 // Pure game logic with no Phaser or DOM dependency, so it can be tested in Node.
 // Everything Phaser-specific lives in src/scenes/.
+// Player-facing copy lives in i18n.js.
+
+import { isLocale, DEFAULT_LOCALE } from './i18n.js';
 
 export const VERSION = '0.2.6';
 
 /** Player-facing stamp on the About overlay. Bump with VERSION. */
 export const LAST_UPDATED = '2 Nov 2026, 15:51';
-
-/** Player-facing About copy. Version is appended by the About scene. */
-export const ABOUT_TEXT = `Flappy Poop
-
-A gut-themed Flappy Bird clone.
-
-This game was coded with the assistance of an LLM. The idea, game design, and all art are by Michael Sieler.
-
-Credits
-Code: JavaScript (ES modules) on Phaser 4.2.1 (MIT)
-Art: Michael Sieler
-Sound: "fart" by MacKaffee (Freesound / Pixabay)
-Inspired by Flappy Bird`;
-
-/** Player-facing How to play copy. Item rows live in HOW_TO_ITEMS. */
-export const HOW_TO_PLAY_TEXT = `Tap to flap. Pass a pipe pair for a point. Hit a pipe, the ceiling, or the floor and the run ends. On iPhone, Silent mode mutes the game — turn it off to hear sound.`;
-
-/** Two-line pause banner. Play splits on the newline so the title can be larger. */
-export const PAUSE_BANNER_TEXT = `PAUSED
-tap anywhere to resume game`;
-
-/** Pickup rows for the How to play overlay. key matches Boot texture names. */
-export const HOW_TO_ITEMS = [
-  { key: 'fiber', name: 'Fiber', detail: '+1 point' },
-  { key: 'probiotic', name: 'Probiotic', detail: 'Blocks one bacteria hit for 5 pipes' },
-  { key: 'bacteria', name: 'Bad bacteria', detail: '−2 points (score never below 0). Does not kill.' },
-];
 
 /** Deterministic PRNG (mulberry32). Returns a function in [0, 1). */
 export function createRng(seed = 1) {
@@ -114,14 +90,15 @@ export function createBestStore(storage, key = 'flappy-poop:best') {
   };
 }
 
-const SETTINGS_DEFAULTS = { sound: true, music: true, haptics: true };
+const SETTINGS_DEFAULTS = { sound: true, music: true, haptics: true, locale: DEFAULT_LOCALE };
 
 function normalizeSettings(raw) {
   const out = { ...SETTINGS_DEFAULTS };
   if (!raw || typeof raw !== 'object') return out;
-  for (const key of Object.keys(SETTINGS_DEFAULTS)) {
+  for (const key of ['sound', 'music', 'haptics']) {
     if (typeof raw[key] === 'boolean') out[key] = raw[key];
   }
+  out.locale = isLocale(raw.locale) ? raw.locale : SETTINGS_DEFAULTS.locale;
   return out;
 }
 

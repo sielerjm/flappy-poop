@@ -1,15 +1,16 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createSettingsStore, vibrate } from '../src/logic.js';
+import { initialLocale } from '../src/i18n.js';
 
-const DEFAULTS = { sound: true, music: true, haptics: true };
+const DEFAULTS = { sound: true, music: true, haptics: true, locale: 'en' };
 
 function fakeStorage() {
   const m = new Map();
   return { getItem: (k) => (m.has(k) ? m.get(k) : null), setItem: (k, v) => m.set(k, String(v)) };
 }
 
-test('empty storage loads sound/music/haptics defaults', () => {
+test('empty storage loads sound/music/haptics/locale defaults', () => {
   const s = createSettingsStore(fakeStorage(), 'k');
   assert.deepEqual(s.load(), DEFAULTS);
 });
@@ -36,13 +37,28 @@ test('set merges a patch, persists, and a new store reads it back', () => {
   const st = fakeStorage();
   const s = createSettingsStore(st, 'k');
   assert.deepEqual(s.set({ sound: false }), { ...DEFAULTS, sound: false });
-  assert.deepEqual(s.set({ haptics: false }), { sound: false, music: true, haptics: false });
-  assert.deepEqual(createSettingsStore(st, 'k').load(), { sound: false, music: true, haptics: false });
+  assert.deepEqual(s.set({ haptics: false }), { sound: false, music: true, haptics: false, locale: 'en' });
+  assert.deepEqual(createSettingsStore(st, 'k').load(), { sound: false, music: true, haptics: false, locale: 'en' });
 });
 
 test('set ignores unknown patch keys and non-boolean values', () => {
   const s = createSettingsStore(fakeStorage(), 'k');
   assert.deepEqual(s.set({ sound: false, volume: 11, music: 'off' }), { ...DEFAULTS, sound: false });
+});
+
+test('locale accepts zh-Hans and rejects garbage', () => {
+  const s = createSettingsStore(fakeStorage(), 'k');
+  assert.deepEqual(s.set({ locale: 'zh-Hans' }), { ...DEFAULTS, locale: 'zh-Hans' });
+  assert.deepEqual(s.set({ locale: 'fr' }), { ...DEFAULTS, locale: 'en' });
+  assert.deepEqual(s.set({ locale: 42 }), { ...DEFAULTS, locale: 'en' });
+  const st = fakeStorage();
+  st.setItem('k', JSON.stringify({ locale: 'fr' }));
+  assert.equal(createSettingsStore(st, 'k').load().locale, 'en');
+});
+
+test('initialLocale matches the i18n helper contract', () => {
+  assert.equal(initialLocale('zh-CN', null), 'zh-Hans');
+  assert.equal(initialLocale('en-US', null), 'en');
 });
 
 test('a storage that throws (private mode) never propagates', () => {
