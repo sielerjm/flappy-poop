@@ -2,10 +2,10 @@
 """process_art.py — crop, knock out background white, and resize Michael's
 drawings into the gameplay art-contract PNGs.
 
-Created by Michael Sieler. Last updated: 2026-11-02.
+Created by Michael Sieler. Last updated: 2026-11-02 (384px contract).
 
 Input:  assets/src/{Poop_Emoji_Alive,Poop_Emoji_Dead,Fiber,Good_Bacteria,Bad_Bacteria}.png
-Output: assets/{poop,poop-dead,fiber,probiotic,bacteria}.png at 192x192 RGBA.
+Output: assets/{poop,poop-dead,fiber,probiotic,bacteria}.png at 384x384 RGBA.
 
 Only white connected to the image border is made transparent, so eyes and
 mouths stay white. Alive and dead poop share one trimmed canvas (union of
@@ -19,7 +19,7 @@ from PIL import Image
 ROOT = Path(__file__).resolve().parent.parent
 SRC = ROOT / "assets" / "src"
 OUT = ROOT / "assets"
-SIZE = 192
+SIZE = 384
 WHITE_CUTOFF = 245  # near-white on the border is treated as background
 PAD = 4  # px of source padding kept around the ink after trim
 

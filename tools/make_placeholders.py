@@ -50,18 +50,18 @@ def poop(path, size=48):
     img.save(path)
 
 
-def pipe(path, w=64, h=480, cap_h=28):
+def pipe(path, w=128, h=960, cap_h=56):
     """Pink Mario-style column. Cap at the TOP; the scene flips it for the bottom pipe."""
     img = Image.new("RGBA", (w, h), (0, 0, 0, 0))
     d = ImageDraw.Draw(img)
     # body with simple shading stripes
-    d.rectangle((4, cap_h, w - 5, h - 1), fill=PINK)
-    d.rectangle((4, cap_h, 10, h - 1), fill=PINK_DARK)
-    d.rectangle((12, cap_h, 18, h - 1), fill=PINK_LIGHT)
-    d.rectangle((w - 11, cap_h, w - 5, h - 1), fill=PINK_DARK)
+    d.rectangle((8, cap_h, w - 9, h - 1), fill=PINK)
+    d.rectangle((8, cap_h, 20, h - 1), fill=PINK_DARK)
+    d.rectangle((24, cap_h, 36, h - 1), fill=PINK_LIGHT)
+    d.rectangle((w - 21, cap_h, w - 9, h - 1), fill=PINK_DARK)
     # cap
-    d.rounded_rectangle((0, 0, w - 1, cap_h), radius=5, fill=PINK, outline=PINK_DARK, width=2)
-    d.rectangle((4, 4, 10, cap_h - 4), fill=PINK_LIGHT)
+    d.rounded_rectangle((0, 0, w - 1, cap_h), radius=10, fill=PINK, outline=PINK_DARK, width=4)
+    d.rectangle((8, 8, 20, cap_h - 8), fill=PINK_LIGHT)
     img.save(path)
 
 
@@ -69,39 +69,39 @@ def villi_band(d, x0, x1, y_base, height, up, rng):
     """Draw a fringe of finger-like villi between x0..x1. up=True grows upward from y_base."""
     x = x0
     while x < x1:
-        w = rng.randint(8, 14)
+        w = rng.randint(16, 28)
         h = int(height * rng.uniform(0.55, 1.0))
         if up:
-            box = (x, y_base - h, x + w, y_base + 6)
+            box = (x, y_base - h, x + w, y_base + 12)
         else:
-            box = (x, y_base - 6, x + w, y_base + h)
-        d.rounded_rectangle(box, radius=w // 2, fill=VILLI, outline=VILLI_DARK, width=1)
-        x += w + rng.randint(1, 3)
+            box = (x, y_base - 12, x + w, y_base + h)
+        d.rounded_rectangle(box, radius=w // 2, fill=VILLI, outline=VILLI_DARK, width=2)
+        x += w + rng.randint(2, 6)
 
 
-def bg(path, w=360, h=640):
+def bg(path, w=720, h=1280):
     rng = random.Random(42)
     img = Image.new("RGBA", (w, h), PURPLE)
     d = ImageDraw.Draw(img)
-    # mucosa texture: speckles
-    for _ in range(600):
+    # mucosa texture: speckles (2x field → denser count)
+    for _ in range(2400):
         x, y = rng.randrange(w), rng.randrange(h)
-        r = rng.randint(1, 4)
+        r = rng.randint(2, 8)
         d.ellipse((x, y, x + r, y + r), fill=PURPLE_DARK)
     # cream crypt lines at the band edges
-    d.rectangle((0, 110, w, 122), fill=CREAM)
-    d.rectangle((0, h - 122, w, h - 110), fill=CREAM)
+    d.rectangle((0, 220, w, 244), fill=CREAM)
+    d.rectangle((0, h - 244, w, h - 220), fill=CREAM)
     # villi fringes (drawn wider than the image so the horizontal tile edge matches)
-    villi_band(d, -20, w + 20, 115, 110, up=True, rng=random.Random(7))
-    villi_band(d, -20, w + 20, h - 115, 110, up=False, rng=random.Random(7))
+    villi_band(d, -40, w + 40, 230, 220, up=True, rng=random.Random(7))
+    villi_band(d, -40, w + 40, h - 230, 220, up=False, rng=random.Random(7))
     img.save(path)
 
 
-def ground(path, w=360, h=64):
+def ground(path, w=720, h=128):
     img = Image.new("RGBA", (w, h), VILLI_DARK)
     d = ImageDraw.Draw(img)
-    d.rectangle((0, 0, w, 6), fill=CREAM)
-    villi_band(d, -20, w + 20, 8, 56, up=False, rng=random.Random(11))
+    d.rectangle((0, 0, w, 12), fill=CREAM)
+    villi_band(d, -40, w + 40, 16, 112, up=False, rng=random.Random(11))
     img.save(path)
 
 
