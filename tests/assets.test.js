@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync, existsSync, statSync } from 'node:fs';
 import { join } from 'node:path';
+import { GAME_WIDTH, GAME_HEIGHT } from '../src/config.js';
 
 const root = new URL('..', import.meta.url).pathname;
 
@@ -99,4 +100,14 @@ test('every file under assets/sfx/ is named in CREDITS.md with a URL', () => {
     assert.match(credits, new RegExp(name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')), `${name} is not named in CREDITS.md`);
   }
   assert.match(credits, /https?:\/\/\S+/, 'CREDITS.md has no URL');
+});
+
+test('pipe.png is at least the playfield tall so flipped tops reach the ceiling', () => {
+  const pipe = pngSize(join(root, 'assets/pipe.png'));
+  assert.ok(pipe.h >= GAME_HEIGHT, `pipe height ${pipe.h} < GAME_HEIGHT ${GAME_HEIGHT}`);
+});
+
+test('bg.png matches the logical playfield exactly (no vertical tiling)', () => {
+  const bg = pngSize(join(root, 'assets/bg.png'));
+  assert.deepEqual({ w: bg.w, h: bg.h }, { w: GAME_WIDTH, h: GAME_HEIGHT });
 });

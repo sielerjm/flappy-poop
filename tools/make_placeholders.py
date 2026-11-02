@@ -50,8 +50,12 @@ def poop(path, size=48):
     img.save(path)
 
 
-def pipe(path, w=128, h=960, cap_h=56):
-    """Pink Mario-style column. Cap at the TOP; the scene flips it for the bottom pipe."""
+def pipe(path, w=128, h=1280, cap_h=56):
+    """Pink Mario-style column. Cap at the TOP; the scene flips it for the bottom pipe.
+
+    Height must be >= the playfield (720x1280) so a flipped top pipe always
+    reaches the ceiling when the gap sits low.
+    """
     img = Image.new("RGBA", (w, h), (0, 0, 0, 0))
     d = ImageDraw.Draw(img)
     # body with simple shading stripes
@@ -69,14 +73,14 @@ def villi_band(d, x0, x1, y_base, height, up, rng):
     """Draw a fringe of finger-like villi between x0..x1. up=True grows upward from y_base."""
     x = x0
     while x < x1:
-        w = rng.randint(16, 28)
+        w = rng.randint(28, 48)
         h = int(height * rng.uniform(0.55, 1.0))
         if up:
-            box = (x, y_base - h, x + w, y_base + 12)
+            box = (x, y_base - h, x + w, y_base + 20)
         else:
-            box = (x, y_base - 12, x + w, y_base + h)
-        d.rounded_rectangle(box, radius=w // 2, fill=VILLI, outline=VILLI_DARK, width=2)
-        x += w + rng.randint(2, 6)
+            box = (x, y_base - 20, x + w, y_base + h)
+        d.rounded_rectangle(box, radius=w // 2, fill=VILLI, outline=VILLI_DARK, width=3)
+        x += w + rng.randint(3, 8)
 
 
 def bg(path, w=720, h=1280):
@@ -88,20 +92,25 @@ def bg(path, w=720, h=1280):
         x, y = rng.randrange(w), rng.randrange(h)
         r = rng.randint(2, 8)
         d.ellipse((x, y, x + r, y + r), fill=PURPLE_DARK)
-    # cream crypt lines at the band edges
-    d.rectangle((0, 220, w, 244), fill=CREAM)
-    d.rectangle((0, h - 244, w, h - 220), fill=CREAM)
+    # Deep fringes (~400px) so folds read at the 720x1280 scale
+    fringe = 400
+    cream_h = 28
+    top_base = fringe + cream_h // 2
+    bot_base = h - fringe - cream_h // 2
+    d.rectangle((0, top_base - cream_h // 2, w, top_base + cream_h // 2), fill=CREAM)
+    d.rectangle((0, bot_base - cream_h // 2, w, bot_base + cream_h // 2), fill=CREAM)
     # villi fringes (drawn wider than the image so the horizontal tile edge matches)
-    villi_band(d, -40, w + 40, 230, 220, up=True, rng=random.Random(7))
-    villi_band(d, -40, w + 40, h - 230, 220, up=False, rng=random.Random(7))
+    villi_band(d, -40, w + 40, top_base, fringe, up=True, rng=random.Random(7))
+    villi_band(d, -40, w + 40, bot_base, fringe, up=False, rng=random.Random(7))
     img.save(path)
 
 
 def ground(path, w=720, h=128):
     img = Image.new("RGBA", (w, h), VILLI_DARK)
     d = ImageDraw.Draw(img)
-    d.rectangle((0, 0, w, 12), fill=CREAM)
-    villi_band(d, -40, w + 40, 16, 112, up=False, rng=random.Random(11))
+    d.rectangle((0, 0, w, 16), fill=CREAM)
+    # Fill most of the strip with larger villi fingers
+    villi_band(d, -40, w + 40, 20, 108, up=False, rng=random.Random(11))
     img.save(path)
 
 
@@ -120,8 +129,11 @@ def icon(path, size):
 
 if __name__ == "__main__":
     # poop.png is Michael's drawing (tools/process_art.py). Do not overwrite it.
-    icon(OUT / "icon-192.png", 192)
-    icon(OUT / "icon-512.png", 512)
+    # Icons are only rebuilt when missing so redrawn gameplay art is not clobbered.
+    for name, size in (("icon-192.png", 192), ("icon-512.png", 512)):
+        path = OUT / name
+        if not path.exists():
+            icon(path, size)
     pipe(OUT / "pipe.png")
     bg(OUT / "bg.png")
     ground(OUT / "ground.png")

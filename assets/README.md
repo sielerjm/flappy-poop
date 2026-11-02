@@ -13,8 +13,8 @@ The player and items are Michael's drawings. Put a new source PNG in `assets/src
 | `fiber.png` | 384x384 | Bonus +1 pickup | Transparent background, subject centred. Drawn at 0.25 scale. Hitbox is a 32 px circle. Source: `assets/src/Fiber.png`. |
 | `probiotic.png` | 384x384 | Good bacteria (5-pipe shield vs bad bacteria) | Same hitbox. Source: `assets/src/Good_Bacteria.png`. |
 | `bacteria.png` | 384x384 | Bad bacteria (−2) | Same hitbox. Hair / flagellum are visual-only. Source: `assets/src/Bad_Bacteria.png`. |
-| `pipe.png` | 128x960 | One intestinal-fold pipe | Cap at the **top**; the game flips it vertically for the bottom pipe. Only the top ~600 px are ever visible, but keep the full height so the column always reaches the screen edge. |
-| `bg.png` | 720x1280 | Gut-wall background | Scrolls slowly; must tile **horizontally** (left edge continues into right edge). Pink villi fringe top and bottom, mucosa in the middle. |
+| `pipe.png` | 128x1280 | One intestinal-fold pipe | Cap at the **top**; the game flips it vertically for the bottom pipe. Height must be **at least the playfield height** (1280) so a flipped top pipe always reaches the ceiling when the gap sits low. |
+| `bg.png` | 720x1280 | Gut-wall background | Exact playfield size. Scrolls slowly; must tile **horizontally** (left edge continues into right edge). Deep pink villi fringe top and bottom, mucosa in the middle. |
 | `ground.png` | 720x128 | Scrolling floor strip | Must tile horizontally. Drawn at the bottom of the screen on top of `bg.png`. |
 | `icon-192.png` | 192x192 | Home-screen icon | Referenced by `manifest.webmanifest`. Keep the subject inside the central 80 % so maskable icons don't crop it. |
 | `icon-512.png` | 512x512 | Home-screen icon (large) | Same drawing as `icon-192.png`. Also used as the Apple touch icon. |
