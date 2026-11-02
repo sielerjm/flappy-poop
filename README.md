@@ -1,6 +1,6 @@
 # Flappy Poop 💩
 
-A poop emoji flaps through the gut, dodging pink intestinal folds. A Flappy Bird clone for phone browsers, built on [Phaser 4](https://phaser.io) with no build step. Version **0.2.5**.
+A poop emoji flaps through the gut, dodging pink intestinal folds. A Flappy Bird clone for phone browsers, built on [Phaser 4](https://phaser.io) with no build step. Version **0.2.6**.
 
 **Play:** push this repo to GitHub, enable Pages (Settings → Pages → Deploy from branch → `main` / root), then open `https://<you>.github.io/<repo>/`. Add it to your home screen for a full-screen, app-like launch.
 
@@ -16,10 +16,12 @@ From score 8, pickups can appear in the gap:
 
 The probiotic does **not** save you from a pipe.
 
+On iPhone, Silent mode mutes the game — turn it off to hear sound. The pause banner is two centered lines: **PAUSED** / tap anywhere to resume game.
+
 ## Controls
 
 - **Tap / Space / ↑** — flap. The first tap also starts the run. After closing Settings or About during a run, tap or Space resumes; that tap does not flap. Unpausing from the pause banner bounces (same lift as a flap) so you can recover.
-- **How to play** (ready screen, also linked from About) — overlay with flap/pipe rules and what fiber, probiotic, and bad bacteria do. Tapping it does not start the run. Closing How to play that was opened from About also closes About, leaving a paused run if info was opened mid-play.
+- **How to play** (ready screen, also linked from About) — overlay with flap/pipe rules, iPhone Silent-mode note, and what fiber, probiotic, and bad bacteria do. Tapping it does not start the run. Closing How to play that was opened from About also closes About, leaving a paused run if info was opened mid-play. Tap the dimmed area outside Settings, About, or How to play to close (same as X).
 - **Bottom-left (i)** — About (credits, author, LLM note, last-updated stamp, How to play link). Independent of Settings.
 - **Bottom-right tray** — pause, mute/unmute, settings. Tray taps never flap, and on the game-over screen they never retry.
 - **P** or **Esc** — pause / resume (during a run). Ignored while Settings, About, or How to play is open; Esc then closes the top overlay.
@@ -71,7 +73,7 @@ tools/make_placeholders.py   pipe / bg / ground / icons only (needs Pillow)
 tools/process_art.py         crop Michael's sources into contract PNGs
 tools/serve.py               npm start: bind 0.0.0.0:8000, print phone URL
 tests/                  node --test: html assets logic state difficulty store smoke
-                        settings sound tray items tuning about howto hitbox chrome serve
+                        settings sound tray items tuning about howto overlay hitbox chrome serve
 .claude/plans/          checkpointed build plans
 ```
 

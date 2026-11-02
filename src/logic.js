@@ -4,7 +4,7 @@
 export const VERSION = '0.2.6';
 
 /** Player-facing stamp on the About overlay. Bump with VERSION. */
-export const LAST_UPDATED = '2 Nov 2026, 15:44';
+export const LAST_UPDATED = '2 Nov 2026, 15:51';
 
 /** Player-facing About copy. Version is appended by the About scene. */
 export const ABOUT_TEXT = `Flappy Poop

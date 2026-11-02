@@ -43,8 +43,9 @@ src/
                             scoring, items, sprite angle, retry lockout, difficulty,
                             best-score store, settings store, vibrate helper,
                             trayLayout, trayHit, howToLayout, howToHit,
-                            ABOUT_TEXT, HOW_TO_PLAY_TEXT, LAST_UPDATED, chromeIntent,
-                            scaledCircleBody. Fully unit-tested.
+                            ABOUT_TEXT, HOW_TO_PLAY_TEXT, PAUSE_BANNER_TEXT, LAST_UPDATED,
+                            chromeIntent, overlayOutsideHit, scaledCircleBody.
+                            Fully unit-tested.
   sound.js                  WebAudio synth blips + setMuted/isMuted/attachGame.
                             setMuted also sets game.sound.mute (the fart MP3).
                             unlock() must run from a user gesture: create,
@@ -63,16 +64,19 @@ src/
                             about > settings. Opening Settings, About, or HowTo
                             while playing pauses; closing them does not resume.
                             Unpause applies flapVelocity as a recovery bounce.
+                            Pause banner is two centered lines (PAUSE_BANNER_TEXT).
     Over.js                 Game-over panel (score, best, "tap to retry") with a
                             tap lockout and its own tray (mute still works).
     Settings.js             Overlay: sound, haptics (Android only), music coming
-                            soon, About link, version.
+                            soon, About link, version. Tap outside the panel
+                            closes (overlayOutsideHit), same as X.
     About.js                Overlay: author, LLM note, engine/art/sound credits,
                             How to play link, LAST_UPDATED under the version.
+                            Tap outside the panel closes.
     HowTo.js                Overlay: flap/pipe rules plus fiber / probiotic /
                             bacteria sprites. Ready-screen How to play uses
                             howToHit() so it does not start a run. Opened from
-                            About, X/Esc closes HowTo and About together.
+                            About, X/Esc/tap-outside closes HowTo and About together.
 
 assets/                     Contract PNGs + README.md (the art contract).
   README.md                 File name, pixel size, orientation rules. tests enforce it.
@@ -97,7 +101,8 @@ tests/                      node --test, zero deps. Each file is self-describing
   tuning.test.js            item / fartVolume sanity bounds
   about.test.js             ABOUT_TEXT names author, LLM, Phaser, JS, sound;
                             LAST_UPDATED has a year and a time
-  howto.test.js             HOW_TO copy, howToLayout / howToHit geometry
+  howto.test.js             HOW_TO copy, pause banner, howToLayout / howToHit geometry
+  overlay.test.js           overlayOutsideHit inside vs 1px outside HowTo/Settings panels
   hitbox.test.js            scaledCircleBody source radius/offset for 2x and 4x
   chrome.test.js            chromeIntent matrix across state x overlay x input
   smoke.test.js             logic.js imports and exports VERSION
