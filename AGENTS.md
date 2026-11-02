@@ -41,11 +41,13 @@ src/
                             feel-related number lives here. Pure data, Node-safe.
   logic.js                  Pure functions, NO Phaser/DOM: rng, gap placement,
                             scoring, items, sprite angle, retry lockout, difficulty,
-                            best-score store, settings store, vibrate helper,
-                            trayLayout, trayHit, howToLayout, howToHit,
-                            ABOUT_TEXT, HOW_TO_PLAY_TEXT, PAUSE_BANNER_TEXT, LAST_UPDATED,
-                            chromeIntent, overlayOutsideHit, scaledCircleBody.
-                            Fully unit-tested.
+                            best-score store, settings store (incl. locale), vibrate
+                            helper, trayLayout, trayHit, howToLayout, howToHit,
+                            LAST_UPDATED, chromeIntent, overlayOutsideHit,
+                            scaledCircleBody. Fully unit-tested.
+  i18n.js                   en / zh-Hans string catalog, t(), initialLocale,
+                            howToItems, pauseBannerText, metaFontSize. Player copy
+                            lives here (not in logic.js). See TRANSLATION_NOTES.md.
   sound.js                  WebAudio synth blips + setMuted/isMuted/attachGame.
                             setMuted also sets game.sound.mute (the fart MP3).
                             unlock() must run from a user gesture: create,
@@ -53,18 +55,19 @@ src/
                             game.sound.unlock(). Blips wait until running.
   ui/
     tray.js                 Phaser wrapper around trayLayout: pause / mute / settings
-                            plus bottom-left info. Chrome taps use trayHit() in
-                            Play/Over, not GameObject pointer handlers.
+                            plus bottom-left info and language (🌐). Chrome taps use
+                            trayHit() in Play/Over, not GameObject pointer handlers.
   scenes/
     Boot.js                 preload() gameplay PNGs + fart.mp3, then start Play.
     Play.js                 State machine: 'ready' -> 'playing' -> 'paused'/'dead'.
                             Spawns pipes and items, tray, auto-pause, haptics, dies,
                             then launches Over as an overlay scene. Tray / keyboard
-                            go through chromeIntent. Overlay order is howto >
-                            about > settings. Opening Settings, About, or HowTo
-                            while playing pauses; closing them does not resume.
-                            Unpause applies flapVelocity as a recovery bounce.
-                            Pause banner is two centered lines (PAUSE_BANNER_TEXT).
+                            go through chromeIntent. Overlay order is language /
+                            howto > about > settings. Opening Settings, About,
+                            HowTo, or Language while playing pauses; closing them
+                            does not resume. Unpause applies flapVelocity as a
+                            recovery bounce. Pause banner is two centered lines
+                            from i18n. Locale via getLocale / applyLocale.
     Over.js                 Game-over panel (score, best, "tap to retry") with a
                             tap lockout and its own tray (mute still works).
     Settings.js             Overlay: sound, haptics (Android only), music coming
@@ -72,11 +75,14 @@ src/
                             closes (overlayOutsideHit), same as X.
     About.js                Overlay: author, LLM note, engine/art/sound credits,
                             How to play link, LAST_UPDATED under the version.
-                            Tap outside the panel closes.
+                            Tap outside the panel closes. Wrapped text uses
+                            useAdvancedWrap for CJK.
     HowTo.js                Overlay: flap/pipe rules plus fiber / probiotic /
                             bacteria sprites. Ready-screen How to play uses
                             howToHit() so it does not start a run. Opened from
                             About, X/Esc/tap-outside closes HowTo and About together.
+                            useAdvancedWrap on body text.
+    Language.js             Overlay: English / 简体中文 picker (🌐 or L).
 
 assets/                     Contract PNGs + README.md (the art contract).
   README.md                 File name, pixel size, orientation rules. tests enforce it.
@@ -95,13 +101,14 @@ tests/                      node --test, zero deps. Each file is self-describing
   store.test.js             best-score store incl. throwing/missing storage
   settings.test.js          settings store + vibrate helper
   sound.test.js             sfx keys, mute, Node import
-  tray.test.js              trayHeight / trayLayout geometry including info;
+  tray.test.js              trayHeight / trayLayout geometry including info + lang;
                             trayHit centre hits vs miss in the tray gap
   items.test.js             rollItem, itemGapY, scoreAfterItem, probiotic inventory
   tuning.test.js            item / fartVolume sanity bounds
-  about.test.js             ABOUT_TEXT names author, LLM, Phaser, JS, sound;
+  about.test.js             About copy (both locales) names author, LLM, Phaser, JS, sound;
                             LAST_UPDATED has a year and a time
   howto.test.js             HOW_TO copy, pause banner, howToLayout / howToHit geometry
+  i18n.test.js              catalog key parity, t() fallback, initialLocale, glossary tokens
   overlay.test.js           overlayOutsideHit inside vs 1px outside HowTo/Settings panels
   hitbox.test.js            scaledCircleBody source radius/offset for 2x and 4x
   chrome.test.js            chromeIntent matrix across state x overlay x input
@@ -144,9 +151,10 @@ tools/
    root by GitHub Pages. Don't add a bundler, TypeScript, or npm packages without
    a strong reason; if you do, the deploy story has to change too.
 6. **Mobile first.** Touch is the primary input (`pointerdown`); keyboard
-   (Space / Up / M / P / Esc / S) is a convenience. Keep `touch-action: none`,
-   the viewport meta, and the WebAudio unlock-on-gesture. Test on a real phone
-   when you touch input, scaling, or audio.
+   (Space / Up / M / P / Esc / S / I / L) is a convenience. Keep `touch-action: none`,
+   the viewport meta, and the WebAudio unlock-on-gesture. Wrapped UI text that
+   can show Chinese must set `useAdvancedWrap: true`. Test on a real phone
+   when you touch input, scaling, audio, or locale.
 7. **Storage can throw.** Private-mode Safari and blocked storage throw on
    `localStorage` access. Go through `createBestStore()` or
    `createSettingsStore()`; never touch `localStorage` directly in scenes.
@@ -183,3 +191,4 @@ Commits so far follow `type(scope): summary` (`feat`, `docs`, `chore`); keep it.
   `src/logic.js`.
 - Multi-step work worth planning → a dated markdown plan in `.claude/plans/`.
 - Repo-wide conventions → this file. Player-facing docs → `README.md`.
+- Locale copy review for LLMs → `TRANSLATION_NOTES.md` (keep in sync with `src/i18n.js`).
