@@ -58,13 +58,14 @@ export class Play extends Phaser.Scene {
 
     // Player: no gravity until the first tap
     this.poop = this.physics.add.sprite(T.poopX, GAME_HEIGHT / 2, 'poop').setDepth(10);
+    this.poop.setScale(T.spriteDisplayScale);
     this.poop.body.setCircle(T.poopRadius, this.poop.width / 2 - T.poopRadius, this.poop.height / 2 - T.poopRadius);
     this.poop.body.setAllowGravity(false);
     this.bob = this.tweens.add({ targets: this.poop, y: '+=12', duration: 500, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
 
     // HUD
     this.scoreText = this.add.text(GAME_WIDTH / 2, 40, '0', { ...TEXT_STYLE, fontSize: '40px' }).setOrigin(0.5).setDepth(20);
-    this.probioticIcon = this.add.image(GAME_WIDTH / 2 - 18, 78, 'probiotic').setScale(0.55).setDepth(20).setVisible(false);
+    this.probioticIcon = this.add.image(GAME_WIDTH / 2 - 18, 78, 'probiotic').setScale(0.55 * T.spriteDisplayScale).setDepth(20).setVisible(false);
     this.probioticText = this.add.text(GAME_WIDTH / 2 + 10, 78, '', { ...TEXT_STYLE, fontSize: '18px' }).setOrigin(0, 0.5).setDepth(20).setVisible(false);
     this.readyTitle = this.add
       .text(GAME_WIDTH / 2, GAME_HEIGHT * 0.3, 'FLAPPY POOP', { ...TEXT_STYLE, fontSize: '26px' })
@@ -277,6 +278,7 @@ export class Play extends Phaser.Scene {
       const y = itemGapY(gapY, gapH, this.rng, kind);
       const item = this.items.create(x, y, kind);
       item.setDepth(8);
+      item.setScale(T.spriteDisplayScale);
       item.body.setCircle(
         T.items.itemRadius,
         item.width / 2 - T.items.itemRadius,
@@ -304,8 +306,14 @@ export class Play extends Phaser.Scene {
   collectItem(item) {
     if (this.state !== 'playing' || !item.active) return;
     const kind = item.getData('kind');
-    const ghost = this.add.image(item.x, item.y, kind).setDepth(12);
-    this.tweens.add({ targets: ghost, scale: 1.4, alpha: 0, duration: 180, onComplete: () => ghost.destroy() });
+    const ghost = this.add.image(item.x, item.y, kind).setScale(T.spriteDisplayScale).setDepth(12);
+    this.tweens.add({
+      targets: ghost,
+      scale: T.spriteDisplayScale * 1.4,
+      alpha: 0,
+      duration: 180,
+      onComplete: () => ghost.destroy(),
+    });
     item.destroy();
     if (kind === 'fiber') {
       this.score = scoreAfterItem(this.score, kind, T);

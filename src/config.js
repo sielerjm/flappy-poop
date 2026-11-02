@@ -14,7 +14,8 @@ export const TUNING = {
   groundHeight: 64,
   gapMargin: 40, // keep the gap this far from the ceiling and the ground
   poopX: 90, // fixed x of the player
-  poopRadius: 17, // circular hitbox (~70 % of the 48 px sprite)
+  poopRadius: 17, // circular hitbox (~70 % of the 48 logical-px sprite)
+  spriteDisplayScale: 0.5, // 96 px textures drawn at 48 logical px
   maxFallAngle: 90, // degrees nose-down at terminal fall
   maxRiseAngle: -25, // degrees nose-up right after a flap
   deathToOverMs: 700, // tumble time before the game-over panel appears
@@ -38,7 +39,7 @@ export const TUNING = {
     fiberPoints: 1, // points added by fiber
     bacteriaPenalty: 2, // points subtracted by unshielded bacteria
     probioticPipes: 5, // pipes a probiotic lasts
-    itemRadius: 16, // px circular hitbox (~1/3 of the 48 px sprite)
+    itemRadius: 16, // px circular hitbox (~1/3 of the 48 logical-px sprite)
     weights: { fiber: 3, probiotic: 2, bacteria: 4 },
   },
 };
