@@ -25,25 +25,19 @@ export class About extends Phaser.Scene {
 
     this.add.text(cx, cy - 440, t(locale, 'aboutTitle'), { ...STYLE, fontSize: '52px', color: '#f8a0c8' }).setOrigin(0.5);
 
-    this.add.text(cx, cy - 330, t(locale, 'aboutName'), { ...STYLE, fontSize: '40px' }).setOrigin(0.5);
-    this.add
-      .text(cx, cy - 276, t(locale, 'aboutTagline'), { ...MUTED, fontSize: '26px', wordWrap: wrap, lineSpacing: 4 })
-      .setOrigin(0.5);
-    this.add
-      .text(cx, cy - 160, t(locale, 'aboutBlurb'), { ...MUTED, fontSize: '24px', wordWrap: wrap, lineSpacing: 6 })
-      .setOrigin(0.5);
+    // Top-origin stack so multi-line blurb/credits grow downward and never overlap titles.
+    let y = cy - 360;
+    const stack = (key, style, gapAfter) => {
+      const text = this.add.text(cx, y, t(locale, key), style).setOrigin(0.5, 0);
+      y += text.height + gapAfter;
+      return text;
+    };
 
-    this.add
-      .text(cx, cy + 20, t(locale, 'aboutCreditsTitle'), { ...STYLE, fontSize: '28px', color: '#f8a0c8' })
-      .setOrigin(0.5);
-    this.add
-      .text(cx, cy + 110, t(locale, 'aboutCredits'), {
-        ...MUTED,
-        fontSize: '24px',
-        wordWrap: wrap,
-        lineSpacing: 8,
-      })
-      .setOrigin(0.5);
+    stack('aboutName', { ...STYLE, fontSize: '40px' }, 12);
+    stack('aboutTagline', { ...MUTED, fontSize: '26px', wordWrap: wrap, lineSpacing: 4 }, 12);
+    stack('aboutBlurb', { ...MUTED, fontSize: '24px', wordWrap: wrap, lineSpacing: 6 }, 36);
+    stack('aboutCreditsTitle', { ...STYLE, fontSize: '28px', color: '#f8a0c8' }, 16);
+    stack('aboutCredits', { ...MUTED, fontSize: '24px', wordWrap: wrap, lineSpacing: 8 }, 0);
 
     const howTo = this.add
       .text(cx, cy + 310, t(locale, 'howToPlay'), { ...STYLE, fontSize: '40px', color: '#f8a0c8' })

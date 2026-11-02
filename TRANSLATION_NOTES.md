@@ -90,18 +90,18 @@ Short, playful, clear. Fit a 720×1280 logical field; How to play / About body w
 ### aboutCredits (English)
 
 ```
-Code: JavaScript (ES modules) on Phaser 4.2.1 (MIT)
+Code: JavaScript / Phaser 4.2.1 (MIT)
 Art: Michael Sieler
-Sound: "fart" by MacKaffee (Freesound / Pixabay)
+Sound: MacKaffee (Freesound / Pixabay)
 Inspired by Flappy Bird
 ```
 
 ### aboutCredits (zh-Hans)
 
 ```
-代码：JavaScript（ES 模块）与 Phaser 4.2.1（MIT）
+代码：JavaScript / Phaser 4.2.1（MIT）
 美术：Michael Sieler
-音效："fart" by MacKaffee（Freesound / Pixabay）
+音效：MacKaffee（Freesound / Pixabay）
 灵感来自 Flappy Bird
 ```
 
