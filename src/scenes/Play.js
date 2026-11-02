@@ -68,8 +68,12 @@ export class Play extends Phaser.Scene {
 
     // HUD
     this.scoreText = this.add.text(GAME_WIDTH / 2, 40, '0', { ...TEXT_STYLE, fontSize: '40px' }).setOrigin(0.5).setDepth(20);
-    this.probioticIcon = this.add.image(GAME_WIDTH / 2 - 18, 78, 'probiotic').setScale(0.55 * T.spriteDisplayScale).setDepth(20).setVisible(false);
-    this.probioticText = this.add.text(GAME_WIDTH / 2 + 10, 78, '', { ...TEXT_STYLE, fontSize: '18px' }).setOrigin(0, 0.5).setDepth(20).setVisible(false);
+    this.probioticIcon = this.add
+      .image(GAME_WIDTH / 2 - 28, 78, 'probiotic')
+      .setDisplaySize(T.hudProbioticSize, T.hudProbioticSize)
+      .setDepth(20)
+      .setVisible(false);
+    this.probioticText = this.add.text(GAME_WIDTH / 2 + 8, 78, '', { ...TEXT_STYLE, fontSize: '20px' }).setOrigin(0, 0.5).setDepth(20).setVisible(false);
     this.readyTitle = this.add
       .text(GAME_WIDTH / 2, GAME_HEIGHT * 0.3, 'FLAPPY POOP', { ...TEXT_STYLE, fontSize: '26px' })
       .setOrigin(0.5)

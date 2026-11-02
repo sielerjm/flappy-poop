@@ -32,3 +32,9 @@ test('every item weight is ≥ 0 and the sum is > 0', () => {
 test('fartVolume is audible but not clipping', () => {
   assert.ok(T.fartVolume >= 0.2 && T.fartVolume <= 1, `fartVolume ${T.fartVolume}`);
 });
+
+test('HUD probiotic icon is at least as large as the world item sprite', () => {
+  const worldPx = 192 * T.spriteDisplayScale;
+  assert.ok(T.hudProbioticSize >= worldPx, `hudProbioticSize ${T.hudProbioticSize} < world ${worldPx}`);
+  assert.ok(T.hudProbioticSize <= 64, `hudProbioticSize ${T.hudProbioticSize} too tall for the score band`);
+});

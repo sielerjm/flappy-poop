@@ -16,6 +16,7 @@ export const TUNING = {
   poopX: 90, // fixed x of the player
   poopRadius: 17, // circular hitbox (~70 % of the 48 logical-px sprite)
   spriteDisplayScale: 0.25, // 192 px textures drawn at 48 logical px
+  hudProbioticSize: 48, // logical px; HUD icon uses setDisplaySize (was ~26 via 0.55*scale)
   maxFallAngle: 90, // degrees nose-down at terminal fall
   maxRiseAngle: -25, // degrees nose-up right after a flap
   deathToOverMs: 700, // tumble time before the game-over panel appears
