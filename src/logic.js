@@ -3,6 +3,19 @@
 
 export const VERSION = '0.2.0';
 
+/** Player-facing About copy. Version is appended by the About scene. */
+export const ABOUT_TEXT = `Flappy Poop
+
+A gut-themed Flappy Bird clone.
+
+This game was coded with the assistance of an LLM. The idea, game design, and all art are by Michael Sieler.
+
+Credits
+Code: JavaScript (ES modules) on Phaser 4.2.1 (MIT)
+Art: Michael Sieler
+Sound: "fart" by MacKaffee (Freesound / Pixabay)
+Inspired by Flappy Bird`;
+
 /** Deterministic PRNG (mulberry32). Returns a function in [0, 1). */
 export function createRng(seed = 1) {
   let a = seed >>> 0;
@@ -202,8 +215,9 @@ export function createEffects(t) {
 }
 
 /**
- * Three tray button centres along the bottom-right of the field. Hit boxes are
- * trayHitMin square and at least that far apart, all inside the field.
+ * Tray button centres: pause / mute / settings along the bottom-right, plus an
+ * independent info button at the bottom-left. Hit boxes are trayHitMin square
+ * and at least that far apart, all inside the field.
  */
 export function trayLayout(width, height, t) {
   const size = t.trayHitMin;
@@ -217,7 +231,46 @@ export function trayLayout(width, height, t) {
     y,
     size,
   }));
-  return { buttons, y, height: t.trayHeight };
+  const info = { id: 'info', x: size / 2 + 8, y, size };
+  return { buttons, info, y, height: t.trayHeight };
+}
+
+/**
+ * Decide what a tray / keyboard / overlay event should do. Scenes execute the
+ * result; this function is Phaser-free so the matrix can be tested in Node.
+ *
+ * @param {'ready'|'playing'|'paused'|'dead'} state
+ * @param {null|'settings'|'about'} overlay topmost overlay (pause is a state)
+ * @param {boolean} stackedSettings true when About sits on top of Settings
+ * @param {'pause'|'mute'|'settings'|'info'|'tap'|'esc'|'close'} input
+ * @param {boolean} resumeLocked true during pauseResumeLockoutMs after overlay close
+ * @returns {{ do: string, pause?: boolean, armResumeLockout?: boolean }}
+ */
+export function chromeIntent({ state, overlay = null, stackedSettings = false, input, resumeLocked = false }) {
+  if (input === 'mute') return { do: 'toggleMute' };
+
+  if (overlay) {
+    if (input === 'close') {
+      return { do: 'closeTop', armResumeLockout: !(overlay === 'about' && stackedSettings) };
+    }
+    if (input === 'info' && overlay === 'settings') return { do: 'openAbout', pause: false };
+    return { do: 'ignore' };
+  }
+
+  if (input === 'pause' || input === 'esc') {
+    if (state === 'playing') return { do: 'pause' };
+    if (state === 'paused') return { do: 'resume' };
+    return { do: 'ignore' };
+  }
+  if (input === 'settings') return { do: 'openSettings', pause: state === 'playing' };
+  if (input === 'info') return { do: 'openAbout', pause: state === 'playing' };
+  if (input === 'tap') {
+    if (state === 'playing') return { do: 'flap' };
+    if (state === 'paused') return resumeLocked ? { do: 'ignore' } : { do: 'resume' };
+    if (state === 'ready') return { do: 'start' };
+    if (state === 'dead') return { do: 'retry' };
+  }
+  return { do: 'ignore' };
 }
 
 export function vibrate(navigatorLike, pattern) {
