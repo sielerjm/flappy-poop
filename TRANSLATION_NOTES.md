@@ -24,7 +24,7 @@ formal medical language.
 - First run with **no** stored `locale`: if `navigator.language` starts with `zh`, use `zh-Hans`; else `en`. Then persist.
 - Once the player picks a language in the 🌐 panel, the stored value always wins.
 - Brand title **Flappy Poop** stays Latin in both locales.
-- Untranslated tokens (must appear in both About bodies): `Flappy Poop`, `Michael Sieler`, `Phaser 4.2.1`, `MacKaffee`, version numbers.
+- Untranslated tokens (must appear across About strings): `Flappy Poop`, `Michael Sieler`, `Phaser 4.2.1`, `MacKaffee`, version numbers.
 - **Silent mode** = iPhone **hardware** ringer/silent switch → **静音模式** (not the in-game mute toggle).
 
 ## Glossary (items)
@@ -64,7 +64,11 @@ Short, playful, clear. Fit a 720×1280 logical field; How to play / About body w
 | musicComingSoon | Music   coming soon | 音乐   即将推出 |
 | aboutLink | About | 关于 |
 | aboutTitle | ABOUT | 关于 |
-| aboutBody | *(see block below)* | *(see block below)* |
+| aboutName | Flappy Poop | Flappy Poop |
+| aboutTagline | A gut-themed Flappy Bird clone. | 一款肠道主题的 Flappy Bird 克隆。 |
+| aboutBlurb | This game was coded with the assistance of an LLM. The idea, game design, and all art are by Michael Sieler. | 本游戏在 LLM 协助下编写。创意、游戏设计与全部美术由 Michael Sieler 完成。 |
+| aboutCreditsTitle | Credits | 致谢 |
+| aboutCredits | *(see block below)* | *(see block below)* |
 | howToTitle | HOW TO PLAY | 玩法说明 |
 | howToBody | Tap to flap. Pass a pipe pair for a point. Hit a pipe, the ceiling, or the floor and the run ends. On iPhone, Silent mode mutes the game — turn it off to hear sound. | 点击飞扑。穿过一对管道得一分。撞到管道、天花板或地面则本局结束。在 iPhone 上，静音模式会让游戏无声——关闭静音即可听到声音。 |
 | itemFiberName | Fiber | 纤维 |
@@ -83,32 +87,18 @@ Short, playful, clear. Fit a 720×1280 logical field; How to play / About body w
 | featureRequest | Feature request | 功能建议 |
 | feedbackLink | Bug or feature request? | 问题或功能建议？ |
 
-### aboutBody (English)
+### aboutCredits (English)
 
 ```
-Flappy Poop
-
-A gut-themed Flappy Bird clone.
-
-This game was coded with the assistance of an LLM. The idea, game design, and all art are by Michael Sieler.
-
-Credits
 Code: JavaScript (ES modules) on Phaser 4.2.1 (MIT)
 Art: Michael Sieler
 Sound: "fart" by MacKaffee (Freesound / Pixabay)
 Inspired by Flappy Bird
 ```
 
-### aboutBody (zh-Hans)
+### aboutCredits (zh-Hans)
 
 ```
-Flappy Poop
-
-一款肠道主题的 Flappy Bird 克隆。
-
-本游戏在 LLM 协助下编写。创意、游戏设计与全部美术由 Michael Sieler 完成。
-
-致谢
 代码：JavaScript（ES 模块）与 Phaser 4.2.1（MIT）
 美术：Michael Sieler
 音效："fart" by MacKaffee（Freesound / Pixabay）

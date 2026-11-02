@@ -19,7 +19,7 @@ import {
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 
 /** Keys that are intentionally identical in en and zh-Hans. */
-const IDENTICAL_OK = new Set(['readyTitle', 'langEnglish', 'langChinese']);
+const IDENTICAL_OK = new Set(['readyTitle', 'aboutName', 'langEnglish', 'langChinese']);
 
 /** English UI literals that must not appear hardcoded in scenes / tray. */
 const SCENE_DENYLIST = [
@@ -122,9 +122,15 @@ test('metaFontSize is larger for Chinese', () => {
   assert.equal(metaFontSize('zh-Hans'), '28px');
 });
 
-test('both About bodies keep untranslated brand and credit tokens', () => {
+test('both About catalogs keep untranslated brand and credit tokens', () => {
   for (const locale of LOCALES) {
-    const body = t(locale, 'aboutBody');
+    const body = [
+      t(locale, 'aboutName'),
+      t(locale, 'aboutTagline'),
+      t(locale, 'aboutBlurb'),
+      t(locale, 'aboutCreditsTitle'),
+      t(locale, 'aboutCredits'),
+    ].join('\n');
     assert.match(body, /Flappy Poop/);
     assert.match(body, /Michael Sieler/);
     assert.match(body, /Phaser 4\.2\.1/);

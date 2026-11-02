@@ -24,14 +24,12 @@ const STRINGS = {
     musicComingSoon: 'Music   coming soon',
     aboutLink: 'About',
     aboutTitle: 'ABOUT',
-    aboutBody: `Flappy Poop
-
-A gut-themed Flappy Bird clone.
-
-This game was coded with the assistance of an LLM. The idea, game design, and all art are by Michael Sieler.
-
-Credits
-Code: JavaScript (ES modules) on Phaser 4.2.1 (MIT)
+    aboutName: 'Flappy Poop',
+    aboutTagline: 'A gut-themed Flappy Bird clone.',
+    aboutBlurb:
+      'This game was coded with the assistance of an LLM. The idea, game design, and all art are by Michael Sieler.',
+    aboutCreditsTitle: 'Credits',
+    aboutCredits: `Code: JavaScript (ES modules) on Phaser 4.2.1 (MIT)
 Art: Michael Sieler
 Sound: "fart" by MacKaffee (Freesound / Pixabay)
 Inspired by Flappy Bird`,
@@ -74,14 +72,11 @@ Inspired by Flappy Bird`,
     musicComingSoon: '音乐   即将推出',
     aboutLink: '关于',
     aboutTitle: '关于',
-    aboutBody: `Flappy Poop
-
-一款肠道主题的 Flappy Bird 克隆。
-
-本游戏在 LLM 协助下编写。创意、游戏设计与全部美术由 Michael Sieler 完成。
-
-致谢
-代码：JavaScript（ES 模块）与 Phaser 4.2.1（MIT）
+    aboutName: 'Flappy Poop',
+    aboutTagline: '一款肠道主题的 Flappy Bird 克隆。',
+    aboutBlurb: '本游戏在 LLM 协助下编写。创意、游戏设计与全部美术由 Michael Sieler 完成。',
+    aboutCreditsTitle: '致谢',
+    aboutCredits: `代码：JavaScript（ES 模块）与 Phaser 4.2.1（MIT）
 美术：Michael Sieler
 音效："fart" by MacKaffee（Freesound / Pixabay）
 灵感来自 Flappy Bird`,
