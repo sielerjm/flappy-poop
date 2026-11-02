@@ -50,10 +50,12 @@ export function hasPassed(pipeCentreX, pipeWidth, playerX) {
 }
 
 /** Sprite angle from vertical velocity: nose up when rising, nose down when falling. */
-export function angleForVelocity(vy, { maxRiseAngle, maxFallAngle }) {
+export function angleForVelocity(vy, { maxRiseAngle, maxFallAngle, angleFallRefVy = 1200 }) {
   if (vy < 0) return maxRiseAngle;
-  const t = Math.min(vy / 600, 1);
-  return maxRiseAngle + (maxFallAngle - maxRiseAngle) * t;
+  const t = Math.min(vy / angleFallRefVy, 1);
+  const deg = maxRiseAngle + (maxFallAngle - maxRiseAngle) * t;
+  // Whole degrees so continuous tilt does not re-jag the outline every frame.
+  return Math.round(deg);
 }
 
 /** Retry is allowed once lockoutMs have elapsed since the game-over screen opened. */

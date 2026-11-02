@@ -16,6 +16,8 @@ new Phaser.Game({
   height: GAME_HEIGHT,
   backgroundColor: '#1a0b14',
   pixelArt: false,
+  roundPixels: true,
+  antialias: true,
   scale: {
     mode: Phaser.Scale.FIT,
     autoCenter: Phaser.Scale.CENTER_BOTH,
