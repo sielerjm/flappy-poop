@@ -1,5 +1,5 @@
 import { GAME_WIDTH, GAME_HEIGHT } from '../config.js';
-import { ABOUT_TEXT, VERSION, LAST_UPDATED, chromeIntent } from '../logic.js';
+import { ABOUT_TEXT, VERSION, LAST_UPDATED, chromeIntent, overlayOutsideHit } from '../logic.js';
 
 const STYLE = { fontFamily: 'sans-serif', fontStyle: 'bold', color: '#ffffff', align: 'center' };
 
@@ -10,10 +10,14 @@ export class About extends Phaser.Scene {
 
   create() {
     this.scene.bringToTop();
-    this.add.rectangle(GAME_WIDTH / 2, GAME_HEIGHT / 2, GAME_WIDTH, GAME_HEIGHT, 0x000000, 0.55).setInteractive();
     const cx = GAME_WIDTH / 2;
     const cy = GAME_HEIGHT / 2;
-    this.add.rectangle(cx, cy, 300, 500, 0x1a0b14, 0.95).setStrokeStyle(4, 0xe85e96);
+    const panel = { x: cx, y: cy, width: 300, height: 500 };
+    const dimmer = this.add.rectangle(GAME_WIDTH / 2, GAME_HEIGHT / 2, GAME_WIDTH, GAME_HEIGHT, 0x000000, 0.55).setInteractive();
+    dimmer.on('pointerdown', (pointer) => {
+      if (overlayOutsideHit(pointer.x, pointer.y, panel)) this.close();
+    });
+    this.add.rectangle(cx, cy, panel.width, panel.height, 0x1a0b14, 0.95).setStrokeStyle(4, 0xe85e96);
 
     this.add.text(cx, cy - 220, 'ABOUT', { ...STYLE, fontSize: '26px', color: '#f8a0c8' }).setOrigin(0.5);
     this.add

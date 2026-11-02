@@ -304,6 +304,17 @@ export function howToHit(x, y, layout) {
 }
 
 /**
+ * True when (x, y) is outside a centred overlay panel. Dimmer taps use this
+ * so a press on the box itself does not close (the panel is not interactive).
+ */
+export function overlayOutsideHit(x, y, panel) {
+  if (!panel) return true;
+  const hw = panel.width / 2;
+  const hh = panel.height / 2;
+  return Math.abs(x - panel.x) > hw || Math.abs(y - panel.y) > hh;
+}
+
+/**
  * Decide what a tray / keyboard / overlay event should do. Scenes execute the
  * result; this function is Phaser-free so the matrix can be tested in Node.
  *
