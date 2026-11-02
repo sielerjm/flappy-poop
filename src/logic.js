@@ -1,10 +1,10 @@
 // Pure game logic with no Phaser or DOM dependency, so it can be tested in Node.
 // Everything Phaser-specific lives in src/scenes/.
 
-export const VERSION = '0.2.5';
+export const VERSION = '0.2.6';
 
 /** Player-facing stamp on the About overlay. Bump with VERSION. */
-export const LAST_UPDATED = '2 Nov 2026, 15:33';
+export const LAST_UPDATED = '2 Nov 2026, 15:44';
 
 /** Player-facing About copy. Version is appended by the About scene. */
 export const ABOUT_TEXT = `Flappy Poop
@@ -20,7 +20,11 @@ Sound: "fart" by MacKaffee (Freesound / Pixabay)
 Inspired by Flappy Bird`;
 
 /** Player-facing How to play copy. Item rows live in HOW_TO_ITEMS. */
-export const HOW_TO_PLAY_TEXT = `Tap to flap. Pass a pipe pair for a point. Hit a pipe, the ceiling, or the floor and the run ends.`;
+export const HOW_TO_PLAY_TEXT = `Tap to flap. Pass a pipe pair for a point. Hit a pipe, the ceiling, or the floor and the run ends. On iPhone, Silent mode mutes the game — turn it off to hear sound.`;
+
+/** Two-line pause banner. Play splits on the newline so the title can be larger. */
+export const PAUSE_BANNER_TEXT = `PAUSED
+tap anywhere to resume game`;
 
 /** Pickup rows for the How to play overlay. key matches Boot texture names. */
 export const HOW_TO_ITEMS = [

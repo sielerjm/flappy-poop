@@ -18,6 +18,7 @@ import {
   howToLayout,
   howToHit,
   scaledCircleBody,
+  PAUSE_BANNER_TEXT,
 } from '../logic.js';
 import { unlock, attachGame, setMuted, isMuted, sfx } from '../sound.js';
 import { createTray } from '../ui/tray.js';
@@ -84,8 +85,18 @@ export class Play extends Phaser.Scene {
       .setDepth(20);
 
     this.pauseShade = this.add.rectangle(GAME_WIDTH / 2, GAME_HEIGHT / 2, GAME_WIDTH, GAME_HEIGHT, 0x000000, 0.45).setDepth(25).setVisible(false);
+    const [pauseTitle, pauseHint] = PAUSE_BANNER_TEXT.split('\n');
     this.pauseText = this.add
-      .text(GAME_WIDTH / 2, GAME_HEIGHT * 0.42, 'PAUSED — tap anywhere to resume', { ...TEXT_STYLE, fontSize: '22px' })
+      .text(GAME_WIDTH / 2, GAME_HEIGHT * 0.40, pauseTitle, { ...TEXT_STYLE, fontSize: '26px' })
+      .setOrigin(0.5)
+      .setDepth(26)
+      .setVisible(false);
+    this.pauseHint = this.add
+      .text(GAME_WIDTH / 2, GAME_HEIGHT * 0.40 + 36, pauseHint, {
+        ...TEXT_STYLE,
+        fontSize: '18px',
+        wordWrap: { width: GAME_WIDTH - 32 },
+      })
       .setOrigin(0.5)
       .setDepth(26)
       .setVisible(false);
@@ -222,14 +233,19 @@ export class Play extends Phaser.Scene {
     if (this.state === 'playing') this.pausePlay();
   }
 
+  setPauseBanner(visible) {
+    this.pauseShade.setVisible(visible);
+    this.pauseText.setVisible(visible);
+    this.pauseHint.setVisible(visible);
+  }
+
   pausePlay() {
     if (this.state !== 'playing') return;
     this.state = 'paused';
     this.physics.pause();
     if (this.spawnTimer) this.spawnTimer.paused = true;
     this.bob.pause();
-    this.pauseShade.setVisible(true);
-    this.pauseText.setVisible(true);
+    this.setPauseBanner(true);
   }
 
   resumePlay() {
@@ -238,8 +254,7 @@ export class Play extends Phaser.Scene {
     this.physics.resume();
     if (this.spawnTimer) this.spawnTimer.paused = false;
     this.bob.resume();
-    this.pauseShade.setVisible(false);
-    this.pauseText.setVisible(false);
+    this.setPauseBanner(false);
     // Recovery bounce on the resume tap. Do not set flapLockedUntil: chrome
     // already maps that tap to resume, not flap; a lockout delays the next flap.
     this.poop.setVelocityY(T.flapVelocity);
@@ -345,8 +360,7 @@ export class Play extends Phaser.Scene {
     this.poop.setTexture('poop-dead');
     for (const pipe of this.pipes.getChildren()) pipe.setVelocityX(0);
     for (const item of this.items.getChildren()) item.setVelocityX(0);
-    this.pauseShade.setVisible(false);
-    this.pauseText.setVisible(false);
+    this.setPauseBanner(false);
     this.cameras.main.shake(200, 0.01);
     this.cameras.main.flash(120, 255, 120, 160);
     if (this.settings.load().haptics) vibrate(globalThis.navigator, T.vibrateOnDieMs);

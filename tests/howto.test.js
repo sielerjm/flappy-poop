@@ -1,13 +1,22 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { GAME_WIDTH, GAME_HEIGHT, TUNING as T } from '../src/config.js';
-import { HOW_TO_PLAY_TEXT, HOW_TO_ITEMS, howToLayout, howToHit } from '../src/logic.js';
+import { HOW_TO_PLAY_TEXT, HOW_TO_ITEMS, PAUSE_BANNER_TEXT, howToLayout, howToHit } from '../src/logic.js';
 
 test('HOW_TO_PLAY_TEXT explains flapping and pipes', () => {
   assert.match(HOW_TO_PLAY_TEXT, /flap/i);
   assert.match(HOW_TO_PLAY_TEXT, /pipe/i);
   assert.match(HOW_TO_PLAY_TEXT, /ceiling/i);
   assert.match(HOW_TO_PLAY_TEXT, /floor/i);
+  assert.match(HOW_TO_PLAY_TEXT, /Silent/);
+  assert.match(HOW_TO_PLAY_TEXT, /iPhone/);
+});
+
+test('PAUSE_BANNER_TEXT is two centered lines, not a clipped em-dash row', () => {
+  assert.match(PAUSE_BANNER_TEXT, /\n/);
+  assert.match(PAUSE_BANNER_TEXT, /PAUSED/);
+  assert.match(PAUSE_BANNER_TEXT, /resume game/);
+  assert.equal(PAUSE_BANNER_TEXT.includes('—'), false);
 });
 
 test('HOW_TO_ITEMS names fiber, probiotic, and bacteria with their effects', () => {

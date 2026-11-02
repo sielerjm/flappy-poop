@@ -17,7 +17,7 @@ export class HowTo extends Phaser.Scene {
 
     this.add.text(cx, cy - 220, 'HOW TO PLAY', { ...STYLE, fontSize: '26px', color: '#f8a0c8' }).setOrigin(0.5);
     this.add
-      .text(cx, cy - 130, HOW_TO_PLAY_TEXT, {
+      .text(cx, cy - 145, HOW_TO_PLAY_TEXT, {
         ...STYLE,
         fontSize: '14px',
         color: '#c9b8dc',
