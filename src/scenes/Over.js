@@ -1,5 +1,6 @@
 import { GAME_WIDTH, GAME_HEIGHT, TUNING as T } from '../config.js';
 import { canRestart, chromeIntent, trayLayout, trayHit } from '../logic.js';
+import { t } from '../i18n.js';
 import { isMuted, unlock } from '../sound.js';
 import { createTray } from '../ui/tray.js';
 
@@ -12,19 +13,20 @@ export class Over extends Phaser.Scene {
     const score = data?.score ?? 0;
     const best = data?.best ?? score;
     this.openedAt = this.time.now;
+    const play = this.scene.get('Play');
+    const locale = play?.getLocale?.() ?? 'en';
 
     const cx = GAME_WIDTH / 2;
     const cy = GAME_HEIGHT / 2;
     const panel = this.add.rectangle(cx, cy, 260, 220, 0x1a0b14, 0.85).setStrokeStyle(4, 0xe85e96);
     const style = { fontFamily: 'sans-serif', fontStyle: 'bold', color: '#ffffff', align: 'center' };
-    this.add.text(cx, cy - 70, 'GAME OVER', { ...style, fontSize: '32px', color: '#f8a0c8' }).setOrigin(0.5);
-    this.add.text(cx, cy - 15, `SCORE  ${score}`, { ...style, fontSize: '24px' }).setOrigin(0.5);
-    this.add.text(cx, cy + 25, `BEST  ${best}`, { ...style, fontSize: '20px', color: '#c9b8dc' }).setOrigin(0.5);
-    this.retryText = this.add.text(cx, cy + 75, 'tap to retry', { ...style, fontSize: '20px' }).setOrigin(0.5).setAlpha(0);
+    this.add.text(cx, cy - 70, t(locale, 'gameOver'), { ...style, fontSize: '32px', color: '#f8a0c8' }).setOrigin(0.5);
+    this.add.text(cx, cy - 15, `${t(locale, 'scoreLabel')}  ${score}`, { ...style, fontSize: '24px' }).setOrigin(0.5);
+    this.add.text(cx, cy + 25, `${t(locale, 'bestLabel')}  ${best}`, { ...style, fontSize: '20px', color: '#c9b8dc' }).setOrigin(0.5);
+    this.retryText = this.add.text(cx, cy + 75, t(locale, 'tapToRetry'), { ...style, fontSize: '20px' }).setOrigin(0.5).setAlpha(0);
     this.tweens.add({ targets: this.retryText, alpha: 1, delay: T.retryLockoutMs, duration: 200 });
     this.tweens.add({ targets: panel, scale: { from: 0.8, to: 1 }, duration: 180, ease: 'Back.easeOut' });
 
-    const play = this.scene.get('Play');
     this.tray = createTray(this, { muted: isMuted() });
 
     const retry = (pointer) => {

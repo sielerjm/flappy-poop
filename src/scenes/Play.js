@@ -18,8 +18,8 @@ import {
   howToLayout,
   howToHit,
   scaledCircleBody,
-  PAUSE_BANNER_TEXT,
 } from '../logic.js';
+import { t, pauseBannerText, initialLocale, isLocale } from '../i18n.js';
 import { unlock, attachGame, setMuted, isMuted, sfx } from '../sound.js';
 import { createTray } from '../ui/tray.js';
 
@@ -46,6 +46,7 @@ export class Play extends Phaser.Scene {
     this.state = 'ready'; // 'ready' | 'playing' | 'paused' | 'dead'
     this.flapLockedUntil = 0;
     this.effects = createEffects(T);
+    this.locale = this.resolveLocale();
     attachGame(this.game);
     setMuted(!this.settings.load().sound);
 
@@ -75,21 +76,21 @@ export class Play extends Phaser.Scene {
       .setVisible(false);
     this.probioticText = this.add.text(GAME_WIDTH / 2 + 8, 78, '', { ...TEXT_STYLE, fontSize: '20px' }).setOrigin(0, 0.5).setDepth(20).setVisible(false);
     this.readyTitle = this.add
-      .text(GAME_WIDTH / 2, GAME_HEIGHT * 0.3, 'FLAPPY POOP', { ...TEXT_STYLE, fontSize: '26px' })
+      .text(GAME_WIDTH / 2, GAME_HEIGHT * 0.3, t(this.locale, 'readyTitle'), { ...TEXT_STYLE, fontSize: '26px' })
       .setOrigin(0.5)
       .setDepth(20);
     const howTo = howToLayout(GAME_WIDTH, GAME_HEIGHT, T);
     this.howToLabel = this.add
-      .text(howTo.x, howTo.y, 'How to play', { ...TEXT_STYLE, fontSize: '20px', color: '#f8a0c8' })
+      .text(howTo.x, howTo.y, t(this.locale, 'howToPlay'), { ...TEXT_STYLE, fontSize: '20px', color: '#f8a0c8' })
       .setOrigin(0.5)
       .setDepth(20);
     this.readyHint = this.add
-      .text(GAME_WIDTH / 2, howTo.y + howTo.height / 2 + 28, 'tap to flap', { ...TEXT_STYLE, fontSize: '22px' })
+      .text(GAME_WIDTH / 2, howTo.y + howTo.height / 2 + 28, t(this.locale, 'tapToFlap'), { ...TEXT_STYLE, fontSize: '22px' })
       .setOrigin(0.5)
       .setDepth(20);
 
     this.pauseShade = this.add.rectangle(GAME_WIDTH / 2, GAME_HEIGHT / 2, GAME_WIDTH, GAME_HEIGHT, 0x000000, 0.45).setDepth(25).setVisible(false);
-    const [pauseTitle, pauseHint] = PAUSE_BANNER_TEXT.split('\n');
+    const [pauseTitle, pauseHint] = pauseBannerText(this.locale).split('\n');
     this.pauseText = this.add
       .text(GAME_WIDTH / 2, GAME_HEIGHT * 0.40, pauseTitle, { ...TEXT_STYLE, fontSize: '26px' })
       .setOrigin(0.5)
@@ -99,7 +100,7 @@ export class Play extends Phaser.Scene {
       .text(GAME_WIDTH / 2, GAME_HEIGHT * 0.40 + 36, pauseHint, {
         ...TEXT_STYLE,
         fontSize: '18px',
-        wordWrap: { width: GAME_WIDTH - 32 },
+        wordWrap: { width: GAME_WIDTH - 32, useAdvancedWrap: true },
       })
       .setOrigin(0.5)
       .setDepth(26)
@@ -120,6 +121,7 @@ export class Play extends Phaser.Scene {
     this.input.keyboard?.on('keydown-ESC', () => this.handleChrome('esc'));
     this.input.keyboard?.on('keydown-S', () => this.handleChrome('settings'));
     this.input.keyboard?.on('keydown-I', () => this.handleChrome('info'));
+    this.input.keyboard?.on('keydown-L', () => this.handleChrome('lang'));
 
     this.onHidden = () => {
       if (typeof document !== 'undefined' && document.hidden) this.autoPause();
@@ -162,13 +164,45 @@ export class Play extends Phaser.Scene {
     this.handleChrome('tap');
   }
 
+  resolveLocale() {
+    let stored = null;
+    try {
+      const raw = globalThis.localStorage?.getItem(T.settingsKey);
+      if (raw != null) {
+        const parsed = JSON.parse(raw);
+        if (isLocale(parsed?.locale)) stored = parsed.locale;
+      }
+    } catch {
+      /* private mode */
+    }
+    const locale = initialLocale(globalThis.navigator?.language, stored);
+    if (stored == null) this.settings.set({ locale });
+    return locale;
+  }
+
+  getLocale() {
+    return this.locale ?? 'en';
+  }
+
+  applyLocale(next) {
+    if (!isLocale(next)) return;
+    this.locale = next;
+    this.readyTitle?.setText(t(next, 'readyTitle'));
+    this.howToLabel?.setText(t(next, 'howToPlay'));
+    this.readyHint?.setText(t(next, 'tapToFlap'));
+    const [pauseTitle, pauseHint] = pauseBannerText(next).split('\n');
+    this.pauseText?.setText(pauseTitle);
+    this.pauseHint?.setText(pauseHint);
+  }
+
   chromeArgs(input) {
     const about = this.scene.isActive('About');
     const howto = this.scene.isActive('HowTo');
     const settings = this.scene.isActive('Settings');
+    const language = this.scene.isActive('Language');
     return {
       state: this.state,
-      overlay: howto ? 'howto' : about ? 'about' : settings ? 'settings' : null,
+      overlay: language ? 'language' : howto ? 'howto' : about ? 'about' : settings ? 'settings' : null,
       stackedSettings: about && settings,
       stackedAbout: howto && about,
       input,
@@ -205,6 +239,11 @@ export class Play extends Phaser.Scene {
         if (result.pause) this.pausePlay();
         if (!this.scene.isActive('HowTo')) this.scene.launch('HowTo');
         this.scene.bringToTop('HowTo');
+        break;
+      case 'openLanguage':
+        if (result.pause) this.pausePlay();
+        if (!this.scene.isActive('Language')) this.scene.launch('Language');
+        this.scene.bringToTop('Language');
         break;
       case 'start':
         this.start();

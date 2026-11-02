@@ -1,5 +1,6 @@
 import { GAME_WIDTH, GAME_HEIGHT, TUNING as T } from '../config.js';
 import { VERSION, createSettingsStore, chromeIntent, overlayOutsideHit } from '../logic.js';
+import { t, toggleLabel, metaFontSize } from '../i18n.js';
 import { setMuted } from '../sound.js';
 
 const STYLE = { fontFamily: 'sans-serif', fontStyle: 'bold', color: '#ffffff', align: 'center' };
@@ -13,6 +14,8 @@ export class Settings extends Phaser.Scene {
     this.scene.bringToTop();
     this.settings = createSettingsStore(globalThis.localStorage, T.settingsKey);
     const cur = this.settings.load();
+    const locale = this.scene.get('Play')?.getLocale?.() ?? cur.locale ?? 'en';
+    this.locale = locale;
 
     const cx = GAME_WIDTH / 2;
     const cy = GAME_HEIGHT / 2;
@@ -23,32 +26,47 @@ export class Settings extends Phaser.Scene {
     });
     this.add.rectangle(cx, cy, panel.width, panel.height, 0x1a0b14, 0.95).setStrokeStyle(4, 0xe85e96);
 
-    this.add.text(cx, cy - 155, 'SETTINGS', { ...STYLE, fontSize: '26px', color: '#f8a0c8' }).setOrigin(0.5);
+    this.add.text(cx, cy - 155, t(locale, 'settingsTitle'), { ...STYLE, fontSize: '26px', color: '#f8a0c8' }).setOrigin(0.5);
 
-    this.soundLabel = this.addToggle(cx, cy - 85, 'Sound', cur.sound, () => {
+    this.soundLabel = this.addToggle(cx, cy - 85, toggleLabel(locale, 'sound', cur.sound), () => {
       const next = !this.settings.load().sound;
       this.settings.set({ sound: next });
       setMuted(!next);
       this.syncTrays(!next);
-      this.soundLabel.setText(next ? 'Sound   ON' : 'Sound   OFF');
+      this.soundLabel.setText(toggleLabel(this.locale, 'sound', next));
     });
 
-    this.hapticsLabel = this.addToggle(cx, cy - 25, 'Haptics', cur.haptics, () => {
+    this.hapticsLabel = this.addToggle(cx, cy - 25, toggleLabel(locale, 'haptics', cur.haptics), () => {
       const next = !this.settings.load().haptics;
       this.settings.set({ haptics: next });
-      this.hapticsLabel.setText(next ? 'Haptics   ON' : 'Haptics   OFF');
+      this.hapticsLabel.setText(toggleLabel(this.locale, 'haptics', next));
     });
-    this.add.text(cx, cy + 3, 'Android only — iPhone has no vibrate', { ...STYLE, fontSize: '12px', color: '#c9b8dc', fontStyle: 'normal' }).setOrigin(0.5);
+    this.add
+      .text(cx, cy + 3, t(locale, 'hapticsHint'), {
+        ...STYLE,
+        fontSize: metaFontSize(locale),
+        color: '#c9b8dc',
+        fontStyle: 'normal',
+        wordWrap: { width: 260, useAdvancedWrap: true },
+      })
+      .setOrigin(0.5);
 
-    this.add.text(cx, cy + 50, 'Music   coming soon', { ...STYLE, fontSize: '20px', color: '#6a5a74' }).setOrigin(0.5);
+    this.add.text(cx, cy + 50, t(locale, 'musicComingSoon'), { ...STYLE, fontSize: '20px', color: '#6a5a74' }).setOrigin(0.5);
 
     const about = this.add
-      .text(cx, cy + 110, 'About', { ...STYLE, fontSize: '20px', color: '#f8a0c8' })
+      .text(cx, cy + 110, t(locale, 'aboutLink'), { ...STYLE, fontSize: '20px', color: '#f8a0c8' })
       .setOrigin(0.5)
       .setInteractive({ useHandCursor: true });
     about.on('pointerdown', () => this.scene.get('Play')?.handleChrome('info'));
 
-    this.add.text(cx, cy + 155, `v${VERSION}`, { ...STYLE, fontSize: '12px', color: '#6a5a74', fontStyle: 'normal' }).setOrigin(0.5);
+    this.add
+      .text(cx, cy + 155, `v${VERSION}`, {
+        ...STYLE,
+        fontSize: metaFontSize(locale),
+        color: '#6a5a74',
+        fontStyle: 'normal',
+      })
+      .setOrigin(0.5);
 
     const close = this.add.text(cx + 128, cy - 163, '✕', { ...STYLE, fontSize: '24px' }).setOrigin(0.5).setInteractive({ useHandCursor: true });
     close.on('pointerdown', () => this.close());
@@ -58,9 +76,9 @@ export class Settings extends Phaser.Scene {
     });
   }
 
-  addToggle(x, y, name, on, handler) {
+  addToggle(x, y, labelText, handler) {
     const label = this.add
-      .text(x, y, `${name}   ${on ? 'ON' : 'OFF'}`, { ...STYLE, fontSize: '20px' })
+      .text(x, y, labelText, { ...STYLE, fontSize: '20px' })
       .setOrigin(0.5)
       .setInteractive({ useHandCursor: true });
     label.on('pointerdown', handler);

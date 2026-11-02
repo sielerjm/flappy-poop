@@ -17,7 +17,7 @@ function intent(partial) {
 
 test('mute always toggles, including while an overlay is open', () => {
   for (const state of STATES) {
-    for (const overlay of [null, 'settings', 'about', 'howto']) {
+    for (const overlay of [null, 'settings', 'about', 'howto', 'language']) {
       assert.deepEqual(intent({ state, overlay, input: 'mute' }), { do: 'toggleMute' });
     }
   }
@@ -32,12 +32,13 @@ test('no overlay: pause and esc toggle only during a run', () => {
   }
 });
 
-test('no overlay: settings and info open that overlay, pausing only if playing', () => {
+test('no overlay: settings, info, howto, and lang open that overlay, pausing only if playing', () => {
   for (const state of STATES) {
     const pause = state === 'playing';
     assert.deepEqual(intent({ state, input: 'settings' }), { do: 'openSettings', pause });
     assert.deepEqual(intent({ state, input: 'info' }), { do: 'openAbout', pause });
     assert.deepEqual(intent({ state, input: 'howto' }), { do: 'openHowTo', pause });
+    assert.deepEqual(intent({ state, input: 'lang' }), { do: 'openLanguage', pause });
   }
 });
 
@@ -55,10 +56,10 @@ test('no overlay: close does nothing', () => {
   }
 });
 
-test('overlay open: pause, tap, esc, and settings are ignored', () => {
+test('overlay open: pause, tap, esc, settings, and lang are ignored', () => {
   for (const state of STATES) {
-    for (const overlay of ['settings', 'about', 'howto']) {
-      for (const input of ['pause', 'tap', 'esc', 'settings']) {
+    for (const overlay of ['settings', 'about', 'howto', 'language']) {
+      for (const input of ['pause', 'tap', 'esc', 'settings', 'lang']) {
         assert.deepEqual(intent({ state, overlay, input }), { do: 'ignore' }, `${state} ${overlay} ${input}`);
       }
     }
@@ -102,6 +103,10 @@ test('close top overlay arms resume lockout unless Settings remains under About'
     assert.deepEqual(intent({ state, overlay: 'howto', stackedAbout: true, input: 'close' }), {
       do: 'closeTop',
       closeAbout: true,
+      armResumeLockout: true,
+    });
+    assert.deepEqual(intent({ state, overlay: 'language', input: 'close' }), {
+      do: 'closeTop',
       armResumeLockout: true,
     });
   }

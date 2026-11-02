@@ -1,18 +1,25 @@
 import { GAME_WIDTH, GAME_HEIGHT, TUNING as T } from '../config.js';
 import { trayLayout } from '../logic.js';
 
-const LABELS = { pause: '⏸', muteOn: '🔇', muteOff: '🔊', settings: '⚙', info: 'i' };
+const LABELS = {
+  pause: '⏸',
+  muteOn: '🔇',
+  muteOff: '🔊',
+  settings: '⚙',
+  info: 'i',
+  lang: '🌐',
+};
 
 /**
  * Phaser-only tray. Layout maths live in trayLayout(); chrome hits go through
  * trayHit() in the scene so they do not depend on Phaser hit-area origin.
  */
 export function createTray(scene, { muted }) {
-  const { buttons, info } = trayLayout(GAME_WIDTH, GAME_HEIGHT, T);
+  const { buttons, info, lang } = trayLayout(GAME_WIDTH, GAME_HEIGHT, T);
   const nodes = [];
   let muteLabel;
 
-  for (const b of [...buttons, info]) {
+  for (const b of [...buttons, info, lang]) {
     const r = b.size / 2;
     const circle = scene.add.circle(b.x, b.y, r, 0x1a0b14, 1).setStrokeStyle(2, 0xe85e96).setDepth(30).setAlpha(T.trayAlpha);
     const label = scene.add

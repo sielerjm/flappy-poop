@@ -209,9 +209,9 @@ export function createEffects(t) {
 }
 
 /**
- * Tray button centres: pause / mute / settings along the bottom-right, plus an
- * independent info button at the bottom-left. Hit boxes are trayHitMin square
- * and at least that far apart, all inside the field.
+ * Tray button centres: pause / mute / settings along the bottom-right, plus
+ * info and language at the bottom-left. Hit boxes are trayHitMin square and at
+ * least that far apart, all inside the field.
  */
 export function trayLayout(width, height, t) {
   const size = t.trayHitMin;
@@ -226,7 +226,8 @@ export function trayLayout(width, height, t) {
     size,
   }));
   const info = { id: 'info', x: size / 2 + 8, y, size };
-  return { buttons, info, y, height: t.trayHeight };
+  const lang = { id: 'lang', x: info.x + spacing, y, size };
+  return { buttons, info, lang, y, height: t.trayHeight };
 }
 
 /**
@@ -237,6 +238,7 @@ export function trayLayout(width, height, t) {
 export function trayHit(x, y, layout) {
   const targets = [...(layout.buttons ?? [])];
   if (layout.info) targets.push(layout.info);
+  if (layout.lang) targets.push(layout.lang);
   for (const b of targets) {
     const r = b.size / 2;
     const dx = x - b.x;
@@ -296,10 +298,10 @@ export function overlayOutsideHit(x, y, panel) {
  * result; this function is Phaser-free so the matrix can be tested in Node.
  *
  * @param {'ready'|'playing'|'paused'|'dead'} state
- * @param {null|'settings'|'about'|'howto'} overlay topmost overlay (pause is a state)
+ * @param {null|'settings'|'about'|'howto'|'language'} overlay topmost overlay (pause is a state)
  * @param {boolean} stackedSettings true when About sits on top of Settings
  * @param {boolean} stackedAbout true when HowTo sits on top of About
- * @param {'pause'|'mute'|'settings'|'info'|'howto'|'tap'|'esc'|'close'} input
+ * @param {'pause'|'mute'|'settings'|'info'|'howto'|'lang'|'tap'|'esc'|'close'} input
  * @param {boolean} resumeLocked true during pauseResumeLockoutMs after overlay close
  * @returns {{ do: string, pause?: boolean, armResumeLockout?: boolean, closeAbout?: boolean }}
  */
@@ -333,6 +335,7 @@ export function chromeIntent({
   if (input === 'settings') return { do: 'openSettings', pause: state === 'playing' };
   if (input === 'info') return { do: 'openAbout', pause: state === 'playing' };
   if (input === 'howto') return { do: 'openHowTo', pause: state === 'playing' };
+  if (input === 'lang') return { do: 'openLanguage', pause: state === 'playing' };
   if (input === 'tap') {
     if (state === 'playing') return { do: 'flap' };
     if (state === 'paused') return resumeLocked ? { do: 'ignore' } : { do: 'resume' };

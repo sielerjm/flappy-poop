@@ -29,21 +29,28 @@ test('trayLayout places three buttons ≥44 px apart and inside the field', () =
   }
 });
 
-test('trayLayout places an info button at the bottom-left that does not overlap the tray', () => {
-  const { buttons, info } = trayLayout(GAME_WIDTH, GAME_HEIGHT, T);
+test('trayLayout places info and language on the bottom-left without overlapping the tray', () => {
+  const { buttons, info, lang } = trayLayout(GAME_WIDTH, GAME_HEIGHT, T);
   assert.equal(info.id, 'info');
+  assert.equal(lang.id, 'lang');
   assertInside(info);
+  assertInside(lang);
   assert.ok(info.x < GAME_WIDTH / 2, 'info should sit on the left');
+  assert.ok(lang.x > info.x, 'lang sits to the right of info');
+  const infoLang = Math.hypot(info.x - lang.x, info.y - lang.y);
+  assert.ok(infoLang >= 44, `info overlaps lang (${infoLang} px)`);
   for (const b of buttons) {
-    const dist = Math.hypot(info.x - b.x, info.y - b.y);
-    assert.ok(dist >= 44, `info overlaps ${b.id} (${dist} px)`);
-    assert.ok(info.x + info.size / 2 < b.x - b.size / 2, `info collides horizontally with ${b.id}`);
+    for (const left of [info, lang]) {
+      const dist = Math.hypot(left.x - b.x, left.y - b.y);
+      assert.ok(dist >= 44, `${left.id} overlaps ${b.id} (${dist} px)`);
+      assert.ok(left.x + left.size / 2 < b.x - b.size / 2, `${left.id} collides horizontally with ${b.id}`);
+    }
   }
 });
 
 test('trayHit returns the button id at its centre and null in the gap', () => {
   const layout = trayLayout(GAME_WIDTH, GAME_HEIGHT, T);
-  for (const b of [...layout.buttons, layout.info]) {
+  for (const b of [...layout.buttons, layout.info, layout.lang]) {
     assert.equal(trayHit(b.x, b.y, layout), b.id, `centre of ${b.id}`);
   }
   assert.equal(trayHit(GAME_WIDTH / 2, layout.y, layout), null);
