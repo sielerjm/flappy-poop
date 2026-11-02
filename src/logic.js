@@ -1,10 +1,10 @@
 // Pure game logic with no Phaser or DOM dependency, so it can be tested in Node.
 // Everything Phaser-specific lives in src/scenes/.
 
-export const VERSION = '0.2.4';
+export const VERSION = '0.2.5';
 
 /** Player-facing stamp on the About overlay. Bump with VERSION. */
-export const LAST_UPDATED = '2 Nov 2026, 15:26';
+export const LAST_UPDATED = '2 Nov 2026, 15:33';
 
 /** Player-facing About copy. Version is appended by the About scene. */
 export const ABOUT_TEXT = `Flappy Poop

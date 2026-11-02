@@ -43,8 +43,8 @@ src/
                             scoring, items, sprite angle, retry lockout, difficulty,
                             best-score store, settings store, vibrate helper,
                             trayLayout, trayHit, howToLayout, howToHit,
-                            ABOUT_TEXT, HOW_TO_PLAY_TEXT, LAST_UPDATED, chromeIntent.
-                            Fully unit-tested.
+                            ABOUT_TEXT, HOW_TO_PLAY_TEXT, LAST_UPDATED, chromeIntent,
+                            scaledCircleBody. Fully unit-tested.
   sound.js                  WebAudio synth blips + setMuted/isMuted/attachGame.
                             setMuted also sets game.sound.mute (the fart MP3).
                             unlock() must run from a user gesture: create,
@@ -98,6 +98,7 @@ tests/                      node --test, zero deps. Each file is self-describing
   about.test.js             ABOUT_TEXT names author, LLM, Phaser, JS, sound;
                             LAST_UPDATED has a year and a time
   howto.test.js             HOW_TO copy, howToLayout / howToHit geometry
+  hitbox.test.js            scaledCircleBody source radius/offset for 2x and 4x
   chrome.test.js            chromeIntent matrix across state x overlay x input
   smoke.test.js             logic.js imports and exports VERSION
   serve.test.js             npm start points at tools/serve.py; bind + URL print
@@ -105,8 +106,9 @@ tests/                      node --test, zero deps. Each file is self-describing
 tools/
   make_placeholders.py      Regenerates pipe / bg / ground / icons only. Must not
                             overwrite poop.png. Run only when you intend to.
-  process_art.py            Crops assets/src/ drawings into 96x96 contract PNGs
-                            (drawn at spriteDisplayScale 0.5).
+  process_art.py            Crops assets/src/ drawings into 192x192 contract PNGs
+                            (drawn at spriteDisplayScale 0.25). Arcade circles
+                            use scaledCircleBody (Phaser source pixels).
   serve.py                  npm start: bind 0.0.0.0:8000, print laptop + phone URLs.
 
 .claude/plans/              Checkpointed build plans. Historical record + decision

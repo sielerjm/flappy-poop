@@ -1,6 +1,6 @@
 # Flappy Poop 💩
 
-A poop emoji flaps through the gut, dodging pink intestinal folds. A Flappy Bird clone for phone browsers, built on [Phaser 4](https://phaser.io) with no build step. Version **0.2.4**.
+A poop emoji flaps through the gut, dodging pink intestinal folds. A Flappy Bird clone for phone browsers, built on [Phaser 4](https://phaser.io) with no build step. Version **0.2.5**.
 
 **Play:** push this repo to GitHub, enable Pages (Settings → Pages → Deploy from branch → `main` / root), then open `https://<you>.github.io/<repo>/`. Add it to your home screen for a full-screen, app-like launch.
 
@@ -39,7 +39,7 @@ npm test       # Node 22 built-in test runner, zero dependencies
 
 ## Replacing the art
 
-The player and items are drawings processed by `tools/process_art.py` from `assets/src/`. Drop a new source PNG in `assets/src/` and re-run that script (needs Pillow) to crop, knock out white, and write the 96×96 contract files (drawn at 0.5 scale).
+The player and items are drawings processed by `tools/process_art.py` from `assets/src/`. Drop a new source PNG in `assets/src/` and re-run that script (needs Pillow) to crop, knock out white, and write the 192×192 contract files (drawn at 0.25 scale).
 
 Pipe, background, ground, and icons are still placeholders from `tools/make_placeholders.py`. That script must **not** overwrite `poop.png`. Overwrite any contract file at the same name and size; `assets/README.md` has the table and `npm test` enforces it.
 
@@ -71,7 +71,7 @@ tools/make_placeholders.py   pipe / bg / ground / icons only (needs Pillow)
 tools/process_art.py         crop Michael's sources into contract PNGs
 tools/serve.py               npm start: bind 0.0.0.0:8000, print phone URL
 tests/                  node --test: html assets logic state difficulty store smoke
-                        settings sound tray items tuning about howto chrome serve
+                        settings sound tray items tuning about howto hitbox chrome serve
 .claude/plans/          checkpointed build plans
 ```
 
