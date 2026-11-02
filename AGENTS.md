@@ -35,18 +35,21 @@ CREDITS.md                  Phaser + every assets/sfx/ file with a URL.
 
 src/
   main.js                   new Phaser.Game(...): 360x640 logical field, Scale.FIT,
-                            arcade physics, scene order [Boot, Play, Over, Settings, About].
+                            arcade physics, scene order
+                            [Boot, Play, Over, Settings, About, HowTo].
   config.js                 GAME_WIDTH / GAME_HEIGHT and the TUNING object. Every
                             feel-related number lives here. Pure data, Node-safe.
   logic.js                  Pure functions, NO Phaser/DOM: rng, gap placement,
                             scoring, items, sprite angle, retry lockout, difficulty,
                             best-score store, settings store, vibrate helper,
-                            trayLayout, trayHit, ABOUT_TEXT, chromeIntent.
+                            trayLayout, trayHit, howToLayout, howToHit,
+                            ABOUT_TEXT, HOW_TO_PLAY_TEXT, chromeIntent.
                             Fully unit-tested.
   sound.js                  WebAudio synth blips + setMuted/isMuted/attachGame.
                             setMuted also sets game.sound.mute (the fart MP3).
-                            unlock() must run from a user gesture: create +
-                            resume() the AudioContext and game.sound.unlock().
+                            unlock() must run from a user gesture: create,
+                            silent-prime, resume() the AudioContext, and
+                            game.sound.unlock(). Blips wait until running.
   ui/
     tray.js                 Phaser wrapper around trayLayout: pause / mute / settings
                             plus bottom-left info. Chrome taps use trayHit() in
@@ -56,13 +59,17 @@ src/
     Play.js                 State machine: 'ready' -> 'playing' -> 'paused'/'dead'.
                             Spawns pipes and items, tray, auto-pause, haptics, dies,
                             then launches Over as an overlay scene. Tray / keyboard
-                            go through chromeIntent. Opening Settings or About while
-                            playing pauses; closing them does not resume.
+                            go through chromeIntent. Opening Settings, About, or
+                            HowTo while playing pauses; closing them does not resume.
+                            Unpause applies flapVelocity as a recovery bounce.
     Over.js                 Game-over panel (score, best, "tap to retry") with a
                             tap lockout and its own tray (mute still works).
     Settings.js             Overlay: sound, haptics (Android only), music coming
                             soon, About link, version.
     About.js                Overlay: author, LLM note, engine/art/sound credits.
+    HowTo.js                Overlay: flap/pipe rules plus fiber / probiotic /
+                            bacteria sprites. Ready-screen How to play uses
+                            howToHit() so it does not start a run.
 
 assets/                     Contract PNGs + README.md (the art contract).
   README.md                 File name, pixel size, orientation rules. tests enforce it.
@@ -86,6 +93,7 @@ tests/                      node --test, zero deps. Each file is self-describing
   items.test.js             rollItem, itemGapY, scoreAfterItem, probiotic inventory
   tuning.test.js            item / fartVolume sanity bounds
   about.test.js             ABOUT_TEXT names author, LLM, Phaser, JS, sound
+  howto.test.js             HOW_TO copy, howToLayout / howToHit geometry
   chrome.test.js            chromeIntent matrix across state x overlay x input
   smoke.test.js             logic.js imports and exports VERSION
   serve.test.js             npm start points at tools/serve.py; bind + URL print
