@@ -1,18 +1,18 @@
 import { GAME_WIDTH, GAME_HEIGHT, TUNING as T } from '../config.js';
 import { trayLayout } from '../logic.js';
 
-const LABELS = { pause: '⏸', muteOn: '🔇', muteOff: '🔊', settings: '⚙' };
+const LABELS = { pause: '⏸', muteOn: '🔇', muteOff: '🔊', settings: '⚙', info: 'i' };
 
 /**
  * Phaser-only tray. Layout maths live in trayLayout(); this just draws it.
  */
-export function createTray(scene, { onPause, onMute, onSettings, muted }) {
-  const { buttons } = trayLayout(GAME_WIDTH, GAME_HEIGHT, T);
-  const handlers = { pause: onPause, mute: onMute, settings: onSettings };
+export function createTray(scene, { onPause, onMute, onSettings, onInfo, muted }) {
+  const { buttons, info } = trayLayout(GAME_WIDTH, GAME_HEIGHT, T);
+  const handlers = { pause: onPause, mute: onMute, settings: onSettings, info: onInfo };
   const nodes = [];
   let muteLabel;
 
-  for (const b of buttons) {
+  for (const b of [...buttons, info]) {
     const r = b.size / 2;
     const circle = scene.add.circle(b.x, b.y, r, 0x1a0b14, 1).setStrokeStyle(2, 0xe85e96).setDepth(30).setAlpha(T.trayAlpha);
     const label = scene.add

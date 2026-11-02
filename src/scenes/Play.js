@@ -12,6 +12,7 @@ import {
   itemGapY,
   scoreAfterItem,
   createEffects,
+  chromeIntent,
 } from '../logic.js';
 import { unlock, attachGame, setMuted, isMuted, sfx } from '../sound.js';
 import { createTray } from '../ui/tray.js';
@@ -78,9 +79,10 @@ export class Play extends Phaser.Scene {
       .setVisible(false);
 
     this.tray = createTray(this, {
-      onPause: () => this.togglePause(),
-      onMute: () => this.toggleMute(),
-      onSettings: () => this.openSettings(),
+      onPause: () => this.handleChrome('pause'),
+      onMute: () => this.handleChrome('mute'),
+      onSettings: () => this.handleChrome('settings'),
+      onInfo: () => this.handleChrome('info'),
       muted: isMuted(),
     });
 
@@ -92,10 +94,11 @@ export class Play extends Phaser.Scene {
     this.input.on('pointerdown', (pointer) => this.flap(pointer));
     this.input.keyboard?.on('keydown-SPACE', () => this.flap());
     this.input.keyboard?.on('keydown-UP', () => this.flap());
-    this.input.keyboard?.on('keydown-M', () => this.toggleMute());
-    this.input.keyboard?.on('keydown-P', () => this.togglePause());
-    this.input.keyboard?.on('keydown-ESC', () => this.togglePause());
-    this.input.keyboard?.on('keydown-S', () => this.openSettings());
+    this.input.keyboard?.on('keydown-M', () => this.handleChrome('mute'));
+    this.input.keyboard?.on('keydown-P', () => this.handleChrome('pause'));
+    this.input.keyboard?.on('keydown-ESC', () => this.handleChrome('esc'));
+    this.input.keyboard?.on('keydown-S', () => this.handleChrome('settings'));
+    this.input.keyboard?.on('keydown-I', () => this.handleChrome('info'));
 
     this.onHidden = () => {
       if (typeof document !== 'undefined' && document.hidden) this.autoPause();
@@ -122,11 +125,57 @@ export class Play extends Phaser.Scene {
   flap(pointer) {
     unlock();
     if (pointer && inTrayBand(pointer.y)) return;
-    if (this.state === 'paused') {
-      this.resumePlay();
-      return;
+    this.handleChrome('tap');
+  }
+
+  chromeArgs(input) {
+    const about = this.scene.isActive('About');
+    const settings = this.scene.isActive('Settings');
+    return {
+      state: this.state,
+      overlay: about ? 'about' : settings ? 'settings' : null,
+      stackedSettings: about && settings,
+      input,
+      resumeLocked: this.time.now < this.flapLockedUntil,
+    };
+  }
+
+  handleChrome(input) {
+    this.applyChrome(chromeIntent(this.chromeArgs(input)));
+  }
+
+  applyChrome(result) {
+    switch (result.do) {
+      case 'pause':
+        this.pausePlay();
+        break;
+      case 'resume':
+        this.resumePlay();
+        break;
+      case 'toggleMute':
+        this.toggleMute();
+        break;
+      case 'openSettings':
+        if (result.pause) this.pausePlay();
+        if (!this.scene.isActive('Settings')) this.scene.launch('Settings');
+        break;
+      case 'openAbout':
+        if (result.pause) this.pausePlay();
+        if (!this.scene.isActive('About')) this.scene.launch('About');
+        break;
+      case 'start':
+        this.start();
+        this.doFlap();
+        break;
+      case 'flap':
+        this.doFlap();
+        break;
+      default:
+        break;
     }
-    if (this.state === 'ready') this.start();
+  }
+
+  doFlap() {
     if (this.state !== 'playing') return;
     if (this.time.now < this.flapLockedUntil) return;
     this.poop.setVelocityY(T.flapVelocity);
@@ -139,11 +188,6 @@ export class Play extends Phaser.Scene {
     setMuted(!next);
     this.tray?.setMuted(!next);
     this.scene.get('Over')?.tray?.setMuted(!next);
-  }
-
-  togglePause() {
-    if (this.state === 'playing') this.pausePlay();
-    else if (this.state === 'paused') this.resumePlay();
   }
 
   autoPause() {
@@ -171,10 +215,8 @@ export class Play extends Phaser.Scene {
     this.flapLockedUntil = this.time.now + T.pauseResumeLockoutMs;
   }
 
-  openSettings() {
-    const wasPlaying = this.state === 'playing';
-    if (wasPlaying) this.pausePlay();
-    this.scene.launch('Settings', { resumeOnClose: wasPlaying });
+  armResumeLockout() {
+    this.flapLockedUntil = this.time.now + T.pauseResumeLockoutMs;
   }
 
   spawnPipePair() {

@@ -1,5 +1,5 @@
 import { GAME_WIDTH, GAME_HEIGHT, TUNING as T } from '../config.js';
-import { canRestart } from '../logic.js';
+import { canRestart, chromeIntent } from '../logic.js';
 import { isMuted } from '../sound.js';
 import { createTray } from '../ui/tray.js';
 
@@ -30,17 +30,20 @@ export class Over extends Phaser.Scene {
 
     const play = this.scene.get('Play');
     this.tray = createTray(this, {
-      onPause: () => {},
-      onMute: () => play?.toggleMute?.(),
-      onSettings: () => this.scene.launch('Settings', { resumeOnClose: false }),
+      onPause: () => play?.handleChrome('pause'),
+      onMute: () => play?.handleChrome('mute'),
+      onSettings: () => play?.handleChrome('settings'),
+      onInfo: () => play?.handleChrome('info'),
       muted: isMuted(),
     });
 
     const retry = (pointer) => {
       if (pointer && inTrayBand(pointer.y)) return;
+      const result = chromeIntent(play.chromeArgs('tap'));
+      if (result.do !== 'retry') return;
       if (!canRestart(this.openedAt, this.time.now, T.retryLockoutMs)) return;
       this.scene.stop('Over');
-      this.scene.get('Play').scene.restart();
+      play.scene.restart();
     };
     this.input.on('pointerdown', retry);
     this.input.keyboard?.on('keydown-SPACE', () => retry());
