@@ -36,14 +36,15 @@ CREDITS.md                  Phaser + every assets/sfx/ file with a URL.
 src/
   main.js                   new Phaser.Game(...): 360x640 logical field, Scale.FIT,
                             arcade physics, scene order
-                            [Boot, Play, Over, Settings, About, HowTo].
+                            [Boot, Play, Over, Settings, About, HowTo, Language,
+                            Feedback].
   config.js                 GAME_WIDTH / GAME_HEIGHT and the TUNING object. Every
                             feel-related number lives here. Pure data, Node-safe.
   logic.js                  Pure functions, NO Phaser/DOM: rng, gap placement,
                             scoring, items, sprite angle, retry lockout, difficulty,
                             best-score store, settings store (incl. locale), vibrate
                             helper, trayLayout, trayHit, howToLayout, howToHit,
-                            LAST_UPDATED, chromeIntent, overlayOutsideHit,
+                            LAST_UPDATED, issueUrl, chromeIntent, overlayOutsideHit,
                             scaledCircleBody. Fully unit-tested.
   i18n.js                   en / zh-Hans string catalog, t(), initialLocale,
                             howToItems, pauseBannerText, metaFontSize. Player copy
@@ -55,18 +56,19 @@ src/
                             game.sound.unlock(). Blips wait until running.
   ui/
     tray.js                 Phaser wrapper around trayLayout: pause / mute / settings
-                            plus bottom-left info and language (🌐). Chrome taps use
-                            trayHit() in Play/Over, not GameObject pointer handlers.
+                            plus bottom-left info, language (🌐), and feedback (💬).
+                            Chrome taps use trayHit() in Play/Over, not GameObject
+                            pointer handlers.
   scenes/
     Boot.js                 preload() gameplay PNGs + fart.mp3, then start Play.
     Play.js                 State machine: 'ready' -> 'playing' -> 'paused'/'dead'.
                             Spawns pipes and items, tray, auto-pause, haptics, dies,
                             then launches Over as an overlay scene. Tray / keyboard
-                            go through chromeIntent. Overlay order is language /
-                            howto > about > settings. Opening Settings, About,
-                            HowTo, or Language while playing pauses; closing them
-                            does not resume. Unpause applies flapVelocity as a
-                            recovery bounce. Pause banner is two centered lines
+                            go through chromeIntent. Overlay order is feedback >
+                            language > howto > about > settings. Opening Settings,
+                            About, HowTo, Language, or Feedback while playing pauses;
+                            closing them does not resume. Unpause applies flapVelocity
+                            as a recovery bounce. Pause banner is two centered lines
                             from i18n. Locale via getLocale / applyLocale.
     Over.js                 Game-over panel (score, best, "tap to retry") with a
                             tap lockout and its own tray (mute still works).
@@ -74,15 +76,18 @@ src/
                             soon, About link, version. Tap outside the panel
                             closes (overlayOutsideHit), same as X.
     About.js                Overlay: author, LLM note, engine/art/sound credits,
-                            How to play link, LAST_UPDATED under the version.
-                            Tap outside the panel closes. Wrapped text uses
+                            How to play + feedback links, LAST_UPDATED under the
+                            version. Tap outside the panel closes. Wrapped text uses
                             useAdvancedWrap for CJK.
     HowTo.js                Overlay: flap/pipe rules plus fiber / probiotic /
-                            bacteria sprites. Ready-screen How to play uses
-                            howToHit() so it does not start a run. Opened from
-                            About, X/Esc/tap-outside closes HowTo and About together.
-                            useAdvancedWrap on body text.
+                            bacteria sprites and a feedback link. Ready-screen How
+                            to play uses howToHit() so it does not start a run.
+                            Opened from About, X/Esc/tap-outside closes HowTo and
+                            About together. useAdvancedWrap on body text.
     Language.js             Overlay: English / 简体中文 picker (🌐 or L).
+    Feedback.js             Overlay: Bug / Feature request chooser (💬, F, or links
+                            from About/HowTo). Buttons open GitHub issue forms via
+                            issueUrl(); closing leaves any parent overlay open.
 
 assets/                     Contract PNGs + README.md (the art contract).
   README.md                 File name, pixel size, orientation rules. tests enforce it.
@@ -101,13 +106,14 @@ tests/                      node --test, zero deps. Each file is self-describing
   store.test.js             best-score store incl. throwing/missing storage
   settings.test.js          settings store + vibrate helper
   sound.test.js             sfx keys, mute, Node import
-  tray.test.js              trayHeight / trayLayout geometry including info + lang;
-                            trayHit centre hits vs miss in the tray gap
+  tray.test.js              trayHeight / trayLayout geometry including info + lang +
+                            feedback; trayHit centre hits vs miss in the tray gap
   items.test.js             rollItem, itemGapY, scoreAfterItem, probiotic inventory
   tuning.test.js            item / fartVolume sanity bounds
   about.test.js             About copy (both locales) names author, LLM, Phaser, JS, sound;
                             LAST_UPDATED has a year and a time
   howto.test.js             HOW_TO copy, pause banner, howToLayout / howToHit geometry
+  feedback.test.js          issueUrl bug/feature templates; feedback i18n keys
   i18n.test.js              catalog key parity, zh≠en (allowlist), TRANSLATION_NOTES
                             key coverage, scene English denylist, initialLocale
   overlay.test.js           overlayOutsideHit inside vs 1px outside HowTo/Settings panels
@@ -115,6 +121,9 @@ tests/                      node --test, zero deps. Each file is self-describing
   chrome.test.js            chromeIntent matrix across state x overlay x input
   smoke.test.js             logic.js imports and exports VERSION
   serve.test.js             npm start points at tools/serve.py; bind + URL print
+
+.github/ISSUE_TEMPLATE/     GitHub issue forms opened from Feedback (bug.yml,
+                            feature.yml); config.yml allows blank issues.
 
 tools/
   make_placeholders.py      Regenerates pipe / bg / ground / icons only. Must not

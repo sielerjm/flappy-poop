@@ -22,13 +22,15 @@ On iPhone, Silent mode mutes the game — turn it off to hear sound. The pause b
 
 - **Tap / Space / ↑** — flap. The first tap also starts the run. After closing Settings or About during a run, tap or Space resumes; that tap does not flap. Unpausing from the pause banner bounces (same lift as a flap) so you can recover.
 - **How to play** (ready screen, also linked from About) — overlay with flap/pipe rules, iPhone Silent-mode note, and what fiber, probiotic, and bad bacteria do. Tapping it does not start the run. Closing How to play that was opened from About also closes About, leaving a paused run if info was opened mid-play. Tap the dimmed area outside Settings, About, or How to play to close (same as X).
-- **Bottom-left (i)** — About (credits, author, LLM note, last-updated stamp, How to play link). Independent of Settings.
+- **Bottom-left (i)** — About (credits, author, LLM note, last-updated stamp, How to play and feedback links). Independent of Settings.
 - **Bottom-left (🌐)** — language (English / 简体中文). Persists. First visit with no saved choice follows the browser language when it starts with `zh`. Opening Language mid-run pauses.
+- **Bottom-left (💬)** — feedback: choose Bug or Feature request to open a GitHub issue form in the browser (needs a GitHub account). Also linked from About and How to play.
 - **Bottom-right tray** — pause, mute/unmute, settings. Tray taps never flap, and on the game-over screen they never retry.
-- **P** or **Esc** — pause / resume (during a run). Ignored while Settings, About, How to play, or Language is open; Esc then closes the top overlay.
+- **P** or **Esc** — pause / resume (during a run). Ignored while Settings, About, How to play, Language, or Feedback is open; Esc then closes the top overlay.
 - **M** — mute / unmute. Persists across reload. Still works while an overlay is open.
 - **S** — settings (sound, haptics, About). Music is listed as coming soon. Opening Settings or About mid-run pauses; closing them leaves the pause banner until a new tap or Space.
 - **I** — About.
+- **F** — Feedback (bug / feature → GitHub).
 - **L** — language.
 - **Haptics** — a short buzz on death, Android / Chrome only. iPhone has no `navigator.vibrate` and must not error.
 
@@ -56,20 +58,21 @@ index.html              viewport/touch setup, loads Phaser + src/main.js
 manifest.webmanifest    "Add to Home Screen" metadata
 CREDITS.md              Phaser + fart-sample attribution, author/art/LLM note
 src/
-  main.js               Phaser.Game config: 360x640, Scale.FIT, [Boot, Play, Over, Settings, About, HowTo, Language]
+  main.js               Phaser.Game config: 360x640, Scale.FIT, [Boot, Play, Over, Settings, About, HowTo, Language, Feedback]
   config.js             GAME_WIDTH/HEIGHT and TUNING
-  logic.js              pure functions: rng, gaps, scoring, items, settings store, tray layout, chromeIntent
+  logic.js              pure functions: rng, gaps, scoring, items, settings store, tray layout, issueUrl, chromeIntent
   i18n.js               en / zh-Hans catalog + t() / initialLocale
   sound.js              WebAudio blips + setMuted (also mutes the Phaser fart sample)
-  ui/tray.js            Phaser wrapper for pause / mute / settings and bottom-left (i) / 🌐
+  ui/tray.js            Phaser wrapper for pause / mute / settings and bottom-left (i) / 🌐 / 💬
   scenes/
     Boot.js             preloads images + fart.mp3
     Play.js             ready -> playing -> paused -> dead; items; tray; locale
     Over.js             game-over panel; tray mute still works
     Settings.js         sound / haptics overlay; About link
-    About.js            credits, author, LLM note, How to play link, last-updated
-    HowTo.js            How to play overlay (ready screen and About link)
+    About.js            credits, author, LLM note, How to play + feedback links, last-updated
+    HowTo.js            How to play overlay (ready screen and About link); feedback link
     Language.js         English / 简体中文 picker
+    Feedback.js         Bug / Feature request chooser → GitHub issue forms
 assets/                 contract PNGs + README.md (the art contract)
   poop.png poop-dead.png fiber.png probiotic.png bacteria.png
   pipe.png bg.png ground.png icon-192.png icon-512.png
@@ -79,7 +82,7 @@ tools/make_placeholders.py   pipe / bg / ground / icons only (needs Pillow)
 tools/process_art.py         crop Michael's sources into contract PNGs
 tools/serve.py               npm start: bind 0.0.0.0:8000, print phone URL
 tests/                  node --test: html assets logic state difficulty store smoke
-                        settings sound tray items tuning about howto overlay hitbox i18n chrome serve
+                        settings sound tray items tuning about howto feedback overlay hitbox i18n chrome serve
 .claude/plans/          checkpointed build plans
 ```
 

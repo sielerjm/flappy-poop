@@ -29,18 +29,23 @@ test('trayLayout places three buttons ≥44 px apart and inside the field', () =
   }
 });
 
-test('trayLayout places info and language on the bottom-left without overlapping the tray', () => {
-  const { buttons, info, lang } = trayLayout(GAME_WIDTH, GAME_HEIGHT, T);
+test('trayLayout places info, language, and feedback on the bottom-left without overlapping the tray', () => {
+  const { buttons, info, lang, feedback } = trayLayout(GAME_WIDTH, GAME_HEIGHT, T);
   assert.equal(info.id, 'info');
   assert.equal(lang.id, 'lang');
+  assert.equal(feedback.id, 'feedback');
   assertInside(info);
   assertInside(lang);
+  assertInside(feedback);
   assert.ok(info.x < GAME_WIDTH / 2, 'info should sit on the left');
   assert.ok(lang.x > info.x, 'lang sits to the right of info');
+  assert.ok(feedback.x > lang.x, 'feedback sits to the right of lang');
   const infoLang = Math.hypot(info.x - lang.x, info.y - lang.y);
+  const langFeedback = Math.hypot(lang.x - feedback.x, lang.y - feedback.y);
   assert.ok(infoLang >= 44, `info overlaps lang (${infoLang} px)`);
+  assert.ok(langFeedback >= 44, `lang overlaps feedback (${langFeedback} px)`);
   for (const b of buttons) {
-    for (const left of [info, lang]) {
+    for (const left of [info, lang, feedback]) {
       const dist = Math.hypot(left.x - b.x, left.y - b.y);
       assert.ok(dist >= 44, `${left.id} overlaps ${b.id} (${dist} px)`);
       assert.ok(left.x + left.size / 2 < b.x - b.size / 2, `${left.id} collides horizontally with ${b.id}`);
@@ -50,7 +55,7 @@ test('trayLayout places info and language on the bottom-left without overlapping
 
 test('trayHit returns the button id at its centre and null in the gap', () => {
   const layout = trayLayout(GAME_WIDTH, GAME_HEIGHT, T);
-  for (const b of [...layout.buttons, layout.info, layout.lang]) {
+  for (const b of [...layout.buttons, layout.info, layout.lang, layout.feedback]) {
     assert.equal(trayHit(b.x, b.y, layout), b.id, `centre of ${b.id}`);
   }
   assert.equal(trayHit(GAME_WIDTH / 2, layout.y, layout), null);
