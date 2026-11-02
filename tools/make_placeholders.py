@@ -92,8 +92,8 @@ def bg(path, w=720, h=1280):
         x, y = rng.randrange(w), rng.randrange(h)
         r = rng.randint(2, 8)
         d.ellipse((x, y, x + r, y + r), fill=PURPLE_DARK)
-    # Deep fringes (~400px) so folds read at the 720x1280 scale
-    fringe = 400
+    # Fringes ~260px (~20% each end) so the purple lumen stays majority open
+    fringe = 260
     cream_h = 28
     top_base = fringe + cream_h // 2
     bot_base = h - fringe - cream_h // 2
