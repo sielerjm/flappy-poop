@@ -15,6 +15,8 @@ import {
   chromeIntent,
   trayLayout,
   trayHit,
+  howToLayout,
+  howToHit,
 } from '../logic.js';
 import { unlock, attachGame, setMuted, isMuted, sfx } from '../sound.js';
 import { createTray } from '../ui/tray.js';
@@ -64,8 +66,17 @@ export class Play extends Phaser.Scene {
     this.scoreText = this.add.text(GAME_WIDTH / 2, 40, '0', { ...TEXT_STYLE, fontSize: '40px' }).setOrigin(0.5).setDepth(20);
     this.probioticIcon = this.add.image(GAME_WIDTH / 2 - 18, 78, 'probiotic').setScale(0.55).setDepth(20).setVisible(false);
     this.probioticText = this.add.text(GAME_WIDTH / 2 + 10, 78, '', { ...TEXT_STYLE, fontSize: '18px' }).setOrigin(0, 0.5).setDepth(20).setVisible(false);
-    this.readyText = this.add
-      .text(GAME_WIDTH / 2, GAME_HEIGHT * 0.3, 'FLAPPY POOP\n\ntap to flap', { ...TEXT_STYLE, fontSize: '26px' })
+    this.readyTitle = this.add
+      .text(GAME_WIDTH / 2, GAME_HEIGHT * 0.3, 'FLAPPY POOP', { ...TEXT_STYLE, fontSize: '26px' })
+      .setOrigin(0.5)
+      .setDepth(20);
+    const howTo = howToLayout(GAME_WIDTH, GAME_HEIGHT, T);
+    this.howToLabel = this.add
+      .text(howTo.x, howTo.y, 'How to play', { ...TEXT_STYLE, fontSize: '20px', color: '#f8a0c8' })
+      .setOrigin(0.5)
+      .setDepth(20);
+    this.readyHint = this.add
+      .text(GAME_WIDTH / 2, howTo.y + howTo.height / 2 + 28, 'tap to flap', { ...TEXT_STYLE, fontSize: '22px' })
       .setOrigin(0.5)
       .setDepth(20);
 
@@ -107,7 +118,9 @@ export class Play extends Phaser.Scene {
   start() {
     this.state = 'playing';
     this.bob.stop();
-    this.readyText.setVisible(false);
+    this.readyTitle.setVisible(false);
+    this.howToLabel.setVisible(false);
+    this.readyHint.setVisible(false);
     this.poop.body.setAllowGravity(true);
     this.poop.body.setGravityY(T.gravity);
     this.spawnTimer = this.time.addEvent({ delay: T.spawnEveryMs, loop: true, callback: () => this.spawnPipePair() });
@@ -123,16 +136,21 @@ export class Play extends Phaser.Scene {
         this.handleChrome(id);
         return;
       }
+      if (this.state === 'ready' && howToHit(pointer.x, pointer.y, howToLayout(GAME_WIDTH, GAME_HEIGHT, T))) {
+        this.handleChrome('howto');
+        return;
+      }
     }
     this.handleChrome('tap');
   }
 
   chromeArgs(input) {
     const about = this.scene.isActive('About');
+    const howto = this.scene.isActive('HowTo');
     const settings = this.scene.isActive('Settings');
     return {
       state: this.state,
-      overlay: about ? 'about' : settings ? 'settings' : null,
+      overlay: about ? 'about' : howto ? 'howto' : settings ? 'settings' : null,
       stackedSettings: about && settings,
       input,
       resumeLocked: this.time.now < this.flapLockedUntil,
@@ -163,6 +181,11 @@ export class Play extends Phaser.Scene {
         if (result.pause) this.pausePlay();
         if (!this.scene.isActive('About')) this.scene.launch('About');
         this.scene.bringToTop('About');
+        break;
+      case 'openHowTo':
+        if (result.pause) this.pausePlay();
+        if (!this.scene.isActive('HowTo')) this.scene.launch('HowTo');
+        this.scene.bringToTop('HowTo');
         break;
       case 'start':
         this.start();

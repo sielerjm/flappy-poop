@@ -16,6 +16,16 @@ Art: Michael Sieler
 Sound: "fart" by MacKaffee (Freesound / Pixabay)
 Inspired by Flappy Bird`;
 
+/** Player-facing How to play copy. Item rows live in HOW_TO_ITEMS. */
+export const HOW_TO_PLAY_TEXT = `Tap to flap. Pass a pipe pair for a point. Hit a pipe, the ceiling, or the floor and the run ends.`;
+
+/** Pickup rows for the How to play overlay. key matches Boot texture names. */
+export const HOW_TO_ITEMS = [
+  { key: 'fiber', name: 'Fiber', detail: '+1 point' },
+  { key: 'probiotic', name: 'Probiotic', detail: 'Blocks one bacteria hit for 5 pipes' },
+  { key: 'bacteria', name: 'Bad bacteria', detail: '−2 points (score never below 0). Does not kill.' },
+];
+
 /** Deterministic PRNG (mulberry32). Returns a function in [0, 1). */
 export function createRng(seed = 1) {
   let a = seed >>> 0;
@@ -253,13 +263,38 @@ export function trayHit(x, y, layout) {
 }
 
 /**
+ * Ready-screen How to play hit box, centred under the title. At least
+ * trayHitMin tall so a thumb can tap it without starting the run.
+ */
+export function howToLayout(width, height, t) {
+  const boxW = 200;
+  const boxH = Math.max(44, t.trayHitMin);
+  return {
+    id: 'howto',
+    x: width / 2,
+    y: height * 0.3 + 52,
+    width: boxW,
+    height: boxH,
+  };
+}
+
+/** 'howto' if (x, y) is inside the ready-screen How to play box, else null. */
+export function howToHit(x, y, layout) {
+  if (!layout) return null;
+  const hw = layout.width / 2;
+  const hh = layout.height / 2;
+  if (Math.abs(x - layout.x) <= hw && Math.abs(y - layout.y) <= hh) return 'howto';
+  return null;
+}
+
+/**
  * Decide what a tray / keyboard / overlay event should do. Scenes execute the
  * result; this function is Phaser-free so the matrix can be tested in Node.
  *
  * @param {'ready'|'playing'|'paused'|'dead'} state
- * @param {null|'settings'|'about'} overlay topmost overlay (pause is a state)
+ * @param {null|'settings'|'about'|'howto'} overlay topmost overlay (pause is a state)
  * @param {boolean} stackedSettings true when About sits on top of Settings
- * @param {'pause'|'mute'|'settings'|'info'|'tap'|'esc'|'close'} input
+ * @param {'pause'|'mute'|'settings'|'info'|'howto'|'tap'|'esc'|'close'} input
  * @param {boolean} resumeLocked true during pauseResumeLockoutMs after overlay close
  * @returns {{ do: string, pause?: boolean, armResumeLockout?: boolean }}
  */
@@ -281,6 +316,7 @@ export function chromeIntent({ state, overlay = null, stackedSettings = false, i
   }
   if (input === 'settings') return { do: 'openSettings', pause: state === 'playing' };
   if (input === 'info') return { do: 'openAbout', pause: state === 'playing' };
+  if (input === 'howto') return { do: 'openHowTo', pause: state === 'playing' };
   if (input === 'tap') {
     if (state === 'playing') return { do: 'flap' };
     if (state === 'paused') return resumeLocked ? { do: 'ignore' } : { do: 'resume' };

@@ -16,7 +16,7 @@ function intent(partial) {
 
 test('mute always toggles, including while an overlay is open', () => {
   for (const state of STATES) {
-    for (const overlay of [null, 'settings', 'about']) {
+    for (const overlay of [null, 'settings', 'about', 'howto']) {
       assert.deepEqual(intent({ state, overlay, input: 'mute' }), { do: 'toggleMute' });
     }
   }
@@ -36,6 +36,7 @@ test('no overlay: settings and info open that overlay, pausing only if playing',
     const pause = state === 'playing';
     assert.deepEqual(intent({ state, input: 'settings' }), { do: 'openSettings', pause });
     assert.deepEqual(intent({ state, input: 'info' }), { do: 'openAbout', pause });
+    assert.deepEqual(intent({ state, input: 'howto' }), { do: 'openHowTo', pause });
   }
 });
 
@@ -55,8 +56,8 @@ test('no overlay: close does nothing', () => {
 
 test('overlay open: pause, tap, esc, and settings are ignored', () => {
   for (const state of STATES) {
-    for (const overlay of ['settings', 'about']) {
-      for (const input of ['pause', 'tap', 'esc', 'settings']) {
+    for (const overlay of ['settings', 'about', 'howto']) {
+      for (const input of ['pause', 'tap', 'esc', 'settings', 'howto']) {
         assert.deepEqual(intent({ state, overlay, input }), { do: 'ignore' }, `${state} ${overlay} ${input}`);
       }
     }
@@ -83,6 +84,10 @@ test('close top overlay arms resume lockout unless Settings remains under About'
     assert.deepEqual(intent({ state, overlay: 'about', stackedSettings: true, input: 'close' }), {
       do: 'closeTop',
       armResumeLockout: false,
+    });
+    assert.deepEqual(intent({ state, overlay: 'howto', input: 'close' }), {
+      do: 'closeTop',
+      armResumeLockout: true,
     });
   }
 });
