@@ -17,6 +17,7 @@ import {
   trayHit,
   howToLayout,
   howToHit,
+  scaledCircleBody,
 } from '../logic.js';
 import { unlock, attachGame, setMuted, isMuted, sfx } from '../sound.js';
 import { createTray } from '../ui/tray.js';
@@ -59,7 +60,8 @@ export class Play extends Phaser.Scene {
     // Player: no gravity until the first tap
     this.poop = this.physics.add.sprite(T.poopX, GAME_HEIGHT / 2, 'poop').setDepth(10);
     this.poop.setScale(T.spriteDisplayScale);
-    this.poop.body.setCircle(T.poopRadius, this.poop.width / 2 - T.poopRadius, this.poop.height / 2 - T.poopRadius);
+    const poopBody = scaledCircleBody(this.poop.frame.width, T.spriteDisplayScale, T.poopRadius);
+    this.poop.body.setCircle(poopBody.radius, poopBody.offset, poopBody.offset);
     this.poop.body.setAllowGravity(false);
     this.bob = this.tweens.add({ targets: this.poop, y: '+=12', duration: 500, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
 
@@ -279,11 +281,8 @@ export class Play extends Phaser.Scene {
       const item = this.items.create(x, y, kind);
       item.setDepth(8);
       item.setScale(T.spriteDisplayScale);
-      item.body.setCircle(
-        T.items.itemRadius,
-        item.width / 2 - T.items.itemRadius,
-        item.height / 2 - T.items.itemRadius,
-      );
+      const itemBody = scaledCircleBody(item.frame.width, T.spriteDisplayScale, T.items.itemRadius);
+      item.body.setCircle(itemBody.radius, itemBody.offset, itemBody.offset);
       item.setVelocityX(-this.diff.pipeSpeed);
       item.setData('kind', kind);
     }

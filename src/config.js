@@ -15,7 +15,7 @@ export const TUNING = {
   gapMargin: 40, // keep the gap this far from the ceiling and the ground
   poopX: 90, // fixed x of the player
   poopRadius: 17, // circular hitbox (~70 % of the 48 logical-px sprite)
-  spriteDisplayScale: 0.5, // 96 px textures drawn at 48 logical px
+  spriteDisplayScale: 0.25, // 192 px textures drawn at 48 logical px
   maxFallAngle: 90, // degrees nose-down at terminal fall
   maxRiseAngle: -25, // degrees nose-up right after a flap
   deathToOverMs: 700, // tumble time before the game-over panel appears

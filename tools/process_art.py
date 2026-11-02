@@ -5,7 +5,7 @@ drawings into the gameplay art-contract PNGs.
 Created by Michael Sieler. Last updated: 2026-11-02.
 
 Input:  assets/src/{Poop_Emoji_Alive,Poop_Emoji_Dead,Fiber,Good_Bacteria,Bad_Bacteria}.png
-Output: assets/{poop,poop-dead,fiber,probiotic,bacteria}.png at 96x96 RGBA.
+Output: assets/{poop,poop-dead,fiber,probiotic,bacteria}.png at 192x192 RGBA.
 
 Only white connected to the image border is made transparent, so eyes and
 mouths stay white. Alive and dead poop share one trimmed canvas (union of
@@ -19,7 +19,7 @@ from PIL import Image
 ROOT = Path(__file__).resolve().parent.parent
 SRC = ROOT / "assets" / "src"
 OUT = ROOT / "assets"
-SIZE = 96
+SIZE = 192
 WHITE_CUTOFF = 245  # near-white on the border is treated as background
 PAD = 4  # px of source padding kept around the ink after trim
 
