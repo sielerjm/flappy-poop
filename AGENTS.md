@@ -12,8 +12,9 @@ is +1, bad bacteria is −2 (floor 0), and a probiotic blocks one bacteria hit f
 up to 5 pipes. Hit a pipe, the ceiling, or the floor and the run ends (dead-poop
 face). Best score and settings are kept in `localStorage`. Difficulty ramps
 (faster pipes, narrower gap) until score 30, then stays flat. A signed
-**save code** (`fp1.<payload>.<sig>`) carries a player's name and top 3 scores
-between browsers via copy/paste; spec in `.claude/plans/Flappy Poop — Save Code Spec.md`.
+**user code** (`fp1.<payload>.<sig>`, the save code) carries a player's username
+and best 6 scores between browsers via copy/paste (Save / Load User button on the
+ready screen); spec in `.claude/plans/Flappy Poop — Save Code Spec.md`.
 
 It is a side project by Michael Sieler (gut-microbiome researcher), hence the
 theme. It is deliberately small: plain ES modules, no bundler, no npm
@@ -40,18 +41,20 @@ src/
                             roundPixels,
                             arcade physics, scene order
                             [Boot, Play, Over, Settings, About, HowTo, Language,
-                            Feedback].
+                            Feedback, Scores].
   config.js                 GAME_WIDTH / GAME_HEIGHT and the TUNING object. Every
                             feel-related number lives here. Pure data, Node-safe.
   logic.js                  Pure functions, NO Phaser/DOM: rng, gap placement,
                             scoring, items, sprite angle, retry lockout, difficulty,
                             best-score store, settings store (incl. locale), vibrate
-                            helper, trayLayout, trayHit, howToLayout, howToHit,
+                            helper, trayLayout, trayHit, readyLayout, readyHit
+                            (howToLayout / howToHit wrap them),
                             LAST_UPDATED, issueUrl, openExternalUrl, chromeIntent,
                             overlayOutsideHit, scaledCircleBody. Fully unit-tested.
   save.js                   Save codes, NO Phaser/DOM: loadLocal / saveLocal
-                            (flappyPoop.save, schema 1), recordScore, isNewTop,
-                            merge, summaryLine, exportCode / importCode (HMAC-SHA256
+                            (flappyPoop.save, schema 1, MAX_TOP = 6), recordScore,
+                            isNewTop, merge, summaryLine, profileLine, exportCode /
+                            importCode (HMAC-SHA256
                             via Web Crypto, 16-byte tag, base64url), PARSERS per
                             wire version, SECRET constant (permanent). Fully
                             unit-tested.
@@ -69,8 +72,12 @@ src/
                             plus bottom-left info, language (🌐), and feedback (💬).
                             Chrome taps use trayHit() in Play/Over, not GameObject
                             pointer handlers.
-    savePanel.js            Plain DOM panel over the canvas (name field, read-only
-                            code + Copy, Load field + status). Opened from Settings.
+    button.js               createButton(): Graphics rounded rect + centred text
+                            for the ready-screen boxes from readyLayout. No pointer
+                            handlers; Play resolves taps with readyHit().
+    savePanel.js            Plain DOM panel over the canvas (Username field,
+                            read-only user code + Copy, Load field + status).
+                            Opened from the ready-screen Save / Load User button.
                             Disables game.input.keyboard while open so typing does
                             not flap. Copy calls clipboard.writeText inside the tap
                             handler (iOS); falls back to selecting the field.
@@ -87,14 +94,15 @@ src/
                             from i18n. Locale via getLocale / applyLocale. Holds the
                             SaveState (loadLocal on create, seeded once from the
                             legacy best); die() records the score and passes newTop
-                            to Over; saveLine under the ready hint shows
-                            summaryLine(); getSaveState / setSaveState for the panel.
+                            to Over. Ready screen: How to play / tap to flap /
+                            Save / Load User buttons plus a profileLine() text;
+                            readyHit() routes taps (howto, start, saveload, profile
+                            → Scores). getSaveState / setSaveState for the panel.
     Over.js                 Game-over panel (score, best, "tap to retry") with a
                             tap lockout and its own tray (mute still works). Shows
-                            newTopHint when the run entered the top 3.
+                            newTopHint when the run entered the top 6.
     Settings.js             Overlay: sound, haptics (Android only), music coming
-                            soon, Save code link (opens the DOM panel), About
-                            link, version. Tap outside the panel
+                            soon, About link, version. Tap outside the panel
                             closes (overlayOutsideHit), same as X.
     About.js                Overlay: author, LLM note, engine/art/sound credits,
                             How to play + feedback links, LAST_UPDATED under the
@@ -110,6 +118,8 @@ src/
                             from About/HowTo). Buttons open GitHub issue forms via
                             issueUrl() + openExternalUrl(); closing leaves any
                             parent overlay open.
+    Scores.js               Overlay: username + up to 6 high scores from the
+                            SaveState; opened by tapping the profile line.
 
 assets/                     Contract PNGs + README.md (the art contract).
   README.md                 File name, pixel size, orientation rules. tests enforce it.
@@ -145,7 +155,9 @@ tests/                      node --test, zero deps. Each file is self-describing
   smoke.test.js             logic.js imports and exports VERSION
   save.test.js              save codes: spec rows 1-10 (round trip, tamper, relabel,
                             v2 migration, merge, name rules, wrapped paste, empty
-                            scores, throwing storage) + helper coverage
+                            scores, throwing storage) + helper coverage, best 6
+  ready.test.js             readyLayout boxes inside the field, non-overlapping,
+                            clear of the bobbing poop; readyHit centre / gap / profile
   serve.test.js             npm start points at tools/serve.py; bind + URL print
 
 .github/ISSUE_TEMPLATE/     GitHub issue forms opened from Feedback (bug.yml,
