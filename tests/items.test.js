@@ -101,19 +101,24 @@ test('rollBean never spawns below beans.startScore', () => {
   for (let i = 0; i < 1000; i++) assert.equal(rollBean(rng, T.beans.startScore - 1, T), false);
 });
 
-test('rollBean spawns at about chancePerGap and is guaranteed once by guaranteeScore', () => {
-  const n = 6000;
-  const rngA = createRng(12);
-  let beans = 0;
-  for (let i = 0; i < n; i++) if (rollBean(rngA, T.beans.startScore, T)) beans += 1;
-  const beanRate = beans / n;
-  assert.ok(Math.abs(beanRate - T.beans.chancePerGap) < 0.03, `bean rate ${beanRate}`);
-  // Fiber's effective rate at the same score (after hazards start, the busiest mix).
+test('rollBean: ~chanceInWindow inside 5–20, ~chanceAfter (below fiber) beyond, guaranteed once by guaranteeScore', () => {
+  const n = 8000;
+  const rate = (score, seed) => {
+    const rng = createRng(seed);
+    let hits = 0;
+    for (let i = 0; i < n; i++) if (rollBean(rng, score, T, { spawnedThisRun: true })) hits += 1;
+    return hits / n;
+  };
+  const inWindow = rate(T.beans.startScore + 3, 12);
+  const after = rate(T.beans.windowEndScore + 5, 14);
+  assert.ok(Math.abs(inWindow - T.beans.chanceInWindow) < 0.02, `in-window rate ${inWindow}`);
+  assert.ok(Math.abs(after - T.beans.chanceAfter) < 0.015, `after-window rate ${after}`);
+  // Fiber's effective rate after hazards start (the leanest fiber mix): beans must be rarer than that after 20.
   const rngB = createRng(13);
   let fiber = 0;
   for (let i = 0; i < n; i++) if (rollItem(rngB, T.items.hazardStartScore + 5, T) === 'fiber') fiber += 1;
   const fiberRate = fiber / n;
-  assert.ok(beanRate <= fiberRate * 1.5, `beans ${beanRate} should not swamp fiber ${fiberRate}`);
+  assert.ok(after < fiberRate, `beans after 20 (${after}) should be rarer than fiber (${fiberRate})`);
   // Guarantee: with no bean yet, the pair at guaranteeScore always carries one; once seen, it is random again.
   const never = () => 0.999;
   assert.equal(rollBean(never, T.beans.guaranteeScore, T, { spawnedThisRun: false }), true);
@@ -121,6 +126,36 @@ test('rollBean spawns at about chancePerGap and is guaranteed once by guaranteeS
   assert.equal(rollBean(never, T.beans.guaranteeScore - 1, T, { spawnedThisRun: false }), false);
   assert.equal(rollBean(never, T.beans.guaranteeScore, T, { spawnedThisRun: true }), false);
   assert.equal(rollBean(never, T.beans.guaranteeScore, T), true, 'default: nothing spawned yet');
+});
+
+test('every simulated run sees at least one bean between pipes 5 and 20', () => {
+  for (let seed = 1; seed <= 500; seed++) {
+    const rng = createRng(seed);
+    let spawned = false;
+    let firstAt = null;
+    for (let score = 0; score <= T.beans.windowEndScore; score++) {
+      if (!spawned && rollBean(rng, score, T, { spawnedThisRun: spawned })) {
+        spawned = true;
+        firstAt = score;
+      }
+    }
+    assert.ok(spawned, `seed ${seed}: no bean by score ${T.beans.windowEndScore}`);
+    assert.ok(firstAt >= T.beans.startScore && firstAt <= T.beans.guaranteeScore, `seed ${seed}: first bean at ${firstAt}`);
+  }
+});
+
+test('probiotic pickups stack and a bacteria hit clears them all', () => {
+  const fx = createEffects(T);
+  fx.applyProbiotic();
+  fx.applyProbiotic();
+  assert.equal(fx.pipesLeft(), 2 * T.items.probioticPipes);
+  fx.onPipePassed();
+  assert.equal(fx.pipesLeft(), 2 * T.items.probioticPipes - 1);
+  assert.equal(fx.consumeProbiotic(), true, 'a hit uses the shield');
+  assert.equal(fx.pipesLeft(), 0, 'and clears the whole stack');
+  assert.equal(fx.hasProbiotic(), false);
+  fx.applyProbiotic();
+  assert.equal(fx.pipesLeft(), T.items.probioticPipes, 'a fresh pickup starts over');
 });
 
 test('beanY stays inside the middle band and reaches both extremes; beanAngle wiggles within wiggleDeg', () => {

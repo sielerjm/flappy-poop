@@ -79,7 +79,7 @@ Short, playful, clear. Fit a 720×1280 logical field; How to play / About body w
 | itemFiberName | Fiber | 纤维 |
 | itemFiberDetail | +1 point | +1 分 |
 | itemProbioticName | Probiotic | 益生菌 |
-| itemProbioticDetail | Blocks one bad bacteria hit up to 5 pipes | 抵挡一次有害细菌攻击，最多持续 5 道管道 |
+| itemProbioticDetail | Blocks one bad bacteria hit for 5 pipes — pickups stack, a hit uses it all up. | 抵挡一次有害细菌攻击，持续 5 道管道——可叠加，被击中则全部用完。 |
 | itemBacteriaName | Bad bacteria | 有害细菌 |
 | itemBacteriaDetail | −2 points (score never below 0). Does not kill. | −2 分（分数不低于 0）。不会致死。 |
 | itemBeanName | Beans | 豆子 |

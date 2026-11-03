@@ -4,10 +4,10 @@
 
 import { isLocale, DEFAULT_LOCALE } from './i18n.js';
 
-export const VERSION = '0.5.2';
+export const VERSION = '0.5.3';
 
 /** Player-facing stamp on the About overlay. Bump with VERSION. */
-export const LAST_UPDATED = '3 Nov 2026, 16:07';
+export const LAST_UPDATED = '3 Nov 2026, 16:20';
 
 const ISSUE_BASE = 'https://github.com/sielerjm/flappy-poop/issues/new';
 
@@ -223,14 +223,17 @@ export function scoreAfterItem(score, kind, t) {
 
 /**
  * True when a bean should spawn with this pipe pair: never before
- * beans.startScore; random at chancePerGap; and, if none has spawned this run
- * yet, forced once the score reaches beans.guaranteeScore so a bean always
- * shows up in the pipe 5–20 window.
+ * beans.startScore; if none has spawned this run yet, forced once the score
+ * reaches beans.guaranteeScore (so one always shows up in the 5–20 window);
+ * otherwise random at chanceInWindow up to windowEndScore and at the lower
+ * chanceAfter beyond it.
  */
 export function rollBean(rng, score, t, { spawnedThisRun = false } = {}) {
-  if (score < t.beans.startScore) return false;
-  if (!spawnedThisRun && score >= t.beans.guaranteeScore) return true;
-  return rng() < t.beans.chancePerGap;
+  const b = t.beans;
+  if (score < b.startScore) return false;
+  if (!spawnedThisRun && score >= b.guaranteeScore) return true;
+  const chance = score <= b.windowEndScore ? b.chanceInWindow : b.chanceAfter;
+  return rng() < chance;
 }
 
 /** Scroll distance between consecutive pipe pairs (px). */
@@ -303,8 +306,9 @@ export function createEffects(t) {
   let powerOn = false;
   let powerJustEnded = false;
   return {
+    /** Pickups stack: each adds probioticPipes on top of what is left. */
     applyProbiotic() {
-      probioticPipesLeft = max;
+      probioticPipesLeft += max;
     },
     hasProbiotic() {
       return probioticPipesLeft > 0;
