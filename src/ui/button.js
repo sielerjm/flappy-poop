@@ -1,4 +1,5 @@
 import { TUNING as T } from '../config.js';
+import { fitScale } from '../logic.js';
 
 /**
  * Rounded-rect button chrome for a ready-screen box from readyLayout().
@@ -14,6 +15,9 @@ export function createButton(scene, box, label, style, { depth = 20 } = {}) {
   g.lineStyle(4, 0xe85e96, 1);
   g.strokeRoundedRect(x, y, box.width, box.height, T.readyButtonRadius);
   const text = scene.add.text(box.x, box.y, label, style).setOrigin(0.5).setDepth(depth + 1);
+  // Shrink a long label (a 16-character username plus "· 🚽 41") to the box.
+  const fit = () => text.setScale(fitScale(text.width, box.width));
+  fit();
   return {
     setVisible(visible) {
       g.setVisible(visible);
@@ -22,6 +26,7 @@ export function createButton(scene, box, label, style, { depth = 20 } = {}) {
     },
     setText(value) {
       text.setText(value);
+      fit();
       return this;
     },
     destroy() {

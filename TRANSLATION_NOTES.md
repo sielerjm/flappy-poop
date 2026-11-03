@@ -100,7 +100,7 @@ Short, playful, clear. Fit a 720×1280 logical field; How to play / About body w
 | saveTitle | SAVE / LOAD USER | 存档 / 载入用户 |
 | saveIntro | Copy your code to keep your name and top scores on another phone or browser. Paste it there to load them. | 复制存档码，即可在其他手机或浏览器保留你的名字和最高分。在那里粘贴即可载入。 |
 | saveNameLabel | Username | 用户名 |
-| saveNamePlaceholder | 1–12 characters | 1–12 个字符 |
+| saveNamePlaceholder | 1–16 characters | 1–16 个字符 |
 | saveYourCode | Save user code | 保存用户码 |
 | saveCopy | Copy | 复制 |
 | saveCopied | Copied | 已复制 |
@@ -109,7 +109,7 @@ Short, playful, clear. Fit a 720×1280 logical field; How to play / About body w
 | saveLoadPlaceholder | Paste a code | 粘贴存档码 |
 | saveWelcome | Welcome back, {name} — {scores} | 欢迎回来，{name}——{scores} |
 | saveWelcomeNoScores | Welcome back, {name} | 欢迎回来，{name} |
-| saveNameRequired | Enter a username first (1–12 characters) | 请先输入用户名（1–12 个字符） |
+| saveNameRequired | Enter a username first (1–16 characters) | 请先输入用户名（1–16 个字符） |
 | saveErrorDamaged | Save code is damaged or was edited | 存档码已损坏或被修改 |
 | saveErrorUnrecognised | Unrecognised save code | 无法识别的存档码 |
 | newTopHint | New high score! Press Save / Load User on the home screen to save it. | 新高分！在主界面点击“存档 / 载入用户”即可保存。 |

@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { GAME_WIDTH, GAME_HEIGHT, TUNING as T } from '../src/config.js';
-import { readyLayout, readyHit, howToLayout } from '../src/logic.js';
+import { readyLayout, readyHit, howToLayout, fitScale } from '../src/logic.js';
 
 const layout = readyLayout(GAME_WIDTH, GAME_HEIGHT, T);
 const boxes = [layout.toilet, layout.howto, layout.saveLoad, layout.profile];
@@ -89,4 +89,12 @@ test('readyHit resolves each box at its centre, misses the gaps, and only report
 
 test('howToLayout is the readyLayout howto box', () => {
   assert.deepEqual(howToLayout(GAME_WIDTH, GAME_HEIGHT, T), layout.howto);
+});
+
+test('fitScale shrinks only labels wider than the padded box', () => {
+  assert.equal(fitScale(200, 360), 1);
+  assert.equal(fitScale(328, 360), 1); // exactly fills the 16 px padding
+  assert.equal(fitScale(656, 360), 0.5);
+  assert.equal(fitScale(0, 360), 1);
+  assert.equal(fitScale(100, 0), 1);
 });

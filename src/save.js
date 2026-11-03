@@ -10,7 +10,7 @@ export const SAVE_KEY = 'flappyPoop.save'; // localStorage key
 export const SCHEMA = 2; // local storage shape version (independent of the wire format); 1 stored top as numbers
 export const MAX_TOP = 6;
 export const NAME_MIN = 1;
-export const NAME_MAX = 12;
+export const NAME_MAX = 16;
 export const EMPTY_STATE = Object.freeze({ id: null, name: '', top: Object.freeze([]), exportedAt: null });
 export const TOILET_EMOJI = '🚽';
 
@@ -73,7 +73,7 @@ function emptyState() {
   return { id: null, name: '', top: [], exportedAt: null };
 }
 
-/** Trim and check 1–12 code points. Returns { ok, name } with the trimmed name. */
+/** Trim and check NAME_MIN–NAME_MAX (1–16) code points. Returns { ok, name } with the trimmed name. */
 export function validateName(raw) {
   if (typeof raw !== 'string') return { ok: false, name: '' };
   const name = raw.trim();
@@ -275,7 +275,7 @@ export async function buildCode(version, payload) {
 
 /**
  * Fresh code from the current state. Throws Error('name') when the name is
- * missing or not 1–12 characters. Generates and persists the id on first export.
+ * missing or not 1–16 characters. Generates and persists the id on first export.
  * @param {object} state SaveState
  * @param {{ version?: number, now?: () => number, storage?: Storage }} [opts]
  */

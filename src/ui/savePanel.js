@@ -62,7 +62,7 @@ function build() {
   const title = h('h2');
   const intro = h('p', { class: 'intro' });
   const nameLabel = h('label', { for: 'save-name' });
-  const name = h('input', { id: 'save-name', type: 'text', maxlength: '12', autocomplete: 'off', autocapitalize: 'off', spellcheck: 'false' });
+  const name = h('input', { id: 'save-name', type: 'text', maxlength: '16', autocomplete: 'off', autocapitalize: 'off', spellcheck: 'false' });
   const codeLabel = h('label', { for: 'save-code' });
   const code = h('input', { id: 'save-code', type: 'text', readonly: true, spellcheck: 'false' });
   const copy = h('button', { type: 'button', id: 'save-copy' });

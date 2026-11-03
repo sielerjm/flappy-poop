@@ -132,12 +132,12 @@ test('7. a code wrapped in a URL fragment, quotes, or whitespace is extracted an
   assert.equal(extractCode(undefined), null);
 });
 
-test('8. a 13-character name is rejected at export and at import', async () => {
-  const long = 'A'.repeat(13);
+test('8. a 17-character name is rejected at export and at import', async () => {
+  const long = 'A'.repeat(17);
   assert.equal(validateName(long).ok, false);
   assert.equal(validateName('').ok, false);
   assert.equal(validateName('   ').ok, false);
-  assert.equal(validateName('A'.repeat(12)).ok, true);
+  assert.equal(validateName('A'.repeat(16)).ok, true);
   assert.deepEqual(validateName('  Bob  '), { ok: true, name: 'Bob' });
   await assert.rejects(exportCode({ ...alice(), name: long }, { storage: fakeStorage() }), /name/);
   await assert.rejects(exportCode({ ...alice(), name: '' }, { storage: fakeStorage() }), /name/);

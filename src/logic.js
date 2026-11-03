@@ -30,6 +30,17 @@ export function reloadUrl(href, now = Date.now()) {
   return url.toString();
 }
 
+/**
+ * Scale that fits a label of textWidth inside a box of boxWidth with `pad` on
+ * each side: 1 when it already fits, smaller otherwise (never 0 or negative).
+ * Used by the ready-screen buttons so a long username does not spill out.
+ */
+export function fitScale(textWidth, boxWidth, pad = 16) {
+  const room = boxWidth - 2 * pad;
+  if (!(textWidth > 0) || !(room > 0)) return 1;
+  return Math.min(1, room / textWidth);
+}
+
 /** Navigate to reloadUrl(); returns the URL used (null when there is no location). */
 export function reloadGame(api = globalThis) {
   if (!api.location || typeof api.location.replace !== 'function') return null;
