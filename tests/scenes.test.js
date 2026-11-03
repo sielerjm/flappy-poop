@@ -1,0 +1,46 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { readdirSync, readFileSync } from 'node:fs';
+import { join, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const scenesDir = join(dirname(fileURLToPath(import.meta.url)), '..', 'src', 'scenes');
+
+/**
+ * Phaser.Scene installs these as instance properties (plugins and systems) on
+ * every scene before create() runs. A scene method with one of these names is
+ * silently shadowed: `this.load(...)` becomes "this.load is not a function"
+ * inside create(), which escapes Phaser's step and freezes the whole game.
+ * Node never runs scenes, so this is the only place it can be caught.
+ */
+const RESERVED = [
+  'add', 'anims', 'cache', 'cameras', 'children', 'data', 'events', 'game', 'input', 'lights', 'load',
+  'make', 'matter', 'physics', 'plugins', 'registry', 'renderer', 'scale', 'scene', 'sound', 'sys',
+  'textures', 'time', 'tweens', 'render',
+];
+const LIFECYCLE = new Set(['init', 'preload', 'create', 'update', 'constructor']);
+
+/** Method names declared at class-body indentation (two spaces) in a scene file. */
+function methodNames(source) {
+  const names = [];
+  for (const m of source.matchAll(/^ {2}(?:async )?([A-Za-z_$][\w$]*)\s*\([^)]*\)\s*\{/gm)) names.push(m[1]);
+  return names;
+}
+
+test('every scene file declares at least create() and no method shadows a Phaser.Scene property', () => {
+  const files = readdirSync(scenesDir).filter((f) => f.endsWith('.js'));
+  assert.ok(files.length >= 9, `expected the scene files, got ${files.length}`);
+  for (const file of files) {
+    const names = methodNames(readFileSync(join(scenesDir, file), 'utf8'));
+    assert.ok(names.includes('create') || names.includes('preload'), `${file}: no lifecycle method found (regex drift?)`);
+    for (const name of names) {
+      if (LIFECYCLE.has(name)) continue;
+      assert.ok(!RESERVED.includes(name), `${file}: method "${name}()" shadows Phaser.Scene's this.${name}`);
+    }
+  }
+});
+
+test('the guard itself catches a shadowing method', () => {
+  const names = methodNames('class X extends Phaser.Scene {\n  create() {\n  }\n\n  async load(a) {\n  }\n}');
+  assert.deepEqual(names, ['create', 'load']);
+});

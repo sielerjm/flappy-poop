@@ -57,10 +57,11 @@ export class Leaderboard extends Phaser.Scene {
     });
 
     const gen = ++this.gen;
-    this.load(gen, play);
+    this.loadBoard(gen, play);
   }
 
-  async load(gen, play) {
+  // Not `load`: Phaser installs its LoaderPlugin on every scene as this.load.
+  async loadBoard(gen, play) {
     // Post a pending best first so the board and the rank reflect it.
     try {
       await play?.syncLeaderboard?.();
@@ -72,10 +73,10 @@ export class Leaderboard extends Phaser.Scene {
     const [rows, rank] = await Promise.all([fetchTop(), named ? fetchRank(state.id) : null]);
     // Closed, or closed and reopened, while the requests were in flight.
     if (gen !== this.gen || !this.scene.isActive()) return;
-    this.render(rows, rank, state);
+    this.showBoard(rows, rank, state);
   }
 
-  render(rows, rank, state) {
+  showBoard(rows, rank, state) {
     const { cx, cy, locale } = this;
     const limit = LEADERBOARD.limit;
 
