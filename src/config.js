@@ -76,3 +76,16 @@ export const TUNING = {
     beanRadius: 48, // px circular hitbox = half the 96 logical-px sprite
   },
 };
+
+// Shared leaderboard (Supabase, plain fetch; see db/schema.sql and src/leaderboard.js).
+// Both values are copied from the Supabase dashboard and are public by design: they
+// ship to every player's browser. The schema's grants are the security boundary.
+// An empty dataApi or publishableKey disables the feature (no requests are made).
+export const LEADERBOARD = {
+  dataApi: 'https://soaakwxspmpcprgyywul.supabase.co/rest/v1', // Data API base URL
+  publishableKey: 'sb_publishable_yPcLgM5m3UwiywHuSH2nVA_46Eq1Cle', // sent as the apikey header
+  timeoutMs: 4000, // ms before a request is abandoned (the game never waits on it)
+  limit: 10, // rows on the board
+  storageKey: 'flappyPoop.leaderboard', // localStorage key for the last confirmed submit
+  maxScore: 200, // scores above this are not submitted (matches the CHECK in db/schema.sql)
+};
