@@ -35,10 +35,11 @@ test('HOW_TO_ITEMS names fiber, probiotic, and bacteria with their effects', () 
   );
   const blob = items.map((item) => `${item.name} ${item.detail}`).join('\n');
   assert.match(blob, /This is a pipe/);
+  assert.match(blob, /1 point for every pipe/);
+  assert.match(blob, /stack/);
   assert.match(blob, /bad bacteria/);
   assert.match(blob, /🚽/);
-  assert.match(blob, /Grab one/);
-  assert.match(blob, /pipe 20/);
+  assert.match(blob, /Grab a bean/);
   assert.equal(blob.includes('tap to flap'), false, 'no stale button reference');
   assert.match(blob, /\+1/);
   assert.match(blob, /5 pipes/);

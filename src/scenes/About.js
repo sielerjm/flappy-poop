@@ -40,8 +40,7 @@ export class About extends Phaser.Scene {
     };
 
     stack('aboutName', { ...STYLE, fontSize: '40px' }, 12);
-    stack('aboutTagline', { ...MUTED, fontSize: '26px', wordWrap: wrap, lineSpacing: 4 }, 12);
-    stack('aboutBlurb', { ...MUTED, fontSize: '24px', wordWrap: wrap, lineSpacing: 6 }, 36);
+    stack('aboutTagline', { ...MUTED, fontSize: '26px', wordWrap: wrap, lineSpacing: 4 }, 36);
     stack('aboutCreditsTitle', { ...STYLE, fontSize: '28px', color: '#f8a0c8' }, 16);
     stack('aboutCredits', { ...MUTED, fontSize: '24px', wordWrap: wrap, lineSpacing: 8 }, 48);
 
@@ -55,7 +54,9 @@ export class About extends Phaser.Scene {
     );
     y += 72;
 
-    // LLM note sits at the bottom, under the links, above the version lines.
+    // Author line, then the LLM note, at the bottom under the links and above the version lines.
+    const author = sv.add(this.add.text(cx, y, t(locale, 'aboutBlurb'), { ...MUTED, fontSize: '22px', wordWrap: wrap, lineSpacing: 4 }).setOrigin(0.5, 0));
+    y += author.height + 12;
     const llm = sv.add(this.add.text(cx, y, t(locale, 'aboutLlmNote'), { ...MUTED, fontSize: '22px', wordWrap: wrap, lineSpacing: 4 }).setOrigin(0.5, 0));
     y += llm.height + 28;
 

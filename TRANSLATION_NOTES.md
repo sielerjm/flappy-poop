@@ -75,15 +75,15 @@ Short, playful, clear. Fit a 720×1280 logical field; How to play / About body w
 | howToTitle | HOW TO PLAY | 玩法说明 |
 | howToBody | Tap to flap. Hit a pipe, the ceiling, or the floor and the run ends. On iPhone, Silent mode mutes the game — turn it off to hear sound. | 点击起飞。撞到管道、天花板或地面则本局结束。在 iPhone 上，静音模式会让游戏无声——关闭静音即可听到声音。 |
 | itemPipeName | Pipe | 管道 |
-| itemPipeDetail | This is a pipe. Dodge the pipes for as long as possible — each pair you pass is a point. | 这是管道。尽量长时间躲开管道，每穿过一对得一分。 |
+| itemPipeDetail | This is a pipe. Dodge the pipes for as long as possible. You gain 1 point for every pipe you dodge. | 这是管道。尽量长时间躲开管道。每躲过一道管道得 1 分。 |
 | itemFiberName | Fiber | 纤维 |
 | itemFiberDetail | +1 point | +1 分 |
 | itemProbioticName | Probiotic | 益生菌 |
-| itemProbioticDetail | Blocks one bad bacteria hit for 5 pipes — pickups stack, a hit uses it all up. | 抵挡一次有害细菌攻击，持续 5 道管道——可叠加，被击中则全部用完。 |
+| itemProbioticDetail | Protects you against bad bacteria for 5 pipes. Subsequent probiotics stack, but hitting a bad bacteria uses them all up. | 在 5 道管道内保护你不受有害细菌伤害。后续益生菌可叠加，但撞到有害细菌会全部用完。 |
 | itemBacteriaName | Bad bacteria | 有害细菌 |
-| itemBacteriaDetail | −2 points (score never below 0). Does not kill. | −2 分（分数不低于 0）。不会致死。 |
+| itemBacteriaDetail | −2 points | −2 分 |
 | itemBeanName | Beans | 豆子 |
-| itemBeanDetail | Bob between pipes from pipe 5 — at least one by pipe 20, rarer after that. Grab one and your poop glows: tap the poop to fart past the next 5 pipes, and nothing can hurt you. | 第5道管道起在管道之间漂动——第20道之前至少出现一次，之后更少见。吃到一颗便便就会发光：点击便便，放屁冲过接下来的5道管道，期间不会受伤。 |
+| itemBeanDetail | Grab a bean and press your poop to activate the power-up: fart past the next 5 pipes, and nothing can hurt you. | 吃到豆子后点击便便启动能力：放屁冲过接下来的 5 道管道，期间不会受伤。 |
 | itemToiletName | On the toilet | 如厕模式 |
 | itemToiletDetail | Playing on the toilet? Flip the switch under the poop on the home screen. Those scores get a 🚽 next to them. | 在马桶上玩？打开主界面便便下方的开关，这些分数旁会显示 🚽。 |
 | updatedPrefix | Updated | 更新于 |
