@@ -2,6 +2,7 @@ import { GAME_WIDTH, GAME_HEIGHT, TUNING as T } from '../config.js';
 import {
   createRng,
   pipeGapY,
+  centredGapY,
   hasPassed,
   angleForVelocity,
   difficulty,
@@ -75,6 +76,7 @@ export class Play extends Phaser.Scene {
     this.fartDurationMs = 0;
     this.fartPeak = 1;
     this.charged = false;
+    this.centreNextGap = false; // first pair after a fart opens at the poop's float height
     this.beanBounds = beanBounds({ gameHeight: GAME_HEIGHT, groundHeight: T.groundHeight, radius: T.beans.beanRadius, frac: T.beans.travelFrac });
     this.locale = this.resolveLocale();
     attachGame(this.game);
@@ -485,12 +487,14 @@ export class Play extends Phaser.Scene {
   }
 
   spawnPipePair() {
-    const gapY = pipeGapY(this.rng, {
+    const gapCfg = {
       gameHeight: GAME_HEIGHT,
       groundHeight: T.groundHeight,
       gapHeight: this.diff.gapHeight,
       gapMargin: T.gapMargin,
-    });
+    };
+    const gapY = this.centreNextGap ? centredGapY(gapCfg) : pipeGapY(this.rng, gapCfg);
+    this.centreNextGap = false;
     const gapH = this.diff.gapHeight;
     const x = GAME_WIDTH + T.pipeWidth;
 
@@ -666,7 +670,9 @@ export class Play extends Phaser.Scene {
     this.poop.body.setAllowGravity(true);
     this.poop.setVelocityY(0);
     this.graceLeftMs = T.beans.graceMs;
-    // Next pair spawns on the next frame at the right edge: a full screen of warning.
+    // Next pair spawns on the next frame at the right edge with its gap at the
+    // poop's float height: a full screen of warning and the easiest line through.
+    this.centreNextGap = true;
     this.distanceSinceSpawn = pipeSpacing(this.diff.pipeSpeed, T.spawnEveryMs);
     this.applyScroll();
     if (this.effects.powerReady()) this.setCharged(true);

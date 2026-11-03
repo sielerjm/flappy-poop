@@ -134,7 +134,8 @@ src/
                             off, doFlap ignored); spawnHeldByFart() stops pipe
                             spawning once fartRemainingDistance() < pipeClearDistance()
                             so the screen is clear at the end; endPower() restores
-                            gravity and spawns the next pair at the right edge,
+                            gravity and spawns the next pair at the right edge with
+                            its gap at mid-screen (centreNextGap → centredGapY),
                             graceLeftMs blocks die(). Pipes spawn by scrolled distance (pipeSpacing),
                             not a timer. Nothing here reads time.now;
                             readyHit() routes taps (howto, start, saveload, profile

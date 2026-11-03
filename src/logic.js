@@ -4,10 +4,10 @@
 
 import { isLocale, DEFAULT_LOCALE } from './i18n.js';
 
-export const VERSION = '0.5.5';
+export const VERSION = '0.5.6';
 
 /** Player-facing stamp on the About overlay. Bump with VERSION. */
-export const LAST_UPDATED = '3 Nov 2026, 16:40';
+export const LAST_UPDATED = '3 Nov 2026, 16:48';
 
 const ISSUE_BASE = 'https://github.com/sielerjm/flappy-poop/issues/new';
 
@@ -70,6 +70,15 @@ export function gapBounds({ gameHeight, groundHeight, gapHeight, gapMargin }) {
 export function pipeGapY(rng, cfg) {
   const { minY, maxY } = gapBounds(cfg);
   return minY + rng() * (maxY - minY);
+}
+
+/**
+ * Gap centre for the first pair after the fart power: the height the poop
+ * floated at (gameHeight / 2), clamped into gapBounds so it is always legal.
+ */
+export function centredGapY(cfg) {
+  const { minY, maxY } = gapBounds(cfg);
+  return Math.min(maxY, Math.max(minY, cfg.gameHeight / 2));
 }
 
 /** True once the pipe's right edge has moved left of the player's x. */

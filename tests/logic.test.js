@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createRng, gapBounds, pipeGapY, hasPassed, angleForVelocity } from '../src/logic.js';
+import { createRng, gapBounds, pipeGapY, centredGapY, hasPassed, angleForVelocity } from '../src/logic.js';
 import { GAME_HEIGHT, TUNING as T } from '../src/config.js';
 
 const cfg = { gameHeight: GAME_HEIGHT, groundHeight: T.groundHeight, gapHeight: T.gapHeight, gapMargin: T.gapMargin };
@@ -47,4 +47,15 @@ test('angleForVelocity is nose-up when rising and clamps nose-down when falling 
   const mid = angleForVelocity(T.angleFallRefVy / 2, T);
   assert.ok(Number.isInteger(mid), 'tilt is quantized to whole degrees');
   assert.ok(mid > T.maxRiseAngle && mid < T.maxFallAngle);
+});
+
+test('centredGapY sits at mid-screen (the fart float height) and stays inside gapBounds', () => {
+  const cfg = { gameHeight: GAME_HEIGHT, groundHeight: T.groundHeight, gapHeight: T.gapHeight, gapMargin: T.gapMargin };
+  assert.equal(centredGapY(cfg), GAME_HEIGHT / 2);
+  const { minY, maxY } = gapBounds(cfg);
+  assert.ok(centredGapY(cfg) >= minY && centredGapY(cfg) <= maxY);
+  // A field so short that mid-screen is illegal gets clamped, not thrown.
+  const tight = { gameHeight: 600, groundHeight: 128, gapHeight: 340, gapMargin: 40 };
+  const b = gapBounds(tight);
+  assert.ok(centredGapY(tight) >= b.minY && centredGapY(tight) <= b.maxY);
 });
