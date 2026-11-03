@@ -38,6 +38,8 @@ test('HOW_TO_ITEMS names fiber, probiotic, and bacteria with their effects', () 
   assert.match(blob, /bad bacteria/);
   assert.match(blob, /🚽/);
   assert.match(blob, /Grab one/);
+  assert.match(blob, /pipe 20/);
+  assert.equal(blob.includes('tap to flap'), false, 'no stale button reference');
   assert.match(blob, /\+1/);
   assert.match(blob, /5 pipes/);
   assert.match(blob, /−2|-2/);

@@ -83,9 +83,9 @@ Short, playful, clear. Fit a 720×1280 logical field; How to play / About body w
 | itemBacteriaName | Bad bacteria | 有害细菌 |
 | itemBacteriaDetail | −2 points (score never below 0). Does not kill. | −2 分（分数不低于 0）。不会致死。 |
 | itemBeanName | Beans | 豆子 |
-| itemBeanDetail | Rare. Show up after pipe 5, bobbing between pipes. Grab one and your poop glows: tap it to fart past the next 5 pipes — nothing can hurt you. | 很少见。第5道管道后出现，在管道之间漂动。吃到一颗便便就会发光：点击它，放屁冲过接下来的5道管道，期间不会受伤。 |
+| itemBeanDetail | Bob between pipes from pipe 5 — at least one by pipe 20, rarer after that. Grab one and your poop glows: tap the poop to fart past the next 5 pipes, and nothing can hurt you. | 第5道管道起在管道之间漂动——第20道之前至少出现一次，之后更少见。吃到一颗便便就会发光：点击便便，放屁冲过接下来的5道管道，期间不会受伤。 |
 | itemToiletName | On the toilet | 如厕模式 |
-| itemToiletDetail | Playing on the toilet? Flip the switch under tap to flap. Those scores get a 🚽 next to them. | 在马桶上玩？打开“点击起飞”下方的开关，这些分数旁会显示 🚽。 |
+| itemToiletDetail | Playing on the toilet? Flip the switch under the poop on the home screen. Those scores get a 🚽 next to them. | 在马桶上玩？打开主界面便便下方的开关，这些分数旁会显示 🚽。 |
 | updatedPrefix | Updated | 更新于 |
 | languageTitle | Language | 语言 |
 | langEnglish | English | English |
