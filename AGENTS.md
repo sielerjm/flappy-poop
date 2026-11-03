@@ -252,7 +252,7 @@ tools/
    root by GitHub Pages. Don't add a bundler, TypeScript, or npm packages without
    a strong reason; if you do, the deploy story has to change too.
 6. **Mobile first.** Touch is the primary input (`pointerdown`); keyboard
-   (Space / Up / M / P / Esc / S / I / L) is a convenience. Keep `touch-action: none`,
+   (Space / Up / M / P / Esc / S / I / L / F / B) is a convenience. Keep `touch-action: none`,
    the viewport meta, and the WebAudio unlock-on-gesture. Wrapped UI text that
    can show Chinese must set `useAdvancedWrap: true`. Test on a real phone
    when you touch input, scaling, audio, or locale.

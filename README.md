@@ -37,6 +37,7 @@ On iPhone, Silent mode mutes the game — turn it off to hear sound. The pause b
 - **I** — About.
 - **F** — Feedback (bug / feature → GitHub).
 - **L** — language.
+- **B** — fire the bean power-up (same as tapping the poop or the bean button; does nothing unless it is charged).
 - **Haptics** — a short buzz on death, Android / Chrome only. iPhone has no `navigator.vibrate` and must not error.
 
 Translation review notes for LLMs / humans: [TRANSLATION_NOTES.md](TRANSLATION_NOTES.md).

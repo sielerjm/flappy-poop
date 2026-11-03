@@ -197,6 +197,7 @@ export class Play extends Phaser.Scene {
     this.input.keyboard?.on('keydown-I', () => this.handleChrome('info'));
     this.input.keyboard?.on('keydown-L', () => this.handleChrome('lang'));
     this.input.keyboard?.on('keydown-F', () => this.handleChrome('feedback'));
+    this.input.keyboard?.on('keydown-B', () => this.activatePower()); // no-op unless the bean power is charged
 
     this.onHidden = () => {
       if (typeof document !== 'undefined' && document.hidden) this.autoPause();
