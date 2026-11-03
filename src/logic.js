@@ -4,10 +4,10 @@
 
 import { isLocale, DEFAULT_LOCALE } from './i18n.js';
 
-export const VERSION = '0.3.3';
+export const VERSION = '0.4.0';
 
 /** Player-facing stamp on the About overlay. Bump with VERSION. */
-export const LAST_UPDATED = '3 Nov 2026, 14:50';
+export const LAST_UPDATED = '3 Nov 2026, 15:02';
 
 const ISSUE_BASE = 'https://github.com/sielerjm/flappy-poop/issues/new';
 
@@ -311,10 +311,12 @@ export function readyLayout(width, height, t) {
   const title = { id: 'title', x: cx, y: 330 };
   const poop = { id: 'poop', x: cx, y: 455 };
   const start = { id: 'start', x: cx, y: 592, width: 250, height: boxH };
-  const howto = { id: 'howto', x: cx, y: 740, width: 400, height: boxH };
-  const saveLoad = { id: 'saveload', x: cx, y: 844, width: 360, height: boxH };
-  const profile = { id: 'profile', x: cx, y: 940, width: 360, height: 72 };
-  return { title, poop, start, howto, saveLoad, profile };
+  // Toilet toggle: 120x56 track left of centre, 🚽 to its right; the hit box spans both.
+  const toilet = { id: 'toilet', x: cx, y: 676, width: 240, height: 72, track: { x: cx - 50, y: 676, width: 120, height: 56 }, emojiX: cx + 80 };
+  const howto = { id: 'howto', x: cx, y: 764, width: 400, height: boxH };
+  const saveLoad = { id: 'saveload', x: cx, y: 860, width: 360, height: boxH };
+  const profile = { id: 'profile', x: cx, y: 946, width: 360, height: 64 }; // bottom 978 clears the lower villi fringe
+  return { title, poop, start, toilet, howto, saveLoad, profile };
 }
 
 function inBox(x, y, box) {
@@ -322,12 +324,13 @@ function inBox(x, y, box) {
 }
 
 /**
- * Which ready-screen box contains (x, y): 'howto' | 'start' | 'saveload' |
- * 'profile' | null. The profile line only counts when hasProfile (a name is set).
+ * Which ready-screen box contains (x, y): 'start' | 'toilet' | 'howto' |
+ * 'saveload' | 'profile' | null. The profile button only counts when
+ * hasProfile (a username is set).
  */
 export function readyHit(x, y, layout, { hasProfile = false } = {}) {
   if (!layout) return null;
-  for (const box of [layout.howto, layout.start, layout.saveLoad]) {
+  for (const box of [layout.start, layout.toilet, layout.howto, layout.saveLoad]) {
     if (box && inBox(x, y, box)) return box.id;
   }
   if (hasProfile && layout.profile && inBox(x, y, layout.profile)) return 'profile';
@@ -343,6 +346,17 @@ export function howToLayout(width, height, t) {
 export function howToHit(x, y, layout) {
   if (!layout) return null;
   return inBox(x, y, layout) ? 'howto' : null;
+}
+
+/**
+ * Scroll offset for a panel whose content may be taller than its view:
+ * clamped to [-(contentHeight - viewHeight), 0]; always 0 when it fits.
+ */
+export function clampScroll(offset, contentHeight, viewHeight) {
+  const maxScroll = Math.max(0, contentHeight - viewHeight);
+  if (!Number.isFinite(offset)) return 0;
+  const v = Math.min(0, Math.max(-maxScroll, offset));
+  return v === 0 ? 0 : v; // normalise -0
 }
 
 /**

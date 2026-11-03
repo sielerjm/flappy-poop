@@ -36,6 +36,10 @@ export const TUNING = {
   readyButtonRadius: 24, // px corner radius of ready-screen buttons
   readyButtonAlpha: 0.55, // 0–1 fill alpha of ready-screen buttons
   launchSlideMs: 700, // ms the poop slides from its ready spot to poopX on the start tap
+  toiletOffColor: 0x6a6a6a, // toggle track when off (grey)
+  toiletOnColor: 0x8b5a2b, // toggle track when on (brown)
+  toiletOffAlpha: 0.33, // 0–1 alpha of the 🚽 while the toggle is off
+  toiletKnobMs: 150, // ms the toggle knob takes to slide
   fartVolume: 0.6, // 0–1 Phaser volume for the death fart sample
   items: {
     startScore: 8, // score at which pickups may appear

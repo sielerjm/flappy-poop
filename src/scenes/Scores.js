@@ -1,7 +1,7 @@
 import { GAME_WIDTH, GAME_HEIGHT } from '../config.js';
 import { VERSION, chromeIntent, overlayOutsideHit } from '../logic.js';
 import { t, metaFontSize } from '../i18n.js';
-import { MAX_TOP } from '../save.js';
+import { MAX_TOP, formatScore } from '../save.js';
 
 const STYLE = { fontFamily: 'sans-serif', fontStyle: 'bold', color: '#ffffff', align: 'center' };
 
@@ -40,7 +40,7 @@ export class Scores extends Phaser.Scene {
           .text(cx - 120, y, `${i + 1}.`, { ...STYLE, fontSize: '40px', color: has ? '#f8a0c8' : '#6a5a74' })
           .setOrigin(0, 0.5);
         this.add
-          .text(cx + 120, y, has ? String(top[i]) : '–', { ...STYLE, fontSize: '40px', color: has ? '#ffffff' : '#6a5a74' })
+          .text(cx + 120, y, has ? formatScore(top[i]) : '–', { ...STYLE, fontSize: '40px', color: has ? '#ffffff' : '#6a5a74' })
           .setOrigin(1, 0.5);
       }
     }

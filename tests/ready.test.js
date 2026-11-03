@@ -4,7 +4,7 @@ import { GAME_WIDTH, GAME_HEIGHT, TUNING as T } from '../src/config.js';
 import { readyLayout, readyHit, howToLayout } from '../src/logic.js';
 
 const layout = readyLayout(GAME_WIDTH, GAME_HEIGHT, T);
-const boxes = [layout.start, layout.howto, layout.saveLoad, layout.profile];
+const boxes = [layout.start, layout.toilet, layout.howto, layout.saveLoad, layout.profile];
 // Where the poop bobs on the ready screen: layout.poop, ±24 bob, ~48 px radius.
 const POOP = { left: layout.poop.x - 48, right: layout.poop.x + 48, top: layout.poop.y - 24 - 48, bottom: layout.poop.y + 24 + 48 };
 
@@ -18,7 +18,7 @@ function overlaps(a, b) {
 test('ready boxes have ids, are inside the field, and the tappable ones are at least trayHitMin tall', () => {
   assert.deepEqual(
     boxes.map((b) => b.id),
-    ['start', 'howto', 'saveload', 'profile'],
+    ['start', 'toilet', 'howto', 'saveload', 'profile'],
   );
   for (const b of boxes) {
     const e = edges(b);
@@ -27,6 +27,10 @@ test('ready boxes have ids, are inside the field, and the tappable ones are at l
   }
   for (const b of [layout.howto, layout.start, layout.saveLoad]) assert.ok(b.height >= T.trayHitMin, `${b.id} tall enough`);
   assert.ok(layout.profile.height >= 64, 'profile is a button now');
+  assert.ok(layout.toilet.height >= 64, 'toggle hit box is thumb-sized');
+  const tr = layout.toilet.track;
+  assert.ok(tr.x - tr.width / 2 >= layout.toilet.x - layout.toilet.width / 2, 'track inside the toggle box');
+  assert.ok(layout.toilet.emojiX + 24 <= layout.toilet.x + layout.toilet.width / 2, 'emoji inside the toggle box');
 });
 
 test('ready boxes do not overlap and stack title, poop, start, howto, saveLoad, profile', () => {
@@ -35,7 +39,7 @@ test('ready boxes do not overlap and stack title, poop, start, howto, saveLoad, 
       assert.equal(overlaps(edges(boxes[i]), edges(boxes[j])), false, `${boxes[i].id} vs ${boxes[j].id}`);
     }
   }
-  const ys = [layout.title.y, layout.poop.y, layout.start.y, layout.howto.y, layout.saveLoad.y, layout.profile.y];
+  const ys = [layout.title.y, layout.poop.y, layout.start.y, layout.toilet.y, layout.howto.y, layout.saveLoad.y, layout.profile.y];
   for (let i = 1; i < ys.length; i += 1) assert.ok(ys[i] > ys[i - 1], `order at index ${i}`);
   assert.equal(layout.title.x, GAME_WIDTH / 2);
   assert.equal(layout.poop.x, GAME_WIDTH / 2);
@@ -50,12 +54,13 @@ test('every ready box keeps clear of the bobbing poop at its ready spot', () => 
 });
 
 test('readyHit resolves each box at its centre, misses the gaps, and only reports profile when a name is set', () => {
-  for (const b of [layout.howto, layout.start, layout.saveLoad]) {
+  for (const b of [layout.howto, layout.start, layout.saveLoad, layout.toilet]) {
     assert.equal(readyHit(b.x, b.y, layout), b.id);
   }
+  assert.equal(readyHit(layout.toilet.emojiX, layout.toilet.y, layout), 'toilet', 'tapping the emoji toggles too');
   assert.equal(readyHit(layout.profile.x, layout.profile.y, layout), null);
   assert.equal(readyHit(layout.profile.x, layout.profile.y, layout, { hasProfile: true }), 'profile');
-  const gapY = (edges(layout.start).bottom + edges(layout.howto).top) / 2;
+  const gapY = (edges(layout.toilet).bottom + edges(layout.howto).top) / 2;
   assert.equal(readyHit(GAME_WIDTH / 2, gapY, layout), null);
   assert.equal(readyHit(layout.poop.x, layout.poop.y, layout, { hasProfile: true }), null, 'poop spot is not a button');
   assert.equal(readyHit(T.poopX, GAME_HEIGHT / 2, layout, { hasProfile: true }), null, 'play position is not a button');

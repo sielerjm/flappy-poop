@@ -20,10 +20,11 @@ import {
   scaledCircleBody,
 } from '../logic.js';
 import { t, pauseBannerText, initialLocale, isLocale } from '../i18n.js';
-import { loadLocal, saveLocal, recordScore, isNewTop, profileLine } from '../save.js';
+import { loadLocal, saveLocal, recordScore, isNewTop, profileLine, TOILET_EMOJI } from '../save.js';
 import { unlock, attachGame, setMuted, isMuted, sfx } from '../sound.js';
 import { createTray } from '../ui/tray.js';
 import { createButton } from '../ui/button.js';
+import { createToggle } from '../ui/toggle.js';
 import { openSavePanel } from '../ui/savePanel.js';
 
 const TEXT_STYLE = {
@@ -80,6 +81,8 @@ export class Play extends Phaser.Scene {
     // readyHit() in flap(), not GameObject handlers, so the chrome is visual only.
     this.readyBoxes = readyLayout(GAME_WIDTH, GAME_HEIGHT, T);
     this.launching = false;
+    // Toilet mode: session-only (registry survives scene.restart, not a reload).
+    this.toilet = Boolean(this.registry.get('toilet'));
 
     // Player: bobs at its ready spot, no gravity until launch() has slid it to poopX.
     this.poop = this.physics.add.sprite(this.readyBoxes.poop.x, this.readyBoxes.poop.y, 'poop').setDepth(10);
@@ -91,6 +94,8 @@ export class Play extends Phaser.Scene {
 
     // HUD
     this.scoreText = this.add.text(GAME_WIDTH / 2, 80, '0', { ...TEXT_STYLE, fontSize: '80px' }).setOrigin(0.5).setDepth(20);
+    // 🚽 left of the score while a toilet-mode run is on.
+    this.toiletHud = this.add.text(GAME_WIDTH / 2 - 96, 80, TOILET_EMOJI, { fontFamily: 'sans-serif', fontSize: '44px' }).setOrigin(0.5).setDepth(20).setVisible(false);
     this.probioticIcon = this.add
       .image(GAME_WIDTH / 2 - 56, 156, 'probiotic')
       .setDisplaySize(T.hudProbioticSize, T.hudProbioticSize)
@@ -101,6 +106,7 @@ export class Play extends Phaser.Scene {
       .text(this.readyBoxes.title.x, this.readyBoxes.title.y, t(this.locale, 'readyTitle'), { ...TEXT_STYLE, fontSize: '52px' })
       .setOrigin(0.5)
       .setDepth(20);
+    this.toiletToggle = createToggle(this, this.readyBoxes.toilet, { on: this.toilet });
     this.howToBtn = createButton(this, this.readyBoxes.howto, t(this.locale, 'howToPlay'), { ...TEXT_STYLE, fontSize: '40px', color: '#f8a0c8' });
     this.startBtn = createButton(this, this.readyBoxes.start, t(this.locale, 'tapToFlap'), { ...TEXT_STYLE, fontSize: '44px' });
     this.saveLoadBtn = createButton(this, this.readyBoxes.saveLoad, t(this.locale, 'saveLoadButton'), {
@@ -188,6 +194,7 @@ export class Play extends Phaser.Scene {
 
   setReadyUiVisible(visible) {
     this.readyTitle.setVisible(visible);
+    this.toiletToggle.setVisible(visible);
     this.howToBtn.setVisible(visible);
     this.startBtn.setVisible(visible);
     this.saveLoadBtn.setVisible(visible);
@@ -197,6 +204,7 @@ export class Play extends Phaser.Scene {
   start() {
     this.state = 'playing';
     this.bob.stop();
+    this.toiletHud.setVisible(this.toilet);
     this.poop.body.setAllowGravity(true);
     this.poop.body.setGravityY(T.gravity);
     this.spawnTimer = this.time.addEvent({ delay: T.spawnEveryMs, loop: true, callback: () => this.spawnPipePair() });
@@ -216,6 +224,10 @@ export class Play extends Phaser.Scene {
         const hit = readyHit(pointer.x, pointer.y, this.readyBoxes, { hasProfile: Boolean(this.save?.name) });
         if (hit === 'howto') {
           this.handleChrome('howto');
+          return;
+        }
+        if (hit === 'toilet') {
+          this.toggleToilet();
           return;
         }
         if (hit === 'saveload') {
@@ -270,6 +282,12 @@ export class Play extends Phaser.Scene {
 
   openSavePanel() {
     openSavePanel({ game: this.game, play: this, locale: this.locale });
+  }
+
+  toggleToilet() {
+    this.toilet = !this.toilet;
+    this.registry.set('toilet', this.toilet);
+    this.toiletToggle.setOn(this.toilet);
   }
 
   applyLocale(next) {
@@ -533,7 +551,7 @@ export class Play extends Phaser.Scene {
     }
     const best = this.best.save(this.score);
     const newTop = isNewTop(this.save, this.score);
-    this.save = saveLocal(recordScore(this.save, this.score));
+    this.save = saveLocal(recordScore(this.save, this.score, { toilet: this.toilet }));
 
     // Tumble: keep gravity so the poop falls, stop it at the ground, spin it.
     this.poop.setVelocityY(Math.max(this.poop.body.velocity.y, 0));
@@ -542,7 +560,7 @@ export class Play extends Phaser.Scene {
 
     this.time.delayedCall(T.deathToOverMs, () => {
       this.physics.pause();
-      this.scene.launch('Over', { score: this.score, best, newTop });
+      this.scene.launch('Over', { score: this.score, best, newTop, toilet: this.toilet });
     });
   }
 
