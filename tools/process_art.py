@@ -2,15 +2,23 @@
 """process_art.py — crop, knock out background white, and resize Michael's
 drawings into the gameplay art-contract PNGs.
 
-Created by Michael Sieler. Last updated: 2026-11-02 (384px contract).
+Created by Michael Sieler. Last updated: 2026-11-03 (poop set + bean).
 
-Input:  assets/src/{Poop_Emoji_Alive,Poop_Emoji_Dead,Fiber,Good_Bacteria,Bad_Bacteria}.png
-Output: assets/{poop,poop-dead,fiber,probiotic,bacteria}.png at 384x384 RGBA.
+Run:    uv run --with pillow python3 tools/process_art.py   (or any Python with Pillow)
+Input:  assets/src/{Poop_Emoji_Alive,Poop_Emoji_Dead,Poop_Stink1,Poop_Stink2,Poop_Fart,
+                    Fiber,Good_Bacteria,Bad_Bacteria,Kidney_Bean}.png
+Output: assets/{poop,poop-dead,fiber,probiotic,bacteria,bean}.png at 384x384 RGBA and
+        assets/{poop-stink1,poop-stink2,poop-fart}.png on larger squares.
 
 Only white connected to the image border is made transparent, so eyes and
-mouths stay white. Alive and dead poop share one trimmed canvas (union of
-both bounding boxes) so the sprite does not jump on death. Items are
-trimmed independently.
+mouths stay white. Items are trimmed independently.
+
+The poop set shares ONE body scale: alive + dead define the body box (union of
+both bounding boxes, as before). The stink frames are cut on a bigger square
+centred on that same body centre, so swapping textures (origin 0.5) never moves
+the body. The fart frame's body sits elsewhere on its source canvas (cloud on
+the left), so its centre is found with a brown-pixel mask and the square is
+centred there; the cloud trails left of the body in the game.
 """
 from collections import deque
 from pathlib import Path
@@ -90,27 +98,86 @@ def scale_to(im: Image.Image, size: int) -> Image.Image:
     return im.resize((size, size), Image.Resampling.LANCZOS)
 
 
-def process_pair(alive_path: Path, dead_path: Path):
-    alive = knock_background(Image.open(alive_path))
-    dead = knock_background(Image.open(dead_path))
+def brown_bbox(im: Image.Image):
+    """Bounding box of the brown body fill (excludes the grey cloud and black lines)."""
+    px = im.load()
+    w, h = im.size
+    l, t, r, b = w, h, -1, -1
+    for y in range(h):
+        for x in range(w):
+            rr, gg, bb, a = px[x, y]
+            if a > 0 and rr > gg > bb and rr - bb > 60:
+                if x < l:
+                    l = x
+                if x > r:
+                    r = x
+                if y < t:
+                    t = y
+                if y > b:
+                    b = y
+    return (l, t, r + 1, b + 1) if r >= 0 else None
+
+
+def crop_centred(im: Image.Image, centre, half: int) -> Image.Image:
+    """Square of side 2*half with `centre` (source px) at the canvas centre."""
+    cx, cy = centre
+    side = 2 * half
+    out = Image.new("RGBA", (side, side), (0, 0, 0, 0))
+    out.paste(im, (half - int(round(cx)), half - int(round(cy))), im)
+    return out
+
+
+def frame_half(bbox, centre, pad=PAD) -> int:
+    """Smallest half-side of a square centred on `centre` that holds bbox."""
+    cx, cy = centre
+    l, t, r, b = bbox
+    return int(max(cx - l, r - cx, cy - t, b - cy)) + pad
+
+
+def process_poop_set():
+    alive = knock_background(Image.open(SRC / "Poop_Emoji_Alive.png"))
+    dead = knock_background(Image.open(SRC / "Poop_Emoji_Dead.png"))
     ba = content_bbox(alive)
     bd = content_bbox(dead)
     if not ba or not bd:
         raise SystemExit("poop source has no visible ink")
-    union = (
-        min(ba[0], bd[0]),
-        min(ba[1], bd[1]),
-        max(ba[2], bd[2]),
-        max(ba[3], bd[3]),
-    )
-    a = crop_to_bbox(alive, union)
-    d = crop_to_bbox(dead, union)
-    side = max(a.width, a.height, d.width, d.height)
-    a = scale_to(fit_on_square(a, side), SIZE)
-    d = scale_to(fit_on_square(d, side), SIZE)
-    a.save(OUT / "poop.png")
-    d.save(OUT / "poop-dead.png")
-    print(f"poop.png: {a.size}  poop-dead.png: {d.size}")
+    union = (min(ba[0], bd[0]), min(ba[1], bd[1]), max(ba[2], bd[2]), max(ba[3], bd[3]))
+    body_centre = ((union[0] + union[2]) / 2, (union[1] + union[3]) / 2)
+    body_half = frame_half(union, body_centre)
+    k = SIZE / (2 * body_half)  # output px per source px for the whole set
+
+    for src_name, dest in (("Poop_Emoji_Alive.png", "poop.png"), ("Poop_Emoji_Dead.png", "poop-dead.png")):
+        im = alive if dest == "poop.png" else dead
+        out = scale_to(crop_centred(im, body_centre, body_half), SIZE)
+        out.save(OUT / dest)
+        print(f"{dest}: {out.size}")
+
+    # Stink frames: same body centre and scale, bigger square for the lines.
+    for src_name, dest in (("Poop_Stink1.png", "poop-stink1.png"), ("Poop_Stink2.png", "poop-stink2.png")):
+        im = knock_background(Image.open(SRC / src_name))
+        bbox = content_bbox(im)
+        if not bbox:
+            raise SystemExit(f"{src_name} has no visible ink")
+        half = frame_half(bbox, body_centre)
+        size = int(round(2 * half * k))
+        size += size % 2
+        out = scale_to(crop_centred(im, body_centre, half), size)
+        out.save(OUT / dest)
+        print(f"{dest}: {out.size}")
+
+    # Fart frame: body is elsewhere on the canvas; centre on the brown body.
+    fart = knock_background(Image.open(SRC / "Poop_Fart.png"))
+    body = brown_bbox(fart)
+    bbox = content_bbox(fart)
+    if not body or not bbox:
+        raise SystemExit("Poop_Fart.png has no visible ink")
+    fart_centre = ((body[0] + body[2]) / 2, (body[1] + body[3]) / 2)
+    half = frame_half(bbox, fart_centre)
+    size = int(round(2 * half * k))
+    size += size % 2
+    out = scale_to(crop_centred(fart, fart_centre, half), size)
+    out.save(OUT / "poop-fart.png")
+    print(f"poop-fart.png: {out.size}  (body centre {tuple(round(v) for v in fart_centre)} of {fart.size})")
 
 
 def process_item(src: Path, dest_name: str):
@@ -127,7 +194,8 @@ def process_item(src: Path, dest_name: str):
 
 
 if __name__ == "__main__":
-    process_pair(SRC / "Poop_Emoji_Alive.png", SRC / "Poop_Emoji_Dead.png")
+    process_poop_set()
     process_item(SRC / "Fiber.png", "fiber.png")
     process_item(SRC / "Good_Bacteria.png", "probiotic.png")
     process_item(SRC / "Bad_Bacteria.png", "bacteria.png")
+    process_item(SRC / "Kidney_Bean.png", "bean.png")
