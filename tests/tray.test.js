@@ -19,7 +19,7 @@ function assertInside(b) {
 test('trayLayout places three buttons ≥44 px apart and inside the field', () => {
   const { buttons } = trayLayout(GAME_WIDTH, GAME_HEIGHT, T);
   assert.equal(buttons.length, 3);
-  assert.deepEqual(buttons.map((b) => b.id), ['pause', 'mute', 'settings']);
+  assert.deepEqual(buttons.map((b) => b.id), ['leaderboard', 'mute', 'settings']);
   for (const b of buttons) assertInside(b);
   for (let i = 0; i < buttons.length - 1; i++) {
     const dx = Math.abs(buttons[i + 1].x - buttons[i].x);
@@ -27,6 +27,27 @@ test('trayLayout places three buttons ≥44 px apart and inside the field', () =
     const dist = Math.hypot(dx, dy);
     assert.ok(dist >= 44, `${buttons[i].id} and ${buttons[i + 1].id} are ${dist} px apart`);
   }
+});
+
+test('pause sits directly above the settings cog, clear of every other slot and the bean button', () => {
+  const layout = trayLayout(GAME_WIDTH, GAME_HEIGHT, T);
+  const { pause, buttons } = layout;
+  const settings = buttons.find((b) => b.id === 'settings');
+  assert.equal(pause.id, 'pause');
+  assert.equal(pause.size, T.trayHitMin);
+  assertInside(pause);
+  assert.equal(pause.x, settings.x, 'same column as settings');
+  assert.ok(pause.y < layout.y, 'above the tray row');
+  assert.ok(pause.y + pause.size / 2 <= settings.y - settings.size / 2, 'does not touch the cog');
+  for (const b of [...buttons, layout.info, layout.lang, layout.feedback]) {
+    const gap = Math.hypot(b.x - pause.x, b.y - pause.y) - (b.size + pause.size) / 2;
+    assert.ok(gap >= 0, `pause overlaps ${b.id} by ${-gap}px`);
+  }
+  const bean = beanButtonLayout(GAME_WIDTH, GAME_HEIGHT, T);
+  const beanGap = Math.hypot(bean.x - pause.x, bean.y - pause.y) - (bean.size + pause.size) / 2;
+  assert.ok(beanGap >= 0, `pause overlaps the bean button by ${-beanGap}px`);
+  assert.equal(trayHit(pause.x, pause.y, layout), 'pause');
+  assert.equal(trayHit(pause.x, pause.y - pause.size / 2 - 2, layout), null);
 });
 
 test('trayLayout places info, language, and feedback on the bottom-left without overlapping the tray', () => {
@@ -55,7 +76,7 @@ test('trayLayout places info, language, and feedback on the bottom-left without 
 
 test('trayHit returns the button id at its centre and null in the gap', () => {
   const layout = trayLayout(GAME_WIDTH, GAME_HEIGHT, T);
-  for (const b of [...layout.buttons, layout.info, layout.lang, layout.feedback]) {
+  for (const b of [...layout.buttons, layout.pause, layout.info, layout.lang, layout.feedback]) {
     assert.equal(trayHit(b.x, b.y, layout), b.id, `centre of ${b.id}`);
   }
   assert.equal(trayHit(GAME_WIDTH / 2, layout.y, layout), null);
@@ -69,7 +90,7 @@ test('bean power button floats above the ground at bottom centre, clear of every
   assert.ok(bean.y + bean.size / 2 <= GAME_HEIGHT - T.groundHeight, 'floats above the ground strip');
   assert.ok(bean.y + bean.size / 2 < tray.y - tray.buttons[0].size / 2, 'well above the tray buttons');
   assert.equal(bean.size, T.trayHitMin);
-  for (const b of [...tray.buttons, tray.info, tray.lang, tray.feedback]) {
+  for (const b of [...tray.buttons, tray.pause, tray.info, tray.lang, tray.feedback]) {
     const gap = Math.hypot(b.x - bean.x, b.y - bean.y) - (b.size + bean.size) / 2;
     assert.ok(gap >= 0, `bean button overlaps ${b.id} by ${-gap}px`);
   }

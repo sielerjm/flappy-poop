@@ -82,6 +82,13 @@ Inspired by Flappy Bird`,
     newTopHint: 'New high score! Press Save / Load User on the home screen to save it.',
     scoresTitle: 'HIGH SCORES',
     scoresEmpty: 'No scores yet',
+    leaderboardTitle: 'LEADERBOARD',
+    leaderboardLoading: 'Loading…',
+    leaderboardOffline: "Can't reach the leaderboard",
+    leaderboardJoin: 'Set a username in Save / Load User to join',
+    leaderboardRank: 'Your best {score} is #{rank} of {total}',
+    leaderboardNotYet: 'Your best is not on the board yet',
+    saveLeaderboardNote: 'Your username and best score are shown on the public leaderboard',
   },
   'zh-Hans': {
     readyTitle: 'FLAPPY POOP',
@@ -157,6 +164,13 @@ Inspired by Flappy Bird`,
     newTopHint: '新高分！在主界面点击“存档 / 载入用户”即可保存。',
     scoresTitle: '最高分',
     scoresEmpty: '暂无分数',
+    leaderboardTitle: '排行榜',
+    leaderboardLoading: '加载中…',
+    leaderboardOffline: '无法连接排行榜',
+    leaderboardJoin: '在“存档 / 载入用户”中设置用户名即可上榜',
+    leaderboardRank: '你的最高分 {score} 排在第 {rank} 名（共 {total} 人）',
+    leaderboardNotYet: '你的最高分尚未上榜',
+    saveLeaderboardNote: '你的用户名和最高分会显示在公开排行榜上',
   },
 };
 
@@ -211,6 +225,14 @@ export function welcomeText(locale, state) {
   const top = Array.isArray(state?.top) ? state.top : [];
   if (top.length === 0) return t(locale, 'saveWelcomeNoScores').replace('{name}', name);
   return t(locale, 'saveWelcome').replace('{name}', name).replace('{scores}', top.map(formatScore).join(' · '));
+}
+
+/** "Your best 🚽 41 is #23 of 150" for a player who is not on the board. */
+export function rankText(locale, info) {
+  return t(locale, 'leaderboardRank')
+    .replace('{score}', formatScore({ score: info?.score ?? 0, toilet: Boolean(info?.toilet) }))
+    .replace('{rank}', String(info?.rank ?? 0))
+    .replace('{total}', String(info?.total ?? 0));
 }
 
 /** Toggle label like "Sound   ON". */

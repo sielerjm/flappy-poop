@@ -13,7 +13,7 @@ import {
   catalogFor,
   howToItems,
   pauseBannerText,
-  metaFontSize,
+  metaFontSize,  rankText,
 } from '../src/i18n.js';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -33,6 +33,7 @@ const SCENE_DENYLIST = [
   'HOW TO PLAY',
   'Save / Load User',
   'HIGH SCORES',
+  'LEADERBOARD',
 ];
 
 const BANNED_IMPORTS = ['ABOUT_TEXT', 'HOW_TO_PLAY_TEXT', 'PAUSE_BANNER_TEXT', 'HOW_TO_ITEMS'];
@@ -142,4 +143,13 @@ test('both About catalogs keep untranslated brand and credit tokens', () => {
     assert.match(body, /fart sound effect \(reed\)/);
     assert.match(body, /Tori Schummer/);
   }
+});
+
+test('rankText fills score (with 🚽 on toilet runs), rank and total in both locales', () => {
+  const info = { rank: 23, total: 150, score: 41, toilet: true };
+  assert.equal(rankText('en', info), 'Your best 🚽 41 is #23 of 150');
+  assert.equal(rankText('en', { ...info, toilet: false }), 'Your best 41 is #23 of 150');
+  const zh = rankText('zh-Hans', info);
+  assert.ok(zh.includes('🚽 41') && zh.includes('23') && zh.includes('150'), zh);
+  assert.ok(!zh.includes('{'), 'no placeholder left over');
 });

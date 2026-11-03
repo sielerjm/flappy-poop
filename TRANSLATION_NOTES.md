@@ -28,6 +28,7 @@ formal medical language.
 - **Silent mode** = iPhone **hardware** ringer/silent switch → **静音模式** (not the in-game mute toggle).
 - **Toilet mode** (如厕模式) = the ready-screen switch; scores from such runs carry a 🚽 (not translated).
 - **User code** / save code (用户码 / 存档码) = the `fp1.…` string players copy between devices. The home-screen button is **Save / Load User**; the panel labels are **Username**, **Save user code**, **Load user code**, and a **Save** button at the bottom that stores the username. `{name}` and `{scores}` are placeholders filled at runtime; keep them verbatim.
+- **Leaderboard** (排行榜) = the shared online Top 10 behind the 🏆 tray button. Only players with a username are on it; `{score}` may carry a 🚽, `{rank}` / `{total}` are numbers. Keep the placeholders verbatim.
 
 ## Glossary (items)
 
@@ -117,6 +118,13 @@ Short, playful, clear. Fit a 720×1280 logical field; How to play / About body w
 | newTopHint | New high score! Press Save / Load User on the home screen to save it. | 新高分！在主界面点击“存档 / 载入用户”即可保存。 |
 | scoresTitle | HIGH SCORES | 最高分 |
 | scoresEmpty | No scores yet | 暂无分数 |
+| leaderboardTitle | LEADERBOARD | 排行榜 |
+| leaderboardLoading | Loading… | 加载中… |
+| leaderboardOffline | Can't reach the leaderboard | 无法连接排行榜 |
+| leaderboardJoin | Set a username in Save / Load User to join | 在“存档 / 载入用户”中设置用户名即可上榜 |
+| leaderboardRank | Your best {score} is #{rank} of {total} | 你的最高分 {score} 排在第 {rank} 名（共 {total} 人） |
+| leaderboardNotYet | Your best is not on the board yet | 你的最高分尚未上榜 |
+| saveLeaderboardNote | Your username and best score are shown on the public leaderboard | 你的用户名和最高分会显示在公开排行榜上 |
 
 ### aboutCredits (English)
 

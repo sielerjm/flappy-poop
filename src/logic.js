@@ -470,15 +470,16 @@ export function createEffects(t) {
 }
 
 /**
- * Tray button centres: pause / mute / settings along the bottom-right, plus
- * info, language, and feedback at the bottom-left. Hit boxes are trayHitMin
- * square and at least that far apart, all inside the field.
+ * Tray button centres: leaderboard / mute / settings along the bottom-right,
+ * pause directly above the settings cog (reachable mid-run without covering
+ * the play area), plus info, language, and feedback at the bottom-left. Hit
+ * boxes are trayHitMin square and at least that far apart, all inside the field.
  */
 export function trayLayout(width, height, t) {
   const size = t.trayHitMin;
   const spacing = size + 16;
   const y = height - t.trayHeight / 2;
-  const ids = ['pause', 'mute', 'settings'];
+  const ids = ['leaderboard', 'mute', 'settings'];
   const right = width - size / 2 - 16;
   const buttons = ids.map((id, i) => ({
     id,
@@ -486,10 +487,11 @@ export function trayLayout(width, height, t) {
     y,
     size,
   }));
+  const pause = { id: 'pause', x: right, y: y - spacing, size };
   const info = { id: 'info', x: size / 2 + 16, y, size };
   const lang = { id: 'lang', x: info.x + spacing, y, size };
   const feedback = { id: 'feedback', x: lang.x + spacing, y, size };
-  return { buttons, info, lang, feedback, y, height: t.trayHeight };
+  return { buttons, pause, info, lang, feedback, y, height: t.trayHeight };
 }
 
 /**
@@ -517,6 +519,7 @@ export function beanButtonHit(x, y, layout) {
  */
 export function trayHit(x, y, layout) {
   const targets = [...(layout.buttons ?? [])];
+  if (layout.pause) targets.push(layout.pause);
   if (layout.info) targets.push(layout.info);
   if (layout.lang) targets.push(layout.lang);
   if (layout.feedback) targets.push(layout.feedback);
@@ -622,11 +625,11 @@ export function overlayOutsideHit(x, y, panel) {
  * result; this function is Phaser-free so the matrix can be tested in Node.
  *
  * @param {'ready'|'playing'|'paused'|'dead'} state
- * @param {null|'settings'|'about'|'howto'|'language'|'feedback'|'scores'} overlay topmost overlay (pause is a state)
+ * @param {null|'settings'|'about'|'howto'|'language'|'feedback'|'leaderboard'|'scores'} overlay topmost overlay (pause is a state)
  * @param {boolean} stackedSettings true when About sits on top of Settings
  * @param {boolean} stackedAbout true when HowTo sits on top of About
  * @param {boolean} stackedUnder true when Feedback sits on top of another overlay
- * @param {'pause'|'mute'|'settings'|'info'|'howto'|'lang'|'feedback'|'scores'|'tap'|'esc'|'close'} input
+ * @param {'pause'|'mute'|'settings'|'info'|'howto'|'lang'|'feedback'|'leaderboard'|'scores'|'tap'|'esc'|'close'} input
  * @param {boolean} resumeLocked true during pauseResumeLockoutMs after overlay close
  * @returns {{ do: string, pause?: boolean, armResumeLockout?: boolean, closeAbout?: boolean }}
  */
@@ -668,6 +671,7 @@ export function chromeIntent({
   if (input === 'lang') return { do: 'openLanguage', pause: state === 'playing' };
   if (input === 'feedback') return { do: 'openFeedback', pause: state === 'playing' };
   if (input === 'scores') return { do: 'openScores', pause: state === 'playing' };
+  if (input === 'leaderboard') return { do: 'openLeaderboard', pause: state === 'playing' };
   if (input === 'tap') {
     if (state === 'playing') return { do: 'flap' };
     if (state === 'paused') return resumeLocked ? { do: 'ignore' } : { do: 'resume' };
