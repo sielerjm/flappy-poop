@@ -1,6 +1,6 @@
 # Flappy Poop 💩
 
-A poop emoji flaps through the gut, dodging pink intestinal folds. A Flappy Bird clone for phone browsers, built on [Phaser 4](https://phaser.io) with no build step. Version **0.2.8**. English and Simplified Chinese in-game.
+A poop emoji flaps through the gut, dodging pink intestinal folds. A Flappy Bird clone for phone browsers, built on [Phaser 4](https://phaser.io) with no build step. Version **0.3.0**. English and Simplified Chinese in-game.
 
 **Play:** push this repo to GitHub, enable Pages (Settings → Pages → Deploy from branch → `main` / root), then open `https://<you>.github.io/<repo>/`. Add it to your home screen for a full-screen, app-like launch.
 
@@ -28,7 +28,8 @@ On iPhone, Silent mode mutes the game — turn it off to hear sound. The pause b
 - **Bottom-right tray** — pause, mute/unmute, settings. Tray taps never flap, and on the game-over screen they never retry.
 - **P** or **Esc** — pause / resume (during a run). Ignored while Settings, About, How to play, Language, or Feedback is open; Esc then closes the top overlay.
 - **M** — mute / unmute. Persists across reload. Still works while an overlay is open.
-- **S** — settings (sound, haptics, About). Music is listed as coming soon. Opening Settings or About mid-run pauses; closing them leaves the pause banner until a new tap or Space.
+- **Save code** (Settings → Save code) — set a name (1–12 characters), then Copy your `fp1.…` code and paste it into Load on another phone or browser to carry your name and top 3 scores across. Codes are signed, so an edited code is refused; loading merges scores (best 3 kept) and the pasted name wins. The ready screen shows `name · 41 · 37 · 30` once a name is set, and the game-over panel reminds you to export after a new top-3 run.
+- **S** — settings (sound, haptics, Save code, About). Music is listed as coming soon. Opening Settings or About mid-run pauses; closing them leaves the pause banner until a new tap or Space.
 - **I** — About.
 - **F** — Feedback (bug / feature → GitHub).
 - **L** — language.
@@ -61,14 +62,16 @@ src/
   main.js               Phaser.Game config: 720x1280, Scale.FIT, roundPixels, [Boot, Play, Over, Settings, About, HowTo, Language, Feedback]
   config.js             GAME_WIDTH/HEIGHT and TUNING
   logic.js              pure functions: rng, gaps, scoring, items, settings store, tray layout, issueUrl, chromeIntent
+  save.js               save codes: fp1.<payload>.<sig> export / import, local top-3 store, merge (Node-testable)
   i18n.js               en / zh-Hans catalog + t() / initialLocale
   sound.js              WebAudio blips + setMuted (also mutes the Phaser fart sample)
   ui/tray.js            Phaser wrapper for pause / mute / settings and bottom-left (i) / 🌐 / 💬
+  ui/savePanel.js       DOM save-code panel (name, Copy, Load) opened from Settings
   scenes/
     Boot.js             preloads images + fart.mp3
     Play.js             ready -> playing -> paused -> dead; items; tray; locale
-    Over.js             game-over panel; tray mute still works
-    Settings.js         sound / haptics overlay; About link
+    Over.js             game-over panel; new-top-3 export hint; tray mute still works
+    Settings.js         sound / haptics overlay; Save code and About links
     About.js            credits, author, LLM note, How to play + feedback links, last-updated
     HowTo.js            How to play overlay (ready screen and About link); feedback link
     Language.js         English / 简体中文 picker
@@ -82,7 +85,7 @@ tools/make_placeholders.py   pipe / bg / ground / icons only (needs Pillow)
 tools/process_art.py         crop Michael's sources into contract PNGs
 tools/serve.py               npm start: bind 0.0.0.0:8000, print phone URL
 tests/                  node --test: html assets logic state difficulty store smoke
-                        settings sound tray items tuning about howto feedback overlay hitbox i18n chrome serve
+                        settings sound tray items tuning about howto feedback overlay hitbox i18n chrome serve save
 .claude/plans/          checkpointed build plans
 ```
 

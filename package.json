@@ -1,6 +1,6 @@
 {
   "name": "flappy-poop",
-  "version": "0.2.8",
+  "version": "0.3.0",
   "description": "A poop emoji flaps through the gut dodging pink intestinal folds. Flappy Bird clone for phone browsers, built on Phaser 4.",
   "type": "module",
   "private": true,

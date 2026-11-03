@@ -11,7 +11,9 @@ the gut dodging pink intestinal-fold pipes. One point per pipe pair passed; fibe
 is +1, bad bacteria is −2 (floor 0), and a probiotic blocks one bacteria hit for
 up to 5 pipes. Hit a pipe, the ceiling, or the floor and the run ends (dead-poop
 face). Best score and settings are kept in `localStorage`. Difficulty ramps
-(faster pipes, narrower gap) until score 30, then stays flat.
+(faster pipes, narrower gap) until score 30, then stays flat. A signed
+**save code** (`fp1.<payload>.<sig>`) carries a player's name and top 3 scores
+between browsers via copy/paste; spec in `.claude/plans/Flappy Poop — Save Code Spec.md`.
 
 It is a side project by Michael Sieler (gut-microbiome researcher), hence the
 theme. It is deliberately small: plain ES modules, no bundler, no npm
@@ -47,9 +49,16 @@ src/
                             helper, trayLayout, trayHit, howToLayout, howToHit,
                             LAST_UPDATED, issueUrl, openExternalUrl, chromeIntent,
                             overlayOutsideHit, scaledCircleBody. Fully unit-tested.
+  save.js                   Save codes, NO Phaser/DOM: loadLocal / saveLocal
+                            (flappyPoop.save, schema 1), recordScore, isNewTop,
+                            merge, summaryLine, exportCode / importCode (HMAC-SHA256
+                            via Web Crypto, 16-byte tag, base64url), PARSERS per
+                            wire version, SECRET constant (permanent). Fully
+                            unit-tested.
   i18n.js                   en / zh-Hans string catalog, t(), initialLocale,
-                            howToItems, pauseBannerText, metaFontSize. Player copy
-                            lives here (not in logic.js). See TRANSLATION_NOTES.md.
+                            howToItems, pauseBannerText, metaFontSize, welcomeText.
+                            Player copy lives here (not in logic.js). See
+                            TRANSLATION_NOTES.md.
   sound.js                  WebAudio synth blips + setMuted/isMuted/attachGame.
                             setMuted also sets game.sound.mute (the fart MP3).
                             unlock() must run from a user gesture: create,
@@ -60,6 +69,11 @@ src/
                             plus bottom-left info, language (🌐), and feedback (💬).
                             Chrome taps use trayHit() in Play/Over, not GameObject
                             pointer handlers.
+    savePanel.js            Plain DOM panel over the canvas (name field, read-only
+                            code + Copy, Load field + status). Opened from Settings.
+                            Disables game.input.keyboard while open so typing does
+                            not flap. Copy calls clipboard.writeText inside the tap
+                            handler (iOS); falls back to selecting the field.
   scenes/
     Boot.js                 preload() gameplay PNGs + fart.mp3, then start Play.
     Play.js                 State machine: 'ready' -> 'playing' -> 'paused'/'dead'.
@@ -70,11 +84,17 @@ src/
                             About, HowTo, Language, or Feedback while playing pauses;
                             closing them does not resume. Unpause applies flapVelocity
                             as a recovery bounce. Pause banner is two centered lines
-                            from i18n. Locale via getLocale / applyLocale.
+                            from i18n. Locale via getLocale / applyLocale. Holds the
+                            SaveState (loadLocal on create, seeded once from the
+                            legacy best); die() records the score and passes newTop
+                            to Over; saveLine under the ready hint shows
+                            summaryLine(); getSaveState / setSaveState for the panel.
     Over.js                 Game-over panel (score, best, "tap to retry") with a
-                            tap lockout and its own tray (mute still works).
+                            tap lockout and its own tray (mute still works). Shows
+                            newTopHint when the run entered the top 3.
     Settings.js             Overlay: sound, haptics (Android only), music coming
-                            soon, About link, version. Tap outside the panel
+                            soon, Save code link (opens the DOM panel), About
+                            link, version. Tap outside the panel
                             closes (overlayOutsideHit), same as X.
     About.js                Overlay: author, LLM note, engine/art/sound credits,
                             How to play + feedback links, LAST_UPDATED under the
@@ -123,6 +143,9 @@ tests/                      node --test, zero deps. Each file is self-describing
   hitbox.test.js            scaledCircleBody source radius/offset for 2x and 4x
   chrome.test.js            chromeIntent matrix across state x overlay x input
   smoke.test.js             logic.js imports and exports VERSION
+  save.test.js              save codes: spec rows 1-10 (round trip, tamper, relabel,
+                            v2 migration, merge, name rules, wrapped paste, empty
+                            scores, throwing storage) + helper coverage
   serve.test.js             npm start points at tools/serve.py; bind + URL print
 
 .github/ISSUE_TEMPLATE/     GitHub issue forms opened from Feedback (bug.yml,
@@ -143,8 +166,9 @@ tools/
 
 ## Rules the code depends on
 
-1. **Phaser-free logic stays in `src/logic.js`.** Anything that can be a pure
-   function (maths, state decisions, storage adapters) goes there with a test.
+1. **Phaser-free logic stays in `src/logic.js`** (and save-code logic in
+   `src/save.js`). Anything that can be a pure function (maths, state
+   decisions, storage adapters) goes there with a test.
    Scenes in `src/scenes/` and `src/ui/` are thin wrappers that call it. This is
    what makes the game testable in Node, where Phaser cannot run.
 2. **Tune numbers in `src/config.js`, never inline.** Scenes import `TUNING as T`.
@@ -169,8 +193,9 @@ tools/
    can show Chinese must set `useAdvancedWrap: true`. Test on a real phone
    when you touch input, scaling, audio, or locale.
 7. **Storage can throw.** Private-mode Safari and blocked storage throw on
-   `localStorage` access. Go through `createBestStore()` or
-   `createSettingsStore()`; never touch `localStorage` directly in scenes.
+   `localStorage` access. Go through `createBestStore()`,
+   `createSettingsStore()`, or `loadLocal()` / `saveLocal()` from `save.js`;
+   never touch `localStorage` directly in scenes.
 8. **Player-facing copy is multi-locale.** Change UI strings only in
    `src/i18n.js` for **every** locale (`en` and `zh-Hans`), update matching
    rows in `TRANSLATION_NOTES.md`, and do not hardcode English in scenes.
@@ -207,7 +232,10 @@ Commits so far follow `type(scope): summary` (`feat`, `docs`, `chore`); keep it.
   plus a `CREDITS.md` row with a URL plus `this.load.audio()` in Boot.
 - New scene → `src/scenes/`, register in the `scene:` array in `src/main.js`.
 - New UI chrome → `src/ui/` (Phaser wrapper) with any pure layout helper in
-  `src/logic.js`.
+  `src/logic.js`. Text input belongs in a DOM panel like `src/ui/savePanel.js`,
+  not Phaser UI.
+- Save-code wire format change → bump `CURRENT_VERSION` in `src/save.js`, add
+  `parseVN` to `PARSERS`, never delete an old parser, never change `SECRET`.
 - New UI string → both locales in `src/i18n.js` + a row in `TRANSLATION_NOTES.md`
   (+ allowlist in `tests/i18n.test.js` only if intentionally identical). Scenes
   call `t(locale, key)`; never hardcode player English.
