@@ -95,21 +95,23 @@ src/
                             SaveState (loadLocal on create, seeded once from the
                             legacy best); die() records the score and passes newTop
                             to Over. Ready screen: How to play / tap to flap /
-                            Save / Load User buttons plus a profileLine() text;
+                            Save / Load User / profileLine() buttons (profile
+                            hidden until a username is set);
                             readyHit() routes taps (howto, start, saveload, profile
                             → Scores). getSaveState / setSaveState for the panel.
-    Over.js                 Game-over panel (score, best, "tap to retry") with a
+    Over.js                 Game-over panel (score, best, "tap to go home") with a
                             tap lockout and its own tray (mute still works). Shows
                             newTopHint when the run entered the top 6.
-    Settings.js             Overlay: sound, haptics (Android only), music coming
-                            soon, About link, version. Tap outside the panel
+    Settings.js             Overlay: sound, haptics (Android only), About link,
+                            version. Tap outside the panel
                             closes (overlayOutsideHit), same as X.
     About.js                Overlay: author, LLM note, engine/art/sound credits,
                             How to play + feedback links, LAST_UPDATED under the
                             version. Tap outside the panel closes. Wrapped text uses
                             useAdvancedWrap for CJK.
-    HowTo.js                Overlay: flap/pipe rules plus fiber / probiotic /
-                            bacteria sprites and a feedback link. Ready-screen How
+    HowTo.js                Overlay: flap rules plus pipe / fiber / probiotic /
+                            bacteria rows (howToItems, pipe first; the pipe icon
+                            is a cropped cap slice) and a feedback link. Ready-screen How
                             to play uses howToHit() so it does not start a run.
                             Opened from About, X/Esc/tap-outside closes HowTo and
                             About together. useAdvancedWrap on body text.

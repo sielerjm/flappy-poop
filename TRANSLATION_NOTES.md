@@ -32,11 +32,12 @@ formal medical language.
 
 | English | Simplified Chinese |
 |---|---|
+| Pipe | 管道 |
 | Fiber | 纤维 |
 | Probiotic | 益生菌 |
 | Bad bacteria | 有害细菌 |
 
-Keep these three consistent everywhere (How to play rows, future copy).
+Keep these consistent everywhere (How to play rows, future copy).
 
 ## Tone
 
@@ -55,14 +56,13 @@ Short, playful, clear. Fit a 720×1280 logical field; How to play / About body w
 | gameOver | GAME OVER | 游戏结束 |
 | scoreLabel | SCORE | 得分 |
 | bestLabel | BEST | 最高 |
-| tapToRetry | tap to retry | 点击重试 |
+| tapToHome | tap to go home | 点击返回主界面 |
 | settingsTitle | SETTINGS | 设置 |
 | sound | Sound | 声音 |
 | haptics | Haptics | 震动 |
 | on | ON | 开 |
 | off | OFF | 关 |
 | hapticsHint | Android only — iPhone has no vibrate | 仅限 Android——iPhone 不支持震动 |
-| musicComingSoon | Music   coming soon | 音乐   即将推出 |
 | aboutLink | About | 关于 |
 | aboutTitle | ABOUT | 关于 |
 | aboutName | Flappy Poop | Flappy Poop |
@@ -71,11 +71,13 @@ Short, playful, clear. Fit a 720×1280 logical field; How to play / About body w
 | aboutCreditsTitle | Credits | 致谢 |
 | aboutCredits | *(see block below)* | *(see block below)* |
 | howToTitle | HOW TO PLAY | 玩法说明 |
-| howToBody | Tap to flap. Pass a pipe pair for a point. Hit a pipe, the ceiling, or the floor and the run ends. On iPhone, Silent mode mutes the game — turn it off to hear sound. | 点击起飞。穿过一对管道得一分。撞到管道、天花板或地面则本局结束。在 iPhone 上，静音模式会让游戏无声——关闭静音即可听到声音。 |
+| howToBody | Tap to flap. Hit a pipe, the ceiling, or the floor and the run ends. On iPhone, Silent mode mutes the game — turn it off to hear sound. | 点击起飞。撞到管道、天花板或地面则本局结束。在 iPhone 上，静音模式会让游戏无声——关闭静音即可听到声音。 |
+| itemPipeName | Pipe | 管道 |
+| itemPipeDetail | This is a pipe. Dodge the pipes for as long as possible — each pair you pass is a point. | 这是管道。尽量长时间躲开管道，每穿过一对得一分。 |
 | itemFiberName | Fiber | 纤维 |
 | itemFiberDetail | +1 point | +1 分 |
 | itemProbioticName | Probiotic | 益生菌 |
-| itemProbioticDetail | Blocks one bacteria hit for 5 pipes | 抵挡一次有害细菌攻击，持续 5 道管道 |
+| itemProbioticDetail | Blocks one bad bacteria hit up to 5 pipes | 抵挡一次有害细菌攻击，最多持续 5 道管道 |
 | itemBacteriaName | Bad bacteria | 有害细菌 |
 | itemBacteriaDetail | −2 points (score never below 0). Does not kill. | −2 分（分数不低于 0）。不会致死。 |
 | updatedPrefix | Updated | 更新于 |
@@ -103,7 +105,7 @@ Short, playful, clear. Fit a 720×1280 logical field; How to play / About body w
 | saveNameRequired | Enter a username first (1–12 characters) | 请先输入用户名（1–12 个字符） |
 | saveErrorDamaged | Save code is damaged or was edited | 存档码已损坏或被修改 |
 | saveErrorUnrecognised | Unrecognised save code | 无法识别的存档码 |
-| newTopHint | New high score — export your save code to keep it. | 新高分——导出存档码即可保存。 |
+| newTopHint | New high score! Press Save / Load User on the home screen to save it. | 新高分！在主界面点击“存档 / 载入用户”即可保存。 |
 | scoresTitle | HIGH SCORES | 最高分 |
 | scoresEmpty | No scores yet | 暂无分数 |
 
