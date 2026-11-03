@@ -94,7 +94,9 @@ src/
                             that fires on pointerup only when moved < 12 px. Used
                             by HowTo and About.
     savePanel.js            Plain DOM panel over the canvas (Username field,
-                            read-only user code + Copy, Load field + status).
+                            read-only user code + Copy, Load field, a full-width
+                            Save button that stores the username and confirms
+                            "Username saved", status line).
                             Opened from the ready-screen Save / Load User button.
                             Disables game.input.keyboard while open so typing does
                             not flap. Copy calls clipboard.writeText inside the tap

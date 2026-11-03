@@ -36,6 +36,8 @@ const CSS = `
   -webkit-user-select: text; user-select: text; }
 #${PANEL_ID} .status.error { color: #ff8da8; }
 #${PANEL_ID} .status.ok { color: #9fe8b4; }
+#${PANEL_ID} .save-row { margin-top: 16px; }
+#${PANEL_ID} .save-row button { flex: 1; padding: 12px 14px; font-size: 18px; }
 `;
 
 let dom = null;
@@ -69,6 +71,7 @@ function build() {
   const loadLabel = h('label', { for: 'save-load' });
   const load = h('input', { id: 'save-load', type: 'text', autocomplete: 'off', autocapitalize: 'off', spellcheck: 'false' });
   const loadBtn = h('button', { type: 'button', id: 'save-load-btn' });
+  const saveBtn = h('button', { type: 'button', id: 'save-save-btn' });
   const status = h('p', { class: 'status', id: 'save-status' });
   const close = h('button', { type: 'button', class: 'close', 'aria-label': 'close' }, '✕');
 
@@ -84,6 +87,7 @@ function build() {
     h('div', { class: 'row' }, code, copy),
     loadLabel,
     h('div', { class: 'row' }, load, loadBtn),
+    h('div', { class: 'row save-row' }, saveBtn),
     status,
   );
   const root = h('div', { id: PANEL_ID, role: 'dialog', 'aria-modal': 'true', hidden: true }, card);
@@ -99,13 +103,17 @@ function build() {
   });
   name.addEventListener('change', () => onNameChange());
   name.addEventListener('blur', () => onNameChange());
+  name.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') onSave();
+  });
+  saveBtn.addEventListener('click', () => onSave());
   copy.addEventListener('click', () => onCopy());
   loadBtn.addEventListener('click', () => onLoad());
   load.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') onLoad();
   });
 
-  dom = { root, title, intro, nameLabel, name, codeLabel, code, copy, loadLabel, load, loadBtn, status };
+  dom = { root, title, intro, nameLabel, name, codeLabel, code, copy, loadLabel, load, loadBtn, saveBtn, status };
 }
 
 function applyLocale(locale) {
@@ -118,6 +126,7 @@ function applyLocale(locale) {
   dom.loadLabel.textContent = t(locale, 'saveLoadLabel');
   dom.load.placeholder = t(locale, 'saveLoadPlaceholder');
   dom.loadBtn.textContent = t(locale, 'saveLoad');
+  dom.saveBtn.textContent = t(locale, 'saveSave');
 }
 
 function setStatus(text, kind = '') {
@@ -161,18 +170,37 @@ async function refreshCode() {
   dom.copy.disabled = false;
 }
 
+/**
+ * Persist the typed username. Returns true when a valid name is stored (or was
+ * already stored); false (with the error shown) when it is empty or too long.
+ * Blur / change save silently; the Save button adds a confirmation on top.
+ */
 function onNameChange() {
   const state = getState();
   const { ok, name } = validateName(dom.name.value);
-  if (!ok && name.length > 0) {
-    setStatus(t(ctx.locale, 'saveNameRequired'), 'error');
-    return;
+  if (!ok) {
+    if (name.length > 0) setStatus(t(ctx.locale, 'saveNameRequired'), 'error');
+    return false;
   }
-  if (name === state.name) return;
+  if (name === state.name) return true;
   setState(saveLocal({ ...state, name }));
   dom.name.value = name;
   setStatus('');
   refreshCode();
+  return true;
+}
+
+/** Save button: store the username and say so, so the player knows it stuck. */
+function onSave() {
+  const { ok } = validateName(dom.name.value);
+  if (!ok) {
+    setStatus(t(ctx.locale, 'saveNameRequired'), 'error');
+    dom.name.focus();
+    return;
+  }
+  onNameChange();
+  setStatus(t(ctx.locale, 'saveNameSaved'), 'ok');
+  dom.name.blur();
 }
 
 function onCopy() {
