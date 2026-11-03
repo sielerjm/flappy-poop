@@ -38,6 +38,7 @@ const CSS = `
 #${PANEL_ID} .status.ok { color: #9fe8b4; }
 #${PANEL_ID} .save-row { margin-top: 16px; }
 #${PANEL_ID} .save-row button { flex: 1; padding: 12px 14px; font-size: 18px; }
+#${PANEL_ID} .note { margin: 2px 0 10px; font-size: 14px; opacity: 0.75; }
 `;
 
 let dom = null;
@@ -65,6 +66,7 @@ function build() {
   const intro = h('p', { class: 'intro' });
   const nameLabel = h('label', { for: 'save-name' });
   const name = h('input', { id: 'save-name', type: 'text', maxlength: '16', autocomplete: 'off', autocapitalize: 'off', spellcheck: 'false' });
+  const note = h('p', { class: 'note' }); // the username is public: it goes on the leaderboard
   const codeLabel = h('label', { for: 'save-code' });
   const code = h('input', { id: 'save-code', type: 'text', readonly: true, spellcheck: 'false' });
   const copy = h('button', { type: 'button', id: 'save-copy' });
@@ -83,6 +85,7 @@ function build() {
     intro,
     nameLabel,
     h('div', { class: 'row' }, name),
+    note,
     codeLabel,
     h('div', { class: 'row' }, code, copy),
     loadLabel,
@@ -113,7 +116,7 @@ function build() {
     if (e.key === 'Enter') onLoad();
   });
 
-  dom = { root, title, intro, nameLabel, name, codeLabel, code, copy, loadLabel, load, loadBtn, saveBtn, status };
+  dom = { root, title, intro, nameLabel, name, note, codeLabel, code, copy, loadLabel, load, loadBtn, saveBtn, status };
 }
 
 function applyLocale(locale) {
@@ -121,6 +124,7 @@ function applyLocale(locale) {
   dom.intro.textContent = t(locale, 'saveIntro');
   dom.nameLabel.textContent = t(locale, 'saveNameLabel');
   dom.name.placeholder = t(locale, 'saveNamePlaceholder');
+  dom.note.textContent = t(locale, 'saveLeaderboardNote');
   dom.codeLabel.textContent = t(locale, 'saveYourCode');
   dom.copy.textContent = t(locale, 'saveCopy');
   dom.loadLabel.textContent = t(locale, 'saveLoadLabel');

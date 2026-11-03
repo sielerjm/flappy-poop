@@ -197,6 +197,7 @@ export class Play extends Phaser.Scene {
     this.input.keyboard?.on('keydown-I', () => this.handleChrome('info'));
     this.input.keyboard?.on('keydown-L', () => this.handleChrome('lang'));
     this.input.keyboard?.on('keydown-F', () => this.handleChrome('feedback'));
+    this.input.keyboard?.on('keydown-T', () => this.handleChrome('leaderboard'));
     this.input.keyboard?.on('keydown-B', () => this.activatePower()); // no-op unless the bean power is charged
 
     this.onHidden = () => {
@@ -363,6 +364,7 @@ export class Play extends Phaser.Scene {
     const settings = this.scene.isActive('Settings');
     const language = this.scene.isActive('Language');
     const feedback = this.scene.isActive('Feedback');
+    const leaderboard = this.scene.isActive('Leaderboard');
     const scores = this.scene.isActive('Scores');
     return {
       state: this.state,
@@ -376,12 +378,14 @@ export class Play extends Phaser.Scene {
               ? 'about'
               : settings
                 ? 'settings'
-                : scores
-                  ? 'scores'
-                  : null,
+                : leaderboard
+                  ? 'leaderboard'
+                  : scores
+                    ? 'scores'
+                    : null,
       stackedSettings: about && settings,
       stackedAbout: howto && about,
-      stackedUnder: feedback && (about || howto || settings || language || scores),
+      stackedUnder: feedback && (about || howto || settings || language || leaderboard || scores),
       input,
       resumeLocked: this.time.now < this.flapLockedUntil,
     };
@@ -431,6 +435,11 @@ export class Play extends Phaser.Scene {
         if (result.pause) this.pausePlay();
         if (!this.scene.isActive('Scores')) this.scene.launch('Scores');
         this.scene.bringToTop('Scores');
+        break;
+      case 'openLeaderboard':
+        if (result.pause) this.pausePlay();
+        if (!this.scene.isActive('Leaderboard')) this.scene.launch('Leaderboard');
+        this.scene.bringToTop('Leaderboard');
         break;
       case 'start':
         this.launch();

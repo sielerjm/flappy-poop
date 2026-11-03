@@ -9,18 +9,20 @@ const LABELS = {
   info: 'i',
   lang: '🌐',
   feedback: '💬',
+  leaderboard: '🏆',
 };
 
 /**
- * Phaser-only tray. Layout maths live in trayLayout(); chrome hits go through
+ * Phaser-only tray: 🏆 / mute / ⚙ bottom-right, ⏸ above the cog, i / 🌐 / 💬
+ * bottom-left. Layout maths live in trayLayout(); chrome hits go through
  * trayHit() in the scene so they do not depend on Phaser hit-area origin.
  */
 export function createTray(scene, { muted }) {
-  const { buttons, info, lang, feedback } = trayLayout(GAME_WIDTH, GAME_HEIGHT, T);
+  const { buttons, pause, info, lang, feedback } = trayLayout(GAME_WIDTH, GAME_HEIGHT, T);
   const nodes = [];
   let muteLabel;
 
-  for (const b of [...buttons, info, lang, feedback]) {
+  for (const b of [...buttons, pause, info, lang, feedback]) {
     const r = b.size / 2;
     const circle = scene.add.circle(b.x, b.y, r, 0x1a0b14, 1).setStrokeStyle(4, 0xe85e96).setDepth(30).setAlpha(T.trayAlpha);
     const label = scene.add

@@ -8,6 +8,7 @@ import { HowTo } from './scenes/HowTo.js';
 import { Language } from './scenes/Language.js';
 import { Feedback } from './scenes/Feedback.js';
 import { Scores } from './scenes/Scores.js';
+import { Leaderboard } from './scenes/Leaderboard.js';
 
 // Phaser is loaded as a global from the <script> tag in index.html.
 const game = new Phaser.Game({
@@ -30,7 +31,7 @@ const game = new Phaser.Game({
   input: {
     activePointers: 1,
   },
-  scene: [Boot, Play, Over, Settings, About, HowTo, Language, Feedback, Scores],
+  scene: [Boot, Play, Over, Settings, About, HowTo, Language, Feedback, Scores, Leaderboard],
 });
 
 // Debug / automation handle (headless drivers reach scenes through it). No gameplay effect.
