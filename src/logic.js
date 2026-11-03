@@ -4,10 +4,10 @@
 
 import { isLocale, DEFAULT_LOCALE } from './i18n.js';
 
-export const VERSION = '0.5.0';
+export const VERSION = '0.5.1';
 
 /** Player-facing stamp on the About overlay. Bump with VERSION. */
-export const LAST_UPDATED = '3 Nov 2026, 15:48';
+export const LAST_UPDATED = '3 Nov 2026, 15:58';
 
 const ISSUE_BASE = 'https://github.com/sielerjm/flappy-poop/issues/new';
 
@@ -237,9 +237,15 @@ export function beanSpawnX(width, pipeWidth, pipeSpeed, spawnEveryMs) {
   return width + pipeWidth + pipeSpacing(pipeSpeed, spawnEveryMs) / 2;
 }
 
-/** Vertical travel limits for a bean's centre. */
-export function beanBounds({ gameHeight, groundHeight, gapMargin, radius }) {
-  return { minY: gapMargin + radius, maxY: gameHeight - groundHeight - gapMargin - radius };
+/**
+ * Vertical travel limits for a bean's centre: the middle `frac` of the playable
+ * height (ceiling to ground), so the bean never dips into the top or bottom band.
+ */
+export function beanBounds({ gameHeight, groundHeight, radius, frac }) {
+  const playH = gameHeight - groundHeight;
+  const minY = Math.max(radius, playH * (0.5 - frac / 2));
+  const maxY = Math.min(playH - radius, playH * (0.5 + frac / 2));
+  return { minY, maxY };
 }
 
 /** Bean centre y at elapsedMs: a full top-to-bottom sine bob with a per-bean phase. */
@@ -408,23 +414,23 @@ export function scaledCircleBody(frameSize, displayScale, logicalRadius) {
 
 /**
  * Ready-screen layout, top to bottom and centred: title, the bobbing poop
- * (its ready spot; launch() slides it to poopX), "tap to flap" (start), then
- * How to play, Save / Load User, and the name · best profile button. Buttons
- * are at least trayHitMin tall; start sits clear of the poop's bob (±24) and
- * radius (~48).
+ * wearing its "TAP TO FLAP!" speech bubble (poop-speech.png; the bubble
+ * reaches ~127 px above and ~116 px right of the body at display scale, so
+ * the poop sits low enough to clear the title), the toilet toggle, then How
+ * to play, Save / Load User, and the name · best profile button. Any tap that
+ * is not on a box starts the run. Buttons are at least trayHitMin tall.
  */
 export function readyLayout(width, height, t) {
   const cx = width / 2;
   const boxH = Math.max(88, t.trayHitMin);
   const title = { id: 'title', x: cx, y: 330 };
-  const poop = { id: 'poop', x: cx, y: 455 };
-  const start = { id: 'start', x: cx, y: 592, width: 250, height: boxH };
+  const poop = { id: 'poop', x: cx, y: 520, bubble: { left: -48, right: 116, top: -127, bottom: 46 } };
   // Toilet toggle: 120x56 track left of centre, 🚽 to its right; the hit box spans both.
   const toilet = { id: 'toilet', x: cx, y: 676, width: 240, height: 72, track: { x: cx - 50, y: 676, width: 120, height: 56 }, emojiX: cx + 80 };
   const howto = { id: 'howto', x: cx, y: 764, width: 400, height: boxH };
   const saveLoad = { id: 'saveload', x: cx, y: 860, width: 360, height: boxH };
   const profile = { id: 'profile', x: cx, y: 946, width: 360, height: 64 }; // bottom 978 clears the lower villi fringe
-  return { title, poop, start, toilet, howto, saveLoad, profile };
+  return { title, poop, toilet, howto, saveLoad, profile };
 }
 
 function inBox(x, y, box) {
@@ -432,13 +438,13 @@ function inBox(x, y, box) {
 }
 
 /**
- * Which ready-screen box contains (x, y): 'start' | 'toilet' | 'howto' |
- * 'saveload' | 'profile' | null. The profile button only counts when
- * hasProfile (a username is set).
+ * Which ready-screen box contains (x, y): 'toilet' | 'howto' | 'saveload' |
+ * 'profile' | null (null = start the run). The profile button only counts
+ * when hasProfile (a username is set).
  */
 export function readyHit(x, y, layout, { hasProfile = false } = {}) {
   if (!layout) return null;
-  for (const box of [layout.start, layout.toilet, layout.howto, layout.saveLoad]) {
+  for (const box of [layout.toilet, layout.howto, layout.saveLoad]) {
     if (box && inBox(x, y, box)) return box.id;
   }
   if (hasProfile && layout.profile && inBox(x, y, layout.profile)) return 'profile';

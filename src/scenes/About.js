@@ -53,7 +53,11 @@ export class About extends Phaser.Scene {
     sv.link(sv.add(this.add.text(cx, y, t(locale, 'feedbackLink'), { ...STYLE, fontSize: '36px', color: '#f8a0c8' }).setOrigin(0.5, 0)), () =>
       this.scene.get('Play')?.handleChrome('feedback'),
     );
-    y += 84;
+    y += 72;
+
+    // LLM note sits at the bottom, under the links, above the version lines.
+    const llm = sv.add(this.add.text(cx, y, t(locale, 'aboutLlmNote'), { ...MUTED, fontSize: '22px', wordWrap: wrap, lineSpacing: 4 }).setOrigin(0.5, 0));
+    y += llm.height + 28;
 
     const metaSize = metaFontSize(locale);
     sv.add(this.add.text(cx, y, `v${VERSION}`, { ...STYLE, fontSize: metaSize, color: '#6a5a74', fontStyle: 'normal' }).setOrigin(0.5, 0));

@@ -42,8 +42,10 @@ test('HUD probiotic icon is at least as large as the world item sprite', () => {
 test('beans block sits in a fair band and the fart ramp stays readable', () => {
   const b = T.beans;
   assert.ok(b.startScore >= 1, 'beans should not appear from pipe 0');
-  assert.ok(b.chancePerGap >= 0.1 && b.chancePerGap <= 0.5, `chancePerGap ${b.chancePerGap}`);
-  assert.ok(b.toCharge >= 3 && b.toCharge <= 8, `toCharge ${b.toCharge}`);
+  assert.ok(b.chancePerGap >= 0.03 && b.chancePerGap <= 0.5, `chancePerGap ${b.chancePerGap}`);
+  assert.ok(b.toCharge >= 1 && b.toCharge <= 8, `toCharge ${b.toCharge}`);
+  assert.ok(b.travelFrac > 0 && b.travelFrac <= 1, `travelFrac ${b.travelFrac}`);
+  assert.ok(b.travelPeriodMs >= 2000, 'bob should be unhurried');
   assert.ok(b.powerPipes >= 3 && b.powerPipes <= 8, `powerPipes ${b.powerPipes}`);
   assert.ok(b.powerMs >= 2000 && b.powerMs <= 8000, `powerMs ${b.powerMs}`);
   assert.ok(b.graceMs * (T.pipeSpeed / 1000) >= T.pipeWidth + T.poopRadius, 'grace must clear a pipe column at base speed');

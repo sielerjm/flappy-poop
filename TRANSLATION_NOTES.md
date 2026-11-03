@@ -52,7 +52,6 @@ Short, playful, clear. Fit a 720×1280 logical field; How to play / About body w
 |---|---|---|
 | readyTitle | FLAPPY POOP | FLAPPY POOP |
 | howToPlay | How to play | 玩法说明 |
-| tapToFlap | tap to flap | 点击起飞 |
 | pauseTitle | PAUSED | 已暂停 |
 | pauseHint | tap anywhere to resume game | 点击任意处继续游戏 |
 | gameOver | GAME OVER | 游戏结束 |
@@ -69,7 +68,8 @@ Short, playful, clear. Fit a 720×1280 logical field; How to play / About body w
 | aboutTitle | ABOUT | 关于 |
 | aboutName | Flappy Poop | Flappy Poop |
 | aboutTagline | A gut-themed Flappy Bird clone. | 一款肠道主题的 Flappy Bird 克隆。 |
-| aboutBlurb | This game was coded with the assistance of an LLM. The idea, game design, and all art are by Michael Sieler. | 本游戏在 LLM 协助下编写。创意、游戏设计与全部美术由 Michael Sieler 完成。 |
+| aboutBlurb | The idea, game design, and all art were created by Michael Sieler. | 创意、游戏设计与全部美术均由 Michael Sieler 创作。 |
+| aboutLlmNote | This game was coded with the assistance of an LLM. | 本游戏在 LLM 协助下编写。 |
 | aboutCreditsTitle | Credits | 致谢 |
 | aboutCredits | *(see block below)* | *(see block below)* |
 | howToTitle | HOW TO PLAY | 玩法说明 |
@@ -83,7 +83,7 @@ Short, playful, clear. Fit a 720×1280 logical field; How to play / About body w
 | itemBacteriaName | Bad bacteria | 有害细菌 |
 | itemBacteriaDetail | −2 points (score never below 0). Does not kill. | −2 分（分数不低于 0）。不会致死。 |
 | itemBeanName | Beans | 豆子 |
-| itemBeanDetail | Show up after pipe 5, bobbing up and down between pipes. Collect 5 and your poop glows: tap it to fart past the next 5 pipes — nothing can hurt you. | 第5道管道后出现，在管道之间上下漂动。集齐5颗后便便会发光：点击它，放屁冲过接下来的5道管道，期间不会受伤。 |
+| itemBeanDetail | Rare. Show up after pipe 5, bobbing between pipes. Grab one and your poop glows: tap it to fart past the next 5 pipes — nothing can hurt you. | 很少见。第5道管道后出现，在管道之间漂动。吃到一颗便便就会发光：点击它，放屁冲过接下来的5道管道，期间不会受伤。 |
 | itemToiletName | On the toilet | 如厕模式 |
 | itemToiletDetail | Playing on the toilet? Flip the switch under tap to flap. Those scores get a 🚽 next to them. | 在马桶上玩？打开“点击起飞”下方的开关，这些分数旁会显示 🚽。 |
 | updatedPrefix | Updated | 更新于 |

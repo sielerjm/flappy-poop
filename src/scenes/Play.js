@@ -104,11 +104,11 @@ export class Play extends Phaser.Scene {
     // Toilet mode: session-only (registry survives scene.restart, not a reload).
     this.toilet = Boolean(this.registry.get('toilet'));
 
-    // Player: bobs at its ready spot, no gravity until launch() has slid it to poopX.
-    this.poop = this.physics.add.sprite(this.readyBoxes.poop.x, this.readyBoxes.poop.y, 'poop').setDepth(10);
+    // Player: bobs at its ready spot wearing the "TAP TO FLAP!" bubble; no gravity
+    // until launch() has swapped to the plain frame and slid it to poopX.
+    this.poop = this.physics.add.sprite(this.readyBoxes.poop.x, this.readyBoxes.poop.y, 'poop-speech').setDepth(10);
     this.poop.setScale(T.spriteDisplayScale);
-    const poopBody = scaledCircleBody(this.poop.frame.width, T.spriteDisplayScale, T.poopRadius);
-    this.poop.body.setCircle(poopBody.radius, poopBody.offset, poopBody.offset);
+    this.setPoopTexture('poop-speech');
     this.poop.body.setAllowGravity(false);
     // White glow behind the poop while the fart power is charged (alpha pulses).
     this.glow = this.add.circle(this.poop.x, this.poop.y, 64, 0xffffff, 1).setAlpha(0).setDepth(9);
@@ -133,7 +133,6 @@ export class Play extends Phaser.Scene {
       .setDepth(20);
     this.toiletToggle = createToggle(this, this.readyBoxes.toilet, { on: this.toilet });
     this.howToBtn = createButton(this, this.readyBoxes.howto, t(this.locale, 'howToPlay'), { ...TEXT_STYLE, fontSize: '40px', color: '#f8a0c8' });
-    this.startBtn = createButton(this, this.readyBoxes.start, t(this.locale, 'tapToFlap'), { ...TEXT_STYLE, fontSize: '44px' });
     this.saveLoadBtn = createButton(this, this.readyBoxes.saveLoad, t(this.locale, 'saveLoadButton'), {
       ...TEXT_STYLE,
       fontSize: '36px',
@@ -206,6 +205,7 @@ export class Play extends Phaser.Scene {
     this.launching = true;
     this.bob.stop();
     this.setReadyUiVisible(false);
+    this.setPoopTexture('poop');
     this.tweens.add({
       targets: this.poop,
       x: T.poopX,
@@ -227,7 +227,6 @@ export class Play extends Phaser.Scene {
     this.readyTitle.setVisible(visible);
     this.toiletToggle.setVisible(visible);
     this.howToBtn.setVisible(visible);
-    this.startBtn.setVisible(visible);
     this.saveLoadBtn.setVisible(visible);
     this.profileBtn.setVisible(visible && Boolean(profileLine(this.save)));
   }
@@ -331,7 +330,6 @@ export class Play extends Phaser.Scene {
     this.locale = next;
     this.readyTitle?.setText(t(next, 'readyTitle'));
     this.howToBtn?.setText(t(next, 'howToPlay'));
-    this.startBtn?.setText(t(next, 'tapToFlap'));
     this.saveLoadBtn?.setText(t(next, 'saveLoadButton'));
     const [pauseTitle, pauseHint] = pauseBannerText(next).split('\n');
     this.pauseText?.setText(pauseTitle);

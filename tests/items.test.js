@@ -101,7 +101,7 @@ test('rollBean never spawns below beans.startScore', () => {
   for (let i = 0; i < 1000; i++) assert.equal(rollBean(rng, T.beans.startScore - 1, T), false);
 });
 
-test('rollBean spawns at about chancePerGap, a little more often than fiber', () => {
+test('rollBean spawns at about chancePerGap, rarer than fiber', () => {
   const n = 6000;
   const rngA = createRng(12);
   let beans = 0;
@@ -113,13 +113,15 @@ test('rollBean spawns at about chancePerGap, a little more often than fiber', ()
   let fiber = 0;
   for (let i = 0; i < n; i++) if (rollItem(rngB, T.items.hazardStartScore + 5, T) === 'fiber') fiber += 1;
   const fiberRate = fiber / n;
-  assert.ok(beanRate > fiberRate, `beans ${beanRate} should outnumber fiber ${fiberRate}`);
-  assert.ok(beanRate < fiberRate * 3, `beans ${beanRate} should not swamp fiber ${fiberRate}`);
+  assert.ok(beanRate < fiberRate, `beans ${beanRate} should be rarer than fiber ${fiberRate}`);
+  assert.ok(beanRate > 0.02, `beans ${beanRate} should still show up`);
 });
 
-test('beanY stays inside the bounds and reaches both extremes; beanAngle wiggles within wiggleDeg', () => {
-  const bounds = beanBounds({ gameHeight: GAME_HEIGHT, groundHeight: T.groundHeight, gapMargin: T.gapMargin, radius: T.beans.beanRadius });
-  assert.ok(bounds.minY > 0 && bounds.maxY < GAME_HEIGHT - T.groundHeight);
+test('beanY stays inside the middle band and reaches both extremes; beanAngle wiggles within wiggleDeg', () => {
+  const bounds = beanBounds({ gameHeight: GAME_HEIGHT, groundHeight: T.groundHeight, radius: T.beans.beanRadius, frac: T.beans.travelFrac });
+  const playH = GAME_HEIGHT - T.groundHeight;
+  assert.ok(bounds.minY >= playH * 0.25 - 1e-9, 'stays out of the top quarter');
+  assert.ok(bounds.maxY <= playH * 0.75 + 1e-9, 'stays out of the bottom quarter');
   let lo = Infinity;
   let hi = -Infinity;
   for (let ms = 0; ms <= T.beans.travelPeriodMs; ms += 10) {
@@ -129,6 +131,9 @@ test('beanY stays inside the bounds and reaches both extremes; beanAngle wiggles
     hi = Math.max(hi, y);
     assert.ok(Math.abs(beanAngle(ms, T)) <= T.beans.wiggleDeg + 1e-9);
   }
+  assert.equal(T.beans.wiggleDeg, 15);
+  assert.ok(Math.abs(beanAngle(T.beans.wigglePeriodMs / 4, T) - 15) < 1e-9, 'reaches +15');
+  assert.ok(Math.abs(beanAngle((3 * T.beans.wigglePeriodMs) / 4, T) + 15) < 1e-9, 'reaches -15');
   assert.ok(lo < bounds.minY + 2 && hi > bounds.maxY - 2, `travel ${lo}..${hi} should span the bounds`);
 });
 

@@ -9,7 +9,7 @@ guide; this file is the map for anyone changing the code.
 Flappy Poop is a Flappy Bird clone for phone browsers: a poop emoji flaps through
 the gut dodging pink intestinal-fold pipes. One point per pipe pair passed; fiber
 is +1, bad bacteria is −2 (floor 0), and a probiotic blocks one bacteria hit for
-up to 5 pipes. From pipe 5 beans bob between pipe pairs; 5 beans charge a fart
+up to 5 pipes. From pipe 5 a rare bean bobs between pipe pairs; one bean charges a fart
 power (stink lines + glow; tap the poop) that plays `fart_accelerate.mp3`, ramps the
 scroll speed up and down with the clip so five pipes pass, and cannot die. Hit a pipe, the ceiling, or the floor and the run ends (dead-poop
 face). Best score and settings are kept in `localStorage`. Difficulty ramps
@@ -110,10 +110,12 @@ src/
                             from i18n. Locale via getLocale / applyLocale. Holds the
                             SaveState (loadLocal on create, seeded once from the
                             legacy best); die() records the score and passes newTop
-                            to Over. Ready screen (readyLayout: title, poop spot,
-                            then tap to flap / How to play / Save / Load User /
+                            to Over. Ready screen (readyLayout: title, poop spot
+                            wearing poop-speech.png's "TAP TO FLAP!" bubble, then
+                            toilet toggle / How to play / Save / Load User /
                             profileLine() buttons; profile hidden until a username
-                            is set); launch() slides the poop to poopX over
+                            is set; any other tap starts); launch() swaps to the
+                            plain poop frame and slides it to poopX over
                             launchSlideMs, then start(); extra taps during the
                             slide are ignored (launching flag). Toilet mode:
                             this.toilet from the registry (session-only), toggle
@@ -160,7 +162,7 @@ src/
 assets/                     Contract PNGs + README.md (the art contract).
   README.md                 File name, pixel size, orientation rules. tests enforce it.
   poop.png poop-dead.png poop-stink1.png poop-stink2.png poop-fart.png
-  fiber.png probiotic.png bacteria.png bean.png
+  poop-speech.png fiber.png probiotic.png bacteria.png bean.png
   pipe.png bg.png ground.png
   icon-192.png icon-512.png
   src/                      Original drawings; not in the size table.
@@ -206,9 +208,9 @@ tools/
                             overwrite poop.png. Run only when you intend to.
   process_art.py            Crops assets/src/ drawings into 384x384 contract PNGs
                             (drawn at spriteDisplayScale 0.25 → 96 logical px);
-                            the poop set (alive / dead / stink1 / stink2 / fart)
-                            shares one body scale and centre, stink/fart on bigger
-                            squares; bean.png from Kidney_Bean.png.
+                            the poop set (alive / dead / stink1 / stink2 / fart /
+                            speech) shares one body scale and centre, stink / fart /
+                            speech on bigger squares; bean.png from Kidney_Bean.png.
                             Arcade circles use scaledCircleBody (Phaser source pixels).
   serve.py                  npm start: bind 0.0.0.0:8000, print laptop + phone URLs.
 

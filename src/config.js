@@ -53,12 +53,13 @@ export const TUNING = {
   },
   beans: {
     startScore: 5, // score from which beans may appear
-    chancePerGap: 0.2, // 0–1 chance a pipe pair spawns a bean (fiber's effective rate is ~0.1–0.18)
-    toCharge: 5, // beans needed to ready the fart power
+    chancePerGap: 0.07, // 0–1 chance a pipe pair spawns a bean (rarer than fiber's effective ~0.1–0.18)
+    toCharge: 1, // beans needed to ready the fart power
     powerPipes: 5, // pipe pairs that cross the screen during one fart
     powerMs: 4344, // ms; fallback power length = the fart_accelerate clip (the loaded sound's duration wins)
-    travelPeriodMs: 2600, // ms for one full up-and-down bob
-    wiggleDeg: 10, // degrees of rotation wiggle
+    travelPeriodMs: 4000, // ms for one full up-and-down bob
+    travelFrac: 0.5, // 0–1 share of the playable height the bob covers, centred (0.5 = middle half)
+    wiggleDeg: 15, // degrees of rotation wiggle about the bean's centre (±)
     wigglePeriodMs: 450, // ms per wiggle cycle
     graceMs: 600, // ms of invulnerability after the fart ends (clears a pipe column at base speed)
     stinkFrameMs: 180, // ms between stink-line frames while charged

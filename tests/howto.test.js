@@ -37,7 +37,7 @@ test('HOW_TO_ITEMS names fiber, probiotic, and bacteria with their effects', () 
   assert.match(blob, /This is a pipe/);
   assert.match(blob, /bad bacteria/);
   assert.match(blob, /🚽/);
-  assert.match(blob, /Collect 5/);
+  assert.match(blob, /Grab one/);
   assert.match(blob, /\+1/);
   assert.match(blob, /5 pipes/);
   assert.match(blob, /−2|-2/);

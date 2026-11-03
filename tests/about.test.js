@@ -8,6 +8,7 @@ function aboutText(locale) {
     t(locale, 'aboutName'),
     t(locale, 'aboutTagline'),
     t(locale, 'aboutBlurb'),
+    t(locale, 'aboutLlmNote'),
     t(locale, 'aboutCreditsTitle'),
     t(locale, 'aboutCredits'),
   ].join('\n');

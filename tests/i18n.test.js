@@ -130,6 +130,7 @@ test('both About catalogs keep untranslated brand and credit tokens', () => {
       t(locale, 'aboutName'),
       t(locale, 'aboutTagline'),
       t(locale, 'aboutBlurb'),
+      t(locale, 'aboutLlmNote'),
       t(locale, 'aboutCreditsTitle'),
       t(locale, 'aboutCredits'),
     ].join('\n');
