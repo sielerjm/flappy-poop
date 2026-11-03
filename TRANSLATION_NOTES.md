@@ -98,7 +98,7 @@ Short, playful, clear. Fit a 720×1280 logical field; How to play / About body w
 | feedbackLink | Bug or feature request? | 问题或功能建议？ |
 | saveLoadButton | Save / Load User | 存档 / 载入用户 |
 | saveTitle | SAVE / LOAD USER | 存档 / 载入用户 |
-| saveIntro | Copy your code to keep your name and top scores on another phone or browser. Paste it there to load them. | 复制存档码，即可在其他手机或浏览器保留你的名字和最高分。在那里粘贴即可载入。 |
+| saveIntro | Copy your code to keep your name and top scores on another phone or browser. Paste it there to load them. Press the Save button to save your username. | 复制存档码，即可在其他手机或浏览器保留你的名字和最高分。在那里粘贴即可载入。按“保存”可保存用户名。 |
 | saveNameLabel | Username | 用户名 |
 | saveNamePlaceholder | 1–16 characters | 1–16 个字符 |
 | saveYourCode | Save user code | 保存用户码 |
