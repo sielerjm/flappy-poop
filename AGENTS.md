@@ -146,8 +146,10 @@ src/
                             tap lockout and its own tray (mute still works). Shows
                             newTopHint when the run entered the top 6.
     Settings.js             Overlay: sound, haptics (Android only), Reload game
-                            (reloadGame(): location.replace with a fresh r= query,
-                            for home-screen installs), About link, version. Tap outside the panel
+                            (hardReloadGame(): re-fetches loaded scripts with
+                            cache: 'reload', then location.replace with a fresh r=
+                            query; picks up a push at once, works on home-screen
+                            installs), About link, version. Tap outside the panel
                             closes (overlayOutsideHit), same as X.
     About.js                Overlay: author, LLM note, engine/art/sound credits
                             (both fart clips), How to play + feedback links,

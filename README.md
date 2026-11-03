@@ -4,7 +4,7 @@
 
 Open it on your phone and add it to your home screen for a full-screen, app-like launch.
 
-A poop emoji flaps through the gut, dodging pink intestinal folds. A Flappy Bird clone for phone browsers, built on [Phaser 4](https://phaser.io) with no build step. Version **0.5.9**. English and Simplified Chinese in-game.
+A poop emoji flaps through the gut, dodging pink intestinal folds. A Flappy Bird clone for phone browsers, built on [Phaser 4](https://phaser.io) with no build step. Version **0.5.10**. English and Simplified Chinese in-game.
 
 **Host your own:** fork or push this repo to GitHub, enable Pages (Settings → Pages → Deploy from branch → `main` / root), then open `https://<you>.github.io/<repo>/`.
 
@@ -37,7 +37,7 @@ On iPhone, Silent mode mutes the game — turn it off to hear sound. The pause b
 - **M** — mute / unmute. Persists across reload. Still works while an overlay is open.
 - **Save / Load User** (ready-screen button) — set a username (1–12 characters), then Copy your `fp1.…` user code and paste it into Load user code on another phone or browser to carry your username and best 6 scores (with their 🚽 flags) across. Codes are signed, so an edited code is refused; loading merges scores (best 6 kept) and the pasted username wins. Once a username is set the ready screen shows a `name · best` button under it; tap that for the High scores overlay (up to 6). The game-over panel reminds you to export after a run that enters the top 6.
 - **How to play** and **tap to flap** are drawn as buttons on the ready screen; tapping the second one starts the run like any other tap.
-- **S** — settings (sound, haptics, Reload game, About). **Reload game** re-fetches the page with a fresh cache-busting query, the way to pick up a new build when the game is installed on the home screen and has no address bar. Opening Settings or About mid-run pauses; closing them leaves the pause banner until a new tap or Space.
+- **S** — settings (sound, haptics, Reload game, About). **Reload game** re-fetches every loaded script with `cache: 'reload'` (so GitHub Pages' 10-minute cache cannot hand back old modules) and then reloads the page with a fresh cache-busting query: the way to pick up a new build straight after a push, and the only way when the game is installed on the home screen and has no address bar. Opening Settings or About mid-run pauses; closing them leaves the pause banner until a new tap or Space.
 - **I** — About.
 - **F** — Feedback (bug / feature → GitHub).
 - **L** — language.

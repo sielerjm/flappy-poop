@@ -4,7 +4,7 @@
 
 import { isLocale, DEFAULT_LOCALE } from './i18n.js';
 
-export const VERSION = '0.5.9';
+export const VERSION = '0.5.10';
 
 /** Player-facing stamp on the About overlay: the time of the last push (written by `npm run push`). */
 export const LAST_UPDATED = '3 Nov 2026, 20:01';
@@ -36,6 +36,40 @@ export function reloadGame(api = globalThis) {
   const target = reloadUrl(api.location.href);
   api.location.replace(target);
   return target;
+}
+
+/**
+ * Same-origin script and page URLs the browser has loaded (Resource Timing API),
+ * plus the page itself. Cross-origin files (the pinned Phaser CDN build) and
+ * assets (already versioned with ?v=) are skipped.
+ */
+export function loadedScriptUrls(api = globalThis) {
+  const origin = api.location?.origin;
+  const entries = api.performance?.getEntriesByType?.('resource') ?? [];
+  const urls = new Set();
+  if (typeof api.location?.href === 'string') urls.add(api.location.href.split('#')[0]);
+  for (const e of entries) {
+    if (typeof e?.name !== 'string' || !origin || !e.name.startsWith(origin)) continue;
+    if (/\.(m?js|html)(\?|$)/.test(e.name)) urls.add(e.name);
+  }
+  return [...urls];
+}
+
+/**
+ * Re-fetch every loaded script with cache: 'reload' so the HTTP cache holds the
+ * newest copy (GitHub Pages serves max-age=600, and the ?r= query only busts the
+ * page), then navigate to reloadUrl(). A hung fetch cannot block the reload:
+ * the refetch races a timeoutMs timer. Returns the URL navigated to (null when
+ * there is no location).
+ */
+export async function hardReloadGame(api = globalThis, { timeoutMs = 3000 } = {}) {
+  if (!api.location || typeof api.location.replace !== 'function') return null;
+  if (typeof api.fetch === 'function') {
+    const refetch = Promise.allSettled(loadedScriptUrls(api).map((u) => api.fetch(u, { cache: 'reload' })));
+    const timer = new Promise((resolve) => (api.setTimeout ?? setTimeout)(resolve, timeoutMs));
+    await Promise.race([refetch, timer]);
+  }
+  return reloadGame(api);
 }
 
 /**

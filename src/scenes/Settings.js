@@ -1,5 +1,5 @@
 import { GAME_WIDTH, GAME_HEIGHT, TUNING as T } from '../config.js';
-import { VERSION, createSettingsStore, chromeIntent, overlayOutsideHit, reloadGame } from '../logic.js';
+import { VERSION, createSettingsStore, chromeIntent, overlayOutsideHit, hardReloadGame } from '../logic.js';
 import { t, toggleLabel, metaFontSize } from '../i18n.js';
 import { setMuted } from '../sound.js';
 
@@ -56,7 +56,7 @@ export class Settings extends Phaser.Scene {
       .text(cx, cy + 120, t(locale, 'reloadGame'), { ...STYLE, fontSize: '40px', color: '#f8a0c8' })
       .setOrigin(0.5)
       .setInteractive({ useHandCursor: true });
-    reload.on('pointerdown', () => reloadGame());
+    reload.on('pointerdown', () => hardReloadGame());
 
     const about = this.add
       .text(cx, cy + 210, t(locale, 'aboutLink'), { ...STYLE, fontSize: '40px', color: '#f8a0c8' })
