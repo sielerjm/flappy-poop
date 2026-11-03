@@ -28,6 +28,13 @@ test('ready boxes have ids, are inside the field, and the tappable ones are at l
   }
   for (const b of [layout.howto, layout.saveLoad]) assert.ok(b.height >= T.trayHitMin, `${b.id} tall enough`);
   assert.ok(layout.profile.height >= 64, 'profile is a button now');
+  // Equal heights and equal gaps for the three stacked buttons.
+  assert.equal(layout.howto.height, layout.saveLoad.height);
+  assert.equal(layout.saveLoad.height, layout.profile.height);
+  const g1 = edges(layout.saveLoad).top - edges(layout.howto).bottom;
+  const g2 = edges(layout.profile).top - edges(layout.saveLoad).bottom;
+  assert.equal(g1, g2, `gaps differ: ${g1} vs ${g2}`);
+  assert.ok(g1 >= 8 && g1 <= 24, `gap ${g1}`);
   assert.ok(layout.toilet.height >= 64, 'toggle hit box is thumb-sized');
   const tr = layout.toilet.track;
   assert.ok(tr.x - tr.width / 2 >= layout.toilet.x - layout.toilet.width / 2, 'track inside the toggle box');

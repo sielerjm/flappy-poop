@@ -484,12 +484,14 @@ export function readyLayout(width, height, t) {
   // Speech-bubble extents at display scale (poop-speech.png ink relative to the
   // body centre, ×readyPoopScale); the poop bobs ±24 on top of that.
   const s = t.readyPoopScale ?? 1;
-  const poop = { id: 'poop', x: cx, y: 637, bubble: { left: -48 * s, right: 116 * s, top: -127 * s, bottom: 46 * s } };
+  const poop = { id: 'poop', x: cx, y: 623, bubble: { left: -48 * s, right: 116 * s, top: -127 * s, bottom: 46 * s } };
   // Toilet toggle: 120x56 track left of centre, 🚽 to its right; the hit box spans both.
-  const toilet = { id: 'toilet', x: cx, y: 765, width: 240, height: 72, track: { x: cx - 50, y: 765, width: 120, height: 56 }, emojiX: cx + 80 };
-  const howto = { id: 'howto', x: cx, y: 932, width: 400, height: boxH };
-  const saveLoad = { id: 'saveload', x: cx, y: 1024, width: 360, height: boxH };
-  const profile = { id: 'profile', x: cx, y: 1116, width: 360, height: 64 }; // bottom 1148: above the ground strip (1152) and the tray band (1168)
+  const toilet = { id: 'toilet', x: cx, y: 751, width: 240, height: 72, track: { x: cx - 50, y: 751, width: 120, height: 56 }, emojiX: cx + 80 };
+  // Three equal buttons, 12 px apart, the last one ending at 1148: above the ground strip (1152) and the tray band (1168).
+  const gap = 12;
+  const profile = { id: 'profile', x: cx, y: 1148 - boxH / 2, width: 360, height: boxH };
+  const saveLoad = { id: 'saveload', x: cx, y: profile.y - boxH - gap, width: 360, height: boxH };
+  const howto = { id: 'howto', x: cx, y: saveLoad.y - boxH - gap, width: 400, height: boxH };
   return { title, poop, toilet, howto, saveLoad, profile };
 }
 

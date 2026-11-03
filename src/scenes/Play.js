@@ -147,7 +147,7 @@ export class Play extends Phaser.Scene {
     });
     // "<name> · best" button under Save / Load User; tapping it opens the Scores
     // overlay. Hidden until a username is set.
-    this.profileBtn = createButton(this, this.readyBoxes.profile, profileLine(this.save), { ...TEXT_STYLE, fontSize: '32px', color: '#f8a0c8' });
+    this.profileBtn = createButton(this, this.readyBoxes.profile, profileLine(this.save), { ...TEXT_STYLE, fontSize: '32px' }); // white: it is the player's own line, not a menu item
     this.refreshProfile();
 
     this.pauseShade = this.add.rectangle(GAME_WIDTH / 2, GAME_HEIGHT / 2, GAME_WIDTH, GAME_HEIGHT, 0x000000, 0.45).setDepth(25).setVisible(false);
