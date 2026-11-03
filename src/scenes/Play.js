@@ -34,9 +34,10 @@ import {
   beanButtonHit,
 } from '../logic.js';
 import { t, pauseBannerText, initialLocale, isLocale } from '../i18n.js';
-import { loadLocal, saveLocal, recordScore, isNewTop, profileLine, topScores, TOILET_EMOJI } from '../save.js';
+import { loadLocal, saveLocal, ensureId, recordScore, isNewTop, profileLine, topScores, TOILET_EMOJI } from '../save.js';
 import { unlock, attachGame, setMuted, isMuted, sfx } from '../sound.js';
 import { createTray } from '../ui/tray.js';
+import { createSubmitStore, submitPlan, submitScore } from '../leaderboard.js';
 import { createButton } from '../ui/button.js';
 import { createToggle } from '../ui/toggle.js';
 import { openSavePanel } from '../ui/savePanel.js';
@@ -65,6 +66,7 @@ export class Play extends Phaser.Scene {
     this.save = loadLocal();
     const legacyBest = this.best.load();
     if (this.save.top.length === 0 && legacyBest > 0) this.save = saveLocal(recordScore(this.save, legacyBest));
+    this.submitStore = createSubmitStore(); // last confirmed leaderboard submit
     this.diff = difficulty(0, T);
     this.state = 'ready'; // 'ready' | 'playing' | 'paused' | 'dead'
     this.flapLockedUntil = 0;
@@ -329,6 +331,24 @@ export class Play extends Phaser.Scene {
   setSaveState(state) {
     this.save = state;
     this.refreshProfile();
+  }
+
+  /**
+   * Post the player's best to the shared leaderboard when it is newer than the
+   * last confirmed submit. Named players only; the id is created on first use
+   * (same as the first save-code export). Resolves on every outcome; a failed
+   * post is retried on the next game over or board open.
+   */
+  syncLeaderboard() {
+    if (!this.save?.name) return Promise.resolve();
+    if (!this.save.id) this.save = ensureId(this.save);
+    const plan = submitPlan(this.save, this.submitStore.load());
+    if (!plan) return Promise.resolve();
+    return submitScore(plan)
+      .then((ok) => {
+        if (ok) this.submitStore.save(plan);
+      })
+      .catch(() => {});
   }
 
   refreshProfile() {
@@ -782,6 +802,7 @@ export class Play extends Phaser.Scene {
     this.best.save(this.score); // legacy store, kept for first-run seeding
     const newTop = isNewTop(this.save, this.score);
     this.save = saveLocal(recordScore(this.save, this.score, { toilet: this.toilet }));
+    this.syncLeaderboard(); // fire and forget; never awaited inside the update loop
     // BEST on the game-over panel = the save state's top score, so a loaded code counts too.
     const best = Math.max(this.score, topScores(this.save)[0] ?? 0);
 
