@@ -237,8 +237,9 @@ export function scoreAfterItem(score, kind, t) {
  * otherwise random at chanceInWindow up to windowEndScore and at the lower
  * chanceAfter beyond it.
  */
-export function rollBean(rng, score, t, { spawnedThisRun = false } = {}) {
+export function rollBean(rng, score, t, { spawnedThisRun = false, holding = false } = {}) {
   const b = t.beans;
+  if (holding) return false; // one bean at a time: none spawn while one is held or the fart runs
   if (score < b.startScore) return false;
   if (!spawnedThisRun && score >= b.guaranteeScore) return true;
   const chance = score <= b.windowEndScore ? b.chanceInWindow : b.chanceAfter;
@@ -353,10 +354,14 @@ export function createEffects(t) {
     pipesLeft() {
       return probioticPipesLeft;
     },
-    /** Collect a bean; returns the new count. */
+    /** Collect a bean; returns the count. Capped at toCharge, ignored while farting: one at a time. */
     addBean() {
-      beanCount += 1;
+      if (!powerOn && beanCount < t.beans.toCharge) beanCount += 1;
       return beanCount;
+    },
+    /** A bean is held (power ready) or being used: no more can be taken or spawned. */
+    holdingBean() {
+      return powerOn || beanCount >= t.beans.toCharge;
     },
     beans() {
       return beanCount;

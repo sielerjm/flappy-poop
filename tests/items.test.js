@@ -126,6 +126,10 @@ test('rollBean: ~chanceInWindow inside 5–20, ~chanceAfter (below fiber) beyond
   assert.equal(rollBean(never, T.beans.guaranteeScore - 1, T, { spawnedThisRun: false }), false);
   assert.equal(rollBean(never, T.beans.guaranteeScore, T, { spawnedThisRun: true }), false);
   assert.equal(rollBean(never, T.beans.guaranteeScore, T), true, 'default: nothing spawned yet');
+  // One at a time: nothing spawns while a bean is held or the fart runs, even past the guarantee.
+  const always = () => 0;
+  assert.equal(rollBean(always, T.beans.guaranteeScore, T, { spawnedThisRun: false, holding: true }), false);
+  assert.equal(rollBean(always, T.beans.startScore + 2, T, { holding: true }), false);
 });
 
 test('every simulated run sees at least one bean between pipes 5 and 20', () => {
@@ -225,14 +229,16 @@ test('bean inventory and the timed fart power', () => {
   fx.tickPower(400);
   assert.equal(fx.powerElapsed(), 400);
   assert.equal(fx.endedPower(), false);
-  // A fifth bean mid-power does not make it ready until the power ends.
+  // Beans collected mid-power are ignored (one at a time); after it ends you start from zero.
   for (let i = 0; i < T.beans.toCharge; i++) fx.addBean();
+  assert.equal(fx.beans(), 0, 'ignored while farting');
   assert.equal(fx.powerReady(), false);
   fx.tickPower(600);
   assert.equal(fx.powerActive(), false);
   assert.equal(fx.endedPower(), true);
   assert.equal(fx.endedPower(), false, 'reported once');
-  assert.equal(fx.powerReady(), true);
+  assert.equal(fx.powerReady(), false, 'nothing carried over');
+  assert.equal(fx.holdingBean(), false);
   assert.equal(fx.powerElapsed(), 0);
 });
 
@@ -259,4 +265,19 @@ test('pipeClearDistance: a right-edge spawn needs the screen plus a column to be
   const d = pipeClearDistance(GAME_WIDTH, T.pipeWidth, T.poopX);
   assert.equal(d, GAME_WIDTH + T.pipeWidth - (T.poopX - T.pipeWidth));
   assert.ok(d < fartRemainingDistance(0, T.beans.powerMs, fartPeakMul(T.beans.powerMs, T.beans.powerPipes, T.spawnEveryMs), T.pipeSpeed), 'the fart scrolls further than one clear distance, so pipes spawned early still pass');
+});
+
+test('beans do not accumulate: the count caps at toCharge and holdingBean blocks more', () => {
+  const fx = createEffects(T);
+  assert.equal(fx.holdingBean(), false);
+  for (let i = 0; i < T.beans.toCharge + 3; i++) fx.addBean();
+  assert.equal(fx.beans(), T.beans.toCharge, 'capped');
+  assert.equal(fx.holdingBean(), true);
+  assert.equal(fx.powerReady(), true);
+  assert.equal(fx.activatePower(1000), true);
+  assert.equal(fx.holdingBean(), true, 'still holding while the fart runs');
+  assert.equal(fx.addBean(), 0, 'ignored mid-fart');
+  fx.tickPower(1000);
+  assert.equal(fx.holdingBean(), false);
+  assert.equal(fx.addBean(), 1, 'can take one again afterwards');
 });

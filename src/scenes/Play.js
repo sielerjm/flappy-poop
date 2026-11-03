@@ -547,7 +547,7 @@ export class Play extends Phaser.Scene {
     }
 
     // Beans ride halfway between this pair and the next, bobbing top to bottom.
-    if (rollBean(this.rng, this.score, T, { spawnedThisRun: this.beanSpawned })) {
+    if (rollBean(this.rng, this.score, T, { spawnedThisRun: this.beanSpawned, holding: this.effects.holdingBean() })) {
       this.beanSpawned = true;
       const phase = this.rng() * Math.PI * 2;
       const bean = this.beans.create(beanSpawnX(GAME_WIDTH, T.pipeWidth, this.diff.pipeSpeed, T.spawnEveryMs), beanY(0, phase, this.beanBounds, T), 'bean');
@@ -595,6 +595,7 @@ export class Play extends Phaser.Scene {
 
   collectBean(bean) {
     if (this.state !== 'playing' || !bean.active) return;
+    if (this.effects.holdingBean()) return; // already carrying one: let it float past
     const ghost = this.add.image(bean.x, bean.y, 'bean').setScale(T.spriteDisplayScale).setDepth(12);
     this.tweens.add({
       targets: ghost,
