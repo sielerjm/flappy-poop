@@ -23,7 +23,7 @@ export class HowTo extends Phaser.Scene {
 
     this.add.text(cx, cy - 440, t(locale, 'howToTitle'), { ...STYLE, fontSize: '52px', color: '#f8a0c8' }).setOrigin(0.5);
     this.add
-      .text(cx, cy - 290, t(locale, 'howToBody'), {
+      .text(cx, cy - 330, t(locale, 'howToBody'), {
         ...STYLE,
         fontSize: '28px',
         color: '#c9b8dc',
@@ -33,30 +33,38 @@ export class HowTo extends Phaser.Scene {
       })
       .setOrigin(0.5);
 
-    const row0 = cy - 40;
+    // Four rows (pipe first): icon at the left, name + wrapped detail at the right.
+    const row0 = cy - 190;
     howToItems(locale).forEach((item, i) => {
-      const y = row0 + i * 144;
-      this.add.image(cx - 220, y, item.key).setDisplaySize(80, 80);
-      this.add.text(cx - 160, y - 24, item.name, { ...STYLE, fontSize: '32px', color: '#f8a0c8' }).setOrigin(0, 0.5);
+      const y = row0 + i * 136;
+      if (item.key === 'pipe') {
+        // pipe.png is 128x1280 with the cap at the top: show a 64x80 cap slice.
+        this.add.image(cx - 220, y - 40, 'pipe').setOrigin(0.5, 0).setScale(0.5).setCrop(0, 0, 128, 160);
+      } else {
+        this.add.image(cx - 220, y, item.key).setDisplaySize(80, 80);
+      }
+      this.add.text(cx - 160, y - 34, item.name, { ...STYLE, fontSize: '32px', color: '#f8a0c8' }).setOrigin(0, 0.5);
+      // Top-aligned under the name so a three-line detail grows downward.
       this.add
-        .text(cx - 160, y + 24, item.detail, {
+        .text(cx - 160, y - 14, item.detail, {
           ...STYLE,
           fontSize: '26px',
           color: '#c9b8dc',
           fontStyle: 'normal',
+          align: 'left',
           wordWrap: { width: 400, useAdvancedWrap: true },
         })
-        .setOrigin(0, 0.5);
+        .setOrigin(0, 0);
     });
 
     const feedback = this.add
-      .text(cx, cy + 390, t(locale, 'feedbackLink'), { ...STYLE, fontSize: '36px', color: '#f8a0c8' })
+      .text(cx, cy + 350, t(locale, 'feedbackLink'), { ...STYLE, fontSize: '36px', color: '#f8a0c8' })
       .setOrigin(0.5)
       .setInteractive({ useHandCursor: true });
     feedback.on('pointerdown', () => this.scene.get('Play')?.handleChrome('feedback'));
 
     this.add
-      .text(cx, cy + 460, `v${VERSION}`, {
+      .text(cx, cy + 440, `v${VERSION}`, {
         ...STYLE,
         fontSize: metaFontSize(locale),
         color: '#6a5a74',

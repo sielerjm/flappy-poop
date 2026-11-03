@@ -106,11 +106,10 @@ export class Play extends Phaser.Scene {
       fontSize: '36px',
       color: '#f8a0c8',
     });
-    // "<name> · best" under Save / Load User; tapping it opens the Scores overlay.
-    this.profileText = this.add
-      .text(this.readyBoxes.profile.x, this.readyBoxes.profile.y, profileLine(this.save), { ...TEXT_STYLE, fontSize: '32px', color: '#f8a0c8' })
-      .setOrigin(0.5)
-      .setDepth(20);
+    // "<name> · best" button under Save / Load User; tapping it opens the Scores
+    // overlay. Hidden until a username is set.
+    this.profileBtn = createButton(this, this.readyBoxes.profile, profileLine(this.save), { ...TEXT_STYLE, fontSize: '32px', color: '#f8a0c8' });
+    this.refreshProfile();
 
     this.pauseShade = this.add.rectangle(GAME_WIDTH / 2, GAME_HEIGHT / 2, GAME_WIDTH, GAME_HEIGHT, 0x000000, 0.45).setDepth(25).setVisible(false);
     const [pauseTitle, pauseHint] = pauseBannerText(this.locale).split('\n');
@@ -166,7 +165,7 @@ export class Play extends Phaser.Scene {
     this.howToBtn.setVisible(false);
     this.startBtn.setVisible(false);
     this.saveLoadBtn.setVisible(false);
-    this.profileText.setVisible(false);
+    this.profileBtn.setVisible(false);
     this.poop.body.setAllowGravity(true);
     this.poop.body.setGravityY(T.gravity);
     this.spawnTimer = this.time.addEvent({ delay: T.spawnEveryMs, loop: true, callback: () => this.spawnPipePair() });
@@ -233,7 +232,9 @@ export class Play extends Phaser.Scene {
   }
 
   refreshProfile() {
-    this.profileText?.setText(profileLine(this.save));
+    const line = profileLine(this.save);
+    this.profileBtn?.setText(line);
+    if (this.state === 'ready') this.profileBtn?.setVisible(Boolean(line));
   }
 
   openSavePanel() {

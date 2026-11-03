@@ -35,7 +35,7 @@ export class Over extends Phaser.Scene {
         })
         .setOrigin(0.5);
     }
-    this.retryText = this.add.text(cx, cy + 185, t(locale, 'tapToRetry'), { ...style, fontSize: '40px' }).setOrigin(0.5).setAlpha(0);
+    this.retryText = this.add.text(cx, cy + 185, t(locale, 'tapToHome'), { ...style, fontSize: '40px' }).setOrigin(0.5).setAlpha(0);
     this.tweens.add({ targets: this.retryText, alpha: 1, delay: T.retryLockoutMs, duration: 200 });
     this.tweens.add({ targets: panel, scale: { from: 0.8, to: 1 }, duration: 180, ease: 'Back.easeOut' });
 

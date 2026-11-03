@@ -4,10 +4,10 @@
 
 import { isLocale, DEFAULT_LOCALE } from './i18n.js';
 
-export const VERSION = '0.3.1';
+export const VERSION = '0.3.2';
 
 /** Player-facing stamp on the About overlay. Bump with VERSION. */
-export const LAST_UPDATED = '3 Nov 2026, 14:17';
+export const LAST_UPDATED = '3 Nov 2026, 14:38';
 
 const ISSUE_BASE = 'https://github.com/sielerjm/flappy-poop/issues/new';
 
@@ -310,7 +310,7 @@ export function readyLayout(width, height, t) {
   const howto = { id: 'howto', x: cx, y: height * 0.3 + 104, width: 400, height: boxH };
   const start = { id: 'start', x: cx, y: howto.y + 104, width: 250, height: boxH };
   const saveLoad = { id: 'saveload', x: cx, y: height / 2 + 160, width: 360, height: boxH };
-  const profile = { id: 'profile', x: cx, y: saveLoad.y + 84, width: 440, height: 64 };
+  const profile = { id: 'profile', x: cx, y: saveLoad.y + 104, width: 360, height: 72 };
   return { howto, start, saveLoad, profile };
 }
 

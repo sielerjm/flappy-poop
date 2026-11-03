@@ -26,7 +26,7 @@ test('ready boxes have ids, are inside the field, and the tappable ones are at l
     assert.ok(e.top >= 0 && e.bottom <= GAME_HEIGHT - T.groundHeight, `${b.id} above the ground`);
   }
   for (const b of [layout.howto, layout.start, layout.saveLoad]) assert.ok(b.height >= T.trayHitMin, `${b.id} tall enough`);
-  assert.ok(layout.profile.height >= 44);
+  assert.ok(layout.profile.height >= 64, 'profile is a button now');
 });
 
 test('ready boxes do not overlap each other and stack top to bottom under the title', () => {

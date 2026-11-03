@@ -31,13 +31,16 @@ test('HOW_TO_ITEMS names fiber, probiotic, and bacteria with their effects', () 
   const items = howToItems('en');
   assert.deepEqual(
     items.map((item) => item.key),
-    ['fiber', 'probiotic', 'bacteria'],
+    ['pipe', 'fiber', 'probiotic', 'bacteria'],
   );
   const blob = items.map((item) => `${item.name} ${item.detail}`).join('\n');
+  assert.match(blob, /This is a pipe/);
+  assert.match(blob, /bad bacteria/);
   assert.match(blob, /\+1/);
   assert.match(blob, /5 pipes/);
   assert.match(blob, /−2|-2/);
   const zh = howToItems('zh-Hans');
+  assert.match(zh.map((i) => i.name).join(' '), /管道/);
   assert.match(zh.map((i) => i.name).join(' '), /纤维/);
   assert.match(zh.map((i) => i.name).join(' '), /益生菌/);
   assert.match(zh.map((i) => i.name).join(' '), /有害细菌/);
