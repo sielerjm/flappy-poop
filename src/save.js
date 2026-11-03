@@ -1,5 +1,5 @@
 // Save codes: a signed, versioned string ("fp1.<payload>.<sig>") that carries a
-// player's name and top-3 scores between browsers. No Phaser or DOM imports so
+// player's name and best MAX_TOP scores between browsers. No Phaser or DOM imports so
 // Node can run tests/save.test.js. Web Crypto only (crypto.subtle, getRandomValues).
 //
 // Signed, not encrypted: the payload is readable; edits are detected. The key is
@@ -8,7 +8,7 @@
 export const CURRENT_VERSION = 1;
 export const SAVE_KEY = 'flappyPoop.save'; // localStorage key
 export const SCHEMA = 1; // local storage shape version (independent of the wire format)
-export const MAX_TOP = 3;
+export const MAX_TOP = 6;
 export const NAME_MIN = 1;
 export const NAME_MAX = 12;
 export const EMPTY_STATE = Object.freeze({ id: null, name: '', top: Object.freeze([]), exportedAt: null });
@@ -98,7 +98,7 @@ function normalizeState(raw) {
   return out;
 }
 
-/** New state with `score` inserted into top (desc, dedup, best 3). Score <= 0 is ignored. */
+/** New state with `score` inserted into top (desc, dedup, best MAX_TOP). Score <= 0 is ignored. */
 export function recordScore(state, score) {
   const base = normalizeState(state);
   if (!Number.isInteger(score) || score <= 0) return base;
@@ -125,11 +125,18 @@ export function merge(local, incoming) {
   };
 }
 
-/** Start-screen line: "Name · 41 · 37 · 30", "Name" when no scores, "" when no name. */
+/** Full line: "Name · 41 · 37 · 30", "Name" when no scores, "" when no name. */
 export function summaryLine(state) {
   const s = normalizeState(state);
   if (!s.name) return '';
   return [s.name, ...s.top].join(' · ');
+}
+
+/** Home-screen line: "Name · 41" (best only), "Name" when no scores, "" when no name. */
+export function profileLine(state) {
+  const s = normalizeState(state);
+  if (!s.name) return '';
+  return s.top.length ? `${s.name} · ${s.top[0]}` : s.name;
 }
 
 /** Random 16-byte id, base64url. Generated once and never regenerated. */

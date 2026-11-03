@@ -14,6 +14,8 @@ import {
   isNewTop,
   merge,
   summaryLine,
+  profileLine,
+  MAX_TOP,
   extractCode,
   buildCode,
   exportCode,
@@ -86,16 +88,17 @@ test('4. a v1 code still imports after CURRENT_VERSION is bumped to 2; re-export
   assert.equal(CURRENT_VERSION, 1);
 });
 
-test('5. local [41, 30] merged with pasted [37, 30, 12] keeps the best three', async () => {
+// The spec table (written for a top 3) expected [41, 37, 30]; the list now keeps six.
+test('5. local [41, 30] merged with pasted [37, 30, 12] unions the scores, best first', async () => {
   const local = { id: newId(), name: 'A', top: [41, 30], exportedAt: null };
   const incoming = { id: newId(), name: 'B', top: [37, 30, 12], exportedAt: NOW };
-  assert.deepEqual(merge(local, incoming).top, [41, 37, 30]);
+  assert.deepEqual(merge(local, incoming).top, [41, 37, 30, 12]);
   const storage = fakeStorage();
   saveLocal(local, storage);
   const code = await exportCode(incoming, { storage: fakeStorage(), now: () => NOW });
   const res = await importCode(code, { storage });
   assert.equal(res.ok, true);
-  assert.deepEqual(res.state.top, [41, 37, 30]);
+  assert.deepEqual(res.state.top, [41, 37, 30, 12]);
 });
 
 test('6. the pasted name and id win over the local ones', async () => {
@@ -157,28 +160,48 @@ test('10. a storage that throws never propagates: empty state, silent save, impo
   assert.equal(res.state.name, 'Alice');
 });
 
-test('recordScore keeps the best three, deduplicates, ignores 0, and returns a new object', () => {
+test('recordScore keeps the best six, deduplicates, ignores 0, and returns a new object', () => {
+  assert.equal(MAX_TOP, 6);
   const s0 = { id: null, name: '', top: [], exportedAt: null };
   const s1 = recordScore(s0, 5);
   assert.deepEqual(s1.top, [5]);
   assert.deepEqual(s0.top, []);
   const s2 = recordScore(recordScore(recordScore(s1, 9), 7), 3);
-  assert.deepEqual(s2.top, [9, 7, 5]);
-  assert.deepEqual(recordScore(s2, 7).top, [9, 7, 5]);
-  assert.deepEqual(recordScore(s2, 8).top, [9, 8, 7]);
-  assert.deepEqual(recordScore(s2, 0).top, [9, 7, 5]);
-  assert.deepEqual(recordScore(s2, -2).top, [9, 7, 5]);
-  assert.deepEqual(recordScore(s2, 2.5).top, [9, 7, 5]);
+  assert.deepEqual(s2.top, [9, 7, 5, 3]);
+  assert.deepEqual(recordScore(s2, 7).top, [9, 7, 5, 3]);
+  assert.deepEqual(recordScore(s2, 8).top, [9, 8, 7, 5, 3]);
+  assert.deepEqual(recordScore(s2, 0).top, [9, 7, 5, 3]);
+  assert.deepEqual(recordScore(s2, -2).top, [9, 7, 5, 3]);
+  assert.deepEqual(recordScore(s2, 2.5).top, [9, 7, 5, 3]);
+  const full = { ...s0, top: [9, 8, 7, 6, 5, 4] };
+  assert.deepEqual(recordScore(full, 3).top, [9, 8, 7, 6, 5, 4]);
+  assert.deepEqual(recordScore(full, 10).top, [10, 9, 8, 7, 6, 5]);
 });
 
 test('isNewTop is true only for a strictly new entry that makes the list', () => {
-  const s = { id: null, name: 'x', top: [9, 7, 5], exportedAt: null };
-  assert.equal(isNewTop(s, 8), true);
+  const s = { id: null, name: 'x', top: [9, 8, 7, 6, 5, 4], exportedAt: null };
+  assert.equal(isNewTop(s, 10), true);
   assert.equal(isNewTop(s, 7), false);
-  assert.equal(isNewTop(s, 4), false);
+  assert.equal(isNewTop(s, 3), false);
   assert.equal(isNewTop(s, 0), false);
   assert.equal(isNewTop({ top: [] }, 1), true);
-  assert.equal(isNewTop({ top: [9, 7] }, 1), true);
+  assert.equal(isNewTop({ top: [9, 7, 5] }, 1), true);
+});
+
+test('profileLine shows the name and best score only', () => {
+  assert.equal(profileLine({ name: 'Bob', top: [41, 37, 30, 12, 9, 5] }), 'Bob · 41');
+  assert.equal(profileLine({ name: 'Bob', top: [] }), 'Bob');
+  assert.equal(profileLine({ name: '', top: [5] }), '');
+  assert.equal(profileLine(null), '');
+});
+
+test('six scores round-trip through a code; a seventh is dropped locally and rejected on the wire', async () => {
+  const six = [60, 50, 40, 30, 20, 10];
+  const code = await exportCode({ id: newId(), name: 'Six', top: six, exportedAt: null }, { storage: fakeStorage(), now: () => NOW });
+  const res = await importCode(code, { storage: fakeStorage() });
+  assert.equal(res.ok, true);
+  assert.deepEqual(res.state.top, six);
+  assert.deepEqual(recordScore(res.state, 5).top, six);
 });
 
 test('local storage round-trips with schema 1 and ignores other schemas or junk', () => {
@@ -220,8 +243,8 @@ test('malformed codes are unrecognised, a bad signature is damaged', async () =>
   assert.deepEqual(await importCode(notJson, { storage }), { ok: false, error: 'unrecognised' });
   const badId = await buildCode(1, { i: 'short', n: 'A', s: [], t: NOW });
   assert.deepEqual(await importCode(badId, { storage }), { ok: false, error: 'unrecognised' });
-  const fourScores = await buildCode(1, { i: newId(), n: 'A', s: [1, 2, 3, 4], t: NOW });
-  assert.deepEqual(await importCode(fourScores, { storage }), { ok: false, error: 'unrecognised' });
+  const sevenScores = await buildCode(1, { i: newId(), n: 'A', s: [1, 2, 3, 4, 5, 6, 7], t: NOW });
+  assert.deepEqual(await importCode(sevenScores, { storage }), { ok: false, error: 'unrecognised' });
   const negative = await buildCode(1, { i: newId(), n: 'A', s: [-1], t: NOW });
   assert.deepEqual(await importCode(negative, { storage }), { ok: false, error: 'unrecognised' });
   assert.equal(storage.getItem(SAVE_KEY), null, 'nothing written on failure');
