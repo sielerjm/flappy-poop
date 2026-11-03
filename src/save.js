@@ -7,11 +7,12 @@
 
 export const CURRENT_VERSION = 1;
 export const SAVE_KEY = 'flappyPoop.save'; // localStorage key
-export const SCHEMA = 1; // local storage shape version (independent of the wire format)
+export const SCHEMA = 2; // local storage shape version (independent of the wire format); 1 stored top as numbers
 export const MAX_TOP = 6;
 export const NAME_MIN = 1;
 export const NAME_MAX = 12;
 export const EMPTY_STATE = Object.freeze({ id: null, name: '', top: Object.freeze([]), exportedAt: null });
+export const TOILET_EMOJI = '🚽';
 
 // Permanent once v1 ships: changing it invalidates every code ever issued.
 const SECRET = '6b4bd093b6e899748ff681b661b86ed0b56adda5dd8f4105';
@@ -80,11 +81,41 @@ export function validateName(raw) {
   return { ok: n >= NAME_MIN && n <= NAME_MAX, name };
 }
 
-/** Positive integers only, descending, deduplicated, at most MAX_TOP. */
+/** A top entry from a bare score (schema 1 / wire `s`) or a { score, toilet } object. */
+function normalizeEntry(v) {
+  if (Number.isInteger(v) && v > 0) return { score: v, toilet: false };
+  if (v && typeof v === 'object' && Number.isInteger(v.score) && v.score > 0) return { score: v.score, toilet: Boolean(v.toilet) };
+  return null;
+}
+
+/**
+ * Top entries { score, toilet }: positive integer scores, deduplicated by score
+ * (first occurrence wins, so local beats pasted on a tie), descending, at most
+ * MAX_TOP.
+ */
 function normalizeTop(list) {
   if (!Array.isArray(list)) return [];
-  const set = new Set(list.filter((v) => Number.isInteger(v) && v > 0));
-  return [...set].sort((a, b) => b - a).slice(0, MAX_TOP);
+  const seen = new Set();
+  const out = [];
+  for (const v of list) {
+    const e = normalizeEntry(v);
+    if (!e || seen.has(e.score)) continue;
+    seen.add(e.score);
+    out.push(e);
+  }
+  return out.sort((a, b) => b.score - a.score).slice(0, MAX_TOP);
+}
+
+/** Just the numbers of the top list, best first. */
+export function topScores(state) {
+  return normalizeTop(state?.top).map((e) => e.score);
+}
+
+/** "🚽 41" for a run played on the toilet, else "41". Accepts a bare number too. */
+export function formatScore(entry) {
+  const e = Number.isInteger(entry) ? { score: entry, toilet: false } : entry;
+  if (!e || typeof e !== 'object' || !Number.isInteger(e.score)) return '';
+  return e.toilet ? `${TOILET_EMOJI} ${e.score}` : String(e.score);
 }
 
 function normalizeState(raw) {
@@ -98,19 +129,21 @@ function normalizeState(raw) {
   return out;
 }
 
-/** New state with `score` inserted into top (desc, dedup, best MAX_TOP). Score <= 0 is ignored. */
-export function recordScore(state, score) {
+/**
+ * New state with `score` inserted into top (desc, dedup, best MAX_TOP). Score <= 0
+ * is ignored. `toilet` marks a run played on the toilet.
+ */
+export function recordScore(state, score, { toilet = false } = {}) {
   const base = normalizeState(state);
   if (!Number.isInteger(score) || score <= 0) return base;
-  return { ...base, top: normalizeTop([...base.top, score]) };
+  return { ...base, top: normalizeTop([...base.top, { score, toilet: Boolean(toilet) }]) };
 }
 
 /** True when `score` would be a new entry in the top list (not already there, and good enough). */
 export function isNewTop(state, score) {
   if (!Number.isInteger(score) || score <= 0) return false;
-  const before = normalizeTop(state?.top);
-  if (before.includes(score)) return false;
-  return recordScore(state, score).top.includes(score);
+  if (topScores(state).includes(score)) return false;
+  return topScores(recordScore(state, score)).includes(score);
 }
 
 /** Pure merge used by importCode: pasted name and id win; scores are unioned. */
@@ -125,18 +158,18 @@ export function merge(local, incoming) {
   };
 }
 
-/** Full line: "Name · 41 · 37 · 30", "Name" when no scores, "" when no name. */
+/** Full line: "Name · 🚽 41 · 37 · 30", "Name" when no scores, "" when no name. */
 export function summaryLine(state) {
   const s = normalizeState(state);
   if (!s.name) return '';
-  return [s.name, ...s.top].join(' · ');
+  return [s.name, ...s.top.map(formatScore)].join(' · ');
 }
 
-/** Home-screen line: "Name · 41" (best only), "Name" when no scores, "" when no name. */
+/** Home-screen line: "Name · 41" (best only, 🚽 when on the toilet), "Name" when no scores, "" when no name. */
 export function profileLine(state) {
   const s = normalizeState(state);
   if (!s.name) return '';
-  return s.top.length ? `${s.name} · ${s.top[0]}` : s.name;
+  return s.top.length ? `${s.name} · ${formatScore(s.top[0])}` : s.name;
 }
 
 /** Random 16-byte id, base64url. Generated once and never regenerated. */
@@ -155,7 +188,8 @@ export function loadLocal(storage = globalThis.localStorage) {
     const raw = storage?.getItem(SAVE_KEY);
     if (raw == null) return emptyState();
     const parsed = JSON.parse(raw);
-    if (parsed?.schema !== SCHEMA) return emptyState();
+    // Schema 1 stored top as bare numbers; normalizeState upgrades it in memory.
+    if (parsed?.schema !== 1 && parsed?.schema !== SCHEMA) return emptyState();
     return normalizeState(parsed);
   } catch {
     return emptyState();
@@ -185,9 +219,19 @@ export function ensureId(state, storage = globalThis.localStorage) {
 // Wire format. Each shipped version keeps its parser forever; serialize() only
 // writes CURRENT_VERSION's shape. Bumping CURRENT_VERSION changes the prefix.
 
-/** v1 payload: {"i":id,"n":name,"s":[...],"t":unixSeconds}. Key order fixed for deterministic bytes. */
+/**
+ * v1 payload: {"i":id,"n":name,"s":[scores],"p":[0|1 toilet flags],"t":unixSeconds}.
+ * Key order fixed for deterministic bytes. `p` is optional on read (added after
+ * v1 shipped; older codes read as all-false), always written.
+ */
 function serialize(state) {
-  return { i: state.id, n: state.name, s: state.top, t: state.exportedAt };
+  return {
+    i: state.id,
+    n: state.name,
+    s: state.top.map((e) => e.score),
+    p: state.top.map((e) => (e.toilet ? 1 : 0)),
+    t: state.exportedAt,
+  };
 }
 
 function parseV1(json) {
@@ -197,8 +241,14 @@ function parseV1(json) {
   if (!ok) throw new Error('v1: bad name');
   if (!Array.isArray(json.s) || json.s.length > MAX_TOP) throw new Error('v1: bad scores');
   if (!json.s.every((v) => Number.isInteger(v) && v >= 0)) throw new Error('v1: bad scores');
+  if (json.p !== undefined) {
+    if (!Array.isArray(json.p) || json.p.length !== json.s.length || !json.p.every((v) => v === 0 || v === 1)) {
+      throw new Error('v1: bad toilet flags');
+    }
+  }
   const exportedAt = Number.isInteger(json.t) ? json.t : null;
-  return { id: json.i, name, top: normalizeTop(json.s), exportedAt };
+  const top = normalizeTop(json.s.map((score, k) => ({ score, toilet: json.p?.[k] === 1 })));
+  return { id: json.i, name, top, exportedAt };
 }
 
 /** Parsers for every version ever shipped. Never delete one. */
