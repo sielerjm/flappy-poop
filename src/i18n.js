@@ -1,6 +1,8 @@
 // Player-facing string catalog. Phaser-free so Node can test every key.
 // Locales: en (default) and zh-Hans (Simplified Chinese).
 
+import { formatScore } from './save.js';
+
 export const DEFAULT_LOCALE = 'en';
 export const LOCALES = ['en', 'zh-Hans'];
 
@@ -43,6 +45,8 @@ Inspired by Flappy Bird`,
     itemProbioticDetail: 'Blocks one bad bacteria hit up to 5 pipes',
     itemBacteriaName: 'Bad bacteria',
     itemBacteriaDetail: '−2 points (score never below 0). Does not kill.',
+    itemToiletName: 'On the toilet',
+    itemToiletDetail: 'Playing on the toilet? Flip the switch under tap to flap. Those scores get a 🚽 next to them.',
     updatedPrefix: 'Updated',
     languageTitle: 'Language',
     langEnglish: 'English',
@@ -110,6 +114,8 @@ Inspired by Flappy Bird`,
     itemProbioticDetail: '抵挡一次有害细菌攻击，最多持续 5 道管道',
     itemBacteriaName: '有害细菌',
     itemBacteriaDetail: '−2 分（分数不低于 0）。不会致死。',
+    itemToiletName: '如厕模式',
+    itemToiletDetail: '在马桶上玩？打开“点击起飞”下方的开关，这些分数旁会显示 🚽。',
     updatedPrefix: '更新于',
     languageTitle: '语言',
     langEnglish: 'English',
@@ -171,6 +177,7 @@ export function howToItems(locale) {
     { key: 'fiber', name: t(locale, 'itemFiberName'), detail: t(locale, 'itemFiberDetail') },
     { key: 'probiotic', name: t(locale, 'itemProbioticName'), detail: t(locale, 'itemProbioticDetail') },
     { key: 'bacteria', name: t(locale, 'itemBacteriaName'), detail: t(locale, 'itemBacteriaDetail') },
+    { key: 'toilet', name: t(locale, 'itemToiletName'), detail: t(locale, 'itemToiletDetail') },
   ];
 }
 
@@ -189,7 +196,7 @@ export function welcomeText(locale, state) {
   const name = state?.name ?? '';
   const top = Array.isArray(state?.top) ? state.top : [];
   if (top.length === 0) return t(locale, 'saveWelcomeNoScores').replace('{name}', name);
-  return t(locale, 'saveWelcome').replace('{name}', name).replace('{scores}', top.join(' · '));
+  return t(locale, 'saveWelcome').replace('{name}', name).replace('{scores}', top.map(formatScore).join(' · '));
 }
 
 /** Toggle label like "Sound   ON". */
