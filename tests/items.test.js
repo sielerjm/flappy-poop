@@ -55,9 +55,9 @@ test('itemGapY stays inside the gap and bacteria is never centred', () => {
   }
 });
 
-test('scoreAfterItem adds 1 for fiber, subtracts 2 for bacteria, floors at 0', () => {
+test('scoreAfterItem adds 1 for fiber, subtracts 3 for bacteria, floors at 0', () => {
   assert.equal(scoreAfterItem(10, 'fiber', T), 11);
-  assert.equal(scoreAfterItem(10, 'bacteria', T), 8);
+  assert.equal(scoreAfterItem(10, 'bacteria', T), 7);
   assert.equal(scoreAfterItem(1, 'bacteria', T), 0);
   assert.equal(scoreAfterItem(0, 'bacteria', T), 0);
   assert.equal(scoreAfterItem(10, 'probiotic', T), 10);

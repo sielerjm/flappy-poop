@@ -9,7 +9,7 @@ test('item spawn rates sit in a fair band', () => {
 
 test('fiber and bacteria score deltas are the locked contract', () => {
   assert.equal(T.items.fiberPoints, 1);
-  assert.equal(T.items.bacteriaPenalty, 2);
+  assert.equal(T.items.bacteriaPenalty, 3);
 });
 
 test('probiotic duration and item hitbox stay playable', () => {

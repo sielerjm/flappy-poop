@@ -8,7 +8,7 @@ guide; this file is the map for anyone changing the code.
 
 Flappy Poop is a Flappy Bird clone for phone browsers: a poop emoji flaps through
 the gut dodging pink intestinal-fold pipes. One point per pipe pair passed; fiber
-is +1, bad bacteria is −2 (floor 0), and a probiotic blocks one bacteria hit for
+is +1, bad bacteria is −3 (floor 0), and a probiotic blocks one bacteria hit for
 5 pipes (pickups stack; a hit clears the stack). From pipe 5 a bean bobs between pipe
 pairs (15 % per pair to pipe 20 with one guaranteed by guaranteeScore, 6 % after);
 one bean charges a fart

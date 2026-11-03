@@ -10,7 +10,7 @@ GitHub Pages is still preferred.
 
 Flappy Poop is a gut-themed Flappy Bird clone for phone browsers (Phaser 4, no
 bundler). A poop emoji flaps through intestinal-fold pipes. Pickups: fiber (+1),
-probiotic (blocks one bacteria hit for 5 pipes), bad bacteria (−2, never kills).
+probiotic (blocks one bacteria hit for 5 pipes; pickups stack), bad bacteria (−3, never kills).
 Author / designer / artist: Michael Sieler. Side project, short playful copy — not
 formal medical language.
 
@@ -82,7 +82,7 @@ Short, playful, clear. Fit a 720×1280 logical field; How to play / About body w
 | itemProbioticName | Probiotic | 益生菌 |
 | itemProbioticDetail | Protects you against bad bacteria for 5 pipes. Subsequent probiotics stack, but hitting a bad bacteria uses them all up. | 在 5 道管道内保护你不受有害细菌伤害。后续益生菌可叠加，但撞到有害细菌会全部用完。 |
 | itemBacteriaName | Bad bacteria | 有害细菌 |
-| itemBacteriaDetail | −2 points | −2 分 |
+| itemBacteriaDetail | −3 points | −3 分 |
 | itemBeanName | Beans | 豆子 |
 | itemBeanDetail | Grab a bean, then press the bean button at the bottom (or your poop) to activate the power-up: fart past the next 5 pipes, and nothing can hurt you. | 吃到豆子后，点击底部的豆子按钮（或便便）启动能力：放屁冲过接下来的 5 道管道，期间不会受伤。 |
 | itemToiletName | On the toilet | 如厕模式 |

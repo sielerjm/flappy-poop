@@ -4,10 +4,10 @@
 
 import { isLocale, DEFAULT_LOCALE } from './i18n.js';
 
-export const VERSION = '0.5.8';
+export const VERSION = '0.5.9';
 
 /** Player-facing stamp on the About overlay. Bump with VERSION. */
-export const LAST_UPDATED = '3 Nov 2026, 19:58';
+export const LAST_UPDATED = '3 Nov 2026, 20:01';
 
 const ISSUE_BASE = 'https://github.com/sielerjm/flappy-poop/issues/new';
 

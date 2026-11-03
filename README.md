@@ -4,7 +4,7 @@
 
 Open it on your phone and add it to your home screen for a full-screen, app-like launch.
 
-A poop emoji flaps through the gut, dodging pink intestinal folds. A Flappy Bird clone for phone browsers, built on [Phaser 4](https://phaser.io) with no build step. Version **0.5.8**. English and Simplified Chinese in-game.
+A poop emoji flaps through the gut, dodging pink intestinal folds. A Flappy Bird clone for phone browsers, built on [Phaser 4](https://phaser.io) with no build step. Version **0.5.9**. English and Simplified Chinese in-game.
 
 **Host your own:** fork or push this repo to GitHub, enable Pages (Settings → Pages → Deploy from branch → `main` / root), then open `https://<you>.github.io/<repo>/`.
 
@@ -16,7 +16,7 @@ From score 8, pickups can appear in the gap:
 
 - **Fiber** (broccoli): +1.
 - **Probiotic** (good bacteria): stays in your inventory for 5 pipes and blocks one bad-bacteria hit.
-- **Bacteria** (bad): −2. Score never goes below 0. Does not kill. After score 15.
+- **Bacteria** (bad): −3. Score never goes below 0. Does not kill. After score 15.
 
 The probiotic does **not** save you from a pipe.
 
