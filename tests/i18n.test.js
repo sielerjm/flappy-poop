@@ -111,7 +111,7 @@ test('howToItems and pauseBannerText resolve for both locales', () => {
     const items = howToItems(locale);
     assert.deepEqual(
       items.map((i) => i.key),
-      ['pipe', 'fiber', 'probiotic', 'bacteria', 'toilet'],
+      ['pipe', 'fiber', 'probiotic', 'bacteria', 'bean', 'toilet'],
     );
     const banner = pauseBannerText(locale);
     assert.match(banner, /\n/);
@@ -137,5 +137,7 @@ test('both About catalogs keep untranslated brand and credit tokens', () => {
     assert.match(body, /Michael Sieler/);
     assert.match(body, /Phaser 4\.2\.1/);
     assert.match(body, /MacKaffee/);
+    assert.match(body, /Pixabay/);
+    assert.match(body, /fart sound effect \(reed\)/);
   }
 });

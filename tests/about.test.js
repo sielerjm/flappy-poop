@@ -21,6 +21,7 @@ test('ABOUT_TEXT names the author, LLM assistance, engine, language, and sound c
     assert.match(body, /Phaser/);
     assert.match(body, /JavaScript/);
     assert.match(body, /MacKaffee/);
+    assert.match(body, /fart sound effect \(reed\)/);
     assert.match(body, /Flappy Poop/);
   }
 });

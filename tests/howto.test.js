@@ -31,12 +31,13 @@ test('HOW_TO_ITEMS names fiber, probiotic, and bacteria with their effects', () 
   const items = howToItems('en');
   assert.deepEqual(
     items.map((item) => item.key),
-    ['pipe', 'fiber', 'probiotic', 'bacteria', 'toilet'],
+    ['pipe', 'fiber', 'probiotic', 'bacteria', 'bean', 'toilet'],
   );
   const blob = items.map((item) => `${item.name} ${item.detail}`).join('\n');
   assert.match(blob, /This is a pipe/);
   assert.match(blob, /bad bacteria/);
   assert.match(blob, /🚽/);
+  assert.match(blob, /Collect 5/);
   assert.match(blob, /\+1/);
   assert.match(blob, /5 pipes/);
   assert.match(blob, /−2|-2/);
@@ -45,6 +46,7 @@ test('HOW_TO_ITEMS names fiber, probiotic, and bacteria with their effects', () 
   assert.match(zh.map((i) => i.name).join(' '), /纤维/);
   assert.match(zh.map((i) => i.name).join(' '), /益生菌/);
   assert.match(zh.map((i) => i.name).join(' '), /有害细菌/);
+  assert.match(zh.map((i) => i.name).join(' '), /豆子/);
 });
 
 test('howToLayout is at least 44 px tall, under the title, and inside the field', () => {

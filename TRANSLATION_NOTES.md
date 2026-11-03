@@ -24,7 +24,7 @@ formal medical language.
 - First run with **no** stored `locale`: if `navigator.language` starts with `zh`, use `zh-Hans`; else `en`. Then persist.
 - Once the player picks a language in the 🌐 panel, the stored value always wins.
 - Brand title **Flappy Poop** stays Latin in both locales.
-- Untranslated tokens (must appear across About strings): `Flappy Poop`, `Michael Sieler`, `Phaser 4.2.1`, `MacKaffee`, version numbers.
+- Untranslated tokens (must appear across About strings): `Flappy Poop`, `Michael Sieler`, `Phaser 4.2.1`, `MacKaffee`, `Pixabay`, `fart sound effect (reed)`, version numbers.
 - **Silent mode** = iPhone **hardware** ringer/silent switch → **静音模式** (not the in-game mute toggle).
 - **Toilet mode** (如厕模式) = the ready-screen switch; scores from such runs carry a 🚽 (not translated).
 - **User code** / save code (用户码 / 存档码) = the `fp1.…` string players copy between devices. The home-screen button is **Save / Load User**; the panel labels are **Username**, **Save user code**, **Load user code**. `{name}` and `{scores}` are placeholders filled at runtime; keep them verbatim.
@@ -34,6 +34,7 @@ formal medical language.
 | English | Simplified Chinese |
 |---|---|
 | Pipe | 管道 |
+| Beans | 豆子 |
 | Fiber | 纤维 |
 | Probiotic | 益生菌 |
 | Bad bacteria | 有害细菌 |
@@ -81,6 +82,8 @@ Short, playful, clear. Fit a 720×1280 logical field; How to play / About body w
 | itemProbioticDetail | Blocks one bad bacteria hit up to 5 pipes | 抵挡一次有害细菌攻击，最多持续 5 道管道 |
 | itemBacteriaName | Bad bacteria | 有害细菌 |
 | itemBacteriaDetail | −2 points (score never below 0). Does not kill. | −2 分（分数不低于 0）。不会致死。 |
+| itemBeanName | Beans | 豆子 |
+| itemBeanDetail | Show up after pipe 5, bobbing up and down between pipes. Collect 5 and your poop glows: tap it to fart past the next 5 pipes — nothing can hurt you. | 第5道管道后出现，在管道之间上下漂动。集齐5颗后便便会发光：点击它，放屁冲过接下来的5道管道，期间不会受伤。 |
 | itemToiletName | On the toilet | 如厕模式 |
 | itemToiletDetail | Playing on the toilet? Flip the switch under tap to flap. Those scores get a 🚽 next to them. | 在马桶上玩？打开“点击起飞”下方的开关，这些分数旁会显示 🚽。 |
 | updatedPrefix | Updated | 更新于 |
@@ -117,7 +120,8 @@ Short, playful, clear. Fit a 720×1280 logical field; How to play / About body w
 ```
 Code: JavaScript / Phaser 4.2.1 (MIT)
 Art: Michael Sieler
-Sound: MacKaffee (Freesound / Pixabay)
+Death fart: MacKaffee (Freesound / Pixabay)
+Power fart: "fart sound effect (reed)" (Pixabay)
 Inspired by Flappy Bird
 ```
 
@@ -126,7 +130,8 @@ Inspired by Flappy Bird
 ```
 代码：JavaScript / Phaser 4.2.1（MIT）
 美术：Michael Sieler
-音效：MacKaffee（Freesound / Pixabay）
+死亡屁声：MacKaffee（Freesound / Pixabay）
+放屁冲刺音效："fart sound effect (reed)"（Pixabay）
 灵感来自 Flappy Bird
 ```
 

@@ -32,7 +32,8 @@ const STRINGS = {
     aboutCreditsTitle: 'Credits',
     aboutCredits: `Code: JavaScript / Phaser 4.2.1 (MIT)
 Art: Michael Sieler
-Sound: MacKaffee (Freesound / Pixabay)
+Death fart: MacKaffee (Freesound / Pixabay)
+Power fart: "fart sound effect (reed)" (Pixabay)
 Inspired by Flappy Bird`,
     howToTitle: 'HOW TO PLAY',
     howToBody:
@@ -45,6 +46,8 @@ Inspired by Flappy Bird`,
     itemProbioticDetail: 'Blocks one bad bacteria hit up to 5 pipes',
     itemBacteriaName: 'Bad bacteria',
     itemBacteriaDetail: '−2 points (score never below 0). Does not kill.',
+    itemBeanName: 'Beans',
+    itemBeanDetail: 'Show up after pipe 5, bobbing up and down between pipes. Collect 5 and your poop glows: tap it to fart past the next 5 pipes — nothing can hurt you.',
     itemToiletName: 'On the toilet',
     itemToiletDetail: 'Playing on the toilet? Flip the switch under tap to flap. Those scores get a 🚽 next to them.',
     updatedPrefix: 'Updated',
@@ -101,7 +104,8 @@ Inspired by Flappy Bird`,
     aboutCreditsTitle: '致谢',
     aboutCredits: `代码：JavaScript / Phaser 4.2.1（MIT）
 美术：Michael Sieler
-音效：MacKaffee（Freesound / Pixabay）
+死亡屁声：MacKaffee（Freesound / Pixabay）
+放屁冲刺音效："fart sound effect (reed)"（Pixabay）
 灵感来自 Flappy Bird`,
     howToTitle: '玩法说明',
     howToBody:
@@ -114,6 +118,8 @@ Inspired by Flappy Bird`,
     itemProbioticDetail: '抵挡一次有害细菌攻击，最多持续 5 道管道',
     itemBacteriaName: '有害细菌',
     itemBacteriaDetail: '−2 分（分数不低于 0）。不会致死。',
+    itemBeanName: '豆子',
+    itemBeanDetail: '第5道管道后出现，在管道之间上下漂动。集齐5颗后便便会发光：点击它，放屁冲过接下来的5道管道，期间不会受伤。',
     itemToiletName: '如厕模式',
     itemToiletDetail: '在马桶上玩？打开“点击起飞”下方的开关，这些分数旁会显示 🚽。',
     updatedPrefix: '更新于',
@@ -177,6 +183,7 @@ export function howToItems(locale) {
     { key: 'fiber', name: t(locale, 'itemFiberName'), detail: t(locale, 'itemFiberDetail') },
     { key: 'probiotic', name: t(locale, 'itemProbioticName'), detail: t(locale, 'itemProbioticDetail') },
     { key: 'bacteria', name: t(locale, 'itemBacteriaName'), detail: t(locale, 'itemBacteriaDetail') },
+    { key: 'bean', name: t(locale, 'itemBeanName'), detail: t(locale, 'itemBeanDetail') },
     { key: 'toilet', name: t(locale, 'itemToiletName'), detail: t(locale, 'itemToiletDetail') },
   ];
 }
