@@ -51,4 +51,21 @@ export const TUNING = {
     itemRadius: 32, // px circular hitbox (~1/3 of the 96 logical-px sprite)
     weights: { fiber: 3, probiotic: 2, bacteria: 4 },
   },
+  beans: {
+    startScore: 5, // score from which beans may appear
+    chancePerGap: 0.2, // 0–1 chance a pipe pair spawns a bean (fiber's effective rate is ~0.1–0.18)
+    toCharge: 5, // beans needed to ready the fart power
+    powerPipes: 5, // pipe pairs that cross the screen during one fart
+    powerMs: 4344, // ms; fallback power length = the fart_accelerate clip (the loaded sound's duration wins)
+    travelPeriodMs: 2600, // ms for one full up-and-down bob
+    wiggleDeg: 10, // degrees of rotation wiggle
+    wigglePeriodMs: 450, // ms per wiggle cycle
+    graceMs: 600, // ms of invulnerability after the fart ends (clears a pipe column at base speed)
+    stinkFrameMs: 180, // ms between stink-line frames while charged
+    glowMinAlpha: 0.2, // 0–1 white glow pulse floor while charged
+    glowMaxAlpha: 0.6, // 0–1 white glow pulse ceiling while charged
+    glowPulseMs: 600, // ms per glow pulse (one way)
+    fartAlphaMs: 250, // ms per opacity swing (1 → 0.5) while farting
+    beanRadius: 32, // px circular hitbox
+  },
 };

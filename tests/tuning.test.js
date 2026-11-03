@@ -38,3 +38,16 @@ test('HUD probiotic icon is at least as large as the world item sprite', () => {
   assert.ok(T.hudProbioticSize >= worldPx, `hudProbioticSize ${T.hudProbioticSize} < world ${worldPx}`);
   assert.ok(T.hudProbioticSize <= 128, `hudProbioticSize ${T.hudProbioticSize} too tall for the score band`);
 });
+
+test('beans block sits in a fair band and the fart ramp stays readable', () => {
+  const b = T.beans;
+  assert.ok(b.startScore >= 1, 'beans should not appear from pipe 0');
+  assert.ok(b.chancePerGap >= 0.1 && b.chancePerGap <= 0.5, `chancePerGap ${b.chancePerGap}`);
+  assert.ok(b.toCharge >= 3 && b.toCharge <= 8, `toCharge ${b.toCharge}`);
+  assert.ok(b.powerPipes >= 3 && b.powerPipes <= 8, `powerPipes ${b.powerPipes}`);
+  assert.ok(b.powerMs >= 2000 && b.powerMs <= 8000, `powerMs ${b.powerMs}`);
+  assert.ok(b.graceMs * (T.pipeSpeed / 1000) >= T.pipeWidth + T.poopRadius, 'grace must clear a pipe column at base speed');
+  assert.ok(b.beanRadius >= 24 && b.beanRadius <= 40, `beanRadius ${b.beanRadius}`);
+  const peak = 1 + (((b.powerPipes * T.spawnEveryMs) / b.powerMs - 1) * Math.PI) / 2;
+  assert.ok(peak > 1 && peak <= 2.5, `fart peak multiplier ${peak}`);
+});

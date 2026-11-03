@@ -90,3 +90,102 @@ test('difficulty() is unchanged by the items block', () => {
   assert.deepEqual(difficulty(0, T), { pipeSpeed: T.pipeSpeed, gapHeight: T.gapHeight });
   assert.deepEqual(difficulty(T.rampEndScore, T), { pipeSpeed: T.maxPipeSpeed, gapHeight: T.minGapHeight });
 });
+
+// ---------------------------------------------------------------------------
+// Beans + fart power
+import { rollBean, pipeSpacing, beanSpawnX, beanBounds, beanY, beanAngle, poopTapHit, fartPeakMul, fartMul } from '../src/logic.js';
+import { GAME_WIDTH, GAME_HEIGHT } from '../src/config.js';
+
+test('rollBean never spawns below beans.startScore', () => {
+  const rng = createRng(11);
+  for (let i = 0; i < 1000; i++) assert.equal(rollBean(rng, T.beans.startScore - 1, T), false);
+});
+
+test('rollBean spawns at about chancePerGap, a little more often than fiber', () => {
+  const n = 6000;
+  const rngA = createRng(12);
+  let beans = 0;
+  for (let i = 0; i < n; i++) if (rollBean(rngA, T.beans.startScore, T)) beans += 1;
+  const beanRate = beans / n;
+  assert.ok(Math.abs(beanRate - T.beans.chancePerGap) < 0.03, `bean rate ${beanRate}`);
+  // Fiber's effective rate at the same score (after hazards start, the busiest mix).
+  const rngB = createRng(13);
+  let fiber = 0;
+  for (let i = 0; i < n; i++) if (rollItem(rngB, T.items.hazardStartScore + 5, T) === 'fiber') fiber += 1;
+  const fiberRate = fiber / n;
+  assert.ok(beanRate > fiberRate, `beans ${beanRate} should outnumber fiber ${fiberRate}`);
+  assert.ok(beanRate < fiberRate * 3, `beans ${beanRate} should not swamp fiber ${fiberRate}`);
+});
+
+test('beanY stays inside the bounds and reaches both extremes; beanAngle wiggles within wiggleDeg', () => {
+  const bounds = beanBounds({ gameHeight: GAME_HEIGHT, groundHeight: T.groundHeight, gapMargin: T.gapMargin, radius: T.beans.beanRadius });
+  assert.ok(bounds.minY > 0 && bounds.maxY < GAME_HEIGHT - T.groundHeight);
+  let lo = Infinity;
+  let hi = -Infinity;
+  for (let ms = 0; ms <= T.beans.travelPeriodMs; ms += 10) {
+    const y = beanY(ms, 0.7, bounds, T);
+    assert.ok(y >= bounds.minY - 1e-9 && y <= bounds.maxY + 1e-9, `y ${y} outside bounds`);
+    lo = Math.min(lo, y);
+    hi = Math.max(hi, y);
+    assert.ok(Math.abs(beanAngle(ms, T)) <= T.beans.wiggleDeg + 1e-9);
+  }
+  assert.ok(lo < bounds.minY + 2 && hi > bounds.maxY - 2, `travel ${lo}..${hi} should span the bounds`);
+});
+
+test('beanSpawnX is off the right edge, halfway to the next pair', () => {
+  const x = beanSpawnX(GAME_WIDTH, T.pipeWidth, T.pipeSpeed, T.spawnEveryMs);
+  const spacing = pipeSpacing(T.pipeSpeed, T.spawnEveryMs);
+  assert.equal(spacing, 450);
+  assert.ok(x > GAME_WIDTH + T.pipeWidth);
+  assert.equal(x, GAME_WIDTH + T.pipeWidth + spacing / 2);
+});
+
+test('poopTapHit is generous (2 x radius) and misses further away', () => {
+  const poop = { x: 180, y: 640 };
+  assert.equal(poopTapHit(180, 640, poop, T.poopRadius), true);
+  assert.equal(poopTapHit(180 + T.poopRadius * 2 - 1, 640, poop, T.poopRadius), true);
+  assert.equal(poopTapHit(180 + T.poopRadius * 2 + 2, 640, poop, T.poopRadius), false);
+  assert.equal(poopTapHit(400, 300, poop, T.poopRadius), false);
+});
+
+test('fartMul is 1 at both ends, peaks mid-clip, and its integral scrolls exactly powerPipes spacings', () => {
+  const duration = T.beans.powerMs;
+  const peak = fartPeakMul(duration, T.beans.powerPipes, T.spawnEveryMs);
+  assert.ok(peak > 1 && peak <= 2.5, `peak ${peak}`);
+  assert.equal(fartMul(0, duration, peak), 1);
+  assert.equal(fartMul(duration, duration, peak), 1);
+  assert.equal(fartMul(-5, duration, peak), 1);
+  assert.ok(Math.abs(fartMul(duration / 2, duration, peak) - peak) < 1e-9);
+  // Integrate speed over the clip: distance = pipeSpeed * sum(mul * dt).
+  const dt = 1;
+  let distance = 0;
+  for (let ms = 0; ms < duration; ms += dt) distance += T.pipeSpeed * fartMul(ms + dt / 2, duration, peak) * (dt / 1000);
+  const spacings = distance / pipeSpacing(T.pipeSpeed, T.spawnEveryMs);
+  assert.ok(Math.abs(spacings - T.beans.powerPipes) < 0.02, `scrolled ${spacings} spacings, want ${T.beans.powerPipes}`);
+});
+
+test('bean inventory and the timed fart power', () => {
+  const fx = createEffects(T);
+  assert.equal(fx.powerReady(), false);
+  assert.equal(fx.activatePower(1000), false, 'not ready yet');
+  for (let i = 1; i < T.beans.toCharge; i++) assert.equal(fx.addBean(), i);
+  assert.equal(fx.powerReady(), false);
+  assert.equal(fx.addBean(), T.beans.toCharge);
+  assert.equal(fx.powerReady(), true);
+  assert.equal(fx.activatePower(1000), true);
+  assert.equal(fx.beans(), 0, 'beans spent');
+  assert.equal(fx.powerActive(), true);
+  assert.equal(fx.powerReady(), false);
+  fx.tickPower(400);
+  assert.equal(fx.powerElapsed(), 400);
+  assert.equal(fx.endedPower(), false);
+  // A fifth bean mid-power does not make it ready until the power ends.
+  for (let i = 0; i < T.beans.toCharge; i++) fx.addBean();
+  assert.equal(fx.powerReady(), false);
+  fx.tickPower(600);
+  assert.equal(fx.powerActive(), false);
+  assert.equal(fx.endedPower(), true);
+  assert.equal(fx.endedPower(), false, 'reported once');
+  assert.equal(fx.powerReady(), true);
+  assert.equal(fx.powerElapsed(), 0);
+});

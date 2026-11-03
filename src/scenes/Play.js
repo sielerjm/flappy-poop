@@ -18,6 +18,15 @@ import {
   readyLayout,
   readyHit,
   scaledCircleBody,
+  rollBean,
+  pipeSpacing,
+  beanSpawnX,
+  beanBounds,
+  beanY,
+  beanAngle,
+  poopTapHit,
+  fartPeakMul,
+  fartMul,
 } from '../logic.js';
 import { t, pauseBannerText, initialLocale, isLocale } from '../i18n.js';
 import { loadLocal, saveLocal, recordScore, isNewTop, profileLine, TOILET_EMOJI } from '../save.js';
@@ -55,6 +64,16 @@ export class Play extends Phaser.Scene {
     this.state = 'ready'; // 'ready' | 'playing' | 'paused' | 'dead'
     this.flapLockedUntil = 0;
     this.effects = createEffects(T);
+    // Scroll multiplier (1 normally, the fart envelope while the power runs),
+    // post-fart grace, and distance-based pipe spawning. None of these read
+    // this.time.now: they advance by delta only while playing, so pausing freezes them.
+    this.scrollMul = 1;
+    this.graceLeftMs = 0;
+    this.distanceSinceSpawn = 0;
+    this.fartDurationMs = 0;
+    this.fartPeak = 1;
+    this.charged = false;
+    this.beanBounds = beanBounds({ gameHeight: GAME_HEIGHT, groundHeight: T.groundHeight, gapMargin: T.gapMargin, radius: T.beans.beanRadius });
     this.locale = this.resolveLocale();
     attachGame(this.game);
     setMuted(!this.settings.load().sound);
@@ -68,6 +87,7 @@ export class Play extends Phaser.Scene {
     }
     this.pipes = this.physics.add.group({ allowGravity: false, immovable: true });
     this.items = this.physics.add.group({ allowGravity: false, immovable: true });
+    this.beans = this.physics.add.group({ allowGravity: false, immovable: true });
     this.ground = this.add
       .tileSprite(0, GAME_HEIGHT - T.groundHeight, GAME_WIDTH, T.groundHeight, 'ground')
       .setOrigin(0, 0)
@@ -90,6 +110,8 @@ export class Play extends Phaser.Scene {
     const poopBody = scaledCircleBody(this.poop.frame.width, T.spriteDisplayScale, T.poopRadius);
     this.poop.body.setCircle(poopBody.radius, poopBody.offset, poopBody.offset);
     this.poop.body.setAllowGravity(false);
+    // White glow behind the poop while the fart power is charged (alpha pulses).
+    this.glow = this.add.circle(this.poop.x, this.poop.y, 64, 0xffffff, 1).setAlpha(0).setDepth(9);
     this.bob = this.tweens.add({ targets: this.poop, y: '+=24', duration: 500, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
 
     // HUD
@@ -102,6 +124,9 @@ export class Play extends Phaser.Scene {
       .setDepth(20)
       .setVisible(false);
     this.probioticText = this.add.text(GAME_WIDTH / 2 + 16, 156, '', { ...TEXT_STYLE, fontSize: '40px' }).setOrigin(0, 0.5).setDepth(20).setVisible(false);
+    // Bean counter (left of the HUD): bean ×n until the power is spent.
+    this.beanIcon = this.add.image(72, 156, 'bean').setDisplaySize(56, 56).setDepth(20).setVisible(false);
+    this.beanText = this.add.text(108, 156, '', { ...TEXT_STYLE, fontSize: '36px' }).setOrigin(0, 0.5).setDepth(20).setVisible(false);
     this.readyTitle = this.add
       .text(this.readyBoxes.title.x, this.readyBoxes.title.y, t(this.locale, 'readyTitle'), { ...TEXT_STYLE, fontSize: '52px' })
       .setOrigin(0.5)
@@ -141,6 +166,7 @@ export class Play extends Phaser.Scene {
     // Collisions
     this.physics.add.overlap(this.poop, this.pipes, () => this.die(), undefined, this);
     this.physics.add.overlap(this.poop, this.items, (_poop, item) => this.collectItem(item), undefined, this);
+    this.physics.add.overlap(this.poop, this.beans, (_poop, bean) => this.collectBean(bean), undefined, this);
 
     // Input: any pointer (touch/mouse) or Space/Up. Tray taps go through trayHit.
     this.input.on('pointerdown', (pointer) => this.flap(pointer));
@@ -163,6 +189,11 @@ export class Play extends Phaser.Scene {
     this.events.once('shutdown', () => {
       if (typeof document !== 'undefined') document.removeEventListener('visibilitychange', this.onHidden);
       this.game.events.off('blur', this.onBlur);
+      if (this.fartSound) {
+        this.fartSound.stop();
+        this.fartSound.destroy();
+        this.fartSound = null;
+      }
     });
   }
 
@@ -207,7 +238,7 @@ export class Play extends Phaser.Scene {
     this.toiletHud.setVisible(this.toilet);
     this.poop.body.setAllowGravity(true);
     this.poop.body.setGravityY(T.gravity);
-    this.spawnTimer = this.time.addEvent({ delay: T.spawnEveryMs, loop: true, callback: () => this.spawnPipePair() });
+    this.distanceSinceSpawn = 0;
     this.spawnPipePair();
   }
 
@@ -239,6 +270,11 @@ export class Play extends Phaser.Scene {
           return;
         }
         // 'start' or empty space both start the run below.
+      }
+      // Charged power: a tap on the poop itself fires the fart instead of flapping.
+      if (this.state === 'playing' && this.effects.powerReady() && poopTapHit(pointer.x, pointer.y, this.poop, T.poopRadius)) {
+        this.activatePower();
+        return;
       }
     }
     this.handleChrome('tap');
@@ -417,7 +453,9 @@ export class Play extends Phaser.Scene {
     if (this.state !== 'playing') return;
     this.state = 'paused';
     this.physics.pause();
-    if (this.spawnTimer) this.spawnTimer.paused = true;
+    if (this.stinkTimer) this.stinkTimer.paused = true;
+    this.fartSound?.pause();
+    this.fartTween?.pause();
     this.bob.pause();
     this.setPauseBanner(true);
   }
@@ -426,7 +464,9 @@ export class Play extends Phaser.Scene {
     if (this.state !== 'paused') return;
     this.state = 'playing';
     this.physics.resume();
-    if (this.spawnTimer) this.spawnTimer.paused = false;
+    if (this.stinkTimer) this.stinkTimer.paused = false;
+    this.fartSound?.resume();
+    this.fartTween?.resume();
     this.bob.resume();
     this.setPauseBanner(false);
     // Recovery bounce on the resume tap. Do not set flapLockedUntil: chrome
@@ -464,7 +504,7 @@ export class Play extends Phaser.Scene {
     for (const p of [top, bottom]) {
       // Body uses unscaled frame units; scale comes from setDisplaySize.
       p.body.setSize(p.frame.width, p.frame.height);
-      p.setVelocityX(-this.diff.pipeSpeed);
+      p.setVelocityX(-this.scrollSpeed());
     }
     // Only the top pipe carries the "passed" flag so a pair scores once.
     top.setData('scoring', true);
@@ -478,15 +518,131 @@ export class Play extends Phaser.Scene {
       item.setScale(T.spriteDisplayScale);
       const itemBody = scaledCircleBody(item.frame.width, T.spriteDisplayScale, T.items.itemRadius);
       item.body.setCircle(itemBody.radius, itemBody.offset, itemBody.offset);
-      item.setVelocityX(-this.diff.pipeSpeed);
+      item.setVelocityX(-this.scrollSpeed());
       item.setData('kind', kind);
+    }
+
+    // Beans ride halfway between this pair and the next, bobbing top to bottom.
+    if (rollBean(this.rng, this.score, T)) {
+      const phase = this.rng() * Math.PI * 2;
+      const bean = this.beans.create(beanSpawnX(GAME_WIDTH, T.pipeWidth, this.diff.pipeSpeed, T.spawnEveryMs), beanY(0, phase, this.beanBounds, T), 'bean');
+      bean.setDepth(8);
+      bean.setScale(T.spriteDisplayScale);
+      const beanBody = scaledCircleBody(bean.frame.width, T.spriteDisplayScale, T.beans.beanRadius);
+      bean.body.setCircle(beanBody.radius, beanBody.offset, beanBody.offset);
+      bean.setVelocityX(-this.scrollSpeed());
+      bean.setData({ elapsed: 0, phase });
     }
   }
 
   applyDifficulty() {
     this.diff = difficulty(this.score, T);
-    for (const pipe of this.pipes.getChildren()) pipe.setVelocityX(-this.diff.pipeSpeed);
-    for (const item of this.items.getChildren()) item.setVelocityX(-this.diff.pipeSpeed);
+    this.applyScroll();
+  }
+
+  /** Current scroll speed (px/s): difficulty speed × the fart envelope. */
+  scrollSpeed() {
+    return this.diff.pipeSpeed * this.scrollMul;
+  }
+
+  /** Single place that pushes the scroll speed onto everything that moves left. */
+  applyScroll() {
+    const v = -this.scrollSpeed();
+    for (const pipe of this.pipes.getChildren()) pipe.setVelocityX(v);
+    for (const item of this.items.getChildren()) item.setVelocityX(v);
+    for (const bean of this.beans.getChildren()) bean.setVelocityX(v);
+  }
+
+  refreshBeanHud() {
+    const n = this.effects.beans();
+    const show = n > 0;
+    this.beanIcon.setVisible(show);
+    this.beanText.setVisible(show);
+    if (show) this.beanText.setText(`×${n}`);
+  }
+
+  /** Swap the player texture and rebuild the circle body for that frame size. */
+  setPoopTexture(key) {
+    this.poop.setTexture(key);
+    const body = scaledCircleBody(this.poop.frame.width, T.spriteDisplayScale, T.poopRadius);
+    this.poop.body.setCircle(body.radius, body.offset, body.offset);
+  }
+
+  collectBean(bean) {
+    if (this.state !== 'playing' || !bean.active) return;
+    const ghost = this.add.image(bean.x, bean.y, 'bean').setScale(T.spriteDisplayScale).setDepth(12);
+    this.tweens.add({
+      targets: ghost,
+      scale: T.spriteDisplayScale * 1.4,
+      alpha: 0,
+      duration: 180,
+      onComplete: () => ghost.destroy(),
+    });
+    bean.destroy();
+    this.effects.addBean();
+    this.refreshBeanHud();
+    sfx.pickup();
+    if (this.effects.powerReady()) this.setCharged(true);
+  }
+
+  /** Charged look: alternating stink-line frames and a pulsing white glow. */
+  setCharged(on) {
+    if (on === this.charged) return;
+    this.charged = on;
+    if (on) {
+      this.stinkFrame = 0;
+      this.setPoopTexture('poop-stink1');
+      this.stinkTimer = this.time.addEvent({
+        delay: T.beans.stinkFrameMs,
+        loop: true,
+        callback: () => {
+          this.stinkFrame ^= 1;
+          this.setPoopTexture(this.stinkFrame ? 'poop-stink2' : 'poop-stink1');
+        },
+      });
+      this.glow.setAlpha(T.beans.glowMinAlpha);
+      this.glowTween = this.tweens.add({ targets: this.glow, alpha: T.beans.glowMaxAlpha, yoyo: true, repeat: -1, duration: T.beans.glowPulseMs });
+    } else {
+      this.stinkTimer?.remove();
+      this.stinkTimer = null;
+      this.glowTween?.stop();
+      this.glowTween = null;
+      this.glow.setAlpha(0);
+      if (this.state === 'playing') this.setPoopTexture('poop');
+    }
+  }
+
+  /** Tap on a charged poop: fart through the next pipes for the length of the clip. */
+  activatePower() {
+    if (this.state !== 'playing' || !this.effects.powerReady()) return;
+    this.setCharged(false);
+    const snd = this.cache.audio.exists('fart-accelerate') ? this.sound.add('fart-accelerate', { volume: T.fartVolume }) : null;
+    const durationMs = snd && snd.duration > 0 ? Math.round(snd.duration * 1000) : T.beans.powerMs;
+    this.effects.activatePower(durationMs);
+    this.fartDurationMs = durationMs;
+    this.fartPeak = fartPeakMul(durationMs, T.beans.powerPipes, T.spawnEveryMs);
+    if (snd) {
+      this.fartSound = snd;
+      snd.once('complete', () => {
+        snd.destroy();
+        if (this.fartSound === snd) this.fartSound = null;
+      });
+      snd.play();
+    }
+    this.setPoopTexture('poop-fart');
+    this.fartTween = this.tweens.add({ targets: this.poop, alpha: 0.5, yoyo: true, repeat: -1, duration: T.beans.fartAlphaMs });
+    this.refreshBeanHud();
+  }
+
+  endPower() {
+    this.fartTween?.stop();
+    this.fartTween = null;
+    this.poop.setAlpha(1);
+    this.scrollMul = 1;
+    this.setPoopTexture('poop');
+    this.graceLeftMs = T.beans.graceMs;
+    this.applyScroll();
+    if (this.effects.powerReady()) this.setCharged(true);
   }
 
   refreshProbioticHud() {
@@ -535,11 +691,14 @@ export class Play extends Phaser.Scene {
 
   die() {
     if (this.state !== 'playing') return;
+    // Farting (or just finished and still clearing the pipe) cannot die.
+    if (this.effects.powerActive() || this.graceLeftMs > 0) return;
     this.state = 'dead';
-    this.spawnTimer?.remove();
-    this.poop.setTexture('poop-dead');
+    this.setCharged(false);
+    this.setPoopTexture('poop-dead');
     for (const pipe of this.pipes.getChildren()) pipe.setVelocityX(0);
     for (const item of this.items.getChildren()) item.setVelocityX(0);
+    for (const bean of this.beans.getChildren()) bean.setVelocityX(0);
     this.setPauseBanner(false);
     this.cameras.main.shake(200, 0.01);
     this.cameras.main.flash(120, 255, 120, 160);
@@ -568,16 +727,39 @@ export class Play extends Phaser.Scene {
     const dt = delta / 1000;
     const scrolling = this.state === 'ready' || this.state === 'playing';
     if (scrolling) {
-      this.bg.tilePositionX += this.diff.pipeSpeed * 0.25 * dt;
-      this.ground.tilePositionX += this.diff.pipeSpeed * dt;
+      this.bg.tilePositionX += this.scrollSpeed() * 0.25 * dt;
+      this.ground.tilePositionX += this.scrollSpeed() * dt;
     }
 
     if (this.state === 'playing') {
+      // Fart power clock and envelope; grace countdown; distance-based spawning.
+      this.effects.tickPower(delta);
+      if (this.effects.powerActive()) {
+        this.scrollMul = fartMul(this.effects.powerElapsed(), this.fartDurationMs, this.fartPeak);
+        this.applyScroll();
+      }
+      if (this.effects.endedPower()) this.endPower();
+      if (this.graceLeftMs > 0) this.graceLeftMs = Math.max(0, this.graceLeftMs - delta);
+      this.distanceSinceSpawn += this.scrollSpeed() * dt;
+      const spacing = pipeSpacing(this.diff.pipeSpeed, T.spawnEveryMs);
+      if (this.distanceSinceSpawn >= spacing) {
+        this.distanceSinceSpawn -= spacing;
+        this.spawnPipePair();
+      }
+
       this.poop.setAngle(angleForVelocity(this.poop.body.velocity.y, T));
-      if (this.poop.y - T.poopRadius < 0 || this.poop.y + T.poopRadius > GAME_HEIGHT - T.groundHeight) {
-        this.die();
+      const top = T.poopRadius;
+      const floor = GAME_HEIGHT - T.groundHeight - T.poopRadius;
+      if (this.poop.y < top || this.poop.y > floor) {
+        if (this.effects.powerActive() || this.graceLeftMs > 0) {
+          this.poop.y = Math.min(Math.max(this.poop.y, top), floor);
+          this.poop.setVelocityY(0);
+        } else {
+          this.die();
+        }
       }
     }
+    this.glow.setPosition(this.poop.x, this.poop.y);
 
     if (this.state === 'dead') {
       // Pin the tumbling poop to the ground instead of letting it fall off-screen.
@@ -602,6 +784,15 @@ export class Play extends Phaser.Scene {
     }
     for (const item of this.items.getChildren()) {
       if (item.x < -T.pipeWidth) item.destroy();
+    }
+    for (const bean of this.beans.getChildren()) {
+      if (this.state === 'playing') {
+        const elapsed = bean.getData('elapsed') + delta;
+        bean.setData('elapsed', elapsed);
+        bean.y = beanY(elapsed, bean.getData('phase'), this.beanBounds, T);
+        bean.setAngle(beanAngle(elapsed, T));
+      }
+      if (bean.x < -T.pipeWidth) bean.destroy();
     }
   }
 }

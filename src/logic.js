@@ -4,10 +4,10 @@
 
 import { isLocale, DEFAULT_LOCALE } from './i18n.js';
 
-export const VERSION = '0.4.0';
+export const VERSION = '0.5.0';
 
 /** Player-facing stamp on the About overlay. Bump with VERSION. */
-export const LAST_UPDATED = '3 Nov 2026, 15:02';
+export const LAST_UPDATED = '3 Nov 2026, 15:48';
 
 const ISSUE_BASE = 'https://github.com/sielerjm/flappy-poop/issues/new';
 
@@ -221,10 +221,75 @@ export function scoreAfterItem(score, kind, t) {
   return score;
 }
 
-/** Inventory for a one-hit probiotic that lasts probioticPipes scored pipes. */
+/** True when a bean should spawn with this pipe pair (only from beans.startScore). */
+export function rollBean(rng, score, t) {
+  if (score < t.beans.startScore) return false;
+  return rng() < t.beans.chancePerGap;
+}
+
+/** Scroll distance between consecutive pipe pairs (px). */
+export function pipeSpacing(pipeSpeed, spawnEveryMs) {
+  return (pipeSpeed * spawnEveryMs) / 1000;
+}
+
+/** Spawn x of a bean: halfway between the pair spawning now and the next one. */
+export function beanSpawnX(width, pipeWidth, pipeSpeed, spawnEveryMs) {
+  return width + pipeWidth + pipeSpacing(pipeSpeed, spawnEveryMs) / 2;
+}
+
+/** Vertical travel limits for a bean's centre. */
+export function beanBounds({ gameHeight, groundHeight, gapMargin, radius }) {
+  return { minY: gapMargin + radius, maxY: gameHeight - groundHeight - gapMargin - radius };
+}
+
+/** Bean centre y at elapsedMs: a full top-to-bottom sine bob with a per-bean phase. */
+export function beanY(elapsedMs, phase, bounds, t) {
+  const centre = (bounds.minY + bounds.maxY) / 2;
+  const half = (bounds.maxY - bounds.minY) / 2;
+  return centre + half * Math.sin((2 * Math.PI * elapsedMs) / t.beans.travelPeriodMs + phase);
+}
+
+/** Small rotation wiggle (degrees) at elapsedMs. */
+export function beanAngle(elapsedMs, t) {
+  return t.beans.wiggleDeg * Math.sin((2 * Math.PI * elapsedMs) / t.beans.wigglePeriodMs);
+}
+
+/** True when (x, y) is within 2 × radius of the poop: a generous thumb target. */
+export function poopTapHit(x, y, poop, radius) {
+  const r = radius * 2;
+  const dx = x - poop.x;
+  const dy = y - poop.y;
+  return dx * dx + dy * dy <= r * r;
+}
+
+/**
+ * Peak scroll multiplier of a half-sine envelope over durationMs whose average
+ * scrolls exactly `pipes` pipe spacings (spawn cadence spawnEveryMs).
+ */
+export function fartPeakMul(durationMs, pipes, spawnEveryMs) {
+  const avg = (pipes * spawnEveryMs) / durationMs;
+  return 1 + ((avg - 1) * Math.PI) / 2;
+}
+
+/** Scroll multiplier at elapsedMs: 1 at the ends, `peak` mid-clip, 1 outside the clip. */
+export function fartMul(elapsedMs, durationMs, peak) {
+  if (!(durationMs > 0) || elapsedMs <= 0 || elapsedMs >= durationMs) return 1;
+  return 1 + (peak - 1) * Math.sin((Math.PI * elapsedMs) / durationMs);
+}
+
+/**
+ * Run-scoped inventory: a one-hit probiotic that lasts probioticPipes scored
+ * pipes, plus the bean counter and the timed fart power. The power clock is
+ * advanced by tickPower(deltaMs) from the scene's update (so pausing freezes it).
+ */
 export function createEffects(t) {
   let probioticPipesLeft = 0;
   const max = t.items.probioticPipes;
+  let beanCount = 0;
+  let powerDuration = 0;
+  let powerClock = 0;
+  let powerOn = false;
+  let powerJustEnded = false;
   return {
     applyProbiotic() {
       probioticPipesLeft = max;
@@ -243,6 +308,49 @@ export function createEffects(t) {
     },
     pipesLeft() {
       return probioticPipesLeft;
+    },
+    /** Collect a bean; returns the new count. */
+    addBean() {
+      beanCount += 1;
+      return beanCount;
+    },
+    beans() {
+      return beanCount;
+    },
+    /** Enough beans and no fart running. */
+    powerReady() {
+      return !powerOn && beanCount >= t.beans.toCharge;
+    },
+    /** Start the fart for durationMs; false unless ready. Spends the beans. */
+    activatePower(durationMs) {
+      if (!this.powerReady()) return false;
+      powerOn = true;
+      powerJustEnded = false;
+      powerDuration = durationMs;
+      powerClock = 0;
+      beanCount = 0;
+      return true;
+    },
+    /** Advance the power clock; call only while the run is playing. */
+    tickPower(deltaMs) {
+      if (!powerOn) return;
+      powerClock += deltaMs;
+      if (powerClock >= powerDuration) {
+        powerOn = false;
+        powerJustEnded = true;
+      }
+    },
+    powerActive() {
+      return powerOn;
+    },
+    powerElapsed() {
+      return powerOn ? powerClock : 0;
+    },
+    /** True once, right after the power ends. */
+    endedPower() {
+      if (!powerJustEnded) return false;
+      powerJustEnded = false;
+      return true;
     },
   };
 }
