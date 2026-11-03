@@ -26,6 +26,7 @@ formal medical language.
 - Brand title **Flappy Poop** stays Latin in both locales.
 - Untranslated tokens (must appear across About strings): `Flappy Poop`, `Michael Sieler`, `Phaser 4.2.1`, `MacKaffee`, version numbers.
 - **Silent mode** = iPhone **hardware** ringer/silent switch → **静音模式** (not the in-game mute toggle).
+- **Save code** (存档码) = the `fp1.…` string players copy between devices. `{name}` and `{scores}` are placeholders filled at runtime; keep them verbatim.
 
 ## Glossary (items)
 
@@ -86,6 +87,23 @@ Short, playful, clear. Fit a 720×1280 logical field; How to play / About body w
 | bugReport | Bug | 问题反馈 |
 | featureRequest | Feature request | 功能建议 |
 | feedbackLink | Bug or feature request? | 问题或功能建议？ |
+| saveLink | Save code | 存档码 |
+| saveTitle | SAVE CODE | 存档码 |
+| saveIntro | Copy your code to keep your name and top scores on another phone or browser. Paste it there to load them. | 复制存档码，即可在其他手机或浏览器保留你的名字和最高分。在那里粘贴即可载入。 |
+| saveNameLabel | Name | 名字 |
+| saveNamePlaceholder | 1–12 characters | 1–12 个字符 |
+| saveYourCode | Your save code | 你的存档码 |
+| saveCopy | Copy | 复制 |
+| saveCopied | Copied | 已复制 |
+| saveLoadLabel | Load save code | 载入存档码 |
+| saveLoad | Load | 载入 |
+| saveLoadPlaceholder | Paste a code | 粘贴存档码 |
+| saveWelcome | Welcome back, {name} — {scores} | 欢迎回来，{name}——{scores} |
+| saveWelcomeNoScores | Welcome back, {name} | 欢迎回来，{name} |
+| saveNameRequired | Enter a name first (1–12 characters) | 请先输入名字（1–12 个字符） |
+| saveErrorDamaged | Save code is damaged or was edited | 存档码已损坏或被修改 |
+| saveErrorUnrecognised | Unrecognised save code | 无法识别的存档码 |
+| newTopHint | New high score — export your save code to keep it. | 新高分——导出存档码即可保存。 |
 
 ### aboutCredits (English)
 

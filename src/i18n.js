@@ -52,6 +52,23 @@ Inspired by Flappy Bird`,
     bugReport: 'Bug',
     featureRequest: 'Feature request',
     feedbackLink: 'Bug or feature request?',
+    saveLink: 'Save code',
+    saveTitle: 'SAVE CODE',
+    saveIntro: 'Copy your code to keep your name and top scores on another phone or browser. Paste it there to load them.',
+    saveNameLabel: 'Name',
+    saveNamePlaceholder: '1–12 characters',
+    saveYourCode: 'Your save code',
+    saveCopy: 'Copy',
+    saveCopied: 'Copied',
+    saveLoadLabel: 'Load save code',
+    saveLoad: 'Load',
+    saveLoadPlaceholder: 'Paste a code',
+    saveWelcome: 'Welcome back, {name} — {scores}',
+    saveWelcomeNoScores: 'Welcome back, {name}',
+    saveNameRequired: 'Enter a name first (1–12 characters)',
+    saveErrorDamaged: 'Save code is damaged or was edited',
+    saveErrorUnrecognised: 'Unrecognised save code',
+    newTopHint: 'New high score — export your save code to keep it.',
   },
   'zh-Hans': {
     readyTitle: 'FLAPPY POOP',
@@ -98,6 +115,23 @@ Inspired by Flappy Bird`,
     bugReport: '问题反馈',
     featureRequest: '功能建议',
     feedbackLink: '问题或功能建议？',
+    saveLink: '存档码',
+    saveTitle: '存档码',
+    saveIntro: '复制存档码，即可在其他手机或浏览器保留你的名字和最高分。在那里粘贴即可载入。',
+    saveNameLabel: '名字',
+    saveNamePlaceholder: '1–12 个字符',
+    saveYourCode: '你的存档码',
+    saveCopy: '复制',
+    saveCopied: '已复制',
+    saveLoadLabel: '载入存档码',
+    saveLoad: '载入',
+    saveLoadPlaceholder: '粘贴存档码',
+    saveWelcome: '欢迎回来，{name}——{scores}',
+    saveWelcomeNoScores: '欢迎回来，{name}',
+    saveNameRequired: '请先输入名字（1–12 个字符）',
+    saveErrorDamaged: '存档码已损坏或被修改',
+    saveErrorUnrecognised: '无法识别的存档码',
+    newTopHint: '新高分——导出存档码即可保存。',
   },
 };
 
@@ -141,6 +175,14 @@ export function pauseBannerText(locale) {
 /** Small meta lines (version, Updated, haptics hint): 28px in Chinese, 24px in English (2x field). */
 export function metaFontSize(locale) {
   return locale === 'zh-Hans' ? '28px' : '24px';
+}
+
+/** "Welcome back, Name — 41 · 37 · 30" after a successful save-code load. */
+export function welcomeText(locale, state) {
+  const name = state?.name ?? '';
+  const top = Array.isArray(state?.top) ? state.top : [];
+  if (top.length === 0) return t(locale, 'saveWelcomeNoScores').replace('{name}', name);
+  return t(locale, 'saveWelcome').replace('{name}', name).replace('{scores}', top.join(' · '));
 }
 
 /** Toggle label like "Sound   ON". */

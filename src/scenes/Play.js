@@ -20,6 +20,7 @@ import {
   scaledCircleBody,
 } from '../logic.js';
 import { t, pauseBannerText, initialLocale, isLocale } from '../i18n.js';
+import { loadLocal, saveLocal, recordScore, isNewTop, summaryLine } from '../save.js';
 import { unlock, attachGame, setMuted, isMuted, sfx } from '../sound.js';
 import { createTray } from '../ui/tray.js';
 
@@ -42,6 +43,11 @@ export class Play extends Phaser.Scene {
     this.score = 0;
     this.best = createBestStore(globalThis.localStorage, T.bestKey);
     this.settings = createSettingsStore(globalThis.localStorage, T.settingsKey);
+    // Save-code state (name + top 3). Seed from the legacy best once so an
+    // existing player's record is not lost when top is still empty.
+    this.save = loadLocal();
+    const legacyBest = this.best.load();
+    if (this.save.top.length === 0 && legacyBest > 0) this.save = saveLocal(recordScore(this.save, legacyBest));
     this.diff = difficulty(0, T);
     this.state = 'ready'; // 'ready' | 'playing' | 'paused' | 'dead'
     this.flapLockedUntil = 0;
@@ -95,6 +101,12 @@ export class Play extends Phaser.Scene {
       .setDepth(20);
     this.readyHint = this.add
       .text(GAME_WIDTH / 2, howTo.y + howTo.height / 2 + 56, t(this.locale, 'tapToFlap'), { ...TEXT_STYLE, fontSize: '44px' })
+      .setOrigin(0.5)
+      .setDepth(20);
+    // "<name> · 41 · 37 · 30" so a pasted save code is visibly confirmed before
+    // play. Sits below the bobbing poop (centre GAME_HEIGHT / 2, bob ±24).
+    this.saveLine = this.add
+      .text(GAME_WIDTH / 2, GAME_HEIGHT / 2 + 130, summaryLine(this.save), { ...TEXT_STYLE, fontSize: '32px', color: '#f8a0c8' })
       .setOrigin(0.5)
       .setDepth(20);
 
@@ -151,6 +163,7 @@ export class Play extends Phaser.Scene {
     this.readyTitle.setVisible(false);
     this.howToLabel.setVisible(false);
     this.readyHint.setVisible(false);
+    this.saveLine.setVisible(false);
     this.poop.body.setAllowGravity(true);
     this.poop.body.setGravityY(T.gravity);
     this.spawnTimer = this.time.addEvent({ delay: T.spawnEveryMs, loop: true, callback: () => this.spawnPipePair() });
@@ -192,6 +205,20 @@ export class Play extends Phaser.Scene {
 
   getLocale() {
     return this.locale ?? 'en';
+  }
+
+  getSaveState() {
+    return this.save;
+  }
+
+  /** Called by the save panel after a name edit or a successful load. */
+  setSaveState(state) {
+    this.save = state;
+    this.refreshSaveLine();
+  }
+
+  refreshSaveLine() {
+    this.saveLine?.setText(summaryLine(this.save));
   }
 
   applyLocale(next) {
@@ -446,6 +473,8 @@ export class Play extends Phaser.Scene {
       sfx.die();
     }
     const best = this.best.save(this.score);
+    const newTop = isNewTop(this.save, this.score);
+    this.save = saveLocal(recordScore(this.save, this.score));
 
     // Tumble: keep gravity so the poop falls, stop it at the ground, spin it.
     this.poop.setVelocityY(Math.max(this.poop.body.velocity.y, 0));
@@ -454,7 +483,7 @@ export class Play extends Phaser.Scene {
 
     this.time.delayedCall(T.deathToOverMs, () => {
       this.physics.pause();
-      this.scene.launch('Over', { score: this.score, best });
+      this.scene.launch('Over', { score: this.score, best, newTop });
     });
   }
 
