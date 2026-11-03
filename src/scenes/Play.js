@@ -73,7 +73,7 @@ export class Play extends Phaser.Scene {
     this.fartDurationMs = 0;
     this.fartPeak = 1;
     this.charged = false;
-    this.beanBounds = beanBounds({ gameHeight: GAME_HEIGHT, groundHeight: T.groundHeight, gapMargin: T.gapMargin, radius: T.beans.beanRadius });
+    this.beanBounds = beanBounds({ gameHeight: GAME_HEIGHT, groundHeight: T.groundHeight, radius: T.beans.beanRadius, frac: T.beans.travelFrac });
     this.locale = this.resolveLocale();
     attachGame(this.game);
     setMuted(!this.settings.load().sound);

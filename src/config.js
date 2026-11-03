@@ -14,7 +14,7 @@ export const TUNING = {
   groundHeight: 128,
   gapMargin: 80, // keep the gap this far from the ceiling and the ground
   poopX: 180, // fixed x of the player
-  poopRadius: 34, // circular hitbox (~70 % of the 96 logical-px sprite)
+  poopRadius: 48, // px circular hitbox = half the 96 logical-px sprite (the whole drawing, square corners excluded)
   spriteDisplayScale: 0.25, // 384 px textures drawn at 96 logical px
   hudProbioticSize: 96, // logical px; HUD icon uses setDisplaySize
   maxFallAngle: 90, // degrees nose-down at terminal fall
@@ -49,13 +49,15 @@ export const TUNING = {
     fiberPoints: 1, // points added by fiber
     bacteriaPenalty: 2, // points subtracted by unshielded bacteria
     probioticPipes: 5, // pipes a probiotic lasts
-    itemRadius: 32, // px circular hitbox (~1/3 of the 96 logical-px sprite)
+    itemRadius: 48, // px circular hitbox = half the 96 logical-px sprite (whole drawing)
     weights: { fiber: 3, probiotic: 2, bacteria: 4 },
   },
   beans: {
     startScore: 5, // score from which beans may appear
-    chancePerGap: 0.09, // 0–1 chance a pipe pair spawns a bean (about fiber's effective ~0.1)
-    guaranteeScore: 18, // if no bean has spawned yet, the pair spawned at this score carries one (it reaches the poop ~2 pipes later, i.e. by pipe 20)
+    windowEndScore: 20, // end of the "at least one bean" window (scores 5–20)
+    chanceInWindow: 0.15, // 0–1 chance per pipe pair inside the window (fiber's effective rate is ~0.10–0.18)
+    chanceAfter: 0.06, // 0–1 chance per pipe pair after the window (below fiber's ~0.10)
+    guaranteeScore: 17, // if no bean has spawned yet, the pair spawned at this score carries one (on screen ~2 pipes later, by pipe 20)
     toCharge: 1, // beans needed to ready the fart power
     powerPipes: 5, // pipe pairs that cross the screen during one fart
     powerMs: 4344, // ms; fallback power length = the fart_accelerate clip (the loaded sound's duration wins)
@@ -69,6 +71,6 @@ export const TUNING = {
     glowMaxAlpha: 0.6, // 0–1 white glow pulse ceiling while charged
     glowPulseMs: 600, // ms per glow pulse (one way)
     fartAlphaMs: 250, // ms per opacity swing (1 → 0.5) while farting
-    beanRadius: 32, // px circular hitbox
+    beanRadius: 48, // px circular hitbox = half the 96 logical-px sprite
   },
 };

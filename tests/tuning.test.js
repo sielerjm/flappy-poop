@@ -14,7 +14,8 @@ test('fiber and bacteria score deltas are the locked contract', () => {
 
 test('probiotic duration and item hitbox stay playable', () => {
   assert.ok(T.items.probioticPipes >= 3 && T.items.probioticPipes <= 8, `probioticPipes ${T.items.probioticPipes}`);
-  assert.ok(T.items.itemRadius >= 24 && T.items.itemRadius <= 40, `itemRadius ${T.items.itemRadius}`);
+  assert.ok(T.items.itemRadius >= 40 && T.items.itemRadius <= 48, `itemRadius ${T.items.itemRadius} should span the 96 px sprite`);
+  assert.ok(T.poopRadius >= 40 && T.poopRadius <= 48, `poopRadius ${T.poopRadius}`);
 });
 
 test('every item weight is ≥ 0 and the sum is > 0', () => {
@@ -42,7 +43,10 @@ test('HUD probiotic icon is at least as large as the world item sprite', () => {
 test('beans block sits in a fair band and the fart ramp stays readable', () => {
   const b = T.beans;
   assert.ok(b.startScore >= 1, 'beans should not appear from pipe 0');
-  assert.ok(b.chancePerGap >= 0.03 && b.chancePerGap <= 0.5, `chancePerGap ${b.chancePerGap}`);
+  assert.ok(b.chanceInWindow >= 0.1 && b.chanceInWindow <= 0.5, `chanceInWindow ${b.chanceInWindow}`);
+  assert.ok(b.chanceAfter > 0 && b.chanceAfter < 0.1, `chanceAfter ${b.chanceAfter} must stay below fiber's ~0.10`);
+  assert.ok(b.chanceInWindow >= b.chanceAfter);
+  assert.ok(b.startScore <= b.guaranteeScore && b.guaranteeScore <= b.windowEndScore, 'guarantee inside the window');
   assert.ok(b.toCharge >= 1 && b.toCharge <= 8, `toCharge ${b.toCharge}`);
   assert.ok(b.travelFrac > 0 && b.travelFrac <= 1, `travelFrac ${b.travelFrac}`);
   assert.ok(b.guaranteeScore >= b.startScore && b.guaranteeScore <= 20, `guaranteeScore ${b.guaranteeScore} should land a bean by pipe 20`);
@@ -51,7 +55,7 @@ test('beans block sits in a fair band and the fart ramp stays readable', () => {
   assert.ok(b.powerPipes >= 3 && b.powerPipes <= 8, `powerPipes ${b.powerPipes}`);
   assert.ok(b.powerMs >= 2000 && b.powerMs <= 8000, `powerMs ${b.powerMs}`);
   assert.ok(b.graceMs * (T.pipeSpeed / 1000) >= T.pipeWidth + T.poopRadius, 'grace must clear a pipe column at base speed');
-  assert.ok(b.beanRadius >= 24 && b.beanRadius <= 40, `beanRadius ${b.beanRadius}`);
+  assert.ok(b.beanRadius >= 40 && b.beanRadius <= 48, `beanRadius ${b.beanRadius}`);
   const peak = 1 + (((b.powerPipes * T.spawnEveryMs) / b.powerMs - 1) * Math.PI) / 2;
   assert.ok(peak > 1 && peak <= 2.5, `fart peak multiplier ${peak}`);
 });
