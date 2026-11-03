@@ -190,6 +190,17 @@ export async function run(url = DEFAULT_URL) {
     await sleep(4000);
     const titles = await evaluate(`__flappy.scene.getScene('Leaderboard').children.list.filter((c) => c.type === 'Text' && c.text === 'LEADERBOARD').length`);
     ok(titles === 1, `reopen race draws one board (titles: ${titles})`);
+    // Every name on the board ends left of its score: long names are shrunk, never clipped or overlapping.
+    const overflow = await evaluate(`(() => {
+      const texts = __flappy.scene.getScene('Leaderboard').children.list.filter((c) => c.type === 'Text');
+      const names = texts.filter((c) => c.originX === 0 && c.text !== 'LEADERBOARD' && !/^\\d+\\.$/.test(c.text));
+      const overflow = names.filter((n) => {
+        const score = texts.find((s) => s.originX === 1 && Math.abs(s.y - n.y) < 1);
+        return score && n.x + n.displayWidth > score.x - score.displayWidth;
+      }).map((n) => n.text);
+      return { checked: names.length, overflow };
+    })()`);
+    ok(overflow.checked > 0 && overflow.overflow.length === 0, `board names fit their column (${overflow.checked} measured${overflow.overflow.length ? `, overflow: ${overflow.overflow.join(', ')}` : ''})`);
     await closeTop('Leaderboard');
 
     const f2 = await frame();

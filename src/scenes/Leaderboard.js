@@ -1,5 +1,5 @@
 import { GAME_WIDTH, GAME_HEIGHT, LEADERBOARD } from '../config.js';
-import { VERSION, chromeIntent, overlayOutsideHit } from '../logic.js';
+import { VERSION, chromeIntent, overlayOutsideHit, fitScale } from '../logic.js';
 import { t, metaFontSize, rankText } from '../i18n.js';
 import { formatScore, topScores } from '../save.js';
 import { fetchTop, fetchRank } from '../leaderboard.js';
@@ -92,10 +92,10 @@ export class Leaderboard extends Phaser.Scene {
         const row = rows[i];
         const color = i === own ? PINK : row ? '#ffffff' : DIM;
         this.add.text(cx - 224, y, `${i + 1}.`, { ...STYLE, fontSize: '34px', color: row ? PINK : DIM }).setOrigin(0, 0.5);
-        this.add
-          .text(cx - 150, y, row ? row.name : '–', { ...STYLE, fontSize: '34px', color, align: 'left', wordWrap: { width: 270, useAdvancedWrap: true }, maxLines: 1 })
-          .setOrigin(0, 0.5);
-        this.add.text(cx + 224, y, row ? formatScore(row) : '–', { ...STYLE, fontSize: '34px', color }).setOrigin(1, 0.5);
+        const score = this.add.text(cx + 224, y, row ? formatScore(row) : '–', { ...STYLE, fontSize: '34px', color }).setOrigin(1, 0.5);
+        const name = this.add.text(cx - 150, y, row ? row.name : '–', { ...STYLE, fontSize: '34px', color, align: 'left' }).setOrigin(0, 0.5);
+        // A 16-character name is wider than its column: shrink it to the room left of the score (same as the ready-screen buttons).
+        name.setScale(fitScale(name.width, score.x - score.width - name.x, 8));
       }
     }
 
