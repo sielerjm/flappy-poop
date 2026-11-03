@@ -146,7 +146,15 @@ async function refreshCode() {
   const withId = ensureId(state);
   if (withId.id !== state.id) setState(withId);
   const token = (refreshCode.token = (refreshCode.token ?? 0) + 1);
-  const code = await exportCode(withId);
+  let code;
+  try {
+    code = await exportCode(withId);
+  } catch {
+    currentCode = '';
+    dom.code.value = t(ctx.locale, 'saveErrorUnrecognised');
+    dom.copy.disabled = true;
+    return;
+  }
   if (token !== refreshCode.token) return; // a newer refresh won
   currentCode = code;
   dom.code.value = code;
@@ -202,7 +210,12 @@ async function onLoad() {
   const { locale } = ctx;
   dom.loadBtn.disabled = true;
   try {
-    const res = await importCode(text, { local: getState() });
+    let res;
+    try {
+      res = await importCode(text, { local: getState() });
+    } catch {
+      res = { ok: false, error: 'unrecognised' }; // e.g. Web Crypto missing on an http:// LAN address
+    }
     if (!res.ok) {
       setStatus(t(locale, res.error === 'damaged' ? 'saveErrorDamaged' : 'saveErrorUnrecognised'), 'error');
       return;

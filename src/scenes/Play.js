@@ -34,7 +34,7 @@ import {
   beanButtonHit,
 } from '../logic.js';
 import { t, pauseBannerText, initialLocale, isLocale } from '../i18n.js';
-import { loadLocal, saveLocal, recordScore, isNewTop, profileLine, TOILET_EMOJI } from '../save.js';
+import { loadLocal, saveLocal, recordScore, isNewTop, profileLine, topScores, TOILET_EMOJI } from '../save.js';
 import { unlock, attachGame, setMuted, isMuted, sfx } from '../sound.js';
 import { createTray } from '../ui/tray.js';
 import { createButton } from '../ui/button.js';
@@ -770,9 +770,11 @@ export class Play extends Phaser.Scene {
     } else {
       sfx.die();
     }
-    const best = this.best.save(this.score);
+    this.best.save(this.score); // legacy store, kept for first-run seeding
     const newTop = isNewTop(this.save, this.score);
     this.save = saveLocal(recordScore(this.save, this.score, { toilet: this.toilet }));
+    // BEST on the game-over panel = the save state's top score, so a loaded code counts too.
+    const best = Math.max(this.score, topScores(this.save)[0] ?? 0);
 
     // Tumble: keep gravity so the poop falls, stop it at the ground, spin it.
     this.poop.setVelocityY(Math.max(this.poop.body.velocity.y, 0));
