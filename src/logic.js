@@ -7,7 +7,7 @@ import { isLocale, DEFAULT_LOCALE } from './i18n.js';
 export const VERSION = '0.5.10';
 
 /** Player-facing stamp on the About overlay: the time of the last push (written by `npm run push`). */
-export const LAST_UPDATED = '3 Nov 2026, 21:40';
+export const LAST_UPDATED = '3 Nov 2026, 21:50';
 
 const ISSUE_BASE = 'https://github.com/sielerjm/flappy-poop/issues/new';
 
