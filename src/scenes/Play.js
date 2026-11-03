@@ -27,6 +27,7 @@ import {
   poopTapHit,
   fartPeakMul,
   fartMul,
+  isAheadOfPlayer,
 } from '../logic.js';
 import { t, pauseBannerText, initialLocale, isLocale } from '../i18n.js';
 import { loadLocal, saveLocal, recordScore, isNewTop, profileLine, TOILET_EMOJI } from '../save.js';
@@ -427,6 +428,7 @@ export class Play extends Phaser.Scene {
   doFlap() {
     if (this.state !== 'playing') return;
     if (this.time.now < this.flapLockedUntil) return;
+    if (this.effects.powerActive()) return; // the fart carries the poop through the middle
     this.poop.setVelocityY(T.flapVelocity);
     sfx.flap();
   }
@@ -456,6 +458,7 @@ export class Play extends Phaser.Scene {
     if (this.stinkTimer) this.stinkTimer.paused = true;
     this.fartSound?.pause();
     this.fartTween?.pause();
+    this.centreTween?.pause();
     this.bob.pause();
     this.setPauseBanner(true);
   }
@@ -467,6 +470,7 @@ export class Play extends Phaser.Scene {
     if (this.stinkTimer) this.stinkTimer.paused = false;
     this.fartSound?.resume();
     this.fartTween?.resume();
+    this.centreTween?.resume();
     this.bob.resume();
     this.setPauseBanner(false);
     // Recovery bounce on the resume tap. Do not set flapLockedUntil: chrome
@@ -632,16 +636,36 @@ export class Play extends Phaser.Scene {
     }
     this.setPoopTexture('poop-fart');
     this.fartTween = this.tweens.add({ targets: this.poop, alpha: 0.5, yoyo: true, repeat: -1, duration: T.beans.fartAlphaMs });
+    // Float through the middle: no gravity, no flaps, glide to mid-height.
+    this.poop.body.setAllowGravity(false);
+    this.poop.setVelocity(0, 0);
+    this.centreTween = this.tweens.add({ targets: this.poop, y: GAME_HEIGHT / 2, duration: T.beans.centreMs, ease: 'Sine.easeOut' });
     this.refreshBeanHud();
+  }
+
+  /** Fade out and remove every pipe / item still ahead of the poop. */
+  clearAhead() {
+    const ahead = [...this.pipes.getChildren(), ...this.items.getChildren()].filter((o) => isAheadOfPlayer(o.x, this.poop.x, T.pipeWidth));
+    for (const obj of ahead) {
+      obj.body.enable = false;
+      this.tweens.add({ targets: obj, alpha: 0, duration: T.beans.clearAheadMs, onComplete: () => obj.destroy() });
+    }
+    // Next pair spawns on the next frame at the right edge: a full screen of warning.
+    this.distanceSinceSpawn = pipeSpacing(this.diff.pipeSpeed, T.spawnEveryMs);
   }
 
   endPower() {
     this.fartTween?.stop();
     this.fartTween = null;
+    this.centreTween?.stop();
+    this.centreTween = null;
     this.poop.setAlpha(1);
     this.scrollMul = 1;
     this.setPoopTexture('poop');
+    this.poop.body.setAllowGravity(true);
+    this.poop.setVelocityY(0);
     this.graceLeftMs = T.beans.graceMs;
+    this.clearAhead();
     this.applyScroll();
     if (this.effects.powerReady()) this.setCharged(true);
   }

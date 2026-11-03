@@ -93,7 +93,7 @@ test('difficulty() is unchanged by the items block', () => {
 
 // ---------------------------------------------------------------------------
 // Beans + fart power
-import { rollBean, pipeSpacing, beanSpawnX, beanBounds, beanY, beanAngle, poopTapHit, fartPeakMul, fartMul } from '../src/logic.js';
+import { rollBean, pipeSpacing, beanSpawnX, beanBounds, beanY, beanAngle, poopTapHit, fartPeakMul, fartMul, isAheadOfPlayer } from '../src/logic.js';
 import { GAME_WIDTH, GAME_HEIGHT } from '../src/config.js';
 
 test('rollBean never spawns below beans.startScore', () => {
@@ -234,4 +234,13 @@ test('bean inventory and the timed fart power', () => {
   assert.equal(fx.endedPower(), false, 'reported once');
   assert.equal(fx.powerReady(), true);
   assert.equal(fx.powerElapsed(), 0);
+});
+
+test('isAheadOfPlayer: a column counts as ahead until the player has fully passed it', () => {
+  const px = T.poopX;
+  assert.equal(isAheadOfPlayer(px + 300, px, T.pipeWidth), true);
+  assert.equal(isAheadOfPlayer(px, px, T.pipeWidth), true, 'overlapping the player is still ahead');
+  assert.equal(isAheadOfPlayer(px - T.pipeWidth + 1, px, T.pipeWidth), true);
+  assert.equal(isAheadOfPlayer(px - T.pipeWidth, px, T.pipeWidth), false, 'fully behind');
+  assert.equal(isAheadOfPlayer(-200, px, T.pipeWidth), false);
 });

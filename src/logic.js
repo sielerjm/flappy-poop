@@ -4,10 +4,10 @@
 
 import { isLocale, DEFAULT_LOCALE } from './i18n.js';
 
-export const VERSION = '0.5.3';
+export const VERSION = '0.5.4';
 
 /** Player-facing stamp on the About overlay. Bump with VERSION. */
-export const LAST_UPDATED = '3 Nov 2026, 16:20';
+export const LAST_UPDATED = '3 Nov 2026, 16:31';
 
 const ISSUE_BASE = 'https://github.com/sielerjm/flappy-poop/issues/new';
 
@@ -267,6 +267,15 @@ export function beanY(elapsedMs, phase, bounds, t) {
 /** Small rotation wiggle (degrees) at elapsedMs. */
 export function beanAngle(elapsedMs, t) {
   return t.beans.wiggleDeg * Math.sin((2 * Math.PI * elapsedMs) / t.beans.wigglePeriodMs);
+}
+
+/**
+ * True when a pipe column (centre objX, width pipeWidth) has not been fully
+ * passed by the player at playerX. Used to clear everything still ahead when
+ * the fart power ends, so the next pair enters from the right edge.
+ */
+export function isAheadOfPlayer(objX, playerX, pipeWidth) {
+  return objX > playerX - pipeWidth;
 }
 
 /** True when (x, y) is within 2 × radius of the poop: a generous thumb target. */

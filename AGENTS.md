@@ -130,8 +130,11 @@ src/
                             (poopTapHit) calls activatePower(): fart texture,
                             alpha tween, fart_accelerate clip, effects.activatePower
                             (clip length), scrollMul from fartMul() each frame via
-                            applyScroll(); endPower() restores, graceLeftMs blocks
-                            die(). Pipes spawn by scrolled distance (pipeSpacing),
+                            applyScroll(); the poop floats at mid-height (gravity
+                            off, doFlap ignored); endPower() restores gravity,
+                            clearAhead() fades pipes / items still ahead
+                            (isAheadOfPlayer) and spawns the next pair at the right
+                            edge, graceLeftMs blocks die(). Pipes spawn by scrolled distance (pipeSpacing),
                             not a timer. Nothing here reads time.now;
                             readyHit() routes taps (howto, start, saveload, profile
                             → Scores). getSaveState / setSaveState for the panel.
