@@ -423,11 +423,12 @@ export function trayLayout(width, height, t) {
 }
 
 /**
- * Bean power button: the empty centre slot of the tray band, shown only while
+ * Bean power button: bottom centre, floating just above the ground strip in
+ * the lower band of the playfield (well clear of the tray), shown only while
  * the fart power is charged. Same size as the tray buttons.
  */
 export function beanButtonLayout(width, height, t) {
-  return { id: 'bean', x: width / 2, y: height - t.trayHeight / 2, size: t.trayHitMin };
+  return { id: 'bean', x: width / 2, y: height - t.groundHeight - t.trayHitMin / 2 - 58, size: t.trayHitMin };
 }
 
 /** True when (x, y) is inside the bean power button. */

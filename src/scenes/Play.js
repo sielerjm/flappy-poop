@@ -175,7 +175,7 @@ export class Play extends Phaser.Scene {
     {
       const b = this.beanButtonBox;
       const r = b.size / 2;
-      const bg = this.add.circle(0, 0, r, 0x1a0b14, 1).setStrokeStyle(4, 0xe85e96);
+      const bg = this.add.circle(0, 0, r, 0xffffff, 0.75).setStrokeStyle(4, 0xe85e96); // translucent white disc
       const icon = this.add.image(0, 0, 'bean').setDisplaySize(56, 56);
       // Container so the pulse scales circle + icon together without touching the icon's own scale.
       this.beanButton = this.add.container(b.x, b.y, [bg, icon]).setDepth(30).setVisible(false);

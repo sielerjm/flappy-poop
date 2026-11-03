@@ -62,11 +62,12 @@ test('trayHit returns the button id at its centre and null in the gap', () => {
   assert.equal(trayHit(GAME_WIDTH / 2, GAME_HEIGHT / 2, layout), null);
 });
 
-test('bean power button sits in the tray centre slot, clear of every tray button', () => {
+test('bean power button floats above the ground at bottom centre, clear of every tray button', () => {
   const tray = trayLayout(GAME_WIDTH, GAME_HEIGHT, T);
   const bean = beanButtonLayout(GAME_WIDTH, GAME_HEIGHT, T);
   assert.equal(bean.x, GAME_WIDTH / 2);
-  assert.equal(bean.y, tray.y);
+  assert.ok(bean.y + bean.size / 2 <= GAME_HEIGHT - T.groundHeight, 'floats above the ground strip');
+  assert.ok(bean.y + bean.size / 2 < tray.y - tray.buttons[0].size / 2, 'well above the tray buttons');
   assert.equal(bean.size, T.trayHitMin);
   for (const b of [...tray.buttons, tray.info, tray.lang, tray.feedback]) {
     const gap = Math.hypot(b.x - bean.x, b.y - bean.y) - (b.size + bean.size) / 2;
