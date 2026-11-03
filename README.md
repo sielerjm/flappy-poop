@@ -32,15 +32,17 @@ On iPhone, Silent mode mutes the game — turn it off to hear sound. The pause b
 - **Bottom-left (i)** — About (credits, author, LLM note, last-updated stamp, How to play and feedback links). Independent of Settings.
 - **Bottom-left (🌐)** — language (English / 简体中文). Persists. First visit with no saved choice follows the browser language when it starts with `zh`. Opening Language mid-run pauses.
 - **Bottom-left (💬)** — feedback: choose Bug or Feature request to open a GitHub issue form in the browser (needs a GitHub account). Also linked from About and How to play.
-- **Bottom-right tray** — pause, mute/unmute, settings. Tray taps never flap, and on the game-over screen they never retry.
-- **P** or **Esc** — pause / resume (during a run). Ignored while Settings, About, How to play, Language, or Feedback is open; Esc then closes the top overlay.
+- **Bottom-right tray** — 🏆 leaderboard, mute/unmute, settings, with pause sitting directly above the settings cog. Tray taps never flap, and on the game-over screen they never retry.
+- **🏆 Leaderboard** (tray or **T**) — the shared online Top 10. Only players who have set a username are on it; your row is highlighted, and if you are below the Top 10 a footer line shows your best and its rank. Runs played on the toilet keep their 🚽. Opening it mid-run pauses. Works offline too: the board just says it cannot be reached and your best is posted the next time it can. See **Leaderboard** below.
+- **P** or **Esc** — pause / resume (during a run). Ignored while Settings, About, How to play, Language, Feedback, or the Leaderboard is open; Esc then closes the top overlay.
 - **M** — mute / unmute. Persists across reload. Still works while an overlay is open.
-- **Save / Load User** (ready-screen button) — set a username (1–16 characters) and press Save (the panel confirms "Username saved"), then Copy your `fp1.…` user code and paste it into Load user code on another phone or browser to carry your username and best 6 scores (with their 🚽 flags) across. Codes are signed, so an edited code is refused; loading merges scores (best 6 kept) and the pasted username wins. Once a username is set the ready screen shows a `name · best` button under it; tap that for the High scores overlay (up to 6). The game-over panel reminds you to export after a run that enters the top 6.
+- **Save / Load User** (ready-screen button) — set a username (1–16 characters; it is shown on the public leaderboard with your best score) and press Save (the panel confirms "Username saved"), then Copy your `fp1.…` user code and paste it into Load user code on another phone or browser to carry your username and best 6 scores (with their 🚽 flags) across. Codes are signed, so an edited code is refused; loading merges scores (best 6 kept) and the pasted username wins. Once a username is set the ready screen shows a `name · best` button under it; tap that for the High scores overlay (up to 6). The game-over panel reminds you to export after a run that enters the top 6.
 - **How to play** and **tap to flap** are drawn as buttons on the ready screen; tapping the second one starts the run like any other tap.
 - **S** — settings (sound, haptics, Reload game, About). **Reload game** re-fetches every loaded script with `cache: 'reload'` (so GitHub Pages' 10-minute cache cannot hand back old modules) and then reloads the page with a fresh cache-busting query: the way to pick up a new build straight after a push, and the only way when the game is installed on the home screen and has no address bar. Opening Settings or About mid-run pauses; closing them leaves the pause banner until a new tap or Space.
 - **I** — About.
 - **F** — Feedback (bug / feature → GitHub).
 - **L** — language.
+- **T** — leaderboard.
 - **B** — fire the bean power-up (same as tapping the poop or the bean button; does nothing unless it is charged).
 - **Haptics** — a short buzz on death, Android / Chrome only. iPhone has no `navigator.vibrate` and must not error.
 
@@ -69,13 +71,14 @@ index.html              viewport/touch setup, loads Phaser + src/main.js
 manifest.webmanifest    "Add to Home Screen" metadata
 CREDITS.md              Phaser + fart-sample attribution, author/art/LLM note
 src/
-  main.js               Phaser.Game config: 720x1280, Scale.FIT, roundPixels, [Boot, Play, Over, Settings, About, HowTo, Language, Feedback]
-  config.js             GAME_WIDTH/HEIGHT and TUNING
+  main.js               Phaser.Game config: 720x1280, Scale.FIT, roundPixels, [Boot, Play, Over, Settings, About, HowTo, Language, Feedback, Scores, Leaderboard]
+  config.js             GAME_WIDTH/HEIGHT, TUNING, and LEADERBOARD (Supabase Data API URL + publishable key, both public)
   logic.js              pure functions: rng, gaps, scoring, items, settings store, tray / ready layout, issueUrl, chromeIntent
   save.js               user codes: fp1.<payload>.<sig> export / import, local best-6 store, merge (Node-testable)
+  leaderboard.js        shared leaderboard over the Supabase REST API: submitPlan, submitStore, submitScore, fetchTop, fetchRank (Node-testable, fetch injected)
   i18n.js               en / zh-Hans catalog + t() / initialLocale
   sound.js              WebAudio blips + setMuted (also mutes the Phaser fart sample)
-  ui/tray.js            Phaser wrapper for pause / mute / settings and bottom-left (i) / 🌐 / 💬
+  ui/tray.js            Phaser wrapper for 🏆 / mute / settings, pause above the cog, and bottom-left (i) / 🌐 / 💬
   ui/button.js          rounded-rect button chrome for ready-screen boxes
   ui/toggle.js          toilet toggle (track + knob + 🚽) for the ready screen
   ui/scrollView.js      finger / wheel scrolling for overlay panels (content camera + thumb)
@@ -90,6 +93,8 @@ src/
     Language.js         English / 简体中文 picker
     Feedback.js         Bug / Feature request chooser → GitHub issue forms
     Scores.js           High scores overlay (username + up to 6 scores) from the profile line
+    Leaderboard.js      shared Top 10 overlay (🏆 / T): rows with 🚽, own row highlighted, rank footer, join hint
+db/schema.sql           Supabase schema (table, RLS + column grant, submit_score / player_rank); run by hand in the SQL editor
 assets/                 contract PNGs + README.md (the art contract)
   poop.png poop-dead.png poop-stink1.png poop-stink2.png poop-fart.png poop-speech.png
   fiber.png probiotic.png bacteria.png bean.png
@@ -101,13 +106,21 @@ tools/make_placeholders.py   pipe / bg / ground / icons only (needs Pillow)
 tools/process_art.py         crop Michael's sources into contract PNGs
 tools/serve.py               npm start: bind 0.0.0.0:8000, print phone URL
 tests/                  node --test: html assets logic state difficulty store smoke
-                        settings sound tray items tuning about howto feedback overlay hitbox i18n chrome serve save ready
+                        settings sound tray items tuning about howto feedback overlay hitbox i18n chrome serve save ready leaderboard
 .claude/plans/          checkpointed build plans
 ```
 
 ## Tuning
 
 Everything that affects feel lives in `TUNING` in `src/config.js`: gravity, flap impulse, pipe speed, spawn interval, gap height, the difficulty ramp, death/retry timings, tray size/alpha, fart volume, and the `items` block (`startScore`, `hazardStartScore`, `chancePerGap`, `fiberPoints`, `bacteriaPenalty`, `probioticPipes`, `itemRadius`, weights). Change a number, reload.
+
+## Leaderboard
+
+The 🏆 button shows a shared Top 10 hosted on a free-tier [Supabase](https://supabase.com) project. What leaves the phone: your username, your best score, its 🚽 flag, and the random id inside your save code (so the same player keeps one row across browsers). Nothing is posted until you set a username in Save / Load User. The save code itself never leaves the device.
+
+The game talks to the Supabase REST API straight from the browser with the project's public URL and publishable key, both in `LEADERBOARD` in [`src/config.js`](src/config.js). What keeps that safe is the schema in [`db/schema.sql`](db/schema.sql): the key can read only name / score / 🚽 / time, never ids, and can write only through `submit_score()`, which keeps each player's maximum, caps scores, and rate-limits. Cheating is possible, as in any client-side game; a bad row is one `delete` in the dashboard.
+
+To run your own: create a free Supabase project, paste `db/schema.sql` into its SQL editor and run it, then put the project's Data API URL and publishable key into `LEADERBOARD`. Leave either blank to turn the feature off. Free projects pause after a week without traffic; the first request afterwards may time out, and the game just shows "Can't reach the leaderboard".
 
 ## Credits
 

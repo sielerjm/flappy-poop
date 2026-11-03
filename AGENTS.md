@@ -46,9 +46,12 @@ src/
                             roundPixels,
                             arcade physics, scene order
                             [Boot, Play, Over, Settings, About, HowTo, Language,
-                            Feedback, Scores].
-  config.js                 GAME_WIDTH / GAME_HEIGHT and the TUNING object. Every
-                            feel-related number lives here. Pure data, Node-safe.
+                            Feedback, Scores, Leaderboard].
+  config.js                 GAME_WIDTH / GAME_HEIGHT, the TUNING object (every
+                            feel-related number lives here), and LEADERBOARD
+                            (Supabase Data API URL + publishable key, both public
+                            by design; timeout, limit, storage key, score cap).
+                            Pure data, Node-safe.
   logic.js                  Pure functions, NO Phaser/DOM: rng, gap placement,
                             scoring, items, beans (rollBean, beanSpawnX, beanY,
                             beanAngle, poopTapHit), fart envelope (pipeSpacing,
@@ -59,6 +62,14 @@ src/
                             LAST_UPDATED, issueUrl, openExternalUrl, chromeIntent,
                             overlayOutsideHit, clampScroll, scaledCircleBody. Fully
                             unit-tested.
+  leaderboard.js            Shared leaderboard, NO Phaser/DOM: submitPlan (pure:
+                            what to post, or null), createSubmitStore
+                            (flappyPoop.leaderboard: last confirmed submit),
+                            submitScore / fetchTop / fetchRank over the Supabase
+                            REST API with an injected fetch, apikey header only,
+                            4 s abort, false / null on any failure, never throws.
+                            Writes go through the submit_score() SQL function.
+                            Fully unit-tested with a fake fetch.
   save.js                   Save codes, NO Phaser/DOM: loadLocal / saveLocal
                             (flappyPoop.save, schema 2: top entries { score,
                             toilet }; schema 1 numbers still load; MAX_TOP = 6),
@@ -79,8 +90,9 @@ src/
                             silent-prime, resume() the AudioContext, and
                             game.sound.unlock(). Blips wait until running.
   ui/
-    tray.js                 Phaser wrapper around trayLayout: pause / mute / settings
-                            plus bottom-left info, language (🌐), and feedback (💬).
+    tray.js                 Phaser wrapper around trayLayout: leaderboard (🏆) /
+                            mute / settings bottom-right, pause directly above the
+                            cog, plus bottom-left info, language (🌐), feedback (💬).
                             Chrome taps use trayHit() in Play/Over, not GameObject
                             pointer handlers.
     button.js               createButton(): Graphics rounded rect + centred text
@@ -107,8 +119,9 @@ src/
                             Spawns pipes and items, tray, auto-pause, haptics, dies,
                             then launches Over as an overlay scene. Tray / keyboard
                             go through chromeIntent. Overlay order is feedback >
-                            language > howto > about > settings. Opening Settings,
-                            About, HowTo, Language, or Feedback while playing pauses;
+                            language > howto > about > settings > leaderboard >
+                            scores. Opening Settings, About, HowTo, Language,
+                            Feedback, or Leaderboard while playing pauses;
                             closing them does not resume. Unpause applies flapVelocity
                             as a recovery bounce. Pause banner is two centered lines
                             from i18n. Locale via getLocale / applyLocale. Holds the
@@ -172,6 +185,13 @@ src/
                             parent overlay open.
     Scores.js               Overlay: username + up to 6 high scores from the
                             SaveState; opened by tapping the profile line.
+    Leaderboard.js          Overlay (🏆 tray button or T): awaits
+                            Play.syncLeaderboard() (posts a pending best), then
+                            fetchTop + fetchRank in parallel behind a Loading line.
+                            Ten rows with 🚽 via formatScore, own row highlighted
+                            by rank, footer = join hint (no username) / rankText
+                            (off the board) / "not on the board yet". A generation
+                            counter drops loads from a closed instance.
 
 assets/                     Contract PNGs + README.md (the art contract).
   README.md                 File name, pixel size, orientation rules. tests enforce it.
@@ -182,6 +202,14 @@ assets/                     Contract PNGs + README.md (the art contract).
   src/                      Original drawings; not in the size table.
   sfx/fart.mp3              Death sample.
   sfx/fart_accelerate.mp3   Fart power-up clip; its duration is the power length.
+
+db/schema.sql               Supabase schema: scores table (player_id = save-code id,
+                            name, score, toilet, updated_at), RLS + a column grant
+                            that hides player_id, submit_score() (max score, toilet
+                            flag follows the score, 5 s rate limit raises) and
+                            player_rank(). Run by hand in the SQL editor, never by
+                            any integration; it is the source of truth for the
+                            backend.
 
 tests/                      node --test, zero deps. Each file is self-describing:
   html.test.js              index.html invariants (viewport, no scroll, pinned Phaser)
@@ -213,6 +241,11 @@ tests/                      node --test, zero deps. Each file is self-describing
   ready.test.js             readyLayout boxes inside the field, non-overlapping,
                             clear of the bobbing poop; readyHit centre / gap / profile
   serve.test.js             npm start points at tools/serve.py; bind + URL print
+  leaderboard.test.js       LEADERBOARD config shape; submitScore headers / body /
+                            400 / throw / timeout; disabled config makes no request;
+                            fetchTop parsing + order; fetchRank; submitPlan matrix
+                            (name, id, cap, confirmed, rename, flag, id change);
+                            submit store incl. throwing storage
 
 .github/ISSUE_TEMPLATE/     GitHub issue forms opened from Feedback (bug.yml,
                             feature.yml); config.yml allows blank issues.
@@ -261,14 +294,15 @@ tools/
    root by GitHub Pages. Don't add a bundler, TypeScript, or npm packages without
    a strong reason; if you do, the deploy story has to change too.
 6. **Mobile first.** Touch is the primary input (`pointerdown`); keyboard
-   (Space / Up / M / P / Esc / S / I / L / F / B) is a convenience. Keep `touch-action: none`,
+   (Space / Up / M / P / Esc / S / I / L / F / B / T) is a convenience. Keep `touch-action: none`,
    the viewport meta, and the WebAudio unlock-on-gesture. Wrapped UI text that
    can show Chinese must set `useAdvancedWrap: true`. Test on a real phone
    when you touch input, scaling, audio, or locale.
 7. **Storage can throw.** Private-mode Safari and blocked storage throw on
    `localStorage` access. Go through `createBestStore()`,
-   `createSettingsStore()`, or `loadLocal()` / `saveLocal()` from `save.js`;
-   never touch `localStorage` directly in scenes.
+   `createSettingsStore()`, `loadLocal()` / `saveLocal()` from `save.js`, or
+   `createSubmitStore()` from `leaderboard.js`; never touch `localStorage`
+   directly in scenes.
 8. **Player-facing copy is multi-locale.** Change UI strings only in
    `src/i18n.js` for **every** locale (`en` and `zh-Hans`), update matching
    rows in `TRANSLATION_NOTES.md`, and do not hardcode English in scenes.
@@ -308,6 +342,14 @@ Commits so far follow `type(scope): summary` (`feat`, `docs`, `chore`); keep it.
 - New sound → a `blip()` preset in `src/sound.js`, **or** a file in `assets/sfx/`
   plus a `CREDITS.md` row with a URL plus `this.load.audio()` in Boot.
 - New scene → `src/scenes/`, register in the `scene:` array in `src/main.js`.
+  An overlay also needs an `isActive` check in `Play.chromeArgs` (and its place
+  in the overlay ternary), a `case` in `Play.applyChrome`, and rows in
+  `tests/chrome.test.js`.
+- Network call → `src/leaderboard.js` only, with `fetch` injected and a timeout;
+  tests pass a fake `fetch`. Never `await` a request inside a Phaser update
+  loop; fire and forget from gameplay, `await` only in an overlay's `create()`.
+- Backend change → edit `db/schema.sql`, run it by hand in the Supabase SQL
+  editor, keep `LEADERBOARD.maxScore` and the schema's score cap in step.
 - New UI chrome → `src/ui/` (Phaser wrapper) with any pure layout helper in
   `src/logic.js`. Text input belongs in a DOM panel like `src/ui/savePanel.js`,
   not Phaser UI.

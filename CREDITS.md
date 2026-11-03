@@ -23,3 +23,8 @@
   https://pixabay.com/sound-effects/people-fart-sound-effect-reed-82976/,
   Pixabay Content License, published 2022-08-10. Plays during the bean fart
   power-up. Bundled inside the game only; not redistributed as a standalone file.
+
+## Services
+
+- Leaderboard hosted on [Supabase](https://supabase.com) (free tier): Postgres +
+  PostgREST, reached straight from the browser. Schema in `db/schema.sql`.
