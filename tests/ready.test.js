@@ -53,6 +53,16 @@ test('every ready box keeps clear of the bobbing poop at its ready spot', () => 
   }
   assert.ok(POOP.top > layout.title.y + 26, 'speech bubble clears the title');
   assert.ok(POOP.right <= GAME_WIDTH, 'bubble stays inside the field');
+  // The poop + toggle block is centred in the free space: equal room above (title) and below (How to play).
+  const blockTop = POOP.top;
+  const blockBottom = layout.toilet.y + layout.toilet.height / 2;
+  const above = blockTop - (layout.title.y + 26);
+  const below = layout.howto.y - layout.howto.height / 2 - blockBottom;
+  assert.ok(Math.abs(above - below) <= 12, `block not centred: ${above} above vs ${below} below`);
+  // The profile button rests just above the tray band, clear of the ground strip.
+  const profileBottom = layout.profile.y + layout.profile.height / 2;
+  assert.ok(profileBottom <= GAME_HEIGHT - T.groundHeight, 'profile clears the ground strip');
+  assert.ok(GAME_HEIGHT - T.trayHeight - profileBottom <= 40, 'profile sits close above the tray');
 });
 
 test('readyHit resolves each box at its centre, misses the gaps, and only reports profile when a name is set', () => {
