@@ -53,6 +53,8 @@ Translation review notes for LLMs / humans: [TRANSLATION_NOTES.md](TRANSLATION_N
 ```bash
 npm start      # serves on 0.0.0.0:8000 and prints laptop + phone URLs
 npm test       # Node 22 built-in test runner, zero dependencies
+npm run smoke  # with npm start running: drive the real game in headless Chrome
+               # (every overlay opens and closes, a run starts, no exceptions)
 npm run push   # stamp the About "Updated" time, test, commit the stamp, push main
 ```
 
@@ -105,8 +107,9 @@ assets/                 contract PNGs + README.md (the art contract)
 tools/make_placeholders.py   pipe / bg / ground / icons only (needs Pillow)
 tools/process_art.py         crop Michael's sources into contract PNGs
 tools/serve.py               npm start: bind 0.0.0.0:8000, print phone URL
+tools/headless_check.mjs     npm run smoke: headless Chrome over the DevTools protocol, zero deps
 tests/                  node --test: html assets logic state difficulty store smoke
-                        settings sound tray items tuning about howto feedback overlay hitbox i18n chrome serve save ready leaderboard
+                        settings sound tray items tuning about howto feedback overlay hitbox i18n chrome serve save ready leaderboard scenes tools
 .claude/plans/          checkpointed build plans
 ```
 

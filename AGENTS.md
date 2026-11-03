@@ -246,6 +246,13 @@ tests/                      node --test, zero deps. Each file is self-describing
                             fetchTop parsing + order; fetchRank; submitPlan matrix
                             (name, id, cap, confirmed, rename, flag, id change);
                             submit store incl. throwing storage
+  scenes.test.js            no scene method is named after a Phaser.Scene property
+                            (add, load, input, time, render, …): such a method is
+                            shadowed by the plugin and throws inside create(), which
+                            freezes the game loop. Node never runs scenes, so this is
+                            the only place to catch it.
+  tools.test.js             npm run smoke points at headless_check.mjs; its OVERLAYS
+                            map equals the overlay scenes registered in main.js
 
 .github/ISSUE_TEMPLATE/     GitHub issue forms opened from Feedback (bug.yml,
                             feature.yml); config.yml allows blank issues.
@@ -264,6 +271,14 @@ tools/
                             current local time, runs npm test, commits the stamp, pushes
                             main. Refuses a dirty tree or a non-main branch; --dry skips
                             commit + push.
+  headless_check.mjs        npm run smoke [url]: launches headless Chrome (CHROME env
+                            overrides the path), drives the running game over the
+                            DevTools protocol through globalThis.__flappy, and fails
+                            on a page exception, a stalled __flappy.loop.frame, or an
+                            overlay that does not open / close. Covers every overlay in
+                            OVERLAYS (tests/tools.test.js keeps that list equal to
+                            main.js), a run start, leaderboard mid-run pause, and a
+                            close-and-reopen race. Zero dependencies (fetch + WebSocket).
 
 .claude/plans/              Checkpointed build plans. Historical record + decision
                             log. Don't edit completed plans; add a new plan file
@@ -321,13 +336,19 @@ npm run push      # stamp LAST_UPDATED = now, run tests, commit the stamp, push 
 npm start         # tools/serve.py: http://localhost:8000 plus a printed
                   # http://<LAN-IP>:8000 for a phone on the same Wi-Fi
                   # (localhost on the phone is the phone, not the laptop)
+npm run smoke     # with npm start running: headless Chrome drives the real game
+                  # (needs Google Chrome; CHROME=/path overrides). Run it after
+                  # any change to src/scenes/* or src/ui/*.
 uv run --with pillow python3 tools/process_art.py   # rebuild poop set / items / bean from assets/src/
 python3 tools/make_placeholders.py   # pipe / bg / ground / icons only
 ```
 
 Scene behaviour (physics, rendering, audio) cannot be verified in Node. When you
-change `src/scenes/*` or `src/sound.js`, say so and ask for a phone check; don't
-report it as tested. `node --check src/scenes/Play.js` at least catches syntax.
+change `src/scenes/*` or `src/sound.js`, run `npm run smoke` (catches exceptions
+inside scenes and a dead game loop, which `node --check` cannot), then say so and
+ask for a phone check for touch, scaling, and audio; don't report those as tested.
+Never name a scene method after a Phaser.Scene property (`load`, `add`, `input`,
+`time`, `render`, …): `tests/scenes.test.js` enforces this.
 
 Commits so far follow `type(scope): summary` (`feat`, `docs`, `chore`); keep it.
 
