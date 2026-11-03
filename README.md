@@ -1,12 +1,12 @@
 # Flappy Poop 💩
 
-A poop emoji flaps through the gut, dodging pink intestinal folds. A Flappy Bird clone for phone browsers, built on [Phaser 4](https://phaser.io) with no build step. Version **0.4.0**. English and Simplified Chinese in-game.
+A poop emoji flaps through the gut, dodging pink intestinal folds. A Flappy Bird clone for phone browsers, built on [Phaser 4](https://phaser.io) with no build step. Version **0.5.0**. English and Simplified Chinese in-game.
 
 **Play:** push this repo to GitHub, enable Pages (Settings → Pages → Deploy from branch → `main` / root), then open `https://<you>.github.io/<repo>/`. Add it to your home screen for a full-screen, app-like launch.
 
 ## How to play
 
-Tap (or press Space / ↑) to flap. Pass a pipe pair for a point. Hit a pipe, the ceiling, or the floor and it's over — the poop swaps to its dead face. Your best score is saved in the browser. Pipes speed up and the gap narrows until score 30, then it stays hard.
+Tap (or press Space / ↑) to flap. Pass a pipe pair for a point. Hit a pipe, the ceiling, or the floor and it's over — the poop swaps to its dead face. From pipe 5, beans bob up and down between pipe pairs; collect 5 and the poop glows with stink lines — tap it to fart: the fart clip plays, the world speeds up and slows back down with it, five pipes rush past, and nothing can hurt you until it ends. Your best score is saved in the browser. Pipes speed up and the gap narrows until score 30, then it stays hard.
 
 From score 8, pickups can appear in the gap:
 
@@ -23,7 +23,8 @@ On iPhone, Silent mode mutes the game — turn it off to hear sound. The pause b
 - **Ready screen** (top to bottom, centred) — title, the bobbing poop, **tap to flap**, the **toilet toggle**, then **How to play**, **Save / Load User**, and your `name · best` button once a username is set. The start tap slides the poop from the centre to its play position on the left before the run begins; taps during the slide are ignored.
 - **Tap / Space / ↑** — flap. The first tap also starts the run. After closing Settings or About during a run, tap or Space resumes; that tap does not flap. Unpausing from the pause banner bounces (same lift as a flap) so you can recover.
 - **Toilet toggle** (under tap to flap) — switch it on when you are playing on the toilet: the track turns brown and the 🚽 lights up. Runs played that way show a 🚽 beside the score (HUD, game over, High scores, your save code). Off by default on every launch.
-- **How to play** (ready screen, also linked from About) — scrollable overlay (drag with a finger or use the mouse wheel) with flap rules, iPhone Silent-mode note, a pipe row (dodge them; each pair passed is a point), what fiber, probiotic, and bad bacteria do, and the toilet toggle. Tapping it does not start the run. Closing How to play that was opened from About also closes About, leaving a paused run if info was opened mid-play. Tap the dimmed area outside Settings, About, or How to play to close (same as X).
+- **How to play** (ready screen, also linked from About) — scrollable overlay (drag with a finger or use the mouse wheel) with flap rules, iPhone Silent-mode note, a pipe row (dodge them; each pair passed is a point), what fiber, probiotic, bad bacteria, and beans do, and the toilet toggle. About scrolls the same way.
+- **Beans / fart power** — beans appear from pipe 5, halfway between pairs, bobbing top to bottom with a wiggle. The HUD counts them (bottom-left of the score). At 5 the poop shows stink lines and a pulsing glow; tap the poop (not elsewhere) to fart. Speed rises and falls with `fart_accelerate.mp3` (4.3 s) so exactly five pipes pass, the poop blinks between full and half opacity, and it cannot die until the clip ends (plus a short grace to clear the last pipe). Tapping it does not start the run. Closing How to play that was opened from About also closes About, leaving a paused run if info was opened mid-play. Tap the dimmed area outside Settings, About, or How to play to close (same as X).
 - **Bottom-left (i)** — About (credits, author, LLM note, last-updated stamp, How to play and feedback links). Independent of Settings.
 - **Bottom-left (🌐)** — language (English / 简体中文). Persists. First visit with no saved choice follows the browser language when it starts with `zh`. Opening Language mid-run pauses.
 - **Bottom-left (💬)** — feedback: choose Bug or Feature request to open a GitHub issue form in the browser (needs a GitHub account). Also linked from About and How to play.
@@ -51,7 +52,7 @@ npm test       # Node 22 built-in test runner, zero dependencies
 
 ## Replacing the art
 
-The player and items are drawings processed by `tools/process_art.py` from `assets/src/`. Drop a new source PNG in `assets/src/` and re-run that script (needs Pillow) to crop, knock out white, and write the 384×384 contract files (drawn at 0.25 scale → 96 logical px on the 720×1280 field).
+The player and items are drawings processed by `tools/process_art.py` from `assets/src/`. Drop a new source PNG in `assets/src/` and re-run that script (`uv run --with pillow python3 tools/process_art.py`) to crop, knock out white, and write the 384×384 contract files (drawn at 0.25 scale → 96 logical px on the 720×1280 field). The poop set (alive, dead, stink frames, fart) shares one body scale and centre so texture swaps never move the body.
 
 Pipe, background, ground, and icons are still placeholders from `tools/make_placeholders.py`. That script must **not** overwrite `poop.png`. Overwrite any contract file at the same name and size; `assets/README.md` has the table and `npm test` enforces it.
 
@@ -71,10 +72,11 @@ src/
   ui/tray.js            Phaser wrapper for pause / mute / settings and bottom-left (i) / 🌐 / 💬
   ui/button.js          rounded-rect button chrome for ready-screen boxes
   ui/toggle.js          toilet toggle (track + knob + 🚽) for the ready screen
+  ui/scrollView.js      finger / wheel scrolling for overlay panels (content camera + thumb)
   ui/savePanel.js       DOM user-code panel (Username, Copy, Load) opened from Save / Load User
   scenes/
     Boot.js             preloads images + fart.mp3
-    Play.js             ready -> playing -> paused -> dead; items; tray; locale; ready buttons + profile line
+    Play.js             ready -> playing -> paused -> dead; items; beans + fart power; tray; locale; ready buttons + profile line
     Over.js             game-over panel; new-top-6 export hint; tray mute still works
     Settings.js         sound / haptics overlay; About link
     About.js            credits, author, LLM note, How to play + feedback links, last-updated
@@ -83,10 +85,12 @@ src/
     Feedback.js         Bug / Feature request chooser → GitHub issue forms
     Scores.js           High scores overlay (username + up to 6 scores) from the profile line
 assets/                 contract PNGs + README.md (the art contract)
-  poop.png poop-dead.png fiber.png probiotic.png bacteria.png
+  poop.png poop-dead.png poop-stink1.png poop-stink2.png poop-fart.png
+  fiber.png probiotic.png bacteria.png bean.png
   pipe.png bg.png ground.png icon-192.png icon-512.png
   src/                  original drawings (not in the size table)
   sfx/fart.mp3          death sample
+  sfx/fart_accelerate.mp3   fart power-up clip (the power lasts exactly this long)
 tools/make_placeholders.py   pipe / bg / ground / icons only (needs Pillow)
 tools/process_art.py         crop Michael's sources into contract PNGs
 tools/serve.py               npm start: bind 0.0.0.0:8000, print phone URL

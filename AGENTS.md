@@ -9,7 +9,9 @@ guide; this file is the map for anyone changing the code.
 Flappy Poop is a Flappy Bird clone for phone browsers: a poop emoji flaps through
 the gut dodging pink intestinal-fold pipes. One point per pipe pair passed; fiber
 is +1, bad bacteria is −2 (floor 0), and a probiotic blocks one bacteria hit for
-up to 5 pipes. Hit a pipe, the ceiling, or the floor and the run ends (dead-poop
+up to 5 pipes. From pipe 5 beans bob between pipe pairs; 5 beans charge a fart
+power (stink lines + glow; tap the poop) that plays `fart_accelerate.mp3`, ramps the
+scroll speed up and down with the clip so five pipes pass, and cannot die. Hit a pipe, the ceiling, or the floor and the run ends (dead-poop
 face). Best score and settings are kept in `localStorage`. Difficulty ramps
 (faster pipes, narrower gap) until score 30, then stays flat. A signed
 **user code** (`fp1.<payload>.<sig>`, the save code) carries a player's username
@@ -25,7 +27,8 @@ dependencies, Phaser 4 loaded from a CDN, deployed to GitHub Pages straight from
   to live there was replaced wholesale; nothing from it survives).
 - Engine: Phaser **4.2.1**, pinned by exact version in `index.html`.
 - Runtime: any modern mobile/desktop browser. Tests need Node 22+ (built-in
-  `node --test`). `tools/` needs Python 3 + Pillow for art scripts.
+  `node --test`). `tools/` needs Python 3 + Pillow for art scripts
+  (`uv run --with pillow python3 tools/process_art.py` works without installing it).
 
 ## Repo map
 
@@ -45,7 +48,9 @@ src/
   config.js                 GAME_WIDTH / GAME_HEIGHT and the TUNING object. Every
                             feel-related number lives here. Pure data, Node-safe.
   logic.js                  Pure functions, NO Phaser/DOM: rng, gap placement,
-                            scoring, items, sprite angle, retry lockout, difficulty,
+                            scoring, items, beans (rollBean, beanSpawnX, beanY,
+                            beanAngle, poopTapHit), fart envelope (pipeSpacing,
+                            fartPeakMul, fartMul), sprite angle, retry lockout, difficulty,
                             best-score store, settings store (incl. locale), vibrate
                             helper, trayLayout, trayHit, readyLayout, readyHit
                             (howToLayout / howToHit wrap them),
@@ -82,6 +87,10 @@ src/
     toggle.js               createToggle(): toilet switch (pill track, knob tween,
                             🚽 alpha) from readyLayout().toilet; setOn(). No pointer
                             handlers.
+    scrollView.js           createScrollView(): second camera clipped to a panel
+                            interior, drag / wheel via clampScroll(), thumb, link()
+                            that fires on pointerup only when moved < 12 px. Used
+                            by HowTo and About.
     savePanel.js            Plain DOM panel over the canvas (Username field,
                             read-only user code + Copy, Load field + status).
                             Opened from the ready-screen Save / Load User button.
@@ -109,7 +118,17 @@ src/
                             slide are ignored (launching flag). Toilet mode:
                             this.toilet from the registry (session-only), toggle
                             under tap to flap, 🚽 HUD left of the score while
-                            playing, passed to recordScore and Over;
+                            playing, passed to recordScore and Over. Beans: group
+                            spawned in spawnPipePair (rollBean, halfway to the next
+                            pair), bobbed in update() from per-bean elapsed ms;
+                            collectBean → effects.addBean; setCharged() alternates
+                            stink frames + pulses this.glow; a tap on the poop
+                            (poopTapHit) calls activatePower(): fart texture,
+                            alpha tween, fart_accelerate clip, effects.activatePower
+                            (clip length), scrollMul from fartMul() each frame via
+                            applyScroll(); endPower() restores, graceLeftMs blocks
+                            die(). Pipes spawn by scrolled distance (pipeSpacing),
+                            not a timer. Nothing here reads time.now;
                             readyHit() routes taps (howto, start, saveload, profile
                             → Scores). getSaveState / setSaveState for the panel.
     Over.js                 Game-over panel (score, best, "tap to go home") with a
@@ -118,17 +137,15 @@ src/
     Settings.js             Overlay: sound, haptics (Android only), About link,
                             version. Tap outside the panel
                             closes (overlayOutsideHit), same as X.
-    About.js                Overlay: author, LLM note, engine/art/sound credits,
-                            How to play + feedback links, LAST_UPDATED under the
-                            version. Tap outside the panel closes. Wrapped text uses
-                            useAdvancedWrap for CJK.
+    About.js                Overlay: author, LLM note, engine/art/sound credits
+                            (both fart clips), How to play + feedback links,
+                            LAST_UPDATED under the version, inside
+                            createScrollView(). Tap outside the panel closes.
+                            Wrapped text uses useAdvancedWrap for CJK.
     HowTo.js                Overlay: flap rules plus pipe / fiber / probiotic /
-                            bacteria / toilet rows (howToItems, pipe first; the
-                            pipe icon is a cropped cap slice, toilet is the 🚽
-                            emoji) and a feedback link. Content lives in a masked
-                            Container scrolled by finger drag or wheel via
-                            clampScroll(); feedback link fires on pointerup only
-                            when the pointer moved < 12 px. Ready-screen How
+                            bacteria / bean / toilet rows (howToItems, pipe first;
+                            the pipe icon is a cropped cap slice, toilet is the 🚽
+                            emoji) and a feedback link, inside createScrollView(). Ready-screen How
                             to play uses howToHit() so it does not start a run.
                             Opened from About, X/Esc/tap-outside closes HowTo and
                             About together. useAdvancedWrap on body text.
@@ -142,11 +159,13 @@ src/
 
 assets/                     Contract PNGs + README.md (the art contract).
   README.md                 File name, pixel size, orientation rules. tests enforce it.
-  poop.png poop-dead.png fiber.png probiotic.png bacteria.png
+  poop.png poop-dead.png poop-stink1.png poop-stink2.png poop-fart.png
+  fiber.png probiotic.png bacteria.png bean.png
   pipe.png bg.png ground.png
   icon-192.png icon-512.png
   src/                      Original drawings; not in the size table.
   sfx/fart.mp3              Death sample.
+  sfx/fart_accelerate.mp3   Fart power-up clip; its duration is the power length.
 
 tests/                      node --test, zero deps. Each file is self-describing:
   html.test.js              index.html invariants (viewport, no scroll, pinned Phaser)
@@ -186,7 +205,10 @@ tools/
   make_placeholders.py      Regenerates pipe / bg / ground / icons only. Must not
                             overwrite poop.png. Run only when you intend to.
   process_art.py            Crops assets/src/ drawings into 384x384 contract PNGs
-                            (drawn at spriteDisplayScale 0.25 → 96 logical px).
+                            (drawn at spriteDisplayScale 0.25 → 96 logical px);
+                            the poop set (alive / dead / stink1 / stink2 / fart)
+                            shares one body scale and centre, stink/fart on bigger
+                            squares; bean.png from Kidney_Bean.png.
                             Arcade circles use scaledCircleBody (Phaser source pixels).
   serve.py                  npm start: bind 0.0.0.0:8000, print laptop + phone URLs.
 
@@ -241,7 +263,7 @@ npm test          # run everything; must pass before committing
 npm start         # tools/serve.py: http://localhost:8000 plus a printed
                   # http://<LAN-IP>:8000 for a phone on the same Wi-Fi
                   # (localhost on the phone is the phone, not the laptop)
-python3 tools/process_art.py         # rebuild poop/items from assets/src/ (Pillow)
+uv run --with pillow python3 tools/process_art.py   # rebuild poop set / items / bean from assets/src/
 python3 tools/make_placeholders.py   # pipe / bg / ground / icons only
 ```
 
