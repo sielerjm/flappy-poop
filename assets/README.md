@@ -34,4 +34,3 @@ Audio files live in `assets/sfx/`. Every file there must be named in `CREDITS.md
 |---|---|
 | `sfx/fart.mp3` | Death fart. "fart" by MacKaffee (Freesound) via Pixabay. See `CREDITS.md`. |
 | `sfx/fart_accelerate.mp3` | Fart power-up (4.3 s); the power lasts exactly this clip. "fart sound effect (reed)" via Pixabay. See `CREDITS.md`. |
-| `sfx/fart2.mp3` | Not used by the game yet (dropped in 2026-11-03). Source to be confirmed. |

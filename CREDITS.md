@@ -23,5 +23,3 @@
   https://pixabay.com/sound-effects/people-fart-sound-effect-reed-82976/,
   Pixabay Content License, published 2022-08-10. Plays during the bean fart
   power-up. Bundled inside the game only; not redistributed as a standalone file.
-- `assets/sfx/fart2.mp3` — not used by the game yet (added 2026-11-03); source
-  and licence to be confirmed by Michael Sieler before it is wired in.
