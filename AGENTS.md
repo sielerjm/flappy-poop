@@ -38,7 +38,7 @@ dependencies, Phaser 4 loaded from a CDN, deployed to GitHub Pages straight from
 index.html                  Entry page. Viewport/touch CSS, <script> for Phaser from
                             jsDelivr, then <script type=module src=src/main.js>.
 manifest.webmanifest        PWA "Add to Home Screen" metadata (fullscreen, portrait).
-package.json                Only `npm test` and `npm start`; no dependencies.
+package.json                `npm test`, `npm start`, `npm run push`; no dependencies.
 CREDITS.md                  Phaser + every assets/sfx/ file with a URL.
 
 src/
@@ -223,6 +223,10 @@ tools/
                             speech on bigger squares; bean.png from Kidney_Bean.png.
                             Arcade circles use scaledCircleBody (Phaser source pixels).
   serve.py                  npm start: bind 0.0.0.0:8000, print laptop + phone URLs.
+  push.mjs                  npm run push: stamps LAST_UPDATED in src/logic.js with the
+                            current local time, runs npm test, commits the stamp, pushes
+                            main. Refuses a dirty tree or a non-main branch; --dry skips
+                            commit + push.
 
 .claude/plans/              Checkpointed build plans. Historical record + decision
                             log. Don't edit completed plans; add a new plan file
@@ -272,6 +276,8 @@ tools/
 
 ```bash
 npm test          # run everything; must pass before committing
+npm run push      # stamp LAST_UPDATED = now, run tests, commit the stamp, push main
+                  # (always push this way so the About overlay's "Updated" is the push time)
 # In a browser, globalThis.__flappy is the Phaser.Game (debug / automation only):
 #   __flappy.scene.getScene('Play').spawnPipePair()
 npm start         # tools/serve.py: http://localhost:8000 plus a printed

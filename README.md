@@ -51,6 +51,7 @@ Translation review notes for LLMs / humans: [TRANSLATION_NOTES.md](TRANSLATION_N
 ```bash
 npm start      # serves on 0.0.0.0:8000 and prints laptop + phone URLs
 npm test       # Node 22 built-in test runner, zero dependencies
+npm run push   # stamp the About "Updated" time, test, commit the stamp, push main
 ```
 
 `npm start` prints `http://localhost:8000` for the laptop and `http://<LAN-IP>:8000` for a phone on the same Wi-Fi. Do not open localhost on the phone — that is the phone itself, not this laptop.

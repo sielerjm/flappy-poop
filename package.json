@@ -6,7 +6,8 @@
   "private": true,
   "scripts": {
     "test": "node --test \"tests/**/*.test.js\"",
-    "start": "python3 tools/serve.py"
+    "start": "python3 tools/serve.py",
+    "push": "node tools/push.mjs"
   },
   "license": "MIT"
 }
