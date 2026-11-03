@@ -27,7 +27,8 @@ import {
   poopTapHit,
   fartPeakMul,
   fartMul,
-  isAheadOfPlayer,
+  fartRemainingDistance,
+  pipeClearDistance,
 } from '../logic.js';
 import { t, pauseBannerText, initialLocale, isLocale } from '../i18n.js';
 import { loadLocal, saveLocal, recordScore, isNewTop, profileLine, TOILET_EMOJI } from '../save.js';
@@ -643,15 +644,15 @@ export class Play extends Phaser.Scene {
     this.refreshBeanHud();
   }
 
-  /** Fade out and remove every pipe / item still ahead of the poop. */
-  clearAhead() {
-    const ahead = [...this.pipes.getChildren(), ...this.items.getChildren()].filter((o) => isAheadOfPlayer(o.x, this.poop.x, T.pipeWidth));
-    for (const obj of ahead) {
-      obj.body.enable = false;
-      this.tweens.add({ targets: obj, alpha: 0, duration: T.beans.clearAheadMs, onComplete: () => obj.destroy() });
-    }
-    // Next pair spawns on the next frame at the right edge: a full screen of warning.
-    this.distanceSinceSpawn = pipeSpacing(this.diff.pipeSpeed, T.spawnEveryMs);
+  /**
+   * While farting, hold pipe spawning once the scroll still to come cannot
+   * carry a new pair fully past the poop before the clip ends. The screen is
+   * then naturally clear at the end and the next pair enters from the right.
+   */
+  spawnHeldByFart() {
+    if (!this.effects.powerActive()) return false;
+    const remaining = fartRemainingDistance(this.effects.powerElapsed(), this.fartDurationMs, this.fartPeak, this.diff.pipeSpeed);
+    return remaining < pipeClearDistance(GAME_WIDTH, T.pipeWidth, T.poopX) + T.beans.endClearMarginPx;
   }
 
   endPower() {
@@ -665,7 +666,8 @@ export class Play extends Phaser.Scene {
     this.poop.body.setAllowGravity(true);
     this.poop.setVelocityY(0);
     this.graceLeftMs = T.beans.graceMs;
-    this.clearAhead();
+    // Next pair spawns on the next frame at the right edge: a full screen of warning.
+    this.distanceSinceSpawn = pipeSpacing(this.diff.pipeSpeed, T.spawnEveryMs);
     this.applyScroll();
     if (this.effects.powerReady()) this.setCharged(true);
   }
@@ -765,11 +767,15 @@ export class Play extends Phaser.Scene {
       }
       if (this.effects.endedPower()) this.endPower();
       if (this.graceLeftMs > 0) this.graceLeftMs = Math.max(0, this.graceLeftMs - delta);
-      this.distanceSinceSpawn += this.scrollSpeed() * dt;
       const spacing = pipeSpacing(this.diff.pipeSpeed, T.spawnEveryMs);
-      if (this.distanceSinceSpawn >= spacing) {
-        this.distanceSinceSpawn -= spacing;
-        this.spawnPipePair();
+      if (this.spawnHeldByFart()) {
+        this.distanceSinceSpawn = 0;
+      } else {
+        this.distanceSinceSpawn += this.scrollSpeed() * dt;
+        if (this.distanceSinceSpawn >= spacing) {
+          this.distanceSinceSpawn -= spacing;
+          this.spawnPipePair();
+        }
       }
 
       this.poop.setAngle(angleForVelocity(this.poop.body.velocity.y, T));

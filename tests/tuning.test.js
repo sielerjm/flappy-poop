@@ -57,7 +57,7 @@ test('beans block sits in a fair band and the fart ramp stays readable', () => {
   assert.ok(b.graceMs * (T.pipeSpeed / 1000) >= T.pipeWidth + T.poopRadius, 'grace must clear a pipe column at base speed');
   assert.ok(b.beanRadius >= 40 && b.beanRadius <= 48, `beanRadius ${b.beanRadius}`);
   assert.ok(b.centreMs >= 100 && b.centreMs <= 1000, `centreMs ${b.centreMs}`);
-  assert.ok(b.clearAheadMs >= 100 && b.clearAheadMs <= 1000, `clearAheadMs ${b.clearAheadMs}`);
+  assert.ok(b.endClearMarginPx >= 0 && b.endClearMarginPx <= 200, `endClearMarginPx ${b.endClearMarginPx}`);
   const peak = 1 + (((b.powerPipes * T.spawnEveryMs) / b.powerMs - 1) * Math.PI) / 2;
   assert.ok(peak > 1 && peak <= 2.5, `fart peak multiplier ${peak}`);
 });

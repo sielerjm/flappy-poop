@@ -72,7 +72,7 @@ export const TUNING = {
     glowPulseMs: 600, // ms per glow pulse (one way)
     fartAlphaMs: 250, // ms per opacity swing (1 → 0.5) while farting
     centreMs: 300, // ms the poop takes to float to mid-height when the fart starts (gravity off, flaps ignored until it ends)
-    clearAheadMs: 300, // ms pipes still ahead of the poop fade out when the fart ends; the next pair then enters from the right edge
+    endClearMarginPx: 64, // px of extra scroll kept in hand so the last pipe is fully behind the poop when the fart ends
     beanRadius: 48, // px circular hitbox = half the 96 logical-px sprite
   },
 };

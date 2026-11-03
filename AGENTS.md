@@ -131,10 +131,11 @@ src/
                             alpha tween, fart_accelerate clip, effects.activatePower
                             (clip length), scrollMul from fartMul() each frame via
                             applyScroll(); the poop floats at mid-height (gravity
-                            off, doFlap ignored); endPower() restores gravity,
-                            clearAhead() fades pipes / items still ahead
-                            (isAheadOfPlayer) and spawns the next pair at the right
-                            edge, graceLeftMs blocks die(). Pipes spawn by scrolled distance (pipeSpacing),
+                            off, doFlap ignored); spawnHeldByFart() stops pipe
+                            spawning once fartRemainingDistance() < pipeClearDistance()
+                            so the screen is clear at the end; endPower() restores
+                            gravity and spawns the next pair at the right edge,
+                            graceLeftMs blocks die(). Pipes spawn by scrolled distance (pipeSpacing),
                             not a timer. Nothing here reads time.now;
                             readyHit() routes taps (howto, start, saveload, profile
                             → Scores). getSaveState / setSaveState for the panel.

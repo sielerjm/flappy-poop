@@ -4,10 +4,10 @@
 
 import { isLocale, DEFAULT_LOCALE } from './i18n.js';
 
-export const VERSION = '0.5.4';
+export const VERSION = '0.5.5';
 
 /** Player-facing stamp on the About overlay. Bump with VERSION. */
-export const LAST_UPDATED = '3 Nov 2026, 16:31';
+export const LAST_UPDATED = '3 Nov 2026, 16:40';
 
 const ISSUE_BASE = 'https://github.com/sielerjm/flappy-poop/issues/new';
 
@@ -270,12 +270,22 @@ export function beanAngle(elapsedMs, t) {
 }
 
 /**
- * True when a pipe column (centre objX, width pipeWidth) has not been fully
- * passed by the player at playerX. Used to clear everything still ahead when
- * the fart power ends, so the next pair enters from the right edge.
+ * Scroll distance (px) still to come in a fart that is elapsedMs in: the
+ * analytic integral of fartMul from elapsedMs to durationMs times pipeSpeed.
+ * Play stops spawning pipes once this drops below pipeClearDistance(), so the
+ * screen is empty of pipes when the clip ends.
  */
-export function isAheadOfPlayer(objX, playerX, pipeWidth) {
-  return objX > playerX - pipeWidth;
+export function fartRemainingDistance(elapsedMs, durationMs, peak, pipeSpeed) {
+  if (!(durationMs > 0)) return 0;
+  const e = Math.min(Math.max(elapsedMs, 0), durationMs);
+  const base = durationMs - e;
+  const bump = ((peak - 1) * durationMs * (Math.cos((Math.PI * e) / durationMs) + 1)) / Math.PI;
+  return ((base + bump) / 1000) * pipeSpeed;
+}
+
+/** Scroll needed for a pipe spawned at the right edge to be fully behind the player. */
+export function pipeClearDistance(width, pipeWidth, playerX) {
+  return width + pipeWidth - (playerX - pipeWidth);
 }
 
 /** True when (x, y) is within 2 × radius of the poop: a generous thumb target. */

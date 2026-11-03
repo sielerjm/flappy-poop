@@ -93,7 +93,7 @@ test('difficulty() is unchanged by the items block', () => {
 
 // ---------------------------------------------------------------------------
 // Beans + fart power
-import { rollBean, pipeSpacing, beanSpawnX, beanBounds, beanY, beanAngle, poopTapHit, fartPeakMul, fartMul, isAheadOfPlayer } from '../src/logic.js';
+import { rollBean, pipeSpacing, beanSpawnX, beanBounds, beanY, beanAngle, poopTapHit, fartPeakMul, fartMul, fartRemainingDistance, pipeClearDistance } from '../src/logic.js';
 import { GAME_WIDTH, GAME_HEIGHT } from '../src/config.js';
 
 test('rollBean never spawns below beans.startScore', () => {
@@ -236,11 +236,27 @@ test('bean inventory and the timed fart power', () => {
   assert.equal(fx.powerElapsed(), 0);
 });
 
-test('isAheadOfPlayer: a column counts as ahead until the player has fully passed it', () => {
-  const px = T.poopX;
-  assert.equal(isAheadOfPlayer(px + 300, px, T.pipeWidth), true);
-  assert.equal(isAheadOfPlayer(px, px, T.pipeWidth), true, 'overlapping the player is still ahead');
-  assert.equal(isAheadOfPlayer(px - T.pipeWidth + 1, px, T.pipeWidth), true);
-  assert.equal(isAheadOfPlayer(px - T.pipeWidth, px, T.pipeWidth), false, 'fully behind');
-  assert.equal(isAheadOfPlayer(-200, px, T.pipeWidth), false);
+test('fartRemainingDistance is the analytic tail of the envelope and reaches 0 at the end', () => {
+  const D = T.beans.powerMs;
+  const peak = fartPeakMul(D, T.beans.powerPipes, T.spawnEveryMs);
+  const total = fartRemainingDistance(0, D, peak, T.pipeSpeed);
+  assert.ok(Math.abs(total / pipeSpacing(T.pipeSpeed, T.spawnEveryMs) - T.beans.powerPipes) < 0.01, 'whole clip = powerPipes spacings');
+  assert.equal(fartRemainingDistance(D, D, peak, T.pipeSpeed), 0);
+  assert.equal(fartRemainingDistance(D + 50, D, peak, T.pipeSpeed), 0);
+  // Matches a numeric integral of fartMul from e to D, and is monotonic.
+  let prev = Infinity;
+  for (let e = 0; e <= D; e += 250) {
+    let num = 0;
+    for (let ms = e; ms < D; ms += 1) num += T.pipeSpeed * fartMul(ms + 0.5, D, peak) * 0.001;
+    const ana = fartRemainingDistance(e, D, peak, T.pipeSpeed);
+    assert.ok(Math.abs(ana - num) < 2, `e=${e}: analytic ${ana} vs numeric ${num}`);
+    assert.ok(ana <= prev, 'monotonic');
+    prev = ana;
+  }
+});
+
+test('pipeClearDistance: a right-edge spawn needs the screen plus a column to be fully behind the poop', () => {
+  const d = pipeClearDistance(GAME_WIDTH, T.pipeWidth, T.poopX);
+  assert.equal(d, GAME_WIDTH + T.pipeWidth - (T.poopX - T.pipeWidth));
+  assert.ok(d < fartRemainingDistance(0, T.beans.powerMs, fartPeakMul(T.beans.powerMs, T.beans.powerPipes, T.spawnEveryMs), T.pipeSpeed), 'the fart scrolls further than one clear distance, so pipes spawned early still pass');
 });
