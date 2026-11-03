@@ -4,10 +4,10 @@
 
 import { isLocale, DEFAULT_LOCALE } from './i18n.js';
 
-export const VERSION = '0.5.1';
+export const VERSION = '0.5.2';
 
 /** Player-facing stamp on the About overlay. Bump with VERSION. */
-export const LAST_UPDATED = '3 Nov 2026, 15:58';
+export const LAST_UPDATED = '3 Nov 2026, 16:07';
 
 const ISSUE_BASE = 'https://github.com/sielerjm/flappy-poop/issues/new';
 
@@ -221,9 +221,15 @@ export function scoreAfterItem(score, kind, t) {
   return score;
 }
 
-/** True when a bean should spawn with this pipe pair (only from beans.startScore). */
-export function rollBean(rng, score, t) {
+/**
+ * True when a bean should spawn with this pipe pair: never before
+ * beans.startScore; random at chancePerGap; and, if none has spawned this run
+ * yet, forced once the score reaches beans.guaranteeScore so a bean always
+ * shows up in the pipe 5–20 window.
+ */
+export function rollBean(rng, score, t, { spawnedThisRun = false } = {}) {
   if (score < t.beans.startScore) return false;
+  if (!spawnedThisRun && score >= t.beans.guaranteeScore) return true;
   return rng() < t.beans.chancePerGap;
 }
 
@@ -424,12 +430,15 @@ export function readyLayout(width, height, t) {
   const cx = width / 2;
   const boxH = Math.max(88, t.trayHitMin);
   const title = { id: 'title', x: cx, y: 330 };
-  const poop = { id: 'poop', x: cx, y: 520, bubble: { left: -48, right: 116, top: -127, bottom: 46 } };
+  // Speech-bubble extents at display scale (poop-speech.png ink relative to the
+  // body centre, ×readyPoopScale); the poop bobs ±24 on top of that.
+  const s = t.readyPoopScale ?? 1;
+  const poop = { id: 'poop', x: cx, y: 556, bubble: { left: -48 * s, right: 116 * s, top: -127 * s, bottom: 46 * s } };
   // Toilet toggle: 120x56 track left of centre, 🚽 to its right; the hit box spans both.
-  const toilet = { id: 'toilet', x: cx, y: 676, width: 240, height: 72, track: { x: cx - 50, y: 676, width: 120, height: 56 }, emojiX: cx + 80 };
-  const howto = { id: 'howto', x: cx, y: 764, width: 400, height: boxH };
-  const saveLoad = { id: 'saveload', x: cx, y: 860, width: 360, height: boxH };
-  const profile = { id: 'profile', x: cx, y: 946, width: 360, height: 64 }; // bottom 978 clears the lower villi fringe
+  const toilet = { id: 'toilet', x: cx, y: 684, width: 240, height: 72, track: { x: cx - 50, y: 684, width: 120, height: 56 }, emojiX: cx + 80 };
+  const howto = { id: 'howto', x: cx, y: 776, width: 400, height: boxH };
+  const saveLoad = { id: 'saveload', x: cx, y: 872, width: 360, height: boxH };
+  const profile = { id: 'profile', x: cx, y: 952, width: 360, height: 64 }; // bottom 984 clears the lower villi fringe (~987)
   return { title, poop, toilet, howto, saveLoad, profile };
 }
 

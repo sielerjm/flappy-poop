@@ -45,6 +45,8 @@ test('beans block sits in a fair band and the fart ramp stays readable', () => {
   assert.ok(b.chancePerGap >= 0.03 && b.chancePerGap <= 0.5, `chancePerGap ${b.chancePerGap}`);
   assert.ok(b.toCharge >= 1 && b.toCharge <= 8, `toCharge ${b.toCharge}`);
   assert.ok(b.travelFrac > 0 && b.travelFrac <= 1, `travelFrac ${b.travelFrac}`);
+  assert.ok(b.guaranteeScore >= b.startScore && b.guaranteeScore <= 20, `guaranteeScore ${b.guaranteeScore} should land a bean by pipe 20`);
+  assert.ok(T.readyPoopScale >= 1 && T.readyPoopScale <= 1.6, `readyPoopScale ${T.readyPoopScale}`);
   assert.ok(b.travelPeriodMs >= 2000, 'bob should be unhurried');
   assert.ok(b.powerPipes >= 3 && b.powerPipes <= 8, `powerPipes ${b.powerPipes}`);
   assert.ok(b.powerMs >= 2000 && b.powerMs <= 8000, `powerMs ${b.powerMs}`);

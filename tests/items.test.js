@@ -101,7 +101,7 @@ test('rollBean never spawns below beans.startScore', () => {
   for (let i = 0; i < 1000; i++) assert.equal(rollBean(rng, T.beans.startScore - 1, T), false);
 });
 
-test('rollBean spawns at about chancePerGap, rarer than fiber', () => {
+test('rollBean spawns at about chancePerGap and is guaranteed once by guaranteeScore', () => {
   const n = 6000;
   const rngA = createRng(12);
   let beans = 0;
@@ -113,8 +113,14 @@ test('rollBean spawns at about chancePerGap, rarer than fiber', () => {
   let fiber = 0;
   for (let i = 0; i < n; i++) if (rollItem(rngB, T.items.hazardStartScore + 5, T) === 'fiber') fiber += 1;
   const fiberRate = fiber / n;
-  assert.ok(beanRate < fiberRate, `beans ${beanRate} should be rarer than fiber ${fiberRate}`);
-  assert.ok(beanRate > 0.02, `beans ${beanRate} should still show up`);
+  assert.ok(beanRate <= fiberRate * 1.5, `beans ${beanRate} should not swamp fiber ${fiberRate}`);
+  // Guarantee: with no bean yet, the pair at guaranteeScore always carries one; once seen, it is random again.
+  const never = () => 0.999;
+  assert.equal(rollBean(never, T.beans.guaranteeScore, T, { spawnedThisRun: false }), true);
+  assert.equal(rollBean(never, T.beans.guaranteeScore + 7, T, { spawnedThisRun: false }), true);
+  assert.equal(rollBean(never, T.beans.guaranteeScore - 1, T, { spawnedThisRun: false }), false);
+  assert.equal(rollBean(never, T.beans.guaranteeScore, T, { spawnedThisRun: true }), false);
+  assert.equal(rollBean(never, T.beans.guaranteeScore, T), true, 'default: nothing spawned yet');
 });
 
 test('beanY stays inside the middle band and reaches both extremes; beanAngle wiggles within wiggleDeg', () => {

@@ -36,6 +36,7 @@ export const TUNING = {
   readyButtonRadius: 24, // px corner radius of ready-screen buttons
   readyButtonAlpha: 0.55, // 0–1 fill alpha of ready-screen buttons
   launchSlideMs: 700, // ms the poop slides from its ready spot to poopX on the start tap
+  readyPoopScale: 1.33, // × spriteDisplayScale for the speech-bubble poop on the ready screen (shrinks back during the slide)
   toiletOffColor: 0x6a6a6a, // toggle track when off (grey)
   toiletOnColor: 0x8b5a2b, // toggle track when on (brown)
   toiletOffAlpha: 0.33, // 0–1 alpha of the 🚽 while the toggle is off
@@ -53,7 +54,8 @@ export const TUNING = {
   },
   beans: {
     startScore: 5, // score from which beans may appear
-    chancePerGap: 0.07, // 0–1 chance a pipe pair spawns a bean (rarer than fiber's effective ~0.1–0.18)
+    chancePerGap: 0.09, // 0–1 chance a pipe pair spawns a bean (about fiber's effective ~0.1)
+    guaranteeScore: 18, // if no bean has spawned yet, the pair spawned at this score carries one (it reaches the poop ~2 pipes later, i.e. by pipe 20)
     toCharge: 1, // beans needed to ready the fart power
     powerPipes: 5, // pipe pairs that cross the screen during one fart
     powerMs: 4344, // ms; fallback power length = the fart_accelerate clip (the loaded sound's duration wins)

@@ -9,7 +9,8 @@ guide; this file is the map for anyone changing the code.
 Flappy Poop is a Flappy Bird clone for phone browsers: a poop emoji flaps through
 the gut dodging pink intestinal-fold pipes. One point per pipe pair passed; fiber
 is +1, bad bacteria is −2 (floor 0), and a probiotic blocks one bacteria hit for
-up to 5 pipes. From pipe 5 a rare bean bobs between pipe pairs; one bean charges a fart
+up to 5 pipes. From pipe 5 a bean bobs between pipe pairs (random, and forced
+once by guaranteeScore if none has appeared); one bean charges a fart
 power (stink lines + glow; tap the poop) that plays `fart_accelerate.mp3`, ramps the
 scroll speed up and down with the clip so five pipes pass, and cannot die. Hit a pipe, the ceiling, or the floor and the run ends (dead-poop
 face). Best score and settings are kept in `localStorage`. Difficulty ramps
@@ -121,8 +122,8 @@ src/
                             this.toilet from the registry (session-only), toggle
                             under tap to flap, 🚽 HUD left of the score while
                             playing, passed to recordScore and Over. Beans: group
-                            spawned in spawnPipePair (rollBean, halfway to the next
-                            pair), bobbed in update() from per-bean elapsed ms;
+                            spawned in spawnPipePair (rollBean with beanSpawned for
+                            the one-per-run guarantee, halfway to the next pair), bobbed in update() from per-bean elapsed ms;
                             collectBean → effects.addBean; setCharged() alternates
                             stink frames + pulses this.glow; a tap on the poop
                             (poopTapHit) calls activatePower(): fart texture,

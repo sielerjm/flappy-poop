@@ -107,8 +107,9 @@ export class Play extends Phaser.Scene {
     // Player: bobs at its ready spot wearing the "TAP TO FLAP!" bubble; no gravity
     // until launch() has swapped to the plain frame and slid it to poopX.
     this.poop = this.physics.add.sprite(this.readyBoxes.poop.x, this.readyBoxes.poop.y, 'poop-speech').setDepth(10);
-    this.poop.setScale(T.spriteDisplayScale);
+    this.poop.setScale(T.spriteDisplayScale * T.readyPoopScale); // bigger on the ready screen; launch() shrinks it back
     this.setPoopTexture('poop-speech');
+    this.beanSpawned = false;
     this.poop.body.setAllowGravity(false);
     // White glow behind the poop while the fart power is charged (alpha pulses).
     this.glow = this.add.circle(this.poop.x, this.poop.y, 64, 0xffffff, 1).setAlpha(0).setDepth(9);
@@ -210,6 +211,7 @@ export class Play extends Phaser.Scene {
       targets: this.poop,
       x: T.poopX,
       y: GAME_HEIGHT / 2,
+      scale: T.spriteDisplayScale,
       duration: T.launchSlideMs,
       ease: 'Sine.easeInOut',
       onComplete: () => {
@@ -521,7 +523,8 @@ export class Play extends Phaser.Scene {
     }
 
     // Beans ride halfway between this pair and the next, bobbing top to bottom.
-    if (rollBean(this.rng, this.score, T)) {
+    if (rollBean(this.rng, this.score, T, { spawnedThisRun: this.beanSpawned })) {
+      this.beanSpawned = true;
       const phase = this.rng() * Math.PI * 2;
       const bean = this.beans.create(beanSpawnX(GAME_WIDTH, T.pipeWidth, this.diff.pipeSpeed, T.spawnEveryMs), beanY(0, phase, this.beanBounds, T), 'bean');
       bean.setDepth(8);
