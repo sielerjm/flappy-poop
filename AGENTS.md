@@ -50,11 +50,15 @@ src/
                             helper, trayLayout, trayHit, readyLayout, readyHit
                             (howToLayout / howToHit wrap them),
                             LAST_UPDATED, issueUrl, openExternalUrl, chromeIntent,
-                            overlayOutsideHit, scaledCircleBody. Fully unit-tested.
+                            overlayOutsideHit, clampScroll, scaledCircleBody. Fully
+                            unit-tested.
   save.js                   Save codes, NO Phaser/DOM: loadLocal / saveLocal
-                            (flappyPoop.save, schema 1, MAX_TOP = 6), recordScore,
-                            isNewTop, merge, summaryLine, profileLine, exportCode /
-                            importCode (HMAC-SHA256
+                            (flappyPoop.save, schema 2: top entries { score,
+                            toilet }; schema 1 numbers still load; MAX_TOP = 6),
+                            recordScore(state, score, { toilet }), isNewTop,
+                            merge, topScores, formatScore ("🚽 41"), summaryLine,
+                            profileLine, exportCode / importCode (HMAC-SHA256,
+                            v1 payload {i, n, s, p, t}; p = optional toilet flags;
                             via Web Crypto, 16-byte tag, base64url), PARSERS per
                             wire version, SECRET constant (permanent). Fully
                             unit-tested.
@@ -75,6 +79,9 @@ src/
     button.js               createButton(): Graphics rounded rect + centred text
                             for the ready-screen boxes from readyLayout. No pointer
                             handlers; Play resolves taps with readyHit().
+    toggle.js               createToggle(): toilet switch (pill track, knob tween,
+                            🚽 alpha) from readyLayout().toilet; setOn(). No pointer
+                            handlers.
     savePanel.js            Plain DOM panel over the canvas (Username field,
                             read-only user code + Copy, Load field + status).
                             Opened from the ready-screen Save / Load User button.
@@ -99,7 +106,10 @@ src/
                             profileLine() buttons; profile hidden until a username
                             is set); launch() slides the poop to poopX over
                             launchSlideMs, then start(); extra taps during the
-                            slide are ignored (launching flag);
+                            slide are ignored (launching flag). Toilet mode:
+                            this.toilet from the registry (session-only), toggle
+                            under tap to flap, 🚽 HUD left of the score while
+                            playing, passed to recordScore and Over;
                             readyHit() routes taps (howto, start, saveload, profile
                             → Scores). getSaveState / setSaveState for the panel.
     Over.js                 Game-over panel (score, best, "tap to go home") with a
@@ -113,8 +123,12 @@ src/
                             version. Tap outside the panel closes. Wrapped text uses
                             useAdvancedWrap for CJK.
     HowTo.js                Overlay: flap rules plus pipe / fiber / probiotic /
-                            bacteria rows (howToItems, pipe first; the pipe icon
-                            is a cropped cap slice) and a feedback link. Ready-screen How
+                            bacteria / toilet rows (howToItems, pipe first; the
+                            pipe icon is a cropped cap slice, toilet is the 🚽
+                            emoji) and a feedback link. Content lives in a masked
+                            Container scrolled by finger drag or wheel via
+                            clampScroll(); feedback link fires on pointerup only
+                            when the pointer moved < 12 px. Ready-screen How
                             to play uses howToHit() so it does not start a run.
                             Opened from About, X/Esc/tap-outside closes HowTo and
                             About together. useAdvancedWrap on body text.

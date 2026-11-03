@@ -1,6 +1,6 @@
 # Flappy Poop 💩
 
-A poop emoji flaps through the gut, dodging pink intestinal folds. A Flappy Bird clone for phone browsers, built on [Phaser 4](https://phaser.io) with no build step. Version **0.3.3**. English and Simplified Chinese in-game.
+A poop emoji flaps through the gut, dodging pink intestinal folds. A Flappy Bird clone for phone browsers, built on [Phaser 4](https://phaser.io) with no build step. Version **0.4.0**. English and Simplified Chinese in-game.
 
 **Play:** push this repo to GitHub, enable Pages (Settings → Pages → Deploy from branch → `main` / root), then open `https://<you>.github.io/<repo>/`. Add it to your home screen for a full-screen, app-like launch.
 
@@ -20,16 +20,17 @@ On iPhone, Silent mode mutes the game — turn it off to hear sound. The pause b
 
 ## Controls
 
-- **Ready screen** (top to bottom, centred) — title, the bobbing poop, **tap to flap**, then **How to play**, **Save / Load User**, and your `name · best` button once a username is set. The start tap slides the poop from the centre to its play position on the left before the run begins; taps during the slide are ignored.
+- **Ready screen** (top to bottom, centred) — title, the bobbing poop, **tap to flap**, the **toilet toggle**, then **How to play**, **Save / Load User**, and your `name · best` button once a username is set. The start tap slides the poop from the centre to its play position on the left before the run begins; taps during the slide are ignored.
 - **Tap / Space / ↑** — flap. The first tap also starts the run. After closing Settings or About during a run, tap or Space resumes; that tap does not flap. Unpausing from the pause banner bounces (same lift as a flap) so you can recover.
-- **How to play** (ready screen, also linked from About) — overlay with flap rules, iPhone Silent-mode note, a pipe row (dodge them; each pair passed is a point), and what fiber, probiotic, and bad bacteria do. Tapping it does not start the run. Closing How to play that was opened from About also closes About, leaving a paused run if info was opened mid-play. Tap the dimmed area outside Settings, About, or How to play to close (same as X).
+- **Toilet toggle** (under tap to flap) — switch it on when you are playing on the toilet: the track turns brown and the 🚽 lights up. Runs played that way show a 🚽 beside the score (HUD, game over, High scores, your save code). Off by default on every launch.
+- **How to play** (ready screen, also linked from About) — scrollable overlay (drag with a finger or use the mouse wheel) with flap rules, iPhone Silent-mode note, a pipe row (dodge them; each pair passed is a point), what fiber, probiotic, and bad bacteria do, and the toilet toggle. Tapping it does not start the run. Closing How to play that was opened from About also closes About, leaving a paused run if info was opened mid-play. Tap the dimmed area outside Settings, About, or How to play to close (same as X).
 - **Bottom-left (i)** — About (credits, author, LLM note, last-updated stamp, How to play and feedback links). Independent of Settings.
 - **Bottom-left (🌐)** — language (English / 简体中文). Persists. First visit with no saved choice follows the browser language when it starts with `zh`. Opening Language mid-run pauses.
 - **Bottom-left (💬)** — feedback: choose Bug or Feature request to open a GitHub issue form in the browser (needs a GitHub account). Also linked from About and How to play.
 - **Bottom-right tray** — pause, mute/unmute, settings. Tray taps never flap, and on the game-over screen they never retry.
 - **P** or **Esc** — pause / resume (during a run). Ignored while Settings, About, How to play, Language, or Feedback is open; Esc then closes the top overlay.
 - **M** — mute / unmute. Persists across reload. Still works while an overlay is open.
-- **Save / Load User** (ready-screen button) — set a username (1–12 characters), then Copy your `fp1.…` user code and paste it into Load user code on another phone or browser to carry your username and best 6 scores across. Codes are signed, so an edited code is refused; loading merges scores (best 6 kept) and the pasted username wins. Once a username is set the ready screen shows a `name · best` button under it; tap that for the High scores overlay (up to 6). The game-over panel reminds you to export after a run that enters the top 6.
+- **Save / Load User** (ready-screen button) — set a username (1–12 characters), then Copy your `fp1.…` user code and paste it into Load user code on another phone or browser to carry your username and best 6 scores (with their 🚽 flags) across. Codes are signed, so an edited code is refused; loading merges scores (best 6 kept) and the pasted username wins. Once a username is set the ready screen shows a `name · best` button under it; tap that for the High scores overlay (up to 6). The game-over panel reminds you to export after a run that enters the top 6.
 - **How to play** and **tap to flap** are drawn as buttons on the ready screen; tapping the second one starts the run like any other tap.
 - **S** — settings (sound, haptics, About). Opening Settings or About mid-run pauses; closing them leaves the pause banner until a new tap or Space.
 - **I** — About.
@@ -69,6 +70,7 @@ src/
   sound.js              WebAudio blips + setMuted (also mutes the Phaser fart sample)
   ui/tray.js            Phaser wrapper for pause / mute / settings and bottom-left (i) / 🌐 / 💬
   ui/button.js          rounded-rect button chrome for ready-screen boxes
+  ui/toggle.js          toilet toggle (track + knob + 🚽) for the ready screen
   ui/savePanel.js       DOM user-code panel (Username, Copy, Load) opened from Save / Load User
   scenes/
     Boot.js             preloads images + fart.mp3
