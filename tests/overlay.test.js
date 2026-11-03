@@ -4,7 +4,7 @@ import { GAME_WIDTH, GAME_HEIGHT } from '../src/config.js';
 import { overlayOutsideHit, clampScroll } from '../src/logic.js';
 
 const howto = { x: GAME_WIDTH / 2, y: GAME_HEIGHT / 2, width: 600, height: 1000 };
-const settings = { x: GAME_WIDTH / 2, y: GAME_HEIGHT / 2, width: 600, height: 760 };
+const settings = { x: GAME_WIDTH / 2, y: GAME_HEIGHT / 2, width: 600, height: 720 };
 
 test('overlayOutsideHit is false at the HowTo panel centre', () => {
   assert.equal(overlayOutsideHit(howto.x, howto.y, howto), false);

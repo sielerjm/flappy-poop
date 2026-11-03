@@ -4,10 +4,10 @@
 
 import { isLocale, DEFAULT_LOCALE } from './i18n.js';
 
-export const VERSION = '0.5.7';
+export const VERSION = '0.5.8';
 
 /** Player-facing stamp on the About overlay. Bump with VERSION. */
-export const LAST_UPDATED = '3 Nov 2026, 19:31';
+export const LAST_UPDATED = '3 Nov 2026, 19:58';
 
 const ISSUE_BASE = 'https://github.com/sielerjm/flappy-poop/issues/new';
 
@@ -16,6 +16,26 @@ export function issueUrl(kind) {
   if (kind === 'bug') return `${ISSUE_BASE}?template=bug.yml`;
   if (kind === 'feature') return `${ISSUE_BASE}?template=feature.yml`;
   throw new Error(`issueUrl: unknown kind ${kind}`);
+}
+
+/**
+ * Same page with a fresh cache-busting `r` query (any old one replaced) so a
+ * home-screen app can pull a new build instead of a cached page. Hash dropped.
+ */
+export function reloadUrl(href, now = Date.now()) {
+  const url = new URL(href);
+  url.searchParams.delete('r');
+  url.searchParams.set('r', String(now));
+  url.hash = '';
+  return url.toString();
+}
+
+/** Navigate to reloadUrl(); returns the URL used (null when there is no location). */
+export function reloadGame(api = globalThis) {
+  if (!api.location || typeof api.location.replace !== 'function') return null;
+  const target = reloadUrl(api.location.href);
+  api.location.replace(target);
+  return target;
 }
 
 /**

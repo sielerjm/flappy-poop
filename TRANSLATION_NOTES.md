@@ -64,6 +64,7 @@ Short, playful, clear. Fit a 720×1280 logical field; How to play / About body w
 | on | ON | 开 |
 | off | OFF | 关 |
 | hapticsHint | Android only — iPhone has no vibrate | 仅限 Android——iPhone 不支持震动 |
+| reloadGame | Reload game | 刷新游戏 |
 | aboutLink | About | 关于 |
 | aboutTitle | ABOUT | 关于 |
 | aboutName | Flappy Poop | Flappy Poop |

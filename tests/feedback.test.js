@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { issueUrl, openExternalUrl } from '../src/logic.js';
+import { issueUrl, openExternalUrl, reloadUrl, reloadGame } from '../src/logic.js';
 import { t, LOCALES } from '../src/i18n.js';
 
 test('issueUrl returns GitHub new-issue template URLs for bug and feature', () => {
@@ -61,4 +61,21 @@ test('feedback catalog keys resolve in both locales', () => {
       assert.ok(value.length > 0, `${locale} ${key} empty`);
     }
   }
+});
+
+test('reloadUrl adds a fresh r= query, replaces an old one, and drops the hash', () => {
+  assert.equal(reloadUrl('https://x.test/flappy-poop/', 42), 'https://x.test/flappy-poop/?r=42');
+  assert.equal(reloadUrl('https://x.test/flappy-poop/?r=1&a=b#frag', 99), 'https://x.test/flappy-poop/?a=b&r=99');
+  assert.equal(reloadUrl('http://localhost:8000/?cb=5', 7), 'http://localhost:8000/?cb=5&r=7');
+});
+
+test('reloadGame navigates via location.replace and no-ops without a location', () => {
+  const calls = [];
+  const api = { location: { href: 'https://x.test/game/?r=1', replace: (u) => calls.push(u) } };
+  const used = reloadGame(api);
+  assert.equal(calls.length, 1);
+  assert.equal(calls[0], used);
+  assert.match(used, /^https:\/\/x\.test\/game\/\?r=\d+$/);
+  assert.notEqual(used, 'https://x.test/game/?r=1');
+  assert.equal(reloadGame({}), null);
 });

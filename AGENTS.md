@@ -145,8 +145,9 @@ src/
     Over.js                 Game-over panel (score, best, "tap to go home") with a
                             tap lockout and its own tray (mute still works). Shows
                             newTopHint when the run entered the top 6.
-    Settings.js             Overlay: sound, haptics (Android only), About link,
-                            version. Tap outside the panel
+    Settings.js             Overlay: sound, haptics (Android only), Reload game
+                            (reloadGame(): location.replace with a fresh r= query,
+                            for home-screen installs), About link, version. Tap outside the panel
                             closes (overlayOutsideHit), same as X.
     About.js                Overlay: author, LLM note, engine/art/sound credits
                             (both fart clips), How to play + feedback links,
