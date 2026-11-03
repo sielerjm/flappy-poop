@@ -35,6 +35,7 @@ export const TUNING = {
   pauseResumeLockoutMs: 300, // ms after resume during which a tap must not flap
   readyButtonRadius: 24, // px corner radius of ready-screen buttons
   readyButtonAlpha: 0.55, // 0–1 fill alpha of ready-screen buttons
+  launchSlideMs: 700, // ms the poop slides from its ready spot to poopX on the start tap
   fartVolume: 0.6, // 0–1 Phaser volume for the death fart sample
   items: {
     startScore: 8, // score at which pickups may appear

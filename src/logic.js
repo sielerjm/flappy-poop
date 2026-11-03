@@ -4,10 +4,10 @@
 
 import { isLocale, DEFAULT_LOCALE } from './i18n.js';
 
-export const VERSION = '0.3.2';
+export const VERSION = '0.3.3';
 
 /** Player-facing stamp on the About overlay. Bump with VERSION. */
-export const LAST_UPDATED = '3 Nov 2026, 14:38';
+export const LAST_UPDATED = '3 Nov 2026, 14:50';
 
 const ISSUE_BASE = 'https://github.com/sielerjm/flappy-poop/issues/new';
 
@@ -299,19 +299,22 @@ export function scaledCircleBody(frameSize, displayScale, logicalRadius) {
 }
 
 /**
- * Ready-screen boxes: How to play, "tap to flap" (start), Save / Load User, and
- * the name · best profile line. Buttons are at least trayHitMin tall. The poop
- * bobs around (poopX, height / 2), so start and saveLoad are narrower than
- * howto and keep clear of x < 240 between y 560 and 720.
+ * Ready-screen layout, top to bottom and centred: title, the bobbing poop
+ * (its ready spot; launch() slides it to poopX), "tap to flap" (start), then
+ * How to play, Save / Load User, and the name · best profile button. Buttons
+ * are at least trayHitMin tall; start sits clear of the poop's bob (±24) and
+ * radius (~48).
  */
 export function readyLayout(width, height, t) {
   const cx = width / 2;
   const boxH = Math.max(88, t.trayHitMin);
-  const howto = { id: 'howto', x: cx, y: height * 0.3 + 104, width: 400, height: boxH };
-  const start = { id: 'start', x: cx, y: howto.y + 104, width: 250, height: boxH };
-  const saveLoad = { id: 'saveload', x: cx, y: height / 2 + 160, width: 360, height: boxH };
-  const profile = { id: 'profile', x: cx, y: saveLoad.y + 104, width: 360, height: 72 };
-  return { howto, start, saveLoad, profile };
+  const title = { id: 'title', x: cx, y: 330 };
+  const poop = { id: 'poop', x: cx, y: 455 };
+  const start = { id: 'start', x: cx, y: 592, width: 250, height: boxH };
+  const howto = { id: 'howto', x: cx, y: 740, width: 400, height: boxH };
+  const saveLoad = { id: 'saveload', x: cx, y: 844, width: 360, height: boxH };
+  const profile = { id: 'profile', x: cx, y: 940, width: 360, height: 72 };
+  return { title, poop, start, howto, saveLoad, profile };
 }
 
 function inBox(x, y, box) {

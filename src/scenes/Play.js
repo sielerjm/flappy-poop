@@ -76,8 +76,13 @@ export class Play extends Phaser.Scene {
       this.ground.setTileScale(GAME_WIDTH / f.width, T.groundHeight / f.height);
     }
 
-    // Player: no gravity until the first tap
-    this.poop = this.physics.add.sprite(T.poopX, GAME_HEIGHT / 2, 'poop').setDepth(10);
+    // Ready-screen geometry (title, poop spot, buttons). Taps resolve through
+    // readyHit() in flap(), not GameObject handlers, so the chrome is visual only.
+    this.readyBoxes = readyLayout(GAME_WIDTH, GAME_HEIGHT, T);
+    this.launching = false;
+
+    // Player: bobs at its ready spot, no gravity until launch() has slid it to poopX.
+    this.poop = this.physics.add.sprite(this.readyBoxes.poop.x, this.readyBoxes.poop.y, 'poop').setDepth(10);
     this.poop.setScale(T.spriteDisplayScale);
     const poopBody = scaledCircleBody(this.poop.frame.width, T.spriteDisplayScale, T.poopRadius);
     this.poop.body.setCircle(poopBody.radius, poopBody.offset, poopBody.offset);
@@ -93,12 +98,9 @@ export class Play extends Phaser.Scene {
       .setVisible(false);
     this.probioticText = this.add.text(GAME_WIDTH / 2 + 16, 156, '', { ...TEXT_STYLE, fontSize: '40px' }).setOrigin(0, 0.5).setDepth(20).setVisible(false);
     this.readyTitle = this.add
-      .text(GAME_WIDTH / 2, GAME_HEIGHT * 0.3, t(this.locale, 'readyTitle'), { ...TEXT_STYLE, fontSize: '52px' })
+      .text(this.readyBoxes.title.x, this.readyBoxes.title.y, t(this.locale, 'readyTitle'), { ...TEXT_STYLE, fontSize: '52px' })
       .setOrigin(0.5)
       .setDepth(20);
-    // Ready-screen buttons. Taps resolve through readyHit() in flap(), not
-    // GameObject handlers, so the chrome is purely visual.
-    this.readyBoxes = readyLayout(GAME_WIDTH, GAME_HEIGHT, T);
     this.howToBtn = createButton(this, this.readyBoxes.howto, t(this.locale, 'howToPlay'), { ...TEXT_STYLE, fontSize: '40px', color: '#f8a0c8' });
     this.startBtn = createButton(this, this.readyBoxes.start, t(this.locale, 'tapToFlap'), { ...TEXT_STYLE, fontSize: '44px' });
     this.saveLoadBtn = createButton(this, this.readyBoxes.saveLoad, t(this.locale, 'saveLoadButton'), {
@@ -158,14 +160,43 @@ export class Play extends Phaser.Scene {
     });
   }
 
+  /**
+   * Start tap: hide the ready UI, slide the poop from its ready spot to the
+   * play position, then start(). Extra taps during the slide are ignored.
+   */
+  launch() {
+    if (this.launching || this.state !== 'ready') return;
+    this.launching = true;
+    this.bob.stop();
+    this.setReadyUiVisible(false);
+    this.tweens.add({
+      targets: this.poop,
+      x: T.poopX,
+      y: GAME_HEIGHT / 2,
+      duration: T.launchSlideMs,
+      ease: 'Sine.easeInOut',
+      onComplete: () => {
+        this.launching = false;
+        if (this.state !== 'ready') return;
+        this.start();
+        this.doFlap();
+        // An overlay opened mid-slide must not leave the run playing under it.
+        if (this.chromeArgs('tap').overlay) this.pausePlay();
+      },
+    });
+  }
+
+  setReadyUiVisible(visible) {
+    this.readyTitle.setVisible(visible);
+    this.howToBtn.setVisible(visible);
+    this.startBtn.setVisible(visible);
+    this.saveLoadBtn.setVisible(visible);
+    this.profileBtn.setVisible(visible && Boolean(profileLine(this.save)));
+  }
+
   start() {
     this.state = 'playing';
     this.bob.stop();
-    this.readyTitle.setVisible(false);
-    this.howToBtn.setVisible(false);
-    this.startBtn.setVisible(false);
-    this.saveLoadBtn.setVisible(false);
-    this.profileBtn.setVisible(false);
     this.poop.body.setAllowGravity(true);
     this.poop.body.setGravityY(T.gravity);
     this.spawnTimer = this.time.addEvent({ delay: T.spawnEveryMs, loop: true, callback: () => this.spawnPipePair() });
@@ -181,7 +212,7 @@ export class Play extends Phaser.Scene {
         this.handleChrome(id);
         return;
       }
-      if (this.state === 'ready') {
+      if (this.state === 'ready' && !this.launching) {
         const hit = readyHit(pointer.x, pointer.y, this.readyBoxes, { hasProfile: Boolean(this.save?.name) });
         if (hit === 'howto') {
           this.handleChrome('howto');
@@ -234,7 +265,7 @@ export class Play extends Phaser.Scene {
   refreshProfile() {
     const line = profileLine(this.save);
     this.profileBtn?.setText(line);
-    if (this.state === 'ready') this.profileBtn?.setVisible(Boolean(line));
+    if (this.state === 'ready' && !this.launching) this.profileBtn?.setVisible(Boolean(line));
   }
 
   openSavePanel() {
@@ -329,8 +360,7 @@ export class Play extends Phaser.Scene {
         this.scene.bringToTop('Scores');
         break;
       case 'start':
-        this.start();
-        this.doFlap();
+        this.launch();
         break;
       case 'flap':
         this.doFlap();
