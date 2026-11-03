@@ -94,9 +94,12 @@ src/
                             from i18n. Locale via getLocale / applyLocale. Holds the
                             SaveState (loadLocal on create, seeded once from the
                             legacy best); die() records the score and passes newTop
-                            to Over. Ready screen: How to play / tap to flap /
-                            Save / Load User / profileLine() buttons (profile
-                            hidden until a username is set);
+                            to Over. Ready screen (readyLayout: title, poop spot,
+                            then tap to flap / How to play / Save / Load User /
+                            profileLine() buttons; profile hidden until a username
+                            is set); launch() slides the poop to poopX over
+                            launchSlideMs, then start(); extra taps during the
+                            slide are ignored (launching flag);
                             readyHit() routes taps (howto, start, saveload, profile
                             → Scores). getSaveState / setSaveState for the panel.
     Over.js                 Game-over panel (score, best, "tap to go home") with a

@@ -1,6 +1,6 @@
 # Flappy Poop 💩
 
-A poop emoji flaps through the gut, dodging pink intestinal folds. A Flappy Bird clone for phone browsers, built on [Phaser 4](https://phaser.io) with no build step. Version **0.3.2**. English and Simplified Chinese in-game.
+A poop emoji flaps through the gut, dodging pink intestinal folds. A Flappy Bird clone for phone browsers, built on [Phaser 4](https://phaser.io) with no build step. Version **0.3.3**. English and Simplified Chinese in-game.
 
 **Play:** push this repo to GitHub, enable Pages (Settings → Pages → Deploy from branch → `main` / root), then open `https://<you>.github.io/<repo>/`. Add it to your home screen for a full-screen, app-like launch.
 
@@ -20,6 +20,7 @@ On iPhone, Silent mode mutes the game — turn it off to hear sound. The pause b
 
 ## Controls
 
+- **Ready screen** (top to bottom, centred) — title, the bobbing poop, **tap to flap**, then **How to play**, **Save / Load User**, and your `name · best` button once a username is set. The start tap slides the poop from the centre to its play position on the left before the run begins; taps during the slide are ignored.
 - **Tap / Space / ↑** — flap. The first tap also starts the run. After closing Settings or About during a run, tap or Space resumes; that tap does not flap. Unpausing from the pause banner bounces (same lift as a flap) so you can recover.
 - **How to play** (ready screen, also linked from About) — overlay with flap rules, iPhone Silent-mode note, a pipe row (dodge them; each pair passed is a point), and what fiber, probiotic, and bad bacteria do. Tapping it does not start the run. Closing How to play that was opened from About also closes About, leaving a paused run if info was opened mid-play. Tap the dimmed area outside Settings, About, or How to play to close (same as X).
 - **Bottom-left (i)** — About (credits, author, LLM note, last-updated stamp, How to play and feedback links). Independent of Settings.
