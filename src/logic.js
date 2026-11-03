@@ -4,10 +4,10 @@
 
 import { isLocale, DEFAULT_LOCALE } from './i18n.js';
 
-export const VERSION = '0.5.6';
+export const VERSION = '0.5.7';
 
 /** Player-facing stamp on the About overlay. Bump with VERSION. */
-export const LAST_UPDATED = '3 Nov 2026, 16:48';
+export const LAST_UPDATED = '3 Nov 2026, 19:31';
 
 const ISSUE_BASE = 'https://github.com/sielerjm/flappy-poop/issues/new';
 
@@ -423,6 +423,23 @@ export function trayLayout(width, height, t) {
 }
 
 /**
+ * Bean power button: the empty centre slot of the tray band, shown only while
+ * the fart power is charged. Same size as the tray buttons.
+ */
+export function beanButtonLayout(width, height, t) {
+  return { id: 'bean', x: width / 2, y: height - t.trayHeight / 2, size: t.trayHitMin };
+}
+
+/** True when (x, y) is inside the bean power button. */
+export function beanButtonHit(x, y, layout) {
+  if (!layout) return false;
+  const r = layout.size / 2;
+  const dx = x - layout.x;
+  const dy = y - layout.y;
+  return dx * dx + dy * dy <= r * r;
+}
+
+/**
  * Which tray button contains (x, y), or null. Radius is size/2 around each
  * button centre. Scene pointerdown uses this so taps do not depend on Phaser
  * hit-area origin (which is top-left of the Game Object).
@@ -451,12 +468,14 @@ export function scaledCircleBody(frameSize, displayScale, logicalRadius) {
 }
 
 /**
- * Ready-screen layout, top to bottom and centred: title, the bobbing poop
- * wearing its "TAP TO FLAP!" speech bubble (poop-speech.png; the bubble
- * reaches ~127 px above and ~116 px right of the body at display scale, so
- * the poop sits low enough to clear the title), the toilet toggle, then How
- * to play, Save / Load User, and the name · best profile button. Any tap that
- * is not on a box starts the run. Buttons are at least trayHitMin tall.
+ * Ready-screen layout, top to bottom and centred: title; then the poop wearing
+ * its "TAP TO FLAP!" speech bubble (poop-speech.png; the bubble reaches ~127 px
+ * above and ~116 px right of the body at display scale, ×readyPoopScale) and
+ * the toilet toggle, as one block centred in the free space with equal room
+ * above and below; then How to play, Save / Load User, and the name · best
+ * profile button stacked down so the profile rests just above the tray band
+ * (and above the ground strip). Any tap that is not on a box starts the run.
+ * Buttons are at least trayHitMin tall.
  */
 export function readyLayout(width, height, t) {
   const cx = width / 2;
@@ -465,12 +484,12 @@ export function readyLayout(width, height, t) {
   // Speech-bubble extents at display scale (poop-speech.png ink relative to the
   // body centre, ×readyPoopScale); the poop bobs ±24 on top of that.
   const s = t.readyPoopScale ?? 1;
-  const poop = { id: 'poop', x: cx, y: 556, bubble: { left: -48 * s, right: 116 * s, top: -127 * s, bottom: 46 * s } };
+  const poop = { id: 'poop', x: cx, y: 637, bubble: { left: -48 * s, right: 116 * s, top: -127 * s, bottom: 46 * s } };
   // Toilet toggle: 120x56 track left of centre, 🚽 to its right; the hit box spans both.
-  const toilet = { id: 'toilet', x: cx, y: 684, width: 240, height: 72, track: { x: cx - 50, y: 684, width: 120, height: 56 }, emojiX: cx + 80 };
-  const howto = { id: 'howto', x: cx, y: 776, width: 400, height: boxH };
-  const saveLoad = { id: 'saveload', x: cx, y: 872, width: 360, height: boxH };
-  const profile = { id: 'profile', x: cx, y: 952, width: 360, height: 64 }; // bottom 984 clears the lower villi fringe (~987)
+  const toilet = { id: 'toilet', x: cx, y: 765, width: 240, height: 72, track: { x: cx - 50, y: 765, width: 120, height: 56 }, emojiX: cx + 80 };
+  const howto = { id: 'howto', x: cx, y: 932, width: 400, height: boxH };
+  const saveLoad = { id: 'saveload', x: cx, y: 1024, width: 360, height: boxH };
+  const profile = { id: 'profile', x: cx, y: 1116, width: 360, height: 64 }; // bottom 1148: above the ground strip (1152) and the tray band (1168)
   return { title, poop, toilet, howto, saveLoad, profile };
 }
 

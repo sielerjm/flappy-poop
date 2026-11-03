@@ -126,8 +126,10 @@ src/
                             spawned in spawnPipePair (rollBean with beanSpawned for
                             the one-per-run guarantee, halfway to the next pair), bobbed in update() from per-bean elapsed ms;
                             collectBean → effects.addBean; setCharged() alternates
-                            stink frames + pulses this.glow; a tap on the poop
-                            (poopTapHit) calls activatePower(): fart texture,
+                            stink frames + pulses this.glow and the bean button in
+                            the tray centre slot (beanButtonLayout, same period); a
+                            tap on the poop (poopTapHit) or the button
+                            (beanButtonHit) calls activatePower(): fart texture,
                             alpha tween, fart_accelerate clip, effects.activatePower
                             (clip length), scrollMul from fartMul() each frame via
                             applyScroll(); the poop floats at mid-height (gravity

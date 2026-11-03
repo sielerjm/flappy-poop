@@ -30,6 +30,8 @@ import {
   fartMul,
   fartRemainingDistance,
   pipeClearDistance,
+  beanButtonLayout,
+  beanButtonHit,
 } from '../logic.js';
 import { t, pauseBannerText, initialLocale, isLocale } from '../i18n.js';
 import { loadLocal, saveLocal, recordScore, isNewTop, profileLine, TOILET_EMOJI } from '../save.js';
@@ -167,6 +169,18 @@ export class Play extends Phaser.Scene {
 
     this.tray = createTray(this, { muted: isMuted() });
 
+    // Bean power button in the tray's centre slot: shown while charged, pulses
+    // in step with the glow, and fires the fart like a tap on the poop.
+    this.beanButtonBox = beanButtonLayout(GAME_WIDTH, GAME_HEIGHT, T);
+    {
+      const b = this.beanButtonBox;
+      const r = b.size / 2;
+      const bg = this.add.circle(0, 0, r, 0x1a0b14, 1).setStrokeStyle(4, 0xe85e96);
+      const icon = this.add.image(0, 0, 'bean').setDisplaySize(56, 56);
+      // Container so the pulse scales circle + icon together without touching the icon's own scale.
+      this.beanButton = this.add.container(b.x, b.y, [bg, icon]).setDepth(30).setVisible(false);
+    }
+
     // Collisions
     this.physics.add.overlap(this.poop, this.pipes, () => this.die(), undefined, this);
     this.physics.add.overlap(this.poop, this.items, (_poop, item) => this.collectItem(item), undefined, this);
@@ -276,8 +290,8 @@ export class Play extends Phaser.Scene {
         }
         // 'start' or empty space both start the run below.
       }
-      // Charged power: a tap on the poop itself fires the fart instead of flapping.
-      if (this.state === 'playing' && this.effects.powerReady() && poopTapHit(pointer.x, pointer.y, this.poop, T.poopRadius)) {
+      // Charged power: a tap on the poop itself or on the bean button fires the fart instead of flapping.
+      if (this.state === 'playing' && this.effects.powerReady() && (poopTapHit(pointer.x, pointer.y, this.poop, T.poopRadius) || beanButtonHit(pointer.x, pointer.y, this.beanButtonBox))) {
         this.activatePower();
         return;
       }
@@ -612,12 +626,25 @@ export class Play extends Phaser.Scene {
       });
       this.glow.setAlpha(T.beans.glowMinAlpha);
       this.glowTween = this.tweens.add({ targets: this.glow, alpha: T.beans.glowMaxAlpha, yoyo: true, repeat: -1, duration: T.beans.glowPulseMs });
+      // Bean button: same period as the glow, started in the same frame so they stay in phase.
+      this.beanButton.setVisible(true).setScale(1).setAlpha(0.7);
+      this.beanButtonTween = this.tweens.add({
+        targets: this.beanButton,
+        scale: 1.12,
+        alpha: 1,
+        yoyo: true,
+        repeat: -1,
+        duration: T.beans.glowPulseMs,
+      });
     } else {
       this.stinkTimer?.remove();
       this.stinkTimer = null;
       this.glowTween?.stop();
       this.glowTween = null;
       this.glow.setAlpha(0);
+      this.beanButtonTween?.stop();
+      this.beanButtonTween = null;
+      this.beanButton.setVisible(false);
       if (this.state === 'playing') this.setPoopTexture('poop');
     }
   }

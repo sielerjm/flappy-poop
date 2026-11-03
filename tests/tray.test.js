@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { GAME_WIDTH, GAME_HEIGHT, TUNING as T } from '../src/config.js';
-import { trayLayout, trayHit } from '../src/logic.js';
+import { trayLayout, trayHit, beanButtonLayout, beanButtonHit } from '../src/logic.js';
 
 test('trayHeight is at least 44 px', () => {
   assert.ok(T.trayHeight >= 44, `trayHeight ${T.trayHeight} < 44`);
@@ -60,4 +60,20 @@ test('trayHit returns the button id at its centre and null in the gap', () => {
   }
   assert.equal(trayHit(GAME_WIDTH / 2, layout.y, layout), null);
   assert.equal(trayHit(GAME_WIDTH / 2, GAME_HEIGHT / 2, layout), null);
+});
+
+test('bean power button sits in the tray centre slot, clear of every tray button', () => {
+  const tray = trayLayout(GAME_WIDTH, GAME_HEIGHT, T);
+  const bean = beanButtonLayout(GAME_WIDTH, GAME_HEIGHT, T);
+  assert.equal(bean.x, GAME_WIDTH / 2);
+  assert.equal(bean.y, tray.y);
+  assert.equal(bean.size, T.trayHitMin);
+  for (const b of [...tray.buttons, tray.info, tray.lang, tray.feedback]) {
+    const gap = Math.hypot(b.x - bean.x, b.y - bean.y) - (b.size + bean.size) / 2;
+    assert.ok(gap >= 0, `bean button overlaps ${b.id} by ${-gap}px`);
+  }
+  assert.equal(beanButtonHit(bean.x, bean.y, bean), true);
+  assert.equal(beanButtonHit(bean.x + bean.size / 2 + 2, bean.y, bean), false);
+  assert.equal(trayHit(bean.x, bean.y, tray), null, 'the slot is not a tray button');
+  assert.equal(beanButtonHit(0, 0, null), false);
 });

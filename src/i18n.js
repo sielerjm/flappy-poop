@@ -33,6 +33,7 @@ const STRINGS = {
 Art: Michael Sieler
 Death fart: MacKaffee (Freesound / Pixabay)
 Power fart: "fart sound effect (reed)" (Pixabay)
+Thanks to Tori Schummer for help with ideation
 Inspired by Flappy Bird`,
     howToTitle: 'HOW TO PLAY',
     howToBody:
@@ -46,7 +47,7 @@ Inspired by Flappy Bird`,
     itemBacteriaName: 'Bad bacteria',
     itemBacteriaDetail: '−2 points',
     itemBeanName: 'Beans',
-    itemBeanDetail: 'Grab a bean and press your poop to activate the power-up: fart past the next 5 pipes, and nothing can hurt you.',
+    itemBeanDetail: 'Grab a bean, then press the bean button at the bottom (or your poop) to activate the power-up: fart past the next 5 pipes, and nothing can hurt you.',
     itemToiletName: 'On the toilet',
     itemToiletDetail: 'Playing on the toilet? Flip the switch under the poop on the home screen. Those scores get a 🚽 next to them.',
     updatedPrefix: 'Updated',
@@ -105,6 +106,7 @@ Inspired by Flappy Bird`,
 美术：Michael Sieler
 死亡屁声：MacKaffee（Freesound / Pixabay）
 放屁冲刺音效："fart sound effect (reed)"（Pixabay）
+感谢 Tori Schummer 协助构思
 灵感来自 Flappy Bird`,
     howToTitle: '玩法说明',
     howToBody:
@@ -118,7 +120,7 @@ Inspired by Flappy Bird`,
     itemBacteriaName: '有害细菌',
     itemBacteriaDetail: '−2 分',
     itemBeanName: '豆子',
-    itemBeanDetail: '吃到豆子后点击便便启动能力：放屁冲过接下来的 5 道管道，期间不会受伤。',
+    itemBeanDetail: '吃到豆子后，点击底部的豆子按钮（或便便）启动能力：放屁冲过接下来的 5 道管道，期间不会受伤。',
     itemToiletName: '如厕模式',
     itemToiletDetail: '在马桶上玩？打开主界面便便下方的开关，这些分数旁会显示 🚽。',
     updatedPrefix: '更新于',

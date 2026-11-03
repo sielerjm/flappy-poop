@@ -24,7 +24,7 @@ formal medical language.
 - First run with **no** stored `locale`: if `navigator.language` starts with `zh`, use `zh-Hans`; else `en`. Then persist.
 - Once the player picks a language in the 🌐 panel, the stored value always wins.
 - Brand title **Flappy Poop** stays Latin in both locales.
-- Untranslated tokens (must appear across About strings): `Flappy Poop`, `Michael Sieler`, `Phaser 4.2.1`, `MacKaffee`, `Pixabay`, `fart sound effect (reed)`, version numbers.
+- Untranslated tokens (must appear across About strings): `Flappy Poop`, `Michael Sieler`, `Phaser 4.2.1`, `MacKaffee`, `Pixabay`, `fart sound effect (reed)`, `Tori Schummer`, version numbers.
 - **Silent mode** = iPhone **hardware** ringer/silent switch → **静音模式** (not the in-game mute toggle).
 - **Toilet mode** (如厕模式) = the ready-screen switch; scores from such runs carry a 🚽 (not translated).
 - **User code** / save code (用户码 / 存档码) = the `fp1.…` string players copy between devices. The home-screen button is **Save / Load User**; the panel labels are **Username**, **Save user code**, **Load user code**. `{name}` and `{scores}` are placeholders filled at runtime; keep them verbatim.
@@ -83,7 +83,7 @@ Short, playful, clear. Fit a 720×1280 logical field; How to play / About body w
 | itemBacteriaName | Bad bacteria | 有害细菌 |
 | itemBacteriaDetail | −2 points | −2 分 |
 | itemBeanName | Beans | 豆子 |
-| itemBeanDetail | Grab a bean and press your poop to activate the power-up: fart past the next 5 pipes, and nothing can hurt you. | 吃到豆子后点击便便启动能力：放屁冲过接下来的 5 道管道，期间不会受伤。 |
+| itemBeanDetail | Grab a bean, then press the bean button at the bottom (or your poop) to activate the power-up: fart past the next 5 pipes, and nothing can hurt you. | 吃到豆子后，点击底部的豆子按钮（或便便）启动能力：放屁冲过接下来的 5 道管道，期间不会受伤。 |
 | itemToiletName | On the toilet | 如厕模式 |
 | itemToiletDetail | Playing on the toilet? Flip the switch under the poop on the home screen. Those scores get a 🚽 next to them. | 在马桶上玩？打开主界面便便下方的开关，这些分数旁会显示 🚽。 |
 | updatedPrefix | Updated | 更新于 |
@@ -122,6 +122,7 @@ Code: JavaScript / Phaser 4.2.1 (MIT)
 Art: Michael Sieler
 Death fart: MacKaffee (Freesound / Pixabay)
 Power fart: "fart sound effect (reed)" (Pixabay)
+Thanks to Tori Schummer for help with ideation
 Inspired by Flappy Bird
 ```
 
@@ -132,6 +133,7 @@ Inspired by Flappy Bird
 美术：Michael Sieler
 死亡屁声：MacKaffee（Freesound / Pixabay）
 放屁冲刺音效："fart sound effect (reed)"（Pixabay）
+感谢 Tori Schummer 协助构思
 灵感来自 Flappy Bird
 ```
 
