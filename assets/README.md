@@ -13,6 +13,7 @@ The player and items are Michael's drawings. Put a new source PNG in `assets/src
 | `poop-stink1.png` | 714x714 | Player, power-up charged (stink lines, frame A) | Same body scale and centre as `poop.png` on a bigger square (the lines stick out). Source: `assets/src/Poop_Stink1.png`. |
 | `poop-stink2.png` | 714x714 | Player, power-up charged (stink lines, frame B) | Alternates with frame A. Source: `assets/src/Poop_Stink2.png`. |
 | `poop-fart.png` | 876x876 | Player during the fart power | Body at the canvas centre (brown mask), cloud trails left. Source: `assets/src/Poop_Fart.png`. |
+| `poop-speech.png` | 1020x1020 | Player on the ready screen with the "TAP TO FLAP!" bubble | Body at the canvas centre (brown mask); the bubble reaches ~127 px up and ~116 px right of the body at display scale. Source: `assets/src/Poop_Speech.png`. |
 | `fiber.png` | 384x384 | Bonus +1 pickup | Transparent background, subject centred. Drawn at 0.25 scale. Hitbox is a 32 px circle. Source: `assets/src/Fiber.png`. |
 | `probiotic.png` | 384x384 | Good bacteria (5-pipe shield vs bad bacteria) | Same hitbox. Source: `assets/src/Good_Bacteria.png`. |
 | `bacteria.png` | 384x384 | Bad bacteria (−2) | Same hitbox. Hair / flagellum are visual-only. Source: `assets/src/Bad_Bacteria.png`. |

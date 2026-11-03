@@ -5,10 +5,10 @@ drawings into the gameplay art-contract PNGs.
 Created by Michael Sieler. Last updated: 2026-11-03 (poop set + bean).
 
 Run:    uv run --with pillow python3 tools/process_art.py   (or any Python with Pillow)
-Input:  assets/src/{Poop_Emoji_Alive,Poop_Emoji_Dead,Poop_Stink1,Poop_Stink2,Poop_Fart,
+Input:  assets/src/{Poop_Emoji_Alive,Poop_Emoji_Dead,Poop_Stink1,Poop_Stink2,Poop_Fart,Poop_Speech,
                     Fiber,Good_Bacteria,Bad_Bacteria,Kidney_Bean}.png
 Output: assets/{poop,poop-dead,fiber,probiotic,bacteria,bean}.png at 384x384 RGBA and
-        assets/{poop-stink1,poop-stink2,poop-fart}.png on larger squares.
+        assets/{poop-stink1,poop-stink2,poop-fart,poop-speech}.png on larger squares.
 
 Only white connected to the image border is made transparent, so eyes and
 mouths stay white. Items are trimmed independently.
@@ -178,6 +178,20 @@ def process_poop_set():
     out = scale_to(crop_centred(fart, fart_centre, half), size)
     out.save(OUT / "poop-fart.png")
     print(f"poop-fart.png: {out.size}  (body centre {tuple(round(v) for v in fart_centre)} of {fart.size})")
+
+    # Speech frame (ready screen "TAP TO FLAP!" bubble): same rule as the fart frame.
+    speech = knock_background(Image.open(SRC / "Poop_Speech.png"))
+    body = brown_bbox(speech)
+    bbox = content_bbox(speech)
+    if not body or not bbox:
+        raise SystemExit("Poop_Speech.png has no visible ink")
+    speech_centre = ((body[0] + body[2]) / 2, (body[1] + body[3]) / 2)
+    half = frame_half(bbox, speech_centre)
+    size = int(round(2 * half * k))
+    size += size % 2
+    out = scale_to(crop_centred(speech, speech_centre, half), size)
+    out.save(OUT / "poop-speech.png")
+    print(f"poop-speech.png: {out.size}  (body centre {tuple(round(v) for v in speech_centre)} of {speech.size})")
 
 
 def process_item(src: Path, dest_name: str):
