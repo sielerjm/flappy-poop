@@ -10,7 +10,7 @@ import { Feedback } from './scenes/Feedback.js';
 import { Scores } from './scenes/Scores.js';
 
 // Phaser is loaded as a global from the <script> tag in index.html.
-new Phaser.Game({
+const game = new Phaser.Game({
   type: Phaser.AUTO,
   parent: 'game',
   width: GAME_WIDTH,
@@ -32,3 +32,6 @@ new Phaser.Game({
   },
   scene: [Boot, Play, Over, Settings, About, HowTo, Language, Feedback, Scores],
 });
+
+// Debug / automation handle (headless drivers reach scenes through it). No gameplay effect.
+globalThis.__flappy = game;
