@@ -1,6 +1,6 @@
-// DOM save-code panel, opened from the Settings overlay. Plain DOM over the
-// canvas (not Phaser UI) because text input and the clipboard are far easier
-// here on phones. Logic lives in src/save.js; this file only wires the form.
+// DOM user-code panel, opened from the Save / Load User button on the ready
+// screen. Plain DOM over the canvas (not Phaser UI) because text input and the
+// clipboard are far easier here on phones. Logic lives in src/save.js; this file only wires the form.
 //
 // While open, Phaser's keyboard manager is disabled so typing in a field does
 // not flap / pause / open overlays. Canvas pointer events never reach the game

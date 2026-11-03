@@ -2,7 +2,6 @@ import { GAME_WIDTH, GAME_HEIGHT, TUNING as T } from '../config.js';
 import { VERSION, createSettingsStore, chromeIntent, overlayOutsideHit } from '../logic.js';
 import { t, toggleLabel, metaFontSize } from '../i18n.js';
 import { setMuted } from '../sound.js';
-import { openSavePanel } from '../ui/savePanel.js';
 
 const STYLE = { fontFamily: 'sans-serif', fontStyle: 'bold', color: '#ffffff', align: 'center' };
 
@@ -52,22 +51,16 @@ export class Settings extends Phaser.Scene {
       })
       .setOrigin(0.5);
 
-    this.add.text(cx, cy + 90, t(locale, 'musicComingSoon'), { ...STYLE, fontSize: '40px', color: '#6a5a74' }).setOrigin(0.5);
-
-    const saveLink = this.add
-      .text(cx, cy + 170, t(locale, 'saveLink'), { ...STYLE, fontSize: '40px', color: '#f8a0c8' })
-      .setOrigin(0.5)
-      .setInteractive({ useHandCursor: true });
-    saveLink.on('pointerdown', () => openSavePanel({ game: this.game, play: this.scene.get('Play'), locale: this.locale }));
+    this.add.text(cx, cy + 100, t(locale, 'musicComingSoon'), { ...STYLE, fontSize: '40px', color: '#6a5a74' }).setOrigin(0.5);
 
     const about = this.add
-      .text(cx, cy + 250, t(locale, 'aboutLink'), { ...STYLE, fontSize: '40px', color: '#f8a0c8' })
+      .text(cx, cy + 220, t(locale, 'aboutLink'), { ...STYLE, fontSize: '40px', color: '#f8a0c8' })
       .setOrigin(0.5)
       .setInteractive({ useHandCursor: true });
     about.on('pointerdown', () => this.scene.get('Play')?.handleChrome('info'));
 
     this.add
-      .text(cx, cy + 320, `v${VERSION}`, {
+      .text(cx, cy + 310, `v${VERSION}`, {
         ...STYLE,
         fontSize: metaFontSize(locale),
         color: '#6a5a74',

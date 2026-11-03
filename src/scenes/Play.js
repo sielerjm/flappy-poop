@@ -15,14 +15,16 @@ import {
   chromeIntent,
   trayLayout,
   trayHit,
-  howToLayout,
-  howToHit,
+  readyLayout,
+  readyHit,
   scaledCircleBody,
 } from '../logic.js';
 import { t, pauseBannerText, initialLocale, isLocale } from '../i18n.js';
-import { loadLocal, saveLocal, recordScore, isNewTop, summaryLine } from '../save.js';
+import { loadLocal, saveLocal, recordScore, isNewTop, profileLine } from '../save.js';
 import { unlock, attachGame, setMuted, isMuted, sfx } from '../sound.js';
 import { createTray } from '../ui/tray.js';
+import { createButton } from '../ui/button.js';
+import { openSavePanel } from '../ui/savePanel.js';
 
 const TEXT_STYLE = {
   fontFamily: 'sans-serif',
@@ -94,19 +96,19 @@ export class Play extends Phaser.Scene {
       .text(GAME_WIDTH / 2, GAME_HEIGHT * 0.3, t(this.locale, 'readyTitle'), { ...TEXT_STYLE, fontSize: '52px' })
       .setOrigin(0.5)
       .setDepth(20);
-    const howTo = howToLayout(GAME_WIDTH, GAME_HEIGHT, T);
-    this.howToLabel = this.add
-      .text(howTo.x, howTo.y, t(this.locale, 'howToPlay'), { ...TEXT_STYLE, fontSize: '40px', color: '#f8a0c8' })
-      .setOrigin(0.5)
-      .setDepth(20);
-    this.readyHint = this.add
-      .text(GAME_WIDTH / 2, howTo.y + howTo.height / 2 + 56, t(this.locale, 'tapToFlap'), { ...TEXT_STYLE, fontSize: '44px' })
-      .setOrigin(0.5)
-      .setDepth(20);
-    // "<name> · 41 · 37 · 30" so a pasted save code is visibly confirmed before
-    // play. Sits below the bobbing poop (centre GAME_HEIGHT / 2, bob ±24).
-    this.saveLine = this.add
-      .text(GAME_WIDTH / 2, GAME_HEIGHT / 2 + 130, summaryLine(this.save), { ...TEXT_STYLE, fontSize: '32px', color: '#f8a0c8' })
+    // Ready-screen buttons. Taps resolve through readyHit() in flap(), not
+    // GameObject handlers, so the chrome is purely visual.
+    this.readyBoxes = readyLayout(GAME_WIDTH, GAME_HEIGHT, T);
+    this.howToBtn = createButton(this, this.readyBoxes.howto, t(this.locale, 'howToPlay'), { ...TEXT_STYLE, fontSize: '40px', color: '#f8a0c8' });
+    this.startBtn = createButton(this, this.readyBoxes.start, t(this.locale, 'tapToFlap'), { ...TEXT_STYLE, fontSize: '44px' });
+    this.saveLoadBtn = createButton(this, this.readyBoxes.saveLoad, t(this.locale, 'saveLoadButton'), {
+      ...TEXT_STYLE,
+      fontSize: '36px',
+      color: '#f8a0c8',
+    });
+    // "<name> · best" under Save / Load User; tapping it opens the Scores overlay.
+    this.profileText = this.add
+      .text(this.readyBoxes.profile.x, this.readyBoxes.profile.y, profileLine(this.save), { ...TEXT_STYLE, fontSize: '32px', color: '#f8a0c8' })
       .setOrigin(0.5)
       .setDepth(20);
 
@@ -161,9 +163,10 @@ export class Play extends Phaser.Scene {
     this.state = 'playing';
     this.bob.stop();
     this.readyTitle.setVisible(false);
-    this.howToLabel.setVisible(false);
-    this.readyHint.setVisible(false);
-    this.saveLine.setVisible(false);
+    this.howToBtn.setVisible(false);
+    this.startBtn.setVisible(false);
+    this.saveLoadBtn.setVisible(false);
+    this.profileText.setVisible(false);
     this.poop.body.setAllowGravity(true);
     this.poop.body.setGravityY(T.gravity);
     this.spawnTimer = this.time.addEvent({ delay: T.spawnEveryMs, loop: true, callback: () => this.spawnPipePair() });
@@ -179,9 +182,21 @@ export class Play extends Phaser.Scene {
         this.handleChrome(id);
         return;
       }
-      if (this.state === 'ready' && howToHit(pointer.x, pointer.y, howToLayout(GAME_WIDTH, GAME_HEIGHT, T))) {
-        this.handleChrome('howto');
-        return;
+      if (this.state === 'ready') {
+        const hit = readyHit(pointer.x, pointer.y, this.readyBoxes, { hasProfile: Boolean(this.save?.name) });
+        if (hit === 'howto') {
+          this.handleChrome('howto');
+          return;
+        }
+        if (hit === 'saveload') {
+          this.openSavePanel();
+          return;
+        }
+        if (hit === 'profile') {
+          this.handleChrome('scores');
+          return;
+        }
+        // 'start' or empty space both start the run below.
       }
     }
     this.handleChrome('tap');
@@ -214,19 +229,24 @@ export class Play extends Phaser.Scene {
   /** Called by the save panel after a name edit or a successful load. */
   setSaveState(state) {
     this.save = state;
-    this.refreshSaveLine();
+    this.refreshProfile();
   }
 
-  refreshSaveLine() {
-    this.saveLine?.setText(summaryLine(this.save));
+  refreshProfile() {
+    this.profileText?.setText(profileLine(this.save));
+  }
+
+  openSavePanel() {
+    openSavePanel({ game: this.game, play: this, locale: this.locale });
   }
 
   applyLocale(next) {
     if (!isLocale(next)) return;
     this.locale = next;
     this.readyTitle?.setText(t(next, 'readyTitle'));
-    this.howToLabel?.setText(t(next, 'howToPlay'));
-    this.readyHint?.setText(t(next, 'tapToFlap'));
+    this.howToBtn?.setText(t(next, 'howToPlay'));
+    this.startBtn?.setText(t(next, 'tapToFlap'));
+    this.saveLoadBtn?.setText(t(next, 'saveLoadButton'));
     const [pauseTitle, pauseHint] = pauseBannerText(next).split('\n');
     this.pauseText?.setText(pauseTitle);
     this.pauseHint?.setText(pauseHint);
@@ -238,6 +258,7 @@ export class Play extends Phaser.Scene {
     const settings = this.scene.isActive('Settings');
     const language = this.scene.isActive('Language');
     const feedback = this.scene.isActive('Feedback');
+    const scores = this.scene.isActive('Scores');
     return {
       state: this.state,
       overlay: feedback
@@ -250,10 +271,12 @@ export class Play extends Phaser.Scene {
               ? 'about'
               : settings
                 ? 'settings'
-                : null,
+                : scores
+                  ? 'scores'
+                  : null,
       stackedSettings: about && settings,
       stackedAbout: howto && about,
-      stackedUnder: feedback && (about || howto || settings || language),
+      stackedUnder: feedback && (about || howto || settings || language || scores),
       input,
       resumeLocked: this.time.now < this.flapLockedUntil,
     };
@@ -298,6 +321,11 @@ export class Play extends Phaser.Scene {
         if (result.pause) this.pausePlay();
         if (!this.scene.isActive('Feedback')) this.scene.launch('Feedback');
         this.scene.bringToTop('Feedback');
+        break;
+      case 'openScores':
+        if (result.pause) this.pausePlay();
+        if (!this.scene.isActive('Scores')) this.scene.launch('Scores');
+        this.scene.bringToTop('Scores');
         break;
       case 'start':
         this.start();

@@ -4,10 +4,10 @@
 
 import { isLocale, DEFAULT_LOCALE } from './i18n.js';
 
-export const VERSION = '0.3.0';
+export const VERSION = '0.3.1';
 
 /** Player-facing stamp on the About overlay. Bump with VERSION. */
-export const LAST_UPDATED = '3 Nov 2026, 13:27';
+export const LAST_UPDATED = '3 Nov 2026, 14:17';
 
 const ISSUE_BASE = 'https://github.com/sielerjm/flappy-poop/issues/new';
 
@@ -299,28 +299,47 @@ export function scaledCircleBody(frameSize, displayScale, logicalRadius) {
 }
 
 /**
- * Ready-screen How to play hit box, centred under the title. At least
- * trayHitMin tall so a thumb can tap it without starting the run.
+ * Ready-screen boxes: How to play, "tap to flap" (start), Save / Load User, and
+ * the name · best profile line. Buttons are at least trayHitMin tall. The poop
+ * bobs around (poopX, height / 2), so start and saveLoad are narrower than
+ * howto and keep clear of x < 240 between y 560 and 720.
  */
-export function howToLayout(width, height, t) {
-  const boxW = 400;
+export function readyLayout(width, height, t) {
+  const cx = width / 2;
   const boxH = Math.max(88, t.trayHitMin);
-  return {
-    id: 'howto',
-    x: width / 2,
-    y: height * 0.3 + 104,
-    width: boxW,
-    height: boxH,
-  };
+  const howto = { id: 'howto', x: cx, y: height * 0.3 + 104, width: 400, height: boxH };
+  const start = { id: 'start', x: cx, y: howto.y + 104, width: 250, height: boxH };
+  const saveLoad = { id: 'saveload', x: cx, y: height / 2 + 160, width: 360, height: boxH };
+  const profile = { id: 'profile', x: cx, y: saveLoad.y + 84, width: 440, height: 64 };
+  return { howto, start, saveLoad, profile };
+}
+
+function inBox(x, y, box) {
+  return Math.abs(x - box.x) <= box.width / 2 && Math.abs(y - box.y) <= box.height / 2;
+}
+
+/**
+ * Which ready-screen box contains (x, y): 'howto' | 'start' | 'saveload' |
+ * 'profile' | null. The profile line only counts when hasProfile (a name is set).
+ */
+export function readyHit(x, y, layout, { hasProfile = false } = {}) {
+  if (!layout) return null;
+  for (const box of [layout.howto, layout.start, layout.saveLoad]) {
+    if (box && inBox(x, y, box)) return box.id;
+  }
+  if (hasProfile && layout.profile && inBox(x, y, layout.profile)) return 'profile';
+  return null;
+}
+
+/** Ready-screen How to play hit box (readyLayout().howto). */
+export function howToLayout(width, height, t) {
+  return readyLayout(width, height, t).howto;
 }
 
 /** 'howto' if (x, y) is inside the ready-screen How to play box, else null. */
 export function howToHit(x, y, layout) {
   if (!layout) return null;
-  const hw = layout.width / 2;
-  const hh = layout.height / 2;
-  if (Math.abs(x - layout.x) <= hw && Math.abs(y - layout.y) <= hh) return 'howto';
-  return null;
+  return inBox(x, y, layout) ? 'howto' : null;
 }
 
 /**
@@ -339,11 +358,11 @@ export function overlayOutsideHit(x, y, panel) {
  * result; this function is Phaser-free so the matrix can be tested in Node.
  *
  * @param {'ready'|'playing'|'paused'|'dead'} state
- * @param {null|'settings'|'about'|'howto'|'language'|'feedback'} overlay topmost overlay (pause is a state)
+ * @param {null|'settings'|'about'|'howto'|'language'|'feedback'|'scores'} overlay topmost overlay (pause is a state)
  * @param {boolean} stackedSettings true when About sits on top of Settings
  * @param {boolean} stackedAbout true when HowTo sits on top of About
  * @param {boolean} stackedUnder true when Feedback sits on top of another overlay
- * @param {'pause'|'mute'|'settings'|'info'|'howto'|'lang'|'feedback'|'tap'|'esc'|'close'} input
+ * @param {'pause'|'mute'|'settings'|'info'|'howto'|'lang'|'feedback'|'scores'|'tap'|'esc'|'close'} input
  * @param {boolean} resumeLocked true during pauseResumeLockoutMs after overlay close
  * @returns {{ do: string, pause?: boolean, armResumeLockout?: boolean, closeAbout?: boolean }}
  */
@@ -384,6 +403,7 @@ export function chromeIntent({
   if (input === 'howto') return { do: 'openHowTo', pause: state === 'playing' };
   if (input === 'lang') return { do: 'openLanguage', pause: state === 'playing' };
   if (input === 'feedback') return { do: 'openFeedback', pause: state === 'playing' };
+  if (input === 'scores') return { do: 'openScores', pause: state === 'playing' };
   if (input === 'tap') {
     if (state === 'playing') return { do: 'flap' };
     if (state === 'paused') return resumeLocked ? { do: 'ignore' } : { do: 'resume' };

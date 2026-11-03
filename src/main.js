@@ -7,6 +7,7 @@ import { About } from './scenes/About.js';
 import { HowTo } from './scenes/HowTo.js';
 import { Language } from './scenes/Language.js';
 import { Feedback } from './scenes/Feedback.js';
+import { Scores } from './scenes/Scores.js';
 
 // Phaser is loaded as a global from the <script> tag in index.html.
 new Phaser.Game({
@@ -29,5 +30,5 @@ new Phaser.Game({
   input: {
     activePointers: 1,
   },
-  scene: [Boot, Play, Over, Settings, About, HowTo, Language, Feedback],
+  scene: [Boot, Play, Over, Settings, About, HowTo, Language, Feedback, Scores],
 });

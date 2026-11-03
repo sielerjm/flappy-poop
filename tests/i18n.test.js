@@ -31,6 +31,8 @@ const SCENE_DENYLIST = [
   'tap to retry',
   'ABOUT',
   'HOW TO PLAY',
+  'Save / Load User',
+  'HIGH SCORES',
 ];
 
 const BANNED_IMPORTS = ['ABOUT_TEXT', 'HOW_TO_PLAY_TEXT', 'PAUSE_BANNER_TEXT', 'HOW_TO_ITEMS'];
