@@ -283,6 +283,28 @@ export async function run(url = DEFAULT_URL) {
     await evaluate(`${play}.resumePlay(), ${play}.effects.applyProbiotic(), ${play}.refreshProbioticHud(), true`);
     const hud = await evaluate(`JSON.stringify({ iconRight: ${play}.probioticIcon.x + ${play}.probioticIcon.displayWidth / 2, textLeft: ${play}.probioticText.x - ${play}.probioticText.width, textRight: ${play}.probioticText.x, scoreRight: ${play}.scoreText.x + ${play}.scoreText.width / 2, y: ${play}.probioticText.y })`).then(JSON.parse);
     ok(hud.iconRight <= hud.textLeft && hud.textRight <= 720 - 8 && hud.iconRight - 96 >= hud.scoreRight && hud.y === 156, `probiotic counter sits at the right edge on the bean row, clear of the score (icon ends ${hud.iconRight.toFixed(0)}, count ${hud.textLeft.toFixed(0)}–${hud.textRight.toFixed(0)})`);
+    // Score popup: fiber → light-green "+3", unshielded bacteria → light-red "−3", each
+    // fading in and back out under the score. Pin the poop while the tweens run, then
+    // restore the probiotic the fart checks below expect.
+    {
+      await evaluate(`${play}.poop.body.setAllowGravity(false), ${play}.poop.setVelocity(0, 0), ${play}.poop.y = 640, ${play}.graceLeftMs = 1e9, true`);
+      const popupHit = async (kind) => {
+        const before = await evaluate(`${play}.score`);
+        await evaluate(`(() => { const p = ${play}; while (p.effects.hasProbiotic()) p.effects.consumeProbiotic(); const it = p.items.create(p.poop.x, p.poop.y, '${kind}'); it.setData('kind', '${kind}'); p.collectItem(it); return true; })()`);
+        const read = () => evaluate(`JSON.stringify({ text: ${play}.scorePopup.text, color: ${play}.scorePopup.style.color, alpha: ${play}.scorePopup.alpha, y: ${play}.scorePopup.y, score: ${play}.score })`).then(JSON.parse);
+        let r = await read();
+        let peak = r.alpha;
+        for (let i = 0; i < 60 && peak < 0.99; i += 1) { await sleep(50); r = await read(); peak = Math.max(peak, r.alpha); }
+        let gone = r;
+        for (let i = 0; i < 80 && gone.alpha > 0; i += 1) { await sleep(50); gone = await read(); }
+        return { before, ...r, peak, after: gone.alpha };
+      };
+      const fib = await popupHit('fiber');
+      ok(fib.text === '+3' && fib.color === TT.popup.fiberColor && fib.score === fib.before + 3 && fib.y === TT.popup.y && fib.peak >= 0.99 && fib.after === 0, `fiber shows a ${fib.color} "${fib.text}" under the score that fades in (peak ${fib.peak.toFixed(2)}) and out (score ${fib.before} → ${fib.score})`);
+      const bac = await popupHit('bacteria');
+      ok(bac.text === '\u22123' && bac.color === TT.popup.bacteriaColor && bac.score === Math.max(0, bac.before - 3) && bac.peak >= 0.99 && bac.after === 0, `unshielded bacteria shows a ${bac.color} "${bac.text}" that fades in (peak ${bac.peak.toFixed(2)}) and out (score ${bac.before} → ${bac.score})`);
+      await evaluate(`${play}.poop.body.setAllowGravity(true), ${play}.graceLeftMs = 0, ${play}.effects.applyProbiotic(), ${play}.refreshProbioticHud(), true`);
+    }
     const pipesBefore = await evaluate(`${play}.effects.pipesLeft()`);
     const score0 = await evaluate(`${play}.score`);
     await evaluate(`${play}.effects.addBean(), ${play}.effects.addBean(), ${play}.setCharged(true), ${play}.activatePower(), true`);
