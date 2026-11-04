@@ -88,10 +88,12 @@ src/
                             LAST_UPDATED, issueUrl, openExternalUrl, chromeIntent,
                             overlayOutsideHit, clampScroll, scaledCircleBody. Fully
                             unit-tested.
-  leaderboard.js            Shared leaderboard, NO Phaser/DOM: submitPlan (pure:
-                            what to post, or null), createSubmitStore
-                            (flappyPoop.leaderboard: last confirmed submit),
-                            submitScore / fetchTop / fetchRank over the Supabase
+  leaderboard.js            Shared leaderboard, NO Phaser/DOM: submitPlan / submitPlans
+                            (pure: what to post; up to two rows per player, best
+                            off and best on the toilet, via save.js bestByToilet),
+                            createSubmitStore (flappyPoop.leaderboard: last
+                            confirmed submit per kind, { off, on }), submitScore /
+                            fetchTop / fetchRank(id, toilet) over the Supabase
                             REST API with an injected fetch, apikey header only,
                             4 s abort, false / null on any failure, never throws.
                             Writes go through the submit_score() SQL function.

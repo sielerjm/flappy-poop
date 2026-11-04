@@ -125,7 +125,7 @@ Everything that affects feel lives in `TUNING` in `src/config.js`: gravity, flap
 
 ## Leaderboard
 
-The 🏆 button shows a shared Top 10 hosted on a free-tier [Supabase](https://supabase.com) project. What leaves the phone: your username, your best score, its 🚽 flag and level, and the random id inside your save code (so the same player keeps one row across browsers). Nothing is posted until you set a username in Save / Load User. The save code itself never leaves the device.
+The 🏆 button shows a shared Top 10 hosted on a free-tier [Supabase](https://supabase.com) project. Each player can hold two rows, the best run on the toilet and the best off it, ranked together in one Top 10 (the 🚽 column tells them apart). What leaves the phone: your username, those two best scores with their level, and the random id inside your save code (so the same player keeps one row across browsers). Nothing is posted until you set a username in Save / Load User. The save code itself never leaves the device.
 
 The game talks to the Supabase REST API straight from the browser with the project's public URL and publishable key, both in `LEADERBOARD` in [`src/config.js`](src/config.js). What keeps that safe is the schema in [`db/schema.sql`](db/schema.sql): the key can read only name / score / 🚽 / level / time, never ids, and can write only through `submit_score()`, which keeps each player's maximum, caps scores, and rate-limits. Cheating is possible, as in any client-side game; a bad row is one `delete` in the dashboard.
 
