@@ -98,6 +98,8 @@ Short, playful, clear. Fit a 720×1280 logical field; How to play / About body w
 | itemBeanDetail | Grab a bean, then press the bean button at the bottom (or your poop) to fart past the next 5 pipes: nothing can touch you. Beans stack to 3; fart with all three and you rocket past 20 in a rainbow glow. | 吃到豆子后，点击底部的豆子按钮（或便便）放屁冲过接下来的 5 道管道，期间什么都碰不到你。豆子最多可攒 3 颗；集齐 3 颗再放屁，就能顶着彩虹光芒一口气冲过 20 道管道。 |
 | itemToiletName | On the toilet | 如厕模式 |
 | itemToiletDetail | Playing on the toilet? Flip the switch under the poop on the home screen. Those scores get a 🚽 next to them. | 在马桶上玩？打开主界面便便下方的开关，这些分数旁会显示 🚽。 |
+| itemLevelsName | Levels | 关卡 |
+| itemLevelsDetail | The gut comes in levels: stomach, duodenum, jejunum and on. Pass a checkered finish line to clear one; the game pauses for a breather, then each level scrolls a little faster. The bar at the top shows how far you are. | 肠道分成关卡：胃、十二指肠、空肠……越过黑白格终点线即可过关；游戏会稍作停顿，之后每一关都会滚得更快一些。顶部的进度条显示你走到了哪里。 |
 | updatedPrefix | Updated | 更新于 |
 | languageTitle | Language | 语言 |
 | langEnglish | English | English |

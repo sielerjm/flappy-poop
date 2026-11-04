@@ -16,8 +16,19 @@ or the bean button) that plays `fart_accelerate.mp3`, ramps the scroll speed up 
 down with the clip so five pipes pass (superPipes = 20 with superBeans = 3 held, under
 a rainbow glow), floats the poop on a ±15° undulating wave, and cannot die; items pass
 through it and the probiotic countdown pauses. Every bean held is spent. Hit a pipe, the ceiling, or the floor and the run ends (dead-poop
-face). Best score and settings are kept in `localStorage`. Difficulty ramps
-(faster pipes, narrower gap) until score 30, then stays flat. A signed
+face). Best score and settings are kept in `localStorage`. The run is cut into
+**levels** by pipe pairs passed (`pipesPassed`, fart pipes included; score never):
+level 1 is `levels.firstPipes` (10), level n ≥ 2 is `pipesStep × (n − 1)`; ends at
+10, 35, 85, 160, 260 … Pipe spacing is a fixed `pipeSpacingPx` (412); speed is
+`levelSpeed()` (275 + 25 per level, cap 450), applied when the break ends; the gap
+is fixed at `gapHeight`. One spacing after a level's last pair a checkered finish
+line (generated texture, plain Image) scrolls in and no pair follows it outside a
+fart; crossing it bumps `level`, plays `sfx.levelUp`, and pauses the run as the
+level break (`levelBreak`, the normal `'paused'` state with its own banner "LEVEL n
+· segment / Tap to continue", the poop gliding to mid-height and bobbing, the
+background crossfading to `LEVELS[n−1].color`). Crossed mid-fart, the break waits
+for `endPower()` (`pendingLevelUp`). A progress bar (`ui/levelBar.js`) fills one
+step per pair. Each top score remembers its level. A signed
 **user code** (`fp1.<payload>.<sig>`, the save code) carries a player's username
 and best 6 scores between browsers via copy/paste (Save / Load User button on the
 ready screen); spec in `.claude/plans/Flappy Poop — Save Code Spec.md`.
@@ -52,7 +63,9 @@ src/
   config.js                 GAME_WIDTH / GAME_HEIGHT, the TUNING object (every
                             feel-related number lives here), and LEADERBOARD
                             (Supabase Data API URL + publishable key, both public
-                            by design; timeout, limit, storage key, score cap).
+                            by design; timeout, limit, storage key, score cap),
+                            LEVELS (gut segment name keys + background colours, in
+                            order) and BACKGROUND (overlay layers: key + parallax).
                             Pure data, Node-safe.
   logic.js                  Pure functions, NO Phaser/DOM: rng, gap placement,
                             scoring, items, beans (rollBean, beanSpawnX, beanY,
@@ -60,7 +73,9 @@ src/
                             fartPeakMul, fartMul, fartRemainingDistance), fartFloat
                             (wave + tilt), hsvToRgb / rainbowHue, glowAlphaAt /
                             glowStops, sprite angle, retry
-                            lockout, difficulty,
+                            lockout, levels (levelPipes, levelEnd, levelFor,
+                            levelSpeed, levelName, levelColor, levelProgress,
+                            levelBarLayout, lerpColor),
                             best-score store, settings store (incl. locale), vibrate
                             helper, trayLayout, trayHit, readyLayout, readyHit
                             (howToLayout / howToHit wrap them),
@@ -76,9 +91,10 @@ src/
                             Writes go through the submit_score() SQL function.
                             Fully unit-tested with a fake fetch.
   save.js                   Save codes, NO Phaser/DOM: loadLocal / saveLocal
-                            (flappyPoop.save, schema 2: top entries { score,
-                            toilet }; schema 1 numbers still load; MAX_TOP = 6),
-                            recordScore(state, score, { toilet }), isNewTop,
+                            (flappyPoop.save, schema 3: top entries { score,
+                            toilet, level }; schema 1 numbers and schema 2 still
+                            load at level 1; MAX_TOP = 6), recordScore(state,
+                            score, { toilet, level }), isNewTop,
                             merge, topScores, formatScore ("🚽 41"), summaryLine,
                             profileLine, exportCode / importCode (HMAC-SHA256,
                             v1 payload {i, n, s, p, t}; p = optional toilet flags;
@@ -95,6 +111,11 @@ src/
                             silent-prime, resume() the AudioContext, and
                             game.sound.unlock(). Blips wait until running.
   ui/
+    finish.js               createFinishTexture(): black / white checkered
+                            canvas texture for the finish line.
+    levelBar.js             createLevelBar(): grey track, pipe-pink fill tweened
+                            one step per pipe (levelProgress), LV n label, 🏁;
+                            geometry from levelBarLayout().
     glow.js                 createGlow(): white radial-gradient canvas texture
                             (solid core, outer glowFadeFrac fading to 0, from
                             glowStops) as an Image behind the poop; tinted for
@@ -176,8 +197,17 @@ src/
                             so the screen is clear at the end; endPower() restores
                             gravity and spawns the next pair at the right edge with
                             its gap at mid-screen (centreNextGap → centredGapY),
-                            graceLeftMs blocks die(). Pipes spawn by scrolled distance (pipeSpacing),
-                            not a timer. Nothing here reads time.now;
+                            graceLeftMs blocks die(). Pipes spawn by scrolled distance (pipeSpacing,
+                            fixed px), not a timer. Spawn slots: at levelEnd(level)
+                            pairs the slot is the finish line (spawnFinishLine),
+                            then nothing until the break ends unless a fart runs;
+                            onFinishCrossed → startLevelBreak (pausePlay with
+                            levelBreak, setPauseBanner shows levelTitle/levelHint,
+                            breakGlide + breakBob, fadeBackground) or pendingLevelUp;
+                            resumePlay → endLevelBreak (applyLevel, grace,
+                            centreNextGap). Background = bgColor rectangle (depth
+                            −20) under bgLayers tileSprites (depth −10+) from
+                            BACKGROUND.layers; levelBar above the score. Nothing here reads time.now;
                             readyHit() routes taps (howto, start, saveload, profile
                             → Scores). getSaveState / setSaveState for the panel.
     Over.js                 Game-over panel (score, best, "tap to go home") with a
@@ -211,7 +241,8 @@ src/
     Leaderboard.js          Overlay (🏆 tray button or T): awaits
                             Play.syncLeaderboard() (posts a pending best), then
                             fetchTop + fetchRank in parallel behind a Loading line.
-                            Ten rows with 🚽 via formatScore, own row highlighted
+                            Ten rows: rank · name · 🚽 · LV n · score (header over
+                            the middle columns), own row highlighted
                             by rank, footer = join hint (no username) / rankText
                             (off the board) / "not on the board yet". A generation
                             counter drops loads from a closed instance.
@@ -220,7 +251,8 @@ assets/                     Contract PNGs + README.md (the art contract).
   README.md                 File name, pixel size, orientation rules. tests enforce it.
   poop.png poop-dead.png poop-stink1.png poop-stink2.png poop-fart.png
   poop-speech.png fiber.png probiotic.png bacteria.png bean.png
-  pipe.png bg.png ground.png
+  pipe.png villi.png ground.png   (villi.png: transparent overlay over the level
+                            colour; art contract in assets/README.md "Background layers")
   icon-192.png icon-512.png
   src/                      Original drawings; not in the size table.
   sfx/fart.mp3              Death sample.
@@ -238,7 +270,9 @@ tests/                      node --test, zero deps. Each file is self-describing
   html.test.js              index.html invariants (viewport, no scroll, pinned Phaser)
   assets.test.js            load.image / load.audio paths; README sizes; sfx credits
   logic.test.js             gap bounds, rng determinism, hasPassed, angle
-  difficulty.test.js        ramp is monotonic, caps, tightest gap still fits the poop
+  levels.test.js            level lengths / ends / levelFor table, levelSpeed cap,
+                            names + colours, levelProgress, lerpColor, gap + grace
+                            sanity, levelBannerText, levelBarLayout, levelLabel
   state.test.js             retry lockout
   store.test.js             best-score store incl. throwing/missing storage
   settings.test.js          settings store + vibrate helper

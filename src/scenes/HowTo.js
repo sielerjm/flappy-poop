@@ -54,6 +54,8 @@ export class HowTo extends Phaser.Scene {
         sv.add(this.add.image(cx - 220, y - 40, 'pipe').setOrigin(0.5, 0).setScale(0.5).setCrop(0, 0, 128, 160));
       } else if (item.key === 'toilet') {
         sv.add(this.add.text(cx - 220, y, TOILET_EMOJI, { fontFamily: 'sans-serif', fontSize: '56px' }).setOrigin(0.5));
+      } else if (item.key === 'levels') {
+        sv.add(this.add.text(cx - 220, y, '🏁', { fontFamily: 'sans-serif', fontSize: '56px' }).setOrigin(0.5));
       } else {
         sv.add(this.add.image(cx - 220, y, item.key).setDisplaySize(80, 80));
       }
