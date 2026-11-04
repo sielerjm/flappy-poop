@@ -14,9 +14,9 @@ Tap (or press Space / ↑) to flap. Pass a pipe pair for a point. Hit a pipe, th
 
 From score 8, pickups can appear in the gap:
 
-- **Fiber** (broccoli): +1.
+- **Fiber** (broccoli): +3. A light-green **+3** fades in and out under the score.
 - **Probiotic** (good bacteria): stays in your inventory for 5 pipes and blocks one bad-bacteria hit.
-- **Bacteria** (bad): −3. Score never goes below 0. Does not kill. After score 15.
+- **Bacteria** (bad): −3. A light-red **−3** fades in and out under the score (it always reads −3, even when the score floors at 0). Score never goes below 0. Does not kill. After score 15. A hit blocked by a probiotic shows nothing.
 
 The probiotic does **not** save you from a pipe.
 
@@ -121,7 +121,7 @@ tests/                  node --test: html assets logic state levels store smoke
 
 ## Tuning
 
-Everything that affects feel lives in `TUNING` in `src/config.js`: gravity, flap impulse, level-1 pipe speed, fixed pipe spacing, gap height, death/retry timings, tray size/alpha, fart volume, the `items` block (`startScore`, `hazardStartScore`, `chancePerGap`, `fiberPoints`, `bacteriaPenalty`, `probioticPipes`, `itemRadius`, weights), the `beans` block, and the `levels` block (`firstPipes`, `pipesStep`, `speedStep`, `maxSpeed`, finish-line and progress-bar sizes and colours, crossfade time). Level names are the `LEVELS` list next to it, background colours `LEVEL_COLORS` (ColorBrewer Set2, tan first, cycling past the end, softened by `levels.whiteBlend`), overlay layers `BACKGROUND.layers`. Change a number, reload.
+Everything that affects feel lives in `TUNING` in `src/config.js`: gravity, flap impulse, level-1 pipe speed, fixed pipe spacing, gap height, death/retry timings, tray size/alpha, fart volume, the `items` block (`startScore`, `hazardStartScore`, `chancePerGap`, `fiberPoints`, `bacteriaPenalty`, `probioticPipes`, `itemRadius`, weights), the `popup` block (the +3 / −3 under the score: `y`, `fontPx`, `fadeMs`, `holdMs`, `fiberColor`, `bacteriaColor`), the `beans` block, and the `levels` block (`firstPipes`, `pipesStep`, `speedStep`, `maxSpeed`, finish-line and progress-bar sizes and colours, crossfade time). Level names are the `LEVELS` list next to it, background colours `LEVEL_COLORS` (ColorBrewer Set2, tan first, cycling past the end, softened by `levels.whiteBlend`), overlay layers `BACKGROUND.layers`. Change a number, reload.
 
 ## Leaderboard
 

@@ -183,7 +183,10 @@ src/
                             slide are ignored (launching flag). Toilet mode:
                             this.toilet from the registry (session-only), toggle
                             under tap to flap, 🚽 HUD left of the score while
-                            playing, passed to recordScore and Over. Beans: group
+                            playing, passed to recordScore and Over. Score popup:
+                            showScorePopup(kind) fades one reused text (scorePopup()
+                            in logic.js, TUNING.popup) under the score after fiber
+                            or an unshielded bacteria hit; its tween pauses with the run. Beans: group
                             spawned in spawnPipePair (rollBean with beanSpawned for
                             the one-per-run guarantee, halfway to the next pair), bobbed in update() from per-bean elapsed ms;
                             collectBean → effects.addBean (up to maxBeans; holdingBean
