@@ -70,6 +70,14 @@ export const TUNING = {
     barFillColor: 0xe85e96, // pipe pink fill (make_placeholders.py PINK)
     barTweenMs: 200, // ms the fill animates to its new width after each pipe
   },
+  popup: {
+    y: 184, // px centre of the "+3" / "−3" under the 80 px score (between the bean and probiotic counters)
+    fontPx: 48, // px font size of the popup
+    fadeMs: 200, // ms to fade in, and again to fade out
+    holdMs: 500, // ms at full alpha between the fades
+    fiberColor: '#a8f0a8', // light green "+3" when fiber is eaten
+    bacteriaColor: '#ff9a9a', // light red "−3" when unshielded bad bacteria hits
+  },
   items: {
     startScore: 8, // score at which pickups may appear
     hazardStartScore: 15, // score at which bad bacteria may appear

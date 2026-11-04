@@ -403,6 +403,17 @@ export function scoreAfterItem(score, kind, t) {
 }
 
 /**
+ * The "+3" / "−3" that fades under the score when an item moves it: text and
+ * colour for fiber and unshielded bacteria, null for anything else. Nominal:
+ * bacteria always reads −bacteriaPenalty even when the 0 floor clamps the loss.
+ */
+export function scorePopup(kind, t) {
+  if (kind === 'fiber') return { text: `+${t.items.fiberPoints}`, color: t.popup.fiberColor };
+  if (kind === 'bacteria') return { text: `\u2212${t.items.bacteriaPenalty}`, color: t.popup.bacteriaColor };
+  return null;
+}
+
+/**
  * True when a bean should spawn with this pipe pair: never before
  * beans.startScore; if none has spawned this run yet, forced once the score
  * reaches beans.guaranteeScore (so one always shows up in the 5–20 window);

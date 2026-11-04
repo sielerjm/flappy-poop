@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { TUNING as T } from '../src/config.js';
-import { createRng, rollItem, itemGapY, scoreAfterItem, createEffects, ITEM_KINDS, bobY, gapBobAmplitude, gapBobY } from '../src/logic.js';
+import { createRng, rollItem, itemGapY, scoreAfterItem, scorePopup, createEffects, ITEM_KINDS, bobY, gapBobAmplitude, gapBobY } from '../src/logic.js';
 
 test('rollItem is always null below startScore', () => {
   const rng = createRng(1);
@@ -376,4 +376,25 @@ test('a moving gap item sweeps its gap but never reaches the pipe mouths; fiber 
   assert.equal(bobY(0, 0, bounds, T.items.fiberPeriodMs), 500);
   assert.ok(Math.abs(bobY(T.items.fiberPeriodMs / 4, 0, bounds, T.items.fiberPeriodMs) - 700) < 1e-6);
   assert.ok(Math.abs(bobY(T.items.fiberPeriodMs / 2, 0, bounds, T.items.fiberPeriodMs) - 500) < 1e-6, 'fiber period is its own');
+});
+
+test('scorePopup: green +fiberPoints for fiber, red −bacteriaPenalty for bacteria, null otherwise', () => {
+  assert.deepEqual(scorePopup('fiber', T), { text: `+${T.items.fiberPoints}`, color: T.popup.fiberColor });
+  assert.deepEqual(scorePopup('bacteria', T), { text: `\u2212${T.items.bacteriaPenalty}`, color: T.popup.bacteriaColor });
+  assert.equal(scorePopup('fiber', T).text, '+3');
+  assert.equal(scorePopup('bacteria', T).text, '\u22123');
+  assert.equal(scorePopup('probiotic', T), null);
+  assert.equal(scorePopup('bean', T), null);
+  assert.equal(scorePopup(undefined, T), null);
+});
+
+test('scorePopup follows the tuning numbers', () => {
+  const t = { ...T, items: { ...T.items, fiberPoints: 5, bacteriaPenalty: 2 } };
+  assert.equal(scorePopup('fiber', t).text, '+5');
+  assert.equal(scorePopup('bacteria', t).text, '\u22122');
+});
+
+test('bacteria popup stays nominal while the score floors at 0', () => {
+  assert.equal(scoreAfterItem(1, 'bacteria', T), 0);
+  assert.equal(scorePopup('bacteria', T).text, `\u2212${T.items.bacteriaPenalty}`);
 });

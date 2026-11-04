@@ -70,3 +70,13 @@ test('beans block sits in a fair band and the fart ramp stays readable', () => {
   assert.ok(peakAt(b.powerPipes, T.levels.maxSpeed) >= 1, 'even at the top speed a normal fart never slows the world');
   assert.ok(b.superPipes < T.levels.pipesStep, 'a super fart can cross at most one finish line');
 });
+
+test('score popup sits under the score and fades at a readable pace', () => {
+  const p = T.popup;
+  assert.ok(p.y > T.hudScoreY && p.y <= 240, `popup.y ${p.y}`);
+  assert.ok(p.fontPx >= 24 && p.fontPx <= 64, `popup.fontPx ${p.fontPx}`);
+  assert.ok(p.fadeMs >= 50 && p.fadeMs <= 1000, `popup.fadeMs ${p.fadeMs}`);
+  assert.ok(p.holdMs >= 0 && p.holdMs <= 2000, `popup.holdMs ${p.holdMs}`);
+  assert.match(p.fiberColor, /^#[0-9a-f]{6}$/i);
+  assert.match(p.bacteriaColor, /^#[0-9a-f]{6}$/i);
+});
