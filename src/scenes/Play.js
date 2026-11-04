@@ -9,6 +9,7 @@ import {
   levelEnd,
   levelProgress,
   levelBarLayout,
+  tutorialSpawn,
   levelColor,
   lerpColor,
   hudRightLayout,
@@ -769,8 +770,10 @@ export class Play extends Phaser.Scene {
     top.setData('scoring', true);
     top.setData('passed', false);
 
-    const kind = rollItem(this.rng, this.score, T);
-    const beanHere = rollBean(this.rng, this.score, T, { spawnedThisRun: this.beanSpawned, holding: this.effects.holdingBean() });
+    // Level 1 is a scripted intro (levels.tutorial): one of each pickup at fixed pairs, no random rolls.
+    const scripted = tutorialSpawn(this.level, this.pipesSpawned, T);
+    const kind = scripted === undefined ? rollItem(this.rng, this.score, T) : scripted === 'bean' ? null : scripted;
+    const beanHere = scripted === undefined ? rollBean(this.rng, this.score, T, { spawnedThisRun: this.beanSpawned, holding: this.effects.holdingBean() }) : scripted === 'bean';
     // Fiber bobs between pairs like a bean (and yields to a bean rolled for the same pair);
     // probiotic and bacteria sit in the gap, behind the pipes, moving from moveFromLevel.
     if (kind === 'fiber' && !beanHere) this.spawnBandItem('fiber');

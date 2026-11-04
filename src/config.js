@@ -45,13 +45,18 @@ export const TUNING = {
   toiletOffAlpha: 0.43, // 0–1 alpha of the 🚽 while the toggle is off
   toiletKnobMs: 150, // ms the toggle knob takes to slide
   fartVolume: 0.6, // 0–1 Phaser volume for the death fart sample
+  levelUpVolume: 0.6, // 0–1 Phaser volume for the level-up chime (NewLevel.mp3)
   levels: {
     firstPipes: 10, // pipe pairs in level 1
     pipesStep: 25, // level n ≥ 2 has pipesStep × (n − 1) pipe pairs: 25, 50, 75, …
     speedStep: 25, // px/s added to pipeSpeed per level after the first
     maxSpeed: 450, // px/s cap (level 8+)
-    finishWidthPx: 64, // px width of the checkered finish line
+    finishWidthPx: 96, // px width of the checkered finish line (three columns of finishCheckPx checks)
     finishCheckPx: 32, // px size of one check on the finish line
+    // Level 1 is a scripted intro: which pair (1-based) carries which pickup; no random
+    // rolls until level 2. Gap items ride in that pair's gap; fiber and the bean bob in
+    // the open after it. All must be below firstPipes.
+    tutorial: { probiotic: 3, bacteria: 5, fiber: 7, bean: 9 },
     fadeMs: 600, // ms the background crossfades to the next level's colour during the break
     whiteBlend: 0.2, // 0–1 share of white mixed into every level colour (0 = the raw palette)
     barY: 48, // px centre line of the progress bar (air above it from the screen top)

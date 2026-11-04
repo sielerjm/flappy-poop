@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { TUNING as T, LEVELS, LEVEL_COLORS, BACKGROUND, GAME_HEIGHT } from '../src/config.js';
 import { levelBannerText, levelLabel, LOCALES } from '../src/i18n.js';
 import { GAME_WIDTH } from '../src/config.js';
-import { levelPipes, levelEnd, levelFor, levelSpeed, levelName, levelColor, levelProgress, lerpColor, pipeSpacing, gapBounds, levelBarLayout, levelBarLabelOnFill, hudRightLayout } from '../src/logic.js';
+import { levelPipes, levelEnd, levelFor, levelSpeed, levelName, levelColor, levelProgress, lerpColor, pipeSpacing, gapBounds, levelBarLayout, levelBarLabelOnFill, hudRightLayout, tutorialSpawn } from '../src/logic.js';
 
 const L = T.levels;
 
@@ -168,4 +168,22 @@ test('hudRightLayout keeps the probiotic icon and count inside the right edge an
     assert.ok(iconX - T.hudProbioticSize / 2 >= GAME_WIDTH / 2 + 110, `icon clear of a three-digit score (text ${textWidth})`);
   }
   assert.deepEqual(hudRightLayout(720, 40, { iconSize: 96 }), { textX: 704, iconX: 704 - 40 - 8 - 48 });
+});
+
+test('level 1 is scripted: probiotic at pair 3, bacteria at 5, fiber after 7, a bean after 9, nothing else; later levels roll', () => {
+  const got = {};
+  for (let pair = 1; pair <= L.firstPipes; pair += 1) {
+    const kind = tutorialSpawn(1, pair, T);
+    if (kind) got[pair] = kind;
+    else assert.equal(kind, null, `pair ${pair} carries nothing`);
+  }
+  assert.deepEqual(got, { 3: 'probiotic', 5: 'bacteria', 7: 'fiber', 9: 'bean' });
+  for (const pair of Object.values(L.tutorial)) assert.ok(pair >= 1 && pair < L.firstPipes, `pair ${pair} is inside level 1, before the finish line`);
+  assert.equal(new Set(Object.values(L.tutorial)).size, 4, 'one pickup per pair');
+  assert.equal(tutorialSpawn(2, 3, T), undefined, 'level 2 is not scripted');
+  assert.equal(tutorialSpawn(1, 0, T), null);
+});
+
+test('the finish line is three columns of checks', () => {
+  assert.equal(L.finishWidthPx / L.finishCheckPx, 3);
 });

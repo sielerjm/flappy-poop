@@ -205,6 +205,20 @@ export async function run(url = DEFAULT_URL) {
       if (key === 'HowTo') await sleep(200);
     }
 
+    // Level 1 is scripted: spawn its nine pairs on the ready screen's frozen world and read what each carried.
+    {
+      const play = `__flappy.scene.getScene('Play')`;
+      const seen = await evaluate(`(() => { const p = ${play}; const out = []; const saved = { spawned: p.pipesSpawned, passed: p.pipesPassed, level: p.level }; p.level = 1; p.pipesSpawned = 0;
+        for (let i = 1; i <= 9; i++) { p.spawnPipePair(); out.push([i, p.items.getChildren().map((c) => c.getData('kind') + (c.getData('bob') ? '/' + c.getData('bob') : '')).join(','), p.beans.getChildren().length]); }
+        p.pipes.clear(true, true); p.items.clear(true, true); p.beans.clear(true, true); p.pipesSpawned = saved.spawned; p.pipesPassed = saved.passed; p.level = saved.level; p.beanSpawned = false; p.distanceSinceSpawn = 0;
+        return JSON.stringify(out); })()`).then(JSON.parse);
+      const at = (n) => seen.find((r) => r[0] === n);
+      const okScript = at(3)[1] === 'probiotic' && at(5)[1] === 'probiotic,bacteria' && at(7)[1] === 'probiotic,bacteria,fiber/band' && at(8)[2] === 0 && at(9)[2] === 1 && at(2)[1] === '' && at(4)[1] === 'probiotic';
+      ok(okScript, `level 1 script: pair 3 probiotic, 5 bacteria, 7 fiber (bobbing), 9 a bean, nothing else (${seen.map((r) => r[0] + ':' + (r[1] || '-') + (r[2] ? '+bean' : '')).join(' ')})`);
+      const line = await evaluate(`JSON.stringify({ w: __flappy.textures.get('finish').getSourceImage().width, check: ${JSON.stringify(0)} })`).then(JSON.parse);
+      ok(line.w === 96, `finish line texture is three columns wide (${line.w} px)`);
+    }
+
     // The overlay loop above opened How to play once: that acknowledges this build.
     {
       const play = `__flappy.scene.getScene('Play')`;
@@ -373,7 +387,7 @@ export async function run(url = DEFAULT_URL) {
     for (let i = 0; i < 60 && (await playState()) !== 'dead'; i += 1) await sleep(100);
     await sleep(TT.deathToOverMs + 300);
     const over = await evaluate(`JSON.stringify({ dead: ${play}.state === 'dead', active: __flappy.scene.isActive('Over'), counts: __flappy.scene.getScene('Over').children.list.filter((c) => c.type === 'Text' && /^×\\d+$/.test(c.text)).map((c) => c.text), collected: ${play}.collected })`).then(JSON.parse);
-    const expected = ['fiber', 'probiotic', 'bacteria', 'bean'].map((k) => `×${over.collected[k]}`);
+    const expected = ['probiotic', 'bacteria', 'fiber', 'bean'].map((k) => `×${over.collected[k]}`);
     ok(over.dead && over.active && JSON.stringify(over.counts) === JSON.stringify(expected), `game over shows the run summary ${expected.join(' ')}`);
 
     const f2 = await frame();

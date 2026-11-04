@@ -192,6 +192,20 @@ export function levelFor(pipesPassed, t) {
   return { level, startPipe: level === 1 ? 0 : levelEnd(level - 1, t), endPipe: levelEnd(level, t) };
 }
 
+/**
+ * What pair `pairIndex` (1-based) of `level` carries when the level is scripted:
+ * 'probiotic' | 'bacteria' | 'fiber' | 'bean' | null (nothing). Returns undefined
+ * for levels that are not scripted (the scene rolls at random instead).
+ */
+export function tutorialSpawn(level, pairIndex, t) {
+  if (level !== 1) return undefined;
+  const script = t.levels.tutorial ?? {};
+  for (const kind of ['probiotic', 'bacteria', 'fiber', 'bean']) {
+    if (script[kind] === pairIndex) return kind;
+  }
+  return null;
+}
+
 /** Scroll speed (px/s) for a level: pipeSpeed + speedStep per level after the first, capped at maxSpeed. */
 export function levelSpeed(level, t) {
   return Math.min(t.levels.maxSpeed, t.pipeSpeed + t.levels.speedStep * (Math.max(1, level) - 1));

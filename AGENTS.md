@@ -207,7 +207,10 @@ src/
                             gravity and spawns the next pair at the right edge with
                             its gap at mid-screen (centreNextGap → centredGapY),
                             graceLeftMs blocks die(). Pipes spawn by scrolled distance (pipeSpacing,
-                            fixed px), not a timer. Items: rollItem per pair;
+                            fixed px), not a timer. Items: level 1 is scripted
+                            (tutorialSpawn / levels.tutorial: probiotic at pair 3,
+                            bacteria 5, fiber 7, bean 9, nothing else); from level
+                            2 rollItem per pair;
                             fiber → spawnBandItem (halfway to the next pair,
                             bobY on items.fiberPeriodMs, yields to a bean rolled
                             for the same pair); probiotic / bacteria →
@@ -227,7 +230,7 @@ src/
                             BACKGROUND.layers; levelBar above the score. Nothing here reads time.now;
                             readyHit() routes taps (howto, start, saveload, profile
                             → Scores). getSaveState / setSaveState for the panel.
-    Over.js                 Game-over panel (score, best, "tap to go home") with a
+    Over.js                 Game-over panel (score, 2 × 2 run summary, best, "tap to go home" button) with a
                             tap lockout and its own tray (mute still works). Shows
                             newTopHint when the run entered the top 6.
     Settings.js             Overlay: sound, haptics (Android only), Reload game
