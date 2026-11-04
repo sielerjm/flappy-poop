@@ -83,16 +83,12 @@ def villi_band(d, x0, x1, y_base, height, up, rng):
         x += w + rng.randint(3, 8)
 
 
-def bg(path, w=720, h=1280):
-    rng = random.Random(42)
-    img = Image.new("RGBA", (w, h), PURPLE)
+def villi(path, w=720, h=1280):
+    """Transparent overlay: cream bands + villi fringes only. The level colour
+    shows through everywhere else (the game draws a solid rectangle under it)."""
+    img = Image.new("RGBA", (w, h), (0, 0, 0, 0))
     d = ImageDraw.Draw(img)
-    # mucosa texture: speckles (2x field → denser count)
-    for _ in range(2400):
-        x, y = rng.randrange(w), rng.randrange(h)
-        r = rng.randint(2, 8)
-        d.ellipse((x, y, x + r, y + r), fill=PURPLE_DARK)
-    # Fringes ~260px (~20% each end) so the purple lumen stays majority open
+    # Fringes ~260px (~20% each end) so the open lumen stays majority clear
     fringe = 260
     cream_h = 28
     top_base = fringe + cream_h // 2
@@ -135,8 +131,8 @@ if __name__ == "__main__":
         if not path.exists():
             icon(path, size)
     pipe(OUT / "pipe.png")
-    bg(OUT / "bg.png")
+    villi(OUT / "villi.png")
     ground(OUT / "ground.png")
-    for f in ["pipe.png", "bg.png", "ground.png", "icon-192.png", "icon-512.png"]:
+    for f in ["pipe.png", "villi.png", "ground.png", "icon-192.png", "icon-512.png"]:
         im = Image.open(OUT / f)
         print(f"{f}: {im.width}x{im.height}")

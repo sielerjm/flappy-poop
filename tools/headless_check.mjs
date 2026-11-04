@@ -311,6 +311,11 @@ export async function run(url = DEFAULT_URL) {
     await sleep(300);
     const resumed = await evaluate(`JSON.stringify({ state: ${play}.state, speed: ${play}.diff.pipeSpeed, lb: ${play}.levelBreak, gravity: ${play}.poop.body.allowGravity, fs: ${play}.finishSpawned })`).then(JSON.parse);
     ok(resumed.state === 'playing' && resumed.speed === TT.pipeSpeed + TT.levels.speedStep && !resumed.lb && resumed.gravity && !resumed.fs, `tap resumes level 2 at ${resumed.speed} px/s with gravity on`);
+    // Keep the driven poop immune and floating while we wait for the crossfade (the resume reset the grace).
+    await evaluate(`${play}.poop.body.setAllowGravity(false), ${play}.poop.setVelocity(0, 0), ${play}.poop.y = 640, ${play}.graceLeftMs = 1e9, true`);
+    await sleep(TT.levels.fadeMs + 200);
+    const colours = await evaluate(`import('./src/config.js').then((m) => JSON.stringify({ now: ${play}.bgColor.fillColor, l1: m.LEVELS[0].color, l2: m.LEVELS[1].color }))`).then(JSON.parse);
+    ok(colours.now === colours.l2 && colours.l2 !== colours.l1, `background crossfaded to level 2's colour (#${colours.now.toString(16)})`);
     // Deferred path: a fart carries the poop across level 2's line; the break waits for the fart's end.
     await evaluate(`${play}.poop.body.setAllowGravity(false), ${play}.poop.setVelocity(0, 0), ${play}.poop.y = 640, ${play}.graceLeftMs = 1e9, true`);
     await evaluate(`${play}.level = 2, ${play}.pipesSpawned = ${end2 - 2}, ${play}.pipesPassed = ${end2 - 2}, ${play}.finishSpawned = false, ${play}.distanceSinceSpawn = ${TT.pipeSpacingPx}, true`);

@@ -1,4 +1,4 @@
-import { GAME_WIDTH, GAME_HEIGHT, TUNING as T, LEVELS } from '../config.js';
+import { GAME_WIDTH, GAME_HEIGHT, TUNING as T, LEVELS, BACKGROUND } from '../config.js';
 import {
   createRng,
   pipeGapY,
@@ -9,6 +9,8 @@ import {
   levelEnd,
   levelProgress,
   levelBarLayout,
+  levelColor,
+  lerpColor,
   createBestStore,
   createSettingsStore,
   vibrate,
@@ -109,13 +111,18 @@ export class Play extends Phaser.Scene {
     attachGame(this.game);
     setMuted(!this.settings.load().sound);
 
-    // Scrolling layers. Tile-scale maps one texture copy onto the playfield so a
-    // stale shorter bg cannot vertically repeat into a mid-screen fold band.
-    this.bg = this.add.tileSprite(0, 0, GAME_WIDTH, GAME_HEIGHT, 'bg').setOrigin(0, 0);
-    {
-      const f = this.bg.frame;
-      this.bg.setTileScale(GAME_WIDTH / f.width, GAME_HEIGHT / f.height);
-    }
+    // Background: a solid per-level colour (crossfaded at each break) under the
+    // transparent overlay layers from BACKGROUND.layers, each a tileSprite scrolled
+    // at its own parallax. Tile-scale maps one texture copy onto the playfield so
+    // a layer never repeats vertically.
+    this.bgColor = this.add.rectangle(0, 0, GAME_WIDTH, GAME_HEIGHT, levelColor(1, LEVELS), 1).setOrigin(0, 0).setDepth(0);
+    this.bgFade = null;
+    this.bgLayers = BACKGROUND.layers.map((layer, i) => {
+      const sprite = this.add.tileSprite(0, 0, GAME_WIDTH, GAME_HEIGHT, layer.key).setOrigin(0, 0).setDepth(1 + i);
+      const f = sprite.frame;
+      sprite.setTileScale(GAME_WIDTH / f.width, GAME_HEIGHT / f.height);
+      return { sprite, parallax: layer.parallax };
+    });
     this.pipes = this.physics.add.group({ allowGravity: false, immovable: true });
     this.items = this.physics.add.group({ allowGravity: false, immovable: true });
     this.beans = this.physics.add.group({ allowGravity: false, immovable: true });
@@ -324,8 +331,26 @@ export class Play extends Phaser.Scene {
     this.applyLevel();
     this.levelBar.setVisible(true);
     this.refreshLevelBar();
+    this.bgFade?.stop();
+    this.bgFade = null;
+    this.bgColor.setFillStyle(levelColor(1, LEVELS), 1);
     this.distanceSinceSpawn = 0;
     this.spawnPipePair();
+  }
+
+  /** Crossfade the background to the current level's colour (used at each break). */
+  fadeBackground() {
+    const from = this.bgColor.fillColor;
+    const to = levelColor(this.level, LEVELS);
+    this.bgFade?.stop();
+    const o = { f: 0 };
+    this.bgFade = this.tweens.add({
+      targets: o,
+      f: 1,
+      duration: T.levels.fadeMs,
+      onUpdate: () => this.bgColor.setFillStyle(lerpColor(from, to, o.f), 1),
+      onComplete: () => this.bgColor.setFillStyle(to, 1),
+    });
   }
 
   /** Bar label and fill for the current level and pipes passed. */
@@ -364,6 +389,7 @@ export class Play extends Phaser.Scene {
     this.levelBreak = true;
     this.refreshLevelBanner();
     this.pausePlay();
+    this.fadeBackground();
     this.poop.setVelocity(0, 0);
     this.poop.body.setAllowGravity(false);
     this.breakGlide = this.tweens.add({
@@ -994,7 +1020,7 @@ export class Play extends Phaser.Scene {
     this.applyRainbow();
     const scrolling = this.state === 'ready' || this.state === 'playing';
     if (scrolling) {
-      this.bg.tilePositionX += this.scrollSpeed() * 0.25 * dt;
+      for (const layer of this.bgLayers) layer.sprite.tilePositionX += this.scrollSpeed() * layer.parallax * dt;
       this.ground.tilePositionX += this.scrollSpeed() * dt;
     }
 

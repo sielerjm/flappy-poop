@@ -107,7 +107,8 @@ test('pipe.png is at least the playfield tall so flipped tops reach the ceiling'
   assert.ok(pipe.h >= GAME_HEIGHT, `pipe height ${pipe.h} < GAME_HEIGHT ${GAME_HEIGHT}`);
 });
 
-test('bg.png matches the logical playfield exactly (no vertical tiling)', () => {
-  const bg = pngSize(join(root, 'assets/bg.png'));
-  assert.deepEqual({ w: bg.w, h: bg.h }, { w: GAME_WIDTH, h: GAME_HEIGHT });
+test('villi.png (the background overlay) matches the logical playfield exactly (no vertical tiling)', () => {
+  const villi = pngSize(join(root, 'assets/villi.png'));
+  assert.deepEqual({ w: villi.w, h: villi.h }, { w: GAME_WIDTH, h: GAME_HEIGHT });
+  assert.ok(!existsSync(join(root, 'assets/bg.png')), 'bg.png is gone: the level colour is a rectangle under the layers');
 });
