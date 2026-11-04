@@ -26,8 +26,10 @@ test('fartFloat rides a wave of waveAmplitudePx around mid-height with a mean at
     n += 1;
   }
   assert.ok(Math.abs(sum / n - CENTRE) < 1, `mean ${sum / n} ≈ ${CENTRE}`);
-  const peakY = fartFloat(b.centreMs + b.wavePeriodMs * 0.25, CENTRE, CENTRE, T).y;
-  assert.ok(Math.abs(peakY - (CENTRE + b.waveAmplitudePx)) < 1e-6, 'reaches the bottom of the wave a quarter period in');
+  // The wave's phase runs from the start of the fart; once the glide is over (r = 1) a quarter period into any cycle is the bottom.
+  const peakY = fartFloat(b.wavePeriodMs * 1.25, CENTRE, CENTRE, T).y;
+  assert.ok(b.wavePeriodMs * 1.25 >= b.centreMs, 'sample point is past the glide');
+  assert.ok(Math.abs(peakY - (CENTRE + b.waveAmplitudePx)) < 1e-6, `bottom of the wave: ${peakY} vs ${CENTRE + b.waveAmplitudePx}`);
 });
 
 test('fartFloat tilts nose up while rising and nose down while falling, within waveTiltDeg', () => {
