@@ -8,7 +8,7 @@
 // plain select on the columns the publishable key is allowed to see.
 
 import { LEADERBOARD } from './config.js';
-import { recordScore } from './save.js';
+import { recordScore, bestByToilet } from './save.js';
 
 // ---------------------------------------------------------------------------
 // Pure helpers
@@ -40,10 +40,11 @@ function normalizeRecord(raw) {
  * last confirmed submit (same id and name) already carries this score or a
  * higher one (an equal score still posts when only the toilet flag changed).
  */
-export function submitPlan(state, lastConfirmed, { maxScore = LEADERBOARD.maxScore } = {}) {
+export function submitPlan(state, lastConfirmed, { maxScore = LEADERBOARD.maxScore, toilet } = {}) {
   const s = recordScore(state, 0); // normalises without changing anything
   if (!s.name || !s.id) return null;
-  const best = s.top[0];
+  // With `toilet` given: the best run of that kind (the board keeps one row per kind). Without it: the overall best.
+  const best = toilet === undefined ? s.top[0] : bestByToilet(s)[toilet ? 'on' : 'off'];
   if (!best || best.score <= 0 || best.score > maxScore) return null;
   const plan = { playerId: s.id, name: s.name, score: best.score, toilet: Boolean(best.toilet), level: levelOf(best.level) };
   const last = normalizeRecord(lastConfirmed);
@@ -56,27 +57,47 @@ export function submitPlan(state, lastConfirmed, { maxScore = LEADERBOARD.maxSco
   return plan;
 }
 
+/**
+ * Up to two plans, one per board row the player can hold: the best run off the
+ * toilet and the best on it, each compared with the last confirmed submit of
+ * that kind ({ off, on } from createSubmitStore().load()).
+ */
+export function submitPlans(state, confirmed, opts = {}) {
+  return [false, true]
+    .map((toilet) => submitPlan(state, confirmed?.[toilet ? 'on' : 'off'] ?? null, { ...opts, toilet }))
+    .filter(Boolean);
+}
+
 // ---------------------------------------------------------------------------
 // Last confirmed submit, in its own localStorage key. normalizeState in save.js
 // drops unknown fields, so this cannot ride inside the SaveState.
 
 export function createSubmitStore(storage = globalThis.localStorage, key = LEADERBOARD.storageKey) {
+  const empty = () => ({ off: null, on: null });
   return {
-    /** The last confirmed submit, or null. */
+    /** The last confirmed submit of each kind: { off, on }, each a record or null. */
     load() {
       try {
         const raw = storage?.getItem(key);
-        return raw == null ? null : normalizeRecord(JSON.parse(raw));
+        if (raw == null) return empty();
+        const parsed = JSON.parse(raw);
+        // Before two rows per player the store held one record: file it under its own kind.
+        if (parsed && typeof parsed === 'object' && 'playerId' in parsed) {
+          const rec = normalizeRecord(parsed);
+          return rec ? { ...empty(), [rec.toilet ? 'on' : 'off']: rec } : empty();
+        }
+        return { off: normalizeRecord(parsed?.off), on: normalizeRecord(parsed?.on) };
       } catch {
-        return null;
+        return empty();
       }
     },
-    /** Remember a confirmed submit; never throws. Returns the stored record or null. */
+    /** Remember a confirmed submit in its kind's slot; never throws. Returns the stored record or null. */
     save(record) {
       const rec = normalizeRecord(record);
       if (!rec) return null;
+      const all = { ...this.load(), [rec.toilet ? 'on' : 'off']: rec };
       try {
-        storage?.setItem(key, JSON.stringify(rec));
+        storage?.setItem(key, JSON.stringify(all));
       } catch {
         /* storage unavailable: the next game over simply resubmits */
       }
@@ -148,9 +169,13 @@ export async function fetchTop(opts = {}) {
 }
 
 /** { rank, total, score, toilet, level } for one player, or null (no row, or unreachable). */
-export async function fetchRank(playerId, opts = {}) {
+/** Standing of one of the player's rows: toilet picks the on-toilet row, else the off-toilet one. */
+export async function fetchRank(playerId, toiletOrOpts = false, maybeOpts = {}) {
+  // fetchRank(id, opts) still works (off-toilet row), as does fetchRank(id, toilet, opts).
+  const wantToilet = typeof toiletOrOpts === 'object' && toiletOrOpts !== null ? false : Boolean(toiletOrOpts);
+  const opts = typeof toiletOrOpts === 'object' && toiletOrOpts !== null ? toiletOrOpts : maybeOpts;
   if (typeof playerId !== 'string' || !playerId) return null;
-  const out = await request('/rpc/player_rank', { method: 'POST', body: { p_player_id: playerId } }, opts);
+  const out = await request('/rpc/player_rank', { method: 'POST', body: { p_player_id: playerId, p_toilet: wantToilet } }, opts);
   if (!out || typeof out !== 'object') return null;
   const { rank, total, score, toilet, level } = out;
   if (!Number.isInteger(rank) || rank < 1 || !Number.isInteger(total) || total < rank || !Number.isInteger(score)) return null;

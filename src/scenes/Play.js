@@ -57,7 +57,7 @@ import { createTray } from '../ui/tray.js';
 import { createGlow, createRectGlow } from '../ui/glow.js';
 import { createFinishTexture } from '../ui/finish.js';
 import { createLevelBar } from '../ui/levelBar.js';
-import { createSubmitStore, submitPlan, submitScore } from '../leaderboard.js';
+import { createSubmitStore, submitPlans, submitScore } from '../leaderboard.js';
 import { createButton } from '../ui/button.js';
 import { createToggle } from '../ui/toggle.js';
 import { openSavePanel } from '../ui/savePanel.js';
@@ -533,12 +533,18 @@ export class Play extends Phaser.Scene {
   syncLeaderboard() {
     if (!this.save?.name) return Promise.resolve();
     if (!this.save.id) this.save = ensureId(this.save);
-    const plan = submitPlan(this.save, this.submitStore.load());
-    if (!plan) return Promise.resolve();
-    return submitScore(plan)
-      .then((ok) => {
-        if (ok) this.submitStore.save(plan);
-      })
+    // Up to two rows per player: best off the toilet and best on it, posted one after the other.
+    const plans = submitPlans(this.save, this.submitStore.load());
+    return plans
+      .reduce(
+        (chain, plan) =>
+          chain.then(() =>
+            submitScore(plan).then((ok) => {
+              if (ok) this.submitStore.save(plan);
+            }),
+          ),
+        Promise.resolve(),
+      )
       .catch(() => {});
   }
 

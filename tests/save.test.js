@@ -28,6 +28,7 @@ import {
   newId,
   b64urlEncode,
   b64urlDecode,
+  bestByToilet,
 } from '../src/save.js';
 
 function fakeStorage() {
@@ -307,6 +308,14 @@ test('base64url helpers round-trip bytes without padding or +/', () => {
   assert.match(enc, /^[A-Za-z0-9_-]+$/);
   assert.deepEqual([...b64urlDecode(enc)], [...bytes]);
   assert.throws(() => b64urlDecode('a+b/c='));
+});
+
+test('bestByToilet picks the best run on the toilet and the best off it', () => {
+  const s = { name: 'A', top: [{ score: 40, toilet: false }, { score: 30, toilet: true }, { score: 20, toilet: true }, { score: 10, toilet: false }] };
+  assert.deepEqual(bestByToilet(s), { on: { score: 30, toilet: true, level: 1 }, off: { score: 40, toilet: false, level: 1 } });
+  assert.deepEqual(bestByToilet({ top: [{ score: 9, toilet: true }] }), { on: { score: 9, toilet: true, level: 1 }, off: null });
+  assert.deepEqual(bestByToilet({ top: [] }), { on: null, off: null });
+  assert.deepEqual(bestByToilet(null), { on: null, off: null });
 });
 
 test('levels ride with top entries: recordScore stores them, schema 2 loads as level 1, dedupe keeps the higher level', () => {

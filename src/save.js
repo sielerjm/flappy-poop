@@ -119,6 +119,12 @@ function normalizeTop(list) {
 }
 
 /** Just the numbers of the top list, best first. */
+/** The best top entry on the toilet and the best off it ({ on, off }, each an entry or null). */
+export function bestByToilet(state) {
+  const top = normalizeState(state).top; // sorted best first
+  return { on: top.find((e) => e.toilet) ?? null, off: top.find((e) => !e.toilet) ?? null };
+}
+
 export function topScores(state) {
   return normalizeTop(state?.top).map((e) => e.score);
 }

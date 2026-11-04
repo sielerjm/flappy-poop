@@ -1,7 +1,7 @@
 import { GAME_WIDTH, GAME_HEIGHT, LEADERBOARD } from '../config.js';
 import { VERSION, chromeIntent, overlayOutsideHit, fitScale } from '../logic.js';
 import { t, metaFontSize, rankText, levelLabel } from '../i18n.js';
-import { topScores, TOILET_EMOJI } from '../save.js';
+import { bestByToilet, TOILET_EMOJI } from '../save.js';
 import { fetchTop, fetchRank } from '../leaderboard.js';
 
 const STYLE = { fontFamily: 'sans-serif', fontStyle: 'bold', color: '#ffffff', align: 'center' };
@@ -70,7 +70,14 @@ export class Leaderboard extends Phaser.Scene {
     }
     const state = play?.getSaveState?.() ?? { name: '', top: [] };
     const named = Boolean(state.name && state.id);
-    const [rows, rank] = await Promise.all([fetchTop(), named ? fetchRank(state.id) : null]);
+    const best = bestByToilet(state);
+    // A player can hold two rows (off and on the toilet): look up each one they have a local best for.
+    const [rows, off, on] = await Promise.all([
+      fetchTop(),
+      named && best.off ? fetchRank(state.id, false) : null,
+      named && best.on ? fetchRank(state.id, true) : null,
+    ]);
+    const rank = { off, on, best };
     // Closed, or closed and reopened, while the requests were in flight.
     if (gen !== this.gen || !this.scene.isActive()) return;
     this.showBoard(rows, rank, state);
@@ -92,15 +99,17 @@ export class Leaderboard extends Phaser.Scene {
       const headerY = cy - 288;
       this.add.text(toiletX, headerY, TOILET_EMOJI, { ...STYLE, fontSize: '20px' }).setOrigin(0.5).setAlpha(0.7);
       this.add.text(levelX, headerY, t(locale, 'leaderboardLevel'), { ...STYLE, fontSize: '20px', color: DIM }).setOrigin(0.5);
-      const own = rank && rank.rank <= rows.length ? rank.rank - 1 : -1;
+      // Highlight each of the player's rows that made the board (up to two).
+      const ownRows = new Set([rank.off, rank.on].filter((r) => r && r.rank <= rows.length).map((r) => r.rank - 1));
       for (let i = 0; i < limit; i += 1) {
         const y = cy - 250 + i * 56;
         const row = rows[i];
-        const color = i === own ? PINK : row ? '#ffffff' : DIM;
+        const own = ownRows.has(i);
+        const color = own ? PINK : row ? '#ffffff' : DIM;
         this.add.text(cx - 224, y, `${i + 1}.`, { ...STYLE, fontSize: '34px', color: row ? PINK : DIM }).setOrigin(0, 0.5);
         this.add.text(cx + 224, y, row ? String(row.score) : '–', { ...STYLE, fontSize: '34px', color }).setOrigin(1, 0.5);
         if (row?.toilet) this.add.text(toiletX, y, TOILET_EMOJI, { ...STYLE, fontSize: '30px' }).setOrigin(0.5);
-        if (row) this.add.text(levelX, y, levelLabel(locale, row.level ?? 1), { ...STYLE, fontSize: '24px', color: i === own ? PINK : MUTED, fontStyle: 'normal' }).setOrigin(0.5);
+        if (row) this.add.text(levelX, y, levelLabel(locale, row.level ?? 1), { ...STYLE, fontSize: '24px', color: own ? PINK : MUTED, fontStyle: 'normal' }).setOrigin(0.5);
         const name = this.add.text(cx - 160, y, row ? row.name : '–', { ...STYLE, fontSize: '34px', color, align: 'left' }).setOrigin(0, 0.5);
         // A 16-character name is wider than its column: shrink it to the room left of the 🚽 column.
         name.setScale(fitScale(name.width, toiletX - 24 - name.x, 8));
@@ -109,11 +118,14 @@ export class Leaderboard extends Phaser.Scene {
 
     if (!state.name) {
       this.footer.setText(t(locale, 'leaderboardJoin'));
-    } else if (rank && rank.rank > limit) {
-      this.footer.setText(rankText(locale, rank));
-    } else if (!rank && rows !== null && (topScores(state)[0] ?? 0) > 0) {
-      this.footer.setText(t(locale, 'leaderboardNotYet'));
+      return;
     }
+    // One line per own row that is below the board (rankText shows the 🚽 on the toilet row);
+    // "not on the board yet" when a local best of some kind has no row at all.
+    const lines = [rank.off, rank.on].filter((r) => r && r.rank > limit).map((r) => rankText(locale, r));
+    const missing = rows !== null && ((rank.best.off && !rank.off) || (rank.best.on && !rank.on));
+    if (missing) lines.push(t(locale, 'leaderboardNotYet'));
+    if (lines.length) this.footer.setText(lines.join('\n'));
   }
 
   close() {

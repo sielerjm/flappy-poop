@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { LEADERBOARD } from '../src/config.js';
-import { createSubmitStore, submitPlan, submitScore, fetchTop, fetchRank } from '../src/leaderboard.js';
+import { createSubmitStore, submitPlan, submitPlans, submitScore, fetchTop, fetchRank } from '../src/leaderboard.js';
 
 const config = { dataApi: 'https://x.example/rest/v1', publishableKey: 'sb_publishable_test', timeoutMs: 50, limit: 10, maxScore: 200 };
 
@@ -130,7 +130,7 @@ test('fetchRank posts the player id and parses the standing', async () => {
   const fetch = fakeFetch({ body: { rank: 23, total: 150, score: 41, toilet: true, level: 3 } });
   const info = await fetchRank(ID, { fetch, config });
   assert.equal(fetch.calls[0].url, 'https://x.example/rest/v1/rpc/player_rank');
-  assert.deepEqual(fetch.calls[0].body, { p_player_id: ID });
+  assert.deepEqual(fetch.calls[0].body, { p_player_id: ID, p_toilet: false });
   assert.deepEqual(info, { rank: 23, total: 150, score: 41, toilet: true, level: 3 });
   assert.deepEqual(await fetchRank(ID, { fetch: fakeFetch({ body: { rank: 1, total: 1, score: 2 } }), config }), { rank: 1, total: 1, score: 2, toilet: false, level: 1 }, 'old schema: level 1');
 });
@@ -177,24 +177,51 @@ test('submitPlan resubmits after a higher score, a rename, a toilet-flag change,
 // ---------------------------------------------------------------------------
 // createSubmitStore
 
-test('createSubmitStore round-trips a record under its key and ignores junk', () => {
+test('createSubmitStore keeps the last confirmed submit of each kind and ignores junk', () => {
   const st = fakeStorage();
   const store = createSubmitStore(st, 'lb');
-  assert.equal(store.load(), null);
+  assert.deepEqual(store.load(), { off: null, on: null });
   const rec = store.save({ playerId: ID, name: 'Alice', score: 41, toilet: 1, level: 2 });
   assert.deepEqual(rec, { playerId: ID, name: 'Alice', score: 41, toilet: true, level: 2 });
-  assert.deepEqual(store.load(), rec);
+  assert.deepEqual(store.load(), { off: null, on: rec });
+  const off = store.save({ playerId: ID, name: 'Alice', score: 50, toilet: false, level: 3 });
+  assert.deepEqual(store.load(), { off, on: rec }, 'the other kind is kept');
+  // A record stored before two rows per player is filed under its own kind.
+  st.setItem('lb', JSON.stringify({ playerId: ID, name: 'Old', score: 7, toilet: false, level: 1 }));
+  assert.deepEqual(store.load(), { off: { playerId: ID, name: 'Old', score: 7, toilet: false, level: 1 }, on: null });
   assert.equal(st._map.has('lb'), true);
   assert.equal(store.save({ playerId: ID, name: 'Alice', score: -1 }), null);
   st.setItem('lb', 'banana');
-  assert.equal(store.load(), null);
+  assert.deepEqual(store.load(), { off: null, on: null });
 });
 
 test('createSubmitStore survives a throwing or missing storage', () => {
   const s = createSubmitStore(boom, 'lb');
-  assert.equal(s.load(), null);
+  assert.deepEqual(s.load(), { off: null, on: null });
   assert.deepEqual(s.save({ playerId: ID, name: 'A', score: 1 }), { playerId: ID, name: 'A', score: 1, toilet: false, level: 1 });
   const u = createSubmitStore(undefined, 'lb');
-  assert.equal(u.load(), null);
+  assert.deepEqual(u.load(), { off: null, on: null });
   assert.ok(u.save({ playerId: ID, name: 'A', score: 1 }));
+});
+
+test('submitPlans gives one plan per kind the player has a best for, each against its own confirmed record', () => {
+  const both = named([{ score: 41, toilet: false }, { score: 30, toilet: true, level: 2 }]);
+  const plans = submitPlans(both, { off: null, on: null });
+  assert.deepEqual(plans, [
+    { playerId: ID, name: 'Alice', score: 41, toilet: false, level: 1 },
+    { playerId: ID, name: 'Alice', score: 30, toilet: true, level: 2 },
+  ]);
+  assert.deepEqual(submitPlans(both, { off: plans[0], on: null }), [plans[1]], 'the confirmed kind is not re-posted');
+  assert.deepEqual(submitPlans(both, { off: plans[0], on: plans[1] }), [], 'nothing new');
+  assert.deepEqual(submitPlans(named([{ score: 9, toilet: true }]), null), [{ playerId: ID, name: 'Alice', score: 9, toilet: true, level: 1 }], 'toilet runs only: one plan');
+  assert.deepEqual(submitPlans({ ...both, name: '' }, null), [], 'no name: nothing');
+  // A better toilet run does not hide the off-toilet best, and vice versa.
+  const toiletLeads = named([{ score: 60, toilet: true }, { score: 20, toilet: false }]);
+  assert.deepEqual(submitPlans(toiletLeads, null).map((p) => [p.toilet, p.score]), [[false, 20], [true, 60]]);
+});
+
+test('fetchRank asks for the toilet row when told to', async () => {
+  const fetch = fakeFetch({ body: { rank: 2, total: 9, score: 30, toilet: true, level: 2 } });
+  assert.deepEqual(await fetchRank(ID, true, { fetch, config }), { rank: 2, total: 9, score: 30, toilet: true, level: 2 });
+  assert.deepEqual(fetch.calls[0].body, { p_player_id: ID, p_toilet: true });
 });
