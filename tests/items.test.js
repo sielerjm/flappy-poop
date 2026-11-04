@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { TUNING as T } from '../src/config.js';
-import { createRng, difficulty, rollItem, itemGapY, scoreAfterItem, createEffects, ITEM_KINDS } from '../src/logic.js';
+import { createRng, rollItem, itemGapY, scoreAfterItem, createEffects, ITEM_KINDS } from '../src/logic.js';
 
 test('rollItem is always null below startScore', () => {
   const rng = createRng(1);
@@ -84,11 +84,6 @@ test('consumeProbiotic clears a held charge and is a no-op when empty', () => {
   assert.equal(fx.consumeProbiotic(), true);
   assert.equal(fx.hasProbiotic(), false);
   assert.equal(fx.consumeProbiotic(), false);
-});
-
-test('difficulty() is unchanged by the items block', () => {
-  assert.deepEqual(difficulty(0, T), { pipeSpeed: T.pipeSpeed, gapHeight: T.gapHeight });
-  assert.deepEqual(difficulty(T.rampEndScore, T), { pipeSpeed: T.maxPipeSpeed, gapHeight: T.minGapHeight });
 });
 
 // ---------------------------------------------------------------------------
@@ -183,9 +178,9 @@ test('beanY stays inside the middle band and reaches both extremes; beanAngle wi
 });
 
 test('beanSpawnX is off the right edge, halfway to the next pair', () => {
-  const x = beanSpawnX(GAME_WIDTH, T.pipeWidth, T.pipeSpeed, T.spawnEveryMs);
-  const spacing = pipeSpacing(T.pipeSpeed, T.spawnEveryMs);
-  assert.equal(spacing, 450);
+  const x = beanSpawnX(GAME_WIDTH, T.pipeWidth, T.pipeSpacingPx);
+  const spacing = pipeSpacing(T);
+  assert.equal(spacing, T.pipeSpacingPx);
   assert.ok(x > GAME_WIDTH + T.pipeWidth);
   assert.equal(x, GAME_WIDTH + T.pipeWidth + spacing / 2);
 });
@@ -200,7 +195,7 @@ test('poopTapHit is generous (2 x radius) and misses further away', () => {
 
 test('fartMul is 1 at both ends, peaks mid-clip, and its integral scrolls exactly powerPipes spacings', () => {
   const duration = T.beans.powerMs;
-  const peak = fartPeakMul(duration, T.beans.powerPipes, T.spawnEveryMs);
+  const peak = fartPeakMul(duration, T.beans.powerPipes, T.pipeSpacingPx, T.pipeSpeed);
   assert.ok(peak > 1 && peak <= 2.5, `peak ${peak}`);
   assert.equal(fartMul(0, duration, peak), 1);
   assert.equal(fartMul(duration, duration, peak), 1);
@@ -210,7 +205,7 @@ test('fartMul is 1 at both ends, peaks mid-clip, and its integral scrolls exactl
   const dt = 1;
   let distance = 0;
   for (let ms = 0; ms < duration; ms += dt) distance += T.pipeSpeed * fartMul(ms + dt / 2, duration, peak) * (dt / 1000);
-  const spacings = distance / pipeSpacing(T.pipeSpeed, T.spawnEveryMs);
+  const spacings = distance / pipeSpacing(T);
   assert.ok(Math.abs(spacings - T.beans.powerPipes) < 0.02, `scrolled ${spacings} spacings, want ${T.beans.powerPipes}`);
 });
 
@@ -258,9 +253,9 @@ test('the probiotic countdown pauses while the fart runs and resumes afterwards'
 
 test('fartRemainingDistance is the analytic tail of the envelope and reaches 0 at the end', () => {
   const D = T.beans.powerMs;
-  const peak = fartPeakMul(D, T.beans.powerPipes, T.spawnEveryMs);
+  const peak = fartPeakMul(D, T.beans.powerPipes, T.pipeSpacingPx, T.pipeSpeed);
   const total = fartRemainingDistance(0, D, peak, T.pipeSpeed);
-  assert.ok(Math.abs(total / pipeSpacing(T.pipeSpeed, T.spawnEveryMs) - T.beans.powerPipes) < 0.01, 'whole clip = powerPipes spacings');
+  assert.ok(Math.abs(total / pipeSpacing(T) - T.beans.powerPipes) < 0.01, 'whole clip = powerPipes spacings');
   assert.equal(fartRemainingDistance(D, D, peak, T.pipeSpeed), 0);
   assert.equal(fartRemainingDistance(D + 50, D, peak, T.pipeSpeed), 0);
   // Matches a numeric integral of fartMul from e to D, and is monotonic.
@@ -278,7 +273,7 @@ test('fartRemainingDistance is the analytic tail of the envelope and reaches 0 a
 test('pipeClearDistance: a right-edge spawn needs the screen plus a column to be fully behind the poop', () => {
   const d = pipeClearDistance(GAME_WIDTH, T.pipeWidth, T.poopX);
   assert.equal(d, GAME_WIDTH + T.pipeWidth - (T.poopX - T.pipeWidth));
-  assert.ok(d < fartRemainingDistance(0, T.beans.powerMs, fartPeakMul(T.beans.powerMs, T.beans.powerPipes, T.spawnEveryMs), T.pipeSpeed), 'the fart scrolls further than one clear distance, so pipes spawned early still pass');
+  assert.ok(d < fartRemainingDistance(0, T.beans.powerMs, fartPeakMul(T.beans.powerMs, T.beans.powerPipes, T.pipeSpacingPx, T.pipeSpeed), T.pipeSpeed), 'the fart scrolls further than one clear distance, so pipes spawned early still pass');
 });
 
 test('beans accumulate to maxBeans; holdingBean only when the bag is full or the fart runs', () => {
@@ -318,12 +313,12 @@ test('1–2 beans give a normal fart, superBeans give a super fart, and every be
 
 test('the super fart envelope scrolls exactly superPipes spacings in the same clip', () => {
   const duration = T.beans.powerMs;
-  const peak = fartPeakMul(duration, T.beans.superPipes, T.spawnEveryMs);
+  const peak = fartPeakMul(duration, T.beans.superPipes, T.pipeSpacingPx, T.pipeSpeed);
   assert.ok(peak > 5 && peak <= 12, `super peak ${peak}`);
   let distance = 0;
   for (let ms = 0; ms < duration; ms += 1) distance += T.pipeSpeed * fartMul(ms + 0.5, duration, peak) * 0.001;
-  const spacings = distance / pipeSpacing(T.pipeSpeed, T.spawnEveryMs);
+  const spacings = distance / pipeSpacing(T);
   assert.ok(Math.abs(spacings - T.beans.superPipes) < 0.02, `scrolled ${spacings} spacings, want ${T.beans.superPipes}`);
-  const tail = fartRemainingDistance(0, duration, peak, T.pipeSpeed) / pipeSpacing(T.pipeSpeed, T.spawnEveryMs);
+  const tail = fartRemainingDistance(0, duration, peak, T.pipeSpeed) / pipeSpacing(T);
   assert.ok(Math.abs(tail - T.beans.superPipes) < 0.01, 'analytic tail agrees');
 });

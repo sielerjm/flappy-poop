@@ -7,8 +7,8 @@ export const GAME_HEIGHT = 1280;
 export const TUNING = {
   gravity: 2600, // px/s^2 pulling the poop down
   flapVelocity: -760, // px/s applied on tap
-  pipeSpeed: 300, // px/s pipes scroll left
-  spawnEveryMs: 1500, // time between pipe pairs
+  pipeSpeed: 275, // px/s pipes scroll left at level 1 (each level adds levels.speedStep)
+  pipeSpacingPx: 412, // px between pipe pairs, fixed for every level (1.5 s at level-1 speed; faster levels = less time per pipe)
   gapHeight: 340, // vertical opening between a pipe pair
   pipeWidth: 128,
   groundHeight: 128,
@@ -22,10 +22,6 @@ export const TUNING = {
   angleFallRefVy: 1200, // px/s; vy at which fall tilt reaches maxFallAngle
   deathToOverMs: 700, // tumble time before the game-over panel appears
   retryLockoutMs: 400, // ignore taps on the panel for this long so a death tap can't restart
-  // Difficulty ramp: from base values at score 0 to the "max" values at rampEndScore, then flat.
-  rampEndScore: 30,
-  maxPipeSpeed: 400,
-  minGapHeight: 260,
   bestKey: 'flappy-poop:best', // localStorage key
   settingsKey: 'flappy-poop:settings', // localStorage key
   vibrateOnDieMs: 60, // ms buzz on death (Android / Chrome only)
@@ -47,6 +43,22 @@ export const TUNING = {
   toiletOffAlpha: 0.33, // 0–1 alpha of the 🚽 while the toggle is off
   toiletKnobMs: 150, // ms the toggle knob takes to slide
   fartVolume: 0.6, // 0–1 Phaser volume for the death fart sample
+  levels: {
+    firstPipes: 10, // pipe pairs in level 1
+    pipesStep: 25, // level n ≥ 2 has pipesStep × (n − 1) pipe pairs: 25, 50, 75, …
+    speedStep: 25, // px/s added to pipeSpeed per level after the first
+    maxSpeed: 450, // px/s cap (level 8+)
+    finishWidthPx: 64, // px width of the checkered finish line
+    finishCheckPx: 32, // px size of one check on the finish line
+    fadeMs: 600, // ms the background crossfades to the next level's colour during the break
+    barY: 30, // px centre line of the progress bar
+    barHeight: 20, // px height of the progress bar
+    barInset: 48, // px from the field edges to the bar track (right side also leaves room for the 🏁)
+    barAlpha: 0.6, // 0–1 alpha of the bar track
+    barTrackColor: 0xd9d9d9, // light grey track
+    barFillColor: 0xe85e96, // pipe pink fill (make_placeholders.py PINK)
+    barTweenMs: 200, // ms the fill animates to its new width after each pipe
+  },
   items: {
     startScore: 8, // score at which pickups may appear
     hazardStartScore: 15, // score at which bad bacteria may appear
@@ -73,7 +85,7 @@ export const TUNING = {
     travelFrac: 0.5, // 0–1 share of the playable height the bob covers, centred (0.5 = middle half)
     wiggleDeg: 15, // degrees of rotation wiggle about the bean's centre (±)
     wigglePeriodMs: 450, // ms per wiggle cycle
-    graceMs: 600, // ms of invulnerability after the fart ends (clears a pipe column at base speed)
+    graceMs: 700, // ms of invulnerability after the fart ends (clears a pipe column at level-1 speed: 0.7 × 275 ≥ pipeWidth + poopRadius)
     stinkFrameMs: 180, // ms between stink-line frames while charged
     glowRadiusPx: 64, // px radius of the glow behind the poop (scale 1)
     glowFadeFrac: 0.25, // 0–1 outer share of the glow radius that fades to transparent
@@ -91,6 +103,25 @@ export const TUNING = {
     endClearMarginPx: 64, // px of extra scroll kept in hand so the last pipe is fully behind the poop when the fart ends
     beanRadius: 48, // px circular hitbox = half the 96 logical-px sprite
   },
+};
+
+// Gut segments the poop travels through, one per level, in order. `key` is the
+// i18n name key (`level.<key>`); `color` is the solid background behind the villi
+// (placeholders for Michael to tune). Past the last row: no name, last colour.
+export const LEVELS = [
+  { key: 'stomach', color: 0xf3cdb4 },
+  { key: 'duodenum', color: 0xeeada6 },
+  { key: 'jejunum', color: 0xe28a98 },
+  { key: 'ileum', color: 0xcc6f88 },
+  { key: 'caecum', color: 0xad5f78 },
+  { key: 'colon', color: 0x8d4b60 },
+  { key: 'rectum', color: 0x6e3a4b },
+];
+
+// Transparent overlay layers drawn over the level colour, back to front. Each is a
+// tileSprite of `key` (loaded in Boot) scrolled at `parallax` × the pipe speed.
+export const BACKGROUND = {
+  layers: [{ key: 'villi', parallax: 0.25 }],
 };
 
 // Shared leaderboard (Supabase, plain fetch; see db/schema.sql and src/leaderboard.js).

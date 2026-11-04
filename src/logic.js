@@ -165,13 +165,61 @@ export function canRestart(openedAt, now, lockoutMs) {
   return now - openedAt >= lockoutMs;
 }
 
-/** Pipe speed and gap height for a given score: linear ramp to a cap, then flat. */
-export function difficulty(score, t) {
-  const f = Math.min(Math.max(score, 0) / t.rampEndScore, 1);
-  return {
-    pipeSpeed: t.pipeSpeed + (t.maxPipeSpeed - t.pipeSpeed) * f,
-    gapHeight: t.gapHeight + (t.minGapHeight - t.gapHeight) * f,
-  };
+// ---------------------------------------------------------------------------
+// Levels: the run is cut into gut segments by pipe pairs passed. Level 1 is
+// firstPipes long; level n ≥ 2 is pipesStep × (n − 1). Speed steps up per level
+// (capped); pipe spacing is fixed in px, so faster levels mean less time per pipe.
+
+/** Pipe pairs in level n (n ≥ 1). */
+export function levelPipes(n, t) {
+  const l = t.levels;
+  if (n <= 1) return l.firstPipes;
+  return l.pipesStep * (n - 1);
+}
+
+/** Pipes passed at which level n ends (cumulative): 10, 35, 85, 160, 260, … */
+export function levelEnd(n, t) {
+  let total = 0;
+  for (let i = 1; i <= n; i += 1) total += levelPipes(i, t);
+  return total;
+}
+
+/** The level a pipes-passed count falls in, with its start (inclusive) and end (exclusive) counts. */
+export function levelFor(pipesPassed, t) {
+  const p = Math.max(0, pipesPassed);
+  let level = 1;
+  while (p >= levelEnd(level, t)) level += 1;
+  return { level, startPipe: level === 1 ? 0 : levelEnd(level - 1, t), endPipe: levelEnd(level, t) };
+}
+
+/** Scroll speed (px/s) for a level: pipeSpeed + speedStep per level after the first, capped at maxSpeed. */
+export function levelSpeed(level, t) {
+  return Math.min(t.levels.maxSpeed, t.pipeSpeed + t.levels.speedStep * (Math.max(1, level) - 1));
+}
+
+/** Segment name key for a level, or null past the named list. */
+export function levelName(level, levels) {
+  return levels[level - 1]?.key ?? null;
+}
+
+/** Background colour for a level: the row's colour, or the last row's past the list. */
+export function levelColor(level, levels) {
+  const i = Math.min(Math.max(1, level), levels.length) - 1;
+  return levels[i].color;
+}
+
+/** 0–1 share of `level` done after pipesPassed pairs: 0 at its first pipe, 1 once its last pair is passed. */
+export function levelProgress(pipesPassed, level, t) {
+  const start = level <= 1 ? 0 : levelEnd(level - 1, t);
+  const f = (pipesPassed - start) / levelPipes(level, t);
+  return Math.min(1, Math.max(0, f));
+}
+
+/** Linear blend of two 0xRRGGBB colours, f in [0, 1]. */
+export function lerpColor(a, b, f) {
+  const k = Math.min(1, Math.max(0, f));
+  const ch = (shift) => Math.round(((a >> shift) & 0xff) + (((b >> shift) & 0xff) - ((a >> shift) & 0xff)) * k);
+  return (ch(16) << 16) | (ch(8) << 8) | ch(0);
 }
 
 /**
@@ -311,14 +359,14 @@ export function rollBean(rng, score, t, { spawnedThisRun = false, holding = fals
   return rng() < chance;
 }
 
-/** Scroll distance between consecutive pipe pairs (px). */
-export function pipeSpacing(pipeSpeed, spawnEveryMs) {
-  return (pipeSpeed * spawnEveryMs) / 1000;
+/** Scroll distance between consecutive pipe pairs (px): fixed for every level. */
+export function pipeSpacing(t) {
+  return t.pipeSpacingPx;
 }
 
 /** Spawn x of a bean: halfway between the pair spawning now and the next one. */
-export function beanSpawnX(width, pipeWidth, pipeSpeed, spawnEveryMs) {
-  return width + pipeWidth + pipeSpacing(pipeSpeed, spawnEveryMs) / 2;
+export function beanSpawnX(width, pipeWidth, spacingPx) {
+  return width + pipeWidth + spacingPx / 2;
 }
 
 /**
@@ -373,10 +421,10 @@ export function poopTapHit(x, y, poop, radius) {
 
 /**
  * Peak scroll multiplier of a half-sine envelope over durationMs whose average
- * scrolls exactly `pipes` pipe spacings (spawn cadence spawnEveryMs).
+ * scrolls exactly `pipes` spacings of spacingPx at base speed pipeSpeed (px/s).
  */
-export function fartPeakMul(durationMs, pipes, spawnEveryMs) {
-  const avg = (pipes * spawnEveryMs) / durationMs;
+export function fartPeakMul(durationMs, pipes, spacingPx, pipeSpeed) {
+  const avg = (pipes * spacingPx) / ((pipeSpeed * durationMs) / 1000);
   return 1 + ((avg - 1) * Math.PI) / 2;
 }
 

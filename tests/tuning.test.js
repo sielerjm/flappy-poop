@@ -60,8 +60,12 @@ test('beans block sits in a fair band and the fart ramp stays readable', () => {
   assert.ok(b.beanRadius >= 40 && b.beanRadius <= 48, `beanRadius ${b.beanRadius}`);
   assert.ok(b.centreMs >= 100 && b.centreMs <= 1000, `centreMs ${b.centreMs}`);
   assert.ok(b.endClearMarginPx >= 0 && b.endClearMarginPx <= 200, `endClearMarginPx ${b.endClearMarginPx}`);
-  const peak = 1 + (((b.powerPipes * T.spawnEveryMs) / b.powerMs - 1) * Math.PI) / 2;
+  // Fart envelope at level-1 speed (fixed spacing): the numbers match the old time-based tuning.
+  const peakAt = (pipes, speed) => 1 + (((pipes * T.pipeSpacingPx) / ((speed * b.powerMs) / 1000) - 1) * Math.PI) / 2;
+  const peak = peakAt(b.powerPipes, T.pipeSpeed);
   assert.ok(peak > 1 && peak <= 2.5, `fart peak multiplier ${peak}`);
-  const superPeak = 1 + (((b.superPipes * T.spawnEveryMs) / b.powerMs - 1) * Math.PI) / 2;
+  const superPeak = peakAt(b.superPipes, T.pipeSpeed);
   assert.ok(superPeak > peak && superPeak <= 12, `super fart peak multiplier ${superPeak}`);
+  assert.ok(peakAt(b.powerPipes, T.levels.maxSpeed) >= 1, 'even at the top speed a normal fart never slows the world');
+  assert.ok(b.superPipes < T.levels.pipesStep, 'a super fart can cross at most one finish line');
 });

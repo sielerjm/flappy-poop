@@ -5,7 +5,7 @@ import {
   centredGapY,
   hasPassed,
   angleForVelocity,
-  difficulty,
+  levelSpeed,
   createBestStore,
   createSettingsStore,
   vibrate,
@@ -71,7 +71,11 @@ export class Play extends Phaser.Scene {
     const legacyBest = this.best.load();
     if (this.save.top.length === 0 && legacyBest > 0) this.save = saveLocal(recordScore(this.save, legacyBest));
     this.submitStore = createSubmitStore(); // last confirmed leaderboard submit
-    this.diff = difficulty(0, T);
+    // Levels: pipe pairs passed decide the level; speed is per level, gap is fixed.
+    this.level = 1;
+    this.pipesPassed = 0;
+    this.pipesSpawned = 0;
+    this.diff = { pipeSpeed: levelSpeed(1, T), gapHeight: T.gapHeight };
     this.state = 'ready'; // 'ready' | 'playing' | 'paused' | 'dead'
     this.flapLockedUntil = 0;
     this.effects = createEffects(T);
@@ -280,6 +284,10 @@ export class Play extends Phaser.Scene {
     this.toiletHud.setVisible(this.toilet);
     this.poop.body.setAllowGravity(true);
     this.poop.body.setGravityY(T.gravity);
+    this.level = 1;
+    this.pipesPassed = 0;
+    this.pipesSpawned = 0;
+    this.applyLevel();
     this.distanceSinceSpawn = 0;
     this.spawnPipePair();
   }
@@ -554,6 +562,7 @@ export class Play extends Phaser.Scene {
   }
 
   spawnPipePair() {
+    this.pipesSpawned += 1;
     const gapCfg = {
       gameHeight: GAME_HEIGHT,
       groundHeight: T.groundHeight,
@@ -602,7 +611,7 @@ export class Play extends Phaser.Scene {
     if (rollBean(this.rng, this.score, T, { spawnedThisRun: this.beanSpawned, holding: this.effects.holdingBean() })) {
       this.beanSpawned = true;
       const phase = this.rng() * Math.PI * 2;
-      const bean = this.beans.create(beanSpawnX(GAME_WIDTH, T.pipeWidth, this.diff.pipeSpeed, T.spawnEveryMs), beanY(0, phase, this.beanBounds, T), 'bean');
+      const bean = this.beans.create(beanSpawnX(GAME_WIDTH, T.pipeWidth, T.pipeSpacingPx), beanY(0, phase, this.beanBounds, T), 'bean');
       bean.setDepth(8);
       bean.setScale(T.spriteDisplayScale);
       const beanBody = scaledCircleBody(bean.frame.width, T.spriteDisplayScale, T.beans.beanRadius);
@@ -612,12 +621,13 @@ export class Play extends Phaser.Scene {
     }
   }
 
-  applyDifficulty() {
-    this.diff = difficulty(this.score, T);
+  /** Speed for the current level (the gap never changes); pushes it onto everything scrolling. */
+  applyLevel() {
+    this.diff = { pipeSpeed: levelSpeed(this.level, T), gapHeight: T.gapHeight };
     this.applyScroll();
   }
 
-  /** Current scroll speed (px/s): difficulty speed × the fart envelope. */
+  /** Current scroll speed (px/s): level speed × the fart envelope. */
   scrollSpeed() {
     return this.diff.pipeSpeed * this.scrollMul;
   }
@@ -734,7 +744,7 @@ export class Play extends Phaser.Scene {
     const durationMs = snd && snd.duration > 0 ? Math.round(snd.duration * 1000) : T.beans.powerMs;
     this.effects.activatePower(durationMs);
     this.fartDurationMs = durationMs;
-    this.fartPeak = fartPeakMul(durationMs, this.effects.powerPipeCount(), T.spawnEveryMs); // 5 pipes, or 20 for a super fart
+    this.fartPeak = fartPeakMul(durationMs, this.effects.powerPipeCount(), T.pipeSpacingPx, this.diff.pipeSpeed); // 5 pipes, or 20 for a super fart, at this level's speed
     if (snd) {
       this.fartSound = snd;
       snd.once('complete', () => {
@@ -779,7 +789,7 @@ export class Play extends Phaser.Scene {
     // Next pair spawns on the next frame at the right edge with its gap at the
     // poop's float height: a full screen of warning and the easiest line through.
     this.centreNextGap = true;
-    this.distanceSinceSpawn = pipeSpacing(this.diff.pipeSpeed, T.spawnEveryMs);
+    this.distanceSinceSpawn = pipeSpacing(T);
     this.applyScroll();
     if (this.effects.powerReady()) this.setCharged(true);
   }
@@ -808,7 +818,6 @@ export class Play extends Phaser.Scene {
     if (kind === 'fiber') {
       this.score = scoreAfterItem(this.score, kind, T);
       this.scoreText.setText(String(this.score));
-      this.applyDifficulty();
       sfx.pickup();
     } else if (kind === 'probiotic') {
       this.effects.applyProbiotic();
@@ -823,7 +832,6 @@ export class Play extends Phaser.Scene {
       } else {
         this.score = scoreAfterItem(this.score, kind, T);
         this.scoreText.setText(String(this.score));
-        this.applyDifficulty();
         sfx.hazard();
       }
     }
@@ -888,7 +896,7 @@ export class Play extends Phaser.Scene {
       }
       if (this.effects.endedPower()) this.endPower();
       if (this.graceLeftMs > 0) this.graceLeftMs = Math.max(0, this.graceLeftMs - delta);
-      const spacing = pipeSpacing(this.diff.pipeSpeed, T.spawnEveryMs);
+      const spacing = pipeSpacing(T);
       if (this.spawnHeldByFart()) {
         this.distanceSinceSpawn = 0;
       } else {
@@ -926,11 +934,11 @@ export class Play extends Phaser.Scene {
       if (this.state === 'playing' && pipe.getData('scoring') && !pipe.getData('passed') && hasPassed(pipe.x, T.pipeWidth, this.poop.x)) {
         pipe.setData('passed', true);
         this.score += 1;
+        this.pipesPassed += 1;
         this.scoreText.setText(String(this.score));
         this.effects.onPipePassed();
         this.refreshProbioticHud();
         sfx.score();
-        this.applyDifficulty();
       }
       if (pipe.x < -T.pipeWidth) pipe.destroy();
     }
