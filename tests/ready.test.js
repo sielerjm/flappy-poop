@@ -64,7 +64,9 @@ test('every ready box keeps clear of the bobbing poop at its ready spot', () => 
   for (const b of boxes) {
     assert.equal(overlaps(edges(b), POOP), false, `${b.id} overlaps the poop`);
   }
-  assert.ok(POOP.top > layout.title.y + 26, 'speech bubble clears the title');
+  assert.ok(T.readyTitlePx >= 52 && T.readyTitlePx <= 96, `readyTitlePx ${T.readyTitlePx}`);
+  assert.ok(POOP.top > layout.title.y + T.readyTitlePx / 2 + 8, 'speech bubble clears the title with air to spare');
+  assert.ok(layout.title.y - T.readyTitlePx / 2 > layout.howto.y + layout.howto.height / 2 - 20, 'title sits below the ? row');
   assert.ok(POOP.right <= GAME_WIDTH, 'bubble stays inside the field');
   // The title / poop / toggle block sits lower now, with clear air to Save / Load User below it.
   const blockBottom = layout.toilet.y + layout.toilet.height / 2;

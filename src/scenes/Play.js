@@ -175,7 +175,7 @@ export class Play extends Phaser.Scene {
     this.beanIcon = this.add.image(72, 156, 'bean').setDisplaySize(56, 56).setDepth(20).setVisible(false);
     this.beanText = this.add.text(108, 156, '', { ...TEXT_STYLE, fontSize: '36px' }).setOrigin(0, 0.5).setDepth(20).setVisible(false);
     this.readyTitle = this.add
-      .text(this.readyBoxes.title.x, this.readyBoxes.title.y, t(this.locale, 'readyTitle'), { ...TEXT_STYLE, fontSize: '52px' })
+      .text(this.readyBoxes.title.x, this.readyBoxes.title.y, t(this.locale, 'readyTitle'), { ...TEXT_STYLE, fontSize: `${T.readyTitlePx}px` })
       .setOrigin(0.5)
       .setDepth(20);
     this.toiletToggle = createToggle(this, this.readyBoxes.toilet, { on: this.toilet });
