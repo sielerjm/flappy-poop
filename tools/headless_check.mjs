@@ -244,6 +244,11 @@ export async function run(url = DEFAULT_URL) {
     const centre = 1280 / 2;
     // The smoke player now has a name: make sure nothing it does can reach the live leaderboard.
     await evaluate(`import('./src/config.js').then((m) => { m.LEADERBOARD.dataApi = ''; return true; })`);
+    // Run the farts from the start of level 3 (50 pipes of room) so neither crosses a finish line here.
+    const TT = await evaluate(`import('./src/config.js').then((m) => JSON.stringify(m.TUNING))`).then(JSON.parse);
+    const end1 = TT.levels.firstPipes;
+    const end2 = end1 + TT.levels.pipesStep;
+    await evaluate(`${play}.level = 3, ${play}.pipesSpawned = ${end2}, ${play}.pipesPassed = ${end2}, ${play}.finishSpawned = false, ${play}.applyLevel(), true`);
     await evaluate(`${play}.resumePlay(), ${play}.effects.applyProbiotic(), ${play}.refreshProbioticHud(), true`);
     const pipesBefore = await evaluate(`${play}.effects.pipesLeft()`);
     const score0 = await evaluate(`${play}.score`);
@@ -278,6 +283,50 @@ export async function run(url = DEFAULT_URL) {
     const r = T.glowRadiusPx;
     const px = await evaluate(`JSON.stringify([0, 0.5, 1 - ${T.glowFadeFrac} / 2, 0.95].map((f) => __flappy.textures.getPixelAlpha(Math.round(${r} + f * ${r}) - (f > 0 ? 1 : 0), ${r}, 'glow')))`).then(JSON.parse);
     ok(px[0] === 255 && px[1] === 255 && px[2] > 90 && px[2] < 170 && px[3] <= 70, `glow texture fades at the edge (alpha at 0 / 0.5 / mid-fade / 0.95 r: ${px.join(' / ')})`);
+
+    // Levels. Plain path: jump to the last pair of level 1, float immune through the
+    // finish line → break (a real pause with the level banner), overlays still work
+    // during it, a tap resumes at the next level's speed with gravity back.
+    const waitBreak = async () => {
+      for (let i = 0; i < 120; i += 1) {
+        if (await evaluate(`${play}.state === 'paused' && ${play}.levelBreak`)) return true;
+        await sleep(100);
+      }
+      return false;
+    };
+    await evaluate(`${play}.poop.body.setAllowGravity(false), ${play}.poop.setVelocity(0, 0), ${play}.poop.y = 640, ${play}.graceLeftMs = 1e9, true`);
+    await evaluate(`${play}.level = 1, ${play}.pipesSpawned = ${end1}, ${play}.pipesPassed = ${end1}, ${play}.finishSpawned = false, ${play}.distanceSinceSpawn = ${TT.pipeSpacingPx}, true`);
+    const broke = await waitBreak();
+    const banner = await evaluate(`JSON.stringify({ level: ${play}.level, title: ${play}.levelTitle.text, titleOn: ${play}.levelTitle.visible, pauseOn: ${play}.pauseText.visible, line: ${play}.finishLine !== null })`).then(JSON.parse);
+    ok(broke && banner.level === 2 && banner.titleOn && !banner.pauseOn && banner.title.startsWith('LEVEL 2'), `crossing the finish line starts the level break (banner "${banner.title}")`);
+    await chrome('leaderboard');
+    await sleep(1500);
+    const lbDuring = await evaluate(`__flappy.scene.isActive('Leaderboard') && ${play}.state === 'paused' && ${play}.levelBreak`);
+    await closeTop('Leaderboard');
+    await sleep(400);
+    const stillBreak = await evaluate(`!__flappy.scene.isActive('Leaderboard') && ${play}.state === 'paused' && ${play}.levelBreak && ${play}.levelTitle.visible`);
+    ok(lbDuring === true && stillBreak === true, 'an overlay opens and closes during the break and the level banner stays');
+    await sleep(400); // resume lockout after the overlay close
+    await chrome('tap');
+    await sleep(300);
+    const resumed = await evaluate(`JSON.stringify({ state: ${play}.state, speed: ${play}.diff.pipeSpeed, lb: ${play}.levelBreak, gravity: ${play}.poop.body.allowGravity, fs: ${play}.finishSpawned })`).then(JSON.parse);
+    ok(resumed.state === 'playing' && resumed.speed === TT.pipeSpeed + TT.levels.speedStep && !resumed.lb && resumed.gravity && !resumed.fs, `tap resumes level 2 at ${resumed.speed} px/s with gravity on`);
+    // Deferred path: a fart carries the poop across level 2's line; the break waits for the fart's end.
+    await evaluate(`${play}.poop.body.setAllowGravity(false), ${play}.poop.setVelocity(0, 0), ${play}.poop.y = 640, ${play}.graceLeftMs = 1e9, true`);
+    await evaluate(`${play}.level = 2, ${play}.pipesSpawned = ${end2 - 2}, ${play}.pipesPassed = ${end2 - 2}, ${play}.finishSpawned = false, ${play}.distanceSinceSpawn = ${TT.pipeSpacingPx}, true`);
+    await evaluate(`${play}.effects.addBean(), ${play}.setCharged(true), ${play}.activatePower(), true`);
+    const pendingSeen = [];
+    for (let i = 0; i < 60 && (await evaluate(`${play}.effects.powerActive()`)); i += 1) {
+      pendingSeen.push(await evaluate(`${play}.pendingLevelUp`));
+      await sleep(100);
+    }
+    const broke2 = await waitBreak();
+    const lvl3 = await evaluate(`${play}.level`);
+    ok(pendingSeen.includes(true) && broke2 && lvl3 === 3, `a finish line crossed mid-fart defers the break to the fart's end (level ${lvl3})`);
+    await chrome('tap');
+    await sleep(300);
+    ok((await evaluate(`${play}.state === 'playing' && ${play}.diff.pipeSpeed === ${TT.pipeSpeed + 2 * TT.levels.speedStep}`)) === true, 'level 3 resumes one step faster again');
+    await evaluate(`${play}.graceLeftMs = 0, true`);
 
     const f2 = await frame();
     await sleep(500);

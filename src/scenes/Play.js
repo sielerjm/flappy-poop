@@ -1,4 +1,4 @@
-import { GAME_WIDTH, GAME_HEIGHT, TUNING as T } from '../config.js';
+import { GAME_WIDTH, GAME_HEIGHT, TUNING as T, LEVELS } from '../config.js';
 import {
   createRng,
   pipeGapY,
@@ -6,6 +6,7 @@ import {
   hasPassed,
   angleForVelocity,
   levelSpeed,
+  levelEnd,
   createBestStore,
   createSettingsStore,
   vibrate,
@@ -36,11 +37,12 @@ import {
   beanButtonLayout,
   beanButtonHit,
 } from '../logic.js';
-import { t, pauseBannerText, initialLocale, isLocale, profileButtonText } from '../i18n.js';
+import { t, pauseBannerText, levelBannerText, initialLocale, isLocale, profileButtonText } from '../i18n.js';
 import { loadLocal, saveLocal, ensureId, recordScore, isNewTop, topScores, TOILET_EMOJI } from '../save.js';
 import { unlock, attachGame, setMuted, isMuted, sfx } from '../sound.js';
 import { createTray } from '../ui/tray.js';
 import { createGlow, createRectGlow } from '../ui/glow.js';
+import { createFinishTexture } from '../ui/finish.js';
 import { createSubmitStore, submitPlan, submitScore } from '../leaderboard.js';
 import { createButton } from '../ui/button.js';
 import { createToggle } from '../ui/toggle.js';
@@ -76,6 +78,16 @@ export class Play extends Phaser.Scene {
     this.pipesPassed = 0;
     this.pipesSpawned = 0;
     this.diff = { pipeSpeed: levelSpeed(1, T), gapHeight: T.gapHeight };
+    // Finish line + break: the line spawns in the slot after a level's last pair;
+    // crossing it pauses the run (levelBreak) until a tap, or waits for the fart
+    // to end first (pendingLevelUp).
+    this.finishLine = null;
+    this.finishSpawned = false;
+    this.levelBreak = false;
+    this.pendingLevelUp = false;
+    this.breakBob = null;
+    this.breakGlide = null;
+    createFinishTexture(this, 'finish', { width: T.levels.finishWidthPx, height: GAME_HEIGHT, check: T.levels.finishCheckPx });
     this.state = 'ready'; // 'ready' | 'playing' | 'paused' | 'dead'
     this.flapLockedUntil = 0;
     this.effects = createEffects(T);
@@ -172,6 +184,17 @@ export class Play extends Phaser.Scene {
     this.refreshProfile();
 
     this.pauseShade = this.add.rectangle(GAME_WIDTH / 2, GAME_HEIGHT / 2, GAME_WIDTH, GAME_HEIGHT, 0x000000, 0.45).setDepth(25).setVisible(false);
+    // Level-break banner shares the shade with the pause banner; setPauseBanner picks one.
+    this.levelTitle = this.add
+      .text(GAME_WIDTH / 2, GAME_HEIGHT * 0.4, '', { ...TEXT_STYLE, fontSize: '52px', color: '#f8a0c8', wordWrap: { width: GAME_WIDTH - 64, useAdvancedWrap: true } })
+      .setOrigin(0.5)
+      .setDepth(26)
+      .setVisible(false);
+    this.levelHint = this.add
+      .text(GAME_WIDTH / 2, GAME_HEIGHT * 0.4 + 72, '', { ...TEXT_STYLE, fontSize: '36px' })
+      .setOrigin(0.5)
+      .setDepth(26)
+      .setVisible(false);
     const [pauseTitle, pauseHint] = pauseBannerText(this.locale).split('\n');
     this.pauseText = this.add
       .text(GAME_WIDTH / 2, GAME_HEIGHT * 0.40, pauseTitle, { ...TEXT_STYLE, fontSize: '52px' })
@@ -287,9 +310,74 @@ export class Play extends Phaser.Scene {
     this.level = 1;
     this.pipesPassed = 0;
     this.pipesSpawned = 0;
+    this.finishLine?.destroy();
+    this.finishLine = null;
+    this.finishSpawned = false;
+    this.levelBreak = false;
+    this.pendingLevelUp = false;
     this.applyLevel();
     this.distanceSinceSpawn = 0;
     this.spawnPipePair();
+  }
+
+  /** The checkered line one spacing after a level's last pair; crossing it ends the level. */
+  spawnFinishLine() {
+    const w = T.levels.finishWidthPx;
+    this.finishLine?.destroy();
+    this.finishLine = this.add.image(GAME_WIDTH + w / 2, 0, 'finish').setOrigin(0.5, 0).setDepth(4);
+    this.finishLine.setData('crossed', false);
+    this.finishSpawned = true;
+  }
+
+  /** The poop has cleared the finish line: next level, and a break (now, or when the fart ends). */
+  onFinishCrossed() {
+    this.level += 1;
+    sfx.levelUp();
+    if (this.effects.powerActive()) this.pendingLevelUp = true;
+    else this.startLevelBreak();
+  }
+
+  refreshLevelBanner() {
+    const [title, hint] = levelBannerText(this.locale, this.level, LEVELS).split('\n');
+    this.levelTitle?.setText(title);
+    this.levelHint?.setText(hint);
+  }
+
+  /** Between levels: a real pause with the level banner, the poop gliding to mid-height and bobbing. */
+  startLevelBreak() {
+    if (this.state !== 'playing') return;
+    this.levelBreak = true;
+    this.refreshLevelBanner();
+    this.pausePlay();
+    this.poop.setVelocity(0, 0);
+    this.poop.body.setAllowGravity(false);
+    this.breakGlide = this.tweens.add({
+      targets: this.poop,
+      y: GAME_HEIGHT / 2,
+      angle: 0,
+      duration: T.beans.centreMs,
+      ease: 'Sine.easeOut',
+      onComplete: () => {
+        if (!this.levelBreak) return;
+        this.breakBob = this.tweens.add({ targets: this.poop, y: '+=24', duration: 500, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+      },
+    });
+  }
+
+  /** The tap that ends the break: new level's speed, grace, and the first pair opening at mid-screen (the fart's landing). */
+  endLevelBreak() {
+    this.levelBreak = false;
+    this.breakGlide?.stop();
+    this.breakGlide = null;
+    this.breakBob?.stop();
+    this.breakBob = null;
+    this.finishSpawned = false;
+    this.poop.body.setAllowGravity(true);
+    this.poop.setVelocityY(0);
+    this.graceLeftMs = T.beans.graceMs;
+    this.centreNextGap = true;
+    this.distanceSinceSpawn = pipeSpacing(T);
+    this.applyLevel();
   }
 
   flap(pointer) {
@@ -409,6 +497,7 @@ export class Play extends Phaser.Scene {
     const [pauseTitle, pauseHint] = pauseBannerText(next).split('\n');
     this.pauseText?.setText(pauseTitle);
     this.pauseHint?.setText(pauseHint);
+    this.refreshLevelBanner();
   }
 
   chromeArgs(input) {
@@ -527,8 +616,11 @@ export class Play extends Phaser.Scene {
 
   setPauseBanner(visible) {
     this.pauseShade.setVisible(visible);
-    this.pauseText.setVisible(visible);
-    this.pauseHint.setVisible(visible);
+    const level = this.levelBreak;
+    this.pauseText.setVisible(visible && !level);
+    this.pauseHint.setVisible(visible && !level);
+    this.levelTitle.setVisible(visible && level);
+    this.levelHint.setVisible(visible && level);
   }
 
   pausePlay() {
@@ -544,6 +636,7 @@ export class Play extends Phaser.Scene {
 
   resumePlay() {
     if (this.state !== 'paused') return;
+    if (this.levelBreak) this.endLevelBreak();
     this.state = 'playing';
     this.physics.resume();
     if (this.stinkTimer) this.stinkTimer.paused = false;
@@ -792,6 +885,11 @@ export class Play extends Phaser.Scene {
     this.distanceSinceSpawn = pipeSpacing(T);
     this.applyScroll();
     if (this.effects.powerReady()) this.setCharged(true);
+    // A finish line crossed during the fart: the screen is clear now, so take the break.
+    if (this.pendingLevelUp) {
+      this.pendingLevelUp = false;
+      this.startLevelBreak();
+    }
   }
 
   refreshProbioticHud() {
@@ -903,7 +1001,24 @@ export class Play extends Phaser.Scene {
         this.distanceSinceSpawn += this.scrollSpeed() * dt;
         if (this.distanceSinceSpawn >= spacing) {
           this.distanceSinceSpawn -= spacing;
-          this.spawnPipePair();
+          if (this.pipesSpawned === levelEnd(this.level, T) && !this.finishSpawned) {
+            this.spawnFinishLine();
+          } else if (this.finishSpawned && !this.effects.powerActive()) {
+            this.distanceSinceSpawn = 0; // nothing follows the line until the break ends (a fart keeps going)
+          } else {
+            this.spawnPipePair();
+          }
+        }
+      }
+      if (this.finishLine) {
+        this.finishLine.x -= this.scrollSpeed() * dt;
+        if (!this.finishLine.getData('crossed') && hasPassed(this.finishLine.x, T.levels.finishWidthPx, this.poop.x)) {
+          this.finishLine.setData('crossed', true);
+          this.onFinishCrossed();
+        }
+        if (this.finishLine && this.finishLine.x < -T.levels.finishWidthPx) {
+          this.finishLine.destroy();
+          this.finishLine = null;
         }
       }
 

@@ -55,6 +55,15 @@ Short, playful, clear. Fit a 720×1280 logical field; How to play / About body w
 | howToPlay | How to play | 玩法说明 |
 | pauseTitle | PAUSED | 已暂停 |
 | pauseHint | tap anywhere to resume game | 点击任意处继续游戏 |
+| levelBanner | LEVEL {n} | 第 {n} 关 |
+| levelContinue | Tap to continue | 点击继续 |
+| level.stomach | Stomach | 胃 |
+| level.duodenum | Duodenum | 十二指肠 |
+| level.jejunum | Jejunum | 空肠 |
+| level.ileum | Ileum | 回肠 |
+| level.caecum | Caecum | 盲肠 |
+| level.colon | Colon | 结肠 |
+| level.rectum | Rectum | 直肠 |
 | gameOver | GAME OVER | 游戏结束 |
 | scoreLabel | SCORE | 得分 |
 | bestLabel | BEST | 最高 |

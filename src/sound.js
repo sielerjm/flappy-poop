@@ -238,6 +238,10 @@ export const sfx = {
   die: () => blip({ freq: 300, to: 60, type: 'sawtooth', duration: 0.35, gain: 0.12 }),
   pickup: () => blip({ freq: 660, to: 1320, type: 'triangle', duration: 0.1, gain: 0.1 }),
   shield: () => noiseSquelch({ duration: 0.14, gain: 0.1 }),
+  levelUp: () => {
+    blip({ freq: 660, to: 990, type: 'triangle', duration: 0.16, gain: 0.1 });
+    blip({ freq: 990, to: 1480, type: 'triangle', duration: 0.22, gain: 0.08 });
+  },
   hazard: () => {
     blip({ freq: 90, to: 50, type: 'square', duration: 0.08, gain: 0.12 });
     blip({ freq: 70, to: 40, type: 'square', duration: 0.1, gain: 0.1 });

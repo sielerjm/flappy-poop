@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { TUNING as T, LEVELS, BACKGROUND, GAME_HEIGHT } from '../src/config.js';
+import { levelBannerText, LOCALES } from '../src/i18n.js';
 import { levelPipes, levelEnd, levelFor, levelSpeed, levelName, levelColor, levelProgress, lerpColor, pipeSpacing, gapBounds } from '../src/logic.js';
 
 const L = T.levels;
@@ -92,4 +93,17 @@ test('the fixed gap still fits the poop with room, and the fart grace clears a p
   const b = gapBounds({ gameHeight: GAME_HEIGHT, groundHeight: T.groundHeight, gapHeight: T.gapHeight, gapMargin: T.gapMargin });
   assert.ok(b.maxY > b.minY, 'a gap can be placed');
   assert.ok((T.beans.graceMs * T.pipeSpeed) / 1000 >= T.pipeWidth + T.poopRadius, 'grace clears a pipe column');
+});
+
+test('levelBannerText names the segment while there is one and drops it past the list, in both locales', () => {
+  assert.equal(levelBannerText('en', 2, LEVELS), 'LEVEL 2 · Duodenum\nTap to continue');
+  assert.equal(levelBannerText('zh-Hans', 3, LEVELS), '第 3 关 · 空肠\n点击继续');
+  assert.equal(levelBannerText('en', 8, LEVELS), 'LEVEL 8\nTap to continue');
+  for (const locale of LOCALES) {
+    for (let n = 1; n <= 9; n += 1) {
+      const [title, hint] = levelBannerText(locale, n, LEVELS).split('\n');
+      assert.ok(title.includes(String(n)) && hint.length > 0, `${locale} level ${n}`);
+      assert.ok(!title.includes('{'), 'placeholder filled');
+    }
+  }
 });

@@ -12,6 +12,15 @@ const STRINGS = {
     howToPlay: 'How to play',
     pauseTitle: 'PAUSED',
     pauseHint: 'tap anywhere to resume game',
+    levelBanner: 'LEVEL {n}',
+    levelContinue: 'Tap to continue',
+    'level.stomach': 'Stomach',
+    'level.duodenum': 'Duodenum',
+    'level.jejunum': 'Jejunum',
+    'level.ileum': 'Ileum',
+    'level.caecum': 'Caecum',
+    'level.colon': 'Colon',
+    'level.rectum': 'Rectum',
     gameOver: 'GAME OVER',
     scoreLabel: 'SCORE',
     bestLabel: 'BEST',
@@ -96,6 +105,15 @@ Inspired by Flappy Bird`,
     howToPlay: '玩法说明',
     pauseTitle: '已暂停',
     pauseHint: '点击任意处继续游戏',
+    levelBanner: '第 {n} 关',
+    levelContinue: '点击继续',
+    'level.stomach': '胃',
+    'level.duodenum': '十二指肠',
+    'level.jejunum': '空肠',
+    'level.ileum': '回肠',
+    'level.caecum': '盲肠',
+    'level.colon': '结肠',
+    'level.rectum': '直肠',
     gameOver: '游戏结束',
     scoreLabel: '得分',
     bestLabel: '最高',
@@ -209,6 +227,17 @@ export function howToItems(locale) {
     { key: 'bean', name: t(locale, 'itemBeanName'), detail: t(locale, 'itemBeanDetail') },
     { key: 'toilet', name: t(locale, 'itemToiletName'), detail: t(locale, 'itemToiletDetail') },
   ];
+}
+
+/**
+ * Level-break banner as two lines: "LEVEL 2 · Jejunum" (the segment name is
+ * omitted past the named list) and "Tap to continue".
+ */
+export function levelBannerText(locale, level, levels) {
+  const key = levels?.[level - 1]?.key;
+  const title = t(locale, 'levelBanner').replace('{n}', String(level));
+  const name = key ? t(locale, `level.${key}`) : '';
+  return `${name ? `${title} · ${name}` : title}\n${t(locale, 'levelContinue')}`;
 }
 
 /** Pause banner as two lines joined by newline (Play splits for sizing). */
