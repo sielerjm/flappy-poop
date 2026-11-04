@@ -28,6 +28,7 @@ import {
   poopTapHit,
   fartPeakMul,
   fartMul,
+  fartFloat,
   fartRemainingDistance,
   pipeClearDistance,
   beanButtonLayout,
@@ -505,7 +506,6 @@ export class Play extends Phaser.Scene {
     if (this.stinkTimer) this.stinkTimer.paused = true;
     this.fartSound?.pause();
     this.fartTween?.pause();
-    this.centreTween?.pause();
     this.bob.pause();
     this.setPauseBanner(true);
   }
@@ -517,7 +517,6 @@ export class Play extends Phaser.Scene {
     if (this.stinkTimer) this.stinkTimer.paused = false;
     this.fartSound?.resume();
     this.fartTween?.resume();
-    this.centreTween?.resume();
     this.bob.resume();
     this.setPauseBanner(false);
     // Recovery bounce on the resume tap. Do not set flapLockedUntil: chrome
@@ -699,10 +698,11 @@ export class Play extends Phaser.Scene {
     }
     this.setPoopTexture('poop-fart');
     this.fartTween = this.tweens.add({ targets: this.poop, alpha: 0.5, yoyo: true, repeat: -1, duration: T.beans.fartAlphaMs });
-    // Float through the middle: no gravity, no flaps, glide to mid-height.
+    // Float through the middle: no gravity, no flaps; update() drives y and the
+    // tilt from fartFloat() (glide to mid-height, then the undulating wave).
     this.poop.body.setAllowGravity(false);
     this.poop.setVelocity(0, 0);
-    this.centreTween = this.tweens.add({ targets: this.poop, y: GAME_HEIGHT / 2, duration: T.beans.centreMs, ease: 'Sine.easeOut' });
+    this.fartStartY = this.poop.y;
     this.refreshBeanHud();
   }
 
@@ -722,8 +722,6 @@ export class Play extends Phaser.Scene {
   endPower() {
     this.fartTween?.stop();
     this.fartTween = null;
-    this.centreTween?.stop();
-    this.centreTween = null;
     this.poop.setAlpha(1);
     this.scrollMul = 1;
     this.setPoopTexture('poop');
@@ -834,6 +832,9 @@ export class Play extends Phaser.Scene {
       if (this.effects.powerActive()) {
         this.scrollMul = fartMul(this.effects.powerElapsed(), this.fartDurationMs, this.fartPeak);
         this.applyScroll();
+        const float = fartFloat(this.effects.powerElapsed(), this.fartStartY, GAME_HEIGHT / 2, T);
+        this.poop.y = float.y;
+        this.poop.setAngle(float.angle);
       }
       if (this.effects.endedPower()) this.endPower();
       if (this.graceLeftMs > 0) this.graceLeftMs = Math.max(0, this.graceLeftMs - delta);
@@ -848,7 +849,7 @@ export class Play extends Phaser.Scene {
         }
       }
 
-      this.poop.setAngle(angleForVelocity(this.poop.body.velocity.y, T));
+      if (!this.effects.powerActive()) this.poop.setAngle(angleForVelocity(this.poop.body.velocity.y, T));
       const top = T.poopRadius;
       const floor = GAME_HEIGHT - T.groundHeight - T.poopRadius;
       if (this.poop.y < top || this.poop.y > floor) {

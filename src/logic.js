@@ -380,6 +380,25 @@ export function fartPeakMul(durationMs, pipes, spawnEveryMs) {
   return 1 + ((avg - 1) * Math.PI) / 2;
 }
 
+/**
+ * Where the floating poop is and how it tilts, elapsedMs into the fart: it
+ * glides from startY to centreY over centreMs (ease-out), and rides a sine
+ * wave of waveAmplitudePx / wavePeriodMs around that line, fading the wave in
+ * over the same glide. Screen y grows downward, so the tilt is +waveTiltDeg
+ * (nose down) while falling and −waveTiltDeg (nose up) while rising.
+ */
+export function fartFloat(elapsedMs, startY, centreY, t) {
+  const b = t.beans;
+  const e = Math.max(0, elapsedMs);
+  const r = b.centreMs > 0 ? Math.min(1, e / b.centreMs) : 1;
+  const ease = 1 - (1 - r) * (1 - r);
+  const phase = (2 * Math.PI * e) / b.wavePeriodMs;
+  return {
+    y: startY + (centreY - startY) * ease + b.waveAmplitudePx * r * Math.sin(phase),
+    angle: b.waveTiltDeg * r * Math.cos(phase),
+  };
+}
+
 /** Scroll multiplier at elapsedMs: 1 at the ends, `peak` mid-clip, 1 outside the clip. */
 export function fartMul(elapsedMs, durationMs, peak) {
   if (!(durationMs > 0) || elapsedMs <= 0 || elapsedMs >= durationMs) return 1;

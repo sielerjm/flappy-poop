@@ -75,6 +75,9 @@ export const TUNING = {
     glowPulseMs: 600, // ms per glow pulse (one way)
     fartAlphaMs: 250, // ms per opacity swing (1 → 0.5) while farting
     centreMs: 300, // ms the poop takes to float to mid-height when the fart starts (gravity off, flaps ignored until it ends)
+    waveAmplitudePx: 60, // px the floating poop rises and falls around mid-height while farting
+    wavePeriodMs: 1200, // ms for one full rise-and-fall of the float wave
+    waveTiltDeg: 15, // degrees the floating poop tilts: nose up (−) while rising, nose down (+) while falling
     endClearMarginPx: 64, // px of extra scroll kept in hand so the last pipe is fully behind the poop when the fart ends
     beanRadius: 48, // px circular hitbox = half the 96 logical-px sprite
   },
