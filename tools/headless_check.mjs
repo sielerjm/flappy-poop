@@ -390,6 +390,14 @@ export async function run(url = DEFAULT_URL) {
     const expected = ['probiotic', 'bacteria', 'fiber', 'bean'].map((k) => `×${over.collected[k]}`);
     ok(over.dead && over.active && JSON.stringify(over.counts) === JSON.stringify(expected), `game over shows the run summary ${expected.join(' ')}`);
 
+    // A game over must not change how later pipes are drawn: restart, start, spawn, check the frame.
+    await evaluate(`__flappy.scene.stop('Over'), ${play}.scene.restart(), true`);
+    for (let i = 0; i < 40 && (await playState()) !== 'ready'; i += 1) await sleep(250);
+    await evaluate(`${play}.flap(), true`);
+    await sleep(1100);
+    const pipeFrames = await evaluate(`(${play}.spawnPipePair(), JSON.stringify({ first: __flappy.textures.get('pipe').firstFrame, frames: ${play}.pipes.getChildren().map((c) => [c.frame.name, c.frame.height]) }))`).then(JSON.parse);
+    ok(pipeFrames.frames.length >= 2 && pipeFrames.frames.every(([n, h]) => n === '__BASE' && h === 1280), `after a game over, new pipes still use the full 128x1280 texture (default frame "${pipeFrames.first}")`);
+
     const f2 = await frame();
     await sleep(500);
     ok((await frame()) > f2, 'game loop still advancing at the end');

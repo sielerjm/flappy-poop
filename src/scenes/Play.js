@@ -752,12 +752,13 @@ export class Play extends Phaser.Scene {
     // Top pipe hangs down: cap must face the gap, so flip the sprite and anchor its bottom.
     const gapTop = gapY - gapH / 2;
     const gapBot = gapY + gapH / 2;
-    const top = this.pipes.create(x, gapTop, 'pipe');
+    // '__BASE': the whole 128x1280 texture, never whatever frame another scene added to 'pipe'.
+    const top = this.pipes.create(x, gapTop, 'pipe', '__BASE');
     top.setOrigin(0.5, 1).setFlipY(true);
     // Stretch if needed so the column always reaches the ceiling (stale short textures too).
     top.setDisplaySize(T.pipeWidth, Math.max(top.frame.height, gapTop + 4));
     // Bottom pipe stands up from the gap: cap already at the top of the image.
-    const bottom = this.pipes.create(x, gapBot, 'pipe');
+    const bottom = this.pipes.create(x, gapBot, 'pipe', '__BASE');
     bottom.setOrigin(0.5, 0);
     bottom.setDisplaySize(T.pipeWidth, Math.max(bottom.frame.height, GAME_HEIGHT - gapBot + 4));
 
