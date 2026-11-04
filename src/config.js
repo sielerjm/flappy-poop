@@ -38,7 +38,7 @@ export const TUNING = {
   readyPromptMaxAlpha: 1, // 0–1 halo pulse ceiling
   savePanelCloseMs: 600, // ms "Username saved" stays up before the panel closes itself (Enter-username flow only)
   launchSlideMs: 700, // ms the poop slides from its ready spot to poopX on the start tap
-  readyPoopScale: 1.33, // × spriteDisplayScale for the speech-bubble poop on the ready screen (shrinks back during the slide)
+  readyPoopScale: 1.5, // × spriteDisplayScale for the speech-bubble poop on the ready screen (shrinks back during the slide)
   toiletOffColor: 0x6a6a6a, // toggle track when off (grey)
   toiletOnColor: 0x8b5a2b, // toggle track when on (brown)
   toiletOffAlpha: 0.33, // 0–1 alpha of the 🚽 while the toggle is off

@@ -78,7 +78,8 @@ src/
                             lockout, levels (levelPipes, levelEnd, levelFor,
                             levelSpeed, levelName, levelColor, levelProgress,
                             levelBarLayout, lerpColor),
-                            best-score store, settings store (incl. locale), vibrate
+                            best-score store, settings store (incl. locale and
+                            howToSeenAt) + howToPromptDue, vibrate
                             helper, trayLayout, trayHit, readyLayout, readyHit
                             (howToLayout / howToHit wrap them),
                             LAST_UPDATED, issueUrl, openExternalUrl, chromeIntent,
@@ -164,9 +165,12 @@ src/
                             from i18n. Locale via getLocale / applyLocale. Holds the
                             SaveState (loadLocal on create, seeded once from the
                             legacy best); die() records the score and passes newTop
-                            to Over. Ready screen (readyLayout: title, poop spot
-                            wearing poop-speech.png's "TAP TO FLAP!" bubble, then
-                            toilet toggle / How to play / Save / Load User /
+                            to Over. Ready screen (readyLayout: a round "?" in the
+                            top-right (howto; under a pulsing createGlow halo while
+                            howToPromptDue(settings, LAST_UPDATED), i.e. until this
+                            build is acknowledged by opening How to play or dying),
+                            title, poop spot wearing poop-speech.png's "TAP TO
+                            FLAP!" bubble, toilet toggle / Save / Load User /
                             profileButtonText() button: "Enter username" (white,
                             under a pulsing createRectGlow halo, opens the save
                             panel on the name field) until a name is set, then

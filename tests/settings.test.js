@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { createSettingsStore, vibrate } from '../src/logic.js';
 import { initialLocale } from '../src/i18n.js';
 
-const DEFAULTS = { sound: true, music: true, haptics: true, locale: 'en' };
+const DEFAULTS = { sound: true, music: true, haptics: true, locale: 'en', howToSeenAt: '' };
 
 function fakeStorage() {
   const m = new Map();
@@ -37,8 +37,8 @@ test('set merges a patch, persists, and a new store reads it back', () => {
   const st = fakeStorage();
   const s = createSettingsStore(st, 'k');
   assert.deepEqual(s.set({ sound: false }), { ...DEFAULTS, sound: false });
-  assert.deepEqual(s.set({ haptics: false }), { sound: false, music: true, haptics: false, locale: 'en' });
-  assert.deepEqual(createSettingsStore(st, 'k').load(), { sound: false, music: true, haptics: false, locale: 'en' });
+  assert.deepEqual(s.set({ haptics: false }), { sound: false, music: true, haptics: false, locale: 'en', howToSeenAt: '' });
+  assert.deepEqual(createSettingsStore(st, 'k').load(), { sound: false, music: true, haptics: false, locale: 'en', howToSeenAt: '' });
 });
 
 test('set ignores unknown patch keys and non-boolean values', () => {
@@ -80,4 +80,14 @@ test('vibrate no-ops and returns false without a vibrate API', () => {
 test('vibrate returns false when the API throws', () => {
   const nav = { vibrate() { throw new Error('denied'); } };
   assert.equal(vibrate(nav, 60), false);
+});
+
+test('howToSeenAt keeps a string stamp, drops anything else, and persists', () => {
+  const st = fakeStorage();
+  const s = createSettingsStore(st, 'k');
+  assert.deepEqual(s.set({ howToSeenAt: '4 Nov 2026, 10:00' }), { ...DEFAULTS, howToSeenAt: '4 Nov 2026, 10:00' });
+  assert.equal(createSettingsStore(st, 'k').load().howToSeenAt, '4 Nov 2026, 10:00');
+  assert.equal(s.set({ howToSeenAt: 42 }).howToSeenAt, '', 'non-string reads as never');
+  st.setItem('k', JSON.stringify({ sound: true, howToSeenAt: { a: 1 } }));
+  assert.equal(createSettingsStore(st, 'k').load().howToSeenAt, '');
 });

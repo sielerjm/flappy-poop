@@ -52,12 +52,13 @@ test('HOW_TO_ITEMS names fiber, probiotic, and bacteria with their effects', () 
   assert.match(zh.map((i) => i.name).join(' '), /豆子/);
 });
 
-test('howToLayout is at least 44 px tall, under the title, and inside the field', () => {
+test('howToLayout is a thumb-sized circle in the top-right corner, inside the field', () => {
   const box = howToLayout(GAME_WIDTH, GAME_HEIGHT, T);
   assert.equal(box.id, 'howto');
   assert.ok(box.height >= 44);
   assert.ok(box.width >= 44);
-  assert.ok(box.y > GAME_HEIGHT * 0.3, 'should sit under the title');
+  assert.equal(box.round, true);
+  assert.ok(box.y < GAME_HEIGHT * 0.15 && box.x > GAME_WIDTH * 0.8, 'top-right corner');
   assert.ok(box.x - box.width / 2 >= 0);
   assert.ok(box.x + box.width / 2 <= GAME_WIDTH);
   assert.ok(box.y - box.height / 2 >= 0);

@@ -40,6 +40,8 @@ import {
   pipeClearDistance,
   beanButtonLayout,
   beanButtonHit,
+  howToPromptDue,
+  LAST_UPDATED,
 } from '../logic.js';
 import { t, pauseBannerText, levelBannerText, levelLabel, initialLocale, isLocale, profileButtonText } from '../i18n.js';
 import { loadLocal, saveLocal, ensureId, recordScore, isNewTop, topScores, TOILET_EMOJI } from '../save.js';
@@ -157,7 +159,7 @@ export class Play extends Phaser.Scene {
     this.bob = this.tweens.add({ targets: this.poop, y: '+=24', duration: 500, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
 
     // HUD
-    this.scoreText = this.add.text(GAME_WIDTH / 2, T.hudScoreY, '0', { ...TEXT_STYLE, fontSize: '80px' }).setOrigin(0.5).setDepth(20);
+    this.scoreText = this.add.text(GAME_WIDTH / 2, T.hudScoreY, '0', { ...TEXT_STYLE, fontSize: '80px' }).setOrigin(0.5).setDepth(20).setVisible(false); // shown from start()
     // Level progress bar above the score: hidden on the ready screen, shown from start(), kept through breaks and death.
     this.levelBar = createLevelBar(this, levelBarLayout(T, GAME_WIDTH)).setVisible(false);
     this.refreshLevelBar();
@@ -177,7 +179,18 @@ export class Play extends Phaser.Scene {
       .setOrigin(0.5)
       .setDepth(20);
     this.toiletToggle = createToggle(this, this.readyBoxes.toilet, { on: this.toilet });
-    this.howToBtn = createButton(this, this.readyBoxes.howto, t(this.locale, 'howToPlay'), { ...TEXT_STYLE, fontSize: '40px', color: '#f8a0c8' });
+    // "?" in the top-right corner opens How to play. It pulses under a soft white
+    // halo until the player acknowledges this build (opens it, or finishes a run).
+    {
+      const b = this.readyBoxes.howto;
+      this.howToHalo = createGlow(this, b.x, b.y, { radius: T.beans.glowRadiusPx, fadeFrac: T.beans.glowFadeFrac })
+        .setDepth(19)
+        .setScale((b.width / 2 + T.readyPromptGlowPx) / T.beans.glowRadiusPx)
+        .setAlpha(T.readyPromptMinAlpha)
+        .setVisible(this.isHowToPromptDue());
+      this.howToHaloTween = this.tweens.add({ targets: this.howToHalo, alpha: T.readyPromptMaxAlpha, yoyo: true, repeat: -1, duration: T.readyPromptPulseMs });
+    }
+    this.howToBtn = createButton(this, this.readyBoxes.howto, '?', { ...TEXT_STYLE, fontSize: '52px', color: '#f8a0c8' });
     this.saveLoadBtn = createButton(this, this.readyBoxes.saveLoad, t(this.locale, 'saveLoadButton'), {
       ...TEXT_STYLE,
       fontSize: '36px',
@@ -309,6 +322,7 @@ export class Play extends Phaser.Scene {
     this.readyTitle.setVisible(visible);
     this.toiletToggle.setVisible(visible);
     this.howToBtn.setVisible(visible);
+    this.howToHalo.setVisible(visible && this.isHowToPromptDue());
     this.saveLoadBtn.setVisible(visible);
     this.profileBtn.setVisible(visible);
     this.profileHalo.setVisible(visible && !this.save?.name);
@@ -317,6 +331,7 @@ export class Play extends Phaser.Scene {
   start() {
     this.state = 'playing';
     this.bob.stop();
+    this.scoreText.setVisible(true);
     this.toiletHud.setVisible(this.toilet);
     this.poop.body.setAllowGravity(true);
     this.poop.body.setGravityY(T.gravity);
@@ -523,6 +538,18 @@ export class Play extends Phaser.Scene {
     }
   }
 
+  /** Does the ? still pulse on this build? */
+  isHowToPromptDue() {
+    return howToPromptDue(this.settings.load(), LAST_UPDATED);
+  }
+
+  /** The player opened How to play or finished a run: no more pulsing until the next build. */
+  markHowToSeen() {
+    if (!this.isHowToPromptDue()) return;
+    this.settings.set({ howToSeenAt: LAST_UPDATED });
+    this.howToHalo?.setVisible(false);
+  }
+
   openSavePanel(opts = {}) {
     openSavePanel({ game: this.game, play: this, locale: this.locale, ...opts });
   }
@@ -537,7 +564,6 @@ export class Play extends Phaser.Scene {
     if (!isLocale(next)) return;
     this.locale = next;
     this.readyTitle?.setText(t(next, 'readyTitle'));
-    this.howToBtn?.setText(t(next, 'howToPlay'));
     this.saveLoadBtn?.setText(t(next, 'saveLoadButton'));
     this.refreshProfile(); // the enter-username prompt is localised too
     const [pauseTitle, pauseHint] = pauseBannerText(next).split('\n');
@@ -606,6 +632,7 @@ export class Play extends Phaser.Scene {
         this.scene.bringToTop('About');
         break;
       case 'openHowTo':
+        this.markHowToSeen();
         if (result.pause) this.pausePlay();
         if (!this.scene.isActive('HowTo')) this.scene.launch('HowTo');
         this.scene.bringToTop('HowTo');
@@ -982,6 +1009,7 @@ export class Play extends Phaser.Scene {
     // Farting (or just finished and still clearing the pipe) cannot die.
     if (this.effects.powerActive() || this.graceLeftMs > 0) return;
     this.state = 'dead';
+    this.markHowToSeen(); // a finished run counts as having seen this build
     this.setCharged(false);
     this.setPoopTexture('poop-dead');
     for (const pipe of this.pipes.getChildren()) pipe.setVelocityX(0);

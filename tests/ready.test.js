@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { GAME_WIDTH, GAME_HEIGHT, TUNING as T } from '../src/config.js';
-import { readyLayout, readyHit, howToLayout, fitScale, rectGlowSize } from '../src/logic.js';
+import { readyLayout, readyHit, howToLayout, fitScale, rectGlowSize, howToPromptDue } from '../src/logic.js';
 
 const layout = readyLayout(GAME_WIDTH, GAME_HEIGHT, T);
 const boxes = [layout.toilet, layout.howto, layout.saveLoad, layout.profile];
@@ -28,27 +28,32 @@ test('ready boxes have ids, are inside the field, and the tappable ones are at l
   }
   for (const b of [layout.howto, layout.saveLoad]) assert.ok(b.height >= T.trayHitMin, `${b.id} tall enough`);
   assert.ok(layout.profile.height >= 64, 'profile is a button now');
-  // Equal heights and equal gaps for the three stacked buttons.
-  assert.equal(layout.howto.height, layout.saveLoad.height);
+  // The "?" is a thumb-sized circle in the top-right corner.
+  assert.equal(layout.howto.round, true);
+  assert.equal(layout.howto.width, layout.howto.height);
+  assert.ok(layout.howto.x + layout.howto.width / 2 <= GAME_WIDTH - 8 && layout.howto.x > GAME_WIDTH * 0.8, 'hugs the right edge');
+  assert.ok(layout.howto.y - layout.howto.height / 2 >= 8 && layout.howto.y < 160, 'near the top');
+  // Equal heights and a small gap for the two stacked buttons, which keep their old positions.
   assert.equal(layout.saveLoad.height, layout.profile.height);
-  const g1 = edges(layout.saveLoad).top - edges(layout.howto).bottom;
   const g2 = edges(layout.profile).top - edges(layout.saveLoad).bottom;
-  assert.equal(g1, g2, `gaps differ: ${g1} vs ${g2}`);
-  assert.ok(g1 >= 8 && g1 <= 24, `gap ${g1}`);
+  assert.ok(g2 >= 8 && g2 <= 24, `gap ${g2}`);
+  assert.equal(layout.saveLoad.y, 967, 'Save / Load User did not move');
+  assert.equal(layout.profile.y, 1067, 'the username button did not move');
   assert.ok(layout.toilet.height >= 64, 'toggle hit box is thumb-sized');
   const tr = layout.toilet.track;
   assert.ok(tr.x - tr.width / 2 >= layout.toilet.x - layout.toilet.width / 2, 'track inside the toggle box');
   assert.ok(layout.toilet.emojiX + 24 <= layout.toilet.x + layout.toilet.width / 2, 'emoji inside the toggle box');
 });
 
-test('ready boxes do not overlap and stack title, poop, toilet, howto, saveLoad, profile', () => {
+test('ready boxes do not overlap; the ? sits above the title and the rest stack title, poop, toilet, saveLoad, profile', () => {
   for (let i = 0; i < boxes.length; i += 1) {
     for (let j = i + 1; j < boxes.length; j += 1) {
       assert.equal(overlaps(edges(boxes[i]), edges(boxes[j])), false, `${boxes[i].id} vs ${boxes[j].id}`);
     }
   }
-  const ys = [layout.title.y, layout.poop.y, layout.toilet.y, layout.howto.y, layout.saveLoad.y, layout.profile.y];
+  const ys = [layout.title.y, layout.poop.y, layout.toilet.y, layout.saveLoad.y, layout.profile.y];
   for (let i = 1; i < ys.length; i += 1) assert.ok(ys[i] > ys[i - 1], `order at index ${i}`);
+  assert.ok(layout.howto.y < layout.title.y, 'the ? is above the title');
   assert.equal(layout.title.x, GAME_WIDTH / 2);
   assert.equal(layout.poop.x, GAME_WIDTH / 2);
   assert.ok(layout.title.y > 120, 'title clears the score HUD');
@@ -60,13 +65,11 @@ test('every ready box keeps clear of the bobbing poop at its ready spot', () => 
   }
   assert.ok(POOP.top > layout.title.y + 26, 'speech bubble clears the title');
   assert.ok(POOP.right <= GAME_WIDTH, 'bubble stays inside the field');
-  // How to play hangs a short, fixed gap below the toggle (halved from the old centred layout), with more room above the poop block than below it.
-  const blockTop = POOP.top;
+  // The title / poop / toggle block sits lower now, with clear air to Save / Load User below it.
   const blockBottom = layout.toilet.y + layout.toilet.height / 2;
-  const above = blockTop - (layout.title.y + 26);
-  const below = layout.howto.y - layout.howto.height / 2 - blockBottom;
-  assert.ok(below >= 28 && below <= 44, `toggle → How to play gap ${below}`);
-  assert.ok(above >= below, 'the poop block keeps more air above than below');
+  const below = edges(layout.saveLoad).top - blockBottom;
+  assert.ok(below >= 60 && below <= 120, `toggle → Save / Load User gap ${below}`);
+  assert.ok(POOP.top > layout.howto.y + layout.howto.height / 2, 'the bubble stays below the ? row');
   // The profile button (and its 40 px prompt halo) stays clear of the ground strip and the tray band.
   const profileBottom = layout.profile.y + layout.profile.height / 2;
   assert.ok(profileBottom + T.readyPromptGlowPx <= GAME_HEIGHT - T.groundHeight, 'profile and its halo clear the ground strip');
@@ -79,7 +82,7 @@ test('readyHit resolves each box at its centre, including the always-present pro
   }
   assert.equal(readyHit(layout.toilet.emojiX, layout.toilet.y, layout), 'toilet', 'tapping the emoji toggles too');
   assert.equal(readyHit(layout.profile.x, layout.profile.y, layout), 'profile', 'the profile button is always a button (it prompts for a name when there is none)');
-  const gapY = (edges(layout.toilet).bottom + edges(layout.howto).top) / 2;
+  const gapY = (edges(layout.toilet).bottom + edges(layout.saveLoad).top) / 2;
   assert.equal(readyHit(GAME_WIDTH / 2, gapY, layout), null);
   assert.equal(readyHit(layout.poop.x + 80, layout.poop.y - 90, layout), null, 'tapping the bubble just starts the run');
   assert.equal(readyHit(layout.poop.x, layout.poop.y, layout), null, 'poop spot is not a button');
@@ -110,4 +113,12 @@ test('rectGlowSize adds the halo pad on every side and never shrinks', () => {
   assert.ok(T.readyPromptMinAlpha > 0 && T.readyPromptMinAlpha < T.readyPromptMaxAlpha && T.readyPromptMaxAlpha <= 1, 'pulse alphas');
   assert.ok(T.readyPromptPulseMs >= 300 && T.readyPromptPulseMs <= 3000, `readyPromptPulseMs ${T.readyPromptPulseMs}`);
   assert.ok(T.savePanelCloseMs >= 200 && T.savePanelCloseMs <= 2000, `savePanelCloseMs ${T.savePanelCloseMs}`);
+});
+
+test('howToPromptDue pulses until this build is acknowledged and returns on a new build', () => {
+  assert.equal(howToPromptDue({ howToSeenAt: '' }, '4 Nov 2026, 10:00'), true, 'never acknowledged');
+  assert.equal(howToPromptDue({ howToSeenAt: '3 Nov 2026, 21:40' }, '4 Nov 2026, 10:00'), true, 'older build acknowledged, this one not');
+  assert.equal(howToPromptDue({ howToSeenAt: '4 Nov 2026, 10:00' }, '4 Nov 2026, 10:00'), false, 'acknowledged this build');
+  assert.equal(howToPromptDue(null, 'x'), true);
+  assert.equal(howToPromptDue({}, 'x'), true);
 });

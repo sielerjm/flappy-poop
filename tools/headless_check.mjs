@@ -155,6 +155,16 @@ export async function run(url = DEFAULT_URL) {
     const chrome = (input) => evaluate(`__flappy.scene.getScene('Play').handleChrome('${input}'), true`);
     const closeTop = (key) => evaluate(`__flappy.scene.getScene('${key}').close(), true`);
 
+    // Home screen: no score shown; the ? pulses on a build this profile has not acknowledged.
+    {
+      const play = `__flappy.scene.getScene('Play')`;
+      const h1 = await evaluate(`${play}.howToHalo.alpha`);
+      await sleep(300);
+      const h2 = await evaluate(`${play}.howToHalo.alpha`);
+      const home = await evaluate(`JSON.stringify({ score: ${play}.scoreText.visible, halo: ${play}.howToHalo.visible, due: ${play}.isHowToPromptDue(), round: ${play}.readyBoxes.howto.round })`).then(JSON.parse);
+      ok(!home.score && home.halo && home.due && home.round && h1 !== h2, `home screen hides the score; the ? pulses on a fresh profile (alpha ${h1.toFixed(2)} → ${h2.toFixed(2)})`);
+    }
+
     // Onboarding: a fresh profile has no username, so the profile button prompts for one
     // under a pulsing halo; tapping it opens the save panel on the name field; Save
     // stores the name and closes the panel by itself.
@@ -195,10 +205,16 @@ export async function run(url = DEFAULT_URL) {
       if (key === 'HowTo') await sleep(200);
     }
 
+    // The overlay loop above opened How to play once: that acknowledges this build.
+    {
+      const play = `__flappy.scene.getScene('Play')`;
+      const seen = await evaluate(`import('./src/logic.js').then((m) => JSON.stringify({ halo: ${play}.howToHalo.visible, due: ${play}.isHowToPromptDue(), stamp: ${play}.settings.load().howToSeenAt === m.LAST_UPDATED }))`).then(JSON.parse);
+      ok(!seen.halo && !seen.due && seen.stamp, 'opening How to play stops the ? pulse and stamps this build');
+    }
     // A run: tap starts it; opening the board mid-run pauses; closing leaves it paused.
     await evaluate(`__flappy.scene.getScene('Play').flap(), true`);
     await sleep(1000);
-    ok((await playState()) === 'playing', 'tap on the ready screen starts a run');
+    ok((await playState()) === 'playing' && (await evaluate(`__flappy.scene.getScene('Play').scoreText.visible && !__flappy.scene.getScene('Play').howToHalo.visible`)) === true, 'tap on the ready screen starts a run; the score appears and the ? is gone');
     await chrome('leaderboard');
     await sleep(3000);
     ok((await playState()) === 'paused' && (await active('Leaderboard')), 'leaderboard mid-run pauses the run');
