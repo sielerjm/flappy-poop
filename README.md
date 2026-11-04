@@ -119,7 +119,7 @@ tests/                  node --test: html assets logic state levels store smoke
 
 ## Tuning
 
-Everything that affects feel lives in `TUNING` in `src/config.js`: gravity, flap impulse, level-1 pipe speed, fixed pipe spacing, gap height, death/retry timings, tray size/alpha, fart volume, the `items` block (`startScore`, `hazardStartScore`, `chancePerGap`, `fiberPoints`, `bacteriaPenalty`, `probioticPipes`, `itemRadius`, weights), the `beans` block, and the `levels` block (`firstPipes`, `pipesStep`, `speedStep`, `maxSpeed`, finish-line and progress-bar sizes and colours, crossfade time). Level names are the `LEVELS` list next to it, background colours `LEVEL_COLORS` (ColorBrewer Set2, cycling past the end), overlay layers `BACKGROUND.layers`. Change a number, reload.
+Everything that affects feel lives in `TUNING` in `src/config.js`: gravity, flap impulse, level-1 pipe speed, fixed pipe spacing, gap height, death/retry timings, tray size/alpha, fart volume, the `items` block (`startScore`, `hazardStartScore`, `chancePerGap`, `fiberPoints`, `bacteriaPenalty`, `probioticPipes`, `itemRadius`, weights), the `beans` block, and the `levels` block (`firstPipes`, `pipesStep`, `speedStep`, `maxSpeed`, finish-line and progress-bar sizes and colours, crossfade time). Level names are the `LEVELS` list next to it, background colours `LEVEL_COLORS` (ColorBrewer Set2, tan first, cycling past the end), overlay layers `BACKGROUND.layers`. Change a number, reload.
 
 ## Leaderboard
 

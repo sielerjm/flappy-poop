@@ -118,11 +118,11 @@ export const LEVELS = [{ key: 'stomach' }, { key: 'duodenum' }, { key: 'jejunum'
 // out; tests/levels.test.js keeps every colour at a distance from the villi and
 // the cream bands (#f6ded2).
 export const LEVEL_COLORS = [
+  0xe5c494, // tan (level 1)
   0x66c2a5, // teal
   0x8da0cb, // periwinkle
   0xa6d854, // lime
   0xffd92f, // yellow
-  0xe5c494, // sand
   0x80b1d3, // light blue
 ];
 
