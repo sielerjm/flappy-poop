@@ -8,7 +8,7 @@
 --
 -- Access model. The game ships the project's publishable key, which runs every
 -- request as the `anon` role. anon can
---   * SELECT name, score, toilet, updated_at  (never player_id: that is the
+--   * SELECT name, score, toilet, level, updated_at  (never player_id: that is the
 --     player's secret save-code id, and reading it would let anyone rename them)
 --   * call submit_score(...)   the only way to write; keeps the max score
 --   * call player_rank(...)    rank of one player, looked up by their own id
@@ -29,8 +29,12 @@ create table if not exists public.scores (
   name       text not null check (name ~ '^[^[:cntrl:]]{1,16}$'),        -- NAME_MAX in src/save.js
   score      int  not null check (score between 0 and 200),               -- LEADERBOARD.maxScore in src/config.js
   toilet     boolean not null default false,                              -- the run that set `score` was on the toilet
+  level      int not null default 1 check (level between 1 and 50),       -- level the run that set `score` ended in
   updated_at timestamptz not null default now()
 );
+
+-- Added 2026-11-04 (levels): safe on a table created before the column existed.
+alter table public.scores add column if not exists level int not null default 1 check (level between 1 and 50);
 
 create index if not exists scores_board on public.scores (score desc, updated_at asc);
 
@@ -41,13 +45,15 @@ create policy anon_read on public.scores for select to anon using (true);
 
 grant usage on schema public to anon;
 revoke all on public.scores from anon, authenticated;
-grant select (name, score, toilet, updated_at) on public.scores to anon;
+grant select (name, score, toilet, level, updated_at) on public.scores to anon;
 
 -- Upsert one player's best. Raises (HTTP 400 through PostgREST) on bad input or
 -- when the row was written less than 5 s ago, so the client never records a
 -- skipped write as confirmed. Name always overwrites; score keeps the max; the
--- toilet flag follows the score only when the new score is higher.
-create or replace function public.submit_score(p_player_id text, p_name text, p_score int, p_toilet boolean default false)
+-- toilet flag and the level follow the score only when the new score is higher.
+-- p_level defaults to 1 so a client from before levels existed still posts.
+drop function if exists public.submit_score(text, text, int, boolean);
+create or replace function public.submit_score(p_player_id text, p_name text, p_score int, p_toilet boolean default false, p_level int default 1)
 returns void
 language plpgsql
 security definer
@@ -65,25 +71,29 @@ begin
   if p_score is null or p_score < 0 or p_score > 200 then
     raise exception 'bad score';
   end if;
+  if p_level is null or p_level < 1 or p_level > 50 then
+    raise exception 'bad level';
+  end if;
 
   select updated_at into last_write from public.scores where player_id = p_player_id;
   if last_write is not null and last_write > now() - interval '5 seconds' then
     raise exception 'rate limited';
   end if;
 
-  insert into public.scores (player_id, name, score, toilet, updated_at)
-  values (p_player_id, p_name, p_score, coalesce(p_toilet, false), now())
+  insert into public.scores (player_id, name, score, toilet, level, updated_at)
+  values (p_player_id, p_name, p_score, coalesce(p_toilet, false), p_level, now())
   on conflict (player_id) do update
     set name       = excluded.name,
         score      = greatest(public.scores.score, excluded.score),
         toilet     = case when excluded.score > public.scores.score then excluded.toilet else public.scores.toilet end,
+        level      = case when excluded.score > public.scores.score then excluded.level else public.scores.level end,
         updated_at = now();
 end;
 $$;
 
 -- One player's standing, in the same order the board uses (score desc, then
 -- earlier write first). Returns null when the player has no row.
---   {"rank": 23, "total": 150, "score": 41, "toilet": true}
+--   {"rank": 23, "total": 150, "score": 41, "toilet": true, "level": 3}
 create or replace function public.player_rank(p_player_id text)
 returns json
 language sql
@@ -96,13 +106,14 @@ as $$
                    where o.score > s.score or (o.score = s.score and o.updated_at < s.updated_at)),
     'total',  (select count(*) from public.scores),
     'score',  s.score,
-    'toilet', s.toilet)
+    'toilet', s.toilet,
+    'level',  s.level)
   from public.scores s
   where s.player_id = p_player_id;
 $$;
 
-revoke execute on function public.submit_score(text, text, int, boolean) from public, authenticated;
-grant  execute on function public.submit_score(text, text, int, boolean) to anon;
+revoke execute on function public.submit_score(text, text, int, boolean, int) from public, authenticated;
+grant  execute on function public.submit_score(text, text, int, boolean, int) to anon;
 revoke execute on function public.player_rank(text) from public, authenticated;
 grant  execute on function public.player_rank(text) to anon;
 
