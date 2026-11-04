@@ -14,6 +14,7 @@ const STRINGS = {
     pauseHint: 'tap anywhere to resume game',
     levelBanner: 'LEVEL {n}',
     levelContinue: 'Tap to continue',
+    levelShort: 'LV {n}',
     'level.stomach': 'Stomach',
     'level.duodenum': 'Duodenum',
     'level.jejunum': 'Jejunum',
@@ -107,6 +108,7 @@ Inspired by Flappy Bird`,
     pauseHint: '点击任意处继续游戏',
     levelBanner: '第 {n} 关',
     levelContinue: '点击继续',
+    levelShort: '第{n}关',
     'level.stomach': '胃',
     'level.duodenum': '十二指肠',
     'level.jejunum': '空肠',
@@ -238,6 +240,11 @@ export function levelBannerText(locale, level, levels) {
   const title = t(locale, 'levelBanner').replace('{n}', String(level));
   const name = key ? t(locale, `level.${key}`) : '';
   return `${name ? `${title} · ${name}` : title}\n${t(locale, 'levelContinue')}`;
+}
+
+/** Short level label for the progress bar and score lines: "LV 2". */
+export function levelLabel(locale, level) {
+  return t(locale, 'levelShort').replace('{n}', String(level));
 }
 
 /** Pause banner as two lines joined by newline (Play splits for sizing). */

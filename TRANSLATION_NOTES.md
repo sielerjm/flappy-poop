@@ -57,6 +57,7 @@ Short, playful, clear. Fit a 720×1280 logical field; How to play / About body w
 | pauseHint | tap anywhere to resume game | 点击任意处继续游戏 |
 | levelBanner | LEVEL {n} | 第 {n} 关 |
 | levelContinue | Tap to continue | 点击继续 |
+| levelShort | LV {n} | 第{n}关 |
 | level.stomach | Stomach | 胃 |
 | level.duodenum | Duodenum | 十二指肠 |
 | level.jejunum | Jejunum | 空肠 |

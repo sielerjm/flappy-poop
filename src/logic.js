@@ -215,6 +215,18 @@ export function levelProgress(pipesPassed, level, t) {
   return Math.min(1, Math.max(0, f));
 }
 
+/**
+ * Progress-bar geometry along the top of the field: a track from barInset in,
+ * leaving room for the 🏁 at its right end; the level label sits on its centre.
+ */
+export function levelBarLayout(t, width) {
+  const l = t.levels;
+  const flagRoom = 40;
+  const x = l.barInset;
+  const w = width - 2 * l.barInset - flagRoom;
+  return { x, y: l.barY, width: w, height: l.barHeight, radius: l.barHeight / 2, labelX: x + w / 2, flagX: x + w + flagRoom / 2 + 4 };
+}
+
 /** Linear blend of two 0xRRGGBB colours, f in [0, 1]. */
 export function lerpColor(a, b, f) {
   const k = Math.min(1, Math.max(0, f));

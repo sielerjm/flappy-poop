@@ -1,8 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { TUNING as T, LEVELS, BACKGROUND, GAME_HEIGHT } from '../src/config.js';
-import { levelBannerText, LOCALES } from '../src/i18n.js';
-import { levelPipes, levelEnd, levelFor, levelSpeed, levelName, levelColor, levelProgress, lerpColor, pipeSpacing, gapBounds } from '../src/logic.js';
+import { levelBannerText, levelLabel, LOCALES } from '../src/i18n.js';
+import { GAME_WIDTH } from '../src/config.js';
+import { levelPipes, levelEnd, levelFor, levelSpeed, levelName, levelColor, levelProgress, lerpColor, pipeSpacing, gapBounds, levelBarLayout } from '../src/logic.js';
 
 const L = T.levels;
 
@@ -106,4 +107,22 @@ test('levelBannerText names the segment while there is one and drops it past the
       assert.ok(!title.includes('{'), 'placeholder filled');
     }
   }
+});
+
+test('levelBarLayout sits above the score, inside the field, with the flag just right of the track', () => {
+  const bar = levelBarLayout(T, GAME_WIDTH);
+  assert.ok(bar.x >= 16 && bar.x + bar.width <= GAME_WIDTH - 16, 'track inside the field with a margin');
+  assert.ok(bar.y - bar.height / 2 >= 8, 'clear of the top edge');
+  assert.ok(bar.y + bar.height / 2 <= 80 - 40, 'above the 80 px score text');
+  assert.ok(bar.flagX > bar.x + bar.width && bar.flagX + 16 <= GAME_WIDTH, 'flag right of the track, inside the field');
+  assert.ok(Math.abs(bar.labelX - (bar.x + bar.width / 2)) < 1e-9, 'label centred on the track');
+  assert.ok(bar.radius === bar.height / 2);
+  assert.ok(T.levels.barTweenMs >= 50 && T.levels.barTweenMs <= 1000 && T.levels.barAlpha > 0 && T.levels.barAlpha <= 1);
+  assert.equal(T.levels.barFillColor, 0xe85e96, 'fill is the pipe pink');
+});
+
+test('levelLabel is short and localised', () => {
+  assert.equal(levelLabel('en', 2), 'LV 2');
+  assert.equal(levelLabel('zh-Hans', 2), '第2关');
+  for (const locale of LOCALES) assert.ok(levelLabel(locale, 12).includes('12'));
 });

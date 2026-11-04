@@ -7,6 +7,8 @@ import {
   angleForVelocity,
   levelSpeed,
   levelEnd,
+  levelProgress,
+  levelBarLayout,
   createBestStore,
   createSettingsStore,
   vibrate,
@@ -37,12 +39,13 @@ import {
   beanButtonLayout,
   beanButtonHit,
 } from '../logic.js';
-import { t, pauseBannerText, levelBannerText, initialLocale, isLocale, profileButtonText } from '../i18n.js';
+import { t, pauseBannerText, levelBannerText, levelLabel, initialLocale, isLocale, profileButtonText } from '../i18n.js';
 import { loadLocal, saveLocal, ensureId, recordScore, isNewTop, topScores, TOILET_EMOJI } from '../save.js';
 import { unlock, attachGame, setMuted, isMuted, sfx } from '../sound.js';
 import { createTray } from '../ui/tray.js';
 import { createGlow, createRectGlow } from '../ui/glow.js';
 import { createFinishTexture } from '../ui/finish.js';
+import { createLevelBar } from '../ui/levelBar.js';
 import { createSubmitStore, submitPlan, submitScore } from '../leaderboard.js';
 import { createButton } from '../ui/button.js';
 import { createToggle } from '../ui/toggle.js';
@@ -148,6 +151,9 @@ export class Play extends Phaser.Scene {
 
     // HUD
     this.scoreText = this.add.text(GAME_WIDTH / 2, 80, '0', { ...TEXT_STYLE, fontSize: '80px' }).setOrigin(0.5).setDepth(20);
+    // Level progress bar above the score: hidden on the ready screen, shown from start(), kept through breaks and death.
+    this.levelBar = createLevelBar(this, levelBarLayout(T, GAME_WIDTH)).setVisible(false);
+    this.refreshLevelBar();
     // 🚽 left of the score while a toilet-mode run is on.
     this.toiletHud = this.add.text(GAME_WIDTH / 2 - 96, 80, TOILET_EMOJI, { fontFamily: 'sans-serif', fontSize: '44px' }).setOrigin(0.5).setDepth(20).setVisible(false);
     this.probioticIcon = this.add
@@ -316,8 +322,16 @@ export class Play extends Phaser.Scene {
     this.levelBreak = false;
     this.pendingLevelUp = false;
     this.applyLevel();
+    this.levelBar.setVisible(true);
+    this.refreshLevelBar();
     this.distanceSinceSpawn = 0;
     this.spawnPipePair();
+  }
+
+  /** Bar label and fill for the current level and pipes passed. */
+  refreshLevelBar() {
+    this.levelBar?.setLabel(levelLabel(this.locale, this.level));
+    this.levelBar?.setProgress(levelProgress(this.pipesPassed, this.level, T));
   }
 
   /** The checkered line one spacing after a level's last pair; crossing it ends the level. */
@@ -332,6 +346,7 @@ export class Play extends Phaser.Scene {
   /** The poop has cleared the finish line: next level, and a break (now, or when the fart ends). */
   onFinishCrossed() {
     this.level += 1;
+    this.refreshLevelBar(); // new level: label steps, fill back to 0
     sfx.levelUp();
     if (this.effects.powerActive()) this.pendingLevelUp = true;
     else this.startLevelBreak();
@@ -498,6 +513,7 @@ export class Play extends Phaser.Scene {
     this.pauseText?.setText(pauseTitle);
     this.pauseHint?.setText(pauseHint);
     this.refreshLevelBanner();
+    this.refreshLevelBar();
   }
 
   chromeArgs(input) {
@@ -1050,6 +1066,7 @@ export class Play extends Phaser.Scene {
         pipe.setData('passed', true);
         this.score += 1;
         this.pipesPassed += 1;
+        this.levelBar.setProgress(levelProgress(this.pipesPassed, this.level, T));
         this.scoreText.setText(String(this.score));
         this.effects.onPipePassed();
         this.refreshProbioticHud();
