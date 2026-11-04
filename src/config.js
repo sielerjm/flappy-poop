@@ -53,6 +53,7 @@ export const TUNING = {
     finishWidthPx: 64, // px width of the checkered finish line
     finishCheckPx: 32, // px size of one check on the finish line
     fadeMs: 600, // ms the background crossfades to the next level's colour during the break
+    whiteBlend: 0.2, // 0–1 share of white mixed into every level colour (0 = the raw palette)
     barY: 48, // px centre line of the progress bar (air above it from the screen top)
     barHeight: 32, // px height of the progress bar
     barLabelPx: 26, // px font size of the LV n label (digits ≈ 19 px tall, so ~6 px of air inside the track)

@@ -65,6 +65,10 @@ test('levelName follows the gut in order and runs out past the list; levelColor 
   assert.equal(levelColor(n + 2, LEVEL_COLORS), LEVEL_COLORS[1]);
   assert.equal(levelColor(2 * n + 1, LEVEL_COLORS), LEVEL_COLORS[0]);
   assert.equal(levelColor(0, LEVEL_COLORS), LEVEL_COLORS[0]);
+  assert.equal(levelColor(1, [0x000000], 0), 0x000000, 'no blend: the raw colour');
+  assert.equal(levelColor(1, [0x000000], 0.2), 0x333333, '20 % white: each channel moves a fifth of the way to 255');
+  assert.equal(levelColor(1, [0xffffff], 0.2), 0xffffff);
+  assert.ok(T.levels.whiteBlend >= 0 && T.levels.whiteBlend <= 0.5, `whiteBlend ${T.levels.whiteBlend}`);
   for (const c of LEVEL_COLORS) assert.ok(Number.isInteger(c) && c >= 0 && c <= 0xffffff);
   for (const row of LEVELS) assert.ok(typeof row.key === 'string');
   assert.ok(BACKGROUND.layers.length >= 1 && BACKGROUND.layers.every((l) => typeof l.key === 'string' && l.parallax > 0 && l.parallax <= 1));
@@ -138,9 +142,11 @@ test('every level colour keeps the villi (#ec8ca0) and the cream bands (#f6ded2)
   const dist = (a, b) => Math.abs(((a >> 16) & 0xff) - ((b >> 16) & 0xff)) + Math.abs(((a >> 8) & 0xff) - ((b >> 8) & 0xff)) + Math.abs((a & 0xff) - (b & 0xff));
   const VILLI = 0xec8ca0;
   const CREAM = 0xf6ded2;
-  for (const c of LEVEL_COLORS) {
-    assert.ok(dist(c, VILLI) >= 70, `#${c.toString(16)} is too close to the villi pink (${dist(c, VILLI)})`);
-    assert.ok(dist(c, CREAM) >= 40, `#${c.toString(16)} is too close to the cream bands (${dist(c, CREAM)})`);
+  // Checked on the colours actually drawn: the palette softened by whiteBlend.
+  for (let n = 1; n <= LEVEL_COLORS.length; n += 1) {
+    const c = levelColor(n, LEVEL_COLORS, T.levels.whiteBlend);
+    assert.ok(dist(c, VILLI) >= 70, `level ${n} #${c.toString(16)} is too close to the villi pink (${dist(c, VILLI)})`);
+    assert.ok(dist(c, CREAM) >= 40, `level ${n} #${c.toString(16)} is too close to the cream bands (${dist(c, CREAM)})`);
   }
   assert.equal(new Set(LEVEL_COLORS).size, LEVEL_COLORS.length, 'colours are distinct');
   const keys = LEVELS.map((r) => r.key);

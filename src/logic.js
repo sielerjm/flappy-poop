@@ -202,9 +202,13 @@ export function levelName(level, levels) {
   return levels[level - 1]?.key ?? null;
 }
 
-/** Background colour for a level: the colours cycle, so level 7 wears colour 1 again. */
-export function levelColor(level, colors) {
-  return colors[(Math.max(1, level) - 1) % colors.length];
+/**
+ * Background colour for a level: the colours cycle, so level 7 wears colour 1
+ * again; whiteBlend (0–1) mixes that much white in to soften the palette.
+ */
+export function levelColor(level, colors, whiteBlend = 0) {
+  const raw = colors[(Math.max(1, level) - 1) % colors.length];
+  return whiteBlend > 0 ? lerpColor(raw, 0xffffff, whiteBlend) : raw;
 }
 
 /** 0–1 share of `level` done after pipesPassed pairs: 0 at its first pipe, 1 once its last pair is passed. */

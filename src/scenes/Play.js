@@ -117,7 +117,7 @@ export class Play extends Phaser.Scene {
     // at its own parallax. Tile-scale maps one texture copy onto the playfield so
     // a layer never repeats vertically.
     // Negative depths: pipes, items and beans are created later at depth 0 and must draw over every layer.
-    this.bgColor = this.add.rectangle(0, 0, GAME_WIDTH, GAME_HEIGHT, levelColor(1, LEVEL_COLORS), 1).setOrigin(0, 0).setDepth(-20);
+    this.bgColor = this.add.rectangle(0, 0, GAME_WIDTH, GAME_HEIGHT, levelColor(1, LEVEL_COLORS, T.levels.whiteBlend), 1).setOrigin(0, 0).setDepth(-20);
     this.bgFade = null;
     this.bgLayers = BACKGROUND.layers.map((layer, i) => {
       const sprite = this.add.tileSprite(0, 0, GAME_WIDTH, GAME_HEIGHT, layer.key).setOrigin(0, 0).setDepth(-10 + i);
@@ -347,7 +347,7 @@ export class Play extends Phaser.Scene {
     this.refreshLevelBar();
     this.bgFade?.stop();
     this.bgFade = null;
-    this.bgColor.setFillStyle(levelColor(1, LEVEL_COLORS), 1);
+    this.bgColor.setFillStyle(levelColor(1, LEVEL_COLORS, T.levels.whiteBlend), 1);
     this.distanceSinceSpawn = 0;
     this.spawnPipePair();
   }
@@ -355,7 +355,7 @@ export class Play extends Phaser.Scene {
   /** Crossfade the background to the current level's colour (used at each break). */
   fadeBackground() {
     const from = this.bgColor.fillColor;
-    const to = levelColor(this.level, LEVEL_COLORS);
+    const to = levelColor(this.level, LEVEL_COLORS, T.levels.whiteBlend);
     this.bgFade?.stop();
     const o = { f: 0 };
     this.bgFade = this.tweens.add({
