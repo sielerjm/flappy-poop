@@ -88,6 +88,7 @@ export class Play extends Phaser.Scene {
     this.level = 1;
     this.pipesPassed = 0;
     this.pipesSpawned = 0;
+    this.collected = { fiber: 0, probiotic: 0, bacteria: 0, bean: 0 }; // this run's pickups, for the game-over summary
     this.diff = { pipeSpeed: levelSpeed(1, T), gapHeight: T.gapHeight };
     // Finish line + break: the line spawns in the slot after a level's last pair
     // and nothing follows it; crossing it pauses the run (levelBreak) until a tap.
@@ -339,6 +340,7 @@ export class Play extends Phaser.Scene {
     this.level = 1;
     this.pipesPassed = 0;
     this.pipesSpawned = 0;
+    this.collected = { fiber: 0, probiotic: 0, bacteria: 0, bean: 0 };
     this.finishLine?.destroy();
     this.finishLine = null;
     this.finishSpawned = false;
@@ -390,7 +392,11 @@ export class Play extends Phaser.Scene {
   onFinishCrossed() {
     this.level += 1;
     this.refreshLevelBar(); // new level: label steps, fill back to 0
-    sfx.levelUp();
+    if (this.cache.audio.exists('level-up')) {
+      this.sound.play('level-up', { volume: T.levelUpVolume });
+    } else {
+      sfx.levelUp();
+    }
     if (this.effects.cancelPower()) {
       this.fartSound?.stop();
       this.endPower();
@@ -862,6 +868,7 @@ export class Play extends Phaser.Scene {
       onComplete: () => ghost.destroy(),
     });
     bean.destroy();
+    this.collected.bean += 1;
     this.effects.addBean();
     this.refreshBeanHud();
     sfx.pickup();
@@ -1014,6 +1021,7 @@ export class Play extends Phaser.Scene {
       onComplete: () => ghost.destroy(),
     });
     item.destroy();
+    if (this.collected[kind] !== undefined) this.collected[kind] += 1;
     if (kind === 'fiber') {
       this.score = scoreAfterItem(this.score, kind, T);
       this.scoreText.setText(String(this.score));
@@ -1070,7 +1078,7 @@ export class Play extends Phaser.Scene {
 
     this.time.delayedCall(T.deathToOverMs, () => {
       this.physics.pause();
-      this.scene.launch('Over', { score: this.score, best, newTop, toilet: this.toilet, level: this.level });
+      this.scene.launch('Over', { score: this.score, best, newTop, toilet: this.toilet, level: this.level, collected: { ...this.collected } });
     });
   }
 

@@ -270,8 +270,8 @@ export async function run(url = DEFAULT_URL) {
     ok(hud.iconRight <= hud.textLeft && hud.textRight <= 720 - 8 && hud.iconRight - 96 >= hud.scoreRight && hud.y === 156, `probiotic counter sits at the right edge on the bean row, clear of the score (icon ends ${hud.iconRight.toFixed(0)}, count ${hud.textLeft.toFixed(0)}–${hud.textRight.toFixed(0)})`);
     const pipesBefore = await evaluate(`${play}.effects.pipesLeft()`);
     const score0 = await evaluate(`${play}.score`);
-    await evaluate(`${play}.effects.addBean(), ${play}.setCharged(true), ${play}.activatePower(), true`);
-    ok((await evaluate(`${play}.effects.powerActive() && !${play}.effects.powerIsSuper()`)) === true, 'one bean fires a normal fart');
+    await evaluate(`${play}.effects.addBean(), ${play}.effects.addBean(), ${play}.setCharged(true), ${play}.activatePower(), true`);
+    ok((await evaluate(`${play}.effects.powerActive() && !${play}.effects.powerIsSuper() && ${play}.effects.beans() === 1`)) === true, 'two beans: a tap fires a normal fart and keeps one bean');
     const normal = await sampleFart();
     const settled = normal.filter((s) => s.e > T.centreMs);
     const inBand = settled.every((s) => s.y >= centre - T.waveAmplitudePx - 2 && s.y <= centre + T.waveAmplitudePx + 2);
@@ -280,6 +280,9 @@ export async function run(url = DEFAULT_URL) {
     const score1 = await evaluate(`${play}.score`);
     const pipesAfter = await evaluate(`${play}.effects.pipesLeft()`);
     ok((await playState()) === 'playing' && score1 - score0 >= 4 && pipesAfter === pipesBefore, `normal fart: alive, +${score1 - score0} pipes, probiotic ${pipesBefore}→${pipesAfter} untouched`);
+    ok((await evaluate(`${play}.effects.powerReady() && ${play}.charged && ${play}.effects.beans() === 1`)) === true, 'the kept bean is still a charged power after the fart');
+    const hit = await evaluate(`import('./src/logic.js').then((l) => JSON.stringify({ near: l.beanButtonHit(${play}.beanButtonBox.x + ${play}.beanButtonBox.size - 2, ${play}.beanButtonBox.y, ${play}.beanButtonBox), far: l.beanButtonHit(${play}.beanButtonBox.x + ${play}.beanButtonBox.size + 2, ${play}.beanButtonBox.y, ${play}.beanButtonBox) }))`).then(JSON.parse);
+    ok(hit.near === true && hit.far === false, 'bean button hit circle is twice the drawn button');
     // Super fart, started inside the grace window so the poop has not fallen yet.
     await evaluate(`${play}.effects.addBean(), ${play}.effects.addBean(), ${play}.effects.addBean(), ${play}.setCharged(true), true`);
     await sleep(150);
@@ -343,19 +346,35 @@ export async function run(url = DEFAULT_URL) {
     await evaluate(`${play}.level = 2, ${play}.pipesSpawned = ${end2 - 2}, ${play}.pipesPassed = ${end2 - 2}, ${play}.finishSpawned = false, ${play}.distanceSinceSpawn = ${TT.pipeSpacingPx}, true`);
     const score3 = await evaluate(`${play}.score`);
     const t0 = Date.now();
-    await evaluate(`${play}.effects.addBean(), ${play}.setCharged(true), ${play}.activatePower(), true`);
+    const beansHeld = await evaluate(`${play}.effects.addBean(), ${play}.effects.beans()`); // a stray real bean may already be in the bag
+    await evaluate(`${play}.setCharged(true), ${play}.activatePower(), true`);
     const broke2 = await waitBreak();
     const cutMs = Date.now() - t0;
     const cut = await evaluate(`JSON.stringify({ level: ${play}.level, power: ${play}.effects.powerActive(), passed: ${play}.pipesPassed, score: ${play}.score, beans: ${play}.effects.beans() })`).then(JSON.parse);
-    ok(broke2 && cut.level === 3 && !cut.power && cut.passed === end2 && cut.score - score3 === 2 && cut.beans === 0 && cutMs < TT.beans.powerMs, `a fart that reaches the finish line ends there: break after ${cutMs} ms, level ${cut.level}, only the ${cut.score - score3} pairs before the line scored`);
+    const beansLeft = beansHeld >= TT.beans.superBeans ? 0 : beansHeld - 1;
+    ok(broke2 && cut.level === 3 && !cut.power && cut.passed === end2 && cut.score - score3 === 2 && cut.beans === beansLeft && cutMs < TT.beans.powerMs, `a fart that reaches the finish line ends there: break after ${cutMs} ms, level ${cut.level}, only the ${cut.score - score3} pairs before the line scored, ${cut.beans} bean(s) left of ${beansHeld}`);
     await chrome('tap');
     await sleep(300);
     ok((await evaluate(`${play}.state === 'playing' && ${play}.diff.pipeSpeed === ${TT.pipeSpeed + 2 * TT.levels.speedStep}`)) === true, 'level 3 resumes one step faster again');
+    // From level 3 a gap item sweeps its gap (spawn one directly: the roll is random).
+    await evaluate(`${play}.gapProbe = ${play}.spawnGapItem('bacteria', 900, 640, ${TT.gapHeight}), true`);
+    const y1 = await evaluate(`${play}.gapProbe.y`);
+    await sleep(400);
+    const probe = await evaluate(`JSON.stringify({ y: ${play}.gapProbe.y, bob: ${play}.gapProbe.getData('bob'), depth: ${play}.gapProbe.depth, pipeDepth: Math.min(...${play}.pipes.getChildren().map((c) => c.depth)) })`).then(JSON.parse);
+    ok(probe.bob === 'gap' && probe.y !== y1 && probe.depth < probe.pipeDepth, `a level-3 gap item moves (y ${y1.toFixed(0)} → ${probe.y.toFixed(0)}) and draws behind the pipes`);
+    await evaluate(`${play}.gapProbe.destroy(), true`);
     const bar = await evaluate(`JSON.stringify({ label: ${play}.levelBar.labelText(), value: ${play}.levelBar.value(), passed: ${play}.pipesPassed, color: ${play}.levelBar.labelColor() })`).then(JSON.parse);
     const expect = Math.min(1, Math.max(0, (bar.passed - end2) / TT.levels.pipesStep / 2));
     const pinkHex = '#' + TT.levels.barFillColor.toString(16).padStart(6, '0');
     ok(bar.label === 'LV 3' && Math.abs(bar.value - expect) < 1e-9 && bar.color === pinkHex, `progress bar reads "${bar.label}" at ${(bar.value * 100).toFixed(0)} % in ${bar.color} (${bar.passed - end2} of ${TT.levels.pipesStep * 2} pipes into level 3)`);
     await evaluate(`${play}.graceLeftMs = 0, true`);
+    // Let the poop fall and die: the game-over panel carries the run summary.
+    await evaluate(`${play}.poop.body.setAllowGravity(true), true`);
+    for (let i = 0; i < 60 && (await playState()) !== 'dead'; i += 1) await sleep(100);
+    await sleep(TT.deathToOverMs + 300);
+    const over = await evaluate(`JSON.stringify({ dead: ${play}.state === 'dead', active: __flappy.scene.isActive('Over'), counts: __flappy.scene.getScene('Over').children.list.filter((c) => c.type === 'Text' && /^×\\d+$/.test(c.text)).map((c) => c.text), collected: ${play}.collected })`).then(JSON.parse);
+    const expected = ['fiber', 'probiotic', 'bacteria', 'bean'].map((k) => `×${over.collected[k]}`);
+    ok(over.dead && over.active && JSON.stringify(over.counts) === JSON.stringify(expected), `game over shows the run summary ${expected.join(' ')}`);
 
     const f2 = await frame();
     await sleep(500);
