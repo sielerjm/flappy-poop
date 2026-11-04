@@ -20,6 +20,7 @@ import {
   rollItem,
   itemGapY,
   scoreAfterItem,
+  scorePopup,
   createEffects,
   chromeIntent,
   trayLayout,
@@ -167,6 +168,9 @@ export class Play extends Phaser.Scene {
 
     // HUD
     this.scoreText = this.add.text(GAME_WIDTH / 2, T.hudScoreY, '0', { ...TEXT_STYLE, fontSize: '80px' }).setOrigin(0.5).setDepth(20).setVisible(false); // shown from start()
+    // "+3" / "−3" under the score when fiber or unshielded bacteria moves it; one reused text, alpha 0 at rest.
+    this.scorePopup = this.add.text(GAME_WIDTH / 2, T.popup.y, '', { ...TEXT_STYLE, fontSize: `${T.popup.fontPx}px` }).setOrigin(0.5).setDepth(20).setAlpha(0);
+    this.popupTween = null;
     // Level progress bar above the score: hidden on the ready screen, shown from start(), kept through breaks and death.
     this.levelBar = createLevelBar(this, levelBarLayout(T, GAME_WIDTH)).setVisible(false);
     this.refreshLevelBar();
@@ -713,6 +717,7 @@ export class Play extends Phaser.Scene {
     if (this.stinkTimer) this.stinkTimer.paused = true;
     this.fartSound?.pause();
     this.fartTween?.pause();
+    this.popupTween?.pause();
     this.bob.pause();
     this.setPauseBanner(true);
   }
@@ -725,6 +730,7 @@ export class Play extends Phaser.Scene {
     if (this.stinkTimer) this.stinkTimer.paused = false;
     this.fartSound?.resume();
     this.fartTween?.resume();
+    this.popupTween?.resume();
     this.bob.resume();
     this.setPauseBanner(false);
     // Recovery bounce on the resume tap. Do not set flapLockedUntil: chrome
@@ -1013,6 +1019,15 @@ export class Play extends Phaser.Scene {
     this.probioticIcon.setX(iconX);
   }
 
+  /** Fade a "+3" / "−3" in and out under the score; a new hit restarts it with its own text and colour. */
+  showScorePopup(kind) {
+    const p = scorePopup(kind, T);
+    if (!p) return;
+    this.popupTween?.stop();
+    this.scorePopup.setText(p.text).setColor(p.color).setAlpha(0);
+    this.popupTween = this.tweens.add({ targets: this.scorePopup, alpha: 1, duration: T.popup.fadeMs, hold: T.popup.holdMs, yoyo: true });
+  }
+
   collectItem(item) {
     if (this.state !== 'playing' || !item.active) return;
     if (this.effects.powerActive()) return; // farting: fiber, probiotic and bacteria scroll straight through
@@ -1030,6 +1045,7 @@ export class Play extends Phaser.Scene {
     if (kind === 'fiber') {
       this.score = scoreAfterItem(this.score, kind, T);
       this.scoreText.setText(String(this.score));
+      this.showScorePopup(kind);
       sfx.pickup();
     } else if (kind === 'probiotic') {
       this.effects.applyProbiotic();
@@ -1042,8 +1058,9 @@ export class Play extends Phaser.Scene {
         this.cameras.main.flash(100, 180, 255, 180);
         sfx.shield();
       } else {
-        this.score = scoreAfterItem(this.score, kind, T);
+        this.score = scoreAfterItem(this.score, kind, T); // floors at 0; the popup still reads the nominal −3
         this.scoreText.setText(String(this.score));
+        this.showScorePopup(kind);
         sfx.hazard();
       }
     }
