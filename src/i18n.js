@@ -44,6 +44,7 @@ const STRINGS = {
 Art: Michael Sieler
 Death fart: MacKaffee (Freesound / Pixabay)
 Power fart: "fart sound effect (reed)" (Pixabay)
+New level: "Shine 11" by BenKirb (Pixabay)
 Thanks to Tori Schummer for help with ideation
 Inspired by Flappy Bird`,
     howToTitle: 'HOW TO PLAY',
@@ -54,11 +55,11 @@ Inspired by Flappy Bird`,
     itemFiberName: 'Fiber',
     itemFiberDetail: '+3 points. Bobs up and down between the pipes.',
     itemProbioticName: 'Probiotic',
-    itemProbioticDetail: 'Protects you against bad bacteria for 5 pipes. Subsequent probiotics stack, but hitting a bad bacteria uses them all up.',
+    itemProbioticDetail: 'Protects you against bad bacteria for 5 pipes. Subsequent probiotics stack, but hitting a bad bacteria uses them all up. From level 3 it moves up and down in the gap.',
     itemBacteriaName: 'Bad bacteria',
-    itemBacteriaDetail: '−3 points',
+    itemBacteriaDetail: '−3 points. From level 3 it moves up and down in the gap.',
     itemBeanName: 'Beans',
-    itemBeanDetail: 'Grab a bean, then press the bean button at the bottom (or your poop) to fart past the next 5 pipes: nothing can touch you. Beans stack to 3; fart with all three and you rocket past 20 in a rainbow glow.',
+    itemBeanDetail: 'Grab a bean, then press the bean button at the bottom (or your poop) to fart past the next 5 pipes: nothing can touch you. A normal fart uses one bean; you can carry 3, and with all three the fart rockets you past 20 in a rainbow glow.',
     itemToiletName: 'On the toilet',
     itemToiletDetail: 'Playing on the toilet? Flip the switch under the poop on the home screen. Those scores get a 🚽 next to them.',
     itemLevelsName: 'Levels',
@@ -141,6 +142,7 @@ Inspired by Flappy Bird`,
 美术：Michael Sieler
 死亡屁声：MacKaffee（Freesound / Pixabay）
 放屁冲刺音效："fart sound effect (reed)"（Pixabay）
+新关卡音效："Shine 11"，BenKirb（Pixabay）
 感谢 Tori Schummer 协助构思
 灵感来自 Flappy Bird`,
     howToTitle: '玩法说明',
@@ -151,11 +153,11 @@ Inspired by Flappy Bird`,
     itemFiberName: '纤维',
     itemFiberDetail: '+3 分。在管道之间上下漂浮。',
     itemProbioticName: '益生菌',
-    itemProbioticDetail: '在 5 道管道内保护你不受有害细菌伤害。后续益生菌可叠加，但撞到有害细菌会全部用完。',
+    itemProbioticDetail: '在 5 道管道内保护你不受有害细菌伤害。后续益生菌可叠加，但撞到有害细菌会全部用完。从第 3 关起它会在管道口之间上下移动。',
     itemBacteriaName: '有害细菌',
-    itemBacteriaDetail: '−3 分',
+    itemBacteriaDetail: '−3 分。从第 3 关起它会在管道口之间上下移动。',
     itemBeanName: '豆子',
-    itemBeanDetail: '吃到豆子后，点击底部的豆子按钮（或便便）放屁冲过接下来的 5 道管道，期间什么都碰不到你。豆子最多可攒 3 颗；集齐 3 颗再放屁，就能顶着彩虹光芒一口气冲过 20 道管道。',
+    itemBeanDetail: '吃到豆子后，点击底部的豆子按钮（或便便）放屁冲过接下来的 5 道管道，期间什么都碰不到你。普通放屁只用一颗豆子；最多可攒 3 颗，集齐 3 颗再放屁，就能顶着彩虹光芒一口气冲过 20 道管道。',
     itemToiletName: '如厕模式',
     itemToiletDetail: '在马桶上玩？打开主界面便便下方的开关，这些分数旁会显示 🚽。',
     itemLevelsName: '关卡',

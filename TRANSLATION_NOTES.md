@@ -91,11 +91,11 @@ Short, playful, clear. Fit a 720×1280 logical field; How to play / About body w
 | itemFiberName | Fiber | 纤维 |
 | itemFiberDetail | +3 points. Bobs up and down between the pipes. | +3 分。在管道之间上下漂浮。 |
 | itemProbioticName | Probiotic | 益生菌 |
-| itemProbioticDetail | Protects you against bad bacteria for 5 pipes. Subsequent probiotics stack, but hitting a bad bacteria uses them all up. | 在 5 道管道内保护你不受有害细菌伤害。后续益生菌可叠加，但撞到有害细菌会全部用完。 |
+| itemProbioticDetail | Protects you against bad bacteria for 5 pipes. Subsequent probiotics stack, but hitting a bad bacteria uses them all up. From level 3 it moves up and down in the gap. | 在 5 道管道内保护你不受有害细菌伤害。后续益生菌可叠加，但撞到有害细菌会全部用完。从第 3 关起它会在管道口之间上下移动。 |
 | itemBacteriaName | Bad bacteria | 有害细菌 |
-| itemBacteriaDetail | −3 points | −3 分 |
+| itemBacteriaDetail | −3 points. From level 3 it moves up and down in the gap. | −3 分。从第 3 关起它会在管道口之间上下移动。 |
 | itemBeanName | Beans | 豆子 |
-| itemBeanDetail | Grab a bean, then press the bean button at the bottom (or your poop) to fart past the next 5 pipes: nothing can touch you. Beans stack to 3; fart with all three and you rocket past 20 in a rainbow glow. | 吃到豆子后，点击底部的豆子按钮（或便便）放屁冲过接下来的 5 道管道，期间什么都碰不到你。豆子最多可攒 3 颗；集齐 3 颗再放屁，就能顶着彩虹光芒一口气冲过 20 道管道。 |
+| itemBeanDetail | Grab a bean, then press the bean button at the bottom (or your poop) to fart past the next 5 pipes: nothing can touch you. A normal fart uses one bean; you can carry 3, and with all three the fart rockets you past 20 in a rainbow glow. | 吃到豆子后，点击底部的豆子按钮（或便便）放屁冲过接下来的 5 道管道，期间什么都碰不到你。普通放屁只用一颗豆子；最多可攒 3 颗，集齐 3 颗再放屁，就能顶着彩虹光芒一口气冲过 20 道管道。 |
 | itemToiletName | On the toilet | 如厕模式 |
 | itemToiletDetail | Playing on the toilet? Flip the switch under the poop on the home screen. Those scores get a 🚽 next to them. | 在马桶上玩？打开主界面便便下方的开关，这些分数旁会显示 🚽。 |
 | itemLevelsName | Levels | 关卡 |

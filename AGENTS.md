@@ -23,7 +23,8 @@ level 1 is `levels.firstPipes` (10), level n ≥ 2 is `pipesStep × (n − 1)`; 
 `levelSpeed()` (275 + 25 per level, cap 450), applied when the break ends; the gap
 is fixed at `gapHeight`. One spacing after a level's last pair a checkered finish
 line (generated texture, plain Image) scrolls in and no pair follows it outside a
-fart; crossing it bumps `level`, plays `sfx.levelUp`, and pauses the run as the
+fart; crossing it bumps `level`, plays `NewLevel.mp3` (`sfx.levelUp` blip if the
+sample is missing), and pauses the run as the
 level break (`levelBreak`, the normal `'paused'` state with its own banner "LEVEL n
 · segment / Tap to continue", the poop gliding to mid-height and bobbing, the
 background crossfading to `levelColor(n, LEVEL_COLORS)`, Set2 colours cycling). A fart never carries the poop past
@@ -71,7 +72,9 @@ src/
                             Pure data, Node-safe.
   logic.js                  Pure functions, NO Phaser/DOM: rng, gap placement,
                             scoring, items, beans (rollBean, beanSpawnX, beanY,
-                            beanAngle, poopTapHit), fart envelope (pipeSpacing,
+                            beanAngle, bobY, gapBobAmplitude, gapBobY,
+                            poopTapHit; beanButtonHit's circle is twice the
+                            drawn button), fart envelope (pipeSpacing,
                             fartPeakMul, fartMul, fartRemainingDistance), fartFloat
                             (wave + tilt), hsvToRgb / rainbowHue, glowAlphaAt /
                             glowStops, sprite angle, retry
@@ -109,7 +112,7 @@ src/
                             Player copy lives here (not in logic.js). See
                             TRANSLATION_NOTES.md.
   sound.js                  WebAudio synth blips + setMuted/isMuted/attachGame.
-                            setMuted also sets game.sound.mute (the fart MP3).
+                            setMuted also sets game.sound.mute (the MP3 samples).
                             unlock() must run from a user gesture: create,
                             silent-prime, resume() the AudioContext, and
                             game.sound.unlock(). Blips wait until running.
@@ -152,7 +155,7 @@ src/
                             not flap. Copy calls clipboard.writeText inside the tap
                             handler (iOS); falls back to selecting the field.
   scenes/
-    Boot.js                 preload() gameplay PNGs + fart.mp3, then start Play.
+    Boot.js                 preload() gameplay PNGs + the sfx MP3s, then start Play.
     Play.js                 State machine: 'ready' -> 'playing' -> 'paused'/'dead'.
                             Spawns pipes and items, tray, auto-pause, haptics, dies,
                             then launches Over as an overlay scene. Tray / keyboard
@@ -204,7 +207,14 @@ src/
                             gravity and spawns the next pair at the right edge with
                             its gap at mid-screen (centreNextGap → centredGapY),
                             graceLeftMs blocks die(). Pipes spawn by scrolled distance (pipeSpacing,
-                            fixed px), not a timer. Spawn slots: at levelEnd(level)
+                            fixed px), not a timer. Items: rollItem per pair;
+                            fiber → spawnBandItem (halfway to the next pair,
+                            bobY on items.fiberPeriodMs, yields to a bean rolled
+                            for the same pair); probiotic / bacteria →
+                            spawnGapItem (depth −1 under the pipes; from
+                            items.moveFromLevel they sweep the gap with gapBobY /
+                            gapBobAmplitude). this.collected counts pickups for
+                            Over's summary row. Spawn slots: at levelEnd(level)
                             pairs the slot is the finish line (spawnFinishLine),
                             then nothing until the break ends unless a fart runs;
                             onFinishCrossed → startLevelBreak (pausePlay with
@@ -264,6 +274,7 @@ assets/                     Contract PNGs + README.md (the art contract).
   src/                      Original drawings; not in the size table.
   sfx/fart.mp3              Death sample.
   sfx/fart_accelerate.mp3   Fart power-up clip; its duration is the power length.
+  sfx/NewLevel.mp3          Level-up chime at the finish line.
 
 db/schema.sql               Supabase schema: scores table (player_id = save-code id,
                             name, score, toilet, updated_at), RLS + a column grant
