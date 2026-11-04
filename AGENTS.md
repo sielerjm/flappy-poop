@@ -230,7 +230,7 @@ src/
                             BACKGROUND.layers; levelBar above the score. Nothing here reads time.now;
                             readyHit() routes taps (howto, start, saveload, profile
                             → Scores). getSaveState / setSaveState for the panel.
-    Over.js                 Game-over panel (score, 2 × 2 run summary, best, "tap to go home" button) with a
+    Over.js                 Game-over panel (score, 2 × 2 run summary, pipes crossed, glowing "tap to go home" button) with a
                             tap lockout and its own tray (mute still works). Shows
                             newTopHint when the run entered the top 6.
     Settings.js             Overlay: sound, haptics (Android only), Reload game

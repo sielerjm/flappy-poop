@@ -389,9 +389,9 @@ export async function run(url = DEFAULT_URL) {
     await evaluate(`${play}.poop.body.setAllowGravity(true), true`);
     for (let i = 0; i < 60 && (await playState()) !== 'dead'; i += 1) await sleep(100);
     await sleep(TT.deathToOverMs + 300);
-    const over = await evaluate(`JSON.stringify({ dead: ${play}.state === 'dead', active: __flappy.scene.isActive('Over'), counts: __flappy.scene.getScene('Over').children.list.filter((c) => c.type === 'Text' && /^×\\d+$/.test(c.text)).map((c) => c.text), collected: ${play}.collected })`).then(JSON.parse);
-    const expected = ['probiotic', 'bacteria', 'fiber', 'bean'].map((k) => `×${over.collected[k]}`);
-    ok(over.dead && over.active && JSON.stringify(over.counts) === JSON.stringify(expected), `game over shows the run summary ${expected.join(' ')}`);
+    const over = await evaluate(`JSON.stringify({ dead: ${play}.state === 'dead', active: __flappy.scene.isActive('Over'), counts: __flappy.scene.getScene('Over').children.list.filter((c) => c.type === 'Text' && /^×\\d+$/.test(c.text)).map((c) => c.text), collected: ${play}.collected, pipes: ${play}.pipesPassed })`).then(JSON.parse);
+    const expected = [...['probiotic', 'bacteria', 'fiber', 'bean'].map((k) => `×${over.collected[k]}`), `×${over.pipes}`];
+    ok(over.dead && over.active && JSON.stringify(over.counts) === JSON.stringify(expected), `game over shows the run summary ${expected.slice(0, 4).join(' ')} and ${over.pipes} pipes crossed`);
 
     // A game over must not change how later pipes are drawn: restart, start, spawn, check the frame.
     await evaluate(`__flappy.scene.stop('Over'), ${play}.scene.restart(), true`);

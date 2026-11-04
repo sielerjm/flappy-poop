@@ -93,7 +93,7 @@ src/
   scenes/
     Boot.js             preloads images + the sfx MP3s
     Play.js             ready -> playing -> paused -> dead; items; beans + fart power; tray; locale; ready buttons + profile line
-    Over.js             game-over panel (score, 2 × 2 run summary, best, home button); new-top-6 export hint; tray mute still works
+    Over.js             game-over panel (score, 2 × 2 run summary, pipes crossed, glowing home button); new-top-6 export hint; tray mute still works
     Settings.js         sound / haptics overlay; About link
     About.js            credits, author, LLM note, How to play + feedback links, last-updated
     HowTo.js            How to play overlay (ready screen and About link); feedback link

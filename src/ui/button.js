@@ -35,6 +35,11 @@ export function createButton(scene, box, label, style, { depth = 20 } = {}) {
       fit();
       return this;
     },
+    setAlpha(alpha) {
+      g.setAlpha(alpha);
+      text.setAlpha(alpha);
+      return this;
+    },
     setColor(color) {
       text.setColor(color);
       return this;

@@ -50,7 +50,7 @@ import {
   LAST_UPDATED,
 } from '../logic.js';
 import { t, pauseBannerText, levelBannerText, levelLabel, initialLocale, isLocale, profileButtonText } from '../i18n.js';
-import { loadLocal, saveLocal, ensureId, recordScore, isNewTop, topScores, TOILET_EMOJI } from '../save.js';
+import { loadLocal, saveLocal, ensureId, recordScore, isNewTop, TOILET_EMOJI } from '../save.js';
 import { unlock, attachGame, setMuted, isMuted, sfx } from '../sound.js';
 import { createTray } from '../ui/tray.js';
 import { createGlow, createRectGlow } from '../ui/glow.js';
@@ -1073,9 +1073,6 @@ export class Play extends Phaser.Scene {
     const newTop = isNewTop(this.save, this.score);
     this.save = saveLocal(recordScore(this.save, this.score, { toilet: this.toilet, level: this.level }));
     this.syncLeaderboard(); // fire and forget; never awaited inside the update loop
-    // BEST on the game-over panel = the save state's top score, so a loaded code counts too.
-    const best = Math.max(this.score, topScores(this.save)[0] ?? 0);
-
     // Tumble: keep gravity so the poop falls, stop it at the ground, spin it.
     this.poop.setVelocityY(Math.max(this.poop.body.velocity.y, 0));
     this.poop.body.setCollideWorldBounds(false);
@@ -1083,7 +1080,7 @@ export class Play extends Phaser.Scene {
 
     this.time.delayedCall(T.deathToOverMs, () => {
       this.physics.pause();
-      this.scene.launch('Over', { score: this.score, best, newTop, toilet: this.toilet, level: this.level, collected: { ...this.collected } });
+      this.scene.launch('Over', { score: this.score, newTop, toilet: this.toilet, level: this.level, pipes: this.pipesPassed, collected: { ...this.collected } });
     });
   }
 
