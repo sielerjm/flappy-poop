@@ -115,10 +115,11 @@ export class Play extends Phaser.Scene {
     // transparent overlay layers from BACKGROUND.layers, each a tileSprite scrolled
     // at its own parallax. Tile-scale maps one texture copy onto the playfield so
     // a layer never repeats vertically.
-    this.bgColor = this.add.rectangle(0, 0, GAME_WIDTH, GAME_HEIGHT, levelColor(1, LEVELS), 1).setOrigin(0, 0).setDepth(0);
+    // Negative depths: pipes, items and beans are created later at depth 0 and must draw over every layer.
+    this.bgColor = this.add.rectangle(0, 0, GAME_WIDTH, GAME_HEIGHT, levelColor(1, LEVELS), 1).setOrigin(0, 0).setDepth(-20);
     this.bgFade = null;
     this.bgLayers = BACKGROUND.layers.map((layer, i) => {
-      const sprite = this.add.tileSprite(0, 0, GAME_WIDTH, GAME_HEIGHT, layer.key).setOrigin(0, 0).setDepth(1 + i);
+      const sprite = this.add.tileSprite(0, 0, GAME_WIDTH, GAME_HEIGHT, layer.key).setOrigin(0, 0).setDepth(-10 + i);
       const f = sprite.frame;
       sprite.setTileScale(GAME_WIDTH / f.width, GAME_HEIGHT / f.height);
       return { sprite, parallax: layer.parallax };
