@@ -40,6 +40,7 @@ import { t, pauseBannerText, initialLocale, isLocale } from '../i18n.js';
 import { loadLocal, saveLocal, ensureId, recordScore, isNewTop, profileLine, topScores, TOILET_EMOJI } from '../save.js';
 import { unlock, attachGame, setMuted, isMuted, sfx } from '../sound.js';
 import { createTray } from '../ui/tray.js';
+import { createGlow } from '../ui/glow.js';
 import { createSubmitStore, submitPlan, submitScore } from '../leaderboard.js';
 import { createButton } from '../ui/button.js';
 import { createToggle } from '../ui/toggle.js';
@@ -122,8 +123,11 @@ export class Play extends Phaser.Scene {
     this.setPoopTexture('poop-speech');
     this.beanSpawned = false;
     this.poop.body.setAllowGravity(false);
-    // White glow behind the poop while the fart power is charged (alpha pulses).
-    this.glow = this.add.circle(this.poop.x, this.poop.y, 64, 0xffffff, 1).setAlpha(0).setDepth(9);
+    // Soft-edged white glow behind the poop while the fart power is charged (alpha
+    // pulses; tinted by applyRainbow). Scale 1 = glowRadiusPx.
+    this.glow = createGlow(this, this.poop.x, this.poop.y, { radius: T.beans.glowRadiusPx, fadeFrac: T.beans.glowFadeFrac })
+      .setAlpha(0)
+      .setDepth(9);
     this.bob = this.tweens.add({ targets: this.poop, y: '+=24', duration: 500, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
 
     // HUD
@@ -657,13 +661,13 @@ export class Play extends Phaser.Scene {
       if (mode === 'super') this.glow.setAlpha(T.beans.superGlowAlpha).setScale(T.beans.superGlowScale);
       else this.glow.setScale(1);
       if (mode === null) {
-        this.glow.setFillStyle(0xffffff, 1);
+        this.glow.clearTint();
         this.beanButtonBg.setFillStyle(0xffffff, 0.75);
       }
     }
     if (!mode) return;
     const color = hsvToRgb(rainbowHue(this.rainbowMs, T.beans.rainbowPeriodMs), 1, 1);
-    this.glow.setFillStyle(color, 1);
+    this.glow.setTint(color);
     if (mode === 'charged') this.beanButtonBg.setFillStyle(color, 0.85);
   }
 

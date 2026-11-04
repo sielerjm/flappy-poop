@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { GAME_HEIGHT, TUNING as T } from '../src/config.js';
-import { fartFloat, hsvToRgb, rainbowHue } from '../src/logic.js';
+import { fartFloat, hsvToRgb, rainbowHue, glowAlphaAt, glowStops } from '../src/logic.js';
 
 const b = T.beans;
 const CENTRE = GAME_HEIGHT / 2;
@@ -79,4 +79,27 @@ test('rainbowHue cycles once per period and stays in [0, 1)', () => {
   }
   assert.equal(rainbowHue(100, 0), 0, 'no period: no cycling');
   assert.ok(T.beans.rainbowPeriodMs >= 300 && T.beans.superGlowAlpha > 0 && T.beans.superGlowAlpha <= 1 && T.beans.superGlowScale >= 1 && T.beans.superGlowScale <= 2);
+});
+
+test('glowAlphaAt is solid to 1 − fadeFrac, fades linearly to 0 at the edge, and glowStops draws the same', () => {
+  const fade = T.beans.glowFadeFrac;
+  assert.ok(fade > 0 && fade < 1, `glowFadeFrac ${fade}`);
+  assert.ok(T.beans.glowRadiusPx >= T.poopRadius, 'glow at least covers the poop');
+  assert.equal(glowAlphaAt(0, fade), 1);
+  assert.equal(glowAlphaAt(1 - fade, fade), 1, 'still solid at the start of the fade');
+  assert.ok(Math.abs(glowAlphaAt(1 - fade / 2, fade) - 0.5) < 1e-9, 'half way through the fade');
+  assert.equal(glowAlphaAt(1, fade), 0);
+  assert.equal(glowAlphaAt(1.5, fade), 0);
+  let prev = 1;
+  for (let d = 0; d <= 1; d += 0.01) {
+    const a = glowAlphaAt(d, fade);
+    assert.ok(a <= prev + 1e-12 && a >= 0 && a <= 1, `monotonic at ${d}`);
+    prev = a;
+  }
+  assert.deepEqual(glowStops(0.25), [
+    [0, 1],
+    [0.75, 1],
+    [1, 0],
+  ]);
+  for (const [stop, alpha] of glowStops(fade)) assert.equal(glowAlphaAt(stop, fade), alpha, `stop ${stop}`);
 });

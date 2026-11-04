@@ -211,7 +211,7 @@ export async function run(url = DEFAULT_URL) {
     const sampleFart = async () => {
       const samples = [];
       for (let i = 0; i < 80 && (await evaluate(`${play}.effects.powerActive()`)); i += 1) {
-        samples.push(await evaluate(`JSON.stringify({ y: ${play}.poop.y, angle: ${play}.poop.angle, fill: ${play}.glow.fillColor, alpha: ${play}.glow.alpha, e: ${play}.effects.powerElapsed() })`).then(JSON.parse));
+        samples.push(await evaluate(`JSON.stringify({ y: ${play}.poop.y, angle: ${play}.poop.angle, fill: ${play}.glow.tintTopLeft, alpha: ${play}.glow.alpha, e: ${play}.effects.powerElapsed() })`).then(JSON.parse));
         await sleep(100);
       }
       return samples;
@@ -233,7 +233,7 @@ export async function run(url = DEFAULT_URL) {
     // Super fart, started inside the grace window so the poop has not fallen yet.
     await evaluate(`${play}.effects.addBean(), ${play}.effects.addBean(), ${play}.effects.addBean(), ${play}.setCharged(true), true`);
     await sleep(150);
-    const chargedFill = await evaluate(`${play}.glow.fillColor`);
+    const chargedFill = await evaluate(`${play}.glow.tintTopLeft`);
     const buttonFill = await evaluate(`${play}.beanButtonBg.fillColor`);
     ok((await evaluate(`${play}.effects.superReady()`)) === true && chargedFill !== 0xffffff && buttonFill !== 0xffffff, `three beans: rainbow glow (#${chargedFill.toString(16)}) and bean button (#${buttonFill.toString(16)})`);
     await evaluate(`${play}.activatePower(), true`);
@@ -246,7 +246,11 @@ export async function run(url = DEFAULT_URL) {
     const score2 = await evaluate(`${play}.score`);
     ok((await playState()) === 'playing' && score2 - score1 >= 19 && (await evaluate(`${play}.effects.beans()`)) === 0, `super fart: alive, +${score2 - score1} pipes, beans spent`);
     await sleep(100);
-    ok((await evaluate(`${play}.glow.alpha === 0 && ${play}.glow.fillColor === 0xffffff && ${play}.rainbowMode === null`)) === true, 'after the super fart the glow is off and white again');
+    ok((await evaluate(`${play}.glow.alpha === 0 && !${play}.glow.isTinted && ${play}.rainbowMode === null`)) === true, 'after the super fart the glow is off and white again');
+    // The glow texture is a soft disc: solid core, outer glowFadeFrac of the radius fading to 0.
+    const r = T.glowRadiusPx;
+    const px = await evaluate(`JSON.stringify([0, 0.5, 1 - ${T.glowFadeFrac} / 2, 0.95].map((f) => __flappy.textures.getPixelAlpha(Math.round(${r} + f * ${r}) - (f > 0 ? 1 : 0), ${r}, 'glow')))`).then(JSON.parse);
+    ok(px[0] === 255 && px[1] === 255 && px[2] > 90 && px[2] < 170 && px[3] <= 70, `glow texture fades at the edge (alpha at 0 / 0.5 / mid-fade / 0.95 r: ${px.join(' / ')})`);
 
     const f2 = await frame();
     await sleep(500);

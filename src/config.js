@@ -70,6 +70,8 @@ export const TUNING = {
     wigglePeriodMs: 450, // ms per wiggle cycle
     graceMs: 600, // ms of invulnerability after the fart ends (clears a pipe column at base speed)
     stinkFrameMs: 180, // ms between stink-line frames while charged
+    glowRadiusPx: 64, // px radius of the glow behind the poop (scale 1)
+    glowFadeFrac: 0.25, // 0–1 outer share of the glow radius that fades to transparent
     glowMinAlpha: 0.2, // 0–1 white glow pulse floor while charged
     glowMaxAlpha: 0.6, // 0–1 white glow pulse ceiling while charged
     glowPulseMs: 600, // ms per glow pulse (one way)

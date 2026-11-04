@@ -58,7 +58,8 @@ src/
                             scoring, items, beans (rollBean, beanSpawnX, beanY,
                             beanAngle, poopTapHit), fart envelope (pipeSpacing,
                             fartPeakMul, fartMul, fartRemainingDistance), fartFloat
-                            (wave + tilt), hsvToRgb / rainbowHue, sprite angle, retry
+                            (wave + tilt), hsvToRgb / rainbowHue, glowAlphaAt /
+                            glowStops, sprite angle, retry
                             lockout, difficulty,
                             best-score store, settings store (incl. locale), vibrate
                             helper, trayLayout, trayHit, readyLayout, readyHit
@@ -94,6 +95,10 @@ src/
                             silent-prime, resume() the AudioContext, and
                             game.sound.unlock(). Blips wait until running.
   ui/
+    glow.js                 createGlow(): white radial-gradient canvas texture
+                            (solid core, outer glowFadeFrac fading to 0, from
+                            glowStops) as an Image behind the poop; tinted for
+                            the rainbow, alpha / scale tweened by Play.
     tray.js                 Phaser wrapper around trayLayout: leaderboard (🏆) /
                             mute / settings bottom-right, pause directly above the
                             cog, plus bottom-left info, language (🌐), feedback (💬).

@@ -380,6 +380,29 @@ export function fartPeakMul(durationMs, pipes, spawnEveryMs) {
   return 1 + ((avg - 1) * Math.PI) / 2;
 }
 
+/**
+ * Alpha of the glow at distFrac (0 = centre, 1 = edge) of its radius: solid up
+ * to 1 − fadeFrac, then linear to 0 at the edge, 0 beyond.
+ */
+export function glowAlphaAt(distFrac, fadeFrac) {
+  const fade = Math.min(1, Math.max(0, fadeFrac));
+  if (!(distFrac > 0)) return 1;
+  if (distFrac >= 1) return 0;
+  const solid = 1 - fade;
+  if (distFrac <= solid) return 1;
+  return fade > 0 ? (1 - distFrac) / fade : 0;
+}
+
+/** Radial-gradient stops [position, alpha] that draw glowAlphaAt (linear between stops). */
+export function glowStops(fadeFrac) {
+  const fade = Math.min(1, Math.max(0, fadeFrac));
+  return [
+    [0, 1],
+    [1 - fade, 1],
+    [1, 0],
+  ];
+}
+
 /** 0xRRGGBB for an HSV colour; h in [0, 1) around the wheel, s and v in [0, 1]. */
 export function hsvToRgb(h, s, v) {
   const hue = ((h % 1) + 1) % 1;
