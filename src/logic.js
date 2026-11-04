@@ -399,6 +399,8 @@ export function createEffects(t) {
   let powerClock = 0;
   let powerOn = false;
   let powerJustEnded = false;
+  let powerSuper = false;
+  let powerPipes = t.beans.powerPipes;
   return {
     /** Pickups stack: each adds probioticPipes on top of what is left. */
     applyProbiotic() {
@@ -421,14 +423,14 @@ export function createEffects(t) {
     pipesLeft() {
       return probioticPipesLeft;
     },
-    /** Collect a bean; returns the count. Capped at toCharge, ignored while farting: one at a time. */
+    /** Collect a bean; returns the count. Capped at maxBeans, ignored while farting. */
     addBean() {
-      if (!powerOn && beanCount < t.beans.toCharge) beanCount += 1;
+      if (!powerOn && beanCount < t.beans.maxBeans) beanCount += 1;
       return beanCount;
     },
-    /** A bean is held (power ready) or being used: no more can be taken or spawned. */
+    /** The bag is full or a fart is running: no more beans can be taken or spawned. */
     holdingBean() {
-      return powerOn || beanCount >= t.beans.toCharge;
+      return powerOn || beanCount >= t.beans.maxBeans;
     },
     beans() {
       return beanCount;
@@ -437,15 +439,32 @@ export function createEffects(t) {
     powerReady() {
       return !powerOn && beanCount >= t.beans.toCharge;
     },
-    /** Start the fart for durationMs; false unless ready. Spends the beans. */
+    /** Enough beans for a super fart (rainbow charged look) and no fart running. */
+    superReady() {
+      return !powerOn && beanCount >= t.beans.superBeans;
+    },
+    /**
+     * Start the fart for durationMs; false unless ready. Spends every bean held:
+     * superBeans or more make it a super fart (superPipes), fewer a normal one.
+     */
     activatePower(durationMs) {
       if (!this.powerReady()) return false;
+      powerSuper = beanCount >= t.beans.superBeans;
+      powerPipes = powerSuper ? t.beans.superPipes : t.beans.powerPipes;
       powerOn = true;
       powerJustEnded = false;
       powerDuration = durationMs;
       powerClock = 0;
       beanCount = 0;
       return true;
+    },
+    /** True while (and after) a super fart, until the next activation. */
+    powerIsSuper() {
+      return powerSuper;
+    },
+    /** Pipe pairs the current (or last) fart carries the poop past. */
+    powerPipeCount() {
+      return powerPipes;
     },
     /** Advance the power clock; call only while the run is playing. */
     tickPower(deltaMs) {

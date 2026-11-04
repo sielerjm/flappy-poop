@@ -53,6 +53,8 @@ test('beans block sits in a fair band and the fart ramp stays readable', () => {
   assert.ok(T.readyPoopScale >= 1 && T.readyPoopScale <= 1.6, `readyPoopScale ${T.readyPoopScale}`);
   assert.ok(b.travelPeriodMs >= 2000, 'bob should be unhurried');
   assert.ok(b.powerPipes >= 3 && b.powerPipes <= 8, `powerPipes ${b.powerPipes}`);
+  assert.ok(b.superPipes > b.powerPipes && b.superPipes <= 30, `superPipes ${b.superPipes}`);
+  assert.ok(b.toCharge <= b.superBeans && b.superBeans <= b.maxBeans && b.maxBeans <= 9, `toCharge ${b.toCharge} ≤ superBeans ${b.superBeans} ≤ maxBeans ${b.maxBeans}`);
   assert.ok(b.powerMs >= 2000 && b.powerMs <= 8000, `powerMs ${b.powerMs}`);
   assert.ok(b.graceMs * (T.pipeSpeed / 1000) >= T.pipeWidth + T.poopRadius, 'grace must clear a pipe column at base speed');
   assert.ok(b.beanRadius >= 40 && b.beanRadius <= 48, `beanRadius ${b.beanRadius}`);
@@ -60,4 +62,6 @@ test('beans block sits in a fair band and the fart ramp stays readable', () => {
   assert.ok(b.endClearMarginPx >= 0 && b.endClearMarginPx <= 200, `endClearMarginPx ${b.endClearMarginPx}`);
   const peak = 1 + (((b.powerPipes * T.spawnEveryMs) / b.powerMs - 1) * Math.PI) / 2;
   assert.ok(peak > 1 && peak <= 2.5, `fart peak multiplier ${peak}`);
+  const superPeak = 1 + (((b.superPipes * T.spawnEveryMs) / b.powerMs - 1) * Math.PI) / 2;
+  assert.ok(superPeak > peak && superPeak <= 12, `super fart peak multiplier ${superPeak}`);
 });

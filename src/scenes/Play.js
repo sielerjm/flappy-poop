@@ -688,7 +688,7 @@ export class Play extends Phaser.Scene {
     const durationMs = snd && snd.duration > 0 ? Math.round(snd.duration * 1000) : T.beans.powerMs;
     this.effects.activatePower(durationMs);
     this.fartDurationMs = durationMs;
-    this.fartPeak = fartPeakMul(durationMs, T.beans.powerPipes, T.spawnEveryMs);
+    this.fartPeak = fartPeakMul(durationMs, this.effects.powerPipeCount(), T.spawnEveryMs); // 5 pipes, or 20 for a super fart
     if (snd) {
       this.fartSound = snd;
       snd.once('complete', () => {
@@ -714,7 +714,9 @@ export class Play extends Phaser.Scene {
   spawnHeldByFart() {
     if (!this.effects.powerActive()) return false;
     const remaining = fartRemainingDistance(this.effects.powerElapsed(), this.fartDurationMs, this.fartPeak, this.diff.pipeSpeed);
-    return remaining < pipeClearDistance(GAME_WIDTH, T.pipeWidth, T.poopX) + T.beans.endClearMarginPx;
+    // At super-fart speed one frame scrolls ~60 px, so keep at least three frames in hand.
+    const margin = Math.max(T.beans.endClearMarginPx, this.scrollSpeed() * 0.05);
+    return remaining < pipeClearDistance(GAME_WIDTH, T.pipeWidth, T.poopX) + margin;
   }
 
   endPower() {

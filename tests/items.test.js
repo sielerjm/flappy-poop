@@ -281,12 +281,16 @@ test('pipeClearDistance: a right-edge spawn needs the screen plus a column to be
   assert.ok(d < fartRemainingDistance(0, T.beans.powerMs, fartPeakMul(T.beans.powerMs, T.beans.powerPipes, T.spawnEveryMs), T.pipeSpeed), 'the fart scrolls further than one clear distance, so pipes spawned early still pass');
 });
 
-test('beans do not accumulate: the count caps at toCharge and holdingBean blocks more', () => {
+test('beans accumulate to maxBeans; holdingBean only when the bag is full or the fart runs', () => {
   const fx = createEffects(T);
   assert.equal(fx.holdingBean(), false);
-  for (let i = 0; i < T.beans.toCharge + 3; i++) fx.addBean();
-  assert.equal(fx.beans(), T.beans.toCharge, 'capped');
-  assert.equal(fx.holdingBean(), true);
+  for (let i = 1; i < T.beans.maxBeans; i++) {
+    assert.equal(fx.addBean(), i);
+    assert.equal(fx.holdingBean(), false, `still room with ${i} beans`);
+  }
+  assert.equal(fx.addBean(), T.beans.maxBeans);
+  assert.equal(fx.holdingBean(), true, 'bag full');
+  assert.equal(fx.addBean(), T.beans.maxBeans, 'capped');
   assert.equal(fx.powerReady(), true);
   assert.equal(fx.activatePower(1000), true);
   assert.equal(fx.holdingBean(), true, 'still holding while the fart runs');
@@ -294,4 +298,32 @@ test('beans do not accumulate: the count caps at toCharge and holdingBean blocks
   fx.tickPower(1000);
   assert.equal(fx.holdingBean(), false);
   assert.equal(fx.addBean(), 1, 'can take one again afterwards');
+});
+
+test('1–2 beans give a normal fart, superBeans give a super fart, and every bean is spent either way', () => {
+  for (let held = T.beans.toCharge; held <= T.beans.maxBeans; held++) {
+    const fx = createEffects(T);
+    for (let i = 0; i < held; i++) fx.addBean();
+    assert.equal(fx.superReady(), held >= T.beans.superBeans, `superReady with ${held}`);
+    assert.equal(fx.activatePower(1000), true);
+    const superFart = held >= T.beans.superBeans;
+    assert.equal(fx.powerIsSuper(), superFart, `${held} beans → super ${superFart}`);
+    assert.equal(fx.powerPipeCount(), superFart ? T.beans.superPipes : T.beans.powerPipes);
+    assert.equal(fx.beans(), 0, 'all beans spent');
+    assert.equal(fx.superReady(), false);
+    fx.tickPower(1000);
+    assert.equal(fx.powerIsSuper(), superFart, 'remembered until the next activation');
+  }
+});
+
+test('the super fart envelope scrolls exactly superPipes spacings in the same clip', () => {
+  const duration = T.beans.powerMs;
+  const peak = fartPeakMul(duration, T.beans.superPipes, T.spawnEveryMs);
+  assert.ok(peak > 5 && peak <= 12, `super peak ${peak}`);
+  let distance = 0;
+  for (let ms = 0; ms < duration; ms += 1) distance += T.pipeSpeed * fartMul(ms + 0.5, duration, peak) * 0.001;
+  const spacings = distance / pipeSpacing(T.pipeSpeed, T.spawnEveryMs);
+  assert.ok(Math.abs(spacings - T.beans.superPipes) < 0.02, `scrolled ${spacings} spacings, want ${T.beans.superPipes}`);
+  const tail = fartRemainingDistance(0, duration, peak, T.pipeSpeed) / pipeSpacing(T.pipeSpeed, T.spawnEveryMs);
+  assert.ok(Math.abs(tail - T.beans.superPipes) < 0.01, 'analytic tail agrees');
 });

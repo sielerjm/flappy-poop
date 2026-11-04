@@ -59,7 +59,10 @@ export const TUNING = {
     chanceAfter: 0.06, // 0–1 chance per pipe pair after the window (below fiber's ~0.10)
     guaranteeScore: 17, // if no bean has spawned yet, the pair spawned at this score carries one (on screen ~2 pipes later, by pipe 20)
     toCharge: 1, // beans needed to ready the fart power
-    powerPipes: 5, // pipe pairs that cross the screen during one fart
+    maxBeans: 3, // beans the poop can carry; none spawn or are taken past this
+    superBeans: 3, // beans held at activation that make it a super fart
+    powerPipes: 5, // pipe pairs that cross the screen during one fart (1–2 beans)
+    superPipes: 20, // pipe pairs during a super fart, in the same clip (≈10× base speed at the peak)
     powerMs: 4344, // ms; fallback power length = the fart_accelerate clip (the loaded sound's duration wins)
     travelPeriodMs: 4000, // ms for one full up-and-down bob
     travelFrac: 0.5, // 0–1 share of the playable height the bob covers, centred (0.5 = middle half)
