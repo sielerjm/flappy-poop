@@ -635,11 +635,10 @@ export function scaledCircleBody(frameSize, displayScale, logicalRadius) {
  * Ready-screen layout, top to bottom and centred: title; then the poop wearing
  * its "TAP TO FLAP!" speech bubble (poop-speech.png; the bubble reaches ~127 px
  * above and ~116 px right of the body at display scale, ×readyPoopScale) and
- * the toilet toggle, as one block centred in the free space with equal room
- * above and below; then How to play, Save / Load User, and the name · best
- * profile button stacked down so the profile rests just above the tray band
- * (and above the ground strip). Any tap that is not on a box starts the run.
- * Buttons are at least trayHitMin tall.
+ * the toilet toggle; then How to play, Save / Load User, and the profile
+ * button stacked down from toiletGap below the toggle, leaving the profile
+ * above the ground strip and the tray band. Any tap that is not on a box
+ * starts the run. Buttons are at least trayHitMin tall.
  */
 export function readyLayout(width, height, t) {
   const cx = width / 2;
@@ -651,11 +650,14 @@ export function readyLayout(width, height, t) {
   const poop = { id: 'poop', x: cx, y: 623, bubble: { left: -48 * s, right: 116 * s, top: -127 * s, bottom: 46 * s } };
   // Toilet toggle: 120x56 track left of centre, 🚽 to its right; the hit box spans both.
   const toilet = { id: 'toilet', x: cx, y: 751, width: 240, height: 72, track: { x: cx - 50, y: 751, width: 120, height: 56 }, emojiX: cx + 80 };
-  // Three equal buttons, 12 px apart, the last one ending at 1148: above the ground strip (1152) and the tray band (1168).
+  // Three equal buttons, 12 px apart, hanging toiletGap below the toggle (it used
+  // to be 73 px; halved so the stack sits higher). Profile bottom lands at 1111,
+  // above the ground strip (1152) and the tray band (1168).
   const gap = 12;
-  const profile = { id: 'profile', x: cx, y: 1148 - boxH / 2, width: 360, height: boxH };
-  const saveLoad = { id: 'saveload', x: cx, y: profile.y - boxH - gap, width: 360, height: boxH };
-  const howto = { id: 'howto', x: cx, y: saveLoad.y - boxH - gap, width: 400, height: boxH };
+  const toiletGap = 36;
+  const howto = { id: 'howto', x: cx, y: toilet.y + toilet.height / 2 + toiletGap + boxH / 2, width: 400, height: boxH };
+  const saveLoad = { id: 'saveload', x: cx, y: howto.y + boxH + gap, width: 360, height: boxH };
+  const profile = { id: 'profile', x: cx, y: saveLoad.y + boxH + gap, width: 360, height: boxH };
   return { title, poop, toilet, howto, saveLoad, profile };
 }
 

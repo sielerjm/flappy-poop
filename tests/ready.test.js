@@ -60,16 +60,17 @@ test('every ready box keeps clear of the bobbing poop at its ready spot', () => 
   }
   assert.ok(POOP.top > layout.title.y + 26, 'speech bubble clears the title');
   assert.ok(POOP.right <= GAME_WIDTH, 'bubble stays inside the field');
-  // The poop + toggle block is centred in the free space: equal room above (title) and below (How to play).
+  // How to play hangs a short, fixed gap below the toggle (halved from the old centred layout), with more room above the poop block than below it.
   const blockTop = POOP.top;
   const blockBottom = layout.toilet.y + layout.toilet.height / 2;
   const above = blockTop - (layout.title.y + 26);
   const below = layout.howto.y - layout.howto.height / 2 - blockBottom;
-  assert.ok(Math.abs(above - below) <= 12, `block not centred: ${above} above vs ${below} below`);
-  // The profile button rests just above the tray band, clear of the ground strip.
+  assert.ok(below >= 28 && below <= 44, `toggle → How to play gap ${below}`);
+  assert.ok(above >= below, 'the poop block keeps more air above than below');
+  // The profile button (and its 40 px prompt halo) stays clear of the ground strip and the tray band.
   const profileBottom = layout.profile.y + layout.profile.height / 2;
-  assert.ok(profileBottom <= GAME_HEIGHT - T.groundHeight, 'profile clears the ground strip');
-  assert.ok(GAME_HEIGHT - T.trayHeight - profileBottom <= 40, 'profile sits close above the tray');
+  assert.ok(profileBottom + T.readyPromptGlowPx <= GAME_HEIGHT - T.groundHeight, 'profile and its halo clear the ground strip');
+  assert.ok(GAME_HEIGHT - T.trayHeight - profileBottom <= 80, 'profile still sits near the tray');
 });
 
 test('readyHit resolves each box at its centre, including the always-present profile button, and misses the gaps', () => {
