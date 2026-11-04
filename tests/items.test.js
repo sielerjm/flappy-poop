@@ -55,8 +55,8 @@ test('itemGapY stays inside the gap and bacteria is never centred', () => {
   }
 });
 
-test('scoreAfterItem adds 1 for fiber, subtracts 3 for bacteria, floors at 0', () => {
-  assert.equal(scoreAfterItem(10, 'fiber', T), 11);
+test('scoreAfterItem adds 3 for fiber, subtracts 3 for bacteria, floors at 0', () => {
+  assert.equal(scoreAfterItem(10, 'fiber', T), 13);
   assert.equal(scoreAfterItem(10, 'bacteria', T), 7);
   assert.equal(scoreAfterItem(1, 'bacteria', T), 0);
   assert.equal(scoreAfterItem(0, 'bacteria', T), 0);
@@ -295,7 +295,7 @@ test('beans accumulate to maxBeans; holdingBean only when the bag is full or the
   assert.equal(fx.addBean(), 1, 'can take one again afterwards');
 });
 
-test('1–2 beans give a normal fart, superBeans give a super fart, and every bean is spent either way', () => {
+test('1–2 beans give a normal fart and spend one; superBeans give a super fart and spend them all', () => {
   for (let held = T.beans.toCharge; held <= T.beans.maxBeans; held++) {
     const fx = createEffects(T);
     for (let i = 0; i < held; i++) fx.addBean();
@@ -304,7 +304,8 @@ test('1–2 beans give a normal fart, superBeans give a super fart, and every be
     const superFart = held >= T.beans.superBeans;
     assert.equal(fx.powerIsSuper(), superFart, `${held} beans → super ${superFart}`);
     assert.equal(fx.powerPipeCount(), superFart ? T.beans.superPipes : T.beans.powerPipes);
-    assert.equal(fx.beans(), 0, 'all beans spent');
+    assert.equal(fx.beans(), superFart ? 0 : held - 1, superFart ? 'a super fart spends every bean' : 'a normal fart spends one bean');
+    assert.equal(fx.powerReady(), false, 'never ready while the fart runs');
     assert.equal(fx.superReady(), false);
     fx.tickPower(1000);
     assert.equal(fx.powerIsSuper(), superFart, 'remembered until the next activation');
@@ -337,4 +338,24 @@ test('cancelPower stops a running fart at once without endedPower firing, and th
   fx.tickPower(1000);
   assert.equal(fx.endedPower(), false, 'no late end event either');
   assert.equal(fx.cancelPower(), false);
+});
+
+test('with two beans a normal fart leaves one, which is still a charged power; a third bean then makes it super', () => {
+  const fx = createEffects(T);
+  fx.addBean();
+  fx.addBean();
+  assert.equal(fx.activatePower(1000), true);
+  assert.equal(fx.powerIsSuper(), false);
+  assert.equal(fx.beans(), 1, 'one bean kept');
+  fx.tickPower(1000);
+  assert.equal(fx.endedPower(), true);
+  assert.equal(fx.powerReady(), true, 'the kept bean is a ready power');
+  assert.equal(fx.superReady(), false);
+  fx.addBean();
+  fx.addBean();
+  assert.equal(fx.beans(), T.beans.maxBeans, 'back to the cap');
+  assert.equal(fx.superReady(), true);
+  assert.equal(fx.activatePower(1000), true);
+  assert.equal(fx.powerIsSuper(), true);
+  assert.equal(fx.beans(), 0, 'the super fart spends all three');
 });

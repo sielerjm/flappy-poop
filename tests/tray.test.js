@@ -95,7 +95,12 @@ test('bean power button floats above the ground at bottom centre, clear of every
     assert.ok(gap >= 0, `bean button overlaps ${b.id} by ${-gap}px`);
   }
   assert.equal(beanButtonHit(bean.x, bean.y, bean), true);
-  assert.equal(beanButtonHit(bean.x + bean.size / 2 + 2, bean.y, bean), false);
+  assert.equal(beanButtonHit(bean.x + bean.size - 2, bean.y, bean), true, 'the hit circle is twice the drawn button');
+  assert.equal(beanButtonHit(bean.x + bean.size + 2, bean.y, bean), false);
+  for (const b of [...tray.buttons, tray.pause, tray.info, tray.lang, tray.feedback]) {
+    const hitGap = Math.hypot(b.x - bean.x, b.y - bean.y) - (b.size / 2 + bean.size);
+    assert.ok(hitGap >= 0, `the enlarged bean hit circle reaches ${b.id} by ${-hitGap}px`);
+  }
   assert.equal(trayHit(bean.x, bean.y, tray), null, 'the slot is not a tray button');
   assert.equal(beanButtonHit(0, 0, null), false);
 });

@@ -89,7 +89,7 @@ Short, playful, clear. Fit a 720×1280 logical field; How to play / About body w
 | itemPipeName | Pipe | 管道 |
 | itemPipeDetail | This is a pipe. Dodge the pipes for as long as possible. You gain 1 point for every pipe you dodge. | 这是管道。尽量长时间躲开管道。每躲过一道管道得 1 分。 |
 | itemFiberName | Fiber | 纤维 |
-| itemFiberDetail | +1 point | +1 分 |
+| itemFiberDetail | +3 points. Bobs up and down between the pipes. | +3 分。在管道之间上下漂浮。 |
 | itemProbioticName | Probiotic | 益生菌 |
 | itemProbioticDetail | Protects you against bad bacteria for 5 pipes. Subsequent probiotics stack, but hitting a bad bacteria uses them all up. | 在 5 道管道内保护你不受有害细菌伤害。后续益生菌可叠加，但撞到有害细菌会全部用完。 |
 | itemBacteriaName | Bad bacteria | 有害细菌 |

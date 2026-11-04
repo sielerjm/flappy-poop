@@ -8,14 +8,14 @@ guide; this file is the map for anyone changing the code.
 
 Flappy Poop is a Flappy Bird clone for phone browsers: a poop emoji flaps through
 the gut dodging pink intestinal-fold pipes. One point per pipe pair passed; fiber
-is +1, bad bacteria is −3 (floor 0), and a probiotic blocks one bacteria hit for
+is +3 (it bobs between pipe pairs like a bean), bad bacteria is −3 (floor 0), and a probiotic blocks one bacteria hit for
 5 pipes (pickups stack; a hit clears the stack). From pipe 5 a bean bobs between pipe
 pairs (15 % per pair to pipe 20 with one guaranteed by guaranteeScore, 6 % after);
 beans stack to maxBeans (3); one charges a fart power (stink lines + glow; tap the poop
 or the bean button) that plays `fart_accelerate.mp3`, ramps the scroll speed up and
 down with the clip so five pipes pass (superPipes = 20 with superBeans = 3 held, under
 a rainbow glow), floats the poop on a ±15° undulating wave, and cannot die; items pass
-through it and the probiotic countdown pauses. Every bean held is spent. Hit a pipe, the ceiling, or the floor and the run ends (dead-poop
+through it and the probiotic countdown pauses. A normal fart spends one bean (the rest stay in the bag, up to maxBeans); a super fart spends all three. Hit a pipe, the ceiling, or the floor and the run ends (dead-poop
 face). Best score and settings are kept in `localStorage`. The run is cut into
 **levels** by pipe pairs passed (`pipesPassed`, fart pipes included; score never):
 level 1 is `levels.firstPipes` (10), level n ≥ 2 is `pipesStep × (n − 1)`; ends at

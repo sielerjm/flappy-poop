@@ -68,7 +68,7 @@ export const TUNING = {
     startScore: 8, // score at which pickups may appear
     hazardStartScore: 15, // score at which bad bacteria may appear
     chancePerGap: 0.3, // 0–1 chance a gap rolls an item
-    fiberPoints: 1, // points added by fiber
+    fiberPoints: 3, // points added by fiber
     bacteriaPenalty: 3, // points subtracted by unshielded bacteria (3 since probiotics stack)
     probioticPipes: 5, // pipes a probiotic lasts
     itemRadius: 48, // px circular hitbox = half the 96 logical-px sprite (whole drawing)

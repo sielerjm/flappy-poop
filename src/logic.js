@@ -600,18 +600,19 @@ export function createEffects(t) {
       return !powerOn && beanCount >= t.beans.superBeans;
     },
     /**
-     * Start the fart for durationMs; false unless ready. Spends every bean held:
-     * superBeans or more make it a super fart (superPipes), fewer a normal one.
+     * Start the fart for durationMs; false unless ready. superBeans or more held
+     * make it a super fart (superPipes) and spend every bean; fewer give a
+     * normal fart (powerPipes) and spend exactly one, the rest stay in the bag.
      */
     activatePower(durationMs) {
       if (!this.powerReady()) return false;
       powerSuper = beanCount >= t.beans.superBeans;
       powerPipes = powerSuper ? t.beans.superPipes : t.beans.powerPipes;
+      beanCount = powerSuper ? 0 : beanCount - 1;
       powerOn = true;
       powerJustEnded = false;
       powerDuration = durationMs;
       powerClock = 0;
-      beanCount = 0;
       return true;
     },
     /** True while (and after) a super fart, until the next activation. */
@@ -688,10 +689,13 @@ export function beanButtonLayout(width, height, t) {
   return { id: 'bean', x: width / 2, y: height - t.groundHeight - t.trayHitMin / 2 - 58, size: t.trayHitMin };
 }
 
-/** True when (x, y) is inside the bean power button. */
+/**
+ * True when (x, y) is inside the bean power button's hit circle, which is twice
+ * the drawn button (radius = the button's diameter) so it is easy to hit mid-run.
+ */
 export function beanButtonHit(x, y, layout) {
   if (!layout) return false;
-  const r = layout.size / 2;
+  const r = layout.size;
   const dx = x - layout.x;
   const dy = y - layout.y;
   return dx * dx + dy * dy <= r * r;
