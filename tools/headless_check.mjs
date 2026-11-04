@@ -148,6 +148,7 @@ export async function run(url = DEFAULT_URL) {
       if (exceptions.length) console.log(`  page exceptions:\n  ${exceptions.join('\n  ')}`);
       return failures;
     }
+    ok((await evaluate(`__flappy.scene.getScene('Play').diff.gapHeight`)) === 374, 'level 1 pipe gap is 10 % wider (374 px)');
 
     const frame = () => evaluate('__flappy.loop.frame');
     const playState = () => evaluate(`__flappy.scene.getScene('Play').state`);
@@ -346,6 +347,7 @@ export async function run(url = DEFAULT_URL) {
     await sleep(300);
     const resumed = await evaluate(`JSON.stringify({ state: ${play}.state, speed: ${play}.diff.pipeSpeed, lb: ${play}.levelBreak, gravity: ${play}.poop.body.allowGravity, fs: ${play}.finishSpawned })`).then(JSON.parse);
     ok(resumed.state === 'playing' && resumed.speed === TT.pipeSpeed + TT.levels.speedStep && !resumed.lb && resumed.gravity && !resumed.fs, `tap resumes level 2 at ${resumed.speed} px/s with gravity on`);
+    ok((await evaluate(`${play}.diff.gapHeight`)) === 357, 'level 2 pipe gap is 5 % wider (357 px)');
     // Keep the driven poop immune and floating while we wait for the crossfade (the resume reset the grace).
     await evaluate(`${play}.poop.body.setAllowGravity(false), ${play}.poop.setVelocity(0, 0), ${play}.poop.y = 640, ${play}.graceLeftMs = 1e9, true`);
     await sleep(TT.levels.fadeMs + 200);
@@ -370,6 +372,7 @@ export async function run(url = DEFAULT_URL) {
     await chrome('tap');
     await sleep(300);
     ok((await evaluate(`${play}.state === 'playing' && ${play}.diff.pipeSpeed === ${TT.pipeSpeed + 2 * TT.levels.speedStep}`)) === true, 'level 3 resumes one step faster again');
+    ok((await evaluate(`${play}.diff.gapHeight`)) === TT.gapHeight, `level 3 uses the base pipe gap (${TT.gapHeight} px)`);
     // From level 3 a gap item sweeps its gap (spawn one directly: the roll is random).
     await evaluate(`${play}.gapProbe = ${play}.spawnGapItem('bacteria', 900, 640, ${TT.gapHeight}), true`);
     const y1 = await evaluate(`${play}.gapProbe.y`);

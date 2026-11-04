@@ -50,6 +50,7 @@ export const TUNING = {
     firstPipes: 10, // pipe pairs in level 1
     pipesStep: 25, // level n ≥ 2 has pipesStep × (n − 1) pipe pairs: 25, 50, 75, …
     speedStep: 25, // px/s added to pipeSpeed per level after the first
+    gapScale: [1.1, 1.05], // × gapHeight per level, index = level − 1 (374 / 357 px); later levels use gapHeight as is
     maxSpeed: 450, // px/s cap (level 8+)
     finishWidthPx: 96, // px width of the checkered finish line (three columns of finishCheckPx checks)
     finishCheckPx: 32, // px size of one check on the finish line

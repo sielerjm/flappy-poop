@@ -206,6 +206,12 @@ export function tutorialSpawn(level, pairIndex, t) {
   return null;
 }
 
+/** Pipe gap (px) for a level: gapHeight × levels.gapScale[level − 1], or gapHeight past the list. */
+export function levelGap(level, t) {
+  const scale = t.levels.gapScale?.[Math.max(1, level) - 1] ?? 1;
+  return Math.round(t.gapHeight * scale);
+}
+
 /** Scroll speed (px/s) for a level: pipeSpeed + speedStep per level after the first, capped at maxSpeed. */
 export function levelSpeed(level, t) {
   return Math.min(t.levels.maxSpeed, t.pipeSpeed + t.levels.speedStep * (Math.max(1, level) - 1));

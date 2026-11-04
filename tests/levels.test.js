@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { TUNING as T, LEVELS, LEVEL_COLORS, BACKGROUND, GAME_HEIGHT } from '../src/config.js';
 import { levelBannerText, levelLabel, LOCALES } from '../src/i18n.js';
 import { GAME_WIDTH } from '../src/config.js';
-import { levelPipes, levelEnd, levelFor, levelSpeed, levelName, levelColor, levelProgress, lerpColor, pipeSpacing, gapBounds, levelBarLayout, levelBarLabelOnFill, hudRightLayout, tutorialSpawn } from '../src/logic.js';
+import { levelPipes, levelEnd, levelFor, levelSpeed, levelGap, levelName, levelColor, levelProgress, lerpColor, pipeSpacing, gapBounds, levelBarLayout, levelBarLabelOnFill, hudRightLayout, tutorialSpawn } from '../src/logic.js';
 
 const L = T.levels;
 
@@ -186,4 +186,19 @@ test('level 1 is scripted: probiotic at pair 3, bacteria at 5, fiber after 7, a 
 
 test('the finish line is three columns of checks', () => {
   assert.equal(L.finishWidthPx / L.finishCheckPx, 3);
+});
+
+test('levelGap is 10 % wider on level 1, 5 % on level 2, and the base gap from level 3 on', () => {
+  assert.equal(levelGap(1, T), 374);
+  assert.equal(levelGap(2, T), 357);
+  assert.equal(levelGap(3, T), T.gapHeight);
+  assert.equal(levelGap(9, T), T.gapHeight);
+  assert.equal(levelGap(0, T), 374, 'below 1 reads as level 1');
+  const s = L.gapScale;
+  for (let i = 0; i < s.length; i += 1) {
+    assert.ok(s[i] >= 1, `gapScale[${i}] never narrows below the base gap`);
+    if (i > 0) assert.ok(s[i] <= s[i - 1], 'gaps never widen as levels rise');
+  }
+  const b = gapBounds({ gameHeight: GAME_HEIGHT, groundHeight: T.groundHeight, gapHeight: levelGap(1, T), gapMargin: T.gapMargin });
+  assert.ok(b.maxY > b.minY, 'the widest gap still has room to move');
 });

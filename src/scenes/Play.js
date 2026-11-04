@@ -6,6 +6,7 @@ import {
   hasPassed,
   angleForVelocity,
   levelSpeed,
+  levelGap,
   levelEnd,
   levelProgress,
   levelBarLayout,
@@ -90,7 +91,7 @@ export class Play extends Phaser.Scene {
     this.pipesPassed = 0;
     this.pipesSpawned = 0;
     this.collected = { fiber: 0, probiotic: 0, bacteria: 0, bean: 0 }; // this run's pickups, for the game-over summary
-    this.diff = { pipeSpeed: levelSpeed(1, T), gapHeight: T.gapHeight };
+    this.diff = { pipeSpeed: levelSpeed(1, T), gapHeight: levelGap(1, T) };
     // Finish line + break: the line spawns in the slot after a level's last pair
     // and nothing follows it; crossing it pauses the run (levelBreak) until a tap.
     // A fart never carries the poop past the line: it is cut there.
@@ -828,7 +829,7 @@ export class Play extends Phaser.Scene {
 
   /** Speed for the current level (the gap never changes); pushes it onto everything scrolling. */
   applyLevel() {
-    this.diff = { pipeSpeed: levelSpeed(this.level, T), gapHeight: T.gapHeight };
+    this.diff = { pipeSpeed: levelSpeed(this.level, T), gapHeight: levelGap(this.level, T) };
     this.applyScroll();
   }
 

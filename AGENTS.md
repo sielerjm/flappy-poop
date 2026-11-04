@@ -21,7 +21,7 @@ face). Best score and settings are kept in `localStorage`. The run is cut into
 level 1 is `levels.firstPipes` (10), level n ≥ 2 is `pipesStep × (n − 1)`; ends at
 10, 35, 85, 160, 260 … Pipe spacing is a fixed `pipeSpacingPx` (412); speed is
 `levelSpeed()` (275 + 25 per level, cap 450), applied when the break ends; the gap
-is fixed at `gapHeight`. One spacing after a level's last pair a checkered finish
+is `levelGap()` (`gapHeight` × `levels.gapScale[level − 1]`: 1.1, 1.05, then 1). One spacing after a level's last pair a checkered finish
 line (generated texture, plain Image) scrolls in and no pair follows it outside a
 fart; crossing it bumps `level`, plays `NewLevel.mp3` (`sfx.levelUp` blip if the
 sample is missing), and pauses the run as the
