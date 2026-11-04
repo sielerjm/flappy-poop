@@ -26,8 +26,9 @@ line (generated texture, plain Image) scrolls in and no pair follows it outside 
 fart; crossing it bumps `level`, plays `sfx.levelUp`, and pauses the run as the
 level break (`levelBreak`, the normal `'paused'` state with its own banner "LEVEL n
 · segment / Tap to continue", the poop gliding to mid-height and bobbing, the
-background crossfading to `levelColor(n, LEVEL_COLORS)`, Set2 colours cycling). Crossed mid-fart, the break waits
-for `endPower()` (`pendingLevelUp`). A progress bar (`ui/levelBar.js`) fills one
+background crossfading to `levelColor(n, LEVEL_COLORS)`, Set2 colours cycling). A fart never carries the poop past
+the line: crossing it cancels the power (`effects.cancelPower()`, `endPower()`),
+so only the pairs actually passed have scored, and the break starts at once. A progress bar (`ui/levelBar.js`) fills one
 step per pair. Each top score remembers its level. A signed
 **user code** (`fp1.<payload>.<sig>`, the save code) carries a player's username
 and best 6 scores between browsers via copy/paste (Save / Load User button on the
@@ -204,7 +205,8 @@ src/
                             then nothing until the break ends unless a fart runs;
                             onFinishCrossed → startLevelBreak (pausePlay with
                             levelBreak, setPauseBanner shows levelTitle/levelHint,
-                            breakGlide + breakBob, fadeBackground) or pendingLevelUp;
+                            breakGlide + breakBob, fadeBackground), cutting a
+                            running fart first (cancelPower + endPower);
                             resumePlay → endLevelBreak (applyLevel, grace,
                             centreNextGap). Background = bgColor rectangle (depth
                             −20) under bgLayers tileSprites (depth −10+) from

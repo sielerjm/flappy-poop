@@ -322,3 +322,19 @@ test('the super fart envelope scrolls exactly superPipes spacings in the same cl
   const tail = fartRemainingDistance(0, duration, peak, T.pipeSpeed) / pipeSpacing(T);
   assert.ok(Math.abs(tail - T.beans.superPipes) < 0.01, 'analytic tail agrees');
 });
+
+test('cancelPower stops a running fart at once without endedPower firing, and the beans stay spent', () => {
+  const fx = createEffects(T);
+  assert.equal(fx.cancelPower(), false, 'nothing to cancel');
+  fx.addBean();
+  assert.equal(fx.activatePower(1000), true);
+  fx.tickPower(300);
+  assert.equal(fx.cancelPower(), true);
+  assert.equal(fx.powerActive(), false);
+  assert.equal(fx.powerElapsed(), 0);
+  assert.equal(fx.endedPower(), false, 'the scene ends the power itself after a cancel');
+  assert.equal(fx.beans(), 0, 'beans spent');
+  fx.tickPower(1000);
+  assert.equal(fx.endedPower(), false, 'no late end event either');
+  assert.equal(fx.cancelPower(), false);
+});

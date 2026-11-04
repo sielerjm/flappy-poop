@@ -83,13 +83,12 @@ export class Play extends Phaser.Scene {
     this.pipesPassed = 0;
     this.pipesSpawned = 0;
     this.diff = { pipeSpeed: levelSpeed(1, T), gapHeight: T.gapHeight };
-    // Finish line + break: the line spawns in the slot after a level's last pair;
-    // crossing it pauses the run (levelBreak) until a tap, or waits for the fart
-    // to end first (pendingLevelUp).
+    // Finish line + break: the line spawns in the slot after a level's last pair
+    // and nothing follows it; crossing it pauses the run (levelBreak) until a tap.
+    // A fart never carries the poop past the line: it is cut there.
     this.finishLine = null;
     this.finishSpawned = false;
     this.levelBreak = false;
-    this.pendingLevelUp = false;
     this.breakBob = null;
     this.breakGlide = null;
     createFinishTexture(this, 'finish', { width: T.levels.finishWidthPx, height: GAME_HEIGHT, check: T.levels.finishCheckPx });
@@ -328,7 +327,6 @@ export class Play extends Phaser.Scene {
     this.finishLine = null;
     this.finishSpawned = false;
     this.levelBreak = false;
-    this.pendingLevelUp = false;
     this.applyLevel();
     this.levelBar.setVisible(true);
     this.refreshLevelBar();
@@ -369,13 +367,19 @@ export class Play extends Phaser.Scene {
     this.finishSpawned = true;
   }
 
-  /** The poop has cleared the finish line: next level, and a break (now, or when the fart ends). */
+  /**
+   * The poop has cleared the finish line: next level and the break. A fart that
+   * carried it here ends now, so only the pairs it actually passed have scored.
+   */
   onFinishCrossed() {
     this.level += 1;
     this.refreshLevelBar(); // new level: label steps, fill back to 0
     sfx.levelUp();
-    if (this.effects.powerActive()) this.pendingLevelUp = true;
-    else this.startLevelBreak();
+    if (this.effects.cancelPower()) {
+      this.fartSound?.stop();
+      this.endPower();
+    }
+    this.startLevelBreak();
   }
 
   refreshLevelBanner() {
@@ -928,11 +932,6 @@ export class Play extends Phaser.Scene {
     this.distanceSinceSpawn = pipeSpacing(T);
     this.applyScroll();
     if (this.effects.powerReady()) this.setCharged(true);
-    // A finish line crossed during the fart: the screen is clear now, so take the break.
-    if (this.pendingLevelUp) {
-      this.pendingLevelUp = false;
-      this.startLevelBreak();
-    }
   }
 
   refreshProbioticHud() {
@@ -1046,8 +1045,8 @@ export class Play extends Phaser.Scene {
           this.distanceSinceSpawn -= spacing;
           if (this.pipesSpawned === levelEnd(this.level, T) && !this.finishSpawned) {
             this.spawnFinishLine();
-          } else if (this.finishSpawned && !this.effects.powerActive()) {
-            this.distanceSinceSpawn = 0; // nothing follows the line until the break ends (a fart keeps going)
+          } else if (this.finishSpawned) {
+            this.distanceSinceSpawn = 0; // nothing follows the line until the break ends, fart or not
           } else {
             this.spawnPipePair();
           }

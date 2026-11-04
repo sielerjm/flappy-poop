@@ -609,6 +609,14 @@ export function createEffects(t) {
     powerElapsed() {
       return powerOn ? powerClock : 0;
     },
+    /** Stop a running fart at once (a finish line was crossed); endedPower() does not fire. Returns whether one was running. */
+    cancelPower() {
+      if (!powerOn) return false;
+      powerOn = false;
+      powerJustEnded = false;
+      powerClock = powerDuration;
+      return true;
+    },
     /** True once, right after the power ends. */
     endedPower() {
       if (!powerJustEnded) return false;

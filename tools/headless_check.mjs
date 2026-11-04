@@ -318,18 +318,18 @@ export async function run(url = DEFAULT_URL) {
     ok(colours.now === colours.l2 && colours.l2 !== colours.l1, `background crossfaded to level 2's colour (#${colours.now.toString(16)})`);
     const depths = await evaluate(`JSON.stringify({ bg: ${play}.bgColor.depth, layers: ${play}.bgLayers.map((l) => l.sprite.depth), pipe: Math.min(...${play}.pipes.getChildren().map((c) => c.depth)), line: ${play}.finishLine ? ${play}.finishLine.depth : null })`).then(JSON.parse);
     ok(depths.bg < Math.min(...depths.layers) && Math.max(...depths.layers) < depths.pipe, `background layers draw under the pipes (depths bg ${depths.bg}, layers ${depths.layers.join('/')}, pipes ${depths.pipe})`);
-    // Deferred path: a fart carries the poop across level 2's line; the break waits for the fart's end.
+    // Cut path: a fart reaches level 2's line; it ends there, only the two pairs before the line score, and the break starts at once.
     await evaluate(`${play}.poop.body.setAllowGravity(false), ${play}.poop.setVelocity(0, 0), ${play}.poop.y = 640, ${play}.graceLeftMs = 1e9, true`);
+    // Clear what is still on screen so only the pairs spawned from these counters can score.
+    await evaluate(`${play}.pipes.clear(true, true), ${play}.items.clear(true, true), ${play}.beans.clear(true, true), true`);
     await evaluate(`${play}.level = 2, ${play}.pipesSpawned = ${end2 - 2}, ${play}.pipesPassed = ${end2 - 2}, ${play}.finishSpawned = false, ${play}.distanceSinceSpawn = ${TT.pipeSpacingPx}, true`);
+    const score3 = await evaluate(`${play}.score`);
+    const t0 = Date.now();
     await evaluate(`${play}.effects.addBean(), ${play}.setCharged(true), ${play}.activatePower(), true`);
-    const pendingSeen = [];
-    for (let i = 0; i < 60 && (await evaluate(`${play}.effects.powerActive()`)); i += 1) {
-      pendingSeen.push(await evaluate(`${play}.pendingLevelUp`));
-      await sleep(100);
-    }
     const broke2 = await waitBreak();
-    const lvl3 = await evaluate(`${play}.level`);
-    ok(pendingSeen.includes(true) && broke2 && lvl3 === 3, `a finish line crossed mid-fart defers the break to the fart's end (level ${lvl3})`);
+    const cutMs = Date.now() - t0;
+    const cut = await evaluate(`JSON.stringify({ level: ${play}.level, power: ${play}.effects.powerActive(), passed: ${play}.pipesPassed, score: ${play}.score, beans: ${play}.effects.beans() })`).then(JSON.parse);
+    ok(broke2 && cut.level === 3 && !cut.power && cut.passed === end2 && cut.score - score3 === 2 && cut.beans === 0 && cutMs < TT.beans.powerMs, `a fart that reaches the finish line ends there: break after ${cutMs} ms, level ${cut.level}, only the ${cut.score - score3} pairs before the line scored`);
     await chrome('tap');
     await sleep(300);
     ok((await evaluate(`${play}.state === 'playing' && ${play}.diff.pipeSpeed === ${TT.pipeSpeed + 2 * TT.levels.speedStep}`)) === true, 'level 3 resumes one step faster again');
