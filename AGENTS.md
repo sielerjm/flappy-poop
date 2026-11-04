@@ -26,7 +26,7 @@ line (generated texture, plain Image) scrolls in and no pair follows it outside 
 fart; crossing it bumps `level`, plays `sfx.levelUp`, and pauses the run as the
 level break (`levelBreak`, the normal `'paused'` state with its own banner "LEVEL n
 · segment / Tap to continue", the poop gliding to mid-height and bobbing, the
-background crossfading to `LEVELS[n−1].color`). Crossed mid-fart, the break waits
+background crossfading to `levelColor(n, LEVEL_COLORS)`, Set2 colours cycling). Crossed mid-fart, the break waits
 for `endPower()` (`pendingLevelUp`). A progress bar (`ui/levelBar.js`) fills one
 step per pair. Each top score remembers its level. A signed
 **user code** (`fp1.<payload>.<sig>`, the save code) carries a player's username
@@ -64,8 +64,9 @@ src/
                             feel-related number lives here), and LEADERBOARD
                             (Supabase Data API URL + publishable key, both public
                             by design; timeout, limit, storage key, score cap),
-                            LEVELS (gut segment name keys + background colours, in
-                            order) and BACKGROUND (overlay layers: key + parallax).
+                            LEVELS (gut segment name keys, in order), LEVEL_COLORS
+                            (Set2 backgrounds, cycling) and BACKGROUND (overlay
+                            layers: key + parallax).
                             Pure data, Node-safe.
   logic.js                  Pure functions, NO Phaser/DOM: rng, gap placement,
                             scoring, items, beans (rollBean, beanSpawnX, beanY,

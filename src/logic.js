@@ -202,10 +202,9 @@ export function levelName(level, levels) {
   return levels[level - 1]?.key ?? null;
 }
 
-/** Background colour for a level: the row's colour, or the last row's past the list. */
-export function levelColor(level, levels) {
-  const i = Math.min(Math.max(1, level), levels.length) - 1;
-  return levels[i].color;
+/** Background colour for a level: the colours cycle, so level 7 wears colour 1 again. */
+export function levelColor(level, colors) {
+  return colors[(Math.max(1, level) - 1) % colors.length];
 }
 
 /** 0–1 share of `level` done after pipesPassed pairs: 0 at its first pipe, 1 once its last pair is passed. */

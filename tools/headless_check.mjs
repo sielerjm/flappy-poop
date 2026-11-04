@@ -314,7 +314,7 @@ export async function run(url = DEFAULT_URL) {
     // Keep the driven poop immune and floating while we wait for the crossfade (the resume reset the grace).
     await evaluate(`${play}.poop.body.setAllowGravity(false), ${play}.poop.setVelocity(0, 0), ${play}.poop.y = 640, ${play}.graceLeftMs = 1e9, true`);
     await sleep(TT.levels.fadeMs + 200);
-    const colours = await evaluate(`import('./src/config.js').then((m) => JSON.stringify({ now: ${play}.bgColor.fillColor, l1: m.LEVELS[0].color, l2: m.LEVELS[1].color }))`).then(JSON.parse);
+    const colours = await evaluate(`import('./src/config.js').then((m) => JSON.stringify({ now: ${play}.bgColor.fillColor, l1: m.LEVEL_COLORS[0], l2: m.LEVEL_COLORS[1] }))`).then(JSON.parse);
     ok(colours.now === colours.l2 && colours.l2 !== colours.l1, `background crossfaded to level 2's colour (#${colours.now.toString(16)})`);
     const depths = await evaluate(`JSON.stringify({ bg: ${play}.bgColor.depth, layers: ${play}.bgLayers.map((l) => l.sprite.depth), pipe: Math.min(...${play}.pipes.getChildren().map((c) => c.depth)), line: ${play}.finishLine ? ${play}.finishLine.depth : null })`).then(JSON.parse);
     ok(depths.bg < Math.min(...depths.layers) && Math.max(...depths.layers) < depths.pipe, `background layers draw under the pipes (depths bg ${depths.bg}, layers ${depths.layers.join('/')}, pipes ${depths.pipe})`);

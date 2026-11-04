@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { TUNING as T, LEVELS, BACKGROUND, GAME_HEIGHT } from '../src/config.js';
+import { TUNING as T, LEVELS, LEVEL_COLORS, BACKGROUND, GAME_HEIGHT } from '../src/config.js';
 import { levelBannerText, levelLabel, LOCALES } from '../src/i18n.js';
 import { GAME_WIDTH } from '../src/config.js';
 import { levelPipes, levelEnd, levelFor, levelSpeed, levelName, levelColor, levelProgress, lerpColor, pipeSpacing, gapBounds, levelBarLayout } from '../src/logic.js';
@@ -50,18 +50,23 @@ test('levelSpeed starts at pipeSpeed, rises speedStep per level, and caps at max
   assert.equal(pipeSpacing(T), T.pipeSpacingPx);
 });
 
-test('levelName follows the gut in order and runs out past the list; levelColor clamps to the last colour', () => {
+test('levelName follows the gut in order and runs out past the list; levelColor cycles through LEVEL_COLORS', () => {
   assert.deepEqual(
     [1, 2, 3, 4, 5, 6, 7].map((n) => levelName(n, LEVELS)),
     ['stomach', 'duodenum', 'jejunum', 'ileum', 'caecum', 'colon', 'rectum'],
   );
   assert.equal(levelName(8, LEVELS), null);
   assert.equal(levelName(0, LEVELS), null);
-  assert.equal(levelColor(1, LEVELS), LEVELS[0].color);
-  assert.equal(levelColor(7, LEVELS), LEVELS[6].color);
-  assert.equal(levelColor(8, LEVELS), LEVELS[6].color);
-  assert.equal(levelColor(0, LEVELS), LEVELS[0].color);
-  for (const row of LEVELS) assert.ok(Number.isInteger(row.color) && row.color >= 0 && row.color <= 0xffffff && typeof row.key === 'string');
+  const n = LEVEL_COLORS.length;
+  assert.equal(n, 6);
+  assert.equal(levelColor(1, LEVEL_COLORS), LEVEL_COLORS[0]);
+  assert.equal(levelColor(n, LEVEL_COLORS), LEVEL_COLORS[n - 1]);
+  assert.equal(levelColor(n + 1, LEVEL_COLORS), LEVEL_COLORS[0], 'cycles past the end');
+  assert.equal(levelColor(n + 2, LEVEL_COLORS), LEVEL_COLORS[1]);
+  assert.equal(levelColor(2 * n + 1, LEVEL_COLORS), LEVEL_COLORS[0]);
+  assert.equal(levelColor(0, LEVEL_COLORS), LEVEL_COLORS[0]);
+  for (const c of LEVEL_COLORS) assert.ok(Number.isInteger(c) && c >= 0 && c <= 0xffffff);
+  for (const row of LEVELS) assert.ok(typeof row.key === 'string');
   assert.ok(BACKGROUND.layers.length >= 1 && BACKGROUND.layers.every((l) => typeof l.key === 'string' && l.parallax > 0 && l.parallax <= 1));
 });
 
@@ -131,10 +136,11 @@ test('every level colour keeps the villi (#ec8ca0) and the cream bands (#f6ded2)
   const dist = (a, b) => Math.abs(((a >> 16) & 0xff) - ((b >> 16) & 0xff)) + Math.abs(((a >> 8) & 0xff) - ((b >> 8) & 0xff)) + Math.abs((a & 0xff) - (b & 0xff));
   const VILLI = 0xec8ca0;
   const CREAM = 0xf6ded2;
-  for (const row of LEVELS) {
-    assert.ok(dist(row.color, VILLI) >= 90, `${row.key} #${row.color.toString(16)} is too close to the villi pink (${dist(row.color, VILLI)})`);
-    assert.ok(dist(row.color, CREAM) >= 40, `${row.key} #${row.color.toString(16)} is too close to the cream bands (${dist(row.color, CREAM)})`);
+  for (const c of LEVEL_COLORS) {
+    assert.ok(dist(c, VILLI) >= 70, `#${c.toString(16)} is too close to the villi pink (${dist(c, VILLI)})`);
+    assert.ok(dist(c, CREAM) >= 40, `#${c.toString(16)} is too close to the cream bands (${dist(c, CREAM)})`);
   }
+  assert.equal(new Set(LEVEL_COLORS).size, LEVEL_COLORS.length, 'colours are distinct');
   const keys = LEVELS.map((r) => r.key);
   assert.equal(new Set(keys).size, keys.length, 'segment keys are unique');
 });

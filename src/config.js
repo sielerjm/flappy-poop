@@ -106,18 +106,21 @@ export const TUNING = {
 };
 
 // Gut segments the poop travels through, one per level, in order. `key` is the
-// i18n name key (`level.<key>`); `color` is the solid background behind the villi.
-// Keep every colour away from the villi pink (#ec8ca0) and the cream bands
-// (#f6ded2) or the fringes vanish into the lumen (tests/levels.test.js checks the
-// distance). Placeholders for Michael to tune. Past the last row: no name, last colour.
-export const LEVELS = [
-  { key: 'stomach', color: 0xf3cdb4 }, // peach
-  { key: 'duodenum', color: 0xc9b8dc }, // lavender
-  { key: 'jejunum', color: 0x8f70ba }, // purple (the original lumen)
-  { key: 'ileum', color: 0x6c5096 }, // deep purple
-  { key: 'caecum', color: 0x4f7f8c }, // teal
-  { key: 'colon', color: 0x5a3f6e }, // plum
-  { key: 'rectum', color: 0x3c2a3a }, // dark plum
+// i18n name key (`level.<key>`). Past the last row a level has no name.
+export const LEVELS = [{ key: 'stomach' }, { key: 'duodenum' }, { key: 'jejunum' }, { key: 'ileum' }, { key: 'caecum' }, { key: 'colon' }, { key: 'rectum' }];
+
+// Solid background colour per level, cycling past the end (level 7 = colour 1 …).
+// ColorBrewer Set2 (the light Dark2) minus its orange #fc8d62 and salmon #fb8072,
+// which sit too close to the villi pink (#ec8ca0, within ~60 channel units) and would wash the fringes
+// out; tests/levels.test.js keeps every colour at a distance from the villi and
+// the cream bands (#f6ded2).
+export const LEVEL_COLORS = [
+  0x66c2a5, // teal
+  0x8da0cb, // periwinkle
+  0xa6d854, // lime
+  0xffd92f, // yellow
+  0xe5c494, // sand
+  0x80b1d3, // light blue
 ];
 
 // Transparent overlay layers drawn over the level colour, back to front. Each is a
