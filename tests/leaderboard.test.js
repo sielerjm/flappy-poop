@@ -57,7 +57,7 @@ test('submitScore posts the plan to submit_score with the apikey header and the 
   assert.equal(c.headers.apikey, 'sb_publishable_test');
   assert.equal(c.headers['Content-Type'], 'application/json');
   assert.equal(c.headers.Authorization, undefined);
-  assert.deepEqual(c.body, { p_player_id: ID, p_name: 'Alice', p_score: 41, p_toilet: true });
+  assert.deepEqual(c.body, { p_player_id: ID, p_name: 'Alice', p_score: 41, p_toilet: true, p_level: 1 });
 });
 
 test('submitScore is false on HTTP 400, on a throwing fetch, and on a malformed plan', async () => {
@@ -101,13 +101,18 @@ test('fetchTop requests the visible columns in board order and returns sorted ro
   ];
   const fetch = fakeFetch({ status: 200, body });
   const rows = await fetchTop({ fetch, config: { ...config, limit: 2 } });
-  assert.equal(fetch.calls[0].url, 'https://x.example/rest/v1/scores?select=name,score,toilet&order=score.desc,updated_at.asc&limit=2');
+  assert.equal(fetch.calls[0].url, 'https://x.example/rest/v1/scores?select=name,score,toilet,level&order=score.desc,updated_at.asc&limit=2');
   assert.equal(fetch.calls[0].method, 'GET');
   assert.equal(fetch.calls[0].headers.apikey, 'sb_publishable_test');
   assert.deepEqual(rows, [
-    { name: 'Alice', score: 41, toilet: true },
-    { name: 'Bob', score: 30, toilet: false },
+    { name: 'Alice', score: 41, toilet: true, level: 1 },
+    { name: 'Bob', score: 30, toilet: false, level: 1 },
   ]);
+  const withLevels = await fetchTop({ fetch: fakeFetch({ status: 200, body: [{ name: 'Cy', score: 60, toilet: false, level: 4 }, { name: 'Di', score: 59, level: 'x' }] }), config });
+  assert.deepEqual(withLevels, [
+    { name: 'Cy', score: 60, toilet: false, level: 4 },
+    { name: 'Di', score: 59, toilet: false, level: 1 },
+  ], 'level carried; a missing or junk level reads as 1 (pre-level rows)');
 });
 
 test('fetchTop is null on a non-array body, a malformed row, bad JSON, or a failed status', async () => {
@@ -122,11 +127,12 @@ test('fetchTop is null on a non-array body, a malformed row, bad JSON, or a fail
 // fetchRank
 
 test('fetchRank posts the player id and parses the standing', async () => {
-  const fetch = fakeFetch({ body: { rank: 23, total: 150, score: 41, toilet: true } });
+  const fetch = fakeFetch({ body: { rank: 23, total: 150, score: 41, toilet: true, level: 3 } });
   const info = await fetchRank(ID, { fetch, config });
   assert.equal(fetch.calls[0].url, 'https://x.example/rest/v1/rpc/player_rank');
   assert.deepEqual(fetch.calls[0].body, { p_player_id: ID });
-  assert.deepEqual(info, { rank: 23, total: 150, score: 41, toilet: true });
+  assert.deepEqual(info, { rank: 23, total: 150, score: 41, toilet: true, level: 3 });
+  assert.deepEqual(await fetchRank(ID, { fetch: fakeFetch({ body: { rank: 1, total: 1, score: 2 } }), config }), { rank: 1, total: 1, score: 2, toilet: false, level: 1 }, 'old schema: level 1');
 });
 
 test('fetchRank is null for a server null, a malformed body, a missing id, or a failed status', async () => {
@@ -152,17 +158,19 @@ test('submitPlan is null without a name, an id, or a positive best, or above max
 
 test('submitPlan carries the best entry with its toilet flag, and skips when already confirmed', () => {
   const plan = submitPlan(named(), null);
-  assert.deepEqual(plan, { playerId: ID, name: 'Alice', score: 41, toilet: true });
-  assert.equal(submitPlan(named(), plan), null, 'same id, name, score and flag: nothing to post');
+  assert.deepEqual(plan, { playerId: ID, name: 'Alice', score: 41, toilet: true, level: 1 });
+  assert.equal(submitPlan(named(), plan), null, 'same id, name, score, flag and level: nothing to post');
+  const lv = submitPlan(named([{ score: 41, toilet: true, level: 3 }]), plan);
+  assert.deepEqual(lv, { playerId: ID, name: 'Alice', score: 41, toilet: true, level: 3 }, 'equal score at a higher level re-posts');
 });
 
 test('submitPlan resubmits after a higher score, a rename, a toilet-flag change, or an id change (code import)', () => {
-  const confirmed = { playerId: ID, name: 'Alice', score: 41, toilet: true };
-  assert.deepEqual(submitPlan(named([{ score: 50, toilet: false }]), confirmed), { playerId: ID, name: 'Alice', score: 50, toilet: false });
-  assert.deepEqual(submitPlan({ ...named(), name: 'Alicia' }, confirmed), { playerId: ID, name: 'Alicia', score: 41, toilet: true });
-  assert.deepEqual(submitPlan(named(), { ...confirmed, toilet: false }), { playerId: ID, name: 'Alice', score: 41, toilet: true });
+  const confirmed = { playerId: ID, name: 'Alice', score: 41, toilet: true, level: 1 };
+  assert.deepEqual(submitPlan(named([{ score: 50, toilet: false }]), confirmed), { playerId: ID, name: 'Alice', score: 50, toilet: false, level: 1 });
+  assert.deepEqual(submitPlan({ ...named(), name: 'Alicia' }, confirmed), { playerId: ID, name: 'Alicia', score: 41, toilet: true, level: 1 });
+  assert.deepEqual(submitPlan(named(), { ...confirmed, toilet: false }), { playerId: ID, name: 'Alice', score: 41, toilet: true, level: 1 });
   const other = 'BBBBBBBBBBBBBBBBBBBBBB';
-  assert.deepEqual(submitPlan({ ...named(), id: other }, confirmed), { playerId: other, name: 'Alice', score: 41, toilet: true });
+  assert.deepEqual(submitPlan({ ...named(), id: other }, confirmed), { playerId: other, name: 'Alice', score: 41, toilet: true, level: 1 });
   assert.equal(submitPlan(named([{ score: 30, toilet: false }]), confirmed), null, 'a worse local best after a code merge never downgrades');
 });
 
@@ -173,8 +181,8 @@ test('createSubmitStore round-trips a record under its key and ignores junk', ()
   const st = fakeStorage();
   const store = createSubmitStore(st, 'lb');
   assert.equal(store.load(), null);
-  const rec = store.save({ playerId: ID, name: 'Alice', score: 41, toilet: 1 });
-  assert.deepEqual(rec, { playerId: ID, name: 'Alice', score: 41, toilet: true });
+  const rec = store.save({ playerId: ID, name: 'Alice', score: 41, toilet: 1, level: 2 });
+  assert.deepEqual(rec, { playerId: ID, name: 'Alice', score: 41, toilet: true, level: 2 });
   assert.deepEqual(store.load(), rec);
   assert.equal(st._map.has('lb'), true);
   assert.equal(store.save({ playerId: ID, name: 'Alice', score: -1 }), null);
@@ -185,7 +193,7 @@ test('createSubmitStore round-trips a record under its key and ignores junk', ()
 test('createSubmitStore survives a throwing or missing storage', () => {
   const s = createSubmitStore(boom, 'lb');
   assert.equal(s.load(), null);
-  assert.deepEqual(s.save({ playerId: ID, name: 'A', score: 1 }), { playerId: ID, name: 'A', score: 1, toilet: false });
+  assert.deepEqual(s.save({ playerId: ID, name: 'A', score: 1 }), { playerId: ID, name: 'A', score: 1, toilet: false, level: 1 });
   const u = createSubmitStore(undefined, 'lb');
   assert.equal(u.load(), null);
   assert.ok(u.save({ playerId: ID, name: 'A', score: 1 }));

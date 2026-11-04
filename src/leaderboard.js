@@ -20,13 +20,18 @@ function baseUrl(config) {
   return url && key ? url : '';
 }
 
-/** A normalised { playerId, name, score, toilet } record, or null. */
+/** Level (≥ 1) from any value; missing or junk reads as 1 (rows from before levels existed). */
+function levelOf(v) {
+  return Number.isInteger(v) && v >= 1 ? v : 1;
+}
+
+/** A normalised { playerId, name, score, toilet, level } record, or null. */
 function normalizeRecord(raw) {
   if (!raw || typeof raw !== 'object') return null;
   if (typeof raw.playerId !== 'string' || !raw.playerId) return null;
   if (typeof raw.name !== 'string' || !raw.name) return null;
   if (!Number.isInteger(raw.score) || raw.score < 0) return null;
-  return { playerId: raw.playerId, name: raw.name, score: raw.score, toilet: Boolean(raw.toilet) };
+  return { playerId: raw.playerId, name: raw.name, score: raw.score, toilet: Boolean(raw.toilet), level: levelOf(raw.level) };
 }
 
 /**
@@ -40,13 +45,13 @@ export function submitPlan(state, lastConfirmed, { maxScore = LEADERBOARD.maxSco
   if (!s.name || !s.id) return null;
   const best = s.top[0];
   if (!best || best.score <= 0 || best.score > maxScore) return null;
-  const plan = { playerId: s.id, name: s.name, score: best.score, toilet: Boolean(best.toilet) };
+  const plan = { playerId: s.id, name: s.name, score: best.score, toilet: Boolean(best.toilet), level: levelOf(best.level) };
   const last = normalizeRecord(lastConfirmed);
   if (last && last.playerId === plan.playerId && last.name === plan.name) {
     // The server keeps the max, so a lower local best has nothing to add; an
-    // equal one only matters when its toilet flag differs.
+    // equal one only matters when its toilet flag or level differs.
     if (last.score > plan.score) return null;
-    if (last.score === plan.score && last.toilet === plan.toilet) return null;
+    if (last.score === plan.score && last.toilet === plan.toilet && last.level === plan.level) return null;
   }
   return plan;
 }
@@ -119,35 +124,35 @@ export async function submitScore(plan, opts = {}) {
   if (!p) return false;
   const out = await request(
     '/rpc/submit_score',
-    { method: 'POST', body: { p_player_id: p.playerId, p_name: p.name, p_score: p.score, p_toilet: p.toilet } },
+    { method: 'POST', body: { p_player_id: p.playerId, p_name: p.name, p_score: p.score, p_toilet: p.toilet, p_level: p.level } },
     opts
   );
   return out !== null;
 }
 
-/** A board row { name, score, toilet } from a server row, or null. */
+/** A board row { name, score, toilet, level } from a server row, or null. A missing level reads as 1. */
 function normalizeRow(raw) {
   if (!raw || typeof raw !== 'object') return null;
   if (typeof raw.name !== 'string' || !Number.isInteger(raw.score)) return null;
-  return { name: raw.name, score: raw.score, toilet: Boolean(raw.toilet) };
+  return { name: raw.name, score: raw.score, toilet: Boolean(raw.toilet), level: levelOf(raw.level) };
 }
 
 /** The top rows, best first, or null when the board cannot be reached. */
 export async function fetchTop(opts = {}) {
   const limit = opts.config?.limit ?? LEADERBOARD.limit;
-  const out = await request(`/scores?select=name,score,toilet&order=score.desc,updated_at.asc&limit=${limit}`, {}, opts);
+  const out = await request(`/scores?select=name,score,toilet,level&order=score.desc,updated_at.asc&limit=${limit}`, {}, opts);
   if (!Array.isArray(out)) return null;
   const rows = out.map(normalizeRow);
   if (rows.some((r) => r === null)) return null;
   return rows.sort((a, b) => b.score - a.score).slice(0, limit);
 }
 
-/** { rank, total, score, toilet } for one player, or null (no row, or unreachable). */
+/** { rank, total, score, toilet, level } for one player, or null (no row, or unreachable). */
 export async function fetchRank(playerId, opts = {}) {
   if (typeof playerId !== 'string' || !playerId) return null;
   const out = await request('/rpc/player_rank', { method: 'POST', body: { p_player_id: playerId } }, opts);
   if (!out || typeof out !== 'object') return null;
-  const { rank, total, score, toilet } = out;
+  const { rank, total, score, toilet, level } = out;
   if (!Number.isInteger(rank) || rank < 1 || !Number.isInteger(total) || total < rank || !Number.isInteger(score)) return null;
-  return { rank, total, score, toilet: Boolean(toilet) };
+  return { rank, total, score, toilet: Boolean(toilet), level: levelOf(level) };
 }

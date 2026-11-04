@@ -1,7 +1,7 @@
 import { GAME_WIDTH, GAME_HEIGHT, LEADERBOARD } from '../config.js';
 import { VERSION, chromeIntent, overlayOutsideHit, fitScale } from '../logic.js';
-import { t, metaFontSize, rankText } from '../i18n.js';
-import { formatScore, topScores } from '../save.js';
+import { t, metaFontSize, rankText, levelLabel } from '../i18n.js';
+import { topScores, TOILET_EMOJI } from '../save.js';
 import { fetchTop, fetchRank } from '../leaderboard.js';
 
 const STYLE = { fontFamily: 'sans-serif', fontStyle: 'bold', color: '#ffffff', align: 'center' };
@@ -86,16 +86,24 @@ export class Leaderboard extends Phaser.Scene {
       this.status.setText(t(locale, 'scoresEmpty'));
     } else {
       this.status.setVisible(false);
+      // Columns: rank · name · 🚽 · LV n · score. Header over the two middle columns.
+      const toiletX = cx + 36;
+      const levelX = cx + 120;
+      const headerY = cy - 288;
+      this.add.text(toiletX, headerY, TOILET_EMOJI, { ...STYLE, fontSize: '20px' }).setOrigin(0.5).setAlpha(0.7);
+      this.add.text(levelX, headerY, t(locale, 'leaderboardLevel'), { ...STYLE, fontSize: '20px', color: DIM }).setOrigin(0.5);
       const own = rank && rank.rank <= rows.length ? rank.rank - 1 : -1;
       for (let i = 0; i < limit; i += 1) {
         const y = cy - 250 + i * 56;
         const row = rows[i];
         const color = i === own ? PINK : row ? '#ffffff' : DIM;
         this.add.text(cx - 224, y, `${i + 1}.`, { ...STYLE, fontSize: '34px', color: row ? PINK : DIM }).setOrigin(0, 0.5);
-        const score = this.add.text(cx + 224, y, row ? formatScore(row) : '–', { ...STYLE, fontSize: '34px', color }).setOrigin(1, 0.5);
-        const name = this.add.text(cx - 150, y, row ? row.name : '–', { ...STYLE, fontSize: '34px', color, align: 'left' }).setOrigin(0, 0.5);
-        // A 16-character name is wider than its column: shrink it to the room left of the score (same as the ready-screen buttons).
-        name.setScale(fitScale(name.width, score.x - score.width - name.x, 8));
+        this.add.text(cx + 224, y, row ? String(row.score) : '–', { ...STYLE, fontSize: '34px', color }).setOrigin(1, 0.5);
+        if (row?.toilet) this.add.text(toiletX, y, TOILET_EMOJI, { ...STYLE, fontSize: '30px' }).setOrigin(0.5);
+        if (row) this.add.text(levelX, y, levelLabel(locale, row.level ?? 1), { ...STYLE, fontSize: '24px', color: i === own ? PINK : MUTED, fontStyle: 'normal' }).setOrigin(0.5);
+        const name = this.add.text(cx - 160, y, row ? row.name : '–', { ...STYLE, fontSize: '34px', color, align: 'left' }).setOrigin(0, 0.5);
+        // A 16-character name is wider than its column: shrink it to the room left of the 🚽 column.
+        name.setScale(fitScale(name.width, toiletX - 24 - name.x, 8));
       }
     }
 

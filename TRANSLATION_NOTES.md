@@ -134,6 +134,7 @@ Short, playful, clear. Fit a 720×1280 logical field; How to play / About body w
 | leaderboardJoin | Set a username in Save / Load User to join | 在“存档 / 载入用户”中设置用户名即可上榜 |
 | leaderboardRank | Your best {score} is #{rank} of {total} | 你的最高分 {score} 排在第 {rank} 名（共 {total} 人） |
 | leaderboardNotYet | Your best is not on the board yet | 你的最高分尚未上榜 |
+| leaderboardLevel | LV | 关卡 |
 | saveLeaderboardNote | Your username and best score are shown on the public leaderboard | 你的用户名和最高分会显示在公开排行榜上 |
 | profilePrompt | Enter username | 输入用户名 |
 
