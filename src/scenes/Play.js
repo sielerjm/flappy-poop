@@ -157,12 +157,12 @@ export class Play extends Phaser.Scene {
     this.bob = this.tweens.add({ targets: this.poop, y: '+=24', duration: 500, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
 
     // HUD
-    this.scoreText = this.add.text(GAME_WIDTH / 2, 80, '0', { ...TEXT_STYLE, fontSize: '80px' }).setOrigin(0.5).setDepth(20);
+    this.scoreText = this.add.text(GAME_WIDTH / 2, T.hudScoreY, '0', { ...TEXT_STYLE, fontSize: '80px' }).setOrigin(0.5).setDepth(20);
     // Level progress bar above the score: hidden on the ready screen, shown from start(), kept through breaks and death.
     this.levelBar = createLevelBar(this, levelBarLayout(T, GAME_WIDTH)).setVisible(false);
     this.refreshLevelBar();
     // 🚽 left of the score while a toilet-mode run is on.
-    this.toiletHud = this.add.text(GAME_WIDTH / 2 - 96, 80, TOILET_EMOJI, { fontFamily: 'sans-serif', fontSize: '44px' }).setOrigin(0.5).setDepth(20).setVisible(false);
+    this.toiletHud = this.add.text(GAME_WIDTH / 2 - 96, T.hudScoreY, TOILET_EMOJI, { fontFamily: 'sans-serif', fontSize: '44px' }).setOrigin(0.5).setDepth(20).setVisible(false);
     this.probioticIcon = this.add
       .image(GAME_WIDTH / 2 - 56, 156, 'probiotic')
       .setDisplaySize(T.hudProbioticSize, T.hudProbioticSize)

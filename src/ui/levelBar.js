@@ -13,10 +13,10 @@ export function createLevelBar(scene, layout, { depth = 20 } = {}) {
   const fillHex = `#${l.barFillColor.toString(16).padStart(6, '0')}`;
   const g = scene.add.graphics().setDepth(depth);
   const label = scene.add
-    .text(layout.labelX, layout.y, '', { fontFamily: 'sans-serif', fontStyle: 'bold', fontSize: '22px', color: '#ffffff', stroke: '#1a0b14', strokeThickness: 3 })
+    .text(layout.labelX, layout.y, '', { fontFamily: 'sans-serif', fontStyle: 'bold', fontSize: `${l.barLabelPx}px`, color: '#ffffff', stroke: '#1a0b14', strokeThickness: 3 })
     .setOrigin(0.5)
     .setDepth(depth + 1);
-  const flag = scene.add.text(layout.flagX, layout.y, '🏁', { fontFamily: 'sans-serif', fontSize: '28px' }).setOrigin(0.5).setDepth(depth + 1);
+  const flag = scene.add.text(layout.flagX, layout.y, '🏁', { fontFamily: 'sans-serif', fontSize: `${l.barFlagPx}px` }).setOrigin(0.5).setDepth(depth + 1);
   let shown = 0; // 0–1 share currently drawn
   let target = 0; // 0–1 share asked for
   let tween = null;

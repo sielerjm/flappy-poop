@@ -17,6 +17,7 @@ export const TUNING = {
   poopRadius: 48, // px circular hitbox = half the 96 logical-px sprite (the whole drawing, square corners excluded)
   spriteDisplayScale: 0.25, // 384 px textures drawn at 96 logical px
   hudProbioticSize: 96, // logical px; HUD icon uses setDisplaySize
+  hudScoreY: 116, // px centre line of the 80 px score (and the 🚽 beside it): below the progress bar with air between
   maxFallAngle: 90, // degrees nose-down at terminal fall
   maxRiseAngle: -25, // degrees nose-up right after a flap
   angleFallRefVy: 1200, // px/s; vy at which fall tilt reaches maxFallAngle
@@ -51,8 +52,10 @@ export const TUNING = {
     finishWidthPx: 64, // px width of the checkered finish line
     finishCheckPx: 32, // px size of one check on the finish line
     fadeMs: 600, // ms the background crossfades to the next level's colour during the break
-    barY: 30, // px centre line of the progress bar
-    barHeight: 20, // px height of the progress bar
+    barY: 48, // px centre line of the progress bar (air above it from the screen top)
+    barHeight: 32, // px height of the progress bar
+    barLabelPx: 26, // px font size of the LV n label (digits ≈ 19 px tall, so ~6 px of air inside the track)
+    barFlagPx: 34, // px font size of the 🏁
     barInset: 48, // px from the field edges to the bar track (right side also leaves room for the 🏁)
     barAlpha: 0.6, // 0–1 alpha of the bar track
     barTrackColor: 0xd9d9d9, // light grey track

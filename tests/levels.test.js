@@ -117,8 +117,10 @@ test('levelBannerText names the segment while there is one and drops it past the
 test('levelBarLayout sits above the score, inside the field, with the flag just right of the track', () => {
   const bar = levelBarLayout(T, GAME_WIDTH);
   assert.ok(bar.x >= 16 && bar.x + bar.width <= GAME_WIDTH - 16, 'track inside the field with a margin');
-  assert.ok(bar.y - bar.height / 2 >= 8, 'clear of the top edge');
-  assert.ok(bar.y + bar.height / 2 <= 80 - 40, 'above the 80 px score text');
+  assert.ok(bar.y - bar.height / 2 >= 24, 'air between the screen top and the bar');
+  assert.ok(bar.y + bar.height / 2 <= T.hudScoreY - 40 - 8, 'air between the bar and the 80 px score text');
+  assert.ok(T.levels.barLabelPx + 4 <= bar.height, 'a couple of pixels above and below the label glyphs inside the track');
+  assert.ok(T.levels.barFlagPx >= 24 && T.levels.barFlagPx <= bar.height + 8, 'flag sized to the bar');
   assert.ok(bar.flagX > bar.x + bar.width && bar.flagX + 16 <= GAME_WIDTH, 'flag right of the track, inside the field');
   assert.ok(Math.abs(bar.labelX - (bar.x + bar.width / 2)) < 1e-9, 'label centred on the track');
   assert.ok(bar.radius === bar.height / 2);
