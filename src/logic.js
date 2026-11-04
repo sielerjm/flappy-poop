@@ -420,10 +420,25 @@ export function beanBounds({ gameHeight, groundHeight, radius, frac }) {
 }
 
 /** Bean centre y at elapsedMs: a full top-to-bottom sine bob with a per-bean phase. */
-export function beanY(elapsedMs, phase, bounds, t) {
+/** y of something bobbing across a band: a sine between bounds.minY and bounds.maxY with the given period. */
+export function bobY(elapsedMs, phase, bounds, periodMs) {
   const centre = (bounds.minY + bounds.maxY) / 2;
   const half = (bounds.maxY - bounds.minY) / 2;
-  return centre + half * Math.sin((2 * Math.PI * elapsedMs) / t.beans.travelPeriodMs + phase);
+  return centre + half * Math.sin((2 * Math.PI * elapsedMs) / periodMs + phase);
+}
+
+export function beanY(elapsedMs, phase, bounds, t) {
+  return bobY(elapsedMs, phase, bounds, t.beans.travelPeriodMs);
+}
+
+/** How far a moving gap item may swing from the gap's centre and still clear the pipe mouths by `margin`. */
+export function gapBobAmplitude(gapHeight, radius, margin) {
+  return Math.max(0, gapHeight / 2 - radius - margin);
+}
+
+/** y of a gap item sweeping up and down its gap. */
+export function gapBobY(elapsedMs, baseY, amp, periodMs, phase) {
+  return baseY + amp * Math.sin((2 * Math.PI * elapsedMs) / periodMs + phase);
 }
 
 /** Small rotation wiggle (degrees) at elapsedMs. */

@@ -30,6 +30,9 @@ import {
   beanSpawnX,
   beanBounds,
   beanY,
+  bobY,
+  gapBobAmplitude,
+  gapBobY,
   beanAngle,
   poopTapHit,
   fartPeakMul,
@@ -761,19 +764,14 @@ export class Play extends Phaser.Scene {
     top.setData('passed', false);
 
     const kind = rollItem(this.rng, this.score, T);
-    if (kind) {
-      const y = itemGapY(gapY, gapH, this.rng, kind);
-      const item = this.items.create(x, y, kind);
-      item.setDepth(8);
-      item.setScale(T.spriteDisplayScale);
-      const itemBody = scaledCircleBody(item.frame.width, T.spriteDisplayScale, T.items.itemRadius);
-      item.body.setCircle(itemBody.radius, itemBody.offset, itemBody.offset);
-      item.setVelocityX(-this.scrollSpeed());
-      item.setData('kind', kind);
-    }
+    const beanHere = rollBean(this.rng, this.score, T, { spawnedThisRun: this.beanSpawned, holding: this.effects.holdingBean() });
+    // Fiber bobs between pairs like a bean (and yields to a bean rolled for the same pair);
+    // probiotic and bacteria sit in the gap, behind the pipes, moving from moveFromLevel.
+    if (kind === 'fiber' && !beanHere) this.spawnBandItem('fiber');
+    else if (kind && kind !== 'fiber') this.spawnGapItem(kind, x, gapY, gapH);
 
     // Beans ride halfway between this pair and the next, bobbing top to bottom.
-    if (rollBean(this.rng, this.score, T, { spawnedThisRun: this.beanSpawned, holding: this.effects.holdingBean() })) {
+    if (beanHere) {
       this.beanSpawned = true;
       const phase = this.rng() * Math.PI * 2;
       const bean = this.beans.create(beanSpawnX(GAME_WIDTH, T.pipeWidth, T.pipeSpacingPx), beanY(0, phase, this.beanBounds, T), 'bean');
@@ -784,6 +782,38 @@ export class Play extends Phaser.Scene {
       bean.setVelocityX(-this.scrollSpeed());
       bean.setData({ elapsed: 0, phase });
     }
+  }
+
+  /** A fiber in the open: spawns halfway to the next pair and bobs across the beans' band. */
+  spawnBandItem(kind) {
+    const phase = this.rng() * Math.PI * 2;
+    const item = this.items.create(beanSpawnX(GAME_WIDTH, T.pipeWidth, T.pipeSpacingPx), bobY(0, phase, this.beanBounds, T.items.fiberPeriodMs), kind);
+    item.setDepth(8);
+    this.finishItem(item, kind);
+    item.setData({ bob: 'band', elapsed: 0, phase });
+    return item;
+  }
+
+  /** A probiotic or bacteria in a gap, behind the pipes; from moveFromLevel it sweeps up and down the gap. */
+  spawnGapItem(kind, x, gapY, gapH) {
+    const y = itemGapY(gapY, gapH, this.rng, kind);
+    const item = this.items.create(x, y, kind);
+    item.setDepth(-1); // under the pipes (0), over the background layers
+    this.finishItem(item, kind);
+    if (this.level >= T.items.moveFromLevel) {
+      const amp = gapBobAmplitude(gapH, T.items.itemRadius, T.items.moveMarginPx);
+      item.setData({ bob: 'gap', baseY: gapY, amp, elapsed: 0, phase: this.rng() * Math.PI * 2 });
+      item.y = gapBobY(0, gapY, amp, T.items.movePeriodMs, item.getData('phase'));
+    }
+    return item;
+  }
+
+  finishItem(item, kind) {
+    item.setScale(T.spriteDisplayScale);
+    const itemBody = scaledCircleBody(item.frame.width, T.spriteDisplayScale, T.items.itemRadius);
+    item.body.setCircle(itemBody.radius, itemBody.offset, itemBody.offset);
+    item.setVelocityX(-this.scrollSpeed());
+    item.setData('kind', kind);
   }
 
   /** Speed for the current level (the gap never changes); pushes it onto everything scrolling. */
@@ -1131,6 +1161,13 @@ export class Play extends Phaser.Scene {
       if (pipe.x < -T.pipeWidth) pipe.destroy();
     }
     for (const item of this.items.getChildren()) {
+      const bob = item.getData('bob');
+      if (bob && this.state === 'playing') {
+        const elapsed = item.getData('elapsed') + delta;
+        item.setData('elapsed', elapsed);
+        if (bob === 'band') item.y = bobY(elapsed, item.getData('phase'), this.beanBounds, T.items.fiberPeriodMs);
+        else item.y = gapBobY(elapsed, item.getData('baseY'), item.getData('amp'), T.items.movePeriodMs, item.getData('phase'));
+      }
       if (item.x < -T.pipeWidth) item.destroy();
     }
     for (const bean of this.beans.getChildren()) {

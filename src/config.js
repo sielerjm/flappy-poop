@@ -73,6 +73,10 @@ export const TUNING = {
     probioticPipes: 5, // pipes a probiotic lasts
     itemRadius: 48, // px circular hitbox = half the 96 logical-px sprite (whole drawing)
     weights: { fiber: 3, probiotic: 2, bacteria: 4 },
+    fiberPeriodMs: 3000, // ms for one full up-and-down bob of a fiber between pipe pairs (beans use beans.travelPeriodMs)
+    moveFromLevel: 3, // from this level probiotic / bacteria move up and down inside their gap
+    movePeriodMs: 1600, // ms for one full up-and-down sweep of a moving gap item
+    moveMarginPx: 8, // px kept between a moving gap item and the pipe mouths
   },
   beans: {
     startScore: 5, // score from which beans may appear

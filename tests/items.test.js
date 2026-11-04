@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { TUNING as T } from '../src/config.js';
-import { createRng, rollItem, itemGapY, scoreAfterItem, createEffects, ITEM_KINDS } from '../src/logic.js';
+import { createRng, rollItem, itemGapY, scoreAfterItem, createEffects, ITEM_KINDS, bobY, gapBobAmplitude, gapBobY } from '../src/logic.js';
 
 test('rollItem is always null below startScore', () => {
   const rng = createRng(1);
@@ -358,4 +358,22 @@ test('with two beans a normal fart leaves one, which is still a charged power; a
   assert.equal(fx.activatePower(1000), true);
   assert.equal(fx.powerIsSuper(), true);
   assert.equal(fx.beans(), 0, 'the super fart spends all three');
+});
+
+test('a moving gap item sweeps its gap but never reaches the pipe mouths; fiber bobs the beans\' band on its own period', () => {
+  const gapH = T.gapHeight;
+  const amp = gapBobAmplitude(gapH, T.items.itemRadius, T.items.moveMarginPx);
+  assert.ok(amp > 40, `amplitude ${amp} gives visible movement`);
+  const baseY = 640;
+  for (let e = 0; e < 2 * T.items.movePeriodMs; e += 25) {
+    const y = gapBobY(e, baseY, amp, T.items.movePeriodMs, 1.3);
+    assert.ok(y - T.items.itemRadius >= baseY - gapH / 2 + T.items.moveMarginPx - 1e-9, `top clears the upper pipe at ${e}`);
+    assert.ok(y + T.items.itemRadius <= baseY + gapH / 2 - T.items.moveMarginPx + 1e-9, `bottom clears the lower pipe at ${e}`);
+  }
+  assert.equal(gapBobAmplitude(100, 48, 8), 0, 'a gap too small to move in gives no movement');
+  assert.ok(T.items.moveFromLevel >= 2 && T.items.movePeriodMs >= 800 && T.items.fiberPeriodMs >= 1500);
+  const bounds = { minY: 300, maxY: 700 };
+  assert.equal(bobY(0, 0, bounds, T.items.fiberPeriodMs), 500);
+  assert.ok(Math.abs(bobY(T.items.fiberPeriodMs / 4, 0, bounds, T.items.fiberPeriodMs) - 700) < 1e-6);
+  assert.ok(Math.abs(bobY(T.items.fiberPeriodMs / 2, 0, bounds, T.items.fiberPeriodMs) - 500) < 1e-6, 'fiber period is its own');
 });
