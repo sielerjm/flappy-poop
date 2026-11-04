@@ -203,6 +203,51 @@ export async function run(url = DEFAULT_URL) {
     ok(overflow.checked > 0 && overflow.overflow.length === 0, `board names fit their column (${overflow.checked} measured${overflow.overflow.length ? `, overflow: ${overflow.overflow.join(', ')}` : ''})`);
     await closeTop('Leaderboard');
 
+    // Farts. Resume the paused run, then: one bean → normal fart (5 pipes, probiotic
+    // untouched, alive after); inside its grace window, three beans → rainbow charged
+    // look → super fart (20 pipes, rainbow halo, wave + tilt, alive after).
+    const play = `__flappy.scene.getScene('Play')`;
+    const T = await evaluate(`import('./src/config.js').then((m) => JSON.stringify(m.TUNING.beans))`).then(JSON.parse);
+    const sampleFart = async () => {
+      const samples = [];
+      for (let i = 0; i < 80 && (await evaluate(`${play}.effects.powerActive()`)); i += 1) {
+        samples.push(await evaluate(`JSON.stringify({ y: ${play}.poop.y, angle: ${play}.poop.angle, fill: ${play}.glow.fillColor, alpha: ${play}.glow.alpha, e: ${play}.effects.powerElapsed() })`).then(JSON.parse));
+        await sleep(100);
+      }
+      return samples;
+    };
+    const centre = 1280 / 2;
+    await evaluate(`${play}.resumePlay(), ${play}.effects.applyProbiotic(), ${play}.refreshProbioticHud(), true`);
+    const pipesBefore = await evaluate(`${play}.effects.pipesLeft()`);
+    const score0 = await evaluate(`${play}.score`);
+    await evaluate(`${play}.effects.addBean(), ${play}.setCharged(true), ${play}.activatePower(), true`);
+    ok((await evaluate(`${play}.effects.powerActive() && !${play}.effects.powerIsSuper()`)) === true, 'one bean fires a normal fart');
+    const normal = await sampleFart();
+    const settled = normal.filter((s) => s.e > T.centreMs);
+    const inBand = settled.every((s) => s.y >= centre - T.waveAmplitudePx - 2 && s.y <= centre + T.waveAmplitudePx + 2);
+    const tilted = settled.every((s) => Math.abs(s.angle) <= T.waveTiltDeg + 0.5) && settled.some((s) => s.angle < -5) && settled.some((s) => s.angle > 5);
+    ok(normal.length >= 30 && inBand && tilted, `normal fart floats in the wave band and tilts both ways (${normal.length} samples, y ${Math.min(...settled.map((s) => s.y)).toFixed(0)}–${Math.max(...settled.map((s) => s.y)).toFixed(0)}, angle ${Math.min(...settled.map((s) => s.angle)).toFixed(1)}…${Math.max(...settled.map((s) => s.angle)).toFixed(1)})`);
+    const score1 = await evaluate(`${play}.score`);
+    const pipesAfter = await evaluate(`${play}.effects.pipesLeft()`);
+    ok((await playState()) === 'playing' && score1 - score0 >= 4 && pipesAfter === pipesBefore, `normal fart: alive, +${score1 - score0} pipes, probiotic ${pipesBefore}→${pipesAfter} untouched`);
+    // Super fart, started inside the grace window so the poop has not fallen yet.
+    await evaluate(`${play}.effects.addBean(), ${play}.effects.addBean(), ${play}.effects.addBean(), ${play}.setCharged(true), true`);
+    await sleep(150);
+    const chargedFill = await evaluate(`${play}.glow.fillColor`);
+    const buttonFill = await evaluate(`${play}.beanButtonBg.fillColor`);
+    ok((await evaluate(`${play}.effects.superReady()`)) === true && chargedFill !== 0xffffff && buttonFill !== 0xffffff, `three beans: rainbow glow (#${chargedFill.toString(16)}) and bean button (#${buttonFill.toString(16)})`);
+    await evaluate(`${play}.activatePower(), true`);
+    ok((await evaluate(`${play}.effects.powerActive() && ${play}.effects.powerIsSuper()`)) === true, 'three beans fire a super fart');
+    const sup = await sampleFart();
+    const supSettled = sup.filter((s) => s.e > T.centreMs);
+    const halo = supSettled.every((s) => s.fill !== 0xffffff && Math.abs(s.alpha - T.superGlowAlpha) < 0.05);
+    const supBand = supSettled.every((s) => s.y >= centre - T.waveAmplitudePx - 2 && s.y <= centre + T.waveAmplitudePx + 2 && Math.abs(s.angle) <= T.waveTiltDeg + 0.5);
+    ok(sup.length >= 30 && halo && supBand, `super fart: rainbow halo and wave throughout (${sup.length} samples)`);
+    const score2 = await evaluate(`${play}.score`);
+    ok((await playState()) === 'playing' && score2 - score1 >= 19 && (await evaluate(`${play}.effects.beans()`)) === 0, `super fart: alive, +${score2 - score1} pipes, beans spent`);
+    await sleep(100);
+    ok((await evaluate(`${play}.glow.alpha === 0 && ${play}.glow.fillColor === 0xffffff && ${play}.rainbowMode === null`)) === true, 'after the super fart the glow is off and white again');
+
     const f2 = await frame();
     await sleep(500);
     ok((await frame()) > f2, 'game loop still advancing at the end');
