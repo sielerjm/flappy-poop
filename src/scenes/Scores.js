@@ -1,6 +1,6 @@
 import { GAME_WIDTH, GAME_HEIGHT } from '../config.js';
 import { VERSION, chromeIntent, overlayOutsideHit } from '../logic.js';
-import { t, metaFontSize } from '../i18n.js';
+import { t, metaFontSize, levelLabel } from '../i18n.js';
 import { MAX_TOP, formatScore } from '../save.js';
 
 const STYLE = { fontFamily: 'sans-serif', fontStyle: 'bold', color: '#ffffff', align: 'center' };
@@ -37,10 +37,11 @@ export class Scores extends Phaser.Scene {
         const y = cy - 150 + i * 76;
         const has = i < top.length;
         this.add
-          .text(cx - 120, y, `${i + 1}.`, { ...STYLE, fontSize: '40px', color: has ? '#f8a0c8' : '#6a5a74' })
+          .text(cx - 160, y, `${i + 1}.`, { ...STYLE, fontSize: '40px', color: has ? '#f8a0c8' : '#6a5a74' })
           .setOrigin(0, 0.5);
+        if (has) this.add.text(cx + 10, y, levelLabel(locale, top[i].level ?? 1), { ...STYLE, fontSize: '28px', color: '#c9b8dc', fontStyle: 'normal' }).setOrigin(0.5);
         this.add
-          .text(cx + 120, y, has ? formatScore(top[i]) : '–', { ...STYLE, fontSize: '40px', color: has ? '#ffffff' : '#6a5a74' })
+          .text(cx + 160, y, has ? formatScore(top[i]) : '–', { ...STYLE, fontSize: '40px', color: has ? '#ffffff' : '#6a5a74' })
           .setOrigin(1, 0.5);
       }
     }

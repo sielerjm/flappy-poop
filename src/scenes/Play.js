@@ -998,7 +998,7 @@ export class Play extends Phaser.Scene {
     }
     this.best.save(this.score); // legacy store, kept for first-run seeding
     const newTop = isNewTop(this.save, this.score);
-    this.save = saveLocal(recordScore(this.save, this.score, { toilet: this.toilet }));
+    this.save = saveLocal(recordScore(this.save, this.score, { toilet: this.toilet, level: this.level }));
     this.syncLeaderboard(); // fire and forget; never awaited inside the update loop
     // BEST on the game-over panel = the save state's top score, so a loaded code counts too.
     const best = Math.max(this.score, topScores(this.save)[0] ?? 0);
@@ -1010,7 +1010,7 @@ export class Play extends Phaser.Scene {
 
     this.time.delayedCall(T.deathToOverMs, () => {
       this.physics.pause();
-      this.scene.launch('Over', { score: this.score, best, newTop, toilet: this.toilet });
+      this.scene.launch('Over', { score: this.score, best, newTop, toilet: this.toilet, level: this.level });
     });
   }
 

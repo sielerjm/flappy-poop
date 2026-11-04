@@ -7,7 +7,7 @@
 
 export const CURRENT_VERSION = 1;
 export const SAVE_KEY = 'flappyPoop.save'; // localStorage key
-export const SCHEMA = 2; // local storage shape version (independent of the wire format); 1 stored top as numbers
+export const SCHEMA = 3; // local storage shape version (independent of the wire format); 1 stored top as numbers, 2 had no level
 export const MAX_TOP = 6;
 export const NAME_MIN = 1;
 export const NAME_MAX = 16;
@@ -81,26 +81,38 @@ export function validateName(raw) {
   return { ok: n >= NAME_MIN && n <= NAME_MAX, name };
 }
 
-/** A top entry from a bare score (schema 1 / wire `s`) or a { score, toilet } object. */
+/** Level (≥ 1) from a stored / wire value; anything else is level 1. */
+function normalizeLevel(v) {
+  return Number.isInteger(v) && v >= 1 ? v : 1;
+}
+
+/** A top entry from a bare score (schema 1 / wire `s`) or a { score, toilet, level } object. */
 function normalizeEntry(v) {
-  if (Number.isInteger(v) && v > 0) return { score: v, toilet: false };
-  if (v && typeof v === 'object' && Number.isInteger(v.score) && v.score > 0) return { score: v.score, toilet: Boolean(v.toilet) };
+  if (Number.isInteger(v) && v > 0) return { score: v, toilet: false, level: 1 };
+  if (v && typeof v === 'object' && Number.isInteger(v.score) && v.score > 0) {
+    return { score: v.score, toilet: Boolean(v.toilet), level: normalizeLevel(v.level) };
+  }
   return null;
 }
 
 /**
- * Top entries { score, toilet }: positive integer scores, deduplicated by score
- * (first occurrence wins, so local beats pasted on a tie), descending, at most
- * MAX_TOP.
+ * Top entries { score, toilet, level }: positive integer scores, deduplicated
+ * by score (first occurrence wins, so local beats pasted on a tie, but the
+ * higher level of the two is kept), descending, at most MAX_TOP.
  */
 function normalizeTop(list) {
   if (!Array.isArray(list)) return [];
-  const seen = new Set();
+  const byScore = new Map();
   const out = [];
   for (const v of list) {
     const e = normalizeEntry(v);
-    if (!e || seen.has(e.score)) continue;
-    seen.add(e.score);
+    if (!e) continue;
+    const dup = byScore.get(e.score);
+    if (dup) {
+      if (e.level > dup.level) dup.level = e.level;
+      continue;
+    }
+    byScore.set(e.score, e);
     out.push(e);
   }
   return out.sort((a, b) => b.score - a.score).slice(0, MAX_TOP);
@@ -131,12 +143,13 @@ function normalizeState(raw) {
 
 /**
  * New state with `score` inserted into top (desc, dedup, best MAX_TOP). Score <= 0
- * is ignored. `toilet` marks a run played on the toilet.
+ * is ignored. `toilet` marks a run played on the toilet; `level` is the level
+ * the run ended in (default 1).
  */
-export function recordScore(state, score, { toilet = false } = {}) {
+export function recordScore(state, score, { toilet = false, level = 1 } = {}) {
   const base = normalizeState(state);
   if (!Number.isInteger(score) || score <= 0) return base;
-  return { ...base, top: normalizeTop([...base.top, { score, toilet: Boolean(toilet) }]) };
+  return { ...base, top: normalizeTop([...base.top, { score, toilet: Boolean(toilet), level: normalizeLevel(level) }]) };
 }
 
 /** True when `score` would be a new entry in the top list (not already there, and good enough). */
@@ -189,7 +202,7 @@ export function loadLocal(storage = globalThis.localStorage) {
     if (raw == null) return emptyState();
     const parsed = JSON.parse(raw);
     // Schema 1 stored top as bare numbers; normalizeState upgrades it in memory.
-    if (parsed?.schema !== 1 && parsed?.schema !== SCHEMA) return emptyState();
+    if (![1, 2, SCHEMA].includes(parsed?.schema)) return emptyState();
     return normalizeState(parsed);
   } catch {
     return emptyState();
@@ -220,18 +233,22 @@ export function ensureId(state, storage = globalThis.localStorage) {
 // writes CURRENT_VERSION's shape. Bumping CURRENT_VERSION changes the prefix.
 
 /**
- * v1 payload: {"i":id,"n":name,"s":[scores],"p":[0|1 toilet flags],"t":unixSeconds}.
+ * v1 payload: {"i":id,"n":name,"s":[scores],"p":[0|1 toilet flags],"l":[levels],"t":unixSeconds}.
  * Key order fixed for deterministic bytes. `p` is optional on read (added after
- * v1 shipped; older codes read as all-false), always written.
+ * v1 shipped; older codes read as all-false), always written. `l` (the level each
+ * score was set at, ≥ 1) is optional on read and written only when some level is
+ * above 1, so codes from before levels existed stay byte-identical.
  */
 function serialize(state) {
-  return {
+  const out = {
     i: state.id,
     n: state.name,
     s: state.top.map((e) => e.score),
     p: state.top.map((e) => (e.toilet ? 1 : 0)),
-    t: state.exportedAt,
   };
+  if (state.top.some((e) => e.level > 1)) out.l = state.top.map((e) => e.level);
+  out.t = state.exportedAt;
+  return out;
 }
 
 function parseV1(json) {
@@ -246,8 +263,13 @@ function parseV1(json) {
       throw new Error('v1: bad toilet flags');
     }
   }
+  if (json.l !== undefined) {
+    if (!Array.isArray(json.l) || json.l.length !== json.s.length || !json.l.every((v) => Number.isInteger(v) && v >= 1 && v <= 999)) {
+      throw new Error('v1: bad levels');
+    }
+  }
   const exportedAt = Number.isInteger(json.t) ? json.t : null;
-  const top = normalizeTop(json.s.map((score, k) => ({ score, toilet: json.p?.[k] === 1 })));
+  const top = normalizeTop(json.s.map((score, k) => ({ score, toilet: json.p?.[k] === 1, level: json.l?.[k] ?? 1 })));
   return { id: json.i, name, top, exportedAt };
 }
 
