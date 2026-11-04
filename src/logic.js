@@ -226,6 +226,11 @@ export function levelBarLayout(t, width) {
   return { x, y: l.barY, width: w, height: l.barHeight, radius: l.barHeight / 2, labelX: x + w / 2, flagX: x + w + flagRoom / 2 + 4 };
 }
 
+/** True once the progress-bar fill has reached the level label, which sits at the track's centre. */
+export function levelBarLabelOnFill(progress) {
+  return progress >= 0.5;
+}
+
 /** Linear blend of two 0xRRGGBB colours, f in [0, 1]. */
 export function lerpColor(a, b, f) {
   const k = Math.min(1, Math.max(0, f));

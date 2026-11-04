@@ -1,13 +1,16 @@
 import { TUNING as T } from '../config.js';
+import { levelBarLabelOnFill } from '../logic.js';
 
 /**
  * Level progress bar: a light-grey track, a pipe-pink fill that animates to
  * each new share (one step per pipe pair passed), the level label centred on
- * it, and a 🏁 at the right end. Geometry comes from levelBarLayout(); Play
+ * it (pink on the grey track, white once the fill has reached it), and a 🏁 at
+ * the right end. Geometry comes from levelBarLayout(); Play
  * decides the share with levelProgress() and the label text with levelLabel().
  */
 export function createLevelBar(scene, layout, { depth = 20 } = {}) {
   const l = T.levels;
+  const fillHex = `#${l.barFillColor.toString(16).padStart(6, '0')}`;
   const g = scene.add.graphics().setDepth(depth);
   const label = scene.add
     .text(layout.labelX, layout.y, '', { fontFamily: 'sans-serif', fontStyle: 'bold', fontSize: '22px', color: '#ffffff', stroke: '#1a0b14', strokeThickness: 3 })
@@ -28,6 +31,7 @@ export function createLevelBar(scene, layout, { depth = 20 } = {}) {
       g.fillStyle(l.barFillColor, 1);
       g.fillRoundedRect(x, y - height / 2, w, height, Math.min(radius, w / 2));
     }
+    label.setColor(levelBarLabelOnFill(shown) ? '#ffffff' : fillHex);
   };
   draw();
 
@@ -54,6 +58,7 @@ export function createLevelBar(scene, layout, { depth = 20 } = {}) {
     },
     setLabel(text) {
       label.setText(text);
+      draw();
       return this;
     },
     setVisible(visible) {
@@ -68,6 +73,9 @@ export function createLevelBar(scene, layout, { depth = 20 } = {}) {
     },
     labelText() {
       return label.text;
+    },
+    labelColor() {
+      return label.style.color;
     },
     destroy() {
       tween?.stop();

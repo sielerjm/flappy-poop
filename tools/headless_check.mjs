@@ -333,9 +333,10 @@ export async function run(url = DEFAULT_URL) {
     await chrome('tap');
     await sleep(300);
     ok((await evaluate(`${play}.state === 'playing' && ${play}.diff.pipeSpeed === ${TT.pipeSpeed + 2 * TT.levels.speedStep}`)) === true, 'level 3 resumes one step faster again');
-    const bar = await evaluate(`JSON.stringify({ label: ${play}.levelBar.labelText(), value: ${play}.levelBar.value(), passed: ${play}.pipesPassed })`).then(JSON.parse);
+    const bar = await evaluate(`JSON.stringify({ label: ${play}.levelBar.labelText(), value: ${play}.levelBar.value(), passed: ${play}.pipesPassed, color: ${play}.levelBar.labelColor() })`).then(JSON.parse);
     const expect = Math.min(1, Math.max(0, (bar.passed - end2) / TT.levels.pipesStep / 2));
-    ok(bar.label === 'LV 3' && Math.abs(bar.value - expect) < 1e-9, `progress bar reads "${bar.label}" at ${(bar.value * 100).toFixed(0)} % (${bar.passed - end2} of ${TT.levels.pipesStep * 2} pipes into level 3)`);
+    const pinkHex = '#' + TT.levels.barFillColor.toString(16).padStart(6, '0');
+    ok(bar.label === 'LV 3' && Math.abs(bar.value - expect) < 1e-9 && bar.color === pinkHex, `progress bar reads "${bar.label}" at ${(bar.value * 100).toFixed(0)} % in ${bar.color} (${bar.passed - end2} of ${TT.levels.pipesStep * 2} pipes into level 3)`);
     await evaluate(`${play}.graceLeftMs = 0, true`);
 
     const f2 = await frame();

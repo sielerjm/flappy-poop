@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { TUNING as T, LEVELS, LEVEL_COLORS, BACKGROUND, GAME_HEIGHT } from '../src/config.js';
 import { levelBannerText, levelLabel, LOCALES } from '../src/i18n.js';
 import { GAME_WIDTH } from '../src/config.js';
-import { levelPipes, levelEnd, levelFor, levelSpeed, levelName, levelColor, levelProgress, lerpColor, pipeSpacing, gapBounds, levelBarLayout } from '../src/logic.js';
+import { levelPipes, levelEnd, levelFor, levelSpeed, levelName, levelColor, levelProgress, lerpColor, pipeSpacing, gapBounds, levelBarLayout, levelBarLabelOnFill } from '../src/logic.js';
 
 const L = T.levels;
 
@@ -143,4 +143,11 @@ test('every level colour keeps the villi (#ec8ca0) and the cream bands (#f6ded2)
   assert.equal(new Set(LEVEL_COLORS).size, LEVEL_COLORS.length, 'colours are distinct');
   const keys = LEVELS.map((r) => r.key);
   assert.equal(new Set(keys).size, keys.length, 'segment keys are unique');
+});
+
+test('the bar label switches from pink to white once the fill reaches the track centre', () => {
+  assert.equal(levelBarLabelOnFill(0), false);
+  assert.equal(levelBarLabelOnFill(0.49), false);
+  assert.equal(levelBarLabelOnFill(0.5), true);
+  assert.equal(levelBarLabelOnFill(1), true);
 });
