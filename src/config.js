@@ -106,16 +106,18 @@ export const TUNING = {
 };
 
 // Gut segments the poop travels through, one per level, in order. `key` is the
-// i18n name key (`level.<key>`); `color` is the solid background behind the villi
-// (placeholders for Michael to tune). Past the last row: no name, last colour.
+// i18n name key (`level.<key>`); `color` is the solid background behind the villi.
+// Keep every colour away from the villi pink (#ec8ca0) and the cream bands
+// (#f6ded2) or the fringes vanish into the lumen (tests/levels.test.js checks the
+// distance). Placeholders for Michael to tune. Past the last row: no name, last colour.
 export const LEVELS = [
-  { key: 'stomach', color: 0xf3cdb4 },
-  { key: 'duodenum', color: 0xeeada6 },
-  { key: 'jejunum', color: 0xe28a98 },
-  { key: 'ileum', color: 0xcc6f88 },
-  { key: 'caecum', color: 0xad5f78 },
-  { key: 'colon', color: 0x8d4b60 },
-  { key: 'rectum', color: 0x6e3a4b },
+  { key: 'stomach', color: 0xf3cdb4 }, // peach
+  { key: 'duodenum', color: 0xc9b8dc }, // lavender
+  { key: 'jejunum', color: 0x8f70ba }, // purple (the original lumen)
+  { key: 'ileum', color: 0x6c5096 }, // deep purple
+  { key: 'caecum', color: 0x4f7f8c }, // teal
+  { key: 'colon', color: 0x5a3f6e }, // plum
+  { key: 'rectum', color: 0x3c2a3a }, // dark plum
 ];
 
 // Transparent overlay layers drawn over the level colour, back to front. Each is a

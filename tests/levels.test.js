@@ -126,3 +126,15 @@ test('levelLabel is short and localised', () => {
   assert.equal(levelLabel('zh-Hans', 2), '第2关');
   for (const locale of LOCALES) assert.ok(levelLabel(locale, 12).includes('12'));
 });
+
+test('every level colour keeps the villi (#ec8ca0) and the cream bands (#f6ded2) visible against it', () => {
+  const dist = (a, b) => Math.abs(((a >> 16) & 0xff) - ((b >> 16) & 0xff)) + Math.abs(((a >> 8) & 0xff) - ((b >> 8) & 0xff)) + Math.abs((a & 0xff) - (b & 0xff));
+  const VILLI = 0xec8ca0;
+  const CREAM = 0xf6ded2;
+  for (const row of LEVELS) {
+    assert.ok(dist(row.color, VILLI) >= 90, `${row.key} #${row.color.toString(16)} is too close to the villi pink (${dist(row.color, VILLI)})`);
+    assert.ok(dist(row.color, CREAM) >= 40, `${row.key} #${row.color.toString(16)} is too close to the cream bands (${dist(row.color, CREAM)})`);
+  }
+  const keys = LEVELS.map((r) => r.key);
+  assert.equal(new Set(keys).size, keys.length, 'segment keys are unique');
+});
