@@ -32,6 +32,7 @@ test('every item weight is ≥ 0 and the sum is > 0', () => {
 
 test('fartVolume is audible but not clipping', () => {
   assert.ok(T.fartVolume >= 0.2 && T.fartVolume <= 1, `fartVolume ${T.fartVolume}`);
+  assert.ok(T.levelUpVolume >= 0.2 && T.levelUpVolume <= 1, `levelUpVolume ${T.levelUpVolume}`);
 });
 
 test('HUD probiotic icon is at least as large as the world item sprite', () => {

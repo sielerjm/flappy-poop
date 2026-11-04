@@ -1,5 +1,5 @@
 // WebAudio synth blips plus a mute gate that also drives Phaser's sound
-// manager (the death fart MP3). unlock() must run from a user gesture: it
+// manager (the fart and level-up MP3s). unlock() must run from a user gesture: it
 // creates the AudioContext, plays a silent buffer (iOS unlock), resume()s
 // it, unlocks Phaser's sound manager, and starts the silent-switch keeper
 // (below). Blips wait until the context is running — notes started while

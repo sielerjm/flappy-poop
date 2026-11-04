@@ -25,6 +25,7 @@ export class Boot extends Phaser.Scene {
     this.load.image('ground', 'assets/ground.png' + V);
     this.load.audio('fart', 'assets/sfx/fart.mp3' + V);
     this.load.audio('fart-accelerate', 'assets/sfx/fart_accelerate.mp3' + V);
+    this.load.audio('level-up', 'assets/sfx/NewLevel.mp3' + V); // finish-line chime
   }
 
   create() {

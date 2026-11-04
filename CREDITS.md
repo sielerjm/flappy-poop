@@ -23,6 +23,11 @@
   https://pixabay.com/sound-effects/people-fart-sound-effect-reed-82976/,
   Pixabay Content License, published 2022-08-10. Plays during the bean fart
   power-up. Bundled inside the game only; not redistributed as a standalone file.
+- `assets/sfx/NewLevel.mp3` — "Shine 11 sparkling chime sound effect" by
+  BenKirb, https://pixabay.com/sound-effects/film-special-effects-shine-11-268907/,
+  Pixabay Content License, published 2024-11-27. Plays when the poop crosses a
+  level's finish line. Bundled inside the game only; not redistributed as a
+  standalone file.
 
 ## Services
 
