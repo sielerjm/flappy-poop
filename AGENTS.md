@@ -144,7 +144,7 @@ src/
                             to Over. Ready screen (readyLayout: title, poop spot
                             wearing poop-speech.png's "TAP TO FLAP!" bubble, then
                             toilet toggle / How to play / Save / Load User /
-                            profileButtonText() button: "Enter username" (pink,
+                            profileButtonText() button: "Enter username" (white,
                             under a pulsing createRectGlow halo, opens the save
                             panel on the name field) until a name is set, then
                             "name · best" opening Scores; any other tap starts); launch() swaps to the

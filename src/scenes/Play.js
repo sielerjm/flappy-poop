@@ -155,8 +155,8 @@ export class Play extends Phaser.Scene {
       color: '#f8a0c8',
     });
     // "<name> · best" button under Save / Load User: opens the Scores overlay.
-    // Without a username it shows the enter-username prompt (pink) under a
-    // pulsing soft white halo and opens the save panel on the name field instead.
+    // Without a username it shows the enter-username prompt under a pulsing
+    // soft white halo and opens the save panel on the name field instead.
     {
       const b = this.readyBoxes.profile;
       this.profileHalo = createRectGlow(this, b.x, b.y, { key: 'ready-halo', width: b.width, height: b.height, radius: T.readyButtonRadius, pad: T.readyPromptGlowPx })
@@ -164,7 +164,7 @@ export class Play extends Phaser.Scene {
         .setAlpha(T.readyPromptMinAlpha);
       this.profileHaloTween = this.tweens.add({ targets: this.profileHalo, alpha: T.readyPromptMaxAlpha, yoyo: true, repeat: -1, duration: T.readyPromptPulseMs });
     }
-    this.profileBtn = createButton(this, this.readyBoxes.profile, profileButtonText(this.locale, this.save), { ...TEXT_STYLE, fontSize: '32px' }); // white once named: the player's own line, not a menu item
+    this.profileBtn = createButton(this, this.readyBoxes.profile, profileButtonText(this.locale, this.save), { ...TEXT_STYLE, fontSize: '32px' }); // white: the player's own line, not a menu item
     this.refreshProfile();
 
     this.pauseShade = this.add.rectangle(GAME_WIDTH / 2, GAME_HEIGHT / 2, GAME_WIDTH, GAME_HEIGHT, 0x000000, 0.45).setDepth(25).setVisible(false);
@@ -375,7 +375,6 @@ export class Play extends Phaser.Scene {
   refreshProfile() {
     const named = Boolean(this.save?.name);
     this.profileBtn?.setText(profileButtonText(this.locale, this.save));
-    this.profileBtn?.setColor(named ? '#ffffff' : '#f8a0c8');
     if (this.state === 'ready' && !this.launching) {
       this.profileBtn?.setVisible(true);
       this.profileHalo?.setVisible(!named);

@@ -54,6 +54,10 @@ export function createRectGlow(scene, x, y, { key, width, height, radius, pad })
     ctx.shadowBlur = pad;
     ctx.fillStyle = '#ffffff';
     roundedRectPath(ctx, pad, pad, width, height, radius);
+    // A single blurred shadow is thin; stacking it makes the halo solid at the
+    // edge and still fades to nothing at `pad`.
+    ctx.fill();
+    ctx.fill();
     ctx.fill();
     ctx.restore();
     ctx.globalCompositeOperation = 'destination-out';
