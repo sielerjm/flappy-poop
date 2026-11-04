@@ -78,6 +78,9 @@ export const TUNING = {
     waveAmplitudePx: 60, // px the floating poop rises and falls around mid-height while farting
     wavePeriodMs: 1200, // ms for one full rise-and-fall of the float wave
     waveTiltDeg: 15, // degrees the floating poop tilts: nose up (−) while rising, nose down (+) while falling
+    rainbowPeriodMs: 1500, // ms for one full hue cycle of the glow / bean button with superBeans held, and of the super-fart halo
+    superGlowAlpha: 0.75, // 0–1 alpha of the rainbow halo behind the poop during a super fart
+    superGlowScale: 1.4, // × glow radius during a super fart
     endClearMarginPx: 64, // px of extra scroll kept in hand so the last pipe is fully behind the poop when the fart ends
     beanRadius: 48, // px circular hitbox = half the 96 logical-px sprite
   },

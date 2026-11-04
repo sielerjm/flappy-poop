@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { GAME_HEIGHT, TUNING as T } from '../src/config.js';
-import { fartFloat } from '../src/logic.js';
+import { fartFloat, hsvToRgb, rainbowHue } from '../src/logic.js';
 
 const b = T.beans;
 const CENTRE = GAME_HEIGHT / 2;
@@ -53,4 +53,28 @@ test('the float wave stays inside the play area with the poop radius to spare', 
   assert.ok(CENTRE - b.waveAmplitudePx > top + 100 && CENTRE + b.waveAmplitudePx < floor - 100, 'wide margins');
   assert.ok(b.wavePeriodMs >= 600 && b.wavePeriodMs <= 3000, `wavePeriodMs ${b.wavePeriodMs}`);
   assert.ok(b.waveTiltDeg > 0 && b.waveTiltDeg <= 45, `waveTiltDeg ${b.waveTiltDeg}`);
+});
+
+test('hsvToRgb hits the primaries, greys when unsaturated, and wraps the hue', () => {
+  assert.equal(hsvToRgb(0, 1, 1), 0xff0000);
+  assert.equal(hsvToRgb(1 / 3, 1, 1), 0x00ff00);
+  assert.equal(hsvToRgb(2 / 3, 1, 1), 0x0000ff);
+  assert.equal(hsvToRgb(0.5, 1, 1), 0x00ffff);
+  assert.equal(hsvToRgb(0.25, 0, 1), 0xffffff);
+  assert.equal(hsvToRgb(0.25, 1, 0), 0x000000);
+  assert.equal(hsvToRgb(1, 1, 1), hsvToRgb(0, 1, 1), 'hue 1 wraps to 0');
+  assert.equal(hsvToRgb(-1 / 3, 1, 1), 0x0000ff, 'negative hue wraps');
+});
+
+test('rainbowHue cycles once per period and stays in [0, 1)', () => {
+  assert.equal(rainbowHue(0, 1500), 0);
+  assert.ok(Math.abs(rainbowHue(750, 1500) - 0.5) < 1e-9);
+  assert.equal(rainbowHue(1500, 1500), 0);
+  assert.ok(Math.abs(rainbowHue(1500 + 150, 1500) - 0.1) < 1e-9);
+  for (let ms = 0; ms < 5000; ms += 37) {
+    const h = rainbowHue(ms, 1500);
+    assert.ok(h >= 0 && h < 1, `hue ${h}`);
+  }
+  assert.equal(rainbowHue(100, 0), 0, 'no period: no cycling');
+  assert.ok(T.beans.rainbowPeriodMs >= 300 && T.beans.superGlowAlpha > 0 && T.beans.superGlowAlpha <= 1 && T.beans.superGlowScale >= 1 && T.beans.superGlowScale <= 2);
 });

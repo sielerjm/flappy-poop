@@ -29,6 +29,8 @@ import {
   fartPeakMul,
   fartMul,
   fartFloat,
+  hsvToRgb,
+  rainbowHue,
   fartRemainingDistance,
   pipeClearDistance,
   beanButtonLayout,
@@ -182,7 +184,10 @@ export class Play extends Phaser.Scene {
       const icon = this.add.image(0, 0, 'bean').setDisplaySize(56, 56);
       // Container so the pulse scales circle + icon together without touching the icon's own scale.
       this.beanButton = this.add.container(b.x, b.y, [bg, icon]).setDepth(30).setVisible(false);
+      this.beanButtonBg = bg; // recoloured by applyRainbow() with three beans held
     }
+    this.rainbowMs = 0;
+    this.rainbowMode = null; // null | 'charged' (superBeans held) | 'super' (super fart running)
 
     // Collisions
     this.physics.add.overlap(this.poop, this.pipes, () => this.die(), undefined, this);
@@ -639,6 +644,29 @@ export class Play extends Phaser.Scene {
     if (this.effects.powerReady()) this.setCharged(true);
   }
 
+  /**
+   * Rainbow colouring, driven every frame: with superBeans held the glow and
+   * the bean button disc cycle through hues; during a super fart the glow is a
+   * bigger, steadier halo doing the same. Otherwise everything is white again.
+   */
+  applyRainbow() {
+    const superFart = this.effects.powerActive() && this.effects.powerIsSuper();
+    const mode = superFart ? 'super' : this.charged && this.effects.superReady() ? 'charged' : null;
+    if (mode !== this.rainbowMode) {
+      this.rainbowMode = mode;
+      if (mode === 'super') this.glow.setAlpha(T.beans.superGlowAlpha).setScale(T.beans.superGlowScale);
+      else this.glow.setScale(1);
+      if (mode === null) {
+        this.glow.setFillStyle(0xffffff, 1);
+        this.beanButtonBg.setFillStyle(0xffffff, 0.75);
+      }
+    }
+    if (!mode) return;
+    const color = hsvToRgb(rainbowHue(this.rainbowMs, T.beans.rainbowPeriodMs), 1, 1);
+    this.glow.setFillStyle(color, 1);
+    if (mode === 'charged') this.beanButtonBg.setFillStyle(color, 0.85);
+  }
+
   /** Charged look: alternating stink-line frames and a pulsing white glow. */
   setCharged(on) {
     if (on === this.charged) return;
@@ -723,6 +751,7 @@ export class Play extends Phaser.Scene {
     this.fartTween?.stop();
     this.fartTween = null;
     this.poop.setAlpha(1);
+    this.glow.setAlpha(0).setScale(1); // the super-fart halo goes out; applyRainbow() whitens it next frame
     this.scrollMul = 1;
     this.setPoopTexture('poop');
     this.poop.body.setAllowGravity(true);
@@ -820,6 +849,8 @@ export class Play extends Phaser.Scene {
 
   update(_time, delta) {
     const dt = delta / 1000;
+    this.rainbowMs += delta; // keeps cycling while paused: it is only colour
+    this.applyRainbow();
     const scrolling = this.state === 'ready' || this.state === 'playing';
     if (scrolling) {
       this.bg.tilePositionX += this.scrollSpeed() * 0.25 * dt;

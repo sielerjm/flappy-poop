@@ -380,6 +380,33 @@ export function fartPeakMul(durationMs, pipes, spawnEveryMs) {
   return 1 + ((avg - 1) * Math.PI) / 2;
 }
 
+/** 0xRRGGBB for an HSV colour; h in [0, 1) around the wheel, s and v in [0, 1]. */
+export function hsvToRgb(h, s, v) {
+  const hue = ((h % 1) + 1) % 1;
+  const i = Math.floor(hue * 6);
+  const f = hue * 6 - i;
+  const p = v * (1 - s);
+  const q = v * (1 - s * f);
+  const u = v * (1 - s * (1 - f));
+  const [r, g, b] = [
+    [v, u, p],
+    [q, v, p],
+    [p, v, u],
+    [p, q, v],
+    [u, p, v],
+    [v, p, q],
+  ][i % 6];
+  const byte = (x) => Math.round(Math.min(1, Math.max(0, x)) * 255);
+  return (byte(r) << 16) | (byte(g) << 8) | byte(b);
+}
+
+/** Hue in [0, 1) that cycles once every periodMs. */
+export function rainbowHue(elapsedMs, periodMs) {
+  if (!(periodMs > 0)) return 0;
+  const h = (elapsedMs / periodMs) % 1;
+  return h < 0 ? h + 1 : h;
+}
+
 /**
  * Where the floating poop is and how it tilts, elapsedMs into the fart: it
  * glides from startY to centreY over centreMs (ease-out), and rides a sine
