@@ -41,7 +41,7 @@ export const TUNING = {
   readyPoopScale: 1.5, // × spriteDisplayScale for the speech-bubble poop on the ready screen (shrinks back during the slide)
   toiletOffColor: 0x6a6a6a, // toggle track when off (grey)
   toiletOnColor: 0x8b5a2b, // toggle track when on (brown)
-  toiletOffAlpha: 0.33, // 0–1 alpha of the 🚽 while the toggle is off
+  toiletOffAlpha: 0.43, // 0–1 alpha of the 🚽 while the toggle is off
   toiletKnobMs: 150, // ms the toggle knob takes to slide
   fartVolume: 0.6, // 0–1 Phaser volume for the death fart sample
   levels: {

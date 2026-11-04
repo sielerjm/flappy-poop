@@ -732,8 +732,10 @@ export function readyLayout(width, height, t) {
   const poop = { id: 'poop', x: cx, y: 672, bubble: { left: -48 * s, right: 116 * s, top: -127 * s, bottom: 46 * s } };
   // Toilet toggle: 120x56 track left of centre, 🚽 to its right; the hit box spans both.
   const toilet = { id: 'toilet', x: cx, y: 812, width: 240, height: 72, track: { x: cx - 50, y: 812, width: 120, height: 56 }, emojiX: cx + 80 };
-  // "?" button: a boxH circle in the top-right corner, 16 px from the right edge.
-  const howto = { id: 'howto', x: width - 16 - boxH / 2, y: 16 + boxH / 2 + 24, width: boxH, height: boxH, round: true };
+  // "?" button: a boxH circle in the top-right corner, inset so its pulsing halo
+  // (readyPromptGlowPx past the rim) stays inside the field.
+  const haloR = boxH / 2 + (t.readyPromptGlowPx ?? 0);
+  const howto = { id: 'howto', x: width - 16 - haloR, y: 16 + haloR, width: boxH, height: boxH, round: true };
   // Two equal buttons, 12 px apart, stacked up from 1111: above the ground strip
   // (1152) and the tray band (1168). These two do not move when the block above shifts.
   const gap = 12;

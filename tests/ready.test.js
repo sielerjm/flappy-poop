@@ -31,8 +31,9 @@ test('ready boxes have ids, are inside the field, and the tappable ones are at l
   // The "?" is a thumb-sized circle in the top-right corner.
   assert.equal(layout.howto.round, true);
   assert.equal(layout.howto.width, layout.howto.height);
-  assert.ok(layout.howto.x + layout.howto.width / 2 <= GAME_WIDTH - 8 && layout.howto.x > GAME_WIDTH * 0.8, 'hugs the right edge');
-  assert.ok(layout.howto.y - layout.howto.height / 2 >= 8 && layout.howto.y < 160, 'near the top');
+  const haloR = layout.howto.width / 2 + T.readyPromptGlowPx;
+  assert.ok(layout.howto.x + haloR <= GAME_WIDTH && layout.howto.x > GAME_WIDTH * 0.8, 'the halo stays inside the right edge');
+  assert.ok(layout.howto.y - haloR >= 0 && layout.howto.y < 160, 'the halo stays inside the top edge');
   // Equal heights and a small gap for the two stacked buttons, which keep their old positions.
   assert.equal(layout.saveLoad.height, layout.profile.height);
   const g2 = edges(layout.profile).top - edges(layout.saveLoad).bottom;
