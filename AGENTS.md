@@ -99,6 +99,8 @@ src/
                             (solid core, outer glowFadeFrac fading to 0, from
                             glowStops) as an Image behind the poop; tinted for
                             the rainbow, alpha / scale tweened by Play.
+                            createRectGlow(): rounded-rect halo (canvas shadow
+                            with the box cut out) for the "Enter username" prompt.
     tray.js                 Phaser wrapper around trayLayout: leaderboard (🏆) /
                             mute / settings bottom-right, pause directly above the
                             cog, plus bottom-left info, language (🌐), feedback (💬).
@@ -118,7 +120,10 @@ src/
                             read-only user code + Copy, Load field, a full-width
                             Save button that stores the username and confirms
                             "Username saved", status line).
-                            Opened from the ready-screen Save / Load User button.
+                            Opened from the ready-screen Save / Load User button,
+                            and by the "Enter username" prompt with
+                            { focusName: true, closeOnSave: true } (caret in the
+                            field at once; Save closes it after savePanelCloseMs).
                             Disables game.input.keyboard while open so typing does
                             not flap. Copy calls clipboard.writeText inside the tap
                             handler (iOS); falls back to selecting the field.
@@ -139,8 +144,10 @@ src/
                             to Over. Ready screen (readyLayout: title, poop spot
                             wearing poop-speech.png's "TAP TO FLAP!" bubble, then
                             toilet toggle / How to play / Save / Load User /
-                            profileLine() buttons; profile hidden until a username
-                            is set; any other tap starts); launch() swaps to the
+                            profileButtonText() button: "Enter username" (pink,
+                            under a pulsing createRectGlow halo, opens the save
+                            panel on the name field) until a name is set, then
+                            "name · best" opening Scores; any other tap starts); launch() swaps to the
                             plain poop frame and slides it to poopX over
                             launchSlideMs, then start(); extra taps during the
                             slide are ignored (launching flag). Toilet mode:

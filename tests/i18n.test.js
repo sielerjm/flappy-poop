@@ -13,7 +13,9 @@ import {
   catalogFor,
   howToItems,
   pauseBannerText,
-  metaFontSize,  rankText,
+  metaFontSize,
+  rankText,
+  profileButtonText,
 } from '../src/i18n.js';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -34,6 +36,7 @@ const SCENE_DENYLIST = [
   'Save / Load User',
   'HIGH SCORES',
   'LEADERBOARD',
+  'Enter username',
 ];
 
 const BANNED_IMPORTS = ['ABOUT_TEXT', 'HOW_TO_PLAY_TEXT', 'PAUSE_BANNER_TEXT', 'HOW_TO_ITEMS'];
@@ -152,4 +155,12 @@ test('rankText fills score (with 🚽 on toilet runs), rank and total in both lo
   const zh = rankText('zh-Hans', info);
   assert.ok(zh.includes('🚽 41') && zh.includes('23') && zh.includes('150'), zh);
   assert.ok(!zh.includes('{'), 'no placeholder left over');
+});
+
+test('profileButtonText prompts for a username until one is set, in both locales', () => {
+  assert.equal(profileButtonText('en', { name: '', top: [] }), 'Enter username');
+  assert.equal(profileButtonText('zh-Hans', { name: '', top: [] }), '输入用户名');
+  assert.equal(profileButtonText('en', null), 'Enter username');
+  assert.equal(profileButtonText('en', { name: 'Alice', top: [] }), 'Alice');
+  assert.equal(profileButtonText('zh-Hans', { name: 'Alice', top: [{ score: 41, toilet: true }] }), 'Alice · 🚽 41');
 });

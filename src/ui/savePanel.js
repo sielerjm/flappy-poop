@@ -6,6 +6,7 @@
 // not flap / pause / open overlays. Canvas pointer events never reach the game
 // because the backdrop sits above the canvas.
 
+import { TUNING as T } from '../config.js';
 import { t, welcomeText } from '../i18n.js';
 import { loadLocal, saveLocal, ensureId, validateName, exportCode, importCode } from '../save.js';
 
@@ -46,6 +47,7 @@ let ctx = null; // { game, play, locale }
 let keyboardWasEnabled = true;
 let currentCode = '';
 let copiedTimer = null;
+let closeTimer = null; // pending self-close after Save (Enter-username flow)
 
 function h(tag, attrs = {}, ...children) {
   const el = document.createElement(tag);
@@ -205,6 +207,10 @@ function onSave() {
   onNameChange();
   setStatus(t(ctx.locale, 'saveNameSaved'), 'ok');
   dom.name.blur();
+  if (ctx.closeOnSave) {
+    clearTimeout(closeTimer);
+    closeTimer = setTimeout(() => closeSavePanel(), T.savePanelCloseMs);
+  }
 }
 
 function onCopy() {
@@ -274,12 +280,17 @@ function setGameKeyboard(enabled) {
 
 /**
  * Open the panel. Regenerates the code every time (spec: export is never cached).
- * @param {{ game: object, play: object, locale: string }} options
+ * focusName puts the caret in the Username field at once (call from inside the
+ * tap so iOS raises the keyboard); closeOnSave makes a successful Save close
+ * the panel after savePanelCloseMs. Both are used by the "Enter username" prompt.
+ * @param {{ game: object, play: object, locale: string, focusName?: boolean, closeOnSave?: boolean }} options
  */
 export function openSavePanel(options) {
   if (typeof document === 'undefined') return;
   if (!dom) build();
-  ctx = { game: options.game, play: options.play, locale: options.locale ?? 'en' };
+  clearTimeout(closeTimer);
+  closeTimer = null;
+  ctx = { game: options.game, play: options.play, locale: options.locale ?? 'en', closeOnSave: Boolean(options.closeOnSave) };
   applyLocale(ctx.locale);
   setGameKeyboard(false);
   const state = getState();
@@ -289,9 +300,12 @@ export function openSavePanel(options) {
   setStatus('');
   dom.root.hidden = false;
   refreshCode();
+  if (options.focusName) dom.name.focus();
 }
 
 export function closeSavePanel() {
+  clearTimeout(closeTimer);
+  closeTimer = null;
   if (!dom || dom.root.hidden) return;
   dom.root.hidden = true;
   if (document.activeElement && dom.root.contains(document.activeElement)) document.activeElement.blur();

@@ -1,7 +1,7 @@
 // Player-facing string catalog. Phaser-free so Node can test every key.
 // Locales: en (default) and zh-Hans (Simplified Chinese).
 
-import { formatScore } from './save.js';
+import { formatScore, profileLine } from './save.js';
 
 export const DEFAULT_LOCALE = 'en';
 export const LOCALES = ['en', 'zh-Hans'];
@@ -89,6 +89,7 @@ Inspired by Flappy Bird`,
     leaderboardRank: 'Your best {score} is #{rank} of {total}',
     leaderboardNotYet: 'Your best is not on the board yet',
     saveLeaderboardNote: 'Your username and best score are shown on the public leaderboard',
+    profilePrompt: 'Enter username',
   },
   'zh-Hans': {
     readyTitle: 'FLAPPY POOP',
@@ -171,6 +172,7 @@ Inspired by Flappy Bird`,
     leaderboardRank: '你的最高分 {score} 排在第 {rank} 名（共 {total} 人）',
     leaderboardNotYet: '你的最高分尚未上榜',
     saveLeaderboardNote: '你的用户名和最高分会显示在公开排行榜上',
+    profilePrompt: '输入用户名',
   },
 };
 
@@ -217,6 +219,11 @@ export function pauseBannerText(locale) {
 /** Small meta lines (version, Updated, haptics hint): 28px in Chinese, 24px in English (2x field). */
 export function metaFontSize(locale) {
   return locale === 'zh-Hans' ? '28px' : '24px';
+}
+
+/** Ready-screen profile button: "Name · 🚽 41" once a username is set, else the prompt to enter one. */
+export function profileButtonText(locale, state) {
+  return profileLine(state) || t(locale, 'profilePrompt');
 }
 
 /** "Welcome back, Name — 41 · 37 · 30" after a successful save-code load. */

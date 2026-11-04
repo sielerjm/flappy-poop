@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { GAME_WIDTH, GAME_HEIGHT, TUNING as T } from '../src/config.js';
-import { readyLayout, readyHit, howToLayout, fitScale } from '../src/logic.js';
+import { readyLayout, readyHit, howToLayout, fitScale, rectGlowSize } from '../src/logic.js';
 
 const layout = readyLayout(GAME_WIDTH, GAME_HEIGHT, T);
 const boxes = [layout.toilet, layout.howto, layout.saveLoad, layout.profile];
@@ -72,18 +72,17 @@ test('every ready box keeps clear of the bobbing poop at its ready spot', () => 
   assert.ok(GAME_HEIGHT - T.trayHeight - profileBottom <= 40, 'profile sits close above the tray');
 });
 
-test('readyHit resolves each box at its centre, misses the gaps, and only reports profile when a name is set', () => {
+test('readyHit resolves each box at its centre, including the always-present profile button, and misses the gaps', () => {
   for (const b of [layout.howto, layout.saveLoad, layout.toilet]) {
     assert.equal(readyHit(b.x, b.y, layout), b.id);
   }
   assert.equal(readyHit(layout.toilet.emojiX, layout.toilet.y, layout), 'toilet', 'tapping the emoji toggles too');
-  assert.equal(readyHit(layout.profile.x, layout.profile.y, layout), null);
-  assert.equal(readyHit(layout.profile.x, layout.profile.y, layout, { hasProfile: true }), 'profile');
+  assert.equal(readyHit(layout.profile.x, layout.profile.y, layout), 'profile', 'the profile button is always a button (it prompts for a name when there is none)');
   const gapY = (edges(layout.toilet).bottom + edges(layout.howto).top) / 2;
   assert.equal(readyHit(GAME_WIDTH / 2, gapY, layout), null);
   assert.equal(readyHit(layout.poop.x + 80, layout.poop.y - 90, layout), null, 'tapping the bubble just starts the run');
-  assert.equal(readyHit(layout.poop.x, layout.poop.y, layout, { hasProfile: true }), null, 'poop spot is not a button');
-  assert.equal(readyHit(T.poopX, GAME_HEIGHT / 2, layout, { hasProfile: true }), null, 'play position is not a button');
+  assert.equal(readyHit(layout.poop.x, layout.poop.y, layout), null, 'poop spot is not a button');
+  assert.equal(readyHit(T.poopX, GAME_HEIGHT / 2, layout), null, 'play position is not a button');
   assert.equal(readyHit(0, 0, null), null);
 });
 
@@ -97,4 +96,17 @@ test('fitScale shrinks only labels wider than the padded box', () => {
   assert.equal(fitScale(656, 360), 0.5);
   assert.equal(fitScale(0, 360), 1);
   assert.equal(fitScale(100, 0), 1);
+});
+
+test('rectGlowSize adds the halo pad on every side and never shrinks', () => {
+  assert.deepEqual(rectGlowSize(360, 88, 28), { width: 416, height: 144 });
+  assert.deepEqual(rectGlowSize(10, 10, 0), { width: 10, height: 10 });
+  assert.deepEqual(rectGlowSize(10, 10, -5), { width: 10, height: 10 });
+  const { profile } = readyLayout(GAME_WIDTH, GAME_HEIGHT, T);
+  const halo = rectGlowSize(profile.width, profile.height, T.readyPromptGlowPx);
+  assert.ok(profile.x - halo.width / 2 >= 0 && profile.x + halo.width / 2 <= GAME_WIDTH, 'halo fits the field');
+  assert.ok(T.readyPromptGlowPx >= 8 && T.readyPromptGlowPx <= 64, `readyPromptGlowPx ${T.readyPromptGlowPx}`);
+  assert.ok(T.readyPromptMinAlpha > 0 && T.readyPromptMinAlpha < T.readyPromptMaxAlpha && T.readyPromptMaxAlpha <= 1, 'pulse alphas');
+  assert.ok(T.readyPromptPulseMs >= 300 && T.readyPromptPulseMs <= 3000, `readyPromptPulseMs ${T.readyPromptPulseMs}`);
+  assert.ok(T.savePanelCloseMs >= 200 && T.savePanelCloseMs <= 2000, `savePanelCloseMs ${T.savePanelCloseMs}`);
 });

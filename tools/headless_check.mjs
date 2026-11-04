@@ -155,6 +155,31 @@ export async function run(url = DEFAULT_URL) {
     const chrome = (input) => evaluate(`__flappy.scene.getScene('Play').handleChrome('${input}'), true`);
     const closeTop = (key) => evaluate(`__flappy.scene.getScene('${key}').close(), true`);
 
+    // Onboarding: a fresh profile has no username, so the profile button prompts for one
+    // under a pulsing halo; tapping it opens the save panel on the name field; Save
+    // stores the name and closes the panel by itself.
+    {
+      const play = `__flappy.scene.getScene('Play')`;
+      const texts = () => evaluate(`${play}.children.list.filter((c) => c.type === 'Text' && c.visible).map((c) => c.text)`);
+      const a1 = await evaluate(`${play}.profileHalo.alpha`);
+      await sleep(300);
+      const a2 = await evaluate(`${play}.profileHalo.alpha`);
+      const promptShown = (await texts()).includes('Enter username');
+      const haloOn = await evaluate(`${play}.profileHalo.visible`);
+      ok(promptShown && haloOn && a1 !== a2, `fresh profile shows "Enter username" with a pulsing halo (alpha ${a1.toFixed(2)} → ${a2.toFixed(2)})`);
+      await evaluate(`${play}.flap({ x: ${play}.readyBoxes.profile.x, y: ${play}.readyBoxes.profile.y }), true`);
+      await sleep(200);
+      const opened = await evaluate(`!document.getElementById('save-panel').hidden && document.activeElement && document.activeElement.id === 'save-name'`);
+      ok(opened === true && (await playState()) === 'ready', 'tapping the prompt opens the save panel on the name field without starting a run');
+      await evaluate(`document.getElementById('save-name').value = 'Smoke', document.getElementById('save-save-btn').click(), true`);
+      await sleep(1200);
+      const closed = await evaluate(`document.getElementById('save-panel').hidden`);
+      const named = await evaluate(`${play}.getSaveState().name`);
+      const line = (await texts()).find((x) => x.startsWith('Smoke'));
+      const haloOff = !(await evaluate(`${play}.profileHalo.visible`));
+      ok(closed === true && named === 'Smoke' && Boolean(line) && haloOff, `Save stores the name, closes the panel, and the button now reads "${line}" without the halo`);
+    }
+
     // Every overlay opens from the ready screen, keeps the loop alive, and closes.
     for (const [input, key] of Object.entries(OVERLAYS)) {
       const before = exceptions.length;
@@ -217,6 +242,8 @@ export async function run(url = DEFAULT_URL) {
       return samples;
     };
     const centre = 1280 / 2;
+    // The smoke player now has a name: make sure nothing it does can reach the live leaderboard.
+    await evaluate(`import('./src/config.js').then((m) => { m.LEADERBOARD.dataApi = ''; return true; })`);
     await evaluate(`${play}.resumePlay(), ${play}.effects.applyProbiotic(), ${play}.refreshProbioticHud(), true`);
     const pipesBefore = await evaluate(`${play}.effects.pipesLeft()`);
     const score0 = await evaluate(`${play}.score`);

@@ -665,16 +665,21 @@ function inBox(x, y, box) {
 
 /**
  * Which ready-screen box contains (x, y): 'toilet' | 'howto' | 'saveload' |
- * 'profile' | null (null = start the run). The profile button only counts
- * when hasProfile (a username is set).
+ * 'profile' | null (null = start the run). The profile button is always there:
+ * it reads "Enter username" until a name is set (Play decides what it opens).
  */
-export function readyHit(x, y, layout, { hasProfile = false } = {}) {
+export function readyHit(x, y, layout) {
   if (!layout) return null;
-  for (const box of [layout.toilet, layout.howto, layout.saveLoad]) {
+  for (const box of [layout.toilet, layout.howto, layout.saveLoad, layout.profile]) {
     if (box && inBox(x, y, box)) return box.id;
   }
-  if (hasProfile && layout.profile && inBox(x, y, layout.profile)) return 'profile';
   return null;
+}
+
+/** Canvas size for a rounded-rect halo that reaches `pad` px past a width × height box. */
+export function rectGlowSize(width, height, pad) {
+  const p = Math.max(0, pad);
+  return { width: Math.ceil(width + 2 * p), height: Math.ceil(height + 2 * p) };
 }
 
 /** Ready-screen How to play hit box (readyLayout().howto). */

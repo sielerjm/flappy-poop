@@ -36,11 +36,11 @@ import {
   beanButtonLayout,
   beanButtonHit,
 } from '../logic.js';
-import { t, pauseBannerText, initialLocale, isLocale } from '../i18n.js';
-import { loadLocal, saveLocal, ensureId, recordScore, isNewTop, profileLine, topScores, TOILET_EMOJI } from '../save.js';
+import { t, pauseBannerText, initialLocale, isLocale, profileButtonText } from '../i18n.js';
+import { loadLocal, saveLocal, ensureId, recordScore, isNewTop, topScores, TOILET_EMOJI } from '../save.js';
 import { unlock, attachGame, setMuted, isMuted, sfx } from '../sound.js';
 import { createTray } from '../ui/tray.js';
-import { createGlow } from '../ui/glow.js';
+import { createGlow, createRectGlow } from '../ui/glow.js';
 import { createSubmitStore, submitPlan, submitScore } from '../leaderboard.js';
 import { createButton } from '../ui/button.js';
 import { createToggle } from '../ui/toggle.js';
@@ -154,9 +154,17 @@ export class Play extends Phaser.Scene {
       fontSize: '36px',
       color: '#f8a0c8',
     });
-    // "<name> · best" button under Save / Load User; tapping it opens the Scores
-    // overlay. Hidden until a username is set.
-    this.profileBtn = createButton(this, this.readyBoxes.profile, profileLine(this.save), { ...TEXT_STYLE, fontSize: '32px' }); // white: it is the player's own line, not a menu item
+    // "<name> · best" button under Save / Load User: opens the Scores overlay.
+    // Without a username it shows the enter-username prompt (pink) under a
+    // pulsing soft white halo and opens the save panel on the name field instead.
+    {
+      const b = this.readyBoxes.profile;
+      this.profileHalo = createRectGlow(this, b.x, b.y, { key: 'ready-halo', width: b.width, height: b.height, radius: T.readyButtonRadius, pad: T.readyPromptGlowPx })
+        .setDepth(19)
+        .setAlpha(T.readyPromptMinAlpha);
+      this.profileHaloTween = this.tweens.add({ targets: this.profileHalo, alpha: T.readyPromptMaxAlpha, yoyo: true, repeat: -1, duration: T.readyPromptPulseMs });
+    }
+    this.profileBtn = createButton(this, this.readyBoxes.profile, profileButtonText(this.locale, this.save), { ...TEXT_STYLE, fontSize: '32px' }); // white once named: the player's own line, not a menu item
     this.refreshProfile();
 
     this.pauseShade = this.add.rectangle(GAME_WIDTH / 2, GAME_HEIGHT / 2, GAME_WIDTH, GAME_HEIGHT, 0x000000, 0.45).setDepth(25).setVisible(false);
@@ -262,7 +270,8 @@ export class Play extends Phaser.Scene {
     this.toiletToggle.setVisible(visible);
     this.howToBtn.setVisible(visible);
     this.saveLoadBtn.setVisible(visible);
-    this.profileBtn.setVisible(visible && Boolean(profileLine(this.save)));
+    this.profileBtn.setVisible(visible);
+    this.profileHalo.setVisible(visible && !this.save?.name);
   }
 
   start() {
@@ -285,7 +294,7 @@ export class Play extends Phaser.Scene {
         return;
       }
       if (this.state === 'ready' && !this.launching) {
-        const hit = readyHit(pointer.x, pointer.y, this.readyBoxes, { hasProfile: Boolean(this.save?.name) });
+        const hit = readyHit(pointer.x, pointer.y, this.readyBoxes);
         if (hit === 'howto') {
           this.handleChrome('howto');
           return;
@@ -299,7 +308,9 @@ export class Play extends Phaser.Scene {
           return;
         }
         if (hit === 'profile') {
-          this.handleChrome('scores');
+          // Named: the High scores overlay. Unnamed: the prompt opens the save panel on the name field.
+          if (this.save?.name) this.handleChrome('scores');
+          else this.openSavePanel({ focusName: true, closeOnSave: true });
           return;
         }
         // 'start' or empty space both start the run below.
@@ -362,13 +373,17 @@ export class Play extends Phaser.Scene {
   }
 
   refreshProfile() {
-    const line = profileLine(this.save);
-    this.profileBtn?.setText(line);
-    if (this.state === 'ready' && !this.launching) this.profileBtn?.setVisible(Boolean(line));
+    const named = Boolean(this.save?.name);
+    this.profileBtn?.setText(profileButtonText(this.locale, this.save));
+    this.profileBtn?.setColor(named ? '#ffffff' : '#f8a0c8');
+    if (this.state === 'ready' && !this.launching) {
+      this.profileBtn?.setVisible(true);
+      this.profileHalo?.setVisible(!named);
+    }
   }
 
-  openSavePanel() {
-    openSavePanel({ game: this.game, play: this, locale: this.locale });
+  openSavePanel(opts = {}) {
+    openSavePanel({ game: this.game, play: this, locale: this.locale, ...opts });
   }
 
   toggleToilet() {
@@ -383,6 +398,7 @@ export class Play extends Phaser.Scene {
     this.readyTitle?.setText(t(next, 'readyTitle'));
     this.howToBtn?.setText(t(next, 'howToPlay'));
     this.saveLoadBtn?.setText(t(next, 'saveLoadButton'));
+    this.refreshProfile(); // the enter-username prompt is localised too
     const [pauseTitle, pauseHint] = pauseBannerText(next).split('\n');
     this.pauseText?.setText(pauseTitle);
     this.pauseHint?.setText(pauseHint);

@@ -29,6 +29,13 @@ export function createButton(scene, box, label, style, { depth = 20 } = {}) {
       fit();
       return this;
     },
+    setColor(color) {
+      text.setColor(color);
+      return this;
+    },
+    getText() {
+      return text.text;
+    },
     destroy() {
       g.destroy();
       text.destroy();
