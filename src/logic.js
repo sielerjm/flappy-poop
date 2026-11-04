@@ -412,7 +412,9 @@ export function createEffects(t) {
       probioticPipesLeft = 0;
       return true;
     },
+    /** A pipe passed: the probiotic counts down, except while farting (nothing can hit you then). */
     onPipePassed() {
+      if (powerOn) return probioticPipesLeft;
       if (probioticPipesLeft > 0) probioticPipesLeft -= 1;
       return probioticPipesLeft;
     },

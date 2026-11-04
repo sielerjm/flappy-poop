@@ -242,6 +242,20 @@ test('bean inventory and the timed fart power', () => {
   assert.equal(fx.powerElapsed(), 0);
 });
 
+test('the probiotic countdown pauses while the fart runs and resumes afterwards', () => {
+  const fx = createEffects(T);
+  fx.applyProbiotic();
+  const n = fx.pipesLeft();
+  assert.equal(fx.onPipePassed(), n - 1, 'counts down normally');
+  fx.addBean();
+  assert.equal(fx.activatePower(1000), true);
+  for (let i = 0; i < 25; i++) fx.onPipePassed();
+  assert.equal(fx.pipesLeft(), n - 1, 'no pipe passed during the fart costs a probiotic pipe');
+  fx.tickPower(1000);
+  assert.equal(fx.powerActive(), false);
+  assert.equal(fx.onPipePassed(), n - 2, 'counts down again once the fart is over');
+});
+
 test('fartRemainingDistance is the analytic tail of the envelope and reaches 0 at the end', () => {
   const D = T.beans.powerMs;
   const peak = fartPeakMul(D, T.beans.powerPipes, T.spawnEveryMs);

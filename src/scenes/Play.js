@@ -746,6 +746,7 @@ export class Play extends Phaser.Scene {
 
   collectItem(item) {
     if (this.state !== 'playing' || !item.active) return;
+    if (this.effects.powerActive()) return; // farting: fiber, probiotic and bacteria scroll straight through
     const kind = item.getData('kind');
     const ghost = this.add.image(item.x, item.y, kind).setScale(T.spriteDisplayScale).setDepth(12);
     this.tweens.add({
