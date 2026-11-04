@@ -11,6 +11,7 @@ import {
   levelBarLayout,
   levelColor,
   lerpColor,
+  hudRightLayout,
   createBestStore,
   createSettingsStore,
   vibrate,
@@ -165,12 +166,9 @@ export class Play extends Phaser.Scene {
     this.refreshLevelBar();
     // 🚽 left of the score while a toilet-mode run is on.
     this.toiletHud = this.add.text(GAME_WIDTH / 2 - 96, T.hudScoreY, TOILET_EMOJI, { fontFamily: 'sans-serif', fontSize: '44px' }).setOrigin(0.5).setDepth(20).setVisible(false);
-    this.probioticIcon = this.add
-      .image(GAME_WIDTH / 2 - 56, 156, 'probiotic')
-      .setDisplaySize(T.hudProbioticSize, T.hudProbioticSize)
-      .setDepth(20)
-      .setVisible(false);
-    this.probioticText = this.add.text(GAME_WIDTH / 2 + 16, 156, '', { ...TEXT_STYLE, fontSize: '40px' }).setOrigin(0, 0.5).setDepth(20).setVisible(false);
+    // Probiotic counter: right-aligned on the bean's row, clear of the score digits and the screen edge.
+    this.probioticIcon = this.add.image(0, 156, 'probiotic').setDisplaySize(T.hudProbioticSize, T.hudProbioticSize).setDepth(20).setVisible(false);
+    this.probioticText = this.add.text(0, 156, '', { ...TEXT_STYLE, fontSize: '40px' }).setOrigin(1, 0.5).setDepth(20).setVisible(false);
     // Bean counter (left of the HUD): bean ×n until the power is spent.
     this.beanIcon = this.add.image(72, 156, 'bean').setDisplaySize(56, 56).setDepth(20).setVisible(false);
     this.beanText = this.add.text(108, 156, '', { ...TEXT_STYLE, fontSize: '36px' }).setOrigin(0, 0.5).setDepth(20).setVisible(false);
@@ -966,7 +964,11 @@ export class Play extends Phaser.Scene {
     const show = n > 0;
     this.probioticIcon.setVisible(show);
     this.probioticText.setVisible(show);
-    if (show) this.probioticText.setText(`×${n}`);
+    if (!show) return;
+    this.probioticText.setText(`×${n}`);
+    const { textX, iconX } = hudRightLayout(GAME_WIDTH, this.probioticText.width, { iconSize: T.hudProbioticSize });
+    this.probioticText.setX(textX);
+    this.probioticIcon.setX(iconX);
   }
 
   collectItem(item) {

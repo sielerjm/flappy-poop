@@ -266,6 +266,8 @@ export async function run(url = DEFAULT_URL) {
     const end2 = end1 + TT.levels.pipesStep;
     await evaluate(`${play}.level = 3, ${play}.pipesSpawned = ${end2}, ${play}.pipesPassed = ${end2}, ${play}.finishSpawned = false, ${play}.applyLevel(), true`);
     await evaluate(`${play}.resumePlay(), ${play}.effects.applyProbiotic(), ${play}.refreshProbioticHud(), true`);
+    const hud = await evaluate(`JSON.stringify({ iconRight: ${play}.probioticIcon.x + ${play}.probioticIcon.displayWidth / 2, textLeft: ${play}.probioticText.x - ${play}.probioticText.width, textRight: ${play}.probioticText.x, scoreRight: ${play}.scoreText.x + ${play}.scoreText.width / 2, y: ${play}.probioticText.y })`).then(JSON.parse);
+    ok(hud.iconRight <= hud.textLeft && hud.textRight <= 720 - 8 && hud.iconRight - 96 >= hud.scoreRight && hud.y === 156, `probiotic counter sits at the right edge on the bean row, clear of the score (icon ends ${hud.iconRight.toFixed(0)}, count ${hud.textLeft.toFixed(0)}–${hud.textRight.toFixed(0)})`);
     const pipesBefore = await evaluate(`${play}.effects.pipesLeft()`);
     const score0 = await evaluate(`${play}.score`);
     await evaluate(`${play}.effects.addBean(), ${play}.setCharged(true), ${play}.activatePower(), true`);

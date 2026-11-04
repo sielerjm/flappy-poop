@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { TUNING as T, LEVELS, LEVEL_COLORS, BACKGROUND, GAME_HEIGHT } from '../src/config.js';
 import { levelBannerText, levelLabel, LOCALES } from '../src/i18n.js';
 import { GAME_WIDTH } from '../src/config.js';
-import { levelPipes, levelEnd, levelFor, levelSpeed, levelName, levelColor, levelProgress, lerpColor, pipeSpacing, gapBounds, levelBarLayout, levelBarLabelOnFill } from '../src/logic.js';
+import { levelPipes, levelEnd, levelFor, levelSpeed, levelName, levelColor, levelProgress, lerpColor, pipeSpacing, gapBounds, levelBarLayout, levelBarLabelOnFill, hudRightLayout } from '../src/logic.js';
 
 const L = T.levels;
 
@@ -158,4 +158,14 @@ test('the bar label switches from pink to white once the fill reaches the track 
   assert.equal(levelBarLabelOnFill(0.49), false);
   assert.equal(levelBarLabelOnFill(0.5), true);
   assert.equal(levelBarLabelOnFill(1), true);
+});
+
+test('hudRightLayout keeps the probiotic icon and count inside the right edge and clear of the score', () => {
+  for (const textWidth of [0, 40, 120]) {
+    const { textX, iconX } = hudRightLayout(GAME_WIDTH, textWidth, { iconSize: T.hudProbioticSize });
+    assert.ok(textX <= GAME_WIDTH - 16, 'count flush to the margin');
+    assert.ok(iconX + T.hudProbioticSize / 2 <= textX - textWidth, `icon ends before the count (text ${textWidth})`);
+    assert.ok(iconX - T.hudProbioticSize / 2 >= GAME_WIDTH / 2 + 110, `icon clear of a three-digit score (text ${textWidth})`);
+  }
+  assert.deepEqual(hudRightLayout(720, 40, { iconSize: 96 }), { textX: 704, iconX: 704 - 40 - 8 - 48 });
 });

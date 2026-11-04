@@ -235,6 +235,15 @@ export function levelBarLabelOnFill(progress) {
   return progress >= 0.5;
 }
 
+/**
+ * A right-aligned "icon ×n" HUD pair: the text's right edge sits `margin` in
+ * from the field's right edge and the icon's centre just left of the text.
+ */
+export function hudRightLayout(width, textWidth, { iconSize, margin = 16, gap = 8 }) {
+  const textX = width - margin;
+  return { textX, iconX: textX - Math.max(0, textWidth) - gap - iconSize / 2 };
+}
+
 /** Linear blend of two 0xRRGGBB colours, f in [0, 1]. */
 export function lerpColor(a, b, f) {
   const k = Math.min(1, Math.max(0, f));
