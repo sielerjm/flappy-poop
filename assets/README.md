@@ -16,8 +16,8 @@ The player and items are Michael's drawings. Put a new source PNG in `assets/src
 | `poop-speech.png` | 1020x1020 | Player on the ready screen with the "TAP TO FLAP!" bubble | Body at the canvas centre (brown mask); the bubble reaches ~127 px up and ~116 px right of the body at display scale. Source: `assets/src/Poop_Speech.png`. |
 | `fiber.png` | 384x384 | Bonus +1 pickup | Transparent background, subject centred. Drawn at 0.25 scale. Hitbox is a 48 px circle (the whole 96 px drawing, `itemRadius`). Source: `assets/src/Fiber.png`. |
 | `probiotic.png` | 384x384 | Good bacteria (5-pipe shield vs bad bacteria) | Same hitbox. Source: `assets/src/Good_Bacteria.png`. |
-| `bacteria.png` | 384x384 | Bad bacteria (−2) | Same hitbox. Hair / flagellum are visual-only. Source: `assets/src/Bad_Bacteria.png`. |
-| `bean.png` | 384x384 | Bean (one readies the fart power) | Same hitbox. Bobs up and down between pipe pairs. Source: `assets/src/Kidney_Bean.png`. |
+| `bacteria.png` | 384x384 | Bad bacteria (−3) | Same hitbox. Hair / flagellum are visual-only. Source: `assets/src/Bad_Bacteria.png`. |
+| `bean.png` | 384x384 | Bean (one readies the fart power; three make it a super fart) | Same hitbox. Bobs up and down between pipe pairs. Source: `assets/src/Kidney_Bean.png`. |
 | `pipe.png` | 128x1280 | One intestinal-fold pipe | Cap at the **top**; the game flips it vertically for the bottom pipe. Height must be **at least the playfield height** (1280) so a flipped top pipe always reaches the ceiling when the gap sits low. |
 | `bg.png` | 720x1280 | Gut-wall background | Exact playfield size. Scrolls slowly; must tile **horizontally** (left edge continues into right edge). Deep pink villi fringe top and bottom, mucosa in the middle. |
 | `ground.png` | 720x128 | Scrolling floor strip | Must tile horizontally. Drawn at the bottom of the screen on top of `bg.png`. |

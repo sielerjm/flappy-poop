@@ -85,7 +85,7 @@ Short, playful, clear. Fit a 720×1280 logical field; How to play / About body w
 | itemBacteriaName | Bad bacteria | 有害细菌 |
 | itemBacteriaDetail | −3 points | −3 分 |
 | itemBeanName | Beans | 豆子 |
-| itemBeanDetail | Grab a bean, then press the bean button at the bottom (or your poop) to activate the power-up: fart past the next 5 pipes, and nothing can hurt you. | 吃到豆子后，点击底部的豆子按钮（或便便）启动能力：放屁冲过接下来的 5 道管道，期间不会受伤。 |
+| itemBeanDetail | Grab a bean, then press the bean button at the bottom (or your poop) to fart past the next 5 pipes: nothing can touch you. Beans stack to 3; fart with all three and you rocket past 20 in a rainbow glow. | 吃到豆子后，点击底部的豆子按钮（或便便）放屁冲过接下来的 5 道管道，期间什么都碰不到你。豆子最多可攒 3 颗；集齐 3 颗再放屁，就能顶着彩虹光芒一口气冲过 20 道管道。 |
 | itemToiletName | On the toilet | 如厕模式 |
 | itemToiletDetail | Playing on the toilet? Flip the switch under the poop on the home screen. Those scores get a 🚽 next to them. | 在马桶上玩？打开主界面便便下方的开关，这些分数旁会显示 🚽。 |
 | updatedPrefix | Updated | 更新于 |

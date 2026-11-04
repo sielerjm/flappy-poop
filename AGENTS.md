@@ -11,9 +11,11 @@ the gut dodging pink intestinal-fold pipes. One point per pipe pair passed; fibe
 is +1, bad bacteria is −3 (floor 0), and a probiotic blocks one bacteria hit for
 5 pipes (pickups stack; a hit clears the stack). From pipe 5 a bean bobs between pipe
 pairs (15 % per pair to pipe 20 with one guaranteed by guaranteeScore, 6 % after);
-one bean charges a fart
-power (stink lines + glow; tap the poop) that plays `fart_accelerate.mp3`, ramps the
-scroll speed up and down with the clip so five pipes pass, and cannot die. Hit a pipe, the ceiling, or the floor and the run ends (dead-poop
+beans stack to maxBeans (3); one charges a fart power (stink lines + glow; tap the poop
+or the bean button) that plays `fart_accelerate.mp3`, ramps the scroll speed up and
+down with the clip so five pipes pass (superPipes = 20 with superBeans = 3 held, under
+a rainbow glow), floats the poop on a ±15° undulating wave, and cannot die; items pass
+through it and the probiotic countdown pauses. Every bean held is spent. Hit a pipe, the ceiling, or the floor and the run ends (dead-poop
 face). Best score and settings are kept in `localStorage`. Difficulty ramps
 (faster pipes, narrower gap) until score 30, then stays flat. A signed
 **user code** (`fp1.<payload>.<sig>`, the save code) carries a player's username
@@ -55,7 +57,9 @@ src/
   logic.js                  Pure functions, NO Phaser/DOM: rng, gap placement,
                             scoring, items, beans (rollBean, beanSpawnX, beanY,
                             beanAngle, poopTapHit), fart envelope (pipeSpacing,
-                            fartPeakMul, fartMul), sprite angle, retry lockout, difficulty,
+                            fartPeakMul, fartMul, fartRemainingDistance), fartFloat
+                            (wave + tilt), hsvToRgb / rainbowHue, sprite angle, retry
+                            lockout, difficulty,
                             best-score store, settings store (incl. locale), vibrate
                             helper, trayLayout, trayHit, readyLayout, readyHit
                             (howToLayout / howToHit wrap them),
@@ -140,15 +144,22 @@ src/
                             playing, passed to recordScore and Over. Beans: group
                             spawned in spawnPipePair (rollBean with beanSpawned for
                             the one-per-run guarantee, halfway to the next pair), bobbed in update() from per-bean elapsed ms;
-                            collectBean → effects.addBean; setCharged() alternates
+                            collectBean → effects.addBean (up to maxBeans; holdingBean
+                            = bag full or farting); setCharged() alternates
                             stink frames + pulses this.glow and the bean button in
-                            the tray centre slot (beanButtonLayout, same period); a
+                            the tray centre slot (beanButtonLayout, same period);
+                            applyRainbow() each frame recolours glow + button disc
+                            with superBeans held and makes the glow a rainbow halo
+                            during a super fart (poop art never tinted); a
                             tap on the poop (poopTapHit) or the button
                             (beanButtonHit) calls activatePower(): fart texture,
                             alpha tween, fart_accelerate clip, effects.activatePower
-                            (clip length), scrollMul from fartMul() each frame via
-                            applyScroll(); the poop floats at mid-height (gravity
-                            off, doFlap ignored); spawnHeldByFart() stops pipe
+                            (clip length; superPipes with superBeans held, else
+                            powerPipes → fartPeak), scrollMul from fartMul() each
+                            frame via applyScroll(); fartFloat() drives y + angle
+                            (glide to mid-height, then the wave with ±waveTiltDeg;
+                            gravity off, doFlap ignored); collectItem ignores items
+                            while farting; spawnHeldByFart() stops pipe
                             spawning once fartRemainingDistance() < pipeClearDistance()
                             so the screen is clear at the end; endPower() restores
                             gravity and spawns the next pair at the right edge with
@@ -223,7 +234,12 @@ tests/                      node --test, zero deps. Each file is self-describing
   tray.test.js              trayHeight / trayLayout geometry including info + lang +
                             feedback; trayHit centre hits vs miss in the tray gap
   items.test.js             rollItem, itemGapY, scoreAfterItem, probiotic inventory
-  tuning.test.js            item / fartVolume sanity bounds
+                            (paused during the fart), bean stacking to maxBeans,
+                            normal vs super fart, fart envelope integrals
+  fart.test.js              fartFloat (glide, wave band, tilt sign vs direction),
+                            hsvToRgb, rainbowHue, wave stays inside the play area
+  tuning.test.js            item / fartVolume / beans sanity bounds (normal and
+                            super fart peaks)
   about.test.js             About copy (both locales) names author, LLM, Phaser, JS, sound;
                             LAST_UPDATED has a year and a time
   howto.test.js             HOW_TO copy, pause banner, howToLayout / howToHit geometry
