@@ -126,6 +126,12 @@ src/
                             4 s abort, false / null on any failure, never throws.
                             Writes go through the submit_score() SQL function.
                             Fully unit-tested with a fake fetch.
+  share.js                  Game-over share, NO Phaser; navigator / document / URL
+                            injected: dataUrlToBytes, shareMode ('share' when
+                            canShare({ files }), else 'download'), shareScoreImage
+                            (navigator.share called synchronously inside the tap;
+                            AbortError = cancelled; other errors and no share sheet
+                            → <a download> PNG; never rejects).
   save.js                   Save codes, NO Phaser/DOM: loadLocal / saveLocal
                             (flappyPoop.save, schema 3: top entries { score,
                             toilet, level }; schema 1 numbers and schema 2 still
@@ -200,8 +206,8 @@ src/
                             as a recovery bounce. Pause banner is two centered lines
                             from i18n. Locale via getLocale / applyLocale. Holds the
                             SaveState (loadLocal on create, seeded once from the
-                            legacy best); die() records the score and passes newTop
-                            to Over. Ready screen (readyLayout: a round "?" in the
+                            legacy best); die() records the score (endRun) and
+                            launches Over (showOver). Ready screen (readyLayout: a round "?" in the
                             top-right (howto; under a pulsing createGlow halo while
                             howToPromptDue(settings, LAST_UPDATED), i.e. until this
                             build is acknowledged by opening How to play or dying),
@@ -299,7 +305,7 @@ src/
                             then nothing until the break ends unless a fart runs;
                             onFinishCrossed → win() on the final level (endRun()
                             shared with die(): state 'dead', score recorded;
-                            showOver(newTop, won)), else startLevelBreak (pausePlay with
+                            showOver(won)), else startLevelBreak (pausePlay with
                             levelBreak, setPauseBanner shows levelTitle/levelHint,
                             breakGlide + breakBob, fadeBackground), cutting a
                             running fart first (cancelPower + endPower);
@@ -319,10 +325,18 @@ src/
                             testRunStart; runIsTest latches per run and endRun()
                             records nothing for it; testBadge (refreshTestBadge).
                             pausePlay / resumePlay share pauseEffects / resumeEffects.
-    Over.js                 Game-over panel ({ test: true }: testRunNotSaved instead of newTopHint) (score, run summary of fiber / probiotic / postbiotic over bacteria / bean / mystery box (mystery-icon.png), pipes crossed, glowing "Home" button) with a
-                            tap lockout and its own tray (mute still works). Shows
-                            newTopHint when the run entered the top 6. With
-                            { won: true } the headline is the gold runWon text.
+    Over.js                 Game-over panel (score, run summary of fiber / probiotic / postbiotic over bacteria / bean / mystery box (mystery-icon.png), pipes crossed, then Share | glowing Home on one row from overButtonsLayout) with a
+                            tap lockout (openedAt = game.loop.time: a relaunched
+                            scene's this.time.now is stale) and its own tray (mute
+                            still works). capturePanel(): over.captureDelayMs after
+                            opening (panel scaled in, buttons still at alpha 0)
+                            renderer.snapshotArea(panelCaptureRect(…)) becomes
+                            this.shareFile (dataUrlToBytes → File) and Share shows.
+                            pointerdown on Share marks it pressed (no home);
+                            pointerup over it runs shareRun() → shareScoreImage
+                            with shareText(). { test: true }: the gold
+                            testRunNotSaved line, no Share, Home alone at centre.
+                            With { won: true } the headline is the gold runWon text.
     Settings.js             Overlay (geometry from settingsLayout): sound, haptics (Android only), Reload game
                             (hardReloadGame(): re-fetches loaded scripts with
                             cache: 'reload', then location.replace with a fresh r=
@@ -425,6 +439,11 @@ tests/                      node --test, zero deps. Each file is self-describing
                             feedback i18n keys
   i18n.test.js              catalog key parity, zh≠en (allowlist), TRANSLATION_NOTES
                             key coverage, scene English denylist, initialLocale
+  share.test.js             dataUrlToBytes, shareMode branches, shareScoreImage (share
+                            called synchronously, cancel, error → download, download
+                            name + revoke, never rejects)
+  over.test.js              overButtonsLayout (Share | Home inside the panel, Home
+                            alone on a test run), overHit, panelCaptureRect
   overlay.test.js           overlayOutsideHit inside vs 1px outside HowTo/Settings panels
                             (plain and test-mode)
   testmode.test.js          isTestWord, testRunStart (levels, par score, clamping),
@@ -483,7 +502,11 @@ tools/
                             level-4 box, the spin pausing, forced draws,
                             the full-bag fallback, and a skip into level 4's break), and
                             test mode (trigger word, start level, Invincible, Settings
-                            power-ups, nothing recorded, Exit latch, normal run after).
+                            power-ups, nothing recorded, Exit latch, normal run after;
+                            a test run's Over has no Share), and the game-over share
+                            (no save hint, the 568x728 capture taken before the
+                            buttons show, a real tap on Share through a stubbed
+                            navigator.share, cancel, download fallback, Home).
                             Zero dependencies (fetch + WebSocket).
 
 .claude/plans/              Checkpointed build plans. Historical record + decision
@@ -530,6 +553,11 @@ tools/
    If a string must stay identical across locales (brand, language names),
    add its key to the allowlist in `tests/i18n.test.js`. `npm test` fails
    when a locale or the notes file lags; run it before every commit and push.
+9. **Share inside the tap.** `navigator.share()` needs transient user activation,
+   which iOS Safari grants only during the tap itself and which touch gives on
+   pointer-up, not pointer-down. Make the file before the tap (Over captures the
+   panel as it opens) and call `shareScoreImage()` straight from the
+   `pointerup` handler: no `await`, timer, or fetch before it.
 
 ## How to work on it
 
