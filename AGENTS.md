@@ -8,11 +8,13 @@ guide; this file is the map for anyone changing the code.
 
 Flappy Poop is a Flappy Bird clone for phone browsers: a poop emoji flaps through
 the gut dodging pink intestinal-fold pipes. One point per pipe pair passed; fiber
-is +3 (it bobs between pipe pairs like a bean), bad bacteria is −3 (floor 0), and a probiotic blocks one bacteria hit for
+is +3 (it sits between pipe pairs like a bean), bad bacteria is −3 (floor 0; never before level 2, pair 5), and a probiotic blocks one bacteria hit for
 5 pipes (pickups stack; a hit clears the stack). Fiber eaten while a probiotic is up makes a
 **postbiotic** (`effects.applyFiber`): pipes and fiber score × `items.postbioticMultiplier` (2) until
-the probiotic countdown ends, fart pipes included; another probiotic extends it, a hit ends it. From pipe 5 a bean bobs between pipe
-pairs (15 % per pair to pipe 20 with one guaranteed by guaranteeScore, 6 % after);
+the probiotic countdown ends, fart pipes included; another probiotic extends it, a hit ends it. Level 1 is
+scripted (probiotic at pair 3, fiber after 4 and 7, a bean after 9) and its fiber and bean hold still midway
+between the two gaps; from level 2 they bob and a bean rolls per pair
+(15 % per pair to pipe 20 with one guaranteed by guaranteeScore, 6 % after);
 beans stack to maxBeans (3); one charges a fart power (stink lines + glow; tap the poop
 or the bean button) that plays `fart_accelerate.mp3`, ramps the scroll speed up and
 down with the clip so five pipes pass (superPipes = 20 with superBeans = 3 held, under
@@ -20,12 +22,16 @@ a rainbow glow), floats the poop on a ±15° undulating wave, and cannot die; it
 through it and the probiotic countdown pauses. A normal fart spends one bean (the rest stay in the bag, up to maxBeans); a super fart spends all three. Hit a pipe, the ceiling, or the floor and the run ends (dead-poop
 face). Best score and settings are kept in `localStorage`. The run is cut into
 **levels** by pipe pairs passed (`pipesPassed`, fart pipes included; score never):
-level 1 is `levels.firstPipes` (10), level n ≥ 2 is `pipesStep × (n − 1)`; ends at
-10, 35, 85, 160, 260 … Pipe spacing is a fixed `pipeSpacingPx` (412); speed is
+level n is `levels.pipes[n − 1]` (10, 25, then 50 each); ends at 10, 35, 85, 135,
+185, 235, 285. Level 7 (rectum, `levels.lastLevel`) is the last: crossing its finish
+line wins the run (`win()`, Over headline "YOU MADE IT OUT!", score saved at level 7).
+Pipe spacing is `pipeSpacing(level)`: `pipeSpacingPx` (412) from
+`levels.spacingRefLevel` (3) on, scaled by the speed ratio on the slower levels
+before it (487 px on level 1, 446 on level 2); speed is
 `levelSpeed()` (275 + 25 per level, cap 450), applied when the break ends; the gap
 is `levelGap()` (`gapHeight` × `levels.gapScale[level − 1]`: 1.1, 1.05, then 1). One spacing after a level's last pair a checkered finish
 line (generated texture, plain Image) scrolls in and no pair follows it outside a
-fart; crossing it bumps `level`, plays `NewLevel.mp3` (`sfx.levelUp` blip if the
+fart; crossing it (any level but the last) bumps `level`, plays `NewLevel.mp3` (`sfx.levelUp` blip if the
 sample is missing), and pauses the run as the
 level break (`levelBreak`, the normal `'paused'` state with its own banner "LEVEL n
 · segment / Tap to continue", the poop gliding to mid-height and bobbing, the
@@ -74,14 +80,15 @@ src/
                             Pure data, Node-safe.
   logic.js                  Pure functions, NO Phaser/DOM: rng, gap placement,
                             scoring (pipePoints, scorePopup, multiplierLayout),
-                            items, beans (rollBean, beanSpawnX, beanY,
+                            items (rollItem, hazardsAllowed, bandItemsMove,
+                            bandMidY, tutorialSpawn), beans (rollBean, beanSpawnX, beanY,
                             beanAngle, bobY, gapBobAmplitude, gapBobY,
                             poopTapHit; beanButtonHit's circle is twice the
                             drawn button), fart envelope (pipeSpacing,
                             fartPeakMul, fartMul, fartRemainingDistance), fartFloat
                             (wave + tilt), hsvToRgb / rainbowHue, glowAlphaAt /
                             glowStops, sprite angle, retry
-                            lockout, levels (levelPipes, levelEnd, levelFor,
+                            lockout, levels (levelPipes, levelEnd, levelFor, isFinalLevel,
                             levelSpeed, levelName, levelColor, levelProgress,
                             levelBarLayout, lerpColor),
                             best-score store, settings store (incl. locale and
@@ -221,21 +228,28 @@ src/
                             so the screen is clear at the end; endPower() restores
                             gravity and spawns the next pair at the right edge with
                             its gap at mid-screen (centreNextGap → centredGapY),
-                            graceLeftMs blocks die(). Pipes spawn by scrolled distance (pipeSpacing,
-                            fixed px), not a timer. Items: level 1 is scripted
-                            (tutorialSpawn / levels.tutorial: probiotic at pair 3,
-                            bacteria 5, fiber 7, bean 9, nothing else); from level
-                            2 rollItem per pair;
+                            graceLeftMs blocks die(). Pipes spawn by scrolled distance (pipeSpacing(level),
+                            px), not a timer. Items: level 1 is scripted
+                            (tutorialSpawn / levels.tutorial pair → kind map:
+                            probiotic 3, fiber 4 and 7, bean 9, nothing else, no
+                            bacteria); from level 2 rollItem per pair, bacteria
+                            only once hazardsAllowed(pipesSpawned) (level 2 pair 5);
                             fiber → spawnBandItem (halfway to the next pair,
                             bobY on items.fiberPeriodMs, yields to a bean rolled
-                            for the same pair); probiotic / bacteria →
+                            for the same pair). Below items.bandMoveFromLevel
+                            fiber and beans hold still at bandMidY of this gap
+                            and the next one, which is pre-rolled into
+                            this.nextGapY (cleared wherever centreNextGap is
+                            set); probiotic / bacteria →
                             spawnGapItem (depth −1 under the pipes; from
                             items.moveFromLevel they sweep the gap with gapBobY /
                             gapBobAmplitude). this.collected counts pickups for
                             Over's summary row. Spawn slots: at levelEnd(level)
                             pairs the slot is the finish line (spawnFinishLine),
                             then nothing until the break ends unless a fart runs;
-                            onFinishCrossed → startLevelBreak (pausePlay with
+                            onFinishCrossed → win() on the final level (endRun()
+                            shared with die(): state 'dead', score recorded;
+                            showOver(newTop, won)), else startLevelBreak (pausePlay with
                             levelBreak, setPauseBanner shows levelTitle/levelHint,
                             breakGlide + breakBob, fadeBackground), cutting a
                             running fart first (cancelPower + endPower);
@@ -247,7 +261,8 @@ src/
                             → Scores). getSaveState / setSaveState for the panel.
     Over.js                 Game-over panel (score, 2 × 2 run summary, pipes crossed, glowing "Home" button) with a
                             tap lockout and its own tray (mute still works). Shows
-                            newTopHint when the run entered the top 6.
+                            newTopHint when the run entered the top 6. With
+                            { won: true } the headline is the gold runWon text.
     Settings.js             Overlay: sound, haptics (Android only), Reload game
                             (hardReloadGame(): re-fetches loaded scripts with
                             cache: 'reload', then location.replace with a fresh r=
@@ -307,7 +322,8 @@ tests/                      node --test, zero deps. Each file is self-describing
   html.test.js              index.html invariants (viewport, no scroll, pinned Phaser)
   assets.test.js            load.image / load.audio paths; README sizes; sfx credits
   logic.test.js             gap bounds, rng determinism, hasPassed, angle
-  levels.test.js            level lengths / ends / levelFor table, levelSpeed cap,
+  levels.test.js            level lengths / ends / levelFor table, final level,
+                            per-level pipe spacing, levelSpeed cap,
                             names + colours, levelProgress, lerpColor, gap + grace
                             sanity, levelBannerText, levelBarLayout, levelLabel
   state.test.js             retry lockout
