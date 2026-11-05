@@ -387,21 +387,59 @@ export function createSettingsStore(storage, key = 'flappy-poop:settings') {
  */
 export const ITEM_KINDS = ['fiber', 'probiotic', 'bacteria'];
 
-/** null or an ITEM_KINDS value. Bacteria weight is 0 unless `hazards` (see hazardsAllowed). */
-export function rollItem(rng, score, t, { hazards = true } = {}) {
+/**
+ * null, an ITEM_KINDS value, or 'mystery'. Bacteria weight is 0 unless `hazards`
+ * (see hazardsAllowed); the mystery box joins the pick with mystery.weight only
+ * when `mystery` (see mysteryAllowed).
+ */
+export function rollItem(rng, score, t, { hazards = true, mystery = false } = {}) {
   const items = t.items;
   if (score < items.startScore) return null;
   if (rng() >= items.chancePerGap) return null;
-  const weights = { ...items.weights };
+  const weights = { ...items.weights, mystery: mystery ? t.mystery.weight : 0 };
   if (!hazards) weights.bacteria = 0;
-  const total = ITEM_KINDS.reduce((sum, k) => sum + Math.max(0, weights[k] ?? 0), 0);
+  const kinds = [...ITEM_KINDS, 'mystery'].filter((k) => (weights[k] ?? 0) > 0);
+  const total = kinds.reduce((sum, k) => sum + weights[k], 0);
   if (total <= 0) return null;
   let pick = rng() * total;
-  for (const kind of ITEM_KINDS) {
-    pick -= Math.max(0, weights[kind] ?? 0);
+  for (const kind of kinds) {
+    pick -= weights[kind];
     if (pick < 0) return kind;
   }
-  return ITEM_KINDS[ITEM_KINDS.length - 1];
+  return kinds[kinds.length - 1]; // float edge: the last kind that can appear at all
+}
+
+/** True when mystery boxes can spawn on `level` (from mystery.fromLevel). */
+export function mysteryAllowed(level, t) {
+  return level >= t.mystery.fromLevel;
+}
+
+/** What a mystery box can hold besides fiber, in roll order; mystery.draws gives each a 0–1 chance. */
+export const MYSTERY_DRAWS = ['probiotic', 'bean1', 'postbiotic', 'bean3', 'skip'];
+
+/** Draw a mystery box's reward: a MYSTERY_DRAWS value by its chance, else 'fiber' (the default). */
+export function rollMystery(rng, t) {
+  let pick = rng();
+  for (const draw of MYSTERY_DRAWS) {
+    pick -= Math.max(0, t.mystery.draws[draw] ?? 0);
+    if (pick < 0) return draw;
+  }
+  return 'fiber';
+}
+
+/**
+ * A draw that cannot do anything becomes fiber: a bean draw with the bag full
+ * (beans.maxBeans), or a skip with no pairs left to skip (the finish line is out).
+ */
+export function resolveMystery(draw, { beans = 0, pairsLeft = 0 } = {}, t) {
+  if ((draw === 'bean1' || draw === 'bean3') && beans >= t.beans.maxBeans) return 'fiber';
+  if (draw === 'skip' && pairsLeft <= 0) return 'fiber';
+  return draw;
+}
+
+/** Pairs a skip jumps over on `level`: every one not yet passed up to the level's end. */
+export function skipPairs(pipesPassed, level, t) {
+  return Math.max(0, levelEnd(level, t) - pipesPassed);
 }
 
 /**
@@ -451,11 +489,13 @@ export function pipePoints(t, mult = 1) {
 /**
  * The popups under the score: 'pipe' is the quick white "+1" (upper row) on
  * every pair passed; fiber and unshielded bacteria are the "+3" / "−3" (lower
- * row). Null for anything else. `mult` scales pipe and fiber, never bacteria.
+ * row); 'skip' is the gold "+N" for the `pairs` a mystery skip jumped over.
+ * Null for anything else. `mult` scales pipe, fiber and skip, never bacteria.
  * Nominal: bacteria always reads −bacteriaPenalty even when the 0 floor clamps the loss.
  */
-export function scorePopup(kind, t, mult = 1) {
+export function scorePopup(kind, t, mult = 1, pairs = 0) {
   if (kind === 'pipe') return { text: `+${pipePoints(t, mult)}`, color: t.popup.pipeColor };
+  if (kind === 'skip') return { text: `+${pairs * pipePoints(t, mult)}`, color: t.mystery.color };
   if (kind === 'fiber') return { text: `+${t.items.fiberPoints * mult}`, color: t.popup.fiberColor };
   if (kind === 'bacteria') return { text: `\u2212${t.items.bacteriaPenalty}`, color: t.popup.bacteriaColor };
   return null;
@@ -698,6 +738,16 @@ export function createEffects(t) {
       if (probioticPipesLeft <= 0 || postbiotic) return false;
       postbiotic = true;
       return true;
+    },
+    /**
+     * A mystery box's postbiotic: `pipes` more probiotic pipes with the multiplier
+     * already on (stacks onto whatever is running). True only when it started one.
+     */
+    applyPostbiotic(pipes) {
+      const started = !(postbiotic && probioticPipesLeft > 0);
+      probioticPipesLeft += pipes;
+      postbiotic = true;
+      return started;
     },
     hasPostbiotic() {
       return postbiotic && probioticPipesLeft > 0;

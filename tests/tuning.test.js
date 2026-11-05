@@ -102,3 +102,20 @@ test('postbiotic multiplier and its ×2 badge stay readable', () => {
   assert.match(b.color, /^#[0-9a-f]{6}$/i);
   assert.match(b.glowColor, /^#[0-9a-f]{6}$/i);
 });
+
+test('mystery box: from level 3, half fiber\'s rate and bob speed, the locked draw table', () => {
+  const m = T.mystery;
+  assert.equal(m.fromLevel, 3);
+  assert.ok(m.fromLevel > T.items.hazardFromLevel, 'boxes arrive after bad bacteria');
+  assert.equal(m.weight, T.items.weights.fiber / 2, 'half as common as fiber');
+  assert.equal(m.periodMs, 2 * T.items.fiberPeriodMs, 'half fiber\'s bob speed');
+  assert.deepEqual(m.draws, { probiotic: 0.2, bean1: 0.2, postbiotic: 0.05, bean3: 0.05, skip: 0.01 });
+  const drawn = Object.values(m.draws).reduce((a, b) => a + b, 0);
+  assert.ok(Math.abs(drawn - 0.51) < 1e-9, `draws sum ${drawn}`);
+  assert.ok(1 - drawn > Math.max(...Object.values(m.draws)), 'fiber (the rest) is the most common draw');
+  assert.equal(m.postbioticPipes, T.items.probioticPipes);
+  assert.ok(m.frameMs >= 40 && m.frameMs <= 200, `mystery.frameMs ${m.frameMs}`);
+  assert.ok(m.revealMs >= 200 && m.revealMs <= 1500, `mystery.revealMs ${m.revealMs}`);
+  assert.ok(m.revealRisePx >= 20 && m.revealRisePx <= 150, `mystery.revealRisePx ${m.revealRisePx}`);
+  assert.match(m.color, /^#[0-9a-f]{6}$/i);
+});

@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { TUNING as T } from '../src/config.js';
-import { createRng, rollItem, hazardsAllowed, tutorialSpawn, bandItemsMove, bandMidY, pipeGapY, itemGapY, scoreAfterItem, scorePopup, popupSlots, pipePoints, createEffects, ITEM_KINDS, bobY, gapBobAmplitude, gapBobY } from '../src/logic.js';
+import { createRng, rollItem, hazardsAllowed, tutorialSpawn, bandItemsMove, bandMidY, pipeGapY, itemGapY, scoreAfterItem, scorePopup, popupSlots, pipePoints, createEffects, ITEM_KINDS, mysteryAllowed, rollMystery, resolveMystery, skipPairs, MYSTERY_DRAWS, levelEnd, bobY, gapBobAmplitude, gapBobY } from '../src/logic.js';
 
 test('rollItem is always null below startScore', () => {
   const rng = createRng(1);
@@ -526,4 +526,108 @@ test('applyFiber counts postbiotic starts: once per run of the multiplier', () =
   fx.consumeProbiotic();
   fx.applyProbiotic();
   assert.equal(fx.applyFiber(), true, 'after a hit ends it, the next one counts again');
+});
+
+test('rollItem never returns a mystery box unless it is allowed', () => {
+  const rng = createRng(11);
+  for (let i = 0; i < 5000; i++) assert.notEqual(rollItem(rng, 100, T), 'mystery');
+});
+
+test('with mystery on the box is half as common as fiber, and the other three keep their ratios', () => {
+  const rng = createRng(12);
+  const counts = { fiber: 0, probiotic: 0, bacteria: 0, mystery: 0 };
+  for (let i = 0; i < 100000; i++) {
+    const kind = rollItem(rng, 100, T, { mystery: true });
+    if (kind) counts[kind] += 1;
+  }
+  const ratio = counts.mystery / counts.fiber;
+  assert.ok(Math.abs(ratio - 0.5) <= 0.05, `mystery / fiber ${ratio}`);
+  const pb = counts.probiotic / counts.bacteria;
+  const want = T.items.weights.probiotic / T.items.weights.bacteria;
+  assert.ok(Math.abs(pb - want) <= 0.05, `probiotic / bacteria ${pb} vs ${want}`);
+});
+
+test('mystery boxes are allowed from mystery.fromLevel (3) on', () => {
+  assert.equal(mysteryAllowed(1, T), false);
+  assert.equal(mysteryAllowed(2, T), false);
+  assert.equal(mysteryAllowed(3, T), true);
+  assert.equal(mysteryAllowed(T.levels.lastLevel, T), true);
+});
+
+test('rollMystery walks the draw bands in order and falls back to fiber', () => {
+  const d = T.mystery.draws;
+  let edge = 0;
+  // Probe just inside each band (exact edges are float sums, so ±1e-9).
+  for (const draw of MYSTERY_DRAWS) {
+    assert.equal(rollMystery(() => edge + 1e-9, T), draw, `start of the ${draw} band`);
+    edge += d[draw];
+    assert.equal(rollMystery(() => edge - 1e-9, T), draw, `end of the ${draw} band`);
+  }
+  assert.equal(rollMystery(() => edge + 1e-9, T), 'fiber');
+  assert.equal(rollMystery(() => 0.999999, T), 'fiber');
+});
+
+test('rollMystery lands near each draw chance; fiber takes the rest', () => {
+  const rng = createRng(13);
+  const n = 100000;
+  const counts = {};
+  for (let i = 0; i < n; i++) {
+    const draw = rollMystery(rng, T);
+    counts[draw] = (counts[draw] ?? 0) + 1;
+  }
+  const fiberWant = 1 - MYSTERY_DRAWS.reduce((sum, k) => sum + T.mystery.draws[k], 0);
+  for (const [draw, want] of [...MYSTERY_DRAWS.map((k) => [k, T.mystery.draws[k]]), ['fiber', fiberWant]]) {
+    const share = (counts[draw] ?? 0) / n;
+    assert.ok(Math.abs(share - want) <= 0.01, `${draw} ${share} vs ${want}`);
+  }
+});
+
+test('resolveMystery turns a draw that cannot do anything into fiber', () => {
+  const full = T.beans.maxBeans;
+  assert.equal(resolveMystery('bean1', { beans: full, pairsLeft: 9 }, T), 'fiber');
+  assert.equal(resolveMystery('bean3', { beans: full, pairsLeft: 9 }, T), 'fiber');
+  assert.equal(resolveMystery('bean3', { beans: full - 1, pairsLeft: 9 }, T), 'bean3');
+  assert.equal(resolveMystery('bean1', { beans: 0, pairsLeft: 9 }, T), 'bean1');
+  assert.equal(resolveMystery('skip', { beans: 0, pairsLeft: 0 }, T), 'fiber');
+  assert.equal(resolveMystery('skip', { beans: 0, pairsLeft: 1 }, T), 'skip');
+  for (const draw of ['fiber', 'probiotic', 'postbiotic']) assert.equal(resolveMystery(draw, { beans: full, pairsLeft: 0 }, T), draw);
+});
+
+test('skipPairs counts the pairs left to the level end', () => {
+  assert.equal(skipPairs(levelEnd(2, T) + 5, 3, T), levelEnd(3, T) - levelEnd(2, T) - 5);
+  assert.equal(skipPairs(40, 3, T), 45);
+  assert.equal(skipPairs(levelEnd(3, T), 3, T), 0);
+  assert.equal(skipPairs(levelEnd(3, T) + 2, 3, T), 0);
+});
+
+test('applyPostbiotic adds pipes with ×2 on, stacks, and counts only a start', () => {
+  const fx = createEffects(T);
+  const n = T.mystery.postbioticPipes;
+  assert.equal(fx.applyPostbiotic(n), true, 'from nothing it starts one');
+  assert.equal(fx.pipesLeft(), n);
+  assert.equal(fx.hasPostbiotic(), true);
+  assert.equal(fx.multiplier(), T.items.postbioticMultiplier);
+  assert.equal(fx.applyPostbiotic(n), false, 'a second one extends, not a new start');
+  assert.equal(fx.pipesLeft(), 2 * n);
+  assert.equal(fx.consumeProbiotic(), true, 'a bacteria hit ends it');
+  assert.equal(fx.hasPostbiotic(), false);
+  assert.equal(fx.multiplier(), 1);
+
+  const up = createEffects(T);
+  up.applyProbiotic();
+  assert.equal(up.hasPostbiotic(), false);
+  assert.equal(up.applyPostbiotic(n), true, 'on a plain probiotic it starts one');
+  assert.equal(up.pipesLeft(), T.items.probioticPipes + n);
+  assert.equal(up.applyFiber(), false, 'fiber then does not count another start');
+
+  const runOut = createEffects(T);
+  runOut.applyPostbiotic(n);
+  for (let i = 0; i < n; i++) runOut.onPipePassed();
+  assert.equal(runOut.hasPostbiotic(), false, 'it ends with the countdown');
+  assert.equal(runOut.applyPostbiotic(n), true, 'and a later one is a new start');
+});
+
+test('skip popup: gold +pairs × pipe points, doubled under the postbiotic', () => {
+  assert.deepEqual(scorePopup('skip', T, 2, 45), { text: '+90', color: T.mystery.color });
+  assert.deepEqual(scorePopup('skip', T, 1, 12), { text: '+12', color: T.mystery.color });
 });
