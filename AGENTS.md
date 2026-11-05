@@ -9,7 +9,9 @@ guide; this file is the map for anyone changing the code.
 Flappy Poop is a Flappy Bird clone for phone browsers: a poop emoji flaps through
 the gut dodging pink intestinal-fold pipes. One point per pipe pair passed; fiber
 is +3 (it bobs between pipe pairs like a bean), bad bacteria is −3 (floor 0), and a probiotic blocks one bacteria hit for
-5 pipes (pickups stack; a hit clears the stack). From pipe 5 a bean bobs between pipe
+5 pipes (pickups stack; a hit clears the stack). Fiber eaten while a probiotic is up makes a
+**postbiotic** (`effects.applyFiber`): pipes and fiber score × `items.postbioticMultiplier` (2) until
+the probiotic countdown ends, fart pipes included; another probiotic extends it, a hit ends it. From pipe 5 a bean bobs between pipe
 pairs (15 % per pair to pipe 20 with one guaranteed by guaranteeScore, 6 % after);
 beans stack to maxBeans (3); one charges a fart power (stink lines + glow; tap the poop
 or the bean button) that plays `fart_accelerate.mp3`, ramps the scroll speed up and
@@ -71,7 +73,8 @@ src/
                             layers: key + parallax).
                             Pure data, Node-safe.
   logic.js                  Pure functions, NO Phaser/DOM: rng, gap placement,
-                            scoring, items, beans (rollBean, beanSpawnX, beanY,
+                            scoring (pipePoints, scorePopup, multiplierLayout),
+                            items, beans (rollBean, beanSpawnX, beanY,
                             beanAngle, bobY, gapBobAmplitude, gapBobY,
                             poopTapHit; beanButtonHit's circle is twice the
                             drawn button), fart envelope (pipeSpacing,
@@ -185,10 +188,17 @@ src/
                             slide are ignored (launching flag). Toilet mode:
                             this.toilet from the registry (session-only), toggle
                             under tap to flap, 🚽 HUD left of the score while
-                            playing, passed to recordScore and Over. Score popup:
-                            showScorePopup(kind) fades one reused text (scorePopup()
-                            in logic.js, TUNING.popup) under the score after fiber
-                            or an unshielded bacteria hit; its tween pauses with the run. Beans: group
+                            playing, passed to recordScore and Over. Score popups
+                            (scorePopup() in logic.js, TUNING.popup), two reused
+                            texts: showPipePopup(mult) is the quick white "+1"
+                            ("+2" under a postbiotic) at popup.pipeY on every pair,
+                            restarted by the next pipe; showScorePopup(kind, mult)
+                            fades "+3" / "−3" at popup.itemY after fiber or an
+                            unshielded bacteria hit. Postbiotic: refreshProbioticHud
+                            swaps probioticIcon to the 'postbiotic' texture and
+                            setMultiplierBadge() shows the gold pulsing "×2" at
+                            multiplierLayout() (TUNING.postbiotic; text shadow +
+                            padding for the glow). All three tweens pause with the run. Beans: group
                             spawned in spawnPipePair (rollBean with beanSpawned for
                             the one-per-run guarantee, halfway to the next pair), bobbed in update() from per-bean elapsed ms;
                             collectBean → effects.addBean (up to maxBeans; holdingBean
@@ -235,7 +245,7 @@ src/
                             BACKGROUND.layers; levelBar above the score. Nothing here reads time.now;
                             readyHit() routes taps (howto, start, saveload, profile
                             → Scores). getSaveState / setSaveState for the panel.
-    Over.js                 Game-over panel (score, 2 × 2 run summary, pipes crossed, glowing "tap to go home" button) with a
+    Over.js                 Game-over panel (score, 2 × 2 run summary, pipes crossed, glowing "Home" button) with a
                             tap lockout and its own tray (mute still works). Shows
                             newTopHint when the run entered the top 6.
     Settings.js             Overlay: sound, haptics (Android only), Reload game
@@ -250,7 +260,7 @@ src/
                             createScrollView(). Tap outside the panel closes.
                             Wrapped text uses useAdvancedWrap for CJK.
     HowTo.js                Overlay: flap rules plus pipe / fiber / probiotic /
-                            bacteria / bean / toilet rows (howToItems, pipe first;
+                            postbiotic / bacteria / bean / toilet rows (howToItems, pipe first;
                             the pipe icon is a cropped cap slice, toilet is the 🚽
                             emoji) and a feedback link, inside createScrollView(). Ready-screen How
                             to play uses howToHit() so it does not start a run.
@@ -275,7 +285,8 @@ src/
 assets/                     Contract PNGs + README.md (the art contract).
   README.md                 File name, pixel size, orientation rules. tests enforce it.
   poop.png poop-dead.png poop-stink1.png poop-stink2.png poop-fart.png
-  poop-speech.png fiber.png probiotic.png bacteria.png bean.png
+  poop-speech.png fiber.png probiotic.png postbiotic.png bacteria.png bean.png
+                            (postbiotic.png: HUD icon only, never spawned)
   pipe.png villi.png ground.png   (villi.png: transparent overlay over the level
                             colour; art contract in assets/README.md "Background layers")
   icon-192.png icon-512.png
@@ -306,12 +317,14 @@ tests/                      node --test, zero deps. Each file is self-describing
   tray.test.js              trayHeight / trayLayout geometry including info + lang +
                             feedback; trayHit centre hits vs miss in the tray gap
   items.test.js             rollItem, itemGapY, scoreAfterItem, probiotic inventory
-                            (paused during the fart), bean stacking to maxBeans,
+                            (paused during the fart), postbiotic multiplier (fiber
+                            with a probiotic up, countdown, extend, hit, fart),
+                            pipe / item popups, bean stacking to maxBeans,
                             normal vs super fart, fart envelope integrals
   fart.test.js              fartFloat (glide, wave band, tilt sign vs direction),
                             hsvToRgb, rainbowHue, wave stays inside the play area
   tuning.test.js            item / fartVolume / beans sanity bounds (normal and
-                            super fart peaks)
+                            super fart peaks), popup rows, postbiotic badge
   about.test.js             About copy (both locales) names author, LLM, Phaser, JS, sound;
                             LAST_UPDATED has a year and a time
   howto.test.js             HOW_TO copy, pause banner, howToLayout / howToHit geometry
@@ -352,7 +365,8 @@ tools/
                             (drawn at spriteDisplayScale 0.25 → 96 logical px);
                             the poop set (alive / dead / stink1 / stink2 / fart /
                             speech) shares one body scale and centre, stink / fart /
-                            speech on bigger squares; bean.png from Kidney_Bean.png.
+                            speech on bigger squares; bean.png from Kidney_Bean.png,
+                            postbiotic.png from Postbiotic.png.
                             Arcade circles use scaledCircleBody (Phaser source pixels).
   serve.py                  npm start: bind 0.0.0.0:8000, print laptop + phone URLs.
   push.mjs                  npm run push: stamps LAST_UPDATED in src/logic.js with the
