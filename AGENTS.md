@@ -11,7 +11,14 @@ the gut dodging pink intestinal-fold pipes. One point per pipe pair passed; fibe
 is +3 (it sits between pipe pairs like a bean), bad bacteria is −3 (floor 0; never before level 2, pair 5), and a probiotic blocks one bacteria hit for
 5 pipes (pickups stack; a hit clears the stack). Fiber eaten while a probiotic is up makes a
 **postbiotic** (`effects.applyFiber`): pipes and fiber score × `items.postbioticMultiplier` (2) until
-the probiotic countdown ends, fart pipes included; another probiotic extends it, a hit ends it. Level 1 is
+the probiotic countdown ends, fart pipes included; another probiotic extends it, a hit ends it. A
+**mystery box** (`TUNING.mystery`, spinning spritesheet) opens into one reward: probiotic 20 %, one bean 20 %,
+a 5-pipe postbiotic 5 % (×2 already on), three beans 5 %, a skip to the end of the level 1 %, else fiber
+(`rollMystery`); a draw that cannot do anything (bean with a full bag, skip with the finish line out) becomes
+fiber (`resolveMystery`). A skip scores every pair left in the level at the current multiplier (countdown
+paused, like a fart), clears what is ahead and brings the finish line in from the right edge. Level 3 has
+exactly one box, held still midway between two gaps after one of its first four pairs (`scriptedMysteryPair`,
+so before pipe 5); from level 4 boxes roll at half fiber's weight (`mysteryRolls`) and bob at half its speed. Level 1 is
 scripted (probiotic at pair 3, fiber after 4 and 7, a bean after 9) and its fiber and bean hold still midway
 between the two gaps; from level 2 they bob and a bean rolls per pair
 (15 % per pair to pipe 20 with one guaranteed by guaranteeScore, 6 % after);
@@ -167,7 +174,9 @@ src/
                             not flap. Copy calls clipboard.writeText inside the tap
                             handler (iOS); falls back to selecting the field.
   scenes/
-    Boot.js                 preload() gameplay PNGs + the sfx MP3s, then start Play.
+    Boot.js                 preload() gameplay PNGs (mystery.png as a 384 px
+                            spritesheet) + the sfx MP3s; create() makes the global
+                            'mystery-spin' anim (mystery.frameMs), then starts Play.
     Play.js                 State machine: 'ready' -> 'playing' -> 'paused'/'dead'.
                             Spawns pipes and items, tray, auto-pause, haptics, dies,
                             then launches Over as an overlay scene. Tray / keyboard
@@ -250,8 +259,28 @@ src/
                             set); probiotic / bacteria →
                             spawnGapItem (depth −1 under the pipes; from
                             items.moveFromLevel they sweep the gap with gapBobY /
-                            gapBobAmplitude). this.collected counts pickups for
-                            Over's summary row. Spawn slots: at levelEnd(level)
+                            gapBobAmplitude). Mystery boxes take the band spot like
+                            fiber: level 3's one box rides after this.mysteryPair
+                            (scriptedMysteryPair in start(); it owns that spot, no
+                            bean, held still at bandMidY); from level 4 rollItem
+                            gets { mystery: mysteryRolls(level) } and a rolled box
+                            bobs on mystery.periodMs. Every box plays
+                            'mystery-spin'; setBoxSpin pauses / resumes it with the
+                            run. collectItem → openMystery(resolveMystery(
+                            rollMystery(rng))): fiber and probiotic reuse
+                            eatFiber / takeProbiotic (shared with the plain
+                            pickups), postbiotic = effects.applyPostbiotic,
+                            beans = addBean × MYSTERY_BEANS, skip = skipToFinish
+                            (skipPairs × pipePoints at the multiplier, pipes /
+                            items / beans ahead of the poop destroyed, the rest
+                            marked passed, pipesPassed = pipesSpawned = levelEnd,
+                            spawnFinishLine, gold flash and "+N"); revealMystery
+                            then raises the drawn icon (🏁 for a skip, "×3"
+                            beside the bean) out of the box over mystery.revealMs.
+                            openMystery takes the draw directly so the smoke can
+                            force one. this.collected counts pickups for Over's
+                            summary rows (a box's reward also counts as its own
+                            kind). Spawn slots: at levelEnd(level)
                             pairs the slot is the finish line (spawnFinishLine),
                             then nothing until the break ends unless a fart runs;
                             onFinishCrossed → win() on the final level (endRun()
@@ -266,7 +295,7 @@ src/
                             BACKGROUND.layers; levelBar above the score. Nothing here reads time.now;
                             readyHit() routes taps (howto, start, saveload, profile
                             → Scores). getSaveState / setSaveState for the panel.
-    Over.js                 Game-over panel (score, run summary of fiber / probiotic / postbiotic over bacteria / bean, pipes crossed, glowing "Home" button) with a
+    Over.js                 Game-over panel (score, run summary of fiber / probiotic / postbiotic over bacteria / bean / mystery box (mystery-icon.png), pipes crossed, glowing "Home" button) with a
                             tap lockout and its own tray (mute still works). Shows
                             newTopHint when the run entered the top 6. With
                             { won: true } the headline is the gold runWon text.
@@ -282,7 +311,8 @@ src/
                             createScrollView(). Tap outside the panel closes.
                             Wrapped text uses useAdvancedWrap for CJK.
     HowTo.js                Overlay: flap rules plus pipe / fiber / probiotic /
-                            postbiotic / bacteria / bean / toilet rows (howToItems, pipe first;
+                            postbiotic / bacteria / bean / mystery box (mystery-icon) /
+                            toilet / levels rows (howToItems, pipe first;
                             the pipe icon is a cropped cap slice, toilet is the 🚽
                             emoji) and a feedback link, inside createScrollView(). Ready-screen How
                             to play uses howToHit() so it does not start a run.
@@ -309,6 +339,9 @@ assets/                     Contract PNGs + README.md (the art contract).
   poop.png poop-dead.png poop-stink1.png poop-stink2.png poop-fart.png
   poop-speech.png fiber.png probiotic.png postbiotic.png bacteria.png bean.png
                             (postbiotic.png: HUD icon only, never spawned)
+  mystery.png               Mystery box spin: 8 frames of 384x384 side by side (3072x384),
+                            loaded as a spritesheet; mystery-icon.png is its static view
+                            for the game-over summary and How to play (never spawned).
   pipe.png villi.png ground.png   (villi.png: transparent overlay over the level
                             colour; art contract in assets/README.md "Background layers")
   icon-192.png icon-512.png
@@ -327,7 +360,8 @@ db/schema.sql               Supabase schema: scores table (player_id = save-code
 
 tests/                      node --test, zero deps. Each file is self-describing:
   html.test.js              index.html invariants (viewport, no scroll, pinned Phaser)
-  assets.test.js            load.image / load.audio paths; README sizes; sfx credits
+  assets.test.js            load.image / load.spritesheet / load.audio paths; README
+                            sizes; a spritesheet is a whole number of frames; sfx credits
   logic.test.js             gap bounds, rng determinism, hasPassed, angle
   levels.test.js            level lengths / ends / levelFor table, final level,
                             per-level pipe spacing, levelSpeed cap,
@@ -344,11 +378,18 @@ tests/                      node --test, zero deps. Each file is self-describing
                             with a probiotic up, countdown, extend, hit, fart),
                             pipe / item popups, popupSlots stack, postbiotic
                             start count, bean stacking to maxBeans,
-                            normal vs super fart, fart envelope integrals
+                            normal vs super fart, fart envelope integrals; mystery
+                            box: the roll at half fiber (only with { mystery }),
+                            mysteryRolls from level 4, scriptedMysteryPair in level
+                            3's first four pairs, rollMystery bands and frequencies,
+                            resolveMystery fallbacks, skipPairs, applyPostbiotic,
+                            the gold skip popup
   fart.test.js              fartFloat (glide, wave band, tilt sign vs direction),
                             hsvToRgb, rainbowHue, wave stays inside the play area
   tuning.test.js            item / fartVolume / beans sanity bounds (normal and
-                            super fart peaks), popup rows, postbiotic badge
+                            super fart peaks), popup rows, postbiotic badge, the
+                            mystery block (levels, half fiber's weight and speed,
+                            the locked draw table)
   about.test.js             About copy (both locales) names author, LLM, Phaser, JS, sound;
                             LAST_UPDATED has a year and a time
   howto.test.js             HOW_TO copy, pause banner, howToLayout / howToHit geometry
@@ -390,7 +431,9 @@ tools/
                             the poop set (alive / dead / stink1 / stink2 / fart /
                             speech) shares one body scale and centre, stink / fart /
                             speech on bigger squares; bean.png from Kidney_Bean.png,
-                            postbiotic.png from Postbiotic.png.
+                            postbiotic.png from Postbiotic.png, mystery-icon.png from
+                            MysteryBox_Icon.png; process_sheet cuts MysteryBox.gif's
+                            frames on one shared square into the mystery.png strip.
                             Arcade circles use scaledCircleBody (Phaser source pixels).
   serve.py                  npm start: bind 0.0.0.0:8000, print laptop + phone URLs.
   push.mjs                  npm run push: stamps LAST_UPDATED in src/logic.js with the
@@ -404,7 +447,10 @@ tools/
                             overlay that does not open / close. Covers every overlay in
                             OVERLAYS (tests/tools.test.js keeps that list equal to
                             main.js), a run start, leaderboard mid-run pause, and a
-                            close-and-reopen race. Zero dependencies (fetch + WebSocket).
+                            close-and-reopen race, plus the mystery box (level 3's
+                            still box, a bobbing box, the spin pausing, forced draws,
+                            the full-bag fallback, and a skip into level 4's break).
+                            Zero dependencies (fetch + WebSocket).
 
 .claude/plans/              Checkpointed build plans. Historical record + decision
                             log. Don't edit completed plans; add a new plan file
@@ -483,7 +529,8 @@ Commits so far follow `type(scope): summary` (`feat`, `docs`, `chore`); keep it.
 - New game mechanic → pure parts in `src/logic.js` + test in `tests/`, wiring in
   `src/scenes/Play.js`, knobs in `src/config.js`.
 - New art → gameplay sprites via `assets/src/` + `tools/process_art.py` + a row
-  in `assets/README.md` + `load.image()` in `src/scenes/Boot.js`. Remaining
+  in `assets/README.md` + `load.image()` (or `load.spritesheet()` for an
+  animated GIF, cut by `process_sheet`) in `src/scenes/Boot.js`. Remaining
   placeholders still go through `make_placeholders.py`, which must not overwrite
   `poop.png`.
 - New sound → a `blip()` preset in `src/sound.js`, **or** a file in `assets/sfx/`
