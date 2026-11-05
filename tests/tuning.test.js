@@ -68,7 +68,7 @@ test('beans block sits in a fair band and the fart ramp stays readable', () => {
   const superPeak = peakAt(b.superPipes, T.pipeSpeed);
   assert.ok(superPeak > peak && superPeak <= 12, `super fart peak multiplier ${superPeak}`);
   assert.ok(peakAt(b.powerPipes, T.levels.maxSpeed) >= 1, 'even at the top speed a normal fart never slows the world');
-  assert.ok(b.superPipes < T.levels.pipesStep, 'a super fart can cross at most one finish line');
+  assert.ok(T.levels.pipes.slice(1).every((n) => b.superPipes < n), 'a super fart can cross at most one finish line');
 });
 
 test('score popup sits under the score and fades at a readable pace', () => {

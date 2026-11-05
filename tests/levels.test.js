@@ -3,14 +3,22 @@ import assert from 'node:assert/strict';
 import { TUNING as T, LEVELS, LEVEL_COLORS, BACKGROUND, GAME_HEIGHT } from '../src/config.js';
 import { levelBannerText, levelLabel, LOCALES } from '../src/i18n.js';
 import { GAME_WIDTH } from '../src/config.js';
-import { levelPipes, levelEnd, levelFor, levelSpeed, levelGap, levelName, levelColor, levelProgress, lerpColor, pipeSpacing, gapBounds, levelBarLayout, levelBarLabelOnFill, hudRightLayout, multiplierLayout, tutorialSpawn } from '../src/logic.js';
+import { levelPipes, levelEnd, levelFor, levelSpeed, levelGap, levelName, levelColor, levelProgress, lerpColor, pipeSpacing, gapBounds, levelBarLayout, levelBarLabelOnFill, hudRightLayout, multiplierLayout, tutorialSpawn, isFinalLevel } from '../src/logic.js';
 
 const L = T.levels;
 
-test('level lengths are 10, 25, 50, 75, 100 … and the cumulative ends are 10, 35, 85, 160, 260', () => {
-  assert.deepEqual([1, 2, 3, 4, 5].map((n) => levelPipes(n, T)), [10, 25, 50, 75, 100]);
-  assert.deepEqual([1, 2, 3, 4, 5].map((n) => levelEnd(n, T)), [10, 35, 85, 160, 260]);
-  assert.equal(levelPipes(0, T), L.firstPipes, 'below 1 reads as level 1');
+test('level lengths are 10, 25, then 50 each, and the cumulative ends are 10, 35, 85, 135, 185, 235, 285', () => {
+  assert.deepEqual([1, 2, 3, 4, 5, 6, 7].map((n) => levelPipes(n, T)), [10, 25, 50, 50, 50, 50, 50]);
+  assert.deepEqual([1, 2, 3, 4, 5, 6, 7].map((n) => levelEnd(n, T)), [10, 35, 85, 135, 185, 235, 285]);
+  assert.equal(levelPipes(0, T), 10, 'below 1 reads as level 1');
+});
+
+test('rectum is the final level: lastLevel is the last named segment', () => {
+  assert.equal(L.lastLevel, LEVELS.length);
+  assert.equal(LEVELS[L.lastLevel - 1].key, 'rectum');
+  assert.equal(isFinalLevel(L.lastLevel - 1, T), false);
+  assert.equal(isFinalLevel(L.lastLevel, T), true);
+  assert.equal(isFinalLevel(1, T), false);
 });
 
 test('levelFor maps every pipes-passed count to the level whose range holds it', () => {
@@ -21,9 +29,12 @@ test('levelFor maps every pipes-passed count to the level whose range holds it',
     [34, 2, 10, 35],
     [35, 3, 35, 85],
     [84, 3, 35, 85],
-    [85, 4, 85, 160],
-    [159, 4, 85, 160],
-    [160, 5, 160, 260],
+    [85, 4, 85, 135],
+    [134, 4, 85, 135],
+    [135, 5, 135, 185],
+    [234, 6, 185, 235],
+    [235, 7, 235, 285],
+    [284, 7, 235, 285],
   ];
   for (const [pipes, level, startPipe, endPipe] of table) {
     assert.deepEqual(levelFor(pipes, T), { level, startPipe, endPipe }, `pipes ${pipes}`);
@@ -185,13 +196,13 @@ test('multiplierLayout puts the ×2 badge right of the score digits, as a subscr
 
 test('level 1 is scripted: probiotic at pair 3, bacteria at 5, fiber after 7, a bean after 9, nothing else; later levels roll', () => {
   const got = {};
-  for (let pair = 1; pair <= L.firstPipes; pair += 1) {
+  for (let pair = 1; pair <= levelPipes(1, T); pair += 1) {
     const kind = tutorialSpawn(1, pair, T);
     if (kind) got[pair] = kind;
     else assert.equal(kind, null, `pair ${pair} carries nothing`);
   }
   assert.deepEqual(got, { 3: 'probiotic', 5: 'bacteria', 7: 'fiber', 9: 'bean' });
-  for (const pair of Object.values(L.tutorial)) assert.ok(pair >= 1 && pair < L.firstPipes, `pair ${pair} is inside level 1, before the finish line`);
+  for (const pair of Object.values(L.tutorial)) assert.ok(pair >= 1 && pair < levelPipes(1, T), `pair ${pair} is inside level 1, before the finish line`);
   assert.equal(new Set(Object.values(L.tutorial)).size, 4, 'one pickup per pair');
   assert.equal(tutorialSpawn(2, 3, T), undefined, 'level 2 is not scripted');
   assert.equal(tutorialSpawn(1, 0, T), null);

@@ -277,8 +277,9 @@ export async function run(url = DEFAULT_URL) {
     await evaluate(`import('./src/config.js').then((m) => { m.LEADERBOARD.dataApi = ''; return true; })`);
     // Run the farts from the start of level 3 (50 pipes of room) so neither crosses a finish line here.
     const TT = await evaluate(`import('./src/config.js').then((m) => JSON.stringify(m.TUNING))`).then(JSON.parse);
-    const end1 = TT.levels.firstPipes;
-    const end2 = end1 + TT.levels.pipesStep;
+    const [len1, len2, len3] = TT.levels.pipes;
+    const end1 = len1;
+    const end2 = len1 + len2;
     await evaluate(`${play}.level = 3, ${play}.pipesSpawned = ${end2}, ${play}.pipesPassed = ${end2}, ${play}.finishSpawned = false, ${play}.applyLevel(), true`);
     await evaluate(`${play}.resumePlay(), ${play}.effects.applyProbiotic(), ${play}.refreshProbioticHud(), true`);
     const hud = await evaluate(`JSON.stringify({ iconRight: ${play}.probioticIcon.x + ${play}.probioticIcon.displayWidth / 2, textLeft: ${play}.probioticText.x - ${play}.probioticText.width, textRight: ${play}.probioticText.x, scoreRight: ${play}.scoreText.x + ${play}.scoreText.width / 2, y: ${play}.probioticText.y })`).then(JSON.parse);
@@ -426,9 +427,9 @@ export async function run(url = DEFAULT_URL) {
     ok(probe.bob === 'gap' && probe.y !== y1 && probe.depth < probe.pipeDepth, `a level-3 gap item moves (y ${y1.toFixed(0)} → ${probe.y.toFixed(0)}) and draws behind the pipes`);
     await evaluate(`${play}.gapProbe.destroy(), true`);
     const bar = await evaluate(`JSON.stringify({ label: ${play}.levelBar.labelText(), value: ${play}.levelBar.value(), passed: ${play}.pipesPassed, color: ${play}.levelBar.labelColor() })`).then(JSON.parse);
-    const expect = Math.min(1, Math.max(0, (bar.passed - end2) / TT.levels.pipesStep / 2));
+    const expect = Math.min(1, Math.max(0, (bar.passed - end2) / len3));
     const pinkHex = '#' + TT.levels.barFillColor.toString(16).padStart(6, '0');
-    ok(bar.label === 'LV 3' && Math.abs(bar.value - expect) < 1e-9 && bar.color === pinkHex, `progress bar reads "${bar.label}" at ${(bar.value * 100).toFixed(0)} % in ${bar.color} (${bar.passed - end2} of ${TT.levels.pipesStep * 2} pipes into level 3)`);
+    ok(bar.label === 'LV 3' && Math.abs(bar.value - expect) < 1e-9 && bar.color === pinkHex, `progress bar reads "${bar.label}" at ${(bar.value * 100).toFixed(0)} % in ${bar.color} (${bar.passed - end2} of ${len3} pipes into level 3)`);
     await evaluate(`${play}.graceLeftMs = 0, true`);
     // Let the poop fall and die: the game-over panel carries the run summary.
     await evaluate(`${play}.poop.body.setAllowGravity(true), true`);

@@ -48,8 +48,8 @@ export const TUNING = {
   fartVolume: 0.6, // 0–1 Phaser volume for the death fart sample
   levelUpVolume: 0.6, // 0–1 Phaser volume for the level-up chime (NewLevel.mp3)
   levels: {
-    firstPipes: 10, // pipe pairs in level 1
-    pipesStep: 25, // level n ≥ 2 has pipesStep × (n − 1) pipe pairs: 25, 50, 75, …
+    pipes: [10, 25, 50], // pipe pairs in levels 1, 2, 3; every later level repeats the last entry (ends at 10, 35, 85, 135, …)
+    lastLevel: 7, // the final level (rectum, = LEVELS.length): crossing its finish line wins the run
     speedStep: 25, // px/s added to pipeSpeed per level after the first
     gapScale: [1.1, 1.05], // × gapHeight per level, index = level − 1 (374 / 357 px); later levels use gapHeight as is
     maxSpeed: 450, // px/s cap (level 8+)
@@ -57,7 +57,7 @@ export const TUNING = {
     finishCheckPx: 32, // px size of one check on the finish line
     // Level 1 is a scripted intro: which pair (1-based) carries which pickup; no random
     // rolls until level 2. Gap items ride in that pair's gap; fiber and the bean bob in
-    // the open after it. All must be below firstPipes.
+    // the open after it. All must be below levels.pipes[0].
     tutorial: { probiotic: 3, bacteria: 5, fiber: 7, bean: 9 },
     fadeMs: 600, // ms the background crossfades to the next level's colour during the break
     whiteBlend: 0.2, // 0–1 share of white mixed into every level colour (0 = the raw palette)

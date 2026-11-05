@@ -166,18 +166,23 @@ export function canRestart(openedAt, now, lockoutMs) {
 }
 
 // ---------------------------------------------------------------------------
-// Levels: the run is cut into gut segments by pipe pairs passed. Level 1 is
-// firstPipes long; level n ≥ 2 is pipesStep × (n − 1). Speed steps up per level
+// Levels: the run is cut into gut segments by pipe pairs passed. Level n is
+// levels.pipes[n − 1] long (the last entry repeats); levels.lastLevel is the
+// final one, whose finish line wins the run. Speed steps up per level
 // (capped); pipe spacing is fixed in px, so faster levels mean less time per pipe.
 
 /** Pipe pairs in level n (n ≥ 1). */
 export function levelPipes(n, t) {
-  const l = t.levels;
-  if (n <= 1) return l.firstPipes;
-  return l.pipesStep * (n - 1);
+  const list = t.levels.pipes;
+  return list[Math.min(Math.max(1, n), list.length) - 1];
 }
 
-/** Pipes passed at which level n ends (cumulative): 10, 35, 85, 160, 260, … */
+/** True for levels.lastLevel (and anything past it): its finish line ends the run as a win. */
+export function isFinalLevel(level, t) {
+  return level >= t.levels.lastLevel;
+}
+
+/** Pipes passed at which level n ends (cumulative): 10, 35, 85, 135, 185, 235, 285. */
 export function levelEnd(n, t) {
   let total = 0;
   for (let i = 1; i <= n; i += 1) total += levelPipes(i, t);
