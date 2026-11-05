@@ -20,6 +20,8 @@ or a skip to the end of the level).
 Test mode (测试模式): a developer sandbox turned on by typing a trigger word as the username. Its
 Settings rows (start level as "Start at LV n", Invincible ON/OFF, power-up buttons, Exit) and its
 messages are terse developer copy; test runs never save a score.
+Game over has a Share button: the share sheet gets an image of the panel plus shareText
+({score} may carry a 🚽, {level} is the short level label, {url} the game's link; keep all three).
 Author / designer / artist: Michael Sieler. Side project, short playful copy — not
 formal medical language.
 
@@ -149,7 +151,8 @@ Short, playful, clear. Fit a 720×1280 logical field; How to play / About body w
 | saveNameRequired | Enter a username first (1–16 characters) | 请先输入用户名（1–16 个字符） |
 | saveErrorDamaged | Save code is damaged or was edited | 存档码已损坏或被修改 |
 | saveErrorUnrecognised | Unrecognised save code | 无法识别的存档码 |
-| newTopHint | New high score! Press Save / Load User on the home screen to save it. | 新高分！在主界面点击“存档 / 载入用户”即可保存。 |
+| shareButton | Share | 分享 |
+| shareText | I scored {score} on Flappy Poop ({level})! {url} | 我在 Flappy Poop 拿到了 {score} 分（{level}）！{url} |
 | testRunNotSaved | Test run — score not saved | 测试局——分数未保存 |
 | scoresTitle | HIGH SCORES | 最高分 |
 | scoresEmpty | No scores yet | 暂无分数 |

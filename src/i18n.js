@@ -103,7 +103,8 @@ Inspired by Flappy Bird`,
     saveNameRequired: 'Enter a username first (1–16 characters)',
     saveErrorDamaged: 'Save code is damaged or was edited',
     saveErrorUnrecognised: 'Unrecognised save code',
-    newTopHint: 'New high score! Press Save / Load User on the home screen to save it.',
+    shareButton: 'Share',
+    shareText: 'I scored {score} on Flappy Poop ({level})! {url}',
     testRunNotSaved: 'Test run — score not saved',
     scoresTitle: 'HIGH SCORES',
     scoresEmpty: 'No scores yet',
@@ -212,7 +213,8 @@ Inspired by Flappy Bird`,
     saveNameRequired: '请先输入用户名（1–16 个字符）',
     saveErrorDamaged: '存档码已损坏或被修改',
     saveErrorUnrecognised: '无法识别的存档码',
-    newTopHint: '新高分！在主界面点击“存档 / 载入用户”即可保存。',
+    shareButton: '分享',
+    shareText: '我在 Flappy Poop 拿到了 {score} 分（{level}）！{url}',
     testRunNotSaved: '测试局——分数未保存',
     scoresTitle: '最高分',
     scoresEmpty: '暂无分数',
@@ -303,6 +305,18 @@ export function welcomeText(locale, state) {
   const top = Array.isArray(state?.top) ? state.top : [];
   if (top.length === 0) return t(locale, 'saveWelcomeNoScores').replace('{name}', name);
   return t(locale, 'saveWelcome').replace('{name}', name).replace('{scores}', top.map(formatScore).join(' · '));
+}
+
+/**
+ * The message shared with the game-over image: the score (with the 🚽 when
+ * toilet mode was on), the level label, and the game's link.
+ */
+export function shareText(locale, { score = 0, toilet = false, level = 1, url = '' } = {}) {
+  return t(locale, 'shareText')
+    .replace('{score}', formatScore({ score: Number.isInteger(score) ? score : 0, toilet: Boolean(toilet) }))
+    .replace('{level}', levelLabel(locale, level))
+    .replace('{url}', url)
+    .trim();
 }
 
 /** "Your best 🚽 41 is #23 of 150" for a player who is not on the board. */

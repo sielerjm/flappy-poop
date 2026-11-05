@@ -15,6 +15,7 @@ import {
   pauseBannerText,
   metaFontSize,
   rankText,
+  shareText,
   profileButtonText,
 } from '../src/i18n.js';
 
@@ -37,6 +38,7 @@ const SCENE_DENYLIST = [
   'HIGH SCORES',
   'LEADERBOARD',
   'Enter username',
+  'Share',
 ];
 
 const BANNED_IMPORTS = ['ABOUT_TEXT', 'HOW_TO_PLAY_TEXT', 'PAUSE_BANNER_TEXT', 'HOW_TO_ITEMS'];
@@ -163,4 +165,14 @@ test('profileButtonText prompts for a username until one is set, in both locales
   assert.equal(profileButtonText('en', null), 'Enter username');
   assert.equal(profileButtonText('en', { name: 'Alice', top: [] }), 'Alice');
   assert.equal(profileButtonText('zh-Hans', { name: 'Alice', top: [{ score: 41, toilet: true }] }), 'Alice · 🚽 41');
+});
+
+test('shareText fills score (with 🚽 on toilet runs), level label and link in both locales', () => {
+  const url = 'https://sielerjm.github.io/flappy-poop/';
+  assert.equal(shareText('en', { score: 146, level: 4, url }), `I scored 146 on Flappy Poop (LV 4)! ${url}`);
+  assert.equal(shareText('en', { score: 41, toilet: true, level: 2, url }), `I scored 🚽 41 on Flappy Poop (LV 2)! ${url}`);
+  const zh = shareText('zh-Hans', { score: 146, level: 4, url });
+  assert.ok(zh.includes('146') && zh.includes('第4关') && zh.endsWith(url) && zh.includes('Flappy Poop'), zh);
+  for (const locale of LOCALES) assert.doesNotMatch(shareText(locale, { score: 1, level: 1, url }), /\{\w+\}/, `${locale} leaves no placeholder`);
+  for (const locale of LOCALES) assert.equal(t(locale, 'newTopHint'), 'newTopHint', `${locale}: the game-over save hint is gone`);
 });

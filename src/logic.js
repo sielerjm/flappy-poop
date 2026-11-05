@@ -969,6 +969,43 @@ function inBox(x, y, box) {
 }
 
 /**
+ * Game-over buttons on one row at cy + over.buttonOffsetY: Share (left) and Home
+ * (right), centred as a pair with over.buttonGap between. With share: false (a
+ * test run) there is no share box and Home sits alone at cx.
+ */
+export function overButtonsLayout(cx, cy, t, { share = true } = {}) {
+  const o = t.over;
+  const y = cy + o.buttonOffsetY;
+  const box = (id, x) => ({ id, x, y, width: o.buttonWidth, height: o.buttonHeight });
+  if (!share) return { share: null, home: box('home', cx) };
+  const offset = (o.buttonWidth + o.buttonGap) / 2;
+  return { share: box('share', cx - offset), home: box('home', cx + offset) };
+}
+
+/** 'share' | 'home' | null for a tap at (x, y) on overButtonsLayout's boxes. */
+export function overHit(x, y, layout) {
+  if (!layout) return null;
+  for (const box of [layout.share, layout.home]) {
+    if (box && inBox(x, y, box)) return box.id;
+  }
+  return null;
+}
+
+/**
+ * Canvas-pixel rect to capture for the share image: the panel ({ x, y, width,
+ * height }, centre-based) plus the half of its stroke drawn outside, times the
+ * canvas / game scale. Integers, since readPixels wants whole pixels.
+ */
+export function panelCaptureRect(panel, stroke, scale = 1) {
+  const half = stroke / 2;
+  const left = Math.floor((panel.x - panel.width / 2 - half) * scale);
+  const top = Math.floor((panel.y - panel.height / 2 - half) * scale);
+  const right = Math.ceil((panel.x + panel.width / 2 + half) * scale);
+  const bottom = Math.ceil((panel.y + panel.height / 2 + half) * scale);
+  return { x: left, y: top, width: right - left, height: bottom - top };
+}
+
+/**
  * Which ready-screen box contains (x, y): 'toilet' | 'howto' | 'saveload' |
  * 'profile' | null (null = start the run). The profile button is always there:
  * it reads "Enter username" until a name is set (Play decides what it opens).

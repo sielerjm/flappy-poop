@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { TUNING as T } from '../src/config.js';
+import { TUNING as T, SHARE } from '../src/config.js';
 import { pipeSpacing, levelSpeed } from '../src/logic.js';
 
 test('item spawn rates sit in a fair band', () => {
@@ -120,4 +120,14 @@ test('mystery box: a first box early in level 3, then half fiber\'s rate; still 
   assert.ok(m.revealMs >= 200 && m.revealMs <= 1500, `mystery.revealMs ${m.revealMs}`);
   assert.ok(m.revealRisePx >= 20 && m.revealRisePx <= 150, `mystery.revealRisePx ${m.revealRisePx}`);
   assert.match(m.color, /^#[0-9a-f]{6}$/i);
+});
+
+test('game-over share: the capture lands after the panel settles and before the buttons fade in', () => {
+  const o = T.over;
+  assert.ok(o.panelInMs > 0 && o.captureDelayMs > o.panelInMs + 30, `capture ${o.captureDelayMs} ms after a ${o.panelInMs} ms scale-in (a frame to spare)`);
+  assert.ok(o.captureDelayMs < T.retryLockoutMs - 30, `capture ${o.captureDelayMs} ms before the buttons fade in at ${T.retryLockoutMs} ms`);
+  assert.ok(o.buttonGap >= 16 && o.buttonWidth >= 180, `buttons ${o.buttonWidth} px, gap ${o.buttonGap} px`);
+  assert.match(SHARE.url, /^https:\/\/\S+\/$/);
+  assert.match(SHARE.fileName, /^[\w-]+\.png$/);
+  assert.equal(SHARE.title, 'Flappy Poop');
 });

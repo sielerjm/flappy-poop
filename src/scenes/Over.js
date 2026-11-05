@@ -15,7 +15,6 @@ export class Over extends Phaser.Scene {
   create(data) {
     const score = data?.score ?? 0;
     const pipes = Number.isInteger(data?.pipes) && data.pipes >= 0 ? data.pipes : 0;
-    const newTop = Boolean(data?.newTop);
     const won = Boolean(data?.won); // crossed the final level's finish line
     const testRun = Boolean(data?.test); // test mode: nothing was recorded (Play.endRun)
     const toilet = Boolean(data?.toilet);
@@ -57,16 +56,6 @@ export class Over extends Phaser.Scene {
     this.add.text(cx - 14, cy + 60, `×${pipes}`, { ...style, fontSize: '40px', color: '#c9b8dc' }).setOrigin(0, 0.5);
     if (testRun) {
       this.add.text(cx, cy + 130, t(locale, 'testRunNotSaved'), { ...style, fontSize: '30px', color: '#ffd700', wordWrap: { width: 460, useAdvancedWrap: true } }).setOrigin(0.5);
-    } else if (newTop) {
-      this.add
-        .text(cx, cy + 130, t(locale, 'newTopHint'), {
-          ...style,
-          fontSize: '26px',
-          color: '#f8a0c8',
-          fontStyle: 'normal',
-          wordWrap: { width: 460, useAdvancedWrap: true },
-        })
-        .setOrigin(0.5);
     }
     // The go-home prompt sits in a ready-screen-style button so it reads as the
     // thing to press (any tap outside the tray goes home too). It fades in after

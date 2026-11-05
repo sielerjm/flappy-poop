@@ -85,6 +85,14 @@ export const TUNING = {
     fiberColor: '#a8f0a8', // light green "+3" when fiber is eaten
     bacteriaColor: '#ff9a9a', // light red "−3" when unshielded bad bacteria hits
   },
+  over: {
+    panelInMs: 180, // ms the game-over panel scales in
+    buttonOffsetY: 250, // px below the panel centre of the Share | Home row
+    buttonWidth: 240, // px per button (Home alone on a test run, centred)
+    buttonHeight: 88, // px (= trayHitMin, a thumb-sized Share target)
+    buttonGap: 40, // px between Share and Home (Home's halo reaches readyPromptGlowPx past its edge)
+    captureDelayMs: 260, // ms after the panel opens that the share image is captured: after panelInMs, before the buttons fade in at retryLockoutMs
+  },
   postbiotic: {
     color: '#ffd700', // gold "×2" badge beside the score while the multiplier runs
     glowColor: '#ffb300', // amber glow (text shadow) around the badge
@@ -196,6 +204,14 @@ export const BACKGROUND = {
 export const TEST_MODE = {
   words: ['pooptest', 'testpoop'], // triggers (either spelling), matched trimmed and case-insensitively (each fits NAME_MAX 16)
   defaultInvincible: true, // Invincible toggle state when test mode turns on
+};
+
+// Share from the game-over panel (src/share.js): the image's file name, the share
+// sheet title, and the link in the message (always the live game, even from localhost).
+export const SHARE = {
+  url: 'https://sielerjm.github.io/flappy-poop/',
+  title: 'Flappy Poop',
+  fileName: 'flappy-poop-score.png',
 };
 
 // Shared leaderboard (Supabase, plain fetch; see db/schema.sql and src/leaderboard.js).
