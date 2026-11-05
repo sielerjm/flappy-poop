@@ -76,9 +76,10 @@ test('beans block sits in a fair band and the fart ramp stays readable', () => {
 
 test('score popup sits under the score and fades at a readable pace', () => {
   const p = T.popup;
-  assert.ok(p.pipeY > T.hudScoreY, `popup.pipeY ${p.pipeY}`);
-  assert.ok(p.itemY > p.pipeY && p.itemY <= 280, `popup.itemY ${p.itemY}`);
-  assert.ok(p.itemY - p.pipeY >= p.fontPx, 'the two rows do not overlap');
+  assert.equal(p.rowY.length, 2, 'two popup rows: pipe and item');
+  assert.ok(p.rowY[0] > T.hudScoreY, `popup.rowY[0] ${p.rowY[0]}`);
+  assert.ok(p.rowY[1] - p.rowY[0] >= p.fontPx && p.rowY[1] <= 280, `popup.rowY[1] ${p.rowY[1]}`);
+  assert.ok(p.shiftMs >= 30 && p.shiftMs <= 300, `popup.shiftMs ${p.shiftMs}`);
   assert.ok(p.pipeFadeMs >= 30 && p.pipeFadeMs <= 500, `popup.pipeFadeMs ${p.pipeFadeMs}`);
   assert.ok(p.pipeHoldMs >= 0 && p.pipeHoldMs <= 1000 && p.pipeHoldMs < p.holdMs, `popup.pipeHoldMs ${p.pipeHoldMs}`);
   assert.match(p.pipeColor, /^#[0-9a-f]{6}$/i);

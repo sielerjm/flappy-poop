@@ -195,7 +195,7 @@ test('multiplierLayout puts the ×2 badge right of the score digits, as a subscr
   const badgeGlyphs = 1.6 * b.fontPx + 12;
   const { x, y } = multiplierLayout(GAME_WIDTH / 2, scoreWidth, T);
   assert.equal(x + b.glowPx, GAME_WIDTH / 2 + scoreWidth / 2 + b.offsetX, 'glyphs start offsetX past the digits');
-  assert.ok(y > T.hudScoreY && y < T.popup.pipeY, `badge y ${y} sits below the score centre, above the pipe popup`);
+  assert.ok(y > T.hudScoreY && y < T.popup.rowY[0], `badge y ${y} sits below the score centre, above the top popup row`);
   // Probiotic counter up to "×20" (~80 px at 40 px bold with stroke).
   const { iconX } = hudRightLayout(GAME_WIDTH, 80, { iconSize: T.hudProbioticSize });
   assert.ok(x + b.glowPx + badgeGlyphs <= iconX - T.hudProbioticSize / 2, 'badge ends before the probiotic icon');

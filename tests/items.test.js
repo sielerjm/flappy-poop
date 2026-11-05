@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { TUNING as T } from '../src/config.js';
-import { createRng, rollItem, hazardsAllowed, tutorialSpawn, bandItemsMove, bandMidY, pipeGapY, itemGapY, scoreAfterItem, scorePopup, pipePoints, createEffects, ITEM_KINDS, bobY, gapBobAmplitude, gapBobY } from '../src/logic.js';
+import { createRng, rollItem, hazardsAllowed, tutorialSpawn, bandItemsMove, bandMidY, pipeGapY, itemGapY, scoreAfterItem, scorePopup, popupSlots, pipePoints, createEffects, ITEM_KINDS, bobY, gapBobAmplitude, gapBobY } from '../src/logic.js';
 
 test('rollItem is always null below startScore', () => {
   const rng = createRng(1);
@@ -459,7 +459,8 @@ test('postbiotic: fiber only turns it on while a probiotic is up', () => {
   assert.equal(fx.applyFiber(), true);
   assert.equal(fx.hasPostbiotic(), true);
   assert.equal(fx.multiplier(), T.items.postbioticMultiplier);
-  assert.equal(fx.applyFiber(), true, 'a second fiber keeps it on');
+  assert.equal(fx.applyFiber(), false, 'a second fiber does not start another one');
+  assert.equal(fx.hasPostbiotic(), true, 'and it keeps running');
   assert.equal(fx.pipesLeft(), T.items.probioticPipes, 'fiber does not change the countdown');
 });
 
@@ -501,4 +502,28 @@ test('postbiotic stays ×2 through a fart while the countdown is paused', () => 
   for (let i = 0; i < 25; i++) fx.onPipePassed();
   assert.equal(fx.pipesLeft(), T.items.probioticPipes);
   assert.equal(fx.multiplier(), 2);
+});
+
+test('popupSlots stacks the showing popups oldest first under the score', () => {
+  const [top, second] = T.popup.rowY;
+  assert.deepEqual(popupSlots([], T), {});
+  assert.deepEqual(popupSlots(['item'], T), { item: top }, 'alone, a fiber popup sits right under the score');
+  assert.deepEqual(popupSlots(['pipe'], T), { pipe: top });
+  assert.deepEqual(popupSlots(['item', 'pipe'], T), { item: top, pipe: second }, 'the newer one enters underneath');
+  assert.deepEqual(popupSlots(['pipe', 'item'], T), { pipe: top, item: second });
+});
+
+test('applyFiber counts postbiotic starts: once per run of the multiplier', () => {
+  const fx = createEffects(T);
+  fx.applyProbiotic();
+  assert.equal(fx.applyFiber(), true, 'first fiber with a probiotic up starts one');
+  assert.equal(fx.applyFiber(), false, 'more fiber while it runs is not a new start');
+  for (let i = 0; i < T.items.probioticPipes; i++) fx.onPipePassed();
+  assert.equal(fx.hasPostbiotic(), false);
+  assert.equal(fx.applyFiber(), false, 'no probiotic, no start');
+  fx.applyProbiotic();
+  assert.equal(fx.applyFiber(), true, 'a new probiotic + fiber is a second start');
+  fx.consumeProbiotic();
+  fx.applyProbiotic();
+  assert.equal(fx.applyFiber(), true, 'after a hit ends it, the next one counts again');
 });

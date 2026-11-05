@@ -315,27 +315,46 @@ export async function run(url = DEFAULT_URL) {
         return { before, ...r, peak, after: gone.alpha };
       };
       const fib = await popupHit('fiber');
-      ok(fib.text === '+3' && fib.color === TT.popup.fiberColor && fib.score === fib.before + 3 && fib.y === TT.popup.itemY && fib.peak >= 0.99 && fib.after === 0, `fiber shows a ${fib.color} "${fib.text}" under the score that fades in (peak ${fib.peak.toFixed(2)}) and out (score ${fib.before} → ${fib.score})`);
+      ok(fib.text === '+3' && fib.color === TT.popup.fiberColor && fib.score === fib.before + 3 && fib.y === TT.popup.rowY[0] && fib.peak >= 0.99 && fib.after === 0, `fiber shows a ${fib.color} "${fib.text}" under the score that fades in (peak ${fib.peak.toFixed(2)}) and out (score ${fib.before} → ${fib.score})`);
       const bac = await popupHit('bacteria');
       ok(bac.text === '\u22123' && bac.color === TT.popup.bacteriaColor && bac.score === Math.max(0, bac.before - 3) && bac.peak >= 0.99 && bac.after === 0, `unshielded bacteria shows a ${bac.color} "${bac.text}" that fades in (peak ${bac.peak.toFixed(2)}) and out (score ${bac.before} → ${bac.score})`);
+      // Popup stack: oldest on top. A fiber "+3" then a pipe "+1" put the "+1" underneath; a fresh
+      // "+1" re-enters underneath again; once the "+3" fades, the "+1" slides up to the top row.
+      {
+        const st = await evaluate(`(() => { const p = ${play}; p.showScorePopup('fiber'); p.showPipePopup(1); const a = { item: p.scorePopup.y, pipe: p.pipePopup.y }; p.showPipePopup(1); return JSON.stringify({ a, b: { item: p.scorePopup.y, pipe: p.pipePopup.y }, order: p.popupOrder }); })()`).then(JSON.parse);
+        const [row0, row1] = TT.popup.rowY;
+        ok(st.a.item === row0 && st.a.pipe === row1 && st.b.item === row0 && st.b.pipe === row1 && st.order.join() === 'item,pipe', `popups stack oldest first: "+3" on y ${st.a.item}, "+1" under it on y ${st.a.pipe}, a fresh "+1" re-enters underneath`);
+        let order = st.order;
+        for (let i = 0; i < 40 && order.includes('item'); i += 1) {
+          await sleep(50);
+          order = await evaluate(`${play}.popupOrder`);
+          if (order.includes('item') && !order.includes('pipe')) await evaluate(`${play}.showPipePopup(1), true`); // keep a "+1" showing until the "+3" goes
+        }
+        await sleep(TT.popup.shiftMs + 60);
+        const slid = await evaluate(`JSON.stringify({ y: ${play}.pipePopup.y, order: ${play}.popupOrder })`).then(JSON.parse);
+        ok(!order.includes('item') && (slid.order.length === 0 || slid.y === row0), `when the "+3" fades, the "+1" slides up to the top row (y ${slid.y}, stack ${JSON.stringify(slid.order)})`);
+      }
       // Postbiotic: fiber with a probiotic up doubles pipes and fiber; the HUD icon swaps to the
       // molecule and a gold ×2 pulses beside the score; a bacteria hit ends it.
       {
         const post = await evaluate(`(() => { const p = ${play}; p.items.clear(true, true); while (p.effects.hasProbiotic()) p.effects.consumeProbiotic(); p.effects.applyProbiotic(); p.refreshProbioticHud(); const before = p.score; const it = p.items.create(p.poop.x, p.poop.y, 'fiber'); it.setData('kind', 'fiber'); p.collectItem(it); return JSON.stringify({ before, score: p.score, mult: p.effects.multiplier(), tex: p.probioticIcon.texture.key, badge: p.multText.visible, text: p.multText.text, popup: p.scorePopup.text }); })()`).then(JSON.parse);
         ok(post.mult === 2 && post.tex === 'postbiotic' && post.badge && post.text === '×2' && post.popup === '+6' && post.score === post.before + 6, `fiber with a probiotic up makes a postbiotic: ×${post.mult}, icon ${post.tex}, badge "${post.text}", popup "${post.popup}" (score ${post.before} → ${post.score})`);
-        const a1 = await evaluate(`${play}.multText.alpha`);
+        const g1 = await evaluate(`JSON.stringify({ glow: ${play}.multGlow.alpha, text: ${play}.multText.alpha, gs: ${play}.multGlow.scale, ts: ${play}.multText.scale })`).then(JSON.parse);
         await sleep(300);
-        const a2 = await evaluate(`${play}.multText.alpha`);
+        const g2 = await evaluate(`JSON.stringify({ glow: ${play}.multGlow.alpha, text: ${play}.multText.alpha, gs: ${play}.multGlow.scale, ts: ${play}.multText.scale, gv: ${play}.multGlow.visible, gd: ${play}.multGlow.depth, td: ${play}.multText.depth, shadow: ${play}.multText.style.shadowBlur, gx: ${play}.multGlow.x, tx: ${play}.multText.x })`).then(JSON.parse);
+        const a1 = g1.glow;
+        const a2 = g2.glow;
+        ok(g1.text === 1 && g2.text === 1 && g2.gv && g2.gd < g2.td && g2.shadow === 0 && g2.gx === g2.tx && Math.abs(g2.gs - g2.ts) < 1e-6, `×2 outline stays crisp: the top layer has no shadow and full alpha, the glow layer sits behind it at the same spot and scale`);
         const place = await evaluate(`JSON.stringify({ left: ${play}.multText.x + ${TT.postbiotic.glowPx}, scoreRight: ${play}.scoreText.x + ${play}.scoreText.width / 2, iconLeft: ${play}.probioticIcon.x - ${play}.probioticIcon.displayWidth / 2, y: ${play}.multText.y })`).then(JSON.parse);
         ok(a1 !== a2 && place.left >= place.scoreRight && place.left < place.iconLeft && place.y > TT.hudScoreY, `×2 badge pulses (alpha ${a1.toFixed(2)} → ${a2.toFixed(2)}) right of the score digits, below their centre`);
         const before = await evaluate(`(() => { const p = ${play}; const top = p.pipes.create(p.poop.x + 160, 100, 'pipe', '__BASE'); top.setOrigin(0.5, 1).setFlipY(true); top.body.setSize(top.frame.width, top.frame.height); top.setVelocityX(-p.scrollSpeed()); top.setData('scoring', true); return p.score; })()`);
         let pipeHit = null;
         for (let i = 0; i < 60; i += 1) {
           await sleep(50);
-          pipeHit = await evaluate(`JSON.stringify({ score: ${play}.score, text: ${play}.pipePopup.text, color: ${play}.pipePopup.style.color, y: ${play}.pipePopup.y })`).then(JSON.parse);
+          pipeHit = await evaluate(`JSON.stringify({ score: ${play}.score, text: ${play}.pipePopup.text, color: ${play}.pipePopup.style.color, y: ${play}.pipePopup.y })`).then(JSON.parse); // the "+6" may still be above it
           if (pipeHit.score !== before) break;
         }
-        ok(pipeHit.score === before + 2 && pipeHit.text === '+2' && pipeHit.color === TT.popup.pipeColor && pipeHit.y === TT.popup.pipeY, `a pipe under the postbiotic scores +${pipeHit.score - before} with a ${pipeHit.color} "${pipeHit.text}" on the pipe row (y ${pipeHit.y})`);
+        ok(pipeHit.score === before + 2 && pipeHit.text === '+2' && pipeHit.color === TT.popup.pipeColor && pipeHit.y >= TT.popup.rowY[0] && pipeHit.y <= TT.popup.rowY[1], `a pipe under the postbiotic scores +${pipeHit.score - before} with a ${pipeHit.color} "${pipeHit.text}" under the score (y ${pipeHit.y})`);
         const ended = await evaluate(`(() => { const p = ${play}; p.effects.consumeProbiotic(); p.refreshProbioticHud(); const off = { mult: p.effects.multiplier(), badge: p.multText.visible, icon: p.probioticIcon.visible }; p.effects.applyProbiotic(); p.refreshProbioticHud(); return JSON.stringify({ ...off, tex: p.probioticIcon.texture.key }); })()`).then(JSON.parse);
         ok(ended.mult === 1 && !ended.badge && !ended.icon && ended.tex === 'probiotic', `a bacteria hit ends the postbiotic (×${ended.mult}, badge and icon hidden); the next probiotic shows the probiotic icon`);
         await evaluate(`${play}.effects.consumeProbiotic(), ${play}.refreshProbioticHud(), true`);

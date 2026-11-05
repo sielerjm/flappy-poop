@@ -429,6 +429,20 @@ export function scoreAfterItem(score, kind, t, mult = 1) {
   return score;
 }
 
+/**
+ * Rows for the popups showing under the score. `order` lists their keys oldest
+ * first ('pipe', 'item'); each gets popup.rowY[i], so the oldest is on top and a
+ * new one enters underneath. Returns { [key]: y }.
+ */
+export function popupSlots(order, t) {
+  const rows = t.popup.rowY;
+  const out = {};
+  order.forEach((key, i) => {
+    out[key] = rows[Math.min(i, rows.length - 1)];
+  });
+  return out;
+}
+
 /** Points one pipe pair is worth under multiplier `mult` (1, or items.postbioticMultiplier). */
 export function pipePoints(t, mult = 1) {
   return t.pipePoints * mult;
@@ -679,10 +693,11 @@ export function createEffects(t) {
       if (probioticPipesLeft === 0) postbiotic = false;
       return probioticPipesLeft;
     },
-    /** Fiber eaten: with a probiotic up it becomes a postbiotic. Returns whether one is running. */
+    /** Fiber eaten: with a probiotic up it becomes a postbiotic. True only when this fiber started one (for the run summary). */
     applyFiber() {
-      if (probioticPipesLeft > 0) postbiotic = true;
-      return postbiotic;
+      if (probioticPipesLeft <= 0 || postbiotic) return false;
+      postbiotic = true;
+      return true;
     },
     hasPostbiotic() {
       return postbiotic && probioticPipesLeft > 0;

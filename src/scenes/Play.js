@@ -24,6 +24,7 @@ import {
   itemGapY,
   scoreAfterItem,
   scorePopup,
+  popupSlots,
   pipePoints,
   createEffects,
   chromeIntent,
@@ -176,25 +177,27 @@ export class Play extends Phaser.Scene {
 
     // HUD
     this.scoreText = this.add.text(GAME_WIDTH / 2, T.hudScoreY, '0', { ...TEXT_STYLE, fontSize: '80px' }).setOrigin(0.5).setDepth(20).setVisible(false); // shown from start()
-    // Quick white "+1" (or "+2" under a postbiotic) under the score on every pipe pair; one reused text, the next pipe restarts it.
-    this.pipePopup = this.add.text(GAME_WIDTH / 2, T.popup.pipeY, '', { ...TEXT_STYLE, fontSize: `${T.popup.fontPx}px`, color: T.popup.pipeColor }).setOrigin(0.5).setDepth(20).setAlpha(0);
+    // Popups under the score, two reused texts: the quick white "+1" ("+2" under a postbiotic) on every pipe
+    // pair, and "+3" / "−3" when fiber or unshielded bacteria moves the score. The ones showing stack oldest
+    // first on popup.rowY (popupOrder, popupSlots); a new one enters underneath, the rest slide up when one goes.
+    this.pipePopup = this.add.text(GAME_WIDTH / 2, T.popup.rowY[0], '', { ...TEXT_STYLE, fontSize: `${T.popup.fontPx}px`, color: T.popup.pipeColor }).setOrigin(0.5).setDepth(20).setAlpha(0);
     this.pipePopupTween = null;
-    // "+3" / "−3" on the row below when fiber or unshielded bacteria moves the score; one reused text, alpha 0 at rest.
-    this.scorePopup = this.add.text(GAME_WIDTH / 2, T.popup.itemY, '', { ...TEXT_STYLE, fontSize: `${T.popup.fontPx}px` }).setOrigin(0.5).setDepth(20).setAlpha(0);
+    this.scorePopup = this.add.text(GAME_WIDTH / 2, T.popup.rowY[0], '', { ...TEXT_STYLE, fontSize: `${T.popup.fontPx}px` }).setOrigin(0.5).setDepth(20).setAlpha(0);
     this.popupTween = null;
-    // Gold "×2" subscript beside the score while a postbiotic runs. The padding keeps the shadow glow inside the text canvas.
+    this.popupOrder = [];
+    this.popupShift = { pipe: null, item: null };
+    // Gold "×2" subscript beside the score while a postbiotic runs, in two layers: multGlow carries the
+    // pulsing amber glow (text shadow; padding keeps it inside the canvas), multText on top is the crisp
+    // gold-on-outline badge with no shadow, so the glow sits behind the outline instead of washing it out.
     const pb = T.postbiotic;
-    this.multText = this.add
-      .text(0, 0, '\u00d7' + T.items.postbioticMultiplier, {
-        ...TEXT_STYLE,
-        fontSize: `${pb.fontPx}px`,
-        color: pb.color,
-        padding: { x: pb.glowPx, y: pb.glowPx },
-        shadow: { offsetX: 0, offsetY: 0, color: pb.glowColor, blur: pb.glowPx, stroke: true, fill: true },
-      })
+    const badgeStyle = { ...TEXT_STYLE, fontSize: `${pb.fontPx}px`, color: pb.color, padding: { x: pb.glowPx, y: pb.glowPx } };
+    const badgeText = '\u00d7' + T.items.postbioticMultiplier;
+    this.multGlow = this.add
+      .text(0, 0, badgeText, { ...badgeStyle, shadow: { offsetX: 0, offsetY: 0, color: pb.glowColor, blur: pb.glowPx, stroke: true, fill: true } })
       .setOrigin(0, 0.5)
-      .setDepth(20)
+      .setDepth(19)
       .setVisible(false);
+    this.multText = this.add.text(0, 0, badgeText, badgeStyle).setOrigin(0, 0.5).setDepth(20).setVisible(false);
     this.multTween = null;
     // Level progress bar above the score: hidden on the ready screen, shown from start(), kept through breaks and death.
     this.levelBar = createLevelBar(this, levelBarLayout(T, GAME_WIDTH)).setVisible(false);
@@ -372,6 +375,7 @@ export class Play extends Phaser.Scene {
     this.pipesPassed = 0;
     this.pipesSpawned = 0;
     this.collected = { fiber: 0, probiotic: 0, bacteria: 0, bean: 0 };
+    this.popupOrder = [];
     this.finishLine?.destroy();
     this.finishLine = null;
     this.finishSpawned = false;
@@ -756,6 +760,8 @@ export class Play extends Phaser.Scene {
     this.fartTween?.pause();
     this.popupTween?.pause();
     this.pipePopupTween?.pause();
+    this.popupShift.pipe?.pause();
+    this.popupShift.item?.pause();
     this.multTween?.pause();
     this.bob.pause();
     this.setPauseBanner(true);
@@ -771,6 +777,8 @@ export class Play extends Phaser.Scene {
     this.fartTween?.resume();
     this.popupTween?.resume();
     this.pipePopupTween?.resume();
+    this.popupShift.pipe?.resume();
+    this.popupShift.item?.resume();
     this.multTween?.resume();
     this.bob.resume();
     this.setPauseBanner(false);
@@ -1081,42 +1089,88 @@ export class Play extends Phaser.Scene {
   setMultiplierBadge(on) {
     if (on) {
       const { x, y } = multiplierLayout(this.scoreText.x, this.scoreText.width, T);
+      this.multGlow.setPosition(x, y).setVisible(true);
       this.multText.setPosition(x, y).setVisible(true);
       if (!this.multTween) {
         const pb = T.postbiotic;
+        // One tween drives the glow: its alpha pulses, and both layers follow its scale. The crisp layer stays at alpha 1.
         this.multTween = this.tweens.add({
-          targets: this.multText,
+          targets: this.multGlow,
           alpha: { from: 1, to: pb.minAlpha },
           scale: { from: 1, to: pb.maxScale },
           duration: pb.pulseMs,
           yoyo: true,
           repeat: -1,
           ease: 'Sine.easeInOut',
+          onUpdate: () => this.multText.setScale(this.multGlow.scale),
         });
         if (this.state === 'paused') this.multTween.pause();
       }
     } else if (this.multText.visible || this.multTween) {
       this.multTween?.stop();
       this.multTween = null;
-      this.multText.setAlpha(1).setScale(1).setVisible(false);
+      this.multGlow.setAlpha(1).setScale(1).setVisible(false);
+      this.multText.setScale(1).setVisible(false);
     }
   }
 
-  /** Fade a "+3" / "−3" in and out on the item row; a new hit restarts it with its own text and colour. */
+  /** Fade a "+3" / "−3" in and out; a new hit restarts it with its own text and colour and re-enters it at the bottom of the stack. */
   showScorePopup(kind, mult = 1) {
     const p = scorePopup(kind, T, mult);
     if (!p) return;
     this.popupTween?.stop();
     this.scorePopup.setText(p.text).setColor(p.color).setAlpha(0);
-    this.popupTween = this.tweens.add({ targets: this.scorePopup, alpha: 1, duration: T.popup.fadeMs, hold: T.popup.holdMs, yoyo: true });
+    this.enqueuePopup('item');
+    this.popupTween = this.tweens.add({ targets: this.scorePopup, alpha: 1, duration: T.popup.fadeMs, hold: T.popup.holdMs, yoyo: true, onComplete: () => this.dequeuePopup('item') });
   }
 
-  /** Quick "+1" / "+2" on the pipe row; the next pipe stops it and starts over, so fart bursts replace each other. */
+  /** Quick "+1" / "+2"; the next pipe stops it and starts over at the bottom of the stack, so fart bursts replace each other. */
   showPipePopup(mult = 1) {
     const p = scorePopup('pipe', T, mult);
     this.pipePopupTween?.stop();
     this.pipePopup.setText(p.text).setColor(p.color).setAlpha(0);
-    this.pipePopupTween = this.tweens.add({ targets: this.pipePopup, alpha: 1, duration: T.popup.pipeFadeMs, hold: T.popup.pipeHoldMs, yoyo: true });
+    this.enqueuePopup('pipe');
+    this.pipePopupTween = this.tweens.add({ targets: this.pipePopup, alpha: 1, duration: T.popup.pipeFadeMs, hold: T.popup.pipeHoldMs, yoyo: true, onComplete: () => this.dequeuePopup('pipe') });
+  }
+
+  popupText(key) {
+    return key === 'pipe' ? this.pipePopup : this.scorePopup;
+  }
+
+  /** Put `key` at the bottom of the popup stack: it appears straight in its row; the others slide to theirs. */
+  enqueuePopup(key) {
+    this.popupOrder = this.popupOrder.filter((k) => k !== key);
+    this.popupOrder.push(key);
+    this.popupShift[key]?.stop();
+    this.popupShift[key] = null;
+    this.popupText(key).setY(popupSlots(this.popupOrder, T)[key]);
+    this.layoutPopups();
+  }
+
+  /** A popup finished fading: drop it from the stack and slide the rest up. */
+  dequeuePopup(key) {
+    this.popupOrder = this.popupOrder.filter((k) => k !== key);
+    this.layoutPopups();
+  }
+
+  layoutPopups() {
+    const slots = popupSlots(this.popupOrder, T);
+    for (const key of this.popupOrder) {
+      const text = this.popupText(key);
+      const y = slots[key];
+      if (text.y === y) continue;
+      this.popupShift[key]?.stop();
+      this.popupShift[key] = this.tweens.add({
+        targets: text,
+        y,
+        duration: T.popup.shiftMs,
+        ease: 'Sine.easeOut',
+        onComplete: () => {
+          this.popupShift[key] = null;
+        },
+      });
+      if (this.state === 'paused') this.popupShift[key].pause();
+    }
   }
 
   collectItem(item) {

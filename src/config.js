@@ -74,8 +74,8 @@ export const TUNING = {
     barTweenMs: 200, // ms the fill animates to its new width after each pipe
   },
   popup: {
-    pipeY: 184, // px centre of the quick "+1" per pipe pair, under the 80 px score (between the bean and probiotic counters)
-    itemY: 236, // px centre of the "+3" / "−3" for fiber / bacteria, stacked under the pipe row
+    rowY: [184, 236], // px centres of the popup rows under the 80 px score: showing popups stack oldest first (top row between the bean and probiotic counters)
+    shiftMs: 90, // ms a popup slides up a row when the one above it goes
     fontPx: 48, // px font size of both popup rows
     pipeFadeMs: 80, // ms the pipe "+1" fades in, and again out (quick; the next pipe restarts it)
     pipeHoldMs: 250, // ms the pipe "+1" stays at full alpha
