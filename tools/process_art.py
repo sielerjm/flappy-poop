@@ -2,12 +2,12 @@
 """process_art.py — crop, knock out background white, and resize Michael's
 drawings into the gameplay art-contract PNGs.
 
-Created by Michael Sieler. Last updated: 2026-11-03 (poop set + bean).
+Created by Michael Sieler. Last updated: 2026-11-05 (postbiotic HUD icon).
 
 Run:    uv run --with pillow python3 tools/process_art.py   (or any Python with Pillow)
 Input:  assets/src/{Poop_Emoji_Alive,Poop_Emoji_Dead,Poop_Stink1,Poop_Stink2,Poop_Fart,Poop_Speech,
-                    Fiber,Good_Bacteria,Bad_Bacteria,Kidney_Bean}.png
-Output: assets/{poop,poop-dead,fiber,probiotic,bacteria,bean}.png at 384x384 RGBA and
+                    Fiber,Good_Bacteria,Bad_Bacteria,Kidney_Bean,Postbiotic}.png
+Output: assets/{poop,poop-dead,fiber,probiotic,bacteria,bean,postbiotic}.png at 384x384 RGBA and
         assets/{poop-stink1,poop-stink2,poop-fart,poop-speech}.png on larger squares.
 
 Only white connected to the image border is made transparent, so eyes and
@@ -213,3 +213,4 @@ if __name__ == "__main__":
     process_item(SRC / "Good_Bacteria.png", "probiotic.png")
     process_item(SRC / "Bad_Bacteria.png", "bacteria.png")
     process_item(SRC / "Kidney_Bean.png", "bean.png")
+    process_item(SRC / "Postbiotic.png", "postbiotic.png")

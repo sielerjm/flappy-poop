@@ -14,6 +14,7 @@ export class Boot extends Phaser.Scene {
     this.load.image('poop-dead', 'assets/poop-dead.png' + V);
     this.load.image('fiber', 'assets/fiber.png' + V);
     this.load.image('probiotic', 'assets/probiotic.png' + V);
+    this.load.image('postbiotic', 'assets/postbiotic.png' + V);
     this.load.image('bacteria', 'assets/bacteria.png' + V);
     this.load.image('bean', 'assets/bean.png' + V);
     this.load.image('poop-stink1', 'assets/poop-stink1.png' + V);
