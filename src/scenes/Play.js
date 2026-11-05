@@ -14,6 +14,7 @@ import {
   levelColor,
   lerpColor,
   hudRightLayout,
+  multiplierLayout,
   createBestStore,
   createSettingsStore,
   vibrate,
@@ -21,6 +22,7 @@ import {
   itemGapY,
   scoreAfterItem,
   scorePopup,
+  pipePoints,
   createEffects,
   chromeIntent,
   trayLayout,
@@ -168,9 +170,26 @@ export class Play extends Phaser.Scene {
 
     // HUD
     this.scoreText = this.add.text(GAME_WIDTH / 2, T.hudScoreY, '0', { ...TEXT_STYLE, fontSize: '80px' }).setOrigin(0.5).setDepth(20).setVisible(false); // shown from start()
-    // "+3" / "−3" under the score when fiber or unshielded bacteria moves it; one reused text, alpha 0 at rest.
+    // Quick white "+1" (or "+2" under a postbiotic) under the score on every pipe pair; one reused text, the next pipe restarts it.
+    this.pipePopup = this.add.text(GAME_WIDTH / 2, T.popup.pipeY, '', { ...TEXT_STYLE, fontSize: `${T.popup.fontPx}px`, color: T.popup.pipeColor }).setOrigin(0.5).setDepth(20).setAlpha(0);
+    this.pipePopupTween = null;
+    // "+3" / "−3" on the row below when fiber or unshielded bacteria moves the score; one reused text, alpha 0 at rest.
     this.scorePopup = this.add.text(GAME_WIDTH / 2, T.popup.itemY, '', { ...TEXT_STYLE, fontSize: `${T.popup.fontPx}px` }).setOrigin(0.5).setDepth(20).setAlpha(0);
     this.popupTween = null;
+    // Gold "×2" subscript beside the score while a postbiotic runs. The padding keeps the shadow glow inside the text canvas.
+    const pb = T.postbiotic;
+    this.multText = this.add
+      .text(0, 0, '\u00d7' + T.items.postbioticMultiplier, {
+        ...TEXT_STYLE,
+        fontSize: `${pb.fontPx}px`,
+        color: pb.color,
+        padding: { x: pb.glowPx, y: pb.glowPx },
+        shadow: { offsetX: 0, offsetY: 0, color: pb.glowColor, blur: pb.glowPx, stroke: true, fill: true },
+      })
+      .setOrigin(0, 0.5)
+      .setDepth(20)
+      .setVisible(false);
+    this.multTween = null;
     // Level progress bar above the score: hidden on the ready screen, shown from start(), kept through breaks and death.
     this.levelBar = createLevelBar(this, levelBarLayout(T, GAME_WIDTH)).setVisible(false);
     this.refreshLevelBar();
@@ -724,6 +743,8 @@ export class Play extends Phaser.Scene {
     this.fartSound?.pause();
     this.fartTween?.pause();
     this.popupTween?.pause();
+    this.pipePopupTween?.pause();
+    this.multTween?.pause();
     this.bob.pause();
     this.setPauseBanner(true);
   }
@@ -737,6 +758,8 @@ export class Play extends Phaser.Scene {
     this.fartSound?.resume();
     this.fartTween?.resume();
     this.popupTween?.resume();
+    this.pipePopupTween?.resume();
+    this.multTween?.resume();
     this.bob.resume();
     this.setPauseBanner(false);
     // Recovery bounce on the resume tap. Do not set flapLockedUntil: chrome
@@ -1013,25 +1036,61 @@ export class Play extends Phaser.Scene {
     if (this.effects.powerReady()) this.setCharged(true);
   }
 
+  /** Probiotic counter (postbiotic icon while the multiplier runs) and the ×2 badge, both from effects. */
   refreshProbioticHud() {
     const n = this.effects.pipesLeft();
     const show = n > 0;
     this.probioticIcon.setVisible(show);
     this.probioticText.setVisible(show);
+    this.setMultiplierBadge(this.effects.hasPostbiotic());
     if (!show) return;
+    this.probioticIcon.setTexture(this.effects.hasPostbiotic() ? 'postbiotic' : 'probiotic').setDisplaySize(T.hudProbioticSize, T.hudProbioticSize);
     this.probioticText.setText(`×${n}`);
     const { textX, iconX } = hudRightLayout(GAME_WIDTH, this.probioticText.width, { iconSize: T.hudProbioticSize });
     this.probioticText.setX(textX);
     this.probioticIcon.setX(iconX);
   }
 
-  /** Fade a "+3" / "−3" in and out under the score; a new hit restarts it with its own text and colour. */
-  showScorePopup(kind) {
-    const p = scorePopup(kind, T);
+  /** Show / hide the pulsing ×2 beside the score; re-placed on every call because the digits widen. */
+  setMultiplierBadge(on) {
+    if (on) {
+      const { x, y } = multiplierLayout(this.scoreText.x, this.scoreText.width, T);
+      this.multText.setPosition(x, y).setVisible(true);
+      if (!this.multTween) {
+        const pb = T.postbiotic;
+        this.multTween = this.tweens.add({
+          targets: this.multText,
+          alpha: { from: 1, to: pb.minAlpha },
+          scale: { from: 1, to: pb.maxScale },
+          duration: pb.pulseMs,
+          yoyo: true,
+          repeat: -1,
+          ease: 'Sine.easeInOut',
+        });
+        if (this.state === 'paused') this.multTween.pause();
+      }
+    } else if (this.multText.visible || this.multTween) {
+      this.multTween?.stop();
+      this.multTween = null;
+      this.multText.setAlpha(1).setScale(1).setVisible(false);
+    }
+  }
+
+  /** Fade a "+3" / "−3" in and out on the item row; a new hit restarts it with its own text and colour. */
+  showScorePopup(kind, mult = 1) {
+    const p = scorePopup(kind, T, mult);
     if (!p) return;
     this.popupTween?.stop();
     this.scorePopup.setText(p.text).setColor(p.color).setAlpha(0);
     this.popupTween = this.tweens.add({ targets: this.scorePopup, alpha: 1, duration: T.popup.fadeMs, hold: T.popup.holdMs, yoyo: true });
+  }
+
+  /** Quick "+1" / "+2" on the pipe row; the next pipe stops it and starts over, so fart bursts replace each other. */
+  showPipePopup(mult = 1) {
+    const p = scorePopup('pipe', T, mult);
+    this.pipePopupTween?.stop();
+    this.pipePopup.setText(p.text).setColor(p.color).setAlpha(0);
+    this.pipePopupTween = this.tweens.add({ targets: this.pipePopup, alpha: 1, duration: T.popup.pipeFadeMs, hold: T.popup.pipeHoldMs, yoyo: true });
   }
 
   collectItem(item) {
@@ -1049,9 +1108,12 @@ export class Play extends Phaser.Scene {
     item.destroy();
     if (this.collected[kind] !== undefined) this.collected[kind] += 1;
     if (kind === 'fiber') {
-      this.score = scoreAfterItem(this.score, kind, T);
+      this.effects.applyFiber(); // with a probiotic up this starts the postbiotic, and this fiber already counts double
+      const mult = this.effects.multiplier();
+      this.score = scoreAfterItem(this.score, kind, T, mult);
       this.scoreText.setText(String(this.score));
-      this.showScorePopup(kind);
+      this.showScorePopup(kind, mult);
+      this.refreshProbioticHud();
       sfx.pickup();
     } else if (kind === 'probiotic') {
       this.effects.applyProbiotic();
@@ -1067,6 +1129,7 @@ export class Play extends Phaser.Scene {
         this.score = scoreAfterItem(this.score, kind, T); // floors at 0; the popup still reads the nominal −3
         this.scoreText.setText(String(this.score));
         this.showScorePopup(kind);
+        this.refreshProbioticHud(); // the score may have lost a digit: re-place the badge
         sfx.hazard();
       }
     }
@@ -1079,6 +1142,7 @@ export class Play extends Phaser.Scene {
     this.state = 'dead';
     this.markHowToSeen(); // a finished run counts as having seen this build
     this.setCharged(false);
+    this.setMultiplierBadge(false); // no pulsing ×2 under the game-over panel
     this.setPoopTexture('poop-dead');
     for (const pipe of this.pipes.getChildren()) pipe.setVelocityX(0);
     for (const item of this.items.getChildren()) item.setVelocityX(0);
@@ -1183,10 +1247,12 @@ export class Play extends Phaser.Scene {
     for (const pipe of this.pipes.getChildren()) {
       if (this.state === 'playing' && pipe.getData('scoring') && !pipe.getData('passed') && hasPassed(pipe.x, T.pipeWidth, this.poop.x)) {
         pipe.setData('passed', true);
-        this.score += 1;
+        const mult = this.effects.multiplier(); // read before the countdown: the last postbiotic pipe still counts double
+        this.score += pipePoints(T, mult);
         this.pipesPassed += 1;
         this.levelBar.setProgress(levelProgress(this.pipesPassed, this.level, T));
         this.scoreText.setText(String(this.score));
+        this.showPipePopup(mult);
         this.effects.onPipePassed();
         this.refreshProbioticHud();
         sfx.score();
