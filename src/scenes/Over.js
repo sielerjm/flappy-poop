@@ -1,7 +1,8 @@
-import { GAME_WIDTH, GAME_HEIGHT, TUNING as T, SHARE } from '../config.js';
-import { canRestart, chromeIntent, trayLayout, trayHit, overButtonsLayout, overHit, panelCaptureRect } from '../logic.js';
-import { t, levelLabel, shareText } from '../i18n.js';
-import { dataUrlToBytes, shareMode, shareScoreImage } from '../share.js';
+import { GAME_WIDTH, GAME_HEIGHT, TUNING as T, SHARE, LEVEL_COLORS } from '../config.js';
+import { canRestart, chromeIntent, trayLayout, trayHit, overButtonsLayout, overHit, shareCardLayout, levelColor } from '../logic.js';
+import { t, levelLabel, shareText, shareCardFooter } from '../i18n.js';
+import { shareMode, shareScoreImage } from '../share.js';
+import { renderShareCard } from '../ui/shareCard.js';
 import { formatScore } from '../save.js';
 import { isMuted, unlock } from '../sound.js';
 import { createTray } from '../ui/tray.js';
@@ -32,8 +33,10 @@ export class Over extends Phaser.Scene {
     const cy = GAME_HEIGHT / 2;
     const panel = this.add.rectangle(cx, cy, 560, 720, 0x1a0b14, 0.85).setStrokeStyle(8, 0xe85e96);
     const style = { fontFamily: 'sans-serif', fontStyle: 'bold', color: '#ffffff', align: 'center' };
-    this.add.text(cx, cy - 270, t(locale, won ? 'runWon' : 'gameOver'), { ...style, fontSize: won ? '48px' : '64px', color: won ? '#ffd700' : '#f8a0c8' }).setOrigin(0.5);
-    this.add.text(cx, cy - 180, `${t(locale, 'scoreLabel')}  ${formatScore({ score, toilet })}  ·  ${levelLabel(locale, level)}`, { ...style, fontSize: '48px' }).setOrigin(0.5);
+    const headline = t(locale, won ? 'runWon' : 'gameOver');
+    const scoreLine = `${t(locale, 'scoreLabel')}  ${formatScore({ score, toilet })}  ·  ${levelLabel(locale, level)}`;
+    this.add.text(cx, cy - 270, headline, { ...style, fontSize: won ? '48px' : '64px', color: won ? '#ffd700' : '#f8a0c8' }).setOrigin(0.5);
+    this.add.text(cx, cy - 180, scoreLine, { ...style, fontSize: '48px' }).setOrigin(0.5);
     // Run summary: what was collected, as icon ×n pairs (no words, so no strings
     // to translate). Row 1 fiber / probiotic / postbiotic (times one started),
     // row 2 bad bacteria / bean / mystery box (a box's reward also counts under
@@ -70,7 +73,7 @@ export class Over extends Phaser.Scene {
     // Same pulsing soft white halo as the enter-username prompt on the ready screen.
     this.homeHalo = createRectGlow(this, home.x, home.y, { key: 'over-home-halo', width: home.width, height: home.height, radius: T.readyButtonRadius, pad: T.readyPromptGlowPx }).setAlpha(0);
     this.homeButton = createButton(this, home, t(locale, 'tapToHome'), { ...style, fontSize: '40px' }, { depth: 1 }).setAlpha(0);
-    // Share stays hidden until its image exists (capturePanel), so a tap on it always has a file to send.
+    // Share stays hidden until its image exists (makeShareCard), so a tap on it always has a file to send.
     this.shareButton = this.buttons.share ? createButton(this, this.buttons.share, t(locale, 'shareButton'), { ...style, fontSize: '40px' }, { depth: 1 }).setAlpha(0).setVisible(false) : null;
     this.buttonFade = { a: 0 };
     this.tweens.add({
@@ -85,13 +88,12 @@ export class Over extends Phaser.Scene {
     });
     this.tweens.add({ targets: this.homeHalo, alpha: { from: T.readyPromptMinAlpha, to: T.readyPromptMaxAlpha }, delay: T.retryLockoutMs, yoyo: true, repeat: -1, duration: T.readyPromptPulseMs });
     this.tweens.add({ targets: panel, scale: { from: 0.8, to: 1 }, duration: T.over.panelInMs, ease: 'Back.easeOut' });
-    // The share image: the panel once it has scaled in, before the buttons fade in.
+    // The share image: a card drawn now, long before any tap (navigator.share must run inside the tap).
     this.shareFile = null;
     this.shareMode = null;
-    this.captureInfo = null;
-    this.captureToken = null;
+    this.cardToken = null;
     this.sharePressed = false;
-    if (this.buttons.share) this.time.delayedCall(T.over.captureDelayMs, () => this.capturePanel(panel));
+    if (this.buttons.share) this.makeShareCard({ headline, won, scoreLine, collected, pipes, locale });
 
     this.tray = createTray(this, { muted: isMuted() });
 
@@ -132,26 +134,33 @@ export class Over extends Phaser.Scene {
   }
 
   /**
-   * Snapshot the panel (renderer.snapshotArea reads the next rendered frame) into
-   * this.shareFile, then show Share. Runs captureDelayMs after the panel opens: it
-   * has scaled in and the buttons are still at alpha 0, so they are not in the image.
+   * Draw the share card (ui/shareCard.js: GAME OVER, the happy poop in a tan
+   * frame, score · level, the pickup rows, pipes, the Play footer with the link) from the
+   * loaded textures, encode it off the main thread, keep it as this.shareFile,
+   * then show Share. A failure leaves Share hidden.
    */
-  capturePanel(panel) {
-    const renderer = this.game.renderer;
-    if (typeof renderer?.snapshotArea !== 'function') return;
+  makeShareCard({ headline, won, scoreLine, collected, pipes, locale }) {
     const token = {};
-    this.captureToken = token;
-    const scale = this.game.canvas.width / GAME_WIDTH;
-    const rect = panelCaptureRect({ x: panel.x, y: panel.y, width: panel.width, height: panel.height }, panel.lineWidth, scale);
-    const at = { fade: this.buttonFade.a, halo: this.homeHalo.alpha, panelScale: panel.scale, ms: this.time.now - this.openedAt };
-    renderer.snapshotArea(rect.x, rect.y, rect.width, rect.height, (image) => {
-      if (this.captureToken !== token || !this.sys.isActive()) return; // closed (or reopened) meanwhile
-      this.captureInfo = { ...at, rect };
-      const decoded = dataUrlToBytes(image?.src);
-      if (!decoded) return;
+    this.cardToken = token;
+    const images = {};
+    for (const key of ['poop', 'fiber', 'probiotic', 'postbiotic', 'bacteria', 'bean', 'mystery-icon', 'pipe']) {
+      if (this.textures.exists(key)) images[key] = this.textures.get(key).getSourceImage();
+    }
+    const tan = levelColor(1, LEVEL_COLORS, T.levels.whiteBlend);
+    const data = {
+      headline,
+      won,
+      tan: `#${tan.toString(16).padStart(6, '0')}`,
+      score: scoreLine,
+      counts: collected,
+      pipes,
+      footer: shareCardFooter(locale, SHARE.url),
+    };
+    renderShareCard({ layout: shareCardLayout(T), data, images }).then((blob) => {
+      if (!blob || this.cardToken !== token || !this.sys.isActive()) return; // failed, or closed / reopened meanwhile
       let file;
       try {
-        file = new File([decoded.bytes], SHARE.fileName, { type: decoded.type });
+        file = new File([blob], SHARE.fileName, { type: 'image/png' });
       } catch {
         return; // no File constructor: leave Share hidden
       }
@@ -163,7 +172,7 @@ export class Over extends Phaser.Scene {
     });
   }
 
-  /** Send the panel image with the score message (share sheet, else download). Call it inside the tap. */
+  /** Send the share card with the score message (share sheet, else download). Call it inside the tap. */
   shareRun() {
     if (!this.shareFile) return Promise.resolve('failed');
     const text = shareText(this.shareInfo.locale, { ...this.shareInfo, url: SHARE.url });

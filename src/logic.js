@@ -992,17 +992,40 @@ export function overHit(x, y, layout) {
 }
 
 /**
- * Canvas-pixel rect to capture for the share image: the panel ({ x, y, width,
- * height }, centre-based) plus the half of its stroke drawn outside, times the
- * canvas / game scale. Integers, since readPixels wants whole pixels.
+ * Where everything sits on the share card (TUNING.shareCard), centred on the
+ * card: headline, the tan poop box and the poop in it, the score line, the two
+ * pickup rows (icon left of its ×n, as on the game-over panel), the pipes row,
+ * and the footer. innerWidth is the widest any text may be (the fillText cap).
  */
-export function panelCaptureRect(panel, stroke, scale = 1) {
-  const half = stroke / 2;
-  const left = Math.floor((panel.x - panel.width / 2 - half) * scale);
-  const top = Math.floor((panel.y - panel.height / 2 - half) * scale);
-  const right = Math.ceil((panel.x + panel.width / 2 + half) * scale);
-  const bottom = Math.ceil((panel.y + panel.height / 2 + half) * scale);
-  return { x: left, y: top, width: right - left, height: bottom - top };
+export function shareCardLayout(t) {
+  const c = t.shareCard;
+  const cx = c.width / 2;
+  const kinds = [
+    ['fiber', 'probiotic', 'postbiotic'],
+    ['bacteria', 'bean', 'mystery'],
+  ];
+  const iconGap = Math.round(c.iconPx * 0.62); // icon centre left of the column, as Over's 30 px for a 48 px icon
+  const rows = kinds.map((row, r) =>
+    row.map((kind, i) => {
+      const x = cx + (i - 1) * c.columnX;
+      return { kind, iconX: x - iconGap, textX: x + 4, y: c.rowY[r], iconPx: c.iconPx, px: c.countPx };
+    }),
+  );
+  const capW = Math.round((c.pipeIconPx * 128) / 160);
+  return {
+    width: c.width,
+    height: c.height,
+    border: c.border,
+    cx,
+    innerWidth: c.width - 2 * (c.border + c.margin),
+    headline: { x: cx, y: c.headlineY, px: c.headlinePx, winPx: c.winHeadlinePx },
+    poopBox: { x: cx, y: c.poopBox.y, width: c.poopBox.width, height: c.poopBox.height, radius: c.poopBox.radius, stroke: c.poopBox.stroke },
+    poop: { x: cx, y: c.poopBox.y, size: c.poopPx },
+    score: { x: cx, y: c.scoreY, px: c.scorePx },
+    rows,
+    pipe: { iconX: cx - capW, textX: cx - capW / 2 + 12, y: c.pipeY, width: capW, height: c.pipeIconPx, px: c.pipePx },
+    footer: { x: cx, y: c.footerY, px: c.footerPx },
+  };
 }
 
 /**

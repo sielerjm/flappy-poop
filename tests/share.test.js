@@ -1,10 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { dataUrlToBytes, shareMode, shareScoreImage } from '../src/share.js';
+import { shareMode, shareScoreImage } from '../src/share.js';
 
-// The 8-byte PNG signature plus the start of an IHDR chunk, as a data URL.
-const PNG_HEAD = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d];
-const PNG_URL = `data:image/png;base64,${Buffer.from(PNG_HEAD).toString('base64')}`;
 const FILE = { name: 'flappy-poop-score.png', type: 'image/png', size: 12 };
 
 /** Fake navigator: canShare answers `can`; share() resolves, or rejects / throws with `error`. */
@@ -38,15 +35,6 @@ function fakeDoc({ throws = false } = {}) {
 }
 
 const abort = () => Object.assign(new Error('closed'), { name: 'AbortError' });
-
-test('dataUrlToBytes decodes a base64 data URL synchronously', () => {
-  const out = dataUrlToBytes(PNG_URL);
-  assert.equal(out.type, 'image/png');
-  assert.deepEqual([...out.bytes], PNG_HEAD);
-  assert.equal(dataUrlToBytes('data:text/plain,hello'), null, 'not base64');
-  assert.equal(dataUrlToBytes('https://example.com/x.png'), null);
-  assert.equal(dataUrlToBytes(undefined), null);
-});
 
 test('shareMode: the share sheet when it takes files, else a download, else nothing', () => {
   const { doc } = fakeDoc();

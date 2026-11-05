@@ -91,7 +91,28 @@ export const TUNING = {
     buttonWidth: 240, // px per button (Home alone on a test run, centred)
     buttonHeight: 88, // px (= trayHitMin, a thumb-sized Share target)
     buttonGap: 40, // px between Share and Home (Home's halo reaches readyPromptGlowPx past its edge)
-    captureDelayMs: 260, // ms after the panel opens that the share image is captured: after panelInMs, before the buttons fade in at retryLockoutMs
+  },
+  shareCard: {
+    width: 1080, // px: the shared image, a 4:5 portrait (the largest shape Instagram's feed shows uncropped)
+    height: 1350, // px
+    border: 16, // px pink frame round the card
+    margin: 24, // px kept between the frame and any text (fillText max width)
+    headlineY: 130, // px centre of GAME OVER (or the win line)
+    headlinePx: 110, // px font size of GAME OVER
+    winHeadlinePx: 84, // px font size of the longer win line
+    poopBox: { y: 400, width: 520, height: 360, radius: 28, stroke: 10 }, // px: the tan frame round the poop (centre y)
+    poopPx: 300, // px the happy poop is drawn at inside the frame
+    scoreY: 690, // px centre of "SCORE n · LV n"
+    scorePx: 80, // px font size of the score line
+    rowY: [820, 940], // px centres of the two pickup rows (fiber · probiotic · postbiotic / bacteria · bean · box)
+    columnX: 300, // px from the card centre to the outer columns
+    iconPx: 84, // px pickup icons
+    countPx: 56, // px font size of the ×n counts
+    pipeY: 1065, // px centre of the pipes row
+    pipeIconPx: 88, // px height of the pipe-cap icon (the 128x160 top slice of pipe.png)
+    pipePx: 68, // px font size of the pipes ×n
+    footerY: 1235, // px centre of "Play: sielerjm.github.io/flappy-poop"
+    footerPx: 46, // px font size of the footer
   },
   postbiotic: {
     color: '#ffd700', // gold "×2" badge beside the score while the multiplier runs

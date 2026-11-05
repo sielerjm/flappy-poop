@@ -122,11 +122,15 @@ test('mystery box: a first box early in level 3, then half fiber\'s rate; still 
   assert.match(m.color, /^#[0-9a-f]{6}$/i);
 });
 
-test('game-over share: the capture lands after the panel settles and before the buttons fade in', () => {
+test('game-over share: the button row and the 4:5 share card', () => {
   const o = T.over;
-  assert.ok(o.panelInMs > 0 && o.captureDelayMs > o.panelInMs + 30, `capture ${o.captureDelayMs} ms after a ${o.panelInMs} ms scale-in (a frame to spare)`);
-  assert.ok(o.captureDelayMs < T.retryLockoutMs - 30, `capture ${o.captureDelayMs} ms before the buttons fade in at ${T.retryLockoutMs} ms`);
+  assert.ok(o.panelInMs > 0 && o.panelInMs < T.retryLockoutMs, `panel scale-in ${o.panelInMs} ms`);
   assert.ok(o.buttonGap >= 16 && o.buttonWidth >= 180, `buttons ${o.buttonWidth} px, gap ${o.buttonGap} px`);
+  const c = T.shareCard;
+  assert.deepEqual([c.width, c.height], [1080, 1350], 'share card is 1080x1350');
+  assert.equal(c.width / c.height, 4 / 5);
+  assert.ok(c.poopPx <= c.poopBox.height && c.poopBox.width <= c.width - 2 * (c.border + c.margin), 'the poop fits its frame, the frame fits the card');
+  assert.equal(c.rowY.length, 2);
   assert.match(SHARE.url, /^https:\/\/\S+\/$/);
   assert.match(SHARE.fileName, /^[\w-]+\.png$/);
   assert.equal(SHARE.title, 'Flappy Poop');

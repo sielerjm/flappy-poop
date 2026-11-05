@@ -16,6 +16,7 @@ import {
   metaFontSize,
   rankText,
   shareText,
+  shareCardFooter,
   profileButtonText,
 } from '../src/i18n.js';
 
@@ -39,6 +40,7 @@ const SCENE_DENYLIST = [
   'LEADERBOARD',
   'Enter username',
   'Share',
+  'Play:',
 ];
 
 const BANNED_IMPORTS = ['ABOUT_TEXT', 'HOW_TO_PLAY_TEXT', 'PAUSE_BANNER_TEXT', 'HOW_TO_ITEMS'];
@@ -175,4 +177,11 @@ test('shareText fills score (with 🚽 on toilet runs), level label and link in 
   assert.ok(zh.includes('146') && zh.includes('第4关') && zh.endsWith(url) && zh.includes('Flappy Poop'), zh);
   for (const locale of LOCALES) assert.doesNotMatch(shareText(locale, { score: 1, level: 1, url }), /\{\w+\}/, `${locale} leaves no placeholder`);
   for (const locale of LOCALES) assert.equal(t(locale, 'newTopHint'), 'newTopHint', `${locale}: the game-over save hint is gone`);
+});
+
+test('shareCardFooter shows the bare link after Play: in both locales', () => {
+  const url = 'https://sielerjm.github.io/flappy-poop/';
+  assert.equal(shareCardFooter('en', url), 'Play: sielerjm.github.io/flappy-poop');
+  assert.equal(shareCardFooter('zh-Hans', url), '来玩：sielerjm.github.io/flappy-poop');
+  assert.equal(shareCardFooter('en', 'http://localhost:8000//'), 'Play: localhost:8000');
 });

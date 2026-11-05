@@ -104,6 +104,7 @@ Inspired by Flappy Bird`,
     saveErrorDamaged: 'Save code is damaged or was edited',
     saveErrorUnrecognised: 'Unrecognised save code',
     shareButton: 'Share',
+    shareCardPlay: 'Play: {url}',
     shareText: 'I scored {score} on Flappy Poop ({level})! {url}',
     testRunNotSaved: 'Test run — score not saved',
     scoresTitle: 'HIGH SCORES',
@@ -214,6 +215,7 @@ Inspired by Flappy Bird`,
     saveErrorDamaged: '存档码已损坏或被修改',
     saveErrorUnrecognised: '无法识别的存档码',
     shareButton: '分享',
+    shareCardPlay: '来玩：{url}',
     shareText: '我在 Flappy Poop 拿到了 {score} 分（{level}）！{url}',
     testRunNotSaved: '测试局——分数未保存',
     scoresTitle: '最高分',
@@ -317,6 +319,12 @@ export function shareText(locale, { score = 0, toilet = false, level = 1, url = 
     .replace('{level}', levelLabel(locale, level))
     .replace('{url}', url)
     .trim();
+}
+
+/** The share card's footer: "Play: sielerjm.github.io/flappy-poop" (the link without https:// or a trailing slash). */
+export function shareCardFooter(locale, url = '') {
+  const bare = String(url).replace(/^[a-z]+:\/\//i, '').replace(/\/+$/, '');
+  return t(locale, 'shareCardPlay').replace('{url}', bare);
 }
 
 /** "Your best 🚽 41 is #23 of 150" for a player who is not on the board. */

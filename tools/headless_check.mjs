@@ -518,8 +518,8 @@ export async function run(url = DEFAULT_URL) {
     const box = await evaluate(`(() => { const o = __flappy.scene.getScene('Over'); const panel = o.children.list.find((c) => c.type === 'Rectangle' && c.width === 560); const L = panel.x - panel.width / 2 + 8, R = panel.x + panel.width / 2 - 8; const parts = o.children.list.filter((c) => (c.type === 'Text' && /^×\\d+$/.test(c.text)) || (c.type === 'Image' && ['fiber', 'probiotic', 'postbiotic', 'bacteria', 'bean', 'mystery-icon'].includes(c.texture.key))).map((c) => { const b = c.getBounds(); return { k: c.texture?.key ?? c.text, l: b.left, r: b.right }; }); return JSON.stringify({ L, R, inside: parts.every((b) => b.l >= L && b.r <= R), icons: parts.filter((b) => b.k !== undefined && !b.k.startsWith('×')).length, minL: Math.min(...parts.map((b) => b.l)), maxR: Math.max(...parts.map((b) => b.r)) }); })()`).then(JSON.parse);
     ok(box.inside && box.icons >= 6, `run summary (fiber · probiotic · postbiotic / bacteria · bean · mystery box) fits inside the panel (${box.minL.toFixed(0)}–${box.maxR.toFixed(0)} within ${box.L}–${box.R})`);
 
-    // Share from the game-over panel: no save hint; Share | Home on one row; the panel is captured
-    // as a PNG before the buttons fade in; a real tap on Share hands the image and the score message
+    // Share from the game-over panel: no save hint; Share | Home on one row; the share card is drawn
+    // as a 1080x1350 PNG as the panel opens; a real tap on Share hands it and the score message
     // to navigator.share (stubbed here) without going home; a cancel is quiet; no share sheet falls
     // back to a download; a tap on Home goes home.
     {
@@ -532,10 +532,13 @@ export async function run(url = DEFAULT_URL) {
       let file = null;
       for (let i = 0; i < 30 && !file; i += 1) {
         await sleep(100);
-        file = await evaluate(`(async () => { const o = ${over}; const f = o.shareFile; if (!f) return null; const head = new DataView(await f.slice(16, 24).arrayBuffer()); return JSON.stringify({ name: f.name, type: f.type, size: f.size, w: head.getUint32(0), h: head.getUint32(4), info: o.captureInfo, mode: o.shareMode, visible: o.shareButton.getText() === '${shareLabel}' && o.children.list.some((c) => c.type === 'Text' && c.text === '${shareLabel}' && c.visible) }); })()`).then((v) => (v ? JSON.parse(v) : null));
+        file = await evaluate(`(async () => { const o = ${over}; const f = o.shareFile; if (!f) return null; const head = new DataView(await f.slice(16, 24).arrayBuffer()); return JSON.stringify({ name: f.name, type: f.type, size: f.size, w: head.getUint32(0), h: head.getUint32(4), mode: o.shareMode, visible: o.shareButton.getText() === '${shareLabel}' && o.children.list.some((c) => c.type === 'Text' && c.text === '${shareLabel}' && c.visible) }); })()`).then((v) => (v ? JSON.parse(v) : null));
       }
-      ok(file && file.type === 'image/png' && file.name === 'flappy-poop-score.png' && file.size > 1000 && file.w === 568 && file.h === 728 && file.visible, `the panel is captured as a ${file?.w}×${file?.h} PNG (${file?.size} bytes, mode ${file?.mode}) and Share appears`);
-      ok(file && file.info.fade === 0 && file.info.halo === 0 && file.info.panelScale === 1 && Math.abs(file.info.ms - TT.over.captureDelayMs) <= 50 && file.info.ms < TT.retryLockoutMs, `the capture comes after the panel settles and before the buttons fade in (at ${file?.info?.ms?.toFixed(0)} ms: buttons ${file?.info?.fade}, halo ${file?.info?.halo}, panel scale ${file?.info?.panelScale})`);
+      ok(file && file.type === 'image/png' && file.name === 'flappy-poop-score.png' && file.size > 1000 && file.w === 1080 && file.h === 1350 && file.visible, `the share card is a ${file?.w}×${file?.h} PNG (${file?.size} bytes, mode ${file?.mode}) and Share appears`);
+      // Pixel samples from the card itself: dark card, pink frame, the tan poop frame, and the poop drawn in it.
+      const px = await evaluate(`Promise.all([import('./src/logic.js'), import('./src/config.js')]).then(async ([l, c]) => { const L = l.shareCardLayout(c.TUNING); const bmp = await createImageBitmap(${over}.shareFile); const cv = document.createElement('canvas'); cv.width = bmp.width; cv.height = bmp.height; const g = cv.getContext('2d'); g.drawImage(bmp, 0, 0); const at = (x, y) => Array.from(g.getImageData(Math.round(x), Math.round(y), 1, 1).data.slice(0, 3)); const b = L.poopBox; return JSON.stringify({ bg: at(L.border + 20, L.border + 20), frame: at(L.border / 2, L.height / 2), tan: at(b.x - b.width / 2 + b.stroke + 12, b.y - b.height / 2 + b.stroke + 12), mid: at(b.x, b.y), footer: at(L.footer.x, L.footer.y) }); })`).then(JSON.parse);
+      const near = (rgb, hex, tol = 6) => rgb.every((v, k) => Math.abs(v - ((hex >> (16 - 8 * k)) & 255)) <= tol);
+      ok(near(px.bg, 0x1a0b14) && near(px.frame, 0xe85e96) && near(px.tan, 0xead0a9) && !near(px.mid, 0xead0a9, 30), `the card has the dark fill (${px.bg}), pink frame (${px.frame}), the tan poop frame (${px.tan}) with the poop in it (centre ${px.mid})`);
       const row = await evaluate(`JSON.stringify(${over}.children.list.filter((c) => c.type === 'Text' && ['${shareLabel}', '${homeLabel}'].includes(c.text)).map((c) => ({ t: c.text, x: c.x, y: c.y })))`).then(JSON.parse);
       const sh = row.find((r) => r.t === shareLabel);
       const hm = row.find((r) => r.t === homeLabel);
