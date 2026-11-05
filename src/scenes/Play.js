@@ -66,7 +66,7 @@ import {
   LAST_UPDATED,
 } from '../logic.js';
 import { t, pauseBannerText, levelBannerText, levelLabel, initialLocale, isLocale, profileButtonText } from '../i18n.js';
-import { loadLocal, saveLocal, ensureId, recordScore, isNewTop, TOILET_EMOJI } from '../save.js';
+import { loadLocal, saveLocal, ensureId, recordScore, TOILET_EMOJI } from '../save.js';
 import { unlock, attachGame, setMuted, isMuted, sfx } from '../sound.js';
 import { createTray } from '../ui/tray.js';
 import { createGlow, createRectGlow } from '../ui/glow.js';
@@ -1467,8 +1467,8 @@ export class Play extends Phaser.Scene {
 
   /**
    * Shared end of a run, lost or won: state 'dead' (taps then go home, as after a
-   * death), HUD effects off, the world stopped, the score recorded and synced.
-   * Returns whether the score entered the top list.
+   * death), HUD effects off, the world stopped, the score recorded and synced
+   * (nothing recorded on a test run).
    */
   endRun() {
     this.state = 'dead';
@@ -1480,19 +1480,17 @@ export class Play extends Phaser.Scene {
     for (const bean of this.beans.getChildren()) bean.setVelocityX(0);
     this.setPauseBanner(false);
     // A test run records nothing: no legacy best, no top-list entry, no leaderboard sync.
-    if (this.runIsTest) return false;
+    if (this.runIsTest) return;
     this.best.save(this.score); // legacy store, kept for first-run seeding
-    const newTop = isNewTop(this.save, this.score);
     this.save = saveLocal(recordScore(this.save, this.score, { toilet: this.toilet, level: this.level }));
     this.syncLeaderboard(); // fire and forget; never awaited inside the update loop
-    return newTop;
   }
 
-  /** The game-over panel after deathToOverMs; `won` swaps its headline. */
-  showOver(newTop, won = false) {
+  /** The game-over panel after deathToOverMs; `won` swaps its headline, `test` hides Share. */
+  showOver(won = false) {
     this.time.delayedCall(T.deathToOverMs, () => {
       this.physics.pause();
-      this.scene.launch('Over', { score: this.score, newTop, won, test: this.runIsTest, toilet: this.toilet, level: this.level, pipes: this.pipesPassed, collected: { ...this.collected } });
+      this.scene.launch('Over', { score: this.score, won, test: this.runIsTest, toilet: this.toilet, level: this.level, pipes: this.pipesPassed, collected: { ...this.collected } });
     });
   }
 
@@ -1504,19 +1502,19 @@ export class Play extends Phaser.Scene {
   win() {
     if (this.state !== 'playing') return;
     this.won = true;
-    const newTop = this.endRun();
+    this.endRun();
     this.poop.body.setAllowGravity(false);
     this.poop.setVelocity(0, 0);
     this.poop.setAngle(0);
     this.cameras.main.flash(250, 255, 215, 0);
-    this.showOver(newTop, true);
+    this.showOver(true);
   }
 
   die() {
     if (this.state !== 'playing') return;
     // Farting (or just finished and still clearing the pipe) cannot die; nor can an Invincible test run.
     if (this.effects.powerActive() || this.graceLeftMs > 0 || this.testInvincible()) return;
-    const newTop = this.endRun();
+    this.endRun();
     this.setPoopTexture('poop-dead');
     this.cameras.main.shake(200, 0.01);
     this.cameras.main.flash(120, 255, 120, 160);
@@ -1530,7 +1528,7 @@ export class Play extends Phaser.Scene {
     this.poop.setVelocityY(Math.max(this.poop.body.velocity.y, 0));
     this.poop.body.setCollideWorldBounds(false);
     this.tweens.add({ targets: this.poop, angle: 180, duration: T.deathToOverMs, ease: 'Quad.easeIn' });
-    this.showOver(newTop);
+    this.showOver();
   }
 
   update(_time, delta) {

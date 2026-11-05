@@ -518,8 +518,59 @@ export async function run(url = DEFAULT_URL) {
     const box = await evaluate(`(() => { const o = __flappy.scene.getScene('Over'); const panel = o.children.list.find((c) => c.type === 'Rectangle' && c.width === 560); const L = panel.x - panel.width / 2 + 8, R = panel.x + panel.width / 2 - 8; const parts = o.children.list.filter((c) => (c.type === 'Text' && /^×\\d+$/.test(c.text)) || (c.type === 'Image' && ['fiber', 'probiotic', 'postbiotic', 'bacteria', 'bean', 'mystery-icon'].includes(c.texture.key))).map((c) => { const b = c.getBounds(); return { k: c.texture?.key ?? c.text, l: b.left, r: b.right }; }); return JSON.stringify({ L, R, inside: parts.every((b) => b.l >= L && b.r <= R), icons: parts.filter((b) => b.k !== undefined && !b.k.startsWith('×')).length, minL: Math.min(...parts.map((b) => b.l)), maxR: Math.max(...parts.map((b) => b.r)) }); })()`).then(JSON.parse);
     ok(box.inside && box.icons >= 6, `run summary (fiber · probiotic · postbiotic / bacteria · bean · mystery box) fits inside the panel (${box.minL.toFixed(0)}–${box.maxR.toFixed(0)} within ${box.L}–${box.R})`);
 
+    // Share from the game-over panel: no save hint; Share | Home on one row; the panel is captured
+    // as a PNG before the buttons fade in; a real tap on Share hands the image and the score message
+    // to navigator.share (stubbed here) without going home; a cancel is quiet; no share sheet falls
+    // back to a download; a tap on Home goes home.
+    {
+      const over = `__flappy.scene.getScene('Over')`;
+      const i18n = (key) => evaluate(`import('./src/i18n.js').then((m) => m.t('en', '${key}'))`);
+      const shareLabel = await i18n('shareButton');
+      const homeLabel = await i18n('tapToHome');
+      const texts = await evaluate(`${over}.children.list.filter((c) => c.type === 'Text').map((c) => c.text)`);
+      ok(!texts.some((x) => /Save \/ Load|newTopHint/.test(x)), 'game over no longer shows the save / load hint');
+      let file = null;
+      for (let i = 0; i < 30 && !file; i += 1) {
+        await sleep(100);
+        file = await evaluate(`(async () => { const o = ${over}; const f = o.shareFile; if (!f) return null; const head = new DataView(await f.slice(16, 24).arrayBuffer()); return JSON.stringify({ name: f.name, type: f.type, size: f.size, w: head.getUint32(0), h: head.getUint32(4), info: o.captureInfo, mode: o.shareMode, visible: o.shareButton.getText() === '${shareLabel}' && o.children.list.some((c) => c.type === 'Text' && c.text === '${shareLabel}' && c.visible) }); })()`).then((v) => (v ? JSON.parse(v) : null));
+      }
+      ok(file && file.type === 'image/png' && file.name === 'flappy-poop-score.png' && file.size > 1000 && file.w === 568 && file.h === 728 && file.visible, `the panel is captured as a ${file?.w}×${file?.h} PNG (${file?.size} bytes, mode ${file?.mode}) and Share appears`);
+      ok(file && file.info.fade === 0 && file.info.halo === 0 && file.info.panelScale === 1 && Math.abs(file.info.ms - TT.over.captureDelayMs) <= 50 && file.info.ms < TT.retryLockoutMs, `the capture comes after the panel settles and before the buttons fade in (at ${file?.info?.ms?.toFixed(0)} ms: buttons ${file?.info?.fade}, halo ${file?.info?.halo}, panel scale ${file?.info?.panelScale})`);
+      const row = await evaluate(`JSON.stringify(${over}.children.list.filter((c) => c.type === 'Text' && ['${shareLabel}', '${homeLabel}'].includes(c.text)).map((c) => ({ t: c.text, x: c.x, y: c.y })))`).then(JSON.parse);
+      const sh = row.find((r) => r.t === shareLabel);
+      const hm = row.find((r) => r.t === homeLabel);
+      ok(sh && hm && sh.y === hm.y && sh.x < 360 && hm.x > 360 && sh.x - TT.over.buttonWidth / 2 >= 80 + 8 && hm.x + TT.over.buttonWidth / 2 <= 640 - 8, `Share (x ${sh?.x}) and Home (x ${hm?.x}) sit side by side inside the panel`);
+      // A real mouse press + release at a game point, through the canvas's on-page box.
+      const tapAt = async (x, y) => {
+        const pt = await evaluate(`(() => { const r = __flappy.canvas.getBoundingClientRect(); return JSON.stringify({ x: r.left + ${x} * r.width / 720, y: r.top + ${y} * r.height / 1280 }); })()`).then(JSON.parse);
+        await cdp.send('Input.dispatchMouseEvent', { type: 'mousePressed', x: pt.x, y: pt.y, button: 'left', clickCount: 1 });
+        await cdp.send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: pt.x, y: pt.y, button: 'left', clickCount: 1 });
+        await sleep(250);
+      };
+      await evaluate(`(() => { window.__shared = []; window.__downloads = []; const def = (k, v) => Object.defineProperty(navigator, k, { value: v, configurable: true, writable: true }); def('canShare', () => window.__canShare); def('share', (d) => { window.__shared.push({ n: d.files.length, type: d.files[0]?.type, name: d.files[0]?.name, title: d.title, text: d.text }); return window.__shareReject ? Promise.reject(Object.assign(new Error('closed'), { name: 'AbortError' })) : Promise.resolve(); }); window.__realClick = HTMLAnchorElement.prototype.click; HTMLAnchorElement.prototype.click = function () { window.__downloads.push(this.download); }; window.__canShare = true; window.__shareReject = false; return true; })()`);
+      const score = await evaluate(`${play}.score`);
+      await tapAt(sh.x, sh.y);
+      const sent = await evaluate(`JSON.stringify({ shared: window.__shared, downloads: window.__downloads, over: __flappy.scene.isActive('Over'), state: ${play}.state })`).then(JSON.parse);
+      const msg = sent.shared[0];
+      ok(sent.over && sent.state === 'dead' && sent.shared.length === 1 && msg.n === 1 && msg.type === 'image/png' && msg.title === 'Flappy Poop' && msg.text.includes(String(score)) && msg.text.includes('https://sielerjm.github.io/flappy-poop/') && sent.downloads.length === 0, `a tap on Share opens the share sheet with the PNG and "${msg?.text}", and stays on the panel`);
+      await evaluate(`window.__shareReject = true, true`);
+      const ex0 = exceptions.length;
+      await tapAt(sh.x, sh.y);
+      const cancelled = await evaluate(`JSON.stringify({ shared: window.__shared.length, downloads: window.__downloads.length, over: __flappy.scene.isActive('Over') })`).then(JSON.parse);
+      ok(cancelled.shared === 2 && cancelled.downloads === 0 && cancelled.over && exceptions.length === ex0, 'closing the share sheet is quiet: no download, no error, still on the panel');
+      await evaluate(`window.__canShare = false, true`);
+      await tapAt(sh.x, sh.y);
+      const fell = await evaluate(`JSON.stringify({ shared: window.__shared.length, downloads: window.__downloads, over: __flappy.scene.isActive('Over') })`).then(JSON.parse);
+      ok(fell.shared === 2 && fell.downloads.length === 1 && fell.downloads[0] === 'flappy-poop-score.png' && fell.over, `with no share sheet for images the PNG downloads (${fell.downloads[0]})`);
+      await evaluate(`(() => { HTMLAnchorElement.prototype.click = window.__realClick; delete navigator.share; delete navigator.canShare; return true; })()`);
+      await tapAt(hm.x, hm.y);
+      for (let i = 0; i < 40 && (await playState()) !== 'ready'; i += 1) await sleep(250);
+      ok(!(await evaluate(`__flappy.scene.isActive('Over')`)) && (await playState()) === 'ready', 'a tap on Home closes the panel and goes home');
+    }
+
     // A game over must not change how later pipes are drawn: restart, start, spawn, check the frame.
-    await evaluate(`__flappy.scene.stop('Over'), ${play}.scene.restart(), true`);
+    // (The Home tap above already restarted Play: restarting again would race the queued restart.)
+    await evaluate(`__flappy.scene.isActive('Over') ? (__flappy.scene.stop('Over'), ${play}.scene.restart()) : null, true`);
     for (let i = 0; i < 40 && (await playState()) !== 'ready'; i += 1) await sleep(250);
     await evaluate(`${play}.flap(), true`);
     await sleep(1100);
@@ -648,7 +699,10 @@ export async function run(url = DEFAULT_URL) {
       await dieNow();
       const after = await stores();
       const texts = await overTexts();
-      ok((await playState()) === 'dead' && after === stores0 && texts.includes(await tx('testRunNotSaved')) && !texts.includes(await tx('newTopHint')), `a test run's death records nothing (save, best, and leaderboard storage byte-identical) and Over shows "${await tx('testRunNotSaved')}"`);
+      ok((await playState()) === 'dead' && after === stores0 && texts.includes(await tx('testRunNotSaved')), `a test run's death records nothing (save, best, and leaderboard storage byte-identical) and Over shows "${await tx('testRunNotSaved')}"`);
+      await sleep(1000);
+      const testOver = await evaluate(`(() => { const o = __flappy.scene.getScene('Over'); const home = o.children.list.find((c) => c.type === 'Text' && c.text === o.homeButton.getText()); return JSON.stringify({ share: o.shareButton, file: o.shareFile, homeX: home?.x, texts: o.children.list.filter((c) => c.type === 'Text').map((c) => c.text) }); })()`).then(JSON.parse);
+      ok(testOver.share === null && testOver.file === null && testOver.homeX === 360 && !testOver.texts.includes(await tx('shareButton')), `a test run's game over has no Share (nothing captured) and Home alone at the centre (x ${testOver.homeX})`);
 
       // Restart keeps test mode (session registry); exiting mid-run turns it off but that run stays unrecorded.
       await home();

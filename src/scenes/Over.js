@@ -1,6 +1,7 @@
-import { GAME_WIDTH, GAME_HEIGHT, TUNING as T } from '../config.js';
-import { canRestart, chromeIntent, trayLayout, trayHit } from '../logic.js';
-import { t, levelLabel } from '../i18n.js';
+import { GAME_WIDTH, GAME_HEIGHT, TUNING as T, SHARE } from '../config.js';
+import { canRestart, chromeIntent, trayLayout, trayHit, overButtonsLayout, overHit, panelCaptureRect } from '../logic.js';
+import { t, levelLabel, shareText } from '../i18n.js';
+import { dataUrlToBytes, shareMode, shareScoreImage } from '../share.js';
 import { formatScore } from '../save.js';
 import { isMuted, unlock } from '../sound.js';
 import { createTray } from '../ui/tray.js';
@@ -20,9 +21,12 @@ export class Over extends Phaser.Scene {
     const toilet = Boolean(data?.toilet);
     const level = Number.isInteger(data?.level) && data.level >= 1 ? data.level : 1;
     const collected = { fiber: 0, probiotic: 0, postbiotic: 0, bacteria: 0, bean: 0, mystery: 0, ...(data?.collected ?? {}) };
-    this.openedAt = this.time.now;
+    // The game loop's time, not this.time.now: a relaunched scene's clock still holds the time it
+    // last ran (Phaser syncs it on boot only), which made the retry lockout a no-op.
+    this.openedAt = this.game.loop.time;
     const play = this.scene.get('Play');
     const locale = play?.getLocale?.() ?? 'en';
+    this.shareInfo = { locale, score, toilet, level }; // the message shareRun() sends with the image
 
     const cx = GAME_WIDTH / 2;
     const cy = GAME_HEIGHT / 2;
@@ -57,16 +61,37 @@ export class Over extends Phaser.Scene {
     if (testRun) {
       this.add.text(cx, cy + 130, t(locale, 'testRunNotSaved'), { ...style, fontSize: '30px', color: '#ffd700', wordWrap: { width: 460, useAdvancedWrap: true } }).setOrigin(0.5);
     }
-    // The go-home prompt sits in a ready-screen-style button so it reads as the
-    // thing to press (any tap outside the tray goes home too). It fades in after
-    // the lockout so a death tap cannot restart.
-    const home = { x: cx, y: cy + 250, width: 380, height: 84 };
+    // Share | Home on one row (overButtonsLayout); a test run gets Home alone, centred,
+    // and nothing to share. Home is the ready-screen-style glowing button (any tap
+    // outside the tray and off Share goes home too). Both fade in after the lockout
+    // so a death tap cannot restart or share.
+    this.buttons = overButtonsLayout(cx, cy, T, { share: !testRun });
+    const home = this.buttons.home;
     // Same pulsing soft white halo as the enter-username prompt on the ready screen.
     this.homeHalo = createRectGlow(this, home.x, home.y, { key: 'over-home-halo', width: home.width, height: home.height, radius: T.readyButtonRadius, pad: T.readyPromptGlowPx }).setAlpha(0);
     this.homeButton = createButton(this, home, t(locale, 'tapToHome'), { ...style, fontSize: '40px' }, { depth: 1 }).setAlpha(0);
-    this.tweens.add({ targets: { a: 0 }, a: 1, delay: T.retryLockoutMs, duration: 200, onUpdate: (tw, target) => this.homeButton.setAlpha(target.a) });
+    // Share stays hidden until its image exists (capturePanel), so a tap on it always has a file to send.
+    this.shareButton = this.buttons.share ? createButton(this, this.buttons.share, t(locale, 'shareButton'), { ...style, fontSize: '40px' }, { depth: 1 }).setAlpha(0).setVisible(false) : null;
+    this.buttonFade = { a: 0 };
+    this.tweens.add({
+      targets: this.buttonFade,
+      a: 1,
+      delay: T.retryLockoutMs,
+      duration: 200,
+      onUpdate: () => {
+        this.homeButton.setAlpha(this.buttonFade.a);
+        this.shareButton?.setAlpha(this.buttonFade.a);
+      },
+    });
     this.tweens.add({ targets: this.homeHalo, alpha: { from: T.readyPromptMinAlpha, to: T.readyPromptMaxAlpha }, delay: T.retryLockoutMs, yoyo: true, repeat: -1, duration: T.readyPromptPulseMs });
-    this.tweens.add({ targets: panel, scale: { from: 0.8, to: 1 }, duration: 180, ease: 'Back.easeOut' });
+    this.tweens.add({ targets: panel, scale: { from: 0.8, to: 1 }, duration: T.over.panelInMs, ease: 'Back.easeOut' });
+    // The share image: the panel once it has scaled in, before the buttons fade in.
+    this.shareFile = null;
+    this.shareMode = null;
+    this.captureInfo = null;
+    this.captureToken = null;
+    this.sharePressed = false;
+    if (this.buttons.share) this.time.delayedCall(T.over.captureDelayMs, () => this.capturePanel(panel));
 
     this.tray = createTray(this, { muted: isMuted() });
 
@@ -85,7 +110,63 @@ export class Over extends Phaser.Scene {
       this.scene.stop('Over');
       play.scene.restart();
     };
-    this.input.on('pointerdown', retry);
+    // Share: pressed on pointerdown (so the tap does not go home), sent on pointerup over
+    // the button. On touch only pointerup / touchend grants the user activation
+    // navigator.share() needs, and Phaser emits it from inside that DOM event.
+    const onShare = (pointer) => Boolean(this.shareFile) && overHit(pointer.x, pointer.y, this.buttons) === 'share';
+    this.input.on('pointerdown', (pointer) => {
+      if (!onShare(pointer)) {
+        retry(pointer);
+        return;
+      }
+      unlock();
+      const panelTap = chromeIntent(play.chromeArgs('tap')).do === 'retry' && canRestart(this.openedAt, this.time.now, T.retryLockoutMs);
+      this.sharePressed = panelTap;
+    });
+    this.input.on('pointerup', (pointer) => {
+      if (!this.sharePressed) return;
+      this.sharePressed = false;
+      if (onShare(pointer)) this.shareRun();
+    });
     this.input.keyboard?.on('keydown-SPACE', () => retry());
+  }
+
+  /**
+   * Snapshot the panel (renderer.snapshotArea reads the next rendered frame) into
+   * this.shareFile, then show Share. Runs captureDelayMs after the panel opens: it
+   * has scaled in and the buttons are still at alpha 0, so they are not in the image.
+   */
+  capturePanel(panel) {
+    const renderer = this.game.renderer;
+    if (typeof renderer?.snapshotArea !== 'function') return;
+    const token = {};
+    this.captureToken = token;
+    const scale = this.game.canvas.width / GAME_WIDTH;
+    const rect = panelCaptureRect({ x: panel.x, y: panel.y, width: panel.width, height: panel.height }, panel.lineWidth, scale);
+    const at = { fade: this.buttonFade.a, halo: this.homeHalo.alpha, panelScale: panel.scale, ms: this.time.now - this.openedAt };
+    renderer.snapshotArea(rect.x, rect.y, rect.width, rect.height, (image) => {
+      if (this.captureToken !== token || !this.sys.isActive()) return; // closed (or reopened) meanwhile
+      this.captureInfo = { ...at, rect };
+      const decoded = dataUrlToBytes(image?.src);
+      if (!decoded) return;
+      let file;
+      try {
+        file = new File([decoded.bytes], SHARE.fileName, { type: decoded.type });
+      } catch {
+        return; // no File constructor: leave Share hidden
+      }
+      const mode = shareMode(globalThis.navigator, file, globalThis.document);
+      if (!mode) return;
+      this.shareFile = file;
+      this.shareMode = mode;
+      this.shareButton?.setVisible(true);
+    });
+  }
+
+  /** Send the panel image with the score message (share sheet, else download). Call it inside the tap. */
+  shareRun() {
+    if (!this.shareFile) return Promise.resolve('failed');
+    const text = shareText(this.shareInfo.locale, { ...this.shareInfo, url: SHARE.url });
+    return shareScoreImage({ file: this.shareFile, title: SHARE.title, text });
   }
 }
