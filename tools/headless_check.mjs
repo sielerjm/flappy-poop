@@ -214,8 +214,8 @@ export async function run(url = DEFAULT_URL) {
         p.pipes.clear(true, true); p.items.clear(true, true); p.beans.clear(true, true); p.pipesSpawned = saved.spawned; p.pipesPassed = saved.passed; p.level = saved.level; p.beanSpawned = false; p.distanceSinceSpawn = 0;
         return JSON.stringify(out); })()`).then(JSON.parse);
       const at = (n) => seen.find((r) => r[0] === n);
-      const okScript = at(3)[1] === 'probiotic' && at(5)[1] === 'probiotic,bacteria' && at(7)[1] === 'probiotic,bacteria,fiber/band' && at(8)[2] === 0 && at(9)[2] === 1 && at(2)[1] === '' && at(4)[1] === 'probiotic';
-      ok(okScript, `level 1 script: pair 3 probiotic, 5 bacteria, 7 fiber (bobbing), 9 a bean, nothing else (${seen.map((r) => r[0] + ':' + (r[1] || '-') + (r[2] ? '+bean' : '')).join(' ')})`);
+      const okScript = at(2)[1] === '' && at(3)[1] === 'probiotic' && at(4)[1] === 'probiotic,fiber/band' && at(6)[1] === 'probiotic,fiber/band' && at(7)[1] === 'probiotic,fiber/band,fiber/band' && at(8)[2] === 0 && at(9)[2] === 1 && !seen.some((r) => r[1].includes('bacteria'));
+      ok(okScript, `level 1 script: pair 3 probiotic, fiber after 4 and 7, 9 a bean, no bacteria (${seen.map((r) => r[0] + ':' + (r[1] || '-') + (r[2] ? '+bean' : '')).join(' ')})`);
       const line = await evaluate(`JSON.stringify({ w: __flappy.textures.get('finish').getSourceImage().width, check: ${JSON.stringify(0)} })`).then(JSON.parse);
       ok(line.w === 96, `finish line texture is three columns wide (${line.w} px)`);
     }
@@ -328,7 +328,9 @@ export async function run(url = DEFAULT_URL) {
         ok(ended.mult === 1 && !ended.badge && !ended.icon && ended.tex === 'probiotic', `a bacteria hit ends the postbiotic (×${ended.mult}, badge and icon hidden); the next probiotic shows the probiotic icon`);
         await evaluate(`${play}.effects.consumeProbiotic(), ${play}.refreshProbioticHud(), true`);
       }
-      await evaluate(`${play}.poop.body.setAllowGravity(true), ${play}.graceLeftMs = 0, ${play}.effects.applyProbiotic(), ${play}.refreshProbioticHud(), true`);
+      // Grace stays on until the fart below starts (endPower resets it to graceMs): with it
+      // at 0 a pipe that happens to overlap the pinned poop killed the run first (rare flake).
+      await evaluate(`${play}.poop.body.setAllowGravity(true), ${play}.effects.applyProbiotic(), ${play}.refreshProbioticHud(), true`);
     }
     const pipesBefore = await evaluate(`${play}.effects.pipesLeft()`);
     const score0 = await evaluate(`${play}.score`);

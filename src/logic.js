@@ -200,16 +200,23 @@ export function levelFor(pipesPassed, t) {
 
 /**
  * What pair `pairIndex` (1-based) of `level` carries when the level is scripted:
- * 'probiotic' | 'bacteria' | 'fiber' | 'bean' | null (nothing). Returns undefined
- * for levels that are not scripted (the scene rolls at random instead).
+ * 'probiotic' | 'fiber' | 'bean' | null (nothing), from the levels.tutorial
+ * pair → kind map. Returns undefined for levels that are not scripted (the
+ * scene rolls at random instead).
  */
 export function tutorialSpawn(level, pairIndex, t) {
   if (level !== 1) return undefined;
-  const script = t.levels.tutorial ?? {};
-  for (const kind of ['probiotic', 'bacteria', 'fiber', 'bean']) {
-    if (script[kind] === pairIndex) return kind;
-  }
-  return null;
+  return t.levels.tutorial?.[pairIndex] ?? null;
+}
+
+/**
+ * True when bad bacteria may be rolled for the pair spawning now (pipesSpawned,
+ * 1-based across the run): from pair items.hazardFromPair of level
+ * items.hazardFromLevel on. Pipe-based, so fiber bonuses cannot bring it forward.
+ */
+export function hazardsAllowed(pipesSpawned, t) {
+  const { hazardFromLevel, hazardFromPair } = t.items;
+  return pipesSpawned >= levelEnd(hazardFromLevel - 1, t) + hazardFromPair;
 }
 
 /** Pipe gap (px) for a level: gapHeight × levels.gapScale[level − 1], or gapHeight past the list. */
@@ -380,13 +387,13 @@ export function createSettingsStore(storage, key = 'flappy-poop:settings') {
  */
 export const ITEM_KINDS = ['fiber', 'probiotic', 'bacteria'];
 
-/** null or an ITEM_KINDS value. Bacteria weight is 0 below hazardStartScore. */
-export function rollItem(rng, score, t) {
+/** null or an ITEM_KINDS value. Bacteria weight is 0 unless `hazards` (see hazardsAllowed). */
+export function rollItem(rng, score, t, { hazards = true } = {}) {
   const items = t.items;
   if (score < items.startScore) return null;
   if (rng() >= items.chancePerGap) return null;
   const weights = { ...items.weights };
-  if (score < items.hazardStartScore) weights.bacteria = 0;
+  if (!hazards) weights.bacteria = 0;
   const total = ITEM_KINDS.reduce((sum, k) => sum + Math.max(0, weights[k] ?? 0), 0);
   if (total <= 0) return null;
   let pick = rng() * total;

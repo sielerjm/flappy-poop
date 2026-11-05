@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { TUNING as T } from '../src/config.js';
-import { createRng, rollItem, itemGapY, scoreAfterItem, scorePopup, pipePoints, createEffects, ITEM_KINDS, bobY, gapBobAmplitude, gapBobY } from '../src/logic.js';
+import { createRng, rollItem, hazardsAllowed, tutorialSpawn, itemGapY, scoreAfterItem, scorePopup, pipePoints, createEffects, ITEM_KINDS, bobY, gapBobAmplitude, gapBobY } from '../src/logic.js';
 
 test('rollItem is always null below startScore', () => {
   const rng = createRng(1);
@@ -10,20 +10,39 @@ test('rollItem is always null below startScore', () => {
   }
 });
 
-test('rollItem never returns bacteria before hazardStartScore', () => {
+test('rollItem never returns bacteria while hazards are off', () => {
   const rng = createRng(2);
   for (let i = 0; i < 1000; i++) {
-    const kind = rollItem(rng, T.items.hazardStartScore - 1, T);
+    const kind = rollItem(rng, 100, T, { hazards: false });
     assert.notEqual(kind, 'bacteria');
   }
 });
 
-test('above hazardStartScore all three kinds appear near their weights', () => {
+test('hazardsAllowed: bad bacteria from level 2, pair 5 (pipe pair 15 of the run), whatever the score', () => {
+  assert.equal(T.items.hazardFromLevel, 2);
+  assert.equal(T.items.hazardFromPair, 5);
+  for (let p = 0; p <= 14; p += 1) assert.equal(hazardsAllowed(p, T), false, `pair ${p}`);
+  for (const p of [15, 16, 35, 100, 285]) assert.equal(hazardsAllowed(p, T), true, `pair ${p}`);
+});
+
+test('a seeded run never meets bacteria before pair 15, even with a high score', () => {
+  for (let seed = 1; seed <= 50; seed += 1) {
+    const rng = createRng(seed);
+    for (let pair = 1; pair <= 14; pair += 1) {
+      const level = pair <= 10 ? 1 : 2;
+      const scripted = tutorialSpawn(level, pair, T);
+      const kind = scripted === undefined ? rollItem(rng, 99, T, { hazards: hazardsAllowed(pair, T) }) : scripted;
+      assert.notEqual(kind, 'bacteria', `seed ${seed}, pair ${pair}`);
+    }
+  }
+});
+
+test('with hazards on all three kinds appear near their weights', () => {
   const rng = createRng(3);
   const counts = { fiber: 0, probiotic: 0, bacteria: 0, none: 0 };
   const n = 4000;
   for (let i = 0; i < n; i++) {
-    const kind = rollItem(rng, T.items.hazardStartScore + 5, T);
+    const kind = rollItem(rng, 20, T);
     if (kind == null) counts.none += 1;
     else counts[kind] += 1;
   }
@@ -111,7 +130,7 @@ test('rollBean: ~chanceInWindow inside 5–20, ~chanceAfter (below fiber) beyond
   // Fiber's effective rate after hazards start (the leanest fiber mix): beans must be rarer than that after 20.
   const rngB = createRng(13);
   let fiber = 0;
-  for (let i = 0; i < n; i++) if (rollItem(rngB, T.items.hazardStartScore + 5, T) === 'fiber') fiber += 1;
+  for (let i = 0; i < n; i++) if (rollItem(rngB, 20, T) === 'fiber') fiber += 1;
   const fiberRate = fiber / n;
   assert.ok(after < fiberRate, `beans after 20 (${after}) should be rarer than fiber (${fiberRate})`);
   // Guarantee: with no bean yet, the pair at guaranteeScore always carries one; once seen, it is random again.

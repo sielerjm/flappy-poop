@@ -5,7 +5,8 @@ import { pipeSpacing, levelSpeed } from '../src/logic.js';
 
 test('item spawn rates sit in a fair band', () => {
   assert.ok(T.items.chancePerGap >= 0.1 && T.items.chancePerGap <= 0.5, `chancePerGap ${T.items.chancePerGap}`);
-  assert.ok(T.items.hazardStartScore >= T.items.startScore, 'hazardStartScore < startScore');
+  assert.ok(T.items.hazardFromLevel >= 2, 'level 1 stays free of bad bacteria');
+  assert.ok(T.items.hazardFromPair >= 1 && T.items.hazardFromPair <= 10, `hazardFromPair ${T.items.hazardFromPair}`);
 });
 
 test('fiber and bacteria score deltas are the locked contract', () => {

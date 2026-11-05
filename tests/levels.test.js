@@ -201,16 +201,16 @@ test('multiplierLayout puts the ×2 badge right of the score digits, as a subscr
   assert.ok(x + b.glowPx + badgeGlyphs <= iconX - T.hudProbioticSize / 2, 'badge ends before the probiotic icon');
 });
 
-test('level 1 is scripted: probiotic at pair 3, bacteria at 5, fiber after 7, a bean after 9, nothing else; later levels roll', () => {
+test('level 1 is scripted: probiotic at pair 3, fiber after 4 and 7, a bean after 9, no bacteria; later levels roll', () => {
   const got = {};
   for (let pair = 1; pair <= levelPipes(1, T); pair += 1) {
     const kind = tutorialSpawn(1, pair, T);
     if (kind) got[pair] = kind;
     else assert.equal(kind, null, `pair ${pair} carries nothing`);
   }
-  assert.deepEqual(got, { 3: 'probiotic', 5: 'bacteria', 7: 'fiber', 9: 'bean' });
-  for (const pair of Object.values(L.tutorial)) assert.ok(pair >= 1 && pair < levelPipes(1, T), `pair ${pair} is inside level 1, before the finish line`);
-  assert.equal(new Set(Object.values(L.tutorial)).size, 4, 'one pickup per pair');
+  assert.deepEqual(got, { 3: 'probiotic', 4: 'fiber', 7: 'fiber', 9: 'bean' });
+  for (const pair of Object.keys(L.tutorial).map(Number)) assert.ok(pair >= 1 && pair < levelPipes(1, T), `pair ${pair} is inside level 1, before the finish line`);
+  assert.ok(!Object.values(L.tutorial).includes('bacteria'), 'no bad bacteria in level 1');
   assert.equal(tutorialSpawn(2, 3, T), undefined, 'level 2 is not scripted');
   assert.equal(tutorialSpawn(1, 0, T), null);
 });

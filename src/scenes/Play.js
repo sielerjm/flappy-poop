@@ -19,6 +19,7 @@ import {
   createSettingsStore,
   vibrate,
   rollItem,
+  hazardsAllowed,
   itemGapY,
   scoreAfterItem,
   scorePopup,
@@ -807,9 +808,10 @@ export class Play extends Phaser.Scene {
     top.setData('scoring', true);
     top.setData('passed', false);
 
-    // Level 1 is a scripted intro (levels.tutorial): one of each pickup at fixed pairs, no random rolls.
+    // Level 1 is a scripted intro (levels.tutorial): pickups at fixed pairs, no bacteria, no random rolls.
+    // Later levels roll; bacteria only from level 2, pair 5 (hazardsAllowed).
     const scripted = tutorialSpawn(this.level, this.pipesSpawned, T);
-    const kind = scripted === undefined ? rollItem(this.rng, this.score, T) : scripted === 'bean' ? null : scripted;
+    const kind = scripted === undefined ? rollItem(this.rng, this.score, T, { hazards: hazardsAllowed(this.pipesSpawned, T) }) : scripted === 'bean' ? null : scripted;
     const beanHere = scripted === undefined ? rollBean(this.rng, this.score, T, { spawnedThisRun: this.beanSpawned, holding: this.effects.holdingBean() }) : scripted === 'bean';
     // Fiber bobs between pairs like a bean (and yields to a bean rolled for the same pair);
     // probiotic and bacteria sit in the gap, behind the pipes, moving from moveFromLevel.

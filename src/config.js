@@ -56,10 +56,11 @@ export const TUNING = {
     maxSpeed: 450, // px/s cap (level 8+)
     finishWidthPx: 96, // px width of the checkered finish line (three columns of finishCheckPx checks)
     finishCheckPx: 32, // px size of one check on the finish line
-    // Level 1 is a scripted intro: which pair (1-based) carries which pickup; no random
-    // rolls until level 2. Gap items ride in that pair's gap; fiber and the bean bob in
-    // the open after it. All must be below levels.pipes[0].
-    tutorial: { probiotic: 3, bacteria: 5, fiber: 7, bean: 9 },
+    // Level 1 is a scripted intro: pair (1-based) → the pickup it carries; no random
+    // rolls and no bad bacteria until level 2. Gap items ride in that pair's gap; fiber
+    // and the bean sit in the open after it (fiber at 4 and 7 = between pairs 4–5 and
+    // 7–8, the bean between 9–10). All must be below levels.pipes[0].
+    tutorial: { 3: 'probiotic', 4: 'fiber', 7: 'fiber', 9: 'bean' },
     fadeMs: 600, // ms the background crossfades to the next level's colour during the break
     whiteBlend: 0.2, // 0–1 share of white mixed into every level colour (0 = the raw palette)
     barY: 48, // px centre line of the progress bar (air above it from the screen top)
@@ -97,7 +98,8 @@ export const TUNING = {
   },
   items: {
     startScore: 8, // score at which pickups may appear
-    hazardStartScore: 15, // score at which bad bacteria may appear
+    hazardFromLevel: 2, // bad bacteria never appear before this level …
+    hazardFromPair: 5, // … nor before this pair (1-based) of it: level 2, pair 5 = pipe pair 15 of the run
     chancePerGap: 0.3, // 0–1 chance a gap rolls an item
     fiberPoints: 3, // points added by fiber
     bacteriaPenalty: 3, // points subtracted by unshielded bacteria (3 since probiotics stack)
