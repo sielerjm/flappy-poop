@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { TUNING as T } from '../src/config.js';
-import { createRng, rollItem, hazardsAllowed, tutorialSpawn, bandItemsMove, bandMidY, pipeGapY, itemGapY, scoreAfterItem, scorePopup, popupSlots, pipePoints, createEffects, ITEM_KINDS, mysteryRolls, scriptedMysteryPair, rollMystery, resolveMystery, skipPairs, MYSTERY_DRAWS, levelEnd, bobY, gapBobAmplitude, gapBobY } from '../src/logic.js';
+import { createRng, rollItem, hazardsAllowed, tutorialSpawn, bandItemsMove, bandMidY, pipeGapY, itemGapY, scoreAfterItem, scorePopup, popupSlots, pipePoints, createEffects, ITEM_KINDS, mysteryRolls, mysteryMoves, scriptedMysteryPair, rollMystery, resolveMystery, skipPairs, MYSTERY_DRAWS, levelEnd, bobY, gapBobAmplitude, gapBobY } from '../src/logic.js';
 
 test('rollItem is always null below startScore', () => {
   const rng = createRng(1);
@@ -547,13 +547,20 @@ test('with mystery on the box is half as common as fiber, and the other three ke
   assert.ok(Math.abs(pb - want) <= 0.05, `probiotic / bacteria ${pb} vs ${want}`);
 });
 
-test('mystery boxes roll (and bob) from level 4; level 3 only has its one scripted box', () => {
-  for (const level of [1, 2, 3]) assert.equal(mysteryRolls(level, T), false, `level ${level}`);
-  assert.equal(mysteryRolls(4, T), true);
-  assert.equal(mysteryRolls(T.levels.lastLevel, T), true);
+test('mystery boxes roll on every pair after the guaranteed first one, never before it', () => {
+  const first = levelEnd(2, T) + 3;
+  for (const pair of [1, 20, levelEnd(2, T) + 1, first - 1, first]) assert.equal(mysteryRolls(pair, first), false, `pair ${pair}`);
+  for (const pair of [first + 1, levelEnd(3, T), levelEnd(T.levels.lastLevel, T)]) assert.equal(mysteryRolls(pair, first), true, `pair ${pair}`);
+  assert.equal(mysteryRolls(100, null), false, 'no first pair picked: no rolls');
 });
 
-test('level 3\'s one box rides after one of its first four pairs, so it comes before pipe 5', () => {
+test('mystery boxes hold still on level 3 and bob from level 4', () => {
+  for (const level of [1, 2, 3]) assert.equal(mysteryMoves(level, T), false, `level ${level}`);
+  assert.equal(mysteryMoves(4, T), true);
+  assert.equal(mysteryMoves(T.levels.lastLevel, T), true);
+});
+
+test('the first box rides after one of level 3\'s first four pairs, so it comes before pipe 5', () => {
   const start = levelEnd(T.mystery.firstLevel - 1, T);
   assert.equal(start, 35);
   const rng = createRng(21);

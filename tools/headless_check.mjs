@@ -454,24 +454,31 @@ export async function run(url = DEFAULT_URL) {
     await sleep(300);
     ok((await evaluate(`${play}.state === 'playing' && ${play}.diff.pipeSpeed === ${TT.pipeSpeed + 2 * TT.levels.speedStep}`)) === true, 'level 3 resumes one step faster again');
     ok((await evaluate(`${play}.diff.gapHeight`)) === TT.gapHeight, `level 3 uses the base pipe gap (${TT.gapHeight} px)`);
-    // Mystery boxes. Level 3 has one, held still after one of its first four pairs; from level 4
-    // they bob the beans' band at half fiber's speed. The spin pauses with the run, and each draw
-    // does what it says. The poop is pinned and immune meanwhile.
+    // Mystery boxes. The first is guaranteed after one of level 3's first four pairs; after it boxes
+    // roll by chance, held still on level 3 and bobbing the beans' band at half fiber's speed from
+    // level 4. The spin pauses with the run, and each draw does what it says. The poop is pinned
+    // and immune meanwhile.
     {
       await evaluate(`${play}.poop.body.setAllowGravity(false), ${play}.poop.setVelocity(0, 0), ${play}.poop.y = 640, ${play}.graceLeftMs = 1e9, true`);
       const pick = await evaluate(`${play}.mysteryPair - ${end2}`);
-      ok(pick >= 1 && pick <= TT.mystery.firstBefore - 1, `this run's level-3 box rides after level 3's pair ${pick}, before pipe ${TT.mystery.firstBefore}`);
-      // Real path: that pair spawns the one box, held still midway between the two gaps (spinning), and no bean.
+      ok(pick >= 1 && pick <= TT.mystery.firstBefore - 1, `this run's first box rides after level 3's pair ${pick}, before pipe ${TT.mystery.firstBefore}`);
+      // Real path: that pair spawns the first box, held still midway between the two gaps (spinning), and no bean.
       const still = await evaluate(`(() => { const p = ${play}; p.items.clear(true, true); p.beans.clear(true, true); p.mysteryPair = p.pipesSpawned + 1; p.spawnPipePair(); const boxes = p.items.getChildren().filter((c) => c.getData('kind') === 'mystery'); p.stillProbe = boxes[0]; return JSON.stringify({ n: boxes.length, level: p.level, bob: boxes[0]?.getData('bob') ?? null, y: boxes[0]?.y, playing: boxes[0]?.anims.isPlaying, frame: boxes[0]?.frame.name, beans: p.beans.getChildren().length }); })()`).then(JSON.parse);
       await sleep(300);
       const still2 = await evaluate(`JSON.stringify({ y: ${play}.stillProbe.y, frame: ${play}.stillProbe.frame.name })`).then(JSON.parse);
-      ok(still.level === 3 && still.n === 1 && still.bob === null && still2.y === still.y && still.playing && still2.frame !== still.frame && still.beans === 0, `level 3's pair spawns one box that holds still at y ${still.y?.toFixed(0)} (after 300 ms ${still2.y?.toFixed(0)}) and spins (frame ${still.frame} → ${still2.frame}), no bean beside it`);
+      ok(still.level === 3 && still.n === 1 && still.bob === null && still2.y === still.y && still.playing && still2.frame !== still.frame && still.beans === 0, `level 3's first-box pair spawns one box that holds still at y ${still.y?.toFixed(0)} (after 300 ms ${still2.y?.toFixed(0)}) and spins (frame ${still.frame} → ${still2.frame}), no bean beside it`);
       await evaluate(`${play}.items.clear(true, true), ${play}.pipes.clear(true, true), true`);
-      // From level 4 the spawner passes no stillY: the box bobs.
-      const spawned = await evaluate(`(() => { const p = ${play}; p.boxProbe = p.spawnBandItem('mystery'); const b = p.boxProbe; return JSON.stringify({ tex: b.texture.key, playing: b.anims.isPlaying, anim: b.anims.currentAnim?.key, frame: b.frame.name, period: b.getData('period'), bob: b.getData('bob'), y: b.y, minY: p.beanBounds.minY, maxY: p.beanBounds.maxY }); })()`).then(JSON.parse);
+      // Later pairs roll: the rng is stubbed so this pair's item roll lands on a box (0.1 < chancePerGap,
+      // then 0.95 of the weights is the box's share; the bean roll then gets 0.5, a miss).
+      const rolledBox = (level) => evaluate(`(() => { const p = ${play}; const keep = p.level; p.items.clear(true, true); p.beans.clear(true, true); p.level = ${level}; p.beanSpawned = true; p.nextGapY = 640; const seq = [0.1, 0.95]; const r = p.rng; p.rng = () => (seq.length ? seq.shift() : 0.5); try { p.spawnPipePair(); } finally { p.rng = r; p.level = keep; } const boxes = p.items.getChildren().filter((c) => c.getData('kind') === 'mystery'); const b = boxes[0]; p.boxProbe = b; return JSON.stringify({ n: boxes.length, rolls: p.pipesSpawned > p.mysteryPair, tex: b?.texture.key, playing: b?.anims.isPlaying, anim: b?.anims.currentAnim?.key, frame: b?.frame.name, bob: b?.getData('bob') ?? null, period: b?.getData('period') ?? null, y: b?.y, minY: p.beanBounds.minY, maxY: p.beanBounds.maxY }); })()`).then(JSON.parse);
+      const r3 = await rolledBox(3);
+      await sleep(300);
+      const r3b = await evaluate(`JSON.stringify({ y: ${play}.boxProbe.y })`).then(JSON.parse);
+      ok(r3.rolls && r3.n === 1 && r3.bob === null && r3b.y === r3.y, `after the first box more can roll on level 3, and they hold still too (y ${r3.y?.toFixed(0)} → ${r3b.y?.toFixed(0)})`);
+      const spawned = await rolledBox(4);
       await sleep(300);
       const later = await evaluate(`JSON.stringify({ frame: ${play}.boxProbe.frame.name, y: ${play}.boxProbe.y })`).then(JSON.parse);
-      ok(spawned.tex === 'mystery' && spawned.playing && spawned.anim === 'mystery-spin' && later.frame !== spawned.frame && spawned.period === TT.mystery.periodMs && spawned.bob === 'band' && later.y !== spawned.y && [spawned.y, later.y].every((y) => y >= spawned.minY && y <= spawned.maxY), `a level-4 mystery box spins (frame ${spawned.frame} → ${later.frame}) and bobs the beans' band on a ${spawned.period} ms period (y ${spawned.y.toFixed(0)} → ${later.y.toFixed(0)})`);
+      ok(spawned.n === 1 && spawned.tex === 'mystery' && spawned.playing && spawned.anim === 'mystery-spin' && later.frame !== spawned.frame && spawned.period === TT.mystery.periodMs && spawned.bob === 'band' && later.y !== spawned.y && [spawned.y, later.y].every((y) => y >= spawned.minY && y <= spawned.maxY), `a level-4 box rolls, spins (frame ${spawned.frame} → ${later.frame}) and bobs the beans' band on a ${spawned.period} ms period (y ${spawned.y?.toFixed(0)} → ${later.y?.toFixed(0)})`);
       await evaluate(`${play}.pausePlay(), true`);
       const f1 = await evaluate(`${play}.boxProbe.frame.name`);
       await sleep(300);

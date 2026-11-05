@@ -103,11 +103,11 @@ test('postbiotic multiplier and its ×2 badge stay readable', () => {
   assert.match(b.glowColor, /^#[0-9a-f]{6}$/i);
 });
 
-test('mystery box: one still box on level 3, then half fiber\'s rate and bob speed, the locked draw table', () => {
+test('mystery box: a first box early in level 3, then half fiber\'s rate; still on level 3, half fiber\'s bob speed after; the locked draw table', () => {
   const m = T.mystery;
-  assert.equal(m.firstLevel, 3, 'the first (still) box is on level 3');
+  assert.equal(m.firstLevel, 3, 'boxes start on level 3');
   assert.ok(m.firstLevel > T.items.hazardFromLevel, 'boxes arrive after bad bacteria');
-  assert.equal(m.rollFromLevel, m.firstLevel + 1, 'random, bobbing boxes from the next level');
+  assert.equal(m.moveFromLevel, m.firstLevel + 1, 'still on level 3, bobbing from the next level');
   assert.ok(m.firstBefore >= 2 && m.firstBefore <= T.levels.pipes[m.firstLevel - 1], `mystery.firstBefore ${m.firstBefore}`);
   assert.equal(m.weight, T.items.weights.fiber / 2, 'half as common as fiber');
   assert.equal(m.periodMs, 2 * T.items.fiberPeriodMs, 'half fiber\'s bob speed');

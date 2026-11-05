@@ -409,14 +409,23 @@ export function rollItem(rng, score, t, { hazards = true, mystery = false } = {}
   return kinds[kinds.length - 1]; // float edge: the last kind that can appear at all
 }
 
-/** True when mystery boxes roll (by weight, any number) and bob on `level`: from mystery.rollFromLevel. */
-export function mysteryRolls(level, t) {
-  return level >= t.mystery.rollFromLevel;
+/**
+ * True when a mystery box can roll with pair `pipesSpawned` (1-based across the
+ * run): on every pair after `firstPair`, the one carrying the guaranteed first
+ * box (scriptedMysteryPair). Never before it, so that box is always the first.
+ */
+export function mysteryRolls(pipesSpawned, firstPair) {
+  return firstPair != null && pipesSpawned > firstPair;
+}
+
+/** True when mystery boxes bob on `level` (from mystery.moveFromLevel); before it they hold still. */
+export function mysteryMoves(level, t) {
+  return level >= t.mystery.moveFromLevel;
 }
 
 /**
- * Pair (1-based across the run, like pipesSpawned) that carries level
- * mystery.firstLevel's one still box: one of that level's first
+ * Pair (1-based across the run, like pipesSpawned) that carries the run's
+ * guaranteed first mystery box: one of level mystery.firstLevel's first
  * mystery.firstBefore − 1 pairs, so the box (which rides after its pair)
  * always comes before that level's pipe firstBefore.
  */

@@ -13,7 +13,8 @@ bundler). A poop emoji flaps through intestinal-fold pipes. Pickups: fiber (+3),
 probiotic (blocks one bacteria hit for 5 pipes; pickups stack), bad bacteria (−3, never kills).
 Postbiotic (后生元): fiber eaten while a probiotic is active; pipes and fiber score ×2 until the
 probiotic runs out. It is a state shown in the HUD, not a pickup.
-Mystery box (神秘盒子): one held still early in level 3, then rolling and bobbing from level 4.
+Mystery box (神秘盒子): the first is guaranteed before pipe 5 of level 3, then more roll by chance;
+still on level 3, bobbing from level 4.
 It opens into a random reward (fiber, probiotic, one or three beans, a 5-pipe postbiotic,
 or a skip to the end of the level).
 Author / designer / artist: Michael Sieler. Side project, short playful copy — not
@@ -107,7 +108,7 @@ Short, playful, clear. Fit a 720×1280 logical field; How to play / About body w
 | itemBeanName | Beans | 豆子 |
 | itemBeanDetail | Grab a bean, then press the bean button at the bottom (or your poop) to fart past the next 5 pipes: nothing can touch you. A normal fart uses one bean; you can carry 3, and with all three the fart rockets you past 20 in a rainbow glow. | 吃到豆子后，点击底部的豆子按钮（或便便）放屁冲过接下来的 5 道管道，期间什么都碰不到你。普通放屁只用一颗豆子；最多可攒 3 颗，集齐 3 颗再放屁，就能顶着彩虹光芒一口气冲过 20 道管道。 |
 | itemMysteryName | Mystery box | 神秘盒子 |
-| itemMysteryDetail | One waits between the pipes early in level 3; from level 4 they float slowly up and down and can turn up again and again. Grab one for a surprise: usually fiber, often a probiotic or a bean, sometimes a 5-pipe postbiotic or three beans, and very rarely a skip to the end of the level (the skipped pipes still score). | 第 3 关开头会有一个停在管道之间；从第 4 关起它们会缓缓上下漂浮，并且可能多次出现。吃到它会随机获得奖励：通常是纤维，也常是益生菌或一颗豆子，偶尔是持续 5 道管道的后生元或三颗豆子，极少数情况下会直接跳到本关终点（跳过的管道照样计分）。 |
+| itemMysteryDetail | The first waits between the pipes before pipe 5 of level 3; after that they turn up at random, holding still on level 3 and floating slowly up and down from level 4. Grab one for a surprise: usually fiber, often a probiotic or a bean, sometimes a 5-pipe postbiotic or three beans, and very rarely a skip to the end of the level (the skipped pipes still score). | 第 3 关第 5 道管道之前必定会有一个停在管道之间；之后会随机出现：第 3 关里静止不动，从第 4 关起缓缓上下漂浮。吃到它会随机获得奖励：通常是纤维，也常是益生菌或一颗豆子，偶尔是持续 5 道管道的后生元或三颗豆子，极少数情况下会直接跳到本关终点（跳过的管道照样计分）。 |
 | itemToiletName | On the toilet | 如厕模式 |
 | itemToiletDetail | Playing on the toilet? Flip the switch under the poop on the home screen. Those scores get a 🚽 next to them. | 在马桶上玩？打开主界面便便下方的开关，这些分数旁会显示 🚽。 |
 | itemLevelsName | Levels | 关卡 |

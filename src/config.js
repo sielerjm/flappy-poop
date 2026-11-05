@@ -114,10 +114,10 @@ export const TUNING = {
     moveMarginPx: 8, // px kept between a moving gap item and the pipe mouths
   },
   mystery: {
-    firstLevel: 3, // the one box of this level, held still midway between two gaps …
-    firstBefore: 5, // … after one of its first four pairs (picked at random), so it comes before pipe 5
-    rollFromLevel: 4, // from this level boxes roll by weight (any number per level) and bob at periodMs
-    weight: 1.5, // share of the item roll from rollFromLevel = items.weights.fiber / 2, so a box is half as common as fiber (it takes the fiber spot between the pairs)
+    firstLevel: 3, // boxes start on this level: the first is guaranteed …
+    firstBefore: 5, // … after one of its first four pairs (picked at random), so it comes before pipe 5; after it boxes roll by weight on every pair
+    moveFromLevel: 4, // boxes hold still midway between two gaps before this level; from it they bob at periodMs
+    weight: 1.5, // share of the item roll (after the first box) = items.weights.fiber / 2, so a box is half as common as fiber (it takes the fiber spot between the pairs)
     periodMs: 6000, // ms per full up-and-down bob = 2 × items.fiberPeriodMs (half fiber's speed)
     frameMs: 70, // ms per spin frame (the source GIF's timing)
     postbioticPipes: 5, // pipes the postbiotic draw adds, ×2 already on (= items.probioticPipes)

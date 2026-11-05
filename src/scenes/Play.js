@@ -22,6 +22,7 @@ import {
   rollItem,
   hazardsAllowed,
   mysteryRolls,
+  mysteryMoves,
   scriptedMysteryPair,
   rollMystery,
   resolveMystery,
@@ -104,7 +105,7 @@ export class Play extends Phaser.Scene {
     this.level = 1;
     this.pipesPassed = 0;
     this.pipesSpawned = 0;
-    this.mysteryPair = null; // picked in start(): the pair level 3's one still box rides after
+    this.mysteryPair = null; // picked in start(): the pair the guaranteed first box (early level 3) rides after
     this.collected = { fiber: 0, probiotic: 0, postbiotic: 0, bacteria: 0, bean: 0, mystery: 0 }; // this run's pickups, for the game-over summary (a box's reward also counts as its own kind)
     this.diff = { pipeSpeed: levelSpeed(1, T), gapHeight: levelGap(1, T) };
     // Finish line + break: the line spawns in the slot after a level's last pair
@@ -385,7 +386,7 @@ export class Play extends Phaser.Scene {
     this.pipesPassed = 0;
     this.pipesSpawned = 0;
     this.collected = { fiber: 0, probiotic: 0, postbiotic: 0, bacteria: 0, bean: 0, mystery: 0 };
-    this.mysteryPair = scriptedMysteryPair(this.rng, T); // the pair level 3's one still box rides after
+    this.mysteryPair = scriptedMysteryPair(this.rng, T); // the pair the guaranteed first box (early level 3) rides after
     this.popupOrder = [];
     this.clearReveal();
     this.finishLine?.destroy();
@@ -845,18 +846,18 @@ export class Play extends Phaser.Scene {
     top.setData('passed', false);
 
     // Level 1 is a scripted intro (levels.tutorial): pickups at fixed pairs, no bacteria, no random rolls.
-    // Later levels roll; bacteria only from level 2, pair 5 (hazardsAllowed). Level 3 has one
-    // mystery box, held still after one of its first four pairs (mysteryPair); from level 4 boxes
-    // roll like the other pickups and bob (mysteryRolls).
+    // Later levels roll; bacteria only from level 2, pair 5 (hazardsAllowed). The first mystery
+    // box is guaranteed after one of level 3's first four pairs (mysteryPair); after it boxes roll
+    // like the other pickups (mysteryRolls), held still on level 3 and bobbing from level 4 (mysteryMoves).
     const scripted = tutorialSpawn(this.level, this.pipesSpawned, T);
     const boxHere = this.pipesSpawned === this.mysteryPair;
     const kind =
       scripted === undefined
-        ? rollItem(this.rng, this.score, T, { hazards: hazardsAllowed(this.pipesSpawned, T), mystery: mysteryRolls(this.level, T) })
+        ? rollItem(this.rng, this.score, T, { hazards: hazardsAllowed(this.pipesSpawned, T), mystery: mysteryRolls(this.pipesSpawned, this.mysteryPair) })
         : scripted === 'bean'
           ? null
           : scripted;
-    // Level 3's box owns this pair's open spot: no bean (or rolled fiber) takes it.
+    // The first box owns this pair's open spot: no bean (or rolled fiber) takes it.
     const beanHere = !boxHere && (scripted === undefined ? rollBean(this.rng, this.score, T, { spawnedThisRun: this.beanSpawned, holding: this.effects.holdingBean() }) : scripted === 'bean');
     // Fiber and mystery boxes sit between pairs like a bean (and yield to a bean rolled for the same pair);
     // probiotic and bacteria sit in the gap, behind the pipes, moving from moveFromLevel.
@@ -867,8 +868,9 @@ export class Play extends Phaser.Scene {
       return bandMidY(gapY, this.nextGapY);
     };
     const band = kind === 'fiber' || kind === 'mystery';
-    if (boxHere) this.spawnBandItem('mystery', stillY());
-    else if (band && !beanHere) this.spawnBandItem(kind, still ? stillY() : null);
+    const boxStill = !mysteryMoves(this.level, T);
+    if (boxHere) this.spawnBandItem('mystery', boxStill ? stillY() : null);
+    else if (band && !beanHere) this.spawnBandItem(kind, (kind === 'mystery' ? boxStill : still) ? stillY() : null);
     if (kind && !band) this.spawnGapItem(kind, x, gapY, gapH);
 
     // Beans ride halfway between this pair and the next, bobbing top to bottom (still in level 1).
@@ -888,7 +890,7 @@ export class Play extends Phaser.Scene {
 
   /**
    * A fiber or mystery box in the open, halfway to the next pair. With a `stillY`
-   * it holds still there (level 1's fiber, level 3's box); otherwise it bobs across
+   * it holds still there (level 1's fiber, level 3's boxes); otherwise it bobs across
    * the beans' band, a box at half fiber's speed (mystery.periodMs). A box always
    * spins ('mystery-spin', from Boot).
    */

@@ -16,9 +16,10 @@ the probiotic countdown ends, fart pipes included; another probiotic extends it,
 a 5-pipe postbiotic 5 % (×2 already on), three beans 5 %, a skip to the end of the level 1 %, else fiber
 (`rollMystery`); a draw that cannot do anything (bean with a full bag, skip with the finish line out) becomes
 fiber (`resolveMystery`). A skip scores every pair left in the level at the current multiplier (countdown
-paused, like a fart), clears what is ahead and brings the finish line in from the right edge. Level 3 has
-exactly one box, held still midway between two gaps after one of its first four pairs (`scriptedMysteryPair`,
-so before pipe 5); from level 4 boxes roll at half fiber's weight (`mysteryRolls`) and bob at half its speed. Level 1 is
+paused, like a fart), clears what is ahead and brings the finish line in from the right edge. The first
+box is guaranteed after one of level 3's first four pairs (`scriptedMysteryPair`, so before pipe 5); on every
+later pair boxes roll at half fiber's weight (`mysteryRolls`). On level 3 they hold still midway between two
+gaps; from level 4 they bob at half fiber's speed (`mysteryMoves`). Level 1 is
 scripted (probiotic at pair 3, fiber after 4 and 7, a bean after 9) and its fiber and bean hold still midway
 between the two gaps; from level 2 they bob and a bean rolls per pair
 (15 % per pair to pipe 20 with one guaranteed by guaranteeScore, 6 % after);
@@ -260,11 +261,13 @@ src/
                             spawnGapItem (depth −1 under the pipes; from
                             items.moveFromLevel they sweep the gap with gapBobY /
                             gapBobAmplitude). Mystery boxes take the band spot like
-                            fiber: level 3's one box rides after this.mysteryPair
-                            (scriptedMysteryPair in start(); it owns that spot, no
-                            bean, held still at bandMidY); from level 4 rollItem
-                            gets { mystery: mysteryRolls(level) } and a rolled box
-                            bobs on mystery.periodMs. Every box plays
+                            fiber: the guaranteed first box rides after
+                            this.mysteryPair (scriptedMysteryPair in start(), one of
+                            level 3's first four pairs; it owns that spot, no bean);
+                            after it rollItem gets { mystery:
+                            mysteryRolls(pipesSpawned, mysteryPair) }. Boxes hold
+                            still at bandMidY before mystery.moveFromLevel (4) and
+                            bob on mystery.periodMs from it (mysteryMoves). Every box plays
                             'mystery-spin'; setBoxSpin pauses / resumes it with the
                             run. collectItem → openMystery(resolveMystery(
                             rollMystery(rng))): fiber and probiotic reuse
@@ -380,7 +383,8 @@ tests/                      node --test, zero deps. Each file is self-describing
                             start count, bean stacking to maxBeans,
                             normal vs super fart, fart envelope integrals; mystery
                             box: the roll at half fiber (only with { mystery }),
-                            mysteryRolls from level 4, scriptedMysteryPair in level
+                            mysteryRolls only after the first box's pair,
+                            mysteryMoves from level 4, scriptedMysteryPair in level
                             3's first four pairs, rollMystery bands and frequencies,
                             resolveMystery fallbacks, skipPairs, applyPostbiotic,
                             the gold skip popup
@@ -448,7 +452,8 @@ tools/
                             OVERLAYS (tests/tools.test.js keeps that list equal to
                             main.js), a run start, leaderboard mid-run pause, and a
                             close-and-reopen race, plus the mystery box (level 3's
-                            still box, a bobbing box, the spin pausing, forced draws,
+                            still first box, a still rolled level-3 box, a bobbing
+                            level-4 box, the spin pausing, forced draws,
                             the full-bag fallback, and a skip into level 4's break).
                             Zero dependencies (fetch + WebSocket).
 
