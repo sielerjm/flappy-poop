@@ -21,6 +21,11 @@ import {
   vibrate,
   rollItem,
   hazardsAllowed,
+  mysteryAllowed,
+  rollMystery,
+  resolveMystery,
+  skipPairs,
+  MYSTERY_BEANS,
   itemGapY,
   scoreAfterItem,
   scorePopup,
@@ -98,7 +103,7 @@ export class Play extends Phaser.Scene {
     this.level = 1;
     this.pipesPassed = 0;
     this.pipesSpawned = 0;
-    this.collected = { fiber: 0, probiotic: 0, postbiotic: 0, bacteria: 0, bean: 0 }; // this run's pickups, for the game-over summary
+    this.collected = { fiber: 0, probiotic: 0, postbiotic: 0, bacteria: 0, bean: 0, mystery: 0 }; // this run's pickups, for the game-over summary (a box's reward also counts as its own kind)
     this.diff = { pipeSpeed: levelSpeed(1, T), gapHeight: levelGap(1, T) };
     // Finish line + break: the line spawns in the slot after a level's last pair
     // and nothing follows it; crossing it pauses the run (levelBreak) until a tap.
@@ -199,6 +204,9 @@ export class Play extends Phaser.Scene {
       .setVisible(false);
     this.multText = this.add.text(0, 0, badgeText, badgeStyle).setOrigin(0, 0.5).setDepth(20).setVisible(false);
     this.multTween = null;
+    // What a mystery box gave: its reward's icon rising out of the box (revealMystery).
+    this.reveal = null;
+    this.revealTween = null;
     // Level progress bar above the score: hidden on the ready screen, shown from start(), kept through breaks and death.
     this.levelBar = createLevelBar(this, levelBarLayout(T, GAME_WIDTH)).setVisible(false);
     this.refreshLevelBar();
@@ -374,8 +382,9 @@ export class Play extends Phaser.Scene {
     this.level = 1;
     this.pipesPassed = 0;
     this.pipesSpawned = 0;
-    this.collected = { fiber: 0, probiotic: 0, postbiotic: 0, bacteria: 0, bean: 0 };
+    this.collected = { fiber: 0, probiotic: 0, postbiotic: 0, bacteria: 0, bean: 0, mystery: 0 };
     this.popupOrder = [];
+    this.clearReveal();
     this.finishLine?.destroy();
     this.finishLine = null;
     this.finishSpawned = false;
@@ -763,6 +772,8 @@ export class Play extends Phaser.Scene {
     this.popupShift.pipe?.pause();
     this.popupShift.item?.pause();
     this.multTween?.pause();
+    this.revealTween?.pause();
+    this.setBoxSpin(false);
     this.bob.pause();
     this.setPauseBanner(true);
   }
@@ -780,6 +791,8 @@ export class Play extends Phaser.Scene {
     this.popupShift.pipe?.resume();
     this.popupShift.item?.resume();
     this.multTween?.resume();
+    this.revealTween?.resume();
+    this.setBoxSpin(true);
     this.bob.resume();
     this.setPauseBanner(false);
     // Recovery bounce on the resume tap. Do not set flapLockedUntil: chrome
@@ -829,11 +842,16 @@ export class Play extends Phaser.Scene {
     top.setData('passed', false);
 
     // Level 1 is a scripted intro (levels.tutorial): pickups at fixed pairs, no bacteria, no random rolls.
-    // Later levels roll; bacteria only from level 2, pair 5 (hazardsAllowed).
+    // Later levels roll; bacteria only from level 2, pair 5 (hazardsAllowed); mystery boxes from level 3 (mysteryAllowed).
     const scripted = tutorialSpawn(this.level, this.pipesSpawned, T);
-    const kind = scripted === undefined ? rollItem(this.rng, this.score, T, { hazards: hazardsAllowed(this.pipesSpawned, T) }) : scripted === 'bean' ? null : scripted;
+    const kind =
+      scripted === undefined
+        ? rollItem(this.rng, this.score, T, { hazards: hazardsAllowed(this.pipesSpawned, T), mystery: mysteryAllowed(this.level, T) })
+        : scripted === 'bean'
+          ? null
+          : scripted;
     const beanHere = scripted === undefined ? rollBean(this.rng, this.score, T, { spawnedThisRun: this.beanSpawned, holding: this.effects.holdingBean() }) : scripted === 'bean';
-    // Fiber sits between pairs like a bean (and yields to a bean rolled for the same pair);
+    // Fiber and mystery boxes sit between pairs like a bean (and yield to a bean rolled for the same pair);
     // probiotic and bacteria sit in the gap, behind the pipes, moving from moveFromLevel.
     // Before bandMoveFromLevel fiber and beans hold still midway between this gap and the next.
     const still = !bandItemsMove(this.level, T);
@@ -841,8 +859,9 @@ export class Play extends Phaser.Scene {
       if (this.nextGapY == null) this.nextGapY = pipeGapY(this.rng, gapCfg);
       return bandMidY(gapY, this.nextGapY);
     };
-    if (kind === 'fiber' && !beanHere) this.spawnBandItem('fiber', still ? stillY() : null);
-    else if (kind && kind !== 'fiber') this.spawnGapItem(kind, x, gapY, gapH);
+    const band = kind === 'fiber' || kind === 'mystery';
+    if (band && !beanHere) this.spawnBandItem(kind, still ? stillY() : null);
+    else if (kind && !band) this.spawnGapItem(kind, x, gapY, gapH);
 
     // Beans ride halfway between this pair and the next, bobbing top to bottom (still in level 1).
     if (beanHere) {
@@ -860,17 +879,33 @@ export class Play extends Phaser.Scene {
   }
 
   /**
-   * A fiber in the open, halfway to the next pair. With a `stillY` it holds still
-   * there (level 1); otherwise it bobs across the beans' band.
+   * A fiber or mystery box in the open, halfway to the next pair. With a `stillY`
+   * it holds still there (level 1); otherwise it bobs across the beans' band, a box
+   * at half fiber's speed (mystery.periodMs) and spinning ('mystery-spin', from Boot).
    */
   spawnBandItem(kind, stillY = null) {
     const phase = this.rng() * Math.PI * 2;
-    const y = stillY ?? bobY(0, phase, this.beanBounds, T.items.fiberPeriodMs);
+    const period = kind === 'mystery' ? T.mystery.periodMs : T.items.fiberPeriodMs;
+    const y = stillY ?? bobY(0, phase, this.beanBounds, period);
     const item = this.items.create(beanSpawnX(GAME_WIDTH, T.pipeWidth, pipeSpacing(this.level, T)), y, kind);
     item.setDepth(8);
     this.finishItem(item, kind);
-    if (stillY == null) item.setData({ bob: 'band', elapsed: 0, phase });
+    if (stillY == null) item.setData({ bob: 'band', elapsed: 0, phase, period });
+    if (kind === 'mystery') {
+      const frames = this.anims.get('mystery-spin').frames.length;
+      item.play({ key: 'mystery-spin', startFrame: Math.floor(this.rng() * frames) });
+      if (this.state === 'paused') item.anims.pause();
+    }
     return item;
+  }
+
+  /** Pause or resume the boxes' spin with the run (the scene keeps updating while paused). */
+  setBoxSpin(on) {
+    for (const item of this.items.getChildren()) {
+      if (item.getData('kind') !== 'mystery') continue;
+      if (on) item.anims.resume();
+      else item.anims.pause();
+    }
   }
 
   /** A probiotic or bacteria in a gap, behind the pipes; from moveFromLevel it sweeps up and down the gap. */
@@ -1115,8 +1150,8 @@ export class Play extends Phaser.Scene {
   }
 
   /** Fade a "+3" / "−3" in and out; a new hit restarts it with its own text and colour and re-enters it at the bottom of the stack. */
-  showScorePopup(kind, mult = 1) {
-    const p = scorePopup(kind, T, mult);
+  showScorePopup(kind, mult = 1, pairs = 0) {
+    const p = scorePopup(kind, T, mult, pairs);
     if (!p) return;
     this.popupTween?.stop();
     this.scorePopup.setText(p.text).setColor(p.color).setAlpha(0);
@@ -1175,9 +1210,11 @@ export class Play extends Phaser.Scene {
 
   collectItem(item) {
     if (this.state !== 'playing' || !item.active) return;
-    if (this.effects.powerActive()) return; // farting: fiber, probiotic and bacteria scroll straight through
+    if (this.effects.powerActive()) return; // farting: fiber, probiotic, bacteria and boxes scroll straight through
     const kind = item.getData('kind');
-    const ghost = this.add.image(item.x, item.y, kind).setScale(T.spriteDisplayScale).setDepth(12);
+    const { x, y } = item;
+    // The burst uses the item's current frame (a spinning box keeps its angle).
+    const ghost = this.add.image(x, y, item.texture.key, item.frame.name).setScale(T.spriteDisplayScale).setDepth(12);
     this.tweens.add({
       targets: ghost,
       scale: T.spriteDisplayScale * 1.4,
@@ -1186,21 +1223,17 @@ export class Play extends Phaser.Scene {
       onComplete: () => ghost.destroy(),
     });
     item.destroy();
-    if (this.collected[kind] !== undefined) this.collected[kind] += 1;
-    if (kind === 'fiber') {
-      // With a probiotic up this starts the postbiotic (counted once per start for the run summary), and this fiber already counts double.
-      if (this.effects.applyFiber()) this.collected.postbiotic += 1;
-      const mult = this.effects.multiplier();
-      this.score = scoreAfterItem(this.score, kind, T, mult);
-      this.scoreText.setText(String(this.score));
-      this.showScorePopup(kind, mult);
-      this.refreshProbioticHud();
-      sfx.pickup();
+    if (kind === 'mystery') {
+      this.collected.mystery += 1;
+      // A draw that cannot do anything (full bag, finish line already out) becomes fiber.
+      const pairsLeft = this.finishSpawned ? 0 : skipPairs(this.pipesPassed, this.level, T);
+      this.openMystery(resolveMystery(rollMystery(this.rng, T), { beans: this.effects.beans(), pairsLeft }, T), x, y);
+    } else if (kind === 'fiber') {
+      this.eatFiber();
     } else if (kind === 'probiotic') {
-      this.effects.applyProbiotic();
-      this.refreshProbioticHud();
-      sfx.pickup();
+      this.takeProbiotic();
     } else if (kind === 'bacteria') {
+      this.collected.bacteria += 1;
       if (this.effects.hasProbiotic()) {
         this.effects.consumeProbiotic();
         this.refreshProbioticHud();
@@ -1214,6 +1247,118 @@ export class Play extends Phaser.Scene {
         sfx.hazard();
       }
     }
+  }
+
+  /** Fiber, picked up or from a box: +fiberPoints (× the multiplier); with a probiotic up it starts the postbiotic. */
+  eatFiber() {
+    this.collected.fiber += 1;
+    // A start is counted once for the run summary, and this fiber already counts double.
+    if (this.effects.applyFiber()) this.collected.postbiotic += 1;
+    const mult = this.effects.multiplier();
+    this.score = scoreAfterItem(this.score, 'fiber', T, mult);
+    this.scoreText.setText(String(this.score));
+    this.showScorePopup('fiber', mult);
+    this.refreshProbioticHud();
+    sfx.pickup();
+  }
+
+  /** Probiotic, picked up or from a box: probioticPipes more on the stack. */
+  takeProbiotic() {
+    this.collected.probiotic += 1;
+    this.effects.applyProbiotic();
+    this.refreshProbioticHud();
+    sfx.pickup();
+  }
+
+  /**
+   * Apply a mystery box's (resolved) draw at the box's spot, then show what it was.
+   * Separate from collectItem so the smoke test can force each draw.
+   */
+  openMystery(draw, x = this.poop.x, y = this.poop.y) {
+    if (draw === 'probiotic') {
+      this.takeProbiotic();
+    } else if (draw === 'postbiotic') {
+      if (this.effects.applyPostbiotic(T.mystery.postbioticPipes)) this.collected.postbiotic += 1;
+      this.refreshProbioticHud();
+      sfx.pickup();
+    } else if (MYSTERY_BEANS[draw]) {
+      const before = this.effects.beans();
+      for (let i = 0; i < MYSTERY_BEANS[draw]; i += 1) this.effects.addBean(); // capped at maxBeans
+      this.collected.bean += this.effects.beans() - before;
+      this.refreshBeanHud();
+      sfx.pickup();
+      if (this.effects.powerReady()) this.setCharged(true);
+    } else if (draw === 'skip') {
+      this.skipToFinish();
+      sfx.pickup();
+    } else {
+      this.eatFiber();
+    }
+    this.revealMystery(draw, x, y);
+  }
+
+  /** The drawn reward's icon (🏁 for a skip, ×3 beside the bean for three) rises out of the box and fades. */
+  revealMystery(draw, x, y) {
+    this.clearReveal();
+    const parts = [];
+    if (draw === 'skip') {
+      parts.push(this.add.text(0, 0, '\u{1F3C1}', { fontFamily: 'sans-serif', fontSize: '72px' }).setOrigin(0.5));
+    } else {
+      const key = { probiotic: 'probiotic', postbiotic: 'postbiotic', bean1: 'bean', bean3: 'bean' }[draw] ?? 'fiber';
+      parts.push(this.add.image(0, 0, key).setScale(T.spriteDisplayScale));
+      if (MYSTERY_BEANS[draw] > 1) parts.push(this.add.text(T.items.itemRadius, 0, `×${MYSTERY_BEANS[draw]}`, { ...TEXT_STYLE, fontSize: '40px' }).setOrigin(0, 0.5));
+    }
+    const reveal = this.add.container(x, y, parts).setDepth(12);
+    reveal.setData('draw', draw);
+    this.reveal = reveal;
+    this.revealTween = this.tweens.add({
+      targets: reveal,
+      y: { value: y - T.mystery.revealRisePx, ease: 'Sine.easeOut' },
+      alpha: { value: 0, ease: 'Quad.easeIn' },
+      duration: T.mystery.revealMs,
+      onComplete: () => {
+        reveal.destroy();
+        if (this.reveal === reveal) {
+          this.reveal = null;
+          this.revealTween = null;
+        }
+      },
+    });
+    if (this.state === 'paused') this.revealTween.pause();
+  }
+
+  clearReveal() {
+    this.revealTween?.stop(); // stop() does not fire onComplete
+    this.revealTween = null;
+    this.reveal?.destroy();
+    this.reveal = null;
+  }
+
+  /**
+   * A mystery box's skip: every pair left in the level scores now (× the
+   * multiplier, the probiotic countdown paused, as in a fart), everything not yet
+   * passed is cleared, and the finish line enters from the right edge.
+   */
+  skipToFinish() {
+    const pairs = skipPairs(this.pipesPassed, this.level, T);
+    const mult = this.effects.multiplier();
+    const end = levelEnd(this.level, T);
+    // The box sits between pairs, so everything ahead of the poop is not yet passed.
+    for (const group of [this.pipes, this.items, this.beans]) {
+      for (const obj of [...group.getChildren()]) if (obj.x > this.poop.x) obj.destroy();
+    }
+    for (const pipe of this.pipes.getChildren()) if (pipe.getData('scoring')) pipe.setData('passed', true); // already credited
+    this.score += pairs * pipePoints(T, mult);
+    this.scoreText.setText(String(this.score));
+    this.pipesPassed = end;
+    this.pipesSpawned = end;
+    this.levelBar.setProgress(levelProgress(this.pipesPassed, this.level, T));
+    this.spawnFinishLine();
+    this.distanceSinceSpawn = 0;
+    this.nextGapY = null;
+    this.showScorePopup('skip', mult, pairs);
+    this.refreshProbioticHud(); // the score may have gained a digit: re-place the ×2 badge
+    this.cameras.main.flash(250, 255, 215, 0);
   }
 
   /**
@@ -1375,7 +1520,7 @@ export class Play extends Phaser.Scene {
       if (bob && this.state === 'playing') {
         const elapsed = item.getData('elapsed') + delta;
         item.setData('elapsed', elapsed);
-        if (bob === 'band') item.y = bobY(elapsed, item.getData('phase'), this.beanBounds, T.items.fiberPeriodMs);
+        if (bob === 'band') item.y = bobY(elapsed, item.getData('phase'), this.beanBounds, item.getData('period') ?? T.items.fiberPeriodMs);
         else item.y = gapBobY(elapsed, item.getData('baseY'), item.getData('amp'), T.items.movePeriodMs, item.getData('phase'));
       }
       if (item.x < -T.pipeWidth) item.destroy();

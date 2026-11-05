@@ -454,6 +454,31 @@ export async function run(url = DEFAULT_URL) {
     await sleep(300);
     ok((await evaluate(`${play}.state === 'playing' && ${play}.diff.pipeSpeed === ${TT.pipeSpeed + 2 * TT.levels.speedStep}`)) === true, 'level 3 resumes one step faster again');
     ok((await evaluate(`${play}.diff.gapHeight`)) === TT.gapHeight, `level 3 uses the base pipe gap (${TT.gapHeight} px)`);
+    // Mystery boxes (level 3): a box spins and bobs the beans' band at half fiber's speed, its spin
+    // pauses with the run, and each draw does what it says. The poop is pinned and immune meanwhile.
+    {
+      await evaluate(`${play}.poop.body.setAllowGravity(false), ${play}.poop.setVelocity(0, 0), ${play}.poop.y = 640, ${play}.graceLeftMs = 1e9, true`);
+      const spawned = await evaluate(`(() => { const p = ${play}; p.boxProbe = p.spawnBandItem('mystery'); const b = p.boxProbe; return JSON.stringify({ tex: b.texture.key, playing: b.anims.isPlaying, anim: b.anims.currentAnim?.key, frame: b.frame.name, period: b.getData('period'), bob: b.getData('bob'), y: b.y, minY: p.beanBounds.minY, maxY: p.beanBounds.maxY }); })()`).then(JSON.parse);
+      await sleep(300);
+      const later = await evaluate(`JSON.stringify({ frame: ${play}.boxProbe.frame.name, y: ${play}.boxProbe.y })`).then(JSON.parse);
+      ok(spawned.tex === 'mystery' && spawned.playing && spawned.anim === 'mystery-spin' && later.frame !== spawned.frame && spawned.period === TT.mystery.periodMs && spawned.bob === 'band' && [spawned.y, later.y].every((y) => y >= spawned.minY && y <= spawned.maxY), `a mystery box spins (frame ${spawned.frame} → ${later.frame}) and bobs the beans' band on a ${spawned.period} ms period`);
+      await evaluate(`${play}.pausePlay(), true`);
+      const f1 = await evaluate(`${play}.boxProbe.frame.name`);
+      await sleep(300);
+      const f2 = await evaluate(`${play}.boxProbe.frame.name`);
+      await evaluate(`${play}.resumePlay(), ${play}.poop.setVelocity(0, 0), ${play}.poop.y = 640, true`);
+      await sleep(300);
+      const f3 = await evaluate(`${play}.boxProbe.frame.name`);
+      ok(f1 === f2 && f3 !== f2, `the box's spin freezes while paused (frame ${f1} → ${f2}) and runs again after resume (→ ${f3})`);
+      await evaluate(`${play}.boxProbe.destroy(), ${play}.poop.setVelocity(0, 0), ${play}.poop.y = 640, true`);
+      // Forced draws: a postbiotic from nothing, then three beans.
+      const drawn = await evaluate(`(() => { const p = ${play}; p.items.clear(true, true); while (p.effects.hasProbiotic()) p.effects.consumeProbiotic(); p.refreshProbioticHud(); const c0 = p.collected.postbiotic; p.openMystery('postbiotic', p.poop.x, p.poop.y); const post = { has: p.effects.hasPostbiotic(), left: p.effects.pipesLeft(), tex: p.probioticIcon.texture.key, badge: p.multText.visible, counted: p.collected.postbiotic - c0, reveal: p.reveal?.getData('draw'), parts: p.reveal?.list.map((c) => c.texture?.key) }; p.effects.consumeProbiotic(); p.refreshProbioticHud(); const b0 = p.collected.bean; p.openMystery('bean3', p.poop.x, p.poop.y); const bean = { beans: p.effects.beans(), counted: p.collected.bean - b0, charged: p.charged, superReady: p.effects.superReady(), hud: p.beanText.text, reveal: p.reveal?.getData('draw'), parts: p.reveal?.list.map((c) => (c.type === 'Text' ? c.text : c.texture.key)) }; return JSON.stringify({ post, bean }); })()`).then(JSON.parse);
+      ok(drawn.post.has && drawn.post.left === TT.mystery.postbioticPipes && drawn.post.tex === 'postbiotic' && drawn.post.badge && drawn.post.counted === 1 && drawn.post.reveal === 'postbiotic' && drawn.post.parts?.[0] === 'postbiotic', `a postbiotic draw turns ×2 on for ${drawn.post.left} pipes (HUD ${drawn.post.tex}, badge on, counted once) and the postbiotic rises out of the box`);
+      ok(drawn.bean.beans === TT.beans.maxBeans && drawn.bean.charged && drawn.bean.superReady && drawn.bean.hud === `×${TT.beans.maxBeans}` && drawn.bean.reveal === 'bean3' && JSON.stringify(drawn.bean.parts) === JSON.stringify(['bean', '×3']), `a three-bean draw fills the bag (${drawn.bean.beans}, +${drawn.bean.counted} counted, super-charged) and shows the bean with "×3" (${JSON.stringify(drawn.bean.parts)})`);
+      // Real path, rng stubbed into the bean band with the bag full: the draw turns into fiber.
+      const fb = await evaluate(`(() => { const p = ${play}; const before = { score: p.score, fiber: p.collected.fiber, box: p.collected.mystery, beans: p.effects.beans() }; const it = p.items.create(p.poop.x, p.poop.y, 'mystery'); it.setData('kind', 'mystery'); const r = p.rng; p.rng = () => 0.25; try { p.collectItem(it); } finally { p.rng = r; } return JSON.stringify({ before, score: p.score, fiber: p.collected.fiber, box: p.collected.mystery, beans: p.effects.beans(), popup: p.scorePopup.text, reveal: p.reveal?.getData('draw') }); })()`).then(JSON.parse);
+      ok(fb.before.beans === TT.beans.maxBeans && fb.beans === fb.before.beans && fb.score === fb.before.score + TT.items.fiberPoints && fb.fiber === fb.before.fiber + 1 && fb.box === fb.before.box + 1 && fb.popup === `+${TT.items.fiberPoints}` && fb.reveal === 'fiber', `a bean drawn with the bag full turns into fiber (+${fb.score - fb.before.score}, popup "${fb.popup}", beans stay ${fb.beans})`);
+    }
     // From level 3 a gap item sweeps its gap (spawn one directly: the roll is random).
     await evaluate(`${play}.gapProbe = ${play}.spawnGapItem('bacteria', 900, 640, ${TT.gapHeight}), true`);
     const y1 = await evaluate(`${play}.gapProbe.y`);
@@ -483,6 +508,23 @@ export async function run(url = DEFAULT_URL) {
     await sleep(1100);
     const pipeFrames = await evaluate(`(${play}.spawnPipePair(), JSON.stringify({ first: __flappy.textures.get('pipe').firstFrame, frames: ${play}.pipes.getChildren().map((c) => [c.frame.name, c.frame.height]) }))`).then(JSON.parse);
     ok(pipeFrames.frames.length >= 2 && pipeFrames.frames.every(([n, h]) => n === '__BASE' && h === 1280), `after a game over, new pipes still use the full 128x1280 texture (default frame "${pipeFrames.first}")`);
+
+    // A mystery skip (real path, rng stubbed into the skip band): under a postbiotic every pair left
+    // in level 3 scores ×2 at once, the pipes ahead are cleared, the finish line comes in from the
+    // right edge, and crossing it breaks to level 4 with the probiotic countdown untouched.
+    {
+      const end3 = end2 + len3;
+      await evaluate(`${play}.poop.body.setAllowGravity(false), ${play}.poop.setVelocity(0, 0), ${play}.poop.y = 640, ${play}.graceLeftMs = 1e9, ${play}.pipes.clear(true, true), ${play}.items.clear(true, true), ${play}.beans.clear(true, true), true`);
+      await evaluate(`${play}.level = 3, ${play}.pipesSpawned = ${end2 + 10}, ${play}.pipesPassed = ${end2 + 8}, ${play}.finishSpawned = false, ${play}.applyLevel(), ${play}.spawnPipePair(), true`);
+      const sk = await evaluate(`(() => { const p = ${play}; while (p.effects.hasProbiotic()) p.effects.consumeProbiotic(); p.effects.applyPostbiotic(${TT.mystery.postbioticPipes}); p.refreshProbioticHud(); const ahead = () => p.pipes.getChildren().filter((c) => c.x > p.poop.x).length; const before = { score: p.score, passed: p.pipesPassed, ahead: ahead(), left: p.effects.pipesLeft() }; const it = p.items.create(p.poop.x, p.poop.y, 'mystery'); it.setData('kind', 'mystery'); const r = p.rng; p.rng = () => 0.505; try { p.collectItem(it); } finally { p.rng = r; } return JSON.stringify({ before, score: p.score, passed: p.pipesPassed, spawned: p.pipesSpawned, ahead: ahead(), items: p.items.getChildren().filter((c) => c.x > p.poop.x).length, line: p.finishLine ? p.finishLine.x : null, fs: p.finishSpawned, popup: p.scorePopup.text, color: p.scorePopup.style.color, reveal: p.reveal?.getData('draw'), bar: p.levelBar.value(), left: p.effects.pipesLeft() }); })()`).then(JSON.parse);
+      const pairs = end3 - sk.before.passed;
+      ok(sk.before.ahead >= 2 && sk.ahead === 0 && sk.items === 0 && sk.line > 720 && sk.fs && sk.passed === end3 && sk.spawned === end3 && sk.score === sk.before.score + 2 * pairs && sk.popup === `+${2 * pairs}` && sk.color === TT.mystery.color && sk.reveal === 'skip' && sk.bar === 1 && sk.left === sk.before.left, `a mystery skip under ×2 scores the ${pairs} pairs left at once (+${sk.score - sk.before.score}, popup "${sk.popup}"), clears the ${sk.before.ahead} pipes ahead, and the finish line enters at x ${sk.line?.toFixed(0)}`);
+      const brokeSkip = await waitBreak();
+      const lv = await evaluate(`JSON.stringify({ level: ${play}.level, left: ${play}.effects.pipesLeft(), passed: ${play}.pipesPassed })`).then(JSON.parse);
+      ok(brokeSkip && lv.level === 4 && lv.left === sk.before.left && lv.passed === end3, `crossing it breaks to level ${lv.level} with ${lv.passed} pipes passed; the postbiotic still has ${lv.left} pipes`);
+      await chrome('tap');
+      await sleep(300);
+    }
 
     // The final level: jump to the last pair of rectum and float immune through its
     // finish line. The run ends as a win: no break, Over opens with the win headline.

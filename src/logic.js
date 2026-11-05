@@ -417,6 +417,9 @@ export function mysteryAllowed(level, t) {
 /** What a mystery box can hold besides fiber, in roll order; mystery.draws gives each a 0–1 chance. */
 export const MYSTERY_DRAWS = ['probiotic', 'bean1', 'postbiotic', 'bean3', 'skip'];
 
+/** Beans each bean draw adds (as many as fit under beans.maxBeans). */
+export const MYSTERY_BEANS = { bean1: 1, bean3: 3 };
+
 /** Draw a mystery box's reward: a MYSTERY_DRAWS value by its chance, else 'fiber' (the default). */
 export function rollMystery(rng, t) {
   let pick = rng();
