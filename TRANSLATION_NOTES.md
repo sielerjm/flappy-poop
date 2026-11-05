@@ -9,8 +9,10 @@ GitHub Pages is still preferred.
 ## Product context
 
 Flappy Poop is a gut-themed Flappy Bird clone for phone browsers (Phaser 4, no
-bundler). A poop emoji flaps through intestinal-fold pipes. Pickups: fiber (+1),
+bundler). A poop emoji flaps through intestinal-fold pipes. Pickups: fiber (+3),
 probiotic (blocks one bacteria hit for 5 pipes; pickups stack), bad bacteria (−3, never kills).
+Postbiotic (后生元): fiber eaten while a probiotic is active; pipes and fiber score ×2 until the
+probiotic runs out. It is a state shown in the HUD, not a pickup.
 Author / designer / artist: Michael Sieler. Side project, short playful copy — not
 formal medical language.
 
@@ -38,6 +40,7 @@ formal medical language.
 | Beans | 豆子 |
 | Fiber | 纤维 |
 | Probiotic | 益生菌 |
+| Postbiotic | 后生元 |
 | Bad bacteria | 有害细菌 |
 
 Keep these consistent everywhere (How to play rows, future copy).
@@ -68,7 +71,7 @@ Short, playful, clear. Fit a 720×1280 logical field; How to play / About body w
 | gameOver | GAME OVER | 游戏结束 |
 | scoreLabel | SCORE | 得分 |
 | bestLabel | BEST | 最高 |
-| tapToHome | tap to go home | 点击返回主界面 |
+| tapToHome | Home | 返回主页 |
 | settingsTitle | SETTINGS | 设置 |
 | sound | Sound | 声音 |
 | haptics | Haptics | 震动 |
@@ -91,7 +94,9 @@ Short, playful, clear. Fit a 720×1280 logical field; How to play / About body w
 | itemFiberName | Fiber | 纤维 |
 | itemFiberDetail | +3 points. Bobs up and down between the pipes. | +3 分。在管道之间上下漂浮。 |
 | itemProbioticName | Probiotic | 益生菌 |
-| itemProbioticDetail | Protects you against bad bacteria for 5 pipes. Subsequent probiotics stack, but hitting a bad bacteria uses them all up. From level 3 it moves up and down in the gap. | 在 5 道管道内保护你不受有害细菌伤害。后续益生菌可叠加，但撞到有害细菌会全部用完。从第 3 关起它会在管道口之间上下移动。 |
+| itemProbioticDetail | Protects you against bad bacteria for 5 pipes. Subsequent probiotics stack, but hitting a bad bacteria uses them all up. Eat a fiber while it is active to make a postbiotic. From level 3 it moves up and down in the gap. | 在 5 道管道内保护你不受有害细菌伤害。后续益生菌可叠加，但撞到有害细菌会全部用完。生效期间吃到纤维会变成后生元。从第 3 关起它会在管道口之间上下移动。 |
+| itemPostbioticName | Postbiotic | 后生元 |
+| itemPostbioticDetail | Eat fiber while a probiotic is active and it turns into a postbiotic: every pipe and fiber is worth double (×2) until the probiotic runs out. Another probiotic keeps it going; a bad bacteria hit ends it. | 在益生菌生效期间吃到纤维，就会变成后生元：在益生菌结束前，每道管道和每个纤维都得双倍分数（×2）。再吃到益生菌可延长时间；撞到有害细菌则立即结束。 |
 | itemBacteriaName | Bad bacteria | 有害细菌 |
 | itemBacteriaDetail | −3 points. From level 3 it moves up and down in the gap. | −3 分。从第 3 关起它会在管道口之间上下移动。 |
 | itemBeanName | Beans | 豆子 |
@@ -165,7 +170,7 @@ Inspired by Flappy Bird
 ## Reviewer checklist
 
 1. Fluency: natural Simplified Chinese, not word-for-word awkwardness.
-2. Glossary: 纤维 / 益生菌 / 有害细菌 used consistently.
+2. Glossary: 纤维 / 益生菌 / 后生元 / 有害细菌 used consistently.
 3. Silent mode: hardware 静音模式, not software mute.
 4. Untranslated tokens still present in About.
 5. Length: How to play body and About still readable in a 520 px wrap on a phone.

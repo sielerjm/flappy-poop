@@ -31,7 +31,7 @@ test('HOW_TO_ITEMS names fiber, probiotic, and bacteria with their effects', () 
   const items = howToItems('en');
   assert.deepEqual(
     items.map((item) => item.key),
-    ['pipe', 'fiber', 'probiotic', 'bacteria', 'bean', 'toilet', 'levels'],
+    ['pipe', 'fiber', 'probiotic', 'postbiotic', 'bacteria', 'bean', 'toilet', 'levels'],
   );
   const blob = items.map((item) => `${item.name} ${item.detail}`).join('\n');
   assert.match(blob, /This is a pipe/);
@@ -44,10 +44,13 @@ test('HOW_TO_ITEMS names fiber, probiotic, and bacteria with their effects', () 
   assert.match(blob, /\+3/);
   assert.match(blob, /5 pipes/);
   assert.match(blob, /−3|-3/);
+  assert.match(blob, /postbiotic/);
+  assert.match(blob, /×2/);
   const zh = howToItems('zh-Hans');
   assert.match(zh.map((i) => i.name).join(' '), /管道/);
   assert.match(zh.map((i) => i.name).join(' '), /纤维/);
   assert.match(zh.map((i) => i.name).join(' '), /益生菌/);
+  assert.match(zh.map((i) => i.name).join(' '), /后生元/);
   assert.match(zh.map((i) => i.name).join(' '), /有害细菌/);
   assert.match(zh.map((i) => i.name).join(' '), /豆子/);
 });

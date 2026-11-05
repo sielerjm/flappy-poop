@@ -30,7 +30,7 @@ const SCENE_DENYLIST = [
   'How to play',
   'tap to flap',
   'PAUSED',
-  'tap to go home',
+  'Home',
   'ABOUT',
   'HOW TO PLAY',
   'Save / Load User',
@@ -115,7 +115,7 @@ test('howToItems and pauseBannerText resolve for both locales', () => {
     const items = howToItems(locale);
     assert.deepEqual(
       items.map((i) => i.key),
-      ['pipe', 'fiber', 'probiotic', 'bacteria', 'bean', 'toilet', 'levels'],
+      ['pipe', 'fiber', 'probiotic', 'postbiotic', 'bacteria', 'bean', 'toilet', 'levels'],
     );
     const banner = pauseBannerText(locale);
     assert.match(banner, /\n/);
