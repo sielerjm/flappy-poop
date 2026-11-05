@@ -127,7 +127,7 @@ src/
                             Writes go through the submit_score() SQL function.
                             Fully unit-tested with a fake fetch.
   share.js                  Game-over share, NO Phaser; navigator / document / URL
-                            injected: dataUrlToBytes, shareMode ('share' when
+                            injected: shareMode ('share' when
                             canShare({ files }), else 'download'), shareScoreImage
                             (navigator.share called synchronously inside the tap;
                             AbortError = cancelled; other errors and no share sheet
@@ -169,6 +169,14 @@ src/
                             cog, plus bottom-left info, language (🌐), feedback (💬).
                             Chrome taps use trayHit() in Play/Over, not GameObject
                             pointer handlers.
+    shareCard.js            The share image, NO Phaser: drawShareCard(ctx, layout,
+                            data, images) paints the 1080x1350 card with Canvas 2D
+                            (dark fill, pink frame, GAME OVER or the gold win line,
+                            the happy poop in a tan level-1 frame, score · level,
+                            fiber / probiotic / postbiotic over bacteria / bean /
+                            mystery-icon, the pipe cap ×n, the Play: link);
+                            renderShareCard() draws it on a fresh canvas and
+                            resolves canvas.toBlob's PNG or null (never rejects).
     button.js               createButton(): Graphics rounded rect + centred text
                             for the ready-screen boxes from readyLayout. No pointer
                             handlers; Play resolves taps with readyHit().
@@ -328,10 +336,12 @@ src/
     Over.js                 Game-over panel (score, run summary of fiber / probiotic / postbiotic over bacteria / bean / mystery box (mystery-icon.png), pipes crossed, then Share | glowing Home on one row from overButtonsLayout) with a
                             tap lockout (openedAt = game.loop.time: a relaunched
                             scene's this.time.now is stale) and its own tray (mute
-                            still works). capturePanel(): over.captureDelayMs after
-                            opening (panel scaled in, buttons still at alpha 0)
-                            renderer.snapshotArea(panelCaptureRect(…)) becomes
-                            this.shareFile (dataUrlToBytes → File) and Share shows.
+                            still works). makeShareCard() at create (not on a
+                            test run): renderShareCard (ui/shareCard.js) from the
+                            loaded textures' source images, shareCardLayout(T),
+                            the panel's headline / score line / counts / pipes and
+                            shareCardFooter(); its toBlob PNG becomes
+                            this.shareFile (a File) and Share shows.
                             pointerdown on Share marks it pressed (no home);
                             pointerup over it runs shareRun() → shareScoreImage
                             with shareText(). { test: true }: the gold
@@ -439,11 +449,15 @@ tests/                      node --test, zero deps. Each file is self-describing
                             feedback i18n keys
   i18n.test.js              catalog key parity, zh≠en (allowlist), TRANSLATION_NOTES
                             key coverage, scene English denylist, initialLocale
-  share.test.js             dataUrlToBytes, shareMode branches, shareScoreImage (share
+  share.test.js             shareMode branches, shareScoreImage (share
                             called synchronously, cancel, error → download, download
                             name + revoke, never rejects)
   over.test.js              overButtonsLayout (Share | Home inside the panel, Home
-                            alone on a test run), overHit, panelCaptureRect
+                            alone on a test run), overHit, shareCardLayout (inside
+                            the frame, top-to-bottom order, rows inside the card)
+  shareCard.test.js         drawShareCard on a fake 2D context (text order, tan frame
+                            before the poop, icons + pipe cap slice, win line, text
+                            max widths), renderShareCard blob / null paths
   overlay.test.js           overlayOutsideHit inside vs 1px outside HowTo/Settings panels
                             (plain and test-mode)
   testmode.test.js          isTestWord, testRunStart (levels, par score, clamping),
@@ -504,8 +518,9 @@ tools/
                             test mode (trigger word, start level, Invincible, Settings
                             power-ups, nothing recorded, Exit latch, normal run after;
                             a test run's Over has no Share), and the game-over share
-                            (no save hint, the 568x728 capture taken before the
-                            buttons show, a real tap on Share through a stubbed
+                            (no save hint, the 1080x1350 share card and its pixels:
+                            dark fill, pink frame, tan poop frame with the poop; a
+                            real tap on Share through a stubbed
                             navigator.share, cancel, download fallback, Home).
                             Zero dependencies (fetch + WebSocket).
 
@@ -555,8 +570,8 @@ tools/
    when a locale or the notes file lags; run it before every commit and push.
 9. **Share inside the tap.** `navigator.share()` needs transient user activation,
    which iOS Safari grants only during the tap itself and which touch gives on
-   pointer-up, not pointer-down. Make the file before the tap (Over captures the
-   panel as it opens) and call `shareScoreImage()` straight from the
+   pointer-up, not pointer-down. Make the file before the tap (Over draws the
+   share card as it opens) and call `shareScoreImage()` straight from the
    `pointerup` handler: no `await`, timer, or fetch before it.
 
 ## How to work on it
