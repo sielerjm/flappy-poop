@@ -169,7 +169,7 @@ export class Play extends Phaser.Scene {
     // HUD
     this.scoreText = this.add.text(GAME_WIDTH / 2, T.hudScoreY, '0', { ...TEXT_STYLE, fontSize: '80px' }).setOrigin(0.5).setDepth(20).setVisible(false); // shown from start()
     // "+3" / "−3" under the score when fiber or unshielded bacteria moves it; one reused text, alpha 0 at rest.
-    this.scorePopup = this.add.text(GAME_WIDTH / 2, T.popup.y, '', { ...TEXT_STYLE, fontSize: `${T.popup.fontPx}px` }).setOrigin(0.5).setDepth(20).setAlpha(0);
+    this.scorePopup = this.add.text(GAME_WIDTH / 2, T.popup.itemY, '', { ...TEXT_STYLE, fontSize: `${T.popup.fontPx}px` }).setOrigin(0.5).setDepth(20).setAlpha(0);
     this.popupTween = null;
     // Level progress bar above the score: hidden on the ready screen, shown from start(), kept through breaks and death.
     this.levelBar = createLevelBar(this, levelBarLayout(T, GAME_WIDTH)).setVisible(false);

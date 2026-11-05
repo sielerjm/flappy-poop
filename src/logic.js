@@ -264,6 +264,16 @@ export function hudRightLayout(width, textWidth, { iconSize, margin = 16, gap = 
   return { textX, iconX: textX - Math.max(0, textWidth) - gap - iconSize / 2 };
 }
 
+/**
+ * Left edge (origin 0, 0.5) of the "×2" postbiotic badge beside the score.
+ * `scoreWidth` is the score text's width; the badge's glow padding (glowPx) is
+ * subtracted so the glyphs, not the padding, start offsetX past the digits.
+ */
+export function multiplierLayout(scoreX, scoreWidth, t) {
+  const b = t.postbiotic;
+  return { x: scoreX + scoreWidth / 2 + b.offsetX - b.glowPx, y: t.hudScoreY + b.offsetY };
+}
+
 /** Linear blend of two 0xRRGGBB colours, f in [0, 1]. */
 export function lerpColor(a, b, f) {
   const k = Math.min(1, Math.max(0, f));
@@ -395,20 +405,31 @@ export function itemGapY(gapY, gapHeight, rng, kind) {
   return gapY + (rng() * 2 - 1) * gapHeight * 0.2;
 }
 
-/** New score after collecting an item. Probiotic is inventory-only. Floor 0. */
-export function scoreAfterItem(score, kind, t) {
-  if (kind === 'fiber') return score + t.items.fiberPoints;
+/**
+ * New score after collecting an item. Probiotic is inventory-only. Floor 0.
+ * `mult` is the postbiotic multiplier (1 or items.postbioticMultiplier); it
+ * doubles fiber, never the bacteria penalty.
+ */
+export function scoreAfterItem(score, kind, t, mult = 1) {
+  if (kind === 'fiber') return score + t.items.fiberPoints * mult;
   if (kind === 'bacteria') return Math.max(0, score - t.items.bacteriaPenalty);
   return score;
 }
 
+/** Points one pipe pair is worth under multiplier `mult` (1, or items.postbioticMultiplier). */
+export function pipePoints(t, mult = 1) {
+  return t.pipePoints * mult;
+}
+
 /**
- * The "+3" / "−3" that fades under the score when an item moves it: text and
- * colour for fiber and unshielded bacteria, null for anything else. Nominal:
- * bacteria always reads −bacteriaPenalty even when the 0 floor clamps the loss.
+ * The popups under the score: 'pipe' is the quick white "+1" (upper row) on
+ * every pair passed; fiber and unshielded bacteria are the "+3" / "−3" (lower
+ * row). Null for anything else. `mult` scales pipe and fiber, never bacteria.
+ * Nominal: bacteria always reads −bacteriaPenalty even when the 0 floor clamps the loss.
  */
-export function scorePopup(kind, t) {
-  if (kind === 'fiber') return { text: `+${t.items.fiberPoints}`, color: t.popup.fiberColor };
+export function scorePopup(kind, t, mult = 1) {
+  if (kind === 'pipe') return { text: `+${pipePoints(t, mult)}`, color: t.popup.pipeColor };
+  if (kind === 'fiber') return { text: `+${t.items.fiberPoints * mult}`, color: t.popup.fiberColor };
   if (kind === 'bacteria') return { text: `\u2212${t.items.bacteriaPenalty}`, color: t.popup.bacteriaColor };
   return null;
 }
@@ -595,6 +616,7 @@ export function fartMul(elapsedMs, durationMs, peak) {
  */
 export function createEffects(t) {
   let probioticPipesLeft = 0;
+  let postbiotic = false; // fiber eaten while the probiotic was up: ×multiplier until the probiotic runs out
   const max = t.items.probioticPipes;
   let beanCount = 0;
   let powerDuration = 0;
@@ -611,16 +633,31 @@ export function createEffects(t) {
     hasProbiotic() {
       return probioticPipesLeft > 0;
     },
+    /** A bad bacteria hit: the whole stack goes, and the postbiotic with it. */
     consumeProbiotic() {
       if (probioticPipesLeft <= 0) return false;
       probioticPipesLeft = 0;
+      postbiotic = false;
       return true;
     },
     /** A pipe passed: the probiotic counts down, except while farting (nothing can hit you then). */
     onPipePassed() {
       if (powerOn) return probioticPipesLeft;
       if (probioticPipesLeft > 0) probioticPipesLeft -= 1;
+      if (probioticPipesLeft === 0) postbiotic = false;
       return probioticPipesLeft;
+    },
+    /** Fiber eaten: with a probiotic up it becomes a postbiotic. Returns whether one is running. */
+    applyFiber() {
+      if (probioticPipesLeft > 0) postbiotic = true;
+      return postbiotic;
+    },
+    hasPostbiotic() {
+      return postbiotic && probioticPipesLeft > 0;
+    },
+    /** Score multiplier for pipes and fiber: items.postbioticMultiplier while a postbiotic runs, else 1. */
+    multiplier() {
+      return postbiotic && probioticPipesLeft > 0 ? t.items.postbioticMultiplier : 1;
     },
     pipesLeft() {
       return probioticPipesLeft;

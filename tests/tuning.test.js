@@ -73,10 +73,28 @@ test('beans block sits in a fair band and the fart ramp stays readable', () => {
 
 test('score popup sits under the score and fades at a readable pace', () => {
   const p = T.popup;
-  assert.ok(p.y > T.hudScoreY && p.y <= 240, `popup.y ${p.y}`);
+  assert.ok(p.pipeY > T.hudScoreY, `popup.pipeY ${p.pipeY}`);
+  assert.ok(p.itemY > p.pipeY && p.itemY <= 280, `popup.itemY ${p.itemY}`);
+  assert.ok(p.itemY - p.pipeY >= p.fontPx, 'the two rows do not overlap');
+  assert.ok(p.pipeFadeMs >= 30 && p.pipeFadeMs <= 500, `popup.pipeFadeMs ${p.pipeFadeMs}`);
+  assert.ok(p.pipeHoldMs >= 0 && p.pipeHoldMs <= 1000 && p.pipeHoldMs < p.holdMs, `popup.pipeHoldMs ${p.pipeHoldMs}`);
+  assert.match(p.pipeColor, /^#[0-9a-f]{6}$/i);
   assert.ok(p.fontPx >= 24 && p.fontPx <= 64, `popup.fontPx ${p.fontPx}`);
   assert.ok(p.fadeMs >= 50 && p.fadeMs <= 1000, `popup.fadeMs ${p.fadeMs}`);
   assert.ok(p.holdMs >= 0 && p.holdMs <= 2000, `popup.holdMs ${p.holdMs}`);
   assert.match(p.fiberColor, /^#[0-9a-f]{6}$/i);
   assert.match(p.bacteriaColor, /^#[0-9a-f]{6}$/i);
+});
+
+test('postbiotic multiplier and its ×2 badge stay readable', () => {
+  assert.equal(T.pipePoints, 1);
+  assert.ok(T.items.postbioticMultiplier >= 2 && T.items.postbioticMultiplier <= 3, `postbioticMultiplier ${T.items.postbioticMultiplier}`);
+  const b = T.postbiotic;
+  assert.ok(b.fontPx >= 20 && b.fontPx <= 48, `postbiotic.fontPx ${b.fontPx}`);
+  assert.ok(b.glowPx >= 0 && b.glowPx <= 32, `postbiotic.glowPx ${b.glowPx}`);
+  assert.ok(b.pulseMs >= 200 && b.pulseMs <= 2000, `postbiotic.pulseMs ${b.pulseMs}`);
+  assert.ok(b.minAlpha > 0 && b.minAlpha < 1, `postbiotic.minAlpha ${b.minAlpha}`);
+  assert.ok(b.maxScale >= 1 && b.maxScale <= 1.5, `postbiotic.maxScale ${b.maxScale}`);
+  assert.match(b.color, /^#[0-9a-f]{6}$/i);
+  assert.match(b.glowColor, /^#[0-9a-f]{6}$/i);
 });

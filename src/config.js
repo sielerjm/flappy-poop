@@ -18,6 +18,7 @@ export const TUNING = {
   spriteDisplayScale: 0.25, // 384 px textures drawn at 96 logical px
   hudProbioticSize: 96, // logical px; HUD icon uses setDisplaySize
   hudScoreY: 116, // px centre line of the 80 px score (and the 🚽 beside it): below the progress bar with air between
+  pipePoints: 1, // points per pipe pair passed (× the postbiotic multiplier)
   maxFallAngle: 90, // degrees nose-down at terminal fall
   maxRiseAngle: -25, // degrees nose-up right after a flap
   angleFallRefVy: 1200, // px/s; vy at which fall tilt reaches maxFallAngle
@@ -71,12 +72,27 @@ export const TUNING = {
     barTweenMs: 200, // ms the fill animates to its new width after each pipe
   },
   popup: {
-    y: 184, // px centre of the "+3" / "−3" under the 80 px score (between the bean and probiotic counters)
-    fontPx: 48, // px font size of the popup
-    fadeMs: 200, // ms to fade in, and again to fade out
-    holdMs: 500, // ms at full alpha between the fades
+    pipeY: 184, // px centre of the quick "+1" per pipe pair, under the 80 px score (between the bean and probiotic counters)
+    itemY: 236, // px centre of the "+3" / "−3" for fiber / bacteria, stacked under the pipe row
+    fontPx: 48, // px font size of both popup rows
+    pipeFadeMs: 80, // ms the pipe "+1" fades in, and again out (quick; the next pipe restarts it)
+    pipeHoldMs: 250, // ms the pipe "+1" stays at full alpha
+    pipeColor: '#ffffff', // white "+1" / "+2"
+    fadeMs: 200, // ms the item popup fades in, and again out
+    holdMs: 500, // ms the item popup stays at full alpha between the fades
     fiberColor: '#a8f0a8', // light green "+3" when fiber is eaten
     bacteriaColor: '#ff9a9a', // light red "−3" when unshielded bad bacteria hits
+  },
+  postbiotic: {
+    color: '#ffd700', // gold "×2" badge beside the score while the multiplier runs
+    glowColor: '#ffb300', // amber glow (text shadow) around the badge
+    fontPx: 32, // px font size of the badge (a subscript to the 80 px score)
+    glowPx: 12, // px shadow blur; also the text padding so the glow is not clipped
+    pulseMs: 600, // ms per pulse (one way)
+    minAlpha: 0.7, // 0–1 pulse floor
+    maxScale: 1.15, // × size at the top of the pulse
+    offsetX: 4, // px from the score digits' right edge to the badge glyphs
+    offsetY: 26, // px below hudScoreY (subscript: sits on the digits' baseline)
   },
   items: {
     startScore: 8, // score at which pickups may appear
@@ -85,6 +101,7 @@ export const TUNING = {
     fiberPoints: 3, // points added by fiber
     bacteriaPenalty: 3, // points subtracted by unshielded bacteria (3 since probiotics stack)
     probioticPipes: 5, // pipes a probiotic lasts
+    postbioticMultiplier: 2, // × on pipes and fiber while a postbiotic runs (fiber eaten with a probiotic up)
     itemRadius: 48, // px circular hitbox = half the 96 logical-px sprite (whole drawing)
     weights: { fiber: 3, probiotic: 2, bacteria: 4 },
     fiberPeriodMs: 3000, // ms for one full up-and-down bob of a fiber between pipe pairs (beans use beans.travelPeriodMs)

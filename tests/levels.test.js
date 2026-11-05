@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { TUNING as T, LEVELS, LEVEL_COLORS, BACKGROUND, GAME_HEIGHT } from '../src/config.js';
 import { levelBannerText, levelLabel, LOCALES } from '../src/i18n.js';
 import { GAME_WIDTH } from '../src/config.js';
-import { levelPipes, levelEnd, levelFor, levelSpeed, levelGap, levelName, levelColor, levelProgress, lerpColor, pipeSpacing, gapBounds, levelBarLayout, levelBarLabelOnFill, hudRightLayout, tutorialSpawn } from '../src/logic.js';
+import { levelPipes, levelEnd, levelFor, levelSpeed, levelGap, levelName, levelColor, levelProgress, lerpColor, pipeSpacing, gapBounds, levelBarLayout, levelBarLabelOnFill, hudRightLayout, multiplierLayout, tutorialSpawn } from '../src/logic.js';
 
 const L = T.levels;
 
@@ -168,6 +168,19 @@ test('hudRightLayout keeps the probiotic icon and count inside the right edge an
     assert.ok(iconX - T.hudProbioticSize / 2 >= GAME_WIDTH / 2 + 110, `icon clear of a three-digit score (text ${textWidth})`);
   }
   assert.deepEqual(hudRightLayout(720, 40, { iconSize: 96 }), { textX: 704, iconX: 704 - 40 - 8 - 48 });
+});
+
+test('multiplierLayout puts the ×2 badge right of the score digits, as a subscript, clear of the probiotic icon', () => {
+  const b = T.postbiotic;
+  // 80 px bold digits are ~45 px wide each plus the 12 px stroke; ×2 at fontPx is ~1.6 em wide with its stroke.
+  const scoreWidth = 3 * 45 + 12;
+  const badgeGlyphs = 1.6 * b.fontPx + 12;
+  const { x, y } = multiplierLayout(GAME_WIDTH / 2, scoreWidth, T);
+  assert.equal(x + b.glowPx, GAME_WIDTH / 2 + scoreWidth / 2 + b.offsetX, 'glyphs start offsetX past the digits');
+  assert.ok(y > T.hudScoreY && y < T.popup.pipeY, `badge y ${y} sits below the score centre, above the pipe popup`);
+  // Probiotic counter up to "×20" (~80 px at 40 px bold with stroke).
+  const { iconX } = hudRightLayout(GAME_WIDTH, 80, { iconSize: T.hudProbioticSize });
+  assert.ok(x + b.glowPx + badgeGlyphs <= iconX - T.hudProbioticSize / 2, 'badge ends before the probiotic icon');
 });
 
 test('level 1 is scripted: probiotic at pair 3, bacteria at 5, fiber after 7, a bean after 9, nothing else; later levels roll', () => {

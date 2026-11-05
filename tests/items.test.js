@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { TUNING as T } from '../src/config.js';
-import { createRng, rollItem, itemGapY, scoreAfterItem, scorePopup, createEffects, ITEM_KINDS, bobY, gapBobAmplitude, gapBobY } from '../src/logic.js';
+import { createRng, rollItem, itemGapY, scoreAfterItem, scorePopup, pipePoints, createEffects, ITEM_KINDS, bobY, gapBobAmplitude, gapBobY } from '../src/logic.js';
 
 test('rollItem is always null below startScore', () => {
   const rng = createRng(1);
@@ -397,4 +397,70 @@ test('scorePopup follows the tuning numbers', () => {
 test('bacteria popup stays nominal while the score floors at 0', () => {
   assert.equal(scoreAfterItem(1, 'bacteria', T), 0);
   assert.equal(scorePopup('bacteria', T).text, `\u2212${T.items.bacteriaPenalty}`);
+});
+
+test('pipe popup: quick white +1 per pair, +2 under the postbiotic; fiber reads +6 under it, bacteria never scales', () => {
+  assert.deepEqual(scorePopup('pipe', T), { text: '+1', color: T.popup.pipeColor });
+  assert.equal(scorePopup('pipe', T, 2).text, '+2');
+  assert.equal(scorePopup('fiber', T, 2).text, '+6');
+  assert.equal(scorePopup('bacteria', T, 2).text, '\u22123');
+  assert.equal(pipePoints(T), 1);
+  assert.equal(pipePoints(T, 2), 2);
+  assert.equal(scoreAfterItem(10, 'fiber', T, 2), 16);
+  assert.equal(scoreAfterItem(10, 'bacteria', T, 2), 7, 'the penalty is never doubled');
+  assert.equal(scoreAfterItem(10, 'probiotic', T, 2), 10);
+});
+
+test('postbiotic: fiber only turns it on while a probiotic is up', () => {
+  const fx = createEffects(T);
+  assert.equal(fx.applyFiber(), false, 'no probiotic, no postbiotic');
+  assert.equal(fx.hasPostbiotic(), false);
+  assert.equal(fx.multiplier(), 1);
+  fx.applyProbiotic();
+  assert.equal(fx.multiplier(), 1, 'a probiotic alone does not multiply');
+  assert.equal(fx.applyFiber(), true);
+  assert.equal(fx.hasPostbiotic(), true);
+  assert.equal(fx.multiplier(), T.items.postbioticMultiplier);
+  assert.equal(fx.applyFiber(), true, 'a second fiber keeps it on');
+  assert.equal(fx.pipesLeft(), T.items.probioticPipes, 'fiber does not change the countdown');
+});
+
+test('postbiotic lasts exactly as long as the probiotic countdown', () => {
+  const fx = createEffects(T);
+  fx.applyProbiotic();
+  fx.applyFiber();
+  for (let i = 0; i < T.items.probioticPipes - 1; i++) {
+    fx.onPipePassed();
+    assert.equal(fx.multiplier(), 2, `still ×2 after ${i + 1} pipes`);
+  }
+  fx.onPipePassed();
+  assert.equal(fx.pipesLeft(), 0);
+  assert.equal(fx.multiplier(), 1, 'ends with the probiotic');
+  fx.applyProbiotic();
+  assert.equal(fx.hasPostbiotic(), false, 'a new probiotic after it ends needs a new fiber');
+});
+
+test('another probiotic extends a running postbiotic; a bacteria hit ends it', () => {
+  const fx = createEffects(T);
+  fx.applyProbiotic();
+  fx.applyFiber();
+  fx.onPipePassed();
+  fx.applyProbiotic();
+  assert.equal(fx.pipesLeft(), 2 * T.items.probioticPipes - 1);
+  assert.equal(fx.multiplier(), 2);
+  assert.equal(fx.consumeProbiotic(), true, 'the hit is still blocked');
+  assert.equal(fx.multiplier(), 1);
+  assert.equal(fx.hasPostbiotic(), false);
+  assert.equal(fx.pipesLeft(), 0);
+});
+
+test('postbiotic stays ×2 through a fart while the countdown is paused', () => {
+  const fx = createEffects(T);
+  fx.applyProbiotic();
+  fx.applyFiber();
+  fx.addBean();
+  assert.equal(fx.activatePower(1000), true);
+  for (let i = 0; i < 25; i++) fx.onPipePassed();
+  assert.equal(fx.pipesLeft(), T.items.probioticPipes);
+  assert.equal(fx.multiplier(), 2);
 });
