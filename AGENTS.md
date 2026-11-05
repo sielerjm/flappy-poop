@@ -198,14 +198,21 @@ src/
                             playing, passed to recordScore and Over. Score popups
                             (scorePopup() in logic.js, TUNING.popup), two reused
                             texts: showPipePopup(mult) is the quick white "+1"
-                            ("+2" under a postbiotic) at popup.pipeY on every pair,
-                            restarted by the next pipe; showScorePopup(kind, mult)
-                            fades "+3" / "−3" at popup.itemY after fiber or an
-                            unshielded bacteria hit. Postbiotic: refreshProbioticHud
-                            swaps probioticIcon to the 'postbiotic' texture and
-                            setMultiplierBadge() shows the gold pulsing "×2" at
-                            multiplierLayout() (TUNING.postbiotic; text shadow +
-                            padding for the glow). All three tweens pause with the run. Beans: group
+                            ("+2" under a postbiotic) on every pair, restarted by
+                            the next pipe; showScorePopup(kind, mult) fades "+3" /
+                            "−3" after fiber or an unshielded bacteria hit. The
+                            ones showing stack oldest first on popup.rowY
+                            (popupOrder + popupSlots(); enqueuePopup puts a new or
+                            restarted one underneath, dequeuePopup on fade-out and
+                            layoutPopups slide the rest up over popup.shiftMs).
+                            Postbiotic: refreshProbioticHud swaps probioticIcon to
+                            the 'postbiotic' texture and setMultiplierBadge() shows
+                            the "×2" at multiplierLayout() (TUNING.postbiotic) in
+                            two layers: multGlow (text shadow + padding, alpha
+                            pulse) under the crisp, shadowless multText, which
+                            follows its scale. collectItem counts postbiotic starts
+                            (applyFiber() true) in this.collected.postbiotic. All
+                            popup / badge tweens pause with the run. Beans: group
                             spawned in spawnPipePair (rollBean with beanSpawned for
                             the one-per-run guarantee, halfway to the next pair), bobbed in update() from per-bean elapsed ms;
                             collectBean → effects.addBean (up to maxBeans; holdingBean
@@ -259,7 +266,7 @@ src/
                             BACKGROUND.layers; levelBar above the score. Nothing here reads time.now;
                             readyHit() routes taps (howto, start, saveload, profile
                             → Scores). getSaveState / setSaveState for the panel.
-    Over.js                 Game-over panel (score, 2 × 2 run summary, pipes crossed, glowing "Home" button) with a
+    Over.js                 Game-over panel (score, run summary of fiber / probiotic / postbiotic over bacteria / bean, pipes crossed, glowing "Home" button) with a
                             tap lockout and its own tray (mute still works). Shows
                             newTopHint when the run entered the top 6. With
                             { won: true } the headline is the gold runWon text.
@@ -335,7 +342,8 @@ tests/                      node --test, zero deps. Each file is self-describing
   items.test.js             rollItem, itemGapY, scoreAfterItem, probiotic inventory
                             (paused during the fart), postbiotic multiplier (fiber
                             with a probiotic up, countdown, extend, hit, fart),
-                            pipe / item popups, bean stacking to maxBeans,
+                            pipe / item popups, popupSlots stack, postbiotic
+                            start count, bean stacking to maxBeans,
                             normal vs super fart, fart envelope integrals
   fart.test.js              fartFloat (glide, wave band, tilt sign vs direction),
                             hsvToRgb, rainbowHue, wave stays inside the play area
