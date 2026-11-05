@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { TUNING as T } from '../src/config.js';
-import { createRng, rollItem, hazardsAllowed, tutorialSpawn, bandItemsMove, bandMidY, pipeGapY, itemGapY, scoreAfterItem, scorePopup, popupSlots, pipePoints, createEffects, ITEM_KINDS, mysteryAllowed, rollMystery, resolveMystery, skipPairs, MYSTERY_DRAWS, levelEnd, bobY, gapBobAmplitude, gapBobY } from '../src/logic.js';
+import { createRng, rollItem, hazardsAllowed, tutorialSpawn, bandItemsMove, bandMidY, pipeGapY, itemGapY, scoreAfterItem, scorePopup, popupSlots, pipePoints, createEffects, ITEM_KINDS, mysteryRolls, scriptedMysteryPair, rollMystery, resolveMystery, skipPairs, MYSTERY_DRAWS, levelEnd, bobY, gapBobAmplitude, gapBobY } from '../src/logic.js';
 
 test('rollItem is always null below startScore', () => {
   const rng = createRng(1);
@@ -547,11 +547,25 @@ test('with mystery on the box is half as common as fiber, and the other three ke
   assert.ok(Math.abs(pb - want) <= 0.05, `probiotic / bacteria ${pb} vs ${want}`);
 });
 
-test('mystery boxes are allowed from mystery.fromLevel (3) on', () => {
-  assert.equal(mysteryAllowed(1, T), false);
-  assert.equal(mysteryAllowed(2, T), false);
-  assert.equal(mysteryAllowed(3, T), true);
-  assert.equal(mysteryAllowed(T.levels.lastLevel, T), true);
+test('mystery boxes roll (and bob) from level 4; level 3 only has its one scripted box', () => {
+  for (const level of [1, 2, 3]) assert.equal(mysteryRolls(level, T), false, `level ${level}`);
+  assert.equal(mysteryRolls(4, T), true);
+  assert.equal(mysteryRolls(T.levels.lastLevel, T), true);
+});
+
+test('level 3\'s one box rides after one of its first four pairs, so it comes before pipe 5', () => {
+  const start = levelEnd(T.mystery.firstLevel - 1, T);
+  assert.equal(start, 35);
+  const rng = createRng(21);
+  const seen = new Set();
+  for (let i = 0; i < 2000; i++) {
+    const pair = scriptedMysteryPair(rng, T);
+    assert.ok(Number.isInteger(pair) && pair >= start + 1 && pair <= start + T.mystery.firstBefore - 1, `pair ${pair}`);
+    seen.add(pair - start);
+  }
+  assert.deepEqual([...seen].sort(), [1, 2, 3, 4], 'every one of the first four pairs can carry it');
+  assert.equal(scriptedMysteryPair(() => 0, T), start + 1);
+  assert.equal(scriptedMysteryPair(() => 0.999999, T), start + 4);
 });
 
 test('rollMystery walks the draw bands in order and falls back to fiber', () => {

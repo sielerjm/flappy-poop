@@ -390,7 +390,7 @@ export const ITEM_KINDS = ['fiber', 'probiotic', 'bacteria'];
 /**
  * null, an ITEM_KINDS value, or 'mystery'. Bacteria weight is 0 unless `hazards`
  * (see hazardsAllowed); the mystery box joins the pick with mystery.weight only
- * when `mystery` (see mysteryAllowed).
+ * when `mystery` (see mysteryRolls).
  */
 export function rollItem(rng, score, t, { hazards = true, mystery = false } = {}) {
   const items = t.items;
@@ -409,9 +409,20 @@ export function rollItem(rng, score, t, { hazards = true, mystery = false } = {}
   return kinds[kinds.length - 1]; // float edge: the last kind that can appear at all
 }
 
-/** True when mystery boxes can spawn on `level` (from mystery.fromLevel). */
-export function mysteryAllowed(level, t) {
-  return level >= t.mystery.fromLevel;
+/** True when mystery boxes roll (by weight, any number) and bob on `level`: from mystery.rollFromLevel. */
+export function mysteryRolls(level, t) {
+  return level >= t.mystery.rollFromLevel;
+}
+
+/**
+ * Pair (1-based across the run, like pipesSpawned) that carries level
+ * mystery.firstLevel's one still box: one of that level's first
+ * mystery.firstBefore − 1 pairs, so the box (which rides after its pair)
+ * always comes before that level's pipe firstBefore.
+ */
+export function scriptedMysteryPair(rng, t) {
+  const { firstLevel, firstBefore } = t.mystery;
+  return levelEnd(firstLevel - 1, t) + 1 + Math.floor(rng() * (firstBefore - 1));
 }
 
 /** What a mystery box can hold besides fiber, in roll order; mystery.draws gives each a 0–1 chance. */
