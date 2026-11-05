@@ -16,6 +16,7 @@ export class Over extends Phaser.Scene {
     const score = data?.score ?? 0;
     const pipes = Number.isInteger(data?.pipes) && data.pipes >= 0 ? data.pipes : 0;
     const newTop = Boolean(data?.newTop);
+    const won = Boolean(data?.won); // crossed the final level's finish line
     const toilet = Boolean(data?.toilet);
     const level = Number.isInteger(data?.level) && data.level >= 1 ? data.level : 1;
     const collected = { fiber: 0, probiotic: 0, bacteria: 0, bean: 0, ...(data?.collected ?? {}) };
@@ -27,7 +28,7 @@ export class Over extends Phaser.Scene {
     const cy = GAME_HEIGHT / 2;
     const panel = this.add.rectangle(cx, cy, 560, 720, 0x1a0b14, 0.85).setStrokeStyle(8, 0xe85e96);
     const style = { fontFamily: 'sans-serif', fontStyle: 'bold', color: '#ffffff', align: 'center' };
-    this.add.text(cx, cy - 270, t(locale, 'gameOver'), { ...style, fontSize: '64px', color: '#f8a0c8' }).setOrigin(0.5);
+    this.add.text(cx, cy - 270, t(locale, won ? 'runWon' : 'gameOver'), { ...style, fontSize: won ? '48px' : '64px', color: won ? '#ffd700' : '#f8a0c8' }).setOrigin(0.5);
     this.add.text(cx, cy - 180, `${t(locale, 'scoreLabel')}  ${formatScore({ score, toilet })}  ·  ${levelLabel(locale, level)}`, { ...style, fontSize: '48px' }).setOrigin(0.5);
     // Run summary: what was collected, as icon ×n pairs in a 2 × 2 grid (no
     // words, so no strings to translate). Row 1 good / bad bacteria, row 2 fiber / bean.

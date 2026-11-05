@@ -69,6 +69,7 @@ Short, playful, clear. Fit a 720×1280 logical field; How to play / About body w
 | level.colon | Colon | 结肠 |
 | level.rectum | Rectum | 直肠 |
 | gameOver | GAME OVER | 游戏结束 |
+| runWon | YOU MADE IT OUT! | 顺利排出！ |
 | scoreLabel | SCORE | 得分 |
 | bestLabel | BEST | 最高 |
 | tapToHome | Home | 返回主页 |
@@ -104,7 +105,7 @@ Short, playful, clear. Fit a 720×1280 logical field; How to play / About body w
 | itemToiletName | On the toilet | 如厕模式 |
 | itemToiletDetail | Playing on the toilet? Flip the switch under the poop on the home screen. Those scores get a 🚽 next to them. | 在马桶上玩？打开主界面便便下方的开关，这些分数旁会显示 🚽。 |
 | itemLevelsName | Levels | 关卡 |
-| itemLevelsDetail | The gut comes in levels: stomach, duodenum, jejunum and on. Pass a checkered finish line to clear one; the game pauses for a breather, then each level scrolls a little faster. The bar at the top shows how far you are. | 肠道分成关卡：胃、十二指肠、空肠……越过黑白格终点线即可过关；游戏会稍作停顿，之后每一关都会滚得更快一些。顶部的进度条显示你走到了哪里。 |
+| itemLevelsDetail | The gut comes in levels: stomach, duodenum, jejunum and on, down to the rectum. Pass a checkered finish line to clear one; the game pauses for a breather, then each level scrolls a little faster. Clear the rectum and you win. The bar at the top shows how far you are. | 肠道分成关卡：胃、十二指肠、空肠……一直到直肠。越过黑白格终点线即可过关；游戏会稍作停顿，之后每一关都会滚得更快一些。通过直肠就赢了。顶部的进度条显示你走到了哪里。 |
 | updatedPrefix | Updated | 更新于 |
 | languageTitle | Language | 语言 |
 | langEnglish | English | English |

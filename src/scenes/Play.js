@@ -8,6 +8,7 @@ import {
   levelSpeed,
   levelGap,
   levelEnd,
+  isFinalLevel,
   levelProgress,
   levelBarLayout,
   tutorialSpawn,
@@ -108,6 +109,7 @@ export class Play extends Phaser.Scene {
     this.breakGlide = null;
     createFinishTexture(this, 'finish', { width: T.levels.finishWidthPx, height: GAME_HEIGHT, check: T.levels.finishCheckPx });
     this.state = 'ready'; // 'ready' | 'playing' | 'paused' | 'dead'
+    this.won = false; // set by win(): the run ended past the final level's finish line
     this.flapLockedUntil = 0;
     this.effects = createEffects(T);
     // Scroll multiplier (1 normally, the fart envelope while the power runs),
@@ -415,12 +417,16 @@ export class Play extends Phaser.Scene {
   }
 
   /**
-   * The poop has cleared the finish line: next level and the break. A fart that
-   * carried it here ends now, so only the pairs it actually passed have scored.
+   * The poop has cleared the finish line: next level and the break, or the win
+   * after the final level (levels.lastLevel). A fart that carried it here ends
+   * now, so only the pairs it actually passed have scored.
    */
   onFinishCrossed() {
-    this.level += 1;
-    this.refreshLevelBar(); // new level: label steps, fill back to 0
+    const final = isFinalLevel(this.level, T);
+    if (!final) {
+      this.level += 1;
+      this.refreshLevelBar(); // new level: label steps, fill back to 0
+    }
     if (this.cache.audio.exists('level-up')) {
       this.sound.play('level-up', { volume: T.levelUpVolume });
     } else {
@@ -430,7 +436,8 @@ export class Play extends Phaser.Scene {
       this.fartSound?.stop();
       this.endPower();
     }
-    this.startLevelBreak();
+    if (final) this.win();
+    else this.startLevelBreak();
   }
 
   refreshLevelBanner() {
@@ -1154,19 +1161,57 @@ export class Play extends Phaser.Scene {
     }
   }
 
-  die() {
-    if (this.state !== 'playing') return;
-    // Farting (or just finished and still clearing the pipe) cannot die.
-    if (this.effects.powerActive() || this.graceLeftMs > 0) return;
+  /**
+   * Shared end of a run, lost or won: state 'dead' (taps then go home, as after a
+   * death), HUD effects off, the world stopped, the score recorded and synced.
+   * Returns whether the score entered the top list.
+   */
+  endRun() {
     this.state = 'dead';
     this.markHowToSeen(); // a finished run counts as having seen this build
     this.setCharged(false);
     this.setMultiplierBadge(false); // no pulsing ×2 under the game-over panel
-    this.setPoopTexture('poop-dead');
     for (const pipe of this.pipes.getChildren()) pipe.setVelocityX(0);
     for (const item of this.items.getChildren()) item.setVelocityX(0);
     for (const bean of this.beans.getChildren()) bean.setVelocityX(0);
     this.setPauseBanner(false);
+    this.best.save(this.score); // legacy store, kept for first-run seeding
+    const newTop = isNewTop(this.save, this.score);
+    this.save = saveLocal(recordScore(this.save, this.score, { toilet: this.toilet, level: this.level }));
+    this.syncLeaderboard(); // fire and forget; never awaited inside the update loop
+    return newTop;
+  }
+
+  /** The game-over panel after deathToOverMs; `won` swaps its headline. */
+  showOver(newTop, won = false) {
+    this.time.delayedCall(T.deathToOverMs, () => {
+      this.physics.pause();
+      this.scene.launch('Over', { score: this.score, newTop, won, toilet: this.toilet, level: this.level, pipes: this.pipesPassed, collected: { ...this.collected } });
+    });
+  }
+
+  /**
+   * Crossing the final level's finish line: the run is won. Same bookkeeping as
+   * die() (score saved at the final level), none of the death effects: the poop
+   * keeps its face and hangs where it is under a gold flash.
+   */
+  win() {
+    if (this.state !== 'playing') return;
+    this.won = true;
+    const newTop = this.endRun();
+    this.poop.body.setAllowGravity(false);
+    this.poop.setVelocity(0, 0);
+    this.poop.setAngle(0);
+    this.cameras.main.flash(250, 255, 215, 0);
+    this.showOver(newTop, true);
+  }
+
+  die() {
+    if (this.state !== 'playing') return;
+    // Farting (or just finished and still clearing the pipe) cannot die.
+    if (this.effects.powerActive() || this.graceLeftMs > 0) return;
+    const newTop = this.endRun();
+    this.setPoopTexture('poop-dead');
     this.cameras.main.shake(200, 0.01);
     this.cameras.main.flash(120, 255, 120, 160);
     if (this.settings.load().haptics) vibrate(globalThis.navigator, T.vibrateOnDieMs);
@@ -1175,19 +1220,11 @@ export class Play extends Phaser.Scene {
     } else {
       sfx.die();
     }
-    this.best.save(this.score); // legacy store, kept for first-run seeding
-    const newTop = isNewTop(this.save, this.score);
-    this.save = saveLocal(recordScore(this.save, this.score, { toilet: this.toilet, level: this.level }));
-    this.syncLeaderboard(); // fire and forget; never awaited inside the update loop
     // Tumble: keep gravity so the poop falls, stop it at the ground, spin it.
     this.poop.setVelocityY(Math.max(this.poop.body.velocity.y, 0));
     this.poop.body.setCollideWorldBounds(false);
     this.tweens.add({ targets: this.poop, angle: 180, duration: T.deathToOverMs, ease: 'Quad.easeIn' });
-
-    this.time.delayedCall(T.deathToOverMs, () => {
-      this.physics.pause();
-      this.scene.launch('Over', { score: this.score, newTop, toilet: this.toilet, level: this.level, pipes: this.pipesPassed, collected: { ...this.collected } });
-    });
+    this.showOver(newTop);
   }
 
   update(_time, delta) {
