@@ -109,6 +109,7 @@ export const TUNING = {
     weights: { fiber: 3, probiotic: 2, bacteria: 4 },
     fiberPeriodMs: 3000, // ms for one full up-and-down bob of a fiber between pipe pairs (beans use beans.travelPeriodMs)
     moveFromLevel: 3, // from this level probiotic / bacteria move up and down inside their gap
+    bandMoveFromLevel: 2, // from this level fiber and beans bob between the pairs; before it they hold still, midway between the two gaps
     movePeriodMs: 1600, // ms for one full up-and-down sweep of a moving gap item
     moveMarginPx: 8, // px kept between a moving gap item and the pipe mouths
   },

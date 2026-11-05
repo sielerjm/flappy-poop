@@ -489,6 +489,20 @@ export function beanBounds({ gameHeight, groundHeight, radius, frac }) {
   return { minY, maxY };
 }
 
+/** True when fiber and beans bob between the pairs on `level`; before items.bandMoveFromLevel they hold still. */
+export function bandItemsMove(level, t) {
+  return level >= t.items.bandMoveFromLevel;
+}
+
+/**
+ * y of a still fiber / bean halfway between a pair whose gap is centred at gapY
+ * and the next pair (nextGapY): the midpoint, so the straight line from gap to
+ * gap runs through it. Both are legal gap centres, so the midpoint is one too.
+ */
+export function bandMidY(gapY, nextGapY) {
+  return (gapY + nextGapY) / 2;
+}
+
 /** Bean centre y at elapsedMs: a full top-to-bottom sine bob with a per-bean phase. */
 /** y of something bobbing across a band: a sine between bounds.minY and bounds.maxY with the given period. */
 export function bobY(elapsedMs, phase, bounds, periodMs) {

@@ -37,6 +37,8 @@ import {
   beanBounds,
   beanY,
   bobY,
+  bandItemsMove,
+  bandMidY,
   gapBobAmplitude,
   gapBobY,
   beanAngle,
@@ -118,6 +120,7 @@ export class Play extends Phaser.Scene {
     this.fartPeak = 1;
     this.charged = false;
     this.centreNextGap = false; // first pair after a fart opens at the poop's float height
+    this.nextGapY = null; // gap centre already rolled for the next pair (a still level-1 fiber / bean sits midway to it)
     this.beanBounds = beanBounds({ gameHeight: GAME_HEIGHT, groundHeight: T.groundHeight, radius: T.beans.beanRadius, frac: T.beans.travelFrac });
     this.locale = this.resolveLocale();
     attachGame(this.game);
@@ -470,6 +473,7 @@ export class Play extends Phaser.Scene {
     this.poop.setVelocityY(0);
     this.graceLeftMs = T.beans.graceMs;
     this.centreNextGap = true;
+    this.nextGapY = null;
     this.distanceSinceSpawn = pipeSpacing(this.level, T);
     this.applyLevel();
   }
@@ -781,7 +785,8 @@ export class Play extends Phaser.Scene {
       gapHeight: this.diff.gapHeight,
       gapMargin: T.gapMargin,
     };
-    const gapY = this.centreNextGap ? centredGapY(gapCfg) : pipeGapY(this.rng, gapCfg);
+    const gapY = this.nextGapY ?? (this.centreNextGap ? centredGapY(gapCfg) : pipeGapY(this.rng, gapCfg));
+    this.nextGapY = null;
     this.centreNextGap = false;
     const gapH = this.diff.gapHeight;
     const x = GAME_WIDTH + T.pipeWidth;
@@ -813,32 +818,43 @@ export class Play extends Phaser.Scene {
     const scripted = tutorialSpawn(this.level, this.pipesSpawned, T);
     const kind = scripted === undefined ? rollItem(this.rng, this.score, T, { hazards: hazardsAllowed(this.pipesSpawned, T) }) : scripted === 'bean' ? null : scripted;
     const beanHere = scripted === undefined ? rollBean(this.rng, this.score, T, { spawnedThisRun: this.beanSpawned, holding: this.effects.holdingBean() }) : scripted === 'bean';
-    // Fiber bobs between pairs like a bean (and yields to a bean rolled for the same pair);
+    // Fiber sits between pairs like a bean (and yields to a bean rolled for the same pair);
     // probiotic and bacteria sit in the gap, behind the pipes, moving from moveFromLevel.
-    if (kind === 'fiber' && !beanHere) this.spawnBandItem('fiber');
+    // Before bandMoveFromLevel fiber and beans hold still midway between this gap and the next.
+    const still = !bandItemsMove(this.level, T);
+    const stillY = () => {
+      if (this.nextGapY == null) this.nextGapY = pipeGapY(this.rng, gapCfg);
+      return bandMidY(gapY, this.nextGapY);
+    };
+    if (kind === 'fiber' && !beanHere) this.spawnBandItem('fiber', still ? stillY() : null);
     else if (kind && kind !== 'fiber') this.spawnGapItem(kind, x, gapY, gapH);
 
-    // Beans ride halfway between this pair and the next, bobbing top to bottom.
+    // Beans ride halfway between this pair and the next, bobbing top to bottom (still in level 1).
     if (beanHere) {
       this.beanSpawned = true;
       const phase = this.rng() * Math.PI * 2;
-      const bean = this.beans.create(beanSpawnX(GAME_WIDTH, T.pipeWidth, pipeSpacing(this.level, T)), beanY(0, phase, this.beanBounds, T), 'bean');
+      const y = still ? stillY() : beanY(0, phase, this.beanBounds, T);
+      const bean = this.beans.create(beanSpawnX(GAME_WIDTH, T.pipeWidth, pipeSpacing(this.level, T)), y, 'bean');
       bean.setDepth(8);
       bean.setScale(T.spriteDisplayScale);
       const beanBody = scaledCircleBody(bean.frame.width, T.spriteDisplayScale, T.beans.beanRadius);
       bean.body.setCircle(beanBody.radius, beanBody.offset, beanBody.offset);
       bean.setVelocityX(-this.scrollSpeed());
-      bean.setData({ elapsed: 0, phase });
+      bean.setData({ elapsed: 0, phase, still });
     }
   }
 
-  /** A fiber in the open: spawns halfway to the next pair and bobs across the beans' band. */
-  spawnBandItem(kind) {
+  /**
+   * A fiber in the open, halfway to the next pair. With a `stillY` it holds still
+   * there (level 1); otherwise it bobs across the beans' band.
+   */
+  spawnBandItem(kind, stillY = null) {
     const phase = this.rng() * Math.PI * 2;
-    const item = this.items.create(beanSpawnX(GAME_WIDTH, T.pipeWidth, pipeSpacing(this.level, T)), bobY(0, phase, this.beanBounds, T.items.fiberPeriodMs), kind);
+    const y = stillY ?? bobY(0, phase, this.beanBounds, T.items.fiberPeriodMs);
+    const item = this.items.create(beanSpawnX(GAME_WIDTH, T.pipeWidth, pipeSpacing(this.level, T)), y, kind);
     item.setDepth(8);
     this.finishItem(item, kind);
-    item.setData({ bob: 'band', elapsed: 0, phase });
+    if (stillY == null) item.setData({ bob: 'band', elapsed: 0, phase });
     return item;
   }
 
@@ -1033,6 +1049,7 @@ export class Play extends Phaser.Scene {
     // Next pair spawns on the next frame at the right edge with its gap at the
     // poop's float height: a full screen of warning and the easiest line through.
     this.centreNextGap = true;
+    this.nextGapY = null;
     this.distanceSinceSpawn = pipeSpacing(this.level, T);
     this.applyScroll();
     if (this.effects.powerReady()) this.setCharged(true);
@@ -1275,7 +1292,7 @@ export class Play extends Phaser.Scene {
       if (this.state === 'playing') {
         const elapsed = bean.getData('elapsed') + delta;
         bean.setData('elapsed', elapsed);
-        bean.y = beanY(elapsed, bean.getData('phase'), this.beanBounds, T);
+        if (!bean.getData('still')) bean.y = beanY(elapsed, bean.getData('phase'), this.beanBounds, T);
         bean.setAngle(beanAngle(elapsed, T));
       }
       if (bean.x < -T.pipeWidth) bean.destroy();

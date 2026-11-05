@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { TUNING as T } from '../src/config.js';
-import { createRng, rollItem, hazardsAllowed, tutorialSpawn, itemGapY, scoreAfterItem, scorePopup, pipePoints, createEffects, ITEM_KINDS, bobY, gapBobAmplitude, gapBobY } from '../src/logic.js';
+import { createRng, rollItem, hazardsAllowed, tutorialSpawn, bandItemsMove, bandMidY, pipeGapY, itemGapY, scoreAfterItem, scorePopup, pipePoints, createEffects, ITEM_KINDS, bobY, gapBobAmplitude, gapBobY } from '../src/logic.js';
 
 test('rollItem is always null below startScore', () => {
   const rng = createRng(1);
@@ -34,6 +34,26 @@ test('a seeded run never meets bacteria before pair 15, even with a high score',
       const kind = scripted === undefined ? rollItem(rng, 99, T, { hazards: hazardsAllowed(pair, T) }) : scripted;
       assert.notEqual(kind, 'bacteria', `seed ${seed}, pair ${pair}`);
     }
+  }
+});
+
+test('fiber and beans hold still in level 1 and bob from bandMoveFromLevel (2)', () => {
+  assert.equal(T.items.bandMoveFromLevel, 2);
+  assert.equal(bandItemsMove(1, T), false);
+  for (const level of [2, 3, 7]) assert.equal(bandItemsMove(level, T), true, `level ${level}`);
+});
+
+test('bandMidY puts a still pickup midway between this gap and the next, inside the legal gap range', () => {
+  assert.equal(bandMidY(300, 700), 500);
+  assert.equal(bandMidY(700, 300), bandMidY(300, 700), 'symmetric');
+  assert.equal(bandMidY(420, 420), 420);
+  const cfg = { gameHeight: 1280, groundHeight: T.groundHeight, gapHeight: 374, gapMargin: T.gapMargin };
+  const rng = createRng(21);
+  const lo = pipeGapY(() => 0, cfg);
+  const hi = pipeGapY(() => 0.999999, cfg);
+  for (let i = 0; i < 500; i += 1) {
+    const y = bandMidY(pipeGapY(rng, cfg), pipeGapY(rng, cfg));
+    assert.ok(y >= lo && y <= hi, `midpoint ${y} inside ${lo}..${hi}`);
   }
 });
 
