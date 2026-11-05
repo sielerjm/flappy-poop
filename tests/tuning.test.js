@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { TUNING as T } from '../src/config.js';
+import { pipeSpacing, levelSpeed } from '../src/logic.js';
 
 test('item spawn rates sit in a fair band', () => {
   assert.ok(T.items.chancePerGap >= 0.1 && T.items.chancePerGap <= 0.5, `chancePerGap ${T.items.chancePerGap}`);
@@ -61,13 +62,14 @@ test('beans block sits in a fair band and the fart ramp stays readable', () => {
   assert.ok(b.beanRadius >= 40 && b.beanRadius <= 48, `beanRadius ${b.beanRadius}`);
   assert.ok(b.centreMs >= 100 && b.centreMs <= 1000, `centreMs ${b.centreMs}`);
   assert.ok(b.endClearMarginPx >= 0 && b.endClearMarginPx <= 200, `endClearMarginPx ${b.endClearMarginPx}`);
-  // Fart envelope at level-1 speed (fixed spacing): the numbers match the old time-based tuning.
-  const peakAt = (pipes, speed) => 1 + (((pipes * T.pipeSpacingPx) / ((speed * b.powerMs) / 1000) - 1) * Math.PI) / 2;
-  const peak = peakAt(b.powerPipes, T.pipeSpeed);
-  assert.ok(peak > 1 && peak <= 2.5, `fart peak multiplier ${peak}`);
-  const superPeak = peakAt(b.superPipes, T.pipeSpeed);
-  assert.ok(superPeak > peak && superPeak <= 12, `super fart peak multiplier ${superPeak}`);
-  assert.ok(peakAt(b.powerPipes, T.levels.maxSpeed) >= 1, 'even at the top speed a normal fart never slows the world');
+  // Fart envelope per level: the clip scrolls powerPipes (or superPipes) of that level's spacing.
+  // Level 1 is the slowest with the widest spacing, so its peaks are the highest.
+  const peakAt = (pipes, level) => 1 + (((pipes * pipeSpacing(level, T)) / ((levelSpeed(level, T) * b.powerMs) / 1000) - 1) * Math.PI) / 2;
+  const peak = peakAt(b.powerPipes, 1);
+  assert.ok(peak > 1 && peak <= 3, `fart peak multiplier ${peak}`);
+  const superPeak = peakAt(b.superPipes, 1);
+  assert.ok(superPeak > peak && superPeak <= 13, `super fart peak multiplier ${superPeak}`);
+  for (let level = 1; level <= T.levels.lastLevel + 3; level += 1) assert.ok(peakAt(b.powerPipes, level) >= 1, `level ${level}: a normal fart never slows the world`);
   assert.ok(T.levels.pipes.slice(1).every((n) => b.superPipes < n), 'a super fart can cross at most one finish line');
 });
 

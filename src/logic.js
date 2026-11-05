@@ -169,7 +169,8 @@ export function canRestart(openedAt, now, lockoutMs) {
 // Levels: the run is cut into gut segments by pipe pairs passed. Level n is
 // levels.pipes[n − 1] long (the last entry repeats); levels.lastLevel is the
 // final one, whose finish line wins the run. Speed steps up per level
-// (capped); pipe spacing is fixed in px, so faster levels mean less time per pipe.
+// (capped); pipe spacing (px) is pipeSpacingPx from levels.spacingRefLevel on and
+// wider on the slower levels before it (pipeSpacing).
 
 /** Pipe pairs in level n (n ≥ 1). */
 export function levelPipes(n, t) {
@@ -455,9 +456,14 @@ export function rollBean(rng, score, t, { spawnedThisRun = false, holding = fals
   return rng() < chance;
 }
 
-/** Scroll distance between consecutive pipe pairs (px): fixed for every level. */
-export function pipeSpacing(t) {
-  return t.pipeSpacingPx;
+/**
+ * Scroll distance between consecutive pipe pairs (px) on `level`: pipeSpacingPx
+ * from levels.spacingRefLevel on; slower levels before it are spaced further
+ * apart in proportion to the speed gap (pipeSpacingPx × refSpeed ÷ speed).
+ */
+export function pipeSpacing(level, t) {
+  const ratio = levelSpeed(t.levels.spacingRefLevel, t) / levelSpeed(level, t);
+  return Math.round(t.pipeSpacingPx * Math.max(1, ratio));
 }
 
 /** Spawn x of a bean: halfway between the pair spawning now and the next one. */

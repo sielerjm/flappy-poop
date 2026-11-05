@@ -178,9 +178,8 @@ test('beanY stays inside the middle band and reaches both extremes; beanAngle wi
 });
 
 test('beanSpawnX is off the right edge, halfway to the next pair', () => {
-  const x = beanSpawnX(GAME_WIDTH, T.pipeWidth, T.pipeSpacingPx);
-  const spacing = pipeSpacing(T);
-  assert.equal(spacing, T.pipeSpacingPx);
+  const spacing = pipeSpacing(1, T);
+  const x = beanSpawnX(GAME_WIDTH, T.pipeWidth, spacing);
   assert.ok(x > GAME_WIDTH + T.pipeWidth);
   assert.equal(x, GAME_WIDTH + T.pipeWidth + spacing / 2);
 });
@@ -195,8 +194,8 @@ test('poopTapHit is generous (2 x radius) and misses further away', () => {
 
 test('fartMul is 1 at both ends, peaks mid-clip, and its integral scrolls exactly powerPipes spacings', () => {
   const duration = T.beans.powerMs;
-  const peak = fartPeakMul(duration, T.beans.powerPipes, T.pipeSpacingPx, T.pipeSpeed);
-  assert.ok(peak > 1 && peak <= 2.5, `peak ${peak}`);
+  const peak = fartPeakMul(duration, T.beans.powerPipes, pipeSpacing(1, T), T.pipeSpeed);
+  assert.ok(peak > 1 && peak <= 3, `peak ${peak}`);
   assert.equal(fartMul(0, duration, peak), 1);
   assert.equal(fartMul(duration, duration, peak), 1);
   assert.equal(fartMul(-5, duration, peak), 1);
@@ -205,7 +204,7 @@ test('fartMul is 1 at both ends, peaks mid-clip, and its integral scrolls exactl
   const dt = 1;
   let distance = 0;
   for (let ms = 0; ms < duration; ms += dt) distance += T.pipeSpeed * fartMul(ms + dt / 2, duration, peak) * (dt / 1000);
-  const spacings = distance / pipeSpacing(T);
+  const spacings = distance / pipeSpacing(1, T);
   assert.ok(Math.abs(spacings - T.beans.powerPipes) < 0.02, `scrolled ${spacings} spacings, want ${T.beans.powerPipes}`);
 });
 
@@ -253,9 +252,9 @@ test('the probiotic countdown pauses while the fart runs and resumes afterwards'
 
 test('fartRemainingDistance is the analytic tail of the envelope and reaches 0 at the end', () => {
   const D = T.beans.powerMs;
-  const peak = fartPeakMul(D, T.beans.powerPipes, T.pipeSpacingPx, T.pipeSpeed);
+  const peak = fartPeakMul(D, T.beans.powerPipes, pipeSpacing(1, T), T.pipeSpeed);
   const total = fartRemainingDistance(0, D, peak, T.pipeSpeed);
-  assert.ok(Math.abs(total / pipeSpacing(T) - T.beans.powerPipes) < 0.01, 'whole clip = powerPipes spacings');
+  assert.ok(Math.abs(total / pipeSpacing(1, T) - T.beans.powerPipes) < 0.01, 'whole clip = powerPipes spacings');
   assert.equal(fartRemainingDistance(D, D, peak, T.pipeSpeed), 0);
   assert.equal(fartRemainingDistance(D + 50, D, peak, T.pipeSpeed), 0);
   // Matches a numeric integral of fartMul from e to D, and is monotonic.
@@ -273,7 +272,7 @@ test('fartRemainingDistance is the analytic tail of the envelope and reaches 0 a
 test('pipeClearDistance: a right-edge spawn needs the screen plus a column to be fully behind the poop', () => {
   const d = pipeClearDistance(GAME_WIDTH, T.pipeWidth, T.poopX);
   assert.equal(d, GAME_WIDTH + T.pipeWidth - (T.poopX - T.pipeWidth));
-  assert.ok(d < fartRemainingDistance(0, T.beans.powerMs, fartPeakMul(T.beans.powerMs, T.beans.powerPipes, T.pipeSpacingPx, T.pipeSpeed), T.pipeSpeed), 'the fart scrolls further than one clear distance, so pipes spawned early still pass');
+  assert.ok(d < fartRemainingDistance(0, T.beans.powerMs, fartPeakMul(T.beans.powerMs, T.beans.powerPipes, pipeSpacing(1, T), T.pipeSpeed), T.pipeSpeed), 'the fart scrolls further than one clear distance, so pipes spawned early still pass');
 });
 
 test('beans accumulate to maxBeans; holdingBean only when the bag is full or the fart runs', () => {
@@ -314,13 +313,13 @@ test('1–2 beans give a normal fart and spend one; superBeans give a super fart
 
 test('the super fart envelope scrolls exactly superPipes spacings in the same clip', () => {
   const duration = T.beans.powerMs;
-  const peak = fartPeakMul(duration, T.beans.superPipes, T.pipeSpacingPx, T.pipeSpeed);
-  assert.ok(peak > 5 && peak <= 12, `super peak ${peak}`);
+  const peak = fartPeakMul(duration, T.beans.superPipes, pipeSpacing(1, T), T.pipeSpeed);
+  assert.ok(peak > 5 && peak <= 13, `super peak ${peak}`);
   let distance = 0;
   for (let ms = 0; ms < duration; ms += 1) distance += T.pipeSpeed * fartMul(ms + 0.5, duration, peak) * 0.001;
-  const spacings = distance / pipeSpacing(T);
+  const spacings = distance / pipeSpacing(1, T);
   assert.ok(Math.abs(spacings - T.beans.superPipes) < 0.02, `scrolled ${spacings} spacings, want ${T.beans.superPipes}`);
-  const tail = fartRemainingDistance(0, duration, peak, T.pipeSpeed) / pipeSpacing(T);
+  const tail = fartRemainingDistance(0, duration, peak, T.pipeSpeed) / pipeSpacing(1, T);
   assert.ok(Math.abs(tail - T.beans.superPipes) < 0.01, 'analytic tail agrees');
 });
 

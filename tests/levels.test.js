@@ -57,8 +57,15 @@ test('levelSpeed starts at pipeSpeed, rises speedStep per level, and caps at max
   }
   assert.equal(levelSpeed(20, T), L.maxSpeed);
   assert.equal(levelSpeed(0, T), T.pipeSpeed, 'below 1 reads as level 1');
-  assert.ok(pipeSpacing(T) / L.maxSpeed >= 0.8, 'even the fastest level leaves ≥ 0.8 s between pipes');
-  assert.equal(pipeSpacing(T), T.pipeSpacingPx);
+  for (let n = 1; n <= 20; n += 1) assert.ok(pipeSpacing(n, T) / levelSpeed(n, T) >= 0.8, `level ${n} leaves ≥ 0.8 s between pipes`);
+});
+
+test('pipe spacing: 487 / 446 px on the slower levels 1–2, pipeSpacingPx from spacingRefLevel on', () => {
+  assert.deepEqual([1, 2, 3, 4, 8].map((n) => pipeSpacing(n, T)), [487, 446, T.pipeSpacingPx, T.pipeSpacingPx, T.pipeSpacingPx]);
+  assert.equal(L.spacingRefLevel, 3);
+  const t1 = pipeSpacing(1, T) / levelSpeed(1, T);
+  const t3 = pipeSpacing(3, T) / levelSpeed(3, T);
+  assert.ok(t1 > t3, 'level 1 leaves more time per pipe than level 3');
 });
 
 test('levelName follows the gut in order and runs out past the list; levelColor cycles through LEVEL_COLORS', () => {

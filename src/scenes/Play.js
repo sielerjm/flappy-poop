@@ -469,7 +469,7 @@ export class Play extends Phaser.Scene {
     this.poop.setVelocityY(0);
     this.graceLeftMs = T.beans.graceMs;
     this.centreNextGap = true;
-    this.distanceSinceSpawn = pipeSpacing(T);
+    this.distanceSinceSpawn = pipeSpacing(this.level, T);
     this.applyLevel();
   }
 
@@ -820,7 +820,7 @@ export class Play extends Phaser.Scene {
     if (beanHere) {
       this.beanSpawned = true;
       const phase = this.rng() * Math.PI * 2;
-      const bean = this.beans.create(beanSpawnX(GAME_WIDTH, T.pipeWidth, T.pipeSpacingPx), beanY(0, phase, this.beanBounds, T), 'bean');
+      const bean = this.beans.create(beanSpawnX(GAME_WIDTH, T.pipeWidth, pipeSpacing(this.level, T)), beanY(0, phase, this.beanBounds, T), 'bean');
       bean.setDepth(8);
       bean.setScale(T.spriteDisplayScale);
       const beanBody = scaledCircleBody(bean.frame.width, T.spriteDisplayScale, T.beans.beanRadius);
@@ -833,7 +833,7 @@ export class Play extends Phaser.Scene {
   /** A fiber in the open: spawns halfway to the next pair and bobs across the beans' band. */
   spawnBandItem(kind) {
     const phase = this.rng() * Math.PI * 2;
-    const item = this.items.create(beanSpawnX(GAME_WIDTH, T.pipeWidth, T.pipeSpacingPx), bobY(0, phase, this.beanBounds, T.items.fiberPeriodMs), kind);
+    const item = this.items.create(beanSpawnX(GAME_WIDTH, T.pipeWidth, pipeSpacing(this.level, T)), bobY(0, phase, this.beanBounds, T.items.fiberPeriodMs), kind);
     item.setDepth(8);
     this.finishItem(item, kind);
     item.setData({ bob: 'band', elapsed: 0, phase });
@@ -986,7 +986,7 @@ export class Play extends Phaser.Scene {
     const durationMs = snd && snd.duration > 0 ? Math.round(snd.duration * 1000) : T.beans.powerMs;
     this.effects.activatePower(durationMs);
     this.fartDurationMs = durationMs;
-    this.fartPeak = fartPeakMul(durationMs, this.effects.powerPipeCount(), T.pipeSpacingPx, this.diff.pipeSpeed); // 5 pipes, or 20 for a super fart, at this level's speed
+    this.fartPeak = fartPeakMul(durationMs, this.effects.powerPipeCount(), pipeSpacing(this.level, T), this.diff.pipeSpeed); // 5 pipes, or 20 for a super fart, at this level's speed and spacing
     if (snd) {
       this.fartSound = snd;
       snd.once('complete', () => {
@@ -1031,7 +1031,7 @@ export class Play extends Phaser.Scene {
     // Next pair spawns on the next frame at the right edge with its gap at the
     // poop's float height: a full screen of warning and the easiest line through.
     this.centreNextGap = true;
-    this.distanceSinceSpawn = pipeSpacing(T);
+    this.distanceSinceSpawn = pipeSpacing(this.level, T);
     this.applyScroll();
     if (this.effects.powerReady()) this.setCharged(true);
   }
@@ -1193,7 +1193,7 @@ export class Play extends Phaser.Scene {
       }
       if (this.effects.endedPower()) this.endPower();
       if (this.graceLeftMs > 0) this.graceLeftMs = Math.max(0, this.graceLeftMs - delta);
-      const spacing = pipeSpacing(T);
+      const spacing = pipeSpacing(this.level, T);
       if (this.spawnHeldByFart()) {
         this.distanceSinceSpawn = 0;
       } else {
