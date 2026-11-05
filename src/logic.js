@@ -1090,3 +1090,80 @@ export function vibrate(navigatorLike, pattern) {
     return false;
   }
 }
+
+// --- Test mode (session-only sandbox; its runs never save) ---------------------
+
+/**
+ * True when `raw` is a test-mode trigger: `words` is one word or a list of them
+ * (TEST_MODE.words), compared trimmed and case-insensitively. Empty or
+ * non-string entries never match.
+ */
+export function isTestWord(raw, words) {
+  if (typeof raw !== 'string') return false;
+  const typed = raw.trim().toLowerCase();
+  if (typed === '') return false;
+  const list = Array.isArray(words) ? words : [words];
+  return list.some((w) => typeof w === 'string' && w.trim() !== '' && typed === w.trim().toLowerCase());
+}
+
+/**
+ * Where a test run starting on `level` begins: the level clamped to
+ * 1..levels.lastLevel (non-numbers → 1), the pairs before it as already spawned
+ * and passed, and a "par" score of one point per such pair, so the score-gated
+ * pickups (items.startScore) and beans (beans.startScore) behave as they would
+ * in a real run that got this far. beanSpawned is true once that score is past
+ * beans.guaranteeScore, so the first-bean guarantee does not fire on pair 1.
+ */
+export function testRunStart(level, t) {
+  const n = Number.isFinite(level) ? Math.min(Math.max(1, Math.round(level)), t.levels.lastLevel) : 1;
+  const pipes = levelEnd(n - 1, t);
+  return { level: n, pipes, score: pipes, beanSpawned: pipes >= t.beans.guaranteeScore };
+}
+
+/** The test start level one `step` (±1) from `level`, wrapping within 1..levels.lastLevel. */
+export function nextTestLevel(level, step, t) {
+  const last = t.levels.lastLevel;
+  const cur = testRunStart(level, t).level;
+  return ((((cur - 1 + step) % last) + last) % last) + 1;
+}
+
+/** Test-mode power-up buttons, left to right: Play.grantTest() draws (mystery-box rewards plus fiber). */
+export const TEST_POWERS = ['probiotic', 'fiber', 'postbiotic', 'bean1', 'bean3', 'skip'];
+
+/**
+ * Settings overlay geometry: the panel rect, the ✕ and each row's centre y.
+ * Without test mode it is the original 600 × 720 panel; with it the panel
+ * grows to 1160 px (60 px clear of the field's top and bottom) and adds the
+ * test section: title, start level (◀ / ▶ hit boxes), Invincible, a row of
+ * TEST_POWERS icon buttons, and Exit. Hit boxes are at least trayHitMin.
+ */
+export function settingsLayout(width, height, t, { test = false } = {}) {
+  const cx = width / 2;
+  const cy = height / 2;
+  const panel = { x: cx, y: cy, width: 600, height: test ? 1160 : 720 };
+  const top = cy - panel.height / 2;
+  const bottom = cy + panel.height / 2;
+  const close = { x: cx + 256, y: top + 54 };
+  if (!test) {
+    const rows = { title: top + 70, sound: top + 210, haptics: top + 330, hint: top + 386, reload: top + 480, about: top + 570, version: bottom - 60 };
+    return { panel, close, rows, test: null };
+  }
+  const rows = {
+    title: top + 70,
+    sound: top + 170,
+    haptics: top + 270,
+    hint: top + 326,
+    reload: top + 420,
+    about: top + 510,
+    testTitle: top + 610,
+    startLevel: top + 710,
+    invincible: top + 810,
+    powers: top + 910,
+    exit: top + 1010,
+    version: bottom - 60,
+  };
+  const hit = Math.max(88, t.trayHitMin);
+  const arrow = (dx) => ({ x: cx + dx, y: rows.startLevel, width: hit, height: hit });
+  const powers = TEST_POWERS.map((draw, i) => ({ id: draw, x: cx + (i - (TEST_POWERS.length - 1) / 2) * 96, y: rows.powers, width: hit, height: hit, icon: 72 }));
+  return { panel, close, rows, test: { divider: top + 560, levelDown: arrow(-230), levelUp: arrow(230), powers } };
+}

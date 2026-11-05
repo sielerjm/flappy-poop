@@ -557,6 +557,125 @@ export async function run(url = DEFAULT_URL) {
       ok(won.won && won.level === last && !won.breakOn && won.over && won.tex !== 'poop-dead' && won.head?.t === want && won.head.w <= 520, `crossing level ${last}'s finish line wins: Over opens with "${won.head?.t}" (${won.head?.w?.toFixed(0)} px wide), level stays ${won.level}, no break, poop ${won.tex}`);
     }
 
+    // Test mode. The trigger word in the save panel turns it on without renaming the player; a test
+    // run starts on the chosen level; Invincible survives the floor and a pipe; the Settings power-up
+    // buttons grant on demand while paused; dying records nothing anywhere; exiting mid-run keeps
+    // that run unrecorded; and the next normal run records again.
+    {
+      const tx = (key) => evaluate(`import('./src/i18n.js').then((m) => m.t('en', '${key}'))`);
+      const words = await evaluate(`import('./src/config.js').then((m) => m.TEST_MODE.words)`);
+      const storeKeys = JSON.stringify(['flappyPoop.save', TT.bestKey, 'flappyPoop.leaderboard']);
+      const stores = () => evaluate(`JSON.stringify(${storeKeys}.map((k) => localStorage.getItem(k)))`);
+      const settings = `__flappy.scene.getScene('Settings')`;
+      const home = async () => {
+        await evaluate(`__flappy.scene.stop('Over'), ${play}.scene.restart(), true`);
+        for (let i = 0; i < 40 && (await playState()) !== 'ready'; i += 1) await sleep(250);
+      };
+      const startRun = async () => {
+        await evaluate(`${play}.flap(), true`);
+        for (let i = 0; i < 40 && (await playState()) !== 'playing'; i += 1) await sleep(100);
+        await evaluate(`${play}.poop.body.setAllowGravity(false), ${play}.poop.setVelocity(0, 0), ${play}.poop.y = 640, true`);
+      };
+      const dieNow = async () => {
+        await evaluate(`${play}.resumePlay(), ${play}.graceLeftMs = 0, ${play}.die(), true`);
+        await sleep(TT.deathToOverMs + 300);
+      };
+      const overTexts = () => evaluate(`__flappy.scene.getScene('Over').children.list.filter((c) => c.type === 'Text').map((c) => c.text)`);
+
+      // Either spelling toggles it (on, off, on again), and none of the three ever renames the
+      // player or touches the leaderboard submit store, so a trigger word cannot relabel the board row.
+      await home();
+      const name0 = await evaluate(`${play}.getSaveState().name`);
+      const submit0 = await evaluate(`localStorage.getItem('flappyPoop.leaderboard')`);
+      const [w1, w2] = words;
+      for (const [typed, wantOn] of [
+        [w2.toUpperCase(), true],
+        [w1, false],
+        [w1.toUpperCase(), true],
+      ]) {
+        await evaluate(`${play}.openSavePanel(), true`);
+        await sleep(200);
+        // Blur first, as a phone does when Save is tapped: that path must not store the word either.
+        await evaluate(`document.getElementById('save-name').value = ' ${typed} ', document.getElementById('save-name').dispatchEvent(new Event('blur')), document.getElementById('save-save-btn').click(), true`);
+        await sleep(200);
+        const seen = await evaluate(`JSON.stringify({ test: ${play}.isTestMode(), name: ${play}.getSaveState().name, stored: JSON.parse(localStorage.getItem('flappyPoop.save')).name, submit: localStorage.getItem('flappyPoop.leaderboard'), field: document.getElementById('save-name').value, status: document.getElementById('save-status').textContent, badge: ${play}.testBadge.visible ? ${play}.testBadge.text : null })`).then(JSON.parse);
+        const wantStatus = await tx(wantOn ? 'testModeOn' : 'testModeOff');
+        const wantBadge = wantOn ? await tx('testTitle') : null;
+        ok(seen.test === wantOn && seen.name === name0 && seen.stored === name0 && seen.submit === submit0 && seen.field === name0 && seen.status === wantStatus && seen.badge === wantBadge, `"${typed}" + Save turns test mode ${wantOn ? 'on' : 'off'}; the name stays "${seen.name}" (stored and in the field), the leaderboard submit store is unchanged, status "${seen.status}", badge ${seen.badge ? `"${seen.badge}"` : 'hidden'}`);
+        await evaluate(`import('./src/ui/savePanel.js').then((m) => (m.closeSavePanel(), true))`);
+      }
+
+      // Settings on the ready screen: the taller panel with the test rows; power-ups dimmed; ▶ steps the start level.
+      await chrome('settings');
+      await sleep(500);
+      const panelSeen = await evaluate(`(() => { const s = ${settings}; const panel = s.children.list.find((c) => c.type === 'Rectangle' && c.width === 600); return JSON.stringify({ h: panel.height, texts: s.children.list.filter((c) => c.type === 'Text').map((c) => c.text), dim: s.powerButtons.map((b) => b.alpha) }); })()`).then(JSON.parse);
+      const startAt = await tx('testStartLevel');
+      ok(panelSeen.h === 1160 && panelSeen.texts.includes(`${startAt}  LV 1`) && panelSeen.texts.includes(await tx('testExit')) && panelSeen.dim.length === 6 && panelSeen.dim.every((a) => a < 1), `Settings in test mode is 1160 px tall with "${startAt}  LV 1", Exit, and six dimmed power-ups on the ready screen`);
+      const stepped = await evaluate(`(() => { const s = ${settings}; const zones = s.children.list.filter((c) => c.type === 'Zone'); const up = zones.reduce((a, b) => (b.x > a.x && b.y === zones[0].y ? b : a)); for (let i = 0; i < 3; i++) up.emit('pointerdown'); return JSON.stringify({ level: ${play}.testSettings().startLevel, label: s.children.list.some((c) => c.type === 'Text' && c.text === '${startAt}  LV 4') }); })()`).then(JSON.parse);
+      ok(stepped.level === 4 && stepped.label, `three taps on ▶ set the next run's start level to ${stepped.level}`);
+      await closeTop('Settings');
+      await sleep(400);
+
+      const stores0 = await stores();
+      await startRun();
+      const begin = await evaluate(`Promise.all([import('./src/logic.js'), import('./src/config.js')]).then(([l, c]) => JSON.stringify({ level: ${play}.level, passed: ${play}.pipesPassed, spawned: ${play}.pipesSpawned, score: ${play}.score, speed: ${play}.diff.pipeSpeed, want: l.levelSpeed(4, c.TUNING), bg: ${play}.bgColor.fillColor, wantBg: l.levelColor(4, c.LEVEL_COLORS, c.TUNING.levels.whiteBlend), end3: l.levelEnd(3, c.TUNING), test: ${play}.runIsTest, badge: ${play}.testBadge.visible ? ${play}.testBadge.text : null }))`).then(JSON.parse);
+      ok(begin.test && begin.level === 4 && begin.passed === begin.end3 && begin.spawned >= begin.end3 && begin.score >= begin.end3 && begin.speed === begin.want && begin.bg === begin.wantBg && begin.badge === '\u{1F9EA}', `a test run starts on level ${begin.level}: ${begin.passed} pipes passed, par score ${begin.score}, ${begin.speed} px/s, level-4 colour, 🧪 in the HUD`);
+
+      // Invincible (on by default): the floor clamps instead of killing, and so does a pipe on top of the poop.
+      await evaluate(`${play}.graceLeftMs = 0, ${play}.poop.body.setAllowGravity(true), ${play}.poop.y = 1250, true`);
+      await sleep(300);
+      // update() clamps to the floor line; gravity may carry it a pixel past that between frames.
+      const floor = await evaluate(`JSON.stringify({ state: ${play}.state, y: ${play}.poop.y, line: ${1280 - TT.groundHeight - TT.poopRadius} })`).then(JSON.parse);
+      const floorOk = floor.state === 'playing' && floor.y <= floor.line + 4;
+      await evaluate(`(() => { const p = ${play}; p.poop.body.setAllowGravity(false); p.poop.setVelocity(0, 0); p.poop.y = 640; const pipe = p.pipes.create(p.poop.x, 540, 'pipe', '__BASE'); pipe.setOrigin(0.5, 0); pipe.body.setSize(pipe.frame.width, pipe.frame.height); pipe.setVelocityX(0); p.pipeProbe = pipe; return true; })()`);
+      await sleep(300);
+      const pipe = await evaluate(`JSON.stringify({ state: ${play}.state, overlap: ${play}.physics.overlap(${play}.poop, ${play}.pipeProbe) })`).then(JSON.parse);
+      const pipeOk = pipe.state === 'playing' && pipe.overlap;
+      await evaluate(`${play}.pipeProbe.destroy(), true`);
+      ok(floorOk && pipeOk, `Invincible: the poop is clamped at the floor (y ${floor.y.toFixed(1)}, line ${floor.line}, ${floor.state}) and flies through a pipe without dying (overlap ${pipe.overlap}, ${pipe.state})`);
+
+      // Power-ups from Settings while paused: the button zones call grantTest; what they start stays frozen.
+      await chrome('settings');
+      await sleep(500);
+      const granted = await evaluate(`Promise.all([import('./src/logic.js'), import('./src/config.js')]).then(([l, c]) => { const s = ${settings}; const p = ${play}; const L = l.settingsLayout(720, 1280, c.TUNING, { test: true }); const zone = (id) => s.children.list.find((z) => z.type === 'Zone' && z.x === L.test.powers.find((b) => b.id === id).x && z.y === L.rows.powers); const live = s.powerButtons.every((b) => b.alpha === 1); while (p.effects.hasProbiotic()) p.effects.consumeProbiotic(); zone('bean3').emit('pointerdown'); zone('probiotic').emit('pointerdown'); const after = { live, state: p.state, beans: p.effects.beans(), charged: p.charged, frozen: p.stinkTimer ? p.stinkTimer.paused : null, probiotic: p.effects.hasProbiotic() }; zone('skip').emit('pointerdown'); return JSON.stringify({ ...after, line: p.finishSpawned, passed: p.pipesPassed, end4: l.levelEnd(4, c.TUNING) }); })`).then(JSON.parse);
+      ok(granted.live && granted.state === 'paused' && granted.beans === TT.beans.maxBeans && granted.charged && granted.frozen === true && granted.probiotic, `Settings power-ups are live during a paused test run: ×3 beans (charged, stink frames frozen under the pause) and a probiotic`);
+      ok(granted.line && granted.passed === granted.end4, `the 🏁 button skips to level 4's finish line (${granted.passed} pipes passed)`);
+
+      // Invincible off, then die: nothing is recorded and Over says so.
+      await evaluate(`${play}.setTestSettings({ invincible: false }), true`);
+      await closeTop('Settings');
+      await sleep(400);
+      await dieNow();
+      const after = await stores();
+      const texts = await overTexts();
+      ok((await playState()) === 'dead' && after === stores0 && texts.includes(await tx('testRunNotSaved')) && !texts.includes(await tx('newTopHint')), `a test run's death records nothing (save, best, and leaderboard storage byte-identical) and Over shows "${await tx('testRunNotSaved')}"`);
+
+      // Restart keeps test mode (session registry); exiting mid-run turns it off but that run stays unrecorded.
+      await home();
+      ok((await evaluate(`${play}.isTestMode() && ${play}.testBadge.visible`)) === true, 'test mode survives the restart after game over (session registry)');
+      await startRun();
+      await chrome('settings');
+      await sleep(500);
+      await evaluate(`${settings}.children.list.find((c) => c.type === 'Text' && c.text === '${await tx('testExit')}').emit('pointerdown'), true`);
+      await sleep(500);
+      const exited = await evaluate(`JSON.stringify({ test: ${play}.isTestMode(), run: ${play}.runIsTest, invincible: ${play}.testInvincible(), h: ${settings}.children.list.find((c) => c.type === 'Rectangle' && c.width === 600).height, active: __flappy.scene.isActive('Settings') })`).then(JSON.parse);
+      ok(!exited.test && exited.run && !exited.invincible && exited.h === 720 && exited.active, 'Exit test mode turns it off mid-run, redraws the plain 720 px Settings, and the run stays a test run');
+      await closeTop('Settings');
+      await sleep(400);
+      const storesBefore = await stores();
+      await evaluate(`${play}.score = 999, true`);
+      await dieNow();
+      ok((await stores()) === storesBefore, 'that run (test mode exited partway) still records nothing');
+
+      await home();
+      await startRun();
+      const normal = await evaluate(`JSON.stringify({ test: ${play}.runIsTest, level: ${play}.level, badge: ${play}.testBadge.visible })`).then(JSON.parse);
+      await evaluate(`${play}.score = 999, true`);
+      await dieNow();
+      const top = await evaluate(`JSON.parse(localStorage.getItem('flappyPoop.save')).top[0]?.score ?? null`);
+      ok(!normal.test && normal.level === 1 && !normal.badge && top === 999 && (await stores()) !== storesBefore, `after exiting, a normal run starts on level 1 with no badge and records again (top score ${top})`);
+    }
+
     const f2 = await frame();
     await sleep(500);
     ok((await frame()) > f2, 'game loop still advancing at the end');

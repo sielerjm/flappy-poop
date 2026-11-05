@@ -17,6 +17,9 @@ Mystery box (神秘盒子): the first is guaranteed before pipe 5 of level 3, th
 still on level 3, bobbing from level 4.
 It opens into a random reward (fiber, probiotic, one or three beans, a 5-pipe postbiotic,
 or a skip to the end of the level).
+Test mode (测试模式): a developer sandbox turned on by typing a trigger word as the username. Its
+Settings rows (start level as "Start at LV n", Invincible ON/OFF, power-up buttons, Exit) and its
+messages are terse developer copy; test runs never save a score.
 Author / designer / artist: Michael Sieler. Side project, short playful copy — not
 formal medical language.
 
@@ -86,6 +89,10 @@ Short, playful, clear. Fit a 720×1280 logical field; How to play / About body w
 | hapticsHint | Android only — iPhone has no vibrate | 仅限 Android——iPhone 不支持震动 |
 | reloadGame | Reload game | 刷新游戏 |
 | aboutLink | About | 关于 |
+| testTitle | 🧪 TEST MODE | 🧪 测试模式 |
+| testStartLevel | Start at | 开始于 |
+| invincible | Invincible | 无敌 |
+| testExit | Exit test mode | 退出测试模式 |
 | aboutTitle | ABOUT | 关于 |
 | aboutName | Flappy Poop | Flappy Poop |
 | aboutTagline | A gut-themed Flappy Bird clone. | 一款肠道主题的 Flappy Bird 克隆。 |
@@ -135,12 +142,15 @@ Short, playful, clear. Fit a 720×1280 logical field; How to play / About body w
 | saveLoadPlaceholder | Paste a code | 粘贴存档码 |
 | saveSave | Save | 保存 |
 | saveNameSaved | Username saved | 用户名已保存 |
+| testModeOn | Test mode on — scores won't be saved | 测试模式已开启——分数不会保存 |
+| testModeOff | Test mode off | 测试模式已关闭 |
 | saveWelcome | Welcome back, {name} — {scores} | 欢迎回来，{name}——{scores} |
 | saveWelcomeNoScores | Welcome back, {name} | 欢迎回来，{name} |
 | saveNameRequired | Enter a username first (1–16 characters) | 请先输入用户名（1–16 个字符） |
 | saveErrorDamaged | Save code is damaged or was edited | 存档码已损坏或被修改 |
 | saveErrorUnrecognised | Unrecognised save code | 无法识别的存档码 |
 | newTopHint | New high score! Press Save / Load User on the home screen to save it. | 新高分！在主界面点击“存档 / 载入用户”即可保存。 |
+| testRunNotSaved | Test run — score not saved | 测试局——分数未保存 |
 | scoresTitle | HIGH SCORES | 最高分 |
 | scoresEmpty | No scores yet | 暂无分数 |
 | leaderboardTitle | LEADERBOARD | 排行榜 |

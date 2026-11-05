@@ -50,6 +50,13 @@ step per pair. Each top score remembers its level. A signed
 **user code** (`fp1.<payload>.<sig>`, the save code) carries a player's username
 and best 6 scores between browsers via copy/paste (Save / Load User button on the
 ready screen); spec in `.claude/plans/Flappy Poop — Save Code Spec.md`.
+**Test mode** is a session-only sandbox: typing either of `TEST_MODE.words` (`pooptest` or `testpoop`, any
+case) as the username and pressing Save toggles it (a trigger word is never stored as a name, so it can
+never relabel the player's leaderboard row). Settings then grows a test section:
+start level for the next run (`testRunStart`: the pairs before it passed, a par score), Invincible (on by
+default; pipes, ceiling and floor cannot kill), power-up buttons (`grantTest` → `openMystery`) and Exit.
+A test run (`runIsTest`, latched for the whole run) records nothing: no legacy best, top list or
+leaderboard sync, and Over says so. A 🧪 badge shows while it is on.
 
 It is a side project by Michael Sieler (gut-microbiome researcher), hence the
 theme. It is deliberately small: plain ES modules, no bundler, no npm
@@ -84,7 +91,8 @@ src/
                             by design; timeout, limit, storage key, score cap),
                             LEVELS (gut segment name keys, in order), LEVEL_COLORS
                             (Set2 backgrounds, cycling) and BACKGROUND (overlay
-                            layers: key + parallax).
+                            layers: key + parallax), TEST_MODE (trigger words,
+                            default Invincible).
                             Pure data, Node-safe.
   logic.js                  Pure functions, NO Phaser/DOM: rng, gap placement,
                             scoring (pipePoints, scorePopup, multiplierLayout),
@@ -104,8 +112,10 @@ src/
                             helper, trayLayout, trayHit, readyLayout, readyHit
                             (howToLayout / howToHit wrap them),
                             LAST_UPDATED, issueUrl, openExternalUrl, chromeIntent,
-                            overlayOutsideHit, clampScroll, scaledCircleBody. Fully
-                            unit-tested.
+                            overlayOutsideHit, clampScroll, scaledCircleBody; test mode:
+                            isTestWord, testRunStart, nextTestLevel, TEST_POWERS,
+                            settingsLayout (Settings panel + rows, taller with the
+                            test section). Fully unit-tested.
   leaderboard.js            Shared leaderboard, NO Phaser/DOM: submitPlan / submitPlans
                             (pure: what to post; up to two rows per player, best
                             off and best on the toilet, via save.js bestByToilet),
@@ -172,7 +182,8 @@ src/
                             { focusName: true, closeOnSave: true } (caret in the
                             field at once; Save closes it after savePanelCloseMs).
                             Disables game.input.keyboard while open so typing does
-                            not flap. Copy calls clipboard.writeText inside the tap
+                            not flap. The test-mode word in Username: Save toggles
+                            Play.setTestMode instead of renaming; blur never stores it. Copy calls clipboard.writeText inside the tap
                             handler (iOS); falls back to selecting the field.
   scenes/
     Boot.js                 preload() gameplay PNGs (mystery.png as a 384 px
@@ -298,16 +309,29 @@ src/
                             BACKGROUND.layers; levelBar above the score. Nothing here reads time.now;
                             readyHit() routes taps (howto, start, saveload, profile
                             → Scores). getSaveState / setSaveState for the panel.
-    Over.js                 Game-over panel (score, run summary of fiber / probiotic / postbiotic over bacteria / bean / mystery box (mystery-icon.png), pipes crossed, glowing "Home" button) with a
+                            Test mode: registry testMode / testStartLevel /
+                            testInvincible (session, like toilet); isTestMode,
+                            setTestMode, testSettings / setTestSettings,
+                            testInvincible (die() and the ceiling / floor clamp
+                            treat it like grace), grantTest(draw) (resolveMystery +
+                            openMystery, then pauseEffects() if paused); start()
+                            seeds level / pipes / score / beanSpawned from
+                            testRunStart; runIsTest latches per run and endRun()
+                            records nothing for it; testBadge (refreshTestBadge).
+                            pausePlay / resumePlay share pauseEffects / resumeEffects.
+    Over.js                 Game-over panel ({ test: true }: testRunNotSaved instead of newTopHint) (score, run summary of fiber / probiotic / postbiotic over bacteria / bean / mystery box (mystery-icon.png), pipes crossed, glowing "Home" button) with a
                             tap lockout and its own tray (mute still works). Shows
                             newTopHint when the run entered the top 6. With
                             { won: true } the headline is the gold runWon text.
-    Settings.js             Overlay: sound, haptics (Android only), Reload game
+    Settings.js             Overlay (geometry from settingsLayout): sound, haptics (Android only), Reload game
                             (hardReloadGame(): re-fetches loaded scripts with
                             cache: 'reload', then location.replace with a fresh r=
                             query; picks up a push at once, works on home-screen
                             installs), About link, version. Tap outside the panel
-                            closes (overlayOutsideHit), same as X.
+                            closes (overlayOutsideHit), same as X. In test mode the
+                            panel is 1160 px with the test section (start level ◀ ▶,
+                            Invincible, TEST_POWERS buttons live only while a test run
+                            is paused, Exit → setTestMode(false) + scene.restart()).
     About.js                Overlay: author, LLM note, engine/art/sound credits
                             (both fart clips), How to play + feedback links,
                             LAST_UPDATED under the version, inside
@@ -402,6 +426,9 @@ tests/                      node --test, zero deps. Each file is self-describing
   i18n.test.js              catalog key parity, zh≠en (allowlist), TRANSLATION_NOTES
                             key coverage, scene English denylist, initialLocale
   overlay.test.js           overlayOutsideHit inside vs 1px outside HowTo/Settings panels
+                            (plain and test-mode)
+  testmode.test.js          isTestWord, testRunStart (levels, par score, clamping),
+                            nextTestLevel wrap, TEST_POWERS, settingsLayout geometry
   hitbox.test.js            scaledCircleBody source radius/offset for 2x and 4x
   chrome.test.js            chromeIntent matrix across state x overlay x input
   smoke.test.js             logic.js imports and exports VERSION
@@ -454,7 +481,9 @@ tools/
                             close-and-reopen race, plus the mystery box (level 3's
                             still first box, a still rolled level-3 box, a bobbing
                             level-4 box, the spin pausing, forced draws,
-                            the full-bag fallback, and a skip into level 4's break).
+                            the full-bag fallback, and a skip into level 4's break), and
+                            test mode (trigger word, start level, Invincible, Settings
+                            power-ups, nothing recorded, Exit latch, normal run after).
                             Zero dependencies (fetch + WebSocket).
 
 .claude/plans/              Checkpointed build plans. Historical record + decision
@@ -513,6 +542,8 @@ npm run push      # stamp LAST_UPDATED = now, run tests, commit the stamp, push 
 npm start         # tools/serve.py: http://localhost:8000 plus a printed
                   # http://<LAN-IP>:8000 for a phone on the same Wi-Fi
                   # (localhost on the phone is the phone, not the laptop)
+# Test mode: type pooptest or testpoop as the username + Save (again to leave; a reload also
+#   leaves). Settings then has start level, Invincible, power-ups; nothing is saved.
 npm run smoke     # with npm start running: headless Chrome drives the real game
                   # (needs Google Chrome; CHROME=/path overrides). Run it after
                   # any change to src/scenes/* or src/ui/*.

@@ -1,4 +1,4 @@
-import { GAME_WIDTH, GAME_HEIGHT, TUNING as T, LEVELS, LEVEL_COLORS, BACKGROUND } from '../config.js';
+import { GAME_WIDTH, GAME_HEIGHT, TUNING as T, LEVELS, LEVEL_COLORS, BACKGROUND, TEST_MODE } from '../config.js';
 import {
   createRng,
   pipeGapY,
@@ -62,6 +62,7 @@ import {
   beanButtonLayout,
   beanButtonHit,
   howToPromptDue,
+  testRunStart,
   LAST_UPDATED,
 } from '../logic.js';
 import { t, pauseBannerText, levelBannerText, levelLabel, initialLocale, isLocale, profileButtonText } from '../i18n.js';
@@ -168,6 +169,10 @@ export class Play extends Phaser.Scene {
     this.launching = false;
     // Toilet mode: session-only (registry survives scene.restart, not a reload).
     this.toilet = Boolean(this.registry.get('toilet'));
+    // Test mode is session-only too (registry 'testMode', 'testStartLevel', 'testInvincible').
+    // runIsTest latches per run: set in start() or when test mode turns on mid-run, and only
+    // cleared by the next start(), so a run that ever had test tools can never be recorded.
+    this.runIsTest = false;
 
     // Player: bobs at its ready spot wearing the "TAP TO FLAP!" bubble; no gravity
     // until launch() has swapped to the plain frame and slid it to poopX.
@@ -215,6 +220,9 @@ export class Play extends Phaser.Scene {
     this.refreshLevelBar();
     // 🚽 left of the score while a toilet-mode run is on.
     this.toiletHud = this.add.text(GAME_WIDTH / 2 - 96, T.hudScoreY, TOILET_EMOJI, { fontFamily: 'sans-serif', fontSize: '44px' }).setOrigin(0.5).setDepth(20).setVisible(false);
+    // Test mode badge (refreshTestBadge): "🧪 TEST MODE" top-left on the ready screen, a bare 🧪 at the
+    // far left of the score row during a test run (the level bar owns the top strip then).
+    this.testBadge = this.add.text(24, 56, '', { ...TEXT_STYLE, fontSize: '34px', color: '#ffd700', strokeThickness: 8 }).setOrigin(0, 0.5).setDepth(20).setVisible(false);
     // Probiotic counter: right-aligned on the bean's row, clear of the score digits and the screen edge.
     this.probioticIcon = this.add.image(0, 156, 'probiotic').setDisplaySize(T.hudProbioticSize, T.hudProbioticSize).setDepth(20).setVisible(false);
     this.probioticText = this.add.text(0, 156, '', { ...TEXT_STYLE, fontSize: '40px' }).setOrigin(1, 0.5).setDepth(20).setVisible(false);
@@ -255,6 +263,7 @@ export class Play extends Phaser.Scene {
     }
     this.profileBtn = createButton(this, this.readyBoxes.profile, profileButtonText(this.locale, this.save), { ...TEXT_STYLE, fontSize: '32px' }); // white: the player's own line, not a menu item
     this.refreshProfile();
+    this.refreshTestBadge(); // still on after a restart: test mode lives in the registry
 
     this.pauseShade = this.add.rectangle(GAME_WIDTH / 2, GAME_HEIGHT / 2, GAME_WIDTH, GAME_HEIGHT, 0x000000, 0.45).setDepth(25).setVisible(false);
     // Level-break banner shares the shade with the pause banner; setPauseBanner picks one.
@@ -373,6 +382,7 @@ export class Play extends Phaser.Scene {
     this.saveLoadBtn.setVisible(visible);
     this.profileBtn.setVisible(visible);
     this.profileHalo.setVisible(visible && !this.save?.name);
+    this.refreshTestBadge();
   }
 
   start() {
@@ -382,9 +392,17 @@ export class Play extends Phaser.Scene {
     this.toiletHud.setVisible(this.toilet);
     this.poop.body.setAllowGravity(true);
     this.poop.body.setGravityY(T.gravity);
-    this.level = 1;
-    this.pipesPassed = 0;
-    this.pipesSpawned = 0;
+    // A test run may start on a later level (testRunStart: the pairs before it passed, a par score);
+    // a normal run is testRunStart(1): level 1, nothing passed, score 0.
+    this.runIsTest = this.isTestMode();
+    const begin = testRunStart(this.runIsTest ? this.testSettings().startLevel : 1, T);
+    this.level = begin.level;
+    this.pipesPassed = begin.pipes;
+    this.pipesSpawned = begin.pipes;
+    this.score = begin.score;
+    this.scoreText.setText(String(this.score));
+    this.beanSpawned = begin.beanSpawned;
+    this.refreshTestBadge();
     this.collected = { fiber: 0, probiotic: 0, postbiotic: 0, bacteria: 0, bean: 0, mystery: 0 };
     this.mysteryPair = scriptedMysteryPair(this.rng, T); // the pair the guaranteed first box (early level 3) rides after
     this.popupOrder = [];
@@ -398,7 +416,7 @@ export class Play extends Phaser.Scene {
     this.refreshLevelBar();
     this.bgFade?.stop();
     this.bgFade = null;
-    this.bgColor.setFillStyle(levelColor(1, LEVEL_COLORS, T.levels.whiteBlend), 1);
+    this.bgColor.setFillStyle(levelColor(this.level, LEVEL_COLORS, T.levels.whiteBlend), 1);
     this.distanceSinceSpawn = 0;
     this.spawnPipePair();
   }
@@ -627,6 +645,70 @@ export class Play extends Phaser.Scene {
     this.toiletToggle.setOn(this.toilet);
   }
 
+  /** Test mode is on for this session (the registry survives scene.restart, not a reload). */
+  isTestMode() {
+    return Boolean(this.registry.get('testMode'));
+  }
+
+  /**
+   * Turn test mode on or off (the save panel's trigger word, Settings' Exit).
+   * Turning it on during a run marks that run as a test run; turning it off
+   * does not unmark it, so the run still is not recorded.
+   */
+  setTestMode(on) {
+    this.registry.set('testMode', Boolean(on));
+    if (on && (this.state === 'playing' || this.state === 'paused')) this.runIsTest = true;
+    this.refreshTestBadge();
+  }
+
+  /** Test-mode knobs for Settings: the next run's start level (1..lastLevel) and Invincible. */
+  testSettings() {
+    const invincible = this.registry.get('testInvincible');
+    return {
+      startLevel: testRunStart(this.registry.get('testStartLevel') ?? 1, T).level,
+      invincible: typeof invincible === 'boolean' ? invincible : TEST_MODE.defaultInvincible,
+    };
+  }
+
+  setTestSettings({ startLevel, invincible } = {}) {
+    if (startLevel !== undefined) this.registry.set('testStartLevel', testRunStart(startLevel, T).level);
+    if (invincible !== undefined) this.registry.set('testInvincible', Boolean(invincible));
+    return this.testSettings();
+  }
+
+  /** Collisions (pipes, ceiling, floor) do not end a test run while Invincible is on. */
+  testInvincible() {
+    return this.runIsTest && this.isTestMode() && this.testSettings().invincible;
+  }
+
+  /**
+   * Test mode: hand out a power-up now, during a test run (playing, or paused
+   * under Settings). `draw` is a mystery-box draw or 'fiber' (TEST_POWERS); one
+   * that cannot do anything becomes fiber, as for a real box (resolveMystery).
+   * Anything the grant starts while paused is frozen with the rest of the run.
+   * Returns the draw applied, or null when it was refused.
+   */
+  grantTest(draw) {
+    if (!this.runIsTest || !this.isTestMode()) return null;
+    if (this.state !== 'playing' && this.state !== 'paused') return null;
+    const pairsLeft = this.finishSpawned ? 0 : skipPairs(this.pipesPassed, this.level, T);
+    const resolved = resolveMystery(draw, { beans: this.effects.beans(), pairsLeft }, T);
+    this.openMystery(resolved);
+    if (this.state === 'paused') this.pauseEffects();
+    return resolved;
+  }
+
+  /** Show / hide the test badge: the long label on the ready screen, the bare 🧪 once a test run is under way. */
+  refreshTestBadge() {
+    if (!this.testBadge) return;
+    const ready = this.state === 'ready';
+    const show = ready ? this.isTestMode() && !this.launching : this.runIsTest;
+    this.testBadge.setVisible(show);
+    if (!show) return;
+    if (ready) this.testBadge.setText(t(this.locale, 'testTitle')).setPosition(24, 56);
+    else this.testBadge.setText('\u{1F9EA}').setPosition(24, T.hudScoreY - 12);
+  }
+
   applyLocale(next) {
     if (!isLocale(next)) return;
     this.locale = next;
@@ -638,6 +720,7 @@ export class Play extends Phaser.Scene {
     this.pauseHint?.setText(pauseHint);
     this.refreshLevelBanner();
     this.refreshLevelBar();
+    this.refreshTestBadge();
   }
 
   chromeArgs(input) {
@@ -768,6 +851,13 @@ export class Play extends Phaser.Scene {
     if (this.state !== 'playing') return;
     this.state = 'paused';
     this.physics.pause();
+    this.pauseEffects();
+    this.bob.pause();
+    this.setPauseBanner(true);
+  }
+
+  /** Freeze the run's timers, tweens, clip and box spin (pausePlay; grantTest while paused). Safe to repeat. */
+  pauseEffects() {
     if (this.stinkTimer) this.stinkTimer.paused = true;
     this.fartSound?.pause();
     this.fartTween?.pause();
@@ -778,15 +868,10 @@ export class Play extends Phaser.Scene {
     this.multTween?.pause();
     this.revealTween?.pause();
     this.setBoxSpin(false);
-    this.bob.pause();
-    this.setPauseBanner(true);
   }
 
-  resumePlay() {
-    if (this.state !== 'paused') return;
-    if (this.levelBreak) this.endLevelBreak();
-    this.state = 'playing';
-    this.physics.resume();
+  /** Undo pauseEffects (resumePlay). */
+  resumeEffects() {
     if (this.stinkTimer) this.stinkTimer.paused = false;
     this.fartSound?.resume();
     this.fartTween?.resume();
@@ -797,6 +882,14 @@ export class Play extends Phaser.Scene {
     this.multTween?.resume();
     this.revealTween?.resume();
     this.setBoxSpin(true);
+  }
+
+  resumePlay() {
+    if (this.state !== 'paused') return;
+    if (this.levelBreak) this.endLevelBreak();
+    this.state = 'playing';
+    this.physics.resume();
+    this.resumeEffects();
     this.bob.resume();
     this.setPauseBanner(false);
     // Recovery bounce on the resume tap. Do not set flapLockedUntil: chrome
@@ -1386,6 +1479,8 @@ export class Play extends Phaser.Scene {
     for (const item of this.items.getChildren()) item.setVelocityX(0);
     for (const bean of this.beans.getChildren()) bean.setVelocityX(0);
     this.setPauseBanner(false);
+    // A test run records nothing: no legacy best, no top-list entry, no leaderboard sync.
+    if (this.runIsTest) return false;
     this.best.save(this.score); // legacy store, kept for first-run seeding
     const newTop = isNewTop(this.save, this.score);
     this.save = saveLocal(recordScore(this.save, this.score, { toilet: this.toilet, level: this.level }));
@@ -1397,7 +1492,7 @@ export class Play extends Phaser.Scene {
   showOver(newTop, won = false) {
     this.time.delayedCall(T.deathToOverMs, () => {
       this.physics.pause();
-      this.scene.launch('Over', { score: this.score, newTop, won, toilet: this.toilet, level: this.level, pipes: this.pipesPassed, collected: { ...this.collected } });
+      this.scene.launch('Over', { score: this.score, newTop, won, test: this.runIsTest, toilet: this.toilet, level: this.level, pipes: this.pipesPassed, collected: { ...this.collected } });
     });
   }
 
@@ -1419,8 +1514,8 @@ export class Play extends Phaser.Scene {
 
   die() {
     if (this.state !== 'playing') return;
-    // Farting (or just finished and still clearing the pipe) cannot die.
-    if (this.effects.powerActive() || this.graceLeftMs > 0) return;
+    // Farting (or just finished and still clearing the pipe) cannot die; nor can an Invincible test run.
+    if (this.effects.powerActive() || this.graceLeftMs > 0 || this.testInvincible()) return;
     const newTop = this.endRun();
     this.setPoopTexture('poop-dead');
     this.cameras.main.shake(200, 0.01);
@@ -1492,7 +1587,7 @@ export class Play extends Phaser.Scene {
       const top = T.poopRadius;
       const floor = GAME_HEIGHT - T.groundHeight - T.poopRadius;
       if (this.poop.y < top || this.poop.y > floor) {
-        if (this.effects.powerActive() || this.graceLeftMs > 0) {
+        if (this.effects.powerActive() || this.graceLeftMs > 0 || this.testInvincible()) {
           this.poop.y = Math.min(Math.max(this.poop.y, top), floor);
           this.poop.setVelocityY(0);
         } else {

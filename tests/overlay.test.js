@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { GAME_WIDTH, GAME_HEIGHT } from '../src/config.js';
-import { overlayOutsideHit, clampScroll } from '../src/logic.js';
+import { GAME_WIDTH, GAME_HEIGHT, TUNING as T } from '../src/config.js';
+import { overlayOutsideHit, clampScroll, settingsLayout } from '../src/logic.js';
 
 const howto = { x: GAME_WIDTH / 2, y: GAME_HEIGHT / 2, width: 600, height: 1000 };
 const settings = { x: GAME_WIDTH / 2, y: GAME_HEIGHT / 2, width: 600, height: 720 };
@@ -31,6 +31,18 @@ test('overlayOutsideHit stays false 1 px inside each HowTo edge', () => {
 test('Settings 600x760 panel: centre inside, 1 px beyond height is outside', () => {
   assert.equal(overlayOutsideHit(settings.x, settings.y, settings), false);
   assert.equal(overlayOutsideHit(settings.x, settings.y + settings.height / 2 + 1, settings), true);
+});
+
+test('Settings test-mode panel (settingsLayout, 600x1160): edges hit like the plain one', () => {
+  const panel = settingsLayout(GAME_WIDTH, GAME_HEIGHT, T, { test: true }).panel;
+  const hh = panel.height / 2;
+  assert.equal(overlayOutsideHit(panel.x, panel.y, panel), false);
+  assert.equal(overlayOutsideHit(panel.x, panel.y - hh + 1, panel), false, 'test title area is inside');
+  assert.equal(overlayOutsideHit(panel.x, panel.y + hh - 1, panel), false, 'version line area is inside');
+  assert.equal(overlayOutsideHit(panel.x, panel.y - hh - 1, panel), true);
+  assert.equal(overlayOutsideHit(panel.x, panel.y + hh + 1, panel), true);
+  // A tap that was inside the plain panel stays inside the taller one.
+  assert.equal(overlayOutsideHit(settings.x, settings.y - settings.height / 2 + 1, panel), false);
 });
 
 test('clampScroll is 0 when the content fits and clamps to the overflow otherwise', () => {

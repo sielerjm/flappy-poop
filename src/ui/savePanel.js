@@ -6,8 +6,9 @@
 // not flap / pause / open overlays. Canvas pointer events never reach the game
 // because the backdrop sits above the canvas.
 
-import { TUNING as T } from '../config.js';
+import { TUNING as T, TEST_MODE } from '../config.js';
 import { t, welcomeText } from '../i18n.js';
+import { isTestWord } from '../logic.js';
 import { loadLocal, saveLocal, ensureId, validateName, exportCode, importCode } from '../save.js';
 
 const PANEL_ID = 'save-panel';
@@ -182,6 +183,8 @@ async function refreshCode() {
  * Blur / change save silently; the Save button adds a confirmation on top.
  */
 function onNameChange() {
+  // The test-mode trigger word is never stored as a name (on a phone, tapping Save blurs the field first).
+  if (isTestWord(dom.name.value, TEST_MODE.words)) return false;
   const state = getState();
   const { ok, name } = validateName(dom.name.value);
   if (!ok) {
@@ -198,6 +201,10 @@ function onNameChange() {
 
 /** Save button: store the username and say so, so the player knows it stuck. */
 function onSave() {
+  if (isTestWord(dom.name.value, TEST_MODE.words)) {
+    toggleTestMode();
+    return;
+  }
   const { ok } = validateName(dom.name.value);
   if (!ok) {
     setStatus(t(ctx.locale, 'saveNameRequired'), 'error');
@@ -206,6 +213,23 @@ function onSave() {
   }
   onNameChange();
   setStatus(t(ctx.locale, 'saveNameSaved'), 'ok');
+  dom.name.blur();
+  if (ctx.closeOnSave) {
+    clearTimeout(closeTimer);
+    closeTimer = setTimeout(() => closeSavePanel(), T.savePanelCloseMs);
+  }
+}
+
+/**
+ * Save with the trigger word in the Username field: flip test mode instead of
+ * renaming, say which way it went, and put the stored name back in the field.
+ */
+function toggleTestMode() {
+  const play = ctx.play;
+  const on = !play?.isTestMode?.();
+  play?.setTestMode?.(on);
+  dom.name.value = getState().name;
+  setStatus(t(ctx.locale, on ? 'testModeOn' : 'testModeOff'), 'ok');
   dom.name.blur();
   if (ctx.closeOnSave) {
     clearTimeout(closeTimer);

@@ -1,6 +1,6 @@
 import { GAME_WIDTH, GAME_HEIGHT, TUNING as T } from '../config.js';
-import { VERSION, createSettingsStore, chromeIntent, overlayOutsideHit, hardReloadGame } from '../logic.js';
-import { t, toggleLabel, metaFontSize } from '../i18n.js';
+import { VERSION, createSettingsStore, chromeIntent, overlayOutsideHit, hardReloadGame, settingsLayout, nextTestLevel } from '../logic.js';
+import { t, toggleLabel, metaFontSize, levelLabel } from '../i18n.js';
 import { setMuted } from '../sound.js';
 
 const STYLE = { fontFamily: 'sans-serif', fontStyle: 'bold', color: '#ffffff', align: 'center' };
@@ -14,21 +14,24 @@ export class Settings extends Phaser.Scene {
     this.scene.bringToTop();
     this.settings = createSettingsStore(globalThis.localStorage, T.settingsKey);
     const cur = this.settings.load();
-    const locale = this.scene.get('Play')?.getLocale?.() ?? cur.locale ?? 'en';
+    const play = this.scene.get('Play');
+    const locale = play?.getLocale?.() ?? cur.locale ?? 'en';
     this.locale = locale;
 
-    const cx = GAME_WIDTH / 2;
-    const cy = GAME_HEIGHT / 2;
-    const panel = { x: cx, y: cy, width: 600, height: 720 };
+    // Test mode (Play.isTestMode) makes the panel taller and adds the test section under About.
+    const testMode = Boolean(play?.isTestMode?.());
+    const layout = settingsLayout(GAME_WIDTH, GAME_HEIGHT, T, { test: testMode });
+    const { panel, rows } = layout;
+    const cx = panel.x;
     const dimmer = this.add.rectangle(GAME_WIDTH / 2, GAME_HEIGHT / 2, GAME_WIDTH, GAME_HEIGHT, 0x000000, 0.55).setInteractive();
     dimmer.on('pointerdown', (pointer) => {
       if (overlayOutsideHit(pointer.x, pointer.y, panel)) this.close();
     });
-    this.add.rectangle(cx, cy, panel.width, panel.height, 0x1a0b14, 0.95).setStrokeStyle(8, 0xe85e96);
+    this.add.rectangle(cx, panel.y, panel.width, panel.height, 0x1a0b14, 0.95).setStrokeStyle(8, 0xe85e96);
 
-    this.add.text(cx, cy - 290, t(locale, 'settingsTitle'), { ...STYLE, fontSize: '52px', color: '#f8a0c8' }).setOrigin(0.5);
+    this.add.text(cx, rows.title, t(locale, 'settingsTitle'), { ...STYLE, fontSize: '52px', color: '#f8a0c8' }).setOrigin(0.5);
 
-    this.soundLabel = this.addToggle(cx, cy - 150, toggleLabel(locale, 'sound', cur.sound), () => {
+    this.soundLabel = this.addToggle(cx, rows.sound, toggleLabel(locale, 'sound', cur.sound), () => {
       const next = !this.settings.load().sound;
       this.settings.set({ sound: next });
       setMuted(!next);
@@ -36,13 +39,13 @@ export class Settings extends Phaser.Scene {
       this.soundLabel.setText(toggleLabel(this.locale, 'sound', next));
     });
 
-    this.hapticsLabel = this.addToggle(cx, cy - 30, toggleLabel(locale, 'haptics', cur.haptics), () => {
+    this.hapticsLabel = this.addToggle(cx, rows.haptics, toggleLabel(locale, 'haptics', cur.haptics), () => {
       const next = !this.settings.load().haptics;
       this.settings.set({ haptics: next });
       this.hapticsLabel.setText(toggleLabel(this.locale, 'haptics', next));
     });
     this.add
-      .text(cx, cy + 26, t(locale, 'hapticsHint'), {
+      .text(cx, rows.hint, t(locale, 'hapticsHint'), {
         ...STYLE,
         fontSize: metaFontSize(locale),
         color: '#c9b8dc',
@@ -53,19 +56,21 @@ export class Settings extends Phaser.Scene {
 
     // Reload: a home-screen app has no address bar, so this is the only way to pull a new build.
     const reload = this.add
-      .text(cx, cy + 120, t(locale, 'reloadGame'), { ...STYLE, fontSize: '40px', color: '#f8a0c8' })
+      .text(cx, rows.reload, t(locale, 'reloadGame'), { ...STYLE, fontSize: '40px', color: '#f8a0c8' })
       .setOrigin(0.5)
       .setInteractive({ useHandCursor: true });
     reload.on('pointerdown', () => hardReloadGame());
 
     const about = this.add
-      .text(cx, cy + 210, t(locale, 'aboutLink'), { ...STYLE, fontSize: '40px', color: '#f8a0c8' })
+      .text(cx, rows.about, t(locale, 'aboutLink'), { ...STYLE, fontSize: '40px', color: '#f8a0c8' })
       .setOrigin(0.5)
       .setInteractive({ useHandCursor: true });
     about.on('pointerdown', () => this.scene.get('Play')?.handleChrome('info'));
 
+    if (testMode) this.buildTestSection(layout, play);
+
     this.add
-      .text(cx, cy + 300, `v${VERSION}`, {
+      .text(cx, rows.version, `v${VERSION}`, {
         ...STYLE,
         fontSize: metaFontSize(locale),
         color: '#6a5a74',
@@ -73,11 +78,79 @@ export class Settings extends Phaser.Scene {
       })
       .setOrigin(0.5);
 
-    const close = this.add.text(cx + 256, cy - 306, '✕', { ...STYLE, fontSize: '48px' }).setOrigin(0.5).setInteractive({ useHandCursor: true });
+    const close = this.add.text(layout.close.x, layout.close.y, '✕', { ...STYLE, fontSize: '48px' }).setOrigin(0.5).setInteractive({ useHandCursor: true });
     close.on('pointerdown', () => this.close());
     this.input.keyboard?.on('keydown-ESC', () => {
       if (this.scene.isActive('About') || this.scene.isActive('Feedback')) return;
       this.close();
+    });
+  }
+
+  /**
+   * Test mode rows: start level for the next run (◀ / ▶, wrapping), Invincible,
+   * the power-up buttons (live only while a test run is paused under this
+   * panel; each tap is Play.grantTest), and Exit, which turns test mode off and
+   * redraws the plain panel. Play keeps every value (session registry).
+   */
+  buildTestSection(layout, play) {
+    const { panel, rows, test } = layout;
+    const cx = panel.x;
+    const locale = this.locale;
+    this.add.rectangle(cx, test.divider, panel.width - 80, 3, 0xe85e96, 0.6);
+    this.add.text(cx, rows.testTitle, t(locale, 'testTitle'), { ...STYLE, fontSize: '44px', color: '#ffd700' }).setOrigin(0.5);
+
+    const levelText = this.add.text(cx, rows.startLevel, '', { ...STYLE, fontSize: '40px' }).setOrigin(0.5);
+    const showLevel = () => levelText.setText(`${t(locale, 'testStartLevel')}  ${levelLabel(locale, play.testSettings().startLevel)}`);
+    showLevel();
+    for (const [box, step, glyph] of [
+      [test.levelDown, -1, '◀'],
+      [test.levelUp, 1, '▶'],
+    ]) {
+      this.add.text(box.x, box.y, glyph, { ...STYLE, fontSize: '44px', color: '#f8a0c8' }).setOrigin(0.5);
+      this.add
+        .zone(box.x, box.y, box.width, box.height)
+        .setInteractive({ useHandCursor: true })
+        .on('pointerdown', () => {
+          play.setTestSettings({ startLevel: nextTestLevel(play.testSettings().startLevel, step, T) });
+          showLevel();
+        });
+    }
+
+    this.invincibleLabel = this.addToggle(cx, rows.invincible, toggleLabel(locale, 'invincible', play.testSettings().invincible), () => {
+      const next = play.setTestSettings({ invincible: !play.testSettings().invincible }).invincible;
+      this.invincibleLabel.setText(toggleLabel(this.locale, 'invincible', next));
+    });
+
+    // Power-ups apply to the run under this panel, so they are dimmed on the ready / game-over screens.
+    const live = play.state === 'paused' && play.runIsTest;
+    this.powerButtons = test.powers.map((b) => {
+      const parts = [];
+      if (b.id === 'skip') {
+        parts.push(this.add.text(0, 0, '\u{1F3C1}', { fontFamily: 'sans-serif', fontSize: '56px' }).setOrigin(0.5));
+      } else {
+        parts.push(this.add.image(0, 0, b.id === 'bean1' || b.id === 'bean3' ? 'bean' : b.id).setDisplaySize(b.icon, b.icon));
+        if (b.id === 'bean3') parts.push(this.add.text(24, 24, '×3', { ...STYLE, fontSize: '28px', stroke: '#1a0b14', strokeThickness: 6 }).setOrigin(0.5));
+      }
+      const button = this.add.container(b.x, b.y, parts).setAlpha(live ? 1 : 0.35);
+      if (live) {
+        this.add
+          .zone(b.x, b.y, b.width, b.height)
+          .setInteractive({ useHandCursor: true })
+          .on('pointerdown', () => {
+            if (!play.grantTest(b.id)) return;
+            this.tweens.add({ targets: button, scale: { from: 1.3, to: 1 }, duration: 200, ease: 'Back.easeOut' });
+          });
+      }
+      return button;
+    });
+
+    const exit = this.add
+      .text(cx, rows.exit, t(locale, 'testExit'), { ...STYLE, fontSize: '40px', color: '#f8a0c8' })
+      .setOrigin(0.5)
+      .setInteractive({ useHandCursor: true });
+    exit.on('pointerdown', () => {
+      play.setTestMode(false);
+      this.scene.restart(); // redraw as the plain panel
     });
   }
 

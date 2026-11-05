@@ -188,6 +188,16 @@ export const BACKGROUND = {
   layers: [{ key: 'villi', parallax: 0.25 }],
 };
 
+// Test mode: a session-only sandbox (start level, invincible, power-ups on demand)
+// whose runs never save. Typing one of `words` in the save panel's Username field and
+// pressing Save toggles it; a trigger word is never stored as a name (so it can never
+// relabel the player's leaderboard row). It is public in
+// this source on purpose: test runs cannot reach the top list or the leaderboard.
+export const TEST_MODE = {
+  words: ['pooptest', 'testpoop'], // triggers (either spelling), matched trimmed and case-insensitively (each fits NAME_MAX 16)
+  defaultInvincible: true, // Invincible toggle state when test mode turns on
+};
+
 // Shared leaderboard (Supabase, plain fetch; see db/schema.sql and src/leaderboard.js).
 // Both values are copied from the Supabase dashboard and are public by design: they
 // ship to every player's browser. The schema's grants are the security boundary.

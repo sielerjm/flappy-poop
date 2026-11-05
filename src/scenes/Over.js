@@ -17,6 +17,7 @@ export class Over extends Phaser.Scene {
     const pipes = Number.isInteger(data?.pipes) && data.pipes >= 0 ? data.pipes : 0;
     const newTop = Boolean(data?.newTop);
     const won = Boolean(data?.won); // crossed the final level's finish line
+    const testRun = Boolean(data?.test); // test mode: nothing was recorded (Play.endRun)
     const toilet = Boolean(data?.toilet);
     const level = Number.isInteger(data?.level) && data.level >= 1 ? data.level : 1;
     const collected = { fiber: 0, probiotic: 0, postbiotic: 0, bacteria: 0, bean: 0, mystery: 0, ...(data?.collected ?? {}) };
@@ -54,7 +55,9 @@ export class Over extends Phaser.Scene {
     // frame becomes the texture's default and every later pipe would spawn from it.
     this.add.image(cx - 46, cy + 60, 'pipe').setOrigin(0.5, 80 / 1280).setCrop(0, 0, 128, 160).setScale(40 / 128);
     this.add.text(cx - 14, cy + 60, `×${pipes}`, { ...style, fontSize: '40px', color: '#c9b8dc' }).setOrigin(0, 0.5);
-    if (newTop) {
+    if (testRun) {
+      this.add.text(cx, cy + 130, t(locale, 'testRunNotSaved'), { ...style, fontSize: '30px', color: '#ffd700', wordWrap: { width: 460, useAdvancedWrap: true } }).setOrigin(0.5);
+    } else if (newTop) {
       this.add
         .text(cx, cy + 130, t(locale, 'newTopHint'), {
           ...style,
