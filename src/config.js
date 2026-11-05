@@ -113,6 +113,19 @@ export const TUNING = {
     movePeriodMs: 1600, // ms for one full up-and-down sweep of a moving gap item
     moveMarginPx: 8, // px kept between a moving gap item and the pipe mouths
   },
+  mystery: {
+    fromLevel: 3, // mystery boxes join the item roll from this level
+    weight: 1.5, // share of the item roll = items.weights.fiber / 2, so a box is half as common as fiber (it takes the fiber spot between the pairs)
+    periodMs: 6000, // ms per full up-and-down bob = 2 × items.fiberPeriodMs (half fiber's speed)
+    frameMs: 70, // ms per spin frame (the source GIF's timing)
+    postbioticPipes: 5, // pipes the postbiotic draw adds, ×2 already on (= items.probioticPipes)
+    // 0–1 chance of each draw when a box opens; fiber (the default) takes the rest (0.49).
+    // bean1 / bean3 add one / three beans; skip clears the rest of the level (skipped pairs score).
+    draws: { probiotic: 0.2, bean1: 0.2, postbiotic: 0.05, bean3: 0.05, skip: 0.01 },
+    revealMs: 700, // ms the drawn reward's icon rises out of the box and fades
+    revealRisePx: 70, // px it rises
+    color: '#ffd700', // gold "+N" for the skipped pairs
+  },
   beans: {
     startScore: 5, // score from which beans may appear
     windowEndScore: 20, // end of the "at least one bean" window (scores 5–20)

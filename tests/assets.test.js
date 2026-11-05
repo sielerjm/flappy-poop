@@ -22,17 +22,31 @@ function walk(dir) {
 const srcFiles = walk(join(root, 'src')).filter((f) => f.endsWith('.js'));
 const loads = srcFiles.flatMap((f) => {
   const src = readFileSync(f, 'utf8');
-  return [...src.matchAll(/this\.load\.image\(\s*['"]([^'"]+)['"]\s*,\s*['"]([^'"]+)['"]/g)].map((m) => ({
-    key: m[1],
-    path: m[2],
+  return [...src.matchAll(/this\.load\.(image|spritesheet)\(\s*['"]([^'"]+)['"]\s*,\s*['"]([^'"]+?)(?:\?[^'"]*)?['"](?:\s*\+\s*V)?\s*(?:,\s*\{\s*frameWidth:\s*(\d+),\s*frameHeight:\s*(\d+))?/g)].map((m) => ({
+    type: m[1],
+    key: m[2],
+    path: m[3],
+    frameWidth: m[4] ? Number(m[4]) : null,
+    frameHeight: m[5] ? Number(m[5]) : null,
     file: f,
   }));
 });
 
-test('every this.load.image() in src/ points at an existing file', () => {
+test('every this.load.image() / load.spritesheet() in src/ points at an existing file', () => {
   assert.ok(loads.length > 0, 'no load.image calls found in src/');
   for (const l of loads) {
     assert.ok(existsSync(join(root, l.path)), `${l.file}: ${l.path} missing`);
+  }
+});
+
+test('every spritesheet is a whole number of its frames', () => {
+  const sheets = loads.filter((l) => l.type === 'spritesheet');
+  assert.ok(sheets.length > 0, 'no load.spritesheet calls found in src/');
+  for (const l of sheets) {
+    assert.ok(l.frameWidth > 0 && l.frameHeight > 0, `${l.file}: ${l.key} needs literal frameWidth / frameHeight`);
+    const real = pngSize(join(root, l.path));
+    assert.equal(real.h, l.frameHeight, `${l.path}: one row of ${l.frameHeight} px frames`);
+    assert.equal(real.w % l.frameWidth, 0, `${l.path}: width ${real.w} is not a whole number of ${l.frameWidth} px frames`);
   }
 });
 

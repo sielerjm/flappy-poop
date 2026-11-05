@@ -1,4 +1,4 @@
-import { GAME_WIDTH, GAME_HEIGHT } from '../config.js';
+import { GAME_WIDTH, GAME_HEIGHT, TUNING as T } from '../config.js';
 import { VERSION } from '../logic.js';
 
 // Cache-bust so browsers pick up new PNGs after art/contract bumps.
@@ -15,6 +15,9 @@ export class Boot extends Phaser.Scene {
     this.load.image('fiber', 'assets/fiber.png' + V);
     this.load.image('probiotic', 'assets/probiotic.png' + V);
     this.load.image('postbiotic', 'assets/postbiotic.png' + V);
+    // Mystery box: 8 spin frames side by side (assets/README.md); the anim is made in create().
+    this.load.spritesheet('mystery', 'assets/mystery.png' + V, { frameWidth: 384, frameHeight: 384 });
+    this.load.image('mystery-icon', 'assets/mystery-icon.png' + V); // static view for the game-over summary and How to play
     this.load.image('bacteria', 'assets/bacteria.png' + V);
     this.load.image('bean', 'assets/bean.png' + V);
     this.load.image('poop-stink1', 'assets/poop-stink1.png' + V);
@@ -31,6 +34,10 @@ export class Boot extends Phaser.Scene {
 
   create() {
     console.log('[Boot] assets loaded', GAME_WIDTH, GAME_HEIGHT);
+    // Global animation manager: every scene can play it.
+    if (!this.anims.exists('mystery-spin')) {
+      this.anims.create({ key: 'mystery-spin', frames: this.anims.generateFrameNumbers('mystery'), frameRate: 1000 / T.mystery.frameMs, repeat: -1 });
+    }
     this.scene.start('Play');
   }
 }

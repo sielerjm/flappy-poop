@@ -2,7 +2,7 @@
 
 Gameplay sprites are listed below. `npm test` checks that the sizes in this table match the PNG files, so if you change a size, update this table and the scene code that positions it.
 
-The player and items are Michael's drawings. Put a new source PNG in `assets/src/` and run `uv run --with pillow python3 tools/process_art.py` (or any Python with Pillow) to crop, knock out **background** white (not eyes or mouths), and write the 384×384 contract files. The poop set (alive, dead, stink1, stink2, fart) shares one body scale and is cut around the body centre, so texture swaps never move the body; the fart frame's body is found with a brown-pixel mask because its cloud sits to the left. The game draws them at 0.25 scale (96 logical px on the 720×1280 field). Do not list source files in this table.
+The player and items are Michael's drawings. Put a new source PNG in `assets/src/` and run `uv run --with pillow python3 tools/process_art.py` (or any Python with Pillow) to crop, knock out **background** white (not eyes or mouths), and write the 384×384 contract files (an animated GIF becomes a one-row spritesheet of 384×384 frames). The poop set (alive, dead, stink1, stink2, fart) shares one body scale and is cut around the body centre, so texture swaps never move the body; the fart frame's body is found with a brown-pixel mask because its cloud sits to the left. The game draws them at 0.25 scale (96 logical px on the 720×1280 field). Do not list source files in this table.
 
 `pipe.png`, `villi.png`, `ground.png`, and the icons are still placeholders from `tools/make_placeholders.py`. That script must **not** overwrite `poop.png`.
 
@@ -19,6 +19,8 @@ The player and items are Michael's drawings. Put a new source PNG in `assets/src
 | `postbiotic.png` | 384x384 | Postbiotic HUD icon (replaces the probiotic counter icon while the ×2 multiplier runs) | Not a world pickup, so no hitbox. Same crop rules as the items. Source: `assets/src/Postbiotic.png`. |
 | `bacteria.png` | 384x384 | Bad bacteria (−3) | Same hitbox. Hair / flagellum are visual-only. Source: `assets/src/Bad_Bacteria.png`. |
 | `bean.png` | 384x384 | Bean (one readies the fart power; three make it a super fart) | Same hitbox. Bobs up and down between pipe pairs. Source: `assets/src/Kidney_Bean.png`. |
+| `mystery.png` | 3072x384 | Mystery box (from level 3; opens into a random reward) | Spritesheet: the 8 frames of the spinning GIF side by side, 384x384 each, all cut on one square so the cube never jitters; played at 70 ms per frame (`mystery.frameMs`). Same hitbox as the items. Bobs between pipe pairs at half fiber's speed. Source: `assets/src/MysteryBox.gif`. |
+| `mystery-icon.png` | 384x384 | Mystery box icon (game-over summary and How to play) | Static three-quarter view; never spawned, so no hitbox. Same crop rules as the items. Source: `assets/src/MysteryBox_Icon.png`. |
 | `pipe.png` | 128x1280 | One intestinal-fold pipe | Cap at the **top**; the game flips it vertically for the bottom pipe. Height must be **at least the playfield height** (1280) so a flipped top pipe always reaches the ceiling when the gap sits low. |
 | `villi.png` | 720x1280 | Villi overlay over the level colour | Exact playfield size, **transparent** except the cream bands and villi fringes top and bottom. Scrolls slowly (parallax 0.25); must tile **horizontally** (left edge continues into right edge). See "Background layers" below. |
 | `ground.png` | 720x128 | Scrolling floor strip | Must tile horizontally. Drawn at the bottom of the screen on top of every background layer. |

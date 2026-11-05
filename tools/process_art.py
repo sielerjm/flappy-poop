@@ -2,13 +2,15 @@
 """process_art.py — crop, knock out background white, and resize Michael's
 drawings into the gameplay art-contract PNGs.
 
-Created by Michael Sieler. Last updated: 2026-11-05 (postbiotic HUD icon).
+Created by Michael Sieler. Last updated: 2026-11-05 (mystery box spin sheet and icon).
 
 Run:    uv run --with pillow python3 tools/process_art.py   (or any Python with Pillow)
 Input:  assets/src/{Poop_Emoji_Alive,Poop_Emoji_Dead,Poop_Stink1,Poop_Stink2,Poop_Fart,Poop_Speech,
-                    Fiber,Good_Bacteria,Bad_Bacteria,Kidney_Bean,Postbiotic}.png
-Output: assets/{poop,poop-dead,fiber,probiotic,bacteria,bean,postbiotic}.png at 384x384 RGBA and
-        assets/{poop-stink1,poop-stink2,poop-fart,poop-speech}.png on larger squares.
+                    Fiber,Good_Bacteria,Bad_Bacteria,Kidney_Bean,Postbiotic,MysteryBox_Icon}.png
+        and assets/src/MysteryBox.gif (animated)
+Output: assets/{poop,poop-dead,fiber,probiotic,bacteria,bean,postbiotic,mystery-icon}.png at 384x384 RGBA,
+        assets/{poop-stink1,poop-stink2,poop-fart,poop-speech}.png on larger squares, and
+        assets/mystery.png: the GIF's frames side by side, 384x384 each (a Phaser spritesheet).
 
 Only white connected to the image border is made transparent, so eyes and
 mouths stay white. Items are trimmed independently.
@@ -207,6 +209,27 @@ def process_item(src: Path, dest_name: str):
     print(f"{dest_name}: {im.size}")
 
 
+def process_sheet(src: Path, dest_name: str):
+    """Animated GIF -> one row of SIZE x SIZE frames. Every frame is cut on the same
+    square (centred on the union of all frames' ink), so the animation never jitters."""
+    gif = Image.open(src)
+    frames = []
+    for i in range(getattr(gif, "n_frames", 1)):
+        gif.seek(i)
+        frames.append(knock_background(gif.convert("RGBA")))
+    boxes = [content_bbox(f) for f in frames]
+    if not all(boxes):
+        raise SystemExit(f"{src.name} has a frame with no visible ink")
+    union = (min(b[0] for b in boxes), min(b[1] for b in boxes), max(b[2] for b in boxes), max(b[3] for b in boxes))
+    centre = ((union[0] + union[2]) / 2, (union[1] + union[3]) / 2)
+    half = frame_half(union, centre)
+    sheet = Image.new("RGBA", (SIZE * len(frames), SIZE), (0, 0, 0, 0))
+    for i, f in enumerate(frames):
+        sheet.paste(scale_to(crop_centred(f, centre, half), SIZE), (i * SIZE, 0))
+    sheet.save(OUT / dest_name)
+    print(f"{dest_name}: {sheet.size} ({len(frames)} frames of {SIZE}x{SIZE})")
+
+
 if __name__ == "__main__":
     process_poop_set()
     process_item(SRC / "Fiber.png", "fiber.png")
@@ -214,3 +237,5 @@ if __name__ == "__main__":
     process_item(SRC / "Bad_Bacteria.png", "bacteria.png")
     process_item(SRC / "Kidney_Bean.png", "bean.png")
     process_item(SRC / "Postbiotic.png", "postbiotic.png")
+    process_item(SRC / "MysteryBox_Icon.png", "mystery-icon.png")
+    process_sheet(SRC / "MysteryBox.gif", "mystery.png")
