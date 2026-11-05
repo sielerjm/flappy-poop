@@ -19,7 +19,7 @@ export class Over extends Phaser.Scene {
     const won = Boolean(data?.won); // crossed the final level's finish line
     const toilet = Boolean(data?.toilet);
     const level = Number.isInteger(data?.level) && data.level >= 1 ? data.level : 1;
-    const collected = { fiber: 0, probiotic: 0, postbiotic: 0, bacteria: 0, bean: 0, ...(data?.collected ?? {}) };
+    const collected = { fiber: 0, probiotic: 0, postbiotic: 0, bacteria: 0, bean: 0, mystery: 0, ...(data?.collected ?? {}) };
     this.openedAt = this.time.now;
     const play = this.scene.get('Play');
     const locale = play?.getLocale?.() ?? 'en';
@@ -32,17 +32,19 @@ export class Over extends Phaser.Scene {
     this.add.text(cx, cy - 180, `${t(locale, 'scoreLabel')}  ${formatScore({ score, toilet })}  ·  ${levelLabel(locale, level)}`, { ...style, fontSize: '48px' }).setOrigin(0.5);
     // Run summary: what was collected, as icon ×n pairs (no words, so no strings
     // to translate). Row 1 fiber / probiotic / postbiotic (times one started),
-    // row 2 bad bacteria / bean; each row centred on its own column count.
+    // row 2 bad bacteria / bean / mystery box (a box's reward also counts under
+    // its own icon); each row centred on its own column count.
     const rows = [
       ['fiber', 'probiotic', 'postbiotic'],
-      ['bacteria', 'bean'],
+      ['bacteria', 'bean', 'mystery'],
     ];
+    const iconKey = { mystery: 'mystery-icon' }; // the box's static view, not the spin sheet
     const columnX = { 2: [-120, 120], 3: [-170, 0, 170] };
     rows.forEach((row, r) => {
       const y = cy - 90 + r * 70;
       row.forEach((kind, c) => {
         const x = cx + columnX[row.length][c];
-        this.add.image(x - 30, y, kind).setDisplaySize(48, 48);
+        this.add.image(x - 30, y, iconKey[kind] ?? kind).setDisplaySize(48, 48);
         this.add.text(x + 2, y, `×${collected[kind]}`, { ...style, fontSize: '32px', color: '#c9b8dc' }).setOrigin(0, 0.5);
       });
     });

@@ -13,6 +13,8 @@ bundler). A poop emoji flaps through intestinal-fold pipes. Pickups: fiber (+3),
 probiotic (blocks one bacteria hit for 5 pipes; pickups stack), bad bacteria (−3, never kills).
 Postbiotic (后生元): fiber eaten while a probiotic is active; pipes and fiber score ×2 until the
 probiotic runs out. It is a state shown in the HUD, not a pickup.
+Mystery box (神秘盒子, from level 3): opens into a random reward (fiber, probiotic, one or three
+beans, a 5-pipe postbiotic, or a skip to the end of the level).
 Author / designer / artist: Michael Sieler. Side project, short playful copy — not
 formal medical language.
 
@@ -42,6 +44,7 @@ formal medical language.
 | Probiotic | 益生菌 |
 | Postbiotic | 后生元 |
 | Bad bacteria | 有害细菌 |
+| Mystery box | 神秘盒子 |
 
 Keep these consistent everywhere (How to play rows, future copy).
 
@@ -102,6 +105,8 @@ Short, playful, clear. Fit a 720×1280 logical field; How to play / About body w
 | itemBacteriaDetail | −3 points. From level 3 it moves up and down in the gap. | −3 分。从第 3 关起它会在管道口之间上下移动。 |
 | itemBeanName | Beans | 豆子 |
 | itemBeanDetail | Grab a bean, then press the bean button at the bottom (or your poop) to fart past the next 5 pipes: nothing can touch you. A normal fart uses one bean; you can carry 3, and with all three the fart rockets you past 20 in a rainbow glow. | 吃到豆子后，点击底部的豆子按钮（或便便）放屁冲过接下来的 5 道管道，期间什么都碰不到你。普通放屁只用一颗豆子；最多可攒 3 颗，集齐 3 颗再放屁，就能顶着彩虹光芒一口气冲过 20 道管道。 |
+| itemMysteryName | Mystery box | 神秘盒子 |
+| itemMysteryDetail | From level 3 it floats slowly between the pipes. Grab it for a surprise: usually fiber, often a probiotic or a bean, sometimes a 5-pipe postbiotic or three beans, and very rarely a skip to the end of the level (the skipped pipes still score). | 从第 3 关起在管道之间缓缓漂浮。吃到它会随机获得奖励：通常是纤维，也常是益生菌或一颗豆子，偶尔是持续 5 道管道的后生元或三颗豆子，极少数情况下会直接跳到本关终点（跳过的管道照样计分）。 |
 | itemToiletName | On the toilet | 如厕模式 |
 | itemToiletDetail | Playing on the toilet? Flip the switch under the poop on the home screen. Those scores get a 🚽 next to them. | 在马桶上玩？打开主界面便便下方的开关，这些分数旁会显示 🚽。 |
 | itemLevelsName | Levels | 关卡 |
@@ -171,7 +176,7 @@ Inspired by Flappy Bird
 ## Reviewer checklist
 
 1. Fluency: natural Simplified Chinese, not word-for-word awkwardness.
-2. Glossary: 纤维 / 益生菌 / 后生元 / 有害细菌 used consistently.
+2. Glossary: 纤维 / 益生菌 / 后生元 / 有害细菌 / 神秘盒子 used consistently.
 3. Silent mode: hardware 静音模式, not software mute.
 4. Untranslated tokens still present in About.
 5. Length: How to play body and About still readable in a 520 px wrap on a phone.

@@ -115,7 +115,7 @@ test('howToItems and pauseBannerText resolve for both locales', () => {
     const items = howToItems(locale);
     assert.deepEqual(
       items.map((i) => i.key),
-      ['pipe', 'fiber', 'probiotic', 'postbiotic', 'bacteria', 'bean', 'toilet', 'levels'],
+      ['pipe', 'fiber', 'probiotic', 'postbiotic', 'bacteria', 'bean', 'mystery-icon', 'toilet', 'levels'],
     );
     const banner = pauseBannerText(locale);
     assert.match(banner, /\n/);
