@@ -183,5 +183,5 @@ export const LEADERBOARD = {
   timeoutMs: 4000, // ms before a request is abandoned (the game never waits on it)
   limit: 10, // rows on the board
   storageKey: 'flappyPoop.leaderboard', // localStorage key for the last confirmed submit
-  maxScore: 200, // scores above this are not submitted (matches the CHECK in db/schema.sql)
+  maxScore: 1000, // scores above this are not submitted (matches the CHECK and submit_score() in db/schema.sql); a full 285-pair run with ×2 fits
 };

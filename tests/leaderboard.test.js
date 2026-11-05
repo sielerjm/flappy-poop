@@ -225,3 +225,13 @@ test('fetchRank asks for the toilet row when told to', async () => {
   assert.deepEqual(await fetchRank(ID, true, { fetch, config }), { rank: 2, total: 9, score: 30, toilet: true, level: 2 });
   assert.deepEqual(fetch.calls[0].body, { p_player_id: ID, p_toilet: true });
 });
+
+test('LEADERBOARD.maxScore matches the score cap in db/schema.sql (column CHECK and submit_score)', async () => {
+  const { readFileSync } = await import('node:fs');
+  const sql = readFileSync(new URL('../db/schema.sql', import.meta.url), 'utf8');
+  const check = sql.match(/score\s+int\s+not null check \(score between 0 and (\d+)\)/);
+  const guard = sql.match(/p_score > (\d+) then/);
+  assert.ok(check && guard, 'both caps found in schema.sql');
+  assert.equal(Number(check[1]), LEADERBOARD.maxScore);
+  assert.equal(Number(guard[1]), LEADERBOARD.maxScore);
+});

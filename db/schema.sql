@@ -22,14 +22,14 @@
 --   raise the score cap (also raise it inside submit_score below and
 --   LEADERBOARD.maxScore in src/config.js):
 --     alter table public.scores drop constraint scores_score_check;
---     alter table public.scores add constraint scores_score_check check (score between 0 and 500);
+--     alter table public.scores add constraint scores_score_check check (score between 0 and 1000);
 --   wipe the board:
 --     truncate public.scores;
 
 create table if not exists public.scores (
   player_id  text not null check (player_id ~ '^[A-Za-z0-9_-]{22}$'), -- save-code id: 16 random bytes, base64url
   name       text not null check (name ~ '^[^[:cntrl:]]{1,16}$'),        -- NAME_MAX in src/save.js
-  score      int  not null check (score between 0 and 200),               -- LEADERBOARD.maxScore in src/config.js
+  score      int  not null check (score between 0 and 1000),              -- LEADERBOARD.maxScore in src/config.js
   toilet     boolean not null default false,                              -- the run that set `score` was on the toilet
   level      int not null default 1 check (level between 1 and 50),       -- level the run that set `score` ended in
   updated_at timestamptz not null default now()
@@ -89,7 +89,7 @@ begin
   if p_name is null or p_name !~ '^[^[:cntrl:]]{1,16}$' then
     raise exception 'bad name';
   end if;
-  if p_score is null or p_score < 0 or p_score > 200 then
+  if p_score is null or p_score < 0 or p_score > 1000 then
     raise exception 'bad score';
   end if;
   if p_level is null or p_level < 1 or p_level > 50 then
