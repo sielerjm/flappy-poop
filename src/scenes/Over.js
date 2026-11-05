@@ -19,7 +19,7 @@ export class Over extends Phaser.Scene {
     const won = Boolean(data?.won); // crossed the final level's finish line
     const toilet = Boolean(data?.toilet);
     const level = Number.isInteger(data?.level) && data.level >= 1 ? data.level : 1;
-    const collected = { fiber: 0, probiotic: 0, bacteria: 0, bean: 0, ...(data?.collected ?? {}) };
+    const collected = { fiber: 0, probiotic: 0, postbiotic: 0, bacteria: 0, bean: 0, ...(data?.collected ?? {}) };
     this.openedAt = this.time.now;
     const play = this.scene.get('Play');
     const locale = play?.getLocale?.() ?? 'en';
@@ -30,16 +30,18 @@ export class Over extends Phaser.Scene {
     const style = { fontFamily: 'sans-serif', fontStyle: 'bold', color: '#ffffff', align: 'center' };
     this.add.text(cx, cy - 270, t(locale, won ? 'runWon' : 'gameOver'), { ...style, fontSize: won ? '48px' : '64px', color: won ? '#ffd700' : '#f8a0c8' }).setOrigin(0.5);
     this.add.text(cx, cy - 180, `${t(locale, 'scoreLabel')}  ${formatScore({ score, toilet })}  ·  ${levelLabel(locale, level)}`, { ...style, fontSize: '48px' }).setOrigin(0.5);
-    // Run summary: what was collected, as icon ×n pairs in a 2 × 2 grid (no
-    // words, so no strings to translate). Row 1 good / bad bacteria, row 2 fiber / bean.
+    // Run summary: what was collected, as icon ×n pairs (no words, so no strings
+    // to translate). Row 1 fiber / probiotic / postbiotic (times one started),
+    // row 2 bad bacteria / bean; each row centred on its own column count.
     const rows = [
-      ['probiotic', 'bacteria'],
-      ['fiber', 'bean'],
+      ['fiber', 'probiotic', 'postbiotic'],
+      ['bacteria', 'bean'],
     ];
+    const columnX = { 2: [-120, 120], 3: [-170, 0, 170] };
     rows.forEach((row, r) => {
       const y = cy - 90 + r * 70;
       row.forEach((kind, c) => {
-        const x = cx + (c === 0 ? -120 : 120);
+        const x = cx + columnX[row.length][c];
         this.add.image(x - 30, y, kind).setDisplaySize(48, 48);
         this.add.text(x + 2, y, `×${collected[kind]}`, { ...style, fontSize: '32px', color: '#c9b8dc' }).setOrigin(0, 0.5);
       });

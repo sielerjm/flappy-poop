@@ -98,7 +98,7 @@ export class Play extends Phaser.Scene {
     this.level = 1;
     this.pipesPassed = 0;
     this.pipesSpawned = 0;
-    this.collected = { fiber: 0, probiotic: 0, bacteria: 0, bean: 0 }; // this run's pickups, for the game-over summary
+    this.collected = { fiber: 0, probiotic: 0, postbiotic: 0, bacteria: 0, bean: 0 }; // this run's pickups, for the game-over summary
     this.diff = { pipeSpeed: levelSpeed(1, T), gapHeight: levelGap(1, T) };
     // Finish line + break: the line spawns in the slot after a level's last pair
     // and nothing follows it; crossing it pauses the run (levelBreak) until a tap.
@@ -374,7 +374,7 @@ export class Play extends Phaser.Scene {
     this.level = 1;
     this.pipesPassed = 0;
     this.pipesSpawned = 0;
-    this.collected = { fiber: 0, probiotic: 0, bacteria: 0, bean: 0 };
+    this.collected = { fiber: 0, probiotic: 0, postbiotic: 0, bacteria: 0, bean: 0 };
     this.popupOrder = [];
     this.finishLine?.destroy();
     this.finishLine = null;
@@ -1188,7 +1188,8 @@ export class Play extends Phaser.Scene {
     item.destroy();
     if (this.collected[kind] !== undefined) this.collected[kind] += 1;
     if (kind === 'fiber') {
-      this.effects.applyFiber(); // with a probiotic up this starts the postbiotic, and this fiber already counts double
+      // With a probiotic up this starts the postbiotic (counted once per start for the run summary), and this fiber already counts double.
+      if (this.effects.applyFiber()) this.collected.postbiotic += 1;
       const mult = this.effects.multiplier();
       this.score = scoreAfterItem(this.score, kind, T, mult);
       this.scoreText.setText(String(this.score));
