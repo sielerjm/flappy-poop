@@ -208,6 +208,7 @@ export const TUNING = {
     beanRadius: 48, // px circular hitbox = half the 96 logical-px sprite
   },
   prefill: {
+    leadGrowth: 0.25, // 0–1 share of the field's extra width (beyond a phone's 720) added to the first pair's lead, so a wide field's first pipes settle a little past the middle: more buffer before the poop reaches them (a phone adds nothing)
     sweepMs: 1200, // ms the pre-filled pairs take to come in from the right edge and settle (quadratic ease-out: fast off the edge, braking to the level's scroll speed by about the field's middle, fading in); only a field wider than a phone has anything to sweep
   },
   gamepad: {

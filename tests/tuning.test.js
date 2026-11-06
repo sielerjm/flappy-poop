@@ -46,6 +46,7 @@ test('the field: a phone portrait at minimum, up to 2:1, the player in the left 
   assert.ok(FIELD.resizeDebounceMs >= 100 && FIELD.resizeDebounceMs <= 1000, `resizeDebounceMs ${FIELD.resizeDebounceMs}`);
   assert.ok(T.poopXFrac >= 0.15 && T.poopXFrac <= 0.4, `poopXFrac ${T.poopXFrac}`);
   assert.ok(T.prefill.sweepMs >= 300 && T.prefill.sweepMs <= 2000, `prefill.sweepMs ${T.prefill.sweepMs}`);
+  assert.ok(T.prefill.leadGrowth >= 0 && T.prefill.leadGrowth <= 0.5, `prefill.leadGrowth ${T.prefill.leadGrowth}`);
 });
 
 test('fartVolume is audible but not clipping', () => {

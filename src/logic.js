@@ -667,8 +667,17 @@ export function pipeLeadPx(t, field) {
 }
 
 /**
+ * The first pair's lead on a field: the phone's pipeLeadPx plus prefill.leadGrowth of
+ * the width beyond a phone's, so a wide field settles its first pipes a little past the
+ * middle (a buffer before the poop reaches them). A phone gets exactly pipeLeadPx.
+ */
+export function pipeLead(fieldW, t, field) {
+  return pipeLeadPx(t, field) + Math.round(Math.max(0, fieldW - field.minWidth) * (t.prefill?.leadGrowth ?? 0));
+}
+
+/**
  * The pairs that fill a field when play (re)starts (a run start, the end of a level
- * break, the end of a fart): the first pipeLeadPx ahead of the player, then one per
+ * break, the end of a fart): the first pipeLead ahead of the player, then one per
  * spacing out to the field's own spawn edge (fieldW + pipeWidth), plus the
  * distanceSinceSpawn that keeps the cadence going (edge − last x: the next regular
  * spawn lands one spacing after the last pair). On the portrait field this is exactly
@@ -677,7 +686,7 @@ export function pipeLeadPx(t, field) {
 export function prefillPairs(fieldW, playerX, spacingPx, t, field) {
   const edge = fieldW + t.pipeWidth;
   const xs = [];
-  for (let x = playerX + pipeLeadPx(t, field); x <= edge; x += spacingPx) xs.push(x);
+  for (let x = playerX + pipeLead(fieldW, t, field); x <= edge; x += spacingPx) xs.push(x);
   if (xs.length === 0) xs.push(edge);
   return { xs, distanceSinceSpawn: edge - xs[xs.length - 1] };
 }

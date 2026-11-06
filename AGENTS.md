@@ -68,9 +68,11 @@ layout in a centred 720 px column (`uiColumn()`), and the poop sits at
 (re)start (`applyFieldSize`); a window resize re-fits at once on the ready screen
 and otherwise after Home (`onFieldResize` → `update()`), never mid-run. A run start,
 the end of a level break and the end of a fart pre-fill the field (`prefillPipes`,
-`prefillPairs`): the first pair the phone's lead ahead (`pipeLeadPx`, 668 px), then one
-per spacing to the edge, so a wide field never waits longer than a phone (where it is
-the one edge spawn as before); a skip's finish line gets the same lead. On a wide field
+`prefillPairs`): the first pair `pipeLead` ahead (the phone's `pipeLeadPx`, 668 px, plus
+`prefill.leadGrowth` of the width beyond a phone's, so on a wide field the first pipes
+settle a little past the middle: a buffer before the poop reaches them), then one per
+spacing to the edge (a phone keeps its one edge spawn); a skip's finish line gets the
+same lead. On a wide field
 the pre-filled stretch does not pop in: it sweeps in from the right edge over
 `prefill.sweepMs` (`sweepOffset`: quadratic ease-out, fastest off the edge and braking
 to the level's scroll speed by about the field's middle, fading from transparent),
@@ -108,8 +110,9 @@ src/
                             chrome column), FIELD (height, minWidth, maxWidth,
                             resizeDebounceMs), the TUNING object (every
                             feel-related number lives here; poopXFrac = the
-                            player's share of the width; prefill.sweepMs = the
-                            pre-fill's sweep-in on a wide field), and LEADERBOARD
+                            player's share of the width; prefill.leadGrowth /
+                            sweepMs = the pre-fill's lead and sweep-in on a wide
+                            field), and LEADERBOARD
                             (Supabase Data API URL + publishable key, both public
                             by design; timeout, limit, storage key, score cap),
                             LEVELS (gut segment name keys, in order), LEVEL_COLORS
@@ -122,7 +125,8 @@ src/
                             the overlay scroll step.
                             Pure data, Node-safe.
   logic.js                  Pure functions, NO Phaser/DOM: field (fieldWidth,
-                            uiColumn, poopX, pipeLeadPx, prefillPairs, sweepOffset;
+                            uiColumn, poopX, pipeLeadPx, pipeLead, prefillPairs,
+                            sweepOffset;
                             trayLayout /
                             levelBarLayout / readyLayout / howToLayout take a
                             trailing x0 = the column's left edge), rng, gap placement,
@@ -530,8 +534,9 @@ tests/                      node --test, zero deps. Each file is self-describing
   field.test.js             fieldWidth (phone, desktop, 2:1 cap, bad input, even),
                             uiColumn, poopX, the x0 shift of trayLayout /
                             levelBarLayout / readyLayout, hits on a shifted column,
-                            pipeLeadPx, prefillPairs (one edge pair on a phone; a
-                            wide field filled from the lead to its edge), sweepOffset
+                            pipeLeadPx, pipeLead (grows with the extra width),
+                            prefillPairs (one edge pair on a phone; a wide field
+                            filled from its lead to its edge), sweepOffset
                             (ends, midpoint, monotonic, fastest off the edge,
                             peak extra speed bound)
   html.test.js              index.html invariants (viewport, no scroll, pinned Phaser)

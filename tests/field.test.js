@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { FIELD, GAME_WIDTH, GAME_HEIGHT, TUNING as T } from '../src/config.js';
-import { fieldWidth, uiColumn, poopX, trayLayout, trayHit, levelBarLayout, readyLayout, readyHit, howToLayout, pipeLeadPx, prefillPairs, pipeSpacing, sweepOffset } from '../src/logic.js';
+import { fieldWidth, uiColumn, poopX, trayLayout, trayHit, levelBarLayout, readyLayout, readyHit, howToLayout, pipeLeadPx, pipeLead, prefillPairs, pipeSpacing, sweepOffset } from '../src/logic.js';
 
 test('fieldWidth: a phone portrait is the minimum, a desktop window widens with its aspect, 2:1 caps it', () => {
   assert.equal(fieldWidth(390, 844, FIELD), FIELD.minWidth, 'phone portrait');
@@ -85,25 +85,35 @@ test('prefillPairs: the portrait field gets exactly today\'s one pair at the edg
   }
 });
 
-test('prefillPairs: a wide field is filled from the phone\'s lead out to its own edge, one pair per spacing', () => {
+test('pipeLead: the phone\'s lead on a phone, grown by leadGrowth of the extra width on a wide field', () => {
+  assert.equal(pipeLead(GAME_WIDTH, T, FIELD), pipeLeadPx(T, FIELD));
+  assert.equal(pipeLead(2304, T, FIELD), 668 + Math.round((2304 - 720) * T.prefill.leadGrowth));
+  assert.equal(pipeLead(2304, T, FIELD), 1064);
+  assert.ok(pipeLead(FIELD.maxWidth, T, FIELD) > pipeLead(2304, T, FIELD), 'grows with the width');
+  // The first pair settles (base − scroll over the sweep) past the field's middle: a buffer before the poop reaches it.
+  const settle = poopX(2304, T) + pipeLead(2304, T, FIELD) - (T.pipeSpeed * T.prefill.sweepMs) / 1000;
+  assert.ok(settle > 2304 / 2 && settle < 2304 * 0.65, `first pair settles at ${settle.toFixed(0)} of 2304`);
+});
+
+test('prefillPairs: a wide field is filled from its lead out to its own edge, one pair per spacing', () => {
   const W = 2304;
   const px = poopX(W, T);
   const edge = W + T.pipeWidth;
   const lvl1 = prefillPairs(W, px, pipeSpacing(1, T), T, FIELD);
-  assert.deepEqual(lvl1.xs, [1244, 1731, 2218]);
-  assert.equal(lvl1.distanceSinceSpawn, edge - 2218);
+  assert.deepEqual(lvl1.xs, [1640, 2127]);
+  assert.equal(lvl1.distanceSinceSpawn, edge - 2127);
   const lvl3 = prefillPairs(W, px, pipeSpacing(3, T), T, FIELD);
-  assert.deepEqual(lvl3.xs, [1244, 1656, 2068]);
-  assert.equal(lvl3.distanceSinceSpawn, edge - 2068);
+  assert.deepEqual(lvl3.xs, [1640, 2052]);
+  assert.equal(lvl3.distanceSinceSpawn, edge - 2052);
   for (const [spacing, r] of [[pipeSpacing(1, T), lvl1], [pipeSpacing(3, T), lvl3]]) {
-    assert.equal(r.xs[0] - px, pipeLeadPx(T, FIELD), 'the first pair is the phone\'s lead ahead');
+    assert.equal(r.xs[0] - px, pipeLead(W, T, FIELD), 'the first pair is the field\'s lead ahead');
     assert.ok(r.xs.every((x) => x <= edge), 'nothing past the spawn edge');
     assert.ok(r.xs[r.xs.length - 1] + spacing > edge, 'the next pair would be past the edge');
     for (let i = 1; i < r.xs.length; i += 1) assert.equal(r.xs[i] - r.xs[i - 1], spacing);
     assert.ok(r.distanceSinceSpawn >= 0 && r.distanceSinceSpawn < spacing, 'the cadence resumes within one spacing');
   }
   const cap = prefillPairs(FIELD.maxWidth, poopX(FIELD.maxWidth, T), pipeSpacing(1, T), T, FIELD);
-  assert.ok(cap.xs.length >= 3 && cap.xs[cap.xs.length - 1] <= FIELD.maxWidth + T.pipeWidth);
+  assert.ok(cap.xs.length >= 2 && cap.xs[cap.xs.length - 1] <= FIELD.maxWidth + T.pipeWidth);
 });
 
 test('sweepOffset: from o0 and invisible to in place and opaque, fastest off the edge and braking to a stop', () => {

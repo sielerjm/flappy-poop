@@ -63,7 +63,7 @@ import {
   rainbowHue,
   fartRemainingDistance,
   pipeClearDistance,
-  pipeLeadPx,
+  pipeLead,
   prefillPairs,
   sweepOffset,
   beanButtonLayout,
@@ -1047,7 +1047,7 @@ export class Play extends Phaser.Scene {
 
   /**
    * Fill the field ahead of the poop as it looks mid-run (a run start, the end of a
-   * level break, the end of a fart): the first pair the phone's lead away (pipeLeadPx),
+   * level break, the end of a fart): the first pair the field's lead away (pipeLead),
    * then one per spacing out to the field's own edge (prefillPairs), the cadence
    * resuming one spacing after the last. On a phone that is one pair at the edge, as
    * before. Stops at the level's last pair: the finish line then follows by cadence.
@@ -1670,7 +1670,7 @@ export class Play extends Phaser.Scene {
     this.pipesPassed = end;
     this.pipesSpawned = end;
     this.levelBar.setProgress(levelProgress(this.pipesPassed, this.level, T));
-    this.spawnFinishLine(this.scale.width + T.pipeWidth - (this.poopX + pipeLeadPx(T, FIELD)));
+    this.spawnFinishLine(this.scale.width + T.pipeWidth - (this.poopX + pipeLead(this.scale.width, T, FIELD)));
     this.distanceSinceSpawn = 0;
     this.nextGapY = null;
     this.showScorePopup('skip', mult, pairs);
