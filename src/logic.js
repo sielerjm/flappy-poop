@@ -146,6 +146,30 @@ export function centredGapY(cfg) {
   return Math.min(maxY, Math.max(minY, cfg.gameHeight / 2));
 }
 
+// ---------------------------------------------------------------------------
+// Field: the height is fixed (FIELD.height); the width follows the window's
+// aspect between minWidth (a phone portrait) and maxWidth (2:1). Chrome stays
+// in a centred minWidth column; the world spans the full width.
+
+/** Logical field width for a viewport: height × aspect, clamped to [minWidth, maxWidth], even. Bad input → minWidth. */
+export function fieldWidth(viewportW, viewportH, field) {
+  if (!(viewportW > 0) || !(viewportH > 0)) return field.minWidth;
+  const raw = Math.round((field.height * viewportW) / viewportH);
+  const even = raw - (raw % 2);
+  return Math.min(field.maxWidth, Math.max(field.minWidth, even));
+}
+
+/** The centred chrome column of a field: { x, width }, width = min(fieldW, minWidth). */
+export function uiColumn(fieldW, field) {
+  const width = Math.min(fieldW, field.minWidth);
+  return { x: Math.round((fieldW - width) / 2), width };
+}
+
+/** The player's fixed x on a field: poopXFrac of its width (180 on a 720 field). */
+export function poopX(fieldW, t) {
+  return Math.round(fieldW * t.poopXFrac);
+}
+
 /** True once the pipe's right edge has moved left of the player's x. */
 export function hasPassed(pipeCentreX, pipeWidth, playerX) {
   return pipeCentreX + pipeWidth / 2 < playerX;
@@ -266,11 +290,12 @@ export function levelProgress(pipesPassed, level, t) {
 /**
  * Progress-bar geometry along the top of the field: a track from barInset in,
  * leaving room for the 🏁 at its right end; the level label sits on its centre.
+ * `x0` shifts the whole bar right (the chrome column's left edge on a wide field).
  */
-export function levelBarLayout(t, width) {
+export function levelBarLayout(t, width, x0 = 0) {
   const l = t.levels;
   const flagRoom = 40;
-  const x = l.barInset;
+  const x = x0 + l.barInset;
   const w = width - 2 * l.barInset - flagRoom;
   return { x, y: l.barY, width: w, height: l.barHeight, radius: l.barHeight / 2, labelX: x + w / 2, flagX: x + w + flagRoom / 2 + 4 };
 }
@@ -875,13 +900,14 @@ export function createEffects(t) {
  * pause directly above the settings cog (reachable mid-run without covering
  * the play area), plus info, language, and feedback at the bottom-left. Hit
  * boxes are trayHitMin square and at least that far apart, all inside the field.
+ * `x0` shifts every button right (the chrome column's left edge on a wide field).
  */
-export function trayLayout(width, height, t) {
+export function trayLayout(width, height, t, x0 = 0) {
   const size = t.trayHitMin;
   const spacing = size + 16;
   const y = height - t.trayHeight / 2;
   const ids = ['leaderboard', 'mute', 'settings'];
-  const right = width - size / 2 - 16;
+  const right = x0 + width - size / 2 - 16;
   const buttons = ids.map((id, i) => ({
     id,
     x: right - (ids.length - 1 - i) * spacing,
@@ -889,7 +915,7 @@ export function trayLayout(width, height, t) {
     size,
   }));
   const pause = { id: 'pause', x: right, y: y - spacing, size };
-  const info = { id: 'info', x: size / 2 + 16, y, size };
+  const info = { id: 'info', x: x0 + size / 2 + 16, y, size };
   const lang = { id: 'lang', x: info.x + spacing, y, size };
   const feedback = { id: 'feedback', x: lang.x + spacing, y, size };
   return { buttons, pause, info, lang, feedback, y, height: t.trayHeight };
@@ -952,10 +978,11 @@ export function scaledCircleBody(frameSize, displayScale, logicalRadius) {
  * of the body at display scale, ×readyPoopScale) and the toilet toggle; then
  * Save / Load User and the profile button stacked up from just above the
  * ground strip and the tray band. Any tap that is not on a box starts the run.
- * Buttons are at least trayHitMin tall.
+ * Buttons are at least trayHitMin tall. `x0` shifts everything right (the
+ * chrome column's left edge on a wide field).
  */
-export function readyLayout(width, height, t) {
-  const cx = width / 2;
+export function readyLayout(width, height, t, x0 = 0) {
+  const cx = x0 + width / 2;
   const boxH = Math.max(88, t.trayHitMin);
   const title = { id: 'title', x: cx, y: 380 };
   // Speech-bubble extents at display scale (poop-speech.png ink relative to the
@@ -967,7 +994,7 @@ export function readyLayout(width, height, t) {
   // "?" button: a boxH circle in the top-right corner, inset so its pulsing halo
   // (readyPromptGlowPx past the rim) stays inside the field.
   const haloR = boxH / 2 + (t.readyPromptGlowPx ?? 0);
-  const howto = { id: 'howto', x: width - 16 - haloR, y: 16 + haloR, width: boxH, height: boxH, round: true };
+  const howto = { id: 'howto', x: x0 + width - 16 - haloR, y: 16 + haloR, width: boxH, height: boxH, round: true };
   // Two equal buttons, 12 px apart, stacked up from 1111: above the ground strip
   // (1152) and the tray band (1168). These two do not move when the block above shifts.
   const gap = 12;
@@ -1060,8 +1087,8 @@ export function rectGlowSize(width, height, pad) {
 }
 
 /** Ready-screen How to play hit box (readyLayout().howto). */
-export function howToLayout(width, height, t) {
-  return readyLayout(width, height, t).howto;
+export function howToLayout(width, height, t, x0 = 0) {
+  return readyLayout(width, height, t, x0).howto;
 }
 
 /** 'howto' if (x, y) is inside the ready-screen How to play box, else null. */

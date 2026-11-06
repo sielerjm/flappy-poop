@@ -1,4 +1,4 @@
-import { GAME_WIDTH, GAME_HEIGHT, TUNING as T } from '../config.js';
+import { GAME_HEIGHT, TUNING as T } from '../config.js';
 import { trayLayout } from '../logic.js';
 
 const LABELS = {
@@ -14,11 +14,13 @@ const LABELS = {
 
 /**
  * Phaser-only tray: 🏆 / mute / ⚙ bottom-right, ⏸ above the cog, i / 🌐 / 💬
- * bottom-left. Layout maths live in trayLayout(); chrome hits go through
- * trayHit() in the scene so they do not depend on Phaser hit-area origin.
+ * bottom-left, inside the chrome column `col` ({ x, width } from uiColumn(): the
+ * whole field on a phone, a centred 720 px band on a wide desktop field). Layout
+ * maths live in trayLayout(); chrome hits go through trayHit() in the scene so
+ * they do not depend on Phaser hit-area origin.
  */
-export function createTray(scene, { muted }) {
-  const { buttons, pause, info, lang, feedback } = trayLayout(GAME_WIDTH, GAME_HEIGHT, T);
+export function createTray(scene, { muted, col }) {
+  const { buttons, pause, info, lang, feedback } = trayLayout(col.width, GAME_HEIGHT, T, col.x);
   const nodes = [];
   const byId = {}; // id → circle, for the controller focus ring (ui/focus.js)
   let muteLabel;

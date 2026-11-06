@@ -1,4 +1,4 @@
-import { GAME_WIDTH, GAME_HEIGHT, LEADERBOARD, TUNING as T } from '../config.js';
+import { GAME_HEIGHT, LEADERBOARD, TUNING as T } from '../config.js';
 import { VERSION, chromeIntent, overlayOutsideHit, fitScale } from '../logic.js';
 import { createFocus, pressable } from '../ui/focus.js';
 import { t, metaFontSize, rankText, levelLabel } from '../i18n.js';
@@ -28,12 +28,13 @@ export class Leaderboard extends Phaser.Scene {
     const locale = play?.getLocale?.() ?? 'en';
     this.locale = locale;
 
-    const cx = GAME_WIDTH / 2;
+    const W = this.scale.width; // the live field (wider than 720 on desktop); the panel stays centred
+    const cx = W / 2;
     const cy = GAME_HEIGHT / 2;
     this.cx = cx;
     this.cy = cy;
     const panel = { x: cx, y: cy, width: 560, height: 800 };
-    const dimmer = this.add.rectangle(GAME_WIDTH / 2, GAME_HEIGHT / 2, GAME_WIDTH, GAME_HEIGHT, 0x000000, 0.55).setInteractive();
+    const dimmer = this.add.rectangle(W / 2, GAME_HEIGHT / 2, W, GAME_HEIGHT, 0x000000, 0.55).setInteractive();
     dimmer.on('pointerdown', (pointer) => {
       if (overlayOutsideHit(pointer.x, pointer.y, panel)) this.close();
     });

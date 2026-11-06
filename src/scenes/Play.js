@@ -1,4 +1,4 @@
-import { GAME_WIDTH, GAME_HEIGHT, TUNING as T, LEVELS, LEVEL_COLORS, BACKGROUND, TEST_MODE } from '../config.js';
+import { GAME_HEIGHT, FIELD, TUNING as T, LEVELS, LEVEL_COLORS, BACKGROUND, TEST_MODE } from '../config.js';
 import {
   createRng,
   pipeGapY,
@@ -16,6 +16,9 @@ import {
   levelColor,
   lerpColor,
   hudRightLayout,
+  fieldWidth,
+  uiColumn,
+  poopX,
   multiplierLayout,
   createBestStore,
   createSettingsStore,
@@ -96,6 +99,14 @@ export class Play extends Phaser.Scene {
   }
 
   create() {
+    // Field: 1280 tall, as wide as the window asks (fieldWidth); re-fitted here on every
+    // (re)start. W is the full width the world spans; col is the centred chrome column
+    // (the whole field on a phone); the poop sits at poopXFrac of the width.
+    this.applyFieldSize();
+    const W = this.scale.width;
+    this.col = uiColumn(W, FIELD);
+    this.poopX = poopX(W, T);
+    this.fieldResizeWanted = false;
     this.rng = createRng(Date.now() & 0xffffffff);
     this.score = 0;
     this.best = createBestStore(globalThis.localStorage, T.bestKey);
@@ -148,29 +159,30 @@ export class Play extends Phaser.Scene {
     // at its own parallax. Tile-scale maps one texture copy onto the playfield so
     // a layer never repeats vertically.
     // Negative depths: pipes, items and beans are created later at depth 0 and must draw over every layer.
-    this.bgColor = this.add.rectangle(0, 0, GAME_WIDTH, GAME_HEIGHT, levelColor(1, LEVEL_COLORS, T.levels.whiteBlend), 1).setOrigin(0, 0).setDepth(-20);
+    this.bgColor = this.add.rectangle(0, 0, W, GAME_HEIGHT, levelColor(1, LEVEL_COLORS, T.levels.whiteBlend), 1).setOrigin(0, 0).setDepth(-20);
     this.bgFade = null;
     this.bgLayers = BACKGROUND.layers.map((layer, i) => {
-      const sprite = this.add.tileSprite(0, 0, GAME_WIDTH, GAME_HEIGHT, layer.key).setOrigin(0, 0).setDepth(-10 + i);
+      // One texture copy per minWidth (720) of field, repeated sideways on a wider desktop field (the art tiles horizontally).
+      const sprite = this.add.tileSprite(0, 0, W, GAME_HEIGHT, layer.key).setOrigin(0, 0).setDepth(-10 + i);
       const f = sprite.frame;
-      sprite.setTileScale(GAME_WIDTH / f.width, GAME_HEIGHT / f.height);
+      sprite.setTileScale(FIELD.minWidth / f.width, GAME_HEIGHT / f.height);
       return { sprite, parallax: layer.parallax };
     });
     this.pipes = this.physics.add.group({ allowGravity: false, immovable: true });
     this.items = this.physics.add.group({ allowGravity: false, immovable: true });
     this.beans = this.physics.add.group({ allowGravity: false, immovable: true });
     this.ground = this.add
-      .tileSprite(0, GAME_HEIGHT - T.groundHeight, GAME_WIDTH, T.groundHeight, 'ground')
+      .tileSprite(0, GAME_HEIGHT - T.groundHeight, W, T.groundHeight, 'ground')
       .setOrigin(0, 0)
       .setDepth(5);
     {
       const f = this.ground.frame;
-      this.ground.setTileScale(GAME_WIDTH / f.width, T.groundHeight / f.height);
+      this.ground.setTileScale(FIELD.minWidth / f.width, T.groundHeight / f.height);
     }
 
     // Ready-screen geometry (title, poop spot, buttons). Taps resolve through
     // readyHit() in flap(), not GameObject handlers, so the chrome is visual only.
-    this.readyBoxes = readyLayout(GAME_WIDTH, GAME_HEIGHT, T);
+    this.readyBoxes = readyLayout(this.col.width, GAME_HEIGHT, T, this.col.x); // centred boxes land on W / 2; the ? at the column's right edge
     this.launching = false;
     // Toilet mode: session-only (registry survives scene.restart, not a reload).
     this.toilet = Boolean(this.registry.get('toilet'));
@@ -180,7 +192,7 @@ export class Play extends Phaser.Scene {
     this.runIsTest = false;
 
     // Player: bobs at its ready spot wearing the "TAP TO FLAP!" bubble; no gravity
-    // until launch() has swapped to the plain frame and slid it to poopX.
+    // until launch() has swapped to the plain frame and slid it to this.poopX.
     this.poop = this.physics.add.sprite(this.readyBoxes.poop.x, this.readyBoxes.poop.y, 'poop-speech').setDepth(10);
     this.poop.setScale(T.spriteDisplayScale * T.readyPoopScale); // bigger on the ready screen; launch() shrinks it back
     this.setPoopTexture('poop-speech');
@@ -194,13 +206,13 @@ export class Play extends Phaser.Scene {
     this.bob = this.tweens.add({ targets: this.poop, y: '+=24', duration: 500, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
 
     // HUD
-    this.scoreText = this.add.text(GAME_WIDTH / 2, T.hudScoreY, '0', { ...TEXT_STYLE, fontSize: '80px' }).setOrigin(0.5).setDepth(20).setVisible(false); // shown from start()
+    this.scoreText = this.add.text(W / 2, T.hudScoreY, '0', { ...TEXT_STYLE, fontSize: '80px' }).setOrigin(0.5).setDepth(20).setVisible(false); // shown from start()
     // Popups under the score, two reused texts: the quick white "+1" ("+2" under a postbiotic) on every pipe
     // pair, and "+3" / "−3" when fiber or unshielded bacteria moves the score. The ones showing stack oldest
     // first on popup.rowY (popupOrder, popupSlots); a new one enters underneath, the rest slide up when one goes.
-    this.pipePopup = this.add.text(GAME_WIDTH / 2, T.popup.rowY[0], '', { ...TEXT_STYLE, fontSize: `${T.popup.fontPx}px`, color: T.popup.pipeColor }).setOrigin(0.5).setDepth(20).setAlpha(0);
+    this.pipePopup = this.add.text(W / 2, T.popup.rowY[0], '', { ...TEXT_STYLE, fontSize: `${T.popup.fontPx}px`, color: T.popup.pipeColor }).setOrigin(0.5).setDepth(20).setAlpha(0);
     this.pipePopupTween = null;
-    this.scorePopup = this.add.text(GAME_WIDTH / 2, T.popup.rowY[0], '', { ...TEXT_STYLE, fontSize: `${T.popup.fontPx}px` }).setOrigin(0.5).setDepth(20).setAlpha(0);
+    this.scorePopup = this.add.text(W / 2, T.popup.rowY[0], '', { ...TEXT_STYLE, fontSize: `${T.popup.fontPx}px` }).setOrigin(0.5).setDepth(20).setAlpha(0);
     this.popupTween = null;
     this.popupOrder = [];
     this.popupShift = { pipe: null, item: null };
@@ -221,19 +233,19 @@ export class Play extends Phaser.Scene {
     this.reveal = null;
     this.revealTween = null;
     // Level progress bar above the score: hidden on the ready screen, shown from start(), kept through breaks and death.
-    this.levelBar = createLevelBar(this, levelBarLayout(T, GAME_WIDTH)).setVisible(false);
+    this.levelBar = createLevelBar(this, levelBarLayout(T, this.col.width, this.col.x)).setVisible(false);
     this.refreshLevelBar();
     // 🚽 left of the score while a toilet-mode run is on.
-    this.toiletHud = this.add.text(GAME_WIDTH / 2 - 96, T.hudScoreY, TOILET_EMOJI, { fontFamily: 'sans-serif', fontSize: '44px' }).setOrigin(0.5).setDepth(20).setVisible(false);
+    this.toiletHud = this.add.text(W / 2 - 96, T.hudScoreY, TOILET_EMOJI, { fontFamily: 'sans-serif', fontSize: '44px' }).setOrigin(0.5).setDepth(20).setVisible(false);
     // Test mode badge (refreshTestBadge): "🧪 TEST MODE" top-left on the ready screen, a bare 🧪 at the
     // far left of the score row during a test run (the level bar owns the top strip then).
-    this.testBadge = this.add.text(24, 56, '', { ...TEXT_STYLE, fontSize: '34px', color: '#ffd700', strokeThickness: 8 }).setOrigin(0, 0.5).setDepth(20).setVisible(false);
+    this.testBadge = this.add.text(this.col.x + 24, 56, '', { ...TEXT_STYLE, fontSize: '34px', color: '#ffd700', strokeThickness: 8 }).setOrigin(0, 0.5).setDepth(20).setVisible(false);
     // Probiotic counter: right-aligned on the bean's row, clear of the score digits and the screen edge.
     this.probioticIcon = this.add.image(0, 156, 'probiotic').setDisplaySize(T.hudProbioticSize, T.hudProbioticSize).setDepth(20).setVisible(false);
     this.probioticText = this.add.text(0, 156, '', { ...TEXT_STYLE, fontSize: '40px' }).setOrigin(1, 0.5).setDepth(20).setVisible(false);
     // Bean counter (left of the HUD): bean ×n until the power is spent.
-    this.beanIcon = this.add.image(72, 156, 'bean').setDisplaySize(56, 56).setDepth(20).setVisible(false);
-    this.beanText = this.add.text(108, 156, '', { ...TEXT_STYLE, fontSize: '36px' }).setOrigin(0, 0.5).setDepth(20).setVisible(false);
+    this.beanIcon = this.add.image(this.col.x + 72, 156, 'bean').setDisplaySize(56, 56).setDepth(20).setVisible(false);
+    this.beanText = this.add.text(this.col.x + 108, 156, '', { ...TEXT_STYLE, fontSize: '36px' }).setOrigin(0, 0.5).setDepth(20).setVisible(false);
     this.readyTitle = this.add
       .text(this.readyBoxes.title.x, this.readyBoxes.title.y, t(this.locale, 'readyTitle'), { ...TEXT_STYLE, fontSize: `${T.readyTitlePx}px` })
       .setOrigin(0.5)
@@ -270,35 +282,35 @@ export class Play extends Phaser.Scene {
     this.refreshProfile();
     this.refreshTestBadge(); // still on after a restart: test mode lives in the registry
 
-    this.pauseShade = this.add.rectangle(GAME_WIDTH / 2, GAME_HEIGHT / 2, GAME_WIDTH, GAME_HEIGHT, 0x000000, 0.45).setDepth(25).setVisible(false);
+    this.pauseShade = this.add.rectangle(W / 2, GAME_HEIGHT / 2, W, GAME_HEIGHT, 0x000000, 0.45).setDepth(25).setVisible(false);
     // Level-break banner shares the shade with the pause banner; setPauseBanner picks one.
     this.levelTitle = this.add
-      .text(GAME_WIDTH / 2, GAME_HEIGHT * 0.4, '', { ...TEXT_STYLE, fontSize: '52px', color: '#f8a0c8', wordWrap: { width: GAME_WIDTH - 64, useAdvancedWrap: true } })
+      .text(W / 2, GAME_HEIGHT * 0.4, '', { ...TEXT_STYLE, fontSize: '52px', color: '#f8a0c8', wordWrap: { width: this.col.width - 64, useAdvancedWrap: true } })
       .setOrigin(0.5)
       .setDepth(26)
       .setVisible(false);
     this.levelHint = this.add
-      .text(GAME_WIDTH / 2, GAME_HEIGHT * 0.4 + 72, '', { ...TEXT_STYLE, fontSize: '36px' })
+      .text(W / 2, GAME_HEIGHT * 0.4 + 72, '', { ...TEXT_STYLE, fontSize: '36px' })
       .setOrigin(0.5)
       .setDepth(26)
       .setVisible(false);
     const [pauseTitle, pauseHint] = pauseBannerText(this.locale).split('\n');
     this.pauseText = this.add
-      .text(GAME_WIDTH / 2, GAME_HEIGHT * 0.40, pauseTitle, { ...TEXT_STYLE, fontSize: '52px' })
+      .text(W / 2, GAME_HEIGHT * 0.40, pauseTitle, { ...TEXT_STYLE, fontSize: '52px' })
       .setOrigin(0.5)
       .setDepth(26)
       .setVisible(false);
     this.pauseHint = this.add
-      .text(GAME_WIDTH / 2, GAME_HEIGHT * 0.40 + 72, pauseHint, {
+      .text(W / 2, GAME_HEIGHT * 0.40 + 72, pauseHint, {
         ...TEXT_STYLE,
         fontSize: '36px',
-        wordWrap: { width: GAME_WIDTH - 64, useAdvancedWrap: true },
+        wordWrap: { width: this.col.width - 64, useAdvancedWrap: true },
       })
       .setOrigin(0.5)
       .setDepth(26)
       .setVisible(false);
 
-    this.tray = createTray(this, { muted: isMuted() });
+    this.tray = createTray(this, { muted: isMuted(), col: this.col });
     // Controller focus ring over the tray, in screen order; A on a ringed button runs the
     // same handleChrome(id) its tap runs. Shown by a d-pad press (onPadAction), never by touch.
     this.focus = createFocus(this, T, {
@@ -307,7 +319,7 @@ export class Play extends Phaser.Scene {
 
     // Bean power button in the tray's centre slot: shown while charged, pulses
     // in step with the glow, and fires the fart like a tap on the poop.
-    this.beanButtonBox = beanButtonLayout(GAME_WIDTH, GAME_HEIGHT, T);
+    this.beanButtonBox = beanButtonLayout(W, GAME_HEIGHT, T); // centred: the tray's middle slot
     {
       const b = this.beanButtonBox;
       const r = b.size / 2;
@@ -364,6 +376,26 @@ export class Play extends Phaser.Scene {
   }
 
   /**
+   * Fit the logical field to the window (fieldWidth): the canvas is resized and
+   * FIT re-centres it. Called first thing in create(), so every (re)start lays the
+   * scene out for the window as it is now.
+   */
+  applyFieldSize() {
+    const want = fieldWidth(globalThis.innerWidth, globalThis.innerHeight, FIELD);
+    if (want !== this.scale.width) this.scale.setGameSize(want, FIELD.height);
+  }
+
+  /** main.js, after a window resize settled: ask for a re-fit (update() restarts the scene once it is safe). */
+  onFieldResize() {
+    this.fieldResizeWanted = true;
+  }
+
+  /** A re-fit can happen now: on the ready screen, nothing sliding, no overlay, panel or game-over on top. */
+  canRefitField() {
+    return this.state === 'ready' && !this.launching && !this.chromeArgs('tap').overlay && !this.scene.isActive('Over') && !isSavePanelOpen();
+  }
+
+  /**
    * Start tap: hide the ready UI, slide the poop from its ready spot to the
    * play position, then start(). Extra taps during the slide are ignored.
    */
@@ -376,7 +408,7 @@ export class Play extends Phaser.Scene {
     this.setPoopTexture('poop');
     this.tweens.add({
       targets: this.poop,
-      x: T.poopX,
+      x: this.poopX,
       y: GAME_HEIGHT / 2,
       scale: T.spriteDisplayScale,
       duration: T.launchSlideMs,
@@ -464,7 +496,7 @@ export class Play extends Phaser.Scene {
   spawnFinishLine() {
     const w = T.levels.finishWidthPx;
     this.finishLine?.destroy();
-    this.finishLine = this.add.image(GAME_WIDTH + w / 2, 0, 'finish').setOrigin(0.5, 0).setDepth(4);
+    this.finishLine = this.add.image(this.scale.width + w / 2, 0, 'finish').setOrigin(0.5, 0).setDepth(4);
     this.finishLine.setData('crossed', false);
     this.finishSpawned = true;
   }
@@ -543,7 +575,7 @@ export class Play extends Phaser.Scene {
     unlock();
     if (this.state === 'dead') return;
     if (pointer) {
-      const id = trayHit(pointer.x, pointer.y, trayLayout(GAME_WIDTH, GAME_HEIGHT, T));
+      const id = trayHit(pointer.x, pointer.y, trayLayout(this.col.width, GAME_HEIGHT, T, this.col.x));
       if (id) {
         this.handleChrome(id);
         return;
@@ -724,8 +756,8 @@ export class Play extends Phaser.Scene {
     const show = ready ? this.isTestMode() && !this.launching : this.runIsTest;
     this.testBadge.setVisible(show);
     if (!show) return;
-    if (ready) this.testBadge.setText(t(this.locale, 'testTitle')).setPosition(24, 56);
-    else this.testBadge.setText('\u{1F9EA}').setPosition(24, T.hudScoreY - 12);
+    if (ready) this.testBadge.setText(t(this.locale, 'testTitle')).setPosition(this.col.x + 24, 56);
+    else this.testBadge.setText('\u{1F9EA}').setPosition(this.col.x + 24, T.hudScoreY - 12);
   }
 
   applyLocale(next) {
@@ -1017,7 +1049,7 @@ export class Play extends Phaser.Scene {
     this.nextGapY = null;
     this.centreNextGap = false;
     const gapH = this.diff.gapHeight;
-    const x = GAME_WIDTH + T.pipeWidth;
+    const x = this.scale.width + T.pipeWidth; // the field's right edge, wherever the window put it
 
     // Top pipe hangs down: cap must face the gap, so flip the sprite and anchor its bottom.
     const gapTop = gapY - gapH / 2;
@@ -1074,7 +1106,7 @@ export class Play extends Phaser.Scene {
       this.beanSpawned = true;
       const phase = this.rng() * Math.PI * 2;
       const y = still ? stillY() : beanY(0, phase, this.beanBounds, T);
-      const bean = this.beans.create(beanSpawnX(GAME_WIDTH, T.pipeWidth, pipeSpacing(this.level, T)), y, 'bean');
+      const bean = this.beans.create(beanSpawnX(this.scale.width, T.pipeWidth, pipeSpacing(this.level, T)), y, 'bean');
       bean.setDepth(8);
       bean.setScale(T.spriteDisplayScale);
       const beanBody = scaledCircleBody(bean.frame.width, T.spriteDisplayScale, T.beans.beanRadius);
@@ -1094,7 +1126,7 @@ export class Play extends Phaser.Scene {
     const phase = this.rng() * Math.PI * 2;
     const period = kind === 'mystery' ? T.mystery.periodMs : T.items.fiberPeriodMs;
     const y = stillY ?? bobY(0, phase, this.beanBounds, period);
-    const item = this.items.create(beanSpawnX(GAME_WIDTH, T.pipeWidth, pipeSpacing(this.level, T)), y, kind);
+    const item = this.items.create(beanSpawnX(this.scale.width, T.pipeWidth, pipeSpacing(this.level, T)), y, kind);
     item.setDepth(8);
     this.finishItem(item, kind);
     if (stillY == null) item.setData({ bob: 'band', elapsed: 0, phase, period });
@@ -1301,7 +1333,7 @@ export class Play extends Phaser.Scene {
     const remaining = fartRemainingDistance(this.effects.powerElapsed(), this.fartDurationMs, this.fartPeak, this.diff.pipeSpeed);
     // At super-fart speed one frame scrolls ~60 px, so keep at least three frames in hand.
     const margin = Math.max(T.beans.endClearMarginPx, this.scrollSpeed() * 0.05);
-    return remaining < pipeClearDistance(GAME_WIDTH, T.pipeWidth, T.poopX) + margin;
+    return remaining < pipeClearDistance(this.scale.width, T.pipeWidth, this.poopX) + margin;
   }
 
   endPower() {
@@ -1333,7 +1365,7 @@ export class Play extends Phaser.Scene {
     if (!show) return;
     this.probioticIcon.setTexture(this.effects.hasPostbiotic() ? 'postbiotic' : 'probiotic').setDisplaySize(T.hudProbioticSize, T.hudProbioticSize);
     this.probioticText.setText(`×${n}`);
-    const { textX, iconX } = hudRightLayout(GAME_WIDTH, this.probioticText.width, { iconSize: T.hudProbioticSize });
+    const { textX, iconX } = hudRightLayout(this.col.x + this.col.width, this.probioticText.width, { iconSize: T.hudProbioticSize });
     this.probioticText.setX(textX);
     this.probioticIcon.setX(iconX);
   }
@@ -1647,6 +1679,14 @@ export class Play extends Phaser.Scene {
   }
 
   update(_time, delta) {
+    // A resize that arrived while a run / overlay was up: re-fit as soon as the ready screen is clear.
+    if (this.fieldResizeWanted && this.canRefitField()) {
+      this.fieldResizeWanted = false;
+      if (fieldWidth(globalThis.innerWidth, globalThis.innerHeight, FIELD) !== this.scale.width) {
+        this.scene.restart(); // create() → applyFieldSize()
+        return;
+      }
+    }
     const dt = delta / 1000;
     this.rainbowMs += delta; // keeps cycling while paused: it is only colour
     this.applyRainbow();

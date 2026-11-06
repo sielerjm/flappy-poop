@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { TUNING as T, SHARE } from '../src/config.js';
+import { TUNING as T, SHARE, FIELD, GAME_WIDTH, GAME_HEIGHT } from '../src/config.js';
 import { pipeSpacing, levelSpeed } from '../src/logic.js';
 
 test('item spawn rates sit in a fair band', () => {
@@ -37,6 +37,14 @@ test('the falling face shows on a long fall but before the tilt maxes out', () =
   assert.ok(T.fallLookVy <= T.angleFallRefVy, `fallLookVy ${T.fallLookVy} should not wait past angleFallRefVy ${T.angleFallRefVy}`);
   // Quick taps never reach it: one flap's rise never ends above the threshold.
   assert.ok(T.fallLookVy > -T.flapVelocity * 0.5, `fallLookVy ${T.fallLookVy} is reached too soon after a flap`);
+});
+
+test('the field: a phone portrait at minimum, up to 2:1, the player in the left part', () => {
+  assert.equal(FIELD.minWidth, GAME_WIDTH);
+  assert.equal(FIELD.height, GAME_HEIGHT);
+  assert.ok(FIELD.maxWidth >= 2 * FIELD.minWidth, `maxWidth ${FIELD.maxWidth}`);
+  assert.ok(FIELD.resizeDebounceMs >= 100 && FIELD.resizeDebounceMs <= 1000, `resizeDebounceMs ${FIELD.resizeDebounceMs}`);
+  assert.ok(T.poopXFrac >= 0.15 && T.poopXFrac <= 0.4, `poopXFrac ${T.poopXFrac}`);
 });
 
 test('fartVolume is audible but not clipping', () => {

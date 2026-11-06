@@ -127,7 +127,7 @@ test('consumeProbiotic clears a held charge and is a no-op when empty', () => {
 
 // ---------------------------------------------------------------------------
 // Beans + fart power
-import { rollBean, pipeSpacing, beanSpawnX, beanBounds, beanY, beanAngle, poopTapHit, fartPeakMul, fartMul, fartRemainingDistance, pipeClearDistance } from '../src/logic.js';
+import { rollBean, pipeSpacing, beanSpawnX, beanBounds, beanY, beanAngle, poopTapHit, fartPeakMul, fartMul, fartRemainingDistance, pipeClearDistance, poopX } from '../src/logic.js';
 import { GAME_WIDTH, GAME_HEIGHT } from '../src/config.js';
 
 test('rollBean never spawns below beans.startScore', () => {
@@ -309,8 +309,9 @@ test('fartRemainingDistance is the analytic tail of the envelope and reaches 0 a
 });
 
 test('pipeClearDistance: a right-edge spawn needs the screen plus a column to be fully behind the poop', () => {
-  const d = pipeClearDistance(GAME_WIDTH, T.pipeWidth, T.poopX);
-  assert.equal(d, GAME_WIDTH + T.pipeWidth - (T.poopX - T.pipeWidth));
+  const px = poopX(GAME_WIDTH, T);
+  const d = pipeClearDistance(GAME_WIDTH, T.pipeWidth, px);
+  assert.equal(d, GAME_WIDTH + T.pipeWidth - (px - T.pipeWidth));
   assert.ok(d < fartRemainingDistance(0, T.beans.powerMs, fartPeakMul(T.beans.powerMs, T.beans.powerPipes, pipeSpacing(1, T), T.pipeSpeed), T.pipeSpeed), 'the fart scrolls further than one clear distance, so pipes spawned early still pass');
 });
 

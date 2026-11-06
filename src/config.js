@@ -1,7 +1,22 @@
 // Logical playfield. Everything in the scenes is laid out in these units;
 // Phaser's Scale Manager fits them to whatever screen the game runs on.
+// GAME_WIDTH is the portrait (phone) width and the width of the chrome column;
+// the live field can be wider (FIELD), which scenes read as this.scale.width.
 export const GAME_WIDTH = 720;
 export const GAME_HEIGHT = 1280;
+
+// Logical field: the height is fixed; the width follows the window's aspect
+// between a phone portrait (minWidth = GAME_WIDTH) and 2:1 (maxWidth), so a
+// desktop window fills sideways instead of showing dark bars. Chrome (tray,
+// level bar, HUD, ready buttons) stays in a centred minWidth column
+// (uiColumn); the world spans the full width. Chosen at boot and re-applied on
+// a window resize only between runs. Pure data, Node-safe.
+export const FIELD = {
+  height: GAME_HEIGHT,
+  minWidth: GAME_WIDTH,
+  maxWidth: 2560, // px; wider windows get FIT's letterbox bars again
+  resizeDebounceMs: 250, // ms a window resize must settle before the field is re-fitted
+};
 
 // Tuning knobs. Pixels, seconds, milliseconds. Pure data, safe to import in Node.
 export const TUNING = {
@@ -13,7 +28,7 @@ export const TUNING = {
   pipeWidth: 128,
   groundHeight: 128,
   gapMargin: 80, // keep the gap this far from the ceiling and the ground
-  poopX: 180, // fixed x of the player
+  poopXFrac: 0.25, // 0–1 share of the field width where the player sits (180 px of a 720 field; the same share on a wider desktop field; poopX())
   poopRadius: 48, // px circular hitbox = half the 96 logical-px sprite (the whole drawing, square corners excluded)
   spriteDisplayScale: 0.25, // 384 px textures drawn at 96 logical px
   hudProbioticSize: 96, // logical px; HUD icon uses setDisplaySize
@@ -39,7 +54,7 @@ export const TUNING = {
   readyPromptMinAlpha: 0.45, // 0–1 halo pulse floor
   readyPromptMaxAlpha: 1, // 0–1 halo pulse ceiling
   savePanelCloseMs: 600, // ms "Username saved" stays up before the panel closes itself (Enter-username flow only)
-  launchSlideMs: 700, // ms the poop slides from its ready spot to poopX on the start tap
+  launchSlideMs: 700, // ms the poop slides from its ready spot to poopX() on the start tap
   readyTitlePx: 72, // px font size of the FLAPPY POOP title on the ready screen
   readyPoopScale: 1.5, // × spriteDisplayScale for the speech-bubble poop on the ready screen (shrinks back during the slide)
   toiletOffColor: 0x6a6a6a, // toggle track when off (grey)

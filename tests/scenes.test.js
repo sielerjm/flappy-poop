@@ -40,6 +40,16 @@ test('every scene file declares at least create() and no method shadows a Phaser
   }
 });
 
+test('no scene or ui module reads GAME_WIDTH: the live field is this.scale.width (wider on desktop), chrome sits in uiColumn()', () => {
+  const uiDir = join(scenesDir, '..', 'ui');
+  const files = [...readdirSync(scenesDir).map((f) => join(scenesDir, f)), ...readdirSync(uiDir).map((f) => join(uiDir, f))].filter((f) => f.endsWith('.js'));
+  assert.ok(files.length >= 15, `expected the scene and ui files, got ${files.length}`);
+  for (const file of files) {
+    const src = readFileSync(file, 'utf8');
+    assert.ok(!/\bGAME_WIDTH\b/.test(src), `${file}: uses GAME_WIDTH; read this.scale.width (the world) or uiColumn() (the chrome column) instead`);
+  }
+});
+
 test('the guard itself catches a shadowing method', () => {
   const names = methodNames('class X extends Phaser.Scene {\n  create() {\n  }\n\n  async load(a) {\n  }\n}');
   assert.deepEqual(names, ['create', 'load']);

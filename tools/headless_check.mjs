@@ -137,6 +137,9 @@ export async function run(url = DEFAULT_URL) {
     // its presses would reach the game mid-check. The page sees no pads; the pad checks below go
     // through Play.padDown / padNav, the same route the plugin's events take.
     await cdp.send('Page.addScriptToEvaluateOnNewDocument', { source: `Object.defineProperty(navigator, 'getGamepads', { value: () => [], configurable: true });` });
+    // The field follows the viewport (fieldWidth): pin it to the portrait 720×1280 so every number
+    // below is the phone layout (--window-size includes browser chrome, so the viewport is smaller).
+    await cdp.send('Emulation.setDeviceMetricsOverride', { width: 720, height: 1280, deviceScaleFactor: 1, mobile: false });
     await cdp.send('Page.navigate', { url: `${url}/?r=${Date.now()}` });
 
     // Boot: wait for Play to reach the ready screen (Phaser comes from a CDN).
@@ -153,6 +156,8 @@ export async function run(url = DEFAULT_URL) {
       return failures;
     }
     ok((await evaluate(`__flappy.scene.getScene('Play').diff.gapHeight`)) === 374, 'level 1 pipe gap is 10 % wider (374 px)');
+    const field0 = await evaluate(`JSON.stringify({ W: __flappy.scale.width, H: __flappy.scale.height, inner: [innerWidth, innerHeight], poopX: __flappy.scene.getScene('Play').poopX })`).then(JSON.parse);
+    ok(field0.W === 720 && field0.H === 1280 && field0.poopX === 180, `a portrait viewport (${field0.inner.join('×')}) gets the ${field0.W}×${field0.H} phone field, poop at ${field0.poopX}`);
 
     const frame = () => evaluate('__flappy.loop.frame');
     const playState = () => evaluate(`__flappy.scene.getScene('Play').state`);
@@ -161,7 +166,7 @@ export async function run(url = DEFAULT_URL) {
     const closeTop = (key) => evaluate(`__flappy.scene.getScene('${key}').close(), true`);
     // A real mouse press + release at a game point, through the canvas's on-page box.
     const tapAt = async (x, y) => {
-      const pt = await evaluate(`(() => { const r = __flappy.canvas.getBoundingClientRect(); return JSON.stringify({ x: r.left + ${x} * r.width / 720, y: r.top + ${y} * r.height / 1280 }); })()`).then(JSON.parse);
+      const pt = await evaluate(`(() => { const r = __flappy.canvas.getBoundingClientRect(); const s = __flappy.scale; return JSON.stringify({ x: r.left + ${x} * r.width / s.width, y: r.top + ${y} * r.height / s.height }); })()`).then(JSON.parse);
       await cdp.send('Input.dispatchMouseEvent', { type: 'mousePressed', x: pt.x, y: pt.y, button: 'left', clickCount: 1 });
       await cdp.send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: pt.x, y: pt.y, button: 'left', clickCount: 1 });
       await sleep(250);
@@ -1010,6 +1015,57 @@ export async function run(url = DEFAULT_URL) {
         for (let i = 0; i < 40 && (await playState()) !== 'ready'; i += 1) await sleep(250);
         ok(held && !(await evaluate(`__flappy.scene.isActive('Over')`)) && (await playState()) === 'ready', 'A on the game-over panel waits out the lockout, then goes home');
       }
+    }
+
+    // Wide field: a desktop-shaped window widens the logical field (fieldWidth) between runs; the
+    // world (background, spawns, dimmers) spans it, the chrome keeps its phone layout in a centred
+    // 720 px column (uiColumn), the poop sits at poopXFrac of the width. A resize mid-run waits
+    // for Home. The run above left Play on the ready screen at the portrait window.
+    {
+      const L = `Promise.all([import('./src/logic.js'), import('./src/config.js')])`;
+      const metrics = (width, height) => cdp.send('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 1, mobile: false });
+      const want = await evaluate(`${L}.then(([l, c]) => JSON.stringify({ W: l.fieldWidth(1800, 1000, c.FIELD), col: l.uiColumn(l.fieldWidth(1800, 1000, c.FIELD), c.FIELD), poopX: l.poopX(l.fieldWidth(1800, 1000, c.FIELD), c.TUNING), howto: l.readyLayout(720, 1280, c.TUNING, l.uiColumn(l.fieldWidth(1800, 1000, c.FIELD), c.FIELD).x).howto.x, debounce: c.FIELD.resizeDebounceMs }))`).then(JSON.parse);
+      const portraitW = await evaluate(`__flappy.scale.width`);
+      await metrics(1800, 1000);
+      let W = portraitW;
+      for (let i = 0; i < 40 && W !== want.W; i += 1) {
+        await sleep(100);
+        W = await evaluate(`__flappy.scale.width`);
+      }
+      for (let i = 0; i < 20 && (await playState()) !== 'ready'; i += 1) await sleep(100);
+      const wide = await evaluate(`(() => { const p = ${play}; const s = __flappy.scale; return JSON.stringify({ W: s.width, H: s.height, state: p.state, inner: [innerWidth, innerHeight], col: p.col, poopX: p.poopX, bg: p.bgColor.width, villi: p.bgLayers.map((l) => l.sprite.width), ground: p.ground.width, cam: p.cameras.main.width, canvas: [__flappy.canvas.width, __flappy.canvas.height], score: p.scoreText.x, title: p.readyTitle.x, howto: p.readyBoxes.howto.x, settingsBtn: p.tray.buttons.settings.x, infoBtn: p.tray.buttons.info.x, bean: p.beanButtonBox.x }); })()`).then(JSON.parse);
+      ok(portraitW === 720 && wide.W === want.W && wide.H === 1280 && wide.state === 'ready' && wide.cam === want.W && wide.canvas[0] === want.W, `a 1800×1000 window re-fits the ready screen to a ${wide.W}×${wide.H} field (was ${portraitW}; window ${wide.inner.join('×')}, camera ${wide.cam}, canvas ${wide.canvas.join('×')}, state ${wide.state})`);
+      ok(wide.col.x === want.col.x && wide.col.width === 720 && wide.poopX === want.poopX && wide.bg === want.W && wide.villi.every((w) => w === want.W) && wide.ground === want.W, `the world spans the field (background ${wide.bg}, villi ${wide.villi.join('/')}, ground ${wide.ground}); the chrome column is ${wide.col.width} px at x ${wide.col.x}; the poop will sit at ${wide.poopX} (25 %)`);
+      const right = wide.col.x + wide.col.width;
+      ok(wide.score === want.W / 2 && wide.title === want.W / 2 && wide.bean === want.W / 2 && wide.howto === want.howto && wide.settingsBtn === right - 44 - 16 && wide.infoBtn === wide.col.x + 44 + 16, `score, title and bean button on the field centre (${wide.score}); ? at ${wide.howto}, ⚙ at ${wide.settingsBtn}, ⓘ at ${wide.infoBtn}: inside the column ${wide.col.x}–${right}`);
+      // A run on the wide field: the poop slides to poopX, pipes enter at the far right edge, the HUD hugs the column.
+      await evaluate(`${play}.launch(), true`);
+      for (let i = 0; i < 30 && (await playState()) !== 'playing'; i += 1) await sleep(100);
+      const run = await evaluate(`(() => { const p = ${play}; p.poop.body.setAllowGravity(false); p.poop.setVelocity(0, 0); p.poop.y = 640; p.graceLeftMs = 1e9; p.spawnPipePair(); p.effects.applyProbiotic(); p.refreshProbioticHud(); p.pausePlay(); const xs = p.pipes.getChildren().map((c) => c.x); return JSON.stringify({ state: p.state, poopX: p.poop.x, pipeX: Math.max(...xs), hudRight: p.probioticText.x, shade: p.pauseShade.width, banner: p.pauseText.x }); })()`).then(JSON.parse);
+      ok(run.state === 'paused' && run.poopX === want.poopX && run.pipeX === want.W + TT.pipeWidth && run.hudRight === right - 16 && run.shade === want.W && run.banner === want.W / 2, `on the wide field the poop flies at x ${run.poopX}, pipes enter at ${run.pipeX} (= ${want.W} + ${TT.pipeWidth}), the probiotic counter ends at ${run.hudRight}, the pause shade is ${run.shade} wide with its banner at ${run.banner}`);
+      // Settings opens centred; a click on the wide world left of the panel closes it (overlayOutsideHit through a real pointer).
+      await chrome('settings');
+      await sleep(300);
+      const panel = await evaluate(`(() => { const s = __flappy.scene.getScene('Settings'); const r = s.children.list.find((c) => c.type === 'Rectangle' && c.width === 600); return JSON.stringify({ open: __flappy.scene.isActive('Settings'), x: r?.x, dimmer: s.children.list.find((c) => c.type === 'Rectangle' && c.width === __flappy.scale.width)?.width }); })()`).then(JSON.parse);
+      await tapAt(40, 640);
+      const closed = !(await active('Settings'));
+      ok(panel.open && panel.x === want.W / 2 && panel.dimmer === want.W && closed, `Settings opens centred at ${panel.x} under a ${panel.dimmer} px dimmer; a click at x 40 on the wide world closes it (${closed})`);
+      // A resize while the run is paused waits: the field keeps its width until Home.
+      await metrics(720, 1280);
+      await sleep(want.debounce + 400);
+      const mid = await evaluate(`JSON.stringify({ W: __flappy.scale.width, wanted: ${play}.fieldResizeWanted, state: ${play}.state })`).then(JSON.parse);
+      ok(mid.W === want.W && mid.wanted === true && mid.state === 'paused', `a resize mid-run is deferred (field still ${mid.W}, re-fit pending ${mid.wanted}, state ${mid.state})`);
+      await evaluate(`(() => { const p = ${play}; p.resumePlay(); p.graceLeftMs = 0; p.poop.body.setAllowGravity(true); p.die(); return true; })()`);
+      for (let i = 0; i < 30 && !(await active('Over')); i += 1) await sleep(100);
+      await evaluate(`(() => { const o = __flappy.scene.getScene('Over'); o.openedAt = 0; o.retry(); return true; })()`);
+      let back = null;
+      for (let i = 0; i < 40; i += 1) {
+        await sleep(100);
+        back = await evaluate(`JSON.stringify({ W: __flappy.scale.width, state: ${play}.state, poopX: ${play}.poopX, col: ${play}.col, over: __flappy.scene.isActive('Over') })`).then(JSON.parse);
+        if (back.W === 720 && back.state === 'ready') break;
+      }
+      ok(back.W === 720 && back.state === 'ready' && back.poopX === 180 && back.col.x === 0 && back.col.width === 720 && !back.over, `Home after the game over re-fits to the portrait window: field ${back.W}, poop at ${back.poopX}, column at ${back.col.x} (state ${back.state})`);
+      await cdp.send('Emulation.clearDeviceMetricsOverride');
     }
 
     const f2 = await frame();

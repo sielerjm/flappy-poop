@@ -1,5 +1,5 @@
-import { GAME_WIDTH, GAME_HEIGHT, TUNING as T, SHARE, LEVEL_COLORS } from '../config.js';
-import { canRestart, chromeIntent, trayLayout, trayHit, overButtonsLayout, overHit, shareCardLayout, levelColor } from '../logic.js';
+import { GAME_HEIGHT, FIELD, TUNING as T, SHARE, LEVEL_COLORS } from '../config.js';
+import { canRestart, chromeIntent, trayLayout, trayHit, overButtonsLayout, overHit, shareCardLayout, levelColor, uiColumn } from '../logic.js';
 import { t, levelLabel, shareText, shareCardFooter } from '../i18n.js';
 import { shareMode, shareScoreImage } from '../share.js';
 import { renderShareCard } from '../ui/shareCard.js';
@@ -30,7 +30,9 @@ export class Over extends Phaser.Scene {
     const locale = play?.getLocale?.() ?? 'en';
     this.shareInfo = { locale, score, toilet, level }; // the message shareRun() sends with the image
 
-    const cx = GAME_WIDTH / 2;
+    const W = this.scale.width; // the live field: the panel stays centred, the tray in the chrome column
+    this.col = uiColumn(W, FIELD);
+    const cx = W / 2;
     const cy = GAME_HEIGHT / 2;
     const panel = this.add.rectangle(cx, cy, 560, 720, 0x1a0b14, 0.85).setStrokeStyle(8, 0xe85e96);
     const style = { fontFamily: 'sans-serif', fontStyle: 'bold', color: '#ffffff', align: 'center' };
@@ -97,7 +99,7 @@ export class Over extends Phaser.Scene {
     this.sharePressed = false;
     if (this.buttons.share) this.makeShareCard({ headline, won, scoreLine, collected, pipes, locale });
 
-    this.tray = createTray(this, { muted: isMuted() });
+    this.tray = createTray(this, { muted: isMuted(), col: this.col });
     // Controller focus ring: Home, Share (once its card exists), then the tray (no ⏸ here).
     // A on Home is the panel tap; A on a tray button is that button's chrome.
     this.focus = createFocus(this, T, {
@@ -144,7 +146,7 @@ export class Over extends Phaser.Scene {
     unlock();
     const play = this.scene.get('Play');
     if (pointer) {
-      const id = trayHit(pointer.x, pointer.y, trayLayout(GAME_WIDTH, GAME_HEIGHT, T));
+      const id = trayHit(pointer.x, pointer.y, trayLayout(this.col.width, GAME_HEIGHT, T, this.col.x));
       if (id) {
         play?.handleChrome(id);
         return;

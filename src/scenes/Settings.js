@@ -1,4 +1,4 @@
-import { GAME_WIDTH, GAME_HEIGHT, TUNING as T } from '../config.js';
+import { GAME_HEIGHT, TUNING as T } from '../config.js';
 import { VERSION, createSettingsStore, chromeIntent, overlayOutsideHit, hardReloadGame, settingsLayout, nextTestLevel } from '../logic.js';
 import { t, toggleLabel, metaFontSize, levelLabel } from '../i18n.js';
 import { createFocus, pressable } from '../ui/focus.js';
@@ -21,10 +21,11 @@ export class Settings extends Phaser.Scene {
 
     // Test mode (Play.isTestMode) makes the panel taller and adds the test section under About.
     const testMode = Boolean(play?.isTestMode?.());
-    const layout = settingsLayout(GAME_WIDTH, GAME_HEIGHT, T, { test: testMode });
+    const W = this.scale.width; // the live field (wider than 720 on desktop); the panel stays centred
+    const layout = settingsLayout(W, GAME_HEIGHT, T, { test: testMode });
     const { panel, rows } = layout;
     const cx = panel.x;
-    const dimmer = this.add.rectangle(GAME_WIDTH / 2, GAME_HEIGHT / 2, GAME_WIDTH, GAME_HEIGHT, 0x000000, 0.55).setInteractive();
+    const dimmer = this.add.rectangle(W / 2, GAME_HEIGHT / 2, W, GAME_HEIGHT, 0x000000, 0.55).setInteractive();
     dimmer.on('pointerdown', (pointer) => {
       if (overlayOutsideHit(pointer.x, pointer.y, panel)) this.close();
     });

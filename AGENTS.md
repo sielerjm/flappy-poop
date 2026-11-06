@@ -59,7 +59,15 @@ A test run (`runIsTest`, latched for the whole run) records nothing: no legacy b
 leaderboard sync, and Over says so. A 🧪 badge shows while it is on.
 
 It is a side project by Michael Sieler (gut-microbiome researcher), hence the
-theme. It is deliberately small: plain ES modules, no bundler, no npm
+theme. The logical field is 1280 px tall and as wide as the window's aspect asks,
+from a phone portrait (720, `GAME_WIDTH`) to 2:1 (`FIELD`, `fieldWidth()`), so a
+desktop window fills sideways; the world (background, pipes, items, dimmers) spans
+the whole width, the chrome (tray, level bar, HUD, ready buttons) keeps its phone
+layout in a centred 720 px column (`uiColumn()`), and the poop sits at
+`poopXFrac` (25 %) of the width (`poopX()`). The width is fitted on every Play
+(re)start (`applyFieldSize`); a window resize re-fits at once on the ready screen
+and otherwise after Home (`onFieldResize` → `update()`), never mid-run.
+It is deliberately small: plain ES modules, no bundler, no npm
 dependencies, Phaser 4 loaded from a CDN, deployed to GitHub Pages straight from
 `main`. Keep it that way unless the game clearly outgrows it.
 
@@ -80,14 +88,19 @@ package.json                `npm test`, `npm start`, `npm run push`; no dependen
 CREDITS.md                  Phaser + every assets/sfx/ file with a URL.
 
 src/
-  main.js                   new Phaser.Game(...): 720x1280 logical field, Scale.FIT,
+  main.js                   new Phaser.Game(...): fieldWidth(window) x 1280 logical
+                            field (720 on a phone, wider on desktop), Scale.FIT,
+                            a debounced window resize → Play.onFieldResize(),
                             roundPixels,
                             arcade physics, input.gamepad on (bound once, in
                             Play), scene order
                             [Boot, Play, Over, Settings, About, HowTo, Language,
                             Feedback, Scores, Leaderboard].
-  config.js                 GAME_WIDTH / GAME_HEIGHT, the TUNING object (every
-                            feel-related number lives here), and LEADERBOARD
+  config.js                 GAME_WIDTH / GAME_HEIGHT (the portrait field = the
+                            chrome column), FIELD (height, minWidth, maxWidth,
+                            resizeDebounceMs), the TUNING object (every
+                            feel-related number lives here; poopXFrac = the
+                            player's share of the width), and LEADERBOARD
                             (Supabase Data API URL + publishable key, both public
                             by design; timeout, limit, storage key, score cap),
                             LEVELS (gut segment name keys, in order), LEVEL_COLORS
@@ -99,7 +112,10 @@ src/
                             TUNING.focus = the focus ring's geometry, pulse and
                             the overlay scroll step.
                             Pure data, Node-safe.
-  logic.js                  Pure functions, NO Phaser/DOM: rng, gap placement,
+  logic.js                  Pure functions, NO Phaser/DOM: field (fieldWidth,
+                            uiColumn, poopX; trayLayout / levelBarLayout /
+                            readyLayout / howToLayout take a trailing x0 = the
+                            column's left edge), rng, gap placement,
                             scoring (pipePoints, scorePopup, multiplierLayout),
                             items (rollItem, hazardsAllowed, bandItemsMove,
                             bandMidY, tutorialSpawn), beans (rollBean, beanSpawnX, beanY,
@@ -234,6 +250,18 @@ src/
                             spritesheet) + the sfx MP3s; create() makes the global
                             'mystery-spin' anim (mystery.frameMs), then starts Play.
     Play.js                 State machine: 'ready' -> 'playing' -> 'paused'/'dead'.
+                            create() starts with applyFieldSize() (setGameSize to
+                            fieldWidth(window) if it changed), then W =
+                            this.scale.width, this.col = uiColumn(W), this.poopX =
+                            poopX(W): the world (background rect + tileSprites
+                            at tile scale minWidth / texture width, pipe / item /
+                            bean / finish spawns at W, pause shade, banners) uses
+                            W; the chrome (tray, level bar, ready boxes, test
+                            badge, bean HUD, probiotic HUD's right edge) uses col.
+                            onFieldResize() sets fieldResizeWanted; update()
+                            restarts the scene once canRefitField() (ready, not
+                            launching, no overlay / Over / save panel).
+                            Never read GAME_WIDTH in a scene (tests/scenes.test.js).
                             Spawns pipes and items, tray, auto-pause, haptics, dies,
                             then launches Over as an overlay scene. Tray / keyboard
                             go through chromeIntent. Overlay order is feedback >
@@ -474,6 +502,9 @@ db/schema.sql               Supabase schema: scores table (player_id = save-code
                             backend.
 
 tests/                      node --test, zero deps. Each file is self-describing:
+  field.test.js             fieldWidth (phone, desktop, 2:1 cap, bad input, even),
+                            uiColumn, poopX, the x0 shift of trayLayout /
+                            levelBarLayout / readyLayout, hits on a shifted column
   html.test.js              index.html invariants (viewport, no scroll, pinned Phaser)
   assets.test.js            load.image / load.spritesheet / load.audio paths; README
                             sizes; a spritesheet is a whole number of frames; sfx credits
@@ -548,7 +579,8 @@ tests/                      node --test, zero deps. Each file is self-describing
                             (add, load, input, time, render, …): such a method is
                             shadowed by the plugin and throws inside create(), which
                             freezes the game loop. Node never runs scenes, so this is
-                            the only place to catch it.
+                            the only place to catch it. Also: no scene / ui module
+                            reads GAME_WIDTH (the field is this.scale.width).
   tools.test.js             npm run smoke points at headless_check.mjs; its OVERLAYS
                             map equals the overlay scenes registered in main.js
 
@@ -599,7 +631,15 @@ tools/
                             wiring, A / Menu / B / RT / Y, an overlay under A and B,
                             the save panel, the tray ring, the game-over ring and
                             Share, every overlay's ring, Settings / Language /
-                            Feedback / About through the ring). The page's
+                            Feedback / About through the ring), and the wide field
+                            (a 1800x1000 viewport re-fits the ready screen to 2304
+                            px: world widths, column chrome, poop at 25 %, right-
+                            edge spawns, centred Settings closed by a click on the
+                            wide world, a mid-run resize deferred until Home). The
+                            viewport is pinned to 720x1280 before load
+                            (Emulation.setDeviceMetricsOverride) so the rest is
+                            the phone field; tapAt maps through the live
+                            __flappy.scale size. The page's
                             navigator.getGamepads is stubbed to [] before load: a
                             pad paired to the machine is visible to headless Chrome
                             and its presses would otherwise reach the game.
@@ -633,7 +673,10 @@ tools/
 5. **No build step, no dependencies.** The site is served as-is from the repo
    root by GitHub Pages. Don't add a bundler, TypeScript, or npm packages without
    a strong reason; if you do, the deploy story has to change too.
-6. **Mobile first.** Touch is the primary input (`pointerdown`); keyboard
+6. **Mobile first.** The phone portrait layout is the design; a desktop window
+   only widens the world around it (the chrome column stays the phone layout).
+   Scenes never read `GAME_WIDTH`: the world uses `this.scale.width`, the chrome
+   `uiColumn()` (`tests/scenes.test.js` enforces it). Touch is the primary input (`pointerdown`); keyboard
    (Space / Up / M / P / Esc / S / I / L / F / B / T) and the gamepad (A / B / Y /
    RT / Menu / d-pad, `src/input/pad.js`) are conveniences that must produce the
    same intents a tap does, through `chromeIntent` / `padIntent`; the focus ring
@@ -717,7 +760,10 @@ Commits so far follow `type(scope): summary` (`feat`, `docs`, `chore`); keep it.
 - Backend change → edit `db/schema.sql`, run it by hand in the Supabase SQL
   editor, keep `LEADERBOARD.maxScore` and the schema's score cap in step.
 - New UI chrome → `src/ui/` (Phaser wrapper) with any pure layout helper in
-  `src/logic.js`. Text input belongs in a DOM panel like `src/ui/savePanel.js`,
+  `src/logic.js`, positioned inside the chrome column (`this.col`: pass
+  `col.width` as the width and `col.x` as the helper's `x0`, or add `col.x`
+  to a fixed x). New world objects (things that scroll, full-screen shades)
+  use `this.scale.width`. Text input belongs in a DOM panel like `src/ui/savePanel.js`,
   not Phaser UI.
 - Save-code wire format change → bump `CURRENT_VERSION` in `src/save.js`, add
   `parseVN` to `PARSERS`, never delete an old parser, never change `SECRET`.

@@ -1,4 +1,4 @@
-import { GAME_WIDTH, GAME_HEIGHT, TUNING as T } from '../config.js';
+import { GAME_HEIGHT, TUNING as T } from '../config.js';
 import { VERSION, chromeIntent, overlayOutsideHit, issueUrl, openExternalUrl } from '../logic.js';
 import { createFocus, pressable } from '../ui/focus.js';
 import { t, metaFontSize } from '../i18n.js';
@@ -13,10 +13,11 @@ export class Feedback extends Phaser.Scene {
   create() {
     this.scene.bringToTop();
     const locale = this.scene.get('Play')?.getLocale?.() ?? 'en';
-    const cx = GAME_WIDTH / 2;
+    const W = this.scale.width; // the live field (wider than 720 on desktop); the panel stays centred
+    const cx = W / 2;
     const cy = GAME_HEIGHT / 2;
     const panel = { x: cx, y: cy, width: 600, height: 720 };
-    const dimmer = this.add.rectangle(GAME_WIDTH / 2, GAME_HEIGHT / 2, GAME_WIDTH, GAME_HEIGHT, 0x000000, 0.55).setInteractive();
+    const dimmer = this.add.rectangle(W / 2, GAME_HEIGHT / 2, W, GAME_HEIGHT, 0x000000, 0.55).setInteractive();
     dimmer.on('pointerdown', (pointer) => {
       if (overlayOutsideHit(pointer.x, pointer.y, panel)) this.close();
     });

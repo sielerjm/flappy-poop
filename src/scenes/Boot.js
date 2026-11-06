@@ -1,4 +1,4 @@
-import { GAME_WIDTH, GAME_HEIGHT, TUNING as T } from '../config.js';
+import { TUNING as T } from '../config.js';
 import { VERSION } from '../logic.js';
 
 // Cache-bust so browsers pick up new PNGs after art/contract bumps.
@@ -36,7 +36,7 @@ export class Boot extends Phaser.Scene {
   }
 
   create() {
-    console.log('[Boot] assets loaded', GAME_WIDTH, GAME_HEIGHT);
+    console.log('[Boot] assets loaded', this.scale.width, this.scale.height);
     // Global animation manager: every scene can play it.
     if (!this.anims.exists('mystery-spin')) {
       this.anims.create({ key: 'mystery-spin', frames: this.anims.generateFrameNumbers('mystery'), frameRate: 1000 / T.mystery.frameMs, repeat: -1 });
