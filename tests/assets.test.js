@@ -76,8 +76,9 @@ test('manifest.webmanifest is valid JSON and its icons exist', () => {
   assert.equal(manifest.display, 'fullscreen');
   assert.ok(Array.isArray(manifest.icons) && manifest.icons.length >= 2);
   for (const icon of manifest.icons) {
-    assert.ok(existsSync(join(root, icon.src)), `manifest icon ${icon.src} missing`);
-    const real = pngSize(join(root, icon.src));
+    const file = icon.src.replace(/\?.*$/, ''); // ?v= cache-buster: the art changed under the same name
+    assert.ok(existsSync(join(root, file)), `manifest icon ${icon.src} missing`);
+    const real = pngSize(join(root, file));
     assert.equal(`${real.w}x${real.h}`, icon.sizes, `${icon.src} size does not match manifest`);
   }
 });
@@ -85,13 +86,17 @@ test('manifest.webmanifest is valid JSON and its icons exist', () => {
 test('index.html links the manifest, an icon and the full-bleed Apple touch icon', () => {
   const html = readFileSync(join(root, 'index.html'), 'utf8');
   assert.match(html, /<link rel="manifest" href="manifest\.webmanifest">/);
-  assert.match(html, /<link rel="icon"[^>]*href="assets\/icon-192\.png"/);
-  const apple = html.match(/<link rel="apple-touch-icon" sizes="(\d+x\d+)" href="([^"]+)">/);
+  assert.match(html, /<link rel="icon"[^>]*href="assets\/icon-192\.png(\?v=\d+)?"/);
+  const apple = html.match(/<link rel="apple-touch-icon" sizes="(\d+x\d+)" href="([^"?]+)(\?v=\d+)?">/);
   assert.ok(apple, 'apple-touch-icon link with sizes not found');
   assert.ok(existsSync(join(root, apple[2])), `${apple[2]} missing`);
   const real = pngSize(join(root, apple[2]));
   assert.equal(`${real.w}x${real.h}`, apple[1], `${apple[2]} size does not match its link`);
   assert.equal(apple[1], '180x180', 'iOS home-screen icons are 180x180');
+  // The icon art changed under the same file names: every icon URL carries the same ?v= so caches refetch it.
+  const manifest = readFileSync(join(root, 'manifest.webmanifest'), 'utf8');
+  const versions = new Set([...(html + manifest).matchAll(/icon[^"']*\.png\?v=(\d+)/g)].map((m) => m[1]));
+  assert.equal(versions.size, 1, `icon ?v= tags differ: ${[...versions].join(', ')}`);
 });
 
 const audioLoads = srcFiles.flatMap((f) => {

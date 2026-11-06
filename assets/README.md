@@ -4,7 +4,7 @@ Gameplay sprites are listed below. `npm test` checks that the sizes in this tabl
 
 The player and items are Michael's drawings. Put a new source PNG in `assets/src/` and run `uv run --with pillow python3 tools/process_art.py` (or any Python with Pillow) to crop, knock out **background** white (not eyes or mouths), and write the 384×384 contract files (an animated GIF becomes a one-row spritesheet of 384×384 frames). The poop set (alive, dead, stink1, stink2, falling, stink-falling1, stink-falling2, fart) shares one body scale and is cut around the body centre, so texture swaps never move the body; the fart frame's body is found with a brown-pixel mask because its cloud sits to the left. The game draws them at 0.25 scale (96 logical px on the 720×1280 field). Do not list source files in this table.
 
-`pipe.png`, `villi.png`, and `ground.png` are still placeholders from `tools/make_placeholders.py`. That script must **not** overwrite `poop.png` or the icons. The icons are cut from `assets/src/FlappyPoopAppArt.png` by `process_art.py` (`process_icons`).
+`pipe.png`, `villi.png`, and `ground.png` are still placeholders from `tools/make_placeholders.py`. That script must **not** overwrite `poop.png` or the icons. The icons are cut from `assets/src/FlappyPoopAppArt.png` by `process_art.py` (`process_icons`). Browsers cache favicons and manifest icons by URL for a long time, so every icon link in `index.html` and `manifest.webmanifest` carries the same `?v=N`; bump it whenever the icon art changes (`tests/assets.test.js` keeps the tags equal).
 
 | File | Size (px) | What it is | Notes for redrawing |
 |---|---|---|---|
