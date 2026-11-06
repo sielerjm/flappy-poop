@@ -106,15 +106,15 @@ test('prefillPairs: a wide field is filled from the phone\'s lead out to its own
   assert.ok(cap.xs.length >= 3 && cap.xs[cap.xs.length - 1] <= FIELD.maxWidth + T.pipeWidth);
 });
 
-test('sweepOffset: from o0 and invisible to in place and opaque, slow-fast-slow', () => {
+test('sweepOffset: from o0 and invisible to in place and opaque, fastest off the edge and braking to a stop', () => {
   const o0 = 1188;
   const ms = T.prefill.sweepMs;
   assert.deepEqual(sweepOffset(0, o0, ms), { dx: o0, alpha: 0, done: false });
   assert.deepEqual(sweepOffset(ms, o0, ms), { dx: 0, alpha: 1, done: true });
   assert.deepEqual(sweepOffset(ms * 2, o0, ms), { dx: 0, alpha: 1, done: true }, 'past the end stays settled');
   const mid = sweepOffset(ms / 2, o0, ms);
-  assert.equal(mid.dx, o0 / 2);
-  assert.equal(mid.alpha, 0.5);
+  assert.equal(mid.dx, o0 / 4, 'ease-out: three quarters of the way by half time');
+  assert.equal(mid.alpha, 0.75);
   const n = 50;
   const samples = Array.from({ length: n + 1 }, (_, i) => sweepOffset((ms * i) / n, o0, ms));
   for (let i = 1; i <= n; i += 1) {
@@ -122,9 +122,11 @@ test('sweepOffset: from o0 and invisible to in place and opaque, slow-fast-slow'
     assert.ok(samples[i].alpha >= samples[i - 1].alpha, `alpha never drops (sample ${i})`);
   }
   const steps = samples.slice(1).map((s, i) => samples[i].dx - s.dx);
-  const peak = steps.indexOf(Math.max(...steps));
-  assert.ok(peak >= n / 2 - 2 && peak <= n / 2 + 1, `fastest at the middle (step ${peak} of ${n})`);
-  assert.ok(steps[0] < steps[peak] / 10 && steps[n - 1] < steps[peak] / 10, 'starts and ends slowly');
+  for (let i = 1; i < n; i += 1) assert.ok(steps[i] <= steps[i - 1] + 1e-9, `braking all the way (step ${i})`);
+  assert.ok(steps[0] > steps[n - 1] * 20, 'fastest off the edge, almost still at the end');
+  assert.ok(steps[n - 1] < (2 * o0) / n / 20, 'joins the normal scroll speed smoothly');
+  // The extra speed off the edge is 2·o0/ms: with o0 1188 and the knob that is ≤ 2000 px/s (about half the first cut's peak).
+  assert.ok((2 * o0) / (ms / 1000) <= 2000, `peak extra speed ${((2 * o0) / (ms / 1000)).toFixed(0)} px/s`);
   assert.deepEqual(sweepOffset(ms / 3, 0, ms).dx, 0, 'nothing to sweep on a phone field');
   assert.deepEqual(sweepOffset(100, o0, 0), { dx: 0, alpha: 1, done: true }, 'a zero duration is done at once');
 });

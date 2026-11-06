@@ -72,8 +72,9 @@ the end of a level break and the end of a fart pre-fill the field (`prefillPipes
 per spacing to the edge, so a wide field never waits longer than a phone (where it is
 the one edge spawn as before); a skip's finish line gets the same lead. On a wide field
 the pre-filled stretch does not pop in: it sweeps in from the right edge over
-`prefill.sweepMs` (`sweepOffset`: cubic ease-in-out, slow-fast-slow, fading from
-transparent), settling exactly where the pre-fill put it.
+`prefill.sweepMs` (`sweepOffset`: quadratic ease-out, fastest off the edge and braking
+to the level's scroll speed by about the field's middle, fading from transparent),
+settling exactly where the pre-fill put it.
 It is deliberately small: plain ES modules, no bundler, no npm
 dependencies, Phaser 4 loaded from a CDN, deployed to GitHub Pages straight from
 `main`. Keep it that way unless the game clearly outgrows it.
@@ -531,7 +532,8 @@ tests/                      node --test, zero deps. Each file is self-describing
                             levelBarLayout / readyLayout, hits on a shifted column,
                             pipeLeadPx, prefillPairs (one edge pair on a phone; a
                             wide field filled from the lead to its edge), sweepOffset
-                            (ends, midpoint, monotonic, fastest at the middle)
+                            (ends, midpoint, monotonic, fastest off the edge,
+                            peak extra speed bound)
   html.test.js              index.html invariants (viewport, no scroll, pinned Phaser)
   assets.test.js            load.image / load.spritesheet / load.audio paths; README
                             sizes; a spritesheet is a whole number of frames; sfx credits
