@@ -154,8 +154,10 @@ src/
                             (howToLayout / howToHit wrap them),
                             LAST_UPDATED, issueUrl, openExternalUrl, chromeIntent,
                             overlayOutsideHit, clampScroll, scaledCircleBody; gamepad:
-                            padAction (button index → action), stickNav, focusStep
-                            (one-dimensional, wrapping), focusRingLayout, padIntent
+                            padAction (button index → action), stickNav, focusNearest
+                            (spatial: the nearest item in a direction, straight
+                            ahead beating a diagonal), focusStep (list order,
+                            wrapping: the fallback), focusRingLayout, padIntent
                             (the pad's state matrix beside chromeIntent: what A / B /
                             RT / Menu / Y / nav do on Play, Over or an overlay); test mode:
                             isTestWord, testRunStart, nextTestLevel, TEST_POWERS,
@@ -212,7 +214,10 @@ src/
                             is moved in the display list to sit directly under
                             the focused object (same depth; a box item: just
                             under createButton's depth; a Zone: no fill), so the
-                            button's art draws over it; the ring rings one item of a
+                            button's art draws over it; a nav press moves to the
+                            nearest visible item in that direction (focusNearest)
+                            and falls back to the list order (focusStep, wrapping)
+                            when nothing lies that way; the ring rings one item of a
                             scene; items are { id, obj | box, activate, visible?,
                             scrolled? }, pressable(id, obj) wraps a Game Object
                             whose own pointerdown is the press. Shows only in
@@ -449,8 +454,12 @@ src/
                             closeTop = the overlay's close(), retry = Over.retry(),
                             activate / move / hideRing = that scene's focus ring;
                             a nav press mid-run pauses and rings ⏸ (pauseAndFocus).
-                            this.focus rings the tray in screen order; launch and
-                            resumePlay hide it. padDown / padNav are the smoke shims.
+                            this.focus rings the tray in screen order, then the
+                            ready screen's toilet toggle and ? (box items visible
+                            only while 'ready' and not launching; Save / Load and
+                            the profile button are off the ring on purpose: they
+                            need the keyboard); launch and resumePlay hide it.
+                            padDown / padNav are the smoke shims.
     Over.js                 Game-over panel (score, run summary of fiber / probiotic / postbiotic over bacteria / bean / mystery box (mystery-icon.png), pipes crossed, then Share | glowing Home on one row from overButtonsLayout) with a
                             tap lockout (openedAt = game.loop.time: a relaunched
                             scene's this.time.now is stale) and its own tray (mute

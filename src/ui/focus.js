@@ -1,4 +1,4 @@
-import { focusRingLayout, focusStep } from '../logic.js';
+import { focusRingLayout, focusStep, focusNearest } from '../logic.js';
 
 const PINK = 0xe85e96;
 const DEPTH = 1000; // above everything else in the owning scene
@@ -27,6 +27,11 @@ const DEPTH = 1000; // above everything else in the owning scene
  * ringed by a second Graphics that only the scroll camera renders, and are
  * scrolled into view when focused. `onVertical(dir)`, when given, takes the
  * up / down presses instead of the list (those overlays scroll their text).
+ *
+ * A d-pad / stick press moves spatially: to the nearest visible item in that
+ * direction (focusNearest); when nothing lies that way it falls back to the
+ * list order (focusStep, wrapping), so every item stays reachable and the
+ * edges wrap around.
  */
 export function createFocus(scene, t, { items = [], scrolled = null, onVertical = null } = {}) {
   let list = [];
@@ -117,7 +122,10 @@ export function createFocus(scene, t, { items = [], scrolled = null, onVertical 
       index = i >= 0 && i < list.length ? i : -1;
       draw();
     },
-    /** Step the list (focusStep), skipping hidden items; from nothing focused the first press lands on an end. */
+    /**
+     * Move the ring: the nearest visible item in that direction (focusNearest), else step the
+     * list (focusStep, wrapping) skipping hidden items; from nothing focused the first press lands on an end.
+     */
     move(dir) {
       if (onVertical && (dir === 'up' || dir === 'down')) {
         onVertical(dir);
@@ -125,8 +133,16 @@ export function createFocus(scene, t, { items = [], scrolled = null, onVertical 
         return;
       }
       if (!list.length) return;
-      let next = focusStep(index, list.length, dir);
-      for (let n = 0; n < list.length && !visible(list[next]); n += 1) next = focusStep(next, list.length, dir);
+      let next = -1;
+      const current = list[index];
+      if (current && visible(current)) {
+        const candidates = list.map((item, i) => ({ index: i, item })).filter((c) => c.index !== index && visible(c.item)).map((c) => ({ index: c.index, rect: bounds(c.item) }));
+        next = focusNearest(bounds(current), candidates, dir);
+      }
+      if (next < 0) {
+        next = focusStep(index, list.length, dir);
+        for (let n = 0; n < list.length && !visible(list[next]); n += 1) next = focusStep(next, list.length, dir);
+      }
       index = visible(list[next]) ? next : -1;
       draw();
     },

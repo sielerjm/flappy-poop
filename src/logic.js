@@ -1272,6 +1272,39 @@ export function focusStep(index, count, dir) {
   return (from + (back ? -1 : 1) + count) % count;
 }
 
+/**
+ * Spatial step for the focus ring: among `candidates` ([{ index, rect }], rect = { x, y,
+ * width, height }, top-left origin) the one whose centre lies in direction `dir` from
+ * `from` (a rect) with the lowest score = distance along the direction + 2 × distance
+ * across it, so an item straight ahead beats a nearer diagonal one. A candidate must be
+ * at least 1 px beyond the current centre along `dir`. −1 when nothing lies that way
+ * (the ring then falls back to the list order, focusStep).
+ */
+export function focusNearest(from, candidates, dir) {
+  if (!from || !Array.isArray(candidates)) return -1;
+  const cx = from.x + from.width / 2;
+  const cy = from.y + from.height / 2;
+  const axis = dir === 'up' || dir === 'down' ? 'y' : 'x';
+  const sign = dir === 'up' || dir === 'left' ? -1 : 1;
+  let best = -1;
+  let bestScore = Infinity;
+  for (const c of candidates) {
+    const r = c?.rect;
+    if (!r) continue;
+    const dx = r.x + r.width / 2 - cx;
+    const dy = r.y + r.height / 2 - cy;
+    const along = (axis === 'y' ? dy : dx) * sign;
+    const across = Math.abs(axis === 'y' ? dx : dy);
+    if (along < 1) continue;
+    const score = along + 2 * across;
+    if (score < bestScore) {
+      bestScore = score;
+      best = c.index;
+    }
+  }
+  return best;
+}
+
 /** The focus ring rectangle: the button's bounds grown by ringPad on every side. */
 export function focusRingLayout(bounds, t) {
   const pad = t.focus.ringPad;

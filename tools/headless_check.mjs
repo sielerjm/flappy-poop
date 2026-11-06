@@ -693,15 +693,14 @@ export async function run(url = DEFAULT_URL) {
       const r3 = await ring();
       await padNav('up');
       const r4 = await ring();
-      ok(r2.index === 0 && r3.index === (await slot('pause')) && r4.index === (await slot('settings')) && r4.state === 'paused', `right wraps to the first slot (${r2.index}), left comes back (${r3.index}), up steps back like left (${r4.index}), still paused`);
+      ok(r2.index === 0 && r3.index === (await slot('pause')) && r4.index === (await slot('settings')) && r4.state === 'paused', `right from ⏸ wraps to the first slot (${r2.index}), left from ⓘ wraps back to ⏸ (${r3.index}), up from ⏸ with nothing above (the ready items are hidden mid-run) falls back to the list (${r4.index}), still paused`);
       await padNav('down');
       await padDown(G.select);
       await sleep(100);
       const r5 = await ring();
       ok(r5.state === 'playing' && !r5.shown && !r5.visible, 'A on ⏸ resumes and the ring is gone');
-      await padNav('down');
-      await padNav('left');
-      await padNav('left');
+      await padNav('down'); // pauses and rings ⏸
+      await padNav('left'); // spatial: the nearest button to the left of ⏸ is 🔇 (one row down)
       const mm0 = await muted();
       await padDown(G.select);
       const r6 = await ring();
@@ -727,6 +726,38 @@ export async function run(url = DEFAULT_URL) {
       await padDown(G.back);
       const r10 = await ring();
       ok(r9.state === 'ready' && r9.shown && r9.index === 0 && r10.state === 'ready' && !r10.shown, 'on the ready screen a nav press rings the tray without starting; B hides it');
+      // Spatial moves on the ready screen: sideways along the tray, up from ⚙ to ⏸, then to the toilet toggle
+      // and the ?, A on each (the toggle flips, the ? opens How to play), down from the ? back to ⏸.
+      {
+        await padNav('right'); // the hidden ring kept ⓘ (index 0): right moves to 🌐 and shows
+        const s1 = await ring();
+        await evaluate(`${play}.focus.setIndex(${await slot('settings')}), true`);
+        await padNav('up');
+        const s2 = await ring();
+        await padNav('up');
+        const s3 = await ring();
+        const t0 = await evaluate(`${play}.toilet`);
+        await padDown(G.select);
+        const t1 = await evaluate(`${play}.toilet`);
+        await padDown(G.select);
+        const t2 = await evaluate(`${play}.toilet`);
+        await padNav('up');
+        const s4 = await ring();
+        await padDown(G.select);
+        await sleep(200);
+        const howOpen = await active('HowTo');
+        await padDown(G.back);
+        await sleep(200);
+        const howClosed = !(await active('HowTo'));
+        const s5 = await ring();
+        await padNav('down');
+        const s6 = await ring();
+        await padDown(G.back);
+        const idOf = async (i) => evaluate(`${play}.focus.items[${i}]?.id ?? null`);
+        ok(s1.index === (await slot('lang')) && s2.index === (await slot('pause')) && s3.index === (await slot('toilet')) && s4.index === (await slot('howto')), `ready screen: right from ⓘ is 🌐 (${await idOf(s1.index)}), up from ⚙ is ⏸ (${await idOf(s2.index)}), up again the toilet toggle (${await idOf(s3.index)}), up again the ? (${await idOf(s4.index)})`);
+        ok(t1 === !t0 && t2 === t0 && (await playState()) === 'ready', `A on the toggle flips toilet mode (${t0} → ${t1} → ${t2}) without starting`);
+        ok(howOpen && howClosed && s5.shown && s5.index === (await slot('howto')) && s6.index === (await slot('pause')) && (await playState()) === 'ready', `A on the ? opens How to play, B closes it with the ring still on the ? (${s5.shown}); down from the ? lands on ⏸ in its column (${await idOf(s6.index)})`);
+      }
       await padNav('right');
       const muteBtn = await evaluate(`JSON.stringify({ x: ${play}.tray.buttons.mute.x, y: ${play}.tray.buttons.mute.y })`).then(JSON.parse);
       const mc0 = await muted();
@@ -998,13 +1029,14 @@ export async function run(url = DEFAULT_URL) {
           await sleep(100);
           file = await evaluate(`Boolean(${over}.shareFile)`);
         }
-        await evaluate(`${play}.padNav('right'), true`);
-        const r1 = await ring();
-        await evaluate(`${play}.padNav('right'), true`);
-        const r2 = await ring();
-        ok(file && r1.id === 'share' && r2.id === 'info', `right walks Home → Share → the tray (${r1.id}, ${r2.id})`);
-        await evaluate(`(() => { window.__padShared = 0; const def = (k, v) => Object.defineProperty(navigator, k, { value: v, configurable: true, writable: true }); def('canShare', () => true); def('share', () => { window.__padShared += 1; return Promise.resolve(); }); return true; })()`);
         await evaluate(`${play}.padNav('left'), true`);
+        const r1 = await ring();
+        await evaluate(`${play}.padNav('down'), true`);
+        const r2 = await ring();
+        const trayIds = ['info', 'lang', 'feedback', 'leaderboard', 'mute', 'settings'];
+        ok(file && r1.id === 'share' && trayIds.includes(r2.id), `left from Home is Share, down from Share is the tray (${r1.id}, ${r2.id})`);
+        await evaluate(`(() => { window.__padShared = 0; const def = (k, v) => Object.defineProperty(navigator, k, { value: v, configurable: true, writable: true }); def('canShare', () => true); def('share', () => { window.__padShared += 1; return Promise.resolve(); }); return true; })()`);
+        await evaluate(`${over}.focus.setIndex(${over}.focus.indexOf('share')), true`);
         await evaluate(`${play}.padDown(${G.select}), true`);
         await sleep(200);
         const shared = await evaluate(`JSON.stringify({ n: window.__padShared, over: __flappy.scene.isActive('Over') })`).then(JSON.parse);

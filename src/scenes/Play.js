@@ -317,8 +317,16 @@ export class Play extends Phaser.Scene {
     this.tray = createTray(this, { muted: isMuted(), col: this.col });
     // Controller focus ring over the tray, in screen order; A on a ringed button runs the
     // same handleChrome(id) its tap runs. Shown by a d-pad press (onPadAction), never by touch.
+    // Ready-screen extras after the tray (so the first ring lands on ⓘ): the toilet toggle and the
+    // ? (How to play), both only while the ready screen is up. Save / Load User and the profile
+    // button stay off the ring on purpose: they need the keyboard.
+    const onReady = () => this.state === 'ready' && !this.launching;
     this.focus = createFocus(this, T, {
-      items: ['info', 'lang', 'feedback', 'leaderboard', 'mute', 'settings', 'pause'].map((id) => ({ id, obj: this.tray.buttons[id], activate: () => this.handleChrome(id) })),
+      items: [
+        ...['info', 'lang', 'feedback', 'leaderboard', 'mute', 'settings', 'pause'].map((id) => ({ id, obj: this.tray.buttons[id], activate: () => this.handleChrome(id) })),
+        { id: 'toilet', box: this.readyBoxes.toilet, visible: onReady, activate: () => this.toggleToilet() },
+        { id: 'howto', box: this.readyBoxes.howto, visible: onReady, activate: () => this.handleChrome('howto') },
+      ],
     });
 
     // Bean power button in the tray's centre slot: shown while charged, pulses

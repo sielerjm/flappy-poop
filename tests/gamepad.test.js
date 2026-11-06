@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { TUNING as T } from '../src/config.js';
-import { padAction, stickNav, focusStep, focusRingLayout, padIntent } from '../src/logic.js';
+import { padAction, stickNav, focusStep, focusNearest, focusRingLayout, padIntent, trayLayout, readyLayout } from '../src/logic.js';
 
 const STATES = ['ready', 'playing', 'paused', 'dead'];
 const TOPS = ['play', 'over', 'overlay'];
@@ -153,4 +153,57 @@ test('padIntent: Menu and RT only reach Play', () => {
       }
     }
   }
+});
+
+// Spatial navigation on the real 720 px ready-screen geometry: the tray (ⓘ 🌐 💬 · 🏆 🔇 ⚙ along the
+// bottom, ⏸ above ⚙), the toilet toggle mid-screen and the ? top-right.
+function readyCandidates() {
+  const tray = trayLayout(720, 1280, T);
+  const ready = readyLayout(720, 1280, T);
+  const box = (b) => ({ x: b.x - b.size / 2, y: b.y - b.size / 2, width: b.size, height: b.size });
+  const rect = (b) => ({ x: b.x - b.width / 2, y: b.y - b.height / 2, width: b.width, height: b.height });
+  const items = [
+    ['info', box(tray.info)], ['lang', box(tray.lang)], ['feedback', box(tray.feedback)],
+    ['leaderboard', box(tray.buttons[0])], ['mute', box(tray.buttons[1])], ['settings', box(tray.buttons[2])], ['pause', box(tray.pause)],
+    ['toilet', rect(ready.toilet)], ['howto', rect(ready.howto)],
+  ];
+  const ids = items.map(([id]) => id);
+  const rects = items.map(([, r]) => r);
+  const from = (id) => rects[ids.indexOf(id)];
+  const others = (id) => items.map(([, r], index) => ({ index, rect: r })).filter((c) => ids[c.index] !== id);
+  return { ids, from, others };
+}
+
+test('focusNearest: the d-pad moves to the nearest button in that direction', () => {
+  const { ids, from, others } = readyCandidates();
+  const go = (id, dir) => ids[focusNearest(from(id), others(id), dir)] ?? null;
+  assert.equal(go('settings', 'up'), 'pause', 'up from ⚙ is the ⏸ above it, not the button to its left');
+  assert.equal(go('settings', 'left'), 'mute');
+  assert.equal(go('settings', 'right'), null, 'nothing right of ⚙');
+  assert.equal(go('settings', 'down'), null, 'nothing below ⚙');
+  assert.equal(go('pause', 'down'), 'settings');
+  assert.equal(go('pause', 'left'), 'mute', 'left from ⏸: 🔇 (104 + 2×104) beats 🏆 (208 + 2×104)');
+  assert.equal(go('info', 'right'), 'lang');
+  assert.equal(go('feedback', 'right'), 'leaderboard', 'across the tray gap');
+  assert.equal(go('info', 'left'), null);
+  assert.equal(go('pause', 'up'), 'toilet', 'up from ⏸: the toggle (308 + 2×300) beats the ? (1020 + 2×40)');
+  assert.equal(go('toilet', 'up'), 'howto');
+  assert.equal(go('howto', 'down'), 'pause', 'down from the ?: ⏸ in the same column beats the nearer toggle off to the side');
+  assert.ok(['feedback', 'leaderboard'].includes(go('toilet', 'down')), 'down from the centred toggle: one of the two tray buttons nearest to straight below (a tie, 92 px either side)');
+});
+
+test('focusNearest: straight ahead beats a nearer diagonal; level items do not count; edge cases', () => {
+  const sq = (x, y) => ({ x: x - 20, y: y - 20, width: 40, height: 40 });
+  const from = sq(100, 500);
+  const cands = [
+    { index: 0, rect: sq(100, 200) }, // straight above, 300 away
+    { index: 1, rect: sq(220, 380) }, // diagonal, 120 up but 120 across: 120 + 240 = 360 > 300
+    { index: 2, rect: sq(300, 500) }, // level: not 'up'
+  ];
+  assert.equal(focusNearest(from, cands, 'up'), 0);
+  assert.equal(focusNearest(from, cands, 'right'), 2, 'level is fine sideways');
+  assert.equal(focusNearest(from, cands, 'down'), -1);
+  assert.equal(focusNearest(from, [], 'up'), -1);
+  assert.equal(focusNearest(null, cands, 'up'), -1);
+  assert.equal(focusNearest(from, [{ index: 3, rect: sq(100, 499.5) }], 'up'), -1, 'half a pixel is level, not above');
 });
