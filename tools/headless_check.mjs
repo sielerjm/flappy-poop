@@ -677,7 +677,7 @@ export async function run(url = DEFAULT_URL) {
       // press shows the ring without starting, B hides it, A then starts; a real mouse click ends
       // controller mode and hides the ring.
       const padNav = (dir) => evaluate(`${play}.padNav('${dir}'), true`);
-      const ring = () => evaluate(`JSON.stringify({ shown: ${play}.focus.shown, index: ${play}.focus.index, visible: ${play}.focus.shown && ${play}.children.list.some((c) => c.type === 'Graphics' && c.depth === 1000 && c.visible), state: ${play}.state, mode: ${play}.registry.get('padMode') ?? null })`).then(JSON.parse);
+      const ring = () => evaluate(`JSON.stringify({ shown: ${play}.focus.shown, index: ${play}.focus.index, visible: ${play}.focus.shown && ${play}.children.list.some((c) => c.type === 'Graphics' && c.depth === 1000 && c.visible), fillUnder: (() => { const p = ${play}; const item = p.focus.items[p.focus.index]; const f = p.focus.fill; if (!item?.obj || !f) return null; const l = p.children.list; return f.visible && f.depth === item.obj.depth && l.indexOf(f) < l.indexOf(item.obj); })(), state: ${play}.state, mode: ${play}.registry.get('padMode') ?? null })`).then(JSON.parse);
       const slot = (id) => evaluate(`${play}.focus.indexOf('${id}')`);
       await padDown(G.back);
       await sleep(100);
@@ -686,6 +686,7 @@ export async function run(url = DEFAULT_URL) {
       await sleep(100);
       const r1 = await ring();
       ok(r0.state === 'playing' && !r0.shown && r1.state === 'paused' && r1.shown && r1.visible && r1.index === (await slot('pause')), `a d-pad press mid-run pauses and rings ⏸ (slot ${r1.index})`);
+      ok(r1.fillUnder === true, 'the ring\'s white fill sits under the ringed button (same depth, earlier in the display list), so the button draws over it');
       await padNav('right');
       const r2 = await ring();
       await padNav('left');

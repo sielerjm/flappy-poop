@@ -4,12 +4,15 @@ const PINK = 0xe85e96;
 const DEPTH = 1000; // above everything else in the owning scene
 
 /**
- * The controller focus ring: a pulsing pink rounded outline over a faint white
- * fill (focus.fillAlpha, so it lifts off the villi) around one of a
- * scene's buttons, walked by the d-pad / sticks and pressed by A. Items are
+ * The controller focus ring: a pulsing pink rounded outline (depth 1000) around
+ * one of a scene's buttons, over a faint white fill (focus.fillAlpha) that sits
+ * in the display list directly UNDER the focused object, so the button's own art
+ * draws on top and only the margin around it lightens. Items are walked by the d-pad / sticks and pressed by A. Items are
  * { id, obj | box, activate, visible?, scrolled? }: obj is any Game Object
- * with getBounds() (a tray circle, a Text link, a zone), box a centred layout
- * rect { x, y, width, height } for chrome drawn by createButton, visible() an
+ * with getBounds() (a tray circle, a Text link, a zone; a Zone has no art of its
+ * own, so it gets the outline only), box a centred layout rect { x, y, width,
+ * height } for chrome drawn by createButton (the fill then sits just under
+ * createButton's depth, item.depth, default 20), visible() an
  * optional gate (Over's Share before its card exists), and activate() the
  * exact function that button's tap already runs. Nothing on the buttons
  * themselves changes.
@@ -31,9 +34,11 @@ export function createFocus(scene, t, { items = [], scrolled = null, onVertical 
   let shown = false;
   let destroyed = false;
   const ring = scene.add.graphics().setDepth(DEPTH).setVisible(false);
+  const fill = scene.add.graphics().setVisible(false); // depth set per item: just under the focused object
   const ringScrolled = scrolled ? scrolled.addScrolled(scene.add.graphics().setDepth(DEPTH).setVisible(false)) : null;
+  const fillScrolled = scrolled ? scrolled.addScrolled(scene.add.graphics().setVisible(false)) : null;
   const pulse = scene.tweens.add({
-    targets: ringScrolled ? [ring, ringScrolled] : [ring],
+    targets: [ring, fill, ringScrolled, fillScrolled].filter(Boolean),
     scale: { from: 1, to: t.focus.pulseScale },
     duration: t.focus.pulseMs,
     yoyo: true,
@@ -42,25 +47,34 @@ export function createFocus(scene, t, { items = [], scrolled = null, onVertical 
   });
 
   function draw() {
-    ring.clear();
-    ringScrolled?.clear();
+    for (const g of [ring, fill, ringScrolled, fillScrolled]) g?.clear().setVisible(false);
     const item = list[index];
-    if (!item || !shown) {
-      ring.setVisible(false);
-      ringScrolled?.setVisible(false);
-      return;
-    }
+    if (!item || !shown) return;
     const b = bounds(item);
     const r = focusRingLayout(b, t);
-    const g = item.scrolled && ringScrolled ? ringScrolled : ring;
+    const useScrolled = Boolean(item.scrolled && ringScrolled);
+    const g = useScrolled ? ringScrolled : ring;
+    const f = useScrolled ? fillScrolled : fill;
     // Drawn around the Graphics' own origin so the pulse scales about the centre.
     g.setPosition(r.x + r.width / 2, r.y + r.height / 2);
-    g.fillStyle(0xffffff, t.focus.fillAlpha);
-    g.fillRoundedRect(-r.width / 2, -r.height / 2, r.width, r.height, r.radius);
     g.lineStyle(t.focus.ringWidth, PINK, 1);
     g.strokeRoundedRect(-r.width / 2, -r.height / 2, r.width, r.height, r.radius);
-    ring.setVisible(g === ring);
-    ringScrolled?.setVisible(g === ringScrolled);
+    g.setVisible(true);
+    // The fill goes under the button: same depth as the focused object and directly below it in
+    // the display list (depth sorting is stable), or just under createButton's depth for a box.
+    const zone = item.obj?.type === 'Zone';
+    if (!zone && t.focus.fillAlpha > 0) {
+      f.setPosition(g.x, g.y);
+      if (item.obj) {
+        f.setDepth(item.obj.depth);
+        scene.children.moveBelow(f, item.obj);
+      } else {
+        f.setDepth((item.depth ?? 20) - 0.5);
+      }
+      f.fillStyle(0xffffff, t.focus.fillAlpha);
+      f.fillRoundedRect(-r.width / 2, -r.height / 2, r.width, r.height, r.radius);
+      f.setVisible(true);
+    }
     if (item.scrolled && scrolled?.scrollTo) scrolled.scrollTo(b.y, b.y + b.height);
   }
 
@@ -86,6 +100,10 @@ export function createFocus(scene, t, { items = [], scrolled = null, onVertical 
     },
     get items() {
       return list;
+    },
+    /** The fill Graphics (probes: it must sit under the focused object). */
+    get fill() {
+      return fill;
     },
     setItems(next) {
       list = next.filter((i) => i && (i.obj || i.box));
@@ -143,7 +161,9 @@ export function createFocus(scene, t, { items = [], scrolled = null, onVertical 
       scene.input.off('pointerdown', onPointer);
       pulse.remove();
       ring.destroy();
+      fill.destroy();
       ringScrolled?.destroy();
+      fillScrolled?.destroy();
       list = [];
     },
   };

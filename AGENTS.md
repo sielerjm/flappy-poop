@@ -143,7 +143,8 @@ src/
                             fallLookVy px/s down), fart envelope (pipeSpacing,
                             fartPeakMul, fartMul, fartRemainingDistance), fartFloat
                             (wave + tilt), hsvToRgb / rainbowHue, glowAlphaAt /
-                            glowStops, sprite angle, retry
+                            glowStops, sprite angle, VERSION (bump it when art
+                            under an existing file name changes: Boot's ?v=), retry
                             lockout, levels (levelPipes, levelEnd, levelFor, isFinalLevel,
                             levelSpeed, levelName, levelColor, levelProgress,
                             levelBarLayout, lerpColor),
@@ -206,8 +207,12 @@ src/
   ui/
     focus.js                createFocus(scene, t, { items, scrolled, onVertical }):
                             the controller focus ring, a pulsing pink rounded
-                            outline over a faint white fill (focus.fillAlpha;
-                            Graphics, depth 1000) around one item of a
+                            outline (Graphics, depth 1000) around one item of a
+                            scene over a faint white fill (focus.fillAlpha) that
+                            is moved in the display list to sit directly under
+                            the focused object (same depth; a box item: just
+                            under createButton's depth; a Zone: no fill), so the
+                            button's art draws over it; the ring rings one item of a
                             scene; items are { id, obj | box, activate, visible?,
                             scrolled? }, pressable(id, obj) wraps a Game Object
                             whose own pointerdown is the press. Shows only in
@@ -632,8 +637,11 @@ tools/
   make_placeholders.py      Regenerates pipe / villi / ground only (icons moved to
                             process_art.py); villi.png carries a baked ceiling
                             strip (ceiling_strip: the ground's mirror along the
-                            top edge, background only). Must not overwrite
-                            poop.png. Run only when you intend to.
+                            top edge, background only); fingers run off the
+                            edges / behind the strips (villi_band min_frac) and
+                            their lumen-side tips undulate (BACK_WAVE on the
+                            fringes, FRONT_WAVE in the strips' TIP_ZONE). Must
+                            not overwrite poop.png. Run only when you intend to.
   process_art.py            Crops assets/src/ drawings into 384x384 contract PNGs
                             (drawn at spriteDisplayScale 0.25 → 96 logical px);
                             the poop set (alive / dead / stink1 / stink2 / falling /

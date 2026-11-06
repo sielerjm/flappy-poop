@@ -71,28 +71,44 @@ def pipe(path, w=128, h=1280, cap_h=56):
     img.save(path)
 
 
-def villi_band(d, x0, x1, y_base, height, up, rng):
-    """Draw a fringe of finger-like villi between x0..x1. up=True grows upward from y_base."""
+def villi_band(d, x0, x1, y_base, height, up, rng, min_frac=0.55, wave=None, tile_w=720):
+    """Draw a fringe of finger-like villi between x0..x1. up=True grows upward from y_base.
+    Each finger is height × uniform(min_frac, 1) long; pick height / min_frac so the far,
+    rounded ends land past the image edge or behind a strip (villi, not teeth). The near
+    (lumen-side) ends sit 20 px past y_base plus `wave` = (amp, periods, phase): a sine along
+    x with a whole number of periods per tile_w (so the horizontal tile seam matches), plus a
+    little per-finger jitter, so the tips undulate instead of lining up on a ruler."""
+    amp, periods, phase = wave or (0, 1, 0)
     x = x0
     while x < x1:
         w = rng.randint(28, 48)
-        h = int(height * rng.uniform(0.55, 1.0))
+        h = int(height * rng.uniform(min_frac, 1.0))
+        xc = x + w / 2
+        o = amp * math.sin(2 * math.pi * periods * xc / tile_w + phase) + (rng.uniform(-amp, amp) * 0.15 if amp else 0)
         if up:
-            box = (x, y_base - h, x + w, y_base + 20)
+            box = (x, y_base - h, x + w, y_base + 20 + o)
         else:
-            box = (x, y_base - 20, x + w, y_base + h)
+            box = (x, y_base - 20 - o, x + w, y_base + h)
         d.rounded_rectangle(box, radius=w // 2, fill=VILLI, outline=VILLI_DARK, width=3)
         x += w + rng.randint(3, 8)
 
 
+FRONT_WAVE = (8, 5, math.pi / 2)  # shallow undulation of the strips' finger tips (±8 px, 5 waves per tile)
+BACK_WAVE = (24, 3, 0.0)  # deeper undulation of the fringes' tips (±24 px, 3 waves per tile)
+TIP_ZONE = 16  # px of the strips' lumen-side edge left for the undulating tips (2 × the front amplitude)
+
+
 def ceiling_strip(d, w, strip_h=128, cream_h=16):
-    """The ground strip's vertical mirror, baked into the overlay's top edge: a dark band,
-    a cream line along its lower edge, and fingers growing up from it (same seed as the
-    ground so the two rows read as one gut wall). Background only: pipes and the poop draw
-    over it, so the ceiling kill line and the gap margin stay as they are."""
-    d.rectangle((0, 0, w, strip_h), fill=VILLI_DARK)
-    d.rectangle((0, strip_h - cream_h, w, strip_h), fill=CREAM)
-    villi_band(d, -40, w + 40, strip_h - 20, 108, up=True, rng=random.Random(11))
+    """The ground strip's vertical mirror, baked into the overlay's top edge: a dark band
+    (strip_h − TIP_ZONE tall), a cream line along its lower edge, and fingers growing up from
+    it whose tips undulate shallowly in the TIP_ZONE below the band (same seed as the ground
+    so the two rows read as one gut wall). Background only: pipes and the poop draw over it,
+    so the ceiling kill line and the gap margin stay as they are."""
+    band = strip_h - TIP_ZONE
+    d.rectangle((0, 0, w, band), fill=VILLI_DARK)
+    d.rectangle((0, band - cream_h, w, band), fill=CREAM)
+    # Tips in [band, strip_h]; far ends run past the top edge (≥ 144 px from the base): no rounded tops on screen.
+    villi_band(d, -40, w + 40, band - 20 + TIP_ZONE / 2, 240, up=True, rng=random.Random(11), min_frac=0.6, wave=FRONT_WAVE, tile_w=w)
 
 
 def villi(path, w=720, h=1280):
@@ -108,20 +124,24 @@ def villi(path, w=720, h=1280):
     bot_base = h - fringe - cream_h // 2
     d.rectangle((0, top_base - cream_h // 2, w, top_base + cream_h // 2), fill=CREAM)
     d.rectangle((0, bot_base - cream_h // 2, w, bot_base + cream_h // 2), fill=CREAM)
-    # villi fringes (drawn wider than the image so the horizontal tile edge matches)
-    villi_band(d, -40, w + 40, top_base, fringe, up=True, rng=random.Random(7))
-    villi_band(d, -40, w + 40, bot_base, fringe, up=False, rng=random.Random(7))
+    # villi fringes (drawn wider than the image so the horizontal tile edge matches); every finger
+    # is ≥ 195 px so its rounded far end sits behind the ceiling strip / the ground strip, and the
+    # tips undulate ±24 px around the cream band (BACK_WAVE).
+    villi_band(d, -40, w + 40, top_base, fringe, up=True, rng=random.Random(7), min_frac=0.75, wave=BACK_WAVE, tile_w=w)
+    villi_band(d, -40, w + 40, bot_base, fringe, up=False, rng=random.Random(7), min_frac=0.75, wave=BACK_WAVE, tile_w=w)
     # Front row at the top, in front of the fringe, as ground.png is in front of the bottom one.
     ceiling_strip(d, w)
     img.save(path)
 
 
 def ground(path, w=720, h=128):
-    img = Image.new("RGBA", (w, h), VILLI_DARK)
+    """The floor strip: transparent TIP_ZONE at the top for the undulating finger tips, then the
+    cream line and the dark band; fingers run past the bottom edge (no rounded bottoms on screen)."""
+    img = Image.new("RGBA", (w, h), (0, 0, 0, 0))
     d = ImageDraw.Draw(img)
-    d.rectangle((0, 0, w, 16), fill=CREAM)
-    # Fill most of the strip with larger villi fingers
-    villi_band(d, -40, w + 40, 20, 108, up=False, rng=random.Random(11))
+    d.rectangle((0, TIP_ZONE, w, h), fill=VILLI_DARK)
+    d.rectangle((0, TIP_ZONE, w, TIP_ZONE + 16), fill=CREAM)
+    villi_band(d, -40, w + 40, TIP_ZONE + 20 - TIP_ZONE / 2, 240, up=False, rng=random.Random(11), min_frac=0.6, wave=FRONT_WAVE, tile_w=w)
     img.save(path)
 
 
