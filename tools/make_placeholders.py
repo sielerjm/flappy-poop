@@ -121,8 +121,9 @@ def villi(path, w=720, h=1280):
     rectangle under the overlay)."""
     img = Image.new("RGBA", (w, h), (0, 0, 0, 0))
     d = ImageDraw.Draw(img)
-    # Fringes ~260px (~20% each end) so the open lumen stays majority clear
-    fringe = 260
+    # Fringes ~175 px (~14 % each end; a third shorter than the first cut) so the open lumen stays clear.
+    # Every finger is ≥ 0.75 × fringe = 131 px, which still reaches behind the strips' dark bands.
+    fringe = 175
     cream_h = 28
     top_base = fringe + cream_h // 2
     bot_base = h - fringe - cream_h // 2
@@ -133,8 +134,8 @@ def villi(path, w=720, h=1280):
     d.rectangle((0, 0, w, top_bar), fill=CREAM)
     d.rectangle((0, bot_bar, w, h), fill=CREAM)
     # villi fringes (drawn wider than the image so the horizontal tile edge matches); every finger
-    # is ≥ 195 px so its rounded far end sits behind the ceiling strip / the ground strip, and the
-    # tips undulate ±24 px around the cream band (BACK_WAVE).
+    # is ≥ 131 px so its rounded far end sits behind the ceiling strip / the ground strip, and the
+    # tips undulate ±24 px around the backdrop's edge (BACK_WAVE).
     villi_band(d, -40, w + 40, top_base, fringe, up=True, rng=random.Random(7), min_frac=0.75, wave=BACK_WAVE, tile_w=w)
     villi_band(d, -40, w + 40, bot_base, fringe, up=False, rng=random.Random(7), min_frac=0.75, wave=BACK_WAVE, tile_w=w)
     # Front row at the top, in front of the fringe, as ground.png is in front of the bottom one.
