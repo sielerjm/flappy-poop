@@ -1,5 +1,6 @@
-import { GAME_WIDTH, GAME_HEIGHT } from '../config.js';
+import { GAME_WIDTH, GAME_HEIGHT, TUNING as T } from '../config.js';
 import { VERSION, chromeIntent, overlayOutsideHit } from '../logic.js';
+import { createFocus, pressable } from '../ui/focus.js';
 import { t, metaFontSize, levelLabel } from '../i18n.js';
 import { MAX_TOP, formatScore } from '../save.js';
 
@@ -61,6 +62,8 @@ export class Scores extends Phaser.Scene {
       if (this.scene.isActive('Feedback')) return;
       this.close();
     });
+    this.focus = createFocus(this, T, { items: [pressable('close', close)] });
+    this.focus.show(); // only under a controller (registry padMode)
   }
 
   close() {

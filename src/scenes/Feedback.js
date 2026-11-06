@@ -1,5 +1,6 @@
-import { GAME_WIDTH, GAME_HEIGHT } from '../config.js';
+import { GAME_WIDTH, GAME_HEIGHT, TUNING as T } from '../config.js';
 import { VERSION, chromeIntent, overlayOutsideHit, issueUrl, openExternalUrl } from '../logic.js';
+import { createFocus, pressable } from '../ui/focus.js';
 import { t, metaFontSize } from '../i18n.js';
 
 const STYLE = { fontFamily: 'sans-serif', fontStyle: 'bold', color: '#ffffff', align: 'center' };
@@ -57,6 +58,8 @@ export class Feedback extends Phaser.Scene {
     const close = this.add.text(cx + 256, cy - 316, '✕', { ...STYLE, fontSize: '48px' }).setOrigin(0.5).setInteractive({ useHandCursor: true });
     close.on('pointerdown', () => this.close());
     this.input.keyboard?.on('keydown-ESC', () => this.close());
+    this.focus = createFocus(this, T, { items: [pressable('close', close), pressable('bug', bug), pressable('feature', feature)] });
+    this.focus.show(); // only under a controller (registry padMode)
   }
 
   openIssue(kind) {

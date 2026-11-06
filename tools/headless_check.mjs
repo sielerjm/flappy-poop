@@ -618,9 +618,12 @@ export async function run(url = DEFAULT_URL) {
       ok(m1 === !m0 && (await muted()) === m0, `Y mutes (${m0} → ${m1}) and unmutes`);
       await chrome('leaderboard');
       await sleep(3000);
+      const lbRing = await evaluate(`JSON.stringify({ shown: __flappy.scene.getScene('Leaderboard').focus.shown, id: __flappy.scene.getScene('Leaderboard').focus.items[0]?.id })`).then(JSON.parse);
       await padDown(G.select);
-      await sleep(200);
-      ok((await playState()) === 'paused' && (await active('Leaderboard')), 'A over an open overlay changes nothing');
+      await sleep(400);
+      ok(lbRing.shown && lbRing.id === 'close' && (await playState()) === 'paused' && !(await active('Leaderboard')), 'an overlay opened under the pad is ringed on ✕; A closes it and leaves the run paused');
+      await chrome('leaderboard');
+      await sleep(3000);
       await padDown(G.back);
       await sleep(400);
       ok((await playState()) === 'paused' && !(await active('Leaderboard')), 'B closes the overlay and leaves the run paused');
@@ -702,6 +705,83 @@ export async function run(url = DEFAULT_URL) {
       ok((await playState()) === 'playing', 'A on the ready screen starts the run');
       await evaluate(`${play}.scene.restart(), true`);
       for (let i = 0; i < 40 && (await playState()) !== 'ready'; i += 1) await sleep(250);
+    }
+
+    // The controller inside the overlays. Opened under a pad, each one rings its ✕ at once; a nav
+    // press walks its rows (About / HowTo scroll on up / down instead); A is the row's own tap; B
+    // closes. Settings flips Sound, Language picks 简体中文 and back, Feedback opens the bug form
+    // (window.open stubbed), About reaches How to play and B unwinds the stack.
+    {
+      const G = TT.gamepad;
+      const padDown = (i) => evaluate(`${play}.padDown(${i}), true`);
+      const padNav = (dir) => evaluate(`${play}.padNav('${dir}'), true`);
+      const ring = (key) => evaluate(`JSON.stringify({ shown: __flappy.scene.getScene('${key}').focus.shown, id: __flappy.scene.getScene('${key}').focus.items[__flappy.scene.getScene('${key}').focus.index]?.id ?? null, offset: __flappy.scene.getScene('${key}').scroll?.offset ?? null })`).then(JSON.parse);
+      await evaluate(`${play}.registry.set('padMode', true), true`);
+      for (const [input, key] of Object.entries(OVERLAYS)) {
+        await chrome(input);
+        await sleep(key === 'Leaderboard' ? 4000 : 600);
+        const r0 = await ring(key);
+        await padNav('down');
+        await sleep(100);
+        const r1 = await ring(key);
+        const scrolls = key === 'About' || key === 'HowTo';
+        // About's English content fits its panel, so it has nothing to scroll; HowTo always does.
+        const walked = scrolls ? r1.id === 'close' && (key === 'About' ? r1.offset <= 0 : r1.offset < 0) : ['Scores', 'Leaderboard'].includes(key) ? r1.id === 'close' : Boolean(r1.id) && r1.id !== 'close';
+        await padDown(G.back);
+        await sleep(400);
+        ok(r0.shown && r0.id === 'close' && walked && !(await active(key)), `${key}: opens ringed on ✕, down ${scrolls ? `scrolls (${r1.offset})` : `walks to ${r1.id}`}, B closes`);
+      }
+      // Settings: A on Sound flips the setting (and back).
+      await chrome('settings');
+      await sleep(600);
+      const sound0 = await evaluate(`${play}.settings.load().sound`);
+      await padNav('down');
+      await padDown(G.select);
+      const sound1 = await evaluate(`${play}.settings.load().sound`);
+      await padDown(G.select);
+      const sound2 = await evaluate(`${play}.settings.load().sound`);
+      await padDown(G.back);
+      await sleep(400);
+      ok(sound1 === !sound0 && sound2 === sound0 && !(await active('Settings')), `Settings: A on Sound flips it (${sound0} → ${sound1}) and back`);
+      // Language: walk to 简体中文, A picks it and closes; then back to English.
+      await chrome('lang');
+      await sleep(600);
+      await padNav('down');
+      await padNav('down');
+      const picked = await ring('Language');
+      await padDown(G.select);
+      await sleep(400);
+      const zh = await evaluate(`JSON.stringify({ locale: ${play}.getLocale(), open: __flappy.scene.isActive('Language') })`).then(JSON.parse);
+      await chrome('lang');
+      await sleep(600);
+      await padNav('down');
+      await padDown(G.select);
+      await sleep(400);
+      ok(picked.id === 'zh-Hans' && zh.locale === 'zh-Hans' && !zh.open && (await evaluate(`${play}.getLocale()`)) === 'en', 'Language: A on 简体中文 applies it and closes; A on English restores it');
+      // Feedback: A on Bug report opens the issue form.
+      await evaluate(`(() => { window.__opened = []; window.__realOpen = window.open; window.open = (u) => { window.__opened.push(u); return {}; }; return true; })()`);
+      await chrome('feedback');
+      await sleep(600);
+      await padNav('down');
+      await padDown(G.select);
+      const opened = await evaluate(`window.__opened`);
+      await evaluate(`(window.open = window.__realOpen, true)`);
+      await padDown(G.back);
+      await sleep(400);
+      ok(opened.length === 1 && /issues\/new/.test(opened[0]) && !(await active('Feedback')), `Feedback: A on Bug report opens ${opened[0]?.slice(0, 60)}…`);
+      // About: right reaches How to play (scrolled into view), A stacks HowTo, B unwinds both.
+      await chrome('info');
+      await sleep(600);
+      await padNav('right');
+      const link = await ring('About');
+      await padDown(G.select);
+      await sleep(600);
+      const stacked = (await active('HowTo')) && (await active('About'));
+      const howToRing = await ring('HowTo');
+      await padDown(G.back);
+      await sleep(400);
+      // How to play opened from About closes About with it (chromeIntent closeAbout), same as its ✕.
+      ok(link.id === 'howto' && link.offset <= 0 && stacked && howToRing.shown && howToRing.id === 'close' && !(await active('HowTo')) && !(await active('About')), `About: right reaches How to play (offset ${link.offset}), A opens it ringed, B closes both`);
     }
 
     // A game over must not change how later pipes are drawn: restart, start, spawn, check the frame.

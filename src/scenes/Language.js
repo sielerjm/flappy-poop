@@ -1,5 +1,6 @@
 import { GAME_WIDTH, GAME_HEIGHT, TUNING as T } from '../config.js';
 import { VERSION, createSettingsStore, chromeIntent, overlayOutsideHit } from '../logic.js';
+import { createFocus, pressable } from '../ui/focus.js';
 import { t, metaFontSize } from '../i18n.js';
 
 const STYLE = { fontFamily: 'sans-serif', fontStyle: 'bold', color: '#ffffff', align: 'center' };
@@ -30,6 +31,7 @@ export class Language extends Phaser.Scene {
       { id: 'en', label: t(locale, 'langEnglish'), y: cy - 50 },
       { id: 'zh-Hans', label: t(locale, 'langChinese'), y: cy + 90 },
     ];
+    const rowItems = [];
     for (const row of rows) {
       const mark = row.id === locale ? '✓  ' : '    ';
       const label = this.add
@@ -37,6 +39,7 @@ export class Language extends Phaser.Scene {
         .setOrigin(0.5)
         .setInteractive({ useHandCursor: true });
       label.on('pointerdown', () => this.pick(row.id));
+      rowItems.push(pressable(row.id, label));
     }
 
     this.add
@@ -54,6 +57,8 @@ export class Language extends Phaser.Scene {
       if (this.scene.isActive('Feedback')) return;
       this.close();
     });
+    this.focus = createFocus(this, T, { items: [pressable('close', close), ...rowItems] });
+    this.focus.show(); // only under a controller (registry padMode)
   }
 
   pick(next) {

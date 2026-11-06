@@ -1,5 +1,6 @@
-import { GAME_WIDTH, GAME_HEIGHT } from '../config.js';
+import { GAME_WIDTH, GAME_HEIGHT, TUNING as T } from '../config.js';
 import { VERSION, chromeIntent, overlayOutsideHit } from '../logic.js';
+import { createFocus, pressable } from '../ui/focus.js';
 import { t, howToItems, metaFontSize } from '../i18n.js';
 import { TOILET_EMOJI } from '../save.js';
 import { createScrollView } from '../ui/scrollView.js';
@@ -79,7 +80,7 @@ export class HowTo extends Phaser.Scene {
     });
 
     const feedbackY = lastBottom + 70;
-    sv.link(sv.add(this.add.text(cx, feedbackY, t(locale, 'feedbackLink'), { ...STYLE, fontSize: '36px', color: '#f8a0c8' }).setOrigin(0.5)), () =>
+    const feedbackLink = sv.link(sv.add(this.add.text(cx, feedbackY, t(locale, 'feedbackLink'), { ...STYLE, fontSize: '36px', color: '#f8a0c8' }).setOrigin(0.5)), () =>
       this.scene.get('Play')?.handleChrome('feedback'),
     );
 
@@ -100,6 +101,14 @@ export class HowTo extends Phaser.Scene {
       if (this.scene.isActive('Feedback')) return;
       this.close();
     });
+    // Controller: left / right walk ✕ and the feedback link (scrolled into view), up / down scroll the rows.
+    this.scroll = sv;
+    this.focus = createFocus(this, T, {
+      items: [pressable('close', close), pressable('feedback', feedbackLink, { event: 'pointerup', scrolled: true })],
+      scrolled: sv,
+      onVertical: (dir) => sv.scrollBy(dir === 'up' ? T.focus.scrollStepPx : -T.focus.scrollStepPx),
+    });
+    this.focus.show(); // only under a controller (registry padMode)
   }
 
   close() {

@@ -1,5 +1,6 @@
-import { GAME_WIDTH, GAME_HEIGHT } from '../config.js';
+import { GAME_WIDTH, GAME_HEIGHT, TUNING as T } from '../config.js';
 import { VERSION, LAST_UPDATED, chromeIntent, overlayOutsideHit } from '../logic.js';
+import { createFocus, pressable } from '../ui/focus.js';
 import { t, metaFontSize } from '../i18n.js';
 import { createScrollView } from '../ui/scrollView.js';
 
@@ -45,11 +46,11 @@ export class About extends Phaser.Scene {
     stack('aboutCredits', { ...MUTED, fontSize: '24px', wordWrap: wrap, lineSpacing: 8 }, 48);
 
     // Links and meta flow after the credits so longer credit blocks push them down.
-    sv.link(sv.add(this.add.text(cx, y, t(locale, 'howToPlay'), { ...STYLE, fontSize: '40px', color: '#f8a0c8' }).setOrigin(0.5, 0)), () =>
+    const howToLink = sv.link(sv.add(this.add.text(cx, y, t(locale, 'howToPlay'), { ...STYLE, fontSize: '40px', color: '#f8a0c8' }).setOrigin(0.5, 0)), () =>
       this.scene.get('Play')?.handleChrome('howto'),
     );
     y += 64;
-    sv.link(sv.add(this.add.text(cx, y, t(locale, 'feedbackLink'), { ...STYLE, fontSize: '36px', color: '#f8a0c8' }).setOrigin(0.5, 0)), () =>
+    const feedbackLink = sv.link(sv.add(this.add.text(cx, y, t(locale, 'feedbackLink'), { ...STYLE, fontSize: '36px', color: '#f8a0c8' }).setOrigin(0.5, 0)), () =>
       this.scene.get('Play')?.handleChrome('feedback'),
     );
     y += 72;
@@ -79,6 +80,14 @@ export class About extends Phaser.Scene {
       if (this.scene.isActive('HowTo') || this.scene.isActive('Feedback')) return;
       this.close();
     });
+    // Controller: left / right walk ✕ and the links (scrolled into view), up / down scroll the text.
+    this.scroll = sv;
+    this.focus = createFocus(this, T, {
+      items: [pressable('close', close), pressable('howto', howToLink, { event: 'pointerup', scrolled: true }), pressable('feedback', feedbackLink, { event: 'pointerup', scrolled: true })],
+      scrolled: sv,
+      onVertical: (dir) => sv.scrollBy(dir === 'up' ? T.focus.scrollStepPx : -T.focus.scrollStepPx),
+    });
+    this.focus.show(); // only under a controller (registry padMode)
   }
 
   close() {

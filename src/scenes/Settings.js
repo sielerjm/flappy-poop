@@ -1,6 +1,7 @@
 import { GAME_WIDTH, GAME_HEIGHT, TUNING as T } from '../config.js';
 import { VERSION, createSettingsStore, chromeIntent, overlayOutsideHit, hardReloadGame, settingsLayout, nextTestLevel } from '../logic.js';
 import { t, toggleLabel, metaFontSize, levelLabel } from '../i18n.js';
+import { createFocus, pressable } from '../ui/focus.js';
 import { setMuted } from '../sound.js';
 
 const STYLE = { fontFamily: 'sans-serif', fontStyle: 'bold', color: '#ffffff', align: 'center' };
@@ -67,6 +68,7 @@ export class Settings extends Phaser.Scene {
       .setInteractive({ useHandCursor: true });
     about.on('pointerdown', () => this.scene.get('Play')?.handleChrome('info'));
 
+    this.testItems = []; // focus items the test section adds (reset: Exit restarts this scene)
     if (testMode) this.buildTestSection(layout, play);
 
     this.add
@@ -84,6 +86,11 @@ export class Settings extends Phaser.Scene {
       if (this.scene.isActive('About') || this.scene.isActive('Feedback')) return;
       this.close();
     });
+    // Controller focus ring: ✕, then the rows top to bottom; A is each row's own pointerdown.
+    this.focus = createFocus(this, T, {
+      items: [pressable('close', close), pressable('sound', this.soundLabel), pressable('haptics', this.hapticsLabel), pressable('reload', reload), pressable('about', about), ...this.testItems],
+    });
+    this.focus.show(); // only under a controller (registry padMode)
   }
 
   /**
@@ -107,19 +114,21 @@ export class Settings extends Phaser.Scene {
       [test.levelUp, 1, '▶'],
     ]) {
       this.add.text(box.x, box.y, glyph, { ...STYLE, fontSize: '44px', color: '#f8a0c8' }).setOrigin(0.5);
-      this.add
+      const zone = this.add
         .zone(box.x, box.y, box.width, box.height)
         .setInteractive({ useHandCursor: true })
         .on('pointerdown', () => {
           play.setTestSettings({ startLevel: nextTestLevel(play.testSettings().startLevel, step, T) });
           showLevel();
         });
+      this.testItems.push(pressable(step < 0 ? 'levelDown' : 'levelUp', zone));
     }
 
     this.invincibleLabel = this.addToggle(cx, rows.invincible, toggleLabel(locale, 'invincible', play.testSettings().invincible), () => {
       const next = play.setTestSettings({ invincible: !play.testSettings().invincible }).invincible;
       this.invincibleLabel.setText(toggleLabel(this.locale, 'invincible', next));
     });
+    this.testItems.push(pressable('invincible', this.invincibleLabel));
 
     // Power-ups apply to the run under this panel, so they are dimmed on the ready / game-over screens.
     const live = play.state === 'paused' && play.runIsTest;
@@ -133,13 +142,14 @@ export class Settings extends Phaser.Scene {
       }
       const button = this.add.container(b.x, b.y, parts).setAlpha(live ? 1 : 0.35);
       if (live) {
-        this.add
+        const zone = this.add
           .zone(b.x, b.y, b.width, b.height)
           .setInteractive({ useHandCursor: true })
           .on('pointerdown', () => {
             if (!play.grantTest(b.id)) return;
             this.tweens.add({ targets: button, scale: { from: 1.3, to: 1 }, duration: 200, ease: 'Back.easeOut' });
           });
+        this.testItems.push(pressable(b.id, zone));
       }
       return button;
     });
@@ -152,6 +162,7 @@ export class Settings extends Phaser.Scene {
       play.setTestMode(false);
       this.scene.restart(); // redraw as the plain panel
     });
+    this.testItems.push(pressable('exit', exit));
   }
 
   addToggle(x, y, labelText, handler) {

@@ -1,5 +1,6 @@
-import { GAME_WIDTH, GAME_HEIGHT, LEADERBOARD } from '../config.js';
+import { GAME_WIDTH, GAME_HEIGHT, LEADERBOARD, TUNING as T } from '../config.js';
 import { VERSION, chromeIntent, overlayOutsideHit, fitScale } from '../logic.js';
+import { createFocus, pressable } from '../ui/focus.js';
 import { t, metaFontSize, rankText, levelLabel } from '../i18n.js';
 import { bestByToilet, TOILET_EMOJI } from '../save.js';
 import { fetchTop, fetchRank } from '../leaderboard.js';
@@ -55,6 +56,8 @@ export class Leaderboard extends Phaser.Scene {
       if (this.scene.isActive('Feedback')) return;
       this.close();
     });
+    this.focus = createFocus(this, T, { items: [pressable('close', close)] });
+    this.focus.show(); // only under a controller (registry padMode)
 
     const gen = ++this.gen;
     this.loadBoard(gen, play);

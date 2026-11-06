@@ -12,6 +12,7 @@ const DRAG_TAP_PX = 12; // pointer movement below this still counts as a tap on 
  *   sv.add(scene.add.text(...));           // scrolls
  *   sv.link(textObj, () => ...);           // tap (not drag) handler
  *   sv.finish(lastContentBottomY);         // builds the camera + thumb
+ *   sv.scrollBy(dy) / sv.scrollTo(top, bottom) / sv.addScrolled(obj)   // controller focus ring
  */
 export function createScrollView(scene, panel, { fixed = [] } = {}) {
   const view = { x: panel.x - panel.width / 2 + 8, y: panel.y - panel.height / 2 + 8, width: panel.width - 16, height: panel.height - 16 };
@@ -86,5 +87,24 @@ export function createScrollView(scene, panel, { fixed = [] } = {}) {
       scene.input.on('wheel', (_pointer, _objects, _dx, dy) => setScroll(offset - dy));
     },
     setScroll,
+    /** Current offset: 0 at the top, negative scrolled down (clampScroll). */
+    get offset() {
+      return offset;
+    },
+    scrollBy(dy) {
+      setScroll(offset + dy);
+    },
+    /** Scroll just enough for the world-y range [top, bottom] to sit inside the viewport. */
+    scrollTo(top, bottom) {
+      const margin = 24;
+      const visibleTop = view.y - offset;
+      if (top - margin < visibleTop) setScroll(view.y - top + margin);
+      else if (bottom + margin > visibleTop + view.height) setScroll(view.y + view.height - bottom - margin);
+    },
+    /** An object made after finish() that only the scroll camera should render (the focus ring over a link). */
+    addScrolled(obj) {
+      scene.cameras.main.ignore(obj);
+      return obj;
+    },
   };
 }

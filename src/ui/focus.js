@@ -148,3 +148,12 @@ export function createFocus(scene, t, { items = [], scrolled = null, onVertical 
   scene.events.once('shutdown', () => api.destroy());
   return api;
 }
+
+/**
+ * A focus item whose A press is the pointer event its Game Object already
+ * handles (an overlay's ✕, toggle, link or zone): nothing new to wire.
+ * scrollView.link handlers listen on pointerup.
+ */
+export function pressable(id, obj, { event = 'pointerdown', scrolled = false } = {}) {
+  return { id, obj, scrolled, activate: () => obj.emit(event) };
+}
