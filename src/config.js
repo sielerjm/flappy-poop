@@ -207,6 +207,9 @@ export const TUNING = {
     endClearMarginPx: 64, // px of extra scroll kept in hand so the last pipe is fully behind the poop when the fart ends
     beanRadius: 48, // px circular hitbox = half the 96 logical-px sprite
   },
+  prefill: {
+    sweepMs: 900, // ms the pre-filled pairs take to rush in from the right edge and settle (cubic ease-in-out, fading in); only a field wider than a phone has anything to sweep
+  },
   gamepad: {
     // Standard-mapping button indices (Xbox: A 0, B 1, X 2, Y 3, LB 4, RB 5, LT 6, RT 7, View 8, Menu 9, d-pad 12–15).
     // A pad that reports another layout (pad.mapping !== 'standard') is retuned here, not in code.

@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { FIELD, GAME_WIDTH, GAME_HEIGHT, TUNING as T } from '../src/config.js';
-import { fieldWidth, uiColumn, poopX, trayLayout, trayHit, levelBarLayout, readyLayout, readyHit, howToLayout, pipeLeadPx, prefillPairs, pipeSpacing } from '../src/logic.js';
+import { fieldWidth, uiColumn, poopX, trayLayout, trayHit, levelBarLayout, readyLayout, readyHit, howToLayout, pipeLeadPx, prefillPairs, pipeSpacing, sweepOffset } from '../src/logic.js';
 
 test('fieldWidth: a phone portrait is the minimum, a desktop window widens with its aspect, 2:1 caps it', () => {
   assert.equal(fieldWidth(390, 844, FIELD), FIELD.minWidth, 'phone portrait');
@@ -104,4 +104,27 @@ test('prefillPairs: a wide field is filled from the phone\'s lead out to its own
   }
   const cap = prefillPairs(FIELD.maxWidth, poopX(FIELD.maxWidth, T), pipeSpacing(1, T), T, FIELD);
   assert.ok(cap.xs.length >= 3 && cap.xs[cap.xs.length - 1] <= FIELD.maxWidth + T.pipeWidth);
+});
+
+test('sweepOffset: from o0 and invisible to in place and opaque, slow-fast-slow', () => {
+  const o0 = 1188;
+  const ms = T.prefill.sweepMs;
+  assert.deepEqual(sweepOffset(0, o0, ms), { dx: o0, alpha: 0, done: false });
+  assert.deepEqual(sweepOffset(ms, o0, ms), { dx: 0, alpha: 1, done: true });
+  assert.deepEqual(sweepOffset(ms * 2, o0, ms), { dx: 0, alpha: 1, done: true }, 'past the end stays settled');
+  const mid = sweepOffset(ms / 2, o0, ms);
+  assert.equal(mid.dx, o0 / 2);
+  assert.equal(mid.alpha, 0.5);
+  const n = 50;
+  const samples = Array.from({ length: n + 1 }, (_, i) => sweepOffset((ms * i) / n, o0, ms));
+  for (let i = 1; i <= n; i += 1) {
+    assert.ok(samples[i].dx <= samples[i - 1].dx, `dx never grows (sample ${i})`);
+    assert.ok(samples[i].alpha >= samples[i - 1].alpha, `alpha never drops (sample ${i})`);
+  }
+  const steps = samples.slice(1).map((s, i) => samples[i].dx - s.dx);
+  const peak = steps.indexOf(Math.max(...steps));
+  assert.ok(peak >= n / 2 - 2 && peak <= n / 2 + 1, `fastest at the middle (step ${peak} of ${n})`);
+  assert.ok(steps[0] < steps[peak] / 10 && steps[n - 1] < steps[peak] / 10, 'starts and ends slowly');
+  assert.deepEqual(sweepOffset(ms / 3, 0, ms).dx, 0, 'nothing to sweep on a phone field');
+  assert.deepEqual(sweepOffset(100, o0, 0), { dx: 0, alpha: 1, done: true }, 'a zero duration is done at once');
 });

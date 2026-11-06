@@ -70,7 +70,10 @@ and otherwise after Home (`onFieldResize` → `update()`), never mid-run. A run 
 the end of a level break and the end of a fart pre-fill the field (`prefillPipes`,
 `prefillPairs`): the first pair the phone's lead ahead (`pipeLeadPx`, 668 px), then one
 per spacing to the edge, so a wide field never waits longer than a phone (where it is
-the one edge spawn as before); a skip's finish line gets the same lead.
+the one edge spawn as before); a skip's finish line gets the same lead. On a wide field
+the pre-filled stretch does not pop in: it sweeps in from the right edge over
+`prefill.sweepMs` (`sweepOffset`: cubic ease-in-out, slow-fast-slow, fading from
+transparent), settling exactly where the pre-fill put it.
 It is deliberately small: plain ES modules, no bundler, no npm
 dependencies, Phaser 4 loaded from a CDN, deployed to GitHub Pages straight from
 `main`. Keep it that way unless the game clearly outgrows it.
@@ -104,7 +107,8 @@ src/
                             chrome column), FIELD (height, minWidth, maxWidth,
                             resizeDebounceMs), the TUNING object (every
                             feel-related number lives here; poopXFrac = the
-                            player's share of the width), and LEADERBOARD
+                            player's share of the width; prefill.sweepMs = the
+                            pre-fill's sweep-in on a wide field), and LEADERBOARD
                             (Supabase Data API URL + publishable key, both public
                             by design; timeout, limit, storage key, score cap),
                             LEVELS (gut segment name keys, in order), LEVEL_COLORS
@@ -117,7 +121,8 @@ src/
                             the overlay scroll step.
                             Pure data, Node-safe.
   logic.js                  Pure functions, NO Phaser/DOM: field (fieldWidth,
-                            uiColumn, poopX, pipeLeadPx, prefillPairs; trayLayout /
+                            uiColumn, poopX, pipeLeadPx, prefillPairs, sweepOffset;
+                            trayLayout /
                             levelBarLayout / readyLayout / howToLayout take a
                             trailing x0 = the column's left edge), rng, gap placement,
                             scoring (pipePoints, scorePopup, multiplierLayout),
@@ -271,7 +276,15 @@ src/
                             the edge spawn), stops at levelEnd, and sets
                             distanceSinceSpawn so the cadence resumes one spacing
                             after the last pair; skipToFinish passes the same
-                            shift to spawnFinishLine(shift).
+                            shift to spawnFinishLine(shift). On a wide field
+                            prefillPipes tags the new objects (data 'sweep' =
+                            { baseX }, alpha 0, velocity 0, x += o0 = edge − first
+                            pair) and sets this.sweep; update() drives x = baseX −
+                            scrolled + dx and alpha from sweepOffset until done →
+                            endSweep() (snap to baseX − scrolled, alpha 1, untag,
+                            applyScroll). applyScroll skips tagged objects;
+                            activatePower, skipToFinish and endRun call endSweep()
+                            first.
                             Never read GAME_WIDTH in a scene (tests/scenes.test.js).
                             Spawns pipes and items, tray, auto-pause, haptics, dies,
                             then launches Over as an overlay scene. Tray / keyboard
@@ -517,7 +530,8 @@ tests/                      node --test, zero deps. Each file is self-describing
                             uiColumn, poopX, the x0 shift of trayLayout /
                             levelBarLayout / readyLayout, hits on a shifted column,
                             pipeLeadPx, prefillPairs (one edge pair on a phone; a
-                            wide field filled from the lead to its edge)
+                            wide field filled from the lead to its edge), sweepOffset
+                            (ends, midpoint, monotonic, fastest at the middle)
   html.test.js              index.html invariants (viewport, no scroll, pinned Phaser)
   assets.test.js            load.image / load.spritesheet / load.audio paths; README
                             sizes; a spritesheet is a whole number of frames; sfx credits
@@ -648,7 +662,9 @@ tools/
                             (a 1800x1000 viewport re-fits the ready screen to 2304
                             px: world widths, column chrome, poop at 25 %, right-
                             edge spawns, the pre-fill at a run start / fart end /
-                            skip, centred Settings closed by a click on the
+                            skip and its sweep-in (edge + invisible + unpowered,
+                            mid-sweep, settled opaque at exact spacing),
+                            centred Settings closed by a click on the
                             wide world, a mid-run resize deferred until Home; the
                             phone field's pre-fill is one edge pair). The
                             viewport is pinned to 720x1280 before load

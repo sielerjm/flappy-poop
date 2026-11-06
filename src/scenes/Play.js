@@ -65,6 +65,7 @@ import {
   pipeClearDistance,
   pipeLeadPx,
   prefillPairs,
+  sweepOffset,
   beanButtonLayout,
   beanButtonHit,
   howToPromptDue,
@@ -109,6 +110,7 @@ export class Play extends Phaser.Scene {
     this.col = uiColumn(W, FIELD);
     this.poopX = poopX(W, T);
     this.fieldResizeWanted = false;
+    this.sweep = null; // the pre-fill's sweep-in on a wide field (prefillPipes / endSweep)
     this.rng = createRng(Date.now() & 0xffffffff);
     this.score = 0;
     this.best = createBestStore(globalThis.localStorage, T.bestKey);
@@ -1051,8 +1053,10 @@ export class Play extends Phaser.Scene {
    * before. Stops at the level's last pair: the finish line then follows by cadence.
    */
   prefillPipes() {
+    this.endSweep();
     const edge = this.scale.width + T.pipeWidth;
     const { xs } = prefillPairs(this.scale.width, this.poopX, pipeSpacing(this.level, T), T, FIELD);
+    const before = new Set(this.worldObjects());
     let last = edge;
     for (const x of xs) {
       if (this.pipesSpawned >= levelEnd(this.level, T)) break;
@@ -1060,6 +1064,39 @@ export class Play extends Phaser.Scene {
       last = x;
     }
     this.distanceSinceSpawn = edge - last;
+    // Wide field: the pre-filled stretch sweeps in from the edge instead of popping into place.
+    // Every new object starts o0 px right of its base (the first pair at the edge, the rest beyond),
+    // invisible and unpowered; update() drives x and alpha from sweepOffset until endSweep().
+    const o0 = edge - xs[0];
+    const fresh = this.worldObjects().filter((obj) => !before.has(obj));
+    if (o0 <= 0 || fresh.length === 0) return;
+    for (const obj of fresh) {
+      obj.setData('sweep', { baseX: obj.x });
+      obj.setAlpha(0);
+      obj.setVelocityX(0);
+      obj.x += o0;
+    }
+    this.sweep = { elapsed: 0, scrolled: 0, o0, ms: T.prefill.sweepMs };
+  }
+
+  /** Every scrolling world object: pipes, items, beans. */
+  worldObjects() {
+    return [...this.pipes.getChildren(), ...this.items.getChildren(), ...this.beans.getChildren()];
+  }
+
+  /** Settle a running sweep at once: every swept object on its base (scrolled as normal), opaque, scrolling. Idempotent. */
+  endSweep() {
+    if (!this.sweep) return;
+    const { scrolled } = this.sweep;
+    for (const obj of this.worldObjects()) {
+      const tag = obj.getData('sweep');
+      if (!tag) continue;
+      obj.x = tag.baseX - scrolled;
+      obj.setAlpha(1);
+      obj.setData('sweep', null);
+    }
+    this.sweep = null;
+    this.applyScroll();
   }
 
   /**
@@ -1212,9 +1249,7 @@ export class Play extends Phaser.Scene {
   /** Single place that pushes the scroll speed onto everything that moves left. */
   applyScroll() {
     const v = -this.scrollSpeed();
-    for (const pipe of this.pipes.getChildren()) pipe.setVelocityX(v);
-    for (const item of this.items.getChildren()) item.setVelocityX(v);
-    for (const bean of this.beans.getChildren()) bean.setVelocityX(v);
+    for (const obj of this.worldObjects()) if (!obj.getData('sweep')) obj.setVelocityX(v); // a swept object's x is driven by the sweep
   }
 
   refreshBeanHud() {
@@ -1328,6 +1363,7 @@ export class Play extends Phaser.Scene {
   /** Tap on a charged poop: fart through the next pipes for the length of the clip. */
   activatePower() {
     if (this.state !== 'playing' || !this.effects.powerReady()) return;
+    this.endSweep(); // the fart's scroll owns every object from here
     this.setCharged(false);
     const snd = this.cache.audio.exists('fart-accelerate') ? this.sound.add('fart-accelerate', { volume: T.fartVolume }) : null;
     const durationMs = snd && snd.duration > 0 ? Math.round(snd.duration * 1000) : T.beans.powerMs;
@@ -1627,6 +1663,7 @@ export class Play extends Phaser.Scene {
     for (const group of [this.pipes, this.items, this.beans]) {
       for (const obj of [...group.getChildren()]) if (obj.x > this.poop.x) obj.destroy();
     }
+    this.endSweep(); // whatever was sweeping in is gone or stays
     for (const pipe of this.pipes.getChildren()) if (pipe.getData('scoring')) pipe.setData('passed', true); // already credited
     this.score += pairs * pipePoints(T, mult);
     this.scoreText.setText(String(this.score));
@@ -1647,6 +1684,7 @@ export class Play extends Phaser.Scene {
    * (nothing recorded on a test run).
    */
   endRun() {
+    this.endSweep(); // a death mid-sweep leaves the pairs in place, opaque
     this.state = 'dead';
     this.markHowToSeen(); // a finished run counts as having seen this build
     this.setCharged(false);
@@ -1753,6 +1791,20 @@ export class Play extends Phaser.Scene {
             this.spawnPipePair();
           }
         }
+      }
+      if (this.sweep) {
+        // The pre-filled stretch rushing in: x and alpha from the curve, on top of the normal scroll.
+        const sw = this.sweep;
+        sw.elapsed += delta;
+        sw.scrolled += this.scrollSpeed() * dt;
+        const { dx, alpha, done } = sweepOffset(sw.elapsed, sw.o0, sw.ms);
+        for (const obj of this.worldObjects()) {
+          const tag = obj.getData('sweep');
+          if (!tag) continue;
+          obj.x = tag.baseX - sw.scrolled + dx;
+          obj.setAlpha(alpha);
+        }
+        if (done) this.endSweep();
       }
       if (this.finishLine) {
         this.finishLine.x -= this.scrollSpeed() * dt;

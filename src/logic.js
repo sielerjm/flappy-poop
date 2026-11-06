@@ -682,6 +682,19 @@ export function prefillPairs(fieldW, playerX, spacingPx, t, field) {
   return { xs, distanceSinceSpawn: edge - xs[xs.length - 1] };
 }
 
+/**
+ * The sweep that brings a wide field's pre-filled pairs in: at elapsed 0 every object
+ * sits `o0` px right of its base (the first pair at the field's edge), then the block
+ * slides left on a cubic ease-in-out (slow, fast across the field, braking into place)
+ * and fades in, settling on its base at `ms`. → { dx, alpha, done }.
+ */
+export function sweepOffset(elapsedMs, o0, ms) {
+  if (!(ms > 0)) return { dx: 0, alpha: 1, done: true };
+  const p = Math.min(Math.max(elapsedMs / ms, 0), 1);
+  const ease = p < 0.5 ? 4 * p * p * p : 1 - (-2 * p + 2) ** 3 / 2;
+  return { dx: o0 * (1 - ease), alpha: ease, done: p >= 1 };
+}
+
 /** Scroll needed for a pipe spawned at the right edge to be fully behind the player. */
 export function pipeClearDistance(width, pipeWidth, playerX) {
   return width + pipeWidth - (playerX - pipeWidth);
