@@ -1097,6 +1097,48 @@ export async function run(url = DEFAULT_URL) {
         if (back.W === 720 && back.state === 'ready') break;
       }
       ok(back.W === 720 && back.state === 'ready' && back.poopX === 180 && back.col.x === 0 && back.col.width === 720 && !back.over, `Home after the game over re-fits to the portrait window: field ${back.W}, poop at ${back.poopX}, column at ${back.col.x} (state ${back.state})`);
+      // A phone: portrait is the phone field; rotating on the ready screen re-fits to the cap and back;
+      // rotating mid-run pauses the run in its old field, and the re-fit lands at Home.
+      const phone = (width, height) => cdp.send('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 2, mobile: true });
+      const settle = async (width) => {
+        let W = null;
+        for (let i = 0; i < 40; i += 1) {
+          await sleep(100);
+          W = await evaluate(`__flappy.scale.width`);
+          if (W === width && (await playState()) === 'ready') break;
+        }
+        return W;
+      };
+      const cap = await evaluate(`import('./src/config.js').then((m) => m.FIELD.maxWidth)`);
+      await phone(390, 844);
+      const portrait = await settle(720);
+      ok(portrait === 720, `a portrait phone (390×844) keeps the ${portrait} px phone field`);
+      await phone(844, 390);
+      const landscape = await settle(cap);
+      const rotated = await evaluate(`JSON.stringify({ W: __flappy.scale.width, state: ${play}.state, poopX: ${play}.poopX })`).then(JSON.parse);
+      const capPoop = await evaluate(`${L}.then(([l, c]) => l.poopX(c.FIELD.maxWidth, c.TUNING))`);
+      ok(landscape === cap && rotated.state === 'ready' && rotated.poopX === capPoop, `rotating on the ready screen re-fits to the ${rotated.W} px cap (poop at ${rotated.poopX}, state ${rotated.state})`);
+      await phone(390, 844);
+      ok((await settle(720)) === 720, 'rotating back re-fits to the phone field');
+      // Mid-run: the rotation pauses the run, the field stays, the re-fit waits for Home.
+      await evaluate(`${play}.launch(), true`);
+      for (let i = 0; i < 30 && (await playState()) !== 'playing'; i += 1) await sleep(100);
+      await evaluate(`${play}.poop.body.setAllowGravity(false), ${play}.poop.setVelocity(0, 0), ${play}.poop.y = 640, ${play}.graceLeftMs = 1e9, true`);
+      await phone(844, 390);
+      await sleep(want.debounce + 400);
+      const midRun = await evaluate(`JSON.stringify({ W: __flappy.scale.width, state: ${play}.state, banner: ${play}.pauseText.visible, wanted: ${play}.fieldResizeWanted })`).then(JSON.parse);
+      ok(midRun.W === 720 && midRun.state === 'paused' && midRun.banner && midRun.wanted, `rotating mid-run pauses (banner ${midRun.banner}) and keeps the ${midRun.W} px field, re-fit pending ${midRun.wanted}`);
+      await evaluate(`${play}.resumePlay(), true`);
+      await sleep(200);
+      const resumed = await evaluate(`JSON.stringify({ W: __flappy.scale.width, state: ${play}.state })`).then(JSON.parse);
+      ok(resumed.state === 'playing' && resumed.W === 720, `a tap resumes the run in its old ${resumed.W} px field`);
+      await evaluate(`(() => { const p = ${play}; p.graceLeftMs = 0; p.poop.body.setAllowGravity(true); p.die(); return true; })()`);
+      for (let i = 0; i < 30 && !(await active('Over')); i += 1) await sleep(100);
+      await evaluate(`(() => { const o = __flappy.scene.getScene('Over'); o.openedAt = 0; o.retry(); return true; })()`);
+      const home = await settle(cap);
+      ok(home === cap && (await playState()) === 'ready', `Home after that run re-fits to the ${home} px landscape field`);
+      await phone(390, 844);
+      ok((await settle(720)) === 720, 'portrait again: the phone field');
       await cdp.send('Emulation.clearDeviceMetricsOverride');
     }
 

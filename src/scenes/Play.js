@@ -389,9 +389,15 @@ export class Play extends Phaser.Scene {
     if (want !== this.scale.width) this.scale.setGameSize(want, FIELD.height);
   }
 
-  /** main.js, after a window resize settled: ask for a re-fit (update() restarts the scene once it is safe). */
+  /**
+   * main.js, after a window resize (or a phone rotation) settled on a different field
+   * width: ask for a re-fit (update() restarts the scene once it is safe). A run in
+   * progress pauses now: the device was just turned or the window dragged, the old
+   * field is letterboxed until Home, and continuing should take a deliberate tap.
+   */
   onFieldResize() {
     this.fieldResizeWanted = true;
+    this.autoPause();
   }
 
   /** A re-fit can happen now: on the ready screen, nothing sliding, no overlay, panel or game-over on top. */

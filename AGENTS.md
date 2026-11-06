@@ -65,8 +65,10 @@ desktop window fills sideways; the world (background, pipes, items, dimmers) spa
 the whole width, the chrome (tray, level bar, HUD, ready buttons) keeps its phone
 layout in a centred 720 px column (`uiColumn()`), and the poop sits at
 `poopXFrac` (25 %) of the width (`poopX()`). The width is fitted on every Play
-(re)start (`applyFieldSize`); a window resize re-fits at once on the ready screen
-and otherwise after Home (`onFieldResize` → `update()`), never mid-run. A run start,
+(re)start (`applyFieldSize`); a window resize or a phone rotation re-fits at once on
+the ready screen and otherwise after Home (`onFieldResize` → `update()`), never
+mid-run: a running run auto-pauses at that moment. Android home-screen installs are
+portrait-locked by the manifest (iOS ignores that), by choice. A run start,
 the end of a level break and the end of a fart pre-fill the field (`prefillPipes`,
 `prefillPairs`): the first pair `pipeLead` ahead (the phone's `pipeLeadPx`, 668 px, plus
 `prefill.leadGrowth` of the width beyond a phone's, so on a wide field the first pipes
@@ -100,7 +102,8 @@ CREDITS.md                  Phaser + every assets/sfx/ file with a URL.
 src/
   main.js                   new Phaser.Game(...): fieldWidth(window) x 1280 logical
                             field (720 on a phone, wider on desktop), Scale.FIT,
-                            a debounced window resize → Play.onFieldResize(),
+                            a debounced window resize (a phone rotation too) →
+                            Play.onFieldResize() when the width would change,
                             roundPixels,
                             arcade physics, input.gamepad on (bound once, in
                             Play), scene order
@@ -272,9 +275,10 @@ src/
                             bean / finish spawns at W, pause shade, banners) uses
                             W; the chrome (tray, level bar, ready boxes, test
                             badge, bean HUD, probiotic HUD's right edge) uses col.
-                            onFieldResize() sets fieldResizeWanted; update()
-                            restarts the scene once canRefitField() (ready, not
-                            launching, no overlay / Over / save panel).
+                            onFieldResize() sets fieldResizeWanted and autoPauses
+                            a running run; update() restarts the scene once
+                            canRefitField() (ready, not launching, no overlay /
+                            Over / save panel).
                             prefillPipes() (start, endLevelBreak, endPower) spawns
                             prefillPairs' pairs through spawnPipePair(shift) /
                             spawnBandItem(kind, stillY, shift) (shift = px left of
@@ -673,7 +677,10 @@ tools/
                             mid-sweep, settled opaque at exact spacing),
                             centred Settings closed by a click on the
                             wide world, a mid-run resize deferred until Home; the
-                            phone field's pre-fill is one edge pair). The
+                            phone field's pre-fill is one edge pair; a phone
+                            rotation: portrait 720 → landscape cap → back, a
+                            mid-run rotation pauses in the old field and re-fits
+                            at Home). The
                             viewport is pinned to 720x1280 before load
                             (Emulation.setDeviceMetricsOverride) so the rest is
                             the phone field; tapAt maps through the live
