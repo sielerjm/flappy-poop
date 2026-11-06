@@ -124,8 +124,8 @@ src/
                             default Invincible). TUNING.gamepad = the pad's
                             standard-mapping button indices (A / B / Y / RT /
                             Menu / d-pad), RT threshold, stick deadzone + repeat;
-                            TUNING.focus = the focus ring's geometry, pulse and
-                            the overlay scroll step.
+                            TUNING.focus = the focus ring's geometry, fill alpha,
+                            pulse and the overlay scroll step.
                             Pure data, Node-safe.
   logic.js                  Pure functions, NO Phaser/DOM: field (fieldWidth,
                             uiColumn, poopX, pipeLeadPx, pipeLead, prefillPairs,
@@ -206,7 +206,8 @@ src/
   ui/
     focus.js                createFocus(scene, t, { items, scrolled, onVertical }):
                             the controller focus ring, a pulsing pink rounded
-                            outline (Graphics, depth 1000) around one item of a
+                            outline over a faint white fill (focus.fillAlpha;
+                            Graphics, depth 1000) around one item of a
                             scene; items are { id, obj | box, activate, visible?,
                             scrolled? }, pressable(id, obj) wraps a Game Object
                             whose own pointerdown is the press. Shows only in
@@ -629,8 +630,10 @@ tests/                      node --test, zero deps. Each file is self-describing
 
 tools/
   make_placeholders.py      Regenerates pipe / villi / ground only (icons moved to
-                            process_art.py). Must not overwrite poop.png. Run only
-                            when you intend to.
+                            process_art.py); villi.png carries a baked ceiling
+                            strip (ceiling_strip: the ground's mirror along the
+                            top edge, background only). Must not overwrite
+                            poop.png. Run only when you intend to.
   process_art.py            Crops assets/src/ drawings into 384x384 contract PNGs
                             (drawn at spriteDisplayScale 0.25 → 96 logical px);
                             the poop set (alive / dead / stink1 / stink2 / falling /

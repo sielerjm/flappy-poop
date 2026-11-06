@@ -232,6 +232,7 @@ export const TUNING = {
     ringPad: 10, // px the ring sits outside the focused button's bounds
     ringWidth: 4, // px stroke
     ringRadius: 14, // px corner radius
+    fillAlpha: 0.18, // 0–1 translucent white inside the ring so it lifts off the villi (0 = outline only)
     pulseScale: 1.06, // × ring scale at the top of the pulse
     pulseMs: 500, // ms per pulse (one way)
     scrollStepPx: 160, // px a d-pad up / down scrolls About and How to play

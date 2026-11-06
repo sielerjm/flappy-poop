@@ -85,9 +85,20 @@ def villi_band(d, x0, x1, y_base, height, up, rng):
         x += w + rng.randint(3, 8)
 
 
+def ceiling_strip(d, w, strip_h=128, cream_h=16):
+    """The ground strip's vertical mirror, baked into the overlay's top edge: a dark band,
+    a cream line along its lower edge, and fingers growing up from it (same seed as the
+    ground so the two rows read as one gut wall). Background only: pipes and the poop draw
+    over it, so the ceiling kill line and the gap margin stay as they are."""
+    d.rectangle((0, 0, w, strip_h), fill=VILLI_DARK)
+    d.rectangle((0, strip_h - cream_h, w, strip_h), fill=CREAM)
+    villi_band(d, -40, w + 40, strip_h - 20, 108, up=True, rng=random.Random(11))
+
+
 def villi(path, w=720, h=1280):
-    """Transparent overlay: cream bands + villi fringes only. The level colour
-    shows through everywhere else (the game draws a solid rectangle under it)."""
+    """Transparent overlay: cream bands + villi fringes, plus the ceiling strip (the
+    ground's mirror) along the top edge. The level colour shows through everywhere
+    else (the game draws a solid rectangle under it)."""
     img = Image.new("RGBA", (w, h), (0, 0, 0, 0))
     d = ImageDraw.Draw(img)
     # Fringes ~260px (~20% each end) so the open lumen stays majority clear
@@ -100,6 +111,8 @@ def villi(path, w=720, h=1280):
     # villi fringes (drawn wider than the image so the horizontal tile edge matches)
     villi_band(d, -40, w + 40, top_base, fringe, up=True, rng=random.Random(7))
     villi_band(d, -40, w + 40, bot_base, fringe, up=False, rng=random.Random(7))
+    # Front row at the top, in front of the fringe, as ground.png is in front of the bottom one.
+    ceiling_strip(d, w)
     img.save(path)
 
 

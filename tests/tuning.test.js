@@ -49,6 +49,10 @@ test('the field: a phone portrait at minimum, up to 2:1, the player in the left 
   assert.ok(T.prefill.leadGrowth >= 0 && T.prefill.leadGrowth <= 0.5, `prefill.leadGrowth ${T.prefill.leadGrowth}`);
 });
 
+test('the focus ring fill is faint enough to leave the button art visible', () => {
+  assert.ok(T.focus.fillAlpha >= 0 && T.focus.fillAlpha <= 0.5, `focus.fillAlpha ${T.focus.fillAlpha}`);
+});
+
 test('fartVolume is audible but not clipping', () => {
   assert.ok(T.fartVolume >= 0.2 && T.fartVolume <= 1, `fartVolume ${T.fartVolume}`);
   assert.ok(T.levelUpVolume >= 0.2 && T.levelUpVolume <= 1, `levelUpVolume ${T.levelUpVolume}`);

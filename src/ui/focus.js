@@ -4,7 +4,8 @@ const PINK = 0xe85e96;
 const DEPTH = 1000; // above everything else in the owning scene
 
 /**
- * The controller focus ring: a pulsing pink rounded outline around one of a
+ * The controller focus ring: a pulsing pink rounded outline over a faint white
+ * fill (focus.fillAlpha, so it lifts off the villi) around one of a
  * scene's buttons, walked by the d-pad / sticks and pressed by A. Items are
  * { id, obj | box, activate, visible?, scrolled? }: obj is any Game Object
  * with getBounds() (a tray circle, a Text link, a zone), box a centred layout
@@ -54,6 +55,8 @@ export function createFocus(scene, t, { items = [], scrolled = null, onVertical 
     const g = item.scrolled && ringScrolled ? ringScrolled : ring;
     // Drawn around the Graphics' own origin so the pulse scales about the centre.
     g.setPosition(r.x + r.width / 2, r.y + r.height / 2);
+    g.fillStyle(0xffffff, t.focus.fillAlpha);
+    g.fillRoundedRect(-r.width / 2, -r.height / 2, r.width, r.height, r.radius);
     g.lineStyle(t.focus.ringWidth, PINK, 1);
     g.strokeRoundedRect(-r.width / 2, -r.height / 2, r.width, r.height, r.radius);
     ring.setVisible(g === ring);
