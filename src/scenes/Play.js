@@ -1060,6 +1060,12 @@ export class Play extends Phaser.Scene {
    */
   prefillPipes() {
     this.endSweep();
+    // Nothing follows a finish line that is already out (a fart cut at the line, or ending past
+    // the level's last pair): the break's own pre-fill (endLevelBreak) fills the next level.
+    if (this.finishSpawned) {
+      this.distanceSinceSpawn = 0;
+      return;
+    }
     const edge = this.scale.width + T.pipeWidth;
     const { xs } = prefillPairs(this.scale.width, this.poopX, pipeSpacing(this.level, T), T, FIELD);
     const before = new Set(this.worldObjects());
@@ -1417,8 +1423,9 @@ export class Play extends Phaser.Scene {
     this.poop.body.setAllowGravity(true);
     this.poop.setVelocityY(0);
     this.graceLeftMs = T.beans.graceMs;
-    // The field is pre-filled again, the first pair the phone's lead away with its gap
-    // at the poop's float height: a phone screen of warning and the easiest line through.
+    // The field is pre-filled again (unless the finish line is already out), the first pair the
+    // field's lead away with its gap at the poop's float height: a phone screen of warning and the
+    // easiest line through.
     this.centreNextGap = true;
     this.nextGapY = null;
     this.prefillPipes();

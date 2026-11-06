@@ -279,8 +279,10 @@ src/
                             a running run; update() restarts the scene once
                             canRefitField() (ready, not launching, no overlay /
                             Over / save panel).
-                            prefillPipes() (start, endLevelBreak, endPower) spawns
-                            prefillPairs' pairs through spawnPipePair(shift) /
+                            prefillPipes() (start, endLevelBreak, endPower; a
+                            no-op while finishSpawned: a fart cut at the line
+                            leaves the break's own pre-fill to fill the next
+                            level) spawns prefillPairs' pairs through spawnPipePair(shift) /
                             spawnBandItem(kind, stillY, shift) (shift = px left of
                             the edge spawn), stops at levelEnd, and sets
                             distanceSinceSpawn so the cadence resumes one spacing
@@ -674,7 +676,9 @@ tools/
                             px: world widths, column chrome, poop at 25 %, right-
                             edge spawns, the pre-fill at a run start / fart end /
                             skip and its sweep-in (edge + invisible + unpowered,
-                            mid-sweep, settled opaque at exact spacing),
+                            mid-sweep, settled opaque at exact spacing), a super
+                            fart carried over the finish line (no pairs during
+                            the break, one pre-fill after it),
                             centred Settings closed by a click on the
                             wide world, a mid-run resize deferred until Home; the
                             phone field's pre-fill is one edge pair; a phone
