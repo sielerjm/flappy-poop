@@ -96,25 +96,29 @@ def villi_band(d, x0, x1, y_base, height, up, rng, min_frac=0.55, wave=None, til
 FRONT_WAVE = (8, 5, math.pi / 2)  # shallow undulation of the strips' finger tips (±8 px, 5 waves per tile)
 BACK_WAVE = (24, 3, 0.0)  # deeper undulation of the fringes' tips (±24 px, 3 waves per tile)
 TIP_ZONE = 16  # px of the strips' lumen-side edge left for the undulating tips (2 × the front amplitude)
+BAR_FRAC = 0.85  # the cream bars end at this share of the shortest tip's reach from the screen edge, so every tip extends past them
 
 
 def ceiling_strip(d, w, strip_h=128, cream_h=16):
-    """The ground strip's vertical mirror, baked into the overlay's top edge: a dark band
-    (strip_h − TIP_ZONE tall), a cream line along its lower edge, and fingers growing up from
-    it whose tips undulate shallowly in the TIP_ZONE below the band (same seed as the ground
-    so the two rows read as one gut wall). Background only: pipes and the poop draw over it,
-    so the ceiling kill line and the gap margin stay as they are."""
-    band = strip_h - TIP_ZONE
-    d.rectangle((0, 0, w, band), fill=VILLI_DARK)
-    d.rectangle((0, band - cream_h, w, band), fill=CREAM)
-    # Tips in [band, strip_h]; far ends run past the top edge (≥ 144 px from the base): no rounded tops on screen.
-    villi_band(d, -40, w + 40, band - 20 + TIP_ZONE / 2, 240, up=True, rng=random.Random(11), min_frac=0.6, wave=FRONT_WAVE, tile_w=w)
+    """The ground strip's vertical mirror, baked into the overlay's top edge: a dark band, a
+    cream line along its lower edge ending at BAR_FRAC of the shortest tip (so every tip
+    extends past it), and fingers growing up from the TIP_ZONE whose tips undulate shallowly
+    (same seed as the ground so the two rows read as one gut wall). Background only: pipes
+    and the poop draw over it, so the ceiling kill line and the gap margin stay as they are."""
+    tips = strip_h - TIP_ZONE  # the shortest front tip's reach from the top edge
+    bar = round(BAR_FRAC * tips)
+    d.rectangle((0, 0, w, bar - cream_h), fill=VILLI_DARK)
+    d.rectangle((0, bar - cream_h, w, bar), fill=CREAM)
+    # Tips in [tips, strip_h]; far ends run past the top edge (≥ 144 px from the base): no rounded tops on screen.
+    villi_band(d, -40, w + 40, tips - 20 + TIP_ZONE / 2, 240, up=True, rng=random.Random(11), min_frac=0.6, wave=FRONT_WAVE, tile_w=w)
 
 
 def villi(path, w=720, h=1280):
-    """Transparent overlay: cream bands + villi fringes, plus the ceiling strip (the
-    ground's mirror) along the top edge. The level colour shows through everywhere
-    else (the game draws a solid rectangle under it)."""
+    """Transparent overlay: a cream mucosa backdrop from each screen edge to BAR_FRAC of the
+    shortest fringe tip (behind everything: the strips and the fringes draw over it), the
+    villi fringes, and the ceiling strip (the ground's mirror) along the top edge. The level
+    colour shows through from the backdrop's edge to the lumen (the game draws a solid
+    rectangle under the overlay)."""
     img = Image.new("RGBA", (w, h), (0, 0, 0, 0))
     d = ImageDraw.Draw(img)
     # Fringes ~260px (~20% each end) so the open lumen stays majority clear
@@ -122,8 +126,12 @@ def villi(path, w=720, h=1280):
     cream_h = 28
     top_base = fringe + cream_h // 2
     bot_base = h - fringe - cream_h // 2
-    d.rectangle((0, top_base - cream_h // 2, w, top_base + cream_h // 2), fill=CREAM)
-    d.rectangle((0, bot_base - cream_h // 2, w, bot_base + cream_h // 2), fill=CREAM)
+    # The backdrop ends short of the shortest tip (base + 20 − amplitude), so no tip lines up with its edge.
+    amp = BACK_WAVE[0]
+    top_bar = round(BAR_FRAC * (top_base + 20 - amp))
+    bot_bar = h - round(BAR_FRAC * (h - (bot_base - 20 + amp)))
+    d.rectangle((0, 0, w, top_bar), fill=CREAM)
+    d.rectangle((0, bot_bar, w, h), fill=CREAM)
     # villi fringes (drawn wider than the image so the horizontal tile edge matches); every finger
     # is ≥ 195 px so its rounded far end sits behind the ceiling strip / the ground strip, and the
     # tips undulate ±24 px around the cream band (BACK_WAVE).
@@ -135,12 +143,15 @@ def villi(path, w=720, h=1280):
 
 
 def ground(path, w=720, h=128):
-    """The floor strip: transparent TIP_ZONE at the top for the undulating finger tips, then the
-    cream line and the dark band; fingers run past the bottom edge (no rounded bottoms on screen)."""
+    """The floor strip, the ceiling strip's mirror: transparent at the top (the overlay's cream
+    backdrop shows through) down to the cream line, which ends BAR_FRAC of the shortest tip
+    from the bottom edge so every tip extends past it; then the dark band. The fingers' tips
+    undulate in the top TIP_ZONE; their far ends run past the bottom edge."""
     img = Image.new("RGBA", (w, h), (0, 0, 0, 0))
     d = ImageDraw.Draw(img)
-    d.rectangle((0, TIP_ZONE, w, h), fill=VILLI_DARK)
-    d.rectangle((0, TIP_ZONE, w, TIP_ZONE + 16), fill=CREAM)
+    bar = round(BAR_FRAC * (h - TIP_ZONE))  # from the bottom edge
+    d.rectangle((0, h - bar, w, h - bar + 16), fill=CREAM)
+    d.rectangle((0, h - bar + 16, w, h), fill=VILLI_DARK)
     villi_band(d, -40, w + 40, TIP_ZONE + 20 - TIP_ZONE / 2, 240, up=False, rng=random.Random(11), min_frac=0.6, wave=FRONT_WAVE, tile_w=w)
     img.save(path)
 

@@ -637,7 +637,9 @@ tools/
   make_placeholders.py      Regenerates pipe / villi / ground only (icons moved to
                             process_art.py); villi.png carries a baked ceiling
                             strip (ceiling_strip: the ground's mirror along the
-                            top edge, background only); fingers run off the
+                            top edge, background only); a cream backdrop from each
+                            screen edge to BAR_FRAC of the shortest fringe tip
+                            sits behind everything; fingers run off the
                             edges / behind the strips (villi_band min_frac) and
                             their lumen-side tips undulate (BACK_WAVE on the
                             fringes, FRONT_WAVE in the strips' TIP_ZONE). Must
