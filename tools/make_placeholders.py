@@ -97,7 +97,7 @@ FRONT_WAVE = (8, 5, math.pi / 2)  # shallow undulation of the strips' finger tip
 BACK_WAVE = (24, 3, 0.0)  # deeper undulation of the fringes' tips (±24 px, 3 waves per tile)
 TIP_ZONE = 16  # px of the strips' lumen-side edge left for the undulating tips (2 × the front amplitude)
 BAR_FRAC = 0.85  # the cream bars end at this share of the shortest tip's reach from the screen edge, so every tip extends past them
-BACKDROP_FADE = 0.95  # share of the cream backdrop's depth (from its lumen edge inward) over which it fades to transparent; the rest, at the screen edge, is solid
+BACKDROP_FADE = 0.05  # share of the cream backdrop's depth (from its lumen edge inward) over which it feathers to transparent: a soft edge, the rest solid
 
 
 def backdrop(d, w, y0, y1, toward_lumen):
