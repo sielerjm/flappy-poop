@@ -135,3 +135,17 @@ test('game-over share: the button row and the 4:5 share card', () => {
   assert.match(SHARE.fileName, /^[\w-]+\.png$/);
   assert.equal(SHARE.title, 'Flappy Poop');
 });
+
+test('gamepad knobs are standard-mapping indices and the thresholds / timings are sane', () => {
+  const g = T.gamepad;
+  for (const k of ['select', 'back', 'mute', 'power', 'pause', 'up', 'down', 'left', 'right']) {
+    assert.ok(Number.isInteger(g[k]) && g[k] >= 0 && g[k] <= 16, `${k} ${g[k]}`);
+  }
+  assert.ok(g.triggerThreshold > 0 && g.triggerThreshold <= 1, `triggerThreshold ${g.triggerThreshold}`);
+  assert.ok(g.stickDeadzone > 0 && g.stickDeadzone < 1, `stickDeadzone ${g.stickDeadzone}`);
+  assert.ok(g.repeatDelayMs > g.repeatEveryMs && g.repeatEveryMs > 0, 'stick repeat waits longer than it repeats');
+  const f = T.focus;
+  assert.ok(f.ringPad > 0 && f.ringWidth > 0 && f.ringRadius > 0, 'ring geometry');
+  assert.ok(f.pulseScale > 1 && f.pulseScale < 1.3 && f.pulseMs > 0, 'ring pulse');
+  assert.ok(f.scrollStepPx > 0, 'scroll step');
+});

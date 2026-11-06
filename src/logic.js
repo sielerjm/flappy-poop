@@ -1141,6 +1141,102 @@ export function chromeIntent({
   return { do: 'ignore' };
 }
 
+/**
+ * Map a gamepad button index to a pad action through the configured layout
+ * (TUNING.gamepad). Unmapped buttons are null.
+ *
+ * @returns {'select'|'back'|'mute'|'power'|'pause'|'nav:up'|'nav:down'|'nav:left'|'nav:right'|null}
+ */
+export function padAction(index, t) {
+  const g = t.gamepad;
+  if (index === g.select) return 'select';
+  if (index === g.back) return 'back';
+  if (index === g.mute) return 'mute';
+  if (index === g.power) return 'power';
+  if (index === g.pause) return 'pause';
+  if (index === g.up) return 'nav:up';
+  if (index === g.down) return 'nav:down';
+  if (index === g.left) return 'nav:left';
+  if (index === g.right) return 'nav:right';
+  return null;
+}
+
+/**
+ * A stick deflection (x, y in −1..1, y positive = down) as a nav action: null
+ * inside the deadzone, else the larger axis wins.
+ */
+export function stickNav(x, y, t) {
+  const dz = t.gamepad.stickDeadzone;
+  const ax = Math.abs(x);
+  const ay = Math.abs(y);
+  if (ax < dz && ay < dz) return null;
+  if (ax >= ay) return x < 0 ? 'nav:left' : 'nav:right';
+  return y < 0 ? 'nav:up' : 'nav:down';
+}
+
+/**
+ * Next focus index in a one-dimensional list: up / left step back, down / right
+ * step forward, wrapping. −1 when there is nothing to focus; from −1 (nothing
+ * focused) forward lands on 0 and back on the last item.
+ */
+export function focusStep(index, count, dir) {
+  if (count <= 0) return -1;
+  const back = dir === 'up' || dir === 'left';
+  const from = index < 0 || index >= count ? (back ? 0 : -1) : index;
+  return (from + (back ? -1 : 1) + count) % count;
+}
+
+/** The focus ring rectangle: the button's bounds grown by ringPad on every side. */
+export function focusRingLayout(bounds, t) {
+  const pad = t.focus.ringPad;
+  return {
+    x: bounds.x - pad,
+    y: bounds.y - pad,
+    width: bounds.width + 2 * pad,
+    height: bounds.height + 2 * pad,
+    radius: t.focus.ringRadius,
+  };
+}
+
+/**
+ * Decide what a gamepad action does, given which scene is on top. The pad
+ * never invents a new game action: 'tap' / 'pause' / 'resume' / 'mute' hand
+ * over to chromeIntent through Play.handleChrome, 'retry' is Over's tap, and
+ * 'activate' presses whatever the focus ring is on. Phaser-free, like
+ * chromeIntent.
+ *
+ * @param {string|null} action from padAction / stickNav
+ * @param {'ready'|'playing'|'paused'|'dead'} state Play's state
+ * @param {'play'|'over'|'overlay'} top the scene the ring belongs to
+ * @param {boolean} ringShown the top scene's focus ring is visible
+ * @param {boolean} savePanelOpen the DOM save panel is up (the pad cannot type)
+ * @returns {{ do: string, dir?: string }}
+ */
+export function padIntent({ action, state, top = 'play', ringShown = false, savePanelOpen = false }) {
+  if (savePanelOpen || !action) return { do: 'ignore' };
+  if (action === 'mute') return { do: 'mute' };
+  if (action.startsWith('nav:')) {
+    const dir = action.slice(4);
+    if (top === 'play' && state === 'playing') return { do: 'pauseAndFocus', dir };
+    return { do: 'move', dir };
+  }
+  if (action === 'select') {
+    if (ringShown) return { do: 'activate' };
+    if (top === 'over') return { do: 'retry' };
+    if (top === 'play') return { do: 'tap' };
+    return { do: 'ignore' };
+  }
+  if (action === 'back') {
+    if (top === 'overlay') return { do: 'closeTop' };
+    if (top === 'play' && state === 'paused') return { do: 'resume' };
+    if (ringShown) return { do: 'hideRing' };
+    return { do: 'ignore' };
+  }
+  if (action === 'pause') return { do: top === 'play' ? 'pause' : 'ignore' };
+  if (action === 'power') return { do: top === 'play' ? 'power' : 'ignore' };
+  return { do: 'ignore' };
+}
+
 export function vibrate(navigatorLike, pattern) {
   if (typeof navigatorLike?.vibrate !== 'function') return false;
   try {

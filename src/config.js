@@ -191,6 +191,31 @@ export const TUNING = {
     endClearMarginPx: 64, // px of extra scroll kept in hand so the last pipe is fully behind the poop when the fart ends
     beanRadius: 48, // px circular hitbox = half the 96 logical-px sprite
   },
+  gamepad: {
+    // Standard-mapping button indices (Xbox: A 0, B 1, X 2, Y 3, LB 4, RB 5, LT 6, RT 7, View 8, Menu 9, d-pad 12–15).
+    // A pad that reports another layout (pad.mapping !== 'standard') is retuned here, not in code.
+    select: 0, // A: flap / start / resume / press the ringed button
+    back: 1, // B: close the top overlay, resume from pause, hide the ring
+    mute: 3, // Y: toggle sound
+    power: 7, // RT: fire the bean power (analog; see triggerThreshold)
+    pause: 9, // Menu: pause / resume
+    up: 12, // d-pad
+    down: 13,
+    left: 14,
+    right: 15,
+    triggerThreshold: 0.5, // 0–1 fraction of RT travel that counts as a press (Phaser's default 1 = pulled to the stop)
+    stickDeadzone: 0.5, // 0–1 stick deflection below which a stick does not navigate
+    repeatDelayMs: 350, // ms a stick is held before it starts repeating
+    repeatEveryMs: 150, // ms between repeats while held
+  },
+  focus: {
+    ringPad: 10, // px the ring sits outside the focused button's bounds
+    ringWidth: 4, // px stroke
+    ringRadius: 14, // px corner radius
+    pulseScale: 1.06, // × ring scale at the top of the pulse
+    pulseMs: 500, // ms per pulse (one way)
+    scrollStepPx: 160, // px a d-pad up / down scrolls About and How to play
+  },
 };
 
 // Gut segments the poop travels through, one per level, in order. `key` is the
