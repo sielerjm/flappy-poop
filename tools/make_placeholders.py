@@ -97,6 +97,20 @@ FRONT_WAVE = (8, 5, math.pi / 2)  # shallow undulation of the strips' finger tip
 BACK_WAVE = (24, 3, 0.0)  # deeper undulation of the fringes' tips (±24 px, 3 waves per tile)
 TIP_ZONE = 16  # px of the strips' lumen-side edge left for the undulating tips (2 × the front amplitude)
 BAR_FRAC = 0.85  # the cream bars end at this share of the shortest tip's reach from the screen edge, so every tip extends past them
+BACKDROP_FADE = 0.95  # share of the cream backdrop's depth (from its lumen edge inward) over which it fades to transparent; the rest, at the screen edge, is solid
+
+
+def backdrop(d, w, y0, y1, toward_lumen):
+    """The cream mucosa backdrop between rows y0..y1, fading linearly to transparent over
+    BACKDROP_FADE of its depth so its lumen-side edge is not a hard cut. toward_lumen is +1
+    when the lumen is below (the top backdrop), −1 when it is above (the bottom one). Drawn
+    first onto the transparent canvas, so the rows' alphas are written as is."""
+    depth = y1 - y0
+    fade = depth * BACKDROP_FADE
+    for y in range(y0, y1):
+        d_lumen = (y1 - y) if toward_lumen > 0 else (y - y0 + 1)  # rows from the lumen edge, 1-based
+        a = 255 if d_lumen > fade else int(round(255 * d_lumen / fade))
+        d.line((0, y, w, y), fill=CREAM[:3] + (a,))
 
 
 def ceiling_strip(d, w, strip_h=128, cream_h=16):
@@ -115,7 +129,8 @@ def ceiling_strip(d, w, strip_h=128, cream_h=16):
 
 def villi(path, w=720, h=1280):
     """Transparent overlay: a cream mucosa backdrop from each screen edge to BAR_FRAC of the
-    shortest fringe tip (behind everything: the strips and the fringes draw over it), the
+    shortest fringe tip, fading to transparent toward the lumen (BACKDROP_FADE; behind
+    everything: the strips and the fringes draw over it), the
     villi fringes, and the ceiling strip (the ground's mirror) along the top edge. The level
     colour shows through from the backdrop's edge to the lumen (the game draws a solid
     rectangle under the overlay)."""
@@ -131,8 +146,8 @@ def villi(path, w=720, h=1280):
     amp = BACK_WAVE[0]
     top_bar = round(BAR_FRAC * (top_base + 20 - amp))
     bot_bar = h - round(BAR_FRAC * (h - (bot_base - 20 + amp)))
-    d.rectangle((0, 0, w, top_bar), fill=CREAM)
-    d.rectangle((0, bot_bar, w, h), fill=CREAM)
+    backdrop(d, w, 0, top_bar, +1)
+    backdrop(d, w, bot_bar, h, -1)
     # villi fringes (drawn wider than the image so the horizontal tile edge matches); every finger
     # is ≥ 131 px so its rounded far end sits behind the ceiling strip / the ground strip, and the
     # tips undulate ±24 px around the backdrop's edge (BACK_WAVE).
