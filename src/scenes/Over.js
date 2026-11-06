@@ -8,6 +8,7 @@ import { isMuted, unlock } from '../sound.js';
 import { createTray } from '../ui/tray.js';
 import { createButton } from '../ui/button.js';
 import { createRectGlow } from '../ui/glow.js';
+import { createFocus } from '../ui/focus.js';
 
 export class Over extends Phaser.Scene {
   constructor() {
@@ -85,6 +86,7 @@ export class Over extends Phaser.Scene {
         this.homeButton.setAlpha(this.buttonFade.a);
         this.shareButton?.setAlpha(this.buttonFade.a);
       },
+      onComplete: () => this.focus?.show(), // under a controller the ring lands on Home once it is visible
     });
     this.tweens.add({ targets: this.homeHalo, alpha: { from: T.readyPromptMinAlpha, to: T.readyPromptMaxAlpha }, delay: T.retryLockoutMs, yoyo: true, repeat: -1, duration: T.readyPromptPulseMs });
     this.tweens.add({ targets: panel, scale: { from: 0.8, to: 1 }, duration: T.over.panelInMs, ease: 'Back.easeOut' });
@@ -96,10 +98,20 @@ export class Over extends Phaser.Scene {
     if (this.buttons.share) this.makeShareCard({ headline, won, scoreLine, collected, pipes, locale });
 
     this.tray = createTray(this, { muted: isMuted() });
-    // scene.stop destroys the tray's text objects; drop the handle so Play.toggleMute cannot
-    // reach a dead label after the panel has closed (setText on it throws inside Phaser).
+    // Controller focus ring: Home, Share (once its card exists), then the tray (no ⏸ here).
+    // A on Home is the panel tap; A on a tray button is that button's chrome.
+    this.focus = createFocus(this, T, {
+      items: [
+        { id: 'home', box: home, activate: () => this.retry() },
+        ...(this.buttons.share ? [{ id: 'share', box: this.buttons.share, visible: () => Boolean(this.shareFile), activate: () => this.shareRun() }] : []),
+        ...['info', 'lang', 'feedback', 'leaderboard', 'mute', 'settings'].map((id) => ({ id, obj: this.tray.buttons[id], activate: () => play?.handleChrome(id) })),
+      ],
+    });
+    // scene.stop destroys the tray's text objects and the ring; drop the handles so Play cannot
+    // reach a dead label (setText on it throws inside Phaser) or a dead ring after the panel closes.
     this.events.once('shutdown', () => {
       this.tray = null;
+      this.focus = null;
     });
 
     // Share: pressed on pointerdown (so the tap does not go home), sent on pointerup over
