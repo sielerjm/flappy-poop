@@ -32,6 +32,13 @@ test('every item weight is ≥ 0 and the sum is > 0', () => {
   assert.ok(sum > 0, 'all weights are 0');
 });
 
+test('the falling face shows on a long fall but before the tilt maxes out', () => {
+  assert.ok(T.fallLookVy > 0, `fallLookVy ${T.fallLookVy}`);
+  assert.ok(T.fallLookVy <= T.angleFallRefVy, `fallLookVy ${T.fallLookVy} should not wait past angleFallRefVy ${T.angleFallRefVy}`);
+  // Quick taps never reach it: one flap's rise never ends above the threshold.
+  assert.ok(T.fallLookVy > -T.flapVelocity * 0.5, `fallLookVy ${T.fallLookVy} is reached too soon after a flap`);
+});
+
 test('fartVolume is audible but not clipping', () => {
   assert.ok(T.fartVolume >= 0.2 && T.fartVolume <= 1, `fartVolume ${T.fartVolume}`);
   assert.ok(T.levelUpVolume >= 0.2 && T.levelUpVolume <= 1, `levelUpVolume ${T.levelUpVolume}`);

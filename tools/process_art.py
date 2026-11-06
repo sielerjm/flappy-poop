@@ -2,23 +2,26 @@
 """process_art.py — crop, knock out background white, and resize Michael's
 drawings into the gameplay art-contract PNGs.
 
-Created by Michael Sieler. Last updated: 2026-11-05 (mystery box spin sheet and icon).
+Created by Michael Sieler. Last updated: 2026-11-06 (falling frames, app icons).
 
 Run:    uv run --with pillow python3 tools/process_art.py   (or any Python with Pillow)
-Input:  assets/src/{Poop_Emoji_Alive,Poop_Emoji_Dead,Poop_Stink1,Poop_Stink2,Poop_Fart,Poop_Speech,
-                    Fiber,Good_Bacteria,Bad_Bacteria,Kidney_Bean,Postbiotic,MysteryBox_Icon}.png
-        and assets/src/MysteryBox.gif (animated)
+Input:  assets/src/{Poop_Emoji_Alive,Poop_Emoji_Dead,Poop_Stink1,Poop_Stink2,PoopFalling,
+                    PoopStinkFalling1,PoopStinkFalling2,Poop_Fart,Poop_Speech,
+                    Fiber,Good_Bacteria,Bad_Bacteria,Kidney_Bean,Postbiotic,MysteryBox_Icon}.png,
+        assets/src/MysteryBox.gif (animated) and assets/src/FlappyPoopAppArt.png (the app icon)
 Output: assets/{poop,poop-dead,fiber,probiotic,bacteria,bean,postbiotic,mystery-icon}.png at 384x384 RGBA,
-        assets/{poop-stink1,poop-stink2,poop-fart,poop-speech}.png on larger squares, and
-        assets/mystery.png: the GIF's frames side by side, 384x384 each (a Phaser spritesheet).
+        assets/{poop-stink1,poop-stink2,poop-falling,poop-stink-falling1,poop-stink-falling2,
+                poop-fart,poop-speech}.png on larger squares,
+        assets/mystery.png: the GIF's frames side by side, 384x384 each (a Phaser spritesheet), and
+        assets/{icon-192,icon-512,apple-touch-icon}.png from the app art (see process_icons).
 
 Only white connected to the image border is made transparent, so eyes and
 mouths stay white. Items are trimmed independently.
 
 The poop set shares ONE body scale: alive + dead define the body box (union of
-both bounding boxes, as before). The stink frames are cut on a bigger square
-centred on that same body centre, so swapping textures (origin 0.5) never moves
-the body. The fart frame's body sits elsewhere on its source canvas (cloud on
+both bounding boxes, as before). The stink and falling frames are cut on a
+bigger square centred on that same body centre, so swapping textures (origin
+0.5) never moves the body. The fart frame's body sits elsewhere on its source canvas (cloud on
 the left), so its centre is found with a brown-pixel mask and the square is
 centred there; the cloud trails left of the body in the game.
 """
@@ -154,8 +157,15 @@ def process_poop_set():
         out.save(OUT / dest)
         print(f"{dest}: {out.size}")
 
-    # Stink frames: same body centre and scale, bigger square for the lines.
-    for src_name, dest in (("Poop_Stink1.png", "poop-stink1.png"), ("Poop_Stink2.png", "poop-stink2.png")):
+    # Stink / falling frames: same body centre and scale, bigger square for the
+    # lines and the sweat marks. The falling faces share the body box exactly.
+    for src_name, dest in (
+        ("Poop_Stink1.png", "poop-stink1.png"),
+        ("Poop_Stink2.png", "poop-stink2.png"),
+        ("PoopFalling.png", "poop-falling.png"),
+        ("PoopStinkFalling1.png", "poop-stink-falling1.png"),
+        ("PoopStinkFalling2.png", "poop-stink-falling2.png"),
+    ):
         im = knock_background(Image.open(SRC / src_name))
         bbox = content_bbox(im)
         if not bbox:
@@ -230,6 +240,36 @@ def process_sheet(src: Path, dest_name: str):
     print(f"{dest_name}: {sheet.size} ({len(frames)} frames of {SIZE}x{SIZE})")
 
 
+ICON_SAFE_FRAC = 0.8  # maskable icons: Android may crop to a circle; the central 80 % is always kept
+ICONS = (("icon-192.png", 192), ("icon-512.png", 512))
+APPLE_ICON = ("apple-touch-icon.png", 180)
+
+
+def process_icons(src: Path):
+    """App icons from the square app art (opaque, its own background colour).
+
+    icon-192 / icon-512 (manifest, purpose "any maskable", and the tab favicon):
+    the drawing is scaled to the central ICON_SAFE_FRAC of a canvas filled with
+    the art's own background (sampled at the top-left corner) so a circular or
+    squircle mask never clips the fart cloud. apple-touch-icon (iPhone home
+    screen, where iOS only rounds the corners): the full art, no padding.
+    """
+    art = Image.open(src).convert("RGBA")
+    if art.width != art.height:
+        raise SystemExit(f"{src.name} must be square, is {art.size}")
+    bg = art.getpixel((0, 0))
+    for name, size in ICONS:
+        inner = int(round(size * ICON_SAFE_FRAC))
+        out = Image.new("RGBA", (size, size), bg)
+        out.paste(scale_to(art, inner), ((size - inner) // 2, (size - inner) // 2))
+        out.save(OUT / name)
+        print(f"{name}: {out.size} (drawing {inner} px on {bg[:3]})")
+    name, size = APPLE_ICON
+    out = scale_to(art, size)
+    out.save(OUT / name)
+    print(f"{name}: {out.size} (full bleed)")
+
+
 if __name__ == "__main__":
     process_poop_set()
     process_item(SRC / "Fiber.png", "fiber.png")
@@ -239,3 +279,4 @@ if __name__ == "__main__":
     process_item(SRC / "Postbiotic.png", "postbiotic.png")
     process_item(SRC / "MysteryBox_Icon.png", "mystery-icon.png")
     process_sheet(SRC / "MysteryBox.gif", "mystery.png")
+    process_icons(SRC / "FlappyPoopAppArt.png")

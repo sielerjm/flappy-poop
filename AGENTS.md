@@ -105,7 +105,9 @@ src/
                             bandMidY, tutorialSpawn), beans (rollBean, beanSpawnX, beanY,
                             beanAngle, bobY, gapBobAmplitude, gapBobY,
                             poopTapHit; beanButtonHit's circle is twice the
-                            drawn button), fart envelope (pipeSpacing,
+                            drawn button), poopFrame (the live poop's texture
+                            key: plain / stink frame, or the falling faces at
+                            fallLookVy px/s down), fart envelope (pipeSpacing,
                             fartPeakMul, fartMul, fartRemainingDistance), fartFloat
                             (wave + tilt), hsvToRgb / rainbowHue, glowAlphaAt /
                             glowStops, sprite angle, retry
@@ -280,8 +282,16 @@ src/
                             the one-per-run guarantee, halfway to the next pair), bobbed in update() from per-bean elapsed ms;
                             collectBean → effects.addBean (up to maxBeans; holdingBean
                             = bag full or farting); setCharged() alternates
-                            stink frames + pulses this.glow and the bean button in
-                            the tray centre slot (beanButtonLayout, same period);
+                            stink frames through refreshPoopLook() + pulses this.glow
+                            and the bean button in the tray centre slot
+                            (beanButtonLayout, same period). refreshPoopLook()
+                            (poopFrame: charged, stinkFrame, body vy) also runs
+                            every playing frame outside a fart, so a drop at
+                            fallLookVy or faster wears poop-falling (or
+                            poop-stink-falling1/2 while charged) until the next
+                            flap; startLevelBreak and win() call it once so the
+                            break glide / the win never keep the scared face;
+                            die's poop-dead and the fart frame are untouched;
                             applyRainbow() each frame recolours glow + button disc
                             with superBeans held and makes the glow a rainbow halo
                             during a super fart (poop art never tinted); a
@@ -434,15 +444,22 @@ src/
 
 assets/                     Contract PNGs + README.md (the art contract).
   README.md                 File name, pixel size, orientation rules. tests enforce it.
-  poop.png poop-dead.png poop-stink1.png poop-stink2.png poop-fart.png
+  poop.png poop-dead.png poop-stink1.png poop-stink2.png poop-falling.png
+  poop-stink-falling1.png poop-stink-falling2.png poop-fart.png
   poop-speech.png fiber.png probiotic.png postbiotic.png bacteria.png bean.png
-                            (postbiotic.png: HUD icon only, never spawned)
+                            (postbiotic.png: HUD icon only, never spawned;
+                            the falling frames: scared face + sweat marks for a
+                            long drop, with / without stink lines)
   mystery.png               Mystery box spin: 8 frames of 384x384 side by side (3072x384),
                             loaded as a spritesheet; mystery-icon.png is its static view
                             for the game-over summary and How to play (never spawned).
   pipe.png villi.png ground.png   (villi.png: transparent overlay over the level
                             colour; art contract in assets/README.md "Background layers")
-  icon-192.png icon-512.png
+  icon-192.png icon-512.png apple-touch-icon.png
+                            App icons from src/FlappyPoopAppArt.png (process_art.py
+                            process_icons): the two manifest / favicon icons keep the
+                            drawing inside the central 80 % (maskable safe zone) on
+                            the art's own tan; the Apple touch icon is full bleed.
   src/                      Original drawings; not in the size table.
   sfx/fart.mp3              Death sample.
   sfx/fart_accelerate.mp3   Fart power-up clip; its duration is the power length.
@@ -539,16 +556,21 @@ tests/                      node --test, zero deps. Each file is self-describing
                             feature.yml); config.yml allows blank issues.
 
 tools/
-  make_placeholders.py      Regenerates pipe / bg / ground / icons only. Must not
-                            overwrite poop.png. Run only when you intend to.
+  make_placeholders.py      Regenerates pipe / villi / ground only (icons moved to
+                            process_art.py). Must not overwrite poop.png. Run only
+                            when you intend to.
   process_art.py            Crops assets/src/ drawings into 384x384 contract PNGs
                             (drawn at spriteDisplayScale 0.25 → 96 logical px);
-                            the poop set (alive / dead / stink1 / stink2 / fart /
-                            speech) shares one body scale and centre, stink / fart /
+                            the poop set (alive / dead / stink1 / stink2 / falling /
+                            stink-falling1 / stink-falling2 / fart / speech) shares
+                            one body scale and centre, stink / falling / fart /
                             speech on bigger squares; bean.png from Kidney_Bean.png,
                             postbiotic.png from Postbiotic.png, mystery-icon.png from
                             MysteryBox_Icon.png; process_sheet cuts MysteryBox.gif's
-                            frames on one shared square into the mystery.png strip.
+                            frames on one shared square into the mystery.png strip;
+                            process_icons cuts icon-192 / icon-512 (padded to the
+                            maskable safe zone) and apple-touch-icon (full bleed)
+                            from FlappyPoopAppArt.png.
                             Arcade circles use scaledCircleBody (Phaser source pixels).
   serve.py                  npm start: bind 0.0.0.0:8000, print laptop + phone URLs.
   push.mjs                  npm run push: stamps LAST_UPDATED in src/logic.js with the
@@ -671,7 +693,10 @@ Commits so far follow `type(scope): summary` (`feat`, `docs`, `chore`); keep it.
   `src/scenes/Play.js`, knobs in `src/config.js`.
 - New art → gameplay sprites via `assets/src/` + `tools/process_art.py` + a row
   in `assets/README.md` + `load.image()` (or `load.spritesheet()` for an
-  animated GIF, cut by `process_sheet`) in `src/scenes/Boot.js`. Remaining
+  animated GIF, cut by `process_sheet`) in `src/scenes/Boot.js`. A new poop
+  face goes in the poop-set loop there (same body box as `Poop_Emoji_Alive.png`)
+  and in `poopFrame()` if the game picks it. App icons: replace
+  `assets/src/FlappyPoopAppArt.png` and re-run the script. Remaining
   placeholders still go through `make_placeholders.py`, which must not overwrite
   `poop.png`.
 - New sound → a `blip()` preset in `src/sound.js`, **or** a file in `assets/sfx/`

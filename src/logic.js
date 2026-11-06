@@ -160,6 +160,18 @@ export function angleForVelocity(vy, { maxRiseAngle, maxFallAngle, angleFallRefV
   return Math.round(deg);
 }
 
+/**
+ * Texture key for the live poop (not farting, dead or on the ready screen):
+ * the plain face or the current stink frame while charged, swapped for its
+ * falling face once the body falls at fallLookVy px/s or faster.
+ */
+export function poopFrame({ charged, stinkFrame = 0, vy }, { fallLookVy }) {
+  const falling = vy >= fallLookVy;
+  if (!charged) return falling ? 'poop-falling' : 'poop';
+  const n = stinkFrame ? 2 : 1;
+  return falling ? `poop-stink-falling${n}` : `poop-stink${n}`;
+}
+
 /** Retry is allowed once lockoutMs have elapsed since the game-over screen opened. */
 export function canRestart(openedAt, now, lockoutMs) {
   return now - openedAt >= lockoutMs;

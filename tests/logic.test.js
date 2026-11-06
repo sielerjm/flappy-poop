@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createRng, gapBounds, pipeGapY, centredGapY, hasPassed, angleForVelocity } from '../src/logic.js';
+import { createRng, gapBounds, pipeGapY, centredGapY, hasPassed, angleForVelocity, poopFrame } from '../src/logic.js';
 import { GAME_HEIGHT, TUNING as T } from '../src/config.js';
 
 const cfg = { gameHeight: GAME_HEIGHT, groundHeight: T.groundHeight, gapHeight: T.gapHeight, gapMargin: T.gapMargin };
@@ -58,4 +58,18 @@ test('centredGapY sits at mid-screen (the fart float height) and stays inside ga
   const tight = { gameHeight: 600, groundHeight: 128, gapHeight: 340, gapMargin: 40 };
   const b = gapBounds(tight);
   assert.ok(centredGapY(tight) >= b.minY && centredGapY(tight) <= b.maxY);
+});
+
+test('poopFrame: the plain or stink face until the fall reaches fallLookVy, then the falling faces', () => {
+  const plain = { charged: false, vy: 0 };
+  assert.equal(poopFrame({ ...plain, vy: T.flapVelocity }, T), 'poop');
+  assert.equal(poopFrame(plain, T), 'poop');
+  assert.equal(poopFrame({ ...plain, vy: T.fallLookVy - 1 }, T), 'poop');
+  assert.equal(poopFrame({ ...plain, vy: T.fallLookVy }, T), 'poop-falling');
+  assert.equal(poopFrame({ ...plain, vy: 10_000 }, T), 'poop-falling');
+  assert.equal(poopFrame({ charged: true, stinkFrame: 0, vy: 0 }, T), 'poop-stink1');
+  assert.equal(poopFrame({ charged: true, stinkFrame: 1, vy: 0 }, T), 'poop-stink2');
+  assert.equal(poopFrame({ charged: true, vy: T.fallLookVy - 1 }, T), 'poop-stink1', 'stinkFrame defaults to frame A');
+  assert.equal(poopFrame({ charged: true, stinkFrame: 0, vy: T.fallLookVy }, T), 'poop-stink-falling1');
+  assert.equal(poopFrame({ charged: true, stinkFrame: 1, vy: T.fallLookVy + 500 }, T), 'poop-stink-falling2');
 });

@@ -5,6 +5,7 @@ import {
   centredGapY,
   hasPassed,
   angleForVelocity,
+  poopFrame,
   levelSpeed,
   levelGap,
   levelEnd,
@@ -134,6 +135,7 @@ export class Play extends Phaser.Scene {
     this.fartDurationMs = 0;
     this.fartPeak = 1;
     this.charged = false;
+    this.stinkFrame = 0; // which stink frame is up while charged (0 = A, 1 = B)
     this.centreNextGap = false; // first pair after a fart opens at the poop's float height
     this.nextGapY = null; // gap centre already rolled for the next pair (a still level-1 fiber / bean sits midway to it)
     this.beanBounds = beanBounds({ gameHeight: GAME_HEIGHT, groundHeight: T.groundHeight, radius: T.beans.beanRadius, frac: T.beans.travelFrac });
@@ -505,6 +507,7 @@ export class Play extends Phaser.Scene {
     this.pausePlay();
     this.fadeBackground();
     this.poop.setVelocity(0, 0);
+    this.refreshPoopLook(); // no scared face on the break's gliding poop (update() does not run it while paused)
     this.poop.body.setAllowGravity(false);
     this.breakGlide = this.tweens.add({
       targets: this.poop,
@@ -1168,6 +1171,17 @@ export class Play extends Phaser.Scene {
     this.poop.body.setCircle(body.radius, body.offset, body.offset);
   }
 
+  /**
+   * The live poop's face from poopFrame(): plain or the current stink frame,
+   * the falling face (sweat marks) once it drops at fallLookVy or faster. Only
+   * swaps when the key changes, so the body circle is rebuilt only then. Callers
+   * keep it off the fart, dead and speech frames.
+   */
+  refreshPoopLook() {
+    const key = poopFrame({ charged: this.charged, stinkFrame: this.stinkFrame, vy: this.poop.body.velocity.y }, T);
+    if (this.poop.texture.key !== key) this.setPoopTexture(key);
+  }
+
   collectBean(bean) {
     if (this.state !== 'playing' || !bean.active) return;
     if (this.effects.holdingBean()) return; // already carrying one: let it float past
@@ -1216,13 +1230,13 @@ export class Play extends Phaser.Scene {
     this.charged = on;
     if (on) {
       this.stinkFrame = 0;
-      this.setPoopTexture('poop-stink1');
+      this.refreshPoopLook();
       this.stinkTimer = this.time.addEvent({
         delay: T.beans.stinkFrameMs,
         loop: true,
         callback: () => {
           this.stinkFrame ^= 1;
-          this.setPoopTexture(this.stinkFrame ? 'poop-stink2' : 'poop-stink1');
+          this.refreshPoopLook();
         },
       });
       this.glow.setAlpha(T.beans.glowMinAlpha);
@@ -1246,7 +1260,7 @@ export class Play extends Phaser.Scene {
       this.beanButtonTween?.stop();
       this.beanButtonTween = null;
       this.beanButton.setVisible(false);
-      if (this.state === 'playing') this.setPoopTexture('poop');
+      if (this.state === 'playing') this.refreshPoopLook();
     }
   }
 
@@ -1605,6 +1619,7 @@ export class Play extends Phaser.Scene {
     this.endRun();
     this.poop.body.setAllowGravity(false);
     this.poop.setVelocity(0, 0);
+    this.refreshPoopLook(); // the plain face (endRun uncharged it), even if the line was crossed mid-drop
     this.poop.setAngle(0);
     this.cameras.main.flash(250, 255, 215, 0);
     this.showOver(true);
@@ -1681,7 +1696,10 @@ export class Play extends Phaser.Scene {
         }
       }
 
-      if (!this.effects.powerActive()) this.poop.setAngle(angleForVelocity(this.poop.body.velocity.y, T));
+      if (!this.effects.powerActive()) {
+        this.poop.setAngle(angleForVelocity(this.poop.body.velocity.y, T));
+        this.refreshPoopLook(); // the falling face past fallLookVy, back to plain / stink on the next flap
+      }
       const top = T.poopRadius;
       const floor = GAME_HEIGHT - T.groundHeight - T.poopRadius;
       if (this.poop.y < top || this.poop.y > floor) {

@@ -82,10 +82,16 @@ test('manifest.webmanifest is valid JSON and its icons exist', () => {
   }
 });
 
-test('index.html links the manifest and an icon', () => {
+test('index.html links the manifest, an icon and the full-bleed Apple touch icon', () => {
   const html = readFileSync(join(root, 'index.html'), 'utf8');
   assert.match(html, /<link rel="manifest" href="manifest\.webmanifest">/);
   assert.match(html, /<link rel="icon"[^>]*href="assets\/icon-192\.png"/);
+  const apple = html.match(/<link rel="apple-touch-icon" sizes="(\d+x\d+)" href="([^"]+)">/);
+  assert.ok(apple, 'apple-touch-icon link with sizes not found');
+  assert.ok(existsSync(join(root, apple[2])), `${apple[2]} missing`);
+  const real = pngSize(join(root, apple[2]));
+  assert.equal(`${real.w}x${real.h}`, apple[1], `${apple[2]} size does not match its link`);
+  assert.equal(apple[1], '180x180', 'iOS home-screen icons are 180x180');
 });
 
 const audioLoads = srcFiles.flatMap((f) => {

@@ -8,6 +8,8 @@ checks that the README table matches the PNG headers).
 
 Run:  python3 tools/make_placeholders.py
 Requires Pillow. Uses Noto Color Emoji for the poop if present, else draws a blob.
+Only pipe / villi / ground: the player, items and the app icons come from
+tools/process_art.py (Michael's drawings in assets/src/), never from here.
 """
 from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont
@@ -110,29 +112,11 @@ def ground(path, w=720, h=128):
     img.save(path)
 
 
-def icon(path, size):
-    """App icon: poop on a pink rounded square (maskable-safe: content within the inner 80 %)."""
-    img = Image.new("RGBA", (size, size), PINK)
-    d = ImageDraw.Draw(img)
-    d.rounded_rectangle((0, 0, size - 1, size - 1), radius=size // 5, fill=PINK)
-    tmp = OUT / "_icon_poop.png"
-    poop(tmp, int(size * 0.62))
-    sprite = Image.open(tmp)
-    tmp.unlink()
-    img.paste(sprite, ((size - sprite.width) // 2, (size - sprite.height) // 2), sprite)
-    img.save(path)
-
-
 if __name__ == "__main__":
-    # poop.png is Michael's drawing (tools/process_art.py). Do not overwrite it.
-    # Icons are only rebuilt when missing so redrawn gameplay art is not clobbered.
-    for name, size in (("icon-192.png", 192), ("icon-512.png", 512)):
-        path = OUT / name
-        if not path.exists():
-            icon(path, size)
+    # poop.png and the icons are Michael's drawings (tools/process_art.py). Do not overwrite them.
     pipe(OUT / "pipe.png")
     villi(OUT / "villi.png")
     ground(OUT / "ground.png")
-    for f in ["pipe.png", "villi.png", "ground.png", "icon-192.png", "icon-512.png"]:
+    for f in ["pipe.png", "villi.png", "ground.png"]:
         im = Image.open(OUT / f)
         print(f"{f}: {im.width}x{im.height}")

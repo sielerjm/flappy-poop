@@ -22,6 +22,9 @@ export class Boot extends Phaser.Scene {
     this.load.image('bean', 'assets/bean.png' + V);
     this.load.image('poop-stink1', 'assets/poop-stink1.png' + V);
     this.load.image('poop-stink2', 'assets/poop-stink2.png' + V);
+    this.load.image('poop-falling', 'assets/poop-falling.png' + V); // long fall, no power ready (fallLookVy)
+    this.load.image('poop-stink-falling1', 'assets/poop-stink-falling1.png' + V); // long fall while charged, frame A
+    this.load.image('poop-stink-falling2', 'assets/poop-stink-falling2.png' + V); // frame B
     this.load.image('poop-fart', 'assets/poop-fart.png' + V);
     this.load.image('poop-speech', 'assets/poop-speech.png' + V);
     this.load.image('pipe', 'assets/pipe.png' + V);

@@ -315,6 +315,27 @@ export async function run(url = DEFAULT_URL) {
     // restore the probiotic the fart checks below expect.
     {
       await evaluate(`${play}.poop.body.setAllowGravity(false), ${play}.poop.setVelocity(0, 0), ${play}.poop.y = 640, ${play}.graceLeftMs = 1e9, true`);
+      // Falling face: a drop at fallLookVy or faster swaps the live poop to its scared frame
+      // (sweat marks; with the stink lines while charged); a flap puts the plain / stink face back.
+      {
+        await sleep(TT.pauseResumeLockoutMs + 50); // closing the leaderboard armed the flap lockout; doFlap() below must land
+        const face = async (vy, charged) => {
+          await evaluate(`${play}.setCharged(${charged}), ${play}.poop.y = 640, ${play}.poop.setVelocityY(${vy}), true`);
+          await sleep(60);
+          const key = await evaluate(`${play}.poop.texture.key`);
+          await evaluate(`${play}.doFlap(), true`); // flapVelocity: rising again
+          await sleep(60);
+          return { key, after: await evaluate(`${play}.poop.texture.key`) };
+        };
+        const plain = await face(TT.fallLookVy + 50, false);
+        const slow = await face(TT.fallLookVy - 100, false);
+        const stink = await face(TT.fallLookVy + 50, true);
+        await evaluate(`${play}.setCharged(false), ${play}.poop.setVelocity(0, 0), ${play}.poop.y = 640, true`);
+        ok(plain.key === 'poop-falling' && plain.after === 'poop', `a fall at ${TT.fallLookVy} px/s shows the falling face (${plain.key}) and the flap clears it (${plain.after})`);
+        ok(slow.key === 'poop' && slow.after === 'poop', `a slower drop keeps the plain face (${slow.key} → ${slow.after})`);
+        ok(/^poop-stink-falling[12]$/.test(stink.key) && /^poop-stink[12]$/.test(stink.after), `charged, the fall shows the sweat face with stink lines (${stink.key}) and the flap goes back to the stink frames (${stink.after})`);
+        ok((await evaluate(`${play}.poop.texture.key`)) === 'poop', 'uncharged and still: the plain face');
+      }
       const popupHit = async (kind) => {
         const before = await evaluate(`${play}.score`);
         await evaluate(`(() => { const p = ${play}; while (p.effects.hasProbiotic()) p.effects.consumeProbiotic(); const it = p.items.create(p.poop.x, p.poop.y, '${kind}'); it.setData('kind', '${kind}'); p.collectItem(it); return true; })()`);
@@ -333,6 +354,8 @@ export async function run(url = DEFAULT_URL) {
       // Popup stack: oldest on top. A fiber "+3" then a pipe "+1" put the "+1" underneath; a fresh
       // "+1" re-enters underneath again; once the "+3" fades, the "+1" slides up to the top row.
       {
+        // Real pipes keep passing the pinned poop, each restarting a "+1"; start from an empty stack.
+        for (let i = 0; i < 40 && (await evaluate(`${play}.popupOrder.length`)) > 0; i += 1) await sleep(50);
         const st = await evaluate(`(() => { const p = ${play}; p.showScorePopup('fiber'); p.showPipePopup(1); const a = { item: p.scorePopup.y, pipe: p.pipePopup.y }; p.showPipePopup(1); return JSON.stringify({ a, b: { item: p.scorePopup.y, pipe: p.pipePopup.y }, order: p.popupOrder }); })()`).then(JSON.parse);
         const [row0, row1] = TT.popup.rowY;
         ok(st.a.item === row0 && st.a.pipe === row1 && st.b.item === row0 && st.b.pipe === row1 && st.order.join() === 'item,pipe', `popups stack oldest first: "+3" on y ${st.a.item}, "+1" under it on y ${st.a.pipe}, a fresh "+1" re-enters underneath`);
