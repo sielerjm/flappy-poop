@@ -20,6 +20,7 @@ const LABELS = {
 export function createTray(scene, { muted }) {
   const { buttons, pause, info, lang, feedback } = trayLayout(GAME_WIDTH, GAME_HEIGHT, T);
   const nodes = [];
+  const byId = {}; // id → circle, for the controller focus ring (ui/focus.js)
   let muteLabel;
 
   for (const b of [...buttons, pause, info, lang, feedback]) {
@@ -34,6 +35,7 @@ export function createTray(scene, { muted }) {
       .setDepth(31)
       .setAlpha(T.trayAlpha);
     if (b.id === 'mute') muteLabel = label;
+    byId[b.id] = circle;
     // Hit origin is top-left of the Game Object, so centre the geom at (r, r).
     circle.setInteractive(new Phaser.Geom.Circle(r, r, r), Phaser.Geom.Circle.Contains);
     circle.on('pointerdown', () => {
@@ -52,6 +54,7 @@ export function createTray(scene, { muted }) {
   }
 
   return {
+    buttons: byId,
     setMuted(isMuted) {
       if (muteLabel) muteLabel.setText(isMuted ? LABELS.muteOn : LABELS.muteOff);
     },

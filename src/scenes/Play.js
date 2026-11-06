@@ -70,6 +70,7 @@ import { t, pauseBannerText, levelBannerText, levelLabel, initialLocale, isLocal
 import { loadLocal, saveLocal, ensureId, recordScore, TOILET_EMOJI } from '../save.js';
 import { unlock, attachGame, setMuted, isMuted, sfx } from '../sound.js';
 import { createTray } from '../ui/tray.js';
+import { createFocus } from '../ui/focus.js';
 import { createGlow, createRectGlow } from '../ui/glow.js';
 import { createFinishTexture } from '../ui/finish.js';
 import { createLevelBar } from '../ui/levelBar.js';
@@ -296,6 +297,11 @@ export class Play extends Phaser.Scene {
       .setVisible(false);
 
     this.tray = createTray(this, { muted: isMuted() });
+    // Controller focus ring over the tray, in screen order; A on a ringed button runs the
+    // same handleChrome(id) its tap runs. Shown by a d-pad press (onPadAction), never by touch.
+    this.focus = createFocus(this, T, {
+      items: ['info', 'lang', 'feedback', 'leaderboard', 'mute', 'settings', 'pause'].map((id) => ({ id, obj: this.tray.buttons[id], activate: () => this.handleChrome(id) })),
+    });
 
     // Bean power button in the tray's centre slot: shown while charged, pulses
     // in step with the glow, and fires the fart like a tap on the poop.
@@ -345,6 +351,8 @@ export class Play extends Phaser.Scene {
       this.game.events.off('blur', this.onBlur);
       this.pad?.destroy();
       this.pad = null;
+      this.focus?.destroy();
+      this.focus = null;
       if (this.fartSound) {
         this.fartSound.stop();
         this.fartSound.destroy();
@@ -360,6 +368,7 @@ export class Play extends Phaser.Scene {
   launch() {
     if (this.launching || this.state !== 'ready') return;
     this.launching = true;
+    this.focus?.hide(); // the ring has no job while the poop flies
     this.bob.stop();
     this.setReadyUiVisible(false);
     this.setPoopTexture('poop');
@@ -976,6 +985,7 @@ export class Play extends Phaser.Scene {
 
   resumePlay() {
     if (this.state !== 'paused') return;
+    this.focus?.hide();
     if (this.levelBreak) this.endLevelBreak();
     this.state = 'playing';
     this.physics.resume();

@@ -155,6 +155,13 @@ export async function run(url = DEFAULT_URL) {
     const active = (key) => evaluate(`__flappy.scene.isActive('${key}')`);
     const chrome = (input) => evaluate(`__flappy.scene.getScene('Play').handleChrome('${input}'), true`);
     const closeTop = (key) => evaluate(`__flappy.scene.getScene('${key}').close(), true`);
+    // A real mouse press + release at a game point, through the canvas's on-page box.
+    const tapAt = async (x, y) => {
+      const pt = await evaluate(`(() => { const r = __flappy.canvas.getBoundingClientRect(); return JSON.stringify({ x: r.left + ${x} * r.width / 720, y: r.top + ${y} * r.height / 1280 }); })()`).then(JSON.parse);
+      await cdp.send('Input.dispatchMouseEvent', { type: 'mousePressed', x: pt.x, y: pt.y, button: 'left', clickCount: 1 });
+      await cdp.send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: pt.x, y: pt.y, button: 'left', clickCount: 1 });
+      await sleep(250);
+    };
 
     // Home screen: no score shown; the ? pulses on a build this profile has not acknowledged.
     {
@@ -543,13 +550,6 @@ export async function run(url = DEFAULT_URL) {
       const sh = row.find((r) => r.t === shareLabel);
       const hm = row.find((r) => r.t === homeLabel);
       ok(sh && hm && sh.y === hm.y && sh.x < 360 && hm.x > 360 && sh.x - TT.over.buttonWidth / 2 >= 80 + 8 && hm.x + TT.over.buttonWidth / 2 <= 640 - 8, `Share (x ${sh?.x}) and Home (x ${hm?.x}) sit side by side inside the panel`);
-      // A real mouse press + release at a game point, through the canvas's on-page box.
-      const tapAt = async (x, y) => {
-        const pt = await evaluate(`(() => { const r = __flappy.canvas.getBoundingClientRect(); return JSON.stringify({ x: r.left + ${x} * r.width / 720, y: r.top + ${y} * r.height / 1280 }); })()`).then(JSON.parse);
-        await cdp.send('Input.dispatchMouseEvent', { type: 'mousePressed', x: pt.x, y: pt.y, button: 'left', clickCount: 1 });
-        await cdp.send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: pt.x, y: pt.y, button: 'left', clickCount: 1 });
-        await sleep(250);
-      };
       await evaluate(`(() => { window.__shared = []; window.__downloads = []; const def = (k, v) => Object.defineProperty(navigator, k, { value: v, configurable: true, writable: true }); def('canShare', () => window.__canShare); def('share', (d) => { window.__shared.push({ n: d.files.length, type: d.files[0]?.type, name: d.files[0]?.name, title: d.title, text: d.text }); return window.__shareReject ? Promise.reject(Object.assign(new Error('closed'), { name: 'AbortError' })) : Promise.resolve(); }); window.__realClick = HTMLAnchorElement.prototype.click; HTMLAnchorElement.prototype.click = function () { window.__downloads.push(this.download); }; window.__canShare = true; window.__shareReject = false; return true; })()`);
       const score = await evaluate(`${play}.score`);
       await tapAt(sh.x, sh.y);
@@ -628,6 +628,73 @@ export async function run(url = DEFAULT_URL) {
       await evaluate(`import('./src/ui/savePanel.js').then((m) => m.closeSavePanel())`);
       await sleep(100);
       ok(swallowed, 'the save panel swallows pad presses');
+
+      // The focus ring over the tray. A d-pad press mid-run pauses and rings ⏸; left / right walk
+      // the tray in screen order and wrap; A on ⏸ resumes and the ring goes; A on 🔇 mutes without
+      // resuming; A on ⚙ opens Settings, B closes it and B again resumes. On the ready screen a nav
+      // press shows the ring without starting, B hides it, A then starts; a real mouse click ends
+      // controller mode and hides the ring.
+      const padNav = (dir) => evaluate(`${play}.padNav('${dir}'), true`);
+      const ring = () => evaluate(`JSON.stringify({ shown: ${play}.focus.shown, index: ${play}.focus.index, visible: ${play}.focus.shown && ${play}.children.list.some((c) => c.type === 'Graphics' && c.depth === 1000 && c.visible), state: ${play}.state, mode: ${play}.registry.get('padMode') ?? null })`).then(JSON.parse);
+      const slot = (id) => evaluate(`${play}.focus.indexOf('${id}')`);
+      await padDown(G.back);
+      await sleep(100);
+      const r0 = await ring();
+      await padNav('left');
+      await sleep(100);
+      const r1 = await ring();
+      ok(r0.state === 'playing' && !r0.shown && r1.state === 'paused' && r1.shown && r1.visible && r1.index === (await slot('pause')), `a d-pad press mid-run pauses and rings ⏸ (slot ${r1.index})`);
+      await padNav('right');
+      const r2 = await ring();
+      await padNav('left');
+      const r3 = await ring();
+      await padNav('up');
+      const r4 = await ring();
+      ok(r2.index === 0 && r3.index === (await slot('pause')) && r4.index === (await slot('settings')) && r4.state === 'paused', `right wraps to the first slot (${r2.index}), left comes back (${r3.index}), up steps back like left (${r4.index}), still paused`);
+      await padNav('down');
+      await padDown(G.select);
+      await sleep(100);
+      const r5 = await ring();
+      ok(r5.state === 'playing' && !r5.shown && !r5.visible, 'A on ⏸ resumes and the ring is gone');
+      await padNav('down');
+      await padNav('left');
+      await padNav('left');
+      const mm0 = await muted();
+      await padDown(G.select);
+      const r6 = await ring();
+      const mm1 = await muted();
+      await padDown(G.select);
+      ok(r6.state === 'paused' && r6.shown && r6.index === (await slot('mute')) && mm1 === !mm0 && (await muted()) === mm0, `A on 🔇 mutes (${mm0} → ${mm1}) and unmutes without resuming; the ring stays`);
+      await padNav('right');
+      await padDown(G.select);
+      await sleep(400);
+      const opened = (await active('Settings')) && (await playState()) === 'paused';
+      await padDown(G.back);
+      await sleep(400);
+      const r7 = await ring();
+      const closed = !(await active('Settings'));
+      await padDown(G.back);
+      await sleep(100);
+      const r8 = await ring();
+      ok(opened && closed && r7.state === 'paused' && r7.shown && r8.state === 'playing' && !r8.shown, 'A on ⚙ opens Settings, B closes it (ring still on the tray), B again resumes');
+      await evaluate(`${play}.scene.restart(), true`);
+      for (let i = 0; i < 40 && (await playState()) !== 'ready'; i += 1) await sleep(250);
+      await padNav('right');
+      const r9 = await ring();
+      await padDown(G.back);
+      const r10 = await ring();
+      ok(r9.state === 'ready' && r9.shown && r9.index === 0 && r10.state === 'ready' && !r10.shown, 'on the ready screen a nav press rings the tray without starting; B hides it');
+      await padNav('right');
+      const muteBtn = await evaluate(`JSON.stringify({ x: ${play}.tray.buttons.mute.x, y: ${play}.tray.buttons.mute.y })`).then(JSON.parse);
+      const mc0 = await muted();
+      await tapAt(muteBtn.x, muteBtn.y); // a real click on 🔇: harmless to the ready screen, toggled back below
+      const r11 = await ring();
+      const mc1 = await muted();
+      await tapAt(muteBtn.x, muteBtn.y);
+      ok(r11.mode === false && !r11.shown && !r11.visible && r11.state === 'ready' && mc1 === !mc0 && (await muted()) === mc0, 'a real click ends controller mode and hides the ring');
+      await padDown(G.select);
+      for (let i = 0; i < 40 && (await playState()) !== 'playing'; i += 1) await sleep(100);
+      ok((await playState()) === 'playing', 'A on the ready screen starts the run');
       await evaluate(`${play}.scene.restart(), true`);
       for (let i = 0; i < 40 && (await playState()) !== 'ready'; i += 1) await sleep(250);
     }
