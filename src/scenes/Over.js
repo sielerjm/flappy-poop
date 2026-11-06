@@ -96,29 +96,19 @@ export class Over extends Phaser.Scene {
     if (this.buttons.share) this.makeShareCard({ headline, won, scoreLine, collected, pipes, locale });
 
     this.tray = createTray(this, { muted: isMuted() });
+    // scene.stop destroys the tray's text objects; drop the handle so Play.toggleMute cannot
+    // reach a dead label after the panel has closed (setText on it throws inside Phaser).
+    this.events.once('shutdown', () => {
+      this.tray = null;
+    });
 
-    const retry = (pointer) => {
-      unlock();
-      if (pointer) {
-        const id = trayHit(pointer.x, pointer.y, trayLayout(GAME_WIDTH, GAME_HEIGHT, T));
-        if (id) {
-          play?.handleChrome(id);
-          return;
-        }
-      }
-      const result = chromeIntent(play.chromeArgs('tap'));
-      if (result.do !== 'retry') return;
-      if (!canRestart(this.openedAt, this.time.now, T.retryLockoutMs)) return;
-      this.scene.stop('Over');
-      play.scene.restart();
-    };
     // Share: pressed on pointerdown (so the tap does not go home), sent on pointerup over
     // the button. On touch only pointerup / touchend grants the user activation
     // navigator.share() needs, and Phaser emits it from inside that DOM event.
     const onShare = (pointer) => Boolean(this.shareFile) && overHit(pointer.x, pointer.y, this.buttons) === 'share';
     this.input.on('pointerdown', (pointer) => {
       if (!onShare(pointer)) {
-        retry(pointer);
+        this.retry(pointer);
         return;
       }
       unlock();
@@ -130,7 +120,29 @@ export class Over extends Phaser.Scene {
       this.sharePressed = false;
       if (onShare(pointer)) this.shareRun();
     });
-    this.input.keyboard?.on('keydown-SPACE', () => retry());
+    this.input.keyboard?.on('keydown-SPACE', () => this.retry());
+  }
+
+  /**
+   * The panel tap: a tray button goes to Play's chrome; anything else goes home
+   * (restart Play) once the lockout has passed. No pointer (Space, the pad's A)
+   * skips the tray check.
+   */
+  retry(pointer) {
+    unlock();
+    const play = this.scene.get('Play');
+    if (pointer) {
+      const id = trayHit(pointer.x, pointer.y, trayLayout(GAME_WIDTH, GAME_HEIGHT, T));
+      if (id) {
+        play?.handleChrome(id);
+        return;
+      }
+    }
+    const result = chromeIntent(play.chromeArgs('tap'));
+    if (result.do !== 'retry') return;
+    if (!canRestart(this.openedAt, this.time.now, T.retryLockoutMs)) return;
+    this.scene.stop('Over');
+    play.scene.restart();
   }
 
   /**
