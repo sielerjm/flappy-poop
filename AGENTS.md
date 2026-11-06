@@ -82,7 +82,8 @@ CREDITS.md                  Phaser + every assets/sfx/ file with a URL.
 src/
   main.js                   new Phaser.Game(...): 720x1280 logical field, Scale.FIT,
                             roundPixels,
-                            arcade physics, scene order
+                            arcade physics, input.gamepad on (bound once, in
+                            Play), scene order
                             [Boot, Play, Over, Settings, About, HowTo, Language,
                             Feedback, Scores, Leaderboard].
   config.js                 GAME_WIDTH / GAME_HEIGHT, the TUNING object (every
@@ -92,7 +93,11 @@ src/
                             LEVELS (gut segment name keys, in order), LEVEL_COLORS
                             (Set2 backgrounds, cycling) and BACKGROUND (overlay
                             layers: key + parallax), TEST_MODE (trigger words,
-                            default Invincible).
+                            default Invincible). TUNING.gamepad = the pad's
+                            standard-mapping button indices (A / B / Y / RT /
+                            Menu / d-pad), RT threshold, stick deadzone + repeat;
+                            TUNING.focus = the focus ring's geometry, pulse and
+                            the overlay scroll step.
                             Pure data, Node-safe.
   logic.js                  Pure functions, NO Phaser/DOM: rng, gap placement,
                             scoring (pipePoints, scorePopup, multiplierLayout),
@@ -112,7 +117,11 @@ src/
                             helper, trayLayout, trayHit, readyLayout, readyHit
                             (howToLayout / howToHit wrap them),
                             LAST_UPDATED, issueUrl, openExternalUrl, chromeIntent,
-                            overlayOutsideHit, clampScroll, scaledCircleBody; test mode:
+                            overlayOutsideHit, clampScroll, scaledCircleBody; gamepad:
+                            padAction (button index → action), stickNav, focusStep
+                            (one-dimensional, wrapping), focusRingLayout, padIntent
+                            (the pad's state matrix beside chromeIntent: what A / B /
+                            RT / Menu / Y / nav do on Play, Over or an overlay); test mode:
                             isTestWord, testRunStart, nextTestLevel, TEST_POWERS,
                             settingsLayout (Settings panel + rows, taller with the
                             test section). Fully unit-tested.
@@ -152,7 +161,24 @@ src/
                             unlock() must run from a user gesture: create,
                             silent-prime, resume() the AudioContext, and
                             game.sound.unlock(). Blips wait until running.
+  input/
+    pad.js                  bindPad(scene, onAction, t): Phaser Gamepad plugin →
+                            pad actions. Edge-triggered 'down' (holding A flaps
+                            once), RT threshold lowered on connect, sticks polled
+                            on the scene update with key-repeat, a console warning
+                            on a non-standard mapping; returns padDown(index) /
+                            padNav(dir) shims for the smoke driver. Only Play binds.
   ui/
+    focus.js                createFocus(scene, t, { items, scrolled, onVertical }):
+                            the controller focus ring, a pulsing pink rounded
+                            outline (Graphics, depth 1000) around one item of a
+                            scene; items are { id, obj | box, activate, visible?,
+                            scrolled? }, pressable(id, obj) wraps a Game Object
+                            whose own pointerdown is the press. Shows only in
+                            controller mode (registry padMode: set by a pad press,
+                            cleared by the scene's next pointerdown), so touch and
+                            mouse never see it. scrolled items are ringed by a
+                            second Graphics the scroll camera alone renders.
     finish.js               createFinishTexture(): black / white checkered
                             canvas texture for the finish line.
     levelBar.js             createLevelBar(): grey track, pipe-pink fill tweened
@@ -168,7 +194,8 @@ src/
                             mute / settings bottom-right, pause directly above the
                             cog, plus bottom-left info, language (🌐), feedback (💬).
                             Chrome taps use trayHit() in Play/Over, not GameObject
-                            pointer handlers.
+                            pointer handlers. Returns buttons (id → circle) for the
+                            focus ring.
     shareCard.js            The share image, NO Phaser: drawShareCard(ctx, layout,
                             data, images) paints the 1080x1350 card with Canvas 2D
                             (dark fill, pink frame, GAME OVER or the gold win line,
@@ -185,8 +212,9 @@ src/
                             handlers.
     scrollView.js           createScrollView(): second camera clipped to a panel
                             interior, drag / wheel via clampScroll(), thumb, link()
-                            that fires on pointerup only when moved < 12 px. Used
-                            by HowTo and About.
+                            that fires on pointerup only when moved < 12 px; offset,
+                            scrollBy, scrollTo and addScrolled for the focus ring.
+                            Used by HowTo and About.
     savePanel.js            Plain DOM panel over the canvas (Username field,
                             read-only user code + Copy, Load field, a full-width
                             Save button that stores the username and confirms
@@ -333,6 +361,17 @@ src/
                             testRunStart; runIsTest latches per run and endRun()
                             records nothing for it; testBadge (refreshTestBadge).
                             pausePlay / resumePlay share pauseEffects / resumeEffects.
+                            Gamepad: this.pad = bindPad(...) is the game's one
+                            binding (this scene is never paused; overlays and Over
+                            run on top of it). onPadAction → padTop (the topmost
+                            overlay, else Over, else Play) → padIntent → the same
+                            handler a tap / key uses: 'tap' = flap(), power =
+                            activatePower, mute / pause / resume = handleChrome,
+                            closeTop = the overlay's close(), retry = Over.retry(),
+                            activate / move / hideRing = that scene's focus ring;
+                            a nav press mid-run pauses and rings ⏸ (pauseAndFocus).
+                            this.focus rings the tray in screen order; launch and
+                            resumePlay hide it. padDown / padNav are the smoke shims.
     Over.js                 Game-over panel (score, run summary of fiber / probiotic / postbiotic over bacteria / bean / mystery box (mystery-icon.png), pipes crossed, then Share | glowing Home on one row from overButtonsLayout) with a
                             tap lockout (openedAt = game.loop.time: a relaunched
                             scene's this.time.now is stale) and its own tray (mute
@@ -347,6 +386,10 @@ src/
                             with shareText(). { test: true }: the gold
                             testRunNotSaved line, no Share, Home alone at centre.
                             With { won: true } the headline is the gold runWon text.
+                            retry(pointer) is a method (the pad's A calls it with no
+                            pointer); this.focus rings Home, Share (once the card
+                            exists) and the tray, shown as the buttons fade in under
+                            a controller; tray and focus are nulled on shutdown.
     Settings.js             Overlay (geometry from settingsLayout): sound, haptics (Android only), Reload game
                             (hardReloadGame(): re-fetches loaded scripts with
                             cache: 'reload', then location.replace with a fresh r=
@@ -376,6 +419,10 @@ src/
                             parent overlay open.
     Scores.js               Overlay: username + up to 6 high scores from the
                             SaveState; opened by tapping the profile line.
+    (every overlay builds this.focus from pressable() items, ✕ first then its
+                            rows, and calls focus.show(), which only shows under a
+                            controller; About / HowTo pass scrolled: sv and
+                            onVertical so up / down scroll the text)
     Leaderboard.js          Overlay (🏆 tray button or T): awaits
                             Play.syncLeaderboard() (posts a pending best), then
                             fetchTop + fetchRank in parallel behind a Loading line.
@@ -464,6 +511,10 @@ tests/                      node --test, zero deps. Each file is self-describing
                             nextTestLevel wrap, TEST_POWERS, settingsLayout geometry
   hitbox.test.js            scaledCircleBody source radius/offset for 2x and 4x
   chrome.test.js            chromeIntent matrix across state x overlay x input
+  gamepad.test.js           padAction (every knob, unmapped → null, a retuned layout),
+                            stickNav deadzone / larger axis, focusStep wrapping,
+                            focusRingLayout, padIntent matrix across top x state x
+                            ring x action (+ the save-panel short-circuit)
   smoke.test.js             logic.js imports and exports VERSION
   save.test.js              save codes: spec rows 1-10 (round trip, tamper, relabel,
                             v2 migration, merge, name rules, wrapped paste, empty
@@ -521,7 +572,15 @@ tools/
                             (no save hint, the 1080x1350 share card and its pixels:
                             dark fill, pink frame, tan poop frame with the poop; a
                             real tap on Share through a stubbed
-                            navigator.share, cancel, download fallback, Home).
+                            navigator.share, cancel, download fallback, Home), and
+                            the controller through Play.padDown / padNav (plugin
+                            wiring, A / Menu / B / RT / Y, an overlay under A and B,
+                            the save panel, the tray ring, the game-over ring and
+                            Share, every overlay's ring, Settings / Language /
+                            Feedback / About through the ring). The page's
+                            navigator.getGamepads is stubbed to [] before load: a
+                            pad paired to the machine is visible to headless Chrome
+                            and its presses would otherwise reach the game.
                             Zero dependencies (fetch + WebSocket).
 
 .claude/plans/              Checkpointed build plans. Historical record + decision
@@ -553,7 +612,10 @@ tools/
    root by GitHub Pages. Don't add a bundler, TypeScript, or npm packages without
    a strong reason; if you do, the deploy story has to change too.
 6. **Mobile first.** Touch is the primary input (`pointerdown`); keyboard
-   (Space / Up / M / P / Esc / S / I / L / F / B / T) is a convenience. Keep `touch-action: none`,
+   (Space / Up / M / P / Esc / S / I / L / F / B / T) and the gamepad (A / B / Y /
+   RT / Menu / d-pad, `src/input/pad.js`) are conveniences that must produce the
+   same intents a tap does, through `chromeIntent` / `padIntent`; the focus ring
+   is the only controller-only UI and must never show without a pad press. Keep `touch-action: none`,
    the viewport meta, and the WebAudio unlock-on-gesture. Wrapped UI text that
    can show Chinese must set `useAdvancedWrap: true`. Test on a real phone
    when you touch input, scaling, audio, or locale.
@@ -616,8 +678,14 @@ Commits so far follow `type(scope): summary` (`feat`, `docs`, `chore`); keep it.
   plus a `CREDITS.md` row with a URL plus `this.load.audio()` in Boot.
 - New scene → `src/scenes/`, register in the `scene:` array in `src/main.js`.
   An overlay also needs an `isActive` check in `Play.chromeArgs` (and its place
-  in the overlay ternary), a `case` in `Play.applyChrome`, and rows in
-  `tests/chrome.test.js`.
+  in the overlay ternary), a `case` in `Play.applyChrome`, a key in
+  `Play.padTop`, rows in `tests/chrome.test.js`, and a `this.focus` ring built
+  from `pressable()` items (✕ first) with `focus.show()` so a controller can
+  walk it.
+- New pad button or action → a knob in `TUNING.gamepad`, a row in `padAction`
+  and `padIntent` (+ `tests/gamepad.test.js`), a `case` in `Play.onPadAction`
+  that calls an existing handler. Never bind the Gamepad plugin in another
+  scene: Play's binding sees every press and routes it to the scene on top.
 - Network call → `src/leaderboard.js` only, with `fetch` injected and a timeout;
   tests pass a fake `fetch`. Never `await` a request inside a Phaser update
   loop; fire and forget from gameplay, `await` only in an overlay's `create()`.
