@@ -2,7 +2,7 @@
 
 ## ▶️ Play now: **[sielerjm.github.io/flappy-poop](https://sielerjm.github.io/flappy-poop/)**
 
-Open it on your phone and add it to your home screen for a full-screen, app-like launch. On a desktop or landscape window the gut widens to fill the screen (the buttons and HUD stay together in the middle, the poop keeps its spot a quarter of the way in); phones keep the portrait field. Resize the window on the start screen to re-fit; mid-run the new size waits for Home.
+Open it on your phone and add it to your home screen for a full-screen, app-like launch. On a desktop or landscape window the gut widens to fill the screen (the buttons and HUD stay together in the middle, the poop keeps its spot a quarter of the way in); phones keep the portrait field, and the gut is already full of pipes when a run, a level or a fart starts, the first one as close as on a phone. Resize the window on the start screen to re-fit; mid-run the new size waits for Home.
 
 A poop emoji flaps through the gut, dodging pink intestinal folds. A Flappy Bird clone for phone browsers, built on [Phaser 4](https://phaser.io) with no build step. Version **0.5.10**. English and Simplified Chinese in-game.
 

@@ -66,7 +66,11 @@ the whole width, the chrome (tray, level bar, HUD, ready buttons) keeps its phon
 layout in a centred 720 px column (`uiColumn()`), and the poop sits at
 `poopXFrac` (25 %) of the width (`poopX()`). The width is fitted on every Play
 (re)start (`applyFieldSize`); a window resize re-fits at once on the ready screen
-and otherwise after Home (`onFieldResize` → `update()`), never mid-run.
+and otherwise after Home (`onFieldResize` → `update()`), never mid-run. A run start,
+the end of a level break and the end of a fart pre-fill the field (`prefillPipes`,
+`prefillPairs`): the first pair the phone's lead ahead (`pipeLeadPx`, 668 px), then one
+per spacing to the edge, so a wide field never waits longer than a phone (where it is
+the one edge spawn as before); a skip's finish line gets the same lead.
 It is deliberately small: plain ES modules, no bundler, no npm
 dependencies, Phaser 4 loaded from a CDN, deployed to GitHub Pages straight from
 `main`. Keep it that way unless the game clearly outgrows it.
@@ -113,9 +117,9 @@ src/
                             the overlay scroll step.
                             Pure data, Node-safe.
   logic.js                  Pure functions, NO Phaser/DOM: field (fieldWidth,
-                            uiColumn, poopX; trayLayout / levelBarLayout /
-                            readyLayout / howToLayout take a trailing x0 = the
-                            column's left edge), rng, gap placement,
+                            uiColumn, poopX, pipeLeadPx, prefillPairs; trayLayout /
+                            levelBarLayout / readyLayout / howToLayout take a
+                            trailing x0 = the column's left edge), rng, gap placement,
                             scoring (pipePoints, scorePopup, multiplierLayout),
                             items (rollItem, hazardsAllowed, bandItemsMove,
                             bandMidY, tutorialSpawn), beans (rollBean, beanSpawnX, beanY,
@@ -261,6 +265,13 @@ src/
                             onFieldResize() sets fieldResizeWanted; update()
                             restarts the scene once canRefitField() (ready, not
                             launching, no overlay / Over / save panel).
+                            prefillPipes() (start, endLevelBreak, endPower) spawns
+                            prefillPairs' pairs through spawnPipePair(shift) /
+                            spawnBandItem(kind, stillY, shift) (shift = px left of
+                            the edge spawn), stops at levelEnd, and sets
+                            distanceSinceSpawn so the cadence resumes one spacing
+                            after the last pair; skipToFinish passes the same
+                            shift to spawnFinishLine(shift).
                             Never read GAME_WIDTH in a scene (tests/scenes.test.js).
                             Spawns pipes and items, tray, auto-pause, haptics, dies,
                             then launches Over as an overlay scene. Tray / keyboard
@@ -504,7 +515,9 @@ db/schema.sql               Supabase schema: scores table (player_id = save-code
 tests/                      node --test, zero deps. Each file is self-describing:
   field.test.js             fieldWidth (phone, desktop, 2:1 cap, bad input, even),
                             uiColumn, poopX, the x0 shift of trayLayout /
-                            levelBarLayout / readyLayout, hits on a shifted column
+                            levelBarLayout / readyLayout, hits on a shifted column,
+                            pipeLeadPx, prefillPairs (one edge pair on a phone; a
+                            wide field filled from the lead to its edge)
   html.test.js              index.html invariants (viewport, no scroll, pinned Phaser)
   assets.test.js            load.image / load.spritesheet / load.audio paths; README
                             sizes; a spritesheet is a whole number of frames; sfx credits
@@ -634,8 +647,10 @@ tools/
                             Feedback / About through the ring), and the wide field
                             (a 1800x1000 viewport re-fits the ready screen to 2304
                             px: world widths, column chrome, poop at 25 %, right-
-                            edge spawns, centred Settings closed by a click on the
-                            wide world, a mid-run resize deferred until Home). The
+                            edge spawns, the pre-fill at a run start / fart end /
+                            skip, centred Settings closed by a click on the
+                            wide world, a mid-run resize deferred until Home; the
+                            phone field's pre-fill is one edge pair). The
                             viewport is pinned to 720x1280 before load
                             (Emulation.setDeviceMetricsOverride) so the rest is
                             the phone field; tapAt maps through the live

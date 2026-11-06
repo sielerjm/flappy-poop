@@ -158,6 +158,12 @@ export async function run(url = DEFAULT_URL) {
     ok((await evaluate(`__flappy.scene.getScene('Play').diff.gapHeight`)) === 374, 'level 1 pipe gap is 10 % wider (374 px)');
     const field0 = await evaluate(`JSON.stringify({ W: __flappy.scale.width, H: __flappy.scale.height, inner: [innerWidth, innerHeight], poopX: __flappy.scene.getScene('Play').poopX })`).then(JSON.parse);
     ok(field0.W === 720 && field0.H === 1280 && field0.poopX === 180, `a portrait viewport (${field0.inner.join('×')}) gets the ${field0.W}×${field0.H} phone field, poop at ${field0.poopX}`);
+    // Pre-fill on the phone field is exactly the old behaviour: one pair at the right edge, cadence from 0.
+    {
+      const pre = await evaluate(`(() => { const p = __flappy.scene.getScene('Play'); const clear = () => { p.pipes.clear(true, true); p.items.clear(true, true); p.beans.clear(true, true); p.pipesSpawned = 0; p.nextGapY = null; }; clear(); p.prefillPipes(); const xs = p.pipes.getChildren().filter((c) => c.getData('scoring')).map((c) => c.x); const d = p.distanceSinceSpawn; clear(); p.distanceSinceSpawn = 0; return JSON.stringify({ xs, d }); })()`).then(JSON.parse);
+      const pipeW = await evaluate(`import('./src/config.js').then((m) => m.TUNING.pipeWidth)`);
+      ok(pre.xs.length === 1 && pre.xs[0] === 720 + pipeW && pre.d === 0, `on the phone field a (re)start pre-fills one pair at the edge (x ${pre.xs.join(', ')}, cadence from ${pre.d})`);
+    }
 
     const frame = () => evaluate('__flappy.loop.frame');
     const playState = () => evaluate(`__flappy.scene.getScene('Play').state`);
@@ -1041,6 +1047,17 @@ export async function run(url = DEFAULT_URL) {
       // A run on the wide field: the poop slides to poopX, pipes enter at the far right edge, the HUD hugs the column.
       await evaluate(`${play}.launch(), true`);
       for (let i = 0; i < 30 && (await playState()) !== 'playing'; i += 1) await sleep(100);
+      // Pre-fill on the wide field: a (re)start, a fart's end and a skip put the first pair / the finish
+      // line the phone's lead (668 px) ahead of the poop, then one pair per spacing out to the edge.
+      {
+        const fill = await evaluate(`${L}.then(([l, c]) => { const W = l.fieldWidth(1800, 1000, c.FIELD); const px = l.poopX(W, c.TUNING); return JSON.stringify({ lead: l.pipeLeadPx(c.TUNING, c.FIELD), ...l.prefillPairs(W, px, l.pipeSpacing(1, c.TUNING), c.TUNING, c.FIELD), gapY: l.centredGapY({ gameHeight: 1280, groundHeight: c.TUNING.groundHeight, gapHeight: c.TUNING.gapHeight * c.TUNING.levels.gapScale[0], gapMargin: c.TUNING.gapMargin }) }); })`).then(JSON.parse);
+        const pre = await evaluate(`(() => { const p = ${play}; const clear = () => { p.pipes.clear(true, true); p.items.clear(true, true); p.beans.clear(true, true); p.nextGapY = null; }; const tops = () => p.pipes.getChildren().filter((c) => c.getData('scoring')).sort((a, b) => a.x - b.x); clear(); p.pipesSpawned = 0; p.prefillPipes(); const start = { xs: tops().map((c) => c.x), d: p.distanceSinceSpawn }; clear(); p.pipesSpawned = 0; p.effects.addBean(); p.setCharged(true); p.activatePower(); p.effects.cancelPower(); p.endPower(); const t0 = tops()[0]; const fart = { xs: tops().map((c) => c.x), d: p.distanceSinceSpawn, gapY: t0.y + p.diff.gapHeight / 2, ahead: p.pipes.getChildren().every((c) => c.x > p.poop.x) }; p.skipToFinish(); const skip = { line: p.finishLine.x, ahead: p.pipes.getChildren().length }; return JSON.stringify({ start, fart, skip, poopX: p.poop.x }); })()`).then(JSON.parse);
+        const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+        ok(same(pre.start.xs, fill.xs) && pre.start.d === fill.distanceSinceSpawn && pre.start.xs[0] === pre.poopX + fill.lead, `a run start pre-fills the wide field: pairs at ${pre.start.xs.join(', ')} (first ${fill.lead} px ahead of the poop at ${pre.poopX}), cadence from ${pre.start.d}`);
+        ok(same(pre.fart.xs, fill.xs) && pre.fart.d === fill.distanceSinceSpawn && pre.fart.gapY === fill.gapY && pre.fart.ahead, `a fart's end pre-fills the same pairs with the first gap at the poop's float height (gap y ${pre.fart.gapY})`);
+        const lineLead = fill.lead - (TT.pipeWidth - TT.levels.finishWidthPx / 2); // the line's centre sits where the phone's edge spawn puts it: 588 px ahead
+        ok(pre.skip.line === pre.poopX + lineLead && pre.skip.ahead === 0, `a skip brings the finish line in ${lineLead} px ahead of the poop (x ${pre.skip.line}, as on a phone), nothing else ahead`);
+      }
       const run = await evaluate(`(() => { const p = ${play}; p.poop.body.setAllowGravity(false); p.poop.setVelocity(0, 0); p.poop.y = 640; p.graceLeftMs = 1e9; p.spawnPipePair(); p.effects.applyProbiotic(); p.refreshProbioticHud(); p.pausePlay(); const xs = p.pipes.getChildren().map((c) => c.x); return JSON.stringify({ state: p.state, poopX: p.poop.x, pipeX: Math.max(...xs), hudRight: p.probioticText.x, shade: p.pauseShade.width, banner: p.pauseText.x }); })()`).then(JSON.parse);
       ok(run.state === 'paused' && run.poopX === want.poopX && run.pipeX === want.W + TT.pipeWidth && run.hudRight === right - 16 && run.shade === want.W && run.banner === want.W / 2, `on the wide field the poop flies at x ${run.poopX}, pipes enter at ${run.pipeX} (= ${want.W} + ${TT.pipeWidth}), the probiotic counter ends at ${run.hudRight}, the pause shade is ${run.shade} wide with its banner at ${run.banner}`);
       // Settings opens centred; a click on the wide world left of the panel closes it (overlayOutsideHit through a real pointer).

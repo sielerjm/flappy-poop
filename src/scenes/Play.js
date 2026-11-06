@@ -63,6 +63,8 @@ import {
   rainbowHue,
   fartRemainingDistance,
   pipeClearDistance,
+  pipeLeadPx,
+  prefillPairs,
   beanButtonLayout,
   beanButtonHit,
   howToPromptDue,
@@ -467,8 +469,7 @@ export class Play extends Phaser.Scene {
     this.bgFade?.stop();
     this.bgFade = null;
     this.bgColor.setFillStyle(levelColor(this.level, LEVEL_COLORS, T.levels.whiteBlend), 1);
-    this.distanceSinceSpawn = 0;
-    this.spawnPipePair();
+    this.prefillPipes();
   }
 
   /** Crossfade the background to the current level's colour (used at each break). */
@@ -492,11 +493,11 @@ export class Play extends Phaser.Scene {
     this.levelBar?.setProgress(levelProgress(this.pipesPassed, this.level, T));
   }
 
-  /** The checkered line one spacing after a level's last pair; crossing it ends the level. */
-  spawnFinishLine() {
+  /** The checkered line one spacing after a level's last pair, at the right edge or `shift` px left of it; crossing it ends the level. */
+  spawnFinishLine(shift = 0) {
     const w = T.levels.finishWidthPx;
     this.finishLine?.destroy();
-    this.finishLine = this.add.image(this.scale.width + w / 2, 0, 'finish').setOrigin(0.5, 0).setDepth(4);
+    this.finishLine = this.add.image(this.scale.width + w / 2 - shift, 0, 'finish').setOrigin(0.5, 0).setDepth(4);
     this.finishLine.setData('crossed', false);
     this.finishSpawned = true;
   }
@@ -554,7 +555,12 @@ export class Play extends Phaser.Scene {
     });
   }
 
-  /** The tap that ends the break: new level's speed, grace, and the first pair opening at mid-screen (the fart's landing). */
+  /**
+   * The tap that ends the break: new level's speed, grace, and the field pre-filled with
+   * the first pair opening at mid-screen (the fart's landing). Runs inside resumePlay()
+   * before the state flips, so a box spawned here starts paused and resumeEffects()
+   * spins it up right after.
+   */
   endLevelBreak() {
     this.levelBreak = false;
     this.breakGlide?.stop();
@@ -567,8 +573,8 @@ export class Play extends Phaser.Scene {
     this.graceLeftMs = T.beans.graceMs;
     this.centreNextGap = true;
     this.nextGapY = null;
-    this.distanceSinceSpawn = pipeSpacing(this.level, T);
     this.applyLevel();
+    this.prefillPipes();
   }
 
   flap(pointer) {
@@ -1037,7 +1043,30 @@ export class Play extends Phaser.Scene {
     this.flapLockedUntil = this.time.now + T.pauseResumeLockoutMs;
   }
 
-  spawnPipePair() {
+  /**
+   * Fill the field ahead of the poop as it looks mid-run (a run start, the end of a
+   * level break, the end of a fart): the first pair the phone's lead away (pipeLeadPx),
+   * then one per spacing out to the field's own edge (prefillPairs), the cadence
+   * resuming one spacing after the last. On a phone that is one pair at the edge, as
+   * before. Stops at the level's last pair: the finish line then follows by cadence.
+   */
+  prefillPipes() {
+    const edge = this.scale.width + T.pipeWidth;
+    const { xs } = prefillPairs(this.scale.width, this.poopX, pipeSpacing(this.level, T), T, FIELD);
+    let last = edge;
+    for (const x of xs) {
+      if (this.pipesSpawned >= levelEnd(this.level, T)) break;
+      this.spawnPipePair(edge - x);
+      last = x;
+    }
+    this.distanceSinceSpawn = edge - last;
+  }
+
+  /**
+   * One pipe pair (and its items) at the field's right edge, or `shift` px left of
+   * it (prefillPipes fills a wide field with pairs that are already on screen).
+   */
+  spawnPipePair(shift = 0) {
     this.pipesSpawned += 1;
     const gapCfg = {
       gameHeight: GAME_HEIGHT,
@@ -1049,7 +1078,7 @@ export class Play extends Phaser.Scene {
     this.nextGapY = null;
     this.centreNextGap = false;
     const gapH = this.diff.gapHeight;
-    const x = this.scale.width + T.pipeWidth; // the field's right edge, wherever the window put it
+    const x = this.scale.width + T.pipeWidth - shift; // the field's right edge, wherever the window put it
 
     // Top pipe hangs down: cap must face the gap, so flip the sprite and anchor its bottom.
     const gapTop = gapY - gapH / 2;
@@ -1097,8 +1126,8 @@ export class Play extends Phaser.Scene {
     };
     const band = kind === 'fiber' || kind === 'mystery';
     const boxStill = !mysteryMoves(this.level, T);
-    if (boxHere) this.spawnBandItem('mystery', boxStill ? stillY() : null);
-    else if (band && !beanHere) this.spawnBandItem(kind, (kind === 'mystery' ? boxStill : still) ? stillY() : null);
+    if (boxHere) this.spawnBandItem('mystery', boxStill ? stillY() : null, shift);
+    else if (band && !beanHere) this.spawnBandItem(kind, (kind === 'mystery' ? boxStill : still) ? stillY() : null, shift);
     if (kind && !band) this.spawnGapItem(kind, x, gapY, gapH);
 
     // Beans ride halfway between this pair and the next, bobbing top to bottom (still in level 1).
@@ -1106,7 +1135,7 @@ export class Play extends Phaser.Scene {
       this.beanSpawned = true;
       const phase = this.rng() * Math.PI * 2;
       const y = still ? stillY() : beanY(0, phase, this.beanBounds, T);
-      const bean = this.beans.create(beanSpawnX(this.scale.width, T.pipeWidth, pipeSpacing(this.level, T)), y, 'bean');
+      const bean = this.beans.create(beanSpawnX(this.scale.width, T.pipeWidth, pipeSpacing(this.level, T)) - shift, y, 'bean');
       bean.setDepth(8);
       bean.setScale(T.spriteDisplayScale);
       const beanBody = scaledCircleBody(bean.frame.width, T.spriteDisplayScale, T.beans.beanRadius);
@@ -1120,13 +1149,13 @@ export class Play extends Phaser.Scene {
    * A fiber or mystery box in the open, halfway to the next pair. With a `stillY`
    * it holds still there (level 1's fiber, level 3's boxes); otherwise it bobs across
    * the beans' band, a box at half fiber's speed (mystery.periodMs). A box always
-   * spins ('mystery-spin', from Boot).
+   * spins ('mystery-spin', from Boot). `shift`: px left of the usual spot (prefillPipes).
    */
-  spawnBandItem(kind, stillY = null) {
+  spawnBandItem(kind, stillY = null, shift = 0) {
     const phase = this.rng() * Math.PI * 2;
     const period = kind === 'mystery' ? T.mystery.periodMs : T.items.fiberPeriodMs;
     const y = stillY ?? bobY(0, phase, this.beanBounds, period);
-    const item = this.items.create(beanSpawnX(this.scale.width, T.pipeWidth, pipeSpacing(this.level, T)), y, kind);
+    const item = this.items.create(beanSpawnX(this.scale.width, T.pipeWidth, pipeSpacing(this.level, T)) - shift, y, kind);
     item.setDepth(8);
     this.finishItem(item, kind);
     if (stillY == null) item.setData({ bob: 'band', elapsed: 0, phase, period });
@@ -1346,11 +1375,11 @@ export class Play extends Phaser.Scene {
     this.poop.body.setAllowGravity(true);
     this.poop.setVelocityY(0);
     this.graceLeftMs = T.beans.graceMs;
-    // Next pair spawns on the next frame at the right edge with its gap at the
-    // poop's float height: a full screen of warning and the easiest line through.
+    // The field is pre-filled again, the first pair the phone's lead away with its gap
+    // at the poop's float height: a phone screen of warning and the easiest line through.
     this.centreNextGap = true;
     this.nextGapY = null;
-    this.distanceSinceSpawn = pipeSpacing(this.level, T);
+    this.prefillPipes();
     this.applyScroll();
     if (this.effects.powerReady()) this.setCharged(true);
   }
@@ -1587,7 +1616,8 @@ export class Play extends Phaser.Scene {
   /**
    * A mystery box's skip: every pair left in the level scores now (× the
    * multiplier, the probiotic countdown paused, as in a fart), everything not yet
-   * passed is cleared, and the finish line enters from the right edge.
+   * passed is cleared, and the finish line enters the phone's lead ahead of the poop
+   * (the right edge on a phone).
    */
   skipToFinish() {
     const pairs = skipPairs(this.pipesPassed, this.level, T);
@@ -1603,7 +1633,7 @@ export class Play extends Phaser.Scene {
     this.pipesPassed = end;
     this.pipesSpawned = end;
     this.levelBar.setProgress(levelProgress(this.pipesPassed, this.level, T));
-    this.spawnFinishLine();
+    this.spawnFinishLine(this.scale.width + T.pipeWidth - (this.poopX + pipeLeadPx(T, FIELD)));
     this.distanceSinceSpawn = 0;
     this.nextGapY = null;
     this.showScorePopup('skip', mult, pairs);

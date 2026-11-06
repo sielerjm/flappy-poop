@@ -658,6 +658,30 @@ export function fartRemainingDistance(elapsedMs, durationMs, peak, pipeSpeed) {
   return ((base + bump) / 1000) * pipeSpeed;
 }
 
+/**
+ * Poop-to-pair distance of a right-edge spawn on the portrait field (720 + 128 − 180 = 668 px):
+ * the lead every field gives its first pair, so a wide desktop field never waits longer than a phone.
+ */
+export function pipeLeadPx(t, field) {
+  return field.minWidth + t.pipeWidth - poopX(field.minWidth, t);
+}
+
+/**
+ * The pairs that fill a field when play (re)starts (a run start, the end of a level
+ * break, the end of a fart): the first pipeLeadPx ahead of the player, then one per
+ * spacing out to the field's own spawn edge (fieldW + pipeWidth), plus the
+ * distanceSinceSpawn that keeps the cadence going (edge − last x: the next regular
+ * spawn lands one spacing after the last pair). On the portrait field this is exactly
+ * one pair at the edge and 0.
+ */
+export function prefillPairs(fieldW, playerX, spacingPx, t, field) {
+  const edge = fieldW + t.pipeWidth;
+  const xs = [];
+  for (let x = playerX + pipeLeadPx(t, field); x <= edge; x += spacingPx) xs.push(x);
+  if (xs.length === 0) xs.push(edge);
+  return { xs, distanceSinceSpawn: edge - xs[xs.length - 1] };
+}
+
 /** Scroll needed for a pipe spawned at the right edge to be fully behind the player. */
 export function pipeClearDistance(width, pipeWidth, playerX) {
   return width + pipeWidth - (playerX - pipeWidth);
