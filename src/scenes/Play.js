@@ -64,6 +64,7 @@ import {
   howToPromptDue,
   testRunStart,
   LAST_UPDATED,
+  padIntent,
 } from '../logic.js';
 import { t, pauseBannerText, levelBannerText, levelLabel, initialLocale, isLocale, profileButtonText } from '../i18n.js';
 import { loadLocal, saveLocal, ensureId, recordScore, TOILET_EMOJI } from '../save.js';
@@ -75,7 +76,8 @@ import { createLevelBar } from '../ui/levelBar.js';
 import { createSubmitStore, submitPlans, submitScore } from '../leaderboard.js';
 import { createButton } from '../ui/button.js';
 import { createToggle } from '../ui/toggle.js';
-import { openSavePanel } from '../ui/savePanel.js';
+import { openSavePanel, isSavePanelOpen } from '../ui/savePanel.js';
+import { bindPad } from '../input/pad.js';
 
 const TEXT_STYLE = {
   fontFamily: 'sans-serif',
@@ -328,6 +330,9 @@ export class Play extends Phaser.Scene {
     this.input.keyboard?.on('keydown-F', () => this.handleChrome('feedback'));
     this.input.keyboard?.on('keydown-T', () => this.handleChrome('leaderboard'));
     this.input.keyboard?.on('keydown-B', () => this.activatePower()); // no-op unless the bean power is charged
+    // Gamepad: one binding for the whole game (overlays and Over run on top of this scene,
+    // which is never paused); onPadAction routes each press to whichever scene is on top.
+    this.pad = bindPad(this, (action) => this.onPadAction(action), T);
 
     this.onHidden = () => {
       if (typeof document !== 'undefined' && document.hidden) this.autoPause();
@@ -338,6 +343,8 @@ export class Play extends Phaser.Scene {
     this.events.once('shutdown', () => {
       if (typeof document !== 'undefined') document.removeEventListener('visibilitychange', this.onHidden);
       this.game.events.off('blur', this.onBlur);
+      this.pad?.destroy();
+      this.pad = null;
       if (this.fartSound) {
         this.fartSound.stop();
         this.fartSound.destroy();
@@ -824,6 +831,89 @@ export class Play extends Phaser.Scene {
     if (this.effects.powerActive()) return; // the fart carries the poop through the middle
     this.poop.setVelocityY(T.flapVelocity);
     sfx.flap();
+  }
+
+  /**
+   * The scene a gamepad press talks to: the topmost overlay (same ladder as
+   * chromeArgs), else the game-over panel, else this scene.
+   */
+  padTop() {
+    const overlay = this.chromeArgs('tap').overlay;
+    if (overlay) {
+      const key = { settings: 'Settings', about: 'About', howto: 'HowTo', language: 'Language', feedback: 'Feedback', leaderboard: 'Leaderboard', scores: 'Scores' }[overlay];
+      return { top: 'overlay', scene: this.scene.get(key) };
+    }
+    if (this.scene.isActive('Over')) return { top: 'over', scene: this.scene.get('Over') };
+    return { top: 'play', scene: this };
+  }
+
+  /**
+   * A gamepad action (padAction / stickNav vocabulary) → padIntent → the same
+   * handler a tap or key already calls: A is the tap (flap / start / resume) or
+   * presses the ringed button, RT the bean power, Menu the pause button, Y mute,
+   * B closes the top overlay / resumes / hides the ring, a nav press pauses a
+   * run and lands the ring on ⏸, otherwise walks the top scene's ring.
+   */
+  onPadAction(action) {
+    const { top, scene } = this.padTop();
+    const result = padIntent({
+      action,
+      state: this.state,
+      top,
+      ringShown: Boolean(scene?.focus?.shown),
+      savePanelOpen: isSavePanelOpen(),
+    });
+    if (result.do === 'ignore') return;
+    this.registry.set('padMode', true); // controller mode: rings may show until the next pointer
+    switch (result.do) {
+      case 'tap':
+        this.flap();
+        break;
+      case 'activate':
+        scene?.focus?.activate();
+        break;
+      case 'retry':
+        scene?.retry?.();
+        break;
+      case 'power':
+        this.activatePower();
+        break;
+      case 'mute':
+        this.handleChrome('mute');
+        break;
+      case 'pause':
+        this.handleChrome('pause');
+        break;
+      case 'resume':
+        this.handleChrome('esc');
+        break;
+      case 'closeTop':
+        scene?.close?.();
+        break;
+      case 'hideRing':
+        scene?.focus?.hide();
+        break;
+      case 'pauseAndFocus':
+        this.pausePlay();
+        this.focus?.setIndex(this.focus.indexOf('pause'));
+        this.focus?.show();
+        break;
+      case 'move':
+        scene?.focus?.move(result.dir);
+        scene?.focus?.show();
+        break;
+      default:
+        break;
+    }
+  }
+
+  /** Smoke shims (tools/headless_check.mjs): a button press / a nav move by the pad's own route. */
+  padDown(index) {
+    this.pad?.padDown(index);
+  }
+
+  padNav(dir) {
+    this.pad?.padNav(dir);
   }
 
   toggleMute() {

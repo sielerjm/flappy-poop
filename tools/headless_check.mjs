@@ -114,7 +114,7 @@ async function connect(port) {
   /** Evaluate in the page; throws on a page-side error so a check fails loudly. */
   const evaluate = async (expression) => {
     const r = await send('Runtime.evaluate', { expression, returnByValue: true, awaitPromise: true });
-    if (r.exceptionDetails) throw new Error(`page: ${r.exceptionDetails.exception?.description ?? r.exceptionDetails.text}`);
+    if (r.exceptionDetails) throw new Error(`page: ${r.exceptionDetails.exception?.description ?? r.exceptionDetails.text} (in: ${expression.replace(/\s+/g, ' ').slice(0, 120)})`);
     return r.result?.value;
   };
   await send('Runtime.enable');
@@ -571,6 +571,67 @@ export async function run(url = DEFAULT_URL) {
       ok(!(await evaluate(`__flappy.scene.isActive('Over')`)) && (await playState()) === 'ready', 'a tap on Home closes the panel and goes home');
     }
 
+    // Gamepad: the plugin is on and Play holds the one 'down' listener; padDown / padNav are the
+    // same route a real press takes. From the ready screen: B does nothing, A starts the run, Menu
+    // pauses and resumes, B resumes a pause, RT without a bean does nothing, Y mutes and unmutes,
+    // A over an overlay is ignored and B closes it, the save panel swallows every press. The run
+    // is restarted afterwards so later checks start from the ready screen as before.
+    {
+      const G = TT.gamepad;
+      const muted = () => evaluate(`import('./src/sound.js').then((m) => m.isMuted())`);
+      const padDown = (i) => evaluate(`${play}.padDown(${i}), true`);
+      const mode = () => evaluate(`${play}.registry.get('padMode') ?? null`);
+      const wired = await evaluate(`JSON.stringify({ plugin: Boolean(${play}.input.gamepad), down: ${play}.input.gamepad ? ${play}.input.gamepad.listenerCount('down') : -1 })`).then(JSON.parse);
+      ok(wired.plugin && wired.down === 1, `gamepad plugin is on with one 'down' listener in Play (${wired.down})`);
+      await evaluate(`${play}.registry.remove('padMode'), true`);
+      await padDown(G.back);
+      await sleep(100);
+      ok((await playState()) === 'ready' && (await mode()) === null, 'B on the ready screen does nothing and leaves controller mode off');
+      await padDown(G.select);
+      for (let i = 0; i < 40 && (await playState()) !== 'playing'; i += 1) await sleep(100);
+      await evaluate(`${play}.poop.body.setAllowGravity(false), ${play}.poop.setVelocity(0, 0), ${play}.poop.y = 640, true`);
+      ok((await playState()) === 'playing' && (await mode()) === true, 'A starts the run and turns controller mode on');
+      await padDown(G.pause);
+      await sleep(100);
+      const p1 = await playState();
+      await padDown(G.pause);
+      await sleep(100);
+      const p2 = await playState();
+      await padDown(G.pause);
+      await sleep(100);
+      const p3 = await playState();
+      await padDown(G.back);
+      await sleep(100);
+      ok(p1 === 'paused' && p2 === 'playing' && p3 === 'paused' && (await playState()) === 'playing', 'Menu pauses, Menu again resumes, B resumes a pause');
+      await padDown(G.power);
+      await sleep(100);
+      ok((await playState()) === 'playing' && !(await evaluate(`${play}.effects.powerActive()`)), 'RT with no bean fires nothing');
+      const m0 = await muted();
+      await padDown(G.mute);
+      const m1 = await muted();
+      await padDown(G.mute);
+      ok(m1 === !m0 && (await muted()) === m0, `Y mutes (${m0} → ${m1}) and unmutes`);
+      await chrome('leaderboard');
+      await sleep(3000);
+      await padDown(G.select);
+      await sleep(200);
+      ok((await playState()) === 'paused' && (await active('Leaderboard')), 'A over an open overlay changes nothing');
+      await padDown(G.back);
+      await sleep(400);
+      ok((await playState()) === 'paused' && !(await active('Leaderboard')), 'B closes the overlay and leaves the run paused');
+      await evaluate(`${play}.openSavePanel(), true`);
+      await sleep(100);
+      await padDown(G.back);
+      await padDown(G.select);
+      await sleep(100);
+      const swallowed = (await playState()) === 'paused' && (await evaluate(`!document.getElementById('save-panel').hidden`));
+      await evaluate(`import('./src/ui/savePanel.js').then((m) => m.closeSavePanel())`);
+      await sleep(100);
+      ok(swallowed, 'the save panel swallows pad presses');
+      await evaluate(`${play}.scene.restart(), true`);
+      for (let i = 0; i < 40 && (await playState()) !== 'ready'; i += 1) await sleep(250);
+    }
+
     // A game over must not change how later pipes are drawn: restart, start, spawn, check the frame.
     // (The Home tap above already restarted Play: restarting again would race the queued restart.)
     await evaluate(`__flappy.scene.isActive('Over') ? (__flappy.scene.stop('Over'), ${play}.scene.restart()) : null, true`);
@@ -731,6 +792,19 @@ export async function run(url = DEFAULT_URL) {
       await dieNow();
       const top = await evaluate(`JSON.parse(localStorage.getItem('flappyPoop.save')).top[0]?.score ?? null`);
       ok(!normal.test && normal.level === 1 && !normal.badge && top === 999 && (await stores()) !== storesBefore, `after exiting, a normal run starts on level 1 with no badge and records again (top score ${top})`);
+
+      // A on the game-over panel: nothing during the lockout, then home (Play restarts to the ready screen).
+      {
+        const G = TT.gamepad;
+        await evaluate(`__flappy.scene.getScene('Over').openedAt = __flappy.loop.time, true`);
+        await evaluate(`${play}.padDown(${G.select}), true`);
+        await sleep(100);
+        const held = await evaluate(`__flappy.scene.isActive('Over')`);
+        await sleep(TT.retryLockoutMs + 100);
+        await evaluate(`${play}.padDown(${G.select}), true`);
+        for (let i = 0; i < 40 && (await playState()) !== 'ready'; i += 1) await sleep(250);
+        ok(held && !(await evaluate(`__flappy.scene.isActive('Over')`)) && (await playState()) === 'ready', 'A on the game-over panel waits out the lockout, then goes home');
+      }
     }
 
     const f2 = await frame();
@@ -740,6 +814,7 @@ export async function run(url = DEFAULT_URL) {
     if (cdp.consoleErrors.length) console.log(`note: console errors/warnings:\n  ${cdp.consoleErrors.join('\n  ')}`);
   } catch (err) {
     ok(false, `driver error: ${err.message}`);
+    if (cdp?.exceptions.length) console.log(`  page exceptions:\n  ${cdp.exceptions.join('\n  ')}`);
   } finally {
     cdp?.close();
     const exited = new Promise((resolve) => proc.once('exit', resolve));

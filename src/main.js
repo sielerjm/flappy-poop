@@ -30,6 +30,7 @@ const game = new Phaser.Game({
   },
   input: {
     activePointers: 1,
+    gamepad: true, // Phaser Gamepad plugin; bound once, in Play (src/input/pad.js)
   },
   scene: [Boot, Play, Over, Settings, About, HowTo, Language, Feedback, Scores, Leaderboard],
 });
