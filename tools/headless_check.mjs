@@ -133,6 +133,10 @@ export async function run(url = DEFAULT_URL) {
   try {
     cdp = await connect(port);
     const { evaluate, exceptions } = cdp;
+    // Hermetic input: a controller paired to this machine is visible to headless Chrome too, and
+    // its presses would reach the game mid-check. The page sees no pads; the pad checks below go
+    // through Play.padDown / padNav, the same route the plugin's events take.
+    await cdp.send('Page.addScriptToEvaluateOnNewDocument', { source: `Object.defineProperty(navigator, 'getGamepads', { value: () => [], configurable: true });` });
     await cdp.send('Page.navigate', { url: `${url}/?r=${Date.now()}` });
 
     // Boot: wait for Play to reach the ready screen (Phaser comes from a CDN).
@@ -184,7 +188,8 @@ export async function run(url = DEFAULT_URL) {
       const a2 = await evaluate(`${play}.profileHalo.alpha`);
       const promptShown = (await texts()).includes('Enter username');
       const haloOn = await evaluate(`${play}.profileHalo.visible`);
-      ok(promptShown && haloOn && a1 !== a2, `fresh profile shows "Enter username" with a pulsing halo (alpha ${a1.toFixed(2)} → ${a2.toFixed(2)})`);
+      const who = await evaluate(`JSON.stringify({ name: ${play}.getSaveState().name ?? null, stored: localStorage.getItem('flappyPoop.save'), launching: ${play}.launching, state: ${play}.state })`).then(JSON.parse);
+      ok(promptShown && haloOn && a1 !== a2, `fresh profile shows "Enter username" with a pulsing halo (alpha ${a1.toFixed(2)} → ${a2.toFixed(2)})${promptShown ? '' : ` — name ${JSON.stringify(who.name)}, stored ${who.stored ? 'yes' : 'no'}, launching ${who.launching}, state ${who.state}`}`);
       await evaluate(`${play}.flap({ x: ${play}.readyBoxes.profile.x, y: ${play}.readyBoxes.profile.y }), true`);
       await sleep(200);
       const opened = await evaluate(`!document.getElementById('save-panel').hidden && document.activeElement && document.activeElement.id === 'save-name'`);
@@ -860,9 +865,39 @@ export async function run(url = DEFAULT_URL) {
       const top = await evaluate(`JSON.parse(localStorage.getItem('flappyPoop.save')).top[0]?.score ?? null`);
       ok(!normal.test && normal.level === 1 && !normal.badge && top === 999 && (await stores()) !== storesBefore, `after exiting, a normal run starts on level 1 with no badge and records again (top score ${top})`);
 
-      // A on the game-over panel: nothing during the lockout, then home (Play restarts to the ready screen).
+      // The controller on the game-over panel. Under a pad the ring lands on Home as the buttons
+      // fade in; right walks to Share, then the tray; A on Share hands the card to navigator.share
+      // (stubbed) and stays on the panel; B hides the ring; A with no ring waits out the lockout,
+      // then goes home (Play restarts to the ready screen).
       {
         const G = TT.gamepad;
+        const over = `__flappy.scene.getScene('Over')`;
+        const ring = () => evaluate(`JSON.stringify({ shown: ${over}.focus.shown, index: ${over}.focus.index, id: ${over}.focus.items[${over}.focus.index]?.id ?? null })`).then(JSON.parse);
+        // This Over opened with controller mode already on (the pad checks above): its ring shows by
+        // itself once Home has faded in (the lockout, then the 200 ms fade).
+        await sleep(TT.retryLockoutMs + 400);
+        const r0 = await ring();
+        ok(r0.shown && r0.id === 'home', `the game-over ring lands on Home by itself under a controller (${r0.id})`);
+        let file = null;
+        for (let i = 0; i < 30 && !file; i += 1) {
+          await sleep(100);
+          file = await evaluate(`Boolean(${over}.shareFile)`);
+        }
+        await evaluate(`${play}.padNav('right'), true`);
+        const r1 = await ring();
+        await evaluate(`${play}.padNav('right'), true`);
+        const r2 = await ring();
+        ok(file && r1.id === 'share' && r2.id === 'info', `right walks Home → Share → the tray (${r1.id}, ${r2.id})`);
+        await evaluate(`(() => { window.__padShared = 0; const def = (k, v) => Object.defineProperty(navigator, k, { value: v, configurable: true, writable: true }); def('canShare', () => true); def('share', () => { window.__padShared += 1; return Promise.resolve(); }); return true; })()`);
+        await evaluate(`${play}.padNav('left'), true`);
+        await evaluate(`${play}.padDown(${G.select}), true`);
+        await sleep(200);
+        const shared = await evaluate(`JSON.stringify({ n: window.__padShared, over: __flappy.scene.isActive('Over') })`).then(JSON.parse);
+        await evaluate(`(() => { delete navigator.share; delete navigator.canShare; return true; })()`);
+        ok(shared.n === 1 && shared.over, 'A on Share sends the card and stays on the panel');
+        await evaluate(`${play}.padDown(${G.back}), true`);
+        const r3 = await ring();
+        ok(!r3.shown, 'B hides the ring');
         await evaluate(`__flappy.scene.getScene('Over').openedAt = __flappy.loop.time, true`);
         await evaluate(`${play}.padDown(${G.select}), true`);
         await sleep(100);
@@ -882,6 +917,7 @@ export async function run(url = DEFAULT_URL) {
   } catch (err) {
     ok(false, `driver error: ${err.message}`);
     if (cdp?.exceptions.length) console.log(`  page exceptions:\n  ${cdp.exceptions.join('\n  ')}`);
+    if (cdp?.consoleErrors.length) console.log(`  console errors/warnings:\n  ${cdp.consoleErrors.join('\n  ')}`);
   } finally {
     cdp?.close();
     const exited = new Promise((resolve) => proc.once('exit', resolve));
