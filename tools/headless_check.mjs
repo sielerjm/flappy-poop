@@ -1241,6 +1241,94 @@ export async function run(url = DEFAULT_URL) {
       await cdp.send('Emulation.clearDeviceMetricsOverride');
     }
 
+    // Versus (two players): the 👥 toggle under the toilet toggle on a landscape window, the join
+    // screen's device claims, the countdown, two Play halves on one shared course, the inputs
+    // routed to the half that owns the device, and the ways back. Portrait never offers it.
+    {
+      const P1 = `__flappy.scene.getScene('Play')`;
+      const P2 = `__flappy.scene.getScene('PlayB')`;
+      const VS = `__flappy.scene.getScene('Versus')`;
+      const L = `Promise.all([import('./src/logic.js'), import('./src/config.js'), import('./src/versus.js')])`;
+      const metrics = (width, height) => cdp.send('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 1, mobile: false });
+      const want = await evaluate(`${L}.then(([l, c, v]) => JSON.stringify({ ...v.versusLayout(1800, 1000, c.FIELD), W: l.fieldWidth(1800, 1000, c.FIELD), countdownMs: c.TUNING.versus.countdownMs, select: c.TUNING.gamepad.select, flapVy: c.TUNING.flapVelocity }))`).then(JSON.parse);
+      const settle = async (w) => {
+        let W = null;
+        for (let i = 0; i < 60 && W !== w; i += 1) {
+          await sleep(100);
+          W = await evaluate('__flappy.scale.width');
+        }
+        for (let i = 0; i < 20 && (await playState()) !== 'ready'; i += 1) await sleep(100);
+        return W;
+      };
+      const until = async (expr, tries = 40) => {
+        for (let i = 0; i < tries; i += 1) {
+          if (await evaluate(expr)) return true;
+          await sleep(100);
+        }
+        return false;
+      };
+      await metrics(1800, 1000);
+      await settle(want.W);
+      const offer = await evaluate(`(() => { const p = ${P1}; return JSON.stringify({ offered: p.versusOffered(), box: p.readyBoxes.versus ?? null, toggle: Boolean(p.versusToggle), on: Boolean(__flappy.registry.get('versus')), state: p.state }); })()`).then(JSON.parse);
+      ok(offer.offered && offer.box && offer.toggle && !offer.on && offer.state === 'ready', `a 1800×1000 window offers the 👥 toggle under the toilet toggle (box at ${offer.box?.x}, ${offer.box?.y}), off`);
+      await evaluate(`${P1}.flap({ x: ${P1}.readyBoxes.versus.x, y: ${P1}.readyBoxes.versus.y }), true`);
+      await sleep(200);
+      const toggled = await evaluate(`JSON.stringify({ on: __flappy.registry.get('versus'), state: ${P1}.state, launching: ${P1}.launching, knob: ${P1}.versusToggle.isOn() })`).then(JSON.parse);
+      ok(toggled.on === true && toggled.knob && toggled.state === 'ready' && !toggled.launching, 'a tap on it switches two-player mode on without starting a run');
+      // The start tap opens the join screen: the canvas is two halves, each a Play on its own strip.
+      await evaluate(`${P1}.launch(), true`);
+      const joinUp = await until(`__flappy.scene.isActive('Versus') && __flappy.scene.isActive('Play') && __flappy.scene.isActive('PlayB') && ${P1}.state === 'ready' && ${P2}.state === 'ready' && Boolean(${P1}.match)`);
+      ok(joinUp, 'the start tap with the toggle on opens the join screen: Versus, Play and PlayB active');
+      const halves = await evaluate(`(() => { const a = ${P1}; const b = ${P2}; const v = ${VS}; const idx = (k) => __flappy.scene.getIndex(k); const half = (p) => ({ player: p.player, fieldW: p.fieldW, fieldX: p.fieldX, cam: [p.cameras.main.x, p.cameras.main.width], tray: Boolean(p.tray), pad: Boolean(p.pad), ready: p.readyTitle.visible, bg: p.bgColor.width }); return JSON.stringify({ W: __flappy.scale.width, status: v.match.status, same: a.match === b.match && a.match === v.match, a: half(a), b: half(b), order: idx('Versus') > idx('Play') && idx('Versus') > idx('PlayB'), seedShared: a.course.shared && b.course.shared && a.course.seed === b.course.seed, join: v.joinTitle.visible && v.homeButton !== null }); })()`).then(JSON.parse);
+      ok(halves.W === want.totalW && halves.status === 'join' && halves.same && halves.a.fieldW === want.halfW && halves.b.fieldW === want.halfW && halves.a.fieldX === 0 && halves.b.fieldX === want.halfW && halves.a.cam[0] === 0 && halves.a.cam[1] === want.halfW && halves.b.cam[0] === want.halfW && halves.b.cam[1] === want.halfW && halves.a.bg === want.halfW, `the canvas is ${halves.W} = 2 × ${want.halfW}: P1's camera at 0, P2's at ${halves.b.cam[0]}, both ${want.halfW} wide, each world ${halves.a.bg} wide (status ${halves.status})`);
+      ok(halves.a.tray && halves.a.pad && !halves.b.tray && !halves.b.pad && !halves.a.ready && !halves.b.ready && halves.order && halves.seedShared && halves.join, 'P1 keeps the tray and the pad, P2 has neither, both hide the ready UI, Versus renders above both halves with the join screen, one shared course');
+      // Claims: a tap on the right half is P2; the same half again is refused; a pad takes the free
+      // slot and the countdown starts; a key group arriving during the countdown is ignored.
+      await evaluate(`${P2}.flap({ x: 100, y: 600 }), true`);
+      const c1 = await evaluate(`JSON.stringify({ slots: ${VS}.match.slots.map((s) => s.device), status: ${VS}.match.status })`).then(JSON.parse);
+      await evaluate(`${P2}.flap({ x: 300, y: 700 }), true`);
+      const c2 = await evaluate(`JSON.stringify({ slots: ${VS}.match.slots.map((s) => s.device), status: ${VS}.match.status })`).then(JSON.parse);
+      await evaluate(`${P1}.padDown(${want.select}, 1), true`);
+      await sleep(100);
+      await evaluate(`${P1}.onVersusKey('Space'), true`);
+      const c3 = await evaluate(`JSON.stringify({ slots: ${VS}.match.slots.map((s) => s.device), status: ${VS}.match.status, count: ${VS}.countText.visible, text: ${VS}.countText.text, badge: ${VS}.joinPrompts.map((p) => p.text) })`).then(JSON.parse);
+      ok(c1.slots[0] === null && c1.slots[1]?.kind === 'touch' && c1.slots[1]?.side === 'right' && c1.status === 'join', `a tap on the right half claims P2 (${JSON.stringify(c1.slots[1])}), P1 still open`);
+      ok(JSON.stringify(c2.slots) === JSON.stringify(c1.slots) && c2.status === 'join', 'a second tap on the same half is refused');
+      ok(c3.slots[0]?.kind === 'pad' && c3.slots[0]?.index === 1 && c3.slots[1]?.kind === 'touch' && c3.status === 'countdown' && c3.count && c3.text === '3' && c3.badge[0].startsWith('🎮 2') && c3.badge[1].startsWith('👆'), `pad 2's A claims P1, the countdown starts at ${c3.text} with the badges ${c3.badge.join(' / ')}; Space during it changes nothing`);
+      const racing = await until(`${VS}.match.status === 'playing' && ${P1}.state === 'playing' && ${P2}.state === 'playing'`, (4 * want.countdownMs + 2500) / 100);
+      ok(racing, 'GO: both halves are playing');
+      // One course: the pair pre-filled on both halves and the next four they spawn match exactly.
+      const course = await evaluate(`(() => { const probe = (p) => ({ tops: p.pipes.getChildren().filter((c) => c.getData('scoring')).sort((a, b) => a.x - b.x).map((c) => [Math.round(c.x), Math.round(c.y)]), items: p.items.getChildren().map((c) => [Math.round(c.x), c.getData('kind')]).sort(), beans: p.beans.getChildren().map((c) => Math.round(c.x)).sort(), spawned: p.pipesSpawned, box: p.mysteryPair }); for (const p of [${P1}, ${P2}]) for (let i = 0; i < 4; i += 1) p.spawnPipePair(); const a = probe(${P1}); const b = probe(${P2}); return JSON.stringify({ a, b, same: JSON.stringify(a) === JSON.stringify(b) }); })()`).then(JSON.parse);
+      ok(course.same && course.a.tops.length >= 5, `both halves spawned the same course: ${course.a.tops.length} pairs at the same gaps, pickups ${JSON.stringify(course.a.items)}, the first box after pair ${course.a.box}`);
+      // Inputs mid-match go to the half whose device pressed: pad 2 is P1, a tap on the right half is P2,
+      // the unclaimed Space group does nothing.
+      await evaluate(`[${P1}, ${P2}].forEach((p) => { p.poop.body.setAllowGravity(false); p.poop.setVelocity(0, 0); p.poop.y = 640; p.graceLeftMs = 1e9; }), true`);
+      const route = await evaluate(`(() => { const a = ${P1}; const b = ${P2}; const vy = () => [a.poop.body.velocity.y, b.poop.body.velocity.y]; a.onVersusKey('Space'); const none = vy(); a.padDown(${want.select}, 1); const pad = vy(); a.poop.setVelocity(0, 0); b.flap({ x: 100, y: 600 }); const tap = vy(); return JSON.stringify({ none, pad, tap }); })()`).then(JSON.parse);
+      ok(route.none[0] === 0 && route.none[1] === 0 && route.pad[0] === want.flapVy && route.pad[1] === 0 && route.tap[0] === 0 && route.tap[1] === want.flapVy, `mid-match the unclaimed Space does nothing, pad 2 flaps P1 (${route.pad.join(' / ')}), a tap on the right half flaps P2 (${route.tap.join(' / ')})`);
+      // Home from the match: both halves stop, the canvas re-fits the window, single player is back.
+      await evaluate(`${VS}.leave(), true`);
+      const left = await until(`!__flappy.scene.isActive('Versus') && !__flappy.scene.isActive('PlayB') && __flappy.scene.isActive('Play') && ${P1}.state === 'ready' && ${P1}.match === null && __flappy.scale.width === ${want.W}`);
+      ok(left, `Home leaves the match: single player on the ready screen at the ${want.W} px field, the halves gone`);
+      // Back in with the toggle still on, then Esc / B on the join screen backs out.
+      await evaluate(`${P1}.launch(), true`);
+      ok(await until(`__flappy.scene.isActive('Versus') && ${VS}.match.status === 'join'`), 'the toggle stays on: the next start tap opens the join screen again');
+      await evaluate(`${VS}.onPadBack(), true`);
+      ok(await until(`!__flappy.scene.isActive('Versus') && __flappy.scene.isActive('Play') && ${P1}.state === 'ready' && ${P1}.match === null`), 'B / Esc on the join screen returns to single player');
+      // A window that cannot fit two halves hides the toggle; the flag left on is ignored by the start tap.
+      await metrics(720, 1280);
+      await settle(720);
+      const narrow = await evaluate(`JSON.stringify({ box: ${P1}.readyBoxes.versus ?? null, toggle: Boolean(${P1}.versusToggle), offered: ${P1}.versusOffered(), flag: __flappy.registry.get('versus') })`).then(JSON.parse);
+      await evaluate(`${P1}.launch(), true`);
+      const single = await until(`${P1}.state === 'playing' && ${P1}.match === null && !__flappy.scene.isActive('Versus')`);
+      ok(narrow.box === null && !narrow.toggle && !narrow.offered && narrow.flag === true && single, 'a portrait window has no 👥 toggle; with the flag still on the start tap launches a single-player run');
+      await evaluate(`(() => { const p = ${P1}; p.graceLeftMs = 0; p.poop.body.setAllowGravity(true); p.die(); return true; })()`);
+      for (let i = 0; i < 30 && !(await active('Over')); i += 1) await sleep(100);
+      await evaluate(`(() => { const o = __flappy.scene.getScene('Over'); o.openedAt = 0; o.retry(); return true; })()`);
+      await settle(720);
+      await evaluate(`__flappy.registry.set('versus', false), true`);
+      await cdp.send('Emulation.clearDeviceMetricsOverride');
+    }
+
     const f2 = await frame();
     await sleep(500);
     ok((await frame()) > f2, 'game loop still advancing at the end');

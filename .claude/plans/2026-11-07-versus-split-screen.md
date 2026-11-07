@@ -216,6 +216,7 @@ that moment (the window may have shrunk since the toggle was set; the toggle its
    single-player `'ready'` at the wide field; with the toggle on, shrink the viewport to 720×1280 → the toggle
    is gone and the start tap launches a single-player run.
    Commit `feat(versus, step 3/6): 👥 toggle, join screen, device claims, countdown, two Play strips`.
+   Result: done. The whole Versus scene (pause, end, panel, rematch included) landed here; section A proves the join flow, section B (step 4) the rest. `npm test` 343 / 343; smoke green with section A. Step 2 is `941ef46`.
 4. **Shared pause, match end, result panel, rematch.** Smoke section B: Menu pauses both under one banner,
    a tap on the right half resumes both; put P1 in a level break (pin `pipesPassed` to the level end and
    cross the line) and press Menu → P2 `'paused'`, P1 still in its break; tap → P2 `'playing'`, P1 still in

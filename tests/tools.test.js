@@ -12,7 +12,7 @@ test('npm run smoke runs tools/headless_check.mjs', () => {
 test('headless_check covers every overlay scene registered in main.js', async () => {
   const { OVERLAYS, DEFAULT_URL } = await import('../tools/headless_check.mjs');
   const registered = /scene:\s*\[([^\]]+)\]/.exec(main)[1].split(',').map((s) => s.trim());
-  const overlays = registered.filter((s) => !['Boot', 'Play', 'Over'].includes(s));
+  const overlays = registered.filter((s) => !['Boot', 'Play', "new Play('PlayB')", 'Over', 'Versus'].includes(s));
   assert.deepEqual(Object.values(OVERLAYS).sort(), overlays.sort());
   assert.match(DEFAULT_URL, /^http:\/\/localhost:8000$/);
 });

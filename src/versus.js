@@ -6,6 +6,9 @@
 
 import { fieldWidth, levelProgress } from './logic.js';
 
+/** The ready-screen toggle's emoji (two heads), beside the 🚽 one. */
+export const VERSUS_EMOJI = '👥';
+
 /**
  * Two phone-width halves fit the window: landscape enough for 2 × minWidth
  * against the field height, and tall enough (versus.minViewportH css px) that a

@@ -83,7 +83,7 @@ import { createButton } from '../ui/button.js';
 import { createToggle } from '../ui/toggle.js';
 import { openSavePanel, isSavePanelOpen } from '../ui/savePanel.js';
 import { bindPad } from '../input/pad.js';
-import { keyGroup, sameDevice, catchUpTier, catchUpDraws } from '../versus.js';
+import { keyGroup, sameDevice, catchUpTier, catchUpDraws, versusAvailable, VERSUS_EMOJI } from '../versus.js';
 
 const TEXT_STYLE = {
   fontFamily: 'sans-serif',
@@ -218,10 +218,12 @@ export class Play extends Phaser.Scene {
 
     // Ready-screen geometry (title, poop spot, buttons). Taps resolve through
     // readyHit() in flap(), not GameObject handlers, so the chrome is visual only.
-    this.readyBoxes = readyLayout(this.col.width, GAME_HEIGHT, T, this.col.x); // centred boxes land on W / 2; the ? at the column's right edge
+    this.readyBoxes = readyLayout(this.col.width, GAME_HEIGHT, T, this.col.x, { versus: this.versusOffered() }); // centred boxes land on W / 2; the ? at the column's right edge
     this.launching = false;
     // Toilet mode: session-only (registry survives scene.restart, not a reload).
     this.toilet = Boolean(this.registry.get('toilet'));
+    // Two-player mode (the 👥 toggle under the toilet one): session-only too; the start tap then goes to Versus.
+    this.versusOn = Boolean(this.registry.get('versus'));
     // Test mode is session-only too (registry 'testMode', 'testStartLevel', 'testInvincible').
     // runIsTest latches per run: set in start() or when test mode turns on mid-run, and only
     // cleared by the next start(), so a run that ever had test tools can never be recorded.
@@ -229,9 +231,11 @@ export class Play extends Phaser.Scene {
 
     // Player: bobs at its ready spot wearing the "TAP TO FLAP!" bubble; no gravity
     // until launch() has swapped to the plain frame and slid it to this.poopX.
-    this.poop = this.physics.add.sprite(this.readyBoxes.poop.x, this.readyBoxes.poop.y, 'poop-speech').setDepth(10);
+    // A match's join screen shows the plain face: the prompt there is the Versus scene's, not the bubble's.
+    const readyFrame = this.match ? 'poop' : 'poop-speech';
+    this.poop = this.physics.add.sprite(this.readyBoxes.poop.x, this.readyBoxes.poop.y, readyFrame).setDepth(10);
     this.poop.setScale(T.spriteDisplayScale * T.readyPoopScale); // bigger on the ready screen; launch() shrinks it back
-    this.setPoopTexture('poop-speech');
+    this.setPoopTexture(readyFrame);
     this.beanSpawned = false;
     this.poop.body.setAllowGravity(false);
     // Soft-edged white glow behind the poop while the fart power is charged (alpha
@@ -287,6 +291,7 @@ export class Play extends Phaser.Scene {
       .setOrigin(0.5)
       .setDepth(20);
     this.toiletToggle = createToggle(this, this.readyBoxes.toilet, { on: this.toilet });
+    this.versusToggle = this.readyBoxes.versus ? createToggle(this, this.readyBoxes.versus, { on: this.versusOn, glyph: VERSUS_EMOJI }) : null;
     // "?" in the top-right corner opens How to play. It pulses under a soft white
     // halo until the player acknowledges this build (opens it, or finishes a run).
     {
@@ -317,6 +322,7 @@ export class Play extends Phaser.Scene {
     this.profileBtn = createButton(this, this.readyBoxes.profile, profileButtonText(this.locale, this.save), { ...TEXT_STYLE, fontSize: '32px' }); // white: the player's own line, not a menu item
     this.refreshProfile();
     this.refreshTestBadge(); // still on after a restart: test mode lives in the registry
+    if (this.match) this.setReadyUiVisible(false); // a half of a match: the Versus scene draws the join screen
 
     this.pauseShade = this.add.rectangle(W / 2, GAME_HEIGHT / 2, W, GAME_HEIGHT, 0x000000, 0.45).setDepth(25).setVisible(false);
     // Level-break banner shares the shade with the pause banner; setPauseBanner picks one.
@@ -346,20 +352,24 @@ export class Play extends Phaser.Scene {
       .setDepth(26)
       .setVisible(false);
 
-    this.tray = createTray(this, { muted: isMuted(), col: this.col });
+    // The tray and the controller ring belong to the chrome owner: single player, or P1 in a match (P2 has neither).
+    this.tray = !this.match || this.player === 1 ? createTray(this, { muted: isMuted(), col: this.col }) : null;
     // Controller focus ring over the tray, in screen order; A on a ringed button runs the
     // same handleChrome(id) its tap runs. Shown by a d-pad press (onPadAction), never by touch.
     // Ready-screen extras after the tray (so the first ring lands on ⓘ): the toilet toggle and the
     // ? (How to play), both only while the ready screen is up. Save / Load User and the profile
     // button stay off the ring on purpose: they need the keyboard.
-    const onReady = () => this.state === 'ready' && !this.launching;
-    this.focus = createFocus(this, T, {
-      items: [
-        ...['info', 'lang', 'feedback', 'leaderboard', 'mute', 'settings', 'pause'].map((id) => ({ id, obj: this.tray.buttons[id], activate: () => this.handleChrome(id) })),
-        { id: 'toilet', box: this.readyBoxes.toilet, visible: onReady, activate: () => this.toggleToilet() },
-        { id: 'howto', box: this.readyBoxes.howto, visible: onReady, activate: () => this.handleChrome('howto') },
-      ],
-    });
+    const onReady = () => this.state === 'ready' && !this.launching && !this.match;
+    this.focus = this.tray
+      ? createFocus(this, T, {
+          items: [
+            ...['info', 'lang', 'feedback', 'leaderboard', 'mute', 'settings', 'pause'].map((id) => ({ id, obj: this.tray.buttons[id], activate: () => this.handleChrome(id) })),
+            { id: 'toilet', box: this.readyBoxes.toilet, visible: onReady, activate: () => this.toggleToilet() },
+            ...(this.readyBoxes.versus ? [{ id: 'versus', box: this.readyBoxes.versus, visible: onReady, activate: () => this.toggleVersus() }] : []),
+            { id: 'howto', box: this.readyBoxes.howto, visible: onReady, activate: () => this.handleChrome('howto') },
+          ],
+        })
+      : null;
 
     // Bean power button in the tray's centre slot: shown while charged, pulses
     // in step with the glow, and fires the fart like a tap on the poop.
@@ -460,6 +470,12 @@ export class Play extends Phaser.Scene {
    */
   launch() {
     if (this.launching || this.state !== 'ready') return;
+    if (this.versusOn && this.versusOffered()) {
+      // Two-player mode: the Versus scene takes over (it stops this scene and launches the halves).
+      this.focus?.hide();
+      this.scene.start('Versus', { match: null });
+      return;
+    }
     this.launching = true;
     this.focus?.hide(); // the ring has no job while the poop flies
     this.bob.stop();
@@ -486,6 +502,7 @@ export class Play extends Phaser.Scene {
   setReadyUiVisible(visible) {
     this.readyTitle.setVisible(visible);
     this.toiletToggle.setVisible(visible);
+    this.versusToggle?.setVisible(visible);
     this.howToBtn.setVisible(visible);
     this.howToHalo.setVisible(visible && this.isHowToPromptDue());
     this.saveLoadBtn.setVisible(visible);
@@ -645,7 +662,7 @@ export class Play extends Phaser.Scene {
     }
     if (this.state === 'dead') return;
     if (pointer) {
-      const id = trayHit(pointer.x, pointer.y, trayLayout(this.col.width, GAME_HEIGHT, T, this.col.x));
+      const id = this.tray ? trayHit(pointer.x, pointer.y, trayLayout(this.col.width, GAME_HEIGHT, T, this.col.x)) : null;
       if (id) {
         this.handleChrome(id);
         return;
@@ -658,6 +675,10 @@ export class Play extends Phaser.Scene {
         }
         if (hit === 'toilet') {
           this.toggleToilet();
+          return;
+        }
+        if (hit === 'versus') {
+          this.toggleVersus();
           return;
         }
         if (hit === 'saveload') {
@@ -764,6 +785,17 @@ export class Play extends Phaser.Scene {
     this.toilet = !this.toilet;
     this.registry.set('toilet', this.toilet);
     this.toiletToggle.setOn(this.toilet);
+  }
+
+  /** The 👥 toggle is offered only where two halves fit the window (versusAvailable), outside a match and test mode. */
+  versusOffered() {
+    return !this.match && !this.isTestMode() && versusAvailable(globalThis.innerWidth, globalThis.innerHeight, T, FIELD);
+  }
+
+  toggleVersus() {
+    this.versusOn = !this.versusOn;
+    this.registry.set('versus', this.versusOn);
+    this.versusToggle?.setOn(this.versusOn);
   }
 
   /** Test mode is on for this session (the registry survives scene.restart, not a reload). */
@@ -1890,9 +1922,14 @@ export class Play extends Phaser.Scene {
     this.breakBob?.stop();
     this.breakBob = null;
     this.levelBreak = false;
+    // A fart mid-halt just stops: no endPower, whose pre-fill would spawn pairs into a run that is over.
     if (this.effects.cancelPower()) {
       this.fartSound?.stop();
-      this.endPower();
+      this.fartTween?.stop();
+      this.fartTween = null;
+      this.poop.setAlpha(1);
+      this.glow.setAlpha(0).setScale(1);
+      this.scrollMul = 1;
     }
     this.endRun({ report: false });
     this.poop.body.setAllowGravity(false);
