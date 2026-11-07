@@ -107,8 +107,8 @@ src/
                             roundPixels,
                             arcade physics, input.gamepad on (bound once, in
                             Play), scene order
-                            [Boot, Play, Over, Settings, About, HowTo, Language,
-                            Feedback, Scores, Leaderboard].
+                            [Boot, Play, Over, Settings, About, HowTo, Changelog,
+                            Language, Feedback, Scores, Leaderboard].
   config.js                 GAME_WIDTH / GAME_HEIGHT (the portrait field = the
                             chrome column), FIELD (height, minWidth, maxWidth,
                             resizeDebounceMs), the TUNING object (every
@@ -117,7 +117,8 @@ src/
                             sweepMs = the pre-fill's lead and sweep-in on a wide
                             field), and LEADERBOARD
                             (Supabase Data API URL + publishable key, both public
-                            by design; timeout, limit, storage key, score cap),
+                            by design; timeout, limit = the Top 25, visibleRows = the
+                            ten in the board's window, storage key, score cap),
                             LEVELS (gut segment name keys, in order), LEVEL_COLORS
                             (Set2 backgrounds, cycling) and BACKGROUND (overlay
                             layers: key + parallax), TEST_MODE (trigger words,
@@ -144,7 +145,9 @@ src/
                             fartPeakMul, fartMul, fartRemainingDistance), fartFloat
                             (wave + tilt), hsvToRgb / rainbowHue, glowAlphaAt /
                             glowStops, sprite angle, VERSION (bump it when art
-                            under an existing file name changes: Boot's ?v=), retry
+                            under an existing file name changes: Boot's ?v=; every
+                            bump needs a CHANGELOG entry), versionText(locale,
+                            version) = the "v0.5.16 beta" line every overlay shows, retry
                             lockout, levels (levelPipes, levelEnd, levelFor, isFinalLevel,
                             levelSpeed, levelName, levelColor, levelProgress,
                             levelBarLayout, lerpColor),
@@ -152,7 +155,9 @@ src/
                             howToSeenAt) + howToPromptDue, vibrate
                             helper, trayLayout, trayHit, readyLayout, readyHit
                             (howToLayout / howToHit wrap them),
-                            LAST_UPDATED, issueUrl, openExternalUrl, chromeIntent,
+                            LAST_UPDATED, issueUrl, openExternalUrl, chromeIntent
+                            (inputs incl. 'changelog'; a Changelog over About closes
+                            back to About without the lockout),
                             overlayOutsideHit, clampScroll, scaledCircleBody; gamepad:
                             padAction (button index → action), stickNav, focusNearest
                             (spatial: the nearest item in a direction, straight
@@ -163,6 +168,10 @@ src/
                             isTestWord, testRunStart, nextTestLevel, TEST_POWERS,
                             settingsLayout (Settings panel + rows, taller with the
                             test section). Fully unit-tested.
+  changelog.js              What's new data, NO Phaser/DOM: CHANGELOG (one entry per
+                            version, newest first: version, date like LAST_UPDATED's
+                            day, notes per locale), changelogEntry, changelogNotes
+                            (bulleted block for a locale, English fallback).
   leaderboard.js            Shared leaderboard, NO Phaser/DOM: submitPlan / submitPlans
                             (pure: what to post; up to two rows per player, best
                             off and best on the toilet, via save.js bestByToilet),
@@ -311,8 +320,8 @@ src/
                             Spawns pipes and items, tray, auto-pause, haptics, dies,
                             then launches Over as an overlay scene. Tray / keyboard
                             go through chromeIntent. Overlay order is feedback >
-                            language > howto > about > settings > leaderboard >
-                            scores. Opening Settings, About, HowTo, Language,
+                            language > howto > changelog > about > settings >
+                            leaderboard > scores. Opening Settings, About, HowTo, Changelog, Language,
                             Feedback, or Leaderboard while playing pauses;
                             closing them does not resume. Unpause applies flapVelocity
                             as a recovery bounce. Pause banner is two centered lines
@@ -432,7 +441,12 @@ src/
                             resumePlay → endLevelBreak (applyLevel, grace,
                             centreNextGap). Background = bgColor rectangle (depth
                             −20) under bgLayers tileSprites (depth −10+) from
-                            BACKGROUND.layers; levelBar above the score. Nothing here reads time.now;
+                            BACKGROUND.layers; the ceiling and ground strips are
+                            tileSprites at depth 5 (over the pipes) scrolled at full
+                            pipe speed, and the poop dies at their edges
+                            (ceilingHeight + poopRadius, GAME_HEIGHT − groundHeight −
+                            poopRadius; gapBounds keeps gapMargin inside both);
+                            levelBar above the score. Nothing here reads time.now;
                             readyHit() routes taps (howto, start, saveload, profile
                             → Scores). getSaveState / setSaveState for the panel.
                             Test mode: registry testMode / testStartLevel /
@@ -489,7 +503,8 @@ src/
                             is paused, Exit → setTestMode(false) + scene.restart()).
     About.js                Overlay: author, LLM note, engine/art/sound credits
                             (both fart clips), How to play + feedback links,
-                            LAST_UPDATED under the version, inside
+                            "Updated LAST_UPDATED" under the version as a link to
+                            Changelog (What's new), inside
                             createScrollView(). Tap outside the panel closes.
                             Wrapped text uses useAdvancedWrap for CJK.
     HowTo.js                Overlay: flap rules plus pipe / fiber / probiotic /
@@ -500,6 +515,13 @@ src/
                             to play uses howToHit() so it does not start a run.
                             Opened from About, X/Esc/tap-outside closes HowTo and
                             About together. useAdvancedWrap on body text.
+    Changelog.js            Overlay (What's new): one version's notes from
+                            src/changelog.js (the latest, or create({ version })
+                            after a link's scene.restart), then a link per other
+                            version ("Latest · " on the newest), inside
+                            createScrollView(). Opened from About's Updated line
+                            (chromeIntent 'changelog'); ✕ / Esc / B / tap outside
+                            return to About.
     Language.js             Overlay: English / 简体中文 picker (🌐 or L).
     Feedback.js             Overlay: Bug / Feature request chooser (💬, F, or links
                             from About/HowTo). Buttons open GitHub issue forms via
@@ -509,13 +531,16 @@ src/
                             SaveState; opened by tapping the profile line.
     (every overlay builds this.focus from pressable() items, ✕ first then its
                             rows, and calls focus.show(), which only shows under a
-                            controller; About / HowTo pass scrolled: sv and
-                            onVertical so up / down scroll the text)
+                            controller; About / HowTo / Changelog pass scrolled: sv and
+                            onVertical so up / down scroll the text; Leaderboard
+                            passes onVertical only, scrolling its rows band)
     Leaderboard.js          Overlay (🏆 tray button or T): awaits
                             Play.syncLeaderboard() (posts a pending best), then
                             fetchTop + fetchRank in parallel behind a Loading line.
-                            Ten rows: rank · name · 🚽 · LV n · score (header over
-                            the middle columns), own row highlighted
+                            Top 25 (LEADERBOARD.limit): rank · name · 🚽 · LV n ·
+                            score rows in a band that shows visibleRows (10) at once
+                            and scrolls (createScrollView over the band; title,
+                            header, footer, version fixed), own row highlighted
                             by rank, footer = join hint (no username) / rankText
                             (off the board) / "not on the board yet". A generation
                             counter drops loads from a closed instance.
@@ -531,8 +556,11 @@ assets/                     Contract PNGs + README.md (the art contract).
   mystery.png               Mystery box spin: 8 frames of 384x384 side by side (3072x384),
                             loaded as a spritesheet; mystery-icon.png is its static view
                             for the game-over summary and How to play (never spawned).
-  pipe.png villi.png ground.png   (villi.png: transparent overlay over the level
-                            colour; art contract in assets/README.md "Background layers")
+  pipe.png villi.png ceiling.png ground.png
+                            (villi.png: transparent overlay over the level colour with
+                            the back fringes; ceiling.png / ground.png: the front rows,
+                            mirrors of each other, drawn over the pipes; art contract
+                            in assets/README.md "Background layers")
   icon-192.png icon-512.png apple-touch-icon.png
                             App icons from src/FlappyPoopAppArt.png (process_art.py
                             process_icons): the two manifest / favicon icons keep the
@@ -593,7 +621,11 @@ tests/                      node --test, zero deps. Each file is self-describing
                             mystery block (levels, half fiber's weight and speed,
                             the locked draw table)
   about.test.js             About copy (both locales) names author, LLM, Phaser, JS, sound;
-                            LAST_UPDATED has a year and a time
+                            LAST_UPDATED has a year and a time; versionText carries
+                            the version and the beta tag in both locales
+  changelog.test.js         CHANGELOG[0] is VERSION (a bump without notes fails the
+                            suite and so npm run push), newest first, dated, notes
+                            in every locale and translated; changelogEntry / Notes
   howto.test.js             HOW_TO copy, pause banner, howToLayout / howToHit geometry
   feedback.test.js          issueUrl bug/feature templates; openExternalUrl paths;
                             feedback i18n keys
@@ -614,6 +646,7 @@ tests/                      node --test, zero deps. Each file is self-describing
                             nextTestLevel wrap, TEST_POWERS, settingsLayout geometry
   hitbox.test.js            scaledCircleBody source radius/offset for 2x and 4x
   chrome.test.js            chromeIntent matrix across state x overlay x input
+                            (incl. the Changelog over About)
   gamepad.test.js           padAction (every knob, unmapped → null, a retuned layout),
                             stickNav deadzone / larger axis, focusStep wrapping,
                             focusRingLayout, padIntent matrix across top x state x
@@ -625,7 +658,7 @@ tests/                      node --test, zero deps. Each file is self-describing
   ready.test.js             readyLayout boxes inside the field, non-overlapping,
                             clear of the bobbing poop; readyHit centre / gap / profile
   serve.test.js             npm start points at tools/serve.py; bind + URL print
-  leaderboard.test.js       LEADERBOARD config shape; submitScore headers / body /
+  leaderboard.test.js       LEADERBOARD config shape (limit 25, visibleRows 10); submitScore headers / body /
                             400 / throw / timeout; disabled config makes no request;
                             fetchTop parsing + order; fetchRank; submitPlan matrix
                             (name, id, cap, confirmed, rename, flag, id change);
@@ -643,10 +676,10 @@ tests/                      node --test, zero deps. Each file is self-describing
                             feature.yml); config.yml allows blank issues.
 
 tools/
-  make_placeholders.py      Regenerates pipe / villi / ground only (icons moved to
-                            process_art.py); villi.png carries a baked ceiling
-                            strip (ceiling_strip: the ground's mirror along the
-                            top edge, background only); a cream backdrop from each
+  make_placeholders.py      Regenerates pipe / villi / ceiling / ground only (icons
+                            moved to process_art.py); ceiling.png is the ground's
+                            mirror (ceiling_strip), drawn by the game as its own
+                            strip over the pipes; a cream backdrop from each
                             screen edge to BAR_FRAC of the shortest fringe tip
                             sits behind everything; fingers run off the
                             edges / behind the strips (villi_band min_frac) and
@@ -734,8 +767,8 @@ tools/
 3. **Respect the art contract.** Asset file names and sizes are fixed by
    `assets/README.md`. Change a size only if you update that table AND the scene
    code that positions the sprite. `npm test` fails otherwise. The pipe image has
-   its cap at the top and is flipped vertically for the top pipe; `bg.png` and
-   `ground.png` must tile horizontally. Player/item redraws go through
+   its cap at the top and is flipped vertically for the top pipe; `villi.png`,
+   `ceiling.png` and `ground.png` must tile horizontally. Player/item redraws go through
    `assets/src/` + `tools/process_art.py`.
 4. **Phaser stays pinned.** `index.html` loads `phaser@4.2.1` from jsDelivr.
    Bump it by changing that one tag; `tests/html.test.js` only checks the pin is
@@ -789,7 +822,7 @@ npm run smoke     # with npm start running: headless Chrome drives the real game
                   # (needs Google Chrome; CHROME=/path overrides). Run it after
                   # any change to src/scenes/* or src/ui/*.
 uv run --with pillow python3 tools/process_art.py   # rebuild poop set / items / bean from assets/src/
-python3 tools/make_placeholders.py   # pipe / bg / ground / icons only
+uv run --with pillow python3 tools/make_placeholders.py   # pipe / villi / ceiling / ground only
 ```
 
 Scene behaviour (physics, rendering, audio) cannot be verified in Node. When you
@@ -818,9 +851,14 @@ Commits so far follow `type(scope): summary` (`feat`, `docs`, `chore`); keep it.
 - New scene → `src/scenes/`, register in the `scene:` array in `src/main.js`.
   An overlay also needs an `isActive` check in `Play.chromeArgs` (and its place
   in the overlay ternary), a `case` in `Play.applyChrome`, a key in
-  `Play.padTop`, rows in `tests/chrome.test.js`, and a `this.focus` ring built
-  from `pressable()` items (✕ first) with `focus.show()` so a controller can
-  walk it.
+  `Play.padTop`, rows in `tests/chrome.test.js`, an entry in `OVERLAYS` in
+  `tools/headless_check.mjs` (the smoke opens every overlay), and a `this.focus`
+  ring built from `pressable()` items (✕ first) with `focus.show()` so a
+  controller can walk it.
+- Version bump (`VERSION` in `src/logic.js`) → a new first entry in
+  `src/changelog.js` with the date and 1–5 bullets in both locales (the What's
+  new page; `tests/changelog.test.js` fails the suite, and so `npm run push`,
+  without it).
 - New pad button or action → a knob in `TUNING.gamepad`, a row in `padAction`
   and `padIntent` (+ `tests/gamepad.test.js`), a `case` in `Play.onPadAction`
   that calls an existing handler. Never bind the Gamepad plugin in another

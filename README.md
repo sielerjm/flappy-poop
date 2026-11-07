@@ -33,12 +33,12 @@ On iPhone, Silent mode mutes the game — turn it off to hear sound. The pause b
 - **Levels** — pipe pairs passed decide the level (fiber and bacteria move the score, never the level). Level 1 is 10 pairs, level 2 is 25, every later level 50: the ends are at 10, 35, 85, 135, 185, 235, 285. Level 1 is a scripted intro: a probiotic at pair 3, fiber after pairs 4 and 7, a bean after pair 9, no bad bacteria. Rectum (level 7) is the last level; crossing its finish line ends the run as a win (the game-over panel reads "YOU MADE IT OUT!" and the score is saved at level 7). One pipe spacing after a level's last pair a black-and-white **finish line** scrolls in and nothing follows it; cross it and the run pauses with "LEVEL 2 · Duodenum / Tap to continue", the poop bobbing at mid-height while the background crossfades to the next segment's colour (stomach, duodenum, jejunum, ileum, caecum, colon, rectum). Tap to continue: the next level's speed applies (275 px/s at level 1, +25 per level, cap 450; the gap is 374 px on level 1 and 357 on level 2, 10 % and 5 % wider than the 340 from level 3 on), you get the same grace as after a fart, and the first pair opens at mid-screen. A fart never carries you past the line: if the line is closer than the fart's pipes, the fart ends at the line, only the pairs it actually passed count, and the break starts at once (the beans are still spent). The **progress bar** at the top (grey track, pink fill, `LV n`, 🏁) fills one step per pair passed and is full when the last pair of the level is behind you. Your best score remembers the level it was set at (game over, High scores, save code, and the leaderboard's level column).
 - **Level 1 is a scripted intro** — no random pickups: a probiotic sits in pair 3's gap, bad bacteria in pair 5's, a fiber bobs after pair 7 and a bean after pair 9, then the finish line. Random rolls start at level 2.
 - **Beans / fart power** — from level 2 a bean appears from pipe 5, halfway between pairs: 15 % per pair until pipe 20 with one guaranteed in that window, then 6 % per pair (rarer than fiber), bobbing slowly through the middle half of the screen with a ±15° wiggle. One bean readies the power: the poop shows stink lines and a pulsing soft-edged glow, and a bean button pulsing in step appears in the bottom-centre of the tray; tap it (or the poop) to fire. You can carry up to three beans (they keep spawning until the bag is full); with three held the glow and the bean button cycle through rainbow colours. A normal fart spends one bean (the rest stay in your bag of up to three, across levels too); with all three held the tap is a **super fart** that spends them all. Speed rises and falls with `fart_accelerate.mp3` (4.3 s) so exactly five pipes pass (twenty for a super fart, at up to ~10× speed, under a rainbow halo). While farting the poop floats through the middle of the screen on a gentle wave, nose up as it rises and nose down as it falls (gravity off, taps ignored), blinks between full and half opacity, cannot die, and fiber, probiotic and bacteria pass straight through it; a probiotic shield does not count down during the fart. Towards the end of the clip no new pipes spawn, so the screen is clear when it ends; the next pair then enters from the right edge with its gap at the height you floated at, so you have a full screen and a straight line through. Tapping it does not start the run. Closing How to play that was opened from About also closes About, leaving a paused run if info was opened mid-play. Tap the dimmed area outside Settings, About, or How to play to close (same as X).
-- **Bottom-left (i)** — About (credits, author, LLM note, last-updated stamp, How to play and feedback links). Independent of Settings.
+- **Bottom-left (i)** — About (credits, author, LLM note, last-updated stamp, How to play and feedback links). Tap the **Updated** line for **What's new**: the latest version's notes, with links to every earlier version's. Independent of Settings.
 - **Bottom-left (🌐)** — language (English / 简体中文). Persists. First visit with no saved choice follows the browser language when it starts with `zh`. Opening Language mid-run pauses.
 - **Bottom-left (💬)** — feedback: choose Bug or Feature request to open a GitHub issue form in the browser (needs a GitHub account). Also linked from About and How to play.
 - **Bottom-right tray** — 🏆 leaderboard, mute/unmute, settings, with pause sitting directly above the settings cog. Tray taps never flap, and on the game-over screen they never retry.
-- **🏆 Leaderboard** (tray or **T**) — the shared online Top 10. Only players who have set a username are on it; your row is highlighted, and if you are below the Top 10 a footer line shows your best and its rank. Runs played on the toilet keep their 🚽. Opening it mid-run pauses. Works offline too: the board just says it cannot be reached and your best is posted the next time it can. See **Leaderboard** below.
-- **P** or **Esc** — pause / resume (during a run). Ignored while Settings, About, How to play, Language, Feedback, or the Leaderboard is open; Esc then closes the top overlay.
+- **🏆 Leaderboard** (tray or **T**) — the shared online Top 25; ten rows show at once, drag or scroll for the rest. Only players who have set a username are on it; your row is highlighted, and if you are below the Top 25 a footer line shows your best and its rank. Runs played on the toilet keep their 🚽. Opening it mid-run pauses. Works offline too: the board just says it cannot be reached and your best is posted the next time it can. See **Leaderboard** below.
+- **P** or **Esc** — pause / resume (during a run). Ignored while Settings, About, How to play, What's new, Language, Feedback, or the Leaderboard is open; Esc then closes the top overlay.
 - **M** — mute / unmute. Persists across reload. Still works while an overlay is open.
 - **Save / Load User** (ready-screen button) — set a username (1–16 characters; it is shown on the public leaderboard with your best score) and press Save (the panel confirms "Username saved"), then Copy your `fp1.…` user code and paste it into Load user code on another phone or browser to carry your username and best 6 scores (with their 🚽 flags) across. Codes are signed, so an edited code is refused; loading merges scores (best 6 kept) and the pasted username wins. New players see an **Enter username** button (pulsing glow) under it that opens this panel with the keyboard on the Username field and closes after Save; once a username is set that button reads `name · best` and opens the High scores overlay (up to 6).
 - **How to play** and **tap to flap** are drawn as buttons on the ready screen; tapping the second one starts the run like any other tap.
@@ -78,13 +78,14 @@ index.html              viewport/touch setup, loads Phaser + src/main.js
 manifest.webmanifest    "Add to Home Screen" metadata
 CREDITS.md              Phaser + fart-sample attribution, author/art/LLM note
 src/
-  main.js               Phaser.Game config: fieldWidth(window) x 1280 (720 on a phone, up to 2560 on desktop), Scale.FIT, roundPixels, resize → Play.onFieldResize, [Boot, Play, Over, Settings, About, HowTo, Language, Feedback, Scores, Leaderboard]
+  main.js               Phaser.Game config: fieldWidth(window) x 1280 (720 on a phone, up to 2560 on desktop), Scale.FIT, roundPixels, resize → Play.onFieldResize, [Boot, Play, Over, Settings, About, HowTo, Changelog, Language, Feedback, Scores, Leaderboard]
   config.js             GAME_WIDTH/HEIGHT, FIELD (the width range), TUNING, and LEADERBOARD (Supabase Data API URL + publishable key, both public)
   logic.js              pure functions: field width / chrome column / poop x, rng, gaps, scoring, items, settings store, tray / ready layout, issueUrl, chromeIntent
   share.js              game-over share: the panel PNG to the share sheet (navigator.share inside the tap), else a download (Node-testable)
   save.js               user codes: fp1.<payload>.<sig> export / import, local best-6 store, merge (Node-testable)
   leaderboard.js        shared leaderboard over the Supabase REST API: submitPlan, submitStore, submitScore, fetchTop, fetchRank (Node-testable, fetch injected)
   i18n.js               en / zh-Hans catalog + t() / initialLocale
+  changelog.js          What's new: one entry per version (date, notes in both locales), newest first; the first must be VERSION
   sound.js              WebAudio blips + setMuted (also mutes the Phaser MP3 samples)
   ui/finish.js          checkered finish-line canvas texture
   ui/levelBar.js        progress bar (track, animated pink fill, LV n, 🏁) from levelBarLayout
@@ -100,27 +101,28 @@ src/
     Play.js             ready -> playing -> paused -> dead; items; mystery boxes (draws, reveal, skip); beans + fart power; tray; locale; ready buttons + profile line
     Over.js             game-over panel (score, 3 + 3 run summary with postbiotics and mystery boxes, pipes crossed, Share | glowing Home); draws the share card for Share; tray mute still works
     Settings.js         sound / haptics overlay; About link
-    About.js            credits, author, LLM note, How to play + feedback links, last-updated
+    About.js            credits, author, LLM note, How to play + feedback links, last-updated (a link to What's new)
+    Changelog.js        What's new overlay: one version's notes from src/changelog.js, links to the other versions
     HowTo.js            How to play overlay (ready screen and About link); feedback link
     Language.js         English / 简体中文 picker
     Feedback.js         Bug / Feature request chooser → GitHub issue forms
     Scores.js           High scores overlay (username + up to 6 scores) from the profile line
-    Leaderboard.js      shared Top 10 overlay (🏆 / T): rows with 🚽, own row highlighted, rank footer, join hint
+    Leaderboard.js      shared Top 25 overlay (🏆 / T): a scrolling ten-row band with 🚽, own row highlighted, rank footer, join hint
 db/schema.sql           Supabase schema (table, RLS + column grant, submit_score / player_rank); run by hand in the SQL editor
 assets/                 contract PNGs + README.md (the art contract)
   poop.png poop-dead.png poop-stink1.png poop-stink2.png poop-falling.png poop-stink-falling1.png poop-stink-falling2.png poop-fart.png poop-speech.png
   fiber.png probiotic.png postbiotic.png bacteria.png bean.png mystery.png (8-frame spin spritesheet) mystery-icon.png
-  pipe.png villi.png ground.png icon-192.png icon-512.png apple-touch-icon.png   (villi.png is a transparent overlay over the per-level colour; see assets/README.md)
+  pipe.png villi.png ceiling.png ground.png icon-192.png icon-512.png apple-touch-icon.png   (villi.png is a transparent overlay over the per-level colour; ceiling.png / ground.png are the front villi rows drawn over the pipes; see assets/README.md)
   src/                  original drawings (not in the size table)
   sfx/fart.mp3          death sample
   sfx/fart_accelerate.mp3   fart power-up clip (the power lasts exactly this long)
   sfx/NewLevel.mp3      level-up chime at the finish line
-tools/make_placeholders.py   pipe / villi / ground only (needs Pillow)
+tools/make_placeholders.py   pipe / villi / ceiling / ground only (needs Pillow)
 tools/process_art.py         crop Michael's sources into contract PNGs and the app icons
 tools/serve.py               npm start: bind 0.0.0.0:8000, print phone URL
 tools/headless_check.mjs     npm run smoke: headless Chrome over the DevTools protocol, zero deps
 tests/                  node --test: html assets logic state levels store smoke
-                        settings sound tray items tuning about howto feedback overlay hitbox i18n chrome serve save ready leaderboard scenes tools fart
+                        settings sound tray items tuning about howto feedback overlay hitbox i18n chrome serve save ready leaderboard scenes tools fart changelog
 .claude/plans/          checkpointed build plans
 ```
 
@@ -130,7 +132,7 @@ Everything that affects feel lives in `TUNING` in `src/config.js`: gravity, flap
 
 ## Leaderboard
 
-The 🏆 button shows a shared Top 10 hosted on a free-tier [Supabase](https://supabase.com) project. Each player can hold two rows, the best run on the toilet and the best off it, ranked together in one Top 10 (the 🚽 column tells them apart). What leaves the phone: your username, those two best scores with their level, and the random id inside your save code (so the same player keeps one row across browsers). Nothing is posted until you set a username in Save / Load User. The save code itself never leaves the device.
+The 🏆 button shows a shared Top 25 (ten rows in view, the rest scroll) hosted on a free-tier [Supabase](https://supabase.com) project. Each player can hold two rows, the best run on the toilet and the best off it, ranked together in one Top 25 (the 🚽 column tells them apart). What leaves the phone: your username, those two best scores with their level, and the random id inside your save code (so the same player keeps one row across browsers). Nothing is posted until you set a username in Save / Load User. The save code itself never leaves the device.
 
 The game talks to the Supabase REST API straight from the browser with the project's public URL and publishable key, both in `LEADERBOARD` in [`src/config.js`](src/config.js). What keeps that safe is the schema in [`db/schema.sql`](db/schema.sql): the key can read only name / score / 🚽 / level / time, never ids, and can write only through `submit_score()`, which keeps each player's maximum, caps scores, and rate-limits. Cheating is possible, as in any client-side game; a bad row is one `delete` in the dashboard.
 
