@@ -1,6 +1,6 @@
 # Plan: Versus — split-screen two-player mode
 
-Baseline `66c414d` on `main`, clean; `npm test` 322 pass / 0 fail (moving pipes from level 4 landed after the draft: `rollPipeMove` draws from the run stream too, so the course covers it). Supersedes the draft at
+Status: complete (code + smoke + docs; the hand check and the push are Michael's). Baseline `66c414d` on `main`, clean; `npm test` 322 pass / 0 fail (moving pipes from level 4 landed after the draft: `rollPipeMove` draws from the run stream too, so the course covers it). Supersedes the draft at
 `.claude/plans/2026-11-07-versus-split-screen.md` (copy this file over it in step 1 so the repo keeps
 the decision log; that is the only plan file the repo convention wants).
 
@@ -238,6 +238,31 @@ that moment (the window may have shrunk since the toggle was set; the toggle its
    ghost, marker, the catch-up box rules, no leaderboard), AGENTS (map rows, the `fieldW` rule, the new-scene checklist), changelog
    entry + VERSION 0.6.0. Verify by grep: no `scale.width` in Play, every new file named in AGENTS, no stale
    helper names. Commit `docs(versus, step 6/6): two-player mode; 0.6.0`.
+   Result: done. `npm test` 343 / 343; every new file named in AGENTS; Play reads the canvas width only in the field fit; the final `npm run smoke` after the docs passed all 203 checks. Step 5 is `276dfc9`, step 6 `0f21ffa`.
+
+## Completion summary (2026-11-07)
+
+```
+0f21ffa docs(versus, step 6/6): two-player mode in README, AGENTS, What's new; 0.6.0
+276dfc9 feat(versus, step 5/6): the other player as a ghost in your lumen; rival marker on the level bar
+52ebd73 feat(versus, step 4/6): shared pause, match ends on a death, result panel, rematch, catch-up box
+bf0ac90 feat(versus, step 3/6): 👥 toggle, join screen, device claims, countdown, two Play strips
+941ef46 refactor(play, step 2/6): a Play instance owns a field strip and asks a course for its randomness
+c5a95d8 feat(versus, step 1/6): course generator, match logic, knobs, ready toggle box, strings
+```
+
+- Every step: `npm test` green (322 at baseline → 343). `npm run smoke` green after steps 2–6 with the
+  existing sections untouched and the versus sections A (join flow), B (the match) and C (ghost and
+  marker) added; the final run after the docs step passed all 203 checks.
+- Found and fixed on the way (step 4, by section B): the pause key inside a half's level break read as
+  "resume" (now the pause key toggles the shared pause); a rematch's countdown never started (its first
+  tick ran inside create(), before the scene was active). Step 5 made explicit that a live ghost
+  follows its alpha at once and only fades once the other player is out.
+- Not verified here (Michael's hand check before `npm run push`): real two-device play (two keyboard
+  groups, keyboard + pad, two pads), two thumbs on an iPad in landscape, audio with two halves, feel.
+- Rollback: `git checkout <hash>` to inspect any step; `git revert` a step or `git reset --hard 66c414d`
+  to drop everything (reset discards work). The checkpoint commits are left as they are; squashing is
+  Michael's call.
 
 ## Verification
 
