@@ -8,6 +8,24 @@ import { LOCALES } from './i18n.js';
 
 export const CHANGELOG = [
   {
+    version: '0.6.0',
+    date: '7 Nov 2026',
+    notes: {
+      en: [
+        'Two players: on a desktop or a tablet in landscape, a 👥 toggle under the toilet toggle starts a side-by-side race on the same course. Keyboard (W / Space and ↑ / Enter), controllers or a thumb on each half; the first death ends it and the higher score wins.',
+        'In a race the other poop shows in your lumen as a faded ghost when it is near, and your progress bar marks where it is.',
+        'A trailing player\'s mystery box helps: 10 pipes behind doubles the bean draws, 25 behind gives three beans at once.',
+        'Two-player runs are not saved and never reach the leaderboard.',
+      ],
+      'zh-Hans': [
+        '双人模式：在电脑或横屏平板上，如厕开关下方新增 👥 开关，可在同一条肠道上并排竞速。支持键盘（W / 空格 和 ↑ / 回车）、手柄，或各自点击自己的半边；一方出局即结束，得分高者获胜。',
+        '竞速时，对手靠近你时会以半透明的影子出现在你的肠道里，进度条上也会标出对手的位置。',
+        '落后的玩家会从神秘盒子获得帮助：落后 10 道管道时豆子的几率翻倍，落后 25 道时直接获得三颗豆子。',
+        '双人模式的分数不会保存，也不会进入排行榜。',
+      ],
+    },
+  },
+  {
     version: '0.5.17',
     date: '7 Nov 2026',
     notes: {

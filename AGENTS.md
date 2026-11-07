@@ -86,6 +86,28 @@ the pre-filled stretch does not pop in: it sweeps in from the right edge over
 `prefill.sweepMs` (`sweepOffset`: quadratic ease-out, fastest off the edge and braking
 to the level's scroll speed by about the field's middle, fading from transparent),
 settling exactly where the pre-fill put it.
+**Two players** (`src/versus.js`, `scenes/Versus.js`): a 👥 toggle under the toilet toggle, offered
+only where two phone-width halves fit the window (`versusAvailable`: landscape, at least
+`versus.minViewportH` css px tall; never in test mode), turns the start tap into a match. The Versus
+scene sets the canvas to two half-window fields (`versusLayout`, capped at `FIELD.maxWidth / 2` each),
+launches `Play` as P1 on the left strip and `PlayB` (a second Play instance) as P2 on the right (each
+`Play.init` gets `{ player, match, fieldW, fieldX }` and a camera viewport), and sits above both. The
+join screen claims a slot per device (`claimDevice`: a tap takes its own half, a keyboard group
+(`versus.keys`: W / Space + E / Left Shift, ↑ / Enter + Right Shift / Numpad 0) or a pad the first free
+slot), then counts 3-2-1-GO and launches both halves together. Both halves run one **shared course**
+(`createCourse(seed, T, { shared: true })`: every draw per pair and purpose, the pair number standing
+in for the score gates, beans spawning into a full bag), while each player's mystery **draws** come
+from their own stream (`rngDraw`) on the **catch-up** table (`catchUpTier` / `catchUpDraws`: 10–24
+pipes behind doubles the bean draws, 25+ forces bean3 = a super fart ready). Each half publishes its
+slot every frame (`publishSlot`: score, pipes, level, distance scrolled, y, angle, frame, alive) and
+shows the other as a faded **ghost** in its lumen at the distance gap (`ghostPlacement`) and as a
+**marker** on its level bar (`rivalMarker`). Level breaks stay per half; the pause key / ⏸ / Menu
+toggle the **shared pause** (`Versus.setPaused`, remembering which halves it paused so a break is
+never ended by the other player). The match ends on the first death or escape: the other half is
+halted alive (`haltRun`), the result panel names the higher score (`matchResult`: score, pipes, then
+the survivor) and offers Rematch (same devices, new seed) | Home (the canvas re-fits the window). A
+match records nothing: no best, no save-code score, no leaderboard.
+
 It is deliberately small: plain ES modules, no bundler, no npm
 dependencies, Phaser 4 loaded from a CDN, deployed to GitHub Pages straight from
 `main`. Keep it that way unless the game clearly outgrows it.
@@ -112,10 +134,13 @@ src/
                             a debounced window resize (a phone rotation too) →
                             Play.onFieldResize() when the width would change,
                             roundPixels,
-                            arcade physics, input.gamepad on (bound once, in
+                            arcade physics, activePointers 2 (two thumbs in a
+                            match), input.gamepad on (bound once, in
                             Play), scene order
-                            [Boot, Play, Over, Settings, About, HowTo, Changelog,
-                            Language, Feedback, Scores, Leaderboard].
+                            [Boot, Play, new Play('PlayB'), Over, Versus, Settings,
+                            About, HowTo, Changelog, Language, Feedback, Scores,
+                            Leaderboard] ('PlayB' is the right half of a match,
+                            launched only by Versus).
   config.js                 GAME_WIDTH / GAME_HEIGHT (the portrait field = the
                             chrome column), FIELD (height, minWidth, maxWidth,
                             resizeDebounceMs), the TUNING object (every
@@ -134,14 +159,25 @@ src/
                             standard-mapping button indices (A / B / Y / RT /
                             Menu / d-pad), RT threshold, stick deadzone + repeat;
                             TUNING.focus = the focus ring's geometry, fill alpha,
-                            pulse and the overlay scroll step.
+                            pulse and the overlay scroll step. TUNING.versus = the
+                            two-player knobs: minViewportH (the gate), keys (the
+                            two keyboard groups), countdownMs, ghostRangePx /
+                            ghostAlpha / ghostFadeMs, barRivalPx / barRivalAlpha,
+                            dividerPx, catchUp (superBehind, beanBehindMin,
+                            beanOddsMul).
                             Pure data, Node-safe.
   logic.js                  Pure functions, NO Phaser/DOM: field (fieldWidth,
                             uiColumn, poopX, pipeLeadPx, pipeLead, prefillPairs,
                             sweepOffset;
                             trayLayout /
                             levelBarLayout / readyLayout / howToLayout take a
-                            trailing x0 = the column's left edge), rng, gap placement,
+                            trailing x0 = the column's left edge; readyLayout takes
+                            { versus } for the 👥 box), rng, createCourse / mixSeed
+                            (every random draw a run makes behind one object: one
+                            stream in single player, exposed as course.rng for the
+                            pickup-time mystery draw and the smoke's forced rolls;
+                            per pair and purpose in a match's shared course;
+                            tests/course.test.js), gap placement,
                             scoring (pipePoints, scorePopup, multiplierLayout),
                             items (rollItem, hazardsAllowed, bandItemsMove,
                             bandMidY, tutorialSpawn), beans (rollBean, beanSpawnX, beanY,
@@ -173,7 +209,10 @@ src/
                             ahead beating a diagonal), focusStep (list order,
                             wrapping: the fallback), focusRingLayout, padIntent
                             (the pad's state matrix beside chromeIntent: what A / B /
-                            RT / Menu / Y / nav do on Play, Over or an overlay); test mode:
+                            RT / Menu / Y / nav do on Play, Over, an overlay or the
+                            versus join / result screen: versusSelect / versusBack);
+                            rollMystery(rng, t, draws) takes an optional draw table
+                            (the versus catch-up); test mode:
                             isTestWord, testRunStart, nextTestLevel, TEST_POWERS,
                             settingsLayout (Settings panel + rows, taller with the
                             test section). Fully unit-tested.
@@ -181,6 +220,13 @@ src/
                             version, newest first: version, date like LAST_UPDATED's
                             day, notes per locale), changelogEntry, changelogNotes
                             (bulleted block for a locale, English fallback).
+  versus.js                 Two-player match logic, NO Phaser/DOM: versusAvailable
+                            (landscape + minViewportH), versusLayout (two half-window
+                            fields, capped at maxWidth / 2), createMatch / resetMatch
+                            / slotTemplate, keyGroup / sameDevice / claimDevice /
+                            allClaimed / deviceLabel (the join screen), ghostPlacement,
+                            rivalMarker, catchUpTier / catchUpDraws, matchResult,
+                            VERSUS_EMOJI. Fully unit-tested (tests/versus.test.js).
   leaderboard.js            Shared leaderboard, NO Phaser/DOM: submitPlan / submitPlans
                             (pure: what to post; up to two rows per player, best
                             off and best on the toilet, via save.js bestByToilet),
@@ -222,8 +268,11 @@ src/
                             pad actions. Edge-triggered 'down' (holding A flaps
                             once), RT threshold lowered on connect, sticks polled
                             on the scene update with key-repeat, a console warning
-                            on a non-standard mapping; returns padDown(index) /
-                            padNav(dir) shims for the smoke driver. Only Play binds.
+                            on a non-standard mapping; every action is handed on with
+                            the pad's index (a match routes A / RT to the half that
+                            claimed that pad); returns padDown(index, padIndex) /
+                            padNav(dir, padIndex) shims for the smoke driver. Only
+                            Play binds (P1 in a match; P2 never).
   ui/
     focus.js                createFocus(scene, t, { items, scrolled, onVertical }):
                             the controller focus ring, a pulsing pink rounded
@@ -247,7 +296,10 @@ src/
                             canvas texture for the finish line.
     levelBar.js             createLevelBar(): grey track, pipe-pink fill tweened
                             one step per pipe (levelProgress), LV n label, 🏁;
-                            geometry from levelBarLayout().
+                            geometry from levelBarLayout(). setRival(marker) /
+                            rival(): the other player's marker in a match (a small
+                            faded poop at rivalMarker's share; gold at the 🏁 a level
+                            ahead, grey at the start behind).
     glow.js                 createGlow(): white radial-gradient canvas texture
                             (solid core, outer glowFadeFrac fading to 0, from
                             glowStops) as an Image behind the poop; tinted for
@@ -271,9 +323,10 @@ src/
     button.js               createButton(): Graphics rounded rect + centred text
                             for the ready-screen boxes from readyLayout. No pointer
                             handlers; Play resolves taps with readyHit().
-    toggle.js               createToggle(): toilet switch (pill track, knob tween,
-                            🚽 alpha) from readyLayout().toilet; setOn(). No pointer
-                            handlers.
+    toggle.js               createToggle(scene, box, { on, glyph }): the toilet switch
+                            (pill track, knob tween, 🚽 alpha) from readyLayout().toilet,
+                            and with glyph 👥 the two-player switch from
+                            readyLayout().versus; setOn(). No pointer handlers.
     scrollView.js           createScrollView(): second camera clipped to a panel
                             interior, drag / wheel via clampScroll(), thumb, link()
                             that fires on pointerup only when moved < 12 px; offset,
@@ -296,10 +349,16 @@ src/
                             spritesheet) + the sfx MP3s; create() makes the global
                             'mystery-spin' anim (mystery.frameMs), then starts Play.
     Play.js                 State machine: 'ready' -> 'playing' -> 'paused'/'dead'.
-                            create() starts with applyFieldSize() (setGameSize to
-                            fieldWidth(window) if it changed), then W =
-                            this.scale.width, this.col = uiColumn(W), this.poopX =
-                            poopX(W): the world (background rect + tileSprites
+                            The constructor takes the scene key ('Play'; 'PlayB' is
+                            the second instance for a match's right half); init(data)
+                            reads { player, match, fieldW, fieldX } (nothing in
+                            single player). create() starts with applyFieldSize()
+                            (setGameSize to fieldWidth(window) if it changed; a
+                            match half skips it and sets its camera viewport to its
+                            strip instead), then W = this.fieldW (the canvas, or
+                            the half's strip: the only this.scale.width read outside
+                            the fit, tests/scenes.test.js), this.col = uiColumn(W),
+                            this.poopX = poopX(W): the world (background rect + tileSprites
                             at tile scale minWidth / texture width, pipe / item /
                             bean / finish spawns at W, pause shade, banners) uses
                             W; the chrome (tray, level bar, ready boxes, test
@@ -486,6 +545,59 @@ src/
                             the profile button are off the ring on purpose: they
                             need the keyboard); launch and resumePlay hide it.
                             padDown / padNav are the smoke shims.
+                            Versus half: this.course = createCourse(seed, T, { shared })
+                            replaces every this.rng read (gapY / item / bean /
+                            pipeMove / phase / itemY / spinFrame by pair number;
+                            mysteryPair at start); this.rngDraw (per player) rolls
+                            the mystery draw on catchUpDraws(catchUpTier(behind))
+                            in collectItem; this.distance (px scrolled this run);
+                            publishSlot() every frame; refreshGhost (this.ghost at
+                            depth 9.5 from ghostPlacement; a live ghost follows its
+                            alpha, an out one fades over ghostFadeMs) and refreshRival
+                            (levelBar.setRival on a level / pair change); a match
+                            records nothing: endRun reports to Versus.onRunEnded
+                            (haltRun = endRun without the death effects or the
+                            report, for the other half); showOver is a no-op. Input:
+                            localPointer() shifts a pointer into the half and drops
+                            the other half's; keyboard events are read by P1 alone
+                            (onVersusKey → keyGroup) and routed with pads by
+                            versusInput() to the half whose device it is (a
+                            join-screen input claims a slot through
+                            Versus.onJoinInput); P2 draws no tray, no ring, binds no
+                            keys and no pad. handleChrome('pause' / 'esc') toggles
+                            the shared pause (Versus.togglePause); pauseRun() /
+                            autoPause forward to it; a 'resume' tap lifts the shared
+                            pause for both and, from a half in its own level break,
+                            ends that break. The ready screen's 👥 toggle
+                            (versusOffered(): outside a match, not test mode,
+                            versusAvailable; toggleVersus → registry 'versus',
+                            session-only) makes launch() scene.start('Versus')
+                            instead of sliding the poop; a match half hides the
+                            ready UI and starts with the plain face.
+    Versus.js               The two-player match, above the two Play halves and
+                            below the overlays (bringToTop after launching them):
+                            create({ match }) lays the halves out (versusLayout),
+                            resizes the canvas, launches Play (P1) and PlayB (P2)
+                            with their strips, draws the divider, the join screen
+                            (title, P1 / P2 prompts → device badges, hint, Home),
+                            the countdown text and the shared PAUSED banner. Status
+                            join → countdown → playing → over (→ left). onJoinInput
+                            claims (claimDevice; a tap that pressed Home is not a
+                            claim), startCountdown ticks 3-2-1-GO on timers (never
+                            synchronously: a rematch starts it inside create()),
+                            go() launches both halves. setPaused(on) pauses every
+                            playing half and remembers them (pausedHalves), resumes
+                            only those; togglePause for the pause key. onRunEnded
+                            (once) halts the other half and shows the result panel
+                            after deathToOverMs: matchResult headline, both scores /
+                            level / pipes, OUT or Made it out!, the not-saved line,
+                            Rematch | Home on overButtonsLayout's row with a focus
+                            ring. rematch() restarts the scene with resetMatch (devices
+                            kept, new seed); leave() stops both halves, re-fits the
+                            canvas to the window and starts Play with explicit data
+                            (a start without data keeps the last launch data).
+                            onPadSelect / onPadBack are the pad's A / B here
+                            (padIntent 'versus'); Esc = back.
     Over.js                 Game-over panel (score, run summary of fiber / probiotic / postbiotic over bacteria / bean / mystery box (mystery-icon.png), pipes crossed, then Share | glowing Home on one row from overButtonsLayout) with a
                             tap lockout (openedAt = game.loop.time: a relaunched
                             scene's this.time.now is stale) and its own tray (mute
@@ -666,6 +778,23 @@ tests/                      node --test, zero deps. Each file is self-describing
                             stickNav deadzone / larger axis, focusStep wrapping,
                             focusRingLayout, padIntent matrix across top x state x
                             ring x action (+ the save-panel short-circuit)
+  versus.test.js            TUNING.versus sanity (gate, ghost, disjoint key groups,
+                            catch-up tiers), versusAvailable, versusLayout (= the wide
+                            field's width, the maxWidth / 2 cap), createMatch /
+                            resetMatch, keyGroup, claimDevice (touch takes its half,
+                            keys / pads the first free slot, refusals), deviceLabel,
+                            ghostPlacement (gap, edge, range, dead), rivalMarker,
+                            matchResult (score, pipes, survivor, draw), catchUpTier at
+                            9 / 10 / 24 / 25, catchUpDraws + rollMystery on the
+                            doubled and super tables, the 👥 ready box, padIntent on
+                            the versus top
+  course.test.js            mixSeed; a single-player course equals a hand-rolled
+                            single stream in Play's order (course.rng swappable); a
+                            shared course is the same for two players whatever their
+                            score or bag, per pair (order-independent), differs by
+                            seed, takes the pair number for the score gates, lets
+                            beans spawn into a full bag, rolls moving pipes from
+                            pipeMove.fromLevel
   smoke.test.js             logic.js imports and exports VERSION
   save.test.js              save codes: spec rows 1-10 (round trip, tamper, relabel,
                             v2 migration, merge, name rules, wrapped paste, empty
@@ -684,8 +813,11 @@ tests/                      node --test, zero deps. Each file is self-describing
                             shadowed by the plugin and throws inside create(), which
                             freezes the game loop. Node never runs scenes, so this is
                             the only place to catch it. Also: no scene / ui module
-                            reads GAME_WIDTH (the field is this.scale.width).
+                            reads GAME_WIDTH (the field is this.scale.width), and
+                            Play.js reads this.scale.width only to fit the field (its
+                            world is this.fieldW: a half of the canvas in a match).
   tools.test.js             npm run smoke points at headless_check.mjs; its OVERLAYS
+                            (Boot, Play, new Play('PlayB'), Over and Versus excluded)
                             map equals the overlay scenes registered in main.js
 
 .github/ISSUE_TEMPLATE/     GitHub issue forms opened from Feedback (bug.yml,
@@ -760,7 +892,17 @@ tools/
                             phone field's pre-fill is one edge pair; a phone
                             rotation: portrait 720 → landscape cap → back, a
                             mid-run rotation pauses in the old field and re-fits
-                            at Home). The
+                            at Home), and two players (A: the 👥 toggle on a
+                            1800×1000 window and not in portrait, the join screen's
+                            two halves and cameras, claims and refusals, the
+                            countdown, five identical pairs on both halves, inputs
+                            routed by device, Home, Esc / B, the flag ignored in
+                            portrait; B: the shared pause, a level break on one half
+                            under Menu and the tap, the match ending on a death with
+                            no Over and nothing recorded, the result panel, the
+                            catch-up draws at 15 / 30 / 0 behind, a rematch, Home; C:
+                            the ghost at the distance gap with the live face, level,
+                            past the range, the rival marker, the fade-out). The
                             viewport is pinned to 720x1280 before load
                             (Emulation.setDeviceMetricsOverride) so the rest is
                             the phone field; tapAt maps through the live
@@ -800,9 +942,11 @@ tools/
    a strong reason; if you do, the deploy story has to change too.
 6. **Mobile first.** The phone portrait layout is the design; a desktop window
    only widens the world around it (the chrome column stays the phone layout).
-   Scenes never read `GAME_WIDTH`: the world uses `this.scale.width`, the chrome
-   `uiColumn()` (`tests/scenes.test.js` enforces it). Touch is the primary input (`pointerdown`); keyboard
-   (Space / Up / M / P / Esc / S / I / L / F / B / T) and the gamepad (A / B / Y /
+   Scenes never read `GAME_WIDTH`: the world uses `this.scale.width` (Play: `this.fieldW`,
+   its strip of the canvas in a two-player match), the chrome
+   `uiColumn()` (`tests/scenes.test.js` enforces both). Touch is the primary input (`pointerdown`); keyboard
+   (Space / Up / M / P / Esc / S / I / L / F / B / T; in a match the two groups of
+   `TUNING.versus.keys`) and the gamepad (A / B / Y /
    RT / Menu / d-pad, `src/input/pad.js`) are conveniences that must produce the
    same intents a tap does, through `chromeIntent` / `padIntent`; the focus ring
    is the only controller-only UI and must never show without a pad press. Keep `touch-action: none`,
@@ -875,15 +1019,21 @@ Commits so far follow `type(scope): summary` (`feat`, `docs`, `chore`); keep it.
   `Play.padTop`, rows in `tests/chrome.test.js`, an entry in `OVERLAYS` in
   `tools/headless_check.mjs` (the smoke opens every overlay), and a `this.focus`
   ring built from `pressable()` items (✕ first) with `focus.show()` so a
-  controller can walk it.
+  controller can walk it. A scene that is not an overlay (Versus, the second
+  Play instance) is instead excluded from the overlay list in `tests/tools.test.js`.
 - Version bump (`VERSION` in `src/logic.js`) → a new first entry in
   `src/changelog.js` with the date and 1–5 bullets in both locales (the What's
   new page; `tests/changelog.test.js` fails the suite, and so `npm run push`,
   without it).
 - New pad button or action → a knob in `TUNING.gamepad`, a row in `padAction`
   and `padIntent` (+ `tests/gamepad.test.js`), a `case` in `Play.onPadAction`
-  that calls an existing handler. Never bind the Gamepad plugin in another
-  scene: Play's binding sees every press and routes it to the scene on top.
+  that calls an existing handler (it receives the pad's index too). Never bind the
+  Gamepad plugin in another scene: Play's binding sees every press and routes it
+  to the scene on top, or to the half that claimed the pad in a match.
+- Two-player rule or knob → pure parts in `src/versus.js` (+ `tests/versus.test.js`),
+  a knob in `TUNING.versus`, wiring in `scenes/Versus.js` (the match) or `Play.js`
+  (a half); anything random a run spawns goes through the course (`createCourse`),
+  never a fresh `Math.random` / `createRng` in Play, or the halves drift apart.
 - Network call → `src/leaderboard.js` only, with `fetch` injected and a timeout;
   tests pass a fake `fetch`. Never `await` a request inside a Phaser update
   loop; fire and forget from gameplay, `await` only in an overlay's `create()`.
