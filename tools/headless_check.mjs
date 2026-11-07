@@ -1435,6 +1435,86 @@ export async function run(url = DEFAULT_URL) {
       await cdp.send('Emulation.clearDeviceMetricsOverride');
     }
 
+    // Versus, the ghost and the rival marker: the other poop shows in your lumen at the distance gap
+    // with its own face, fades to the range edge, is gone past it and fades out once the other is out;
+    // the level bar carries the other's marker (same level: its share; a level ahead: the flag; behind: the start).
+    {
+      const P1 = `__flappy.scene.getScene('Play')`;
+      const P2 = `__flappy.scene.getScene('PlayB')`;
+      const VS = `__flappy.scene.getScene('Versus')`;
+      const L = `Promise.all([import('./src/logic.js'), import('./src/config.js')])`;
+      const metrics = (width, height) => cdp.send('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 1, mobile: false });
+      const want = await evaluate(`${L}.then(([l, c]) => JSON.stringify({ W: l.fieldWidth(1800, 1000, c.FIELD), countdownMs: c.TUNING.versus.countdownMs, range: c.TUNING.versus.ghostRangePx, alpha: c.TUNING.versus.ghostAlpha, fadeMs: c.TUNING.versus.ghostFadeMs, deathMs: c.TUNING.deathToOverMs }))`).then(JSON.parse);
+      const settle = async (w) => {
+        let W = null;
+        for (let i = 0; i < 60 && W !== w; i += 1) {
+          await sleep(100);
+          W = await evaluate('__flappy.scale.width');
+        }
+        for (let i = 0; i < 20 && (await playState()) !== 'ready'; i += 1) await sleep(100);
+        return W;
+      };
+      const until = async (expr, tries = 40) => {
+        for (let i = 0; i < tries; i += 1) {
+          if (await evaluate(expr)) return true;
+          await sleep(100);
+        }
+        return false;
+      };
+      await metrics(1800, 1000);
+      await settle(want.W);
+      await evaluate(`${P1}.toggleVersus(), ${P1}.launch(), true`);
+      await until(`__flappy.scene.isActive('Versus') && ${VS}.match.status === 'join'`);
+      const joined = await evaluate(`JSON.stringify({ ghost: [${P1}.ghost.visible, ${P2}.ghost.visible], rival: [${P1}.levelBar.rival(), ${P2}.levelBar.rival()] })`).then(JSON.parse);
+      await evaluate(`${P1}.onVersusKey('Space'), ${P1}.onVersusKey('ArrowUp'), true`);
+      const racing = await until(`${VS}.match.status === 'playing' && ${P1}.state === 'playing' && ${P2}.state === 'playing'`, (4 * want.countdownMs + 2500) / 100);
+      ok(racing && !joined.ghost[0] && !joined.ghost[1] && joined.rival[0] === null && joined.rival[1] === null, 'no ghost and no marker on the join screen; both halves racing');
+      await evaluate(`[${P1}, ${P2}].forEach((p) => { p.poop.body.setAllowGravity(false); p.poop.setVelocity(0, 0); p.poop.y = 640; p.graceLeftMs = 1e9; }), true`);
+      const place = (d1, d2, extra = '') => evaluate(`(() => { const a = ${P1}; const b = ${P2}; a.distance = ${d1}; b.distance = ${d2}; b.poop.y = 500; b.poop.setAngle(12); ${extra} a.publishSlot(); b.publishSlot(); return true; })()`);
+      await place(1000, 1300, "b.setPoopTexture('poop-falling');");
+      await sleep(150);
+      // The halves update one after the other, so a ghost reads the other's distance up to a frame late: a few px of slack.
+      const g1 = await evaluate(`JSON.stringify({ a: { v: ${P1}.ghost.visible, x: ${P1}.ghost.x, y: ${P1}.ghost.y, angle: ${P1}.ghost.angle, alpha: ${P1}.ghost.alpha, tex: ${P1}.ghost.texture.key, poopX: ${P1}.poopX }, b: { v: ${P2}.ghost.visible, x: ${P2}.ghost.x, alpha: ${P2}.ghost.alpha, poopX: ${P2}.poopX, angle: ${P2}.poop.angle, tex: ${P2}.poop.texture.key } })`).then(JSON.parse);
+      const near = (a, b, tol) => Math.abs(a - b) <= tol;
+      const wantAlpha = want.alpha * (1 - 300 / want.range);
+      ok(g1.a.v && near(g1.a.x, g1.a.poopX + 300, 25) && g1.a.y === 500 && near(g1.a.angle, g1.b.angle, 1) && near(g1.a.alpha, wantAlpha, 0.02) && g1.a.tex === g1.b.tex, `P1 sees P2's ghost 300 px ahead at (${g1.a.x.toFixed(0)}, ${g1.a.y}), tilted like P2 (${g1.a.angle.toFixed(0)}°), wearing P2's face (${g1.a.tex}), alpha ${g1.a.alpha.toFixed(2)} (${wantAlpha.toFixed(2)} for the gap)`);
+      ok(g1.b.v && near(g1.b.x, g1.b.poopX - 300, 25) && near(g1.b.alpha, wantAlpha, 0.02), `P2 sees P1's ghost 300 px behind (x ${g1.b.x.toFixed(0)}) at the same alpha`);
+      await place(1000, 1000);
+      await sleep(150);
+      const g2 = await evaluate(`JSON.stringify({ x: ${P1}.ghost.x, alpha: ${P1}.ghost.alpha, poopX: ${P1}.poopX })`).then(JSON.parse);
+      ok(g2.x === g2.poopX && Math.abs(g2.alpha - want.alpha) < 1e-9, `level with each other the ghost sits on the poop at full ghost alpha ${g2.alpha.toFixed(2)}`);
+      await place(1000, 1000 + want.range + 1);
+      await sleep(150);
+      ok(!(await evaluate(`${P1}.ghost.visible`)), `past ${want.range} px the ghost is gone`);
+      // The rival marker: P2 three pairs into level 1 → 0.3 on P1's bar; a level ahead → the flag; behind → the start.
+      const marker = (lvl2, pipes2, lvl1 = 1) => evaluate(`(() => { const a = ${P1}; const b = ${P2}; a.level = ${lvl1}; b.level = ${lvl2}; b.pipesPassed = ${pipes2}; b.publishSlot(); return true; })()`);
+      await marker(1, 3);
+      await sleep(150);
+      const m1 = await evaluate(`JSON.stringify(${P1}.levelBar.rival())`).then(JSON.parse);
+      await marker(2, 11);
+      await sleep(150);
+      const m2 = await evaluate(`JSON.stringify(${P1}.levelBar.rival())`).then(JSON.parse);
+      await marker(1, 9, 2);
+      await sleep(150);
+      const m3 = await evaluate(`JSON.stringify(${P1}.levelBar.rival())`).then(JSON.parse);
+      ok(m1?.frac === 0.3 && m1?.relation === 'same' && m2?.frac === 1 && m2?.relation === 'ahead' && m3?.frac === 0 && m3?.relation === 'behind', `P1's bar marks P2 at ${m1?.frac} (${m1?.relation}), then at the flag (${m2?.relation}), then at the start (${m3?.relation})`);
+      // Once P2 is out its ghost fades away where it fell.
+      await place(1000, 1100);
+      await sleep(150);
+      const before = await evaluate(`${P1}.ghost.alpha`);
+      await evaluate(`(() => { const b = ${P2}; b.graceLeftMs = 0; b.poop.body.setAllowGravity(true); b.die(); return true; })()`);
+      await sleep(want.fadeMs + 300);
+      const after = await evaluate(`JSON.stringify({ alpha: ${P1}.ghost.alpha, visible: ${P1}.ghost.visible, status: ${VS}.match.status })`).then(JSON.parse);
+      ok(before > 0 && after.alpha === 0 && !after.visible && after.status === 'over', `P2's death fades its ghost out (alpha ${before.toFixed(2)} → ${after.alpha}) within ${want.fadeMs} ms`);
+      await until(`${VS}.resultShown`, (want.deathMs + 1500) / 100);
+      await evaluate(`${VS}.leave(), true`);
+      ok(await until(`!__flappy.scene.isActive('Versus') && __flappy.scene.isActive('Play') && ${P1}.state === 'ready' && ${P1}.match === null`), 'Home after the ghost checks');
+      await evaluate(`__flappy.registry.set('versus', false), true`);
+      await metrics(720, 1280);
+      await settle(720);
+      await cdp.send('Emulation.clearDeviceMetricsOverride');
+    }
+
     const f2 = await frame();
     await sleep(500);
     ok((await frame()) > f2, 'game loop still advancing at the end');

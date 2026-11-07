@@ -17,6 +17,12 @@ export function createLevelBar(scene, layout, { depth = 20 } = {}) {
     .setOrigin(0.5)
     .setDepth(depth + 1);
   const flag = scene.add.text(layout.flagX, layout.y, '🏁', { fontFamily: 'sans-serif', fontSize: `${l.barFlagPx}px` }).setOrigin(0.5).setDepth(depth + 1);
+  // A two-player match: the other player's spot on this bar (rivalMarker in versus.js), a small
+  // faded poop; gold when a level ahead (pinned at the 🏁), grey when behind (at the start).
+  const v = T.versus;
+  const rivalImg = scene.add.image(layout.x, layout.y, 'poop').setDisplaySize(v.barRivalPx, v.barRivalPx).setDepth(depth + 2).setAlpha(v.barRivalAlpha).setVisible(false);
+  let rival = null;
+  let visibleBar = true;
   let shown = 0; // 0–1 share currently drawn
   let target = 0; // 0–1 share asked for
   let tween = null;
@@ -62,10 +68,30 @@ export function createLevelBar(scene, layout, { depth = 20 } = {}) {
       return this;
     },
     setVisible(visible) {
+      visibleBar = visible;
       g.setVisible(visible);
       label.setVisible(visible);
       flag.setVisible(visible);
+      rivalImg.setVisible(visible && rival !== null);
       return this;
+    },
+    /** Place the other player's marker ({ frac, relation } from rivalMarker), or hide it with null. */
+    setRival(marker) {
+      rival = marker ?? null;
+      if (!rival) {
+        rivalImg.setVisible(false);
+        return this;
+      }
+      const { x, y, width } = layout;
+      rivalImg.setPosition(x + width * rival.frac, y).setVisible(visibleBar);
+      if (rival.relation === 'ahead') rivalImg.setTint(0xffd700);
+      else if (rival.relation === 'behind') rivalImg.setTint(0x9a9a9a);
+      else rivalImg.clearTint();
+      return this;
+    },
+    /** The marker last placed (null when none). */
+    rival() {
+      return rival;
     },
     /** The share last asked for (what the fill is heading to). */
     value() {
@@ -82,6 +108,7 @@ export function createLevelBar(scene, layout, { depth = 20 } = {}) {
       g.destroy();
       label.destroy();
       flag.destroy();
+      rivalImg.destroy();
     },
   };
 }

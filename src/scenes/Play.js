@@ -83,7 +83,7 @@ import { createButton } from '../ui/button.js';
 import { createToggle } from '../ui/toggle.js';
 import { openSavePanel, isSavePanelOpen } from '../ui/savePanel.js';
 import { bindPad } from '../input/pad.js';
-import { keyGroup, sameDevice, catchUpTier, catchUpDraws, versusAvailable, VERSUS_EMOJI } from '../versus.js';
+import { keyGroup, sameDevice, catchUpTier, catchUpDraws, versusAvailable, ghostPlacement, rivalMarker, VERSUS_EMOJI } from '../versus.js';
 
 const TEXT_STYLE = {
   fontFamily: 'sans-serif',
@@ -244,6 +244,10 @@ export class Play extends Phaser.Scene {
       .setAlpha(0)
       .setDepth(9);
     this.bob = this.tweens.add({ targets: this.poop, y: '+=24', duration: 500, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+    // A match: the other player's poop as a faded ghost in this lumen, placed by the difference in
+    // distance scrolled (ghostPlacement), under the live poop and over its glow. Hidden until the race.
+    this.ghost = this.match ? this.add.image(this.poopX, GAME_HEIGHT / 2, 'poop').setScale(T.spriteDisplayScale).setDepth(9.5).setAlpha(0).setVisible(false) : null;
+    this.rivalKey = null; // what the rival marker on the level bar was last placed for
 
     // HUD
     this.scoreText = this.add.text(W / 2, T.hudScoreY, '0', { ...TEXT_STYLE, fontSize: '80px' }).setOrigin(0.5).setDepth(20).setVisible(false); // shown from start()
@@ -1948,6 +1952,38 @@ export class Play extends Phaser.Scene {
     this.poop.setAngle(0);
   }
 
+  /**
+   * The other half's poop in this lumen: at my poopX plus the distance it is ahead (or behind),
+   * wearing its own face and tilt, faded with the gap; gone past ghostRangePx. Once the other is
+   * out it fades over ghostFadeMs where it fell. Nothing on the join screen or the countdown.
+   */
+  refreshGhost(delta) {
+    if (!this.ghost) return;
+    const s = this.match.status;
+    if (s !== 'playing' && s !== 'over') {
+      this.ghost.setVisible(false).setAlpha(0);
+      return;
+    }
+    const other = this.match.slots[this.player === 1 ? 1 : 0];
+    const g = ghostPlacement({ distance: this.distance }, other, this.poopX, T);
+    // A live ghost follows its alpha at once; once the other is out it fades over ghostFadeMs.
+    const out = !other.alive || other.ended;
+    const alpha = out ? Math.max(0, this.ghost.alpha - (T.versus.ghostAlpha * delta) / T.versus.ghostFadeMs) : g.alpha;
+    this.ghost.setAlpha(alpha).setVisible(g.visible && alpha > 0);
+    if (!g.visible) return;
+    this.ghost.setPosition(g.x, g.y).setAngle(g.angle);
+    if (this.ghost.texture.key !== g.frame && this.textures.exists(g.frame)) this.ghost.setTexture(g.frame);
+  }
+
+  /** The other player's marker on this level bar (rivalMarker), re-placed only when a level or pair count changed. */
+  refreshRival() {
+    const other = this.match.slots[this.player === 1 ? 1 : 0];
+    const key = `${this.level}:${other.level}:${other.pipesPassed}:${this.state === 'ready' ? 0 : 1}`;
+    if (key === this.rivalKey) return;
+    this.rivalKey = key;
+    this.levelBar.setRival(this.state === 'ready' ? null : rivalMarker({ level: this.level }, other, T));
+  }
+
   /** This half's live state for the other half (the ghost, the rival marker) and the result panel. */
   publishSlot() {
     const slot = this.match?.slots[this.player - 1];
@@ -2100,7 +2136,11 @@ export class Play extends Phaser.Scene {
       }
     }
     this.glow.setPosition(this.poop.x, this.poop.y);
-    if (this.match) this.publishSlot();
+    if (this.match) {
+      this.publishSlot();
+      this.refreshGhost(delta);
+      this.refreshRival();
+    }
 
     if (this.state === 'dead') {
       // Pin the tumbling poop to the ground instead of letting it fall off-screen.

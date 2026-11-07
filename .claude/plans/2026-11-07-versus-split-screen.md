@@ -233,6 +233,7 @@ that moment (the window may have shrunk since the toggle was set; the toggle its
    alpha in `(0, ghostAlpha]`, beyond the range hidden; P2 three pairs into level 1 → P1's marker `0.3`
    `'same'`; P2 on level 2 → `1` `'ahead'`; P2 dead → ghost alpha reaches 0 within `ghostFadeMs`.
    Commit `feat(versus, step 5/6): the other player as a ghost in your lumen; rival marker on the level bar`.
+   Result: done. Section C made one design point explicit: a live ghost follows its alpha at once and only fades over ghostFadeMs once the other is out. `npm test` 343 / 343; smoke green with sections A–C. Step 4 is `52ebd73`.
 6. **Docs.** README (How to play "Two players", Controls: toggle, join, key groups, pads, touch halves,
    ghost, marker, the catch-up box rules, no leaderboard), AGENTS (map rows, the `fieldW` rule, the new-scene checklist), changelog
    entry + VERSION 0.6.0. Verify by grep: no `scale.width` in Play, every new file named in AGENTS, no stale
