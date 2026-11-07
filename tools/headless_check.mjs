@@ -657,6 +657,9 @@ export async function run(url = DEFAULT_URL) {
       await padDown(G.back);
       await sleep(100);
       ok(p1 === 'paused' && p2 === 'playing' && p3 === 'paused' && (await playState()) === 'playing', 'Menu pauses, Menu again resumes, B resumes a pause');
+      // The resume tap's bounce is half a flap (read in the same tick as the resume, before gravity).
+      const bounce = await evaluate(`(() => { const p = ${play}; p.pausePlay(); p.resumePlay(); const vy = p.poop.body.velocity.y; p.poop.setVelocity(0, 0); return vy; })()`);
+      ok(bounce === TT.flapVelocity * TT.resumeFlapScale, `a resume lifts at ${bounce} px/s = ${TT.resumeFlapScale} × a flap (${TT.flapVelocity})`);
       await padDown(G.power);
       await sleep(100);
       ok((await playState()) === 'playing' && !(await evaluate(`${play}.effects.powerActive()`)), 'RT with no bean fires nothing');
@@ -1393,6 +1396,8 @@ export async function run(url = DEFAULT_URL) {
       await sleep(100);
       const resumed = await evaluate(`JSON.stringify({ a: ${P1}.state, b: ${P2}.state, banner: ${VS}.pauseText.visible, halves: [...${VS}.pausedHalves] })`).then(JSON.parse);
       ok(resumed.a === 'playing' && resumed.b === 'playing' && !resumed.banner && resumed.halves.length === 0, 'a tap on the right half resumes both');
+      const lifts = await evaluate(`(() => { ${VS}.setPaused(true); ${VS}.setPaused(false); const vs = [${P1}.poop.body.velocity.y, ${P2}.poop.body.velocity.y]; ${P1}.poop.setVelocity(0, 0); ${P2}.poop.setVelocity(0, 0); return JSON.stringify(vs); })()`).then(JSON.parse);
+      ok(lifts.every((vy) => vy === TT.flapVelocity * TT.resumeFlapScale), `the shared resume lifts both poops at half a flap (${lifts.join(' / ')} px/s)`);
       await pin();
       // A level break on P1 while P2 plays on: the shared pause pauses P2 alone and leaves the break;
       // the shared resume brings P2 back and leaves the break; P1's own continue tap ends it alone.

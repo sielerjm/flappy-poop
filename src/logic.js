@@ -188,6 +188,11 @@ export function angleForVelocity(vy, { maxRiseAngle, maxFallAngle, angleFallRefV
   return Math.round(deg);
 }
 
+/** Vertical velocity (px/s, negative = up) the resume tap applies: resumeFlapScale of a flap. */
+export function resumeFlapVelocity(t) {
+  return t.flapVelocity * t.resumeFlapScale;
+}
+
 /**
  * Texture key for the live poop (not farting, dead or on the ready screen):
  * the plain face or the current stink frame while charged, swapped for its

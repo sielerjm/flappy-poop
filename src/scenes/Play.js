@@ -5,6 +5,7 @@ import {
   centredGapY,
   hasPassed,
   angleForVelocity,
+  resumeFlapVelocity,
   poopFrame,
   levelSpeed,
   levelGap,
@@ -1230,9 +1231,11 @@ export class Play extends Phaser.Scene {
     this.resumeEffects();
     this.bob.resume();
     this.setPauseBanner(false);
-    // Recovery bounce on the resume tap. Do not set flapLockedUntil: chrome
-    // already maps that tap to resume, not flap; a lockout delays the next flap.
-    this.poop.setVelocityY(T.flapVelocity);
+    // Recovery bounce on the resume tap: half a flap (resumeFlapScale), so the poop neither drops
+    // into the pipe below nor flies into the one above. Not during a fart (fartFloat owns y).
+    // Do not set flapLockedUntil: chrome already maps that tap to resume, not flap; a lockout
+    // delays the next flap.
+    if (!this.effects.powerActive()) this.poop.setVelocityY(resumeFlapVelocity(T));
     sfx.flap();
   }
 

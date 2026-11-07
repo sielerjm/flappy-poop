@@ -46,6 +46,10 @@ test('the falling face shows on a long fall but before the tilt maxes out', () =
   assert.ok(T.fallLookVy > -T.flapVelocity * 0.5, `fallLookVy ${T.fallLookVy} is reached too soon after a flap`);
 });
 
+test('the resume bounce is a real lift but softer than a flap', () => {
+  assert.ok(T.resumeFlapScale > 0 && T.resumeFlapScale < 1, `resumeFlapScale ${T.resumeFlapScale}`);
+});
+
 test('the field: a phone portrait at minimum, up to 2:1, the player in the left part', () => {
   assert.equal(FIELD.minWidth, GAME_WIDTH);
   assert.equal(FIELD.height, GAME_HEIGHT);

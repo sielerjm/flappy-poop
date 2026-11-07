@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createRng, gapBounds, pipeGapY, centredGapY, hasPassed, angleForVelocity, poopFrame } from '../src/logic.js';
+import { createRng, gapBounds, pipeGapY, centredGapY, hasPassed, angleForVelocity, resumeFlapVelocity, poopFrame } from '../src/logic.js';
 import { GAME_HEIGHT, TUNING as T } from '../src/config.js';
 
 const cfg = { gameHeight: GAME_HEIGHT, ceilingHeight: T.ceilingHeight, groundHeight: T.groundHeight, gapHeight: T.gapHeight, gapMargin: T.gapMargin };
@@ -61,6 +61,13 @@ test('centredGapY sits at mid-screen (the fart float height) and stays inside ga
   const tight = { gameHeight: 600, groundHeight: 128, gapHeight: 340, gapMargin: 40 };
   const b = gapBounds(tight);
   assert.ok(centredGapY(tight) >= b.minY && centredGapY(tight) <= b.maxY);
+});
+
+test('resumeFlapVelocity: the resume tap lifts at resumeFlapScale of a flap', () => {
+  const vy = resumeFlapVelocity(T);
+  assert.ok(vy < 0, `resume lift ${vy} points up`);
+  assert.ok(Math.abs(vy) < Math.abs(T.flapVelocity), 'softer than a flap');
+  assert.equal(resumeFlapVelocity({ flapVelocity: -800, resumeFlapScale: 0.5 }), -400);
 });
 
 test('poopFrame: the plain or stink face until the fall reaches fallLookVy, then the falling faces', () => {

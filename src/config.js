@@ -22,6 +22,7 @@ export const FIELD = {
 export const TUNING = {
   gravity: 2600, // px/s^2 pulling the poop down
   flapVelocity: -760, // px/s applied on tap
+  resumeFlapScale: 0.5, // 0–1 share of flapVelocity the resume tap applies (resumeFlapVelocity): a lift that settles the poop without throwing it into the pipe above
   pipeSpeed: 275, // px/s pipes scroll left at level 1 (each level adds levels.speedStep up to levels.maxSpeed)
   pipeSpacingPx: 412, // px between pipe pairs from levels.spacingRefLevel on (1.27 s at level-3 speed); slower levels get more, see pipeSpacing()
   gapHeight: 340, // vertical opening between a pipe pair
