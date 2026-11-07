@@ -913,6 +913,12 @@ export class Play extends Phaser.Scene {
   }
 
   handleChrome(input) {
+    // A match: the pause key / button / ⏸ toggles the shared pause, not this half's own state
+    // (which may be its level break: 'paused' there must not read as "resume"). The rest is chromeIntent's.
+    if (this.match && (input === 'pause' || input === 'esc') && !this.chromeArgs('tap').overlay) {
+      this.versusHost()?.togglePause?.();
+      return;
+    }
     this.applyChrome(chromeIntent(this.chromeArgs(input)));
   }
 
@@ -922,10 +928,14 @@ export class Play extends Phaser.Scene {
         this.pauseRun();
         break;
       case 'resume':
-        // A match: the shared pause lifts both halves, but a level break's continue tap is this
-        // half's own (resumePlay → endLevelBreak) and never touches the other.
-        if (this.match && !this.levelBreak) this.versusHost()?.setPaused?.(false);
-        else this.resumePlay();
+        if (this.match) {
+          // A match: the tap lifts the shared pause for both halves (a no-op when it is not on); a
+          // half tapping in its own level break ends that break too, and never the other's.
+          if (this.levelBreak) this.resumePlay();
+          this.versusHost()?.setPaused?.(false);
+        } else {
+          this.resumePlay();
+        }
         break;
       case 'toggleMute':
         this.toggleMute();

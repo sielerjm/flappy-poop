@@ -228,6 +228,7 @@ that moment (the window may have shrunk since the toggle was set; the toggle its
    `rngDraw` stubbed to return 0.3 → `bean1` (0.2 + 0.4 covers it), where the plain table would give
    probiotic / fiber.
    Commit `feat(versus, step 4/6): shared pause, match ends on a death, result panel, rematch, catch-up box`.
+   Result: done. Section B found two defects fixed here: the pause key in a half's level break read as resume (now the pause key toggles the shared pause), and a rematch's countdown never started (its first tick ran inside create(), before the scene was active). `npm test` 343 / 343; smoke green with sections A and B. Step 3 is `bf0ac90`.
 5. **Ghost and rival marker.** Smoke section C: pinned distances place the ghosts at `poopX ± 300` with
    alpha in `(0, ghostAlpha]`, beyond the range hidden; P2 three pairs into level 1 → P1's marker `0.3`
    `'same'`; P2 on level 2 → `1` `'ahead'`; P2 dead → ghost alpha reaches 0 within `ghostFadeMs`.

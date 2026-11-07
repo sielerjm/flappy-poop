@@ -135,7 +135,7 @@ export class Versus extends Phaser.Scene {
       i += 1;
       this.time.delayedCall(T.versus.countdownMs, tick);
     };
-    tick();
+    this.time.delayedCall(0, tick); // never synchronously: a rematch starts this inside create(), before the scene is active
   }
 
   /** The race starts: both halves slide their poop into place and run (Play.launch). */
@@ -174,6 +174,12 @@ export class Versus extends Phaser.Scene {
 
   isPaused() {
     return this.pausedHalves.size > 0;
+  }
+
+  /** The pause key / ⏸ / Menu from either half: lift the shared pause if it is on, else pause every half that plays. */
+  togglePause() {
+    if (this.match.status !== 'playing') return;
+    this.setPaused(!this.isPaused());
   }
 
   /**
