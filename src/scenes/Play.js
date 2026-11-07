@@ -615,8 +615,27 @@ export class Play extends Phaser.Scene {
       this.fartSound?.stop();
       this.endPower();
     }
+    // A match: clearing a level earns versus.scoring.levelClearBonus. The score moves now (win()
+    // reports it); the popup starts after the break has paused the run (a tween made while
+    // paused is not paused with it), or at once on the final level.
+    if (this.match) {
+      this.score += T.versus.scoring.levelClearBonus;
+      this.scoreText.setText(String(this.score));
+      this.refreshProbioticHud();
+    }
     if (final) this.win();
     else this.startLevelBreak();
+    if (this.match) this.showScorePopup('levelClear');
+  }
+
+  /**
+   * The finished half of a match while the other plays on: "Made it out!" over "Waiting for
+   * P2…" (the level banner's texts, no shade). It stays until the result panel covers it.
+   */
+  showEscapedBanner() {
+    if (!this.match || !this.won) return;
+    this.levelTitle?.setText(t(this.locale, 'versusEscaped')).setVisible(true);
+    this.levelHint?.setText(t(this.locale, 'versusWaiting').replace('{n}', String(this.player === 1 ? 2 : 1))).setVisible(true);
   }
 
   refreshLevelBanner() {
@@ -678,7 +697,7 @@ export class Play extends Phaser.Scene {
       if (pointer) this.versusInput({ kind: 'touch', side: this.player === 1 ? 'left' : 'right' }, 'flap', pointer);
       return;
     }
-    if (this.state === 'dead') return;
+    if (this.state === 'dead' && !this.match) return; // a finished match half keeps its tray and lifts a shared pause (chromeState)
     if (pointer) {
       const id = this.tray ? trayHit(pointer.x, pointer.y, trayLayout(this.col.width, GAME_HEIGHT, T, this.col.x)) : null;
       if (id) {
@@ -890,8 +909,32 @@ export class Play extends Phaser.Scene {
     this.pauseText?.setText(pauseTitle);
     this.pauseHint?.setText(pauseHint);
     this.refreshLevelBanner();
+    this.showEscapedBanner(); // a finished match half keeps its banner in the new language
     this.refreshLevelBar();
     this.refreshTestBadge();
+  }
+
+  /**
+   * The state chrome decisions (chromeIntent, padIntent) read. In a match it is the match's,
+   * not this half's: a finished half (waiting for the other) or a respawning one still pauses
+   * and resumes the match from its tray, keys and pad; its own level break keeps 'paused' so
+   * its continue tap ends the break.
+   */
+  chromeState() {
+    if (!this.match || this.match.status !== 'playing') return this.state;
+    const host = this.versusHost();
+    if (this.levelBreak || host?.isPaused?.()) return 'paused';
+    if (host?.anyLive?.()) return 'playing';
+    return this.state;
+  }
+
+  /**
+   * Whether opening an overlay pauses the run: chromeIntent's answer or, in a match, any half
+   * still live (a half in its own level break reads 'paused', and the other would fly on
+   * under an overlay that covers both halves).
+   */
+  overlayPause(result) {
+    return Boolean(result.pause) || Boolean(this.match?.status === 'playing' && this.versusHost()?.anyLive?.());
   }
 
   chromeArgs(input) {
@@ -904,7 +947,7 @@ export class Play extends Phaser.Scene {
     const leaderboard = this.scene.isActive('Leaderboard');
     const scores = this.scene.isActive('Scores');
     return {
-      state: this.state,
+      state: this.chromeState(),
       overlay: feedback
         ? 'feedback'
         : language
@@ -959,43 +1002,43 @@ export class Play extends Phaser.Scene {
         this.toggleMute();
         break;
       case 'openSettings':
-        if (result.pause) this.pauseRun();
+        if (this.overlayPause(result)) this.pauseRun();
         if (!this.scene.isActive('Settings')) this.scene.launch('Settings');
         this.scene.bringToTop('Settings');
         break;
       case 'openAbout':
-        if (result.pause) this.pauseRun();
+        if (this.overlayPause(result)) this.pauseRun();
         if (!this.scene.isActive('About')) this.scene.launch('About');
         this.scene.bringToTop('About');
         break;
       case 'openHowTo':
         this.markHowToSeen();
-        if (result.pause) this.pauseRun();
+        if (this.overlayPause(result)) this.pauseRun();
         if (!this.scene.isActive('HowTo')) this.scene.launch('HowTo');
         this.scene.bringToTop('HowTo');
         break;
       case 'openChangelog':
-        if (result.pause) this.pauseRun();
+        if (this.overlayPause(result)) this.pauseRun();
         if (!this.scene.isActive('Changelog')) this.scene.launch('Changelog');
         this.scene.bringToTop('Changelog');
         break;
       case 'openLanguage':
-        if (result.pause) this.pauseRun();
+        if (this.overlayPause(result)) this.pauseRun();
         if (!this.scene.isActive('Language')) this.scene.launch('Language');
         this.scene.bringToTop('Language');
         break;
       case 'openFeedback':
-        if (result.pause) this.pauseRun();
+        if (this.overlayPause(result)) this.pauseRun();
         if (!this.scene.isActive('Feedback')) this.scene.launch('Feedback');
         this.scene.bringToTop('Feedback');
         break;
       case 'openScores':
-        if (result.pause) this.pauseRun();
+        if (this.overlayPause(result)) this.pauseRun();
         if (!this.scene.isActive('Scores')) this.scene.launch('Scores');
         this.scene.bringToTop('Scores');
         break;
       case 'openLeaderboard':
-        if (result.pause) this.pauseRun();
+        if (this.overlayPause(result)) this.pauseRun();
         if (!this.scene.isActive('Leaderboard')) this.scene.launch('Leaderboard');
         this.scene.bringToTop('Leaderboard');
         break;
@@ -1051,7 +1094,7 @@ export class Play extends Phaser.Scene {
     }
     const result = padIntent({
       action,
-      state: this.state,
+      state: this.chromeState(),
       top,
       ringShown: Boolean(scene?.focus?.shown),
       savePanelOpen: isSavePanelOpen(),
@@ -1981,8 +2024,8 @@ export class Play extends Phaser.Scene {
     for (const item of this.items.getChildren()) item.setVelocityX(0);
     for (const bean of this.beans.getChildren()) bean.setVelocityX(0);
     this.setPauseBanner(false);
-    // A match records nothing either: the Versus scene hears the end (the other half is halted,
-    // the result panel follows) unless this is that halt itself (haltRun).
+    // A match records nothing either: the Versus scene hears the end (the result panel follows
+    // once both halves have reported).
     if (this.match) {
       this.publishSlot();
       this.match.slots[this.player - 1].ended = true;
@@ -1994,35 +2037,6 @@ export class Play extends Phaser.Scene {
     this.best.save(this.score); // legacy store, kept for first-run seeding
     this.save = saveLocal(recordScore(this.save, this.score, { toilet: this.toilet, level: this.level }));
     this.syncLeaderboard(); // fire and forget; never awaited inside the update loop
-  }
-
-  /**
-   * A match ended on the other half: stop this run where it is, alive (the survivor keeps
-   * its face, hangs where it is like a win), without reporting back. Safe on a half that is
-   * paused or in a level break: the break's tweens stop and its banner goes.
-   */
-  haltRun() {
-    if (this.state !== 'playing' && this.state !== 'paused' && this.state !== 'respawn') return;
-    if (this.state === 'respawn' || this.respawnPaused) this.cancelRespawn();
-    this.breakGlide?.stop();
-    this.breakGlide = null;
-    this.breakBob?.stop();
-    this.breakBob = null;
-    this.levelBreak = false;
-    // A fart mid-halt just stops: no endPower, whose pre-fill would spawn pairs into a run that is over.
-    if (this.effects.cancelPower()) {
-      this.fartSound?.stop();
-      this.fartTween?.stop();
-      this.fartTween = null;
-      this.poop.setAlpha(1);
-      this.glow.setAlpha(0).setScale(1);
-      this.scrollMul = 1;
-    }
-    this.endRun({ report: false });
-    this.poop.body.setAllowGravity(false);
-    this.poop.setVelocity(0, 0);
-    this.refreshPoopLook();
-    this.poop.setAngle(0);
   }
 
   /**
@@ -2095,6 +2109,7 @@ export class Play extends Phaser.Scene {
     this.refreshPoopLook(); // the plain face (endRun uncharged it), even if the line was crossed mid-drop
     this.poop.setAngle(0);
     this.cameras.main.flash(250, 255, 215, 0);
+    this.showEscapedBanner(); // a match: this half waits here for the other
     this.showOver(true);
   }
 
@@ -2210,17 +2225,6 @@ export class Play extends Phaser.Scene {
     const slot = this.match.slots[this.player - 1];
     slot.respawning = false;
     this.publishSlot();
-  }
-
-  /** Drop a respawn where it is (haltRun): the tumble stops, the poop is opaque again, the slot no longer respawning. */
-  cancelRespawn() {
-    this.deathTween?.stop();
-    this.deathTween = null;
-    this.respawnPaused = false;
-    this.respawnFrom = null;
-    this.poop.setAlpha(1);
-    const slot = this.match?.slots[this.player - 1];
-    if (slot) slot.respawning = false;
   }
 
   update(_time, delta) {

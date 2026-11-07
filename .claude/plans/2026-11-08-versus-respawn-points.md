@@ -104,14 +104,15 @@ Decisions made here, flagged so they can be overruled:
 - Verify: `npm test`; `npm run smoke` green.
 - Commit: `feat(versus, step 2/4): a crash puts you back mid-screen after a tumble, a glide and a blink`
 - Rollback: `git checkout -- .`
-- Result: npm test 350 / 351 (baseline failure only); npm run smoke all checks passed. `haltRun` kept through this step (it still halts the other half under the first-report end) with a `cancelRespawn` so a halt mid-respawn is clean; step 3 removes both. Smoke lessons: the gap height lives on the half's `diff`, not the pipe; the restart poll can see up to 100 ms of fall before the pin, so y has 40 px of slack and the angle is "not tumbled". Commit `<step2>`.
+- Result: npm test 350 / 351 (baseline failure only); npm run smoke all checks passed. `haltRun` kept through this step (it still halts the other half under the first-report end) with a `cancelRespawn` so a halt mid-respawn is clean; step 3 removes both. Smoke lessons: the gap height lives on the half's `diff`, not the pipe; the restart poll can see up to 100 ms of fall before the pin, so y has 40 px of slack and the angle is "not tumbled". Commit `4a9d56b`.
 
-### Step 3/4 — Points decide: level bonus, both finish, the result  [pending]
+### Step 3/4 — Points decide: level bonus, both finish, the result  [done]
 - Change: `onFinishCrossed` bonus + popup timing; `win()` → `showEscapedBanner()` (+ `applyLocale`); `Versus.onRunEnded` waits for both, `anyLive()`; the match-derived chrome state in `chromeArgs` / `applyChrome` and the `flap()` fall-through for `'dead'` / `'respawn'` halves; `showResult` deaths row, no status line.
 - Smoke: cross a level-1 line on P1 → score +25 and the popup text `+25` visible after the break starts; force P1 to the rectum's line → score +25, `slots[0].won`, P1 `'dead'`, P1's banner reads `Made it out!` / `Waiting for P2…`, status still `'playing'`, P2 still `'playing'`; Menu → only P2 pauses; a tap on P1's half → P2 resumes; P1 opens Settings → P2 `'paused'`, close → `'playing'`; a pad nav press on P1 → P2 paused, ring on P1's tray; P2 to the line → status `'over'`, panel: headline by points (5+25 vs 9+25 → `P2 WINS!`), both scores, `💀 ×1` / `💀 ×0`, no `OUT`; a second match (Rematch) pinned to equal points with deaths 1 / 0 → `P2 WINS!`; a third pinned equal → `DRAW`; nothing recorded; Home.
 - Verify: `npm test`; `npm run smoke` green.
 - Commit: `feat(versus, step 3/4): 25 points a level, the match ends when both are out, fewer crashes breaks a tie`
 - Rollback: `git checkout -- .`
+- Result: npm test 350 / 351 (baseline failure only); npm run smoke all checks passed, including the review's cases (Settings and a d-pad press from the finished P1 pause P2, a tap on P1's half resumes it, Settings from P1's own level break pauses P2). `haltRun` and `cancelRespawn` removed. Smoke lesson: the waiting player's rival keeps scoring pipes, so the finish helper pins the score as the line spawns. Commit `<step3>`.
 
 ### Step 4/4 — Docs, What's new, 0.7.0  [pending]
 - Change: `AGENTS.md`, `README.md`, `TRANSLATION_NOTES.md`, `src/changelog.js`, `VERSION` + `package.json` 0.7.0; plan status complete.

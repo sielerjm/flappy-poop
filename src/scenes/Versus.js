@@ -176,6 +176,11 @@ export class Versus extends Phaser.Scene {
     return this.pausedHalves.size > 0;
   }
 
+  /** A half is still in its run: playing or respawning (not paused, not in a level break, not finished). */
+  anyLive() {
+    return this.halves().some((half) => half?.state === 'playing' || half?.state === 'respawn');
+  }
+
   /** The pause key / ⏸ / Menu from either half: lift the shared pause if it is on, else pause every half that plays. */
   togglePause() {
     if (this.match.status !== 'playing') return;
@@ -183,21 +188,22 @@ export class Versus extends Phaser.Scene {
   }
 
   /**
-   * A half's run ended (Play.endRun: a death, or the rectum's finish line): the match is
-   * over at once. The other half is halted where it is (haltRun reports nothing), the
-   * shared banner goes, and the result panel follows after the death tumble.
+   * A half's run ended (Play.endRun: the rectum's finish line; a crash is a respawn, never
+   * the end). The first one out waits under its own banner while the other plays on; once
+   * both have reported the match is over, the shared banner goes, and the result panel
+   * follows after a beat.
    */
-  onRunEnded(player) {
+  onRunEnded() {
     if (this.match.status !== 'playing') return;
+    if (!this.match.slots.every((slot) => slot.ended)) return;
     this.match.status = 'over';
     this.pausedHalves.clear();
     this.pauseText.setVisible(false);
     this.pauseHint.setVisible(false);
-    this.halfScene(player === 1 ? 1 : 0)?.haltRun();
     this.time.delayedCall(T.deathToOverMs, () => this.showResult());
   }
 
-  /** The result panel: who won (matchResult), each player's score, level and pipes, Rematch | Home. */
+  /** The result panel: who won (matchResult: points, then fewer crashes), each player's score, level, pipes and crashes, Rematch | Home. */
   showResult() {
     if (this.resultShown || !this.sys.isActive()) return;
     this.resultShown = true;
@@ -217,7 +223,8 @@ export class Versus extends Phaser.Scene {
       // Pipes passed: the pipe sprite's cap as the icon, ×n beside it, as the game-over panel shows them.
       this.add.image(x - 46, cy + 20, 'pipe').setOrigin(0.5, 80 / 1280).setCrop(0, 0, 128, 160).setScale(40 / 128).setDepth(71);
       this.add.text(x - 14, cy + 20, `×${slot.pipesPassed}`, { ...STYLE, fontSize: '36px', color: '#c9b8dc', strokeThickness: 8 }).setOrigin(0, 0.5).setDepth(71);
-      if (slot.won) this.add.text(x, cy + 90, t(this.locale, 'versusEscaped'), { ...STYLE, fontSize: '32px', color: GOLD, strokeThickness: 8 }).setOrigin(0.5).setDepth(71);
+      // Crashes: the tiebreak, so it is on the panel. Symbols only, no string to translate.
+      this.add.text(x, cy + 90, `💀 ×${slot.deaths ?? 0}`, { ...STYLE, fontSize: '36px', color: '#c9b8dc', strokeThickness: 8 }).setOrigin(0.5).setDepth(71);
     });
     this.add.text(cx, cy + 160, t(this.locale, 'versusNotSaved'), { ...STYLE, fontSize: '26px', color: GOLD, strokeThickness: 6, wordWrap: { width: 560, useAdvancedWrap: true } }).setOrigin(0.5).setDepth(71);
     // Rematch (the left box) | Home (the right), on the game-over panel's row.
