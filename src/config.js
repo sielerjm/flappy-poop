@@ -213,6 +213,7 @@ export const TUNING = {
     glowMinAlpha: 0.2, // 0–1 white glow pulse floor while charged
     glowMaxAlpha: 0.6, // 0–1 white glow pulse ceiling while charged
     glowPulseMs: 600, // ms per glow pulse (one way)
+    buttonEdgeMarginPx: 64, // px from the field's edge to the bean button's rim on a wide (landscape) field, where it sits by the thumb of the settings' hand (beanButtonLayout); portrait and a match half keep it centred
     fartAlphaMs: 250, // ms per opacity swing (1 → 0.5) while farting
     centreMs: 300, // ms the poop takes to float to mid-height when the fart starts (gravity off, flaps ignored until it ends)
     waveAmplitudePx: 60, // px the floating poop rises and falls around mid-height while farting

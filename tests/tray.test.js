@@ -103,4 +103,28 @@ test('bean power button floats above the ground at bottom centre, clear of every
   }
   assert.equal(trayHit(bean.x, bean.y, tray), null, 'the slot is not a tray button');
   assert.equal(beanButtonHit(0, 0, null), false);
+  // A hand setting changes nothing in portrait (no room beside the tray).
+  assert.deepEqual(beanButtonLayout(GAME_WIDTH, GAME_HEIGHT, T, { colWidth: GAME_WIDTH, hand: 'left' }), bean);
+});
+
+test('on a wide field the bean button sits by the thumb of the chosen hand, inside the field and clear of the centred tray', () => {
+  const W = 2560;
+  const portrait = beanButtonLayout(GAME_WIDTH, GAME_HEIGHT, T);
+  const right = beanButtonLayout(W, GAME_HEIGHT, T, { colWidth: GAME_WIDTH });
+  const left = beanButtonLayout(W, GAME_HEIGHT, T, { colWidth: GAME_WIDTH, hand: 'left' });
+  assert.equal(right.x, W - T.beans.buttonEdgeMarginPx - right.size / 2, 'right by default');
+  assert.equal(left.x, T.beans.buttonEdgeMarginPx + left.size / 2);
+  assert.deepEqual(beanButtonLayout(W, GAME_HEIGHT, T, { colWidth: GAME_WIDTH, hand: 'right' }), right);
+  for (const b of [right, left]) {
+    assert.equal(b.y, portrait.y, 'same height as in portrait');
+    assert.equal(b.size, portrait.size);
+    assert.ok(b.x - b.size >= 0 && b.x + b.size <= W, `the enlarged hit circle stays inside the field (x ${b.x})`);
+    assert.equal(beanButtonHit(b.x, b.y, b), true);
+  }
+  assert.ok(left.x + left.size < W / 2 - GAME_WIDTH / 2, 'left button ends before the chrome column');
+  assert.ok(right.x - right.size > W / 2 + GAME_WIDTH / 2, 'right button starts after the chrome column');
+  // A match half keeps the centre: each half is one thumb's zone and P1's right edge is the divider.
+  assert.equal(beanButtonLayout(W / 2, GAME_HEIGHT, T, { colWidth: GAME_WIDTH, match: true }).x, W / 4);
+  // The phone field itself (as wide as the column) is not wide.
+  assert.equal(beanButtonLayout(GAME_WIDTH, GAME_HEIGHT, T, { colWidth: GAME_WIDTH }).x, GAME_WIDTH / 2);
 });

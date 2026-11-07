@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { createSettingsStore, vibrate } from '../src/logic.js';
 import { initialLocale } from '../src/i18n.js';
 
-const DEFAULTS = { sound: true, music: true, haptics: true, locale: 'en', howToSeenAt: '' };
+const DEFAULTS = { sound: true, music: true, haptics: true, locale: 'en', howToSeenAt: '', hand: 'right' };
 
 function fakeStorage() {
   const m = new Map();
@@ -37,8 +37,8 @@ test('set merges a patch, persists, and a new store reads it back', () => {
   const st = fakeStorage();
   const s = createSettingsStore(st, 'k');
   assert.deepEqual(s.set({ sound: false }), { ...DEFAULTS, sound: false });
-  assert.deepEqual(s.set({ haptics: false }), { sound: false, music: true, haptics: false, locale: 'en', howToSeenAt: '' });
-  assert.deepEqual(createSettingsStore(st, 'k').load(), { sound: false, music: true, haptics: false, locale: 'en', howToSeenAt: '' });
+  assert.deepEqual(s.set({ haptics: false }), { ...DEFAULTS, sound: false, haptics: false });
+  assert.deepEqual(createSettingsStore(st, 'k').load(), { ...DEFAULTS, sound: false, haptics: false });
 });
 
 test('set ignores unknown patch keys and non-boolean values', () => {
@@ -80,6 +80,17 @@ test('vibrate no-ops and returns false without a vibrate API', () => {
 test('vibrate returns false when the API throws', () => {
   const nav = { vibrate() { throw new Error('denied'); } };
   assert.equal(vibrate(nav, 60), false);
+});
+
+test('hand is left or right, defaults to right, and persists', () => {
+  const st = fakeStorage();
+  const s = createSettingsStore(st, 'k');
+  assert.deepEqual(s.set({ hand: 'left' }), { ...DEFAULTS, hand: 'left' });
+  assert.equal(createSettingsStore(st, 'k').load().hand, 'left');
+  assert.equal(s.set({ hand: 'up' }).hand, 'right', 'garbage falls back to right');
+  assert.equal(s.set({ hand: 'right' }).hand, 'right');
+  st.setItem('k', JSON.stringify({ sound: true, hand: 7 }));
+  assert.equal(createSettingsStore(st, 'k').load().hand, 'right');
 });
 
 test('howToSeenAt keeps a string stamp, drops anything else, and persists', () => {

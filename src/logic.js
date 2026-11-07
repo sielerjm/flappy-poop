@@ -369,7 +369,10 @@ export function createBestStore(storage, key = 'flappy-poop:best') {
   };
 }
 
-const SETTINGS_DEFAULTS = { sound: true, music: true, haptics: true, locale: DEFAULT_LOCALE, howToSeenAt: '' };
+/** Which thumb the bean power button sits by on a wide field (Settings' 👈 👉 toggle; carried by the save code). */
+export const HANDS = ['left', 'right'];
+
+const SETTINGS_DEFAULTS = { sound: true, music: true, haptics: true, locale: DEFAULT_LOCALE, howToSeenAt: '', hand: 'right' };
 
 function normalizeSettings(raw) {
   const out = { ...SETTINGS_DEFAULTS };
@@ -380,6 +383,7 @@ function normalizeSettings(raw) {
   out.locale = isLocale(raw.locale) ? raw.locale : SETTINGS_DEFAULTS.locale;
   // The build (LAST_UPDATED) on which the player last opened How to play or finished a run.
   out.howToSeenAt = typeof raw.howToSeenAt === 'string' ? raw.howToSeenAt : '';
+  out.hand = HANDS.includes(raw.hand) ? raw.hand : SETTINGS_DEFAULTS.hand;
   return out;
 }
 
@@ -1081,10 +1085,18 @@ export function trayLayout(width, height, t, x0 = 0) {
 /**
  * Bean power button: bottom centre, floating just above the ground strip in
  * the lower band of the playfield (well clear of the tray), shown only while
- * the fart power is charged. Same size as the tray buttons.
+ * the fart power is charged. Same size as the tray buttons. On a field wider than the
+ * chrome column (colWidth) it moves to the `hand` side's edge unless this is a match half.
  */
-export function beanButtonLayout(width, height, t) {
-  return { id: 'bean', x: width / 2, y: height - t.groundHeight - t.trayHitMin / 2 - 58, size: t.trayHitMin };
+export function beanButtonLayout(width, height, t, { colWidth = width, hand = 'right', match = false } = {}) {
+  const size = t.trayHitMin;
+  const y = height - t.groundHeight - size / 2 - 58;
+  // A wide field (landscape: wider than the chrome column) puts it by the thumb of the settings'
+  // hand, at the field's edge; portrait has no room beside the tray, and a match half keeps its
+  // centre (P1's right edge is the divider, each half is one thumb's zone).
+  if (width <= colWidth || match) return { id: 'bean', x: width / 2, y, size };
+  const inset = t.beans.buttonEdgeMarginPx + size / 2;
+  return { id: 'bean', x: hand === 'left' ? inset : width - inset, y, size };
 }
 
 /**
