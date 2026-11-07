@@ -123,6 +123,8 @@ Short, playful, clear. Fit a 720×1280 logical field; How to play / About body w
 | itemToiletName | On the toilet | 如厕模式 |
 | itemToiletDetail | Playing on the toilet? Flip the switch under the poop on the home screen. Those scores get a 🚽 next to them. | 在马桶上玩？打开主界面便便下方的开关，这些分数旁会显示 🚽。 |
 | itemLevelsName | Levels | 关卡 |
+| itemControlsName | Controls | 操作方式 |
+| itemControlsDetail | One player: tap or click to flap; the bean button (or the poop) farts. Keyboard: Space or ↑ flaps, B farts, P or Esc pauses. Controller: A flaps, RT farts, Menu pauses. Two players (the 👥 toggle): P1 flaps with W or Space and farts with E or Left Shift; P2 flaps with ↑ or Enter and farts with Right Shift or Numpad 0. A controller (A, RT) or a tap on your half works too. | 单人：点击起飞；按豆子按钮（或便便）放屁。键盘：空格或 ↑ 起飞，B 放屁，P 或 Esc 暂停。手柄：A 起飞，RT 放屁，Menu 暂停。双人模式（👥 开关）：玩家 1 用 W 或空格起飞、E 或左 Shift 放屁；玩家 2 用 ↑ 或回车起飞、右 Shift 或小键盘 0 放屁。也可以用手柄（A、RT）或点击你这一侧。 |
 | itemLevelsDetail | The gut comes in levels: stomach, duodenum, jejunum and on, down to the rectum. Pass a checkered finish line to clear one; the game pauses for a breather before the next. Levels 2 and 3 scroll faster, then the speed holds; from level 4 some pipes drift up and down. Clear the rectum and you win. The bar at the top shows how far you are. | 肠道分成关卡：胃、十二指肠、空肠……一直到直肠。越过黑白格终点线即可过关；游戏会稍作停顿再进入下一关。第 2、3 关会滚得更快，之后速度保持不变；从第 4 关起有些管道会上下漂移。通过直肠就赢了。顶部的进度条显示你走到了哪里。 |
 | updatedPrefix | Updated | 更新于 |
 | versionLine | v{version} beta | v{version} 测试版 |

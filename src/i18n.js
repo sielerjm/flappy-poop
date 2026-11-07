@@ -73,6 +73,9 @@ Inspired by Flappy Bird`,
     itemToiletDetail: 'Playing on the toilet? Flip the switch under the poop on the home screen. Those scores get a 🚽 next to them.',
     itemLevelsName: 'Levels',
     itemLevelsDetail: 'The gut comes in levels: stomach, duodenum, jejunum and on, down to the rectum. Pass a checkered finish line to clear one; the game pauses for a breather before the next. Levels 2 and 3 scroll faster, then the speed holds; from level 4 some pipes drift up and down. Clear the rectum and you win. The bar at the top shows how far you are.',
+    itemControlsName: 'Controls',
+    itemControlsDetail:
+      'One player: tap or click to flap; the bean button (or the poop) farts. Keyboard: Space or ↑ flaps, B farts, P or Esc pauses. Controller: A flaps, RT farts, Menu pauses. Two players (the 👥 toggle): P1 flaps with W or Space and farts with E or Left Shift; P2 flaps with ↑ or Enter and farts with Right Shift or Numpad 0. A controller (A, RT) or a tap on your half works too.',
     updatedPrefix: 'Updated',
     versionLine: 'v{version} beta',
     changelogTitle: "WHAT'S NEW",
@@ -201,6 +204,9 @@ Inspired by Flappy Bird`,
     itemToiletDetail: '在马桶上玩？打开主界面便便下方的开关，这些分数旁会显示 🚽。',
     itemLevelsName: '关卡',
     itemLevelsDetail: '肠道分成关卡：胃、十二指肠、空肠……一直到直肠。越过黑白格终点线即可过关；游戏会稍作停顿再进入下一关。第 2、3 关会滚得更快，之后速度保持不变；从第 4 关起有些管道会上下漂移。通过直肠就赢了。顶部的进度条显示你走到了哪里。',
+    itemControlsName: '操作方式',
+    itemControlsDetail:
+      '单人：点击起飞；按豆子按钮（或便便）放屁。键盘：空格或 ↑ 起飞，B 放屁，P 或 Esc 暂停。手柄：A 起飞，RT 放屁，Menu 暂停。双人模式（👥 开关）：玩家 1 用 W 或空格起飞、E 或左 Shift 放屁；玩家 2 用 ↑ 或回车起飞、右 Shift 或小键盘 0 放屁。也可以用手柄（A、RT）或点击你这一侧。',
     updatedPrefix: '更新于',
     versionLine: 'v{version} 测试版',
     changelogTitle: '更新说明',
@@ -287,7 +293,7 @@ export function t(locale, key) {
   return STRINGS[DEFAULT_LOCALE][key] ?? key;
 }
 
-/** How to play rows for a locale, pipe first. key matches Boot texture names. */
+/** How to play rows for a locale, pipe first, controls last. key matches a Boot texture name or an emoji row in HowTo. */
 export function howToItems(locale) {
   return [
     { key: 'pipe', name: t(locale, 'itemPipeName'), detail: t(locale, 'itemPipeDetail') },
@@ -299,6 +305,7 @@ export function howToItems(locale) {
     { key: 'mystery-icon', name: t(locale, 'itemMysteryName'), detail: t(locale, 'itemMysteryDetail') },
     { key: 'toilet', name: t(locale, 'itemToiletName'), detail: t(locale, 'itemToiletDetail') },
     { key: 'levels', name: t(locale, 'itemLevelsName'), detail: t(locale, 'itemLevelsDetail') },
+    { key: 'controls', name: t(locale, 'itemControlsName'), detail: t(locale, 'itemControlsDetail') },
   ];
 }
 
