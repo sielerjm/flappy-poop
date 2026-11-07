@@ -989,8 +989,8 @@ export async function run(url = DEFAULT_URL) {
       await sleep(500);
       const panelSeen = await evaluate(`(() => { const s = ${settings}; const panel = s.children.list.find((c) => c.type === 'Rectangle' && c.width === 600); return JSON.stringify({ h: panel.height, texts: s.children.list.filter((c) => c.type === 'Text').map((c) => c.text), dim: s.powerButtons.map((b) => b.alpha) }); })()`).then(JSON.parse);
       const startAt = await tx('testStartLevel');
-      ok(panelSeen.h === 1160 && panelSeen.texts.includes(`${startAt}  LV 1`) && panelSeen.texts.includes(await tx('testExit')) && panelSeen.dim.length === 6 && panelSeen.dim.every((a) => a < 1), `Settings in test mode is 1160 px tall with "${startAt}  LV 1", Exit, and six dimmed power-ups on the ready screen`);
-      const stepped = await evaluate(`(() => { const s = ${settings}; const zones = s.children.list.filter((c) => c.type === 'Zone'); const up = zones.reduce((a, b) => (b.x > a.x && b.y === zones[0].y ? b : a)); for (let i = 0; i < 3; i++) up.emit('pointerdown'); return JSON.stringify({ level: ${play}.testSettings().startLevel, label: s.children.list.some((c) => c.type === 'Text' && c.text === '${startAt}  LV 4') }); })()`).then(JSON.parse);
+      ok(panelSeen.h === 1240 && panelSeen.texts.includes(`${startAt}  LV 1`) && panelSeen.texts.includes(await tx('testExit')) && panelSeen.dim.length === 6 && panelSeen.dim.every((a) => a < 1), `Settings in test mode is 1240 px tall with "${startAt}  LV 1", Exit, and six dimmed power-ups on the ready screen`);
+      const stepped = await evaluate(`(() => { const s = ${settings}; const zones = s.children.list.filter((c) => c.type === 'Zone'); const up = zones.reduce((a, b) => (b.x > a.x ? b : a)); /* ▶ is the rightmost zone (the hand row's zone is centred) */ for (let i = 0; i < 3; i++) up.emit('pointerdown'); return JSON.stringify({ level: ${play}.testSettings().startLevel, label: s.children.list.some((c) => c.type === 'Text' && c.text === '${startAt}  LV 4') }); })()`).then(JSON.parse);
       ok(stepped.level === 4 && stepped.label, `three taps on ▶ set the next run's start level to ${stepped.level}`);
       await closeTop('Settings');
       await sleep(400);
@@ -1064,7 +1064,7 @@ export async function run(url = DEFAULT_URL) {
       await evaluate(`${settings}.children.list.find((c) => c.type === 'Text' && c.text === '${await tx('testExit')}').emit('pointerdown'), true`);
       await sleep(500);
       const exited = await evaluate(`JSON.stringify({ test: ${play}.isTestMode(), run: ${play}.runIsTest, invincible: ${play}.testInvincible(), h: ${settings}.children.list.find((c) => c.type === 'Rectangle' && c.width === 600).height, active: __flappy.scene.isActive('Settings') })`).then(JSON.parse);
-      ok(!exited.test && exited.run && !exited.invincible && exited.h === 720 && exited.active, 'Exit test mode turns it off mid-run, redraws the plain 720 px Settings, and the run stays a test run');
+      ok(!exited.test && exited.run && !exited.invincible && exited.h === 860 && exited.active, 'Exit test mode turns it off mid-run, redraws the plain 860 px Settings, and the run stays a test run');
       await closeTop('Settings');
       await sleep(400);
       const storesBefore = await stores();
@@ -1145,7 +1145,8 @@ export async function run(url = DEFAULT_URL) {
       ok(portraitW === 720 && wide.W === want.W && wide.H === 1280 && wide.state === 'ready' && wide.cam === want.W && wide.canvas[0] === want.W, `a 1800×1000 window re-fits the ready screen to a ${wide.W}×${wide.H} field (was ${portraitW}; window ${wide.inner.join('×')}, camera ${wide.cam}, canvas ${wide.canvas.join('×')}, state ${wide.state})`);
       ok(wide.col.x === want.col.x && wide.col.width === 720 && wide.poopX === want.poopX && wide.bg === want.W && wide.villi.every((w) => w === want.W) && wide.ground === want.W, `the world spans the field (background ${wide.bg}, villi ${wide.villi.join('/')}, ground ${wide.ground}); the chrome column is ${wide.col.width} px at x ${wide.col.x}; the poop will sit at ${wide.poopX} (25 %)`);
       const right = wide.col.x + wide.col.width;
-      ok(wide.score === want.W / 2 && wide.title === want.W / 2 && wide.bean === want.W / 2 && wide.howto === want.howto && wide.settingsBtn === right - 44 - 16 && wide.infoBtn === wide.col.x + 44 + 16, `score, title and bean button on the field centre (${wide.score}); ? at ${wide.howto}, ⚙ at ${wide.settingsBtn}, ⓘ at ${wide.infoBtn}: inside the column ${wide.col.x}–${right}`);
+      const beanRight = want.W - TT.beans.buttonEdgeMarginPx - TT.trayHitMin / 2;
+      ok(wide.score === want.W / 2 && wide.title === want.W / 2 && wide.bean === beanRight && wide.howto === want.howto && wide.settingsBtn === right - 44 - 16 && wide.infoBtn === wide.col.x + 44 + 16, `score and title on the field centre (${wide.score}), the bean button by the right thumb at ${wide.bean}; ? at ${wide.howto}, ⚙ at ${wide.settingsBtn}, ⓘ at ${wide.infoBtn}: inside the column ${wide.col.x}–${right}`);
       // A run on the wide field: the poop slides to poopX, pipes enter at the far right edge, the HUD hugs the column.
       await evaluate(`${play}.launch(), true`);
       for (let i = 0; i < 30 && (await playState()) !== 'playing'; i += 1) await sleep(100);
@@ -1234,6 +1235,17 @@ export async function run(url = DEFAULT_URL) {
       const rotated = await evaluate(`JSON.stringify({ W: __flappy.scale.width, state: ${play}.state, poopX: ${play}.poopX })`).then(JSON.parse);
       const capPoop = await evaluate(`${L}.then(([l, c]) => l.poopX(c.FIELD.maxWidth, c.TUNING))`);
       ok(landscape === cap && rotated.state === 'ready' && rotated.poopX === capPoop, `rotating on the ready screen re-fits to the ${rotated.W} px cap (poop at ${rotated.poopX}, state ${rotated.state})`);
+      // The bean button by the right thumb in landscape; Settings' 👈 👉 row moves it live, and back.
+      {
+        const inset = TT.beans.buttonEdgeMarginPx + TT.trayHitMin / 2;
+        const atRight = await evaluate(`JSON.stringify({ hand: ${play}.settings.load().hand, box: ${play}.beanButtonBox.x, btn: ${play}.beanButton.x, y: ${play}.beanButton.y })`).then(JSON.parse);
+        await chrome('settings');
+        const flipped = await evaluate(`(() => { const s = __flappy.scene.getScene('Settings'); s.toggleHand(); return JSON.stringify({ hand: ${play}.settings.load().hand, on: s.handToggle.isOn(), box: ${play}.beanButtonBox.x, btn: ${play}.beanButton.x }); })()`).then(JSON.parse);
+        const back = await evaluate(`(() => { const s = __flappy.scene.getScene('Settings'); s.toggleHand(); return JSON.stringify({ hand: ${play}.settings.load().hand, on: s.handToggle.isOn(), box: ${play}.beanButtonBox.x, btn: ${play}.beanButton.x }); })()`).then(JSON.parse);
+        await closeTop('Settings');
+        ok(atRight.hand === 'right' && atRight.box === cap - inset && atRight.btn === atRight.box && atRight.y === 1280 - TT.groundHeight - TT.trayHitMin / 2 - 58, `in landscape the bean button sits by the right thumb at x ${atRight.btn} (hand ${atRight.hand})`);
+        ok(flipped.hand === 'left' && !flipped.on && flipped.box === inset && flipped.btn === inset && back.hand === 'right' && back.on && back.btn === cap - inset, `Settings' 👈 👉 row moves it to the left thumb at x ${flipped.btn} and back to ${back.btn}`);
+      }
       await phone(390, 844);
       ok((await settle(720)) === 720, 'rotating back re-fits to the phone field');
       // Mid-run: the rotation pauses the run, the field stays, the re-fit waits for Home.

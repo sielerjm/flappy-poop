@@ -91,6 +91,7 @@ Short, playful, clear. Fit a 720×1280 logical field; How to play / About body w
 | on | ON | 开 |
 | off | OFF | 关 |
 | hapticsHint | Android only — iPhone has no vibrate | 仅限 Android——iPhone 不支持震动 |
+| handHint | Bean button side in landscape | 横屏时豆子按钮的位置 |
 | reloadGame | Reload game | 刷新游戏 |
 | aboutLink | About | 关于 |
 | testTitle | 🧪 TEST MODE | 🧪 测试模式 |

@@ -2,6 +2,7 @@ import { GAME_HEIGHT, TUNING as T } from '../config.js';
 import { versionText, createSettingsStore, chromeIntent, overlayOutsideHit, hardReloadGame, settingsLayout, nextTestLevel } from '../logic.js';
 import { t, toggleLabel, metaFontSize, levelLabel } from '../i18n.js';
 import { createFocus, pressable } from '../ui/focus.js';
+import { createToggle } from '../ui/toggle.js';
 import { setMuted } from '../sound.js';
 
 const STYLE = { fontFamily: 'sans-serif', fontStyle: 'bold', color: '#ffffff', align: 'center' };
@@ -56,6 +57,23 @@ export class Settings extends Phaser.Scene {
       })
       .setOrigin(0.5);
 
+    // Hand: which thumb the bean power button sits by on a landscape (wide) field. 👈 pill 👉, the
+    // whole row tappable; both Play instances re-place their button at once (a paused run too).
+    this.handToggle = createToggle(this, layout.hand, { on: cur.hand === 'right', depth: 0, glyph: '👉', glyphLeft: '👈' });
+    const handZone = this.add
+      .zone(layout.hand.track.x, layout.hand.y, layout.hand.width, layout.hand.height)
+      .setInteractive({ useHandCursor: true })
+      .on('pointerdown', () => this.toggleHand());
+    this.add
+      .text(cx, rows.handHint, t(locale, 'handHint'), {
+        ...STYLE,
+        fontSize: metaFontSize(locale),
+        color: '#c9b8dc',
+        fontStyle: 'normal',
+        wordWrap: { width: 520, useAdvancedWrap: true },
+      })
+      .setOrigin(0.5);
+
     // Reload: a home-screen app has no address bar, so this is the only way to pull a new build.
     const reload = this.add
       .text(cx, rows.reload, t(locale, 'reloadGame'), { ...STYLE, fontSize: '40px', color: '#f8a0c8' })
@@ -89,7 +107,7 @@ export class Settings extends Phaser.Scene {
     });
     // Controller focus ring: ✕, then the rows top to bottom; A is each row's own pointerdown.
     this.focus = createFocus(this, T, {
-      items: [pressable('close', close), pressable('sound', this.soundLabel), pressable('haptics', this.hapticsLabel), pressable('reload', reload), pressable('about', about), ...this.testItems],
+      items: [pressable('close', close), pressable('sound', this.soundLabel), pressable('haptics', this.hapticsLabel), pressable('hand', handZone), pressable('reload', reload), pressable('about', about), ...this.testItems],
     });
     this.focus.show(); // only under a controller (registry padMode)
   }
@@ -164,6 +182,14 @@ export class Settings extends Phaser.Scene {
       this.scene.restart(); // redraw as the plain panel
     });
     this.testItems.push(pressable('exit', exit));
+  }
+
+  /** Flip the hand setting and move the bean button on every Play instance (single player, or both halves of a match). */
+  toggleHand() {
+    const next = this.settings.load().hand === 'right' ? 'left' : 'right';
+    this.settings.set({ hand: next });
+    this.handToggle.setOn(next === 'right');
+    for (const key of ['Play', 'PlayB']) if (this.scene.isActive(key)) this.scene.get(key)?.applyHand?.(); // PlayB runs only in a match
   }
 
   addToggle(x, y, labelText, handler) {

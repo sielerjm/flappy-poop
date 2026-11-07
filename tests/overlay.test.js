@@ -4,7 +4,7 @@ import { GAME_WIDTH, GAME_HEIGHT, TUNING as T } from '../src/config.js';
 import { overlayOutsideHit, clampScroll, settingsLayout } from '../src/logic.js';
 
 const howto = { x: GAME_WIDTH / 2, y: GAME_HEIGHT / 2, width: 600, height: 1000 };
-const settings = { x: GAME_WIDTH / 2, y: GAME_HEIGHT / 2, width: 600, height: 720 };
+const settings = { x: GAME_WIDTH / 2, y: GAME_HEIGHT / 2, width: 600, height: 860 };
 
 test('overlayOutsideHit is false at the HowTo panel centre', () => {
   assert.equal(overlayOutsideHit(howto.x, howto.y, howto), false);
@@ -33,7 +33,7 @@ test('Settings 600x760 panel: centre inside, 1 px beyond height is outside', () 
   assert.equal(overlayOutsideHit(settings.x, settings.y + settings.height / 2 + 1, settings), true);
 });
 
-test('Settings test-mode panel (settingsLayout, 600x1160): edges hit like the plain one', () => {
+test('Settings test-mode panel (settingsLayout, 600x1240): edges hit like the plain one', () => {
   const panel = settingsLayout(GAME_WIDTH, GAME_HEIGHT, T, { test: true }).panel;
   const hh = panel.height / 2;
   assert.equal(overlayOutsideHit(panel.x, panel.y, panel), false);

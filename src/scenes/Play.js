@@ -382,7 +382,7 @@ export class Play extends Phaser.Scene {
 
     // Bean power button in the tray's centre slot: shown while charged, pulses
     // in step with the glow, and fires the fart like a tap on the poop.
-    this.beanButtonBox = beanButtonLayout(W, GAME_HEIGHT, T); // centred: the tray's middle slot
+    this.beanButtonBox = beanButtonLayout(W, GAME_HEIGHT, T, this.beanButtonOpts()); // the tray's middle slot; by the hand's thumb on a wide field
     {
       const b = this.beanButtonBox;
       const r = b.size / 2;
@@ -1237,6 +1237,18 @@ export class Play extends Phaser.Scene {
     // delays the next flap.
     if (!this.effects.powerActive()) this.poop.setVelocityY(resumeFlapVelocity(T));
     sfx.flap();
+  }
+
+  /** beanButtonLayout's options: the settings' hand; a match half keeps the centre of its strip. */
+  beanButtonOpts() {
+    return { colWidth: this.col.width, hand: this.settings.load().hand, match: Boolean(this.match) };
+  }
+
+  /** Re-place the bean button after the hand setting changed (Settings' toggle, a save-code load). */
+  applyHand() {
+    if (!this.col) return; // never created (PlayB outside a match)
+    this.beanButtonBox = beanButtonLayout(this.fieldW, GAME_HEIGHT, T, this.beanButtonOpts());
+    this.beanButton?.setPosition(this.beanButtonBox.x, this.beanButtonBox.y);
   }
 
   armResumeLockout() {

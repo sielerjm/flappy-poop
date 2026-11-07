@@ -1555,30 +1555,34 @@ export const TEST_POWERS = ['probiotic', 'fiber', 'postbiotic', 'bean1', 'bean3'
 export function settingsLayout(width, height, t, { test = false } = {}) {
   const cx = width / 2;
   const cy = height / 2;
-  const panel = { x: cx, y: cy, width: 600, height: test ? 1160 : 720 };
+  const panel = { x: cx, y: cy, width: 600, height: test ? 1240 : 860 };
   const top = cy - panel.height / 2;
   const bottom = cy + panel.height / 2;
   const close = { x: cx + 256, y: top + 54 };
+  // The 👈 👉 hand row: a toilet-style pill between the two glyphs, its hit box the whole row.
+  const handRow = (y) => ({ track: { x: cx, y, width: 120, height: 56 }, emojiX: cx + 110, leftX: cx - 110, y, width: 360, height: 88 });
   if (!test) {
-    const rows = { title: top + 70, sound: top + 210, haptics: top + 330, hint: top + 386, reload: top + 480, about: top + 570, version: bottom - 60 };
-    return { panel, close, rows, test: null };
+    const rows = { title: top + 70, sound: top + 210, haptics: top + 330, hint: top + 386, hand: top + 470, handHint: top + 526, reload: top + 620, about: top + 710, version: bottom - 60 };
+    return { panel, close, rows, hand: handRow(rows.hand), test: null };
   }
   const rows = {
     title: top + 70,
     sound: top + 170,
     haptics: top + 270,
     hint: top + 326,
-    reload: top + 420,
-    about: top + 510,
-    testTitle: top + 610,
-    startLevel: top + 710,
-    invincible: top + 810,
-    powers: top + 910,
-    exit: top + 1010,
+    hand: top + 400,
+    handHint: top + 456,
+    reload: top + 540,
+    about: top + 630,
+    testTitle: top + 730,
+    startLevel: top + 820,
+    invincible: top + 910,
+    powers: top + 1000,
+    exit: top + 1090,
     version: bottom - 60,
   };
   const hit = Math.max(88, t.trayHitMin);
   const arrow = (dx) => ({ x: cx + dx, y: rows.startLevel, width: hit, height: hit });
   const powers = TEST_POWERS.map((draw, i) => ({ id: draw, x: cx + (i - (TEST_POWERS.length - 1) / 2) * 96, y: rows.powers, width: hit, height: hit, icon: 72 }));
-  return { panel, close, rows, test: { divider: top + 560, levelDown: arrow(-230), levelUp: arrow(230), powers } };
+  return { panel, close, rows, hand: handRow(rows.hand), test: { divider: top + 680, levelDown: arrow(-230), levelUp: arrow(230), powers } };
 }
