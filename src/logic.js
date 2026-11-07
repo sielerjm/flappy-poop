@@ -5,9 +5,9 @@
 import { isLocale, DEFAULT_LOCALE, t } from './i18n.js';
 
 export const VERSION = '0.5.16'; // bumped when art under an existing name changes (Boot's ?v= cache-bust)
-/** The version line every overlay shows: `v{VERSION} beta` in the locale's words (i18n versionLine). */
-export function versionText(locale) {
-  return t(locale, 'versionLine').replace('{version}', VERSION);
+/** The version line every overlay shows: `v{VERSION} beta` in the locale's words (i18n versionLine); What's new passes older versions. */
+export function versionText(locale, version = VERSION) {
+  return t(locale, 'versionLine').replace('{version}', version);
 }
 
 /** Player-facing stamp on the About overlay: the time of the last push (written by `npm run push`). */
@@ -1175,11 +1175,11 @@ export function overlayOutsideHit(x, y, panel) {
  * result; this function is Phaser-free so the matrix can be tested in Node.
  *
  * @param {'ready'|'playing'|'paused'|'dead'} state
- * @param {null|'settings'|'about'|'howto'|'language'|'feedback'|'leaderboard'|'scores'} overlay topmost overlay (pause is a state)
+ * @param {null|'settings'|'about'|'howto'|'changelog'|'language'|'feedback'|'leaderboard'|'scores'} overlay topmost overlay (pause is a state)
  * @param {boolean} stackedSettings true when About sits on top of Settings
- * @param {boolean} stackedAbout true when HowTo sits on top of About
+ * @param {boolean} stackedAbout true when HowTo or Changelog (What's new) sits on top of About
  * @param {boolean} stackedUnder true when Feedback sits on top of another overlay
- * @param {'pause'|'mute'|'settings'|'info'|'howto'|'lang'|'feedback'|'leaderboard'|'scores'|'tap'|'esc'|'close'} input
+ * @param {'pause'|'mute'|'settings'|'info'|'howto'|'changelog'|'lang'|'feedback'|'leaderboard'|'scores'|'tap'|'esc'|'close'} input
  * @param {boolean} resumeLocked true during pauseResumeLockoutMs after overlay close
  * @returns {{ do: string, pause?: boolean, armResumeLockout?: boolean, closeAbout?: boolean }}
  */
@@ -1202,11 +1202,15 @@ export function chromeIntent({
       if (overlay === 'feedback') {
         return { do: 'closeTop', armResumeLockout: !stackedUnder };
       }
+      if (overlay === 'changelog') {
+        return { do: 'closeTop', armResumeLockout: !stackedAbout }; // back to About when it is underneath
+      }
       return { do: 'closeTop', armResumeLockout: !(overlay === 'about' && stackedSettings) };
     }
     if (input === 'feedback') return { do: 'openFeedback', pause: false };
     if (input === 'info' && overlay === 'settings') return { do: 'openAbout', pause: false };
     if (input === 'howto' && overlay === 'about') return { do: 'openHowTo', pause: false };
+    if (input === 'changelog' && overlay === 'about') return { do: 'openChangelog', pause: false };
     return { do: 'ignore' };
   }
 
@@ -1218,6 +1222,7 @@ export function chromeIntent({
   if (input === 'settings') return { do: 'openSettings', pause: state === 'playing' };
   if (input === 'info') return { do: 'openAbout', pause: state === 'playing' };
   if (input === 'howto') return { do: 'openHowTo', pause: state === 'playing' };
+  if (input === 'changelog') return { do: 'openChangelog', pause: state === 'playing' };
   if (input === 'lang') return { do: 'openLanguage', pause: state === 'playing' };
   if (input === 'feedback') return { do: 'openFeedback', pause: state === 'playing' };
   if (input === 'scores') return { do: 'openScores', pause: state === 'playing' };

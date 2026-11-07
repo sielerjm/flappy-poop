@@ -6,6 +6,7 @@ import { Over } from './scenes/Over.js';
 import { Settings } from './scenes/Settings.js';
 import { About } from './scenes/About.js';
 import { HowTo } from './scenes/HowTo.js';
+import { Changelog } from './scenes/Changelog.js';
 import { Language } from './scenes/Language.js';
 import { Feedback } from './scenes/Feedback.js';
 import { Scores } from './scenes/Scores.js';
@@ -35,7 +36,7 @@ const game = new Phaser.Game({
     activePointers: 1,
     gamepad: true, // Phaser Gamepad plugin; bound once, in Play (src/input/pad.js)
   },
-  scene: [Boot, Play, Over, Settings, About, HowTo, Language, Feedback, Scores, Leaderboard],
+  scene: [Boot, Play, Over, Settings, About, HowTo, Changelog, Language, Feedback, Scores, Leaderboard],
 });
 
 // A window resize (or a phone rotating) asks Play for a new field width. Play

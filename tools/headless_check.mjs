@@ -24,6 +24,7 @@ export const OVERLAYS = {
   settings: 'Settings',
   info: 'About',
   howto: 'HowTo',
+  changelog: 'Changelog',
   lang: 'Language',
   feedback: 'Feedback',
   scores: 'Scores',
@@ -777,7 +778,7 @@ export async function run(url = DEFAULT_URL) {
     }
 
     // The controller inside the overlays. Opened under a pad, each one rings its ✕ at once; a nav
-    // press walks its rows (About / HowTo scroll on up / down instead); A is the row's own tap; B
+    // press walks its rows (About / HowTo / Changelog scroll on up / down instead); A is the row's own tap; B
     // closes. Settings flips Sound, Language picks 简体中文 and back, Feedback opens the bug form
     // (window.open stubbed), About reaches How to play and B unwinds the stack.
     {
@@ -793,8 +794,8 @@ export async function run(url = DEFAULT_URL) {
         await padNav('down');
         await sleep(100);
         const r1 = await ring(key);
-        const scrolls = key === 'About' || key === 'HowTo';
-        // About's English content fits its panel, so it has nothing to scroll; HowTo always does.
+        const scrolls = key === 'About' || key === 'HowTo' || key === 'Changelog';
+        // About's English content fits its panel, so it has nothing to scroll; HowTo and Changelog (every version listed) always do.
         const walked = scrolls ? r1.id === 'close' && (key === 'About' ? r1.offset <= 0 : r1.offset < 0) : ['Scores', 'Leaderboard'].includes(key) ? r1.id === 'close' : Boolean(r1.id) && r1.id !== 'close';
         await padDown(G.back);
         await sleep(400);
@@ -851,6 +852,31 @@ export async function run(url = DEFAULT_URL) {
       await sleep(400);
       // How to play opened from About closes About with it (chromeIntent closeAbout), same as its ✕.
       ok(link.id === 'howto' && link.offset <= 0 && stacked && howToRing.shown && howToRing.id === 'close' && !(await active('HowTo')) && !(await active('About')), `About: right reaches How to play (offset ${link.offset}), A opens it ringed, B closes both`);
+      // About: the Updated line (last ring item) opens What's new over About; a version link there
+      // re-renders the page on that version; B returns to About, B again closes it.
+      await chrome('info');
+      await sleep(600);
+      // Spatial right bounces between ✕ (up-right of the links) and How to play, so land the ring by id.
+      await evaluate(`(() => { const a = __flappy.scene.getScene('About'); a.focus.setIndex(a.focus.indexOf('changelog')); return true; })()`);
+      const updated = await ring('About');
+      await padDown(G.select);
+      await sleep(600);
+      const logTexts = () => evaluate(`__flappy.scene.getScene('Changelog').children.list.filter((c) => c.type === 'Text').map((c) => c.text)`);
+      const latest = await import('../src/changelog.js').then((m) => m.CHANGELOG);
+      const shown0 = (await logTexts()).some((x) => x.startsWith(`v${latest[0].version} `));
+      await padNav('right'); // the first link: the previous version
+      const pick = await ring('Changelog');
+      await padDown(G.select);
+      await sleep(600);
+      const texts1 = await logTexts();
+      const shown1 = texts1.some((x) => x.startsWith(`v${latest[1].version} `)) && texts1.some((x) => x.includes(`v${latest[0].version} `) && !x.startsWith('v'));
+      await padDown(G.back);
+      await sleep(400);
+      const backToAbout = !(await active('Changelog')) && (await active('About'));
+      await padDown(G.back);
+      await sleep(400);
+      const aboutGone = !(await active('About'));
+      ok(updated.id === 'changelog' && (await active('Changelog')) === false && shown0 && pick.id === `v${latest[1].version}` && shown1 && backToAbout && aboutGone, `About: the Updated line (ring ${updated.id}) opens What's new on v${latest[0].version} (${shown0}); A on the ${pick.id} link shows that version with a Latest link (${shown1}; ${JSON.stringify(texts1.slice(0, 4))}); B returns to About (${backToAbout}), B closes it (${aboutGone})`);
     }
 
     // A game over must not change how later pipes are drawn: restart, start, spawn, check the frame.

@@ -125,6 +125,9 @@ Short, playful, clear. Fit a 720×1280 logical field; How to play / About body w
 | itemLevelsDetail | The gut comes in levels: stomach, duodenum, jejunum and on, down to the rectum. Pass a checkered finish line to clear one; the game pauses for a breather, then each level scrolls a little faster. Clear the rectum and you win. The bar at the top shows how far you are. | 肠道分成关卡：胃、十二指肠、空肠……一直到直肠。越过黑白格终点线即可过关；游戏会稍作停顿，之后每一关都会滚得更快一些。通过直肠就赢了。顶部的进度条显示你走到了哪里。 |
 | updatedPrefix | Updated | 更新于 |
 | versionLine | v{version} beta | v{version} 测试版 |
+| changelogTitle | WHAT'S NEW | 更新说明 |
+| changelogLatest | Latest | 最新版本 |
+| changelogPrevious | Previous updates | 历史更新 |
 | languageTitle | Language | 语言 |
 | langEnglish | English | English |
 | langChinese | 简体中文 | 简体中文 |

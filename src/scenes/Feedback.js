@@ -72,6 +72,7 @@ export class Feedback extends Phaser.Scene {
     const stackedUnder =
       this.scene.isActive('About') ||
       this.scene.isActive('HowTo') ||
+      this.scene.isActive('Changelog') ||
       this.scene.isActive('Settings') ||
       this.scene.isActive('Language');
     const result = chromeIntent({

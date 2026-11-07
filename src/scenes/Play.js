@@ -805,6 +805,7 @@ export class Play extends Phaser.Scene {
   chromeArgs(input) {
     const about = this.scene.isActive('About');
     const howto = this.scene.isActive('HowTo');
+    const changelog = this.scene.isActive('Changelog');
     const settings = this.scene.isActive('Settings');
     const language = this.scene.isActive('Language');
     const feedback = this.scene.isActive('Feedback');
@@ -818,18 +819,20 @@ export class Play extends Phaser.Scene {
           ? 'language'
           : howto
             ? 'howto'
-            : about
-              ? 'about'
-              : settings
-                ? 'settings'
-                : leaderboard
-                  ? 'leaderboard'
-                  : scores
-                    ? 'scores'
-                    : null,
+            : changelog
+              ? 'changelog'
+              : about
+                ? 'about'
+                : settings
+                  ? 'settings'
+                  : leaderboard
+                    ? 'leaderboard'
+                    : scores
+                      ? 'scores'
+                      : null,
       stackedSettings: about && settings,
-      stackedAbout: howto && about,
-      stackedUnder: feedback && (about || howto || settings || language || leaderboard || scores),
+      stackedAbout: (howto || changelog) && about,
+      stackedUnder: feedback && (about || howto || changelog || settings || language || leaderboard || scores),
       input,
       resumeLocked: this.time.now < this.flapLockedUntil,
     };
@@ -865,6 +868,11 @@ export class Play extends Phaser.Scene {
         if (result.pause) this.pausePlay();
         if (!this.scene.isActive('HowTo')) this.scene.launch('HowTo');
         this.scene.bringToTop('HowTo');
+        break;
+      case 'openChangelog':
+        if (result.pause) this.pausePlay();
+        if (!this.scene.isActive('Changelog')) this.scene.launch('Changelog');
+        this.scene.bringToTop('Changelog');
         break;
       case 'openLanguage':
         if (result.pause) this.pausePlay();
@@ -912,7 +920,7 @@ export class Play extends Phaser.Scene {
   padTop() {
     const overlay = this.chromeArgs('tap').overlay;
     if (overlay) {
-      const key = { settings: 'Settings', about: 'About', howto: 'HowTo', language: 'Language', feedback: 'Feedback', leaderboard: 'Leaderboard', scores: 'Scores' }[overlay];
+      const key = { settings: 'Settings', about: 'About', howto: 'HowTo', changelog: 'Changelog', language: 'Language', feedback: 'Feedback', leaderboard: 'Leaderboard', scores: 'Scores' }[overlay];
       return { top: 'overlay', scene: this.scene.get(key) };
     }
     if (this.scene.isActive('Over')) return { top: 'over', scene: this.scene.get('Over') };

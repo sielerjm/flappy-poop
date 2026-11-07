@@ -17,7 +17,7 @@ function intent(partial) {
 
 test('mute always toggles, including while an overlay is open', () => {
   for (const state of STATES) {
-    for (const overlay of [null, 'settings', 'about', 'howto', 'language', 'feedback', 'leaderboard', 'scores']) {
+    for (const overlay of [null, 'settings', 'about', 'howto', 'changelog', 'language', 'feedback', 'leaderboard', 'scores']) {
       assert.deepEqual(intent({ state, overlay, input: 'mute' }), { do: 'toggleMute' });
     }
   }
@@ -61,7 +61,7 @@ test('no overlay: close does nothing', () => {
 
 test('overlay open: pause, tap, esc, settings, lang, leaderboard, and scores are ignored', () => {
   for (const state of STATES) {
-    for (const overlay of ['settings', 'about', 'howto', 'language', 'feedback', 'leaderboard', 'scores']) {
+    for (const overlay of ['settings', 'about', 'howto', 'changelog', 'language', 'feedback', 'leaderboard', 'scores']) {
       for (const input of ['pause', 'tap', 'esc', 'settings', 'lang', 'leaderboard', 'scores']) {
         assert.deepEqual(intent({ state, overlay, input }), { do: 'ignore' }, `${state} ${overlay} ${input}`);
       }
@@ -73,7 +73,7 @@ test('overlay open: pause, tap, esc, settings, lang, leaderboard, and scores are
 
 test('feedback opens Feedback from any overlay without pausing again', () => {
   for (const state of STATES) {
-    for (const overlay of ['settings', 'about', 'howto', 'language', 'feedback', 'leaderboard', 'scores']) {
+    for (const overlay of ['settings', 'about', 'howto', 'changelog', 'language', 'feedback', 'leaderboard', 'scores']) {
       assert.deepEqual(intent({ state, overlay, input: 'feedback' }), { do: 'openFeedback', pause: false });
     }
   }
@@ -83,6 +83,18 @@ test('info while Settings is top opens About; info while About is top is ignored
   for (const state of STATES) {
     assert.deepEqual(intent({ state, overlay: 'settings', input: 'info' }), { do: 'openAbout', pause: false });
     assert.deepEqual(intent({ state, overlay: 'about', input: 'info' }), { do: 'ignore' });
+  }
+});
+
+test('changelog (What\'s new) opens from no overlay or over About; it is ignored elsewhere; close returns to About without the lockout', () => {
+  for (const state of STATES) {
+    assert.deepEqual(intent({ state, input: 'changelog' }), { do: 'openChangelog', pause: state === 'playing' });
+    assert.deepEqual(intent({ state, overlay: 'about', input: 'changelog' }), { do: 'openChangelog', pause: false });
+    for (const overlay of ['settings', 'howto', 'changelog', 'language', 'leaderboard', 'scores']) {
+      assert.deepEqual(intent({ state, overlay, input: 'changelog' }), { do: 'ignore' });
+    }
+    assert.deepEqual(intent({ state, overlay: 'changelog', stackedAbout: true, input: 'close' }), { do: 'closeTop', armResumeLockout: false });
+    assert.deepEqual(intent({ state, overlay: 'changelog', stackedAbout: false, input: 'close' }), { do: 'closeTop', armResumeLockout: true });
   }
 });
 

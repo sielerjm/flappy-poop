@@ -65,26 +65,35 @@ export class About extends Phaser.Scene {
     const metaSize = metaFontSize(locale);
     sv.add(this.add.text(cx, y, versionText(locale), { ...STYLE, fontSize: metaSize, color: '#6a5a74', fontStyle: 'normal' }).setOrigin(0.5, 0));
     y += 44;
-    const updated = sv.add(
-      this.add
-        .text(cx, y, `${t(locale, 'updatedPrefix')} ${LAST_UPDATED}`, {
-          ...STYLE,
-          fontSize: metaSize,
-          color: '#6a5a74',
-          fontStyle: 'normal',
-        })
-        .setOrigin(0.5, 0),
+    // "Updated <stamp>" is a link to What's new (the Changelog overlay).
+    const updated = sv.link(
+      sv.add(
+        this.add
+          .text(cx, y, `${t(locale, 'updatedPrefix')} ${LAST_UPDATED}`, {
+            ...STYLE,
+            fontSize: metaSize,
+            color: '#f8a0c8',
+            fontStyle: 'normal',
+          })
+          .setOrigin(0.5, 0),
+      ),
+      () => this.scene.get('Play')?.handleChrome('changelog'),
     );
     sv.finish(updated.y + updated.height);
 
     this.input.keyboard?.on('keydown-ESC', () => {
-      if (this.scene.isActive('HowTo') || this.scene.isActive('Feedback')) return;
+      if (this.scene.isActive('HowTo') || this.scene.isActive('Changelog') || this.scene.isActive('Feedback')) return;
       this.close();
     });
     // Controller: left / right walk ✕ and the links (scrolled into view), up / down scroll the text.
     this.scroll = sv;
     this.focus = createFocus(this, T, {
-      items: [pressable('close', close), pressable('howto', howToLink, { event: 'pointerup', scrolled: true }), pressable('feedback', feedbackLink, { event: 'pointerup', scrolled: true })],
+      items: [
+        pressable('close', close),
+        pressable('howto', howToLink, { event: 'pointerup', scrolled: true }),
+        pressable('feedback', feedbackLink, { event: 'pointerup', scrolled: true }),
+        pressable('changelog', updated, { event: 'pointerup', scrolled: true }),
+      ],
       scrolled: sv,
       onVertical: (dir) => sv.scrollBy(dir === 'up' ? T.focus.scrollStepPx : -T.focus.scrollStepPx),
     });
@@ -92,7 +101,7 @@ export class About extends Phaser.Scene {
   }
 
   close() {
-    if (this.scene.isActive('HowTo') || this.scene.isActive('Feedback')) return;
+    if (this.scene.isActive('HowTo') || this.scene.isActive('Changelog') || this.scene.isActive('Feedback')) return;
     const play = this.scene.get('Play');
     const result = chromeIntent({
       state: play?.state ?? 'ready',
