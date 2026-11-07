@@ -226,6 +226,29 @@ export const TUNING = {
     leadGrowth: 0.25, // 0–1 share of the field's extra width (beyond a phone's 720) added to the first pair's lead, so a wide field's first pipes settle a little past the middle: more buffer before the poop reaches them (a phone adds nothing)
     sweepMs: 1200, // ms the pre-filled pairs take to come in from the right edge and settle (quadratic ease-out: fast off the edge, braking to the level's scroll speed by about the field's middle, fading in); only a field wider than a phone has anything to sweep
   },
+  // Versus: split-screen two-player mode (src/versus.js, scenes/Versus.js). Two phone-width halves side
+  // by side on a landscape screen; P1 is the left half, P2 the right.
+  versus: {
+    minViewportH: 600, // css px; a shorter landscape window (a phone on its side) is not offered two halves
+    // Keyboard groups: each is one claimable device on the join screen. Codes are KeyboardEvent.code.
+    keys: {
+      left: { flap: ['Space', 'KeyW'], power: ['KeyE', 'ShiftLeft'] },
+      right: { flap: ['ArrowUp', 'Enter', 'NumpadEnter'], power: ['ShiftRight', 'Numpad0'] },
+    },
+    countdownMs: 900, // ms per countdown step (3, 2, 1, GO) once both players have claimed a slot
+    ghostRangePx: 720, // px of distance difference within which the other poop shows in your lumen as a ghost
+    ghostAlpha: 0.35, // 0–1 alpha of the ghost when the two are level; fades to 0 at ghostRangePx
+    ghostFadeMs: 600, // ms the ghost takes to fade out once the other player is out
+    barRivalPx: 28, // px size of the other player's marker on the level bar
+    barRivalAlpha: 0.55, // 0–1 alpha of that marker
+    dividerPx: 4, // px width of the line between the two halves
+    // Catch-up: what a trailing player's mystery box does, by pipes passed behind the other when it opens.
+    catchUp: {
+      superBehind: 25, // from this many pipes behind the box is a guaranteed bean3 (the bag topped up to three: a super fart ready)
+      beanBehindMin: 10, // from this many pipes behind (and below superBehind) the bean draws' odds are multiplied …
+      beanOddsMul: 2, // … by this (bean1 0.2 → 0.4, bean3 0.05 → 0.1; fiber's remainder shrinks)
+    },
+  },
   gamepad: {
     // Standard-mapping button indices (Xbox: A 0, B 1, X 2, Y 3, LB 4, RB 5, LT 6, RT 7, View 8, Menu 9, d-pad 12–15).
     // A pad that reports another layout (pad.mapping !== 'standard') is retuned here, not in code.

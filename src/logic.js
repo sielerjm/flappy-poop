@@ -481,11 +481,15 @@ export const MYSTERY_DRAWS = ['probiotic', 'bean1', 'postbiotic', 'bean3', 'skip
 /** Beans each bean draw adds (as many as fit under beans.maxBeans). */
 export const MYSTERY_BEANS = { bean1: 1, bean3: 3 };
 
-/** Draw a mystery box's reward: a MYSTERY_DRAWS value by its chance, else 'fiber' (the default). */
-export function rollMystery(rng, t) {
+/**
+ * Draw a mystery box's reward: a MYSTERY_DRAWS value by its chance, else 'fiber'
+ * (the default). `draws` is the chance table (mystery.draws; a versus catch-up
+ * passes its own, see versus.js catchUpDraws).
+ */
+export function rollMystery(rng, t, draws = t.mystery.draws) {
   let pick = rng();
   for (const draw of MYSTERY_DRAWS) {
-    pick -= Math.max(0, t.mystery.draws[draw] ?? 0);
+    pick -= Math.max(0, draws[draw] ?? 0);
     if (pick < 0) return draw;
   }
   return 'fiber';
@@ -673,6 +677,68 @@ export function rollPipeMove(rng, level, baseY, bounds, t, { centred = false } =
   if (!p || centred) return null;
   if (rng() >= p.chance) return null;
   return { baseY, amp: pipeMoveAmplitude(baseY, bounds, p.ampPx), periodMs: p.periodMs, phase: rng() * Math.PI * 2 };
+}
+
+// ---------------------------------------------------------------------------
+// Course: every random draw a run makes while it spawns, behind one object, so a
+// versus match can hand both players the same pipes and pickups (shared) while
+// single player keeps its one stream and call order (unchanged behaviour).
+
+/** 32-bit mix of a run seed, a pair number and a purpose salt: the seed of one shared-course draw. */
+export function mixSeed(seed, n, salt = 0) {
+  let h = (seed >>> 0) ^ Math.imul(n >>> 0, 0x9e3779b1) ^ Math.imul((salt + 1) >>> 0, 0x85ebca6b);
+  h = Math.imul(h ^ (h >>> 16), 0x7feb352d);
+  h = Math.imul(h ^ (h >>> 15), 0x846ca68b);
+  return (h ^ (h >>> 16)) >>> 0;
+}
+
+const COURSE_SALT = { mystery: 1, gap: 2, item: 3, bean: 4, move: 5, itemY: 6, spin: 7, band: 10, beanPhase: 11, gapPhase: 12 };
+
+/**
+ * The run's course: the pair the first mystery box rides after, and per pair
+ * (1-based, pipesSpawned) the gap centre, the item and bean rolls, the moving-pipe
+ * roll, bobbing phases, a gap item's y and a box's start frame. Single player
+ * (shared: false) draws all of it from one stream in the order Play calls, exactly
+ * as the run did before the course existed. Shared (a versus match) draws each
+ * value from its own stream seeded by (seed, pair, purpose), so both players get
+ * the same course whatever they do: the pair number stands in for the score in
+ * the item and bean gates, and beans spawn into a full bag (a held bean lets the
+ * next one float past, collectBean).
+ */
+export function createCourse(seed, t, { shared = false } = {}) {
+  const stream = createRng(seed);
+  const at = shared ? (n, salt) => createRng(mixSeed(seed, n, salt)) : () => stream;
+  return {
+    seed,
+    shared,
+    /** scriptedMysteryPair: single player calls it once, at start(), as before. */
+    mysteryPair() {
+      return scriptedMysteryPair(at(0, COURSE_SALT.mystery), t);
+    },
+    gapY(n, cfg) {
+      return pipeGapY(at(n, COURSE_SALT.gap), cfg);
+    },
+    item(n, { score = 0, hazards = true, mystery = false } = {}) {
+      return rollItem(at(n, COURSE_SALT.item), shared ? n : score, t, { hazards, mystery });
+    },
+    bean(n, { score = 0, spawnedThisRun = false, holding = false } = {}) {
+      return rollBean(at(n, COURSE_SALT.bean), shared ? n : score, t, { spawnedThisRun, holding: shared ? false : holding });
+    },
+    pipeMove(n, level, baseY, bounds, { centred = false } = {}) {
+      return rollPipeMove(at(n, COURSE_SALT.move), level, baseY, bounds, t, { centred });
+    },
+    /** 0–2π start phase of a bob; `slot` is 'band' (fiber / box), 'bean' or 'gap' (probiotic / bacteria). */
+    phase(n, slot) {
+      const salt = slot === 'bean' ? COURSE_SALT.beanPhase : slot === 'gap' ? COURSE_SALT.gapPhase : COURSE_SALT.band;
+      return at(n, salt)() * Math.PI * 2;
+    },
+    itemY(n, gapY, gapH, kind) {
+      return itemGapY(gapY, gapH, at(n, COURSE_SALT.itemY), kind);
+    },
+    spinFrame(n, frames) {
+      return Math.floor(at(n, COURSE_SALT.spin)() * frames);
+    },
+  };
 }
 
 /** Small rotation wiggle (degrees) at elapsedMs. */
@@ -1062,9 +1128,11 @@ export function scaledCircleBody(frameSize, displayScale, logicalRadius) {
  * Save / Load User and the profile button stacked up from just above the
  * ground strip and the tray band. Any tap that is not on a box starts the run.
  * Buttons are at least trayHitMin tall. `x0` shifts everything right (the
- * chrome column's left edge on a wide field).
+ * chrome column's left edge on a wide field). With `versus` the 👥 two-player
+ * toggle sits under the toilet toggle (only offered when two halves fit the
+ * window, versusAvailable).
  */
-export function readyLayout(width, height, t, x0 = 0) {
+export function readyLayout(width, height, t, x0 = 0, { versus = false } = {}) {
   const cx = x0 + width / 2;
   const boxH = Math.max(88, t.trayHitMin);
   const title = { id: 'title', x: cx, y: 380 };
@@ -1074,6 +1142,10 @@ export function readyLayout(width, height, t, x0 = 0) {
   const poop = { id: 'poop', x: cx, y: 672, bubble: { left: -48 * s, right: 116 * s, top: -127 * s, bottom: 46 * s } };
   // Toilet toggle: 120x56 track left of centre, 🚽 to its right; the hit box spans both.
   const toilet = { id: 'toilet', x: cx, y: 812, width: 240, height: 72, track: { x: cx - 50, y: 812, width: 120, height: 56 }, emojiX: cx + 80 };
+  // 👥 two-player toggle: the same switch directly under the toilet toggle, inside the 75 px
+  // between it (bottom 848) and Save / Load User (top 923); the bobbing bubble above and the
+  // pinned buttons below leave no other room, so neither neighbour moves.
+  const two = versus ? { id: 'versus', x: cx, y: 886, width: 240, height: 72, track: { x: cx - 50, y: 886, width: 120, height: 56 }, emojiX: cx + 80 } : undefined;
   // "?" button: a boxH circle in the top-right corner, inset so its pulsing halo
   // (readyPromptGlowPx past the rim) stays inside the field.
   const haloR = boxH / 2 + (t.readyPromptGlowPx ?? 0);
@@ -1083,7 +1155,7 @@ export function readyLayout(width, height, t, x0 = 0) {
   const gap = 12;
   const profile = { id: 'profile', x: cx, y: 1111 - boxH / 2, width: 360, height: boxH };
   const saveLoad = { id: 'saveload', x: cx, y: profile.y - boxH - gap, width: 360, height: boxH };
-  return { title, poop, toilet, howto, saveLoad, profile };
+  return { title, poop, toilet, howto, saveLoad, profile, ...(two ? { versus: two } : {}) };
 }
 
 function inBox(x, y, box) {
@@ -1157,7 +1229,7 @@ export function shareCardLayout(t) {
  */
 export function readyHit(x, y, layout) {
   if (!layout) return null;
-  for (const box of [layout.toilet, layout.howto, layout.saveLoad, layout.profile]) {
+  for (const box of [layout.toilet, layout.versus, layout.howto, layout.saveLoad, layout.profile]) {
     if (box && inBox(x, y, box)) return box.id;
   }
   return null;
@@ -1379,6 +1451,13 @@ export function padIntent({ action, state, top = 'play', ringShown = false, save
     const dir = action.slice(4);
     if (top === 'play' && state === 'playing') return { do: 'pauseAndFocus', dir };
     return { do: 'move', dir };
+  }
+  if (top === 'versus') {
+    // The join or result screen of a two-player match: A claims a slot / presses Rematch
+    // (or the ringed button), B backs out (or hides the ring); the run buttons do nothing.
+    if (action === 'select') return { do: ringShown ? 'activate' : 'versusSelect' };
+    if (action === 'back') return { do: ringShown ? 'hideRing' : 'versusBack' };
+    return { do: 'ignore' };
   }
   if (action === 'select') {
     if (ringShown) return { do: 'activate' };

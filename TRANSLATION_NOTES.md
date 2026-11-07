@@ -41,6 +41,7 @@ formal medical language.
 - **Toilet mode** (如厕模式) = the ready-screen switch; scores from such runs carry a 🚽 (not translated).
 - **User code** / save code (用户码 / 存档码) = the `fp1.…` string players copy between devices. The home-screen button is **Save / Load User**; the panel labels are **Username**, **Save user code**, **Load user code**, and a **Save** button at the bottom that stores the username. `{name}` and `{scores}` are placeholders filled at runtime; keep them verbatim.
 - **Leaderboard** (排行榜) = the shared online Top 10 behind the 🏆 tray button. Only players with a username are on it; `{score}` may carry a 🚽, `{rank}` / `{total}` are numbers. Keep the placeholders verbatim.
+- **Two players** (双人模式) = the 👥 switch under the toilet toggle, offered only on a landscape screen wide enough for two halves (desktop, tablet). P1 is the left half, P2 the right; `{n}` is the player number. Two-player runs never reach the leaderboard or the save code.
 
 ## Glossary (items)
 
@@ -171,6 +172,18 @@ Short, playful, clear. Fit a 720×1280 logical field; How to play / About body w
 | leaderboardLevel | LV | 关卡 |
 | saveLeaderboardNote | Your username and best score are shown on the public leaderboard | 你的用户名和最高分会显示在公开排行榜上 |
 | profilePrompt | Enter username | 输入用户名 |
+| versusTitle | 2 PLAYERS | 双人模式 |
+| versusPlayer | P{n} | 玩家{n} |
+| versusJoinPrompt | press your flap button | 按下你的起飞键 |
+| versusJoinReady | ready! | 准备好了！ |
+| versusJoinHint | Keyboard: W / Space or ↑ / Enter · a controller · tap your half | 键盘：W / 空格 或 ↑ / 回车 · 手柄 · 点击你这一侧 |
+| versusGo | GO! | 出发！ |
+| versusWins | P{n} WINS! | 玩家{n} 获胜！ |
+| versusDraw | DRAW | 平局 |
+| versusRematch | Rematch | 再来一局 |
+| versusNotSaved | Two-player runs are not saved | 双人模式的分数不会保存 |
+| versusOut | OUT | 出局 |
+| versusEscaped | Made it out! | 顺利排出！ |
 
 ### aboutCredits (English)
 
