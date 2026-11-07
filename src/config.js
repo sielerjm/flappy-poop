@@ -290,7 +290,8 @@ export const LEADERBOARD = {
   dataApi: 'https://soaakwxspmpcprgyywul.supabase.co/rest/v1', // Data API base URL
   publishableKey: 'sb_publishable_yPcLgM5m3UwiywHuSH2nVA_46Eq1Cle', // sent as the apikey header
   timeoutMs: 4000, // ms before a request is abandoned (the game never waits on it)
-  limit: 10, // rows on the board
+  limit: 25, // rows fetched and shown on the board (Top 25)
+  visibleRows: 10, // rows inside the board's window at once; the rest scroll (finger, wheel, d-pad)
   storageKey: 'flappyPoop.leaderboard', // localStorage key for the last confirmed submit
   maxScore: 1000, // scores above this are not submitted (matches the CHECK and submit_score() in db/schema.sql); a full 285-pair run with ×2 fits
 };
