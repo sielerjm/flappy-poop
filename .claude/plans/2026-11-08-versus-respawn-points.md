@@ -1,6 +1,6 @@
 # Plan: Versus — respawn after a crash, points decide the match
 - Created: 2026-11-08
-- Status: in progress
+- Status: complete
 - Baseline commit: `57b9ec6` on `main` (tree clean apart from four untracked sfx files that are Michael's: `assets/sfx/Coin_Pickup.mp3`, `Coin_Spend.mp3`, `ShopOpenClose.mp3`, `ToiletFlush_Win.mp3`; never staged here)
 - Whole-suite verification: `npm test` (baseline 347 pass / 1 fail: `every file under assets/sfx/ is named in CREDITS.md`, caused by those untracked files, not touched by this plan) + `npm run smoke` after every scene step (needs `npm start`; the server on port 8000 is already up)
 - Golden output: n/a
@@ -112,17 +112,21 @@ Decisions made here, flagged so they can be overruled:
 - Verify: `npm test`; `npm run smoke` green.
 - Commit: `feat(versus, step 3/4): 25 points a level, the match ends when both are out, fewer crashes breaks a tie`
 - Rollback: `git checkout -- .`
-- Result: npm test 350 / 351 (baseline failure only); npm run smoke all checks passed, including the review's cases (Settings and a d-pad press from the finished P1 pause P2, a tap on P1's half resumes it, Settings from P1's own level break pauses P2). `haltRun` and `cancelRespawn` removed. Smoke lesson: the waiting player's rival keeps scoring pipes, so the finish helper pins the score as the line spawns. Commit `<step3>`.
+- Result: npm test 350 / 351 (baseline failure only); npm run smoke all checks passed, including the review's cases (Settings and a d-pad press from the finished P1 pause P2, a tap on P1's half resumes it, Settings from P1's own level break pauses P2). `haltRun` and `cancelRespawn` removed. Smoke lesson: the waiting player's rival keeps scoring pipes, so the finish helper pins the score as the line spawns. Commit `1c48b4e`.
 
-### Step 4/4 — Docs, What's new, 0.7.0  [pending]
+### Step 4/4 — Docs, What's new, 0.7.0  [done]
 - Change: `AGENTS.md`, `README.md`, `TRANSLATION_NOTES.md`, `src/changelog.js`, `VERSION` + `package.json` 0.7.0; plan status complete.
 - Verify: `grep -n "haltRun\|versusOut\|first death\|survivor" AGENTS.md README.md src/ tests/ tools/` finds nothing stale (the 0.6.0 changelog notes are history and stay); `npm test` green.
 - Commit: `docs(versus, step 4/4): respawn and points rules; 0.7.0`
 - Rollback: `git checkout -- .`
+- Result: the grep for `haltRun` / `versusOut` / first death / survivor finds nothing outside the 0.6.0 changelog history; npm test 350 / 351 (baseline failure only). Commit `<step4>`.
 
 ## Verification
 - `npm test` after every step; `npm run smoke` after steps 2 and 3 (existing single-player sections untouched: they are the regression that single player did not move).
 - Hand check (Michael): the feel of the tumble → glide → blink on a laptop with two keyboard groups; a crash just before a finish line; a shared pause mid-blink; one player finishing far ahead and waiting; the result panel's 💀 row; phone portrait unchanged. Then `npm run push` when he decides.
 
 ## Completion summary
-(filled at the end)
+- Commits on `main` since the baseline `57b9ec6` (`git log --oneline 57b9ec6..HEAD`): step 1 `9ce9a25` (pure logic, knobs, strings), step 2 `4a9d56b` (the respawn in a Play half), step 3 `1c48b4e` (level bonus, both finish, the result), step 4 (docs, 0.7.0). Nothing pushed.
+- Verified at every step: `npm test` 350 / 351 (the one failure is the baseline's uncredited sfx files, untouched here); `npm run smoke` all checks passed after steps 2 and 3 (sections B and C drive the whole respawn, a shared pause mid-blink, Settings mid-respawn, the score floor, the level bonus, the waiting half's tray / tap / d-pad, the end when both are out, the 💀 row, the fewer-crashes tiebreak and the draw).
+- Unverified: feel on real devices (the 2.9 s respawn, the blink, the waiting banner), the Chinese strings (drafts), and the `npm run push`.
+- Roll back: `git checkout <hash>` to inspect, `git revert <hash>` per step, or `git reset --hard 57b9ec6` to drop all four (discards work). The checkpoint commits are left as they are; squashing is Michael's call.

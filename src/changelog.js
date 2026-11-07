@@ -8,6 +8,22 @@ import { LOCALES } from './i18n.js';
 
 export const CHANGELOG = [
   {
+    version: '0.7.0',
+    date: '8 Nov 2026',
+    notes: {
+      en: [
+        'Two players, Mario Kart style: a crash no longer ends the race. Your half pauses for the tumble, the poop is carried back to mid-screen, blinks a few times, and you play on with a clear screen.',
+        'Points decide the race: a crash costs 2 × your level (never below 0) and clearing a level earns 25. The match ends once both players are out of the rectum; equal points go to the player with fewer crashes.',
+        'The result panel shows each player\'s crashes, and the first one out waits under "Made it out!" while the other finishes.',
+      ],
+      'zh-Hans': [
+        '双人模式更像马里奥赛车：撞车不再结束比赛。你的半边会停顿一下，便便被送回屏幕中央、闪烁几下，然后在清空的画面上继续。',
+        '比赛由分数决定：撞车扣 2 × 当前关卡的分数（最低为 0），过一关得 25 分。两人都通过直肠后比赛结束；分数相同时撞车少的一方获胜。',
+        '结算面板会显示每位玩家的撞车次数；先出来的一方会在"顺利排出！"下等待对方完成。',
+      ],
+    },
+  },
+  {
     version: '0.6.1',
     date: '7 Nov 2026',
     notes: {

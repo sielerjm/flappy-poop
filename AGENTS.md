@@ -99,14 +99,22 @@ slot), then counts 3-2-1-GO and launches both halves together. Both halves run o
 in for the score gates, beans spawning into a full bag), while each player's mystery **draws** come
 from their own stream (`rngDraw`) on the **catch-up** table (`catchUpTier` / `catchUpDraws`: 10–24
 pipes behind doubles the bean draws, 25+ forces bean3 = a super fart ready). Each half publishes its
-slot every frame (`publishSlot`: score, pipes, level, distance scrolled, y, angle, frame, alive) and
+slot every frame (`publishSlot`: score, pipes, level, distance scrolled, y, angle, frame, alpha) and
 shows the other as a faded **ghost** in its lumen at the distance gap (`ghostPlacement`) and as a
-**marker** on its level bar (`rivalMarker`). Level breaks stay per half; the pause key / ⏸ / Menu
-toggle the **shared pause** (`Versus.setPaused`, remembering which halves it paused so a break is
-never ended by the other player). The match ends on the first death or escape: the other half is
-halted alive (`haltRun`), the result panel names the higher score (`matchResult`: score, pipes, then
-the survivor) and offers Rematch (same devices, new seed) | Home (the canvas re-fits the window). A
-match records nothing: no best, no save-code score, no leaderboard.
+**marker** on its level bar (`rivalMarker`). A crash never ends a match run: it is a **respawn**
+(`startRespawn` / `tickRespawn` / `endRespawn` on `respawnPose`, state `'respawn'`): the half's world
+halts, the score loses `versus.scoring.deathPenaltyPerLevel` × level (floored at 0, the −N popup), the
+slot counts the crash, the poop tumbles, everything not yet credited is cleared, it glides back to
+mid-screen, blinks, and plays on with the next pair at mid-height. Clearing a level earns
+`versus.scoring.levelClearBonus`. Level breaks stay per half; the pause key / ⏸ / Menu toggle the
+**shared pause** (`Versus.setPaused`, remembering which halves it paused so a break is never ended by
+the other player; a respawning half's clock stops with it). Chrome decisions in a match read
+`chromeState()` (the match's state, not the half's), so a finished or respawning half still pauses and
+resumes the match. The match ends once **both** have cleared the rectum (the first one out waits under
+"Made it out!" / "Waiting for P2…", `showEscapedBanner`); the result panel names the higher score
+(`matchResult`: score, then fewer crashes, else a draw) with each player's 💀 count and offers Rematch
+(same devices, new seed) | Home (the canvas re-fits the window). A match records nothing: no best, no
+save-code score, no leaderboard.
 
 It is deliberately small: plain ES modules, no bundler, no npm
 dependencies, Phaser 4 loaded from a CDN, deployed to GitHub Pages straight from
@@ -168,7 +176,9 @@ src/
                             two keyboard groups), countdownMs, ghostRangePx /
                             ghostAlpha / ghostFadeMs, barRivalPx / barRivalAlpha,
                             dividerPx, catchUp (superBehind, beanBehindMin,
-                            beanOddsMul).
+                            beanOddsMul), scoring (deathPenaltyPerLevel,
+                            levelClearBonus), respawn (crashMs, glideMs, blinkMs,
+                            blinkCycles, blinkAlpha).
                             Pure data, Node-safe.
   logic.js                  Pure functions, NO Phaser/DOM: field (fieldWidth,
                             uiColumn, poopX, pipeLeadPx, pipeLead, prefillPairs,
@@ -233,8 +243,11 @@ src/
                             (landscape + minViewportH), versusLayout (two half-window
                             fields, capped at maxWidth / 2), createMatch / resetMatch
                             / slotTemplate, keyGroup / sameDevice / claimDevice /
-                            allClaimed / deviceLabel (the join screen), ghostPlacement,
-                            rivalMarker, catchUpTier / catchUpDraws, matchResult,
+                            allClaimed / deviceLabel (the join screen), ghostPlacement
+                            (scaled by the other's alpha, 0 once ended), rivalMarker,
+                            catchUpTier / catchUpDraws, matchResult (score, fewer
+                            deaths, draw), respawnTotalMs / respawnPose (the crash →
+                            glide → blink → done timeline, pure in elapsed ms),
                             VERSUS_EMOJI. Fully unit-tested (tests/versus.test.js).
   leaderboard.js            Shared leaderboard, NO Phaser/DOM: submitPlan / submitPlans
                             (pure: what to post; up to two rows per player, best
@@ -361,7 +374,8 @@ src/
     Boot.js                 preload() gameplay PNGs (mystery.png as a 384 px
                             spritesheet) + the sfx MP3s; create() makes the global
                             'mystery-spin' anim (mystery.frameMs), then starts Play.
-    Play.js                 State machine: 'ready' -> 'playing' -> 'paused'/'dead'.
+    Play.js                 State machine: 'ready' -> 'playing' -> 'paused'/'dead'
+                            (+ 'respawn' in a match: between a crash and its restart).
                             The constructor takes the scene key ('Play'; 'PlayB' is
                             the second instance for a match's right half); init(data)
                             reads { player, match, fieldW, fieldX } (nothing in
@@ -524,9 +538,9 @@ src/
                             kind). Spawn slots: at levelEnd(level)
                             pairs the slot is the finish line (spawnFinishLine),
                             then nothing until the break ends unless a fart runs;
-                            onFinishCrossed → win() on the final level (endRun()
-                            shared with die(): state 'dead', score recorded;
-                            showOver(won)), else startLevelBreak (pausePlay with
+                            onFinishCrossed → win() on the final level (endRun():
+                            state 'dead', score recorded; showOver(won)), else
+                            startLevelBreak (pausePlay with
                             levelBreak, setPauseBanner shows levelTitle/levelHint,
                             breakGlide + breakBob, fadeBackground), cutting a
                             running fart first (cancelPower + endPower);
@@ -574,11 +588,29 @@ src/
                             in collectItem; this.distance (px scrolled this run);
                             publishSlot() every frame; refreshGhost (this.ghost at
                             depth 9.5 from ghostPlacement; a live ghost follows its
-                            alpha, an out one fades over ghostFadeMs) and refreshRival
+                            alpha, an ended one fades over ghostFadeMs) and refreshRival
                             (levelBar.setRival on a level / pair change); a match
-                            records nothing: endRun reports to Versus.onRunEnded
-                            (haltRun = endRun without the death effects or the
-                            report, for the other half); showOver is a no-op. Input:
+                            records nothing: endRun reports to Versus.onRunEnded;
+                            showOver is a no-op. die() in a match → startRespawn
+                            (state 'respawn', the world halted, scoreAfterDeath +
+                            the 'death' popup, slot.deaths, setCharged off), then
+                            tickRespawn every frame on respawnPose (the tumble under
+                            physics with deathTween; the first glide frame clears
+                            the field ahead with hasPassed, drops pipesSpawned back
+                            to pipesPassed and a finish line ahead; the glide and
+                            blinks drive y / angle / alpha) and endRespawn (grace,
+                            centreNextGap + prefillPipes like endPower, re-charged).
+                            pausePlay accepts 'respawn' (respawnPaused) and
+                            resumePlay returns to it without the bounce; autoPause
+                            too. onFinishCrossed adds levelClearBonus (the popup
+                            after the break starts); win() → showEscapedBanner
+                            (levelTitle / levelHint, no shade; applyLocale keeps it).
+                            chromeState() / overlayPause(): chromeArgs and
+                            onPadAction read the match's state ('paused' in this
+                            half's own break or under the shared pause, 'playing'
+                            while any half is live) so a finished or respawning half
+                            still drives the match; flap() lets a finished half
+                            through to its tray and the resume tap. Input:
                             localPointer() shifts a pointer into the half and drops
                             the other half's; keyboard events are read by P1 alone
                             (onVersusKey → keyGroup) and routed with pads by
@@ -607,13 +639,15 @@ src/
                             claim), startCountdown ticks 3-2-1-GO on timers (never
                             synchronously: a rematch starts it inside create()),
                             go() launches both halves. setPaused(on) pauses every
-                            playing half and remembers them (pausedHalves), resumes
-                            only those; togglePause for the pause key. onRunEnded
-                            (once) halts the other half and shows the result panel
-                            after deathToOverMs: matchResult headline, both scores /
-                            level / pipes, OUT or Made it out!, the not-saved line,
-                            Rematch | Home on overButtonsLayout's row with a focus
-                            ring. rematch() restarts the scene with resetMatch (devices
+                            playing or respawning half and remembers them
+                            (pausedHalves), resumes only those; togglePause for the
+                            pause key; anyLive() for chromeState. onRunEnded waits
+                            for both slots to end (the first finisher waits under its
+                            own banner), then shows the result panel after
+                            deathToOverMs: matchResult headline, both scores / level
+                            / pipes / 💀 crashes, the not-saved line, Rematch | Home
+                            on overButtonsLayout's row with a focus ring. rematch()
+                            restarts the scene with resetMatch (devices
                             kept, new seed); leave() stops both halves, re-fits the
                             canvas to the window and starts Play with explicit data
                             (a start without data keeps the last launch data).
@@ -757,7 +791,9 @@ tests/                      node --test, zero deps. Each file is self-describing
   pipeMove.test.js          pipeMoveParams rows, pipeMoveAmplitude clamp, pipeMoveShiftPx,
                             rollPipeMove (no draw below fromLevel, centred pair, seeded share ≈ chance),
                             every row's shift under half the clearance
-  items.test.js             rollItem, itemGapY, scoreAfterItem, probiotic inventory
+  items.test.js             rollItem, itemGapY, scoreAfterItem, deathPenalty /
+                            scoreAfterDeath (floor) + the death and levelClear
+                            popups, probiotic inventory
                             (paused during the fart), postbiotic multiplier (fiber
                             with a probiotic up, countdown, extend, hit, fart),
                             pipe / item popups, popupSlots stack, postbiotic
@@ -804,7 +840,8 @@ tests/                      node --test, zero deps. Each file is self-describing
                             (incl. the hand row)
   hitbox.test.js            scaledCircleBody source radius/offset for 2x and 4x
   chrome.test.js            chromeIntent matrix across state x overlay x input
-                            (incl. the Changelog over About)
+                            (incl. the Changelog over About, 'respawn' pausing like
+                            'playing' and ignoring taps)
   gamepad.test.js           padAction (every knob, unmapped → null, a retuned layout),
                             stickNav deadzone / larger axis, focusStep wrapping,
                             focusRingLayout, padIntent matrix across top x state x
@@ -814,11 +851,15 @@ tests/                      node --test, zero deps. Each file is self-describing
                             field's width, the maxWidth / 2 cap), createMatch /
                             resetMatch, keyGroup, claimDevice (touch takes its half,
                             keys / pads the first free slot, refusals), deviceLabel,
-                            ghostPlacement (gap, edge, range, dead), rivalMarker,
-                            matchResult (score, pipes, survivor, draw), catchUpTier at
-                            9 / 10 / 24 / 25, catchUpDraws + rollMystery on the
-                            doubled and super tables, the 👥 ready box, padIntent on
-                            the versus top
+                            ghostPlacement (gap, edge, range, the other's blink,
+                            ended), rivalMarker, matchResult (score, fewer deaths,
+                            draw; pipes never decide), respawnPose (phase boundaries,
+                            the glide from the fall to mid-screen and the nearest
+                            whole turn, the blink's triangle wave, done, purity),
+                            the scoring / respawn knobs, catchUpTier at 9 / 10 / 24
+                            / 25, catchUpDraws + rollMystery on the doubled and
+                            super tables, the 👥 ready box, padIntent on the versus
+                            top
   course.test.js            mixSeed; a single-player course equals a hand-rolled
                             single stream in Play's order (course.rng swappable); a
                             shared course is the same for two players whatever their
@@ -930,11 +971,20 @@ tools/
                             countdown, five identical pairs on both halves, inputs
                             routed by device, Home, Esc / B, the flag ignored in
                             portrait; B: the shared pause, a level break on one half
-                            under Menu and the tap, the match ending on a death with
-                            no Over and nothing recorded, the result panel, the
-                            catch-up draws at 15 / 30 / 0 behind, a rematch, Home; C:
-                            the ghost at the distance gap with the live face, level,
-                            past the range, the rival marker, the fade-out). The
+                            under Menu and the tap (+25 and its popup; Settings from
+                            the break pauses the other half), the catch-up draws at
+                            15 / 30 / 0 behind, a crash as a respawn (the −N popup,
+                            the halted world, the cleared field and finish line, the
+                            glide, a shared pause mid-blink, Settings mid-respawn,
+                            the restart with grace and a centred pair, the 0 floor),
+                            the first finisher waiting under its banner while its
+                            tray / tap / d-pad still pause and resume the other, the
+                            end when both are out with no Over and nothing recorded,
+                            the panel's 💀 row, rematches for the fewer-crashes
+                            tiebreak and the draw, Home; C: the ghost at the distance
+                            gap with the live face, level, past the range, the rival
+                            marker, the crash face and blink on the ghost, the
+                            fade-out once the other's run ends). The
                             viewport is pinned to 720x1280 before load
                             (Emulation.setDeviceMetricsOverride) so the rest is
                             the phone field; tapAt maps through the live
