@@ -119,14 +119,14 @@ Decisions made here, flagged so they can be overruled:
 - Verify: `grep -n "haltRun\|versusOut\|first death\|survivor" AGENTS.md README.md src/ tests/ tools/` finds nothing stale (the 0.6.0 changelog notes are history and stay); `npm test` green.
 - Commit: `docs(versus, step 4/4): respawn and points rules; 0.7.0`
 - Rollback: `git checkout -- .`
-- Result: the grep for `haltRun` / `versusOut` / first death / survivor finds nothing outside the 0.6.0 changelog history; npm test 350 / 351 (baseline failure only). Commit `<step4>`.
+- Result: the grep for `haltRun` / `versusOut` / first death / survivor finds nothing outside the 0.6.0 changelog history; npm test 350 / 351 (baseline failure only). Commit `5a9bfb3`.
 
 ## Verification
 - `npm test` after every step; `npm run smoke` after steps 2 and 3 (existing single-player sections untouched: they are the regression that single player did not move).
 - Hand check (Michael): the feel of the tumble → glide → blink on a laptop with two keyboard groups; a crash just before a finish line; a shared pause mid-blink; one player finishing far ahead and waiting; the result panel's 💀 row; phone portrait unchanged. Then `npm run push` when he decides.
 
 ## Completion summary
-- Commits on `main` since the baseline `57b9ec6` (`git log --oneline 57b9ec6..HEAD`): step 1 `9ce9a25` (pure logic, knobs, strings), step 2 `4a9d56b` (the respawn in a Play half), step 3 `1c48b4e` (level bonus, both finish, the result), step 4 (docs, 0.7.0). Nothing pushed.
+- Commits on `main` since the baseline `57b9ec6` (`git log --oneline 57b9ec6..HEAD`): step 1 `9ce9a25` (pure logic, knobs, strings), step 2 `4a9d56b` (the respawn in a Play half), step 3 `1c48b4e` (level bonus, both finish, the result), step 4 `5a9bfb3` (docs, 0.7.0). Nothing pushed.
 - Verified at every step: `npm test` 350 / 351 (the one failure is the baseline's uncredited sfx files, untouched here); `npm run smoke` all checks passed after steps 2 and 3 (sections B and C drive the whole respawn, a shared pause mid-blink, Settings mid-respawn, the score floor, the level bonus, the waiting half's tray / tap / d-pad, the end when both are out, the 💀 row, the fewer-crashes tiebreak and the draw).
 - Unverified: feel on real devices (the 2.9 s respawn, the blink, the waiting banner), the Chinese strings (drafts), and the `npm run push`.
 - Roll back: `git checkout <hash>` to inspect, `git revert <hash>` per step, or `git reset --hard 57b9ec6` to drop all four (discards work). The checkpoint commits are left as they are; squashing is Michael's call.
