@@ -8,6 +8,20 @@ import { LOCALES } from './i18n.js';
 
 export const CHANGELOG = [
   {
+    version: '0.5.17',
+    date: '7 Nov 2026',
+    notes: {
+      en: [
+        'The scroll speed stops rising after level 3; levels 3 to 7 share one pace.',
+        'From level 4 some pipe pairs drift slowly up and down, more of them and farther on later levels. The pair after a fart holds still.',
+      ],
+      'zh-Hans': [
+        '滚动速度在第 3 关后不再增加；第 3 到 7 关保持同一节奏。',
+        '从第 4 关起，有些管道会缓缓上下漂移，关卡越高漂移的管道越多、幅度越大。放屁后的第一道管道保持不动。',
+      ],
+    },
+  },
+  {
     version: '0.5.16',
     date: '7 Nov 2026',
     notes: {

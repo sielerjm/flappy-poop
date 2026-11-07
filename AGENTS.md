@@ -36,8 +36,15 @@ line wins the run (`win()`, Over headline "YOU MADE IT OUT!", score saved at lev
 Pipe spacing is `pipeSpacing(level)`: `pipeSpacingPx` (412) from
 `levels.spacingRefLevel` (3) on, scaled by the speed ratio on the slower levels
 before it (487 px on level 1, 446 on level 2); speed is
-`levelSpeed()` (275 + 25 per level, cap 450), applied when the break ends; the gap
-is `levelGap()` (`gapHeight` × `levels.gapScale[level − 1]`: 1.1, 1.05, then 1). One spacing after a level's last pair a checkered finish
+`levelSpeed()` (275 + 25 per level, capped at `levels.maxSpeed` 325 = level 3's speed, so
+levels 3+ share one cruise and later difficulty is content), applied when the break ends; the gap
+is `levelGap()` (`gapHeight` × `levels.gapScale[level − 1]`: 1.1, 1.05, then 1). **Moving pipes:** from
+`pipeMove.fromLevel` (4) a share of the pairs (`pipeMove.chance` per level, with `ampPx` /
+`periodMs` rows) bob their gap centre on a sine: `rollPipeMove` at spawn (after the item and bean
+draws; never for the centred pair after a fart; amplitude clamped into `gapBounds`), `gapBobY` in
+`update()` moving both columns, a probiotic / bacteria in that pair riding the gap centre (`bob: 'pair'`).
+`pipeMoveShiftPx` is the gap's shift during one column crossing; `tests/tuning.test.js` keeps every
+row under half the poop's clearance so the motion alone can never clip a centred poop. One spacing after a level's last pair a checkered finish
 line (generated texture, plain Image) scrolls in and no pair follows it outside a
 fart; crossing it (any level but the last) bumps `level`, plays `NewLevel.mp3` (`sfx.levelUp` blip if the
 sample is missing), and pauses the run as the
@@ -122,7 +129,8 @@ src/
                             LEVELS (gut segment name keys, in order), LEVEL_COLORS
                             (Set2 backgrounds, cycling) and BACKGROUND (overlay
                             layers: key + parallax), TEST_MODE (trigger words,
-                            default Invincible). TUNING.gamepad = the pad's
+                            default Invincible). TUNING.pipeMove = moving pairs
+                            (fromLevel, per-level chance / ampPx / periodMs rows). TUNING.gamepad = the pad's
                             standard-mapping button indices (A / B / Y / RT /
                             Menu / d-pad), RT threshold, stick deadzone + repeat;
                             TUNING.focus = the focus ring's geometry, fill alpha,
@@ -143,7 +151,8 @@ src/
                             key: plain / stink frame, or the falling faces at
                             fallLookVy px/s down), fart envelope (pipeSpacing,
                             fartPeakMul, fartMul, fartRemainingDistance), fartFloat
-                            (wave + tilt), hsvToRgb / rainbowHue, glowAlphaAt /
+                            (wave + tilt), moving pipes (pipeMoveParams,
+                            pipeMoveAmplitude, pipeMoveShiftPx, rollPipeMove), hsvToRgb / rainbowHue, glowAlphaAt /
                             glowStops, sprite angle, VERSION (bump it when art
                             under an existing file name changes: Boot's ?v=; every
                             bump needs a CHANGELOG entry), versionText(locale,
@@ -363,6 +372,9 @@ src/
                             popup / badge tweens pause with the run. Beans: group
                             spawned in spawnPipePair (rollBean with beanSpawned for
                             the one-per-run guarantee, halfway to the next pair), bobbed in update() from per-bean elapsed ms;
+                            moving pairs: the top pipe carries { move, elapsed, mate, gapH }
+                            from rollPipeMove and update() places both columns (gapBobY),
+                            frozen while paused;
                             collectBean → effects.addBean (up to maxBeans; holdingBean
                             = bag full or farting); setCharged() alternates
                             stink frames through refreshPoopLook() + pulses this.glow
@@ -593,7 +605,7 @@ tests/                      node --test, zero deps. Each file is self-describing
                             sizes; a spritesheet is a whole number of frames; sfx credits
   logic.test.js             gap bounds, rng determinism, hasPassed, angle
   levels.test.js            level lengths / ends / levelFor table, final level,
-                            per-level pipe spacing, levelSpeed cap,
+                            per-level pipe spacing, levelSpeed cap (the level-3 cruise),
                             names + colours, levelProgress, lerpColor, gap + grace
                             sanity, levelBannerText, levelBarLayout, levelLabel
   state.test.js             retry lockout
@@ -602,6 +614,9 @@ tests/                      node --test, zero deps. Each file is self-describing
   sound.test.js             sfx keys, mute, Node import
   tray.test.js              trayHeight / trayLayout geometry including info + lang +
                             feedback; trayHit centre hits vs miss in the tray gap
+  pipeMove.test.js          pipeMoveParams rows, pipeMoveAmplitude clamp, pipeMoveShiftPx,
+                            rollPipeMove (no draw below fromLevel, centred pair, seeded share ≈ chance),
+                            every row's shift under half the clearance
   items.test.js             rollItem, itemGapY, scoreAfterItem, probiotic inventory
                             (paused during the fart), postbiotic multiplier (fiber
                             with a probiotic up, countdown, extend, hit, fart),

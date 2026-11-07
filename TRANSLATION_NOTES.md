@@ -106,7 +106,7 @@ Short, playful, clear. Fit a 720×1280 logical field; How to play / About body w
 | howToTitle | HOW TO PLAY | 玩法说明 |
 | howToBody | Tap to flap. Hit a pipe, the ceiling, or the floor and the run ends. On iPhone, Silent mode mutes the game — turn it off to hear sound. | 点击起飞。撞到管道、天花板或地面则本局结束。在 iPhone 上，静音模式会让游戏无声——关闭静音即可听到声音。 |
 | itemPipeName | Pipe | 管道 |
-| itemPipeDetail | This is a pipe. Dodge the pipes for as long as possible. You gain 1 point for every pipe you dodge. | 这是管道。尽量长时间躲开管道。每躲过一道管道得 1 分。 |
+| itemPipeDetail | This is a pipe. Dodge the pipes for as long as possible. You gain 1 point for every pipe you dodge. From level 4 some pairs drift slowly up and down. | 这是管道。尽量长时间躲开管道。每躲过一道管道得 1 分。从第 4 关起，有些管道会缓缓上下漂移。 |
 | itemFiberName | Fiber | 纤维 |
 | itemFiberDetail | +3 points. Waits between the pipes; from level 2 it bobs up and down. | +3 分。停在管道之间；从第 2 关起会上下漂浮。 |
 | itemProbioticName | Probiotic | 益生菌 |
@@ -122,7 +122,7 @@ Short, playful, clear. Fit a 720×1280 logical field; How to play / About body w
 | itemToiletName | On the toilet | 如厕模式 |
 | itemToiletDetail | Playing on the toilet? Flip the switch under the poop on the home screen. Those scores get a 🚽 next to them. | 在马桶上玩？打开主界面便便下方的开关，这些分数旁会显示 🚽。 |
 | itemLevelsName | Levels | 关卡 |
-| itemLevelsDetail | The gut comes in levels: stomach, duodenum, jejunum and on, down to the rectum. Pass a checkered finish line to clear one; the game pauses for a breather, then each level scrolls a little faster. Clear the rectum and you win. The bar at the top shows how far you are. | 肠道分成关卡：胃、十二指肠、空肠……一直到直肠。越过黑白格终点线即可过关；游戏会稍作停顿，之后每一关都会滚得更快一些。通过直肠就赢了。顶部的进度条显示你走到了哪里。 |
+| itemLevelsDetail | The gut comes in levels: stomach, duodenum, jejunum and on, down to the rectum. Pass a checkered finish line to clear one; the game pauses for a breather before the next. Levels 2 and 3 scroll faster, then the speed holds; from level 4 some pipes drift up and down. Clear the rectum and you win. The bar at the top shows how far you are. | 肠道分成关卡：胃、十二指肠、空肠……一直到直肠。越过黑白格终点线即可过关；游戏会稍作停顿再进入下一关。第 2、3 关会滚得更快，之后速度保持不变；从第 4 关起有些管道会上下漂移。通过直肠就赢了。顶部的进度条显示你走到了哪里。 |
 | updatedPrefix | Updated | 更新于 |
 | versionLine | v{version} beta | v{version} 测试版 |
 | changelogTitle | WHAT'S NEW | 更新说明 |
