@@ -4,6 +4,7 @@ import {
   createCourse,
   centredGapY,
   hasPassed,
+  scoreAfterDeath,
   angleForVelocity,
   resumeFlapVelocity,
   HANDS,
@@ -85,7 +86,7 @@ import { createButton } from '../ui/button.js';
 import { createToggle } from '../ui/toggle.js';
 import { openSavePanel, isSavePanelOpen } from '../ui/savePanel.js';
 import { bindPad } from '../input/pad.js';
-import { keyGroup, sameDevice, catchUpTier, catchUpDraws, versusAvailable, ghostPlacement, rivalMarker, VERSUS_EMOJI } from '../versus.js';
+import { keyGroup, sameDevice, catchUpTier, catchUpDraws, versusAvailable, ghostPlacement, rivalMarker, respawnPose, VERSUS_EMOJI } from '../versus.js';
 
 const TEXT_STYLE = {
   fontFamily: 'sans-serif',
@@ -165,8 +166,15 @@ export class Play extends Phaser.Scene {
     this.breakBob = null;
     this.breakGlide = null;
     createFinishTexture(this, 'finish', { width: T.levels.finishWidthPx, height: GAME_HEIGHT, check: T.levels.finishCheckPx });
-    this.state = 'ready'; // 'ready' | 'playing' | 'paused' | 'dead'
+    this.state = 'ready'; // 'ready' | 'playing' | 'paused' | 'respawn' | 'dead' ('respawn': a match half between a crash and its restart)
     this.won = false; // set by win(): the run ended past the final level's finish line
+    // A match's respawn (startRespawn / tickRespawn / endRespawn): the clock advances by delta
+    // only while the state is 'respawn', so the shared pause freezes it; respawnFrom is the pose
+    // the glide starts from (null through the tumble); respawnPaused marks a pause taken mid-respawn.
+    this.respawnElapsed = 0;
+    this.respawnFrom = null;
+    this.respawnPaused = false;
+    this.deathTween = null; // the crash tumble (die), stopped when a respawn's glide takes over
     this.flapLockedUntil = 0;
     this.effects = createEffects(T);
     // Scroll multiplier (1 normally, the fart envelope while the power runs),
@@ -1116,7 +1124,7 @@ export class Play extends Phaser.Scene {
   }
 
   autoPause() {
-    if (this.state === 'playing') this.pauseRun();
+    if (this.state === 'playing' || this.state === 'respawn') this.pauseRun();
   }
 
   /** The Versus scene while this half is in a match; null in single player. */
@@ -1185,7 +1193,8 @@ export class Play extends Phaser.Scene {
   }
 
   pausePlay() {
-    if (this.state !== 'playing') return;
+    if (this.state !== 'playing' && this.state !== 'respawn') return;
+    this.respawnPaused = this.state === 'respawn'; // resumePlay returns to the respawn, not to play
     this.state = 'paused';
     this.physics.pause();
     this.pauseEffects();
@@ -1205,6 +1214,7 @@ export class Play extends Phaser.Scene {
     this.multTween?.pause();
     this.probioticTween?.pause();
     this.revealTween?.pause();
+    this.deathTween?.pause();
     this.setBoxSpin(false);
   }
 
@@ -1220,12 +1230,24 @@ export class Play extends Phaser.Scene {
     this.multTween?.resume();
     this.probioticTween?.resume();
     this.revealTween?.resume();
+    this.deathTween?.resume();
     this.setBoxSpin(true);
   }
 
   resumePlay() {
     if (this.state !== 'paused') return;
     this.focus?.hide();
+    if (this.respawnPaused) {
+      // A pause taken mid-respawn: the respawn clock picks up where it stopped. No bounce and no
+      // flap sound: tickRespawn owns the poop until the restart.
+      this.respawnPaused = false;
+      this.state = 'respawn';
+      this.physics.resume();
+      this.resumeEffects();
+      this.bob.resume();
+      this.setPauseBanner(false);
+      return;
+    }
     if (this.levelBreak) this.endLevelBreak();
     this.state = 'playing';
     this.physics.resume();
@@ -1725,8 +1747,8 @@ export class Play extends Phaser.Scene {
   }
 
   /** Fade a "+3" / "−3" in and out; a new hit restarts it with its own text and colour and re-enters it at the bottom of the stack. */
-  showScorePopup(kind, mult = 1, pairs = 0) {
-    const p = scorePopup(kind, T, mult, pairs);
+  showScorePopup(kind, mult = 1, pairs = 0, level = 1) {
+    const p = scorePopup(kind, T, mult, pairs, level);
     if (!p) return;
     this.popupTween?.stop();
     this.scorePopup.setText(p.text).setColor(p.color).setAlpha(0);
@@ -1980,7 +2002,8 @@ export class Play extends Phaser.Scene {
    * paused or in a level break: the break's tweens stop and its banner goes.
    */
   haltRun() {
-    if (this.state !== 'playing' && this.state !== 'paused') return;
+    if (this.state !== 'playing' && this.state !== 'paused' && this.state !== 'respawn') return;
+    if (this.state === 'respawn' || this.respawnPaused) this.cancelRespawn();
     this.breakGlide?.stop();
     this.breakGlide = null;
     this.breakBob?.stop();
@@ -2016,8 +2039,8 @@ export class Play extends Phaser.Scene {
     }
     const other = this.match.slots[this.player === 1 ? 1 : 0];
     const g = ghostPlacement({ distance: this.distance }, other, this.poopX, T);
-    // A live ghost follows its alpha at once; once the other is out it fades over ghostFadeMs.
-    const out = !other.alive || other.ended;
+    // A live ghost follows its alpha at once; once the other's run has ended it fades over ghostFadeMs.
+    const out = other.ended;
     const alpha = out ? Math.max(0, this.ghost.alpha - (T.versus.ghostAlpha * delta) / T.versus.ghostFadeMs) : g.alpha;
     this.ghost.setAlpha(alpha).setVisible(g.visible && alpha > 0);
     if (!g.visible) return;
@@ -2045,6 +2068,7 @@ export class Play extends Phaser.Scene {
     slot.y = this.poop.y;
     slot.angle = this.poop.angle;
     slot.frame = this.poop.texture.key;
+    slot.alpha = this.poop.alpha; // the respawn blink, so the ghost blinks too
   }
 
   /** The game-over panel after deathToOverMs; `won` swaps its headline, `test` hides Share. A match has no Over: the Versus scene shows the result. */
@@ -2078,8 +2102,9 @@ export class Play extends Phaser.Scene {
     if (this.state !== 'playing') return;
     // Farting (or just finished and still clearing the pipe) cannot die; nor can an Invincible test run.
     if (this.effects.powerActive() || this.graceLeftMs > 0 || this.testInvincible()) return;
-    if (this.match) this.match.slots[this.player - 1].alive = false;
-    this.endRun();
+    // A match: the crash costs points and a respawn, never the run. Single player: the run ends.
+    if (this.match) this.startRespawn();
+    else this.endRun();
     this.setPoopTexture('poop-dead');
     this.cameras.main.shake(200, 0.01);
     this.cameras.main.flash(120, 255, 120, 160);
@@ -2089,11 +2114,113 @@ export class Play extends Phaser.Scene {
     } else {
       sfx.die();
     }
-    // Tumble: keep gravity so the poop falls, stop it at the ground, spin it.
+    // Tumble: keep gravity so the poop falls, stop it at the ground, spin it (over the crash
+    // phase in a match, until the game-over panel in single player).
     this.poop.setVelocityY(Math.max(this.poop.body.velocity.y, 0));
     this.poop.body.setCollideWorldBounds(false);
-    this.tweens.add({ targets: this.poop, angle: 180, duration: T.deathToOverMs, ease: 'Quad.easeIn' });
-    this.showOver();
+    this.deathTween?.stop();
+    this.deathTween = this.tweens.add({ targets: this.poop, angle: 180, duration: this.match ? T.versus.respawn.crashMs : T.deathToOverMs, ease: 'Quad.easeIn' });
+    if (!this.match) this.showOver();
+  }
+
+  /**
+   * A crash in a match (die): the world halts where it is, the score loses the death penalty
+   * (floored at 0, the −N popup), the slot counts the crash, and the respawn clock starts.
+   * tickRespawn carries it from here: the tumble, the glide, the blinks, then endRespawn.
+   */
+  startRespawn() {
+    this.state = 'respawn';
+    this.respawnElapsed = 0;
+    this.respawnFrom = null;
+    this.respawnPaused = false;
+    this.endSweep();
+    for (const obj of this.worldObjects()) obj.setVelocityX(0);
+    this.setCharged(false); // the stink frames would overwrite the dead face; endRespawn re-charges
+    this.score = scoreAfterDeath(this.score, this.level, T);
+    this.scoreText.setText(String(this.score));
+    this.showScorePopup('death', 1, 0, this.level);
+    this.refreshProbioticHud(); // the score may have lost a digit: re-place the ×2 badge
+    const slot = this.match.slots[this.player - 1];
+    slot.deaths += 1;
+    slot.respawning = true;
+    this.publishSlot();
+  }
+
+  /**
+   * Every frame of a respawn: the clock advances by delta (so a pause freezes it) and
+   * respawnPose says where the poop is. Through the tumble physics owns it; the first frame
+   * past it stops the tumble, clears the field ahead and notes the pose the glide starts from;
+   * the glide and the blinks drive y, angle and alpha; done restarts play.
+   */
+  tickRespawn(delta) {
+    this.respawnElapsed += delta;
+    let pose = respawnPose(this.respawnElapsed, this.respawnFrom, T);
+    if (pose.phase === 'crash') return;
+    if (!this.respawnFrom) {
+      this.deathTween?.stop();
+      this.deathTween = null;
+      this.poop.body.setAllowGravity(false);
+      this.poop.setVelocity(0, 0);
+      this.respawnFrom = { y: this.poop.y, angle: this.poop.angle };
+      this.clearFieldAhead();
+      this.refreshPoopLook(); // the plain face back for the ride to mid-screen
+      pose = respawnPose(this.respawnElapsed, this.respawnFrom, T);
+    }
+    this.poop.y = pose.y;
+    this.poop.setAngle(pose.angle);
+    this.poop.setAlpha(pose.alpha);
+    if (pose.phase === 'done') this.endRespawn();
+  }
+
+  /**
+   * The respawn's clear screen: every pipe, item and bean not yet credited (hasPassed, the
+   * scoring rule: fully behind the poop) goes, and a finish line still ahead with it (it spawns
+   * again once the level's pairs are done). Credited pairs stay and scroll off. The pair count
+   * drops back to the pairs passed, so the cleared pairs come back from the shared course
+   * under the same numbers and the level's progress and finish stay in step.
+   */
+  clearFieldAhead() {
+    for (const group of [this.pipes, this.items, this.beans]) {
+      for (const obj of [...group.getChildren()]) if (!hasPassed(obj.x, obj.displayWidth, this.poop.x)) obj.destroy();
+    }
+    if (this.finishLine && !this.finishLine.getData('crossed')) {
+      this.finishLine.destroy();
+      this.finishLine = null;
+      this.finishSpawned = false;
+    }
+    this.endSweep();
+    this.pipesSpawned = this.pipesPassed;
+    this.nextGapY = null;
+  }
+
+  /** The restart after the blinks: like the end of a fart, with the next pair opening at mid-screen and the usual grace. */
+  endRespawn() {
+    this.poop.setAlpha(1);
+    this.poop.setAngle(0);
+    this.state = 'playing';
+    this.poop.body.setAllowGravity(true);
+    this.poop.setVelocityY(0);
+    this.graceLeftMs = T.beans.graceMs;
+    this.centreNextGap = true;
+    this.nextGapY = null;
+    this.prefillPipes();
+    this.applyScroll();
+    if (this.effects.powerReady()) this.setCharged(true);
+    this.refreshPoopLook();
+    const slot = this.match.slots[this.player - 1];
+    slot.respawning = false;
+    this.publishSlot();
+  }
+
+  /** Drop a respawn where it is (haltRun): the tumble stops, the poop is opaque again, the slot no longer respawning. */
+  cancelRespawn() {
+    this.deathTween?.stop();
+    this.deathTween = null;
+    this.respawnPaused = false;
+    this.respawnFrom = null;
+    this.poop.setAlpha(1);
+    const slot = this.match?.slots[this.player - 1];
+    if (slot) slot.respawning = false;
   }
 
   update(_time, delta) {
@@ -2192,7 +2319,8 @@ export class Play extends Phaser.Scene {
       this.refreshRival();
     }
 
-    if (this.state === 'dead') {
+    if (this.state === 'respawn') this.tickRespawn(delta);
+    if (this.state === 'dead' || (this.state === 'respawn' && !this.respawnFrom)) {
       // Pin the tumbling poop to the ground instead of letting it fall off-screen.
       const floor = GAME_HEIGHT - T.groundHeight - T.poopRadius;
       if (this.poop.y > floor) {

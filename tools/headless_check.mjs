@@ -1381,16 +1381,18 @@ export async function run(url = DEFAULT_URL) {
       await cdp.send('Emulation.clearDeviceMetricsOverride');
     }
 
-    // Versus, the match itself: the shared pause (and a level break that it must not end), the end
-    // of the match on the first death, the result panel, nothing recorded, the catch-up box for a
-    // trailing player, a rematch on a fresh seed with the same devices, Home from the panel.
+    // Versus, the match itself: the shared pause (and a level break that it must not end), the
+    // catch-up box for a trailing player, a crash as a respawn (the death penalty, the tumble, the
+    // cleared field, the glide and the blinks under a shared pause, the restart), the end of the
+    // match, the result panel, nothing recorded, a rematch on a fresh seed with the same devices,
+    // Home from the panel.
     {
       const P1 = `__flappy.scene.getScene('Play')`;
       const P2 = `__flappy.scene.getScene('PlayB')`;
       const VS = `__flappy.scene.getScene('Versus')`;
       const L = `Promise.all([import('./src/logic.js'), import('./src/config.js')])`;
       const metrics = (width, height) => cdp.send('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 1, mobile: false });
-      const want = await evaluate(`${L}.then(([l, c]) => JSON.stringify({ W: l.fieldWidth(1800, 1000, c.FIELD), countdownMs: c.TUNING.versus.countdownMs, pause: c.TUNING.gamepad.pause, end1: c.TUNING.levels.pipes[0], deathMs: c.TUNING.deathToOverMs, maxBeans: c.TUNING.beans.maxBeans, super: c.TUNING.versus.catchUp.superBehind, beanMin: c.TUNING.versus.catchUp.beanBehindMin }))`).then(JSON.parse);
+      const want = await evaluate(`${L}.then(([l, c]) => JSON.stringify({ W: l.fieldWidth(1800, 1000, c.FIELD), countdownMs: c.TUNING.versus.countdownMs, pause: c.TUNING.gamepad.pause, end1: c.TUNING.levels.pipes[0], deathMs: c.TUNING.deathToOverMs, maxBeans: c.TUNING.beans.maxBeans, super: c.TUNING.versus.catchUp.superBehind, beanMin: c.TUNING.versus.catchUp.beanBehindMin, last: c.TUNING.levels.lastLevel, end: l.levelEnd(c.TUNING.levels.lastLevel, c.TUNING), penalty: c.TUNING.versus.scoring.deathPenaltyPerLevel, respawn: c.TUNING.versus.respawn, pipeW: c.TUNING.pipeWidth }))`).then(JSON.parse);
       const settle = async (w) => {
         let W = null;
         for (let i = 0; i < 60 && W !== w; i += 1) {
@@ -1460,27 +1462,68 @@ export async function run(url = DEFAULT_URL) {
       ok(cu2.beans === want.maxBeans && cu2.draw === 'bean3', `${want.super + 5} pipes behind, any draw is bean3: the bag is topped up to ${cu2.beans} (a super fart ready)`);
       const cu3 = await evaluate(`(() => { const a = ${P1}; const b = ${P2}; a.pipesPassed = 20; b.pipesPassed = 20; b.publishSlot(); a.items.clear(true, true); const it = a.items.create(a.poop.x, a.poop.y, 'mystery'); it.setData('kind', 'mystery'); const keep = a.rngDraw; a.rngDraw = () => 0.55; try { a.collectItem(it); } finally { a.rngDraw = keep; } return JSON.stringify({ draw: a.reveal?.getData('draw') ?? null, beans: a.effects.beans() }); })()`).then(JSON.parse);
       ok(cu3.draw === 'fiber' && cu3.beans === want.maxBeans, 'level with the other player, the same 0.55 draw is plain fiber');
-      // The end: P2 dies with the higher score. Both halves stop at once, no Over panel, nothing
-      // recorded; after the tumble the result panel names P2 and offers Rematch | Home.
+      // A crash is a respawn, not the end. P2 (score 9, level 1) hits a pipe: the match and P1 play
+      // on, P2 loses 2 points (the −2 popup) and tumbles with the dead face while its world stands
+      // still; after the tumble everything not yet credited is gone (the pair it hit, the pairs
+      // ahead, a finish line ahead), the credited pair behind stays, the pair count drops back to
+      // the pairs passed, and the plain-faced poop glides to mid-screen; the blinks freeze under a
+      // shared pause and pick up after it; then P2 plays again from mid-screen with the usual grace,
+      // the next pair opening at mid-height. Then P1 (score 1, level 3) crashes to 0, never below.
+      const R = want.respawn;
+      const glideEnd = R.crashMs + R.glideMs;
+      const totalMs = glideEnd + 2 * R.blinkMs * R.blinkCycles;
       const seed1 = await evaluate(`${VS}.match.seed`);
-      await evaluate(`(() => { const a = ${P1}; const b = ${P2}; a.score = 5; b.score = 9; a.pipesPassed = 7; b.pipesPassed = 7; b.graceLeftMs = 0; b.poop.body.setAllowGravity(true); b.die(); return true; })()`);
-      await sleep(150);
-      const ended = await evaluate(`JSON.stringify({ status: ${VS}.match.status, a: ${P1}.state, b: ${P2}.state, aAlive: ${VS}.match.slots[0].alive, bAlive: ${VS}.match.slots[1].alive, ended: ${VS}.match.slots.map((s) => s.ended), over: __flappy.scene.isActive('Over'), panel: ${VS}.resultShown, aFace: ${P1}.poop.texture.key, bFace: ${P2}.poop.texture.key })`).then(JSON.parse);
-      ok(ended.status === 'over' && ended.a === 'dead' && ended.b === 'dead' && ended.aAlive && !ended.bAlive && ended.ended[0] && ended.ended[1] && !ended.over && !ended.panel && ended.aFace === 'poop' && ended.bFace === 'poop-dead', `P2's death ends the match at once: both halves stopped (P1 halted alive with its plain face, P2 ${ended.bFace}), no Over, the panel waits for the tumble`);
-      ok(await until(`${VS}.resultShown`, (want.deathMs + 1500) / 100), 'the result panel shows after the death tumble');
+      await evaluate(`(() => { const a = ${P1}; const b = ${P2}; a.score = 5; b.score = 9; a.pipesPassed = 7; a.pipesSpawned = 7; b.level = 1; b.pipes.clear(true, true); b.items.clear(true, true); b.beans.clear(true, true); b.nextGapY = null; b.pipesPassed = 3; b.pipesSpawned = 3; b.spawnPipePair(); b.spawnPipePair(); b.spawnPipePair(); const [t0, b0] = b.pipes.getChildren(); t0.x = 100; b0.x = 100; for (const q of [t0, b0]) if (q.getData('scoring')) q.setData('passed', true); b.finishSpawned = false; b.spawnFinishLine(); b.graceLeftMs = 0; b.poop.body.setAllowGravity(true); b.die(); return true; })()`);
+      await sleep(120);
+      const crash = await evaluate(`JSON.stringify({ status: ${VS}.match.status, a: ${P1}.state, b: ${P2}.state, face: ${P2}.poop.texture.key, deaths: ${VS}.match.slots[1].deaths, score: ${P2}.score, slotScore: ${VS}.match.slots[1].score, popup: ${P2}.scorePopup.text, popupShown: ${P2}.scorePopup.alpha > 0, charged: ${P2}.charged, respawning: ${VS}.match.slots[1].respawning, ended: ${VS}.match.slots.map((s) => s.ended), pipes: ${P2}.pipes.getChildren().length, line: Boolean(${P2}.finishLine), over: __flappy.scene.isActive('Over'), vx: ${P2}.pipes.getChildren().map((q) => q.body.velocity.x) })`).then(JSON.parse);
+      ok(crash.status === 'playing' && crash.a === 'playing' && crash.b === 'respawn' && crash.face === 'poop-dead' && crash.deaths === 1 && crash.score === 9 - want.penalty && crash.slotScore === crash.score && crash.popup === `\u2212${want.penalty}` && crash.popupShown && !crash.charged && crash.respawning && !crash.ended[0] && !crash.ended[1] && crash.pipes === 6 && crash.line && !crash.over && crash.vx.every((v) => v === 0), `P2's crash: the match plays on (status ${crash.status}, P1 ${crash.a}), P2 is ${crash.b} with its ${crash.face} face, 1 death, score 9 → ${crash.score} (popup ${crash.popup}), its world halted (${crash.pipes} pipes still there, velocities 0)`);
+      await sleep(R.crashMs);
+      const glide = await evaluate(`JSON.stringify({ b: ${P2}.state, from: Boolean(${P2}.respawnFrom), face: ${P2}.poop.texture.key, pipes: ${P2}.pipes.getChildren().map((q) => q.x), line: Boolean(${P2}.finishLine), lineFlag: ${P2}.finishSpawned, spawned: ${P2}.pipesSpawned, passed: ${P2}.pipesPassed, items: ${P2}.items.getChildren().length, beans: ${P2}.beans.getChildren().length, y: ${P2}.poop.y, alpha: ${P2}.poop.alpha, gravity: ${P2}.poop.body.allowGravity })`).then(JSON.parse);
+      ok(glide.b === 'respawn' && glide.from && glide.face !== 'poop-dead' && glide.pipes.length === 2 && glide.pipes.every((x) => x === 100) && !glide.line && !glide.lineFlag && glide.spawned === 3 && glide.passed === 3 && glide.items === 0 && glide.beans === 0 && glide.alpha === 1 && !glide.gravity, `after the tumble the field ahead is clear (${glide.pipes.length} pipes left, both the credited pair at x 100; finish line gone, finishSpawned ${glide.lineFlag}), pairs spawned ${glide.spawned} = passed ${glide.passed}, the face is ${glide.face}, gliding (y ${glide.y.toFixed(0)})`);
+      ok(await until(`${P2}.state === 'respawn' && ${P2}.respawnElapsed > ${glideEnd} && ${P2}.poop.alpha < 0.9`, (totalMs + 500) / 100), 'the poop blinks at mid-screen after the glide');
+      await evaluate(`${P1}.padDown(${want.pause}), true`);
+      await sleep(100);
+      const held = await evaluate(`JSON.stringify({ a: ${P1}.state, b: ${P2}.state, rp: ${P2}.respawnPaused, elapsed: ${P2}.respawnElapsed, alpha: ${P2}.poop.alpha, halves: [...${VS}.pausedHalves], banner: ${VS}.pauseText.visible, shade: ${P2}.pauseShade.visible })`).then(JSON.parse);
+      await sleep(300);
+      const held2 = await evaluate(`JSON.stringify({ elapsed: ${P2}.respawnElapsed, alpha: ${P2}.poop.alpha, y: ${P2}.poop.y })`).then(JSON.parse);
+      ok(held.a === 'paused' && held.b === 'paused' && held.rp && held.halves.length === 2 && held.banner && held.shade && held2.elapsed === held.elapsed && held2.alpha === held.alpha && Math.abs(held2.y - 640) < 1, `Menu mid-blink pauses both; the respawn clock (${held.elapsed.toFixed(0)} ms) and the blink (alpha ${held.alpha.toFixed(2)}) hold for 300 ms`);
+      await evaluate(`${P1}.flap({ x: 100, y: 600 }), true`);
+      await sleep(100);
+      const back = await evaluate(`JSON.stringify({ a: ${P1}.state, b: ${P2}.state, rp: ${P2}.respawnPaused, elapsed: ${P2}.respawnElapsed, vy: ${P2}.poop.body.velocity.y, banner: ${VS}.pauseText.visible })`).then(JSON.parse);
+      ok(back.a === 'playing' && back.b === 'respawn' && !back.rp && back.elapsed > held.elapsed && back.vy === 0 && !back.banner, `a tap on P1 resumes both: P2 back in its respawn (clock ${back.elapsed.toFixed(0)} ms), no bounce`);
+      // The restart: pin P2 in the same expression that sees it playing (gravity is back and the grace is short).
+      const restarted = await until(`${P2}.state === 'playing' && (globalThis.__grace = ${P2}.graceLeftMs, globalThis.__y = ${P2}.poop.y, ${P2}.graceLeftMs = 1e9, ${P2}.poop.body.setAllowGravity(false), ${P2}.poop.setVelocity(0, 0), true)`, (totalMs + 1000) / 100);
+      const again = await evaluate(`(() => { const b = ${P2}; const ahead = b.pipes.getChildren().filter((q) => q.getData('scoring') && q.x > b.poop.x).sort((p, q) => p.x - q.x)[0]; return JSON.stringify({ status: ${VS}.match.status, y: globalThis.__y, alpha: b.poop.alpha, angle: b.poop.angle, grace: globalThis.__grace, respawning: ${VS}.match.slots[1].respawning, deaths: ${VS}.match.slots[1].deaths, gapY: ahead ? ahead.y + b.diff.gapHeight / 2 : null, move: ahead ? ahead.getData('move') ?? null : 'none', face: b.poop.texture.key, spawned: b.pipesSpawned }); })()`).then(JSON.parse);
+      ok(restarted && again.status === 'playing' && Math.abs(again.y - 640) < 40 && again.alpha === 1 && Math.abs(again.angle) < 45 && again.grace > 0 && !again.respawning && again.deaths === 1 && again.gapY !== null && Math.abs(again.gapY - 640) < 1 && again.move === null && again.spawned > 3, `P2 plays again from mid-screen (y ${again.y.toFixed(0)} at the first poll, alpha ${again.alpha}, upright) with ${again.grace} ms of grace; the first pair ahead opens at mid-height (gap ${again.gapY?.toFixed(0)}, not moving)`);
+      await evaluate(`(() => { const a = ${P1}; a.score = 1; a.level = 3; a.graceLeftMs = 0; a.poop.body.setAllowGravity(true); a.die(); return true; })()`);
+      await sleep(120);
+      const floor = await evaluate(`JSON.stringify({ a: ${P1}.state, score: ${P1}.score, popup: ${P1}.scorePopup.text, deaths: ${VS}.match.slots[0].deaths })`).then(JSON.parse);
+      ok(floor.a === 'respawn' && floor.score === 0 && floor.popup === `\u2212${3 * want.penalty}` && floor.deaths === 1, `P1's crash on level 3 reads ${floor.popup} and floors the score at ${floor.score}`);
+      ok(await until(`${P1}.state === 'playing' && (${P1}.graceLeftMs = 1e9, ${P1}.poop.body.setAllowGravity(false), ${P1}.poop.setVelocity(0, 0), true)`, (totalMs + 1000) / 100), 'P1 is back too');
+      await evaluate(`${P1}.level = 1, ${P1}.applyLevel(), ${P1}.refreshLevelBar(), true`);
+      // The end: P2 clears the rectum with the higher score (5 vs 9 − 2). Both halves stop at once, no
+      // Over panel, nothing recorded; after the tumble delay the result panel names P2 and offers Rematch | Home.
+      const finish = (P) => evaluate(`(() => { const p = ${P}; p.pipes.clear(true, true); p.items.clear(true, true); p.beans.clear(true, true); p.nextGapY = null; p.level = ${want.last}; p.pipesSpawned = ${want.end}; p.pipesPassed = ${want.end}; p.finishSpawned = false; p.applyLevel(); p.spawnFinishLine(); p.finishLine.x = p.poop.x + 150; return true; })()`);
+      await evaluate(`${P1}.score = 5, ${P2}.score = 9, true`);
+      await finish(P2);
+      ok(await until(`${VS}.match.status === 'over'`), 'P2 crosses the rectum\'s finish line and the match is over');
+      await sleep(100);
+      const ended = await evaluate(`JSON.stringify({ status: ${VS}.match.status, a: ${P1}.state, b: ${P2}.state, won: ${VS}.match.slots.map((s) => s.won), ended: ${VS}.match.slots.map((s) => s.ended), over: __flappy.scene.isActive('Over'), panel: ${VS}.resultShown, aFace: ${P1}.poop.texture.key, bFace: ${P2}.poop.texture.key })`).then(JSON.parse);
+      ok(ended.status === 'over' && ended.a === 'dead' && ended.b === 'dead' && !ended.won[0] && ended.won[1] && ended.ended[0] && ended.ended[1] && !ended.over && !ended.panel && ended.aFace === 'poop' && ended.bFace === 'poop', `both halves stopped (P1 halted with its plain face, P2 ${ended.bFace}), no Over, the panel waits for the tumble delay`);
+      ok(await until(`${VS}.resultShown`, (want.deathMs + 1500) / 100), 'the result panel shows after the delay');
       const panel = await evaluate(`(() => { const v = ${VS}; const texts = v.children.list.filter((c) => c.type === 'Text' && c.visible).map((c) => c.text); return JSON.stringify({ texts, buttons: Boolean(v.buttons), rematch: v.rematchButton.getText(), home: v.resultHome.getText(), syncs: globalThis.__syncs ?? 0, save: localStorage.getItem('flappyPoop.save'), status: v.match.status }); })()`).then(JSON.parse);
-      ok(panel.texts.includes('P2 WINS!') && panel.texts.includes('OUT') && panel.texts.includes('9') && panel.texts.includes('5') && panel.buttons && panel.rematch === 'Rematch' && panel.home === 'Home', `the panel reads P2 WINS! with both scores and OUT under P2; Rematch | Home`);
+      ok(panel.texts.includes('P2 WINS!') && !panel.texts.includes('OUT') && panel.texts.includes('9') && panel.texts.includes('5') && panel.buttons && panel.rematch === 'Rematch' && panel.home === 'Home', `the panel reads P2 WINS! with both scores and no OUT; Rematch | Home`);
       ok(panel.syncs === 0 && panel.save === saveBefore, 'a match records nothing: no leaderboard sync, the save state untouched');
       // Rematch: the same devices, a fresh seed, straight through the countdown into play.
       await evaluate(`${VS}.rematch(), true`);
-      const again = await until(`__flappy.scene.isActive('Versus') && ${VS}.match.status === 'playing' && ${P1}.state === 'playing' && ${P2}.state === 'playing'`, (4 * want.countdownMs + 3000) / 100);
-      const re = await evaluate(`JSON.stringify({ seed: ${VS}.match.seed, devices: ${VS}.match.slots.map((s) => s.device), scores: ${VS}.match.slots.map((s) => s.score), same: ${P1}.match === ${VS}.match && ${P2}.match === ${VS}.match, W: __flappy.scale.width })`).then(JSON.parse);
+      const again2 = await until(`__flappy.scene.isActive('Versus') && ${VS}.match.status === 'playing' && ${P1}.state === 'playing' && ${P2}.state === 'playing'`, (4 * want.countdownMs + 3000) / 100);
+      const re = await evaluate(`JSON.stringify({ seed: ${VS}.match.seed, devices: ${VS}.match.slots.map((s) => s.device), scores: ${VS}.match.slots.map((s) => s.score), deaths: ${VS}.match.slots.map((s) => s.deaths), same: ${P1}.match === ${VS}.match && ${P2}.match === ${VS}.match, W: __flappy.scale.width })`).then(JSON.parse);
       const reState = await evaluate(`JSON.stringify({ status: ${VS}.match.status, a: ${P1}.state, b: ${P2}.state, count: ${VS}.countText.text })`);
-      ok(again && re.seed !== seed1 && re.devices[0]?.group === 'left' && re.devices[1]?.group === 'right' && re.scores[0] === 0 && re.scores[1] === 0 && re.same, `Rematch keeps the devices (${re.devices.map((d) => d?.group).join(' / ')}) on a new seed and both halves race again${again ? '' : ` — ${reState}`}`);
+      ok(again2 && re.seed !== seed1 && re.devices[0]?.group === 'left' && re.devices[1]?.group === 'right' && re.scores[0] === 0 && re.scores[1] === 0 && re.deaths[0] === 0 && re.deaths[1] === 0 && re.same, `Rematch keeps the devices (${re.devices.map((d) => d?.group).join(' / ')}) on a new seed with the counts reset, and both halves race again${again2 ? '' : ` — ${reState}`}`);
       await pin();
       // Home from the result panel: end this match too, then leave.
-      await evaluate(`(() => { const a = ${P1}; a.graceLeftMs = 0; a.poop.body.setAllowGravity(true); a.die(); return true; })()`);
-      ok(await until(`${VS}.resultShown`, (want.deathMs + 1500) / 100), 'the rematch ends on P1\'s death with its own panel');
+      await finish(P1);
+      ok(await until(`${VS}.resultShown`, (want.deathMs + 2500) / 100), 'the rematch ends on P1\'s finish with its own panel');
       await evaluate(`${VS}.leave(), true`);
       ok(await until(`!__flappy.scene.isActive('Versus') && !__flappy.scene.isActive('PlayB') && __flappy.scene.isActive('Play') && ${P1}.state === 'ready' && ${P1}.match === null && __flappy.scale.width === ${want.W}`), 'Home from the panel returns to single player at the window\'s field');
       await evaluate(`__flappy.registry.set('versus', false), delete globalThis.__syncs, true`);
@@ -1490,7 +1533,8 @@ export async function run(url = DEFAULT_URL) {
     }
 
     // Versus, the ghost and the rival marker: the other poop shows in your lumen at the distance gap
-    // with its own face, fades to the range edge, is gone past it and fades out once the other is out;
+    // with its own face, fades to the range edge, is gone past it, shows the other's crash and blink,
+    // and fades out once the other's run has ended;
     // the level bar carries the other's marker (same level: its share; a level ahead: the flag; behind: the start).
     {
       const P1 = `__flappy.scene.getScene('Play')`;
@@ -1498,7 +1542,7 @@ export async function run(url = DEFAULT_URL) {
       const VS = `__flappy.scene.getScene('Versus')`;
       const L = `Promise.all([import('./src/logic.js'), import('./src/config.js')])`;
       const metrics = (width, height) => cdp.send('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 1, mobile: false });
-      const want = await evaluate(`${L}.then(([l, c]) => JSON.stringify({ W: l.fieldWidth(1800, 1000, c.FIELD), countdownMs: c.TUNING.versus.countdownMs, range: c.TUNING.versus.ghostRangePx, alpha: c.TUNING.versus.ghostAlpha, fadeMs: c.TUNING.versus.ghostFadeMs, deathMs: c.TUNING.deathToOverMs }))`).then(JSON.parse);
+      const want = await evaluate(`${L}.then(([l, c]) => JSON.stringify({ W: l.fieldWidth(1800, 1000, c.FIELD), countdownMs: c.TUNING.versus.countdownMs, range: c.TUNING.versus.ghostRangePx, alpha: c.TUNING.versus.ghostAlpha, fadeMs: c.TUNING.versus.ghostFadeMs, deathMs: c.TUNING.deathToOverMs, last: c.TUNING.levels.lastLevel, end: l.levelEnd(c.TUNING.levels.lastLevel, c.TUNING), respawn: c.TUNING.versus.respawn }))`).then(JSON.parse);
       const settle = async (w) => {
         let W = null;
         for (let i = 0; i < 60 && W !== w; i += 1) {
@@ -1552,14 +1596,31 @@ export async function run(url = DEFAULT_URL) {
       await sleep(150);
       const m3 = await evaluate(`JSON.stringify(${P1}.levelBar.rival())`).then(JSON.parse);
       ok(m1?.frac === 0.3 && m1?.relation === 'same' && m2?.frac === 1 && m2?.relation === 'ahead' && m3?.frac === 0 && m3?.relation === 'behind', `P1's bar marks P2 at ${m1?.frac} (${m1?.relation}), then at the flag (${m2?.relation}), then at the start (${m3?.relation})`);
-      // Once P2 is out its ghost fades away where it fell.
+      // P2's crash shows on its ghost: the dead face through the tumble, the blink after the glide,
+      // and the ghost is still there once P2 plays again. Only the end of P2's run fades it out.
       await place(1000, 1100);
       await sleep(150);
       const before = await evaluate(`${P1}.ghost.alpha`);
+      const R = want.respawn;
+      const totalMs = R.crashMs + R.glideMs + 2 * R.blinkMs * R.blinkCycles;
       await evaluate(`(() => { const b = ${P2}; b.graceLeftMs = 0; b.poop.body.setAllowGravity(true); b.die(); return true; })()`);
+      await sleep(150);
+      const crashGhost = await evaluate(`JSON.stringify({ tex: ${P1}.ghost.texture.key, visible: ${P1}.ghost.visible, status: ${VS}.match.status })`).then(JSON.parse);
+      ok(before > 0 && crashGhost.visible && crashGhost.tex === 'poop-dead' && crashGhost.status === 'playing', `P2's crash puts the dead face on its ghost (${crashGhost.tex}); the match plays on`);
+      const blinking = await until(`${P2}.state === 'respawn' && ${P2}.respawnElapsed > ${R.crashMs + R.glideMs} && ${P2}.poop.alpha < 0.6 && (globalThis.__gb = ${P1}.ghost.alpha, globalThis.__pb = ${P2}.poop.alpha, true)`, (totalMs + 500) / 100);
+      const blink = await evaluate(`JSON.stringify({ ghost: globalThis.__gb, poop: globalThis.__pb, visible: ${P1}.ghost.visible })`).then(JSON.parse);
+      const placed = want.alpha * (1 - 100 / want.range);
+      ok(blinking && blink.visible && blink.ghost > 0 && blink.ghost < placed * 0.8, `mid-blink the ghost blinks with P2 (ghost alpha ${blink.ghost.toFixed(2)} under the placement's ${placed.toFixed(2)}, poop ${blink.poop.toFixed(2)})`);
+      ok(await until(`${P2}.state === 'playing' && (${P2}.graceLeftMs = 1e9, ${P2}.poop.body.setAllowGravity(false), ${P2}.poop.setVelocity(0, 0), true)`, (totalMs + 1000) / 100), 'P2 plays again');
+      await place(1000, 1100);
+      await sleep(150);
+      const afterRespawn = await evaluate(`JSON.stringify({ alpha: ${P1}.ghost.alpha, visible: ${P1}.ghost.visible })`).then(JSON.parse);
+      ok(afterRespawn.visible && Math.abs(afterRespawn.alpha - placed) < 0.02, `after the respawn the ghost is back at its placement alpha (${afterRespawn.alpha.toFixed(2)})`);
+      await evaluate(`(() => { const p = ${P2}; p.pipes.clear(true, true); p.items.clear(true, true); p.beans.clear(true, true); p.nextGapY = null; p.level = ${want.last}; p.pipesSpawned = ${want.end}; p.pipesPassed = ${want.end}; p.finishSpawned = false; p.applyLevel(); p.spawnFinishLine(); p.finishLine.x = p.poop.x + 150; return true; })()`);
+      ok(await until(`${VS}.match.slots[1].ended`), 'P2 clears the rectum');
       await sleep(want.fadeMs + 300);
       const after = await evaluate(`JSON.stringify({ alpha: ${P1}.ghost.alpha, visible: ${P1}.ghost.visible, status: ${VS}.match.status })`).then(JSON.parse);
-      ok(before > 0 && after.alpha === 0 && !after.visible && after.status === 'over', `P2's death fades its ghost out (alpha ${before.toFixed(2)} → ${after.alpha}) within ${want.fadeMs} ms`);
+      ok(after.alpha === 0 && !after.visible && after.status === 'over', `the end of P2's run fades its ghost out (alpha ${placed.toFixed(2)} → ${after.alpha}) within ${want.fadeMs} ms`);
       await until(`${VS}.resultShown`, (want.deathMs + 1500) / 100);
       await evaluate(`${VS}.leave(), true`);
       ok(await until(`!__flappy.scene.isActive('Versus') && __flappy.scene.isActive('Play') && ${P1}.state === 'ready' && ${P1}.match === null`), 'Home after the ghost checks');

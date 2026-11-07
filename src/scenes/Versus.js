@@ -155,8 +155,8 @@ export class Versus extends Phaser.Scene {
     if (this.match.status !== 'playing') return;
     if (on) {
       this.halves().forEach((half, i) => {
-        if (half?.state === 'playing') {
-          half.pausePlay();
+        if (half?.state === 'playing' || half?.state === 'respawn') {
+          half.pausePlay(); // a respawning half's clock stops; resumePlay returns it to the respawn
           this.pausedHalves.add(i);
         }
       });
