@@ -643,6 +643,38 @@ export function gapBobY(elapsedMs, baseY, amp, periodMs, phase) {
   return baseY + amp * Math.sin((2 * Math.PI * elapsedMs) / periodMs + phase);
 }
 
+/** Moving-pipe row for a level: { chance, ampPx, periodMs }, or null before pipeMove.fromLevel; past the table the last row repeats. */
+export function pipeMoveParams(level, t) {
+  const m = t.pipeMove;
+  if (!m || !(level >= m.fromLevel)) return null;
+  const i = Math.min(level - m.fromLevel, m.chance.length - 1);
+  return { chance: m.chance[i], ampPx: m.ampPx[i], periodMs: m.periodMs[i] };
+}
+
+/** The swing a gap centred at baseY may have and stay inside bounds (gapBounds): ampPx, cut down near either edge, 0 on it. */
+export function pipeMoveAmplitude(baseY, bounds, ampPx) {
+  return Math.max(0, Math.min(ampPx, baseY - bounds.minY, bounds.maxY - baseY));
+}
+
+/** Worst-case px a moving gap shifts while the poop crosses one column (pipeWidth + its diameter) at `speed` px/s. */
+export function pipeMoveShiftPx(ampPx, periodMs, speed, t) {
+  const peak = (ampPx * 2 * Math.PI) / (periodMs / 1000); // px/s at the sine's steepest
+  return (peak * (t.pipeWidth + 2 * t.poopRadius)) / speed;
+}
+
+/**
+ * Whether a pair spawning on `level` with its gap at baseY moves, and how:
+ * null before pipeMove.fromLevel, for the centred pair after a fart (it must stay at the
+ * float height), or when the chance roll fails; else { baseY, amp, periodMs, phase } for
+ * gapBobY. Draws from rng only when a roll can happen, so earlier levels keep their sequence.
+ */
+export function rollPipeMove(rng, level, baseY, bounds, t, { centred = false } = {}) {
+  const p = pipeMoveParams(level, t);
+  if (!p || centred) return null;
+  if (rng() >= p.chance) return null;
+  return { baseY, amp: pipeMoveAmplitude(baseY, bounds, p.ampPx), periodMs: p.periodMs, phase: rng() * Math.PI * 2 };
+}
+
 /** Small rotation wiggle (degrees) at elapsedMs. */
 export function beanAngle(elapsedMs, t) {
   return t.beans.wiggleDeg * Math.sin((2 * Math.PI * elapsedMs) / t.beans.wigglePeriodMs);

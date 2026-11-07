@@ -159,6 +159,20 @@ export const TUNING = {
     movePeriodMs: 1600, // ms for one full up-and-down sweep of a moving gap item
     moveMarginPx: 8, // px kept between a moving gap item and the pipe mouths
   },
+  // Moving pipes: from fromLevel a share of the pairs bob their gap up and down (a sine on the gap
+  // centre; both columns follow, see Play.update). Rows are indexed level − fromLevel (L4 / L5 / L6 /
+  // L7+; past the table the last row repeats). The swing is clamped so the gap centre stays inside
+  // gapBounds (a pair rolled near the band's edge swings less, so `chance` is not a count of visibly
+  // moving pairs). Every row keeps the gap's shift during one column crossing (pipeMoveShiftPx:
+  // ampPx · 2π / period × (pipeWidth + poop diameter) / speed) under half the poop's clearance
+  // (gapHeight / 2 − poopRadius), so a centred poop is never clipped by the motion itself; escalate by
+  // chance and amplitude, not by a faster period (tests/tuning.test.js).
+  pipeMove: {
+    fromLevel: 4, // first level with moving pairs; the pair after a fart (centred gap) never moves
+    chance: [0.15, 0.3, 0.45, 0.6], // 0–1 chance a spawning pair moves, per row
+    ampPx: [30, 40, 60, 80], // px the gap centre swings each way (before the bounds clamp)
+    periodMs: [6000, 5000, 5000, 6000], // ms per full up-and-down
+  },
   mystery: {
     firstLevel: 3, // boxes start on this level: the first is guaranteed …
     firstBefore: 5, // … after one of its first four pairs (picked at random), so it comes before pipe 5; after it boxes roll by weight on every pair
