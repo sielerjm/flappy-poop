@@ -1,5 +1,5 @@
 import { GAME_HEIGHT, TUNING as T } from '../config.js';
-import { VERSION, chromeIntent, overlayOutsideHit, issueUrl, openExternalUrl } from '../logic.js';
+import { versionText, chromeIntent, overlayOutsideHit, issueUrl, openExternalUrl } from '../logic.js';
 import { createFocus, pressable } from '../ui/focus.js';
 import { t, metaFontSize } from '../i18n.js';
 
@@ -48,7 +48,7 @@ export class Feedback extends Phaser.Scene {
     feature.on('pointerdown', () => this.openIssue('feature'));
 
     this.add
-      .text(cx, cy + 290, `v${VERSION}`, {
+      .text(cx, cy + 290, versionText(locale), {
         ...STYLE,
         fontSize: metaFontSize(locale),
         color: '#6a5a74',

@@ -4,7 +4,7 @@
 
 Open it on your phone and add it to your home screen for a full-screen, app-like launch. On a desktop or landscape window the gut widens to fill the screen (the buttons and HUD stay together in the middle, the poop keeps its spot a quarter of the way in); phones keep the portrait field, and when a run, a level or a fart starts the pipes sweep in from the right and settle across the gut, fading in, the first one a little past the middle so there is room to line up. Resize the window, or rotate your phone, on the start screen to re-fit; mid-run the game pauses and the new size waits for Home. Home-screen installs stay portrait on Android (iOS lets them rotate). In landscape on a phone everything is small, since the field is always 1280 tall.
 
-A poop emoji flaps through the gut, dodging pink intestinal folds. A Flappy Bird clone for phone browsers, built on [Phaser 4](https://phaser.io) with no build step. Version **0.5.10**. English and Simplified Chinese in-game.
+A poop emoji flaps through the gut, dodging pink intestinal folds. A Flappy Bird clone for phone browsers, built on [Phaser 4](https://phaser.io) with no build step. Version **0.5.16 beta**. English and Simplified Chinese in-game.
 
 **Host your own:** fork or push this repo to GitHub, enable Pages (Settings → Pages → Deploy from branch → `main` / root), then open `https://<you>.github.io/<repo>/`.
 

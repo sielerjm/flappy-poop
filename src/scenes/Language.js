@@ -1,5 +1,5 @@
 import { GAME_HEIGHT, TUNING as T } from '../config.js';
-import { VERSION, createSettingsStore, chromeIntent, overlayOutsideHit } from '../logic.js';
+import { versionText, createSettingsStore, chromeIntent, overlayOutsideHit } from '../logic.js';
 import { createFocus, pressable } from '../ui/focus.js';
 import { t, metaFontSize } from '../i18n.js';
 
@@ -44,7 +44,7 @@ export class Language extends Phaser.Scene {
     }
 
     this.add
-      .text(cx, cy + 210, `v${VERSION}`, {
+      .text(cx, cy + 210, versionText(locale), {
         ...STYLE,
         fontSize: metaFontSize(locale),
         color: '#6a5a74',

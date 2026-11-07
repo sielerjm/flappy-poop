@@ -1,5 +1,5 @@
 import { GAME_HEIGHT, TUNING as T } from '../config.js';
-import { VERSION, LAST_UPDATED, chromeIntent, overlayOutsideHit } from '../logic.js';
+import { versionText, LAST_UPDATED, chromeIntent, overlayOutsideHit } from '../logic.js';
 import { createFocus, pressable } from '../ui/focus.js';
 import { t, metaFontSize } from '../i18n.js';
 import { createScrollView } from '../ui/scrollView.js';
@@ -63,7 +63,7 @@ export class About extends Phaser.Scene {
     y += llm.height + 28;
 
     const metaSize = metaFontSize(locale);
-    sv.add(this.add.text(cx, y, `v${VERSION}`, { ...STYLE, fontSize: metaSize, color: '#6a5a74', fontStyle: 'normal' }).setOrigin(0.5, 0));
+    sv.add(this.add.text(cx, y, versionText(locale), { ...STYLE, fontSize: metaSize, color: '#6a5a74', fontStyle: 'normal' }).setOrigin(0.5, 0));
     y += 44;
     const updated = sv.add(
       this.add

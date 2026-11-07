@@ -1,5 +1,5 @@
 import { GAME_HEIGHT, TUNING as T } from '../config.js';
-import { VERSION, chromeIntent, overlayOutsideHit } from '../logic.js';
+import { versionText, chromeIntent, overlayOutsideHit } from '../logic.js';
 import { createFocus, pressable } from '../ui/focus.js';
 import { t, metaFontSize, levelLabel } from '../i18n.js';
 import { MAX_TOP, formatScore } from '../save.js';
@@ -49,7 +49,7 @@ export class Scores extends Phaser.Scene {
     }
 
     this.add
-      .text(cx, cy + 330, `v${VERSION}`, {
+      .text(cx, cy + 330, versionText(locale), {
         ...STYLE,
         fontSize: metaFontSize(locale),
         color: '#6a5a74',

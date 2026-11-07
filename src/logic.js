@@ -2,9 +2,13 @@
 // Everything Phaser-specific lives in src/scenes/.
 // Player-facing copy lives in i18n.js.
 
-import { isLocale, DEFAULT_LOCALE } from './i18n.js';
+import { isLocale, DEFAULT_LOCALE, t } from './i18n.js';
 
 export const VERSION = '0.5.16'; // bumped when art under an existing name changes (Boot's ?v= cache-bust)
+/** The version line every overlay shows: `v{VERSION} beta` in the locale's words (i18n versionLine). */
+export function versionText(locale) {
+  return t(locale, 'versionLine').replace('{version}', VERSION);
+}
 
 /** Player-facing stamp on the About overlay: the time of the last push (written by `npm run push`). */
 export const LAST_UPDATED = '6 Nov 2026, 18:26';

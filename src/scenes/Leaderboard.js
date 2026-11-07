@@ -1,5 +1,5 @@
 import { GAME_HEIGHT, LEADERBOARD, TUNING as T } from '../config.js';
-import { VERSION, chromeIntent, overlayOutsideHit, fitScale } from '../logic.js';
+import { versionText, chromeIntent, overlayOutsideHit, fitScale } from '../logic.js';
 import { createFocus, pressable } from '../ui/focus.js';
 import { t, metaFontSize, rankText, levelLabel } from '../i18n.js';
 import { bestByToilet, TOILET_EMOJI } from '../save.js';
@@ -48,7 +48,7 @@ export class Leaderboard extends Phaser.Scene {
       .text(cx, cy + 300, '', { ...STYLE, fontSize: '26px', color: PINK, fontStyle: 'normal', wordWrap: { width: 500, useAdvancedWrap: true } })
       .setOrigin(0.5);
     this.add
-      .text(cx, cy + 358, `v${VERSION}`, { ...STYLE, fontSize: metaFontSize(locale), color: DIM, fontStyle: 'normal' })
+      .text(cx, cy + 358, versionText(locale), { ...STYLE, fontSize: metaFontSize(locale), color: DIM, fontStyle: 'normal' })
       .setOrigin(0.5);
 
     const close = this.add.text(cx + 236, cy - 346, '✕', { ...STYLE, fontSize: '48px' }).setOrigin(0.5).setInteractive({ useHandCursor: true });

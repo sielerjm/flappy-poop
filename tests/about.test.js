@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { LAST_UPDATED } from '../src/logic.js';
+import { LAST_UPDATED, VERSION, versionText } from '../src/logic.js';
 import { t, LOCALES } from '../src/i18n.js';
 
 function aboutText(locale) {
@@ -35,4 +35,11 @@ test('LAST_UPDATED is a player-facing date and time', () => {
   assert.ok(LAST_UPDATED.length > 0);
   assert.match(LAST_UPDATED, /20\d\d/);
   assert.match(LAST_UPDATED, /\d:\d/);
+});
+
+test('every overlay\'s version line carries the version and the beta tag in both locales', () => {
+  assert.match(VERSION, /^\d+\.\d+\.\d+$/);
+  assert.equal(versionText('en'), `v${VERSION} beta`);
+  assert.ok(versionText('zh-Hans').startsWith(`v${VERSION} `) && versionText('zh-Hans') !== versionText('en'));
+  assert.equal(versionText('xx'), versionText('en'), 'unknown locale falls back to English');
 });

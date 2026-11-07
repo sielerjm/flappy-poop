@@ -1,5 +1,5 @@
 import { GAME_HEIGHT, TUNING as T } from '../config.js';
-import { VERSION, chromeIntent, overlayOutsideHit } from '../logic.js';
+import { versionText, chromeIntent, overlayOutsideHit } from '../logic.js';
 import { createFocus, pressable } from '../ui/focus.js';
 import { t, howToItems, metaFontSize } from '../i18n.js';
 import { TOILET_EMOJI } from '../save.js';
@@ -88,7 +88,7 @@ export class HowTo extends Phaser.Scene {
     const versionY = feedbackY + 80;
     sv.add(
       this.add
-        .text(cx, versionY, `v${VERSION}`, {
+        .text(cx, versionY, versionText(locale), {
           ...STYLE,
           fontSize: metaFontSize(locale),
           color: '#6a5a74',

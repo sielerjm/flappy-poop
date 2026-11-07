@@ -1,5 +1,5 @@
 import { GAME_HEIGHT, TUNING as T } from '../config.js';
-import { VERSION, createSettingsStore, chromeIntent, overlayOutsideHit, hardReloadGame, settingsLayout, nextTestLevel } from '../logic.js';
+import { versionText, createSettingsStore, chromeIntent, overlayOutsideHit, hardReloadGame, settingsLayout, nextTestLevel } from '../logic.js';
 import { t, toggleLabel, metaFontSize, levelLabel } from '../i18n.js';
 import { createFocus, pressable } from '../ui/focus.js';
 import { setMuted } from '../sound.js';
@@ -73,7 +73,7 @@ export class Settings extends Phaser.Scene {
     if (testMode) this.buildTestSection(layout, play);
 
     this.add
-      .text(cx, rows.version, `v${VERSION}`, {
+      .text(cx, rows.version, versionText(locale), {
         ...STYLE,
         fontSize: metaFontSize(locale),
         color: '#6a5a74',
