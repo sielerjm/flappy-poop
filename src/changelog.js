@@ -8,6 +8,22 @@ import { LOCALES } from './i18n.js';
 
 export const CHANGELOG = [
   {
+    version: '0.6.1',
+    date: '7 Nov 2026',
+    notes: {
+      en: [
+        'The probiotic / postbiotic icon beside its pipe count breathes gently while the count runs.',
+        'In landscape (and on a desktop window) the bean button sits by your right thumb at the edge of the screen. A 👈 👉 row in Settings moves it to the left; your save code carries the choice.',
+        'Resuming from a pause gives a gentle half-flap bounce instead of a full flap, so the poop no longer jumps into the pipe above.',
+      ],
+      'zh-Hans': [
+        '益生菌 / 后生元图标在倒数期间会轻轻地一张一缩。',
+        '横屏（以及电脑窗口）下，豆子按钮移到屏幕边缘、靠近右手拇指的位置。设置里新增 👈 👉 一行，可切换到左侧；你的存档码会记住这个选择。',
+        '暂停后继续时只会轻轻弹起半次起飞的高度，而不是整次，便便不会再撞上上方的管道。',
+      ],
+    },
+  },
+  {
     version: '0.6.0',
     date: '7 Nov 2026',
     notes: {

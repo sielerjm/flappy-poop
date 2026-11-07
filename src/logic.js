@@ -4,7 +4,7 @@
 
 import { isLocale, DEFAULT_LOCALE, t } from './i18n.js';
 
-export const VERSION = '0.6.0'; // bumped when art under an existing name changes (Boot's ?v= cache-bust)
+export const VERSION = '0.6.1'; // bumped when art under an existing name changes (Boot's ?v= cache-bust)
 /** The version line every overlay shows: `v{VERSION} beta` in the locale's words (i18n versionLine); What's new passes older versions. */
 export function versionText(locale, version = VERSION) {
   return t(locale, 'versionLine').replace('{version}', version);
@@ -1546,11 +1546,12 @@ export function nextTestLevel(level, step, t) {
 export const TEST_POWERS = ['probiotic', 'fiber', 'postbiotic', 'bean1', 'bean3', 'skip'];
 
 /**
- * Settings overlay geometry: the panel rect, the ✕ and each row's centre y.
- * Without test mode it is the original 600 × 720 panel; with it the panel
- * grows to 1160 px (60 px clear of the field's top and bottom) and adds the
- * test section: title, start level (◀ / ▶ hit boxes), Invincible, a row of
- * TEST_POWERS icon buttons, and Exit. Hit boxes are at least trayHitMin.
+ * Settings overlay geometry: the panel rect, the ✕, each row's centre y and the
+ * hand row's box (👈 pill 👉, the whole row tappable). Without test mode it is a
+ * 600 × 860 panel; with it the panel grows to 1240 px (20 px clear of the field's
+ * top and bottom) and adds the test section: title, start level (◀ / ▶ hit
+ * boxes), Invincible, a row of TEST_POWERS icon buttons, and Exit. Hit boxes are
+ * at least trayHitMin.
  */
 export function settingsLayout(width, height, t, { test = false } = {}) {
   const cx = width / 2;

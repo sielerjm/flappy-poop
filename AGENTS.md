@@ -154,7 +154,11 @@ src/
                             LEVELS (gut segment name keys, in order), LEVEL_COLORS
                             (Set2 backgrounds, cycling) and BACKGROUND (overlay
                             layers: key + parallax), TEST_MODE (trigger words,
-                            default Invincible). TUNING.pipeMove = moving pairs
+                            default Invincible). TUNING.hudProbioticPulse = the
+                            HUD icon's breath; resumeFlapScale = the resume
+                            bounce's share of a flap; beans.buttonEdgeMarginPx =
+                            the bean button's inset by a thumb on a wide field.
+                            TUNING.pipeMove = moving pairs
                             (fromLevel, per-level chance / ampPx / periodMs rows). TUNING.gamepad = the pad's
                             standard-mapping button indices (A / B / Y / RT /
                             Menu / d-pad), RT threshold, stick deadzone + repeat;
@@ -182,7 +186,11 @@ src/
                             items (rollItem, hazardsAllowed, bandItemsMove,
                             bandMidY, tutorialSpawn), beans (rollBean, beanSpawnX, beanY,
                             beanAngle, bobY, gapBobAmplitude, gapBobY,
-                            poopTapHit; beanButtonHit's circle is twice the
+                            poopTapHit; beanButtonLayout(width, height, t, {
+                            colWidth, hand, match }): centred, or by the hand's
+                            thumb at beans.buttonEdgeMarginPx from the edge of a
+                            field wider than the column outside a match;
+                            beanButtonHit's circle is twice the
                             drawn button), poopFrame (the live poop's texture
                             key: plain / stink frame, or the falling faces at
                             fallLookVy px/s down), fart envelope (pipeSpacing,
@@ -196,8 +204,9 @@ src/
                             lockout, levels (levelPipes, levelEnd, levelFor, isFinalLevel,
                             levelSpeed, levelName, levelColor, levelProgress,
                             levelBarLayout, lerpColor),
-                            best-score store, settings store (incl. locale and
-                            howToSeenAt) + howToPromptDue, vibrate
+                            best-score store, settings store (incl. locale,
+                            howToSeenAt and hand: HANDS 'left' | 'right', the
+                            bean button's side) + howToPromptDue, vibrate
                             helper, trayLayout, trayHit, readyLayout, readyHit
                             (howToLayout / howToHit wrap them),
                             LAST_UPDATED, issueUrl, openExternalUrl, chromeIntent
@@ -250,7 +259,9 @@ src/
                             score, { toilet, level }), isNewTop,
                             merge, topScores, formatScore ("🚽 41"), summaryLine,
                             profileLine, exportCode / importCode (HMAC-SHA256,
-                            v1 payload {i, n, s, p, t}; p = optional toilet flags;
+                            v1 payload {i, n, s, p, [l], [h], t}; p = optional toilet
+                            flags; h = 'l' only for a left-handed player, handed
+                            back as `hand` beside the state, never in SaveState;
                             via Web Crypto, 16-byte tag, base64url), PARSERS per
                             wire version, SECRET constant (permanent). Fully
                             unit-tested.
@@ -323,10 +334,12 @@ src/
     button.js               createButton(): Graphics rounded rect + centred text
                             for the ready-screen boxes from readyLayout. No pointer
                             handlers; Play resolves taps with readyHit().
-    toggle.js               createToggle(scene, box, { on, glyph }): the toilet switch
+    toggle.js               createToggle(scene, box, { on, glyph, glyphLeft }): the toilet switch
                             (pill track, knob tween, 🚽 alpha) from readyLayout().toilet,
-                            and with glyph 👥 the two-player switch from
-                            readyLayout().versus; setOn(). No pointer handlers.
+                            with glyph 👥 the two-player switch from
+                            readyLayout().versus, and with glyphLeft 👈 / glyph 👉
+                            Settings' hand row (the off-side glyph lit) from
+                            settingsLayout().hand; setOn(). No pointer handlers.
     scrollView.js           createScrollView(): second camera clipped to a panel
                             interior, drag / wheel via clampScroll(), thumb, link()
                             that fires on pointerup only when moved < 12 px; offset,
@@ -391,8 +404,9 @@ src/
                             language > howto > changelog > about > settings >
                             leaderboard > scores. Opening Settings, About, HowTo, Changelog, Language,
                             Feedback, or Leaderboard while playing pauses;
-                            closing them does not resume. Unpause applies flapVelocity
-                            as a recovery bounce. Pause banner is two centered lines
+                            closing them does not resume. Unpause applies
+                            resumeFlapVelocity (resumeFlapScale × a flap, 0.5) as
+                            a recovery bounce, none during a fart. Pause banner is two centered lines
                             from i18n. Locale via getLocale / applyLocale. Holds the
                             SaveState (loadLocal on create, seeded once from the
                             legacy best); die() records the score (endRun) and
@@ -422,7 +436,10 @@ src/
                             restarted one underneath, dequeuePopup on fade-out and
                             layoutPopups slide the rest up over popup.shiftMs).
                             Postbiotic: refreshProbioticHud swaps probioticIcon to
-                            the 'postbiotic' texture and setMultiplierBadge() shows
+                            the 'postbiotic' texture (the icon sits in the
+                            probioticHud container, which setProbioticPulse
+                            breathes on hudProbioticPulse while the count runs;
+                            paused with the run, scale 1 once spent) and setMultiplierBadge() shows
                             the "×2" at multiplierLayout() (TUNING.postbiotic) in
                             two layers: multGlow (text shadow + padding, alpha
                             pulse) under the crisp, shadowless multText, which
@@ -438,7 +455,11 @@ src/
                             = bag full or farting); setCharged() alternates
                             stink frames through refreshPoopLook() + pulses this.glow
                             and the bean button in the tray centre slot
-                            (beanButtonLayout, same period). refreshPoopLook()
+                            (beanButtonLayout with beanButtonOpts(): the
+                            settings' hand puts it by a thumb on a wide field,
+                            a match half keeps the centre; applyHand() re-places
+                            it, getHand / setHand serve Settings and the save
+                            panel; same period). refreshPoopLook()
                             (poopFrame: charged, stinkFrame, body vy) also runs
                             every playing frame outside a fart, so a drop at
                             fallLookVy or faster wears poop-falling (or
@@ -616,13 +637,17 @@ src/
                             pointer); this.focus rings Home, Share (once the card
                             exists) and the tray, shown as the buttons fade in under
                             a controller; tray and focus are nulled on shutdown.
-    Settings.js             Overlay (geometry from settingsLayout): sound, haptics (Android only), Reload game
+    Settings.js             Overlay (geometry from settingsLayout): sound, haptics (Android only), the
+                            hand row (👈 pill 👉 from createToggle with glyphLeft, a
+                            Zone over the row, a hint line; toggleHand →
+                            Play.setHand, which moves the bean button on every
+                            running Play instance), Reload game
                             (hardReloadGame(): re-fetches loaded scripts with
                             cache: 'reload', then location.replace with a fresh r=
                             query; picks up a push at once, works on home-screen
                             installs), About link, version. Tap outside the panel
-                            closes (overlayOutsideHit), same as X. In test mode the
-                            panel is 1160 px with the test section (start level ◀ ▶,
+                            closes (overlayOutsideHit), same as X. The panel is 860
+                            px; in test mode 1240 px with the test section (start level ◀ ▶,
                             Invincible, TEST_POWERS buttons live only while a test run
                             is paused, Exit → setTestMode(false) + scene.restart()).
     About.js                Overlay: author, LLM note, engine/art/sound credits
@@ -715,17 +740,20 @@ tests/                      node --test, zero deps. Each file is self-describing
   html.test.js              index.html invariants (viewport, no scroll, pinned Phaser)
   assets.test.js            load.image / load.spritesheet / load.audio paths; README
                             sizes; a spritesheet is a whole number of frames; sfx credits
-  logic.test.js             gap bounds, rng determinism, hasPassed, angle
+  logic.test.js             gap bounds, rng determinism, hasPassed, angle,
+                            resumeFlapVelocity
   levels.test.js            level lengths / ends / levelFor table, final level,
                             per-level pipe spacing, levelSpeed cap (the level-3 cruise),
                             names + colours, levelProgress, lerpColor, gap + grace
                             sanity, levelBannerText, levelBarLayout, levelLabel
   state.test.js             retry lockout
   store.test.js             best-score store incl. throwing/missing storage
-  settings.test.js          settings store + vibrate helper
+  settings.test.js          settings store (incl. hand) + vibrate helper
   sound.test.js             sfx keys, mute, Node import
   tray.test.js              trayHeight / trayLayout geometry including info + lang +
-                            feedback; trayHit centre hits vs miss in the tray gap
+                            feedback; trayHit centre hits vs miss in the tray gap;
+                            the bean button centred in portrait, by either thumb on
+                            a wide field, centred in a match half
   pipeMove.test.js          pipeMoveParams rows, pipeMoveAmplitude clamp, pipeMoveShiftPx,
                             rollPipeMove (no draw below fromLevel, centred pair, seeded share ≈ chance),
                             every row's shift under half the clearance
@@ -745,6 +773,8 @@ tests/                      node --test, zero deps. Each file is self-describing
                             hsvToRgb, rainbowHue, wave stays inside the play area
   tuning.test.js            item / fartVolume / beans sanity bounds (normal and
                             super fart peaks), popup rows, postbiotic badge, the
+                            HUD icon pulse under the gap to its count, the resume
+                            bounce scale in (0, 1), the
                             mystery block (levels, half fiber's weight and speed,
                             the locked draw table)
   about.test.js             About copy (both locales) names author, LLM, Phaser, JS, sound;
@@ -771,6 +801,7 @@ tests/                      node --test, zero deps. Each file is self-describing
                             (plain and test-mode)
   testmode.test.js          isTestWord, testRunStart (levels, par score, clamping),
                             nextTestLevel wrap, TEST_POWERS, settingsLayout geometry
+                            (incl. the hand row)
   hitbox.test.js            scaledCircleBody source radius/offset for 2x and 4x
   chrome.test.js            chromeIntent matrix across state x overlay x input
                             (incl. the Changelog over About)
@@ -798,7 +829,8 @@ tests/                      node --test, zero deps. Each file is self-describing
   smoke.test.js             logic.js imports and exports VERSION
   save.test.js              save codes: spec rows 1-10 (round trip, tamper, relabel,
                             v2 migration, merge, name rules, wrapped paste, empty
-                            scores, throwing storage) + helper coverage, best 6
+                            scores, throwing storage) + helper coverage, best 6,
+                            the optional h (hand) key
   ready.test.js             readyLayout boxes inside the field, non-overlapping,
                             clear of the bobbing poop; readyHit centre / gap / profile
   serve.test.js             npm start points at tools/serve.py; bind + URL print;
@@ -1046,7 +1078,10 @@ Commits so far follow `type(scope): summary` (`feat`, `docs`, `chore`); keep it.
   use `this.scale.width`. Text input belongs in a DOM panel like `src/ui/savePanel.js`,
   not Phaser UI.
 - Save-code wire format change → bump `CURRENT_VERSION` in `src/save.js`, add
-  `parseVN` to `PARSERS`, never delete an old parser, never change `SECRET`.
+  `parseVN` to `PARSERS`, never delete an old parser, never change `SECRET`. An
+  optional key with a default (`p`, `l`, `h`) joins the current version without a
+  bump (spec rule 5): write it only when it differs from the default so older
+  codes stay byte-identical, and update the spec's payload table.
 - New UI string → both locales in `src/i18n.js` + a row in `TRANSLATION_NOTES.md`
   (+ allowlist in `tests/i18n.test.js` only if intentionally identical). Scenes
   call `t(locale, key)`; never hardcode player English.
