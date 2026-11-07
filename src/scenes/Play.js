@@ -54,6 +54,8 @@ import {
   bandMidY,
   gapBobAmplitude,
   gapBobY,
+  gapBounds,
+  rollPipeMove,
   beanAngle,
   poopTapHit,
   fartPeakMul,
@@ -1146,6 +1148,7 @@ export class Play extends Phaser.Scene {
       gapHeight: this.diff.gapHeight,
       gapMargin: T.gapMargin,
     };
+    const centred = this.nextGapY == null && this.centreNextGap; // the pair after a fart: opens at the float height and never moves
     const gapY = this.nextGapY ?? (this.centreNextGap ? centredGapY(gapCfg) : pipeGapY(this.rng, gapCfg));
     this.nextGapY = null;
     this.centreNextGap = false;
@@ -1188,6 +1191,11 @@ export class Play extends Phaser.Scene {
           : scripted;
     // The first box owns this pair's open spot: no bean (or rolled fiber) takes it.
     const beanHere = !boxHere && (scripted === undefined ? rollBean(this.rng, this.score, T, { spawnedThisRun: this.beanSpawned, holding: this.effects.holdingBean() }) : scripted === 'bean');
+    // From pipeMove.fromLevel some pairs bob their gap: the top pipe carries the motion and its mate
+    // follows in update() (the 1280 px texture covers any gap position, so only y changes). Rolled
+    // after the item and bean draws so levels below fromLevel and the draws before it keep their sequence.
+    const move = rollPipeMove(this.rng, this.level, gapY, gapBounds(gapCfg), T, { centred });
+    if (move) top.setData({ move, elapsed: 0, mate: bottom, gapH });
     // Fiber and mystery boxes sit between pairs like a bean (and yield to a bean rolled for the same pair);
     // probiotic and bacteria sit in the gap, behind the pipes, moving from moveFromLevel.
     // Before bandMoveFromLevel fiber and beans hold still midway between this gap and the next.
@@ -1200,7 +1208,7 @@ export class Play extends Phaser.Scene {
     const boxStill = !mysteryMoves(this.level, T);
     if (boxHere) this.spawnBandItem('mystery', boxStill ? stillY() : null, shift);
     else if (band && !beanHere) this.spawnBandItem(kind, (kind === 'mystery' ? boxStill : still) ? stillY() : null, shift);
-    if (kind && !band) this.spawnGapItem(kind, x, gapY, gapH);
+    if (kind && !band) this.spawnGapItem(kind, x, gapY, gapH, move ? top : null);
 
     // Beans ride halfway between this pair and the next, bobbing top to bottom (still in level 1).
     if (beanHere) {
@@ -1248,13 +1256,20 @@ export class Play extends Phaser.Scene {
     }
   }
 
-  /** A probiotic or bacteria in a gap, behind the pipes; from moveFromLevel it sweeps up and down the gap. */
-  spawnGapItem(kind, x, gapY, gapH) {
+  /**
+   * A probiotic or bacteria in a gap, behind the pipes; from moveFromLevel it sweeps up and down
+   * the gap. In a moving pair (`pair` = its top pipe) it rides the gap centre instead, so it can
+   * never leave the opening.
+   */
+  spawnGapItem(kind, x, gapY, gapH, pair = null) {
     const y = itemGapY(gapY, gapH, this.rng, kind);
     const item = this.items.create(x, y, kind);
     item.setDepth(-1); // under the pipes (0), over the background layers
     this.finishItem(item, kind);
-    if (this.level >= T.items.moveFromLevel) {
+    if (pair) {
+      item.setData({ bob: 'pair', pair, elapsed: 0 });
+      item.y = gapY;
+    } else if (this.level >= T.items.moveFromLevel) {
       const amp = gapBobAmplitude(gapH, T.items.itemRadius, T.items.moveMarginPx);
       item.setData({ bob: 'gap', baseY: gapY, amp, elapsed: 0, phase: this.rng() * Math.PI * 2 });
       item.y = gapBobY(0, gapY, amp, T.items.movePeriodMs, item.getData('phase'));
@@ -1882,6 +1897,18 @@ export class Play extends Phaser.Scene {
     }
 
     for (const pipe of this.pipes.getChildren()) {
+      // A moving pair: the gap centre follows its sine (frozen while paused, like the items); the
+      // mate stays gapH below. Arcade reads the sprites' positions each step, so the bodies follow.
+      const move = pipe.getData('move');
+      if (move && this.state === 'playing') {
+        const elapsed = pipe.getData('elapsed') + delta;
+        pipe.setData('elapsed', elapsed);
+        const gapY = gapBobY(elapsed, move.baseY, move.amp, move.periodMs, move.phase);
+        const gapH = pipe.getData('gapH');
+        pipe.y = gapY - gapH / 2;
+        const mate = pipe.getData('mate');
+        if (mate?.active) mate.y = gapY + gapH / 2;
+      }
       if (this.state === 'playing' && pipe.getData('scoring') && !pipe.getData('passed') && hasPassed(pipe.x, T.pipeWidth, this.poop.x)) {
         pipe.setData('passed', true);
         const mult = this.effects.multiplier(); // read before the countdown: the last postbiotic pipe still counts double
@@ -1902,7 +1929,10 @@ export class Play extends Phaser.Scene {
         const elapsed = item.getData('elapsed') + delta;
         item.setData('elapsed', elapsed);
         if (bob === 'band') item.y = bobY(elapsed, item.getData('phase'), this.beanBounds, item.getData('period') ?? T.items.fiberPeriodMs);
-        else item.y = gapBobY(elapsed, item.getData('baseY'), item.getData('amp'), T.items.movePeriodMs, item.getData('phase'));
+        else if (bob === 'pair') {
+          const pair = item.getData('pair'); // the moving pair's top pipe (updated above in this frame)
+          if (pair?.active) item.y = pair.y + pair.getData('gapH') / 2;
+        } else item.y = gapBobY(elapsed, item.getData('baseY'), item.getData('amp'), T.items.movePeriodMs, item.getData('phase'));
       }
       if (item.x < -T.pipeWidth) item.destroy();
     }
