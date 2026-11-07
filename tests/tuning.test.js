@@ -3,6 +3,13 @@ import assert from 'node:assert/strict';
 import { TUNING as T, SHARE, FIELD, GAME_WIDTH, GAME_HEIGHT } from '../src/config.js';
 import { pipeSpacing, levelSpeed } from '../src/logic.js';
 
+test('the ceiling strip mirrors the ground strip, and the play area between them is centred on mid-screen', () => {
+  assert.equal(T.ceilingHeight, T.groundHeight);
+  assert.ok(T.ceilingHeight > 0 && T.ceilingHeight < GAME_HEIGHT / 4, `ceilingHeight ${T.ceilingHeight}`);
+  assert.equal((T.ceilingHeight + GAME_HEIGHT - T.groundHeight) / 2, GAME_HEIGHT / 2, 'the fart float centre is the play centre');
+  assert.ok(T.hudScoreY + 40 <= T.ceilingHeight + T.gapMargin, 'the score sits above where a gap can start');
+});
+
 test('item spawn rates sit in a fair band', () => {
   assert.ok(T.items.chancePerGap >= 0.1 && T.items.chancePerGap <= 0.5, `chancePerGap ${T.items.chancePerGap}`);
   assert.ok(T.items.hazardFromLevel >= 2, 'level 1 stays free of bad bacteria');

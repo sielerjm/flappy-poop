@@ -175,13 +175,19 @@ export class Play extends Phaser.Scene {
     this.pipes = this.physics.add.group({ allowGravity: false, immovable: true });
     this.items = this.physics.add.group({ allowGravity: false, immovable: true });
     this.beans = this.physics.add.group({ allowGravity: false, immovable: true });
+    // The ceiling and ground strips: in front of the pipes (depth 5) at full scroll speed, so the
+    // front villi rows pass faster than the back fringes in the overlay. The poop dies at their edges.
     this.ground = this.add
       .tileSprite(0, GAME_HEIGHT - T.groundHeight, W, T.groundHeight, 'ground')
       .setOrigin(0, 0)
       .setDepth(5);
-    {
-      const f = this.ground.frame;
-      this.ground.setTileScale(FIELD.minWidth / f.width, T.groundHeight / f.height);
+    this.ceiling = this.add.tileSprite(0, 0, W, T.ceilingHeight, 'ceiling').setOrigin(0, 0).setDepth(5);
+    for (const [strip, height] of [
+      [this.ground, T.groundHeight],
+      [this.ceiling, T.ceilingHeight],
+    ]) {
+      const f = strip.frame;
+      strip.setTileScale(FIELD.minWidth / f.width, height / f.height);
     }
 
     // Ready-screen geometry (title, poop spot, buttons). Taps resolve through
@@ -1127,6 +1133,7 @@ export class Play extends Phaser.Scene {
     this.pipesSpawned += 1;
     const gapCfg = {
       gameHeight: GAME_HEIGHT,
+      ceilingHeight: T.ceilingHeight,
       groundHeight: T.groundHeight,
       gapHeight: this.diff.gapHeight,
       gapMargin: T.gapMargin,
@@ -1783,6 +1790,7 @@ export class Play extends Phaser.Scene {
     if (scrolling) {
       for (const layer of this.bgLayers) layer.sprite.tilePositionX += this.scrollSpeed() * layer.parallax * dt;
       this.ground.tilePositionX += this.scrollSpeed() * dt;
+      this.ceiling.tilePositionX += this.scrollSpeed() * dt;
     }
 
     if (this.state === 'playing') {
@@ -1843,7 +1851,7 @@ export class Play extends Phaser.Scene {
         this.poop.setAngle(angleForVelocity(this.poop.body.velocity.y, T));
         this.refreshPoopLook(); // the falling face past fallLookVy, back to plain / stink on the next flap
       }
-      const top = T.poopRadius;
+      const top = T.ceilingHeight + T.poopRadius; // the strips' edges, like the floor
       const floor = GAME_HEIGHT - T.groundHeight - T.poopRadius;
       if (this.poop.y < top || this.poop.y > floor) {
         if (this.effects.powerActive() || this.graceLeftMs > 0 || this.testInvincible()) {

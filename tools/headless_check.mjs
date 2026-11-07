@@ -670,6 +670,9 @@ export async function run(url = DEFAULT_URL) {
       await evaluate(`import('./src/ui/savePanel.js').then((m) => m.closeSavePanel())`);
       await sleep(100);
       ok(swallowed, 'the save panel swallows pad presses');
+      // Earlier A presses flapped the gravity-free poop upward; park it mid-field again so the
+      // resumes below never meet the ceiling kill line.
+      await evaluate(`${play}.poop.setVelocity(0, 0), ${play}.poop.y = 640, true`);
 
       // The focus ring over the tray. A d-pad press mid-run pauses and rings ⏸; left / right walk
       // the tray in screen order and wrap; A on ⏸ resumes and the ring goes; A on 🔇 mutes without
@@ -718,7 +721,7 @@ export async function run(url = DEFAULT_URL) {
       await padDown(G.back);
       await sleep(100);
       const r8 = await ring();
-      ok(opened && closed && r7.state === 'paused' && r7.shown && r8.state === 'playing' && !r8.shown, 'A on ⚙ opens Settings, B closes it (ring still on the tray), B again resumes');
+      ok(opened && closed && r7.state === 'paused' && r7.shown && r8.state === 'playing' && !r8.shown, `A on ⚙ opens Settings (${opened}), B closes it (${closed}; ring still on the tray: ${r7.state}, shown ${r7.shown}), B again resumes (${r8.state}, shown ${r8.shown})`);
       await evaluate(`${play}.scene.restart(), true`);
       for (let i = 0; i < 40 && (await playState()) !== 'ready'; i += 1) await sleep(250);
       await padNav('right');

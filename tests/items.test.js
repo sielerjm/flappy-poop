@@ -47,7 +47,7 @@ test('bandMidY puts a still pickup midway between this gap and the next, inside 
   assert.equal(bandMidY(300, 700), 500);
   assert.equal(bandMidY(700, 300), bandMidY(300, 700), 'symmetric');
   assert.equal(bandMidY(420, 420), 420);
-  const cfg = { gameHeight: 1280, groundHeight: T.groundHeight, gapHeight: 374, gapMargin: T.gapMargin };
+  const cfg = { gameHeight: 1280, ceilingHeight: T.ceilingHeight, groundHeight: T.groundHeight, gapHeight: 374, gapMargin: T.gapMargin };
   const rng = createRng(21);
   const lo = pipeGapY(() => 0, cfg);
   const hi = pipeGapY(() => 0.999999, cfg);

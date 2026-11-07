@@ -4,7 +4,7 @@
 
 import { isLocale, DEFAULT_LOCALE } from './i18n.js';
 
-export const VERSION = '0.5.15'; // bumped when art under an existing name changes (Boot's ?v= cache-bust)
+export const VERSION = '0.5.16'; // bumped when art under an existing name changes (Boot's ?v= cache-bust)
 
 /** Player-facing stamp on the About overlay: the time of the last push (written by `npm run push`). */
 export const LAST_UPDATED = '6 Nov 2026, 18:26';
@@ -123,9 +123,9 @@ export function createRng(seed = 1) {
   };
 }
 
-/** Vertical bounds the centre of a pipe gap may occupy. */
-export function gapBounds({ gameHeight, groundHeight, gapHeight, gapMargin }) {
-  const minY = gapMargin + gapHeight / 2;
+/** Vertical bounds the centre of a pipe gap may occupy: gapMargin below the ceiling strip and above the ground strip. */
+export function gapBounds({ gameHeight, ceilingHeight = 0, groundHeight, gapHeight, gapMargin }) {
+  const minY = ceilingHeight + gapMargin + gapHeight / 2;
   const maxY = gameHeight - groundHeight - gapMargin - gapHeight / 2;
   if (maxY < minY) throw new Error('gapBounds: playfield too short for this gap');
   return { minY, maxY };

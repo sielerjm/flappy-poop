@@ -118,7 +118,7 @@ test('lerpColor blends per channel and clamps f', () => {
 
 test('the fixed gap still fits the poop with room, and the fart grace clears a pipe column at level-1 speed', () => {
   assert.ok(T.gapHeight >= T.poopRadius * 2 * 2.5, 'gap is at least 2.5 poop diameters');
-  const b = gapBounds({ gameHeight: GAME_HEIGHT, groundHeight: T.groundHeight, gapHeight: T.gapHeight, gapMargin: T.gapMargin });
+  const b = gapBounds({ gameHeight: GAME_HEIGHT, ceilingHeight: T.ceilingHeight, groundHeight: T.groundHeight, gapHeight: T.gapHeight, gapMargin: T.gapMargin });
   assert.ok(b.maxY > b.minY, 'a gap can be placed');
   assert.ok((T.beans.graceMs * T.pipeSpeed) / 1000 >= T.pipeWidth + T.poopRadius, 'grace clears a pipe column');
 });
@@ -230,6 +230,6 @@ test('levelGap is 10 % wider on level 1, 5 % on level 2, and the base gap from l
     assert.ok(s[i] >= 1, `gapScale[${i}] never narrows below the base gap`);
     if (i > 0) assert.ok(s[i] <= s[i - 1], 'gaps never widen as levels rise');
   }
-  const b = gapBounds({ gameHeight: GAME_HEIGHT, groundHeight: T.groundHeight, gapHeight: levelGap(1, T), gapMargin: T.gapMargin });
+  const b = gapBounds({ gameHeight: GAME_HEIGHT, ceilingHeight: T.ceilingHeight, groundHeight: T.groundHeight, gapHeight: levelGap(1, T), gapMargin: T.gapMargin });
   assert.ok(b.maxY > b.minY, 'the widest gap still has room to move');
 });

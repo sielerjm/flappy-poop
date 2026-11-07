@@ -26,7 +26,8 @@ export const TUNING = {
   pipeSpacingPx: 412, // px between pipe pairs from levels.spacingRefLevel on (1.27 s at level-3 speed); slower levels get more, see pipeSpacing()
   gapHeight: 340, // vertical opening between a pipe pair
   pipeWidth: 128,
-  groundHeight: 128,
+  groundHeight: 128, // px, the ground strip: the poop dies at its edge and gaps keep gapMargin above it
+  ceilingHeight: 128, // px, the ceiling strip (the ground's mirror): the poop dies at its edge and gaps keep gapMargin below it
   gapMargin: 80, // keep the gap this far from the ceiling and the ground
   poopXFrac: 0.25, // 0–1 share of the field width where the player sits (180 px of a 720 field; the same share on a wider desktop field; poopX())
   poopRadius: 48, // px circular hitbox = half the 96 logical-px sprite (the whole drawing, square corners excluded)

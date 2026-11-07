@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { createRng, gapBounds, pipeGapY, centredGapY, hasPassed, angleForVelocity, poopFrame } from '../src/logic.js';
 import { GAME_HEIGHT, TUNING as T } from '../src/config.js';
 
-const cfg = { gameHeight: GAME_HEIGHT, groundHeight: T.groundHeight, gapHeight: T.gapHeight, gapMargin: T.gapMargin };
+const cfg = { gameHeight: GAME_HEIGHT, ceilingHeight: T.ceilingHeight, groundHeight: T.groundHeight, gapHeight: T.gapHeight, gapMargin: T.gapMargin };
 
 test('pipeGapY always lands inside gapBounds (10 000 draws)', () => {
   const { minY, maxY } = gapBounds(cfg);
@@ -15,10 +15,13 @@ test('pipeGapY always lands inside gapBounds (10 000 draws)', () => {
   }
 });
 
-test('the gap never overlaps the ground or the ceiling with the shipped tuning', () => {
+test('the gap keeps gapMargin below the ceiling strip and above the ground strip with the shipped tuning', () => {
   const { minY, maxY } = gapBounds(cfg);
-  assert.ok(minY - T.gapHeight / 2 >= 0);
-  assert.ok(maxY + T.gapHeight / 2 <= GAME_HEIGHT - T.groundHeight);
+  assert.equal(minY - T.gapHeight / 2, T.ceilingHeight + T.gapMargin);
+  assert.equal(maxY + T.gapHeight / 2, GAME_HEIGHT - T.groundHeight - T.gapMargin);
+  assert.ok(maxY > minY);
+  const { minY: noCeiling } = gapBounds({ ...cfg, ceilingHeight: undefined });
+  assert.equal(noCeiling, T.gapMargin + T.gapHeight / 2, 'ceilingHeight defaults to 0');
 });
 
 test('same seed gives the same pipe sequence; different seed differs', () => {
@@ -50,7 +53,7 @@ test('angleForVelocity is nose-up when rising and clamps nose-down when falling 
 });
 
 test('centredGapY sits at mid-screen (the fart float height) and stays inside gapBounds', () => {
-  const cfg = { gameHeight: GAME_HEIGHT, groundHeight: T.groundHeight, gapHeight: T.gapHeight, gapMargin: T.gapMargin };
+  const cfg = { gameHeight: GAME_HEIGHT, ceilingHeight: T.ceilingHeight, groundHeight: T.groundHeight, gapHeight: T.gapHeight, gapMargin: T.gapMargin };
   assert.equal(centredGapY(cfg), GAME_HEIGHT / 2);
   const { minY, maxY } = gapBounds(cfg);
   assert.ok(centredGapY(cfg) >= minY && centredGapY(cfg) <= maxY);

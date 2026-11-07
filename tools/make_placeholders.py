@@ -8,7 +8,7 @@ checks that the README table matches the PNG headers).
 
 Run:  python3 tools/make_placeholders.py
 Requires Pillow. Uses Noto Color Emoji for the poop if present, else draws a blob.
-Only pipe / villi / ground: the player, items and the app icons come from
+Only pipe / villi / ceiling / ground: the player, items and the app icons come from
 tools/process_art.py (Michael's drawings in assets/src/), never from here.
 """
 from pathlib import Path
@@ -114,11 +114,11 @@ def backdrop(d, w, y0, y1, toward_lumen):
 
 
 def ceiling_strip(d, w, strip_h=128, cream_h=16):
-    """The ground strip's vertical mirror, baked into the overlay's top edge: a dark band, a
+    """The ground strip's vertical mirror (drawn into ceiling.png by ceiling()): a dark band, a
     cream line along its lower edge ending at BAR_FRAC of the shortest tip (so every tip
     extends past it), and fingers growing up from the TIP_ZONE whose tips undulate shallowly
-    (same seed as the ground so the two rows read as one gut wall). Background only: pipes
-    and the poop draw over it, so the ceiling kill line and the gap margin stay as they are."""
+    (same seed as the ground so the two rows read as one gut wall). The game draws it in front
+    of the pipes at pipe speed, like the ground; the poop dies at its edge (ceilingHeight)."""
     tips = strip_h - TIP_ZONE  # the shortest front tip's reach from the top edge
     bar = round(BAR_FRAC * tips)
     d.rectangle((0, 0, w, bar - cream_h), fill=VILLI_DARK)
@@ -130,10 +130,10 @@ def ceiling_strip(d, w, strip_h=128, cream_h=16):
 def villi(path, w=720, h=1280):
     """Transparent overlay: a cream mucosa backdrop from each screen edge to BAR_FRAC of the
     shortest fringe tip, fading to transparent toward the lumen (BACKDROP_FADE; behind
-    everything: the strips and the fringes draw over it), the
-    villi fringes, and the ceiling strip (the ground's mirror) along the top edge. The level
-    colour shows through from the backdrop's edge to the lumen (the game draws a solid
-    rectangle under the overlay)."""
+    everything: the strips and the fringes draw over it) and the two villi fringes. The front
+    rows are separate strips (ceiling.png / ground.png) that the game draws over the pipes.
+    The level colour shows through from the backdrop's edge to the lumen (the game draws a
+    solid rectangle under the overlay)."""
     img = Image.new("RGBA", (w, h), (0, 0, 0, 0))
     d = ImageDraw.Draw(img)
     # Fringes ~175 px (~14 % each end; a third shorter than the first cut) so the open lumen stays clear.
@@ -149,12 +149,21 @@ def villi(path, w=720, h=1280):
     backdrop(d, w, 0, top_bar, +1)
     backdrop(d, w, bot_bar, h, -1)
     # villi fringes (drawn wider than the image so the horizontal tile edge matches); every finger
-    # is ≥ 131 px so its rounded far end sits behind the ceiling strip / the ground strip, and the
+    # is ≥ 131 px so its rounded far end sits behind the ceiling strip / the ground strip (drawn by
+    # the game in front of this overlay), and the
     # tips undulate ±24 px around the backdrop's edge (BACK_WAVE).
     villi_band(d, -40, w + 40, top_base, fringe, up=True, rng=random.Random(7), min_frac=0.75, wave=BACK_WAVE, tile_w=w)
     villi_band(d, -40, w + 40, bot_base, fringe, up=False, rng=random.Random(7), min_frac=0.75, wave=BACK_WAVE, tile_w=w)
-    # Front row at the top, in front of the fringe, as ground.png is in front of the bottom one.
-    ceiling_strip(d, w)
+    img.save(path)
+
+
+def ceiling(path, w=720, h=128):
+    """The ceiling strip, ground.png's mirror: its own file because the game draws it as a
+    tileSprite in front of the pipes at pipe speed (like the ground), not as part of the slow
+    overlay. See ceiling_strip for the drawing."""
+    img = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+    d = ImageDraw.Draw(img)
+    ceiling_strip(d, w, strip_h=h)
     img.save(path)
 
 
@@ -176,7 +185,8 @@ if __name__ == "__main__":
     # poop.png and the icons are Michael's drawings (tools/process_art.py). Do not overwrite them.
     pipe(OUT / "pipe.png")
     villi(OUT / "villi.png")
+    ceiling(OUT / "ceiling.png")
     ground(OUT / "ground.png")
-    for f in ["pipe.png", "villi.png", "ground.png"]:
+    for f in ["pipe.png", "villi.png", "ceiling.png", "ground.png"]:
         im = Image.open(OUT / f)
         print(f"{f}: {im.width}x{im.height}")

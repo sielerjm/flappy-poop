@@ -29,6 +29,7 @@ export class Boot extends Phaser.Scene {
     this.load.image('poop-speech', 'assets/poop-speech.png' + V);
     this.load.image('pipe', 'assets/pipe.png' + V);
     this.load.image('villi', 'assets/villi.png' + V); // transparent overlay above the per-level colour
+    this.load.image('ceiling', 'assets/ceiling.png' + V); // the ceiling strip, the ground's mirror: in front of the pipes at pipe speed
     this.load.image('ground', 'assets/ground.png' + V);
     this.load.audio('fart', 'assets/sfx/fart.mp3' + V);
     this.load.audio('fart-accelerate', 'assets/sfx/fart_accelerate.mp3' + V);

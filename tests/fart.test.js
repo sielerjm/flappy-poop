@@ -50,7 +50,7 @@ test('fartFloat tilts nose up while rising and nose down while falling, within w
 });
 
 test('the float wave stays inside the play area with the poop radius to spare', () => {
-  const top = T.poopRadius;
+  const top = T.ceilingHeight + T.poopRadius;
   const floor = GAME_HEIGHT - T.groundHeight - T.poopRadius;
   assert.ok(CENTRE - b.waveAmplitudePx > top + 100 && CENTRE + b.waveAmplitudePx < floor - 100, 'wide margins');
   assert.ok(b.wavePeriodMs >= 600 && b.wavePeriodMs <= 3000, `wavePeriodMs ${b.wavePeriodMs}`);
