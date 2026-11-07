@@ -50,6 +50,16 @@ test('no scene or ui module reads GAME_WIDTH: the live field is this.scale.width
   }
 });
 
+test('Play.js reads this.scale.width only to fit the field: its world is this.fieldW (a half of the canvas in a versus match)', () => {
+  const src = readFileSync(join(scenesDir, 'Play.js'), 'utf8');
+  const lines = src.split('\n').filter((line) => line.includes('scale.width'));
+  assert.ok(lines.length >= 1, 'applyFieldSize still fits the canvas');
+  for (const line of lines) {
+    assert.match(line, /setGameSize|fieldWidth\(globalThis|this\.fieldW = this\.half/, `Play.js reads the canvas width outside the field fit: ${line.trim()}`);
+  }
+  assert.ok(/this\.fieldW/.test(src), 'the world width is this.fieldW');
+});
+
 test('the guard itself catches a shadowing method', () => {
   const names = methodNames('class X extends Phaser.Scene {\n  create() {\n  }\n\n  async load(a) {\n  }\n}');
   assert.deepEqual(names, ['create', 'load']);

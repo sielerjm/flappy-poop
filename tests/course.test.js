@@ -55,6 +55,11 @@ test('a single-player course draws exactly what the one stream drew before, in t
   const c = createCourse(5, T);
   assert.equal(c.shared, false);
   assert.equal(c.seed, 5);
+  assert.equal(typeof c.rng, 'function', 'the single stream is exposed for the pickup-time mystery draw');
+  c.rng = () => 0; // the smoke swaps the stream to force a roll
+  assert.equal(c.gapY(3, cfg), gapBounds(cfg).minY);
+  assert.equal(c.item(30, { score: 50 }), 'fiber', 'a zero roll is the first kind with weight');
+  assert.equal(createCourse(5, T, { shared: true }).rng, null);
 });
 
 test('a shared course is the same for two players whatever their score or bean bag, and differs by seed', () => {

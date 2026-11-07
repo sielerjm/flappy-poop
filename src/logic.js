@@ -706,11 +706,13 @@ const COURSE_SALT = { mystery: 1, gap: 2, item: 3, bean: 4, move: 5, itemY: 6, s
  * next one float past, collectBean).
  */
 export function createCourse(seed, t, { shared = false } = {}) {
-  const stream = createRng(seed);
-  const at = shared ? (n, salt) => createRng(mixSeed(seed, n, salt)) : () => stream;
-  return {
+  // Single player reads course.rng on every draw, so a test can swap the stream to force a roll.
+  const at = shared ? (n, salt) => createRng(mixSeed(seed, n, salt)) : () => course.rng;
+  const course = {
     seed,
     shared,
+    /** The single stream itself (null when shared): the mystery draw at pickup time reads it, as the run always did. */
+    rng: shared ? null : createRng(seed),
     /** scriptedMysteryPair: single player calls it once, at start(), as before. */
     mysteryPair() {
       return scriptedMysteryPair(at(0, COURSE_SALT.mystery), t);
@@ -739,6 +741,7 @@ export function createCourse(seed, t, { shared = false } = {}) {
       return Math.floor(at(n, COURSE_SALT.spin)() * frames);
     },
   };
+  return course;
 }
 
 /** Small rotation wiggle (degrees) at elapsedMs. */

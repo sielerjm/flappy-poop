@@ -1,7 +1,7 @@
 import { GAME_HEIGHT, FIELD, TUNING as T, LEVELS, LEVEL_COLORS, BACKGROUND, TEST_MODE } from '../config.js';
 import {
   createRng,
-  pipeGapY,
+  createCourse,
   centredGapY,
   hasPassed,
   angleForVelocity,
@@ -23,16 +23,13 @@ import {
   createBestStore,
   createSettingsStore,
   vibrate,
-  rollItem,
   hazardsAllowed,
   mysteryRolls,
   mysteryMoves,
-  scriptedMysteryPair,
   rollMystery,
   resolveMystery,
   skipPairs,
   MYSTERY_BEANS,
-  itemGapY,
   scoreAfterItem,
   scorePopup,
   popupSlots,
@@ -44,7 +41,6 @@ import {
   readyLayout,
   readyHit,
   scaledCircleBody,
-  rollBean,
   pipeSpacing,
   beanSpawnX,
   beanBounds,
@@ -55,7 +51,6 @@ import {
   gapBobAmplitude,
   gapBobY,
   gapBounds,
-  rollPipeMove,
   beanAngle,
   poopTapHit,
   fartPeakMul,
@@ -88,6 +83,7 @@ import { createButton } from '../ui/button.js';
 import { createToggle } from '../ui/toggle.js';
 import { openSavePanel, isSavePanelOpen } from '../ui/savePanel.js';
 import { bindPad } from '../input/pad.js';
+import { keyGroup, sameDevice, catchUpTier, catchUpDraws } from '../versus.js';
 
 const TEXT_STYLE = {
   fontFamily: 'sans-serif',
@@ -99,21 +95,49 @@ const TEXT_STYLE = {
 };
 
 export class Play extends Phaser.Scene {
-  constructor() {
-    super('Play');
+  /** 'Play' is the single-player scene and the left half (P1) of a versus match; 'PlayB' is the right half. */
+  constructor(key = 'Play') {
+    super(key);
+  }
+
+  /**
+   * Launch data. A versus half (scenes/Versus.js launches two Play instances) gets its
+   * player number, the shared match object and the strip of the canvas it owns; single
+   * player gets nothing and owns the whole canvas.
+   */
+  init(data) {
+    this.player = data?.player ?? 1;
+    this.match = data?.match ?? null;
+    this.half = this.match ? { fieldW: data.fieldW, fieldX: data.fieldX ?? 0 } : null;
   }
 
   create() {
     // Field: 1280 tall, as wide as the window asks (fieldWidth); re-fitted here on every
-    // (re)start. W is the full width the world spans; col is the centred chrome column
-    // (the whole field on a phone); the poop sits at poopXFrac of the width.
-    this.applyFieldSize();
-    const W = this.scale.width;
+    // (re)start. W is the full width this scene's world spans (the canvas, or this half's
+    // strip of it in a match); col is the centred chrome column (the whole field on a
+    // phone); the poop sits at poopXFrac of the width. Only applyFieldSize reads the
+    // canvas size; everything else uses this.fieldW (tests/scenes.test.js).
+    if (!this.half) this.applyFieldSize();
+    this.fieldW = this.half ? this.half.fieldW : this.scale.width;
+    this.fieldX = this.half ? this.half.fieldX : 0;
+    const W = this.fieldW;
+    if (this.half) {
+      // This half renders into its own strip of the canvas; its world starts at 0 like a phone's.
+      this.cameras.main.setViewport(this.fieldX, 0, W, GAME_HEIGHT);
+      this.physics.world.setBounds(0, 0, W, GAME_HEIGHT);
+    }
     this.col = uiColumn(W, FIELD);
     this.poopX = poopX(W, T);
     this.fieldResizeWanted = false;
     this.sweep = null; // the pre-fill's sweep-in on a wide field (prefillPipes / endSweep)
-    this.rng = createRng(Date.now() & 0xffffffff);
+    // Every random draw of the run comes from the course (createCourse): one stream in single
+    // player, a shared per-pair course in a match so both halves get the same pipes and pickups.
+    // A match rolls its mystery draws from a stream of its own per player (rngDraw), so what a
+    // box gives is each player's own luck and never shifts the shared course.
+    const seed = this.match ? this.match.seed : Date.now() & 0xffffffff;
+    this.course = createCourse(seed, T, { shared: Boolean(this.match) });
+    this.rngDraw = this.match ? createRng((Date.now() ^ (this.player * 0x9e3779b1)) & 0xffffffff) : null;
+    this.distance = 0; // px scrolled this run; the other half's ghost is placed by the difference
     this.score = 0;
     this.best = createBestStore(globalThis.localStorage, T.bestKey);
     this.settings = createSettingsStore(globalThis.localStorage, T.settingsKey);
@@ -357,22 +381,31 @@ export class Play extends Phaser.Scene {
     this.physics.add.overlap(this.poop, this.items, (_poop, item) => this.collectItem(item), undefined, this);
     this.physics.add.overlap(this.poop, this.beans, (_poop, bean) => this.collectBean(bean), undefined, this);
 
-    // Input: any pointer (touch/mouse) or Space/Up. Tray taps go through trayHit.
-    this.input.on('pointerdown', (pointer) => this.flap(pointer));
-    this.input.keyboard?.on('keydown-SPACE', () => this.flap());
-    this.input.keyboard?.on('keydown-UP', () => this.flap());
-    this.input.keyboard?.on('keydown-M', () => this.handleChrome('mute'));
-    this.input.keyboard?.on('keydown-P', () => this.handleChrome('pause'));
-    this.input.keyboard?.on('keydown-ESC', () => this.handleChrome('esc'));
-    this.input.keyboard?.on('keydown-S', () => this.handleChrome('settings'));
-    this.input.keyboard?.on('keydown-I', () => this.handleChrome('info'));
-    this.input.keyboard?.on('keydown-L', () => this.handleChrome('lang'));
-    this.input.keyboard?.on('keydown-F', () => this.handleChrome('feedback'));
-    this.input.keyboard?.on('keydown-T', () => this.handleChrome('leaderboard'));
-    this.input.keyboard?.on('keydown-B', () => this.activatePower()); // no-op unless the bean power is charged
-    // Gamepad: one binding for the whole game (overlays and Over run on top of this scene,
-    // which is never paused); onPadAction routes each press to whichever scene is on top.
-    this.pad = bindPad(this, (action) => this.onPadAction(action), T);
+    // Input: any pointer (touch/mouse) on this scene's strip of the canvas, or the keys. Tray
+    // taps go through trayHit. In a match the pointer is localised to the half (localPointer);
+    // the keyboard is read by the left half alone and routed to the half whose key group
+    // pressed (onVersusKey), so one key never flaps twice.
+    this.input.on('pointerdown', (pointer) => {
+      const p = this.localPointer(pointer);
+      if (p) this.flap(p);
+    });
+    const keys = !this.match || this.player === 1 ? this.input.keyboard : null;
+    keys?.on('keydown-SPACE', () => !this.match && this.flap());
+    keys?.on('keydown-UP', () => !this.match && this.flap());
+    keys?.on('keydown-M', () => this.handleChrome('mute'));
+    keys?.on('keydown-P', () => this.handleChrome('pause'));
+    keys?.on('keydown-ESC', () => this.handleChrome('esc'));
+    keys?.on('keydown-S', () => this.handleChrome('settings'));
+    keys?.on('keydown-I', () => this.handleChrome('info'));
+    keys?.on('keydown-L', () => this.handleChrome('lang'));
+    keys?.on('keydown-F', () => this.handleChrome('feedback'));
+    keys?.on('keydown-T', () => this.handleChrome('leaderboard'));
+    keys?.on('keydown-B', () => !this.match && this.activatePower()); // no-op unless the bean power is charged
+    keys?.on('keydown', (event) => this.onVersusKey(event?.code)); // a match: each key group is one player's flap / power
+    // Gamepad: one binding for the whole game (overlays, Over and the other half of a match run
+    // on top of or beside this scene, which is never paused); onPadAction routes each press to
+    // whichever scene is on top, and in a match to the half that claimed the pad.
+    this.pad = !this.match || this.player === 1 ? bindPad(this, (action, padIndex) => this.onPadAction(action, padIndex), T) : null;
 
     this.onHidden = () => {
       if (typeof document !== 'undefined' && document.hidden) this.autoPause();
@@ -412,7 +445,7 @@ export class Play extends Phaser.Scene {
    * field is letterboxed until Home, and continuing should take a deliberate tap.
    */
   onFieldResize() {
-    this.fieldResizeWanted = true;
+    this.fieldResizeWanted = !this.match; // a match keeps its halves until Home; the field re-fits then
     this.autoPause();
   }
 
@@ -445,7 +478,7 @@ export class Play extends Phaser.Scene {
         this.start();
         this.doFlap();
         // An overlay opened mid-slide must not leave the run playing under it.
-        if (this.chromeArgs('tap').overlay) this.pausePlay();
+        if (this.chromeArgs('tap').overlay) this.pauseRun();
       },
     });
   }
@@ -480,7 +513,8 @@ export class Play extends Phaser.Scene {
     this.beanSpawned = begin.beanSpawned;
     this.refreshTestBadge();
     this.collected = { fiber: 0, probiotic: 0, postbiotic: 0, bacteria: 0, bean: 0, mystery: 0 };
-    this.mysteryPair = scriptedMysteryPair(this.rng, T); // the pair the guaranteed first box (early level 3) rides after
+    this.mysteryPair = this.course.mysteryPair(); // the pair the guaranteed first box (early level 3) rides after
+    this.distance = 0;
     this.popupOrder = [];
     this.clearReveal();
     this.finishLine?.destroy();
@@ -521,7 +555,7 @@ export class Play extends Phaser.Scene {
   spawnFinishLine(shift = 0) {
     const w = T.levels.finishWidthPx;
     this.finishLine?.destroy();
-    this.finishLine = this.add.image(this.scale.width + w / 2 - shift, 0, 'finish').setOrigin(0.5, 0).setDepth(4);
+    this.finishLine = this.add.image(this.fieldW + w / 2 - shift, 0, 'finish').setOrigin(0.5, 0).setDepth(4);
     this.finishLine.setData('crossed', false);
     this.finishSpawned = true;
   }
@@ -603,6 +637,12 @@ export class Play extends Phaser.Scene {
 
   flap(pointer) {
     unlock();
+    if (this.match && this.match.status !== 'playing') {
+      // The join screen: a tap on this half claims it (versusInput); the countdown and the
+      // result panel take nothing here (the Versus scene owns the panel's buttons).
+      if (pointer) this.versusInput({ kind: 'touch', side: this.player === 1 ? 'left' : 'right' }, 'flap', pointer);
+      return;
+    }
     if (this.state === 'dead') return;
     if (pointer) {
       const id = trayHit(pointer.x, pointer.y, trayLayout(this.col.width, GAME_HEIGHT, T, this.col.x));
@@ -847,52 +887,55 @@ export class Play extends Phaser.Scene {
   applyChrome(result) {
     switch (result.do) {
       case 'pause':
-        this.pausePlay();
+        this.pauseRun();
         break;
       case 'resume':
-        this.resumePlay();
+        // A match: the shared pause lifts both halves, but a level break's continue tap is this
+        // half's own (resumePlay → endLevelBreak) and never touches the other.
+        if (this.match && !this.levelBreak) this.versusHost()?.setPaused?.(false);
+        else this.resumePlay();
         break;
       case 'toggleMute':
         this.toggleMute();
         break;
       case 'openSettings':
-        if (result.pause) this.pausePlay();
+        if (result.pause) this.pauseRun();
         if (!this.scene.isActive('Settings')) this.scene.launch('Settings');
         this.scene.bringToTop('Settings');
         break;
       case 'openAbout':
-        if (result.pause) this.pausePlay();
+        if (result.pause) this.pauseRun();
         if (!this.scene.isActive('About')) this.scene.launch('About');
         this.scene.bringToTop('About');
         break;
       case 'openHowTo':
         this.markHowToSeen();
-        if (result.pause) this.pausePlay();
+        if (result.pause) this.pauseRun();
         if (!this.scene.isActive('HowTo')) this.scene.launch('HowTo');
         this.scene.bringToTop('HowTo');
         break;
       case 'openChangelog':
-        if (result.pause) this.pausePlay();
+        if (result.pause) this.pauseRun();
         if (!this.scene.isActive('Changelog')) this.scene.launch('Changelog');
         this.scene.bringToTop('Changelog');
         break;
       case 'openLanguage':
-        if (result.pause) this.pausePlay();
+        if (result.pause) this.pauseRun();
         if (!this.scene.isActive('Language')) this.scene.launch('Language');
         this.scene.bringToTop('Language');
         break;
       case 'openFeedback':
-        if (result.pause) this.pausePlay();
+        if (result.pause) this.pauseRun();
         if (!this.scene.isActive('Feedback')) this.scene.launch('Feedback');
         this.scene.bringToTop('Feedback');
         break;
       case 'openScores':
-        if (result.pause) this.pausePlay();
+        if (result.pause) this.pauseRun();
         if (!this.scene.isActive('Scores')) this.scene.launch('Scores');
         this.scene.bringToTop('Scores');
         break;
       case 'openLeaderboard':
-        if (result.pause) this.pausePlay();
+        if (result.pause) this.pauseRun();
         if (!this.scene.isActive('Leaderboard')) this.scene.launch('Leaderboard');
         this.scene.bringToTop('Leaderboard');
         break;
@@ -926,6 +969,7 @@ export class Play extends Phaser.Scene {
       return { top: 'overlay', scene: this.scene.get(key) };
     }
     if (this.scene.isActive('Over')) return { top: 'over', scene: this.scene.get('Over') };
+    if (this.match && this.match.status !== 'playing') return { top: 'versus', scene: this.versusHost() }; // the join screen or the result panel
     return { top: 'play', scene: this };
   }
 
@@ -936,8 +980,15 @@ export class Play extends Phaser.Scene {
    * B closes the top overlay / resumes / hides the ring, a nav press pauses a
    * run and lands the ring on ⏸, otherwise walks the top scene's ring.
    */
-  onPadAction(action) {
+  onPadAction(action, padIndex = 0) {
     const { top, scene } = this.padTop();
+    if (this.match && top === 'play' && (action === 'select' || action === 'power')) {
+      // A match: A and RT belong to the half that claimed this pad (versusInput); the other
+      // buttons stay global (pause, mute, back, the ring) through padIntent below.
+      this.registry.set('padMode', true);
+      this.versusInput({ kind: 'pad', index: padIndex }, action === 'select' ? 'flap' : 'power');
+      return;
+    }
     const result = padIntent({
       action,
       state: this.state,
@@ -976,7 +1027,7 @@ export class Play extends Phaser.Scene {
         scene?.focus?.hide();
         break;
       case 'pauseAndFocus':
-        this.pausePlay();
+        this.pauseRun();
         this.focus?.setIndex(this.focus.indexOf('pause'));
         this.focus?.show();
         break;
@@ -984,18 +1035,24 @@ export class Play extends Phaser.Scene {
         scene?.focus?.move(result.dir);
         scene?.focus?.show();
         break;
+      case 'versusSelect':
+        scene?.onPadSelect?.(padIndex); // the join screen claims the pad; the result panel presses Rematch
+        break;
+      case 'versusBack':
+        scene?.onPadBack?.();
+        break;
       default:
         break;
     }
   }
 
   /** Smoke shims (tools/headless_check.mjs): a button press / a nav move by the pad's own route. */
-  padDown(index) {
-    this.pad?.padDown(index);
+  padDown(index, padIndex = 0) {
+    this.pad?.padDown(index, padIndex);
   }
 
-  padNav(dir) {
-    this.pad?.padNav(dir);
+  padNav(dir, padIndex = 0) {
+    this.pad?.padNav(dir, padIndex);
   }
 
   toggleMute() {
@@ -1007,14 +1064,70 @@ export class Play extends Phaser.Scene {
   }
 
   autoPause() {
-    if (this.state === 'playing') this.pausePlay();
+    if (this.state === 'playing') this.pauseRun();
+  }
+
+  /** The Versus scene while this half is in a match; null in single player. */
+  versusHost() {
+    return this.match ? this.scene.get('Versus') : null;
+  }
+
+  /** Pause the run: a match's shared pause (both halves under one banner), else this scene's own. */
+  pauseRun() {
+    const host = this.versusHost();
+    if (host?.setPaused) host.setPaused(true);
+    else this.pausePlay();
+  }
+
+  /** The other half's Play scene in a match (the Versus scene keeps both), else null. */
+  otherHalf() {
+    return this.versusHost()?.halfScene?.(this.player === 1 ? 1 : 0) ?? null;
+  }
+
+  /**
+   * A pointer in this scene's world: as it is in single player; in a match shifted into the
+   * half's own coordinates, or null when it landed on the other half.
+   */
+  localPointer(pointer) {
+    if (!this.half) return pointer;
+    const x = pointer.x - this.fieldX;
+    if (x < 0 || x >= this.fieldW) return null;
+    return { x, y: pointer.y };
+  }
+
+  /**
+   * A match input from a device (a key group, a pad, a touch on a half) with its role. On the
+   * join screen the Versus scene claims a slot for the device; mid-match the input is the flap
+   * or the power of the half whose device it is, and an unclaimed device does nothing.
+   */
+  versusInput(device, role, pointer) {
+    const host = this.versusHost();
+    if (!host || !this.match) return;
+    if (this.match.status !== 'playing') {
+      host.onJoinInput?.(device, role);
+      return;
+    }
+    const i = this.match.slots.findIndex((s) => sameDevice(s.device, device));
+    if (i < 0) return;
+    const half = i === this.player - 1 ? this : host.halfScene?.(i);
+    if (!half) return;
+    if (role === 'power') half.activatePower();
+    else half.flap(half === this ? pointer : undefined);
+  }
+
+  /** A match: a key inside a group is that player's flap or power (keyGroup); every other key is the chrome's. */
+  onVersusKey(code) {
+    if (!this.match) return;
+    const g = keyGroup(code, T);
+    if (g) this.versusInput({ kind: 'keys', group: g.group }, g.role);
   }
 
   setPauseBanner(visible) {
     this.pauseShade.setVisible(visible);
     const level = this.levelBreak;
-    this.pauseText.setVisible(visible && !level);
-    this.pauseHint.setVisible(visible && !level);
+    const shared = Boolean(this.match); // a match's PAUSED banner is the Versus scene's, drawn once across both halves
+    this.pauseText.setVisible(visible && !level && !shared);
+    this.pauseHint.setVisible(visible && !level && !shared);
     this.levelTitle.setVisible(visible && level);
     this.levelHint.setVisible(visible && level);
   }
@@ -1090,8 +1203,8 @@ export class Play extends Phaser.Scene {
       this.distanceSinceSpawn = 0;
       return;
     }
-    const edge = this.scale.width + T.pipeWidth;
-    const { xs } = prefillPairs(this.scale.width, this.poopX, pipeSpacing(this.level, T), T, FIELD);
+    const edge = this.fieldW + T.pipeWidth;
+    const { xs } = prefillPairs(this.fieldW, this.poopX, pipeSpacing(this.level, T), T, FIELD);
     const before = new Set(this.worldObjects());
     let last = edge;
     for (const x of xs) {
@@ -1148,12 +1261,13 @@ export class Play extends Phaser.Scene {
       gapHeight: this.diff.gapHeight,
       gapMargin: T.gapMargin,
     };
+    const n = this.pipesSpawned; // this pair's number in the run: the course rolls everything about it by n
     const centred = this.nextGapY == null && this.centreNextGap; // the pair after a fart: opens at the float height and never moves
-    const gapY = this.nextGapY ?? (this.centreNextGap ? centredGapY(gapCfg) : pipeGapY(this.rng, gapCfg));
+    const gapY = this.nextGapY ?? (this.centreNextGap ? centredGapY(gapCfg) : this.course.gapY(n, gapCfg));
     this.nextGapY = null;
     this.centreNextGap = false;
     const gapH = this.diff.gapHeight;
-    const x = this.scale.width + T.pipeWidth - shift; // the field's right edge, wherever the window put it
+    const x = this.fieldW + T.pipeWidth - shift; // the field's right edge, wherever the window put it
 
     // Top pipe hangs down: cap must face the gap, so flip the sprite and anchor its bottom.
     const gapTop = gapY - gapH / 2;
@@ -1185,23 +1299,23 @@ export class Play extends Phaser.Scene {
     const boxHere = this.pipesSpawned === this.mysteryPair;
     const kind =
       scripted === undefined
-        ? rollItem(this.rng, this.score, T, { hazards: hazardsAllowed(this.pipesSpawned, T), mystery: mysteryRolls(this.pipesSpawned, this.mysteryPair) })
+        ? this.course.item(n, { score: this.score, hazards: hazardsAllowed(n, T), mystery: mysteryRolls(n, this.mysteryPair) })
         : scripted === 'bean'
           ? null
           : scripted;
     // The first box owns this pair's open spot: no bean (or rolled fiber) takes it.
-    const beanHere = !boxHere && (scripted === undefined ? rollBean(this.rng, this.score, T, { spawnedThisRun: this.beanSpawned, holding: this.effects.holdingBean() }) : scripted === 'bean');
+    const beanHere = !boxHere && (scripted === undefined ? this.course.bean(n, { score: this.score, spawnedThisRun: this.beanSpawned, holding: this.effects.holdingBean() }) : scripted === 'bean');
     // From pipeMove.fromLevel some pairs bob their gap: the top pipe carries the motion and its mate
     // follows in update() (the 1280 px texture covers any gap position, so only y changes). Rolled
     // after the item and bean draws so levels below fromLevel and the draws before it keep their sequence.
-    const move = rollPipeMove(this.rng, this.level, gapY, gapBounds(gapCfg), T, { centred });
+    const move = this.course.pipeMove(n, this.level, gapY, gapBounds(gapCfg), { centred });
     if (move) top.setData({ move, elapsed: 0, mate: bottom, gapH });
     // Fiber and mystery boxes sit between pairs like a bean (and yield to a bean rolled for the same pair);
     // probiotic and bacteria sit in the gap, behind the pipes, moving from moveFromLevel.
     // Before bandMoveFromLevel fiber and beans hold still midway between this gap and the next.
     const still = !bandItemsMove(this.level, T);
     const stillY = () => {
-      if (this.nextGapY == null) this.nextGapY = pipeGapY(this.rng, gapCfg);
+      if (this.nextGapY == null) this.nextGapY = this.course.gapY(n + 1, gapCfg); // the next pair reuses it
       return bandMidY(gapY, this.nextGapY);
     };
     const band = kind === 'fiber' || kind === 'mystery';
@@ -1213,9 +1327,9 @@ export class Play extends Phaser.Scene {
     // Beans ride halfway between this pair and the next, bobbing top to bottom (still in level 1).
     if (beanHere) {
       this.beanSpawned = true;
-      const phase = this.rng() * Math.PI * 2;
+      const phase = this.course.phase(n, 'bean');
       const y = still ? stillY() : beanY(0, phase, this.beanBounds, T);
-      const bean = this.beans.create(beanSpawnX(this.scale.width, T.pipeWidth, pipeSpacing(this.level, T)) - shift, y, 'bean');
+      const bean = this.beans.create(beanSpawnX(this.fieldW, T.pipeWidth, pipeSpacing(this.level, T)) - shift, y, 'bean');
       bean.setDepth(8);
       bean.setScale(T.spriteDisplayScale);
       const beanBody = scaledCircleBody(bean.frame.width, T.spriteDisplayScale, T.beans.beanRadius);
@@ -1232,16 +1346,16 @@ export class Play extends Phaser.Scene {
    * spins ('mystery-spin', from Boot). `shift`: px left of the usual spot (prefillPipes).
    */
   spawnBandItem(kind, stillY = null, shift = 0) {
-    const phase = this.rng() * Math.PI * 2;
+    const phase = this.course.phase(this.pipesSpawned, 'band');
     const period = kind === 'mystery' ? T.mystery.periodMs : T.items.fiberPeriodMs;
     const y = stillY ?? bobY(0, phase, this.beanBounds, period);
-    const item = this.items.create(beanSpawnX(this.scale.width, T.pipeWidth, pipeSpacing(this.level, T)) - shift, y, kind);
+    const item = this.items.create(beanSpawnX(this.fieldW, T.pipeWidth, pipeSpacing(this.level, T)) - shift, y, kind);
     item.setDepth(8);
     this.finishItem(item, kind);
     if (stillY == null) item.setData({ bob: 'band', elapsed: 0, phase, period });
     if (kind === 'mystery') {
       const frames = this.anims.get('mystery-spin').frames.length;
-      item.play({ key: 'mystery-spin', startFrame: Math.floor(this.rng() * frames) });
+      item.play({ key: 'mystery-spin', startFrame: this.course.spinFrame(this.pipesSpawned, frames) });
       if (this.state === 'paused') item.anims.pause();
     }
     return item;
@@ -1262,7 +1376,7 @@ export class Play extends Phaser.Scene {
    * never leave the opening.
    */
   spawnGapItem(kind, x, gapY, gapH, pair = null) {
-    const y = itemGapY(gapY, gapH, this.rng, kind);
+    const y = this.course.itemY(this.pipesSpawned, gapY, gapH, kind);
     const item = this.items.create(x, y, kind);
     item.setDepth(-1); // under the pipes (0), over the background layers
     this.finishItem(item, kind);
@@ -1271,7 +1385,7 @@ export class Play extends Phaser.Scene {
       item.y = gapY;
     } else if (this.level >= T.items.moveFromLevel) {
       const amp = gapBobAmplitude(gapH, T.items.itemRadius, T.items.moveMarginPx);
-      item.setData({ bob: 'gap', baseY: gapY, amp, elapsed: 0, phase: this.rng() * Math.PI * 2 });
+      item.setData({ bob: 'gap', baseY: gapY, amp, elapsed: 0, phase: this.course.phase(this.pipesSpawned, 'gap') });
       item.y = gapBobY(0, gapY, amp, T.items.movePeriodMs, item.getData('phase'));
     }
     return item;
@@ -1448,7 +1562,7 @@ export class Play extends Phaser.Scene {
     const remaining = fartRemainingDistance(this.effects.powerElapsed(), this.fartDurationMs, this.fartPeak, this.diff.pipeSpeed);
     // At super-fart speed one frame scrolls ~60 px, so keep at least three frames in hand.
     const margin = Math.max(T.beans.endClearMarginPx, this.scrollSpeed() * 0.05);
-    return remaining < pipeClearDistance(this.scale.width, T.pipeWidth, this.poopX) + margin;
+    return remaining < pipeClearDistance(this.fieldW, T.pipeWidth, this.poopX) + margin;
   }
 
   endPower() {
@@ -1591,9 +1705,14 @@ export class Play extends Phaser.Scene {
     item.destroy();
     if (kind === 'mystery') {
       this.collected.mystery += 1;
-      // A draw that cannot do anything (full bag, finish line already out) becomes fiber.
+      // A draw that cannot do anything (full bag, finish line already out) becomes fiber. A match
+      // rolls from this player's own draw stream, on the catch-up table for how far behind the other
+      // player they are (catchUpTier: double bean odds from 10 pipes, a guaranteed bean3 from 25).
       const pairsLeft = this.finishSpawned ? 0 : skipPairs(this.pipesPassed, this.level, T);
-      this.openMystery(resolveMystery(rollMystery(this.rng, T), { beans: this.effects.beans(), pairsLeft }, T), x, y);
+      const other = this.match?.slots[this.player === 1 ? 1 : 0];
+      const draws = this.match ? catchUpDraws(catchUpTier((other?.pipesPassed ?? 0) - this.pipesPassed, T), T) : T.mystery.draws;
+      const draw = rollMystery(this.match ? this.rngDraw : this.course.rng, T, draws);
+      this.openMystery(resolveMystery(draw, { beans: this.effects.beans(), pairsLeft }, T), x, y);
     } else if (kind === 'fiber') {
       this.eatFiber();
     } else if (kind === 'probiotic') {
@@ -1721,7 +1840,7 @@ export class Play extends Phaser.Scene {
     this.pipesPassed = end;
     this.pipesSpawned = end;
     this.levelBar.setProgress(levelProgress(this.pipesPassed, this.level, T));
-    this.spawnFinishLine(this.scale.width + T.pipeWidth - (this.poopX + pipeLead(this.scale.width, T, FIELD)));
+    this.spawnFinishLine(this.fieldW + T.pipeWidth - (this.poopX + pipeLead(this.fieldW, T, FIELD)));
     this.distanceSinceSpawn = 0;
     this.nextGapY = null;
     this.showScorePopup('skip', mult, pairs);
@@ -1734,7 +1853,7 @@ export class Play extends Phaser.Scene {
    * death), HUD effects off, the world stopped, the score recorded and synced
    * (nothing recorded on a test run).
    */
-  endRun() {
+  endRun({ report = true } = {}) {
     this.endSweep(); // a death mid-sweep leaves the pairs in place, opaque
     this.state = 'dead';
     this.markHowToSeen(); // a finished run counts as having seen this build
@@ -1744,6 +1863,14 @@ export class Play extends Phaser.Scene {
     for (const item of this.items.getChildren()) item.setVelocityX(0);
     for (const bean of this.beans.getChildren()) bean.setVelocityX(0);
     this.setPauseBanner(false);
+    // A match records nothing either: the Versus scene hears the end (the other half is halted,
+    // the result panel follows) unless this is that halt itself (haltRun).
+    if (this.match) {
+      this.publishSlot();
+      this.match.slots[this.player - 1].ended = true;
+      if (report) this.versusHost()?.onRunEnded?.(this.player, { score: this.score, level: this.level, pipesPassed: this.pipesPassed, won: this.won });
+      return;
+    }
     // A test run records nothing: no legacy best, no top-list entry, no leaderboard sync.
     if (this.runIsTest) return;
     this.best.save(this.score); // legacy store, kept for first-run seeding
@@ -1751,8 +1878,45 @@ export class Play extends Phaser.Scene {
     this.syncLeaderboard(); // fire and forget; never awaited inside the update loop
   }
 
-  /** The game-over panel after deathToOverMs; `won` swaps its headline, `test` hides Share. */
+  /**
+   * A match ended on the other half: stop this run where it is, alive (the survivor keeps
+   * its face, hangs where it is like a win), without reporting back. Safe on a half that is
+   * paused or in a level break: the break's tweens stop and its banner goes.
+   */
+  haltRun() {
+    if (this.state !== 'playing' && this.state !== 'paused') return;
+    this.breakGlide?.stop();
+    this.breakGlide = null;
+    this.breakBob?.stop();
+    this.breakBob = null;
+    this.levelBreak = false;
+    if (this.effects.cancelPower()) {
+      this.fartSound?.stop();
+      this.endPower();
+    }
+    this.endRun({ report: false });
+    this.poop.body.setAllowGravity(false);
+    this.poop.setVelocity(0, 0);
+    this.refreshPoopLook();
+    this.poop.setAngle(0);
+  }
+
+  /** This half's live state for the other half (the ghost, the rival marker) and the result panel. */
+  publishSlot() {
+    const slot = this.match?.slots[this.player - 1];
+    if (!slot) return;
+    slot.score = this.score;
+    slot.pipesPassed = this.pipesPassed;
+    slot.level = this.level;
+    slot.distance = this.distance;
+    slot.y = this.poop.y;
+    slot.angle = this.poop.angle;
+    slot.frame = this.poop.texture.key;
+  }
+
+  /** The game-over panel after deathToOverMs; `won` swaps its headline, `test` hides Share. A match has no Over: the Versus scene shows the result. */
   showOver(won = false) {
+    if (this.match) return;
     this.time.delayedCall(T.deathToOverMs, () => {
       this.physics.pause();
       this.scene.launch('Over', { score: this.score, won, test: this.runIsTest, toilet: this.toilet, level: this.level, pipes: this.pipesPassed, collected: { ...this.collected } });
@@ -1767,6 +1931,7 @@ export class Play extends Phaser.Scene {
   win() {
     if (this.state !== 'playing') return;
     this.won = true;
+    if (this.match) this.match.slots[this.player - 1].won = true;
     this.endRun();
     this.poop.body.setAllowGravity(false);
     this.poop.setVelocity(0, 0);
@@ -1780,6 +1945,7 @@ export class Play extends Phaser.Scene {
     if (this.state !== 'playing') return;
     // Farting (or just finished and still clearing the pipe) cannot die; nor can an Invincible test run.
     if (this.effects.powerActive() || this.graceLeftMs > 0 || this.testInvincible()) return;
+    if (this.match) this.match.slots[this.player - 1].alive = false;
     this.endRun();
     this.setPoopTexture('poop-dead');
     this.cameras.main.shake(200, 0.01);
@@ -1799,7 +1965,7 @@ export class Play extends Phaser.Scene {
 
   update(_time, delta) {
     // A resize that arrived while a run / overlay was up: re-fit as soon as the ready screen is clear.
-    if (this.fieldResizeWanted && this.canRefitField()) {
+    if (this.fieldResizeWanted && !this.match && this.canRefitField()) {
       this.fieldResizeWanted = false;
       if (fieldWidth(globalThis.innerWidth, globalThis.innerHeight, FIELD) !== this.scale.width) {
         this.scene.restart(); // create() → applyFieldSize()
@@ -1828,6 +1994,7 @@ export class Play extends Phaser.Scene {
       }
       if (this.effects.endedPower()) this.endPower();
       if (this.graceLeftMs > 0) this.graceLeftMs = Math.max(0, this.graceLeftMs - delta);
+      this.distance += this.scrollSpeed() * dt;
       const spacing = pipeSpacing(this.level, T);
       if (this.spawnHeldByFart()) {
         this.distanceSinceSpawn = 0;
@@ -1886,6 +2053,7 @@ export class Play extends Phaser.Scene {
       }
     }
     this.glow.setPosition(this.poop.x, this.poop.y);
+    if (this.match) this.publishSlot();
 
     if (this.state === 'dead') {
       // Pin the tumbling poop to the ground instead of letting it fall off-screen.

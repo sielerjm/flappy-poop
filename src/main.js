@@ -33,7 +33,7 @@ const game = new Phaser.Game({
     arcade: { gravity: { x: 0, y: 0 }, debug: false },
   },
   input: {
-    activePointers: 1,
+    activePointers: 2, // two: a versus match on a tablet takes one thumb per half
     gamepad: true, // Phaser Gamepad plugin; bound once, in Play (src/input/pad.js)
   },
   scene: [Boot, Play, Over, Settings, About, HowTo, Changelog, Language, Feedback, Scores, Leaderboard],

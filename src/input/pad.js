@@ -6,8 +6,9 @@ import { padAction, stickNav } from '../logic.js';
  * so its button threshold is lowered to t.gamepad.triggerThreshold on connect
  * (one fire per pull). Sticks are polled each scene update through stickNav:
  * one move per push, then key-repeat while held. Every event becomes a pad
- * action (padAction / stickNav) handed to onAction; the scene decides what
- * it means (Play.onPadAction via padIntent).
+ * action (padAction / stickNav) handed to onAction with the pad's index (a
+ * versus match routes A / RT by it); the scene decides what it means
+ * (Play.onPadAction via padIntent).
  *
  * Returns shims that feed onAction through the same path for the headless
  * smoke driver, which has no pad: padDown(index), padNav(dir).
@@ -34,7 +35,7 @@ export function bindPad(scene, onAction, t) {
 
   const onDown = (pad, button) => {
     prime(pad);
-    onAction(padAction(button.index, t));
+    onAction(padAction(button.index, t), pad.index);
   };
   const onConnected = (pad) => prime(pad);
 
@@ -43,11 +44,15 @@ export function bindPad(scene, onAction, t) {
   const onUpdate = (time) => {
     if (!plugin?.gamepads) return;
     let action = null;
+    let index = 0; // the pad whose stick moved
     for (const pad of plugin.gamepads) {
       if (!pad) continue;
       prime(pad);
       action = stickNav(pad.leftStick.x, pad.leftStick.y, t) ?? stickNav(pad.rightStick.x, pad.rightStick.y, t);
-      if (action) break;
+      if (action) {
+        index = pad.index;
+        break;
+      }
     }
     if (!action) {
       held = null;
@@ -56,10 +61,10 @@ export function bindPad(scene, onAction, t) {
     if (action !== held) {
       held = action;
       nextAt = time + g.repeatDelayMs;
-      onAction(action);
+      onAction(action, index);
     } else if (time >= nextAt) {
       nextAt = time + g.repeatEveryMs;
-      onAction(action);
+      onAction(action, index);
     }
   };
 
@@ -75,13 +80,13 @@ export function bindPad(scene, onAction, t) {
   scene.events.once('shutdown', destroy);
 
   return {
-    /** Smoke shim: the same route a real button press takes. */
-    padDown(index) {
-      onAction(padAction(index, t));
+    /** Smoke shim: the same route a real button press takes; `padIndex` is which pad (a match claims pads by it). */
+    padDown(index, padIndex = 0) {
+      onAction(padAction(index, t), padIndex);
     },
     /** Smoke shim: the same route a d-pad or stick move takes. */
-    padNav(dir) {
-      onAction(`nav:${dir}`);
+    padNav(dir, padIndex = 0) {
+      onAction(`nav:${dir}`, padIndex);
     },
     destroy,
   };
