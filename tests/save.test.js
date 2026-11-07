@@ -334,6 +334,38 @@ test('levels ride with top entries: recordScore stores them, schema 2 loads as l
   assert.equal(saved.top[0].level, 2);
 });
 
+test('save codes carry the bean button side as an optional h key: written only for left, handed back on import, rejected when malformed', async () => {
+  const storage = fakeStorage();
+  const local = () => ({ id: null, name: '', top: [], exportedAt: null });
+  const state = { id: newId(), name: 'Hand', top: [{ score: 41, toilet: false, level: 1 }], exportedAt: null };
+  const plain = await exportCode(state, { now: () => NOW, storage });
+  const right = await exportCode(state, { now: () => NOW, storage, hand: 'right' });
+  assert.equal(right, plain, 'right (the default) writes no h: the code is byte-identical');
+  assert.deepEqual(Object.keys(JSON.parse(new TextDecoder().decode(b64urlDecode(plain.split('.')[1])))), ['i', 'n', 's', 'p', 't']);
+  const none = await importCode(plain, { storage, local: local() });
+  assert.equal(none.ok, true);
+  assert.equal(none.hand, null, 'a code without h carries no side');
+  assert.equal('hand' in none.state, false, 'hand is not part of SaveState');
+  const left = await exportCode(state, { now: () => NOW, storage, hand: 'left' });
+  const payload = JSON.parse(new TextDecoder().decode(b64urlDecode(left.split('.')[1])));
+  assert.equal(payload.h, 'l');
+  assert.deepEqual(Object.keys(payload), ['i', 'n', 's', 'p', 'h', 't'], 'h sits before t');
+  const res = await importCode(left, { storage, local: local() });
+  assert.equal(res.ok, true);
+  assert.equal(res.hand, 'left');
+  assert.equal(res.state.name, 'Hand');
+  assert.deepEqual(res.state.top, [{ score: 41, toilet: false, level: 1 }]);
+  assert.equal('hand' in res.state, false);
+  const r = await importCode(await buildCode(1, { i: state.id, n: 'Hand', s: [41], p: [0], h: 'r', t: NOW }), { storage, local: local() });
+  assert.equal(r.hand, 'right', 'an explicit r reads as right');
+  for (const bad of ['x', 1, ['l'], 'left']) {
+    const sig = await buildCode(1, { i: state.id, n: 'Hand', s: [41], p: [0], h: bad, t: NOW });
+    const bd = await importCode(sig, { storage, local: local() });
+    assert.equal(bd.ok, false, `h = ${JSON.stringify(bad)}`);
+    assert.equal(bd.error, 'unrecognised');
+  }
+});
+
 test('save codes carry levels as an optional l key: round trip, absent on old codes, rejected when malformed', async () => {
   const storage = fakeStorage();
   const state = { id: newId(), name: 'Lev', top: [{ score: 41, toilet: false, level: 3 }, { score: 20, toilet: true, level: 1 }], exportedAt: null };

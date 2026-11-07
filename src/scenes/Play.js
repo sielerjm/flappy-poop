@@ -6,6 +6,7 @@ import {
   hasPassed,
   angleForVelocity,
   resumeFlapVelocity,
+  HANDS,
   poopFrame,
   levelSpeed,
   levelGap,
@@ -1242,6 +1243,18 @@ export class Play extends Phaser.Scene {
   /** beanButtonLayout's options: the settings' hand; a match half keeps the centre of its strip. */
   beanButtonOpts() {
     return { colWidth: this.col.width, hand: this.settings.load().hand, match: Boolean(this.match) };
+  }
+
+  /** The settings' hand (bean button side), carried by the save code. */
+  getHand() {
+    return this.settings.load().hand;
+  }
+
+  /** Store a hand (Settings' toggle, a loaded save code) and re-place the bean button on every running Play instance. */
+  setHand(hand) {
+    if (!HANDS.includes(hand)) return;
+    this.settings.set({ hand });
+    for (const key of ['Play', 'PlayB']) if (this.scene.isActive(key)) this.scene.get(key)?.applyHand?.(); // PlayB runs only in a match
   }
 
   /** Re-place the bean button after the hand setting changed (Settings' toggle, a save-code load). */

@@ -187,9 +187,10 @@ export class Settings extends Phaser.Scene {
   /** Flip the hand setting and move the bean button on every Play instance (single player, or both halves of a match). */
   toggleHand() {
     const next = this.settings.load().hand === 'right' ? 'left' : 'right';
-    this.settings.set({ hand: next });
+    const play = this.scene.get('Play');
+    if (play?.setHand) play.setHand(next); // stores it and moves the button on every running Play instance
+    else this.settings.set({ hand: next });
     this.handToggle.setOn(next === 'right');
-    for (const key of ['Play', 'PlayB']) if (this.scene.isActive(key)) this.scene.get(key)?.applyHand?.(); // PlayB runs only in a match
   }
 
   addToggle(x, y, labelText, handler) {

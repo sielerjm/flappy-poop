@@ -243,9 +243,12 @@ export function ensureId(state, storage = globalThis.localStorage) {
  * Key order fixed for deterministic bytes. `p` is optional on read (added after
  * v1 shipped; older codes read as all-false), always written. `l` (the level each
  * score was set at, ≥ 1) is optional on read and written only when some level is
- * above 1, so codes from before levels existed stay byte-identical.
+ * above 1, so codes from before levels existed stay byte-identical. `h` (2026-11-07) is the
+ * device setting for the bean button's side: written only as 'l' for a left-handed player, so
+ * every right-handed code stays byte-identical; it is applied to the settings on import and is
+ * not part of SaveState.
  */
-function serialize(state) {
+function serialize(state, { hand = null } = {}) {
   const out = {
     i: state.id,
     n: state.name,
@@ -253,6 +256,7 @@ function serialize(state) {
     p: state.top.map((e) => (e.toilet ? 1 : 0)),
   };
   if (state.top.some((e) => e.level > 1)) out.l = state.top.map((e) => e.level);
+  if (hand === 'left') out.h = 'l';
   out.t = state.exportedAt;
   return out;
 }
@@ -274,9 +278,11 @@ function parseV1(json) {
       throw new Error('v1: bad levels');
     }
   }
+  if (json.h !== undefined && json.h !== 'l' && json.h !== 'r') throw new Error('v1: bad hand');
   const exportedAt = Number.isInteger(json.t) ? json.t : null;
   const top = normalizeTop(json.s.map((score, k) => ({ score, toilet: json.p?.[k] === 1, level: json.l?.[k] ?? 1 })));
-  return { id: json.i, name, top, exportedAt };
+  const hand = json.h === 'l' ? 'left' : json.h === 'r' ? 'right' : null; // not SaveState: importCode hands it back beside the state
+  return { id: json.i, name, top, exportedAt, hand };
 }
 
 /** Parsers for every version ever shipped. Never delete one. */
@@ -305,20 +311,21 @@ export async function buildCode(version, payload) {
  * Fresh code from the current state. Throws Error('name') when the name is
  * missing or not 1–16 characters. Generates and persists the id on first export.
  * @param {object} state SaveState
- * @param {{ version?: number, now?: () => number, storage?: Storage }} [opts]
+ * @param {{ version?: number, now?: () => number, storage?: Storage, hand?: 'left' | 'right' | null }} [opts] hand = the bean button side to carry (only 'left' is written)
  */
-export async function exportCode(state, { version = CURRENT_VERSION, now = () => Math.floor(Date.now() / 1000), storage = globalThis.localStorage } = {}) {
+export async function exportCode(state, { version = CURRENT_VERSION, now = () => Math.floor(Date.now() / 1000), storage = globalThis.localStorage, hand = null } = {}) {
   const { ok, name } = validateName(state?.name);
   if (!ok) throw new Error('name');
   const next = ensureId({ ...normalizeState(state), name }, storage);
   next.exportedAt = now();
-  return buildCode(version, serialize(next));
+  return buildCode(version, serialize(next, { hand }));
 }
 
 /**
  * Validate a pasted code, merge it into local state, persist, and return the
- * merged state. Nothing is written until every check passes.
- * @returns {Promise<{ ok: true, state: object } | { ok: false, error: 'damaged' | 'unrecognised' }>}
+ * merged state. Nothing is written until every check passes. `hand` is the code's bean button
+ * side ('left' | 'right') or null when the code carries none; the caller applies it to the settings.
+ * @returns {Promise<{ ok: true, state: object, hand: 'left' | 'right' | null } | { ok: false, error: 'damaged' | 'unrecognised' }>}
  */
 export async function importCode(text, { storage = globalThis.localStorage, parsers = PARSERS, local } = {}) {
   const code = extractCode(text);
@@ -346,7 +353,8 @@ export async function importCode(text, { storage = globalThis.localStorage, pars
     return { ok: false, error: 'unrecognised' };
   }
 
-  const state = merge(local ?? loadLocal(storage), incoming);
+  const { hand = null, ...parsed } = incoming;
+  const state = merge(local ?? loadLocal(storage), parsed);
   saveLocal(state, storage);
-  return { ok: true, state };
+  return { ok: true, state, hand };
 }

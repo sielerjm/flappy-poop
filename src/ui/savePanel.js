@@ -164,7 +164,7 @@ async function refreshCode() {
   const token = (refreshCode.token = (refreshCode.token ?? 0) + 1);
   let code;
   try {
-    code = await exportCode(withId);
+    code = await exportCode(withId, { hand: ctx.play?.getHand?.() ?? null });
   } catch {
     currentCode = '';
     dom.code.value = t(ctx.locale, 'saveErrorUnrecognised');
@@ -283,6 +283,7 @@ async function onLoad() {
       return;
     }
     setState(res.state);
+    if (res.hand) ctx.play?.setHand?.(res.hand); // the code's bean button side becomes this device's
     dom.name.value = res.state.name;
     dom.load.value = '';
     setStatus(welcomeText(locale, res.state), 'ok');

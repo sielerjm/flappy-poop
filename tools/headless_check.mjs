@@ -1245,6 +1245,29 @@ export async function run(url = DEFAULT_URL) {
         await closeTop('Settings');
         ok(atRight.hand === 'right' && atRight.box === cap - inset && atRight.btn === atRight.box && atRight.y === 1280 - TT.groundHeight - TT.trayHitMin / 2 - 58, `in landscape the bean button sits by the right thumb at x ${atRight.btn} (hand ${atRight.hand})`);
         ok(flipped.hand === 'left' && !flipped.on && flipped.box === inset && flipped.btn === inset && back.hand === 'right' && back.on && back.btn === cap - inset, `Settings' 👈 👉 row moves it to the left thumb at x ${flipped.btn} and back to ${back.btn}`);
+        // The save code carries the side: a left-handed export has h: 'l'; loading it on a right-handed
+        // device moves the button to the left thumb. A right-handed export carries no h at all.
+        const codeOf = async () => {
+          await evaluate(`import('./src/ui/savePanel.js').then((m) => (m.closeSavePanel(), true))`);
+          await evaluate(`${play}.openSavePanel(), true`);
+          let code = '';
+          for (let i = 0; i < 40 && !code.startsWith('fp1.'); i += 1) { await sleep(50); code = await evaluate(`document.getElementById('save-code').value`); }
+          return code;
+        };
+        const decode = (code) => JSON.parse(Buffer.from(code.split('.')[1], 'base64url').toString());
+        const rightCode = await codeOf();
+        await evaluate(`${play}.setHand('left'), true`);
+        const leftCode = await codeOf();
+        await evaluate(`${play}.setHand('right'), true`);
+        await evaluate(`document.getElementById('save-load').value = ${JSON.stringify(leftCode)}, document.getElementById('save-load-btn').click(), true`);
+        let loaded = null;
+        for (let i = 0; i < 40; i += 1) { await sleep(50); loaded = await evaluate(`JSON.stringify({ hand: ${play}.settings.load().hand, btn: ${play}.beanButton.x, name: ${play}.getSaveState().name, status: document.getElementById('save-status').textContent })`).then(JSON.parse); if (loaded.hand === 'left') break; }
+        await evaluate(`${play}.setHand('right'), true`);
+        await evaluate(`import('./src/ui/savePanel.js').then((m) => (m.closeSavePanel(), true))`);
+        const rightPayload = decode(rightCode);
+        const leftPayload = decode(leftCode);
+        ok(rightPayload.h === undefined && leftPayload.h === 'l' && leftPayload.n === rightPayload.n, `the save code carries the side only for left (right: no h, left: h ${JSON.stringify(leftPayload.h)})`);
+        ok(loaded.hand === 'left' && loaded.btn === inset && loaded.name === rightPayload.n, `loading a left-handed code on a right-handed device moves the button to x ${loaded.btn} (hand ${loaded.hand}, name ${loaded.name}, status "${loaded.status}")`);
       }
       await phone(390, 844);
       ok((await settle(720)) === 720, 'rotating back re-fits to the phone field');
