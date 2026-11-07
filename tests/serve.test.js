@@ -15,3 +15,9 @@ test('serve.py binds all IPv4 interfaces and prints localhost plus a phone URL',
   assert.match(serve, /localhost/);
   assert.match(serve, /Phone:/);
 });
+
+test('serve.py forbids caching so a dev reload never mixes old and new modules', () => {
+  assert.match(serve, /Cache-Control",\s*"no-store"/);
+  assert.match(serve, /NoStoreHandler/);
+  assert.ok(!/ReuseTCPServer\(\(HOST, PORT\), http\.server\.SimpleHTTPRequestHandler\)/.test(serve), 'the server must use the no-store handler');
+});

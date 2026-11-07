@@ -1,12 +1,16 @@
 #!/usr/bin/env python3
 """serve.py — serve the repo root and print laptop + phone URLs.
 
-Created by Michael Sieler. Last updated: 2026-11-02.
+Created by Michael Sieler. Last updated: 2026-11-07.
 
 Input:  none (serves the repository root).
 Output: http.server on 0.0.0.0:8000; prints http://localhost:8000 and any
         LAN IPv4 as http://<ip>:8000 so a phone on the same Wi-Fi can connect.
         localhost on a phone is the phone itself, not this laptop.
+        Every response carries Cache-Control: no-store, so a reload never mixes
+        cached ES modules with fresh ones (an old scene file with a new config.js
+        looked like a broken leaderboard once). GitHub Pages caches for ~10 min;
+        there, Settings > Reload game refetches.
 """
 import http.server
 import os
@@ -44,6 +48,15 @@ class ReuseTCPServer(socketserver.TCPServer):
     allow_reuse_address = True
 
 
+class NoStoreHandler(http.server.SimpleHTTPRequestHandler):
+    """SimpleHTTPRequestHandler that forbids caching: a dev reload must fetch every module afresh."""
+
+    def end_headers(self):
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("Expires", "0")
+        super().end_headers()
+
+
 def main():
     os.chdir(ROOT)
     print(f"Laptop:  http://localhost:{PORT}")
@@ -54,7 +67,7 @@ def main():
     else:
         print("Phone:   could not detect a LAN IP; check System Settings > Wi-Fi")
     print("Ctrl-C to stop.")
-    with ReuseTCPServer((HOST, PORT), http.server.SimpleHTTPRequestHandler) as httpd:
+    with ReuseTCPServer((HOST, PORT), NoStoreHandler) as httpd:
         try:
             httpd.serve_forever()
         except KeyboardInterrupt:

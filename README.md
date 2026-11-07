@@ -119,7 +119,7 @@ assets/                 contract PNGs + README.md (the art contract)
   sfx/NewLevel.mp3      level-up chime at the finish line
 tools/make_placeholders.py   pipe / villi / ceiling / ground only (needs Pillow)
 tools/process_art.py         crop Michael's sources into contract PNGs and the app icons
-tools/serve.py               npm start: bind 0.0.0.0:8000, print phone URL
+tools/serve.py               npm start: bind 0.0.0.0:8000, print phone URL; every response is Cache-Control: no-store (a reload never mixes old and new modules; on GitHub Pages use Settings → Reload game)
 tools/headless_check.mjs     npm run smoke: headless Chrome over the DevTools protocol, zero deps
 tests/                  node --test: html assets logic state levels store smoke
                         settings sound tray items tuning about howto feedback overlay hitbox i18n chrome serve save ready leaderboard scenes tools fart changelog

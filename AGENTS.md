@@ -657,7 +657,8 @@ tests/                      node --test, zero deps. Each file is self-describing
                             scores, throwing storage) + helper coverage, best 6
   ready.test.js             readyLayout boxes inside the field, non-overlapping,
                             clear of the bobbing poop; readyHit centre / gap / profile
-  serve.test.js             npm start points at tools/serve.py; bind + URL print
+  serve.test.js             npm start points at tools/serve.py; bind + URL print;
+                            the no-store handler
   leaderboard.test.js       LEADERBOARD config shape (limit 25, visibleRows 10); submitScore headers / body /
                             400 / throw / timeout; disabled config makes no request;
                             fetchTop parsing + order; fetchRank; submitPlan matrix
@@ -699,7 +700,12 @@ tools/
                             maskable safe zone) and apple-touch-icon (full bleed)
                             from FlappyPoopAppArt.png.
                             Arcade circles use scaledCircleBody (Phaser source pixels).
-  serve.py                  npm start: bind 0.0.0.0:8000, print laptop + phone URLs.
+  serve.py                  npm start: bind 0.0.0.0:8000, print laptop + phone URLs;
+                            NoStoreHandler sends Cache-Control: no-store on every
+                            response so a reload never serves a mix of cached and
+                            fresh ES modules (an old scene with a new config.js
+                            once looked like a broken leaderboard). Pages caches
+                            ~10 min: Settings → Reload game there.
   push.mjs                  npm run push: stamps LAST_UPDATED in src/logic.js with the
                             current local time, runs npm test, commits the stamp, pushes
                             main. Refuses a dirty tree or a non-main branch; --dry skips
