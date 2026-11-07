@@ -544,6 +544,16 @@ export function scoreAfterItem(score, kind, t, mult = 1) {
   return score;
 }
 
+/** What a crash costs in a two-player match: versus.scoring.deathPenaltyPerLevel × the level number. */
+export function deathPenalty(level, t) {
+  return t.versus.scoring.deathPenaltyPerLevel * Math.max(1, level | 0);
+}
+
+/** The score after a crash in a match: the death penalty off, floored at 0. */
+export function scoreAfterDeath(score, level, t) {
+  return Math.max(0, score - deathPenalty(level, t));
+}
+
 /**
  * Rows for the popups showing under the score. `order` lists their keys oldest
  * first ('pipe', 'item'); each gets popup.rowY[i], so the oldest is on top and a
@@ -567,14 +577,18 @@ export function pipePoints(t, mult = 1) {
  * The popups under the score: 'pipe' is the quick white "+1" (upper row) on
  * every pair passed; fiber and unshielded bacteria are the "+3" / "−3" (lower
  * row); 'skip' is the gold "+N" for the `pairs` a mystery skip jumped over.
- * Null for anything else. `mult` scales pipe, fiber and skip, never bacteria.
- * Nominal: bacteria always reads −bacteriaPenalty even when the 0 floor clamps the loss.
+ * A match's 'death' (−deathPenalty for `level`, the bacteria colour) and 'levelClear'
+ * (+levelClearBonus, gold). Null for anything else. `mult` scales pipe, fiber and skip,
+ * never bacteria or the death penalty.
+ * Nominal: bacteria and death always read the full loss even when the 0 floor clamps it.
  */
-export function scorePopup(kind, t, mult = 1, pairs = 0) {
+export function scorePopup(kind, t, mult = 1, pairs = 0, level = 1) {
   if (kind === 'pipe') return { text: `+${pipePoints(t, mult)}`, color: t.popup.pipeColor };
   if (kind === 'skip') return { text: `+${pairs * pipePoints(t, mult)}`, color: t.mystery.color };
   if (kind === 'fiber') return { text: `+${t.items.fiberPoints * mult}`, color: t.popup.fiberColor };
   if (kind === 'bacteria') return { text: `\u2212${t.items.bacteriaPenalty}`, color: t.popup.bacteriaColor };
+  if (kind === 'death') return { text: `\u2212${deathPenalty(level, t)}`, color: t.popup.bacteriaColor };
+  if (kind === 'levelClear') return { text: `+${t.versus.scoring.levelClearBonus}`, color: t.mystery.color };
   return null;
 }
 
@@ -1298,7 +1312,7 @@ export function overlayOutsideHit(x, y, panel) {
  * Decide what a tray / keyboard / overlay event should do. Scenes execute the
  * result; this function is Phaser-free so the matrix can be tested in Node.
  *
- * @param {'ready'|'playing'|'paused'|'dead'} state
+ * @param {'ready'|'playing'|'paused'|'respawn'|'dead'} state ('respawn': a match half between a crash and its restart; pauses like 'playing', ignores taps)
  * @param {null|'settings'|'about'|'howto'|'changelog'|'language'|'feedback'|'leaderboard'|'scores'} overlay topmost overlay (pause is a state)
  * @param {boolean} stackedSettings true when About sits on top of Settings
  * @param {boolean} stackedAbout true when HowTo or Changelog (What's new) sits on top of About
@@ -1338,19 +1352,20 @@ export function chromeIntent({
     return { do: 'ignore' };
   }
 
+  const live = state === 'playing' || state === 'respawn'; // a respawning half pauses like a playing one
   if (input === 'pause' || input === 'esc') {
-    if (state === 'playing') return { do: 'pause' };
+    if (live) return { do: 'pause' };
     if (state === 'paused') return { do: 'resume' };
     return { do: 'ignore' };
   }
-  if (input === 'settings') return { do: 'openSettings', pause: state === 'playing' };
-  if (input === 'info') return { do: 'openAbout', pause: state === 'playing' };
-  if (input === 'howto') return { do: 'openHowTo', pause: state === 'playing' };
-  if (input === 'changelog') return { do: 'openChangelog', pause: state === 'playing' };
-  if (input === 'lang') return { do: 'openLanguage', pause: state === 'playing' };
-  if (input === 'feedback') return { do: 'openFeedback', pause: state === 'playing' };
-  if (input === 'scores') return { do: 'openScores', pause: state === 'playing' };
-  if (input === 'leaderboard') return { do: 'openLeaderboard', pause: state === 'playing' };
+  if (input === 'settings') return { do: 'openSettings', pause: live };
+  if (input === 'info') return { do: 'openAbout', pause: live };
+  if (input === 'howto') return { do: 'openHowTo', pause: live };
+  if (input === 'changelog') return { do: 'openChangelog', pause: live };
+  if (input === 'lang') return { do: 'openLanguage', pause: live };
+  if (input === 'feedback') return { do: 'openFeedback', pause: live };
+  if (input === 'scores') return { do: 'openScores', pause: live };
+  if (input === 'leaderboard') return { do: 'openLeaderboard', pause: live };
   if (input === 'tap') {
     if (state === 'playing') return { do: 'flap' };
     if (state === 'paused') return resumeLocked ? { do: 'ignore' } : { do: 'resume' };
@@ -1458,7 +1473,7 @@ export function focusRingLayout(bounds, t) {
  * chromeIntent.
  *
  * @param {string|null} action from padAction / stickNav
- * @param {'ready'|'playing'|'paused'|'dead'} state Play's state
+ * @param {'ready'|'playing'|'paused'|'respawn'|'dead'} state Play's state ('respawn' pauses like 'playing')
  * @param {'play'|'over'|'overlay'} top the scene the ring belongs to
  * @param {boolean} ringShown the top scene's focus ring is visible
  * @param {boolean} savePanelOpen the DOM save panel is up (the pad cannot type)
@@ -1469,7 +1484,7 @@ export function padIntent({ action, state, top = 'play', ringShown = false, save
   if (action === 'mute') return { do: 'mute' };
   if (action.startsWith('nav:')) {
     const dir = action.slice(4);
-    if (top === 'play' && state === 'playing') return { do: 'pauseAndFocus', dir };
+    if (top === 'play' && (state === 'playing' || state === 'respawn')) return { do: 'pauseAndFocus', dir };
     return { do: 'move', dir };
   }
   if (top === 'versus') {

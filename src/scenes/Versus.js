@@ -217,8 +217,7 @@ export class Versus extends Phaser.Scene {
       // Pipes passed: the pipe sprite's cap as the icon, ×n beside it, as the game-over panel shows them.
       this.add.image(x - 46, cy + 20, 'pipe').setOrigin(0.5, 80 / 1280).setCrop(0, 0, 128, 160).setScale(40 / 128).setDepth(71);
       this.add.text(x - 14, cy + 20, `×${slot.pipesPassed}`, { ...STYLE, fontSize: '36px', color: '#c9b8dc', strokeThickness: 8 }).setOrigin(0, 0.5).setDepth(71);
-      const status = slot.won ? t(this.locale, 'versusEscaped') : slot.alive ? '' : t(this.locale, 'versusOut');
-      if (status) this.add.text(x, cy + 90, status, { ...STYLE, fontSize: '32px', color: slot.won ? GOLD : '#ff8aa0', strokeThickness: 8 }).setOrigin(0.5).setDepth(71);
+      if (slot.won) this.add.text(x, cy + 90, t(this.locale, 'versusEscaped'), { ...STYLE, fontSize: '32px', color: GOLD, strokeThickness: 8 }).setOrigin(0.5).setDepth(71);
     });
     this.add.text(cx, cy + 160, t(this.locale, 'versusNotSaved'), { ...STYLE, fontSize: '26px', color: GOLD, strokeThickness: 6, wordWrap: { width: 560, useAdvancedWrap: true } }).setOrigin(0.5).setDepth(71);
     // Rematch (the left box) | Home (the right), on the game-over panel's row.

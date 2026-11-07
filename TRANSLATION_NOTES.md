@@ -41,7 +41,7 @@ formal medical language.
 - **Toilet mode** (如厕模式) = the ready-screen switch; scores from such runs carry a 🚽 (not translated).
 - **User code** / save code (用户码 / 存档码) = the `fp1.…` string players copy between devices. The home-screen button is **Save / Load User**; the panel labels are **Username**, **Save user code**, **Load user code**, and a **Save** button at the bottom that stores the username. `{name}` and `{scores}` are placeholders filled at runtime; keep them verbatim.
 - **Leaderboard** (排行榜) = the shared online Top 25 behind the 🏆 tray button. Only players with a username are on it; `{score}` may carry a 🚽, `{rank}` / `{total}` are numbers. Keep the placeholders verbatim.
-- **Two players** (双人模式) = the 👥 switch under the toilet toggle, offered only on a landscape screen wide enough for two halves (desktop, tablet). P1 is the left half, P2 the right; `{n}` is the player number. Two-player runs never reach the leaderboard or the save code.
+- **Two players** (双人模式) = the 👥 switch under the toilet toggle, offered only on a landscape screen wide enough for two halves (desktop, tablet). P1 is the left half, P2 the right; `{n}` is the player number. A crash does not end a two-player run (the poop is put back mid-screen); the match is decided on points once both players have cleared the last level, and the first one out waits under **Made it out!** / **Waiting for P{n}…**. Two-player runs never reach the leaderboard or the save code.
 
 ## Glossary (items)
 
@@ -185,8 +185,8 @@ Short, playful, clear. Fit a 720×1280 logical field; How to play / About body w
 | versusDraw | DRAW | 平局 |
 | versusRematch | Rematch | 再来一局 |
 | versusNotSaved | Two-player runs are not saved | 双人模式的分数不会保存 |
-| versusOut | OUT | 出局 |
 | versusEscaped | Made it out! | 顺利排出！ |
+| versusWaiting | Waiting for P{n}… | 等待玩家{n}… |
 
 ### aboutCredits (English)
 

@@ -4,6 +4,7 @@
 // for a trailing player's mystery box, and who won. The Versus scene and both
 // Play halves call these; tests/versus.test.js covers them.
 
+import { GAME_HEIGHT } from './config.js';
 import { fieldWidth, levelProgress } from './logic.js';
 
 /** The ready-screen toggle's emoji (two heads), beside the 🚽 one. */
@@ -31,9 +32,14 @@ export function versusLayout(viewportW, viewportH, field) {
   return { halfW, totalW: 2 * halfW, x: [0, halfW] };
 }
 
-/** One player's live state, written by its Play half every playing frame and read by the other. */
+/**
+ * One player's live state, written by its Play half every playing frame and read by the
+ * other. `deaths` counts crashes (each one a respawn, never the end), `respawning` is true
+ * from the hit to the restart, `alpha` carries the blink so the ghost blinks too, `ended`
+ * once the run is over (the rectum cleared), `won` when it cleared the rectum.
+ */
 export function slotTemplate() {
-  return { device: null, score: 0, pipesPassed: 0, level: 1, distance: 0, y: 0, angle: 0, frame: 'poop', alive: true, ended: false, won: false };
+  return { device: null, score: 0, pipesPassed: 0, level: 1, distance: 0, y: 0, angle: 0, frame: 'poop', alpha: 1, deaths: 0, respawning: false, ended: false, won: false };
 }
 
 /** A new match on the join screen: slot 0 is the left half (P1), slot 1 the right (P2). */
@@ -111,16 +117,16 @@ export function deviceLabel(device) {
  * Where the other player's poop shows in my lumen: at my poopX plus the
  * difference in distance scrolled, while that lies within ghostRangePx. The
  * alpha is ghostAlpha at no difference, fading linearly to 0 at the range edge,
- * and 0 once the other is dead or has ended (the half fades the ghost out to it).
- * y, angle and frame are the other's own, so its faces and the fart show.
+ * scaled by the other's own alpha (its respawn blink shows), and 0 once the
+ * other's run has ended (the half fades the ghost out to it). y, angle and
+ * frame are the other's own, so its faces, the fart and the crash show.
  */
 export function ghostPlacement(me, other, poopX, t) {
   if (!me || !other) return { visible: false, x: poopX, y: 0, angle: 0, frame: 'poop', alpha: 0 };
   const v = t.versus;
   const dx = (other.distance ?? 0) - (me.distance ?? 0);
   const visible = Math.abs(dx) <= v.ghostRangePx;
-  const alive = Boolean(other.alive) && !other.ended;
-  const alpha = visible && alive ? v.ghostAlpha * (1 - Math.abs(dx) / v.ghostRangePx) : 0;
+  const alpha = visible && !other.ended ? v.ghostAlpha * (1 - Math.abs(dx) / v.ghostRangePx) * (other.alpha ?? 1) : 0;
   return { visible, x: poopX + dx, y: other.y ?? 0, angle: other.angle ?? 0, frame: other.frame ?? 'poop', alpha };
 }
 
@@ -137,17 +143,53 @@ export function rivalMarker(me, other, t) {
 }
 
 /**
- * Who won once the match has ended: the higher score, else the more pipes
- * passed, else the survivor (the one still alive when the other died), else a
- * draw. { winner: 0 | 1 | null, by: 'score' | 'pipes' | 'survivor' | 'draw' }.
+ * Who won once both runs have ended: the higher score, else the fewer crashes,
+ * else a draw. { winner: 0 | 1 | null, by: 'score' | 'deaths' | 'draw' }.
  */
 export function matchResult(slots) {
   const [a, b] = slots ?? [];
   if (!a || !b) return { winner: null, by: 'draw' };
   if (a.score !== b.score) return { winner: a.score > b.score ? 0 : 1, by: 'score' };
-  if (a.pipesPassed !== b.pipesPassed) return { winner: a.pipesPassed > b.pipesPassed ? 0 : 1, by: 'pipes' };
-  if (Boolean(a.alive) !== Boolean(b.alive)) return { winner: a.alive ? 0 : 1, by: 'survivor' };
+  const da = a.deaths ?? 0;
+  const db = b.deaths ?? 0;
+  if (da !== db) return { winner: da < db ? 0 : 1, by: 'deaths' };
   return { winner: null, by: 'draw' };
+}
+
+/** How long a respawn takes from the hit to the restart: the tumble, the glide and the blinks. */
+export function respawnTotalMs(t) {
+  const r = t.versus.respawn;
+  return r.crashMs + r.glideMs + 2 * r.blinkMs * r.blinkCycles;
+}
+
+/**
+ * The poop's pose `elapsed` ms into a respawn, pure in time so a paused clock
+ * freezes it: 'crash' (physics owns the tumble; y / angle are `from`'s or 0 while
+ * `from` is null), 'glide' (eased, 1 − (1 − r)², from `from` to mid-screen and the
+ * nearest whole turn, so a half-spun poop finishes its spin rather than unwinding),
+ * 'blink' (held at mid-screen, alpha 1 → blinkAlpha → 1 per cycle, a triangle wave),
+ * 'done' (mid-screen, upright, opaque). { phase, y, angle, alpha }.
+ */
+export function respawnPose(elapsed, from, t) {
+  const r = t.versus.respawn;
+  const centreY = GAME_HEIGHT / 2;
+  const fy = from?.y ?? centreY;
+  const fa = from?.angle ?? 0;
+  const ms = Math.max(0, elapsed ?? 0);
+  if (ms < r.crashMs) return { phase: 'crash', y: fy, angle: fa, alpha: 1 };
+  const glideEnd = r.crashMs + r.glideMs;
+  const target = Math.round(fa / 360) * 360 || 0; // `|| 0` turns a -0 into 0
+  if (ms < glideEnd) {
+    const k = 1 - (1 - (ms - r.crashMs) / r.glideMs) ** 2;
+    return { phase: 'glide', y: fy + (centreY - fy) * k, angle: fa + (target - fa) * k, alpha: 1 };
+  }
+  const blinkEnd = glideEnd + 2 * r.blinkMs * r.blinkCycles;
+  if (ms < blinkEnd) {
+    const u = ((ms - glideEnd) % (2 * r.blinkMs)) / r.blinkMs; // 0 → 2 per cycle
+    const dip = u <= 1 ? u : 2 - u; // 0 at the cycle's ends, 1 at its middle
+    return { phase: 'blink', y: centreY, angle: target, alpha: 1 - (1 - r.blinkAlpha) * dip };
+  }
+  return { phase: 'done', y: centreY, angle: target, alpha: 1 };
 }
 
 /**

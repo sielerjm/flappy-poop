@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { TUNING as T } from '../src/config.js';
-import { createRng, rollItem, hazardsAllowed, tutorialSpawn, bandItemsMove, bandMidY, pipeGapY, itemGapY, scoreAfterItem, scorePopup, popupSlots, pipePoints, createEffects, ITEM_KINDS, mysteryRolls, mysteryMoves, scriptedMysteryPair, rollMystery, resolveMystery, skipPairs, MYSTERY_DRAWS, levelEnd, bobY, gapBobAmplitude, gapBobY } from '../src/logic.js';
+import { createRng, rollItem, hazardsAllowed, tutorialSpawn, bandItemsMove, bandMidY, pipeGapY, itemGapY, scoreAfterItem, scoreAfterDeath, deathPenalty, scorePopup, popupSlots, pipePoints, createEffects, ITEM_KINDS, mysteryRolls, mysteryMoves, scriptedMysteryPair, rollMystery, resolveMystery, skipPairs, MYSTERY_DRAWS, levelEnd, bobY, gapBobAmplitude, gapBobY } from '../src/logic.js';
 
 test('rollItem is always null below startScore', () => {
   const rng = createRng(1);
@@ -436,6 +436,22 @@ test('scorePopup follows the tuning numbers', () => {
 test('bacteria popup stays nominal while the score floors at 0', () => {
   assert.equal(scoreAfterItem(1, 'bacteria', T), 0);
   assert.equal(scorePopup('bacteria', T).text, `\u2212${T.items.bacteriaPenalty}`);
+});
+
+test('a match crash costs deathPenaltyPerLevel × level, floored at 0, and the popup reads the full loss', () => {
+  const per = T.versus.scoring.deathPenaltyPerLevel;
+  assert.equal(deathPenalty(1, T), per);
+  assert.equal(deathPenalty(3, T), 3 * per);
+  assert.equal(deathPenalty(0, T), per, 'a level below 1 still costs one level');
+  assert.equal(scoreAfterDeath(9, 1, T), 9 - per);
+  assert.equal(scoreAfterDeath(10, 3, T), 10 - 3 * per);
+  assert.equal(scoreAfterDeath(1, 3, T), 0, 'never below 0');
+  assert.equal(scoreAfterDeath(0, 7, T), 0);
+  assert.deepEqual(scorePopup('death', T, 1, 0, 3), { text: `\u2212${3 * per}`, color: T.popup.bacteriaColor });
+  assert.equal(scorePopup('death', T).text, `\u2212${per}`, 'level 1 by default');
+  assert.equal(scorePopup('death', T, 2, 0, 2).text, `\u2212${2 * per}`, 'the postbiotic never scales the penalty');
+  assert.deepEqual(scorePopup('levelClear', T), { text: `+${T.versus.scoring.levelClearBonus}`, color: T.mystery.color });
+  assert.equal(scorePopup('levelClear', T, 2).text, `+${T.versus.scoring.levelClearBonus}`, 'nor the bonus');
 });
 
 test('pipe popup: quick white +1 per pair, +2 under the postbiotic; fiber reads +6 under it, bacteria never scales', () => {

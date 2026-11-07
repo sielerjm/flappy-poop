@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { chromeIntent } from '../src/logic.js';
 
-const STATES = ['ready', 'playing', 'paused', 'dead'];
+const STATES = ['ready', 'playing', 'paused', 'respawn', 'dead'];
 
 function intent(partial) {
   return chromeIntent({
@@ -32,9 +32,9 @@ test('no overlay: pause and esc toggle only during a run', () => {
   }
 });
 
-test('no overlay: settings, info, howto, lang, feedback, leaderboard, and scores open that overlay, pausing only if playing', () => {
+test('no overlay: settings, info, howto, lang, feedback, leaderboard, and scores open that overlay, pausing only if playing (or respawning)', () => {
   for (const state of STATES) {
-    const pause = state === 'playing';
+    const pause = state === 'playing' || state === 'respawn';
     assert.deepEqual(intent({ state, input: 'settings' }), { do: 'openSettings', pause });
     assert.deepEqual(intent({ state, input: 'info' }), { do: 'openAbout', pause });
     assert.deepEqual(intent({ state, input: 'howto' }), { do: 'openHowTo', pause });
@@ -51,6 +51,17 @@ test('no overlay: tap flaps, starts, resumes, or retries', () => {
   assert.deepEqual(intent({ state: 'paused', input: 'tap', resumeLocked: true }), { do: 'ignore' });
   assert.deepEqual(intent({ state: 'ready', input: 'tap' }), { do: 'start' });
   assert.deepEqual(intent({ state: 'dead', input: 'tap' }), { do: 'retry' });
+  assert.deepEqual(intent({ state: 'respawn', input: 'tap' }), { do: 'ignore' }, 'a respawning half takes no tap');
+});
+
+test('no overlay: P / Esc pause a playing or respawning half, resume a paused one, else nothing', () => {
+  for (const input of ['pause', 'esc']) {
+    assert.deepEqual(intent({ state: 'playing', input }), { do: 'pause' });
+    assert.deepEqual(intent({ state: 'respawn', input }), { do: 'pause' });
+    assert.deepEqual(intent({ state: 'paused', input }), { do: 'resume' });
+    assert.deepEqual(intent({ state: 'ready', input }), { do: 'ignore' });
+    assert.deepEqual(intent({ state: 'dead', input }), { do: 'ignore' });
+  }
 });
 
 test('no overlay: close does nothing', () => {
@@ -88,7 +99,7 @@ test('info while Settings is top opens About; info while About is top is ignored
 
 test('changelog (What\'s new) opens from no overlay or over About; it is ignored elsewhere; close returns to About without the lockout', () => {
   for (const state of STATES) {
-    assert.deepEqual(intent({ state, input: 'changelog' }), { do: 'openChangelog', pause: state === 'playing' });
+    assert.deepEqual(intent({ state, input: 'changelog' }), { do: 'openChangelog', pause: state === 'playing' || state === 'respawn' });
     assert.deepEqual(intent({ state, overlay: 'about', input: 'changelog' }), { do: 'openChangelog', pause: false });
     for (const overlay of ['settings', 'howto', 'changelog', 'language', 'leaderboard', 'scores']) {
       assert.deepEqual(intent({ state, overlay, input: 'changelog' }), { do: 'ignore' });

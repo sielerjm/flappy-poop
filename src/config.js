@@ -251,6 +251,21 @@ export const TUNING = {
       beanBehindMin: 10, // from this many pipes behind (and below superBehind) the bean draws' odds are multiplied …
       beanOddsMul: 2, // … by this (bean1 0.2 → 0.4, bean3 0.05 → 0.1; fiber's remainder shrinks)
     },
+    // Points in a match (single player is untouched): a crash costs deathPenaltyPerLevel × level,
+    // never below 0; clearing a level earns levelClearBonus. The higher total wins when both are out.
+    scoring: {
+      deathPenaltyPerLevel: 2, // points lost per level number on a crash (level 3: −6)
+      levelClearBonus: 25, // points for crossing a finish line
+    },
+    // A crash in a match does not end the run: the half halts for the tumble, the poop is eased back
+    // to mid-screen, blinks (invulnerable, the world still halted), then plays on with a clear screen.
+    respawn: {
+      crashMs: 700, // ms of tumble after the hit (the world stands still from the hit on)
+      glideMs: 700, // ms the poop takes to ease back to mid-screen
+      blinkMs: 250, // ms per half blink (1 → blinkAlpha, or back)
+      blinkCycles: 3, // full blinks (out and back) before play resumes
+      blinkAlpha: 0.2, // 0–1 alpha at the bottom of a blink
+    },
   },
   gamepad: {
     // Standard-mapping button indices (Xbox: A 0, B 1, X 2, Y 3, LB 4, RB 5, LT 6, RT 7, View 8, Menu 9, d-pad 12–15).

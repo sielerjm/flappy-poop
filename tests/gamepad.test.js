@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { TUNING as T } from '../src/config.js';
 import { padAction, stickNav, focusStep, focusNearest, focusRingLayout, padIntent, trayLayout, readyLayout } from '../src/logic.js';
 
-const STATES = ['ready', 'playing', 'paused', 'dead'];
+const STATES = ['ready', 'playing', 'paused', 'respawn', 'dead'];
 const TOPS = ['play', 'over', 'overlay'];
 const NAV = ['nav:up', 'nav:down', 'nav:left', 'nav:right'];
 
@@ -102,17 +102,19 @@ test('padIntent: Y mutes everywhere', () => {
   }
 });
 
-test('padIntent: a nav press pauses a run first, then moves the ring', () => {
+test('padIntent: a nav press pauses a run (or a respawn) first, then moves the ring', () => {
   for (const action of NAV) {
     const dir = action.slice(4);
     assert.deepEqual(intent({ action, state: 'playing', top: 'play' }), { do: 'pauseAndFocus', dir });
+    assert.deepEqual(intent({ action, state: 'respawn', top: 'play' }), { do: 'pauseAndFocus', dir });
     for (const state of ['ready', 'paused', 'dead']) {
       assert.deepEqual(intent({ action, state, top: 'play' }), { do: 'move', dir }, `play ${state}`);
     }
     for (const state of STATES) {
+      const live = state === 'playing' || state === 'respawn';
       assert.deepEqual(intent({ action, state, top: 'over' }), { do: 'move', dir });
       assert.deepEqual(intent({ action, state, top: 'overlay' }), { do: 'move', dir });
-      assert.deepEqual(intent({ action, state, top: 'play', ringShown: true }), state === 'playing' ? { do: 'pauseAndFocus', dir } : { do: 'move', dir });
+      assert.deepEqual(intent({ action, state, top: 'play', ringShown: true }), live ? { do: 'pauseAndFocus', dir } : { do: 'move', dir });
     }
   }
 });
