@@ -33,6 +33,7 @@ export const TUNING = {
   poopRadius: 48, // px circular hitbox = half the 96 logical-px sprite (the whole drawing, square corners excluded)
   spriteDisplayScale: 0.25, // 384 px textures drawn at 96 logical px
   hudProbioticSize: 96, // logical px; HUD icon uses setDisplaySize
+  hudProbioticPulse: { scale: 1.1, ms: 600 }, // the probiotic / postbiotic HUD icon breathes 1 → scale and back every ms while its count runs; it grows hudProbioticSize × (scale − 1) / 2 per side, which must stay under hudRightLayout's 8 px gap to the count (tests/tuning.test.js)
   hudScoreY: 116, // px centre line of the 80 px score (and the 🚽 beside it): below the progress bar with air between
   pipePoints: 1, // points per pipe pair passed (× the postbiotic multiplier)
   maxFallAngle: 90, // degrees nose-down at terminal fall

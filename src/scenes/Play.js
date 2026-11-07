@@ -285,7 +285,11 @@ export class Play extends Phaser.Scene {
     // far left of the score row during a test run (the level bar owns the top strip then).
     this.testBadge = this.add.text(this.col.x + 24, 56, '', { ...TEXT_STYLE, fontSize: '34px', color: '#ffd700', strokeThickness: 8 }).setOrigin(0, 0.5).setDepth(20).setVisible(false);
     // Probiotic counter: right-aligned on the bean's row, clear of the score digits and the screen edge.
-    this.probioticIcon = this.add.image(0, 156, 'probiotic').setDisplaySize(T.hudProbioticSize, T.hudProbioticSize).setDepth(20).setVisible(false);
+    // The icon sits in a container so its breathing pulse (setProbioticPulse) scales the container:
+    // refreshProbioticHud re-runs setDisplaySize on the icon itself, which would reset a tween on it.
+    this.probioticIcon = this.add.image(0, 0, 'probiotic').setDisplaySize(T.hudProbioticSize, T.hudProbioticSize);
+    this.probioticHud = this.add.container(0, 156, [this.probioticIcon]).setDepth(20).setVisible(false);
+    this.probioticTween = null;
     this.probioticText = this.add.text(0, 156, '', { ...TEXT_STYLE, fontSize: '40px' }).setOrigin(1, 0.5).setDepth(20).setVisible(false);
     // Bean counter (left of the HUD): bean ×n until the power is spent.
     this.beanIcon = this.add.image(this.col.x + 72, 156, 'bean').setDisplaySize(56, 56).setDepth(20).setVisible(false);
@@ -1197,6 +1201,7 @@ export class Play extends Phaser.Scene {
     this.popupShift.pipe?.pause();
     this.popupShift.item?.pause();
     this.multTween?.pause();
+    this.probioticTween?.pause();
     this.revealTween?.pause();
     this.setBoxSpin(false);
   }
@@ -1211,6 +1216,7 @@ export class Play extends Phaser.Scene {
     this.popupShift.pipe?.resume();
     this.popupShift.item?.resume();
     this.multTween?.resume();
+    this.probioticTween?.resume();
     this.revealTween?.resume();
     this.setBoxSpin(true);
   }
@@ -1635,15 +1641,30 @@ export class Play extends Phaser.Scene {
   refreshProbioticHud() {
     const n = this.effects.pipesLeft();
     const show = n > 0;
-    this.probioticIcon.setVisible(show);
+    this.probioticHud.setVisible(show);
     this.probioticText.setVisible(show);
     this.setMultiplierBadge(this.effects.hasPostbiotic());
+    this.setProbioticPulse(show);
     if (!show) return;
     this.probioticIcon.setTexture(this.effects.hasPostbiotic() ? 'postbiotic' : 'probiotic').setDisplaySize(T.hudProbioticSize, T.hudProbioticSize);
     this.probioticText.setText(`×${n}`);
     const { textX, iconX } = hudRightLayout(this.col.x + this.col.width, this.probioticText.width, { iconSize: T.hudProbioticSize });
     this.probioticText.setX(textX);
-    this.probioticIcon.setX(iconX);
+    this.probioticHud.setX(iconX);
+  }
+
+  /** Start / stop the HUD icon's breathing (hudProbioticPulse) with its count; paused with the run like the ×2 badge. */
+  setProbioticPulse(on) {
+    if (on) {
+      if (this.probioticTween) return;
+      const pulse = T.hudProbioticPulse;
+      this.probioticTween = this.tweens.add({ targets: this.probioticHud, scale: { from: 1, to: pulse.scale }, duration: pulse.ms, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+      if (this.state === 'paused') this.probioticTween.pause();
+    } else if (this.probioticTween) {
+      this.probioticTween.stop();
+      this.probioticTween = null;
+      this.probioticHud.setScale(1);
+    }
   }
 
   /** Show / hide the pulsing ×2 beside the score; re-placed on every call because the digits widen. */
@@ -1905,6 +1926,7 @@ export class Play extends Phaser.Scene {
     this.markHowToSeen(); // a finished run counts as having seen this build
     this.setCharged(false);
     this.setMultiplierBadge(false); // no pulsing ×2 under the game-over panel
+    this.setProbioticPulse(false); // nor a breathing icon
     for (const pipe of this.pipes.getChildren()) pipe.setVelocityX(0);
     for (const item of this.items.getChildren()) item.setVelocityX(0);
     for (const bean of this.beans.getChildren()) bean.setVelocityX(0);

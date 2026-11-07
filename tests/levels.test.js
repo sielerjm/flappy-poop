@@ -207,7 +207,8 @@ test('multiplierLayout puts the ×2 badge right of the score digits, as a subscr
   assert.ok(y > T.hudScoreY && y < T.popup.rowY[0], `badge y ${y} sits below the score centre, above the top popup row`);
   // Probiotic counter up to "×20" (~80 px at 40 px bold with stroke).
   const { iconX } = hudRightLayout(GAME_WIDTH, 80, { iconSize: T.hudProbioticSize });
-  assert.ok(x + b.glowPx + badgeGlyphs <= iconX - T.hudProbioticSize / 2, 'badge ends before the probiotic icon');
+  const pulsed = (T.hudProbioticSize * T.hudProbioticPulse.scale) / 2; // the icon's half width at the top of its breath
+  assert.ok(x + b.glowPx + badgeGlyphs <= iconX - pulsed, 'badge ends before the probiotic icon, even mid-pulse');
 });
 
 test('level 1 is scripted: probiotic at pair 3, fiber after 4 and 7, a bean after 9, no bacteria; later levels roll', () => {

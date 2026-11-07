@@ -69,6 +69,13 @@ test('HUD probiotic icon is at least as large as the world item sprite', () => {
   const worldPx = 384 * T.spriteDisplayScale;
   assert.ok(T.hudProbioticSize >= worldPx, `hudProbioticSize ${T.hudProbioticSize} < world ${worldPx}`);
   assert.ok(T.hudProbioticSize <= 128, `hudProbioticSize ${T.hudProbioticSize} too tall for the score band`);
+  // Its pulse: a visible breath that never reaches the ×n count (hudRightLayout's gap is 8 px) nor the level bar above.
+  const pulse = T.hudProbioticPulse;
+  assert.ok(pulse.scale > 1 && pulse.scale <= 1.17, `hudProbioticPulse.scale ${pulse.scale}`);
+  assert.ok(pulse.ms >= 300 && pulse.ms <= 2000, `hudProbioticPulse.ms ${pulse.ms}`);
+  const grow = (T.hudProbioticSize * (pulse.scale - 1)) / 2;
+  assert.ok(grow < 8, `the pulsed icon grows ${grow} px per side, into the 8 px gap before the count`);
+  assert.ok(156 - T.hudProbioticSize / 2 - grow > T.levels.barY + T.levels.barHeight / 2, 'the pulsed icon stays under the level bar');
 });
 
 test('beans block sits in a fair band and the fart ramp stays readable', () => {
