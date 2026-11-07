@@ -22,7 +22,7 @@ export const FIELD = {
 export const TUNING = {
   gravity: 2600, // px/s^2 pulling the poop down
   flapVelocity: -760, // px/s applied on tap
-  pipeSpeed: 275, // px/s pipes scroll left at level 1 (each level adds levels.speedStep)
+  pipeSpeed: 275, // px/s pipes scroll left at level 1 (each level adds levels.speedStep up to levels.maxSpeed)
   pipeSpacingPx: 412, // px between pipe pairs from levels.spacingRefLevel on (1.27 s at level-3 speed); slower levels get more, see pipeSpacing()
   gapHeight: 340, // vertical opening between a pipe pair
   pipeWidth: 128,
@@ -70,7 +70,7 @@ export const TUNING = {
     spacingRefLevel: 3, // levels slower than this one space their pipes pipeSpacingPx × (its speed ÷ theirs): 487 px on level 1, 446 on level 2
     speedStep: 25, // px/s added to pipeSpeed per level after the first
     gapScale: [1.1, 1.05], // × gapHeight per level, index = level − 1 (374 / 357 px); later levels use gapHeight as is
-    maxSpeed: 450, // px/s cap (level 8+)
+    maxSpeed: 325, // px/s cap = level 3's speed: levels 3+ share one cruise; later difficulty is content (hazards, mystery boxes, moving pipes), not a faster scroll
     finishWidthPx: 96, // px width of the checkered finish line (three columns of finishCheckPx checks)
     finishCheckPx: 32, // px size of one check on the finish line
     // Level 1 is a scripted intro: pair (1-based) → the pickup it carries; no random

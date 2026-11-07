@@ -60,6 +60,15 @@ test('levelSpeed starts at pipeSpeed, rises speedStep per level, and caps at max
   for (let n = 1; n <= 20; n += 1) assert.ok(pipeSpacing(n, T) / levelSpeed(n, T) >= 0.8, `level ${n} leaves ≥ 0.8 s between pipes`);
 });
 
+test('scroll speed holds at the level-3 cruise: levels 3+ all run at maxSpeed = pipeSpeed + 2 × speedStep, spacing stays pipeSpacingPx', () => {
+  assert.equal(L.maxSpeed, T.pipeSpeed + 2 * L.speedStep, 'the cap is level 3\'s speed');
+  assert.ok(levelSpeed(2, T) < levelSpeed(3, T), 'levels 1–3 still ramp');
+  for (const n of [3, 4, 5, 6, 7, 20]) {
+    assert.equal(levelSpeed(n, T), L.maxSpeed, `level ${n} cruises`);
+    assert.equal(pipeSpacing(n, T), T.pipeSpacingPx, `level ${n} spacing`);
+  }
+});
+
 test('pipe spacing: 487 / 446 px on the slower levels 1–2, pipeSpacingPx from spacingRefLevel on', () => {
   assert.deepEqual([1, 2, 3, 4, 8].map((n) => pipeSpacing(n, T)), [487, 446, T.pipeSpacingPx, T.pipeSpacingPx, T.pipeSpacingPx]);
   assert.equal(L.spacingRefLevel, 3);
