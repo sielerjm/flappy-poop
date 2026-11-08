@@ -786,3 +786,48 @@ test('levelClearCoins: the cleared level\'s number, +3 in a match without a cras
   assert.equal(T.coin.perLevel, 1);
   assert.equal(T.coin.cleanLevelBonus, 3);
 });
+
+test('mysteryFace: the texture and count a draw is shown with (the reveal and the reel)', async () => {
+  const { mysteryFace } = await import('../src/logic.js');
+  assert.deepEqual(mysteryFace('bean1'), { key: 'bean', count: null });
+  assert.deepEqual(mysteryFace('bean3'), { key: 'bean', count: 3 });
+  assert.deepEqual(mysteryFace('coin10'), { key: 'coin', count: 10 });
+  assert.deepEqual(mysteryFace('probiotic'), { key: 'probiotic', count: null });
+  assert.deepEqual(mysteryFace('fiber'), { key: 'fiber', count: null });
+  assert.deepEqual(mysteryFace('nonsense'), { key: 'fiber', count: null });
+  assert.equal(mysteryFace('skip').emoji, '\u{1F3C1}');
+});
+
+test('reelStrip: shop.reel.items faces, the draw at stop (tail faces before the end), no neighbours alike, only grantable faces', async () => {
+  const { reelStrip, REEL_FACES, createRng } = await import('../src/logic.js');
+  const R = T.shop.reel;
+  assert.ok(!REEL_FACES.includes('skip'), 'a skip never comes out of a shop box');
+  for (const result of REEL_FACES) {
+    for (let seed = 1; seed <= 40; seed += 1) {
+      const { faces, stop } = reelStrip(result, createRng(seed), T);
+      assert.equal(faces.length, R.items);
+      assert.equal(stop, R.items - 1 - R.tail);
+      assert.equal(faces[stop], result);
+      assert.ok(faces.every((f) => REEL_FACES.includes(f)), JSON.stringify(faces));
+      for (let i = 1; i < faces.length; i += 1) assert.notEqual(faces[i], faces[i - 1], `neighbours ${i - 1}/${i} alike in ${JSON.stringify(faces)}`);
+    }
+  }
+  const edge = reelStrip('coin15', () => 0.999999, T);
+  assert.equal(edge.faces[edge.stop], 'coin15', 'an rng near 1 stays inside the pool');
+});
+
+test('reelProgress: 0 → 1 over shop.reel.spinMs, never backwards, fastest at the start', async () => {
+  const { reelProgress } = await import('../src/logic.js');
+  const S = T.shop.reel.spinMs;
+  assert.equal(reelProgress(0, T), 0);
+  assert.equal(reelProgress(S, T), 1);
+  assert.equal(reelProgress(S + 500, T), 1);
+  assert.equal(reelProgress(-10, T), 0);
+  let prev = 0;
+  for (let e = 0; e <= S; e += 30) {
+    const p = reelProgress(e, T);
+    assert.ok(p >= prev, `monotone at ${e}`);
+    prev = p;
+  }
+  assert.ok(reelProgress(S / 10, T) - reelProgress(0, T) > reelProgress(S, T) - reelProgress(S * 0.9, T), 'eases out');
+});

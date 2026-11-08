@@ -210,6 +210,17 @@ export const TUNING = {
     prices: { fiber: 1, bean: 6, superBean: 16, mystery: 5 }, // coins; superBean fills the bag to beans.superBeans (a super fart ready); mystery opens a box on the plain draw table
     disabledAlpha: 0.35, // 0–1 alpha of a row the purse cannot pay for, or a bean row with the bag full
     panelInMs: 180, // ms the panel scales in
+    // A bought mystery box spins a reel of rewards over the panel (right to left, easing out) that
+    // stops on its draw, holds pauseMs, then grants it.
+    reel: {
+      items: 16, // faces on the strip
+      tail: 2, // faces after the drawn one, so the window is full when it stops
+      spinMs: 1800, // ms from the start to the stop
+      pauseMs: 700, // ms the stopped reel holds the draw before it is granted
+      iconPx: 72, // px of a face's drawing
+      pitchPx: 120, // px between faces
+      landScale: 1.25, // the drawn face pops to this scale when it lands
+    },
   },
   beans: {
     startScore: 5, // score from which beans may appear

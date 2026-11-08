@@ -38,6 +38,9 @@ import {
   skipPairs,
   MYSTERY_BEANS,
   MYSTERY_COINS,
+  mysteryFace,
+  reelStrip,
+  reelProgress,
   BAND_ITEMS,
   canBuy,
   buyBlocker,
@@ -396,6 +399,7 @@ export class Play extends Phaser.Scene {
     // (openShop) inside this half's column, above the shade and the banner, under the tray.
     this.shopOpen = false;
     this.shop = null;
+    this.reelSpin = null; // the reel a bought box spins over the shop (spinReel), until its draw is granted
     this.shopButtonBox = shopButtonLayout(this.col.width, GAME_HEIGHT, T, this.col.x);
     this.shopBoxes = shopLayout(this.col.width, GAME_HEIGHT, T, this.col.x);
     this.shopButton = createButton(this, this.shopButtonBox, coinLabel(0), { ...TEXT_STYLE, fontSize: '40px' }, { depth: 27 }).setVisible(false);
@@ -484,6 +488,7 @@ export class Play extends Phaser.Scene {
       this.focus = null;
       this.shop = null; // its objects die with the scene
       this.shopOpen = false;
+      this.reelSpin = null;
       this.stopFartSound();
     });
   }
@@ -2205,7 +2210,8 @@ export class Play extends Phaser.Scene {
    * Buy a SHOP_ITEMS row with coins (the level-break shop). False, and nothing taken, unless
    * canBuy. Fiber → eatFiber; bean → one bean; superBean → the bag filled to beans.superBeans;
    * mystery → a box opened on the plain draw table with pairsLeft 0 (a skip in the break becomes
-   * fiber), its reveal at `opts.x` / `opts.y` (`opts.depth`, `opts.run`: see revealMystery).
+   * fiber), its reveal at `opts.x` / `opts.y` (`opts.depth`, `opts.run`: see revealMystery); with
+   * `opts.reel` (the shop's rows) the draw spins the reel first and is granted when it stops (spinReel).
    * Nothing it starts is frozen with the paused run: the reward animates in the break.
    */
   buyItem(id, opts = {}) {
@@ -2215,8 +2221,9 @@ export class Play extends Phaser.Scene {
     else if (id === 'bean') this.giveBeans(1);
     else if (id === 'superBean') this.giveBeans(T.beans.superBeans);
     else if (id === 'mystery') {
-      const draw = rollMystery(this.match ? this.rngDraw : this.course.rng, T);
-      this.openMystery(resolveMystery(draw, { beans: this.effects.beans(), pairsLeft: 0 }, T), opts.x, opts.y, opts);
+      const draw = resolveMystery(rollMystery(this.match ? this.rngDraw : this.course.rng, T), { beans: this.effects.beans(), pairsLeft: 0 }, T);
+      if (opts.reel) this.spinReel(draw, opts);
+      else this.openMystery(draw, opts.x, opts.y, opts);
     }
     this.refreshCoinHud();
     this.playSample('coin-spend', T.coinSpendVolume, sfx.pickup);
@@ -2293,10 +2300,10 @@ export class Play extends Phaser.Scene {
 
   /** A tap (or the ring's A) on a shop row: buy it when the purse and the bag allow; the reward rises from the row's icon over the panel. */
   shopBuy(id) {
-    if (!this.shopOpen) return false;
+    if (!this.shopOpen || this.reelSpin) return false; // nothing else is bought while the reel spins
     const row = this.shopBoxes.rows.find((r) => r.id === id);
     if (!row) return false;
-    const ok = this.buyItem(id, { x: row.iconX, y: row.y, depth: 29.5, run: true });
+    const ok = this.buyItem(id, { x: row.iconX, y: row.y, depth: 29.5, run: true, reel: true });
     this.refreshShop();
     this.refreshShopButton();
     this.refreshLevelBanner();
@@ -2306,6 +2313,7 @@ export class Play extends Phaser.Scene {
   /** Close the shop panel (✕, a tap outside, Esc, B, the power input; silently when the run ends or the break does). */
   closeShop({ silent = false } = {}) {
     if (!this.shopOpen) return;
+    this.finishReel({ early: true }); // a reel cut short grants its draw now (with the rising reveal)
     const s = this.shop;
     s?.tween?.stop();
     for (const obj of [s?.panel, s?.closeText, s?.title, s?.coins]) obj?.destroy();
@@ -2317,6 +2325,79 @@ export class Play extends Phaser.Scene {
     this.refreshShopButton();
     this.versusHost()?.onShopChanged?.();
     if (this.focus?.shown && this.shopButtonShown()) this.focus.setIndex(this.focus.indexOf('shop'));
+  }
+
+  /**
+   * The shop's slot machine for a bought box: a window over the rows scrolls a strip of rewards
+   * (reelStrip) right to left on reelProgress's ease-out, a tick per face going by, and stops on
+   * `draw` with a ding and a pop; after shop.reel.pauseMs the draw is granted (finishReel). It runs
+   * in the paused break (its tween and timer are its own, never frozen). Nothing is bought meanwhile.
+   */
+  spinReel(draw, opts = {}) {
+    this.finishReel({ early: true });
+    const R = T.shop.reel;
+    const L = this.shopBoxes.reel;
+    const { faces, stop } = reelStrip(draw, Math.random, T);
+    const dim = this.add.rectangle(L.x, L.y, L.width + 40, L.dimHeight, 0x1a0b14, 0.85).setDepth(30);
+    const frame = this.add.rectangle(L.x, L.y, L.width, L.height, 0x2a1220, 1).setStrokeStyle(6, 0xffd700).setDepth(30.5);
+    const marker = this.add.graphics().setDepth(31.5);
+    marker.lineStyle(4, 0xffd700, 1);
+    marker.strokeRoundedRect(L.x - R.pitchPx / 2 + 6, L.y - L.height / 2 + 14, R.pitchPx - 12, L.height - 28, 16);
+    const strip = faces.map((f) => {
+      const face = mysteryFace(f);
+      const parts = [this.add.image(0, 0, face.key).setDisplaySize(R.iconPx, R.iconPx)];
+      if (face.count) parts.push(this.add.text(R.iconPx / 2 - 6, R.iconPx / 2 - 8, `×${face.count}`, { ...TEXT_STYLE, fontSize: '28px' }).setOrigin(0.5));
+      return this.add.container(L.x, L.y, parts).setDepth(31);
+    });
+    const spin = { draw, opts, faces, stop, dim, frame, marker, strip, slot: 0, landed: false, tween: null, timer: null, pop: null };
+    this.reelSpin = spin;
+    const place = (pos) => {
+      for (let i = 0; i < strip.length; i += 1) {
+        const dx = (i - pos) * R.pitchPx;
+        const alpha = Math.max(0, 1 - Math.abs(dx) / (L.width / 2)); // faces fade towards the window's edges
+        strip[i].setPosition(L.x + dx, L.y).setAlpha(alpha).setVisible(alpha > 0);
+      }
+    };
+    place(0);
+    spin.tween = this.tweens.addCounter({
+      from: 0,
+      to: R.spinMs,
+      duration: R.spinMs,
+      onUpdate: (tw) => {
+        const pos = reelProgress(tw.getValue(), T) * stop;
+        place(pos);
+        const slot = Math.round(pos);
+        if (slot !== spin.slot) {
+          spin.slot = slot;
+          sfx.tick();
+        }
+      },
+      onComplete: () => {
+        place(stop);
+        spin.landed = true;
+        sfx.reelStop();
+        spin.pop = this.tweens.add({ targets: strip[stop], scale: R.landScale, duration: 140, yoyo: true, ease: 'Quad.easeOut' });
+        spin.timer = this.time.delayedCall(R.pauseMs, () => this.finishReel());
+      },
+    });
+    return spin;
+  }
+
+  /**
+   * Close the reel and grant its draw (openMystery at the bought row, refreshing the purse and the
+   * shop). `early`: cut short (the shop closing, the level starting), so the draw also rises from
+   * its row as a box's reveal would. Nothing to do without a reel.
+   */
+  finishReel({ early = false } = {}) {
+    const spin = this.reelSpin;
+    if (!spin) return;
+    this.reelSpin = null;
+    spin.tween?.stop();
+    spin.pop?.stop();
+    spin.timer?.remove(false);
+    for (const obj of [spin.dim, spin.frame, spin.marker, ...spin.strip]) obj.destroy();
+    this.openMystery(spin.draw, spin.opts.x, spin.opts.y, { ...spin.opts, reveal: early });
+    this.refreshPurse();
   }
 
   /**
@@ -2340,7 +2421,7 @@ export class Play extends Phaser.Scene {
     } else {
       this.eatFiber();
     }
-    this.revealMystery(draw, x ?? this.poop.x, y ?? this.poop.y, opts);
+    if (opts.reveal !== false) this.revealMystery(draw, x ?? this.poop.x, y ?? this.poop.y, opts); // the shop's reel already showed it
   }
 
   /**
@@ -2351,13 +2432,12 @@ export class Play extends Phaser.Scene {
   revealMystery(draw, x, y, { depth = 12, run = false } = {}) {
     this.clearReveal();
     const parts = [];
-    if (draw === 'skip') {
-      parts.push(this.add.text(0, 0, '\u{1F3C1}', { fontFamily: 'sans-serif', fontSize: '72px' }).setOrigin(0.5));
+    const face = mysteryFace(draw);
+    if (face.emoji) {
+      parts.push(this.add.text(0, 0, face.emoji, { fontFamily: 'sans-serif', fontSize: '72px' }).setOrigin(0.5));
     } else {
-      const key = { probiotic: 'probiotic', postbiotic: 'postbiotic', bean1: 'bean', bean3: 'bean', coin5: 'coin', coin10: 'coin', coin15: 'coin' }[draw] ?? 'fiber';
-      parts.push(this.add.image(0, 0, key).setDisplaySize(2 * T.items.itemRadius, 2 * T.items.itemRadius)); // the pickup's size, whatever the texture's
-      const count = MYSTERY_BEANS[draw] > 1 ? MYSTERY_BEANS[draw] : MYSTERY_COINS[draw];
-      if (count) parts.push(this.add.text(T.items.itemRadius, 0, `×${count}`, { ...TEXT_STYLE, fontSize: '40px' }).setOrigin(0, 0.5));
+      parts.push(this.add.image(0, 0, face.key).setDisplaySize(2 * T.items.itemRadius, 2 * T.items.itemRadius)); // the pickup's size, whatever the texture's
+      if (face.count) parts.push(this.add.text(T.items.itemRadius, 0, `×${face.count}`, { ...TEXT_STYLE, fontSize: '40px' }).setOrigin(0, 0.5));
     }
     const reveal = this.add.container(x, y, parts).setDepth(depth);
     reveal.setData('draw', draw);

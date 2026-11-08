@@ -515,16 +515,43 @@ export async function run(url = DEFAULT_URL) {
       await tapAt(row('superBean').x, row('superBean').y);
       const sb = await evaluate(`JSON.stringify({ beans: ${play}.effects.beans(), coins: ${play}.effects.coins(), open: ${play}.shopOpen })`).then(JSON.parse);
       ok(sb.beans === 1 && sb.coins === b.coins && sb.open, 'a tap on the greyed super bean row buys nothing and keeps the shop open');
+      // The mystery row spins the reel: the price is paid at once, the draw (a bean, rolled from the
+      // course stream) is granted when the reel stops and has held its beat; a tap on another row
+      // meanwhile buys nothing.
+      const R = TT.shop.reel;
+      const waitFor = async (expr, tries) => {
+        for (let i = 0; i < tries; i += 1) {
+          if ((await evaluate(expr)) === true) return true;
+          await sleep(100);
+        }
+        return false;
+      };
       await evaluate(`${play}.keepRng = ${play}.course.rng, ${play}.course.rng = () => 0.25, true`);
       await tapAt(row('mystery').x, row('mystery').y);
       await evaluate(`${play}.course.rng = ${play}.keepRng, true`);
-      const m = await evaluate(`JSON.stringify({ beans: ${play}.effects.beans(), coins: ${play}.effects.coins(), draw: ${play}.reveal?.getData('draw'), running: Boolean(${play}.revealTween?.isPlaying()), depth: ${play}.reveal?.depth, panel: ${play}.shop.panel.depth, y0: ${play}.reveal?.y })`).then(JSON.parse);
-      await sleep(150);
-      const my = await evaluate(`${play}.reveal ? ${play}.reveal.y : -1`);
-      ok(m.draw === 'bean1' && m.beans === 2 && m.coins === b.coins - TT.shop.prices.mystery && m.running && m.depth > m.panel && my !== m.y0, `the mystery row opens a box: a bean (bag ${m.beans}, purse ${m.coins}); its reveal rises over the panel while the run is paused (y ${m.y0?.toFixed(0)} → ${my?.toFixed?.(0)})`);
+      const reel0 = await evaluate(`(() => { const p = ${play}; const r = p.reelSpin; return JSON.stringify({ on: Boolean(r), draw: r?.draw, face: r?.faces[r.stop], n: r?.strip.length, beans: p.effects.beans(), coins: p.effects.coins(), depth: r?.frame.depth, panel: p.shop.panel.depth, x0: r?.strip[0].x, cx: p.shopBoxes.reel.x }); })()`).then(JSON.parse);
+      const s1 = await evaluate(`${play}.score`);
+      await tapAt(row('fiber').x, row('fiber').y);
+      const refused = await evaluate(`JSON.stringify({ score: ${play}.score, coins: ${play}.effects.coins(), on: Boolean(${play}.reelSpin) })`).then(JSON.parse);
+      await sleep(250);
+      const x1 = await evaluate(`${play}.reelSpin?.strip[0].x ?? null`);
+      ok(reel0.on && reel0.draw === 'bean1' && reel0.face === 'bean1' && reel0.n === R.items && reel0.beans === 1 && reel0.coins === b.coins - TT.shop.prices.mystery && reel0.depth > reel0.panel && x1 !== null && x1 < reel0.x0, `the mystery row spins a ${reel0.n}-face reel over the panel (paid: purse ${reel0.coins}; the bean waits); it scrolls right to left (${reel0.x0} → ${x1?.toFixed(0)})`);
+      ok(refused.on && refused.score === s1 && refused.coins === reel0.coins, 'a tap on the fiber row while the reel spins buys nothing');
+      ok(await waitFor(`${play}.reelSpin?.landed === true`, (R.spinMs + 1000) / 100), 'the reel lands');
+      const landed = await evaluate(`(() => { const p = ${play}; const r = p.reelSpin; return JSON.stringify({ x: r?.strip[r.stop].x, cx: p.shopBoxes.reel.x, beans: p.effects.beans() }); })()`).then(JSON.parse);
+      ok(await waitFor(`${play}.reelSpin === null`, (R.pauseMs + 1000) / 100), 'the reel closes after its beat');
+      const m = await evaluate(`JSON.stringify({ beans: ${play}.effects.beans(), coins: ${play}.effects.coins(), open: ${play}.shopOpen, line: ${play}.shop.coins.text })`).then(JSON.parse);
+      ok(landed.x === landed.cx && landed.beans === 1 && m.beans === 2 && m.coins === reel0.coins && m.open && m.line.endsWith(`💰 ${m.coins}`), `it stops with the bean in the window's centre (x ${landed.x}), holds it (bag ${landed.beans}), then grants it: bag ${m.beans}, purse ${m.coins}, the shop still open`);
+      // Closing the shop mid-spin grants the draw at once, rising from its row (10 coins here).
+      await evaluate(`${play}.keepRng = ${play}.course.rng, ${play}.course.rng = () => 0.63, true`);
+      await tapAt(row('mystery').x, row('mystery').y);
+      await evaluate(`${play}.course.rng = ${play}.keepRng, true`);
+      const spun = await evaluate(`(${play}.lastReel = ${play}.reelSpin, JSON.stringify({ on: Boolean(${play}.reelSpin), draw: ${play}.reelSpin?.draw, coins: ${play}.effects.coins() }))`).then(JSON.parse);
       await tapAt(prep.close.x, prep.close.y);
+      const cutReel = await evaluate(`JSON.stringify({ on: Boolean(${play}.reelSpin), coins: ${play}.effects.coins(), reveal: ${play}.reveal?.getData('draw'), running: Boolean(${play}.revealTween?.isPlaying()), objs: (() => { const r = ${play}.lastReel; return r ? [r.dim, r.frame, r.marker, ...r.strip].filter((c) => c.scene).length : -1; })() })`).then(JSON.parse);
+      ok(spun.on && spun.draw === 'coin10' && spun.coins === m.coins - TT.shop.prices.mystery && !cutReel.on && cutReel.coins === spun.coins + 10 && cutReel.reveal === 'coin10' && cutReel.running && cutReel.objs === 0, `closing the shop mid-spin grants the draw at once (+10, purse ${cutReel.coins}) with its reveal rising; the reel's objects are gone`);
       const closed = await evaluate(`JSON.stringify({ open: ${play}.shopOpen, shop: ${play}.shop, state: ${play}.state, lb: ${play}.levelBreak, pill: ${play}.shopButtonShown(), btn: ${play}.shopButton.getText(), title: ${play}.levelTitle.visible })`).then(JSON.parse);
-      ok(!closed.open && closed.shop === null && closed.state === 'paused' && closed.lb && closed.pill && closed.btn === `💰 ${m.coins}` && closed.title, `✕ closes the shop and the break goes on: the pill reads "${closed.btn}"`);
+      ok(!closed.open && closed.shop === null && closed.state === 'paused' && closed.lb && closed.pill && closed.btn === `💰 ${cutReel.coins}` && closed.title, `✕ closes the shop and the break goes on: the pill reads "${closed.btn}"`);
       // The super bean with the bag at 2: it fills the bag (a super fart ready) and empties the purse.
       await evaluate(`${play}.effects.addCoins(${TT.shop.prices.superBean} - ${play}.effects.coins()), ${play}.refreshShopButton(), true`);
       await sleep(400); // the ✕ armed the resume lockout

@@ -246,4 +246,10 @@ export const sfx = {
     blip({ freq: 90, to: 50, type: 'square', duration: 0.08, gain: 0.12 });
     blip({ freq: 70, to: 40, type: 'square', duration: 0.1, gain: 0.1 });
   },
+  // The shop reel: a short click per face going by, a bright two-note ding when it stops.
+  tick: () => blip({ freq: 1400, to: 1100, type: 'square', duration: 0.02, gain: 0.04 }),
+  reelStop: () => {
+    blip({ freq: 990, to: 990, type: 'triangle', duration: 0.12, gain: 0.1 });
+    blip({ freq: 1480, to: 1480, type: 'triangle', duration: 0.24, gain: 0.08 });
+  },
 };

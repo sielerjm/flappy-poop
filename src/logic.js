@@ -524,6 +524,49 @@ export function resolveMystery(draw, { beans = 0, pairsLeft = 0 } = {}, t) {
   return draw;
 }
 
+/**
+ * How a draw is drawn: a texture key and the count shown beside it (×3 beans, ×5 / ×10 / ×15
+ * coins), or a skip's 🏁 emoji. Fiber (the default) for anything else. The box reveal and the
+ * shop's reel both use it.
+ */
+export function mysteryFace(draw) {
+  if (draw === 'skip') return { emoji: '\u{1F3C1}', count: null };
+  const key = { probiotic: 'probiotic', postbiotic: 'postbiotic', bean1: 'bean', bean3: 'bean', coin5: 'coin', coin10: 'coin', coin15: 'coin' }[draw] ?? 'fiber';
+  const count = MYSTERY_BEANS[draw] > 1 ? MYSTERY_BEANS[draw] : (MYSTERY_COINS[draw] ?? null);
+  return { key, count };
+}
+
+/** What the shop's reel shows: every reward a box bought in a level break can give (a skip becomes fiber there). */
+export const REEL_FACES = ['fiber', 'probiotic', 'postbiotic', 'bean1', 'bean3', 'coin5', 'coin10', 'coin15'];
+
+/**
+ * The shop reel's strip for a box that drew `result`: shop.reel.items faces, random REEL_FACES
+ * with no two neighbours alike, `result` at `stop` (shop.reel.tail faces before the end, so the
+ * window still has faces on its right when it stops there).
+ */
+export function reelStrip(result, rng, t) {
+  const r = t.shop.reel;
+  const stop = r.items - 1 - r.tail;
+  const faces = [];
+  for (let i = 0; i < r.items; i += 1) {
+    if (i === stop) {
+      faces.push(result);
+      continue;
+    }
+    // Neither the face before nor, next to the stop, the result itself.
+    const avoid = new Set([faces[i - 1], i === stop - 1 ? result : undefined]);
+    const pool = REEL_FACES.filter((f) => !avoid.has(f));
+    faces.push(pool[Math.min(pool.length - 1, Math.floor(rng() * pool.length))]);
+  }
+  return { faces, stop };
+}
+
+/** The reel's position `elapsed` ms into its spin, 0 → 1 over shop.reel.spinMs on a cubic ease-out (fast, then settling). */
+export function reelProgress(elapsed, t) {
+  const r = Math.min(1, Math.max(0, (elapsed || 0) / t.shop.reel.spinMs));
+  return 1 - (1 - r) ** 3;
+}
+
 /** Pairs a skip jumps over on `level`: every one not yet passed up to the level's end. */
 export function skipPairs(pipesPassed, level, t) {
   return Math.max(0, levelEnd(level, t) - pipesPassed);
@@ -581,6 +624,8 @@ export function shopLayout(width, height, t, x0 = 0) {
     title: { x: cx, y: 374 },
     coins: { x: cx, y: 440 },
     rows: SHOP_ITEMS.map((id, i) => ({ id, x: cx, y: 540 + i * 104, width: 520, height: t.trayHitMin, iconX: cx - 210, nameX: cx - 150, priceX: cx + 230, icon: 72 })),
+    // The reel a bought box spins: a window over the middle of the rows, a dimmer over all four.
+    reel: { x: cx, y: 696, width: 520, height: 168, dimHeight: 432 },
   };
 }
 

@@ -234,3 +234,13 @@ test('the still pulse: a slight breath, slow enough to read, never touching a ne
   // centre) is at least gapMargin away.
   assert.ok(96 * (1 + p.amount) / 2 < 48 + T.gapMargin, 'the pulse stays within the gap margin');
 });
+
+test('the shop reel spins long enough to read and stops for a beat', () => {
+  const r = T.shop.reel;
+  assert.ok(r.items >= 8 && r.items <= 30, `items ${r.items}`);
+  assert.ok(r.tail >= 1 && r.tail < r.items / 2, `tail ${r.tail}`);
+  assert.ok(r.spinMs >= 800 && r.spinMs <= 3500, `spinMs ${r.spinMs}`);
+  assert.ok(r.pauseMs >= 300 && r.pauseMs <= 2000, `pauseMs ${r.pauseMs}`);
+  assert.ok(r.iconPx <= r.pitchPx, 'faces never overlap');
+  assert.ok(r.landScale > 1 && r.landScale <= 1.6, `landScale ${r.landScale}`);
+});
