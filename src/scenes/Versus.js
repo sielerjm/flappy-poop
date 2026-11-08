@@ -31,7 +31,7 @@ export class Versus extends Phaser.Scene {
     this.locale = this.scene.get('Play')?.locale ?? 'en';
     this.pausedHalves = new Set(); // which halves the shared pause paused (a half in its level break is never one of them)
     this.resultShown = false;
-    this.levelCountdown = false; // both halves are at a level's finish line and the shared count to the next level runs
+    this.levelStage = null; // once both halves are at a level's finish line: 'arming' (the beat), 'tap' (waiting for a tap from either), 'count' (the shared 3-2-1-GO)
     this.homeTapFrame = -1; // the frame a tap landed on the join screen's Home: the halves do not claim that tap
     const W = layout.totalW;
     const cx = W / 2;
@@ -168,25 +168,43 @@ export class Versus extends Phaser.Scene {
 
   /**
    * A half reached a level's finish line (Play.onFinishCrossed; the last level ends the run
-   * instead). The first one waits under "Waiting for P2…"; once both are at the line their
-   * hints go and, after levelSyncDelayMs, the shared countdown starts the next level for both.
+   * instead). The first one waits under "Waiting for P2…". Once both are at the line their
+   * hints go for levelSyncDelayMs (the arriving player's last flap must not count as the go-
+   * ahead), then both read "Tap to continue" and wait for a tap from either (onLevelTap).
    */
   onLevelReached() {
-    if (this.match.status !== 'playing' || this.levelCountdown) return;
+    if (this.match.status !== 'playing' || this.levelStage) return;
     const halves = this.halves();
     if (!halves.every((half) => half?.levelBreak && half.state === 'paused')) return;
-    this.levelCountdown = true;
+    this.levelStage = 'arming';
     for (const half of halves) half.setLevelHintVisible(false);
     const match = this.match;
     this.time.delayedCall(T.versus.levelSyncDelayMs, () => {
-      if (!this.sys.isActive() || this.match !== match || match.status !== 'playing') return;
-      this.runCountdown(() => this.beginLevel(), { status: 'playing', hold: true });
+      if (!this.sys.isActive() || this.match !== match || match.status !== 'playing' || this.levelStage !== 'arming') return;
+      this.levelStage = 'tap';
+      for (const half of this.halves()) {
+        half?.refreshLevelBanner(); // the hint now reads "Tap to continue"
+        half?.setLevelHintVisible(true);
+      }
     });
+  }
+
+  /**
+   * A tap on a half in its level break (Play.applyChrome 'resume': a touch, a flap key, a pad's A
+   * or B). Once both are at the line and the beat has passed it is the go-ahead for both: the
+   * prompts go and the shared countdown starts the next level (holding under an overlay).
+   * Before that it does nothing.
+   */
+  onLevelTap() {
+    if (this.match.status !== 'playing' || this.levelStage !== 'tap') return;
+    this.levelStage = 'count';
+    for (const half of this.halves()) half?.setLevelHintVisible(false);
+    this.runCountdown(() => this.beginLevel(), { status: 'playing', hold: true });
   }
 
   /** GO: both halves leave their break in the same frame (Play.beginLevel), side by side on the course. */
   beginLevel() {
-    this.levelCountdown = false;
+    this.levelStage = null;
     this.countText.setVisible(false);
     for (const half of this.halves()) half?.beginLevel();
     if (globalThis.document?.hidden) this.setPaused(true); // GO on a hidden tab: nothing was live to auto-pause during the count

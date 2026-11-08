@@ -626,7 +626,7 @@ export class Play extends Phaser.Scene {
     if (final) this.win();
     else this.startLevelBreak();
     if (this.match) this.showScorePopup('levelClear');
-    if (this.match && !final) this.versusHost()?.onLevelReached?.(); // the first one at the line waits; both there: the shared countdown
+    if (this.match && !final) this.versusHost()?.onLevelReached?.(); // the first one at the line waits; both there: a tap from either starts the shared count
   }
 
   /**
@@ -642,11 +642,13 @@ export class Play extends Phaser.Scene {
   refreshLevelBanner() {
     const [title, hint] = levelBannerText(this.locale, this.level, LEVELS).split('\n');
     this.levelTitle?.setText(title);
-    // A match's break is not ended by a tap: it waits for the other player, then the shared countdown starts both.
-    this.levelHint?.setText(this.match && this.levelBreak ? t(this.locale, 'versusWaiting').replace('{n}', String(this.player === 1 ? 2 : 1)) : hint);
+    // A match's break waits for the other player; once both are at the line (Versus levelStage 'tap')
+    // the hint is the usual "Tap to continue", and a tap from either half starts the shared count.
+    const waiting = this.match && this.levelBreak && this.versusHost()?.levelStage !== 'tap';
+    this.levelHint?.setText(waiting ? t(this.locale, 'versusWaiting').replace('{n}', String(this.player === 1 ? 2 : 1)) : hint);
   }
 
-  /** The level break's hint line: Versus hides it while the shared countdown runs over the banner. */
+  /** The level break's hint line: Versus hides it through the beat and the count, and shows "Tap to continue" between. */
   setLevelHintVisible(on) {
     this.levelHint?.setVisible(Boolean(on) && this.levelBreak);
   }
@@ -931,7 +933,8 @@ export class Play extends Phaser.Scene {
    * The state chrome decisions (chromeIntent, padIntent) read. In a match it is the match's,
    * not this half's: a finished half (waiting for the other) or a respawning one still pauses
    * and resumes the match from its tray, keys and pad; its own level break reads 'paused', where
-   * a tap only lifts a shared pause (the shared countdown ends the break, Versus.beginLevel).
+   * a tap lifts a shared pause or, once both are at the line, starts the shared count
+   * (Versus.onLevelTap, then beginLevel ends both breaks).
    */
   chromeState() {
     if (!this.match || this.match.status !== 'playing') return this.state;
@@ -1004,7 +1007,9 @@ export class Play extends Phaser.Scene {
       case 'resume':
         if (this.match) {
           // A match: the tap lifts the shared pause for both halves (a no-op when it is not on). A half
-          // in its level break stays there: the break ends for both at once on the shared countdown.
+          // in its level break stays there; once both are at the line a tap from either is the go-ahead
+          // for the shared count that ends both breaks at once (Versus.onLevelTap, a no-op before that).
+          if (this.levelBreak) this.versusHost()?.onLevelTap?.();
           this.versusHost()?.setPaused?.(false);
         } else {
           this.resumePlay();

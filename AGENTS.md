@@ -111,8 +111,9 @@ slot counts the crash, the poop tumbles, everything not yet credited is cleared,
 mid-screen, blinks, and plays on with the next pair at mid-height. Clearing a level earns
 `versus.scoring.levelClearBonus`. Levels start together: the first player over a finish line waits in
 its level break under "Waiting for P2…" (no shade, a tap does not end it); once both are there
-`Versus.onLevelReached` runs the match-start 3-2-1-GO (`runCountdown`, holding while an overlay is open)
-and `beginLevel` ends both breaks in the same frame. The pause key / ⏸ / Menu toggle the
+(`Versus.onLevelReached`) and `levelSyncDelayMs` has passed, both read "Tap to continue", a tap from
+either (`Versus.onLevelTap`) runs the match-start 3-2-1-GO (`runCountdown`, holding while an overlay is
+open), and `beginLevel` ends both breaks in the same frame. The pause key / ⏸ / Menu toggle the
 **shared pause** (`Versus.setPaused`, remembering which halves it paused so a break is never ended by
 the other player; a respawning half's clock stops with it). Chrome decisions in a match read
 `chromeState()` (the match's state, not the half's), so a finished or respawning half still pauses and
@@ -183,8 +184,9 @@ src/
                             ghostAlpha / ghostFadeMs, barRivalPx / barRivalAlpha,
                             dividerPx, catchUp (superBehind, beanBehindMin,
                             beanOddsMul), scoring (deathPenaltyPerLevel,
-                            levelClearBonus), levelSyncDelayMs (the beat before
-                            the shared level count), respawn (crashMs, glideMs,
+                            levelClearBonus), levelSyncDelayMs (the beat after both
+                            reach a line before a tap can start the next level),
+                            respawn (crashMs, glideMs,
                             blinkMs, blinkCycles, blinkAlpha).
                             Pure data, Node-safe.
   logic.js                  Pure functions, NO Phaser/DOM: field (fieldWidth,
@@ -633,13 +635,16 @@ src/
                             keys and no pad. handleChrome('pause' / 'esc') toggles
                             the shared pause (Versus.togglePause); pauseRun() /
                             autoPause forward to it; a 'resume' tap (and a pad's B)
-                            lifts the shared pause for both and nothing else: a match
-                            half's level break ends only on the shared count
-                            (beginLevel, from Versus). onFinishCrossed reports
-                            Versus.onLevelReached; refreshLevelBanner shows "Waiting
-                            for P{n}…" as a match break's hint (applyLocale keeps
-                            it), setPauseBanner keeps the shade off there, and
-                            setLevelHintVisible hides the hint under the count. The
+                            lifts the shared pause for both and, from a half in its
+                            level break, reaches Versus.onLevelTap (the go-ahead once
+                            both are at the line, else nothing): a match half's break
+                            ends only on the shared count (beginLevel, from Versus).
+                            onFinishCrossed reports Versus.onLevelReached;
+                            refreshLevelBanner shows "Waiting for P{n}…" as a match
+                            break's hint until Versus's levelStage is 'tap', then
+                            "Tap to continue" (applyLocale keeps it), setPauseBanner
+                            keeps the shade off there, and setLevelHintVisible hides
+                            the hint through the beat and the count. The
                             ready screen's 👥 toggle
                             (versusOffered(): outside a match, not test mode,
                             versusAvailable; toggleVersus → registry 'versus',
@@ -660,11 +665,14 @@ src/
                             create(); it stops on a restart or a status change and,
                             for a level, holds while an overlay is open, then repeats
                             the step for a full beat), go() launches both halves.
-                            onLevelReached: both halves in their level break → hints
-                            hidden, levelSyncDelayMs, runCountdown under status
-                            'playing' (ghosts and the pause plumbing as usual) →
-                            beginLevel (both Play.beginLevel in one call; a hidden
-                            tab pauses at once). setPaused(on) pauses every
+                            levelStage: onLevelReached with both halves in their
+                            level break → 'arming' (hints hidden for
+                            levelSyncDelayMs) → 'tap' ("Tap to continue" on both) →
+                            onLevelTap (a tap from either) → 'count': runCountdown
+                            under status 'playing' (ghosts and the pause plumbing as
+                            usual) → beginLevel (both Play.beginLevel in one call,
+                            levelStage back to null; a hidden tab pauses at once).
+                            setPaused(on) pauses every
                             playing or respawning half and remembers them
                             (pausedHalves), resumes only those; togglePause for the
                             pause key; anyLive() for chromeState. onRunEnded waits
@@ -1004,8 +1012,10 @@ tools/
                             P2…" with no shade; Settings from the break pauses the
                             other half; its tap and a pad's B do not end the break,
                             Menu / B pause and lift the other), the other's arrival
-                            arming the shared count (hints hidden), Settings holding
-                            it, GO starting level 2 on both with equal distances and
+                            (hints hidden through the beat, a tap then ignored), "Tap
+                            to continue" on both with no count until a tap, P2's tap
+                            starting the count, Settings holding it, GO starting
+                            level 2 on both with equal distances and
                             each ghost on the other's poop, the catch-up draws at
                             15 / 30 / 0 behind, a crash as a respawn (the −N popup,
                             the halted world, the cleared field and finish line, the

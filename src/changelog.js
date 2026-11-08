@@ -12,12 +12,12 @@ export const CHANGELOG = [
     date: '8 Nov 2026',
     notes: {
       en: [
-        'Two players: levels now start together. Reach a finish line first and you wait for the other player; then a 3-2-1-GO starts the next level for both.',
+        'Two players: levels now start together. Reach a finish line first and you wait for the other player; once you are both there, either of you taps to continue and a 3-2-1-GO starts the next level for both.',
         'The other player\'s ghost stays by the pipes they are actually at. Before, a fart, a crash or a skip could push it out of sight for the rest of the race.',
         'While you wait at a finish line, a controller\'s B button no longer pauses the other player.',
       ],
       'zh-Hans': [
-        '双人模式：现在两人同时开始每一关。先到终点线的一方会等待对方；两人都到之后，3-2-1-出发！同时开始下一关。',
+        '双人模式：现在两人同时开始每一关。先到终点线的一方会等待对方；两人都到之后，任意一方点击继续，3-2-1-出发！同时开始下一关。',
         '对手的影子现在会停在对方真正所在的管道旁。以前放屁、撞车或跳关之后，影子可能在本局剩下的时间里都看不到。',
         '在终点线等待时，手柄的 B 键不会再让对手暂停。',
       ],
