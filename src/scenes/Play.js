@@ -88,7 +88,7 @@ import {
   LAST_UPDATED,
   padIntent,
 } from '../logic.js';
-import { t, pauseBannerText, levelBannerText, levelLabel, initialLocale, isLocale, profileButtonText, coinLabel } from '../i18n.js';
+import { t, pauseBannerText, levelBannerText, levelLabel, initialLocale, isLocale, profileButtonText, coinLabel, countText } from '../i18n.js';
 import { loadLocal, saveLocal, ensureId, recordScore, TOILET_EMOJI } from '../save.js';
 import { unlock, attachGame, setMuted, isMuted, sfx } from '../sound.js';
 import { createTray } from '../ui/tray.js';
@@ -653,7 +653,7 @@ export class Play extends Phaser.Scene {
       this.endPower();
     }
     // Coins for the cleared level (its number, +3 without a crash in it), before the break so its shop can spend them.
-    this.takeCoins(levelClearCoins(done, this.crashesThisLevel, T));
+    this.takeCoins(levelClearCoins(done, this.crashesThisLevel, T, { match: Boolean(this.match) }));
     // A match: clearing a level earns versus.scoring.levelClearBonus. The score moves now (win()
     // reports it); the popup starts after the break has paused the run (a tween made while
     // paused is not paused with it), or at once on the final level.
@@ -680,7 +680,7 @@ export class Play extends Phaser.Scene {
 
   refreshLevelBanner() {
     // Single player with coins in the purse: "Tap to continue · 💰 to shop".
-    const shop = !this.match && (this.effects?.coins?.() ?? 0) > 0;
+    const shop = !this.match && this.purseCoins() > 0;
     const [title, hint] = levelBannerText(this.locale, this.level, LEVELS, { shop }).split('\n');
     this.levelTitle?.setText(title);
     // A match's break is a ready check: the hint is this player's state ("Tap when ready", then
@@ -937,7 +937,30 @@ export class Play extends Phaser.Scene {
   setTestMode(on) {
     this.registry.set('testMode', Boolean(on));
     if (on && (this.state === 'playing' || this.state === 'paused')) this.runIsTest = true;
+    // Leaving test mode empties the purse: what the endless test purse hid is not kept.
+    if (!on) this.effects?.spendCoins(this.effects.coins());
     this.refreshTestBadge();
+    this.refreshPurse();
+  }
+
+  /** A test run in test mode (single player only) has an endless purse: the shop takes nothing. */
+  testCoins() {
+    return this.runIsTest && this.isTestMode() && !this.match;
+  }
+
+  /** The purse the HUD, the 💰 pill and the shop read: the coins held, or Infinity in a test run (testCoins). */
+  purseCoins() {
+    if (this.testCoins()) return Infinity;
+    return this.effects?.coins?.() ?? 0;
+  }
+
+  /** Re-draw everything that shows the purse: the inventory row, the 💰 pill, the open shop and the banner hint. */
+  refreshPurse() {
+    if (!this.effects || !this.coinText) return;
+    this.refreshInventory();
+    this.refreshShopButton();
+    if (this.shopOpen) this.refreshShop();
+    if (this.levelBreak) this.refreshLevelBanner();
   }
 
   /** Test-mode knobs for Settings: the next run's start level (1..lastLevel) and Invincible. */
@@ -1766,7 +1789,7 @@ export class Play extends Phaser.Scene {
 
   /** The inventory rows: coin ×n over bean ×n, each only while above 0, stacked from the top (inventoryRows). */
   refreshInventory() {
-    const coins = this.effects.coins();
+    const coins = this.purseCoins();
     const beans = this.effects.beans();
     const rows = inventoryRows({ coins, beans }, T);
     for (const [icon, text, y, n] of [[this.coinIcon, this.coinText, rows.coin, coins], [this.beanIcon, this.beanText, rows.bean, beans]]) {
@@ -1775,7 +1798,7 @@ export class Play extends Phaser.Scene {
       text.setVisible(show);
       if (!show) continue;
       icon.setY(y);
-      text.setY(y).setText(`×${n}`);
+      text.setY(y).setText(`×${countText(n)}`);
     }
   }
 
@@ -2096,7 +2119,8 @@ export class Play extends Phaser.Scene {
       this.takeProbiotic();
     } else if (kind === 'coin') {
       if (kernel && this.kernel) this.kernel.done = true;
-      this.takeCoins(1);
+      // A postbiotic doubles a kernel picked up (never a box's coins: openMystery pays those plain).
+      this.takeCoins(this.effects.multiplier());
     } else if (kind === 'bacteria') {
       this.collected.bacteria += 1;
       if (this.effects.hasProbiotic()) {
@@ -2177,8 +2201,8 @@ export class Play extends Phaser.Scene {
    * Nothing it starts is frozen with the paused run: the reward animates in the break.
    */
   buyItem(id, opts = {}) {
-    if (!canBuy(id, { coins: this.effects.coins(), beans: this.effects.beans() }, T)) return false;
-    this.effects.spendCoins(T.shop.prices[id]);
+    if (!canBuy(id, { coins: this.purseCoins(), beans: this.effects.beans() }, T)) return false;
+    if (!this.testCoins()) this.effects.spendCoins(T.shop.prices[id]);
     if (id === 'fiber') this.eatFiber();
     else if (id === 'bean') this.giveBeans(1);
     else if (id === 'superBean') this.giveBeans(T.beans.superBeans);
@@ -2205,7 +2229,7 @@ export class Play extends Phaser.Scene {
   /** The 💰 pill: shown by shopButtonShown, labelled with the purse, dimmed (trayAlpha) when it is empty. */
   refreshShopButton() {
     if (!this.shopButton) return;
-    const coins = this.effects?.coins?.() ?? 0;
+    const coins = this.purseCoins();
     this.shopButton.setText(coinLabel(coins)).setAlpha(coins > 0 ? 1 : T.trayAlpha).setVisible(this.shopButtonShown());
   }
 
@@ -2241,7 +2265,7 @@ export class Play extends Phaser.Scene {
   /** Re-label the open shop: the title, the purse, and each row bright or greyed (buyBlocker) with its price or "Bag full". */
   refreshShop() {
     if (!this.shop) return;
-    const coins = this.effects.coins();
+    const coins = this.purseCoins();
     const beans = this.effects.beans();
     const names = { fiber: 'shopFiber', bean: 'shopBean', superBean: 'shopSuperBean', mystery: 'shopMystery' };
     this.shop.title.setText(t(this.locale, 'shopTitle'));

@@ -655,10 +655,14 @@ export function pipePoints(t, mult = 1) {
  * never bacteria or the death penalty.
  * Nominal: bacteria and death always read the full loss even when the 0 floor clamps it.
  */
-/** The coins a finish line pays: the cleared level's number × coin.perLevel, + coin.cleanLevelBonus without a crash in it. */
-export function levelClearCoins(level, crashes, t) {
+/**
+ * The coins a finish line pays: the cleared level's number × coin.perLevel, + coin.cleanLevelBonus
+ * in a match (`match`) without a crash in that level. Single player never earns the bonus: a crash
+ * there ends the run, so every level cleared is crash-free anyway.
+ */
+export function levelClearCoins(level, crashes, t, { match = false } = {}) {
   const lv = Math.max(1, Math.floor(level) || 1);
-  return lv * t.coin.perLevel + ((crashes ?? 0) > 0 ? 0 : t.coin.cleanLevelBonus);
+  return lv * t.coin.perLevel + (match && !((crashes ?? 0) > 0) ? t.coin.cleanLevelBonus : 0);
 }
 
 /** The coins a two-player crash leaves: versus.crashCoinKeep of them, rounded down (15 → 13, 5 → 4, 1 → 0). */

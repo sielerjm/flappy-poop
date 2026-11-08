@@ -687,6 +687,8 @@ test('buyBlocker / canBuy: coins first, then the bean bag; fiber and the box nee
   assert.equal(buyBlocker('constructor', { coins: 99, beans: 0 }, T), 'price');
   assert.equal(canBuy('fiber', { coins: p.fiber }, T), true);
   assert.equal(canBuy('bean', { coins: p.bean, beans: full }, T), false);
+  for (const item of SHOP_ITEMS) assert.equal(buyBlocker(item, { coins: Infinity, beans: 0 }, T), null, `a test run's endless purse buys ${item}`);
+  assert.equal(buyBlocker('bean', { coins: Infinity, beans: T.beans.maxBeans }, T), 'full', 'an endless purse still cannot overfill the bag');
 });
 
 test('skipPairs counts the pairs left to the level end', () => {
@@ -753,12 +755,15 @@ test('clearPowerups: a death takes the beans, the probiotic stack and a postbiot
   assert.equal(f2.endedPower(), false, 'without firing the end-of-power hook');
 });
 
-test('levelClearCoins: the cleared level\'s number, +3 without a crash in it', () => {
-  assert.equal(levelClearCoins(1, 0, T), 1 + T.coin.cleanLevelBonus);
-  assert.equal(levelClearCoins(3, 0, T), 3 + T.coin.cleanLevelBonus);
-  assert.equal(levelClearCoins(3, 1, T), 3, 'a crash forfeits the bonus');
-  assert.equal(levelClearCoins(7, 2, T), 7);
-  assert.equal(levelClearCoins(0, 0, T), 1 + T.coin.cleanLevelBonus, 'at least level 1');
+test('levelClearCoins: the cleared level\'s number, +3 in a match without a crash in it', () => {
+  const match = { match: true };
+  assert.equal(levelClearCoins(1, 0, T, match), 1 + T.coin.cleanLevelBonus);
+  assert.equal(levelClearCoins(3, 0, T, match), 3 + T.coin.cleanLevelBonus);
+  assert.equal(levelClearCoins(3, 1, T, match), 3, 'a crash forfeits the bonus');
+  assert.equal(levelClearCoins(7, 2, T, match), 7);
+  assert.equal(levelClearCoins(0, 0, T, match), 1 + T.coin.cleanLevelBonus, 'at least level 1');
+  assert.equal(levelClearCoins(3, 0, T), 3, 'single player: the level number only, no bonus');
+  assert.equal(levelClearCoins(1, 0, T, { match: false }), 1);
   assert.equal(T.coin.perLevel, 1);
   assert.equal(T.coin.cleanLevelBonus, 3);
 });

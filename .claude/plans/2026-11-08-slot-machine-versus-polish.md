@@ -34,12 +34,13 @@ Decisions made here (overrule any at approval):
 - Change: commit Michael's English edits with zh-Hans to match (sync plan table), `howToBody` without the Silent sentence, the `sound` row (en + zh) and its 🔊 in `HowTo.js` (`EMOJI_ROWS`), `TRANSLATION_NOTES.md` rows, `tests/howto.test.js` + `tests/i18n.test.js` row lists retargeted; review every How to play row en + zh against the game.
 - Verify: `npm test` fully green; `npm run smoke` (the How to play overlay opens, scrolls, walks its rows).
 - Commit: `docs(howto, step 1/6): the shortened How to play in both languages; the Silent note gets a 🔊 row`
-- Result: npm test 377/377; smoke all passed; 🔊 row checked in a screenshot
+- Result: npm test 377/377; smoke all passed; 🔊 row checked in a screenshot; commit `03ba916`
 
-### Step 2/6 — Coin rules: postbiotic doubles kernels, +3 in two-player only, ∞ in test mode  [pending]
+### Step 2/6 — Coin rules: postbiotic doubles kernels, +3 in two-player only, ∞ in test mode  [done]
 - Change: `collectItem` coin × multiplier (the postbiotic How to play row says so, en + zh + notes: moved here from step 1 so each commit's text matches the game); `levelClearCoins(level, crashes, t, { match })`; Play `testCoins()` / `purseLabel()` (∞), `buyBlocker` with an infinite purse, `buyItem` skips the spend, `setTestMode(false)` empties the purse; `coinLabel` shows ∞. Tests: levelClearCoins in and out of a match; buyBlocker with Infinity. Smoke: a kernel under a postbiotic adds 2; a box's coins under a postbiotic stay 10; single player's level 2 pays 2 (no +3); a match keeps +3; a test run shows ∞, buys without spending, exiting test mode empties the purse.
 - Verify: `npm test`; `npm run smoke`.
 - Commit: `feat(coins, step 2/6): a postbiotic doubles kernels picked up; +3 only in two-player; infinite coins in test mode`
+- Result: npm test 377/377; smoke all passed (kernel ×2 / box 10 under a postbiotic; single-player level 2 pays 2; match +3 kept; ∞ purse and its reset)
 
 ### Step 3/6 — A quicker single-bean fart  [pending]
 - Change: `beans.normalPowerMs`, `beans.normalFadeMs`; `activatePower` picks the duration by super / normal, fades the clip out at the end of a normal fart. Tests: tuning (normal shorter than the clip, fade inside it); `fartPeakMul` for 5 pairs in 2.5 s. Smoke: a normal fart passes its 5 pairs in about 2.5 s and ends with the sound faded; a super fart still runs the clip length; the re-fill after it unchanged.

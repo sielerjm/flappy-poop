@@ -74,7 +74,7 @@ Inspired by Flappy Bird`,
     itemProbioticName: 'Probiotic',
     itemProbioticDetail: 'Protects you against bad bacteria for 5 pipes. Subsequent probiotics stack, but hitting a bad bacteria uses them all up. Eat a fiber while it is active to make a postbiotic. From level 3 it moves up and down in the gap.',
     itemPostbioticName: 'Postbiotic',
-    itemPostbioticDetail: 'Eat fiber while a probiotic is active and it turns into a postbiotic: every pipe and fiber is worth double (×2) until the probiotic runs out. Another probiotic keeps it going; a bad bacteria hit ends it.',
+    itemPostbioticDetail: 'Eat fiber while a probiotic is active and it turns into a postbiotic: every pipe and fiber is worth double (×2) until the probiotic runs out, and every kernel you pick up counts twice. Another probiotic keeps it going; a bad bacteria hit ends it.',
     itemBacteriaName: 'Bad bacteria',
     itemBacteriaDetail: '−3 points. From level 3 it moves up and down in the gap.',
     itemBeanName: 'Beans',
@@ -223,7 +223,7 @@ Inspired by Flappy Bird`,
     itemProbioticName: '益生菌',
     itemProbioticDetail: '在 5 道管道内保护你不受有害细菌伤害。后续益生菌可叠加，但撞到有害细菌会全部用完。生效期间吃到纤维会变成后生元。从第 3 关起它会在管道口之间上下移动。',
     itemPostbioticName: '后生元',
-    itemPostbioticDetail: '在益生菌生效期间吃到纤维，就会变成后生元：在益生菌结束前，每道管道和每个纤维都得双倍分数（×2）。再吃到益生菌可延长时间；撞到有害细菌则立即结束。',
+    itemPostbioticDetail: '在益生菌生效期间吃到纤维，就会变成后生元：在益生菌结束前，每道管道和每个纤维都得双倍分数（×2），拾取的每粒玉米粒也算两粒。再吃到益生菌可延长时间；撞到有害细菌则立即结束。',
     itemBacteriaName: '有害细菌',
     itemBacteriaDetail: '−3 分。从第 3 关起它会在管道口之间上下移动。',
     itemBeanName: '豆子',
@@ -359,9 +359,14 @@ export function levelBannerText(locale, level, levels, { shop = false } = {}) {
   return `${name ? `${title} · ${name}` : title}\n${t(locale, shop ? 'levelShopHint' : 'levelContinue')}`;
 }
 
-/** The coin glyph and a count: "💰 12" (the shop button, the purse line, every price). Locale-free, like formatScore's "🚽 41". */
+/** The coin glyph and a count: "💰 12" (the shop button, the purse line, every price); a test run's endless purse reads "💰 ∞". Locale-free, like formatScore's "🚽 41". */
 export function coinLabel(n) {
-  return `💰 ${n}`;
+  return `💰 ${countText(n)}`;
+}
+
+/** A count for the coin labels: the number, or ∞ for a test run's endless purse (Infinity). */
+export function countText(n) {
+  return Number.isFinite(n) ? String(n) : '∞';
 }
 
 /** Short level label for the progress bar and score lines: "LV 2". */

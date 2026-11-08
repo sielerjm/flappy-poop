@@ -202,7 +202,7 @@ export const TUNING = {
     radius: 24, // px circular hitbox = half the 48 px drawing (the whole kernel, like every pickup)
     firstAfterPipePx: 112, // px from the centre of level 1's last pair to its guaranteed kernel (pipe half-width 64 + the hitbox radius 24 + 24 px of air), at that pair's gap height
     perLevel: 1, // coins per level number paid at a finish line (level 3 → 3), to each player in a match
-    cleanLevelBonus: 3, // more coins at a finish line reached without a crash in that level (single player: every level)
+    cleanLevelBonus: 3, // more coins at a finish line reached without a crash in that level: two-player only (a single-player crash ends the run)
     chance: 0.05, // 0–1 chance per pair from level 2 of an extra coin, only in a band slot nothing else took (no fiber, box, bean or guaranteed kernel): ≈ 4 % of pairs
   },
   // The level-break shop (the 💰 under the banner): coins buy one row at a time.

@@ -190,4 +190,5 @@ test('shareCardFooter shows the bare link after Play: in both locales', () => {
 test('coinLabel is the 💰 glyph and the count, the same in every locale', () => {
   assert.equal(coinLabel(12), '💰 12');
   assert.equal(coinLabel(0), '💰 0');
+  assert.equal(coinLabel(Infinity), '💰 ∞', 'a test run\'s endless purse');
 });
