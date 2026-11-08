@@ -1,6 +1,6 @@
 # Plan: Shop slot machine, test-mode coins, two-player polish (flush, GO boost, level wins, pulsing prompts), a quicker fart, coin rules, How to play sync
 - Created: 2026-11-08
-- Status: in progress (approved 2026-11-08)
+- Status: complete
 - Baseline commit: `bde331d` on `main` (7 ahead of origin, unpushed 0.8.1; uncommitted: Michael's How to play / save / feedback English edits in `src/i18n.js`; untracked `assets/sfx/ToiletFlush_Win.mp3`)
 - Whole-suite verification: `npm test` (baseline: 1 failure, `tests/howto.test.js`, from those English edits; step 1 fixes it) + `npm run smoke` after every scene step (server on port 8000). No source edits while a smoke runs.
 - Repo plan copy: `.claude/plans/2026-11-08-slot-machine-versus-polish.md` (written in step 1, `git add -f`)
@@ -58,12 +58,33 @@ Decisions made here (overrule any at approval):
 - Change: `Versus.runCountdown` starts at GO (flush there, GO visible one beat); Boot loads `flush` (`ToiletFlush_Win.mp3`, committed; CREDITS line updated); Play `armStartBoost()` (at `launch` in a match and `beginLevel`), the boost in `doFlap` / `update` (`boostPeakMul`, fart face); `slot.levelWins` (first to each line, first out) and the wider result panel with 🏁; Play `setHintPulse()` (scale + glow copy) for tap prompts in both modes, `levelSubHint` under "Ready! Waiting…"; i18n `versusUnreadyHint` (en + zh) + notes. Tests: `boostPeakMul` (the extra distance integrates to `distancePx`); `slotTemplate` levelWins; tuning knobs. Smoke: the match starts at GO (both halves playing while GO shows), the flush plays (sound key requested), a flap within the window boosts (distance gains ≈ 192 px over the other half, fart face during), a late flap does not; level wins counted (P1 first at level 1) and shown on the panel; the prompts pulse (scale moves, glow alpha moves); the sub-hint shows only while ready; the shared-start checks adjusted to GO starting the level.
 - Verify: `npm test`; `npm run smoke`.
 - Commit: `feat(versus, step 5/6): GO starts the race with a flush, a tap at GO boosts, level wins on the panel, pulsing prompts`
-- Result: npm test 385/385; smoke all passed first run (both halves playing as GO shows, poops already slid in during the count; flush once at GO; a tap 50 ms after GO → 192 px ahead with the fart face, a late tap nothing; level wins P1 2 / P2 0 on the 820 px panel; prompts pulse with the glow in both modes; the un-ready line only while ready). Screenshots of the ready lines and the result panel checked. The halves now slide into place under the "3" (Play.launch hold) so the run can start on GO.
+- Result: npm test 385/385; smoke all passed first run (both halves playing as GO shows, poops already slid in during the count; flush once at GO; a tap 50 ms after GO → 192 px ahead with the fart face, a late tap nothing; level wins P1 2 / P2 0 on the 820 px panel; prompts pulse with the glow in both modes; the un-ready line only while ready). Screenshots of the ready lines and the result panel checked. The halves now slide into place under the "3" (Play.launch hold) so the run can start on GO. Commit `c6d7387`.
 
-### Step 6/6 — Docs, 0.8.1 notes  [pending]
-- Change: `README.md`, `AGENTS.md`, `assets/README.md` (the flush), `TRANSLATION_NOTES.md`, the 0.8.1 What's new (en + zh, ≤ 5 bullets); plan status complete.
-- Verify: `npm test` green; stale-wording grep; `npm run smoke` on the final tree.
-- Commit: `docs(step 6/6): slot machine, test-mode coins, two-player polish, the quicker fart; 0.8.1`
+### Step 6/7 — Docs, 0.8.1 notes  [done]
+- Change (already in the working tree): `README.md`, `AGENTS.md`, `assets/README.md` (the flush row, the reel's synth blips), `TRANSLATION_NOTES.md` (the stale two-player "Tap to continue … a tap from either starts a shared 3-2-1-GO" line fixed), the 0.8.1 What's new in `src/changelog.js` (five bullets per locale; the +3 now two-player only).
+- Verify: `npm test` 385/385 (done); stale-wording grep finds nothing (done). The smoke's one failure is step 7's bug, not these docs.
+- Commit: `docs(step 6/7): slot machine, test-mode coins, two-player polish, the quicker fart; 0.8.1` with only the doc files, the changelog and the plan copy (not `tools/headless_check.mjs`, which goes with step 7).
+
+### Step 7/7 — The arrival beat's own timer decides when "Tap when ready" shows  [done]
+- Bug (found by the "after its beat P2 reads Tap when ready" smoke check, 2 of ~12 runs; the diagnostic caught P2 in its break 2 s after arrival, hint text right, `beatPassed` true, hint still hidden):
+  - Phaser's clock advances timers by the smoothed, capped frame delta, but `time.now` is the raw loop time (phaser 4.2.1 `src/time/Clock.js` `update`).
+  - `Versus.onLevelReached`'s `delayedCall(levelSyncDelayMs)` can therefore fire while raw `now − arrived` is still under `levelSyncDelayMs`. `refreshReady` then reads `beatPassed()` as false and keeps the hint hidden, and nothing refreshes it again.
+  - On a device with frame hitches the player can sit in the break with no prompt (taps still count once raw time passes).
+  - It came in with the unpushed ready check (`4d11e87`). It is not a test artefact.
+- Change (`src/scenes/Versus.js`):
+  - A `levelBeats` set records each half whose arrival timer has fired. The timer callback adds the half, then calls `refreshReady`.
+  - `beatPassed(i)` returns `levelBeats.has(i)`, so one clock decides both the prompt and when taps count.
+  - `onLevelReached` deletes the half from the set, `beginLevel` clears it, and `create` initialises it.
+  - `levelArrivals` stays: it decides the first arrival, which wins the level.
+  - AGENTS ready-check line updated.
+- Smoke (`tools/headless_check.mjs`):
+  - Keep the failure diagnostic added while investigating.
+  - Add a deterministic regression check: right after P2 arrives, move its `levelArrivals` stamp 50 ms into the future (the raw clock lagging the timer). "Tap when ready" must still show after the beat. On the old code this never shows.
+- Verify: `npm test`; `npm run smoke` three times in a row, all passing. Run the new regression check once against the old `beatPassed`, to confirm it can fail.
+- Commit: `fix(versus, step 7/7): the arrival beat's own timer decides when the ready prompt shows and taps count`
+- Result: diagnosis confirmed by measurement (a 600 ms timer created right after a 150 ms hitch fires at raw 517 ms, 11/12 trials; Phaser `TimeStep.smoothDelta` averages 10 frames while `time` is raw). With the old `beatPassed` the new check fails every run with the flake's signature; with the fix, three smoke runs in a row pass. npm test 385/385.
+- Result: diagnosis confirmed by measurement (a 600 ms timer created right after a 150 ms hitch fires at raw 517 ms, 11/12 trials; Phaser `TimeStep.smoothDelta` averages 10 frames while `time` is raw). With the old `beatPassed` the new check fails every run with the flake's signature; with the fix, three smoke runs in a row pass. npm test 385/385.
+- Not in scope: the occasional two-player "same course" smoke failure (seen 2× over two sessions, never reproduced). Noted for a later look.
 
 ## Risks and notes
 - Step 1 commits Michael's own English edits as they stand (he asked for the sync); nothing else of his is touched.
@@ -76,4 +97,4 @@ Decisions made here (overrule any at approval):
 - Hand check (Michael): buy a box in the shop and watch the reel; a test run's ∞ purse and its reset on exit; a two-player start with the flush and a boost tap at GO; level wins on the result panel; the pulsing prompts and the un-ready line; the quicker single fart; double kernels under a postbiotic; the How to play text in both languages with the 🔊 row. Then `npm run push`.
 
 ## Completion summary
-(filled at the end)
+Commits since `bde331d`: 03ba916 (How to play sync + 🔊 row), 0a41168 (coin rules, ∞ test purse), caf6440 (2.5 s fart), a5ad170 (shop reel), c6d7387 (two-player GO / flush / boost / level wins / pulsing prompts), the step 6 docs commit and the step 7 fix. Each step verified with `npm test` and `npm run smoke`; the ready-check flake seen during steps 3 and 6 was a real bug, fixed in step 7. Roll back with `git revert <hash>` per step, or `git reset --hard bde331d` (discards all of it). Not machine-verifiable: feel (reel speed, boost size, pulse strength, the 2.5 s fart and its fade, the flush volume), and real-device audio (headless Chrome keeps audio locked). Not pushed.

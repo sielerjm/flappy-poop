@@ -33,7 +33,8 @@ export class Versus extends Phaser.Scene {
     this.resultShown = false;
     this.levelStage = null; // 'count' while the shared 3-2-1-GO to the next level runs (both players ready)
     this.readyHalves = new Set(); // halves (0 = P1, 1 = P2) that tapped ready in their level break
-    this.levelArrivals = new Map(); // half → this scene's clock when it reached the line (its arrival beat runs from there)
+    this.levelArrivals = new Map(); // half → this scene's clock when it reached the line (the first arrival wins the level)
+    this.levelBeats = new Set(); // halves whose arrival beat (the levelSyncDelayMs timer) has passed: their taps count, their hint shows
     this.levelCountToken = 0; // bumped to cancel a running level count
     this.goToken = 0; // bumped by each GO: only the latest GO's beat hides countText
     this.homeTapFrame = -1; // the frame a tap landed on the join screen's Home: the halves do not claim that tap
@@ -188,6 +189,10 @@ export class Versus extends Phaser.Scene {
    * A half reached a level's finish line (Play.onFinishCrossed; the last level ends the run
    * instead). Its hint stays hidden for levelSyncDelayMs (the arrival flap must not count as a
    * ready tap), then reads "Tap when ready". The next level starts once both are ready.
+   * The beat is the timer itself (levelBeats), not time.now against the arrival stamp: Phaser's
+   * timers advance by the smoothed frame delta while time.now is raw loop time, so after a frame
+   * hitch a timer runs up to ~100 ms ahead of the clock and would fire with the stamp still "inside"
+   * the beat, leaving the hint hidden for good.
    */
   onLevelReached(half) {
     if (this.match.status !== 'playing') return;
@@ -196,6 +201,7 @@ export class Versus extends Phaser.Scene {
     // The first one over this level's line wins the level (🏁 on the result panel).
     if (![...this.levelArrivals.keys()].some((k) => k !== i)) this.match.slots[i].levelWins = (this.match.slots[i].levelWins ?? 0) + 1;
     this.readyHalves.delete(i);
+    this.levelBeats.delete(i);
     this.levelArrivals.set(i, this.time.now);
     half.refreshLevelBanner();
     half.setLevelHintVisible(false);
@@ -203,14 +209,14 @@ export class Versus extends Phaser.Scene {
     const match = this.match;
     this.time.delayedCall(T.versus.levelSyncDelayMs, () => {
       if (!this.sys.isActive() || this.match !== match || match.status !== 'playing' || !half.levelBreak) return;
+      this.levelBeats.add(i);
       this.refreshReady();
     });
   }
 
-  /** This half's arrival beat has passed: its taps count as ready toggles. */
+  /** This half's arrival beat has passed (its timer fired): its taps count as ready toggles and its hint shows. */
   beatPassed(i) {
-    const arrived = this.levelArrivals.get(i);
-    return arrived != null && this.time.now - arrived >= T.versus.levelSyncDelayMs;
+    return this.levelBeats.has(i);
   }
 
   /**
@@ -280,6 +286,7 @@ export class Versus extends Phaser.Scene {
     this.levelStage = null;
     this.readyHalves.clear();
     this.levelArrivals.clear();
+    this.levelBeats.clear();
     for (const half of this.halves()) half?.beginLevel();
     if (globalThis.document?.hidden) this.setPaused(true); // GO on a hidden tab: nothing was live to auto-pause during the count
   }

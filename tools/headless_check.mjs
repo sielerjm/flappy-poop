@@ -1720,10 +1720,17 @@ export async function run(url = DEFAULT_URL) {
       // starts it over. Settings from P1's tray holds the count until it closes; GO starts level 2 for both.
       await evaluate(`(() => { const p = ${P2}; p.pipes.clear(true, true); p.items.clear(true, true); p.beans.clear(true, true); p.nextGapY = null; p.pipesSpawned = ${want.end1}; p.pipesPassed = ${want.end1}; p.finishSpawned = false; p.spawnFinishLine(); p.finishLine.x = p.poop.x + 150; return true; })()`);
       ok(await until(`${P2}.levelBreak && ${P2}.state === 'paused'`), 'P2 crosses its finish line into its break');
+      // Regression: the beat is its timer, not the clock against the arrival stamp. Phaser's timers run on the
+      // smoothed delta and get ahead of time.now after a frame hitch, so a stamp-based beat could still read
+      // "inside" when the timer fired and the hint would never show. Push the stamp 50 ms ahead to stand in for
+      // that: the hint must show after the beat all the same.
+      await evaluate(`${VS}.levelArrivals.set(1, ${VS}.levelArrivals.get(1) + 50), true`);
       // The tap inside the beat is sent in the same evaluate that reads the clock, so it never lands after the beat.
       const early = await evaluate(`(() => { const v = ${VS}; const p = ${P2}; const inBeat = !v.beatPassed(1); if (inBeat) p.flap({ x: 100, y: 600 }); return JSON.stringify({ inBeat, ready: v.isReady(p), hint: p.levelHint.visible, levels: [${P1}.level, p.level] }); })()`).then(JSON.parse);
       ok(!early.ready && (!early.inBeat || !early.hint) && early.levels[0] === 2 && early.levels[1] === 2, early.inBeat ? 'a tap inside P2\'s arrival beat counts for nothing (not ready, the hint still hidden)' : 'P2\'s beat had already passed (nothing to check inside it)');
-      ok(await until(`${P2}.levelHint.visible && ${P2}.levelHint.text === 'Tap when ready'`, (want.syncMs + 1000) / 100), 'after its beat P2 reads "Tap when ready"');
+      const p2Hint = await until(`${P2}.levelHint.visible && ${P2}.levelHint.text === 'Tap when ready'`, (want.syncMs + 1000) / 100);
+      const p2Seen = p2Hint ? '' : await evaluate(`JSON.stringify({ shown: ${P2}.levelHint.visible, text: ${P2}.levelHint.text, lb: ${P2}.levelBreak, state: ${P2}.state, ready: [${VS}.isReady(${P1}), ${VS}.isReady(${P2})], stage: ${VS}.levelStage, beat: ${VS}.beatPassed(1), arrivals: [...${VS}.levelArrivals.entries()], now: ${VS}.time.now, levels: [${P1}.level, ${P2}.level], early: ${JSON.stringify(early)} })`);
+      ok(p2Hint, `after its beat P2 reads "Tap when ready"${p2Seen ? ` — ${p2Seen}` : ''}`);
       await evaluate(`${P1}.flap({ x: 100, y: 600 }), true`);
       await sleep(want.countdownMs + 300);
       const oneReady = await evaluate(`JSON.stringify({ a: ${VS}.isReady(${P1}), b: ${VS}.isReady(${P2}), stage: ${VS}.levelStage, counting: ${VS}.countText.visible, hintA: ${P1}.levelHint.text, states: [${P1}.state, ${P2}.state] })`).then(JSON.parse);
