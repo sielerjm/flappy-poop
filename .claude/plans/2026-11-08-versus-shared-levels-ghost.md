@@ -97,14 +97,14 @@ Decisions made here, flagged so they can be overruled:
 - Change: `AGENTS.md`, `README.md`, `TRANSLATION_NOTES.md`, `src/changelog.js`, `VERSION` + `package.json`; plan status complete.
 - Verify: `grep -n "per half\|each player's own\|continue tap" AGENTS.md README.md` finds nothing stale for the match; `npm test`.
 - Commit: `docs(versus, step 4/4): shared level starts, the course-anchored ghost; 0.7.1`
-- Result: the grep finds no per-half break or scroll-distance wording for the match (two stale comments, in Play.chromeState and the smoke's section B header, fixed here); npm test 352 / 353 (baseline failure only). Commit `<step4>`.
+- Result: the grep finds no per-half break or scroll-distance wording for the match (two stale comments, in Play.chromeState and the smoke's section B header, fixed here); npm test 352 / 353 (baseline failure only). Commit `d27ac2d`.
 
 ## Verification
 - `npm test` after every step; `npm run smoke` after steps 2 and 3.
 - Hand check (Michael): reach a finish line first and wait; the other arrives; the count; both start together; a fart then the ghost staying by the right pipes; a respawn with the ghost returning. Then `npm run push` when he decides.
 
 ## Completion summary
-- Commits on `main` since the baseline `7d6cfbf`: step 1 `24bc539` (course distance, the knob), step 2 `48da0b8` (distance re-anchored at every re-fill), step 3 `bce3339` (levels start together; pad B fix), step 4 (docs, 0.7.1). Nothing pushed; `main` is now 9 commits ahead of origin (with the unpushed 0.7.0 work).
+- Commits on `main` since the baseline `7d6cfbf`: step 1 `24bc539` (course distance, the knob), step 2 `48da0b8` (distance re-anchored at every re-fill), step 3 `bce3339` (levels start together; pad B fix), step 4 `d27ac2d` (docs, 0.7.1). Nothing pushed; `main` is now 9 commits ahead of origin (with the unpushed 0.7.0 work).
 - Verified: `npm test` 352 / 353 at every step (the one failure is the baseline's uncredited sfx files, untouched); `npm run smoke` all checks passed after steps 2 and 3.
 - Deviation from the approved design: the distance anchor is the next pair due to spawn (exact for the re-filled stretch, no off-by-one window, valid when nothing spawns) instead of the first uncredited pipe; recorded under Design.
 - Unverified: the feel on real devices (the 600 ms beat, the count over the banners, the ghost after farts and crashes), the Chinese strings (drafts).
