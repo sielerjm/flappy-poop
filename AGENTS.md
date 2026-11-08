@@ -13,13 +13,25 @@ is +3 (it sits between pipe pairs like a bean), bad bacteria is −3 (floor 0; n
 **postbiotic** (`effects.applyFiber`): pipes and fiber score × `items.postbioticMultiplier` (2) until
 the probiotic countdown ends, fart pipes included; another probiotic extends it, a hit ends it. A
 **mystery box** (`TUNING.mystery`, spinning spritesheet) opens into one reward: probiotic 20 %, one bean 20 %,
-a 5-pipe postbiotic 5 % (×2 already on), three beans 5 %, a skip to the end of the level 1 %, else fiber
-(`rollMystery`); a draw that cannot do anything (bean with a full bag, skip with the finish line out) becomes
+a 5-pipe postbiotic 5 % (×2 already on), three beans 5 %, a skip to the end of the level 1 %, 5 coins 10 %,
+10 coins 5 %, 15 coins 1 % (the coin draws come after skip in `MYSTERY_DRAWS`, so the older bands hold), else
+fiber (33 %, `rollMystery`); a draw that cannot do anything (bean with a full bag, skip with the finish line out) becomes
 fiber (`resolveMystery`). A skip scores every pair left in the level at the current multiplier (countdown
 paused, like a fart), clears what is ahead and brings the finish line in from the right edge. The first
 box is guaranteed after one of level 3's first four pairs (`scriptedMysteryPair`, so before pipe 5); on every
 later pair boxes roll at half fiber's weight (`mysteryRolls`). On level 3 they hold still midway between two
-gaps; from level 4 they bob at half fiber's speed (`mysteryMoves`). Level 1 is
+gaps; from level 4 they bob at half fiber's speed (`mysteryMoves`). **Coins** (`coin.png`, a golden corn
+kernel) join the item roll from level 2 at `coin.weight` (half a box's) as a band item like fiber
+(`BAND_ITEMS`); a coin or a box's coin draw goes into the run's purse (`effects.addCoins`, the HUD row
+under the beans, `Coin_Pickup.mp3`), reset with the run. The **shop** (`TUNING.shop`): in a level break a
+💰 pill under the banner (`shopButtonLayout`; dimmed at 0 coins, the single-player hint then drops its
+"· 💰 to shop") opens a panel of rows (`shopLayout`, `SHOP_ITEMS`) in the chrome column: fiber 2, one bean 6,
+a super bean 16 (fills the bag to `superBeans`), a mystery box 5 (the plain draw table, `pairsLeft` 0 so a
+skip becomes fiber). `buyBlocker` / `canBuy` grey a row the purse or the bag refuses; `Play.buyItem` spends
+and applies it, and the reward animates in the paused break. ✕, a tap outside the panel, Esc / P / B and
+the power input (B key, RT, a versus power key) close it (`chromeIntent` `closeShop`, arming the resume
+lockout); closing never continues the level. Coins are not on the game-over summary or the share card
+(`collected.coin` is counted for a later row). Level 1 is
 scripted (probiotic at pair 3, fiber after 4 and 7, a bean after 9) and its fiber and bean hold still midway
 between the two gaps; from level 2 they bob and a bean rolls per pair
 (15 % per pair to pipe 20 with one guaranteed by guaranteeScore, 6 % after);
@@ -113,7 +125,10 @@ mid-screen, blinks, and plays on with the next pair at mid-height. Clearing a le
 its level break under "Waiting for P2…" (no shade, a tap does not end it); once both are there
 (`Versus.onLevelReached`) and `levelSyncDelayMs` has passed, both read "Tap to continue", a tap from
 either (`Versus.onLevelTap`) runs the match-start 3-2-1-GO (`runCountdown`, holding while an overlay is
-open), and `beginLevel` ends both breaks in the same frame. The pause key / ⏸ / Menu toggle the
+open), and `beginLevel` ends both breaks in the same frame. Each half shops in its own break (the panel
+is Play's, in its strip; the other half plays on), and a shop open on either half holds the shared start
+(`Versus.onLevelTap` waits; the other half reads "Waiting for Pn…" until it closes, `onShopChanged`); the
+💰 pill hides once the count runs. The pause key / ⏸ / Menu toggle the
 **shared pause** (`Versus.setPaused`, remembering which halves it paused so a break is never ended by
 the other player; a respawning half's clock stops with it). Chrome decisions in a match read
 `chromeState()` (the match's state, not the half's), so a finished or respawning half still pauses and
@@ -240,7 +255,11 @@ src/
                             RT / Menu / Y / nav do on Play, Over, an overlay or the
                             versus join / result screen: versusSelect / versusBack);
                             rollMystery(rng, t, draws) takes an optional draw table
-                            (the versus catch-up); test mode:
+                            (the versus catch-up); coins and the shop: BAND_ITEMS,
+                            MYSTERY_COINS, createEffects addCoins / spendCoins /
+                            coins, SHOP_ITEMS, buyBlocker / canBuy, shopButtonLayout
+                            / shopButtonHit, shopLayout / shopHit, chromeIntent's
+                            shop / breaking args and 'shop' input; test mode:
                             isTestWord, testRunStart, nextTestLevel, TEST_POWERS,
                             settingsLayout (Settings panel + rows, taller with the
                             test section). Fully unit-tested.
@@ -291,7 +310,9 @@ src/
                             wire version, SECRET constant (permanent). Fully
                             unit-tested.
   i18n.js                   en / zh-Hans string catalog, t(), initialLocale,
-                            howToItems, pauseBannerText, metaFontSize, welcomeText.
+                            howToItems, pauseBannerText, metaFontSize, welcomeText,
+                            levelBannerText(locale, level, levels, { shop }),
+                            coinLabel ("💰 12", locale-free).
                             Player copy lives here (not in logic.js). See
                             TRANSLATION_NOTES.md.
   sound.js                  WebAudio synth blips + setMuted/isMuted/attachGame.
@@ -384,7 +405,8 @@ src/
                             handler (iOS); falls back to selecting the field.
   scenes/
     Boot.js                 preload() gameplay PNGs (mystery.png as a 384 px
-                            spritesheet) + the sfx MP3s; create() makes the global
+                            spritesheet; coin.png) + the sfx MP3s (coin, coin-spend,
+                            shop beside fart / fart-accelerate / level-up); create() makes the global
                             'mystery-spin' anim (mystery.frameMs), then starts Play.
     Play.js                 State machine: 'ready' -> 'playing' -> 'paused'/'dead'
                             (+ 'respawn' in a match: between a crash and its restart).
@@ -639,6 +661,19 @@ src/
                             level break, reaches Versus.onLevelTap (the go-ahead once
                             both are at the line, else nothing): a match half's break
                             ends only on the shared count (beginLevel, from Versus).
+                            Coins and the shop: takeCoins (purse, collected.coin,
+                            refreshCoinHud, the coin sample), giveBeans, playSample
+                            (a sample or its synth fallback), buyItem(id, opts);
+                            shopOpen / shop, refreshShopButton / shopButtonShown
+                            (the 💰 pill, depth 27), openShop / refreshShop /
+                            shopBuy / closeShop (panel 27, texts 28-29, the reveal
+                            29.5 and running while paused: revealMystery { depth,
+                            run }); flap() routes an open shop's taps (✕, a row, the
+                            panel, outside → handleChrome('tap') → closeShop) before
+                            the power tap; activatePower in a break toggles the shop;
+                            handleChrome's match pause shortcut skips an open shop;
+                            endRun / start / endLevelBreak close it; the ring walks
+                            the 💰, ✕ and the rows (shop, shopClose, shop:<id>).
                             onFinishCrossed reports Versus.onLevelReached;
                             refreshLevelBanner shows "Waiting for P{n}…" as a match
                             break's hint until Versus's levelStage is 'tap', then
@@ -668,10 +703,13 @@ src/
                             levelStage: onLevelReached with both halves in their
                             level break → 'arming' (hints hidden for
                             levelSyncDelayMs) → 'tap' ("Tap to continue" on both) →
-                            onLevelTap (a tap from either) → 'count': runCountdown
+                            onLevelTap (a tap from either; ignored while anyShopOpen)
+                            → 'count' (each half's 💰 pill hides): runCountdown
                             under status 'playing' (ghosts and the pause plumbing as
                             usual) → beginLevel (both Play.beginLevel in one call,
                             levelStage back to null; a hidden tab pauses at once).
+                            shopOpenElsewhere(half) / onShopChanged: the other half's
+                            prompt reads "Waiting for Pn…" while a shop is open.
                             setPaused(on) pauses every
                             playing or respawning half and remembers them
                             (pausedHalves), resumes only those; togglePause for the
@@ -766,8 +804,10 @@ assets/                     Contract PNGs + README.md (the art contract).
   README.md                 File name, pixel size, orientation rules. tests enforce it.
   poop.png poop-dead.png poop-stink1.png poop-stink2.png poop-falling.png
   poop-stink-falling1.png poop-stink-falling2.png poop-fart.png
-  poop-speech.png fiber.png probiotic.png postbiotic.png bacteria.png bean.png
-                            (postbiotic.png: HUD icon only, never spawned;
+  poop-speech.png fiber.png probiotic.png postbiotic.png bacteria.png bean.png coin.png
+                            (coin.png: the golden corn kernel, a placeholder cut from
+                            assets/src/Kernel_0.png until a spin GIF replaces it;
+                            postbiotic.png: HUD icon only, never spawned;
                             the falling frames: scared face + sweat marks for a
                             long drop, with / without stink lines)
   mystery.png               Mystery box spin: 8 frames of 384x384 side by side (3072x384),
@@ -787,6 +827,11 @@ assets/                     Contract PNGs + README.md (the art contract).
   sfx/fart.mp3              Death sample.
   sfx/fart_accelerate.mp3   Fart power-up clip; its duration is the power length.
   sfx/NewLevel.mp3          Level-up chime at the finish line.
+  sfx/Coin_Pickup.mp3       A coin picked up, or a box paying coins.
+  sfx/Coin_Spend.mp3        A shop purchase.
+  sfx/ShopOpenClose.mp3     The shop opening and closing.
+  (sfx/ToiletFlush_Win.mp3 may sit untracked in a working copy: Michael's placeholder,
+   uncredited, so the CREDITS test fails until it is credited or removed.)
 
 db/schema.sql               Supabase schema: scores table (player_id = save-code id,
                             name, score, toilet, updated_at), RLS + a column grant
@@ -838,7 +883,9 @@ tests/                      node --test, zero deps. Each file is self-describing
                             mysteryMoves from level 4, scriptedMysteryPair in level
                             3's first four pairs, rollMystery bands and frequencies,
                             resolveMystery fallbacks, skipPairs, applyPostbiotic,
-                            the gold skip popup
+                            the gold skip popup; coins: the roll's coin share (half a
+                            box's, no flag needed), BAND_ITEMS, MYSTERY_COINS, the
+                            purse, buyBlocker / canBuy
   fart.test.js              fartFloat (glide, wave band, tilt sign vs direction),
                             hsvToRgb, rainbowHue, wave stays inside the play area
   tuning.test.js            item / fartVolume / beans sanity bounds (normal and
@@ -846,7 +893,9 @@ tests/                      node --test, zero deps. Each file is self-describing
                             HUD icon pulse under the gap to its count, the resume
                             bounce scale in (0, 1), the
                             mystery block (levels, half fiber's weight and speed,
-                            the locked draw table)
+                            the locked draw table with the coin draws), coins (half
+                            a box's weight, the locked shop prices, the volumes,
+                            the purse row clear of the bean row)
   about.test.js             About copy (both locales) names author, LLM, Phaser, JS, sound;
                             LAST_UPDATED has a year and a time; versionText carries
                             the version and the beta tag in both locales
@@ -875,7 +924,11 @@ tests/                      node --test, zero deps. Each file is self-describing
   hitbox.test.js            scaledCircleBody source radius/offset for 2x and 4x
   chrome.test.js            chromeIntent matrix across state x overlay x input
                             (incl. the Changelog over About, 'respawn' pausing like
-                            'playing' and ignoring taps)
+                            'playing' and ignoring taps, the shop's open / close rows)
+  shop.test.js              shopButtonLayout (under the banner hint, above the bean
+                            button, clear of the tray and the break's poop), the
+                            panel and its rows (inside the strips, apart, covering the
+                            pill), shopButtonHit / shopHit
   gamepad.test.js           padAction (every knob, unmapped → null, a retuned layout),
                             stickNav deadzone / larger axis, focusStep wrapping,
                             focusRingLayout, padIntent matrix across top x state x
@@ -951,7 +1004,7 @@ tools/
                             one body scale and centre, stink / falling / fart /
                             speech on bigger squares; bean.png from Kidney_Bean.png,
                             postbiotic.png from Postbiotic.png, mystery-icon.png from
-                            MysteryBox_Icon.png; process_sheet cuts MysteryBox.gif's
+                            MysteryBox_Icon.png, coin.png from Kernel_0.png; process_sheet cuts MysteryBox.gif's
                             frames on one shared square into the mystery.png strip;
                             process_icons cuts icon-192 / icon-512 (padded to the
                             maskable safe zone) and apple-touch-icon (full bleed)
@@ -977,7 +1030,14 @@ tools/
                             close-and-reopen race, plus the mystery box (level 3's
                             still first box, a still rolled level-3 box, a bobbing
                             level-4 box, the spin pausing, forced draws,
-                            the full-bag fallback, and a skip into level 4's break), and
+                            the full-bag fallback, and a skip into level 4's break), coins
+                            (a rolled coin bobbing like fiber, the purse and its HUD row,
+                            the coin draws, buyItem with a full bag, a new purse at Home),
+                            the shop (the 💰 pill and hint, rows bought by real taps, a
+                            greyed row, the reveal over the panel while paused, ✕, a tap
+                            outside without continuing, the super bean filling the bag,
+                            RT, the controller ring, the empty purse at level 4's break),
+                            and
                             test mode (trigger word, start level, Invincible, Settings
                             power-ups, nothing recorded, Exit latch, normal run after;
                             a test run's Over has no Share), and the game-over share
@@ -1011,9 +1071,13 @@ tools/
                             level's line waiting (+25 and its popup, "Waiting for
                             P2…" with no shade; Settings from the break pauses the
                             other half; its tap and a pad's B do not end the break,
-                            Menu / B pause and lift the other), the other's arrival
+                            Menu / B pause and lift the other; P1 shopping while P2
+                            plays on, P2's strip never reaching P1's shop, B closing
+                            it), the other's arrival
                             (hints hidden through the beat, a tap then ignored), "Tap
-                            to continue" on both with no count until a tap, P2's tap
+                            to continue" on both with no count until a tap, P1's open
+                            shop holding the start ("Waiting for P1…" on P2, its tap
+                            ignored, P1's power key closing the shop), P2's tap
                             starting the count, Settings holding it, GO starting
                             level 2 on both with equal distances and
                             each ghost on the other's poop, the catch-up draws at

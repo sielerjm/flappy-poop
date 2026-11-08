@@ -1,5 +1,6 @@
 # Plan: Coins and the level-break shop
 
+- Status: complete
 - Created: 2026-11-08; re-audited 2026-11-08 against `1d756f5` (after the versus respawn 0.7.0 and shared-levels 0.7.1 plans landed)
 - Baseline: `main` at `1d756f5`, tree clean apart from Michael's untracked `assets/sfx/Coin_Pickup.mp3`, `Coin_Spend.mp3`, `ShopOpenClose.mp3`, `ToiletFlush_Win.mp3`, `assets/src/Kernel_0.png`
 - Repo plan copy: `.claude/plans/2026-11-08-coins-and-shop.md` (gitignored; `git add -f` it in step 1, as the versus plans were)
@@ -190,3 +191,9 @@ shop: {
 - Single player: the coin HUD and the "+3" popup sit at depth 20 under the shade (25), dimmed like the score. A match's break has no shade, so they show plainly.
 - A shopper holds the shared start indefinitely; the other player's hint names them. If that stalls play tests, the fallback is to drop the `onLevelTap` gate and let `endLevelBreak`'s belt close the shop on GO (one line each).
 - Pad B in a match closes P1's shop only (B is routed by P1's `onPadAction`); P2's claimed pad uses A (pointer-less tap) or RT.
+
+## Completion summary (2026-11-08)
+- Status: complete. Commits on `main` since `1d756f5`: step 1 `092d62e` (art, sounds), step 2 `1481498` (logic, strings, tests), step 3 `170ada0` (coins in Play, buyItem), step 4 `5d99c6e` (the shop panel), step 5 `41272f0` (How to play), step 6 (docs, 0.8.0; this commit). Nothing pushed.
+- Verified: `npm test` 366 / 367 at every step (the one failure is the untracked, uncredited `ToiletFlush_Win.mp3`, left alone as asked); `npm run smoke` all checks passed after steps 3, 4, 5 and 6 (269 at the end). Mutation check: dropping `onShopChanged` from `closeShop` fails the match's "open shop holds the start" check.
+- Deviations: the shop's bean rows read "Bag full" whenever the bag is, even with the purse short (buyBlocker still names coins first); the overlay check guards shop-row taps so a tap on Settings over the shop never buys; the 💰 pill and openShop are refused once a match's shared count runs; the controls copy names the fart button as the shop toggle. CREDITS carry each sound's real title, author and date from its Pixabay page.
+- Unverified: phone feel (pill and row size, the panel over the bobbing poop, the three samples' volumes), the Chinese strings (drafts).

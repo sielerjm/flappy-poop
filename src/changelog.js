@@ -8,6 +8,22 @@ import { LOCALES } from './i18n.js';
 
 export const CHANGELOG = [
   {
+    version: '0.8.0',
+    date: '8 Nov 2026',
+    notes: {
+      en: [
+        'Coins: golden corn kernels turn up between the pipes from level 2 and collect in a purse under your bean count. Mystery boxes can now pay out 5, 10 or 15 of them.',
+        'A shop in every level break: tap 💰 to spend your coins on fiber (+3), a bean, a super fart (the bean bag filled) or a mystery box. Tap anywhere else to keep going and hold on to your coins.',
+        'Two players: each of you shops in your own break, and an open shop holds the shared start until it closes.',
+      ],
+      'zh-Hans': [
+        '金币：从第 2 关起，金黄的玉米粒会偶尔出现在管道之间，收集后显示在豆子计数下方。神秘盒子现在也可能开出 5、10 或 15 枚金币。',
+        '每个关卡间歇都有商店：点击 💰 用金币购买纤维（+3）、一颗豆子、超级屁（装满豆袋）或神秘盒子。点击其他地方则继续前进，金币留着下次用。',
+        '双人模式：各自在自己的间歇里进商店；有人的商店还开着时，双方的出发会等它关闭。',
+      ],
+    },
+  },
+  {
     version: '0.7.1',
     date: '8 Nov 2026',
     notes: {
