@@ -62,7 +62,7 @@ Decisions made here (overrule any at approval):
 - Hand check (Michael): more coins from level 2 without fewer other pickups; the kernel crisper; the coin count rising at each finish line (+3 when clean); in two-player both tapping ready, un-readying to shop, a tap cancelling the count; About's tagline. Then `npm run push`.
 
 ## Completion summary
-- Commits on `main` since `6cf72e6`: `8d38932` (coins as extras, sharper kernel), `e0fd643` (level coins, +3 clean), `4d11e87` (ready check), step 4 (tagline, docs, 0.8.1). Nothing pushed.
+- Commits on `main` since `6cf72e6`: `8d38932` (coins as extras, sharper kernel), `e0fd643` (level coins, +3 clean), `4d11e87` (ready check), step 4 `fbb59e0` (tagline, docs, 0.8.1). Nothing pushed.
 - Verified: `npm run smoke` all checks after every step (288 at the end); `npm test` green except `tests/howto.test.js`, which Michael's uncommitted How to play rewrite in `src/i18n.js` breaks (it expects "5 coins" in the box row). That edit was never staged; each commit carried only this plan's strings.
 - Before `npm run push`: reconcile that rewrite with `tests/howto.test.js` and the TRANSLATION_NOTES rows, or the push script's test run stops.
 - Unverified: feel on devices; Chinese strings are drafts.
