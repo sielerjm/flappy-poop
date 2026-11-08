@@ -8,7 +8,7 @@ GitHub Pages is still preferred.
 
 ## Product context
 
-Flappy Poop is a gut-themed Flappy Bird clone for phone browsers (Phaser 4, no
+Flappy Poop ("The #1 game to play while going #2!") is a gut-themed Flappy Bird clone for phone browsers (Phaser 4, no
 bundler). A poop emoji flaps through intestinal-fold pipes. Pickups: fiber (+3),
 probiotic (blocks one bacteria hit for 5 pipes; pickups stack), bad bacteria (−3, never kills).
 Postbiotic (后生元): fiber eaten while a probiotic is active; pipes and fiber score ×2 until the
@@ -117,7 +117,7 @@ Short, playful, clear. Fit a 720×1280 logical field; How to play / About body w
 | testExit | Exit test mode | 退出测试模式 |
 | aboutTitle | ABOUT | 关于 |
 | aboutName | Flappy Poop | Flappy Poop |
-| aboutTagline | A gut-themed Flappy Bird clone. | 一款肠道主题的 Flappy Bird 克隆。 |
+| aboutTagline | The #1 game to play while going #2! | 上大号时必玩的头号游戏！ |
 | aboutBlurb | The idea, game design, and all art were created by Michael Sieler. | 创意、游戏设计与全部美术均由 Michael Sieler 创作。 |
 | aboutLlmNote | This game was coded with the assistance of an LLM. | 本游戏在 LLM 协助下编写。 |
 | aboutCreditsTitle | Credits | 致谢 |

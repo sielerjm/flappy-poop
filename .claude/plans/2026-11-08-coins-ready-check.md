@@ -1,6 +1,6 @@
 # Plan: More coins (as extras), a sharper kernel, coins for clearing a level, a two-player ready check, a new tagline
 - Created: 2026-11-08
-- Status: in progress
+- Status: complete
 - Baseline commit: `6cf72e6` on `main` (2 ahead of origin; tree clean apart from Michael's untracked `assets/sfx/ToiletFlush_Win.mp3`)
 - Whole-suite verification: `npm test` (baseline green) + `npm run smoke` after every step (server on port 8000). No source edits while a smoke runs.
 - Repo plan copy: `.claude/plans/2026-11-08-coins-ready-check.md` (written in step 1, `git add -f`)
@@ -43,12 +43,13 @@ Decisions made here (overrule any at approval):
 - Change: `src/scenes/Versus.js`: `readyHalves`, arrival times, `onLevelReached(half)`, `onLevelTap(half)` (toggle; both ready → count; a tap during the count cancels it with a token checked by `runCountdown`), `isReady(half)`, `beginLevel` clears; drop 'arming' / 'tap' and `shopOpenElsewhere` / `onShopChanged`'s hint flip. `src/scenes/Play.js`: `refreshLevelBanner` hints, `shopButtonShown` / the power-input shop toggle blocked while ready, `applyChrome` 'resume' passes the half. `src/i18n.js`: `versusTapReady`, `versusReadyWaiting` (en + zh) + `TRANSLATION_NOTES.md`. Smoke: section B's level-break block rewritten (P1 arrives, its beat, "Tap when ready", ready → "Ready! Waiting for P2…" with the 💰 hidden, un-ready → pill back, ready again; P2's arrival flap ignored; P2 ready → the count; P2's tap during the count cancels it and P1 stays ready; P2 ready again → count, Settings hold, GO with equal distances); the shop-holds-the-start check becomes "a shopping player is not ready, so the count waits".
 - Verify: `npm test`; `npm run smoke`.
 - Commit: `feat(versus, step 3/4): both players tap ready at the level pause; a second tap takes it back`
-- Result: npm test passes except Michael's own How to play edit (tests/howto.test.js); npm run smoke all 288 checks passed (ready / un-ready with the 💰 hiding and returning, pad B marking ready, a tap during a shared pause only lifting it, a tap inside P2's arrival beat ignored, one ready alone starting nothing, a shopper not ready, both ready → the count, a tap during it cancelling it, a fresh count from 3, GO with equal distances and the ready set cleared). Added in execution: while a shared pause is on, a tap only lifts it (no ready toggle). Smoke lessons: the 💰 pill's visibility is read through `shopButtonShown()` (the button object has no `visible`); a tap right after closing a shop sits inside the resume lockout. `src/i18n.js` committed as HEAD plus the two new keys only (Michael's uncommitted rewrite of the How to play rows stays in the working tree). Commit `<c3>`.
+- Result: npm test passes except Michael's own How to play edit (tests/howto.test.js); npm run smoke all 288 checks passed (ready / un-ready with the 💰 hiding and returning, pad B marking ready, a tap during a shared pause only lifting it, a tap inside P2's arrival beat ignored, one ready alone starting nothing, a shopper not ready, both ready → the count, a tap during it cancelling it, a fresh count from 3, GO with equal distances and the ready set cleared). Added in execution: while a shared pause is on, a tap only lifts it (no ready toggle). Smoke lessons: the 💰 pill's visibility is read through `shopButtonShown()` (the button object has no `visible`); a tap right after closing a shop sits inside the resume lockout. `src/i18n.js` committed as HEAD plus the two new keys only (Michael's uncommitted rewrite of the How to play rows stays in the working tree). Commit `4d11e87`.
 
-### Step 4/4 — Tagline, docs, What's new 0.8.1  [pending]
+### Step 4/4 — Tagline, docs, What's new 0.8.1  [done]
 - Change: `aboutTagline` (en + zh) + notes row; `README.md`, `AGENTS.md`, How to play's coin row (more coins from level 2, the level reward and the +3), `src/changelog.js` 0.8.1 (en + zh), `VERSION` + `package.json`; plan status complete.
 - Verify: `npm test`; grep for stale wording ("Tap to continue" for a match break, `coin.weight`, `coin.scale`, "gut-themed"); `npm run smoke` on the final tree.
 - Commit: `docs(step 4/4): the new tagline, coins and the ready check; 0.8.1`
+- Result: npm run smoke all 288 checks passed on the final tree (What's new opens on 0.8.1). The How to play coin row was left as Michael rewrote it (uncommitted) rather than edited here. The tagline committed as HEAD + that line only.
 
 ## Risks and notes
 - The extra-coin roll draws only from its own stream, so neither the single-player course nor the shared course moves for anything else.
@@ -61,4 +62,7 @@ Decisions made here (overrule any at approval):
 - Hand check (Michael): more coins from level 2 without fewer other pickups; the kernel crisper; the coin count rising at each finish line (+3 when clean); in two-player both tapping ready, un-readying to shop, a tap cancelling the count; About's tagline. Then `npm run push`.
 
 ## Completion summary
-(filled at the end)
+- Commits on `main` since `6cf72e6`: `8d38932` (coins as extras, sharper kernel), `e0fd643` (level coins, +3 clean), `4d11e87` (ready check), step 4 (tagline, docs, 0.8.1). Nothing pushed.
+- Verified: `npm run smoke` all checks after every step (288 at the end); `npm test` green except `tests/howto.test.js`, which Michael's uncommitted How to play rewrite in `src/i18n.js` breaks (it expects "5 coins" in the box row). That edit was never staged; each commit carried only this plan's strings.
+- Before `npm run push`: reconcile that rewrite with `tests/howto.test.js` and the TRANSLATION_NOTES rows, or the push script's test run stops.
+- Unverified: feel on devices; Chinese strings are drafts.

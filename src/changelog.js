@@ -8,6 +8,24 @@ import { LOCALES } from './i18n.js';
 
 export const CHANGELOG = [
   {
+    version: '0.8.1',
+    date: '8 Nov 2026',
+    notes: {
+      en: [
+        'Twice as many coins from level 2, as extras: they only fill gaps nothing else took, so you get just as much fiber, probiotic, bacteria and boxes.',
+        'Every finish line pays coins: the level\'s number, plus 3 if you didn\'t crash in that level.',
+        'Two players: the next level waits until both of you tap ready; tap again to take it back (to shop or take a break), even during the countdown.',
+        'A sharper coin kernel, and a new tagline in About: "The #1 game to play while going #2!"',
+      ],
+      'zh-Hans': [
+        '从第 2 关起金币多了一倍，都是额外出现的：只出现在空着的位置，纤维、益生菌、有害细菌和神秘盒子一个都不会少。',
+        '每过一关都有金币奖励：数量等于关卡编号，本关没有撞车再加 3 枚。',
+        '双人模式：两人都点击准备后才开始下一关；再点一次可以取消准备（去商店或休息一下），倒数中也可以。',
+        '玉米粒金币更清晰了；关于页面换上新标语："上大号时必玩的头号游戏！"',
+      ],
+    },
+  },
+  {
     version: '0.8.0',
     date: '8 Nov 2026',
     notes: {

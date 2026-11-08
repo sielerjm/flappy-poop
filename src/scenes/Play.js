@@ -1732,7 +1732,7 @@ export class Play extends Phaser.Scene {
   }
 
   finishItem(item, kind) {
-    const coin = kind === 'coin'; // a kernel is drawn at coin.scale of the other pickups, its hitbox the whole drawing
+    const coin = kind === 'coin'; // a kernel is drawn at coin.displayPx (from its 96 px image), its hitbox the whole drawing
     const scale = coin ? T.coin.displayPx / item.frame.width : T.spriteDisplayScale;
     const radius = coin ? T.coin.radius : T.items.itemRadius;
     item.setScale(scale);

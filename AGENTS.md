@@ -21,8 +21,9 @@ paused, like a fart), clears what is ahead and brings the finish line in from th
 box is guaranteed after one of level 3's first four pairs (`scriptedMysteryPair`, so before pipe 5); on every
 later pair boxes roll at half fiber's weight (`mysteryRolls`). On level 3 they hold still midway between two
 gaps; from level 4 they bob at half fiber's speed (`mysteryMoves`). **Coins** (`coin.png`, a golden corn
-kernel, drawn at `coin.scale` with a `coin.radius` hitbox) join the item roll from level 2 at `coin.weight`
-(half a box's) as a band item like fiber (`BAND_ITEMS`), and every level carries **one guaranteed kernel**
+kernel, a 96 px image drawn at `coin.displayPx` 48 with a `coin.radius` hitbox) are not in the item roll:
+from level 2 an extra coin fills a band slot nothing else took (`course.coin(n)` at `coin.chance`, its own
+stream in both modes), and every level carries **one guaranteed kernel**
 (`Play.armKernel` from `course.kernelPair(level)`: level 1's waits `coin.firstAfterPipePx` past its last pair
 at that pair's gap, still; from level 2 it takes its pair's band slot, or the next pair's without a box or
 bean, or past the last pipe; `clearFieldAhead` re-arms it when a respawn clears it untaken). A coin or a
@@ -129,14 +130,15 @@ distance gap (`ghostPlacement`) and as a
 halts, the score loses `versus.scoring.deathPenaltyPerLevel` × level (floored at 0, the −N popup), the
 slot counts the crash, the poop tumbles, everything not yet credited is cleared, it glides back to
 mid-screen, blinks, and plays on with the next pair at mid-height. Clearing a level earns
-`versus.scoring.levelClearBonus`. Levels start together: the first player over a finish line waits in
-its level break under "Waiting for P2…" (no shade, a tap does not end it); once both are there
-(`Versus.onLevelReached`) and `levelSyncDelayMs` has passed, both read "Tap to continue", a tap from
-either (`Versus.onLevelTap`) runs the match-start 3-2-1-GO (`runCountdown`, holding while an overlay is
-open), and `beginLevel` ends both breaks in the same frame. Each half shops in its own break (the panel
-is Play's, in its strip; the other half plays on), and a shop open on either half holds the shared start
-(`Versus.onLevelTap` waits; the other half reads "Waiting for Pn…" until it closes, `onShopChanged`); the
-💰 pill hides once the count runs. The pause key / ⏸ / Menu toggle the
+`versus.scoring.levelClearBonus`. Every finish line also pays `levelClearCoins` (the level's number, + 3
+without a crash in it: `Play.crashesThisLevel`). Levels start together through a **ready check**: each
+half's taps (after `levelSyncDelayMs` from its own arrival, `Versus.onLevelReached(half)`) toggle that
+player's ready (`Versus.onLevelTap(half)`, `readyHalves`; hints "Tap when ready" / "Ready! Waiting for
+P2…", the 💰 hidden while ready); both ready runs the match-start 3-2-1-GO (`startLevelCount` →
+`runCountdown`, holding while an overlay is open), a tap during it un-readies that player and cancels it
+(`cancelLevelCount`, a token), and `beginLevel` ends both breaks in the same frame. A tap while the
+shared pause is on only lifts it. Each half shops in its own break (the panel is Play's, in its strip;
+the other half plays on); a shopper is never ready, so the count cannot start under an open shop. The pause key / ⏸ / Menu toggle the
 **shared pause** (`Versus.setPaused`, remembering which halves it paused so a break is never ended by
 the other player; a respawning half's clock stops with it). Chrome decisions in a match read
 `chromeState()` (the match's state, not the half's), so a finished or respawning half still pauses and
@@ -665,10 +667,12 @@ src/
                             keys and no pad. handleChrome('pause' / 'esc') toggles
                             the shared pause (Versus.togglePause); pauseRun() /
                             autoPause forward to it; a 'resume' tap (and a pad's B)
-                            lifts the shared pause for both and, from a half in its
-                            level break, reaches Versus.onLevelTap (the go-ahead once
-                            both are at the line, else nothing): a match half's break
-                            ends only on the shared count (beginLevel, from Versus).
+                            lifts the shared pause when it is on, else (a half in its
+                            level break) toggles that player's ready through
+                            Versus.onLevelTap: a match half's break ends only on the
+                            shared count (beginLevel, from Versus). onFinishCrossed
+                            pays levelClearCoins (crashesThisLevel, reset at each
+                            level start, +1 per respawn).
                             Coins and the shop: takeCoins (purse, collected.coin,
                             refreshCoinHud, the coin sample), refreshInventory (coin
                             and bean rows by inventoryRows), clearPowerups (die in
@@ -689,10 +693,11 @@ src/
                             handleChrome's match pause shortcut skips an open shop;
                             endRun / start / endLevelBreak close it; the ring walks
                             the 💰, ✕ and the rows (shop, shopClose, shop:<id>).
-                            onFinishCrossed reports Versus.onLevelReached;
-                            refreshLevelBanner shows "Waiting for P{n}…" as a match
-                            break's hint until Versus's levelStage is 'tap', then
-                            "Tap to continue" (applyLocale keeps it), setPauseBanner
+                            onFinishCrossed reports Versus.onLevelReached(this);
+                            refreshLevelBanner shows a match break's ready state
+                            ("Tap when ready" / "Ready! Waiting for P{n}…";
+                            applyLocale keeps it), shopButtonShown hides the 💰
+                            while ready or counting, setPauseBanner
                             keeps the shade off there, and setLevelHintVisible hides
                             the hint through the beat and the count. The
                             ready screen's 👥 toggle
@@ -715,16 +720,15 @@ src/
                             create(); it stops on a restart or a status change and,
                             for a level, holds while an overlay is open, then repeats
                             the step for a full beat), go() launches both halves.
-                            levelStage: onLevelReached with both halves in their
-                            level break → 'arming' (hints hidden for
-                            levelSyncDelayMs) → 'tap' ("Tap to continue" on both) →
-                            onLevelTap (a tap from either; ignored while anyShopOpen)
-                            → 'count' (each half's 💰 pill hides): runCountdown
-                            under status 'playing' (ghosts and the pause plumbing as
-                            usual) → beginLevel (both Play.beginLevel in one call,
-                            levelStage back to null; a hidden tab pauses at once).
-                            shopOpenElsewhere(half) / onShopChanged: the other half's
-                            prompt reads "Waiting for Pn…" while a shop is open.
+                            The ready check: onLevelReached(half) notes its arrival
+                            (levelArrivals; its hint hidden for levelSyncDelayMs,
+                            beatPassed), onLevelTap(half) toggles readyHalves, both
+                            ready → startLevelCount (levelStage 'count', a token
+                            runCountdown's `alive` reads) → beginLevel (both
+                            Play.beginLevel in one call, the ready set cleared; a
+                            hidden tab pauses at once); a tap during the count →
+                            cancelLevelCount. isReady(half), refreshReady (hints and
+                            💰 pills), onShopChanged refreshes them.
                             setPaused(on) pauses every
                             playing or respawning half and remembers them
                             (pausedHalves), resumes only those; togglePause for the
