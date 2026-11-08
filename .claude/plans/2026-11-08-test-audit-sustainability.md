@@ -1,6 +1,6 @@
 # Plan: Sustainable testing and audit workflow
 - Created: 2026-11-08
-- Status: in progress (step 3)
+- Status: in progress (step 4)
 - Repo plan copy: `.claude/plans/2026-11-08-test-audit-sustainability.md` (folder is gitignored: `git add -f`, as every plan before it)
 - Baseline commit: `c4226b7` on `main`, tree clean. **Re-check at start:** another session landed 8 commits during the audit; if HEAD moved or the tree is dirty with someone else's work, stop and report.
 - Whole-suite verification: `npm test` (baseline **385 pass / 0 fail**, ~10 s) + full `npm run smoke` (server: `npm start` on :8000, Chrome, network for the live leaderboard reads). No source edits while a smoke runs (serve.py is no-store).
@@ -40,7 +40,7 @@ The audit of the generated plan (`test_audit_sustainability_7b5eb48e.plan.md`) f
 - Commit: `docs(plan, step 1/6): test audit plan; archive finished and superseded plans`
 - Result: plans folder = this plan + Save Code Spec + Archive/; npm test 385/385; golden smoke 303/303 twice.
 
-### Step 2/6 — Orphan audit suite  [done]
+### Step 2/6 — Orphan audit suite  [done, `3f22b76`]
 - Change: new `tests/orphans.test.js`, zero deps (`fs` + regex, comments stripped before matching so a name mentioned only in a comment still counts as orphaned):
   1. **Exports**: every `export function|const|let|class` in `src/**/*.js` is referenced in `src/**` or `tools/*.mjs` outside its own file, or used in its own file beyond the declaration. Tests never count. `ALLOWED_EXPORTS` maps name → reason. Initial entries: test hooks `catalogKeys`, `catalogFor`, `_resetKeeperForTests`, `pipeMoveShiftPx` (tuning guard), `glowAlphaAt` (glowStops' profile), plus the seven dead ones marked `'dead: removed in step 3'`.
   2. **Config knobs**: flatten `TUNING`, `FIELD`, `LEADERBOARD`, `TEST_MODE`, `SHARE`, `BACKGROUND`. Arrays and numeric-keyed maps such as `levels.tutorial` count as leaves. A nested leaf is used if `parent.leaf` appears in `src/` outside config.js, or if both `parent` and `leaf` appear in the same file (covers destructuring). A top-level leaf is used if its bare word appears, which covers `angleForVelocity`'s destructured knobs. The prototype found zero real orphans.
@@ -54,10 +54,11 @@ The audit of the generated plan (`test_audit_sustainability_7b5eb48e.plan.md`) f
 - Commit: `test(audit, step 2/6): orphan audit for exports, knobs, strings, textures, overlay wiring; sfx triangle`
 - Result: 9 audit tests + 2 sfx edges green; npm test 396/396. Mutations each failed the right check (unused export, dropped key allowlist, padTop without Scores, unread knob, credited-untracked sfx, tracked-unloaded sfx). Found during build: Boot's poop-stink / stink-falling frames are named only by template stem (`poop-stink${n}`); `namesKey` accepts a numbered key's stem in a template.
 
-### Step 3/6 — Delete the dead code  [pending]
+### Step 3/6 — Delete the dead code  [done]
 - Change: remove `levelName`, `howToLayout`, `howToHit` (logic.js), `isNewTop`, `summaryLine`, `EMPTY_STATE` (save.js), `respawnTotalMs` (versus.js), and `bestLabel` (en + zh-Hans in i18n.js and its `TRANSLATION_NOTES.md` row). Delete the tests that only exercised them. Where a test used one as a helper or checked live behaviour through it, retarget instead: field.test's x0 shift and ready.test should use `readyLayout().howto`, and versus.test should compute the respawn total inline. Remove the `'dead'` entries from the allowlists.
 - Verify: `npm test` passes, with the count dropping only by the deleted tests (list them in the commit body). `grep -rwn` for each removed name in `src tests tools` finds nothing. The hygiene check from step 2 passes, which shows no entry was left behind.
 - Commit: `refactor(audit, step 3/6): drop seven unused exports and the unused BEST label`
+- Result: npm test 394/394 (−2: the isNewTop test and ready.test's howToLayout identity test; the rest retargeted). Grep finds none of the eight names in src/tests/tools. Cascade: deleting isNewTop left `topScores` used only by save.test → allowlisted as a test hook (not deleted: not on Michael's list).
 
 ### Step 4/6 — Smoke sections, full run unchanged  [pending]
 - Change: in `tools/headless_check.mjs`, add a static `export const SECTIONS = [{ name, needs, about }]` and, inside `run()`, `section(name, fn)`. It checks that `name` is the next registered section, records it, counts its `ok()` calls, and runs `fn`. Wrap each existing comment-block section in place, with assertion text and order untouched. Sections in run order: `home`, `overlays`, `level1`, `howto-seen`, `run`, `farts`, `levels`, `mystery`, `death`, `share`, `pad`, `pad-overlays`, `pipes-after-over`, `skip`, `final`, `testmode`, `wide`, `versus-join`, `versus-match`, `versus-ghost`. Keep these unwrapped: Chrome/CDP setup, the hermetic stubs, the boot wait, helpers, the shared constants (`play`, `T`, `TT`, `SPACING`, `end1`, `end2`, …), the muzzle, and the final loop and exception checks. The level-3 jump at the start of the fart block moves inside `farts`. Hoist every binding a later section reads. Every `needs` is the full prefix for now. At the end, print checks per section and assert every registered section ran.

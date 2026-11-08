@@ -102,7 +102,6 @@ Short, playful, clear. Fit a 720×1280 logical field; How to play / About body w
 | gameOver | GAME OVER | 游戏结束 |
 | runWon | YOU MADE IT OUT! | 顺利排出！ |
 | scoreLabel | SCORE | 得分 |
-| bestLabel | BEST | 最高 |
 | tapToHome | Home | 返回主页 |
 | settingsTitle | SETTINGS | 设置 |
 | sound | Sound | 声音 |

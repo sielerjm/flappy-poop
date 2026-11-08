@@ -15,9 +15,7 @@ import {
   ensureId,
   validateName,
   recordScore,
-  isNewTop,
   merge,
-  summaryLine,
   profileLine,
   topScores,
   formatScore,
@@ -146,15 +144,12 @@ test('8. a 17-character name is rejected at export and at import', async () => {
   assert.deepEqual(await importCode(forged, { storage: fakeStorage() }), { ok: false, error: 'unrecognised' });
 });
 
-test('9. an empty score list is accepted and the summary line shows the name only', async () => {
+test('9. an empty score list is accepted and the profile line shows the name only', async () => {
   const code = await buildCode(1, { i: newId(), n: 'Solo', s: [], t: NOW });
   const res = await importCode(code, { storage: fakeStorage() });
   assert.equal(res.ok, true);
   assert.deepEqual(res.state.top, []);
-  assert.equal(summaryLine(res.state), 'Solo');
-  assert.equal(summaryLine({ name: 'Alice', top: [41, 37, 30] }), 'Alice · 41 · 37 · 30');
-  assert.equal(summaryLine({ name: '', top: [5] }), '');
-  assert.equal(summaryLine(null), '');
+  assert.equal(profileLine(res.state), 'Solo');
 });
 
 test('10. a storage that throws never propagates: empty state, silent save, import still ok', async () => {
@@ -197,17 +192,7 @@ test('toilet runs keep their flag through recordScore, dedupe, and merge', () =>
   assert.deepEqual(merged.top, [{ score: 20, toilet: false, level: 1 }, { score: 8, toilet: true, level: 1 }]);
 });
 
-test('isNewTop is true only for a strictly new entry that makes the list', () => {
-  const s = { id: null, name: 'x', top: [9, 8, 7, 6, 5, 4], exportedAt: null };
-  assert.equal(isNewTop(s, 10), true);
-  assert.equal(isNewTop(s, 7), false);
-  assert.equal(isNewTop(s, 3), false);
-  assert.equal(isNewTop(s, 0), false);
-  assert.equal(isNewTop({ top: [] }, 1), true);
-  assert.equal(isNewTop({ top: [9, 7, 5] }, 1), true);
-});
-
-test('formatScore, profileLine, and summaryLine mark toilet scores with the emoji', () => {
+test('formatScore and profileLine mark toilet scores with the emoji', () => {
   assert.equal(formatScore(41), '41');
   assert.equal(formatScore({ score: 41, toilet: false, level: 1 }), '41');
   assert.equal(formatScore({ score: 41, toilet: true, level: 1 }), `${TOILET_EMOJI} 41`);
@@ -217,7 +202,6 @@ test('formatScore, profileLine, and summaryLine mark toilet scores with the emoj
   assert.equal(profileLine({ name: 'Bob', top: [] }), 'Bob');
   assert.equal(profileLine({ name: '', top: [5] }), '');
   assert.equal(profileLine(null), '');
-  assert.equal(summaryLine({ name: 'Bob', top: [{ score: 41, toilet: true, level: 1 }, 37] }), `Bob · ${TOILET_EMOJI} 41 · 37`);
 });
 
 test('toilet flags travel in the code as p; missing p reads as all false; bad p is unrecognised', async () => {

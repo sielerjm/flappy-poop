@@ -275,11 +275,6 @@ export function levelSpeed(level, t) {
   return Math.min(t.levels.maxSpeed, t.pipeSpeed + t.levels.speedStep * (Math.max(1, level) - 1));
 }
 
-/** Segment name key for a level, or null past the named list. */
-export function levelName(level, levels) {
-  return levels[level - 1]?.key ?? null;
-}
-
 /**
  * Background colour for a level: the colours cycle, so level 7 wears colour 1
  * again; whiteBlend (0–1) mixes that much white in to soften the palette.
@@ -1516,17 +1511,6 @@ export function readyHit(x, y, layout) {
 export function rectGlowSize(width, height, pad) {
   const p = Math.max(0, pad);
   return { width: Math.ceil(width + 2 * p), height: Math.ceil(height + 2 * p) };
-}
-
-/** Ready-screen How to play hit box (readyLayout().howto). */
-export function howToLayout(width, height, t, x0 = 0) {
-  return readyLayout(width, height, t, x0).howto;
-}
-
-/** 'howto' if (x, y) is inside the ready-screen How to play box, else null. */
-export function howToHit(x, y, layout) {
-  if (!layout) return null;
-  return inBox(x, y, layout) ? 'howto' : null;
 }
 
 /**

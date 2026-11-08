@@ -182,12 +182,6 @@ export function matchResult(slots) {
   return { winner: null, by: 'draw' };
 }
 
-/** How long a respawn takes from the hit to the restart: the tumble, the glide and the blinks. */
-export function respawnTotalMs(t) {
-  const r = t.versus.respawn;
-  return r.crashMs + r.glideMs + 2 * r.blinkMs * r.blinkCycles;
-}
-
 /**
  * The poop's pose `elapsed` ms into a respawn, pure in time so a paused clock
  * freezes it: 'crash' (physics owns the tumble; y / angle are `from`'s or 0 while

@@ -11,7 +11,6 @@ export const SCHEMA = 3; // local storage shape version (independent of the wire
 export const MAX_TOP = 6;
 export const NAME_MIN = 1;
 export const NAME_MAX = 16;
-export const EMPTY_STATE = Object.freeze({ id: null, name: '', top: Object.freeze([]), exportedAt: null });
 export const TOILET_EMOJI = '🚽';
 
 // Permanent once v1 ships: changing it invalidates every code ever issued.
@@ -158,13 +157,6 @@ export function recordScore(state, score, { toilet = false, level = 1 } = {}) {
   return { ...base, top: normalizeTop([...base.top, { score, toilet: Boolean(toilet), level: normalizeLevel(level) }]) };
 }
 
-/** True when `score` would be a new entry in the top list (not already there, and good enough). */
-export function isNewTop(state, score) {
-  if (!Number.isInteger(score) || score <= 0) return false;
-  if (topScores(state).includes(score)) return false;
-  return topScores(recordScore(state, score)).includes(score);
-}
-
 /** Pure merge used by importCode: pasted name and id win; scores are unioned. */
 export function merge(local, incoming) {
   const a = normalizeState(local);
@@ -175,13 +167,6 @@ export function merge(local, incoming) {
     top: normalizeTop([...a.top, ...b.top]),
     exportedAt: b.exportedAt,
   };
-}
-
-/** Full line: "Name · 🚽 41 · 37 · 30", "Name" when no scores, "" when no name. */
-export function summaryLine(state) {
-  const s = normalizeState(state);
-  if (!s.name) return '';
-  return [s.name, ...s.top.map(formatScore)].join(' · ');
 }
 
 /** Home-screen line: "Name · 41" (best only, 🚽 when on the toilet), "Name" when no scores, "" when no name. */

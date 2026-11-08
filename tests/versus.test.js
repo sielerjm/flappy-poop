@@ -18,7 +18,6 @@ import {
   matchResult,
   catchUpTier,
   catchUpDraws,
-  respawnTotalMs,
   respawnPose,
   coursePairStart,
   courseDistance,
@@ -55,7 +54,8 @@ test('versus knobs are sane: a landscape gate, a visible ghost, disjoint key gro
   assert.ok(r.blinkMs >= 80 && r.blinkMs <= 1000, `blinkMs ${r.blinkMs}`);
   assert.ok(Number.isInteger(r.blinkCycles) && r.blinkCycles >= 1 && r.blinkCycles <= 8, `blinkCycles ${r.blinkCycles}`);
   assert.ok(r.blinkAlpha >= 0 && r.blinkAlpha < 1, `blinkAlpha ${r.blinkAlpha}`);
-  assert.ok(respawnTotalMs(T) <= 6000, `a respawn takes ${respawnTotalMs(T)} ms`);
+  const respawnMs = r.crashMs + r.glideMs + 2 * r.blinkMs * r.blinkCycles;
+  assert.ok(respawnMs <= 6000, `a respawn takes ${respawnMs} ms`);
   assert.ok(V.levelSyncDelayMs >= 0 && V.levelSyncDelayMs <= 3000, `levelSyncDelayMs ${V.levelSyncDelayMs}`);
 });
 
@@ -252,8 +252,7 @@ test('respawnPose: a crash, a glide from where the poop fell to mid-screen, blin
   const r = V.respawn;
   const from = { y: 1100, angle: 170 };
   const glideEnd = r.crashMs + r.glideMs;
-  const total = respawnTotalMs(T);
-  assert.equal(total, glideEnd + 2 * r.blinkMs * r.blinkCycles);
+  const total = glideEnd + 2 * r.blinkMs * r.blinkCycles;
   assert.deepEqual(respawnPose(0, null, T), { phase: 'crash', y: GAME_HEIGHT / 2, angle: 0, alpha: 1 }, 'before the glide nothing is driven: defaults');
   assert.deepEqual(respawnPose(r.crashMs - 1, from, T), { phase: 'crash', y: 1100, angle: 170, alpha: 1 });
   const g0 = respawnPose(r.crashMs, from, T);

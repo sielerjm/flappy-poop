@@ -20,13 +20,7 @@ const ALLOWED_EXPORTS = {
   _resetKeeperForTests: 'test hook: tests/sound.test.js resets the silent-audio keeper between tests',
   pipeMoveShiftPx: "test guard: tests/pipeMove.test.js and tuning.test.js keep every moving-pipe row under half the poop's clearance",
   glowAlphaAt: "test reference: the glow's alpha profile that glowStops() draws (tests/fart.test.js)",
-  levelName: 'dead: removed in step 3',
-  howToLayout: 'dead: removed in step 3',
-  howToHit: 'dead: removed in step 3',
-  isNewTop: 'dead: removed in step 3',
-  summaryLine: 'dead: removed in step 3',
-  EMPTY_STATE: 'dead: removed in step 3',
-  respawnTotalMs: 'dead: removed in step 3',
+  topScores: 'test hook: tests/save.test.js reads top lists as plain numbers (its last game use, isNewTop, is gone)',
 };
 
 /** UI string keys no source names literally: prefix → why (they are built at run time). */
@@ -35,9 +29,7 @@ const ALLOWED_KEY_PREFIXES = {
 };
 
 /** UI string keys kept although nothing shows them: key → why. */
-const ALLOWED_KEYS = {
-  bestLabel: 'dead: removed in step 3',
-};
+const ALLOWED_KEYS = {};
 
 /** The config objects whose every leaf must be read somewhere in src/ (outside config.js). */
 const CONFIG_ROOTS = ['TUNING', 'FIELD', 'LEADERBOARD', 'TEST_MODE', 'SHARE', 'BACKGROUND'];

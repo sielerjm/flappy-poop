@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { TUNING as T, LEVELS, LEVEL_COLORS, BACKGROUND, GAME_HEIGHT } from '../src/config.js';
 import { levelBannerText, levelLabel, LOCALES } from '../src/i18n.js';
 import { GAME_WIDTH } from '../src/config.js';
-import { levelPipes, levelEnd, levelFor, levelSpeed, levelGap, levelName, levelColor, levelProgress, lerpColor, pipeSpacing, gapBounds, levelBarLayout, levelBarLabelOnFill, hudRightLayout, multiplierLayout, tutorialSpawn, isFinalLevel } from '../src/logic.js';
+import { levelPipes, levelEnd, levelFor, levelSpeed, levelGap, levelColor, levelProgress, lerpColor, pipeSpacing, gapBounds, levelBarLayout, levelBarLabelOnFill, hudRightLayout, multiplierLayout, tutorialSpawn, isFinalLevel } from '../src/logic.js';
 
 const L = T.levels;
 
@@ -77,13 +77,11 @@ test('pipe spacing: 487 / 446 px on the slower levels 1–2, pipeSpacingPx from 
   assert.ok(t1 > t3, 'level 1 leaves more time per pipe than level 3');
 });
 
-test('levelName follows the gut in order and runs out past the list; levelColor cycles through LEVEL_COLORS', () => {
+test('LEVELS follows the gut in order; levelColor cycles through LEVEL_COLORS', () => {
   assert.deepEqual(
-    [1, 2, 3, 4, 5, 6, 7].map((n) => levelName(n, LEVELS)),
+    LEVELS.map((l) => l.key),
     ['stomach', 'duodenum', 'jejunum', 'ileum', 'caecum', 'colon', 'rectum'],
   );
-  assert.equal(levelName(8, LEVELS), null);
-  assert.equal(levelName(0, LEVELS), null);
   const n = LEVEL_COLORS.length;
   assert.equal(n, 6);
   assert.equal(levelColor(1, LEVEL_COLORS), LEVEL_COLORS[0]);

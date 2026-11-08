@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { FIELD, GAME_WIDTH, GAME_HEIGHT, TUNING as T } from '../src/config.js';
-import { fieldWidth, uiColumn, poopX, trayLayout, trayHit, levelBarLayout, readyLayout, readyHit, howToLayout, pipeLeadPx, pipeLead, prefillPairs, pipeSpacing, sweepOffset } from '../src/logic.js';
+import { fieldWidth, uiColumn, poopX, trayLayout, trayHit, levelBarLayout, readyLayout, readyHit, pipeLeadPx, pipeLead, prefillPairs, pipeSpacing, sweepOffset } from '../src/logic.js';
 
 test('fieldWidth: a phone portrait is the minimum, a desktop window widens with its aspect, 2:1 caps it', () => {
   assert.equal(fieldWidth(390, 844, FIELD), FIELD.minWidth, 'phone portrait');
@@ -57,7 +57,6 @@ test('x0 shifts the tray, the level bar and the ready screen sideways and nothin
   assert.equal(moved.toilet.track.x, base.toilet.track.x + dx);
   assert.equal(moved.toilet.emojiX, base.toilet.emojiX + dx);
   assert.deepEqual(moved.poop.bubble, base.poop.bubble, 'bubble extents are relative');
-  assert.deepEqual(howToLayout(720, GAME_HEIGHT, T, dx), moved.howto);
 });
 
 test('hits follow the shifted chrome: the column on a 2304 field', () => {

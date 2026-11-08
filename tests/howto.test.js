@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { GAME_WIDTH, GAME_HEIGHT, TUNING as T } from '../src/config.js';
-import { howToLayout, howToHit } from '../src/logic.js';
+import { readyLayout, readyHit } from '../src/logic.js';
 import { t, howToItems, pauseBannerText, LOCALES } from '../src/i18n.js';
 
 test('HOW_TO_PLAY_TEXT explains flapping and pipes', () => {
@@ -84,8 +84,8 @@ test('HOW_TO_ITEMS names fiber, probiotic, and bacteria with their effects', () 
   assert.match(zhControls.detail, /右 Shift 或小键盘 0 放屁/);
 });
 
-test('howToLayout is a thumb-sized circle in the top-right corner, inside the field', () => {
-  const box = howToLayout(GAME_WIDTH, GAME_HEIGHT, T);
+test("the ready screen's How to play box is a thumb-sized circle in the top-right corner, inside the field", () => {
+  const box = readyLayout(GAME_WIDTH, GAME_HEIGHT, T).howto;
   assert.equal(box.id, 'howto');
   assert.ok(box.height >= 44);
   assert.ok(box.width >= 44);
@@ -97,9 +97,9 @@ test('howToLayout is a thumb-sized circle in the top-right corner, inside the fi
   assert.ok(box.y + box.height / 2 <= GAME_HEIGHT);
 });
 
-test('howToHit returns howto at the centre and null outside the box', () => {
-  const box = howToLayout(GAME_WIDTH, GAME_HEIGHT, T);
-  assert.equal(howToHit(box.x, box.y, box), 'howto');
-  assert.equal(howToHit(box.x, box.y + box.height / 2 + 2, box), null);
-  assert.equal(howToHit(GAME_WIDTH / 2, GAME_HEIGHT / 2, box), null);
+test('readyHit returns howto at the centre of its box and null just outside it', () => {
+  const layout = readyLayout(GAME_WIDTH, GAME_HEIGHT, T);
+  const box = layout.howto;
+  assert.equal(readyHit(box.x, box.y, layout), 'howto');
+  assert.equal(readyHit(box.x, box.y + box.height / 2 + 2, layout), null);
 });

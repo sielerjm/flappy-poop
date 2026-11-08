@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { GAME_WIDTH, GAME_HEIGHT, TUNING as T } from '../src/config.js';
-import { readyLayout, readyHit, howToLayout, fitScale, rectGlowSize, howToPromptDue, poopX } from '../src/logic.js';
+import { readyLayout, readyHit, fitScale, rectGlowSize, howToPromptDue, poopX } from '../src/logic.js';
 
 const layout = readyLayout(GAME_WIDTH, GAME_HEIGHT, T);
 const boxes = [layout.toilet, layout.howto, layout.saveLoad, layout.profile];
@@ -91,10 +91,6 @@ test('readyHit resolves each box at its centre, including the always-present pro
   assert.equal(readyHit(layout.poop.x, layout.poop.y, layout), null, 'poop spot is not a button');
   assert.equal(readyHit(poopX(GAME_WIDTH, T), GAME_HEIGHT / 2, layout), null, 'play position is not a button');
   assert.equal(readyHit(0, 0, null), null);
-});
-
-test('howToLayout is the readyLayout howto box', () => {
-  assert.deepEqual(howToLayout(GAME_WIDTH, GAME_HEIGHT, T), layout.howto);
 });
 
 test('fitScale shrinks only labels wider than the padded box', () => {
