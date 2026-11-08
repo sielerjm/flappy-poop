@@ -1,5 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
 import { readFileSync, readdirSync, existsSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { GAME_WIDTH, GAME_HEIGHT } from '../src/config.js';
@@ -125,6 +126,34 @@ test('every file under assets/sfx/ is named in CREDITS.md with a URL', () => {
     assert.match(credits, new RegExp(name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')), `${name} is not named in CREDITS.md`);
   }
   assert.match(credits, /https?:\/\/\S+/, 'CREDITS.md has no URL');
+});
+
+/**
+ * Sound files git tracks (a file only on one machine is not part of the game; a new
+ * one counts once it is `git add`-ed). Outside a git checkout: the folder.
+ */
+function trackedSfx() {
+  try {
+    const out = execFileSync('git', ['ls-files', '-z', 'assets/sfx'], { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
+    return out.split('\0').filter(Boolean).map((p) => p.slice('assets/sfx/'.length));
+  } catch {
+    return readdirSync(join(root, 'assets/sfx')).filter((n) => !n.startsWith('.'));
+  }
+}
+
+test('every tracked file under assets/sfx/ is loaded by a this.load.audio(): no shipped sound sits unused', () => {
+  const loaded = new Set(audioLoads.map((l) => l.path));
+  const files = trackedSfx();
+  assert.ok(files.length > 0, 'no tracked sound files');
+  for (const name of files) assert.ok(loaded.has(`assets/sfx/${name}`), `assets/sfx/${name} is never loaded: add a this.load.audio() in Boot, or remove the file and its CREDITS.md row`);
+});
+
+test('every assets/sfx/ file CREDITS.md names is tracked in git: no credit for a sound the game does not ship', () => {
+  const credits = readFileSync(join(root, 'CREDITS.md'), 'utf8');
+  const named = [...credits.matchAll(/assets\/sfx\/([^\s`'")]+)/g)].map((m) => m[1]);
+  assert.ok(named.length > 0, 'CREDITS.md names no sound files');
+  const files = new Set(trackedSfx());
+  for (const name of named) assert.ok(files.has(name), `CREDITS.md credits assets/sfx/${name}, which git does not track: git add it, or drop the row`);
 });
 
 test('pipe.png is at least the playfield tall so flipped tops reach the ceiling', () => {

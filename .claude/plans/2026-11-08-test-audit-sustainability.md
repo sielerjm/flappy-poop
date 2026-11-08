@@ -1,6 +1,6 @@
 # Plan: Sustainable testing and audit workflow
 - Created: 2026-11-08
-- Status: in progress (step 2)
+- Status: in progress (step 3)
 - Repo plan copy: `.claude/plans/2026-11-08-test-audit-sustainability.md` (folder is gitignored: `git add -f`, as every plan before it)
 - Baseline commit: `c4226b7` on `main`, tree clean. **Re-check at start:** another session landed 8 commits during the audit; if HEAD moved or the tree is dirty with someone else's work, stop and report.
 - Whole-suite verification: `npm test` (baseline **385 pass / 0 fail**, ~10 s) + full `npm run smoke` (server: `npm start` on :8000, Chrome, network for the live leaderboard reads). No source edits while a smoke runs (serve.py is no-store).
@@ -34,13 +34,13 @@ The audit of the generated plan (`test_audit_sustainability_7b5eb48e.plan.md`) f
 
 ## Steps
 
-### Step 1/6 — Plan copy and plan housekeeping  [done]
+### Step 1/6 — Plan copy and plan housekeeping  [done, `2907c06`]
 - Change: write this plan to `.claude/plans/2026-11-08-test-audit-sustainability.md` (`git add -f`). `git mv` the two complete, tracked plans (`2026-11-08-coins-ready-check.md`, `2026-11-08-slot-machine-versus-polish.md`) into `Archive/`. Move the two untracked generated plans (`test_audit_sustainability_7b5eb48e.plan.md`, `i18n_howto_sync_1687e16d.plan.md`) into `Archive/` and `git add -f` them. Record both smoke golden runs in the scratchpad before any code change.
 - Verify: `ls .claude/plans` shows only the new dated plan, the Save Code Spec and `Archive/`; `git status --short` shows only those renames/adds; `npm test` 385/385; both golden files end in "all checks passed".
 - Commit: `docs(plan, step 1/6): test audit plan; archive finished and superseded plans`
 - Result: plans folder = this plan + Save Code Spec + Archive/; npm test 385/385; golden smoke 303/303 twice.
 
-### Step 2/6 — Orphan audit suite  [pending]
+### Step 2/6 — Orphan audit suite  [done]
 - Change: new `tests/orphans.test.js`, zero deps (`fs` + regex, comments stripped before matching so a name mentioned only in a comment still counts as orphaned):
   1. **Exports**: every `export function|const|let|class` in `src/**/*.js` is referenced in `src/**` or `tools/*.mjs` outside its own file, or used in its own file beyond the declaration. Tests never count. `ALLOWED_EXPORTS` maps name → reason. Initial entries: test hooks `catalogKeys`, `catalogFor`, `_resetKeeperForTests`, `pipeMoveShiftPx` (tuning guard), `glowAlphaAt` (glowStops' profile), plus the seven dead ones marked `'dead: removed in step 3'`.
   2. **Config knobs**: flatten `TUNING`, `FIELD`, `LEADERBOARD`, `TEST_MODE`, `SHARE`, `BACKGROUND`. Arrays and numeric-keyed maps such as `levels.tutorial` count as leaves. A nested leaf is used if `parent.leaf` appears in `src/` outside config.js, or if both `parent` and `leaf` appear in the same file (covers destructuring). A top-level leaf is used if its bare word appears, which covers `angleForVelocity`'s destructured knobs. The prototype found zero real orphans.
@@ -52,6 +52,7 @@ The audit of the generated plan (`test_audit_sustainability_7b5eb48e.plan.md`) f
 - Also, in `tests/assets.test.js` (it already reads CREDITS and the `load.audio` calls), add the two missing sfx edges. Every tracked `assets/sfx/` file is loaded by a `load.audio`. Every `assets/sfx/X` named in CREDITS is a tracked file. Use `git ls-files`, falling back to `readdirSync` outside a checkout.
 - Verify: `node --test tests/orphans.test.js tests/assets.test.js` passes. Each self-test fails if its fixture orphan is removed: try once, then revert. `npm test` passes.
 - Commit: `test(audit, step 2/6): orphan audit for exports, knobs, strings, textures, overlay wiring; sfx triangle`
+- Result: 9 audit tests + 2 sfx edges green; npm test 396/396. Mutations each failed the right check (unused export, dropped key allowlist, padTop without Scores, unread knob, credited-untracked sfx, tracked-unloaded sfx). Found during build: Boot's poop-stink / stink-falling frames are named only by template stem (`poop-stink${n}`); `namesKey` accepts a numbered key's stem in a template.
 
 ### Step 3/6 — Delete the dead code  [pending]
 - Change: remove `levelName`, `howToLayout`, `howToHit` (logic.js), `isNewTop`, `summaryLine`, `EMPTY_STATE` (save.js), `respawnTotalMs` (versus.js), and `bestLabel` (en + zh-Hans in i18n.js and its `TRANSLATION_NOTES.md` row). Delete the tests that only exercised them. Where a test used one as a helper or checked live behaviour through it, retarget instead: field.test's x0 shift and ready.test should use `readyLayout().howto`, and versus.test should compute the respawn total inline. Remove the `'dead'` entries from the allowlists.
