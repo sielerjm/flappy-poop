@@ -38,6 +38,7 @@ export class Boot extends Phaser.Scene {
     this.load.audio('coin', 'assets/sfx/Coin_Pickup.mp3' + V); // a coin picked up, or a box paying coins
     this.load.audio('coin-spend', 'assets/sfx/Coin_Spend.mp3' + V); // a shop purchase
     this.load.audio('shop', 'assets/sfx/ShopOpenClose.mp3' + V); // the shop panel opening / closing
+    this.load.audio('flush', 'assets/sfx/ToiletFlush_Win.mp3' + V); // a two-player GO
   }
 
   create() {

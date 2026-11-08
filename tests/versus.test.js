@@ -127,6 +127,7 @@ test('createMatch / resetMatch: two empty slots, a 32-bit seed, a rematch keeps 
   assert.equal(m.slots.length, 2);
   assert.deepEqual(m.slots[0], slotTemplate());
   assert.equal(m.slots[0].deaths, 0);
+  assert.equal(m.slots[0].levelWins, 0, 'no level won yet (🏁 on the result panel)');
   assert.equal(m.slots[0].respawning, false);
   assert.equal(m.slots[0].alpha, 1);
   assert.equal(m.slots[0].ended, false);
@@ -388,3 +389,24 @@ test('stillPulseScale: 1 at the start and each half period, 1 ± amount at the q
     assert.ok(k >= 1 - p.amount - 1e-9 && k <= 1 + p.amount + 1e-9);
   }
 });
+
+test('the start boost: a flap inside a short window after GO earns two poop widths', async () => {
+  const { boostPeakMul, fartMul, levelSpeed } = await import('../src/logic.js');
+  const b = T.versus.startBoost;
+  assert.ok(b.windowMs >= 150 && b.windowMs <= 600, `windowMs ${b.windowMs}`);
+  assert.equal(b.distancePx, 2 * 96, 'two 96 px poops');
+  assert.ok(b.durationMs >= 200 && b.durationMs <= 1000, `durationMs ${b.durationMs}`);
+  for (const level of [1, 2, 3, T.levels.lastLevel]) {
+    const v = levelSpeed(level, T);
+    const peak = boostPeakMul(b.distancePx, b.durationMs, v);
+    assert.ok(peak > 1 && peak < 6, `level ${level}: peak ×${peak}`);
+    // The extra scroll over plain speed integrates to distancePx.
+    let extra = 0;
+    for (let ms = 0; ms < b.durationMs; ms += 1) extra += v * (fartMul(ms + 0.5, b.durationMs, peak) - 1) * 0.001;
+    assert.ok(Math.abs(extra - b.distancePx) < 0.5, `level ${level}: ${extra.toFixed(2)} px extra`);
+  }
+  assert.equal(boostPeakMul(192, 0, 275), 1);
+  assert.equal(boostPeakMul(0, 400, 275), 1);
+  assert.ok(T.versus.resultPanelW >= 760 && T.versus.resultPanelW <= 1000, `resultPanelW ${T.versus.resultPanelW}`);
+});
+

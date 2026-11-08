@@ -71,6 +71,10 @@ export const TUNING = {
   coinVolume: 0.6, // 0–1 Phaser volume for a coin picked up or a box paying coins (Coin_Pickup.mp3)
   coinSpendVolume: 0.6, // 0–1 Phaser volume for a shop purchase (Coin_Spend.mp3)
   shopVolume: 0.6, // 0–1 Phaser volume for the shop opening / closing (ShopOpenClose.mp3)
+  flushVolume: 0.6, // 0–1 Phaser volume for the toilet flush on a two-player GO (ToiletFlush_Win.mp3)
+  // The level break's tap prompt ("Tap to continue", "Tap when ready") breathes: its scale swells by
+  // `amount` and back each periodMs, while a white copy behind it swells by glowSpread and fades from glowAlpha.
+  hintPulse: { periodMs: 1400, amount: 0.05, glowAlpha: 0.5, glowSpread: 0.16 },
   levels: {
     pipes: [10, 25, 50], // pipe pairs in levels 1, 2, 3; every later level repeats the last entry (ends at 10, 35, 85, 135, …)
     lastLevel: 7, // the final level (rectum, = LEVELS.length): crossing its finish line wins the run
@@ -272,7 +276,11 @@ export const TUNING = {
       left: { flap: ['Space', 'KeyW'], power: ['KeyE', 'ShiftLeft'] },
       right: { flap: ['ArrowUp', 'Enter', 'NumpadEnter'], power: ['ShiftRight', 'Numpad0'] },
     },
-    countdownMs: 900, // ms per countdown step (3, 2, 1, GO) once both players have claimed a slot
+    countdownMs: 900, // ms per countdown step (3, 2, 1, GO) once both players have claimed a slot; the race starts as GO appears (with the flush) and GO stays up one step
+    // A flap within windowMs of GO (the match start or a level start) scrolls that half distancePx further
+    // (two 96 px poops) over durationMs on a sine surge, the fart face on; once per start, a fart cancels it.
+    startBoost: { windowMs: 300, distancePx: 192, durationMs: 400 },
+    resultPanelW: 820, // px width of the result panel (each player's column a half of it)
     ghostRangePx: 720, // px of distance difference within which the other poop shows in your lumen as a ghost
     ghostAlpha: 0.35, // 0–1 alpha of the ghost when the two are level; fades to 0 at ghostRangePx
     ghostFadeMs: 600, // ms the ghost takes to fade out once the other player is out

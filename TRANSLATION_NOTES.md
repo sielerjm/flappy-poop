@@ -212,6 +212,7 @@ Short, playful, clear. Fit a 720×1280 logical field; How to play / About body w
 | versusWaiting | Waiting for P{n}… | 等待玩家{n}… |
 | versusTapReady | Tap when ready | 准备好了就点一下 |
 | versusReadyWaiting | Ready! Waiting for P{n}… | 已准备！等待玩家{n}… |
+| versusUnreadyHint | Tap again to un-ready | 再点一次可取消准备 |
 
 ### aboutCredits (English)
 

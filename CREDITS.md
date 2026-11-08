@@ -45,7 +45,9 @@
   standalone file.
 - `assets/sfx/ToiletFlush_Win.mp3` — "Toilet Flush 1" by FreeSounds-4U,
   https://pixabay.com/sound-effects/household-toilet-flush-1-401155/,
-  Pixabay Content License, published 2025-09-08. Not used in the game yet.
+  Pixabay Content License, published 2025-09-08. Plays when GO appears in a
+  two-player countdown. Bundled inside the game only; not redistributed as a
+  standalone file.
 
 ## Services
 

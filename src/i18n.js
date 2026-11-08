@@ -155,6 +155,7 @@ Inspired by Flappy Bird`,
     versusWaiting: 'Waiting for P{n}…',
     versusTapReady: 'Tap when ready',
     versusReadyWaiting: 'Ready! Waiting for P{n}…',
+    versusUnreadyHint: 'Tap again to un-ready',
   },
   'zh-Hans': {
     readyTitle: 'FLAPPY POOP',
@@ -303,6 +304,7 @@ Inspired by Flappy Bird`,
     versusWaiting: '等待玩家{n}…',
     versusTapReady: '准备好了就点一下',
     versusReadyWaiting: '已准备！等待玩家{n}…',
+    versusUnreadyHint: '再点一次可取消准备',
   },
 };
 

@@ -11,7 +11,7 @@ import {
   _resetKeeperForTests,
 } from '../src/sound.js';
 
-const KEYS = ['flap', 'score', 'die', 'pickup', 'shield', 'hazard', 'levelUp'];
+const KEYS = ['flap', 'score', 'die', 'pickup', 'shield', 'hazard', 'levelUp', 'tick', 'reelStop'];
 
 test('src/sound.js imports in Node and exports the sfx keys', () => {
   for (const key of KEYS) {

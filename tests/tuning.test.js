@@ -244,3 +244,22 @@ test('the shop reel spins long enough to read and stops for a beat', () => {
   assert.ok(r.iconPx <= r.pitchPx, 'faces never overlap');
   assert.ok(r.landScale > 1 && r.landScale <= 1.6, `landScale ${r.landScale}`);
 });
+
+test('the level break prompt breathes gently under a fading white glow', async () => {
+  const { hintPulse } = await import('../src/logic.js');
+  const p = T.hintPulse;
+  assert.ok(p.periodMs >= 800 && p.periodMs <= 3000, `periodMs ${p.periodMs}`);
+  assert.ok(p.amount > 0 && p.amount <= 0.1, `amount ${p.amount}: slight`);
+  assert.ok(p.glowAlpha > 0 && p.glowAlpha <= 0.7, `glowAlpha ${p.glowAlpha}: subtle`);
+  assert.ok(p.glowSpread > 0 && p.glowSpread <= 0.3, `glowSpread ${p.glowSpread}`);
+  const start = hintPulse(0, T);
+  assert.deepEqual(start, { scale: 1, glowScale: 1, glowAlpha: p.glowAlpha });
+  const mid = hintPulse(p.periodMs / 2, T);
+  assert.ok(Math.abs(mid.scale - (1 + p.amount)) < 1e-9, 'fullest half way');
+  assert.ok(Math.abs(mid.glowAlpha - p.glowAlpha / 2) < 1e-9 && Math.abs(mid.glowScale - (1 + p.glowSpread / 2)) < 1e-9, 'the glow swells while it fades');
+  const loop = hintPulse(p.periodMs * 3 + 100, T);
+  const first = hintPulse(100, T);
+  assert.ok(Math.abs(loop.scale - first.scale) < 1e-9 && Math.abs(loop.glowAlpha - first.glowAlpha) < 1e-9, 'it repeats each period');
+  assert.ok(T.flushVolume > 0 && T.flushVolume <= 1, `flushVolume ${T.flushVolume}`);
+});
+

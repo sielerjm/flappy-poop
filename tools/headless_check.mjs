@@ -552,6 +552,11 @@ export async function run(url = DEFAULT_URL) {
       ok(spun.on && spun.draw === 'coin10' && spun.coins === m.coins - TT.shop.prices.mystery && !cutReel.on && cutReel.coins === spun.coins + 10 && cutReel.reveal === 'coin10' && cutReel.running && cutReel.objs === 0, `closing the shop mid-spin grants the draw at once (+10, purse ${cutReel.coins}) with its reveal rising; the reel's objects are gone`);
       const closed = await evaluate(`JSON.stringify({ open: ${play}.shopOpen, shop: ${play}.shop, state: ${play}.state, lb: ${play}.levelBreak, pill: ${play}.shopButtonShown(), btn: ${play}.shopButton.getText(), title: ${play}.levelTitle.visible })`).then(JSON.parse);
       ok(!closed.open && closed.shop === null && closed.state === 'paused' && closed.lb && closed.pill && closed.btn === `💰 ${cutReel.coins}` && closed.title, `✕ closes the shop and the break goes on: the pill reads "${closed.btn}"`);
+      // The break's "Tap to continue · 💰 to shop" breathes under a white glow; no un-ready line in single player.
+      const sp1 = await evaluate(`JSON.stringify({ s: ${play}.levelHint.scale, g: ${play}.levelHintGlow.alpha, on: ${play}.levelHintGlow.visible, text: ${play}.levelHintGlow.text, hint: ${play}.levelHint.text, sub: ${play}.levelSubHint.visible })`).then(JSON.parse);
+      await sleep(TT.hintPulse.periodMs / 3);
+      const sp2 = await evaluate(`JSON.stringify({ s: ${play}.levelHint.scale, g: ${play}.levelHintGlow.alpha, on: ${play}.levelHintGlow.visible })`).then(JSON.parse);
+      ok(sp1.on && sp2.on && sp1.text === sp1.hint && sp1.s !== sp2.s && sp1.g !== sp2.g && !sp1.sub, `"${sp1.hint}" pulses (scale ${sp1.s.toFixed(3)} → ${sp2.s.toFixed(3)}) under its white glow (alpha ${sp1.g.toFixed(2)} → ${sp2.g.toFixed(2)}); no un-ready line in single player`);
       // The super bean with the bag at 2: it fills the bag (a super fart ready) and empties the purse.
       await evaluate(`${play}.effects.addCoins(${TT.shop.prices.superBean} - ${play}.effects.coins()), ${play}.refreshShopButton(), true`);
       await sleep(400); // the ✕ armed the resume lockout
@@ -1546,8 +1551,9 @@ export async function run(url = DEFAULT_URL) {
       ok(c1.slots[0] === null && c1.slots[1]?.kind === 'touch' && c1.slots[1]?.side === 'right' && c1.status === 'join', `a tap on the right half claims P2 (${JSON.stringify(c1.slots[1])}), P1 still open`);
       ok(JSON.stringify(c2.slots) === JSON.stringify(c1.slots) && c2.status === 'join', 'a second tap on the same half is refused');
       ok(c3.slots[0]?.kind === 'pad' && c3.slots[0]?.index === 1 && c3.slots[1]?.kind === 'touch' && c3.status === 'countdown' && c3.count && c3.text === '3' && c3.badge[0].startsWith('🎮 2') && c3.badge[1].startsWith('👆'), `pad 2's A claims P1, the countdown starts at ${c3.text} with the badges ${c3.badge.join(' / ')}; Space during it changes nothing`);
-      const racing = await until(`${VS}.match.status === 'playing' && ${P1}.state === 'playing' && ${P2}.state === 'playing'`, (4 * want.countdownMs + 2500) / 100);
-      ok(racing, 'GO: both halves are playing');
+      const racing = await until(`${VS}.match.status === 'playing' && ${P1}.state === 'playing' && ${P2}.state === 'playing' && (globalThis.__start = JSON.stringify({ go: ${VS}.countText.visible ? ${VS}.countText.text : null, x: [${P1}.poop.x - ${P1}.poopX, ${P2}.poop.x - ${P2}.poopX] }), true)`, (4 * want.countdownMs + 2500) / 100);
+      const startSeen = JSON.parse(await evaluate('globalThis.__start ?? "{}"'));
+      ok(racing && startSeen.go === 'GO!' && startSeen.x.every((dx) => Math.abs(dx) < 1), `GO: both halves are playing the moment GO shows ("${startSeen.go}"), each poop already slid into place (dx ${startSeen.x?.join(' / ')})`);
       // One course: the pair pre-filled on both halves and the next four they spawn match exactly.
       const course = await evaluate(`(() => { const probe = (p) => ({ tops: p.pipes.getChildren().filter((c) => c.getData('scoring')).sort((a, b) => a.x - b.x).map((c) => [Math.round(c.x), Math.round(c.y)]), items: p.items.getChildren().map((c) => [Math.round(c.x), c.getData('kind')]).sort(), beans: p.beans.getChildren().map((c) => Math.round(c.x)).sort(), spawned: p.pipesSpawned, box: p.mysteryPair }); for (const p of [${P1}, ${P2}]) for (let i = 0; i < 4; i += 1) p.spawnPipePair(); const a = probe(${P1}); const b = probe(${P2}); return JSON.stringify({ a, b, same: JSON.stringify(a) === JSON.stringify(b) }); })()`).then(JSON.parse);
       ok(course.same && course.a.tops.length >= 5, `both halves spawned the same course: ${course.a.tops.length} pairs at the same gaps, pickups ${JSON.stringify(course.a.items)}, the first box after pair ${course.a.box}`);
@@ -1670,10 +1676,15 @@ export async function run(url = DEFAULT_URL) {
       // hides; a second tap takes it back ("Tap when ready", the 💰 back). Neither ends the break or touches P2.
       await evaluate(`${P1}.flap({ x: 100, y: 600 }), true`);
       await sleep(100);
-      const brk3 = await evaluate(`JSON.stringify({ a: ${P1}.state, lb: ${P1}.levelBreak, level: ${P1}.level, b: ${P2}.state, bLevel: ${P2}.level, hint: ${P1}.levelHint.text, hintShown: ${P1}.levelHint.visible, shade: ${P1}.pauseShade.visible, ready: ${VS}.isReady(${P1}), pill: ${P1}.shopButtonShown() })`).then(JSON.parse);
+      const brk3 = await evaluate(`JSON.stringify({ a: ${P1}.state, lb: ${P1}.levelBreak, level: ${P1}.level, b: ${P2}.state, bLevel: ${P2}.level, hint: ${P1}.levelHint.text, hintShown: ${P1}.levelHint.visible, shade: ${P1}.pauseShade.visible, ready: ${VS}.isReady(${P1}), pill: ${P1}.shopButtonShown(), sub: ${P1}.levelSubHint.visible ? ${P1}.levelSubHint.text : null, subY: ${P1}.levelSubHint.y - ${P1}.levelHint.y, subPx: parseInt(${P1}.levelSubHint.style.fontSize, 10), glow: ${P1}.levelHintGlow.visible, scale: ${P1}.levelHint.scale })`).then(JSON.parse);
       await evaluate(`${P1}.flap({ x: 100, y: 600 }), true`);
       await sleep(100);
-      const brk4 = await evaluate(`JSON.stringify({ lb: ${P1}.levelBreak, hint: ${P1}.levelHint.text, ready: ${VS}.isReady(${P1}), pill: ${P1}.shopButtonShown() })`).then(JSON.parse);
+      const brk4 = await evaluate(`JSON.stringify({ lb: ${P1}.levelBreak, hint: ${P1}.levelHint.text, ready: ${VS}.isReady(${P1}), pill: ${P1}.shopButtonShown(), sub: ${P1}.levelSubHint.visible })`).then(JSON.parse);
+      const pulseA = await evaluate(`JSON.stringify({ s: ${P1}.levelHint.scale, g: ${P1}.levelHintGlow.alpha, gs: ${P1}.levelHintGlow.scale, on: ${P1}.levelHintGlow.visible, text: ${P1}.levelHintGlow.text })`).then(JSON.parse);
+      await sleep(TT.hintPulse.periodMs / 3);
+      const pulseB = await evaluate(`JSON.stringify({ s: ${P1}.levelHint.scale, g: ${P1}.levelHintGlow.alpha, on: ${P1}.levelHintGlow.visible })`).then(JSON.parse);
+      ok(brk3.sub === 'Tap again to un-ready' && brk3.subY > 30 && brk3.subPx < 36 && !brk3.glow && brk3.scale === 1, `ready, P1 reads "${brk3.sub}" on a smaller line (${brk3.subPx} px) under its hint, which holds still`);
+      ok(!brk4.sub && pulseA.on && pulseB.on && pulseA.text === 'Tap when ready' && pulseA.s !== pulseB.s && pulseA.g !== pulseB.g && [pulseA.s, pulseB.s].every((x) => x >= 1 && x <= 1 + TT.hintPulse.amount + 1e-9) && pulseA.gs >= pulseA.s, `un-ready, the un-ready line goes and "Tap when ready" pulses (scale ${pulseA.s.toFixed(3)} → ${pulseB.s.toFixed(3)}) under its white glow (alpha ${pulseA.g.toFixed(2)} → ${pulseB.g.toFixed(2)})`);
       ok(brk3.a === 'paused' && brk3.lb && brk3.level === 2 && brk3.b === 'playing' && brk3.bLevel === 1 && brk3.ready && brk3.hint === 'Ready! Waiting for P2…' && brk3.hintShown && !brk3.shade && !brk3.pill && brk4.lb && !brk4.ready && brk4.hint === 'Tap when ready' && brk4.pill, `P1's tap marks it ready ("${brk3.hint}", the 💰 hidden) without ending its break; a second tap takes it back ("${brk4.hint}", the 💰 back); P2 plays on`);
       // A pad's B on the waiting P1 marks it ready and never pauses P2; after Menu paused P2, B only lifts the pause.
       await evaluate(`${P1}.padDown(${want.back}), true`);
@@ -1747,10 +1758,11 @@ export async function run(url = DEFAULT_URL) {
       ok(heldAt.open && heldStill.text === heldAt.text && heldStill.a === 'paused' && heldStill.b === 'paused', `Settings from P1 holds the count at ${heldAt.text} (still ${heldStill.text} a beat later), both halves still waiting`);
       await evaluate(`__flappy.scene.getScene('Settings').close(), true`);
       const closedAt = Date.now();
-      const go = await until(`${P1}.state === 'playing' && ${P2}.state === 'playing' && (globalThis.__go = JSON.stringify({ d: [${P1}.distance, ${P2}.distance], levels: [${P1}.level, ${P2}.level], lb: [${P1}.levelBreak, ${P2}.levelBreak], stage: ${VS}.levelStage, status: ${VS}.match.status, shown: ${VS}.countText.visible, ready: ${VS}.readyHalves.size }), [${P1}, ${P2}].forEach((p) => { p.poop.body.setAllowGravity(false); p.poop.setVelocity(0, 0); p.poop.y = 640; p.graceLeftMs = 1e9; }), true)`, (5 * want.countdownMs + 2000) / 100);
+      const go = await until(`${P1}.state === 'playing' && ${P2}.state === 'playing' && (globalThis.__go = JSON.stringify({ d: [${P1}.distance, ${P2}.distance], levels: [${P1}.level, ${P2}.level], lb: [${P1}.levelBreak, ${P2}.levelBreak], stage: ${VS}.levelStage, status: ${VS}.match.status, shown: ${VS}.countText.visible, text: ${VS}.countText.text, ready: ${VS}.readyHalves.size }), [${P1}, ${P2}].forEach((p) => { p.poop.body.setAllowGravity(false); p.poop.setVelocity(0, 0); p.poop.y = 640; p.graceLeftMs = 1e9; }), true)`, (5 * want.countdownMs + 2000) / 100);
       const elapsed = Date.now() - closedAt;
       const started = JSON.parse(await evaluate('globalThis.__go'));
-      ok(go && elapsed >= 3 * want.countdownMs && started.levels[0] === 2 && started.levels[1] === 2 && !started.lb[0] && !started.lb[1] && started.stage === null && started.ready === 0 && !started.shown && started.status === 'playing' && Math.abs(started.d[0] - started.d[1]) < 1, `GO starts level 2 on both halves together, ${elapsed} ms after Settings closed (distances ${started.d.map((d) => d.toFixed(1)).join(' / ')})`);
+      ok(go && elapsed >= 3 * want.countdownMs && started.levels[0] === 2 && started.levels[1] === 2 && !started.lb[0] && !started.lb[1] && started.stage === null && started.ready === 0 && started.shown && started.text === 'GO!' && started.status === 'playing' && Math.abs(started.d[0] - started.d[1]) < 1, `GO starts level 2 on both halves together as it shows, ${elapsed} ms after Settings closed (distances ${started.d.map((d) => d.toFixed(1)).join(' / ')})`);
+      ok(await until(`!${VS}.countText.visible`, (want.countdownMs + 800) / 100), 'GO goes after its beat, the level under way');
       await sleep(150);
       const ghosts = await evaluate(`JSON.stringify({ v: [${P1}.ghost.visible, ${P2}.ghost.visible], a: [${P1}.ghost.alpha, ${P2}.ghost.alpha], dx: [${P1}.ghost.x - ${P1}.poopX, ${P2}.ghost.x - ${P2}.poopX] })`).then(JSON.parse);
       ok(ghosts.v[0] && ghosts.v[1] && ghosts.a.every((x) => x > 0.3) && ghosts.dx.every((x) => Math.abs(x) < 25), `side by side on the course, each ghost sits on the other's poop (dx ${ghosts.dx.map((x) => x.toFixed(0)).join(' / ')}, alpha ${ghosts.a.map((x) => x.toFixed(2)).join(' / ')})`);
@@ -1847,6 +1859,8 @@ export async function run(url = DEFAULT_URL) {
       ok(await until(`${VS}.resultShown`, (want.deathMs + 1500) / 100), 'the result panel shows after the delay');
       const panel = await evaluate(`(() => { const v = ${VS}; const texts = v.children.list.filter((c) => c.type === 'Text' && c.visible).map((c) => c.text); return JSON.stringify({ texts, buttons: Boolean(v.buttons), rematch: v.rematchButton.getText(), home: v.resultHome.getText(), syncs: globalThis.__syncs ?? 0, save: localStorage.getItem('flappyPoop.save'), status: v.match.status }); })()`).then(JSON.parse);
       ok(panel.texts.includes('P2 WINS!') && !panel.texts.includes('OUT') && panel.texts.includes(String(9 + want.bonus)) && panel.texts.includes(String(5 + want.bonus)) && panel.texts.filter((x) => x === '💀 ×1').length === 2 && panel.buttons && panel.rematch === 'Rematch' && panel.home === 'Home', `the panel reads P2 WINS! with both scores and a 💀 ×1 under each; Rematch | Home`);
+      const flags = await evaluate(`(() => { const v = ${VS}; const wide = v.children.list.find((c) => c.type === 'Rectangle' && c.depth === 70); const t = (s) => v.children.list.find((c) => c.type === 'Text' && c.text === s); return JSON.stringify({ wins: v.match.slots.map((s) => s.levelWins), w: wide?.width, p1: t('🏁 ×2')?.x, p2: t('🏁 ×0')?.x, cx: v.layout.totalW / 2 }); })()`).then(JSON.parse);
+      ok(flags.wins[0] === 2 && flags.wins[1] === 0 && flags.w === TT.versus.resultPanelW && flags.p1 < flags.cx && flags.p2 > flags.cx, `level wins: P1 first over level 1's line and first out (🏁 ×${flags.wins[0]}), P2 🏁 ×${flags.wins[1]}, on a ${flags.w} px panel`);
       ok(panel.syncs === 0 && panel.save === saveBefore, 'a match records nothing: no leaderboard sync, the save state untouched');
       // Rematch: the same devices, a fresh seed, straight through the countdown into play. Pinned to
       // equal points, the fewer crashes win; equal crashes too is a draw.
@@ -1856,7 +1870,20 @@ export async function run(url = DEFAULT_URL) {
         await pin();
         return ok2;
       };
-      const again2 = await rematch();
+      // The first rematch checks GO's flush and the start boost: P1 flaps inside the window (in the
+      // same evaluate that sees GO), P2 flaps after it; P1 ends up two poop widths ahead.
+      await evaluate(`(() => { const proto = ${VS}.constructor.prototype; if (!proto.__flushSpy) { const orig = proto.flush; proto.flush = function () { (globalThis.__flushes ??= []).push(this.countText.text); return orig.call(this); }; proto.__flushSpy = true; } globalThis.__flushes = []; return true; })()`);
+      await evaluate(`${VS}.rematch(), true`);
+      const boostSeen = await until(`__flappy.scene.isActive('Versus') && ${VS}.match.status === 'playing' && ${P1}.state === 'playing' && ${P2}.state === 'playing' && (globalThis.__boost = JSON.stringify({ since: ${P1}.time.now - ${P1}.boostArmedAt, d0: ${P1}.distance - ${P2}.distance, flapped: (${P1}.handleChrome('tap'), true), boost: Boolean(${P1}.boost), face: ${P1}.poop.texture.key }), [${P1}, ${P2}].forEach((p) => { p.poop.body.setAllowGravity(false); p.poop.setVelocity(0, 0); p.poop.y = 640; p.graceLeftMs = 1e9; }), true)`, (4 * want.countdownMs + 3000) / 100);
+      const bst = JSON.parse(await evaluate('globalThis.__boost ?? "{}"'));
+      await sleep(TT.versus.startBoost.windowMs + 100);
+      const late = await evaluate(`(() => { const b = ${P2}; b.handleChrome('tap'); b.poop.setVelocity(0, 0); b.poop.y = 640; return JSON.stringify({ boost: Boolean(b.boost) }); })()`).then(JSON.parse);
+      await sleep(TT.versus.startBoost.durationMs + 300);
+      const gained = await evaluate(`JSON.stringify({ d: ${P1}.distance - ${P2}.distance, boost: Boolean(${P1}.boost), face: ${P1}.poop.texture.key, mul: ${P1}.scrollMul, flushes: globalThis.__flushes, loaded: __flappy.cache.audio.exists('flush') })`).then(JSON.parse);
+      ok(gained.loaded && gained.flushes.length === 1 && gained.flushes[0] === 'GO!', `the toilet flushes once, as GO shows (${JSON.stringify(gained.flushes)})`);
+      ok(boostSeen && bst.since <= TT.versus.startBoost.windowMs && bst.boost && bst.face === 'poop-fart' && !late.boost && !gained.boost && gained.face === 'poop' && gained.mul === 1 && Math.abs(gained.d - bst.d0 - TT.versus.startBoost.distancePx) < 12, `a tap ${Math.round(bst.since)} ms after GO boosts P1 with the fart face (${bst.face}); P2's tap after the window does not; P1 ends ${(gained.d - bst.d0).toFixed(0)} px ahead (want ${TT.versus.startBoost.distancePx}), its face and scroll back to plain`);
+      await pin();
+      const again2 = boostSeen;
       const re = await evaluate(`JSON.stringify({ seed: ${VS}.match.seed, devices: ${VS}.match.slots.map((s) => s.device), scores: ${VS}.match.slots.map((s) => s.score), deaths: ${VS}.match.slots.map((s) => s.deaths), same: ${P1}.match === ${VS}.match && ${P2}.match === ${VS}.match, W: __flappy.scale.width })`).then(JSON.parse);
       const reState = await evaluate(`JSON.stringify({ status: ${VS}.match.status, a: ${P1}.state, b: ${P2}.state, count: ${VS}.countText.text })`);
       ok(again2 && re.seed !== seed1 && re.devices[0]?.group === 'left' && re.devices[1]?.group === 'right' && re.scores[0] === 0 && re.scores[1] === 0 && re.deaths[0] === 0 && re.deaths[1] === 0 && re.same, `Rematch keeps the devices (${re.devices.map((d) => d?.group).join(' / ')}) on a new seed with the counts reset, and both halves race again${again2 ? '' : ` — ${reState}`}`);

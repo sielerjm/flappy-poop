@@ -1102,6 +1102,30 @@ export function fartFloat(elapsedMs, startY, centreY, t) {
 }
 
 /**
+ * The peak scroll multiplier of a start boost: fartMul's sine surge over `durationMs` that carries
+ * the half `distancePx` further than plain `pipeSpeed` would (∫(mul − 1)·v dt = distancePx).
+ */
+export function boostPeakMul(distancePx, durationMs, pipeSpeed) {
+  if (!(durationMs > 0) || !(pipeSpeed > 0)) return 1;
+  return 1 + (Math.max(0, distancePx) * Math.PI * 1000) / (2 * durationMs * pipeSpeed);
+}
+
+/**
+ * The level break's tap prompt `elapsed` ms into its pulse (hintPulse): the prompt's scale (1 → 1 + amount
+ * and back, a cosine), and its white glow copy's scale and alpha (swelling by glowSpread while it fades
+ * from glowAlpha to 0, once per period).
+ */
+export function hintPulse(elapsed, t) {
+  const p = t.hintPulse;
+  const phase = (((Math.max(0, elapsed || 0)) % p.periodMs) + p.periodMs) % p.periodMs / p.periodMs;
+  return {
+    scale: 1 + p.amount * (0.5 - 0.5 * Math.cos(2 * Math.PI * phase)),
+    glowScale: 1 + p.glowSpread * phase,
+    glowAlpha: p.glowAlpha * (1 - phase),
+  };
+}
+
+/**
  * How long a fart lasts: a super fart runs the fart_accelerate clip (`clipMs`, or beans.powerMs when
  * it did not load); a normal fart runs beans.normalPowerMs, so its pipes go by quicker.
  */

@@ -35,6 +35,7 @@ export class Versus extends Phaser.Scene {
     this.readyHalves = new Set(); // halves (0 = P1, 1 = P2) that tapped ready in their level break
     this.levelArrivals = new Map(); // half → this scene's clock when it reached the line (its arrival beat runs from there)
     this.levelCountToken = 0; // bumped to cancel a running level count
+    this.goToken = 0; // bumped by each GO: only the latest GO's beat hides countText
     this.homeTapFrame = -1; // the frame a tap landed on the join screen's Home: the halves do not claim that tap
     const W = layout.totalW;
     const cx = W / 2;
@@ -124,17 +125,20 @@ export class Versus extends Phaser.Scene {
     this.joinHint.setVisible(false);
     this.homeButton.setVisible(false);
     this.focus?.hide();
-    this.runCountdown(() => this.go(), { status: 'countdown' });
+    // The halves slide their poops into place under the "3" and wait there (Play.launch hold); GO starts them.
+    this.runCountdown(() => this.go(), { status: 'countdown', onStart: () => this.halves().forEach((half) => half?.launch({ hold: true })) });
   }
 
   /**
-   * 3, 2, 1, GO on countText, one step per versus.countdownMs, then onDone. It stops if the scene
-   * stops or restarts (a new match object) or the match leaves `status`. With `hold`, a step that
-   * finds an overlay open (Settings from P1's tray) waits for it to close, then shows the step
-   * before it again for a full beat: closing an overlay arms P1's resume lockout, and a GO right
-   * after it would swallow P1's first flap.
+   * 3, 2, 1, GO on countText, one step per versus.countdownMs. GO is the start: it flushes the toilet
+   * and runs onGo in the same frame, then stays up one more step (a tap right on it is the start
+   * boost, Play.tryStartBoost). `onStart` runs with the first step. It stops if the scene stops or
+   * restarts (a new match object) or the match leaves `status`. With `hold`, a step that finds an
+   * overlay open (Settings from P1's tray) waits for it to close, then shows the step before it
+   * again for a full beat: closing an overlay arms P1's resume lockout, and a GO right after it
+   * would swallow P1's first flap.
    */
-  runCountdown(onDone, { status, hold = false, alive = null }) {
+  runCountdown(onGo, { status, hold = false, alive = null, onStart = null }) {
     const match = this.match;
     const steps = ['3', '2', '1', t(this.locale, 'versusGo')];
     let i = 0;
@@ -150,18 +154,29 @@ export class Versus extends Phaser.Scene {
         held = false;
         i = Math.max(0, i - 1);
       }
-      if (i === steps.length) {
-        this.countText.setVisible(false);
-        onDone();
-        return;
-      }
+      if (i === 0) onStart?.();
       this.countText.setText(steps[i]).setVisible(true).setScale(1.3);
       this.tweens.add({ targets: this.countText, scale: 1, duration: T.versus.countdownMs * 0.6, ease: 'Back.easeOut' });
+      if (i === steps.length - 1) {
+        this.flush();
+        const token = ++this.goToken;
+        onGo();
+        this.time.delayedCall(T.versus.countdownMs, () => {
+          if (this.sys.isActive() && this.goToken === token) this.countText.setVisible(false);
+        });
+        return;
+      }
       sfx.score();
       i += 1;
       this.time.delayedCall(T.versus.countdownMs, tick);
     };
     this.time.delayedCall(0, tick); // never synchronously: a rematch starts this inside create(), before the scene is active
+  }
+
+  /** GO's toilet flush (ToiletFlush_Win.mp3), or the step blip when it did not load. */
+  flush() {
+    if (this.cache.audio.exists('flush')) this.sound.play('flush', { volume: T.flushVolume });
+    else sfx.score();
   }
 
   /** An overlay (Settings, About, …) is up over the match: the level countdown holds under it. */
@@ -178,6 +193,8 @@ export class Versus extends Phaser.Scene {
     if (this.match.status !== 'playing') return;
     const i = this.halves().indexOf(half);
     if (i < 0) return;
+    // The first one over this level's line wins the level (🏁 on the result panel).
+    if (![...this.levelArrivals.keys()].some((k) => k !== i)) this.match.slots[i].levelWins = (this.match.slots[i].levelWins ?? 0) + 1;
     this.readyHalves.delete(i);
     this.levelArrivals.set(i, this.time.now);
     half.refreshLevelBanner();
@@ -233,6 +250,7 @@ export class Versus extends Phaser.Scene {
   cancelLevelCount() {
     this.levelStage = null;
     this.levelCountToken += 1;
+    this.goToken += 1;
     this.countText.setVisible(false);
   }
 
@@ -257,21 +275,20 @@ export class Versus extends Phaser.Scene {
     this.refreshReady();
   }
 
-  /** GO: both halves leave their break in the same frame (Play.beginLevel), side by side on the course. */
+  /** GO: both halves leave their break in the same frame (Play.beginLevel), side by side on the course; GO stays up one beat. */
   beginLevel() {
     this.levelStage = null;
     this.readyHalves.clear();
     this.levelArrivals.clear();
-    this.countText.setVisible(false);
     for (const half of this.halves()) half?.beginLevel();
     if (globalThis.document?.hidden) this.setPaused(true); // GO on a hidden tab: nothing was live to auto-pause during the count
   }
 
-  /** The race starts: both halves slide their poop into place and run (Play.launch). */
+  /** GO: the race starts, both halves running in the same frame from where the count slid them (Play.startRace). */
   go() {
     this.match.status = 'playing';
     this.setJoinVisible(false);
-    for (const half of this.halves()) half?.launch();
+    for (const half of this.halves()) half?.startRace();
   }
 
   /**
@@ -322,9 +339,12 @@ export class Versus extends Phaser.Scene {
    * both have reported the match is over, the shared banner goes, and the result panel
    * follows after a beat.
    */
-  onRunEnded() {
+  onRunEnded(player) {
     if (this.match.status !== 'playing') return;
-    if (!this.match.slots.every((slot) => slot.ended)) return;
+    // The first one out of the rectum wins the last level too.
+    const slot = this.match.slots[player - 1];
+    if (slot && this.match.slots.filter((s) => s.ended).length === 1) slot.levelWins = (slot.levelWins ?? 0) + 1;
+    if (!this.match.slots.every((s) => s.ended)) return;
     this.match.status = 'over';
     this.pausedHalves.clear();
     this.pauseText.setVisible(false);
@@ -332,7 +352,7 @@ export class Versus extends Phaser.Scene {
     this.time.delayedCall(T.deathToOverMs, () => this.showResult());
   }
 
-  /** The result panel: who won (matchResult: points, then fewer crashes), each player's score, level, pipes and crashes, Rematch | Home. */
+  /** The result panel: who won (matchResult: points, then fewer crashes), each player's score, level, pipes, level wins (🏁) and crashes, Rematch | Home. */
   showResult() {
     if (this.resultShown || !this.sys.isActive()) return;
     this.resultShown = true;
@@ -341,19 +361,20 @@ export class Versus extends Phaser.Scene {
     const cy = GAME_HEIGHT / 2;
     const slots = this.match.slots;
     const res = matchResult(slots);
-    const panel = this.add.rectangle(cx, cy, 640, 760, 0x1a0b14, 0.9).setStrokeStyle(8, 0xe85e96).setDepth(70);
+    const panel = this.add.rectangle(cx, cy, T.versus.resultPanelW, 760, 0x1a0b14, 0.9).setStrokeStyle(8, 0xe85e96).setDepth(70);
     const headline = res.winner == null ? t(this.locale, 'versusDraw') : t(this.locale, 'versusWins').replace('{n}', String(res.winner + 1));
     this.add.text(cx, cy - 290, headline, { ...STYLE, fontSize: '60px', color: GOLD }).setOrigin(0.5).setDepth(71);
     slots.forEach((slot, i) => {
-      const x = cx + (i === 0 ? -150 : 150);
+      const x = cx + (i === 0 ? -1 : 1) * (T.versus.resultPanelW / 4);
       this.add.text(x, cy - 190, t(this.locale, 'versusPlayer').replace('{n}', String(i + 1)), { ...STYLE, fontSize: '44px', color: PINK }).setOrigin(0.5).setDepth(71);
       this.add.text(x, cy - 110, String(slot.score), { ...STYLE, fontSize: '72px' }).setOrigin(0.5).setDepth(71);
       this.add.text(x, cy - 40, levelLabel(this.locale, slot.level), { ...STYLE, fontSize: '32px', color: '#c9b8dc', strokeThickness: 8 }).setOrigin(0.5).setDepth(71);
       // Pipes passed: the pipe sprite's cap as the icon, ×n beside it, as the game-over panel shows them.
       this.add.image(x - 46, cy + 20, 'pipe').setOrigin(0.5, 80 / 1280).setCrop(0, 0, 128, 160).setScale(40 / 128).setDepth(71);
       this.add.text(x - 14, cy + 20, `×${slot.pipesPassed}`, { ...STYLE, fontSize: '36px', color: '#c9b8dc', strokeThickness: 8 }).setOrigin(0, 0.5).setDepth(71);
-      // Crashes: the tiebreak, so it is on the panel. Symbols only, no string to translate.
-      this.add.text(x, cy + 90, `💀 ×${slot.deaths ?? 0}`, { ...STYLE, fontSize: '36px', color: '#c9b8dc', strokeThickness: 8 }).setOrigin(0.5).setDepth(71);
+      // Level wins (first over each line) beside the crashes (the tiebreak). Symbols only, no string to translate.
+      this.add.text(x - 80, cy + 90, `🏁 ×${slot.levelWins ?? 0}`, { ...STYLE, fontSize: '36px', color: '#c9b8dc', strokeThickness: 8 }).setOrigin(0.5).setDepth(71);
+      this.add.text(x + 80, cy + 90, `💀 ×${slot.deaths ?? 0}`, { ...STYLE, fontSize: '36px', color: '#c9b8dc', strokeThickness: 8 }).setOrigin(0.5).setDepth(71);
     });
     this.add.text(cx, cy + 160, t(this.locale, 'versusNotSaved'), { ...STYLE, fontSize: '26px', color: GOLD, strokeThickness: 6, wordWrap: { width: 560, useAdvancedWrap: true } }).setOrigin(0.5).setDepth(71);
     // Rematch (the left box) | Home (the right), on the game-over panel's row.

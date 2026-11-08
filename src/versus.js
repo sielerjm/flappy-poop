@@ -40,7 +40,7 @@ export function versusLayout(viewportW, viewportH, field) {
  * once the run is over (the rectum cleared), `won` when it cleared the rectum.
  */
 export function slotTemplate() {
-  return { device: null, score: 0, pipesPassed: 0, level: 1, distance: 0, y: 0, angle: 0, frame: 'poop', alpha: 1, deaths: 0, respawning: false, ended: false, won: false };
+  return { device: null, score: 0, pipesPassed: 0, level: 1, distance: 0, y: 0, angle: 0, frame: 'poop', alpha: 1, deaths: 0, levelWins: 0, respawning: false, ended: false, won: false };
 }
 
 /** A new match on the join screen: slot 0 is the left half (P1), slot 1 the right (P2). */

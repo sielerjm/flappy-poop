@@ -77,6 +77,8 @@ import {
   fartPeakMul,
   fartDuration,
   fartVolumeFrac,
+  boostPeakMul,
+  hintPulse,
   fartMul,
   fartFloat,
   hsvToRgb,
@@ -205,6 +207,8 @@ export class Play extends Phaser.Scene {
     this.distanceSinceSpawn = 0;
     this.fartDurationMs = 0;
     this.fartPeak = 1;
+    this.boostArmedAt = null; // a match's GO (startRace, beginLevel): the scene clock the start-boost window opened at
+    this.boost = null; // { elapsed, peak } while a start boost scrolls this half ahead
     this.charged = false;
     this.stinkFrame = 0; // which stink frame is up while charged (0 = A, 1 = B)
     this.centreNextGap = false; // first pair after a fart opens at the poop's float height
@@ -380,6 +384,20 @@ export class Play extends Phaser.Scene {
       .setOrigin(0.5)
       .setDepth(26)
       .setVisible(false);
+    // The tap prompt breathes under a soft white copy that swells and fades (syncLevelHint, hintPulse);
+    // a match's "Ready!" line has a smaller one under it: a second tap takes the ready back.
+    this.levelHintGlow = this.add
+      .text(W / 2, GAME_HEIGHT * 0.4 + 72, '', { ...TEXT_STYLE, fontSize: '36px', stroke: '#ffffff', strokeThickness: 10 })
+      .setShadow(0, 0, '#ffffff', 18, true, true)
+      .setOrigin(0.5)
+      .setDepth(25.9)
+      .setVisible(false);
+    this.hintPulseMs = 0;
+    this.levelSubHint = this.add
+      .text(W / 2, GAME_HEIGHT * 0.4 + 72 + 50, '', { ...TEXT_STYLE, fontSize: '26px', color: '#c9b8dc', strokeThickness: 8 })
+      .setOrigin(0.5)
+      .setDepth(26)
+      .setVisible(false);
     const [pauseTitle, pauseHint] = pauseBannerText(this.locale).split('\n');
     this.pauseText = this.add
       .text(W / 2, GAME_HEIGHT * 0.40, pauseTitle, { ...TEXT_STYLE, fontSize: '52px' })
@@ -523,7 +541,11 @@ export class Play extends Phaser.Scene {
    * Start tap: hide the ready UI, slide the poop from its ready spot to the
    * play position, then start(). Extra taps during the slide are ignored.
    */
-  launch() {
+  /**
+   * The start tap: the poop slides into place, then the run starts with a flap. `hold` (a match's
+   * countdown): it slides and waits there; the Versus GO starts it (startRace).
+   */
+  launch({ hold = false } = {}) {
     if (this.launching || this.state !== 'ready') return;
     if (this.versusOn && this.versusOffered()) {
       // Two-player mode: the Versus scene takes over (it stops this scene and launches the halves).
@@ -536,7 +558,7 @@ export class Play extends Phaser.Scene {
     this.bob.stop();
     this.setReadyUiVisible(false);
     this.setPoopTexture('poop');
-    this.tweens.add({
+    this.launchTween = this.tweens.add({
       targets: this.poop,
       x: this.poopX,
       y: GAME_HEIGHT / 2,
@@ -544,14 +566,34 @@ export class Play extends Phaser.Scene {
       duration: T.launchSlideMs,
       ease: 'Sine.easeInOut',
       onComplete: () => {
+        this.launchTween = null;
         this.launching = false;
-        if (this.state !== 'ready') return;
+        if (this.state !== 'ready' || hold) return;
         this.start();
         this.doFlap();
         // An overlay opened mid-slide must not leave the run playing under it.
         if (this.chromeArgs('tap').overlay) this.pauseRun();
       },
     });
+  }
+
+  /**
+   * A match's GO (Versus.go): the run starts now, from wherever the countdown's slide got the poop
+   * (snapped into place if it is still sliding), with the launch flap; the start-boost window opens.
+   */
+  startRace() {
+    if (this.state !== 'ready') return;
+    this.launchTween?.stop();
+    this.launchTween = null;
+    this.launching = false;
+    this.bob.stop();
+    this.setReadyUiVisible(false);
+    this.setPoopTexture('poop');
+    this.poop.setPosition(this.poopX, GAME_HEIGHT / 2).setScale(T.spriteDisplayScale);
+    this.start();
+    this.doFlap();
+    this.armStartBoost();
+    if (this.chromeArgs('tap').overlay) this.pauseRun();
   }
 
   setReadyUiVisible(visible) {
@@ -685,12 +727,36 @@ export class Play extends Phaser.Scene {
     this.levelTitle?.setText(title);
     // A match's break is a ready check: the hint is this player's state ("Tap when ready", then
     // "Ready! Waiting for P2…"); the shared count starts once both are ready (Versus.onLevelTap).
+    this.levelSubHint?.setText(t(this.locale, 'versusUnreadyHint'));
     if (this.match && this.levelBreak) {
       const ready = Boolean(this.versusHost()?.isReady?.(this));
       this.levelHint?.setText(ready ? t(this.locale, 'versusReadyWaiting').replace('{n}', String(this.player === 1 ? 2 : 1)) : t(this.locale, 'versusTapReady'));
     } else {
       this.levelHint?.setText(hint);
     }
+  }
+
+  /**
+   * Every frame: the level break's tap prompt ("Tap to continue", "Tap when ready") pulses with its
+   * glow copy (hintPulse); a match player who is ready instead gets the smaller "Tap again to
+   * un-ready" under "Ready! Waiting for P2…". Both follow the hint's own visibility.
+   */
+  syncLevelHint(delta) {
+    const hint = this.levelHint;
+    if (!hint || !this.levelHintGlow) return;
+    const ready = Boolean(this.match && this.levelBreak && this.versusHost()?.isReady?.(this));
+    this.levelSubHint.setVisible(hint.visible && ready);
+    if (!hint.visible || !this.levelBreak || ready) {
+      hint.setScale(1);
+      this.levelHintGlow.setVisible(false);
+      this.hintPulseMs = 0;
+      return;
+    }
+    this.hintPulseMs += delta;
+    const p = hintPulse(this.hintPulseMs, T);
+    hint.setScale(p.scale);
+    if (this.levelHintGlow.text !== hint.text) this.levelHintGlow.setText(hint.text);
+    this.levelHintGlow.setPosition(hint.x, hint.y).setScale(p.scale * p.glowScale).setAlpha(p.glowAlpha).setVisible(true);
   }
 
   /** The level break's hint line: Versus hides it through the beat and the count, and shows "Tap to continue" between. */
@@ -702,6 +768,40 @@ export class Play extends Phaser.Scene {
   beginLevel() {
     if (!this.levelBreak || this.state !== 'paused') return;
     this.resumePlay();
+    this.armStartBoost();
+  }
+
+  /** A match's GO: a flap within versus.startBoost.windowMs from now earns the start boost (tryStartBoost). */
+  armStartBoost() {
+    this.endBoost();
+    this.boostArmedAt = this.match ? this.time.now : null;
+  }
+
+  /**
+   * A player's flap (not the launch's own): the first one after GO, if it lands inside the window,
+   * starts the boost: the half scrolls versus.startBoost.distancePx further over durationMs
+   * (boostPeakMul on fartMul's surge) with the fart face. One chance per GO.
+   */
+  tryStartBoost() {
+    if (this.boostArmedAt == null) return false;
+    const inWindow = this.time.now - this.boostArmedAt <= T.versus.startBoost.windowMs;
+    this.boostArmedAt = null;
+    if (!inWindow || this.state !== 'playing' || this.effects.powerActive()) return false;
+    const b = T.versus.startBoost;
+    this.boost = { elapsed: 0, peak: boostPeakMul(b.distancePx, b.durationMs, this.diff.pipeSpeed) };
+    this.refreshPoopLook();
+    return true;
+  }
+
+  /** The boost is over (its time is up, a fart took over, the run stopped): the scroll back to 1 and the plain face. */
+  endBoost() {
+    if (!this.boost) return;
+    this.boost = null;
+    if (!this.effects.powerActive()) {
+      this.scrollMul = 1;
+      this.applyScroll();
+    }
+    if (this.state === 'playing' && !this.effects.powerActive()) this.refreshPoopLook();
   }
 
   /** Between levels: a real pause with the level banner, the poop gliding to mid-height and bobbing. */
@@ -1171,19 +1271,21 @@ export class Play extends Phaser.Scene {
         this.launch();
         break;
       case 'flap':
-        this.doFlap();
+        if (this.doFlap()) this.tryStartBoost();
         break;
       default:
         break;
     }
   }
 
+  /** A flap, when one is allowed (playing, no lockout, no fart); true when it flapped. */
   doFlap() {
-    if (this.state !== 'playing') return;
-    if (this.time.now < this.flapLockedUntil) return;
-    if (this.effects.powerActive()) return; // the fart carries the poop through the middle
+    if (this.state !== 'playing') return false;
+    if (this.time.now < this.flapLockedUntil) return false;
+    if (this.effects.powerActive()) return false; // the fart carries the poop through the middle
     this.poop.setVelocityY(T.flapVelocity);
     sfx.flap();
+    return true;
   }
 
   /**
@@ -1816,7 +1918,8 @@ export class Play extends Phaser.Scene {
    * keep it off the fart, dead and speech frames.
    */
   refreshPoopLook() {
-    const key = poopFrame({ charged: this.charged, stinkFrame: this.stinkFrame, vy: this.poop.body.velocity.y }, T);
+    // A start boost wears the fart face.
+    const key = this.boost ? 'poop-fart' : poopFrame({ charged: this.charged, stinkFrame: this.stinkFrame, vy: this.poop.body.velocity.y }, T);
     if (this.poop.texture.key !== key) this.setPoopTexture(key);
   }
 
@@ -1914,6 +2017,8 @@ export class Play extends Phaser.Scene {
       return;
     }
     if (this.state !== 'playing' || !this.effects.powerReady()) return;
+    this.boost = null; // a fart takes over from a start boost (its scroll and face)
+    this.boostArmedAt = null;
     this.endSweep(); // the fart's scroll owns every object from here
     this.setCharged(false);
     const snd = this.cache.audio.exists('fart-accelerate') ? this.sound.add('fart-accelerate', { volume: T.fartVolume }) : null;
@@ -2502,6 +2607,8 @@ export class Play extends Phaser.Scene {
    */
   endRun({ report = true } = {}) {
     this.closeShop({ silent: true });
+    this.boostArmedAt = null;
+    this.endBoost();
     this.endSweep(); // a death mid-sweep leaves the pairs in place, opaque
     this.state = 'dead';
     this.markHowToSeen(); // a finished run counts as having seen this build
@@ -2633,6 +2740,9 @@ export class Play extends Phaser.Scene {
    * tickRespawn carries it from here: the tumble, the glide, the blinks, then endRespawn.
    */
   startRespawn() {
+    this.boostArmedAt = null;
+    this.boost = null; // the world halts for the respawn; the face is the tumble's
+    this.scrollMul = 1;
     this.state = 'respawn';
     this.respawnElapsed = 0;
     this.respawnFrom = null;
@@ -2739,6 +2849,7 @@ export class Play extends Phaser.Scene {
     const dt = delta / 1000;
     this.rainbowMs += delta; // keeps cycling while paused: it is only colour
     this.applyRainbow();
+    this.syncLevelHint(delta); // the break's prompt pulses while paused too
     const scrolling = this.state === 'ready' || this.state === 'playing';
     if (scrolling) {
       for (const layer of this.bgLayers) layer.sprite.tilePositionX += this.scrollSpeed() * layer.parallax * dt;
@@ -2757,6 +2868,15 @@ export class Play extends Phaser.Scene {
         const float = fartFloat(this.effects.powerElapsed(), this.fartStartY, GAME_HEIGHT / 2, T);
         this.poop.y = float.y;
         this.poop.setAngle(float.angle);
+      } else if (this.boost) {
+        // The start boost: a short surge on the scroll (the world, the ghost's distance and all).
+        this.boost.elapsed += delta;
+        const D = T.versus.startBoost.durationMs;
+        if (this.boost.elapsed >= D) this.endBoost();
+        else {
+          this.scrollMul = fartMul(this.boost.elapsed, D, this.boost.peak);
+          this.applyScroll();
+        }
       }
       if (this.effects.endedPower()) this.endPower();
       if (this.graceLeftMs > 0) this.graceLeftMs = Math.max(0, this.graceLeftMs - delta);
