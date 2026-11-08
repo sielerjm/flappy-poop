@@ -1,11 +1,12 @@
 // Versus (split-screen two-player) match logic. Pure functions, NO Phaser/DOM:
 // the layout of two halves, the device claims on the join screen, the ghost of
-// the other player, the rival marker on the level bar, the catch-up draw table
-// for a trailing player's mystery box, and who won. The Versus scene and both
-// Play halves call these; tests/versus.test.js covers them.
+// the other player and the course distance it reads, the rival marker on the
+// level bar, the catch-up draw table for a trailing player's mystery box, the
+// respawn timeline, and who won. The Versus scene and both Play halves call
+// these; tests/versus.test.js covers them.
 
 import { GAME_HEIGHT } from './config.js';
-import { fieldWidth, levelProgress } from './logic.js';
+import { fieldWidth, levelProgress, levelFor, pipeSpacing } from './logic.js';
 
 /** The ready-screen toggle's emoji (two heads), beside the 🚽 one. */
 export const VERSUS_EMOJI = '👥';
@@ -128,6 +129,31 @@ export function ghostPlacement(me, other, poopX, t) {
   const visible = Math.abs(dx) <= v.ghostRangePx;
   const alpha = visible && !other.ended ? v.ghostAlpha * (1 - Math.abs(dx) / v.ghostRangePx) * (other.alpha ?? 1) : 0;
   return { visible, x: poopX + dx, y: other.y ?? 0, angle: other.angle ?? 0, frame: other.frame ?? 'poop', alpha };
+}
+
+/**
+ * Where pair `n` (0-based, in spawn order) sits on the course, in px from pair 0:
+ * each pair one pipeSpacing further than the one before, at the spacing of the
+ * earlier pair's level (so a level's finish line, pair levelEnd, lies one of that
+ * level's spacings after its last pair, where the line spawns).
+ */
+export function coursePairStart(n, t) {
+  const pairs = Math.max(0, Math.floor(n) || 0);
+  let x = 0;
+  for (let k = 0; k < pairs; k += 1) x += pipeSpacing(levelFor(k, t).level, t);
+  return x;
+}
+
+/**
+ * What a half's `distance` reads when pair `pair` is `anchorX − poopX` px ahead of
+ * its poop: the pair's course position less that lead. A half re-anchors its
+ * distance to this at every re-fill of its field, so the two halves' distances
+ * name the same place on the course and the ghost (which reads their difference)
+ * stands by the pipes the other player is at, whatever farts, crashes and skips
+ * did to the px each one scrolled. The run starts at −pipeLead on both halves.
+ */
+export function courseDistance(pair, anchorX, poopX, t) {
+  return coursePairStart(pair, t) - (anchorX - poopX);
 }
 
 /**

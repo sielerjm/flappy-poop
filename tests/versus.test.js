@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { FIELD, GAME_WIDTH, GAME_HEIGHT, TUNING as T } from '../src/config.js';
-import { fieldWidth, levelProgress, rollMystery, resolveMystery, MYSTERY_DRAWS, readyLayout, readyHit, padIntent } from '../src/logic.js';
+import { fieldWidth, levelProgress, rollMystery, resolveMystery, MYSTERY_DRAWS, readyLayout, readyHit, padIntent, pipeSpacing, levelEnd, pipeLead } from '../src/logic.js';
 import {
   versusAvailable,
   versusLayout,
@@ -20,6 +20,8 @@ import {
   catchUpDraws,
   respawnTotalMs,
   respawnPose,
+  coursePairStart,
+  courseDistance,
 } from '../src/versus.js';
 
 const V = T.versus;
@@ -54,6 +56,43 @@ test('versus knobs are sane: a landscape gate, a visible ghost, disjoint key gro
   assert.ok(Number.isInteger(r.blinkCycles) && r.blinkCycles >= 1 && r.blinkCycles <= 8, `blinkCycles ${r.blinkCycles}`);
   assert.ok(r.blinkAlpha >= 0 && r.blinkAlpha < 1, `blinkAlpha ${r.blinkAlpha}`);
   assert.ok(respawnTotalMs(T) <= 6000, `a respawn takes ${respawnTotalMs(T)} ms`);
+  assert.ok(V.levelSyncDelayMs >= 0 && V.levelSyncDelayMs <= 3000, `levelSyncDelayMs ${V.levelSyncDelayMs}`);
+});
+
+test('coursePairStart: pair 0 at 0, then one spacing per pair at the earlier pair\'s level, a finish line one spacing after its level\'s last pair', () => {
+  const s1 = pipeSpacing(1, T);
+  const s2 = pipeSpacing(2, T);
+  const s3 = pipeSpacing(3, T);
+  const end1 = levelEnd(1, T);
+  const end2 = levelEnd(2, T);
+  assert.equal(coursePairStart(0, T), 0);
+  assert.equal(coursePairStart(1, T), s1);
+  assert.equal(coursePairStart(end1 - 1, T), (end1 - 1) * s1, 'level 1\'s last pair');
+  assert.equal(coursePairStart(end1, T), end1 * s1, 'level 1\'s finish line (and level 2\'s first pair) one level-1 spacing on');
+  assert.equal(coursePairStart(end1 + 1, T), end1 * s1 + s2, 'then level 2\'s spacing');
+  assert.equal(coursePairStart(end2 + 2, T), end1 * s1 + (end2 - end1) * s2 + 2 * s3);
+  for (let n = 0; n < levelEnd(T.levels.lastLevel, T); n += 1) assert.ok(coursePairStart(n + 1, T) > coursePairStart(n, T), `pair ${n + 1} is further on than pair ${n}`);
+  assert.equal(coursePairStart(-3, T), 0, 'nothing before pair 0');
+  assert.equal(coursePairStart(2.7, T), coursePairStart(2, T), 'whole pairs');
+});
+
+test('courseDistance: a pair\'s course position less its lead on the poop; the same place reads the same from any pair of a stretch', () => {
+  const poopX = 288;
+  const lead = pipeLead(1152, T, FIELD);
+  assert.equal(courseDistance(0, poopX + lead, poopX, T), -lead, 'a run starts at −pipeLead');
+  const s1 = pipeSpacing(1, T);
+  // The same moment seen from pair 3 (400 px ahead) and from pair 4 (one spacing further): one place.
+  assert.equal(courseDistance(4, poopX + 400 + s1, poopX, T), courseDistance(3, poopX + 400, poopX, T));
+  // Across a level boundary: level 1's last pair and the line (one level-1 spacing later) agree.
+  const end1 = levelEnd(1, T);
+  assert.equal(courseDistance(end1, poopX + 100 + s1, poopX, T), courseDistance(end1 - 1, poopX + 100, poopX, T));
+  // Within level 2, the next pair along adds level 2's spacing.
+  const s2 = pipeSpacing(2, T);
+  assert.equal(courseDistance(end1 + 3, poopX + 50 + s2, poopX, T), courseDistance(end1 + 2, poopX + 50, poopX, T));
+  // Two halves at the same pair with the same lead read the same; a pair ahead reads further on.
+  assert.equal(courseDistance(12, 900, poopX, T), courseDistance(12, 900, poopX, T));
+  assert.ok(courseDistance(12, 900, poopX, T) > courseDistance(11, 900, poopX, T));
+  assert.ok(courseDistance(12, 800, poopX, T) > courseDistance(12, 900, poopX, T), 'the closer the pair, the further on the poop');
 });
 
 test('versusAvailable: landscape and tall enough; portrait, a phone on its side and bad input are refused', () => {

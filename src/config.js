@@ -259,6 +259,7 @@ export const TUNING = {
     },
     // A crash in a match does not end the run: the half halts for the tumble, the poop is eased back
     // to mid-screen, blinks (invulnerable, the world still halted), then plays on with a clear screen.
+    levelSyncDelayMs: 600, // ms between the second player reaching a level's finish line and the shared 3-2-1-GO that starts the next level for both
     respawn: {
       crashMs: 700, // ms of tumble after the hit (the world stands still from the hit on)
       glideMs: 700, // ms the poop takes to ease back to mid-screen
