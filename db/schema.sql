@@ -19,10 +19,10 @@
 -- Maintenance (SQL editor):
 --   remove a cheater or a ghost row:
 --     delete from public.scores where name = 'somebody';
---   raise the score cap (also raise it inside submit_score below and
---   LEADERBOARD.maxScore in src/config.js):
---     alter table public.scores drop constraint scores_score_check;
---     alter table public.scores add constraint scores_score_check check (score between 0 and 1000);
+--   raise the score cap: edit the CHECK below, the submit_score guard, and
+--   LEADERBOARD.maxScore in src/config.js to the same number, then paste this
+--   whole file again (the drop/add after the primary-key block updates a live
+--   table; create table if not exists alone would leave an old CHECK).
 --   wipe the board:
 --     truncate public.scores;
 
@@ -56,6 +56,11 @@ begin
   end if;
 end;
 $$;
+
+-- Score cap (LEADERBOARD.maxScore): re-applied on every run so a live table
+-- created under an older cap (e.g. 200) picks up the value in this file.
+alter table public.scores drop constraint if exists scores_score_check;
+alter table public.scores add constraint scores_score_check check (score between 0 and 1000);
 
 create index if not exists scores_board on public.scores (score desc, updated_at asc);
 
