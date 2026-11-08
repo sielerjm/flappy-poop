@@ -9,7 +9,6 @@ export const CURRENT_VERSION = 1;
 export const SAVE_KEY = 'flappyPoop.save'; // localStorage key
 export const SCHEMA = 3; // local storage shape version (independent of the wire format); 1 stored top as numbers, 2 had no level
 export const MAX_TOP = 6;
-export const COINS_MAX = 99999; // the most coins a save (and a save code) holds
 export const NAME_MIN = 1;
 export const NAME_MAX = 16;
 export const EMPTY_STATE = Object.freeze({ id: null, name: '', top: Object.freeze([]), exportedAt: null });
@@ -145,26 +144,7 @@ function normalizeState(raw) {
   if (ok) out.name = name;
   out.top = normalizeTop(raw.top);
   if (Number.isInteger(raw.exportedAt)) out.exportedAt = raw.exportedAt;
-  const coins = normalizeCoins(raw.coins);
-  if (coins > 0) out.coins = coins; // kept only when above 0, so a coinless state keeps its old shape
   return out;
-}
-
-/** A coin balance from a stored / wire value: a whole number 0–COINS_MAX; anything else is 0. */
-function normalizeCoins(v) {
-  return Number.isInteger(v) && v > 0 ? Math.min(v, COINS_MAX) : 0;
-}
-
-/** The saved coin balance (0 when the state has none). */
-export function coinBalance(state) {
-  return normalizeCoins(state?.coins);
-}
-
-/** New state with the coin balance set to `n` (clamped; the key dropped at 0). */
-export function withCoins(state, n) {
-  const { coins: _old, ...rest } = normalizeState(state);
-  const coins = normalizeCoins(Math.floor(n));
-  return coins > 0 ? { ...rest, coins } : rest;
 }
 
 /**
@@ -185,22 +165,16 @@ export function isNewTop(state, score) {
   return topScores(recordScore(state, score)).includes(score);
 }
 
-/**
- * Pure merge used by importCode: pasted name and id win; scores are unioned; the coin balance is
- * the larger of the two (loading the same code twice can never multiply coins).
- */
+/** Pure merge used by importCode: pasted name and id win; scores are unioned. */
 export function merge(local, incoming) {
   const a = normalizeState(local);
   const b = normalizeState(incoming);
-  const out = {
+  return {
     id: b.id ?? a.id,
     name: b.name,
     top: normalizeTop([...a.top, ...b.top]),
     exportedAt: b.exportedAt,
   };
-  const coins = Math.max(coinBalance(a), coinBalance(b));
-  if (coins > 0) out.coins = coins;
-  return out;
 }
 
 /** Full line: "Name · 🚽 41 · 37 · 30", "Name" when no scores, "" when no name. */
@@ -272,8 +246,7 @@ export function ensureId(state, storage = globalThis.localStorage) {
  * above 1, so codes from before levels existed stay byte-identical. `h` (2026-11-07) is the
  * device setting for the bean button's side: written only as 'l' for a left-handed player, so
  * every right-handed code stays byte-identical; it is applied to the settings on import and is
- * not part of SaveState. `c` (2026-11-08) is the saved coin balance: written only when above 0, so
- * every coinless code stays byte-identical; 0–COINS_MAX on read.
+ * not part of SaveState.
  */
 function serialize(state, { hand = null } = {}) {
   const out = {
@@ -284,7 +257,6 @@ function serialize(state, { hand = null } = {}) {
   };
   if (state.top.some((e) => e.level > 1)) out.l = state.top.map((e) => e.level);
   if (hand === 'left') out.h = 'l';
-  if (coinBalance(state) > 0) out.c = coinBalance(state);
   out.t = state.exportedAt;
   return out;
 }
@@ -307,12 +279,10 @@ function parseV1(json) {
     }
   }
   if (json.h !== undefined && json.h !== 'l' && json.h !== 'r') throw new Error('v1: bad hand');
-  if (json.c !== undefined && !(Number.isInteger(json.c) && json.c >= 0 && json.c <= COINS_MAX)) throw new Error('v1: bad coins');
   const exportedAt = Number.isInteger(json.t) ? json.t : null;
   const top = normalizeTop(json.s.map((score, k) => ({ score, toilet: json.p?.[k] === 1, level: json.l?.[k] ?? 1 })));
   const hand = json.h === 'l' ? 'left' : json.h === 'r' ? 'right' : null; // not SaveState: importCode hands it back beside the state
-  const coins = json.c > 0 ? { coins: json.c } : {};
-  return { id: json.i, name, top, exportedAt, ...coins, hand };
+  return { id: json.i, name, top, exportedAt, hand };
 }
 
 /** Parsers for every version ever shipped. Never delete one. */

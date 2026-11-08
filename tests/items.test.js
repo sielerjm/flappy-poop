@@ -726,3 +726,28 @@ test('skip popup: gold +pairs × pipe points, doubled under the postbiotic', () 
   assert.deepEqual(scorePopup('skip', T, 2, 45), { text: '+90', color: T.mystery.color });
   assert.deepEqual(scorePopup('skip', T, 1, 12), { text: '+12', color: T.mystery.color });
 });
+
+test('clearPowerups: a death takes the beans, the probiotic stack and a postbiotic, and stops a fart; coins stay', () => {
+  const fx = createEffects(T);
+  fx.addBean();
+  fx.addBean();
+  fx.applyProbiotic();
+  fx.applyFiber();
+  fx.addCoins(7);
+  assert.ok(fx.beans() === 2 && fx.hasProbiotic() && fx.hasPostbiotic() && fx.multiplier() > 1);
+  fx.clearPowerups();
+  assert.equal(fx.beans(), 0);
+  assert.equal(fx.powerReady(), false, 'no fart ready');
+  assert.equal(fx.hasProbiotic(), false);
+  assert.equal(fx.hasPostbiotic(), false);
+  assert.equal(fx.multiplier(), 1);
+  assert.equal(fx.pipesLeft(), 0);
+  assert.equal(fx.coins(), 7, 'coins are not a power-up');
+  const f2 = createEffects(T);
+  for (let i = 0; i < 3; i += 1) f2.addBean();
+  f2.activatePower(1000);
+  assert.equal(f2.powerActive(), true);
+  f2.clearPowerups();
+  assert.equal(f2.powerActive(), false, 'a running fart stops');
+  assert.equal(f2.endedPower(), false, 'without firing the end-of-power hook');
+});

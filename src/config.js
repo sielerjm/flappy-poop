@@ -36,8 +36,8 @@ export const TUNING = {
   hudProbioticSize: 96, // logical px; HUD icon uses setDisplaySize
   hudProbioticPulse: { scale: 1.1, ms: 600 }, // the probiotic / postbiotic HUD icon breathes 1 → scale and back every ms while its count runs; it grows hudProbioticSize × (scale − 1) / 2 per side, which must stay under hudRightLayout's 8 px gap to the count (tests/tuning.test.js)
   hudScoreY: 116, // px centre line of the 80 px score (and the 🚽 beside it): below the progress bar with air between
-  // The coin purse: a second row under the bean counter (y 156, 56 px icon) at the chrome column's left, px from the column's left edge.
-  hudCoin: { y: 216, iconX: 72, textX: 108, iconPx: 56, fontPx: 36 },
+  // The inventory at the chrome column's top left: coin ×n, then bean ×n (each row only while above 0).
+  hudInventory: { y0: 156, pitch: 60, iconX: 72, textX: 108, iconPx: 56, fontPx: 36 }, // px: the inventory rows (coins, then beans) stack down from y0 one pitch apart, only the rows shown; x from the chrome column's left edge
   pipePoints: 1, // points per pipe pair passed (× the postbiotic multiplier)
   maxFallAngle: 90, // degrees nose-down at terminal fall
   maxRiseAngle: -25, // degrees nose-up right after a flap
@@ -160,6 +160,7 @@ export const TUNING = {
     postbioticMultiplier: 2, // × on pipes and fiber while a postbiotic runs (fiber eaten with a probiotic up)
     itemRadius: 48, // px circular hitbox = half the 96 logical-px sprite (whole drawing)
     weights: { fiber: 3, probiotic: 2, bacteria: 4 },
+    stillPulse: { amount: 0.06, periodMs: 1200 }, // a pickup holding still (no bob) pulses its drawing by ±amount of its size each periodMs; the hitbox never changes
     fiberPeriodMs: 3000, // ms for one full up-and-down bob of a fiber between pipe pairs (beans use beans.travelPeriodMs)
     moveFromLevel: 3, // from this level probiotic / bacteria move up and down inside their gap
     bandMoveFromLevel: 2, // from this level fiber and beans bob between the pairs; before it they hold still, midway between the two gaps
@@ -204,7 +205,7 @@ export const TUNING = {
   },
   // The level-break shop (the 💰 under the banner): coins buy one row at a time.
   shop: {
-    prices: { fiber: 2, bean: 6, superBean: 16, mystery: 5 }, // coins; superBean fills the bag to beans.superBeans (a super fart ready); mystery opens a box on the plain draw table
+    prices: { fiber: 1, bean: 6, superBean: 16, mystery: 5 }, // coins; superBean fills the bag to beans.superBeans (a super fart ready); mystery opens a box on the plain draw table
     disabledAlpha: 0.35, // 0–1 alpha of a row the purse cannot pay for, or a bean row with the bag full
     panelInMs: 180, // ms the panel scales in
   },
@@ -277,6 +278,7 @@ export const TUNING = {
     },
     // A crash in a match does not end the run: the half halts for the tumble, the poop is eased back
     // to mid-screen, blinks (invulnerable, the world still halted), then plays on with a clear screen.
+    crashCoinKeep: 0.9, // 0–1 share of a player's coins a crash leaves them, rounded down (15 → 13, 5 → 4, 1 → 0)
     levelSyncDelayMs: 600, // ms after the second player reaches a level's finish line before a tap can start the shared 3-2-1-GO ("Tap to continue" shows then), so the arriving player's last flap does not count
     respawn: {
       crashMs: 700, // ms of tumble after the hit (the world stands still from the hit on)

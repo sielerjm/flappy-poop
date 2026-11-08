@@ -9,9 +9,6 @@ import {
   SCHEMA,
   PARSERS,
   MAX_TOP,
-  COINS_MAX,
-  coinBalance,
-  withCoins,
   TOILET_EMOJI,
   loadLocal,
   saveLocal,
@@ -391,56 +388,6 @@ test('save codes carry levels as an optional l key: round trip, absent on old co
     const sig = await buildCode(1, { i: state.id, n: 'Lev', s: [41, 20], p: [0, 1], l: bad, t: NOW });
     const r = await importCode(sig, { storage, local: { id: null, name: '', top: [], exportedAt: null } });
     assert.equal(r.ok, false, `l = ${JSON.stringify(bad)}`);
-    assert.equal(r.error, 'unrecognised');
-  }
-});
-
-test('coins: kept in the state only when above 0, clamped, and saved and loaded with it', () => {
-  assert.equal(coinBalance({ id: null, name: '', top: [], exportedAt: null }), 0, 'an old save has none');
-  assert.equal('coins' in loadLocal(fakeStorage()), false, 'an empty save keeps its old shape');
-  for (const bad of [-3, 1.5, '7', null, NaN]) assert.equal(coinBalance({ coins: bad }), 0, `coins = ${bad}`);
-  assert.equal(coinBalance({ coins: COINS_MAX + 50 }), COINS_MAX, 'clamped');
-  const s = withCoins(alice(), 12);
-  assert.equal(s.coins, 12);
-  assert.equal('coins' in withCoins(s, 0), false, 'a balance of 0 drops the key');
-  assert.equal(withCoins(s, 3.9).coins, 3, 'whole coins');
-  const storage = fakeStorage();
-  saveLocal(withCoins(alice(), 25), storage);
-  assert.equal(coinBalance(loadLocal(storage)), 25, 'a saved balance comes back');
-  assert.equal(recordScore(withCoins(alice(), 9), 50).coins, 9, 'a recorded run keeps the balance');
-});
-
-test('coins: merge keeps the larger balance, so loading the same code twice never multiplies them', () => {
-  const local = withCoins({ id: newId(), name: 'A', top: [], exportedAt: null }, 40);
-  const incoming = withCoins({ id: newId(), name: 'B', top: [], exportedAt: NOW }, 15);
-  assert.equal(merge(local, incoming).coins, 40);
-  assert.equal(merge(incoming, local).coins, 40);
-  assert.equal(merge(merge(local, incoming), incoming).coins, 40, 'again: still 40');
-  assert.equal('coins' in merge({ id: null, name: '', top: [], exportedAt: null }, { id: newId(), name: 'C', top: [], exportedAt: NOW }), false, 'none on either side: none after');
-});
-
-test('save codes carry coins as an optional c key: written only when above 0, round trip, rejected when malformed', async () => {
-  const storage = fakeStorage();
-  const state = withCoins({ id: newId(), name: 'Kern', top: [{ score: 41, toilet: false, level: 1 }], exportedAt: null }, 37);
-  const code = await exportCode(state, { now: () => NOW, storage });
-  const payload = JSON.parse(new TextDecoder().decode(b64urlDecode(code.split('.')[1])));
-  assert.equal(payload.c, 37);
-  assert.deepEqual(Object.keys(payload), ['i', 'n', 's', 'p', 'c', 't'], 'key order fixed, c before t');
-  const res = await importCode(code, { storage, local: { id: null, name: '', top: [], exportedAt: null } });
-  assert.equal(res.ok, true);
-  assert.equal(res.state.coins, 37);
-  const poorer = await importCode(code, { storage, local: withCoins({ id: null, name: '', top: [], exportedAt: null }, 80) });
-  assert.equal(poorer.state.coins, 80, 'a richer device keeps its balance');
-  // No coins: no c key at all, so every coinless code stays byte-identical.
-  const plainCode = await exportCode({ ...state, coins: 0 }, { now: () => NOW, storage });
-  const plainPayload = JSON.parse(new TextDecoder().decode(b64urlDecode(plainCode.split('.')[1])));
-  assert.deepEqual(Object.keys(plainPayload), ['i', 'n', 's', 'p', 't']);
-  const old = await importCode(plainCode, { storage, local: { id: null, name: '', top: [], exportedAt: null } });
-  assert.equal('coins' in old.state, false, 'a code without c brings no coins');
-  for (const bad of [-1, 1.5, 'x', COINS_MAX + 1]) {
-    const sig = await buildCode(1, { i: state.id, n: 'Kern', s: [41], p: [0], c: bad, t: NOW });
-    const r = await importCode(sig, { storage, local: { id: null, name: '', top: [], exportedAt: null } });
-    assert.equal(r.ok, false, `c = ${JSON.stringify(bad)}`);
     assert.equal(r.error, 'unrecognised');
   }
 });

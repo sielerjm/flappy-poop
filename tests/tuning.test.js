@@ -212,12 +212,23 @@ test('coins: half as common as a box, the shop prices, the sound volumes and the
   assert.equal(T.coin.radius, T.items.itemRadius * T.coin.scale, 'the hitbox is the whole drawing, at the kernel\'s own size');
   assert.ok(T.coin.firstAfterPipePx >= T.pipeWidth / 2 + T.coin.radius, 'level 1\'s kernel sits clear of the last pipe');
   const p = T.shop.prices;
-  assert.deepEqual(p, { fiber: 2, bean: 6, superBean: 16, mystery: 5 });
+  assert.deepEqual(p, { fiber: 1, bean: 6, superBean: 16, mystery: 5 });
   assert.ok(p.superBean > p.bean && p.superBean <= p.bean * T.beans.superBeans, `super bean ${p.superBean} vs bean ${p.bean}`);
   for (const k of ['coinVolume', 'coinSpendVolume', 'shopVolume']) assert.ok(T[k] > 0 && T[k] <= 1, `${k} ${T[k]}`);
   assert.ok(T.shop.disabledAlpha > 0 && T.shop.disabledAlpha < 1, `disabledAlpha ${T.shop.disabledAlpha}`);
   assert.ok(T.shop.panelInMs >= 60 && T.shop.panelInMs <= 600, `panelInMs ${T.shop.panelInMs}`);
-  const h = T.hudCoin;
-  assert.ok(h.y - h.iconPx / 2 >= 156 + 56 / 2, `the purse row (top ${h.y - h.iconPx / 2}) clears the bean row (bottom 184)`);
+  const h = T.hudInventory;
+  assert.ok(h.y0 - h.iconPx / 2 > T.levels.barY + T.levels.barHeight / 2, `the top row (top ${h.y0 - h.iconPx / 2}) sits under the level bar`);
+  assert.ok(h.pitch >= h.iconPx, `rows ${h.pitch} px apart never overlap their ${h.iconPx} px icons`);
   assert.ok(h.iconPx <= T.hudProbioticSize && h.textX > h.iconX + h.iconPx / 2 - 8, 'icon then count, left to right');
+  assert.ok(T.versus.crashCoinKeep > 0 && T.versus.crashCoinKeep < 1, `crashCoinKeep ${T.versus.crashCoinKeep}`);
+});
+
+test('the still pulse: a slight breath, slow enough to read, never touching a neighbour', () => {
+  const p = T.items.stillPulse;
+  assert.ok(p.amount > 0 && p.amount <= 0.1, `amount ${p.amount}`);
+  assert.ok(p.periodMs >= 600 && p.periodMs <= 3000, `periodMs ${p.periodMs}`);
+  // A pulsed 96 px pickup grows by amount × 48 px a side; the closest neighbour (a pipe's edge from a gap item's
+  // centre) is at least gapMargin away.
+  assert.ok(96 * (1 + p.amount) / 2 < 48 + T.gapMargin, 'the pulse stays within the gap margin');
 });

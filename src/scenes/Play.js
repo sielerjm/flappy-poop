@@ -5,6 +5,9 @@ import {
   centredGapY,
   hasPassed,
   scoreAfterDeath,
+  crashCoins,
+  inventoryRows,
+  stillPulseScale,
   angleForVelocity,
   resumeFlapVelocity,
   HANDS,
@@ -85,7 +88,7 @@ import {
   padIntent,
 } from '../logic.js';
 import { t, pauseBannerText, levelBannerText, levelLabel, initialLocale, isLocale, profileButtonText, coinLabel } from '../i18n.js';
-import { loadLocal, saveLocal, ensureId, recordScore, coinBalance, withCoins, TOILET_EMOJI } from '../save.js';
+import { loadLocal, saveLocal, ensureId, recordScore, TOILET_EMOJI } from '../save.js';
 import { unlock, attachGame, setMuted, isMuted, sfx } from '../sound.js';
 import { createTray } from '../ui/tray.js';
 import { createFocus } from '../ui/focus.js';
@@ -312,15 +315,14 @@ export class Play extends Phaser.Scene {
     this.probioticHud = this.add.container(0, 156, [this.probioticIcon]).setDepth(20).setVisible(false);
     this.probioticTween = null;
     this.probioticText = this.add.text(0, 156, '', { ...TEXT_STYLE, fontSize: '40px' }).setOrigin(1, 0.5).setDepth(20).setVisible(false);
-    // Bean counter (left of the HUD): bean ×n until the power is spent.
-    this.beanIcon = this.add.image(this.col.x + 72, 156, 'bean').setDisplaySize(56, 56).setDepth(20).setVisible(false);
-    this.beanText = this.add.text(this.col.x + 108, 156, '', { ...TEXT_STYLE, fontSize: '36px' }).setOrigin(0, 0.5).setDepth(20).setVisible(false);
-    // Coin purse (hudCoin): a second row under the bean counter, coin ×n while any are held.
-    const hc = T.hudCoin;
-    this.coinIcon = this.add.image(this.col.x + hc.iconX, hc.y, 'coin').setDisplaySize(hc.iconPx, hc.iconPx).setDepth(20).setVisible(false);
-    this.coinText = this.add.text(this.col.x + hc.textX, hc.y, '', { ...TEXT_STYLE, fontSize: `${hc.fontPx}px` }).setOrigin(0, 0.5).setDepth(20).setVisible(false);
+    // The inventory at the top left (hudInventory): coin ×n, then bean ×n, each row only while above 0,
+    // stacked from the top (inventoryRows) and placed by refreshInventory.
+    const hi = T.hudInventory;
+    this.coinIcon = this.add.image(this.col.x + hi.iconX, hi.y0, 'coin').setDisplaySize(hi.iconPx, hi.iconPx).setDepth(20).setVisible(false);
+    this.coinText = this.add.text(this.col.x + hi.textX, hi.y0, '', { ...TEXT_STYLE, fontSize: `${hi.fontPx}px` }).setOrigin(0, 0.5).setDepth(20).setVisible(false);
+    this.beanIcon = this.add.image(this.col.x + hi.iconX, hi.y0, 'bean').setDisplaySize(hi.iconPx, hi.iconPx).setDepth(20).setVisible(false);
+    this.beanText = this.add.text(this.col.x + hi.textX, hi.y0, '', { ...TEXT_STYLE, fontSize: `${hi.fontPx}px` }).setOrigin(0, 0.5).setDepth(20).setVisible(false);
     this.kernel = null; // the level's guaranteed kernel (armKernel)
-    this.refreshCoinHud(); // the home screen shows the saved balance
     this.readyTitle = this.add
       .text(this.readyBoxes.title.x, this.readyBoxes.title.y, t(this.locale, 'readyTitle'), { ...TEXT_STYLE, fontSize: `${T.readyTitlePx}px` })
       .setOrigin(0.5)
@@ -579,9 +581,8 @@ export class Play extends Phaser.Scene {
     this.refreshTestBadge();
     this.collected = { fiber: 0, probiotic: 0, postbiotic: 0, bacteria: 0, bean: 0, mystery: 0, coin: 0 };
     this.mysteryPair = this.course.mysteryPair(); // the pair the guaranteed first box (early level 3) rides after
-    // The purse: a single-player run starts with the saved coins; a match or a test run starts empty and saves nothing.
+    // The purse: every run starts empty (coins last across the levels of one run only).
     this.effects.spendCoins(this.effects.coins());
-    if (this.savesCoins()) this.effects.addCoins(coinBalance(this.save));
     this.refreshCoinHud();
     this.armKernel();
     this.distance = 0;
@@ -846,7 +847,6 @@ export class Play extends Phaser.Scene {
   setSaveState(state) {
     this.save = state;
     this.refreshProfile();
-    this.refreshCoinHud(); // a loaded code may bring coins
   }
 
   /**
@@ -1716,11 +1716,22 @@ export class Play extends Phaser.Scene {
   }
 
   refreshBeanHud() {
-    const n = this.effects.beans();
-    const show = n > 0;
-    this.beanIcon.setVisible(show);
-    this.beanText.setVisible(show);
-    if (show) this.beanText.setText(`×${n}`);
+    this.refreshInventory();
+  }
+
+  /** The inventory rows: coin ×n over bean ×n, each only while above 0, stacked from the top (inventoryRows). */
+  refreshInventory() {
+    const coins = this.effects.coins();
+    const beans = this.effects.beans();
+    const rows = inventoryRows({ coins, beans }, T);
+    for (const [icon, text, y, n] of [[this.coinIcon, this.coinText, rows.coin, coins], [this.beanIcon, this.beanText, rows.bean, beans]]) {
+      const show = y != null;
+      icon.setVisible(show);
+      text.setVisible(show);
+      if (!show) continue;
+      icon.setY(y);
+      text.setY(y).setText(`×${n}`);
+    }
   }
 
   /** Swap the player texture and rebuild the circle body for that frame size. */
@@ -2083,19 +2094,13 @@ export class Play extends Phaser.Scene {
   takeCoins(n) {
     this.effects.addCoins(n);
     this.collected.coin += n;
-    this.persistCoins();
     this.refreshCoinHud();
     this.playSample('coin', T.coinVolume, sfx.pickup);
   }
 
-  /** The purse under the bean counter: coin ×n while any are held. */
+  /** The purse row (over the bean row): coin ×n while any are held. */
   refreshCoinHud() {
-    // On the home screen the saved balance (a match half has none); in a run the purse.
-    const n = this.state === 'ready' ? (this.match ? 0 : coinBalance(this.save)) : this.effects.coins();
-    const show = n > 0;
-    this.coinIcon.setVisible(show);
-    this.coinText.setVisible(show);
-    if (show) this.coinText.setText(`×${n}`);
+    this.refreshInventory();
   }
 
   /**
@@ -2136,21 +2141,9 @@ export class Play extends Phaser.Scene {
       const draw = rollMystery(this.match ? this.rngDraw : this.course.rng, T);
       this.openMystery(resolveMystery(draw, { beans: this.effects.beans(), pairsLeft: 0 }, T), opts.x, opts.y, opts);
     }
-    this.persistCoins();
     this.refreshCoinHud();
     this.playSample('coin-spend', T.coinSpendVolume, sfx.pickup);
     return true;
-  }
-
-  /** Coins carry over between runs: a single-player, non-test run (a match and a test run record nothing). */
-  savesCoins() {
-    return !this.match && !this.runIsTest;
-  }
-
-  /** Keep the purse in the save after every change, so nothing is lost if the game closes mid-run. */
-  persistCoins() {
-    if (!this.savesCoins()) return;
-    this.save = saveLocal(withCoins(this.save, this.effects.coins()));
   }
 
   /**

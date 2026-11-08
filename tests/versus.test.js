@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { FIELD, GAME_WIDTH, GAME_HEIGHT, TUNING as T } from '../src/config.js';
-import { fieldWidth, levelProgress, rollMystery, resolveMystery, MYSTERY_DRAWS, readyLayout, readyHit, padIntent, pipeSpacing, levelEnd, pipeLead } from '../src/logic.js';
+import { fieldWidth, levelProgress, rollMystery, resolveMystery, MYSTERY_DRAWS, readyLayout, readyHit, padIntent, pipeSpacing, levelEnd, pipeLead, crashCoins, inventoryRows, stillPulseScale } from '../src/logic.js';
 import {
   versusAvailable,
   versusLayout,
@@ -356,5 +356,35 @@ test('padIntent on the versus join / result screen: A selects (or presses the ri
     for (const action of ['pause', 'power']) assert.deepEqual(intent({ action, state }), { do: 'ignore' }, `${state} ${action}`);
     for (const dir of ['up', 'down', 'left', 'right']) assert.deepEqual(intent({ action: `nav:${dir}`, state }), { do: 'move', dir });
     assert.deepEqual(intent({ action: 'select', state, savePanelOpen: true }), { do: 'ignore' });
+  }
+});
+
+test('crashCoins: a two-player crash keeps 90 % of the coins, rounded down', () => {
+  assert.equal(crashCoins(15, T), 13);
+  assert.equal(crashCoins(25, T), 22);
+  assert.equal(crashCoins(10, T), 9);
+  assert.equal(crashCoins(5, T), 4);
+  assert.equal(crashCoins(1, T), 0, 'one coin is lost to a crash');
+  assert.equal(crashCoins(0, T), 0);
+  assert.equal(crashCoins(-3, T), 0);
+});
+
+test('inventoryRows: coins on top, beans under them, only the rows shown, no empty slot', () => {
+  const h = T.hudInventory;
+  assert.deepEqual(inventoryRows({ coins: 3, beans: 2 }, T), { coin: h.y0, bean: h.y0 + h.pitch });
+  assert.deepEqual(inventoryRows({ coins: 0, beans: 2 }, T), { coin: null, bean: h.y0 }, 'beans alone take the top row');
+  assert.deepEqual(inventoryRows({ coins: 4, beans: 0 }, T), { coin: h.y0, bean: null });
+  assert.deepEqual(inventoryRows({}, T), { coin: null, bean: null });
+});
+
+test('stillPulseScale: 1 at the start and each half period, 1 ± amount at the quarters', () => {
+  const p = T.items.stillPulse;
+  assert.equal(stillPulseScale(0, T), 1);
+  assert.ok(Math.abs(stillPulseScale(p.periodMs / 4, T) - (1 + p.amount)) < 1e-9);
+  assert.ok(Math.abs(stillPulseScale((3 * p.periodMs) / 4, T) - (1 - p.amount)) < 1e-9);
+  assert.ok(Math.abs(stillPulseScale(p.periodMs / 2, T) - 1) < 1e-9);
+  for (let ms = 0; ms < 5000; ms += 37) {
+    const k = stillPulseScale(ms, T);
+    assert.ok(k >= 1 - p.amount - 1e-9 && k <= 1 + p.amount + 1e-9);
   }
 });

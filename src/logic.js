@@ -655,6 +655,34 @@ export function pipePoints(t, mult = 1) {
  * never bacteria or the death penalty.
  * Nominal: bacteria and death always read the full loss even when the 0 floor clamps it.
  */
+/** The coins a two-player crash leaves: versus.crashCoinKeep of them, rounded down (15 → 13, 5 → 4, 1 → 0). */
+export function crashCoins(coins, t) {
+  return Math.floor(Math.max(0, Math.floor(coins) || 0) * t.versus.crashCoinKeep);
+}
+
+/**
+ * Where the inventory rows sit (hudInventory): the rows shown stack down from y0 one pitch
+ * apart in the order coins, beans, so there is never an empty slot. { coin, bean }: y or null.
+ */
+export function inventoryRows({ coins = 0, beans = 0 } = {}, t) {
+  const h = t.hudInventory;
+  const out = { coin: null, bean: null };
+  let y = h.y0;
+  for (const [key, n] of [['coin', coins], ['bean', beans]]) {
+    if (n > 0) {
+      out[key] = y;
+      y += h.pitch;
+    }
+  }
+  return out;
+}
+
+/** A still pickup's pulse: the factor on its display scale `elapsed` ms after it spawned (1 ± items.stillPulse.amount). */
+export function stillPulseScale(elapsed, t) {
+  const p = t.items.stillPulse;
+  return 1 + p.amount * Math.sin((2 * Math.PI * Math.max(0, elapsed || 0)) / p.periodMs);
+}
+
 export function scorePopup(kind, t, mult = 1, pairs = 0, level = 1) {
   if (kind === 'pipe') return { text: `+${pipePoints(t, mult)}`, color: t.popup.pipeColor };
   if (kind === 'skip') return { text: `+${pairs * pipePoints(t, mult)}`, color: t.mystery.color };
@@ -1162,6 +1190,15 @@ export function createEffects(t) {
       powerJustEnded = false;
       powerClock = powerDuration;
       return true;
+    },
+    /** A death: every power-up goes (the beans, so no fart or super fart ready; the probiotic stack and a postbiotic; a running fart). Coins stay. */
+    clearPowerups() {
+      powerOn = false;
+      powerJustEnded = false;
+      powerClock = powerDuration;
+      beanCount = 0;
+      probioticPipesLeft = 0;
+      postbiotic = false;
     },
     /** True once, right after the power ends. */
     endedPower() {
