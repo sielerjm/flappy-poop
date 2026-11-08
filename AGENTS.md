@@ -99,14 +99,20 @@ slot), then counts 3-2-1-GO and launches both halves together. Both halves run o
 in for the score gates, beans spawning into a full bag), while each player's mystery **draws** come
 from their own stream (`rngDraw`) on the **catch-up** table (`catchUpTier` / `catchUpDraws`: 10–24
 pipes behind doubles the bean draws, 25+ forces bean3 = a super fart ready). Each half publishes its
-slot every frame (`publishSlot`: score, pipes, level, distance scrolled, y, angle, frame, alpha) and
-shows the other as a faded **ghost** in its lumen at the distance gap (`ghostPlacement`) and as a
+slot every frame (`publishSlot`: score, pipes, level, distance, y, angle, frame, alpha; the distance is
+the half's place on the course: the scroll, re-anchored at the end of every re-fill and after a skip by
+`rebaseDistance` on `courseDistance`, since a fart, a respawn, a skip or a re-fill's fixed lead would
+otherwise drift it from the pipes) and shows the other as a faded **ghost** in its lumen at the
+distance gap (`ghostPlacement`) and as a
 **marker** on its level bar (`rivalMarker`). A crash never ends a match run: it is a **respawn**
 (`startRespawn` / `tickRespawn` / `endRespawn` on `respawnPose`, state `'respawn'`): the half's world
 halts, the score loses `versus.scoring.deathPenaltyPerLevel` × level (floored at 0, the −N popup), the
 slot counts the crash, the poop tumbles, everything not yet credited is cleared, it glides back to
 mid-screen, blinks, and plays on with the next pair at mid-height. Clearing a level earns
-`versus.scoring.levelClearBonus`. Level breaks stay per half; the pause key / ⏸ / Menu toggle the
+`versus.scoring.levelClearBonus`. Levels start together: the first player over a finish line waits in
+its level break under "Waiting for P2…" (no shade, a tap does not end it); once both are there
+`Versus.onLevelReached` runs the match-start 3-2-1-GO (`runCountdown`, holding while an overlay is open)
+and `beginLevel` ends both breaks in the same frame. The pause key / ⏸ / Menu toggle the
 **shared pause** (`Versus.setPaused`, remembering which halves it paused so a break is never ended by
 the other player; a respawning half's clock stops with it). Chrome decisions in a match read
 `chromeState()` (the match's state, not the half's), so a finished or respawning half still pauses and
@@ -177,8 +183,9 @@ src/
                             ghostAlpha / ghostFadeMs, barRivalPx / barRivalAlpha,
                             dividerPx, catchUp (superBehind, beanBehindMin,
                             beanOddsMul), scoring (deathPenaltyPerLevel,
-                            levelClearBonus), respawn (crashMs, glideMs, blinkMs,
-                            blinkCycles, blinkAlpha).
+                            levelClearBonus), levelSyncDelayMs (the beat before
+                            the shared level count), respawn (crashMs, glideMs,
+                            blinkMs, blinkCycles, blinkAlpha).
                             Pure data, Node-safe.
   logic.js                  Pure functions, NO Phaser/DOM: field (fieldWidth,
                             uiColumn, poopX, pipeLeadPx, pipeLead, prefillPairs,
@@ -248,7 +255,10 @@ src/
                             catchUpTier / catchUpDraws, matchResult (score, fewer
                             deaths, draw), respawnTotalMs / respawnPose (the crash →
                             glide → blink → done timeline, pure in elapsed ms),
-                            VERSUS_EMOJI. Fully unit-tested (tests/versus.test.js).
+                            coursePairStart / courseDistance (a pair's place on the
+                            course; what a half's distance reads with a pair a given
+                            lead ahead), VERSUS_EMOJI. Fully unit-tested
+                            (tests/versus.test.js).
   leaderboard.js            Shared leaderboard, NO Phaser/DOM: submitPlan / submitPlans
                             (pure: what to post; up to two rows per player, best
                             off and best on the toilet, via save.js bestByToilet),
@@ -585,7 +595,10 @@ src/
                             pipeMove / phase / itemY / spinFrame by pair number;
                             mysteryPair at start); this.rngDraw (per player) rolls
                             the mystery draw on catchUpDraws(catchUpTier(behind))
-                            in collectItem; this.distance (px scrolled this run);
+                            in collectItem; this.distance (its place on the course:
+                            the scroll, re-anchored by rebaseDistance at the end of
+                            every prefillPipes and after skipToFinish, from the next
+                            pair due to spawn or the level's finish line);
                             publishSlot() every frame; refreshGhost (this.ghost at
                             depth 9.5 from ghostPlacement; a live ghost follows its
                             alpha, an ended one fades over ghostFadeMs) and refreshRival
@@ -619,9 +632,15 @@ src/
                             Versus.onJoinInput); P2 draws no tray, no ring, binds no
                             keys and no pad. handleChrome('pause' / 'esc') toggles
                             the shared pause (Versus.togglePause); pauseRun() /
-                            autoPause forward to it; a 'resume' tap lifts the shared
-                            pause for both and, from a half in its own level break,
-                            ends that break. The ready screen's 👥 toggle
+                            autoPause forward to it; a 'resume' tap (and a pad's B)
+                            lifts the shared pause for both and nothing else: a match
+                            half's level break ends only on the shared count
+                            (beginLevel, from Versus). onFinishCrossed reports
+                            Versus.onLevelReached; refreshLevelBanner shows "Waiting
+                            for P{n}…" as a match break's hint (applyLocale keeps
+                            it), setPauseBanner keeps the shade off there, and
+                            setLevelHintVisible hides the hint under the count. The
+                            ready screen's 👥 toggle
                             (versusOffered(): outside a match, not test mode,
                             versusAvailable; toggleVersus → registry 'versus',
                             session-only) makes launch() scene.start('Versus')
@@ -636,9 +655,16 @@ src/
                             the countdown text and the shared PAUSED banner. Status
                             join → countdown → playing → over (→ left). onJoinInput
                             claims (claimDevice; a tap that pressed Home is not a
-                            claim), startCountdown ticks 3-2-1-GO on timers (never
-                            synchronously: a rematch starts it inside create()),
-                            go() launches both halves. setPaused(on) pauses every
+                            claim), startCountdown runs runCountdown (3-2-1-GO on
+                            timers, never synchronously: a rematch starts it inside
+                            create(); it stops on a restart or a status change and,
+                            for a level, holds while an overlay is open, then repeats
+                            the step for a full beat), go() launches both halves.
+                            onLevelReached: both halves in their level break → hints
+                            hidden, levelSyncDelayMs, runCountdown under status
+                            'playing' (ghosts and the pause plumbing as usual) →
+                            beginLevel (both Play.beginLevel in one call; a hidden
+                            tab pauses at once). setPaused(on) pauses every
                             playing or respawning half and remembers them
                             (pausedHalves), resumes only those; togglePause for the
                             pause key; anyLive() for chromeState. onRunEnded waits
@@ -856,7 +882,10 @@ tests/                      node --test, zero deps. Each file is self-describing
                             draw; pipes never decide), respawnPose (phase boundaries,
                             the glide from the fall to mid-screen and the nearest
                             whole turn, the blink's triangle wave, done, purity),
-                            the scoring / respawn knobs, catchUpTier at 9 / 10 / 24
+                            coursePairStart / courseDistance (level spacings, a
+                            line one spacing after its level's last pair, the same
+                            place read from any pair, −pipeLead at the start), the
+                            scoring / respawn / level-sync knobs, catchUpTier at 9 / 10 / 24
                             / 25, catchUpDraws + rollMystery on the doubled and
                             super tables, the 👥 ready box, padIntent on the versus
                             top
@@ -970,9 +999,14 @@ tools/
                             two halves and cameras, claims and refusals, the
                             countdown, five identical pairs on both halves, inputs
                             routed by device, Home, Esc / B, the flag ignored in
-                            portrait; B: the shared pause, a level break on one half
-                            under Menu and the tap (+25 and its popup; Settings from
-                            the break pauses the other half), the catch-up draws at
+                            portrait; B: the shared pause, the first one over a
+                            level's line waiting (+25 and its popup, "Waiting for
+                            P2…" with no shade; Settings from the break pauses the
+                            other half; its tap and a pad's B do not end the break,
+                            Menu / B pause and lift the other), the other's arrival
+                            arming the shared count (hints hidden), Settings holding
+                            it, GO starting level 2 on both with equal distances and
+                            each ghost on the other's poop, the catch-up draws at
                             15 / 30 / 0 behind, a crash as a respawn (the −N popup,
                             the halted world, the cleared field and finish line, the
                             glide, a shared pause mid-blink, Settings mid-respawn,
@@ -983,8 +1017,10 @@ tools/
                             the panel's 💀 row, rematches for the fewer-crashes
                             tiebreak and the draw, Home; C: the ghost at the distance
                             gap with the live face, level, past the range, the rival
-                            marker, the crash face and blink on the ghost, the
-                            fade-out once the other's run ends). The
+                            marker, the crash face and blink on the ghost, P2's
+                            distance against its real next pair after a respawn
+                            and after a fart, the fade-out once the other's run
+                            ends). The
                             viewport is pinned to 720x1280 before load
                             (Emulation.setDeviceMetricsOverride) so the rest is
                             the phone field; tapAt maps through the live

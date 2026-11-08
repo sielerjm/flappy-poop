@@ -930,8 +930,8 @@ export class Play extends Phaser.Scene {
   /**
    * The state chrome decisions (chromeIntent, padIntent) read. In a match it is the match's,
    * not this half's: a finished half (waiting for the other) or a respawning one still pauses
-   * and resumes the match from its tray, keys and pad; its own level break keeps 'paused' so
-   * its continue tap ends the break.
+   * and resumes the match from its tray, keys and pad; its own level break reads 'paused', where
+   * a tap only lifts a shared pause (the shared countdown ends the break, Versus.beginLevel).
    */
   chromeState() {
     if (!this.match || this.match.status !== 'playing') return this.state;

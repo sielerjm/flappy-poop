@@ -1,6 +1,6 @@
 # Plan: Versus — levels start together; the ghost anchored to the course
 - Created: 2026-11-08
-- Status: in progress
+- Status: complete
 - Baseline commit: `7d6cfbf` on `main` (5 ahead of origin, unpushed; tree clean apart from Michael's untracked `assets/sfx/Coin_*.mp3`, `ShopOpenClose.mp3`, `ToiletFlush_Win.mp3`, `assets/src/Kernel_0.png`, never staged here)
 - Whole-suite verification: `npm test` (baseline 350 pass / 1 fail: `every file under assets/sfx/ is named in CREDITS.md`, from those untracked files, not this plan's) + `npm run smoke` after every scene step (server on port 8000 is up)
 - Golden output: n/a
@@ -91,16 +91,21 @@ Decisions made here, flagged so they can be overruled:
 - Change: `Play` (`refreshLevelBanner` hint, the shade gate in `setPauseBanner`, `setLevelHintVisible`, `beginLevel`, the `'resume'` rule, `onFinishCrossed` report), `Versus` (`runCountdown`, `onLevelReached`, `beginLevel`), smoke section B's break block.
 - Verify: `npm test`; `npm run smoke` green.
 - Commit: `feat(versus, step 3/4): the first player at the line waits; both start the next level on a shared countdown`
-- Result: npm test 352 / 353 (baseline failure only); npm run smoke all checks passed: P1's tap no longer ends its break (it waits under "Waiting for P2…", no shade), P2's arrival arms the count with both hints hidden, the count shows 3 after the beat, Settings from P1 holds it, closing it costs a full beat, GO starts level 2 on both with equal distances, and each ghost sits on the other's poop. Found and fixed in execution: a pad's B on a waiting half mapped to the pause toggle and paused the other player; in a match B now only lifts a shared pause (checked in the smoke). Commit `<step3>`.
+- Result: npm test 352 / 353 (baseline failure only); npm run smoke all checks passed: P1's tap no longer ends its break (it waits under "Waiting for P2…", no shade), P2's arrival arms the count with both hints hidden, the count shows 3 after the beat, Settings from P1 holds it, closing it costs a full beat, GO starts level 2 on both with equal distances, and each ghost sits on the other's poop. Found and fixed in execution: a pad's B on a waiting half mapped to the pause toggle and paused the other player; in a match B now only lifts a shared pause (checked in the smoke). Commit `bce3339`.
 
-### Step 4/4 — Docs, What's new, 0.7.1  [pending]
+### Step 4/4 — Docs, What's new, 0.7.1  [done]
 - Change: `AGENTS.md`, `README.md`, `TRANSLATION_NOTES.md`, `src/changelog.js`, `VERSION` + `package.json`; plan status complete.
 - Verify: `grep -n "per half\|each player's own\|continue tap" AGENTS.md README.md` finds nothing stale for the match; `npm test`.
 - Commit: `docs(versus, step 4/4): shared level starts, the course-anchored ghost; 0.7.1`
+- Result: the grep finds no per-half break or scroll-distance wording for the match (two stale comments, in Play.chromeState and the smoke's section B header, fixed here); npm test 352 / 353 (baseline failure only). Commit `<step4>`.
 
 ## Verification
 - `npm test` after every step; `npm run smoke` after steps 2 and 3.
 - Hand check (Michael): reach a finish line first and wait; the other arrives; the count; both start together; a fart then the ghost staying by the right pipes; a respawn with the ghost returning. Then `npm run push` when he decides.
 
 ## Completion summary
-(filled at the end)
+- Commits on `main` since the baseline `7d6cfbf`: step 1 `24bc539` (course distance, the knob), step 2 `48da0b8` (distance re-anchored at every re-fill), step 3 `bce3339` (levels start together; pad B fix), step 4 (docs, 0.7.1). Nothing pushed; `main` is now 9 commits ahead of origin (with the unpushed 0.7.0 work).
+- Verified: `npm test` 352 / 353 at every step (the one failure is the baseline's uncredited sfx files, untouched); `npm run smoke` all checks passed after steps 2 and 3.
+- Deviation from the approved design: the distance anchor is the next pair due to spawn (exact for the re-filled stretch, no off-by-one window, valid when nothing spawns) instead of the first uncredited pipe; recorded under Design.
+- Unverified: the feel on real devices (the 600 ms beat, the count over the banners, the ghost after farts and crashes), the Chinese strings (drafts).
+- Roll back: `git revert <hash>` per step, or `git reset --hard 7d6cfbf` to drop all four (discards work).

@@ -1437,7 +1437,8 @@ export async function run(url = DEFAULT_URL) {
       ok(lifts.every((vy) => vy === TT.flapVelocity * TT.resumeFlapScale), `the shared resume lifts both poops at half a flap (${lifts.join(' / ')} px/s)`);
       await pin();
       // A level break on P1 while P2 plays on: the shared pause pauses P2 alone and leaves the break;
-      // the shared resume brings P2 back and leaves the break; P1's own continue tap ends it alone.
+      // the shared resume brings P2 back and leaves the break; P1's own tap does not end it (P1 waits
+      // for P2, then the shared count starts level 2 for both).
       await evaluate(`(() => { const p = ${P1}; p.score = 3; p.pipes.clear(true, true); p.items.clear(true, true); p.beans.clear(true, true); p.nextGapY = null; p.pipesSpawned = ${want.end1}; p.pipesPassed = ${want.end1}; p.finishSpawned = false; p.spawnFinishLine(); p.finishLine.x = p.poop.x + 150; return true; })()`);
       ok(await until(`${P1}.levelBreak && ${P1}.state === 'paused'`), 'P1 crosses its finish line into a level break while P2 plays on');
       await sleep(250);
