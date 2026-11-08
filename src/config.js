@@ -197,6 +197,9 @@ export const TUNING = {
     color: '#ffd700', // gold "+N" for the skipped pairs
   },
   coin: {
+    scale: 0.5, // × spriteDisplayScale for a kernel in the field (48 px drawn; the HUD purse icon keeps its own size)
+    radius: 24, // px circular hitbox = half the 48 px drawing (the whole kernel, like every pickup)
+    firstAfterPipePx: 112, // px from the centre of level 1's last pair to its guaranteed kernel (pipe half-width 64 + the hitbox radius 24 + 24 px of air), at that pair's gap height
     weight: 0.75, // share of the item roll = mystery.weight / 2 (half as common as a box); a band item like fiber, from level 2 (level 1 is scripted), bobbing at items.fiberPeriodMs
   },
   // The level-break shop (the 💰 under the banner): coins buy one row at a time.

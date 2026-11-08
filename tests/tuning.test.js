@@ -208,6 +208,9 @@ test('moving pipes: from level 4, chances in (0, 1], slow periods, the swing fit
 
 test('coins: half as common as a box, the shop prices, the sound volumes and the purse row', () => {
   assert.equal(T.coin.weight, T.mystery.weight / 2, 'a coin is half as common as a box');
+  assert.ok(T.coin.scale > 0 && T.coin.scale <= 1, `coin.scale ${T.coin.scale}`);
+  assert.equal(T.coin.radius, T.items.itemRadius * T.coin.scale, 'the hitbox is the whole drawing, at the kernel\'s own size');
+  assert.ok(T.coin.firstAfterPipePx >= T.pipeWidth / 2 + T.coin.radius, 'level 1\'s kernel sits clear of the last pipe');
   const p = T.shop.prices;
   assert.deepEqual(p, { fiber: 2, bean: 6, superBean: 16, mystery: 5 });
   assert.ok(p.superBean > p.bean && p.superBean <= p.bean * T.beans.superBeans, `super bean ${p.superBean} vs bean ${p.bean}`);

@@ -788,7 +788,7 @@ export function mixSeed(seed, n, salt = 0) {
   return (h ^ (h >>> 16)) >>> 0;
 }
 
-const COURSE_SALT = { mystery: 1, gap: 2, item: 3, bean: 4, move: 5, itemY: 6, spin: 7, band: 10, beanPhase: 11, gapPhase: 12 };
+const COURSE_SALT = { mystery: 1, gap: 2, item: 3, bean: 4, move: 5, itemY: 6, spin: 7, band: 10, beanPhase: 11, gapPhase: 12, kernel: 13 };
 
 /**
  * The run's course: the pair the first mystery box rides after, and per pair
@@ -835,6 +835,20 @@ export function createCourse(seed, t, { shared = false } = {}) {
     },
     spinFrame(n, frames) {
       return Math.floor(at(n, COURSE_SALT.spin)() * frames);
+    },
+    /**
+     * The pair (pipesSpawned, 1-based) that carries a level's guaranteed kernel: level 1's last
+     * pair (the kernel waits just past it); from level 2 any pair of the level but its last. Drawn
+     * from the level's own stream in both modes, so the single stream keeps its order and both
+     * halves of a match agree.
+     */
+    kernelPair(level) {
+      const lv = Math.max(1, Math.floor(level) || 1);
+      const end = levelEnd(lv, t);
+      if (lv === 1) return end;
+      const first = levelEnd(lv - 1, t) + 1;
+      const span = Math.max(1, end - first); // first .. end − 1
+      return first + Math.floor(createRng(mixSeed(seed, lv, COURSE_SALT.kernel))() * span);
     },
   };
   return course;

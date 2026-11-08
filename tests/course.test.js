@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { GAME_HEIGHT, TUNING as T } from '../src/config.js';
-import { createRng, createCourse, mixSeed, scriptedMysteryPair, pipeGapY, rollItem, rollBean, rollPipeMove, itemGapY, gapBounds, hazardsAllowed, mysteryRolls, levelFor } from '../src/logic.js';
+import { createRng, createCourse, mixSeed, scriptedMysteryPair, pipeGapY, rollItem, rollBean, rollPipeMove, itemGapY, gapBounds, hazardsAllowed, mysteryRolls, levelFor, levelEnd } from '../src/logic.js';
 
 const cfg = { gameHeight: GAME_HEIGHT, ceilingHeight: T.ceilingHeight, groundHeight: T.groundHeight, gapHeight: T.gapHeight, gapMargin: T.gapMargin };
 const bounds = gapBounds(cfg);
@@ -111,4 +111,32 @@ test('a shared course rolls moving pipes from pipeMove.fromLevel and never for t
   for (let pair = 90; pair <= 300; pair += 1) if (c.pipeMove(pair, 4, 600, bounds)) moving += 1;
   assert.ok(moving > 10, `some level-4 pairs move (${moving})`);
   assert.equal(c.pipeMove(95, 4, 600, bounds, { centred: true }), null);
+});
+
+test('kernelPair: level 1\'s last pair, then one pair per level but its last, the same in both modes and on both halves', () => {
+  const last = T.levels.lastLevel;
+  for (const seed of [1, 7, 12345, 0xdeadbeef]) {
+    const single = createCourse(seed, T);
+    const a = createCourse(seed, T, { shared: true });
+    const b = createCourse(seed, T, { shared: true });
+    assert.equal(single.kernelPair(1), levelEnd(1, T), 'level 1: the kernel waits past its last pair');
+    for (let level = 2; level <= last; level += 1) {
+      const n = a.kernelPair(level);
+      assert.ok(Number.isInteger(n) && n > levelEnd(level - 1, T) && n < levelEnd(level, T), `seed ${seed} level ${level}: pair ${n} inside the level, not its last`);
+      assert.equal(b.kernelPair(level), n, 'both halves of a match agree');
+      assert.equal(single.kernelPair(level), n, 'single player draws it the same way');
+      assert.equal(a.kernelPair(level), n, 'asking again gives the same pair');
+    }
+  }
+  const spread = new Set();
+  for (let seed = 1; seed <= 200; seed += 1) spread.add(createCourse(seed, T).kernelPair(4));
+  assert.ok(spread.size > 20, `the pair varies with the seed (${spread.size} different pairs in level 4)`);
+});
+
+test('kernelPair never touches the single stream: the run draws the same with or without it', () => {
+  for (const seed of [3, 99]) {
+    const c = createCourse(seed, T);
+    for (let level = 1; level <= T.levels.lastLevel; level += 1) c.kernelPair(level);
+    assert.deepEqual(walk(c, 80), handRoll(seed, 80), `seed ${seed}`);
+  }
 });
