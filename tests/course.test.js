@@ -140,3 +140,20 @@ test('kernelPair never touches the single stream: the run draws the same with or
     assert.deepEqual(walk(c, 80), handRoll(seed, 80), `seed ${seed}`);
   }
 });
+
+test('course.coin: an extra coin per pair at coin.chance, the same in both modes and on both halves, without touching the single stream', () => {
+  const a = createCourse(77, T, { shared: true });
+  const b = createCourse(77, T, { shared: true });
+  const single = createCourse(77, T);
+  let hits = 0;
+  for (let n = 1; n <= 4000; n += 1) {
+    const c = a.coin(n);
+    assert.equal(b.coin(n), c, `pair ${n}: both halves agree`);
+    assert.equal(single.coin(n), c, `pair ${n}: single player draws it the same way`);
+    if (c) hits += 1;
+  }
+  assert.ok(Math.abs(hits / 4000 - T.coin.chance) < 0.015, `about coin.chance of the pairs (${hits / 4000})`);
+  const d = createCourse(5, T);
+  for (let n = 1; n <= 200; n += 1) d.coin(n);
+  assert.deepEqual(walk(d, 60), handRoll(5, 60), 'the single stream keeps its order');
+});

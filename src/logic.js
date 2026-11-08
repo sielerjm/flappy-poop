@@ -441,18 +441,18 @@ export const ITEM_KINDS = ['fiber', 'probiotic', 'bacteria'];
 export const BAND_ITEMS = ['fiber', 'mystery', 'coin'];
 
 /**
- * null, an ITEM_KINDS value, 'mystery' or 'coin'. Bacteria weight is 0 unless
+ * null, an ITEM_KINDS value or 'mystery'. Bacteria weight is 0 unless
  * `hazards` (see hazardsAllowed); the mystery box joins the pick with
- * mystery.weight only when `mystery` (see mysteryRolls); a coin always joins
- * with coin.weight (the roll itself only runs from level 2: level 1 is scripted).
+ * mystery.weight only when `mystery` (see mysteryRolls). Coins are not in this roll:
+ * an extra coin fills an empty band slot instead (createCourse().coin).
  */
 export function rollItem(rng, score, t, { hazards = true, mystery = false } = {}) {
   const items = t.items;
   if (score < items.startScore) return null;
   if (rng() >= items.chancePerGap) return null;
-  const weights = { ...items.weights, mystery: mystery ? t.mystery.weight : 0, coin: t.coin.weight };
+  const weights = { ...items.weights, mystery: mystery ? t.mystery.weight : 0 };
   if (!hazards) weights.bacteria = 0;
-  const kinds = [...ITEM_KINDS, 'mystery', 'coin'].filter((k) => (weights[k] ?? 0) > 0);
+  const kinds = [...ITEM_KINDS, 'mystery'].filter((k) => (weights[k] ?? 0) > 0);
   const total = kinds.reduce((sum, k) => sum + weights[k], 0);
   if (total <= 0) return null;
   let pick = rng() * total;
@@ -816,7 +816,7 @@ export function mixSeed(seed, n, salt = 0) {
   return (h ^ (h >>> 16)) >>> 0;
 }
 
-const COURSE_SALT = { mystery: 1, gap: 2, item: 3, bean: 4, move: 5, itemY: 6, spin: 7, band: 10, beanPhase: 11, gapPhase: 12, kernel: 13 };
+const COURSE_SALT = { mystery: 1, gap: 2, item: 3, bean: 4, move: 5, itemY: 6, spin: 7, band: 10, beanPhase: 11, gapPhase: 12, kernel: 13, coin: 14 };
 
 /**
  * The run's course: the pair the first mystery box rides after, and per pair
@@ -870,6 +870,13 @@ export function createCourse(seed, t, { shared = false } = {}) {
      * from the level's own stream in both modes, so the single stream keeps its order and both
      * halves of a match agree.
      */
+    /**
+     * Whether pair `n` carries an extra coin (from level 2, coin.chance), placed only in a band slot
+     * nothing else took, so coins never cost another pickup its place. Its own stream in both modes.
+     */
+    coin(n) {
+      return createRng(mixSeed(seed, n, COURSE_SALT.coin))() < t.coin.chance;
+    },
     kernelPair(level) {
       const lv = Math.max(1, Math.floor(level) || 1);
       const end = levelEnd(lv, t);

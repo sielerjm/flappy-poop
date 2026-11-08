@@ -10,7 +10,8 @@ Input:  assets/src/{Poop_Emoji_Alive,Poop_Emoji_Dead,Poop_Stink1,Poop_Stink2,Poo
                     Fiber,Good_Bacteria,Bad_Bacteria,Kidney_Bean,Postbiotic,MysteryBox_Icon,
                     Kernel_0}.png,
         assets/src/MysteryBox.gif (animated) and assets/src/FlappyPoopAppArt.png (the app icon)
-Output: assets/{poop,poop-dead,fiber,probiotic,bacteria,bean,postbiotic,mystery-icon,coin}.png at 384x384 RGBA,
+Output: assets/{poop,poop-dead,fiber,probiotic,bacteria,bean,postbiotic,mystery-icon}.png at 384x384 RGBA,
+        assets/coin.png at 96x96 (drawn at 48 px: a clean 2:1 shrink instead of 8:1),
         assets/{poop-stink1,poop-stink2,poop-falling,poop-stink-falling1,poop-stink-falling2,
                 poop-fart,poop-speech}.png on larger squares,
         assets/mystery.png: the GIF's frames side by side, 384x384 each (a Phaser spritesheet), and
@@ -207,14 +208,14 @@ def process_poop_set():
     print(f"poop-speech.png: {out.size}  (body centre {tuple(round(v) for v in speech_centre)} of {speech.size})")
 
 
-def process_item(src: Path, dest_name: str):
+def process_item(src: Path, dest_name: str, size: int = SIZE):
     im = knock_background(Image.open(src))
     bbox = content_bbox(im)
     if not bbox:
         raise SystemExit(f"{src.name} has no visible ink")
     im = crop_to_bbox(im, bbox)
     side = max(im.width, im.height)
-    im = scale_to(fit_on_square(im, side), SIZE)
+    im = scale_to(fit_on_square(im, side), size)
     dest = OUT / dest_name
     im.save(dest)
     print(f"{dest_name}: {im.size}")
@@ -279,6 +280,6 @@ if __name__ == "__main__":
     process_item(SRC / "Kidney_Bean.png", "bean.png")
     process_item(SRC / "Postbiotic.png", "postbiotic.png")
     process_item(SRC / "MysteryBox_Icon.png", "mystery-icon.png")
-    process_item(SRC / "Kernel_0.png", "coin.png")  # placeholder: a spin GIF (process_sheet) replaces it later
+    process_item(SRC / "Kernel_0.png", "coin.png", 96)  # drawn at 48 px in the field; placeholder until a spin GIF (process_sheet) replaces it
     process_sheet(SRC / "MysteryBox.gif", "mystery.png")
     process_icons(SRC / "FlappyPoopAppArt.png")

@@ -57,7 +57,7 @@ test('bandMidY puts a still pickup midway between this gap and the next, inside 
   }
 });
 
-test('with hazards on all three kinds and coins appear near their weights', () => {
+test('with hazards on all three kinds appear near their weights, and never a coin', () => {
   const rng = createRng(3);
   const counts = { fiber: 0, probiotic: 0, bacteria: 0, coin: 0, none: 0 };
   const n = 4000;
@@ -68,9 +68,10 @@ test('with hazards on all three kinds and coins appear near their weights', () =
   }
   const spawned = n - counts.none;
   assert.ok(spawned > n * 0.2, `too few items: ${spawned}`);
-  const weights = { ...T.items.weights, coin: T.coin.weight };
+  const weights = { ...T.items.weights };
   const totalW = Object.values(weights).reduce((a, b) => a + b, 0);
-  for (const kind of [...ITEM_KINDS, 'coin']) {
+  assert.equal(counts.coin ?? 0, 0, 'coins are not in the item roll');
+  for (const kind of ITEM_KINDS) {
     assert.ok(counts[kind] > 0, `${kind} never appeared`);
     const share = counts[kind] / spawned;
     const expected = weights[kind] / totalW;
@@ -551,7 +552,7 @@ test('rollItem never returns a mystery box unless it is allowed', () => {
   for (let i = 0; i < 5000; i++) assert.notEqual(rollItem(rng, 100, T), 'mystery');
 });
 
-test('with mystery on the box is half as common as fiber, a coin half as common as the box, and the other three keep their ratios', () => {
+test('with mystery on the box is half as common as fiber, no coin rolls, and the other three keep their ratios', () => {
   const rng = createRng(12);
   const counts = { fiber: 0, probiotic: 0, bacteria: 0, mystery: 0, coin: 0 };
   for (let i = 0; i < 100000; i++) {
@@ -560,8 +561,7 @@ test('with mystery on the box is half as common as fiber, a coin half as common 
   }
   const ratio = counts.mystery / counts.fiber;
   assert.ok(Math.abs(ratio - 0.5) <= 0.05, `mystery / fiber ${ratio}`);
-  const coins = counts.coin / counts.mystery;
-  assert.ok(Math.abs(coins - 0.5) <= 0.05, `coin / mystery ${coins}`);
+  assert.equal(counts.coin, 0, 'coins fill empty slots instead (createCourse().coin)');
   const pb = counts.probiotic / counts.bacteria;
   const want = T.items.weights.probiotic / T.items.weights.bacteria;
   assert.ok(Math.abs(pb - want) <= 0.05, `probiotic / bacteria ${pb} vs ${want}`);
@@ -638,11 +638,11 @@ test('resolveMystery turns a draw that cannot do anything into fiber', () => {
   for (const draw of ['fiber', 'probiotic', 'postbiotic', 'coin5', 'coin10', 'coin15']) assert.equal(resolveMystery(draw, { beans: full, pairsLeft: 0 }, T), draw);
 });
 
-test('rollItem rolls coins without the mystery flag; band items are fiber, the box and the coin', () => {
+test('rollItem never rolls a coin (extra coins fill empty slots instead); band items are fiber, the box and the coin', () => {
   const rng = createRng(31);
   let coins = 0;
-  for (let i = 0; i < 20000; i++) if (rollItem(rng, 100, T) === 'coin') coins += 1;
-  assert.ok(coins > 0, 'coins need no flag');
+  for (let i = 0; i < 20000; i++) if (rollItem(rng, 100, T, { mystery: true }) === 'coin') coins += 1;
+  assert.equal(coins, 0);
   assert.deepEqual(BAND_ITEMS, ['fiber', 'mystery', 'coin']);
   for (const k of ['probiotic', 'bacteria']) assert.ok(!BAND_ITEMS.includes(k), `${k} sits in the gap`);
 });

@@ -1599,6 +1599,10 @@ export class Play extends Phaser.Scene {
     else if (kernelBand) this.markKernel(this.spawnBandItem('coin', still ? stillY() : null, shift));
     else if (band && !beanHere) this.spawnBandItem(kind, (kind === 'mystery' ? boxStill : still) ? stillY() : null, shift);
     if (kernelPast) this.markKernel(this.spawnStillCoin(x + T.coin.firstAfterPipePx, gapY));
+    // An extra coin from level 2 (course.coin) only fills a band slot nothing else took, so it never
+    // costs a fiber, a box, a bean or the guaranteed kernel its place.
+    const slotTaken = boxHere || beanHere || band || kernelBand || kernelPast;
+    if (!slotTaken && scripted === undefined && this.level >= 2 && this.course.coin(n)) this.spawnBandItem('coin', still ? stillY() : null, shift);
     if (kind && !band) this.spawnGapItem(kind, x, gapY, gapH, move ? top : null);
 
     // Beans ride halfway between this pair and the next, bobbing top to bottom (still in level 1).
@@ -1720,7 +1724,7 @@ export class Play extends Phaser.Scene {
 
   finishItem(item, kind) {
     const coin = kind === 'coin'; // a kernel is drawn at coin.scale of the other pickups, its hitbox the whole drawing
-    const scale = T.spriteDisplayScale * (coin ? T.coin.scale : 1);
+    const scale = coin ? T.coin.displayPx / item.frame.width : T.spriteDisplayScale;
     const radius = coin ? T.coin.radius : T.items.itemRadius;
     item.setScale(scale);
     item.setData({ baseScale: scale, radius, elapsed: 0 }); // the still pulse's base (pulseStill); a bobbing item resets elapsed with its bob
@@ -2308,7 +2312,7 @@ export class Play extends Phaser.Scene {
       parts.push(this.add.text(0, 0, '\u{1F3C1}', { fontFamily: 'sans-serif', fontSize: '72px' }).setOrigin(0.5));
     } else {
       const key = { probiotic: 'probiotic', postbiotic: 'postbiotic', bean1: 'bean', bean3: 'bean', coin5: 'coin', coin10: 'coin', coin15: 'coin' }[draw] ?? 'fiber';
-      parts.push(this.add.image(0, 0, key).setScale(T.spriteDisplayScale));
+      parts.push(this.add.image(0, 0, key).setDisplaySize(2 * T.items.itemRadius, 2 * T.items.itemRadius)); // the pickup's size, whatever the texture's
       const count = MYSTERY_BEANS[draw] > 1 ? MYSTERY_BEANS[draw] : MYSTERY_COINS[draw];
       if (count) parts.push(this.add.text(T.items.itemRadius, 0, `×${count}`, { ...TEXT_STYLE, fontSize: '40px' }).setOrigin(0, 0.5));
     }
