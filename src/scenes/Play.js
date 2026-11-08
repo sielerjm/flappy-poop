@@ -103,7 +103,7 @@ import { createFocus } from '../ui/focus.js';
 import { createGlow, createRectGlow } from '../ui/glow.js';
 import { createFinishTexture } from '../ui/finish.js';
 import { createLevelBar } from '../ui/levelBar.js';
-import { createSubmitStore, submitPlans, submitScore } from '../leaderboard.js';
+import { createSubmitStore, createMergeStore, submitPlans, submitScore, checkNameAvailable, mergePlayers } from '../leaderboard.js';
 import { createButton } from '../ui/button.js';
 import { createToggle } from '../ui/toggle.js';
 import { openSavePanel, isSavePanelOpen } from '../ui/savePanel.js';
@@ -172,6 +172,8 @@ export class Play extends Phaser.Scene {
     const legacyBest = this.best.load();
     if (this.save.top.length === 0 && legacyBest > 0) this.save = saveLocal(recordScore(this.save, legacyBest));
     this.submitStore = createSubmitStore(); // last confirmed leaderboard submit
+    this.mergeStore = createMergeStore(); // account merges (Load user code) the board has not confirmed yet
+    this.boardNameTaken = false; // the last sync was refused because another player holds this username
     // Levels: pipe pairs passed decide the level; speed is per level, gap is fixed.
     this.level = 1;
     this.pipesPassed = 0;
@@ -967,7 +969,17 @@ export class Play extends Phaser.Scene {
    * post is retried on the next game over or board open.
    */
   syncLeaderboard() {
-    if (!this.save?.name) return Promise.resolve();
+    // Queued account merges go first, so the rows the posts land on are already one player's.
+    const merges = this.mergeStore.load().reduce(
+      (chain, pair) =>
+        chain.then(() =>
+          mergePlayers(pair.keep, pair.merge).then((ok) => {
+            if (ok) this.mergeStore.remove(pair);
+          }),
+        ),
+      Promise.resolve(),
+    );
+    if (!this.save?.name) return merges.catch(() => {});
     if (!this.save.id) this.save = ensureId(this.save);
     // Up to two rows per player: best off the toilet and best on it, posted one after the other.
     const plans = submitPlans(this.save, this.submitStore.load());
@@ -975,13 +987,33 @@ export class Play extends Phaser.Scene {
       .reduce(
         (chain, plan) =>
           chain.then(() =>
-            submitScore(plan).then((ok) => {
-              if (ok) this.submitStore.save(plan);
+            submitScore(plan).then((res) => {
+              if (res.ok) {
+                this.submitStore.save(plan);
+                this.boardNameTaken = false;
+              } else if (res.reason === 'nameTaken') {
+                this.boardNameTaken = true; // another player holds the name: the panel and the board say so
+              }
             }),
           ),
-        Promise.resolve(),
+        merges,
       )
       .catch(() => {});
+  }
+
+  /** Is `name` free on the board for this player's id? true / false / null (the board cannot say). The save panel asks before storing a name. */
+  checkNameAvailable(name, id) {
+    return checkNameAvailable(name, id);
+  }
+
+  /**
+   * After "Load user code" on a device that already had its own id: the two ids are one player.
+   * Queued (it survives being offline), then sent with the next sync, which starts now.
+   */
+  queueMerge(keepId, mergeId) {
+    if (!this.mergeStore.add({ keep: keepId, merge: mergeId })) return false;
+    this.syncLeaderboard();
+    return true;
   }
 
   refreshProfile() {

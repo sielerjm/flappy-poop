@@ -3,15 +3,20 @@
 // injected the same way save.js takes a storage.
 //
 // Every network function resolves (never rejects) and reports failure as
-// false / null: the game treats the leaderboard as garnish and never waits on it.
-// Writes go through the submit_score() SQL function (db/schema.sql); reads are a
-// plain select on the columns the publishable key is allowed to see.
+// false / null (submitScore: { ok: false, reason }): the game treats the
+// leaderboard as garnish and never waits on it. Writes go through the SQL
+// functions in db/schema.sql (submit_score, merge_players); reads are a plain
+// select on the columns the publishable key is allowed to see, plus the
+// name_available and player_rank functions.
 
 import { LEADERBOARD } from './config.js';
 import { recordScore, bestByToilet } from './save.js';
 
 // ---------------------------------------------------------------------------
 // Pure helpers
+
+/** A save-code id: 22 base64url characters (newId in save.js; the CHECKs in db/schema.sql). */
+const ID_RE = /^[A-Za-z0-9_-]{22}$/;
 
 /** Base URL without a trailing slash, or '' when the feature is disabled. */
 function baseUrl(config) {
@@ -103,6 +108,68 @@ export function createSubmitStore(storage = globalThis.localStorage, key = LEADE
       }
       return rec;
     },
+    /** Forget both (signing this device out); never throws. */
+    clear() {
+      try {
+        storage?.removeItem(key);
+      } catch {
+        /* storage unavailable */
+      }
+    },
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Account merges still to send: after "Load user code" the device holds two ids
+// (the one it had, the pasted one it adopts) and tells the board they are one
+// player (merge_players). The pair waits here until the server confirms, so an
+// offline load still reconciles on the next sync.
+
+/** A { keep, merge } pair of distinct valid ids, or null. */
+function normalizePair(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+  const { keep, merge } = raw;
+  if (typeof keep !== 'string' || typeof merge !== 'string' || !ID_RE.test(keep) || !ID_RE.test(merge) || keep === merge) return null;
+  return { keep, merge };
+}
+
+export function createMergeStore(storage = globalThis.localStorage, key = LEADERBOARD.mergesKey) {
+  const write = (pairs) => {
+    try {
+      if (pairs.length) storage?.setItem(key, JSON.stringify(pairs));
+      else storage?.removeItem(key);
+    } catch {
+      /* storage unavailable: the merge is sent on this session's next sync only */
+    }
+  };
+  return {
+    /** The queued pairs, oldest first (junk dropped). */
+    load() {
+      try {
+        const raw = storage?.getItem(key);
+        const parsed = raw == null ? [] : JSON.parse(raw);
+        return Array.isArray(parsed) ? parsed.map(normalizePair).filter(Boolean) : [];
+      } catch {
+        return [];
+      }
+    },
+    /** Queue a pair (once); returns the stored pair or null when it is not a valid pair. */
+    add(pair) {
+      const p = normalizePair(pair);
+      if (!p) return null;
+      const all = this.load();
+      if (!all.some((q) => q.keep === p.keep && q.merge === p.merge)) write([...all, p]);
+      return p;
+    },
+    /** Drop a confirmed pair. */
+    remove(pair) {
+      const p = normalizePair(pair);
+      if (!p) return;
+      write(this.load().filter((q) => !(q.keep === p.keep && q.merge === p.merge)));
+    },
+    clear() {
+      write([]);
+    },
   };
 }
 
@@ -111,9 +178,11 @@ export function createSubmitStore(storage = globalThis.localStorage, key = LEADE
 
 /**
  * One request with the apikey header and a timeout. Resolves to the parsed
- * JSON body (undefined for an empty 2xx body) or to null on any failure.
+ * JSON body (undefined for an empty 2xx body) or to null on any failure. With
+ * `errors`, a non-2xx answer resolves to { error: true, status, message } (the
+ * PostgREST message, e.g. "name taken") instead of null.
  */
-async function request(path, { method = 'GET', body } = {}, { fetch = globalThis.fetch, config = LEADERBOARD } = {}) {
+async function request(path, { method = 'GET', body, errors = false } = {}, { fetch = globalThis.fetch, config = LEADERBOARD } = {}) {
   const base = baseUrl(config);
   if (!base || typeof fetch !== 'function') return null;
   const controller = typeof AbortController === 'function' ? new AbortController() : null;
@@ -127,7 +196,17 @@ async function request(path, { method = 'GET', body } = {}, { fetch = globalThis
       body: body === undefined ? undefined : JSON.stringify(body),
       signal: controller?.signal,
     });
-    if (!res?.ok) return null;
+    if (!res?.ok) {
+      if (!errors || !res) return null;
+      let message = '';
+      try {
+        const text = typeof res.text === 'function' ? await res.text() : '';
+        message = text ? (JSON.parse(text)?.message ?? text) : '';
+      } catch {
+        /* a non-JSON error body: no message */
+      }
+      return { error: true, status: res.status, message: typeof message === 'string' ? message : '' };
+    }
     if (res.status === 204) return undefined;
     const text = typeof res.text === 'function' ? await res.text() : '';
     if (text === '') return undefined;
@@ -139,15 +218,46 @@ async function request(path, { method = 'GET', body } = {}, { fetch = globalThis
   }
 }
 
-/** POST the plan to submit_score(). True only when the server accepted it. */
+/**
+ * POST the plan to submit_score(). { ok: true } only when the server accepted
+ * it; otherwise { ok: false, reason }: 'nameTaken' when another player holds
+ * the username (the server's "name taken"), else 'other' (rate limited, bad
+ * input, offline, a malformed plan).
+ */
 export async function submitScore(plan, opts = {}) {
   const p = normalizeRecord(plan);
-  if (!p) return false;
+  if (!p) return { ok: false, reason: 'other' };
   const out = await request(
     '/rpc/submit_score',
-    { method: 'POST', body: { p_player_id: p.playerId, p_name: p.name, p_score: p.score, p_toilet: p.toilet, p_level: p.level } },
+    { method: 'POST', errors: true, body: { p_player_id: p.playerId, p_name: p.name, p_score: p.score, p_toilet: p.toilet, p_level: p.level } },
     opts
   );
+  if (out === null) return { ok: false, reason: 'other' };
+  if (out?.error) return { ok: false, reason: /name taken/i.test(out.message) ? 'nameTaken' : 'other' };
+  return { ok: true };
+}
+
+/**
+ * Is `name` free for this player's id on the board (name_available)? true /
+ * false, or null when the board cannot say (disabled, unreachable, the
+ * function not deployed yet): the caller then saves locally and lets
+ * submit_score enforce it on the next sync.
+ */
+export async function checkNameAvailable(name, playerId, opts = {}) {
+  if (typeof name !== 'string' || !name.trim() || typeof playerId !== 'string' || !ID_RE.test(playerId)) return null;
+  const out = await request('/rpc/name_available', { method: 'POST', body: { p_name: name, p_player_id: playerId } }, opts);
+  return typeof out === 'boolean' ? out : null;
+}
+
+/**
+ * Tell the board that keepId and mergeId are one player (merge_players: the
+ * merged id's rows fold into the kept id's and it becomes an alias). True only
+ * when the server confirmed; false otherwise (retry later).
+ */
+export async function mergePlayers(keepId, mergeId, opts = {}) {
+  const p = normalizePair({ keep: keepId, merge: mergeId });
+  if (!p) return false;
+  const out = await request('/rpc/merge_players', { method: 'POST', body: { p_keep_id: p.keep, p_merge_id: p.merge } }, opts);
   return out !== null;
 }
 

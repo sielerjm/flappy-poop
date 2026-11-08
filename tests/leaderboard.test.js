@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { LEADERBOARD } from '../src/config.js';
-import { createSubmitStore, submitPlan, submitPlans, submitScore, fetchTop, fetchRank } from '../src/leaderboard.js';
+import { createSubmitStore, createMergeStore, submitPlan, submitPlans, submitScore, checkNameAvailable, mergePlayers, fetchTop, fetchRank } from '../src/leaderboard.js';
 
 const config = { dataApi: 'https://x.example/rest/v1', publishableKey: 'sb_publishable_test', timeoutMs: 50, limit: 10, maxScore: 200 };
 
@@ -19,7 +19,7 @@ function fakeFetch({ status = 200, body = '' } = {}) {
 
 function fakeStorage() {
   const m = new Map();
-  return { getItem: (k) => (m.has(k) ? m.get(k) : null), setItem: (k, v) => m.set(k, String(v)), _map: m };
+  return { getItem: (k) => (m.has(k) ? m.get(k) : null), setItem: (k, v) => m.set(k, String(v)), removeItem: (k) => m.delete(k), _map: m };
 }
 const boom = {
   getItem() {
@@ -44,6 +44,8 @@ test('LEADERBOARD config is complete and points at a Supabase Data API over http
   assert.equal(LEADERBOARD.visibleRows, 10, 'ten rows in the window');
   assert.ok(LEADERBOARD.visibleRows >= 1 && LEADERBOARD.visibleRows <= LEADERBOARD.limit);
   assert.equal(typeof LEADERBOARD.storageKey, 'string');
+  assert.equal(typeof LEADERBOARD.mergesKey, 'string');
+  assert.notEqual(LEADERBOARD.mergesKey, LEADERBOARD.storageKey);
 });
 
 // ---------------------------------------------------------------------------
@@ -51,8 +53,8 @@ test('LEADERBOARD config is complete and points at a Supabase Data API over http
 
 test('submitScore posts the plan to submit_score with the apikey header and the exact body', async () => {
   const fetch = fakeFetch({ status: 204 });
-  const ok = await submitScore({ playerId: ID, name: 'Alice', score: 41, toilet: true }, { fetch, config: { ...config, dataApi: 'https://x.example/rest/v1/' } });
-  assert.equal(ok, true);
+  const res = await submitScore({ playerId: ID, name: 'Alice', score: 41, toilet: true }, { fetch, config: { ...config, dataApi: 'https://x.example/rest/v1/' } });
+  assert.deepEqual(res, { ok: true });
   assert.equal(fetch.calls.length, 1);
   const [c] = fetch.calls;
   assert.equal(c.url, 'https://x.example/rest/v1/rpc/submit_score', 'trailing slash on dataApi must not double up');
@@ -63,31 +65,93 @@ test('submitScore posts the plan to submit_score with the apikey header and the 
   assert.deepEqual(c.body, { p_player_id: ID, p_name: 'Alice', p_score: 41, p_toilet: true, p_level: 1 });
 });
 
-test('submitScore is false on HTTP 400, on a throwing fetch, and on a malformed plan', async () => {
-  assert.equal(await submitScore({ playerId: ID, name: 'Alice', score: 41 }, { fetch: fakeFetch({ status: 400, body: { message: 'rate limited' } }), config }), false);
+test('submitScore says why it failed: nameTaken for the server\'s "name taken", other for the rest', async () => {
+  const plan = { playerId: ID, name: 'Alice', score: 41 };
+  assert.deepEqual(await submitScore(plan, { fetch: fakeFetch({ status: 400, body: { message: 'rate limited' } }), config }), { ok: false, reason: 'other' });
+  assert.deepEqual(await submitScore(plan, { fetch: fakeFetch({ status: 400, body: { code: 'P0001', message: 'name taken' } }), config }), { ok: false, reason: 'nameTaken' });
+  assert.deepEqual(await submitScore(plan, { fetch: fakeFetch({ status: 400, body: 'not json' }), config }), { ok: false, reason: 'other' });
+  assert.deepEqual(await submitScore(plan, { fetch: fakeFetch({ status: 500, body: '' }), config }), { ok: false, reason: 'other' });
   const throwing = async () => {
     throw new TypeError('network down');
   };
-  assert.equal(await submitScore({ playerId: ID, name: 'Alice', score: 41 }, { fetch: throwing, config }), false);
+  assert.deepEqual(await submitScore(plan, { fetch: throwing, config }), { ok: false, reason: 'other' });
   const fetch = fakeFetch({ status: 204 });
-  assert.equal(await submitScore({ playerId: ID, name: '', score: 41 }, { fetch, config }), false);
-  assert.equal(await submitScore(null, { fetch, config }), false);
+  assert.deepEqual(await submitScore({ playerId: ID, name: '', score: 41 }, { fetch, config }), { ok: false, reason: 'other' });
+  assert.deepEqual(await submitScore(null, { fetch, config }), { ok: false, reason: 'other' });
   assert.equal(fetch.calls.length, 0, 'a malformed plan never reaches the network');
 });
 
-test('submitScore gives up after timeoutMs and resolves false', async () => {
+test('checkNameAvailable posts to name_available and answers true / false, or null when the board cannot say', async () => {
+  const yes = fakeFetch({ status: 200, body: true });
+  assert.equal(await checkNameAvailable('Alice', ID, { fetch: yes, config }), true);
+  assert.equal(yes.calls[0].url, 'https://x.example/rest/v1/rpc/name_available');
+  assert.deepEqual(yes.calls[0].body, { p_name: 'Alice', p_player_id: ID });
+  assert.equal(await checkNameAvailable('Alice', ID, { fetch: fakeFetch({ status: 200, body: false }), config }), false);
+  assert.equal(await checkNameAvailable('Alice', ID, { fetch: fakeFetch({ status: 404, body: { message: 'function not found' } }), config }), null, 'not deployed yet');
+  assert.equal(await checkNameAvailable('Alice', ID, { fetch: fakeFetch({ status: 200, body: { odd: 1 } }), config }), null, 'junk body');
+  const throwing = async () => {
+    throw new TypeError('network down');
+  };
+  assert.equal(await checkNameAvailable('Alice', ID, { fetch: throwing, config }), null);
+  assert.equal(await checkNameAvailable('Alice', ID, { fetch: yes, config: { ...config, dataApi: '' } }), null, 'disabled');
+  assert.equal(await checkNameAvailable('', ID, { fetch: yes, config }), null);
+  assert.equal(await checkNameAvailable('Alice', 'short', { fetch: yes, config }), null);
+  assert.equal(yes.calls.length, 1, 'a bad name or id never reaches the network');
+});
+
+test('mergePlayers posts both ids to merge_players; true only on a 2xx', async () => {
+  const B = 'BBBBBBBBBBBBBBBBBBBBBB';
+  const fetch = fakeFetch({ status: 204 });
+  assert.equal(await mergePlayers(ID, B, { fetch, config }), true);
+  assert.equal(fetch.calls[0].url, 'https://x.example/rest/v1/rpc/merge_players');
+  assert.deepEqual(fetch.calls[0].body, { p_keep_id: ID, p_merge_id: B });
+  assert.equal(await mergePlayers(ID, B, { fetch: fakeFetch({ status: 400, body: { message: 'bad player id' } }), config }), false);
+  assert.equal(await mergePlayers(ID, ID, { fetch, config }), false, 'the same id twice is nothing to merge');
+  assert.equal(await mergePlayers(ID, 'short', { fetch, config }), false);
+  assert.equal(await mergePlayers(null, B, { fetch, config }), false);
+  assert.equal(fetch.calls.length, 1, 'a bad pair never reaches the network');
+});
+
+test('createMergeStore queues a pair once, drops it when confirmed, survives junk, and clears', () => {
+  const B = 'BBBBBBBBBBBBBBBBBBBBBB';
+  const storage = fakeStorage();
+  const store = createMergeStore(storage, 'k');
+  assert.deepEqual(store.load(), []);
+  assert.deepEqual(store.add({ keep: ID, merge: B }), { keep: ID, merge: B });
+  store.add({ keep: ID, merge: B });
+  assert.equal(store.add({ keep: ID, merge: ID }), null, 'not a merge');
+  assert.equal(store.add({ keep: ID, merge: 'short' }), null);
+  assert.deepEqual(store.load(), [{ keep: ID, merge: B }], 'queued once');
+  store.add({ keep: B, merge: ID });
+  assert.equal(store.load().length, 2);
+  store.remove({ keep: ID, merge: B });
+  assert.deepEqual(store.load(), [{ keep: B, merge: ID }]);
+  storage.setItem('k', '{"not":"an array"}');
+  assert.deepEqual(store.load(), []);
+  storage.setItem('k', JSON.stringify([{ keep: ID, merge: B }, { junk: 1 }, null]));
+  assert.deepEqual(store.load(), [{ keep: ID, merge: B }], 'junk entries dropped');
+  store.clear();
+  assert.deepEqual(store.load(), []);
+  assert.equal(storage.getItem('k'), null, 'an empty queue leaves no key behind');
+  const denied = createMergeStore(boom, 'k');
+  assert.deepEqual(denied.load(), []);
+  assert.deepEqual(denied.add({ keep: ID, merge: B }), { keep: ID, merge: B }, 'a denied storage never throws');
+  denied.clear();
+});
+
+test('submitScore gives up after timeoutMs and resolves { ok: false }', async () => {
   const hanging = (url, init) =>
     new Promise((resolve, reject) => {
       init.signal.addEventListener('abort', () => reject(new Error('AbortError')));
     });
   const t0 = Date.now();
-  assert.equal(await submitScore({ playerId: ID, name: 'Alice', score: 1 }, { fetch: hanging, config: { ...config, timeoutMs: 5 } }), false);
+  assert.deepEqual(await submitScore({ playerId: ID, name: 'Alice', score: 1 }, { fetch: hanging, config: { ...config, timeoutMs: 5 } }), { ok: false, reason: 'other' });
   assert.ok(Date.now() - t0 < 1000, 'did not wait for the hanging request');
 });
 
 test('an empty dataApi or publishableKey disables every request', async () => {
   const fetch = fakeFetch({ status: 200, body: [] });
-  assert.equal(await submitScore({ playerId: ID, name: 'Alice', score: 1 }, { fetch, config: { ...config, dataApi: '' } }), false);
+  assert.deepEqual(await submitScore({ playerId: ID, name: 'Alice', score: 1 }, { fetch, config: { ...config, dataApi: '' } }), { ok: false, reason: 'other' });
   assert.equal(await fetchTop({ fetch, config: { ...config, publishableKey: '' } }), null);
   assert.equal(await fetchRank(ID, { fetch, config: { ...config, dataApi: '' } }), null);
   assert.equal(fetch.calls.length, 0);
@@ -179,6 +243,17 @@ test('submitPlan resubmits after a higher score, a rename, a toilet-flag change,
 
 // ---------------------------------------------------------------------------
 // createSubmitStore
+
+test('createSubmitStore.clear forgets both kinds and never throws', () => {
+  const storage = fakeStorage();
+  const store = createSubmitStore(storage, 'k');
+  store.save({ playerId: ID, name: 'Alice', score: 3, toilet: false });
+  store.save({ playerId: ID, name: 'Alice', score: 4, toilet: true });
+  store.clear();
+  assert.deepEqual(store.load(), { off: null, on: null });
+  assert.equal(storage.getItem('k'), null);
+  createSubmitStore(boom, 'k').clear();
+});
 
 test('createSubmitStore keeps the last confirmed submit of each kind and ignores junk', () => {
   const st = fakeStorage();
