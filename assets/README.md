@@ -37,16 +37,17 @@ Image format: PNG with alpha. The logical playfield is 720x1280. Player and item
 
 ## Sounds
 
-Audio files live in `assets/sfx/`. Every file there must be named in `CREDITS.md` with a URL; `npm test` fails otherwise. Synth blips (flap, score, pickup, shield, hazard, and the die fallback) stay in `src/sound.js` and need no file.
+Audio files live in `assets/sfx/`. Every file there must be named in `CREDITS.md` with a URL; `npm test` fails otherwise. Synth blips (flap, score, pickup, shield, hazard, the shop reel's tick and landing ding, and the die fallback) stay in `src/sound.js` and need no file.
 
 | File | What it is |
 |---|---|
 | `sfx/fart.mp3` | Death fart. "fart" by MacKaffee (Freesound) via Pixabay. See `CREDITS.md`. |
-| `sfx/fart_accelerate.mp3` | Fart power-up (4.3 s); the power lasts exactly this clip. "fart sound effect (reed)" via Pixabay. See `CREDITS.md`. |
+| `sfx/fart_accelerate.mp3` | Fart power-up (4.3 s); a super fart lasts exactly this clip, a normal fart 2.5 s with the clip faded out. "fart sound effect (reed)" via Pixabay. See `CREDITS.md`. |
 | `sfx/NewLevel.mp3` | Finish-line chime (a new level). "Shine 11" by BenKirb via Pixabay. See `CREDITS.md`. |
 | `sfx/Coin_Pickup.mp3` | A coin picked up, or a mystery box paying coins. Via Pixabay. See `CREDITS.md`. |
 | `sfx/Coin_Spend.mp3` | A shop purchase. Via Pixabay. See `CREDITS.md`. |
 | `sfx/ShopOpenClose.mp3` | The level-break shop opening and closing. Via Pixabay. See `CREDITS.md`. |
+| `sfx/ToiletFlush_Win.mp3` | The toilet flush when GO appears in a two-player countdown. "Toilet Flush 1" by FreeSounds-4U via Pixabay. See `CREDITS.md`. |
 
 ## Background layers (art contract)
 

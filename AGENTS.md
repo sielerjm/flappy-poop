@@ -37,7 +37,15 @@ clears the power-ups. Pickups with no motion data pulse (`pulseStill` / `pulseSc
 "· 💰 to shop") opens a panel of rows (`shopLayout`, `SHOP_ITEMS`) in the chrome column: fiber 1, one bean 6,
 a super bean 16 (fills the bag to `superBeans`), a mystery box 5 (the plain draw table, `pairsLeft` 0 so a
 skip becomes fiber). `buyBlocker` / `canBuy` grey a row the purse or the bag refuses; `Play.buyItem` spends
-and applies it, and the reward animates in the paused break. ✕, a tap outside the panel, Esc / P / B and
+and applies it, and the reward animates in the paused break. A box bought from the panel (`shopBuy` passes
+`reel`) spins the **slot machine** first (`spinReel` / `finishReel`, `TUNING.shop.reel`, `reelStrip` /
+`reelProgress` / `REEL_FACES` / `mysteryFace`): the draw is resolved and paid at once, a window over the rows
+scrolls the strip right to left on a cubic ease-out (`sfx.tick` per face, `sfx.reelStop` and a pop on landing),
+holds `pauseMs`, then `openMystery(draw, …, { reveal: false })`; `shopBuy` refuses while it spins and
+`closeShop` (so the level start too) finishes it early with the rising reveal. A postbiotic doubles a kernel
+picked up (`collectItem` pays `effects.multiplier()`), never a box's coins or a level's. In a test run
+(`testCoins`, single player) the purse is endless (`purseCoins` → Infinity, `countText` / `coinLabel` read ∞,
+`buyItem` spends nothing) and `setTestMode(false)` empties it. ✕, a tap outside the panel, Esc / P / B and
 the power input (B key, RT, a versus power key) close it (`chromeIntent` `closeShop`, arming the resume
 lockout); closing never continues the level. The game-over panel shows `collected.coin` beside the pipes
 (the share card does not). Level 1 is
@@ -46,8 +54,9 @@ between the two gaps; from level 2 they bob and a bean rolls per pair
 (15 % per pair to pipe 20 with one guaranteed by guaranteeScore, 6 % after);
 beans stack to maxBeans (3); one charges a fart power (stink lines + glow; tap the poop
 or the bean button) that plays `fart_accelerate.mp3`, ramps the scroll speed up and
-down with the clip so five pipes pass (superPipes = 20 with superBeans = 3 held, under
-a rainbow glow), floats the poop on a ±15° undulating wave, and cannot die; items pass
+down so five pipes pass in `beans.normalPowerMs` (2.5 s; the clip fades out over `normalFadeMs` and is
+cut, `fartDuration` / `fartVolumeFrac`), or superPipes = 20 over the whole clip with superBeans = 3 held,
+under a rainbow glow, floats the poop on a ±15° undulating wave, and cannot die; items pass
 through it and the probiotic countdown pauses. A normal fart spends one bean (the rest stay in the bag, up to maxBeans); a super fart spends all three. Hit a pipe, the ceiling, or the floor and the run ends (dead-poop
 face). Best score and settings are kept in `localStorage`. The run is cut into
 **levels** by pipe pairs passed (`pipesPassed`, fart pipes included; score never):
@@ -115,7 +124,12 @@ launches `Play` as P1 on the left strip and `PlayB` (a second Play instance) as 
 `Play.init` gets `{ player, match, fieldW, fieldX }` and a camera viewport), and sits above both. The
 join screen claims a slot per device (`claimDevice`: a tap takes its own half, a keyboard group
 (`versus.keys`: W / Space + E / Left Shift, ↑ / Enter + Right Shift / Numpad 0) or a pad the first free
-slot), then counts 3-2-1-GO and launches both halves together. Both halves run one **shared course**
+slot), then counts 3-2-1-GO: the halves slide their poops into place under the "3" (`Play.launch({ hold
+})`) and **GO starts the race** in that frame (`Versus.go` → `Play.startRace`) with a toilet flush
+(`Versus.flush`, `ToiletFlush_Win.mp3`); GO stays up one beat. A player's flap within
+`versus.startBoost.windowMs` of GO (`armStartBoost` / `tryStartBoost`, only from the chrome 'flap' action,
+never the launch's own flap) scrolls that half `distancePx` (two poops) further over `durationMs`
+(`boostPeakMul` on `fartMul`'s surge) with the fart face; a fart, a respawn or the run's end cancel it. Both halves run one **shared course**
 (`createCourse(seed, T, { shared: true })`: every draw per pair and purpose, the pair number standing
 in for the score gates, beans spawning into a full bag), while each player's mystery **draws** come
 from their own stream (`rngDraw`) on the **catch-up** table (`catchUpTier` / `catchUpDraws`: 10–24
@@ -131,12 +145,19 @@ halts, the score loses `versus.scoring.deathPenaltyPerLevel` × level (floored a
 slot counts the crash, the poop tumbles, everything not yet credited is cleared, it glides back to
 mid-screen, blinks, and plays on with the next pair at mid-height. Clearing a level earns
 `versus.scoring.levelClearBonus`. Every finish line also pays `levelClearCoins` (the level's number, + 3
-without a crash in it: `Play.crashesThisLevel`). Levels start together through a **ready check**: each
-half's taps (after `levelSyncDelayMs` from its own arrival, `Versus.onLevelReached(half)`) toggle that
+without a crash in it in a match only: `Play.crashesThisLevel`; single player gets the number alone). The
+first over each level's line (`onLevelReached`, no other arrival yet) and the first out (`onRunEnded(player)`)
+win the level: `slot.levelWins`, 🏁 on the result panel. Levels start together through a **ready check**: each
+half's taps (once its own arrival beat's timer has fired, `Versus.onLevelReached(half)` → `levelBeats`;
+never `time.now` against the arrival stamp, since Phaser's smoothed delta lets a timer run ahead of the
+raw clock after a frame hitch) toggle that
 player's ready (`Versus.onLevelTap(half)`, `readyHalves`; hints "Tap when ready" / "Ready! Waiting for
-P2…", the 💰 hidden while ready); both ready runs the match-start 3-2-1-GO (`startLevelCount` →
-`runCountdown`, holding while an overlay is open), a tap during it un-readies that player and cancels it
-(`cancelLevelCount`, a token), and `beginLevel` ends both breaks in the same frame. A tap while the
+P2…" with "Tap again to un-ready" under it, the 💰 hidden while ready); both ready runs the match-start
+3-2-1-GO (`startLevelCount` → `runCountdown`, holding while an overlay is open), a tap during it un-readies
+that player and cancels it (`cancelLevelCount`, a token), and GO's `beginLevel` ends both breaks in the same
+frame (the flush and the start boost again). The break's tap prompt, single player's too, breathes under a
+white glow copy (`Play.syncLevelHint` each frame on `hintPulse`, `TUNING.hintPulse`); `levelSubHint` is the
+smaller un-ready line. A tap while the
 shared pause is on only lifts it. Each half shops in its own break (the panel is Play's, in its strip;
 the other half plays on); a shopper is never ready, so the count cannot start under an open shop. The pause key / ⏸ / Menu toggle the
 **shared pause** (`Versus.setPaused`, remembering which halves it paused so a break is never ended by
@@ -144,7 +165,8 @@ the other player; a respawning half's clock stops with it). Chrome decisions in 
 `chromeState()` (the match's state, not the half's), so a finished or respawning half still pauses and
 resumes the match. The match ends once **both** have cleared the rectum (the first one out waits under
 "Made it out!" / "Waiting for P2…", `showEscapedBanner`); the result panel names the higher score
-(`matchResult`: score, then fewer crashes, else a draw) with each player's 💀 count and offers Rematch
+(`matchResult`: score, then fewer crashes, else a draw) on a `versus.resultPanelW` (820 px) panel with each
+player's 🏁 level wins and 💀 count, and offers Rematch
 (same devices, new seed) | Home (the canvas re-fits the window). A match records nothing: no best, no
 save-code score, no leaderboard.
 
@@ -531,8 +553,10 @@ src/
                             tap on the poop (poopTapHit) or the button
                             (beanButtonHit) calls activatePower(): fart texture,
                             alpha tween, fart_accelerate clip, effects.activatePower
-                            (clip length; superPipes with superBeans held, else
-                            powerPipes → fartPeak), scrollMul from fartMul() each
+                            (fartDuration: the clip with superBeans held for
+                            superPipes, else beans.normalPowerMs for powerPipes,
+                            the clip faded by fartVolumeFrac and cut in endPower /
+                            stopFartSound → fartPeak), scrollMul from fartMul() each
                             frame via applyScroll(); fartFloat() drives y + angle
                             (glide to mid-height, then the wave with ±waveTiltDeg;
                             gravity off, doFlap ignored); collectItem ignores items
@@ -719,9 +743,15 @@ src/
                             timers, never synchronously: a rematch starts it inside
                             create(); it stops on a restart or a status change and,
                             for a level, holds while an overlay is open, then repeats
-                            the step for a full beat), go() launches both halves.
+                            the step for a full beat). Its GO step runs onGo in the
+                            same frame (flush(), the GO text hidden one beat later
+                            by goToken): go() → each half's startRace() (the halves
+                            slid in under the "3" through onStart → launch({ hold })),
+                            beginLevel() for a level. onRunEnded(player) and
+                            onLevelReached count slot.levelWins.
                             The ready check: onLevelReached(half) notes its arrival
-                            (levelArrivals; its hint hidden for levelSyncDelayMs,
+                            (levelArrivals, the first winning the level; its hint
+                            hidden until its levelSyncDelayMs timer fires: levelBeats,
                             beatPassed), onLevelTap(half) toggles readyHalves, both
                             ready → startLevelCount (levelStage 'count', a token
                             runCountdown's `alive` reads) → beginLevel (both
@@ -785,9 +815,10 @@ src/
                             Wrapped text uses useAdvancedWrap for CJK.
     HowTo.js                Overlay: flap rules plus pipe / fiber / probiotic /
                             postbiotic / bacteria / bean / mystery box (mystery-icon) /
-                            toilet / levels rows (howToItems, pipe first;
-                            the pipe icon is a cropped cap slice, toilet is the 🚽
-                            emoji) and a feedback link, inside createScrollView(). Ready-screen How
+                            toilet / levels / controls / sound rows (howToItems,
+                            pipe first, the 🔊 Sound row with the iPhone Silent-mode
+                            note last; the pipe icon is a cropped cap slice, toilet,
+                            levels, controls and sound are emoji: EMOJI_ROWS) and a feedback link, inside createScrollView(). Ready-screen How
                             to play uses howToHit() so it does not start a run.
                             Opened from About, X/Esc/tap-outside closes HowTo and
                             About together. useAdvancedWrap on body text.
@@ -846,13 +877,12 @@ assets/                     Contract PNGs + README.md (the art contract).
                             the art's own tan; the Apple touch icon is full bleed.
   src/                      Original drawings; not in the size table.
   sfx/fart.mp3              Death sample.
-  sfx/fart_accelerate.mp3   Fart power-up clip; its duration is the power length.
+  sfx/fart_accelerate.mp3   Fart power-up clip; its duration is a super fart's length (a normal fart is 2.5 s, the clip faded out).
   sfx/NewLevel.mp3          Level-up chime at the finish line.
   sfx/Coin_Pickup.mp3       A coin picked up, or a box paying coins.
   sfx/Coin_Spend.mp3        A shop purchase.
   sfx/ShopOpenClose.mp3     The shop opening and closing.
-  (sfx/ToiletFlush_Win.mp3 may sit untracked in a working copy: Michael's placeholder,
-   uncredited, so the CREDITS test fails until it is credited or removed.)
+  sfx/ToiletFlush_Win.mp3   The toilet flush when GO appears in a two-player countdown.
 
 db/schema.sql               Supabase schema: scores table (player_id = save-code id,
                             name, score, toilet, updated_at), RLS + a column grant
@@ -1104,11 +1134,13 @@ tools/
                             plays on, P2's strip never reaching P1's shop, B closing
                             it), the other's arrival
                             (hints hidden through the beat, a tap then ignored), "Tap
-                            to continue" on both with no count until a tap, P1's open
+                            when ready" on both with no count until both are ready
+                            (pulsing under its glow; "Tap again to un-ready" while
+                            ready), P1's open
                             shop holding the start ("Waiting for P1…" on P2, its tap
                             ignored, P1's power key closing the shop), P2's tap
                             starting the count, Settings holding it, GO starting
-                            level 2 on both with equal distances and
+                            level 2 on both as it shows, with equal distances and
                             each ghost on the other's poop, the catch-up draws at
                             15 / 30 / 0 behind, a crash as a respawn (the −N popup,
                             the halted world, the cleared field and finish line, the
