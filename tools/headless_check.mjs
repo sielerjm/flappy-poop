@@ -1392,7 +1392,7 @@ export async function run(url = DEFAULT_URL) {
       const VS = `__flappy.scene.getScene('Versus')`;
       const L = `Promise.all([import('./src/logic.js'), import('./src/config.js')])`;
       const metrics = (width, height) => cdp.send('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 1, mobile: false });
-      const want = await evaluate(`${L}.then(([l, c]) => JSON.stringify({ W: l.fieldWidth(1800, 1000, c.FIELD), countdownMs: c.TUNING.versus.countdownMs, pause: c.TUNING.gamepad.pause, end1: c.TUNING.levels.pipes[0], deathMs: c.TUNING.deathToOverMs, maxBeans: c.TUNING.beans.maxBeans, super: c.TUNING.versus.catchUp.superBehind, beanMin: c.TUNING.versus.catchUp.beanBehindMin, last: c.TUNING.levels.lastLevel, end: l.levelEnd(c.TUNING.levels.lastLevel, c.TUNING), penalty: c.TUNING.versus.scoring.deathPenaltyPerLevel, bonus: c.TUNING.versus.scoring.levelClearBonus, respawn: c.TUNING.versus.respawn, lockoutMs: c.TUNING.pauseResumeLockoutMs, up: c.TUNING.gamepad.up }))`).then(JSON.parse);
+      const want = await evaluate(`${L}.then(([l, c]) => JSON.stringify({ W: l.fieldWidth(1800, 1000, c.FIELD), countdownMs: c.TUNING.versus.countdownMs, pause: c.TUNING.gamepad.pause, end1: c.TUNING.levels.pipes[0], deathMs: c.TUNING.deathToOverMs, maxBeans: c.TUNING.beans.maxBeans, super: c.TUNING.versus.catchUp.superBehind, beanMin: c.TUNING.versus.catchUp.beanBehindMin, last: c.TUNING.levels.lastLevel, end: l.levelEnd(c.TUNING.levels.lastLevel, c.TUNING), penalty: c.TUNING.versus.scoring.deathPenaltyPerLevel, bonus: c.TUNING.versus.scoring.levelClearBonus, respawn: c.TUNING.versus.respawn, lockoutMs: c.TUNING.pauseResumeLockoutMs, up: c.TUNING.gamepad.up, back: c.TUNING.gamepad.back, syncMs: c.TUNING.versus.levelSyncDelayMs }))`).then(JSON.parse);
       const settle = async (w) => {
         let W = null;
         for (let i = 0; i < 60 && W !== w; i += 1) {
@@ -1463,8 +1463,43 @@ export async function run(url = DEFAULT_URL) {
       ok(brk2.a === 'paused' && brk2.lb && brk2.b === 'playing' && !brk2.banner, 'a tap on the right half resumes P2 and leaves P1 in its break');
       await evaluate(`${P1}.flap({ x: 100, y: 600 }), true`);
       await sleep(100);
-      const brk3 = await evaluate(`JSON.stringify({ a: ${P1}.state, lb: ${P1}.levelBreak, level: ${P1}.level, b: ${P2}.state, bLevel: ${P2}.level })`).then(JSON.parse);
-      ok(brk3.a === 'playing' && !brk3.lb && brk3.level === 2 && brk3.b === 'playing' && brk3.bLevel === 1, `P1's continue tap ends its break into level ${brk3.level}; P2 stays on level ${brk3.bLevel}, untouched`);
+      const brk3 = await evaluate(`JSON.stringify({ a: ${P1}.state, lb: ${P1}.levelBreak, level: ${P1}.level, b: ${P2}.state, bLevel: ${P2}.level, hint: ${P1}.levelHint.text, hintShown: ${P1}.levelHint.visible, shade: ${P1}.pauseShade.visible })`).then(JSON.parse);
+      ok(brk3.a === 'paused' && brk3.lb && brk3.level === 2 && brk3.b === 'playing' && brk3.bLevel === 1 && brk3.hint === 'Waiting for P2…' && brk3.hintShown && !brk3.shade, `P1's tap does not end its break: it waits on level ${brk3.level} under "${brk3.hint}" (no shade) while P2 plays on level ${brk3.bLevel}`);
+      // A pad's B on the waiting P1 neither ends its break nor pauses P2; after Menu paused P2, B lifts it.
+      await evaluate(`${P1}.padDown(${want.back}), true`);
+      await sleep(100);
+      const padB = await evaluate(`JSON.stringify({ lb: ${P1}.levelBreak, b: ${P2}.state })`).then(JSON.parse);
+      await evaluate(`${P1}.padDown(${want.pause}), true`);
+      await sleep(100);
+      const padB2 = await evaluate(`${P2}.state`);
+      await evaluate(`${P1}.padDown(${want.back}), true`);
+      await sleep(100);
+      const padB3 = await evaluate(`JSON.stringify({ lb: ${P1}.levelBreak, b: ${P2}.state })`).then(JSON.parse);
+      ok(padB.lb && padB.b === 'playing' && padB2 === 'paused' && padB3.lb && padB3.b === 'playing', `pad B on the waiting P1 leaves P2 playing (${padB.b}); Menu pauses P2 (${padB2}) and B lifts it (${padB3.b}); P1 keeps waiting`);
+      await evaluate(`${P1}.focus?.hide(), true`);
+      // P2 reaches its line too: both wait, the hints go, and after a beat the shared 3-2-1-GO starts
+      // level 2 for both in the same frame. Settings from P1's tray holds the count until it closes,
+      // then the count picks up with a full beat.
+      await evaluate(`(() => { const p = ${P2}; p.pipes.clear(true, true); p.items.clear(true, true); p.beans.clear(true, true); p.nextGapY = null; p.pipesSpawned = ${want.end1}; p.pipesPassed = ${want.end1}; p.finishSpawned = false; p.spawnFinishLine(); p.finishLine.x = p.poop.x + 150; return true; })()`);
+      ok(await until(`${P2}.levelBreak && ${P2}.state === 'paused'`), 'P2 crosses its finish line into its break');
+      const both = await evaluate(`JSON.stringify({ count: ${VS}.levelCountdown, hints: [${P1}.levelHint.visible, ${P2}.levelHint.visible], titles: [${P1}.levelTitle.visible, ${P2}.levelTitle.visible], levels: [${P1}.level, ${P2}.level], status: ${VS}.match.status })`).then(JSON.parse);
+      ok(both.count && !both.hints[0] && !both.hints[1] && both.titles[0] && both.titles[1] && both.levels[0] === 2 && both.levels[1] === 2 && both.status === 'playing', 'both at the line: the shared count is armed, both hints hidden, both LEVEL 2 titles up, the match still playing');
+      ok(await until(`${VS}.countText.visible && ${VS}.countText.text === '3'`, (want.syncMs + want.countdownMs + 1000) / 100), 'after a beat the shared count shows 3');
+      await evaluate(`${P1}.handleChrome('settings'), true`);
+      await sleep(200);
+      const heldAt = await evaluate(`JSON.stringify({ open: __flappy.scene.isActive('Settings'), text: ${VS}.countText.text })`).then(JSON.parse);
+      await sleep(want.countdownMs + 400);
+      const heldStill = await evaluate(`JSON.stringify({ text: ${VS}.countText.text, a: ${P1}.state, b: ${P2}.state })`).then(JSON.parse);
+      ok(heldAt.open && heldStill.text === heldAt.text && heldStill.a === 'paused' && heldStill.b === 'paused', `Settings from P1 holds the count at ${heldAt.text} (still ${heldStill.text} a beat later), both halves still waiting`);
+      await evaluate(`__flappy.scene.getScene('Settings').close(), true`);
+      const closedAt = Date.now();
+      const go = await until(`${P1}.state === 'playing' && ${P2}.state === 'playing' && (globalThis.__go = JSON.stringify({ d: [${P1}.distance, ${P2}.distance], levels: [${P1}.level, ${P2}.level], lb: [${P1}.levelBreak, ${P2}.levelBreak], count: ${VS}.levelCountdown, status: ${VS}.match.status, shown: ${VS}.countText.visible }), [${P1}, ${P2}].forEach((p) => { p.poop.body.setAllowGravity(false); p.poop.setVelocity(0, 0); p.poop.y = 640; p.graceLeftMs = 1e9; }), true)`, (5 * want.countdownMs + 2000) / 100);
+      const elapsed = Date.now() - closedAt;
+      const started = JSON.parse(await evaluate('globalThis.__go'));
+      ok(go && elapsed >= 3 * want.countdownMs && started.levels[0] === 2 && started.levels[1] === 2 && !started.lb[0] && !started.lb[1] && !started.count && !started.shown && started.status === 'playing' && Math.abs(started.d[0] - started.d[1]) < 1, `GO starts level 2 on both halves together, ${elapsed} ms after Settings closed (distances ${started.d.map((d) => d.toFixed(1)).join(' / ')})`);
+      await sleep(150);
+      const ghosts = await evaluate(`JSON.stringify({ v: [${P1}.ghost.visible, ${P2}.ghost.visible], a: [${P1}.ghost.alpha, ${P2}.ghost.alpha], dx: [${P1}.ghost.x - ${P1}.poopX, ${P2}.ghost.x - ${P2}.poopX] })`).then(JSON.parse);
+      ok(ghosts.v[0] && ghosts.v[1] && ghosts.a.every((x) => x > 0.3) && ghosts.dx.every((x) => Math.abs(x) < 25), `side by side on the course, each ghost sits on the other's poop (dx ${ghosts.dx.map((x) => x.toFixed(0)).join(' / ')}, alpha ${ghosts.a.map((x) => x.toFixed(2)).join(' / ')})`);
       await pin();
       // The catch-up box (a trailing player's mystery draw): 15 behind doubles the bean odds (0.55 is
       // fiber on the plain table, bean1 on the doubled one); 30 behind tops the bag up to three beans.

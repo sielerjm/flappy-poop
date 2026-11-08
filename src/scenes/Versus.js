@@ -31,6 +31,7 @@ export class Versus extends Phaser.Scene {
     this.locale = this.scene.get('Play')?.locale ?? 'en';
     this.pausedHalves = new Set(); // which halves the shared pause paused (a half in its level break is never one of them)
     this.resultShown = false;
+    this.levelCountdown = false; // both halves are at a level's finish line and the shared count to the next level runs
     this.homeTapFrame = -1; // the frame a tap landed on the join screen's Home: the halves do not claim that tap
     const W = layout.totalW;
     const cx = W / 2;
@@ -113,20 +114,42 @@ export class Versus extends Phaser.Scene {
     if (allClaimed(this.match)) this.startCountdown();
   }
 
-  /** 3, 2, 1, GO: one step per versus.countdownMs, then both halves launch together. */
+  /** 3, 2, 1, GO, then both halves launch together. */
   startCountdown() {
     this.match.status = 'countdown';
     this.refreshJoin();
     this.joinHint.setVisible(false);
     this.homeButton.setVisible(false);
     this.focus?.hide();
+    this.runCountdown(() => this.go(), { status: 'countdown' });
+  }
+
+  /**
+   * 3, 2, 1, GO on countText, one step per versus.countdownMs, then onDone. It stops if the scene
+   * stops or restarts (a new match object) or the match leaves `status`. With `hold`, a step that
+   * finds an overlay open (Settings from P1's tray) waits for it to close, then shows the step
+   * before it again for a full beat: closing an overlay arms P1's resume lockout, and a GO right
+   * after it would swallow P1's first flap.
+   */
+  runCountdown(onDone, { status, hold = false }) {
+    const match = this.match;
     const steps = ['3', '2', '1', t(this.locale, 'versusGo')];
     let i = 0;
+    let held = false;
     const tick = () => {
-      if (!this.sys.isActive() || this.match.status !== 'countdown') return;
+      if (!this.sys.isActive() || this.match !== match || match.status !== status) return;
+      if (hold && this.overlayOpen()) {
+        held = true;
+        this.time.delayedCall(100, tick);
+        return;
+      }
+      if (held) {
+        held = false;
+        i = Math.max(0, i - 1);
+      }
       if (i === steps.length) {
         this.countText.setVisible(false);
-        this.go();
+        onDone();
         return;
       }
       this.countText.setText(steps[i]).setVisible(true).setScale(1.3);
@@ -136,6 +159,37 @@ export class Versus extends Phaser.Scene {
       this.time.delayedCall(T.versus.countdownMs, tick);
     };
     this.time.delayedCall(0, tick); // never synchronously: a rematch starts this inside create(), before the scene is active
+  }
+
+  /** An overlay (Settings, About, …) is up over the match: the level countdown holds under it. */
+  overlayOpen() {
+    return Boolean(this.scene.get('Play')?.chromeArgs?.('tap')?.overlay);
+  }
+
+  /**
+   * A half reached a level's finish line (Play.onFinishCrossed; the last level ends the run
+   * instead). The first one waits under "Waiting for P2…"; once both are at the line their
+   * hints go and, after levelSyncDelayMs, the shared countdown starts the next level for both.
+   */
+  onLevelReached() {
+    if (this.match.status !== 'playing' || this.levelCountdown) return;
+    const halves = this.halves();
+    if (!halves.every((half) => half?.levelBreak && half.state === 'paused')) return;
+    this.levelCountdown = true;
+    for (const half of halves) half.setLevelHintVisible(false);
+    const match = this.match;
+    this.time.delayedCall(T.versus.levelSyncDelayMs, () => {
+      if (!this.sys.isActive() || this.match !== match || match.status !== 'playing') return;
+      this.runCountdown(() => this.beginLevel(), { status: 'playing', hold: true });
+    });
+  }
+
+  /** GO: both halves leave their break in the same frame (Play.beginLevel), side by side on the course. */
+  beginLevel() {
+    this.levelCountdown = false;
+    this.countText.setVisible(false);
+    for (const half of this.halves()) half?.beginLevel();
+    if (globalThis.document?.hidden) this.setPaused(true); // GO on a hidden tab: nothing was live to auto-pause during the count
   }
 
   /** The race starts: both halves slide their poop into place and run (Play.launch). */

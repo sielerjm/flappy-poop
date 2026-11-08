@@ -626,6 +626,7 @@ export class Play extends Phaser.Scene {
     if (final) this.win();
     else this.startLevelBreak();
     if (this.match) this.showScorePopup('levelClear');
+    if (this.match && !final) this.versusHost()?.onLevelReached?.(); // the first one at the line waits; both there: the shared countdown
   }
 
   /**
@@ -641,7 +642,19 @@ export class Play extends Phaser.Scene {
   refreshLevelBanner() {
     const [title, hint] = levelBannerText(this.locale, this.level, LEVELS).split('\n');
     this.levelTitle?.setText(title);
-    this.levelHint?.setText(hint);
+    // A match's break is not ended by a tap: it waits for the other player, then the shared countdown starts both.
+    this.levelHint?.setText(this.match && this.levelBreak ? t(this.locale, 'versusWaiting').replace('{n}', String(this.player === 1 ? 2 : 1)) : hint);
+  }
+
+  /** The level break's hint line: Versus hides it while the shared countdown runs over the banner. */
+  setLevelHintVisible(on) {
+    this.levelHint?.setVisible(Boolean(on) && this.levelBreak);
+  }
+
+  /** The shared start of the next level in a match (Versus, on GO): this half's break ends now, in the same frame as the other's. */
+  beginLevel() {
+    if (!this.levelBreak || this.state !== 'paused') return;
+    this.resumePlay();
   }
 
   /** Between levels: a real pause with the level banner, the poop gliding to mid-height and bobbing. */
@@ -990,9 +1003,8 @@ export class Play extends Phaser.Scene {
         break;
       case 'resume':
         if (this.match) {
-          // A match: the tap lifts the shared pause for both halves (a no-op when it is not on); a
-          // half tapping in its own level break ends that break too, and never the other's.
-          if (this.levelBreak) this.resumePlay();
+          // A match: the tap lifts the shared pause for both halves (a no-op when it is not on). A half
+          // in its level break stays there: the break ends for both at once on the shared countdown.
           this.versusHost()?.setPaused?.(false);
         } else {
           this.resumePlay();
@@ -1121,7 +1133,10 @@ export class Play extends Phaser.Scene {
         this.handleChrome('pause');
         break;
       case 'resume':
-        this.handleChrome('esc');
+        // B on a paused run. In a match that lifts the shared pause and nothing else: the pause key's
+        // toggle would pause the other player from a half waiting at its finish line.
+        if (this.match) this.applyChrome({ do: 'resume' });
+        else this.handleChrome('esc');
         break;
       case 'closeTop':
         scene?.close?.();
@@ -1226,9 +1241,9 @@ export class Play extends Phaser.Scene {
   }
 
   setPauseBanner(visible) {
-    this.pauseShade.setVisible(visible);
     const level = this.levelBreak;
     const shared = Boolean(this.match); // a match's PAUSED banner is the Versus scene's, drawn once across both halves
+    this.pauseShade.setVisible(visible && !(level && shared)); // a match's level break: the poop idles in the open while the other finishes
     this.pauseText.setVisible(visible && !level && !shared);
     this.pauseHint.setVisible(visible && !level && !shared);
     this.levelTitle.setVisible(visible && level);

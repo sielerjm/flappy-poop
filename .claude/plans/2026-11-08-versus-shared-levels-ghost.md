@@ -85,12 +85,13 @@ Decisions made here, flagged so they can be overruled:
 - Change: `Play.rebaseDistance()`; calls in `prefillPipes` (both branches; this covers `start()`, `endPower`, `endRespawn`, `endLevelBreak`) and `skipToFinish`; `tools/headless_check.mjs` section C (the respawn and fart checks above).
 - Verify: `npm test`; `npm run smoke` green.
 - Commit: `fix(versus, step 2/4): the ghost reads the course, not the scroll: distance re-anchored at every pre-fill`
-- Result: npm test 352 / 353 (baseline failure only); npm run smoke all checks passed, including P2's distance against its real next pair after a respawn and after a fart (within 15 px), and the ghost back at its placement alpha 100 px apart after the respawn. Section C's crash now happens mid-level 2 (no boxes, so no skip can cut the checks short). Commit `<step2>`.
+- Result: npm test 352 / 353 (baseline failure only); npm run smoke all checks passed, including P2's distance against its real next pair after a respawn and after a fart (within 15 px), and the ghost back at its placement alpha 100 px apart after the respawn. Section C's crash now happens mid-level 2 (no boxes, so no skip can cut the checks short). Commit `48da0b8`.
 
-### Step 3/4 — Levels start together  [pending]
+### Step 3/4 — Levels start together  [done]
 - Change: `Play` (`refreshLevelBanner` hint, the shade gate in `setPauseBanner`, `setLevelHintVisible`, `beginLevel`, the `'resume'` rule, `onFinishCrossed` report), `Versus` (`runCountdown`, `onLevelReached`, `beginLevel`), smoke section B's break block.
 - Verify: `npm test`; `npm run smoke` green.
 - Commit: `feat(versus, step 3/4): the first player at the line waits; both start the next level on a shared countdown`
+- Result: npm test 352 / 353 (baseline failure only); npm run smoke all checks passed: P1's tap no longer ends its break (it waits under "Waiting for P2…", no shade), P2's arrival arms the count with both hints hidden, the count shows 3 after the beat, Settings from P1 holds it, closing it costs a full beat, GO starts level 2 on both with equal distances, and each ghost sits on the other's poop. Found and fixed in execution: a pad's B on a waiting half mapped to the pause toggle and paused the other player; in a match B now only lifts a shared pause (checked in the smoke). Commit `<step3>`.
 
 ### Step 4/4 — Docs, What's new, 0.7.1  [pending]
 - Change: `AGENTS.md`, `README.md`, `TRANSLATION_NOTES.md`, `src/changelog.js`, `VERSION` + `package.json`; plan status complete.
