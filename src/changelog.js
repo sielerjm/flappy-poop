@@ -12,9 +12,13 @@ export const CHANGELOG = [
     date: '8 Nov 2026',
     notes: {
       en: [
+        'One player across devices: load your user code on another phone or browser and the leaderboard joins both into one player, so your best counts once wherever you play. Save / Load User now lists the three steps.',
+        'A username belongs to the player who holds it on the board: typing a name that is taken points you at your user code instead. A new Clear button signs a device out (copy your code first).',
         "Two players: only the first one over each finish line (the rectum's too) earns the 25 points; the second still gets the level's coins.",
       ],
       'zh-Hans': [
+        '跨设备同一位玩家：在其他手机或浏览器上载入你的用户码，排行榜会把两边合并为同一位玩家，你的最高分在哪里玩都只算一次。“存档 / 载入用户”现在列出了三个步骤。',
+        '用户名归榜上持有它的玩家所有：输入一个已被使用的名字时，游戏会提示你改用用户码。新增“清除”按钮可让设备退出（请先复制你的用户码）。',
         '双人模式：只有最先越过每条终点线（包括直肠）的玩家才能得到 25 分；后到的玩家仍能拿到本关的金币。',
       ],
     },

@@ -1,6 +1,6 @@
 # Plan: One player across devices — backend account merging, a username claim, clear save/load steps, and Clear
 - Created: 2026-11-08
-- Status: in progress (approved 2026-11-08)
+- Status: steps 1–4 done (code committed, not pushed); step 5 is Michael's rollout
 - Source: Michael's `.claude/plans/username_uniqueness_claim_8632d0fc.plan.md` (audited), his asks (merge today's duplicates, prevent new ones, succinct save/load instructions; a pink-outlined **Clear** left of Save) and two answers: a held name typed on a new browser is **refused with the code steps** (no auto-join); Clear **signs this device out**.
 - Baseline: `26831f7` on `main`, tree clean. 0.8.2 is committed, not pushed: this joins its What's new.
 - Whole-suite verification: `npm test` (orphan audit included); `npm run smoke -- --only=home` while iterating on the panel; the full `npm run smoke` before each scene commit. SQL proven in a throwaway local Postgres (`colima start`, Michael's OK) before he pastes `db/schema.sql` into Supabase.
@@ -81,10 +81,11 @@ Fix or add:
 - Commit: `feat(save, step 3/5): a taken username points at the user code; loading a code merges the accounts; Clear signs out`
 - Result: npm test 403/403; `--only=home` 11 checks; full smoke 312/312. Screenshots of the panel (fresh, named, Clear armed, zh-Hans) checked. Not in the smoke: the 🏆 overlay's taken line (the overlay needs the live board; the branch is three lines in `showBoard`, read in review). Save is not disabled during the check (a disabled button swallows the phone tap that blurred the field); blur and Save share one cached check instead. Step 2 commit `05d660b`.
 
-### Step 4/5 — Docs and 0.8.2 notes
+### Step 4/5 — Docs and 0.8.2 notes  [done]
 - `README.md` (Save / Load bullet; the leaderboard section: one player across devices, aliases, the claim, Clear), `AGENTS.md` (save / leaderboard sections, `schema.sql`, the smoke summary, the maintenance recipe), the Save Code Spec (dated note: name vs id, aliases, merge, Clear), `src/changelog.js` 0.8.2 (two bullets per locale: load your code on any device and the leaderboard joins them; usernames belong to one player, with Clear).
 - Verify: `npm test`; stale-wording grep; `--only=home`.
 - Commit: `docs(step 4/5): one player across devices in README, AGENTS and the spec; 0.8.2`
+- Result: README (Save / Load bullet, the leaderboard section), AGENTS (the save-code paragraph, leaderboard.js, savePanel.js, schema.sql), the Save Code Spec note, the home section's blurb and the 0.8.2 notes (three bullets per locale); npm test 403/403; `--only=home` passes. Step 3 commit `2ed83d4`. A live probe shows `name_available` is still 404 on Supabase: step 5 is pending.
 
 ### Step 5/5 — Rollout (Michael, with a live probe)
 1. Paste the whole `db/schema.sql` into the Supabase SQL editor ("Success. No rows returned").

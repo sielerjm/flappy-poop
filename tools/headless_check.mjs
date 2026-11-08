@@ -46,7 +46,7 @@ export const OVERLAYS = {
  * ready screen with the same checks as in the full run (set only once that is shown).
  */
 export const SECTIONS = [
-  { name: 'home', about: 'home screen (no score, the ? pulsing); onboarding: the username prompt, the save panel, the name saved' },
+  { name: 'home', about: 'home screen (no score, the ? pulsing); onboarding: the username prompt, the save panel, the name saved; the username claim, the merge on Load, Clear' },
   { name: 'overlays', needs: [], about: 'every overlay opens from the ready screen, keeps the loop alive and closes' },
   { name: 'level1', needs: [], about: "level 1's scripted pairs and still pickups; the finish-line texture" },
   { name: 'howto-seen', needs: ['overlays'], about: 'opening How to play stops the ? pulse and stamps this build' },

@@ -86,7 +86,17 @@ so only the pairs actually passed have scored, and the break starts at once. A p
 step per pair. Each top score remembers its level. A signed
 **user code** (`fp1.<payload>.<sig>`, the save code) carries a player's username
 and best 6 scores between browsers via copy/paste (Save / Load User button on the
-ready screen); spec in `.claude/plans/Flappy Poop — Save Code Spec.md`.
+ready screen); spec in `.claude/plans/Flappy Poop — Save Code Spec.md`. The code's
+random `id` is also the leaderboard identity. **One player across devices** (2026-11-08):
+a username belongs to the player holding it on the board (`submit_score` raises
+'name taken'; the panel asks `name_available` first through `Play.checkNameAvailable`
+and refuses the name with the user-code steps; the board cannot say → saved locally,
+`saveNameOffline`; a refused sync sets `Play.boardNameTaken`, shown by the panel and
+the 🏆 footer). Loading a code on a device that had its own player queues
+`merge_players(pasted, old)` (`createMergeStore`, drained first by `syncLeaderboard`):
+the board folds the rows and keeps the old id as an alias (`player_aliases`), so every
+id resolves to one player. The panel's **Clear** (`Play.signOut`, two taps inside
+`saveClearConfirmMs`) forgets the player on the device only.
 **Test mode** is a session-only sandbox: typing either of `TEST_MODE.words` (`pooptest` or `testpoop`, any
 case) as the username and pressing Save toggles it (a trigger word is never stored as a name, so it can
 never relabel the player's leaderboard row). Settings then grows a test section:
@@ -320,8 +330,14 @@ src/
                             confirmed submit per kind, { off, on }), submitScore /
                             fetchTop / fetchRank(id, toilet) over the Supabase
                             REST API with an injected fetch, apikey header only,
-                            4 s abort, false / null on any failure, never throws.
-                            Writes go through the submit_score() SQL function.
+                            4 s abort, false / null on any failure, never throws
+                            (submitScore: { ok } or { ok: false, reason: 'nameTaken'
+                            | 'other' }, request's errors flag reading the
+                            PostgREST message). checkNameAvailable (true / false /
+                            null), mergePlayers, createMergeStore
+                            (flappyPoop.merges: queued { keep, merge } pairs until
+                            the server confirms). Writes go through the
+                            submit_score() and merge_players() SQL functions.
                             Fully unit-tested with a fake fetch.
   share.js                  Game-over share, NO Phaser; navigator / document / URL
                             injected: shareMode ('share' when
@@ -424,10 +440,18 @@ src/
                             that fires on pointerup only when moved < 12 px; offset,
                             scrollBy, scrollTo and addScrolled for the focus ring.
                             Used by HowTo and About.
-    savePanel.js            Plain DOM panel over the canvas (Username field,
-                            read-only user code + Copy, Load field, a full-width
-                            Save button that stores the username and confirms
-                            "Username saved", status line).
+    savePanel.js            Plain DOM panel over the canvas (a three-step intro,
+                            Username field, read-only user code + Copy, Load
+                            field, an outlined Clear beside the Save button that
+                            stores the username and confirms "Username saved",
+                            status line). claimName asks the board once per name
+                            (blur and Save share the promise; Save is never
+                            disabled, a disabled button would swallow the phone
+                            tap that blurred the field): taken → refused with the
+                            steps, unknown → saved with the offline note. Load
+                            from another id → Play.queueMerge, "saveMerged". Clear
+                            → warn, then Play.signOut on a second tap inside
+                            saveClearConfirmMs.
                             Opened from the ready-screen Save / Load User button,
                             and by the "Enter username" prompt with
                             { focusName: true, closeOnSave: true } (caret in the
@@ -889,11 +913,21 @@ assets/                     Contract PNGs + README.md (the art contract).
 
 db/schema.sql               Supabase schema: scores table (player_id = save-code id,
                             name, score, toilet, updated_at), RLS + a column grant
-                            that hides player_id, submit_score() (max score, toilet
-                            flag follows the score, 5 s rate limit raises) and
-                            player_rank(). Run by hand in the SQL editor, never by
-                            any integration; it is the source of truth for the
-                            backend.
+                            that hides player_id; player_aliases (old id → the id it
+                            was merged into; no role may read it) with
+                            resolve_player(); name_key() (lower(btrim)) and the
+                            claim rule name_blocked(); submit_score() (resolves the
+                            id, advisory lock on the name key, 'name taken', max
+                            score, toilet flag follows the score, 5 s rate limit,
+                            renames all of the player's rows); name_available();
+                            merge_players() (fold_player: max per kind, the kept
+                            name, aliases); player_rank(); admin_merge_name /
+                            admin_merge_all_duplicates for the owner only. Run by
+                            hand in the SQL editor, never by any integration; it is
+                            the source of truth for the backend. Apply it BEFORE
+                            pushing a client that depends on new functions. Verified
+                            offline with PGlite (Postgres in WebAssembly) when no
+                            Docker daemon is available.
 
 tests/                      node --test, zero deps. Each file is self-describing:
   field.test.js             fieldWidth (phone, desktop, 2:1 cap, bad input, even),

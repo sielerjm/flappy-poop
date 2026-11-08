@@ -159,3 +159,9 @@ Run these as unit tests on `save.js`; the first four are the ones most likely to
 | 10 | `localStorage` throws (storage disabled) | Game still starts with empty state |
 
 Manual check on iPhone Safari and Chrome: Copy button puts the code on the clipboard; pasting into Notes and back into the game restores the name and scores.
+
+## 2026-11-08: one player across devices
+
+- The `id` is the leaderboard identity; the display name is a claim the board grants to the player holding it (`db/schema.sql`: `name_key`, `name_blocked`, `submit_score` raises 'name taken'; `name_available` is the read-only check the panel makes before storing a name). Ids that already shared a name before this rule are grandfathered.
+- Import keeps merging as above (pasted id and name win, scores unioned). When the device had its own `id`, the game also calls `merge_players(pasted, old)`: the board folds the old id's rows into the pasted id's and records the old id in `player_aliases`, so every function resolves it to the same player from then on. The pair is queued in `localStorage` (`flappyPoop.merges`) until the server confirms.
+- **Clear** in the panel signs the device out (name, id, top scores, confirmed submits, queued merges, the legacy best); the board keeps the rows, the code brings them back. Nothing in the wire format changed.
