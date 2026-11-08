@@ -1129,9 +1129,12 @@ tools/
                             and its presses would otherwise reach the game.
                             Zero dependencies (fetch + WebSocket).
 
-.claude/plans/              Checkpointed build plans. Historical record + decision
-                            log. Don't edit completed plans; add a new plan file
-                            for new multi-step work.
+.claude/plans/              Active / incomplete dated build plans + living specs
+                            (e.g. the Save Code Spec). Add a new dated plan here
+                            for new multi-step work; when Status is complete, move
+                            it into Archive/.
+.claude/plans/Archive/      Completed build plans (historical record + decision
+                            log). Don't edit archived plans.
 ```
 
 ## Rules the code depends on
@@ -1270,6 +1273,7 @@ Commits so far follow `type(scope): summary` (`feat`, `docs`, `chore`); keep it.
 - New UI string → both locales in `src/i18n.js` + a row in `TRANSLATION_NOTES.md`
   (+ allowlist in `tests/i18n.test.js` only if intentionally identical). Scenes
   call `t(locale, key)`; never hardcode player English.
-- Multi-step work worth planning → a dated markdown plan in `.claude/plans/`.
+- Multi-step work worth planning → a dated markdown plan in `.claude/plans/`;
+  when Status is complete, move it into `.claude/plans/Archive/`.
 - Repo-wide conventions → this file. Player-facing docs → `README.md`.
 - Locale copy review for LLMs → `TRANSLATION_NOTES.md` (keep in sync with `src/i18n.js`).

@@ -133,7 +133,8 @@ tools/serve.py               npm start: bind 0.0.0.0:8000, print phone URL; ever
 tools/headless_check.mjs     npm run smoke: headless Chrome over the DevTools protocol, zero deps
 tests/                  node --test: html assets logic state levels store smoke
                         settings sound tray items tuning about howto feedback overlay hitbox i18n chrome serve save ready leaderboard scenes tools fart changelog versus course
-.claude/plans/          checkpointed build plans
+.claude/plans/          active / incomplete build plans + living specs
+.claude/plans/Archive/  completed build plans (don't edit)
 ```
 
 ## Tuning
