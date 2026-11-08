@@ -22,6 +22,8 @@ between the pipes from level 2 (or out of a mystery box), kept in a purse for th
 and spent in the **shop** (商店) at the level break: the
 💰 button under the banner opens it (fiber, one bean, a super fart that fills the bean bag, a
 mystery box). 💰 is the coin glyph and is not translated; "💰 12" style labels need no strings.
+The How to play row calls them **Kernels** (玉米粒) and keeps to a short line; the shop and the rest of
+the UI keep **coins** (金币). The iPhone Silent-mode note is its own last How to play row, **Sound** (声音, shown with 🔊).
 In two players each half shops in its own level break, and a shop open on either half holds the
 shared start (the other player reads **Waiting for P{n}…** until it closes).
 Test mode (测试模式): a developer sandbox turned on by typing a trigger word as the username. Its
@@ -123,7 +125,7 @@ Short, playful, clear. Fit a 720×1280 logical field; How to play / About body w
 | aboutCreditsTitle | Credits | 致谢 |
 | aboutCredits | *(see block below)* | *(see block below)* |
 | howToTitle | HOW TO PLAY | 玩法说明 |
-| howToBody | Tap to flap. Hit a pipe, the ceiling, or the floor and the run ends. On iPhone, Silent mode mutes the game — turn it off to hear sound. | 点击起飞。撞到管道、天花板或地面则本局结束。在 iPhone 上，静音模式会让游戏无声——关闭静音即可听到声音。 |
+| howToBody | Tap to flap. Hit a pipe, the ceiling, or the floor and the run ends. | 点击起飞。撞到管道、天花板或地面则本局结束。 |
 | itemPipeName | Pipe | 管道 |
 | itemPipeDetail | This is a pipe. Dodge the pipes for as long as possible. You gain 1 point for every pipe you dodge. From level 4 some pairs drift slowly up and down. | 这是管道。尽量长时间躲开管道。每躲过一道管道得 1 分。从第 4 关起，有些管道会缓缓上下漂移。 |
 | itemFiberName | Fiber | 纤维 |
@@ -136,16 +138,18 @@ Short, playful, clear. Fit a 720×1280 logical field; How to play / About body w
 | itemBacteriaDetail | −3 points. From level 3 it moves up and down in the gap. | −3 分。从第 3 关起它会在管道口之间上下移动。 |
 | itemBeanName | Beans | 豆子 |
 | itemBeanDetail | Grab a bean, then press the bean button at the bottom (or your poop) to fart past the next 5 pipes: nothing can touch you. A normal fart uses one bean; you can carry 3, and with all three the fart rockets you past 20 in a rainbow glow. | 吃到豆子后，点击底部的豆子按钮（或便便）放屁冲过接下来的 5 道管道，期间什么都碰不到你。普通放屁只用一颗豆子；最多可攒 3 颗，集齐 3 颗再放屁，就能顶着彩虹光芒一口气冲过 20 道管道。 |
-| itemCoinName | Coins | 金币 |
-| itemCoinDetail | A golden corn kernel. One waits on every level: on level 1 just past the last pipe, from level 2 at a random spot between the pipes, bobbing; more turn up now and then, and mystery boxes can hold some too. Coins go into your purse, shown above your beans, and last for this run only (a death takes them all); at the level break, tap 💰 to open the shop and spend them on fiber, a bean, a super fart or a mystery box. | 金黄的玉米粒。每一关都有一粒：第 1 关在最后一道管道之后，从第 2 关起随机出现在管道之间并上下漂浮；此外还会偶尔多出几粒，神秘盒子里有时也有。金币存进钱袋，显示在豆子计数上方，只在本局有效（死亡会全部清空）；过关休息时点击 💰 打开商店，可以用来买纤维、豆子、超级屁或神秘盒子。 |
+| itemCoinName | Kernels | 玉米粒 |
+| itemCoinDetail | A golden corn kernel. Kernels go into your purse and can be redeemed for items in the shop. Tap 💰 to open the shop in between levels. | 金黄的玉米粒。玉米粒会进入钱袋，可在商店兑换物品。关卡之间点击 💰 打开商店。 |
 | itemMysteryName | Mystery box | 神秘盒子 |
-| itemMysteryDetail | The first waits between the pipes before pipe 5 of level 3; after that they turn up at random, holding still on level 3 and floating slowly up and down from level 4. Grab one for a surprise: usually fiber, often a probiotic or a bean, sometimes 5 coins, a 5-pipe postbiotic or three beans, now and then 10 coins, and very rarely 15 coins or a skip to the end of the level (the skipped pipes still score). | 第 3 关第 5 道管道之前必定会有一个停在管道之间；之后会随机出现：第 3 关里静止不动，从第 4 关起缓缓上下漂浮。吃到它会随机获得奖励：通常是纤维，也常是益生菌或一颗豆子，有时是 5 枚金币、持续 5 道管道的后生元或三颗豆子，偶尔是 10 枚金币，极少数情况下是 15 枚金币或直接跳到本关终点（跳过的管道照样计分）。 |
+| itemMysteryDetail | Mystery boxes contain a random surprise item. | 神秘盒子里装有随机惊喜道具。 |
 | itemToiletName | On the toilet | 如厕模式 |
 | itemToiletDetail | Playing on the toilet? Flip the switch under the poop on the home screen. Those scores get a 🚽 next to them. | 在马桶上玩？打开主界面便便下方的开关，这些分数旁会显示 🚽。 |
 | itemLevelsName | Levels | 关卡 |
 | itemControlsName | Controls | 操作方式 |
 | itemControlsDetail | One player: tap or click to flap; the bean button (or the poop) farts. Keyboard: Space or ↑ flaps, B farts, P or Esc pauses. Controller: A flaps, RT farts, Menu pauses. Two players (the 👥 toggle): P1 flaps with W or Space and farts with E or Left Shift; P2 flaps with ↑ or Enter and farts with Right Shift or Numpad 0. A controller (A, RT) or a tap on your half works too. In a level break your fart button (B, RT, E…) opens and closes the 💰 shop. | 单人：点击起飞；按豆子按钮（或便便）放屁。键盘：空格或 ↑ 起飞，B 放屁，P 或 Esc 暂停。手柄：A 起飞，RT 放屁，Menu 暂停。双人模式（👥 开关）：玩家 1 用 W 或空格起飞、E 或左 Shift 放屁；玩家 2 用 ↑ 或回车起飞、右 Shift 或小键盘 0 放屁。也可以用手柄（A、RT）或点击你这一侧。过关休息时，放屁键（B、RT、E 等）可打开或关闭 💰 商店。 |
-| itemLevelsDetail | The gut comes in levels: stomach, duodenum, jejunum and on, down to the rectum. Pass a checkered finish line to clear one; the game pauses for a breather before the next. Levels 2 and 3 scroll faster, then the speed holds; from level 4 some pipes drift up and down. Clear the rectum and you win. The bar at the top shows how far you are. | 肠道分成关卡：胃、十二指肠、空肠……一直到直肠。越过黑白格终点线即可过关；游戏会稍作停顿再进入下一关。第 2、3 关会滚得更快，之后速度保持不变；从第 4 关起有些管道会上下漂移。通过直肠就赢了。顶部的进度条显示你走到了哪里。 |
+| itemSoundName | Sound | 声音 |
+| itemSoundDetail | On iPhone, Silent mode mutes the game - turn it off to hear sound. | 在 iPhone 上，静音模式会让游戏无声——关闭静音即可听到声音。 |
+| itemLevelsDetail | The gut comes in levels: stomach, duodenum, jejunum and on, down to the rectum. Pass a checkered finish line to clear one; the game pauses for a breather before the next level. Clear the rectum and you win! The bar at the top shows how far you are. | 肠道分成关卡：胃、十二指肠、空肠……一直到直肠。越过黑白格终点线即可过关；游戏会稍作停顿再进入下一关。通过直肠就赢了！顶部的进度条显示你走到了哪里。 |
 | updatedPrefix | Updated | 更新于 |
 | versionLine | v{version} beta | v{version} 测试版 |
 | changelogTitle | WHAT'S NEW | 更新说明 |
@@ -155,13 +159,13 @@ Short, playful, clear. Fit a 720×1280 logical field; How to play / About body w
 | langEnglish | English | English |
 | langChinese | 简体中文 | 简体中文 |
 | feedbackTitle | FEEDBACK | 反馈 |
-| feedbackBody | Report a bug or suggest a feature. Opens GitHub in your browser — you need a GitHub account to submit. | 报告问题或提出功能建议。将在浏览器中打开 GitHub——提交需要 GitHub 账号。 |
+| feedbackBody | Report a bug or suggest a feature. Opens GitHub in your browser - you need a GitHub account to submit. | 报告问题或提出功能建议。将在浏览器中打开 GitHub——提交需要 GitHub 账号。 |
 | bugReport | Bug | 问题反馈 |
 | featureRequest | Feature request | 功能建议 |
 | feedbackLink | Bug or feature request? | 问题或功能建议？ |
 | saveLoadButton | Save / Load User | 存档 / 载入用户 |
 | saveTitle | SAVE / LOAD USER | 存档 / 载入用户 |
-| saveIntro | Copy your code to keep your name and top scores on another phone or browser. Paste it there to load them. Press the Save button to save your username. | 复制存档码，即可在其他手机或浏览器保留你的名字和最高分。在那里粘贴即可载入。按“保存”可保存用户名。 |
+| saveIntro | Enter your username to save it and your top scores. Copy your code to keep your name and top scores on another phone or browser. Paste it there to load them. Press the Save button to save your username. | 输入用户名以保存它和你的最高分。复制存档码，即可在其他手机或浏览器保留你的名字和最高分。在那里粘贴即可载入。按“保存”可保存用户名。 |
 | saveNameLabel | Username | 用户名 |
 | saveNamePlaceholder | 1–16 characters | 1–16 个字符 |
 | saveYourCode | Save user code | 保存用户码 |
