@@ -294,10 +294,10 @@ export const TUNING = {
       beanOddsMul: 2, // … by this (bean1 0.2 → 0.4, bean3 0.05 → 0.1; fiber's remainder shrinks)
     },
     // Points in a match (single player is untouched): a crash costs deathPenaltyPerLevel × level,
-    // never below 0; clearing a level earns levelClearBonus. The higher total wins when both are out.
+    // never below 0; the first over each finish line earns levelClearBonus. The higher total wins when both are out.
     scoring: {
       deathPenaltyPerLevel: 2, // points lost per level number on a crash (level 3: −6)
-      levelClearBonus: 25, // points for crossing a finish line
+      levelClearBonus: 25, // points for the first player over a finish line (the rectum's too); the second gets none
     },
     // A crash in a match does not end the run: the half halts for the tumble, the poop is eased back
     // to mid-screen, blinks (invulnerable, the world still halted), then plays on with a clear screen.

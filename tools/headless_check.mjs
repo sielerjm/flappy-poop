@@ -1863,8 +1863,12 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         // ready". P1 marks ready and nothing starts; P2 shopping is not ready, so still nothing; P2's ready
         // starts the 3-2-1-GO; a tap from P2 during the count cancels it (P1 stays ready); P2's ready again
         // starts it over. Settings from P1's tray holds the count until it closes; GO starts level 2 for both.
+        const p2Before = await evaluate(`JSON.stringify({ score: ${P2}.score, coins: ${P2}.effects.coins(), wins: ${VS}.match.slots[1].levelWins })`).then(JSON.parse);
         await evaluate(`(() => { const p = ${P2}; p.pipes.clear(true, true); p.items.clear(true, true); p.beans.clear(true, true); p.nextGapY = null; p.pipesSpawned = ${want.end1}; p.pipesPassed = ${want.end1}; p.finishSpawned = false; p.spawnFinishLine(); p.finishLine.x = p.poop.x + 150; return true; })()`);
         ok(await until(`${P2}.levelBreak && ${P2}.state === 'paused'`), 'P2 crosses its finish line into its break');
+        // Second over the line: no +25 and no popup (P1 took them), the level's coins all the same.
+        const p2After = await evaluate(`JSON.stringify({ score: ${P2}.score, slot: ${VS}.match.slots[1].score, coins: ${P2}.effects.coins(), wins: ${VS}.match.slots[1].levelWins, popup: ${P2}.scorePopup.visible && ${P2}.scorePopup.alpha > 0 ? ${P2}.scorePopup.text : null })`).then(JSON.parse);
+        ok(p2After.score === p2Before.score && p2After.slot === p2After.score && p2After.popup !== `+${want.bonus}` && p2After.coins - p2Before.coins === 1 + TT.coin.cleanLevelBonus && p2After.wins === p2Before.wins, `P2 second over the line: score still ${p2After.score} (no +${want.bonus}, no popup), coins +${p2After.coins - p2Before.coins}, no level win`);
         // Regression: the beat is its timer, not the clock against the arrival stamp. Phaser's timers run on the
         // smoothed delta and get ahead of time.now after a frame hitch, so a stamp-based beat could still read
         // "inside" when the timer fired and the hint would never show. Push the stamp 50 ms ahead to stand in for
@@ -2007,10 +2011,10 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         ok(await until(`${VS}.match.status === 'over'`), 'P2 crosses the rectum\'s finish line and the match is over');
         await sleep(100);
         const ended = await evaluate(`JSON.stringify({ status: ${VS}.match.status, a: ${P1}.state, b: ${P2}.state, scores: ${VS}.match.slots.map((s) => s.score), won: ${VS}.match.slots.map((s) => s.won), ended: ${VS}.match.slots.map((s) => s.ended), over: __flappy.scene.isActive('Over'), panel: ${VS}.resultShown, faces: [${P1}.poop.texture.key, ${P2}.poop.texture.key] })`).then(JSON.parse);
-        ok(ended.status === 'over' && ended.a === 'dead' && ended.b === 'dead' && ended.scores[0] === 5 + want.bonus && ended.scores[1] === 9 + want.bonus && ended.won[0] && ended.won[1] && ended.ended[0] && ended.ended[1] && !ended.over && !ended.panel && ended.faces.every((f) => f === 'poop'), `both out (${ended.scores.join(' / ')}), no Over, the panel waits for the delay`);
+        ok(ended.status === 'over' && ended.a === 'dead' && ended.b === 'dead' && ended.scores[0] === 5 + want.bonus && ended.scores[1] === 9 && ended.won[0] && ended.won[1] && ended.ended[0] && ended.ended[1] && !ended.over && !ended.panel && ended.faces.every((f) => f === 'poop'), `both out (${ended.scores.join(' / ')}), no Over, the panel waits for the delay`);
         ok(await until(`${VS}.resultShown`, (want.deathMs + 1500) / 100), 'the result panel shows after the delay');
         const panel = await evaluate(`(() => { const v = ${VS}; const texts = v.children.list.filter((c) => c.type === 'Text' && c.visible).map((c) => c.text); return JSON.stringify({ texts, buttons: Boolean(v.buttons), rematch: v.rematchButton.getText(), home: v.resultHome.getText(), syncs: globalThis.__syncs ?? 0, save: localStorage.getItem('flappyPoop.save'), status: v.match.status }); })()`).then(JSON.parse);
-        ok(panel.texts.includes('P2 WINS!') && !panel.texts.includes('OUT') && panel.texts.includes(String(9 + want.bonus)) && panel.texts.includes(String(5 + want.bonus)) && panel.texts.filter((x) => x === '💀 ×1').length === 2 && panel.buttons && panel.rematch === 'Rematch' && panel.home === 'Home', `the panel reads P2 WINS! with both scores and a 💀 ×1 under each; Rematch | Home`);
+        ok(panel.texts.includes('P1 WINS!') && !panel.texts.includes('OUT') && panel.texts.includes('9') && panel.texts.includes(String(5 + want.bonus)) && panel.texts.filter((x) => x === '💀 ×1').length === 2 && panel.buttons && panel.rematch === 'Rematch' && panel.home === 'Home', `the panel reads P1 WINS! (first out took the +${want.bonus}: ${5 + want.bonus} to 9) with a 💀 ×1 under each; Rematch | Home`);
         const flags = await evaluate(`(() => { const v = ${VS}; const wide = v.children.list.find((c) => c.type === 'Rectangle' && c.depth === 70); const t = (s) => v.children.list.find((c) => c.type === 'Text' && c.text === s); return JSON.stringify({ wins: v.match.slots.map((s) => s.levelWins), w: wide?.width, p1: t('🏁 ×2')?.x, p2: t('🏁 ×0')?.x, cx: v.layout.totalW / 2 }); })()`).then(JSON.parse);
         ok(flags.wins[0] === 2 && flags.wins[1] === 0 && flags.w === TT.versus.resultPanelW && flags.p1 < flags.cx && flags.p2 > flags.cx, `level wins: P1 first over level 1's line and first out (🏁 ×${flags.wins[0]}), P2 🏁 ×${flags.wins[1]}, on a ${flags.w} px panel`);
         ok(panel.syncs === 0 && panel.save === saveBefore, 'a match records nothing: no leaderboard sync, the save state untouched');
@@ -2047,10 +2051,10 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
           await until(`${VS}.resultShown`, (want.deathMs + 2500) / 100);
           return evaluate(`(() => { const v = ${VS}; const texts = v.children.list.filter((c) => c.type === 'Text' && c.visible).map((c) => c.text); return JSON.stringify({ head: texts.find((x) => /WINS|DRAW/.test(x)), skulls: texts.filter((x) => x.startsWith('💀')) }); })()`).then(JSON.parse);
         };
-        const tie = await headline(9, 9, 1, 0);
+        const tie = await headline(9, 9 + want.bonus, 1, 0); // P1 first out takes the +25: P2 pinned 25 higher so both total 34
         ok(tie.head === 'P2 WINS!' && tie.skulls.join(' ') === '💀 ×1 💀 ×0', `equal points: the fewer crashes win (${tie.head}, ${tie.skulls.join(' / ')})`);
         ok(await rematch(), 'a second rematch');
-        const draw = await headline(9, 9, 2, 2);
+        const draw = await headline(9, 9 + want.bonus, 2, 2);
         ok(draw.head === 'DRAW', `equal points and crashes: ${draw.head}`);
         // Home from the result panel.
         await evaluate(`${VS}.leave(), true`);

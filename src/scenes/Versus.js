@@ -33,7 +33,8 @@ export class Versus extends Phaser.Scene {
     this.resultShown = false;
     this.levelStage = null; // 'count' while the shared 3-2-1-GO to the next level runs (both players ready)
     this.readyHalves = new Set(); // halves (0 = P1, 1 = P2) that tapped ready in their level break
-    this.levelArrivals = new Map(); // half → this scene's clock when it reached the line (the first arrival wins the level)
+    this.levelArrivals = new Map(); // half → this scene's clock when it reached the line
+    this.levelFirst = null; // the half (0 / 1) first over this level's line (claimLevelFinish): it took the +25 and the 🏁
     this.levelBeats = new Set(); // halves whose arrival beat (the levelSyncDelayMs timer) has passed: their taps count, their hint shows
     this.levelCountToken = 0; // bumped to cancel a running level count
     this.goToken = 0; // bumped by each GO: only the latest GO's beat hides countText
@@ -198,8 +199,6 @@ export class Versus extends Phaser.Scene {
     if (this.match.status !== 'playing') return;
     const i = this.halves().indexOf(half);
     if (i < 0) return;
-    // The first one over this level's line wins the level (🏁 on the result panel).
-    if (![...this.levelArrivals.keys()].some((k) => k !== i)) this.match.slots[i].levelWins = (this.match.slots[i].levelWins ?? 0) + 1;
     this.readyHalves.delete(i);
     this.levelBeats.delete(i);
     this.levelArrivals.set(i, this.time.now);
@@ -212,6 +211,22 @@ export class Versus extends Phaser.Scene {
       this.levelBeats.add(i);
       this.refreshReady();
     });
+  }
+
+  /**
+   * A half crossed this level's finish line (Play.onFinishCrossed, the rectum's too): true for the
+   * first of the two since the level began, who wins the level (slot.levelWins, 🏁) and takes
+   * versus.scoring.levelClearBonus; false for the second. Levels start together (beginLevel clears
+   * levelFirst), so "this level" is the same for both halves.
+   */
+  claimLevelFinish(half) {
+    if (this.match.status !== 'playing') return false;
+    const i = this.halves().indexOf(half);
+    if (i < 0 || this.levelFirst != null) return false;
+    this.levelFirst = i;
+    const slot = this.match.slots[i];
+    slot.levelWins = (slot.levelWins ?? 0) + 1;
+    return true;
   }
 
   /** This half's arrival beat has passed (its timer fired): its taps count as ready toggles and its hint shows. */
@@ -287,6 +302,7 @@ export class Versus extends Phaser.Scene {
     this.readyHalves.clear();
     this.levelArrivals.clear();
     this.levelBeats.clear();
+    this.levelFirst = null;
     for (const half of this.halves()) half?.beginLevel();
     if (globalThis.document?.hidden) this.setPaused(true); // GO on a hidden tab: nothing was live to auto-pause during the count
   }
@@ -348,9 +364,6 @@ export class Versus extends Phaser.Scene {
    */
   onRunEnded(player) {
     if (this.match.status !== 'playing') return;
-    // The first one out of the rectum wins the last level too.
-    const slot = this.match.slots[player - 1];
-    if (slot && this.match.slots.filter((s) => s.ended).length === 1) slot.levelWins = (slot.levelWins ?? 0) + 1;
     if (!this.match.slots.every((s) => s.ended)) return;
     this.match.status = 'over';
     this.pausedHalves.clear();

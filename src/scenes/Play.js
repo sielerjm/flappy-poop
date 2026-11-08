@@ -696,17 +696,19 @@ export class Play extends Phaser.Scene {
     if (this.effects.cancelPower()) this.endPower(); // endPower stops the clip
     // Coins for the cleared level (its number, +3 without a crash in it), before the break so its shop can spend them.
     this.takeCoins(levelClearCoins(done, this.crashesThisLevel, T, { match: Boolean(this.match) }));
-    // A match: clearing a level earns versus.scoring.levelClearBonus. The score moves now (win()
-    // reports it); the popup starts after the break has paused the run (a tween made while
-    // paused is not paused with it), or at once on the final level.
-    if (this.match) {
+    // A match: the first over this line (Versus.claimLevelFinish, the rectum's too) earns
+    // versus.scoring.levelClearBonus and the level win; the second gets neither. The score moves
+    // now (win() reports it); the popup starts after the break has paused the run (a tween made
+    // while paused is not paused with it), or at once on the final level.
+    const first = Boolean(this.match && this.versusHost()?.claimLevelFinish?.(this));
+    if (first) {
       this.score += T.versus.scoring.levelClearBonus;
       this.scoreText.setText(String(this.score));
       this.refreshProbioticHud();
     }
     if (final) this.win();
     else this.startLevelBreak();
-    if (this.match) this.showScorePopup('levelClear');
+    if (first) this.showScorePopup('levelClear');
     if (this.match && !final) this.versusHost()?.onLevelReached?.(this); // the ready check: both players tap ready, then the shared count
   }
 
