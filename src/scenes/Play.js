@@ -33,6 +33,9 @@ import {
   resolveMystery,
   skipPairs,
   MYSTERY_BEANS,
+  MYSTERY_COINS,
+  BAND_ITEMS,
+  canBuy,
   scoreAfterItem,
   scorePopup,
   popupSlots,
@@ -155,7 +158,7 @@ export class Play extends Phaser.Scene {
     this.pipesPassed = 0;
     this.pipesSpawned = 0;
     this.mysteryPair = null; // picked in start(): the pair the guaranteed first box (early level 3) rides after
-    this.collected = { fiber: 0, probiotic: 0, postbiotic: 0, bacteria: 0, bean: 0, mystery: 0 }; // this run's pickups, for the game-over summary (a box's reward also counts as its own kind)
+    this.collected = { fiber: 0, probiotic: 0, postbiotic: 0, bacteria: 0, bean: 0, mystery: 0, coin: 0 }; // this run's pickups, for the game-over summary (a box's reward also counts as its own kind)
     this.diff = { pipeSpeed: levelSpeed(1, T), gapHeight: levelGap(1, T) };
     // Finish line + break: the line spawns in the slot after a level's last pair
     // and nothing follows it; crossing it pauses the run (levelBreak) until a tap.
@@ -304,6 +307,10 @@ export class Play extends Phaser.Scene {
     // Bean counter (left of the HUD): bean ×n until the power is spent.
     this.beanIcon = this.add.image(this.col.x + 72, 156, 'bean').setDisplaySize(56, 56).setDepth(20).setVisible(false);
     this.beanText = this.add.text(this.col.x + 108, 156, '', { ...TEXT_STYLE, fontSize: '36px' }).setOrigin(0, 0.5).setDepth(20).setVisible(false);
+    // Coin purse (hudCoin): a second row under the bean counter, coin ×n while any are held.
+    const hc = T.hudCoin;
+    this.coinIcon = this.add.image(this.col.x + hc.iconX, hc.y, 'coin').setDisplaySize(hc.iconPx, hc.iconPx).setDepth(20).setVisible(false);
+    this.coinText = this.add.text(this.col.x + hc.textX, hc.y, '', { ...TEXT_STYLE, fontSize: `${hc.fontPx}px` }).setOrigin(0, 0.5).setDepth(20).setVisible(false);
     this.readyTitle = this.add
       .text(this.readyBoxes.title.x, this.readyBoxes.title.y, t(this.locale, 'readyTitle'), { ...TEXT_STYLE, fontSize: `${T.readyTitlePx}px` })
       .setOrigin(0.5)
@@ -547,7 +554,7 @@ export class Play extends Phaser.Scene {
     this.scoreText.setText(String(this.score));
     this.beanSpawned = begin.beanSpawned;
     this.refreshTestBadge();
-    this.collected = { fiber: 0, probiotic: 0, postbiotic: 0, bacteria: 0, bean: 0, mystery: 0 };
+    this.collected = { fiber: 0, probiotic: 0, postbiotic: 0, bacteria: 0, bean: 0, mystery: 0, coin: 0 };
     this.mysteryPair = this.course.mysteryPair(); // the pair the guaranteed first box (early level 3) rides after
     this.distance = 0;
     this.popupOrder = [];
@@ -606,11 +613,7 @@ export class Play extends Phaser.Scene {
       this.level += 1;
       this.refreshLevelBar(); // new level: label steps, fill back to 0
     }
-    if (this.cache.audio.exists('level-up')) {
-      this.sound.play('level-up', { volume: T.levelUpVolume });
-    } else {
-      sfx.levelUp();
-    }
+    this.playSample('level-up', T.levelUpVolume, sfx.levelUp);
     if (this.effects.cancelPower()) {
       this.fartSound?.stop();
       this.endPower();
@@ -1497,7 +1500,7 @@ export class Play extends Phaser.Scene {
     // after the item and bean draws so levels below fromLevel and the draws before it keep their sequence.
     const move = this.course.pipeMove(n, this.level, gapY, gapBounds(gapCfg), { centred });
     if (move) top.setData({ move, elapsed: 0, mate: bottom, gapH });
-    // Fiber and mystery boxes sit between pairs like a bean (and yield to a bean rolled for the same pair);
+    // Fiber, mystery boxes and coins sit between pairs like a bean (and yield to a bean rolled for the same pair);
     // probiotic and bacteria sit in the gap, behind the pipes, moving from moveFromLevel.
     // Before bandMoveFromLevel fiber and beans hold still midway between this gap and the next.
     const still = !bandItemsMove(this.level, T);
@@ -1505,7 +1508,7 @@ export class Play extends Phaser.Scene {
       if (this.nextGapY == null) this.nextGapY = this.course.gapY(n + 1, gapCfg); // the next pair reuses it
       return bandMidY(gapY, this.nextGapY);
     };
-    const band = kind === 'fiber' || kind === 'mystery';
+    const band = BAND_ITEMS.includes(kind); // fiber, a box or a coin: in the open between the pairs
     const boxStill = !mysteryMoves(this.level, T);
     if (boxHere) this.spawnBandItem('mystery', boxStill ? stillY() : null, shift);
     else if (band && !beanHere) this.spawnBandItem(kind, (kind === 'mystery' ? boxStill : still) ? stillY() : null, shift);
@@ -1919,6 +1922,8 @@ export class Play extends Phaser.Scene {
       this.eatFiber();
     } else if (kind === 'probiotic') {
       this.takeProbiotic();
+    } else if (kind === 'coin') {
+      this.takeCoins(1);
     } else if (kind === 'bacteria') {
       this.collected.bacteria += 1;
       if (this.effects.hasProbiotic()) {
@@ -1957,11 +1962,71 @@ export class Play extends Phaser.Scene {
     sfx.pickup();
   }
 
+  /** Coins picked up or paid by a box: into the purse, counted for the run (collected.coin counts coins), the HUD and the coin sound. */
+  takeCoins(n) {
+    this.effects.addCoins(n);
+    this.collected.coin += n;
+    this.refreshCoinHud();
+    this.playSample('coin', T.coinVolume, sfx.pickup);
+  }
+
+  /** The purse under the bean counter: coin ×n while any are held. */
+  refreshCoinHud() {
+    const n = this.effects.coins();
+    const show = n > 0;
+    this.coinIcon.setVisible(show);
+    this.coinText.setVisible(show);
+    if (show) this.coinText.setText(`×${n}`);
+  }
+
+  /**
+   * Up to `n` beans from a box or the shop (addBean caps at maxBeans): counted for the run,
+   * the HUD refreshed, the power charged once ready. Returns the beans that fit.
+   */
+  giveBeans(n) {
+    const before = this.effects.beans();
+    for (let i = 0; i < n; i += 1) this.effects.addBean();
+    const added = this.effects.beans() - before;
+    this.collected.bean += added;
+    this.refreshBeanHud();
+    sfx.pickup();
+    if (this.effects.powerReady()) this.setCharged(true);
+    return added;
+  }
+
+  /** A loaded sample at `volume`, or the synth `fallback` when the file did not load. */
+  playSample(key, volume, fallback = null) {
+    if (this.cache.audio.exists(key)) this.sound.play(key, { volume });
+    else fallback?.();
+  }
+
+  /**
+   * Buy a SHOP_ITEMS row with coins (the level-break shop). False, and nothing taken, unless
+   * canBuy. Fiber → eatFiber; bean → one bean; superBean → the bag filled to beans.superBeans;
+   * mystery → a box opened on the plain draw table with pairsLeft 0 (a skip in the break becomes
+   * fiber), its reveal at `opts.x` / `opts.y` (`opts.depth`, `opts.run`: see revealMystery).
+   * Nothing it starts is frozen with the paused run: the reward animates in the break.
+   */
+  buyItem(id, opts = {}) {
+    if (!canBuy(id, { coins: this.effects.coins(), beans: this.effects.beans() }, T)) return false;
+    this.effects.spendCoins(T.shop.prices[id]);
+    if (id === 'fiber') this.eatFiber();
+    else if (id === 'bean') this.giveBeans(1);
+    else if (id === 'superBean') this.giveBeans(T.beans.superBeans);
+    else if (id === 'mystery') {
+      const draw = rollMystery(this.match ? this.rngDraw : this.course.rng, T);
+      this.openMystery(resolveMystery(draw, { beans: this.effects.beans(), pairsLeft: 0 }, T), opts.x, opts.y, opts);
+    }
+    this.refreshCoinHud();
+    this.playSample('coin-spend', T.coinSpendVolume, sfx.pickup);
+    return true;
+  }
+
   /**
    * Apply a mystery box's (resolved) draw at the box's spot, then show what it was.
    * Separate from collectItem so the smoke test can force each draw.
    */
-  openMystery(draw, x = this.poop.x, y = this.poop.y) {
+  openMystery(draw, x = this.poop.x, y = this.poop.y, opts = {}) {
     if (draw === 'probiotic') {
       this.takeProbiotic();
     } else if (draw === 'postbiotic') {
@@ -1969,33 +2034,35 @@ export class Play extends Phaser.Scene {
       this.refreshProbioticHud();
       sfx.pickup();
     } else if (MYSTERY_BEANS[draw]) {
-      const before = this.effects.beans();
-      for (let i = 0; i < MYSTERY_BEANS[draw]; i += 1) this.effects.addBean(); // capped at maxBeans
-      this.collected.bean += this.effects.beans() - before;
-      this.refreshBeanHud();
-      sfx.pickup();
-      if (this.effects.powerReady()) this.setCharged(true);
+      this.giveBeans(MYSTERY_BEANS[draw]);
+    } else if (MYSTERY_COINS[draw]) {
+      this.takeCoins(MYSTERY_COINS[draw]);
     } else if (draw === 'skip') {
       this.skipToFinish();
       sfx.pickup();
     } else {
       this.eatFiber();
     }
-    this.revealMystery(draw, x, y);
+    this.revealMystery(draw, x ?? this.poop.x, y ?? this.poop.y, opts);
   }
 
-  /** The drawn reward's icon (🏁 for a skip, ×3 beside the bean for three) rises out of the box and fades. */
-  revealMystery(draw, x, y) {
+  /**
+   * The drawn reward's icon (🏁 for a skip, ×3 beside the bean for three, ×5 / ×10 / ×15 beside a
+   * coin) rises out of the box and fades. `depth` lifts it (over the shop panel); `run` keeps it
+   * moving while the run is paused (a box bought in the level break).
+   */
+  revealMystery(draw, x, y, { depth = 12, run = false } = {}) {
     this.clearReveal();
     const parts = [];
     if (draw === 'skip') {
       parts.push(this.add.text(0, 0, '\u{1F3C1}', { fontFamily: 'sans-serif', fontSize: '72px' }).setOrigin(0.5));
     } else {
-      const key = { probiotic: 'probiotic', postbiotic: 'postbiotic', bean1: 'bean', bean3: 'bean' }[draw] ?? 'fiber';
+      const key = { probiotic: 'probiotic', postbiotic: 'postbiotic', bean1: 'bean', bean3: 'bean', coin5: 'coin', coin10: 'coin', coin15: 'coin' }[draw] ?? 'fiber';
       parts.push(this.add.image(0, 0, key).setScale(T.spriteDisplayScale));
-      if (MYSTERY_BEANS[draw] > 1) parts.push(this.add.text(T.items.itemRadius, 0, `×${MYSTERY_BEANS[draw]}`, { ...TEXT_STYLE, fontSize: '40px' }).setOrigin(0, 0.5));
+      const count = MYSTERY_BEANS[draw] > 1 ? MYSTERY_BEANS[draw] : MYSTERY_COINS[draw];
+      if (count) parts.push(this.add.text(T.items.itemRadius, 0, `×${count}`, { ...TEXT_STYLE, fontSize: '40px' }).setOrigin(0, 0.5));
     }
-    const reveal = this.add.container(x, y, parts).setDepth(12);
+    const reveal = this.add.container(x, y, parts).setDepth(depth);
     reveal.setData('draw', draw);
     this.reveal = reveal;
     this.revealTween = this.tweens.add({
@@ -2011,7 +2078,7 @@ export class Play extends Phaser.Scene {
         }
       },
     });
-    if (this.state === 'paused') this.revealTween.pause();
+    if (this.state === 'paused' && !run) this.revealTween.pause();
   }
 
   clearReveal() {
@@ -2167,11 +2234,7 @@ export class Play extends Phaser.Scene {
     this.cameras.main.shake(200, 0.01);
     this.cameras.main.flash(120, 255, 120, 160);
     if (this.settings.load().haptics) vibrate(globalThis.navigator, T.vibrateOnDieMs);
-    if (this.cache.audio.exists('fart')) {
-      this.sound.play('fart', { volume: T.fartVolume });
-    } else {
-      sfx.die();
-    }
+    this.playSample('fart', T.fartVolume, sfx.die);
     // Tumble: keep gravity so the poop falls, stop it at the ground, spin it (over the crash
     // phase in a match, until the game-over panel in single player).
     this.poop.setVelocityY(Math.max(this.poop.body.velocity.y, 0));
