@@ -193,13 +193,33 @@ export class Versus extends Phaser.Scene {
    * A tap on a half in its level break (Play.applyChrome 'resume': a touch, a flap key, a pad's A
    * or B). Once both are at the line and the beat has passed it is the go-ahead for both: the
    * prompts go and the shared countdown starts the next level (holding under an overlay).
-   * Before that it does nothing.
+   * Before that it does nothing, and so it does while either half has its shop open (the other
+   * reads "Waiting for Pn…" until the shopper closes it).
    */
   onLevelTap() {
-    if (this.match.status !== 'playing' || this.levelStage !== 'tap') return;
+    if (this.match.status !== 'playing' || this.levelStage !== 'tap' || this.anyShopOpen()) return;
     this.levelStage = 'count';
-    for (const half of this.halves()) half?.setLevelHintVisible(false);
+    for (const half of this.halves()) {
+      half?.setLevelHintVisible(false);
+      half?.refreshShopButton?.(); // no shop under the count: GO would shut it
+    }
     this.runCountdown(() => this.beginLevel(), { status: 'playing', hold: true });
+  }
+
+  /** Some half has its level-break shop open: the shared start waits for it. */
+  anyShopOpen() {
+    return this.halves().some((half) => half?.shopOpen);
+  }
+
+  /** A half other than `half` has its shop open (that half's banner then reads "Waiting for Pn…"). */
+  shopOpenElsewhere(half) {
+    return this.halves().some((h) => h && h !== half && h.shopOpen);
+  }
+
+  /** A half opened or closed its shop: once both are at the line, the other's prompt flips between "Waiting for Pn…" and "Tap to continue". */
+  onShopChanged() {
+    if (this.match?.status !== 'playing' || this.levelStage !== 'tap') return;
+    for (const half of this.halves()) half?.refreshLevelBanner();
   }
 
   /** GO: both halves leave their break in the same frame (Play.beginLevel), side by side on the course. */

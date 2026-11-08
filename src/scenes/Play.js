@@ -36,6 +36,14 @@ import {
   MYSTERY_COINS,
   BAND_ITEMS,
   canBuy,
+  buyBlocker,
+  SHOP_ITEMS,
+  shopButtonLayout,
+  shopButtonHit,
+  shopLayout,
+  shopHit,
+  overlayOutsideHit,
+  fitScale,
   scoreAfterItem,
   scorePopup,
   popupSlots,
@@ -76,7 +84,7 @@ import {
   LAST_UPDATED,
   padIntent,
 } from '../logic.js';
-import { t, pauseBannerText, levelBannerText, levelLabel, initialLocale, isLocale, profileButtonText } from '../i18n.js';
+import { t, pauseBannerText, levelBannerText, levelLabel, initialLocale, isLocale, profileButtonText, coinLabel } from '../i18n.js';
 import { loadLocal, saveLocal, ensureId, recordScore, TOILET_EMOJI } from '../save.js';
 import { unlock, attachGame, setMuted, isMuted, sfx } from '../sound.js';
 import { createTray } from '../ui/tray.js';
@@ -376,6 +384,13 @@ export class Play extends Phaser.Scene {
       .setOrigin(0.5)
       .setDepth(26)
       .setVisible(false);
+    // The level-break shop: the 💰 pill under the banner (refreshShopButton) opens a panel of rows
+    // (openShop) inside this half's column, above the shade and the banner, under the tray.
+    this.shopOpen = false;
+    this.shop = null;
+    this.shopButtonBox = shopButtonLayout(this.col.width, GAME_HEIGHT, T, this.col.x);
+    this.shopBoxes = shopLayout(this.col.width, GAME_HEIGHT, T, this.col.x);
+    this.shopButton = createButton(this, this.shopButtonBox, coinLabel(0), { ...TEXT_STYLE, fontSize: '40px' }, { depth: 27 }).setVisible(false);
 
     // The tray and the controller ring belong to the chrome owner: single player, or P1 in a match (P2 has neither).
     this.tray = !this.match || this.player === 1 ? createTray(this, { muted: isMuted(), col: this.col }) : null;
@@ -392,6 +407,10 @@ export class Play extends Phaser.Scene {
             { id: 'toilet', box: this.readyBoxes.toilet, visible: onReady, activate: () => this.toggleToilet() },
             ...(this.readyBoxes.versus ? [{ id: 'versus', box: this.readyBoxes.versus, visible: onReady, activate: () => this.toggleVersus() }] : []),
             { id: 'howto', box: this.readyBoxes.howto, visible: onReady, activate: () => this.handleChrome('howto') },
+            // The level break: the 💰 pill, then (the shop open) its ✕ and rows down the column.
+            { id: 'shop', box: this.shopButtonBox, depth: 27, visible: () => this.shopButtonShown(), activate: () => this.handleChrome('shop') },
+            { id: 'shopClose', box: this.shopBoxes.close, depth: 29, visible: () => this.shopOpen, activate: () => this.handleChrome('esc') },
+            ...this.shopBoxes.rows.map((row) => ({ id: `shop:${row.id}`, box: row, depth: 28, visible: () => this.shopOpen, activate: () => this.shopBuy(row.id) })),
           ],
         })
       : null;
@@ -455,6 +474,8 @@ export class Play extends Phaser.Scene {
       this.pad = null;
       this.focus?.destroy();
       this.focus = null;
+      this.shop = null; // its objects die with the scene
+      this.shopOpen = false;
       if (this.fartSound) {
         this.fartSound.stop();
         this.fartSound.destroy();
@@ -559,6 +580,7 @@ export class Play extends Phaser.Scene {
     this.distance = 0;
     this.popupOrder = [];
     this.clearReveal();
+    this.closeShop({ silent: true });
     this.finishLine?.destroy();
     this.finishLine = null;
     this.finishSpawned = false;
@@ -643,11 +665,15 @@ export class Play extends Phaser.Scene {
   }
 
   refreshLevelBanner() {
-    const [title, hint] = levelBannerText(this.locale, this.level, LEVELS).split('\n');
+    // Single player with coins in the purse: "Tap to continue · 💰 to shop".
+    const shop = !this.match && (this.effects?.coins?.() ?? 0) > 0;
+    const [title, hint] = levelBannerText(this.locale, this.level, LEVELS, { shop }).split('\n');
     this.levelTitle?.setText(title);
     // A match's break waits for the other player; once both are at the line (Versus levelStage 'tap')
     // the hint is the usual "Tap to continue", and a tap from either half starts the shared count.
-    const waiting = this.match && this.levelBreak && this.versusHost()?.levelStage !== 'tap';
+    // While the other half has its shop open this half waits for it too.
+    const host = this.versusHost();
+    const waiting = this.match && this.levelBreak && (host?.levelStage !== 'tap' || Boolean(host?.shopOpenElsewhere?.(this)));
     this.levelHint?.setText(waiting ? t(this.locale, 'versusWaiting').replace('{n}', String(this.player === 1 ? 2 : 1)) : hint);
   }
 
@@ -692,6 +718,7 @@ export class Play extends Phaser.Scene {
    * spins it up right after.
    */
   endLevelBreak() {
+    this.closeShop({ silent: true }); // never left open into the level (a match's shared start waits for it anyway)
     this.levelBreak = false;
     this.breakGlide?.stop();
     this.breakGlide = null;
@@ -748,6 +775,32 @@ export class Play extends Phaser.Scene {
         }
         // 'start' or empty space both start the run below.
       }
+    }
+    // The level-break shop. Open: the ✕ closes it, a row buys (a greyed row refuses, the tap is
+    // spent), the panel itself swallows the tap, and outside it (or a tap with no pointer: a key,
+    // a pad's A) closes it through chromeIntent; it never continues the level. Closed: the 💰 opens it.
+    if (this.shopOpen) {
+      // An overlay over the shop (Settings from the tray) owns the tap: chromeIntent ignores it below.
+      if (pointer && !this.chromeArgs('tap').overlay) {
+        const hit = shopHit(pointer.x, pointer.y, this.shopBoxes);
+        if (hit === 'close') {
+          this.handleChrome('esc');
+          return;
+        }
+        if (hit) {
+          this.shopBuy(hit);
+          return;
+        }
+        if (!overlayOutsideHit(pointer.x, pointer.y, this.shopBoxes.panel)) return;
+      }
+      this.handleChrome('tap');
+      return;
+    }
+    if (pointer && this.shopButtonShown() && shopButtonHit(pointer.x, pointer.y, this.shopButtonBox)) {
+      this.handleChrome('shop');
+      return;
+    }
+    if (pointer) {
       // Charged power: a tap on the poop itself or on the bean button fires the fart instead of flapping.
       if (this.state === 'playing' && this.effects.powerReady() && (poopTapHit(pointer.x, pointer.y, this.poop, T.poopRadius) || beanButtonHit(pointer.x, pointer.y, this.beanButtonBox))) {
         this.activatePower();
@@ -927,6 +980,7 @@ export class Play extends Phaser.Scene {
     this.pauseText?.setText(pauseTitle);
     this.pauseHint?.setText(pauseHint);
     this.refreshLevelBanner();
+    if (this.shopOpen) this.refreshShop();
     this.showEscapedBanner(); // a finished match half keeps its banner in the new language
     this.refreshLevelBar();
     this.refreshTestBadge();
@@ -989,13 +1043,16 @@ export class Play extends Phaser.Scene {
       stackedUnder: feedback && (about || howto || changelog || settings || language || leaderboard || scores),
       input,
       resumeLocked: this.time.now < this.flapLockedUntil,
+      shop: this.shopOpen,
+      breaking: this.levelBreak,
     };
   }
 
   handleChrome(input) {
     // A match: the pause key / button / ⏸ toggles the shared pause, not this half's own state
     // (which may be its level break: 'paused' there must not read as "resume"). The rest is chromeIntent's.
-    if (this.match && (input === 'pause' || input === 'esc') && !this.chromeArgs('tap').overlay) {
+    // With this half's shop open those keys close the shop first (chromeIntent's closeShop).
+    if (this.match && (input === 'pause' || input === 'esc') && !this.shopOpen && !this.chromeArgs('tap').overlay) {
       this.versusHost()?.togglePause?.();
       return;
     }
@@ -1020,6 +1077,13 @@ export class Play extends Phaser.Scene {
         break;
       case 'toggleMute':
         this.toggleMute();
+        break;
+      case 'openShop':
+        this.openShop();
+        break;
+      case 'closeShop':
+        this.closeShop();
+        if (result.armResumeLockout) this.armResumeLockout(); // the closing tap's twin must not continue the level
         break;
       case 'openSettings':
         if (this.overlayPause(result)) this.pauseRun();
@@ -1143,8 +1207,8 @@ export class Play extends Phaser.Scene {
       case 'resume':
         // B on a paused run. In a match that lifts the shared pause and nothing else: the pause key's
         // toggle would pause the other player from a half waiting at its finish line.
-        if (this.match) this.applyChrome({ do: 'resume' });
-        else this.handleChrome('esc');
+        if (this.match && !this.shopOpen) this.applyChrome({ do: 'resume' });
+        else this.handleChrome('esc'); // single player, or this half's shop open: chromeIntent closes it
         break;
       case 'closeTop':
         scene?.close?.();
@@ -1256,6 +1320,7 @@ export class Play extends Phaser.Scene {
     this.pauseHint.setVisible(visible && !level && !shared);
     this.levelTitle.setVisible(visible && level);
     this.levelHint.setVisible(visible && level);
+    this.refreshShopButton();
   }
 
   pausePlay() {
@@ -1716,6 +1781,12 @@ export class Play extends Phaser.Scene {
 
   /** Tap on a charged poop: fart through the next pipes for the length of the clip. */
   activatePower() {
+    // In a level break the power input (B, a versus group's power key, the pad's RT) toggles the
+    // shop, so a keyboard or pad player can shop without a pointer.
+    if (this.levelBreak && this.state === 'paused') {
+      this.handleChrome(this.shopOpen ? 'esc' : 'shop');
+      return;
+    }
     if (this.state !== 'playing' || !this.effects.powerReady()) return;
     this.endSweep(); // the fart's scroll owns every object from here
     this.setCharged(false);
@@ -2023,6 +2094,100 @@ export class Play extends Phaser.Scene {
   }
 
   /**
+   * Whether the 💰 pill shows: this half's level break, the shop closed, and (a match) the shared
+   * count not yet running (a shop opened under the 3-2-1 would be shut by GO).
+   */
+  shopButtonShown() {
+    if (!this.levelBreak || this.state !== 'paused' || this.shopOpen) return false;
+    return !(this.match && this.versusHost()?.levelStage === 'count');
+  }
+
+  /** The 💰 pill: shown by shopButtonShown, labelled with the purse, dimmed (trayAlpha) when it is empty. */
+  refreshShopButton() {
+    if (!this.shopButton) return;
+    const coins = this.effects?.coins?.() ?? 0;
+    this.shopButton.setText(coinLabel(coins)).setAlpha(coins > 0 ? 1 : T.trayAlpha).setVisible(this.shopButtonShown());
+  }
+
+  /** Open the shop panel (the 💰 in a level break): the rows, the purse, the open sound. */
+  openShop() {
+    if (this.shopOpen || !this.shopButtonShown()) return;
+    const L = this.shopBoxes;
+    const nameStyle = { ...TEXT_STYLE, fontSize: '32px' };
+    const panel = this.add.rectangle(L.panel.x, L.panel.y, L.panel.width, L.panel.height, 0x1a0b14, 0.95).setStrokeStyle(8, 0xe85e96).setDepth(27).setScale(0.8);
+    const tween = this.tweens.add({ targets: panel, scale: 1, duration: T.shop.panelInMs, ease: 'Back.easeOut' });
+    const closeText = this.add.text(L.close.x, L.close.y, '\u2715', { ...TEXT_STYLE, fontSize: '48px' }).setOrigin(0.5).setDepth(29);
+    const title = this.add.text(L.title.x, L.title.y, '', { ...TEXT_STYLE, fontSize: '48px', color: '#f8a0c8' }).setOrigin(0.5).setDepth(28);
+    const coins = this.add.text(L.coins.x, L.coins.y, '', { ...TEXT_STYLE, fontSize: '36px' }).setOrigin(0.5).setDepth(28);
+    const icons = { fiber: 'fiber', bean: 'bean', superBean: 'bean', mystery: 'mystery-icon' };
+    const rows = {};
+    for (const row of L.rows) {
+      const button = createButton(this, row, '', nameStyle, { depth: 28 });
+      const icon = this.add.image(row.iconX, row.y, icons[row.id]).setDisplaySize(row.icon, row.icon).setDepth(29);
+      const extra = row.id === 'superBean' ? this.add.text(row.iconX + row.icon / 2 - 4, row.y + 18, `×${T.beans.superBeans}`, { ...TEXT_STYLE, fontSize: '28px' }).setOrigin(0.5).setDepth(29) : null;
+      const name = this.add.text(row.nameX, row.y, '', nameStyle).setOrigin(0, 0.5).setDepth(29);
+      const price = this.add.text(row.priceX, row.y, '', nameStyle).setOrigin(1, 0.5).setDepth(29);
+      rows[row.id] = { button, icon, extra, name, price };
+    }
+    this.shop = { panel, tween, closeText, title, coins, rows };
+    this.shopOpen = true;
+    this.refreshShop();
+    this.refreshShopButton();
+    this.playSample('shop', T.shopVolume, sfx.pickup);
+    this.versusHost()?.onShopChanged?.();
+    if (this.focus?.shown) this.focus.setIndex(this.focus.indexOf('shopClose'));
+  }
+
+  /** Re-label the open shop: the title, the purse, and each row bright or greyed (buyBlocker) with its price or "Bag full". */
+  refreshShop() {
+    if (!this.shop) return;
+    const coins = this.effects.coins();
+    const beans = this.effects.beans();
+    const names = { fiber: 'shopFiber', bean: 'shopBean', superBean: 'shopSuperBean', mystery: 'shopMystery' };
+    this.shop.title.setText(t(this.locale, 'shopTitle'));
+    this.shop.coins.setText(`${t(this.locale, 'shopCoins')}  ${coinLabel(coins)}`);
+    for (const row of this.shopBoxes.rows) {
+      const r = this.shop.rows[row.id];
+      const blocker = buyBlocker(row.id, { coins, beans }, T);
+      // A full bag reads "Bag full" even with the purse short too: coins would not help.
+      const bagFull = buyBlocker(row.id, { coins: Infinity, beans }, T) === 'full';
+      r.price.setText(bagFull ? t(this.locale, 'shopFull') : coinLabel(T.shop.prices[row.id]));
+      r.name.setText(t(this.locale, names[row.id])).setScale(1);
+      r.name.setScale(fitScale(r.name.width, row.priceX - r.price.width - 16 - row.nameX));
+      const alpha = blocker ? T.shop.disabledAlpha : 1;
+      for (const part of [r.button, r.icon, r.extra, r.name, r.price]) part?.setAlpha(alpha);
+    }
+  }
+
+  /** A tap (or the ring's A) on a shop row: buy it when the purse and the bag allow; the reward rises from the row's icon over the panel. */
+  shopBuy(id) {
+    if (!this.shopOpen) return false;
+    const row = this.shopBoxes.rows.find((r) => r.id === id);
+    if (!row) return false;
+    const ok = this.buyItem(id, { x: row.iconX, y: row.y, depth: 29.5, run: true });
+    this.refreshShop();
+    this.refreshShopButton();
+    this.refreshLevelBanner();
+    return ok;
+  }
+
+  /** Close the shop panel (✕, a tap outside, Esc, B, the power input; silently when the run ends or the break does). */
+  closeShop({ silent = false } = {}) {
+    if (!this.shopOpen) return;
+    const s = this.shop;
+    s?.tween?.stop();
+    for (const obj of [s?.panel, s?.closeText, s?.title, s?.coins]) obj?.destroy();
+    for (const r of Object.values(s?.rows ?? {})) for (const part of [r.button, r.icon, r.extra, r.name, r.price]) part?.destroy();
+    this.shop = null;
+    this.shopOpen = false;
+    if (!silent) this.playSample('shop', T.shopVolume, sfx.pickup);
+    this.refreshLevelBanner();
+    this.refreshShopButton();
+    this.versusHost()?.onShopChanged?.();
+    if (this.focus?.shown && this.shopButtonShown()) this.focus.setIndex(this.focus.indexOf('shop'));
+  }
+
+  /**
    * Apply a mystery box's (resolved) draw at the box's spot, then show what it was.
    * Separate from collectItem so the smoke test can force each draw.
    */
@@ -2124,6 +2289,7 @@ export class Play extends Phaser.Scene {
    * (nothing recorded on a test run).
    */
   endRun({ report = true } = {}) {
+    this.closeShop({ silent: true });
     this.endSweep(); // a death mid-sweep leaves the pairs in place, opaque
     this.state = 'dead';
     this.markHowToSeen(); // a finished run counts as having seen this build
