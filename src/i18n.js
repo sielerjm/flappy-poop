@@ -151,6 +151,8 @@ Inspired by Flappy Bird`,
     versusNotSaved: 'Two-player runs are not saved',
     versusEscaped: 'Made it out!',
     versusWaiting: 'Waiting for P{n}…',
+    versusTapReady: 'Tap when ready',
+    versusReadyWaiting: 'Ready! Waiting for P{n}…',
   },
   'zh-Hans': {
     readyTitle: 'FLAPPY POOP',
@@ -295,6 +297,8 @@ Inspired by Flappy Bird`,
     versusNotSaved: '双人模式的分数不会保存',
     versusEscaped: '顺利排出！',
     versusWaiting: '等待玩家{n}…',
+    versusTapReady: '准备好了就点一下',
+    versusReadyWaiting: '已准备！等待玩家{n}…',
   },
 };
 

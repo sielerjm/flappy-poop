@@ -1621,22 +1621,28 @@ export async function run(url = DEFAULT_URL) {
       await sleep(100);
       const brk2 = await evaluate(`JSON.stringify({ a: ${P1}.state, lb: ${P1}.levelBreak, level: ${P1}.level, b: ${P2}.state, banner: ${VS}.pauseText.visible })`).then(JSON.parse);
       ok(brk2.a === 'paused' && brk2.lb && brk2.b === 'playing' && !brk2.banner, 'a tap on the right half resumes P2 and leaves P1 in its break');
+      // P1's tap at the line marks it ready (its arrival beat is long past): "Ready! Waiting for P2…", the 💰
+      // hides; a second tap takes it back ("Tap when ready", the 💰 back). Neither ends the break or touches P2.
       await evaluate(`${P1}.flap({ x: 100, y: 600 }), true`);
       await sleep(100);
-      const brk3 = await evaluate(`JSON.stringify({ a: ${P1}.state, lb: ${P1}.levelBreak, level: ${P1}.level, b: ${P2}.state, bLevel: ${P2}.level, hint: ${P1}.levelHint.text, hintShown: ${P1}.levelHint.visible, shade: ${P1}.pauseShade.visible })`).then(JSON.parse);
-      ok(brk3.a === 'paused' && brk3.lb && brk3.level === 2 && brk3.b === 'playing' && brk3.bLevel === 1 && brk3.hint === 'Waiting for P2…' && brk3.hintShown && !brk3.shade, `P1's tap does not end its break: it waits on level ${brk3.level} under "${brk3.hint}" (no shade) while P2 plays on level ${brk3.bLevel}`);
-      // A pad's B on the waiting P1 neither ends its break nor pauses P2; after Menu paused P2, B lifts it.
+      const brk3 = await evaluate(`JSON.stringify({ a: ${P1}.state, lb: ${P1}.levelBreak, level: ${P1}.level, b: ${P2}.state, bLevel: ${P2}.level, hint: ${P1}.levelHint.text, hintShown: ${P1}.levelHint.visible, shade: ${P1}.pauseShade.visible, ready: ${VS}.isReady(${P1}), pill: ${P1}.shopButtonShown() })`).then(JSON.parse);
+      await evaluate(`${P1}.flap({ x: 100, y: 600 }), true`);
+      await sleep(100);
+      const brk4 = await evaluate(`JSON.stringify({ lb: ${P1}.levelBreak, hint: ${P1}.levelHint.text, ready: ${VS}.isReady(${P1}), pill: ${P1}.shopButtonShown() })`).then(JSON.parse);
+      ok(brk3.a === 'paused' && brk3.lb && brk3.level === 2 && brk3.b === 'playing' && brk3.bLevel === 1 && brk3.ready && brk3.hint === 'Ready! Waiting for P2…' && brk3.hintShown && !brk3.shade && !brk3.pill && brk4.lb && !brk4.ready && brk4.hint === 'Tap when ready' && brk4.pill, `P1's tap marks it ready ("${brk3.hint}", the 💰 hidden) without ending its break; a second tap takes it back ("${brk4.hint}", the 💰 back); P2 plays on`);
+      // A pad's B on the waiting P1 marks it ready and never pauses P2; after Menu paused P2, B only lifts the pause.
       await evaluate(`${P1}.padDown(${want.back}), true`);
       await sleep(100);
-      const padB = await evaluate(`JSON.stringify({ lb: ${P1}.levelBreak, b: ${P2}.state })`).then(JSON.parse);
+      const padB = await evaluate(`JSON.stringify({ lb: ${P1}.levelBreak, b: ${P2}.state, ready: ${VS}.isReady(${P1}) })`).then(JSON.parse);
       await evaluate(`${P1}.padDown(${want.pause}), true`);
       await sleep(100);
       const padB2 = await evaluate(`${P2}.state`);
       await evaluate(`${P1}.padDown(${want.back}), true`);
       await sleep(100);
-      const padB3 = await evaluate(`JSON.stringify({ lb: ${P1}.levelBreak, b: ${P2}.state })`).then(JSON.parse);
-      ok(padB.lb && padB.b === 'playing' && padB2 === 'paused' && padB3.lb && padB3.b === 'playing', `pad B on the waiting P1 leaves P2 playing (${padB.b}); Menu pauses P2 (${padB2}) and B lifts it (${padB3.b}); P1 keeps waiting`);
-      await evaluate(`${P1}.focus?.hide(), true`);
+      const padB3 = await evaluate(`JSON.stringify({ lb: ${P1}.levelBreak, b: ${P2}.state, ready: ${VS}.isReady(${P1}) })`).then(JSON.parse);
+      ok(padB.lb && padB.ready && padB.b === 'playing' && padB2 === 'paused' && padB3.lb && padB3.b === 'playing' && padB3.ready, `pad B on the waiting P1 marks it ready and leaves P2 playing (${padB.b}); Menu pauses P2 (${padB2}) and B only lifts it (${padB3.b}); P1 stays ready`);
+      await evaluate(`${P1}.focus?.hide(), ${P1}.flap({ x: 100, y: 600 }), true`); // take the ready back to shop
+      await sleep(100);
       // The shop while P1 waits at the line: it opens in P1's strip, P2 plays on, a tap in P2's strip
       // never reaches it, and the pad's B closes it (not the shared pause).
       {
@@ -1648,40 +1654,46 @@ export async function run(url = DEFAULT_URL) {
         await pin();
         await evaluate(`${P1}.padDown(${want.back}), true`);
         await sleep(100);
-        const shut = await evaluate(`JSON.stringify({ open: ${P1}.shopOpen, lb: ${P1}.levelBreak, b: ${P2}.state, halves: [...${VS}.pausedHalves] })`).then(JSON.parse);
-        ok(shopOpen.open && shopOpen.hint === 'Waiting for P2…' && p2.d > shopOpen.d && p2.state === 'playing' && still.open && still.coins === 10 && !shut.open && shut.lb && shut.b === 'playing' && shut.halves.length === 0, `P1 shops while it waits (P2 plays on: distance ${shopOpen.d.toFixed(0)} → ${p2.d.toFixed(0)}); a tap in P2's strip leaves P1's shop and purse alone; pad B closes it and P1 keeps waiting, nobody paused`);
+        const shut = await evaluate(`JSON.stringify({ open: ${P1}.shopOpen, lb: ${P1}.levelBreak, b: ${P2}.state, halves: [...${VS}.pausedHalves], ready: ${VS}.isReady(${P1}) })`).then(JSON.parse);
+        ok(shopOpen.open && shopOpen.hint === 'Tap when ready' && p2.d > shopOpen.d && p2.state === 'playing' && still.open && still.coins === 10 && !shut.open && shut.lb && shut.b === 'playing' && shut.halves.length === 0 && !shut.ready, `P1 shops while it waits, not ready (P2 plays on: distance ${shopOpen.d.toFixed(0)} → ${p2.d.toFixed(0)}); a tap in P2's strip leaves P1's shop and purse alone; pad B closes it and P1 keeps waiting, nobody paused`);
         await sleep(400);
       }
-      // P2 reaches its line too: both wait. Through a short beat the hints are hidden and a tap does
-      // nothing (the arriving player's last flap must not count); then both read "Tap to continue" and
-      // nothing starts until a tap. P2's tap starts the shared 3-2-1-GO; Settings from P1's tray holds
-      // the count until it closes, then the count picks up with a full beat; GO starts level 2 for both
-      // in the same frame.
+      // P2 reaches its line: a tap inside its arrival beat does not count; after the beat it reads "Tap when
+      // ready". P1 marks ready and nothing starts; P2 shopping is not ready, so still nothing; P2's ready
+      // starts the 3-2-1-GO; a tap from P2 during the count cancels it (P1 stays ready); P2's ready again
+      // starts it over. Settings from P1's tray holds the count until it closes; GO starts level 2 for both.
       await evaluate(`(() => { const p = ${P2}; p.pipes.clear(true, true); p.items.clear(true, true); p.beans.clear(true, true); p.nextGapY = null; p.pipesSpawned = ${want.end1}; p.pipesPassed = ${want.end1}; p.finishSpawned = false; p.spawnFinishLine(); p.finishLine.x = p.poop.x + 150; return true; })()`);
       ok(await until(`${P2}.levelBreak && ${P2}.state === 'paused'`), 'P2 crosses its finish line into its break');
-      // The tap during the beat is sent in the same evaluate that reads the stage, so it never lands after the beat.
-      const both = await evaluate(`(() => { const v = ${VS}; const stage = v.levelStage; if (stage === 'arming') ${P1}.flap({ x: 100, y: 600 }); return JSON.stringify({ stage, after: v.levelStage, counting: v.countText.visible, hints: [${P1}.levelHint.visible, ${P2}.levelHint.visible], titles: [${P1}.levelTitle.visible, ${P2}.levelTitle.visible], levels: [${P1}.level, ${P2}.level], status: v.match.status }); })()`).then(JSON.parse);
-      ok((both.stage === 'arming' || both.stage === 'tap') && both.after === both.stage && !both.counting && (both.stage !== 'arming' || (!both.hints[0] && !both.hints[1])) && both.titles[0] && both.titles[1] && both.levels[0] === 2 && both.levels[1] === 2 && both.status === 'playing', `both at the line (${both.stage}): ${both.stage === 'arming' ? 'through the beat both hints are hidden and a tap from P1 does nothing' : 'the beat had already passed'}; both LEVEL 2 titles up, the match still playing`);
-      ok(await until(`${VS}.levelStage === 'tap' && ${P1}.levelHint.visible && ${P2}.levelHint.visible`, (want.syncMs + 1000) / 100), 'after the beat both halves show the continue prompt');
-      const prompt = await evaluate(`JSON.stringify([${P1}.levelHint.text, ${P2}.levelHint.text])`).then(JSON.parse);
+      // The tap inside the beat is sent in the same evaluate that reads the clock, so it never lands after the beat.
+      const early = await evaluate(`(() => { const v = ${VS}; const p = ${P2}; const inBeat = !v.beatPassed(1); if (inBeat) p.flap({ x: 100, y: 600 }); return JSON.stringify({ inBeat, ready: v.isReady(p), hint: p.levelHint.visible, levels: [${P1}.level, p.level] }); })()`).then(JSON.parse);
+      ok(!early.ready && (!early.inBeat || !early.hint) && early.levels[0] === 2 && early.levels[1] === 2, early.inBeat ? 'a tap inside P2\'s arrival beat counts for nothing (not ready, the hint still hidden)' : 'P2\'s beat had already passed (nothing to check inside it)');
+      ok(await until(`${P2}.levelHint.visible && ${P2}.levelHint.text === 'Tap when ready'`, (want.syncMs + 1000) / 100), 'after its beat P2 reads "Tap when ready"');
+      await evaluate(`${P1}.flap({ x: 100, y: 600 }), true`);
       await sleep(want.countdownMs + 300);
-      const idle = await evaluate(`JSON.stringify({ stage: ${VS}.levelStage, counting: ${VS}.countText.visible, states: [${P1}.state, ${P2}.state], lb: [${P1}.levelBreak, ${P2}.levelBreak] })`).then(JSON.parse);
-      ok(prompt.every((x) => x === 'Tap to continue') && idle.stage === 'tap' && !idle.counting && idle.states.every((x) => x === 'paused') && idle.lb.every(Boolean), `both read "${prompt[0]}" and nothing starts without a tap (a beat later: still ${idle.stage}, no count, both in their break)`);
-      // A shop open on either half holds the shared start: P1 opens its shop, P2 reads "Waiting for P1…"
-      // and its tap starts nothing; P1 buys fiber and closes the shop with its power key; P2's prompt comes back.
+      const oneReady = await evaluate(`JSON.stringify({ a: ${VS}.isReady(${P1}), b: ${VS}.isReady(${P2}), stage: ${VS}.levelStage, counting: ${VS}.countText.visible, hintA: ${P1}.levelHint.text, states: [${P1}.state, ${P2}.state] })`).then(JSON.parse);
+      ok(oneReady.a && !oneReady.b && oneReady.stage === null && !oneReady.counting && oneReady.hintA === 'Ready! Waiting for P2…' && oneReady.states.every((x) => x === 'paused'), 'P1 ready alone: a beat later nothing has started');
       {
-        const held = await evaluate(`(() => { const a = ${P1}; const box = a.shopButtonBox; a.flap({ x: box.x, y: box.y }); const open = a.shopOpen; const hint = ${P2}.levelHint.text; ${P2}.flap({ x: 100, y: 600 }); return JSON.stringify({ open, hint, stage: ${VS}.levelStage, counting: ${VS}.countText.visible }); })()`).then(JSON.parse);
-        const bought = await evaluate(`(() => { const a = ${P1}; const s0 = a.score; const c0 = a.effects.coins(); const ok = a.shopBuy('fiber'); return JSON.stringify({ ok, score: a.score - s0, spent: c0 - a.effects.coins() }); })()`).then(JSON.parse);
-        await evaluate(`${P1}.onVersusKey('KeyE'), true`); // P1's power key (the left group claimed it)
+        const held = await evaluate(`(() => { const b = ${P2}; const box = b.shopButtonBox; b.flap({ x: box.x, y: box.y }); return JSON.stringify({ open: b.shopOpen, ready: ${VS}.isReady(b), stage: ${VS}.levelStage, counting: ${VS}.countText.visible }); })()`).then(JSON.parse);
+        const bought = await evaluate(`(() => { const b = ${P2}; const s0 = b.score; const c0 = b.effects.coins(); const ok = b.shopBuy('fiber'); return JSON.stringify({ ok, score: b.score - s0, spent: c0 - b.effects.coins() }); })()`).then(JSON.parse);
+        await evaluate(`${P1}.onVersusKey('ShiftRight'), true`); // P2's power key (the right group claimed it)
         await sleep(100);
-        const back = await evaluate(`JSON.stringify({ open: ${P1}.shopOpen, hint: ${P2}.levelHint.text, stage: ${VS}.levelStage })`).then(JSON.parse);
-        ok(held.open && held.hint === 'Waiting for P1…' && held.stage === 'tap' && !held.counting && bought.ok && bought.score === TT.items.fiberPoints && bought.spent === TT.shop.prices.fiber && !back.open && back.hint === 'Tap to continue' && back.stage === 'tap', `with P1's shop open P2 reads "${held.hint}" and its tap starts nothing; P1 buys fiber (+${bought.score}) and its power key closes the shop; P2 reads "${back.hint}" again`);
+        const back = await evaluate(`JSON.stringify({ open: ${P2}.shopOpen, ready: ${VS}.isReady(${P2}), stage: ${VS}.levelStage, hint: ${P2}.levelHint.text })`).then(JSON.parse);
+        ok(held.open && !held.ready && held.stage === null && !held.counting && bought.ok && bought.score === TT.items.fiberPoints && bought.spent === TT.shop.prices.fiber && !back.open && !back.ready && back.stage === null && back.hint === 'Tap when ready', `P2 shops (not ready, so nothing starts), buys fiber for ${bought.spent} and closes it with its power key: still "${back.hint}"`);
       }
+      await sleep(want.lockoutMs + 100); // closing the shop armed P2's resume lockout: a tap inside it is swallowed
       await evaluate(`${P2}.flap({ x: 100, y: 600 }), true`);
       await sleep(100);
-      const tapped = await evaluate(`JSON.stringify({ stage: ${VS}.levelStage, hints: [${P1}.levelHint.visible, ${P2}.levelHint.visible] })`).then(JSON.parse);
-      ok(tapped.stage === 'count' && !tapped.hints[0] && !tapped.hints[1], `a tap from P2 is the go-ahead for both: the shared count starts (${tapped.stage}) and both prompts go`);
-      ok(await until(`${VS}.countText.visible && ${VS}.countText.text === '3'`, 20), 'the shared count shows 3');
+      const tapped = await evaluate(`JSON.stringify({ stage: ${VS}.levelStage, hints: [${P1}.levelHint.visible, ${P2}.levelHint.visible], pills: [${P1}.shopButtonShown(), ${P2}.shopButtonShown()] })`).then(JSON.parse);
+      ok(tapped.stage === 'count' && !tapped.hints[0] && !tapped.hints[1] && !tapped.pills[0] && !tapped.pills[1], `P2 ready too: the shared count starts (${tapped.stage}); both prompts and both 💰 go`);
+      ok(await until(`${VS}.countText.visible && ${VS}.countText.text === '3'`, 20), 'the count shows 3');
+      await evaluate(`${P2}.flap({ x: 100, y: 600 }), true`);
+      await sleep(100);
+      const cancelled = await evaluate(`JSON.stringify({ stage: ${VS}.levelStage, counting: ${VS}.countText.visible, a: ${VS}.isReady(${P1}), b: ${VS}.isReady(${P2}), hintB: ${P2}.levelHint.text, hintShown: ${P2}.levelHint.visible })`).then(JSON.parse);
+      await sleep(want.countdownMs + 200);
+      const stays = await evaluate(`JSON.stringify({ stage: ${VS}.levelStage, counting: ${VS}.countText.visible, states: [${P1}.state, ${P2}.state] })`).then(JSON.parse);
+      ok(cancelled.stage === null && !cancelled.counting && cancelled.a && !cancelled.b && cancelled.hintB === 'Tap when ready' && cancelled.hintShown && stays.stage === null && !stays.counting && stays.states.every((x) => x === 'paused'), 'a tap from P2 during the count takes its ready back and cancels the count (P1 stays ready); it does not come back on its own');
+      await evaluate(`${P2}.flap({ x: 100, y: 600 }), true`);
+      ok(await until(`${VS}.levelStage === 'count' && ${VS}.countText.visible && ${VS}.countText.text === '3'`, 20), 'P2 ready again: the count starts over from 3');
       await evaluate(`${P1}.handleChrome('settings'), true`);
       await sleep(200);
       const heldAt = await evaluate(`JSON.stringify({ open: __flappy.scene.isActive('Settings'), text: ${VS}.countText.text })`).then(JSON.parse);
@@ -1690,10 +1702,10 @@ export async function run(url = DEFAULT_URL) {
       ok(heldAt.open && heldStill.text === heldAt.text && heldStill.a === 'paused' && heldStill.b === 'paused', `Settings from P1 holds the count at ${heldAt.text} (still ${heldStill.text} a beat later), both halves still waiting`);
       await evaluate(`__flappy.scene.getScene('Settings').close(), true`);
       const closedAt = Date.now();
-      const go = await until(`${P1}.state === 'playing' && ${P2}.state === 'playing' && (globalThis.__go = JSON.stringify({ d: [${P1}.distance, ${P2}.distance], levels: [${P1}.level, ${P2}.level], lb: [${P1}.levelBreak, ${P2}.levelBreak], stage: ${VS}.levelStage, status: ${VS}.match.status, shown: ${VS}.countText.visible }), [${P1}, ${P2}].forEach((p) => { p.poop.body.setAllowGravity(false); p.poop.setVelocity(0, 0); p.poop.y = 640; p.graceLeftMs = 1e9; }), true)`, (5 * want.countdownMs + 2000) / 100);
+      const go = await until(`${P1}.state === 'playing' && ${P2}.state === 'playing' && (globalThis.__go = JSON.stringify({ d: [${P1}.distance, ${P2}.distance], levels: [${P1}.level, ${P2}.level], lb: [${P1}.levelBreak, ${P2}.levelBreak], stage: ${VS}.levelStage, status: ${VS}.match.status, shown: ${VS}.countText.visible, ready: ${VS}.readyHalves.size }), [${P1}, ${P2}].forEach((p) => { p.poop.body.setAllowGravity(false); p.poop.setVelocity(0, 0); p.poop.y = 640; p.graceLeftMs = 1e9; }), true)`, (5 * want.countdownMs + 2000) / 100);
       const elapsed = Date.now() - closedAt;
       const started = JSON.parse(await evaluate('globalThis.__go'));
-      ok(go && elapsed >= 3 * want.countdownMs && started.levels[0] === 2 && started.levels[1] === 2 && !started.lb[0] && !started.lb[1] && started.stage === null && !started.shown && started.status === 'playing' && Math.abs(started.d[0] - started.d[1]) < 1, `GO starts level 2 on both halves together, ${elapsed} ms after Settings closed (distances ${started.d.map((d) => d.toFixed(1)).join(' / ')})`);
+      ok(go && elapsed >= 3 * want.countdownMs && started.levels[0] === 2 && started.levels[1] === 2 && !started.lb[0] && !started.lb[1] && started.stage === null && started.ready === 0 && !started.shown && started.status === 'playing' && Math.abs(started.d[0] - started.d[1]) < 1, `GO starts level 2 on both halves together, ${elapsed} ms after Settings closed (distances ${started.d.map((d) => d.toFixed(1)).join(' / ')})`);
       await sleep(150);
       const ghosts = await evaluate(`JSON.stringify({ v: [${P1}.ghost.visible, ${P2}.ghost.visible], a: [${P1}.ghost.alpha, ${P2}.ghost.alpha], dx: [${P1}.ghost.x - ${P1}.poopX, ${P2}.ghost.x - ${P2}.poopX] })`).then(JSON.parse);
       ok(ghosts.v[0] && ghosts.v[1] && ghosts.a.every((x) => x > 0.3) && ghosts.dx.every((x) => Math.abs(x) < 25), `side by side on the course, each ghost sits on the other's poop (dx ${ghosts.dx.map((x) => x.toFixed(0)).join(' / ')}, alpha ${ghosts.a.map((x) => x.toFixed(2)).join(' / ')})`);

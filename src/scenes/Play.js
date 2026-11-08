@@ -665,7 +665,7 @@ export class Play extends Phaser.Scene {
     if (final) this.win();
     else this.startLevelBreak();
     if (this.match) this.showScorePopup('levelClear');
-    if (this.match && !final) this.versusHost()?.onLevelReached?.(); // the first one at the line waits; both there: a tap from either starts the shared count
+    if (this.match && !final) this.versusHost()?.onLevelReached?.(this); // the ready check: both players tap ready, then the shared count
   }
 
   /**
@@ -683,12 +683,14 @@ export class Play extends Phaser.Scene {
     const shop = !this.match && (this.effects?.coins?.() ?? 0) > 0;
     const [title, hint] = levelBannerText(this.locale, this.level, LEVELS, { shop }).split('\n');
     this.levelTitle?.setText(title);
-    // A match's break waits for the other player; once both are at the line (Versus levelStage 'tap')
-    // the hint is the usual "Tap to continue", and a tap from either half starts the shared count.
-    // While the other half has its shop open this half waits for it too.
-    const host = this.versusHost();
-    const waiting = this.match && this.levelBreak && (host?.levelStage !== 'tap' || Boolean(host?.shopOpenElsewhere?.(this)));
-    this.levelHint?.setText(waiting ? t(this.locale, 'versusWaiting').replace('{n}', String(this.player === 1 ? 2 : 1)) : hint);
+    // A match's break is a ready check: the hint is this player's state ("Tap when ready", then
+    // "Ready! Waiting for P2…"); the shared count starts once both are ready (Versus.onLevelTap).
+    if (this.match && this.levelBreak) {
+      const ready = Boolean(this.versusHost()?.isReady?.(this));
+      this.levelHint?.setText(ready ? t(this.locale, 'versusReadyWaiting').replace('{n}', String(this.player === 1 ? 2 : 1)) : t(this.locale, 'versusTapReady'));
+    } else {
+      this.levelHint?.setText(hint);
+    }
   }
 
   /** The level break's hint line: Versus hides it through the beat and the count, and shows "Tap to continue" between. */
@@ -1006,8 +1008,8 @@ export class Play extends Phaser.Scene {
    * The state chrome decisions (chromeIntent, padIntent) read. In a match it is the match's,
    * not this half's: a finished half (waiting for the other) or a respawning one still pauses
    * and resumes the match from its tray, keys and pad; its own level break reads 'paused', where
-   * a tap lifts a shared pause or, once both are at the line, starts the shared count
-   * (Versus.onLevelTap, then beginLevel ends both breaks).
+   * a tap lifts a shared pause or toggles this player's ready (Versus.onLevelTap: both ready
+   * start the shared count, then beginLevel ends both breaks).
    */
   chromeState() {
     if (!this.match || this.match.status !== 'playing') return this.state;
@@ -1082,11 +1084,11 @@ export class Play extends Phaser.Scene {
         break;
       case 'resume':
         if (this.match) {
-          // A match: the tap lifts the shared pause for both halves (a no-op when it is not on). A half
-          // in its level break stays there; once both are at the line a tap from either is the go-ahead
-          // for the shared count that ends both breaks at once (Versus.onLevelTap, a no-op before that).
-          if (this.levelBreak) this.versusHost()?.onLevelTap?.();
-          this.versusHost()?.setPaused?.(false);
+          // A match: the tap lifts the shared pause when it is on; otherwise, from a half in its level
+          // break, it toggles that player's ready (Versus.onLevelTap: both ready start the count).
+          const host = this.versusHost();
+          if (host?.isPaused?.()) host.setPaused(false);
+          else if (this.levelBreak) host?.onLevelTap?.(this);
         } else {
           this.resumePlay();
         }
@@ -2195,7 +2197,9 @@ export class Play extends Phaser.Scene {
    */
   shopButtonShown() {
     if (!this.levelBreak || this.state !== 'paused' || this.shopOpen) return false;
-    return !(this.match && this.versusHost()?.levelStage === 'count');
+    // A match: no shop under the count, nor for a player who tapped ready (a second tap takes it back).
+    const host = this.match ? this.versusHost() : null;
+    return !(host && (host.levelStage === 'count' || host.isReady?.(this)));
   }
 
   /** The 💰 pill: shown by shopButtonShown, labelled with the purse, dimmed (trayAlpha) when it is empty. */

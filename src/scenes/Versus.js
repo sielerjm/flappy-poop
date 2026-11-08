@@ -31,7 +31,10 @@ export class Versus extends Phaser.Scene {
     this.locale = this.scene.get('Play')?.locale ?? 'en';
     this.pausedHalves = new Set(); // which halves the shared pause paused (a half in its level break is never one of them)
     this.resultShown = false;
-    this.levelStage = null; // once both halves are at a level's finish line: 'arming' (the beat), 'tap' (waiting for a tap from either), 'count' (the shared 3-2-1-GO)
+    this.levelStage = null; // 'count' while the shared 3-2-1-GO to the next level runs (both players ready)
+    this.readyHalves = new Set(); // halves (0 = P1, 1 = P2) that tapped ready in their level break
+    this.levelArrivals = new Map(); // half → this scene's clock when it reached the line (its arrival beat runs from there)
+    this.levelCountToken = 0; // bumped to cancel a running level count
     this.homeTapFrame = -1; // the frame a tap landed on the join screen's Home: the halves do not claim that tap
     const W = layout.totalW;
     const cx = W / 2;
@@ -131,13 +134,13 @@ export class Versus extends Phaser.Scene {
    * before it again for a full beat: closing an overlay arms P1's resume lockout, and a GO right
    * after it would swallow P1's first flap.
    */
-  runCountdown(onDone, { status, hold = false }) {
+  runCountdown(onDone, { status, hold = false, alive = null }) {
     const match = this.match;
     const steps = ['3', '2', '1', t(this.locale, 'versusGo')];
     let i = 0;
     let held = false;
     const tick = () => {
-      if (!this.sys.isActive() || this.match !== match || match.status !== status) return;
+      if (!this.sys.isActive() || this.match !== match || match.status !== status || (alive && !alive())) return;
       if (hold && this.overlayOpen()) {
         held = true;
         this.time.delayedCall(100, tick);
@@ -168,63 +171,97 @@ export class Versus extends Phaser.Scene {
 
   /**
    * A half reached a level's finish line (Play.onFinishCrossed; the last level ends the run
-   * instead). The first one waits under "Waiting for P2…". Once both are at the line their
-   * hints go for levelSyncDelayMs (the arriving player's last flap must not count as the go-
-   * ahead), then both read "Tap to continue" and wait for a tap from either (onLevelTap).
+   * instead). Its hint stays hidden for levelSyncDelayMs (the arrival flap must not count as a
+   * ready tap), then reads "Tap when ready". The next level starts once both are ready.
    */
-  onLevelReached() {
-    if (this.match.status !== 'playing' || this.levelStage) return;
-    const halves = this.halves();
-    if (!halves.every((half) => half?.levelBreak && half.state === 'paused')) return;
-    this.levelStage = 'arming';
-    for (const half of halves) half.setLevelHintVisible(false);
+  onLevelReached(half) {
+    if (this.match.status !== 'playing') return;
+    const i = this.halves().indexOf(half);
+    if (i < 0) return;
+    this.readyHalves.delete(i);
+    this.levelArrivals.set(i, this.time.now);
+    half.refreshLevelBanner();
+    half.setLevelHintVisible(false);
+    half.refreshShopButton?.();
     const match = this.match;
     this.time.delayedCall(T.versus.levelSyncDelayMs, () => {
-      if (!this.sys.isActive() || this.match !== match || match.status !== 'playing' || this.levelStage !== 'arming') return;
-      this.levelStage = 'tap';
-      for (const half of this.halves()) {
-        half?.refreshLevelBanner(); // the hint now reads "Tap to continue"
-        half?.setLevelHintVisible(true);
-      }
+      if (!this.sys.isActive() || this.match !== match || match.status !== 'playing' || !half.levelBreak) return;
+      this.refreshReady();
     });
+  }
+
+  /** This half's arrival beat has passed: its taps count as ready toggles. */
+  beatPassed(i) {
+    const arrived = this.levelArrivals.get(i);
+    return arrived != null && this.time.now - arrived >= T.versus.levelSyncDelayMs;
   }
 
   /**
    * A tap on a half in its level break (Play.applyChrome 'resume': a touch, a flap key, a pad's A
-   * or B). Once both are at the line and the beat has passed it is the go-ahead for both: the
-   * prompts go and the shared countdown starts the next level (holding under an overlay).
-   * Before that it does nothing, and so it does while either half has its shop open (the other
-   * reads "Waiting for Pn…" until the shopper closes it).
+   * or B, never while a shared pause is on). After the half's arrival beat it toggles that player's
+   * ready; both ready starts the shared 3-2-1-GO, and a tap during the count takes that player's
+   * ready back and cancels it (to shop again or take a break).
    */
-  onLevelTap() {
-    if (this.match.status !== 'playing' || this.levelStage !== 'tap' || this.anyShopOpen()) return;
-    this.levelStage = 'count';
-    for (const half of this.halves()) {
-      half?.setLevelHintVisible(false);
-      half?.refreshShopButton?.(); // no shop under the count: GO would shut it
+  onLevelTap(half) {
+    if (this.match.status !== 'playing') return;
+    const i = this.halves().indexOf(half);
+    if (i < 0 || !half.levelBreak || half.state !== 'paused' || half.shopOpen || !this.beatPassed(i)) return;
+    if (this.readyHalves.has(i)) {
+      this.readyHalves.delete(i);
+      if (this.levelStage === 'count') this.cancelLevelCount();
+    } else {
+      this.readyHalves.add(i);
     }
-    this.runCountdown(() => this.beginLevel(), { status: 'playing', hold: true });
+    this.refreshReady();
+    if (this.readyHalves.size === 2 && this.levelStage !== 'count' && this.halves().every((h) => h?.levelBreak && h.state === 'paused') && !this.anyShopOpen()) this.startLevelCount();
   }
 
-  /** Some half has its level-break shop open: the shared start waits for it. */
+  /** True when this half has tapped ready in its level break. */
+  isReady(half) {
+    return this.readyHalves.has(this.halves().indexOf(half));
+  }
+
+  /** Both ready: the 3-2-1-GO (holding under an overlay); a later tap cancels it through the token. */
+  startLevelCount() {
+    this.levelStage = 'count';
+    this.refreshReady();
+    const token = ++this.levelCountToken;
+    this.runCountdown(() => this.beginLevel(), { status: 'playing', hold: true, alive: () => this.levelCountToken === token && this.levelStage === 'count' });
+  }
+
+  /** A player took their ready back during the count: it stops, and the prompts come back. */
+  cancelLevelCount() {
+    this.levelStage = null;
+    this.levelCountToken += 1;
+    this.countText.setVisible(false);
+  }
+
+  /** Re-label both halves' level-break hints and 💰 pills for the ready state (hidden during the count or a half's arrival beat). */
+  refreshReady() {
+    this.halves().forEach((half, i) => {
+      if (!half?.levelBreak) return;
+      half.refreshLevelBanner();
+      half.setLevelHintVisible(this.levelStage !== 'count' && this.beatPassed(i));
+      half.refreshShopButton?.();
+    });
+  }
+
+  /** Some half has its level-break shop open (a shopper is never ready, so the count cannot start under it). */
   anyShopOpen() {
     return this.halves().some((half) => half?.shopOpen);
   }
 
-  /** A half other than `half` has its shop open (that half's banner then reads "Waiting for Pn…"). */
-  shopOpenElsewhere(half) {
-    return this.halves().some((h) => h && h !== half && h.shopOpen);
-  }
-
-  /** A half opened or closed its shop: once both are at the line, the other's prompt flips between "Waiting for Pn…" and "Tap to continue". */
+  /** A half opened or closed its shop: refresh the ready prompts. */
   onShopChanged() {
-    if (this.match?.status !== 'playing' || this.levelStage !== 'tap') return;
-    for (const half of this.halves()) half?.refreshLevelBanner();
+    if (this.match?.status !== 'playing') return;
+    this.refreshReady();
   }
 
   /** GO: both halves leave their break in the same frame (Play.beginLevel), side by side on the course. */
   beginLevel() {
     this.levelStage = null;
+    this.readyHalves.clear();
+    this.levelArrivals.clear();
     this.countText.setVisible(false);
     for (const half of this.halves()) half?.beginLevel();
     if (globalThis.document?.hidden) this.setPaused(true); // GO on a hidden tab: nothing was live to auto-pause during the count

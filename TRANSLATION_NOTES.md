@@ -206,6 +206,8 @@ Short, playful, clear. Fit a 720×1280 logical field; How to play / About body w
 | versusNotSaved | Two-player runs are not saved | 双人模式的分数不会保存 |
 | versusEscaped | Made it out! | 顺利排出！ |
 | versusWaiting | Waiting for P{n}… | 等待玩家{n}… |
+| versusTapReady | Tap when ready | 准备好了就点一下 |
+| versusReadyWaiting | Ready! Waiting for P{n}… | 已准备！等待玩家{n}… |
 
 ### aboutCredits (English)
 
