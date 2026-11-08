@@ -1663,7 +1663,8 @@ export async function run(url = DEFAULT_URL) {
       const before = await evaluate(`${P1}.ghost.alpha`);
       const R = want.respawn;
       const totalMs = R.crashMs + R.glideMs + 2 * R.blinkMs * R.blinkCycles;
-      await evaluate(`(() => { const b = ${P2}; b.graceLeftMs = 0; b.poop.body.setAllowGravity(true); b.die(); return true; })()`);
+      // P2 crashes mid-level 2 (no boxes before level 3, so no skip can cut the checks short; 25 pairs ahead).
+      await evaluate(`(() => { const b = ${P2}; b.level = 2; b.pipesPassed = 10; b.graceLeftMs = 0; b.poop.body.setAllowGravity(true); b.die(); return true; })()`);
       await sleep(150);
       const crashGhost = await evaluate(`JSON.stringify({ tex: ${P1}.ghost.texture.key, visible: ${P1}.ghost.visible, status: ${VS}.match.status })`).then(JSON.parse);
       ok(before > 0 && crashGhost.visible && crashGhost.tex === 'poop-dead' && crashGhost.status === 'playing', `P2's crash puts the dead face on its ghost (${crashGhost.tex}); the match plays on`);
@@ -1672,10 +1673,24 @@ export async function run(url = DEFAULT_URL) {
       const placed = want.alpha * (1 - 100 / want.range);
       ok(blinking && blink.visible && blink.ghost > 0 && blink.ghost < placed * 0.8, `mid-blink the ghost blinks with P2 (ghost alpha ${blink.ghost.toFixed(2)} under the placement's ${placed.toFixed(2)}, poop ${blink.poop.toFixed(2)})`);
       ok(await until(`${P2}.state === 'playing' && (${P2}.graceLeftMs = 1e9, ${P2}.poop.body.setAllowGravity(false), ${P2}.poop.setVelocity(0, 0), true)`, (totalMs + 1000) / 100), 'P2 plays again');
-      await place(1000, 1100);
+      // The respawn's re-fill re-anchored P2's distance to the course: it reads the place of P2's
+      // next pair less that pair's lead on the poop (read off the real pipes once the sweep-in settled).
+      const course = (P) => evaluate(`Promise.all([import('./src/versus.js'), import('./src/config.js')]).then(([v, c]) => { const p = ${P}; const next = p.pipes.getChildren().filter((q) => q.getData('scoring') && !q.getData('passed')).sort((q, r) => q.x - r.x)[0]; return JSON.stringify({ distance: p.distance, truth: next ? v.coursePairStart(p.pipesPassed, c.TUNING) - (next.x - p.poopX) : null, passed: p.pipesPassed }); })`).then(JSON.parse);
+      await until(`!${P2}.sweep`);
+      const c1 = await course(P2);
+      ok(c1.truth !== null && Math.abs(c1.distance - c1.truth) < 15, `after the respawn P2's distance reads its place on the course (${c1.distance.toFixed(0)}, ${c1.truth?.toFixed(0)} from its next pair, pair ${c1.passed})`);
+      await evaluate(`(() => { const a = ${P1}; const b = ${P2}; a.distance = b.distance - 100; a.publishSlot(); b.publishSlot(); return true; })()`);
       await sleep(150);
       const afterRespawn = await evaluate(`JSON.stringify({ alpha: ${P1}.ghost.alpha, visible: ${P1}.ghost.visible })`).then(JSON.parse);
-      ok(afterRespawn.visible && Math.abs(afterRespawn.alpha - placed) < 0.02, `after the respawn the ghost is back at its placement alpha (${afterRespawn.alpha.toFixed(2)})`);
+      ok(afterRespawn.visible && Math.abs(afterRespawn.alpha - placed) < 0.02, `after the respawn, 100 px apart on the course, the ghost is back at its placement alpha (${afterRespawn.alpha.toFixed(2)})`);
+      // A fart scrolls far more than the five pairs it passes; its end re-anchors the distance too,
+      // so the farter's ghost no longer runs hundreds of px ahead of where it really is.
+      await evaluate(`(() => { const b = ${P2}; if (!b.effects.powerReady()) b.effects.addBean(); b.setCharged(true); b.activatePower(); return true; })()`);
+      const farting = await evaluate(`${P2}.effects.powerActive()`);
+      const farted = await until(`!${P2}.effects.powerActive() && (${P2}.graceLeftMs = 1e9, ${P2}.poop.body.setAllowGravity(false), ${P2}.poop.setVelocity(0, 0), ${P2}.poop.y = 640, true)`, 100);
+      await until(`!${P2}.sweep`);
+      const c2 = await course(P2);
+      ok(farting && farted && c2.truth !== null && Math.abs(c2.distance - c2.truth) < 15 && c2.passed > c1.passed, `after a fart P2's distance still reads its place on the course (${c2.distance.toFixed(0)}, ${c2.truth?.toFixed(0)} from pair ${c2.passed})`);
       await evaluate(`(() => { const p = ${P2}; p.pipes.clear(true, true); p.items.clear(true, true); p.beans.clear(true, true); p.nextGapY = null; p.level = ${want.last}; p.pipesSpawned = ${want.end}; p.pipesPassed = ${want.end}; p.finishSpawned = false; p.applyLevel(); p.spawnFinishLine(); p.finishLine.x = p.poop.x + 150; return true; })()`);
       ok(await until(`${VS}.match.slots[1].ended`), 'P2 clears the rectum');
       await sleep(want.fadeMs + 300);

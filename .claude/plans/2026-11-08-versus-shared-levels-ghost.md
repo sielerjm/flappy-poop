@@ -79,12 +79,13 @@ Decisions made here, flagged so they can be overruled:
 - Change: `src/versus.js` (`coursePairStart`, `courseDistance`), `src/config.js` (`levelSyncDelayMs`), `tests/versus.test.js` (the cases above + a knob bound).
 - Verify: `npm test` green but for the baseline failure.
 - Commit: `feat(versus, step 1/4): course distance for the ghost's anchor; level-sync knob`
-- Result: npm test 352 / 353 (the baseline's assets failure only). Commit `<step1>`.
+- Result: npm test 352 / 353 (the baseline's assets failure only). Commit `24bc539`.
 
-### Step 2/4 — Re-anchor distance at every pre-fill  [pending]
+### Step 2/4 — Re-anchor distance at every pre-fill  [done]
 - Change: `Play.rebaseDistance()`; calls in `prefillPipes` (both branches; this covers `start()`, `endPower`, `endRespawn`, `endLevelBreak`) and `skipToFinish`; `tools/headless_check.mjs` section C (the respawn and fart checks above).
 - Verify: `npm test`; `npm run smoke` green.
 - Commit: `fix(versus, step 2/4): the ghost reads the course, not the scroll: distance re-anchored at every pre-fill`
+- Result: npm test 352 / 353 (baseline failure only); npm run smoke all checks passed, including P2's distance against its real next pair after a respawn and after a fart (within 15 px), and the ghost back at its placement alpha 100 px apart after the respawn. Section C's crash now happens mid-level 2 (no boxes, so no skip can cut the checks short). Commit `<step2>`.
 
 ### Step 3/4 — Levels start together  [pending]
 - Change: `Play` (`refreshLevelBanner` hint, the shade gate in `setPauseBanner`, `setLevelHintVisible`, `beginLevel`, the `'resume'` rule, `onFinishCrossed` report), `Versus` (`runCountdown`, `onLevelReached`, `beginLevel`), smoke section B's break block.

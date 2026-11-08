@@ -86,7 +86,7 @@ import { createButton } from '../ui/button.js';
 import { createToggle } from '../ui/toggle.js';
 import { openSavePanel, isSavePanelOpen } from '../ui/savePanel.js';
 import { bindPad } from '../input/pad.js';
-import { keyGroup, sameDevice, catchUpTier, catchUpDraws, versusAvailable, ghostPlacement, rivalMarker, respawnPose, VERSUS_EMOJI } from '../versus.js';
+import { keyGroup, sameDevice, catchUpTier, catchUpDraws, versusAvailable, ghostPlacement, rivalMarker, respawnPose, courseDistance, VERSUS_EMOJI } from '../versus.js';
 
 const TEXT_STYLE = {
   fontFamily: 'sans-serif',
@@ -140,7 +140,7 @@ export class Play extends Phaser.Scene {
     const seed = this.match ? this.match.seed : Date.now() & 0xffffffff;
     this.course = createCourse(seed, T, { shared: Boolean(this.match) });
     this.rngDraw = this.match ? createRng((Date.now() ^ (this.player * 0x9e3779b1)) & 0xffffffff) : null;
-    this.distance = 0; // px scrolled this run; the other half's ghost is placed by the difference
+    this.distance = 0; // where this half is on the course, in px: advanced by the scroll, re-anchored at every re-fill (rebaseDistance); the other half's ghost is placed by the difference
     this.score = 0;
     this.best = createBestStore(globalThis.localStorage, T.bestKey);
     this.settings = createSettingsStore(globalThis.localStorage, T.settingsKey);
@@ -1346,6 +1346,7 @@ export class Play extends Phaser.Scene {
     // the level's last pair): the break's own pre-fill (endLevelBreak) fills the next level.
     if (this.finishSpawned) {
       this.distanceSinceSpawn = 0;
+      this.rebaseDistance();
       return;
     }
     const edge = this.fieldW + T.pipeWidth;
@@ -1358,6 +1359,7 @@ export class Play extends Phaser.Scene {
       last = x;
     }
     this.distanceSinceSpawn = edge - last;
+    this.rebaseDistance(); // the re-filled stretch sets where this half is on the course (the sweep-in below only draws it)
     // Wide field: the pre-filled stretch sweeps in from the edge instead of popping into place.
     // Every new object starts o0 px right of its base (the first pair at the edge, the rest beyond),
     // invisible and unpowered; update() drives x and alpha from sweepOffset until endSweep().
@@ -1376,6 +1378,26 @@ export class Play extends Phaser.Scene {
   /** Every scrolling world object: pipes, items, beans. */
   worldObjects() {
     return [...this.pipes.getChildren(), ...this.items.getChildren(), ...this.beans.getChildren()];
+  }
+
+  /**
+   * Re-anchor `distance` (what the other half's ghost reads) to the course, at every re-fill and
+   * skip. Scrolled px stop naming a place on the course at each of those: a fart scrolls far more
+   * than the pairs it passes, a respawn stands still, a skip jumps, and every re-fill sets its first
+   * pair at a fixed lead. So the distance is set from the next pair due to spawn (one spacing after
+   * the last pair spawned, distanceSinceSpawn into it), or, with the level's finish line out, from
+   * the line (where a pair's centre would stand: pipeWidth − finishWidthPx / 2 right of the line's).
+   * A crossed line is left to the level break's own re-fill. Both halves then agree on the course.
+   */
+  rebaseDistance() {
+    if (this.finishSpawned) {
+      const line = this.finishLine;
+      if (!line || line.getData('crossed')) return;
+      this.distance = courseDistance(levelEnd(this.level, T), line.x + T.pipeWidth - T.levels.finishWidthPx / 2, this.poopX, T);
+      return;
+    }
+    const nextX = this.fieldW + T.pipeWidth + pipeSpacing(this.level, T) - this.distanceSinceSpawn;
+    this.distance = courseDistance(this.pipesSpawned, nextX, this.poopX, T);
   }
 
   /** Settle a running sweep at once: every swept object on its base (scrolled as normal), opaque, scrolling. Idempotent. */
@@ -2002,6 +2024,7 @@ export class Play extends Phaser.Scene {
     this.levelBar.setProgress(levelProgress(this.pipesPassed, this.level, T));
     this.spawnFinishLine(this.fieldW + T.pipeWidth - (this.poopX + pipeLead(this.fieldW, T, FIELD)));
     this.distanceSinceSpawn = 0;
+    this.rebaseDistance(); // a skip jumps along the course: the distance follows to the line
     this.nextGapY = null;
     this.showScorePopup('skip', mult, pairs);
     this.refreshProbioticHud(); // the score may have gained a digit: re-place the ×2 badge
