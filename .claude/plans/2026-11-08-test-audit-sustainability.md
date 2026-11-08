@@ -1,6 +1,6 @@
 # Plan: Sustainable testing and audit workflow
 - Created: 2026-11-08
-- Status: in progress (step 5; a step was added after step 4, so later commits read n/7)
+- Status: in progress (step 6; a step was added after step 4, so later commits read n/7)
 - Repo plan copy: `.claude/plans/2026-11-08-test-audit-sustainability.md` (folder is gitignored: `git add -f`, as every plan before it)
 - Baseline commit: `c4226b7` on `main`, tree clean. **Re-check at start:** another session landed 8 commits during the audit; if HEAD moved or the tree is dirty with someone else's work, stop and report.
 - Whole-suite verification: `npm test` (baseline **385 pass / 0 fail**, ~10 s) + full `npm run smoke` (server: `npm start` on :8000, Chrome, network for the live leaderboard reads). No source edits while a smoke runs (serve.py is no-store).
@@ -60,17 +60,18 @@ The audit of the generated plan (`test_audit_sustainability_7b5eb48e.plan.md`) f
 - Commit: `refactor(audit, step 3/6): drop seven unused exports and the unused BEST label`
 - Result: npm test 394/394 (−2: the isNewTop test and ready.test's howToLayout identity test; the rest retargeted). Grep finds none of the eight names in src/tests/tools. Cascade: deleting isNewTop left `topScores` used only by save.test → allowlisted as a test hook (not deleted: not on Michael's list).
 
-### Step 4/6 — Smoke sections, full run unchanged  [done]
+### Step 4/6 — Smoke sections, full run unchanged  [done, `a31909a`]
 - Change: in `tools/headless_check.mjs`, add a static `export const SECTIONS = [{ name, needs, about }]` and, inside `run()`, `section(name, fn)`. It checks that `name` is the next registered section, records it, counts its `ok()` calls, and runs `fn`. Wrap each existing comment-block section in place, with assertion text and order untouched. Sections in run order: `home`, `overlays`, `level1`, `howto-seen`, `run`, `farts`, `levels`, `mystery`, `death`, `share`, `pad`, `pad-overlays`, `pipes-after-over`, `skip`, `final`, `testmode`, `wide`, `versus-join`, `versus-match`, `versus-ghost`. Keep these unwrapped: Chrome/CDP setup, the hermetic stubs, the boot wait, helpers, the shared constants (`play`, `T`, `TT`, `SPACING`, `end1`, `end2`, …), the muzzle, and the final loop and exception checks. The level-3 jump at the start of the fart block moves inside `farts`. Hoist every binding a later section reads. Every `needs` is the full prefix for now. At the end, print checks per section and assert every registered section ran.
 - Verify: full `npm run smoke` passes, and its normalised labels diff against the golden runs within the noise floor. The run also prints 20 sections with a per-section count whose total equals the golden check count.
 - Commit: `refactor(smoke, step 4/6): named sections with per-section check counts`
 - Result: full smoke 304 checks = golden 303 + the new "every section ran"; normalised labels differ from golden only by that check and the two noise-floor lines. Per section: home 4 · overlays 8 · level1 3 · howto-seen 1 · run 5 · farts 27 · levels 27 · mystery 29 · death 3 · share 9 · pad 23 · pad-overlays 14 · pipes-after-over 1 · skip 3 · final 1 · testmode 22 · wide 26 · versus-join 15 · versus-match 60 · versus-ghost 16 (+7 unwrapped: boot, pre-fill, tail). Only one top-level binding crossed sections (`waitBreak`, levels → skip): hoisted into the shared area. Wrapped by a one-off transform; `git diff -w` is the wrappers plus the two moves.
 - Found: the first run failed 3 fart checks: `addBean(), addBean()` assumed an empty bag, and a real bean collected during the live level-3 stretch before it made three (a super fart). Pre-existing race (the golden runs passed by timing); the rerun passed. Added step 5 to harden it before the `--only` runs.
 
-### Step 5/7 (added) — Harden the two-bean fart check  [pending]
+### Step 5/7 (added) — Harden the two-bean fart check  [done]
 - Change: in the `farts` section, empty the bean bag before `addBean(), addBean()` so the normal-fart checks always start from exactly two beans (a real bean collected in the live stretch before it no longer turns the fart super). No other check changes.
 - Verify: full `npm run smoke` passes; labels match golden as in step 4.
 - Commit: `fix(smoke, step 5/7): the two-bean fart starts from an empty bag`
+- Result: full smoke 304/304; labels equal step 4's apart from a noise-floor line. Only clears when the bag is not empty, and restores the probiotic count the next check reads.
 
 ### Step 6/7 — `--list`, `--only`, proven-independent sections  [pending]
 - Change: export pure `parseArgs(argv)` → `{ url, only, list }`. It accepts a positional URL or `--url=`, `--list`, and `--only=a,b`; an unknown name is an error that lists the valid names. Export `expandOnly(names, SECTIONS)`, which returns the transitive `needs` closure in fixed order. `--list` prints name, needs and about without launching Chrome. `section()` skips anything not in the expanded set. Then relax `needs` for each candidate (`pad`, `pad-overlays`, `pipes-after-over`, `testmode`, `wide`, `versus-join`, `versus-ghost`, `overlays`, `level1`) only when `--only=<it>` passes alone with the same check count as in the full run. Leave the rest chained. The `about` text says "runs after X" so nothing pretends to be independent.

@@ -487,7 +487,9 @@ export async function run(url = DEFAULT_URL) {
       }
       const pipesBefore = await evaluate(`${play}.effects.pipesLeft()`);
       const score0 = await evaluate(`${play}.score`);
-      await evaluate(`${play}.effects.addBean(), ${play}.effects.addBean(), ${play}.setCharged(true), ${play}.activatePower(), true`);
+      // Exactly two beans: a real bean collected in the live stretch above would make three (a super fart).
+      // One synchronous evaluate, so no frame runs between emptying the bag and the fart; the probiotic count is kept.
+      await evaluate(`(() => { const p = ${play}; if (p.effects.beans() > 0) { const keep = p.effects.pipesLeft(); p.effects.clearPowerups(); while (p.effects.pipesLeft() < keep) p.effects.applyProbiotic(); p.refreshProbioticHud(); } p.effects.addBean(); p.effects.addBean(); p.setCharged(true); p.activatePower(); return true; })()`);
       ok((await evaluate(`${play}.effects.powerActive() && !${play}.effects.powerIsSuper() && ${play}.effects.beans() === 1`)) === true, 'two beans: a tap fires a normal fart and keeps one bean');
       const normal = await sampleFart();
       const settled = normal.filter((s) => s.e > T.centreMs);
