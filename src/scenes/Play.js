@@ -963,6 +963,19 @@ export class Play extends Phaser.Scene {
   }
 
   /**
+   * The save panel's Clear: this device forgets its player (name, id, top scores), the last
+   * confirmed submits, any queued merge and the legacy best (create() would re-seed it), so the
+   * next username starts a brand-new player. Settings stay. The board keeps the old id's rows.
+   */
+  signOut() {
+    this.setSaveState(saveLocal({}));
+    this.submitStore.clear();
+    this.mergeStore.clear();
+    this.best.clear();
+    this.boardNameTaken = false;
+  }
+
+  /**
    * Post the player's best to the shared leaderboard when it is newer than the
    * last confirmed submit. Named players only; the id is created on first use
    * (same as the first save-code export). Resolves on every outcome; a failed

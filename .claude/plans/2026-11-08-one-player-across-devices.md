@@ -74,11 +74,12 @@ Fix or add:
 - Commit: `feat(board, step 2/5): submitScore reasons, name checks and queued account merges in the client`
 - Result: npm test 403/403 (the orphan audit sees `LEADERBOARD.mergesKey` and the three new exports used from Play). Step 1 commit `e00e090`.
 
-### Step 3/5 — Save panel: the claim, the merge on Load, the instructions, Clear
+### Step 3/5 — Save panel: the claim, the merge on Load, the instructions, Clear  [done]
 - Change: `src/ui/savePanel.js` (`claimName` gating blur/change/Save; Load queues `merge_players(pasted, old)` when the ids differ and runs a sync; the numbered intro; the taken-name steps; Clear with the outline style and two-tap confirm); `src/logic.js` `createBestStore().clear()`; `Play.signOut()`; `src/scenes/Leaderboard.js` the taken line; `src/config.js` `saveClearConfirmMs`; i18n + notes.
 - Smoke (`home`, with `play.checkNameAvailable` and `mergePlayers` stubbed): Smoke saves; a taken name is refused and nothing stored; offline saves with the note; blur then Save checks once; Load of a code with another id queues the merge and the sync drains it (the stub records the pair); Clear warns then signs out (state, submit store, legacy best, merge queue gone; settings kept; the code field reads "Enter a username first"); the 🏆 overlay shows the taken line; onboarding and the test-mode trigger word still pass.
 - Verify: `npm test`; `--only=home`; the full smoke; a screenshot of the panel (Clear beside Save) in both locales.
 - Commit: `feat(save, step 3/5): a taken username points at the user code; loading a code merges the accounts; Clear signs out`
+- Result: npm test 403/403; `--only=home` 11 checks; full smoke 312/312. Screenshots of the panel (fresh, named, Clear armed, zh-Hans) checked. Not in the smoke: the 🏆 overlay's taken line (the overlay needs the live board; the branch is three lines in `showBoard`, read in review). Save is not disabled during the check (a disabled button swallows the phone tap that blurred the field); blur and Save share one cached check instead. Step 2 commit `05d660b`.
 
 ### Step 4/5 — Docs and 0.8.2 notes
 - `README.md` (Save / Load bullet; the leaderboard section: one player across devices, aliases, the claim, Clear), `AGENTS.md` (save / leaderboard sections, `schema.sql`, the smoke summary, the maintenance recipe), the Save Code Spec (dated note: name vs id, aliases, merge, Clear), `src/changelog.js` 0.8.2 (two bullets per locale: load your code on any device and the leaderboard joins them; usernames belong to one player, with Clear).

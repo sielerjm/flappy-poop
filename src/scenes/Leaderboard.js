@@ -94,10 +94,10 @@ export class Leaderboard extends Phaser.Scene {
     const rank = { off, on, best };
     // Closed, or closed and reopened, while the requests were in flight.
     if (gen !== this.gen || !this.scene.isActive()) return;
-    this.showBoard(rows, rank, state);
+    this.showBoard(rows, rank, state, { nameTaken: Boolean(play?.boardNameTaken) });
   }
 
-  showBoard(rows, rank, state) {
+  showBoard(rows, rank, state, { nameTaken = false } = {}) {
     const { cx, cy, locale } = this;
     const limit = LEADERBOARD.limit;
 
@@ -145,10 +145,12 @@ export class Leaderboard extends Phaser.Scene {
       return;
     }
     // One line per own row that is below the board (rankText shows the 🚽 on the toilet row);
-    // "not on the board yet" when a local best of some kind has no row at all.
+    // "not on the board yet" when a local best of some kind has no row at all, or, when the last
+    // sync was refused because another player holds the username, what to do about it.
     const lines = [rank.off, rank.on].filter((r) => r && r.rank > limit).map((r) => rankText(locale, r));
     const missing = rows !== null && ((rank.best.off && !rank.off) || (rank.best.on && !rank.on));
-    if (missing) lines.push(t(locale, 'leaderboardNotYet'));
+    if (nameTaken) lines.push(t(locale, 'leaderboardNameTaken'));
+    else if (missing) lines.push(t(locale, 'leaderboardNotYet'));
     if (lines.length) this.footer.setText(lines.join('\n'));
   }
 

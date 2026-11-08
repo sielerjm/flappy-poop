@@ -49,6 +49,7 @@ formal medical language.
 - **Silent mode** = iPhone **hardware** ringer/silent switch → **静音模式** (not the in-game mute toggle).
 - **Toilet mode** (如厕模式) = the ready-screen switch; scores from such runs carry a 🚽 (not translated).
 - **User code** / save code (用户码 / 存档码) = the `fp1.…` string players copy between devices. The home-screen button is **Save / Load User**; the panel labels are **Username**, **Save user code**, **Load user code**, and a **Save** button at the bottom that stores the username. `{name}` and `{scores}` are placeholders filled at runtime; keep them verbatim.
+- **One player across devices** (2026-11-08): every browser has its own secret id; the leaderboard treats ids merged through a user code as one player (aliases). A **username belongs to the player holding it on the board**: typing a held name on a new browser is refused (`saveNameTaken`), and the way in is to paste the user code (`saveIntro` step 3, `saveMerged`). **Clear** (清除) signs this device out after a second tap (`saveClearConfirm`, `saveCleared`): the name, id and scores are forgotten on the device only. "Sign out" is the plain sense (退出), not an account system. `{name}` stays verbatim.
 - **Leaderboard** (排行榜) = the shared online Top 25 behind the 🏆 tray button. Only players with a username are on it; `{score}` may carry a 🚽, `{rank}` / `{total}` are numbers. Keep the placeholders verbatim.
 - **Two players** (双人模式) = the 👥 switch under the toilet toggle, offered only on a landscape screen wide enough for two halves (desktop, tablet). P1 is the left half, P2 the right; `{n}` is the player number. A crash does not end a two-player run (the poop is put back mid-screen). Levels start together: the first one over a finish line waits under **Waiting for P{n}…** until the other arrives; then each player taps ready (**Tap when ready**, then **Ready! Waiting for P{n}…** with a smaller **Tap again to un-ready** under it), and once both are ready a shared 3-2-1-GO starts the level as **GO!** appears (with a toilet flush). The match is decided on points once both players have cleared the last level, and the first one out waits under **Made it out!** / **Waiting for P{n}…**. Two-player runs never reach the leaderboard or the save code.
 
@@ -164,7 +165,11 @@ Short, playful, clear. Fit a 720×1280 logical field; How to play / About body w
 | feedbackLink | Bug or feature request? | 问题或功能建议？ |
 | saveLoadButton | Save / Load User | 存档 / 载入用户 |
 | saveTitle | SAVE / LOAD USER | 存档 / 载入用户 |
-| saveIntro | Enter your username to save it and your top scores. Copy your code to keep your name and top scores on another phone or browser. Paste it there to load them. Press the Save button to save your username. | 输入用户名以保存它和你的最高分。复制存档码，即可在其他手机或浏览器保留你的名字和最高分。在那里粘贴即可载入。按“保存”可保存用户名。 |
+| saveIntro | 1. Pick a username and press Save.
+2. Copy your user code and keep it somewhere safe (a note, a message to yourself).
+3. On another phone or browser, paste it under Load user code: your name and scores follow you, and the leaderboard joins both into one player. | 1. 输入用户名并按“保存”。
+2. 复制你的用户码，保存在安全的地方（备忘录、发给自己的消息）。
+3. 在其他手机或浏览器上，把它粘贴到“载入用户码”：你的名字和分数会跟着你，排行榜也会把两边合并为同一位玩家。 |
 | saveNameLabel | Username | 用户名 |
 | saveNamePlaceholder | 1–16 characters | 1–16 个字符 |
 | saveYourCode | Save user code | 保存用户码 |
@@ -182,6 +187,13 @@ Short, playful, clear. Fit a 720×1280 logical field; How to play / About body w
 | saveNameRequired | Enter a username first (1–16 characters) | 请先输入用户名（1–16 个字符） |
 | saveErrorDamaged | Save code is damaged or was edited | 存档码已损坏或被修改 |
 | saveErrorUnrecognised | Unrecognised save code | 无法识别的存档码 |
+| saveNameChecking | Checking the leaderboard… | 正在查询排行榜… |
+| saveNameTaken | That username is taken. If it's yours, copy your user code on the device where you set it and paste it here under Load user code. Otherwise pick another name. | 这个用户名已被使用。如果是你的，请在设置它的那台设备上复制用户码，然后粘贴到这里的“载入用户码”。否则请换一个名字。 |
+| saveNameOffline | Username saved on this device (couldn't check the leaderboard) | 用户名已保存在此设备（无法连接排行榜核对） |
+| saveClear | Clear | 清除 |
+| saveClearConfirm | Copy your user code first: without it this username and its scores can't come back. Tap Clear again to sign out. | 请先复制你的用户码：没有它，这个用户名和分数就找不回来了。再点一次“清除”即可退出。 |
+| saveCleared | Signed out: this device has no username now | 已退出：此设备现在没有用户名 |
+| saveMerged | Welcome back, {name} — this device is now part of your player | 欢迎回来，{name}——这台设备现已并入你的玩家账号 |
 | shareButton | Share | 分享 |
 | shareCardPlay | Play: {url} | 来玩：{url} |
 | shareText | I scored {score} on Flappy Poop ({level})! {url} | 我在 Flappy Poop 拿到了 {score} 分（{level}）！{url} |
@@ -194,6 +206,7 @@ Short, playful, clear. Fit a 720×1280 logical field; How to play / About body w
 | leaderboardJoin | Set a username in Save / Load User to join | 在“存档 / 载入用户”中设置用户名即可上榜 |
 | leaderboardRank | Your best {score} is #{rank} of {total} | 你的最高分 {score} 排在第 {rank} 名（共 {total} 人） |
 | leaderboardNotYet | Your best is not on the board yet | 你的最高分尚未上榜 |
+| leaderboardNameTaken | Your username belongs to another player: open Save / Load User to fix it | 你的用户名属于另一位玩家：请打开“存档 / 载入用户”处理 |
 | leaderboardLevel | LV | 关卡 |
 | saveLeaderboardNote | Your username and best score are shown on the public leaderboard | 你的用户名和最高分会显示在公开排行榜上 |
 | profilePrompt | Enter username | 输入用户名 |

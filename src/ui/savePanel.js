@@ -21,7 +21,7 @@ const CSS = `
 #${PANEL_ID} .card { position: relative; box-sizing: border-box; width: min(92vw, 420px); max-height: 90vh; overflow: auto;
   padding: 20px 20px 16px; border: 4px solid #e85e96; border-radius: 16px; background: #1a0b14; }
 #${PANEL_ID} h2 { margin: 0 0 8px; font-size: 22px; color: #f8a0c8; text-align: center; }
-#${PANEL_ID} .intro { margin: 0 0 14px; font-size: 14px; line-height: 1.4; color: #c9b8dc; }
+#${PANEL_ID} .intro { margin: 0 0 14px; font-size: 14px; line-height: 1.4; color: #c9b8dc; white-space: pre-line; }
 #${PANEL_ID} label { display: block; margin: 10px 0 4px; font-size: 14px; font-weight: bold; color: #f8a0c8; }
 #${PANEL_ID} .row { display: flex; gap: 8px; }
 #${PANEL_ID} input { flex: 1; min-width: 0; box-sizing: border-box; padding: 10px 12px; font-size: 16px; font-family: ui-monospace, Menlo, monospace;
@@ -32,6 +32,9 @@ const CSS = `
 #${PANEL_ID} button { padding: 10px 14px; font-size: 16px; font-weight: bold; color: #1a0b14; background: #f8a0c8;
   border: 0; border-radius: 10px; touch-action: manipulation; cursor: pointer; }
 #${PANEL_ID} button:active { background: #e85e96; }
+#${PANEL_ID} button:disabled { opacity: 0.4; cursor: default; }
+#${PANEL_ID} button.outline { color: #f8a0c8; background: transparent; border: 2px solid #e85e96; }
+#${PANEL_ID} button.outline:active { background: rgba(232, 94, 150, 0.25); }
 #${PANEL_ID} .close { position: absolute; top: 8px; right: 8px; width: 40px; height: 40px; padding: 0; font-size: 22px;
   background: transparent; color: #ffffff; }
 #${PANEL_ID} .status { min-height: 1.4em; margin: 12px 0 0; font-size: 14px; line-height: 1.4; color: #c9b8dc;
@@ -40,6 +43,7 @@ const CSS = `
 #${PANEL_ID} .status.ok { color: #9fe8b4; }
 #${PANEL_ID} .save-row { margin-top: 16px; }
 #${PANEL_ID} .save-row button { flex: 1; padding: 12px 14px; font-size: 18px; }
+#${PANEL_ID} .save-row button.outline { flex: 0 0 auto; min-width: 96px; }
 #${PANEL_ID} .note { margin: 2px 0 10px; font-size: 14px; opacity: 0.75; }
 `;
 
@@ -49,6 +53,9 @@ let keyboardWasEnabled = true;
 let currentCode = '';
 let copiedTimer = null;
 let closeTimer = null; // pending self-close after Save (Enter-username flow)
+let claim = null; // { name, promise } the last username check this panel session (one check per name: blur and Save share it)
+let clearArmedAt = 0; // Date.now() of a first tap on Clear; a second inside saveClearConfirmMs signs out
+let clearTimer = null;
 
 function h(tag, attrs = {}, ...children) {
   const el = document.createElement(tag);
@@ -77,6 +84,7 @@ function build() {
   const load = h('input', { id: 'save-load', type: 'text', autocomplete: 'off', autocapitalize: 'off', spellcheck: 'false' });
   const loadBtn = h('button', { type: 'button', id: 'save-load-btn' });
   const saveBtn = h('button', { type: 'button', id: 'save-save-btn' });
+  const clearBtn = h('button', { type: 'button', id: 'save-clear-btn', class: 'outline' }); // sign this device out (two taps)
   const status = h('p', { class: 'status', id: 'save-status' });
   const close = h('button', { type: 'button', class: 'close', 'aria-label': 'close' }, '✕');
 
@@ -93,7 +101,7 @@ function build() {
     h('div', { class: 'row' }, code, copy),
     loadLabel,
     h('div', { class: 'row' }, load, loadBtn),
-    h('div', { class: 'row save-row' }, saveBtn),
+    h('div', { class: 'row save-row' }, clearBtn, saveBtn),
     status,
   );
   const root = h('div', { id: PANEL_ID, role: 'dialog', 'aria-modal': 'true', hidden: true }, card);
@@ -113,13 +121,14 @@ function build() {
     if (e.key === 'Enter') onSave();
   });
   saveBtn.addEventListener('click', () => onSave());
+  clearBtn.addEventListener('click', () => onClear());
   copy.addEventListener('click', () => onCopy());
   loadBtn.addEventListener('click', () => onLoad());
   load.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') onLoad();
   });
 
-  dom = { root, title, intro, nameLabel, name, note, codeLabel, code, copy, loadLabel, load, loadBtn, saveBtn, status };
+  dom = { root, title, intro, nameLabel, name, note, codeLabel, code, copy, loadLabel, load, loadBtn, saveBtn, clearBtn, status };
 }
 
 function applyLocale(locale) {
@@ -134,6 +143,12 @@ function applyLocale(locale) {
   dom.load.placeholder = t(locale, 'saveLoadPlaceholder');
   dom.loadBtn.textContent = t(locale, 'saveLoad');
   dom.saveBtn.textContent = t(locale, 'saveSave');
+  dom.clearBtn.textContent = t(locale, 'saveClear');
+}
+
+/** Clear has something to clear only while a username is stored. */
+function refreshClear() {
+  dom.clearBtn.disabled = !getState().name;
 }
 
 function setStatus(text, kind = '') {
@@ -178,29 +193,63 @@ async function refreshCode() {
 }
 
 /**
- * Persist the typed username. Returns true when a valid name is stored (or was
- * already stored); false (with the error shown) when it is empty or too long.
- * Blur / change save silently; the Save button adds a confirmation on top.
+ * Does the board let this player have `name` (a valid, trimmed name that is not
+ * the stored one)? 'free', 'taken' (another player holds it), or 'unknown' (the
+ * board could not say: offline, or the check not deployed). One check per name
+ * per panel session: a blur and the Save tap that follows it share the promise.
  */
-function onNameChange() {
+function claimName(name) {
+  if (claim?.name === name) return claim.promise;
+  const state = getState();
+  const withId = ensureId(state); // the claim is for this device's id (the same one the code carries)
+  if (withId.id !== state.id) setState(withId);
+  const promise = Promise.resolve()
+    .then(() => ctx.play?.checkNameAvailable?.(name, withId.id) ?? null)
+    .then((r) => (r === true ? 'free' : r === false ? 'taken' : 'unknown'))
+    .catch(() => 'unknown');
+  claim = { name, promise };
+  return promise;
+}
+
+/**
+ * Persist the typed username once the board allows it. Resolves to 'stored'
+ * (saved now, or already the stored name), 'offline' (saved on this device, the
+ * board could not be asked) or false (empty / too long, taken, or typed over
+ * while the check ran; the error is shown). Blur / change save silently; the Save
+ * button adds a confirmation on top.
+ */
+async function onNameChange() {
   // The test-mode trigger word is never stored as a name (on a phone, tapping Save blurs the field first).
   if (isTestWord(dom.name.value, TEST_MODE.words)) return false;
-  const state = getState();
   const { ok, name } = validateName(dom.name.value);
   if (!ok) {
     if (name.length > 0) setStatus(t(ctx.locale, 'saveNameRequired'), 'error');
     return false;
   }
-  if (name === state.name) return true;
-  setState(saveLocal({ ...state, name }));
-  dom.name.value = name;
-  setStatus('');
-  refreshCode();
-  return true;
+  if (name === getState().name) return 'stored';
+  const { locale } = ctx;
+  setStatus(t(locale, 'saveNameChecking'));
+  const verdict = await claimName(name);
+  if (!ctx || !dom) return false; // the panel closed meanwhile
+  if (validateName(dom.name.value).name !== name) return false; // typed on: that change asks again
+  if (verdict === 'taken') {
+    setStatus(t(locale, 'saveNameTaken'), 'error');
+    return false;
+  }
+  const state = getState();
+  if (name !== state.name) {
+    setState(saveLocal({ ...state, name }));
+    dom.name.value = name;
+    refreshCode();
+    refreshClear();
+    ctx.play?.syncLeaderboard?.(); // the claim becomes a board row as soon as there is a score to post
+  }
+  setStatus(verdict === 'unknown' ? t(locale, 'saveNameOffline') : '');
+  return verdict === 'unknown' ? 'offline' : 'stored';
 }
 
 /** Save button: store the username and say so, so the player knows it stuck. */
-function onSave() {
+async function onSave() {
   if (isTestWord(dom.name.value, TEST_MODE.words)) {
     toggleTestMode();
     return;
@@ -211,13 +260,51 @@ function onSave() {
     dom.name.focus();
     return;
   }
-  onNameChange();
-  setStatus(t(ctx.locale, 'saveNameSaved'), 'ok');
+  const closeOnSave = ctx.closeOnSave;
+  const result = await onNameChange();
+  if (!ctx || !dom) return;
+  if (!result) {
+    if (!dom.status.classList.contains('error')) dom.name.focus();
+    return;
+  }
+  setStatus(t(ctx.locale, result === 'offline' ? 'saveNameOffline' : 'saveNameSaved'), 'ok');
   dom.name.blur();
-  if (ctx.closeOnSave) {
+  if (closeOnSave) {
     clearTimeout(closeTimer);
     closeTimer = setTimeout(() => closeSavePanel(), T.savePanelCloseMs);
   }
+}
+
+/**
+ * Clear: sign this device out. The first tap warns (copy the code first) and arms
+ * the button for saveClearConfirmMs; a second tap inside that forgets the player
+ * on this device (Play.signOut: name, id, scores, confirmed submits, the legacy
+ * best). The board keeps the old id's rows; the code brings them back.
+ */
+function onClear() {
+  if (!getState().name) return;
+  const { locale } = ctx;
+  const now = Date.now();
+  if (clearArmedAt && now - clearArmedAt <= T.saveClearConfirmMs) {
+    clearTimeout(clearTimer);
+    clearArmedAt = 0;
+    if (ctx.play?.signOut) ctx.play.signOut();
+    else setState(saveLocal({}));
+    claim = null;
+    dom.name.value = '';
+    dom.load.value = '';
+    refreshCode();
+    refreshClear();
+    setStatus(t(locale, 'saveCleared'), 'ok');
+    return;
+  }
+  clearArmedAt = now;
+  setStatus(t(locale, 'saveClearConfirm'), 'error');
+  clearTimeout(clearTimer);
+  clearTimer = setTimeout(() => {
+    clearArmedAt = 0;
+    if (dom && ctx && dom.status.textContent === t(locale, 'saveClearConfirm')) setStatus('');
+  }, T.saveClearConfirmMs);
 }
 
 /**
@@ -272,9 +359,10 @@ async function onLoad() {
   const { locale } = ctx;
   dom.loadBtn.disabled = true;
   try {
+    const before = getState();
     let res;
     try {
-      res = await importCode(text, { local: getState() });
+      res = await importCode(text, { local: before });
     } catch {
       res = { ok: false, error: 'unrecognised' }; // e.g. Web Crypto missing on an http:// LAN address
     }
@@ -284,9 +372,14 @@ async function onLoad() {
     }
     setState(res.state);
     if (res.hand) ctx.play?.setHand?.(res.hand); // the code's bean button side becomes this device's
+    // This device had its own player (a name or scores under another id): the pasted code's id
+    // takes over locally (merge in save.js), and the board is told the two ids are one player.
+    const merged = Boolean(before.id && res.state.id && before.id !== res.state.id && (before.name || before.top.length) && ctx.play?.queueMerge?.(res.state.id, before.id));
+    claim = null;
     dom.name.value = res.state.name;
     dom.load.value = '';
-    setStatus(welcomeText(locale, res.state), 'ok');
+    setStatus(merged ? t(locale, 'saveMerged').replace('{name}', res.state.name) : welcomeText(locale, res.state), 'ok');
+    refreshClear();
     if (ctx) await refreshCode();
   } finally {
     dom.loadBtn.disabled = false;
@@ -315,6 +408,9 @@ export function openSavePanel(options) {
   if (!dom) build();
   clearTimeout(closeTimer);
   closeTimer = null;
+  clearTimeout(clearTimer);
+  clearArmedAt = 0;
+  claim = null;
   ctx = { game: options.game, play: options.play, locale: options.locale ?? 'en', closeOnSave: Boolean(options.closeOnSave) };
   applyLocale(ctx.locale);
   setGameKeyboard(false);
@@ -322,7 +418,9 @@ export function openSavePanel(options) {
   dom.name.value = state.name;
   dom.load.value = '';
   dom.copy.textContent = t(ctx.locale, 'saveCopy');
-  setStatus('');
+  // The last sync was refused because another player holds this username: say so, with the way out.
+  setStatus(state.name && ctx.play?.boardNameTaken ? t(ctx.locale, 'saveNameTaken') : '', state.name && ctx.play?.boardNameTaken ? 'error' : '');
+  refreshClear();
   dom.root.hidden = false;
   refreshCode();
   if (options.focusName) dom.name.focus();
@@ -331,6 +429,8 @@ export function openSavePanel(options) {
 export function closeSavePanel() {
   clearTimeout(closeTimer);
   closeTimer = null;
+  clearTimeout(clearTimer);
+  clearArmedAt = 0;
   if (!dom || dom.root.hidden) return;
   dom.root.hidden = true;
   if (document.activeElement && dom.root.contains(document.activeElement)) document.activeElement.blur();

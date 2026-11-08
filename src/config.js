@@ -59,6 +59,7 @@ export const TUNING = {
   readyPromptMinAlpha: 0.45, // 0–1 halo pulse floor
   readyPromptMaxAlpha: 1, // 0–1 halo pulse ceiling
   savePanelCloseMs: 600, // ms "Username saved" stays up before the panel closes itself (Enter-username flow only)
+  saveClearConfirmMs: 4000, // ms a first tap on the save panel's Clear stays armed: a second tap inside it signs this device out
   launchSlideMs: 700, // ms the poop slides from its ready spot to poopX() on the start tap
   readyTitlePx: 72, // px font size of the FLAPPY POOP title on the ready screen
   readyPoopScale: 1.5, // × spriteDisplayScale for the speech-bubble poop on the ready screen (shrinks back during the slide)

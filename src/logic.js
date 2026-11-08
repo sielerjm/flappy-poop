@@ -350,6 +350,14 @@ export function createBestStore(storage, key = 'flappy-poop:best') {
         return 0;
       }
     },
+    /** Forget the best (signing this device out); never throws. */
+    clear() {
+      try {
+        storage?.removeItem(key);
+      } catch {
+        /* storage unavailable */
+      }
+    },
     /** Saves if score beats the stored best; returns the resulting best. */
     save(score) {
       const best = this.load();
