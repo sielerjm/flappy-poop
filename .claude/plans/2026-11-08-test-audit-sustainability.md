@@ -1,6 +1,6 @@
 # Plan: Sustainable testing and audit workflow
 - Created: 2026-11-08
-- Status: in progress (step 6; a step was added after step 4, so later commits read n/7)
+- Status: in progress (step 7; a step was added after step 4, so later commits read n/7)
 - Repo plan copy: `.claude/plans/2026-11-08-test-audit-sustainability.md` (folder is gitignored: `git add -f`, as every plan before it)
 - Baseline commit: `c4226b7` on `main`, tree clean. **Re-check at start:** another session landed 8 commits during the audit; if HEAD moved or the tree is dirty with someone else's work, stop and report.
 - Whole-suite verification: `npm test` (baseline **385 pass / 0 fail**, ~10 s) + full `npm run smoke` (server: `npm start` on :8000, Chrome, network for the live leaderboard reads). No source edits while a smoke runs (serve.py is no-store).
@@ -67,13 +67,13 @@ The audit of the generated plan (`test_audit_sustainability_7b5eb48e.plan.md`) f
 - Result: full smoke 304 checks = golden 303 + the new "every section ran"; normalised labels differ from golden only by that check and the two noise-floor lines. Per section: home 4 · overlays 8 · level1 3 · howto-seen 1 · run 5 · farts 27 · levels 27 · mystery 29 · death 3 · share 9 · pad 23 · pad-overlays 14 · pipes-after-over 1 · skip 3 · final 1 · testmode 22 · wide 26 · versus-join 15 · versus-match 60 · versus-ghost 16 (+7 unwrapped: boot, pre-fill, tail). Only one top-level binding crossed sections (`waitBreak`, levels → skip): hoisted into the shared area. Wrapped by a one-off transform; `git diff -w` is the wrappers plus the two moves.
 - Found: the first run failed 3 fart checks: `addBean(), addBean()` assumed an empty bag, and a real bean collected during the live level-3 stretch before it made three (a super fart). Pre-existing race (the golden runs passed by timing); the rerun passed. Added step 5 to harden it before the `--only` runs.
 
-### Step 5/7 (added) — Harden the two-bean fart check  [done]
+### Step 5/7 (added) — Harden the two-bean fart check  [done, `68ee477`]
 - Change: in the `farts` section, empty the bean bag before `addBean(), addBean()` so the normal-fart checks always start from exactly two beans (a real bean collected in the live stretch before it no longer turns the fart super). No other check changes.
 - Verify: full `npm run smoke` passes; labels match golden as in step 4.
 - Commit: `fix(smoke, step 5/7): the two-bean fart starts from an empty bag`
 - Result: full smoke 304/304; labels equal step 4's apart from a noise-floor line. Only clears when the bag is not empty, and restores the probiotic count the next check reads.
 
-### Step 6/7 — `--list`, `--only`, proven-independent sections  [pending]
+### Step 6/7 — `--list`, `--only`, proven-independent sections  [done]
 - Change: export pure `parseArgs(argv)` → `{ url, only, list }`. It accepts a positional URL or `--url=`, `--list`, and `--only=a,b`; an unknown name is an error that lists the valid names. Export `expandOnly(names, SECTIONS)`, which returns the transitive `needs` closure in fixed order. `--list` prints name, needs and about without launching Chrome. `section()` skips anything not in the expanded set. Then relax `needs` for each candidate (`pad`, `pad-overlays`, `pipes-after-over`, `testmode`, `wide`, `versus-join`, `versus-ghost`, `overlays`, `level1`) only when `--only=<it>` passes alone with the same check count as in the full run. Leave the rest chained. The `about` text says "runs after X" so nothing pretends to be independent.
 - `tests/tools.test.js` gains these checks:
   - Section names are unique, and `needs` point only backwards.
@@ -82,6 +82,17 @@ The audit of the generated plan (`test_audit_sustainability_7b5eb48e.plan.md`) f
   - `parseArgs` and `expandOnly` produce the expected results.
 - Verify: `npm test` passes and `npm run smoke -- --list` prints 20 sections. Each relaxed section passes `--only` alone with its full-run count. A chained pick such as `--only=share` runs its prefix and passes. Full `npm run smoke` still matches the golden labels.
 - Commit: `feat(smoke, step 6/7): --list and --only with declared section needs`
+- Result: npm test 399/399; full smoke 304/304 (labels = step 5's but a noise line); `--only=share` (chained) 123 checks, passes. Mutations failed the muzzle and order guards.
+  Trials (each `--only=<x>` alone, count compared with the full run):
+
+  | Section | Alone | Kept |
+  |---|---|---|
+  | overlays, level1, run, pad, pad-overlays, pipes-after-over, versus-join, versus-match, versus-ghost | pass, same count | `needs: []` |
+  | howto-seen | pass after overlays | `needs: ['overlays']` |
+  | skip / final | pass after pipes-after-over / skip | `['pipes-after-over']` / `['skip']` |
+  | testmode | alone: TypeError (no saved name); after home: 22 checks but 2 game-over ring fails (expects pad's controller mode) | chained |
+  | wide | alone: a pre-fill check and a driver error (expects the earlier run's state) | chained |
+  | farts, levels, mystery, death, share | continue one run by design | chained |
 
 ### Step 7/7 — Docs, when-to-run, close the plan  [pending]
 - Change: in `AGENTS.md`, rewrite "How to work on it" with a when-to-run table:

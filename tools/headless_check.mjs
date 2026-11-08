@@ -5,8 +5,14 @@
 //
 // Usage: npm start (in another terminal), then
 //        npm run smoke                       # against http://localhost:8000
-//        npm run smoke -- http://host:8000   # any URL
+//        npm run smoke -- http://host:8000   # any URL (or --url=http://host:8000)
+//        npm run smoke -- --list             # the sections, what each needs, what each covers
+//        npm run smoke -- --only=wide,pad    # those sections, plus the sections they need
 //        CHROME=/path/to/chrome npm run smoke
+//
+// --only skips sections; it never reorders them, and everything outside a section
+// (the hermetic stubs, the boot wait, the leaderboard muzzle) always runs, so a
+// subset can never do anything the full run does not. Run the full smoke before a push.
 //
 // Zero dependencies: Chrome is driven over the DevTools protocol with Node's
 // built-in fetch + WebSocket. Scenes are reached through globalThis.__flappy
@@ -35,30 +41,82 @@ export const OVERLAYS = {
  * The smoke's sections in run order; run() calls section(name) for each, in this
  * order. Everything outside a section (Chrome, the hermetic stubs, the boot wait,
  * the shared helpers, the leaderboard muzzle, the final loop / exception checks)
- * always runs.
+ * always runs. `needs` is what --only also runs for a section: omitted, every
+ * section before it (it continues their state); [] when it passes alone from the
+ * ready screen with the same checks as in the full run (set only once that is shown).
  */
 export const SECTIONS = [
   { name: 'home', about: 'home screen (no score, the ? pulsing); onboarding: the username prompt, the save panel, the name saved' },
-  { name: 'overlays', about: 'every overlay opens from the ready screen, keeps the loop alive and closes' },
-  { name: 'level1', about: "level 1's scripted pairs and still pickups; the finish-line texture" },
-  { name: 'howto-seen', about: 'opening How to play stops the ? pulse and stamps this build' },
-  { name: 'run', about: 'a run starts; the leaderboard mid-run pauses it; the reopen race; board names fit (live board)' },
+  { name: 'overlays', needs: [], about: 'every overlay opens from the ready screen, keeps the loop alive and closes' },
+  { name: 'level1', needs: [], about: "level 1's scripted pairs and still pickups; the finish-line texture" },
+  { name: 'howto-seen', needs: ['overlays'], about: 'opening How to play stops the ? pulse and stamps this build' },
+  { name: 'run', needs: [], about: 'a run starts; the leaderboard mid-run pauses it; the reopen race; board names fit (live board)' },
   { name: 'farts', about: 'probiotic HUD and its pulse, score popups, normal and super fart, the glow texture' },
   { name: 'levels', about: "finish line → level break, overlays in the break, the shop, a fart cut at level 2's line" },
   { name: 'mystery', about: "mystery boxes and draws, the guaranteed kernel and purse, a sweeping gap item, the level bar" },
   { name: 'death', about: 'death clears coins and power-ups; the game-over run summary' },
   { name: 'share', about: 'game-over share: the share card, Share through a stubbed navigator.share, cancel, download, Home' },
-  { name: 'pad', about: 'the gamepad on Play, overlays and the save panel; the tray and game-over rings' },
-  { name: 'pad-overlays', about: "the controller inside every overlay's ring" },
-  { name: 'pipes-after-over', about: 'after a game over, new pipes still use the full pipe texture' },
-  { name: 'skip', about: 'a mystery skip under a postbiotic into level 4' },
-  { name: 'final', about: 'the final level: crossing the rectum line wins the run' },
+  { name: 'pad', needs: [], about: 'the gamepad on Play, overlays and the save panel; the tray and game-over rings' },
+  { name: 'pad-overlays', needs: [], about: "the controller inside every overlay's ring" },
+  { name: 'pipes-after-over', needs: [], about: 'after a game over, new pipes still use the full pipe texture' },
+  { name: 'skip', needs: ['pipes-after-over'], about: 'a mystery skip under a postbiotic into level 4' },
+  { name: 'final', needs: ['skip'], about: 'the final level: crossing the rectum line wins the run' },
   { name: 'testmode', about: 'test mode: trigger word, start level, Invincible, power-ups, nothing recorded, Exit' },
   { name: 'wide', about: 'the wide field: re-fit, column chrome, pre-fill and sweep-in, resize and rotation' },
-  { name: 'versus-join', about: 'two players: the 👥 toggle, the join screen, claims, countdown, routed input, Home' },
-  { name: 'versus-match', about: 'two players: shared pause, level sync and ready check, catch-up, respawn, result, rematch' },
-  { name: 'versus-ghost', about: "two players: the ghost at the distance gap and the rival marker on the level bar" },
+  { name: 'versus-join', needs: [], about: 'two players: the 👥 toggle, the join screen, claims, countdown, routed input, Home' },
+  { name: 'versus-match', needs: [], about: 'two players: shared pause, level sync and ready check, catch-up, respawn, result, rematch' },
+  { name: 'versus-ghost', needs: [], about: "two players: the ghost at the distance gap and the rival marker on the level bar" },
 ];
+
+/** What a section needs: its own list, or (omitted) every section before it. */
+function needsOf(section, sections) {
+  return section.needs ?? sections.slice(0, sections.indexOf(section)).map((s) => s.name);
+}
+
+/** The sections --only runs for `names`: those and everything they need, in run order. */
+export function expandOnly(names, sections = SECTIONS) {
+  const byName = new Map(sections.map((s) => [s.name, s]));
+  const want = new Set();
+  const add = (name) => {
+    if (want.has(name)) return;
+    want.add(name);
+    for (const n of needsOf(byName.get(name), sections)) add(n);
+  };
+  for (const n of names) add(n);
+  return sections.map((s) => s.name).filter((n) => want.has(n));
+}
+
+/**
+ * Command line → { url, only, list }. A positional argument or --url= is the URL;
+ * --only=a,b names sections (null: all); --list prints them. Throws on anything else
+ * or on a name SECTIONS does not have, listing the valid ones.
+ */
+export function parseArgs(argv, sections = SECTIONS) {
+  const out = { url: DEFAULT_URL, only: null, list: false };
+  for (const arg of argv) {
+    if (arg === '--list') out.list = true;
+    else if (arg.startsWith('--only=')) out.only = arg.slice('--only='.length).split(',').map((s) => s.trim()).filter(Boolean);
+    else if (arg.startsWith('--url=')) out.url = arg.slice('--url='.length);
+    else if (!arg.startsWith('-')) out.url = arg;
+    else throw new Error(`unknown option ${arg} (use --list, --only=a,b or --url=…)`);
+  }
+  if (out.only) {
+    const names = sections.map((s) => s.name);
+    const unknown = out.only.filter((n) => !names.includes(n));
+    if (unknown.length || !out.only.length) throw new Error(`--only: ${unknown.length ? `no section ${unknown.join(', ')}` : 'name at least one section'}; the sections are ${names.join(', ')}`);
+  }
+  out.url = out.url.replace(/\/+$/, '');
+  return out;
+}
+
+/** --list: one line per section, with what it needs. */
+export function listSections(sections = SECTIONS) {
+  const w = Math.max(...sections.map((s) => s.name.length));
+  return sections.map((s, i) => {
+    const needs = s.needs ? (s.needs.length ? `needs ${s.needs.join(', ')}` : 'runs alone') : i === 0 ? 'runs alone' : `runs after ${sections[i - 1].name} (and all before)`;
+    return `${s.name.padEnd(w)}  ${needs}\n${' '.repeat(w + 2)}${s.about}`;
+  }).join('\n');
+}
 
 const CHROME_CANDIDATES = [
   process.env.CHROME,
@@ -152,7 +210,9 @@ async function connect(port) {
   return { send, evaluate, exceptions, consoleErrors, close: () => ws.close() };
 }
 
-export async function run(url = DEFAULT_URL) {
+export async function run(url = DEFAULT_URL, { only = null } = {}) {
+  const selected = only ? new Set(expandOnly(only)) : null;
+  if (selected) console.log(`sections: ${[...selected].join(', ')}`);
   const { proc, port, profile } = launchChrome();
   const failures = [];
   let checks = 0;
@@ -161,11 +221,14 @@ export async function run(url = DEFAULT_URL) {
     console.log(`${cond ? 'ok  ' : 'FAIL'} ${label}`);
     if (!cond) failures.push(label);
   };
-  /** Sections run so far, with their check counts: section(name) must name the next one in SECTIONS. */
+  /** Sections run so far, with their check counts. section(name) must name the next one in SECTIONS; --only skips the rest. */
   const ran = [];
+  let reached = 0;
   const section = async (name, fn) => {
-    const next = SECTIONS[ran.length]?.name;
+    const next = SECTIONS[reached]?.name;
     if (name !== next) throw new Error(`section '${name}' is out of order: SECTIONS expects '${next}' next`);
+    reached += 1;
+    if (selected && !selected.has(name)) return;
     const before = checks;
     ran.push({ name, checks: 0 });
     await fn();
@@ -2120,7 +2183,8 @@ export async function run(url = DEFAULT_URL) {
     ok((await frame()) > f2, 'game loop still advancing at the end');
     ok(exceptions.length === 0, exceptions.length ? `page exceptions:\n  ${exceptions.join('\n  ')}` : 'no page exceptions');
     if (cdp.consoleErrors.length) console.log(`note: console errors/warnings:\n  ${cdp.consoleErrors.join('\n  ')}`);
-    ok(ran.length === SECTIONS.length, `every section ran (${ran.length} / ${SECTIONS.length})`);
+    const due = selected ? selected.size : SECTIONS.length;
+    ok(reached === SECTIONS.length && ran.length === due, `every ${selected ? 'selected ' : ''}section ran (${ran.length} / ${due})`);
   } catch (err) {
     ok(false, `driver error: ${err.message}`);
     if (cdp?.exceptions.length) console.log(`  page exceptions:\n  ${cdp.exceptions.join('\n  ')}`);
@@ -2137,9 +2201,19 @@ export async function run(url = DEFAULT_URL) {
 }
 
 if (process.argv[1] && import.meta.url === new URL(`file://${process.argv[1]}`).href) {
-  const url = process.argv[2] ?? DEFAULT_URL;
-  console.log(`headless_check: ${url}`);
-  const failures = await run(url);
+  let args;
+  try {
+    args = parseArgs(process.argv.slice(2));
+  } catch (err) {
+    console.error(`headless_check: ${err.message}`);
+    process.exit(2);
+  }
+  if (args.list) {
+    console.log(listSections());
+    process.exit(0);
+  }
+  console.log(`headless_check: ${args.url}${args.only ? ` (--only=${args.only.join(',')})` : ''}`);
+  const failures = await run(args.url, { only: args.only });
   console.log(failures.length ? `\n${failures.length} check(s) failed` : '\nall checks passed');
   process.exit(failures.length ? 1 : 0);
 }
