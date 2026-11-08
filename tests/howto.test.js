@@ -31,7 +31,7 @@ test('HOW_TO_ITEMS names fiber, probiotic, and bacteria with their effects', () 
   const items = howToItems('en');
   assert.deepEqual(
     items.map((item) => item.key),
-    ['pipe', 'fiber', 'probiotic', 'postbiotic', 'bacteria', 'bean', 'mystery-icon', 'toilet', 'levels', 'controls'],
+    ['pipe', 'fiber', 'probiotic', 'postbiotic', 'bacteria', 'bean', 'coin', 'mystery-icon', 'toilet', 'levels', 'controls'],
   );
   const blob = items.map((item) => `${item.name} ${item.detail}`).join('\n');
   assert.match(blob, /This is a pipe/);
@@ -48,6 +48,9 @@ test('HOW_TO_ITEMS names fiber, probiotic, and bacteria with their effects', () 
   assert.match(blob, /×2/);
   assert.match(blob, /Mystery box/);
   assert.match(blob, /level 3/);
+  assert.match(blob, /golden corn kernel/, 'the coin row');
+  assert.match(blob, /5 coins/, 'the box can pay coins');
+  assert.match(blob, /💰 shop/, 'the controls name the shop');
   const controls = items.at(-1);
   assert.equal(controls.name, 'Controls');
   assert.match(controls.detail, /Space or ↑ flaps, B farts/, 'single-player keys');
@@ -63,6 +66,7 @@ test('HOW_TO_ITEMS names fiber, probiotic, and bacteria with their effects', () 
   assert.match(zh.map((i) => i.name).join(' '), /有害细菌/);
   assert.match(zh.map((i) => i.name).join(' '), /豆子/);
   assert.match(zh.map((i) => i.name).join(' '), /神秘盒子/);
+  assert.match(zh.map((i) => i.name).join(' '), /金币/);
   assert.match(zh.at(-1).detail, /W 或空格起飞、E 或左 Shift 放屁/);
   assert.match(zh.at(-1).detail, /右 Shift 或小键盘 0 放屁/);
 });
