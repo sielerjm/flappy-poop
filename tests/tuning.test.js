@@ -98,16 +98,18 @@ test('beans block sits in a fair band and the fart ramp stays readable', () => {
   assert.ok(b.superPipes > b.powerPipes && b.superPipes <= 30, `superPipes ${b.superPipes}`);
   assert.ok(b.toCharge <= b.superBeans && b.superBeans <= b.maxBeans && b.maxBeans <= 9, `toCharge ${b.toCharge} ≤ superBeans ${b.superBeans} ≤ maxBeans ${b.maxBeans}`);
   assert.ok(b.powerMs >= 2000 && b.powerMs <= 8000, `powerMs ${b.powerMs}`);
+  assert.ok(b.normalPowerMs >= 1500 && b.normalPowerMs < b.powerMs, `a normal fart (${b.normalPowerMs} ms) is shorter than the clip (${b.powerMs} ms)`);
+  assert.ok(b.normalFadeMs > 0 && b.normalFadeMs <= b.normalPowerMs / 4, `normalFadeMs ${b.normalFadeMs}: a short fade at the end`);
   assert.ok(b.graceMs * (T.pipeSpeed / 1000) >= T.pipeWidth + T.poopRadius, 'grace must clear a pipe column at base speed');
   assert.ok(b.beanRadius >= 40 && b.beanRadius <= 48, `beanRadius ${b.beanRadius}`);
   assert.ok(b.centreMs >= 100 && b.centreMs <= 1000, `centreMs ${b.centreMs}`);
   assert.ok(b.endClearMarginPx >= 0 && b.endClearMarginPx <= 200, `endClearMarginPx ${b.endClearMarginPx}`);
-  // Fart envelope per level: the clip scrolls powerPipes (or superPipes) of that level's spacing.
-  // Level 1 is the slowest with the widest spacing, so its peaks are the highest.
-  const peakAt = (pipes, level) => 1 + (((pipes * pipeSpacing(level, T)) / ((levelSpeed(level, T) * b.powerMs) / 1000) - 1) * Math.PI) / 2;
+  // Fart envelope per level: a normal fart scrolls powerPipes in normalPowerMs, a super fart superPipes
+  // in the clip, at that level's spacing. Level 1 is the slowest with the widest spacing, so its peaks are the highest.
+  const peakAt = (pipes, level, ms = b.normalPowerMs) => 1 + (((pipes * pipeSpacing(level, T)) / ((levelSpeed(level, T) * ms) / 1000) - 1) * Math.PI) / 2;
   const peak = peakAt(b.powerPipes, 1);
-  assert.ok(peak > 1 && peak <= 3, `fart peak multiplier ${peak}`);
-  const superPeak = peakAt(b.superPipes, 1);
+  assert.ok(peak > 1 && peak <= 6, `fart peak multiplier ${peak}`);
+  const superPeak = peakAt(b.superPipes, 1, b.powerMs);
   assert.ok(superPeak > peak && superPeak <= 13, `super fart peak multiplier ${superPeak}`);
   for (let level = 1; level <= T.levels.lastLevel + 3; level += 1) assert.ok(peakAt(b.powerPipes, level) >= 1, `level ${level}: a normal fart never slows the world`);
   assert.ok(T.levels.pipes.slice(1).every((n) => b.superPipes < n), 'a super fart can cross at most one finish line');

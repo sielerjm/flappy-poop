@@ -432,11 +432,21 @@ export async function run(url = DEFAULT_URL) {
     const settled = normal.filter((s) => s.e > T.centreMs);
     const inBand = settled.every((s) => s.y >= centre - T.waveAmplitudePx - 2 && s.y <= centre + T.waveAmplitudePx + 2);
     const tilted = settled.every((s) => Math.abs(s.angle) <= T.waveTiltDeg + 0.5) && settled.some((s) => s.angle < -5) && settled.some((s) => s.angle > 5);
-    ok(normal.length >= 30 && inBand && tilted, `normal fart floats in the wave band and tilts both ways (${normal.length} samples, y ${Math.min(...settled.map((s) => s.y)).toFixed(0)}–${Math.max(...settled.map((s) => s.y)).toFixed(0)}, angle ${Math.min(...settled.map((s) => s.angle)).toFixed(1)}…${Math.max(...settled.map((s) => s.angle)).toFixed(1)})`);
+    ok(normal.length >= 15 && inBand && tilted, `normal fart floats in the wave band and tilts both ways (${normal.length} samples, y ${Math.min(...settled.map((s) => s.y)).toFixed(0)}–${Math.max(...settled.map((s) => s.y)).toFixed(0)}, angle ${Math.min(...settled.map((s) => s.angle)).toFixed(1)}…${Math.max(...settled.map((s) => s.angle)).toFixed(1)})`);
     const score1 = await evaluate(`${play}.score`);
     const pipesAfter = await evaluate(`${play}.effects.pipesLeft()`);
     ok((await playState()) === 'playing' && score1 - score0 >= 4 && pipesAfter === pipesBefore, `normal fart: alive, +${score1 - score0} pipes, probiotic ${pipesBefore}→${pipesAfter} untouched`);
     ok((await evaluate(`${play}.effects.powerReady() && ${play}.charged && ${play}.effects.beans() === 1`)) === true, 'the kept bean is still a charged power after the fart');
+    // The kept bean: a normal fart lasts normalPowerMs, its clip fades over the last normalFadeMs and is cut at the end.
+    // (currentConfig.volume: headless Chrome keeps audio locked, where the gain getter reads 1.)
+    const fade = await evaluate(`(() => { const p = ${play}; p.activatePower(); const out = { dur: p.fartDurationMs, peak: p.fartPeak, superFart: p.effects.powerIsSuper(), clip: Boolean(p.fartSound), vol0: p.fartSound?.currentConfig?.volume ?? null }; p.effects.tickPower(p.fartDurationMs - ${TT.beans.normalFadeMs} / 2 - p.effects.powerElapsed()); return JSON.stringify(out); })()`).then(JSON.parse);
+    await sleep(40);
+    const mid = await evaluate(`JSON.stringify({ vol: ${play}.fartSound?.currentConfig?.volume ?? null, e: ${play}.effects.powerElapsed(), on: ${play}.effects.powerActive() })`).then(JSON.parse);
+    for (let i = 0; i < 40 && (await evaluate(`${play}.effects.powerActive()`)); i += 1) await sleep(50);
+    const cutClip = await evaluate(`JSON.stringify({ on: ${play}.effects.powerActive(), clip: ${play}.fartSound === null, state: ${play}.state })`).then(JSON.parse);
+    const fv = TT.fartVolume;
+    const fadeOk = !fade.clip || (Math.abs(fade.vol0 - fv) < 1e-6 && mid.vol !== null && mid.vol < fv * 0.75 && mid.vol > 0);
+    ok(!fade.superFart && fade.dur === TT.beans.normalPowerMs && mid.on && fadeOk && !cutClip.on && cutClip.clip && cutClip.state === 'playing', `a normal fart lasts ${fade.dur} ms (peak ×${fade.peak.toFixed(2)}); ${fade.clip ? `its clip fades (${fv} → ${mid.vol?.toFixed(3)} at ${Math.round(mid.e)} ms) and is cut when it ends` : 'no clip loaded'}`);
     const hit = await evaluate(`import('./src/logic.js').then((l) => JSON.stringify({ near: l.beanButtonHit(${play}.beanButtonBox.x + ${play}.beanButtonBox.size - 2, ${play}.beanButtonBox.y, ${play}.beanButtonBox), far: l.beanButtonHit(${play}.beanButtonBox.x + ${play}.beanButtonBox.size + 2, ${play}.beanButtonBox.y, ${play}.beanButtonBox) }))`).then(JSON.parse);
     ok(hit.near === true && hit.far === false, 'bean button hit circle is twice the drawn button');
     // Super fart, started inside the grace window so the poop has not fallen yet.
@@ -446,7 +456,8 @@ export async function run(url = DEFAULT_URL) {
     const buttonFill = await evaluate(`${play}.beanButtonBg.fillColor`);
     ok((await evaluate(`${play}.effects.superReady()`)) === true && chargedFill !== 0xffffff && buttonFill !== 0xffffff, `three beans: rainbow glow (#${chargedFill.toString(16)}) and bean button (#${buttonFill.toString(16)})`);
     await evaluate(`${play}.activatePower(), true`);
-    ok((await evaluate(`${play}.effects.powerActive() && ${play}.effects.powerIsSuper()`)) === true, 'three beans fire a super fart');
+    const superDur = await evaluate(`${play}.fartDurationMs`);
+    ok((await evaluate(`${play}.effects.powerActive() && ${play}.effects.powerIsSuper()`)) === true && superDur > TT.beans.normalPowerMs, `three beans fire a super fart that runs the clip (${superDur} ms)`);
     const sup = await sampleFart();
     const supSettled = sup.filter((s) => s.e > T.centreMs);
     const halo = supSettled.every((s) => s.fill !== 0xffffff && Math.abs(s.alpha - T.superGlowAlpha) < 0.05);

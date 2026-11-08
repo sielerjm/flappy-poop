@@ -1056,6 +1056,24 @@ export function fartFloat(elapsedMs, startY, centreY, t) {
   };
 }
 
+/**
+ * How long a fart lasts: a super fart runs the fart_accelerate clip (`clipMs`, or beans.powerMs when
+ * it did not load); a normal fart runs beans.normalPowerMs, so its pipes go by quicker.
+ */
+export function fartDuration(superFart, clipMs, t) {
+  if (!superFart) return t.beans.normalPowerMs;
+  return clipMs > 0 ? Math.round(clipMs) : t.beans.powerMs;
+}
+
+/** The clip's volume share `elapsedMs` into a fart of `durationMs`: 1, then a linear fade to 0 over the last `fadeMs`. */
+export function fartVolumeFrac(elapsedMs, durationMs, fadeMs) {
+  if (!(durationMs > 0)) return 0;
+  const left = durationMs - Math.max(0, elapsedMs || 0);
+  if (left <= 0) return 0;
+  if (!(fadeMs > 0) || left >= fadeMs) return 1;
+  return left / fadeMs;
+}
+
 /** Scroll multiplier at elapsedMs: 1 at the ends, `peak` mid-clip, 1 outside the clip. */
 export function fartMul(elapsedMs, durationMs, peak) {
   if (!(durationMs > 0) || elapsedMs <= 0 || elapsedMs >= durationMs) return 1;

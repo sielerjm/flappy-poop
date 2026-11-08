@@ -222,7 +222,9 @@ export const TUNING = {
     superBeans: 3, // beans held at activation that make it a super fart
     powerPipes: 5, // pipe pairs that cross the screen during one fart (1–2 beans)
     superPipes: 20, // pipe pairs during a super fart, in the same clip (≈10× base speed at the peak)
-    powerMs: 4344, // ms; fallback power length = the fart_accelerate clip (the loaded sound's duration wins)
+    powerMs: 4344, // ms; fallback super-fart length = the fart_accelerate clip (the loaded sound's duration wins)
+    normalPowerMs: 2500, // ms a 1–2 bean fart lasts: its powerPipes go by faster than the clip (a super fart keeps the clip length)
+    normalFadeMs: 250, // ms the clip fades out over at the end of a normal fart, then it is cut (its pitch untouched)
     travelPeriodMs: 4000, // ms for one full up-and-down bob
     travelFrac: 0.5, // 0–1 share of the playable height the bob covers, centred (0.5 = middle half)
     wiggleDeg: 15, // degrees of rotation wiggle about the bean's centre (±)

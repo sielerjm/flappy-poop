@@ -40,12 +40,13 @@ Decisions made here (overrule any at approval):
 - Change: `collectItem` coin × multiplier (the postbiotic How to play row says so, en + zh + notes: moved here from step 1 so each commit's text matches the game); `levelClearCoins(level, crashes, t, { match })`; Play `testCoins()` / `purseLabel()` (∞), `buyBlocker` with an infinite purse, `buyItem` skips the spend, `setTestMode(false)` empties the purse; `coinLabel` shows ∞. Tests: levelClearCoins in and out of a match; buyBlocker with Infinity. Smoke: a kernel under a postbiotic adds 2; a box's coins under a postbiotic stay 10; single player's level 2 pays 2 (no +3); a match keeps +3; a test run shows ∞, buys without spending, exiting test mode empties the purse.
 - Verify: `npm test`; `npm run smoke`.
 - Commit: `feat(coins, step 2/6): a postbiotic doubles kernels picked up; +3 only in two-player; infinite coins in test mode`
-- Result: npm test 377/377; smoke all passed (kernel ×2 / box 10 under a postbiotic; single-player level 2 pays 2; match +3 kept; ∞ purse and its reset)
+- Result: npm test 377/377; smoke all passed (kernel ×2 / box 10 under a postbiotic; single-player level 2 pays 2; match +3 kept; ∞ purse and its reset); commit `0a41168`
 
-### Step 3/6 — A quicker single-bean fart  [pending]
+### Step 3/6 — A quicker single-bean fart  [done]
 - Change: `beans.normalPowerMs`, `beans.normalFadeMs`; `activatePower` picks the duration by super / normal, fades the clip out at the end of a normal fart. Tests: tuning (normal shorter than the clip, fade inside it); `fartPeakMul` for 5 pairs in 2.5 s. Smoke: a normal fart passes its 5 pairs in about 2.5 s and ends with the sound faded; a super fart still runs the clip length; the re-fill after it unchanged.
 - Verify: `npm test`; `npm run smoke`.
 - Commit: `feat(fart, step 3/6): a single-bean fart crosses its five pipes in about 2.5 s`
+- Result: npm test 379/379; smoke all passed on the second run (normal fart 2500 ms, peak ×3.41 on level 3, clip 0.6 → 0.18 mid-fade, cut at the end; super fart 4344 ms). The first run had one two-player ready-check timing failure that did not reproduce.
 
 ### Step 4/6 — The shop's slot machine  [pending]
 - Change: `src/logic.js` `reelStrip`, `reelProgress`; `src/config.js` `shop.reel`; `src/sound.js` `sfx.tick`; `src/scenes/Play.js` `spinReel` (window, strip, ticks, landing, pause, grant, close), `buyItem('mystery')` through it, purchases blocked while spinning, `closeShop` / `endLevelBreak` finish it at once, `openMystery(draw, x, y, { reveal: false })`. Tests: the strip's length and last item, only grantable rewards in it; `reelProgress` monotone 0 → 1 over spinMs. Smoke: a bought box with the draw stubbed to `coin10` opens the reel, a second buy is refused mid-spin, the reel stops on the kernel ×10, then the purse gains 10 and the window closes; closing the shop mid-spin grants at once.

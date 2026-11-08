@@ -72,6 +72,8 @@ import {
   beanAngle,
   poopTapHit,
   fartPeakMul,
+  fartDuration,
+  fartVolumeFrac,
   fartMul,
   fartFloat,
   hsvToRgb,
@@ -482,11 +484,7 @@ export class Play extends Phaser.Scene {
       this.focus = null;
       this.shop = null; // its objects die with the scene
       this.shopOpen = false;
-      if (this.fartSound) {
-        this.fartSound.stop();
-        this.fartSound.destroy();
-        this.fartSound = null;
-      }
+      this.stopFartSound();
     });
   }
 
@@ -648,10 +646,7 @@ export class Play extends Phaser.Scene {
       this.refreshLevelBar(); // new level: label steps, fill back to 0
     }
     this.playSample('level-up', T.levelUpVolume, sfx.levelUp);
-    if (this.effects.cancelPower()) {
-      this.fartSound?.stop();
-      this.endPower();
-    }
+    if (this.effects.cancelPower()) this.endPower(); // endPower stops the clip
     // Coins for the cleared level (its number, +3 without a crash in it), before the break so its shop can spend them.
     this.takeCoins(levelClearCoins(done, this.crashesThisLevel, T, { match: Boolean(this.match) }));
     // A match: clearing a level earns versus.scoring.levelClearBonus. The score moves now (win()
@@ -1902,7 +1897,10 @@ export class Play extends Phaser.Scene {
     }
   }
 
-  /** Tap on a charged poop: fart through the next pipes for the length of the clip. */
+  /**
+   * Tap on a charged poop: fart through the next pipes. A super fart lasts the clip; a normal
+   * one beans.normalPowerMs (fartDuration), the clip fading out over its end (update) and cut.
+   */
   activatePower() {
     // In a level break the power input (B, a versus group's power key, the pad's RT) toggles the
     // shop, so a keyboard or pad player can shop without a pointer.
@@ -1914,7 +1912,8 @@ export class Play extends Phaser.Scene {
     this.endSweep(); // the fart's scroll owns every object from here
     this.setCharged(false);
     const snd = this.cache.audio.exists('fart-accelerate') ? this.sound.add('fart-accelerate', { volume: T.fartVolume }) : null;
-    const durationMs = snd && snd.duration > 0 ? Math.round(snd.duration * 1000) : T.beans.powerMs;
+    const durationMs = fartDuration(this.effects.superReady(), snd && snd.duration > 0 ? snd.duration * 1000 : 0, T);
+    this.stopFartSound(); // a clip still fading from the last fart
     this.effects.activatePower(durationMs);
     this.fartDurationMs = durationMs;
     this.fartPeak = fartPeakMul(durationMs, this.effects.powerPipeCount(), pipeSpacing(this.level, T), this.diff.pipeSpeed); // 5 pipes, or 20 for a super fart, at this level's speed and spacing
@@ -1949,7 +1948,16 @@ export class Play extends Phaser.Scene {
     return remaining < pipeClearDistance(this.fieldW, T.pipeWidth, this.poopX) + margin;
   }
 
+  /** Stop and drop the fart clip (a normal fart's end, a cut fart, the scene going down). */
+  stopFartSound() {
+    if (!this.fartSound) return;
+    this.fartSound.stop();
+    this.fartSound.destroy();
+    this.fartSound = null;
+  }
+
   endPower() {
+    this.stopFartSound(); // a normal fart ends before its clip does; a super fart's clip is at its end
     this.fartTween?.stop();
     this.fartTween = null;
     this.poop.setAlpha(1);
@@ -2664,6 +2672,8 @@ export class Play extends Phaser.Scene {
       if (this.effects.powerActive()) {
         this.scrollMul = fartMul(this.effects.powerElapsed(), this.fartDurationMs, this.fartPeak);
         this.applyScroll();
+        // A normal fart is shorter than its clip: fade the clip out over its last beans.normalFadeMs.
+        if (this.fartSound && !this.effects.powerIsSuper()) this.fartSound.setVolume(T.fartVolume * fartVolumeFrac(this.effects.powerElapsed(), this.fartDurationMs, T.beans.normalFadeMs));
         const float = fartFloat(this.effects.powerElapsed(), this.fartStartY, GAME_HEIGHT / 2, T);
         this.poop.y = float.y;
         this.poop.setAngle(float.angle);

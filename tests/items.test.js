@@ -130,7 +130,7 @@ test('consumeProbiotic clears a held charge and is a no-op when empty', () => {
 
 // ---------------------------------------------------------------------------
 // Beans + fart power
-import { rollBean, pipeSpacing, beanSpawnX, beanBounds, beanY, beanAngle, poopTapHit, fartPeakMul, fartMul, fartRemainingDistance, pipeClearDistance, poopX } from '../src/logic.js';
+import { rollBean, pipeSpacing, beanSpawnX, beanBounds, beanY, beanAngle, poopTapHit, fartPeakMul, fartMul, fartRemainingDistance, pipeClearDistance, poopX, fartDuration, fartVolumeFrac } from '../src/logic.js';
 import { GAME_WIDTH, GAME_HEIGHT } from '../src/config.js';
 
 test('rollBean never spawns below beans.startScore', () => {
@@ -234,10 +234,29 @@ test('poopTapHit is generous (2 x radius) and misses further away', () => {
   assert.equal(poopTapHit(400, 300, poop, T.poopRadius), false);
 });
 
-test('fartMul is 1 at both ends, peaks mid-clip, and its integral scrolls exactly powerPipes spacings', () => {
-  const duration = T.beans.powerMs;
+test('fartDuration: a normal fart runs normalPowerMs, a super fart the clip (powerMs without one)', () => {
+  assert.equal(fartDuration(false, 4344.2, T), T.beans.normalPowerMs);
+  assert.equal(fartDuration(false, 0, T), T.beans.normalPowerMs);
+  assert.equal(fartDuration(true, 4344.2, T), 4344);
+  assert.equal(fartDuration(true, 0, T), T.beans.powerMs);
+  assert.equal(T.beans.normalPowerMs, 2500);
+});
+
+test('fartVolumeFrac: full volume, then a linear fade to 0 over the last fadeMs', () => {
+  const D = T.beans.normalPowerMs;
+  const F = T.beans.normalFadeMs;
+  assert.equal(fartVolumeFrac(0, D, F), 1);
+  assert.equal(fartVolumeFrac(D - F, D, F), 1);
+  assert.ok(Math.abs(fartVolumeFrac(D - F / 2, D, F) - 0.5) < 1e-9);
+  assert.equal(fartVolumeFrac(D, D, F), 0);
+  assert.equal(fartVolumeFrac(D + 100, D, F), 0);
+  assert.equal(fartVolumeFrac(100, D, 0), 1, 'no fade: full until the end');
+});
+
+test('fartMul is 1 at both ends, peaks mid-fart, and its integral scrolls exactly powerPipes spacings in normalPowerMs', () => {
+  const duration = T.beans.normalPowerMs;
   const peak = fartPeakMul(duration, T.beans.powerPipes, pipeSpacing(1, T), T.pipeSpeed);
-  assert.ok(peak > 1 && peak <= 3, `peak ${peak}`);
+  assert.ok(peak > 1 && peak <= 6, `peak ${peak}`);
   assert.equal(fartMul(0, duration, peak), 1);
   assert.equal(fartMul(duration, duration, peak), 1);
   assert.equal(fartMul(-5, duration, peak), 1);
@@ -293,10 +312,10 @@ test('the probiotic countdown pauses while the fart runs and resumes afterwards'
 });
 
 test('fartRemainingDistance is the analytic tail of the envelope and reaches 0 at the end', () => {
-  const D = T.beans.powerMs;
+  const D = T.beans.normalPowerMs;
   const peak = fartPeakMul(D, T.beans.powerPipes, pipeSpacing(1, T), T.pipeSpeed);
   const total = fartRemainingDistance(0, D, peak, T.pipeSpeed);
-  assert.ok(Math.abs(total / pipeSpacing(1, T) - T.beans.powerPipes) < 0.01, 'whole clip = powerPipes spacings');
+  assert.ok(Math.abs(total / pipeSpacing(1, T) - T.beans.powerPipes) < 0.01, 'the whole fart = powerPipes spacings');
   assert.equal(fartRemainingDistance(D, D, peak, T.pipeSpeed), 0);
   assert.equal(fartRemainingDistance(D + 50, D, peak, T.pipeSpeed), 0);
   // Matches a numeric integral of fartMul from e to D, and is monotonic.
@@ -315,7 +334,7 @@ test('pipeClearDistance: a right-edge spawn needs the screen plus a column to be
   const px = poopX(GAME_WIDTH, T);
   const d = pipeClearDistance(GAME_WIDTH, T.pipeWidth, px);
   assert.equal(d, GAME_WIDTH + T.pipeWidth - (px - T.pipeWidth));
-  assert.ok(d < fartRemainingDistance(0, T.beans.powerMs, fartPeakMul(T.beans.powerMs, T.beans.powerPipes, pipeSpacing(1, T), T.pipeSpeed), T.pipeSpeed), 'the fart scrolls further than one clear distance, so pipes spawned early still pass');
+  assert.ok(d < fartRemainingDistance(0, T.beans.normalPowerMs, fartPeakMul(T.beans.normalPowerMs, T.beans.powerPipes, pipeSpacing(1, T), T.pipeSpeed), T.pipeSpeed), 'the fart scrolls further than one clear distance, so pipes spawned early still pass');
 });
 
 test('beans accumulate to maxBeans; holdingBean only when the bag is full or the fart runs', () => {
