@@ -6,7 +6,7 @@
 // these; tests/versus.test.js covers them.
 
 import { GAME_HEIGHT } from './config.js';
-import { fieldWidth, levelProgress, levelFor, pipeSpacing } from './logic.js';
+import { fieldWidth, levelProgress, levelFor, pipeSpacing, MYSTERY_DRAWS } from './logic.js';
 
 /** The ready-screen toggle's emoji (two heads), beside the 🚽 one. */
 export const VERSUS_EMOJI = '👥';
@@ -238,7 +238,7 @@ export function catchUpTier(behind, t) {
  */
 export function catchUpDraws(tier, t) {
   const base = t.mystery.draws;
-  if (tier === 'super') return { probiotic: 0, bean1: 0, postbiotic: 0, bean3: 1, skip: 0 };
+  if (tier === 'super') return Object.fromEntries(MYSTERY_DRAWS.map((k) => [k, k === 'bean3' ? 1 : 0])); // every draw named, so a new one never slips in
   if (tier === 'beans') {
     const m = t.versus.catchUp.beanOddsMul;
     return { ...base, bean1: base.bean1 * m, bean3: base.bean3 * m };

@@ -150,10 +150,11 @@ test('mystery box: a first box early in level 3, then half fiber\'s rate; still 
   assert.ok(m.firstBefore >= 2 && m.firstBefore <= T.levels.pipes[m.firstLevel - 1], `mystery.firstBefore ${m.firstBefore}`);
   assert.equal(m.weight, T.items.weights.fiber / 2, 'half as common as fiber');
   assert.equal(m.periodMs, 2 * T.items.fiberPeriodMs, 'half fiber\'s bob speed');
-  assert.deepEqual(m.draws, { probiotic: 0.2, bean1: 0.2, postbiotic: 0.05, bean3: 0.05, skip: 0.01 });
+  assert.deepEqual(m.draws, { probiotic: 0.2, bean1: 0.2, postbiotic: 0.05, bean3: 0.05, skip: 0.01, coin5: 0.1, coin10: 0.05, coin15: 0.01 });
   const drawn = Object.values(m.draws).reduce((a, b) => a + b, 0);
-  assert.ok(Math.abs(drawn - 0.51) < 1e-9, `draws sum ${drawn}`);
+  assert.ok(Math.abs(drawn - 0.67) < 1e-9, `draws sum ${drawn}`);
   assert.ok(1 - drawn > Math.max(...Object.values(m.draws)), 'fiber (the rest) is the most common draw');
+  assert.ok(m.draws.coin15 < m.draws.coin10 && m.draws.coin10 < m.draws.coin5, 'the bigger the coin draw, the rarer');
   assert.equal(m.postbioticPipes, T.items.probioticPipes);
   assert.ok(m.frameMs >= 40 && m.frameMs <= 200, `mystery.frameMs ${m.frameMs}`);
   assert.ok(m.revealMs >= 200 && m.revealMs <= 1500, `mystery.revealMs ${m.revealMs}`);
@@ -203,4 +204,17 @@ test('moving pipes: from level 4, chances in (0, 1], slow periods, the swing fit
     const shift = pipeMoveShiftPx(M.ampPx[i], M.periodMs[i], levelSpeed(M.fromLevel + i, T), T);
     assert.ok(shift <= 0.5 * clearance, `row ${i}: the gap shifts ${shift.toFixed(1)} px during a crossing, over ${(0.5 * clearance).toFixed(1)}`);
   }
+});
+
+test('coins: half as common as a box, the shop prices, the sound volumes and the purse row', () => {
+  assert.equal(T.coin.weight, T.mystery.weight / 2, 'a coin is half as common as a box');
+  const p = T.shop.prices;
+  assert.deepEqual(p, { fiber: 2, bean: 6, superBean: 16, mystery: 5 });
+  assert.ok(p.superBean > p.bean && p.superBean <= p.bean * T.beans.superBeans, `super bean ${p.superBean} vs bean ${p.bean}`);
+  for (const k of ['coinVolume', 'coinSpendVolume', 'shopVolume']) assert.ok(T[k] > 0 && T[k] <= 1, `${k} ${T[k]}`);
+  assert.ok(T.shop.disabledAlpha > 0 && T.shop.disabledAlpha < 1, `disabledAlpha ${T.shop.disabledAlpha}`);
+  assert.ok(T.shop.panelInMs >= 60 && T.shop.panelInMs <= 600, `panelInMs ${T.shop.panelInMs}`);
+  const h = T.hudCoin;
+  assert.ok(h.y - h.iconPx / 2 >= 156 + 56 / 2, `the purse row (top ${h.y - h.iconPx / 2}) clears the bean row (bottom 184)`);
+  assert.ok(h.iconPx <= T.hudProbioticSize && h.textX > h.iconX + h.iconPx / 2 - 8, 'icon then count, left to right');
 });

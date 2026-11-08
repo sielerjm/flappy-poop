@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { TUNING as T } from '../src/config.js';
-import { padAction, stickNav, focusStep, focusNearest, focusRingLayout, padIntent, trayLayout, readyLayout } from '../src/logic.js';
+import { padAction, stickNav, focusStep, focusNearest, focusRingLayout, padIntent, trayLayout, readyLayout, shopButtonLayout } from '../src/logic.js';
 
 const STATES = ['ready', 'playing', 'paused', 'respawn', 'dead'];
 const TOPS = ['play', 'over', 'overlay'];
@@ -208,4 +208,21 @@ test('focusNearest: straight ahead beats a nearer diagonal; level items do not c
   assert.equal(focusNearest(from, [], 'up'), -1);
   assert.equal(focusNearest(null, cands, 'up'), -1);
   assert.equal(focusNearest(from, [{ index: 3, rect: sq(100, 499.5) }], 'up'), -1, 'half a pixel is level, not above');
+});
+
+test('focusNearest in a level break: up from ⏸ reaches the 💰 button; down from it comes back to the tray', () => {
+  const tray = trayLayout(720, 1280, T);
+  const shop = shopButtonLayout(720, 1280, T);
+  const box = (b) => ({ x: b.x - b.size / 2, y: b.y - b.size / 2, width: b.size, height: b.size });
+  const items = [
+    ['info', box(tray.info)], ['lang', box(tray.lang)], ['feedback', box(tray.feedback)],
+    ['leaderboard', box(tray.buttons[0])], ['mute', box(tray.buttons[1])], ['settings', box(tray.buttons[2])], ['pause', box(tray.pause)],
+    ['shop', { x: shop.x - shop.width / 2, y: shop.y - shop.height / 2, width: shop.width, height: shop.height }],
+  ];
+  const ids = items.map(([id]) => id);
+  const from = (id) => items[ids.indexOf(id)][1];
+  const others = (id) => items.map(([, rect], index) => ({ index, rect })).filter((c) => ids[c.index] !== id);
+  const go = (id, dir) => ids[focusNearest(from(id), others(id), dir)] ?? null;
+  assert.equal(go('pause', 'up'), 'shop');
+  assert.ok(['feedback', 'leaderboard'].includes(go('shop', 'down')), 'down from the centred pill: a tray button below it');
 });

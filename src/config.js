@@ -36,6 +36,8 @@ export const TUNING = {
   hudProbioticSize: 96, // logical px; HUD icon uses setDisplaySize
   hudProbioticPulse: { scale: 1.1, ms: 600 }, // the probiotic / postbiotic HUD icon breathes 1 → scale and back every ms while its count runs; it grows hudProbioticSize × (scale − 1) / 2 per side, which must stay under hudRightLayout's 8 px gap to the count (tests/tuning.test.js)
   hudScoreY: 116, // px centre line of the 80 px score (and the 🚽 beside it): below the progress bar with air between
+  // The coin purse: a second row under the bean counter (y 156, 56 px icon) at the chrome column's left, px from the column's left edge.
+  hudCoin: { y: 216, iconX: 72, textX: 108, iconPx: 56, fontPx: 36 },
   pipePoints: 1, // points per pipe pair passed (× the postbiotic multiplier)
   maxFallAngle: 90, // degrees nose-down at terminal fall
   maxRiseAngle: -25, // degrees nose-up right after a flap
@@ -186,12 +188,22 @@ export const TUNING = {
     periodMs: 6000, // ms per full up-and-down bob = 2 × items.fiberPeriodMs (half fiber's speed)
     frameMs: 70, // ms per spin frame (the source GIF's timing)
     postbioticPipes: 5, // pipes the postbiotic draw adds, ×2 already on (= items.probioticPipes)
-    // 0–1 chance of each draw when a box opens; fiber (the default) takes the rest (0.49).
-    // bean1 / bean3 add one / three beans; skip clears the rest of the level (skipped pairs score).
-    draws: { probiotic: 0.2, bean1: 0.2, postbiotic: 0.05, bean3: 0.05, skip: 0.01 },
+    // 0–1 chance of each draw when a box opens; fiber (the default) takes the rest (0.33).
+    // bean1 / bean3 add one / three beans; skip clears the rest of the level (skipped pairs score);
+    // coin5 / coin10 / coin15 pay that many coins into the purse.
+    draws: { probiotic: 0.2, bean1: 0.2, postbiotic: 0.05, bean3: 0.05, skip: 0.01, coin5: 0.1, coin10: 0.05, coin15: 0.01 },
     revealMs: 700, // ms the drawn reward's icon rises out of the box and fades
     revealRisePx: 70, // px it rises
     color: '#ffd700', // gold "+N" for the skipped pairs
+  },
+  coin: {
+    weight: 0.75, // share of the item roll = mystery.weight / 2 (half as common as a box); a band item like fiber, from level 2 (level 1 is scripted), bobbing at items.fiberPeriodMs
+  },
+  // The level-break shop (the 💰 under the banner): coins buy one row at a time.
+  shop: {
+    prices: { fiber: 2, bean: 6, superBean: 16, mystery: 5 }, // coins; superBean fills the bag to beans.superBeans (a super fart ready); mystery opens a box on the plain draw table
+    disabledAlpha: 0.35, // 0–1 alpha of a row the purse cannot pay for, or a bean row with the bag full
+    panelInMs: 180, // ms the panel scales in
   },
   beans: {
     startScore: 5, // score from which beans may appear

@@ -14,6 +14,14 @@ const STRINGS = {
     pauseHint: 'tap anywhere to resume game',
     levelBanner: 'LEVEL {n}',
     levelContinue: 'Tap to continue',
+    levelShopHint: 'Tap to continue · 💰 to shop',
+    shopTitle: 'SHOP',
+    shopCoins: 'Your coins',
+    shopFiber: 'Fiber · +3 points',
+    shopBean: 'One bean',
+    shopSuperBean: 'Super fart · fills the bag',
+    shopMystery: 'Mystery box',
+    shopFull: 'Bag full',
     levelShort: 'LV {n}',
     'level.stomach': 'Stomach',
     'level.duodenum': 'Duodenum',
@@ -68,8 +76,10 @@ Inspired by Flappy Bird`,
     itemBacteriaDetail: '−3 points. From level 3 it moves up and down in the gap.',
     itemBeanName: 'Beans',
     itemBeanDetail: 'Grab a bean, then press the bean button at the bottom (or your poop) to fart past the next 5 pipes: nothing can touch you. A normal fart uses one bean; you can carry 3, and with all three the fart rockets you past 20 in a rainbow glow.',
+    itemCoinName: 'Coins',
+    itemCoinDetail: 'A golden corn kernel that turns up now and then between the pipes from level 2 (mystery boxes can hold some too). Coins go into your purse for the run, counted under your beans; at the level break, tap 💰 to open the shop and spend them on fiber, a bean, a super fart or a mystery box.',
     itemMysteryName: 'Mystery box',
-    itemMysteryDetail: 'The first waits between the pipes before pipe 5 of level 3; after that they turn up at random, holding still on level 3 and floating slowly up and down from level 4. Grab one for a surprise: usually fiber, often a probiotic or a bean, sometimes a 5-pipe postbiotic or three beans, and very rarely a skip to the end of the level (the skipped pipes still score).',
+    itemMysteryDetail: 'The first waits between the pipes before pipe 5 of level 3; after that they turn up at random, holding still on level 3 and floating slowly up and down from level 4. Grab one for a surprise: usually fiber, often a probiotic or a bean, sometimes 5 coins, a 5-pipe postbiotic or three beans, now and then 10 coins, and very rarely 15 coins or a skip to the end of the level (the skipped pipes still score).',
     itemToiletName: 'On the toilet',
     itemToiletDetail: 'Playing on the toilet? Flip the switch under the poop on the home screen. Those scores get a 🚽 next to them.',
     itemLevelsName: 'Levels',
@@ -146,6 +156,14 @@ Inspired by Flappy Bird`,
     pauseHint: '点击任意处继续游戏',
     levelBanner: '第 {n} 关',
     levelContinue: '点击继续',
+    levelShopHint: '点击继续 · 💰 进商店',
+    shopTitle: '商店',
+    shopCoins: '你的金币',
+    shopFiber: '纤维 · +3 分',
+    shopBean: '一颗豆子',
+    shopSuperBean: '超级屁 · 装满豆袋',
+    shopMystery: '神秘盒子',
+    shopFull: '豆袋已满',
     levelShort: '第{n}关',
     'level.stomach': '胃',
     'level.duodenum': '十二指肠',
@@ -200,8 +218,10 @@ Inspired by Flappy Bird`,
     itemBacteriaDetail: '−3 分。从第 3 关起它会在管道口之间上下移动。',
     itemBeanName: '豆子',
     itemBeanDetail: '吃到豆子后，点击底部的豆子按钮（或便便）放屁冲过接下来的 5 道管道，期间什么都碰不到你。普通放屁只用一颗豆子；最多可攒 3 颗，集齐 3 颗再放屁，就能顶着彩虹光芒一口气冲过 20 道管道。',
+    itemCoinName: '金币',
+    itemCoinDetail: '金黄的玉米粒，从第 2 关起偶尔出现在管道之间（神秘盒子里有时也有）。本局收集的金币存进钱袋，显示在豆子计数下方；过关休息时点击 💰 打开商店，可以用来买纤维、豆子、超级屁或神秘盒子。',
     itemMysteryName: '神秘盒子',
-    itemMysteryDetail: '第 3 关第 5 道管道之前必定会有一个停在管道之间；之后会随机出现：第 3 关里静止不动，从第 4 关起缓缓上下漂浮。吃到它会随机获得奖励：通常是纤维，也常是益生菌或一颗豆子，偶尔是持续 5 道管道的后生元或三颗豆子，极少数情况下会直接跳到本关终点（跳过的管道照样计分）。',
+    itemMysteryDetail: '第 3 关第 5 道管道之前必定会有一个停在管道之间；之后会随机出现：第 3 关里静止不动，从第 4 关起缓缓上下漂浮。吃到它会随机获得奖励：通常是纤维，也常是益生菌或一颗豆子，有时是 5 枚金币、持续 5 道管道的后生元或三颗豆子，偶尔是 10 枚金币，极少数情况下是 15 枚金币或直接跳到本关终点（跳过的管道照样计分）。',
     itemToiletName: '如厕模式',
     itemToiletDetail: '在马桶上玩？打开主界面便便下方的开关，这些分数旁会显示 🚽。',
     itemLevelsName: '关卡',
@@ -313,13 +333,19 @@ export function howToItems(locale) {
 
 /**
  * Level-break banner as two lines: "LEVEL 2 · Jejunum" (the segment name is
- * omitted past the named list) and "Tap to continue".
+ * omitted past the named list) and "Tap to continue", or with `shop` (coins in
+ * the purse) "Tap to continue · 💰 to shop".
  */
-export function levelBannerText(locale, level, levels) {
+export function levelBannerText(locale, level, levels, { shop = false } = {}) {
   const key = levels?.[level - 1]?.key;
   const title = t(locale, 'levelBanner').replace('{n}', String(level));
   const name = key ? t(locale, `level.${key}`) : '';
-  return `${name ? `${title} · ${name}` : title}\n${t(locale, 'levelContinue')}`;
+  return `${name ? `${title} · ${name}` : title}\n${t(locale, shop ? 'levelShopHint' : 'levelContinue')}`;
+}
+
+/** The coin glyph and a count: "💰 12" (the shop button, the purse line, every price). Locale-free, like formatScore's "🚽 41". */
+export function coinLabel(n) {
+  return `💰 ${n}`;
 }
 
 /** Short level label for the progress bar and score lines: "LV 2". */

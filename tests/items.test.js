@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { TUNING as T } from '../src/config.js';
-import { createRng, rollItem, hazardsAllowed, tutorialSpawn, bandItemsMove, bandMidY, pipeGapY, itemGapY, scoreAfterItem, scoreAfterDeath, deathPenalty, scorePopup, popupSlots, pipePoints, createEffects, ITEM_KINDS, mysteryRolls, mysteryMoves, scriptedMysteryPair, rollMystery, resolveMystery, skipPairs, MYSTERY_DRAWS, levelEnd, bobY, gapBobAmplitude, gapBobY } from '../src/logic.js';
+import { createRng, rollItem, hazardsAllowed, tutorialSpawn, bandItemsMove, bandMidY, pipeGapY, itemGapY, scoreAfterItem, scoreAfterDeath, deathPenalty, scorePopup, popupSlots, pipePoints, createEffects, ITEM_KINDS, BAND_ITEMS, MYSTERY_COINS, MYSTERY_BEANS, SHOP_ITEMS, buyBlocker, canBuy, mysteryRolls, mysteryMoves, scriptedMysteryPair, rollMystery, resolveMystery, skipPairs, MYSTERY_DRAWS, levelEnd, bobY, gapBobAmplitude, gapBobY } from '../src/logic.js';
 
 test('rollItem is always null below startScore', () => {
   const rng = createRng(1);
@@ -57,9 +57,9 @@ test('bandMidY puts a still pickup midway between this gap and the next, inside 
   }
 });
 
-test('with hazards on all three kinds appear near their weights', () => {
+test('with hazards on all three kinds and coins appear near their weights', () => {
   const rng = createRng(3);
-  const counts = { fiber: 0, probiotic: 0, bacteria: 0, none: 0 };
+  const counts = { fiber: 0, probiotic: 0, bacteria: 0, coin: 0, none: 0 };
   const n = 4000;
   for (let i = 0; i < n; i++) {
     const kind = rollItem(rng, 20, T);
@@ -68,11 +68,12 @@ test('with hazards on all three kinds appear near their weights', () => {
   }
   const spawned = n - counts.none;
   assert.ok(spawned > n * 0.2, `too few items: ${spawned}`);
-  const totalW = T.items.weights.fiber + T.items.weights.probiotic + T.items.weights.bacteria;
-  for (const kind of ITEM_KINDS) {
+  const weights = { ...T.items.weights, coin: T.coin.weight };
+  const totalW = Object.values(weights).reduce((a, b) => a + b, 0);
+  for (const kind of [...ITEM_KINDS, 'coin']) {
     assert.ok(counts[kind] > 0, `${kind} never appeared`);
     const share = counts[kind] / spawned;
-    const expected = T.items.weights[kind] / totalW;
+    const expected = weights[kind] / totalW;
     assert.ok(Math.abs(share - expected) <= 0.1, `${kind} share ${share} vs ${expected}`);
   }
 });
@@ -550,15 +551,17 @@ test('rollItem never returns a mystery box unless it is allowed', () => {
   for (let i = 0; i < 5000; i++) assert.notEqual(rollItem(rng, 100, T), 'mystery');
 });
 
-test('with mystery on the box is half as common as fiber, and the other three keep their ratios', () => {
+test('with mystery on the box is half as common as fiber, a coin half as common as the box, and the other three keep their ratios', () => {
   const rng = createRng(12);
-  const counts = { fiber: 0, probiotic: 0, bacteria: 0, mystery: 0 };
+  const counts = { fiber: 0, probiotic: 0, bacteria: 0, mystery: 0, coin: 0 };
   for (let i = 0; i < 100000; i++) {
     const kind = rollItem(rng, 100, T, { mystery: true });
     if (kind) counts[kind] += 1;
   }
   const ratio = counts.mystery / counts.fiber;
   assert.ok(Math.abs(ratio - 0.5) <= 0.05, `mystery / fiber ${ratio}`);
+  const coins = counts.coin / counts.mystery;
+  assert.ok(Math.abs(coins - 0.5) <= 0.05, `coin / mystery ${coins}`);
   const pb = counts.probiotic / counts.bacteria;
   const want = T.items.weights.probiotic / T.items.weights.bacteria;
   assert.ok(Math.abs(pb - want) <= 0.05, `probiotic / bacteria ${pb} vs ${want}`);
@@ -603,6 +606,10 @@ test('rollMystery walks the draw bands in order and falls back to fiber', () => 
   }
   assert.equal(rollMystery(() => edge + 1e-9, T), 'fiber');
   assert.equal(rollMystery(() => 0.999999, T), 'fiber');
+  // The coin draws come after skip, so the older bands (and the smoke's pinned 0.25 bean1 / 0.505 skip) hold.
+  assert.deepEqual(MYSTERY_DRAWS.slice(-4), ['skip', 'coin5', 'coin10', 'coin15']);
+  assert.equal(rollMystery(() => 0.25, T), 'bean1');
+  assert.equal(rollMystery(() => 0.505, T), 'skip');
 });
 
 test('rollMystery lands near each draw chance; fiber takes the rest', () => {
@@ -628,7 +635,57 @@ test('resolveMystery turns a draw that cannot do anything into fiber', () => {
   assert.equal(resolveMystery('bean1', { beans: 0, pairsLeft: 9 }, T), 'bean1');
   assert.equal(resolveMystery('skip', { beans: 0, pairsLeft: 0 }, T), 'fiber');
   assert.equal(resolveMystery('skip', { beans: 0, pairsLeft: 1 }, T), 'skip');
-  for (const draw of ['fiber', 'probiotic', 'postbiotic']) assert.equal(resolveMystery(draw, { beans: full, pairsLeft: 0 }, T), draw);
+  for (const draw of ['fiber', 'probiotic', 'postbiotic', 'coin5', 'coin10', 'coin15']) assert.equal(resolveMystery(draw, { beans: full, pairsLeft: 0 }, T), draw);
+});
+
+test('rollItem rolls coins without the mystery flag; band items are fiber, the box and the coin', () => {
+  const rng = createRng(31);
+  let coins = 0;
+  for (let i = 0; i < 20000; i++) if (rollItem(rng, 100, T) === 'coin') coins += 1;
+  assert.ok(coins > 0, 'coins need no flag');
+  assert.deepEqual(BAND_ITEMS, ['fiber', 'mystery', 'coin']);
+  for (const k of ['probiotic', 'bacteria']) assert.ok(!BAND_ITEMS.includes(k), `${k} sits in the gap`);
+});
+
+test('the coin draws pay 5, 10 and 15 coins and are all draws', () => {
+  assert.deepEqual(MYSTERY_COINS, { coin5: 5, coin10: 10, coin15: 15 });
+  for (const k of Object.keys(MYSTERY_COINS)) assert.ok(MYSTERY_DRAWS.includes(k), k);
+  for (const k of Object.keys(MYSTERY_BEANS)) assert.ok(!(k in MYSTERY_COINS), `${k} pays beans, not coins`);
+});
+
+test('the purse: coins add, a short purse spends nothing, an exact one empties', () => {
+  const e = createEffects(T);
+  assert.equal(e.coins(), 0);
+  assert.equal(e.addCoins(5), 5);
+  assert.equal(e.addCoins(0), 5);
+  assert.equal(e.addCoins(-3), 5, 'nothing negative goes in');
+  assert.equal(e.spendCoins(6), false);
+  assert.equal(e.coins(), 5, 'a refused spend takes nothing');
+  assert.equal(e.spendCoins(0), true);
+  assert.equal(e.spendCoins(5), true);
+  assert.equal(e.coins(), 0);
+  assert.equal(e.spendCoins(-1), false);
+});
+
+test('buyBlocker / canBuy: coins first, then the bean bag; fiber and the box need coins only', () => {
+  const p = T.shop.prices;
+  const full = T.beans.maxBeans;
+  assert.deepEqual(SHOP_ITEMS, ['fiber', 'bean', 'superBean', 'mystery']);
+  assert.deepEqual(Object.keys(p).sort(), [...SHOP_ITEMS].sort(), 'a price for every row and a row for every price');
+  assert.equal(buyBlocker('fiber', { coins: p.fiber - 1, beans: 0 }, T), 'coins');
+  assert.equal(buyBlocker('fiber', { coins: p.fiber, beans: full }, T), null);
+  assert.equal(buyBlocker('bean', { coins: p.bean, beans: full }, T), 'full');
+  assert.equal(buyBlocker('bean', { coins: p.bean, beans: full - 1 }, T), null);
+  assert.equal(buyBlocker('bean', { coins: p.bean - 1, beans: full }, T), 'coins', 'coins are named before the bag');
+  assert.equal(buyBlocker('superBean', { coins: p.superBean, beans: T.beans.superBeans }, T), 'full');
+  assert.equal(buyBlocker('superBean', { coins: p.superBean, beans: T.beans.superBeans - 1 }, T), null);
+  assert.equal(buyBlocker('superBean', { coins: p.superBean - 1, beans: 0 }, T), 'coins');
+  assert.equal(buyBlocker('mystery', { coins: p.mystery, beans: full }, T), null);
+  assert.equal(buyBlocker('mystery', { coins: p.mystery - 1, beans: 0 }, T), 'coins');
+  assert.equal(buyBlocker('toilet', { coins: 99, beans: 0 }, T), 'price');
+  assert.equal(buyBlocker('constructor', { coins: 99, beans: 0 }, T), 'price');
+  assert.equal(canBuy('fiber', { coins: p.fiber }, T), true);
+  assert.equal(canBuy('bean', { coins: p.bean, beans: full }, T), false);
 });
 
 test('skipPairs counts the pairs left to the level end', () => {

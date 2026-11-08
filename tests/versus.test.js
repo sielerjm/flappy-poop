@@ -301,13 +301,18 @@ test('catchUpDraws: the plain table, bean odds doubled, or bean3 alone; rollMyst
   assert.equal(beans.bean3, T.mystery.draws.bean3 * 2);
   assert.equal(beans.bean1, 0.4);
   assert.equal(beans.bean3, 0.1);
-  for (const k of ['probiotic', 'postbiotic', 'skip']) assert.equal(beans[k], T.mystery.draws[k], k);
-  // 0.55 is fiber on the plain table (bands end at 0.51) and bean1 on the doubled one (0.2–0.6).
-  assert.equal(rollMystery(() => 0.55, T), 'fiber');
+  for (const k of ['probiotic', 'postbiotic', 'skip', 'coin5', 'coin10', 'coin15']) assert.equal(beans[k], T.mystery.draws[k], k);
+  // 0.55 is coin5 on the plain table (0.51–0.61, after skip) and bean1 on the doubled one (0.2–0.6).
+  assert.equal(rollMystery(() => 0.55, T), 'coin5');
+  assert.equal(rollMystery(() => 0.95, T), 'fiber', 'fiber takes the rest (from 0.67)');
   assert.equal(rollMystery(() => 0.55, T, beans), 'bean1');
-  assert.equal(rollMystery(() => 0.7, T, beans), 'bean3', '0.6–0.7 is the doubled bean3 band');
-  assert.equal(rollMystery(() => 0.8, T, beans), 'fiber', 'fiber still takes the rest');
+  assert.equal(rollMystery(() => 0.7, T, beans), 'bean3', '0.65–0.75 is the doubled bean3 band');
+  assert.equal(rollMystery(() => 0.8, T, beans), 'coin5', 'the coin draws follow, unchanged (0.76–0.86)');
+  assert.equal(rollMystery(() => 0.95, T, beans), 'fiber', 'fiber still takes the rest');
+  const beanSum = MYSTERY_DRAWS.reduce((a, k) => a + beans[k], 0);
+  assert.ok(beanSum <= 1, `the doubled table sums to ${beanSum}`);
   const sup = catchUpDraws('super', T);
+  assert.deepEqual(sup, Object.fromEntries(MYSTERY_DRAWS.map((k) => [k, k === 'bean3' ? 1 : 0])), 'super names every draw: bean3 1, the rest 0');
   for (const r of [0, 0.3, 0.5, 0.999999]) assert.equal(rollMystery(() => r, T, sup), 'bean3', `super at ${r}`);
   assert.equal(resolveMystery('bean3', { beans: T.beans.maxBeans, pairsLeft: 9 }, T), 'fiber', 'a full bag already has its super fart');
   assert.equal(resolveMystery('bean3', { beans: 1, pairsLeft: 9 }, T), 'bean3');

@@ -437,18 +437,22 @@ export function createSettingsStore(storage, key = 'flappy-poop:settings') {
  */
 export const ITEM_KINDS = ['fiber', 'probiotic', 'bacteria'];
 
+/** Pickups that ride in the open between two pairs (yielding to a bean rolled for the same pair); the rest sit in the gap. */
+export const BAND_ITEMS = ['fiber', 'mystery', 'coin'];
+
 /**
- * null, an ITEM_KINDS value, or 'mystery'. Bacteria weight is 0 unless `hazards`
- * (see hazardsAllowed); the mystery box joins the pick with mystery.weight only
- * when `mystery` (see mysteryRolls).
+ * null, an ITEM_KINDS value, 'mystery' or 'coin'. Bacteria weight is 0 unless
+ * `hazards` (see hazardsAllowed); the mystery box joins the pick with
+ * mystery.weight only when `mystery` (see mysteryRolls); a coin always joins
+ * with coin.weight (the roll itself only runs from level 2: level 1 is scripted).
  */
 export function rollItem(rng, score, t, { hazards = true, mystery = false } = {}) {
   const items = t.items;
   if (score < items.startScore) return null;
   if (rng() >= items.chancePerGap) return null;
-  const weights = { ...items.weights, mystery: mystery ? t.mystery.weight : 0 };
+  const weights = { ...items.weights, mystery: mystery ? t.mystery.weight : 0, coin: t.coin.weight };
   if (!hazards) weights.bacteria = 0;
-  const kinds = [...ITEM_KINDS, 'mystery'].filter((k) => (weights[k] ?? 0) > 0);
+  const kinds = [...ITEM_KINDS, 'mystery', 'coin'].filter((k) => (weights[k] ?? 0) > 0);
   const total = kinds.reduce((sum, k) => sum + weights[k], 0);
   if (total <= 0) return null;
   let pick = rng() * total;
@@ -484,11 +488,17 @@ export function scriptedMysteryPair(rng, t) {
   return levelEnd(firstLevel - 1, t) + 1 + Math.floor(rng() * (firstBefore - 1));
 }
 
-/** What a mystery box can hold besides fiber, in roll order; mystery.draws gives each a 0–1 chance. */
-export const MYSTERY_DRAWS = ['probiotic', 'bean1', 'postbiotic', 'bean3', 'skip'];
+/**
+ * What a mystery box can hold besides fiber, in roll order; mystery.draws gives each a 0–1 chance.
+ * The coin draws come after skip so the older draws keep their bands (0.2 / 0.4 / 0.45 / 0.5 / 0.51).
+ */
+export const MYSTERY_DRAWS = ['probiotic', 'bean1', 'postbiotic', 'bean3', 'skip', 'coin5', 'coin10', 'coin15'];
 
 /** Beans each bean draw adds (as many as fit under beans.maxBeans). */
 export const MYSTERY_BEANS = { bean1: 1, bean3: 3 };
+
+/** Coins each coin draw pays into the purse. */
+export const MYSTERY_COINS = { coin5: 5, coin10: 10, coin15: 15 };
 
 /**
  * Draw a mystery box's reward: a MYSTERY_DRAWS value by its chance, else 'fiber'
@@ -517,6 +527,69 @@ export function resolveMystery(draw, { beans = 0, pairsLeft = 0 } = {}, t) {
 /** Pairs a skip jumps over on `level`: every one not yet passed up to the level's end. */
 export function skipPairs(pipesPassed, level, t) {
   return Math.max(0, levelEnd(level, t) - pipesPassed);
+}
+
+/** What the level-break shop sells, in panel order; shop.prices gives each a price in coins. */
+export const SHOP_ITEMS = ['fiber', 'bean', 'superBean', 'mystery'];
+
+/**
+ * Why `item` cannot be bought now, or null when it can: 'price' (not a shop item),
+ * 'coins' (the purse is short of shop.prices[item]), 'full' (a bean with beans.maxBeans
+ * held, a super bean with beans.superBeans held). Fiber and a mystery box need coins only.
+ */
+export function buyBlocker(item, { coins = 0, beans = 0 } = {}, t) {
+  const price = t.shop.prices[item];
+  if (!SHOP_ITEMS.includes(item) || !(price >= 0)) return 'price';
+  if (coins < price) return 'coins';
+  if (item === 'bean' && beans >= t.beans.maxBeans) return 'full';
+  if (item === 'superBean' && beans >= t.beans.superBeans) return 'full';
+  return null;
+}
+
+/** True when `item` can be bought with this purse and bag (buyBlocker is null). */
+export function canBuy(item, state, t) {
+  return buyBlocker(item, state, t) === null;
+}
+
+/**
+ * The 💰 button in a level break, in the chrome column: a pill under the banner's hint
+ * (y 584), above the bean button (top ≈ 962), clear of the break's bobbing poop
+ * (x ≤ poopX + poopRadius ≈ 228 on a phone) and of the tray. `x0` = the column's left edge.
+ */
+export function shopButtonLayout(width, height, t, x0 = 0) {
+  return { id: 'shop', x: x0 + width / 2, y: 720, width: 240, height: t.trayHitMin };
+}
+
+/** 'shop' when (x, y) is on the 💰 button, else null. */
+export function shopButtonHit(x, y, box) {
+  if (!box) return null;
+  return inBox(x, y, box) ? 'shop' : null;
+}
+
+/**
+ * The shop panel in the chrome column: panel 600 × 620 centred at y 620 (310–930, clear
+ * of the ceiling strip, the bean button and ⏸), the ✕ at Settings' spot, a title and a
+ * coins line, then one row per SHOP_ITEMS entry, 104 px apart (trayHitMin + 16), each a
+ * 520 × 88 box with the icon, the name and the price laid along it. The 💰 button lies
+ * inside the panel, so the open panel covers it. `x0` = the column's left edge.
+ */
+export function shopLayout(width, height, t, x0 = 0) {
+  const cx = x0 + width / 2;
+  return {
+    panel: { x: cx, y: 620, width: 600, height: 620 },
+    close: { id: 'close', x: cx + 256, y: 364, width: 88, height: 88 },
+    title: { x: cx, y: 374 },
+    coins: { x: cx, y: 440 },
+    rows: SHOP_ITEMS.map((id, i) => ({ id, x: cx, y: 540 + i * 104, width: 520, height: t.trayHitMin, iconX: cx - 210, nameX: cx - 150, priceX: cx + 230, icon: 72 })),
+  };
+}
+
+/** What a tap on the open shop hits: 'close', a SHOP_ITEMS row id, or null (between rows, or outside: overlayOutsideHit on layout.panel). */
+export function shopHit(x, y, layout) {
+  if (!layout) return null;
+  if (inBox(x, y, layout.close)) return 'close';
+  for (const row of layout.rows) if (inBox(x, y, row)) return row.id;
+  return null;
 }
 
 /**
@@ -940,6 +1013,7 @@ export function createEffects(t) {
   let postbiotic = false; // fiber eaten while the probiotic was up: ×multiplier until the probiotic runs out
   const max = t.items.probioticPipes;
   let beanCount = 0;
+  let coinCount = 0; // the run's purse (coins), spent in the level-break shop
   let powerDuration = 0;
   let powerClock = 0;
   let powerOn = false;
@@ -1005,6 +1079,20 @@ export function createEffects(t) {
     },
     beans() {
       return beanCount;
+    },
+    /** Coins picked up or paid by a box into the run's purse; returns the purse. */
+    addCoins(n) {
+      if (n > 0) coinCount += n;
+      return coinCount;
+    },
+    /** Pay `n` from the purse: false, and nothing taken, when it is short. */
+    spendCoins(n) {
+      if (!(n >= 0) || coinCount < n) return false;
+      coinCount -= n;
+      return true;
+    },
+    coins() {
+      return coinCount;
     },
     /** Enough beans and no fart running. */
     powerReady() {
@@ -1317,8 +1405,10 @@ export function overlayOutsideHit(x, y, panel) {
  * @param {boolean} stackedSettings true when About sits on top of Settings
  * @param {boolean} stackedAbout true when HowTo or Changelog (What's new) sits on top of About
  * @param {boolean} stackedUnder true when Feedback sits on top of another overlay
- * @param {'pause'|'mute'|'settings'|'info'|'howto'|'changelog'|'lang'|'feedback'|'leaderboard'|'scores'|'tap'|'esc'|'close'} input
+ * @param {'pause'|'mute'|'settings'|'info'|'howto'|'changelog'|'lang'|'feedback'|'leaderboard'|'scores'|'shop'|'tap'|'esc'|'close'} input ('shop': the 💰 button in a level break)
  * @param {boolean} resumeLocked true during pauseResumeLockoutMs after overlay close
+ * @param {boolean} shop true while this half's level-break shop panel is open
+ * @param {boolean} breaking true while this half is in its own level break (the only place the shop opens)
  * @returns {{ do: string, pause?: boolean, armResumeLockout?: boolean, closeAbout?: boolean }}
  */
 export function chromeIntent({
@@ -1329,6 +1419,8 @@ export function chromeIntent({
   stackedUnder = false,
   input,
   resumeLocked = false,
+  shop = false,
+  breaking = false,
 }) {
   if (input === 'mute') return { do: 'toggleMute' };
 
@@ -1350,6 +1442,16 @@ export function chromeIntent({
     if (input === 'howto' && overlay === 'about') return { do: 'openHowTo', pause: false };
     if (input === 'changelog' && overlay === 'about') return { do: 'openChangelog', pause: false };
     return { do: 'ignore' };
+  }
+
+  // The level-break shop: the 💰 opens it in a break; while it is open a tap (outside the panel,
+  // or with no pointer), Esc or the pause key close it and never continue the level. Overlays
+  // still open over it (the rows below, pause false since the state is 'paused').
+  if (input === 'shop') {
+    return state === 'paused' && breaking && !shop ? { do: 'openShop' } : { do: 'ignore' };
+  }
+  if (shop && state === 'paused' && (input === 'tap' || input === 'esc' || input === 'pause')) {
+    return { do: 'closeShop', armResumeLockout: true };
   }
 
   const live = state === 'playing' || state === 'respawn'; // a respawning half pauses like a playing one
@@ -1470,7 +1572,9 @@ export function focusRingLayout(bounds, t) {
  * never invents a new game action: 'tap' / 'pause' / 'resume' / 'mute' hand
  * over to chromeIntent through Play.handleChrome, 'retry' is Over's tap, and
  * 'activate' presses whatever the focus ring is on. Phaser-free, like
- * chromeIntent.
+ * chromeIntent. The level-break shop needs no rows here: A (tap / activate),
+ * B (resume) and Menu (pause) reach chromeIntent's shop rows through Play, and
+ * RT (power) toggles the shop in a break (Play.activatePower).
  *
  * @param {string|null} action from padAction / stickNav
  * @param {'ready'|'playing'|'paused'|'respawn'|'dead'} state Play's state ('respawn' pauses like 'playing')

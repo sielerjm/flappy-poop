@@ -16,7 +16,13 @@ probiotic runs out. It is a state shown in the HUD, not a pickup.
 Mystery box (神秘盒子): the first is guaranteed before pipe 5 of level 3, then more roll by chance;
 still on level 3, bobbing from level 4.
 It opens into a random reward (fiber, probiotic, one or three beans, a 5-pipe postbiotic,
-or a skip to the end of the level).
+5 / 10 / 15 coins, or a skip to the end of the level).
+Coins (金币): golden corn kernels that turn up between the pipes from level 2 (or come out of a
+mystery box), kept in a purse for the run and spent in the **shop** (商店) at the level break: the
+💰 button under the banner opens it (fiber, one bean, a super fart that fills the bean bag, a
+mystery box). 💰 is the coin glyph and is not translated; "💰 12" style labels need no strings.
+In two players each half shops in its own level break, and a shop open on either half holds the
+shared start (the other player reads **Waiting for P{n}…** until it closes).
 Test mode (测试模式): a developer sandbox turned on by typing a trigger word as the username. Its
 Settings rows (start level as "Start at LV n", Invincible ON/OFF, power-up buttons, Exit) and its
 messages are terse developer copy; test runs never save a score.
@@ -54,6 +60,8 @@ formal medical language.
 | Postbiotic | 后生元 |
 | Bad bacteria | 有害细菌 |
 | Mystery box | 神秘盒子 |
+| Coin | 金币 |
+| Shop | 商店 |
 
 Keep these consistent everywhere (How to play rows, future copy).
 
@@ -72,6 +80,14 @@ Short, playful, clear. Fit a 720×1280 logical field; How to play / About body w
 | pauseHint | tap anywhere to resume game | 点击任意处继续游戏 |
 | levelBanner | LEVEL {n} | 第 {n} 关 |
 | levelContinue | Tap to continue | 点击继续 |
+| levelShopHint | Tap to continue · 💰 to shop | 点击继续 · 💰 进商店 |
+| shopTitle | SHOP | 商店 |
+| shopCoins | Your coins | 你的金币 |
+| shopFiber | Fiber · +3 points | 纤维 · +3 分 |
+| shopBean | One bean | 一颗豆子 |
+| shopSuperBean | Super fart · fills the bag | 超级屁 · 装满豆袋 |
+| shopMystery | Mystery box | 神秘盒子 |
+| shopFull | Bag full | 豆袋已满 |
 | levelShort | LV {n} | 第{n}关 |
 | level.stomach | Stomach | 胃 |
 | level.duodenum | Duodenum | 十二指肠 |
@@ -119,8 +135,10 @@ Short, playful, clear. Fit a 720×1280 logical field; How to play / About body w
 | itemBacteriaDetail | −3 points. From level 3 it moves up and down in the gap. | −3 分。从第 3 关起它会在管道口之间上下移动。 |
 | itemBeanName | Beans | 豆子 |
 | itemBeanDetail | Grab a bean, then press the bean button at the bottom (or your poop) to fart past the next 5 pipes: nothing can touch you. A normal fart uses one bean; you can carry 3, and with all three the fart rockets you past 20 in a rainbow glow. | 吃到豆子后，点击底部的豆子按钮（或便便）放屁冲过接下来的 5 道管道，期间什么都碰不到你。普通放屁只用一颗豆子；最多可攒 3 颗，集齐 3 颗再放屁，就能顶着彩虹光芒一口气冲过 20 道管道。 |
+| itemCoinName | Coins | 金币 |
+| itemCoinDetail | A golden corn kernel that turns up now and then between the pipes from level 2 (mystery boxes can hold some too). Coins go into your purse for the run, counted under your beans; at the level break, tap 💰 to open the shop and spend them on fiber, a bean, a super fart or a mystery box. | 金黄的玉米粒，从第 2 关起偶尔出现在管道之间（神秘盒子里有时也有）。本局收集的金币存进钱袋，显示在豆子计数下方；过关休息时点击 💰 打开商店，可以用来买纤维、豆子、超级屁或神秘盒子。 |
 | itemMysteryName | Mystery box | 神秘盒子 |
-| itemMysteryDetail | The first waits between the pipes before pipe 5 of level 3; after that they turn up at random, holding still on level 3 and floating slowly up and down from level 4. Grab one for a surprise: usually fiber, often a probiotic or a bean, sometimes a 5-pipe postbiotic or three beans, and very rarely a skip to the end of the level (the skipped pipes still score). | 第 3 关第 5 道管道之前必定会有一个停在管道之间；之后会随机出现：第 3 关里静止不动，从第 4 关起缓缓上下漂浮。吃到它会随机获得奖励：通常是纤维，也常是益生菌或一颗豆子，偶尔是持续 5 道管道的后生元或三颗豆子，极少数情况下会直接跳到本关终点（跳过的管道照样计分）。 |
+| itemMysteryDetail | The first waits between the pipes before pipe 5 of level 3; after that they turn up at random, holding still on level 3 and floating slowly up and down from level 4. Grab one for a surprise: usually fiber, often a probiotic or a bean, sometimes 5 coins, a 5-pipe postbiotic or three beans, now and then 10 coins, and very rarely 15 coins or a skip to the end of the level (the skipped pipes still score). | 第 3 关第 5 道管道之前必定会有一个停在管道之间；之后会随机出现：第 3 关里静止不动，从第 4 关起缓缓上下漂浮。吃到它会随机获得奖励：通常是纤维，也常是益生菌或一颗豆子，有时是 5 枚金币、持续 5 道管道的后生元或三颗豆子，偶尔是 10 枚金币，极少数情况下是 15 枚金币或直接跳到本关终点（跳过的管道照样计分）。 |
 | itemToiletName | On the toilet | 如厕模式 |
 | itemToiletDetail | Playing on the toilet? Flip the switch under the poop on the home screen. Those scores get a 🚽 next to them. | 在马桶上玩？打开主界面便便下方的开关，这些分数旁会显示 🚽。 |
 | itemLevelsName | Levels | 关卡 |

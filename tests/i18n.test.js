@@ -12,6 +12,7 @@ import {
   catalogKeys,
   catalogFor,
   howToItems,
+  coinLabel,
   pauseBannerText,
   metaFontSize,
   rankText,
@@ -184,4 +185,9 @@ test('shareCardFooter shows the bare link after Play: in both locales', () => {
   assert.equal(shareCardFooter('en', url), 'Play: sielerjm.github.io/flappy-poop');
   assert.equal(shareCardFooter('zh-Hans', url), '来玩：sielerjm.github.io/flappy-poop');
   assert.equal(shareCardFooter('en', 'http://localhost:8000//'), 'Play: localhost:8000');
+});
+
+test('coinLabel is the 💰 glyph and the count, the same in every locale', () => {
+  assert.equal(coinLabel(12), '💰 12');
+  assert.equal(coinLabel(0), '💰 0');
 });
