@@ -893,8 +893,8 @@ export async function run(url = DEFAULT_URL) {
         await sleep(100);
         const r1 = await ring(key);
         const scrolls = key === 'About' || key === 'HowTo' || key === 'Changelog';
-        // About's English content fits its panel, so it has nothing to scroll; HowTo and Changelog (every version listed) always do.
-        const walked = scrolls ? r1.id === 'close' && (key === 'About' ? r1.offset <= 0 : r1.offset < 0) : ['Scores', 'Leaderboard'].includes(key) ? r1.id === 'close' : Boolean(r1.id) && r1.id !== 'close';
+        // About, HowTo and Changelog (every version listed) are all longer than their panel, so a down press scrolls.
+        const walked = scrolls ? r1.id === 'close' && r1.offset < 0 : ['Scores', 'Leaderboard'].includes(key) ? r1.id === 'close' : Boolean(r1.id) && r1.id !== 'close';
         await padDown(G.back);
         await sleep(400);
         ok(r0.shown && r0.id === 'close' && walked && !(await active(key)), `${key}: opens ringed on ✕, down ${scrolls ? `scrolls (${r1.offset})` : `walks to ${r1.id}`}, B closes`);
@@ -975,6 +975,15 @@ export async function run(url = DEFAULT_URL) {
       await sleep(400);
       const aboutGone = !(await active('About'));
       ok(updated.id === 'changelog' && (await active('Changelog')) === false && shown0 && pick.id === `v${latest[1].version}` && shown1 && backToAbout && aboutGone, `About: the Updated line (ring ${updated.id}) opens What's new on v${latest[0].version} (${shown0}); A on the ${pick.id} link shows that version with a Latest link (${shown1}; ${JSON.stringify(texts1.slice(0, 4))}); B returns to About (${backToAbout}), B closes it (${aboutGone})`);
+      // About's order: the two links first, then the credits, the author line and the LLM note, the
+      // version and Updated lines last. It is longer than its panel and scrolls down to the Updated line.
+      await chrome('info');
+      await sleep(600);
+      const order = await evaluate(`Promise.all([import('./src/i18n.js'), import('./src/logic.js')]).then(([i, l]) => { const a = __flappy.scene.getScene('About'); const ys = new Map(a.children.list.filter((c) => c.type === 'Text').map((c) => [c.text, c.y])); const keys = ['aboutName', 'aboutTagline', 'howToPlay', 'feedbackLink', 'aboutCreditsTitle', 'aboutCredits', 'aboutBlurb', 'aboutLlmNote']; const seq = [...keys.map((k) => ys.get(i.t('en', k))), ys.get(l.versionText('en')), ys.get(i.t('en', 'updatedPrefix') + ' ' + l.LAST_UPDATED)]; const before = a.scroll.offset; a.scroll.scrollBy(-100000); const view = a.scroll.view; const last = seq[seq.length - 1]; const top = view.y - a.scroll.offset; return JSON.stringify({ seq, before, after: a.scroll.offset, visible: last >= top && last <= top + view.height }); })`).then(JSON.parse);
+      const sorted = order.seq.every((y, k) => typeof y === 'number' && (k === 0 || y > order.seq[k - 1]));
+      ok(sorted && order.before === 0 && order.after < 0 && order.visible, `About reads name, tagline, How to play, Bug or feature request?, Credits, the author and LLM lines, then version and Updated last (y ${order.seq.map((y) => Math.round(y)).join(' < ')}); it scrolls ${-order.after} px to the Updated line`);
+      await evaluate(`__flappy.scene.getScene('About').close(), true`);
+      await sleep(300);
     }
 
     // A game over must not change how later pipes are drawn: restart, start, spawn, check the frame.

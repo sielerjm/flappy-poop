@@ -7,7 +7,11 @@ import { createScrollView } from '../ui/scrollView.js';
 const STYLE = { fontFamily: 'sans-serif', fontStyle: 'bold', color: '#ffffff', align: 'center' };
 const MUTED = { ...STYLE, fontStyle: 'normal', color: '#c9b8dc' };
 
-/** About overlay: name, blurb, credits, links, version; scrollable (see ui/scrollView.js). */
+/**
+ * About overlay: name and tagline, then the How to play and feedback links, then the credits,
+ * the author line and the LLM note, with the version and Updated lines last. Longer than its
+ * panel, it scrolls like What's new (ui/scrollView.js).
+ */
 export class About extends Phaser.Scene {
   constructor() {
     super('About');
@@ -42,29 +46,28 @@ export class About extends Phaser.Scene {
     };
 
     stack('aboutName', { ...STYLE, fontSize: '40px' }, 12);
-    stack('aboutTagline', { ...MUTED, fontSize: '26px', wordWrap: wrap, lineSpacing: 4 }, 36);
-    stack('aboutCreditsTitle', { ...STYLE, fontSize: '28px', color: '#f8a0c8' }, 16);
-    stack('aboutCredits', { ...MUTED, fontSize: '24px', wordWrap: wrap, lineSpacing: 8 }, 48);
+    stack('aboutTagline', { ...MUTED, fontSize: '26px', wordWrap: wrap, lineSpacing: 4 }, 56);
 
-    // Links and meta flow after the credits so longer credit blocks push them down.
+    // The links first, in reach without scrolling.
     const howToLink = sv.link(sv.add(this.add.text(cx, y, t(locale, 'howToPlay'), { ...STYLE, fontSize: '40px', color: '#f8a0c8' }).setOrigin(0.5, 0)), () =>
       this.scene.get('Play')?.handleChrome('howto'),
     );
-    y += 64;
+    y += 72;
     const feedbackLink = sv.link(sv.add(this.add.text(cx, y, t(locale, 'feedbackLink'), { ...STYLE, fontSize: '36px', color: '#f8a0c8' }).setOrigin(0.5, 0)), () =>
       this.scene.get('Play')?.handleChrome('feedback'),
     );
-    y += 72;
+    y += feedbackLink.height + 64;
 
-    // Author line, then the LLM note, at the bottom under the links and above the version lines.
-    const author = sv.add(this.add.text(cx, y, t(locale, 'aboutBlurb'), { ...MUTED, fontSize: '22px', wordWrap: wrap, lineSpacing: 4 }).setOrigin(0.5, 0));
-    y += author.height + 12;
-    const llm = sv.add(this.add.text(cx, y, t(locale, 'aboutLlmNote'), { ...MUTED, fontSize: '22px', wordWrap: wrap, lineSpacing: 4 }).setOrigin(0.5, 0));
-    y += llm.height + 28;
+    // Then the credits, the author line and the LLM note; a longer block only scrolls further.
+    stack('aboutCreditsTitle', { ...STYLE, fontSize: '28px', color: '#f8a0c8' }, 20);
+    stack('aboutCredits', { ...MUTED, fontSize: '24px', wordWrap: wrap, lineSpacing: 8 }, 56);
+    stack('aboutBlurb', { ...MUTED, fontSize: '22px', wordWrap: wrap, lineSpacing: 4 }, 12);
+    stack('aboutLlmNote', { ...MUTED, fontSize: '22px', wordWrap: wrap, lineSpacing: 4 }, 48);
 
+    // The version lines at the very bottom.
     const metaSize = metaFontSize(locale);
     sv.add(this.add.text(cx, y, versionText(locale), { ...STYLE, fontSize: metaSize, color: '#6a5a74', fontStyle: 'normal' }).setOrigin(0.5, 0));
-    y += 44;
+    y += 48;
     // "Updated <stamp>" is a link to What's new (the Changelog overlay).
     const updated = sv.link(
       sv.add(
