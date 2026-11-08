@@ -637,6 +637,28 @@ export async function run(url = DEFAULT_URL) {
       ok(buy.box && buy.afterBox.coins === buy.afterBeans - buy.P.mystery && buy.afterBox.reveal === 'fiber', `a bought box opens on the plain table (a bean drawn with the bag full turns into fiber) for ${buy.P.mystery} coins`);
       ok(!buy.junk && !buy.broke && !buy.hud, 'an unknown row and an empty purse buy nothing; the empty purse hides the HUD row');
     }
+    // The guaranteed kernel, drawn at half size, and the saved purse. Level 1's waits just past the
+    // level's last pair, holding still at that pair's gap; taking it saves the purse. From level 2 one
+    // rides in the band slot of course.kernelPair, bobbing, moving on to the next pair when a bean has
+    // the slot; a respawn's clear before it is taken brings it back with the re-filled stretch. A shop
+    // purchase saves the purse too.
+    {
+      const SAVED = `(JSON.parse(localStorage.getItem('flappyPoop.save') ?? '{}').coins ?? 0)`;
+      const KEEP = 'const keep = { level: p.level, spawned: p.pipesSpawned, passed: p.pipesPassed, fin: p.finishSpawned, box: p.mysteryPair, item: p.course.item, bean: p.course.bean };';
+      const BACK = 'p.items.clear(true, true); p.beans.clear(true, true); p.pipes.clear(true, true); p.course.item = keep.item; p.course.bean = keep.bean; p.level = keep.level; p.pipesSpawned = keep.spawned; p.pipesPassed = keep.passed; p.finishSpawned = keep.fin; p.mysteryPair = keep.box; p.nextGapY = null; p.applyLevel(); p.armKernel();';
+      // Spawned in one evaluate, read a frame later (Arcade sizes a new body on its next step), then taken.
+      await evaluate(`(() => { const p = ${play}; ${KEEP} globalThis.__keep = keep; p.items.clear(true, true); p.beans.clear(true, true); p.pipes.clear(true, true); p.level = 1; p.applyLevel(); p.nextGapY = null; p.centreNextGap = false; p.finishSpawned = true; p.armKernel(); p.pipesSpawned = ${TT.levels.pipes[0]} - 1; p.spawnPipePair(); const top = p.pipes.getChildren().find((q) => q.getData('scoring')); const it = p.items.getChildren().find((q) => q.getData('kernel')); const gapY = top.y + p.diff.gapHeight / 2; globalThis.__k1 = { pair: p.kernel.pair, n: p.pipesSpawned, has: Boolean(it), dx: it ? it.x - top.x : null, dy: it ? it.y - gapY : null, bob: it?.getData('bob') ?? null, w: it?.displayWidth, kind: it?.getData('kind') ?? null }; return true; })()`);
+      await sleep(100);
+      const k1 = await evaluate(`(() => { const p = ${play}; const keep = globalThis.__keep; const out = globalThis.__k1; const it = p.items.getChildren().find((q) => q.getData('kernel')); out.bw = it?.body.width; const purse0 = p.effects.coins(); if (it) p.collectItem(it); Object.assign(out, { done: p.kernel.done, gained: p.effects.coins() - purse0, purse: p.effects.coins(), saved: ${SAVED} }); ${BACK} return JSON.stringify(out); })()`).then(JSON.parse);
+      ok(k1.has && k1.n === TT.levels.pipes[0] && k1.pair === k1.n && Math.abs(k1.dx - TT.coin.firstAfterPipePx) < 1 && Math.abs(k1.dy) < 1 && k1.bob === null && k1.kind === 'coin', `level 1's kernel waits just past its last pair (pair ${k1.n}), ${Math.round(k1.dx)} px on at the pair's gap height, still`);
+      ok(k1.w === 96 * TT.coin.scale && Math.abs(k1.bw - 2 * TT.coin.radius) < 0.5, `kernels are drawn at half size (${k1.w} px) with a hitbox to match (${k1.bw} px across)`);
+      ok(k1.done && k1.gained === 1 && k1.saved === k1.purse, `taking it settles the level's kernel, adds a coin and saves the purse (${k1.saved} saved)`);
+      const k2 = await evaluate(`Promise.all([import('./src/logic.js'), import('./src/config.js')]).then(([l, c]) => { const p = ${play}; ${KEEP} p.items.clear(true, true); p.beans.clear(true, true); p.pipes.clear(true, true); p.level = 4; p.applyLevel(); p.nextGapY = null; p.centreNextGap = false; p.finishSpawned = false; p.mysteryPair = -1; p.armKernel(); const kp = p.kernel.pair; p.course.item = () => null; p.course.bean = (n) => n === kp; p.pipesSpawned = kp - 1; p.spawnPipePair(); const first = { kernel: p.items.getChildren().some((q) => q.getData('kernel')), beans: p.beans.getChildren().length }; p.spawnPipePair(); const it = p.items.getChildren().find((q) => q.getData('kernel')); const out = { kp, inLevel: kp > l.levelEnd(3, c.TUNING) && kp < l.levelEnd(4, c.TUNING), first, n: p.pipesSpawned, has: Boolean(it), bob: it?.getData('bob') ?? null, period: it?.getData('period') ?? null, w: it?.displayWidth }; p.pipesPassed = kp - 1; p.clearFieldAhead(); out.cleared = { item: Boolean(p.kernel.item), done: p.kernel.done, left: p.items.getChildren().filter((q) => q.getData('kernel')).length }; p.course.bean = () => false; p.prefillPipes(); out.back = p.items.getChildren().filter((q) => q.getData('kernel') && q.active).length; ${BACK} return JSON.stringify(out); })`).then(JSON.parse);
+      ok(k2.inLevel && !k2.first.kernel && k2.first.beans === 1 && k2.has && k2.n === k2.kp + 1 && k2.bob === 'band' && k2.period === TT.items.fiberPeriodMs && k2.w === 96 * TT.coin.scale, `level 4's kernel is drawn for pair ${k2.kp}; a bean has that slot, so it rides behind pair ${k2.n}, bobbing like any coin`);
+      ok(!k2.cleared.item && !k2.cleared.done && k2.cleared.left === 0 && k2.back === 1, 'a respawn that clears it before it is taken brings it back with the re-filled stretch');
+      const shop = await evaluate(`(() => { const p = ${play}; p.effects.addCoins(10); p.persistCoins(); const before = ${SAVED}; const ok = p.buyItem('fiber'); return JSON.stringify({ ok, before, after: ${SAVED}, purse: p.effects.coins() }); })()`).then(JSON.parse);
+      ok(shop.ok && shop.after === shop.before - TT.shop.prices.fiber && shop.after === shop.purse, `a shop purchase saves the purse too (${shop.before} → ${shop.after})`);
+    }
     // From level 3 a gap item sweeps its gap (spawn one directly: the roll is random).
     await evaluate(`${play}.gapProbe = ${play}.spawnGapItem('bacteria', 900, 640, ${TT.gapHeight}), true`);
     const y1 = await evaluate(`${play}.gapProbe.y`);
@@ -703,7 +725,9 @@ export async function run(url = DEFAULT_URL) {
       await tapAt(hm.x, hm.y);
       for (let i = 0; i < 40 && (await playState()) !== 'ready'; i += 1) await sleep(250);
       ok(!(await evaluate(`__flappy.scene.isActive('Over')`)) && (await playState()) === 'ready', 'a tap on Home closes the panel and goes home');
-      ok((await evaluate(`${play}.effects.coins() === 0 && !${play}.coinIcon.visible && ${play}.collected.coin === 0`)) === true, 'home starts a new purse: no coins, no coin row');
+      const home = await evaluate(`import('./src/save.js').then((m) => { const p = ${play}; const saved = m.coinBalance(JSON.parse(localStorage.getItem('flappyPoop.save') ?? '{}')); const row = { icon: p.coinIcon.visible, text: p.coinText.text }; const keep = p.save; p.setSaveState(m.withCoins(p.save, 77)); const loaded = { icon: p.coinIcon.visible, text: p.coinText.text }; p.setSaveState(keep); return JSON.stringify({ purse: p.effects.coins(), counted: p.collected.coin, saved, mem: m.coinBalance(p.save), row, loaded, after: { icon: p.coinIcon.visible, text: p.coinText.text } }); })`).then(JSON.parse);
+      ok(home.purse === 0 && home.counted === 0 && home.saved === home.mem && (home.saved > 0 ? home.row.icon && home.row.text === `×${home.saved}` : !home.row.icon), `home: the run's counts reset, and the purse row shows the ${home.saved} coins saved from earlier runs`);
+      ok(home.loaded.icon && home.loaded.text === '×77' && (home.saved > 0 ? home.after.text === `×${home.saved}` : !home.after.icon), 'a save state with 77 coins (a loaded code) shows ×77 on the home screen');
     }
 
     // Gamepad: the plugin is on and Play holds the one 'down' listener; padDown / padNav are the
@@ -726,6 +750,8 @@ export async function run(url = DEFAULT_URL) {
       for (let i = 0; i < 40 && (await playState()) !== 'playing'; i += 1) await sleep(100);
       await evaluate(`${play}.poop.body.setAllowGravity(false), ${play}.poop.setVelocity(0, 0), ${play}.poop.y = 640, true`);
       ok((await playState()) === 'playing' && (await mode()) === true, 'A starts the run and turns controller mode on');
+      const carried = await evaluate(`import('./src/save.js').then((m) => JSON.stringify({ purse: ${play}.effects.coins(), saved: m.coinBalance(${play}.save) }))`).then(JSON.parse);
+      ok(carried.purse === carried.saved, `the run starts with the saved coins in its purse (${carried.purse})`);
       await padDown(G.pause);
       await sleep(100);
       const p1 = await playState();
@@ -1520,6 +1546,8 @@ export async function run(url = DEFAULT_URL) {
       await evaluate(`${P1}.toggleVersus(), ${P1}.launch(), true`);
       ok(await until(`__flappy.scene.isActive('Versus') && ${VS}.match.status === 'join'`), 'the 👥 toggle (toggleVersus) and the start tap open the join screen');
       ok(await race(), 'a keyboard-only match: W / Space is P1, ↑ / Enter is P2, both playing after the countdown');
+      const vcoins = await evaluate(`(() => { const a = ${P1}; const saved = () => (JSON.parse(localStorage.getItem('flappyPoop.save') ?? '{}').coins ?? 0); const before = saved(); const start = a.effects.coins(); a.takeCoins(3); const out = { start, purse: a.effects.coins(), before, after: saved() }; a.effects.spendCoins(3); a.refreshCoinHud(); return JSON.stringify(out); })()`).then(JSON.parse);
+      ok(vcoins.start === 0 && vcoins.purse === 3 && vcoins.after === vcoins.before, `a match starts with an empty purse and saves none of its coins (${vcoins.before} saved before and after)`);
       await evaluate(`[${P1}, ${P2}].forEach((p) => { p.syncLeaderboard = () => { globalThis.__syncs = (globalThis.__syncs ?? 0) + 1; }; }), true`);
       // The shared pause: Menu pauses both under one banner (the Versus scene's, not the halves');
       // a tap on the right half resumes both.

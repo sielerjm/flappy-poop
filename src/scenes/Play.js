@@ -85,7 +85,7 @@ import {
   padIntent,
 } from '../logic.js';
 import { t, pauseBannerText, levelBannerText, levelLabel, initialLocale, isLocale, profileButtonText, coinLabel } from '../i18n.js';
-import { loadLocal, saveLocal, ensureId, recordScore, TOILET_EMOJI } from '../save.js';
+import { loadLocal, saveLocal, ensureId, recordScore, coinBalance, withCoins, TOILET_EMOJI } from '../save.js';
 import { unlock, attachGame, setMuted, isMuted, sfx } from '../sound.js';
 import { createTray } from '../ui/tray.js';
 import { createFocus } from '../ui/focus.js';
@@ -319,6 +319,8 @@ export class Play extends Phaser.Scene {
     const hc = T.hudCoin;
     this.coinIcon = this.add.image(this.col.x + hc.iconX, hc.y, 'coin').setDisplaySize(hc.iconPx, hc.iconPx).setDepth(20).setVisible(false);
     this.coinText = this.add.text(this.col.x + hc.textX, hc.y, '', { ...TEXT_STYLE, fontSize: `${hc.fontPx}px` }).setOrigin(0, 0.5).setDepth(20).setVisible(false);
+    this.kernel = null; // the level's guaranteed kernel (armKernel)
+    this.refreshCoinHud(); // the home screen shows the saved balance
     this.readyTitle = this.add
       .text(this.readyBoxes.title.x, this.readyBoxes.title.y, t(this.locale, 'readyTitle'), { ...TEXT_STYLE, fontSize: `${T.readyTitlePx}px` })
       .setOrigin(0.5)
@@ -577,6 +579,11 @@ export class Play extends Phaser.Scene {
     this.refreshTestBadge();
     this.collected = { fiber: 0, probiotic: 0, postbiotic: 0, bacteria: 0, bean: 0, mystery: 0, coin: 0 };
     this.mysteryPair = this.course.mysteryPair(); // the pair the guaranteed first box (early level 3) rides after
+    // The purse: a single-player run starts with the saved coins; a match or a test run starts empty and saves nothing.
+    this.effects.spendCoins(this.effects.coins());
+    if (this.savesCoins()) this.effects.addCoins(coinBalance(this.save));
+    this.refreshCoinHud();
+    this.armKernel();
     this.distance = 0;
     this.popupOrder = [];
     this.clearReveal();
@@ -731,6 +738,7 @@ export class Play extends Phaser.Scene {
     this.centreNextGap = true;
     this.nextGapY = null;
     this.applyLevel();
+    this.armKernel(); // the new level's guaranteed kernel
     this.prefillPipes();
   }
 
@@ -838,6 +846,7 @@ export class Play extends Phaser.Scene {
   setSaveState(state) {
     this.save = state;
     this.refreshProfile();
+    this.refreshCoinHud(); // a loaded code may bring coins
   }
 
   /**
@@ -1575,8 +1584,21 @@ export class Play extends Phaser.Scene {
     };
     const band = BAND_ITEMS.includes(kind); // fiber, a box or a coin: in the open between the pairs
     const boxStill = !mysteryMoves(this.level, T);
+    // The level's guaranteed kernel (armKernel, course.kernelPair). From level 2 it takes the band slot of
+    // its pair, or of the next pair whose slot holds no box and no bean, bobbing like any coin in place of
+    // a rolled fiber or coin. Level 1's waits just past the level's last pair, still at that pair's gap;
+    // so does a later level's when even its last pair's slot is taken. Flown past, farted through or
+    // skipped it is gone for the level (a respawn that clears it re-arms it: clearFieldAhead).
+    const k = this.kernel;
+    if (k?.item && !(k.item.active && k.item.scene)) k.done = true;
+    const kernelDue = Boolean(k && !k.done && !k.item && k.level === this.level && n >= k.pair);
+    const slotFree = !boxHere && !beanHere && kind !== 'mystery';
+    const kernelBand = kernelDue && this.level > 1 && slotFree;
+    const kernelPast = kernelDue && !kernelBand && (this.level === 1 || n >= levelEnd(this.level, T));
     if (boxHere) this.spawnBandItem('mystery', boxStill ? stillY() : null, shift);
+    else if (kernelBand) this.markKernel(this.spawnBandItem('coin', still ? stillY() : null, shift));
     else if (band && !beanHere) this.spawnBandItem(kind, (kind === 'mystery' ? boxStill : still) ? stillY() : null, shift);
+    if (kernelPast) this.markKernel(this.spawnStillCoin(x + T.coin.firstAfterPipePx, gapY));
     if (kind && !band) this.spawnGapItem(kind, x, gapY, gapH, move ? top : null);
 
     // Beans ride halfway between this pair and the next, bobbing top to bottom (still in level 1).
@@ -1616,6 +1638,26 @@ export class Play extends Phaser.Scene {
     return item;
   }
 
+  /** A coin holding still at (x, y): level 1's guaranteed kernel just past the last pipe, or one stranded by a respawn. */
+  spawnStillCoin(x, y) {
+    const item = this.items.create(x, y, 'coin');
+    item.setDepth(8);
+    this.finishItem(item, 'coin');
+    return item;
+  }
+
+  /** This coin is the level's guaranteed kernel (taking it, or losing it, settles the level's kernel). */
+  markKernel(item) {
+    item.setData('kernel', true);
+    if (this.kernel) this.kernel.item = item;
+    return item;
+  }
+
+  /** The current level's guaranteed kernel (course.kernelPair): not spawned yet, not taken. */
+  armKernel() {
+    this.kernel = { level: this.level, pair: this.course.kernelPair(this.level), item: null, done: false };
+  }
+
   /** Pause or resume the boxes' spin with the run (the scene keeps updating while paused). */
   setBoxSpin(on) {
     for (const item of this.items.getChildren()) {
@@ -1647,8 +1689,10 @@ export class Play extends Phaser.Scene {
   }
 
   finishItem(item, kind) {
-    item.setScale(T.spriteDisplayScale);
-    const itemBody = scaledCircleBody(item.frame.width, T.spriteDisplayScale, T.items.itemRadius);
+    const coin = kind === 'coin'; // a kernel is drawn at coin.scale of the other pickups, its hitbox the whole drawing
+    const scale = T.spriteDisplayScale * (coin ? T.coin.scale : 1);
+    item.setScale(scale);
+    const itemBody = scaledCircleBody(item.frame.width, scale, coin ? T.coin.radius : T.items.itemRadius);
     item.body.setCircle(itemBody.radius, itemBody.offset, itemBody.offset);
     item.setVelocityX(-this.scrollSpeed());
     item.setData('kind', kind);
@@ -1968,12 +2012,13 @@ export class Play extends Phaser.Scene {
     if (this.state !== 'playing' || !item.active) return;
     if (this.effects.powerActive()) return; // farting: fiber, probiotic, bacteria and boxes scroll straight through
     const kind = item.getData('kind');
+    const kernel = Boolean(item.getData('kernel')); // read before destroy() takes the item's data with it
     const { x, y } = item;
-    // The burst uses the item's current frame (a spinning box keeps its angle).
-    const ghost = this.add.image(x, y, item.texture.key, item.frame.name).setScale(T.spriteDisplayScale).setDepth(12);
+    // The burst uses the item's current frame (a spinning box keeps its angle) and its own size (a kernel is drawn smaller).
+    const ghost = this.add.image(x, y, item.texture.key, item.frame.name).setScale(item.scaleX).setDepth(12);
     this.tweens.add({
       targets: ghost,
-      scale: T.spriteDisplayScale * 1.4,
+      scale: item.scaleX * 1.4,
       alpha: 0,
       duration: 180,
       onComplete: () => ghost.destroy(),
@@ -1994,6 +2039,7 @@ export class Play extends Phaser.Scene {
     } else if (kind === 'probiotic') {
       this.takeProbiotic();
     } else if (kind === 'coin') {
+      if (kernel && this.kernel) this.kernel.done = true;
       this.takeCoins(1);
     } else if (kind === 'bacteria') {
       this.collected.bacteria += 1;
@@ -2037,13 +2083,15 @@ export class Play extends Phaser.Scene {
   takeCoins(n) {
     this.effects.addCoins(n);
     this.collected.coin += n;
+    this.persistCoins();
     this.refreshCoinHud();
     this.playSample('coin', T.coinVolume, sfx.pickup);
   }
 
   /** The purse under the bean counter: coin ×n while any are held. */
   refreshCoinHud() {
-    const n = this.effects.coins();
+    // On the home screen the saved balance (a match half has none); in a run the purse.
+    const n = this.state === 'ready' ? (this.match ? 0 : coinBalance(this.save)) : this.effects.coins();
     const show = n > 0;
     this.coinIcon.setVisible(show);
     this.coinText.setVisible(show);
@@ -2088,9 +2136,21 @@ export class Play extends Phaser.Scene {
       const draw = rollMystery(this.match ? this.rngDraw : this.course.rng, T);
       this.openMystery(resolveMystery(draw, { beans: this.effects.beans(), pairsLeft: 0 }, T), opts.x, opts.y, opts);
     }
+    this.persistCoins();
     this.refreshCoinHud();
     this.playSample('coin-spend', T.coinSpendVolume, sfx.pickup);
     return true;
+  }
+
+  /** Coins carry over between runs: a single-player, non-test run (a match and a test run record nothing). */
+  savesCoins() {
+    return !this.match && !this.runIsTest;
+  }
+
+  /** Keep the purse in the save after every change, so nothing is lost if the game closes mid-run. */
+  persistCoins() {
+    if (!this.savesCoins()) return;
+    this.save = saveLocal(withCoins(this.save, this.effects.coins()));
   }
 
   /**
@@ -2467,6 +2527,8 @@ export class Play extends Phaser.Scene {
    * under the same numbers and the level's progress and finish stay in step.
    */
   clearFieldAhead() {
+    const k = this.kernel;
+    const kernelCleared = Boolean(k && !k.done && k.item?.active && !hasPassed(k.item.x, k.item.displayWidth, this.poop.x));
     for (const group of [this.pipes, this.items, this.beans]) {
       for (const obj of [...group.getChildren()]) if (!hasPassed(obj.x, obj.displayWidth, this.poop.x)) obj.destroy();
     }
@@ -2478,6 +2540,7 @@ export class Play extends Phaser.Scene {
     this.endSweep();
     this.pipesSpawned = this.pipesPassed;
     this.nextGapY = null;
+    if (kernelCleared) k.item = null; // the guaranteed kernel comes back with the re-filled stretch (endRespawn)
   }
 
   /** The restart after the blinks: like the end of a fart, with the next pair opening at mid-screen and the usual grace. */
@@ -2491,6 +2554,11 @@ export class Play extends Phaser.Scene {
     this.centreNextGap = true;
     this.nextGapY = null;
     this.prefillPipes();
+    // No pair left in the level to carry a cleared kernel: it waits mid-screen, one lead ahead.
+    const k = this.kernel;
+    if (k && !k.done && !k.item && k.level === this.level && this.pipesSpawned >= levelEnd(this.level, T)) {
+      this.markKernel(this.spawnStillCoin(this.poopX + pipeLead(this.fieldW, T, FIELD), GAME_HEIGHT / 2));
+    }
     this.applyScroll();
     if (this.effects.powerReady()) this.setCharged(true);
     this.refreshPoopLook();
