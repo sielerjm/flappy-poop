@@ -1,6 +1,6 @@
 # Plan: Still pickups pulse, coins per run (death clears them), coins on Over, coins above beans, fiber 1
 - Created: 2026-11-08
-- Status: in progress
+- Status: complete
 - Baseline commit: `38a65a8` on `main` (11 ahead of origin, unpushed 0.8.0 work; tree clean apart from Michael's untracked `assets/sfx/ToiletFlush_Win.mp3`)
 - Whole-suite verification: `npm test` (baseline 372 / 372) + `npm run smoke` after each scene step (server on port 8000). No source edits while a smoke runs.
 - Repo plan copy: `.claude/plans/2026-11-08-pulse-coins-per-run.md` (written in step 1, `git add -f`)
@@ -35,12 +35,13 @@ Decisions made here (overrule any at approval):
 - Visual check: screenshots of the inventory rows, a level-1 pickup mid-pulse and the Over panel.
 - Verify: `npm test`; `npm run smoke` green.
 - Commit: `feat(play, step 2/3): still pickups pulse, death clears coins and power-ups, coins above beans and on Over`
-- Result: npm test 374 / 374; npm run smoke all 282 checks passed (a still fiber pulses 0.235–0.265 while a bobbing one stays 0.25; the body is re-fitted each frame and reads 95.6–96.5 px between physics steps, exact in the step where collisions run, so the check allows 2 px; single-player death clears 3 coins, a bean and a probiotic and Over counts the coins beside the pipes; a match crash 15 → 13 coins, beans and probiotic gone). One earlier run failed the two-player "same course" check once; it did not reproduce in a fresh-page repro (both halves identical) or the next full run. Screenshots of the inventory (coins over beans) and the Over row look right. Commit `<p2>`.
+- Result: npm test 374 / 374; npm run smoke all 282 checks passed (a still fiber pulses 0.235–0.265 while a bobbing one stays 0.25; the body is re-fitted each frame and reads 95.6–96.5 px between physics steps, exact in the step where collisions run, so the check allows 2 px; single-player death clears 3 coins, a bean and a probiotic and Over counts the coins beside the pipes; a match crash 15 → 13 coins, beans and probiotic gone). One earlier run failed the two-player "same course" check once; it did not reproduce in a fresh-page repro (both halves identical) or the next full run. Screenshots of the inventory (coins over beans) and the Over row look right. Commit `936cfa1`.
 
-### Step 3/3 — Docs and 0.8.0 notes  [pending]
+### Step 3/3 — Docs and 0.8.0 notes  [done]
 - Change: `README.md`, `AGENTS.md`, How to play's coin row and `TRANSLATION_NOTES.md` (coins per run, death, the crash cost, above the beans, fiber 1, the pulse), `.claude/plans/Flappy Poop — Save Code Spec.md` (the `c` row removed), the 0.8.0 What's new notes (en + zh); plan status complete.
 - Verify: `npm test`; `grep -n "saved between runs\|stay saved\|persistCoins\|coinBalance\|hudCoin\|fiber 2\|for 2 coins" README.md AGENTS.md src/ tests/ tools/ TRANSLATION_NOTES.md` finds nothing; `npm run smoke` once more on the final tree.
 - Commit: `docs(coins, step 3/3): coins per run, death clears them and the power-ups, the still pulse`
+- Result: npm test 374 / 374; the stale-wording grep finds nothing; npm run smoke all 282 checks passed on the final tree. The 0.8.0 notes stay at five bullets per locale (the changelog test's limit): the crash cost joined the two-player note, the death reset and the pulse share one.
 
 ## Risks and notes
 - Re-fitting a body every frame is cheap for the few still pickups on screen; the smoke checks the body width holds while the scale moves.
@@ -52,4 +53,7 @@ Decisions made here (overrule any at approval):
 - Hand check (Michael): level 1's pickups pulsing and level 2's bobbing ones not; die with coins and beans → next run starts empty; a two-player crash costs coins and power-ups; coins above beans; Over's coin count; fiber for 1 in the shop. Then `npm run push`.
 
 ## Completion summary
-(filled at the end)
+- Commits on `main` since `38a65a8`: step 1 `ed62694`, step 2 `936cfa1`, step 3 (docs). Nothing pushed.
+- Verified: `npm test` green at every step; `npm run smoke` all checks after each step; screenshots of the inventory rows and the Over coin cell.
+- Unverified: feel on devices (pulse size and speed, the death reset, the crash cost); Chinese strings are drafts. One two-player "same course" smoke failure seen once and not reproduced.
+- Roll back: `git revert <hash>` per step, or `git reset --hard 38a65a8` (discards work).

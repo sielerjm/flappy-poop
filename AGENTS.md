@@ -26,18 +26,20 @@ kernel, drawn at `coin.scale` with a `coin.radius` hitbox) join the item roll fr
 (`Play.armKernel` from `course.kernelPair(level)`: level 1's waits `coin.firstAfterPipePx` past its last pair
 at that pair's gap, still; from level 2 it takes its pair's band slot, or the next pair's without a box or
 bean, or past the last pipe; `clearFieldAhead` re-arms it when a respawn clears it untaken). A coin or a
-box's coin draw goes into the purse (`effects.addCoins`, the HUD row under the beans, `Coin_Pickup.mp3`),
-which **carries over between runs**: a single-player, non-test run starts from the save's `coins`
-(`coinBalance`) and `persistCoins()` saves after every pickup and purchase (`withCoins`); the home screen's
-purse row shows the saved balance; a match or a test run starts empty and saves nothing. The **shop** (`TUNING.shop`): in a level break a
+box's coin draw goes into the purse (`effects.addCoins`, `Coin_Pickup.mp3`), shown in the top-left
+inventory over the beans (`inventoryRows`, `TUNING.hudInventory`: the rows shown stack from the top). Coins
+last **one run**: `start()` empties the purse, nothing is saved, a single-player death empties it and clears
+every power-up (`effects.clearPowerups`), and a two-player crash keeps `crashCoins` (90 %, rounded down) and
+clears the power-ups. Pickups with no motion data pulse (`pulseStill` / `pulseScale`, `stillPulseScale`,
+`items.stillPulse`), their circle body re-fitted each frame so the hitbox holds. The **shop** (`TUNING.shop`): in a level break a
 💰 pill under the banner (`shopButtonLayout`; dimmed at 0 coins, the single-player hint then drops its
-"· 💰 to shop") opens a panel of rows (`shopLayout`, `SHOP_ITEMS`) in the chrome column: fiber 2, one bean 6,
+"· 💰 to shop") opens a panel of rows (`shopLayout`, `SHOP_ITEMS`) in the chrome column: fiber 1, one bean 6,
 a super bean 16 (fills the bag to `superBeans`), a mystery box 5 (the plain draw table, `pairsLeft` 0 so a
 skip becomes fiber). `buyBlocker` / `canBuy` grey a row the purse or the bag refuses; `Play.buyItem` spends
 and applies it, and the reward animates in the paused break. ✕, a tap outside the panel, Esc / P / B and
 the power input (B key, RT, a versus power key) close it (`chromeIntent` `closeShop`, arming the resume
-lockout); closing never continues the level. Coins are not on the game-over summary or the share card
-(`collected.coin` is counted for a later row). Level 1 is
+lockout); closing never continues the level. The game-over panel shows `collected.coin` beside the pipes
+(the share card does not). Level 1 is
 scripted (probiotic at pair 3, fiber after 4 and 7, a bean after 9) and its fiber and bean hold still midway
 between the two gaps; from level 2 they bob and a bean rolls per pair
 (15 % per pair to pipe 20 with one guaranteed by guaranteeScore, 6 % after);
@@ -308,13 +310,10 @@ src/
                             load at level 1; MAX_TOP = 6), recordScore(state,
                             score, { toilet, level }), isNewTop,
                             merge, topScores, formatScore ("🚽 41"), summaryLine,
-                            profileLine, coinBalance / withCoins (the saved coin
-                            balance, kept in the state only above 0, ≤ COINS_MAX;
-                            merge keeps the larger), exportCode / importCode
-                            (HMAC-SHA256, v1 payload {i, n, s, p, [l], [h], [c], t};
-                            p = optional toilet flags; h = 'l' only for a
-                            left-handed player, handed back as `hand` beside the
-                            state, never in SaveState; c = coins, only above 0;
+                            profileLine, exportCode / importCode (HMAC-SHA256,
+                            v1 payload {i, n, s, p, [l], [h], t}; p = optional toilet
+                            flags; h = 'l' only for a left-handed player, handed
+                            back as `hand` beside the state, never in SaveState;
                             via Web Crypto, 16-byte tag, base64url), PARSERS per
                             wire version, SECRET constant (permanent). Fully
                             unit-tested.
@@ -671,11 +670,14 @@ src/
                             both are at the line, else nothing): a match half's break
                             ends only on the shared count (beginLevel, from Versus).
                             Coins and the shop: takeCoins (purse, collected.coin,
-                            persistCoins, refreshCoinHud, the coin sample; the HUD
-                            row shows the saved balance on the home screen),
-                            armKernel / markKernel / spawnStillCoin (the level's
-                            guaranteed kernel; collectItem reads its flag before
-                            destroy), savesCoins, giveBeans, playSample
+                            refreshCoinHud, the coin sample), refreshInventory (coin
+                            and bean rows by inventoryRows), clearPowerups (die in
+                            single player with the purse emptied; startRespawn with
+                            crashCoins), pulseStill / pulseScale (still pickups and
+                            still beans breathe, body re-fitted), armKernel /
+                            markKernel / spawnStillCoin (the level's guaranteed
+                            kernel; collectItem reads its flag before destroy),
+                            giveBeans, playSample
                             (a sample or its synth fallback), buyItem(id, opts);
                             shopOpen / shop, refreshShopButton / shopButtonShown
                             (the 💰 pill, depth 27), openShop / refreshShop /
@@ -1050,9 +1052,12 @@ tools/
                             the coin draws, buyItem with a full bag, level 1's
                             kernel past its last pair at half size, a later level's
                             kernel deferred past a bean and brought back after a
-                            respawn's clear, the purse saved on a pickup and a
-                            purchase, the saved balance at Home and in the next
-                            run, a match saving nothing),
+                            respawn's clear, fiber for 1, the coin row over the
+                            bean row and the stacking, a still fiber pulsing with
+                            its hitbox held, a single-player death clearing coins
+                            and power-ups with Over counting the coins, an empty
+                            purse at Home and in the next run, a match crash
+                            keeping 90 % of the coins and clearing the power-ups),
                             the shop (the 💰 pill and hint, rows bought by real taps, a
                             greyed row, the reveal over the panel while paused, ✕, a tap
                             outside without continuing, the super bean filling the bag,

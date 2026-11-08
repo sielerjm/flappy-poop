@@ -42,7 +42,6 @@ Payload v1 (minified JSON, keys in this order so the bytes are deterministic):
 | `p` | int\[\] | Optional; 0/1 toilet flags parallel to `s` (🚽 runs). Older codes without it read as all 0 |
 | `l` | int\[\] | Optional (2026-11-04); the level (≥ 1) each score was set at, parallel to `s`. Written only when some level is above 1; older codes read as all 1 |
 | `h` | string | Optional (2026-11-07); `"l"` when the bean button sits by the left thumb (Settings' 👈 👉 row), `"r"` accepted. Written only for left, so right-handed codes stay byte-identical. Not part of `SaveState`: `importCode` hands it back as `hand` and the panel applies it to the device's settings |
-| `c` | int | Optional (2026-11-08); the saved coin balance, 0–99 999. Written only when above 0, so coinless codes stay byte-identical. On import the larger of the code's and the device's balance is kept |
 | `t` | int | Unix seconds at export, informational only |
 
 The signature covers the prefix too, so a `fp1.` payload cannot be relabelled `fp2.` without failing verification.
@@ -57,7 +56,7 @@ Rules:
 2. Each shipped version has a parser in a `PARSERS` map: `{1: parseV1, 2: parseV2, ...}`. A parser turns that version's payload JSON into the in-memory `SaveState` and fills defaults for fields that version did not have.
 3. Import reads the prefix, looks up the parser, verifies the signature, then parses. Unknown version (newer than the game, or malformed) is rejected with "Unrecognised save code".
 4. Export always serialises `SaveState` with the current version's serialiser and signs it with the current prefix.
-5. Bump the version only when the payload schema changes in a way the old parser cannot handle (a renamed or re-typed key). Adding an optional key with a default does not need a bump (`p`, `l`, `h` and `c` joined v1 this way).
+5. Bump the version only when the payload schema changes in a way the old parser cannot handle (a renamed or re-typed key). Adding an optional key with a default does not need a bump (`p`, `l` and `h` joined v1 this way).
 6. Never delete a parser once shipped; codes live in players' notes apps indefinitely.
 
 In-memory `SaveState` (the game's own shape, independent of any wire version):

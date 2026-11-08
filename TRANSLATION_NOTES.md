@@ -18,7 +18,7 @@ still on level 3, bobbing from level 4.
 It opens into a random reward (fiber, probiotic, one or three beans, a 5-pipe postbiotic,
 5 / 10 / 15 coins, or a skip to the end of the level).
 Coins (金币): golden corn kernels, one on every level (on level 1 just past the last pipe) and more
-between the pipes from level 2 (or out of a mystery box), kept in a purse that is saved between runs
+between the pipes from level 2 (or out of a mystery box), kept in a purse for the run (a death empties it)
 and spent in the **shop** (商店) at the level break: the
 💰 button under the banner opens it (fiber, one bean, a super fart that fills the bean bag, a
 mystery box). 💰 is the coin glyph and is not translated; "💰 12" style labels need no strings.
@@ -137,7 +137,7 @@ Short, playful, clear. Fit a 720×1280 logical field; How to play / About body w
 | itemBeanName | Beans | 豆子 |
 | itemBeanDetail | Grab a bean, then press the bean button at the bottom (or your poop) to fart past the next 5 pipes: nothing can touch you. A normal fart uses one bean; you can carry 3, and with all three the fart rockets you past 20 in a rainbow glow. | 吃到豆子后，点击底部的豆子按钮（或便便）放屁冲过接下来的 5 道管道，期间什么都碰不到你。普通放屁只用一颗豆子；最多可攒 3 颗，集齐 3 颗再放屁，就能顶着彩虹光芒一口气冲过 20 道管道。 |
 | itemCoinName | Coins | 金币 |
-| itemCoinDetail | A golden corn kernel. One waits on every level: on level 1 just past the last pipe, from level 2 at a random spot between the pipes, bobbing; more turn up now and then, and mystery boxes can hold some too. Coins go into your purse, counted under your beans, and stay saved for your next run; at the level break, tap 💰 to open the shop and spend them on fiber, a bean, a super fart or a mystery box. | 金黄的玉米粒。每一关都有一粒：第 1 关在最后一道管道之后，从第 2 关起随机出现在管道之间并上下漂浮；此外还会偶尔多出几粒，神秘盒子里有时也有。金币存进钱袋，显示在豆子计数下方，并会保存到下一局；过关休息时点击 💰 打开商店，可以用来买纤维、豆子、超级屁或神秘盒子。 |
+| itemCoinDetail | A golden corn kernel. One waits on every level: on level 1 just past the last pipe, from level 2 at a random spot between the pipes, bobbing; more turn up now and then, and mystery boxes can hold some too. Coins go into your purse, shown above your beans, and last for this run only (a death takes them all); at the level break, tap 💰 to open the shop and spend them on fiber, a bean, a super fart or a mystery box. | 金黄的玉米粒。每一关都有一粒：第 1 关在最后一道管道之后，从第 2 关起随机出现在管道之间并上下漂浮；此外还会偶尔多出几粒，神秘盒子里有时也有。金币存进钱袋，显示在豆子计数上方，只在本局有效（死亡会全部清空）；过关休息时点击 💰 打开商店，可以用来买纤维、豆子、超级屁或神秘盒子。 |
 | itemMysteryName | Mystery box | 神秘盒子 |
 | itemMysteryDetail | The first waits between the pipes before pipe 5 of level 3; after that they turn up at random, holding still on level 3 and floating slowly up and down from level 4. Grab one for a surprise: usually fiber, often a probiotic or a bean, sometimes 5 coins, a 5-pipe postbiotic or three beans, now and then 10 coins, and very rarely 15 coins or a skip to the end of the level (the skipped pipes still score). | 第 3 关第 5 道管道之前必定会有一个停在管道之间；之后会随机出现：第 3 关里静止不动，从第 4 关起缓缓上下漂浮。吃到它会随机获得奖励：通常是纤维，也常是益生菌或一颗豆子，有时是 5 枚金币、持续 5 道管道的后生元或三颗豆子，偶尔是 10 枚金币，极少数情况下是 15 枚金币或直接跳到本关终点（跳过的管道照样计分）。 |
 | itemToiletName | On the toilet | 如厕模式 |
