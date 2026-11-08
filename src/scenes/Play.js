@@ -6,6 +6,7 @@ import {
   hasPassed,
   scoreAfterDeath,
   crashCoins,
+  levelClearCoins,
   inventoryRows,
   stillPulseScale,
   angleForVelocity,
@@ -323,6 +324,7 @@ export class Play extends Phaser.Scene {
     this.beanIcon = this.add.image(this.col.x + hi.iconX, hi.y0, 'bean').setDisplaySize(hi.iconPx, hi.iconPx).setDepth(20).setVisible(false);
     this.beanText = this.add.text(this.col.x + hi.textX, hi.y0, '', { ...TEXT_STYLE, fontSize: `${hi.fontPx}px` }).setOrigin(0, 0.5).setDepth(20).setVisible(false);
     this.kernel = null; // the level's guaranteed kernel (armKernel)
+    this.crashesThisLevel = 0; // two-player crashes in the current level (start / endLevelBreak reset it)
     this.readyTitle = this.add
       .text(this.readyBoxes.title.x, this.readyBoxes.title.y, t(this.locale, 'readyTitle'), { ...TEXT_STYLE, fontSize: `${T.readyTitlePx}px` })
       .setOrigin(0.5)
@@ -585,6 +587,7 @@ export class Play extends Phaser.Scene {
     this.effects.spendCoins(this.effects.coins());
     this.refreshCoinHud();
     this.armKernel();
+    this.crashesThisLevel = 0; // a two-player crash forfeits the level's +3 (levelClearCoins)
     this.distance = 0;
     this.popupOrder = [];
     this.clearReveal();
@@ -638,6 +641,7 @@ export class Play extends Phaser.Scene {
    * now, so only the pairs it actually passed have scored.
    */
   onFinishCrossed() {
+    const done = this.level; // the level just cleared (its number pays its coins)
     const final = isFinalLevel(this.level, T);
     if (!final) {
       this.level += 1;
@@ -648,6 +652,8 @@ export class Play extends Phaser.Scene {
       this.fartSound?.stop();
       this.endPower();
     }
+    // Coins for the cleared level (its number, +3 without a crash in it), before the break so its shop can spend them.
+    this.takeCoins(levelClearCoins(done, this.crashesThisLevel, T));
     // A match: clearing a level earns versus.scoring.levelClearBonus. The score moves now (win()
     // reports it); the popup starts after the break has paused the run (a tween made while
     // paused is not paused with it), or at once on the final level.
@@ -740,6 +746,7 @@ export class Play extends Phaser.Scene {
     this.nextGapY = null;
     this.applyLevel();
     this.armKernel(); // the new level's guaranteed kernel
+    this.crashesThisLevel = 0;
     this.prefillPipes();
   }
 
@@ -2516,6 +2523,7 @@ export class Play extends Phaser.Scene {
     this.respawnPaused = false;
     this.endSweep();
     for (const obj of this.worldObjects()) obj.setVelocityX(0);
+    this.crashesThisLevel += 1; // no +3 at this level's finish line
     // A crash keeps versus.crashCoinKeep of the coins (rounded down) and takes every power-up.
     this.effects.spendCoins(this.effects.coins() - crashCoins(this.effects.coins(), T));
     this.clearPowerups(); // also uncharges: the stink frames would overwrite the dead face

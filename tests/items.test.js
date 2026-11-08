@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { TUNING as T } from '../src/config.js';
+import { levelClearCoins } from '../src/logic.js';
 import { createRng, rollItem, hazardsAllowed, tutorialSpawn, bandItemsMove, bandMidY, pipeGapY, itemGapY, scoreAfterItem, scoreAfterDeath, deathPenalty, scorePopup, popupSlots, pipePoints, createEffects, ITEM_KINDS, BAND_ITEMS, MYSTERY_COINS, MYSTERY_BEANS, SHOP_ITEMS, buyBlocker, canBuy, mysteryRolls, mysteryMoves, scriptedMysteryPair, rollMystery, resolveMystery, skipPairs, MYSTERY_DRAWS, levelEnd, bobY, gapBobAmplitude, gapBobY } from '../src/logic.js';
 
 test('rollItem is always null below startScore', () => {
@@ -750,4 +751,14 @@ test('clearPowerups: a death takes the beans, the probiotic stack and a postbiot
   f2.clearPowerups();
   assert.equal(f2.powerActive(), false, 'a running fart stops');
   assert.equal(f2.endedPower(), false, 'without firing the end-of-power hook');
+});
+
+test('levelClearCoins: the cleared level\'s number, +3 without a crash in it', () => {
+  assert.equal(levelClearCoins(1, 0, T), 1 + T.coin.cleanLevelBonus);
+  assert.equal(levelClearCoins(3, 0, T), 3 + T.coin.cleanLevelBonus);
+  assert.equal(levelClearCoins(3, 1, T), 3, 'a crash forfeits the bonus');
+  assert.equal(levelClearCoins(7, 2, T), 7);
+  assert.equal(levelClearCoins(0, 0, T), 1 + T.coin.cleanLevelBonus, 'at least level 1');
+  assert.equal(T.coin.perLevel, 1);
+  assert.equal(T.coin.cleanLevelBonus, 3);
 });

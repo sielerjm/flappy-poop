@@ -564,10 +564,12 @@ export async function run(url = DEFAULT_URL) {
     const score3 = await evaluate(`${play}.score`);
     const t0 = Date.now();
     const beansHeld = await evaluate(`${play}.effects.addBean(), ${play}.effects.beans()`); // a stray real bean may already be in the bag
+    const coins2 = await evaluate(`${play}.effects.coins()`);
     await evaluate(`${play}.setCharged(true), ${play}.activatePower(), true`);
     const broke2 = await waitBreak();
     const cutMs = Date.now() - t0;
-    const cut = await evaluate(`JSON.stringify({ level: ${play}.level, power: ${play}.effects.powerActive(), passed: ${play}.pipesPassed, score: ${play}.score, beans: ${play}.effects.beans() })`).then(JSON.parse);
+    const cut = await evaluate(`JSON.stringify({ level: ${play}.level, power: ${play}.effects.powerActive(), passed: ${play}.pipesPassed, score: ${play}.score, beans: ${play}.effects.beans(), coins: ${play}.effects.coins() })`).then(JSON.parse);
+    ok(cut.coins - coins2 === 2 + TT.coin.cleanLevelBonus, `clearing level 2 without a crash pays ${cut.coins - coins2} coins (its number, 2, + ${TT.coin.cleanLevelBonus})`);
     const beansLeft = beansHeld >= TT.beans.superBeans ? 0 : beansHeld - 1;
     ok(broke2 && cut.level === 3 && !cut.power && cut.passed === end2 && cut.score - score3 === 2 && cut.beans === beansLeft && cutMs < TT.beans.powerMs, `a fart that reaches the finish line ends there: break after ${cutMs} ms, level ${cut.level}, only the ${cut.score - score3} pairs before the line scored, ${cut.beans} bean(s) left of ${beansHeld}`);
     await chrome('tap');
@@ -1593,10 +1595,13 @@ export async function run(url = DEFAULT_URL) {
       // A level break on P1 while P2 plays on: the shared pause pauses P2 alone and leaves the break;
       // the shared resume brings P2 back and leaves the break; P1's own tap does not end it (P1 waits
       // for P2, then the shared count starts level 2 for both).
+      const p1Coins = await evaluate(`${P1}.effects.coins()`);
       await evaluate(`(() => { const p = ${P1}; p.score = 3; p.pipes.clear(true, true); p.items.clear(true, true); p.beans.clear(true, true); p.nextGapY = null; p.pipesSpawned = ${want.end1}; p.pipesPassed = ${want.end1}; p.finishSpawned = false; p.spawnFinishLine(); p.finishLine.x = p.poop.x + 150; return true; })()`);
       ok(await until(`${P1}.levelBreak && ${P1}.state === 'paused'`), 'P1 crosses its finish line into a level break while P2 plays on');
       await sleep(250);
       const bonus = await evaluate(`JSON.stringify({ score: ${P1}.score, slot: ${VS}.match.slots[0].score, popup: ${P1}.scorePopup.text, alpha: ${P1}.scorePopup.alpha, running: Boolean(${P1}.popupTween?.isPlaying()) })`).then(JSON.parse);
+      const p1Paid = (await evaluate(`${P1}.effects.coins()`)) - p1Coins;
+      ok(p1Paid === 1 + TT.coin.cleanLevelBonus, `P1 clears level 1 without a crash: ${p1Paid} coins (1 + ${TT.coin.cleanLevelBonus})`);
       ok(bonus.score === 3 + want.bonus && bonus.slot === bonus.score && bonus.popup === `+${want.bonus}` && bonus.alpha > 0 && bonus.running, `clearing the level earns ${want.bonus}: score 3 → ${bonus.score}, the +${want.bonus} popup plays through the break (alpha ${bonus.alpha.toFixed(2)})`);
       // Settings from P1's tray during its own break pauses P2 too (the overlay covers both halves); closing it leaves P2 paused until a tap.
       await evaluate(`${P1}.handleChrome('settings'), true`);
@@ -1635,7 +1640,7 @@ export async function run(url = DEFAULT_URL) {
       // The shop while P1 waits at the line: it opens in P1's strip, P2 plays on, a tap in P2's strip
       // never reaches it, and the pad's B closes it (not the shared pause).
       {
-        const shopOpen = await evaluate(`(() => { const a = ${P1}; a.effects.addCoins(10); a.refreshShopButton(); const box = a.shopButtonBox; a.flap({ x: box.x, y: box.y }); return JSON.stringify({ open: a.shopOpen, hint: a.levelHint.text, d: ${P2}.distance, fiber: a.shopBoxes.rows[0], fx: ${P2}.fieldX }); })()`).then(JSON.parse);
+        const shopOpen = await evaluate(`(() => { const a = ${P1}; a.effects.spendCoins(a.effects.coins()); a.effects.addCoins(10); a.refreshShopButton(); const box = a.shopButtonBox; a.flap({ x: box.x, y: box.y }); return JSON.stringify({ open: a.shopOpen, hint: a.levelHint.text, d: ${P2}.distance, fiber: a.shopBoxes.rows[0], fx: ${P2}.fieldX }); })()`).then(JSON.parse);
         await sleep(300);
         const p2 = await evaluate(`JSON.stringify({ d: ${P2}.distance, state: ${P2}.state })`).then(JSON.parse);
         await tapAt(shopOpen.fx + shopOpen.fiber.x, shopOpen.fiber.y);
