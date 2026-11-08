@@ -20,6 +20,7 @@ export class Boot extends Phaser.Scene {
     this.load.image('mystery-icon', 'assets/mystery-icon.png' + V); // static view for the game-over summary and How to play
     this.load.image('bacteria', 'assets/bacteria.png' + V);
     this.load.image('bean', 'assets/bean.png' + V);
+    this.load.image('coin', 'assets/coin.png' + V); // golden corn kernel: the purse's coin (pickup, HUD, box reveal, shop)
     this.load.image('poop-stink1', 'assets/poop-stink1.png' + V);
     this.load.image('poop-stink2', 'assets/poop-stink2.png' + V);
     this.load.image('poop-falling', 'assets/poop-falling.png' + V); // long fall, no power ready (fallLookVy)
@@ -34,6 +35,9 @@ export class Boot extends Phaser.Scene {
     this.load.audio('fart', 'assets/sfx/fart.mp3' + V);
     this.load.audio('fart-accelerate', 'assets/sfx/fart_accelerate.mp3' + V);
     this.load.audio('level-up', 'assets/sfx/NewLevel.mp3' + V); // finish-line chime
+    this.load.audio('coin', 'assets/sfx/Coin_Pickup.mp3' + V); // a coin picked up, or a box paying coins
+    this.load.audio('coin-spend', 'assets/sfx/Coin_Spend.mp3' + V); // a shop purchase
+    this.load.audio('shop', 'assets/sfx/ShopOpenClose.mp3' + V); // the shop panel opening / closing
   }
 
   create() {

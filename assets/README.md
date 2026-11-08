@@ -22,6 +22,7 @@ The player and items are Michael's drawings. Put a new source PNG in `assets/src
 | `postbiotic.png` | 384x384 | Postbiotic HUD icon (replaces the probiotic counter icon while the ×2 multiplier runs) | Not a world pickup, so no hitbox. Same crop rules as the items. Source: `assets/src/Postbiotic.png`. |
 | `bacteria.png` | 384x384 | Bad bacteria (−3) | Same hitbox. Hair / flagellum are visual-only. Source: `assets/src/Bad_Bacteria.png`. |
 | `bean.png` | 384x384 | Bean (one readies the fart power; three make it a super fart) | Same hitbox. Bobs up and down between pipe pairs. Source: `assets/src/Kidney_Bean.png`. |
+| `coin.png` | 384x384 | Coin (a golden corn kernel; collects in the run's purse, spent in the shop at the level break) | Same hitbox. Bobs between pipe pairs like fiber, from level 2. Also the purse's HUD icon, a box's coin reveal and the shop's prices. Placeholder until a spin GIF replaces it. Source: `assets/src/Kernel_0.png`. |
 | `mystery.png` | 3072x384 | Mystery box (from level 3; opens into a random reward) | Spritesheet: the 8 frames of the spinning GIF side by side, 384x384 each, all cut on one square so the cube never jitters; played at 70 ms per frame (`mystery.frameMs`). Same hitbox as the items. Bobs between pipe pairs at half fiber's speed. Source: `assets/src/MysteryBox.gif`. |
 | `mystery-icon.png` | 384x384 | Mystery box icon (game-over summary and How to play) | Static three-quarter view; never spawned, so no hitbox. Same crop rules as the items. Source: `assets/src/MysteryBox_Icon.png`. |
 | `pipe.png` | 128x1280 | One intestinal-fold pipe | Cap at the **top**; the game flips it vertically for the bottom pipe. Height must be **at least the playfield height** (1280) so a flipped top pipe always reaches the ceiling when the gap sits low. |
@@ -42,6 +43,10 @@ Audio files live in `assets/sfx/`. Every file there must be named in `CREDITS.md
 |---|---|
 | `sfx/fart.mp3` | Death fart. "fart" by MacKaffee (Freesound) via Pixabay. See `CREDITS.md`. |
 | `sfx/fart_accelerate.mp3` | Fart power-up (4.3 s); the power lasts exactly this clip. "fart sound effect (reed)" via Pixabay. See `CREDITS.md`. |
+| `sfx/NewLevel.mp3` | Finish-line chime (a new level). "Shine 11" by BenKirb via Pixabay. See `CREDITS.md`. |
+| `sfx/Coin_Pickup.mp3` | A coin picked up, or a mystery box paying coins. Via Pixabay. See `CREDITS.md`. |
+| `sfx/Coin_Spend.mp3` | A shop purchase. Via Pixabay. See `CREDITS.md`. |
+| `sfx/ShopOpenClose.mp3` | The level-break shop opening and closing. Via Pixabay. See `CREDITS.md`. |
 
 ## Background layers (art contract)
 

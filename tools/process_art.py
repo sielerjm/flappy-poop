@@ -7,9 +7,10 @@ Created by Michael Sieler. Last updated: 2026-11-06 (falling frames, app icons).
 Run:    uv run --with pillow python3 tools/process_art.py   (or any Python with Pillow)
 Input:  assets/src/{Poop_Emoji_Alive,Poop_Emoji_Dead,Poop_Stink1,Poop_Stink2,PoopFalling,
                     PoopStinkFalling1,PoopStinkFalling2,Poop_Fart,Poop_Speech,
-                    Fiber,Good_Bacteria,Bad_Bacteria,Kidney_Bean,Postbiotic,MysteryBox_Icon}.png,
+                    Fiber,Good_Bacteria,Bad_Bacteria,Kidney_Bean,Postbiotic,MysteryBox_Icon,
+                    Kernel_0}.png,
         assets/src/MysteryBox.gif (animated) and assets/src/FlappyPoopAppArt.png (the app icon)
-Output: assets/{poop,poop-dead,fiber,probiotic,bacteria,bean,postbiotic,mystery-icon}.png at 384x384 RGBA,
+Output: assets/{poop,poop-dead,fiber,probiotic,bacteria,bean,postbiotic,mystery-icon,coin}.png at 384x384 RGBA,
         assets/{poop-stink1,poop-stink2,poop-falling,poop-stink-falling1,poop-stink-falling2,
                 poop-fart,poop-speech}.png on larger squares,
         assets/mystery.png: the GIF's frames side by side, 384x384 each (a Phaser spritesheet), and
@@ -278,5 +279,6 @@ if __name__ == "__main__":
     process_item(SRC / "Kidney_Bean.png", "bean.png")
     process_item(SRC / "Postbiotic.png", "postbiotic.png")
     process_item(SRC / "MysteryBox_Icon.png", "mystery-icon.png")
+    process_item(SRC / "Kernel_0.png", "coin.png")  # placeholder: a spin GIF (process_sheet) replaces it later
     process_sheet(SRC / "MysteryBox.gif", "mystery.png")
     process_icons(SRC / "FlappyPoopAppArt.png")

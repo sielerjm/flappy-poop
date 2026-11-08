@@ -66,6 +66,9 @@ export const TUNING = {
   toiletKnobMs: 150, // ms the toggle knob takes to slide
   fartVolume: 0.6, // 0–1 Phaser volume for the death fart sample
   levelUpVolume: 0.6, // 0–1 Phaser volume for the level-up chime (NewLevel.mp3)
+  coinVolume: 0.6, // 0–1 Phaser volume for a coin picked up or a box paying coins (Coin_Pickup.mp3)
+  coinSpendVolume: 0.6, // 0–1 Phaser volume for a shop purchase (Coin_Spend.mp3)
+  shopVolume: 0.6, // 0–1 Phaser volume for the shop opening / closing (ShopOpenClose.mp3)
   levels: {
     pipes: [10, 25, 50], // pipe pairs in levels 1, 2, 3; every later level repeats the last entry (ends at 10, 35, 85, 135, …)
     lastLevel: 7, // the final level (rectum, = LEVELS.length): crossing its finish line wins the run

@@ -28,6 +28,21 @@
   Pixabay Content License, published 2024-11-27. Plays when the poop crosses a
   level's finish line. Bundled inside the game only; not redistributed as a
   standalone file.
+- `assets/sfx/Coin_Pickup.mp3` — "Drop Coin" by freesound_gamestudio,
+  https://pixabay.com/sound-effects/film-special-effects-drop-coin-384921/,
+  Pixabay Content License, published 2025-08-05. Plays when a coin is picked
+  up or a mystery box pays coins. Bundled inside the game only; not
+  redistributed as a standalone file.
+- `assets/sfx/Coin_Spend.mp3` — "Coin Drop" by Universfield,
+  https://pixabay.com/sound-effects/film-special-effects-coin-drop-229314/,
+  Pixabay Content License, published 2024-08-05. Plays on a shop purchase.
+  Bundled inside the game only; not redistributed as a standalone file.
+- `assets/sfx/ShopOpenClose.mp3` — "Money Bag" by PhilSavlem (Freesound),
+  uploaded by freesound_community,
+  https://pixabay.com/sound-effects/film-special-effects-money-bag-82960/,
+  Pixabay Content License, published 2022-08-10. Plays when the level-break
+  shop opens and closes. Bundled inside the game only; not redistributed as a
+  standalone file.
 
 ## Services
 
