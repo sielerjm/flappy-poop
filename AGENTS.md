@@ -21,9 +21,15 @@ paused, like a fart), clears what is ahead and brings the finish line in from th
 box is guaranteed after one of level 3's first four pairs (`scriptedMysteryPair`, so before pipe 5); on every
 later pair boxes roll at half fiber's weight (`mysteryRolls`). On level 3 they hold still midway between two
 gaps; from level 4 they bob at half fiber's speed (`mysteryMoves`). **Coins** (`coin.png`, a golden corn
-kernel) join the item roll from level 2 at `coin.weight` (half a box's) as a band item like fiber
-(`BAND_ITEMS`); a coin or a box's coin draw goes into the run's purse (`effects.addCoins`, the HUD row
-under the beans, `Coin_Pickup.mp3`), reset with the run. The **shop** (`TUNING.shop`): in a level break a
+kernel, drawn at `coin.scale` with a `coin.radius` hitbox) join the item roll from level 2 at `coin.weight`
+(half a box's) as a band item like fiber (`BAND_ITEMS`), and every level carries **one guaranteed kernel**
+(`Play.armKernel` from `course.kernelPair(level)`: level 1's waits `coin.firstAfterPipePx` past its last pair
+at that pair's gap, still; from level 2 it takes its pair's band slot, or the next pair's without a box or
+bean, or past the last pipe; `clearFieldAhead` re-arms it when a respawn clears it untaken). A coin or a
+box's coin draw goes into the purse (`effects.addCoins`, the HUD row under the beans, `Coin_Pickup.mp3`),
+which **carries over between runs**: a single-player, non-test run starts from the save's `coins`
+(`coinBalance`) and `persistCoins()` saves after every pickup and purchase (`withCoins`); the home screen's
+purse row shows the saved balance; a match or a test run starts empty and saves nothing. The **shop** (`TUNING.shop`): in a level break a
 💰 pill under the banner (`shopButtonLayout`; dimmed at 0 coins, the single-player hint then drops its
 "· 💰 to shop") opens a panel of rows (`shopLayout`, `SHOP_ITEMS`) in the chrome column: fiber 2, one bean 6,
 a super bean 16 (fills the bag to `superBeans`), a mystery box 5 (the plain draw table, `pairsLeft` 0 so a
@@ -302,10 +308,13 @@ src/
                             load at level 1; MAX_TOP = 6), recordScore(state,
                             score, { toilet, level }), isNewTop,
                             merge, topScores, formatScore ("🚽 41"), summaryLine,
-                            profileLine, exportCode / importCode (HMAC-SHA256,
-                            v1 payload {i, n, s, p, [l], [h], t}; p = optional toilet
-                            flags; h = 'l' only for a left-handed player, handed
-                            back as `hand` beside the state, never in SaveState;
+                            profileLine, coinBalance / withCoins (the saved coin
+                            balance, kept in the state only above 0, ≤ COINS_MAX;
+                            merge keeps the larger), exportCode / importCode
+                            (HMAC-SHA256, v1 payload {i, n, s, p, [l], [h], [c], t};
+                            p = optional toilet flags; h = 'l' only for a
+                            left-handed player, handed back as `hand` beside the
+                            state, never in SaveState; c = coins, only above 0;
                             via Web Crypto, 16-byte tag, base64url), PARSERS per
                             wire version, SECRET constant (permanent). Fully
                             unit-tested.
@@ -662,7 +671,11 @@ src/
                             both are at the line, else nothing): a match half's break
                             ends only on the shared count (beginLevel, from Versus).
                             Coins and the shop: takeCoins (purse, collected.coin,
-                            refreshCoinHud, the coin sample), giveBeans, playSample
+                            persistCoins, refreshCoinHud, the coin sample; the HUD
+                            row shows the saved balance on the home screen),
+                            armKernel / markKernel / spawnStillCoin (the level's
+                            guaranteed kernel; collectItem reads its flag before
+                            destroy), savesCoins, giveBeans, playSample
                             (a sample or its synth fallback), buyItem(id, opts);
                             shopOpen / shop, refreshShopButton / shopButtonShown
                             (the 💰 pill, depth 27), openShop / refreshShop /
@@ -756,7 +769,9 @@ src/
                             px; in test mode 1240 px with the test section (start level ◀ ▶,
                             Invincible, TEST_POWERS buttons live only while a test run
                             is paused, Exit → setTestMode(false) + scene.restart()).
-    About.js                Overlay: author, LLM note, engine/art/sound credits
+    About.js                Overlay: How to play + feedback links, then the
+                            engine/art/sound credits, author and LLM note, version
+                            and Updated last; longer than its panel, it scrolls
                             (both fart clips), How to play + feedback links,
                             "Updated LAST_UPDATED" under the version as a link to
                             Changelog (What's new), inside
@@ -1032,7 +1047,12 @@ tools/
                             level-4 box, the spin pausing, forced draws,
                             the full-bag fallback, and a skip into level 4's break), coins
                             (a rolled coin bobbing like fiber, the purse and its HUD row,
-                            the coin draws, buyItem with a full bag, a new purse at Home),
+                            the coin draws, buyItem with a full bag, level 1's
+                            kernel past its last pair at half size, a later level's
+                            kernel deferred past a bean and brought back after a
+                            respawn's clear, the purse saved on a pickup and a
+                            purchase, the saved balance at Home and in the next
+                            run, a match saving nothing),
                             the shop (the 💰 pill and hint, rows bought by real taps, a
                             greyed row, the reveal over the panel while paused, ✕, a tap
                             outside without continuing, the super bean filling the bag,

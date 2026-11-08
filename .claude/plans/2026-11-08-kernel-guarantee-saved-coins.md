@@ -1,6 +1,6 @@
 # Plan: A guaranteed kernel every level, half-size kernels, saved coins; About reorder
 - Created: 2026-11-08
-- Status: in progress
+- Status: complete
 - Baseline commit: `e51ba77` on `main` (6 ahead of origin: the unpushed 0.8.0 coins-and-shop work; tree clean apart from Michael's untracked `assets/sfx/ToiletFlush_Win.mp3`)
 - Whole-suite verification: `npm test` (baseline 366 pass / 1 fail: `every file under assets/sfx/ is named in CREDITS.md`, the untracked toilet flush) + `npm run smoke` after each scene step (server on port 8000 is up). No source edits while a smoke runs (it imports `src/changelog.js` mid-run).
 - Repo plan copy: `.claude/plans/2026-11-08-kernel-guarantee-saved-coins.md` (written in step 1, `git add -f`)
@@ -47,12 +47,13 @@ Decisions made here (overrule any at approval):
 - Change: `src/scenes/Play.js`: arm the level's kernel at `start()` and `endLevelBreak()`; `spawnPipePair` spawns it (level 1 just past the last pipe at its gap, still; later levels in the band slot, deferring past a box or bean), marks it, re-arms it in `clearFieldAhead`, ends it when taken or gone; `finishItem` sizes coins by `coin.scale` / `coin.radius`; the purse starts from `save.coins` in a single-player, non-test run and `persistCoins()` runs after `takeCoins` and a shop purchase; `refreshCoinHud` shows the saved balance on the home screen; a loaded save code (`setSaveState`) refreshes it. Smoke: level 1's kernel after the last pair (x past the pipe, y at its gap, still, 48 px, radius 24), collected into the purse; a level-2+ kernel at `course.kernelPair` (same pair on both halves of a match), bobbing; a crash before it brings it back; the purse saved to localStorage and a new run starting with it; a shop purchase saved; the save code carrying `c` and loading it; a match and a test run saving nothing; the home-screen purse row. Audit the existing coin and shop checks for a carried-over balance (reset `save.coins` where a check expects an empty purse).
 - Verify: `npm test`; `npm run smoke` green.
 - Commit: `feat(coins, step 3/4): a kernel guaranteed every level, drawn at half size; coins saved across runs`
-- Result: npm test 371 / 372 (baseline failure only); npm run smoke all 279 checks passed (level 1's kernel 112 px past pair 10 at its gap, still, 48 px with a 48 px hitbox; taking it saves the purse; level 4's kernel deferred past a bean to the next pair, bobbing; a respawn's clear brings it back; a purchase saves; home shows the saved balance and a loaded balance; the next run starts with it; a match starts empty and saves nothing). Found and fixed in execution: `collectItem` destroys the item before its branches, so the kernel flag is read before `destroy()`; the pickup burst now takes the item's own scale (a half-size kernel's burst was full size). Only the old "home starts a new purse" smoke check encoded the per-run rule; it now checks the saved balance. Screenshots of the home row and a level-1 kernel look right. Also: a later level whose last pair's slot is taken puts its kernel past the last pipe, so it is never dropped. Commit `<s3>`.
+- Result: npm test 371 / 372 (baseline failure only); npm run smoke all 279 checks passed (level 1's kernel 112 px past pair 10 at its gap, still, 48 px with a 48 px hitbox; taking it saves the purse; level 4's kernel deferred past a bean to the next pair, bobbing; a respawn's clear brings it back; a purchase saves; home shows the saved balance and a loaded balance; the next run starts with it; a match starts empty and saves nothing). Found and fixed in execution: `collectItem` destroys the item before its branches, so the kernel flag is read before `destroy()`; the pickup burst now takes the item's own scale (a half-size kernel's burst was full size). Only the old "home starts a new purse" smoke check encoded the per-run rule; it now checks the saved balance. Screenshots of the home row and a level-1 kernel look right. Also: a later level whose last pair's slot is taken puts its kernel past the last pipe, so it is never dropped. Commit `d274ce0`.
 
-### Step 4/4 — Docs, How to play, credits, 0.8.0 notes  [pending]
+### Step 4/4 — Docs, How to play, credits, 0.8.0 notes  [done]
 - Change: the How to play coin row (en + zh: one kernel on every level, level 1 just past the last pipe, more from level 2, boxes 5 / 10 / 15, the shop, saved between runs) + `TRANSLATION_NOTES.md`; `CREDITS.md` toilet flush line; `README.md` and `AGENTS.md` (coins, the kernel rule, saved coins, the save code `c`, About's order); `.claude/plans/Flappy Poop — Save Code Spec.md` (the `c` key); the 0.8.0 What's new notes (en + zh); plan status complete.
 - Verify: `npm test` fully green (the credits test included); `npm run smoke` once more on the final tree.
 - Commit: `docs(coins, step 4/4): the guaranteed kernel, saved coins, About's order, the toilet flush credit`
+- Result: npm test 372 / 372 (the credits test green with the toilet flush line: "Toilet Flush 1" by FreeSounds-4U, Pixabay Content License, 2025-09-08, from the page itself); npm run smoke all 279 checks passed on the final tree. Also added the coin, purchase and shop sounds to About's in-game credits (both locales) and refreshed the stale credit blocks in TRANSLATION_NOTES.md.
 
 ## Risks and notes
 - Saved coins persist through the smoke's own runs: later checks may start with leftover coins. Step 3 audits and resets where needed.
@@ -65,4 +66,7 @@ Decisions made here (overrule any at approval):
 - Hand check (Michael): the level-1 kernel just past the last pipe; one kernel on every later level plus the odd random one; kernels at half size; coins still there after closing and reopening the game; the shop spending them; About's new order and scrolling. Then `npm run push`.
 
 ## Completion summary
-(filled at the end)
+- Commits on `main` since `e51ba77`: step 1 `95e7c35` (About), step 2 `c7c37c7` (kernel pair, saved coins in the save and code), step 3 `d274ce0` (Play: guaranteed kernel, half size, saved purse), step 4 (docs, credits, 0.8.0 notes). Nothing pushed; `main` is 10 ahead of origin with the unpushed 0.8.0 work.
+- Verified: `npm test` green at every step (fully green after step 4); `npm run smoke` all checks after steps 1, 3 and 4; screenshots of About, the home purse row and a level-1 kernel.
+- Unverified: feel on devices (kernel size, level 1's spot, the saved balance), the Chinese strings (drafts).
+- Roll back: `git revert <hash>` per step, or `git reset --hard e51ba77` (discards work).

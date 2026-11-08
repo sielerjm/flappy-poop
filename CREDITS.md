@@ -43,6 +43,9 @@
   Pixabay Content License, published 2022-08-10. Plays when the level-break
   shop opens and closes. Bundled inside the game only; not redistributed as a
   standalone file.
+- `assets/sfx/ToiletFlush_Win.mp3` — "Toilet Flush 1" by FreeSounds-4U,
+  https://pixabay.com/sound-effects/household-toilet-flush-1-401155/,
+  Pixabay Content License, published 2025-09-08. Not used in the game yet.
 
 ## Services
 
