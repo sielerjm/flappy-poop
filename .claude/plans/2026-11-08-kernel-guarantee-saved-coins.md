@@ -66,7 +66,7 @@ Decisions made here (overrule any at approval):
 - Hand check (Michael): the level-1 kernel just past the last pipe; one kernel on every later level plus the odd random one; kernels at half size; coins still there after closing and reopening the game; the shop spending them; About's new order and scrolling. Then `npm run push`.
 
 ## Completion summary
-- Commits on `main` since `e51ba77`: step 1 `95e7c35` (About), step 2 `c7c37c7` (kernel pair, saved coins in the save and code), step 3 `d274ce0` (Play: guaranteed kernel, half size, saved purse), step 4 (docs, credits, 0.8.0 notes). Nothing pushed; `main` is 10 ahead of origin with the unpushed 0.8.0 work.
+- Commits on `main` since `e51ba77`: step 1 `95e7c35` (About), step 2 `c7c37c7` (kernel pair, saved coins in the save and code), step 3 `d274ce0` (Play: guaranteed kernel, half size, saved purse), step 4 `e088a0b` (docs, credits, 0.8.0 notes). Nothing pushed; `main` is 10 ahead of origin with the unpushed 0.8.0 work.
 - Verified: `npm test` green at every step (fully green after step 4); `npm run smoke` all checks after steps 1, 3 and 4; screenshots of About, the home purse row and a level-1 kernel.
 - Unverified: feel on devices (kernel size, level 1's spot, the saved balance), the Chinese strings (drafts).
 - Roll back: `git revert <hash>` per step, or `git reset --hard e51ba77` (discards work).
