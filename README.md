@@ -65,6 +65,8 @@ npm start      # serves on 0.0.0.0:8000 and prints laptop + phone URLs
 npm test       # Node 22 built-in test runner, zero dependencies
 npm run smoke  # with npm start running: drive the real game in headless Chrome
                # (every overlay opens and closes, a run starts, no exceptions)
+npm run smoke -- --list           # its named sections
+npm run smoke -- --only=wide,pad  # just those (plus what they need) while iterating
 npm run push   # stamp the About "Updated" time, test, commit the stamp, push main
 ```
 
@@ -134,6 +136,7 @@ tools/serve.py               npm start: bind 0.0.0.0:8000, print phone URL; ever
 tools/headless_check.mjs     npm run smoke: headless Chrome over the DevTools protocol, zero deps
 tests/                  node --test: html assets logic state levels store smoke
                         settings sound tray items tuning about howto feedback overlay hitbox i18n chrome serve save ready leaderboard scenes tools fart changelog versus course
+                        orphans (nothing unused: exports, knobs, strings, textures, overlay wiring)
 .claude/plans/          active / incomplete build plans + living specs
 .claude/plans/Archive/  completed build plans (don't edit)
 ```
@@ -152,7 +155,7 @@ To run your own: create a free Supabase project, paste `db/schema.sql` into its 
 
 ## Credits
 
-See [`CREDITS.md`](CREDITS.md). Every file under `assets/sfx/` must be listed there with a URL; `npm test` fails if a loaded audio file is missing or uncredited.
+See [`CREDITS.md`](CREDITS.md). Every file under `assets/sfx/` must be listed there with a URL and loaded in Boot; `npm test` fails if a sound is uncredited, never loaded, or credited without being tracked in git.
 
 ## Phaser version
 

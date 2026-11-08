@@ -240,7 +240,7 @@ src/
                             uiColumn, poopX, pipeLeadPx, pipeLead, prefillPairs,
                             sweepOffset;
                             trayLayout /
-                            levelBarLayout / readyLayout / howToLayout take a
+                            levelBarLayout / readyLayout take a
                             trailing x0 = the column's left edge; readyLayout takes
                             { versus } for the 👥 box), rng, createCourse / mixSeed
                             (every random draw a run makes behind one object: one
@@ -268,13 +268,12 @@ src/
                             bump needs a CHANGELOG entry), versionText(locale,
                             version) = the "v0.5.16 beta" line every overlay shows, retry
                             lockout, levels (levelPipes, levelEnd, levelFor, isFinalLevel,
-                            levelSpeed, levelName, levelColor, levelProgress,
+                            levelSpeed, levelColor, levelProgress,
                             levelBarLayout, lerpColor),
                             best-score store, settings store (incl. locale,
                             howToSeenAt and hand: HANDS 'left' | 'right', the
                             bean button's side) + howToPromptDue, vibrate
-                            helper, trayLayout, trayHit, readyLayout, readyHit
-                            (howToLayout / howToHit wrap them),
+                            helper, trayLayout, trayHit, readyLayout, readyHit,
                             LAST_UPDATED, issueUrl, openExternalUrl, chromeIntent
                             (inputs incl. 'changelog'; a Changelog over About closes
                             back to About without the lockout),
@@ -306,7 +305,7 @@ src/
                             allClaimed / deviceLabel (the join screen), ghostPlacement
                             (scaled by the other's alpha, 0 once ended), rivalMarker,
                             catchUpTier / catchUpDraws, matchResult (score, fewer
-                            deaths, draw), respawnTotalMs / respawnPose (the crash →
+                            deaths, draw), respawnPose (the crash →
                             glide → blink → done timeline, pure in elapsed ms),
                             coursePairStart / courseDistance (a pair's place on the
                             course; what a half's distance reads with a pair a given
@@ -332,8 +331,8 @@ src/
                             (flappyPoop.save, schema 3: top entries { score,
                             toilet, level }; schema 1 numbers and schema 2 still
                             load at level 1; MAX_TOP = 6), recordScore(state,
-                            score, { toilet, level }), isNewTop,
-                            merge, topScores, formatScore ("🚽 41"), summaryLine,
+                            score, { toilet, level }),
+                            merge, topScores (the numbers; tests read it), formatScore ("🚽 41"),
                             profileLine, exportCode / importCode (HMAC-SHA256,
                             v1 payload {i, n, s, p, [l], [h], t}; p = optional toilet
                             flags; h = 'l' only for a left-handed player, handed
@@ -819,7 +818,7 @@ src/
                             pipe first, the 🔊 Sound row with the iPhone Silent-mode
                             note last; the pipe icon is a cropped cap slice, toilet,
                             levels, controls and sound are emoji: EMOJI_ROWS) and a feedback link, inside createScrollView(). Ready-screen How
-                            to play uses howToHit() so it does not start a run.
+                            to play is readyHit()'s 'howto' box, so it does not start a run.
                             Opened from About, X/Esc/tap-outside closes HowTo and
                             About together. useAdvancedWrap on body text.
     Changelog.js            Overlay (What's new): one version's notes from
@@ -903,7 +902,9 @@ tests/                      node --test, zero deps. Each file is self-describing
                             peak extra speed bound)
   html.test.js              index.html invariants (viewport, no scroll, pinned Phaser)
   assets.test.js            load.image / load.spritesheet / load.audio paths; README
-                            sizes; a spritesheet is a whole number of frames; sfx credits
+                            sizes; a spritesheet is a whole number of frames; sfx credits;
+                            the sound triangle: every tracked sfx file is loaded, every
+                            credited one is tracked (git ls-files)
   logic.test.js             gap bounds, rng determinism, hasPassed, angle,
                             resumeFlapVelocity
   levels.test.js            level lengths / ends / levelFor table, final level,
@@ -953,7 +954,8 @@ tests/                      node --test, zero deps. Each file is self-describing
   changelog.test.js         CHANGELOG[0] is VERSION (a bump without notes fails the
                             suite and so npm run push), newest first, dated, notes
                             in every locale and translated; changelogEntry / Notes
-  howto.test.js             HOW_TO copy, pause banner, howToLayout / howToHit geometry
+  howto.test.js             HOW_TO copy, pause banner, the ready screen's ? box
+                            (readyLayout().howto geometry, readyHit)
   feedback.test.js          issueUrl bug/feature templates; openExternalUrl paths;
                             feedback i18n keys
   i18n.test.js              catalog key parity, zh≠en (allowlist), TRANSLATION_NOTES
@@ -1032,7 +1034,20 @@ tests/                      node --test, zero deps. Each file is self-describing
                             world is this.fieldW: a half of the canvas in a match).
   tools.test.js             npm run smoke points at headless_check.mjs; its OVERLAYS
                             (Boot, Play, new Play('PlayB'), Over and Versus excluded)
-                            map equals the overlay scenes registered in main.js
+                            map equals the overlay scenes registered in main.js; its
+                            SECTIONS (unique, described, needs pointing backwards) match
+                            the file's section() calls in order; the gamepad stub precedes
+                            the page load and the leaderboard muzzle sits unwrapped between
+                            the run and farts sections (so every --only subset is muzzled);
+                            parseArgs / expandOnly
+  orphans.test.js           the orphan audit, sources read as text (comments stripped;
+                            tests never count as a use): every src/ export is used by src/
+                            or tools/, every config knob is read in src/, every UI string
+                            key is named outside the catalog, every texture Boot loads is
+                            drawn, every overlay is in Play.chromeArgs / padTop and
+                            launched. Kept-on-purpose items sit in its allowlists with a
+                            reason (ALLOWED_EXPORTS: the test hooks); an entry that stops
+                            being true fails; self-tests prove each scanner can fail
 
 .github/ISSUE_TEMPLATE/     GitHub issue forms opened from Feedback (bug.yml,
                             feature.yml); config.yml allows blank issues.
@@ -1071,7 +1086,13 @@ tools/
                             current local time, runs npm test, commits the stamp, pushes
                             main. Refuses a dirty tree or a non-main branch; --dry skips
                             commit + push.
-  headless_check.mjs        npm run smoke [url]: launches headless Chrome (CHROME env
+  headless_check.mjs        npm run smoke [url] [--list] [--only=a,b]: the checks run in
+                            named sections (SECTIONS, in run order, each printing its check
+                            count); --list shows them; --only runs those plus what they
+                            need (needs omitted = every earlier section; [] = passes alone,
+                            set only once shown), skipping and never reordering; the
+                            hermetic stubs, the boot wait and the leaderboard muzzle sit
+                            outside every section. It launches headless Chrome (CHROME env
                             overrides the path), drives the running game over the
                             DevTools protocol through globalThis.__flappy, and fails
                             on a page exception, a stalled __flappy.loop.frame, or an
@@ -1229,7 +1250,8 @@ tools/
 ## How to work on it
 
 ```bash
-npm test          # run everything; must pass before committing
+npm test          # every unit + audit test (~10 s); must pass before committing
+node --test tests/items.test.js   # one file while iterating
 npm run push      # stamp LAST_UPDATED = now, run tests, commit the stamp, push main
                   # (always push this way so the About overlay's "Updated" is the push time)
 # In a browser, globalThis.__flappy is the Phaser.Game (debug / automation only):
@@ -1240,20 +1262,34 @@ npm start         # tools/serve.py: http://localhost:8000 plus a printed
 # Test mode: type pooptest or testpoop as the username + Save (again to leave; a reload also
 #   leaves). Settings then has start level, Invincible, power-ups; nothing is saved.
 npm run smoke     # with npm start running: headless Chrome drives the real game
-                  # (needs Google Chrome; CHROME=/path overrides). Run it after
-                  # any change to src/scenes/* or src/ui/*.
+                  # (needs Google Chrome; CHROME=/path overrides), ~3 min.
+npm run smoke -- --list            # the sections and what each needs
+npm run smoke -- --only=wide,pad   # just those (plus what they need)
 uv run --with pillow python3 tools/process_art.py   # rebuild poop set / items / bean from assets/src/
 uv run --with pillow python3 tools/make_placeholders.py   # pipe / villi / ceiling / ground only
 ```
 
+When to run what:
+
+| You are | Run |
+|---|---|
+| iterating on pure logic | `node --test tests/<area>.test.js` |
+| about to commit anything | `npm test` (it includes the orphan audit) |
+| iterating on a scene, `src/ui/*` or `src/sound.js` | `npm run smoke -- --only=<the sections you touched>` |
+| done with scene / UI / sound work, before a push | the full `npm run smoke` |
+| changing touch, scaling, audio or locale | ask Michael for a phone check |
+
 Scene behaviour (physics, rendering, audio) cannot be verified in Node. When you
-change `src/scenes/*` or `src/sound.js`, run `npm run smoke` (catches exceptions
-inside scenes and a dead game loop, which `node --check` cannot), then say so and
-ask for a phone check for touch, scaling, and audio; don't report those as tested.
+change `src/scenes/*` or `src/sound.js`, run the full `npm run smoke` before you
+call it done (it catches exceptions inside scenes and a dead game loop, which
+`node --check` cannot), then say so and ask for a phone check for touch, scaling,
+and audio; don't report those as tested. A subset is for iterating: it skips
+sections, so it never stands in for the full run.
 Never name a scene method after a Phaser.Scene property (`load`, `add`, `input`,
 `time`, `render`, …): `tests/scenes.test.js` enforces this.
 
-Commits so far follow `type(scope): summary` (`feat`, `docs`, `chore`); keep it.
+Commits follow `type(scope): summary` (`feat`, `fix`, `docs`, `chore`, `test`, `tune`,
+`refactor`); a step of a plan adds `step n/N` to the scope. Keep it.
 
 ## Where to put new things
 
@@ -1309,6 +1345,13 @@ Commits so far follow `type(scope): summary` (`feat`, `docs`, `chore`); keep it.
 - New UI string → both locales in `src/i18n.js` + a row in `TRANSLATION_NOTES.md`
   (+ allowlist in `tests/i18n.test.js` only if intentionally identical). Scenes
   call `t(locale, key)`; never hardcode player English.
+- Code, a knob, a string or a texture kept although nothing uses it (a test hook,
+  say) → a one-line reason in the matching allowlist in `tests/orphans.test.js`;
+  otherwise delete it. The audit fails on anything unused and unexplained.
+- New smoke checks → inside the section they belong to in `tools/headless_check.mjs`.
+  A new section → a `SECTIONS` entry (with `about`) and a `section()` call in the
+  same order; leave `needs` out (it then runs after everything before it) until
+  `--only=<it>` passes alone with the same checks as the full run.
 - Multi-step work worth planning → a dated markdown plan in `.claude/plans/`;
   when Status is complete, move it into `.claude/plans/Archive/`.
 - Repo-wide conventions → this file. Player-facing docs → `README.md`.

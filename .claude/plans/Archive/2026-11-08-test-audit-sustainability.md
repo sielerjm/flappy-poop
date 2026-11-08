@@ -1,6 +1,6 @@
 # Plan: Sustainable testing and audit workflow
 - Created: 2026-11-08
-- Status: in progress (step 7; a step was added after step 4, so later commits read n/7)
+- Status: complete (7 steps; step 5 was added after step 4, so commits 1–4 read n/6 and 5–7 read n/7)
 - Repo plan copy: `.claude/plans/2026-11-08-test-audit-sustainability.md` (folder is gitignored: `git add -f`, as every plan before it)
 - Baseline commit: `c4226b7` on `main`, tree clean. **Re-check at start:** another session landed 8 commits during the audit; if HEAD moved or the tree is dirty with someone else's work, stop and report.
 - Whole-suite verification: `npm test` (baseline **385 pass / 0 fail**, ~10 s) + full `npm run smoke` (server: `npm start` on :8000, Chrome, network for the live leaderboard reads). No source edits while a smoke runs (serve.py is no-store).
@@ -73,7 +73,7 @@ The audit of the generated plan (`test_audit_sustainability_7b5eb48e.plan.md`) f
 - Commit: `fix(smoke, step 5/7): the two-bean fart starts from an empty bag`
 - Result: full smoke 304/304; labels equal step 4's apart from a noise-floor line. Only clears when the bag is not empty, and restores the probiotic count the next check reads.
 
-### Step 6/7 — `--list`, `--only`, proven-independent sections  [done]
+### Step 6/7 — `--list`, `--only`, proven-independent sections  [done, `f506628`]
 - Change: export pure `parseArgs(argv)` → `{ url, only, list }`. It accepts a positional URL or `--url=`, `--list`, and `--only=a,b`; an unknown name is an error that lists the valid names. Export `expandOnly(names, SECTIONS)`, which returns the transitive `needs` closure in fixed order. `--list` prints name, needs and about without launching Chrome. `section()` skips anything not in the expanded set. Then relax `needs` for each candidate (`pad`, `pad-overlays`, `pipes-after-over`, `testmode`, `wide`, `versus-join`, `versus-ghost`, `overlays`, `level1`) only when `--only=<it>` passes alone with the same check count as in the full run. Leave the rest chained. The `about` text says "runs after X" so nothing pretends to be independent.
 - `tests/tools.test.js` gains these checks:
   - Section names are unique, and `needs` point only backwards.
@@ -94,7 +94,7 @@ The audit of the generated plan (`test_audit_sustainability_7b5eb48e.plan.md`) f
   | wide | alone: a pre-fill check and a driver error (expects the earlier run's state) | chained |
   | farts, levels, mystery, death, share | continue one run by design | chained |
 
-### Step 7/7 — Docs, when-to-run, close the plan  [pending]
+### Step 7/7 — Docs, when-to-run, close the plan  [done]
 - Change: in `AGENTS.md`, rewrite "How to work on it" with a when-to-run table:
   - while iterating on logic, `node --test tests/<area>.test.js`;
   - before every commit, `npm test`;
@@ -115,6 +115,23 @@ The audit of the generated plan (`test_audit_sustainability_7b5eb48e.plan.md`) f
   - Every new flag and file is named in AGENTS.md: `--only`, `--list`, `orphans.test.js` and `SECTIONS`.
   - `npm run smoke -- --list` matches the documented names.
 - Commit: `docs(test, step 7/7): when to run what; audit and smoke sections in AGENTS; plan archived`
+- Result: npm test 399/399; grep finds none of the removed names in AGENTS.md, README.md, TRANSLATION_NOTES.md or src/; AGENTS names --only, --list, orphans.test.js, SECTIONS, ALLOWED_EXPORTS and section(); the documented example sections (wide, pad) exist.
 
 ## Completion summary
-To fill in at the end: `git log --oneline c4226b7..HEAD`, the result of each verification, which sections were relaxed and which stay chained, and anything left unverified. A phone check is not needed because nothing here changes touch, scaling, audio or locale behaviour.
+`git log --oneline c4226b7..HEAD` (plus this step's commit):
+
+```
+2907c06 docs(plan, step 1/6): test audit plan; archive finished and superseded plans
+3f22b76 test(audit, step 2/6): orphan audit for exports, knobs, strings, textures, overlay wiring; sfx triangle
+debea1e refactor(audit, step 3/6): drop seven unused exports and the unused BEST label
+a31909a refactor(smoke, step 4/6): named sections with per-section check counts
+68ee477 fix(smoke, step 5/7): the two-bean fart starts from an empty bag
+f506628 feat(smoke, step 6/7): --list and --only with declared section needs
+```
+
+- Unit suite: 385 → 399 tests (+9 orphan audit, +2 sfx edges, +5 smoke tooling; −2 with the dead code), all green.
+- Smoke: 303 → 304 checks (+ "every section ran"), all green; labels equal the baseline apart from the noise floor. 20 sections; 12 with proven needs (9 alone; howto-seen after overlays; skip after pipes-after-over; final after skip); farts … share, testmode and wide stay chained (trials in step 6).
+- Deleted: 7 unused exports and the BEST string; `topScores` allowlisted as a test hook (cascade of deleting isNewTop).
+- Fixed on the way: a pre-existing smoke flake (a stray real bean turned the two-bean fart super).
+- Not verified: nothing changes touch, scaling, audio or locale behaviour, so no phone check is needed. Not pushed (`npm run push` is Michael's call).
+- Roll back: `git revert <hash>` per step, or `git reset --hard c4226b7` to drop all of it (discards the work).
