@@ -1612,7 +1612,7 @@ export class Play extends Phaser.Scene {
       const beanBody = scaledCircleBody(bean.frame.width, T.spriteDisplayScale, T.beans.beanRadius);
       bean.body.setCircle(beanBody.radius, beanBody.offset, beanBody.offset);
       bean.setVelocityX(-this.scrollSpeed());
-      bean.setData({ elapsed: 0, phase, still });
+      bean.setData({ elapsed: 0, phase, still, baseScale: T.spriteDisplayScale, radius: T.beans.beanRadius });
     }
   }
 
@@ -1653,6 +1653,36 @@ export class Play extends Phaser.Scene {
     return item;
   }
 
+  /** A still item's frame: advance its clock (only while playing, so a pause freezes it) and pulse it. */
+  pulseStill(item, delta) {
+    const elapsed = (item.getData('elapsed') ?? 0) + delta;
+    item.setData('elapsed', elapsed);
+    this.pulseScale(item, elapsed);
+  }
+
+  /**
+   * A pickup holding still breathes (stillPulseScale on its base scale); its circle body is re-fitted
+   * to the new scale each frame so the hitbox keeps its logical radius (Arcade grows a body with its
+   * sprite). Objects made without finishItem's base (a smoke probe) are left alone.
+   */
+  pulseScale(obj, elapsed) {
+    const base = obj.getData('baseScale');
+    const radius = obj.getData('radius');
+    if (!base || !radius || !obj.body) return;
+    const scale = base * stillPulseScale(elapsed, T);
+    obj.setScale(scale);
+    const b = scaledCircleBody(obj.frame.width, scale, radius);
+    obj.body.setCircle(b.radius, b.offset, b.offset);
+  }
+
+  /** A death clears every power-up (beans, the probiotic stack, a postbiotic) and its HUD. */
+  clearPowerups() {
+    this.effects.clearPowerups();
+    this.setCharged(false);
+    this.refreshInventory();
+    this.refreshProbioticHud();
+  }
+
   /** The current level's guaranteed kernel (course.kernelPair): not spawned yet, not taken. */
   armKernel() {
     this.kernel = { level: this.level, pair: this.course.kernelPair(this.level), item: null, done: false };
@@ -1691,8 +1721,10 @@ export class Play extends Phaser.Scene {
   finishItem(item, kind) {
     const coin = kind === 'coin'; // a kernel is drawn at coin.scale of the other pickups, its hitbox the whole drawing
     const scale = T.spriteDisplayScale * (coin ? T.coin.scale : 1);
+    const radius = coin ? T.coin.radius : T.items.itemRadius;
     item.setScale(scale);
-    const itemBody = scaledCircleBody(item.frame.width, scale, coin ? T.coin.radius : T.items.itemRadius);
+    item.setData({ baseScale: scale, radius, elapsed: 0 }); // the still pulse's base (pulseStill); a bobbing item resets elapsed with its bob
+    const itemBody = scaledCircleBody(item.frame.width, scale, radius);
     item.body.setCircle(itemBody.radius, itemBody.offset, itemBody.offset);
     item.setVelocityX(-this.scrollSpeed());
     item.setData('kind', kind);
@@ -2446,9 +2478,14 @@ export class Play extends Phaser.Scene {
     if (this.state !== 'playing') return;
     // Farting (or just finished and still clearing the pipe) cannot die; nor can an Invincible test run.
     if (this.effects.powerActive() || this.graceLeftMs > 0 || this.testInvincible()) return;
-    // A match: the crash costs points and a respawn, never the run. Single player: the run ends.
+    // A match: the crash costs points and a respawn, never the run. Single player: the run ends, and
+    // the coins and every power-up go with it (Over still shows what the run collected).
     if (this.match) this.startRespawn();
-    else this.endRun();
+    else {
+      this.endRun();
+      this.effects.spendCoins(this.effects.coins());
+      this.clearPowerups();
+    }
     this.setPoopTexture('poop-dead');
     this.cameras.main.shake(200, 0.01);
     this.cameras.main.flash(120, 255, 120, 160);
@@ -2475,7 +2512,9 @@ export class Play extends Phaser.Scene {
     this.respawnPaused = false;
     this.endSweep();
     for (const obj of this.worldObjects()) obj.setVelocityX(0);
-    this.setCharged(false); // the stink frames would overwrite the dead face; endRespawn re-charges
+    // A crash keeps versus.crashCoinKeep of the coins (rounded down) and takes every power-up.
+    this.effects.spendCoins(this.effects.coins() - crashCoins(this.effects.coins(), T));
+    this.clearPowerups(); // also uncharges: the stink frames would overwrite the dead face
     this.score = scoreAfterDeath(this.score, this.level, T);
     this.scoreText.setText(String(this.score));
     this.showScorePopup('death', 1, 0, this.level);
@@ -2695,6 +2734,7 @@ export class Play extends Phaser.Scene {
     }
     for (const item of this.items.getChildren()) {
       const bob = item.getData('bob');
+      if (!bob && this.state === 'playing') this.pulseStill(item, delta);
       if (bob && this.state === 'playing') {
         const elapsed = item.getData('elapsed') + delta;
         item.setData('elapsed', elapsed);
@@ -2711,6 +2751,7 @@ export class Play extends Phaser.Scene {
         const elapsed = bean.getData('elapsed') + delta;
         bean.setData('elapsed', elapsed);
         if (!bean.getData('still')) bean.y = beanY(elapsed, bean.getData('phase'), this.beanBounds, T);
+        else this.pulseScale(bean, elapsed);
         bean.setAngle(beanAngle(elapsed, T));
       }
       if (bean.x < -T.pipeWidth) bean.destroy();

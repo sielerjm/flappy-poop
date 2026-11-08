@@ -22,7 +22,7 @@ export class Over extends Phaser.Scene {
     const testRun = Boolean(data?.test); // test mode: nothing was recorded (Play.endRun)
     const toilet = Boolean(data?.toilet);
     const level = Number.isInteger(data?.level) && data.level >= 1 ? data.level : 1;
-    const collected = { fiber: 0, probiotic: 0, postbiotic: 0, bacteria: 0, bean: 0, mystery: 0, ...(data?.collected ?? {}) };
+    const collected = { fiber: 0, probiotic: 0, postbiotic: 0, bacteria: 0, bean: 0, mystery: 0, coin: 0, ...(data?.collected ?? {}) };
     // The game loop's time, not this.time.now: a relaunched scene's clock still holds the time it
     // last ran (Phaser syncs it on boot only), which made the retry lockout a no-op.
     this.openedAt = this.game.loop.time;
@@ -58,12 +58,15 @@ export class Over extends Phaser.Scene {
         this.add.text(x + 2, y, `×${collected[kind]}`, { ...style, fontSize: '32px', color: '#c9b8dc' }).setOrigin(0, 0.5);
       });
     });
-    // Pipes crossed this run (fart pipes included, as for levels): the cap of
-    // the pipe sprite as the icon, then ×n like the summary rows.
+    // Pipes crossed this run (fart pipes included, as for levels) | the coins this run collected
+    // (kernels and box coins): each an icon then ×n, on the summary's two-column grid.
     // Crop the cap slice instead of adding a frame to the shared 'pipe' texture: a named
     // frame becomes the texture's default and every later pipe would spawn from it.
-    this.add.image(cx - 46, cy + 60, 'pipe').setOrigin(0.5, 80 / 1280).setCrop(0, 0, 128, 160).setScale(40 / 128);
-    this.add.text(cx - 14, cy + 60, `×${pipes}`, { ...style, fontSize: '40px', color: '#c9b8dc' }).setOrigin(0, 0.5);
+    const [pipeX, coinX] = columnX[2].map((dx) => cx + dx);
+    this.add.image(pipeX - 30, cy + 60, 'pipe').setOrigin(0.5, 80 / 1280).setCrop(0, 0, 128, 160).setScale(40 / 128);
+    this.add.text(pipeX + 2, cy + 60, `×${pipes}`, { ...style, fontSize: '40px', color: '#c9b8dc' }).setOrigin(0, 0.5);
+    this.add.image(coinX - 30, cy + 60, 'coin').setDisplaySize(48, 48);
+    this.add.text(coinX + 2, cy + 60, `×${collected.coin}`, { ...style, fontSize: '40px', color: '#c9b8dc' }).setOrigin(0, 0.5);
     if (testRun) {
       this.add.text(cx, cy + 130, t(locale, 'testRunNotSaved'), { ...style, fontSize: '30px', color: '#ffd700', wordWrap: { width: 460, useAdvancedWrap: true } }).setOrigin(0.5);
     }
