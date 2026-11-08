@@ -143,11 +143,12 @@ distance gap (`ghostPlacement`) and as a
 (`startRespawn` / `tickRespawn` / `endRespawn` on `respawnPose`, state `'respawn'`): the half's world
 halts, the score loses `versus.scoring.deathPenaltyPerLevel` × level (floored at 0, the −N popup), the
 slot counts the crash, the poop tumbles, everything not yet credited is cleared, it glides back to
-mid-screen, blinks, and plays on with the next pair at mid-height. Clearing a level earns
-`versus.scoring.levelClearBonus`. Every finish line also pays `levelClearCoins` (the level's number, + 3
-without a crash in it in a match only: `Play.crashesThisLevel`; single player gets the number alone). The
-first over each level's line (`onLevelReached`, no other arrival yet) and the first out (`onRunEnded(player)`)
-win the level: `slot.levelWins`, 🏁 on the result panel. Levels start together through a **ready check**: each
+mid-screen, blinks, and plays on with the next pair at mid-height. The **first** over each finish line
+(the rectum's too) earns `versus.scoring.levelClearBonus` and its popup; the second gets neither. Every finish line also pays `levelClearCoins` (the level's number, + 3
+without a crash in it in a match only: `Play.crashesThisLevel`; single player gets the number alone). One
+claimer decides both: `Versus.claimLevelFinish(half)` (from `Play.onFinishCrossed`) is true for the first
+half over the current level's line (`levelFirst`, cleared by `beginLevel`), which also wins the level:
+`slot.levelWins`, 🏁 on the result panel. Levels start together through a **ready check**: each
 half's taps (once its own arrival beat's timer has fired, `Versus.onLevelReached(half)` → `levelBeats`;
 never `time.now` against the arrival stamp, since Phaser's smoothed delta lets a timer run ahead of the
 raw clock after a frame hitch) toggle that
@@ -231,7 +232,8 @@ src/
                             ghostAlpha / ghostFadeMs, barRivalPx / barRivalAlpha,
                             dividerPx, catchUp (superBehind, beanBehindMin,
                             beanOddsMul), scoring (deathPenaltyPerLevel,
-                            levelClearBonus), levelSyncDelayMs (the beat after both
+                            levelClearBonus: the first over a line only),
+                            levelSyncDelayMs (the beat after both
                             reach a line before a tap can start the next level),
                             respawn (crashMs, glideMs,
                             blinkMs, blinkCycles, blinkAlpha).
@@ -672,7 +674,8 @@ src/
                             centreNextGap + prefillPipes like endPower, re-charged).
                             pausePlay accepts 'respawn' (respawnPaused) and
                             resumePlay returns to it without the bounce; autoPause
-                            too. onFinishCrossed adds levelClearBonus (the popup
+                            too. onFinishCrossed adds levelClearBonus when
+                            Versus.claimLevelFinish says it is first (the popup
                             after the break starts); win() → showEscapedBanner
                             (levelTitle / levelHint, no shade; applyLocale keeps it).
                             chromeState() / overlayPause(): chromeArgs and
@@ -746,8 +749,9 @@ src/
                             same frame (flush(), the GO text hidden one beat later
                             by goToken): go() → each half's startRace() (the halves
                             slid in under the "3" through onStart → launch({ hold })),
-                            beginLevel() for a level. onRunEnded(player) and
-                            onLevelReached count slot.levelWins.
+                            beginLevel() for a level. claimLevelFinish(half): the
+                            first over this level's line (levelFirst, cleared by
+                            beginLevel) gets slot.levelWins and the +25.
                             The ready check: onLevelReached(half) notes its arrival
                             (levelArrivals, the first winning the level; its hint
                             hidden until its levelSyncDelayMs timer fires: levelBeats,
@@ -1154,7 +1158,8 @@ tools/
                             Menu / B pause and lift the other; P1 shopping while P2
                             plays on, P2's strip never reaching P1's shop, B closing
                             it), the other's arrival
-                            (hints hidden through the beat, a tap then ignored), "Tap
+                            (no +25 and no popup for the second, its coins paid;
+                            hints hidden through the beat, a tap then ignored), "Tap
                             when ready" on both with no count until both are ready
                             (pulsing under its glow; "Tap again to un-ready" while
                             ready), P1's open
@@ -1170,8 +1175,9 @@ tools/
                             the first finisher waiting under its banner while its
                             tray / tap / d-pad still pause and resume the other, the
                             end when both are out with no Over and nothing recorded,
-                            the panel's 💀 row, rematches for the fewer-crashes
-                            tiebreak and the draw, Home; C: the ghost at the distance
+                            the panel's 💀 and 🏁 rows (P1 first out wins on its
+                            +25), rematches for the fewer-crashes tiebreak and
+                            the draw (P2 pinned 25 higher), Home; C: the ghost at the distance
                             gap with the live face, level, past the range, the rival
                             marker, the crash face and blink on the ghost, P2's
                             distance against its real next pair after a respawn

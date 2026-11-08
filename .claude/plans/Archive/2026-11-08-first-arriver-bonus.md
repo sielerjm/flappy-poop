@@ -1,6 +1,6 @@
 # Plan: Only the first player over each finish line earns the +25 (two-player); 0.8.2
 - Created: 2026-11-08
-- Status: in progress (approved 2026-11-08; re-checked against `e0df7f8`)
+- Status: complete
 - Source: Michael's audit `.claude/plans/first-arriver_+25_audit_b41c635c.plan.md`. Its verdict and rules are kept. Its notes on 0.8.1 being unpushed, the uncommitted fart edits and polish step 5 are out of date: all of that has shipped.
 - Baseline: `e0df7f8` on `main`, tree clean. The gate is met: the test-audit plan is complete, archived and pushed (`2907c06`..`e0df7f8`).
   - That audit changed no file this plan touches except README's dev section.
@@ -40,7 +40,7 @@ Level wins (🏁) already count "first over each line, and first out" in two pla
 - Commit: `feat(versus, step 1/2): only the first over each finish line earns the +25; one claimer for it and the 🏁`
 - Result: npm test 399/399 (orphan audit included); `--only=versus-match` 61 checks pass; with the old `onFinishCrossed` the new check fails (P2 1 → 26) along with four others; full smoke 305/305.
 
-### Step 2/2 — Docs and 0.8.2  [pending]
+### Step 2/2 — Docs and 0.8.2  [done]
 - Change:
   - `src/logic.js`: `VERSION` '0.8.2'. `src/changelog.js` gets a new 0.8.2 entry (today's date) with one bullet per locale:
     - en: "Two players: only the first one over each finish line (the rectum's too) earns the 25 points; the second still gets the level's coins."
@@ -56,6 +56,7 @@ Level wins (🏁) already count "first over each line, and first out" in two pla
   - Older changelog entries (0.7.x "clearing a level earns 25") are history: leave them.
 - Verify: `npm test` (changelog test: first entry = VERSION; orphan audit). `grep -n "Clearing a level earns\|earns 25 points"` over README / AGENTS / TRANSLATION_NOTES finds no current-behaviour claim. `npm run smoke -- --only=versus-match` (docs only touch no scene, so the full run from step 1 stands).
 - Commit: `docs(step 2/2): first-over-the-line +25 in README and AGENTS; 0.8.2`
+- Result: VERSION 0.8.2 with one What's new bullet per locale; README and AGENTS (scoring paragraph, config map, onFinishCrossed, claimLevelFinish, smoke summary) updated; the stale-claim grep is clean; npm test 399/399; `--only=versus-match` passes. Step 1 commit `823fd2d`.
 - Push only when Michael asks (`npm run push`).
 
 ## Risks and notes
@@ -66,3 +67,6 @@ Level wins (🏁) already count "first over each line, and first out" in two pla
 ## Verification (end to end)
 - `npm test`, full `npm run smoke`.
 - Hand check (Michael): a two-player match where one player reaches a line first. Only that player's score jumps by 25 (gold +25). The other's score holds when they arrive, and the result panel's 🏁 matches who got there first.
+
+## Completion summary
+Commits since `e0df7f8`: `823fd2d` (the first-claimer and the +25 gate, smoke updated), then the step 2 docs / 0.8.2 commit. Full smoke 305/305 after step 1; the new second-arrival check fails on the old code. Not pushed. Roll back with `git revert` per commit.

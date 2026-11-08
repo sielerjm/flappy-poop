@@ -8,6 +8,18 @@ import { LOCALES } from './i18n.js';
 
 export const CHANGELOG = [
   {
+    version: '0.8.2',
+    date: '8 Nov 2026',
+    notes: {
+      en: [
+        "Two players: only the first one over each finish line (the rectum's too) earns the 25 points; the second still gets the level's coins.",
+      ],
+      'zh-Hans': [
+        '双人模式：只有最先越过每条终点线（包括直肠）的玩家才能得到 25 分；后到的玩家仍能拿到本关的金币。',
+      ],
+    },
+  },
+  {
     version: '0.8.1',
     date: '8 Nov 2026',
     notes: {
