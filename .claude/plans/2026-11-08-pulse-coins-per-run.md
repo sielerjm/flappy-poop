@@ -53,7 +53,7 @@ Decisions made here (overrule any at approval):
 - Hand check (Michael): level 1's pickups pulsing and level 2's bobbing ones not; die with coins and beans → next run starts empty; a two-player crash costs coins and power-ups; coins above beans; Over's coin count; fiber for 1 in the shop. Then `npm run push`.
 
 ## Completion summary
-- Commits on `main` since `38a65a8`: step 1 `ed62694`, step 2 `936cfa1`, step 3 (docs). Nothing pushed.
+- Commits on `main` since `38a65a8`: step 1 `ed62694`, step 2 `936cfa1`, step 3 `5693634` (docs). Nothing pushed.
 - Verified: `npm test` green at every step; `npm run smoke` all checks after each step; screenshots of the inventory rows and the Over coin cell.
 - Unverified: feel on devices (pulse size and speed, the death reset, the crash cost); Chinese strings are drafts. One two-player "same course" smoke failure seen once and not reproduced.
 - Roll back: `git revert <hash>` per step, or `git reset --hard 38a65a8` (discards work).
