@@ -365,9 +365,14 @@ src/
                             v1 payload {i, n, s, p, [l], [h], t}; p = optional toilet
                             flags; h = 'l' only for a left-handed player, handed
                             back as `hand` beside the state, never in SaveState;
-                            via Web Crypto, 16-byte tag, base64url), PARSERS per
-                            wire version, SECRET constant (permanent). Fully
-                            unit-tested.
+                            via Web Crypto, else sha256.js where crypto.subtle is
+                            missing, e.g. a plain-http LAN page; 16-byte tag,
+                            base64url), PARSERS per wire version, SECRET constant
+                            (permanent). Fully unit-tested.
+  sha256.js                 sha256 / hmacSha256 in plain JS, NO imports: save.js's
+                            signer when the page has no Web Crypto (browsers give
+                            crypto.subtle only to https and localhost). Pinned by
+                            FIPS / RFC 4231 vectors and parity with Node's HMAC.
   i18n.js                   en / zh-Hans string catalog, t(), initialLocale,
                             howToItems, pauseBannerText, metaFontSize, welcomeText,
                             levelBannerText(locale, level, levels, { shop }),
@@ -1312,7 +1317,9 @@ npm run push      # stamp LAST_UPDATED = now, run tests, commit the stamp, push 
 #   __flappy.scene.getScene('Play').spawnPipePair()
 npm start         # tools/serve.py: http://localhost:8000 plus a printed
                   # http://<LAN-IP>:8000 for a phone on the same Wi-Fi
-                  # (localhost on the phone is the phone, not the laptop)
+                  # (localhost on the phone is the phone, not the laptop; user
+                  # codes work there too: plain http has no Web Crypto, so save.js
+                  # signs with sha256.js)
 # Test mode: type pooptest or testpoop as the username + Save (again to leave; a reload also
 #   leaves). Settings then has start level, Invincible, power-ups; nothing is saved.
 npm run smoke     # with npm start running: headless Chrome drives the real game
