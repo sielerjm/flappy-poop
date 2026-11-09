@@ -21,6 +21,11 @@ const ALLOWED_EXPORTS = {
   pipeMoveShiftPx: "test guard: tests/pipeMove.test.js and tuning.test.js keep every moving-pipe row under half the poop's clearance",
   glowAlphaAt: "test reference: the glow's alpha profile that glowStops() draws (tests/fart.test.js)",
   topScores: 'test hook: tests/save.test.js reads top lists as plain numbers (its last game use, isNewTop, is gone)',
+  createTournament: 'tournament plan (2026-11-09-tournament-a), step 5 wires it into the lobby; remove this entry then',
+  nextMatch: 'tournament plan, step 5 races the queue; remove this entry then',
+  recordResult: 'tournament plan, step 5 records each race; remove this entry then',
+  placings: 'tournament plan, step 5 shows the podium; remove this entry then',
+  raceOutcome: 'tournament plan, step 4 decides a tournament race with it; remove this entry then',
 };
 
 /** UI string keys no source names literally: prefix → why (they are built at run time). */

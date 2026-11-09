@@ -315,6 +315,12 @@ export const TUNING = {
       blinkAlpha: 0.2, // 0–1 alpha at the bottom of a blink
     },
   },
+  // Tournament (🏅, from the two-player join screen): a World Cup bracket for minPlayers–maxPlayers
+  // on one device, two at a time (src/tournament.js); byes fill the bracket to 4 or 8.
+  tournament: {
+    minPlayers: 3,
+    maxPlayers: 8,
+  },
   gamepad: {
     // Standard-mapping button indices (Xbox: A 0, B 1, X 2, Y 3, LB 4, RB 5, LT 6, RT 7, View 8, Menu 9, d-pad 12–15).
     // A pad that reports another layout (pad.mapping !== 'standard') is retuned here, not in code.
