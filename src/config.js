@@ -394,5 +394,6 @@ export const LEADERBOARD = {
   visibleRows: 10, // rows inside the board's window at once; the rest scroll (finger, wheel, d-pad)
   storageKey: 'flappyPoop.leaderboard', // localStorage key for the last confirmed submit
   mergesKey: 'flappyPoop.merges', // localStorage key for account merges still to send (merge_players after a Load user code)
+  renameKey: 'flappyPoop.rename', // localStorage key for a rename typed on this device, until a post carries it to the board (else the device adopts the board's name)
   maxScore: 1000, // scores above this are not submitted (matches the CHECK and submit_score() in db/schema.sql); a full 285-pair run with ×2 fits
 };

@@ -7,10 +7,10 @@
 // leaderboard as garnish and never waits on it. Writes go through the SQL
 // functions in db/schema.sql (submit_score, merge_players); reads are a plain
 // select on the columns the publishable key is allowed to see, plus the
-// name_available and player_rank functions.
+// name_available, player_rank and player_name functions.
 
 import { LEADERBOARD } from './config.js';
-import { recordScore, bestByToilet } from './save.js';
+import { recordScore, bestByToilet, validateName } from './save.js';
 
 // ---------------------------------------------------------------------------
 // Pure helpers
@@ -174,6 +174,68 @@ export function createMergeStore(storage = globalThis.localStorage, key = LEADER
 }
 
 // ---------------------------------------------------------------------------
+// A rename typed on this device, in its own localStorage key. The board's name
+// is the player's name: before posting, a device adopts it (nameAction) unless
+// this record says the player renamed here, in which case the post carries the
+// rename to the board. Cleared once a post with that id and name is confirmed,
+// by a Load (the code's name is not a rename) and by Clear.
+
+/** A { id, name } record with a valid id and a non-empty name, or null. */
+function normalizeRename(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+  const { id, name } = raw;
+  if (typeof id !== 'string' || !ID_RE.test(id) || typeof name !== 'string' || !name) return null;
+  return { id, name };
+}
+
+export function createRenameStore(storage = globalThis.localStorage, key = LEADERBOARD.renameKey) {
+  return {
+    /** The pending rename { id, name }, or null. */
+    load() {
+      try {
+        const raw = storage?.getItem(key);
+        return raw == null ? null : normalizeRename(JSON.parse(raw));
+      } catch {
+        return null;
+      }
+    },
+    /** Remember a rename; returns the stored record, or null when it is not a valid one. */
+    set(rename) {
+      const r = normalizeRename(rename);
+      if (!r) return null;
+      try {
+        storage?.setItem(key, JSON.stringify(r));
+      } catch {
+        /* storage unavailable: the rename still posts this session */
+      }
+      return r;
+    },
+    clear() {
+      try {
+        storage?.removeItem(key);
+      } catch {
+        /* storage unavailable */
+      }
+    },
+  };
+}
+
+/**
+ * Should this device take the board's name ('adopt') or keep its own ('keep')?
+ * Adopt only when the board has a name for the player, it differs from the
+ * local one, and the local one is not a rename typed on this device (pending
+ * for this id and this name). So a phone still holding an old name switches to
+ * the new one instead of renaming the player back, and a loaded code that
+ * carried an older name catches up.
+ */
+export function nameAction({ local, board, pending, id } = {}) {
+  if (typeof board !== 'string' || !board || board === local) return 'keep';
+  const p = normalizeRename(pending);
+  if (p && p.id === id && p.name === local) return 'keep';
+  return 'adopt';
+}
+
+// ---------------------------------------------------------------------------
 // Network
 
 /**
@@ -259,6 +321,20 @@ export async function mergePlayers(keepId, mergeId, opts = {}) {
   if (!p) return false;
   const out = await request('/rpc/merge_players', { method: 'POST', body: { p_keep_id: p.keep, p_merge_id: p.merge } }, opts);
   return out !== null;
+}
+
+/**
+ * The name on the board for this player's id (player_name; resolves aliases),
+ * or null when the player has no rows, the answer is not a valid username, or
+ * the board cannot say (disabled, unreachable, not deployed). Null never
+ * changes anything: only a name is adopted.
+ */
+export async function fetchPlayerName(playerId, opts = {}) {
+  if (typeof playerId !== 'string' || !ID_RE.test(playerId)) return null;
+  const out = await request('/rpc/player_name', { method: 'POST', body: { p_player_id: playerId } }, opts);
+  if (typeof out !== 'string') return null;
+  const { ok, name } = validateName(out);
+  return ok && name === out ? out : null;
 }
 
 /** A board row { name, score, toilet, level } from a server row, or null. A missing level reads as 1. */

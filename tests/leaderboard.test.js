@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { LEADERBOARD } from '../src/config.js';
-import { createSubmitStore, createMergeStore, submitPlan, submitPlans, submitScore, checkNameAvailable, mergePlayers, fetchTop, fetchRank } from '../src/leaderboard.js';
+import { createSubmitStore, createMergeStore, createRenameStore, nameAction, submitPlan, submitPlans, submitScore, checkNameAvailable, mergePlayers, fetchPlayerName, fetchTop, fetchRank } from '../src/leaderboard.js';
 
 const config = { dataApi: 'https://x.example/rest/v1', publishableKey: 'sb_publishable_test', timeoutMs: 50, limit: 10, maxScore: 200 };
 
@@ -46,6 +46,8 @@ test('LEADERBOARD config is complete and points at a Supabase Data API over http
   assert.equal(typeof LEADERBOARD.storageKey, 'string');
   assert.equal(typeof LEADERBOARD.mergesKey, 'string');
   assert.notEqual(LEADERBOARD.mergesKey, LEADERBOARD.storageKey);
+  assert.equal(typeof LEADERBOARD.renameKey, 'string');
+  assert.equal(new Set([LEADERBOARD.storageKey, LEADERBOARD.mergesKey, LEADERBOARD.renameKey]).size, 3);
 });
 
 // ---------------------------------------------------------------------------
@@ -110,6 +112,65 @@ test('mergePlayers posts both ids to merge_players; true only on a 2xx', async (
   assert.equal(await mergePlayers(ID, 'short', { fetch, config }), false);
   assert.equal(await mergePlayers(null, B, { fetch, config }), false);
   assert.equal(fetch.calls.length, 1, 'a bad pair never reaches the network');
+});
+
+test('fetchPlayerName posts the id to player_name and answers the board name, else null', async () => {
+  const ok = fakeFetch({ status: 200, body: '"Alicia"' }) // PostgREST sends a text result as a JSON string;
+  assert.equal(await fetchPlayerName(ID, { fetch: ok, config }), 'Alicia');
+  assert.equal(ok.calls[0].url, 'https://x.example/rest/v1/rpc/player_name');
+  assert.deepEqual(ok.calls[0].body, { p_player_id: ID });
+  assert.equal(await fetchPlayerName(ID, { fetch: fakeFetch({ status: 200, body: 'null' }), config }), null, 'no rows');
+  assert.equal(await fetchPlayerName(ID, { fetch: fakeFetch({ status: 404, body: { message: 'function not found' } }), config }), null, 'not deployed yet');
+  assert.equal(await fetchPlayerName(ID, { fetch: fakeFetch({ status: 200, body: { odd: 1 } }), config }), null, 'junk body');
+  assert.equal(await fetchPlayerName(ID, { fetch: fakeFetch({ status: 200, body: JSON.stringify('x'.repeat(17)) }), config }), null, 'not a valid username');
+  assert.equal(await fetchPlayerName(ID, { fetch: fakeFetch({ status: 200, body: '" Alicia "' }), config }), null, 'untrimmed');
+  const throwing = async () => {
+    throw new TypeError('network down');
+  };
+  assert.equal(await fetchPlayerName(ID, { fetch: throwing, config }), null);
+  assert.equal(await fetchPlayerName(ID, { fetch: ok, config: { ...config, dataApi: '' } }), null, 'disabled');
+  assert.equal(await fetchPlayerName('short', { fetch: ok, config }), null);
+  assert.equal(ok.calls.length, 1, 'a bad id never reaches the network');
+});
+
+test('nameAction adopts the board name only when it differs and the local name is not a rename typed here', () => {
+  const B = 'BBBBBBBBBBBBBBBBBBBBBB';
+  const cases = [
+    [{ local: 'Alice', board: null, pending: null, id: ID }, 'keep', 'the board has no name (no rows, offline)'],
+    [{ local: 'Alice', board: 'Alice', pending: null, id: ID }, 'keep', 'same name'],
+    [{ local: 'Alice', board: 'Alicia', pending: null, id: ID }, 'adopt', 'a stale device (renamed elsewhere) or a loaded code with an older name'],
+    [{ local: 'Alicia', board: 'Alice', pending: { id: ID, name: 'Alicia' }, id: ID }, 'keep', 'renamed here: the post carries it to the board'],
+    [{ local: 'Alicia', board: 'Alice', pending: { id: B, name: 'Alicia' }, id: ID }, 'adopt', 'a rename noted under another id does not count'],
+    [{ local: 'Alicia', board: 'Al', pending: { id: ID, name: 'Ally' }, id: ID }, 'adopt', 'a pending rename to another name does not cover this one'],
+    [{ local: 'Alice', board: '', pending: null, id: ID }, 'keep', 'an empty board name is no name'],
+  ];
+  for (const [input, want, why] of cases) assert.equal(nameAction(input), want, why);
+  assert.equal(nameAction(), 'keep');
+});
+
+test('createRenameStore remembers one { id, name }, survives junk and blocked storage, and clears', () => {
+  const storage = fakeStorage();
+  const store = createRenameStore(storage, 'r');
+  assert.equal(store.load(), null);
+  assert.deepEqual(store.set({ id: ID, name: 'Alicia' }), { id: ID, name: 'Alicia' });
+  assert.deepEqual(store.load(), { id: ID, name: 'Alicia' });
+  store.set({ id: ID, name: 'Ally' });
+  assert.deepEqual(store.load(), { id: ID, name: 'Ally' }, 'the latest rename replaces the last');
+  assert.equal(store.set({ id: 'short', name: 'X' }), null);
+  assert.equal(store.set({ id: ID, name: '' }), null);
+  assert.deepEqual(store.load(), { id: ID, name: 'Ally' }, 'a bad record changes nothing');
+  storage.setItem('r', '{"id":5}');
+  assert.equal(store.load(), null);
+  storage.setItem('r', 'not json');
+  assert.equal(store.load(), null);
+  store.set({ id: ID, name: 'Ally' });
+  store.clear();
+  assert.equal(store.load(), null);
+  assert.equal(storage.getItem('r'), null);
+  const blocked = createRenameStore({ ...boom, removeItem() { throw new Error('denied'); } }, 'r');
+  assert.equal(blocked.load(), null);
+  assert.deepEqual(blocked.set({ id: ID, name: 'A' }), { id: ID, name: 'A' }, 'still answers; the rename posts this session');
+  blocked.clear();
 });
 
 test('createMergeStore queues a pair once, drops it when confirmed, survives junk, and clears', () => {

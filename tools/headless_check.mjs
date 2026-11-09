@@ -46,7 +46,7 @@ export const OVERLAYS = {
  * ready screen with the same checks as in the full run (set only once that is shown).
  */
 export const SECTIONS = [
-  { name: 'home', about: 'home screen (no score, the ? pulsing); onboarding: the username prompt, the save panel, the name saved; the username claim, the merge on Load, Clear' },
+  { name: 'home', about: 'home screen (no score, the ? pulsing); onboarding: the username prompt, the save panel, the name saved; the username claim, the merge on Load, the board\'s name winning over a stale one, Clear' },
   { name: 'overlays', needs: [], about: 'every overlay opens from the ready screen, keeps the loop alive and closes' },
   { name: 'level1', needs: [], about: "level 1's scripted pairs and still pickups; the finish-line texture" },
   { name: 'howto-seen', needs: ['overlays'], about: 'opening How to play stops the ? pulse and stamps this build' },
@@ -311,8 +311,10 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await sleep(200);
         const opened = await evaluate(`!document.getElementById('save-panel').hidden && document.activeElement && document.activeElement.id === 'save-name'`);
         ok(opened === true && (await playState()) === 'ready', 'tapping the prompt opens the save panel on the name field without starting a run');
-        // The board's username check is stubbed for the whole section (deterministic, and never the live board).
+        // The board's username check and its name for this player are stubbed for the whole section
+        // (deterministic, and never the live board).
         await evaluate(`(globalThis.__nameFree = true, globalThis.__nameChecks = [], ${play}.checkNameAvailable = (name, id) => (globalThis.__nameChecks.push([name, id]), Promise.resolve(globalThis.__nameFree)), true)`);
+        await evaluate(`(globalThis.__boardName = null, globalThis.__nameFetches = [], ${play}.fetchPlayerName = (id) => (globalThis.__nameFetches.push(id), Promise.resolve(globalThis.__boardName)), true)`);
         await evaluate(`document.getElementById('save-name').value = 'Smoke', document.getElementById('save-save-btn').click(), true`);
         await sleep(1200);
         const closed = await evaluate(`document.getElementById('save-panel').hidden`);
@@ -366,16 +368,33 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         const loadedStatus = await status();
         await evaluate(`import('./src/config.js').then((m) => { m.LEADERBOARD.dataApi = globalThis.__api; return true; })`);
         ok(loaded.name === 'Other' && loaded.id === other && loaded.field === 'Other' && JSON.stringify(loaded.queue) === JSON.stringify([{ keep: other, merge: oldId }]) && loadedStatus.text === (await tx('saveMerged')).replace('{name}', 'Other') && loadedStatus.cls.includes('ok'), `Load user code from another id adopts it, queues the merge (keep ${other.slice(0, 4)}…, merge the old id) and reads "${loadedStatus.text}"`);
+        // The board's name wins unless the player renamed here. Data API muzzled throughout.
+        await evaluate(`import('./src/config.js').then((m) => { globalThis.__api = m.LEADERBOARD.dataApi; m.LEADERBOARD.dataApi = ''; return true; })`);
+        const fetched = await evaluate(`JSON.stringify({ fetches: globalThis.__nameFetches, pending: ${play}.renameStore.load() })`).then(JSON.parse);
+        ok(fetched.fetches.length === 1 && fetched.fetches[0] === other && fetched.pending === null, `names typed here (Smoke, Offline) never asked the board for its name; the Load cleared the pending rename and its sync asked once (${fetched.fetches.length})`);
+        // The loaded code carried an older name than the board's (renamed on another device): the open panel shows the newer one.
+        await evaluate(`globalThis.__boardName = 'OtherNew', ${play}.syncLeaderboard().then(() => true)`);
+        const adopted = await evaluate(`JSON.stringify({ name: ${play}.getSaveState().name, stored: JSON.parse(localStorage.getItem('flappyPoop.save')).name, field: ${el('save-name')}.value, profile: ${play}.profileBtn.getText(), code: ${el('save-code')}.value })`).then(JSON.parse);
+        const adoptedStatus = await status();
+        const otherCode = await evaluate(`import('./src/save.js').then((m) => m.importCode(${el('save-code')}.value, { storage: { getItem: () => null, setItem() {} } })).then((r) => r.ok ? r.state.name : '')`);
+        ok(adopted.name === 'OtherNew' && adopted.stored === 'OtherNew' && adopted.field === 'OtherNew' && adopted.profile.startsWith('OtherNew') && adoptedStatus.text === (await tx('saveMerged')).replace('{name}', 'OtherNew') && otherCode === 'OtherNew', `the board's newer name replaces the loaded code's: stored, in the field, the welcome line, the profile and the code ("${adopted.profile}")`);
+        // A rename typed here goes to the board: the next sync keeps it and does not ask.
+        await typeAndSave('Renamed');
+        const fetches0 = await evaluate(`globalThis.__nameFetches.length`);
+        await evaluate(`${play}.syncLeaderboard().then(() => true)`);
+        const kept = await evaluate(`JSON.stringify({ name: ${play}.getSaveState().name, pending: ${play}.renameStore.load(), fetches: globalThis.__nameFetches.length })`).then(JSON.parse);
+        ok(kept.name === 'Renamed' && kept.pending?.name === 'Renamed' && kept.pending?.id === other && kept.fetches === fetches0, `a rename typed here is kept (pending until a post carries it) and the board's "${'OtherNew'}" does not overwrite it`);
+        await evaluate(`globalThis.__boardName = null, import('./src/config.js').then((m) => { m.LEADERBOARD.dataApi = globalThis.__api; return true; })`); // the stub answers "no name" from here on
         // Clear: a first tap warns, a second inside the window signs the device out.
-        const keys = await evaluate(`import('./src/config.js').then((m) => JSON.stringify({ best: m.TUNING.bestKey, settings: m.TUNING.settingsKey, submits: m.LEADERBOARD.storageKey, merges: m.LEADERBOARD.mergesKey, confirmMs: m.TUNING.saveClearConfirmMs }))`).then(JSON.parse);
+        const keys = await evaluate(`import('./src/config.js').then((m) => JSON.stringify({ best: m.TUNING.bestKey, settings: m.TUNING.settingsKey, submits: m.LEADERBOARD.storageKey, merges: m.LEADERBOARD.mergesKey, rename: m.LEADERBOARD.renameKey, confirmMs: m.TUNING.saveClearConfirmMs }))`).then(JSON.parse);
         await evaluate(`localStorage.setItem('${keys.best}', '7'), ${play}.submitStore.save({ playerId: '${other}', name: 'Other', score: 5, toilet: false, level: 1 }), true`);
         await evaluate(`${el('save-clear-btn')}.click(), true`);
         const armed = await evaluate(`JSON.stringify({ name: ${play}.getSaveState().name, status: ${el('save-status')}.textContent, cls: ${el('save-status')}.className, disabled: ${el('save-clear-btn')}.disabled, outline: getComputedStyle(${el('save-clear-btn')}).backgroundColor, border: getComputedStyle(${el('save-clear-btn')}).borderTopColor, left: ${el('save-clear-btn')}.getBoundingClientRect().left < ${el('save-save-btn')}.getBoundingClientRect().left })`).then(JSON.parse);
-        ok(armed.name === 'Other' && armed.status === (await tx('saveClearConfirm')) && armed.cls.includes('error') && !armed.disabled && armed.outline === 'rgba(0, 0, 0, 0)' && armed.border === 'rgb(232, 94, 150)' && armed.left && keys.confirmMs >= 2000, `a first tap on Clear (pink outline, left of Save) only warns: "${armed.status.slice(0, 40)}…"; the player is still "${armed.name}"`);
+        ok(armed.name === 'Renamed' && armed.status === (await tx('saveClearConfirm')) && armed.cls.includes('error') && !armed.disabled && armed.outline === 'rgba(0, 0, 0, 0)' && armed.border === 'rgb(232, 94, 150)' && armed.left && keys.confirmMs >= 2000, `a first tap on Clear (pink outline, left of Save) only warns: "${armed.status.slice(0, 40)}…"; the player is still "${armed.name}"`);
         await evaluate(`${el('save-clear-btn')}.click(), true`);
         await sleep(100);
-        const gone = await evaluate(`JSON.stringify({ state: ${play}.getSaveState(), save: localStorage.getItem('flappyPoop.save'), best: localStorage.getItem('${keys.best}'), submits: localStorage.getItem('${keys.submits}'), merges: localStorage.getItem('${keys.merges}'), settings: localStorage.getItem('${keys.settings}') !== null, status: ${el('save-status')}.textContent, field: ${el('save-name')}.value, code: ${el('save-code')}.value, disabled: ${el('save-clear-btn')}.disabled, prompt: ${play}.profileBtn.getText() })`).then(JSON.parse);
-        ok(gone.state.name === '' && gone.state.id === null && gone.state.top.length === 0 && gone.best === null && gone.submits === null && gone.merges === null && gone.settings && gone.status === (await tx('saveCleared')) && gone.field === '' && gone.code === (await tx('saveNameRequired')) && gone.disabled && gone.prompt === (await tx('profilePrompt')), `a second tap signs the device out: no name, id or scores, the submits, merges and legacy best gone, settings kept; Clear greys and the code field reads "${gone.code}"`);
+        const gone = await evaluate(`JSON.stringify({ state: ${play}.getSaveState(), save: localStorage.getItem('flappyPoop.save'), best: localStorage.getItem('${keys.best}'), submits: localStorage.getItem('${keys.submits}'), merges: localStorage.getItem('${keys.merges}'), rename: localStorage.getItem('${keys.rename}'), settings: localStorage.getItem('${keys.settings}') !== null, status: ${el('save-status')}.textContent, field: ${el('save-name')}.value, code: ${el('save-code')}.value, disabled: ${el('save-clear-btn')}.disabled, prompt: ${play}.profileBtn.getText() })`).then(JSON.parse);
+        ok(gone.state.name === '' && gone.state.id === null && gone.state.top.length === 0 && gone.best === null && gone.submits === null && gone.merges === null && gone.rename === null && gone.settings && gone.status === (await tx('saveCleared')) && gone.field === '' && gone.code === (await tx('saveNameRequired')) && gone.disabled && gone.prompt === (await tx('profilePrompt')), `a second tap signs the device out: no name, id or scores, the submits, merges, pending rename and legacy best gone, settings kept; Clear greys and the code field reads "${gone.code}"`);
         // Back to the smoke's own name for the rest of the run.
         await typeAndSave('Smoke');
         await evaluate(`import('./src/ui/savePanel.js').then((m) => (m.closeSavePanel(), true))`);

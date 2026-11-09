@@ -103,10 +103,10 @@ import { createFocus } from '../ui/focus.js';
 import { createGlow, createRectGlow } from '../ui/glow.js';
 import { createFinishTexture } from '../ui/finish.js';
 import { createLevelBar } from '../ui/levelBar.js';
-import { createSubmitStore, createMergeStore, submitPlans, submitScore, checkNameAvailable, mergePlayers } from '../leaderboard.js';
+import { createSubmitStore, createMergeStore, createRenameStore, submitPlans, submitScore, checkNameAvailable, mergePlayers, fetchPlayerName, nameAction } from '../leaderboard.js';
 import { createButton } from '../ui/button.js';
 import { createToggle } from '../ui/toggle.js';
-import { openSavePanel, isSavePanelOpen } from '../ui/savePanel.js';
+import { openSavePanel, isSavePanelOpen, showAdoptedName } from '../ui/savePanel.js';
 import { bindPad } from '../input/pad.js';
 import { keyGroup, sameDevice, catchUpTier, catchUpDraws, versusAvailable, ghostPlacement, rivalMarker, respawnPose, courseDistance, VERSUS_EMOJI } from '../versus.js';
 
@@ -118,6 +118,10 @@ const TEXT_STYLE = {
   strokeThickness: 12,
   align: 'center',
 };
+
+// The first Play.create of a page load also syncs the leaderboard (later restarts don't), so a
+// rename made on another device shows as soon as the game opens online.
+let bootSynced = false;
 
 export class Play extends Phaser.Scene {
   /** 'Play' is the single-player scene and the left half (P1) of a versus match; 'PlayB' is the right half. */
@@ -173,6 +177,7 @@ export class Play extends Phaser.Scene {
     if (this.save.top.length === 0 && legacyBest > 0) this.save = saveLocal(recordScore(this.save, legacyBest));
     this.submitStore = createSubmitStore(); // last confirmed leaderboard submit
     this.mergeStore = createMergeStore(); // account merges (Load user code) the board has not confirmed yet
+    this.renameStore = createRenameStore(); // a rename typed on this device, until a post carries it to the board
     this.boardNameTaken = false; // the last sync was refused because another player holds this username
     // Levels: pipe pairs passed decide the level; speed is per level, gap is fixed.
     this.level = 1;
@@ -372,6 +377,10 @@ export class Play extends Phaser.Scene {
     this.profileBtn = createButton(this, this.readyBoxes.profile, profileButtonText(this.locale, this.save), { ...TEXT_STYLE, fontSize: '32px' }); // white: the player's own line, not a menu item
     this.refreshProfile();
     this.refreshTestBadge(); // still on after a restart: test mode lives in the registry
+    if (!this.match && !bootSynced) {
+      bootSynced = true;
+      this.syncLeaderboard(); // fire and forget: picks up the board's name (a rename made on another device)
+    }
     if (this.match) this.setReadyUiVisible(false); // a half of a match: the Versus scene draws the join screen
 
     this.pauseShade = this.add.rectangle(W / 2, GAME_HEIGHT / 2, W, GAME_HEIGHT, 0x000000, 0.45).setDepth(25).setVisible(false);
@@ -971,6 +980,7 @@ export class Play extends Phaser.Scene {
     this.setSaveState(saveLocal({}));
     this.submitStore.clear();
     this.mergeStore.clear();
+    this.renameStore.clear();
     this.best.clear();
     this.boardNameTaken = false;
   }
@@ -978,7 +988,9 @@ export class Play extends Phaser.Scene {
   /**
    * Post the player's best to the shared leaderboard when it is newer than the
    * last confirmed submit. Named players only; the id is created on first use
-   * (same as the first save-code export). Resolves on every outcome; a failed
+   * (same as the first save-code export). Before posting, the device takes the
+   * board's name for its player unless the player renamed here (nameAction), so
+   * a rename made on another device sticks. Resolves on every outcome; a failed
    * post is retried on the next game over or board open.
    */
   syncLeaderboard() {
@@ -994,24 +1006,58 @@ export class Play extends Phaser.Scene {
     );
     if (!this.save?.name) return merges.catch(() => {});
     if (!this.save.id) this.save = ensureId(this.save);
-    // Up to two rows per player: best off the toilet and best on it, posted one after the other.
-    const plans = submitPlans(this.save, this.submitStore.load());
-    return plans
-      .reduce(
-        (chain, plan) =>
-          chain.then(() =>
-            submitScore(plan).then((res) => {
-              if (res.ok) {
-                this.submitStore.save(plan);
-                this.boardNameTaken = false;
-              } else if (res.reason === 'nameTaken') {
-                this.boardNameTaken = true; // another player holds the name: the panel and the board say so
-              }
-            }),
-          ),
-        merges,
+    const id = this.save.id;
+    const renamedHere = () => {
+      const p = this.renameStore.load();
+      return Boolean(p && p.id === id && p.name === this.save.name);
+    };
+    return merges
+      .then(() => (renamedHere() ? null : this.fetchPlayerName(id))) // a rename typed here goes to the board, not the other way round
+      .then((board) => {
+        if (this.save?.id === id && nameAction({ local: this.save.name, board, pending: this.renameStore.load(), id }) === 'adopt') this.adoptBoardName(board);
+      })
+      .then(() =>
+        // Up to two rows per player: best off the toilet and best on it, posted one after the other.
+        submitPlans(this.save, this.submitStore.load()).reduce(
+          (chain, plan) =>
+            chain.then(() =>
+              submitScore(plan).then((res) => {
+                if (res.ok) {
+                  this.submitStore.save(plan);
+                  this.boardNameTaken = false;
+                  const p = this.renameStore.load();
+                  if (p && p.id === plan.playerId && p.name === plan.name) this.renameStore.clear(); // the board has the rename now
+                } else if (res.reason === 'nameTaken') {
+                  this.boardNameTaken = true; // another player holds the name: the panel and the board say so
+                }
+              }),
+            ),
+          Promise.resolve(),
+        ),
       )
       .catch(() => {});
+  }
+
+  /** The board's name for this player's id, or null (none, or the board cannot say). A method so the smoke can stub it. */
+  fetchPlayerName(id) {
+    return fetchPlayerName(id);
+  }
+
+  /** Take the board's name (renamed on another device, or newer than a loaded code's): store it, and show it in an open save panel. */
+  adoptBoardName(name) {
+    const prev = this.save.name;
+    this.setSaveState(saveLocal({ ...this.save, name }));
+    showAdoptedName(prev, name);
+  }
+
+  /** The save panel stored a username typed on this device: it is a rename the board should take. */
+  noteRename(name) {
+    if (this.save?.id) this.renameStore.set({ id: this.save.id, name });
+  }
+
+  /** A Load: the code's name is not a rename, so the next sync takes the board's latest. */
+  forgetRename() {
+    this.renameStore.clear();
   }
 
   /** Is `name` free on the board for this player's id? true / false / null (the board cannot say). The save panel asks before storing a name. */

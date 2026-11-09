@@ -1,6 +1,6 @@
 # Plan: A rename reaches every device on its own, and a fourth Save / Load step says so
 - Created: 2026-11-09
-- Status: in progress (step 2)
+- Status: in progress (step 3)
 - Baseline: `b367afd` on `main` (0.8.2 pushed), tree clean.
 - Whole-suite verification: `npm test` (403 pass at baseline); `npm run smoke -- --only=home` while iterating, the full `npm run smoke` before the client commit.
 - Repo plan copy: `.claude/plans/2026-11-09-rename-everywhere.md` (`git add -f`), archived when done.
@@ -36,9 +36,10 @@ Michael's direction: "New usernames will be updated when you load your player co
 - Change: the function, its grant to anon, a header line in the access-model list, and the "one player across devices" comment block (the board's name wins; devices adopt it).
 - Verify in PGlite (scratchpad harness, as for 0.8.2): the file applies twice; as anon, `player_name` returns the name for a canonical id and for an alias id, and null for an unknown id; after a rename through `submit_score` it returns the new name; anon still can't read `player_aliases`. Then `npm test`.
 - Commit: `feat(board, step 1/4): player_name, the board's current name for a player`
+- Result commit: `a1984ad`.
 - Result: done. PGlite: the file applies twice; 10 player_name checks pass (canonical / alias / unknown / bad / null ids; a rename posted from an alias device shows on both ids and both rows; anon still refused on player_aliases; anon may execute, authenticated may not); the 18 earlier scenarios still pass. npm test 403/403.
 
-### Step 2/4 — Client: adopt the board's name, keep a deliberate rename
+### Step 2/4 — Client: adopt the board's name, keep a deliberate rename  [done]
 - Change: `src/leaderboard.js` (`fetchPlayerName`, `createRenameStore`, `nameAction`); `src/config.js` (`renameKey`); `src/scenes/Play.js` (`renameStore`, `noteRename`, the adopt step in `syncLeaderboard`, the boot sync, `signOut` clears it); `src/ui/savePanel.js` (store → `noteRename`; Load → clear).
 - Tests (`tests/leaderboard.test.js`):
   - `nameAction` table: no board name; same name; stale device; pending matches; pending for another id or name; after a Load;
@@ -51,6 +52,7 @@ Michael's direction: "New usernames will be updated when you load your player co
   - the boot sync makes no live request.
 - Verify: `npm test`; `--only=home`; the full smoke.
 - Commit: `feat(save, step 2/4): a rename reaches every device; a stale device adopts the board's name`
+- Result: done. npm test 406/406 (fetchPlayerName, the nameAction table, the rename store; the orphan audit sees renameKey and the new exports used). Smoke home 14 checks (3 new: names typed here never ask the board; the board's newer name replaces a loaded code's in the store, field, welcome line, profile and code; a rename typed here is kept and not overwritten; Clear also forgets the pending rename). Full smoke 315/315. The boot sync is covered by construction (the smoke's page boots with no name, so it makes no request). A first full run failed twice: the left-handed Load check (my stub's board name leaked into the wide section; reset after the block) and the moving-pipes probiotic check (intermittent: it passed on the rerun with no change; its item lookup can pick another pair's probiotic).
 
 ### Step 3/4 — Copy, docs, 0.8.3
 - `src/i18n.js` `saveIntro` gets step 4 (en + zh-Hans); the panel already renders `pre-line` and scrolls past 90vh.

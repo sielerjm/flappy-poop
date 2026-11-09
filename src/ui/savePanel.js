@@ -56,6 +56,7 @@ let closeTimer = null; // pending self-close after Save (Enter-username flow)
 let claim = null; // { name, promise } the last username check this panel session (one check per name: blur and Save share it)
 let clearArmedAt = 0; // Date.now() of a first tap on Clear; a second inside saveClearConfirmMs signs out
 let clearTimer = null;
+let loaded = null; // { name, text(name) } after a Load: the welcome line, rebuilt if the board's newer name replaces the code's
 
 function h(tag, attrs = {}, ...children) {
   const el = document.createElement(tag);
@@ -239,6 +240,7 @@ async function onNameChange() {
   const state = getState();
   if (name !== state.name) {
     setState(saveLocal({ ...state, name }));
+    ctx.play?.noteRename?.(name); // typed here: the board takes this name, not the other way round
     dom.name.value = name;
     refreshCode();
     refreshClear();
@@ -370,6 +372,7 @@ async function onLoad() {
       setStatus(t(locale, res.error === 'damaged' ? 'saveErrorDamaged' : 'saveErrorUnrecognised'), 'error');
       return;
     }
+    ctx.play?.forgetRename?.(); // the code's name is not a rename: the board's latest name wins on the next sync
     setState(res.state);
     if (res.hand) ctx.play?.setHand?.(res.hand); // the code's bean button side becomes this device's
     // This device had its own player (a name or scores under another id): the pasted code's id
@@ -378,8 +381,11 @@ async function onLoad() {
     claim = null;
     dom.name.value = res.state.name;
     dom.load.value = '';
-    setStatus(merged ? t(locale, 'saveMerged').replace('{name}', res.state.name) : welcomeText(locale, res.state), 'ok');
+    const statusFor = (name) => (merged ? t(locale, 'saveMerged').replace('{name}', name) : welcomeText(locale, { ...res.state, name }));
+    loaded = { name: res.state.name, text: statusFor };
+    setStatus(statusFor(res.state.name), 'ok');
     refreshClear();
+    if (!merged) ctx.play?.syncLeaderboard?.(); // a merge already started one; either way the board's name for this player comes back
     if (ctx) await refreshCode();
   } finally {
     dom.loadBtn.disabled = false;
@@ -411,6 +417,7 @@ export function openSavePanel(options) {
   clearTimeout(clearTimer);
   clearArmedAt = 0;
   claim = null;
+  loaded = null;
   ctx = { game: options.game, play: options.play, locale: options.locale ?? 'en', closeOnSave: Boolean(options.closeOnSave) };
   applyLocale(ctx.locale);
   setGameKeyboard(false);
@@ -436,6 +443,24 @@ export function closeSavePanel() {
   if (document.activeElement && dom.root.contains(document.activeElement)) document.activeElement.blur();
   setGameKeyboard(true);
   ctx = null;
+}
+
+/**
+ * Play took the board's name for this player (renamed on another device, or newer
+ * than the name a loaded code carried). Show it in the open panel, unless the
+ * player is typing another name; the welcome line after a Load follows it.
+ */
+export function showAdoptedName(prev, next) {
+  if (!ctx || !dom || dom.root.hidden) return;
+  if (validateName(dom.name.value).name !== prev) return; // typing something else: leave the field alone
+  claim = null;
+  dom.name.value = next;
+  if (loaded && loaded.name === prev && dom.status.textContent === loaded.text(prev)) {
+    setStatus(loaded.text(next), 'ok');
+    loaded = { ...loaded, name: next };
+  }
+  refreshClear();
+  refreshCode();
 }
 
 export function isSavePanelOpen() {
