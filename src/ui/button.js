@@ -5,13 +5,13 @@ import { fitScale } from '../logic.js';
  * Button chrome for a ready-screen box from readyLayout(): a rounded rect, or a
  * circle when the box is `round` (the "?" in the corner). Purely visual: Play
  * resolves taps with readyHit(), so there are no pointer handlers here (same
- * rule as the tray).
+ * rule as the tray). `fillAlpha` 1 makes it opaque (the 🏅 button, over the divider).
  */
-export function createButton(scene, box, label, style, { depth = 20 } = {}) {
+export function createButton(scene, box, label, style, { depth = 20, fillAlpha = T.readyButtonAlpha } = {}) {
   const g = scene.add.graphics().setDepth(depth);
   const x = box.x - box.width / 2;
   const y = box.y - box.height / 2;
-  g.fillStyle(0x1a0b14, T.readyButtonAlpha);
+  g.fillStyle(0x1a0b14, fillAlpha);
   g.lineStyle(4, 0xe85e96, 1);
   if (box.round) {
     g.fillCircle(box.x, box.y, box.width / 2);

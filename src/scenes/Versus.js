@@ -62,14 +62,14 @@ export class Versus extends Phaser.Scene {
       .text(cx, 960, t(this.locale, 'versusJoinHint'), { ...STYLE, fontSize: '30px', strokeThickness: 8, wordWrap: { width: Math.min(W - 80, 1100), useAdvancedWrap: true } })
       .setOrigin(0.5)
       .setDepth(52);
-    // Home on the join screen; "🏅 Tournament" (a plain match only) sits above the hint, between the
-    // two poops, clear of P1's tray (its ⏸ is next to Home's row). In a tournament race Home reads
-    // Bracket and opens the tournament panel instead of leaving.
+    // Home on the join screen; "🏅 Tournament" (a plain match only) sits under the title, above the
+    // halves' labels, opaque over the divider. In a tournament race Home reads Bracket and opens the
+    // tournament panel instead of leaving.
     const tournament = Boolean(this.match.tournament);
     this.homeBox = { id: 'home', x: cx, y: 1067, width: 360, height: 88 };
     this.homeButton = createButton(this, this.homeBox, t(this.locale, tournament ? 'tournamentBracket' : 'tapToHome'), { ...STYLE, fontSize: '40px' }, { depth: 52 });
-    this.tournamentBox = tournament ? null : { id: 'tournament', x: cx, y: 840, width: 360, height: 88 };
-    this.tournamentButton = this.tournamentBox ? createButton(this, this.tournamentBox, t(this.locale, 'tournamentButton'), { ...STYLE, fontSize: '36px', color: GOLD }, { depth: 52 }) : null;
+    this.tournamentBox = tournament ? null : { id: 'tournament', x: cx, y: 322, width: 360, height: 88 };
+    this.tournamentButton = this.tournamentBox ? createButton(this, this.tournamentBox, t(this.locale, 'tournamentButton'), { ...STYLE, fontSize: '36px', color: GOLD }, { depth: 52, fillAlpha: 1 }) : null;
     // The countdown, centred on the canvas, and the shared PAUSED banner across both halves.
     this.countText = this.add.text(cx, GAME_HEIGHT * 0.45, '', { ...STYLE, fontSize: '160px', strokeThickness: 16 }).setOrigin(0.5).setDepth(55).setVisible(false);
     const [pauseTitle, pauseHint] = pauseBannerText(this.locale).split('\n');
