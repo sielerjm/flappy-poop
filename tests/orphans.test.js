@@ -23,6 +23,7 @@ const ALLOWED_EXPORTS = {
   topScores: 'test hook: tests/save.test.js reads top lists as plain numbers (its last game use, isNewTop, is gone)',
   tournamentPayload: 'Release B in progress: the podium posts it from step 4 (remove in step 4)',
   linkedCount: 'Release B in progress: the podium reads it from step 4 (remove in step 4)',
+  fetchTournamentBoard: 'Release B in progress: the 🏅 board tab reads it from step 5 (remove in step 5)',
 };
 
 /** UI string keys no source names literally: prefix → why (they are built at run time). */

@@ -405,5 +405,7 @@ export const LEADERBOARD = {
   storageKey: 'flappyPoop.leaderboard', // localStorage key for the last confirmed submit
   mergesKey: 'flappyPoop.merges', // localStorage key for account merges still to send (merge_players after a Load user code)
   renameKey: 'flappyPoop.rename', // localStorage key for a rename typed on this device, until a post carries it to the board (else the device adopts the board's name)
+  tournamentsKey: 'flappyPoop.tournaments', // localStorage key for finished tournaments (🏅) the board has not confirmed yet (submit_tournament)
+  tournamentQueueMax: 20, // finished tournaments kept for a later post; the oldest goes first when full
   maxScore: 1000, // scores above this are not submitted (matches the CHECK and submit_score() in db/schema.sql); a full 285-pair run with ×2 fits
 };

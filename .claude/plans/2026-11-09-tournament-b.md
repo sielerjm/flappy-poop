@@ -1,6 +1,6 @@
 # Plan: Tournament mode, Release B (🏅 medal board and head-to-head rows)
 - Created: 2026-11-09 (revised the same day after a critical review)
-- Status: in progress (step 3)
+- Status: in progress (step 4)
 - Baseline: `9a70e6a` on `main` (Release A plus the join-row fix; 8 commits ahead of origin, not pushed), tree clean.
 - Whole-suite verification: `npm test` (430 pass); `npm run smoke` (full; tournament 9, versus 81).
 - Source: Michael's `.claude/plans/tournament_mode_bracket_0b9f821f.plan.md` (steps 7–10); archive it with this plan when done.
@@ -77,11 +77,12 @@ Release A plays a whole tournament on one device but saves nothing. Release B se
 - **Handoff:** Michael applies `db/schema.sql` in Supabase; then a read-only live probe calls `tournament_board()` and a `submit_tournament` with a garbage payload (must be rejected).
 - Result: done. Schema: `tournaments`, `tournament_stats`, `tournament_matchups` (RLS, all revoked), `submit_tournament` (receipt under a per-host advisory lock → 'duplicate' before the 60 s pace; per-round counts, once per round, semi sides from quarter winners or byes, final from semi winners or the bye, bronze from semi losers, winner = raceOutcome of its slots; medals derived; names via scores / name_blocked / 'Player'), `tournament_board` (gold, silver, bronze, best, earlier first; `me`, the caller appended below the top; limit 1–100), `fold_player` folds stats and re-points matchups and receipts; header and maintenance lines. PL/pgSQL gotcha: a bare CASE inside `IF … THEN` ends the condition at its THEN; parenthesised. PGlite pinned 0.5.12 (26 Oct; 0.5.16 was published today). tests/schema.test.js 10 tests: pins, anon denied, N 3–8 medals = placings, 300 legal brackets accepted, 16 forgeries rejected with no receipt left, duplicate / rate limit, guests, board order and `me`, names, merge fold. npm test 442/442. Step 1 commit `a022b86`.
 
-### Step 3/6: Client API, queue and sync  [pending]
+### Step 3/6: Client API, queue and sync  [done]
 - **Change:** `src/leaderboard.js`: `submitTournament`, `fetchTournamentBoard` (allowlisted until step 5), `createTournamentQueue`; `LEADERBOARD.tournamentsKey`, `tournamentQueueMax`; `Play.syncLeaderboard` drains before the name check.
 - **Tests (`tests/leaderboard.test.js`, fake fetch):** the RPC path and `p_*` body; `"ok"`, `"duplicate"`, empty body, 400 rate limited, other 400, timeout and `dataApi` '' map to ok / keep / rejected; the queue survives throwing storage, caps at 20 dropping the oldest, keeps order, stops at the first keep, records outcomes, and a concurrent drain reuses the in-flight promise; the storage-key distinctness test gains the new key; board rows are validated.
 - **Verify:** `npm test`; full smoke (score sync unchanged).
 - **Commit:** `feat(tournament-b, step 3/6): queue and post finished tournaments with the leaderboard sync`
+- Result: done. `submitTournament` → 'ok' (ok / duplicate / empty 2xx), 'rejected' only on a 400 saying 'bad tournament' / 'bad host id', else 'keep' (offline, timeout, rate limited, 404 before the schema is applied, 5xx). `fetchTournamentBoard` (rows validated, rank order, `me`). `createTournamentQueue`: entries { payload, hostId }, once per id, oldest dropped past `tournamentQueueMax`; drain state and outcomes shared per storage (WeakMap), so two Play instances or the podium and a game over join one drain. `LEADERBOARD.tournamentsKey` / `tournamentQueueMax`. `syncLeaderboard` drains after the merges and before the no-username return. `fetchTournamentBoard` allowlisted until step 5. npm test 447/447; full smoke 329/329. Step 2 commit `e637cc6`.
 
 ### Step 4/6: Podium sends the tournament  [pending]
 - **Change:** `tournamentPanel.js`: `ensureId` on "Use my player"; enqueue and `posted` state in `onRace`; the podium status from the state; `onRace` awaits `play.syncLeaderboard()` and re-renders. Strings (en + zh-Hans + notes): the five status lines; `tournamentHowBody`'s last sentence → "Players who joined with their user code get their medals on the 🏅 board; guests aren't saved."; the panel's header comment and the notes' Tournament bullet lose "nothing is saved". Step-1 allowlist entries come off.

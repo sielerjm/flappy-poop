@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { LEADERBOARD } from '../src/config.js';
-import { createSubmitStore, createMergeStore, createRenameStore, nameAction, submitPlan, submitPlans, submitScore, checkNameAvailable, mergePlayers, fetchPlayerName, fetchTop, fetchRank } from '../src/leaderboard.js';
+import { createSubmitStore, createMergeStore, createRenameStore, createTournamentQueue, nameAction, submitPlan, submitPlans, submitScore, submitTournament, checkNameAvailable, mergePlayers, fetchPlayerName, fetchTop, fetchRank, fetchTournamentBoard } from '../src/leaderboard.js';
 
 const config = { dataApi: 'https://x.example/rest/v1', publishableKey: 'sb_publishable_test', timeoutMs: 50, limit: 10, maxScore: 200 };
 
@@ -47,7 +47,8 @@ test('LEADERBOARD config is complete and points at a Supabase Data API over http
   assert.equal(typeof LEADERBOARD.mergesKey, 'string');
   assert.notEqual(LEADERBOARD.mergesKey, LEADERBOARD.storageKey);
   assert.equal(typeof LEADERBOARD.renameKey, 'string');
-  assert.equal(new Set([LEADERBOARD.storageKey, LEADERBOARD.mergesKey, LEADERBOARD.renameKey]).size, 3);
+  assert.equal(new Set([LEADERBOARD.storageKey, LEADERBOARD.mergesKey, LEADERBOARD.renameKey, LEADERBOARD.tournamentsKey]).size, 4);
+  assert.ok(Number.isInteger(LEADERBOARD.tournamentQueueMax) && LEADERBOARD.tournamentQueueMax >= 1);
 });
 
 // ---------------------------------------------------------------------------
@@ -373,4 +374,102 @@ test('LEADERBOARD.maxScore matches the score cap in db/schema.sql (column CHECK 
   assert.ok(check && guard, 'both caps found in schema.sql');
   assert.equal(Number(check[1]), LEADERBOARD.maxScore);
   assert.equal(Number(guard[1]), LEADERBOARD.maxScore);
+});
+
+// ---------------------------------------------------------------------------
+// Tournaments (🏅): submitTournament, fetchTournamentBoard, the queue
+
+const TID = 'TTTTTTTTTTTTTTTTTTTTTT';
+const HOST = 'HHHHHHHHHHHHHHHHHHHHHH';
+const payload = (id = TID) => ({ id, levelPipes: [10, 25], players: [{ id: ID, name: 'Alice' }, { id: null, name: null }, { id: null, name: null }], matches: [] });
+
+test('submitTournament posts the payload and host id to submit_tournament', async () => {
+  const fetch = fakeFetch({ body: '"ok"' });
+  assert.equal(await submitTournament(payload(), HOST, { fetch, config }), 'ok');
+  assert.equal(fetch.calls.length, 1);
+  assert.equal(fetch.calls[0].url, 'https://x.example/rest/v1/rpc/submit_tournament');
+  assert.equal(fetch.calls[0].method, 'POST');
+  assert.deepEqual(fetch.calls[0].body, { p_host_id: HOST, p_tournament: payload() });
+});
+
+test('submitTournament: ok / duplicate / empty → ok; a refused bracket → rejected; anything else → keep', async () => {
+  const at = (status, body) => submitTournament(payload(), HOST, { fetch: fakeFetch({ status, body }), config });
+  assert.equal(await at(200, '"ok"'), 'ok');
+  assert.equal(await at(200, '"duplicate"'), 'ok', 'the server already had it');
+  assert.equal(await at(204, ''), 'ok');
+  assert.equal(await at(400, { message: 'bad tournament: final side 0' }), 'rejected');
+  assert.equal(await at(400, { message: 'bad host id' }), 'rejected');
+  assert.equal(await at(400, { message: 'rate limited' }), 'keep', 'paced: next sync');
+  assert.equal(await at(404, { message: 'Could not find the function public.submit_tournament' }), 'keep', 'schema not applied yet: wait');
+  assert.equal(await at(500, 'oops'), 'keep');
+  const never = (url, init) => new Promise((_, reject) => init.signal.addEventListener('abort', () => reject(new Error('aborted'))));
+  assert.equal(await submitTournament(payload(), HOST, { fetch: never, config }), 'keep', 'a timeout');
+  assert.equal(await submitTournament(payload(), HOST, { fetch: fakeFetch(), config: { ...config, dataApi: '' } }), 'keep', 'board disabled');
+  assert.equal(await submitTournament(payload('short'), HOST, { fetch: fakeFetch(), config }), 'rejected', 'a malformed entry is never sent');
+  assert.equal(await submitTournament(payload(), 'nope', { fetch: fakeFetch(), config }), 'rejected');
+});
+
+test('fetchTournamentBoard: the rows in rank order with me, or null on junk / failure', async () => {
+  const rows = [
+    { rank: 2, name: 'Bob', best_score: 40, gold: 1, silver: 0, bronze: 0, events: 2, me: false },
+    { rank: 1, name: 'Alice', best_score: 30, gold: 2, silver: 1, bronze: 0, events: 3, me: true },
+  ];
+  const fetch = fakeFetch({ body: rows });
+  const out = await fetchTournamentBoard(ID, { fetch, config });
+  assert.deepEqual(out, [
+    { rank: 1, name: 'Alice', best: 30, gold: 2, silver: 1, bronze: 0, events: 3, me: true },
+    { rank: 2, name: 'Bob', best: 40, gold: 1, silver: 0, bronze: 0, events: 2, me: false },
+  ]);
+  assert.equal(fetch.calls[0].url, 'https://x.example/rest/v1/rpc/tournament_board');
+  assert.deepEqual(fetch.calls[0].body, { p_player_id: ID, p_limit: config.limit });
+  const anon = fakeFetch({ body: [] });
+  assert.deepEqual(await fetchTournamentBoard(null, { fetch: anon, config }), []);
+  assert.deepEqual(anon.calls[0].body, { p_player_id: null, p_limit: config.limit }, 'no id: no caller row');
+  assert.equal(await fetchTournamentBoard(ID, { fetch: fakeFetch({ body: [{ ...rows[0], gold: -1 }] }), config }), null);
+  assert.equal(await fetchTournamentBoard(ID, { fetch: fakeFetch({ body: [{ ...rows[0], name: '' }] }), config }), null);
+  assert.equal(await fetchTournamentBoard(ID, { fetch: fakeFetch({ status: 500 }), config }), null);
+});
+
+test('tournament queue: once per id, oldest first, capped, junk dropped, survives throwing storage', () => {
+  const storage = fakeStorage();
+  const q = createTournamentQueue(storage, { key: 'k', max: 3 });
+  assert.deepEqual(q.load(), []);
+  assert.equal(q.add(payload('a'.repeat(22)), 'nope'), null, 'a bad host id is not queued');
+  for (const c of 'abcd') q.add(payload(c.repeat(22)), HOST);
+  q.add(payload('b'.repeat(22)), HOST);
+  assert.deepEqual(q.load().map((e) => e.payload.id[0]), ['b', 'c', 'd'], 'the oldest went; no repeats');
+  assert.equal(q.outcome('c'.repeat(22)), 'queued');
+  assert.equal(q.outcome('z'.repeat(22)), null);
+  storage.setItem('k', JSON.stringify([{ payload: payload('e'.repeat(22)), hostId: HOST }, { junk: true }, 'x']));
+  assert.equal(q.load().length, 1);
+  storage.setItem('k', '{not json');
+  assert.deepEqual(q.load(), []);
+  const broken = createTournamentQueue(boom, { key: 'k' });
+  assert.deepEqual(broken.load(), []);
+  assert.ok(broken.add(payload(), HOST), 'add does not throw');
+});
+
+test('tournament queue drain: in order, stops at the first keep, records outcomes, one drain at a time', async () => {
+  const storage = fakeStorage();
+  const q = createTournamentQueue(storage, { key: 'k' });
+  for (const c of 'abc') q.add(payload(c.repeat(22)), HOST);
+  const answers = { a: 'ok', b: 'rejected', c: 'keep' };
+  const seen = [];
+  const submit = async (p) => {
+    seen.push(p.id[0]);
+    await new Promise((r) => setTimeout(r, 5));
+    return answers[p.id[0]];
+  };
+  const [first, second] = [q.drain(submit), createTournamentQueue(storage, { key: 'k' }).drain(submit)];
+  assert.equal(first, second, 'a second drain on the same storage joins the first');
+  assert.equal(await first, 2);
+  assert.deepEqual(seen, ['a', 'b', 'c'], 'each posted once, in order');
+  assert.equal(q.outcome('a'.repeat(22)), 'sent');
+  assert.equal(q.outcome('b'.repeat(22)), 'rejected');
+  assert.equal(q.outcome('c'.repeat(22)), 'queued', 'kept for the next sync');
+  answers.c = 'ok';
+  q.add(payload('d'.repeat(22)), HOST);
+  answers.d = 'keep';
+  assert.equal(await q.drain(async (p) => (p.id[0] === 'c' ? 'ok' : (() => { throw new Error('boom'); })())), 1, 'a throwing submit counts as keep');
+  assert.deepEqual(q.load().map((e) => e.payload.id[0]), ['d']);
 });

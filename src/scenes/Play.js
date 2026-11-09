@@ -105,7 +105,7 @@ import { createGlow, createRectGlow } from '../ui/glow.js';
 import { createFinishTexture } from '../ui/finish.js';
 import { createLightTexture } from '../ui/pipeShade.js';
 import { createLevelBar } from '../ui/levelBar.js';
-import { createSubmitStore, createMergeStore, createRenameStore, submitPlans, submitScore, checkNameAvailable, mergePlayers, fetchPlayerName, nameAction } from '../leaderboard.js';
+import { createSubmitStore, createMergeStore, createRenameStore, createTournamentQueue, submitPlans, submitScore, submitTournament, checkNameAvailable, mergePlayers, fetchPlayerName, nameAction } from '../leaderboard.js';
 import { createButton } from '../ui/button.js';
 import { createToggle } from '../ui/toggle.js';
 import { openSavePanel, isSavePanelOpen, showAdoptedName } from '../ui/savePanel.js';
@@ -182,6 +182,7 @@ export class Play extends Phaser.Scene {
     if (this.save.top.length === 0 && legacyBest > 0) this.save = saveLocal(recordScore(this.save, legacyBest));
     this.submitStore = createSubmitStore(); // last confirmed leaderboard submit
     this.mergeStore = createMergeStore(); // account merges (a pasted user code) the board has not confirmed yet
+    this.tournamentQueue = createTournamentQueue(); // finished tournaments (🏅) the board has not confirmed yet
     this.renameStore = createRenameStore(); // a rename typed on this device, until a post carries it to the board
     this.boardNameTaken = false; // the last sync was refused because another player holds this username
     // Levels: pipe pairs passed decide the level; speed is per level, gap is fixed.
@@ -980,8 +981,9 @@ export class Play extends Phaser.Scene {
   }
 
   /**
-   * Post the player's best to the shared leaderboard when it is newer than the
-   * last confirmed submit. Named players only; the id is created on first use
+   * Send queued merges, then finished tournaments (🏅, tournamentQueue: they post
+   * whether or not this device has a username), then post the player's best to
+   * the shared leaderboard when it is newer than the last confirmed submit. Named players only; the id is created on first use
    * (same as the first save-code export). Before posting, the device takes the
    * board's name for its player unless the player renamed here (nameAction), so
    * a rename made on another device sticks. Resolves on every outcome; a failed
@@ -998,14 +1000,16 @@ export class Play extends Phaser.Scene {
         ),
       Promise.resolve(),
     );
-    if (!this.save?.name) return merges.catch(() => {});
+    // Finished tournaments next: they carry their own host id, so they post even without a username here.
+    const tournaments = merges.then(() => this.tournamentQueue.drain((payload, hostId) => submitTournament(payload, hostId)));
+    if (!this.save?.name) return tournaments.catch(() => {});
     if (!this.save.id) this.save = ensureId(this.save);
     const id = this.save.id;
     const renamedHere = () => {
       const p = this.renameStore.load();
       return Boolean(p && p.id === id && p.name === this.save.name);
     };
-    return merges
+    return tournaments
       .then(() => (renamedHere() ? null : this.fetchPlayerName(id))) // a rename typed here goes to the board, not the other way round
       .then((board) => {
         if (this.save?.id === id && nameAction({ local: this.save.name, board, pending: this.renameStore.load(), id }) === 'adopt') this.adoptBoardName(board);

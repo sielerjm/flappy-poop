@@ -5,9 +5,9 @@
 // Every network function resolves (never rejects) and reports failure as
 // false / null (submitScore: { ok: false, reason }): the game treats the
 // leaderboard as garnish and never waits on it. Writes go through the SQL
-// functions in db/schema.sql (submit_score, merge_players); reads are a plain
-// select on the columns the publishable key is allowed to see, plus the
-// name_available, player_rank and player_name functions.
+// functions in db/schema.sql (submit_score, merge_players, submit_tournament);
+// reads are a plain select on the columns the publishable key is allowed to see,
+// plus the name_available, player_rank, player_name and tournament_board functions.
 
 import { LEADERBOARD } from './config.js';
 import { recordScore, bestByToilet, validateName } from './save.js';
@@ -238,6 +238,98 @@ export function nameAction({ local, board, pending, id } = {}) {
 // ---------------------------------------------------------------------------
 // Network
 
+// ---------------------------------------------------------------------------
+// Finished tournaments (🏅) still to send (submit_tournament). One entry per
+// tournament: { payload (src/tournament.js tournamentPayload), hostId }. An entry
+// leaves when the server answers: accepted (or already had it), or rejected as a
+// bracket it cannot accept. Offline, rate limited or any other trouble keeps it for
+// the next sync. Drains are shared per storage, so the podium and a game over that
+// sync at the same moment post each tournament once; the outcome of each id is
+// remembered for this page load (the podium's status line).
+
+/** { payload, hostId } with a valid tournament id and host id, or null. */
+function normalizeEntry(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+  const { payload, hostId } = raw;
+  if (typeof hostId !== 'string' || !ID_RE.test(hostId)) return null;
+  if (!payload || typeof payload !== 'object' || typeof payload.id !== 'string' || !ID_RE.test(payload.id)) return null;
+  if (!Array.isArray(payload.players) || !Array.isArray(payload.matches)) return null;
+  return { payload, hostId };
+}
+
+const queueShared = new WeakMap(); // storage → { inflight, outcomes }
+const queueFallback = { inflight: null, outcomes: new Map() };
+
+export function createTournamentQueue(storage = globalThis.localStorage, { key = LEADERBOARD.tournamentsKey, max = LEADERBOARD.tournamentQueueMax } = {}) {
+  let shared = queueFallback;
+  if (storage && typeof storage === 'object') {
+    if (!queueShared.has(storage)) queueShared.set(storage, { inflight: null, outcomes: new Map() });
+    shared = queueShared.get(storage);
+  }
+  const write = (entries) => {
+    try {
+      if (entries.length) storage?.setItem(key, JSON.stringify(entries));
+      else storage?.removeItem(key);
+    } catch {
+      /* storage unavailable: the tournament is lost with the page (it was a bonus anyway) */
+    }
+  };
+  return {
+    /** The queued entries, oldest first (junk dropped). */
+    load() {
+      try {
+        const raw = storage?.getItem(key);
+        const parsed = raw == null ? [] : JSON.parse(raw);
+        return Array.isArray(parsed) ? parsed.map(normalizeEntry).filter(Boolean) : [];
+      } catch {
+        return [];
+      }
+    },
+    /** Queue a finished tournament once; the oldest go when more than `max` wait. Returns the entry or null. */
+    add(payload, hostId) {
+      const e = normalizeEntry({ payload, hostId });
+      if (!e) return null;
+      const all = this.load();
+      if (all.some((q) => q.payload.id === e.payload.id)) return e;
+      write([...all, e].slice(-Math.max(1, max)));
+      shared.outcomes.delete(e.payload.id);
+      return e;
+    },
+    /** 'queued' while waiting, 'sent' / 'rejected' once answered (this page load), else null. */
+    outcome(id) {
+      if (this.load().some((q) => q.payload.id === id)) return 'queued';
+      return shared.outcomes.get(id) ?? null;
+    },
+    /**
+     * Post the queue in order with `submit(payload, hostId)` → 'ok' | 'keep' | 'rejected',
+     * stopping at the first 'keep'. A drain already running is returned instead of a
+     * second one. Resolves (never rejects) with how many entries left the queue.
+     */
+    drain(submit) {
+      if (shared.inflight) return shared.inflight;
+      shared.inflight = (async () => {
+        let done = 0;
+        for (const entry of this.load()) {
+          let res = 'keep';
+          try {
+            res = await submit(entry.payload, entry.hostId);
+          } catch {
+            res = 'keep';
+          }
+          if (res !== 'ok' && res !== 'rejected') break;
+          write(this.load().filter((q) => q.payload.id !== entry.payload.id));
+          shared.outcomes.set(entry.payload.id, res === 'ok' ? 'sent' : 'rejected');
+          done += 1;
+        }
+        return done;
+      })().finally(() => {
+        shared.inflight = null;
+      });
+      return shared.inflight;
+    },
+  };
+}
+
 /**
  * One request with the apikey header and a timeout. Resolves to the parsed
  * JSON body (undefined for an empty 2xx body) or to null on any failure. With
@@ -335,6 +427,47 @@ export async function fetchPlayerName(playerId, opts = {}) {
   if (typeof out !== 'string') return null;
   const { ok, name } = validateName(out);
   return ok && name === out ? out : null;
+}
+
+/**
+ * Post a finished tournament (submit_tournament): 'ok' when the server has it (accepted
+ * now, or a duplicate of one it already had), 'rejected' when it refused the bracket
+ * ('bad tournament: …' or 'bad host id': it will never accept it), else 'keep'
+ * (offline, rate limited, the function not deployed yet, any other trouble).
+ */
+export async function submitTournament(payload, hostId, opts = {}) {
+  const e = normalizeEntry({ payload, hostId });
+  if (!e) return 'rejected';
+  const out = await request('/rpc/submit_tournament', { method: 'POST', errors: true, body: { p_host_id: e.hostId, p_tournament: e.payload } }, opts);
+  if (out === null) return 'keep';
+  if (out?.error) return out.status === 400 && /bad tournament|bad host id/i.test(out.message) ? 'rejected' : 'keep';
+  return 'ok';
+}
+
+const COUNT = (v) => Number.isInteger(v) && v >= 0;
+
+/** A 🏅 board row { rank, name, best, gold, silver, bronze, events, me } from a server row, or null. */
+function normalizeMedalRow(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+  const { rank, name, best_score: best, gold, silver, bronze, events, me } = raw;
+  if (!Number.isInteger(rank) || rank < 1 || typeof name !== 'string' || !validateName(name).ok) return null;
+  if (![best, gold, silver, bronze, events].every(COUNT)) return null;
+  return { rank, name, best, gold, silver, bronze, events, me: me === true };
+}
+
+/**
+ * The 🏅 medal board (tournament_board): the top rows by gold, silver, bronze, best
+ * race, plus this player's row (me) when it is below them; null when the board
+ * cannot be reached.
+ */
+export async function fetchTournamentBoard(playerId, opts = {}) {
+  const limit = opts.config?.limit ?? LEADERBOARD.limit;
+  const id = typeof playerId === 'string' && ID_RE.test(playerId) ? playerId : null;
+  const out = await request('/rpc/tournament_board', { method: 'POST', body: { p_player_id: id, p_limit: limit } }, opts);
+  if (!Array.isArray(out)) return null;
+  const rows = out.map(normalizeMedalRow);
+  if (rows.some((r) => r === null)) return null;
+  return rows.sort((a, b) => a.rank - b.rank);
 }
 
 /** A board row { name, score, toilet, level } from a server row, or null. A missing level reads as 1. */
