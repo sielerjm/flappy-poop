@@ -1,6 +1,6 @@
 # Plan: Fix the flaky moving-pipes smoke check; moving pipes speed up linearly per level and are a lighter pink
 - Created: 2026-11-09
-- Status: in progress (step 3)
+- Status: in progress (step 4)
 - Baseline: `510afe2` on `main` (0.8.3 pushed), tree clean.
 - Whole-suite verification: `npm test` (406 pass at baseline); `npm run smoke` (315 checks; the moving-pipes check fails now and then).
 - Repo plan copy: `.claude/plans/2026-11-09-moving-pipes-speed.md` (`git add -f`), archived when done.
@@ -67,7 +67,7 @@
 - Commit: `feat(pipes, step 2/4): moving pipes speed up 20 px/s per level from level 4`
 - Result: done. Rows L4–L7: 30/40/60/80 px every 6000/4000/4000/4000 ms, crossing shift 21.7/43.3/65.0/86.6 px (limit 91.5). Deviation: past the table the whole last row repeats (speed included), so the 4 s floor holds and 'the last row repeats' stays true; no level exists past 7. npm test 407/407 (new: the speed rises by speedStepPx each level); full smoke 315/315. The L7 look is checked with step 3's screenshots. Step 1 commit `955df10`.
 
-### Step 3/4 — Moving pipes are a lighter pink
+### Step 3/4 — Moving pipes are a lighter pink  [done]
 - Why: Michael wants moving pairs told apart from still ones at a glance.
 - How: Phaser's tint multiplies, so it can only darken. Instead, paint a second texture once, following `createFinishTexture` (`src/ui/finish.js`):
   - new `createLightTexture(scene, srcKey, key, frac)` in `src/ui/pipeShade.js`, idempotent (`textures.exists`);
@@ -82,6 +82,7 @@
   - full smoke;
   - a test-mode screenshot at level 7 with a moving and a still pair side by side, for Michael to judge the shade; `lightenFrac` is the one number to change.
 - Commit: `feat(pipes, step 3/4): moving pipes are a lighter pink`
+- Result: done. Sampled pipe pixel rgb 232,94,150 → 238,134,176 (alpha kept). npm test 407/407 (lightenFrac range); smoke testmode adds the shade check; full smoke 316/316. Level-7 screenshots in the scratchpad (shots5/l7_a, l7_b): the lighter pair stands apart, and its gap moved ~80 px in 0.5 s. Step 2 commit `e75f4b0`.
 
 ### Step 4/4 — Docs and 0.8.4
 - `AGENTS.md:71-77` (the moving-pipes paragraph: speed knobs, ¾ clearance, the lighter `pipe-moving` texture), the `src/ui/` tree (pipeShade.js), `AGENTS.md:967` (`pipeMove.test.js` line); README if it mentions the motion (grep).

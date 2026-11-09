@@ -102,6 +102,7 @@ import { createTray } from '../ui/tray.js';
 import { createFocus } from '../ui/focus.js';
 import { createGlow, createRectGlow } from '../ui/glow.js';
 import { createFinishTexture } from '../ui/finish.js';
+import { createLightTexture } from '../ui/pipeShade.js';
 import { createLevelBar } from '../ui/levelBar.js';
 import { createSubmitStore, createMergeStore, createRenameStore, submitPlans, submitScore, checkNameAvailable, mergePlayers, fetchPlayerName, nameAction } from '../leaderboard.js';
 import { createButton } from '../ui/button.js';
@@ -195,6 +196,7 @@ export class Play extends Phaser.Scene {
     this.breakBob = null;
     this.breakGlide = null;
     createFinishTexture(this, 'finish', { width: T.levels.finishWidthPx, height: GAME_HEIGHT, check: T.levels.finishCheckPx });
+    createLightTexture(this, 'pipe', 'pipe-moving', T.pipeMove.lightenFrac); // a moving pair's lighter pink
     this.state = 'ready'; // 'ready' | 'playing' | 'paused' | 'respawn' | 'dead' ('respawn': a match half between a crash and its restart)
     this.won = false; // set by win(): the run ended past the final level's finish line
     // A match's respawn (startRespawn / tickRespawn / endRespawn): the clock advances by delta
@@ -1800,7 +1802,10 @@ export class Play extends Phaser.Scene {
     // follows in update() (the 1280 px texture covers any gap position, so only y changes). Rolled
     // after the item and bean draws so levels below fromLevel and the draws before it keep their sequence.
     const move = this.course.pipeMove(n, this.level, gapY, gapBounds(gapCfg), { centred });
-    if (move) top.setData({ move, elapsed: 0, mate: bottom, gapH });
+    if (move) {
+      top.setData({ move, elapsed: 0, mate: bottom, gapH });
+      for (const p of [top, bottom]) p.setTexture('pipe-moving', '__BASE'); // lighter pink: same size, so the bodies stay as set
+    }
     // Fiber, mystery boxes and coins sit between pairs like a bean (and yield to a bean rolled for the same pair);
     // probiotic and bacteria sit in the gap, behind the pipes, moving from moveFromLevel.
     // Before bandMoveFromLevel fiber and beans hold still midway between this gap and the next.

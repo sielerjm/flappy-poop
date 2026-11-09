@@ -197,6 +197,7 @@ test('moving pipes: from level 4, chances in (0, 1], slow periods, the swing fit
   assert.ok(M.fromLevel >= 4, 'levels 1–3 never move');
   assert.equal(M.chance.length, M.ampPx.length);
   assert.ok(M.speedPx > 0 && M.speedStepPx >= 0, 'a positive start speed that never falls');
+  assert.ok(M.lightenFrac >= 0.1 && M.lightenFrac <= 0.5, `lightenFrac ${M.lightenFrac}: visibly lighter, still pink`);
   const clearance = T.gapHeight / 2 - T.poopRadius;
   const band = GAME_HEIGHT - T.ceilingHeight - T.groundHeight - 2 * T.gapMargin - T.gapHeight; // room the gap centre can travel
   for (let i = 0; i < M.chance.length; i += 1) {

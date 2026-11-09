@@ -1443,7 +1443,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         // its gap. After 400 ms the gap has moved, x has scrolled, the mate is still gapH below, the body
         // follows the sprite, the item sits on the gap centre; the pair after a fart (centred) never moves.
         const mvSpawn = (centred) =>
-          evaluate(`import('./src/config.js').then((m) => { const p = ${play}; const row = m.TUNING.pipeMove.chance; const keep = row[0]; row[0] = 1; const r = p.course.rng; p.course.rng = () => 0.5; p.centreNextGap = ${centred}; p.nextGapY = ${centred} ? null : 640; try { p.spawnPipePair(); } finally { p.course.rng = r; row[0] = keep; } const top = p.pipes.getChildren().filter((c) => c.getData('scoring')).pop(); globalThis.__mvTop = top; return JSON.stringify({ moves: Boolean(top.getData('move')), y: top.y }); })`).then(JSON.parse);
+          evaluate(`import('./src/config.js').then((m) => { const p = ${play}; const row = m.TUNING.pipeMove.chance; const keep = row[0]; row[0] = 1; const r = p.course.rng; p.course.rng = () => 0.5; p.centreNextGap = ${centred}; p.nextGapY = ${centred} ? null : 640; try { p.spawnPipePair(); } finally { p.course.rng = r; row[0] = keep; } const top = p.pipes.getChildren().filter((c) => c.getData('scoring')).pop(); globalThis.__mvTop = top; return JSON.stringify({ moves: Boolean(top.getData('move')), y: top.y, tex: top.texture.key, mateTex: top.getData('mate')?.texture.key ?? null }); })`).then(JSON.parse);
         const mvCentred = await mvSpawn(true);
         await evaluate(`(() => { const top = globalThis.__mvTop; top.getData('mate')?.destroy(); top.destroy(); return true; })()`);
         const mv0 = await mvSpawn(false);
@@ -1456,6 +1456,13 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await sleep(400);
         const mvB = await mvRead();
         await evaluate(`(() => { const top = globalThis.__mvTop; globalThis.__mvItem?.destroy(); top.getData('mate').destroy(); top.destroy(); globalThis.__mvTop = globalThis.__mvItem = null; return true; })()`);
+        // A moving pair wears the lighter pink: both columns on 'pipe-moving', a still pair on 'pipe'; the same pixel is lighter, not white.
+        const shade = await evaluate(`(() => { const t = ${play}.textures; const w = t.get('pipe').getSourceImage().width; const px = (key) => { const c = t.getPixel(Math.floor(w / 2), 600, key, '__BASE'); return c ? [c.red, c.green, c.blue, c.alpha] : null; }; return JSON.stringify({ still: px('pipe'), moving: px('pipe-moving') }); })()`).then(JSON.parse);
+        const sum = (c) => c[0] + c[1] + c[2];
+        ok(
+          mvCentred.tex === 'pipe' && mv0.tex === 'pipe-moving' && mv0.mateTex === 'pipe-moving' && shade.still && shade.moving && sum(shade.moving) > sum(shade.still) + 20 && sum(shade.moving) < 3 * 250 && shade.moving[3] === shade.still[3],
+          `a moving pair is a lighter pink (both columns ${mv0.tex}; the still pair ${mvCentred.tex}): rgb ${shade.still.slice(0, 3).join(',')} → ${shade.moving.slice(0, 3).join(',')}, alpha kept`,
+        );
         const expect = TT.pipeMove.ampPx[0];
         ok(
           !mvCentred.moves && mv0.moves && mvA.amp === expect && mvB.x < mvA.x && Math.abs(mvB.y - mvA.y) > 4 && Math.abs(mvA.mateDy - mvA.gapH) < 0.01 && Math.abs(mvB.mateDy - mvA.gapH) < 0.01 && Math.abs(mvB.bodyDy - mvA.bodyDy) < 2 && Math.abs(mvB.itemDy - mvA.gapH / 2) < 0.01 && mvA.rides && mvB.rides,
