@@ -144,6 +144,11 @@ Inspired by Flappy Bird`,
     leaderboardNotYet: 'Your best is not on the board yet',
     leaderboardNameTaken: 'Your username belongs to another player: tap your name on the home screen to fix it',
     leaderboardLevel: 'LV',
+    medalBoardTitle: 'MEDAL BOARD',
+    medalBoardBest: 'BEST RACE',
+    medalBoardEmpty: 'No medals yet: finish a tournament to start the board',
+    medalBoardJoin: 'Join a tournament with your user code to get on this board',
+    medalBoardYou: 'You: #{rank} · {events} tournaments',
     saveLeaderboardNote: 'Your username and best score are shown on the public leaderboard',
     loadUserButton: 'Load user',
     versusTitle: '2 PLAYERS',
@@ -334,6 +339,11 @@ Inspired by Flappy Bird`,
     leaderboardNotYet: '你的最高分尚未上榜',
     leaderboardNameTaken: '你的用户名属于另一位玩家：请在首页点你的名字处理',
     leaderboardLevel: '关卡',
+    medalBoardTitle: '奖牌榜',
+    medalBoardBest: '单场最佳',
+    medalBoardEmpty: '还没有奖牌：完成一届锦标赛就能上榜',
+    medalBoardJoin: '用你的用户码参加锦标赛，就能上这个榜',
+    medalBoardYou: '你：第 {rank} 名 · 参赛 {events} 届',
     saveLeaderboardNote: '你的用户名和最高分会显示在公开排行榜上',
     loadUserButton: '载入用户',
     versusTitle: '双人模式',
@@ -505,6 +515,13 @@ export function shareCardFooter(locale, url = '') {
 }
 
 /** "Your best 🚽 41 is #23 of 150" for a player who is not on the board. */
+/** The 🏅 board's footer line for the player's own row: "You: #3 · 5 tournaments". */
+export function medalYouText(locale, row) {
+  return t(locale, 'medalBoardYou')
+    .replace('{rank}', String(row?.rank ?? 0))
+    .replace('{events}', String(row?.events ?? 0));
+}
+
 export function rankText(locale, info) {
   return t(locale, 'leaderboardRank')
     .replace('{score}', formatScore({ score: info?.score ?? 0, toilet: Boolean(info?.toilet) }))

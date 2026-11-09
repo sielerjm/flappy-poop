@@ -55,6 +55,10 @@ export function createToggle(scene, box, { on = false, depth = 20, glyph = TOILE
       if (leftGlyph) scene.tweens.add({ targets: leftGlyph, alpha: state ? T.toiletOffAlpha : 1, duration: T.toiletKnobMs });
       return this;
     },
+    /** Its game objects (an overlay with a scroll view keeps them on the main camera). */
+    objects() {
+      return [g, knob, emoji, leftGlyph].filter(Boolean);
+    },
     setVisible(visible) {
       g.setVisible(visible);
       knob.setVisible(visible);

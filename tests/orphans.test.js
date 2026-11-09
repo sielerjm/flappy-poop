@@ -21,7 +21,6 @@ const ALLOWED_EXPORTS = {
   pipeMoveShiftPx: "test guard: tests/pipeMove.test.js and tuning.test.js keep every moving-pipe row under half the poop's clearance",
   glowAlphaAt: "test reference: the glow's alpha profile that glowStops() draws (tests/fart.test.js)",
   topScores: 'test hook: tests/save.test.js reads top lists as plain numbers (its last game use, isNewTop, is gone)',
-  fetchTournamentBoard: 'Release B in progress: the 🏅 board tab reads it from step 5 (remove in step 5)',
 };
 
 /** UI string keys no source names literally: prefix → why (they are built at run time). */

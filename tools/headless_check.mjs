@@ -425,6 +425,31 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         ok(opened && closed && f1 > f0 && exceptions.length === before, `overlay ${key}: opens, loop advances (${f0}→${f1}), closes, no exception`);
         if (key === 'HowTo') await sleep(200);
       }
+      // The 🏆 ⟷ 🏅 switch (board muzzled: both boards read offline). A tap flips to the medal board and
+      // the choice survives a reopen; A on the switch under the pad flips back, the ring stays on it.
+      await evaluate(`import('./src/config.js').then((m) => { globalThis.__api = m.LEADERBOARD.dataApi; m.LEADERBOARD.dataApi = ''; return true; })`);
+      const LB = `__flappy.scene.getScene('Leaderboard')`;
+      const lbState = () => evaluate(`JSON.stringify({ active: __flappy.scene.isActive('Leaderboard'), title: ${LB}.title?.text, tab: __flappy.registry.get('leaderboardTab') ?? null, status: ${LB}.status?.visible ? ${LB}.status.text : null, ring: ${LB}.focus?.shown ? ${LB}.focus.items[${LB}.focus.index]?.id : null })`).then(JSON.parse);
+      const ttx = (key) => evaluate(`import('./src/i18n.js').then((m) => m.t('en', '${key}'))`);
+      await chrome('leaderboard');
+      await sleep(600);
+      const tab0 = await lbState();
+      await evaluate(`${LB}.tabZone.emit('pointerdown'), true`);
+      await sleep(900);
+      const tab1 = await lbState();
+      await closeTop('Leaderboard');
+      await sleep(300);
+      await chrome('leaderboard');
+      await sleep(600);
+      const tab2 = await lbState();
+      ok(tab0.title === (await ttx('leaderboardTitle')) && tab1.title === (await ttx('medalBoardTitle')) && tab1.tab === 'medals' && tab1.status === (await ttx('leaderboardOffline')) && tab2.title === tab1.title, `the switch flips "${tab0.title}" to "${tab1.title}" (offline: "${tab1.status}"), and the board reopens on it`);
+      await evaluate(`(__flappy.registry.set('padMode', true), ${LB}.focus.show(), ${LB}.focus.setIndex(${LB}.focus.indexOf('tab')), ${LB}.focus.activate(), true)`);
+      await sleep(900);
+      const tab3 = await lbState();
+      await closeTop('Leaderboard');
+      await sleep(300);
+      await evaluate(`(__flappy.registry.set('padMode', false), __flappy.registry.set('leaderboardTab', 'scores'), import('./src/config.js').then((m) => { m.LEADERBOARD.dataApi = globalThis.__api; return true; }))`);
+      ok(tab3.title === (await ttx('leaderboardTitle')) && tab3.tab === 'scores' && tab3.ring === 'tab' && !(await active('Leaderboard')), `under the pad, A on the switch flips back to "${tab3.title}" with the ring still on it`);
     });
 
     await section('level1', async () => {

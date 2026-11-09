@@ -1824,6 +1824,31 @@ export function nextTestLevel(level, step, t) {
 export const TEST_POWERS = ['probiotic', 'fiber', 'postbiotic', 'bean1', 'bean3', 'skip'];
 
 /**
+ * Leaderboard overlay geometry around its centre (cx, cy): a 560 × 800 panel; the
+ * title and the ✕ along the top; under them the 🏆 ⟷ 🏅 switch (createToggle's box:
+ * a pill with a glyph each side, the whole row tappable); the column header; the
+ * rows (LEADERBOARD.visibleRows at `pitch`, from `firstY`); the footer and the
+ * version line. Column x's for both boards: rank, name, 🚽, LV, the right-hand
+ * number (score or best race), and the right edge of the 🥇 🥈 🥉 text.
+ */
+export function leaderboardLayout(cx, cy) {
+  const tabY = cy - 282;
+  return {
+    panel: { x: cx, y: cy, width: 560, height: 800 },
+    title: { x: cx, y: cy - 344 },
+    close: { x: cx + 236, y: cy - 346 },
+    tab: { track: { x: cx, y: tabY, width: 104, height: 48 }, emojiX: cx + 100, leftX: cx - 100, y: tabY, width: 320, height: 72 },
+    headerY: cy - 234,
+    firstY: cy - 196,
+    pitch: 52,
+    footerY: cy + 326,
+    versionY: cy + 374,
+    cols: { rank: cx - 224, name: cx - 160, toilet: cx + 36, level: cx + 120, right: cx + 224, medalsRight: cx + 158 },
+    titleMaxW: 420, // a longer title (MEDAL BOARD) shrinks to stay clear of the ✕
+  };
+}
+
+/**
  * Settings overlay geometry: the panel rect, the ✕, each row's centre y and the
  * hand row's box (👈 pill 👉, the whole row tappable). Without test mode it is a
  * 600 × 860 panel; with it the panel grows to 1240 px (20 px clear of the field's

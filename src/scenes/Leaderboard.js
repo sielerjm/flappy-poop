@@ -1,27 +1,36 @@
 import { GAME_HEIGHT, LEADERBOARD, TUNING as T } from '../config.js';
-import { versionText, chromeIntent, overlayOutsideHit, fitScale } from '../logic.js';
+import { versionText, chromeIntent, overlayOutsideHit, fitScale, leaderboardLayout } from '../logic.js';
 import { createFocus, pressable } from '../ui/focus.js';
-import { t, metaFontSize, rankText, levelLabel } from '../i18n.js';
+import { createToggle } from '../ui/toggle.js';
+import { t, metaFontSize, rankText, levelLabel, medalYouText } from '../i18n.js';
 import { bestByToilet, TOILET_EMOJI } from '../save.js';
-import { fetchTop, fetchRank } from '../leaderboard.js';
+import { fetchTop, fetchRank, fetchTournamentBoard } from '../leaderboard.js';
 import { createScrollView } from '../ui/scrollView.js';
 
 const STYLE = { fontFamily: 'sans-serif', fontStyle: 'bold', color: '#ffffff', align: 'center' };
 const PINK = '#f8a0c8';
 const MUTED = '#c9b8dc';
 const DIM = '#6a5a74';
+/** The registry key for the board last shown this session: 'scores' (🏆) or 'medals' (🏅). */
+const TAB_KEY = 'leaderboardTab';
 
 /**
- * Shared Top 25 overlay (🏆 in the tray or T). Posts any pending best first
- * (Play.syncLeaderboard), then loads the board and the player's own standing.
- * Network work happens only here, in create(), behind a Loading line; the
- * game itself never waits on it. LEADERBOARD.visibleRows rows show at once; the
- * band scrolls (ui/scrollView.js) while the title, header and footer stay put.
+ * Shared board overlay (🏆 in the tray or T), two boards behind a 🏆 ⟷ 🏅 switch
+ * under the title: the Top 25 scores, or the 🏅 medal board (tournament_board:
+ * 🥇, then 🥈, 🥉, best race). Posts anything pending first (Play.syncLeaderboard),
+ * then loads the board and the player's own standing. Network work happens only
+ * here, in create(), behind a Loading line; the game itself never waits on it.
+ * LEADERBOARD.visibleRows rows show at once; the band scrolls (ui/scrollView.js)
+ * while the title, the switch, the header and the footer stay put. Switching
+ * restarts the scene on the other board (no second sync); the board shown last
+ * is remembered for the session (registry TAB_KEY).
  */
 export class Leaderboard extends Phaser.Scene {
   constructor() {
     super('Leaderboard');
     this.gen = 0;
+    this.skipSync = false; // set by a switch: the restart loads the other board without syncing again
+    this.ringOnTab = false; // set by a switch under the pad: the restart puts the ring back on the switch
   }
 
   create() {
@@ -29,60 +38,98 @@ export class Leaderboard extends Phaser.Scene {
     const play = this.scene.get('Play');
     const locale = play?.getLocale?.() ?? 'en';
     this.locale = locale;
+    this.tab = this.registry.get(TAB_KEY) === 'medals' ? 'medals' : 'scores';
+    this.switching = false;
+    const skipSync = this.skipSync;
+    this.skipSync = false;
 
     const W = this.scale.width; // the live field (wider than 720 on desktop); the panel stays centred
     const cx = W / 2;
     const cy = GAME_HEIGHT / 2;
+    const L = leaderboardLayout(cx, cy);
+    this.L = L;
     this.cx = cx;
     this.cy = cy;
-    const panel = { x: cx, y: cy, width: 560, height: 800 };
-    this.panel = panel;
+    this.panel = L.panel;
     const dimmer = this.add.rectangle(W / 2, GAME_HEIGHT / 2, W, GAME_HEIGHT, 0x000000, 0.55).setInteractive();
     dimmer.on('pointerdown', (pointer) => {
-      if (overlayOutsideHit(pointer.x, pointer.y, panel)) this.close();
+      if (overlayOutsideHit(pointer.x, pointer.y, L.panel)) this.close();
     });
-    const panelRect = this.add.rectangle(cx, cy, panel.width, panel.height, 0x1a0b14, 0.95).setStrokeStyle(8, 0xe85e96);
+    const panelRect = this.add.rectangle(cx, cy, L.panel.width, L.panel.height, 0x1a0b14, 0.95).setStrokeStyle(8, 0xe85e96);
 
-    const title = this.add.text(cx, cy - 330, t(locale, 'leaderboardTitle'), { ...STYLE, fontSize: '52px', color: PINK }).setOrigin(0.5);
+    const titleText = t(locale, this.tab === 'medals' ? 'medalBoardTitle' : 'leaderboardTitle');
+    const title = this.add.text(L.title.x, L.title.y, titleText, { ...STYLE, fontSize: '52px', color: PINK }).setOrigin(0.5);
+    title.setScale(fitScale(title.width, L.titleMaxW, 0));
+    this.title = title;
+    // 🏆 ⟷ 🏅: the whole row is the switch (Settings' 👈 👉 hand row).
+    this.tabToggle = createToggle(this, L.tab, { on: this.tab === 'medals', depth: 1, glyph: '🏅', glyphLeft: '🏆' });
+    const tabZone = this.add
+      .zone(L.tab.track.x, L.tab.y, L.tab.width, L.tab.height)
+      .setInteractive({ useHandCursor: true })
+      .on('pointerdown', () => this.switchTab());
+    this.tabZone = tabZone;
     this.status = this.add
       .text(cx, cy, t(locale, 'leaderboardLoading'), { ...STYLE, fontSize: '36px', color: MUTED, fontStyle: 'normal', wordWrap: { width: 480, useAdvancedWrap: true } })
       .setOrigin(0.5);
     this.footer = this.add
-      .text(cx, cy + 300, '', { ...STYLE, fontSize: '26px', color: PINK, fontStyle: 'normal', wordWrap: { width: 500, useAdvancedWrap: true } })
+      .text(cx, L.footerY, '', { ...STYLE, fontSize: '26px', color: PINK, fontStyle: 'normal', wordWrap: { width: 500, useAdvancedWrap: true } })
       .setOrigin(0.5);
     const version = this.add
-      .text(cx, cy + 358, versionText(locale), { ...STYLE, fontSize: metaFontSize(locale), color: DIM, fontStyle: 'normal' })
+      .text(cx, L.versionY, versionText(locale), { ...STYLE, fontSize: metaFontSize(locale), color: DIM, fontStyle: 'normal' })
       .setOrigin(0.5);
 
-    const close = this.add.text(cx + 236, cy - 346, '✕', { ...STYLE, fontSize: '48px' }).setOrigin(0.5).setInteractive({ useHandCursor: true });
+    const close = this.add.text(L.close.x, L.close.y, '✕', { ...STYLE, fontSize: '48px' }).setOrigin(0.5).setInteractive({ useHandCursor: true });
     close.on('pointerdown', () => this.close());
     // Everything outside the rows band stays on the main camera when the band becomes a scroll view.
-    this.fixed = [dimmer, panelRect, title, this.status, this.footer, version, close];
+    this.fixed = [dimmer, panelRect, title, ...this.tabToggle.objects(), tabZone, this.status, this.footer, version, close];
     this.scroll = null; // the rows' scroll view, once the board has loaded
     this.input.keyboard?.on('keydown-ESC', () => {
       if (this.scene.isActive('Feedback')) return;
       this.close();
     });
-    // Controller: the ring sits on ✕; up / down scroll the rows once they are in.
+    // Controller: the ring sits on ✕ (A on the switch flips the board); up / down scroll the rows once they are in.
     this.focus = createFocus(this, T, {
-      items: [pressable('close', close)],
+      items: [pressable('close', close), pressable('tab', tabZone)],
       onVertical: (dir) => this.scroll?.scrollBy(dir === 'up' ? T.focus.scrollStepPx : -T.focus.scrollStepPx),
     });
     this.focus.show(); // only under a controller (registry padMode)
+    if (this.ringOnTab) this.focus.setIndex(this.focus.indexOf('tab'));
+    this.ringOnTab = false;
 
     const gen = ++this.gen;
-    this.loadBoard(gen, play);
+    this.loadBoard(gen, play, { skipSync });
+  }
+
+  /** Flip 🏆 ⟷ 🏅: remember the choice, slide the knob, then restart on the other board. */
+  switchTab() {
+    if (this.switching) return;
+    this.switching = true;
+    const next = this.tab === 'medals' ? 'scores' : 'medals';
+    this.registry.set(TAB_KEY, next);
+    this.tabToggle.setOn(next === 'medals');
+    this.gen += 1; // drop any in-flight load
+    this.skipSync = true;
+    this.ringOnTab = this.focus?.shown && this.focus.items[this.focus.index]?.id === 'tab';
+    this.time.delayedCall(T.toiletKnobMs, () => this.scene.restart());
   }
 
   // Not `load`: Phaser installs its LoaderPlugin on every scene as this.load.
-  async loadBoard(gen, play) {
-    // Post a pending best first so the board and the rank reflect it.
-    try {
-      await play?.syncLeaderboard?.();
-    } catch {
-      /* never blocks the board */
+  async loadBoard(gen, play, { skipSync = false } = {}) {
+    // Post anything pending first so the board and the rank reflect it.
+    if (!skipSync) {
+      try {
+        await play?.syncLeaderboard?.();
+      } catch {
+        /* never blocks the board */
+      }
     }
     const state = play?.getSaveState?.() ?? { name: '', top: [] };
+    if (this.tab === 'medals') {
+      const rows = await fetchTournamentBoard(state.id ?? null);
+      if (gen !== this.gen || !this.scene.isActive()) return;
+      this.showMedals(rows);
+      return;
+    }
     const named = Boolean(state.name && state.id);
     const best = bestByToilet(state);
     // A player can hold two rows (off and on the toilet): look up each one they have a local best for.
@@ -97,8 +144,16 @@ export class Leaderboard extends Phaser.Scene {
     this.showBoard(rows, rank, state, { nameTaken: Boolean(play?.boardNameTaken) });
   }
 
+  /** The rows band: visibleRows rows tall, scrolled by a second camera (finger drag, wheel, d-pad). */
+  rowsBand() {
+    const { cx, L } = this;
+    const visible = Math.min(LEADERBOARD.visibleRows, LEADERBOARD.limit);
+    const band = { x: cx, y: L.firstY - L.pitch / 2 + (visible * L.pitch) / 2, width: L.panel.width, height: visible * L.pitch + 16 };
+    return { sv: createScrollView(this, band, { fixed: this.fixed }), visible };
+  }
+
   showBoard(rows, rank, state, { nameTaken = false } = {}) {
-    const { cx, cy, locale } = this;
+    const { locale, L } = this;
     const limit = LEADERBOARD.limit;
 
     if (rows === null) {
@@ -108,35 +163,28 @@ export class Leaderboard extends Phaser.Scene {
     } else {
       this.status.setVisible(false);
       // Columns: rank · name · 🚽 · LV n · score. Header over the two middle columns.
-      const toiletX = cx + 36;
-      const levelX = cx + 120;
-      const headerY = cy - 288;
-      this.fixed.push(this.add.text(toiletX, headerY, TOILET_EMOJI, { ...STYLE, fontSize: '20px' }).setOrigin(0.5).setAlpha(0.7));
-      this.fixed.push(this.add.text(levelX, headerY, t(locale, 'leaderboardLevel'), { ...STYLE, fontSize: '20px', color: DIM }).setOrigin(0.5));
-      // The rows band: visibleRows rows tall, scrolled by a second camera (finger drag, wheel, d-pad).
-      const pitch = 56;
-      const firstY = cy - 250;
-      const visible = Math.min(LEADERBOARD.visibleRows, limit);
-      const band = { x: cx, y: firstY - pitch / 2 + (visible * pitch) / 2, width: this.panel.width, height: visible * pitch + 16 };
-      const sv = createScrollView(this, band, { fixed: this.fixed });
+      const { toilet: toiletX, level: levelX } = L.cols;
+      this.fixed.push(this.add.text(toiletX, L.headerY, TOILET_EMOJI, { ...STYLE, fontSize: '20px' }).setOrigin(0.5).setAlpha(0.7));
+      this.fixed.push(this.add.text(levelX, L.headerY, t(locale, 'leaderboardLevel'), { ...STYLE, fontSize: '20px', color: DIM }).setOrigin(0.5));
+      const { sv, visible } = this.rowsBand();
       // Highlight each of the player's rows that made the board (up to two).
       const ownRows = new Set([rank.off, rank.on].filter((r) => r && r.rank <= rows.length).map((r) => r.rank - 1));
       const count = Math.max(rows.length, visible); // a short board still fills the window with – rows
-      let y = firstY;
+      let y = L.firstY;
       for (let i = 0; i < count; i += 1) {
-        y = firstY + i * pitch;
+        y = L.firstY + i * L.pitch;
         const row = rows[i];
         const own = ownRows.has(i);
         const color = own ? PINK : row ? '#ffffff' : DIM;
-        sv.add(this.add.text(cx - 224, y, `${i + 1}.`, { ...STYLE, fontSize: '34px', color: row ? PINK : DIM }).setOrigin(0, 0.5));
-        sv.add(this.add.text(cx + 224, y, row ? String(row.score) : '–', { ...STYLE, fontSize: '34px', color }).setOrigin(1, 0.5));
+        sv.add(this.add.text(L.cols.rank, y, `${i + 1}.`, { ...STYLE, fontSize: '34px', color: row ? PINK : DIM }).setOrigin(0, 0.5));
+        sv.add(this.add.text(L.cols.right, y, row ? String(row.score) : '–', { ...STYLE, fontSize: '34px', color }).setOrigin(1, 0.5));
         if (row?.toilet) sv.add(this.add.text(toiletX, y, TOILET_EMOJI, { ...STYLE, fontSize: '30px' }).setOrigin(0.5));
         if (row) sv.add(this.add.text(levelX, y, levelLabel(locale, row.level ?? 1), { ...STYLE, fontSize: '24px', color: own ? PINK : MUTED, fontStyle: 'normal' }).setOrigin(0.5));
-        const name = sv.add(this.add.text(cx - 160, y, row ? row.name : '–', { ...STYLE, fontSize: '34px', color, align: 'left' }).setOrigin(0, 0.5));
+        const name = sv.add(this.add.text(L.cols.name, y, row ? row.name : '–', { ...STYLE, fontSize: '34px', color, align: 'left' }).setOrigin(0, 0.5));
         // A 16-character name is wider than its column: shrink it to the room left of the 🚽 column.
         name.setScale(fitScale(name.width, toiletX - 24 - name.x, 8));
       }
-      sv.finish(y + pitch / 2 - 40); // finish() adds 40 px of slack; the band ends half a pitch under the last row
+      sv.finish(y + L.pitch / 2 - 40); // finish() adds 40 px of slack; the band ends half a pitch under the last row
       this.scroll = sv;
     }
 
@@ -152,6 +200,44 @@ export class Leaderboard extends Phaser.Scene {
     if (nameTaken) lines.push(t(locale, 'leaderboardNameTaken'));
     else if (missing) lines.push(t(locale, 'leaderboardNotYet'));
     if (lines.length) this.footer.setText(lines.join('\n'));
+  }
+
+  /**
+   * The 🏅 board: rank · name · 🥇n 🥈n 🥉n · best race, the player's own row in pink (and
+   * appended with its true rank when it is below the top); the footer gives their rank and
+   * how many tournaments they finished, or how to get on the board.
+   */
+  showMedals(rows) {
+    const { locale, L } = this;
+    if (rows === null) {
+      this.status.setText(t(locale, 'leaderboardOffline'));
+      return;
+    }
+    const mine = rows.find((r) => r.me) ?? null;
+    this.footer.setText(mine ? medalYouText(locale, mine) : t(locale, 'medalBoardJoin'));
+    if (rows.length === 0) {
+      this.status.setText(t(locale, 'medalBoardEmpty'));
+      return;
+    }
+    this.status.setVisible(false);
+    this.fixed.push(this.add.text(L.cols.right, L.headerY, t(locale, 'medalBoardBest'), { ...STYLE, fontSize: '20px', color: DIM }).setOrigin(1, 0.5));
+    const { sv, visible } = this.rowsBand();
+    const count = Math.max(rows.length, visible);
+    let y = L.firstY;
+    for (let i = 0; i < count; i += 1) {
+      y = L.firstY + i * L.pitch;
+      const row = rows[i];
+      const color = row?.me ? PINK : row ? '#ffffff' : DIM;
+      sv.add(this.add.text(L.cols.rank, y, `${row ? row.rank : i + 1}.`, { ...STYLE, fontSize: '34px', color: row ? PINK : DIM }).setOrigin(0, 0.5));
+      sv.add(this.add.text(L.cols.right, y, row ? String(row.best) : '–', { ...STYLE, fontSize: '30px', color }).setOrigin(1, 0.5));
+      const medals = row ? sv.add(this.add.text(L.cols.medalsRight, y, `🥇${row.gold} 🥈${row.silver} 🥉${row.bronze}`, { ...STYLE, fontSize: '20px', color: row.me ? PINK : MUTED }).setOrigin(1, 0.5)) : null;
+      const name = sv.add(this.add.text(L.cols.name, y, row ? row.name : '–', { ...STYLE, fontSize: '34px', color, align: 'left' }).setOrigin(0, 0.5));
+      // The name gets the room left of the medals (a long name shrinks, as on 🏆).
+      const room = (medals ? medals.x - medals.width : L.cols.toilet) - 8 - name.x;
+      name.setScale(fitScale(name.width, room, 4));
+    }
+    sv.finish(y + L.pitch / 2 - 40);
+    this.scroll = sv;
   }
 
   close() {

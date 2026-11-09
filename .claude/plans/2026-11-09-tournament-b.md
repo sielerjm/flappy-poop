@@ -1,6 +1,6 @@
 # Plan: Tournament mode, Release B (🏅 medal board and head-to-head rows)
 - Created: 2026-11-09 (revised the same day after a critical review)
-- Status: in progress (step 5)
+- Status: in progress (step 6)
 - Baseline: `9a70e6a` on `main` (Release A plus the join-row fix; 8 commits ahead of origin, not pushed), tree clean.
 - Whole-suite verification: `npm test` (430 pass); `npm run smoke` (full; tournament 9, versus 81).
 - Source: Michael's `.claude/plans/tournament_mode_bracket_0b9f821f.plan.md` (steps 7–10); archive it with this plan when done.
@@ -91,7 +91,7 @@ Release A plays a whole tournament on one device but saves nothing. Release B se
 - **Commit:** `feat(tournament-b, step 4/6): the podium posts linked players' medals`
 - Result: done. `onRace` → `queueFinished` once when the Final is recorded (registry `posted: 'queued' | 'none'`, `tournamentId`); the host's id via `hostSave` (`ensureId`, stored) on Use my player and at the Final; the podium's `#tour-saved` line reads the queue's outcome (Saving… / Saved / posts when online / couldn't save / nothing to save). 5 strings + `tournamentHowBody` (en + zh, notes; the Tournament bullet). Smoke `tournament` +3 (12): offline the podium says later and the queue holds one payload (Linked + Smoke linked, the guest null, 2 matches, host id = save id); a stubbed board takes it once and the podium says Saved; an all-guest Final queues nothing. The "saves nothing" check became "no score recorded; the save only gained its id". Found on the way: versus-match's counting stub of `syncLeaderboard` outlived its section (Phaser reuses scene instances) and broke the tournament section in the full run; it is now deleted after its check. Step-1 allowlist entries removed. npm test 447/447; full smoke 332/332. Step 3 commit `e8f6b9e`.
 
-### Step 5/6: 🏆 ⟷ 🏅 switch on the leaderboard overlay  [pending]
+### Step 5/6: 🏆 ⟷ 🏅 switch on the leaderboard overlay  [done]
 - **Change:**
   - `logic.js`: `leaderboardLayout(tab)` (title left in the panel, the pill at the right of the title row, column x's per tab); `createToggle` gains an `objects()` accessor so the pill joins `this.fixed`.
   - `Leaderboard.js`: the pill is a pressable zone (Settings' `handZone` pattern; a tap or the pad's A toggles, down still scrolls, B closes); switching does `scene.restart({ tab, synced: true })` (no sync again, `gen` bumped); the tab is remembered in the registry for the session, default 🏆.
@@ -101,6 +101,7 @@ Release A plays a whole tournament on one device but saves nothing. Release B se
 - **Screenshots:** en and zh-Hans at 1600 × 900 and 390 × 844 with fake board rows (16-char names, three-digit counts).
 - **Verify:** `npm test`; `--only=overlays,pad`; full smoke.
 - **Commit:** `feat(tournament-b, step 5/6): a 🏅 medal board tab on the leaderboard`
+- Result: done. Deviation: the pill does not fit the title row at phone width (a 52 px LEADERBOARD and the ✕ leave no room), so it has its own row under the title and the row pitch went 56 → 52 to pay for it (still 10 visible rows). `leaderboardLayout(cx, cy)` in logic.js (+ a test in overlay.test.js); `createToggle().objects()`; Leaderboard.js: the switch row is a pressable zone (tap, or A under the pad, which keeps the ring on it after the restart), `scene.restart()` with no second sync, registry `leaderboardTab`; the 🏅 board: rank · name · 🥇n 🥈n 🥉n · BEST RACE, the caller pink (appended with its rank below the top), footer "You: #r · n tournaments" or how to join; a long title shrinks to clear the ✕. Strings: medalBoardTitle / Best / Empty / Join / You (en + zh, notes, the Leaderboard bullet), `medalYouText`. Screenshots (stubbed rows: 16-char names, 3-digit medals, a me row at #31) en / zh at 390 × 844 and 1600 × 900. Smoke `overlays` +2 (muzzled): tap flips and the tab survives a reopen; A under the pad flips back with the ring on the switch. npm test 448/448; full smoke 334/334. Step 4 commit `ad09cb1`.
 
 ### Step 6/6: Docs and 0.10.0  [pending]
 - **Change:** AGENTS (the tournament paragraph: posting, queue, board tab; the schema section: tables, RPCs, fold, grants; the file map: `tests/schema.test.js`; the dev-dependency and `npm install` where it now says zero dependencies); README (the board, guests not saved, the forged-bracket limit next to the trust note, `npm install` for tests, the same zero-dependency lines); `db/schema.sql` header; `VERSION` 0.10.0 with a changelog entry en + zh; archive this plan and Michael's source plan.
