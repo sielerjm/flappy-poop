@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { TUNING as T } from '../src/config.js';
 import { createRng, withLevelPipes, levelEnd, levelPipes, levelFor } from '../src/logic.js';
-import { createTournament, nextMatch, recordResult, matchPlayers, isDone, placings, raceOutcome, claimFromCode, claimHost } from '../src/tournament.js';
+import { createTournament, nextMatch, recordResult, matchPlayers, isDone, placings, raceOutcome, claimFromCode, claimHost, tournamentPayload, linkedCount } from '../src/tournament.js';
 import { exportCode } from '../src/save.js';
 
 const roster = (n) => Array.from({ length: n }, (_, i) => ({ name: `P${i}`, playerId: null, guest: true }));
@@ -183,4 +183,75 @@ test('a tournament race runs its own level table: 225 pairs, the scripted level 
   assert.equal(withLevelPipes(T, null), T, 'no table: the same object');
   assert.notEqual(tt.levels, T.levels, 'a copy: T itself never changes');
   assert.deepEqual(T.levels.pipes, [10, 25, 50]);
+});
+
+/** Race the whole bracket with realistic results: random slots, decided by raceOutcome (finalFirst breaks a full tie). */
+function playRealistic(tour, rng) {
+  for (let guard = 0; guard < 20; guard += 1) {
+    const m = nextMatch(tour);
+    if (!m) break;
+    const slot = () => ({ score: Math.floor(rng() * 4) * 10, deaths: Math.floor(rng() * 2), levelWins: Math.floor(rng() * 3), finalFirst: false });
+    const slots = [slot(), slot()];
+    slots[rng() < 0.5 ? 0 : 1].finalFirst = true;
+    const out = raceOutcome(slots);
+    recordResult(tour, m.id, out.winner, { by: out.by, slots });
+  }
+  return tour;
+}
+
+/** The medals as the server derives them from a payload alone (db/schema.sql submit_tournament). */
+function payloadMedals(payload) {
+  const by = (round) => payload.matches.filter((m) => m.round === round);
+  const side = (m, w) => (w === 0 ? m.a : m.b);
+  const [final] = by('final');
+  const [bronze] = by('bronze');
+  const semis = by('semi');
+  return {
+    gold: side(final, final.winner),
+    silver: side(final, 1 - final.winner),
+    bronze: bronze ? side(bronze, bronze.winner) : side(semis[0], 1 - semis[0].winner),
+  };
+}
+
+test('tournamentPayload: raced matches only, per-round counts from N, side order kept, the medals of placings()', () => {
+  for (let n = 3; n <= 8; n += 1) {
+    for (let seed = 1; seed <= 15; seed += 1) {
+      const rng = createRng(seed * 97 + n);
+      const players = roster(n).map((p, i) => (i % 2 ? p : { name: `L${i}`, playerId: `${'A'.repeat(21)}${i}`, guest: false }));
+      const tour = playRealistic(createTournament(players, rng), rng);
+      const pl = tournamentPayload(tour, 'TTTTTTTTTTTTTTTTTTTTTT');
+      const count = (round) => pl.matches.filter((m) => m.round === round).length;
+      const tag = `${n} players, seed ${seed}`;
+      assert.equal(count('quarter'), Math.max(0, n - 4), `${tag}: quarters`);
+      assert.equal(count('semi'), n >= 4 ? 2 : 1, `${tag}: semis`);
+      assert.equal(count('bronze'), n >= 4 ? 1 : 0, `${tag}: bronze`);
+      assert.equal(count('final'), 1, `${tag}: final`);
+      assert.equal(pl.matches.length, n - 1 + (n >= 4 ? 1 : 0), `${tag}: no byes`);
+      for (const m of pl.matches) {
+        const raced = tour.matches.find((x) => x.id === m.id);
+        assert.deepEqual([m.a, m.b], matchPlayers(tour, raced), `${tag}: ${m.id} sides`);
+        assert.equal(m.winner, raced.winner);
+        assert.deepEqual(raceOutcome(m.slots), { winner: m.winner, by: m.by }, `${tag}: ${m.id} winner agrees with its slots`);
+      }
+      assert.deepEqual(payloadMedals(pl), placings(tour), tag);
+      assert.deepEqual(pl.levelPipes, T.tournament.levelPipes);
+    }
+  }
+});
+
+test('tournamentPayload: guests travel as { id: null, name: null }; linkedCount counts the ids', () => {
+  const players = [
+    { name: 'Guesty', playerId: null, guest: true },
+    { name: 'Linked', playerId: 'BBBBBBBBBBBBBBBBBBBBBB', guest: false },
+    { name: 'Host', playerId: 'HHHHHHHHHHHHHHHHHHHHHH', guest: false, host: true },
+    { name: 'NoId', playerId: null, guest: false, host: true },
+  ];
+  const tour = playRealistic(createTournament(players, createRng(5)), createRng(6));
+  const pl = tournamentPayload(tour, 'TTTTTTTTTTTTTTTTTTTTTT', [10, 20]);
+  assert.deepEqual(pl.players, [{ id: null, name: null }, { id: 'BBBBBBBBBBBBBBBBBBBBBB', name: 'Linked' }, { id: 'HHHHHHHHHHHHHHHHHHHHHH', name: 'Host' }, { id: null, name: null }]);
+  assert.equal(linkedCount(tour), 2);
+  assert.equal(linkedCount(createTournament(roster(3), createRng(1))), 0);
+  assert.equal(JSON.stringify(pl).includes('Guesty'), false, 'no guest name leaves the device');
+  assert.deepEqual(pl.levelPipes, [10, 20]);
+  assert.equal(pl.id, 'TTTTTTTTTTTTTTTTTTTTTT');
 });

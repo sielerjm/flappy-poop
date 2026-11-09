@@ -163,6 +163,42 @@ export function raceOutcome(slots) {
 }
 
 // ---------------------------------------------------------------------------
+// Release B: the finished tournament as one payload for submit_tournament (db/schema.sql),
+// which re-checks the bracket and derives the medals itself. Guests travel as
+// { id: null, name: null }: nothing about them leaves the device.
+
+/** True for a lobby entry that carries a player id (a pasted code or the host's own player). */
+function linked(p) {
+  return Boolean(p && !p.guest && p.playerId);
+}
+
+/** How many entries carry a player id: with none, a finished tournament has nothing to post. */
+export function linkedCount(tour) {
+  return tour.players.filter(linked).length;
+}
+
+/**
+ * The payload for a finished tournament: { id, levelPipes, players, matches }, raced matches
+ * only (byes are implied), in bracket order, each { id, round, a, b, winner, by, slots } with
+ * slots[0] for side a (score, deaths, levelWins, finalFirst as the race reported them).
+ */
+export function tournamentPayload(tour, id, levelPipes = TUNING.tournament.levelPipes) {
+  const slot = (s) => ({ score: Math.max(0, Math.floor(s?.score ?? 0)), deaths: Math.max(0, Math.floor(s?.deaths ?? 0)), levelWins: Math.max(0, Math.floor(s?.levelWins ?? 0)), finalFirst: Boolean(s?.finalFirst) });
+  return {
+    id,
+    levelPipes: [...levelPipes],
+    players: tour.players.map((p) => (linked(p) ? { id: p.playerId, name: p.name } : { id: null, name: null })),
+    matches: tour.matches
+      .filter((m) => m.winner != null && !m.result?.bye)
+      .map((m) => {
+        const [a, b] = matchPlayers(tour, m);
+        const slots = m.result?.slots ?? [];
+        return { id: m.id, round: m.round, a, b, winner: m.winner, by: m.result?.by ?? 'score', slots: [slot(slots[0]), slot(slots[1])] };
+      }),
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Lobby slots: a pasted user code (linked) or the host's own player. Read in memory only:
 // importCode merges into the local player and saves by default, so it gets a storage that
 // keeps nothing and an empty local player; the host's own save is never read or written.
