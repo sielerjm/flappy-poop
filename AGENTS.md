@@ -1232,6 +1232,8 @@ tools/
                             it into Archive/.
 .claude/plans/Archive/      Completed build plans (historical record + decision
                             log). Don't edit archived plans.
+meta/                       Local-only project notes and reports (gitignored;
+                            never commit).
 ```
 
 ## Rules the code depends on
