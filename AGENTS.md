@@ -95,7 +95,11 @@ and refuses the name with the user-code steps; the board cannot say → saved lo
 the 🏆 footer). Loading a code on a device that had its own player queues
 `merge_players(pasted, old)` (`createMergeStore`, drained first by `syncLeaderboard`):
 the board folds the rows and keeps the old id as an alias (`player_aliases`), so every
-id resolves to one player. The panel's **Clear** (`Play.signOut`, two taps inside
+id resolves to one player. **The board's name wins** (2026-11-09): `syncLeaderboard` asks
+`player_name` (`Play.fetchPlayerName`) and adopts it (`nameAction`, `Play.adoptBoardName`,
+`showAdoptedName` in an open panel) unless the name is a rename typed on this device
+(`createRenameStore`, flappyPoop.rename, set by the panel's store, cleared once a post
+carries it, by Load and by Clear); the first `Play.create` of a page load syncs. The panel's **Clear** (`Play.signOut`, two taps inside
 `saveClearConfirmMs`) forgets the player on the device only.
 **Test mode** is a session-only sandbox: typing either of `TEST_MODE.words` (`pooptest` or `testpoop`, any
 case) as the username and pressing Save toggles it (a trigger word is never stored as a name, so it can
@@ -336,7 +340,9 @@ src/
                             PostgREST message). checkNameAvailable (true / false /
                             null), mergePlayers, createMergeStore
                             (flappyPoop.merges: queued { keep, merge } pairs until
-                            the server confirms). Writes go through the
+                            the server confirms), fetchPlayerName (the board's name
+                            or null), createRenameStore (flappyPoop.rename: a rename
+                            typed here), nameAction ('adopt' / 'keep'). Writes go through the
                             submit_score() and merge_players() SQL functions.
                             Fully unit-tested with a fake fetch.
   share.js                  Game-over share, NO Phaser; navigator / document / URL
@@ -921,7 +927,8 @@ db/schema.sql               Supabase schema: scores table (player_id = save-code
                             score, toilet flag follows the score, 5 s rate limit,
                             renames all of the player's rows); name_available();
                             merge_players() (fold_player: max per kind, the kept
-                            name, aliases); player_rank(); admin_merge_name /
+                            name, aliases); player_rank(); player_name() (the board's
+                            name for an id, aliases resolved); admin_merge_name /
                             admin_merge_all_duplicates for the owner only. Run by
                             hand in the SQL editor, never by any integration; it is
                             the source of truth for the backend. Apply it BEFORE

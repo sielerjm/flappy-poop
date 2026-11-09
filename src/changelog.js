@@ -8,8 +8,16 @@ import { LOCALES } from './i18n.js';
 
 export const CHANGELOG = [
   {
+    version: '0.8.3',
+    date: '9 Nov 2026',
+    notes: {
+      en: ['Change your username once: every phone and browser that uses your user code picks up the new name on its own. Save / Load User explains it as a fourth step.'],
+      'zh-Hans': ['用户名只需改一次：使用你用户码的每台手机和浏览器都会自动换成新名字。“存档 / 载入用户”新增第四步说明。'],
+    },
+  },
+  {
     version: '0.8.2',
-    date: '8 Nov 2026',
+    date: '9 Nov 2026',
     notes: {
       en: [
         'One player across devices: load your user code on another phone or browser and the leaderboard joins both into one player, so your best counts once wherever you play. Save / Load User now lists the three steps.',

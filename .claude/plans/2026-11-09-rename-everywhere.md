@@ -1,6 +1,6 @@
 # Plan: A rename reaches every device on its own, and a fourth Save / Load step says so
 - Created: 2026-11-09
-- Status: in progress (step 3)
+- Status: in progress (step 4: Michael's rollout)
 - Baseline: `b367afd` on `main` (0.8.2 pushed), tree clean.
 - Whole-suite verification: `npm test` (403 pass at baseline); `npm run smoke -- --only=home` while iterating, the full `npm run smoke` before the client commit.
 - Repo plan copy: `.claude/plans/2026-11-09-rename-everywhere.md` (`git add -f`), archived when done.
@@ -54,7 +54,7 @@ Michael's direction: "New usernames will be updated when you load your player co
 - Commit: `feat(save, step 2/4): a rename reaches every device; a stale device adopts the board's name`
 - Result: done. npm test 406/406 (fetchPlayerName, the nameAction table, the rename store; the orphan audit sees renameKey and the new exports used). Smoke home 14 checks (3 new: names typed here never ask the board; the board's newer name replaces a loaded code's in the store, field, welcome line, profile and code; a rename typed here is kept and not overwritten; Clear also forgets the pending rename). Full smoke 315/315. The boot sync is covered by construction (the smoke's page boots with no name, so it makes no request). A first full run failed twice: the left-handed Load check (my stub's board name leaked into the wide section; reset after the block) and the moving-pipes probiotic check (intermittent: it passed on the rerun with no change; its item lookup can pick another pair's probiotic).
 
-### Step 3/4 — Copy, docs, 0.8.3
+### Step 3/4 — Copy, docs, 0.8.3  [done]
 - `src/i18n.js` `saveIntro` gets step 4 (en + zh-Hans); the panel already renders `pre-line` and scrolls past 90vh.
 - `TRANSLATION_NOTES.md`: the row, plus a sentence in the "One player across devices" bullet.
 - `README.md:47` (four steps; the board's name wins); `AGENTS.md` (`leaderboard.js`, `schema.sql`).
@@ -65,6 +65,7 @@ Michael's direction: "New usernames will be updated when you load your player co
   - panel screenshots (scratchpad `shot.mjs`) in en and zh-Hans at 390×844 and 844×390: four lines, nothing clipped;
   - `grep` for "three steps" / "三个步骤": nothing stale.
 - Commit: `docs(step 3/4): a fourth Save / Load step; 0.8.3`
+- Result: done. npm test 406/406; smoke home 14 checks pass; panel screenshots (en / zh-Hans, 390×844 and 844×390): four lines, nothing clipped, landscape scrolls as before. The only "three steps" left are in the 0.8.2 notes, which describe that version and stay. Step 2 commit `ae47764`.
 
 ### Step 4/4 — Rollout (Michael, then me)
 1. Michael: back up both tables (`meta/db-backups/README.md`), then paste the whole `db/schema.sql` into the SQL Editor. It is idempotent: the fold already ran, and nothing in the file re-runs it.
