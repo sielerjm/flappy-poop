@@ -1443,22 +1443,23 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         // its gap. After 400 ms the gap has moved, x has scrolled, the mate is still gapH below, the body
         // follows the sprite, the item sits on the gap centre; the pair after a fart (centred) never moves.
         const mvSpawn = (centred) =>
-          evaluate(`import('./src/config.js').then((m) => { const p = ${play}; const row = m.TUNING.pipeMove.chance; const keep = row[0]; row[0] = 1; const r = p.course.rng; p.course.rng = () => 0.5; p.centreNextGap = ${centred}; p.nextGapY = ${centred} ? null : 640; try { p.spawnPipePair(); } finally { p.course.rng = r; row[0] = keep; } const top = p.pipes.getChildren().filter((c) => c.getData('scoring')).pop(); return JSON.stringify({ moves: Boolean(top.getData('move')), y: top.y }); })`).then(JSON.parse);
+          evaluate(`import('./src/config.js').then((m) => { const p = ${play}; const row = m.TUNING.pipeMove.chance; const keep = row[0]; row[0] = 1; const r = p.course.rng; p.course.rng = () => 0.5; p.centreNextGap = ${centred}; p.nextGapY = ${centred} ? null : 640; try { p.spawnPipePair(); } finally { p.course.rng = r; row[0] = keep; } const top = p.pipes.getChildren().filter((c) => c.getData('scoring')).pop(); globalThis.__mvTop = top; return JSON.stringify({ moves: Boolean(top.getData('move')), y: top.y }); })`).then(JSON.parse);
         const mvCentred = await mvSpawn(true);
-        await evaluate(`(() => { const p = ${play}; const top = p.pipes.getChildren().filter((c) => c.getData('scoring')).pop(); top.getData('mate')?.destroy(); top.destroy(); return true; })()`);
+        await evaluate(`(() => { const top = globalThis.__mvTop; top.getData('mate')?.destroy(); top.destroy(); return true; })()`);
         const mv0 = await mvSpawn(false);
         const mvRead = () =>
-          evaluate(`(() => { const p = ${play}; const top = p.pipes.getChildren().filter((c) => c.getData('move')).pop(); const item = p.items.getChildren().find((c) => c.getData('bob') === 'pair'); return JSON.stringify({ x: top.x, y: top.y, bodyDy: top.body.y - top.y, mateDy: top.getData('mate').y - top.y, gapH: top.getData('gapH'), amp: top.getData('move').amp, itemDy: item ? item.y - top.y : null }); })()`).then(JSON.parse);
-        await evaluate(`(() => { const p = ${play}; const top = p.pipes.getChildren().filter((c) => c.getData('move')).pop(); p.spawnGapItem('probiotic', top.x, top.y + top.getData('gapH') / 2, top.getData('gapH'), top); return true; })()`);
+          evaluate(`(() => { const top = globalThis.__mvTop; const item = globalThis.__mvItem; return JSON.stringify({ x: top.x, y: top.y, bodyDy: top.body.y - top.y, mateDy: top.getData('mate').y - top.y, gapH: top.getData('gapH'), amp: top.getData('move').amp, itemDy: item ? item.y - top.y : null, rides: Boolean(item) && item.getData('bob') === 'pair' && item.getData('pair') === top }); })()`).then(JSON.parse);
+        // Read back by reference: the game keeps spawning its own moving pairs and riding items while this waits.
+        await evaluate(`(() => { const p = ${play}; const top = globalThis.__mvTop; globalThis.__mvItem = p.spawnGapItem('probiotic', top.x, top.y + top.getData('gapH') / 2, top.getData('gapH'), top); return true; })()`);
         await sleep(100); // a frame: Arcade takes the body's position from the sprite each preUpdate (a one-frame, sub-pixel lag)
         const mvA = await mvRead();
         await sleep(400);
         const mvB = await mvRead();
-        await evaluate(`(() => { const p = ${play}; const top = p.pipes.getChildren().filter((c) => c.getData('move')).pop(); p.items.getChildren().filter((c) => c.getData('bob') === 'pair').forEach((c) => c.destroy()); top.getData('mate').destroy(); top.destroy(); return true; })()`);
+        await evaluate(`(() => { const top = globalThis.__mvTop; globalThis.__mvItem?.destroy(); top.getData('mate').destroy(); top.destroy(); globalThis.__mvTop = globalThis.__mvItem = null; return true; })()`);
         const expect = TT.pipeMove.ampPx[0];
         ok(
-          !mvCentred.moves && mv0.moves && mvA.amp === expect && mvB.x < mvA.x && Math.abs(mvB.y - mvA.y) > 4 && Math.abs(mvA.mateDy - mvA.gapH) < 0.01 && Math.abs(mvB.mateDy - mvA.gapH) < 0.01 && Math.abs(mvB.bodyDy - mvA.bodyDy) < 2 && Math.abs(mvB.itemDy - mvA.gapH / 2) < 0.01,
-          `moving pipes: the centred pair stays still (${!mvCentred.moves}), a level-4 pair bobs (amp ${mvA.amp}, y ${mvA.y.toFixed(1)} → ${mvB.y.toFixed(1)} while x ${mvA.x.toFixed(0)} → ${mvB.x.toFixed(0)}), its mate keeps the ${mvA.gapH} px gap (${mvA.mateDy.toFixed(1)}, ${mvB.mateDy.toFixed(1)}), the body tracks the sprite (body − sprite ${mvA.bodyDy.toFixed(1)} → ${mvB.bodyDy.toFixed(1)}), the probiotic rides the gap centre (${mvA.itemDy} → ${mvB.itemDy})`,
+          !mvCentred.moves && mv0.moves && mvA.amp === expect && mvB.x < mvA.x && Math.abs(mvB.y - mvA.y) > 4 && Math.abs(mvA.mateDy - mvA.gapH) < 0.01 && Math.abs(mvB.mateDy - mvA.gapH) < 0.01 && Math.abs(mvB.bodyDy - mvA.bodyDy) < 2 && Math.abs(mvB.itemDy - mvA.gapH / 2) < 0.01 && mvA.rides && mvB.rides,
+          `moving pipes: the centred pair stays still (${!mvCentred.moves}), a level-4 pair bobs (amp ${mvA.amp}, y ${mvA.y.toFixed(1)} → ${mvB.y.toFixed(1)} while x ${mvA.x.toFixed(0)} → ${mvB.x.toFixed(0)}), its mate keeps the ${mvA.gapH} px gap (${mvA.mateDy.toFixed(1)}, ${mvB.mateDy.toFixed(1)}), the body tracks the sprite (body − sprite ${mvA.bodyDy.toFixed(1)} → ${mvB.bodyDy.toFixed(1)}), the probiotic rides this pair's gap centre (${mvA.itemDy} → ${mvB.itemDy}, rides ${mvA.rides && mvB.rides})`,
         );
 
         // Power-ups from Settings while paused: the button zones call grantTest; what they start stays frozen.
