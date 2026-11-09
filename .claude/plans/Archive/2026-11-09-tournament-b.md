@@ -1,6 +1,6 @@
 # Plan: Tournament mode, Release B (🏅 medal board and head-to-head rows)
 - Created: 2026-11-09 (revised the same day after a critical review)
-- Status: in progress (step 6)
+- Status: complete (committed; push on Michael's word, after the schema is applied in Supabase)
 - Baseline: `9a70e6a` on `main` (Release A plus the join-row fix; 8 commits ahead of origin, not pushed), tree clean.
 - Whole-suite verification: `npm test` (430 pass); `npm run smoke` (full; tournament 9, versus 81).
 - Source: Michael's `.claude/plans/tournament_mode_bracket_0b9f821f.plan.md` (steps 7–10); archive it with this plan when done.
@@ -103,11 +103,15 @@ Release A plays a whole tournament on one device but saves nothing. Release B se
 - **Commit:** `feat(tournament-b, step 5/6): a 🏅 medal board tab on the leaderboard`
 - Result: done. Deviation: the pill does not fit the title row at phone width (a 52 px LEADERBOARD and the ✕ leave no room), so it has its own row under the title and the row pitch went 56 → 52 to pay for it (still 10 visible rows). `leaderboardLayout(cx, cy)` in logic.js (+ a test in overlay.test.js); `createToggle().objects()`; Leaderboard.js: the switch row is a pressable zone (tap, or A under the pad, which keeps the ring on it after the restart), `scene.restart()` with no second sync, registry `leaderboardTab`; the 🏅 board: rank · name · 🥇n 🥈n 🥉n · BEST RACE, the caller pink (appended with its rank below the top), footer "You: #r · n tournaments" or how to join; a long title shrinks to clear the ✕. Strings: medalBoardTitle / Best / Empty / Join / You (en + zh, notes, the Leaderboard bullet), `medalYouText`. Screenshots (stubbed rows: 16-char names, 3-digit medals, a me row at #31) en / zh at 390 × 844 and 1600 × 900. Smoke `overlays` +2 (muzzled): tap flips and the tab survives a reopen; A under the pad flips back with the ring on the switch. npm test 448/448; full smoke 334/334. Step 4 commit `ad09cb1`.
 
-### Step 6/6: Docs and 0.10.0  [pending]
+### Step 6/6: Docs and 0.10.0  [done]
 - **Change:** AGENTS (the tournament paragraph: posting, queue, board tab; the schema section: tables, RPCs, fold, grants; the file map: `tests/schema.test.js`; the dev-dependency and `npm install` where it now says zero dependencies); README (the board, guests not saved, the forged-bracket limit next to the trust note, `npm install` for tests, the same zero-dependency lines); `db/schema.sql` header; `VERSION` 0.10.0 with a changelog entry en + zh; archive this plan and Michael's source plan.
 - **Verify:** `npm test`; full smoke; grep for stale "nothing is saved" / "zero dependencies" wording.
 - **Commit:** `docs(tournament-b, step 6/6): medal board in AGENTS / README; 0.10.0`
 - Push on Michael's word, only after the schema is live.
+- Result: done. AGENTS (the 🏅 medal board paragraph; package.json, rule 5 and the intro now say no *runtime* dependencies plus one devDependency; db/schema.sql, leaderboard.js, Leaderboard.js and tests entries incl. schema.test.js; the PL/pgSQL CASE gotcha); README (version 0.10.0, Medals paragraph with the forged-bracket limit next to the trust note, the 🏅 switch in Leaderboard, `npm install` for tests); VERSION 0.10.0 + changelog en / zh. Note: 0.9.0 has not shipped yet either, so one push brings both entries (both dated 9 Nov). Stale-wording grep clean (the remaining "zero dependencies" lines describe the smoke driver and the orphan test, still true). npm test 448/448; full smoke 334/334. Step 5 commit `f406cda`. Archived with Michael's source plan.
+
+## Completion summary
+`git log --oneline 9a70e6a..HEAD`: a022b86 (payload), e637cc6 (schema + PGlite), e8f6b9e (client + queue), ad09cb1 (podium), f406cda (🏅 tab), and the docs commit. Not verified here: the schema on the live Supabase (Michael applies db/schema.sql, then a read-only probe of tournament_board and a garbage submit_tournament). Roll back: `git revert` the step commits; the database objects are additive (drop the three tables and two functions, and re-run the old fold_player, to undo).
 
 ## Risks and notes
 - **Git can't undo the database.** Everything is additive and re-runnable; `fold_player` is the only function whose behaviour changes, so its PGlite scenarios plus the existing `submit_score` checks are the guard.

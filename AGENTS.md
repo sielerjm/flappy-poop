@@ -210,12 +210,20 @@ then `slot.finalFirst`, set by `claimLevelFinish` on the final level; never a dr
 shows how, and offers **Continue** (`Versus.continueTournament` emits `'tournament-race'` on
 `game.events`; the panel records it with `recordResult`, then shows the bracket or the **podium**
 (`placings`: 🥇 🥈 🥉, New tournament with the same players, Home). **Abandon** (two taps) clears the
-registry and leaves a plain join screen. Nothing in a tournament is saved or posted (Release B, the 🏅
-medal board and head-to-head rows, is planned separately in
-`.claude/plans/tournament_mode_bracket_0b9f821f.plan.md`).
+registry and leaves a plain join screen, saving nothing. **The 🏅 medal board** (Release B, 2026-11-09):
+"Use my player" gives the host's player its id (`hostSave` → `ensureId`). When `onRace` records the
+Final, a tournament with any linked player (`linkedCount`) is queued once (`queueFinished`:
+`tournamentPayload(tour, newId())` with the host device's id into `Play.tournamentQueue`, registry
+`posted` / `tournamentId`) and synced; the podium's line (`#tour-saved`, `savedText`) follows the
+queue's outcome. Guests travel as `{ id: null, name: null }`. `Play.syncLeaderboard` drains the queue
+after the merges and before the no-username return. The server (`submit_tournament`) re-checks the
+bracket round by round, derives the medals, keeps a receipt per tournament id (a resend is
+'duplicate') and paces one per host per 60 s; stats feed `tournament_board`, the 🏅 tab of the
+Leaderboard overlay; races between two linked players become `tournament_matchups` rows for the
+owner's head-to-head analysis (no role can read them).
 
-It is deliberately small: plain ES modules, no bundler, no npm
-dependencies, Phaser 4 loaded from a CDN, deployed to GitHub Pages straight from
+It is deliberately small: plain ES modules, no bundler, no runtime npm
+dependencies (one devDependency for the schema tests), Phaser 4 loaded from a CDN, deployed to GitHub Pages straight from
 `main`. Keep it that way unless the game clearly outgrows it.
 
 - Repo: `github.com/sielerjm/flappy-poop` (the pre-2026 "joke version" that used
@@ -231,7 +239,9 @@ dependencies, Phaser 4 loaded from a CDN, deployed to GitHub Pages straight from
 index.html                  Entry page. Viewport/touch CSS, <script> for Phaser from
                             jsDelivr, then <script type=module src=src/main.js>.
 manifest.webmanifest        PWA "Add to Home Screen" metadata (fullscreen, portrait).
-package.json                `npm test`, `npm start`, `npm run push`; no dependencies.
+package.json                `npm test`, `npm start`, `npm run push`; one devDependency,
+                            @electric-sql/pglite (pinned; tests/schema.test.js), so
+                            `npm install` once per checkout. The game loads none.
 CREDITS.md                  Phaser + every assets/sfx/ file with a URL.
 
 src/
@@ -380,8 +390,13 @@ src/
                             (flappyPoop.merges: queued { keep, merge } pairs until
                             the server confirms), fetchPlayerName (the board's name
                             or null), createRenameStore (flappyPoop.rename: a rename
-                            typed here), nameAction ('adopt' / 'keep'). Writes go through the
-                            submit_score() and merge_players() SQL functions.
+                            typed here), nameAction ('adopt' / 'keep'). Tournaments:
+                            submitTournament ('ok' / 'keep' / 'rejected': only the
+                            server's own bracket refusal drops one), fetchTournamentBoard,
+                            createTournamentQueue (flappyPoop.tournaments, capped;
+                            drains joined per storage, outcomes for the podium).
+                            Writes go through the submit_score(), merge_players()
+                            and submit_tournament() SQL functions.
                             Fully unit-tested with a fake fetch.
   share.js                  Game-over share, NO Phaser; navigator / document / URL
                             injected: shareMode ('share' when
@@ -940,7 +955,13 @@ src/
                             header, footer, version fixed), own row highlighted
                             by rank, footer = join hint (no username) / rankText
                             (off the board) / "not on the board yet". A generation
-                            counter drops loads from a closed instance.
+                            counter drops loads from a closed instance. A 🏆 ⟷ 🏅
+                            switch under the title (createToggle, the row a pressable
+                            zone; leaderboardLayout) restarts it on the 🏅 medal
+                            board (fetchTournamentBoard: rank · name · 🥇 🥈 🥉 · best
+                            race, the caller pink and appended below the top, footer
+                            medalYouText) without a second sync; registry
+                            'leaderboardTab' keeps the choice for the session.
 
 assets/                     Contract PNGs + README.md (the art contract).
   README.md                 File name, pixel size, orientation rules. tests enforce it.
@@ -986,14 +1007,23 @@ db/schema.sql               Supabase schema: scores table (player_id = save-code
                             merge_players() (fold_player: max per kind, the kept
                             name, aliases); player_rank(); player_name() (the board's
                             name for an id, aliases resolved); admin_merge_name /
-                            admin_merge_all_duplicates for the owner only. Run by
+                            admin_merge_all_duplicates for the owner only.
+                            Tournaments (🏅): tournaments (receipts), tournament_stats,
+                            tournament_matchups (no role reads any of them);
+                            submit_tournament(host, payload) (receipt under a host
+                            lock → 'duplicate'; 60 s per host; per-round bracket
+                            checks; medals derived; names from scores, else the
+                            code's unless name_blocked → 'Player'); tournament_board
+                            (gold, silver, bronze, best; `me`); fold_player folds
+                            medals and re-points matchups and receipts. Run by
                             hand in the SQL editor, never by any integration; it is
                             the source of truth for the backend. Apply it BEFORE
-                            pushing a client that depends on new functions. Verified
-                            offline with PGlite (Postgres in WebAssembly) when no
-                            Docker daemon is available.
+                            pushing a client that depends on new functions.
+                            tests/schema.test.js runs it in PGlite (Postgres in
+                            WebAssembly). PL/pgSQL gotcha: a bare CASE inside
+                            `IF … THEN` ends the condition at its THEN; parenthesise.
 
-tests/                      node --test, zero deps. Each file is self-describing:
+tests/                      node --test (schema.test.js needs `npm install`: PGlite). Each file is self-describing:
   field.test.js             fieldWidth (phone, desktop, 2:1 cap, bad input, even),
                             uiColumn, poopX, the x0 shift of trayLayout /
                             levelBarLayout / readyLayout, hits on a shifted column,
@@ -1125,7 +1155,14 @@ tests/                      node --test, zero deps. Each file is self-describing
                             400 / throw / timeout; disabled config makes no request;
                             fetchTop parsing + order; fetchRank; submitPlan matrix
                             (name, id, cap, confirmed, rename, flag, id change);
-                            submit store incl. throwing storage
+                            submit store incl. throwing storage; submitTournament
+                            (ok / keep / rejected), fetchTournamentBoard, the
+                            tournament queue (cap, order, joined drains)
+  schema.test.js            db/schema.sql in PGlite, applied twice: anon reads no
+                            tournament table; medals = placings() for 3–8 players;
+                            300 legal brackets accepted, 16 forgeries rejected (no
+                            receipt left); duplicate / 60 s pacing; guests; board
+                            order and `me`; names; merge_players folds medals
   scenes.test.js            no scene method is named after a Phaser.Scene property
                             (add, load, input, time, render, …): such a method is
                             shadowed by the plugin and throws inside create(), which
@@ -1320,9 +1357,10 @@ meta/                       Local-only project notes and reports (gitignored;
    Bump it by changing that one tag; `tests/html.test.js` only checks the pin is
    an exact version. Phaser is a global (`Phaser.Scene`, `Phaser.Game`), not an
    import.
-5. **No build step, no dependencies.** The site is served as-is from the repo
+5. **No build step, no runtime dependencies.** The site is served as-is from the repo
    root by GitHub Pages. Don't add a bundler, TypeScript, or npm packages without
-   a strong reason; if you do, the deploy story has to change too.
+   a strong reason; if you do, the deploy story has to change too. The one
+   devDependency (PGlite, pinned exactly) only runs db/schema.sql in tests.
 6. **Mobile first.** The phone portrait layout is the design; a desktop window
    only widens the world around it (the chrome column stays the phone layout).
    Scenes never read `GAME_WIDTH`: the world uses `this.scale.width` (Play: `this.fieldW`,

@@ -8,7 +8,7 @@ A Flappy Bird–style game for phone browsers: flap a poop through the gut, dodg
 
 **Play now → [sielerjm.github.io/flappy-poop](https://sielerjm.github.io/flappy-poop/)**
 
-Works best on your phone — add it to your home screen for a full-screen, app-like launch. On a desktop or landscape window the gut widens to fill the screen. English and Simplified Chinese in-game. Version **0.9.0 beta**.
+Works best on your phone — add it to your home screen for a full-screen, app-like launch. On a desktop or landscape window the gut widens to fill the screen. English and Simplified Chinese in-game. Version **0.10.0 beta**.
 
 Tip: on iPhone, turn **Silent mode off** to hear sound.
 
@@ -189,7 +189,9 @@ On a window wide and tall enough for two phone-width halves (desktop or tablet l
 3. **Play** each match: the two named players claim their halves as usual. Tournament races are shorter (levels of 10 / 25 / 35 / 35 / 35 / 35 / 50 pairs). Ties go to fewer crashes, then more finish lines crossed first, then whoever crossed the last line first.
 4. **Continue** after each race back to the bracket; the Final ends on a 🥇 🥈 🥉 podium. **Abandon** (two taps) stops early.
 
-Nothing in a tournament is saved. A pasted code shares that player's secret save id with the host device for the tournament only (it is never stored); paste codes only from people you're playing with.
+**Medals.** When the Final is decided, everyone who joined with their user code (and you, with **Use my player**) gets their medals on the **🏅 medal board**: tap 🏆, then flip the 🏆 ⟷ 🏅 switch under the title. Players rank by 🥇, then 🥈, 🥉 and their best race. Offline, the podium keeps the medals on this device and posts them next time the board can be reached. Guests and abandoned tournaments are never saved.
+
+A pasted code shares that player's secret save id with the host device for the tournament (it is never stored); paste codes only from people you're playing with. The server checks every bracket it receives, but a host holding everyone's codes could still report races that never happened: the medal board is for friends, not prizes.
 
 ![Finish line](docs/finish-divider.svg)
 
@@ -207,19 +209,20 @@ A username belongs to one player on the board: if a name is taken, paste your co
 
 ### Leaderboard
 
-The 🏆 tray button (or **T**) shows a shared **Top 25**. You need a username to appear. Toilet runs keep their 🚽. Offline, the board says it can’t be reached and posts your best next time it can.
+The 🏆 tray button (or **T**) shows a shared **Top 25**. You need a username to appear. Toilet runs keep their 🚽. Offline, the board says it can’t be reached and posts your best next time it can. The 🏆 ⟷ 🏅 switch under the title shows the **🏅 medal board** from tournaments instead.
 
 ![Finish line](docs/finish-divider.svg)
 
 ## 🛠️ For developers
 
-Plain ES modules, no bundler, no npm dependencies. [Phaser 4.2.1](https://phaser.io) from a CDN, deployed to GitHub Pages from `main`.
+Plain ES modules, no bundler, no runtime npm dependencies. [Phaser 4.2.1](https://phaser.io) from a CDN, deployed to GitHub Pages from `main`.
 
 ### Run locally
 
 ```bash
 npm start      # serves on 0.0.0.0:8000 and prints laptop + phone URLs
-npm test       # Node 22 built-in test runner, zero dependencies
+npm install    # once: PGlite, the only devDependency (runs db/schema.sql in the tests)
+npm test       # Node 22 built-in test runner
 npm run smoke  # with npm start running: drive the real game in headless Chrome
 npm run smoke -- --list           # named smoke sections
 npm run smoke -- --only=wide,pad  # subset while iterating
