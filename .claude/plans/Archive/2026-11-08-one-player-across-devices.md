@@ -1,6 +1,6 @@
 # Plan: One player across devices — backend account merging, a username claim, clear save/load steps, and Clear
 - Created: 2026-11-08
-- Status: steps 1–4 done (code committed, not pushed); step 5 is Michael's rollout
+- Status: complete (2026-11-09: SQL applied, duplicates folded, probe passed, archived, pushed)
 - Source: Michael's `.claude/plans/username_uniqueness_claim_8632d0fc.plan.md` (audited), his asks (merge today's duplicates, prevent new ones, succinct save/load instructions; a pink-outlined **Clear** left of Save) and two answers: a held name typed on a new browser is **refused with the code steps** (no auto-join); Clear **signs this device out**.
 - Baseline: `26831f7` on `main`, tree clean. 0.8.2 is committed, not pushed: this joins its What's new.
 - Whole-suite verification: `npm test` (orphan audit included); `npm run smoke -- --only=home` while iterating on the panel; the full `npm run smoke` before each scene commit. SQL proven in a throwaway local Postgres (`colima start`, Michael's OK) before he pastes `db/schema.sql` into Supabase.
@@ -87,11 +87,17 @@ Fix or add:
 - Commit: `docs(step 4/5): one player across devices in README, AGENTS and the spec; 0.8.2`
 - Result: README (Save / Load bullet, the leaderboard section), AGENTS (the save-code paragraph, leaderboard.js, savePanel.js, schema.sql), the Save Code Spec note, the home section's blurb and the 0.8.2 notes (three bullets per locale); npm test 403/403; `--only=home` passes. Step 3 commit `2ed83d4`. A live probe shows `name_available` is still 404 on Supabase: step 5 is pending.
 
-### Step 5/5 — Rollout (Michael, with a live probe)
-1. Paste the whole `db/schema.sql` into the Supabase SQL editor ("Success. No rows returned").
-2. Run `select * from public.admin_merge_all_duplicates();` (or `admin_merge_name` per name) once he has confirmed the three duplicated names are one person each.
-3. I run a read-only probe: `name_available` is false for a held name with a random id and true for a fresh one; `fetchTop` shows the duplicates gone.
-4. `npm run push` on his word.
+### Step 5/5 — Rollout (Michael, with a live probe)  [done]
+- Result (2026-11-09): Michael ran `admin_merge_all_duplicates()`. Probe: 28 rows; no name has two rows of one kind; basel off 43; Davewave246 off 149 · on 87; Michele2.0 off 120 · on 65; `name_available` false for MICHELE2.0 / "Basel " with a stranger id, true for a fresh name; anon gets 401 on `player_aliases` and on `admin_merge_all_duplicates`. 28, not 29: the fold also joined a **fourth** name, 俊逸, which my pre-fold probe missed (it flagged names with more than two rows; 俊逸 had two off rows, like basel). The "shawn" device (backup: off 54, 6 Nov) had posted as 俊逸 (8 Nov 18:31 UTC, the old `submit_score` renamed its row), so 俊逸 sat under two ids (that device and the original 5 Nov device, off 35). `player_rank(shawn's id)` now returns 俊逸's row (off 60, level 3). Shawn was not deleted; re-inserting him would conflict or leave a ghost row under an alias id.
+1. ✅ Michael pasted `db/schema.sql` into Supabase (2026-11-09). Live probe (read-only): `name_available('DAVEWAVE246', random id)` → false; a fresh name → true; anon on `player_aliases` → 401. Board: 34 rows; duplicates still there (basel 43 / 9; Davewave246 two ids, now off 149 · on 87 · on 82 · off 62; Michele2.0 two ids, off 120 · off 94 · on 65 · on 58).
+2. Michael confirmed the three names are one person each. He runs the fold in the **SQL Editor** (dashboard → left sidebar → SQL Editor → + New query; runs as the owner, so the anon revoke doesn't apply):
+   - optional preview (read-only): `select public.name_key(name) as username, count(distinct player_id) as devices, max(score) as best from public.scores group by 1 having count(distinct player_id) > 1;` → 3 rows, 2 devices each.
+   - the fold: `select * from public.admin_merge_all_duplicates();` → 3 rows (`basel 1`, `davewave246 1`, `michele2.0 1`). Re-running is harmless (finds none). It cannot be undone; `db/BACKUP_2026-11-08__scores_rows.sql` is his pre-fold copy (older than today's scores; the fold keeps maxes, so nothing that matters is lost).
+3. I re-run the read-only probe. Expected: 29 rows; no name with more than two rows; basel off 43; Davewave246 off 149 · on 87; Michele2.0 off 120 · on 65; `name_available` still false for a held name with a random id and true for a fresh one; anon still refused on `player_aliases`.
+4. Archive: plan status → complete; `git mv` (with `-f` adds) the repo copy `.claude/plans/2026-11-08-one-player-across-devices.md` and Michael's source `username_uniqueness_claim_8632d0fc.plan.md` into `.claude/plans/Archive/`; commit `chore: archive the one-player-across-devices plans`.
+5. `npm run push` (Michael said go: "we can do this"): stamps LAST_UPDATED, runs `npm test`, commits the stamp, pushes `main` (8 commits since c4226b7 + the archive + the stamp). It ignores untracked files and adds only `src/logic.js`, so the backup (every player's secret id) cannot ride along.
+- Not done by me: the backup file stays where Michael put it (untracked). Suggest moving it into `meta/` (gitignored, local-only by the new convention) so a later `git add db/` can't publish the ids.
+- No Docker needed: the SQL is applied and proven live.
 
 ## Risks and notes
 - A stranger who already holds a name keeps it; the real owner reclaims nothing without a code (out of scope, as before). Squatting a fresh name still needs a positive score.
