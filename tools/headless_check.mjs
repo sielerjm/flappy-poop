@@ -2115,6 +2115,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         const flags = await evaluate(`(() => { const v = ${VS}; const wide = v.children.list.find((c) => c.type === 'Rectangle' && c.depth === 70); const t = (s) => v.children.list.find((c) => c.type === 'Text' && c.text === s); return JSON.stringify({ wins: v.match.slots.map((s) => s.levelWins), w: wide?.width, p1: t('🏁 ×2')?.x, p2: t('🏁 ×0')?.x, cx: v.layout.totalW / 2 }); })()`).then(JSON.parse);
         ok(flags.wins[0] === 2 && flags.wins[1] === 0 && flags.w === TT.versus.resultPanelW && flags.p1 < flags.cx && flags.p2 > flags.cx, `level wins: P1 first over level 1's line and first out (🏁 ×${flags.wins[0]}), P2 🏁 ×${flags.wins[1]}, on a ${flags.w} px panel`);
         ok(panel.syncs === 0 && panel.save === saveBefore, 'a match records nothing: no leaderboard sync, the save state untouched');
+        await evaluate(`[${P1}, ${P2}].forEach((p) => { delete p.syncLeaderboard; }), true`); // the counting stub off: scene instances outlive restarts, and later sections sync for real
         // Rematch: the same devices, a fresh seed, straight through the countdown into play. Pinned to
         // equal points, the fewer crashes win; equal crashes too is a draw.
         const rematch = async () => {
@@ -2403,7 +2404,24 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         const podium = await evaluate(`[...document.querySelectorAll('#tour-podium p')].map((p) => p.textContent)`);
         const bronzeName = semiNames[1];
         ok(final.shown && final.texts.includes(`${finalNames[1]} WINS!`) && (await open()) && podium[0].startsWith(`🥇 ${finalNames[1]}`) && podium[1].startsWith(`🥈 ${finalNames[0]}`) && podium[2].startsWith(`🥉 ${bronzeName}`) && finalNames.includes(semiNames[0]), `the Final's winner takes gold: ${podium.join(' · ')} (the semi loser is third without racing again)`);
-        ok((await evaluate(`localStorage.getItem('flappyPoop.save')`)) === saveBefore, 'a tournament saves nothing: the host\'s save state is untouched');
+        // The 🏅 board: the Final queued the tournament once (2 linked players: the pasted code and the
+        // host); the board is muzzled here, so the podium says it posts later.
+        const later = await tx('tournamentSaveLater');
+        const savedLater = await until(`document.getElementById('tour-saved')?.textContent === ${JSON.stringify(later)}`, 60);
+        const queued = await evaluate(`JSON.stringify({ q: ${P1}.tournamentQueue.load(), reg: __flappy.registry.get('tournament'), save: ${P1}.getSaveState() })`).then(JSON.parse);
+        const entry = queued.q[0];
+        const gold = entry && entry.payload.matches.find((m) => m.round === 'final');
+        const goldName = gold && entry.payload.players[gold.winner === 0 ? gold.a : gold.b]?.name;
+        ok(savedLater && queued.q.length === 1 && entry.payload.id === queued.reg.tournamentId && queued.reg.posted === 'queued' && entry.hostId === queued.save.id && entry.payload.players.filter((p) => p.id).map((p) => p.name).sort().join() === 'Linked,Smoke' && entry.payload.players.every((p) => p.id || p.name === null) && entry.payload.matches.length === 2 && (goldName ?? null) === (finalNames[1] === guest ? null : finalNames[1]), `the Final queues the tournament once for the 🏅 board (linked: Linked, Smoke; the guest sent as null); offline, the podium says "${later}"`);
+        const saveAfter = JSON.parse((await evaluate(`localStorage.getItem('flappyPoop.save')`)) ?? '{}');
+        const saveWas = JSON.parse(saveBefore ?? '{}');
+        ok(JSON.stringify(saveAfter.top ?? []) === JSON.stringify(saveWas.top ?? []) && /^[A-Za-z0-9_-]{22}$/.test(saveAfter.id ?? ''), 'a tournament records no score; the host\'s save only gained its id (the payload\'s host id)');
+        // Online (a stubbed board): the next sync posts it, the queue empties and the podium says so.
+        await evaluate(`(() => { globalThis.__fetch = globalThis.fetch; globalThis.__posts = []; globalThis.fetch = async (url, init) => { if (String(url).endsWith('/rpc/submit_tournament')) { globalThis.__posts.push(JSON.parse(init.body)); return new Response('"ok"', { status: 200 }); } return new Response('{"message":"stub"}', { status: 503 }); }; return import('./src/config.js').then((m) => { m.LEADERBOARD.dataApi = 'https://stub.invalid/rest/v1'; return true; }); })()`);
+        await evaluate(`${P1}.syncLeaderboard().then(() => ${PANEL}).then((m) => (m.openTournamentPanel({ game: __flappy, locale: 'en', play: ${P1} }), true))`);
+        const posted = await evaluate(`JSON.stringify({ posts: globalThis.__posts, q: ${P1}.tournamentQueue.load().length, saved: document.getElementById('tour-saved')?.textContent })`).then(JSON.parse);
+        await evaluate(`(globalThis.fetch = globalThis.__fetch, import('./src/config.js').then((m) => { m.LEADERBOARD.dataApi = ''; return true; }))`);
+        ok(posted.posts.length === 1 && posted.posts[0].p_tournament.id === entry.payload.id && posted.posts[0].p_host_id === entry.hostId && posted.q === 0 && posted.saved === (await tx('tournamentSaveSent')), `online, the next sync posts it once and the podium says "${posted.saved}"`);
         // New tournament: the same three players, a fresh draw; Abandon (two taps) → a plain join screen.
         await click('tour-again');
         const again = await evaluate(`JSON.stringify(__flappy.registry.get('tournament').tour.players.map((p) => p.name).sort())`).then(JSON.parse);
@@ -2413,6 +2431,12 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await click('tour-abandon');
         const plain = await until(`!__flappy.registry.get('tournament') && __flappy.scene.isActive('Versus') && ${VS}.match.status === 'join' && !${VS}.match.tournament && Boolean(${VS}.tournamentButton)`, 60);
         ok(again.join() === [guest, 'Linked', 'Smoke'].sort().join() && armed === (await tx('tournamentAbandonConfirm')) && stillOpen && plain && !(await open()) && (await evaluate(`${VS}.joinTitle.text`)) === (await tx('versusTitle')), `New tournament keeps the players (${again.join(', ')}); Abandon asks once ("${armed.slice(0, 30)}…"), then leaves a plain join screen`);
+        // An all-guest tournament: its Final queues nothing, and the podium says so.
+        await evaluate(`Promise.all([import('./src/tournament.js'), import('./src/logic.js')]).then(([t, l]) => { const tour = t.createTournament([0, 1, 2].map((i) => ({ name: 'G' + i, playerId: null, guest: true })), l.createRng(3)); const semi = t.nextMatch(tour); t.recordResult(tour, semi.id, 0, { by: 'score', slots: [{ score: 5, deaths: 0, levelWins: 0, finalFirst: false }, { score: 1, deaths: 0, levelWins: 0, finalFirst: true }] }); __flappy.registry.set('tournament', { tour, matchId: 'final' }); __flappy.events.emit('tournament-race', { outcome: { winner: 0, by: 'score' }, slots: [{ score: 9, deaths: 0, levelWins: 1, finalFirst: true }, { score: 2, deaths: 1, levelWins: 0, finalFirst: false }] }); return true; })`);
+        await sleep(200);
+        const guests = await evaluate(`JSON.stringify({ saved: document.getElementById('tour-saved')?.textContent, q: ${P1}.tournamentQueue.load().length, posted: __flappy.registry.get('tournament')?.posted })`).then(JSON.parse);
+        ok(guests.saved === (await tx('tournamentSaveNone')) && guests.q === 0 && guests.posted === 'none', `an all-guest tournament queues nothing: "${guests.saved}"`);
+        await evaluate(`${PANEL}.then((m) => m.closeTournamentPanel()).then(() => (__flappy.registry.remove('tournament'), true))`);
         await evaluate(`${VS}.leave(), true`);
         await until(`!__flappy.scene.isActive('Versus') && __flappy.scene.isActive('Play') && ${P1}.state === 'ready'`);
         await evaluate(`__flappy.registry.set('versus', false), true`);

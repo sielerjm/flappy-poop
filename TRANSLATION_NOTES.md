@@ -51,7 +51,7 @@ formal medical language.
 - **User code** / save code (用户码 / 存档码) = the `fp1.…` string players copy between devices. The home-screen user button reads **Load user** (载入用户) until a username is set, then the name and best; it opens the panel titled **SAVE / LOAD USER**, whose labels are **Username**, **Save user code**, **Load user code**, and a **Save** button at the bottom that stores the username. `{name}` and `{scores}` are placeholders filled at runtime; keep them verbatim.
 - **One player across devices** (2026-11-08): every browser has its own secret id; the leaderboard treats ids merged through a user code as one player (aliases). A **username belongs to the player holding it on the board**: typing a held name on a new browser is refused (`saveNameTaken`), and the way in is to paste the user code (`saveIntro` step 3, `saveMerged`). **The **board's name wins** (2026-11-09): a rename typed on one device reaches the others on their own (`saveIntro` step 4, 自动更新); only a name typed on a device overrides the board. **Clear** (清除) signs this device out after a second tap (`saveClearConfirm`, `saveCleared`): the name, id and scores are forgotten on the device only. "Sign out" is the plain sense (退出), not an account system. `{name}` stays verbatim.
 - **Leaderboard** (排行榜) = the shared online Top 25 behind the 🏆 tray button. Only players with a username are on it; `{score}` may carry a 🚽, `{rank}` / `{total}` are numbers. Keep the placeholders verbatim.
-- **Tournament** (锦标赛, 🏅) = 3–8 players on one device, raced two at a time on the two-player screen in a knockout bracket (赛程, **Bracket**): quarter-finals, semi-finals, a bronze match (铜牌赛) and the Final, then a podium (领奖台). Each row of the lobby is a pasted user code, a **Guest** (访客, a made-up English name such as JollyPlunger042, kept as is in Chinese), or **Use my player** (the host's own username). **Abandon** ends it; nothing in a tournament is saved.
+- **Tournament** (锦标赛, 🏅) = 3–8 players on one device, raced two at a time on the two-player screen in a knockout bracket (赛程, **Bracket**): quarter-finals, semi-finals, a bronze match (铜牌赛) and the Final, then a podium (领奖台). Each row of the lobby is a pasted user code, a **Guest** (访客, a made-up English name such as JollyPlunger042, kept as is in Chinese), or **Use my player** (the host's own username). **Abandon** ends it and saves nothing. When the Final is decided, players who joined with a user code (and the host's own player) get their medals (奖牌) on the **🏅 board** (🏅 榜, a tab of the leaderboard); the podium says whether that worked. Guests are never saved.
 - **Two players** (双人模式) = the 👥 switch under the toilet toggle, offered only on a landscape screen wide enough for two halves (desktop, tablet). P1 is the left half, P2 the right; `{n}` is the player number, and `{name}` is "P1" / "P2" (versusPlayer) or, in a tournament race, the competitor's name. A crash does not end a two-player run (the poop is put back mid-screen). Levels start together: the first one over a finish line waits under **Waiting for {name}…** until the other arrives; then each player taps ready (**Tap when ready**, then **Ready! Waiting for {name}…** with a smaller **Tap again to un-ready** under it), and once both are ready a shared 3-2-1-GO starts the level as **GO!** appears (with a toilet flush). The match is decided on points once both players have cleared the last level, and the first one out waits under **Made it out!** / **Waiting for P{n}…**. Two-player runs never reach the leaderboard or the save code.
 
 ## Glossary (items)
@@ -256,11 +256,16 @@ Short, playful, clear. Fit a 720×1280 logical field; How to play / About body w
 | tournamentHowBody | 3 to 8 players race two at a time on this screen, knockout style: win to move on.
 Add each player by pasting their user code, as a guest, or with your own player.
 Races are shorter than a normal run. The higher score wins; a tie goes to fewer crashes, then more finish lines crossed first.
-The top three take the podium 🥇 🥈 🥉. Nothing is saved to the leaderboard. | 3 到 8 名玩家在这台设备上两两比赛，淘汰制：赢了才能晋级。
+The top three take the podium 🥇 🥈 🥉. Players who joined with their user code get their medals on the 🏅 board; guests aren't saved. | 3 到 8 名玩家在这台设备上两两比赛，淘汰制：赢了才能晋级。
 添加玩家：粘贴他们的用户码、选“访客”，或“用我的玩家”。
 每场比赛比平常短。得分高者胜；平分时撞得少的胜，再看谁率先过线的关卡更多。
-前三名登上领奖台 🥇 🥈 🥉。不会保存到排行榜。 |
+前三名登上领奖台 🥇 🥈 🥉。用用户码加入的玩家，奖牌会记到 🏅 榜上；访客不会保存。 |
 | tournamentGotIt | Got it | 知道了 |
+| tournamentSaving | Saving medals… | 正在保存奖牌… |
+| tournamentSaveSent | Medals saved to the 🏅 board | 奖牌已记到 🏅 榜 |
+| tournamentSaveLater | Medals saved on this device: they post when you're online | 奖牌已存在本设备：联网后自动上传 |
+| tournamentSaveRejected | Couldn't save this tournament's medals | 无法保存这届锦标赛的奖牌 |
+| tournamentSaveNone | No one joined with a user code: no medals to save | 没有人用用户码加入：没有奖牌要保存 |
 | versusUnreadyHint | Tap again to un-ready | 再点一次可取消准备 |
 
 ### aboutCredits (English)

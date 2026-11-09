@@ -1,6 +1,6 @@
 # Plan: Tournament mode, Release B (🏅 medal board and head-to-head rows)
 - Created: 2026-11-09 (revised the same day after a critical review)
-- Status: in progress (step 4)
+- Status: in progress (step 5)
 - Baseline: `9a70e6a` on `main` (Release A plus the join-row fix; 8 commits ahead of origin, not pushed), tree clean.
 - Whole-suite verification: `npm test` (430 pass); `npm run smoke` (full; tournament 9, versus 81).
 - Source: Michael's `.claude/plans/tournament_mode_bracket_0b9f821f.plan.md` (steps 7–10); archive it with this plan when done.
@@ -84,11 +84,12 @@ Release A plays a whole tournament on one device but saves nothing. Release B se
 - **Commit:** `feat(tournament-b, step 3/6): queue and post finished tournaments with the leaderboard sync`
 - Result: done. `submitTournament` → 'ok' (ok / duplicate / empty 2xx), 'rejected' only on a 400 saying 'bad tournament' / 'bad host id', else 'keep' (offline, timeout, rate limited, 404 before the schema is applied, 5xx). `fetchTournamentBoard` (rows validated, rank order, `me`). `createTournamentQueue`: entries { payload, hostId }, once per id, oldest dropped past `tournamentQueueMax`; drain state and outcomes shared per storage (WeakMap), so two Play instances or the podium and a game over join one drain. `LEADERBOARD.tournamentsKey` / `tournamentQueueMax`. `syncLeaderboard` drains after the merges and before the no-username return. `fetchTournamentBoard` allowlisted until step 5. npm test 447/447; full smoke 329/329. Step 2 commit `e637cc6`.
 
-### Step 4/6: Podium sends the tournament  [pending]
+### Step 4/6: Podium sends the tournament  [done]
 - **Change:** `tournamentPanel.js`: `ensureId` on "Use my player"; enqueue and `posted` state in `onRace`; the podium status from the state; `onRace` awaits `play.syncLeaderboard()` and re-renders. Strings (en + zh-Hans + notes): the five status lines; `tournamentHowBody`'s last sentence → "Players who joined with their user code get their medals on the 🏅 board; guests aren't saved."; the panel's header comment and the notes' Tournament bullet lose "nothing is saved". Step-1 allowlist entries come off.
 - **Smoke (`tournament`):** the "saves nothing" check becomes "name and top list untouched" (the host now gets an id); with `dataApi` '' the podium says "posts when online" and the queue holds one payload with the right medals; with a dummy `dataApi` and the page's `fetch` stubbed to answer 200 `"ok"` for `/rpc/submit_tournament`, a `syncLeaderboard()` empties it and the podium says Saved (then `dataApi` back to ''); an all-guest tournament queues nothing and says so.
 - **Verify:** `npm test`; `--only=tournament`; full smoke.
 - **Commit:** `feat(tournament-b, step 4/6): the podium posts linked players' medals`
+- Result: done. `onRace` → `queueFinished` once when the Final is recorded (registry `posted: 'queued' | 'none'`, `tournamentId`); the host's id via `hostSave` (`ensureId`, stored) on Use my player and at the Final; the podium's `#tour-saved` line reads the queue's outcome (Saving… / Saved / posts when online / couldn't save / nothing to save). 5 strings + `tournamentHowBody` (en + zh, notes; the Tournament bullet). Smoke `tournament` +3 (12): offline the podium says later and the queue holds one payload (Linked + Smoke linked, the guest null, 2 matches, host id = save id); a stubbed board takes it once and the podium says Saved; an all-guest Final queues nothing. The "saves nothing" check became "no score recorded; the save only gained its id". Found on the way: versus-match's counting stub of `syncLeaderboard` outlived its section (Phaser reuses scene instances) and broke the tournament section in the full run; it is now deleted after its check. Step-1 allowlist entries removed. npm test 447/447; full smoke 332/332. Step 3 commit `e8f6b9e`.
 
 ### Step 5/6: 🏆 ⟷ 🏅 switch on the leaderboard overlay  [pending]
 - **Change:**

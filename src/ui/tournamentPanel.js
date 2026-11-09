@@ -6,15 +6,19 @@
 //   bracket — every match so far and the next one; Play starts it as a Versus race; Abandon
 //             (two taps) ends the tournament without saving anything.
 //   podium  — 🥇 🥈 🥉; New tournament (same players, a fresh draw) or Home.
-// The tournament itself lives in the game registry ('tournament': { tour, matchId }) so it
-// survives the Versus restarts between races; each race's result comes back on game.events
-// ('tournament-race', from Versus.continueTournament). Nothing is saved or posted.
+// The tournament itself lives in the game registry ('tournament': { tour, matchId, posted,
+// tournamentId }) so it survives the Versus restarts between races; each race's result comes
+// back on game.events ('tournament-race', from Versus.continueTournament). When the Final is
+// recorded, a tournament with any linked player (a pasted code or the host's own player) is
+// queued once for the 🏅 board (Play.tournamentQueue → submit_tournament) and the podium says
+// how that went; guests are never sent. Abandon saves nothing.
 
 import { TUNING as T } from '../config.js';
 import { t } from '../i18n.js';
 import { createRng } from '../logic.js';
 import { createMatch } from '../versus.js';
-import { createTournament, nextMatch, recordResult, matchPlayers, placings, claimFromCode, claimHost } from '../tournament.js';
+import { createTournament, nextMatch, recordResult, matchPlayers, placings, claimFromCode, claimHost, tournamentPayload, linkedCount } from '../tournament.js';
+import { ensureId, newId } from '../save.js';
 import { rollGuestName } from '../tournamentNames.js';
 
 const PANEL_ID = 'tournament-panel';
@@ -52,6 +56,7 @@ const CSS = `
 #${PANEL_ID} .match .lost { opacity: 0.6; }
 #${PANEL_ID} .next { margin: 14px 0 0; font-size: 18px; text-align: center; color: #ffd700; }
 #${PANEL_ID} .podium p { margin: 8px 0; font-size: 22px; text-align: center; }
+#${PANEL_ID} .saved { margin: 12px 0 0; font-size: 14px; text-align: center; color: #c9b8dc; }
 #${PANEL_ID} .help p { margin: 0 0 10px; font-size: 16px; line-height: 1.4; }
 #${PANEL_ID} .status { min-height: 1.4em; margin: 10px 0 0; font-size: 14px; color: #c9b8dc; }
 #${PANEL_ID} .status.error { color: #ff8da8; }
@@ -65,6 +70,7 @@ let pasting = -1; // the row showing a paste field, or -1
 let abandonArmedAt = 0;
 let hooked = false; // the 'tournament-race' listener is on game.events
 let view = null; // 'help' while the help card shows
+let saving = false; // the finished tournament's first sync is running
 
 function h(tag, attrs = {}, ...children) {
   const el = document.createElement(tag);
@@ -119,6 +125,15 @@ function versus() {
 /** The running tournament ({ tour, matchId }) or null. */
 export function tournamentState(game) {
   return game?.registry?.get(REGISTRY_KEY) ?? null;
+}
+
+/** The host device's save, given an id (stored) when it has none: the payload's host id. */
+function hostSave(play) {
+  const save = play?.getSaveState?.();
+  if (!save || save.id) return save ?? null;
+  const withId = ensureId(save);
+  play.setSaveState?.(withId);
+  return withId;
 }
 
 function setState(state) {
@@ -208,6 +223,9 @@ function renderSlot(p, i) {
       setStatus(tr(res.error === 'noName' ? 'tournamentNeedName' : 'tournamentDuplicate'), 'error');
       return;
     }
+    // The host's player is linked like a pasted code: it needs its id (created now if this
+    // device never posted; the first leaderboard sync would create the same thing).
+    if (!res.player.playerId) res.player.playerId = hostSave(ctx.play)?.id ?? null;
     players[i] = res.player;
     setStatus('');
     renderLobby();
@@ -317,8 +335,43 @@ function onRace(detail) {
     return;
   }
   recordResult(state.tour, state.matchId, detail.outcome.winner, { by: detail.outcome.by, slots: detail.slots });
-  game.registry.set(REGISTRY_KEY, { ...state, matchId: null });
-  openTournamentPanel({ game, locale: vs?.locale ?? 'en', play: game.scene.getScene('Play') });
+  let next = { ...state, matchId: null };
+  const play = game.scene.getScene('Play');
+  if (placings(state.tour) && !state.posted) next = { ...next, ...queueFinished(state.tour, play) };
+  game.registry.set(REGISTRY_KEY, next);
+  openTournamentPanel({ game, locale: vs?.locale ?? 'en', play });
+}
+
+/**
+ * The Final is in: queue the tournament for the 🏅 board once (when anyone in it is linked)
+ * and start a sync; the podium's line follows it. { posted: 'queued' | 'none', tournamentId }.
+ */
+function queueFinished(tour, play) {
+  const host = linkedCount(tour) > 0 ? hostSave(play) : null;
+  if (!host?.id || !play?.tournamentQueue) return { posted: 'none' };
+  const tournamentId = newId();
+  if (!play.tournamentQueue.add(tournamentPayload(tour, tournamentId), host.id)) return { posted: 'none' };
+  saving = true;
+  Promise.resolve(play.syncLeaderboard?.())
+    .catch(() => {})
+    .finally(() => {
+      saving = false;
+      const el = document.getElementById('tour-saved');
+      if (el && ctx) el.textContent = savedText(ctx.game);
+    });
+  return { posted: 'queued', tournamentId };
+}
+
+/** The podium's line about the 🏅 board: saving, saved, saved for later, refused, or nothing to save. */
+function savedText(game) {
+  const state = tournamentState(game);
+  if (!state?.posted) return '';
+  if (state.posted === 'none') return tr('tournamentSaveNone');
+  const out = game.scene.getScene('Play')?.tournamentQueue?.outcome(state.tournamentId);
+  if (out === 'sent') return tr('tournamentSaveSent');
+  if (out === 'rejected') return tr('tournamentSaveRejected');
+  if (out === 'queued') return tr(saving ? 'tournamentSaving' : 'tournamentSaveLater');
+  return '';
 }
 
 // ---------------------------------------------------------------------------
@@ -343,6 +396,7 @@ function renderPodium() {
   });
   dom.body.replaceChildren(
     h('div', { class: 'podium', id: 'tour-podium' }, h('p', {}, `🥇 ${label(tour.players[p.gold])}`), h('p', {}, `🥈 ${label(tour.players[p.silver])}`), h('p', {}, `🥉 ${label(tour.players[p.bronze])}`)),
+    h('p', { class: 'saved', id: 'tour-saved' }, savedText(ctx.game)),
     h('div', { class: 'actions' }, again, home),
   );
 }
