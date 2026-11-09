@@ -1,6 +1,6 @@
 # Plan: Fix the flaky moving-pipes smoke check; moving pipes speed up linearly per level and are a lighter pink
 - Created: 2026-11-09
-- Status: in progress (step 4)
+- Status: complete (committed; push on Michael's word)
 - Baseline: `510afe2` on `main` (0.8.3 pushed), tree clean.
 - Whole-suite verification: `npm test` (406 pass at baseline); `npm run smoke` (315 checks; the moving-pipes check fails now and then).
 - Repo plan copy: `.claude/plans/2026-11-09-moving-pipes-speed.md` (`git add -f`), archived when done.
@@ -84,11 +84,12 @@
 - Commit: `feat(pipes, step 3/4): moving pipes are a lighter pink`
 - Result: done. Sampled pipe pixel rgb 232,94,150 → 238,134,176 (alpha kept). npm test 407/407 (lightenFrac range); smoke testmode adds the shade check; full smoke 316/316. Level-7 screenshots in the scratchpad (shots5/l7_a, l7_b): the lighter pair stands apart, and its gap moved ~80 px in 0.5 s. Step 2 commit `e75f4b0`.
 
-### Step 4/4 — Docs and 0.8.4
+### Step 4/4 — Docs and 0.8.4  [done]
 - `AGENTS.md:71-77` (the moving-pipes paragraph: speed knobs, ¾ clearance, the lighter `pipe-moving` texture), the `src/ui/` tree (pipeShade.js), `AGENTS.md:967` (`pipeMove.test.js` line); README if it mentions the motion (grep).
 - `src/logic.js` `VERSION` 0.8.4 and a `src/changelog.js` entry (en + zh-Hans): "Moving pipes are a lighter pink and speed up with every level after level 4."
 - Verify: `npm test`; `grep -rn "periodMs" src tests tools AGENTS.md | grep -i pipeMove` → nothing stale.
 - Commit: `docs(step 4/4): moving pipes (speed, shade) in AGENTS; 0.8.4`
+- Result: done. AGENTS (the moving-pipes paragraph, ui/pipeShade.js, the pipeMove.test.js line); README has no moving-pipe text. VERSION 0.8.4 with en + zh-Hans notes. npm test 407/407; the remaining periodMs hits are the derived value and the mystery box's own knob. Step 3 commit `58e0f4d`.
 - Push: `npm run push` on Michael's word.
 
 ## Risks and notes

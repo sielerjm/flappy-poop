@@ -8,6 +8,14 @@ import { LOCALES } from './i18n.js';
 
 export const CHANGELOG = [
   {
+    version: '0.8.4',
+    date: '9 Nov 2026',
+    notes: {
+      en: ['Moving pipes are a lighter pink, and they move up and down faster with every level after level 4.'],
+      'zh-Hans': ['移动的管道现在是更浅的粉色，并且从第 4 关之后每一关都上下移动得更快。'],
+    },
+  },
+  {
     version: '0.8.3',
     date: '9 Nov 2026',
     notes: {

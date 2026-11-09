@@ -69,12 +69,16 @@ before it (487 px on level 1, 446 on level 2); speed is
 `levelSpeed()` (275 + 25 per level, capped at `levels.maxSpeed` 325 = level 3's speed, so
 levels 3+ share one cruise and later difficulty is content), applied when the break ends; the gap
 is `levelGap()` (`gapHeight` × `levels.gapScale[level − 1]`: 1.1, 1.05, then 1). **Moving pipes:** from
-`pipeMove.fromLevel` (4) a share of the pairs (`pipeMove.chance` per level, with `ampPx` /
-`periodMs` rows) bob their gap centre on a sine: `rollPipeMove` at spawn (after the item and bean
+`pipeMove.fromLevel` (4) a share of the pairs (`pipeMove.chance` and `ampPx` per level) bob their gap
+centre on a sine whose average vertical speed rises linearly (`speedPx` 20 px/s on L4, + `speedStepPx`
+20 per level; `pipeMoveParams` derives each row's period: 6 / 4 / 4 / 4 s). A moving pair wears a
+lighter pink (`pipe-moving`, painted once by `createLightTexture` in `ui/pipeShade.js` at
+`pipeMove.lightenFrac`): `rollPipeMove` at spawn (after the item and bean
 draws; never for the centred pair after a fart; amplitude clamped into `gapBounds`), `gapBobY` in
 `update()` moving both columns, a probiotic / bacteria in that pair riding the gap centre (`bob: 'pair'`).
 `pipeMoveShiftPx` is the gap's shift during one column crossing; `tests/tuning.test.js` keeps every
-row under half the poop's clearance so the motion alone can never clip a centred poop. One spacing after a level's last pair a checkered finish
+row under three quarters of the poop's clearance (and every period ≥ 4 s) so the motion alone can
+never clip a centred poop. One spacing after a level's last pair a checkered finish
 line (generated texture, plain Image) scrolls in and no pair follows it outside a
 fart; crossing it (any level but the last) bumps `level`, plays `NewLevel.mp3` (`sfx.levelUp` blip if the
 sample is missing), and pauses the run as the
@@ -406,6 +410,9 @@ src/
                             second Graphics the scroll camera alone renders.
     finish.js               createFinishTexture(): black / white checkered
                             canvas texture for the finish line.
+    pipeShade.js            createLightTexture(): a lighter copy of a texture
+                            (white laid over its own pixels): 'pipe-moving', the
+                            moving pairs' pink.
     levelBar.js             createLevelBar(): grey track, pipe-pink fill tweened
                             one step per pipe (levelProgress), LV n label, 🏁;
                             geometry from levelBarLayout(). setRival(marker) /
@@ -966,7 +973,7 @@ tests/                      node --test, zero deps. Each file is self-describing
                             a wide field, centred in a match half
   pipeMove.test.js          pipeMoveParams rows, pipeMoveAmplitude clamp, pipeMoveShiftPx,
                             rollPipeMove (no draw below fromLevel, centred pair, seeded share ≈ chance),
-                            every row's shift under half the clearance
+                            the linear speed step, every row's shift under ¾ of the clearance
   items.test.js             rollItem, itemGapY, scoreAfterItem, deathPenalty /
                             scoreAfterDeath (floor) + the death and levelClear
                             popups, probiotic inventory
