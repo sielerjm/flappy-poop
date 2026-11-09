@@ -1,6 +1,6 @@
 # Plan: Tournament mode, Release A (local bracket on one device)
 - Created: 2026-11-09 (revised after Michael's critical-audit request the same day)
-- Status: in progress (step 4)
+- Status: in progress (step 5)
 - Baseline: `7a589bd` on `main` (0.8.5 pushed), tree clean.
 - Whole-suite verification: `npm test` (411 pass); `npm run smoke` (315 checks).
 - Source: Michael's `.claude/plans/tournament_mode_bracket_0b9f821f.plan.md`. Release B (the 🏅 medal board, stats, head-to-head rows) gets its own plan once A has been played; the source plan stays in place until then.
@@ -42,12 +42,13 @@ A same-device tournament: 3–8 players, a World Cup bracket, two at a time thro
 - Commit: `feat(tournament, step 3/6): a match can run on its own level table`
 - Result: done. A dependency scan of logic.js / versus.js found 13 helpers that read the table (levelEnd, levelFor, levelPipes, levelProgress, testRunStart, nextTestLevel, skipPairs, hazardsAllowed, scriptedMysteryPair, courseDistance, coursePairStart, rivalMarker, createCourse); all 20 Play call sites now pass `this.tune` (`withLevelPipes(T, match.levelPipes)`, set in init). `TUNING.tournament.levelPipes` added here (moved from step 1). `createMatch(seed, { levelPipes, names, tournament })`; `resetMatch` keeps them. tests/scenes.test.js: a balanced-paren scan that no such call in Play passes bare `T`, with a self-test that it catches one nested. tests/tournament.test.js: the table is 225, levels 1–2 unchanged, T untouched. Smoke versus-match: a rematch on the table gives both halves `tune`, and level 3's line follows pair 70. npm test 429/429; full smoke 316/316. Step 2 commit `799a463`.
 
-### Step 4/6 — Names, Continue and the final-line tiebreak in Versus
+### Step 4/6 — Names, Continue and the final-line tiebreak in Versus  [done]
 - `match.names` ([a, b] or null): join labels, the "Waiting for…" / ready hints and the result panel show names instead of P1 / P2 when present (new strings take `{name}`; the P{n} strings stay for plain 2-player).
 - `claimLevelFinish` on the final level sets `slot.finalFirst = true`. For `match.tournament` the result panel uses `raceOutcome` (headline "{name} wins!", the tiebreak shown as a small line) and its left button reads **Continue** (`versusContinue`) instead of Rematch; Continue hands the outcome to the tournament flow (step 5) rather than restarting.
 - Smoke (`versus-match`): a match created with names shows them on the join screen and the result; a forced equal score and crashes resolves by 🏁 then by `finalFirst`; plain 2-player still says DRAW.
 - Verify: `npm test`; `--only=versus-join,versus-match`; the full smoke.
 - Commit: `feat(tournament, step 4/6): named halves, Continue, and first-across-the-line in Versus`
+- Result: done. versusWins / versusWaiting / versusReadyWaiting take `{name}` (`versusName`: the competitor's name, else "P1" / "玩家1", so plain 2-player text is unchanged); new tournamentContinue / tournamentByDeaths / tournamentByLevelWins / tournamentByFinalFirst (en + zh, notes rows and the two-player bullet). `slot.finalFirst` set by claimLevelFinish on the final level. A tournament match decides by `raceOutcome`, shows the tiebreak line, and its left button is Continue (`primary()`), which emits `tournament-race` on game.events (nobody listening: back to single player). raceOutcome's allowlist entry dropped. Smoke versus-match +3: named join labels and result, 🏁 tiebreak, final-line tiebreak, Continue's event; plain DRAW unchanged. npm test 429/429; full smoke 320/320. Step 3 commit `9f141f7`.
 
 ### Step 5/6 — Lobby, bracket and podium panels; the join-screen button
 - Join screen: a "🏅 Tournament" button (tap, pad ring, Esc/B unchanged) under the hint; hidden once a tournament is running (the join screen then shows the matchup's names and "Round / Semi / Bronze / Final").

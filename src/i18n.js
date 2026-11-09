@@ -152,15 +152,19 @@ Inspired by Flappy Bird`,
     versusJoinReady: 'ready!',
     versusJoinHint: 'Keyboard: W / Space or ↑ / Enter · a controller · tap your half',
     versusGo: 'GO!',
-    versusWins: 'P{n} WINS!',
+    versusWins: '{name} WINS!',
     versusDraw: 'DRAW',
     versusRematch: 'Rematch',
     versusNotSaved: 'Two-player runs are not saved',
     versusEscaped: 'Made it out!',
-    versusWaiting: 'Waiting for P{n}…',
+    versusWaiting: 'Waiting for {name}…',
     versusTapReady: 'Tap when ready',
-    versusReadyWaiting: 'Ready! Waiting for P{n}…',
+    versusReadyWaiting: 'Ready! Waiting for {name}…',
     versusUnreadyHint: 'Tap again to un-ready',
+    tournamentContinue: 'Continue',
+    tournamentByDeaths: 'Fewer crashes',
+    tournamentByLevelWins: 'More finish lines first',
+    tournamentByFinalFirst: 'First across the line',
   },
   'zh-Hans': {
     readyTitle: 'FLAPPY POOP',
@@ -306,15 +310,19 @@ Inspired by Flappy Bird`,
     versusJoinReady: '准备好了！',
     versusJoinHint: '键盘：W / 空格 或 ↑ / 回车 · 手柄 · 点击你这一侧',
     versusGo: '出发！',
-    versusWins: '玩家{n} 获胜！',
+    versusWins: '{name} 获胜！',
     versusDraw: '平局',
     versusRematch: '再来一局',
     versusNotSaved: '双人模式的分数不会保存',
     versusEscaped: '顺利排出！',
-    versusWaiting: '等待玩家{n}…',
+    versusWaiting: '等待{name}…',
     versusTapReady: '准备好了就点一下',
-    versusReadyWaiting: '已准备！等待玩家{n}…',
+    versusReadyWaiting: '已准备！等待{name}…',
     versusUnreadyHint: '再点一次可取消准备',
+    tournamentContinue: '继续',
+    tournamentByDeaths: '撞得更少',
+    tournamentByLevelWins: '率先过线的关卡更多',
+    tournamentByFinalFirst: '率先冲过终点线',
   },
 };
 
@@ -384,6 +392,11 @@ export function countText(n) {
 /** Short level label for the progress bar and score lines: "LV 2". */
 export function levelLabel(locale, level) {
   return t(locale, 'levelShort').replace('{n}', String(level));
+}
+
+/** A match half's display name: the tournament competitor's (match.names), else "P1" / "P2" (versusPlayer). */
+export function versusName(locale, match, index) {
+  return match?.names?.[index] || t(locale, 'versusPlayer').replace('{n}', String(index + 1));
 }
 
 /** Pause banner as two lines joined by newline (Play splits for sizing). */

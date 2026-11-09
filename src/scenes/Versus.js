@@ -1,7 +1,8 @@
 import { GAME_HEIGHT, FIELD, TUNING as T } from '../config.js';
-import { fieldWidth, overButtonsLayout, overHit, canRestart } from '../logic.js';
+import { fieldWidth, overButtonsLayout, overHit, canRestart, isFinalLevel } from '../logic.js';
 import { versusLayout, createMatch, resetMatch, claimDevice, allClaimed, deviceLabel, matchResult } from '../versus.js';
-import { t, levelLabel, pauseBannerText } from '../i18n.js';
+import { t, levelLabel, pauseBannerText, versusName } from '../i18n.js';
+import { raceOutcome } from '../tournament.js';
 import { createButton } from '../ui/button.js';
 import { createFocus } from '../ui/focus.js';
 import { unlock, sfx } from '../sound.js';
@@ -52,7 +53,7 @@ export class Versus extends Phaser.Scene {
     // Join screen: the title, each half's label with its prompt (then its device badge), a hint, Home.
     const halfCx = (i) => layout.x[i] + layout.halfW / 2;
     this.joinTitle = this.add.text(cx, 220, t(this.locale, 'versusTitle'), { ...STYLE, fontSize: '72px' }).setOrigin(0.5).setDepth(52);
-    this.joinLabels = [0, 1].map((i) => this.add.text(halfCx(i), 420, t(this.locale, 'versusPlayer').replace('{n}', String(i + 1)), { ...STYLE, fontSize: '64px', color: PINK }).setOrigin(0.5).setDepth(52));
+    this.joinLabels = [0, 1].map((i) => this.add.text(halfCx(i), 420, versusName(this.locale, this.match, i), { ...STYLE, fontSize: '64px', color: PINK }).setOrigin(0.5).setDepth(52));
     this.joinPrompts = [0, 1].map((i) => this.add.text(halfCx(i), 500, '', { ...STYLE, fontSize: '40px', wordWrap: { width: layout.halfW - 80, useAdvancedWrap: true } }).setOrigin(0.5).setDepth(52));
     this.joinHint = this.add
       .text(cx, 960, t(this.locale, 'versusJoinHint'), { ...STYLE, fontSize: '30px', strokeThickness: 8, wordWrap: { width: Math.min(W - 80, 1100), useAdvancedWrap: true } })
@@ -226,6 +227,7 @@ export class Versus extends Phaser.Scene {
     this.levelFirst = i;
     const slot = this.match.slots[i];
     slot.levelWins = (slot.levelWins ?? 0) + 1;
+    if (isFinalLevel(half.level, T)) slot.finalFirst = true; // first out of the rectum: a tournament race's last tiebreak
     return true;
   }
 
@@ -372,7 +374,11 @@ export class Versus extends Phaser.Scene {
     this.time.delayedCall(T.deathToOverMs, () => this.showResult());
   }
 
-  /** The result panel: who won (matchResult: points, then fewer crashes), each player's score, level, pipes, level wins (🏁) and crashes, Rematch | Home. */
+  /**
+   * The result panel: who won (matchResult: points, then fewer crashes; a tournament race goes on
+   * to more 🏁, then first across the final line, raceOutcome), each player's score, level, pipes,
+   * level wins (🏁) and crashes, Rematch | Home (a tournament race: Continue | Home).
+   */
   showResult() {
     if (this.resultShown || !this.sys.isActive()) return;
     this.resultShown = true;
@@ -380,13 +386,18 @@ export class Versus extends Phaser.Scene {
     const cx = W / 2;
     const cy = GAME_HEIGHT / 2;
     const slots = this.match.slots;
-    const res = matchResult(slots);
+    const tournament = Boolean(this.match.tournament);
+    const res = tournament ? raceOutcome(slots) : matchResult(slots);
+    this.outcome = res;
     const panel = this.add.rectangle(cx, cy, T.versus.resultPanelW, 760, 0x1a0b14, 0.9).setStrokeStyle(8, 0xe85e96).setDepth(70);
-    const headline = res.winner == null ? t(this.locale, 'versusDraw') : t(this.locale, 'versusWins').replace('{n}', String(res.winner + 1));
-    this.add.text(cx, cy - 290, headline, { ...STYLE, fontSize: '60px', color: GOLD }).setOrigin(0.5).setDepth(71);
+    const headline = res.winner == null ? t(this.locale, 'versusDraw') : t(this.locale, 'versusWins').replace('{name}', versusName(this.locale, this.match, res.winner));
+    this.add.text(cx, cy - 290, headline, { ...STYLE, fontSize: '60px', color: GOLD, wordWrap: { width: T.versus.resultPanelW - 60, useAdvancedWrap: true } }).setOrigin(0.5).setDepth(71);
+    // A tournament race decided past the score says how (the plain panel shows the 💀 counts instead).
+    const tiebreak = tournament ? { deaths: 'tournamentByDeaths', levelWins: 'tournamentByLevelWins', finalFirst: 'tournamentByFinalFirst' }[res.by] : null;
+    if (tiebreak) this.add.text(cx, cy - 238, t(this.locale, tiebreak), { ...STYLE, fontSize: '28px', color: '#c9b8dc', strokeThickness: 6 }).setOrigin(0.5).setDepth(71);
     slots.forEach((slot, i) => {
       const x = cx + (i === 0 ? -1 : 1) * (T.versus.resultPanelW / 4);
-      this.add.text(x, cy - 190, t(this.locale, 'versusPlayer').replace('{n}', String(i + 1)), { ...STYLE, fontSize: '44px', color: PINK }).setOrigin(0.5).setDepth(71);
+      this.add.text(x, cy - 190, versusName(this.locale, this.match, i), { ...STYLE, fontSize: '44px', color: PINK }).setOrigin(0.5).setDepth(71);
       this.add.text(x, cy - 110, String(slot.score), { ...STYLE, fontSize: '72px' }).setOrigin(0.5).setDepth(71);
       this.add.text(x, cy - 40, levelLabel(this.locale, slot.level), { ...STYLE, fontSize: '32px', color: '#c9b8dc', strokeThickness: 8 }).setOrigin(0.5).setDepth(71);
       // Pipes passed: the pipe sprite's cap as the icon, ×n beside it, as the game-over panel shows them.
@@ -397,14 +408,14 @@ export class Versus extends Phaser.Scene {
       this.add.text(x + 80, cy + 90, `💀 ×${slot.deaths ?? 0}`, { ...STYLE, fontSize: '36px', color: '#c9b8dc', strokeThickness: 8 }).setOrigin(0.5).setDepth(71);
     });
     this.add.text(cx, cy + 160, t(this.locale, 'versusNotSaved'), { ...STYLE, fontSize: '26px', color: GOLD, strokeThickness: 6, wordWrap: { width: 560, useAdvancedWrap: true } }).setOrigin(0.5).setDepth(71);
-    // Rematch (the left box) | Home (the right), on the game-over panel's row.
+    // Rematch (a tournament race: Continue) on the left | Home on the right, on the game-over panel's row.
     this.buttons = overButtonsLayout(cx, cy, T, { share: true });
-    this.rematchButton = createButton(this, this.buttons.share, t(this.locale, 'versusRematch'), { ...STYLE, fontSize: '40px' }, { depth: 71 });
+    this.rematchButton = createButton(this, this.buttons.share, t(this.locale, tournament ? 'tournamentContinue' : 'versusRematch'), { ...STYLE, fontSize: '40px' }, { depth: 71 });
     this.resultHome = createButton(this, this.buttons.home, t(this.locale, 'tapToHome'), { ...STYLE, fontSize: '40px' }, { depth: 71 });
     this.openedAt = this.game.loop.time;
     this.tweens.add({ targets: panel, scale: { from: 0.8, to: 1 }, duration: T.over.panelInMs, ease: 'Back.easeOut' });
     this.focus?.setItems([
-      { id: 'rematch', box: this.buttons.share, activate: () => this.rematch() },
+      { id: 'rematch', box: this.buttons.share, activate: () => this.primary() },
       { id: 'home', box: this.buttons.home, activate: () => this.leave() },
     ]);
     this.focus?.show(); // only under a controller
@@ -425,7 +436,7 @@ export class Versus extends Phaser.Scene {
     if (s === 'over' && this.buttons) {
       if (!canRestart(this.openedAt, this.game.loop.time, T.retryLockoutMs)) return;
       const hit = overHit(pointer.x, pointer.y, this.buttons);
-      if (hit === 'share') this.rematch();
+      if (hit === 'share') this.primary();
       else if (hit === 'home') this.leave();
     }
   }
@@ -433,13 +444,30 @@ export class Versus extends Phaser.Scene {
   /** The pad's A with no ring (Play.onPadAction → padIntent 'versusSelect'): a claim on the join screen, Rematch on the panel. */
   onPadSelect(padIndex = 0) {
     if (this.match.status === 'join') this.onJoinInput({ kind: 'pad', index: padIndex });
-    else if (this.match.status === 'over' && this.buttons && canRestart(this.openedAt, this.game.loop.time, T.retryLockoutMs)) this.rematch();
+    else if (this.match.status === 'over' && this.buttons && canRestart(this.openedAt, this.game.loop.time, T.retryLockoutMs)) this.primary();
   }
 
   /** The pad's B or Esc: back to single player from the join screen or the result panel; nothing mid-match. */
   onPadBack() {
     if (this.scene.get('Play')?.chromeArgs?.('tap').overlay) return; // an overlay is up: its own Esc / B closes it
     if (this.match.status === 'join' || this.match.status === 'over') this.leave();
+  }
+
+  /** The result panel's left button: Rematch, or Continue after a tournament race. */
+  primary() {
+    if (this.match.tournament) this.continueTournament();
+    else this.rematch();
+  }
+
+  /**
+   * Continue after a tournament race: hands the outcome and both slots to whoever runs the
+   * tournament ('tournament-race' on game.events: the lobby / bracket panel). Nobody listening
+   * (a stale tournament match): back to single player.
+   */
+  continueTournament() {
+    const detail = { outcome: this.outcome, slots: this.match.slots.map((s) => ({ score: s.score, deaths: s.deaths, levelWins: s.levelWins, finalFirst: s.finalFirst })) };
+    if (this.game.events.listenerCount('tournament-race') > 0) this.game.events.emit('tournament-race', detail);
+    else this.leave();
   }
 
   /** The same players again on a fresh course: both halves relaunch, straight into the countdown. */

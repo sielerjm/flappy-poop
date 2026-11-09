@@ -2162,6 +2162,26 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         const lined = await until(`${P1}.finishSpawned`, 80);
         const at = await evaluate(`${P1}.pipesSpawned`);
         ok(tuned && lined && at === 70 && JSON.stringify(tunes.a) === JSON.stringify(table) && JSON.stringify(tunes.b) === JSON.stringify(table) && JSON.stringify(tunes.match) === JSON.stringify(table), `a match on the tournament table (${table.join('/')}): both halves run on it and level 3's finish line follows pair ${at} (85 on the normal table)`);
+        // A tournament race: the halves carry the competitors' names, a tie on points and crashes goes
+        // to more 🏁 and then to the first across the final line, and Continue hands the outcome on.
+        const panelTexts = () => evaluate(`JSON.stringify(${VS}.children.list.filter((c) => c.type === 'Text' && c.visible).map((c) => c.text))`).then(JSON.parse);
+        await evaluate(`${VS}.match.names = ['Ann', 'Bo'], ${VS}.match.tournament = true, true`);
+        const named = await rematch();
+        const labels = await evaluate(`JSON.stringify(${VS}.joinLabels.map((l) => l.text))`).then(JSON.parse);
+        const byWins = await headline(9, 9 + want.bonus, 1, 1); // P1 first out takes the +25 and the last 🏁: equal points and crashes, more 🏁
+        const winsTexts = await panelTexts();
+        ok(named && labels.join() === 'Ann,Bo' && byWins.head === 'Ann WINS!' && winsTexts.includes('More finish lines first') && winsTexts.includes('Continue') && winsTexts.includes('Bo') && !winsTexts.includes('Rematch'), `a named tournament race: join labels ${labels.join(' / ')}; equal points and crashes go to more 🏁: "${byWins.head}" (${winsTexts.filter((x) => /first|Continue/.test(x)).join(', ')})`);
+        ok(await rematch(), 'a tournament race rematch (test only: the panel offers Continue)');
+        await evaluate(`${VS}.match.slots[1].levelWins = 1, true`); // P2 already took a line: P1's final 🏁 levels it at 1 each
+        const byLine = await headline(9, 9 + want.bonus, 1, 1);
+        const lineTexts = await panelTexts();
+        const lineFlags = await evaluate(`JSON.stringify(${VS}.match.slots.map((s) => [s.levelWins, s.finalFirst]))`).then(JSON.parse);
+        ok(byLine.head === 'Ann WINS!' && lineTexts.includes('First across the line') && JSON.stringify(lineFlags) === '[[1,true],[1,false]]', `equal 🏁 too: the first across the final line wins ("${byLine.head}", slots ${JSON.stringify(lineFlags)})`);
+        await evaluate(`(__flappy.events.once('tournament-race', (d) => { globalThis.__race = d; }), true)`);
+        await sleep(TT.retryLockoutMs + 100);
+        await evaluate(`${VS}.primary(), true`);
+        const handed = JSON.parse(await evaluate(`JSON.stringify(globalThis.__race ?? null)`));
+        ok(handed?.outcome?.winner === 0 && handed.outcome.by === 'finalFirst' && handed.slots.length === 2 && handed.slots[0].finalFirst === true && (await evaluate(`__flappy.scene.isActive('Versus')`)), `Continue hands the race to the tournament ('tournament-race': winner ${handed?.outcome?.winner}, by ${handed?.outcome?.by}) and stays on the panel`);
         // Home from the result panel.
         await evaluate(`${VS}.leave(), true`);
         ok(await until(`!__flappy.scene.isActive('Versus') && !__flappy.scene.isActive('PlayB') && __flappy.scene.isActive('Play') && ${P1}.state === 'ready' && ${P1}.match === null && __flappy.scale.width === ${want.W}`), 'Home from the panel returns to single player at the window\'s field');

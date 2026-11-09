@@ -96,7 +96,7 @@ import {
   LAST_UPDATED,
   padIntent,
 } from '../logic.js';
-import { t, pauseBannerText, levelBannerText, levelLabel, initialLocale, isLocale, profileButtonText, coinLabel, countText } from '../i18n.js';
+import { t, pauseBannerText, levelBannerText, levelLabel, initialLocale, isLocale, profileButtonText, coinLabel, countText, versusName } from '../i18n.js';
 import { loadLocal, saveLocal, ensureId, recordScore, TOILET_EMOJI } from '../save.js';
 import { unlock, attachGame, setMuted, isMuted, sfx } from '../sound.js';
 import { createTray } from '../ui/tray.js';
@@ -729,7 +729,7 @@ export class Play extends Phaser.Scene {
   showEscapedBanner() {
     if (!this.match || !this.won) return;
     this.levelTitle?.setText(t(this.locale, 'versusEscaped')).setVisible(true);
-    this.levelHint?.setText(t(this.locale, 'versusWaiting').replace('{n}', String(this.player === 1 ? 2 : 1))).setVisible(true);
+    this.levelHint?.setText(t(this.locale, 'versusWaiting').replace('{name}', versusName(this.locale, this.match, this.player === 1 ? 1 : 0))).setVisible(true);
   }
 
   refreshLevelBanner() {
@@ -742,7 +742,7 @@ export class Play extends Phaser.Scene {
     this.levelSubHint?.setText(t(this.locale, 'versusUnreadyHint'));
     if (this.match && this.levelBreak) {
       const ready = Boolean(this.versusHost()?.isReady?.(this));
-      this.levelHint?.setText(ready ? t(this.locale, 'versusReadyWaiting').replace('{n}', String(this.player === 1 ? 2 : 1)) : t(this.locale, 'versusTapReady'));
+      this.levelHint?.setText(ready ? t(this.locale, 'versusReadyWaiting').replace('{name}', versusName(this.locale, this.match, this.player === 1 ? 1 : 0)) : t(this.locale, 'versusTapReady'));
     } else {
       this.levelHint?.setText(hint);
     }

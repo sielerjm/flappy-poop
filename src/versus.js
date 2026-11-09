@@ -37,10 +37,11 @@ export function versusLayout(viewportW, viewportH, field) {
  * One player's live state, written by its Play half every playing frame and read by the
  * other. `deaths` counts crashes (each one a respawn, never the end), `respawning` is true
  * from the hit to the restart, `alpha` carries the blink so the ghost blinks too, `ended`
- * once the run is over (the rectum cleared), `won` when it cleared the rectum.
+ * once the run is over (the rectum cleared), `won` when it cleared the rectum, `finalFirst`
+ * when it crossed the final line before the other half (a tournament race's last tiebreak).
  */
 export function slotTemplate() {
-  return { device: null, score: 0, pipesPassed: 0, level: 1, distance: 0, y: 0, angle: 0, frame: 'poop', alpha: 1, deaths: 0, levelWins: 0, respawning: false, ended: false, won: false };
+  return { device: null, score: 0, pipesPassed: 0, level: 1, distance: 0, y: 0, angle: 0, frame: 'poop', alpha: 1, deaths: 0, levelWins: 0, finalFirst: false, respawning: false, ended: false, won: false };
 }
 
 /**
