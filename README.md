@@ -83,7 +83,7 @@ The gut is cut into seven segments (stomach → rectum). You advance by **pipe p
 | 3–7 | 50 each | 85 … 285 |
 
 - **Level 1** is a scripted intro: probiotic at pair 3, fiber after pairs 4 and 7, a bean after pair 9 — no bad bacteria, no random rolls.
-- From **level 4**, some pipe pairs slowly drift up and down.
+- From **level 4**, some pipe pairs (a lighter pink) move up and down, faster with every level.
 - A fart never carries you past a finish line: if the line is closer than the burst, the fart ends at the line and the break starts.
 
 ### The shop
@@ -190,6 +190,7 @@ On a window wide and tall enough for two phone-width halves (desktop or tablet l
 2. Pick a username (1–16 characters) and press **Save** — it appears on the public leaderboard with your best.
 3. **Copy** your `fp1.…` user code and keep it somewhere safe.
 4. On another phone or browser, **Load** that code to bring your name and best 6 scores with you.
+5. To change your username, type a new one and press **Save**: every phone and browser that uses your code picks up the new name on its own.
 
 A username belongs to one player on the board: if a name is taken, paste your code instead (or pick another name). **Clear** (two taps) signs this device out only — the board keeps your rows; the code brings them back.
 
