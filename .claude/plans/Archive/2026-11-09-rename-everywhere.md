@@ -1,6 +1,6 @@
 # Plan: A rename reaches every device on its own, and a fourth Save / Load step says so
 - Created: 2026-11-09
-- Status: in progress (step 4: Michael's rollout)
+- Status: complete (2026-11-09: SQL applied, probe passed, pushed)
 - Baseline: `b367afd` on `main` (0.8.2 pushed), tree clean.
 - Whole-suite verification: `npm test` (403 pass at baseline); `npm run smoke -- --only=home` while iterating, the full `npm run smoke` before the client commit.
 - Repo plan copy: `.claude/plans/2026-11-09-rename-everywhere.md` (`git add -f`), archived when done.
@@ -67,7 +67,8 @@ Michael's direction: "New usernames will be updated when you load your player co
 - Commit: `docs(step 3/4): a fourth Save / Load step; 0.8.3`
 - Result: done. npm test 406/406; smoke home 14 checks pass; panel screenshots (en / zh-Hans, 390×844 and 844×390): four lines, nothing clipped, landscape scrolls as before. The only "three steps" left are in the 0.8.2 notes, which describe that version and stay. Step 2 commit `ae47764`.
 
-### Step 4/4 — Rollout (Michael, then me)
+### Step 4/4 — Rollout (Michael, then me)  [done]
+- Result: Michael backed up and applied the schema ("Success. No rows returned"). Live probe (read-only): player_name(random id) → null, a bad id → null, Shawn's old id → "俊逸" (the merged player; the client's fetchPlayerName agrees); anon still 401 on player_aliases; board 28 rows. Pushed with `npm run push`. Step 3 commit `1cd5085`.
 1. Michael: back up both tables (`meta/db-backups/README.md`), then paste the whole `db/schema.sql` into the SQL Editor. It is idempotent: the fold already ran, and nothing in the file re-runs it.
 2. Me, a read-only probe: `player_name` with a random id → null; the new client's boot sync against the live board adopts nothing for a matching name.
 3. `npm run push` on Michael's word. SQL before push: until `player_name` exists the client treats the board as unreachable and keeps today's behaviour, so a push first is safe, just inert.
