@@ -8,6 +8,20 @@ import { LOCALES } from './i18n.js';
 
 export const CHANGELOG = [
   {
+    version: '0.9.0',
+    date: '9 Nov 2026',
+    notes: {
+      en: [
+        'Tournament (🏅): 3–8 players on one device race two at a time in a knockout bracket, with a bronze match, a Final and a podium. Tap 🏅 Tournament on the two-player screen; add players by pasting their user code, as a guest, or as yourself.',
+        'Tournament races are shorter (225 pipe pairs) and never end in a draw: after points and crashes, the player who crossed more finish lines first, then the last line first, wins.',
+      ],
+      'zh-Hans': [
+        '锦标赛（🏅）：3–8 位玩家在同一台设备上两两对决，进行淘汰赛，设有铜牌赛、决赛和领奖台。在双人模式页面点“🏅 锦标赛”；可以粘贴用户码、以访客身份或用自己的玩家加入。',
+        '锦标赛的比赛更短（225 对管道），而且不会平局：分数和撞击次数相同时，率先过线次数更多者胜，再相同则率先冲过终点线者胜。',
+      ],
+    },
+  },
+  {
     version: '0.8.5',
     date: '9 Nov 2026',
     notes: {

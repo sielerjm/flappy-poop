@@ -148,7 +148,7 @@ slot), then counts 3-2-1-GO: the halves slide their poops into place under the "
 `versus.startBoost.windowMs` of GO (`armStartBoost` / `tryStartBoost`, only from the chrome 'flap' action,
 never the launch's own flap) scrolls that half `distancePx` (two poops) further over `durationMs`
 (`boostPeakMul` on `fartMul`'s surge) with the fart face; a fart, a respawn or the run's end cancel it. Both halves run one **shared course**
-(`createCourse(seed, T, { shared: true })`: every draw per pair and purpose, the pair number standing
+(`createCourse(seed, this.tune, { shared: true })`: every draw per pair and purpose, the pair number standing
 in for the score gates, beans spawning into a full bag), while each player's mystery **draws** come
 from their own stream (`rngDraw`) on the **catch-up** table (`catchUpTier` / `catchUpDraws`: 10–24
 pipes behind doubles the bean draws, 25+ forces bean3 = a super fart ready). Each half publishes its
@@ -188,6 +188,30 @@ resumes the match. The match ends once **both** have cleared the rectum (the fir
 player's 🏁 level wins and 💀 count, and offers Rematch
 (same devices, new seed) | Home (the canvas re-fits the window). A match records nothing: no best, no
 save-code score, no leaderboard.
+
+**Tournament** (🏅, `src/tournament.js`, `src/tournamentNames.js`, `ui/tournamentPanel.js`; 2026-11-09,
+Release A, local only): the join screen's "🏅 Tournament" button (plain matches only, centred above the
+hint, clear of P1's tray) opens a DOM panel over Versus. **Lobby**: `TUNING.tournament.minPlayers`–
+`maxPlayers` rows, each a pasted user code (`claimFromCode`: `importCode` with a storage that keeps nothing
+and an empty local player, so the host's save is never read or written; one row per player id), a
+**Guest** (`rollGuestName`: AdjectiveNoun###, ≤ 16 code points, clean words) or **Use my player**
+(`claimHost`, once, needs a username). **Start** draws a seeded World Cup bracket (`createTournament`:
+4 or 8 slots, byes at most one per first-round pair, settled at once; queue order round one, semis,
+bronze, Final; 3 players race a semi and the Final, the semi loser third) into the game registry
+(`'tournament'`: `{ tour, matchId }`), so it survives the Versus restarts between races. **Play**
+restarts Versus (`restartWith`) on `createMatch(seed, { levelPipes: tournament.levelPipes, names,
+tournament: { round, matchId } })`: the halves run on the shorter table (`Play.tune` =
+`withLevelPipes(T, match.levelPipes)`, 10 / 25 / 35 / 35 / 35 / 35 / 50 = 225 pairs; every level-length
+helper in Play takes `this.tune`, never bare `T`, guarded by `tests/scenes.test.js`), the join title is the
+round, `versusName` puts the competitors' names where "P1 / P2" go, and Home reads **Bracket** (back
+to the panel, nothing recorded). The result panel decides by `raceOutcome` (score, fewer crashes, more 🏁,
+then `slot.finalFirst`, set by `claimLevelFinish` on the final level; never a draw once both finish),
+shows how, and offers **Continue** (`Versus.continueTournament` emits `'tournament-race'` on
+`game.events`; the panel records it with `recordResult`, then shows the bracket or the **podium**
+(`placings`: 🥇 🥈 🥉, New tournament with the same players, Home). **Abandon** (two taps) clears the
+registry and leaves a plain join screen. Nothing in a tournament is saved or posted (Release B, the 🏅
+medal board and head-to-head rows, is planned separately in
+`.claude/plans/tournament_mode_bracket_0b9f821f.plan.md`).
 
 It is deliberately small: plain ES modules, no bundler, no npm
 dependencies, Phaser 4 loaded from a CDN, deployed to GitHub Pages straight from
@@ -318,6 +342,14 @@ src/
                             version, newest first: version, date like LAST_UPDATED's
                             day, notes per locale), changelogEntry, changelogNotes
                             (bulleted block for a locale, English fallback).
+  tournament.js             Tournament (🏅) logic, NO Phaser/DOM: createTournament
+                            (seeded 4- or 8-slot bracket, byes), matchPlayers,
+                            nextMatch, recordResult, isDone, placings, raceOutcome
+                            (score, crashes, 🏁, first across the final line), and
+                            the lobby claims claimFromCode (in memory only) /
+                            claimHost. Fully unit-tested.
+  tournamentNames.js        Guest names: GUEST_WORDS (clean, short) and
+                            rollGuestName (AdjectiveNoun###, rerolled on a clash).
   versus.js                 Two-player match logic, NO Phaser/DOM: versusAvailable
                             (landscape + minViewportH), versusLayout (two half-window
                             fields, capped at maxWidth / 2), createMatch / resetMatch
@@ -329,7 +361,8 @@ src/
                             glide → blink → done timeline, pure in elapsed ms),
                             coursePairStart / courseDistance (a pair's place on the
                             course; what a half's distance reads with a pair a given
-                            lead ahead), VERSUS_EMOJI. Fully unit-tested
+                            lead ahead), VERSUS_EMOJI; createMatch's options
+                            (levelPipes, names, tournament) ride a rematch. Fully unit-tested
                             (tests/versus.test.js).
   leaderboard.js            Shared leaderboard, NO Phaser/DOM: submitPlan / submitPlans
                             (pure: what to post; up to two rows per player, best
@@ -458,6 +491,13 @@ src/
                             that fires on pointerup only when moved < 12 px; offset,
                             scrollBy, scrollTo and addScrolled for the focus ring.
                             Used by HowTo and About.
+    tournamentPanel.js      Plain DOM panel over the Versus join screen for a
+                            tournament: lobby (count, Paste code / Guest / Use my
+                            player rows, Start), bracket (results, next match, Play,
+                            Abandon on two taps), podium (New tournament, Home).
+                            State in the registry 'tournament'; races start through
+                            Versus.restartWith; results arrive on 'tournament-race'.
+                            ROUND_KEYS names the rounds for the join title.
     savePanel.js            Plain DOM panel over the canvas (a three-step intro,
                             Username field, read-only user code + Copy, Load
                             field, an outlined Clear beside the Save button that
@@ -818,7 +858,13 @@ src/
                             canvas to the window and starts Play with explicit data
                             (a start without data keeps the last launch data).
                             onPadSelect / onPadBack are the pad's A / B here
-                            (padIntent 'versus'); Esc = back.
+                            (padIntent 'versus'); Esc = back. Tournament: the join
+                            screen's 🏅 button (openTournament), the round as the
+                            title, names via versusName; a tournament race's panel
+                            decides by raceOutcome and its left button is Continue
+                            (primary → continueTournament: 'tournament-race'); Home
+                            becomes Bracket (home()); restartWith(match) starts the
+                            next race or a plain match after Abandon.
     Over.js                 Game-over panel (score, run summary of fiber / probiotic / postbiotic over bacteria / bean / mystery box (mystery-icon.png), pipes crossed, then Share | glowing Home on one row from overButtonsLayout) with a
                             tap lockout (openedAt = game.loop.time: a relaunched
                             scene's this.time.now is stale) and its own tray (mute

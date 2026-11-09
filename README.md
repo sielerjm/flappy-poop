@@ -8,7 +8,7 @@ A Flappy Bird–style game for phone browsers: flap a poop through the gut, dodg
 
 **Play now → [sielerjm.github.io/flappy-poop](https://sielerjm.github.io/flappy-poop/)**
 
-Works best on your phone — add it to your home screen for a full-screen, app-like launch. On a desktop or landscape window the gut widens to fill the screen. English and Simplified Chinese in-game. Version **0.8.5 beta**.
+Works best on your phone — add it to your home screen for a full-screen, app-like launch. On a desktop or landscape window the gut widens to fill the screen. English and Simplified Chinese in-game. Version **0.9.0 beta**.
 
 Tip: on iPhone, turn **Silent mode off** to hear sound.
 
@@ -179,6 +179,17 @@ On a window wide and tall enough for two phone-width halves (desktop or tablet l
 **Crashes don’t end the match.** You tumble, lose **2 × level** points and **10%** of your coins (keep 90%, rounded down), clear power-ups, then respawn with a clear screen.
 
 **Scoring.** First over each finish line gets **+25** (second gets none). Both still get the level’s coins. When both clear the rectum, higher score wins; ties go to fewer crashes. Trailing players get friendlier mystery draws. Matches are never saved to the leaderboard.
+
+### 🏅 Tournament
+
+3–8 players on one device, two at a time, in a knockout bracket. On the two-player join screen, tap **🏅 Tournament**:
+
+1. Set the number of players, then fill each row: **Paste code** (that player's user code: their username comes along), **Guest** (a made-up name like *JollyPlunger042*), or **Use my player** (yours).
+2. **Start** draws the bracket: quarter-finals (from 5 players), semi-finals, a **bronze match**, then the **Final**. Byes fill the gaps; with 3 players, one semi and the Final, and the semi loser takes bronze.
+3. **Play** each match: the two named players claim their halves as usual. Tournament races are shorter (levels of 10 / 25 / 35 / 35 / 35 / 35 / 50 pairs). Ties go to fewer crashes, then more finish lines crossed first, then whoever crossed the last line first.
+4. **Continue** after each race back to the bracket; the Final ends on a 🥇 🥈 🥉 podium. **Abandon** (two taps) stops early.
+
+Nothing in a tournament is saved. A pasted code shares that player's secret save id with the host device for the tournament only (it is never stored); paste codes only from people you're playing with.
 
 ![Finish line](docs/finish-divider.svg)
 

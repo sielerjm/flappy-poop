@@ -1,6 +1,6 @@
 # Plan: Tournament mode, Release A (local bracket on one device)
 - Created: 2026-11-09 (revised after Michael's critical-audit request the same day)
-- Status: in progress (step 6)
+- Status: complete (committed; push on Michael's word)
 - Baseline: `7a589bd` on `main` (0.8.5 pushed), tree clean.
 - Whole-suite verification: `npm test` (411 pass); `npm run smoke` (315 checks).
 - Source: Michael's `.claude/plans/tournament_mode_bracket_0b9f821f.plan.md`. Release B (the 🏅 medal board, stats, head-to-head rows) gets its own plan once A has been played; the source plan stays in place until then.
@@ -60,10 +60,11 @@ A same-device tournament: 3–8 players, a World Cup bracket, two at a time thro
 - Commit: `feat(tournament, step 5/6): lobby, bracket and podium over the join screen`
 - Result: done. `src/ui/tournamentPanel.js` (lobby / bracket / podium; registry 'tournament' { tour, matchId }; listens for 'tournament-race'); Versus: the 🏅 button (centred at y 840, clear of P1's tray), Bracket instead of Home in a tournament race (join screen, result panel, Esc/B: back to the bracket, nothing recorded), the round as the join title, `restartWith(match)`; `match.tournament` is { round, matchId }. 23 strings in en + zh-Hans with notes rows and a Tournament bullet. Screenshots (en / zh, 1600×900) caught two issues, both fixed: the 🏅 button first sat over P1's ⏸, and `refreshProfile` re-showed P1's user button on a match half after a save change (now guarded with `!this.match`). Smoke `tournament` (8 checks): the join button, lobby rows (guest, a refused then a pasted code, Use my player), Start, a named semi on the tournament table, Continue, the Final, the podium (semi loser third), nothing saved, New tournament, Abandon twice. The six step-1/2 allowlist entries are gone (now used). npm test 429/429; full smoke 328/328. Step 4 commit `bd7f98f`.
 
-### Step 6/6 — Docs and 0.9.0
+### Step 6/6 — Docs and 0.9.0  [done]
 - AGENTS (`tournament.js`, `tournamentNames.js`, `ui/tournamentPanel.js`, `Play.tune`, the registry key, the smoke section); README (👥 → 🏅: paste / guest / Use my player, wide windows only, nothing saved, and the trust note: a pasted code hands that player's secret id to the host device in memory only); How to play if it lists modes; TRANSLATION_NOTES; `VERSION` 0.9.0 with en + zh-Hans notes. Archive this plan (the source plan stays for Release B).
 - Verify: `npm test`; the full smoke; grep for stale P1/P2 wording in tournament paths.
 - Commit: `docs(tournament, step 6/6): Tournament mode in AGENTS / README; 0.9.0`. Push on Michael's word.
+- Result: done. AGENTS: a Tournament paragraph after the two-player one, the file map (tournament.js, tournamentNames.js, ui/tournamentPanel.js), the Versus entry, `createCourse(seed, this.tune, …)`. README: a 🏅 Tournament subsection under 👥 Two players (steps, shorter races, tiebreaks, nothing saved, the pasted-code trust note) and the version line. How to play left as is (its controls item covers two players; the tournament is reached from that screen). VERSION 0.9.0 with en + zh notes. npm test 429/429. Full smoke: the first run failed 8 checks in `farts`, all after "super fart: alive, +20 pipes" (its +20 passed; the poop most likely crashed just after the fart's grace); the farts section then passed twice alone and the full smoke passed. A second known flake, next to the moving-pipes one fixed earlier. Step 5 commit `8ee45f9`.
 
 ## Risks and notes
 - Step 3 is the one that can break normal play; its source scan and the full smoke are the guard. Step 5 is the largest UI step; if it outgrows one commit, split "button + lobby" from "bracket + podium".
