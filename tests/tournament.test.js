@@ -2,7 +2,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { TUNING as T } from '../src/config.js';
 import { createRng } from '../src/logic.js';
-import { createTournament, nextMatch, recordResult, matchPlayers, isDone, placings, raceOutcome } from '../src/tournament.js';
+import { createTournament, nextMatch, recordResult, matchPlayers, isDone, placings, raceOutcome, claimFromCode, claimHost } from '../src/tournament.js';
+import { exportCode } from '../src/save.js';
 
 const roster = (n) => Array.from({ length: n }, (_, i) => ({ name: `P${i}`, playerId: null, guest: true }));
 
@@ -131,4 +132,39 @@ test('raceOutcome: score, then fewer crashes, then more level wins, then first a
   assert.deepEqual(raceOutcome([s(), s({ finalFirst: true })]), { winner: 1, by: 'finalFirst' });
   assert.deepEqual(raceOutcome([s(), s()]), { winner: null, by: 'draw' }, 'only when nobody crossed first (never after a finished race)');
   assert.deepEqual(raceOutcome([{ score: 5, deaths: 0 }, { score: 5, deaths: 0 }]), { winner: null, by: 'draw' }, 'missing fields read as none');
+});
+
+/** A storage double that records every call, standing in for the host's localStorage. */
+function spyStorage() {
+  const calls = [];
+  return { calls, getItem: (k) => (calls.push(['get', k]), null), setItem: (k) => calls.push(['set', k]), removeItem: (k) => calls.push(['remove', k]) };
+}
+
+test('claimFromCode reads a pasted code in memory: the id and name, never the host\'s storage', async () => {
+  const host = spyStorage();
+  const had = Object.getOwnPropertyDescriptor(globalThis, 'localStorage');
+  Object.defineProperty(globalThis, 'localStorage', { value: host, configurable: true, writable: true });
+  try {
+    const code = await exportCode({ id: 'BBBBBBBBBBBBBBBBBBBBBB', name: 'Linked', top: [{ score: 40, toilet: false, level: 3 }], exportedAt: null }, { storage: spyStorage() });
+    const res = await claimFromCode(`here you go: ${code}`, []);
+    assert.deepEqual(res, { ok: true, player: { name: 'Linked', playerId: 'BBBBBBBBBBBBBBBBBBBBBB', guest: false } });
+    assert.deepEqual(host.calls, [], 'the host\'s save is neither read nor written');
+    assert.deepEqual(await claimFromCode(code, [res.player]), { ok: false, error: 'duplicate' }, 'one slot per player');
+    assert.deepEqual(await claimFromCode(code.slice(0, -3) + (code.endsWith('AAA') ? 'BBB' : 'AAA'), []), { ok: false, error: 'damaged' });
+    assert.deepEqual(await claimFromCode('not a code', []), { ok: false, error: 'unrecognised' });
+    assert.deepEqual(host.calls, []);
+  } finally {
+    if (had) Object.defineProperty(globalThis, 'localStorage', had);
+    else delete globalThis.localStorage;
+  }
+});
+
+test('claimHost: the host\'s own player once, and only with a username', () => {
+  const save = { id: 'HHHHHHHHHHHHHHHHHHHHHH', name: 'Host', top: [], exportedAt: null };
+  const res = claimHost(save, []);
+  assert.deepEqual(res, { ok: true, player: { name: 'Host', playerId: save.id, guest: false, host: true } });
+  assert.deepEqual(claimHost(save, [res.player]), { ok: false, error: 'duplicate' });
+  assert.deepEqual(claimHost(save, [{ name: 'Host', playerId: save.id, guest: false }]), { ok: false, error: 'duplicate' }, 'their pasted code is the same player');
+  assert.deepEqual(claimHost({ ...save, name: '' }, []), { ok: false, error: 'noName' });
+  assert.deepEqual(claimHost(null, []), { ok: false, error: 'noName' });
 });

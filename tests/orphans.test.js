@@ -26,6 +26,8 @@ const ALLOWED_EXPORTS = {
   recordResult: 'tournament plan, step 5 records each race; remove this entry then',
   placings: 'tournament plan, step 5 shows the podium; remove this entry then',
   raceOutcome: 'tournament plan, step 4 decides a tournament race with it; remove this entry then',
+  claimFromCode: 'tournament plan, step 5 fills a lobby slot from a pasted code; remove this entry then',
+  claimHost: 'tournament plan, step 5 fills a lobby slot with the host\'s player; remove this entry then',
 };
 
 /** UI string keys no source names literally: prefix → why (they are built at run time). */

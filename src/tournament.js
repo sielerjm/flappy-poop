@@ -11,6 +11,7 @@
 
 import { TUNING } from './config.js';
 import { matchResult } from './versus.js';
+import { importCode } from './save.js';
 
 /** The rounds a bracket of `size` slots plays, in race order (bronze before the Final). */
 function roundsFor(size) {
@@ -159,4 +160,44 @@ export function raceOutcome(slots) {
   if (wa !== wb) return { winner: wa > wb ? 0 : 1, by: 'levelWins' };
   if (a.finalFirst !== b.finalFirst) return { winner: a.finalFirst ? 0 : 1, by: 'finalFirst' };
   return { winner: null, by: 'draw' };
+}
+
+// ---------------------------------------------------------------------------
+// Lobby slots: a pasted user code (linked) or the host's own player. Read in memory only:
+// importCode merges into the local player and saves by default, so it gets a storage that
+// keeps nothing and an empty local player; the host's own save is never read or written.
+
+const NO_STORAGE = { getItem: () => null, setItem() {}, removeItem() {} };
+const EMPTY_PLAYER = { id: null, name: '', top: [], exportedAt: null };
+
+/**
+ * A lobby entry from a pasted user code: { ok: true, player: { name, playerId, guest: false } },
+ * or { ok: false, error: 'unrecognised' | 'damaged' | 'duplicate' } ('duplicate': that player
+ * already has a slot). Async (the signature check).
+ */
+export async function claimFromCode(text, players = []) {
+  let res;
+  try {
+    res = await importCode(text, { storage: NO_STORAGE, local: EMPTY_PLAYER });
+  } catch {
+    return { ok: false, error: 'unrecognised' };
+  }
+  if (!res.ok) return { ok: false, error: res.error };
+  const { id, name } = res.state;
+  if (!id || !name) return { ok: false, error: 'unrecognised' };
+  if (players.some((p) => p?.playerId === id)) return { ok: false, error: 'duplicate' };
+  return { ok: true, player: { name, playerId: id, guest: false } };
+}
+
+/**
+ * The host's own player for a slot ("Use my player"): { ok: true, player: { name, playerId,
+ * guest: false, host: true } }, or { ok: false, error: 'noName' (no username yet) | 'duplicate'
+ * (already in a slot) }.
+ */
+export function claimHost(save, players = []) {
+  const name = save?.name ?? '';
+  if (!name) return { ok: false, error: 'noName' };
+  const id = save.id ?? null;
+  if (players.some((p) => p?.host || (id && p?.playerId === id))) return { ok: false, error: 'duplicate' };
+  return { ok: true, player: { name, playerId: id, guest: false, host: true } };
 }

@@ -1,6 +1,6 @@
 # Plan: Tournament mode, Release A (local bracket on one device)
 - Created: 2026-11-09 (revised after Michael's critical-audit request the same day)
-- Status: in progress (step 2)
+- Status: in progress (step 3)
 - Baseline: `7a589bd` on `main` (0.8.5 pushed), tree clean.
 - Whole-suite verification: `npm test` (411 pass); `npm run smoke` (315 checks).
 - Source: Michael's `.claude/plans/tournament_mode_bracket_0b9f821f.plan.md`. Release B (the 🏅 medal board, stats, head-to-head rows) gets its own plan once A has been played; the source plan stays in place until then.
@@ -27,11 +27,12 @@ A same-device tournament: 3–8 players, a World Cup bracket, two at a time thro
 - Verify: `npm test`. Commit: `feat(tournament, step 1/6): a pure World Cup bracket for 3–8 players`
 - Result: done. `src/tournament.js` (createTournament, matchPlayers, nextMatch, recordResult, isDone, placings, raceOutcome); `TUNING.tournament` { minPlayers, maxPlayers }. Deviation: `levelPipes` moves to step 3, where Play first reads it (the audit fails on an unread knob); its sum test goes there. The five exports the game doesn't call yet are allowlisted in tests/orphans.test.js with "remove in step 4/5" reasons (a stale entry fails the audit). tests/tournament.test.js 9 tests; npm test 420/420.
 
-### Step 2/6 — Guest names and in-memory claims
+### Step 2/6 — Guest names and in-memory claims  [done]
 - `src/tournamentNames.js`: short clean adjectives, silly gut nouns; `rollGuestName(rng, taken)` → `AdjectiveNoun###`, rerolled on a clash.
 - In `src/tournament.js`: `claimFromCode(text, players)` runs `importCode` with a **stub storage and `local: empty state`** (it merges and saves by default) → `{ playerId, name }` or `'unrecognised' | 'damaged' | 'duplicate'`; `claimHost(save, players)` for "Use my player" (needs a name; once per tournament).
 - Tests: names ≤ 16 code points with a 3-digit tail; no banned stems; deterministic for a seeded rng; a claim never reads or writes the host's storage (spy); a tampered code and a repeated id are refused.
 - Verify: `npm test`. Commit: `feat(tournament, step 2/6): guest names and in-memory user-code claims`
+- Result: done. `src/tournamentNames.js` (30 adjectives ≤ 6 letters, 30 nouns ≤ 7, so every name ≤ 16; `rollGuestName` rerolls clashes); `claimFromCode` / `claimHost` in `src/tournament.js`. Tests: word list clean (substring stems; 'pee' / 'wee' dropped from the list because they sit inside harmless words like Speedy), every name a valid username, seeded rolls repeat, a claim with a spy as `localStorage` makes zero storage calls, tampered / repeated / junk codes refused, host once and only with a name. `claimFromCode` / `claimHost` allowlisted until step 5. npm test 426/426. Step 1 commit `8958af5`.
 
 ### Step 3/6 — Per-match level table
 - `src/logic.js`: `withLevelPipes(t, pipes)` (a shallow `T` with `levels.pipes` replaced). `createMatch(seed, { levelPipes, names, tournament })` and `resetMatch` carry the options.
