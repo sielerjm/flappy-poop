@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="36" viewBox="0 0 960 36" role="img" aria-label="Finish line">
+  <!-- 3-row checkered band matching src/ui/finish.js (#ffffff / #111111, (row+col)%2) -->
+  <defs>
+    <pattern id="finish" width="24" height="36" patternUnits="userSpaceOnUse">
+      <rect width="12" height="12" fill="#ffffff"/>
+      <rect x="12" width="12" height="12" fill="#111111"/>
+      <rect y="12" width="12" height="12" fill="#111111"/>
+      <rect x="12" y="12" width="12" height="12" fill="#ffffff"/>
+      <rect y="24" width="12" height="12" fill="#ffffff"/>
+      <rect x="12" y="24" width="12" height="12" fill="#111111"/>
+    </pattern>
+  </defs>
+  <rect width="960" height="36" fill="url(#finish)"/>
+</svg>

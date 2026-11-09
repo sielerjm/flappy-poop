@@ -1,166 +1,242 @@
-# Flappy Poop 💩
+# Flappy Poop
 
-## ▶️ Play now: **[sielerjm.github.io/flappy-poop](https://sielerjm.github.io/flappy-poop/)**
+<p align="center">
+  <img src="assets/icon-192.png" alt="Flappy Poop" width="96" height="96" />
+</p>
 
-Open it on your phone and add it to your home screen for a full-screen, app-like launch. On a desktop or landscape window the gut widens to fill the screen (the buttons and HUD stay together in the middle, the poop keeps its spot a quarter of the way in); phones keep the portrait field, and when a run, a level or a fart starts the pipes sweep in from the right and settle across the gut, fading in, the first one a little past the middle so there is room to line up. Resize the window, or rotate your phone, on the start screen to re-fit; mid-run the game pauses and the new size waits for Home. Home-screen installs stay portrait on Android (iOS lets them rotate). In landscape on a phone everything is small, since the field is always 1280 tall.
+A Flappy Bird–style game for phone browsers: flap a poop through the gut, dodge pink intestinal folds, grab fiber and beans, and try to make it out the other end.
 
-A poop emoji flaps through the gut, dodging pink intestinal folds. A Flappy Bird clone for phone browsers, built on [Phaser 4](https://phaser.io) with no build step. Version **0.8.0 beta**. English and Simplified Chinese in-game.
+**Play now → [sielerjm.github.io/flappy-poop](https://sielerjm.github.io/flappy-poop/)**
 
-**Host your own:** fork or push this repo to GitHub, enable Pages (Settings → Pages → Deploy from branch → `main` / root), then open `https://<you>.github.io/<repo>/`.
+Works best on your phone — add it to your home screen for a full-screen, app-like launch. On a desktop or landscape window the gut widens to fill the screen. English and Simplified Chinese in-game. Version **0.8.3 beta**.
+
+Tip: on iPhone, turn **Silent mode off** to hear sound.
+
+| | |
+| --- | --- |
+| [How to play](#how-to-play) | [Pickups & power-ups](#pickups--power-ups) |
+| [Levels & shop](#levels--shop) | [Controls](#controls) |
+| [Two players](#two-players) | [Save codes & leaderboard](#save-codes--leaderboard) |
+| [For developers](#for-developers) | |
+
+![Finish line](docs/finish-divider.svg)
 
 ## How to play
 
-Tap (or press Space / ↑) to flap. Pass a pipe pair for a point; a quick white **+1** flashes under the score each time (fart bursts replace one with the next). Let it drop for long enough and the poop pulls a scared face with sweat marks (the stink lines stay on when a fart is ready); any tap brings the normal face back. Hit a pipe, the ceiling, or the floor and it's over — the poop swaps to its dead face. From pipe 5, a bean (always at least one by pipe 20, rarer afterwards) bobs through the middle of the screen between pipe pairs; grab one and the poop glows with stink lines — tap it to fart: the fart clip plays, the world speeds up and slows back down with it, five pipes rush past, and nothing can touch you until it ends. Beans stack to three; with three the glow turns rainbow, and that fart rockets you past twenty pipes in the same clip. Your best score is saved in the browser. The gut comes in **levels** (stomach, duodenum, jejunum, …): level 1 is 10 pipes, level 2 is 25, and every level after that is 50, down to the rectum (level 7), the last one: clear it and you win ("YOU MADE IT OUT!"). A checkered finish line ends each level, the game pauses for a breather until you tap, the background colour changes, and each level scrolls a little faster. The slow first two levels space their pipes further apart (487 and 446 px, against 412 from level 3 on). A bar at the top shows your progress through the level. On a desktop or a tablet in landscape, a **👥 toggle** under the toilet toggle turns the next start tap into a **two-player race** on the same course, side by side (see **Two players** under Controls).
+- **Tap** (or press **Space** / **↑**) to flap.
+- Fly through gaps in the pink pipe pairs — each pair you pass is **+1**.
+- Hit a pipe, the ceiling, or the floor and the run ends.
+- Each gut segment ends at a **checkered finish line**. Cross it for a short break, then keep going.
+- Level 7 (the rectum) is the last: clear it and you win — **YOU MADE IT OUT!**
 
-From score 8, pickups can appear in the gap:
+Open the round **?** on the ready screen anytime for the in-game guide (pickups, toilet mode, controls, sound).
 
-- **Fiber** (broccoli): +3. A light-green **+3** fades in and out under the score. Popups that are showing stack downward, oldest on top: a new **+1** or **+3** enters underneath, and the other slides up when one fades. In level 1 it holds still midway between two gaps (so does the bean); from level 2 both bob up and down.
-- **Probiotic** (good bacteria): stays in your inventory for 5 pipes and blocks one bad-bacteria hit.
-- **Postbiotic**: eat a fiber while a probiotic is active and it turns into a postbiotic. The probiotic icon in the top-right becomes a molecule, a gold **×2** pulses beside the score, and every pipe (**+2**) and fiber (**+6**, the one that started it included) scores double until the probiotic countdown runs out, farts included; every kernel you pick up meanwhile counts as two (a box's coins never double). Another probiotic extends it; a bad-bacteria hit is still blocked but ends it.
-- **Mystery box**: a spinning brown box with a question mark. The first one is guaranteed early in level 3, waiting between the pipes after one of the level's first four pairs (so before pipe 5); after that they turn up at random, half as often as fiber. On level 3 they hold still midway between two gaps; from level 4 they float up and down at half fiber's speed. Fly through one and it opens: usually fiber (33 %), or a probiotic (20 %), one bean (20 %), 5 coins (10 %), a 5-pipe postbiotic with the ×2 already on (5 %), three beans (5 %), 10 coins (5 %), or, very rarely (1 % each), 15 coins or a skip to the end of the level. The reward's icon rises out of the box (🏁 for the skip, ×3 beside the bean for three, ×5 / ×10 / ×15 beside a coin). A bean with a full bag, or a skip once the finish line is already out, becomes fiber instead. The skip scores every pipe left in the level at once (doubled under a postbiotic, with the probiotic countdown paused, as in a fart), clears the pipes ahead under a gold flash, and brings in the finish line. Boxes pass through a fart like the other items.
-- **Coins** (a golden corn kernel, drawn at half a pickup's size): **one is guaranteed on every level**: on level 1 it waits just past the last pipe, holding still at that pipe's gap; from level 2 it rides between the pipes at a random pair of the level, bobbing (a crash before you take it brings it back). From level 2 more turn up as extras, on about 4 % of pairs, only in a gap between pipes nothing else took (so they never cost you a fiber, probiotic, bacteria or box), and boxes can pay 5, 10 or 15. **Every finish line pays coins**: the level's number (level 3 → 3), and in two-player **3 more** if you didn't crash in that level (each player is paid at their own line, whoever is first; single player has no bonus, since a crash there ends the run). Coins go into your purse, shown as a coin ×n row at the top left, above the bean counter, with a cha-ching. They last **only through one run**: every game starts at 0, a death in single player takes them all, and making it out keeps nothing. They are spent in the **shop** at the level break (below), and the game-over panel counts how many the run collected.
-- **Still pickups pulse**: anything holding still (level 1's fiber, bean and kernel, level 2's gap pickups, level 3's held boxes) breathes gently in size; its hitbox stays the same. Once pickups bob, they stop pulsing.
-- **Bacteria** (bad): −3. A light-red **−3** fades in and out under the score (it always reads −3, even when the score floors at 0). Score never goes below 0. Does not kill. Never in level 1; from level 2, pair 5 on. A hit blocked by a probiotic shows nothing.
+![Finish line](docs/finish-divider.svg)
 
-The probiotic does **not** save you from a pipe.
+## Pickups & power-ups
 
-**The shop.** At every level break a **💰 n** button sits under the banner (dimmed when your purse is empty; with coins the hint reads "Tap to continue · 💰 to shop"). Tap it to open the shop: **fiber** for 1 coin (+3, doubled under a postbiotic), **one bean** for 6, a **super fart** for 16 (fills the bean bag to three) and a **mystery box** for 5 (the same odds as one in the level; a skip turns into fiber there). Tap a row to buy; a row you cannot afford, or a bean row with the bag full ("Bag full"), is greyed out. What you buy shows at once. A box spins a little **slot machine** first: a window over the rows scrolls the rewards right to left with a tick per face, slows down, lands on what the box drew with a ding, holds it for a moment, then gives it to you; nothing else can be bought while it spins, and closing the shop (or starting the level) mid-spin hands the reward over at once, rising from its row. In **test mode** the purse is endless (it reads 💰 ∞ and buying costs nothing); leaving test mode empties it. Close the shop with ✕, a tap outside it, Esc, B or your fart button; closing never starts the level, so tap again to continue. Or skip the shop, tap to continue and keep your coins for later. In a two-player race each player shops in their own break while the other plays on; once both are at the line, an open shop holds the start (the other player reads "Waiting for P1…" until it closes).
+From early in a run, helpful (and not-so-helpful) things appear between the pipes.
 
-On iPhone, Silent mode mutes the game — turn it off to hear sound (How to play says so in its 🔊 row). The pause banner is two centered lines: **PAUSED** / tap anywhere to resume game.
+### Fiber, probiotic, postbiotic, bacteria
+
+| | What it does |
+| --- | --- |
+| **Fiber** (broccoli) | **+3** score |
+| **Probiotic** | Blocks **one** bad-bacteria hit for the next **5** pipes |
+| **Postbiotic** | Eat fiber while a probiotic is up: pipes and fiber score **×2** until the probiotic runs out (farts included; kernels count double too). Another probiotic extends it; a bacteria hit still blocks but ends the ×2 |
+| **Bacteria** | **−3** score (never below 0). Does **not** kill. Never in level 1; from level 2, pair 5 on |
+
+A probiotic does **not** save you from a pipe.
+
+### Beans & fart
+
+- Grab a **bean** between pipe pairs (from level 2). Beans stack up to **3**.
+- When charged, the poop shows stink lines and a soft glow — tap the poop, the bean button, or press **B** to **fart**.
+- A normal fart spends **one** bean: the world surges so **five** pipes rush past (~2.5 s). You cannot die while farting.
+- With **three** beans, the glow turns rainbow: a **super fart** spends all three and rockets you past **twenty** pipes.
+
+### Mystery box
+
+A spinning brown box with a question mark. The first is guaranteed early in **level 3**; after that they show up about half as often as fiber.
+
+Open one for a random reward — usually fiber, or a probiotic, beans, coins, a ready-made postbiotic, or (rarely) a skip to the end of the level. Details below under [Odds & details](#odds--details).
+
+### Coins (golden corn kernels)
+
+- Spend them in the **shop** at each level break.
+- **One kernel is guaranteed per level**; extras can appear from level 2, and boxes can pay coins too.
+- Every finish line pays coins equal to the **level number** (and in two-player, **+3** more if you didn’t crash that level).
+- Coins last **one run only** — a new game starts at 0; a single-player death clears the purse.
+
+![Finish line](docs/finish-divider.svg)
+
+## Levels & shop
+
+### Levels
+
+The gut is cut into seven segments (stomach → rectum). You advance by **pipe pairs passed**, not by score.
+
+| Level | Pairs in level | Ends at pair |
+| --- | ---: | ---: |
+| 1 Stomach | 10 | 10 |
+| 2 Duodenum | 25 | 35 |
+| 3–7 | 50 each | 85 … 285 |
+
+- **Level 1** is a scripted intro: probiotic at pair 3, fiber after pairs 4 and 7, a bean after pair 9 — no bad bacteria, no random rolls.
+- From **level 4**, some pipe pairs slowly drift up and down.
+- A fart never carries you past a finish line: if the line is closer than the burst, the fart ends at the line and the break starts.
+
+### The shop
+
+At every level break, tap **💰** under the banner (dimmed when empty).
+
+| Item | Cost |
+| --- | ---: |
+| Fiber | 1 |
+| Mystery box | 5 |
+| One bean | 6 |
+| Super fart (fill bag to 3) | 16 |
+
+A bought mystery box spins a little slot machine before the reward lands. Close the shop with ✕, a tap outside, Esc, or your fart button — closing never starts the next level.
+
+### Odds & details
+
+Mystery-box draws (fiber takes the leftover ~33%):
+
+| Reward | Chance |
+| --- | ---: |
+| Probiotic | 20% |
+| One bean | 20% |
+| 5 coins | 10% |
+| Postbiotic (5 pipes, ×2 on) | 5% |
+| Three beans | 5% |
+| 10 coins | 5% |
+| Skip to finish | 1% |
+| 15 coins | 1% |
+
+A bean draw with a full bag, or a skip once the finish line is already out, becomes fiber instead.
+
+![Finish line](docs/finish-divider.svg)
 
 ## Controls
 
-- **Ready screen** — a round **?** in the top-right corner opens How to play; it pulses with a soft glow until you open it or finish a run on this build (it comes back after each update). Then, top to bottom: title, the bobbing poop with its "TAP TO FLAP!" speech bubble (any tap starts), the **toilet toggle**, **Save / Load User**, and your `name · best` button. No score is shown until a run starts. Until you set a username that last button reads **Enter username** under a soft pulsing glow: tap it, type a name, press Save, and the panel closes by itself. The start tap slides the poop from the centre to its play position on the left before the run begins; taps during the slide are ignored.
-- **Tap / Space / ↑** — flap. The first tap also starts the run. After closing Settings or About during a run, tap or Space resumes; that tap does not flap. Unpausing from the pause banner gives a gentle bounce (half a flap) so you neither drop into the pipe below nor fly into the one above.
-- **Toilet toggle** (under tap to flap) — switch it on when you are playing on the toilet: the track turns brown and the 🚽 lights up. Runs played that way show a 🚽 beside the score (HUD, game over, High scores, your save code). Off by default on every launch.
-- **How to play** (the ? on the ready screen, also linked from About) — scrollable overlay (drag with a finger or use the mouse wheel) with the flap rule, a pipe row (dodge them; each pair passed is a point), what fiber (+3, bobbing between pairs like a bean), probiotic, the postbiotic it makes with fiber (×2), and bad bacteria (in the gaps, behind the pipes, and moving up and down from level 3), beans and the mystery box do, the toilet toggle, levels, a 🎮 **Controls** row (touch, keyboard and controller buttons for one player, and the two keyboard groups for two), and a last 🔊 **Sound** row with the iPhone Silent-mode note. The coin row is called **Kernels** there and kept short. The game-over panel sums up the run: score, level, how many of each pickup you collected (fiber, probiotic and postbiotics started on the first row; bad bacteria, beans and mystery boxes on the second; a box's reward also counts under its own icon), the pipes crossed and the coins collected, and the 🚽 when toilet mode was on. Under it, **Share** opens your phone's share sheet with a share card (GAME OVER, the happy poop in a tan frame, your score and level, the pickup rows and pipes, and "Play: sielerjm.github.io/flappy-poop"); save it, post it, or send it in a message along with "I scored … on Flappy Poop" and the link; where the browser has no share sheet for images it downloads the PNG instead. **Home** sits beside it; a test run shows Home only. About scrolls the same way.
-- **Levels** — pipe pairs passed decide the level (fiber and bacteria move the score, never the level). Level 1 is 10 pairs, level 2 is 25, every later level 50: the ends are at 10, 35, 85, 135, 185, 235, 285. Level 1 is a scripted intro: a probiotic at pair 3, fiber after pairs 4 and 7, a bean after pair 9, no bad bacteria. Rectum (level 7) is the last level; crossing its finish line ends the run as a win (the game-over panel reads "YOU MADE IT OUT!" and the score is saved at level 7). One pipe spacing after a level's last pair a black-and-white **finish line** scrolls in and nothing follows it; cross it and the run pauses with "LEVEL 2 · Duodenum / Tap to continue", the poop bobbing at mid-height while the background crossfades to the next segment's colour (stomach, duodenum, jejunum, ileum, caecum, colon, rectum). Tap to continue: the next level's speed applies (275 px/s on level 1, 300 on level 2, 325 from level 3 on; the gap is 374 px on level 1 and 357 on level 2, 10 % and 5 % wider than the 340 from level 3 on), you get the same grace as after a fart, and the first pair opens at mid-screen. From level 4 some pipe pairs **drift slowly up and down** (15 % of pairs on level 4, then 30 / 45 / 60 % on levels 5 / 6 / 7, swinging 30 to 80 px over 5 to 6 s, never past the gap's usual range); the pair after a fart holds still, and a probiotic or bacteria inside a moving pair rides along with it. A fart never carries you past the line: if the line is closer than the fart's pipes, the fart ends at the line, only the pairs it actually passed count, and the break starts at once (the beans are still spent). The **progress bar** at the top (grey track, pink fill, `LV n`, 🏁) fills one step per pair passed and is full when the last pair of the level is behind you. Your best score remembers the level it was set at (game over, High scores, save code, and the leaderboard's level column).
-- **Level 1 is a scripted intro** — no random pickups: a probiotic sits in pair 3's gap, bad bacteria in pair 5's, a fiber bobs after pair 7 and a bean after pair 9, then the finish line. Random rolls start at level 2.
-- **Beans / fart power** — from level 2 a bean appears from pipe 5, halfway between pairs: 15 % per pair until pipe 20 with one guaranteed in that window, then 6 % per pair (rarer than fiber), bobbing slowly through the middle half of the screen with a ±15° wiggle. One bean readies the power: the poop shows stink lines and a pulsing soft-edged glow, and a bean button pulsing in step appears in the bottom-centre of the tray (in landscape, or on a desktop window, it sits by your right thumb at the screen's edge instead; Settings' 👈 👉 row moves it to the left); tap it (or the poop) to fire. You can carry up to three beans (they keep spawning until the bag is full); with three held the glow and the bean button cycle through rainbow colours. A normal fart spends one bean (the rest stay in your bag of up to three, across levels too); with all three held the tap is a **super fart** that spends them all. Speed rises and falls so exactly five pipes pass in about 2.5 s (the `fart_accelerate.mp3` clip plays from its start and fades out as the fart ends), or twenty for a super fart over the whole 4.3 s clip, at up to ~10× speed, under a rainbow halo. While farting the poop floats through the middle of the screen on a gentle wave, nose up as it rises and nose down as it falls (gravity off, taps ignored), blinks between full and half opacity, cannot die, and fiber, probiotic and bacteria pass straight through it; a probiotic shield does not count down during the fart. Towards the end of the clip no new pipes spawn, so the screen is clear when it ends; the next pair then enters from the right edge with its gap at the height you floated at, so you have a full screen and a straight line through. Tapping it does not start the run. Closing How to play that was opened from About also closes About, leaving a paused run if info was opened mid-play. Tap the dimmed area outside Settings, About, or How to play to close (same as X).
-- **Bottom-left (i)** — About: How to play and the feedback link first, then the credits, the author and LLM note, and the version and last-updated stamp at the bottom; it scrolls like What's new. Tap the **Updated** line for **What's new**: the latest version's notes, with links to every earlier version's. Independent of Settings.
-- **Bottom-left (🌐)** — language (English / 简体中文). Persists. First visit with no saved choice follows the browser language when it starts with `zh`. Opening Language mid-run pauses.
-- **Bottom-left (💬)** — feedback: choose Bug or Feature request to open a GitHub issue form in the browser (needs a GitHub account). Also linked from About and How to play.
-- **Bottom-right tray** — 🏆 leaderboard, mute/unmute, settings, with pause sitting directly above the settings cog. Tray taps never flap, and on the game-over screen they never retry.
-- **🏆 Leaderboard** (tray or **T**) — the shared online Top 25; ten rows show at once, drag or scroll for the rest. Only players who have set a username are on it; your row is highlighted, and if you are below the Top 25 a footer line shows your best and its rank. Runs played on the toilet keep their 🚽. Opening it mid-run pauses. Works offline too: the board just says it cannot be reached and your best is posted the next time it can. See **Leaderboard** below.
-- **P** or **Esc** — pause / resume (during a run). Ignored while Settings, About, How to play, What's new, Language, Feedback, or the Leaderboard is open; Esc then closes the top overlay.
-- **M** — mute / unmute. Persists across reload. Still works while an overlay is open.
-- **Save / Load User** (ready-screen button) — the panel lists the four steps: pick a username (1–16 characters; it is shown on the public leaderboard with your best score) and press Save (the panel confirms "Username saved"); Copy your `fp1.…` user code and keep it somewhere safe; on another phone or browser paste it into Load user code, and your username and best 6 scores (with their 🚽 flags) follow you; to rename, type a new username and press Save, and every device and browser using your code picks it up on its own. A code from a left-handed player also carries the bean button's side (Settings' 👈 👉 row), applied on load. Codes are signed, so an edited code is refused; loading merges scores (best 6 kept), the pasted username wins, and if that device already had its own player the leaderboard is told the two are **one player** (the old id becomes an alias, so the device keeps counting under the pasted code's rows). **A username belongs to the player holding it on the board**: typing a name that is already on the board on a new browser is refused with those steps (paste your code instead, or pick another name); when the board cannot be reached the name is saved on the device and checked on the next sync. **Clear** (the outlined button left of Save) signs this device out: a first tap warns you to copy your code first, a second within a few seconds forgets the username, id and scores on this device (the board keeps them; the code brings them back). The ready screen's **Enter username** prompt returns. New players see an **Enter username** button (pulsing glow) under it that opens this panel with the keyboard on the Username field and closes after Save; once a username is set that button reads `name · best` and opens the High scores overlay (up to 6).
-- **How to play** and **tap to flap** are drawn as buttons on the ready screen; tapping the second one starts the run like any other tap.
-- **S** — settings (sound, haptics, the 👈 👉 bean-button side for landscape, Reload game, About). **Reload game** re-fetches every loaded script with `cache: 'reload'` (so GitHub Pages' 10-minute cache cannot hand back old modules) and then reloads the page with a fresh cache-busting query: the way to pick up a new build straight after a push, and the only way when the game is installed on the home screen and has no address bar. Opening Settings or About mid-run pauses; closing them leaves the pause banner until a new tap or Space.
-- **I** — About.
-- **F** — Feedback (bug / feature → GitHub).
-- **L** — language.
-- **T** — leaderboard.
-- **B** — fire the bean power-up (same as tapping the poop or the bean button; does nothing unless it is charged; three beans make it a super fart). In a level break it opens and closes the shop instead (so does the pad's RT and, in two players, your fart key).
-- **Two players (👥)** — on a window wide and tall enough for two phone-width halves (a desktop, a tablet in landscape; never a phone in portrait) a second toggle sits under the toilet toggle. Switch it on (session-only, like 🚽) and the start tap opens a **join screen** instead of a run: the canvas becomes two halves, P1 on the left and P2 on the right. The first device to flap takes P1 and the next distinct device takes P2: the keyboard counts as two devices (**W / Space** flaps and **E / Left Shift** fires the power for one group; **↑ / Enter** and **Right Shift / Numpad 0** for the other), each **controller** is one (A flaps, RT fires), and a **tap on a half** takes that half (two thumbs on a tablet). Once both are in, the poops slide into place and a 3-2-1-GO countdown starts both runs **the moment GO appears**, with a toilet flush; a flap right on GO (within 0.3 s) gives that player a fart-powered **head start** of two poop widths. Both players get the **same course** (pipes, fiber, probiotics, bad bacteria, beans and where the mystery boxes sit); what a box *gives* is each player's own luck, and a fart or a skip bends your own course after it (the first pair after a fart opens at mid-screen, as always). The other poop shows in your lumen as a faded **ghost** when it is within a screen of you on the course (ahead or behind, wearing its own face, and by the pipes the other player is actually at, even after a fart, a crash or a skip), and your **progress bar** carries a small poop marking where the other player is (gold at the 🏁 when a level ahead, grey at the start when behind). **Levels start together**: cross your finish line first and your poop idles under *Waiting for P2…* until the other player gets there; the next level waits for **both players to tap ready** (a touch, a flap key, or a controller's A or B): each half reads *Tap when ready* (it pulses gently under a soft white glow, as single player's *Tap to continue* does), then *Ready! Waiting for P2…* with a smaller *Tap again to un-ready* under it, and a second tap takes the ready back, to shop again or take a break (the 💰 hides while you're ready). Once both are ready a 3-2-1-GO starts the next level for both as GO appears (the flush and the head start again); a tap during the count takes that player's ready back and stops it. You can tap ready as soon as your own pause starts. **P**, **Esc**, ⏸ or a pad's **Menu** pause both halves under one banner, and a tap anywhere resumes both. A **crash never ends a two-player run**: your half halts for the tumble, the poop is carried back to mid-screen, blinks a few times, and you play on with a clear screen (the next pair opens at mid-height, as after a fart); it costs **2 × level points** (never below 0), **10 % of your coins** (you keep 90 %, rounded down) and **every power-up** (beans, a super fart ready, probiotic and postbiotic), and counts as a crash. **The first player over each finish line (the rectum's too) earns 25 points**; the second gets none, though both get the level's coins. The match ends once **both players have cleared the rectum** (the first one out waits under *Made it out! / Waiting for P2…* while the other plays on; its tray and taps still pause and resume the match): the **higher score wins**, equal scores go to the player with **fewer crashes**, still equal is a draw. A trailing player gets help from the mystery box: 10 to 24 pipes behind, bean draws are twice as likely; 25 or more behind, every box gives three beans (a super fart ready to fire). Two-player runs are never saved and never reach the leaderboard. The result panel shows both scores with each player's 🏁 **level wins** (first over each finish line, and first out of the rectum) and 💀 crashes and offers **Rematch** (same devices, a fresh course) and **Home**; Esc or B backs out of the join screen. Both halves make their own sounds. Settings, About and the rest open from P1's tray as usual and pause both halves.
-- **Controller** (an Xbox pad over Bluetooth, desktop browser or iPhone Safari; other standard-mapping pads should work too) — press any button once so the browser exposes the pad (Safari sometimes spends that first press). **A** flaps, starts, resumes, continues a level break, and presses the ringed button; **RT** fires the bean power (in a level break it opens and closes the shop); **Menu** pauses / resumes; **B** closes the top overlay (or the shop), resumes from pause, or hides the ring; **Y** mutes. In a level break the d-pad rings the 💰 button, A opens the shop on its ✕, and the d-pad walks the rows. The **d-pad or either stick** moves a pink **focus ring** to the nearest button in that direction (up from ⚙ is ⏸, left of it 🔇; at an edge it wraps round): during a run a press pauses first and lands on ⏸, then the tray (i, 🌐, 💬, 🏆, mute, ⚙, ⏸) is yours and A presses; on the start screen the toilet toggle and the ? are reachable too (Save / Load User and the username button need a tap or click, since they take typing); on the game-over panel the ring starts on Home (Share from the pad saves the PNG, since a pad press is not a tap for the share sheet); inside an overlay it starts on ✕ and walks the rows (in About and How to play, up / down scroll the text). The ring only appears after a pad press and goes away on the next tap or click, so phones never see it. Sound starts after the first tap or click (a pad press cannot unlock audio). If a pad lands on the wrong buttons, its layout is a table in `src/config.js` (`TUNING.gamepad`); a non-standard mapping is reported once in the console.
-- **Haptics** — a short buzz on death, Android / Chrome only. iPhone has no `navigator.vibrate` and must not error.
+### Ready screen
 
-Translation review notes for LLMs / humans: [TRANSLATION_NOTES.md](TRANSLATION_NOTES.md).
+Top to bottom: title, bobbing poop (“TAP TO FLAP!”), **toilet toggle**, **Save / Load User**, and your profile button (`Enter username` until you set a name, then `name · best`). The **?** opens How to play.
 
-## Run locally
+### During a run
+
+| Input | Action |
+| --- | --- |
+| Tap / Space / ↑ | Flap (first tap also starts) |
+| **B** / bean button / tap poop | Fire fart when charged; in a level break, open/close the shop |
+| **P** / Esc / ⏸ | Pause / resume |
+| **M** | Mute / unmute |
+| **S** | Settings |
+| **I** | About |
+| **L** | Language |
+| **F** | Feedback |
+| **T** | Leaderboard |
+
+### Tray
+
+- **Bottom-left:** About (i), language (🌐), feedback (💬)
+- **Bottom-right:** Leaderboard (🏆), mute, settings, with pause above the cog
+
+### Toilet mode
+
+Flip the toilet toggle when you’re playing on the toilet. Those runs show a 🚽 beside the score and on the leaderboard. Off by default each launch.
+
+### Controller
+
+Xbox-style pads work in desktop browsers and iPhone Safari (press any button once so the browser sees the pad).
+
+| Button | Action |
+| --- | --- |
+| **A** | Flap / confirm |
+| **RT** | Fart / shop toggle in a break |
+| **Menu** | Pause |
+| **B** | Back / close overlay |
+| **Y** | Mute |
+| D-pad / stick | Move the pink focus ring |
+
+The ring only appears after a pad press; a tap or click hides it again.
+
+![Finish line](docs/finish-divider.svg)
+
+## Two players
+
+On a window wide and tall enough for two phone-width halves (desktop or tablet landscape — not a phone in portrait), a **👥** toggle appears under the toilet switch.
+
+1. Turn it on and tap to start → **join screen** (P1 left, P2 right).
+2. Claim a half: tap your side, use a keyboard group, or a controller. Keyboard groups: **W / Space + E / Left Shift** vs **↑ / Enter + Right Shift / Numpad 0**.
+3. After both claim, a **3-2-1-GO** starts the race (toilet flush on GO). A flap right on GO can give a short head start.
+
+**Same course, separate luck.** Both players see the same pipes and pickups; what a mystery box *gives* is each player’s own roll. The other poop appears as a faded **ghost** nearby, and as a marker on your progress bar.
+
+**Levels stay in sync.** Cross the finish line and wait for the other player; both must tap **ready** before the next countdown. An open shop holds the start.
+
+**Crashes don’t end the match.** You tumble, lose **2 × level** points and **10%** of your coins (keep 90%, rounded down), clear power-ups, then respawn with a clear screen.
+
+**Scoring.** First over each finish line gets **+25** (second gets none). Both still get the level’s coins. When both clear the rectum, higher score wins; ties go to fewer crashes. Trailing players get friendlier mystery draws. Matches are never saved to the leaderboard.
+
+![Finish line](docs/finish-divider.svg)
+
+## Save codes & leaderboard
+
+### Username & save code
+
+1. Open **Save / Load User** (or **Enter username**) on the ready screen.
+2. Pick a username (1–16 characters) and press **Save** — it appears on the public leaderboard with your best.
+3. **Copy** your `fp1.…` user code and keep it somewhere safe.
+4. On another phone or browser, **Load** that code to bring your name and best 6 scores with you.
+
+A username belongs to one player on the board: if a name is taken, paste your code instead (or pick another name). **Clear** (two taps) signs this device out only — the board keeps your rows; the code brings them back.
+
+### Leaderboard
+
+The 🏆 tray button (or **T**) shows a shared **Top 25**. You need a username to appear. Toilet runs keep their 🚽. Offline, the board says it can’t be reached and posts your best next time it can.
+
+![Finish line](docs/finish-divider.svg)
+
+## For developers
+
+Plain ES modules, no bundler, no npm dependencies. [Phaser 4.2.1](https://phaser.io) from a CDN, deployed to GitHub Pages from `main`.
+
+### Run locally
 
 ```bash
 npm start      # serves on 0.0.0.0:8000 and prints laptop + phone URLs
 npm test       # Node 22 built-in test runner, zero dependencies
 npm run smoke  # with npm start running: drive the real game in headless Chrome
-               # (every overlay opens and closes, a run starts, no exceptions)
-npm run smoke -- --list           # its named sections
-npm run smoke -- --only=wide,pad  # just those (plus what they need) while iterating
-npm run push   # stamp the About "Updated" time, test, commit the stamp, push main
+npm run smoke -- --list           # named smoke sections
+npm run smoke -- --only=wide,pad  # subset while iterating
+npm run push   # stamp About "Updated" time, test, commit the stamp, push main
 ```
 
-`npm start` prints `http://localhost:8000` for the laptop and `http://<LAN-IP>:8000` for a phone on the same Wi-Fi. Do not open localhost on the phone — that is the phone itself, not this laptop.
+`npm start` prints `http://localhost:8000` for the laptop and `http://<LAN-IP>:8000` for a phone on the same Wi-Fi. Do not open localhost on the phone — that is the phone itself.
 
-## Replacing the art
+### Host your own
 
-The player and items are drawings processed by `tools/process_art.py` from `assets/src/`. Drop a new source PNG in `assets/src/` and re-run that script (`uv run --with pillow python3 tools/process_art.py`) to crop, knock out white, and write the 384×384 contract files (drawn at 0.25 scale → 96 logical px on the 720×1280 field). The poop set (alive, dead, stink frames, falling faces, fart) shares one body scale and centre so texture swaps never move the body. The same script cuts the app icons from `assets/src/FlappyPoopAppArt.png`: `icon-192.png` / `icon-512.png` keep the drawing inside the central 80 % on the art's own tan (Android crops maskable icons to a circle), `apple-touch-icon.png` is the full art (iOS only rounds the corners).
+Fork or push this repo to GitHub, enable Pages (Settings → Pages → Deploy from branch → `main` / root), then open `https://<you>.github.io/<repo>/`.
 
-Pipe, background, and ground are still placeholders from `tools/make_placeholders.py`. That script must **not** overwrite `poop.png` or the icons. Overwrite any contract file at the same name and size; `assets/README.md` has the table and `npm test` enforces it.
+### Art, tuning, layout
 
-## Repo layout
+- Art contract and sizes: [`assets/README.md`](assets/README.md). Player/item redraws go through `assets/src/` + `tools/process_art.py`.
+- Feel numbers live in `TUNING` in [`src/config.js`](src/config.js) — change a number, reload.
+- Full repo map and agent rules: [`AGENTS.md`](AGENTS.md).
 
-```
-index.html              viewport/touch setup, loads Phaser + src/main.js
-manifest.webmanifest    "Add to Home Screen" metadata
-CREDITS.md              Phaser + fart-sample attribution, author/art/LLM note
-src/
-  main.js               Phaser.Game config: fieldWidth(window) x 1280 (720 on a phone, up to 2560 on desktop), Scale.FIT, roundPixels, resize → Play.onFieldResize, [Boot, Play, Over, Settings, About, HowTo, Changelog, Language, Feedback, Scores, Leaderboard]
-  config.js             GAME_WIDTH/HEIGHT, FIELD (the width range), TUNING, and LEADERBOARD (Supabase Data API URL + publishable key, both public)
-  logic.js              pure functions: field width / chrome column / poop x, rng, gaps, scoring, items, settings store, tray / ready layout, issueUrl, chromeIntent
-  share.js              game-over share: the panel PNG to the share sheet (navigator.share inside the tap), else a download (Node-testable)
-  save.js               user codes: fp1.<payload>.<sig> export / import, local best-6 store, merge (Node-testable)
-  leaderboard.js        shared leaderboard over the Supabase REST API: submitPlan, submitStore, submitScore, fetchTop, fetchRank (Node-testable, fetch injected)
-  versus.js             two-player match logic: the two-half layout and its gate, join-screen device claims, ghost placement, rival marker, catch-up draw tables, the respawn timeline, match result (Node-testable)
-  i18n.js               en / zh-Hans catalog + t() / initialLocale
-  changelog.js          What's new: one entry per version (date, notes in both locales), newest first; the first must be VERSION
-  sound.js              WebAudio blips + setMuted (also mutes the Phaser MP3 samples)
-  ui/finish.js          checkered finish-line canvas texture
-  ui/levelBar.js        progress bar (track, animated pink fill, LV n, 🏁) from levelBarLayout; the other player's marker in a match
-  ui/glow.js            soft radial glow (bean power) and rounded-rect halo (Enter-username prompt) canvas textures
-  ui/tray.js            Phaser wrapper for 🏆 / mute / settings, pause above the cog, and bottom-left (i) / 🌐 / 💬
-  ui/shareCard.js       the 1080x1350 share card (Canvas 2D: headline, poop in a tan frame, score, pickups, Play: link)
-  ui/button.js          rounded-rect button chrome for ready-screen boxes
-  ui/toggle.js          toilet toggle (track + knob + 🚽) and the 👥 two-player toggle for the ready screen
-  ui/scrollView.js      finger / wheel scrolling for overlay panels (content camera + thumb)
-  ui/savePanel.js       DOM user-code panel (Username, Copy, Load) opened from Save / Load User
-  scenes/
-    Boot.js             preloads images (the mystery box as a spritesheet) + the sfx MP3s; makes the box's spin anim
-    Play.js             ready -> playing -> paused -> dead; items; mystery boxes (draws, reveal, skip); beans + fart power; tray; locale; ready buttons + profile line; also one half of a two-player match ('Play' = P1 on the left, 'PlayB' = P2 on the right)
-    Versus.js           two-player match: join screen + device claims, countdown, shared pause, the end once both have cleared the rectum, result panel (Rematch | Home); sits above the two Play halves
-    Over.js             game-over panel (score, 3 + 3 run summary with postbiotics and mystery boxes, pipes crossed, Share | glowing Home); draws the share card for Share; tray mute still works
-    Settings.js         sound / haptics / bean-button side overlay; About link
-    About.js            How to play + feedback links, credits, author, LLM note, version, last-updated (a link to What's new); scrolls
-    Changelog.js        What's new overlay: one version's notes from src/changelog.js, links to the other versions
-    HowTo.js            How to play overlay (ready screen and About link); feedback link
-    Language.js         English / 简体中文 picker
-    Feedback.js         Bug / Feature request chooser → GitHub issue forms
-    Scores.js           High scores overlay (username + up to 6 scores) from the profile line
-    Leaderboard.js      shared Top 25 overlay (🏆 / T): a scrolling ten-row band with 🚽, own row highlighted, rank footer, join hint
-db/schema.sql           Supabase schema (table, RLS + column grant, submit_score / player_rank / name_available / player_name / merge_players); run by hand in the SQL editor
-assets/                 contract PNGs + README.md (the art contract)
-  poop.png poop-dead.png poop-stink1.png poop-stink2.png poop-falling.png poop-stink-falling1.png poop-stink-falling2.png poop-fart.png poop-speech.png
-  fiber.png probiotic.png postbiotic.png bacteria.png bean.png coin.png (placeholder kernel) mystery.png (8-frame spin spritesheet) mystery-icon.png
-  pipe.png villi.png ceiling.png ground.png icon-192.png icon-512.png apple-touch-icon.png   (villi.png is a transparent overlay over the per-level colour; ceiling.png / ground.png are the front villi rows drawn over the pipes; see assets/README.md)
-  src/                  original drawings (not in the size table)
-  sfx/fart.mp3          death sample
-  sfx/fart_accelerate.mp3   fart power-up clip (a super fart lasts exactly this long; a normal one 2.5 s, the clip faded out)
-  sfx/NewLevel.mp3      level-up chime at the finish line
-  sfx/Coin_Pickup.mp3   a coin picked up, or a box paying coins
-  sfx/Coin_Spend.mp3    a shop purchase
-  sfx/ShopOpenClose.mp3 the shop opening and closing
-  sfx/ToiletFlush_Win.mp3   the toilet flush on a two-player GO
-tools/make_placeholders.py   pipe / villi / ceiling / ground only (needs Pillow)
-tools/process_art.py         crop Michael's sources into contract PNGs and the app icons
-tools/serve.py               npm start: bind 0.0.0.0:8000, print phone URL; every response is Cache-Control: no-store (a reload never mixes old and new modules; on GitHub Pages use Settings → Reload game)
-tools/headless_check.mjs     npm run smoke: headless Chrome over the DevTools protocol, zero deps
-tests/                  node --test: html assets logic state levels store smoke
-                        settings sound tray items tuning about howto feedback overlay hitbox i18n chrome serve save ready leaderboard scenes tools fart changelog versus course
-                        orphans (nothing unused: exports, knobs, strings, textures, overlay wiring)
-.claude/plans/          active / incomplete build plans + living specs
-.claude/plans/Archive/  completed build plans (don't edit)
-```
+### Leaderboard (self-host)
 
-## Tuning
+The board is a free-tier [Supabase](https://supabase.com) project. The browser talks to the REST API with the public URL and publishable key in `LEADERBOARD` in [`src/config.js`](src/config.js). Safety comes from [`db/schema.sql`](db/schema.sql): the key can read name / score / toilet / level / time (not ids) and write only through `submit_score()` and `merge_players()`.
 
-Everything that affects feel lives in `TUNING` in `src/config.js`: gravity, flap impulse, `poopXFrac` (the player's spot as a share of the field width; the width range itself is `FIELD` beside it), `prefill.leadGrowth` and `prefill.sweepMs` (how far ahead the first pipes settle and how long they take to sweep in on a wide field), `fallLookVy` (the downward speed that brings out the falling face), level-1 pipe speed, pipe spacing (`pipeSpacingPx`, widened on levels before `levels.spacingRefLevel`), gap height, death/retry timings, tray size/alpha, fart volume, the `items` block (`startScore`, `hazardFromLevel`, `hazardFromPair`, `bandMoveFromLevel`, `chancePerGap`, `fiberPoints`, `bacteriaPenalty`, `probioticPipes`, `postbioticMultiplier`, `itemRadius`, weights), `pipePoints`, the `popup` block (`rowY` for the two stacked rows and `shiftMs` for the slide up; the pipe +1: `pipeFadeMs`, `pipeHoldMs`, `pipeColor`; the +3 / −3: `fadeMs`, `holdMs`, `fiberColor`, `bacteriaColor`; `fontPx` for both), the `over` block (game-over panel scale-in and the Share | Home row), the `shareCard` block (the share image's size, frame, and where each line sits), the `postbiotic` block (the ×2 badge: gold text over a separate pulsing glow layer; colour, glow, size, pulse, offset from the score), the `mystery` block (`firstLevel` / `firstBefore` for the guaranteed first box early in level 3, `moveFromLevel` for when boxes start to bob, `weight` = half of fiber's, `periodMs` = twice fiber's, `frameMs` spin, `postbioticPipes`, the `draws` table, `revealMs` / `revealRisePx`, the skip's gold `color`), the `coin` block (`weight`, half a box's), the `shop` block (`prices`, `disabledAlpha`, `panelInMs`), `hudInventory` (the coin and bean rows, coins on top), `coinVolume` / `coinSpendVolume` / `shopVolume`, the `beans` block, and the `levels` block (`pipes`, `lastLevel`, `spacingRefLevel`, `tutorial`, `speedStep`, `maxSpeed`, finish-line and progress-bar sizes and colours, crossfade time). Level names are the `LEVELS` list next to it, background colours `LEVEL_COLORS` (ColorBrewer Set2, tan first, cycling past the end, softened by `levels.whiteBlend`), overlay layers `BACKGROUND.layers`, and the share link, title and file name `SHARE`. Change a number, reload.
+To run your own: create a free Supabase project, run `db/schema.sql` in the SQL editor, then put the Data API URL and publishable key into `LEADERBOARD`. Leave either blank to turn the feature off.
 
-## Leaderboard
+What leaves the phone: username, best scores with level, and the random id inside your save code. The save code itself never leaves the device.
 
-The 🏆 button shows a shared Top 25 (ten rows in view, the rest scroll) hosted on a free-tier [Supabase](https://supabase.com) project. Each player can hold two rows, the best run on the toilet and the best off it, ranked together in one Top 25 (the 🚽 column tells them apart). What leaves the phone: your username, those two best scores with their level, and the random id inside your save code (so the same player keeps one row across browsers). Nothing is posted until you set a username in Save / Load User. The save code itself never leaves the device. **One player across devices:** every browser has its own id, and loading your user code on a second browser tells the board that both ids are you (`merge_players`): the board folds the rows together and remembers the old id as an alias, so even a browser that never loads the code keeps posting into your rows. The board's name is your name: before posting, a device asks the board (`player_name`) and takes the name it has, unless you typed a new one on that device, so a rename made on one phone reaches the others instead of being switched back. A username is held by one player: a new browser typing a name already on the board is refused and pointed at the code (pasting it is the way in).
+### Credits & lineage
 
-The game talks to the Supabase REST API straight from the browser with the project's public URL and publishable key, both in `LEADERBOARD` in [`src/config.js`](src/config.js). What keeps that safe is the schema in [`db/schema.sql`](db/schema.sql): the key can read only name / score / 🚽 / level / time, never ids, and can write only through `submit_score()` (which keeps each player's maximum, caps scores, rate-limits, and refuses a username another player holds) and `merge_players()` (which needs both secret ids). Cheating is possible, as in any client-side game; a bad row is one `delete` in the dashboard, and `admin_merge_name('somebody')` in the SQL editor folds one person's duplicate ids into one player.
-
-To run your own: create a free Supabase project, paste `db/schema.sql` into its SQL editor and run it, then put the project's Data API URL and publishable key into `LEADERBOARD`. Leave either blank to turn the feature off. Free projects pause after a week without traffic; the first request afterwards may time out, and the game just shows "Can't reach the leaderboard".
-
-## Credits
-
-See [`CREDITS.md`](CREDITS.md). Every file under `assets/sfx/` must be listed there with a URL and loaded in Boot; `npm test` fails if a sound is uncredited, never loaded, or credited without being tracked in git.
-
-## Phaser version
-
-Pinned in `index.html` to `phaser@4.2.1` from jsDelivr. To bump it, change that one tag; `tests/html.test.js` only checks that it stays pinned to an exact version.
-
-## Lineage
-
-Rewritten from scratch, replacing the 2018-tutorial-based joke version at [sielerjm/flappy-poop](https://github.com/sielerjm/flappy-poop).
+- Credits and sound attribution: [`CREDITS.md`](CREDITS.md)
+- Translation notes: [`TRANSLATION_NOTES.md`](TRANSLATION_NOTES.md)
+- Phaser is pinned in `index.html` to `phaser@4.2.1` from jsDelivr
+- Rewritten from scratch, replacing the older joke version at [sielerjm/flappy-poop](https://github.com/sielerjm/flappy-poop)
