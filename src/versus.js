@@ -34,6 +34,26 @@ export function versusLayout(viewportW, viewportH, field) {
 }
 
 /**
+ * The join screen's bottom row, on the right half (P1's tray owns the left half's bottom):
+ * [🏅 Tournament] (?) at the divider end, Home at the far edge, all on the tray's row.
+ * A tournament race has no 🏅 or (?): Home alone (it reads Bracket there).
+ * Boxes are { id, x, y, width, height[, round] } centres; `help` is a circle (width = diameter).
+ */
+export function joinButtonsLayout(layout, height, t, { tournament = false } = {}) {
+  const y = height - t.trayHeight / 2;
+  const h = t.trayHitMin;
+  const margin = 24;
+  const x0 = layout.x[1];
+  const right = x0 + layout.halfW;
+  const home = { id: 'home', x: right - margin - 120, y, width: 240, height: h };
+  if (tournament) return { home, tournament: null, help: null };
+  const tour = { id: 'tournament', x: x0 + margin + 160, y, width: 320, height: h };
+  const d = 64;
+  const help = { id: 'help', x: tour.x + tour.width / 2 + 16 + d / 2, y, width: d, height: d, round: true };
+  return { home, tournament: tour, help };
+}
+
+/**
  * One player's live state, written by its Play half every playing frame and read by the
  * other. `deaths` counts crashes (each one a respawn, never the end), `respawning` is true
  * from the hit to the restart, `alpha` carries the blink so the ghost blinks too, `ended`

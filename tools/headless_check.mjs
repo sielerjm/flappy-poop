@@ -2339,7 +2339,15 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         for (let i = 0; i < 20 && (await playState()) !== 'ready'; i += 1) await sleep(100);
         await evaluate(`${P1}.toggleVersus(), ${P1}.launch(), true`);
         await until(`__flappy.scene.isActive('Versus') && ${VS}.match.status === 'join'`);
-        const join = await evaluate(`JSON.stringify({ title: ${VS}.joinTitle.text, button: ${VS}.tournamentButton?.getText(), home: ${VS}.homeButton.getText(), box: ${VS}.tournamentBox })`).then(JSON.parse);
+        const join = await evaluate(`JSON.stringify({ title: ${VS}.joinTitle.text, button: ${VS}.tournamentButton?.getText(), home: ${VS}.homeButton.getText(), box: ${VS}.tournamentBox, help: ${VS}.tournamentHelpBox, rightX: ${VS}.layout.x[1] })`).then(JSON.parse);
+        // The (?) beside 🏅: the help card (its paragraphs, Got it closes it), no half claimed.
+        await evaluate(`${VS}.onPointer({ x: ${join.help.x}, y: ${join.help.y} }), true`);
+        await sleep(200);
+        const help = { open: await open(), title: await text('tour-title'), paras: await evaluate(`document.querySelectorAll('#tour-help p').length`), ok: await text('tour-help-ok') };
+        await click('tour-help-ok');
+        const helpClosed = !(await open());
+        const claimed = await evaluate(`${VS}.match.slots.filter((s) => s.device).length`);
+        ok(help.open && help.title === (await tx('tournamentHowTitle')) && help.paras === 4 && help.ok === (await tx('tournamentGotIt')) && helpClosed && claimed === 0 && join.help.x > join.box.x && join.box.x > join.rightX, `(?) beside 🏅 on the right half opens "${help.title}" (${help.paras} paragraphs); ${help.ok} closes it; no half claimed`);
         await evaluate(`${VS}.onPointer({ x: ${join.box.x}, y: ${join.box.y} }), true`);
         await sleep(200);
         ok(join.title === (await tx('versusTitle')) && join.button === (await tx('tournamentButton')) && join.home === (await tx('tapToHome')) && (await open()) && (await evaluate(`${VS}.match.status`)) === 'join', `the join screen offers "${join.button}" beside Home; a tap opens the lobby without claiming a half`);

@@ -1,5 +1,6 @@
 // Tournament (🏅) panels: plain DOM over the Versus join screen, like the save panel (text
-// input for pasted codes, lists of up to eight rows). Three views:
+// input for pasted codes, lists of up to eight rows). Three views, plus help (the join screen's
+// (?) beside 🏅: how a tournament works, one OK button):
 //   lobby   — the player count (minPlayers–maxPlayers) and one row per player: Paste code,
 //             Guest, Use my player, ✕. Start when every row is filled.
 //   bracket — every match so far and the next one; Play starts it as a Versus race; Abandon
@@ -51,6 +52,7 @@ const CSS = `
 #${PANEL_ID} .match .lost { opacity: 0.6; }
 #${PANEL_ID} .next { margin: 14px 0 0; font-size: 18px; text-align: center; color: #ffd700; }
 #${PANEL_ID} .podium p { margin: 8px 0; font-size: 22px; text-align: center; }
+#${PANEL_ID} .help p { margin: 0 0 10px; font-size: 16px; line-height: 1.4; }
 #${PANEL_ID} .status { min-height: 1.4em; margin: 10px 0 0; font-size: 14px; color: #c9b8dc; }
 #${PANEL_ID} .status.error { color: #ff8da8; }
 `;
@@ -62,6 +64,7 @@ let players = []; // lobby rows: { name, playerId, guest, host? } or null (empty
 let pasting = -1; // the row showing a paste field, or -1
 let abandonArmedAt = 0;
 let hooked = false; // the 'tournament-race' listener is on game.events
+let view = null; // 'help' while the help card shows
 
 function h(tag, attrs = {}, ...children) {
   const el = document.createElement(tag);
@@ -345,8 +348,23 @@ function renderPodium() {
 }
 
 // ---------------------------------------------------------------------------
+// Help: what a tournament is, one paragraph per line of tournamentHowBody.
+
+function renderHelp() {
+  dom.title.textContent = tr('tournamentHowTitle');
+  dom.close.hidden = false;
+  const ok = h('button', { type: 'button', id: 'tour-help-ok' }, tr('tournamentGotIt'));
+  ok.addEventListener('click', () => closeTournamentPanel());
+  dom.body.replaceChildren(h('div', { class: 'help', id: 'tour-help' }, ...tr('tournamentHowBody').split('\n').map((line) => h('p', {}, line))), h('div', { class: 'actions' }, ok));
+}
+
+// ---------------------------------------------------------------------------
 
 function onClose() {
+  if (view === 'help') {
+    closeTournamentPanel();
+    return;
+  }
   // Only the lobby closes back to the join screen; the bracket and podium have their own ways out.
   if (tournamentState(ctx?.game)) return;
   closeTournamentPanel();
@@ -354,8 +372,8 @@ function onClose() {
 
 /**
  * Open the panel over the Versus scene: the lobby when no tournament is running, else the
- * bracket, or the podium once the Final is decided.
- * @param {{ game: object, locale: string, play: object }} options
+ * bracket, or the podium once the Final is decided; `view: 'help'` shows the help card instead.
+ * @param {{ game: object, locale: string, play: object, view?: 'help' | null }} options
  */
 export function openTournamentPanel(options) {
   if (typeof document === 'undefined') return;
@@ -369,8 +387,10 @@ export function openTournamentPanel(options) {
   setGameKeyboard(false);
   setStatus('');
   pasting = -1;
+  view = options.view === 'help' ? 'help' : null;
   const state = tournamentState(ctx.game);
-  if (!state) {
+  if (view === 'help') renderHelp();
+  else if (!state) {
     if (players.length < T.tournament.minPlayers) players = [null, null, null, null];
     renderLobby();
   } else if (placings(state.tour)) renderPodium();

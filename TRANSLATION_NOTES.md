@@ -252,6 +252,15 @@ Short, playful, clear. Fit a 720×1280 logical field; How to play / About body w
 | tournamentPodium | PODIUM | 领奖台 |
 | tournamentNew | New tournament | 再来一届 |
 | tournamentBracket | Bracket | 赛程 |
+| tournamentHowTitle | How a tournament works | 锦标赛怎么玩 |
+| tournamentHowBody | 3 to 8 players race two at a time on this screen, knockout style: win to move on.
+Add each player by pasting their user code, as a guest, or with your own player.
+Races are shorter than a normal run. The higher score wins; a tie goes to fewer crashes, then more finish lines crossed first.
+The top three take the podium 🥇 🥈 🥉. Nothing is saved to the leaderboard. | 3 到 8 名玩家在这台设备上两两比赛，淘汰制：赢了才能晋级。
+添加玩家：粘贴他们的用户码、选“访客”，或“用我的玩家”。
+每场比赛比平常短。得分高者胜；平分时撞得少的胜，再看谁率先过线的关卡更多。
+前三名登上领奖台 🥇 🥈 🥉。不会保存到排行榜。 |
+| tournamentGotIt | Got it | 知道了 |
 | versusUnreadyHint | Tap again to un-ready | 再点一次可取消准备 |
 
 ### aboutCredits (English)

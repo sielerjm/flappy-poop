@@ -182,7 +182,7 @@ On a window wide and tall enough for two phone-width halves (desktop or tablet l
 
 ### 🏅 Tournament
 
-3–8 players on one device, two at a time, in a knockout bracket. On the two-player join screen, tap **🏅 Tournament**:
+3–8 players on one device, two at a time, in a knockout bracket. On the two-player join screen, tap **🏅 Tournament** (bottom right; the **?** beside it explains the rules):
 
 1. Set the number of players, then fill each row: **Paste code** (that player's user code: their username comes along), **Guest** (a made-up name like *JollyPlunger042*), or **Use my player** (yours).
 2. **Start** draws the bracket: quarter-finals (from 5 players), semi-finals, a **bronze match**, then the **Final**. Byes fill the gaps; with 3 players, one semi and the Final, and the semi loser takes bronze.

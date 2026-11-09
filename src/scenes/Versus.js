@@ -1,6 +1,6 @@
 import { GAME_HEIGHT, FIELD, TUNING as T } from '../config.js';
 import { fieldWidth, overButtonsLayout, overHit, canRestart, isFinalLevel } from '../logic.js';
-import { versusLayout, createMatch, resetMatch, claimDevice, allClaimed, deviceLabel, matchResult } from '../versus.js';
+import { versusLayout, joinButtonsLayout, createMatch, resetMatch, claimDevice, allClaimed, deviceLabel, matchResult } from '../versus.js';
 import { t, levelLabel, pauseBannerText, versusName } from '../i18n.js';
 import { raceOutcome } from '../tournament.js';
 import { openTournamentPanel, ROUND_KEYS } from '../ui/tournamentPanel.js';
@@ -62,14 +62,18 @@ export class Versus extends Phaser.Scene {
       .text(cx, 960, t(this.locale, 'versusJoinHint'), { ...STYLE, fontSize: '30px', strokeThickness: 8, wordWrap: { width: Math.min(W - 80, 1100), useAdvancedWrap: true } })
       .setOrigin(0.5)
       .setDepth(52);
-    // Home on the join screen; "🏅 Tournament" (a plain match only) sits under the title, above the
-    // halves' labels, opaque over the divider. In a tournament race Home reads Bracket and opens the
-    // tournament panel instead of leaving.
+    // The join screen's bottom row on the right half (P1's tray owns the left): 🏅 Tournament and
+    // its (?) by the divider, Home at the edge, all opaque (joinButtonsLayout). A tournament race
+    // has Home alone, reading Bracket: it opens the tournament panel instead of leaving.
     const tournament = Boolean(this.match.tournament);
-    this.homeBox = { id: 'home', x: cx, y: 1067, width: 360, height: 88 };
-    this.homeButton = createButton(this, this.homeBox, t(this.locale, tournament ? 'tournamentBracket' : 'tapToHome'), { ...STYLE, fontSize: '40px' }, { depth: 52 });
-    this.tournamentBox = tournament ? null : { id: 'tournament', x: cx, y: 322, width: 360, height: 88 };
-    this.tournamentButton = this.tournamentBox ? createButton(this, this.tournamentBox, t(this.locale, 'tournamentButton'), { ...STYLE, fontSize: '36px', color: GOLD }, { depth: 52, fillAlpha: 1 }) : null;
+    const row = joinButtonsLayout(layout, GAME_HEIGHT, T, { tournament });
+    const solid = { depth: 52, fillAlpha: 1 };
+    this.homeBox = row.home;
+    this.homeButton = createButton(this, this.homeBox, t(this.locale, tournament ? 'tournamentBracket' : 'tapToHome'), { ...STYLE, fontSize: '40px' }, solid);
+    this.tournamentBox = row.tournament;
+    this.tournamentButton = this.tournamentBox ? createButton(this, this.tournamentBox, t(this.locale, 'tournamentButton'), { ...STYLE, fontSize: '36px', color: GOLD }, solid) : null;
+    this.tournamentHelpBox = row.help;
+    this.tournamentHelpButton = this.tournamentHelpBox ? createButton(this, this.tournamentHelpBox, '?', { ...STYLE, fontSize: '36px', strokeThickness: 8 }, solid) : null;
     // The countdown, centred on the canvas, and the shared PAUSED banner across both halves.
     this.countText = this.add.text(cx, GAME_HEIGHT * 0.45, '', { ...STYLE, fontSize: '160px', strokeThickness: 16 }).setOrigin(0.5).setDepth(55).setVisible(false);
     const [pauseTitle, pauseHint] = pauseBannerText(this.locale).split('\n');
@@ -84,6 +88,7 @@ export class Versus extends Phaser.Scene {
     this.focus = createFocus(this, T, {
       items: [
         ...(this.tournamentBox ? [{ id: 'tournament', box: this.tournamentBox, visible: () => this.match.status === 'join', activate: () => this.openTournament() }] : []),
+        ...(this.tournamentHelpBox ? [{ id: 'help', box: this.tournamentHelpBox, visible: () => this.match.status === 'join', activate: () => this.openTournament('help') }] : []),
         { id: 'home', box: this.homeBox, visible: () => this.match.status === 'join', activate: () => this.home() },
       ],
     });
@@ -118,6 +123,7 @@ export class Versus extends Phaser.Scene {
     for (const o of [...this.joinLabels, ...this.joinPrompts, this.joinHint]) o.setVisible(visible);
     this.homeButton.setVisible(visible);
     this.tournamentButton?.setVisible(visible);
+    this.tournamentHelpButton?.setVisible(visible);
     if (!visible) this.focus?.hide();
   }
 
@@ -143,6 +149,7 @@ export class Versus extends Phaser.Scene {
     this.joinHint.setVisible(false);
     this.homeButton.setVisible(false);
     this.tournamentButton?.setVisible(false);
+    this.tournamentHelpButton?.setVisible(false);
     this.focus?.hide();
     // The halves slide their poops into place under the "3" and wait there (Play.launch hold); GO starts them.
     this.runCountdown(() => this.go(), { status: 'countdown', onStart: () => this.halves().forEach((half) => half?.launch({ hold: true })) });
@@ -449,6 +456,9 @@ export class Versus extends Phaser.Scene {
       } else if (inside(this.tournamentBox)) {
         this.homeTapFrame = this.game.loop.frame; // the halves do not claim this tap either
         this.openTournament();
+      } else if (inside(this.tournamentHelpBox)) {
+        this.homeTapFrame = this.game.loop.frame;
+        this.openTournament('help');
       }
       return;
     }
@@ -478,9 +488,9 @@ export class Versus extends Phaser.Scene {
     else this.leave();
   }
 
-  /** The tournament panel over this scene: the lobby, or the running tournament's bracket. */
-  openTournament() {
-    openTournamentPanel({ game: this.game, locale: this.locale, play: this.halfScene(0) });
+  /** The tournament panel over this scene: the lobby, or the running tournament's bracket; `view` 'help' explains tournaments. */
+  openTournament(view = null) {
+    openTournamentPanel({ game: this.game, locale: this.locale, play: this.halfScene(0), view });
   }
 
   /** Start over on `match` (a tournament race, or a plain match after an abandoned tournament): both halves relaunch. */

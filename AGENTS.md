@@ -190,8 +190,9 @@ player's 🏁 level wins and 💀 count, and offers Rematch
 save-code score, no leaderboard.
 
 **Tournament** (🏅, `src/tournament.js`, `src/tournamentNames.js`, `ui/tournamentPanel.js`; 2026-11-09,
-Release A, local only): the join screen's "🏅 Tournament" button (plain matches only, centred above the
-hint, clear of P1's tray) opens a DOM panel over Versus. **Lobby**: `TUNING.tournament.minPlayers`–
+Release A, local only): the join screen's "🏅 Tournament" button (plain matches only; the bottom row of
+the right half, `joinButtonsLayout`: 🏅, its (?) and Home, opaque, P1's tray owning the left half) opens a
+DOM panel over Versus; the (?) opens the same panel's help card (`view: 'help'`). **Lobby**: `TUNING.tournament.minPlayers`–
 `maxPlayers` rows, each a pasted user code (`claimFromCode`: `importCode` with a storage that keeps nothing
 and an empty local player, so the host's save is never read or written; one row per player id), a
 **Guest** (`rollGuestName`: AdjectiveNoun###, ≤ 16 code points, clean words) or **Use my player**

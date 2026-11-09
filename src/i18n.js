@@ -188,6 +188,10 @@ Inspired by Flappy Bird`,
     tournamentPodium: 'PODIUM',
     tournamentNew: 'New tournament',
     tournamentBracket: 'Bracket',
+    tournamentHowTitle: 'How a tournament works',
+    tournamentHowBody:
+      '3 to 8 players race two at a time on this screen, knockout style: win to move on.\nAdd each player by pasting their user code, as a guest, or with your own player.\nRaces are shorter than a normal run. The higher score wins; a tie goes to fewer crashes, then more finish lines crossed first.\nThe top three take the podium 🥇 🥈 🥉. Nothing is saved to the leaderboard.',
+    tournamentGotIt: 'Got it',
   },
   'zh-Hans': {
     readyTitle: 'FLAPPY POOP',
@@ -369,6 +373,10 @@ Inspired by Flappy Bird`,
     tournamentPodium: '领奖台',
     tournamentNew: '再来一届',
     tournamentBracket: '赛程',
+    tournamentHowTitle: '锦标赛怎么玩',
+    tournamentHowBody:
+      '3 到 8 名玩家在这台设备上两两比赛，淘汰制：赢了才能晋级。\n添加玩家：粘贴他们的用户码、选“访客”，或“用我的玩家”。\n每场比赛比平常短。得分高者胜；平分时撞得少的胜，再看谁率先过线的关卡更多。\n前三名登上领奖台 🥇 🥈 🥉。不会保存到排行榜。',
+    tournamentGotIt: '知道了',
   },
 };
 
