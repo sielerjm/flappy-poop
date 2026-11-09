@@ -14,14 +14,14 @@ Tip: on iPhone, turn **Silent mode off** to hear sound.
 
 | | |
 | --- | --- |
-| [How to play](#how-to-play) | [Pickups & power-ups](#pickups--power-ups) |
-| [Levels & shop](#levels--shop) | [Controls](#controls) |
-| [Two players](#two-players) | [Save codes & leaderboard](#save-codes--leaderboard) |
-| [For developers](#for-developers) | |
+| [👆 How to play](#how-to-play) | [🥦 Pickups & power-ups](#pickups--power-ups) |
+| [🏁 Levels & shop](#levels--shop) | [🎮 Controls](#controls) |
+| [👥 Two players](#two-players) | [🏆 Save codes & leaderboard](#save-codes--leaderboard) |
+| [🛠️ For developers](#for-developers) | |
 
 ![Finish line](docs/finish-divider.svg)
 
-## How to play
+## 👆 How to play
 
 - **Tap** (or press **Space** / **↑**) to flap.
 - Fly through gaps in the pink pipe pairs — each pair you pass is **+1**.
@@ -33,7 +33,7 @@ Open the round **?** on the ready screen anytime for the in-game guide (pickups,
 
 ![Finish line](docs/finish-divider.svg)
 
-## Pickups & power-ups
+## 🥦 Pickups & power-ups
 
 From early in a run, helpful (and not-so-helpful) things appear between the pipes.
 
@@ -41,27 +41,27 @@ From early in a run, helpful (and not-so-helpful) things appear between the pipe
 
 | | What it does |
 | --- | --- |
-| **Fiber** (broccoli) | **+3** score |
-| **Probiotic** | Blocks **one** bad-bacteria hit for the next **5** pipes |
-| **Postbiotic** | Eat fiber while a probiotic is up: pipes and fiber score **×2** until the probiotic runs out (farts included; kernels count double too). Another probiotic extends it; a bacteria hit still blocks but ends the ×2 |
-| **Bacteria** | **−3** score (never below 0). Does **not** kill. Never in level 1; from level 2, pair 5 on |
+| <img src="assets/fiber.png" width="36" height="36" alt=""> **Fiber** (broccoli) | **+3** score |
+| <img src="assets/probiotic.png" width="36" height="36" alt=""> **Probiotic** | Blocks **one** bad-bacteria hit for the next **5** pipes |
+| <img src="assets/postbiotic.png" width="36" height="36" alt=""> **Postbiotic** | Eat fiber while a probiotic is up: pipes and fiber score **×2** until the probiotic runs out (farts included; kernels count double too). Another probiotic extends it; a bacteria hit still blocks but ends the ×2 |
+| <img src="assets/bacteria.png" width="36" height="36" alt=""> **Bacteria** | **−3** score (never below 0). Does **not** kill. Never in level 1; from level 2, pair 5 on |
 
 A probiotic does **not** save you from a pipe.
 
-### Beans & fart
+### <img src="assets/bean.png" width="28" height="28" alt=""> Beans & fart
 
 - Grab a **bean** between pipe pairs (from level 2). Beans stack up to **3**.
 - When charged, the poop shows stink lines and a soft glow — tap the poop, the bean button, or press **B** to **fart**.
 - A normal fart spends **one** bean: the world surges so **five** pipes rush past (~2.5 s). You cannot die while farting.
 - With **three** beans, the glow turns rainbow: a **super fart** spends all three and rockets you past **twenty** pipes.
 
-### Mystery box
+### <img src="assets/mystery-icon.png" width="28" height="28" alt=""> Mystery box
 
 A spinning brown box with a question mark. The first is guaranteed early in **level 3**; after that they show up about half as often as fiber.
 
 Open one for a random reward — usually fiber, or a probiotic, beans, coins, a ready-made postbiotic, or (rarely) a skip to the end of the level. Details below under [Odds & details](#odds--details).
 
-### Coins (golden corn kernels)
+### <img src="assets/coin.png" width="28" height="28" alt=""> Coins (golden corn kernels)
 
 - Spend them in the **shop** at each level break.
 - **One kernel is guaranteed per level**; extras can appear from level 2, and boxes can pay coins too.
@@ -70,9 +70,9 @@ Open one for a random reward — usually fiber, or a probiotic, beans, coins, a 
 
 ![Finish line](docs/finish-divider.svg)
 
-## Levels & shop
+## 🏁 Levels & shop
 
-### Levels
+### 🏁 Levels
 
 The gut is cut into seven segments (stomach → rectum). You advance by **pipe pairs passed**, not by score.
 
@@ -86,16 +86,16 @@ The gut is cut into seven segments (stomach → rectum). You advance by **pipe p
 - From **level 4**, some pipe pairs (a lighter pink) move up and down, faster with every level.
 - A fart never carries you past a finish line: if the line is closer than the burst, the fart ends at the line and the break starts.
 
-### The shop
+### 💰 The shop
 
 At every level break, tap **💰** under the banner (dimmed when empty).
 
 | Item | Cost |
 | --- | ---: |
-| Fiber | 1 |
-| Mystery box | 5 |
-| One bean | 6 |
-| Super fart (fill bag to 3) | 16 |
+| <img src="assets/fiber.png" width="28" height="28" alt=""> Fiber | 1 |
+| <img src="assets/mystery-icon.png" width="28" height="28" alt=""> Mystery box | 5 |
+| <img src="assets/bean.png" width="28" height="28" alt=""> One bean | 6 |
+| <img src="assets/bean.png" width="28" height="28" alt=""> Super fart (fill bag to 3) | 16 |
 
 A bought mystery box spins a little slot machine before the reward lands. Close the shop with ✕, a tap outside, Esc, or your fart button — closing never starts the next level.
 
@@ -105,20 +105,20 @@ Mystery-box draws (fiber takes the leftover ~33%):
 
 | Reward | Chance |
 | --- | ---: |
-| Probiotic | 20% |
-| One bean | 20% |
-| 5 coins | 10% |
-| Postbiotic (5 pipes, ×2 on) | 5% |
-| Three beans | 5% |
-| 10 coins | 5% |
-| Skip to finish | 1% |
-| 15 coins | 1% |
+| <img src="assets/probiotic.png" width="28" height="28" alt=""> Probiotic | 20% |
+| <img src="assets/bean.png" width="28" height="28" alt=""> One bean | 20% |
+| <img src="assets/coin.png" width="28" height="28" alt=""> 5 coins | 10% |
+| <img src="assets/postbiotic.png" width="28" height="28" alt=""> Postbiotic (5 pipes, ×2 on) | 5% |
+| <img src="assets/bean.png" width="28" height="28" alt=""> Three beans | 5% |
+| <img src="assets/coin.png" width="28" height="28" alt=""> 10 coins | 5% |
+| 🏁 Skip to finish | 1% |
+| <img src="assets/coin.png" width="28" height="28" alt=""> 15 coins | 1% |
 
 A bean draw with a full bag, or a skip once the finish line is already out, becomes fiber instead.
 
 ![Finish line](docs/finish-divider.svg)
 
-## Controls
+## 🎮 Controls
 
 ### Ready screen
 
@@ -143,7 +143,7 @@ Top to bottom: title, bobbing poop (“TAP TO FLAP!”), **toilet toggle**, **Sa
 - **Bottom-left:** About (i), language (🌐), feedback (💬)
 - **Bottom-right:** Leaderboard (🏆), mute, settings, with pause above the cog
 
-### Toilet mode
+### 🚽 Toilet mode
 
 Flip the toilet toggle when you’re playing on the toilet. Those runs show a 🚽 beside the score and on the leaderboard. Off by default each launch.
 
@@ -164,7 +164,7 @@ The ring only appears after a pad press; a tap or click hides it again.
 
 ![Finish line](docs/finish-divider.svg)
 
-## Two players
+## 👥 Two players
 
 On a window wide and tall enough for two phone-width halves (desktop or tablet landscape — not a phone in portrait), a **👥** toggle appears under the toilet switch.
 
@@ -182,7 +182,7 @@ On a window wide and tall enough for two phone-width halves (desktop or tablet l
 
 ![Finish line](docs/finish-divider.svg)
 
-## Save codes & leaderboard
+## 🏆 Save codes & leaderboard
 
 ### Username & save code
 
@@ -200,7 +200,7 @@ The 🏆 tray button (or **T**) shows a shared **Top 25**. You need a username t
 
 ![Finish line](docs/finish-divider.svg)
 
-## For developers
+## 🛠️ For developers
 
 Plain ES modules, no bundler, no npm dependencies. [Phaser 4.2.1](https://phaser.io) from a CDN, deployed to GitHub Pages from `main`.
 
