@@ -174,17 +174,20 @@ export const TUNING = {
   },
   // Moving pipes: from fromLevel a share of the pairs bob their gap up and down (a sine on the gap
   // centre; both columns follow, see Play.update). Rows are indexed level − fromLevel (L4 / L5 / L6 /
-  // L7+; past the table the last row repeats). The swing is clamped so the gap centre stays inside
-  // gapBounds (a pair rolled near the band's edge swings less, so `chance` is not a count of visibly
-  // moving pairs). Every row keeps the gap's shift during one column crossing (pipeMoveShiftPx:
-  // ampPx · 2π / period × (pipeWidth + poop diameter) / speed) under half the poop's clearance
-  // (gapHeight / 2 − poopRadius), so a centred poop is never clipped by the motion itself; escalate by
-  // chance and amplitude, not by a faster period (tests/tuning.test.js).
+  // L7+; past the table the last row repeats). The gap's average vertical speed (4 × ampPx ÷ period)
+  // rises linearly: speedPx on fromLevel, + speedStepPx per level, so each row's period is derived
+  // (pipeMoveParams: 6 / 4 / 4 / 4 s with these swings). The swing is clamped so the gap centre stays
+  // inside gapBounds (a pair rolled near the band's edge swings less, so `chance` is not a count of
+  // visibly moving pairs). Every row keeps the gap's shift during one column crossing (pipeMoveShiftPx:
+  // ampPx · 2π / period × (pipeWidth + poop diameter) / speed) under three quarters of the poop's
+  // clearance (gapHeight / 2 − poopRadius), so a centred poop is never clipped by the motion itself,
+  // and every period stays ≥ 4 s, a drift rather than a wobble (tests/tuning.test.js).
   pipeMove: {
     fromLevel: 4, // first level with moving pairs; the pair after a fart (centred gap) never moves
     chance: [0.15, 0.3, 0.45, 0.6], // 0–1 chance a spawning pair moves, per row
     ampPx: [30, 40, 60, 80], // px the gap centre swings each way (before the bounds clamp)
-    periodMs: [6000, 5000, 5000, 6000], // ms per full up-and-down
+    speedPx: 20, // px/s the gap centre averages on fromLevel (30 px each way every 6 s)
+    speedStepPx: 20, // px/s added per level after fromLevel: L5 40, L6 60, L7 80
   },
   mystery: {
     firstLevel: 3, // boxes start on this level: the first is guaranteed …

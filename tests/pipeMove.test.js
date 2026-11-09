@@ -11,8 +11,10 @@ test('pipeMoveParams: nothing before fromLevel, a row per level after it, the la
   for (let n = 0; n < M.fromLevel; n += 1) assert.equal(pipeMoveParams(n, T), null, `level ${n}`);
   const rows = M.chance.length;
   for (let i = 0; i < rows; i += 1) {
-    assert.deepEqual(pipeMoveParams(M.fromLevel + i, T), { chance: M.chance[i], ampPx: M.ampPx[i], periodMs: M.periodMs[i] });
+    const p = pipeMoveParams(M.fromLevel + i, T);
+    assert.deepEqual(p, { chance: M.chance[i], ampPx: M.ampPx[i], periodMs: Math.round((4000 * M.ampPx[i]) / (M.speedPx + M.speedStepPx * i)) });
   }
+  assert.deepEqual([4, 5, 6, 7].map((n) => pipeMoveParams(n, T).periodMs), [6000, 4000, 4000, 4000], 'L4 keeps its 6 s; L5–L7 sweep their wider swings every 4 s');
   assert.deepEqual(pipeMoveParams(M.fromLevel + rows + 5, T), pipeMoveParams(M.fromLevel + rows - 1, T), 'past the table the last row repeats');
   assert.equal(pipeMoveParams(5, { ...T, pipeMove: undefined }), null, 'no block, no motion');
 });
@@ -22,6 +24,19 @@ test('rows escalate: chance and amplitude never fall from one level to the next'
     assert.ok(M.chance[i] >= M.chance[i - 1], `chance row ${i}`);
     assert.ok(M.ampPx[i] >= M.ampPx[i - 1], `ampPx row ${i}`);
   }
+});
+
+test('the gap\'s average vertical speed rises by speedStepPx every level from speedPx on fromLevel', () => {
+  const speed = (level) => {
+    const p = pipeMoveParams(level, T);
+    return (4 * p.ampPx * 1000) / p.periodMs; // px/s: four swings of ampPx per period
+  };
+  assert.ok(Math.abs(speed(M.fromLevel) - M.speedPx) < 0.1, `L${M.fromLevel}: ${speed(M.fromLevel)}`);
+  for (let i = 1; i < M.chance.length; i += 1) {
+    const step = speed(M.fromLevel + i) - speed(M.fromLevel + i - 1);
+    assert.ok(Math.abs(step - M.speedStepPx) < 0.1, `L${M.fromLevel + i}: +${step.toFixed(2)} px/s`);
+  }
+  assert.ok(M.speedStepPx > 0, 'faster every level');
 });
 
 test('pipeMoveAmplitude: full swing mid-band, cut down near an edge, zero on it, never negative', () => {
@@ -57,7 +72,7 @@ test('rollPipeMove: null before fromLevel without touching the rng; null for the
 test('rollPipeMove: a passing roll returns the clamped swing, the row period and a phase in [0, 2π); a failing roll is null', () => {
   const seq = (values) => () => values.shift() ?? 0.5;
   const move = rollPipeMove(seq([0, 0.25]), M.fromLevel + 1, mid, bounds, T);
-  assert.deepEqual(move, { baseY: mid, amp: M.ampPx[1], periodMs: M.periodMs[1], phase: 0.25 * Math.PI * 2 });
+  assert.deepEqual(move, { baseY: mid, amp: M.ampPx[1], periodMs: pipeMoveParams(M.fromLevel + 1, T).periodMs, phase: 0.25 * Math.PI * 2 });
   assert.equal(rollPipeMove(seq([0.999]), M.fromLevel + 1, mid, bounds, T), null);
   const edge = rollPipeMove(seq([0, 0]), M.fromLevel, bounds.minY, bounds, T);
   assert.equal(edge.amp, 0, 'a pair on the band edge gets no swing');
@@ -76,10 +91,11 @@ test('rollPipeMove: over many seeded draws the moving share tracks each row\'s c
   }
 });
 
-test('every row keeps the gap\'s shift during a column crossing under half the poop\'s clearance at that level\'s speed', () => {
+test('every row keeps the gap\'s shift during a column crossing under three quarters of the poop\'s clearance at that level\'s speed', () => {
   const clearance = T.gapHeight / 2 - T.poopRadius;
   for (let i = 0; i < M.chance.length; i += 1) {
-    const shift = pipeMoveShiftPx(M.ampPx[i], M.periodMs[i], levelSpeed(M.fromLevel + i, T), T);
-    assert.ok(shift <= 0.5 * clearance, `row ${i}: shift ${shift.toFixed(1)} px vs ${(0.5 * clearance).toFixed(1)}`);
+    const level = M.fromLevel + i;
+    const shift = pipeMoveShiftPx(M.ampPx[i], pipeMoveParams(level, T).periodMs, levelSpeed(level, T), T);
+    assert.ok(shift <= 0.75 * clearance, `row ${i}: shift ${shift.toFixed(1)} px vs ${(0.75 * clearance).toFixed(1)}`);
   }
 });

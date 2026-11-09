@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { TUNING as T, SHARE, FIELD, GAME_WIDTH, GAME_HEIGHT } from '../src/config.js';
-import { pipeSpacing, levelSpeed, pipeMoveShiftPx } from '../src/logic.js';
+import { pipeSpacing, levelSpeed, pipeMoveShiftPx, pipeMoveParams } from '../src/logic.js';
 
 test('the ceiling strip mirrors the ground strip, and the play area between them is centred on mid-screen', () => {
   assert.equal(T.ceilingHeight, T.groundHeight);
@@ -192,19 +192,20 @@ test('gamepad knobs are standard-mapping indices and the thresholds / timings ar
   assert.ok(f.scrollStepPx > 0, 'scroll step');
 });
 
-test('moving pipes: from level 4, chances in (0, 1], slow periods, the swing fits the band, the shift stays under half the clearance', () => {
+test('moving pipes: from level 4, chances in (0, 1], slow periods, the swing fits the band, the shift stays under three quarters of the clearance', () => {
   const M = T.pipeMove;
   assert.ok(M.fromLevel >= 4, 'levels 1–3 never move');
   assert.equal(M.chance.length, M.ampPx.length);
-  assert.equal(M.chance.length, M.periodMs.length);
+  assert.ok(M.speedPx > 0 && M.speedStepPx >= 0, 'a positive start speed that never falls');
   const clearance = T.gapHeight / 2 - T.poopRadius;
   const band = GAME_HEIGHT - T.ceilingHeight - T.groundHeight - 2 * T.gapMargin - T.gapHeight; // room the gap centre can travel
   for (let i = 0; i < M.chance.length; i += 1) {
     assert.ok(M.chance[i] > 0 && M.chance[i] <= 1, `chance row ${i}`);
-    assert.ok(M.periodMs[i] >= 4000, `period row ${i} is a slow drift, not a wobble`);
+    const { periodMs } = pipeMoveParams(M.fromLevel + i, T);
+    assert.ok(periodMs >= 4000, `period row ${i} (${periodMs} ms) is a slow drift, not a wobble`);
     assert.ok(M.ampPx[i] > 0 && M.ampPx[i] <= band / 2, `ampPx row ${i} fits the band`);
-    const shift = pipeMoveShiftPx(M.ampPx[i], M.periodMs[i], levelSpeed(M.fromLevel + i, T), T);
-    assert.ok(shift <= 0.5 * clearance, `row ${i}: the gap shifts ${shift.toFixed(1)} px during a crossing, over ${(0.5 * clearance).toFixed(1)}`);
+    const shift = pipeMoveShiftPx(M.ampPx[i], periodMs, levelSpeed(M.fromLevel + i, T), T);
+    assert.ok(shift <= 0.75 * clearance, `row ${i}: the gap shifts ${shift.toFixed(1)} px during a crossing, over ${(0.75 * clearance).toFixed(1)}`);
   }
 });
 

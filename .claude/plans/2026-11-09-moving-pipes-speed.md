@@ -1,6 +1,6 @@
 # Plan: Fix the flaky moving-pipes smoke check; moving pipes speed up linearly per level and are a lighter pink
 - Created: 2026-11-09
-- Status: in progress (step 2)
+- Status: in progress (step 3)
 - Baseline: `510afe2` on `main` (0.8.3 pushed), tree clean.
 - Whole-suite verification: `npm test` (406 pass at baseline); `npm run smoke` (315 checks; the moving-pipes check fails now and then).
 - Repo plan copy: `.claude/plans/2026-11-09-moving-pipes-speed.md` (`git add -f`), archived when done.
@@ -58,13 +58,14 @@
 - Commit: `test(smoke, step 1/4): the moving-pipes check reads back its own pair and probiotic`
 - Result: done. `--only=testmode` (197 checks with its prerequisites) passed 5 runs in a row; full smoke 315/315.
 
-### Step 2/4 — Linear moving-pipe speed
+### Step 2/4 — Linear moving-pipe speed  [done]
 - Change: `src/config.js` (`pipeMove`: `speedPx`, `speedStepPx` in place of `periodMs`, and the comment); `src/logic.js` (`pipeMoveParams` derives `periodMs`); `tests/pipeMove.test.js` (rows expect the derived cycles 6000 / 4000 / 4000 / 4000; the shift test at ¾ clearance); `tests/tuning.test.js` (¾ clearance, cycle ≥ 4000 ms, and a new check that the average vertical speed rises by exactly `speedStepPx` per level from `speedPx` at `fromLevel`).
 - Verify:
   - `npm test` (the orphan audit sees the two new knobs used and `periodMs` gone);
   - full `npm run smoke`: the moving-pipes check still expects `ampPx[0]` on level 4;
   - a screenshot sequence of an L7 moving pair (test mode's start level) to eyeball the motion.
 - Commit: `feat(pipes, step 2/4): moving pipes speed up 20 px/s per level from level 4`
+- Result: done. Rows L4–L7: 30/40/60/80 px every 6000/4000/4000/4000 ms, crossing shift 21.7/43.3/65.0/86.6 px (limit 91.5). Deviation: past the table the whole last row repeats (speed included), so the 4 s floor holds and 'the last row repeats' stays true; no level exists past 7. npm test 407/407 (new: the speed rises by speedStepPx each level); full smoke 315/315. The L7 look is checked with step 3's screenshots. Step 1 commit `955df10`.
 
 ### Step 3/4 — Moving pipes are a lighter pink
 - Why: Michael wants moving pairs told apart from still ones at a glance.

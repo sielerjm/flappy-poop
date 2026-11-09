@@ -829,12 +829,17 @@ export function gapBobY(elapsedMs, baseY, amp, periodMs, phase) {
   return baseY + amp * Math.sin((2 * Math.PI * elapsedMs) / periodMs + phase);
 }
 
-/** Moving-pipe row for a level: { chance, ampPx, periodMs }, or null before pipeMove.fromLevel; past the table the last row repeats. */
+/**
+ * Moving-pipe row for a level: { chance, ampPx, periodMs }, or null before pipeMove.fromLevel; past
+ * the table the last row repeats. The period is derived so the gap's average vertical speed
+ * (4 × ampPx per period) is speedPx + speedStepPx per level after fromLevel: linear in the level.
+ */
 export function pipeMoveParams(level, t) {
   const m = t.pipeMove;
   if (!m || !(level >= m.fromLevel)) return null;
   const i = Math.min(level - m.fromLevel, m.chance.length - 1);
-  return { chance: m.chance[i], ampPx: m.ampPx[i], periodMs: m.periodMs[i] };
+  const speed = m.speedPx + m.speedStepPx * i;
+  return { chance: m.chance[i], ampPx: m.ampPx[i], periodMs: Math.round((4000 * m.ampPx[i]) / speed) };
 }
 
 /** The swing a gap centred at baseY may have and stay inside bounds (gapBounds): ampPx, cut down near either edge, 0 on it. */
