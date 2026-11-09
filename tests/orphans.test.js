@@ -212,7 +212,7 @@ test("every overlay scene in main.js is wired into Play's chrome: chromeArgs, pa
   const play = SRC['src/scenes/Play.js'];
   const registered = /scene:\s*\[([^\]]+)\]/.exec(main)[1].split(',').map((s) => s.trim());
   const overlays = registered.filter((s) => !['Boot', 'Play', "new Play('PlayB')", 'Over', 'Versus'].includes(s));
-  assert.ok(overlays.length >= 8, `expected the overlays, got ${overlays.join(', ')}`);
+  assert.ok(overlays.length >= 7, `expected the overlays (seven since the High scores page went), got ${overlays.join(', ')}`);
   const chromeArgs = methodBody(play, 'chromeArgs');
   const padTop = methodBody(play, 'padTop');
   const scenes = Object.entries(SRC).filter(([p]) => p.startsWith('src/scenes/')).map(([, s]) => s).join('\n');

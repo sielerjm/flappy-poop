@@ -1,6 +1,6 @@
 # Plan: One ready-screen user button; retire the High scores overlay
 - Created: 2026-11-09
-- Status: in progress (step 2)
+- Status: in progress (step 3)
 - Baseline: `d204131` on `main` (0.8.4 pushed; Michael's README refresh with pickup icons and section emojis committed on top), tree clean.
 - Whole-suite verification: `npm test` (407 pass); `npm run smoke` (316 checks).
 - Source: Michael's `.claude/plans/merge_ready_user_button_34e25606.plan.md` (audited below); archived with this plan when done.
@@ -70,7 +70,7 @@ The local High scores overlay goes away. Top scores keep being recorded in the s
 - **Commit**: `feat(ready, step 1/3): one user button: Load user, then name · best; it always opens the save panel`
 - Result: done. npm test 407/407; smoke home 15 checks (onboarding rewritten: "Load user" + halo, the panel stays open on the code after Save, the named button reopens the panel); full smoke 317/317. Screenshots (scratchpad shots6: portrait en unnamed / named, zh named; 1600×900 en / zh unnamed with 👥): one button, the toggles keep their places with clear air below. Also the TRANSLATION_NOTES glossary line now names the user button.
 
-### Step 2/3 — Retire the High scores overlay
+### Step 2/3 — Retire the High scores overlay  [done]
 - **Code**:
   - delete `src/scenes/Scores.js`;
   - `src/main.js` drops the import and the scene entry;
@@ -86,6 +86,7 @@ The local High scores overlay goes away. Top scores keep being recorded in the s
   - `npm run smoke -- --only=overlays,pad-overlays`, then the full smoke;
   - `grep -rn "Scores\b\|openScores\|scoresTitle" src tests tools` → only `scoresEmpty` / `topScores`-style hits.
 - **Commit**: `refactor(ui, step 2/3): retire the local High scores overlay`
+- Result: done. Scores.js deleted; main.js, Play (chromeArgs, openScores, padTop key map), chromeIntent, scoresTitle, the notes row, chrome.test, smoke OVERLAYS and pad walk updated; orphans.test's overlay floor 8 → 7. npm test 407/407; smoke overlays + pad-overlays 20; full smoke 315/315 (two fewer: the Scores overlay's open/close and pad walk). grep: only save.js's 'bad scores' messages and topScores-style names remain. Step 1 commit `3382c6b`.
 
 ### Step 3/3 — Docs and 0.8.5
 - **`AGENTS.md`**:

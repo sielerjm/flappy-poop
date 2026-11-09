@@ -33,7 +33,6 @@ export const OVERLAYS = {
   changelog: 'Changelog',
   lang: 'Language',
   feedback: 'Feedback',
-  scores: 'Scores',
   leaderboard: 'Leaderboard',
 };
 
@@ -1216,7 +1215,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
           const r1 = await ring(key);
           const scrolls = key === 'About' || key === 'HowTo' || key === 'Changelog';
           // About, HowTo and Changelog (every version listed) are all longer than their panel, so a down press scrolls.
-          const walked = scrolls ? r1.id === 'close' && r1.offset < 0 : ['Scores', 'Leaderboard'].includes(key) ? r1.id === 'close' : Boolean(r1.id) && r1.id !== 'close';
+          const walked = scrolls ? r1.id === 'close' && r1.offset < 0 : key === 'Leaderboard' ? r1.id === 'close' : Boolean(r1.id) && r1.id !== 'close';
           await padDown(G.back);
           await sleep(400);
           ok(r0.shown && r0.id === 'close' && walked && !(await active(key)), `${key}: opens ringed on ✕, down ${scrolls ? `scrolls (${r1.offset})` : `walks to ${r1.id}`}, B closes`);

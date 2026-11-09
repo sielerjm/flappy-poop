@@ -19,7 +19,7 @@ function intent(partial) {
 
 test('mute always toggles, including while an overlay is open', () => {
   for (const state of STATES) {
-    for (const overlay of [null, 'settings', 'about', 'howto', 'changelog', 'language', 'feedback', 'leaderboard', 'scores']) {
+    for (const overlay of [null, 'settings', 'about', 'howto', 'changelog', 'language', 'feedback', 'leaderboard']) {
       assert.deepEqual(intent({ state, overlay, input: 'mute' }), { do: 'toggleMute' });
     }
   }
@@ -34,7 +34,7 @@ test('no overlay: pause and esc toggle only during a run', () => {
   }
 });
 
-test('no overlay: settings, info, howto, lang, feedback, leaderboard, and scores open that overlay, pausing only if playing (or respawning)', () => {
+test('no overlay: settings, info, howto, lang, feedback, and leaderboard open that overlay, pausing only if playing (or respawning)', () => {
   for (const state of STATES) {
     const pause = state === 'playing' || state === 'respawn';
     assert.deepEqual(intent({ state, input: 'settings' }), { do: 'openSettings', pause });
@@ -42,7 +42,6 @@ test('no overlay: settings, info, howto, lang, feedback, leaderboard, and scores
     assert.deepEqual(intent({ state, input: 'howto' }), { do: 'openHowTo', pause });
     assert.deepEqual(intent({ state, input: 'lang' }), { do: 'openLanguage', pause });
     assert.deepEqual(intent({ state, input: 'feedback' }), { do: 'openFeedback', pause });
-    assert.deepEqual(intent({ state, input: 'scores' }), { do: 'openScores', pause });
     assert.deepEqual(intent({ state, input: 'leaderboard' }), { do: 'openLeaderboard', pause });
   }
 });
@@ -72,10 +71,10 @@ test('no overlay: close does nothing', () => {
   }
 });
 
-test('overlay open: pause, tap, esc, settings, lang, leaderboard, and scores are ignored', () => {
+test('overlay open: pause, tap, esc, settings, lang, and leaderboard are ignored', () => {
   for (const state of STATES) {
-    for (const overlay of ['settings', 'about', 'howto', 'changelog', 'language', 'feedback', 'leaderboard', 'scores']) {
-      for (const input of ['pause', 'tap', 'esc', 'settings', 'lang', 'leaderboard', 'scores']) {
+    for (const overlay of ['settings', 'about', 'howto', 'changelog', 'language', 'feedback', 'leaderboard']) {
+      for (const input of ['pause', 'tap', 'esc', 'settings', 'lang', 'leaderboard']) {
         assert.deepEqual(intent({ state, overlay, input }), { do: 'ignore' }, `${state} ${overlay} ${input}`);
       }
     }
@@ -86,7 +85,7 @@ test('overlay open: pause, tap, esc, settings, lang, leaderboard, and scores are
 
 test('feedback opens Feedback from any overlay without pausing again', () => {
   for (const state of STATES) {
-    for (const overlay of ['settings', 'about', 'howto', 'changelog', 'language', 'feedback', 'leaderboard', 'scores']) {
+    for (const overlay of ['settings', 'about', 'howto', 'changelog', 'language', 'feedback', 'leaderboard']) {
       assert.deepEqual(intent({ state, overlay, input: 'feedback' }), { do: 'openFeedback', pause: false });
     }
   }
@@ -103,7 +102,7 @@ test('changelog (What\'s new) opens from no overlay or over About; it is ignored
   for (const state of STATES) {
     assert.deepEqual(intent({ state, input: 'changelog' }), { do: 'openChangelog', pause: state === 'playing' || state === 'respawn' });
     assert.deepEqual(intent({ state, overlay: 'about', input: 'changelog' }), { do: 'openChangelog', pause: false });
-    for (const overlay of ['settings', 'howto', 'changelog', 'language', 'leaderboard', 'scores']) {
+    for (const overlay of ['settings', 'howto', 'changelog', 'language', 'leaderboard']) {
       assert.deepEqual(intent({ state, overlay, input: 'changelog' }), { do: 'ignore' });
     }
     assert.deepEqual(intent({ state, overlay: 'changelog', stackedAbout: true, input: 'close' }), { do: 'closeTop', armResumeLockout: false });
@@ -145,10 +144,6 @@ test('close top overlay arms resume lockout unless Settings remains under About'
       do: 'closeTop',
       armResumeLockout: true,
     });
-    assert.deepEqual(intent({ state, overlay: 'scores', input: 'close' }), {
-      do: 'closeTop',
-      armResumeLockout: true,
-    });
     assert.deepEqual(intent({ state, overlay: 'leaderboard', input: 'close' }), {
       do: 'closeTop',
       armResumeLockout: true,
@@ -173,7 +168,7 @@ test('resumeLocked does not block P/Esc resume once no overlay is open', () => {
   assert.deepEqual(intent({ state: 'paused', input: 'esc', resumeLocked: true }), { do: 'resume' });
 });
 
-const OVERLAYS = ['settings', 'about', 'howto', 'changelog', 'language', 'feedback', 'leaderboard', 'scores'];
+const OVERLAYS = ['settings', 'about', 'howto', 'changelog', 'language', 'feedback', 'leaderboard'];
 
 test('the shop: the 💰 opens it only in a level break; open, a tap / esc / pause close it and arm the lockout', () => {
   assert.deepEqual(intent({ state: 'paused', breaking: true, input: 'shop' }), { do: 'openShop' });

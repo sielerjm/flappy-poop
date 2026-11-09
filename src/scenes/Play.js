@@ -1241,7 +1241,6 @@ export class Play extends Phaser.Scene {
     const language = this.scene.isActive('Language');
     const feedback = this.scene.isActive('Feedback');
     const leaderboard = this.scene.isActive('Leaderboard');
-    const scores = this.scene.isActive('Scores');
     return {
       state: this.chromeState(),
       overlay: feedback
@@ -1258,12 +1257,10 @@ export class Play extends Phaser.Scene {
                   ? 'settings'
                   : leaderboard
                     ? 'leaderboard'
-                    : scores
-                      ? 'scores'
-                      : null,
+                    : null,
       stackedSettings: about && settings,
       stackedAbout: (howto || changelog) && about,
-      stackedUnder: feedback && (about || howto || changelog || settings || language || leaderboard || scores),
+      stackedUnder: feedback && (about || howto || changelog || settings || language || leaderboard),
       input,
       resumeLocked: this.time.now < this.flapLockedUntil,
       shop: this.shopOpen,
@@ -1339,11 +1336,6 @@ export class Play extends Phaser.Scene {
         if (!this.scene.isActive('Feedback')) this.scene.launch('Feedback');
         this.scene.bringToTop('Feedback');
         break;
-      case 'openScores':
-        if (this.overlayPause(result)) this.pauseRun();
-        if (!this.scene.isActive('Scores')) this.scene.launch('Scores');
-        this.scene.bringToTop('Scores');
-        break;
       case 'openLeaderboard':
         if (this.overlayPause(result)) this.pauseRun();
         if (!this.scene.isActive('Leaderboard')) this.scene.launch('Leaderboard');
@@ -1377,7 +1369,7 @@ export class Play extends Phaser.Scene {
   padTop() {
     const overlay = this.chromeArgs('tap').overlay;
     if (overlay) {
-      const key = { settings: 'Settings', about: 'About', howto: 'HowTo', changelog: 'Changelog', language: 'Language', feedback: 'Feedback', leaderboard: 'Leaderboard', scores: 'Scores' }[overlay];
+      const key = { settings: 'Settings', about: 'About', howto: 'HowTo', changelog: 'Changelog', language: 'Language', feedback: 'Feedback', leaderboard: 'Leaderboard' }[overlay];
       return { top: 'overlay', scene: this.scene.get(key) };
     }
     if (this.scene.isActive('Over')) return { top: 'over', scene: this.scene.get('Over') };

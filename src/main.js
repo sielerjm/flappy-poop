@@ -10,7 +10,6 @@ import { HowTo } from './scenes/HowTo.js';
 import { Changelog } from './scenes/Changelog.js';
 import { Language } from './scenes/Language.js';
 import { Feedback } from './scenes/Feedback.js';
-import { Scores } from './scenes/Scores.js';
 import { Leaderboard } from './scenes/Leaderboard.js';
 
 // Logical field: 1280 tall; as wide as the window's aspect asks, between a phone
@@ -39,7 +38,7 @@ const game = new Phaser.Game({
   },
   // Play twice: 'Play' is single player and the left half of a versus match, 'PlayB' the right half
   // (only Versus launches it). Versus owns the match and sits above both halves, below the overlays.
-  scene: [Boot, Play, new Play('PlayB'), Over, Versus, Settings, About, HowTo, Changelog, Language, Feedback, Scores, Leaderboard],
+  scene: [Boot, Play, new Play('PlayB'), Over, Versus, Settings, About, HowTo, Changelog, Language, Feedback, Leaderboard],
 });
 
 // A window resize (or a phone rotating) asks Play for a new field width. Play
