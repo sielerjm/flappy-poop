@@ -162,10 +162,10 @@ test('rankText fills score (with 🚽 on toilet runs), rank and total in both lo
   assert.ok(!zh.includes('{'), 'no placeholder left over');
 });
 
-test('profileButtonText prompts for a username until one is set, in both locales', () => {
-  assert.equal(profileButtonText('en', { name: '', top: [] }), 'Enter username');
-  assert.equal(profileButtonText('zh-Hans', { name: '', top: [] }), '输入用户名');
-  assert.equal(profileButtonText('en', null), 'Enter username');
+test('profileButtonText reads Load user until a username is set, then name · best, in both locales', () => {
+  assert.equal(profileButtonText('en', { name: '', top: [] }), 'Load user');
+  assert.equal(profileButtonText('zh-Hans', { name: '', top: [] }), '载入用户');
+  assert.equal(profileButtonText('en', null), 'Load user');
   assert.equal(profileButtonText('en', { name: 'Alice', top: [] }), 'Alice');
   assert.equal(profileButtonText('zh-Hans', { name: 'Alice', top: [{ score: 41, toilet: true }] }), 'Alice · 🚽 41');
 });

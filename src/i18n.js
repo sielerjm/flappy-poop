@@ -105,7 +105,6 @@ Inspired by Flappy Bird`,
     bugReport: 'Bug',
     featureRequest: 'Feature request',
     feedbackLink: 'Bug or feature request?',
-    saveLoadButton: 'Save / Load User',
     saveTitle: 'SAVE / LOAD USER',
     saveIntro: '1. Pick a username and press Save.\n2. Copy your user code and keep it somewhere safe (a note, a message to yourself).\n3. On another phone or browser, paste it under Load user code: your name and scores follow you, and the leaderboard joins both into one player.\n4. To change your username, type a new one and press Save. Devices and browsers that use your user code update to the new name automatically.',
     saveNameLabel: 'Username',
@@ -141,13 +140,13 @@ Inspired by Flappy Bird`,
     leaderboardTitle: 'LEADERBOARD',
     leaderboardLoading: 'Loading…',
     leaderboardOffline: "Can't reach the leaderboard",
-    leaderboardJoin: 'Set a username in Save / Load User to join',
+    leaderboardJoin: 'Tap Load user on the home screen to set a username and join',
     leaderboardRank: 'Your best {score} is #{rank} of {total}',
     leaderboardNotYet: 'Your best is not on the board yet',
-    leaderboardNameTaken: 'Your username belongs to another player: open Save / Load User to fix it',
+    leaderboardNameTaken: 'Your username belongs to another player: tap your name on the home screen to fix it',
     leaderboardLevel: 'LV',
     saveLeaderboardNote: 'Your username and best score are shown on the public leaderboard',
-    profilePrompt: 'Enter username',
+    loadUserButton: 'Load user',
     versusTitle: '2 PLAYERS',
     versusPlayer: 'P{n}',
     versusJoinPrompt: 'press your flap button',
@@ -261,7 +260,6 @@ Inspired by Flappy Bird`,
     bugReport: '问题反馈',
     featureRequest: '功能建议',
     feedbackLink: '问题或功能建议？',
-    saveLoadButton: '存档 / 载入用户',
     saveTitle: '存档 / 载入用户',
     saveIntro: '1. 输入用户名并按“保存”。\n2. 复制你的用户码，保存在安全的地方（备忘录、发给自己的消息）。\n3. 在其他手机或浏览器上，把它粘贴到“载入用户码”：你的名字和分数会跟着你，排行榜也会把两边合并为同一位玩家。\n4. 要更改用户名，输入新名字并按“保存”。使用你用户码的其他设备和浏览器会自动更新为新名字。',
     saveNameLabel: '用户名',
@@ -297,13 +295,13 @@ Inspired by Flappy Bird`,
     leaderboardTitle: '排行榜',
     leaderboardLoading: '加载中…',
     leaderboardOffline: '无法连接排行榜',
-    leaderboardJoin: '在“存档 / 载入用户”中设置用户名即可上榜',
+    leaderboardJoin: '在首页点“载入用户”设置用户名即可上榜',
     leaderboardRank: '你的最高分 {score} 排在第 {rank} 名（共 {total} 人）',
     leaderboardNotYet: '你的最高分尚未上榜',
-    leaderboardNameTaken: '你的用户名属于另一位玩家：请打开“存档 / 载入用户”处理',
+    leaderboardNameTaken: '你的用户名属于另一位玩家：请在首页点你的名字处理',
     leaderboardLevel: '关卡',
     saveLeaderboardNote: '你的用户名和最高分会显示在公开排行榜上',
-    profilePrompt: '输入用户名',
+    loadUserButton: '载入用户',
     versusTitle: '双人模式',
     versusPlayer: '玩家{n}',
     versusJoinPrompt: '按下你的起飞键',
@@ -400,9 +398,9 @@ export function metaFontSize(locale) {
   return locale === 'zh-Hans' ? '28px' : '24px';
 }
 
-/** Ready-screen profile button: "Name · 🚽 41" once a username is set, else the prompt to enter one. */
+/** Ready-screen user button: "Name · 🚽 41" once a username is set, else "Load user". Either way it opens the save panel. */
 export function profileButtonText(locale, state) {
-  return profileLine(state) || t(locale, 'profilePrompt');
+  return profileLine(state) || t(locale, 'loadUserButton');
 }
 
 /** "Welcome back, Name — 41 · 37 · 30" after a successful save-code load. */

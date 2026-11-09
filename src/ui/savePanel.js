@@ -1,5 +1,5 @@
-// DOM user-code panel, opened from the Save / Load User button on the ready
-// screen. Plain DOM over the canvas (not Phaser UI) because text input and the
+// DOM user-code panel, opened from the user button on the ready screen ("Load
+// user", then "name · best"). Plain DOM over the canvas (not Phaser UI) because text input and the
 // clipboard are far easier here on phones. Logic lives in src/save.js; this file only wires the form.
 //
 // While open, Phaser's keyboard manager is disabled so typing in a field does
@@ -52,7 +52,6 @@ let ctx = null; // { game, play, locale }
 let keyboardWasEnabled = true;
 let currentCode = '';
 let copiedTimer = null;
-let closeTimer = null; // pending self-close after Save (Enter-username flow)
 let claim = null; // { name, promise } the last username check this panel session (one check per name: blur and Save share it)
 let clearArmedAt = 0; // Date.now() of a first tap on Clear; a second inside saveClearConfirmMs signs out
 let clearTimer = null;
@@ -262,7 +261,6 @@ async function onSave() {
     dom.name.focus();
     return;
   }
-  const closeOnSave = ctx.closeOnSave;
   const result = await onNameChange();
   if (!ctx || !dom) return;
   if (!result) {
@@ -270,11 +268,7 @@ async function onSave() {
     return;
   }
   setStatus(t(ctx.locale, result === 'offline' ? 'saveNameOffline' : 'saveNameSaved'), 'ok');
-  dom.name.blur();
-  if (closeOnSave) {
-    clearTimeout(closeTimer);
-    closeTimer = setTimeout(() => closeSavePanel(), T.savePanelCloseMs);
-  }
+  dom.name.blur(); // the panel stays open: the user code is right below
 }
 
 /**
@@ -320,10 +314,6 @@ function toggleTestMode() {
   dom.name.value = getState().name;
   setStatus(t(ctx.locale, on ? 'testModeOn' : 'testModeOff'), 'ok');
   dom.name.blur();
-  if (ctx.closeOnSave) {
-    clearTimeout(closeTimer);
-    closeTimer = setTimeout(() => closeSavePanel(), T.savePanelCloseMs);
-  }
 }
 
 function onCopy() {
@@ -405,20 +395,18 @@ function setGameKeyboard(enabled) {
 /**
  * Open the panel. Regenerates the code every time (spec: export is never cached).
  * focusName puts the caret in the Username field at once (call from inside the
- * tap so iOS raises the keyboard); closeOnSave makes a successful Save close
- * the panel after savePanelCloseMs. Both are used by the "Enter username" prompt.
- * @param {{ game: object, play: object, locale: string, focusName?: boolean, closeOnSave?: boolean }} options
+ * tap so iOS raises the keyboard); the user button asks for it while there is no
+ * username. The panel stays open after Save, so the player sees their user code.
+ * @param {{ game: object, play: object, locale: string, focusName?: boolean }} options
  */
 export function openSavePanel(options) {
   if (typeof document === 'undefined') return;
   if (!dom) build();
-  clearTimeout(closeTimer);
-  closeTimer = null;
   clearTimeout(clearTimer);
   clearArmedAt = 0;
   claim = null;
   loaded = null;
-  ctx = { game: options.game, play: options.play, locale: options.locale ?? 'en', closeOnSave: Boolean(options.closeOnSave) };
+  ctx = { game: options.game, play: options.play, locale: options.locale ?? 'en' };
   applyLocale(ctx.locale);
   setGameKeyboard(false);
   const state = getState();
@@ -434,8 +422,6 @@ export function openSavePanel(options) {
 }
 
 export function closeSavePanel() {
-  clearTimeout(closeTimer);
-  closeTimer = null;
   clearTimeout(clearTimer);
   clearArmedAt = 0;
   if (!dom || dom.root.hidden) return;

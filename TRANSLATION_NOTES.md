@@ -48,7 +48,7 @@ formal medical language.
 - Untranslated tokens (must appear across About strings): `Flappy Poop`, `Michael Sieler`, `Phaser 4.2.1`, `MacKaffee`, `Pixabay`, `fart sound effect (reed)`, `Tori Schummer`, version numbers.
 - **Silent mode** = iPhone **hardware** ringer/silent switch → **静音模式** (not the in-game mute toggle).
 - **Toilet mode** (如厕模式) = the ready-screen switch; scores from such runs carry a 🚽 (not translated).
-- **User code** / save code (用户码 / 存档码) = the `fp1.…` string players copy between devices. The home-screen button is **Save / Load User**; the panel labels are **Username**, **Save user code**, **Load user code**, and a **Save** button at the bottom that stores the username. `{name}` and `{scores}` are placeholders filled at runtime; keep them verbatim.
+- **User code** / save code (用户码 / 存档码) = the `fp1.…` string players copy between devices. The home-screen user button reads **Load user** (载入用户) until a username is set, then the name and best; it opens the panel titled **SAVE / LOAD USER**, whose labels are **Username**, **Save user code**, **Load user code**, and a **Save** button at the bottom that stores the username. `{name}` and `{scores}` are placeholders filled at runtime; keep them verbatim.
 - **One player across devices** (2026-11-08): every browser has its own secret id; the leaderboard treats ids merged through a user code as one player (aliases). A **username belongs to the player holding it on the board**: typing a held name on a new browser is refused (`saveNameTaken`), and the way in is to paste the user code (`saveIntro` step 3, `saveMerged`). **The **board's name wins** (2026-11-09): a rename typed on one device reaches the others on their own (`saveIntro` step 4, 自动更新); only a name typed on a device overrides the board. **Clear** (清除) signs this device out after a second tap (`saveClearConfirm`, `saveCleared`): the name, id and scores are forgotten on the device only. "Sign out" is the plain sense (退出), not an account system. `{name}` stays verbatim.
 - **Leaderboard** (排行榜) = the shared online Top 25 behind the 🏆 tray button. Only players with a username are on it; `{score}` may carry a 🚽, `{rank}` / `{total}` are numbers. Keep the placeholders verbatim.
 - **Two players** (双人模式) = the 👥 switch under the toilet toggle, offered only on a landscape screen wide enough for two halves (desktop, tablet). P1 is the left half, P2 the right; `{n}` is the player number. A crash does not end a two-player run (the poop is put back mid-screen). Levels start together: the first one over a finish line waits under **Waiting for P{n}…** until the other arrives; then each player taps ready (**Tap when ready**, then **Ready! Waiting for P{n}…** with a smaller **Tap again to un-ready** under it), and once both are ready a shared 3-2-1-GO starts the level as **GO!** appears (with a toilet flush). The match is decided on points once both players have cleared the last level, and the first one out waits under **Made it out!** / **Waiting for P{n}…**. Two-player runs never reach the leaderboard or the save code.
@@ -163,7 +163,6 @@ Short, playful, clear. Fit a 720×1280 logical field; How to play / About body w
 | bugReport | Bug | 问题反馈 |
 | featureRequest | Feature request | 功能建议 |
 | feedbackLink | Bug or feature request? | 问题或功能建议？ |
-| saveLoadButton | Save / Load User | 存档 / 载入用户 |
 | saveTitle | SAVE / LOAD USER | 存档 / 载入用户 |
 | saveIntro | 1. Pick a username and press Save.
 2. Copy your user code and keep it somewhere safe (a note, a message to yourself).
@@ -205,13 +204,13 @@ Short, playful, clear. Fit a 720×1280 logical field; How to play / About body w
 | leaderboardTitle | LEADERBOARD | 排行榜 |
 | leaderboardLoading | Loading… | 加载中… |
 | leaderboardOffline | Can't reach the leaderboard | 无法连接排行榜 |
-| leaderboardJoin | Set a username in Save / Load User to join | 在“存档 / 载入用户”中设置用户名即可上榜 |
+| leaderboardJoin | Tap Load user on the home screen to set a username and join | 在首页点“载入用户”设置用户名即可上榜 |
 | leaderboardRank | Your best {score} is #{rank} of {total} | 你的最高分 {score} 排在第 {rank} 名（共 {total} 人） |
 | leaderboardNotYet | Your best is not on the board yet | 你的最高分尚未上榜 |
-| leaderboardNameTaken | Your username belongs to another player: open Save / Load User to fix it | 你的用户名属于另一位玩家：请打开“存档 / 载入用户”处理 |
+| leaderboardNameTaken | Your username belongs to another player: tap your name on the home screen to fix it | 你的用户名属于另一位玩家：请在首页点你的名字处理 |
 | leaderboardLevel | LV | 关卡 |
 | saveLeaderboardNote | Your username and best score are shown on the public leaderboard | 你的用户名和最高分会显示在公开排行榜上 |
-| profilePrompt | Enter username | 输入用户名 |
+| loadUserButton | Load user | 载入用户 |
 | versusTitle | 2 PLAYERS | 双人模式 |
 | versusPlayer | P{n} | 玩家{n} |
 | versusJoinPrompt | press your flap button | 按下你的起飞键 |

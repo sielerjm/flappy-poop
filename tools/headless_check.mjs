@@ -294,34 +294,41 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         ok(!home.score && home.halo && home.due && home.round && h1 !== h2, `home screen hides the score; the ? pulses on a fresh profile (alpha ${h1.toFixed(2)} → ${h2.toFixed(2)})`);
       }
 
-      // Onboarding: a fresh profile has no username, so the profile button prompts for one
-      // under a pulsing halo; tapping it opens the save panel on the name field; Save
-      // stores the name and closes the panel by itself.
+      // Onboarding: a fresh profile has no username, so the user button reads "Load user" under a
+      // pulsing halo; tapping it opens the save panel on the name field; Save stores the name and the
+      // panel stays open on the user code. Named, the button reads the name and still opens the panel.
       {
         const play = `__flappy.scene.getScene('Play')`;
         const texts = () => evaluate(`${play}.children.list.filter((c) => c.type === 'Text' && c.visible).map((c) => c.text)`);
         const a1 = await evaluate(`${play}.profileHalo.alpha`);
         await sleep(300);
         const a2 = await evaluate(`${play}.profileHalo.alpha`);
-        const promptShown = (await texts()).includes('Enter username');
+        const promptShown = (await texts()).includes('Load user');
         const haloOn = await evaluate(`${play}.profileHalo.visible`);
         const who = await evaluate(`JSON.stringify({ name: ${play}.getSaveState().name ?? null, stored: localStorage.getItem('flappyPoop.save'), launching: ${play}.launching, state: ${play}.state })`).then(JSON.parse);
-        ok(promptShown && haloOn && a1 !== a2, `fresh profile shows "Enter username" with a pulsing halo (alpha ${a1.toFixed(2)} → ${a2.toFixed(2)})${promptShown ? '' : ` — name ${JSON.stringify(who.name)}, stored ${who.stored ? 'yes' : 'no'}, launching ${who.launching}, state ${who.state}`}`);
+        ok(promptShown && haloOn && a1 !== a2, `fresh profile shows "Load user" with a pulsing halo (alpha ${a1.toFixed(2)} → ${a2.toFixed(2)})${promptShown ? '' : ` — name ${JSON.stringify(who.name)}, stored ${who.stored ? 'yes' : 'no'}, launching ${who.launching}, state ${who.state}`}`);
         await evaluate(`${play}.flap({ x: ${play}.readyBoxes.profile.x, y: ${play}.readyBoxes.profile.y }), true`);
         await sleep(200);
         const opened = await evaluate(`!document.getElementById('save-panel').hidden && document.activeElement && document.activeElement.id === 'save-name'`);
-        ok(opened === true && (await playState()) === 'ready', 'tapping the prompt opens the save panel on the name field without starting a run');
+        ok(opened === true && (await playState()) === 'ready', 'tapping "Load user" opens the save panel on the name field without starting a run');
         // The board's username check and its name for this player are stubbed for the whole section
         // (deterministic, and never the live board).
         await evaluate(`(globalThis.__nameFree = true, globalThis.__nameChecks = [], ${play}.checkNameAvailable = (name, id) => (globalThis.__nameChecks.push([name, id]), Promise.resolve(globalThis.__nameFree)), true)`);
         await evaluate(`(globalThis.__boardName = null, globalThis.__nameFetches = [], ${play}.fetchPlayerName = (id) => (globalThis.__nameFetches.push(id), Promise.resolve(globalThis.__boardName)), true)`);
         await evaluate(`document.getElementById('save-name').value = 'Smoke', document.getElementById('save-save-btn').click(), true`);
         await sleep(1200);
-        const closed = await evaluate(`document.getElementById('save-panel').hidden`);
+        const after = await evaluate(`JSON.stringify({ open: !document.getElementById('save-panel').hidden, code: document.getElementById('save-code').value })`).then(JSON.parse);
         const named = await evaluate(`${play}.getSaveState().name`);
+        await evaluate(`import('./src/ui/savePanel.js').then((m) => (m.closeSavePanel(), true))`);
         const line = (await texts()).find((x) => x.startsWith('Smoke'));
         const haloOff = !(await evaluate(`${play}.profileHalo.visible`));
-        ok(closed === true && named === 'Smoke' && Boolean(line) && haloOff, `Save stores the name, closes the panel, and the button now reads "${line}" without the halo`);
+        ok(after.open && after.code.startsWith('fp1.') && named === 'Smoke' && Boolean(line) && haloOff, `Save stores the name and the panel stays open on the user code (${after.code.slice(0, 8)}…); closed, the button reads "${line}" without the halo`);
+        // Named, the same button opens the save panel (the High scores page is gone).
+        await evaluate(`${play}.flap({ x: ${play}.readyBoxes.profile.x, y: ${play}.readyBoxes.profile.y }), true`);
+        await sleep(200);
+        const reopened = await evaluate(`JSON.stringify({ open: !document.getElementById('save-panel').hidden, field: document.getElementById('save-name').value, focused: document.activeElement?.id === 'save-name' })`).then(JSON.parse);
+        await evaluate(`import('./src/ui/savePanel.js').then((m) => (m.closeSavePanel(), true))`);
+        ok(reopened.open && reopened.field === 'Smoke' && !reopened.focused && (await playState()) === 'ready', `tapping "${line}" opens the save panel on the stored name (no keyboard raised) without starting a run`);
       }
 
       // The username claim, the merge on Load, and Clear. The board check stays stubbed; the Data API
@@ -394,7 +401,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await evaluate(`${el('save-clear-btn')}.click(), true`);
         await sleep(100);
         const gone = await evaluate(`JSON.stringify({ state: ${play}.getSaveState(), save: localStorage.getItem('flappyPoop.save'), best: localStorage.getItem('${keys.best}'), submits: localStorage.getItem('${keys.submits}'), merges: localStorage.getItem('${keys.merges}'), rename: localStorage.getItem('${keys.rename}'), settings: localStorage.getItem('${keys.settings}') !== null, status: ${el('save-status')}.textContent, field: ${el('save-name')}.value, code: ${el('save-code')}.value, disabled: ${el('save-clear-btn')}.disabled, prompt: ${play}.profileBtn.getText() })`).then(JSON.parse);
-        ok(gone.state.name === '' && gone.state.id === null && gone.state.top.length === 0 && gone.best === null && gone.submits === null && gone.merges === null && gone.rename === null && gone.settings && gone.status === (await tx('saveCleared')) && gone.field === '' && gone.code === (await tx('saveNameRequired')) && gone.disabled && gone.prompt === (await tx('profilePrompt')), `a second tap signs the device out: no name, id or scores, the submits, merges, pending rename and legacy best gone, settings kept; Clear greys and the code field reads "${gone.code}"`);
+        ok(gone.state.name === '' && gone.state.id === null && gone.state.top.length === 0 && gone.best === null && gone.submits === null && gone.merges === null && gone.rename === null && gone.settings && gone.status === (await tx('saveCleared')) && gone.field === '' && gone.code === (await tx('saveNameRequired')) && gone.disabled && gone.prompt === (await tx('loadUserButton')), `a second tap signs the device out: no name, id or scores, the submits, merges, pending rename and legacy best gone, settings kept; Clear greys and the code field reads "${gone.code}"`);
         // Back to the smoke's own name for the rest of the run.
         await typeAndSave('Smoke');
         await evaluate(`import('./src/ui/savePanel.js').then((m) => (m.closeSavePanel(), true))`);

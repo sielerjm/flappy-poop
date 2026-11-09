@@ -361,14 +361,8 @@ export class Play extends Phaser.Scene {
       this.howToHaloTween = this.tweens.add({ targets: this.howToHalo, alpha: T.readyPromptMaxAlpha, yoyo: true, repeat: -1, duration: T.readyPromptPulseMs });
     }
     this.howToBtn = createButton(this, this.readyBoxes.howto, '?', { ...TEXT_STYLE, fontSize: '52px', color: '#f8a0c8' });
-    this.saveLoadBtn = createButton(this, this.readyBoxes.saveLoad, t(this.locale, 'saveLoadButton'), {
-      ...TEXT_STYLE,
-      fontSize: '36px',
-      color: '#f8a0c8',
-    });
-    // "<name> · best" button under Save / Load User: opens the Scores overlay.
-    // Without a username it shows the enter-username prompt under a pulsing
-    // soft white halo and opens the save panel on the name field instead.
+    // The user button: "<name> · best" once a username is set, else "Load user" under a pulsing
+    // soft white halo. Either way a tap opens the save panel (on the name field when unnamed).
     {
       const b = this.readyBoxes.profile;
       this.profileHalo = createRectGlow(this, b.x, b.y, { key: 'ready-halo', width: b.width, height: b.height, radius: T.readyButtonRadius, pad: T.readyPromptGlowPx })
@@ -440,8 +434,8 @@ export class Play extends Phaser.Scene {
     // Controller focus ring over the tray, in screen order; A on a ringed button runs the
     // same handleChrome(id) its tap runs. Shown by a d-pad press (onPadAction), never by touch.
     // Ready-screen extras after the tray (so the first ring lands on ⓘ): the toilet toggle and the
-    // ? (How to play), both only while the ready screen is up. Save / Load User and the profile
-    // button stay off the ring on purpose: they need the keyboard.
+    // ? (How to play), both only while the ready screen is up. The user button stays off the ring
+    // on purpose: the save panel needs the keyboard.
     const onReady = () => this.state === 'ready' && !this.launching && !this.match;
     this.focus = this.tray
       ? createFocus(this, T, {
@@ -615,7 +609,6 @@ export class Play extends Phaser.Scene {
     this.versusToggle?.setVisible(visible);
     this.howToBtn.setVisible(visible);
     this.howToHalo.setVisible(visible && this.isHowToPromptDue());
-    this.saveLoadBtn.setVisible(visible);
     this.profileBtn.setVisible(visible);
     this.profileHalo.setVisible(visible && !this.save?.name);
     this.refreshTestBadge();
@@ -896,14 +889,9 @@ export class Play extends Phaser.Scene {
           this.toggleVersus();
           return;
         }
-        if (hit === 'saveload') {
-          this.openSavePanel();
-          return;
-        }
         if (hit === 'profile') {
-          // Named: the High scores overlay. Unnamed: the prompt opens the save panel on the name field.
-          if (this.save?.name) this.handleChrome('scores');
-          else this.openSavePanel({ focusName: true, closeOnSave: true });
+          // The user button always opens the save panel; unnamed, on the name field (it stays open after Save, so the code shows).
+          this.openSavePanel({ focusName: !this.save?.name });
           return;
         }
         // 'start' or empty space both start the run below.
@@ -1210,8 +1198,7 @@ export class Play extends Phaser.Scene {
     if (!isLocale(next)) return;
     this.locale = next;
     this.readyTitle?.setText(t(next, 'readyTitle'));
-    this.saveLoadBtn?.setText(t(next, 'saveLoadButton'));
-    this.refreshProfile(); // the enter-username prompt is localised too
+    this.refreshProfile(); // "Load user" is localised too
     const [pauseTitle, pauseHint] = pauseBannerText(next).split('\n');
     this.pauseText?.setText(pauseTitle);
     this.pauseHint?.setText(pauseHint);

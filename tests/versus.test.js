@@ -325,7 +325,6 @@ test('ready layout grows a 👥 toggle under the toilet toggle only when asked, 
   const v = layout.versus;
   assert.equal(v.id, 'versus');
   assert.deepEqual([layout.toilet.x, layout.toilet.y, layout.toilet.width, layout.toilet.height], [plain.toilet.x, plain.toilet.y, plain.toilet.width, plain.toilet.height], 'the toilet toggle does not move');
-  assert.equal(layout.saveLoad.y, plain.saveLoad.y);
   assert.equal(layout.profile.y, plain.profile.y);
   assert.equal(v.x, layout.toilet.x);
   assert.equal(v.width, layout.toilet.width);
@@ -335,7 +334,7 @@ test('ready layout grows a 👥 toggle under the toilet toggle only when asked, 
   const top = v.y - v.height / 2;
   const bottom = v.y + v.height / 2;
   assert.ok(top > layout.toilet.y + layout.toilet.height / 2, 'under the toilet toggle');
-  assert.ok(bottom < layout.saveLoad.y - layout.saveLoad.height / 2, 'above Save / Load User');
+  assert.ok(bottom < layout.profile.y - layout.profile.height / 2, 'above the user button');
   const B = layout.poop.bubble;
   assert.ok(top > layout.poop.y + B.bottom + 24, 'clear of the bobbing bubble');
   assert.equal(readyHit(v.x, v.y, layout), 'versus');

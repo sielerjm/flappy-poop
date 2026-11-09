@@ -1410,8 +1410,9 @@ export function scaledCircleBody(frameSize, displayScale, logicalRadius) {
  * centred top to bottom, the title, the poop wearing its "TAP TO FLAP!" speech
  * bubble (poop-speech.png; the bubble reaches ~127 px above and ~116 px right
  * of the body at display scale, ×readyPoopScale) and the toilet toggle; then
- * Save / Load User and the profile button stacked up from just above the
- * ground strip and the tray band. Any tap that is not on a box starts the run.
+ * the user button ("Load user", then "name · best"; it opens the save panel)
+ * just above the ground strip and the tray band. Any tap that is not on a box
+ * starts the run.
  * Buttons are at least trayHitMin tall. `x0` shifts everything right (the
  * chrome column's left edge on a wide field). With `versus` the 👥 two-player
  * toggle sits under the toilet toggle (only offered when two halves fit the
@@ -1427,20 +1428,17 @@ export function readyLayout(width, height, t, x0 = 0, { versus = false } = {}) {
   const poop = { id: 'poop', x: cx, y: 672, bubble: { left: -48 * s, right: 116 * s, top: -127 * s, bottom: 46 * s } };
   // Toilet toggle: 120x56 track left of centre, 🚽 to its right; the hit box spans both.
   const toilet = { id: 'toilet', x: cx, y: 812, width: 240, height: 72, track: { x: cx - 50, y: 812, width: 120, height: 56 }, emojiX: cx + 80 };
-  // 👥 two-player toggle: the same switch directly under the toilet toggle, inside the 75 px
-  // between it (bottom 848) and Save / Load User (top 923); the bobbing bubble above and the
-  // pinned buttons below leave no other room, so neither neighbour moves.
+  // 👥 two-player toggle: the same switch directly under the toilet toggle (bottom 848), above
+  // the user button (top 1023); the bobbing bubble above leaves no other room.
   const two = versus ? { id: 'versus', x: cx, y: 886, width: 240, height: 72, track: { x: cx - 50, y: 886, width: 120, height: 56 }, emojiX: cx + 80 } : undefined;
   // "?" button: a boxH circle in the top-right corner, inset so its pulsing halo
   // (readyPromptGlowPx past the rim) stays inside the field.
   const haloR = boxH / 2 + (t.readyPromptGlowPx ?? 0);
   const howto = { id: 'howto', x: x0 + width - 16 - haloR, y: 16 + haloR, width: boxH, height: boxH, round: true };
-  // Two equal buttons, 12 px apart, stacked up from 1111: above the ground strip
-  // (1152) and the tray band (1168). These two do not move when the block above shifts.
-  const gap = 12;
+  // The user button, its bottom at 1111: above the ground strip (1152) and the tray band (1168).
+  // It does not move when the block above shifts.
   const profile = { id: 'profile', x: cx, y: 1111 - boxH / 2, width: 360, height: boxH };
-  const saveLoad = { id: 'saveload', x: cx, y: profile.y - boxH - gap, width: 360, height: boxH };
-  return { title, poop, toilet, howto, saveLoad, profile, ...(two ? { versus: two } : {}) };
+  return { title, poop, toilet, howto, profile, ...(two ? { versus: two } : {}) };
 }
 
 function inBox(x, y, box) {
@@ -1508,13 +1506,13 @@ export function shareCardLayout(t) {
 }
 
 /**
- * Which ready-screen box contains (x, y): 'toilet' | 'howto' | 'saveload' |
- * 'profile' | null (null = start the run). The profile button is always there:
- * it reads "Enter username" until a name is set (Play decides what it opens).
+ * Which ready-screen box contains (x, y): 'toilet' | 'versus' | 'howto' |
+ * 'profile' | null (null = start the run). The profile (user) button is always
+ * there: it reads "Load user" until a name is set; either way it opens the save panel.
  */
 export function readyHit(x, y, layout) {
   if (!layout) return null;
-  for (const box of [layout.toilet, layout.versus, layout.howto, layout.saveLoad, layout.profile]) {
+  for (const box of [layout.toilet, layout.versus, layout.howto, layout.profile]) {
     if (box && inBox(x, y, box)) return box.id;
   }
   return null;

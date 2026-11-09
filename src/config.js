@@ -54,11 +54,10 @@ export const TUNING = {
   pauseResumeLockoutMs: 300, // ms after resume during which a tap must not flap
   readyButtonRadius: 24, // px corner radius of ready-screen buttons
   readyButtonAlpha: 0.55, // 0–1 fill alpha of ready-screen buttons
-  readyPromptGlowPx: 40, // px the "Enter username" halo reaches past the button edge (fades to 0 there)
+  readyPromptGlowPx: 40, // px the "Load user" halo reaches past the button edge (fades to 0 there)
   readyPromptPulseMs: 900, // ms per halo pulse (one way)
   readyPromptMinAlpha: 0.45, // 0–1 halo pulse floor
   readyPromptMaxAlpha: 1, // 0–1 halo pulse ceiling
-  savePanelCloseMs: 600, // ms "Username saved" stays up before the panel closes itself (Enter-username flow only)
   saveClearConfirmMs: 4000, // ms a first tap on the save panel's Clear stays armed: a second tap inside it signs this device out
   launchSlideMs: 700, // ms the poop slides from its ready spot to poopX() on the start tap
   readyTitlePx: 72, // px font size of the FLAPPY POOP title on the ready screen
