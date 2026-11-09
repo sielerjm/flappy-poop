@@ -51,6 +51,7 @@ formal medical language.
 - **User code** / save code (用户码 / 存档码) = the `fp1.…` string players copy between devices. The home-screen user button reads **Load user** (载入用户) until a username is set, then the name and best; it opens the panel titled **SAVE / LOAD USER**, whose labels are **Username**, **Save user code**, **Load user code**, and a **Save** button at the bottom that stores the username. `{name}` and `{scores}` are placeholders filled at runtime; keep them verbatim.
 - **One player across devices** (2026-11-08): every browser has its own secret id; the leaderboard treats ids merged through a user code as one player (aliases). A **username belongs to the player holding it on the board**: typing a held name on a new browser is refused (`saveNameTaken`), and the way in is to paste the user code (`saveIntro` step 3, `saveMerged`). **The **board's name wins** (2026-11-09): a rename typed on one device reaches the others on their own (`saveIntro` step 4, 自动更新); only a name typed on a device overrides the board. **Clear** (清除) signs this device out after a second tap (`saveClearConfirm`, `saveCleared`): the name, id and scores are forgotten on the device only. "Sign out" is the plain sense (退出), not an account system. `{name}` stays verbatim.
 - **Leaderboard** (排行榜) = the shared online Top 25 behind the 🏆 tray button. Only players with a username are on it; `{score}` may carry a 🚽, `{rank}` / `{total}` are numbers. Keep the placeholders verbatim.
+- **Tournament** (锦标赛, 🏅) = 3–8 players on one device, raced two at a time on the two-player screen in a knockout bracket (赛程, **Bracket**): quarter-finals, semi-finals, a bronze match (铜牌赛) and the Final, then a podium (领奖台). Each row of the lobby is a pasted user code, a **Guest** (访客, a made-up English name such as JollyPlunger042, kept as is in Chinese), or **Use my player** (the host's own username). **Abandon** ends it; nothing in a tournament is saved.
 - **Two players** (双人模式) = the 👥 switch under the toilet toggle, offered only on a landscape screen wide enough for two halves (desktop, tablet). P1 is the left half, P2 the right; `{n}` is the player number, and `{name}` is "P1" / "P2" (versusPlayer) or, in a tournament race, the competitor's name. A crash does not end a two-player run (the poop is put back mid-screen). Levels start together: the first one over a finish line waits under **Waiting for {name}…** until the other arrives; then each player taps ready (**Tap when ready**, then **Ready! Waiting for {name}…** with a smaller **Tap again to un-ready** under it), and once both are ready a shared 3-2-1-GO starts the level as **GO!** appears (with a toilet flush). The match is decided on points once both players have cleared the last level, and the first one out waits under **Made it out!** / **Waiting for P{n}…**. Two-player runs never reach the leaderboard or the save code.
 
 ## Glossary (items)
@@ -228,6 +229,29 @@ Short, playful, clear. Fit a 720×1280 logical field; How to play / About body w
 | tournamentByDeaths | Fewer crashes | 撞得更少 |
 | tournamentByLevelWins | More finish lines first | 率先过线的关卡更多 |
 | tournamentByFinalFirst | First across the line | 率先冲过终点线 |
+| tournamentButton | 🏅 Tournament | 🏅 锦标赛 |
+| tournamentTitle | 🏅 TOURNAMENT | 🏅 锦标赛 |
+| tournamentPlayers | Players | 人数 |
+| tournamentPaste | Paste code | 粘贴用户码 |
+| tournamentGuest | Guest | 访客 |
+| tournamentMe | Use my player | 用我的玩家 |
+| tournamentAdd | Add | 添加 |
+| tournamentStart | Start | 开始 |
+| tournamentDuplicate | That player already has a spot | 这位玩家已经在名单里了 |
+| tournamentNeedName | Set a username first (Load user on the home screen) | 请先设置用户名（首页的“载入用户”） |
+| tournamentGuestTag | (guest) | （访客） |
+| tournamentHostTag | (you) | （我） |
+| tournamentVs | vs | 对 |
+| tournamentPlay | Play | 开赛 |
+| tournamentAbandon | Abandon | 放弃 |
+| tournamentAbandonConfirm | Tap Abandon again to end the tournament: nothing is saved | 再点一次“放弃”结束锦标赛：不会保存任何结果 |
+| tournamentQuarter | QUARTER-FINAL | 四分之一决赛 |
+| tournamentSemi | SEMI-FINAL | 半决赛 |
+| tournamentBronze | BRONZE MATCH | 铜牌赛 |
+| tournamentFinal | FINAL | 决赛 |
+| tournamentPodium | PODIUM | 领奖台 |
+| tournamentNew | New tournament | 再来一届 |
+| tournamentBracket | Bracket | 赛程 |
 | versusUnreadyHint | Tap again to un-ready | 再点一次可取消准备 |
 
 ### aboutCredits (English)

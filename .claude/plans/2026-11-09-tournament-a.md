@@ -1,6 +1,6 @@
 # Plan: Tournament mode, Release A (local bracket on one device)
 - Created: 2026-11-09 (revised after Michael's critical-audit request the same day)
-- Status: in progress (step 5)
+- Status: in progress (step 6)
 - Baseline: `7a589bd` on `main` (0.8.5 pushed), tree clean.
 - Whole-suite verification: `npm test` (411 pass); `npm run smoke` (315 checks).
 - Source: Michael's `.claude/plans/tournament_mode_bracket_0b9f821f.plan.md`. Release B (the 🏅 medal board, stats, head-to-head rows) gets its own plan once A has been played; the source plan stays in place until then.
@@ -50,7 +50,7 @@ A same-device tournament: 3–8 players, a World Cup bracket, two at a time thro
 - Commit: `feat(tournament, step 4/6): named halves, Continue, and first-across-the-line in Versus`
 - Result: done. versusWins / versusWaiting / versusReadyWaiting take `{name}` (`versusName`: the competitor's name, else "P1" / "玩家1", so plain 2-player text is unchanged); new tournamentContinue / tournamentByDeaths / tournamentByLevelWins / tournamentByFinalFirst (en + zh, notes rows and the two-player bullet). `slot.finalFirst` set by claimLevelFinish on the final level. A tournament match decides by `raceOutcome`, shows the tiebreak line, and its left button is Continue (`primary()`), which emits `tournament-race` on game.events (nobody listening: back to single player). raceOutcome's allowlist entry dropped. Smoke versus-match +3: named join labels and result, 🏁 tiebreak, final-line tiebreak, Continue's event; plain DRAW unchanged. npm test 429/429; full smoke 320/320. Step 3 commit `9f141f7`.
 
-### Step 5/6 — Lobby, bracket and podium panels; the join-screen button
+### Step 5/6 — Lobby, bracket and podium panels; the join-screen button  [done]
 - Join screen: a "🏅 Tournament" button (tap, pad ring, Esc/B unchanged) under the hint; hidden once a tournament is running (the join screen then shows the matchup's names and "Round / Semi / Bronze / Final").
 - `src/ui/tournamentPanel.js` (DOM, savePanel pattern, game keyboard disabled while open): **Lobby** (player count 3–8; per row Paste code / Guest / Use my player / clear; Start enables when every row is filled; Home); **Bracket** (the list of rounds with results so far, "Next: A vs B", Play, Abandon with a confirm); **Podium** (🥇 🥈 🥉 with names, guests marked; New tournament with the same players and a fresh seed; Home).
 - Flow: Start → `createTournament` → registry `tournament` → Versus restarts with `createMatch(seed, { levelPipes, names, tournament: true })` for `nextMatch`; Continue → `recordResult` → the Bracket panel (or the Podium when done). Home / Abandon clears the registry; nothing is saved anywhere.
@@ -58,6 +58,7 @@ A same-device tournament: 3–8 players, a World Cup bracket, two at a time thro
 - Smoke (new `tournament` section, wide window): open the lobby from the join screen; a bad code is refused; three rows (guest, a pasted test code, Use my player) enable Start; the first race's join screen shows the two names; `P1.win(); P2.win()` ends it and Continue shows the bracket with the result; the Final the same way; the podium names the right three; New tournament keeps the players; Home clears the registry.
 - Verify: `npm test`; `--only=tournament`; the full smoke; lobby / bracket / podium screenshots in en and zh-Hans at 1600 × 900.
 - Commit: `feat(tournament, step 5/6): lobby, bracket and podium over the join screen`
+- Result: done. `src/ui/tournamentPanel.js` (lobby / bracket / podium; registry 'tournament' { tour, matchId }; listens for 'tournament-race'); Versus: the 🏅 button (centred at y 840, clear of P1's tray), Bracket instead of Home in a tournament race (join screen, result panel, Esc/B: back to the bracket, nothing recorded), the round as the join title, `restartWith(match)`; `match.tournament` is { round, matchId }. 23 strings in en + zh-Hans with notes rows and a Tournament bullet. Screenshots (en / zh, 1600×900) caught two issues, both fixed: the 🏅 button first sat over P1's ⏸, and `refreshProfile` re-showed P1's user button on a match half after a save change (now guarded with `!this.match`). Smoke `tournament` (8 checks): the join button, lobby rows (guest, a refused then a pasted code, Use my player), Start, a named semi on the tournament table, Continue, the Final, the podium (semi loser third), nothing saved, New tournament, Abandon twice. The six step-1/2 allowlist entries are gone (now used). npm test 429/429; full smoke 328/328. Step 4 commit `bd7f98f`.
 
 ### Step 6/6 — Docs and 0.9.0
 - AGENTS (`tournament.js`, `tournamentNames.js`, `ui/tournamentPanel.js`, `Play.tune`, the registry key, the smoke section); README (👥 → 🏅: paste / guest / Use my player, wide windows only, nothing saved, and the trust note: a pasted code hands that player's secret id to the host device in memory only); How to play if it lists modes; TRANSLATION_NOTES; `VERSION` 0.9.0 with en + zh-Hans notes. Archive this plan (the source plan stays for Release B).

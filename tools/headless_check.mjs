@@ -65,6 +65,7 @@ export const SECTIONS = [
   { name: 'versus-join', needs: [], about: 'two players: the 👥 toggle, the join screen, claims, countdown, routed input, Home' },
   { name: 'versus-match', needs: [], about: 'two players: shared pause, level sync and ready check, catch-up, respawn, result, rematch' },
   { name: 'versus-ghost', needs: [], about: "two players: the ghost at the distance gap and the rival marker on the level bar" },
+  { name: 'tournament', needs: [], about: '🏅 tournament: the join-screen button, the lobby (guest, pasted code, host), the bracket, named races, Continue, the podium, abandon' },
 ];
 
 /** What a section needs: its own list, or (omitted) every section before it. */
@@ -2304,6 +2305,111 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await evaluate(`__flappy.registry.set('versus', false), true`);
         await metrics(720, 1280);
         await settle(720);
+        await cdp.send('Emulation.clearDeviceMetricsOverride');
+      }
+    });
+
+    await section('tournament', async () => {
+      // Tournament (🏅): from the two-player join screen, a 3-player lobby (a guest, a pasted user
+      // code after a refused one, the host's own player), the bracket, a named semi-final on the
+      // tournament's level table, Continue back to the bracket, the Final, the podium, then a new
+      // tournament with the same players and Abandon back to a plain join screen. Nothing is saved.
+      {
+        const P1 = `__flappy.scene.getScene('Play')`;
+        const P2 = `__flappy.scene.getScene('PlayB')`;
+        const VS = `__flappy.scene.getScene('Versus')`;
+        const PANEL = `import('./src/ui/tournamentPanel.js')`;
+        const L = `Promise.all([import('./src/logic.js'), import('./src/config.js')])`;
+        const tx = (key) => evaluate(`import('./src/i18n.js').then((m) => m.t('en', '${key}'))`);
+        const metrics = (width, height) => cdp.send('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 1, mobile: false });
+        const want = await evaluate(`${L}.then(([l, c]) => JSON.stringify({ W: l.fieldWidth(1800, 1000, c.FIELD), countdownMs: c.TUNING.versus.countdownMs, last: c.TUNING.levels.lastLevel, table: c.TUNING.tournament.levelPipes, end: l.levelEnd(c.TUNING.levels.lastLevel, l.withLevelPipes(c.TUNING, c.TUNING.tournament.levelPipes)), deathMs: c.TUNING.deathToOverMs, lockout: c.TUNING.retryLockoutMs }))`).then(JSON.parse);
+        const until = async (expr, tries = 40) => {
+          for (let i = 0; i < tries; i += 1) {
+            if (await evaluate(expr)) return true;
+            await sleep(100);
+          }
+          return false;
+        };
+        const click = (id) => evaluate(`(document.getElementById('${id}').click(), true)`);
+        const text = (id) => evaluate(`document.getElementById('${id}')?.textContent ?? null`);
+        const open = () => evaluate(`${PANEL}.then((m) => m.isTournamentPanelOpen())`);
+        const saveBefore = await evaluate(`localStorage.getItem('flappyPoop.save')`);
+        await metrics(1800, 1000);
+        for (let i = 0; i < 60 && (await evaluate('__flappy.scale.width')) !== want.W; i += 1) await sleep(100);
+        for (let i = 0; i < 20 && (await playState()) !== 'ready'; i += 1) await sleep(100);
+        await evaluate(`${P1}.toggleVersus(), ${P1}.launch(), true`);
+        await until(`__flappy.scene.isActive('Versus') && ${VS}.match.status === 'join'`);
+        const join = await evaluate(`JSON.stringify({ title: ${VS}.joinTitle.text, button: ${VS}.tournamentButton?.getText(), home: ${VS}.homeButton.getText(), box: ${VS}.tournamentBox })`).then(JSON.parse);
+        await evaluate(`${VS}.onPointer({ x: ${join.box.x}, y: ${join.box.y} }), true`);
+        await sleep(200);
+        ok(join.title === (await tx('versusTitle')) && join.button === (await tx('tournamentButton')) && join.home === (await tx('tapToHome')) && (await open()) && (await evaluate(`${VS}.match.status`)) === 'join', `the join screen offers "${join.button}" beside Home; a tap opens the lobby without claiming a half`);
+        // Lobby: 4 rows by default, − to 3; a guest; a refused then a good pasted code; the host's player.
+        const rows0 = await text('tour-count');
+        await click('tour-minus');
+        await click('tour-guest-0');
+        const guest = await evaluate(`document.querySelector('#tour-slot-0 .who').firstChild.textContent`);
+        await click('tour-paste-btn-1');
+        await evaluate(`(document.getElementById('tour-paste-1').value = 'hello, not a code', document.getElementById('tour-add-1').click(), true)`);
+        await sleep(300);
+        const refused = await text('tour-status');
+        const code = await evaluate(`import('./src/save.js').then((m) => m.exportCode({ id: 'LLLLLLLLLLLLLLLLLLLLLL', name: 'Linked', top: [], exportedAt: null }, { storage: { getItem: () => null, setItem() {} } }))`);
+        await evaluate(`(document.getElementById('tour-paste-1').value = ${JSON.stringify(code)}, document.getElementById('tour-add-1').click(), true)`);
+        await sleep(300);
+        const linked = await evaluate(`document.querySelector('#tour-slot-1 .who')?.firstChild?.textContent ?? null`);
+        const startOff = await evaluate(`document.getElementById('tour-start').disabled`);
+        await evaluate(`${P1}.setSaveState({ ...${P1}.getSaveState(), name: 'Smoke' }), true`); // in memory only: --only=tournament runs without the home section
+        await click('tour-me-2');
+        const host = await evaluate(`document.querySelector('#tour-slot-2 .who')?.textContent ?? null`);
+        const startOn = !(await evaluate(`document.getElementById('tour-start').disabled`));
+        ok(rows0 === '4' && (await text('tour-count')) === '3' && /^[A-Z][a-z]+[A-Z][a-z]+\d{3}$/.test(guest) && refused === (await tx('saveErrorUnrecognised')) && linked === 'Linked' && startOff && host?.startsWith('Smoke') && startOn, `lobby: 4 → 3 rows; guest ${guest}; a bad code refused ("${refused}"); a pasted code fills "Linked"; Use my player fills "${host}"; Start enables only when all are filled`);
+        // Start → the bracket: a 3-player draw races one semi-final, then the Final.
+        await click('tour-start');
+        const next1 = await text('tour-next');
+        ok(next1?.startsWith(await tx('tournamentSemi')) && Boolean(await evaluate(`__flappy.registry.get('tournament')?.tour`)), `Start draws the bracket: "${next1}"`);
+        const raceOnce = async (scoreA, scoreB, aFirst) => {
+          await click('tour-play');
+          const started = await until(`!__flappy.scene.isActive('Versus') ? false : ${VS}.match.status === 'join' && Boolean(${VS}.match.tournament) && ${P1}.match === ${VS}.match`, 60);
+          const seen = await evaluate(`JSON.stringify({ title: ${VS}.joinTitle.text, labels: ${VS}.joinLabels.map((l) => l.text), names: ${VS}.match.names, home: ${VS}.homeButton.getText(), button: Boolean(${VS}.tournamentButton), tune: ${P1}.tune.levels.pipes, panel: false })`).then(JSON.parse);
+          seen.panel = await open();
+          await evaluate(`${P1}.onVersusKey('Space'), ${P1}.onVersusKey('ArrowUp'), true`);
+          const racing = await until(`${VS}.match.status === 'playing' && ${P1}.state === 'playing' && ${P2}.state === 'playing'`, (4 * want.countdownMs + 2500) / 100);
+          await evaluate(`[${P1}, ${P2}].forEach((p) => { p.poop.body.setAllowGravity(false); p.poop.setVelocity(0, 0); p.poop.y = 640; p.graceLeftMs = 1e9; }), true`);
+          const finish = (P, score) => evaluate(`(() => { const p = ${P}; p.score = ${score}; p.pipes.clear(true, true); p.items.clear(true, true); p.beans.clear(true, true); p.nextGapY = null; p.level = ${want.last}; p.pipesSpawned = ${want.end}; p.pipesPassed = ${want.end}; p.finishSpawned = false; p.applyLevel(); p.spawnFinishLine(); p.finishLine.x = p.poop.x + 150; return true; })()`);
+          const [first, second] = aFirst ? [[P1, scoreA, 0], [P2, scoreB, 1]] : [[P2, scoreB, 1], [P1, scoreA, 0]];
+          await finish(first[0], first[1]);
+          await until(`${VS}.match.slots[${first[2]}].ended`);
+          await finish(second[0], second[1]);
+          const shown = await until(`${VS}.resultShown`, (want.deathMs + 2500) / 100);
+          const texts = await evaluate(`JSON.stringify(${VS}.children.list.filter((c) => c.type === 'Text' && c.visible).map((c) => c.text))`).then(JSON.parse);
+          await sleep(want.lockout + 100);
+          await evaluate(`${VS}.primary(), true`); // Continue
+          await sleep(300);
+          return { started, racing, shown, seen, texts };
+        };
+        const semi = await raceOnce(20, 5, true); // left (side a) first out and ahead: wins
+        const semiNames = semi.seen.names;
+        ok(semi.started && semi.racing && semi.shown && semi.seen.title === (await tx('tournamentSemi')) && semi.seen.labels.join() === semiNames.join() && semi.seen.home === (await tx('tournamentBracket')) && !semi.seen.button && !semi.seen.panel && JSON.stringify(semi.seen.tune) === JSON.stringify(want.table), `Play starts the semi on its own join screen: ${semiNames.join(' vs ')}, "${semi.seen.title}", Bracket instead of Home, the tournament level table`);
+        ok(semi.texts.includes(`${semiNames[0]} WINS!`) && semi.texts.includes(await tx('tournamentContinue')) && (await open()) && (await text('tour-next'))?.startsWith(await tx('tournamentFinal')), `the semi's result names "${semiNames[0]}"; Continue records it and the bracket shows the Final next`);
+        const final = await raceOnce(1, 9, false); // right (side b) first out and ahead: wins
+        const finalNames = final.seen.names;
+        const podium = await evaluate(`[...document.querySelectorAll('#tour-podium p')].map((p) => p.textContent)`);
+        const bronzeName = semiNames[1];
+        ok(final.shown && final.texts.includes(`${finalNames[1]} WINS!`) && (await open()) && podium[0].startsWith(`🥇 ${finalNames[1]}`) && podium[1].startsWith(`🥈 ${finalNames[0]}`) && podium[2].startsWith(`🥉 ${bronzeName}`) && finalNames.includes(semiNames[0]), `the Final's winner takes gold: ${podium.join(' · ')} (the semi loser is third without racing again)`);
+        ok((await evaluate(`localStorage.getItem('flappyPoop.save')`)) === saveBefore, 'a tournament saves nothing: the host\'s save state is untouched');
+        // New tournament: the same three players, a fresh draw; Abandon (two taps) → a plain join screen.
+        await click('tour-again');
+        const again = await evaluate(`JSON.stringify(__flappy.registry.get('tournament').tour.players.map((p) => p.name).sort())`).then(JSON.parse);
+        await click('tour-abandon');
+        const armed = await text('tour-status');
+        const stillOpen = await open();
+        await click('tour-abandon');
+        const plain = await until(`!__flappy.registry.get('tournament') && __flappy.scene.isActive('Versus') && ${VS}.match.status === 'join' && !${VS}.match.tournament && Boolean(${VS}.tournamentButton)`, 60);
+        ok(again.join() === [guest, 'Linked', 'Smoke'].sort().join() && armed === (await tx('tournamentAbandonConfirm')) && stillOpen && plain && !(await open()) && (await evaluate(`${VS}.joinTitle.text`)) === (await tx('versusTitle')), `New tournament keeps the players (${again.join(', ')}); Abandon asks once ("${armed.slice(0, 30)}…"), then leaves a plain join screen`);
+        await evaluate(`${VS}.leave(), true`);
+        await until(`!__flappy.scene.isActive('Versus') && __flappy.scene.isActive('Play') && ${P1}.state === 'ready'`);
+        await evaluate(`__flappy.registry.set('versus', false), true`);
+        await metrics(720, 1280);
+        for (let i = 0; i < 60 && (await evaluate('__flappy.scale.width')) !== 720; i += 1) await sleep(100);
         await cdp.send('Emulation.clearDeviceMetricsOverride');
       }
     });

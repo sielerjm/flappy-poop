@@ -47,7 +47,8 @@ export function slotTemplate() {
 /**
  * A new match on the join screen: slot 0 is the left half (P1), slot 1 the right (P2).
  * Options a tournament race sets: `levelPipes` (its own level lengths, read by each half as
- * Play.tune), `names` ([left, right] shown instead of P1 / P2) and `tournament` (true).
+ * Play.tune), `names` ([left, right] shown instead of P1 / P2) and `tournament` ({ round,
+ * matchId }: the bracket match it races; truthy).
  */
 export function createMatch(seed, { levelPipes = null, names = null, tournament = false } = {}) {
   return { seed: seed >>> 0, status: 'join', slots: [slotTemplate(), slotTemplate()], levelPipes, names, tournament };
@@ -55,7 +56,7 @@ export function createMatch(seed, { levelPipes = null, names = null, tournament 
 
 /** A rematch: the same devices on the same sides and the same options, a fresh seed, everything else reset. */
 export function resetMatch(match, seed) {
-  const next = createMatch(seed, { levelPipes: match?.levelPipes ?? null, names: match?.names ?? null, tournament: Boolean(match?.tournament) });
+  const next = createMatch(seed, { levelPipes: match?.levelPipes ?? null, names: match?.names ?? null, tournament: match?.tournament ?? false });
   next.slots.forEach((slot, i) => {
     slot.device = match?.slots?.[i]?.device ?? null;
   });

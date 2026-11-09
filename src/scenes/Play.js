@@ -1072,7 +1072,7 @@ export class Play extends Phaser.Scene {
   refreshProfile() {
     const named = Boolean(this.save?.name);
     this.profileBtn?.setText(profileButtonText(this.locale, this.save));
-    if (this.state === 'ready' && !this.launching) {
+    if (this.state === 'ready' && !this.launching && !this.match) {
       this.profileBtn?.setVisible(true);
       this.profileHalo?.setVisible(!named);
     }
