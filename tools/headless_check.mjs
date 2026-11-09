@@ -2152,6 +2152,16 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         ok(await rematch(), 'a second rematch');
         const draw = await headline(9, 9 + want.bonus, 2, 2);
         ok(draw.head === 'DRAW', `equal points and crashes: ${draw.head}`);
+        // A tournament race's own level lengths (TUNING.tournament.levelPipes): carried through the rematch,
+        // both halves run on them (Play.tune), and level 3's finish line comes after pair 70, not 85.
+        const table = await evaluate(`import('./src/config.js').then((c) => JSON.stringify(c.TUNING.tournament.levelPipes))`).then(JSON.parse);
+        await evaluate(`${VS}.match.levelPipes = ${JSON.stringify(table)}, true`);
+        const tuned = await rematch();
+        const tunes = await evaluate(`JSON.stringify({ a: ${P1}.tune.levels.pipes, b: ${P2}.tune.levels.pipes, match: ${VS}.match.levelPipes })`).then(JSON.parse);
+        await evaluate(`(() => { const p = ${P1}; p.level = 3; p.pipesSpawned = 69; p.pipesPassed = 69; p.finishSpawned = false; p.distanceSinceSpawn = 0; return true; })()`);
+        const lined = await until(`${P1}.finishSpawned`, 80);
+        const at = await evaluate(`${P1}.pipesSpawned`);
+        ok(tuned && lined && at === 70 && JSON.stringify(tunes.a) === JSON.stringify(table) && JSON.stringify(tunes.b) === JSON.stringify(table) && JSON.stringify(tunes.match) === JSON.stringify(table), `a match on the tournament table (${table.join('/')}): both halves run on it and level 3's finish line follows pair ${at} (85 on the normal table)`);
         // Home from the result panel.
         await evaluate(`${VS}.leave(), true`);
         ok(await until(`!__flappy.scene.isActive('Versus') && !__flappy.scene.isActive('PlayB') && __flappy.scene.isActive('Play') && ${P1}.state === 'ready' && ${P1}.match === null && __flappy.scale.width === ${want.W}`), 'Home from the panel returns to single player at the window\'s field');

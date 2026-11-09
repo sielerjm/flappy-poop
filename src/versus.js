@@ -43,14 +43,18 @@ export function slotTemplate() {
   return { device: null, score: 0, pipesPassed: 0, level: 1, distance: 0, y: 0, angle: 0, frame: 'poop', alpha: 1, deaths: 0, levelWins: 0, respawning: false, ended: false, won: false };
 }
 
-/** A new match on the join screen: slot 0 is the left half (P1), slot 1 the right (P2). */
-export function createMatch(seed) {
-  return { seed: seed >>> 0, status: 'join', slots: [slotTemplate(), slotTemplate()] };
+/**
+ * A new match on the join screen: slot 0 is the left half (P1), slot 1 the right (P2).
+ * Options a tournament race sets: `levelPipes` (its own level lengths, read by each half as
+ * Play.tune), `names` ([left, right] shown instead of P1 / P2) and `tournament` (true).
+ */
+export function createMatch(seed, { levelPipes = null, names = null, tournament = false } = {}) {
+  return { seed: seed >>> 0, status: 'join', slots: [slotTemplate(), slotTemplate()], levelPipes, names, tournament };
 }
 
-/** A rematch: the same devices on the same sides, a fresh seed, everything else reset. */
+/** A rematch: the same devices on the same sides and the same options, a fresh seed, everything else reset. */
 export function resetMatch(match, seed) {
-  const next = createMatch(seed);
+  const next = createMatch(seed, { levelPipes: match?.levelPipes ?? null, names: match?.names ?? null, tournament: Boolean(match?.tournament) });
   next.slots.forEach((slot, i) => {
     slot.device = match?.slots?.[i]?.device ?? null;
   });

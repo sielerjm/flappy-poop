@@ -120,7 +120,7 @@ test('versusLayout: two half-window fields, the same canvas as the wide field, c
   assert.equal(ultra.totalW, FIELD.maxWidth);
 });
 
-test('createMatch / resetMatch: two empty slots, a 32-bit seed, a rematch keeps the devices only', () => {
+test('createMatch / resetMatch: two empty slots, a 32-bit seed, a rematch keeps the devices and the options only', () => {
   const m = createMatch(-1);
   assert.equal(m.status, 'join');
   assert.equal(m.seed, 0xffffffff);
@@ -145,6 +145,11 @@ test('createMatch / resetMatch: two empty slots, a 32-bit seed, a rematch keeps 
   assert.equal(r.slots[1].deaths, 0);
   assert.equal(r.slots[1].ended, false);
   assert.equal(resetMatch(null, 1).slots[0].device, null);
+  // A plain match has no options; a tournament race's survive its rematch (Versus.restart).
+  assert.deepEqual([m.levelPipes, m.names, m.tournament], [null, null, false]);
+  const tm = createMatch(5, { levelPipes: [10, 25], names: ['Ann', 'Bo'], tournament: true });
+  const tr = resetMatch(tm, 6);
+  assert.deepEqual([tr.levelPipes, tr.names, tr.tournament], [[10, 25], ['Ann', 'Bo'], true]);
 });
 
 test('keyGroup maps every configured code to its group and role, nothing else', () => {

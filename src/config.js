@@ -320,6 +320,7 @@ export const TUNING = {
   tournament: {
     minPlayers: 3,
     maxPlayers: 8,
+    levelPipes: [10, 25, 35, 35, 35, 35, 50], // pipe pairs per level in a tournament race (225 in all; a normal run's levels.pipes makes 285)
   },
   gamepad: {
     // Standard-mapping button indices (Xbox: A 0, B 1, X 2, Y 3, LB 4, RB 5, LT 6, RT 7, View 8, Menu 9, d-pad 12–15).

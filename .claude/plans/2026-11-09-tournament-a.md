@@ -1,6 +1,6 @@
 # Plan: Tournament mode, Release A (local bracket on one device)
 - Created: 2026-11-09 (revised after Michael's critical-audit request the same day)
-- Status: in progress (step 3)
+- Status: in progress (step 4)
 - Baseline: `7a589bd` on `main` (0.8.5 pushed), tree clean.
 - Whole-suite verification: `npm test` (411 pass); `npm run smoke` (315 checks).
 - Source: Michael's `.claude/plans/tournament_mode_bracket_0b9f821f.plan.md`. Release B (the 🏅 medal board, stats, head-to-head rows) gets its own plan once A has been played; the source plan stays in place until then.
@@ -34,12 +34,13 @@ A same-device tournament: 3–8 players, a World Cup bracket, two at a time thro
 - Verify: `npm test`. Commit: `feat(tournament, step 2/6): guest names and in-memory user-code claims`
 - Result: done. `src/tournamentNames.js` (30 adjectives ≤ 6 letters, 30 nouns ≤ 7, so every name ≤ 16; `rollGuestName` rerolls clashes); `claimFromCode` / `claimHost` in `src/tournament.js`. Tests: word list clean (substring stems; 'pee' / 'wee' dropped from the list because they sit inside harmless words like Speedy), every name a valid username, seeded rolls repeat, a claim with a spy as `localStorage` makes zero storage calls, tampered / repeated / junk codes refused, host once and only with a name. `claimFromCode` / `claimHost` allowlisted until step 5. npm test 426/426. Step 1 commit `8958af5`.
 
-### Step 3/6 — Per-match level table
+### Step 3/6 — Per-match level table  [done]
 - `src/logic.js`: `withLevelPipes(t, pipes)` (a shallow `T` with `levels.pipes` replaced). `createMatch(seed, { levelPipes, names, tournament })` and `resetMatch` carry the options.
 - `Play`: `this.tune = this.match?.levelPipes ? withLevelPipes(T, this.match.levelPipes) : T`, used by every call of `levelEnd` / `levelFor` / `levelPipes` / `levelProgress` / `isFinalLevel` / `testRunStart` / `courseDistance` / `coursePairStart` / `createCourse` (the course's box pacing reads level ends too). Versus's own code has no level-boundary calls.
 - Tests: a source scan over `src/scenes/Play.js` (pattern: `tests/scenes.test.js`) that none of those helpers is called with bare `T`; `levelEnd(7, withLevelPipes(T, TUNING.tournament.levelPipes)) === 225` and `levelEnd(7, T) === 285`; the existing versus tests pass unchanged.
 - Verify: `npm test`; the **full smoke** (normal and 2-player unchanged); a smoke check in `versus-match` that a match started with the tournament table spawns its level-3 finish line at pair 70.
 - Commit: `feat(tournament, step 3/6): a match can run on its own level table`
+- Result: done. A dependency scan of logic.js / versus.js found 13 helpers that read the table (levelEnd, levelFor, levelPipes, levelProgress, testRunStart, nextTestLevel, skipPairs, hazardsAllowed, scriptedMysteryPair, courseDistance, coursePairStart, rivalMarker, createCourse); all 20 Play call sites now pass `this.tune` (`withLevelPipes(T, match.levelPipes)`, set in init). `TUNING.tournament.levelPipes` added here (moved from step 1). `createMatch(seed, { levelPipes, names, tournament })`; `resetMatch` keeps them. tests/scenes.test.js: a balanced-paren scan that no such call in Play passes bare `T`, with a self-test that it catches one nested. tests/tournament.test.js: the table is 225, levels 1–2 unchanged, T untouched. Smoke versus-match: a rematch on the table gives both halves `tune`, and level 3's line follows pair 70. npm test 429/429; full smoke 316/316. Step 2 commit `799a463`.
 
 ### Step 4/6 — Names, Continue and the final-line tiebreak in Versus
 - `match.names` ([a, b] or null): join labels, the "Waiting for…" / ready hints and the result panel show names instead of P1 / P2 when present (new strings take `{name}`; the P{n} strings stay for plain 2-player).

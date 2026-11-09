@@ -18,6 +18,7 @@ import {
   levelEnd,
   isFinalLevel,
   levelProgress,
+  withLevelPipes,
   levelBarLayout,
   tutorialSpawn,
   levelColor,
@@ -139,6 +140,9 @@ export class Play extends Phaser.Scene {
     this.player = data?.player ?? 1;
     this.match = data?.match ?? null;
     this.half = this.match ? { fieldW: data.fieldW, fieldX: data.fieldX ?? 0 } : null;
+    // The level lengths this half runs on: a tournament race's own table, else the normal one.
+    // Every level-boundary helper gets this.tune, never bare T (tests/scenes.test.js checks).
+    this.tune = withLevelPipes(T, this.match?.levelPipes);
   }
 
   create() {
@@ -165,7 +169,7 @@ export class Play extends Phaser.Scene {
     // A match rolls its mystery draws from a stream of its own per player (rngDraw), so what a
     // box gives is each player's own luck and never shifts the shared course.
     const seed = this.match ? this.match.seed : Date.now() & 0xffffffff;
-    this.course = createCourse(seed, T, { shared: Boolean(this.match) });
+    this.course = createCourse(seed, this.tune, { shared: Boolean(this.match) });
     this.rngDraw = this.match ? createRng((Date.now() ^ (this.player * 0x9e3779b1)) & 0xffffffff) : null;
     this.distance = 0; // where this half is on the course, in px: advanced by the scroll, re-anchored at every re-fill (rebaseDistance); the other half's ghost is placed by the difference
     this.score = 0;
@@ -624,7 +628,7 @@ export class Play extends Phaser.Scene {
     // A test run may start on a later level (testRunStart: the pairs before it passed, a par score);
     // a normal run is testRunStart(1): level 1, nothing passed, score 0.
     this.runIsTest = this.isTestMode();
-    const begin = testRunStart(this.runIsTest ? this.testSettings().startLevel : 1, T);
+    const begin = testRunStart(this.runIsTest ? this.testSettings().startLevel : 1, this.tune);
     this.level = begin.level;
     this.pipesPassed = begin.pipes;
     this.pipesSpawned = begin.pipes;
@@ -674,7 +678,7 @@ export class Play extends Phaser.Scene {
   /** Bar label and fill for the current level and pipes passed. */
   refreshLevelBar() {
     this.levelBar?.setLabel(levelLabel(this.locale, this.level));
-    this.levelBar?.setProgress(levelProgress(this.pipesPassed, this.level, T));
+    this.levelBar?.setProgress(levelProgress(this.pipesPassed, this.level, this.tune));
   }
 
   /** The checkered line one spacing after a level's last pair, at the right edge or `shift` px left of it; crossing it ends the level. */
@@ -1150,13 +1154,13 @@ export class Play extends Phaser.Scene {
   testSettings() {
     const invincible = this.registry.get('testInvincible');
     return {
-      startLevel: testRunStart(this.registry.get('testStartLevel') ?? 1, T).level,
+      startLevel: testRunStart(this.registry.get('testStartLevel') ?? 1, this.tune).level,
       invincible: typeof invincible === 'boolean' ? invincible : TEST_MODE.defaultInvincible,
     };
   }
 
   setTestSettings({ startLevel, invincible } = {}) {
-    if (startLevel !== undefined) this.registry.set('testStartLevel', testRunStart(startLevel, T).level);
+    if (startLevel !== undefined) this.registry.set('testStartLevel', testRunStart(startLevel, this.tune).level);
     if (invincible !== undefined) this.registry.set('testInvincible', Boolean(invincible));
     return this.testSettings();
   }
@@ -1176,7 +1180,7 @@ export class Play extends Phaser.Scene {
   grantTest(draw) {
     if (!this.runIsTest || !this.isTestMode()) return null;
     if (this.state !== 'playing' && this.state !== 'paused') return null;
-    const pairsLeft = this.finishSpawned ? 0 : skipPairs(this.pipesPassed, this.level, T);
+    const pairsLeft = this.finishSpawned ? 0 : skipPairs(this.pipesPassed, this.level, this.tune);
     const resolved = resolveMystery(draw, { beans: this.effects.beans(), pairsLeft }, T);
     this.openMystery(resolved);
     if (this.state === 'paused') this.pauseEffects();
@@ -1659,7 +1663,7 @@ export class Play extends Phaser.Scene {
     const before = new Set(this.worldObjects());
     let last = edge;
     for (const x of xs) {
-      if (this.pipesSpawned >= levelEnd(this.level, T)) break;
+      if (this.pipesSpawned >= levelEnd(this.level, this.tune)) break;
       this.spawnPipePair(edge - x);
       last = x;
     }
@@ -1698,11 +1702,11 @@ export class Play extends Phaser.Scene {
     if (this.finishSpawned) {
       const line = this.finishLine;
       if (!line || line.getData('crossed')) return;
-      this.distance = courseDistance(levelEnd(this.level, T), line.x + T.pipeWidth - T.levels.finishWidthPx / 2, this.poopX, T);
+      this.distance = courseDistance(levelEnd(this.level, this.tune), line.x + T.pipeWidth - T.levels.finishWidthPx / 2, this.poopX, this.tune);
       return;
     }
     const nextX = this.fieldW + T.pipeWidth + pipeSpacing(this.level, T) - this.distanceSinceSpawn;
-    this.distance = courseDistance(this.pipesSpawned, nextX, this.poopX, T);
+    this.distance = courseDistance(this.pipesSpawned, nextX, this.poopX, this.tune);
   }
 
   /** Settle a running sweep at once: every swept object on its base (scrolled as normal), opaque, scrolling. Idempotent. */
@@ -1771,7 +1775,7 @@ export class Play extends Phaser.Scene {
     const boxHere = this.pipesSpawned === this.mysteryPair;
     const kind =
       scripted === undefined
-        ? this.course.item(n, { score: this.score, hazards: hazardsAllowed(n, T), mystery: mysteryRolls(n, this.mysteryPair) })
+        ? this.course.item(n, { score: this.score, hazards: hazardsAllowed(n, this.tune), mystery: mysteryRolls(n, this.mysteryPair) })
         : scripted === 'bean'
           ? null
           : scripted;
@@ -1805,7 +1809,7 @@ export class Play extends Phaser.Scene {
     const kernelDue = Boolean(k && !k.done && !k.item && k.level === this.level && n >= k.pair);
     const slotFree = !boxHere && !beanHere && kind !== 'mystery';
     const kernelBand = kernelDue && this.level > 1 && slotFree;
-    const kernelPast = kernelDue && !kernelBand && (this.level === 1 || n >= levelEnd(this.level, T));
+    const kernelPast = kernelDue && !kernelBand && (this.level === 1 || n >= levelEnd(this.level, this.tune));
     if (boxHere) this.spawnBandItem('mystery', boxStill ? stillY() : null, shift);
     else if (kernelBand) this.markKernel(this.spawnBandItem('coin', still ? stillY() : null, shift));
     else if (band && !beanHere) this.spawnBandItem(kind, (kind === 'mystery' ? boxStill : still) ? stillY() : null, shift);
@@ -2303,7 +2307,7 @@ export class Play extends Phaser.Scene {
       // A draw that cannot do anything (full bag, finish line already out) becomes fiber. A match
       // rolls from this player's own draw stream, on the catch-up table for how far behind the other
       // player they are (catchUpTier: double bean odds from 10 pipes, a guaranteed bean3 from 25).
-      const pairsLeft = this.finishSpawned ? 0 : skipPairs(this.pipesPassed, this.level, T);
+      const pairsLeft = this.finishSpawned ? 0 : skipPairs(this.pipesPassed, this.level, this.tune);
       const other = this.match?.slots[this.player === 1 ? 1 : 0];
       const draws = this.match ? catchUpDraws(catchUpTier((other?.pipesPassed ?? 0) - this.pipesPassed, T), T) : T.mystery.draws;
       const draw = rollMystery(this.match ? this.rngDraw : this.course.rng, T, draws);
@@ -2654,9 +2658,9 @@ export class Play extends Phaser.Scene {
    * (the right edge on a phone).
    */
   skipToFinish() {
-    const pairs = skipPairs(this.pipesPassed, this.level, T);
+    const pairs = skipPairs(this.pipesPassed, this.level, this.tune);
     const mult = this.effects.multiplier();
-    const end = levelEnd(this.level, T);
+    const end = levelEnd(this.level, this.tune);
     // The box sits between pairs, so everything ahead of the poop is not yet passed.
     for (const group of [this.pipes, this.items, this.beans]) {
       for (const obj of [...group.getChildren()]) if (obj.x > this.poop.x) obj.destroy();
@@ -2667,7 +2671,7 @@ export class Play extends Phaser.Scene {
     this.scoreText.setText(String(this.score));
     this.pipesPassed = end;
     this.pipesSpawned = end;
-    this.levelBar.setProgress(levelProgress(this.pipesPassed, this.level, T));
+    this.levelBar.setProgress(levelProgress(this.pipesPassed, this.level, this.tune));
     this.spawnFinishLine(this.fieldW + T.pipeWidth - (this.poopX + pipeLead(this.fieldW, T, FIELD)));
     this.distanceSinceSpawn = 0;
     this.rebaseDistance(); // a skip jumps along the course: the distance follows to the line
@@ -2740,7 +2744,7 @@ export class Play extends Phaser.Scene {
     const key = `${this.level}:${other.level}:${other.pipesPassed}:${this.state === 'ready' ? 0 : 1}`;
     if (key === this.rivalKey) return;
     this.rivalKey = key;
-    this.levelBar.setRival(this.state === 'ready' ? null : rivalMarker({ level: this.level }, other, T));
+    this.levelBar.setRival(this.state === 'ready' ? null : rivalMarker({ level: this.level }, other, this.tune));
   }
 
   /** This half's live state for the other half (the ghost, the rival marker) and the result panel. */
@@ -2903,7 +2907,7 @@ export class Play extends Phaser.Scene {
     this.prefillPipes();
     // No pair left in the level to carry a cleared kernel: it waits mid-screen, one lead ahead.
     const k = this.kernel;
-    if (k && !k.done && !k.item && k.level === this.level && this.pipesSpawned >= levelEnd(this.level, T)) {
+    if (k && !k.done && !k.item && k.level === this.level && this.pipesSpawned >= levelEnd(this.level, this.tune)) {
       this.markKernel(this.spawnStillCoin(this.poopX + pipeLead(this.fieldW, T, FIELD), GAME_HEIGHT / 2));
     }
     this.applyScroll();
@@ -2965,7 +2969,7 @@ export class Play extends Phaser.Scene {
         this.distanceSinceSpawn += this.scrollSpeed() * dt;
         if (this.distanceSinceSpawn >= spacing) {
           this.distanceSinceSpawn -= spacing;
-          if (this.pipesSpawned === levelEnd(this.level, T) && !this.finishSpawned) {
+          if (this.pipesSpawned === levelEnd(this.level, this.tune) && !this.finishSpawned) {
             this.spawnFinishLine();
           } else if (this.finishSpawned) {
             this.distanceSinceSpawn = 0; // nothing follows the line until the break ends, fart or not
@@ -3050,7 +3054,7 @@ export class Play extends Phaser.Scene {
         const mult = this.effects.multiplier(); // read before the countdown: the last postbiotic pipe still counts double
         this.score += pipePoints(T, mult);
         this.pipesPassed += 1;
-        this.levelBar.setProgress(levelProgress(this.pipesPassed, this.level, T));
+        this.levelBar.setProgress(levelProgress(this.pipesPassed, this.level, this.tune));
         this.scoreText.setText(String(this.score));
         this.showPipePopup(mult);
         this.effects.onPipePassed();

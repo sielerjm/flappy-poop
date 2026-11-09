@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { TUNING as T } from '../src/config.js';
-import { createRng } from '../src/logic.js';
+import { createRng, withLevelPipes, levelEnd, levelPipes, levelFor } from '../src/logic.js';
 import { createTournament, nextMatch, recordResult, matchPlayers, isDone, placings, raceOutcome, claimFromCode, claimHost } from '../src/tournament.js';
 import { exportCode } from '../src/save.js';
 
@@ -167,4 +167,20 @@ test('claimHost: the host\'s own player once, and only with a username', () => {
   assert.deepEqual(claimHost(save, [{ name: 'Host', playerId: save.id, guest: false }]), { ok: false, error: 'duplicate' }, 'their pasted code is the same player');
   assert.deepEqual(claimHost({ ...save, name: '' }, []), { ok: false, error: 'noName' });
   assert.deepEqual(claimHost(null, []), { ok: false, error: 'noName' });
+});
+
+test('a tournament race runs its own level table: 225 pairs, the scripted level 1 and level 2 unchanged', () => {
+  const pipes = T.tournament.levelPipes;
+  assert.deepEqual(pipes, [10, 25, 35, 35, 35, 35, 50]);
+  assert.equal(pipes.length, T.levels.lastLevel, 'one entry per level');
+  const tt = withLevelPipes(T, pipes);
+  assert.equal(levelEnd(7, tt), 225);
+  assert.equal(levelEnd(7, T), 285, 'a normal run is untouched');
+  assert.equal(levelPipes(1, tt), T.levels.pipes[0], 'level 1 keeps its scripted 10 pairs');
+  assert.equal(levelPipes(2, tt), T.levels.pipes[1]);
+  assert.equal(levelEnd(3, tt), 70);
+  assert.equal(levelFor(70, tt).level, 4);
+  assert.equal(withLevelPipes(T, null), T, 'no table: the same object');
+  assert.notEqual(tt.levels, T.levels, 'a copy: T itself never changes');
+  assert.deepEqual(T.levels.pipes, [10, 25, 50]);
 });

@@ -223,6 +223,16 @@ export function levelPipes(n, t) {
   return list[Math.min(Math.max(1, n), list.length) - 1];
 }
 
+/**
+ * `t` with its level lengths swapped for `pipes` (a tournament race's shorter levels), or `t`
+ * itself when there is no table. Every level-boundary helper reads levels.pipes from the `t`
+ * it is given, so a Play half passes this (Play.tune) to all of them.
+ */
+export function withLevelPipes(t, pipes) {
+  if (!Array.isArray(pipes) || pipes.length === 0) return t;
+  return { ...t, levels: { ...t.levels, pipes: pipes.slice() } };
+}
+
 /** True for levels.lastLevel (and anything past it): its finish line ends the run as a win. */
 export function isFinalLevel(level, t) {
   return level >= t.levels.lastLevel;

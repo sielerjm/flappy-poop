@@ -64,3 +64,48 @@ test('the guard itself catches a shadowing method', () => {
   const names = methodNames('class X extends Phaser.Scene {\n  create() {\n  }\n\n  async load(a) {\n  }\n}');
   assert.deepEqual(names, ['create', 'load']);
 });
+
+// Helpers that read the level lengths (levels.pipes, directly or through another): Play must pass
+// them this.tune (a tournament race's own table, or T), never bare T, or a half's finish lines,
+// level bar and ghost would follow the normal 285-pair course in a 225-pair race.
+const LEVEL_TABLE_HELPERS = ['courseDistance', 'coursePairStart', 'createCourse', 'hazardsAllowed', 'levelEnd', 'levelFor', 'levelPipes', 'levelProgress', 'nextTestLevel', 'rivalMarker', 'scriptedMysteryPair', 'skipPairs', 'testRunStart'];
+
+/** Each call of one of `names` in `src` as { name, args } (top-level arguments, trimmed), parens balanced. */
+function helperCalls(src, names) {
+  const calls = [];
+  const re = new RegExp(`\\b(${names.join('|')})\\(`, 'g');
+  for (const m of src.matchAll(re)) {
+    let depth = 1;
+    let i = m.index + m[0].length;
+    let arg = '';
+    const args = [];
+    for (; i < src.length && depth > 0; i += 1) {
+      const c = src[i];
+      if (c === '(' || c === '[' || c === '{') depth += 1;
+      if (c === ')' || c === ']' || c === '}') depth -= 1;
+      if (depth === 0) break;
+      if (c === ',' && depth === 1) {
+        args.push(arg.trim());
+        arg = '';
+      } else arg += c;
+    }
+    args.push(arg.trim());
+    calls.push({ name: m[1], args });
+  }
+  return calls;
+}
+
+const stripLineComments = (src) => src.split('\n').filter((l) => !/^\s*(\/\/|\*|\/\*)/.test(l)).join('\n');
+
+test('Play.js passes this.tune, never bare T, to every helper that reads the level lengths', () => {
+  const calls = helperCalls(stripLineComments(readFileSync(join(scenesDir, 'Play.js'), 'utf8')), LEVEL_TABLE_HELPERS);
+  assert.ok(calls.length >= 15, `found ${calls.length} calls`);
+  const bare = calls.filter((c) => c.args.includes('T')).map((c) => `${c.name}(${c.args.join(', ')})`);
+  assert.deepEqual(bare, []);
+  assert.ok(calls.every((c) => c.args.includes('this.tune')), 'each one names this.tune');
+});
+
+test('the level-table guard itself catches a bare T, nested calls included', () => {
+  const calls = helperCalls('a = courseDistance(levelEnd(this.level, T), x + T.pipeWidth, p, this.tune);', LEVEL_TABLE_HELPERS);
+  assert.deepEqual(calls.map((c) => [c.name, c.args.at(-1)]), [['courseDistance', 'this.tune'], ['levelEnd', 'T']]);
+});
