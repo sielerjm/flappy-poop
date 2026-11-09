@@ -14,6 +14,7 @@
 --   * call player_rank(...)    rank of one of a player's rows, looked up by their own id
 --   * call name_available(...) whether a username is free for this player's id
 --   * call merge_players(...)  fold one of the player's ids into another (needs both secrets)
+--   * call player_name(...)    the name on the board for this player's id (2026-11-09)
 -- A player has up to two rows: their best on the toilet and their best off it
 -- (primary key player_id + toilet, since 2026-11-04).
 -- and nothing else: no INSERT / UPDATE / DELETE on the table, and nothing at all
@@ -35,8 +36,12 @@
 --     a third id is refused.
 --   * A successful post renames all of that player's rows, so a rename frees the
 --     old name.
+--   * The board's name is the player's name (2026-11-09): before posting, a
+--     device asks player_name and adopts the board's name unless the player
+--     typed a rename on that device. So a rename on one phone reaches the
+--     others, and a phone holding the old name no longer renames them back.
 -- Apply this file BEFORE pushing a client that calls name_available /
--- merge_players; an old client keeps working (same submit_score signature).
+-- merge_players / player_name; an old client keeps working (same submit_score signature).
 --
 -- Maintenance (SQL editor):
 --   remove a cheater or a ghost row:
@@ -226,6 +231,23 @@ as $$
   end;
 $$;
 
+-- The name on the board for this player (their rows share one; the latest write
+-- wins if not), or null when the player has no rows. The id is resolved first,
+-- so an old device's id answers with the merged player's name. Read-only: the
+-- game adopts it before posting, so a rename made on another device sticks.
+create or replace function public.player_name(p_player_id text)
+returns text
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select s.name from public.scores s
+  where p_player_id ~ '^[A-Za-z0-9_-]{22}$' and s.player_id = public.resolve_player(p_player_id)
+  order by s.updated_at desc
+  limit 1;
+$$;
+
 -- Fold the player v_merge into v_keep (both already resolved, distinct): per
 -- toilet kind the kept row takes the higher score with that score's level and
 -- write time, every kept row carries the kept player's name (the merged one's
@@ -376,6 +398,8 @@ revoke execute on function public.name_available(text, text) from public, authen
 grant  execute on function public.name_available(text, text) to anon;
 revoke execute on function public.merge_players(text, text) from public, authenticated;
 grant  execute on function public.merge_players(text, text) to anon;
+revoke execute on function public.player_name(text) from public, authenticated;
+grant  execute on function public.player_name(text) to anon;
 
 -- Tell PostgREST about the new functions right away.
 notify pgrst, 'reload schema';
