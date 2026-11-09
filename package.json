@@ -10,5 +10,8 @@
     "push": "node tools/push.mjs",
     "smoke": "node tools/headless_check.mjs"
   },
-  "license": "MIT"
+  "license": "MIT",
+  "devDependencies": {
+    "@electric-sql/pglite": "0.5.12"
+  }
 }

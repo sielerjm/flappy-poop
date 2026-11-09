@@ -1,6 +1,6 @@
 # Plan: Tournament mode, Release B (🏅 medal board and head-to-head rows)
 - Created: 2026-11-09 (revised the same day after a critical review)
-- Status: in progress (step 1)
+- Status: in progress (step 3)
 - Baseline: `9a70e6a` on `main` (Release A plus the join-row fix; 8 commits ahead of origin, not pushed), tree clean.
 - Whole-suite verification: `npm test` (430 pass); `npm run smoke` (full; tournament 9, versus 81).
 - Source: Michael's `.claude/plans/tournament_mode_bracket_0b9f821f.plan.md` (steps 7–10); archive it with this plan when done.
@@ -66,7 +66,7 @@ Release A plays a whole tournament on one device but saves nothing. Release B se
 - **Commit:** `feat(tournament-b, step 1/6): a server-ready payload for a finished tournament`
 - Result: done. `tournamentPayload(tour, id, levelPipes = TUNING.tournament.levelPipes)` and `linkedCount` (allowlisted until step 4). Tests: N 3–8 × 15 seeds with realistic raceOutcome results: per-round counts, sides = matchPlayers, each winner agrees with raceOutcome(slots), payloadMedals = placings; guests { id: null, name: null } with no guest name in the JSON. npm test 432/432.
 
-### Step 2/6: Schema and PGlite tests  [pending]
+### Step 2/6: Schema and PGlite tests  [done]
 - **Change:**
   - `db/schema.sql`: the three tables, `submit_tournament`, `tournament_board`, the `fold_player` additions, grants matching the score functions, the header's object list and the maintenance lines (wipe / cheater now span the new tables); idempotent as now.
   - `package.json`: `devDependencies: { "@electric-sql/pglite": <latest, pinned exactly> }`; **commit `package-lock.json`** (push.mjs ignores untracked files, so a forgotten lockfile would ship silently).
@@ -75,6 +75,7 @@ Release A plays a whole tournament on one device but saves nothing. Release B se
 - **Verify:** `npm install && npm test`.
 - **Commit:** `feat(tournament-b, step 2/6): tournament stats, matchups and submit_tournament in the schema, with PGlite tests`
 - **Handoff:** Michael applies `db/schema.sql` in Supabase; then a read-only live probe calls `tournament_board()` and a `submit_tournament` with a garbage payload (must be rejected).
+- Result: done. Schema: `tournaments`, `tournament_stats`, `tournament_matchups` (RLS, all revoked), `submit_tournament` (receipt under a per-host advisory lock → 'duplicate' before the 60 s pace; per-round counts, once per round, semi sides from quarter winners or byes, final from semi winners or the bye, bronze from semi losers, winner = raceOutcome of its slots; medals derived; names via scores / name_blocked / 'Player'), `tournament_board` (gold, silver, bronze, best, earlier first; `me`, the caller appended below the top; limit 1–100), `fold_player` folds stats and re-points matchups and receipts; header and maintenance lines. PL/pgSQL gotcha: a bare CASE inside `IF … THEN` ends the condition at its THEN; parenthesised. PGlite pinned 0.5.12 (26 Oct; 0.5.16 was published today). tests/schema.test.js 10 tests: pins, anon denied, N 3–8 medals = placings, 300 legal brackets accepted, 16 forgeries rejected with no receipt left, duplicate / rate limit, guests, board order and `me`, names, merge fold. npm test 442/442. Step 1 commit `a022b86`.
 
 ### Step 3/6: Client API, queue and sync  [pending]
 - **Change:** `src/leaderboard.js`: `submitTournament`, `fetchTournamentBoard` (allowlisted until step 5), `createTournamentQueue`; `LEADERBOARD.tournamentsKey`, `tournamentQueueMax`; `Play.syncLeaderboard` drains before the name check.

@@ -15,10 +15,13 @@
 --   * call name_available(...) whether a username is free for this player's id
 --   * call merge_players(...)  fold one of the player's ids into another (needs both secrets)
 --   * call player_name(...)    the name on the board for this player's id (2026-11-09)
+--   * call submit_tournament(...) a finished 🏅 tournament, re-checked here (2026-11-09)
+--   * call tournament_board(...)  the 🏅 medal board (names and counts, never ids)
 -- A player has up to two rows: their best on the toilet and their best off it
 -- (primary key player_id + toilet, since 2026-11-04).
 -- and nothing else: no INSERT / UPDATE / DELETE on the table, and nothing at all
--- on player_aliases.
+-- on player_aliases or the tournament tables (tournaments, tournament_stats,
+-- tournament_matchups).
 --
 -- One player across devices (2026-11-08). Every browser mints its own secret id,
 -- so one person playing on a second phone used to become a second player. Now:
@@ -41,7 +44,8 @@
 --     typed a rename on that device. So a rename on one phone reaches the
 --     others, and a phone holding the old name no longer renames them back.
 -- Apply this file BEFORE pushing a client that calls name_available /
--- merge_players / player_name; an old client keeps working (same submit_score signature).
+-- merge_players / player_name / submit_tournament / tournament_board; an old
+-- client keeps working (same submit_score signature).
 --
 -- Maintenance (SQL editor):
 --   remove a cheater or a ghost row:
@@ -52,6 +56,12 @@
 --   table; create table if not exists alone would leave an old CHECK).
 --   wipe the board:
 --     truncate public.scores; truncate public.player_aliases;
+--   wipe the 🏅 board (receipts, stats and head-to-head rows):
+--     truncate public.tournaments cascade; truncate public.tournament_stats;
+--   remove a player's medals: delete from public.tournament_stats where name = 'somebody';
+--   head-to-head (owner only), e.g. wins per pair:
+--     select player_a, player_b, winner_id, count(*) from public.tournament_matchups
+--     where player_a <> player_b group by 1, 2, 3;
 --   fold one person's duplicate ids (same username from several browsers) into
 --   one player, keeping the top scorer's id and aliasing the rest so their
 --   devices keep working. Only when you know the rows are one person:
@@ -248,11 +258,71 @@ as $$
   limit 1;
 $$;
 
+-- Added 2026-11-09 (tournament, Release B). A finished same-device tournament
+-- (🏅) arrives once through submit_tournament, which re-checks the bracket and
+-- derives the medals. Three tables, none readable by any role (ids are secrets):
+--   tournaments          one receipt per tournament (its client-minted id): a resend
+--                        is a no-op, and the host's last receipt paces the next one
+--   tournament_stats     one row per linked player: medals, events, best race score
+--   tournament_matchups  one row per race between two linked players, for the
+--                        owner's head-to-head analysis in the SQL editor
+-- Guests never reach the server: the payload carries { id: null, name: null }.
+create table if not exists public.tournaments (
+  id           text primary key check (id ~ '^[A-Za-z0-9_-]{22}$'),
+  host_id      text not null check (host_id ~ '^[A-Za-z0-9_-]{22}$'),
+  players      int  not null check (players between 3 and 8),   -- TUNING.tournament minPlayers / maxPlayers
+  level_pipes  int[] not null,                                  -- the level table the races ran on
+  submitted_at timestamptz not null default now()
+);
+create index if not exists tournaments_host on public.tournaments (host_id, submitted_at desc);
+
+create table if not exists public.tournament_stats (
+  player_id  text primary key check (player_id ~ '^[A-Za-z0-9_-]{22}$'),
+  name       text not null check (name ~ '^[^[:cntrl:]]{1,16}$'),
+  best_score int  not null default 0 check (best_score between 0 and 1000),
+  gold       int  not null default 0 check (gold >= 0),
+  silver     int  not null default 0 check (silver >= 0),
+  bronze     int  not null default 0 check (bronze >= 0),
+  events     int  not null default 0 check (events >= 0),
+  updated_at timestamptz not null default now()
+);
+
+-- No player_a <> player_b check: a later merge of two ids that once raced each
+-- other leaves a self-edge (filter it in analysis).
+create table if not exists public.tournament_matchups (
+  id            bigserial primary key,
+  tournament_id text not null references public.tournaments (id) on delete cascade,
+  match_id      text not null,                                  -- quarter0..3 / semi0..1 / bronze / final
+  round         text not null check (round in ('quarter', 'semi', 'bronze', 'final')),
+  player_a      text not null,
+  player_b      text not null,
+  winner_id     text not null,
+  score_a       int  not null,
+  score_b       int  not null,
+  deaths_a      int  not null,
+  deaths_b      int  not null,
+  level_wins_a  int  not null,
+  level_wins_b  int  not null,
+  decided_by    text not null check (decided_by in ('score', 'deaths', 'levelWins', 'finalFirst')),
+  played_at     timestamptz not null default now(),
+  check (winner_id in (player_a, player_b))
+);
+create index if not exists tournament_matchups_a on public.tournament_matchups (player_a);
+create index if not exists tournament_matchups_b on public.tournament_matchups (player_b);
+
+alter table public.tournaments enable row level security;
+alter table public.tournament_stats enable row level security;
+alter table public.tournament_matchups enable row level security;
+revoke all on public.tournaments, public.tournament_stats, public.tournament_matchups from public, anon, authenticated;
+revoke all on sequence public.tournament_matchups_id_seq from public, anon, authenticated;
+
 -- Fold the player v_merge into v_keep (both already resolved, distinct): per
 -- toilet kind the kept row takes the higher score with that score's level and
 -- write time, every kept row carries the kept player's name (the merged one's
 -- when the kept player had no rows yet), the merged rows go, the merged id
--- becomes an alias of v_keep and its own aliases are re-pointed. Internal.
+-- becomes an alias of v_keep and its own aliases are re-pointed. Tournament
+-- stats fold too (medals and events summed, best race score kept, the kept
+-- player's stats name), and matchups and receipts are re-pointed. Internal.
 create or replace function public.fold_player(v_keep text, v_merge text)
 returns void
 language plpgsql
@@ -282,6 +352,23 @@ begin
           updated_at = case when excluded.score > public.scores.score then excluded.updated_at else public.scores.updated_at end;
   end loop;
   delete from public.scores where player_id = v_merge;
+  insert into public.tournament_stats (player_id, name, best_score, gold, silver, bronze, events, updated_at)
+  select v_keep, m.name, m.best_score, m.gold, m.silver, m.bronze, m.events, m.updated_at
+  from public.tournament_stats m where m.player_id = v_merge
+  on conflict (player_id) do update
+    set best_score = greatest(public.tournament_stats.best_score, excluded.best_score),
+        gold       = public.tournament_stats.gold + excluded.gold,
+        silver     = public.tournament_stats.silver + excluded.silver,
+        bronze     = public.tournament_stats.bronze + excluded.bronze,
+        events     = public.tournament_stats.events + excluded.events,
+        updated_at = greatest(public.tournament_stats.updated_at, excluded.updated_at);
+  delete from public.tournament_stats where player_id = v_merge;
+  update public.tournament_matchups
+    set player_a  = case when player_a = v_merge then v_keep else player_a end,
+        player_b  = case when player_b = v_merge then v_keep else player_b end,
+        winner_id = case when winner_id = v_merge then v_keep else winner_id end
+  where v_merge in (player_a, player_b);
+  update public.tournaments set host_id = v_keep where host_id = v_merge;
   update public.player_aliases set canonical_id = v_keep, merged_at = now() where canonical_id = v_merge;
   insert into public.player_aliases (alias_id, canonical_id)
   values (v_merge, v_keep)
@@ -390,6 +477,328 @@ as $$
   where s.player_id = public.resolve_player(p_player_id) and s.toilet = coalesce(p_toilet, false);
 $$;
 
+-- A finished tournament (🏅) from the host device: one call per tournament.
+-- p_tournament (src/tournament.js tournamentPayload):
+--   { "id": 22-char id, "levelPipes": [10, 25, …],
+--     "players": [{ "id": player id | null, "name": name | null }, …],   (null id = a guest)
+--     "matches": [{ "id": "quarter0", "round": "quarter", "a": 0, "b": 3, "winner": 0 | 1,
+--                   "by": "score" | "deaths" | "levelWins" | "finalFirst",
+--                   "slots": [{ "score", "deaths", "levelWins", "finalFirst" }, …] }, …] }
+-- Raced matches only (byes are implied). Returns 'ok', or 'duplicate' for a
+-- tournament already received (a resend after a lost answer). Raises 'bad host
+-- id', 'rate limited' (another tournament from this host in the last 60 s) or
+-- 'bad tournament: <why>' when the bracket is not one createTournament can
+-- produce: per-round counts from the player count, each player at most once per
+-- round, every semi side the winner of its quarter or a bye, the final the two
+-- semi winners (3 players: the semi winner and the bye), the bronze match the
+-- two semi losers, and each winner the one its slots give (score, then fewer
+-- crashes, then more level wins, then first across the final line: raceOutcome).
+-- The medals are derived here: the client only reports races. Then each linked
+-- player's stats row gets +1 event, their medal and their best race score, and
+-- every race between two linked players becomes a matchup row.
+create or replace function public.submit_tournament(p_host_id text, p_tournament jsonb)
+returns text
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  t jsonb := p_tournament;
+  v_host text;
+  v_tid text;
+  v_n int;
+  v_size int;
+  v_pipes int[];
+  v_ids text[];
+  v_names text[];
+  v_pid text;
+  v_pname text;
+  p jsonb;
+  m jsonb;
+  i int;
+  k int;
+  a int;
+  b int;
+  w int;
+  v_by text;
+  v_mid text;
+  v_round text;
+  sc0 int; sc1 int; d0 int; d1 int; lw0 int; lw1 int; ff0 boolean; ff1 boolean;
+  v_want text;
+  v_rows int;
+  -- per match id: the winner / loser player index, and the two sides
+  win jsonb := '{}'::jsonb;
+  lose jsonb := '{}'::jsonb;
+  sides jsonb := '{}'::jsonb;
+  in_quarters int[] := '{}';
+  in_semis int[] := '{}';
+  seen int[];
+  v_gold int;
+  v_silver int;
+  v_bronze int;
+  v_best int;
+  v_name text;
+  q int;
+  side_player int;
+begin
+  if p_host_id is null or p_host_id !~ '^[A-Za-z0-9_-]{22}$' then
+    raise exception 'bad host id';
+  end if;
+  if t is null or jsonb_typeof(t) <> 'object' or jsonb_typeof(t->'players') is distinct from 'array' or jsonb_typeof(t->'matches') is distinct from 'array' then
+    raise exception 'bad tournament: shape';
+  end if;
+  v_tid := t->>'id';
+  if v_tid is null or v_tid !~ '^[A-Za-z0-9_-]{22}$' then
+    raise exception 'bad tournament: id';
+  end if;
+  if jsonb_typeof(t->'levelPipes') is distinct from 'array' or jsonb_array_length(t->'levelPipes') not between 1 and 50
+     or exists (select 1 from jsonb_array_elements(t->'levelPipes') e where jsonb_typeof(e) <> 'number' or (e #>> '{}') !~ '^[0-9]{1,4}$' or (e #>> '{}')::int not between 1 and 1000) then
+    raise exception 'bad tournament: levelPipes';
+  end if;
+  select array_agg((e #>> '{}')::int order by o) into v_pipes from jsonb_array_elements(t->'levelPipes') with ordinality x(e, o);
+
+  -- One tournament at a time per host; the receipt first, so a resend (or two
+  -- drains racing) is answered 'duplicate' before anything is counted twice.
+  v_host := public.resolve_player(p_host_id);
+  perform pg_advisory_xact_lock(hashtext('tournament:' || v_host));
+  v_n := jsonb_array_length(t->'players');
+  if v_n < 3 or v_n > 8 then
+    raise exception 'bad tournament: % players', v_n;
+  end if;
+  insert into public.tournaments (id, host_id, players, level_pipes) values (v_tid, v_host, v_n, v_pipes)
+  on conflict (id) do nothing;
+  get diagnostics v_rows = row_count;
+  if v_rows = 0 then
+    return 'duplicate';
+  end if;
+  if exists (select 1 from public.tournaments r where r.host_id = v_host and r.id <> v_tid and r.submitted_at > now() - interval '60 seconds') then
+    raise exception 'rate limited';
+  end if;
+
+  -- Players: a valid id and name, or a guest (both null). Linked ids are resolved
+  -- and must be distinct: two codes of one (merged) player are one competitor.
+  v_ids := array_fill(null::text, array[v_n]);
+  v_names := array_fill(null::text, array[v_n]);
+  for i in 0 .. v_n - 1 loop
+    p := t->'players'->i;
+    if jsonb_typeof(p) is distinct from 'object' then
+      raise exception 'bad tournament: player %', i;
+    end if;
+    v_pid := p->>'id';
+    v_pname := p->>'name';
+    if v_pid is null then
+      continue;
+    end if;
+    if v_pid !~ '^[A-Za-z0-9_-]{22}$' or v_pname is null or v_pname !~ '^[^[:cntrl:]]{1,16}$' then
+      raise exception 'bad tournament: player %', i;
+    end if;
+    v_pid := public.resolve_player(v_pid);
+    if v_pid = any(v_ids) then
+      raise exception 'bad tournament: one player twice';
+    end if;
+    v_ids[i + 1] := v_pid;
+    v_names[i + 1] := v_pname;
+  end loop;
+
+  -- Matches: the right number per round for v_n players, each id once.
+  v_size := case when v_n <= 4 then 4 else 8 end;
+  if (select count(*) from jsonb_array_elements(t->'matches') e where e->>'round' = 'quarter') <> greatest(0, v_n - 4)
+     or (select count(*) from jsonb_array_elements(t->'matches') e where e->>'round' = 'semi') <> (case when v_n >= 4 then 2 else 1 end)
+     or (select count(*) from jsonb_array_elements(t->'matches') e where e->>'round' = 'bronze') <> (case when v_n >= 4 then 1 else 0 end)
+     or (select count(*) from jsonb_array_elements(t->'matches') e where e->>'round' = 'final') <> 1
+     or jsonb_array_length(t->'matches') <> v_n - 1 + (case when v_n >= 4 then 1 else 0 end) then
+    raise exception 'bad tournament: match count';
+  end if;
+
+  for k in 0 .. jsonb_array_length(t->'matches') - 1 loop
+    m := t->'matches'->k;
+    v_mid := m->>'id';
+    v_round := m->>'round';
+    if v_mid is null or sides ? v_mid
+       or not (v_round = 'quarter' and v_size = 8 and v_mid ~ '^quarter[0-3]$'
+            or v_round = 'semi' and v_mid ~ '^semi[01]$'
+            or v_round = 'bronze' and v_mid = 'bronze'
+            or v_round = 'final' and v_mid = 'final') then
+      raise exception 'bad tournament: match id %', coalesce(v_mid, '?');
+    end if;
+    if coalesce(m->>'a', '') !~ '^[0-9]$' or coalesce(m->>'b', '') !~ '^[0-9]$' or coalesce(m->>'winner', '') !~ '^[01]$' then
+      raise exception 'bad tournament: % sides', v_mid;
+    end if;
+    a := (m->>'a')::int;
+    b := (m->>'b')::int;
+    w := (m->>'winner')::int;
+    if a >= v_n or b >= v_n or a = b then
+      raise exception 'bad tournament: % sides', v_mid;
+    end if;
+    if jsonb_typeof(m->'slots') is distinct from 'array' or jsonb_array_length(m->'slots') <> 2
+       or exists (select 1 from jsonb_array_elements(m->'slots') e
+                  where jsonb_typeof(e) is distinct from 'object'
+                     or coalesce(e->>'score', '') !~ '^[0-9]{1,4}$' or coalesce(e->>'deaths', '') !~ '^[0-9]{1,4}$'
+                     or coalesce(e->>'levelWins', '') !~ '^[0-9]{1,2}$' or jsonb_typeof(e->'finalFirst') is distinct from 'boolean') then
+      raise exception 'bad tournament: % slots', v_mid;
+    end if;
+    sc0 := (m->'slots'->0->>'score')::int;  sc1 := (m->'slots'->1->>'score')::int;
+    d0  := (m->'slots'->0->>'deaths')::int; d1  := (m->'slots'->1->>'deaths')::int;
+    lw0 := (m->'slots'->0->>'levelWins')::int; lw1 := (m->'slots'->1->>'levelWins')::int;
+    ff0 := (m->'slots'->0->>'finalFirst')::boolean; ff1 := (m->'slots'->1->>'finalFirst')::boolean;
+    if sc0 > 1000 or sc1 > 1000 then
+      raise exception 'bad tournament: % score', v_mid;
+    end if;
+    -- The winner its slots give (raceOutcome); a tournament race cannot be a draw.
+    v_by := m->>'by';
+    v_want := case when sc0 <> sc1 then 'score' when d0 <> d1 then 'deaths' when lw0 <> lw1 then 'levelWins' when ff0 <> ff1 then 'finalFirst' end;
+    if v_want is null or v_by is distinct from v_want
+       or w <> (case v_want when 'score' then (case when sc0 > sc1 then 0 else 1 end)
+                            when 'deaths' then (case when d0 < d1 then 0 else 1 end)
+                            when 'levelWins' then (case when lw0 > lw1 then 0 else 1 end)
+                            else (case when ff0 then 0 else 1 end) end) then
+      raise exception 'bad tournament: % winner', v_mid;
+    end if;
+    sides := sides || jsonb_build_object(v_mid, jsonb_build_array(a, b));
+    win := win || jsonb_build_object(v_mid, case when w = 0 then a else b end);
+    lose := lose || jsonb_build_object(v_mid, case when w = 0 then b else a end);
+    if v_round = 'quarter' then
+      in_quarters := in_quarters || array[a, b];
+    elsif v_round = 'semi' then
+      in_semis := in_semis || array[a, b];
+    end if;
+  end loop;
+
+  -- Each player at most once per round.
+  if (select count(distinct x) from unnest(in_quarters) x) <> coalesce(array_length(in_quarters, 1), 0)
+     or (select count(distinct x) from unnest(in_semis) x) <> coalesce(array_length(in_semis, 1), 0) then
+    raise exception 'bad tournament: a player twice in a round';
+  end if;
+
+  -- Semis (8 slots): side k of semi s is the winner of quarter 2s + k, or, when
+  -- that quarter had a bye, a player who raced no quarter.
+  if v_size = 8 then
+    for k in 0 .. 1 loop
+      for i in 0 .. 1 loop
+        side_player := (sides->('semi' || k)->>i)::int;
+        q := 2 * k + i;
+        if sides ? ('quarter' || q) then
+          if side_player <> (win->>('quarter' || q))::int then
+            raise exception 'bad tournament: semi% side %', k, i;
+          end if;
+        elsif side_player = any(in_quarters) then
+          raise exception 'bad tournament: semi% side %', k, i;
+        end if;
+      end loop;
+    end loop;
+  end if;
+
+  -- The final: side s is the winner of semi s, or (3 players) a player in no semi.
+  for i in 0 .. 1 loop
+    side_player := (sides->'final'->>i)::int;
+    if sides ? ('semi' || i) then
+      if side_player <> (win->>('semi' || i))::int then
+        raise exception 'bad tournament: final side %', i;
+      end if;
+    elsif v_size <> 4 or side_player = any(in_semis) then
+      raise exception 'bad tournament: final side %', i;
+    end if;
+  end loop;
+
+  -- The bronze match: side s is the loser of semi s.
+  if sides ? 'bronze' then
+    for i in 0 .. 1 loop
+      if (sides->'bronze'->>i)::int <> (lose->>('semi' || i))::int then
+        raise exception 'bad tournament: bronze side %', i;
+      end if;
+    end loop;
+  end if;
+
+  -- Every player raced at least once (the counts and the checks above imply it; cheap to state).
+  select array_agg(distinct x) into seen from (
+    select (e->>'a')::int x from jsonb_array_elements(t->'matches') e
+    union select (e->>'b')::int from jsonb_array_elements(t->'matches') e) s;
+  if coalesce(array_length(seen, 1), 0) <> v_n then
+    raise exception 'bad tournament: a player never raced';
+  end if;
+
+  v_gold := (win->>'final')::int;
+  v_silver := (lose->>'final')::int;
+  v_bronze := case when sides ? 'bronze' then (win->>'bronze')::int
+                   else (lose->>(case when sides ? 'semi0' then 'semi0' else 'semi1' end))::int end;
+
+  -- Stats, one linked player at a time in id order (two tournaments sharing
+  -- players lock rows in the same order). The name: the player's score-board
+  -- name when they have one; else the code's name unless another player holds
+  -- it on the score board (a code can carry any name), then their stats name or 'Player'.
+  for i in select o - 1 from unnest(v_ids) with ordinality u(id, o) where id is not null order by id loop
+    v_pid := v_ids[i + 1];
+    select max(case when (e->>'a')::int = i then (e->'slots'->0->>'score')::int else (e->'slots'->1->>'score')::int end)
+      into v_best
+      from jsonb_array_elements(t->'matches') e
+      where (e->>'a')::int = i or (e->>'b')::int = i;
+    select s.name into v_name from public.scores s where s.player_id = v_pid order by s.updated_at desc limit 1;
+    if v_name is null then
+      if public.name_blocked(public.name_key(v_names[i + 1]), v_pid) then
+        select st.name into v_name from public.tournament_stats st where st.player_id = v_pid;
+        v_name := coalesce(v_name, 'Player');
+      else
+        v_name := v_names[i + 1];
+      end if;
+    end if;
+    insert into public.tournament_stats (player_id, name, best_score, gold, silver, bronze, events, updated_at)
+    values (v_pid, v_name, coalesce(v_best, 0),
+            case when i = v_gold then 1 else 0 end, case when i = v_silver then 1 else 0 end, case when i = v_bronze then 1 else 0 end,
+            1, now())
+    on conflict (player_id) do update
+      set name       = excluded.name,
+          best_score = greatest(public.tournament_stats.best_score, excluded.best_score),
+          gold       = public.tournament_stats.gold + excluded.gold,
+          silver     = public.tournament_stats.silver + excluded.silver,
+          bronze     = public.tournament_stats.bronze + excluded.bronze,
+          events     = public.tournament_stats.events + 1,
+          updated_at = now();
+  end loop;
+
+  -- Head-to-head: every race between two linked players.
+  insert into public.tournament_matchups (tournament_id, match_id, round, player_a, player_b, winner_id, score_a, score_b, deaths_a, deaths_b, level_wins_a, level_wins_b, decided_by)
+  select v_tid, e->>'id', e->>'round', v_ids[(e->>'a')::int + 1], v_ids[(e->>'b')::int + 1],
+         v_ids[(case when (e->>'winner')::int = 0 then e->>'a' else e->>'b' end)::int + 1],
+         (e->'slots'->0->>'score')::int, (e->'slots'->1->>'score')::int,
+         (e->'slots'->0->>'deaths')::int, (e->'slots'->1->>'deaths')::int,
+         (e->'slots'->0->>'levelWins')::int, (e->'slots'->1->>'levelWins')::int,
+         e->>'by'
+  from jsonb_array_elements(t->'matches') e
+  where v_ids[(e->>'a')::int + 1] is not null and v_ids[(e->>'b')::int + 1] is not null;
+
+  return 'ok';
+end;
+$$;
+
+-- The 🏅 board: the top p_limit (1–100) linked players by gold, silver, bronze,
+-- best race score (earlier first on a full tie), each with the name on the
+-- score board when they have one. With p_player_id, that player's row is
+-- flagged `me` and appended with its true rank when it is below the top. No
+-- ids leave the server.
+drop function if exists public.tournament_board(text, int);
+create or replace function public.tournament_board(p_player_id text default null, p_limit int default 25)
+returns table (rank int, name text, best_score int, gold int, silver int, bronze int, events int, me boolean)
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  with caller as (
+    select public.resolve_player(p_player_id) as cid where p_player_id ~ '^[A-Za-z0-9_-]{22}$'
+  ), ranked as (
+    select st.player_id as pid,
+           coalesce((select s.name from public.scores s where s.player_id = st.player_id order by s.updated_at desc limit 1), st.name) as pname,
+           st.best_score as pbest, st.gold as pgold, st.silver as psilver, st.bronze as pbronze, st.events as pevents,
+           row_number() over (order by st.gold desc, st.silver desc, st.bronze desc, st.best_score desc, st.updated_at asc)::int as prank
+    from public.tournament_stats st
+  )
+  select r.prank, r.pname, r.pbest, r.pgold, r.psilver, r.pbronze, r.pevents,
+         coalesce(r.pid = (select cid from caller), false)
+  from ranked r
+  where r.prank <= least(greatest(coalesce(p_limit, 25), 1), 100) or r.pid = (select cid from caller)
+  order by r.prank;
+$$;
+
 revoke execute on function public.submit_score(text, text, int, boolean, int) from public, authenticated;
 grant  execute on function public.submit_score(text, text, int, boolean, int) to anon;
 revoke execute on function public.player_rank(text, boolean) from public, authenticated;
@@ -400,6 +809,10 @@ revoke execute on function public.merge_players(text, text) from public, authent
 grant  execute on function public.merge_players(text, text) to anon;
 revoke execute on function public.player_name(text) from public, authenticated;
 grant  execute on function public.player_name(text) to anon;
+revoke execute on function public.submit_tournament(text, jsonb) from public, authenticated;
+grant  execute on function public.submit_tournament(text, jsonb) to anon;
+revoke execute on function public.tournament_board(text, int) from public, authenticated;
+grant  execute on function public.tournament_board(text, int) to anon;
 
 -- Tell PostgREST about the new functions right away.
 notify pgrst, 'reload schema';
