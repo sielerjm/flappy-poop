@@ -177,7 +177,7 @@ export class Play extends Phaser.Scene {
     const legacyBest = this.best.load();
     if (this.save.top.length === 0 && legacyBest > 0) this.save = saveLocal(recordScore(this.save, legacyBest));
     this.submitStore = createSubmitStore(); // last confirmed leaderboard submit
-    this.mergeStore = createMergeStore(); // account merges (Load user code) the board has not confirmed yet
+    this.mergeStore = createMergeStore(); // account merges (a pasted user code) the board has not confirmed yet
     this.renameStore = createRenameStore(); // a rename typed on this device, until a post carries it to the board
     this.boardNameTaken = false; // the last sync was refused because another player holds this username
     // Levels: pipe pairs passed decide the level; speed is per level, gap is fixed.
@@ -361,7 +361,7 @@ export class Play extends Phaser.Scene {
       this.howToHaloTween = this.tweens.add({ targets: this.howToHalo, alpha: T.readyPromptMaxAlpha, yoyo: true, repeat: -1, duration: T.readyPromptPulseMs });
     }
     this.howToBtn = createButton(this, this.readyBoxes.howto, '?', { ...TEXT_STYLE, fontSize: '52px', color: '#f8a0c8' });
-    // The user button: "<name> · best" once a username is set, else "Load user" under a pulsing
+    // The user button: "<name> · best" once a username is set, else loadUserButton under a pulsing
     // soft white halo. Either way a tap opens the save panel (on the name field when unnamed).
     {
       const b = this.readyBoxes.profile;
@@ -1056,7 +1056,7 @@ export class Play extends Phaser.Scene {
   }
 
   /**
-   * After "Load user code" on a device that already had its own id: the two ids are one player.
+   * After a pasted user code loads on a device that already had its own id: the two ids are one player.
    * Queued (it survives being offline), then sent with the next sync, which starts now.
    */
   queueMerge(keepId, mergeId) {
@@ -1198,7 +1198,7 @@ export class Play extends Phaser.Scene {
     if (!isLocale(next)) return;
     this.locale = next;
     this.readyTitle?.setText(t(next, 'readyTitle'));
-    this.refreshProfile(); // "Load user" is localised too
+    this.refreshProfile(); // loadUserButton is localised too
     const [pauseTitle, pauseHint] = pauseBannerText(next).split('\n');
     this.pauseText?.setText(pauseTitle);
     this.pauseHint?.setText(pauseHint);

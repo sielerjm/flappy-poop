@@ -8,6 +8,14 @@ import { LOCALES } from './i18n.js';
 
 export const CHANGELOG = [
   {
+    version: '0.8.5',
+    date: '9 Nov 2026',
+    notes: {
+      en: ['One button for your user on the home screen: Load user until you pick a name, then your name and best. It always opens Save / Load. The separate High scores page is gone; your best is on that button and on the 🏆 board.'],
+      'zh-Hans': ['首页只剩一个用户按钮：设置用户名前显示“载入用户”，之后显示你的名字和最高分，点它总会打开“存档 / 载入用户”。单独的最高分页面已移除；你的最高分显示在这个按钮和 🏆 排行榜上。'],
+    },
+  },
+  {
     version: '0.8.4',
     date: '9 Nov 2026',
     notes: {

@@ -8,7 +8,7 @@ A Flappy Bird–style game for phone browsers: flap a poop through the gut, dodg
 
 **Play now → [sielerjm.github.io/flappy-poop](https://sielerjm.github.io/flappy-poop/)**
 
-Works best on your phone — add it to your home screen for a full-screen, app-like launch. On a desktop or landscape window the gut widens to fill the screen. English and Simplified Chinese in-game. Version **0.8.4 beta**.
+Works best on your phone — add it to your home screen for a full-screen, app-like launch. On a desktop or landscape window the gut widens to fill the screen. English and Simplified Chinese in-game. Version **0.8.5 beta**.
 
 Tip: on iPhone, turn **Silent mode off** to hear sound.
 
@@ -122,7 +122,7 @@ A bean draw with a full bag, or a skip once the finish line is already out, beco
 
 ### Ready screen
 
-Top to bottom: title, bobbing poop (“TAP TO FLAP!”), **toilet toggle**, **Save / Load User**, and your profile button (`Enter username` until you set a name, then `name · best`). The **?** opens How to play.
+Top to bottom: title, bobbing poop (“TAP TO FLAP!”), **toilet toggle**, and your **user button**: `Load user` until you set a name, then `name · best`; it opens Save / Load. The **?** opens How to play.
 
 ### During a run
 
@@ -186,7 +186,7 @@ On a window wide and tall enough for two phone-width halves (desktop or tablet l
 
 ### Username & save code
 
-1. Open **Save / Load User** (or **Enter username**) on the ready screen.
+1. Tap **Load user** (or your name, once set) on the ready screen.
 2. Pick a username (1–16 characters) and press **Save** — it appears on the public leaderboard with your best.
 3. **Copy** your `fp1.…` user code and keep it somewhere safe.
 4. On another phone or browser, **Load** that code to bring your name and best 6 scores with you.

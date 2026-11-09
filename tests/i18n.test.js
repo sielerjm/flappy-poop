@@ -39,7 +39,7 @@ const SCENE_DENYLIST = [
   'Save / Load User',
   'HIGH SCORES',
   'LEADERBOARD',
-  'Enter username',
+  'Load user',
   'Share',
   'Play:',
 ];

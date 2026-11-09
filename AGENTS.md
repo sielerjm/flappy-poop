@@ -89,8 +89,8 @@ the line: crossing it cancels the power (`effects.cancelPower()`, `endPower()`),
 so only the pairs actually passed have scored, and the break starts at once. A progress bar (`ui/levelBar.js`) fills one
 step per pair. Each top score remembers its level. A signed
 **user code** (`fp1.<payload>.<sig>`, the save code) carries a player's username
-and best 6 scores between browsers via copy/paste (Save / Load User button on the
-ready screen); spec in `.claude/plans/Flappy Poop — Save Code Spec.md`. The code's
+and best 6 scores between browsers via copy/paste (the save panel, opened by the
+ready screen's user button); spec in `.claude/plans/Flappy Poop — Save Code Spec.md`. The code's
 random `id` is also the leaderboard identity. **One player across devices** (2026-11-08):
 a username belongs to the player holding it on the board (`submit_score` raises
 'name taken'; the panel asks `name_available` first through `Play.checkNameAvailable`
@@ -219,7 +219,7 @@ src/
                             match), input.gamepad on (bound once, in
                             Play), scene order
                             [Boot, Play, new Play('PlayB'), Over, Versus, Settings,
-                            About, HowTo, Changelog, Language, Feedback, Scores,
+                            About, HowTo, Changelog, Language, Feedback,
                             Leaderboard] ('PlayB' is the right half of a match,
                             launched only by Versus).
   config.js                 GAME_WIDTH / GAME_HEIGHT (the portrait field = the
@@ -424,7 +424,7 @@ src/
                             glowStops) as an Image behind the poop; tinted for
                             the rainbow, alpha / scale tweened by Play.
                             createRectGlow(): rounded-rect halo (canvas shadow
-                            with the box cut out) for the "Enter username" prompt.
+                            with the box cut out) for the "Load user" button.
     tray.js                 Phaser wrapper around trayLayout: leaderboard (🏆) /
                             mute / settings bottom-right, pause directly above the
                             cog, plus bottom-left info, language (🌐), feedback (💬).
@@ -465,10 +465,10 @@ src/
                             from another id → Play.queueMerge, "saveMerged". Clear
                             → warn, then Play.signOut on a second tap inside
                             saveClearConfirmMs.
-                            Opened from the ready-screen Save / Load User button,
-                            and by the "Enter username" prompt with
-                            { focusName: true, closeOnSave: true } (caret in the
-                            field at once; Save closes it after savePanelCloseMs).
+                            Opened by the ready screen's user button, with
+                            { focusName: true } while there is no username (caret
+                            in the field at once). It stays open after Save so the
+                            player sees their user code.
                             Disables game.input.keyboard while open so typing does
                             not flap. The test-mode word in Username: Save toggles
                             Play.setTestMode instead of renaming; blur never stores it. Copy calls clipboard.writeText inside the tap
@@ -533,11 +533,11 @@ src/
                             howToPromptDue(settings, LAST_UPDATED), i.e. until this
                             build is acknowledged by opening How to play or dying),
                             title, poop spot wearing poop-speech.png's "TAP TO
-                            FLAP!" bubble, toilet toggle / Save / Load User /
-                            profileButtonText() button: "Enter username" (white,
-                            under a pulsing createRectGlow halo, opens the save
-                            panel on the name field) until a name is set, then
-                            "name · best" opening Scores; any other tap starts); launch() swaps to the
+                            FLAP!" bubble, toilet toggle, and the user button
+                            (profileButtonText(): "Load user" under a pulsing
+                            createRectGlow halo until a name is set, then "name ·
+                            best"; either way it opens the save panel, on the name
+                            field while unnamed); any other tap starts); launch() swaps to the
                             plain poop frame and slides it to poopX over
                             launchSlideMs, then start(); extra taps during the
                             slide are ignored (launching flag). Toilet mode:
@@ -659,8 +659,8 @@ src/
                             (ceilingHeight + poopRadius, GAME_HEIGHT − groundHeight −
                             poopRadius; gapBounds keeps gapMargin inside both);
                             levelBar above the score. Nothing here reads time.now;
-                            readyHit() routes taps (howto, start, saveload, profile
-                            → Scores). getSaveState / setSaveState for the panel.
+                            readyHit() routes taps (toilet, versus, howto, profile
+                            → the save panel; anything else starts). getSaveState / setSaveState for the panel.
                             Test mode: registry testMode / testStartLevel /
                             testInvincible (session, like toilet); isTestMode,
                             setTestMode, testSettings / setTestSettings,
@@ -874,8 +874,6 @@ src/
                             from About/HowTo). Buttons open GitHub issue forms via
                             issueUrl() + openExternalUrl(); closing leaves any
                             parent overlay open.
-    Scores.js               Overlay: username + up to 6 high scores from the
-                            SaveState; opened by tapping the profile line.
     (every overlay builds this.focus from pressable() items, ✕ first then its
                             rows, and calls focus.show(), which only shows under a
                             controller; About / HowTo / Changelog pass scrolled: sv and

@@ -1,6 +1,6 @@
 # Plan: One ready-screen user button; retire the High scores overlay
 - Created: 2026-11-09
-- Status: in progress (step 3)
+- Status: complete (committed; push on Michael's word)
 - Baseline: `d204131` on `main` (0.8.4 pushed; Michael's README refresh with pickup icons and section emojis committed on top), tree clean.
 - Whole-suite verification: `npm test` (407 pass); `npm run smoke` (316 checks).
 - Source: Michael's `.claude/plans/merge_ready_user_button_34e25606.plan.md` (audited below); archived with this plan when done.
@@ -88,7 +88,7 @@ The local High scores overlay goes away. Top scores keep being recorded in the s
 - **Commit**: `refactor(ui, step 2/3): retire the local High scores overlay`
 - Result: done. Scores.js deleted; main.js, Play (chromeArgs, openScores, padTop key map), chromeIntent, scoresTitle, the notes row, chrome.test, smoke OVERLAYS and pad walk updated; orphans.test's overlay floor 8 → 7. npm test 407/407; smoke overlays + pad-overlays 20; full smoke 315/315 (two fewer: the Scores overlay's open/close and pad walk). grep: only save.js's 'bad scores' messages and topScores-style names remain. Step 1 commit `3382c6b`.
 
-### Step 3/3 — Docs and 0.8.5
+### Step 3/3 — Docs and 0.8.5  [done]
 - **`AGENTS.md`**:
   - the ready-screen description, the scene list (no Scores);
   - `savePanel.js` (no `closeOnSave`) and `readyLayout`;
@@ -102,6 +102,7 @@ The local High scores overlay goes away. Top scores keep being recorded in the s
   - `npm test`;
   - `grep -rn "Save / Load User\|Enter username\|saveLoadButton\|profilePrompt\|openScores\|Scores.js\|savePanelCloseMs\|closeOnSave" src tests tools AGENTS.md README.md TRANSLATION_NOTES.md` → only historical changelog entries.
 - **Commit**: `docs(step 3/3): one user button and no High scores in AGENTS / README; 0.8.5` (archives this plan and Michael's source plan)
+- Result: done. AGENTS (save-code paragraph, scene list, createRectGlow, savePanel, the ready-screen description, readyHit, the Scores entry gone); README's two lines plus its version line (0.8.4 → 0.8.5 beta); VERSION 0.8.5 with en + zh-Hans notes. The i18n denylist now guards "Load user" instead of "Enter username" (four Play comments reworded to name loadUserButton). npm test 407/407; smoke home 15. grep: only historical changelog entries and the ready test's own 'no Save / Load User box' message. Step 2 commit `86b9c47`.
 - **Push**: `npm run push` on Michael's word.
 
 ## Risks and notes
