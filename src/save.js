@@ -1,9 +1,13 @@
 // Save codes: a signed, versioned string ("fp1.<payload>.<sig>") that carries a
 // player's name and best MAX_TOP scores between browsers. No Phaser or DOM imports so
-// Node can run tests/save.test.js. Web Crypto only (crypto.subtle, getRandomValues).
+// Node can run tests/save.test.js. Web Crypto (crypto.subtle, getRandomValues); where
+// crypto.subtle is missing (a plain-http page, e.g. npm start's LAN URL) codes are signed
+// with the same HMAC-SHA-256 in plain JS (sha256.js).
 //
 // Signed, not encrypted: the payload is readable; edits are detected. The key is
 // embedded in client JavaScript on purpose (tamper-evident, not tamper-proof).
+
+import { hmacSha256 } from './sha256.js';
 
 export const CURRENT_VERSION = 1;
 export const SAVE_KEY = 'flappyPoop.save'; // localStorage key
@@ -48,8 +52,9 @@ function hmacKey() {
   return keyPromise;
 }
 
-/** First SIG_BYTES of HMAC-SHA256(SECRET, message). */
+/** First SIG_BYTES of HMAC-SHA256(SECRET, message): Web Crypto where the page has it, else the plain-JS fallback. */
 async function tag(message) {
+  if (!globalThis.crypto?.subtle) return hmacSha256(encoder.encode(SECRET), encoder.encode(message)).slice(0, SIG_BYTES);
   const full = await crypto.subtle.sign('HMAC', await hmacKey(), encoder.encode(message));
   return new Uint8Array(full).slice(0, SIG_BYTES);
 }

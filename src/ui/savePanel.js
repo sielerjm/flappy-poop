@@ -356,7 +356,7 @@ async function onLoad() {
     try {
       res = await importCode(text, { local: before });
     } catch {
-      res = { ok: false, error: 'unrecognised' }; // e.g. Web Crypto missing on an http:// LAN address
+      res = { ok: false, error: 'unrecognised' }; // anything unexpected (save.js signs without Web Crypto too, so a plain-http LAN page works)
     }
     if (!res.ok) {
       setStatus(t(locale, res.error === 'damaged' ? 'saveErrorDamaged' : 'saveErrorUnrecognised'), 'error');
