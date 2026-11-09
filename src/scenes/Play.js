@@ -868,8 +868,16 @@ export class Play extends Phaser.Scene {
   flap(pointer) {
     unlock();
     if (this.match && this.match.status !== 'playing') {
-      // The join screen: a tap on this half claims it (versusInput); the countdown and the
-      // result panel take nothing here (the Versus scene owns the panel's buttons).
+      // P1's tray works on the join screen and under the result panel (not in the countdown: a
+      // menu there would cover the race as it starts). Any other tap on the join screen claims
+      // this half (versusInput); the countdown and the result panel take nothing else here (the
+      // Versus scene owns the panel's buttons).
+      const trayOpen = pointer && this.tray && (this.match.status === 'join' || this.match.status === 'over');
+      const id = trayOpen ? trayHit(pointer.x, pointer.y, trayLayout(this.col.width, GAME_HEIGHT, T, this.col.x)) : null;
+      if (id) {
+        this.handleChrome(id);
+        return;
+      }
       if (pointer) this.versusInput({ kind: 'touch', side: this.player === 1 ? 'left' : 'right' }, 'flap', pointer);
       return;
     }
