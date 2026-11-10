@@ -29,7 +29,7 @@ Tip: on iPhone, turn **Silent mode off** to hear sound.
 - Each gut segment ends at a **checkered finish line**. Cross it for a short break, then keep going.
 - Level 7 (the rectum) is the last: clear it and you win — **YOU MADE IT OUT!**
 
-Open the round **?** on the ready screen anytime for the in-game guide (pickups, toilet mode, levels, controls, two players, tournament, sound).
+Open the round **?** on the ready screen anytime for the in-game guide (pickups, levels, controls, toilet mode, two players, tournament, and what each tray button does).
 
 ![Finish line](docs/finish-divider.svg)
 

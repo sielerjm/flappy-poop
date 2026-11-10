@@ -152,8 +152,18 @@ Short, playful, clear. Fit a 720×1280 logical field; How to play / About body w
 | itemTwoPlayerDetail | On a wide screen, flip the 👥 switch under the toilet one and race a friend side by side on the same course. A crash costs points, not the match; first over each finish line gets +25, and the higher score wins. | 在宽屏上，打开马桶开关下方的👥开关，和朋友在同一条赛道上并排比赛。撞到只会扣分，不会输掉比赛；率先冲过每条终点线得25分，最后分高者胜。 |
 | itemTournamentName | Tournament | 锦标赛 |
 | itemTournamentDetail | 3 to 8 players race two at a time in a knockout bracket: tap 🏅 Tournament on the two-player screen. The top three win 🥇 🥈 🥉, and players who joined with their user code keep their medals on the 🏅 board. | 3到8名玩家两两比赛，淘汰制：在双人模式页面点“🏅锦标赛”。前三名获得🥇🥈🥉，用用户码加入的玩家奖牌会记到🏅榜上。 |
+| itemInfoName | About | 关于 |
+| itemInfoDetail | The i button opens About: the credits, this guide and What's new (the update notes). Key: I. | i按钮打开“关于”：制作名单、本玩法说明和更新说明。按键：I。 |
+| itemLanguageName | Language | 语言 |
+| itemLanguageDetail | Switch between English and 简体中文. Key: L. | 在English和简体中文之间切换。按键：L。 |
+| itemFeedbackName | Feedback | 反馈 |
+| itemFeedbackDetail | Report a bug or suggest a feature on GitHub. Key: F. | 在GitHub上报告问题或提出功能建议。按键：F。 |
+| itemLeaderboardName | Leaderboard | 排行榜 |
+| itemLeaderboardDetail | The top 25 scores. Flip the 🏆 ⟷ 🏅 switch for the tournament medal board. Key: T. | 前25名的成绩。点🏆⟷🏅开关查看锦标赛奖牌榜。按键：T。 |
+| itemSettingsName | Settings | 设置 |
+| itemSettingsDetail | Sound, haptics (Android only), the bean button's side in landscape, and Reload game to fetch the newest version. Key: S. | 音效、震动（仅限Android）、横屏时豆子按钮的位置，以及“刷新游戏”获取最新版本。按键：S。 |
 | itemSoundName | Sound | 声音 |
-| itemSoundDetail | On iPhone, Silent mode mutes the game - turn it off to hear sound. | 在 iPhone 上，静音模式会让游戏无声——关闭静音即可听到声音。 |
+| itemSoundDetail | Mute or unmute the game. Key: M. On iPhone, Silent mode mutes the game - turn it off to hear sound. | 静音或取消静音。按键：M。 iPhone需关闭静音模式才有声音。 |
 | itemLevelsDetail | The gut comes in levels: stomach, duodenum, jejunum and on, down to the rectum. Pass a checkered finish line to clear one; the game pauses for a breather before the next level. Clear the rectum and you win! The bar at the top shows how far you are. | 肠道分成关卡：胃、十二指肠、空肠……一直到直肠。越过黑白格终点线即可过关；游戏会稍作停顿再进入下一关。通过直肠就赢了！顶部的进度条显示你走到了哪里。 |
 | updatedPrefix | Updated | 更新于 |
 | versionLine | v{version} beta | v{version} 测试版 |

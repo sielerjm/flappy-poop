@@ -922,11 +922,11 @@ src/
                             Wrapped text uses useAdvancedWrap for CJK.
     HowTo.js                Overlay: flap rules plus pipe / fiber / probiotic /
                             postbiotic / bacteria / bean / mystery box (mystery-icon) /
-                            toilet / levels / controls / two players / tournament /
-                            sound rows (howToItems, pipe first, the 🔊 Sound row with
-                            the iPhone Silent-mode note last; the pipe icon is a cropped
-                            cap slice, toilet, levels, controls, 👥, 🏅 and sound are
-                            emoji: EMOJI_ROWS) and a feedback link, inside createScrollView(). Ready-screen How
+                            levels / controls / toilet / two players / tournament rows,
+                            then one row per tray button left to right (ⓘ 🌐 💬 🏆 🔊 ⚙;
+                            the 🔊 Sound row also carries the iPhone Silent-mode note)
+                            (howToItems; the pipe icon is a cropped cap slice, the rows
+                            from levels on are emoji: EMOJI_ROWS) and a feedback link, inside createScrollView(). Ready-screen How
                             to play is readyHit()'s 'howto' box, so it does not start a run.
                             Opened from About, X/Esc/tap-outside closes HowTo and
                             About together. useAdvancedWrap on body text.

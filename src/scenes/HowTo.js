@@ -7,7 +7,19 @@ import { createScrollView } from '../ui/scrollView.js';
 
 const STYLE = { fontFamily: 'sans-serif', fontStyle: 'bold', color: '#ffffff', align: 'center' };
 /** Rows drawn as an emoji instead of a texture (see howToItems). */
-const EMOJI_ROWS = { toilet: TOILET_EMOJI, levels: '🏁', controls: '🎮', twoPlayer: '👥', tournament: '🏅', sound: '🔊' };
+const EMOJI_ROWS = {
+  toilet: TOILET_EMOJI,
+  levels: '🏁',
+  controls: '🎮',
+  twoPlayer: '👥',
+  tournament: '🏅',
+  info: 'ℹ️',
+  language: '🌐',
+  feedback: '💬',
+  leaderboard: '🏆',
+  sound: '🔊',
+  settings: '⚙️',
+};
 
 /** How to play overlay: title, rules, one row per item, scrollable (see ui/scrollView.js). */
 export class HowTo extends Phaser.Scene {
@@ -46,7 +58,7 @@ export class HowTo extends Phaser.Scene {
         .setOrigin(0.5),
     );
 
-    // Rows (pipe first, toilet last): icon at the left, name + wrapped detail at
+    // Rows (pipe first, the tray buttons last): icon at the left, name + wrapped detail at
     // the right. Rows flow from each detail's real height (min pitch 136 px).
     const ROW_PITCH = 136;
     let nextY = cy - 190;

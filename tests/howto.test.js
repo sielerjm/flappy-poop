@@ -14,16 +14,28 @@ test('HOW_TO_PLAY_TEXT explains flapping and pipes', () => {
   assert.equal(/静音/.test(t('zh-Hans', 'howToBody')), false);
 });
 
-test('the Silent-mode note is the last How to play row, Sound', () => {
-  const en = howToItems('en').at(-1);
-  assert.equal(en.key, 'sound');
+test('How to play ends with the tray buttons left to right; Sound carries the Silent-mode note', () => {
+  for (const locale of LOCALES) {
+    const keys = howToItems(locale).map((item) => item.key);
+    assert.deepEqual(keys.slice(-6), ['info', 'language', 'feedback', 'leaderboard', 'sound', 'settings'], locale);
+    assert.ok(keys.indexOf('controls') < keys.indexOf('toilet') && keys.indexOf('toilet') < keys.indexOf('twoPlayer'), 'the toilet row sits between Controls and Two players');
+  }
+  const en = howToItems('en').find((item) => item.key === 'sound');
   assert.equal(en.name, 'Sound');
+  assert.match(en.detail, /Key: M/);
   assert.match(en.detail, /iPhone/);
   assert.match(en.detail, /Silent mode/);
-  const zh = howToItems('zh-Hans').at(-1);
+  const zh = howToItems('zh-Hans').find((item) => item.key === 'sound');
   assert.equal(zh.name, '声音');
   assert.match(zh.detail, /iPhone/);
   assert.match(zh.detail, /静音/);
+  const byKey = Object.fromEntries(howToItems('en').map((item) => [item.key, item]));
+  assert.match(byKey.info.detail, /Key: I/);
+  assert.match(byKey.language.detail, /Key: L/);
+  assert.match(byKey.feedback.detail, /Key: F/);
+  assert.match(byKey.leaderboard.detail, /Key: T/);
+  assert.match(byKey.leaderboard.detail, /🏅/, 'names the medal board switch');
+  assert.match(byKey.settings.detail, /Key: S/);
 });
 
 test('PAUSE_BANNER_TEXT is two centered lines, not a clipped em-dash row', () => {
@@ -40,7 +52,7 @@ test('HOW_TO_ITEMS names fiber, probiotic, and bacteria with their effects', () 
   const items = howToItems('en');
   assert.deepEqual(
     items.map((item) => item.key),
-    ['pipe', 'fiber', 'probiotic', 'postbiotic', 'bacteria', 'bean', 'coin', 'mystery-icon', 'toilet', 'levels', 'controls', 'twoPlayer', 'tournament', 'sound'],
+    ['pipe', 'fiber', 'probiotic', 'postbiotic', 'bacteria', 'bean', 'coin', 'mystery-icon', 'levels', 'controls', 'toilet', 'twoPlayer', 'tournament', 'info', 'language', 'feedback', 'leaderboard', 'sound', 'settings'],
   );
   const blob = items.map((item) => `${item.name} ${item.detail}`).join('\n');
   assert.match(blob, /This is a pipe/);

@@ -90,8 +90,18 @@ Inspired by Flappy Bird`,
     itemTwoPlayerDetail: 'On a wide screen, flip the 👥 switch under the toilet one and race a friend side by side on the same course. A crash costs points, not the match; first over each finish line gets +25, and the higher score wins.',
     itemTournamentName: 'Tournament',
     itemTournamentDetail: '3 to 8 players race two at a time in a knockout bracket: tap 🏅 Tournament on the two-player screen. The top three win 🥇 🥈 🥉, and players who joined with their user code keep their medals on the 🏅 board.',
+    itemInfoName: 'About',
+    itemInfoDetail: "The i button opens About: the credits, this guide and What's new (the update notes). Key: I.",
+    itemLanguageName: 'Language',
+    itemLanguageDetail: 'Switch between English and 简体中文. Key: L.',
+    itemFeedbackName: 'Feedback',
+    itemFeedbackDetail: 'Report a bug or suggest a feature on GitHub. Key: F.',
+    itemLeaderboardName: 'Leaderboard',
+    itemLeaderboardDetail: 'The top 25 scores. Flip the 🏆 ⟷ 🏅 switch for the tournament medal board. Key: T.',
+    itemSettingsName: 'Settings',
+    itemSettingsDetail: "Sound, haptics (Android only), the bean button's side in landscape, and Reload game to fetch the newest version. Key: S.",
     itemSoundName: 'Sound',
-    itemSoundDetail: 'On iPhone, Silent mode mutes the game - turn it off to hear sound.',
+    itemSoundDetail: 'Mute or unmute the game. Key: M. On iPhone, Silent mode mutes the game - turn it off to hear sound.',
     itemControlsName: 'Controls',
     itemControlsDetail:
       'One player: tap or click to flap; the bean button (or the poop) farts. Keyboard: Space or ↑ flaps, B farts, P or Esc pauses. Controller: A flaps, RT farts, Menu pauses. Two players (the 👥 toggle): P1 flaps with W or Space and farts with E or Left Shift; P2 flaps with ↑ or Enter and farts with Right Shift or Numpad 0. A controller (A, RT) or a tap on your half works too. In a level break your fart button (B, RT, E…) opens and closes the 💰 shop.',
@@ -290,8 +300,18 @@ Inspired by Flappy Bird`,
     itemTwoPlayerDetail: '在宽屏上，打开马桶开关下方的👥开关，和朋友在同一条赛道上并排比赛。撞到只会扣分，不会输掉比赛；率先冲过每条终点线得25分，最后分高者胜。',
     itemTournamentName: '锦标赛',
     itemTournamentDetail: '3到8名玩家两两比赛，淘汰制：在双人模式页面点“🏅锦标赛”。前三名获得🥇🥈🥉，用用户码加入的玩家奖牌会记到🏅榜上。',
+    itemInfoName: '关于',
+    itemInfoDetail: 'i按钮打开“关于”：制作名单、本玩法说明和更新说明。按键：I。',
+    itemLanguageName: '语言',
+    itemLanguageDetail: '在English和简体中文之间切换。按键：L。',
+    itemFeedbackName: '反馈',
+    itemFeedbackDetail: '在GitHub上报告问题或提出功能建议。按键：F。',
+    itemLeaderboardName: '排行榜',
+    itemLeaderboardDetail: '前25名的成绩。点🏆⟷🏅开关查看锦标赛奖牌榜。按键：T。',
+    itemSettingsName: '设置',
+    itemSettingsDetail: '音效、震动（仅限Android）、横屏时豆子按钮的位置，以及“刷新游戏”获取最新版本。按键：S。',
     itemSoundName: '声音',
-    itemSoundDetail: '在 iPhone 上，静音模式会让游戏无声——关闭静音即可听到声音。',
+    itemSoundDetail: '静音或取消静音。按键：M。 iPhone需关闭静音模式才有声音。',
     itemControlsName: '操作方式',
     itemControlsDetail:
       '单人：点击起飞；按豆子按钮（或便便）放屁。键盘：空格或 ↑ 起飞，B 放屁，P 或 Esc 暂停。手柄：A 起飞，RT 放屁，Menu 暂停。双人模式（👥 开关）：玩家 1 用 W 或空格起飞、E 或左 Shift 放屁；玩家 2 用 ↑ 或回车起飞、右 Shift 或小键盘 0 放屁。也可以用手柄（A、RT）或点击你这一侧。过关休息时，放屁键（B、RT、E 等）可打开或关闭 💰 商店。',
@@ -431,7 +451,7 @@ export function t(locale, key) {
   return STRINGS[DEFAULT_LOCALE][key] ?? key;
 }
 
-/** How to play rows for a locale, pipe first, then controls, two players, tournament, and sound last. key matches a Boot texture name or an emoji row in HowTo. */
+/** How to play rows for a locale: pipe first, the pickups, levels, controls, toilet, two players, tournament, then the tray buttons left to right (ⓘ 🌐 💬 🏆 🔊 ⚙). key matches a Boot texture name or an emoji row in HowTo. */
 export function howToItems(locale) {
   return [
     { key: 'pipe', name: t(locale, 'itemPipeName'), detail: t(locale, 'itemPipeDetail') },
@@ -442,12 +462,17 @@ export function howToItems(locale) {
     { key: 'bean', name: t(locale, 'itemBeanName'), detail: t(locale, 'itemBeanDetail') },
     { key: 'coin', name: t(locale, 'itemCoinName'), detail: t(locale, 'itemCoinDetail') },
     { key: 'mystery-icon', name: t(locale, 'itemMysteryName'), detail: t(locale, 'itemMysteryDetail') },
-    { key: 'toilet', name: t(locale, 'itemToiletName'), detail: t(locale, 'itemToiletDetail') },
     { key: 'levels', name: t(locale, 'itemLevelsName'), detail: t(locale, 'itemLevelsDetail') },
     { key: 'controls', name: t(locale, 'itemControlsName'), detail: t(locale, 'itemControlsDetail') },
+    { key: 'toilet', name: t(locale, 'itemToiletName'), detail: t(locale, 'itemToiletDetail') },
     { key: 'twoPlayer', name: t(locale, 'itemTwoPlayerName'), detail: t(locale, 'itemTwoPlayerDetail') },
     { key: 'tournament', name: t(locale, 'itemTournamentName'), detail: t(locale, 'itemTournamentDetail') },
+    { key: 'info', name: t(locale, 'itemInfoName'), detail: t(locale, 'itemInfoDetail') },
+    { key: 'language', name: t(locale, 'itemLanguageName'), detail: t(locale, 'itemLanguageDetail') },
+    { key: 'feedback', name: t(locale, 'itemFeedbackName'), detail: t(locale, 'itemFeedbackDetail') },
+    { key: 'leaderboard', name: t(locale, 'itemLeaderboardName'), detail: t(locale, 'itemLeaderboardDetail') },
     { key: 'sound', name: t(locale, 'itemSoundName'), detail: t(locale, 'itemSoundDetail') },
+    { key: 'settings', name: t(locale, 'itemSettingsName'), detail: t(locale, 'itemSettingsDetail') },
   ];
 }
 
