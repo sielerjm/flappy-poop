@@ -1749,7 +1749,8 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
           // itself once Home has faded in (the lockout, then the 200 ms fade).
           await sleep(TT.retryLockoutMs + 400);
           const r0 = await ring();
-          ok(r0.shown && r0.id === 'home', `the game-over ring lands on Home by itself under a controller (${r0.id})`);
+          ok(r0.shown && r0.id === 'again', `the game-over ring lands on the glowing Play again by itself under a controller (${r0.id})`);
+          await evaluate(`${over}.focus.setIndex(${over}.focus.indexOf('home')), true`); // the walk below starts from Home
           let file = null;
           for (let i = 0; i < 30 && !file; i += 1) {
             await sleep(100);

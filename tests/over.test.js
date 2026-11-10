@@ -116,22 +116,28 @@ test('a Daily Dump result: the score line is a box of its own, apart from Share 
   assert.equal(overHit(cx, cy + T.over.scoreOffsetY, overButtonsLayout(cx, cy, T)), null);
 });
 
-test('Play again sits centred under Share | Home, clear of Home\'s halo, inside the panel grown downward; none unless asked', () => {
+test('Play again sits centred under Share | Home with its glow inside the panel; the lifted, grown panel clears the ⏸ and the field; none unless asked', async () => {
+  const { trayLayout } = await import('../src/logic.js');
+  const lifted = cy - T.over.againLiftPx; // Over's centre when Play again is shown
   for (const share of [true, false]) {
-    const layout = overButtonsLayout(cx, cy, T, { share, again: true });
+    const layout = overButtonsLayout(cx, lifted, T, { share, again: true });
     const a = layout.again;
     assert.equal(a.id, 'again');
     assert.equal(a.x, cx);
     assert.ok(a.height >= T.trayHitMin);
-    const bottom = cy + PANEL.height / 2 + T.over.againPanelGrowPx - STROKE;
-    assert.ok(a.y + a.height / 2 <= bottom - 8, 'inside the grown panel');
+    const top = lifted - PANEL.height / 2 + STROKE;
+    const bottom = lifted + PANEL.height / 2 + T.over.againPanelGrowPx - STROKE;
+    assert.ok(a.y + a.height / 2 + T.readyPromptGlowPx <= bottom, 'Play again and its glow inside the panel');
     assert.ok(a.x - a.width / 2 >= cx - PANEL.width / 2 + STROKE && a.x + a.width / 2 <= cx + PANEL.width / 2 - STROKE);
-    const rowBottom = layout.home.y + layout.home.height / 2 + T.readyPromptGlowPx;
-    assert.ok(a.y - a.height / 2 >= rowBottom, `clear of Home's halo (${a.y - a.height / 2} vs ${rowBottom})`);
+    assert.ok(a.y - a.height / 2 >= layout.home.y + layout.home.height / 2 + 16, 'a clear gap under the Share | Home row');
     assert.equal(overHit(a.x, a.y, layout), 'again');
+    assert.ok(top - STROKE >= 160, 'the panel top stays under the HUD');
   }
-  // The grown panel stays above the tray band.
-  assert.ok(cy + PANEL.height / 2 + T.over.againPanelGrowPx <= GAME_HEIGHT - T.trayHeight, 'the panel clears the tray');
+  // The panel's bottom clears the ⏸ (above the cog) and the tray band.
+  const pause = trayLayout(GAME_WIDTH, GAME_HEIGHT, T).pause;
+  const panelBottom = lifted + PANEL.height / 2 + T.over.againPanelGrowPx;
+  assert.ok(panelBottom <= pause.y - pause.size / 2 - 12, `panel bottom ${panelBottom} vs ⏸ top ${pause.y - pause.size / 2}`);
   assert.equal(overButtonsLayout(cx, cy, T).again, null);
   assert.equal(overButtonsLayout(cx, cy, T, { score: true }).again, null, 'a Daily Dump result has none');
 });
+

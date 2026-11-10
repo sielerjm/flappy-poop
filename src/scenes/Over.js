@@ -40,13 +40,14 @@ export class Over extends Phaser.Scene {
     const W = this.scale.width; // the live field: the panel stays centred, the tray in the chrome column
     this.col = uiColumn(W, FIELD);
     const cx = W / 2;
-    const cy = GAME_HEIGHT / 2;
+    // A normal or test run offers Play again under Share | Home: the panel sits over.againLiftPx higher
+    // and grows downward, so its bottom stays clear of the ⏸ button above the cog.
+    const again = !this.daily;
+    const cy = GAME_HEIGHT / 2 - (again ? T.over.againLiftPx : 0);
     // The top of the input stack: Phaser's top-only input stops at the first scene with an interactive
     // object under the pointer, and this panel's taps are scene-level events. Without this zone every
     // tap here also reached Play underneath (harmless on a dead run, a new run on its ready screen).
     this.add.zone(W / 2, GAME_HEIGHT / 2, W, GAME_HEIGHT).setInteractive();
-    // A normal or test run offers Play again under Share | Home: the panel grows downward for it.
-    const again = !this.daily;
     const grow = again ? T.over.againPanelGrowPx : 0;
     const panel = this.add.rectangle(cx, cy + grow / 2, 560, 720 + grow, 0x1a0b14, 0.85).setStrokeStyle(8, 0xe85e96);
     const style = { fontFamily: 'sans-serif', fontStyle: 'bold', color: '#ffffff', align: 'center' };
@@ -108,8 +109,9 @@ export class Over extends Phaser.Scene {
     // so a death tap cannot restart or share.
     this.buttons = overButtonsLayout(cx, cy, T, { share: !testRun, score: linked, again });
     const home = this.buttons.home;
-    // Same pulsing soft white halo as the enter-username prompt on the ready screen.
-    this.homeHalo = createRectGlow(this, home.x, home.y, { key: 'over-home-halo', width: home.width, height: home.height, radius: T.readyButtonRadius, pad: T.readyPromptGlowPx }).setAlpha(0);
+    // The suggested next step glows (the ready screen's prompt halo): Play again when offered, else Home.
+    const lead = this.buttons.again ?? home;
+    this.homeHalo = createRectGlow(this, lead.x, lead.y, { key: 'over-home-halo', width: lead.width, height: lead.height, radius: T.readyButtonRadius, pad: T.readyPromptGlowPx }).setAlpha(0);
     this.homeButton = createButton(this, home, t(locale, 'tapToHome'), { ...style, fontSize: '40px' }, { depth: 1 }).setAlpha(0);
     // Share stays hidden until its image exists (makeShareCard), so a tap on it always has a file to send.
     this.shareButton = this.buttons.share ? createButton(this, this.buttons.share, t(locale, 'shareButton'), { ...style, fontSize: '40px' }, { depth: 1 }).setAlpha(0).setVisible(false) : null;
@@ -143,8 +145,9 @@ export class Over extends Phaser.Scene {
     // A on Home is the panel tap; A on a tray button is that button's chrome.
     this.focus = createFocus(this, T, {
       items: [
-        { id: 'home', box: home, activate: () => this.retry() },
+        // The ring starts on the glowing button: Play again when offered, else Home.
         ...(this.buttons.again ? [{ id: 'again', box: this.buttons.again, activate: () => this.playAgain() }] : []),
+        { id: 'home', box: home, activate: () => this.retry() },
         ...(this.buttons.score ? [{ id: 'score', box: this.buttons.score, activate: () => this.openDailyBoard() }] : []),
         ...(this.buttons.rank ? [{ id: 'rank', box: this.buttons.rank, activate: () => this.openDailyBoard() }] : []),
         ...(this.buttons.share ? [{ id: 'share', box: this.buttons.share, visible: () => Boolean(this.shareFile), activate: () => this.shareRun() }] : []),

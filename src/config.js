@@ -123,8 +123,9 @@ export const TUNING = {
     buttonWidth: 240, // px per button (Home alone on a test run, centred)
     buttonHeight: 88, // px (= trayHitMin, a thumb-sized Share target)
     buttonGap: 40, // px between Share and Home (Home's halo reaches readyPromptGlowPx past its edge)
-    againOffsetY: 394, // px below the panel centre of Play again (under Share | Home, clear of Home's halo)
-    againPanelGrowPx: 110, // px the panel grows downward when Play again is shown (its top stays put)
+    againOffsetY: 362, // px below the panel centre of Play again (under Share | Home)
+    againPanelGrowPx: 96, // px the panel grows downward when Play again is shown
+    againLiftPx: 40, // px the whole panel moves up when Play again is shown, so its bottom clears the ⏸ above the cog
   },
   shareCard: {
     width: 1080, // px: the shared image, a 4:5 portrait (the largest shape Instagram's feed shows uncropped)
