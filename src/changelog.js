@@ -14,10 +14,12 @@ export const CHANGELOG = [
       en: [
         'The 🏅 medal board: when a tournament ends, everyone who joined with their user code (and you, with Use my player) gets their medals on a new board behind the 🏆 button. Flip the 🏆 ⟷ 🏅 switch under the title; players rank by gold, then silver, bronze and their best race. Guests are never saved.',
         'Offline at the podium? The medals wait on this device and post the next time the board can be reached.',
+        'How to play has two new rows, 👥 Two players and 🏅 Tournament, between Controls and Sound.',
       ],
       'zh-Hans': [
         '🏅 奖牌榜：锦标赛结束后，用用户码加入的玩家（以及选“用我的玩家”的你）都会把奖牌记到 🏆 按钮里的新榜单上。点标题下的 🏆 ⟷ 🏅 切换；按金牌、银牌、铜牌和单场最佳排名。访客不会保存。',
         '领奖台时没联网？奖牌会先存在本设备，等能连上排行榜时再上传。',
+        '玩法说明新增两行：👥 双人模式和 🏅 锦标赛，位于操作方式和声音之间。',
       ],
     },
   },

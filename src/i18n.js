@@ -86,6 +86,10 @@ Inspired by Flappy Bird`,
     itemToiletDetail: 'Playing on the toilet? Flip the switch under the poop on the home screen. Those scores get a 🚽 next to them.',
     itemLevelsName: 'Levels',
     itemLevelsDetail: 'The gut comes in levels: stomach, duodenum, jejunum and on, down to the rectum. Pass a checkered finish line to clear one; the game pauses for a breather before the next level. Clear the rectum and you win! The bar at the top shows how far you are.',
+    itemTwoPlayerName: 'Two players',
+    itemTwoPlayerDetail: 'On a wide screen, flip the 👥 switch under the toilet one and race a friend side by side on the same course. A crash costs points, not the match; first over each finish line gets +25, and the higher score wins.',
+    itemTournamentName: 'Tournament',
+    itemTournamentDetail: '3 to 8 players race two at a time in a knockout bracket: tap 🏅 Tournament on the two-player screen. The top three win 🥇 🥈 🥉, and players who joined with their user code keep their medals on the 🏅 board.',
     itemSoundName: 'Sound',
     itemSoundDetail: 'On iPhone, Silent mode mutes the game - turn it off to hear sound.',
     itemControlsName: 'Controls',
@@ -282,6 +286,10 @@ Inspired by Flappy Bird`,
     itemToiletDetail: '在马桶上玩？打开主界面便便下方的开关，这些分数旁会显示 🚽。',
     itemLevelsName: '关卡',
     itemLevelsDetail: '肠道分成关卡：胃、十二指肠、空肠……一直到直肠。越过黑白格终点线即可过关；游戏会稍作停顿再进入下一关。通过直肠就赢了！顶部的进度条显示你走到了哪里。',
+    itemTwoPlayerName: '双人模式',
+    itemTwoPlayerDetail: '在宽屏上，打开马桶开关下方的👥开关，和朋友在同一条赛道上并排比赛。撞到只会扣分，不会输掉比赛；率先冲过每条终点线得25分，最后分高者胜。',
+    itemTournamentName: '锦标赛',
+    itemTournamentDetail: '3到8名玩家两两比赛，淘汰制：在双人模式页面点“🏅锦标赛”。前三名获得🥇🥈🥉，用用户码加入的玩家奖牌会记到🏅榜上。',
     itemSoundName: '声音',
     itemSoundDetail: '在 iPhone 上，静音模式会让游戏无声——关闭静音即可听到声音。',
     itemControlsName: '操作方式',
@@ -423,7 +431,7 @@ export function t(locale, key) {
   return STRINGS[DEFAULT_LOCALE][key] ?? key;
 }
 
-/** How to play rows for a locale, pipe first, controls then sound last. key matches a Boot texture name or an emoji row in HowTo. */
+/** How to play rows for a locale, pipe first, then controls, two players, tournament, and sound last. key matches a Boot texture name or an emoji row in HowTo. */
 export function howToItems(locale) {
   return [
     { key: 'pipe', name: t(locale, 'itemPipeName'), detail: t(locale, 'itemPipeDetail') },
@@ -437,6 +445,8 @@ export function howToItems(locale) {
     { key: 'toilet', name: t(locale, 'itemToiletName'), detail: t(locale, 'itemToiletDetail') },
     { key: 'levels', name: t(locale, 'itemLevelsName'), detail: t(locale, 'itemLevelsDetail') },
     { key: 'controls', name: t(locale, 'itemControlsName'), detail: t(locale, 'itemControlsDetail') },
+    { key: 'twoPlayer', name: t(locale, 'itemTwoPlayerName'), detail: t(locale, 'itemTwoPlayerDetail') },
+    { key: 'tournament', name: t(locale, 'itemTournamentName'), detail: t(locale, 'itemTournamentDetail') },
     { key: 'sound', name: t(locale, 'itemSoundName'), detail: t(locale, 'itemSoundDetail') },
   ];
 }

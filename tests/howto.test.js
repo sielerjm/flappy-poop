@@ -40,7 +40,7 @@ test('HOW_TO_ITEMS names fiber, probiotic, and bacteria with their effects', () 
   const items = howToItems('en');
   assert.deepEqual(
     items.map((item) => item.key),
-    ['pipe', 'fiber', 'probiotic', 'postbiotic', 'bacteria', 'bean', 'coin', 'mystery-icon', 'toilet', 'levels', 'controls', 'sound'],
+    ['pipe', 'fiber', 'probiotic', 'postbiotic', 'bacteria', 'bean', 'coin', 'mystery-icon', 'toilet', 'levels', 'controls', 'twoPlayer', 'tournament', 'sound'],
   );
   const blob = items.map((item) => `${item.name} ${item.detail}`).join('\n');
   assert.match(blob, /This is a pipe/);
@@ -70,6 +70,15 @@ test('HOW_TO_ITEMS names fiber, probiotic, and bacteria with their effects', () 
   assert.match(controls.detail, /W or Space and farts with E or Left Shift/, 'P1 keys');
   assert.match(controls.detail, /↑ or Enter and farts with Right Shift or Numpad 0/, 'P2 keys');
   assert.match(controls.detail, /👥/);
+  const two = items.find((item) => item.key === 'twoPlayer');
+  assert.equal(two.name, 'Two players');
+  assert.match(two.detail, /👥/, 'names the toggle');
+  assert.match(two.detail, /\+25/, 'first over the line');
+  const tour = items.find((item) => item.key === 'tournament');
+  assert.equal(tour.name, 'Tournament');
+  assert.match(tour.detail, /3 to 8/);
+  assert.match(tour.detail, /🏅 Tournament/, 'names the join-screen button');
+  assert.match(tour.detail, /🏅 board/, 'where the medals go');
   const zh = howToItems('zh-Hans');
   assert.match(zh.map((i) => i.name).join(' '), /管道/);
   assert.match(zh.map((i) => i.name).join(' '), /纤维/);
@@ -79,6 +88,8 @@ test('HOW_TO_ITEMS names fiber, probiotic, and bacteria with their effects', () 
   assert.match(zh.map((i) => i.name).join(' '), /豆子/);
   assert.match(zh.map((i) => i.name).join(' '), /神秘盒子/);
   assert.match(zh.map((i) => i.name).join(' '), /玉米粒/);
+  assert.match(zh.map((i) => i.name).join(' '), /双人模式/);
+  assert.match(zh.map((i) => i.name).join(' '), /锦标赛/);
   const zhControls = zh.find((item) => item.key === 'controls');
   assert.match(zhControls.detail, /W 或空格起飞、E 或左 Shift 放屁/);
   assert.match(zhControls.detail, /右 Shift 或小键盘 0 放屁/);

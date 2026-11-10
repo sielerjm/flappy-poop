@@ -7,7 +7,7 @@ import { createScrollView } from '../ui/scrollView.js';
 
 const STYLE = { fontFamily: 'sans-serif', fontStyle: 'bold', color: '#ffffff', align: 'center' };
 /** Rows drawn as an emoji instead of a texture (see howToItems). */
-const EMOJI_ROWS = { toilet: TOILET_EMOJI, levels: '🏁', controls: '🎮', sound: '🔊' };
+const EMOJI_ROWS = { toilet: TOILET_EMOJI, levels: '🏁', controls: '🎮', twoPlayer: '👥', tournament: '🏅', sound: '🔊' };
 
 /** How to play overlay: title, rules, one row per item, scrollable (see ui/scrollView.js). */
 export class HowTo extends Phaser.Scene {
