@@ -8,7 +8,7 @@ A Flappy Bird–style game for phone browsers: flap a poop through the gut, dodg
 
 **Play now → [sielerjm.github.io/flappy-poop](https://sielerjm.github.io/flappy-poop/)**
 
-Works best on your phone — add it to your home screen for a full-screen, app-like launch. On a desktop or landscape window the gut widens to fill the screen. English and Simplified Chinese in-game. Version **0.12.0 beta**.
+Works best on your phone — add it to your home screen for a full-screen, app-like launch. On a desktop or landscape window the gut widens to fill the screen. English and Simplified Chinese in-game. Version **0.13.0 beta**.
 
 Tip: on iPhone, turn **Silent mode off** to hear sound.
 
@@ -169,8 +169,8 @@ The ring only appears after a pad press; a tap or click hides it again.
 
 On a window wide and tall enough for two phone-width halves (desktop or tablet landscape — not a phone in portrait), a **👥** toggle appears under the toilet switch.
 
-1. Turn it on and tap to start → **join screen** (P1 left, P2 right).
-2. Claim a half: tap your side, use a keyboard group, or a controller. Keyboard groups: **W / Space + E / Left Shift** vs **↑ / Enter + Right Shift / Numpad 0**.
+1. Turn it on and tap to start → the **tournament lobby** (every two-player session is a [tournament](#-tournament); two guests are filled in, so **Start**, then **Play**, is all a quick race needs).
+2. On the race's **join screen** (left player left, right player right), claim a half: tap your side, use a keyboard group, or a controller. Keyboard groups: **W / Space + E / Left Shift** vs **↑ / Enter + Right Shift / Numpad 0**.
 3. After both claim, a **3-2-1-GO** starts the race (toilet flush on GO). A flap right on GO can give a short head start.
 
 **Same course, separate luck.** Both players see the same pipes and pickups; what a mystery box *gives* is each player’s own roll. The other poop appears as a faded **ghost** nearby, and as a marker on your progress bar.
@@ -179,18 +179,19 @@ On a window wide and tall enough for two phone-width halves (desktop or tablet l
 
 **Crashes don’t end the match.** You tumble, lose **2 × level** points and **10%** of your coins (keep 90%, rounded down), clear power-ups, then respawn with a clear screen.
 
-**Scoring.** First over each finish line gets **+25** (second gets none). Both still get the level’s coins. When both clear the rectum, higher score wins; ties go to fewer crashes. Trailing players get friendlier mystery draws. Matches are never saved to the leaderboard.
+**Scoring.** First over each finish line gets **+25** (second gets none). Both still get the level’s coins. When both clear the rectum, higher score wins; ties go to fewer crashes, then more finish lines crossed first, then whoever crossed the last line first. Trailing players get friendlier mystery draws. Races are never saved to the 🏆 leaderboard.
 
 ### 🏅 Tournament
 
-3–8 players on one device, two at a time, in a knockout bracket. On the two-player join screen, tap **🏅 Tournament** (bottom right; the **?** beside it explains the rules):
+2–8 players on one device, two at a time, in a knockout bracket. The 👥 start opens the lobby (the **?** in its corner explains the rules; **✕** goes back to single player). A controller works throughout: the d-pad moves a gold ring, **A** presses, **B** closes the lobby, the help card or the bracket you opened mid-race.
 
-1. Set the number of players, then fill each row: **Paste code** (that player's user code: their username comes along), **Guest** (a made-up name like *JollyPlunger042*), or **Use my player** (yours).
-2. **Start** draws the bracket: quarter-finals (from 5 players), semi-finals, a **bronze match**, then the **Final**. Byes fill the gaps; with 3 players, one semi and the Final, and the semi loser takes bronze.
-3. **Play** each match: the two named players claim their halves as usual. Tournament races are shorter (levels of 10 / 25 / 35 / 35 / 35 / 35 / 50 pairs). Ties go to fewer crashes, then more finish lines crossed first, then whoever crossed the last line first.
-4. **Continue** after each race back to the bracket; the Final ends on a 🥇 🥈 🥉 podium. **Abandon** (two taps) stops early.
+1. Set the number of players (new rows start as guests), then fill each row: **Paste code** (that player's user code: their username comes along), **Guest** (a made-up name like *JollyPlunger042*), or **Use my player** (yours).
+2. **Start** draws the bracket: quarter-finals (from 5 players), semi-finals, a **bronze match**, then the **Final**. Byes fill the gaps; with 3 players, one semi and the Final, and the semi loser takes bronze; with 2, just the Final.
+3. Until the first race, **choose who meets whom**: drag a player by its ⠿ handle, use **↑ ↓**, or **🎲 Shuffle**.
+4. **Play** each match: the two named players claim their halves as usual. Races are shorter than a normal run (levels of 10 / 25 / 35 / 35 / 35 / 35 / 50 pairs). Ties go to fewer crashes, then more finish lines crossed first, then whoever crossed the last line first. When both players wait at a finish line, **🏅 Bracket** shows the draw.
+5. After a race, **Continue** goes straight to the next one (the Final ends on a 🥇 🥈 🥉 podium); **Bracket** shows the bracket first. Both record the race. **Abandon** (two taps) stops early and goes back to the lobby with the same players.
 
-**Medals.** When the Final is decided, everyone who joined with their user code (and you, with **Use my player**) gets their medals on the **🏅 medal board**: tap 🏆, then the 🏅 tab under the title. Players rank by 🥇, then 🥈, 🥉 and their best race. Offline, the podium keeps the medals on this device and posts them next time the board can be reached. Guests and abandoned tournaments are never saved.
+**Medals.** When the Final of a tournament of 3 or more is decided, everyone who joined with their user code (and you, with **Use my player**) gets their medals on the **🏅 medal board**: tap 🏆, then the 🏅 tab under the title. Players rank by 🥇, then 🥈, 🥉 and their best race. Offline, the podium keeps the medals on this device and posts them next time the board can be reached. Guests, two-player tournaments and abandoned tournaments are never saved.
 
 A pasted code shares that player's secret save id with the host device for the tournament (it is never stored); paste codes only from people you're playing with. The server checks every bracket it receives, but a host holding everyone's codes could still report races that never happened: the medal board is for friends, not prizes.
 

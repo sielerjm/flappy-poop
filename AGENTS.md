@@ -138,7 +138,8 @@ to the level's scroll speed by about the field's middle, fading from transparent
 settling exactly where the pre-fill put it.
 **Two players** (`src/versus.js`, `scenes/Versus.js`): a 👥 toggle under the toilet toggle, offered
 only where two phone-width halves fit the window (`versusAvailable`: landscape, at least
-`versus.minViewportH` css px tall; never in test mode), turns the start tap into a match. The Versus
+`versus.minViewportH` css px tall; never in test mode), turns the start tap into a tournament (every
+two-player session is one: the **Tournament** paragraph below; its races are the matches here). The Versus
 scene sets the canvas to two half-window fields (`versusLayout`, capped at `FIELD.maxWidth / 2` each),
 launches `Play` as P1 on the left strip and `PlayB` (a second Play instance) as P2 on the right (each
 `Play.init` gets `{ player, match, fieldW, fieldX }` and a camera viewport), and sits above both. The
@@ -186,43 +187,80 @@ the other player; a respawning half's clock stops with it). Chrome decisions in 
 `chromeState()` (the match's state, not the half's), so a finished or respawning half still pauses and
 resumes the match. The match ends once **both** have cleared the rectum (the first one out waits under
 "Made it out!" / "Waiting for P2…", `showEscapedBanner`); the result panel names the higher score
-(`matchResult`: score, then fewer crashes, else a draw) on a `versus.resultPanelW` (820 px) panel with each
-player's 🏁 level wins and 💀 count, and offers Rematch
-(same devices, new seed) | Home (the canvas re-fits the window). A match records nothing: no best, no
-save-code score, no leaderboard.
+(`raceOutcome`, below) on a `versus.resultPanelW` (820 px) panel with each player's 🏁 level wins and 💀
+count, and offers Continue | Bracket (the Tournament paragraph). A race records nothing: no best, no
+save-code score, no 🏆 leaderboard. `Versus.rematch()` (same devices, new seed) has no button any more:
+the smoke restarts a match through it.
 
 **Tournament** (🏅, `src/tournament.js`, `src/tournamentNames.js`, `ui/tournamentPanel.js`; 2026-11-09,
-Release A, local only): the join screen's "🏅 Tournament" button (plain matches only; the bottom row of
-the right half, `joinButtonsLayout`: 🏅, its (?) and Home, opaque, P1's tray owning the left half) opens a
-DOM panel over Versus; the (?) opens the same panel's help card (`view: 'help'`). **Lobby**: `TUNING.tournament.minPlayers`–
-`maxPlayers` rows, each a pasted user code (`claimFromCode`: `importCode` with a storage that keeps nothing
-and an empty local player, so the host's save is never read or written; one row per player id), a
-**Guest** (`rollGuestName`: AdjectiveNoun###, ≤ 16 code points, clean words) or **Use my player**
-(`claimHost`, once, needs a username). **Start** draws a seeded World Cup bracket (`createTournament`:
-4 or 8 slots, byes at most one per first-round pair, settled at once; queue order round one, semis,
-bronze, Final; 3 players race a semi and the Final, the semi loser third) into the game registry
-(`'tournament'`: `{ tour, matchId }`), so it survives the Versus restarts between races. **Play**
-restarts Versus (`restartWith`) on `createMatch(seed, { levelPipes: tournament.levelPipes, names,
-tournament: { round, matchId } })`: the halves run on the shorter table (`Play.tune` =
-`withLevelPipes(T, match.levelPipes)`, 10 / 25 / 35 / 35 / 35 / 35 / 50 = 225 pairs; every level-length
-helper in Play takes `this.tune`, never bare `T`, guarded by `tests/scenes.test.js`), the join title is the
-round, `versusName` puts the competitors' names where "P1 / P2" go, and Home reads **Bracket** (back
-to the panel, nothing recorded). The result panel decides by `raceOutcome` (score, fewer crashes, more 🏁,
-then `slot.finalFirst`, set by `claimLevelFinish` on the final level; never a draw once both finish),
-shows how, and offers **Continue** (`Versus.continueTournament` emits `'tournament-race'` on
-`game.events`; the panel records it with `recordResult`, then shows the bracket or the **podium**
-(`placings`: 🥇 🥈 🥉, New tournament with the same players, Home). **Abandon** (two taps) clears the
-registry and leaves a plain join screen, saving nothing. **The 🏅 medal board** (Release B, 2026-11-09):
-"Use my player" gives the host's player its id (`hostSave` → `ensureId`). When `onRace` records the
-Final, a tournament with any linked player (`linkedCount`) is queued once (`queueFinished`:
-`tournamentPayload(tour, newId())` with the host device's id into `Play.tournamentQueue`, registry
-`posted` / `tournamentId`) and synced; the podium's line (`#tour-saved`, `savedText`) follows the
-queue's outcome. Guests travel as `{ id: null, name: null }`. `Play.syncLeaderboard` drains the queue
-after the merges and before the no-username return. The server (`submit_tournament`) re-checks the
-bracket round by round, derives the medals, keeps a receipt per tournament id (a resend is
-'duplicate') and paces one per host per 60 s; stats feed `tournament_board`, the 🏅 tab of the
-Leaderboard overlay; races between two linked players become `tournament_matchups` rows for the
-owner's head-to-head analysis (no role can read them).
+Release A; one mode with two players since 0.13.0, 2026-11-10): **every two-player session is a
+tournament** of `TUNING.tournament.minPlayers`–`maxPlayers` (2–8). The 👥 start brings Versus a plain match,
+which is the **lobby** (`match.status` `'lobby'`: the join screen hidden, `openTournament()` the next
+tick, no claims); the panel is plain DOM over Versus, and the race's join screen keeps only **Bracket**
+(`joinButtonsLayout`: one box at the right half's edge, P1's tray owning the left half). **Lobby**: the
+count (− / +, new rows rolled as Guests, so Start is one tap) and a row per player: a pasted user code
+(`claimFromCode`: `importCode` with a storage that keeps nothing and an empty local player, so the host's
+save is never read or written; one row per player id), a **Guest** (`rollGuestName`: AdjectiveNoun###,
+≤ 16 code points, clean words) or **Use my player** (`claimHost`, once, needs a username); the card's **?**
+opens the help card (`view: 'help'`, Got it back to the lobby), its ✕ / Esc / the pad's B leaves for
+single player (a paste field closes first). The lobby rows outlive the panel (module state), so the next
+👥 session starts with the last players. **Start** draws a seeded World Cup bracket (`createTournament`
+→ `buildBracket(players, order)`: 2, 4 or 8 slots, byes at most one per first-round pair on a fixed
+pattern, settled at once; queue order round one, semis, bronze, Final; 3 players race a semi and the
+Final, the semi loser third; 2 players race the Final alone, no bronze, `placings().bronze` null) into the
+game registry (`'tournament'`: `{ tour, matchId }`), so it survives the Versus restarts between races.
+**Seeding** (`tour.order`: the players filling the non-bye first-round slots in order; `seedSlots` lays
+them out with null byes): while `canReseed` (no race recorded) the bracket view is the seeding view, a
+card per first-round pair, every player with a ⠿ handle and ↑ / ↓; `reseed(tour, from, to)` swaps two
+seeds and rebuilds (pure; the bye pattern holds, so the server's bracket check still passes), a drag
+(pointer events followed on the window, `setPointerCapture` in a try, the row under the pointer marked
+`.drop`) swaps the dragged seed with the one it lands on, 🎲 is `reshuffle`. After the first race the
+view is the match list with the next match. **Play** restarts Versus (`restartWith`) on
+`createMatch(seed, { levelPipes: tournament.levelPipes, names, tournament: { round, matchId } })`: the
+halves run on the shorter table (`Play.tune` = `withLevelPipes(T, match.levelPipes)`, 10 / 25 / 35 / 35 /
+35 / 35 / 50 = 225 pairs, two players too; every level-length helper in Play takes `this.tune`, never bare
+`T`, guarded by `tests/scenes.test.js`), the join title is the round, `versusName` puts the competitors'
+names where "P1 / P2" go, and Bracket there opens the bracket (nothing recorded: the race has not run).
+**Mid-race**: once both halves wait at the same line with no count and no shop (`Versus.bothInBreak`),
+each half shows a **🏅 Bracket** pill one row under its 💰 (`bracketButtonLayout`; `Play.bracketButtonShown`
+/ `refreshBracketButton`, refreshed with the 💰 and by Versus on each arrival and the count; on P1's ring
+after the 💰: while P1's ring shows, a pad's A presses the ringed button instead of going to the half as a
+flap or ready tap, `Play.onPadAction`'s `ringPress`); its tap opens the panel's **peek** view
+(`Versus.openPeek` → `view: 'peek'`: the match list without a "next" line, since that is the race being run;
+Back to the race, ✕) and is never a ready tap; `Versus.overlayOpen` counts the panel, so a count holds
+under it. The result panel decides by `raceOutcome` (score, fewer crashes, more 🏁, then
+`slot.finalFirst`, set by `claimLevelFinish` on the final level; never a draw once both finish), shows
+how, and offers **Continue** | **Bracket**: both `Versus.continueTournament(then)` (once per race,
+`handedOff`, and only from the shown panel past `retryLockoutMs`: Esc / B / A in the `deathToOverMs`
+beat before it do nothing) emit `'tournament-race'` on `game.events` with `{ then, outcome, slots }` (the
+outcome fixed in `onRunEnded`, reset in `create()`: the scene object outlives restarts); the panel's
+`onRace` records it with `recordResult` only while `matchId` is set (a second press records nothing),
+then `then` `'next'` starts the next race at once (`startRace(game)`: the panel is closed, so it takes the
+game, not `ctx`) and anything else, or the Final, opens the bracket or the **podium** (`placings`: 🥇 🥈,
+🥉 from 3 players; New tournament with the same players, Home). Before 0.13.0 only Continue recorded:
+Bracket on the result panel left the race open and Play raced it again. **Abandon** (two taps) clears the
+registry and restarts Versus on a plain match, i.e. the lobby, with the same players; nothing is saved.
+**Controller**: while the panel is open `padIntent` (`tournamentPanelOpen`) sends nav, A and B to it
+(`{ do: 'panel', action }` → `tournamentPadAction`; Y still mutes, the run buttons wait), ahead of a
+match's own A / RT routing: the d-pad moves a gold ring (`button.pad`) over the visible, enabled buttons
+by `focusNearest` on their rects (else `focusStep`), the first press lands it on the view's primary
+button (`data-primary`: Start, Play, Back, Home, Got it), A clicks it, B is Esc; a pointer press hides it;
+after ↑ / ↓ it follows the moved player; Start moves it to Play. A paste field needs a keyboard (Guest and
+Use my player cover a pad-only setup). The card takes focus when nothing inside has it (`holdFocus`), so
+Esc reaches the panel after a mouse open. With every session a tournament, `versusTitle` ("2 PLAYERS"),
+`versusDraw` and the `versusPlayer` fallback are reachable only in principle (a race always has a round,
+names and a `finalFirst` half); they stay as safe fallbacks. **The 🏅 medal board** (Release B, 2026-11-09): "Use my player"
+gives the host's player its id (`hostSave` → `ensureId`). When `onRace` records the Final, a tournament
+of `tournament.minPostPlayers` (3, submit_tournament's floor) or more with any linked player (`postable`)
+is queued once (`queueFinished`: `tournamentPayload(tour, newId())` with the host device's id into
+`Play.tournamentQueue`, registry `posted` / `tournamentId`) and synced; a 2-player one is `posted: 'two'`
+(the podium says it is not saved), an all-guest one `'none'`. The podium's line (`#tour-saved`,
+`savedText`) follows the queue's outcome. Guests travel as `{ id: null, name: null }`.
+`Play.syncLeaderboard` drains the queue after the merges and before the no-username return. The server
+(`submit_tournament`) re-checks the bracket round by round, derives the medals, keeps a receipt per
+tournament id (a resend is 'duplicate') and paces one per host per 60 s; stats feed `tournament_board`,
+the 🏅 tab of the Leaderboard overlay; races between two linked players become `tournament_matchups`
+rows for the owner's head-to-head analysis (no role can read them).
 
 **Daily Dump** (🌞, 2026-11-10, plan `.claude/plans/Archive/2026-11-10-daily-dump.md`): once per UTC
 day every player flies the same endless course. The ready screen's 🌞 (`readyLayout.daily`, top
@@ -371,12 +409,14 @@ src/
                             wrapping: the fallback), focusRingLayout, padIntent
                             (the pad's state matrix beside chromeIntent: what A / B /
                             RT / Menu / Y / nav do on Play, Over, an overlay or the
-                            versus join / result screen: versusSelect / versusBack);
+                            versus join / result screen: versusSelect / versusBack;
+                            the tournament panel open: 'panel');
                             rollMystery(rng, t, draws) takes an optional draw table
                             (the versus catch-up); coins and the shop: BAND_ITEMS,
                             MYSTERY_COINS, createEffects addCoins / spendCoins /
                             coins, SHOP_ITEMS, buyBlocker / canBuy, shopButtonLayout
-                            / shopButtonHit, shopLayout / shopHit, chromeIntent's
+                            / shopButtonHit, bracketButtonLayout (the 🏅 pill under
+                            the 💰 in a race's shared level break), shopLayout / shopHit, chromeIntent's
                             shop / breaking args and 'shop' input; test mode:
                             isTestWord, testRunStart, nextTestLevel, TEST_POWERS,
                             settingsLayout (Settings panel + rows, taller with the
@@ -386,17 +426,22 @@ src/
                             day, notes per locale), changelogEntry, changelogNotes
                             (bulleted block for a locale, English fallback).
   tournament.js             Tournament (🏅) logic, NO Phaser/DOM: createTournament
-                            (seeded 4- or 8-slot bracket, byes), matchPlayers,
-                            nextMatch, recordResult, isDone, placings, raceOutcome
-                            (score, crashes, 🏁, first across the final line), and
-                            the lobby claims claimFromCode (in memory only) /
-                            claimHost. Fully unit-tested.
+                            (seeded 2-, 4- or 8-slot bracket, byes; buildBracket
+                            from tour.order), seedSlots / canReseed / reseed (swap
+                            two seeds, pure) / reshuffle, matchPlayers, nextMatch,
+                            recordResult, isDone, placings (bronze null for two),
+                            raceOutcome (score, crashes, 🏁, first across the final
+                            line), linkedCount / postable (3+ players and someone
+                            linked) / tournamentPayload, and the lobby claims
+                            claimFromCode (in memory only) / claimHost. Fully
+                            unit-tested.
   tournamentNames.js        Guest names: GUEST_WORDS (clean, short) and
                             rollGuestName (AdjectiveNoun###, rerolled on a clash).
   versus.js                 Two-player match logic, NO Phaser/DOM: versusAvailable
                             (landscape + minViewportH), versusLayout (two half-window
-                            fields, capped at maxWidth / 2), createMatch / resetMatch
-                            / slotTemplate, keyGroup / sameDevice / claimDevice /
+                            fields, capped at maxWidth / 2), joinButtonsLayout (the
+                            join screen's Bracket box), createMatch / resetMatch
+                            (the smoke's rematch) / slotTemplate, keyGroup / sameDevice / claimDevice /
                             allClaimed / deviceLabel (the join screen), ghostPlacement
                             (scaled by the other's alpha, 0 once ended), rivalMarker,
                             catchUpTier / catchUpDraws, matchResult (score, fewer
@@ -565,13 +610,17 @@ src/
                             leaderboard's 🏆 · 🌞 · 🏅 row (a track, a pill that
                             slides behind the chosen glyph); nearestTab(x, xs) picks
                             the tab under a tap. Purely visual, like createToggle.
-    tournamentPanel.js      Plain DOM panel over the Versus join screen for a
-                            tournament: lobby (count, Paste code / Guest / Use my
-                            player rows, Start), bracket (results, next match, Play,
-                            Abandon on two taps), podium (New tournament, Home).
-                            State in the registry 'tournament'; races start through
-                            Versus.restartWith; results arrive on 'tournament-race'.
-                            ROUND_KEYS names the rounds for the join title.
+    tournamentPanel.js      Plain DOM panel over Versus, every two-player session's
+                            front door: lobby (count, Paste code / Guest / Use my
+                            player rows, ?, Start), seeding (until the first race:
+                            pairs, ⠿ drag, ↑ / ↓, 🎲, Play, Abandon), bracket
+                            (results, next match, Play, Abandon on two taps), peek
+                            (read-only, from a level break's 🏅 pill), podium (New
+                            tournament, Home), help. State in the registry
+                            'tournament'; races start through Versus.restartWith;
+                            results arrive on 'tournament-race' ({ then }: 'next'
+                            races on, else the panel). tournamentPadAction walks its
+                            buttons for a controller. ROUND_KEYS names the rounds.
     savePanel.js            Plain DOM panel over the canvas (a three-step intro,
                             Username field, read-only user code + Copy, Load
                             field, an outlined Clear beside the Save button that
@@ -895,10 +944,11 @@ src/
                             create({ match }) lays the halves out (versusLayout),
                             resizes the canvas, launches Play (P1) and PlayB (P2)
                             with their strips, draws the divider, the join screen
-                            (title, P1 / P2 prompts → device badges, hint, Home),
+                            (title, P1 / P2 prompts → device badges, hint, Bracket),
                             the countdown text and the shared PAUSED banner. Status
+                            lobby (a plain match: the tournament panel over it) |
                             join → countdown → playing → over (→ left). onJoinInput
-                            claims (claimDevice; a tap that pressed Home is not a
+                            claims (claimDevice; a tap that pressed Bracket is not a
                             claim), startCountdown runs runCountdown (3-2-1-GO on
                             timers, never synchronously: a rematch starts it inside
                             create(); it stops on a restart or a status change and,
@@ -926,21 +976,24 @@ src/
                             pause key; anyLive() for chromeState. onRunEnded waits
                             for both slots to end (the first finisher waits under its
                             own banner), then shows the result panel after
-                            deathToOverMs: matchResult headline, both scores / level
-                            / pipes / 💀 crashes, the not-saved line, Rematch | Home
-                            on overButtonsLayout's row with a focus ring. rematch()
+                            deathToOverMs: raceOutcome headline (and how, past the
+                            score), both scores / level / pipes / 🏁 / 💀, the
+                            not-saved line, Continue | Bracket on overButtonsLayout's
+                            row with a focus ring. rematch() (no button: the smoke's)
                             restarts the scene with resetMatch (devices
                             kept, new seed); leave() stops both halves, re-fits the
                             canvas to the window and starts Play with explicit data
                             (a start without data keeps the last launch data).
                             onPadSelect / onPadBack are the pad's A / B here
-                            (padIntent 'versus'); Esc = back. Tournament: the join
-                            screen's 🏅 button (openTournament), the round as the
-                            title, names via versusName; a tournament race's panel
-                            decides by raceOutcome and its left button is Continue
-                            (primary → continueTournament: 'tournament-race'); Home
-                            becomes Bracket (home()); restartWith(match) starts the
-                            next race or a plain match after Abandon.
+                            (padIntent 'versus'); Esc = back (not while the panel is
+                            up: it has its own). Tournament: openTournament(view)
+                            opens the panel (the lobby, bracket, podium, 'help',
+                            'peek'); the round as the title, names via versusName;
+                            primary → continueTournament('next'), home() on the
+                            result panel → continueTournament('bracket'), on the
+                            join screen the bracket; bothInBreak / openPeek for
+                            the 🏅 pill; restartWith(match) starts the next race or
+                            the lobby after Abandon.
     Over.js                 Game-over panel (score, run summary of fiber / probiotic / postbiotic over bacteria / bean / mystery box (mystery-icon.png), pipes crossed, then Share | Home on one row from overButtonsLayout and, on a normal or test run, a glowing Play again under them, the panel lifted over.againLiftPx so it clears the ⏸) with a
                             tap lockout (openedAt = game.loop.time: a relaunched
                             scene's this.time.now is stale) and its own tray (mute
@@ -1210,11 +1263,13 @@ tests/                      node --test (schema.test.js needs `npm install`: PGl
   shop.test.js              shopButtonLayout (under the banner hint, above the bean
                             button, clear of the tray and the break's poop), the
                             panel and its rows (inside the strips, apart, covering the
-                            pill), shopButtonHit / shopHit
+                            pill), shopButtonHit / shopHit, bracketButtonLayout (a row
+                            under the 💰, above the bean button)
   gamepad.test.js           padAction (every knob, unmapped → null, a retuned layout),
                             stickNav deadzone / larger axis, focusStep wrapping,
                             focusRingLayout, padIntent matrix across top x state x
-                            ring x action (+ the save-panel short-circuit)
+                            ring x action (+ the save-panel short-circuit, the
+                            tournament panel's nav / A / B)
   versus.test.js            TUNING.versus sanity (gate, ghost, disjoint key groups,
                             catch-up tiers), versusAvailable, versusLayout (= the wide
                             field's width, the maxWidth / 2 cap), createMatch /
@@ -1261,7 +1316,8 @@ tests/                      node --test (schema.test.js needs `npm install`: PGl
                             dailyRunStart, the per-pair reward stream, the daily
                             store and queue, the result's date / rank / share words
   schema.test.js            db/schema.sql in PGlite, applied twice: anon reads no
-                            tournament table; medals = placings() for 3–8 players;
+                            tournament table; medals = placings() for 3–8 players
+                            (the floor pinned to minPostPlayers);
                             300 legal brackets accepted, 16 forgeries rejected (no
                             receipt left); duplicate / 60 s pacing; guests; board
                             order and `me`; names; merge_players folds medals;
@@ -1389,11 +1445,12 @@ tools/
                             rotation: portrait 720 → landscape cap → back, a
                             mid-run rotation pauses in the old field and re-fits
                             at Home), and two players (A: the 👥 toggle on a
-                            1800×1000 window and not in portrait, the join screen's
+                            1800×1000 window and not in portrait, the lobby it opens
+                            (two guests, Start ready), a race's join screen with its
                             two halves and cameras, claims and refusals, the
                             countdown, five identical pairs on both halves, inputs
-                            routed by device, Home, Esc / B, the flag ignored in
-                            portrait; B: the shared pause, the first one over a
+                            routed by device, leaving, the pad's B in the lobby, the
+                            flag ignored in portrait; B: the shared pause, the first one over a
                             level's line waiting (+25 and its popup, "Waiting for
                             P2…" with no shade; Settings from the break pauses the
                             other half; its tap and a pad's B do not end the break,
@@ -1418,13 +1475,23 @@ tools/
                             tray / tap / d-pad still pause and resume the other, the
                             end when both are out with no Over and nothing recorded,
                             the panel's 💀 and 🏁 rows (P1 first out wins on its
-                            +25), rematches for the fewer-crashes tiebreak and
-                            the draw (P2 pinned 25 higher), Home; C: the ghost at the distance
+                            +25), rematches (Versus.rematch) for the fewer-crashes
+                            tiebreak (P2 pinned 25 higher), the tournament table,
+                            named races decided on 🏁 and then the final line,
+                            Continue handing the race on; C: the ghost at the distance
                             gap with the live face, level, past the range, the rival
                             marker, the crash face and blink on the ghost, P2's
                             distance against its real next pair after a respawn
                             and after a fart, the fade-out once the other's run
-                            ends). The
+                            ends; lobbyToRace / leaveVersus enter and leave them),
+                            the tournament (the lobby and its help, a 3-player
+                            roster, the pad's ring and A / B in the panel, seeding
+                            by ↓, 🎲 and a real mouse drag, the 🏅 pill only once
+                            both wait at a line and its read-only peek, Bracket on
+                            a result panel recording the race, Continue to the
+                            podium and the 🏅 queue / post, Continue straight into
+                            the next race, Abandon to the lobby, a 2-player Final
+                            with no 🥉 and nothing saved, an all-guest one). The
                             viewport is pinned to 720x1280 before load
                             (Emulation.setDeviceMetricsOverride) so the rest is
                             the phone field; tapAt maps through the live

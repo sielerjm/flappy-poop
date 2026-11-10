@@ -8,6 +8,26 @@ import { LOCALES } from './i18n.js';
 
 export const CHANGELOG = [
   {
+    version: '0.13.0',
+    date: '10 Nov 2026',
+    notes: {
+      en: [
+        'Two players is now always a tournament, for 2 to 8 players: two players race one Final, and more play a knockout bracket.',
+        'Before the first race, choose who meets whom: drag a player, use ↑ ↓, or 🎲 to reshuffle.',
+        'When both players wait at a finish line, 🏅 Bracket shows the draw mid-race. After a race, Continue goes straight to the next one.',
+        'Bracket on a race\'s result panel now records the result, so the bronze match and the Final come up as they should.',
+        'A controller can set up the tournament: move with the d-pad, A to press, B to go back.',
+      ],
+      'zh-Hans': [
+        '双人模式现在总是锦标赛，支持 2 到 8 名玩家：两名玩家只比一场决赛，更多玩家进行淘汰赛。',
+        '第一场比赛前可以决定谁对谁：拖动玩家、用 ↑ ↓，或点 🎲 重新抽签。',
+        '两人都在终点线等候时，点 🏅 赛程 可在比赛中查看对阵。比赛结束后，“继续”直接进入下一场。',
+        '比赛结果面板上的“赛程”现在会记录结果，铜牌赛和决赛会正常进行。',
+        '可以用手柄设置锦标赛：方向键移动，A 确认，B 返回。',
+      ],
+    },
+  },
+  {
     version: '0.12.0',
     date: '10 Nov 2026',
     notes: {
