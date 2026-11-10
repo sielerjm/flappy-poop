@@ -2,6 +2,7 @@ import { GAME_HEIGHT, TUNING as T } from '../config.js';
 import { versionText, createSettingsStore, chromeIntent, overlayOutsideHit, hardReloadGame, settingsLayout, nextTestLevel } from '../logic.js';
 import { t, toggleLabel, metaFontSize, levelLabel } from '../i18n.js';
 import { createFocus, pressable } from '../ui/focus.js';
+import { isTopOverlay, openChangelog } from '../ui/overlayStack.js';
 import { createToggle } from '../ui/toggle.js';
 import { setMuted } from '../sound.js';
 
@@ -90,24 +91,23 @@ export class Settings extends Phaser.Scene {
     this.testItems = []; // focus items the test section adds (reset: Exit restarts this scene)
     if (testMode) this.buildTestSection(layout, play);
 
-    this.add
+    const version = this.add
       .text(cx, rows.version, versionText(locale), {
         ...STYLE,
         fontSize: metaFontSize(locale),
-        color: '#6a5a74',
+        color: '#f8a0c8',
         fontStyle: 'normal',
       })
-      .setOrigin(0.5);
+      .setOrigin(0.5)
+      .setInteractive({ useHandCursor: true });
+    version.on('pointerdown', () => openChangelog(this)); // What's new, over this panel
 
     const close = this.add.text(layout.close.x, layout.close.y, '✕', { ...STYLE, fontSize: '48px' }).setOrigin(0.5).setInteractive({ useHandCursor: true });
     close.on('pointerdown', () => this.close());
-    this.input.keyboard?.on('keydown-ESC', () => {
-      if (this.scene.isActive('About') || this.scene.isActive('Feedback')) return;
-      this.close();
-    });
+    this.input.keyboard?.on('keydown-ESC', () => this.close());
     // Controller focus ring: ✕, then the rows top to bottom; A is each row's own pointerdown.
     this.focus = createFocus(this, T, {
-      items: [pressable('close', close), pressable('sound', this.soundLabel), pressable('haptics', this.hapticsLabel), pressable('hand', handZone), pressable('reload', reload), pressable('about', about), ...this.testItems],
+      items: [pressable('close', close), pressable('sound', this.soundLabel), pressable('haptics', this.hapticsLabel), pressable('hand', handZone), pressable('reload', reload), pressable('about', about), ...this.testItems, pressable('changelog', version)],
     });
     this.focus.show(); // only under a controller (registry padMode)
   }
@@ -208,7 +208,7 @@ export class Settings extends Phaser.Scene {
   }
 
   close() {
-    if (this.scene.isActive('About') || this.scene.isActive('Feedback')) return;
+    if (!isTopOverlay(this)) return; // About, What's new or Feedback is over it
     const play = this.scene.get('Play');
     const result = chromeIntent({
       state: play?.state ?? 'ready',

@@ -1564,7 +1564,7 @@ export function overlayOutsideHit(x, y, panel) {
  * @param {null|'settings'|'about'|'howto'|'changelog'|'language'|'feedback'|'leaderboard'} overlay topmost overlay (pause is a state)
  * @param {boolean} stackedSettings true when About sits on top of Settings
  * @param {boolean} stackedAbout true when HowTo or Changelog (What's new) sits on top of About
- * @param {boolean} stackedUnder true when Feedback sits on top of another overlay
+ * @param {boolean} stackedUnder true when Feedback or What's new sits on top of another overlay
  * @param {'pause'|'mute'|'settings'|'info'|'howto'|'changelog'|'lang'|'feedback'|'leaderboard'|'shop'|'tap'|'esc'|'close'} input ('shop': the 💰 button in a level break)
  * @param {boolean} resumeLocked true during pauseResumeLockoutMs after overlay close
  * @param {boolean} shop true while this half's level-break shop panel is open
@@ -1593,14 +1593,15 @@ export function chromeIntent({
         return { do: 'closeTop', armResumeLockout: !stackedUnder };
       }
       if (overlay === 'changelog') {
-        return { do: 'closeTop', armResumeLockout: !stackedAbout }; // back to About when it is underneath
+        return { do: 'closeTop', armResumeLockout: !(stackedAbout || stackedUnder) }; // back to the overlay underneath
       }
       return { do: 'closeTop', armResumeLockout: !(overlay === 'about' && stackedSettings) };
     }
     if (input === 'feedback') return { do: 'openFeedback', pause: false };
     if (input === 'info' && overlay === 'settings') return { do: 'openAbout', pause: false };
     if (input === 'howto' && overlay === 'about') return { do: 'openHowTo', pause: false };
-    if (input === 'changelog' && overlay === 'about') return { do: 'openChangelog', pause: false };
+    // A version line: What's new opens over any overlay (its own version links restart it instead).
+    if (input === 'changelog' && overlay !== 'changelog') return { do: 'openChangelog', pause: false };
     return { do: 'ignore' };
   }
 

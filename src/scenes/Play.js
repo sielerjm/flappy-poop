@@ -101,6 +101,7 @@ import { loadLocal, saveLocal, ensureId, recordScore, TOILET_EMOJI } from '../sa
 import { unlock, attachGame, setMuted, isMuted, sfx } from '../sound.js';
 import { createTray } from '../ui/tray.js';
 import { createFocus } from '../ui/focus.js';
+import { activeOverlays, OVERLAY_SCENES } from '../ui/overlayStack.js';
 import { createGlow, createRectGlow } from '../ui/glow.js';
 import { createFinishTexture } from '../ui/finish.js';
 import { createLightTexture } from '../ui/pipeShade.js';
@@ -1250,33 +1251,16 @@ export class Play extends Phaser.Scene {
   }
 
   chromeArgs(input) {
-    const about = this.scene.isActive('About');
-    const howto = this.scene.isActive('HowTo');
-    const changelog = this.scene.isActive('Changelog');
-    const settings = this.scene.isActive('Settings');
-    const language = this.scene.isActive('Language');
-    const feedback = this.scene.isActive('Feedback');
-    const leaderboard = this.scene.isActive('Leaderboard');
+    // The top overlay is the scene order's (ui/overlayStack.js): What's new and Feedback open over any other.
+    const stack = activeOverlays(this);
+    const top = stack.at(-1)?.id ?? null;
+    const open = (id) => stack.some((o) => o.id === id);
     return {
       state: this.chromeState(),
-      overlay: feedback
-        ? 'feedback'
-        : language
-          ? 'language'
-          : howto
-            ? 'howto'
-            : changelog
-              ? 'changelog'
-              : about
-                ? 'about'
-                : settings
-                  ? 'settings'
-                  : leaderboard
-                    ? 'leaderboard'
-                    : null,
-      stackedSettings: about && settings,
-      stackedAbout: (howto || changelog) && about,
-      stackedUnder: feedback && (about || howto || changelog || settings || language || leaderboard),
+      overlay: top,
+      stackedSettings: top === 'about' && open('settings'),
+      stackedAbout: (top === 'howto' || top === 'changelog') && open('about'),
+      stackedUnder: stack.length > 1,
       input,
       resumeLocked: this.time.now < this.flapLockedUntil,
       shop: this.shopOpen,
@@ -1384,10 +1368,7 @@ export class Play extends Phaser.Scene {
    */
   padTop() {
     const overlay = this.chromeArgs('tap').overlay;
-    if (overlay) {
-      const key = { settings: 'Settings', about: 'About', howto: 'HowTo', changelog: 'Changelog', language: 'Language', feedback: 'Feedback', leaderboard: 'Leaderboard' }[overlay];
-      return { top: 'overlay', scene: this.scene.get(key) };
-    }
+    if (overlay) return { top: 'overlay', scene: this.scene.get(OVERLAY_SCENES[overlay]) };
     if (this.scene.isActive('Over')) return { top: 'over', scene: this.scene.get('Over') };
     if (this.match && this.match.status !== 'playing') return { top: 'versus', scene: this.versusHost() }; // the join screen or the result panel
     return { top: 'play', scene: this };

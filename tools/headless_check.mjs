@@ -450,6 +450,37 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
       await sleep(300);
       await evaluate(`(__flappy.registry.set('padMode', false), __flappy.registry.set('leaderboardTab', 'scores'), import('./src/config.js').then((m) => { m.LEADERBOARD.dataApi = globalThis.__api; return true; }))`);
       ok(tab3.title === (await ttx('leaderboardTitle')) && tab3.tab === 'scores' && tab3.ring === 'tab' && !(await active('Leaderboard')), `under the pad, A on the switch flips back to "${tab3.title}" with the ring still on it`);
+
+      // Every overlay's version line opens What's new over it (a real click; HowTo and About scroll to
+      // it first), and one real Esc closes only What's new. Board muzzled so the Leaderboard settles at once.
+      {
+        await evaluate(`import('./src/config.js').then((m) => { globalThis.__api = m.LEADERBOARD.dataApi; m.LEADERBOARD.dataApi = ''; return true; })`);
+        const vt = await evaluate(`import('./src/logic.js').then((m) => m.versionText('en'))`);
+        const esc = async () => {
+          for (const type of ['keyDown', 'keyUp']) await cdp.send('Input.dispatchKeyEvent', { type, key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27 });
+          await sleep(300);
+        };
+        const seen = [];
+        for (const [input, key, scrolled] of [['settings', 'Settings'], ['info', 'About', true], ['howto', 'HowTo', true], ['lang', 'Language'], ['feedback', 'Feedback'], ['leaderboard', 'Leaderboard']]) {
+          await chrome(input);
+          await sleep(600);
+          // Scroll first and let a frame draw: the scroll camera's matrix (what input hit-tests) updates on render.
+          if (scrolled) await evaluate(`__flappy.scene.getScene('${key}').scroll.scrollBy(-100000), true`);
+          await sleep(200);
+          const at = await evaluate(`(() => { const s = __flappy.scene.getScene('${key}'); const o = s.children.list.find((c) => c.type === 'Text' && c.text === ${JSON.stringify(vt)}); if (!o) return 'null'; const c = o.getCenter(); return JSON.stringify({ x: c.x, y: c.y + ${scrolled ? 's.scroll.offset' : '0'} }); })()`).then(JSON.parse);
+          if (at) await tapAt(at.x, at.y);
+          await sleep(400);
+          const over = (await active('Changelog')) && (await evaluate(`__flappy.scene.getIndex('Changelog') > __flappy.scene.getIndex('${key}')`));
+          await esc();
+          const back = !(await active('Changelog')) && (await active(key));
+          await closeTop(key);
+          await sleep(300);
+          seen.push({ key, found: Boolean(at), over, back, closed: !(await active(key)) });
+        }
+        await evaluate(`import('./src/config.js').then((m) => { m.LEADERBOARD.dataApi = globalThis.__api; return true; })`);
+        const bad = seen.filter((s) => !(s.found && s.over && s.back && s.closed));
+        ok(bad.length === 0 && (await playState()) === 'ready', `a click on "${vt}" opens What's new over ${seen.map((s) => s.key).join(', ')}; Esc returns to the panel${bad.length ? ` — failed: ${JSON.stringify(bad)}` : ''}`);
+      }
     });
 
     await section('level1', async () => {

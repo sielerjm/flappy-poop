@@ -1,6 +1,7 @@
 import { GAME_HEIGHT, TUNING as T } from '../config.js';
 import { versionText, chromeIntent, overlayOutsideHit } from '../logic.js';
 import { createFocus, pressable } from '../ui/focus.js';
+import { isTopOverlay, openChangelog } from '../ui/overlayStack.js';
 import { t, howToItems, metaFontSize } from '../i18n.js';
 import { TOILET_EMOJI } from '../save.js';
 import { createScrollView } from '../ui/scrollView.js';
@@ -98,26 +99,27 @@ export class HowTo extends Phaser.Scene {
     );
 
     const versionY = feedbackY + 80;
-    sv.add(
-      this.add
-        .text(cx, versionY, versionText(locale), {
-          ...STYLE,
-          fontSize: metaFontSize(locale),
-          color: '#6a5a74',
-          fontStyle: 'normal',
-        })
-        .setOrigin(0.5),
+    // The version line opens What's new over this panel (as every overlay's does).
+    const versionLink = sv.link(
+      sv.add(
+        this.add
+          .text(cx, versionY, versionText(locale), {
+            ...STYLE,
+            fontSize: metaFontSize(locale),
+            color: '#f8a0c8',
+            fontStyle: 'normal',
+          })
+          .setOrigin(0.5),
+      ),
+      () => openChangelog(this),
     );
     sv.finish(versionY);
 
-    this.input.keyboard?.on('keydown-ESC', () => {
-      if (this.scene.isActive('Feedback')) return;
-      this.close();
-    });
-    // Controller: left / right walk ✕ and the feedback link (scrolled into view), up / down scroll the rows.
+    this.input.keyboard?.on('keydown-ESC', () => this.close());
+    // Controller: left / right walk ✕, the feedback link and the version line (scrolled into view), up / down scroll the rows.
     this.scroll = sv;
     this.focus = createFocus(this, T, {
-      items: [pressable('close', close), pressable('feedback', feedbackLink, { event: 'pointerup', scrolled: true })],
+      items: [pressable('close', close), pressable('feedback', feedbackLink, { event: 'pointerup', scrolled: true }), pressable('changelog', versionLink, { event: 'pointerup', scrolled: true })],
       scrolled: sv,
       onVertical: (dir) => sv.scrollBy(dir === 'up' ? T.focus.scrollStepPx : -T.focus.scrollStepPx),
     });
@@ -125,7 +127,7 @@ export class HowTo extends Phaser.Scene {
   }
 
   close() {
-    if (this.scene.isActive('Feedback')) return;
+    if (!isTopOverlay(this)) return; // What's new or Feedback is over it
     const play = this.scene.get('Play');
     const stackedAbout = this.scene.isActive('About');
     const result = chromeIntent({

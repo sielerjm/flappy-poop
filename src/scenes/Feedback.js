@@ -1,6 +1,7 @@
 import { GAME_HEIGHT, TUNING as T } from '../config.js';
 import { versionText, chromeIntent, overlayOutsideHit, issueUrl, openExternalUrl } from '../logic.js';
 import { createFocus, pressable } from '../ui/focus.js';
+import { isTopOverlay, hasOverlayUnder, openChangelog } from '../ui/overlayStack.js';
 import { t, metaFontSize } from '../i18n.js';
 
 const STYLE = { fontFamily: 'sans-serif', fontStyle: 'bold', color: '#ffffff', align: 'center' };
@@ -47,19 +48,21 @@ export class Feedback extends Phaser.Scene {
       .setInteractive({ useHandCursor: true });
     feature.on('pointerdown', () => this.openIssue('feature'));
 
-    this.add
+    const version = this.add
       .text(cx, cy + 290, versionText(locale), {
         ...STYLE,
         fontSize: metaFontSize(locale),
-        color: '#6a5a74',
+        color: '#f8a0c8',
         fontStyle: 'normal',
       })
-      .setOrigin(0.5);
+      .setOrigin(0.5)
+      .setInteractive({ useHandCursor: true });
+    version.on('pointerdown', () => openChangelog(this)); // What's new, over this panel
 
     const close = this.add.text(cx + 256, cy - 316, '✕', { ...STYLE, fontSize: '48px' }).setOrigin(0.5).setInteractive({ useHandCursor: true });
     close.on('pointerdown', () => this.close());
     this.input.keyboard?.on('keydown-ESC', () => this.close());
-    this.focus = createFocus(this, T, { items: [pressable('close', close), pressable('bug', bug), pressable('feature', feature)] });
+    this.focus = createFocus(this, T, { items: [pressable('close', close), pressable('bug', bug), pressable('feature', feature), pressable('changelog', version)] });
     this.focus.show(); // only under a controller (registry padMode)
   }
 
@@ -68,13 +71,9 @@ export class Feedback extends Phaser.Scene {
   }
 
   close() {
+    if (!isTopOverlay(this)) return; // What's new is over it
     const play = this.scene.get('Play');
-    const stackedUnder =
-      this.scene.isActive('About') ||
-      this.scene.isActive('HowTo') ||
-      this.scene.isActive('Changelog') ||
-      this.scene.isActive('Settings') ||
-      this.scene.isActive('Language');
+    const stackedUnder = hasOverlayUnder(this);
     const result = chromeIntent({
       state: play?.state ?? 'ready',
       overlay: 'feedback',

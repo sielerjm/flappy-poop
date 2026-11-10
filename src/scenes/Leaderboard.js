@@ -1,6 +1,7 @@
 import { GAME_HEIGHT, LEADERBOARD, TUNING as T } from '../config.js';
 import { versionText, chromeIntent, overlayOutsideHit, fitScale, leaderboardLayout } from '../logic.js';
 import { createFocus, pressable } from '../ui/focus.js';
+import { isTopOverlay, openChangelog } from '../ui/overlayStack.js';
 import { createToggle } from '../ui/toggle.js';
 import { t, metaFontSize, rankText, levelLabel, medalYouText } from '../i18n.js';
 import { bestByToilet, TOILET_EMOJI } from '../save.js';
@@ -75,21 +76,20 @@ export class Leaderboard extends Phaser.Scene {
       .text(cx, L.footerY, '', { ...STYLE, fontSize: '26px', color: PINK, fontStyle: 'normal', wordWrap: { width: 500, useAdvancedWrap: true } })
       .setOrigin(0.5);
     const version = this.add
-      .text(cx, L.versionY, versionText(locale), { ...STYLE, fontSize: metaFontSize(locale), color: DIM, fontStyle: 'normal' })
-      .setOrigin(0.5);
+      .text(cx, L.versionY, versionText(locale), { ...STYLE, fontSize: metaFontSize(locale), color: PINK, fontStyle: 'normal' })
+      .setOrigin(0.5)
+      .setInteractive({ useHandCursor: true });
+    version.on('pointerdown', () => openChangelog(this)); // What's new, over this panel
 
     const close = this.add.text(L.close.x, L.close.y, '✕', { ...STYLE, fontSize: '48px' }).setOrigin(0.5).setInteractive({ useHandCursor: true });
     close.on('pointerdown', () => this.close());
     // Everything outside the rows band stays on the main camera when the band becomes a scroll view.
     this.fixed = [dimmer, panelRect, title, ...this.tabToggle.objects(), tabZone, this.status, this.footer, version, close];
     this.scroll = null; // the rows' scroll view, once the board has loaded
-    this.input.keyboard?.on('keydown-ESC', () => {
-      if (this.scene.isActive('Feedback')) return;
-      this.close();
-    });
+    this.input.keyboard?.on('keydown-ESC', () => this.close());
     // Controller: the ring sits on ✕ (A on the switch flips the board); up / down scroll the rows once they are in.
     this.focus = createFocus(this, T, {
-      items: [pressable('close', close), pressable('tab', tabZone)],
+      items: [pressable('close', close), pressable('tab', tabZone), pressable('changelog', version)],
       onVertical: (dir) => this.scroll?.scrollBy(dir === 'up' ? T.focus.scrollStepPx : -T.focus.scrollStepPx),
     });
     this.focus.show(); // only under a controller (registry padMode)
@@ -241,7 +241,7 @@ export class Leaderboard extends Phaser.Scene {
   }
 
   close() {
-    if (this.scene.isActive('Feedback')) return;
+    if (!isTopOverlay(this)) return; // What's new or Feedback is over it
     const play = this.scene.get('Play');
     const result = chromeIntent({
       state: play?.state ?? 'ready',

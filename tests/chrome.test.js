@@ -98,15 +98,16 @@ test('info while Settings is top opens About; info while About is top is ignored
   }
 });
 
-test('changelog (What\'s new) opens from no overlay or over About; it is ignored elsewhere; close returns to About without the lockout', () => {
+test('changelog (What\'s new) opens from no overlay or over any other overlay without pausing again; close returns to the one underneath without the lockout', () => {
   for (const state of STATES) {
     assert.deepEqual(intent({ state, input: 'changelog' }), { do: 'openChangelog', pause: state === 'playing' || state === 'respawn' });
-    assert.deepEqual(intent({ state, overlay: 'about', input: 'changelog' }), { do: 'openChangelog', pause: false });
-    for (const overlay of ['settings', 'howto', 'changelog', 'language', 'leaderboard']) {
-      assert.deepEqual(intent({ state, overlay, input: 'changelog' }), { do: 'ignore' });
+    for (const overlay of ['about', 'settings', 'howto', 'language', 'feedback', 'leaderboard']) {
+      assert.deepEqual(intent({ state, overlay, input: 'changelog' }), { do: 'openChangelog', pause: false }, overlay);
     }
+    assert.deepEqual(intent({ state, overlay: 'changelog', input: 'changelog' }), { do: 'ignore' }, 'its own version links restart it instead');
     assert.deepEqual(intent({ state, overlay: 'changelog', stackedAbout: true, input: 'close' }), { do: 'closeTop', armResumeLockout: false });
-    assert.deepEqual(intent({ state, overlay: 'changelog', stackedAbout: false, input: 'close' }), { do: 'closeTop', armResumeLockout: true });
+    assert.deepEqual(intent({ state, overlay: 'changelog', stackedUnder: true, input: 'close' }), { do: 'closeTop', armResumeLockout: false });
+    assert.deepEqual(intent({ state, overlay: 'changelog', input: 'close' }), { do: 'closeTop', armResumeLockout: true });
   }
 });
 

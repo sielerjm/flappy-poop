@@ -1,6 +1,7 @@
 import { GAME_HEIGHT, TUNING as T } from '../config.js';
 import { versionText, chromeIntent, overlayOutsideHit } from '../logic.js';
 import { createFocus, pressable } from '../ui/focus.js';
+import { isTopOverlay, hasOverlayUnder } from '../ui/overlayStack.js';
 import { t } from '../i18n.js';
 import { createScrollView } from '../ui/scrollView.js';
 import { CHANGELOG, changelogEntry, changelogNotes } from '../changelog.js';
@@ -12,7 +13,8 @@ const MUTED = { ...STYLE, fontStyle: 'normal', color: '#c9b8dc' };
 /**
  * What's new overlay: one version's notes (the latest unless restarted with
  * { version }), then a link per other version. Opened from About's "Updated"
- * line; ✕ / Esc / tap outside return to About. Scrollable (see ui/scrollView.js).
+ * line or any overlay's version line; ✕ / Esc / tap outside return to the
+ * overlay underneath. Scrollable (see ui/scrollView.js).
  */
 export class Changelog extends Phaser.Scene {
   constructor() {
@@ -62,10 +64,7 @@ export class Changelog extends Phaser.Scene {
     }
     sv.finish(y);
 
-    this.input.keyboard?.on('keydown-ESC', () => {
-      if (this.scene.isActive('Feedback')) return;
-      this.close();
-    });
+    this.input.keyboard?.on('keydown-ESC', () => this.close());
     // Controller: left / right walk ✕ and the version links (scrolled into view), up / down scroll the text.
     this.scroll = sv;
     this.focus = createFocus(this, T, {
@@ -77,12 +76,13 @@ export class Changelog extends Phaser.Scene {
   }
 
   close() {
-    if (this.scene.isActive('Feedback')) return;
+    if (!isTopOverlay(this)) return; // Feedback is over it
     const play = this.scene.get('Play');
     const result = chromeIntent({
       state: play?.state ?? 'ready',
       overlay: 'changelog',
       stackedAbout: this.scene.isActive('About'),
+      stackedUnder: hasOverlayUnder(this),
       input: 'close',
     });
     if (result.do !== 'closeTop') return;

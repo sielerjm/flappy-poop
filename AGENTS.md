@@ -502,6 +502,12 @@ src/
                             readyLayout().versus, and with glyphLeft 👈 / glyph 👉
                             Settings' hand row (the off-side glyph lit) from
                             settingsLayout().hand; setOn(). No pointer handlers.
+    overlayStack.js         The overlay stack: OVERLAY_SCENES (chromeIntent id →
+                            scene key), activeOverlays() bottom to top by scene
+                            order, isTopOverlay() (every overlay's Esc / ✕ / close()
+                            guard, so one Esc closes only the top panel),
+                            hasOverlayUnder(), and openChangelog() for the version
+                            lines. Play.chromeArgs and padTop read the top from it.
     scrollView.js           createScrollView(): second camera clipped to a panel
                             interior, drag / wheel via clampScroll(), thumb, link()
                             that fires on pointerup only when moved < 12 px; offset,
@@ -916,7 +922,7 @@ src/
                             engine/art/sound credits, author and LLM note, version
                             and Updated last; longer than its panel, it scrolls
                             (both fart clips), How to play + feedback links,
-                            "Updated LAST_UPDATED" under the version as a link to
+                            the version and "Updated LAST_UPDATED" under it both link to
                             Changelog (What's new), inside
                             createScrollView(). Tap outside the panel closes.
                             Wrapped text uses useAdvancedWrap for CJK.
@@ -934,9 +940,10 @@ src/
                             src/changelog.js (the latest, or create({ version })
                             after a link's scene.restart), then a link per other
                             version ("Latest · " on the newest), inside
-                            createScrollView(). Opened from About's Updated line
-                            (chromeIntent 'changelog'); ✕ / Esc / B / tap outside
-                            return to About.
+                            createScrollView(). Opened from About's Updated line or
+                            any overlay's version line (chromeIntent 'changelog',
+                            ui/overlayStack.js openChangelog); ✕ / Esc / B / tap
+                            outside return to the overlay underneath.
     Language.js             Overlay: English / 简体中文 picker (🌐 or L).
     Feedback.js             Overlay: Bug / Feature request chooser (💬, F, or links
                             from About/HowTo). Buttons open GitHub issue forms via
@@ -1184,7 +1191,8 @@ tests/                      node --test (schema.test.js needs `npm install`: PGl
                             tests never count as a use): every src/ export is used by src/
                             or tools/, every config knob is read in src/, every UI string
                             key is named outside the catalog, every texture Boot loads is
-                            drawn, every overlay is in Play.chromeArgs / padTop and
+                            drawn, every overlay is in ui/overlayStack.js
+                            OVERLAY_SCENES (which chromeArgs / padTop read) and
                             launched. Kept-on-purpose items sit in its allowlists with a
                             reason (ALLOWED_EXPORTS: the test hooks); an entry that stops
                             being true fails; self-tests prove each scanner can fail
@@ -1453,9 +1461,10 @@ Commits follow `type(scope): summary` (`feat`, `fix`, `docs`, `chore`, `test`, `
 - New sound → a `blip()` preset in `src/sound.js`, **or** a file in `assets/sfx/`
   plus a `CREDITS.md` row with a URL plus `this.load.audio()` in Boot.
 - New scene → `src/scenes/`, register in the `scene:` array in `src/main.js`.
-  An overlay also needs an `isActive` check in `Play.chromeArgs` (and its place
-  in the overlay ternary), a `case` in `Play.applyChrome`, a key in
-  `Play.padTop`, rows in `tests/chrome.test.js`, an entry in `OVERLAYS` in
+  An overlay also needs an entry in `OVERLAY_SCENES` (`src/ui/overlayStack.js`,
+  which `Play.chromeArgs` and `Play.padTop` read), an `isTopOverlay(this)` guard
+  in its `close()`, a version line that calls `openChangelog(this)`, a `case` in
+  `Play.applyChrome`, rows in `tests/chrome.test.js`, an entry in `OVERLAYS` in
   `tools/headless_check.mjs` (the smoke opens every overlay), and a `this.focus`
   ring built from `pressable()` items (✕ first) with `focus.show()` so a
   controller can walk it. A scene that is not an overlay (Versus, the second

@@ -1,6 +1,7 @@
 import { GAME_HEIGHT, TUNING as T } from '../config.js';
 import { versionText, LAST_UPDATED, chromeIntent, overlayOutsideHit } from '../logic.js';
 import { createFocus, pressable } from '../ui/focus.js';
+import { isTopOverlay, openChangelog } from '../ui/overlayStack.js';
 import { t, metaFontSize } from '../i18n.js';
 import { createScrollView } from '../ui/scrollView.js';
 
@@ -66,9 +67,11 @@ export class About extends Phaser.Scene {
 
     // The version lines at the very bottom.
     const metaSize = metaFontSize(locale);
-    sv.add(this.add.text(cx, y, versionText(locale), { ...STYLE, fontSize: metaSize, color: '#6a5a74', fontStyle: 'normal' }).setOrigin(0.5, 0));
+    const versionLink = sv.link(sv.add(this.add.text(cx, y, versionText(locale), { ...STYLE, fontSize: metaSize, color: '#f8a0c8', fontStyle: 'normal' }).setOrigin(0.5, 0)), () =>
+      openChangelog(this),
+    );
     y += 48;
-    // "Updated <stamp>" is a link to What's new (the Changelog overlay).
+    // The version and "Updated <stamp>" both link to What's new (the Changelog overlay).
     const updated = sv.link(
       sv.add(
         this.add
@@ -84,10 +87,7 @@ export class About extends Phaser.Scene {
     );
     sv.finish(updated.y + updated.height);
 
-    this.input.keyboard?.on('keydown-ESC', () => {
-      if (this.scene.isActive('HowTo') || this.scene.isActive('Changelog') || this.scene.isActive('Feedback')) return;
-      this.close();
-    });
+    this.input.keyboard?.on('keydown-ESC', () => this.close());
     // Controller: left / right walk ✕ and the links (scrolled into view), up / down scroll the text.
     this.scroll = sv;
     this.focus = createFocus(this, T, {
@@ -95,6 +95,7 @@ export class About extends Phaser.Scene {
         pressable('close', close),
         pressable('howto', howToLink, { event: 'pointerup', scrolled: true }),
         pressable('feedback', feedbackLink, { event: 'pointerup', scrolled: true }),
+        pressable('version', versionLink, { event: 'pointerup', scrolled: true }),
         pressable('changelog', updated, { event: 'pointerup', scrolled: true }),
       ],
       scrolled: sv,
@@ -104,7 +105,7 @@ export class About extends Phaser.Scene {
   }
 
   close() {
-    if (this.scene.isActive('HowTo') || this.scene.isActive('Changelog') || this.scene.isActive('Feedback')) return;
+    if (!isTopOverlay(this)) return; // How to play, What's new or Feedback is over it
     const play = this.scene.get('Play');
     const result = chromeIntent({
       state: play?.state ?? 'ready',

@@ -207,7 +207,7 @@ test('every texture Boot loads by a literal key is used somewhere in src/', () =
   assert.deepEqual(unused, [], `textures loaded but never drawn (drop the load and the file, or use it):\n  ${unused.join('\n  ')}`);
 });
 
-test("every overlay scene in main.js is wired into Play's chrome: chromeArgs, padTop and a launch", () => {
+test("every overlay scene in main.js is wired into Play's chrome: the overlay stack (chromeArgs, padTop) and a launch", () => {
   const main = SRC['src/main.js'];
   const play = SRC['src/scenes/Play.js'];
   const registered = /scene:\s*\[([^\]]+)\]/.exec(main)[1].split(',').map((s) => s.trim());
@@ -215,10 +215,12 @@ test("every overlay scene in main.js is wired into Play's chrome: chromeArgs, pa
   assert.ok(overlays.length >= 7, `expected the overlays (seven since the High scores page went), got ${overlays.join(', ')}`);
   const chromeArgs = methodBody(play, 'chromeArgs');
   const padTop = methodBody(play, 'padTop');
+  const stack = SRC['src/ui/overlayStack.js'];
+  assert.ok(chromeArgs.includes('activeOverlays(this)'), 'Play.chromeArgs reads the top overlay from the overlay stack');
+  assert.ok(padTop.includes('OVERLAY_SCENES['), 'Play.padTop maps the top overlay through OVERLAY_SCENES');
   const scenes = Object.entries(SRC).filter(([p]) => p.startsWith('src/scenes/')).map(([, s]) => s).join('\n');
   for (const key of overlays) {
-    assert.ok(chromeArgs.includes(`isActive('${key}')`), `Play.chromeArgs never asks whether ${key} is open`);
-    assert.ok(padTop.includes(`'${key}'`), `Play.padTop does not map ${key}: a controller cannot reach it`);
+    assert.ok(stack.includes(`'${key}'`), `ui/overlayStack.js OVERLAY_SCENES does not list ${key}: chromeArgs and a controller cannot see it`);
     assert.ok(scenes.includes(`launch('${key}'`), `no scene launches ${key}`);
   }
 });

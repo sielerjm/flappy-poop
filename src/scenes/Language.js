@@ -1,6 +1,7 @@
 import { GAME_HEIGHT, TUNING as T } from '../config.js';
 import { versionText, createSettingsStore, chromeIntent, overlayOutsideHit } from '../logic.js';
 import { createFocus, pressable } from '../ui/focus.js';
+import { isTopOverlay, openChangelog } from '../ui/overlayStack.js';
 import { t, metaFontSize } from '../i18n.js';
 
 const STYLE = { fontFamily: 'sans-serif', fontStyle: 'bold', color: '#ffffff', align: 'center' };
@@ -43,22 +44,21 @@ export class Language extends Phaser.Scene {
       rowItems.push(pressable(row.id, label));
     }
 
-    this.add
+    const version = this.add
       .text(cx, cy + 210, versionText(locale), {
         ...STYLE,
         fontSize: metaFontSize(locale),
-        color: '#6a5a74',
+        color: '#f8a0c8',
         fontStyle: 'normal',
       })
-      .setOrigin(0.5);
+      .setOrigin(0.5)
+      .setInteractive({ useHandCursor: true });
+    version.on('pointerdown', () => openChangelog(this)); // What's new, over this panel
 
     const close = this.add.text(cx + 236, cy - 216, '✕', { ...STYLE, fontSize: '48px' }).setOrigin(0.5).setInteractive({ useHandCursor: true });
     close.on('pointerdown', () => this.close());
-    this.input.keyboard?.on('keydown-ESC', () => {
-      if (this.scene.isActive('Feedback')) return;
-      this.close();
-    });
-    this.focus = createFocus(this, T, { items: [pressable('close', close), ...rowItems] });
+    this.input.keyboard?.on('keydown-ESC', () => this.close());
+    this.focus = createFocus(this, T, { items: [pressable('close', close), ...rowItems, pressable('changelog', version)] });
     this.focus.show(); // only under a controller (registry padMode)
   }
 
@@ -69,7 +69,7 @@ export class Language extends Phaser.Scene {
   }
 
   close() {
-    if (this.scene.isActive('Feedback')) return;
+    if (!isTopOverlay(this)) return; // What's new or Feedback is over it
     const play = this.scene.get('Play');
     const result = chromeIntent({
       state: play?.state ?? 'ready',
