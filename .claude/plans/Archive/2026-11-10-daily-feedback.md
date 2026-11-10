@@ -1,6 +1,6 @@
 # Plan: Daily Dump feedback (rank link, popup emoji and copy) + the leaderboard's own-row highlight
 - Created: 2026-11-10
-- Status: in progress (step 3)
+- Status: complete
 - Baseline: `a2e0c5a` on `main` (pushed; tree clean).
 - Whole-suite verification: `npm test` (473 pass), `npm run smoke` (357, full).
 - Repo plan copy: `.claude/plans/2026-11-10-daily-feedback.md` (`git add -f`), archived when done.
@@ -42,7 +42,7 @@ Michael's feedback after playing 0.11.0:
 - **Commit:** `feat(daily): the result's rank carries a 🏆 and opens the 🌞 board`
 - **Result:** npm test 473/473; full smoke 359/359 (daily 18: a real click on the rank cell opens the 🌞 board; the stubbed rank reads "🏆 #4 of 9", the share text has it without the 🏆). Screenshots en + zh (the zh rank shrinks to its cell). The rank box's place is `TUNING.over.rankBox`, read by both the layout and Over's text.
 
-### Step 3/3: the popup's emoji line and new copy; 0.11.1  [pending]
+### Step 3/3: the popup's emoji line and new copy; 0.11.1  [done]
 - **Change:**
   - `src/scenes/Daily.js`: an emoji line "🌞 💩 🛌 🔁" (about 40 px, no translation: emoji only) between the body and the note, at about `cy + 20`. The note stays at `cy + 100` and the button at `cy + 200`.
   - `dailyBody` (en): "… Compare scores on the 🌞 leaderboard; a new course starts every day at midnight UTC."
@@ -53,6 +53,7 @@ Michael's feedback after playing 0.11.0:
 - **Smoke:** the popup checks still pass.
 - **Screenshots:** the popup in its Create user / Play / result states, en + zh, 720×1280, so the line clears the body and the note.
 - **Commit:** `feat(daily): the popup's 🌞 💩 🛌 🔁 line and "midnight UTC"; 0.11.1`
+- **Result:** npm test 473/473; full smoke 359/359. The body moved up 20 px and the note down 5 px so the emoji line (cy + 30) clears both (screenshots en + zh, Create user / result states).
 - **Push:** on Michael's word. No schema change.
 
 ## Risks and notes

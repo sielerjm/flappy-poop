@@ -285,12 +285,12 @@ The top three take the podium 🥇 🥈 🥉. Players who joined with their user
 | tournamentGotIt | Got it | 知道了 |
 | dailyTitle | 🌞 DAILY DUMP | 🌞 每日一拉 |
 | dailyToday | Today's course: {level} | 今日赛道：{level} |
-| dailyBody | One try a day. Everyone flies the same course today, and it never ends: go as far as you can. No kernels, no shop. Compare scores on the 🌞 board; a new course starts every day at 00:00 UTC. | 每天只有一次机会。
+| dailyBody | One try a day. Everyone flies the same course today, and it never ends: go as far as you can. No kernels, no shop. Compare scores on the 🌞 leaderboard; a new course starts every day at midnight UTC. | 每天只有一次机会。
 今天所有人飞同一条赛道，
 而且没有尽头：能飞多远就飞多远。
 没有玉米粒，也没有商店。
-在🌞榜上比分数；
-每天UTC 00:00换一条新赛道。 |
+在🌞排行榜上比分数；
+每天UTC午夜换一条新赛道。 |
 | dailyCreateUser | Create user | 创建用户 |
 | dailyPlay | Play | 开始 |
 | dailySeeResult | See today's result | 查看今日成绩 |

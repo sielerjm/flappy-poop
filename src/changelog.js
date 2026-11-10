@@ -8,6 +8,22 @@ import { LOCALES } from './i18n.js';
 
 export const CHANGELOG = [
   {
+    version: '0.11.1',
+    date: '10 Nov 2026',
+    notes: {
+      en: [
+        'Your Daily Dump rank reads 🏆 #n of n; tap it (or your score) for the 🌞 leaderboard.',
+        "The 🏆 leaderboard marks all of your rows on every device, even the kind (🚽 or not) you never played on this one.",
+        'The Daily Dump popup: 🌞 💩 🛌 🔁, and a new course every day at midnight UTC.',
+      ],
+      'zh-Hans': [
+        '每日一拉的排名显示为 🏆 第n名；点它（或你的分数）即可打开🌞排行榜。',
+        '🏆 排行榜在每台设备上都会标出你的所有成绩，包括这台设备上没玩过的那一类（🚽 或非 🚽）。',
+        '每日一拉弹窗：🌞 💩 🛌 🔁；每天UTC午夜换一条新赛道。',
+      ],
+    },
+  },
+  {
     version: '0.11.0',
     date: '10 Nov 2026',
     notes: {

@@ -41,9 +41,11 @@ export class Daily extends Phaser.Scene {
     this.todayText = this.add
       .text(cx, cy - 290, t(locale, 'dailyToday').replace('{level}', levelLabel(locale, dailyLevel(this.day, T))), { ...STYLE, fontSize: '34px', color: '#ffd700' })
       .setOrigin(0.5);
-    this.add.text(cx, cy - 110, t(locale, 'dailyBody'), { ...MUTED, fontSize: '28px', wordWrap: wrap, lineSpacing: 6 }).setOrigin(0.5);
+    this.add.text(cx, cy - 130, t(locale, 'dailyBody'), { ...MUTED, fontSize: '28px', wordWrap: wrap, lineSpacing: 6 }).setOrigin(0.5);
+    // The day in four pictures (no words, so nothing to translate): sun up, poop, sleep, repeat.
+    this.add.text(cx, cy + 30, '\u{1F31E} \u{1F4A9} \u{1F6CC} \u{1F501}', { fontFamily: 'sans-serif', fontSize: '40px' }).setOrigin(0.5);
     // Under the button's row: why a name is needed, or that practice is not saved.
-    this.note = this.add.text(cx, cy + 100, '', { ...MUTED, fontSize: '24px', wordWrap: wrap, lineSpacing: 4 }).setOrigin(0.5);
+    this.note = this.add.text(cx, cy + 105, '', { ...MUTED, fontSize: '24px', wordWrap: wrap, lineSpacing: 4 }).setOrigin(0.5);
 
     const box = { x: cx, y: cy + 200, width: 380, height: 96 };
     this.button = createButton(this, box, '', { ...STYLE, fontSize: '40px', color: '#f8a0c8' }, { depth: 2, fillAlpha: 1 });
