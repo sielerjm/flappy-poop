@@ -8,6 +8,14 @@ import { LOCALES } from './i18n.js';
 
 export const CHANGELOG = [
   {
+    version: '0.11.2',
+    date: '10 Nov 2026',
+    notes: {
+      en: ["The Daily Dump is one try per player, not per device: a phone or browser signed in with your user code shows today's result if you already played elsewhere."],
+      'zh-Hans': ['每日一拉是每位玩家每天一次，而不是每台设备一次：用同一用户码登录的手机或浏览器，如果你已经在别处玩过，会直接显示今天的成绩。'],
+    },
+  },
+  {
     version: '0.11.1',
     date: '10 Nov 2026',
     notes: {

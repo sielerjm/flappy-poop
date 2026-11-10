@@ -2780,6 +2780,29 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await evaluate(`(${P}.setTestMode(false), true)`);
         await home();
         ok(t1.label === (await tx('dailyPractice')) && t1.note === (await tx('dailyPracticeNote')) && practice.daily && practice.test && rec1 === rec0, `test mode: "${t1.label}" starts an unsaved daily run (the stored attempt unchanged)`);
+        // One play per player per day across devices: this device has no attempt, but the board already has
+        // this user code's score today (played on another device): the popup offers the result, not a run.
+        await evaluate(`(${keys.map((k) => `localStorage.removeItem('${k}')`).join(', ')}, true)`);
+        await setName('SunTester');
+        await home();
+        const boardStub = (mine) => evaluate(`(() => { globalThis.__fetch4 ??= globalThis.fetch; const rows = ${mine ? `[{ rank: 2, name: 'SunTester', score: 41, level: ${today.level}, pipes: 30, me: true, total: 5 }]` : '[]'}; globalThis.fetch = async (url) => String(url).endsWith('/rpc/daily_board') ? new Response(JSON.stringify(rows), { status: 200 }) : new Response('{"message":"stub"}', { status: 503 }); return import('./src/config.js').then((m) => { m.LEADERBOARD.dataApi = 'https://stub.invalid/rest/v1'; return true; }); })()`);
+        await boardStub(true);
+        await clickSun();
+        await waitFor(`${D}.button?.getText?.() === ${JSON.stringify(await tx('dailySeeResult'))}`, 30);
+        const elsewhere = await popup();
+        const adopted = await stored();
+        await evaluate(`__flappy.scene.getScene('Daily').close(), true`);
+        await sleep(300);
+        // No score on the board yet: Play, as before (and the local record stays empty).
+        await evaluate(`(${keys.map((k) => `localStorage.removeItem('${k}')`).join(', ')}, true)`);
+        await boardStub(false);
+        await clickSun();
+        await waitFor(`${D}.button?.getText?.() === ${JSON.stringify(await tx('dailyPlay'))}`, 30);
+        const fresh = await popup();
+        const none = await stored();
+        await evaluate(`(__flappy.scene.getScene('Daily').close(), globalThis.fetch = globalThis.__fetch4, globalThis.__fetch4 = undefined, import('./src/config.js').then((m) => { m.LEADERBOARD.dataApi = ''; return true; }))`);
+        await sleep(300);
+        ok(elsewhere.label === (await tx('dailySeeResult')) && adopted.rec?.final === true && adopted.rec.score === 41 && adopted.rec.day === today.day && fresh.label === (await tx('dailyPlay')) && none.rec === null, `played on another device: the popup offers "${elsewhere.label}" (the board's 41 kept as today's attempt); with no score on the board it offers "${fresh.label}"`);
         await setName(JSON.parse(nameWas));
 
         // Put everything back.

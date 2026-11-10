@@ -293,6 +293,7 @@ The top three take the podium 🥇 🥈 🥉. Players who joined with their user
 每天UTC午夜换一条新赛道。 |
 | dailyCreateUser | Create user | 创建用户 |
 | dailyPlay | Play | 开始 |
+| dailyChecking | Checking… | 检查中… |
 | dailySeeResult | See today's result | 查看今日成绩 |
 | dailyPractice | Practice | 练习 |
 | dailyNeedName | Pick a username first: your score goes on the 🌞 board under it. | 先取一个用户名：你的分数会以这个名字记到🌞榜上。 |

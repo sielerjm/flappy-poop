@@ -111,7 +111,7 @@ import { createGlow, createRectGlow } from '../ui/glow.js';
 import { createFinishTexture } from '../ui/finish.js';
 import { createLightTexture } from '../ui/pipeShade.js';
 import { createLevelBar } from '../ui/levelBar.js';
-import { createSubmitStore, createMergeStore, createRenameStore, createTournamentQueue, createDailyStore, createDailyQueue, submitDailyScore, submitPlans, submitScore, submitTournament, checkNameAvailable, mergePlayers, fetchPlayerName, nameAction } from '../leaderboard.js';
+import { createSubmitStore, createMergeStore, createRenameStore, createTournamentQueue, createDailyStore, createDailyQueue, submitDailyScore, fetchDailyBoard, submitPlans, submitScore, submitTournament, checkNameAvailable, mergePlayers, fetchPlayerName, nameAction } from '../leaderboard.js';
 import { createButton } from '../ui/button.js';
 import { createToggle } from '../ui/toggle.js';
 import { openSavePanel, isSavePanelOpen, showAdoptedName } from '../ui/savePanel.js';
@@ -395,6 +395,11 @@ export class Play extends Phaser.Scene {
       this.dailySunTween = this.tweens.add({ targets: this.dailySun, scale: T.dailyPulseScale, yoyo: true, repeat: -1, duration: T.readyPromptPulseMs, ease: 'Sine.easeInOut' });
     }
     this.refreshDailyPrompt();
+    // Once per page load and day: a user code that already played today on another device stops the glow here too.
+    if (!this.match && this.registry.get('dailyCheckedDay') !== utcDayKey()) {
+      this.registry.set('dailyCheckedDay', utcDayKey());
+      this.checkDailyOnServer();
+    }
     // The user button: "<name> · best" once a username is set, else loadUserButton under a pulsing
     // soft white halo. Either way a tap opens the save panel (on the name field when unnamed).
     {
@@ -1061,6 +1066,26 @@ export class Play extends Phaser.Scene {
   /** Has this player used today's Daily Dump on this device (a record for today, finished or cut off)? */
   dailyPlayedToday() {
     return Boolean(this.save?.id && this.dailyStore.load(utcDayKey(), this.save.id));
+  }
+
+  /**
+   * One play per player per day, across devices: ask the 🌞 board whether this user code already has
+   * today's score (from any device). When it does, that becomes this device's attempt, final (so the
+   * popup offers today's result and the 🌞 stops glowing). Resolves true when today is played here
+   * or there; offline or unnamed, false (the server still keeps only the first score of the day).
+   */
+  async checkDailyOnServer() {
+    const id = this.save?.id;
+    if (!id || !this.save?.name) return false;
+    if (this.dailyPlayedToday()) return true;
+    const day = utcDayKey();
+    const rows = await fetchDailyBoard(id, day);
+    const me = rows?.find((r) => r.me);
+    if (this.dailyStore.load(day, id)) return true; // a run here claimed the day while the board answered
+    if (!me || this.save?.id !== id) return false;
+    this.dailyStore.save({ day, playerId: id, level: me.level, score: me.score, pipes: me.pipes, collected: {}, final: true });
+    this.refreshDailyPrompt();
+    return true;
   }
 
   /** The 🌞 breathes under its halo on the ready screen until today's attempt is used. */

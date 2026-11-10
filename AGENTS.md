@@ -227,7 +227,11 @@ day every player flies the same endless course. The ready screen's 🌞 (`readyL
 centre on the ?'s row; it breathes under a halo until today is played, `Play.refreshDailyPrompt`)
 opens the `Daily` overlay, whose one button follows the player: Create user (the save panel opens
 over it; `Play.setSaveState` redraws it), Play (`Play.startDaily`), See today's result
-(`Play.showDailyResult`), or Practice in test mode (a test run: never claimed or posted). A daily
+(`Play.showDailyResult`), or Practice in test mode (a test run: never claimed or posted). One play
+per player, not per device: before offering Play (and once per page load and day for the glow),
+`Play.checkDailyOnServer` reads the caller's own row off `daily_board`; a score posted from another
+device becomes this device's final attempt ("Checking…" meanwhile; offline it falls back to Play,
+and the server still keeps only the first post). A daily
 run (`runIsDaily`, latched in `start()` like `runIsTest`) builds `createCourse(dailySeed(day),
 tune, { shared: true })` at `dailyLevel(day)` (3–7, `TUNING.daily`) with `dailyRunStart` (that
 level's pairs, score 0) and never leaves the level: no finish line (the spawn branch and the

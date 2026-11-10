@@ -67,28 +67,49 @@ export class Daily extends Phaser.Scene {
     close.on('pointerdown', () => this.close());
     this.input.keyboard?.on('keydown-ESC', () => this.close());
     this.focus = createFocus(this, T, { items: [pressable('close', close), pressable('daily', this.buttonZone), pressable('changelog', version)] });
+    this.checking = false; // asking the 🌞 board whether this player already played today (verify)
     this.draw();
+    this.verify();
     this.focus.show(); // only under a controller (registry padMode)
   }
 
-  /** What the button does now: 'practice' (test mode), 'create' (no username), 'result' (today played), else 'play'. */
+  /**
+   * One play per player per day, across devices: before offering Play, ask the board whether this
+   * user code already has today's score (Play.checkDailyOnServer). The button reads "Checking…"
+   * meanwhile; offline it falls back to Play (the server still keeps only the first score).
+   */
+  verify() {
+    if (this.checking || this.mode() !== 'play') return;
+    this.checking = true;
+    this.draw();
+    const done = () => {
+      this.checking = false;
+      if (this.sys.isActive()) this.draw();
+    };
+    Promise.resolve(this.scene.get('Play')?.checkDailyOnServer?.()).then(done, done);
+  }
+
+  /** What the button does now: 'practice' (test mode), 'create' (no username), 'result' (today played), 'checking' (asking the board), else 'play'. */
   mode() {
     const play = this.scene.get('Play');
     if (play?.isTestMode?.()) return 'practice';
     if (!play?.save?.name) return 'create';
     if (play.dailyPlayedToday?.()) return 'result';
+    if (this.checking) return 'checking';
     return 'play';
   }
 
   /** Play calls this after a save or Clear: redraw for the player's new state (only while the popup is up). */
   refresh() {
-    if (this.sys.isActive()) this.draw();
+    if (!this.sys.isActive()) return;
+    this.draw();
+    this.verify(); // a name just saved: is that user code's day already played?
   }
 
   /** The button, the note and the countdown for the player's state. */
   draw() {
     const mode = this.mode();
-    const label = { practice: 'dailyPractice', create: 'dailyCreateUser', result: 'dailySeeResult', play: 'dailyPlay' }[mode];
+    const label = { practice: 'dailyPractice', create: 'dailyCreateUser', result: 'dailySeeResult', checking: 'dailyChecking', play: 'dailyPlay' }[mode];
     this.button.setText(t(this.locale, label));
     this.note.setText(mode === 'create' ? t(this.locale, 'dailyNeedName') : mode === 'practice' ? t(this.locale, 'dailyPracticeNote') : '');
     this.tick();
@@ -105,6 +126,7 @@ export class Daily extends Phaser.Scene {
     if (!isTopOverlay(this)) return;
     const play = this.scene.get('Play');
     const mode = this.mode();
+    if (mode === 'checking') return; // the board has not answered yet
     if (mode === 'create') {
       play?.openSavePanel({ focusName: true }); // this popup stays; refresh() turns the button into Play after Save
       return;
