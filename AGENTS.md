@@ -222,6 +222,28 @@ bracket round by round, derives the medals, keeps a receipt per tournament id (a
 Leaderboard overlay; races between two linked players become `tournament_matchups` rows for the
 owner's head-to-head analysis (no role can read them).
 
+**Daily Dump** (🌞, 2026-11-10, plan `.claude/plans/Archive/2026-11-10-daily-dump.md`): once per UTC
+day every player flies the same endless course. The ready screen's 🌞 (`readyLayout.daily`, top
+centre on the ?'s row; it breathes under a halo until today is played, `Play.refreshDailyPrompt`)
+opens the `Daily` overlay, whose one button follows the player: Create user (the save panel opens
+over it; `Play.setSaveState` redraws it), Play (`Play.startDaily`), See today's result
+(`Play.showDailyResult`), or Practice in test mode (a test run: never claimed or posted). A daily
+run (`runIsDaily`, latched in `start()` like `runIsTest`) builds `createCourse(dailySeed(day),
+tune, { shared: true })` at `dailyLevel(day)` (3–7, `TUNING.daily`) with `dailyRunStart` (that
+level's pairs, score 0) and never leaves the level: no finish line (the spawn branch and the
+pre-fill stop), a box's skip and coin draws open as fiber (`dailyDraw`), no kernel or rolled coin,
+`takeCoins` refuses, "🌞 LV n" (`dailyHud`) in place of the level bar. A box's reward comes from
+its pair's own stream (`course.reward(pair)`), so it is the same for everyone. The attempt is
+claimed at the start (`dailyStore`, `flappyPoop.daily`) and rewritten from `update()` as the score
+moves; `endRun` makes it final and queues it (`dailyQueue`, `flappyPoop.dailyQueue`) without
+touching the 🏆 list or best; `syncLeaderboard` finalises an *unfinished* record left by a reload
+(never the run in flight) and `drainDaily` posts under the current name. Over shows the daily
+result: date headline, the score as a link to the board's 🌞 tab, the rank read off
+`daily_board` once the post settles, the countdown to 00:00 UTC, Share with `dailyShareText`.
+The server (`submit_daily_score`) takes today or yesterday (UTC), checks the day's level with its
+own FNV-1a (`daily_level` = the client's `dailyLevel`), keeps the first post per player and day
+('duplicate' after), and follows the score board's name claim.
+
 It is deliberately small: plain ES modules, no bundler, no runtime npm
 dependencies (one devDependency for the schema tests), Phaser 4 loaded from a CDN, deployed to GitHub Pages straight from
 `main`. Keep it that way unless the game clearly outgrows it.
@@ -297,7 +319,11 @@ src/
                             trayLayout /
                             levelBarLayout / readyLayout take a
                             trailing x0 = the column's left edge; readyLayout takes
-                            { versus } for the 👥 box), rng, createCourse / mixSeed
+                            { versus } for the 👥 box; it also returns the 🌞 daily
+                            box), rng, createCourse / mixSeed (course.reward(n): a
+                            box's reward stream, per pair when shared), the Daily
+                            Dump's utcDayKey / msUntilUtcMidnight / countdownText /
+                            fnv1a32 / dailySeed / dailyLevel / dailyRunStart
                             (every random draw a run makes behind one object: one
                             stream in single player, exposed as course.rng for the
                             pickup-time mystery draw and the smoke's forced rolls;
@@ -395,8 +421,16 @@ src/
                             server's own bracket refusal drops one), fetchTournamentBoard,
                             createTournamentQueue (flappyPoop.tournaments, capped;
                             drains joined per storage, outcomes for the podium).
-                            Writes go through the submit_score(), merge_players()
-                            and submit_tournament() SQL functions.
+                            Both queues sit on createPostQueue. Daily Dump:
+                            createDailyStore (flappyPoop.daily: this device's
+                            attempt, read back for the same day and player),
+                            createDailyQueue (flappyPoop.dailyQueue, one entry per
+                            player and day, outcome 'nameTaken' kept),
+                            submitDailyScore ('ok' / 'keep' / 'rejected' /
+                            'nameTaken'), fetchDailyBoard (rows with me and total).
+                            Writes go through the submit_score(), merge_players(),
+                            submit_tournament() and submit_daily_score() SQL
+                            functions.
                             Fully unit-tested with a fake fetch.
   share.js                  Game-over share, NO Phaser; navigator / document / URL
                             injected: shareMode ('share' when
@@ -513,6 +547,10 @@ src/
                             that fires on pointerup only when moved < 12 px; offset,
                             scrollBy, scrollTo and addScrolled for the focus ring.
                             Used by HowTo and About.
+    tabs.js                 createTabs(scene, box, { glyphs, index }): the
+                            leaderboard's 🏆 · 🌞 · 🏅 row (a track, a pill that
+                            slides behind the chosen glyph); nearestTab(x, xs) picks
+                            the tab under a tap. Purely visual, like createToggle.
     tournamentPanel.js      Plain DOM panel over the Versus join screen for a
                             tournament: lobby (count, Paste code / Guest / Use my
                             player rows, Start), bracket (results, next match, Play,
@@ -897,7 +935,15 @@ src/
                             loaded textures' source images, shareCardLayout(T),
                             the panel's headline / score line / counts / pipes and
                             shareCardFooter(); its toBlob PNG becomes
-                            this.shareFile (a File) and Share shows.
+                            this.shareFile (a File) and Share shows. A Daily Dump
+                            (data.daily: day, level, playerId, practice, sync, view)
+                            gets the date headline, its score as overHit's 'score'
+                            box (the board's 🌞 tab), the rank in the coin cell
+                            (loadDailyRank after daily.sync: the queue's outcome,
+                            else its row off daily_board; the card is drawn again
+                            with it), the countdown in the test note's slot, and
+                            dailyShareText; `view` (today's result from the popup)
+                            lets Home work while Play is on its ready screen.
                             pointerdown on Share marks it pressed (no home);
                             pointerup over it runs shareRun() → shareScoreImage
                             with shareText(). { test: true }: the gold
@@ -930,7 +976,7 @@ src/
                             Wrapped text uses useAdvancedWrap for CJK.
     HowTo.js                Overlay: flap rules plus pipe / fiber / probiotic /
                             postbiotic / bacteria / bean / mystery box (mystery-icon) /
-                            levels / controls / toilet / two players / tournament rows,
+                            levels / controls / toilet / two players / tournament / Daily Dump rows,
                             then one row per tray button left to right (ⓘ 🌐 💬 🏆 🔊 ⚙;
                             the 🔊 Sound row also carries the iPhone Silent-mode note)
                             (howToItems; the pipe icon is a cropped cap slice, the rows
@@ -951,6 +997,11 @@ src/
                             from About/HowTo). Buttons open GitHub issue forms via
                             issueUrl() + openExternalUrl(); closing leaves any
                             parent overlay open.
+    Daily.js                Overlay (the ready screen's 🌞; chromeIntent 'daily' from
+                            the ready screen only): what the Daily Dump is, today's
+                            level, one button by mode() (Create user / Play / See
+                            today's result / Practice), the countdown once played,
+                            the version line. refresh() redraws it after a save.
     (every overlay builds this.focus from pressable() items, ✕ first then its
                             rows, and calls focus.show(), which only shows under a
                             controller; About / HowTo / Changelog pass scrolled: sv and
@@ -965,13 +1016,18 @@ src/
                             header, footer, version fixed), own row highlighted
                             by rank, footer = join hint (no username) / rankText
                             (off the board) / "not on the board yet". A generation
-                            counter drops loads from a closed instance. A 🏆 ⟷ 🏅
-                            switch under the title (createToggle, the row a pressable
-                            zone; leaderboardLayout) restarts it on the 🏅 medal
-                            board (fetchTournamentBoard: rank · name · 🥇 🥈 🥉 · best
-                            race, the caller pink and appended below the top, footer
-                            medalYouText) without a second sync; registry
-                            'leaderboardTab' keeps the choice for the session.
+                            counter drops loads from a closed instance. The 🏆 · 🌞 · 🏅
+                            tabs under the title (createTabs, the row a pressable
+                            zone: a tap picks the nearest glyph, the pad's A the next
+                            tab; leaderboardLayout) restart it on another board without
+                            a second sync: 🌞 today's Daily Dump (fetchDailyBoard: the
+                            date and level in the header, rank · name · score, footer
+                            dailyYouText / posts when online / how to play) or the 🏅
+                            medal board (fetchTournamentBoard: rank · name · 🥇 🥈 🥉 ·
+                            best race, the caller pink and appended below the top,
+                            footer medalYouText); registry 'leaderboardTab' ('scores' |
+                            'daily' | 'medals') keeps the choice for the session (a
+                            daily result's score link sets 'daily').
 
 assets/                     Contract PNGs + README.md (the art contract).
   README.md                 File name, pixel size, orientation rules. tests enforce it.
@@ -1025,7 +1081,15 @@ db/schema.sql               Supabase schema: scores table (player_id = save-code
                             checks; medals derived; names from scores, else the
                             code's unless name_blocked → 'Player'); tournament_board
                             (gold, silver, bronze, best; `me`); fold_player folds
-                            medals and re-points matchups and receipts. Run by
+                            medals and re-points matchups and receipts. Daily Dump
+                            (🌞): daily_scores (one row per player and UTC day, no
+                            role reads it); fnv1a32 / daily_level (internal, = the
+                            client's dailyLevel); submit_daily_score (today or
+                            yesterday in UTC via `now() at time zone 'utc'`, the
+                            day's level, the name claim, the first post kept →
+                            'duplicate'); daily_board (a day's top, `me`, `total`);
+                            fold_player moves daily rows (the kept row wins a
+                            shared day). Run by
                             hand in the SQL editor, never by any integration; it is
                             the source of truth for the backend. Apply it BEFORE
                             pushing a client that depends on new functions.
@@ -1167,12 +1231,21 @@ tests/                      node --test (schema.test.js needs `npm install`: PGl
                             (name, id, cap, confirmed, rename, flag, id change);
                             submit store incl. throwing storage; submitTournament
                             (ok / keep / rejected), fetchTournamentBoard, the
-                            tournament queue (cap, order, joined drains)
+                            tournament queue (cap, order, joined drains);
+                            submitDailyScore's answer mapping, fetchDailyBoard
+  daily.test.js             Daily Dump: the UTC day key and countdown, FNV-1a
+                            vectors, seed / level stable and spread over 3–7,
+                            dailyRunStart, the per-pair reward stream, the daily
+                            store and queue, the result's date / rank / share words
   schema.test.js            db/schema.sql in PGlite, applied twice: anon reads no
                             tournament table; medals = placings() for 3–8 players;
                             300 legal brackets accepted, 16 forgeries rejected (no
                             receipt left); duplicate / 60 s pacing; guests; board
-                            order and `me`; names; merge_players folds medals
+                            order and `me`; names; merge_players folds medals;
+                            daily: the cap / level pins, client = server level over
+                            a year, today / yesterday only, first post kept, the
+                            name claim, the board (`me`, `total`), the day in UTC
+                            under other session time zones, the fold, anon access
   scenes.test.js            no scene method is named after a Phaser.Scene property
                             (add, load, input, time, render, …): such a method is
                             shadowed by the plugin and throws inside create(), which

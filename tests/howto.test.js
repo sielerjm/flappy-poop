@@ -52,7 +52,7 @@ test('HOW_TO_ITEMS names fiber, probiotic, and bacteria with their effects', () 
   const items = howToItems('en');
   assert.deepEqual(
     items.map((item) => item.key),
-    ['pipe', 'fiber', 'probiotic', 'postbiotic', 'bacteria', 'bean', 'coin', 'mystery-icon', 'levels', 'controls', 'toilet', 'twoPlayer', 'tournament', 'info', 'language', 'feedback', 'leaderboard', 'sound', 'settings'],
+    ['pipe', 'fiber', 'probiotic', 'postbiotic', 'bacteria', 'bean', 'coin', 'mystery-icon', 'levels', 'controls', 'toilet', 'twoPlayer', 'tournament', 'daily', 'info', 'language', 'feedback', 'leaderboard', 'sound', 'settings'],
   );
   const blob = items.map((item) => `${item.name} ${item.detail}`).join('\n');
   assert.match(blob, /This is a pipe/);
@@ -91,6 +91,10 @@ test('HOW_TO_ITEMS names fiber, probiotic, and bacteria with their effects', () 
   assert.match(tour.detail, /3 to 8/);
   assert.match(tour.detail, /🏅 Tournament/, 'names the join-screen button');
   assert.match(tour.detail, /🏅 board/, 'where the medals go');
+  const day = items.find((item) => item.key === 'daily');
+  assert.equal(day.name, 'Daily Dump');
+  assert.match(day.detail, /🌞/, 'names the button and the board');
+  assert.match(day.detail, /00:00 UTC/, 'when the course changes');
   const zh = howToItems('zh-Hans');
   assert.match(zh.map((i) => i.name).join(' '), /管道/);
   assert.match(zh.map((i) => i.name).join(' '), /纤维/);

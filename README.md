@@ -8,7 +8,7 @@ A Flappy Bird–style game for phone browsers: flap a poop through the gut, dodg
 
 **Play now → [sielerjm.github.io/flappy-poop](https://sielerjm.github.io/flappy-poop/)**
 
-Works best on your phone — add it to your home screen for a full-screen, app-like launch. On a desktop or landscape window the gut widens to fill the screen. English and Simplified Chinese in-game. Version **0.10.1 beta**.
+Works best on your phone — add it to your home screen for a full-screen, app-like launch. On a desktop or landscape window the gut widens to fill the screen. English and Simplified Chinese in-game. Version **0.11.0 beta**.
 
 Tip: on iPhone, turn **Silent mode off** to hear sound.
 
@@ -16,8 +16,8 @@ Tip: on iPhone, turn **Silent mode off** to hear sound.
 | --- | --- |
 | [👆 How to play](#how-to-play) | [🥦 Pickups & power-ups](#pickups--power-ups) |
 | [🏁 Levels & shop](#levels--shop) | [🎮 Controls](#controls) |
-| [👥 Two players](#two-players) | [🏆 Save codes & leaderboard](#save-codes--leaderboard) |
-| [🛠️ For developers](#for-developers) | |
+| [👥 Two players](#two-players) | [🌞 Daily Dump](#daily-dump) |
+| [🏆 Save codes & leaderboard](#save-codes--leaderboard) | [🛠️ For developers](#for-developers) |
 
 ![Finish line](docs/finish-divider.svg)
 
@@ -122,7 +122,7 @@ A bean draw with a full bag, or a skip once the finish line is already out, beco
 
 ### Ready screen
 
-Top to bottom: title, bobbing poop (“TAP TO FLAP!”), **toilet toggle**, and your **user button**: `Load user` until you set a name, then `name · best`; it opens Save / Load. The **?** opens How to play.
+Along the top: the **🌞** (the [Daily Dump](#daily-dump)) and the **?** (How to play). Then, top to bottom: title, bobbing poop (“TAP TO FLAP!”), **toilet toggle**, and your **user button**: `Load user` until you set a name, then `name · best`; it opens Save / Load.
 
 ### During a run
 
@@ -189,9 +189,23 @@ On a window wide and tall enough for two phone-width halves (desktop or tablet l
 3. **Play** each match: the two named players claim their halves as usual. Tournament races are shorter (levels of 10 / 25 / 35 / 35 / 35 / 35 / 50 pairs). Ties go to fewer crashes, then more finish lines crossed first, then whoever crossed the last line first.
 4. **Continue** after each race back to the bracket; the Final ends on a 🥇 🥈 🥉 podium. **Abandon** (two taps) stops early.
 
-**Medals.** When the Final is decided, everyone who joined with their user code (and you, with **Use my player**) gets their medals on the **🏅 medal board**: tap 🏆, then flip the 🏆 ⟷ 🏅 switch under the title. Players rank by 🥇, then 🥈, 🥉 and their best race. Offline, the podium keeps the medals on this device and posts them next time the board can be reached. Guests and abandoned tournaments are never saved.
+**Medals.** When the Final is decided, everyone who joined with their user code (and you, with **Use my player**) gets their medals on the **🏅 medal board**: tap 🏆, then the 🏅 tab under the title. Players rank by 🥇, then 🥈, 🥉 and their best race. Offline, the podium keeps the medals on this device and posts them next time the board can be reached. Guests and abandoned tournaments are never saved.
 
 A pasted code shares that player's secret save id with the host device for the tournament (it is never stored); paste codes only from people you're playing with. The server checks every bracket it receives, but a host holding everyone's codes could still report races that never happened: the medal board is for friends, not prizes.
+
+![Finish line](docs/finish-divider.svg)
+
+## 🌞 Daily Dump
+
+One try a day, the same course for everyone, Wordle style. Tap the **🌞** at the top of the home screen (it glows until you have played today):
+
+- **Create user** first if you have no username: your score goes on the board under it. Then **Play**.
+- The course comes from the date (UTC), so everyone flies the same pipes and pickups; a box gives everyone the same thing too. It runs at one level all day (3–7, shown in the popup) and **never ends**: no finish lines, no breaks, no kernels or shop. Go as far as you can.
+- One crash and the day is done. Quitting or reloading mid-run counts as your try (the score so far is kept).
+- The result shows your rank for the day (tap your score for the **🌞 board**), a countdown to the next course and **Share**. A new course starts every day at **00:00 UTC** (01:00 in Geneva, late afternoon in the US).
+- Daily scores have their own board and never touch the 🏆 Top 25. Offline, the score posts the next time the board can be reached.
+
+The 🌞 board, like the others, is for friends, not prizes: the course comes from your device's clock (someone could set it ahead and practise tomorrow's), scores are reported by the game, and the server keeps only the first score it gets from you each day. If you ran a fart, the pair right after it opens mid-height for you, so two players' courses can differ by a pipe or two.
 
 ![Finish line](docs/finish-divider.svg)
 
@@ -209,7 +223,7 @@ A username belongs to one player on the board: if a name is taken, paste your co
 
 ### Leaderboard
 
-The 🏆 tray button (or **T**) shows a shared **Top 25**. You need a username to appear. Toilet runs keep their 🚽. Offline, the board says it can’t be reached and posts your best next time it can. The 🏆 ⟷ 🏅 switch under the title shows the **🏅 medal board** from tournaments instead.
+The 🏆 tray button (or **T**) shows a shared **Top 25**. You need a username to appear. Toilet runs keep their 🚽. Offline, the board says it can’t be reached and posts your best next time it can. The tabs under the title switch to the **🌞 Daily Dump** board for today and the **🏅 medal board** from tournaments.
 
 ![Finish line](docs/finish-divider.svg)
 
@@ -243,11 +257,11 @@ Fork or push this repo to GitHub, enable Pages (Settings → Pages → Deploy fr
 
 ### Leaderboard (self-host)
 
-The board is a free-tier [Supabase](https://supabase.com) project. The browser talks to the REST API with the public URL and publishable key in `LEADERBOARD` in [`src/config.js`](src/config.js). Safety comes from [`db/schema.sql`](db/schema.sql): the key can read name / score / toilet / level / time (not ids) and write only through `submit_score()` and `merge_players()`.
+The board is a free-tier [Supabase](https://supabase.com) project. The browser talks to the REST API with the public URL and publishable key in `LEADERBOARD` in [`src/config.js`](src/config.js). Safety comes from [`db/schema.sql`](db/schema.sql): the key can read name / score / toilet / level / time (not ids) and write only through its functions (`submit_score()`, `merge_players()`, `submit_tournament()`, `submit_daily_score()`); the 🏅 and 🌞 boards are read through `tournament_board()` and `daily_board()`, which never return ids.
 
 To run your own: create a free Supabase project, run `db/schema.sql` in the SQL editor, then put the Data API URL and publishable key into `LEADERBOARD`. Leave either blank to turn the feature off.
 
-What leaves the phone: username, best scores with level, and the random id inside your save code. The save code itself never leaves the device.
+What leaves the phone: username, best scores with level, Daily Dump scores (day, level, pipes), finished tournaments' results, and the random id inside your save code. The save code itself never leaves the device.
 
 ### Credits & lineage
 

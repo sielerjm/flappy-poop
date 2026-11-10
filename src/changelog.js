@@ -8,6 +8,22 @@ import { LOCALES } from './i18n.js';
 
 export const CHANGELOG = [
   {
+    version: '0.11.0',
+    date: '10 Nov 2026',
+    notes: {
+      en: [
+        "Daily Dump 🌞: tap the sun at the top of the home screen. Once a day everyone flies the same endless course at one level, with one try. No kernels, no shop: go as far as you can.",
+        'Your result shows your rank for the day, a countdown to the next course (00:00 UTC) and Share. Tap your score for the new 🌞 board.',
+        'The leaderboard now has three tabs: 🏆 Top 25, 🌞 today\'s Daily Dump and 🏅 medals. How to play has a Daily Dump row.',
+      ],
+      'zh-Hans': [
+        '每日一拉 🌞：点首页顶部的太阳。每天所有人飞同一条无尽赛道，按当天的关卡，只有一次机会。没有玉米粒，也没有商店：能飞多远就飞多远。',
+        '成绩页会显示你今天的排名、到下一条赛道（UTC 00:00）的倒计时，还能分享。点你的分数即可查看新的🌞榜。',
+        '排行榜现在有三个标签页：🏆 前25名、🌞 今天的每日一拉、🏅 奖牌榜。玩法说明新增每日一拉一行。',
+      ],
+    },
+  },
+  {
     version: '0.10.1',
     date: '10 Nov 2026',
     notes: {

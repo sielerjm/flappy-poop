@@ -14,6 +14,7 @@ const EMOJI_ROWS = {
   controls: '🎮',
   twoPlayer: '👥',
   tournament: '🏅',
+  daily: '🌞',
   info: 'ℹ️',
   language: '🌐',
   feedback: '💬',

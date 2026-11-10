@@ -90,6 +90,8 @@ Inspired by Flappy Bird`,
     itemTwoPlayerDetail: 'On a wide screen, flip the 👥 switch under the toilet one and race a friend side by side on the same course. A crash costs points, not the match; first over each finish line gets +25, and the higher score wins.',
     itemTournamentName: 'Tournament',
     itemTournamentDetail: '3 to 8 players race two at a time in a knockout bracket: tap 🏅 Tournament on the two-player screen. The top three win 🥇 🥈 🥉, and players who joined with their user code keep their medals on the 🏅 board.',
+    itemDailyName: 'Daily Dump',
+    itemDailyDetail: "Tap the 🌞 at the top of the home screen: one try a day on a course everyone shares, endless at the day's level, with no kernels. Your score goes on the 🌞 board; a new course every day at 00:00 UTC.",
     itemInfoName: 'About',
     itemInfoDetail: "The i button opens About: the credits, this guide and What's new (the update notes). Key: I.",
     itemLanguageName: 'Language',
@@ -323,6 +325,8 @@ Inspired by Flappy Bird`,
     itemTwoPlayerDetail: '在宽屏上，打开马桶开关下方的👥开关，和朋友在同一条赛道上并排比赛。撞到只会扣分，不会输掉比赛；率先冲过每条终点线得25分，最后分高者胜。',
     itemTournamentName: '锦标赛',
     itemTournamentDetail: '3到8名玩家两两比赛，淘汰制：在双人模式页面点“🏅锦标赛”。前三名获得🥇🥈🥉，用用户码加入的玩家奖牌会记到🏅榜上。',
+    itemDailyName: '每日一拉',
+    itemDailyDetail: '点首页顶部的🌞：每天一次机会，所有人飞同一条赛道，按当天的关卡一直飞下去，没有玉米粒。分数记到🌞榜上；每天UTC 00:00换新赛道。',
     itemInfoName: '关于',
     itemInfoDetail: 'i按钮打开“关于”：制作名单、本玩法说明和更新说明。按键：I。',
     itemLanguageName: '语言',
@@ -497,7 +501,7 @@ export function t(locale, key) {
   return STRINGS[DEFAULT_LOCALE][key] ?? key;
 }
 
-/** How to play rows for a locale: pipe first, the pickups, levels, controls, toilet, two players, tournament, then the tray buttons left to right (ⓘ 🌐 💬 🏆 🔊 ⚙). key matches a Boot texture name or an emoji row in HowTo. */
+/** How to play rows for a locale: pipe first, the pickups, levels, controls, toilet, two players, tournament, the Daily Dump, then the tray buttons left to right (ⓘ 🌐 💬 🏆 🔊 ⚙). key matches a Boot texture name or an emoji row in HowTo. */
 export function howToItems(locale) {
   return [
     { key: 'pipe', name: t(locale, 'itemPipeName'), detail: t(locale, 'itemPipeDetail') },
@@ -513,6 +517,7 @@ export function howToItems(locale) {
     { key: 'toilet', name: t(locale, 'itemToiletName'), detail: t(locale, 'itemToiletDetail') },
     { key: 'twoPlayer', name: t(locale, 'itemTwoPlayerName'), detail: t(locale, 'itemTwoPlayerDetail') },
     { key: 'tournament', name: t(locale, 'itemTournamentName'), detail: t(locale, 'itemTournamentDetail') },
+    { key: 'daily', name: t(locale, 'itemDailyName'), detail: t(locale, 'itemDailyDetail') },
     { key: 'info', name: t(locale, 'itemInfoName'), detail: t(locale, 'itemInfoDetail') },
     { key: 'language', name: t(locale, 'itemLanguageName'), detail: t(locale, 'itemLanguageDetail') },
     { key: 'feedback', name: t(locale, 'itemFeedbackName'), detail: t(locale, 'itemFeedbackDetail') },

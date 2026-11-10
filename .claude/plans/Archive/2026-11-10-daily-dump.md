@@ -1,6 +1,6 @@
 # Plan: Daily Dump mode (audited revision of `daily_dump_mode_f097792f.plan.md`)
 - Created: 2026-11-10 (an audit of Michael's draft against the code)
-- Status: in progress (step 8; db/schema.sql applied by Michael 10 Nov)
+- Status: complete (10 Nov 2026; db/schema.sql applied by Michael and probed read-only)
 - Baseline: `2690200` on `main` (pushed; tree clean).
 - Whole-suite verification: `npm test` (449 pass), `npm run smoke` (337, full).
 - On approval, this revision replaces the draft at `.claude/plans/daily_dump_mode_f097792f.plan.md`. Repo copy: `.claude/plans/2026-11-10-daily-dump.md` (`git add -f`, only that file).
@@ -263,7 +263,7 @@ Each step is verified, then committed. The full suite runs at every step.
 - **Commit:** `feat(daily, step 7/8): a 🌞 daily tab on the leaderboard`
 - **Result:** npm test 473/473; full smoke 357/357 (overlays 12: real clicks on 🏅 and 🌞, the pad's A cycling and wrapping; daily: the score link lands on the "DAILY DUMP" board). The 🌞 board drops the 🚽 / LV columns (every row is the day's level, shown in the header with the date). Live schema probed read-only after Michael applied it: board `[]`, bad submits 400, table and helpers denied. Screenshots en + zh with fake rows.
 
-### Step 8/8: How to play, docs and 0.11.0  [pending]
+### Step 8/8: How to play, docs and 0.11.0  [done]
 - **Change:**
   - the How to play row and its tests;
   - AGENTS (rules, file map, schema section, the "new overlay / new mode" notes);
@@ -272,6 +272,7 @@ Each step is verified, then committed. The full suite runs at every step.
   - archive this plan and the draft.
 - **Verify:** full suite; a grep for stale "🏆 ⟷ 🏅" wording.
 - **Commit:** `docs(daily, step 8/8): Daily Dump in How to play, AGENTS and README; 0.11.0`
+- **Result:** the How to play 🌞 row (after 🏅 Tournament); README Daily Dump section, contents link, ready screen, tabs, self-host access line and what leaves the phone; AGENTS overview paragraph and file map; TRANSLATION_NOTES glossary; VERSION 0.11.0 with a What's new entry (en + zh). No stale "🏆 ⟷ 🏅" wording left outside the 0.10.0 history note.
 - **Push:** on Michael's word, after the schema is live.
 
 ## Risks and notes
