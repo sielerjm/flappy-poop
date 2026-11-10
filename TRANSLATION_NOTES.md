@@ -30,8 +30,8 @@ Test mode (测试模式): a developer sandbox turned on by typing a trigger word
 Settings rows (start level as "Start at LV n", Invincible ON/OFF, power-up buttons, Exit) and its
 messages are terse developer copy; test runs never save a score.
 Game over has a Share button: the share sheet gets a picture card (GAME OVER, the poop, score,
-pickup counts, and shareCardPlay's "Play: <link>" footer) plus shareText ({score} may carry a 🚽,
-{level} is the short level label, {url} the game's link; keep every placeholder).
+pickup counts, and shareCardPlay's "Play: <link>" footer); the message under it is only the game's
+link (nothing to translate).
 Author / designer / artist: Michael Sieler. Side project, short playful copy — not
 formal medical language.
 
@@ -220,7 +220,6 @@ Short, playful, clear. Fit a 720×1280 logical field; How to play / About body w
 | saveMerged | Welcome back, {name} — this device is now part of your player | 欢迎回来，{name}——这台设备现已并入你的玩家账号 |
 | shareButton | Share | 分享 |
 | shareCardPlay | Play: {url} | 来玩：{url} |
-| shareText | I scored {score} on Flappy Poop ({level})! {url} | 我在 Flappy Poop 拿到了 {score} 分（{level}）！{url} |
 | testRunNotSaved | Test run — score not saved | 测试局——分数未保存 |
 | playAgain | Play again | 再玩一次 |
 | newPersonalBest | 🎉 New personal best! | 🎉 新的个人最佳！ |
@@ -313,8 +312,6 @@ The top three take the podium 🥇 🥈 🥉. Players who joined with their user
 | dailyRankNameTaken | Name taken | 名字已被占用 |
 | dailyRankRejected | Not saved | 未保存 |
 | dailyRankUnavailable | Rank unavailable | 暂无排名 |
-| dailyShareText | 🌞 I scored {score} in the Flappy Poop Daily Dump ({day}){rank}! {url} | 🌞 我在 Flappy Poop 每日一拉（{day}）拿到了 {score} 分{rank}！{url} |
-| dailyShareRank | , #{rank} of {total} | ，第{rank}名 / 共{total}人 |
 | dailyBoardTitle | DAILY DUMP | 每日一拉 |
 | dailyBoardEmpty | No one has played today's Daily Dump yet | 今天还没有人玩每日一拉 |
 | dailyBoardJoin | Play today's Daily Dump from the 🌞 on the home screen | 在首页点🌞玩今天的每日一拉 |

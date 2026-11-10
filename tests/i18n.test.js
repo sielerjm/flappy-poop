@@ -16,7 +16,6 @@ import {
   pauseBannerText,
   metaFontSize,
   rankText,
-  shareText,
   shareCardFooter,
   profileButtonText,
 } from '../src/i18n.js';
@@ -170,14 +169,10 @@ test('profileButtonText reads Load user until a username is set, then name · be
   assert.equal(profileButtonText('zh-Hans', { name: 'Alice', top: [{ score: 41, toilet: true }] }), 'Alice · 🚽 41');
 });
 
-test('shareText fills score (with 🚽 on toilet runs), level label and link in both locales', () => {
-  const url = 'https://sielerjm.github.io/flappy-poop/';
-  assert.equal(shareText('en', { score: 146, level: 4, url }), `I scored 146 on Flappy Poop (LV 4)! ${url}`);
-  assert.equal(shareText('en', { score: 41, toilet: true, level: 2, url }), `I scored 🚽 41 on Flappy Poop (LV 2)! ${url}`);
-  const zh = shareText('zh-Hans', { score: 146, level: 4, url });
-  assert.ok(zh.includes('146') && zh.includes('第4关') && zh.endsWith(url) && zh.includes('Flappy Poop'), zh);
-  for (const locale of LOCALES) assert.doesNotMatch(shareText(locale, { score: 1, level: 1, url }), /\{\w+\}/, `${locale} leaves no placeholder`);
-  for (const locale of LOCALES) assert.equal(t(locale, 'newTopHint'), 'newTopHint', `${locale}: the game-over save hint is gone`);
+test('the share message has no strings of its own (it is only the link), and the old save hint is gone', () => {
+  for (const locale of LOCALES) {
+    for (const key of ['shareText', 'dailyShareText', 'dailyShareRank', 'newTopHint']) assert.equal(t(locale, key), key, `${locale}: no ${key}`);
+  }
 });
 
 test('shareCardFooter shows the bare link after Play: in both locales', () => {

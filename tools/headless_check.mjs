@@ -1131,7 +1131,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await tapAt(sh.x, sh.y);
         const sent = await evaluate(`JSON.stringify({ shared: window.__shared, downloads: window.__downloads, over: __flappy.scene.isActive('Over'), state: ${play}.state })`).then(JSON.parse);
         const msg = sent.shared[0];
-        ok(sent.over && sent.state === 'dead' && sent.shared.length === 1 && msg.n === 1 && msg.type === 'image/png' && msg.title === 'Flappy Poop' && msg.text.includes(String(score)) && msg.text.includes('https://sielerjm.github.io/flappy-poop/') && sent.downloads.length === 0, `a tap on Share opens the share sheet with the PNG and "${msg?.text}", and stays on the panel`);
+        ok(sent.over && sent.state === 'dead' && sent.shared.length === 1 && msg.n === 1 && msg.type === 'image/png' && msg.title === 'Flappy Poop' && msg.text === 'https://sielerjm.github.io/flappy-poop/' && sent.downloads.length === 0, `a tap on Share opens the share sheet with the PNG and "${msg?.text}", and stays on the panel`);
         await evaluate(`window.__shareReject = true, true`);
         const ex0 = exceptions.length;
         await tapAt(sh.x, sh.y);
@@ -2776,9 +2776,9 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await evaluate(`(() => { globalThis.__fetch2 = globalThis.fetch; globalThis.fetch = async (url) => String(url).endsWith('/rpc/daily_board') ? new Response(JSON.stringify([{ rank: 1, name: 'Top', score: 300, level: ${want.level}, pipes: 200, me: false, total: 9 }, { rank: 4, name: 'DailySmoke', score: 23, level: ${want.level}, pipes: 20, me: true, total: 9 }]), { status: 200 }) : new Response('{"message":"stub"}', { status: 503 }); return import('./src/config.js').then((m) => { m.LEADERBOARD.dataApi = 'https://stub.invalid/rest/v1'; return true; }); })()`);
         await evaluate(`(${P}.scene.launch('Over', { score: 23, pipes: 20, level: ${want.level}, collected: {}, daily: { day: '${DAY}', level: ${want.level}, playerId: ${P}.save.id, practice: false, sync: Promise.resolve(), view: true } }), true)`);
         await waitFor(`__flappy.scene.getScene('Over')?.dailyRank != null`, 40);
-        const ranked = await evaluate(`import('./src/i18n.js').then((m) => JSON.stringify({ rank: ${O}.rankText?.text, share: m.dailyShareText('en', { day: '${DAY}', score: 23, ...${O}.dailyRank, url: 'u' }) }))`).then(JSON.parse);
+        const ranked = await evaluate(`JSON.stringify({ rank: ${O}.rankText?.text })`).then(JSON.parse);
         await evaluate(`(globalThis.fetch = globalThis.__fetch2, __flappy.scene.stop('Over'), import('./src/config.js').then((m) => { m.LEADERBOARD.dataApi = ''; return true; }))`);
-        ok(ranked.rank === '\u{1F3C6} #4 of 9' && /, #4 of 9!/.test(ranked.share), `online, the result reads its rank off the board ("${ranked.rank}") and the share text carries it`);
+        ok(ranked.rank === '\u{1F3C6} #4 of 9', `online, the result reads its rank off the board ("${ranked.rank}")`);
         const days = sent.posts.map((b) => b.p_day).sort();
         ok(days.join() === [DAY2, DAY].join() && sent.posts.every((b) => b.p_name === 'DailySmoke' && b.p_level === (b.p_day === DAY ? want.level : b.p_level)) && sent.q === 0 && sent.out === 'sent', `online, one sync posts both days once (${days.join(', ')}) under the current name; the queue empties (${sent.q}, ${sent.out})`);
 

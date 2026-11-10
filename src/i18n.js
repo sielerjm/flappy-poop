@@ -154,7 +154,6 @@ Inspired by Flappy Bird`,
     saveErrorUnrecognised: 'Unrecognised save code',
     shareButton: 'Share',
     shareCardPlay: 'Play: {url}',
-    shareText: 'I scored {score} on Flappy Poop ({level})! {url}',
     testRunNotSaved: 'Test run — score not saved',
     playAgain: 'Play again',
     newPersonalBest: '🎉 New personal best!',
@@ -238,8 +237,6 @@ Inspired by Flappy Bird`,
     dailyRankNameTaken: 'Name taken',
     dailyRankRejected: 'Not saved',
     dailyRankUnavailable: 'Rank unavailable',
-    dailyShareText: '🌞 I scored {score} in the Flappy Poop Daily Dump ({day}){rank}! {url}',
-    dailyShareRank: ', #{rank} of {total}',
     dailyBoardTitle: 'DAILY DUMP',
     dailyBoardEmpty: "No one has played today's Daily Dump yet",
     dailyBoardJoin: "Play today's Daily Dump from the 🌞 on the home screen",
@@ -396,7 +393,6 @@ Inspired by Flappy Bird`,
     saveErrorUnrecognised: '无法识别的存档码',
     shareButton: '分享',
     shareCardPlay: '来玩：{url}',
-    shareText: '我在 Flappy Poop 拿到了 {score} 分（{level}）！{url}',
     testRunNotSaved: '测试局——分数未保存',
     playAgain: '再玩一次',
     newPersonalBest: '🎉 新的个人最佳！',
@@ -480,8 +476,6 @@ Inspired by Flappy Bird`,
     dailyRankNameTaken: '名字已被占用',
     dailyRankRejected: '未保存',
     dailyRankUnavailable: '暂无排名',
-    dailyShareText: '🌞 我在 Flappy Poop 每日一拉（{day}）拿到了 {score} 分{rank}！{url}',
-    dailyShareRank: '，第{rank}名 / 共{total}人',
     dailyBoardTitle: '每日一拉',
     dailyBoardEmpty: '今天还没有人玩每日一拉',
     dailyBoardJoin: '在首页点🌞玩今天的每日一拉',
@@ -598,18 +592,6 @@ export function welcomeText(locale, state) {
   return t(locale, 'saveWelcome').replace('{name}', name).replace('{scores}', top.map(formatScore).join(' · '));
 }
 
-/**
- * The message shared with the game-over image: the score (with the 🚽 when
- * toilet mode was on), the level label, and the game's link.
- */
-export function shareText(locale, { score = 0, toilet = false, level = 1, url = '' } = {}) {
-  return t(locale, 'shareText')
-    .replace('{score}', formatScore({ score: Number.isInteger(score) ? score : 0, toilet: Boolean(toilet) }))
-    .replace('{level}', levelLabel(locale, level))
-    .replace('{url}', url)
-    .trim();
-}
-
 /** A Daily Dump day ('YYYY-MM-DD') as the locale writes a short date: "10 Nov", "11月10日" (the day itself if Intl cannot). */
 export function dailyDayText(locale, day) {
   const ms = Date.parse(`${day}T00:00:00Z`);
@@ -626,20 +608,9 @@ export function dailyYouText(locale, { rank, total, score }) {
   return t(locale, 'dailyBoardYou').replace('{rank}', String(rank)).replace('{total}', String(total)).replace('{score}', String(score));
 }
 
-/** The rank on a Daily Dump result: "🏆 #3 of 12" (the share text words it without the 🏆: dailyShareRank). */
+/** The rank on a Daily Dump result: "🏆 #3 of 12". */
 export function dailyRankText(locale, { rank, total }) {
   return t(locale, 'dailyRank').replace('{rank}', String(rank)).replace('{total}', String(total));
-}
-
-/** The message shared with a Daily Dump result: the day, the score and (once known) the rank, and the link. */
-export function dailyShareText(locale, { day, score = 0, rank = null, total = null, url = '' } = {}) {
-  const place = Number.isInteger(rank) && Number.isInteger(total) ? t(locale, 'dailyShareRank').replace('{rank}', String(rank)).replace('{total}', String(total)) : '';
-  return t(locale, 'dailyShareText')
-    .replace('{day}', dailyDayText(locale, day))
-    .replace('{score}', String(Number.isInteger(score) ? score : 0))
-    .replace('{rank}', place)
-    .replace('{url}', url)
-    .trim();
 }
 
 /** The share card's footer: "Play: sielerjm.github.io/flappy-poop" (the link without https:// or a trailing slash). */

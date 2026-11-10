@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { TUNING as T, LEADERBOARD } from '../src/config.js';
 import { utcDayKey, msUntilUtcMidnight, countdownText, fnv1a32, dailySeed, dailyLevel, dailyRunStart, testRunStart, levelEnd, createCourse, createRng } from '../src/logic.js';
 import { createDailyStore, createDailyQueue, dailyEntryId } from '../src/leaderboard.js';
-import { dailyDayText, dailyRankText, dailyShareText } from '../src/i18n.js';
+import { dailyDayText, dailyRankText } from '../src/i18n.js';
 
 const memory = () => {
   const data = new Map();
@@ -153,16 +153,11 @@ test('the daily queue: one entry per player and day, capped, posted in order, na
   assert.equal(q.outcome(dailyEntryId(e('2026-11-11'))), 'queued');
 });
 
-test('the result panel words: the day as each locale writes it, the rank, and the share message', () => {
+test('the result panel words: the day as each locale writes it, and the rank', () => {
   assert.equal(dailyDayText('en', '2026-11-10'), '10 Nov');
   assert.equal(dailyDayText('zh-Hans', '2026-11-10'), '11月10日');
   assert.equal(dailyDayText('en', '2026-01-01'), '1 Jan', 'UTC, not the local zone');
   assert.equal(dailyDayText('en', 'garbage'), 'garbage');
   assert.equal(dailyRankText('en', { rank: 3, total: 12 }), '🏆 #3 of 12');
   assert.equal(dailyRankText('zh-Hans', { rank: 3, total: 12 }), '🏆 第3名 / 共12人');
-  assert.ok(!dailyShareText('en', { day: '2026-11-10', score: 1, rank: 3, total: 12, url: '' }).includes('🏆'), 'the share text words the rank without the 🏆');
-  const url = 'https://example.test/';
-  assert.equal(dailyShareText('en', { day: '2026-11-10', score: 87, rank: 3, total: 12, url }), '🌞 I scored 87 in the Flappy Poop Daily Dump (10 Nov), #3 of 12! https://example.test/');
-  assert.equal(dailyShareText('en', { day: '2026-11-10', score: 87, url }), '🌞 I scored 87 in the Flappy Poop Daily Dump (10 Nov)! https://example.test/', 'no rank yet: no rank words');
-  assert.match(dailyShareText('zh-Hans', { day: '2026-11-10', score: 87, rank: 3, total: 12, url }), /11月10日.*87.*第3名/);
 });

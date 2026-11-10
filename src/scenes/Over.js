@@ -1,6 +1,6 @@
 import { GAME_HEIGHT, FIELD, TUNING as T, SHARE, LEVEL_COLORS } from '../config.js';
 import { canRestart, chromeIntent, trayLayout, trayHit, overButtonsLayout, overHit, shareCardLayout, levelColor, uiColumn, msUntilUtcMidnight, countdownText, fitScale } from '../logic.js';
-import { t, levelLabel, shareText, shareCardFooter, dailyDayText, dailyRankText, dailyShareText } from '../i18n.js';
+import { t, levelLabel, shareCardFooter, dailyDayText, dailyRankText } from '../i18n.js';
 import { fetchDailyBoard, dailyEntryId } from '../leaderboard.js';
 import { shareMode, shareScoreImage } from '../share.js';
 import { renderShareCard } from '../ui/shareCard.js';
@@ -34,7 +34,7 @@ export class Over extends Phaser.Scene {
     this.openedAt = this.game.loop.time;
     const play = this.scene.get('Play');
     const locale = play?.getLocale?.() ?? 'en';
-    this.shareInfo = { locale, score, toilet, level }; // the message shareRun() sends with the image
+    this.shareInfo = { locale }; // the panel's locale (the rank line reads it)
     this.dailyRank = null; // { rank, total } once the 🌞 board answers
 
     const W = this.scale.width; // the live field: the panel stays centred, the tray in the chrome column
@@ -308,12 +308,12 @@ export class Over extends Phaser.Scene {
       });
   }
 
-  /** Send the share card with the score message (share sheet, else download). Call it inside the tap. */
+  /**
+   * Send the share card (share sheet, else download) with the game's link as the only message: the
+   * card already shows the score, the level and (on a Daily Dump) the rank. Call it inside the tap.
+   */
   shareRun() {
     if (!this.shareFile) return Promise.resolve('failed');
-    const text = this.daily
-      ? dailyShareText(this.shareInfo.locale, { day: this.daily.day, score: this.shareInfo.score, ...(this.dailyRank ?? {}), url: SHARE.url })
-      : shareText(this.shareInfo.locale, { ...this.shareInfo, url: SHARE.url });
-    return shareScoreImage({ file: this.shareFile, title: SHARE.title, text });
+    return shareScoreImage({ file: this.shareFile, title: SHARE.title, text: SHARE.url });
   }
 }
