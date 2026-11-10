@@ -427,31 +427,45 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         ok(opened && closed && f1 > f0 && exceptions.length === before, `overlay ${key}: opens, loop advances (${f0}→${f1}), closes, no exception`);
         if (key === 'HowTo') await sleep(200);
       }
-      // The 🏆 ⟷ 🏅 switch (board muzzled: both boards read offline). A tap flips to the medal board and
-      // the choice survives a reopen; A on the switch under the pad flips back, the ring stays on it.
+      // The 🏆 · 🌞 · 🏅 tabs (board muzzled: every board reads offline). A real click on 🏅 shows the medal
+      // board and the choice survives a reopen; a click on 🌞 shows today's Daily Dump; under the pad, A
+      // moves to the next tab (🌞 → 🏅 → 🏆, wrapping), the ring staying on the tabs.
       await evaluate(`import('./src/config.js').then((m) => { globalThis.__api = m.LEADERBOARD.dataApi; m.LEADERBOARD.dataApi = ''; return true; })`);
       const LB = `__flappy.scene.getScene('Leaderboard')`;
       const lbState = () => evaluate(`JSON.stringify({ active: __flappy.scene.isActive('Leaderboard'), title: ${LB}.title?.text, tab: __flappy.registry.get('leaderboardTab') ?? null, status: ${LB}.status?.visible ? ${LB}.status.text : null, ring: ${LB}.focus?.shown ? ${LB}.focus.items[${LB}.focus.index]?.id : null })`).then(JSON.parse);
       const ttx = (key) => evaluate(`import('./src/i18n.js').then((m) => m.t('en', '${key}'))`);
+      const clickTab = async (i) => {
+        const at = await evaluate(`JSON.stringify({ x: ${LB}.L.tab.xs[${i}], y: ${LB}.L.tab.y })`).then(JSON.parse);
+        await tapAt(at.x, at.y);
+        await sleep(900);
+      };
+      const padA = async () => {
+        await evaluate(`(${LB}.focus.setIndex(${LB}.focus.indexOf('tab')), ${LB}.focus.activate(), true)`);
+        await sleep(900);
+        await evaluate(`${LB}.focus.show(), true`);
+        return lbState();
+      };
       await chrome('leaderboard');
       await sleep(600);
       const tab0 = await lbState();
-      await evaluate(`${LB}.tabZone.emit('pointerdown'), true`);
-      await sleep(900);
+      await clickTab(2);
       const tab1 = await lbState();
       await closeTop('Leaderboard');
       await sleep(300);
       await chrome('leaderboard');
       await sleep(600);
       const tab2 = await lbState();
-      ok(tab0.title === (await ttx('leaderboardTitle')) && tab1.title === (await ttx('medalBoardTitle')) && tab1.tab === 'medals' && tab1.status === (await ttx('leaderboardOffline')) && tab2.title === tab1.title, `the switch flips "${tab0.title}" to "${tab1.title}" (offline: "${tab1.status}"), and the board reopens on it`);
-      await evaluate(`(__flappy.registry.set('padMode', true), ${LB}.focus.show(), ${LB}.focus.setIndex(${LB}.focus.indexOf('tab')), ${LB}.focus.activate(), true)`);
-      await sleep(900);
-      const tab3 = await lbState();
+      ok(tab0.title === (await ttx('leaderboardTitle')) && tab1.title === (await ttx('medalBoardTitle')) && tab1.tab === 'medals' && tab1.status === (await ttx('leaderboardOffline')) && tab2.title === tab1.title, `a click on 🏅 turns "${tab0.title}" into "${tab1.title}" (offline: "${tab1.status}"), and the board reopens on it`);
+      await clickTab(1);
+      const tabD = await lbState();
+      ok(tabD.title === (await ttx('dailyBoardTitle')) && tabD.tab === 'daily' && tabD.status === (await ttx('leaderboardOffline')), `a click on 🌞 shows "${tabD.title}" (offline: "${tabD.status}")`);
+      await evaluate(`(__flappy.registry.set('padMode', true), ${LB}.focus.show(), true)`);
+      const tabP1 = await padA();
+      const tabP2 = await padA();
       await closeTop('Leaderboard');
       await sleep(300);
       await evaluate(`(__flappy.registry.set('padMode', false), __flappy.registry.set('leaderboardTab', 'scores'), import('./src/config.js').then((m) => { m.LEADERBOARD.dataApi = globalThis.__api; return true; }))`);
-      ok(tab3.title === (await ttx('leaderboardTitle')) && tab3.tab === 'scores' && tab3.ring === 'tab' && !(await active('Leaderboard')), `under the pad, A on the switch flips back to "${tab3.title}" with the ring still on it`);
+      ok(tabP1.tab === 'medals' && tabP2.tab === 'scores' && tabP2.title === (await ttx('leaderboardTitle')) && tabP1.ring === 'tab' && tabP2.ring === 'tab' && !(await active('Leaderboard')), `under the pad, A moves 🌞 → ${tabP1.tab} → ${tabP2.tab} with the ring still on the tabs`);
 
       // Every overlay's version line opens What's new over it (a real click; HowTo and About scroll to
       // it first), and one real Esc closes only What's new. Board muzzled so the Leaderboard settles at once.
@@ -2603,10 +2617,11 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         const cd1 = await evaluate(`${O}.countdown?.text ?? null`);
         await tapAt(ov0.score.x, ov0.score.y);
         await waitFor(`__flappy.scene.isActive('Leaderboard')`, 30);
-        const board = await evaluate(`JSON.stringify({ open: __flappy.scene.isActive('Leaderboard'), tab: __flappy.registry.get('leaderboardTab'), over: __flappy.scene.isActive('Over') })`).then(JSON.parse);
+        await sleep(400);
+        const board = await evaluate(`JSON.stringify({ open: __flappy.scene.isActive('Leaderboard'), tab: __flappy.registry.get('leaderboardTab'), title: __flappy.scene.getScene('Leaderboard').title?.text, over: __flappy.scene.isActive('Over') })`).then(JSON.parse);
         await evaluate(`(__flappy.scene.getScene('Leaderboard').close(), __flappy.registry.set('leaderboardTab', 'scores'), true)`);
         await sleep(300);
-        ok(ov0.texts.some((x) => x.startsWith('DAILY DUMP · ')) && ov0.rank === 'Posts when online' && /^Next Daily Dump in \d\d:\d\d:\d\d$/.test(ov0.cd ?? '') && cd1 !== ov0.cd && board.open && board.tab === 'daily' && board.over, `the daily result: "${ov0.texts[0]}", rank "${ov0.rank}", "${ov0.cd}" → "${cd1}"; a real click on the score opens the board on 🌞 (${board.tab})`);
+        ok(ov0.texts.some((x) => x.startsWith('DAILY DUMP · ')) && ov0.rank === 'Posts when online' && /^Next Daily Dump in \d\d:\d\d:\d\d$/.test(ov0.cd ?? '') && cd1 !== ov0.cd && board.open && board.tab === 'daily' && board.title === 'DAILY DUMP' && board.over, `the daily result: "${ov0.texts[0]}", rank "${ov0.rank}", "${ov0.cd}" → "${cd1}"; a real click on the score opens the board on 🌞 ("${board.title}")`);
 
         // Same day, same course: a second run on the pinned day lays the same gaps.
         await home();

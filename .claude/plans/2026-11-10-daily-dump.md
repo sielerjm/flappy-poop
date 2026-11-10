@@ -1,6 +1,6 @@
 # Plan: Daily Dump mode (audited revision of `daily_dump_mode_f097792f.plan.md`)
 - Created: 2026-11-10 (an audit of Michael's draft against the code)
-- Status: in progress (step 7; db/schema.sql applied by Michael 10 Nov)
+- Status: in progress (step 8; db/schema.sql applied by Michael 10 Nov)
 - Baseline: `2690200` on `main` (pushed; tree clean).
 - Whole-suite verification: `npm test` (449 pass), `npm run smoke` (337, full).
 - On approval, this revision replaces the draft at `.claude/plans/daily_dump_mode_f097792f.plan.md`. Repo copy: `.claude/plans/2026-11-10-daily-dump.md` (`git add -f`, only that file).
@@ -255,12 +255,13 @@ Each step is verified, then committed. The full suite runs at every step.
 - **Commit:** `feat(daily, step 6/8): the daily result: rank, countdown, share`
 - **Result:** npm test 472/472; full smoke 356/356 (daily 17: the result's headline, rank cell and ticking countdown, a real click on the score opening the board's 🌞 tab, the rank read off a stubbed board into the share text, Home from today's result). Screenshots en + zh.
 
-### Step 7/8: 🏆 · 🌞 · 🏅 on the leaderboard  [pending]
+### Step 7/8: 🏆 · 🌞 · 🏅 on the leaderboard  [done]
 - **Change:** `src/ui/tabs.js`, the tab logic, the 🌞 columns and footer, copy (the How to play leaderboard row loses "🏆 ⟷ 🏅").
 - **Tests:** `tests/overlay.test.js` (three glyphs clear of ✕ and inside the panel; `tests/howto.test.js`'s 🏅 check still holds).
 - **Smoke:** the overlays tab checks for three tabs; the pad's A cycles; the tab is remembered and reset.
 - **Screenshots:** with fake rows.
 - **Commit:** `feat(daily, step 7/8): a 🌞 daily tab on the leaderboard`
+- **Result:** npm test 473/473; full smoke 357/357 (overlays 12: real clicks on 🏅 and 🌞, the pad's A cycling and wrapping; daily: the score link lands on the "DAILY DUMP" board). The 🌞 board drops the 🚽 / LV columns (every row is the day's level, shown in the header with the date). Live schema probed read-only after Michael applied it: board `[]`, bad submits 400, table and helpers denied. Screenshots en + zh with fake rows.
 
 ### Step 8/8: How to play, docs and 0.11.0  [pending]
 - **Change:**

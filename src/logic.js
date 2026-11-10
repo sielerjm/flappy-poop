@@ -1909,8 +1909,9 @@ export const TEST_POWERS = ['probiotic', 'fiber', 'postbiotic', 'bean1', 'bean3'
 
 /**
  * Leaderboard overlay geometry around its centre (cx, cy): a 560 × 800 panel; the
- * title and the ✕ along the top; under them the 🏆 ⟷ 🏅 switch (createToggle's box:
- * a pill with a glyph each side, the whole row tappable); the column header; the
+ * title and the ✕ along the top; under them the 🏆 · 🌞 · 🏅 tabs (createTabs' box: a
+ * track with a glyph at each of `xs` and a pill behind the chosen one, the whole row
+ * tappable); the column header; the
  * rows (LEADERBOARD.visibleRows at `pitch`, from `firstY`); the footer and the
  * version line. Column x's for both boards: rank, name, 🚽, LV, the right-hand
  * number (score or best race), and the right edge of the 🥇 🥈 🥉 text.
@@ -1921,7 +1922,7 @@ export function leaderboardLayout(cx, cy) {
     panel: { x: cx, y: cy, width: 560, height: 800 },
     title: { x: cx, y: cy - 344 },
     close: { x: cx + 236, y: cy - 346 },
-    tab: { track: { x: cx, y: tabY, width: 104, height: 48 }, emojiX: cx + 100, leftX: cx - 100, y: tabY, width: 320, height: 72 },
+    tab: { y: tabY, xs: [cx - 96, cx, cx + 96], track: { x: cx, y: tabY, width: 288, height: 56 }, pill: { width: 88, height: 46 }, width: 320, height: 72 },
     headerY: cy - 234,
     firstY: cy - 196,
     pitch: 52,

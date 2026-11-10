@@ -97,7 +97,7 @@ Inspired by Flappy Bird`,
     itemFeedbackName: 'Feedback',
     itemFeedbackDetail: 'Report a bug or suggest a feature on GitHub. Key: F.',
     itemLeaderboardName: 'Leaderboard',
-    itemLeaderboardDetail: 'The top 25 scores. Flip the 🏆 ⟷ 🏅 switch for the tournament medal board. Key: T.',
+    itemLeaderboardDetail: "The top 25 scores. Its 🌞 tab has today's Daily Dump, its 🏅 tab the tournament medals. Key: T.",
     itemSettingsName: 'Settings',
     itemSettingsDetail: "Sound, haptics (Android only), the bean button's side in landscape, and Reload game to fetch the newest version. Key: S.",
     itemSoundName: 'Sound',
@@ -230,6 +230,10 @@ Inspired by Flappy Bird`,
     dailyRankUnavailable: 'Rank unavailable',
     dailyShareText: '🌞 I scored {score} in the Flappy Poop Daily Dump ({day}){rank}! {url}',
     dailyShareRank: ', #{rank} of {total}',
+    dailyBoardTitle: 'DAILY DUMP',
+    dailyBoardEmpty: "No one has played today's Daily Dump yet",
+    dailyBoardJoin: "Play today's Daily Dump from the 🌞 on the home screen",
+    dailyBoardYou: 'You: #{rank} of {total} · {score}',
     tournamentSaving: 'Saving medals…',
     tournamentSaveSent: 'Medals saved to the 🏅 board',
     tournamentSaveLater: 'Medals saved on this device: they post when you\'re online',
@@ -326,7 +330,7 @@ Inspired by Flappy Bird`,
     itemFeedbackName: '反馈',
     itemFeedbackDetail: '在GitHub上报告问题或提出功能建议。按键：F。',
     itemLeaderboardName: '排行榜',
-    itemLeaderboardDetail: '前25名的成绩。点🏆⟷🏅开关查看锦标赛奖牌榜。按键：T。',
+    itemLeaderboardDetail: '前25名的成绩。🌞页是今天的每日一拉，🏅页是锦标赛奖牌榜。按键：T。',
     itemSettingsName: '设置',
     itemSettingsDetail: '音效、震动（仅限Android）、横屏时豆子按钮的位置，以及“刷新游戏”获取最新版本。按键：S。',
     itemSoundName: '声音',
@@ -458,6 +462,10 @@ Inspired by Flappy Bird`,
     dailyRankUnavailable: '暂无排名',
     dailyShareText: '🌞 我在 Flappy Poop 每日一拉（{day}）拿到了 {score} 分{rank}！{url}',
     dailyShareRank: '，第{rank}名 / 共{total}人',
+    dailyBoardTitle: '每日一拉',
+    dailyBoardEmpty: '今天还没有人玩每日一拉',
+    dailyBoardJoin: '在首页点🌞玩今天的每日一拉',
+    dailyBoardYou: '你：第{rank}名 / 共{total}人 · {score}',
     tournamentSaving: '正在保存奖牌…',
     tournamentSaveSent: '奖牌已记到 🏅 榜',
     tournamentSaveLater: '奖牌已存在本设备：联网后自动上传',
@@ -590,6 +598,11 @@ export function dailyDayText(locale, day) {
   } catch {
     return String(day);
   }
+}
+
+/** The 🌞 board's footer for the player's own row: "You: #3 of 12 · 87". */
+export function dailyYouText(locale, { rank, total, score }) {
+  return t(locale, 'dailyBoardYou').replace('{rank}', String(rank)).replace('{total}', String(total)).replace('{score}', String(score));
 }
 
 /** The rank on a Daily Dump result: "#3 of 12". */

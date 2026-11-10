@@ -1,30 +1,34 @@
 import { GAME_HEIGHT, LEADERBOARD, TUNING as T } from '../config.js';
-import { versionText, chromeIntent, overlayOutsideHit, fitScale, leaderboardLayout } from '../logic.js';
+import { versionText, chromeIntent, overlayOutsideHit, fitScale, leaderboardLayout, utcDayKey, dailyLevel } from '../logic.js';
 import { createFocus, pressable } from '../ui/focus.js';
 import { isTopOverlay, openChangelog } from '../ui/overlayStack.js';
-import { createToggle } from '../ui/toggle.js';
-import { t, metaFontSize, rankText, levelLabel, medalYouText } from '../i18n.js';
+import { createTabs, nearestTab } from '../ui/tabs.js';
+import { t, metaFontSize, rankText, levelLabel, medalYouText, dailyYouText, dailyDayText } from '../i18n.js';
 import { bestByToilet, TOILET_EMOJI } from '../save.js';
-import { fetchTop, fetchRank, fetchTournamentBoard } from '../leaderboard.js';
+import { fetchTop, fetchRank, fetchTournamentBoard, fetchDailyBoard } from '../leaderboard.js';
 import { createScrollView } from '../ui/scrollView.js';
 
 const STYLE = { fontFamily: 'sans-serif', fontStyle: 'bold', color: '#ffffff', align: 'center' };
 const PINK = '#f8a0c8';
 const MUTED = '#c9b8dc';
 const DIM = '#6a5a74';
-/** The registry key for the board last shown this session: 'scores' (🏆) or 'medals' (🏅). */
+/** The registry key for the board last shown this session: 'scores' (🏆), 'daily' (🌞) or 'medals' (🏅). */
 const TAB_KEY = 'leaderboardTab';
+/** The boards in tab order, with their glyphs and titles. */
+const TABS = ['scores', 'daily', 'medals'];
+const TAB_GLYPHS = ['\u{1F3C6}', '\u{1F31E}', '\u{1F3C5}'];
+const TAB_TITLES = { scores: 'leaderboardTitle', daily: 'dailyBoardTitle', medals: 'medalBoardTitle' };
 
 /**
- * Shared board overlay (🏆 in the tray or T), two boards behind a 🏆 ⟷ 🏅 switch
- * under the title: the Top 25 scores, or the 🏅 medal board (tournament_board:
- * 🥇, then 🥈, 🥉, best race). Posts anything pending first (Play.syncLeaderboard),
+ * Shared board overlay (🏆 in the tray or T), three boards behind the 🏆 · 🌞 · 🏅 tabs
+ * under the title: the Top 25 scores, today's Daily Dump (daily_board), or the 🏅 medal
+ * board (tournament_board: 🥇, then 🥈, 🥉, best race). Posts anything pending first (Play.syncLeaderboard),
  * then loads the board and the player's own standing. Network work happens only
  * here, in create(), behind a Loading line; the game itself never waits on it.
  * LEADERBOARD.visibleRows rows show at once; the band scrolls (ui/scrollView.js)
  * while the title, the switch, the header and the footer stay put. Switching
- * restarts the scene on the other board (no second sync); the board shown last
- * is remembered for the session (registry TAB_KEY).
+ * restarts the scene on the chosen board (no second sync); the board shown last
+ * is remembered for the session (registry TAB_KEY; a Daily Dump result's score sets 🌞).
  */
 export class Leaderboard extends Phaser.Scene {
   constructor() {
@@ -39,7 +43,7 @@ export class Leaderboard extends Phaser.Scene {
     const play = this.scene.get('Play');
     const locale = play?.getLocale?.() ?? 'en';
     this.locale = locale;
-    this.tab = this.registry.get(TAB_KEY) === 'medals' ? 'medals' : 'scores';
+    this.tab = TABS.includes(this.registry.get(TAB_KEY)) ? this.registry.get(TAB_KEY) : 'scores';
     this.switching = false;
     const skipSync = this.skipSync;
     this.skipSync = false;
@@ -58,16 +62,19 @@ export class Leaderboard extends Phaser.Scene {
     });
     const panelRect = this.add.rectangle(cx, cy, L.panel.width, L.panel.height, 0x1a0b14, 0.95).setStrokeStyle(8, 0xe85e96);
 
-    const titleText = t(locale, this.tab === 'medals' ? 'medalBoardTitle' : 'leaderboardTitle');
+    const titleText = t(locale, TAB_TITLES[this.tab]);
     const title = this.add.text(L.title.x, L.title.y, titleText, { ...STYLE, fontSize: '52px', color: PINK }).setOrigin(0.5);
     title.setScale(fitScale(title.width, L.titleMaxW, 0));
     this.title = title;
-    // 🏆 ⟷ 🏅: the whole row is the switch (Settings' 👈 👉 hand row).
-    this.tabToggle = createToggle(this, L.tab, { on: this.tab === 'medals', depth: 1, glyph: '🏅', glyphLeft: '🏆' });
+    // 🏆 · 🌞 · 🏅: a tap picks the nearest glyph; the pad's A (no pointer) moves to the next tab.
+    this.tabs = createTabs(this, L.tab, { glyphs: TAB_GLYPHS, index: TABS.indexOf(this.tab), depth: 1 });
     const tabZone = this.add
       .zone(L.tab.track.x, L.tab.y, L.tab.width, L.tab.height)
       .setInteractive({ useHandCursor: true })
-      .on('pointerdown', () => this.switchTab());
+      .on('pointerdown', (pointer) => {
+        const here = TABS.indexOf(this.tab);
+        this.switchTab(TABS[Number.isFinite(pointer?.x) ? nearestTab(pointer.x, L.tab.xs) : (here + 1) % TABS.length]);
+      });
     this.tabZone = tabZone;
     this.status = this.add
       .text(cx, cy, t(locale, 'leaderboardLoading'), { ...STYLE, fontSize: '36px', color: MUTED, fontStyle: 'normal', wordWrap: { width: 480, useAdvancedWrap: true } })
@@ -84,10 +91,10 @@ export class Leaderboard extends Phaser.Scene {
     const close = this.add.text(L.close.x, L.close.y, '✕', { ...STYLE, fontSize: '48px' }).setOrigin(0.5).setInteractive({ useHandCursor: true });
     close.on('pointerdown', () => this.close());
     // Everything outside the rows band stays on the main camera when the band becomes a scroll view.
-    this.fixed = [dimmer, panelRect, title, ...this.tabToggle.objects(), tabZone, this.status, this.footer, version, close];
+    this.fixed = [dimmer, panelRect, title, ...this.tabs.objects(), tabZone, this.status, this.footer, version, close];
     this.scroll = null; // the rows' scroll view, once the board has loaded
     this.input.keyboard?.on('keydown-ESC', () => this.close());
-    // Controller: the ring sits on ✕ (A on the switch flips the board); up / down scroll the rows once they are in.
+    // Controller: the ring sits on ✕ (A on the tabs moves to the next board); up / down scroll the rows once they are in.
     this.focus = createFocus(this, T, {
       items: [pressable('close', close), pressable('tab', tabZone), pressable('changelog', version)],
       onVertical: (dir) => this.scroll?.scrollBy(dir === 'up' ? T.focus.scrollStepPx : -T.focus.scrollStepPx),
@@ -100,13 +107,12 @@ export class Leaderboard extends Phaser.Scene {
     this.loadBoard(gen, play, { skipSync });
   }
 
-  /** Flip 🏆 ⟷ 🏅: remember the choice, slide the knob, then restart on the other board. */
-  switchTab() {
-    if (this.switching) return;
+  /** Show board `next` ('scores' | 'daily' | 'medals'): remember it, slide the pill, then restart on it. */
+  switchTab(next) {
+    if (this.switching || next === this.tab || !TABS.includes(next)) return;
     this.switching = true;
-    const next = this.tab === 'medals' ? 'scores' : 'medals';
     this.registry.set(TAB_KEY, next);
-    this.tabToggle.setOn(next === 'medals');
+    this.tabs.setIndex(TABS.indexOf(next));
     this.gen += 1; // drop any in-flight load
     this.skipSync = true;
     this.ringOnTab = this.focus?.shown && this.focus.items[this.focus.index]?.id === 'tab';
@@ -128,6 +134,13 @@ export class Leaderboard extends Phaser.Scene {
       const rows = await fetchTournamentBoard(state.id ?? null);
       if (gen !== this.gen || !this.scene.isActive()) return;
       this.showMedals(rows);
+      return;
+    }
+    if (this.tab === 'daily') {
+      const day = utcDayKey();
+      const rows = await fetchDailyBoard(state.id ?? null, day);
+      if (gen !== this.gen || !this.scene.isActive()) return;
+      this.showDaily(rows, day, state, { nameTaken: Boolean(play?.boardNameTaken), played: Boolean(play?.dailyPlayedToday?.()) });
       return;
     }
     const named = Boolean(state.name && state.id);
@@ -235,6 +248,44 @@ export class Leaderboard extends Phaser.Scene {
       // The name gets the room left of the medals (a long name shrinks, as on 🏆).
       const room = (medals ? medals.x - medals.width : L.cols.toilet) - 8 - name.x;
       name.setScale(fitScale(name.width, room, 4));
+    }
+    sv.finish(y + L.pitch / 2 - 40);
+    this.scroll = sv;
+  }
+
+  /**
+   * The 🌞 board: today's Daily Dump (the day and its level in the header), rank · name · score,
+   * the player's own row in pink (appended below the top when it is lower). The footer gives
+   * their rank, says their score has yet to post, or how to play.
+   */
+  showDaily(rows, day, state, { nameTaken = false, played = false } = {}) {
+    const { locale, L } = this;
+    this.fixed.push(this.add.text(this.cx, L.headerY, `${dailyDayText(locale, day)} · \u{1F31E} ${levelLabel(locale, dailyLevel(day, T))}`, { ...STYLE, fontSize: '22px', color: MUTED, fontStyle: 'normal' }).setOrigin(0.5));
+    if (rows === null) {
+      this.status.setText(t(locale, 'leaderboardOffline'));
+      return;
+    }
+    const mine = rows.find((r) => r.me) ?? null;
+    if (mine) this.footer.setText(dailyYouText(locale, mine));
+    else if (nameTaken && state.name) this.footer.setText(t(locale, 'leaderboardNameTaken'));
+    else if (played) this.footer.setText(t(locale, 'dailyRankQueued'));
+    else this.footer.setText(t(locale, 'dailyBoardJoin'));
+    if (rows.length === 0) {
+      this.status.setText(t(locale, 'dailyBoardEmpty'));
+      return;
+    }
+    this.status.setVisible(false);
+    const { sv, visible } = this.rowsBand();
+    const count = Math.max(rows.length, visible);
+    let y = L.firstY;
+    for (let i = 0; i < count; i += 1) {
+      y = L.firstY + i * L.pitch;
+      const row = rows[i];
+      const color = row?.me ? PINK : row ? '#ffffff' : DIM;
+      sv.add(this.add.text(L.cols.rank, y, `${row ? row.rank : i + 1}.`, { ...STYLE, fontSize: '34px', color: row ? PINK : DIM }).setOrigin(0, 0.5));
+      sv.add(this.add.text(L.cols.right, y, row ? String(row.score) : '–', { ...STYLE, fontSize: '34px', color }).setOrigin(1, 0.5));
+      const name = sv.add(this.add.text(L.cols.name, y, row ? row.name : '–', { ...STYLE, fontSize: '34px', color, align: 'left' }).setOrigin(0, 0.5));
+      name.setScale(fitScale(name.width, L.cols.level - name.x, 8)); // no 🚽 or LV columns here: the name gets the room up to the score
     }
     sv.finish(y + L.pitch / 2 - 40);
     this.scroll = sv;

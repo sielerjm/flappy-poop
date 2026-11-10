@@ -159,7 +159,7 @@ Short, playful, clear. Fit a 720×1280 logical field; How to play / About body w
 | itemFeedbackName | Feedback | 反馈 |
 | itemFeedbackDetail | Report a bug or suggest a feature on GitHub. Key: F. | 在GitHub上报告问题或提出功能建议。按键：F。 |
 | itemLeaderboardName | Leaderboard | 排行榜 |
-| itemLeaderboardDetail | The top 25 scores. Flip the 🏆 ⟷ 🏅 switch for the tournament medal board. Key: T. | 前25名的成绩。点🏆⟷🏅开关查看锦标赛奖牌榜。按键：T。 |
+| itemLeaderboardDetail | The top 25 scores. Its 🌞 tab has today's Daily Dump, its 🏅 tab the tournament medals. Key: T. | 前25名的成绩。🌞页是今天的每日一拉，🏅页是锦标赛奖牌榜。按键：T。 |
 | itemSettingsName | Settings | 设置 |
 | itemSettingsDetail | Sound, haptics (Android only), the bean button's side in landscape, and Reload game to fetch the newest version. Key: S. | 音效、震动（仅限Android）、横屏时豆子按钮的位置，以及“刷新游戏”获取最新版本。按键：S。 |
 | itemSoundName | Sound | 声音 |
@@ -304,6 +304,10 @@ The top three take the podium 🥇 🥈 🥉. Players who joined with their user
 | dailyRankUnavailable | Rank unavailable | 暂无排名 |
 | dailyShareText | 🌞 I scored {score} in the Flappy Poop Daily Dump ({day}){rank}! {url} | 🌞 我在 Flappy Poop 每日一拉（{day}）拿到了 {score} 分{rank}！{url} |
 | dailyShareRank | , #{rank} of {total} | ，第{rank}名 / 共{total}人 |
+| dailyBoardTitle | DAILY DUMP | 每日一拉 |
+| dailyBoardEmpty | No one has played today's Daily Dump yet | 今天还没有人玩每日一拉 |
+| dailyBoardJoin | Play today's Daily Dump from the 🌞 on the home screen | 在首页点🌞玩今天的每日一拉 |
+| dailyBoardYou | You: #{rank} of {total} · {score} | 你：第{rank}名 / 共{total}人 · {score} |
 | tournamentSaving | Saving medals… | 正在保存奖牌… |
 | tournamentSaveSent | Medals saved to the 🏅 board | 奖牌已记到 🏅 榜 |
 | tournamentSaveLater | Medals saved on this device: they post when you're online | 奖牌已存在本设备：联网后自动上传 |

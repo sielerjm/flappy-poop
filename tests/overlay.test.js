@@ -2,6 +2,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { GAME_WIDTH, GAME_HEIGHT, TUNING as T } from '../src/config.js';
 import { overlayOutsideHit, clampScroll, settingsLayout, leaderboardLayout } from '../src/logic.js';
+import { nearestTab } from '../src/ui/tabs.js';
+import { dailyYouText } from '../src/i18n.js';
 
 const howto = { x: GAME_WIDTH / 2, y: GAME_HEIGHT / 2, width: 600, height: 1000 };
 const settings = { x: GAME_WIDTH / 2, y: GAME_HEIGHT / 2, width: 600, height: 860 };
@@ -55,7 +57,7 @@ test('clampScroll is 0 when the content fits and clamps to the overflow otherwis
   assert.equal(clampScroll(Number.NaN, 1300, 1000), 0);
 });
 
-test('leaderboardLayout: the 🏆 ⟷ 🏅 switch sits between the title and the header; ten rows, the footer and the version fit the panel', async () => {
+test('leaderboardLayout: the 🏆 · 🌞 · 🏅 tabs sit between the title and the header; ten rows, the footer and the version fit the panel', async () => {
   const { LEADERBOARD } = await import('../src/config.js');
   const cx = 360;
   const cy = 640;
@@ -67,11 +69,26 @@ test('leaderboardLayout: the 🏆 ⟷ 🏅 switch sits between the title and the
   assert.ok(titleBottom <= tabTop, 'the pill clears the title');
   assert.ok(L.tab.y + L.tab.track.height / 2 < L.headerY - 10, 'the pill clears the header');
   assert.ok(L.tab.height >= T.trayHitMin * 0.8 && L.tab.width >= T.trayHitMin * 3, 'the switch row is a thumb-sized target');
-  assert.ok(L.tab.leftX - 24 > cx - L.panel.width / 2 && L.tab.emojiX + 24 < L.close.x - 24, 'both glyphs inside the panel, clear of ✕');
+  assert.equal(L.tab.xs.length, 3, 'three boards');
+  assert.ok(L.tab.xs[0] < L.tab.xs[1] && L.tab.xs[1] === cx && L.tab.xs[1] < L.tab.xs[2], 'left to right, the middle one centred');
+  assert.ok(L.tab.xs[0] - 24 > cx - L.panel.width / 2 && L.tab.xs[2] + 24 < L.close.x - 24, 'every glyph inside the panel, clear of ✕');
+  assert.ok(L.tab.xs[1] - L.tab.xs[0] >= L.tab.pill.width && L.tab.xs[2] - L.tab.xs[1] >= L.tab.pill.width, 'the pill behind one glyph never covers its neighbour');
+  assert.ok(L.tab.track.x - L.tab.track.width / 2 <= L.tab.xs[0] - L.tab.pill.width / 2 && L.tab.track.x + L.tab.track.width / 2 >= L.tab.xs[2] + L.tab.pill.width / 2, 'the pill stays inside the track');
+  assert.ok(L.tab.xs.every((x) => Math.abs(x - L.tab.track.x) <= L.tab.width / 2), 'the tap row spans every glyph');
   assert.ok(L.headerY < L.firstY - L.pitch / 2, 'the header sits above the first row');
   const lastRow = L.firstY + (LEADERBOARD.visibleRows - 1) * L.pitch;
   assert.ok(lastRow + L.pitch / 2 <= L.footerY - 26, 'ten rows end above the footer');
   assert.ok(L.versionY + 12 <= bottom - 8 && L.title.y - 26 >= top + 8, 'title and version inside the frame');
   assert.ok(L.cols.medalsRight < L.cols.right - 60, 'the medals end before a three-digit best-race number');
   assert.ok(L.title.x + L.titleMaxW / 2 < L.close.x - 24, 'a title shrunk to titleMaxW clears the ✕');
+});
+
+test('a tap on the tab row picks the nearest glyph; the 🌞 footer names your rank', () => {
+  const { tab } = leaderboardLayout(360, 640);
+  assert.deepEqual(tab.xs.map((x) => nearestTab(x, tab.xs)), [0, 1, 2]);
+  assert.equal(nearestTab(tab.track.x - tab.width / 2, tab.xs), 0, 'the left end');
+  assert.equal(nearestTab(tab.track.x + tab.width / 2, tab.xs), 2, 'the right end');
+  assert.equal(nearestTab((tab.xs[0] + tab.xs[1]) / 2 + 1, tab.xs), 1, 'just past halfway');
+  assert.equal(dailyYouText('en', { rank: 3, total: 12, score: 87 }), 'You: #3 of 12 · 87');
+  assert.equal(dailyYouText('zh-Hans', { rank: 3, total: 12, score: 87 }), '你：第3名 / 共12人 · 87');
 });
