@@ -1,6 +1,6 @@
 # Plan: "See today's result" must not let taps through to the home screen underneath
 - Created: 2026-11-10 (audited against the code the same day; every claim below was checked with a grep)
-- Status: in progress (step 2)
+- Status: complete
 - Baseline: `c87eb49` on `main` (0.11.2, one commit ahead of origin, not pushed).
 - Whole-suite verification: `npm test` (473 pass), `npm run smoke` (361, full; read the summary line, never just grep it).
 - Repo plan copy: `.claude/plans/2026-11-10-result-view.md` (`git add -f`), archived when done.
@@ -39,11 +39,12 @@ Michael found two bugs on the Daily Dump's "See today's result" screen.
 - **Commit:** `fix(daily): "See today's result" is a finished screen, so taps on it start nothing`
 - **Result:** the three new daily checks failed without the fix (a paused run behind the board; 1 launch on Space; Versus behind an outside tap, once mid-respawn) and pass with it. The Space check counts `launch()` calls: Over's own Space goes Home and the restart would hide a run.
 
-### Step 2/2: Over stops every tap at itself  [pending]
+### Step 2/2: Over stops every tap at itself  [done]
 - **Change:** `src/scenes/Over.js`: a full-field `this.add.zone(W / 2, GAME_HEIGHT / 2, W, GAME_HEIGHT).setInteractive()` added first (lowest), with a comment: it is the interactive object Phaser's top-only input stops at, so Play never sees a tap under this panel; Over's own scene-level handlers (Home, Share, the links, its tray) are unchanged.
 - **Smoke (`death` or `share`, under a normal game over):** count calls to `Play.flap` (wrap the method, then restore it) while a real click lands on Over's panel and one on empty field: 0 calls. Run it first without the zone: it reads 2 (the taps reached Play, harmless only because Play was dead).
 - **Verify:** `npm test`; `--only=death,share,daily`; full smoke; the pad's game-over ring checks (`pad`) still pass (the zone is not a ring item).
 - **Commit:** `fix(over): the game-over panel is the top of the input stack; nothing under it hears a tap`
+- **Result:** the new death check read 2 flap calls without the zone and 0 with it; npm test 473/473; full smoke 364/364 (share, pad and daily unchanged).
 
 ## Risks and notes
 - `'dead'` on the ready screen: Play's update pins a dead poop to the floor only when it is below the floor line (`Play.js:3238`); the hidden poop sits at its ready spot above it, so nothing moves. Home restarts Play anyway.

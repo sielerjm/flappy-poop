@@ -41,6 +41,10 @@ export class Over extends Phaser.Scene {
     this.col = uiColumn(W, FIELD);
     const cx = W / 2;
     const cy = GAME_HEIGHT / 2;
+    // The top of the input stack: Phaser's top-only input stops at the first scene with an interactive
+    // object under the pointer, and this panel's taps are scene-level events. Without this zone every
+    // tap here also reached Play underneath (harmless on a dead run, a new run on its ready screen).
+    this.add.zone(W / 2, GAME_HEIGHT / 2, W, GAME_HEIGHT).setInteractive();
     const panel = this.add.rectangle(cx, cy, 560, 720, 0x1a0b14, 0.85).setStrokeStyle(8, 0xe85e96);
     const style = { fontFamily: 'sans-serif', fontStyle: 'bold', color: '#ffffff', align: 'center' };
     const headline = daily ? t(locale, 'dailyOverTitle').replace('{day}', dailyDayText(locale, daily.day)) : t(locale, won ? 'runWon' : 'gameOver');

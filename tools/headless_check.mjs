@@ -1080,6 +1080,15 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
       ok(cleared.coins === 0 && cleared.beans === 0 && !cleared.probiotic && cleared.rows.every((v) => !v) && cleared.coinIcon && cleared.collected >= 3, `death empties the purse and clears the beans and the probiotic (HUD rows gone); Over counts the ${cleared.collected} coins the run collected beside the pipes`);
       const box = await evaluate(`(() => { const o = __flappy.scene.getScene('Over'); const panel = o.children.list.find((c) => c.type === 'Rectangle' && c.width === 560); const L = panel.x - panel.width / 2 + 8, R = panel.x + panel.width / 2 - 8; const parts = o.children.list.filter((c) => (c.type === 'Text' && /^×\\d+$/.test(c.text)) || (c.type === 'Image' && ['fiber', 'probiotic', 'postbiotic', 'bacteria', 'bean', 'mystery-icon'].includes(c.texture.key))).map((c) => { const b = c.getBounds(); return { k: c.texture?.key ?? c.text, l: b.left, r: b.right }; }); return JSON.stringify({ L, R, inside: parts.every((b) => b.l >= L && b.r <= R), icons: parts.filter((b) => b.k !== undefined && !b.k.startsWith('×')).length, minL: Math.min(...parts.map((b) => b.l)), maxR: Math.max(...parts.map((b) => b.r)) }); })()`).then(JSON.parse);
       ok(box.inside && box.icons >= 6, `run summary (fiber · probiotic · postbiotic / bacteria · bean · mystery box) fits inside the panel (${box.minL.toFixed(0)}–${box.maxR.toFixed(0)} within ${box.L}–${box.R})`);
+      // The game-over panel is the top of the input stack: a real tap on it, or on the field around it,
+      // never reaches Play (its flap() runs on no tap). The lockout is re-armed so neither tap goes home.
+      {
+        await evaluate(`(() => { const p = ${play}; const o = __flappy.scene.getScene('Over'); o.openedAt = __flappy.loop.time + 5000; globalThis.__flaps = 0; globalThis.__flap = p.flap; p.flap = function (...a) { globalThis.__flaps += 1; return globalThis.__flap.apply(this, a); }; return true; })()`);
+        await tapAt(360, 640);
+        await tapAt(360, 150);
+        const heard = await evaluate(`(() => { delete ${play}.flap; __flappy.scene.getScene('Over').openedAt = __flappy.loop.time - 5000; return JSON.stringify({ flaps: globalThis.__flaps, over: __flappy.scene.isActive('Over'), state: ${play}.state }); })()`).then(JSON.parse);
+        ok(heard.flaps === 0 && heard.over && heard.state === 'dead', `taps on the game-over panel and the field around it never reach Play (${heard.flaps} flap calls; Over still up)`);
+      }
     });
 
     await section('share', async () => {
