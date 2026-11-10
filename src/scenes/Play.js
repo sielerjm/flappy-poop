@@ -381,6 +381,7 @@ export class Play extends Phaser.Scene {
       this.howToHaloTween = this.tweens.add({ targets: this.howToHalo, alpha: T.readyPromptMaxAlpha, yoyo: true, repeat: -1, duration: T.readyPromptPulseMs });
     }
     this.howToBtn = createButton(this, this.readyBoxes.howto, '?', { ...TEXT_STYLE, fontSize: '52px', color: '#f8a0c8' });
+    this.howToBtn.pulse(this.isHowToPromptDue()); // breathes with its halo until this build's How to play is seen
     // 🌞 at the top centre opens the Daily Dump popup. Until this player has used today's attempt
     // it breathes (dailyPulseScale) under the same soft white halo as the ?.
     {
@@ -1274,6 +1275,7 @@ export class Play extends Phaser.Scene {
   refreshProfile() {
     const named = Boolean(this.save?.name);
     this.profileBtn?.setText(profileButtonText(this.locale, this.save));
+    this.profileBtn?.pulse(!named); // the user button breathes with its halo until a username is set
     if (this.state === 'ready' && !this.launching && !this.match) {
       this.profileBtn?.setVisible(true);
       this.profileHalo?.setVisible(!named);
@@ -1290,6 +1292,7 @@ export class Play extends Phaser.Scene {
     if (!this.isHowToPromptDue()) return;
     this.settings.set({ howToSeenAt: LAST_UPDATED });
     this.howToHalo?.setVisible(false);
+    this.howToBtn?.pulse(false);
   }
 
   openSavePanel(opts = {}) {

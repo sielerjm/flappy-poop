@@ -24,7 +24,23 @@ export function createButton(scene, box, label, style, { depth = 20, fillAlpha =
   // Shrink a long label (a 16-character username plus "· 🚽 41") to the box.
   const fit = () => text.setScale(fitScale(text.width, box.width));
   fit();
+  // The label's breathing pulse (pulse()): a yoyo tween from its fitted scale, restarted on a new text.
+  let pulseTween = null;
+  let pulseOpts = null;
+  const startPulse = () => {
+    pulseTween?.stop();
+    pulseTween = null;
+    fit();
+    if (pulseOpts) pulseTween = scene.tweens.add({ targets: text, scale: text.scale * pulseOpts.scale, yoyo: true, repeat: -1, duration: pulseOpts.ms, ease: 'Sine.easeInOut' });
+  };
   return {
+    /** Breathe the label (on) at `scale` × its fitted size over `ms` each way, or settle it (off). */
+    pulse(on, { scale = T.dailyPulseScale, ms = T.readyPromptPulseMs } = {}) {
+      if (Boolean(on) === Boolean(pulseOpts) && (!on || pulseTween)) return this;
+      pulseOpts = on ? { scale, ms } : null;
+      startPulse();
+      return this;
+    },
     setVisible(visible) {
       g.setVisible(visible);
       text.setVisible(visible);
@@ -32,8 +48,13 @@ export function createButton(scene, box, label, style, { depth = 20, fillAlpha =
     },
     setText(value) {
       text.setText(value);
-      fit();
+      if (pulseOpts) startPulse();
+      else fit();
       return this;
+    },
+    /** The label's current scale (the smoke reads the pulse). */
+    labelScale() {
+      return text.scale;
     },
     setAlpha(alpha) {
       g.setAlpha(alpha);
@@ -48,6 +69,7 @@ export function createButton(scene, box, label, style, { depth = 20, fillAlpha =
       return text.text;
     },
     destroy() {
+      pulseTween?.stop();
       g.destroy();
       text.destroy();
     },

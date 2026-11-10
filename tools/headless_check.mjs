@@ -294,6 +294,14 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         const h2 = await evaluate(`${play}.howToHalo.alpha`);
         const home = await evaluate(`JSON.stringify({ score: ${play}.scoreText.visible, halo: ${play}.howToHalo.visible, due: ${play}.isHowToPromptDue(), round: ${play}.readyBoxes.howto.round })`).then(JSON.parse);
         ok(!home.score && home.halo && home.due && home.round && h1 !== h2, `home screen hides the score; the ? pulses on a fresh profile (alpha ${h1.toFixed(2)} → ${h2.toFixed(2)})`);
+        // The ? and the user button's label breathe with their halos too (button.pulse).
+        const scales = [];
+        for (let i = 0; i < 3; i += 1) {
+          scales.push(await evaluate(`JSON.stringify([${play}.howToBtn.labelScale(), ${play}.profileBtn.labelScale()])`).then(JSON.parse));
+          if (i < 2) await sleep(300);
+        }
+        const spread = (k) => Math.max(...scales.map((x) => x[k])) - Math.min(...scales.map((x) => x[k]));
+        ok(spread(0) > 0.01 && spread(1) > 0.01, `on a fresh profile the ? and the user button's label pulse (scale spread over 600 ms: ${spread(0).toFixed(3)}, ${spread(1).toFixed(3)})`);
       }
 
       // Onboarding: a fresh profile has no username, so the user button reads "Load user" under a
@@ -325,6 +333,10 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         const line = (await texts()).find((x) => x.startsWith('Smoke'));
         const haloOff = !(await evaluate(`${play}.profileHalo.visible`));
         ok(after.open && after.code.startsWith('fp1.') && named === 'Smoke' && Boolean(line) && haloOff, `Save stores the name and the panel stays open on the user code (${after.code.slice(0, 8)}…); closed, the button reads "${line}" without the halo`);
+        const still1 = await evaluate(`${play}.profileBtn.labelScale()`);
+        await sleep(300);
+        const still2 = await evaluate(`${play}.profileBtn.labelScale()`);
+        ok(still1 === still2, `named, the user button's label stops pulsing (scale ${still1} → ${still2})`);
         // Named, the same button opens the save panel (the High scores page is gone).
         await evaluate(`${play}.flap({ x: ${play}.readyBoxes.profile.x, y: ${play}.readyBoxes.profile.y }), true`);
         await sleep(200);
@@ -578,7 +590,10 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
       {
         const play = `__flappy.scene.getScene('Play')`;
         const seen = await evaluate(`import('./src/logic.js').then((m) => JSON.stringify({ halo: ${play}.howToHalo.visible, due: ${play}.isHowToPromptDue(), stamp: ${play}.settings.load().howToSeenAt === m.LAST_UPDATED }))`).then(JSON.parse);
-        ok(!seen.halo && !seen.due && seen.stamp, 'opening How to play stops the ? pulse and stamps this build');
+        const q1 = await evaluate(`${play}.howToBtn.labelScale()`);
+        await sleep(300);
+        const q2 = await evaluate(`${play}.howToBtn.labelScale()`);
+        ok(!seen.halo && !seen.due && seen.stamp && q1 === q2, `opening How to play stops the ? pulse (halo off, label still at ${q2}) and stamps this build`);
       }
     });
     await section('run', async () => {
