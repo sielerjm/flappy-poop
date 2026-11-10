@@ -4,7 +4,7 @@ import { GAME_WIDTH, GAME_HEIGHT, TUNING as T } from '../src/config.js';
 import { readyLayout, readyHit, fitScale, rectGlowSize, howToPromptDue, poopX } from '../src/logic.js';
 
 const layout = readyLayout(GAME_WIDTH, GAME_HEIGHT, T);
-const boxes = [layout.toilet, layout.howto, layout.profile];
+const boxes = [layout.toilet, layout.howto, layout.daily, layout.profile];
 // Where the poop (with its speech bubble) bobs on the ready screen: layout.poop ± bubble extents, ±24 bob.
 const B = layout.poop.bubble;
 const POOP = { left: layout.poop.x + B.left, right: layout.poop.x + B.right, top: layout.poop.y + B.top - 24, bottom: layout.poop.y + B.bottom + 24 };
@@ -19,14 +19,14 @@ function overlaps(a, b) {
 test('ready boxes have ids, are inside the field, and the tappable ones are at least trayHitMin tall', () => {
   assert.deepEqual(
     boxes.map((b) => b.id),
-    ['toilet', 'howto', 'profile'],
+    ['toilet', 'howto', 'daily', 'profile'],
   );
   for (const b of boxes) {
     const e = edges(b);
     assert.ok(e.left >= 0 && e.right <= GAME_WIDTH, `${b.id} inside width`);
     assert.ok(e.top >= 0 && e.bottom <= GAME_HEIGHT - T.groundHeight, `${b.id} above the ground`);
   }
-  for (const b of [layout.howto, layout.profile]) assert.ok(b.height >= T.trayHitMin, `${b.id} tall enough`);
+  for (const b of [layout.howto, layout.daily, layout.profile]) assert.ok(b.height >= T.trayHitMin, `${b.id} tall enough`);
   assert.equal(layout.saveLoad, undefined, 'one user button: no separate Save / Load User box');
   // The "?" is a thumb-sized circle in the top-right corner.
   assert.equal(layout.howto.round, true);
@@ -35,6 +35,13 @@ test('ready boxes have ids, are inside the field, and the tappable ones are at l
   assert.ok(layout.howto.x + haloR <= GAME_WIDTH && layout.howto.x > GAME_WIDTH * 0.8, 'the halo stays inside the right edge');
   assert.ok(layout.howto.y - haloR >= 0 && layout.howto.y < 160, 'the halo stays inside the top edge');
   assert.equal(layout.profile.y, 1067, 'the user button keeps the lower slot');
+  // The 🌞 is the same round button at the top centre, on the ?'s row; the two halos never touch.
+  assert.equal(layout.daily.round, true);
+  assert.equal(layout.daily.width, layout.howto.width);
+  assert.equal(layout.daily.x, GAME_WIDTH / 2);
+  assert.equal(layout.daily.y, layout.howto.y);
+  assert.ok(layout.howto.x - layout.daily.x >= 2 * haloR, 'the 🌞 halo clears the ? halo');
+  assert.ok(layout.daily.y + haloR < layout.title.y - 36, 'the 🌞 halo clears the title');
   assert.ok(layout.toilet.height >= 64, 'toggle hit box is thumb-sized');
   const tr = layout.toilet.track;
   assert.ok(tr.x - tr.width / 2 >= layout.toilet.x - layout.toilet.width / 2, 'track inside the toggle box');
@@ -117,4 +124,10 @@ test('howToPromptDue pulses until this build is acknowledged and returns on a ne
   assert.equal(howToPromptDue({ howToSeenAt: '4 Nov 2026, 10:00' }, '4 Nov 2026, 10:00'), false, 'acknowledged this build');
   assert.equal(howToPromptDue(null, 'x'), true);
   assert.equal(howToPromptDue({}, 'x'), true);
+});
+
+test('readyHit returns daily at the centre of the 🌞 and null just outside it', () => {
+  const box = layout.daily;
+  assert.equal(readyHit(box.x, box.y, layout), 'daily');
+  assert.equal(readyHit(box.x, box.y + box.height / 2 + 2, layout), null);
 });

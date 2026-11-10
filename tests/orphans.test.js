@@ -23,8 +23,6 @@ const ALLOWED_EXPORTS = {
   topScores: 'test hook: tests/save.test.js reads top lists as plain numbers (its last game use, isNewTop, is gone)',
   // Daily Dump (plan .claude/plans/2026-11-10-daily-dump.md): helpers land before their callers.
   fetchDailyBoard: 'Daily Dump: the result panel reads its rank from it from step 6; remove in step 6',
-  msUntilUtcMidnight: 'Daily Dump: the popup and the result panel count down to the next day from step 5; remove in step 5',
-  countdownText: 'Daily Dump: the popup and the result panel count down to the next day from step 5; remove in step 5',
 };
 
 /** UI string keys no source names literally: prefix → why (they are built at run time). */

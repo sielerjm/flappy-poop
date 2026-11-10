@@ -280,6 +280,21 @@ The top three take the podium 🥇 🥈 🥉. Players who joined with their user
 每场比赛比平常短。得分高者胜；平分时撞得少的胜，再看谁率先过线的关卡更多。
 前三名登上领奖台 🥇 🥈 🥉。用用户码加入的玩家，奖牌会记到 🏅 榜上；访客不会保存。 |
 | tournamentGotIt | Got it | 知道了 |
+| dailyTitle | 🌞 DAILY DUMP | 🌞 每日一拉 |
+| dailyToday | Today's course: {level} | 今日赛道：{level} |
+| dailyBody | One try a day. Everyone flies the same course today, and it never ends: go as far as you can. No kernels, no shop. Compare scores on the 🌞 board; a new course starts every day at 00:00 UTC. | 每天只有一次机会。
+今天所有人飞同一条赛道，
+而且没有尽头：能飞多远就飞多远。
+没有玉米粒，也没有商店。
+在🌞榜上比分数；
+每天UTC 00:00换一条新赛道。 |
+| dailyCreateUser | Create user | 创建用户 |
+| dailyPlay | Play | 开始 |
+| dailySeeResult | See today's result | 查看今日成绩 |
+| dailyPractice | Practice | 练习 |
+| dailyNeedName | Pick a username first: your score goes on the 🌞 board under it. | 先取一个用户名：你的分数会以这个名字记到🌞榜上。 |
+| dailyPracticeNote | Test mode: practice runs are not saved and do not use up the day. | 测试模式：练习不会保存，也不会用掉今天的机会。 |
+| dailyNext | Next Daily Dump in {time} | 下一次每日一拉：{time}后 |
 | tournamentSaving | Saving medals… | 正在保存奖牌… |
 | tournamentSaveSent | Medals saved to the 🏅 board | 奖牌已记到 🏅 榜 |
 | tournamentSaveLater | Medals saved on this device: they post when you're online | 奖牌已存在本设备：联网后自动上传 |

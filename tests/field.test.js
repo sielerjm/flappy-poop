@@ -50,7 +50,7 @@ test('x0 shifts the tray, the level bar and the ready screen sideways and nothin
   shifted(levelBarLayout(T, 720), levelBarLayout(T, 720, dx), dx);
   const base = readyLayout(720, GAME_HEIGHT, T);
   const moved = readyLayout(720, GAME_HEIGHT, T, dx);
-  for (const id of ['title', 'poop', 'toilet', 'howto', 'profile']) {
+  for (const id of ['title', 'poop', 'toilet', 'howto', 'daily', 'profile']) {
     assert.equal(moved[id].x, base[id].x + dx, id);
     assert.equal(moved[id].y, base[id].y, `${id} y`);
   }

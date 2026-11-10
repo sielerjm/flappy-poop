@@ -15,6 +15,7 @@ export const OVERLAY_SCENES = {
   language: 'Language',
   feedback: 'Feedback',
   leaderboard: 'Leaderboard',
+  daily: 'Daily',
 };
 
 /** Active overlays, bottom to top: [{ id, key }]. */

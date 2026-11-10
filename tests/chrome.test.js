@@ -111,6 +111,16 @@ test('changelog (What\'s new) opens from no overlay or over any other overlay wi
   }
 });
 
+test('the 🌞 opens the Daily Dump popup from the ready screen only, never over another overlay', () => {
+  assert.deepEqual(intent({ state: 'ready', input: 'daily' }), { do: 'openDaily', pause: false });
+  for (const state of STATES.filter((s) => s !== 'ready')) assert.deepEqual(intent({ state, input: 'daily' }), { do: 'ignore' }, state);
+  for (const overlay of ['settings', 'about', 'howto', 'changelog', 'language', 'feedback', 'leaderboard', 'daily']) {
+    assert.deepEqual(intent({ state: 'ready', overlay, input: 'daily' }), { do: 'ignore' }, overlay);
+  }
+  assert.deepEqual(intent({ state: 'ready', overlay: 'daily', input: 'close' }), { do: 'closeTop', armResumeLockout: true });
+  assert.deepEqual(intent({ state: 'ready', overlay: 'daily', input: 'changelog' }), { do: 'openChangelog', pause: false }, 'its version line');
+});
+
 test('howto while About is top opens HowTo; howto while HowTo is top is ignored', () => {
   for (const state of STATES) {
     assert.deepEqual(intent({ state, overlay: 'about', input: 'howto' }), { do: 'openHowTo', pause: false });

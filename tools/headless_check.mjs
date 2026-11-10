@@ -34,6 +34,7 @@ export const OVERLAYS = {
   lang: 'Language',
   feedback: 'Feedback',
   leaderboard: 'Leaderboard',
+  daily: 'Daily',
 };
 
 /**
@@ -1220,6 +1221,8 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
           await padDown(G.select);
           const t2 = await evaluate(`${play}.toilet`);
           await padNav('up');
+          const sSun = await ring(); // the 🌞 sits straight up the middle column
+          await padNav('right');
           const s4 = await ring();
           await padDown(G.select);
           await sleep(200);
@@ -1232,7 +1235,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
           const s6 = await ring();
           await padDown(G.back);
           const idOf = async (i) => evaluate(`${play}.focus.items[${i}]?.id ?? null`);
-          ok(s1.index === (await slot('lang')) && s2.index === (await slot('pause')) && s3.index === (await slot('toilet')) && s4.index === (await slot('howto')), `ready screen: right from ⓘ is 🌐 (${await idOf(s1.index)}), up from ⚙ is ⏸ (${await idOf(s2.index)}), up again the toilet toggle (${await idOf(s3.index)}), up again the ? (${await idOf(s4.index)})`);
+          ok(s1.index === (await slot('lang')) && s2.index === (await slot('pause')) && s3.index === (await slot('toilet')) && sSun.index === (await slot('daily')) && s4.index === (await slot('howto')), `ready screen: right from ⓘ is 🌐 (${await idOf(s1.index)}), up from ⚙ is ⏸ (${await idOf(s2.index)}), up again the toilet toggle (${await idOf(s3.index)}), up again the 🌞 (${await idOf(sSun.index)}), right from it the ? (${await idOf(s4.index)})`);
           ok(t1 === !t0 && t2 === t0 && (await playState()) === 'ready', `A on the toggle flips toilet mode (${t0} → ${t1} → ${t2}) without starting`);
           ok(howOpen && howClosed && s5.shown && s5.index === (await slot('howto')) && s6.index === (await slot('pause')) && (await playState()) === 'ready', `A on the ? opens How to play, B closes it with the ring still on the ? (${s5.shown}); down from the ? lands on ⏸ in its column (${await idOf(s6.index)})`);
         }
@@ -2620,6 +2623,75 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await evaluate(`(globalThis.fetch = globalThis.__fetch, ${P}.setSaveState({ ...${P}.save, name: ${name0} ?? undefined }), import('./src/config.js').then((m) => { m.LEADERBOARD.dataApi = ''; return true; }))`);
         const days = sent.posts.map((b) => b.p_day).sort();
         ok(days.join() === [DAY2, DAY].join() && sent.posts.every((b) => b.p_name === 'DailySmoke' && b.p_level === (b.p_day === DAY ? want.level : b.p_level)) && sent.q === 0 && sent.out === 'sent', `online, one sync posts both days once (${days.join(', ')}) under the current name; the queue empties (${sent.q}, ${sent.out})`);
+
+        // The 🌞 and its popup, on today's real day (what the game uses): clear today's attempt first.
+        const D = `__flappy.scene.getScene('Daily')`;
+        const tx = (key) => evaluate(`import('./src/i18n.js').then((m) => m.t('en', '${key}'))`);
+        const popup = () => evaluate(`JSON.stringify({ open: __flappy.scene.isActive('Daily'), label: ${D}.button?.getText?.() ?? null, note: ${D}.note?.text ?? null, countdown: ${D}.countdown?.visible ? ${D}.countdown.text : null, state: ${P}.state, halo: ${P}.dailyHalo.visible })`).then(JSON.parse);
+        const clickSun = async () => {
+          const b = await evaluate(`JSON.stringify(${P}.readyBoxes.daily)`).then(JSON.parse);
+          await tapAt(b.x, b.y);
+          await waitFor(`__flappy.scene.isActive('Daily')`, 20);
+        };
+        const clickButton = async () => {
+          const z = await evaluate(`JSON.stringify({ x: ${D}.buttonZone.x, y: ${D}.buttonZone.y })`).then(JSON.parse);
+          await tapAt(z.x, z.y);
+        };
+        const nameWas = await evaluate(`JSON.stringify(${P}.save.name ?? null)`);
+        // Names go through saveLocal, as the save panel does: home() restarts Play, which reloads the save.
+        const setName = (name) => evaluate(`import('./src/save.js').then((m) => (${P}.setSaveState(m.saveLocal({ ...${P}.save, name: ${JSON.stringify(name)} ?? undefined })), true))`);
+        await evaluate(`(${keys.map((k) => `localStorage.removeItem('${k}')`).join(', ')}, true)`);
+        await setName(null);
+        await home();
+        const u0 = await popup();
+        await clickSun();
+        const u1 = await popup();
+        const closeAt = await evaluate(`JSON.stringify((() => { const c = ${D}.children.list.find((o) => o.type === 'Text' && o.text === '✕'); return { x: c.x, y: c.y }; })())`).then(JSON.parse);
+        await tapAt(closeAt.x, closeAt.y);
+        await waitFor(`!__flappy.scene.isActive('Daily')`, 20);
+        const u2 = await popup();
+        ok(u0.halo && u1.open && u1.label === (await tx('dailyCreateUser')) && u1.note === (await tx('dailyNeedName')) && !u2.open && u2.state === 'ready', `unplayed, the 🌞 glows; a real click opens the popup ("${u1.label}" with no username) and ✕ goes back to the home screen (${u2.state})`);
+        // Create user: the save panel opens over the popup; a saved name turns the button into Play.
+        await clickSun();
+        await clickButton();
+        const panelOpen = await evaluate(`import('./src/ui/savePanel.js').then((m) => m.isSavePanelOpen())`);
+        await setName('SunTester');
+        await evaluate(`import('./src/ui/savePanel.js').then((m) => (m.closeSavePanel(), true))`);
+        const u3 = await popup();
+        ok(panelOpen && u3.open && u3.label === (await tx('dailyPlay')) && u3.note === '', `Create user opens the save panel over the popup (${panelOpen}); after Save the button reads "${u3.label}"`);
+        // Play: today's run at today's level.
+        const today = await evaluate(`${L}.then(([l, c]) => JSON.stringify({ day: l.utcDayKey(), level: l.dailyLevel(l.utcDayKey(), c.TUNING) }))`).then(JSON.parse);
+        await clickButton();
+        await waitFor(`${P}.state === 'playing'`);
+        const run = await evaluate(`JSON.stringify({ daily: ${P}.runIsDaily, day: ${P}.daily?.day, level: ${P}.level, open: __flappy.scene.isActive('Daily') })`).then(JSON.parse);
+        ok(run.daily && run.day === today.day && run.level === today.level && !run.open, `Play closes the popup and starts today's Daily Dump (${run.day}, LV ${run.level})`);
+        await evaluate(`(${P}.graceLeftMs = 0, ${P}.die(), true)`);
+        await waitFor(`__flappy.scene.isActive('Over')`, 40);
+        await home();
+        // Played: the 🌞 is still; the popup offers today's result with the countdown, and it opens Over.
+        const p0 = await popup();
+        await clickSun();
+        const p1 = await popup();
+        await clickButton();
+        await waitFor(`__flappy.scene.isActive('Over')`, 30);
+        const res = await evaluate(`JSON.stringify({ over: __flappy.scene.isActive('Over'), daily: __flappy.scene.getScene('Over').scene.settings.data?.daily?.day ?? null, open: __flappy.scene.isActive('Daily') })`).then(JSON.parse);
+        ok(!p0.halo && p1.label === (await tx('dailySeeResult')) && /^Next Daily Dump in \d\d:\d\d:\d\d$/.test(p1.countdown ?? '') && res.over && res.daily === today.day && !res.open, `played: no glow; the popup offers "${p1.label}" with "${p1.countdown}", which opens today's result`);
+        await home();
+        // Test mode: Practice runs are never saved and leave the day alone.
+        const rec0 = await evaluate(`localStorage.getItem('${keys[0]}')`);
+        await evaluate(`${P}.setTestMode(true), true`);
+        await clickSun();
+        const t1 = await popup();
+        await clickButton();
+        await waitFor(`${P}.state === 'playing'`);
+        const practice = await evaluate(`JSON.stringify({ daily: ${P}.runIsDaily, test: ${P}.runIsTest })`).then(JSON.parse);
+        await evaluate(`(${P}.graceLeftMs = 0, ${P}.setTestSettings({ invincible: false }), ${P}.die(), true)`);
+        await waitFor(`__flappy.scene.isActive('Over')`, 40);
+        const rec1 = await evaluate(`localStorage.getItem('${keys[0]}')`);
+        await evaluate(`(${P}.setTestMode(false), true)`);
+        await home();
+        ok(t1.label === (await tx('dailyPractice')) && t1.note === (await tx('dailyPracticeNote')) && practice.daily && practice.test && rec1 === rec0, `test mode: "${t1.label}" starts an unsaved daily run (the stored attempt unchanged)`);
+        await setName(JSON.parse(nameWas));
 
         // Put everything back.
         await evaluate(`(${keys.map((k) => `localStorage.removeItem('${k}')`).join(', ')}, __flappy.registry.set('toilet', false), __flappy.registry.set('versus', false), true)`);

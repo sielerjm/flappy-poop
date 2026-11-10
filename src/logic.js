@@ -1437,7 +1437,8 @@ export function scaledCircleBody(frameSize, displayScale, logicalRadius) {
 }
 
 /**
- * Ready-screen layout: a round "?" (How to play) in the top-right corner; then,
+ * Ready-screen layout: a round "?" (How to play) in the top-right corner and a round 🌞
+ * (the Daily Dump popup) at the top centre on the same row; then,
  * centred top to bottom, the title, the poop wearing its "TAP TO FLAP!" speech
  * bubble (poop-speech.png; the bubble reaches ~127 px above and ~116 px right
  * of the body at display scale, ×readyPoopScale) and the toilet toggle; then
@@ -1466,10 +1467,12 @@ export function readyLayout(width, height, t, x0 = 0, { versus = false } = {}) {
   // (readyPromptGlowPx past the rim) stays inside the field.
   const haloR = boxH / 2 + (t.readyPromptGlowPx ?? 0);
   const howto = { id: 'howto', x: x0 + width - 16 - haloR, y: 16 + haloR, width: boxH, height: boxH, round: true };
+  // 🌞 Daily Dump: the same round button at the top centre, on the ? row (its halo clears the ?'s).
+  const daily = { id: 'daily', x: cx, y: howto.y, width: boxH, height: boxH, round: true };
   // The user button, its bottom at 1111: above the ground strip (1152) and the tray band (1168).
   // It does not move when the block above shifts.
   const profile = { id: 'profile', x: cx, y: 1111 - boxH / 2, width: 360, height: boxH };
-  return { title, poop, toilet, howto, profile, ...(two ? { versus: two } : {}) };
+  return { title, poop, toilet, howto, daily, profile, ...(two ? { versus: two } : {}) };
 }
 
 function inBox(x, y, box) {
@@ -1543,7 +1546,7 @@ export function shareCardLayout(t) {
  */
 export function readyHit(x, y, layout) {
   if (!layout) return null;
-  for (const box of [layout.toilet, layout.versus, layout.howto, layout.profile]) {
+  for (const box of [layout.toilet, layout.versus, layout.howto, layout.daily, layout.profile]) {
     if (box && inBox(x, y, box)) return box.id;
   }
   return null;
@@ -1582,11 +1585,11 @@ export function overlayOutsideHit(x, y, panel) {
  * result; this function is Phaser-free so the matrix can be tested in Node.
  *
  * @param {'ready'|'playing'|'paused'|'respawn'|'dead'} state ('respawn': a match half between a crash and its restart; pauses like 'playing', ignores taps)
- * @param {null|'settings'|'about'|'howto'|'changelog'|'language'|'feedback'|'leaderboard'} overlay topmost overlay (pause is a state)
+ * @param {null|'settings'|'about'|'howto'|'changelog'|'language'|'feedback'|'leaderboard'|'daily'} overlay topmost overlay (pause is a state)
  * @param {boolean} stackedSettings true when About sits on top of Settings
  * @param {boolean} stackedAbout true when HowTo or Changelog (What's new) sits on top of About
  * @param {boolean} stackedUnder true when Feedback or What's new sits on top of another overlay
- * @param {'pause'|'mute'|'settings'|'info'|'howto'|'changelog'|'lang'|'feedback'|'leaderboard'|'shop'|'tap'|'esc'|'close'} input ('shop': the 💰 button in a level break)
+ * @param {'pause'|'mute'|'settings'|'info'|'howto'|'changelog'|'lang'|'feedback'|'leaderboard'|'daily'|'shop'|'tap'|'esc'|'close'} input ('shop': the 💰 button in a level break; 'daily': the 🌞, ready screen only)
  * @param {boolean} resumeLocked true during pauseResumeLockoutMs after overlay close
  * @param {boolean} shop true while this half's level-break shop panel is open
  * @param {boolean} breaking true while this half is in its own level break (the only place the shop opens)
@@ -1645,6 +1648,8 @@ export function chromeIntent({
   if (input === 'settings') return { do: 'openSettings', pause: live };
   if (input === 'info') return { do: 'openAbout', pause: live };
   if (input === 'howto') return { do: 'openHowTo', pause: live };
+  // The 🌞 popup starts a run, so it opens from the ready screen only.
+  if (input === 'daily') return state === 'ready' ? { do: 'openDaily', pause: false } : { do: 'ignore' };
   if (input === 'changelog') return { do: 'openChangelog', pause: live };
   if (input === 'lang') return { do: 'openLanguage', pause: live };
   if (input === 'feedback') return { do: 'openFeedback', pause: live };

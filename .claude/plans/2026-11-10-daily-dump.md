@@ -1,6 +1,6 @@
 # Plan: Daily Dump mode (audited revision of `daily_dump_mode_f097792f.plan.md`)
 - Created: 2026-11-10 (an audit of Michael's draft against the code)
-- Status: in progress (step 5; db/schema.sql still to be applied by Michael)
+- Status: in progress (step 6; db/schema.sql still to be applied by Michael)
 - Baseline: `2690200` on `main` (pushed; tree clean).
 - Whole-suite verification: `npm test` (449 pass), `npm run smoke` (337, full).
 - On approval, this revision replaces the draft at `.claude/plans/daily_dump_mode_f097792f.plan.md`. Repo copy: `.claude/plans/2026-11-10-daily-dump.md` (`git add -f`, only that file).
@@ -226,7 +226,7 @@ Each step is verified, then committed. The full suite runs at every step.
 - **Commit:** `feat(daily, step 4/8): queue and post the daily score with the leaderboard sync`
 - **Result:** npm test 468/468; full smoke 346/346 (daily 9). A queued entry carries the name it was queued with; the drain sends the current player's name instead, keeps the current player's entry while they have no name, and drops another player's nameless leftover.
 
-### Step 5/8: the 🌞 and the Daily Dump popup  [pending]
+### Step 5/8: the 🌞 and the Daily Dump popup  [done]
 - **Change:**
   - the 🌞's layout, hit test, pulse and ring;
   - the `Daily` overlay scene with its three button states, the refresh after a save, the stored-result reopen, and Practice in test mode;
@@ -241,6 +241,7 @@ Each step is verified, then committed. The full suite runs at every step.
   - in test mode the button reads Practice, and the run isn't recorded.
 - **Screenshots:** the popup in its three states, en + zh, 720×1280 and wide; the ready screen with the 🧪 badge (check it clears the 🌞's halo).
 - **Commit:** `feat(daily, step 5/8): the 🌞 opens the Daily Dump popup: Create user, Play or today's result`
+- **Result:** npm test 470/470; full smoke 353/353 (daily 14, overlays 11, pad-overlays 14). The pad's "up from the toilet" now reaches the 🌞, then right to the ?. Screenshots: en + zh, 720×1280 and 1600×900; the zh body has explicit line breaks (Phaser wrapped "。" onto a line start).
 
 ### Step 6/8: daily Over and Share  [pending]
 - **Change:** the Over layout above, the countdown, the score link, `dailyShareText`, and the card text.

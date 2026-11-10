@@ -58,6 +58,7 @@ export const TUNING = {
   readyPromptPulseMs: 900, // ms per halo pulse (one way)
   readyPromptMinAlpha: 0.45, // 0–1 halo pulse floor
   readyPromptMaxAlpha: 1, // 0–1 halo pulse ceiling
+  dailyPulseScale: 1.14, // the 🌞's breathing size (×) while today's Daily Dump is unplayed, in step with its halo
   saveClearConfirmMs: 4000, // ms a first tap on the save panel's Clear stays armed: a second tap inside it signs this device out
   launchSlideMs: 700, // ms the poop slides from its ready spot to poopX() on the start tap
   readyTitlePx: 72, // px font size of the FLAPPY POOP title on the ready screen

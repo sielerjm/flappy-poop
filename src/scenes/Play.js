@@ -381,6 +381,20 @@ export class Play extends Phaser.Scene {
       this.howToHaloTween = this.tweens.add({ targets: this.howToHalo, alpha: T.readyPromptMaxAlpha, yoyo: true, repeat: -1, duration: T.readyPromptPulseMs });
     }
     this.howToBtn = createButton(this, this.readyBoxes.howto, '?', { ...TEXT_STYLE, fontSize: '52px', color: '#f8a0c8' });
+    // 🌞 at the top centre opens the Daily Dump popup. Until this player has used today's attempt
+    // it breathes (dailyPulseScale) under the same soft white halo as the ?.
+    {
+      const b = this.readyBoxes.daily;
+      this.dailyHalo = createGlow(this, b.x, b.y, { radius: T.beans.glowRadiusPx, fadeFrac: T.beans.glowFadeFrac })
+        .setDepth(19)
+        .setScale((b.width / 2 + T.readyPromptGlowPx) / T.beans.glowRadiusPx)
+        .setAlpha(T.readyPromptMinAlpha);
+      this.dailyHaloTween = this.tweens.add({ targets: this.dailyHalo, alpha: T.readyPromptMaxAlpha, yoyo: true, repeat: -1, duration: T.readyPromptPulseMs });
+      this.dailyBtn = createButton(this, b, '', { ...TEXT_STYLE, fontSize: '52px' });
+      this.dailySun = this.add.text(b.x, b.y, '\u{1F31E}', { fontFamily: 'sans-serif', fontSize: '52px' }).setOrigin(0.5).setDepth(21);
+      this.dailySunTween = this.tweens.add({ targets: this.dailySun, scale: T.dailyPulseScale, yoyo: true, repeat: -1, duration: T.readyPromptPulseMs, ease: 'Sine.easeInOut' });
+    }
+    this.refreshDailyPrompt();
     // The user button: "<name> · best" once a username is set, else loadUserButton under a pulsing
     // soft white halo. Either way a tap opens the save panel (on the name field when unnamed).
     {
@@ -463,6 +477,7 @@ export class Play extends Phaser.Scene {
             ...['info', 'lang', 'feedback', 'leaderboard', 'mute', 'settings', 'pause'].map((id) => ({ id, obj: this.tray.buttons[id], activate: () => this.handleChrome(id) })),
             { id: 'toilet', box: this.readyBoxes.toilet, visible: onReady, activate: () => this.toggleToilet() },
             ...(this.readyBoxes.versus ? [{ id: 'versus', box: this.readyBoxes.versus, visible: onReady, activate: () => this.toggleVersus() }] : []),
+            { id: 'daily', box: this.readyBoxes.daily, visible: onReady, activate: () => this.handleChrome('daily') },
             { id: 'howto', box: this.readyBoxes.howto, visible: onReady, activate: () => this.handleChrome('howto') },
             // The level break: the 💰 pill, then (the shop open) its ✕ and rows down the column.
             { id: 'shop', box: this.shopButtonBox, depth: 27, visible: () => this.shopButtonShown(), activate: () => this.handleChrome('shop') },
@@ -642,6 +657,9 @@ export class Play extends Phaser.Scene {
     this.versusToggle?.setVisible(visible);
     this.howToBtn.setVisible(visible);
     this.howToHalo.setVisible(visible && this.isHowToPromptDue());
+    this.dailyBtn.setVisible(visible);
+    this.dailySun.setVisible(visible);
+    this.refreshDailyPrompt();
     this.profileBtn.setVisible(visible);
     this.profileHalo.setVisible(visible && !this.save?.name);
     this.refreshTestBadge();
@@ -953,6 +971,10 @@ export class Play extends Phaser.Scene {
           this.handleChrome('howto');
           return;
         }
+        if (hit === 'daily') {
+          this.handleChrome('daily');
+          return;
+        }
         if (hit === 'toilet') {
           this.toggleToilet();
           return;
@@ -1027,10 +1049,57 @@ export class Play extends Phaser.Scene {
     return this.save;
   }
 
-  /** Called by the save panel after a name edit or a successful load. */
+  /** Called by the save panel after a name edit or a successful load (and by Clear). */
   setSaveState(state) {
     this.save = state;
     this.refreshProfile();
+    this.refreshDailyPrompt();
+    this.scene.get('Daily')?.refresh?.(); // the popup's button: Create user ⟷ Play / See today's result
+  }
+
+  /** Has this player used today's Daily Dump on this device (a record for today, finished or cut off)? */
+  dailyPlayedToday() {
+    return Boolean(this.save?.id && this.dailyStore.load(utcDayKey(), this.save.id));
+  }
+
+  /** The 🌞 breathes under its halo on the ready screen until today's attempt is used. */
+  refreshDailyPrompt() {
+    if (!this.dailySun) return;
+    const ready = this.state === 'ready' && !this.launching && !this.match && this.dailyBtn && this.dailySun.visible;
+    const due = Boolean(ready) && !this.dailyPlayedToday();
+    this.dailyHalo.setVisible(due);
+    if (due) this.dailySunTween.resume();
+    else {
+      this.dailySunTween.pause();
+      this.dailySun.setScale(1);
+    }
+  }
+
+  /**
+   * The popup's "See today's result": the game-over panel for today's stored attempt (an abandoned
+   * one is finalised and queued by the sync first). Its rank comes from the board when it answers.
+   */
+  showDailyResult() {
+    if (this.match || this.state !== 'ready' || this.launching) return false;
+    const day = utcDayKey();
+    const rec = this.save?.id ? this.dailyStore.load(day, this.save.id) : null;
+    if (!rec) return false;
+    const sync = this.syncLeaderboard();
+    const after = this.dailyStore.load(day, this.save.id) ?? rec;
+    this.focus?.hide();
+    this.setReadyUiVisible(false);
+    this.poop.setVisible(false);
+    this.scene.launch('Over', {
+      score: after.score,
+      won: false,
+      test: false,
+      toilet: false,
+      level: after.level,
+      pipes: after.pipes,
+      collected: { fiber: 0, probiotic: 0, postbiotic: 0, bacteria: 0, bean: 0, mystery: 0, coin: 0, ...after.collected },
+      daily: { day, level: after.level, practice: false, sync },
+    });
+    return true;
   }
 
   /**
@@ -1402,6 +1471,10 @@ export class Play extends Phaser.Scene {
         if (this.overlayPause(result)) this.pauseRun();
         if (!this.scene.isActive('HowTo')) this.scene.launch('HowTo');
         this.scene.bringToTop('HowTo');
+        break;
+      case 'openDaily':
+        if (!this.scene.isActive('Daily')) this.scene.launch('Daily');
+        this.scene.bringToTop('Daily');
         break;
       case 'openChangelog':
         if (this.overlayPause(result)) this.pauseRun();
