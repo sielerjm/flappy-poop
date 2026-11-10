@@ -121,21 +121,16 @@ test('versusLayout: two half-window fields, the same canvas as the wide field, c
   assert.equal(ultra.totalW, FIELD.maxWidth);
 });
 
-test('joinButtonsLayout: 🏅 and its (?) by the divider, Home at the edge, all on the right half on the tray row', () => {
+test('joinButtonsLayout: Bracket alone at the right half\'s edge, on the tray row', () => {
   for (const vw of [1300, 1800, 6000]) {
     const l = versusLayout(vw, 1000, FIELD);
     const row = joinButtonsLayout(l, GAME_HEIGHT, T);
-    const boxes = [row.tournament, row.help, row.home];
-    for (const b of boxes) {
-      assert.equal(b.y, GAME_HEIGHT - T.trayHeight / 2, `${b.id}: the tray's row`);
-      assert.ok(b.x - b.width / 2 >= l.x[1] + 16 && b.x + b.width / 2 <= l.totalW - 16, `${b.id} inside the right half at ${vw}`);
-      assert.ok(b.y + b.height / 2 <= GAME_HEIGHT, `${b.id} on screen`);
-    }
-    for (let i = 1; i < boxes.length; i += 1) assert.ok(boxes[i - 1].x + boxes[i - 1].width / 2 + 16 <= boxes[i].x - boxes[i].width / 2, `${boxes[i - 1].id} then ${boxes[i].id}, apart, at ${vw}`);
-    assert.equal(row.help.round, true);
-    assert.ok(row.tournament.height >= T.trayHitMin && row.home.height >= T.trayHitMin, 'thumb-sized');
-    const race = joinButtonsLayout(l, GAME_HEIGHT, T, { tournament: true });
-    assert.deepEqual(race, { home: row.home, tournament: null, help: null }, 'a tournament race: Home (Bracket) alone, same place');
+    assert.deepEqual(Object.keys(row), ['home']);
+    const b = row.home;
+    assert.equal(b.y, GAME_HEIGHT - T.trayHeight / 2, "the tray's row");
+    assert.ok(b.x - b.width / 2 >= l.x[1] + 16 && b.x + b.width / 2 <= l.totalW - 16, `inside the right half at ${vw}`);
+    assert.ok(b.y + b.height / 2 <= GAME_HEIGHT, 'on screen');
+    assert.ok(b.height >= T.trayHitMin, 'thumb-sized');
   }
 });
 

@@ -63,10 +63,10 @@ export const SECTIONS = [
   { name: 'final', needs: ['skip'], about: 'the final level: crossing the rectum line wins the run' },
   { name: 'testmode', about: 'test mode: trigger word, start level, Invincible, power-ups, nothing recorded, Exit' },
   { name: 'wide', about: 'the wide field: re-fit, column chrome, pre-fill and sweep-in, resize and rotation' },
-  { name: 'versus-join', needs: [], about: 'two players: the 👥 toggle, the join screen, claims, countdown, routed input, Home' },
-  { name: 'versus-match', needs: [], about: 'two players: shared pause, level sync and ready check, catch-up, respawn, result, rematch' },
+  { name: 'versus-join', needs: [], about: 'two players: the 👥 toggle, the lobby, a race\'s join screen, claims, countdown, routed input, leaving' },
+  { name: 'versus-match', needs: [], about: 'two players: shared pause, level sync and ready check, catch-up, respawn, result, the result panel\'s gate, the smoke\'s rematch' },
   { name: 'versus-ghost', needs: [], about: "two players: the ghost at the distance gap and the rival marker on the level bar" },
-  { name: 'tournament', needs: [], about: '🏅 tournament: the join-screen button, the lobby (guest, pasted code, host), the bracket, named races, Continue, the podium, abandon' },
+  { name: 'tournament', needs: [], about: '🏅 tournament (every two-player session): the lobby (guest, pasted code, host, help), the pad in the panel, seeding (↑ ↓, 🎲, drag), the 🏅 pill in a level break, Bracket / Continue after a race, the podium, abandon to the lobby, two players' },
   { name: 'daily', needs: [], about: "🌞 Daily Dump: the day's level and shared course, endless (no finish line), no coins or skips, the attempt claimed at the start and final at the crash, nothing on the 🏆 lists, an abandoned run finalised" },
 ];
 
@@ -283,6 +283,25 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
       await cdp.send('Input.dispatchMouseEvent', { type: 'mousePressed', x: pt.x, y: pt.y, button: 'left', clickCount: 1 });
       await cdp.send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: pt.x, y: pt.y, button: 'left', clickCount: 1 });
       await sleep(250);
+    };
+    // Every two-player session is a tournament: the 👥 start tap (with the toggle on) opens the lobby
+    // over Versus. lobbyToRace replaces the lobby's draw with a 2-player tournament of `names` (left
+    // first), then presses Play: the race's join screen, devices unclaimed. True once it is up.
+    const lobbyToRace = async (names = ['P1', 'P2']) => {
+      const VS = `__flappy.scene.getScene('Versus')`;
+      const PANEL = `import('./src/ui/tournamentPanel.js')`;
+      for (let i = 0; i < 40 && !(await evaluate(`__flappy.scene.isActive('Versus') && ${VS}.match.status === 'lobby' && Boolean(document.getElementById('tour-start'))`)); i += 1) await sleep(100);
+      await evaluate(`Promise.all([import('./src/tournament.js'), import('./src/logic.js'), ${PANEL}]).then(([t, l, p]) => { let tour = t.createTournament(${JSON.stringify(names)}.map((name) => ({ name, playerId: null, guest: true })), l.createRng(1)); if (tour.order[0] !== 0) tour = t.reseed(tour, 0, 1); __flappy.registry.set('tournament', { tour, matchId: null }); p.openTournamentPanel({ game: __flappy, locale: 'en', play: __flappy.scene.getScene('Play') }); document.getElementById('tour-play').click(); return true; })`);
+      for (let i = 0; i < 60; i += 1) {
+        if (await evaluate(`__flappy.scene.isActive('Versus') && ${VS}.match.status === 'join' && Boolean(${VS}.match.tournament) && __flappy.scene.getScene('Play').match === ${VS}.match`)) return true;
+        await sleep(100);
+      }
+      return false;
+    };
+    // Leave a two-player session for single player: close the panel, forget the tournament, Versus.leave().
+    const leaveVersus = async () => {
+      await evaluate(`import('./src/ui/tournamentPanel.js').then((m) => (m.closeTournamentPanel(), __flappy.registry.remove('tournament'), __flappy.scene.getScene('Versus').leave(), true))`);
+      for (let i = 0; i < 40 && !(await evaluate(`!__flappy.scene.isActive('Versus') && __flappy.scene.getScene('Play').state === 'ready'`)); i += 1) await sleep(100);
     };
 
     await section('home', async () => {
@@ -1957,16 +1976,17 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
     });
 
     await section('versus-join', async () => {
-      // Versus (two players): the 👥 toggle under the toilet toggle on a landscape window, the join
-      // screen's device claims, the countdown, two Play halves on one shared course, the inputs
-      // routed to the half that owns the device, and the ways back. Portrait never offers it.
+      // Versus (two players): the 👥 toggle under the toilet toggle on a landscape window, the lobby
+      // (every two-player session is a tournament), a race's join screen with its device claims, the
+      // countdown, two Play halves on one shared course, the inputs routed to the half that owns the
+      // device, and the ways back. Portrait never offers it.
       {
         const P1 = `__flappy.scene.getScene('Play')`;
         const P2 = `__flappy.scene.getScene('PlayB')`;
         const VS = `__flappy.scene.getScene('Versus')`;
         const L = `Promise.all([import('./src/logic.js'), import('./src/config.js'), import('./src/versus.js')])`;
         const metrics = (width, height) => cdp.send('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 1, mobile: false });
-        const want = await evaluate(`${L}.then(([l, c, v]) => JSON.stringify({ ...v.versusLayout(1800, 1000, c.FIELD), W: l.fieldWidth(1800, 1000, c.FIELD), countdownMs: c.TUNING.versus.countdownMs, select: c.TUNING.gamepad.select, flapVy: c.TUNING.flapVelocity }))`).then(JSON.parse);
+        const want = await evaluate(`${L}.then(([l, c, v]) => JSON.stringify({ ...v.versusLayout(1800, 1000, c.FIELD), W: l.fieldWidth(1800, 1000, c.FIELD), countdownMs: c.TUNING.versus.countdownMs, select: c.TUNING.gamepad.select, back: c.TUNING.gamepad.back, flapVy: c.TUNING.flapVelocity }))`).then(JSON.parse);
         const settle = async (w) => {
           let W = null;
           for (let i = 0; i < 60 && W !== w; i += 1) {
@@ -1991,10 +2011,14 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await sleep(200);
         const toggled = await evaluate(`JSON.stringify({ on: __flappy.registry.get('versus'), state: ${P1}.state, launching: ${P1}.launching, knob: ${P1}.versusToggle.isOn() })`).then(JSON.parse);
         ok(toggled.on === true && toggled.knob && toggled.state === 'ready' && !toggled.launching, 'a tap on it switches two-player mode on without starting a run');
-        // The start tap opens the join screen: the canvas is two halves, each a Play on its own strip.
+        // The start tap opens the tournament lobby (two guests, Start ready), then a race's join screen:
+        // the canvas is two halves, each a Play on its own strip.
         await evaluate(`${P1}.launch(), true`);
-        const joinUp = await until(`__flappy.scene.isActive('Versus') && __flappy.scene.isActive('Play') && __flappy.scene.isActive('PlayB') && ${P1}.state === 'ready' && ${P2}.state === 'ready' && Boolean(${P1}.match)`);
-        ok(joinUp, 'the start tap with the toggle on opens the join screen: Versus, Play and PlayB active');
+        const lobbyUp = await until(`__flappy.scene.isActive('Versus') && ${VS}.match.status === 'lobby' && Boolean(document.getElementById('tour-start'))`);
+        const lobby = await evaluate(`JSON.stringify({ count: document.getElementById('tour-count')?.textContent, rows: document.querySelectorAll('[id^="tour-slot-"] .who:not(.empty)').length, start: !document.getElementById('tour-start').disabled, title: ${VS}.joinTitle.visible, home: ${VS}.homeButton.visible })`).then(JSON.parse);
+        ok(lobbyUp && lobby.count === '2' && lobby.rows === 2 && lobby.start && !lobby.title && !lobby.home, `the start tap with the toggle on opens the tournament lobby: ${lobby.count} players, both rows guests, Start ready, the join screen hidden under it`);
+        const joinUp = (await lobbyToRace()) && (await until(`__flappy.scene.isActive('PlayB') && ${P1}.state === 'ready' && ${P2}.state === 'ready' && Boolean(${P1}.match)`));
+        ok(joinUp, 'Play opens the race\'s join screen: Versus, Play and PlayB active');
         const halves = await evaluate(`(() => { const a = ${P1}; const b = ${P2}; const v = ${VS}; const idx = (k) => __flappy.scene.getIndex(k); const half = (p) => ({ player: p.player, fieldW: p.fieldW, fieldX: p.fieldX, cam: [p.cameras.main.x, p.cameras.main.width], tray: Boolean(p.tray), pad: Boolean(p.pad), ready: p.readyTitle.visible, bg: p.bgColor.width }); return JSON.stringify({ W: __flappy.scale.width, status: v.match.status, same: a.match === b.match && a.match === v.match, a: half(a), b: half(b), order: idx('Versus') > idx('Play') && idx('Versus') > idx('PlayB'), seedShared: a.course.shared && b.course.shared && a.course.seed === b.course.seed, join: v.joinTitle.visible && v.homeButton !== null }); })()`).then(JSON.parse);
         ok(halves.W === want.totalW && halves.status === 'join' && halves.same && halves.a.fieldW === want.halfW && halves.b.fieldW === want.halfW && halves.a.fieldX === 0 && halves.b.fieldX === want.halfW && halves.a.cam[0] === 0 && halves.a.cam[1] === want.halfW && halves.b.cam[0] === want.halfW && halves.b.cam[1] === want.halfW && halves.a.bg === want.halfW, `the canvas is ${halves.W} = 2 × ${want.halfW}: P1's camera at 0, P2's at ${halves.b.cam[0]}, both ${want.halfW} wide, each world ${halves.a.bg} wide (status ${halves.status})`);
         ok(halves.a.tray && halves.a.pad && !halves.b.tray && !halves.b.pad && !halves.a.ready && !halves.b.ready && halves.order && halves.seedShared && halves.join, 'P1 keeps the tray and the pad, P2 has neither, both hide the ready UI, Versus renders above both halves with the join screen, one shared course');
@@ -2029,15 +2053,15 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await evaluate(`[${P1}, ${P2}].forEach((p) => { p.poop.body.setAllowGravity(false); p.poop.setVelocity(0, 0); p.poop.y = 640; p.graceLeftMs = 1e9; }), true`);
         const route = await evaluate(`(() => { const a = ${P1}; const b = ${P2}; const vy = () => [a.poop.body.velocity.y, b.poop.body.velocity.y]; a.onVersusKey('Space'); const none = vy(); a.padDown(${want.select}, 1); const pad = vy(); a.poop.setVelocity(0, 0); b.flap({ x: 100, y: 600 }); const tap = vy(); return JSON.stringify({ none, pad, tap }); })()`).then(JSON.parse);
         ok(route.none[0] === 0 && route.none[1] === 0 && route.pad[0] === want.flapVy && route.pad[1] === 0 && route.tap[0] === 0 && route.tap[1] === want.flapVy, `mid-match the unclaimed Space does nothing, pad 2 flaps P1 (${route.pad.join(' / ')}), a tap on the right half flaps P2 (${route.tap.join(' / ')})`);
-        // Home from the match: both halves stop, the canvas re-fits the window, single player is back.
-        await evaluate(`${VS}.leave(), true`);
+        // Leaving the match: both halves stop, the canvas re-fits the window, single player is back.
+        await leaveVersus();
         const left = await until(`!__flappy.scene.isActive('Versus') && !__flappy.scene.isActive('PlayB') && __flappy.scene.isActive('Play') && ${P1}.state === 'ready' && ${P1}.match === null && __flappy.scale.width === ${want.W}`);
-        ok(left, `Home leaves the match: single player on the ready screen at the ${want.W} px field, the halves gone`);
-        // Back in with the toggle still on, then Esc / B on the join screen backs out.
+        ok(left, `leaving the match: single player on the ready screen at the ${want.W} px field, the halves gone`);
+        // Back in with the toggle still on, then the pad's B in the lobby backs out.
         await evaluate(`${P1}.launch(), true`);
-        ok(await until(`__flappy.scene.isActive('Versus') && ${VS}.match.status === 'join'`), 'the toggle stays on: the next start tap opens the join screen again');
-        await evaluate(`${VS}.onPadBack(), true`);
-        ok(await until(`!__flappy.scene.isActive('Versus') && __flappy.scene.isActive('Play') && ${P1}.state === 'ready' && ${P1}.match === null`), 'B / Esc on the join screen returns to single player');
+        ok(await until(`__flappy.scene.isActive('Versus') && ${VS}.match.status === 'lobby' && Boolean(document.getElementById('tour-start'))`), 'the toggle stays on: the next start tap opens the lobby again');
+        await evaluate(`${P1}.padDown(${want.back}), true`);
+        ok(await until(`!__flappy.scene.isActive('Versus') && __flappy.scene.isActive('Play') && ${P1}.state === 'ready' && ${P1}.match === null`) && !(await evaluate(`import('./src/ui/tournamentPanel.js').then((m) => m.isTournamentPanelOpen())`)), 'B (or Esc) in the lobby returns to single player');
         // A window that cannot fit two halves hides the toggle; the flag left on is ignored by the start tap.
         await metrics(720, 1280);
         await settle(720);
@@ -2058,15 +2082,15 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
       // Versus, the match itself: the shared pause (and a level break that it must not end), the
       // catch-up box for a trailing player, a crash as a respawn (the death penalty, the tumble, the
       // cleared field, the glide and the blinks under a shared pause, the restart), the end of the
-      // match, the result panel, nothing recorded, a rematch on a fresh seed with the same devices,
-      // Home from the panel.
+      // match, the result panel (gated until it shows), nothing recorded, the smoke's rematch on a fresh
+      // seed with the same devices, Continue handing the race on, leaving.
       {
         const P1 = `__flappy.scene.getScene('Play')`;
         const P2 = `__flappy.scene.getScene('PlayB')`;
         const VS = `__flappy.scene.getScene('Versus')`;
         const L = `Promise.all([import('./src/logic.js'), import('./src/config.js')])`;
         const metrics = (width, height) => cdp.send('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 1, mobile: false });
-        const want = await evaluate(`${L}.then(([l, c]) => JSON.stringify({ W: l.fieldWidth(1800, 1000, c.FIELD), countdownMs: c.TUNING.versus.countdownMs, pause: c.TUNING.gamepad.pause, end1: c.TUNING.levels.pipes[0], deathMs: c.TUNING.deathToOverMs, maxBeans: c.TUNING.beans.maxBeans, super: c.TUNING.versus.catchUp.superBehind, beanMin: c.TUNING.versus.catchUp.beanBehindMin, last: c.TUNING.levels.lastLevel, end: l.levelEnd(c.TUNING.levels.lastLevel, c.TUNING), penalty: c.TUNING.versus.scoring.deathPenaltyPerLevel, bonus: c.TUNING.versus.scoring.levelClearBonus, respawn: c.TUNING.versus.respawn, lockoutMs: c.TUNING.pauseResumeLockoutMs, up: c.TUNING.gamepad.up, back: c.TUNING.gamepad.back, syncMs: c.TUNING.versus.levelSyncDelayMs }))`).then(JSON.parse);
+        const want = await evaluate(`${L}.then(([l, c]) => JSON.stringify({ W: l.fieldWidth(1800, 1000, c.FIELD), countdownMs: c.TUNING.versus.countdownMs, pause: c.TUNING.gamepad.pause, end1: c.TUNING.tournament.levelPipes[0], deathMs: c.TUNING.deathToOverMs, maxBeans: c.TUNING.beans.maxBeans, super: c.TUNING.versus.catchUp.superBehind, beanMin: c.TUNING.versus.catchUp.beanBehindMin, last: c.TUNING.levels.lastLevel, end: l.levelEnd(c.TUNING.levels.lastLevel, l.withLevelPipes(c.TUNING, c.TUNING.tournament.levelPipes)), penalty: c.TUNING.versus.scoring.deathPenaltyPerLevel, bonus: c.TUNING.versus.scoring.levelClearBonus, respawn: c.TUNING.versus.respawn, lockoutMs: c.TUNING.pauseResumeLockoutMs, up: c.TUNING.gamepad.up, back: c.TUNING.gamepad.back, syncMs: c.TUNING.versus.levelSyncDelayMs }))`).then(JSON.parse);
         const settle = async (w) => {
           let W = null;
           for (let i = 0; i < 60 && W !== w; i += 1) {
@@ -2094,7 +2118,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await settle(want.W);
         const saveBefore = await evaluate(`localStorage.getItem('flappyPoop.save')`);
         await evaluate(`${P1}.toggleVersus(), ${P1}.launch(), true`);
-        ok(await until(`__flappy.scene.isActive('Versus') && ${VS}.match.status === 'join'`), 'the 👥 toggle (toggleVersus) and the start tap open the join screen');
+        ok(await lobbyToRace(), 'the 👥 toggle (toggleVersus) and the start tap open the lobby; Play opens a race\'s join screen');
         ok(await race(), 'a keyboard-only match: W / Space is P1, ↑ / Enter is P2, both playing after the countdown');
         const vcoins = await evaluate(`(() => { const a = ${P1}; const saved = () => (JSON.parse(localStorage.getItem('flappyPoop.save') ?? '{}').coins ?? 0); const before = saved(); const start = a.effects.coins(); a.takeCoins(3); const out = { start, purse: a.effects.coins(), before, after: saved() }; a.effects.spendCoins(3); a.refreshCoinHud(); return JSON.stringify(out); })()`).then(JSON.parse);
         ok(vcoins.start === 0 && vcoins.purse === 3, 'a match starts with an empty purse');
@@ -2300,7 +2324,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         // "Waiting for P2…" while P2 plays on; its tray, keys and pad still drive the match (Settings
         // pauses P2, a tap on P1's half lifts the pause, a d-pad press pauses and rings). Then P2 (9)
         // crosses too: both earn 25, P2 wins 34 to 30; no Over, nothing recorded; the panel shows the
-        // crashes (the tiebreak) and offers Rematch | Home.
+        // crashes (the tiebreak) and offers Continue | Bracket.
         const finish = (P, score) => evaluate(`(() => { const p = ${P}; if (${score} != null) p.score = ${score}; p.pipes.clear(true, true); p.items.clear(true, true); p.beans.clear(true, true); p.nextGapY = null; p.level = ${want.last}; p.pipesSpawned = ${want.end}; p.pipesPassed = ${want.end}; p.finishSpawned = false; p.applyLevel(); p.spawnFinishLine(); p.finishLine.x = p.poop.x + 150; return true; })()`);
         await finish(P1, 5); // the score is pinned as the line spawns: nothing scores past a finish line
         ok(await until(`${VS}.match.slots[0].ended`), 'P1 crosses the rectum\'s finish line first');
@@ -2336,15 +2360,19 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await sleep(100);
         const ended = await evaluate(`JSON.stringify({ status: ${VS}.match.status, a: ${P1}.state, b: ${P2}.state, scores: ${VS}.match.slots.map((s) => s.score), won: ${VS}.match.slots.map((s) => s.won), ended: ${VS}.match.slots.map((s) => s.ended), over: __flappy.scene.isActive('Over'), panel: ${VS}.resultShown, faces: [${P1}.poop.texture.key, ${P2}.poop.texture.key] })`).then(JSON.parse);
         ok(ended.status === 'over' && ended.a === 'dead' && ended.b === 'dead' && ended.scores[0] === 5 + want.bonus && ended.scores[1] === 9 && ended.won[0] && ended.won[1] && ended.ended[0] && ended.ended[1] && !ended.over && !ended.panel && ended.faces.every((f) => f === 'poop'), `both out (${ended.scores.join(' / ')}), no Over, the panel waits for the delay`);
+        // The beat before the panel: Esc / B (onPadBack), A (primary) and Bracket (home) hand nothing on;
+        // the outcome is already this race's (fixed when both runs ended).
+        const gate = await evaluate(`(() => { const v = ${VS}; let sent = 0; const count = () => { sent += 1; }; __flappy.events.on('tournament-race', count); v.onPadBack(); v.primary(); v.home(); __flappy.events.off('tournament-race', count); return JSON.stringify({ sent, handed: v.handedOff, shown: v.resultShown, panel: document.getElementById('tournament-panel')?.hidden === false, outcome: v.outcome }); })()`).then(JSON.parse);
+        ok(gate.sent === 0 && !gate.handed && !gate.shown && !gate.panel && gate.outcome?.winner === 0, `before the panel shows, Esc / B, A and Bracket hand nothing on (sent ${gate.sent}); the outcome is this race's (winner ${gate.outcome?.winner}, by ${gate.outcome?.by})`);
         ok(await until(`${VS}.resultShown`, (want.deathMs + 1500) / 100), 'the result panel shows after the delay');
         const panel = await evaluate(`(() => { const v = ${VS}; const texts = v.children.list.filter((c) => c.type === 'Text' && c.visible).map((c) => c.text); return JSON.stringify({ texts, buttons: Boolean(v.buttons), rematch: v.rematchButton.getText(), home: v.resultHome.getText(), syncs: globalThis.__syncs ?? 0, save: localStorage.getItem('flappyPoop.save'), status: v.match.status }); })()`).then(JSON.parse);
-        ok(panel.texts.includes('P1 WINS!') && !panel.texts.includes('OUT') && panel.texts.includes('9') && panel.texts.includes(String(5 + want.bonus)) && panel.texts.filter((x) => x === '💀 ×1').length === 2 && panel.buttons && panel.rematch === 'Rematch' && panel.home === 'Home', `the panel reads P1 WINS! (first out took the +${want.bonus}: ${5 + want.bonus} to 9) with a 💀 ×1 under each; Rematch | Home`);
+        ok(panel.texts.includes('P1 WINS!') && !panel.texts.includes('OUT') && panel.texts.includes('9') && panel.texts.includes(String(5 + want.bonus)) && panel.texts.filter((x) => x === '💀 ×1').length === 2 && panel.buttons && panel.rematch === 'Continue' && panel.home === 'Bracket', `the panel reads P1 WINS! (first out took the +${want.bonus}: ${5 + want.bonus} to 9) with a 💀 ×1 under each; Continue | Bracket`);
         const flags = await evaluate(`(() => { const v = ${VS}; const wide = v.children.list.find((c) => c.type === 'Rectangle' && c.depth === 70); const t = (s) => v.children.list.find((c) => c.type === 'Text' && c.text === s); return JSON.stringify({ wins: v.match.slots.map((s) => s.levelWins), w: wide?.width, p1: t('🏁 ×2')?.x, p2: t('🏁 ×0')?.x, cx: v.layout.totalW / 2 }); })()`).then(JSON.parse);
         ok(flags.wins[0] === 2 && flags.wins[1] === 0 && flags.w === TT.versus.resultPanelW && flags.p1 < flags.cx && flags.p2 > flags.cx, `level wins: P1 first over level 1's line and first out (🏁 ×${flags.wins[0]}), P2 🏁 ×${flags.wins[1]}, on a ${flags.w} px panel`);
         ok(panel.syncs === 0 && panel.save === saveBefore, 'a match records nothing: no leaderboard sync, the save state untouched');
         await evaluate(`[${P1}, ${P2}].forEach((p) => { delete p.syncLeaderboard; }), true`); // the counting stub off: scene instances outlive restarts, and later sections sync for real
-        // Rematch: the same devices, a fresh seed, straight through the countdown into play. Pinned to
-        // equal points, the fewer crashes win; equal crashes too is a draw.
+        // Rematch (the smoke's restart, Versus.rematch: no button offers it): the same devices, a fresh
+        // seed, straight through the countdown into play. Pinned to equal points, the fewer crashes win.
         const rematch = async () => {
           await evaluate(`${VS}.rematch(), true`);
           const ok2 = await until(`__flappy.scene.isActive('Versus') && ${VS}.match.status === 'playing' && ${P1}.state === 'playing' && ${P2}.state === 'playing'`, (4 * want.countdownMs + 3000) / 100);
@@ -2378,13 +2406,9 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         };
         const tie = await headline(9, 9 + want.bonus, 1, 0); // P1 first out takes the +25: P2 pinned 25 higher so both total 34
         ok(tie.head === 'P2 WINS!' && tie.skulls.join(' ') === '💀 ×1 💀 ×0', `equal points: the fewer crashes win (${tie.head}, ${tie.skulls.join(' / ')})`);
-        ok(await rematch(), 'a second rematch');
-        const draw = await headline(9, 9 + want.bonus, 2, 2);
-        ok(draw.head === 'DRAW', `equal points and crashes: ${draw.head}`);
-        // A tournament race's own level lengths (TUNING.tournament.levelPipes): carried through the rematch,
-        // both halves run on them (Play.tune), and level 3's finish line comes after pair 70, not 85.
+        // Every race runs the tournament's level lengths (TUNING.tournament.levelPipes): carried through the
+        // rematch, both halves run on them (Play.tune), and level 3's finish line comes after pair 70, not 85.
         const table = await evaluate(`import('./src/config.js').then((c) => JSON.stringify(c.TUNING.tournament.levelPipes))`).then(JSON.parse);
-        await evaluate(`${VS}.match.levelPipes = ${JSON.stringify(table)}, true`);
         const tuned = await rematch();
         const tunes = await evaluate(`JSON.stringify({ a: ${P1}.tune.levels.pipes, b: ${P2}.tune.levels.pipes, match: ${VS}.match.levelPipes })`).then(JSON.parse);
         await evaluate(`(() => { const p = ${P1}; p.level = 3; p.pipesSpawned = 69; p.pipesPassed = 69; p.finishSpawned = false; p.distanceSinceSpawn = 0; return true; })()`);
@@ -2394,7 +2418,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         // A tournament race: the halves carry the competitors' names, a tie on points and crashes goes
         // to more 🏁 and then to the first across the final line, and Continue hands the outcome on.
         const panelTexts = () => evaluate(`JSON.stringify(${VS}.children.list.filter((c) => c.type === 'Text' && c.visible).map((c) => c.text))`).then(JSON.parse);
-        await evaluate(`${VS}.match.names = ['Ann', 'Bo'], ${VS}.match.tournament = true, true`);
+        await evaluate(`${VS}.match.names = ['Ann', 'Bo'], true`);
         const named = await rematch();
         const labels = await evaluate(`JSON.stringify(${VS}.joinLabels.map((l) => l.text))`).then(JSON.parse);
         const byWins = await headline(9, 9 + want.bonus, 1, 1); // P1 first out takes the +25 and the last 🏁: equal points and crashes, more 🏁
@@ -2410,10 +2434,10 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await sleep(TT.retryLockoutMs + 100);
         await evaluate(`${VS}.primary(), true`);
         const handed = JSON.parse(await evaluate(`JSON.stringify(globalThis.__race ?? null)`));
-        ok(handed?.outcome?.winner === 0 && handed.outcome.by === 'finalFirst' && handed.slots.length === 2 && handed.slots[0].finalFirst === true && (await evaluate(`__flappy.scene.isActive('Versus')`)), `Continue hands the race to the tournament ('tournament-race': winner ${handed?.outcome?.winner}, by ${handed?.outcome?.by}) and stays on the panel`);
-        // Home from the result panel.
-        await evaluate(`${VS}.leave(), true`);
-        ok(await until(`!__flappy.scene.isActive('Versus') && !__flappy.scene.isActive('PlayB') && __flappy.scene.isActive('Play') && ${P1}.state === 'ready' && ${P1}.match === null && __flappy.scale.width === ${want.W}`), 'Home from the panel returns to single player at the window\'s field');
+        ok(handed?.then === 'next' && handed?.outcome?.winner === 0 && handed.outcome.by === 'finalFirst' && handed.slots.length === 2 && handed.slots[0].finalFirst === true && (await evaluate(`__flappy.scene.isActive('Versus')`)), `Continue hands the race to the tournament ('tournament-race': then ${handed?.then}, winner ${handed?.outcome?.winner}, by ${handed?.outcome?.by}); the Final of two leads to the podium over the match`);
+        // Leaving from the podium.
+        await leaveVersus();
+        ok(await until(`!__flappy.scene.isActive('Versus') && !__flappy.scene.isActive('PlayB') && __flappy.scene.isActive('Play') && ${P1}.state === 'ready' && ${P1}.match === null && __flappy.scale.width === ${want.W}`), 'leaving returns to single player at the window\'s field');
         await evaluate(`__flappy.registry.set('versus', false), delete globalThis.__syncs, true`);
         await metrics(720, 1280);
         await settle(720);
@@ -2432,7 +2456,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         const VS = `__flappy.scene.getScene('Versus')`;
         const L = `Promise.all([import('./src/logic.js'), import('./src/config.js')])`;
         const metrics = (width, height) => cdp.send('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 1, mobile: false });
-        const want = await evaluate(`${L}.then(([l, c]) => JSON.stringify({ W: l.fieldWidth(1800, 1000, c.FIELD), countdownMs: c.TUNING.versus.countdownMs, range: c.TUNING.versus.ghostRangePx, alpha: c.TUNING.versus.ghostAlpha, fadeMs: c.TUNING.versus.ghostFadeMs, deathMs: c.TUNING.deathToOverMs, last: c.TUNING.levels.lastLevel, end: l.levelEnd(c.TUNING.levels.lastLevel, c.TUNING), respawn: c.TUNING.versus.respawn }))`).then(JSON.parse);
+        const want = await evaluate(`${L}.then(([l, c]) => JSON.stringify({ W: l.fieldWidth(1800, 1000, c.FIELD), countdownMs: c.TUNING.versus.countdownMs, range: c.TUNING.versus.ghostRangePx, alpha: c.TUNING.versus.ghostAlpha, fadeMs: c.TUNING.versus.ghostFadeMs, deathMs: c.TUNING.deathToOverMs, last: c.TUNING.levels.lastLevel, end: l.levelEnd(c.TUNING.levels.lastLevel, l.withLevelPipes(c.TUNING, c.TUNING.tournament.levelPipes)), respawn: c.TUNING.versus.respawn }))`).then(JSON.parse);
         const settle = async (w) => {
           let W = null;
           for (let i = 0; i < 60 && W !== w; i += 1) {
@@ -2452,7 +2476,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await metrics(1800, 1000);
         await settle(want.W);
         await evaluate(`${P1}.toggleVersus(), ${P1}.launch(), true`);
-        await until(`__flappy.scene.isActive('Versus') && ${VS}.match.status === 'join'`);
+        await lobbyToRace();
         const joined = await evaluate(`JSON.stringify({ ghost: [${P1}.ghost.visible, ${P2}.ghost.visible], rival: [${P1}.levelBar.rival(), ${P2}.levelBar.rival()] })`).then(JSON.parse);
         await evaluate(`${P1}.onVersusKey('Space'), ${P1}.onVersusKey('ArrowUp'), true`);
         const racing = await until(`${VS}.match.status === 'playing' && ${P1}.state === 'playing' && ${P2}.state === 'playing'`, (4 * want.countdownMs + 2500) / 100);
@@ -2528,8 +2552,8 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         ok(after.alpha === 0 && !after.visible && after.status === 'playing' && after.a === 'playing', `the end of P2's run fades its ghost out (alpha ${placed.toFixed(2)} → ${after.alpha}) within ${want.fadeMs} ms; P1 plays on`);
         await evaluate(`(() => { const p = ${P1}; p.pipes.clear(true, true); p.items.clear(true, true); p.beans.clear(true, true); p.nextGapY = null; p.level = ${want.last}; p.pipesSpawned = ${want.end}; p.pipesPassed = ${want.end}; p.finishSpawned = false; p.applyLevel(); p.spawnFinishLine(); p.finishLine.x = p.poop.x + 150; return true; })()`);
         ok(await until(`${VS}.resultShown`, (want.deathMs + 2500) / 100), 'P1 clears it too and the result shows');
-        await evaluate(`${VS}.leave(), true`);
-        ok(await until(`!__flappy.scene.isActive('Versus') && __flappy.scene.isActive('Play') && ${P1}.state === 'ready' && ${P1}.match === null`), 'Home after the ghost checks');
+        await leaveVersus();
+        ok(await until(`!__flappy.scene.isActive('Versus') && __flappy.scene.isActive('Play') && ${P1}.state === 'ready' && ${P1}.match === null`), 'leaving after the ghost checks');
         await evaluate(`__flappy.registry.set('versus', false), true`);
         await metrics(720, 1280);
         await settle(720);
@@ -2538,10 +2562,14 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
     });
 
     await section('tournament', async () => {
-      // Tournament (🏅): from the two-player join screen, a 3-player lobby (a guest, a pasted user
-      // code after a refused one, the host's own player), the bracket, a named semi-final on the
-      // tournament's level table, Continue back to the bracket, the Final, the podium, then a new
-      // tournament with the same players and Abandon back to a plain join screen. Nothing is saved.
+      // Tournament (🏅): every two-player session. The 👥 start opens the lobby (two guests); its ? the
+      // help card. A 3-player lobby (a guest, a pasted code after a refused one, the host's own player),
+      // walked with the pad too; the seeding view (↓, 🎲, a mouse drag, the pad's ring on ↑ / ↓); a
+      // semi-final on the tournament table with the 🏅 pill in a shared level break (the bracket
+      // read-only, never a ready tap), Bracket on its result panel recording it (the Final next, not
+      // the semi again); the Final by Continue to the podium and the 🏅 board's queue; a new tournament
+      // whose Continue goes straight into the Final's join screen; Abandon back to the lobby; a
+      // 2-player tournament (one Final, no 🥉, not saved); an all-guest one (nothing to save).
       {
         const P1 = `__flappy.scene.getScene('Play')`;
         const P2 = `__flappy.scene.getScene('PlayB')`;
@@ -2550,7 +2578,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         const L = `Promise.all([import('./src/logic.js'), import('./src/config.js')])`;
         const tx = (key) => evaluate(`import('./src/i18n.js').then((m) => m.t('en', '${key}'))`);
         const metrics = (width, height) => cdp.send('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 1, mobile: false });
-        const want = await evaluate(`${L}.then(([l, c]) => JSON.stringify({ W: l.fieldWidth(1800, 1000, c.FIELD), countdownMs: c.TUNING.versus.countdownMs, last: c.TUNING.levels.lastLevel, table: c.TUNING.tournament.levelPipes, end: l.levelEnd(c.TUNING.levels.lastLevel, l.withLevelPipes(c.TUNING, c.TUNING.tournament.levelPipes)), deathMs: c.TUNING.deathToOverMs, lockout: c.TUNING.retryLockoutMs }))`).then(JSON.parse);
+        const want = await evaluate(`${L}.then(([l, c]) => JSON.stringify({ W: l.fieldWidth(1800, 1000, c.FIELD), countdownMs: c.TUNING.versus.countdownMs, last: c.TUNING.levels.lastLevel, table: c.TUNING.tournament.levelPipes, end1: c.TUNING.tournament.levelPipes[0], end: l.levelEnd(c.TUNING.levels.lastLevel, l.withLevelPipes(c.TUNING, c.TUNING.tournament.levelPipes)), deathMs: c.TUNING.deathToOverMs, lockout: c.TUNING.retryLockoutMs, syncMs: c.TUNING.versus.levelSyncDelayMs }))`).then(JSON.parse);
         const until = async (expr, tries = 40) => {
           for (let i = 0; i < tries; i += 1) {
             if (await evaluate(expr)) return true;
@@ -2561,29 +2589,32 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         const click = (id) => evaluate(`(document.getElementById('${id}').click(), true)`);
         const text = (id) => evaluate(`document.getElementById('${id}')?.textContent ?? null`);
         const open = () => evaluate(`${PANEL}.then((m) => m.isTournamentPanelOpen())`);
+        const ring = () => evaluate(`document.querySelector('#tournament-panel button.pad')?.id ?? null`);
+        const pad = (action) => evaluate(`${P1}.onPadAction('${action}'), true`);
+        const order = () => evaluate(`JSON.stringify(__flappy.registry.get('tournament').tour.order)`).then(JSON.parse);
         const saveBefore = await evaluate(`localStorage.getItem('flappyPoop.save')`);
         await metrics(1800, 1000);
         for (let i = 0; i < 60 && (await evaluate('__flappy.scale.width')) !== want.W; i += 1) await sleep(100);
         for (let i = 0; i < 20 && (await playState()) !== 'ready'; i += 1) await sleep(100);
+        await evaluate(`__flappy.registry.set('padMode', false), true`);
         await evaluate(`${P1}.toggleVersus(), ${P1}.launch(), true`);
-        await until(`__flappy.scene.isActive('Versus') && ${VS}.match.status === 'join'`);
-        const join = await evaluate(`JSON.stringify({ title: ${VS}.joinTitle.text, button: ${VS}.tournamentButton?.getText(), home: ${VS}.homeButton.getText(), box: ${VS}.tournamentBox, help: ${VS}.tournamentHelpBox, rightX: ${VS}.layout.x[1] })`).then(JSON.parse);
-        // The (?) beside 🏅: the help card (its paragraphs, Got it closes it), no half claimed.
-        await evaluate(`${VS}.onPointer({ x: ${join.help.x}, y: ${join.help.y} }), true`);
-        await sleep(200);
-        const help = { open: await open(), title: await text('tour-title'), paras: await evaluate(`document.querySelectorAll('#tour-help p').length`), ok: await text('tour-help-ok') };
+        const lobbyUp = await until(`__flappy.scene.isActive('Versus') && ${VS}.match.status === 'lobby' && Boolean(document.getElementById('tour-start'))`);
+        const lobby0 = await evaluate(`JSON.stringify({ count: document.getElementById('tour-count')?.textContent, title: document.getElementById('tour-title')?.textContent, guests: [...document.querySelectorAll('[id^="tour-slot-"] .who')].map((w) => w.firstChild?.textContent), start: !document.getElementById('tour-start').disabled, joinButtons: [Boolean(${VS}.tournamentButton), Boolean(${VS}.tournamentHelpButton)] })`).then(JSON.parse);
+        ok(lobbyUp && lobby0.count === '2' && lobby0.title === (await tx('tournamentTitle')) && lobby0.guests.length === 2 && lobby0.guests.every((g) => /^[A-Z][a-z]+[A-Z][a-z]+\d{3}$/.test(g)) && lobby0.guests[0] !== lobby0.guests[1] && lobby0.start && !lobby0.joinButtons[0] && !lobby0.joinButtons[1], `the 👥 start opens the lobby: 2 players (${lobby0.guests.join(', ')}), Start ready; the join screen has no 🏅 or (?) any more`);
+        // ? in the card: the help card (its paragraphs); Got it goes back to the lobby, still open.
+        await click('tour-help-btn');
+        const help = { title: await text('tour-title'), paras: await evaluate(`document.querySelectorAll('#tour-help p').length`), ok: await text('tour-help-ok') };
         await click('tour-help-ok');
-        const helpClosed = !(await open());
-        const claimed = await evaluate(`${VS}.match.slots.filter((s) => s.device).length`);
-        ok(help.open && help.title === (await tx('tournamentHowTitle')) && help.paras === 4 && help.ok === (await tx('tournamentGotIt')) && helpClosed && claimed === 0 && join.help.x > join.box.x && join.box.x > join.rightX, `(?) beside 🏅 on the right half opens "${help.title}" (${help.paras} paragraphs); ${help.ok} closes it; no half claimed`);
-        await evaluate(`${VS}.onPointer({ x: ${join.box.x}, y: ${join.box.y} }), true`);
-        await sleep(200);
-        ok(join.title === (await tx('versusTitle')) && join.button === (await tx('tournamentButton')) && join.home === (await tx('tapToHome')) && (await open()) && (await evaluate(`${VS}.match.status`)) === 'join', `the join screen offers "${join.button}" beside Home; a tap opens the lobby without claiming a half`);
-        // Lobby: 4 rows by default, − to 3; a guest; a refused then a good pasted code; the host's player.
-        const rows0 = await text('tour-count');
-        await click('tour-minus');
+        const backToLobby = (await open()) && Boolean(await text('tour-count'));
+        ok(help.title === (await tx('tournamentHowTitle')) && help.paras === 4 && help.ok === (await tx('tournamentGotIt')) && backToLobby && (await evaluate(`${VS}.match.slots.filter((s) => s.device).length`)) === 0, `? opens "${help.title}" (${help.paras} paragraphs); ${help.ok} goes back to the lobby; no half claimed`);
+        // Lobby: + to 3 (the new row a guest); row 0 cleared then a Guest; row 1 a refused then a good pasted code; row 2 the host's player.
+        await click('tour-plus');
+        const third = await evaluate(`document.querySelector('#tour-slot-2 .who')?.firstChild?.textContent ?? null`);
+        await click('tour-clear-0');
+        const startOff = await evaluate(`document.getElementById('tour-start').disabled`);
         await click('tour-guest-0');
         const guest = await evaluate(`document.querySelector('#tour-slot-0 .who').firstChild.textContent`);
+        await click('tour-clear-1');
         await click('tour-paste-btn-1');
         await evaluate(`(document.getElementById('tour-paste-1').value = 'hello, not a code', document.getElementById('tour-add-1').click(), true)`);
         await sleep(300);
@@ -2592,25 +2623,69 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await evaluate(`(document.getElementById('tour-paste-1').value = ${JSON.stringify(code)}, document.getElementById('tour-add-1').click(), true)`);
         await sleep(300);
         const linked = await evaluate(`document.querySelector('#tour-slot-1 .who')?.firstChild?.textContent ?? null`);
-        const startOff = await evaluate(`document.getElementById('tour-start').disabled`);
         await evaluate(`${P1}.setSaveState({ ...${P1}.getSaveState(), name: 'Smoke' }), true`); // in memory only: --only=tournament runs without the home section
+        await click('tour-clear-2');
         await click('tour-me-2');
         const host = await evaluate(`document.querySelector('#tour-slot-2 .who')?.textContent ?? null`);
         const startOn = !(await evaluate(`document.getElementById('tour-start').disabled`));
-        ok(rows0 === '4' && (await text('tour-count')) === '3' && /^[A-Z][a-z]+[A-Z][a-z]+\d{3}$/.test(guest) && refused === (await tx('saveErrorUnrecognised')) && linked === 'Linked' && startOff && host?.startsWith('Smoke') && startOn, `lobby: 4 → 3 rows; guest ${guest}; a bad code refused ("${refused}"); a pasted code fills "Linked"; Use my player fills "${host}"; Start enables only when all are filled`);
-        // Start → the bracket: a 3-player draw races one semi-final, then the Final.
-        await click('tour-start');
+        ok((await text('tour-count')) === '3' && /^[A-Z][a-z]+[A-Z][a-z]+\d{3}$/.test(third ?? '') && startOff && /^[A-Z][a-z]+[A-Z][a-z]+\d{3}$/.test(guest) && refused === (await tx('saveErrorUnrecognised')) && linked === 'Linked' && host?.startsWith('Smoke') && startOn, `lobby: + adds guest ${third}; a cleared row holds Start back; guest ${guest}; a bad code refused ("${refused}"); a pasted code fills "Linked"; Use my player fills "${host}"`);
+        // The pad: the first press rings Start (the view's primary button), A presses it, and the ring
+        // lands on Play in the seeding view; nav walks up to a ↑ / ↓, whose A reseeds and keeps the ring on it.
+        await pad('nav:up');
+        const ring0 = await ring();
+        await pad('select');
+        const seedingUp = Boolean(await text('tour-seed-hint'));
+        const ring1 = await ring();
+        const before = await order();
+        let moved = null;
+        for (let i = 0; i < 12 && !moved; i += 1) {
+          await pad('nav:up');
+          const at = await ring();
+          if (/^tour-(up|down)-\d$/.test(at ?? '')) moved = at;
+        }
+        await pad('select');
+        const afterPad = await order();
+        const [, dir, idx] = /^tour-(up|down)-(\d)$/.exec(moved ?? '') ?? [];
+        const to = dir === 'up' ? Number(idx) - 1 : Number(idx) + 1;
+        const swappedByPad = moved && afterPad[to] === before[Number(idx)] && afterPad[Number(idx)] === before[to];
+        const ring2 = await ring();
+        await pad('back');
+        const stillSeeding = (await open()) && Boolean(await text('tour-seed-hint'));
+        ok(ring0 === 'tour-start' && seedingUp && ring1 === 'tour-play' && swappedByPad && /^tour-(up|down)-\d$/.test(ring2 ?? '') && stillSeeding, `the pad: the ring lands on Start, A starts; the seeding view rings Play; ${moved} by A swaps two seeds (${before.join(',')} → ${afterPad.join(',')}), the ring stays on a move button (${ring2}); B leaves the seeding view alone`);
+        await evaluate(`document.getElementById('tour-close').click(), true`); // a mouse press hides the ring (the ✕ is hidden here: nothing else happens)
+        await evaluate(`document.getElementById('tournament-panel').dispatchEvent(new PointerEvent('pointerdown')), true`);
+        // Seeding with the mouse: two first-round pairs (one with a bye), ↓ on seed 0 swaps it with seed 1,
+        // 🎲 redraws the order, a drag from seed 0's handle onto seed 2 swaps those two.
+        const seedView = await evaluate(`JSON.stringify({ pairs: document.querySelectorAll('#tour-body .pair').length, seeds: document.querySelectorAll('#tour-body .seed[data-seed]').length, byes: document.querySelectorAll('#tour-body .seed.bye').length, up0: document.getElementById('tour-up-0').disabled, down2: document.getElementById('tour-down-2').disabled, ring: document.querySelector('#tournament-panel button.pad')?.id ?? null })`).then(JSON.parse);
+        const o1 = await order();
+        await click('tour-down-0');
+        const o2 = await order();
+        await click('tour-shuffle');
+        const o3 = await order();
+        const grip = await evaluate(`(() => { const c = (el) => { const r = el.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; }; return JSON.stringify({ from: c(document.getElementById('tour-grip-0')), to: c(document.getElementById('tour-seed-2')) }); })()`).then(JSON.parse);
+        await cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: grip.from.x, y: grip.from.y });
+        await cdp.send('Input.dispatchMouseEvent', { type: 'mousePressed', x: grip.from.x, y: grip.from.y, button: 'left', clickCount: 1 });
+        for (let k = 1; k <= 4; k += 1) await cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: grip.from.x, y: grip.from.y + ((grip.to.y - grip.from.y) * k) / 4, button: 'left', buttons: 1 });
+        const marked = await evaluate(`document.getElementById('tour-seed-2')?.classList.contains('drop') ?? false`);
+        await cdp.send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: grip.to.x, y: grip.to.y, button: 'left', clickCount: 1 });
+        await sleep(100);
+        const o4 = await order();
+        ok(seedView.pairs === 2 && seedView.seeds === 3 && seedView.byes === 1 && seedView.up0 && seedView.down2 && !seedView.ring && o2[0] === o1[1] && o2[1] === o1[0] && o2[2] === o1[2] && o3.slice().sort().join() === '0,1,2' && marked && o4[0] === o3[2] && o4[2] === o3[0] && o4[1] === o3[1], `seeding: ${seedView.pairs} pairs (${seedView.byes} bye), ↓ swaps seeds 0 and 1 (${o1.join(',')} → ${o2.join(',')}), 🎲 redraws (${o3.join(',')}), a drag from seed 0 onto seed 2 marks it and swaps them (${o4.join(',')}); a click hid the pad's ring`);
         const next1 = await text('tour-next');
-        ok(next1?.startsWith(await tx('tournamentSemi')) && Boolean(await evaluate(`__flappy.registry.get('tournament')?.tour`)), `Start draws the bracket: "${next1}"`);
-        const raceOnce = async (scoreA, scoreB, aFirst) => {
-          await click('tour-play');
+        ok(next1 === null && Boolean(await evaluate(`__flappy.registry.get('tournament')?.tour`)), 'the seeding view has Play and no "next" line yet');
+        // A race: Play → its join screen → both claim → GO; `before` runs mid-race; then both cross the
+        // rectum's line (the first one ahead) and the result panel's `button` hands it on.
+        const finish = (P, score) => evaluate(`(() => { const p = ${P}; p.score = ${score}; p.pipes.clear(true, true); p.items.clear(true, true); p.beans.clear(true, true); p.nextGapY = null; p.level = ${want.last}; p.pipesSpawned = ${want.end}; p.pipesPassed = ${want.end}; p.finishSpawned = false; p.applyLevel(); p.spawnFinishLine(); p.finishLine.x = p.poop.x + 150; return true; })()`);
+        const pin = () => evaluate(`[${P1}, ${P2}].forEach((p) => { p.poop.body.setAllowGravity(false); p.poop.setVelocity(0, 0); p.poop.y = 640; p.graceLeftMs = 1e9; }), true`);
+        const raceOnce = async (scoreA, scoreB, aFirst, { press = true, button = 'next', midRace = null } = {}) => {
+          if (press) await click('tour-play');
           const started = await until(`!__flappy.scene.isActive('Versus') ? false : ${VS}.match.status === 'join' && Boolean(${VS}.match.tournament) && ${P1}.match === ${VS}.match`, 60);
-          const seen = await evaluate(`JSON.stringify({ title: ${VS}.joinTitle.text, labels: ${VS}.joinLabels.map((l) => l.text), names: ${VS}.match.names, home: ${VS}.homeButton.getText(), button: Boolean(${VS}.tournamentButton), tune: ${P1}.tune.levels.pipes, panel: false })`).then(JSON.parse);
+          const seen = await evaluate(`JSON.stringify({ title: ${VS}.joinTitle.text, labels: ${VS}.joinLabels.map((l) => l.text), names: ${VS}.match.names, home: ${VS}.homeButton.getText(), tune: ${P1}.tune.levels.pipes })`).then(JSON.parse);
           seen.panel = await open();
           await evaluate(`${P1}.onVersusKey('Space'), ${P1}.onVersusKey('ArrowUp'), true`);
           const racing = await until(`${VS}.match.status === 'playing' && ${P1}.state === 'playing' && ${P2}.state === 'playing'`, (4 * want.countdownMs + 2500) / 100);
-          await evaluate(`[${P1}, ${P2}].forEach((p) => { p.poop.body.setAllowGravity(false); p.poop.setVelocity(0, 0); p.poop.y = 640; p.graceLeftMs = 1e9; }), true`);
-          const finish = (P, score) => evaluate(`(() => { const p = ${P}; p.score = ${score}; p.pipes.clear(true, true); p.items.clear(true, true); p.beans.clear(true, true); p.nextGapY = null; p.level = ${want.last}; p.pipesSpawned = ${want.end}; p.pipesPassed = ${want.end}; p.finishSpawned = false; p.applyLevel(); p.spawnFinishLine(); p.finishLine.x = p.poop.x + 150; return true; })()`);
+          await pin();
+          const mid = midRace ? await midRace() : null;
           const [first, second] = aFirst ? [[P1, scoreA, 0], [P2, scoreB, 1]] : [[P2, scoreB, 1], [P1, scoreA, 0]];
           await finish(first[0], first[1]);
           await until(`${VS}.match.slots[${first[2]}].ended`);
@@ -2618,26 +2693,65 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
           const shown = await until(`${VS}.resultShown`, (want.deathMs + 2500) / 100);
           const texts = await evaluate(`JSON.stringify(${VS}.children.list.filter((c) => c.type === 'Text' && c.visible).map((c) => c.text))`).then(JSON.parse);
           await sleep(want.lockout + 100);
-          await evaluate(`${VS}.primary(), true`); // Continue
+          await evaluate(button === 'bracket' ? `${VS}.home(), true` : `${VS}.primary(), true`); // Bracket | Continue
           await sleep(300);
-          return { started, racing, shown, seen, texts };
+          return { started, racing, shown, seen, texts, mid };
         };
-        const semi = await raceOnce(20, 5, true); // left (side a) first out and ahead: wins
+        // Mid-race: both halves to level 1's line. While one still flies there is no 🏅 pill; once both
+        // wait it shows on both, and a tap on it opens the bracket read-only (no Play, no seeding) without
+        // readying the half; Back to the race closes it; both ready and the race goes on.
+        const toLine = (P) => evaluate(`(() => { const p = ${P}; p.pipes.clear(true, true); p.items.clear(true, true); p.beans.clear(true, true); p.nextGapY = null; p.pipesSpawned = ${want.end1}; p.pipesPassed = ${want.end1}; p.finishSpawned = false; p.spawnFinishLine(); p.finishLine.x = p.poop.x + 150; return true; })()`);
+        const pillText = await tx('tournamentBracketPill');
+        const peekCheck = async () => {
+          await toLine(P1);
+          await until(`${P1}.levelBreak && ${P1}.state === 'paused'`);
+          const pillShown = (P) => `${P}.children.list.some((c) => c.type === 'Text' && c.text === ${JSON.stringify(pillText)} && c.visible)`;
+          const alone = await evaluate(`JSON.stringify({ shown: ${P1}.bracketButtonShown(), visible: ${pillShown(P1)}, both: ${VS}.bothInBreak() })`).then(JSON.parse);
+          await toLine(P2);
+          await until(`${P2}.levelBreak && ${P2}.state === 'paused'`);
+          const both = await evaluate(`JSON.stringify({ a: ${pillShown(P1)}, b: ${pillShown(P2)}, both: ${VS}.bothInBreak(), text: ${P1}.bracketButton.getText(), box: ${P1}.bracketButtonBox })`).then(JSON.parse);
+          await sleep(want.syncMs + 100); // past the arrival beat: a plain tap would now ready the half
+          await evaluate(`${P1}.flap({ x: ${both.box.x}, y: ${both.box.y} }), true`);
+          await sleep(100);
+          const peek = await evaluate(`JSON.stringify({ open: document.getElementById('tournament-panel') && !document.getElementById('tournament-panel').hidden, back: document.getElementById('tour-back')?.textContent ?? null, play: Boolean(document.getElementById('tour-play')), seeding: Boolean(document.getElementById('tour-seed-hint')), lines: document.querySelectorAll('#tour-body .match').length, ready: ${VS}.isReady(${P1}), held: ${VS}.overlayOpen() })`).then(JSON.parse);
+          await click('tour-back');
+          const closed = !(await open());
+          // The pad: P1's ring on the pill, A opens the peek (never a ready tap), B closes it.
+          await evaluate(`(() => { const p = ${P1}; p.focus.setIndex(p.focus.indexOf('bracket')); p.focus.show(); p.onPadAction('select'); return true; })()`);
+          const padPeek = await evaluate(`JSON.stringify({ open: !document.getElementById('tournament-panel').hidden, back: Boolean(document.getElementById('tour-back')), ready: ${VS}.isReady(${P1}) })`).then(JSON.parse);
+          await pad('back');
+          padPeek.closed = !(await open());
+          await evaluate(`${P1}.focus.hide(), true`);
+          await evaluate(`${VS}.onLevelTap(${P1}), ${VS}.onLevelTap(${P2}), true`);
+          const resumed = await until(`${P1}.state === 'playing' && ${P2}.state === 'playing' && ${P1}.level === 2`, (4 * want.countdownMs + 2500) / 100);
+          await pin();
+          return { alone, both, peek, closed, resumed, padPeek };
+        };
+        const semi = await raceOnce(20, 5, true, { button: 'bracket', midRace: peekCheck }); // left (side a) first out and ahead: wins
         const semiNames = semi.seen.names;
-        ok(semi.started && semi.racing && semi.shown && semi.seen.title === (await tx('tournamentSemi')) && semi.seen.labels.join() === semiNames.join() && semi.seen.home === (await tx('tournamentBracket')) && !semi.seen.button && !semi.seen.panel && JSON.stringify(semi.seen.tune) === JSON.stringify(want.table), `Play starts the semi on its own join screen: ${semiNames.join(' vs ')}, "${semi.seen.title}", Bracket instead of Home, the tournament level table`);
-        ok(semi.texts.includes(`${semiNames[0]} WINS!`) && semi.texts.includes(await tx('tournamentContinue')) && (await open()) && (await text('tour-next'))?.startsWith(await tx('tournamentFinal')), `the semi's result names "${semiNames[0]}"; Continue records it and the bracket shows the Final next`);
-        const final = await raceOnce(1, 9, false); // right (side b) first out and ahead: wins
+        const m = semi.mid;
+        ok(m && !m.alone.shown && !m.alone.visible && !m.alone.both && m.both.a && m.both.b && m.both.both && m.both.text === (await tx('tournamentBracketPill')), `mid-race: no 🏅 pill while P2 still flies; once both wait at the line "${m?.both.text}" shows on both halves`);
+        ok(m && m.padPeek.open && m.padPeek.back && !m.padPeek.ready && m.padPeek.closed, `the pad: A on P1's ring over the pill opens the peek (no ready tap), B closes it`);
+        ok(m && m.peek.open && m.peek.back === (await tx('tournamentBack')) && !m.peek.play && !m.peek.seeding && m.peek.lines >= 2 && !m.peek.ready && m.peek.held && m.closed && m.resumed, `a tap on it opens the bracket read-only (${m?.peek.lines} lines, "${m?.peek.back}", no Play, no seeding), never a ready tap, the count held under it; closed, both ready and race level 2`);
+        ok(semi.started && semi.racing && semi.shown && semi.seen.title === (await tx('tournamentSemi')) && semi.seen.labels.join() === semiNames.join() && semi.seen.home === (await tx('tournamentBracket')) && !semi.seen.panel && JSON.stringify(semi.seen.tune) === JSON.stringify(want.table), `Play starts the semi on its own join screen: ${semiNames.join(' vs ')}, "${semi.seen.title}", Bracket in the corner, the tournament level table`);
+        const afterBracket = await evaluate(`JSON.stringify({ matchId: __flappy.registry.get('tournament').matchId, semi: __flappy.registry.get('tournament').tour.matches.filter((x) => x.round === 'semi' && !x.result?.bye).map((x) => x.winner) })`).then(JSON.parse);
+        ok(semi.texts.includes(`${semiNames[0]} WINS!`) && semi.texts.includes(await tx('tournamentContinue')) && semi.texts.includes(await tx('tournamentBracket')) && (await open()) && (await text('tour-next'))?.startsWith(await tx('tournamentFinal')) && afterBracket.matchId === null && afterBracket.semi.join() === '0', `the semi's result names "${semiNames[0]}"; Bracket on its panel records it (semi won by side ${afterBracket.semi.join()}) and the bracket shows the Final next, not the semi again`);
+        await evaluate(`${VS}.primary(), ${VS}.home(), true`); // Continue and Bracket again on the same result panel
+        await sleep(200);
+        const twice = await evaluate(`JSON.stringify({ final: __flappy.registry.get('tournament').tour.matches.find((x) => x.id === 'final').winner, next: document.getElementById('tour-next')?.textContent ?? null, join: ${VS}.match.status })`).then(JSON.parse);
+        ok(twice.final === null && twice.next?.startsWith(await tx('tournamentFinal')) && twice.join === 'over', `a second press on the same result panel records nothing and starts nothing (Final undecided, still "${twice.next}")`);
+        const final = await raceOnce(1, 9, false); // right (side b) first out and ahead: wins; Continue → the podium
         const finalNames = final.seen.names;
         const podium = await evaluate(`[...document.querySelectorAll('#tour-podium p')].map((p) => p.textContent)`);
         const bronzeName = semiNames[1];
-        ok(final.shown && final.texts.includes(`${finalNames[1]} WINS!`) && (await open()) && podium[0].startsWith(`🥇 ${finalNames[1]}`) && podium[1].startsWith(`🥈 ${finalNames[0]}`) && podium[2].startsWith(`🥉 ${bronzeName}`) && finalNames.includes(semiNames[0]), `the Final's winner takes gold: ${podium.join(' · ')} (the semi loser is third without racing again)`);
+        ok(final.shown && final.texts.includes(`${finalNames[1]} WINS!`) && (await open()) && podium.length === 3 && podium[0].startsWith(`🥇 ${finalNames[1]}`) && podium[1].startsWith(`🥈 ${finalNames[0]}`) && podium[2].startsWith(`🥉 ${bronzeName}`) && finalNames.includes(semiNames[0]), `Continue after the Final: the podium, its winner gold: ${podium.join(' · ')} (the semi loser is third without racing again)`);
         // The 🏅 board: the Final queued the tournament once (2 linked players: the pasted code and the
         // host); the board is muzzled here, so the podium says it posts later.
         const later = await tx('tournamentSaveLater');
         const savedLater = await until(`document.getElementById('tour-saved')?.textContent === ${JSON.stringify(later)}`, 60);
         const queued = await evaluate(`JSON.stringify({ q: ${P1}.tournamentQueue.load(), reg: __flappy.registry.get('tournament'), save: ${P1}.getSaveState() })`).then(JSON.parse);
         const entry = queued.q[0];
-        const gold = entry && entry.payload.matches.find((m) => m.round === 'final');
+        const gold = entry && entry.payload.matches.find((x) => x.round === 'final');
         const goldName = gold && entry.payload.players[gold.winner === 0 ? gold.a : gold.b]?.name;
         ok(savedLater && queued.q.length === 1 && entry.payload.id === queued.reg.tournamentId && queued.reg.posted === 'queued' && entry.hostId === queued.save.id && entry.payload.players.filter((p) => p.id).map((p) => p.name).sort().join() === 'Linked,Smoke' && entry.payload.players.every((p) => p.id || p.name === null) && entry.payload.matches.length === 2 && (goldName ?? null) === (finalNames[1] === guest ? null : finalNames[1]), `the Final queues the tournament once for the 🏅 board (linked: Linked, Smoke; the guest sent as null); offline, the podium says "${later}"`);
         const saveAfter = JSON.parse((await evaluate(`localStorage.getItem('flappyPoop.save')`)) ?? '{}');
@@ -2649,23 +2763,49 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         const posted = await evaluate(`JSON.stringify({ posts: globalThis.__posts, q: ${P1}.tournamentQueue.load().length, saved: document.getElementById('tour-saved')?.textContent })`).then(JSON.parse);
         await evaluate(`(globalThis.fetch = globalThis.__fetch, import('./src/config.js').then((m) => { m.LEADERBOARD.dataApi = ''; return true; }))`);
         ok(posted.posts.length === 1 && posted.posts[0].p_tournament.id === entry.payload.id && posted.posts[0].p_host_id === entry.hostId && posted.q === 0 && posted.saved === (await tx('tournamentSaveSent')), `online, the next sync posts it once and the podium says "${posted.saved}"`);
-        // New tournament: the same three players, a fresh draw; Abandon (two taps) → a plain join screen.
+        // New tournament: the same three players, a fresh draw (the seeding view). Its semi by Continue goes
+        // straight to the Final's join screen (no panel); Bracket there, then Abandon (two taps) → the lobby.
         await click('tour-again');
         const again = await evaluate(`JSON.stringify(__flappy.registry.get('tournament').tour.players.map((p) => p.name).sort())`).then(JSON.parse);
+        const againSeeding = Boolean(await text('tour-seed-hint'));
+        await raceOnce(9, 2, true);
+        const straight = await until(`${VS}.match.status === 'join' && ${VS}.match.tournament?.round === 'final'`, 60);
+        const straightPanel = await open();
+        await evaluate(`${VS}.home(), true`);
+        const bracketAtJoin = (await open()) && (await text('tour-next'))?.startsWith(await tx('tournamentFinal'));
         await click('tour-abandon');
         const armed = await text('tour-status');
         const stillOpen = await open();
         await click('tour-abandon');
-        const plain = await until(`!__flappy.registry.get('tournament') && __flappy.scene.isActive('Versus') && ${VS}.match.status === 'join' && !${VS}.match.tournament && Boolean(${VS}.tournamentButton)`, 60);
-        ok(again.join() === [guest, 'Linked', 'Smoke'].sort().join() && armed === (await tx('tournamentAbandonConfirm')) && stillOpen && plain && !(await open()) && (await evaluate(`${VS}.joinTitle.text`)) === (await tx('versusTitle')), `New tournament keeps the players (${again.join(', ')}); Abandon asks once ("${armed.slice(0, 30)}…"), then leaves a plain join screen`);
+        const toLobby = await until(`!__flappy.registry.get('tournament') && __flappy.scene.isActive('Versus') && ${VS}.match.status === 'lobby' && Boolean(document.getElementById('tour-start'))`, 60);
+        const lobbyNames = await evaluate(`JSON.stringify([...document.querySelectorAll('[id^="tour-slot-"] .who')].map((w) => w.firstChild?.textContent).sort())`).then(JSON.parse);
+        ok(again.join() === [guest, 'Linked', 'Smoke'].sort().join() && againSeeding && straight && !straightPanel && bracketAtJoin, `New tournament keeps the players (${again.join(', ')}) and seeds again; Continue after its semi goes straight to the Final's join screen; Bracket there shows the Final next`);
+        ok(armed === (await tx('tournamentAbandonConfirm')) && stillOpen && toLobby && lobbyNames.join() === again.join(), `Abandon asks once ("${armed.slice(0, 30)}…"), then the lobby with the same players (${lobbyNames.join(', ')})`);
+        // Two players: − to 2 (the guest and Linked) → one Final; Continue → a podium without 🥉 and nothing queued, though Linked is linked.
+        await click('tour-minus');
+        await click('tour-start');
+        const twoSeed = await evaluate(`JSON.stringify({ pairs: document.querySelectorAll('#tour-body .pair').length, round: document.querySelector('#tour-body .pair .round')?.textContent, byes: document.querySelectorAll('#tour-body .seed.bye').length })`).then(JSON.parse);
+        const two = await raceOnce(9, 3, true);
+        const twoPodium = await evaluate(`JSON.stringify({ lines: [...document.querySelectorAll('#tour-podium p')].map((p) => p.textContent), saved: document.getElementById('tour-saved')?.textContent, q: ${P1}.tournamentQueue.load().length, posted: __flappy.registry.get('tournament')?.posted })`).then(JSON.parse);
+        ok(twoSeed.pairs === 1 && twoSeed.round === (await tx('tournamentFinal')) && twoSeed.byes === 0 && two.seen.title === (await tx('tournamentFinal')) && twoPodium.lines.length === 2 && twoPodium.lines[0].startsWith('🥇') && twoPodium.lines[1].startsWith('🥈') && twoPodium.saved === (await tx('tournamentSaveTwo')) && twoPodium.q === 0 && twoPodium.posted === 'two', `2 players: one "${twoSeed.round}", a podium of ${twoPodium.lines.length} (${twoPodium.lines.join(' · ')}), "${twoPodium.saved}", nothing queued`);
         // An all-guest tournament: its Final queues nothing, and the podium says so.
         await evaluate(`Promise.all([import('./src/tournament.js'), import('./src/logic.js')]).then(([t, l]) => { const tour = t.createTournament([0, 1, 2].map((i) => ({ name: 'G' + i, playerId: null, guest: true })), l.createRng(3)); const semi = t.nextMatch(tour); t.recordResult(tour, semi.id, 0, { by: 'score', slots: [{ score: 5, deaths: 0, levelWins: 0, finalFirst: false }, { score: 1, deaths: 0, levelWins: 0, finalFirst: true }] }); __flappy.registry.set('tournament', { tour, matchId: 'final' }); __flappy.events.emit('tournament-race', { outcome: { winner: 0, by: 'score' }, slots: [{ score: 9, deaths: 0, levelWins: 1, finalFirst: true }, { score: 2, deaths: 1, levelWins: 0, finalFirst: false }] }); return true; })`);
         await sleep(200);
         const guests = await evaluate(`JSON.stringify({ saved: document.getElementById('tour-saved')?.textContent, q: ${P1}.tournamentQueue.load().length, posted: __flappy.registry.get('tournament')?.posted })`).then(JSON.parse);
         ok(guests.saved === (await tx('tournamentSaveNone')) && guests.q === 0 && guests.posted === 'none', `an all-guest tournament queues nothing: "${guests.saved}"`);
-        await evaluate(`${PANEL}.then((m) => m.closeTournamentPanel()).then(() => (__flappy.registry.remove('tournament'), true))`);
-        await evaluate(`${VS}.leave(), true`);
-        await until(`!__flappy.scene.isActive('Versus') && __flappy.scene.isActive('Play') && ${P1}.state === 'ready'`);
+        // The podium's Home: the tournament forgotten, single player back.
+        await click('tour-home');
+        const homed = await until(`!__flappy.scene.isActive('Versus') && __flappy.scene.isActive('Play') && ${P1}.state === 'ready' && ${P1}.match === null && !__flappy.registry.get('tournament')`, 60);
+        ok(homed && !(await open()), 'Home on the podium clears the tournament and returns to single player');
+        // A mouse-opened lobby (nothing focused in it): Esc still leaves for single player.
+        await evaluate(`__flappy.registry.set('padMode', false), ${P1}.launch(), true`);
+        const lobbyAgain = await until(`__flappy.scene.isActive('Versus') && ${VS}.match.status === 'lobby' && Boolean(document.getElementById('tour-start'))`);
+        await click('tour-plus'); // a click re-renders the lobby, dropping the clicked button's focus
+        await cdp.send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27 });
+        await cdp.send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27 });
+        const escaped = await until(`!__flappy.scene.isActive('Versus') && __flappy.scene.isActive('Play') && ${P1}.state === 'ready' && ${P1}.match === null`);
+        const keys = await evaluate(`__flappy.input.keyboard.enabled`);
+        ok(lobbyAgain && escaped && !(await open()) && keys === true, 'Esc in a mouse-opened lobby (after a click re-rendered it) returns to single player, the game keyboard back on');
         await evaluate(`__flappy.registry.set('versus', false), true`);
         await metrics(720, 1280);
         for (let i = 0; i < 60 && (await evaluate('__flappy.scale.width')) !== 720; i += 1) await sleep(100);

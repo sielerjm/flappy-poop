@@ -629,6 +629,15 @@ export function shopButtonLayout(width, height, t, x0 = 0) {
   return { id: 'shop', x: x0 + width / 2, y: 720, width: 240, height: t.trayHitMin };
 }
 
+/**
+ * The 🏅 Bracket pill of a tournament race's level break: one row under the 💰 pill (the same
+ * width, trayHitMin + 16 lower), above the bean button. Shown once both halves are in the break.
+ */
+export function bracketButtonLayout(width, height, t, x0 = 0) {
+  const shop = shopButtonLayout(width, height, t, x0);
+  return { id: 'bracket', x: shop.x, y: shop.y + t.trayHitMin + 16, width: shop.width, height: t.trayHitMin };
+}
+
 /** 'shop' when (x, y) is on the 💰 button, else null. */
 export function shopButtonHit(x, y, box) {
   if (!box) return null;
@@ -1790,18 +1799,21 @@ export function focusRingLayout(bounds, t) {
  * @param {'play'|'over'|'overlay'} top the scene the ring belongs to
  * @param {boolean} ringShown the top scene's focus ring is visible
  * @param {boolean} savePanelOpen the DOM save panel is up (the pad cannot type)
- * @returns {{ do: string, dir?: string }}
+ * @param {boolean} tournamentPanelOpen the DOM tournament panel is up: it walks its own
+ *   buttons, so nav, A and B go to it ({ do: 'panel', action }), Y still mutes, the rest waits
+ * @returns {{ do: string, dir?: string, action?: string }}
  */
-export function padIntent({ action, state, top = 'play', ringShown = false, savePanelOpen = false }) {
+export function padIntent({ action, state, top = 'play', ringShown = false, savePanelOpen = false, tournamentPanelOpen = false }) {
   if (savePanelOpen || !action) return { do: 'ignore' };
   if (action === 'mute') return { do: 'mute' };
+  if (tournamentPanelOpen) return action === 'select' || action === 'back' || action.startsWith('nav:') ? { do: 'panel', action } : { do: 'ignore' };
   if (action.startsWith('nav:')) {
     const dir = action.slice(4);
     if (top === 'play' && (state === 'playing' || state === 'respawn')) return { do: 'pauseAndFocus', dir };
     return { do: 'move', dir };
   }
   if (top === 'versus') {
-    // The join or result screen of a two-player match: A claims a slot / presses Rematch
+    // The join or result screen of a two-player match: A claims a slot / presses Continue
     // (or the ringed button), B backs out (or hides the ring); the run buttons do nothing.
     if (action === 'select') return { do: ringShown ? 'activate' : 'versusSelect' };
     if (action === 'back') return { do: ringShown ? 'hideRing' : 'versusBack' };

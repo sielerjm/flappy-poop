@@ -92,6 +92,19 @@ test('padIntent: the save panel and unmapped buttons swallow everything', () => 
   }
 });
 
+test('padIntent: the tournament panel takes nav, A and B; Y still mutes; the run buttons wait', () => {
+  for (const top of TOPS) {
+    for (const state of STATES) {
+      for (const ringShown of [false, true]) {
+        for (const action of ['select', 'back', ...NAV]) assert.deepEqual(intent({ action, state, top, ringShown, tournamentPanelOpen: true }), { do: 'panel', action }, `${top} ${state} ${action}`);
+        assert.deepEqual(intent({ action: 'mute', state, top, ringShown, tournamentPanelOpen: true }), { do: 'mute' });
+        for (const action of ['power', 'pause']) assert.deepEqual(intent({ action, state, top, ringShown, tournamentPanelOpen: true }), { do: 'ignore' }, `${top} ${state} ${action}`);
+      }
+    }
+  }
+  assert.deepEqual(intent({ action: 'select', tournamentPanelOpen: true, savePanelOpen: true }), { do: 'ignore' }, 'the save panel still wins');
+});
+
 test('padIntent: Y mutes everywhere', () => {
   for (const top of TOPS) {
     for (const state of STATES) {

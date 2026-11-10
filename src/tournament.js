@@ -3,11 +3,15 @@
 // the bracket, the race queue, the results, the podium and who won a race.
 // tests/tournament.test.js covers it.
 //
-// A bracket is 4 or 8 slots; byes fill the empty ones (at most one per first-round pair,
+// A bracket is 2, 4 or 8 slots; byes fill the empty ones (at most one per first-round pair,
 // so a bye never meets a bye). Rounds: quarters (8 slots), semis, then bronze (the two semi
-// losers) before the Final. A match with a bye on one side is decided without a race: a
-// first-round bye advances its player, and with 3 players the bronze match has a bye, so
-// the lone semi's loser is third without racing again.
+// losers) before the Final; two players race the Final alone (no bronze). A match with a bye
+// on one side is decided without a race: a first-round bye advances its player, and with 3
+// players the bronze match has a bye, so the lone semi's loser is third without racing again.
+//
+// Seeding: `tour.order` lists the players in the order they fill the non-bye first-round
+// slots. Until the first race is played (canReseed) the host can swap two seeds (reseed) or
+// draw a fresh order (reshuffle); either rebuilds the bracket on the same bye pattern.
 
 import { TUNING } from './config.js';
 import { matchResult } from './versus.js';
@@ -15,7 +19,13 @@ import { importCode } from './save.js';
 
 /** The rounds a bracket of `size` slots plays, in race order (bronze before the Final). */
 function roundsFor(size) {
+  if (size === 2) return ['final'];
   return size === 8 ? ['quarter', 'semi', 'bronze', 'final'] : ['semi', 'bronze', 'final'];
+}
+
+/** The bracket size for `n` players: 2, 4 or 8 slots. */
+function sizeFor(n) {
+  return n <= 2 ? 2 : n <= 4 ? 4 : 8;
 }
 
 /** Fisher–Yates on a copy, drawing from `rng` (0–1). */
@@ -37,29 +47,74 @@ export function createTournament(players, rng, t = TUNING) {
   const { minPlayers, maxPlayers } = t.tournament;
   const n = players?.length ?? 0;
   if (n < minPlayers || n > maxPlayers) throw new Error(`tournament: ${n} players, want ${minPlayers}–${maxPlayers}`);
-  const size = n <= 4 ? 4 : 8;
+  return buildBracket(players.map((p) => ({ ...p })), shuffled(players.map((_, i) => i), rng));
+}
+
+/**
+ * The bracket for `players` with `order` (player indices) filling the non-bye first-round
+ * slots in sequence: pair p is slots 2p and 2p + 1, a bye pair keeps only its first slot.
+ */
+function buildBracket(players, order) {
+  const n = players.length;
+  const size = sizeFor(n);
   const pairs = size / 2;
   const byes = size - n;
   // Which first-round pairs get a bye: alternate halves (last pair of each half first).
   const byeOrder = pairs === 4 ? [3, 1, 2, 0] : [1, 0];
   const byePairs = new Set(byeOrder.slice(0, byes));
-  const order = shuffled(players.map((_, i) => i), rng);
   const firstRound = roundsFor(size)[0];
   const matches = [];
   let next = 0;
   for (let p = 0; p < pairs; p += 1) {
     const a = { player: order[next++] };
     const b = byePairs.has(p) ? null : { player: order[next++] };
-    matches.push({ id: `${firstRound}${p}`, round: firstRound, sides: [a, b], winner: null, result: null });
+    const id = firstRound === 'final' ? 'final' : `${firstRound}${p}`;
+    matches.push({ id, round: firstRound, sides: [a, b], winner: null, result: null });
   }
   if (size === 8) {
     for (let s = 0; s < 2; s += 1) matches.push({ id: `semi${s}`, round: 'semi', sides: [{ winnerOf: `quarter${2 * s}` }, { winnerOf: `quarter${2 * s + 1}` }], winner: null, result: null });
   }
-  matches.push({ id: 'bronze', round: 'bronze', sides: [{ loserOf: 'semi0' }, { loserOf: 'semi1' }], winner: null, result: null });
-  matches.push({ id: 'final', round: 'final', sides: [{ winnerOf: 'semi0' }, { winnerOf: 'semi1' }], winner: null, result: null });
-  const tour = { players: players.map((p) => ({ ...p })), size, matches };
+  if (size >= 4) {
+    matches.push({ id: 'bronze', round: 'bronze', sides: [{ loserOf: 'semi0' }, { loserOf: 'semi1' }], winner: null, result: null });
+    matches.push({ id: 'final', round: 'final', sides: [{ winnerOf: 'semi0' }, { winnerOf: 'semi1' }], winner: null, result: null });
+  }
+  const tour = { players, size, order: order.slice(), matches };
   settle(tour);
   return tour;
+}
+
+/**
+ * The first-round slots in bracket order (pair p is slots 2p and 2p + 1): a player index, or
+ * null for a bye. The seeding view renders from this; seeds (tour.order) skip the byes.
+ */
+export function seedSlots(tour) {
+  const first = tour.matches.filter((m) => m.round === tour.matches[0].round);
+  return first.flatMap((m) => m.sides.map((ref) => (ref ? ref.player : null)));
+}
+
+/** True while the seeding can change: no match has been raced yet (byes do not count). */
+export function canReseed(tour) {
+  return tour.matches.every((m) => m.winner == null || m.result?.bye);
+}
+
+/**
+ * A new tour with the players at seeds `from` and `to` (indices into tour.order) swapped and
+ * the bracket rebuilt on the same bye pattern. Throws once a race has been played or for a seed
+ * out of range. The input is not changed.
+ */
+export function reseed(tour, from, to) {
+  if (!canReseed(tour)) throw new Error('tournament: seeding is locked once a race is played');
+  const n = tour.order.length;
+  if (!Number.isInteger(from) || !Number.isInteger(to) || from < 0 || to < 0 || from >= n || to >= n) throw new Error('tournament: no such seed');
+  const order = tour.order.slice();
+  [order[from], order[to]] = [order[to], order[from]];
+  return buildBracket(tour.players.map((p) => ({ ...p })), order);
+}
+
+/** A new tour on a fresh draw from `rng`, the same players; refused like reseed once a race is played. */
+export function reshuffle(tour, rng) {
+  if (!canReseed(tour)) throw new Error('tournament: seeding is locked once a race is played');
+  return buildBracket(tour.players.map((p) => ({ ...p })), shuffled(tour.players.map((_, i) => i), rng));
 }
 
 function byId(tour, id) {
@@ -138,11 +193,12 @@ export function placings(tour) {
   const final = byId(tour, 'final');
   const bronze = byId(tour, 'bronze');
   const [fa, fb] = matchPlayers(tour, final);
-  const [ba, bb] = matchPlayers(tour, bronze);
   const gold = final.winner === 0 ? fa : fb;
   const silver = final.winner === 0 ? fb : fa;
+  if (!bronze) return { gold, silver, bronze: null }; // two players: the Final alone
+  const [ba, bb] = matchPlayers(tour, bronze);
   const third = bronze.winner === 0 ? ba : bb;
-  return { gold, silver, bronze: third };
+  return { gold, silver, bronze: third ?? null };
 }
 
 /**
@@ -175,6 +231,14 @@ function linked(p) {
 /** How many entries carry a player id: with none, a finished tournament has nothing to post. */
 export function linkedCount(tour) {
   return tour.players.filter(linked).length;
+}
+
+/**
+ * True when a finished tournament goes to the 🏅 board: minPostPlayers (3, submit_tournament's
+ * own floor; two players race the Final alone, nothing to give bronze) or more, and someone linked.
+ */
+export function postable(tour, t = TUNING) {
+  return tour.players.length >= t.tournament.minPostPlayers && linkedCount(tour) > 0;
 }
 
 /**

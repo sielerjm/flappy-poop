@@ -1,9 +1,9 @@
 import { GAME_HEIGHT, FIELD, TUNING as T } from '../config.js';
 import { fieldWidth, overButtonsLayout, overHit, canRestart, isFinalLevel } from '../logic.js';
-import { versusLayout, joinButtonsLayout, createMatch, resetMatch, claimDevice, allClaimed, deviceLabel, matchResult } from '../versus.js';
+import { versusLayout, joinButtonsLayout, createMatch, resetMatch, claimDevice, allClaimed, deviceLabel } from '../versus.js';
 import { t, levelLabel, pauseBannerText, versusName } from '../i18n.js';
 import { raceOutcome } from '../tournament.js';
-import { openTournamentPanel, ROUND_KEYS } from '../ui/tournamentPanel.js';
+import { openTournamentPanel, isTournamentPanelOpen, ROUND_KEYS } from '../ui/tournamentPanel.js';
 import { createButton } from '../ui/button.js';
 import { createFocus } from '../ui/focus.js';
 import { unlock, sfx } from '../sound.js';
@@ -15,10 +15,11 @@ const GOLD = '#ffd700';
 /**
  * The two-player match: owns the join screen, the countdown, the shared pause,
  * the end of the match and the result panel, and sits on top of the two Play
- * halves ('Play' = P1 on the left, 'PlayB' = P2 on the right). Started by Play's
- * start tap with the 👥 toggle on (scene.start('Versus')); restarted by a rematch
- * with { match } (the devices kept, a fresh seed). Overlays open above it as they
- * do above Play, through P1's chrome.
+ * halves ('Play' = P1 on the left, 'PlayB' = P2 on the right). Every two-player
+ * session is a tournament (2–8 players): Play's start tap with the 👥 toggle on
+ * (scene.start('Versus')) brings a plain match, which is the 'lobby' (the tournament
+ * panel over it); each race restarts it with { match } (restartWith). Overlays open
+ * above it as they do above Play, through P1's chrome.
  */
 export class Versus extends Phaser.Scene {
   constructor() {
@@ -40,7 +41,9 @@ export class Versus extends Phaser.Scene {
     this.levelBeats = new Set(); // halves whose arrival beat (the levelSyncDelayMs timer) has passed: their taps count, their hint shows
     this.levelCountToken = 0; // bumped to cancel a running level count
     this.goToken = 0; // bumped by each GO: only the latest GO's beat hides countText
-    this.homeTapFrame = -1; // the frame a tap landed on the join screen's Home: the halves do not claim that tap
+    this.homeTapFrame = -1; // the frame a tap landed on the join screen's Bracket: the halves do not claim that tap
+    this.handedOff = false; // the result went to the tournament (Continue / Bracket): a second press does nothing
+    this.outcome = null; // raceOutcome, fixed when both runs end (onRunEnded): never the scene's last match's (Phaser reuses the scene object)
     const W = layout.totalW;
     const cx = W / 2;
 
@@ -62,42 +65,39 @@ export class Versus extends Phaser.Scene {
       .text(cx, 960, t(this.locale, 'versusJoinHint'), { ...STYLE, fontSize: '30px', strokeThickness: 8, wordWrap: { width: Math.min(W - 80, 1100), useAdvancedWrap: true } })
       .setOrigin(0.5)
       .setDepth(52);
-    // The join screen's bottom row on the right half (P1's tray owns the left): 🏅 Tournament and
-    // its (?) by the divider, Home at the edge, all opaque (joinButtonsLayout). A tournament race
-    // has Home alone, reading Bracket: it opens the tournament panel instead of leaving.
-    const tournament = Boolean(this.match.tournament);
-    const row = joinButtonsLayout(layout, GAME_HEIGHT, T, { tournament });
-    const solid = { depth: 52, fillAlpha: 1 };
+    // The join screen's bottom row on the right half (P1's tray owns the left): Bracket at the edge,
+    // opaque (joinButtonsLayout). It opens the tournament panel; nothing is recorded.
+    const row = joinButtonsLayout(layout, GAME_HEIGHT, T);
     this.homeBox = row.home;
-    this.homeButton = createButton(this, this.homeBox, t(this.locale, tournament ? 'tournamentBracket' : 'tapToHome'), { ...STYLE, fontSize: '40px' }, solid);
-    this.tournamentBox = row.tournament;
-    this.tournamentButton = this.tournamentBox ? createButton(this, this.tournamentBox, t(this.locale, 'tournamentButton'), { ...STYLE, fontSize: '36px', color: GOLD }, solid) : null;
-    this.tournamentHelpBox = row.help;
-    this.tournamentHelpButton = this.tournamentHelpBox ? createButton(this, this.tournamentHelpBox, '?', { ...STYLE, fontSize: '36px', strokeThickness: 8 }, solid) : null;
+    this.homeButton = createButton(this, this.homeBox, t(this.locale, 'tournamentBracket'), { ...STYLE, fontSize: '40px' }, { depth: 52, fillAlpha: 1 });
     // The countdown, centred on the canvas, and the shared PAUSED banner across both halves.
     this.countText = this.add.text(cx, GAME_HEIGHT * 0.45, '', { ...STYLE, fontSize: '160px', strokeThickness: 16 }).setOrigin(0.5).setDepth(55).setVisible(false);
     const [pauseTitle, pauseHint] = pauseBannerText(this.locale).split('\n');
     this.pauseText = this.add.text(cx, GAME_HEIGHT * 0.4, pauseTitle, { ...STYLE, fontSize: '52px' }).setOrigin(0.5).setDepth(60).setVisible(false);
     this.pauseHint = this.add.text(cx, GAME_HEIGHT * 0.4 + 72, pauseHint, { ...STYLE, fontSize: '36px', wordWrap: { width: 640, useAdvancedWrap: true } }).setOrigin(0.5).setDepth(60).setVisible(false);
-    this.buttons = null; // the result panel's Rematch | Home boxes (overButtonsLayout), once it shows
+    this.buttons = null; // the result panel's Continue | Bracket boxes (overButtonsLayout), once it shows
     this.openedAt = 0;
 
     this.input.on('pointerdown', (pointer) => this.onPointer(pointer));
     this.input.keyboard?.on('keydown-ESC', () => this.onPadBack());
-    // Controller: Home on the join screen; Rematch and Home on the result panel (setItems there).
+    // Controller: Bracket on the join screen; Continue and Bracket on the result panel (setItems there).
     this.focus = createFocus(this, T, {
-      items: [
-        ...(this.tournamentBox ? [{ id: 'tournament', box: this.tournamentBox, visible: () => this.match.status === 'join', activate: () => this.openTournament() }] : []),
-        ...(this.tournamentHelpBox ? [{ id: 'help', box: this.tournamentHelpBox, visible: () => this.match.status === 'join', activate: () => this.openTournament('help') }] : []),
-        { id: 'home', box: this.homeBox, visible: () => this.match.status === 'join', activate: () => this.home() },
-      ],
+      items: [{ id: 'home', box: this.homeBox, visible: () => this.match.status === 'join', activate: () => this.home() }],
     });
     this.events.once('shutdown', () => {
       this.focus?.destroy();
       this.focus = null;
     });
 
-    if (allClaimed(this.match)) this.startCountdown(); // a rematch: the devices are known
+    if (!this.match.tournament) {
+      // The 👥 start (or an abandoned tournament): the lobby. The join screen waits under the
+      // tournament panel, which opens next tick (the halves launch first); its ✕ leaves.
+      this.match.status = 'lobby';
+      this.setJoinVisible(false);
+      this.time.delayedCall(0, () => {
+        if (this.sys.isActive() && this.match.status === 'lobby') this.openTournament();
+      });
+    } else if (allClaimed(this.match)) this.startCountdown(); // a rematch (the smoke's): the devices are known
     else this.refreshJoin();
   }
 
@@ -122,8 +122,6 @@ export class Versus extends Phaser.Scene {
     this.joinTitle.setVisible(visible);
     for (const o of [...this.joinLabels, ...this.joinPrompts, this.joinHint]) o.setVisible(visible);
     this.homeButton.setVisible(visible);
-    this.tournamentButton?.setVisible(visible);
-    this.tournamentHelpButton?.setVisible(visible);
     if (!visible) this.focus?.hide();
   }
 
@@ -148,8 +146,6 @@ export class Versus extends Phaser.Scene {
     this.refreshJoin();
     this.joinHint.setVisible(false);
     this.homeButton.setVisible(false);
-    this.tournamentButton?.setVisible(false);
-    this.tournamentHelpButton?.setVisible(false);
     this.focus?.hide();
     // The halves slide their poops into place under the "3" and wait there (Play.launch hold); GO starts them.
     this.runCountdown(() => this.go(), { status: 'countdown', onStart: () => this.halves().forEach((half) => half?.launch({ hold: true })) });
@@ -205,9 +201,9 @@ export class Versus extends Phaser.Scene {
     else sfx.score();
   }
 
-  /** An overlay (Settings, About, …) is up over the match: the level countdown holds under it. */
+  /** An overlay (Settings, About, …) or the tournament panel is up over the match: the level countdown holds under it. */
   overlayOpen() {
-    return Boolean(this.scene.get('Play')?.chromeArgs?.('tap')?.overlay);
+    return Boolean(this.scene.get('Play')?.chromeArgs?.('tap')?.overlay) || isTournamentPanelOpen();
   }
 
   /**
@@ -229,6 +225,7 @@ export class Versus extends Phaser.Scene {
     half.refreshLevelBanner();
     half.setLevelHintVisible(false);
     half.refreshShopButton?.();
+    for (const other of this.halves()) other?.refreshBracketButton?.(); // both in the break: the 🏅 pills show
     const match = this.match;
     this.time.delayedCall(T.versus.levelSyncDelayMs, () => {
       if (!this.sys.isActive() || this.match !== match || match.status !== 'playing' || !half.levelBreak) return;
@@ -288,6 +285,7 @@ export class Versus extends Phaser.Scene {
   startLevelCount() {
     this.levelStage = 'count';
     this.refreshReady();
+    for (const half of this.halves()) half?.refreshBracketButton?.();
     const token = ++this.levelCountToken;
     this.runCountdown(() => this.beginLevel(), { status: 'playing', hold: true, alive: () => this.levelCountToken === token && this.levelStage === 'count' });
   }
@@ -300,7 +298,7 @@ export class Versus extends Phaser.Scene {
     this.countText.setVisible(false);
   }
 
-  /** Re-label both halves' level-break hints and 💰 pills for the ready state (hidden during the count or a half's arrival beat). */
+  /** Re-label both halves' level-break hints and 💰 / 🏅 pills for the ready state (hidden during the count or a half's arrival beat). */
   refreshReady() {
     this.halves().forEach((half, i) => {
       if (!half?.levelBreak) return;
@@ -308,6 +306,22 @@ export class Versus extends Phaser.Scene {
       half.setLevelHintVisible(this.levelStage !== 'count' && this.beatPassed(i));
       half.refreshShopButton?.();
     });
+  }
+
+  /**
+   * Both halves wait at the same finish line with no count running and no shop open: a tournament
+   * race's 🏅 pill shows (Play.bracketButtonShown), and the bracket can open over the match, since
+   * nobody is flying under it.
+   */
+  bothInBreak() {
+    if (this.match.status !== 'playing' || this.levelStage === 'count' || this.anyShopOpen()) return false;
+    return this.halves().every((half) => half?.levelBreak && half.state === 'paused');
+  }
+
+  /** The 🏅 pill: the bracket read-only over the match (the panel's peek view). */
+  openPeek() {
+    if (!this.match.tournament || !this.bothInBreak()) return;
+    this.openTournament('peek');
   }
 
   /** Some half has its level-break shop open (a shopper is never ready, so the count cannot start under it). */
@@ -391,6 +405,7 @@ export class Versus extends Phaser.Scene {
     if (this.match.status !== 'playing') return;
     if (!this.match.slots.every((s) => s.ended)) return;
     this.match.status = 'over';
+    this.outcome = raceOutcome(this.match.slots); // this race's, before anything can hand it on
     this.pausedHalves.clear();
     this.pauseText.setVisible(false);
     this.pauseHint.setVisible(false);
@@ -398,9 +413,9 @@ export class Versus extends Phaser.Scene {
   }
 
   /**
-   * The result panel: who won (matchResult: points, then fewer crashes; a tournament race goes on
-   * to more 🏁, then first across the final line, raceOutcome), each player's score, level, pipes,
-   * level wins (🏁) and crashes, Rematch | Home (a tournament race: Continue | Home).
+   * The result panel: who won (raceOutcome: points, then fewer crashes, more 🏁, then first across
+   * the final line), each player's score, level, pipes, level wins (🏁) and crashes, then Continue
+   * (straight into the next race, or the podium) | Bracket (the bracket first). Both record the race.
    */
   showResult() {
     if (this.resultShown || !this.sys.isActive()) return;
@@ -409,14 +424,13 @@ export class Versus extends Phaser.Scene {
     const cx = W / 2;
     const cy = GAME_HEIGHT / 2;
     const slots = this.match.slots;
-    const tournament = Boolean(this.match.tournament);
-    const res = tournament ? raceOutcome(slots) : matchResult(slots);
+    const res = this.outcome ?? raceOutcome(slots);
     this.outcome = res;
     const panel = this.add.rectangle(cx, cy, T.versus.resultPanelW, 760, 0x1a0b14, 0.9).setStrokeStyle(8, 0xe85e96).setDepth(70);
     const headline = res.winner == null ? t(this.locale, 'versusDraw') : t(this.locale, 'versusWins').replace('{name}', versusName(this.locale, this.match, res.winner));
     this.add.text(cx, cy - 290, headline, { ...STYLE, fontSize: '60px', color: GOLD, wordWrap: { width: T.versus.resultPanelW - 60, useAdvancedWrap: true } }).setOrigin(0.5).setDepth(71);
-    // A tournament race decided past the score says how (the plain panel shows the 💀 counts instead).
-    const tiebreak = tournament ? { deaths: 'tournamentByDeaths', levelWins: 'tournamentByLevelWins', finalFirst: 'tournamentByFinalFirst' }[res.by] : null;
+    // A race decided past the score says how.
+    const tiebreak = { deaths: 'tournamentByDeaths', levelWins: 'tournamentByLevelWins', finalFirst: 'tournamentByFinalFirst' }[res.by];
     if (tiebreak) this.add.text(cx, cy - 238, t(this.locale, tiebreak), { ...STYLE, fontSize: '28px', color: '#c9b8dc', strokeThickness: 6 }).setOrigin(0.5).setDepth(71);
     slots.forEach((slot, i) => {
       const x = cx + (i === 0 ? -1 : 1) * (T.versus.resultPanelW / 4);
@@ -431,10 +445,10 @@ export class Versus extends Phaser.Scene {
       this.add.text(x + 80, cy + 90, `💀 ×${slot.deaths ?? 0}`, { ...STYLE, fontSize: '36px', color: '#c9b8dc', strokeThickness: 8 }).setOrigin(0.5).setDepth(71);
     });
     this.add.text(cx, cy + 160, t(this.locale, 'versusNotSaved'), { ...STYLE, fontSize: '26px', color: GOLD, strokeThickness: 6, wordWrap: { width: 560, useAdvancedWrap: true } }).setOrigin(0.5).setDepth(71);
-    // Rematch (a tournament race: Continue) on the left | Home on the right, on the game-over panel's row.
+    // Continue on the left | Bracket on the right, on the game-over panel's row.
     this.buttons = overButtonsLayout(cx, cy, T, { share: true });
-    this.rematchButton = createButton(this, this.buttons.share, t(this.locale, tournament ? 'tournamentContinue' : 'versusRematch'), { ...STYLE, fontSize: '40px' }, { depth: 71 });
-    this.resultHome = createButton(this, this.buttons.home, t(this.locale, tournament ? 'tournamentBracket' : 'tapToHome'), { ...STYLE, fontSize: '40px' }, { depth: 71 });
+    this.rematchButton = createButton(this, this.buttons.share, t(this.locale, 'tournamentContinue'), { ...STYLE, fontSize: '40px' }, { depth: 71 });
+    this.resultHome = createButton(this, this.buttons.home, t(this.locale, 'tournamentBracket'), { ...STYLE, fontSize: '40px' }, { depth: 71 });
     this.openedAt = this.game.loop.time;
     this.tweens.add({ targets: panel, scale: { from: 0.8, to: 1 }, duration: T.over.panelInMs, ease: 'Back.easeOut' });
     this.focus?.setItems([
@@ -444,21 +458,15 @@ export class Versus extends Phaser.Scene {
     this.focus?.show(); // only under a controller
   }
 
-  /** A tap on this scene: Home on the join screen; Rematch / Home on the result panel (after the lockout). */
+  /** A tap on this scene: Bracket on the join screen; Continue / Bracket on the result panel (after the lockout). */
   onPointer(pointer) {
     unlock();
     const s = this.match.status;
     if (s === 'join') {
-      const inside = (b) => b && Math.abs(pointer.x - b.x) <= b.width / 2 && Math.abs(pointer.y - b.y) <= b.height / 2;
-      if (inside(this.homeBox)) {
-        this.homeTapFrame = this.game.loop.frame;
+      const b = this.homeBox;
+      if (Math.abs(pointer.x - b.x) <= b.width / 2 && Math.abs(pointer.y - b.y) <= b.height / 2) {
+        this.homeTapFrame = this.game.loop.frame; // the halves do not claim this tap
         this.home();
-      } else if (inside(this.tournamentBox)) {
-        this.homeTapFrame = this.game.loop.frame; // the halves do not claim this tap either
-        this.openTournament();
-      } else if (inside(this.tournamentHelpBox)) {
-        this.homeTapFrame = this.game.loop.frame;
-        this.openTournament('help');
       }
       return;
     }
@@ -470,25 +478,29 @@ export class Versus extends Phaser.Scene {
     }
   }
 
-  /** The pad's A with no ring (Play.onPadAction → padIntent 'versusSelect'): a claim on the join screen, Rematch on the panel. */
+  /** The pad's A with no ring (Play.onPadAction → padIntent 'versusSelect'): a claim on the join screen, Continue on the panel. */
   onPadSelect(padIndex = 0) {
     if (this.match.status === 'join') this.onJoinInput({ kind: 'pad', index: padIndex });
     else if (this.match.status === 'over' && this.buttons && canRestart(this.openedAt, this.game.loop.time, T.retryLockoutMs)) this.primary();
   }
 
-  /** The pad's B or Esc: back to single player from the join screen or the result panel; nothing mid-match. */
+  /** The pad's B or Esc: the bracket from the join screen or the result panel; nothing mid-match. */
   onPadBack() {
-    if (this.scene.get('Play')?.chromeArgs?.('tap').overlay) return; // an overlay is up: its own Esc / B closes it
+    if (this.scene.get('Play')?.chromeArgs?.('tap').overlay || isTournamentPanelOpen()) return; // an overlay or the panel is up: its own Esc / B closes it
     if (this.match.status === 'join' || this.match.status === 'over') this.home();
+    else if (this.match.status === 'lobby') this.openTournament();
   }
 
-  /** Home on the join screen or the result panel: back to single player; in a tournament race, the bracket (nothing recorded). */
+  /**
+   * Bracket on the join screen (the race not started: nothing recorded) or on the result panel
+   * (the race recorded first, then the bracket); the lobby's way back is the panel itself.
+   */
   home() {
-    if (this.match.tournament) this.openTournament();
-    else this.leave();
+    if (this.match.status === 'over') this.continueTournament('bracket');
+    else this.openTournament();
   }
 
-  /** The tournament panel over this scene: the lobby, or the running tournament's bracket; `view` 'help' explains tournaments. */
+  /** The tournament panel over this scene: the lobby, or the running tournament's bracket; `view` 'help' / 'peek'. */
   openTournament(view = null) {
     openTournamentPanel({ game: this.game, locale: this.locale, play: this.halfScene(0), view });
   }
@@ -501,24 +513,32 @@ export class Versus extends Phaser.Scene {
     this.scene.restart({ match });
   }
 
-  /** The result panel's left button: Rematch, or Continue after a tournament race. */
+  /** The result panel's left button: Continue (the next race, or the podium after the Final). */
   primary() {
-    if (this.match.tournament) this.continueTournament();
-    else this.rematch();
+    this.continueTournament('next');
   }
 
   /**
-   * Continue after a tournament race: hands the outcome and both slots to whoever runs the
-   * tournament ('tournament-race' on game.events: the lobby / bracket panel). Nobody listening
-   * (a stale tournament match): back to single player.
+   * After a race (Continue: `then` 'next'; Bracket: 'bracket'): hands the outcome and both slots
+   * to the tournament ('tournament-race' on game.events: the panel records it once, then starts
+   * the next race or shows the bracket / podium). Once per race: a second press does nothing.
+   * Nobody listening (a stale tournament match): back to single player.
    */
-  continueTournament() {
-    const detail = { outcome: this.outcome, slots: this.match.slots.map((s) => ({ score: s.score, deaths: s.deaths, levelWins: s.levelWins, finalFirst: s.finalFirst })) };
+  continueTournament(then = 'next') {
+    // Only from the shown result panel, past its lockout: Esc / B / A in the beat before it (or a
+    // flap mashed into it) must not hand the race on unseen.
+    if (this.handedOff || this.match.status !== 'over' || !this.buttons || !canRestart(this.openedAt, this.game.loop.time, T.retryLockoutMs)) return;
+    this.handedOff = true;
+    const detail = { then, outcome: this.outcome, slots: this.match.slots.map((s) => ({ score: s.score, deaths: s.deaths, levelWins: s.levelWins, finalFirst: s.finalFirst })) };
     if (this.game.events.listenerCount('tournament-race') > 0) this.game.events.emit('tournament-race', detail);
     else this.leave();
   }
 
-  /** The same players again on a fresh course: both halves relaunch, straight into the countdown. */
+  /**
+   * The same players again on a fresh course: both halves relaunch, straight into the countdown.
+   * No button offers it since every match became a tournament race; the smoke (tools/headless_check.mjs)
+   * restarts a match through it with the devices kept.
+   */
   rematch() {
     const next = resetMatch(this.match, Date.now() & 0xffffffff);
     this.match.status = 'left';

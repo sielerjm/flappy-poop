@@ -51,7 +51,7 @@ formal medical language.
 - **User code** / save code (用户码 / 存档码) = the `fp1.…` string players copy between devices. The home-screen user button reads **Load user** (载入用户) until a username is set, then the name and best; it opens the panel titled **SAVE / LOAD USER**, whose labels are **Username**, **Save user code**, **Load user code**, and a **Save** button at the bottom that stores the username. `{name}` and `{scores}` are placeholders filled at runtime; keep them verbatim.
 - **One player across devices** (2026-11-08): every browser has its own secret id; the leaderboard treats ids merged through a user code as one player (aliases). A **username belongs to the player holding it on the board**: typing a held name on a new browser is refused (`saveNameTaken`), and the way in is to paste the user code (`saveIntro` step 3, `saveMerged`). **The **board's name wins** (2026-11-09): a rename typed on one device reaches the others on their own (`saveIntro` step 4, 自动更新); only a name typed on a device overrides the board. **Clear** (清除) signs this device out after a second tap (`saveClearConfirm`, `saveCleared`): the name, id and scores are forgotten on the device only. "Sign out" is the plain sense (退出), not an account system. `{name}` stays verbatim.
 - **Leaderboard** (排行榜) = the shared online Top 25 behind the 🏆 tray button. Only players with a username are on it; `{score}` may carry a 🚽, `{rank}` / `{total}` are numbers. Keep the placeholders verbatim. The 🏆 · 🌞 · 🏅 tabs under the title switch it to today's **DAILY DUMP** board (每日一拉) or the **MEDAL BOARD** (奖牌榜): players ranked by 🥇, then 🥈, 🥉 and their **BEST RACE** (单场最佳: their best score in one tournament race, on the shorter tournament levels, so not comparable with the 🏆 score); `{events}` is how many tournaments they finished.
-- **Tournament** (锦标赛, 🏅) = 3–8 players on one device, raced two at a time on the two-player screen in a knockout bracket (赛程, **Bracket**): quarter-finals, semi-finals, a bronze match (铜牌赛) and the Final, then a podium (领奖台). Each row of the lobby is a pasted user code, a **Guest** (访客, a made-up English name such as JollyPlunger042, kept as is in Chinese), or **Use my player** (the host's own username). **Abandon** ends it and saves nothing. When the Final is decided, players who joined with a user code (and the host's own player) get their medals (奖牌) on the **🏅 board** (🏅 榜, a tab of the leaderboard); the podium says whether that worked. Guests are never saved.
+- **Tournament** (锦标赛, 🏅) = every two-player (👥) session: 2–8 players on one device, raced two at a time in a knockout bracket (赛程, **Bracket**): quarter-finals, semi-finals, a bronze match (铜牌赛) and the Final, then a podium (领奖台); two players race the Final alone (no bronze). Each row of the lobby is a pasted user code, a **Guest** (访客, a made-up English name such as JollyPlunger042, kept as is in Chinese), or **Use my player** (the host's own username). Before the first race the host can change who meets whom (drag, ↑ ↓, 🎲 **Shuffle** 重新抽签; a **bye** 轮空 goes straight through). **Abandon** ends it, saves nothing and goes back to the lobby. When the Final of 3 or more players is decided, players who joined with a user code (and the host's own player) get their medals (奖牌) on the **🏅 board** (🏅 榜, a tab of the leaderboard); the podium says whether that worked. Guests and two-player tournaments are never saved.
 - **Username rules** (2026-11-10): a new username has 4–16 characters (at least 2 when it has Chinese, Japanese or Korean characters), no spaces, no emoji, and none of a short list of English rude words; the save panel says which rule a name broke (saveNameShort / Space / Emoji / Blocked / Long). Names chosen before the rules keep working. saveNameBlocked stays vague on purpose ("pick a different username").
 - **Play again** (再玩一次) = the game-over button that starts the next run at once; **New personal best** (新的个人最佳) shows when a run beats every earlier score on this device.
 - **Daily Dump** (每日一拉, 🌞) = the once-a-day challenge behind the 🌞 at the top of the home screen: everyone flies the same endless course that day (赛道, at one level, 关), with one try (一次机会); a new course starts at 00:00 UTC. The name is a pun (a "dump" is a poop); 每日一拉 keeps the joke ("one poop a day"). Its popup's button reads **Create user** (创建用户, no username yet), **Play** (开始), **See today's result** (查看今日成绩) or, in test mode, **Practice** (练习: never saved). `{level}` is a level label such as "LV 5" / "第5关", `{time}` a countdown hh:mm:ss, `{day}` a short date written by the browser for the locale ("10 Nov" / "11月10日"), `{rank}` / `{total}` / `{score}` numbers; keep them verbatim. The zh body text carries explicit line breaks so the game's wrap never starts a line with punctuation.
@@ -152,9 +152,9 @@ Short, playful, clear. Fit a 720×1280 logical field; How to play / About body w
 | itemControlsName | Controls | 操作方式 |
 | itemControlsDetail | One player: tap or click to flap; the bean button (or the poop) farts. Keyboard: Space or ↑ flaps, B farts, P or Esc pauses. Controller: A flaps, RT farts, Menu pauses. Two players (the 👥 toggle): P1 flaps with W or Space and farts with E or Left Shift; P2 flaps with ↑ or Enter and farts with Right Shift or Numpad 0. A controller (A, RT) or a tap on your half works too. In a level break your fart button (B, RT, E…) opens and closes the 💰 shop. | 单人：点击起飞；按豆子按钮（或便便）放屁。键盘：空格或 ↑ 起飞，B 放屁，P 或 Esc 暂停。手柄：A 起飞，RT 放屁，Menu 暂停。双人模式（👥 开关）：玩家 1 用 W 或空格起飞、E 或左 Shift 放屁；玩家 2 用 ↑ 或回车起飞、右 Shift 或小键盘 0 放屁。也可以用手柄（A、RT）或点击你这一侧。过关休息时，放屁键（B、RT、E 等）可打开或关闭 💰 商店。 |
 | itemTwoPlayerName | Two players | 双人模式 |
-| itemTwoPlayerDetail | On a wide screen, flip the 👥 switch under the toilet one and race a friend side by side on the same course. A crash costs points, not the match; first over each finish line gets +25, and the higher score wins. | 在宽屏上，打开马桶开关下方的👥开关，和朋友在同一条赛道上并排比赛。撞到只会扣分，不会输掉比赛；率先冲过每条终点线得25分，最后分高者胜。 |
+| itemTwoPlayerDetail | On a wide screen, flip the 👥 switch under the toilet one and race friends side by side on the same course, two at a time. A crash costs points, not the race; first over each finish line gets +25, and the higher score wins. | 在宽屏上，打开马桶开关下方的👥开关，和朋友两两在同一条赛道上并排比赛。撞到只会扣分，不会输掉比赛；率先冲过每条终点线得25分，最后分高者胜。 |
 | itemTournamentName | Tournament | 锦标赛 |
-| itemTournamentDetail | 3 to 8 players race two at a time in a knockout bracket: tap 🏅 Tournament on the two-player screen. The top three win 🥇 🥈 🥉, and players who joined with their user code keep their medals on the 🏅 board. | 3到8名玩家两两比赛，淘汰制：在双人模式页面点“🏅锦标赛”。前三名获得🥇🥈🥉，用用户码加入的玩家奖牌会记到🏅榜上。 |
+| itemTournamentDetail | Every two-player session is a tournament for 2 to 8 players: two race one Final, more play a knockout bracket you can arrange before the first race. The winners take the podium (🥉 from 3 players); with 3 or more players, those who joined with their user code keep their medals on the 🏅 board. | 双人模式总是锦标赛，支持2到8名玩家：两人只比一场决赛，更多玩家进行淘汰赛，第一场比赛前可以调整对阵。胜者登上领奖台（3名或以上玩家时才有🥉）；3名或以上玩家时，用用户码加入的玩家奖牌会记到🏅榜上。 |
 | itemDailyName | Daily Dump | 每日一拉 |
 | itemDailyDetail | Tap the 🌞 at the top of the home screen: one try a day on a course everyone shares, endless at the day's level, with no kernels. Your score goes on the 🌞 board; a new course every day at 00:00 UTC. | 点首页顶部的🌞：每天一次机会，所有人飞同一条赛道，按当天的关卡一直飞下去，没有玉米粒。分数记到🌞榜上；每天UTC 00:00换新赛道。 |
 | itemInfoName | About | 关于 |
@@ -249,8 +249,7 @@ Short, playful, clear. Fit a 720×1280 logical field; How to play / About body w
 | versusGo | GO! | 出发！ |
 | versusWins | {name} WINS! | {name} 获胜！ |
 | versusDraw | DRAW | 平局 |
-| versusRematch | Rematch | 再来一局 |
-| versusNotSaved | Two-player runs are not saved | 双人模式的分数不会保存 |
+| versusNotSaved | Races are not saved to the 🏆 board | 比赛分数不会记到 🏆 榜上 |
 | versusEscaped | Made it out! | 顺利排出！ |
 | versusWaiting | Waiting for {name}… | 等待{name}… |
 | versusTapReady | Tap when ready | 准备好了就点一下 |
@@ -259,7 +258,6 @@ Short, playful, clear. Fit a 720×1280 logical field; How to play / About body w
 | tournamentByDeaths | Fewer crashes | 撞得更少 |
 | tournamentByLevelWins | More finish lines first | 率先过线的关卡更多 |
 | tournamentByFinalFirst | First across the line | 率先冲过终点线 |
-| tournamentButton | 🏅 Tournament | 🏅 锦标赛 |
 | tournamentTitle | 🏅 TOURNAMENT | 🏅 锦标赛 |
 | tournamentPlayers | Players | 人数 |
 | tournamentPaste | Paste code | 粘贴用户码 |
@@ -283,13 +281,13 @@ Short, playful, clear. Fit a 720×1280 logical field; How to play / About body w
 | tournamentNew | New tournament | 再来一届 |
 | tournamentBracket | Bracket | 赛程 |
 | tournamentHowTitle | How a tournament works | 锦标赛怎么玩 |
-| tournamentHowBody | 3 to 8 players race two at a time on this screen, knockout style: win to move on.
-Add each player by pasting their user code, as a guest, or with your own player.
-Races are shorter than a normal run. The higher score wins; a tie goes to fewer crashes, then more finish lines crossed first.
-The top three take the podium 🥇 🥈 🥉. Players who joined with their user code get their medals on the 🏅 board; guests aren't saved. | 3 到 8 名玩家在这台设备上两两比赛，淘汰制：赢了才能晋级。
-添加玩家：粘贴他们的用户码、选“访客”，或“用我的玩家”。
-每场比赛比平常短。得分高者胜；平分时撞得少的胜，再看谁率先过线的关卡更多。
-前三名登上领奖台 🥇 🥈 🥉。用用户码加入的玩家，奖牌会记到 🏅 榜上；访客不会保存。 |
+| tournamentHowBody | 2 to 8 players race two at a time on this screen, knockout style: win to move on. Two players race one Final.
+Add each player by pasting their user code, as a guest, or with your own player. Before the first race, drag a player, use ↑ ↓ or 🎲 to choose who meets whom.
+Races are shorter than a normal run. The higher score wins; a tie goes to fewer crashes, then more finish lines crossed first, then whoever crossed the last line first. When both players wait at a finish line, 🏅 Bracket shows the draw.
+The winners take the podium 🥇 🥈 (and 🥉 from 3 players). With 3 or more players, those who joined with their user code get their medals on the 🏅 board; guests aren't saved. | 2 到 8 名玩家在这台设备上两两比赛，淘汰制：赢了才能晋级。两名玩家只比一场决赛。
+添加玩家：粘贴他们的用户码、选“访客”，或“用我的玩家”。第一场比赛前，拖动玩家、用 ↑ ↓ 或 🎲 决定谁对谁。
+每场比赛比平常短。得分高者胜；平分时撞得少的胜，再看谁率先过线的关卡更多，最后看谁先冲过最后一条终点线。两人都在终点线等候时，点 🏅 赛程 可查看对阵。
+胜者登上领奖台 🥇 🥈（3 名或以上玩家时还有 🥉）。3 名或以上玩家时，用用户码加入的玩家，奖牌会记到 🏅 榜上；访客不会保存。 |
 | tournamentGotIt | Got it | 知道了 |
 | dailyTitle | 🌞 DAILY DUMP | 🌞 每日一拉 |
 | dailyToday | Today's course: {level} | 今日赛道：{level} |
@@ -323,6 +321,14 @@ The top three take the podium 🥇 🥈 🥉. Players who joined with their user
 | tournamentSaveLater | Medals saved on this device: they post when you're online | 奖牌已存在本设备：联网后自动上传 |
 | tournamentSaveRejected | Couldn't save this tournament's medals | 无法保存这届锦标赛的奖牌 |
 | tournamentSaveNone | No one joined with a user code: no medals to save | 没有人用用户码加入：没有奖牌要保存 |
+| tournamentSeedHint | Drag a player or use ↑ ↓ to choose who meets whom | 拖动玩家或用 ↑ ↓ 决定谁对谁 |
+| tournamentShuffle | 🎲 Shuffle | 🎲 重新抽签 |
+| tournamentMoveUp | Move up | 上移 |
+| tournamentMoveDown | Move down | 下移 |
+| tournamentBye | bye: goes straight through | 轮空：直接晋级 |
+| tournamentBack | Back to the race | 回到比赛 |
+| tournamentBracketPill | 🏅 Bracket | 🏅 赛程 |
+| tournamentSaveTwo | Two-player tournaments aren't saved to the 🏅 board | 双人锦标赛不会记到 🏅 榜上 |
 | versusUnreadyHint | Tap again to un-ready | 再点一次可取消准备 |
 
 ### aboutCredits (English)

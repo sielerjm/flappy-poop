@@ -9,7 +9,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { TUNING as T, LEADERBOARD } from '../src/config.js';
 import { createRng } from '../src/logic.js';
-import { createTournament, nextMatch, recordResult, raceOutcome, placings, tournamentPayload, matchPlayers } from '../src/tournament.js';
+import { createTournament, nextMatch, recordResult, raceOutcome, placings, tournamentPayload, matchPlayers, reseed, reshuffle } from '../src/tournament.js';
 
 let PGlite;
 try {
@@ -61,10 +61,16 @@ function playOut(tour, rng) {
 }
 
 /** A finished tournament of n players; `guest(i)` picks who is a guest; ids from `tag`. */
-function finished(n, seed, { tag = 'P', guest = () => false } = {}) {
+function finished(n, seed, { tag = 'P', guest = () => false, reseeds = 0 } = {}) {
   const players = Array.from({ length: n }, (_, i) => (guest(i) ? { name: `Guest${i}`, playerId: null, guest: true } : { name: `${tag}${i}`, playerId: id(`${tag}${i}`), guest: false }));
   const rng = createRng(seed);
-  return playOut(createTournament(players, rng), rng);
+  let tour = createTournament(players, rng);
+  // The host's seeding before the first race: random swaps (the drag and ↑ / ↓) and 🎲 redraws.
+  for (let k = 0; k < reseeds; k += 1) {
+    const seeds = tour.order.length;
+    tour = rng() < 0.2 ? reshuffle(tour, rng) : reseed(tour, Math.floor(rng() * seeds), Math.floor(rng() * seeds));
+  }
+  return playOut(tour, rng);
 }
 
 /** Each player's best race score in a finished tour. */
@@ -78,8 +84,10 @@ function bests(tour) {
 }
 
 test('the schema pins the tournament limits and the score cap the game uses', () => {
-  assert.match(SQL, new RegExp(`v_n < ${T.tournament.minPlayers} or v_n > ${T.tournament.maxPlayers}`), 'submit_tournament: TUNING.tournament min / max players');
-  assert.match(SQL, new RegExp(`players between ${T.tournament.minPlayers} and ${T.tournament.maxPlayers}`), 'tournaments.players check');
+  // The board takes 3–8 (minPostPlayers): a 2-player tournament (minPlayers) is never sent.
+  assert.match(SQL, new RegExp(`v_n < ${T.tournament.minPostPlayers} or v_n > ${T.tournament.maxPlayers}`), 'submit_tournament: TUNING.tournament min post / max players');
+  assert.match(SQL, new RegExp(`players between ${T.tournament.minPostPlayers} and ${T.tournament.maxPlayers}`), 'tournaments.players check');
+  assert.ok(T.tournament.minPlayers < T.tournament.minPostPlayers, 'smaller tournaments exist, and stay local');
   assert.match(SQL, new RegExp(`sc0 > ${LEADERBOARD.maxScore} or sc1 > ${LEADERBOARD.maxScore}`), 'race scores capped like the board');
   assert.match(SQL, new RegExp(`best_score between 0 and ${LEADERBOARD.maxScore}`));
 });
@@ -210,12 +218,13 @@ test('forged or impossible brackets are rejected, and change nothing', async () 
   assert.equal(await submit(db, id('H'), base), 'ok', 'the untouched payload is accepted');
 });
 
-test('every legal shape is accepted: 50 seeded brackets per size', async () => {
+test('every legal shape is accepted: 50 seeded brackets per size, half of them reseeded by the host first', async () => {
   const db = await freshDb();
   for (let n = 3; n <= 8; n += 1) {
     for (let seed = 1; seed <= 50; seed += 1) {
-      const tour = finished(n, seed * 13 + n, { tag: `S${n}x${seed}p` });
-      assert.equal(await submit(db, id(`H${n}x${seed}`), tournamentPayload(tour, id(`T${n}x${seed}`))), 'ok', `${n} players, seed ${seed}`);
+      const reseeds = seed % 2 === 0 ? 1 + (seed % 6) : 0; // the seeding view's swaps and 🎲 keep the bye pattern
+      const tour = finished(n, seed * 13 + n, { tag: `S${n}x${seed}p`, reseeds });
+      assert.equal(await submit(db, id(`H${n}x${seed}`), tournamentPayload(tour, id(`T${n}x${seed}`))), 'ok', `${n} players, seed ${seed}, ${reseeds} reseeds`);
     }
   }
 });

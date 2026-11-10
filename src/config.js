@@ -323,10 +323,12 @@ export const TUNING = {
       blinkAlpha: 0.2, // 0–1 alpha at the bottom of a blink
     },
   },
-  // Tournament (🏅, from the two-player join screen): a World Cup bracket for minPlayers–maxPlayers
-  // on one device, two at a time (src/tournament.js); byes fill the bracket to 4 or 8.
+  // Tournament (🏅, every two-player session): a World Cup bracket for minPlayers–maxPlayers
+  // on one device, two at a time (src/tournament.js); byes fill the bracket to 2, 4 or 8. Every
+  // two-player session is a tournament: two players race the Final alone.
   tournament: {
-    minPlayers: 3,
+    minPlayers: 2,
+    minPostPlayers: 3, // the 🏅 board's floor (submit_tournament): two players race the Final alone, no bronze, so they stay on the device
     maxPlayers: 8,
     levelPipes: [10, 25, 35, 35, 35, 35, 50], // pipe pairs per level in a tournament race (225 in all; a normal run's levels.pipes makes 285)
   },

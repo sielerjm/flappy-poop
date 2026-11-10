@@ -52,6 +52,7 @@ import {
   buyBlocker,
   SHOP_ITEMS,
   shopButtonLayout,
+  bracketButtonLayout,
   shopButtonHit,
   shopLayout,
   shopHit,
@@ -115,6 +116,7 @@ import { createSubmitStore, createMergeStore, createRenameStore, createTournamen
 import { createButton } from '../ui/button.js';
 import { createToggle } from '../ui/toggle.js';
 import { openSavePanel, isSavePanelOpen, showAdoptedName } from '../ui/savePanel.js';
+import { isTournamentPanelOpen, tournamentPadAction } from '../ui/tournamentPanel.js';
 import { bindPad } from '../input/pad.js';
 import { keyGroup, sameDevice, catchUpTier, catchUpDraws, versusAvailable, ghostPlacement, rivalMarker, respawnPose, courseDistance, VERSUS_EMOJI } from '../versus.js';
 
@@ -468,6 +470,10 @@ export class Play extends Phaser.Scene {
     this.shopButtonBox = shopButtonLayout(this.col.width, GAME_HEIGHT, T, this.col.x);
     this.shopBoxes = shopLayout(this.col.width, GAME_HEIGHT, T, this.col.x);
     this.shopButton = createButton(this, this.shopButtonBox, coinLabel(0), { ...TEXT_STYLE, fontSize: '40px' }, { depth: 27 }).setVisible(false);
+    // A tournament race's 🏅 Bracket pill under the 💰: once both halves are in their level break
+    // (Versus.bothInBreak) it opens the bracket read-only (Versus.openPeek); it never readies the half.
+    this.bracketButtonBox = this.match?.tournament ? bracketButtonLayout(this.col.width, GAME_HEIGHT, T, this.col.x) : null;
+    this.bracketButton = this.bracketButtonBox ? createButton(this, this.bracketButtonBox, t(this.locale, 'tournamentBracketPill'), { ...TEXT_STYLE, fontSize: '36px', color: '#ffd700' }, { depth: 27 }).setVisible(false) : null;
 
     // The tray and the controller ring belong to the chrome owner: single player, or P1 in a match (P2 has neither).
     this.tray = !this.match || this.player === 1 ? createTray(this, { muted: isMuted(), col: this.col }) : null;
@@ -487,6 +493,7 @@ export class Play extends Phaser.Scene {
             { id: 'howto', box: this.readyBoxes.howto, visible: onReady, activate: () => this.handleChrome('howto') },
             // The level break: the 💰 pill, then (the shop open) its ✕ and rows down the column.
             { id: 'shop', box: this.shopButtonBox, depth: 27, visible: () => this.shopButtonShown(), activate: () => this.handleChrome('shop') },
+            ...(this.bracketButtonBox ? [{ id: 'bracket', box: this.bracketButtonBox, depth: 27, visible: () => this.bracketButtonShown(), activate: () => this.openBracketPeek() }] : []),
             { id: 'shopClose', box: this.shopBoxes.close, depth: 29, visible: () => this.shopOpen, activate: () => this.handleChrome('esc') },
             ...this.shopBoxes.rows.map((row) => ({ id: `shop:${row.id}`, box: row, depth: 28, visible: () => this.shopOpen, activate: () => this.shopBuy(row.id) })),
           ],
@@ -1028,6 +1035,10 @@ export class Play extends Phaser.Scene {
     }
     if (pointer && this.shopButtonShown() && shopButtonHit(pointer.x, pointer.y, this.shopButtonBox)) {
       this.handleChrome('shop');
+      return;
+    }
+    if (pointer && this.bracketButtonShown() && Math.abs(pointer.x - this.bracketButtonBox.x) <= this.bracketButtonBox.width / 2 && Math.abs(pointer.y - this.bracketButtonBox.y) <= this.bracketButtonBox.height / 2) {
+      this.openBracketPeek(); // a look at the bracket, never a ready tap
       return;
     }
     if (pointer) {
@@ -1581,9 +1592,12 @@ export class Play extends Phaser.Scene {
    */
   onPadAction(action, padIndex = 0) {
     const { top, scene } = this.padTop();
-    if (this.match && top === 'play' && (action === 'select' || action === 'power')) {
+    const tournamentPanelOpen = isTournamentPanelOpen();
+    const ringPress = action === 'select' && Boolean(this.focus?.shown); // A on P1's ring presses the ringed button (⏸, 💰, 🏅)
+    if (this.match && top === 'play' && !tournamentPanelOpen && !ringPress && (action === 'select' || action === 'power')) {
       // A match: A and RT belong to the half that claimed this pad (versusInput); the other
-      // buttons stay global (pause, mute, back, the ring) through padIntent below.
+      // buttons stay global (pause, mute, back, the ring) through padIntent below, and so does
+      // A while P1's ring shows.
       this.registry.set('padMode', true);
       this.versusInput({ kind: 'pad', index: padIndex }, action === 'select' ? 'flap' : 'power');
       return;
@@ -1594,6 +1608,7 @@ export class Play extends Phaser.Scene {
       top,
       ringShown: Boolean(scene?.focus?.shown),
       savePanelOpen: isSavePanelOpen(),
+      tournamentPanelOpen,
     });
     if (result.do === 'ignore') return;
     this.registry.set('padMode', true); // controller mode: rings may show until the next pointer
@@ -1637,8 +1652,11 @@ export class Play extends Phaser.Scene {
         scene?.focus?.move(result.dir);
         scene?.focus?.show();
         break;
+      case 'panel':
+        tournamentPadAction(result.action); // the tournament panel walks its own buttons
+        break;
       case 'versusSelect':
-        scene?.onPadSelect?.(padIndex); // the join screen claims the pad; the result panel presses Rematch
+        scene?.onPadSelect?.(padIndex); // the join screen claims the pad; the result panel presses Continue
         break;
       case 'versusBack':
         scene?.onPadBack?.();
@@ -2627,8 +2645,26 @@ export class Play extends Phaser.Scene {
     return !(host && (host.levelStage === 'count' || host.isReady?.(this)));
   }
 
+  /** The 🏅 Bracket pill shows in a tournament race's level break once both halves have reached the line (Versus.bothInBreak), the shop closed. */
+  bracketButtonShown() {
+    if (!this.bracketButton || !this.levelBreak || this.state !== 'paused' || this.shopOpen) return false;
+    return Boolean(this.versusHost()?.bothInBreak?.());
+  }
+
+  refreshBracketButton() {
+    this.bracketButton?.setVisible(this.bracketButtonShown());
+  }
+
+  /** The 🏅 pill: the bracket read-only over the match (the panel's peek view). */
+  openBracketPeek() {
+    if (!this.bracketButtonShown()) return;
+    this.focus?.hide();
+    this.versusHost()?.openPeek?.();
+  }
+
   /** The 💰 pill: shown by shopButtonShown, labelled with the purse, dimmed (trayAlpha) when it is empty. */
   refreshShopButton() {
+    this.refreshBracketButton();
     if (!this.shopButton) return;
     const coins = this.purseCoins();
     this.shopButton.setText(coinLabel(coins)).setAlpha(coins > 0 ? 1 : T.trayAlpha).setVisible(this.shopButtonShown());

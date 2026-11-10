@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { TUNING as T } from '../src/config.js';
 import { createRng, withLevelPipes, levelEnd, levelPipes, levelFor } from '../src/logic.js';
-import { createTournament, nextMatch, recordResult, matchPlayers, isDone, placings, raceOutcome, claimFromCode, claimHost, tournamentPayload, linkedCount } from '../src/tournament.js';
+import { createTournament, nextMatch, recordResult, matchPlayers, isDone, placings, raceOutcome, claimFromCode, claimHost, tournamentPayload, linkedCount, seedSlots, canReseed, reseed, reshuffle, postable } from '../src/tournament.js';
 import { exportCode } from '../src/save.js';
 
 const roster = (n) => Array.from({ length: n }, (_, i) => ({ name: `P${i}`, playerId: null, guest: true }));
@@ -19,10 +19,10 @@ function playOut(tour, pick = () => 0) {
   return raced;
 }
 
-test('tournament knobs: 3 to 8 players', () => {
-  assert.equal(T.tournament.minPlayers, 3);
+test('tournament knobs: 2 to 8 players', () => {
+  assert.equal(T.tournament.minPlayers, 2);
   assert.equal(T.tournament.maxPlayers, 8);
-  assert.throws(() => createTournament(roster(2), createRng(1)), /2 players/);
+  assert.throws(() => createTournament(roster(1), createRng(1)), /1 players/);
   assert.throws(() => createTournament(roster(9), createRng(1)), /9 players/);
 });
 
@@ -113,6 +113,68 @@ test('a seeded random run for every size ends with three different players on th
       assert.equal(new Set([p.gold, p.silver, p.bronze]).size, 3, `${n} players, seed ${seed}: ${JSON.stringify(p)}`);
     }
   }
+});
+
+test('2 players: one Final and no bronze; the podium has gold and silver only', () => {
+  const tour = createTournament(roster(2), createRng(4));
+  assert.equal(tour.size, 2);
+  assert.deepEqual(tour.matches.map((m) => m.id), ['final']);
+  const m = nextMatch(tour);
+  assert.equal(m.id, 'final');
+  assert.equal(placings(tour), null);
+  const [a, b] = matchPlayers(tour, m);
+  recordResult(tour, 'final', 1, { by: 'score' });
+  assert.ok(isDone(tour));
+  assert.deepEqual(placings(tour), { gold: b, silver: a, bronze: null });
+  assert.equal(nextMatch(tour), null);
+});
+
+test('seedSlots: the first-round slots in bracket order, null for a bye; tour.order is the seeds', () => {
+  for (let n = 2; n <= 8; n += 1) {
+    const tour = createTournament(roster(n), createRng(n * 7));
+    const slots = seedSlots(tour);
+    assert.equal(slots.length, tour.size, `${n} players: ${tour.size} slots`);
+    assert.deepEqual(slots.filter((x) => x !== null), tour.order, `${n} players: the seeds fill the non-bye slots in order`);
+    assert.equal(slots.filter((x) => x === null).length, tour.size - n);
+    for (let p = 0; p < slots.length; p += 2) assert.notEqual(slots[p], null, 'a bye never takes a pair\'s first slot');
+  }
+});
+
+test('reseed swaps two seeds on the same bye pattern, without touching its input; reshuffle redraws', () => {
+  const tour = createTournament(roster(6), createRng(11));
+  const before = JSON.stringify(tour);
+  const byes = seedSlots(tour).map((x) => x === null);
+  const next = reseed(tour, 0, 3);
+  assert.equal(JSON.stringify(tour), before, 'the input is not mutated');
+  assert.deepEqual(next.order, [tour.order[3], tour.order[1], tour.order[2], tour.order[0], ...tour.order.slice(4)]);
+  assert.deepEqual(seedSlots(next).map((x) => x === null), byes, 'the byes stay where they were');
+  assert.deepEqual(next.players, tour.players);
+  // Byes re-settle: whoever now sits beside a bye has already advanced.
+  for (const m of next.matches.filter((x) => x.round === 'quarter' && x.sides[1] === null)) assert.equal(m.winner, 0);
+  assert.throws(() => reseed(tour, 0, 6), /no such seed/);
+  assert.throws(() => reseed(tour, -1, 0), /no such seed/);
+  const a = reshuffle(tour, createRng(99));
+  const b = reshuffle(tour, createRng(99));
+  assert.deepEqual(a.order, b.order, 'a reshuffle is deterministic for its rng');
+  assert.deepEqual(a.order.slice().sort(), tour.order.slice().sort());
+});
+
+test('2 players: reseed swaps the Final\'s sides', () => {
+  const tour = createTournament(roster(2), createRng(8));
+  const [a, b] = matchPlayers(tour, tour.matches[0]);
+  const next = reseed(tour, 0, 1);
+  assert.deepEqual(matchPlayers(next, next.matches[0]), [b, a]);
+  assert.deepEqual(seedSlots(next), [b, a]);
+});
+
+test('seeding locks once a race is played: canReseed, reseed and reshuffle refuse', () => {
+  const tour = createTournament(roster(3), createRng(2));
+  assert.ok(canReseed(tour), 'a settled bye does not lock it');
+  const m = nextMatch(tour);
+  recordResult(tour, m.id, 0, { by: 'score' });
+  assert.equal(canReseed(tour), false);
+  assert.throws(() => reseed(tour, 0, 1), /locked/);
+  assert.throws(() => reshuffle(tour, createRng(1)), /locked/);
 });
 
 test('the seed shuffles the draw: different seeds, different first-round pairs', () => {
@@ -251,6 +313,9 @@ test('tournamentPayload: guests travel as { id: null, name: null }; linkedCount 
   assert.deepEqual(pl.players, [{ id: null, name: null }, { id: 'BBBBBBBBBBBBBBBBBBBBBB', name: 'Linked' }, { id: 'HHHHHHHHHHHHHHHHHHHHHH', name: 'Host' }, { id: null, name: null }]);
   assert.equal(linkedCount(tour), 2);
   assert.equal(linkedCount(createTournament(roster(3), createRng(1))), 0);
+  assert.ok(postable(tour), '4 players, two linked: it goes to the board');
+  assert.equal(postable(createTournament(roster(3), createRng(1))), false, 'all guests: nothing to post');
+  assert.equal(postable(createTournament([players[1], players[2]], createRng(1))), false, 'two players stay local, linked or not');
   assert.equal(JSON.stringify(pl).includes('Guesty'), false, 'no guest name leaves the device');
   assert.deepEqual(pl.levelPipes, [10, 20]);
   assert.equal(pl.id, 'TTTTTTTTTTTTTTTTTTTTTT');

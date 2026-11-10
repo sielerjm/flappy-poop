@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { GAME_WIDTH, GAME_HEIGHT, TUNING as T } from '../src/config.js';
-import { shopButtonLayout, shopButtonHit, shopLayout, shopHit, SHOP_ITEMS, overlayOutsideHit, trayLayout, trayHit, beanButtonLayout, poopX } from '../src/logic.js';
+import { shopButtonLayout, bracketButtonLayout, shopButtonHit, shopLayout, shopHit, SHOP_ITEMS, overlayOutsideHit, trayLayout, trayHit, beanButtonLayout, poopX } from '../src/logic.js';
 
 const W = GAME_WIDTH; // the chrome column (a phone field)
 const button = shopButtonLayout(W, GAME_HEIGHT, T);
@@ -33,6 +33,20 @@ test('the 💰 button sits under the banner hint, above the bean button, clear o
   const shifted = shopButtonLayout(W, GAME_HEIGHT, T, 500);
   assert.equal(shifted.x, button.x + 500, 'x follows the column on a wide field');
   assert.equal(shifted.y, button.y);
+});
+
+test('the 🏅 Bracket pill sits one row under the 💰, above the bean button, clear of the tray', () => {
+  const pill = bracketButtonLayout(W, GAME_HEIGHT, T);
+  const e = edges(pill);
+  assert.equal(pill.id, 'bracket');
+  assert.ok(pill.height >= T.trayHitMin, 'thumb-sized');
+  assert.ok(e.left >= 0 && e.right <= W, 'inside the column');
+  assert.equal(pill.x, button.x);
+  assert.ok(e.top >= edges(button).bottom + 8, `below the 💰 (top ${e.top})`);
+  assert.ok(e.bottom <= bean.y - bean.size, `above the bean button's hit circle (bottom ${e.bottom})`);
+  assert.equal(trayHit(pill.x, pill.y, tray), null, 'not on a tray button');
+  assert.equal(shopButtonHit(pill.x, pill.y, button), null, 'not on the 💰');
+  assert.equal(bracketButtonLayout(W, GAME_HEIGHT, T, 500).x, pill.x + 500, 'x follows the column');
 });
 
 test('shopButtonHit: on the pill, not off it', () => {

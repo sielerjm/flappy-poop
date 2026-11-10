@@ -88,8 +88,8 @@ test('HOW_TO_ITEMS names fiber, probiotic, and bacteria with their effects', () 
   assert.match(two.detail, /\+25/, 'first over the line');
   const tour = items.find((item) => item.key === 'tournament');
   assert.equal(tour.name, 'Tournament');
-  assert.match(tour.detail, /3 to 8/);
-  assert.match(tour.detail, /🏅 Tournament/, 'names the join-screen button');
+  assert.match(tour.detail, /2 to 8/);
+  assert.match(tour.detail, /Every two-player session/, 'every 👥 session is one');
   assert.match(tour.detail, /🏅 board/, 'where the medals go');
   const day = items.find((item) => item.key === 'daily');
   assert.equal(day.name, 'Daily Dump');
