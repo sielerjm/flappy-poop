@@ -632,9 +632,8 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
           ok((await evaluate(`${play}.poop.texture.key`)) === 'poop', 'uncharged and still: the plain face');
         }
         const popupHit = async (kind) => {
-          const before = await evaluate(`${play}.score`);
-          // The score is read inside the hit: real pipes keep passing the pinned poop and would add +1 before a later sample.
-          const score = await evaluate(`(() => { const p = ${play}; while (p.effects.hasProbiotic()) p.effects.consumeProbiotic(); const it = p.items.create(p.poop.x, p.poop.y, '${kind}'); it.setData('kind', '${kind}'); p.collectItem(it); return p.score; })()`);
+          // Both scores are read inside the hit: real pipes keep passing the pinned poop and would add +1 between two samples.
+          const { before, score } = await evaluate(`(() => { const p = ${play}; while (p.effects.hasProbiotic()) p.effects.consumeProbiotic(); const before = p.score; const it = p.items.create(p.poop.x, p.poop.y, '${kind}'); it.setData('kind', '${kind}'); p.collectItem(it); return JSON.stringify({ before, score: p.score }); })()`).then(JSON.parse);
           const read = () => evaluate(`JSON.stringify({ text: ${play}.scorePopup.text, color: ${play}.scorePopup.style.color, alpha: ${play}.scorePopup.alpha, y: ${play}.scorePopup.y, score: ${play}.score })`).then(JSON.parse);
           let r = await read();
           let peak = r.alpha;
