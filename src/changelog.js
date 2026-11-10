@@ -8,6 +8,14 @@ import { LOCALES } from './i18n.js';
 
 export const CHANGELOG = [
   {
+    version: '0.10.1',
+    date: '10 Nov 2026',
+    notes: {
+      en: ['A tap on the floor lifts you again in test mode with Invincible on, and just after a fart: one tap is a whole flap, not a tiny hop.'],
+      'zh-Hans': ['测试模式开启无敌时，以及刚放完屁时，贴着地面点击也能正常起飞：点一下就是完整的一次起飞，不再只跳一小下。'],
+    },
+  },
+  {
     version: '0.10.0',
     date: '9 Nov 2026',
     notes: {

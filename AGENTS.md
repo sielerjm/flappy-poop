@@ -732,7 +732,9 @@ src/
                             testInvincible (session, like toilet); isTestMode,
                             setTestMode, testSettings / setTestSettings,
                             testInvincible (die() and the ceiling / floor clamp
-                            treat it like grace), grantTest(draw) (resolveMystery +
+                            treat it like grace; the clamp, clampToPlayArea in
+                            logic.js, stops only motion further into a strip, so a
+                            flap from the floor keeps its lift), grantTest(draw) (resolveMystery +
                             openMystery, then pauseEffects() if paused); start()
                             seeds level / pipes / score / beanSpawned from
                             testRunStart; runIsTest latches per run and endRun()

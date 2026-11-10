@@ -1,6 +1,6 @@
 # Plan: a tap on the floor lifts the poop again (Invincible / fart grace)
 - Created: 2026-11-10
-- Status: in progress (step 2)
+- Status: complete
 - Baseline: `76ef9c2` on `main` (pushed; tree clean).
 - Whole-suite verification: `npm test` (448 pass); `npm run smoke` (336, full).
 - Repo plan copy: `.claude/plans/2026-11-10-floor-flap.md` (`git add -f`), archived when done.
@@ -45,13 +45,14 @@ The same clamp also runs during the bean fart (`powerActive`) and the short grac
 - **Commit:** `fix(play): a tap on the floor lifts the poop under Invincible and the fart grace`
 - **Result:** new smoke check failed first (12 px), passes after (105 px); npm test 449/449; full smoke 337/337.
 
-### Step 2/2: docs and 0.10.1  [pending]
+### Step 2/2: docs and 0.10.1  [done]
 - **Change:**
   - `VERSION` 0.10.1 and `src/changelog.js` 0.10.1 (en + zh-Hans), one line: in test mode with Invincible, and just after a fart, a tap on the floor lifts you again.
   - `AGENTS.md`: the Play.js note on testInvincible (~line 734) says the clamp stops only motion further into the strip, and names `clampToPlayArea` among the logic.js helpers.
   - Archive this plan.
 - **Verify:** `npm test` (the changelog test needs the first entry to match VERSION); full smoke.
 - **Commit:** `docs: floor flap fix in AGENTS; 0.10.1`
+- **Result:** step 1 commit `c463b95`; npm test and full smoke green after the bump.
 - **Push:** only on Michael's word.
 
 ## Risks and notes
