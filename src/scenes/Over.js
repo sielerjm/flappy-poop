@@ -24,9 +24,8 @@ export class Over extends Phaser.Scene {
     const toilet = Boolean(data?.toilet);
     const level = Number.isInteger(data?.level) && data.level >= 1 ? data.level : 1;
     const collected = { fiber: 0, probiotic: 0, postbiotic: 0, bacteria: 0, bean: 0, mystery: 0, coin: 0, ...(data?.collected ?? {}) };
-    // A Daily Dump (🌞): { day, level, playerId, practice, sync, view }. Its score links to the 🌞 board,
+    // A Daily Dump (🌞): { day, level, playerId, practice, sync }. Its score links to the 🌞 board,
     // its coin cell holds the day's rank, and the countdown to the next day takes the test note's slot.
-    // `view`: opened from the popup's "See today's result" (Play is on its ready screen, not dead).
     this.daily = data?.daily?.day ? data.daily : null;
     const daily = this.daily;
     const linked = Boolean(daily && !daily.practice);
@@ -189,9 +188,7 @@ export class Over extends Phaser.Scene {
       }
     }
     const result = chromeIntent(play.chromeArgs('tap'));
-    // Home: a game over's tap reads 'retry'; today's result opened from the ready screen reads 'start'.
-    const home = result.do === 'retry' || (this.daily?.view && result.do === 'start');
-    if (!home) return;
+    if (result.do !== 'retry') return;
     if (!canRestart(this.openedAt, this.time.now, T.retryLockoutMs)) return;
     this.scene.stop('Over');
     play.scene.restart();

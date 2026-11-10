@@ -11,8 +11,14 @@ export const CHANGELOG = [
     version: '0.11.2',
     date: '10 Nov 2026',
     notes: {
-      en: ["The Daily Dump is one try per player, not per device: a phone or browser signed in with your user code shows today's result if you already played elsewhere."],
-      'zh-Hans': ['每日一拉是每位玩家每天一次，而不是每台设备一次：用同一用户码登录的手机或浏览器，如果你已经在别处玩过，会直接显示今天的成绩。'],
+      en: [
+        "The Daily Dump is one try per player, not per device: a phone or browser signed in with your user code shows today's result if you already played elsewhere.",
+        "Today's result no longer starts a run behind it: its leaderboard link, a tap outside it and Home all behave.",
+      ],
+      'zh-Hans': [
+        '每日一拉是每位玩家每天一次，而不是每台设备一次：用同一用户码登录的手机或浏览器，如果你已经在别处玩过，会直接显示今天的成绩。',
+        '查看今日成绩时，后台不会再开始新的一局：排行榜链接、点面板外和“返回主页”都正常了。',
+      ],
     },
   },
   {

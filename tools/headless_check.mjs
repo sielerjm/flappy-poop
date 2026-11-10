@@ -2758,14 +2758,63 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await waitFor(`__flappy.scene.isActive('Over')`, 30);
         const res = await evaluate(`JSON.stringify({ over: __flappy.scene.isActive('Over'), daily: __flappy.scene.getScene('Over').scene.settings.data?.daily?.day ?? null, open: __flappy.scene.isActive('Daily') })`).then(JSON.parse);
         ok(!p0.halo && p1.label === (await tx('dailySeeResult')) && /^Next Daily Dump in \d\d:\d\d:\d\d$/.test(p1.countdown ?? '') && res.over && res.daily === today.day && !res.open, `played: no glow; the popup offers "${p1.label}" with "${p1.countdown}", which opens today's result`);
-        // Home on that result (Play is on its ready screen, not dead): a real click goes home.
+        // Today's result is a finished screen: Play sits 'dead' under it, so no tap or key on it starts a
+        // run behind it (it used to stay 'ready', and every tap on Over also reached Play's flap()).
+        const playNow = () => evaluate(`JSON.stringify({ state: ${P}.state, launching: ${P}.launching, over: __flappy.scene.isActive('Over'), board: __flappy.scene.isActive('Leaderboard'), versus: __flappy.scene.isActive('Versus') })`).then(JSON.parse);
+        const openResult = async () => {
+          await home();
+          await clickSun();
+          await clickButton();
+          await waitFor(`__flappy.scene.isActive('Over')`, 30);
+          await sleep(TT.retryLockoutMs + 300);
+        };
+        const clickHome = async () => {
+          const at = await evaluate(`JSON.stringify(__flappy.scene.getScene('Over').buttons.home)`).then(JSON.parse);
+          await evaluate(`globalThis.__dailyBoxes = ${P}.readyBoxes, true`);
+          await tapAt(at.x, at.y);
+          return waitFor(`!__flappy.scene.isActive('Over') && ${P}.readyBoxes !== globalThis.__dailyBoxes && ${P}.state === 'ready' && ${P}.poop.visible`, 30);
+        };
         await sleep(TT.retryLockoutMs + 300);
-        const homeAt = await evaluate(`JSON.stringify(__flappy.scene.getScene('Over').buttons.home)`).then(JSON.parse);
-        await evaluate(`globalThis.__dailyBoxes = ${P}.readyBoxes, true`);
-        await tapAt(homeAt.x, homeAt.y);
-        const wentHome = await waitFor(`!__flappy.scene.isActive('Over') && ${P}.readyBoxes !== globalThis.__dailyBoxes && ${P}.state === 'ready' && ${P}.poop.visible`, 30);
-        ok(wentHome, `Home on today's result goes back to a fresh home screen (${wentHome})`);
+        const v0 = await playNow();
+        // The score link: the board opens over the result, and nothing starts behind it.
+        const scoreAt = await evaluate(`JSON.stringify(__flappy.scene.getScene('Over').buttons.score)`).then(JSON.parse);
+        await tapAt(scoreAt.x, scoreAt.y);
+        await waitFor(`__flappy.scene.isActive('Leaderboard')`, 30);
+        await sleep(TT.launchSlideMs + 300);
+        const v1 = await playNow();
+        await evaluate(`__flappy.scene.getScene('Leaderboard').close(), __flappy.registry.set('leaderboardTab', 'scores'), true`);
+        await sleep(300);
+        const v2 = await playNow();
+        const homed = await clickHome();
+        ok(v0.state === 'dead' && !v0.launching && v1.board && v1.over && v1.state === 'dead' && !v1.launching && v2.over && v2.state === 'dead' && homed, `today's result sits on a finished screen (${v0.state}); its score link opens the board with nothing started behind it (${v1.state}, launching ${v1.launching}); closing the board and Home go to a fresh home screen (${homed})`);
+        // A real Space on the result goes Home (Over's key) and never launches a run in Play (its own key).
+        await openResult();
+        await evaluate(`(() => { const p = ${P}; globalThis.__launches = 0; globalThis.__launch = p.launch; p.launch = function (...a) { globalThis.__launches += 1; return globalThis.__launch.apply(this, a); }; return true; })()`);
+        for (const type of ['keyDown', 'keyUp']) await cdp.send('Input.dispatchKeyEvent', { type, key: ' ', code: 'Space', windowsVirtualKeyCode: 32 });
+        await sleep(TT.launchSlideMs + 300);
+        const launches = await evaluate(`(() => { delete ${P}.launch; return globalThis.__launches; })()`);
+        ok(launches === 0, `Space on today's result launches no run in Play (${launches} launch calls)`);
         await home();
+        // On a wide window with the 👥 toggle on, a tap outside the panel goes home: never to the two-player
+        // screen, and never a pile of panels (three times over: the pile showed up on a repeat).
+        await evaluate(`__flappy.registry.set('versus', true), true`);
+        await cdp.send('Emulation.setDeviceMetricsOverride', { width: 1600, height: 900, deviceScaleFactor: 1, mobile: false });
+        await waitFor(`__flappy.scale.width > 1000`, 60);
+        const outside = [];
+        for (let i = 0; i < 3; i += 1) {
+          await openResult();
+          const offered = await evaluate(`${P}.versusOffered()`);
+          await evaluate(`globalThis.__dailyBoxes = ${P}.readyBoxes, true`);
+          await tapAt(60, 640);
+          await waitFor(`!__flappy.scene.isActive('Over') && ${P}.readyBoxes !== globalThis.__dailyBoxes && ${P}.state === 'ready'`, 30);
+          await sleep(TT.launchSlideMs + 300);
+          outside.push({ offered, ...(await playNow()) });
+        }
+        await cdp.send('Emulation.clearDeviceMetricsOverride');
+        await waitFor(`__flappy.scale.width === 720`, 60);
+        await evaluate(`__flappy.registry.set('versus', false), true`);
+        await home();
+        ok(outside.every((o) => o.offered && o.state === 'ready' && !o.launching && !o.over && !o.board && !o.versus), `wide, 👥 on: a tap outside today's result goes home each time, never to Versus or a pile of panels (${outside.map((o) => `${o.state}${o.versus ? '+versus' : ''}${o.over ? '+over' : ''}${o.board ? '+board' : ''}`).join(', ')})`);
         // Test mode: Practice runs are never saved and leave the day alone.
         const rec0 = await evaluate(`localStorage.getItem('${keys[0]}')`);
         await evaluate(`${P}.setTestMode(true), true`);

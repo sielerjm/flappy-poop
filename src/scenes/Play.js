@@ -1103,7 +1103,8 @@ export class Play extends Phaser.Scene {
 
   /**
    * The popup's "See today's result": the game-over panel for today's stored attempt (an abandoned
-   * one is finalised and queued by the sync first). Its rank comes from the board when it answers.
+   * one is finalised and queued by the sync first), over a finished screen ('dead'). Its rank comes
+   * from the board when it answers.
    */
   showDailyResult() {
     if (this.match || this.state !== 'ready' || this.launching) return false;
@@ -1115,6 +1116,10 @@ export class Play extends Phaser.Scene {
     this.focus?.hide();
     this.setReadyUiVisible(false);
     this.poop.setVisible(false);
+    // A finished screen, as under any game over: Over's taps also reach this scene (and its keys too),
+    // and on the ready screen flap() would start a run behind the result. 'dead' makes it ignore them,
+    // and Over's Home is a plain retry. Home restarts this scene.
+    this.state = 'dead';
     this.scene.launch('Over', {
       score: after.score,
       won: false,
@@ -1123,7 +1128,7 @@ export class Play extends Phaser.Scene {
       level: after.level,
       pipes: after.pipes,
       collected: { fiber: 0, probiotic: 0, postbiotic: 0, bacteria: 0, bean: 0, mystery: 0, coin: 0, ...after.collected },
-      daily: { day, level: after.level, playerId: this.save.id, practice: false, sync, view: true },
+      daily: { day, level: after.level, playerId: this.save.id, practice: false, sync },
     });
     return true;
   }
