@@ -467,6 +467,22 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
       await evaluate(`(__flappy.registry.set('padMode', false), __flappy.registry.set('leaderboardTab', 'scores'), import('./src/config.js').then((m) => { m.LEADERBOARD.dataApi = globalThis.__api; return true; }))`);
       ok(tabP1.tab === 'medals' && tabP2.tab === 'scores' && tabP2.title === (await ttx('leaderboardTitle')) && tabP1.ring === 'tab' && tabP2.ring === 'tab' && !(await active('Leaderboard')), `under the pad, A moves 🌞 → ${tabP1.tab} → ${tabP2.tab} with the ring still on the tabs`);
 
+      // Your rows on the 🏆 board are pink whatever this device has played: a save with only off-toilet
+      // runs still asks for its 🚽 row's rank (a player merged across devices has rows from all of them).
+      {
+        const P = `__flappy.scene.getScene('Play')`;
+        const saved = await evaluate(`JSON.stringify(${P}.save)`);
+        await evaluate(`import('./src/save.js').then((m) => (${P}.setSaveState(m.ensureId(m.saveLocal({ ...${P}.save, name: 'RowsTester', top: [{ score: 160, toilet: false, level: 4 }] }))), true))`);
+        await evaluate(`(() => { globalThis.__fetch3 = globalThis.fetch; globalThis.__ranks = []; const top = [{ name: 'RowsTester', score: 261, toilet: true, level: 6 }, { name: 'B', score: 243, toilet: false, level: 6 }, { name: 'C', score: 240, toilet: false, level: 6 }, { name: 'D', score: 199, toilet: false, level: 5 }, { name: 'RowsTester', score: 197, toilet: false, level: 5 }]; globalThis.fetch = async (url, init) => { const u = String(url); if (u.includes('/scores?')) return new Response(JSON.stringify(top), { status: 200 }); if (u.endsWith('/rpc/player_rank')) { const b = JSON.parse(init.body); globalThis.__ranks.push(b.p_toilet); return new Response(JSON.stringify(b.p_toilet ? { rank: 1, total: 5, score: 261, toilet: true, level: 6 } : { rank: 5, total: 5, score: 197, toilet: false, level: 5 }), { status: 200 }); } return new Response('{"message":"stub"}', { status: 503 }); }; return import('./src/config.js').then((m) => { globalThis.__api3 = m.LEADERBOARD.dataApi; m.LEADERBOARD.dataApi = 'https://stub.invalid/rest/v1'; return true; }); })()`);
+        await chrome('leaderboard');
+        await sleep(1200);
+        const rowsPink = await evaluate(`JSON.stringify({ colors: Object.fromEntries(__flappy.scene.getScene('Leaderboard').children.list.filter((c) => c.type === 'Text' && ['261', '197', '243'].includes(c.text)).map((c) => [c.text, c.style.color])), asked: globalThis.__ranks.slice().sort() })`).then(JSON.parse);
+        await closeTop('Leaderboard');
+        await sleep(300);
+        await evaluate(`(globalThis.fetch = globalThis.__fetch3, import('./src/config.js').then((m) => { m.LEADERBOARD.dataApi = globalThis.__api3; return import('./src/save.js'); }).then((m) => (${P}.setSaveState(m.saveLocal(${saved})), true)))`);
+        ok(rowsPink.colors['261'] === '#f8a0c8' && rowsPink.colors['197'] === '#f8a0c8' && rowsPink.colors['243'] === '#ffffff' && rowsPink.asked.join() === 'false,true', `with only off-toilet runs on this device, both of your board rows are pink (🚽 261 ${rowsPink.colors['261']}, 197 ${rowsPink.colors['197']}; ranks asked for ${rowsPink.asked.join(' and ')})`);
+      }
+
       // Every overlay's version line opens What's new over it (a real click; HowTo and About scroll to
       // it first), and one real Esc closes only What's new. Board muzzled so the Leaderboard settles at once.
       {
