@@ -556,6 +556,12 @@ export class Play extends Phaser.Scene {
       this.reelSpin = null;
       this.stopFartSound();
     });
+    // Over's Play again: a one-shot registry flag (not restart data, which Phaser would keep for
+    // every later restart), cleared here before the run starts.
+    if (this.registry.get('playAgain')) {
+      this.registry.set('playAgain', false);
+      if (!this.match) this.launch({ solo: true });
+    }
   }
 
   /**
@@ -592,9 +598,10 @@ export class Play extends Phaser.Scene {
    * The start tap: the poop slides into place, then the run starts with a flap. `hold` (a match's
    * countdown): it slides and waits there; the Versus GO starts it (startRace).
    */
-  launch({ hold = false, daily = false } = {}) {
+  launch({ hold = false, daily = false, solo = false } = {}) {
     if (this.launching || this.state !== 'ready') return;
-    if (!daily && this.versusOn && this.versusOffered()) {
+    // Play again (solo) and a Daily Dump are one-player runs whatever the 👥 toggle says.
+    if (!daily && !solo && this.versusOn && this.versusOffered()) {
       // Two-player mode: the Versus scene takes over (it stops this scene and launches the halves).
       this.focus?.hide();
       this.scene.start('Versus', { match: null });
@@ -675,6 +682,7 @@ export class Play extends Phaser.Scene {
     const daily = this.dailyNext;
     this.dailyNext = null;
     this.runIsDaily = Boolean(daily);
+    this.personalBest = false; // endRun decides
     this.dailyRunDay = daily?.day ?? null; // the day on the result panel (practice too)
     this.dailySync = null;
     if (daily) {
@@ -2908,6 +2916,10 @@ export class Play extends Phaser.Scene {
       this.dailySync = this.syncLeaderboard();
       return;
     }
+    // A new personal best (Over says so, on screen only): above every score this player had, of
+    // either kind, before this one is recorded.
+    const prevBest = Math.max(this.best.load(), ...(this.save?.top ?? []).map((e) => e?.score ?? 0));
+    this.personalBest = this.score > 0 && this.score > prevBest;
     this.best.save(this.score); // legacy store, kept for first-run seeding
     this.save = saveLocal(recordScore(this.save, this.score, { toilet: this.toilet, level: this.level }));
     this.syncLeaderboard(); // fire and forget; never awaited inside the update loop
@@ -2974,7 +2986,8 @@ export class Play extends Phaser.Scene {
       this.physics.pause();
       const daily = this.runIsDaily ? { day: this.dailyRunDay ?? null, level: this.level, playerId: this.save?.id ?? null, practice: this.runIsTest, sync: this.dailySync ?? null } : null;
       const pipes = this.runIsDaily && this.daily ? this.pipesPassed - this.daily.startPipes : this.pipesPassed;
-      this.scene.launch('Over', { score: this.score, won, test: this.runIsTest, toilet: this.toilet, level: this.level, pipes, collected: { ...this.collected }, daily });
+      const personalBest = Boolean(this.personalBest && !this.runIsTest && !this.runIsDaily);
+      this.scene.launch('Over', { score: this.score, won, test: this.runIsTest, toilet: this.toilet, level: this.level, pipes, collected: { ...this.collected }, daily, personalBest });
     });
   }
 

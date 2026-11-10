@@ -45,7 +45,10 @@ export class Over extends Phaser.Scene {
     // object under the pointer, and this panel's taps are scene-level events. Without this zone every
     // tap here also reached Play underneath (harmless on a dead run, a new run on its ready screen).
     this.add.zone(W / 2, GAME_HEIGHT / 2, W, GAME_HEIGHT).setInteractive();
-    const panel = this.add.rectangle(cx, cy, 560, 720, 0x1a0b14, 0.85).setStrokeStyle(8, 0xe85e96);
+    // A normal or test run offers Play again under Share | Home: the panel grows downward for it.
+    const again = !this.daily;
+    const grow = again ? T.over.againPanelGrowPx : 0;
+    const panel = this.add.rectangle(cx, cy + grow / 2, 560, 720 + grow, 0x1a0b14, 0.85).setStrokeStyle(8, 0xe85e96);
     const style = { fontFamily: 'sans-serif', fontStyle: 'bold', color: '#ffffff', align: 'center' };
     const headline = daily ? t(locale, 'dailyOverTitle').replace('{day}', dailyDayText(locale, daily.day)) : t(locale, won ? 'runWon' : 'gameOver');
     const scoreLine = `${t(locale, 'scoreLabel')}  ${formatScore({ score, toilet })}  ·  ${daily ? '\u{1F31E} ' : ''}${levelLabel(locale, level)}`;
@@ -86,6 +89,10 @@ export class Over extends Phaser.Scene {
       this.add.image(coinX - 30, cy + 60, 'coin').setDisplaySize(48, 48);
       this.add.text(coinX + 2, cy + 60, `×${collected.coin}`, { ...style, fontSize: '40px', color: '#c9b8dc' }).setOrigin(0, 0.5);
     }
+    if (data?.personalBest && !testRun && !daily) {
+      // On this screen only: the share card never carries it.
+      this.add.text(cx, cy + 130, t(locale, 'newPersonalBest'), { ...style, fontSize: '34px', color: '#ffd700' }).setOrigin(0.5);
+    }
     if (testRun) {
       this.add.text(cx, cy + 130, t(locale, 'testRunNotSaved'), { ...style, fontSize: '30px', color: '#ffd700', wordWrap: { width: 460, useAdvancedWrap: true } }).setOrigin(0.5);
     } else if (daily) {
@@ -99,13 +106,14 @@ export class Over extends Phaser.Scene {
     // and nothing to share. Home is the ready-screen-style glowing button (any tap
     // outside the tray and off Share goes home too). Both fade in after the lockout
     // so a death tap cannot restart or share.
-    this.buttons = overButtonsLayout(cx, cy, T, { share: !testRun, score: linked });
+    this.buttons = overButtonsLayout(cx, cy, T, { share: !testRun, score: linked, again });
     const home = this.buttons.home;
     // Same pulsing soft white halo as the enter-username prompt on the ready screen.
     this.homeHalo = createRectGlow(this, home.x, home.y, { key: 'over-home-halo', width: home.width, height: home.height, radius: T.readyButtonRadius, pad: T.readyPromptGlowPx }).setAlpha(0);
     this.homeButton = createButton(this, home, t(locale, 'tapToHome'), { ...style, fontSize: '40px' }, { depth: 1 }).setAlpha(0);
     // Share stays hidden until its image exists (makeShareCard), so a tap on it always has a file to send.
     this.shareButton = this.buttons.share ? createButton(this, this.buttons.share, t(locale, 'shareButton'), { ...style, fontSize: '40px' }, { depth: 1 }).setAlpha(0).setVisible(false) : null;
+    this.againButton = this.buttons.again ? createButton(this, this.buttons.again, t(locale, 'playAgain'), { ...style, fontSize: '40px' }, { depth: 1 }).setAlpha(0) : null;
     this.buttonFade = { a: 0 };
     this.tweens.add({
       targets: this.buttonFade,
@@ -115,6 +123,7 @@ export class Over extends Phaser.Scene {
       onUpdate: () => {
         this.homeButton.setAlpha(this.buttonFade.a);
         this.shareButton?.setAlpha(this.buttonFade.a);
+        this.againButton?.setAlpha(this.buttonFade.a);
       },
       onComplete: () => this.focus?.show(), // under a controller the ring lands on Home once it is visible
     });
@@ -135,6 +144,7 @@ export class Over extends Phaser.Scene {
     this.focus = createFocus(this, T, {
       items: [
         { id: 'home', box: home, activate: () => this.retry() },
+        ...(this.buttons.again ? [{ id: 'again', box: this.buttons.again, activate: () => this.playAgain() }] : []),
         ...(this.buttons.score ? [{ id: 'score', box: this.buttons.score, activate: () => this.openDailyBoard() }] : []),
         ...(this.buttons.rank ? [{ id: 'rank', box: this.buttons.rank, activate: () => this.openDailyBoard() }] : []),
         ...(this.buttons.share ? [{ id: 'share', box: this.buttons.share, visible: () => Boolean(this.shareFile), activate: () => this.shareRun() }] : []),
@@ -158,6 +168,10 @@ export class Over extends Phaser.Scene {
       const link = overHit(pointer.x, pointer.y, this.buttons);
       if (link === 'score' || link === 'rank') {
         this.openDailyBoard();
+        return;
+      }
+      if (link === 'again') {
+        this.playAgain();
         return;
       }
       if (!onShare(pointer)) {
@@ -235,6 +249,21 @@ export class Over extends Phaser.Scene {
       this.shareMode = mode;
       this.shareButton?.setVisible(true);
     });
+  }
+
+  /**
+   * Play again: home, then straight into a new run (Play reads the one-shot registry flag in
+   * create(): a restart's data would stick to the scene and auto-start every later Home too).
+   * Same lockout and overlay rules as Home.
+   */
+  playAgain() {
+    unlock();
+    const play = this.scene.get('Play');
+    if (chromeIntent(play.chromeArgs('tap')).do !== 'retry') return;
+    if (!canRestart(this.openedAt, this.time.now, T.retryLockoutMs)) return;
+    this.registry.set('playAgain', true);
+    this.scene.stop('Over');
+    play.scene.restart();
   }
 
   /** The rank cell's text, shrunk to its box (a long zh rank stays inside the panel). */

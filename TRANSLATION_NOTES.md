@@ -222,6 +222,8 @@ Short, playful, clear. Fit a 720×1280 logical field; How to play / About body w
 | shareCardPlay | Play: {url} | 来玩：{url} |
 | shareText | I scored {score} on Flappy Poop ({level})! {url} | 我在 Flappy Poop 拿到了 {score} 分（{level}）！{url} |
 | testRunNotSaved | Test run — score not saved | 测试局——分数未保存 |
+| playAgain | Play again | 再玩一次 |
+| newPersonalBest | 🎉 New personal best! | 🎉 新的个人最佳！ |
 | scoresEmpty | No scores yet | 暂无分数 |
 | leaderboardTitle | LEADERBOARD | 排行榜 |
 | leaderboardLoading | Loading… | 加载中… |

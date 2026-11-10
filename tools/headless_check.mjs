@@ -1148,6 +1148,62 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         const home = await evaluate(`JSON.stringify({ purse: ${play}.effects.coins(), counted: ${play}.collected.coin, icon: ${play}.coinIcon.visible })`).then(JSON.parse);
         ok(home.purse === 0 && home.counted === 0 && !home.icon, 'home starts a new purse: no coins, no coin row (coins last one run)');
       }
+
+      // Play again and the new-personal-best line. A run that beats this player's best says so on the
+      // panel (never on the card); a real click on Play again goes straight into a new run, a
+      // one-player run even on a wide window with the 👥 toggle on; a later Home stays home.
+      {
+        const O = `__flappy.scene.getScene('Over')`;
+        const tx = (key) => evaluate(`import('./src/i18n.js').then((m) => m.t('en', '${key}'))`);
+        const pb = await tx('newPersonalBest');
+        const saved = await evaluate(`JSON.stringify({ save: localStorage.getItem('flappyPoop.save'), best: localStorage.getItem(${JSON.stringify(TT.bestKey)}) })`).then(JSON.parse);
+        const waitUntil = async (expr, tries = 60) => {
+          for (let i = 0; i < tries; i += 1) {
+            if (await evaluate(expr)) return true;
+            await sleep(100);
+          }
+          return false;
+        };
+        const runAndDie = async (score, start) => {
+          if (start) await evaluate(start);
+          await waitUntil(`${play}.state === 'playing'`);
+          await evaluate(`(() => { const p = ${play}; p.graceLeftMs = 0; p.score = ${score}; p.die(); return true; })()`);
+          await waitUntil(`__flappy.scene.isActive('Over')`);
+          await sleep(TT.retryLockoutMs + 400);
+          return evaluate(`JSON.stringify({ texts: ${O}.children.list.filter((c) => c.type === 'Text').map((c) => c.text), again: ${O}.buttons.again, card: JSON.stringify(${O}.cardData ?? {}) })`).then(JSON.parse);
+        };
+        await evaluate(`import('./src/save.js').then((m) => { const p = ${play}; p.setSaveState(m.saveLocal({ ...p.save, top: [{ score: 5, toilet: false, level: 1 }] })); localStorage.setItem(${JSON.stringify(TT.bestKey)}, '5'); return true; })`);
+        const beat = await runAndDie(9, `${play}.flap(), true`);
+        ok(beat.texts.includes(pb) && !beat.card.includes(pb) && beat.again, `a run that beats the best (9 > 5) shows "${pb}" on the panel, not on the card; Play again is offered`);
+        await tapAt(beat.again.x, beat.again.y);
+        const restarted = await waitUntil(`!__flappy.scene.isActive('Over') && ${play}.state === 'playing'`);
+        const flag = await evaluate(`__flappy.registry.get('playAgain')`);
+        const lower = await runAndDie(3);
+        ok(restarted && flag === false && !lower.texts.includes(pb), `a real click on Play again starts a new run at once (flag cleared: ${flag}); a lower score shows no best line`);
+        // Wide, 👥 on: Play again still starts a one-player run, and Home after it stays home.
+        await evaluate(`(__flappy.scene.stop('Over'), __flappy.registry.set('versus', true), ${play}.scene.restart(), true)`);
+        await cdp.send('Emulation.setDeviceMetricsOverride', { width: 1600, height: 900, deviceScaleFactor: 1, mobile: false });
+        await waitUntil(`__flappy.scale.width > 1000 && ${play}.state === 'ready' && !${play}.launching`);
+        const wideOver = await runAndDie(1, `${play}.launch({ solo: true }), true`);
+        await tapAt(wideOver.again.x, wideOver.again.y);
+        await waitUntil(`${play}.state === 'playing'`);
+        const solo = await evaluate(`JSON.stringify({ state: ${play}.state, versus: __flappy.scene.isActive('Versus'), offered: ${play}.versusOffered?.() ?? null })`).then(JSON.parse);
+        const homeOver = await runAndDie(1);
+        const homeBox = await evaluate(`JSON.stringify(${O}.buttons.home)`).then(JSON.parse);
+        await tapAt(homeBox.x, homeBox.y);
+        await waitUntil(`!__flappy.scene.isActive('Over') && ${play}.state === 'ready'`);
+        await sleep(TT.launchSlideMs + 500);
+        const stayed = await evaluate(`JSON.stringify({ state: ${play}.state, launching: ${play}.launching, versus: __flappy.scene.isActive('Versus') })`).then(JSON.parse);
+        // Back to the boot viewport (720 × 1280, set at the top): clearing the override would drop to the
+        // raw window and a wider field for every later section.
+        await evaluate(`__flappy.registry.set('versus', false), true`);
+        await cdp.send('Emulation.setDeviceMetricsOverride', { width: 720, height: 1280, deviceScaleFactor: 1, mobile: false });
+        await waitUntil(`__flappy.scale.width === 720`);
+        await evaluate(`(() => { localStorage.setItem('flappyPoop.save', ${JSON.stringify(saved.save)} ?? '{}'); ${saved.best == null ? `localStorage.removeItem(${JSON.stringify(TT.bestKey)})` : `localStorage.setItem(${JSON.stringify(TT.bestKey)}, ${JSON.stringify(saved.best)})`}; return import('./src/save.js').then((m) => (${play}.setSaveState(m.loadLocal()), true)); })()`);
+        await evaluate(`${play}.scene.restart(), true`);
+        await waitUntil(`${play}.state === 'ready' && !${play}.launching`);
+        ok(homeOver.again && solo.state === 'playing' && !solo.versus && solo.offered && stayed.state === 'ready' && !stayed.launching && !stayed.versus, `wide with 👥 on: Play again starts a one-player run (no Versus); Home afterwards stays on the home screen (${stayed.state})`);
+      }
     });
 
     await section('pad', async () => {
@@ -1681,9 +1737,11 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
           await evaluate(`${play}.padNav('left'), true`);
           const r1 = await ring();
           await evaluate(`${play}.padNav('down'), true`);
+          const r2a = await ring();
+          await evaluate(`${play}.padNav('down'), true`);
           const r2 = await ring();
           const trayIds = ['info', 'lang', 'feedback', 'leaderboard', 'mute', 'settings'];
-          ok(file && r1.id === 'share' && trayIds.includes(r2.id), `left from Home is Share, down from Share is the tray (${r1.id}, ${r2.id})`);
+          ok(file && r1.id === 'share' && r2a.id === 'again' && trayIds.includes(r2.id), `left from Home is Share, down from Share is Play again, down again the tray (${r1.id}, ${r2a.id}, ${r2.id})`);
           await evaluate(`(() => { window.__padShared = 0; const def = (k, v) => Object.defineProperty(navigator, k, { value: v, configurable: true, writable: true }); def('canShare', () => true); def('share', () => { window.__padShared += 1; return Promise.resolve(); }); return true; })()`);
           await evaluate(`${over}.focus.setIndex(${over}.focus.indexOf('share')), true`);
           await evaluate(`${play}.padDown(${G.select}), true`);
@@ -2828,7 +2886,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
           await sleep(TT.launchSlideMs + 300);
           outside.push({ offered, ...(await playNow()) });
         }
-        await cdp.send('Emulation.clearDeviceMetricsOverride');
+        await cdp.send('Emulation.setDeviceMetricsOverride', { width: 720, height: 1280, deviceScaleFactor: 1, mobile: false }); // the boot viewport
         await waitFor(`__flappy.scale.width === 720`, 60);
         await evaluate(`__flappy.registry.set('versus', false), true`);
         await home();

@@ -1485,22 +1485,25 @@ function inBox(x, y, box) {
  * test run) there is no share box and Home sits alone at cx. With score: true (a
  * Daily Dump) the score line at cy + over.scoreOffsetY and the rank's cell
  * (over.rankBox) are boxes too (both open the 🌞 board); otherwise both are null.
+ * With again: true (a normal or test run) Play again sits centred under them at
+ * cy + over.againOffsetY; otherwise again is null.
  */
-export function overButtonsLayout(cx, cy, t, { share = true, score = false } = {}) {
+export function overButtonsLayout(cx, cy, t, { share = true, score = false, again = false } = {}) {
   const o = t.over;
   const y = cy + o.buttonOffsetY;
   const box = (id, x) => ({ id, x, y, width: o.buttonWidth, height: o.buttonHeight });
   const scoreBox = score ? { id: 'score', x: cx, y: cy + o.scoreOffsetY, width: o.scoreBoxWidth, height: o.buttonHeight } : null;
   const rankBox = score ? { id: 'rank', x: cx + o.rankBox.dx, y: cy + o.rankBox.dy, width: o.rankBox.width, height: o.buttonHeight } : null;
-  if (!share) return { share: null, home: box('home', cx), score: scoreBox, rank: rankBox };
+  const againBox = again ? { id: 'again', x: cx, y: cy + o.againOffsetY, width: o.buttonWidth, height: o.buttonHeight } : null;
+  if (!share) return { share: null, home: box('home', cx), score: scoreBox, rank: rankBox, again: againBox };
   const offset = (o.buttonWidth + o.buttonGap) / 2;
-  return { share: box('share', cx - offset), home: box('home', cx + offset), score: scoreBox, rank: rankBox };
+  return { share: box('share', cx - offset), home: box('home', cx + offset), score: scoreBox, rank: rankBox, again: againBox };
 }
 
-/** 'share' | 'home' | 'score' | 'rank' | null for a tap at (x, y) on overButtonsLayout's boxes. */
+/** 'share' | 'home' | 'score' | 'rank' | 'again' | null for a tap at (x, y) on overButtonsLayout's boxes. */
 export function overHit(x, y, layout) {
   if (!layout) return null;
-  for (const box of [layout.share, layout.home, layout.score, layout.rank]) {
+  for (const box of [layout.share, layout.home, layout.score, layout.rank, layout.again]) {
     if (box && inBox(x, y, box)) return box.id;
   }
   return null;
