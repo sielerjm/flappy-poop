@@ -11,7 +11,7 @@ export function versionText(locale, version = VERSION) {
 }
 
 /** Player-facing stamp on the About overlay: the time of the last push (written by `npm run push`). */
-export const LAST_UPDATED = '10 Nov 2026, 14:58';
+export const LAST_UPDATED = '10 Nov 2026, 20:44';
 
 const ISSUE_BASE = 'https://github.com/sielerjm/flappy-poop/issues/new';
 
