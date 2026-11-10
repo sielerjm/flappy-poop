@@ -1,6 +1,6 @@
 # Plan: Daily Dump mode (audited revision of `daily_dump_mode_f097792f.plan.md`)
 - Created: 2026-11-10 (an audit of Michael's draft against the code)
-- Status: in progress (step 3)
+- Status: in progress (step 3: waiting for Michael to apply db/schema.sql)
 - Baseline: `2690200` on `main` (pushed; tree clean).
 - Whole-suite verification: `npm test` (449 pass), `npm run smoke` (337, full).
 - On approval, this revision replaces the draft at `.claude/plans/daily_dump_mode_f097792f.plan.md`. Repo copy: `.claude/plans/2026-11-10-daily-dump.md` (`git add -f`, only that file).
@@ -202,7 +202,7 @@ Each step is verified, then committed. The full suite runs at every step.
 - **Commit:** `feat(daily, step 2/8): an endless, date-seeded, coin-free run at the day's level`
 - **Result:** npm test 457/457; full smoke 345/345 with the new `daily` section (8 checks; it failed 8/8 until its own `home()` waited for the restarted scene). The record is rewritten from `update()` whenever the score or pipe count moves; `syncLeaderboard` finalises only an *unfinished* record (never the run in flight), and `endRun` queues its own.
 
-### Step 3/8: schema and PGlite tests  [pending]
+### Step 3/8: schema and PGlite tests  [done]
 - **Change:** the server section above.
 - **Tests (`tests/schema.test.js`):**
   - submit ok, then a resend gives duplicate (with no row change);
@@ -217,6 +217,7 @@ Each step is verified, then committed. The full suite runs at every step.
   - the cap is pinned to `dailyMaxScore`, and the 🏆 cap regexes still read 1000.
 - **Handoff:** Michael applies the schema, then a read-only live probe: `daily_board()` → `[]`, and a garbage submit → 400.
 - **Commit:** `feat(daily, step 3/8): daily_scores, submit_daily_score and daily_board, with PGlite tests`
+- **Result:** npm test 465/465 (8 new schema tests); full smoke 345/345. Three deliberate SQL breakages (level `% 4`, a later run overwriting the first, `current_date`) were each caught, then reverted. A pre-existing smoke race (farts: bacteria popup, 1 run in 3) was fixed in its own commit.
 
 ### Step 4/8: client post and board fetch  [pending]
 - **Change:** `submitDailyScore`, `fetchDailyBoard`, and the `syncLeaderboard` drain.

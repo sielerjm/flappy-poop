@@ -315,3 +315,135 @@ test('merge_players folds medals, events and best, and re-points matchups and re
   await asAnon(db, 'select public.submit_score($1, $2, 20)', [id('P1'), 'Keeper']);
   assert.equal((await db.query('select player_id from public.scores')).rows[0].player_id, id('P0'), 'an alias posts into the kept player');
 });
+
+// ---------------------------------------------------------------------------
+// Daily Dump (🌞): daily_scores, submit_daily_score, daily_board, and the fold.
+
+const utcToday = (db) => db.query("select to_char((now() at time zone 'utc')::date, 'YYYY-MM-DD') as d").then((r) => r.rows[0].d);
+const shiftDay = (day, n) => new Date(Date.parse(`${day}T00:00:00Z`) + n * 86400000).toISOString().slice(0, 10);
+const dsubmit = (db, pid, name, day, score, level, pipes = 10) =>
+  asAnon(db, 'select public.submit_daily_score($1, $2, $3::date, $4, $5, $6) as r', [pid, name, day, score, level, pipes]).then((r) => r.rows[0].r);
+const dboard = (db, me = null, day = null, limit = 25) => asAnon(db, 'select * from public.daily_board($1, $2::date, $3)', [me, day, limit]).then((r) => r.rows);
+const drows = (db) => db.query("select player_id, to_char(day, 'YYYY-MM-DD') as day, name, score, level, pipes from public.daily_scores order by player_id, day").then((r) => r.rows);
+
+test('the daily schema pins the cap and the level range the game uses', () => {
+  assert.match(SQL, new RegExp(`score\\s+int\\s+not null check \\(score between 0 and ${LEADERBOARD.dailyMaxScore}\\)`), 'daily_scores.score CHECK = LEADERBOARD.dailyMaxScore');
+  assert.match(SQL, new RegExp(`p_score > ${LEADERBOARD.dailyMaxScore} then`), 'submit_daily_score guard');
+  assert.match(SQL, new RegExp(`level between ${T.daily.minLevel} and ${T.daily.maxLevel}\\)`), 'daily_scores.level CHECK = TUNING.daily');
+  assert.match(SQL, new RegExp(`\\(${T.daily.minLevel} \\+ public\\.fnv1a32\\(to_char\\(p_day, 'YYYY-MM-DD'\\) \\|\\| ':level'\\) % ${T.daily.maxLevel - T.daily.minLevel + 1}\\)`), 'daily_level = dailyLevel');
+  // The 🏆 caps still read first in the file (tests/leaderboard.test.js pins them by first match).
+  assert.equal(/score\s+int\s+not null check \(score between 0 and (\d+)\)/.exec(SQL)[1], String(LEADERBOARD.maxScore));
+  assert.equal(/p_score > (\d+) then/.exec(SQL)[1], String(LEADERBOARD.maxScore));
+});
+
+test("the server's FNV-1a and daily_level agree with the client's over a year", async () => {
+  const db = await freshDb();
+  for (const [str, want] of [['', 0x811c9dc5], ['a', 0xe40c292c], ['foobar', 0xbf9cf968]]) {
+    const got = (await db.query('select public.fnv1a32($1) as h', [str])).rows[0].h;
+    assert.equal(Number(got), want, `fnv1a32(${JSON.stringify(str)})`);
+  }
+  const { dailyLevel, fnv1a32 } = await import('../src/logic.js');
+  const days = Array.from({ length: 365 }, (_, i) => shiftDay('2026-01-01', i));
+  const rows = (await db.query("select to_char(d, 'YYYY-MM-DD') as day, public.daily_level(d) as lv from unnest($1::date[]) as d", [days])).rows;
+  for (const r of rows) assert.equal(r.lv, dailyLevel(r.day, T), r.day);
+  assert.equal(Number((await db.query('select public.fnv1a32($1) as h', ['2026-11-10:course'])).rows[0].h), fnv1a32('2026-11-10:course'));
+});
+
+test('submit_daily_score keeps the first post of a day, takes today and yesterday only, and checks the level', async () => {
+  const db = await freshDb();
+  const { dailyLevel } = await import('../src/logic.js');
+  const today = await utcToday(db);
+  const lv = (day) => dailyLevel(day, T);
+  const A = id('DA');
+  assert.equal(await dsubmit(db, A, 'Alice', today, 87, lv(today), 60), 'ok');
+  assert.equal(await dsubmit(db, A, 'Alice', today, 87, lv(today), 60), 'duplicate', 'a resend');
+  assert.equal(await dsubmit(db, A, 'Alice', today, 400, lv(today), 300), 'duplicate', 'a second, better run the same day');
+  assert.deepEqual(await drows(db), [{ player_id: A, day: today, name: 'Alice', score: 87, level: lv(today), pipes: 60 }]);
+  const yesterday = shiftDay(today, -1);
+  assert.equal(await dsubmit(db, A, 'Alice', yesterday, 12, lv(yesterday)), 'ok', 'yesterday: a run that ended after midnight, or posted later');
+  await assert.rejects(dsubmit(db, A, 'Alice', shiftDay(today, -2), 5, lv(shiftDay(today, -2))), /bad day/);
+  await assert.rejects(dsubmit(db, A, 'Alice', shiftDay(today, 1), 5, lv(shiftDay(today, 1))), /bad day/, 'tomorrow');
+  const B = id('DB');
+  const wrong = lv(today) === T.daily.maxLevel ? T.daily.minLevel : lv(today) + 1;
+  await assert.rejects(dsubmit(db, B, 'Bob', today, 5, wrong), /bad level/);
+  await assert.rejects(dsubmit(db, B, 'Bob', today, LEADERBOARD.dailyMaxScore + 1, lv(today)), /bad score/);
+  await assert.rejects(dsubmit(db, B, 'Bob', today, -1, lv(today)), /bad score/);
+  await assert.rejects(dsubmit(db, B, 'Bob', today, 5, lv(today), -1), /bad pipes/);
+  await assert.rejects(dsubmit(db, 'short', 'Bob', today, 5, lv(today)), /bad player id/);
+  await assert.rejects(dsubmit(db, B, 'x'.repeat(17), today, 5, lv(today)), /bad name/);
+  assert.equal(await dsubmit(db, B, 'Bob', today, LEADERBOARD.dailyMaxScore, lv(today)), 'ok', 'the cap itself is allowed');
+});
+
+test('a daily post follows the score board name claim', async () => {
+  const db = await freshDb();
+  const { dailyLevel } = await import('../src/logic.js');
+  const today = await utcToday(db);
+  const owner = id('NO');
+  await asAnon(db, 'select public.submit_score($1, $2, $3)', [owner, 'Alice', 10]);
+  await assert.rejects(dsubmit(db, id('NX'), ' alice', today, 5, dailyLevel(today, T)), /name taken/, 'another id, the same name key');
+  assert.equal(await dsubmit(db, owner, 'Alice', today, 5, dailyLevel(today, T)), 'ok', 'the owner');
+});
+
+test("daily_board: a day's top by score (earlier post first), the caller flagged and appended, the total, the 🏆 name", async () => {
+  const db = await freshDb();
+  const today = await utcToday(db);
+  const lv = 3;
+  const put = (tag, score, minutesAgo, day = today, name = `N${tag}`) =>
+    db.query("insert into public.daily_scores (player_id, day, name, score, level, pipes, submitted_at) values ($1, $2::date, $3, $4, $5, 0, now() - make_interval(mins => $6))", [id(tag), day, name, score, lv, minutesAgo]);
+  for (let i = 0; i < 30; i += 1) await put(`B${i}`, 100 + i, 60);
+  await put('TIE1', 500, 30);
+  await put('TIE2', 500, 50); // posted earlier: ranks first on the tie
+  await put('LOW', 1, 5);
+  await put('OLD', 9999, 5, shiftDay(today, -1));
+  await asAnon(db, 'select public.submit_score($1, $2, $3)', [id('TIE1'), 'Renamed', 10]);
+  const top = await dboard(db);
+  assert.equal(top.length, 25);
+  assert.deepEqual(top.slice(0, 2).map((r) => [r.rank, r.name, r.score]), [[1, 'NTIE2', 500], [2, 'Renamed', 500]], 'tie: earlier post first; the score board name shows');
+  assert.ok(top.every((r) => r.total === 33 && r.me === false), 'total counts the day only');
+  assert.ok(!top.some((r) => r.score === 9999), "yesterday's rows stay on yesterday's board");
+  const mine = await dboard(db, id('LOW'));
+  assert.equal(mine.length, 26);
+  assert.deepEqual([mine.at(-1).rank, mine.at(-1).score, mine.at(-1).me], [33, 1, true], 'the caller below the top, with their true rank');
+  const old = await dboard(db, null, shiftDay(today, -1));
+  assert.deepEqual(old.map((r) => [r.rank, r.score, r.total]), [[1, 9999, 1]], 'p_day picks another day');
+  assert.equal((await dboard(db, null, null, 500)).length, 33, 'the limit caps at 100, more than this day has');
+  assert.equal((await dboard(db, 'garbage')).length, 25, 'a bad id is no caller');
+  assert.ok(Object.keys(top[0]).every((k) => ['rank', 'name', 'score', 'level', 'pipes', 'me', 'total'].includes(k)), 'no ids leave the server');
+});
+
+test('the daily day is UTC whatever the session time zone says', async () => {
+  const db = await freshDb();
+  const { dailyLevel } = await import('../src/logic.js');
+  const today = await utcToday(db);
+  for (const tz of ['Pacific/Kiritimati', 'Pacific/Pago_Pago', 'America/Los_Angeles']) {
+    await db.exec(`set timezone to '${tz}'`);
+    const pid = id(`TZ${tz.length}`);
+    assert.equal(await dsubmit(db, pid, `Z${tz.length}`, today, 5, dailyLevel(today, T)), 'ok', tz);
+    assert.ok((await dboard(db, pid)).some((r) => r.me), `${tz}: the default board day is the UTC day`);
+  }
+  await db.exec('reset timezone');
+});
+
+test('merging players folds their daily rows: the kept row wins a day both played', async () => {
+  const db = await freshDb();
+  const today = await utcToday(db);
+  const keep = id('MK');
+  const merge = id('MM');
+  const put = (pid, day, score) => db.query("insert into public.daily_scores (player_id, day, name, score, level, pipes) values ($1, $2::date, 'X', $3, 3, 0)", [pid, day, score]);
+  await put(keep, today, 10);
+  await put(merge, today, 99);
+  await put(merge, shiftDay(today, -1), 7);
+  await asAnon(db, 'select public.merge_players($1, $2)', [keep, merge]);
+  assert.deepEqual((await drows(db)).map((r) => [r.player_id, r.day, r.score]), [
+    [keep, shiftDay(today, -1), 7],
+    [keep, today, 10],
+  ]);
+});
+
+test('anon cannot read daily_scores or call its internal helpers', async () => {
+  const db = await freshDb();
+  await assert.rejects(asAnon(db, 'select * from public.daily_scores'), /permission denied/);
+  await assert.rejects(asAnon(db, "insert into public.daily_scores (player_id, day, name, score, level, pipes) values ('x', now(), 'x', 1, 3, 0)"), /permission denied/);
+  await assert.rejects(asAnon(db, "select public.fnv1a32('a')"), /permission denied/);
+  await assert.rejects(asAnon(db, 'select public.daily_level(now()::date)'), /permission denied/);
+});

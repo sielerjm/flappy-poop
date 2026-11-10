@@ -17,11 +17,13 @@
 --   * call player_name(...)    the name on the board for this player's id (2026-11-09)
 --   * call submit_tournament(...) a finished 🏅 tournament, re-checked here (2026-11-09)
 --   * call tournament_board(...)  the 🏅 medal board (names and counts, never ids)
+--   * call submit_daily_score(...) a Daily Dump (🌞) score, once per player and UTC day (2026-11-10)
+--   * call daily_board(...)        the 🌞 board for a day (names and scores, never ids)
 -- A player has up to two rows: their best on the toilet and their best off it
 -- (primary key player_id + toilet, since 2026-11-04).
 -- and nothing else: no INSERT / UPDATE / DELETE on the table, and nothing at all
--- on player_aliases or the tournament tables (tournaments, tournament_stats,
--- tournament_matchups).
+-- on player_aliases, the tournament tables (tournaments, tournament_stats,
+-- tournament_matchups) or daily_scores.
 --
 -- One player across devices (2026-11-08). Every browser mints its own secret id,
 -- so one person playing on a second phone used to become a second player. Now:
@@ -44,7 +46,8 @@
 --     typed a rename on that device. So a rename on one phone reaches the
 --     others, and a phone holding the old name no longer renames them back.
 -- Apply this file BEFORE pushing a client that calls name_available /
--- merge_players / player_name / submit_tournament / tournament_board; an old
+-- merge_players / player_name / submit_tournament / tournament_board /
+-- submit_daily_score / daily_board; an old
 -- client keeps working (same submit_score signature).
 --
 -- Maintenance (SQL editor):
@@ -59,6 +62,8 @@
 --   wipe the 🏅 board (receipts, stats and head-to-head rows):
 --     truncate public.tournaments cascade; truncate public.tournament_stats;
 --   remove a player's medals: delete from public.tournament_stats where name = 'somebody';
+--   wipe the 🌞 Daily Dump boards: truncate public.daily_scores;
+--   remove a daily cheat: delete from public.daily_scores where name = 'somebody' and day = '2026-11-10';
 --   head-to-head (owner only), e.g. wins per pair:
 --     select player_a, player_b, winner_id, count(*) from public.tournament_matchups
 --     where player_a <> player_b group by 1, 2, 3;
@@ -316,13 +321,63 @@ alter table public.tournament_matchups enable row level security;
 revoke all on public.tournaments, public.tournament_stats, public.tournament_matchups from public, anon, authenticated;
 revoke all on sequence public.tournament_matchups_id_seq from public, anon, authenticated;
 
+-- Added 2026-11-10 (Daily Dump, 🌞). Once per UTC day every player flies the same
+-- date-seeded endless course at one level (3–7, from the date); one crash ends
+-- the attempt. One row per (resolved) player and day: the first post is kept,
+-- a resend answers 'duplicate'. Readable by no role (ids are secrets): the board
+-- is daily_board(). Scores here never touch public.scores (the 🏆 board).
+create table if not exists public.daily_scores (
+  player_id    text not null check (player_id ~ '^[A-Za-z0-9_-]{22}$'),
+  day          date not null,
+  name         text not null check (name ~ '^[^[:cntrl:]]{1,16}$'),
+  score        int  not null check (score between 0 and 10000),   -- LEADERBOARD.dailyMaxScore
+  level        int  not null check (level between 3 and 7),       -- TUNING.daily minLevel / maxLevel
+  pipes        int  not null check (pipes >= 0),
+  submitted_at timestamptz not null default now(),
+  primary key (player_id, day)
+);
+create index if not exists daily_scores_board on public.daily_scores (day, score desc, submitted_at asc);
+alter table public.daily_scores enable row level security;
+revoke all on public.daily_scores from public, anon, authenticated;
+
+-- 32-bit FNV-1a over a text's characters (fnv1a32 in src/logic.js: day keys are
+-- ASCII, so the code points match the client's UTF-16 units). Internal.
+create or replace function public.fnv1a32(p text)
+returns bigint
+language plpgsql
+immutable
+as $$
+declare
+  h bigint := 2166136261;
+  i int;
+begin
+  for i in 1 .. coalesce(length(p), 0) loop
+    h := ((h # ascii(substr(p, i, 1))) * 16777619) & 4294967295;
+  end loop;
+  return h;
+end;
+$$;
+revoke execute on function public.fnv1a32(text) from public, anon, authenticated;
+
+-- A day's level, as the client's dailyLevel: 3 + fnv1a32('YYYY-MM-DD:level') % 5. Internal.
+create or replace function public.daily_level(p_day date)
+returns int
+language sql
+immutable
+as $$
+  select (3 + public.fnv1a32(to_char(p_day, 'YYYY-MM-DD') || ':level') % 5)::int;
+$$;
+revoke execute on function public.daily_level(date) from public, anon, authenticated;
+
 -- Fold the player v_merge into v_keep (both already resolved, distinct): per
 -- toilet kind the kept row takes the higher score with that score's level and
 -- write time, every kept row carries the kept player's name (the merged one's
 -- when the kept player had no rows yet), the merged rows go, the merged id
 -- becomes an alias of v_keep and its own aliases are re-pointed. Tournament
 -- stats fold too (medals and events summed, best race score kept, the kept
--- player's stats name), and matchups and receipts are re-pointed. Internal.
+-- player's stats name), and matchups and receipts are re-pointed. Daily Dump
+-- rows move to the kept id; on a day both played, the kept player's row stays.
+-- Internal.
 create or replace function public.fold_player(v_keep text, v_merge text)
 returns void
 language plpgsql
@@ -369,6 +424,11 @@ begin
         winner_id = case when winner_id = v_merge then v_keep else winner_id end
   where v_merge in (player_a, player_b);
   update public.tournaments set host_id = v_keep where host_id = v_merge;
+  insert into public.daily_scores (player_id, day, name, score, level, pipes, submitted_at)
+  select v_keep, d.day, d.name, d.score, d.level, d.pipes, d.submitted_at
+  from public.daily_scores d where d.player_id = v_merge
+  on conflict (player_id, day) do nothing;
+  delete from public.daily_scores where player_id = v_merge;
   update public.player_aliases set canonical_id = v_keep, merged_at = now() where canonical_id = v_merge;
   insert into public.player_aliases (alias_id, canonical_id)
   values (v_merge, v_keep)
@@ -799,6 +859,89 @@ as $$
   order by r.prank;
 $$;
 
+-- A Daily Dump score (🌞). p_day is the run's UTC day: today, or yesterday (a run
+-- that ended after midnight, or posted later from offline); p_level must be that
+-- day's level (daily_level). The name follows the score board's claim rule. The
+-- first post per player and day is kept: a resend (or a second device) answers
+-- 'duplicate' and changes nothing. Returns 'ok' or 'duplicate'; errors raise.
+create or replace function public.submit_daily_score(p_player_id text, p_name text, p_day date, p_score int, p_level int, p_pipes int)
+returns text
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_today date := (now() at time zone 'utc')::date;
+  v_id text;
+  v_key text;
+  v_rows int;
+begin
+  if p_player_id is null or p_player_id !~ '^[A-Za-z0-9_-]{22}$' then
+    raise exception 'bad player id';
+  end if;
+  if p_name is null or p_name !~ '^[^[:cntrl:]]{1,16}$' then
+    raise exception 'bad name';
+  end if;
+  if p_score is null or p_score < 0 or p_score > 10000 then
+    raise exception 'bad score';
+  end if;
+  if p_pipes is null or p_pipes < 0 then
+    raise exception 'bad pipes';
+  end if;
+  if p_day is null or p_day not in (v_today, v_today - 1) then
+    raise exception 'bad day';
+  end if;
+  if p_level is null or p_level <> public.daily_level(p_day) then
+    raise exception 'bad level';
+  end if;
+
+  v_id := public.resolve_player(p_player_id);
+  v_key := public.name_key(p_name);
+  perform pg_advisory_xact_lock(hashtext(v_key));
+  if public.name_blocked(v_key, v_id) then
+    raise exception 'name taken';
+  end if;
+
+  insert into public.daily_scores (player_id, day, name, score, level, pipes)
+  values (v_id, p_day, p_name, p_score, p_level, p_pipes)
+  on conflict (player_id, day) do nothing;
+  get diagnostics v_rows = row_count;
+  return case when v_rows = 0 then 'duplicate' else 'ok' end;
+end;
+$$;
+
+-- The 🌞 board for p_day (default: today, UTC): the top p_limit (1–100) by score,
+-- earlier post first on a tie, each with the name on the score board when the
+-- player has one. With p_player_id, that player's row is flagged `me` and
+-- appended with its true rank when it is below the top. `total` is how many
+-- played that day. No ids leave the server.
+create or replace function public.daily_board(p_player_id text default null, p_day date default null, p_limit int default 25)
+returns table (rank int, name text, score int, level int, pipes int, me boolean, total int)
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  with caller as (
+    select public.resolve_player(p_player_id) as cid where p_player_id ~ '^[A-Za-z0-9_-]{22}$'
+  ), today as (
+    select coalesce(p_day, (now() at time zone 'utc')::date) as d
+  ), ranked as (
+    select ds.player_id as pid,
+           coalesce((select s.name from public.scores s where s.player_id = ds.player_id order by s.updated_at desc limit 1), ds.name) as pname,
+           ds.score as pscore, ds.level as plevel, ds.pipes as ppipes,
+           row_number() over (order by ds.score desc, ds.submitted_at asc)::int as prank,
+           (count(*) over ())::int as ptotal
+    from public.daily_scores ds
+    where ds.day = (select d from today)
+  )
+  select r.prank, r.pname, r.pscore, r.plevel, r.ppipes,
+         coalesce(r.pid = (select cid from caller), false), r.ptotal
+  from ranked r
+  where r.prank <= least(greatest(coalesce(p_limit, 25), 1), 100) or r.pid = (select cid from caller)
+  order by r.prank;
+$$;
+
 revoke execute on function public.submit_score(text, text, int, boolean, int) from public, authenticated;
 grant  execute on function public.submit_score(text, text, int, boolean, int) to anon;
 revoke execute on function public.player_rank(text, boolean) from public, authenticated;
@@ -813,6 +956,10 @@ revoke execute on function public.submit_tournament(text, jsonb) from public, au
 grant  execute on function public.submit_tournament(text, jsonb) to anon;
 revoke execute on function public.tournament_board(text, int) from public, authenticated;
 grant  execute on function public.tournament_board(text, int) to anon;
+revoke execute on function public.submit_daily_score(text, text, date, int, int, int) from public, authenticated;
+grant  execute on function public.submit_daily_score(text, text, date, int, int, int) to anon;
+revoke execute on function public.daily_board(text, date, int) from public, authenticated;
+grant  execute on function public.daily_board(text, date, int) to anon;
 
 -- Tell PostgREST about the new functions right away.
 notify pgrst, 'reload schema';
