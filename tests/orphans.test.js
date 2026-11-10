@@ -21,6 +21,15 @@ const ALLOWED_EXPORTS = {
   pipeMoveShiftPx: "test guard: tests/pipeMove.test.js and tuning.test.js keep every moving-pipe row under half the poop's clearance",
   glowAlphaAt: "test reference: the glow's alpha profile that glowStops() draws (tests/fart.test.js)",
   topScores: 'test hook: tests/save.test.js reads top lists as plain numbers (its last game use, isNewTop, is gone)',
+  // Daily Dump (plan .claude/plans/2026-11-10-daily-dump.md): helpers land before their callers.
+  createDailyStore: 'Daily Dump: Play claims and finalises the attempt with it from step 2; remove in step 2',
+  createDailyQueue: 'Daily Dump: Play queues and drains daily scores from step 2; remove in step 2',
+  utcDayKey: "Daily Dump: Play latches the run's day from step 2; remove in step 2",
+  dailySeed: "Daily Dump: Play builds the day's course from step 2; remove in step 2",
+  dailyLevel: "Daily Dump: Play starts the day's level from step 2; remove in step 2",
+  dailyRunStart: 'Daily Dump: Play starts a daily run from step 2; remove in step 2',
+  msUntilUtcMidnight: 'Daily Dump: the popup and the result panel count down to the next day from step 5; remove in step 5',
+  countdownText: 'Daily Dump: the popup and the result panel count down to the next day from step 5; remove in step 5',
 };
 
 /** UI string keys no source names literally: prefix → why (they are built at run time). */

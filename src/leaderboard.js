@@ -257,68 +257,78 @@ function normalizeEntry(raw) {
   return { payload, hostId };
 }
 
-const queueShared = new WeakMap(); // storage → { inflight, outcomes }
-const queueFallback = { inflight: null, outcomes: new Map() };
+const queueShared = new WeakMap(); // key → storage → { inflight, outcomes }
+const queueFallback = new Map(); // key → { inflight, outcomes } when there is no storage object
 
-export function createTournamentQueue(storage = globalThis.localStorage, { key = LEADERBOARD.tournamentsKey, max = LEADERBOARD.tournamentQueueMax } = {}) {
-  let shared = queueFallback;
+/**
+ * A post queue in storage under `key`: entries normalised by `normalize`, one per `idOf(entry)`,
+ * at most `max` (the oldest go first). drain(submit) posts in order: 'ok' and 'rejected' take an
+ * entry out ('sent' / 'rejected'), 'nameTaken' keeps it and stops (outcome 'nameTaken' until the
+ * next answer), anything else ('keep', a throw) keeps it and stops. Drains are shared per storage
+ * and key, so two syncs at once post each entry once.
+ */
+function createPostQueue(storage, { key, max, normalize, idOf }) {
+  let shared;
   if (storage && typeof storage === 'object') {
-    if (!queueShared.has(storage)) queueShared.set(storage, { inflight: null, outcomes: new Map() });
-    shared = queueShared.get(storage);
+    if (!queueShared.has(storage)) queueShared.set(storage, new Map());
+    const byKey = queueShared.get(storage);
+    if (!byKey.has(key)) byKey.set(key, { inflight: null, outcomes: new Map() });
+    shared = byKey.get(key);
+  } else {
+    if (!queueFallback.has(key)) queueFallback.set(key, { inflight: null, outcomes: new Map() });
+    shared = queueFallback.get(key);
   }
   const write = (entries) => {
     try {
       if (entries.length) storage?.setItem(key, JSON.stringify(entries));
       else storage?.removeItem(key);
     } catch {
-      /* storage unavailable: the tournament is lost with the page (it was a bonus anyway) */
+      /* storage unavailable: the entry is lost with the page */
     }
   };
-  return {
+  const queue = {
     /** The queued entries, oldest first (junk dropped). */
     load() {
       try {
         const raw = storage?.getItem(key);
         const parsed = raw == null ? [] : JSON.parse(raw);
-        return Array.isArray(parsed) ? parsed.map(normalizeEntry).filter(Boolean) : [];
+        return Array.isArray(parsed) ? parsed.map(normalize).filter(Boolean) : [];
       } catch {
         return [];
       }
     },
-    /** Queue a finished tournament once; the oldest go when more than `max` wait. Returns the entry or null. */
-    add(payload, hostId) {
-      const e = normalizeEntry({ payload, hostId });
+    /** Queue an entry once (by id); the oldest go when more than `max` wait. Returns the entry or null. */
+    add(raw) {
+      const e = normalize(raw);
       if (!e) return null;
-      const all = this.load();
-      if (all.some((q) => q.payload.id === e.payload.id)) return e;
+      const all = queue.load();
+      if (all.some((q) => idOf(q) === idOf(e))) return e;
       write([...all, e].slice(-Math.max(1, max)));
-      shared.outcomes.delete(e.payload.id);
+      shared.outcomes.delete(idOf(e));
       return e;
     },
-    /** 'queued' while waiting, 'sent' / 'rejected' once answered (this page load), else null. */
+    /** 'queued' (or 'nameTaken' after that answer) while waiting, 'sent' / 'rejected' once answered (this page load), else null. */
     outcome(id) {
-      if (this.load().some((q) => q.payload.id === id)) return 'queued';
-      return shared.outcomes.get(id) ?? null;
+      const last = shared.outcomes.get(id) ?? null;
+      if (queue.load().some((q) => idOf(q) === id)) return last === 'nameTaken' ? 'nameTaken' : 'queued';
+      return last === 'nameTaken' ? null : last;
     },
-    /**
-     * Post the queue in order with `submit(payload, hostId)` → 'ok' | 'keep' | 'rejected',
-     * stopping at the first 'keep'. A drain already running is returned instead of a
-     * second one. Resolves (never rejects) with how many entries left the queue.
-     */
+    /** Post the queue in order with `submit(entry)`; a drain already running is returned instead. Resolves with how many left. */
     drain(submit) {
       if (shared.inflight) return shared.inflight;
       shared.inflight = (async () => {
         let done = 0;
-        for (const entry of this.load()) {
+        for (const entry of queue.load()) {
           let res = 'keep';
           try {
-            res = await submit(entry.payload, entry.hostId);
+            res = await submit(entry);
           } catch {
             res = 'keep';
           }
+          if (res === 'nameTaken') shared.outcomes.set(idOf(entry), 'nameTaken');
           if (res !== 'ok' && res !== 'rejected') break;
-          write(this.load().filter((q) => q.payload.id !== entry.payload.id));
-          shared.outcomes.set(entry.payload.id, res === 'ok' ? 'sent' : 'rejected');
+          write(queue.load().filter((q) => idOf(q) !== idOf(entry)));
+          shared.outcomes.set(idOf(entry), res === 'ok' ? 'sent' : 'rejected');
           done += 1;
         }
         return done;
@@ -328,6 +338,104 @@ export function createTournamentQueue(storage = globalThis.localStorage, { key =
       return shared.inflight;
     },
   };
+  return queue;
+}
+
+export function createTournamentQueue(storage = globalThis.localStorage, { key = LEADERBOARD.tournamentsKey, max = LEADERBOARD.tournamentQueueMax } = {}) {
+  const q = createPostQueue(storage, { key, max, normalize: normalizeEntry, idOf: (e) => e.payload.id });
+  return {
+    load: q.load,
+    /** Queue a finished tournament once; the oldest go when more than `max` wait. Returns the entry or null. */
+    add(payload, hostId) {
+      return q.add({ payload, hostId });
+    },
+    /** 'queued' while waiting, 'sent' / 'rejected' once answered (this page load), else null. */
+    outcome: q.outcome,
+    /**
+     * Post the queue in order with `submit(payload, hostId)` → 'ok' | 'keep' | 'rejected',
+     * stopping at the first 'keep'. A drain already running is returned instead of a
+     * second one. Resolves (never rejects) with how many entries left the queue.
+     */
+    drain(submit) {
+      return q.drain((e) => submit(e.payload, e.hostId));
+    },
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Daily Dump (🌞). The attempt record lives on this device under dailyKey: claimed when the run
+// starts (final: false), rewritten as the score grows, final at the crash. A record left unfinished
+// (a reload mid-run) is the day's result all the same. Its score waits in the daily queue until
+// submit_daily_score answers; the name is read when the post is sent.
+
+const DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
+const nonNegInt = (n) => Number.isInteger(n) && n >= 0;
+
+/** A daily attempt record, or null: { day, playerId, level, score, pipes, collected, final }. */
+function normalizeDaily(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+  const { day, playerId, level, score, pipes, collected, final } = raw;
+  if (typeof day !== 'string' || !DAY_RE.test(day)) return null;
+  if (typeof playerId !== 'string' || !ID_RE.test(playerId)) return null;
+  if (!Number.isInteger(level) || !nonNegInt(score) || !nonNegInt(pipes)) return null;
+  const counts = collected && typeof collected === 'object' && !Array.isArray(collected) ? collected : {};
+  return { day, playerId, level, score, pipes, collected: counts, final: Boolean(final) };
+}
+
+export function createDailyStore(storage = globalThis.localStorage, { key = LEADERBOARD.dailyKey } = {}) {
+  const read = () => {
+    try {
+      const raw = storage?.getItem(key);
+      return raw == null ? null : normalizeDaily(JSON.parse(raw));
+    } catch {
+      return null;
+    }
+  };
+  return {
+    /** This player's attempt for `day`, or null (another day or another player on this device). */
+    load(day, playerId) {
+      const rec = read();
+      return rec && rec.day === day && rec.playerId === playerId ? rec : null;
+    },
+    /** Whatever record is stored, any day or player (the sync finalises an unfinished one). */
+    peek() {
+      return read();
+    },
+    /** Store the attempt (junk is ignored). Returns the stored record or null. */
+    save(rec) {
+      const r = normalizeDaily(rec);
+      if (!r) return null;
+      try {
+        storage?.setItem(key, JSON.stringify(r));
+      } catch {
+        /* storage unavailable: the attempt still posts from memory this page load */
+      }
+      return r;
+    },
+    clear() {
+      try {
+        storage?.removeItem(key);
+      } catch {
+        /* ignore */
+      }
+    },
+  };
+}
+
+/** A queued daily score, or null: { day, playerId, score, level, pipes } (score within dailyMaxScore). */
+function normalizeDailyEntry(raw) {
+  const r = normalizeDaily(raw);
+  if (!r || r.score > LEADERBOARD.dailyMaxScore) return null;
+  return { day: r.day, playerId: r.playerId, score: r.score, level: r.level, pipes: r.pipes };
+}
+
+/** The daily queue's id for an entry: one score per player and day. */
+export function dailyEntryId(entry) {
+  return `${entry.playerId}:${entry.day}`;
+}
+
+export function createDailyQueue(storage = globalThis.localStorage, { key = LEADERBOARD.dailyQueueKey, max = LEADERBOARD.dailyQueueMax } = {}) {
+  return createPostQueue(storage, { key, max, normalize: normalizeDailyEntry, idOf: dailyEntryId });
 }
 
 /**

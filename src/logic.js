@@ -902,7 +902,7 @@ export function mixSeed(seed, n, salt = 0) {
   return (h ^ (h >>> 16)) >>> 0;
 }
 
-const COURSE_SALT = { mystery: 1, gap: 2, item: 3, bean: 4, move: 5, itemY: 6, spin: 7, band: 10, beanPhase: 11, gapPhase: 12, kernel: 13, coin: 14 };
+const COURSE_SALT = { mystery: 1, gap: 2, item: 3, bean: 4, move: 5, itemY: 6, spin: 7, band: 10, beanPhase: 11, gapPhase: 12, kernel: 13, coin: 14, reward: 15 };
 
 /**
  * The run's course: the pair the first mystery box rides after, and per pair
@@ -949,6 +949,14 @@ export function createCourse(seed, t, { shared = false } = {}) {
     },
     spinFrame(n, frames) {
       return Math.floor(at(n, COURSE_SALT.spin)() * frames);
+    },
+    /**
+     * The stream a box from pair `n` rolls its reward from (rollMystery). Shared: its own per-pair
+     * stream, so the same box gives every player the same thing (the Daily Dump); single player:
+     * the one stream at pickup time, as before.
+     */
+    reward(n) {
+      return at(n, COURSE_SALT.reward);
     },
     /**
      * The pair (pipesSpawned, 1-based) that carries a level's guaranteed kernel: level 1's last
@@ -1825,6 +1833,60 @@ export function testRunStart(level, t) {
   const n = Number.isFinite(level) ? Math.min(Math.max(1, Math.round(level)), t.levels.lastLevel) : 1;
   const pipes = levelEnd(n - 1, t);
   return { level: n, pipes, score: pipes, beanSpawned: pipes >= t.beans.guaranteeScore };
+}
+
+// ---------------------------------------------------------------------------
+// Daily Dump (🌞): the day, its course seed and its level. The day is the UTC date, so every
+// player shares it; db/schema.sql repeats fnv1a32 and dailyLevel in SQL to check a posted level.
+
+/** The UTC day of `date` as 'YYYY-MM-DD' (the Daily Dump's day: one course, one attempt). */
+export function utcDayKey(date = new Date()) {
+  return date.toISOString().slice(0, 10);
+}
+
+/** Milliseconds from `date` to the next 00:00 UTC (the next Daily Dump). */
+export function msUntilUtcMidnight(date = new Date()) {
+  const next = Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate() + 1);
+  return next - date.getTime();
+}
+
+/** A countdown as hh:mm:ss (negative counts as 0). */
+export function countdownText(ms) {
+  const total = Math.max(0, Math.floor(ms / 1000));
+  const two = (n) => String(n).padStart(2, '0');
+  return `${two(Math.floor(total / 3600))}:${two(Math.floor(total / 60) % 60)}:${two(total % 60)}`;
+}
+
+/**
+ * 32-bit FNV-1a over a string's UTF-16 code units (day keys are ASCII). Chosen because it is a few
+ * lines in both JS and PL/pgSQL, so the server can recompute a day's level (daily_level).
+ */
+export function fnv1a32(str) {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < str.length; i += 1) {
+    h ^= str.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  return h >>> 0;
+}
+
+/** The day's course seed (createCourse with shared: true draws every pair from it). */
+export function dailySeed(day) {
+  return fnv1a32(`${day}:course`);
+}
+
+/** The day's level, daily.minLevel–daily.maxLevel, fixed for the whole run. */
+export function dailyLevel(day, t) {
+  const { minLevel, maxLevel } = t.daily;
+  return minLevel + (fnv1a32(`${day}:level`) % (maxLevel - minLevel + 1));
+}
+
+/**
+ * Where a Daily Dump run starts: testRunStart's level and pairs (so the course and its gates read
+ * like that level), but a score of 0. The run never leaves this level.
+ */
+export function dailyRunStart(level, t) {
+  return { ...testRunStart(level, t), score: 0 };
 }
 
 /** The test start level one `step` (±1) from `level`, wrapping within 1..levels.lastLevel. */

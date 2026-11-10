@@ -322,6 +322,13 @@ export const TUNING = {
     maxPlayers: 8,
     levelPipes: [10, 25, 35, 35, 35, 35, 50], // pipe pairs per level in a tournament race (225 in all; a normal run's levels.pipes makes 285)
   },
+  // Daily Dump (🌞): once per UTC day, every player flies the same date-seeded endless course at one
+  // level from minLevel–maxLevel (dailyLevel in logic.js; db/schema.sql's daily_level and its level
+  // CHECK repeat both numbers).
+  daily: {
+    minLevel: 3,
+    maxLevel: 7,
+  },
   gamepad: {
     // Standard-mapping button indices (Xbox: A 0, B 1, X 2, Y 3, LB 4, RB 5, LT 6, RT 7, View 8, Menu 9, d-pad 12–15).
     // A pad that reports another layout (pad.mapping !== 'standard') is retuned here, not in code.
@@ -407,5 +414,9 @@ export const LEADERBOARD = {
   renameKey: 'flappyPoop.rename', // localStorage key for a rename typed on this device, until a post carries it to the board (else the device adopts the board's name)
   tournamentsKey: 'flappyPoop.tournaments', // localStorage key for finished tournaments (🏅) the board has not confirmed yet (submit_tournament)
   tournamentQueueMax: 20, // finished tournaments kept for a later post; the oldest goes first when full
+  dailyKey: 'flappyPoop.daily', // localStorage key for this device's Daily Dump (🌞) attempt: claimed at the start, rewritten as the score grows
+  dailyQueueKey: 'flappyPoop.dailyQueue', // localStorage key for Daily Dump scores the board has not confirmed yet (submit_daily_score)
+  dailyQueueMax: 3, // daily scores kept for a later post (one per player and day); the oldest goes first when full
+  dailyMaxScore: 10000, // the Daily Dump cap (endless runs); matches daily_scores' CHECK and submit_daily_score() in db/schema.sql
   maxScore: 1000, // scores above this are not submitted (matches the CHECK and submit_score() in db/schema.sql); a full 285-pair run with ×2 fits
 };
