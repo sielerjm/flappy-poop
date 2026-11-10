@@ -422,11 +422,16 @@ export function createDailyStore(storage = globalThis.localStorage, { key = LEAD
   };
 }
 
-/** A queued daily score, or null: { day, playerId, score, level, pipes } (score within dailyMaxScore). */
+/**
+ * A queued daily score, or null: { day, playerId, score, level, pipes, name } (score within
+ * dailyMaxScore). `name` is the player's name when it was queued, used only when the device no
+ * longer holds that player (the drain sends the current name otherwise).
+ */
 function normalizeDailyEntry(raw) {
   const r = normalizeDaily(raw);
   if (!r || r.score > LEADERBOARD.dailyMaxScore) return null;
-  return { day: r.day, playerId: r.playerId, score: r.score, level: r.level, pipes: r.pipes };
+  const name = typeof raw.name === 'string' && validateName(raw.name).ok ? raw.name : null;
+  return { day: r.day, playerId: r.playerId, score: r.score, level: r.level, pipes: r.pipes, name };
 }
 
 /** The daily queue's id for an entry: one score per player and day. */
@@ -553,6 +558,50 @@ export async function submitTournament(payload, hostId, opts = {}) {
 }
 
 const COUNT = (v) => Number.isInteger(v) && v >= 0;
+
+/**
+ * Post one daily score (submit_daily_score) under `entry.name`. 'ok' when the board has it (now,
+ * or a duplicate of the first post that day), 'nameTaken' when another player holds the name,
+ * 'rejected' when the server will never take it (a stale day, a wrong level, a bad score / id /
+ * name) or the entry is malformed, else 'keep' (offline, the function not deployed yet, …).
+ */
+export async function submitDailyScore(entry, opts = {}) {
+  const e = normalizeDailyEntry(entry);
+  if (!e || !e.name) return 'rejected';
+  const body = { p_player_id: e.playerId, p_name: e.name, p_day: e.day, p_score: e.score, p_level: e.level, p_pipes: e.pipes };
+  const out = await request('/rpc/submit_daily_score', { method: 'POST', errors: true, body }, opts);
+  if (out === null) return 'keep';
+  if (out?.error) {
+    if (/name taken/i.test(out.message)) return 'nameTaken';
+    return out.status === 400 && /bad (day|level|score|pipes|player id|name)/i.test(out.message) ? 'rejected' : 'keep';
+  }
+  return 'ok';
+}
+
+/** A 🌞 board row { rank, name, score, level, pipes, me, total } from a server row, or null. */
+function normalizeDailyRow(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+  const { rank, name, score, level, pipes, total } = raw;
+  if (!Number.isInteger(rank) || rank < 1 || typeof name !== 'string' || !validateName(name).ok) return null;
+  if (!COUNT(score) || !Number.isInteger(level) || !COUNT(pipes) || !COUNT(total)) return null;
+  return { rank, name, score, level, pipes, me: Boolean(raw.me), total };
+}
+
+/**
+ * The 🌞 board for `day` ('YYYY-MM-DD'; today in UTC when omitted): the top rows by score, plus
+ * this player's row (me, with its rank and the day's total) when it is below them; null when the
+ * board cannot be reached or answers junk.
+ */
+export async function fetchDailyBoard(playerId, day = null, opts = {}) {
+  const limit = opts.config?.limit ?? LEADERBOARD.limit;
+  const id = typeof playerId === 'string' && ID_RE.test(playerId) ? playerId : null;
+  const d = typeof day === 'string' && DAY_RE.test(day) ? day : null;
+  const out = await request('/rpc/daily_board', { method: 'POST', body: { p_player_id: id, p_day: d, p_limit: limit } }, opts);
+  if (!Array.isArray(out)) return null;
+  const rows = out.map(normalizeDailyRow);
+  if (rows.some((r) => r === null)) return null;
+  return rows.sort((a, b) => a.rank - b.rank);
+}
 
 /** A 🏅 board row { rank, name, best, gold, silver, bronze, events, me } from a server row, or null. */
 function normalizeMedalRow(raw) {

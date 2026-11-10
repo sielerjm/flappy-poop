@@ -110,7 +110,10 @@ test('the daily queue: one entry per player and day, capped, posted in order, na
   const storage = memory();
   const q = createDailyQueue(storage, { key: 'dq', max: 2 });
   const e = (day, id = ID, score = 10) => ({ day, playerId: id, score, level: 4, pipes: 9, collected: { fiber: 1 }, final: true });
-  assert.deepEqual(q.add(e('2026-11-08')), { day: '2026-11-08', playerId: ID, score: 10, level: 4, pipes: 9 }, 'only what the post needs');
+  assert.deepEqual(q.add(e('2026-11-08')), { day: '2026-11-08', playerId: ID, score: 10, level: 4, pipes: 9, name: null }, 'only what the post needs');
+  assert.equal(q.load()[0].name, null);
+  assert.equal(createDailyQueue(memory(), { key: 'x' }).add({ ...e('2026-11-08'), name: 'Alice' }).name, 'Alice', 'the name it was queued with, when valid');
+  assert.equal(createDailyQueue(memory(), { key: 'x' }).add({ ...e('2026-11-08'), name: 'x'.repeat(40) }).name, null);
   q.add(e('2026-11-08', ID, 99));
   assert.equal(q.load().length, 1, 'once per player and day');
   assert.equal(q.load()[0].score, 10, 'the first score stays');

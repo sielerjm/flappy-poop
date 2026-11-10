@@ -2611,6 +2611,16 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         const r3 = await stored();
         ok(r3a.rec?.day === DAY2 && r3a.rec.final === false && r3.rec?.final === true && r3.rec.score === 9 && r3.queue.some((q) => q.day === DAY2 && q.score === 9), `a run abandoned at 9 is left unfinished (final ${r3a.rec?.final}); the next sync makes it final and queues it (${r3.queue.map((q) => q.day).join(', ')})`);
 
+        // Online (a stubbed board): the next sync posts both queued days once each, under the player's
+        // current name (they were queued before it had one), and the queue empties.
+        const name0 = await evaluate(`JSON.stringify(${P}.save.name ?? null)`);
+        await evaluate(`(() => { const p = ${P}; p.setSaveState({ ...p.save, name: 'DailySmoke' }); globalThis.__fetch = globalThis.fetch; globalThis.__posts = []; globalThis.fetch = async (url, init) => { if (String(url).endsWith('/rpc/submit_daily_score')) { globalThis.__posts.push(JSON.parse(init.body)); return new Response('"ok"', { status: 200 }); } return new Response('{"message":"stub"}', { status: 503 }); }; return import('./src/config.js').then((m) => { m.LEADERBOARD.dataApi = 'https://stub.invalid/rest/v1'; return true; }); })()`);
+        await evaluate(`${P}.syncLeaderboard().then(() => true)`);
+        const sent = await evaluate(`JSON.stringify({ posts: globalThis.__posts, q: ${P}.dailyQueue.load().length, out: ${P}.dailyQueue.outcome(${P}.save.id + ':${DAY2}') })`).then(JSON.parse);
+        await evaluate(`(globalThis.fetch = globalThis.__fetch, ${P}.setSaveState({ ...${P}.save, name: ${name0} ?? undefined }), import('./src/config.js').then((m) => { m.LEADERBOARD.dataApi = ''; return true; }))`);
+        const days = sent.posts.map((b) => b.p_day).sort();
+        ok(days.join() === [DAY2, DAY].join() && sent.posts.every((b) => b.p_name === 'DailySmoke' && b.p_level === (b.p_day === DAY ? want.level : b.p_level)) && sent.q === 0 && sent.out === 'sent', `online, one sync posts both days once (${days.join(', ')}) under the current name; the queue empties (${sent.q}, ${sent.out})`);
+
         // Put everything back.
         await evaluate(`(${keys.map((k) => `localStorage.removeItem('${k}')`).join(', ')}, __flappy.registry.set('toilet', false), __flappy.registry.set('versus', false), true)`);
         await home();

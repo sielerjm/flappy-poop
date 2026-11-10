@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { LEADERBOARD } from '../src/config.js';
-import { createSubmitStore, createMergeStore, createRenameStore, createTournamentQueue, nameAction, submitPlan, submitPlans, submitScore, submitTournament, checkNameAvailable, mergePlayers, fetchPlayerName, fetchTop, fetchRank, fetchTournamentBoard } from '../src/leaderboard.js';
+import { createSubmitStore, createMergeStore, createRenameStore, createTournamentQueue, nameAction, submitPlan, submitPlans, submitScore, submitTournament, checkNameAvailable, mergePlayers, fetchPlayerName, fetchTop, fetchRank, fetchTournamentBoard, submitDailyScore, fetchDailyBoard } from '../src/leaderboard.js';
 
 const config = { dataApi: 'https://x.example/rest/v1', publishableKey: 'sb_publishable_test', timeoutMs: 50, limit: 10, maxScore: 200 };
 
@@ -474,4 +474,54 @@ test('tournament queue drain: in order, stops at the first keep, records outcome
   answers.d = 'keep';
   assert.equal(await q.drain(async (p) => (p.id[0] === 'c' ? 'ok' : (() => { throw new Error('boom'); })())), 1, 'a throwing submit counts as keep');
   assert.deepEqual(q.load().map((e) => e.payload.id[0]), ['d']);
+});
+
+// ---------------------------------------------------------------------------
+// Daily Dump (🌞): submitDailyScore, fetchDailyBoard
+
+const DPID = 'PPPPPPPPPPPPPPPPPPPPPP';
+const dentry = (over = {}) => ({ day: '2026-11-10', playerId: DPID, score: 87, level: 5, pipes: 60, name: 'Alice', ...over });
+
+test('submitDailyScore posts the entry to submit_daily_score as p_* arguments', async () => {
+  const fetch = fakeFetch({ body: '"ok"' });
+  assert.equal(await submitDailyScore(dentry(), { fetch, config }), 'ok');
+  assert.equal(fetch.calls.length, 1);
+  assert.equal(fetch.calls[0].url, 'https://x.example/rest/v1/rpc/submit_daily_score');
+  assert.equal(fetch.calls[0].method, 'POST');
+  assert.deepEqual(fetch.calls[0].body, { p_player_id: DPID, p_name: 'Alice', p_day: '2026-11-10', p_score: 87, p_level: 5, p_pipes: 60 });
+});
+
+test('submitDailyScore: ok / duplicate / empty → ok; name taken → nameTaken; a refusal → rejected; anything else → keep', async () => {
+  const at = (status, body) => submitDailyScore(dentry(), { fetch: fakeFetch({ status, body }), config });
+  assert.equal(await at(200, '"ok"'), 'ok');
+  assert.equal(await at(200, '"duplicate"'), 'ok', 'the first post of the day is already there');
+  assert.equal(await at(204, ''), 'ok');
+  assert.equal(await at(400, { message: 'name taken' }), 'nameTaken');
+  for (const m of ['bad day', 'bad level', 'bad score', 'bad pipes', 'bad player id', 'bad name']) assert.equal(await at(400, { message: m }), 'rejected', m);
+  assert.equal(await at(404, { message: 'Could not find the function public.submit_daily_score' }), 'keep', 'schema not applied yet: wait');
+  assert.equal(await at(500, 'oops'), 'keep');
+  const never = (url, init) => new Promise((_, reject) => init.signal.addEventListener('abort', () => reject(new Error('aborted'))));
+  assert.equal(await submitDailyScore(dentry(), { fetch: never, config }), 'keep', 'a timeout');
+  assert.equal(await submitDailyScore(dentry(), { fetch: fakeFetch(), config: { ...config, dataApi: '' } }), 'keep', 'board disabled');
+  for (const bad of [{ name: null }, { name: '' }, { day: 'today' }, { playerId: 'short' }, { score: -1 }, { score: LEADERBOARD.dailyMaxScore + 1 }]) {
+    const fetch = fakeFetch();
+    assert.equal(await submitDailyScore(dentry(bad), { fetch, config }), 'rejected', JSON.stringify(bad));
+    assert.equal(fetch.calls.length, 0, 'a malformed entry is never sent');
+  }
+});
+
+test('fetchDailyBoard: the rows in rank order with me and the total, or null on junk / failure', async () => {
+  const row = (rank, over = {}) => ({ rank, name: `N${rank}`, score: 100 - rank, level: 5, pipes: 50, me: false, total: 30, ...over });
+  const fetch = fakeFetch({ body: [row(2), row(1), row(30, { me: true })] });
+  const rows = await fetchDailyBoard(DPID, '2026-11-10', { fetch, config });
+  assert.deepEqual(rows.map((r) => [r.rank, r.me, r.total]), [[1, false, 30], [2, false, 30], [30, true, 30]]);
+  assert.equal(fetch.calls[0].url, 'https://x.example/rest/v1/rpc/daily_board');
+  assert.deepEqual(fetch.calls[0].body, { p_player_id: DPID, p_day: '2026-11-10', p_limit: config.limit });
+  const loose = fakeFetch({ body: [] });
+  assert.deepEqual(await fetchDailyBoard('nope', 'garbage', { fetch: loose, config }), []);
+  assert.deepEqual(loose.calls[0].body, { p_player_id: null, p_day: null, p_limit: config.limit }, 'a bad id or day is sent as null (the server picks today)');
+  assert.equal(await fetchDailyBoard(DPID, null, { fetch: fakeFetch({ body: [row(1, { name: '' })] }), config }), null, 'one bad row → null');
+  assert.equal(await fetchDailyBoard(DPID, null, { fetch: fakeFetch({ body: [row(1, { score: 'x' })] }), config }), null);
+  assert.equal(await fetchDailyBoard(DPID, null, { fetch: fakeFetch({ status: 500, body: 'x' }), config }), null);
+  assert.equal(await fetchDailyBoard(DPID, null, { fetch: fakeFetch(), config: { ...config, dataApi: '' } }), null);
 });

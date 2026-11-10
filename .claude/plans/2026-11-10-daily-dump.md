@@ -1,6 +1,6 @@
 # Plan: Daily Dump mode (audited revision of `daily_dump_mode_f097792f.plan.md`)
 - Created: 2026-11-10 (an audit of Michael's draft against the code)
-- Status: in progress (step 3: waiting for Michael to apply db/schema.sql)
+- Status: in progress (step 5; db/schema.sql still to be applied by Michael)
 - Baseline: `2690200` on `main` (pushed; tree clean).
 - Whole-suite verification: `npm test` (449 pass), `npm run smoke` (337, full).
 - On approval, this revision replaces the draft at `.claude/plans/daily_dump_mode_f097792f.plan.md`. Repo copy: `.claude/plans/2026-11-10-daily-dump.md` (`git add -f`, only that file).
@@ -219,11 +219,12 @@ Each step is verified, then committed. The full suite runs at every step.
 - **Commit:** `feat(daily, step 3/8): daily_scores, submit_daily_score and daily_board, with PGlite tests`
 - **Result:** npm test 465/465 (8 new schema tests); full smoke 345/345. Three deliberate SQL breakages (level `% 4`, a later run overwriting the first, `current_date`) were each caught, then reverted. A pre-existing smoke race (farts: bacteria popup, 1 run in 3) was fixed in its own commit.
 
-### Step 4/8: client post and board fetch  [pending]
+### Step 4/8: client post and board fetch  [done]
 - **Change:** `submitDailyScore`, `fetchDailyBoard`, and the `syncLeaderboard` drain.
 - **Tests:** fake fetch for each answer mapping; rows validated.
 - **Smoke:** `daily` with a stubbed fetch: the queue empties, and the stub is removed afterwards.
 - **Commit:** `feat(daily, step 4/8): queue and post the daily score with the leaderboard sync`
+- **Result:** npm test 468/468; full smoke 346/346 (daily 9). A queued entry carries the name it was queued with; the drain sends the current player's name instead, keeps the current player's entry while they have no name, and drops another player's nameless leftover.
 
 ### Step 5/8: the 🌞 and the Daily Dump popup  [pending]
 - **Change:**

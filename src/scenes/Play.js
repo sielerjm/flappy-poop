@@ -111,7 +111,7 @@ import { createGlow, createRectGlow } from '../ui/glow.js';
 import { createFinishTexture } from '../ui/finish.js';
 import { createLightTexture } from '../ui/pipeShade.js';
 import { createLevelBar } from '../ui/levelBar.js';
-import { createSubmitStore, createMergeStore, createRenameStore, createTournamentQueue, createDailyStore, createDailyQueue, submitPlans, submitScore, submitTournament, checkNameAvailable, mergePlayers, fetchPlayerName, nameAction } from '../leaderboard.js';
+import { createSubmitStore, createMergeStore, createRenameStore, createTournamentQueue, createDailyStore, createDailyQueue, submitDailyScore, submitPlans, submitScore, submitTournament, checkNameAvailable, mergePlayers, fetchPlayerName, nameAction } from '../leaderboard.js';
 import { createButton } from '../ui/button.js';
 import { createToggle } from '../ui/toggle.js';
 import { openSavePanel, isSavePanelOpen, showAdoptedName } from '../ui/savePanel.js';
@@ -1072,7 +1072,9 @@ export class Play extends Phaser.Scene {
     );
     // Finished tournaments next: they carry their own host id, so they post even without a username here.
     const tournaments = merges.then(() => this.tournamentQueue.drain((payload, hostId) => submitTournament(payload, hostId)));
-    if (!this.save?.name) return tournaments.catch(() => {});
+    // Daily Dump scores carry their own id too; a device with no username sends them under the
+    // name they were queued with (a named device sends after the name check below).
+    if (!this.save?.name) return tournaments.then(() => this.drainDaily()).catch(() => {});
     if (!this.save.id) this.save = ensureId(this.save);
     const id = this.save.id;
     const renamedHere = () => {
@@ -1084,6 +1086,7 @@ export class Play extends Phaser.Scene {
       .then((board) => {
         if (this.save?.id === id && nameAction({ local: this.save.name, board, pending: this.renameStore.load(), id }) === 'adopt') this.adoptBoardName(board);
       })
+      .then(() => this.drainDaily())
       .then(() =>
         // Up to two rows per player: best off the toilet and best on it, posted one after the other.
         submitPlans(this.save, this.submitStore.load()).reduce(
@@ -1104,6 +1107,23 @@ export class Play extends Phaser.Scene {
         ),
       )
       .catch(() => {});
+  }
+
+  /**
+   * Post the queued Daily Dump scores (dailyQueue): this player's under their current name (a
+   * rename adopted from the board included), another player's left on this device under the name
+   * it was queued with. 'nameTaken' for this player lights the board's name-taken note.
+   */
+  drainDaily() {
+    return this.dailyQueue.drain((e) => {
+      const name = (e.playerId === this.save?.id && this.save?.name) || e.name;
+      // No name yet: this player's waits until they pick one; a signed-out player's leftover can never post.
+      if (!name) return e.playerId === this.save?.id ? 'keep' : 'rejected';
+      return submitDailyScore({ ...e, name }).then((res) => {
+        if (res === 'nameTaken' && e.playerId === this.save?.id) this.boardNameTaken = true;
+        return res;
+      });
+    });
   }
 
   /** The board's name for this player's id, or null (none, or the board cannot say). A method so the smoke can stub it. */
@@ -2779,7 +2799,7 @@ export class Play extends Phaser.Scene {
     // never the 🏆 top list or best (an endless score above maxScore would stop every 🏆 post).
     if (this.runIsDaily) {
       const rec = this.saveDailyAttempt(true);
-      if (rec) this.dailyQueue.add(rec);
+      if (rec) this.dailyQueue.add({ ...rec, name: this.save?.name ?? null });
       this.dailySync = this.syncLeaderboard();
       return;
     }
@@ -2838,7 +2858,8 @@ export class Play extends Phaser.Scene {
   finishAbandonedDaily() {
     const rec = this.dailyStore.peek();
     if (!rec || rec.final) return;
-    this.dailyQueue.add(this.dailyStore.save({ ...rec, final: true }));
+    const done = this.dailyStore.save({ ...rec, final: true });
+    if (done) this.dailyQueue.add({ ...done, name: done.playerId === this.save?.id ? (this.save?.name ?? null) : null });
   }
 
   /** The game-over panel after deathToOverMs; `won` swaps its headline, `test` hides Share. A match has no Over: the Versus scene shows the result. */
