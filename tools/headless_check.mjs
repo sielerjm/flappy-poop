@@ -483,6 +483,27 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         ok(rowsPink.colors['261'] === '#f8a0c8' && rowsPink.colors['197'] === '#f8a0c8' && rowsPink.colors['243'] === '#ffffff' && rowsPink.asked.join() === 'false,true', `with only off-toilet runs on this device, both of your board rows are pink (🚽 261 ${rowsPink.colors['261']}, 197 ${rowsPink.colors['197']}; ranks asked for ${rowsPink.asked.join(' and ')})`);
       }
 
+      // What's new always opens on the latest version, even after an older one was viewed and closed
+      // (scene.launch without data used to reuse the last restart's { version }).
+      {
+        const CL = `__flappy.scene.getScene('Changelog')`;
+        const heading = () => evaluate(`${CL}.children.list.filter((c) => c.type === 'Text')[2]?.text ?? null`);
+        const versions = await import('../src/changelog.js').then((m) => m.CHANGELOG.map((e) => e.version));
+        await chrome('changelog');
+        await sleep(500);
+        await evaluate(`${CL}.scene.restart({ version: '${versions.at(-1)}' }), true`);
+        await sleep(500);
+        const old = await heading();
+        await closeTop('Changelog');
+        await sleep(300);
+        await chrome('changelog');
+        await sleep(500);
+        const again = await heading();
+        await closeTop('Changelog');
+        await sleep(300);
+        ok(old?.startsWith(`v${versions.at(-1)} `) && again?.startsWith(`v${versions[0]} `), `What's new reopens on the latest version ("${again}") after an older one was viewed ("${old}")`);
+      }
+
       // Every overlay's version line opens What's new over it (a real click; HowTo and About scroll to
       // it first), and one real Esc closes only What's new. Board muzzled so the Leaderboard settles at once.
       {

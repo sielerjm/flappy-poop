@@ -15,11 +15,13 @@ export const CHANGELOG = [
         'Your Daily Dump rank reads 🏆 #n of n; tap it (or your score) for the 🌞 leaderboard.',
         "The 🏆 leaderboard marks all of your rows on every device, even the kind (🚽 or not) you never played on this one.",
         'The Daily Dump popup: 🌞 💩 🛌 🔁, and a new course every day at midnight UTC.',
+        "What's new always opens on the newest version, even after you looked at an older one.",
       ],
       'zh-Hans': [
         '每日一拉的排名显示为 🏆 第n名；点它（或你的分数）即可打开🌞排行榜。',
         '🏆 排行榜在每台设备上都会标出你的所有成绩，包括这台设备上没玩过的那一类（🚽 或非 🚽）。',
         '每日一拉弹窗：🌞 💩 🛌 🔁；每天UTC午夜换一条新赛道。',
+        '“更新说明”现在总是打开最新版本，即使你之前看过旧版本。',
       ],
     },
   },

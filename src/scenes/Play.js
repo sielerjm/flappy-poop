@@ -1479,7 +1479,8 @@ export class Play extends Phaser.Scene {
         break;
       case 'openChangelog':
         if (this.overlayPause(result)) this.pauseRun();
-        if (!this.scene.isActive('Changelog')) this.scene.launch('Changelog');
+        // Always on the latest version: a launch without data would reuse the last version link's { version }.
+        if (!this.scene.isActive('Changelog')) this.scene.launch('Changelog', { version: null });
         this.scene.bringToTop('Changelog');
         break;
       case 'openLanguage':
