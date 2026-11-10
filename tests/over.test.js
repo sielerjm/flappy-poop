@@ -84,3 +84,21 @@ test('share card rows: fiber · probiotic · postbiotic over bacteria · bean ·
   assert.ok(L.pipe.iconX + L.pipe.width / 2 < L.pipe.textX, 'pipe cap left of its count');
   assert.ok(Math.abs(L.pipe.width / L.pipe.height - 128 / 160) < 0.02, 'pipe cap keeps the 128x160 slice shape');
 });
+
+test('a Daily Dump result: the score line is a box of its own, apart from Share and Home, inside the panel', () => {
+  for (const share of [true, false]) {
+    const layout = overButtonsLayout(cx, cy, T, { share, score: true });
+    const box = layout.score;
+    assert.equal(box.id, 'score');
+    assert.equal(box.x, cx);
+    assert.equal(box.y, cy + T.over.scoreOffsetY);
+    assert.ok(box.height >= T.trayHitMin);
+    assert.ok(box.x - box.width / 2 >= cx - PANEL.width / 2 + STROKE && box.x + box.width / 2 <= cx + PANEL.width / 2 - STROKE, 'inside the panel');
+    assert.equal(overHit(box.x, box.y, layout), 'score');
+    for (const b of [layout.share, layout.home].filter(Boolean)) {
+      assert.ok(Math.abs(b.y - box.y) > (b.height + box.height) / 2, `${b.id} is on another row`);
+    }
+  }
+  assert.equal(overButtonsLayout(cx, cy, T).score, null, 'a normal game over has no score box');
+  assert.equal(overHit(cx, cy + T.over.scoreOffsetY, overButtonsLayout(cx, cy, T)), null);
+});

@@ -1,6 +1,7 @@
 import { GAME_HEIGHT, FIELD, TUNING as T, SHARE, LEVEL_COLORS } from '../config.js';
-import { canRestart, chromeIntent, trayLayout, trayHit, overButtonsLayout, overHit, shareCardLayout, levelColor, uiColumn } from '../logic.js';
-import { t, levelLabel, shareText, shareCardFooter } from '../i18n.js';
+import { canRestart, chromeIntent, trayLayout, trayHit, overButtonsLayout, overHit, shareCardLayout, levelColor, uiColumn, msUntilUtcMidnight, countdownText } from '../logic.js';
+import { t, levelLabel, shareText, shareCardFooter, dailyDayText, dailyRankText, dailyShareText } from '../i18n.js';
+import { fetchDailyBoard, dailyEntryId } from '../leaderboard.js';
 import { shareMode, shareScoreImage } from '../share.js';
 import { renderShareCard } from '../ui/shareCard.js';
 import { formatScore } from '../save.js';
@@ -23,12 +24,19 @@ export class Over extends Phaser.Scene {
     const toilet = Boolean(data?.toilet);
     const level = Number.isInteger(data?.level) && data.level >= 1 ? data.level : 1;
     const collected = { fiber: 0, probiotic: 0, postbiotic: 0, bacteria: 0, bean: 0, mystery: 0, coin: 0, ...(data?.collected ?? {}) };
+    // A Daily Dump (🌞): { day, level, playerId, practice, sync, view }. Its score links to the 🌞 board,
+    // its coin cell holds the day's rank, and the countdown to the next day takes the test note's slot.
+    // `view`: opened from the popup's "See today's result" (Play is on its ready screen, not dead).
+    this.daily = data?.daily?.day ? data.daily : null;
+    const daily = this.daily;
+    const linked = Boolean(daily && !daily.practice);
     // The game loop's time, not this.time.now: a relaunched scene's clock still holds the time it
     // last ran (Phaser syncs it on boot only), which made the retry lockout a no-op.
     this.openedAt = this.game.loop.time;
     const play = this.scene.get('Play');
     const locale = play?.getLocale?.() ?? 'en';
     this.shareInfo = { locale, score, toilet, level }; // the message shareRun() sends with the image
+    this.dailyRank = null; // { rank, total } once the 🌞 board answers
 
     const W = this.scale.width; // the live field: the panel stays centred, the tray in the chrome column
     this.col = uiColumn(W, FIELD);
@@ -36,10 +44,11 @@ export class Over extends Phaser.Scene {
     const cy = GAME_HEIGHT / 2;
     const panel = this.add.rectangle(cx, cy, 560, 720, 0x1a0b14, 0.85).setStrokeStyle(8, 0xe85e96);
     const style = { fontFamily: 'sans-serif', fontStyle: 'bold', color: '#ffffff', align: 'center' };
-    const headline = t(locale, won ? 'runWon' : 'gameOver');
-    const scoreLine = `${t(locale, 'scoreLabel')}  ${formatScore({ score, toilet })}  ·  ${levelLabel(locale, level)}`;
-    this.add.text(cx, cy - 270, headline, { ...style, fontSize: won ? '48px' : '64px', color: won ? '#ffd700' : '#f8a0c8' }).setOrigin(0.5);
-    this.add.text(cx, cy - 180, scoreLine, { ...style, fontSize: '48px' }).setOrigin(0.5);
+    const headline = daily ? t(locale, 'dailyOverTitle').replace('{day}', dailyDayText(locale, daily.day)) : t(locale, won ? 'runWon' : 'gameOver');
+    const scoreLine = `${t(locale, 'scoreLabel')}  ${formatScore({ score, toilet })}  ·  ${daily ? '\u{1F31E} ' : ''}${levelLabel(locale, level)}`;
+    this.add.text(cx, cy - 270, headline, { ...style, fontSize: daily ? '48px' : won ? '48px' : '64px', color: won ? '#ffd700' : '#f8a0c8' }).setOrigin(0.5);
+    // A Daily Dump's score is pink: it is the link to the 🌞 board (overHit 'score').
+    this.add.text(cx, cy + T.over.scoreOffsetY, scoreLine, { ...style, fontSize: '48px', color: linked ? '#f8a0c8' : '#ffffff' }).setOrigin(0.5);
     // Run summary: what was collected, as icon ×n pairs (no words, so no strings
     // to translate). Row 1 fiber / probiotic / postbiotic (times one started),
     // row 2 bad bacteria / bean / mystery box (a box's reward also counts under
@@ -65,16 +74,27 @@ export class Over extends Phaser.Scene {
     const [pipeX, coinX] = columnX[2].map((dx) => cx + dx);
     this.add.image(pipeX - 30, cy + 60, 'pipe').setOrigin(0.5, 80 / 1280).setCrop(0, 0, 128, 160).setScale(40 / 128);
     this.add.text(pipeX + 2, cy + 60, `×${pipes}`, { ...style, fontSize: '40px', color: '#c9b8dc' }).setOrigin(0, 0.5);
-    this.add.image(coinX - 30, cy + 60, 'coin').setDisplaySize(48, 48);
-    this.add.text(coinX + 2, cy + 60, `×${collected.coin}`, { ...style, fontSize: '40px', color: '#c9b8dc' }).setOrigin(0, 0.5);
+    if (daily) {
+      // No coins in a Daily Dump: the cell holds the day's rank (loadDailyRank fills it in).
+      this.rankText = this.add.text(coinX + 10, cy + 60, linked ? t(locale, 'dailyRankLoading') : '', { ...style, fontSize: '30px', color: '#ffd700' }).setOrigin(0.5);
+    } else {
+      this.add.image(coinX - 30, cy + 60, 'coin').setDisplaySize(48, 48);
+      this.add.text(coinX + 2, cy + 60, `×${collected.coin}`, { ...style, fontSize: '40px', color: '#c9b8dc' }).setOrigin(0, 0.5);
+    }
     if (testRun) {
       this.add.text(cx, cy + 130, t(locale, 'testRunNotSaved'), { ...style, fontSize: '30px', color: '#ffd700', wordWrap: { width: 460, useAdvancedWrap: true } }).setOrigin(0.5);
+    } else if (daily) {
+      // The countdown to the next course, on the wall clock (this scene's clock is stale after a relaunch).
+      this.countdown = this.add.text(cx, cy + 130, '', { ...style, fontSize: '28px', color: '#c9b8dc', fontStyle: 'normal' }).setOrigin(0.5);
+      const tick = () => this.countdown?.setText(t(locale, 'dailyNext').replace('{time}', countdownText(msUntilUtcMidnight(new Date()))));
+      tick();
+      this.time.addEvent({ delay: 1000, loop: true, callback: tick });
     }
     // Share | Home on one row (overButtonsLayout); a test run gets Home alone, centred,
     // and nothing to share. Home is the ready-screen-style glowing button (any tap
     // outside the tray and off Share goes home too). Both fade in after the lockout
     // so a death tap cannot restart or share.
-    this.buttons = overButtonsLayout(cx, cy, T, { share: !testRun });
+    this.buttons = overButtonsLayout(cx, cy, T, { share: !testRun, score: linked });
     const home = this.buttons.home;
     // Same pulsing soft white halo as the enter-username prompt on the ready screen.
     this.homeHalo = createRectGlow(this, home.x, home.y, { key: 'over-home-halo', width: home.width, height: home.height, radius: T.readyButtonRadius, pad: T.readyPromptGlowPx }).setAlpha(0);
@@ -100,7 +120,9 @@ export class Over extends Phaser.Scene {
     this.shareMode = null;
     this.cardToken = null;
     this.sharePressed = false;
-    if (this.buttons.share) this.makeShareCard({ headline, won, scoreLine, collected, pipes, locale });
+    this.cardData = { headline, won, scoreLine, collected, pipes, locale };
+    if (this.buttons.share) this.makeShareCard(this.cardData);
+    if (linked) this.loadDailyRank(play);
 
     this.tray = createTray(this, { muted: isMuted(), col: this.col });
     // Controller focus ring: Home, Share (once its card exists), then the tray (no ⏸ here).
@@ -108,6 +130,7 @@ export class Over extends Phaser.Scene {
     this.focus = createFocus(this, T, {
       items: [
         { id: 'home', box: home, activate: () => this.retry() },
+        ...(this.buttons.score ? [{ id: 'score', box: this.buttons.score, activate: () => this.openDailyBoard() }] : []),
         ...(this.buttons.share ? [{ id: 'share', box: this.buttons.share, visible: () => Boolean(this.shareFile), activate: () => this.shareRun() }] : []),
         ...['info', 'lang', 'feedback', 'leaderboard', 'mute', 'settings'].map((id) => ({ id, obj: this.tray.buttons[id], activate: () => play?.handleChrome(id) })),
       ],
@@ -117,6 +140,8 @@ export class Over extends Phaser.Scene {
     this.events.once('shutdown', () => {
       this.tray = null;
       this.focus = null;
+      this.rankText = null;
+      this.countdown = null;
     });
 
     // Share: pressed on pointerdown (so the tap does not go home), sent on pointerup over
@@ -124,6 +149,10 @@ export class Over extends Phaser.Scene {
     // navigator.share() needs, and Phaser emits it from inside that DOM event.
     const onShare = (pointer) => Boolean(this.shareFile) && overHit(pointer.x, pointer.y, this.buttons) === 'share';
     this.input.on('pointerdown', (pointer) => {
+      if (overHit(pointer.x, pointer.y, this.buttons) === 'score') {
+        this.openDailyBoard();
+        return;
+      }
       if (!onShare(pointer)) {
         this.retry(pointer);
         return;
@@ -156,7 +185,9 @@ export class Over extends Phaser.Scene {
       }
     }
     const result = chromeIntent(play.chromeArgs('tap'));
-    if (result.do !== 'retry') return;
+    // Home: a game over's tap reads 'retry'; today's result opened from the ready screen reads 'start'.
+    const home = result.do === 'retry' || (this.daily?.view && result.do === 'start');
+    if (!home) return;
     if (!canRestart(this.openedAt, this.time.now, T.retryLockoutMs)) return;
     this.scene.stop('Over');
     play.scene.restart();
@@ -201,10 +232,47 @@ export class Over extends Phaser.Scene {
     });
   }
 
+  /** The daily score's link: the leaderboard on its 🌞 tab (past the death-tap lockout, like Home). */
+  openDailyBoard() {
+    if (!this.buttons?.score || !canRestart(this.openedAt, this.time.now, T.retryLockoutMs)) return;
+    this.registry.set('leaderboardTab', 'daily');
+    this.scene.get('Play')?.handleChrome('leaderboard');
+  }
+
+  /**
+   * The day's rank under the score: once Play's sync (daily.sync) has settled, the queue says
+   * whether the post went; a sent (or earlier) post reads its own row off the 🌞 board. The share
+   * card and text are drawn again with the rank once it is known.
+   */
+  loadDailyRank(play) {
+    const { day, playerId } = this.daily;
+    const say = (key) => this.rankText?.setText(t(this.shareInfo.locale, key));
+    Promise.resolve(this.daily.sync)
+      .catch(() => {})
+      .then(() => {
+        if (!this.rankText) return null;
+        const out = play?.dailyQueue?.outcome(dailyEntryId({ playerId, day }));
+        if (out === 'queued') return say('dailyRankQueued');
+        if (out === 'nameTaken') return say('dailyRankNameTaken');
+        if (out === 'rejected') return say('dailyRankRejected');
+        return fetchDailyBoard(playerId, day).then((rows) => {
+          if (!this.rankText) return;
+          const me = rows?.find((r) => r.me);
+          if (!me) return say('dailyRankUnavailable');
+          this.dailyRank = { rank: me.rank, total: me.total };
+          const rank = dailyRankText(this.shareInfo.locale, this.dailyRank);
+          this.rankText.setText(rank);
+          if (this.buttons.share) this.makeShareCard({ ...this.cardData, scoreLine: `${this.cardData.scoreLine}  ·  ${rank}` });
+        });
+      });
+  }
+
   /** Send the share card with the score message (share sheet, else download). Call it inside the tap. */
   shareRun() {
     if (!this.shareFile) return Promise.resolve('failed');
-    const text = shareText(this.shareInfo.locale, { ...this.shareInfo, url: SHARE.url });
+    const text = this.daily
+      ? dailyShareText(this.shareInfo.locale, { day: this.daily.day, score: this.shareInfo.score, ...(this.dailyRank ?? {}), url: SHARE.url })
+      : shareText(this.shareInfo.locale, { ...this.shareInfo, url: SHARE.url });
     return shareScoreImage({ file: this.shareFile, title: SHARE.title, text });
   }
 }

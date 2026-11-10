@@ -2594,6 +2594,20 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         const after = await evaluate(`JSON.stringify({ top: ${P}.save.top ?? null, best: localStorage.getItem(${JSON.stringify(TT.bestKey)}) })`);
         ok(r2.rec?.final === true && r2.queue.length === 1 && r2.queue[0].day === DAY && r2.queue[0].score === r2.rec.score && over?.day === DAY && over.level === want.level && after === before, `the crash: the record is final (score ${r2.rec?.score}), its score queued for the board (${r2.queue.length}), Over gets the day; the 🏆 top list and best are untouched`);
 
+        // The daily result panel: its headline, the rank cell (the board is muzzled: the post waits), the
+        // countdown ticking, and the score as a real link to the board's 🌞 tab.
+        const O = `__flappy.scene.getScene('Over')`;
+        await sleep(TT.retryLockoutMs + 300);
+        const ov0 = await evaluate(`JSON.stringify({ texts: ${O}.children.list.filter((c) => c.type === 'Text').map((c) => c.text), rank: ${O}.rankText?.text ?? null, cd: ${O}.countdown?.text ?? null, score: ${O}.buttons.score })`).then(JSON.parse);
+        await sleep(1200);
+        const cd1 = await evaluate(`${O}.countdown?.text ?? null`);
+        await tapAt(ov0.score.x, ov0.score.y);
+        await waitFor(`__flappy.scene.isActive('Leaderboard')`, 30);
+        const board = await evaluate(`JSON.stringify({ open: __flappy.scene.isActive('Leaderboard'), tab: __flappy.registry.get('leaderboardTab'), over: __flappy.scene.isActive('Over') })`).then(JSON.parse);
+        await evaluate(`(__flappy.scene.getScene('Leaderboard').close(), __flappy.registry.set('leaderboardTab', 'scores'), true)`);
+        await sleep(300);
+        ok(ov0.texts.some((x) => x.startsWith('DAILY DUMP · ')) && ov0.rank === 'Posts when online' && /^Next Daily Dump in \d\d:\d\d:\d\d$/.test(ov0.cd ?? '') && cd1 !== ov0.cd && board.open && board.tab === 'daily' && board.over, `the daily result: "${ov0.texts[0]}", rank "${ov0.rank}", "${ov0.cd}" → "${cd1}"; a real click on the score opens the board on 🌞 (${board.tab})`);
+
         // Same day, same course: a second run on the pinned day lays the same gaps.
         await home();
         await evaluate(`${P}.startDaily({ day: '${DAY}' })`);
@@ -2621,6 +2635,13 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await evaluate(`${P}.syncLeaderboard().then(() => true)`);
         const sent = await evaluate(`JSON.stringify({ posts: globalThis.__posts, q: ${P}.dailyQueue.load().length, out: ${P}.dailyQueue.outcome(${P}.save.id + ':${DAY2}') })`).then(JSON.parse);
         await evaluate(`(globalThis.fetch = globalThis.__fetch, ${P}.setSaveState({ ...${P}.save, name: ${name0} ?? undefined }), import('./src/config.js').then((m) => { m.LEADERBOARD.dataApi = ''; return true; }))`);
+        // With a board that answers, the result panel reads its rank off the player's own row and the share text carries it.
+        await evaluate(`(() => { globalThis.__fetch2 = globalThis.fetch; globalThis.fetch = async (url) => String(url).endsWith('/rpc/daily_board') ? new Response(JSON.stringify([{ rank: 1, name: 'Top', score: 300, level: ${want.level}, pipes: 200, me: false, total: 9 }, { rank: 4, name: 'DailySmoke', score: 23, level: ${want.level}, pipes: 20, me: true, total: 9 }]), { status: 200 }) : new Response('{"message":"stub"}', { status: 503 }); return import('./src/config.js').then((m) => { m.LEADERBOARD.dataApi = 'https://stub.invalid/rest/v1'; return true; }); })()`);
+        await evaluate(`(${P}.scene.launch('Over', { score: 23, pipes: 20, level: ${want.level}, collected: {}, daily: { day: '${DAY}', level: ${want.level}, playerId: ${P}.save.id, practice: false, sync: Promise.resolve(), view: true } }), true)`);
+        await waitFor(`__flappy.scene.getScene('Over')?.dailyRank != null`, 40);
+        const ranked = await evaluate(`import('./src/i18n.js').then((m) => JSON.stringify({ rank: ${O}.rankText?.text, share: m.dailyShareText('en', { day: '${DAY}', score: 23, ...${O}.dailyRank, url: 'u' }) }))`).then(JSON.parse);
+        await evaluate(`(globalThis.fetch = globalThis.__fetch2, __flappy.scene.stop('Over'), import('./src/config.js').then((m) => { m.LEADERBOARD.dataApi = ''; return true; }))`);
+        ok(ranked.rank === '#4 of 9' && /#4 of 9/.test(ranked.share), `online, the result reads its rank off the board ("${ranked.rank}") and the share text carries it`);
         const days = sent.posts.map((b) => b.p_day).sort();
         ok(days.join() === [DAY2, DAY].join() && sent.posts.every((b) => b.p_name === 'DailySmoke' && b.p_level === (b.p_day === DAY ? want.level : b.p_level)) && sent.q === 0 && sent.out === 'sent', `online, one sync posts both days once (${days.join(', ')}) under the current name; the queue empties (${sent.q}, ${sent.out})`);
 
@@ -2676,6 +2697,13 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await waitFor(`__flappy.scene.isActive('Over')`, 30);
         const res = await evaluate(`JSON.stringify({ over: __flappy.scene.isActive('Over'), daily: __flappy.scene.getScene('Over').scene.settings.data?.daily?.day ?? null, open: __flappy.scene.isActive('Daily') })`).then(JSON.parse);
         ok(!p0.halo && p1.label === (await tx('dailySeeResult')) && /^Next Daily Dump in \d\d:\d\d:\d\d$/.test(p1.countdown ?? '') && res.over && res.daily === today.day && !res.open, `played: no glow; the popup offers "${p1.label}" with "${p1.countdown}", which opens today's result`);
+        // Home on that result (Play is on its ready screen, not dead): a real click goes home.
+        await sleep(TT.retryLockoutMs + 300);
+        const homeAt = await evaluate(`JSON.stringify(__flappy.scene.getScene('Over').buttons.home)`).then(JSON.parse);
+        await evaluate(`globalThis.__dailyBoxes = ${P}.readyBoxes, true`);
+        await tapAt(homeAt.x, homeAt.y);
+        const wentHome = await waitFor(`!__flappy.scene.isActive('Over') && ${P}.readyBoxes !== globalThis.__dailyBoxes && ${P}.state === 'ready' && ${P}.poop.visible`, 30);
+        ok(wentHome, `Home on today's result goes back to a fresh home screen (${wentHome})`);
         await home();
         // Test mode: Practice runs are never saved and leave the day alone.
         const rec0 = await evaluate(`localStorage.getItem('${keys[0]}')`);

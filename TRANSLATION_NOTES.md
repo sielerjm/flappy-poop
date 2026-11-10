@@ -295,6 +295,15 @@ The top three take the podium 🥇 🥈 🥉. Players who joined with their user
 | dailyNeedName | Pick a username first: your score goes on the 🌞 board under it. | 先取一个用户名：你的分数会以这个名字记到🌞榜上。 |
 | dailyPracticeNote | Test mode: practice runs are not saved and do not use up the day. | 测试模式：练习不会保存，也不会用掉今天的机会。 |
 | dailyNext | Next Daily Dump in {time} | 下一次每日一拉：{time}后 |
+| dailyOverTitle | DAILY DUMP · {day} | 每日一拉 · {day} |
+| dailyRank | #{rank} of {total} | 第{rank}名 / 共{total}人 |
+| dailyRankLoading | Rank… | 排名… |
+| dailyRankQueued | Posts when online | 联网后上传 |
+| dailyRankNameTaken | Name taken | 名字已被占用 |
+| dailyRankRejected | Not saved | 未保存 |
+| dailyRankUnavailable | Rank unavailable | 暂无排名 |
+| dailyShareText | 🌞 I scored {score} in the Flappy Poop Daily Dump ({day}){rank}! {url} | 🌞 我在 Flappy Poop 每日一拉（{day}）拿到了 {score} 分{rank}！{url} |
+| dailyShareRank | , #{rank} of {total} | ，第{rank}名 / 共{total}人 |
 | tournamentSaving | Saving medals… | 正在保存奖牌… |
 | tournamentSaveSent | Medals saved to the 🏅 board | 奖牌已记到 🏅 榜 |
 | tournamentSaveLater | Medals saved on this device: they post when you're online | 奖牌已存在本设备：联网后自动上传 |

@@ -1,6 +1,6 @@
 # Plan: Daily Dump mode (audited revision of `daily_dump_mode_f097792f.plan.md`)
 - Created: 2026-11-10 (an audit of Michael's draft against the code)
-- Status: in progress (step 6; db/schema.sql still to be applied by Michael)
+- Status: in progress (step 7; db/schema.sql applied by Michael 10 Nov)
 - Baseline: `2690200` on `main` (pushed; tree clean).
 - Whole-suite verification: `npm test` (449 pass), `npm run smoke` (337, full).
 - On approval, this revision replaces the draft at `.claude/plans/daily_dump_mode_f097792f.plan.md`. Repo copy: `.claude/plans/2026-11-10-daily-dump.md` (`git add -f`, only that file).
@@ -243,7 +243,7 @@ Each step is verified, then committed. The full suite runs at every step.
 - **Commit:** `feat(daily, step 5/8): the 🌞 opens the Daily Dump popup: Create user, Play or today's result`
 - **Result:** npm test 470/470; full smoke 353/353 (daily 14, overlays 11, pad-overlays 14). The pad's "up from the toilet" now reaches the 🌞, then right to the ?. Screenshots: en + zh, 720×1280 and 1600×900; the zh body has explicit line breaks (Phaser wrapped "。" onto a line start).
 
-### Step 6/8: daily Over and Share  [pending]
+### Step 6/8: daily Over and Share  [done]
 - **Change:** the Over layout above, the countdown, the score link, `dailyShareText`, and the card text.
 - **Tests:** `tests/over.test.js` (the daily hit box sits apart from Home and Share), countdown text, share text.
 - **Smoke:**
@@ -253,6 +253,7 @@ Each step is verified, then committed. The full suite runs at every step.
   - the offline rank text shows (the API is muzzled in the smoke).
 - **Screenshots:** en + zh.
 - **Commit:** `feat(daily, step 6/8): the daily result: rank, countdown, share`
+- **Result:** npm test 472/472; full smoke 356/356 (daily 17: the result's headline, rank cell and ticking countdown, a real click on the score opening the board's 🌞 tab, the rank read off a stubbed board into the share text, Home from today's result). Screenshots en + zh.
 
 ### Step 7/8: 🏆 · 🌞 · 🏅 on the leaderboard  [pending]
 - **Change:** `src/ui/tabs.js`, the tab logic, the 🌞 columns and footer, copy (the How to play leaderboard row loses "🏆 ⟷ 🏅").

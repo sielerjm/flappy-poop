@@ -221,6 +221,15 @@ Inspired by Flappy Bird`,
     dailyNeedName: 'Pick a username first: your score goes on the 🌞 board under it.',
     dailyPracticeNote: 'Test mode: practice runs are not saved and do not use up the day.',
     dailyNext: 'Next Daily Dump in {time}',
+    dailyOverTitle: 'DAILY DUMP · {day}',
+    dailyRank: '#{rank} of {total}',
+    dailyRankLoading: 'Rank…',
+    dailyRankQueued: 'Posts when online',
+    dailyRankNameTaken: 'Name taken',
+    dailyRankRejected: 'Not saved',
+    dailyRankUnavailable: 'Rank unavailable',
+    dailyShareText: '🌞 I scored {score} in the Flappy Poop Daily Dump ({day}){rank}! {url}',
+    dailyShareRank: ', #{rank} of {total}',
     tournamentSaving: 'Saving medals…',
     tournamentSaveSent: 'Medals saved to the 🏅 board',
     tournamentSaveLater: 'Medals saved on this device: they post when you\'re online',
@@ -440,6 +449,15 @@ Inspired by Flappy Bird`,
     dailyNeedName: '先取一个用户名：你的分数会以这个名字记到🌞榜上。',
     dailyPracticeNote: '测试模式：练习不会保存，也不会用掉今天的机会。',
     dailyNext: '下一次每日一拉：{time}后',
+    dailyOverTitle: '每日一拉 · {day}',
+    dailyRank: '第{rank}名 / 共{total}人',
+    dailyRankLoading: '排名…',
+    dailyRankQueued: '联网后上传',
+    dailyRankNameTaken: '名字已被占用',
+    dailyRankRejected: '未保存',
+    dailyRankUnavailable: '暂无排名',
+    dailyShareText: '🌞 我在 Flappy Poop 每日一拉（{day}）拿到了 {score} 分{rank}！{url}',
+    dailyShareRank: '，第{rank}名 / 共{total}人',
     tournamentSaving: '正在保存奖牌…',
     tournamentSaveSent: '奖牌已记到 🏅 榜',
     tournamentSaveLater: '奖牌已存在本设备：联网后自动上传',
@@ -559,6 +577,33 @@ export function shareText(locale, { score = 0, toilet = false, level = 1, url = 
   return t(locale, 'shareText')
     .replace('{score}', formatScore({ score: Number.isInteger(score) ? score : 0, toilet: Boolean(toilet) }))
     .replace('{level}', levelLabel(locale, level))
+    .replace('{url}', url)
+    .trim();
+}
+
+/** A Daily Dump day ('YYYY-MM-DD') as the locale writes a short date: "10 Nov", "11月10日" (the day itself if Intl cannot). */
+export function dailyDayText(locale, day) {
+  const ms = Date.parse(`${day}T00:00:00Z`);
+  if (!Number.isFinite(ms)) return String(day);
+  try {
+    return new Intl.DateTimeFormat(isLocale(locale) && locale !== 'en' ? locale : 'en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' }).format(ms);
+  } catch {
+    return String(day);
+  }
+}
+
+/** The rank on a Daily Dump result: "#3 of 12". */
+export function dailyRankText(locale, { rank, total }) {
+  return t(locale, 'dailyRank').replace('{rank}', String(rank)).replace('{total}', String(total));
+}
+
+/** The message shared with a Daily Dump result: the day, the score and (once known) the rank, and the link. */
+export function dailyShareText(locale, { day, score = 0, rank = null, total = null, url = '' } = {}) {
+  const place = Number.isInteger(rank) && Number.isInteger(total) ? t(locale, 'dailyShareRank').replace('{rank}', String(rank)).replace('{total}', String(total)) : '';
+  return t(locale, 'dailyShareText')
+    .replace('{day}', dailyDayText(locale, day))
+    .replace('{score}', String(Number.isInteger(score) ? score : 0))
+    .replace('{rank}', place)
     .replace('{url}', url)
     .trim();
 }

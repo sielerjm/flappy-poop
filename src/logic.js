@@ -1482,21 +1482,24 @@ function inBox(x, y, box) {
 /**
  * Game-over buttons on one row at cy + over.buttonOffsetY: Share (left) and Home
  * (right), centred as a pair with over.buttonGap between. With share: false (a
- * test run) there is no share box and Home sits alone at cx.
+ * test run) there is no share box and Home sits alone at cx. With score: true (a
+ * Daily Dump) the score line at cy + over.scoreOffsetY is a box too (it opens the
+ * 🌞 board); otherwise score is null.
  */
-export function overButtonsLayout(cx, cy, t, { share = true } = {}) {
+export function overButtonsLayout(cx, cy, t, { share = true, score = false } = {}) {
   const o = t.over;
   const y = cy + o.buttonOffsetY;
   const box = (id, x) => ({ id, x, y, width: o.buttonWidth, height: o.buttonHeight });
-  if (!share) return { share: null, home: box('home', cx) };
+  const scoreBox = score ? { id: 'score', x: cx, y: cy + o.scoreOffsetY, width: o.scoreBoxWidth, height: o.buttonHeight } : null;
+  if (!share) return { share: null, home: box('home', cx), score: scoreBox };
   const offset = (o.buttonWidth + o.buttonGap) / 2;
-  return { share: box('share', cx - offset), home: box('home', cx + offset) };
+  return { share: box('share', cx - offset), home: box('home', cx + offset), score: scoreBox };
 }
 
-/** 'share' | 'home' | null for a tap at (x, y) on overButtonsLayout's boxes. */
+/** 'share' | 'home' | 'score' | null for a tap at (x, y) on overButtonsLayout's boxes. */
 export function overHit(x, y, layout) {
   if (!layout) return null;
-  for (const box of [layout.share, layout.home]) {
+  for (const box of [layout.share, layout.home, layout.score]) {
     if (box && inBox(x, y, box)) return box.id;
   }
   return null;

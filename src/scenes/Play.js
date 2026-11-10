@@ -670,6 +670,7 @@ export class Play extends Phaser.Scene {
     const daily = this.dailyNext;
     this.dailyNext = null;
     this.runIsDaily = Boolean(daily);
+    this.dailyRunDay = daily?.day ?? null; // the day on the result panel (practice too)
     this.dailySync = null;
     if (daily) {
       this.toilet = false; // this run only: create() reads the toggle again for the next one
@@ -1097,7 +1098,7 @@ export class Play extends Phaser.Scene {
       level: after.level,
       pipes: after.pipes,
       collected: { fiber: 0, probiotic: 0, postbiotic: 0, bacteria: 0, bean: 0, mystery: 0, coin: 0, ...after.collected },
-      daily: { day, level: after.level, practice: false, sync },
+      daily: { day, level: after.level, playerId: this.save.id, practice: false, sync, view: true },
     });
     return true;
   }
@@ -2940,7 +2941,7 @@ export class Play extends Phaser.Scene {
     if (this.match) return;
     this.time.delayedCall(T.deathToOverMs, () => {
       this.physics.pause();
-      const daily = this.runIsDaily ? { day: this.daily?.day ?? null, level: this.level, practice: this.runIsTest, sync: this.dailySync ?? null } : null;
+      const daily = this.runIsDaily ? { day: this.dailyRunDay ?? null, level: this.level, playerId: this.save?.id ?? null, practice: this.runIsTest, sync: this.dailySync ?? null } : null;
       const pipes = this.runIsDaily && this.daily ? this.pipesPassed - this.daily.startPipes : this.pipesPassed;
       this.scene.launch('Over', { score: this.score, won, test: this.runIsTest, toilet: this.toilet, level: this.level, pipes, collected: { ...this.collected }, daily });
     });

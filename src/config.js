@@ -116,6 +116,8 @@ export const TUNING = {
   },
   over: {
     panelInMs: 180, // ms the game-over panel scales in
+    scoreOffsetY: -180, // px from the panel centre to the score line (a Daily Dump's score is a link to the 🌞 board)
+    scoreBoxWidth: 480, // px: the daily score link's hit box (the line is 48 px text)
     buttonOffsetY: 250, // px below the panel centre of the Share | Home row
     buttonWidth: 240, // px per button (Home alone on a test run, centred)
     buttonHeight: 88, // px (= trayHitMin, a thumb-sized Share target)
