@@ -188,6 +188,19 @@ export function angleForVelocity(vy, { maxRiseAngle, maxFallAngle, angleFallRefV
   return Math.round(deg);
 }
 
+/**
+ * Keep a poop that cannot die (the fart, its grace, an Invincible test run) inside the strips:
+ * y is clamped to [top, floor], and vy is zeroed only when it pushes further out (falling at the
+ * floor, rising at the ceiling). A flap from the floor keeps its upward speed: Arcade writes the
+ * step back to the sprite after update(), so on the tap's frame the sprite still reads a hair past
+ * the floor, and zeroing every vy there cancelled the flap.
+ */
+export function clampToPlayArea(y, vy, top, floor) {
+  if (y > floor) return { y: floor, vy: vy > 0 ? 0 : vy };
+  if (y < top) return { y: top, vy: vy < 0 ? 0 : vy };
+  return { y, vy };
+}
+
 /** Vertical velocity (px/s, negative = up) the resume tap applies: resumeFlapScale of a flap. */
 export function resumeFlapVelocity(t) {
   return t.flapVelocity * t.resumeFlapScale;

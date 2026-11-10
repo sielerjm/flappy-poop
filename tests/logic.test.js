@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createRng, gapBounds, pipeGapY, centredGapY, hasPassed, angleForVelocity, resumeFlapVelocity, poopFrame } from '../src/logic.js';
+import { createRng, gapBounds, pipeGapY, centredGapY, hasPassed, angleForVelocity, clampToPlayArea, resumeFlapVelocity, poopFrame } from '../src/logic.js';
 import { GAME_HEIGHT, TUNING as T } from '../src/config.js';
 
 const cfg = { gameHeight: GAME_HEIGHT, ceilingHeight: T.ceilingHeight, groundHeight: T.groundHeight, gapHeight: T.gapHeight, gapMargin: T.gapMargin };
@@ -41,6 +41,17 @@ test('hasPassed flips exactly when the pipe right edge crosses the player', () =
   assert.equal(hasPassed(100, 64, 90), false); // right edge 132 > 90
   assert.equal(hasPassed(60, 64, 90), false); // right edge 92 > 90
   assert.equal(hasPassed(57, 64, 90), true); // right edge 89 < 90
+});
+
+test('clampToPlayArea holds the poop inside the strips and stops only motion further into them', () => {
+  const top = T.ceilingHeight + T.poopRadius;
+  const floor = GAME_HEIGHT - T.groundHeight - T.poopRadius;
+  assert.deepEqual(clampToPlayArea(floor + 0.7, -717, top, floor), { y: floor, vy: -717 }, 'a flap from the floor keeps its lift');
+  assert.deepEqual(clampToPlayArea(floor + 0.7, 43, top, floor), { y: floor, vy: 0 }, 'falling at the floor stops');
+  assert.deepEqual(clampToPlayArea(top - 2, -300, top, floor), { y: top, vy: 0 }, 'rising at the ceiling stops');
+  assert.deepEqual(clampToPlayArea(top - 2, 100, top, floor), { y: top, vy: 100 }, 'falling away from the ceiling keeps going');
+  assert.deepEqual(clampToPlayArea(640, 250, top, floor), { y: 640, vy: 250 }, 'inside the band nothing changes');
+  assert.deepEqual(clampToPlayArea(floor, 0, top, floor), { y: floor, vy: 0 }, 'on the line itself nothing changes');
 });
 
 test('angleForVelocity is nose-up when rising and clamps nose-down when falling fast', () => {

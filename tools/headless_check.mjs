@@ -1497,6 +1497,18 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await evaluate(`${play}.pipeProbe.destroy(), true`);
         ok(floorOk && pipeOk, `Invincible: the poop is clamped at the floor (y ${floor.y.toFixed(1)}, line ${floor.line}, ${floor.state}) and flies through a pipe without dying (overlap ${pipe.overlap}, ${pipe.state})`);
 
+        // Resting on the floor, one tap is a whole flap: the clamp stops only falling, so the flap's
+        // upward speed survives the frame (it used to be zeroed, leaving a ~12 px hop).
+        {
+          await evaluate(`(() => { const p = ${play}; p.graceLeftMs = 0; p.poop.body.setAllowGravity(true); p.poop.y = 1250; return true; })()`);
+          await sleep(500);
+          await evaluate(`(() => { const p = ${play}; window.__minY = p.poop.y; window.__track = () => { window.__minY = Math.min(window.__minY, p.poop.y); }; p.events.on('postupdate', window.__track); p.flap(); return true; })()`);
+          await sleep(350);
+          const hop = await evaluate(`(() => { ${play}.events.off('postupdate', window.__track); return JSON.stringify({ state: ${play}.state, minY: window.__minY }); })()`).then(JSON.parse);
+          const line = 1280 - TT.groundHeight - TT.poopRadius;
+          ok(hop.state === 'playing' && line - hop.minY >= 80, `Invincible: one tap from the floor lifts the poop ${Math.round(line - hop.minY)} px (a whole flap is ~111; at least 80)`);
+        }
+
         // The endless test purse: ∞ in the HUD, the pill and the shop; buying spends nothing; Exit empties the purse.
         const inf = await evaluate(`(() => { const p = ${play}; p.takeCoins(4); const purse = p.purseCoins(); const real0 = p.effects.coins(); const fiber = p.buyItem('fiber'); const bean = p.buyItem('superBean'); const real1 = p.effects.coins(); p.refreshShopButton(); const out = { purse, hud: p.coinText.visible ? p.coinText.text : null, pill: p.shopButton.getText(), fiber, bean, real0, real1 }; p.setTestMode(false); Object.assign(out, { offPurse: p.purseCoins(), offReal: p.effects.coins(), offHud: p.coinText.visible }); p.setTestMode(true); out.back = p.purseCoins(); return JSON.stringify(out); })()`).then(JSON.parse);
         ok(inf.purse === null && inf.hud === "×∞" && inf.pill === "💰 ∞" && inf.fiber && inf.bean && inf.real1 === inf.real0 && inf.offPurse === 0 && inf.offReal === 0 && !inf.offHud && inf.back === null, `a test run's purse is endless (HUD "${inf.hud}", pill "${inf.pill}"): fiber and a super bean bought, the real purse still ${inf.real1}; leaving test mode empties it (${inf.offReal}, row hidden)`);

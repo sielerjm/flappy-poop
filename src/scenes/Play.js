@@ -10,6 +10,7 @@ import {
   inventoryRows,
   stillPulseScale,
   angleForVelocity,
+  clampToPlayArea,
   resumeFlapVelocity,
   HANDS,
   poopFrame,
@@ -3005,8 +3006,10 @@ export class Play extends Phaser.Scene {
       const floor = GAME_HEIGHT - T.groundHeight - T.poopRadius;
       if (this.poop.y < top || this.poop.y > floor) {
         if (this.effects.powerActive() || this.graceLeftMs > 0 || this.testInvincible()) {
-          this.poop.y = Math.min(Math.max(this.poop.y, top), floor);
-          this.poop.setVelocityY(0);
+          const vy = this.poop.body.velocity.y;
+          const held = clampToPlayArea(this.poop.y, vy, top, floor); // stops only motion further into the strip
+          this.poop.y = held.y;
+          if (held.vy !== vy) this.poop.setVelocityY(held.vy);
         } else {
           this.die();
         }
