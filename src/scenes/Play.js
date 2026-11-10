@@ -3269,7 +3269,7 @@ export class Play extends Phaser.Scene {
       if (move && this.state === 'playing') {
         const elapsed = pipe.getData('elapsed') + delta;
         pipe.setData('elapsed', elapsed);
-        const gapY = gapBobY(elapsed, move.baseY, move.amp, move.periodMs, move.phase);
+        const gapY = gapBobY(elapsed, move.baseY, move.amp, move.periodMs, move.phase, move.holdMs); // rests at each end (pipeMove.holdMs)
         const gapH = pipe.getData('gapH');
         pipe.y = gapY - gapH / 2;
         const mate = pipe.getData('mate');

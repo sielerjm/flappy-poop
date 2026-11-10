@@ -847,9 +847,25 @@ export function gapBobAmplitude(gapHeight, radius, margin) {
   return Math.max(0, gapHeight / 2 - radius - margin);
 }
 
-/** y of a gap item sweeping up and down its gap. */
-export function gapBobY(elapsedMs, baseY, amp, periodMs, phase) {
-  return baseY + amp * Math.sin((2 * Math.PI * elapsedMs) / periodMs + phase);
+/**
+ * y of a gap (or a gap item) sweeping up and down: a sine of periodMs around baseY. With holdMs it
+ * rests holdMs at each extreme, added to the cycle (periodMs + 2 · holdMs): real time maps onto the
+ * sine's time, frozen at its peaks, so the swing between them is the sine's own, at its speed.
+ * holdMs 0 is the plain sine. `phase` (0–2π) places the start anywhere in the cycle.
+ */
+export function gapBobY(elapsedMs, baseY, amp, periodMs, phase, holdMs = 0) {
+  const h = Math.max(0, holdMs || 0);
+  if (h === 0) return baseY + amp * Math.sin((2 * Math.PI * elapsedMs) / periodMs + phase);
+  const cycle = periodMs + 2 * h;
+  const u = (((elapsedMs + (phase / (2 * Math.PI)) * cycle) % cycle) + cycle) % cycle;
+  const q = periodMs / 4;
+  let s;
+  if (u < q) s = u; // rising to the top
+  else if (u < q + h) s = q; // resting at the top
+  else if (u < 3 * q + h) s = u - h; // down through the middle to the bottom
+  else if (u < 3 * q + 2 * h) s = 3 * q; // resting at the bottom
+  else s = u - 2 * h; // back up to the middle
+  return baseY + amp * Math.sin((2 * Math.PI * s) / periodMs);
 }
 
 /**
@@ -886,7 +902,7 @@ export function rollPipeMove(rng, level, baseY, bounds, t, { centred = false } =
   const p = pipeMoveParams(level, t);
   if (!p || centred) return null;
   if (rng() >= p.chance) return null;
-  return { baseY, amp: pipeMoveAmplitude(baseY, bounds, p.ampPx), periodMs: p.periodMs, phase: rng() * Math.PI * 2 };
+  return { baseY, amp: pipeMoveAmplitude(baseY, bounds, p.ampPx), periodMs: p.periodMs, phase: rng() * Math.PI * 2, holdMs: t.pipeMove.holdMs ?? 0 };
 }
 
 // ---------------------------------------------------------------------------

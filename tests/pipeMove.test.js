@@ -72,7 +72,7 @@ test('rollPipeMove: null before fromLevel without touching the rng; null for the
 test('rollPipeMove: a passing roll returns the clamped swing, the row period and a phase in [0, 2π); a failing roll is null', () => {
   const seq = (values) => () => values.shift() ?? 0.5;
   const move = rollPipeMove(seq([0, 0.25]), M.fromLevel + 1, mid, bounds, T);
-  assert.deepEqual(move, { baseY: mid, amp: M.ampPx[1], periodMs: pipeMoveParams(M.fromLevel + 1, T).periodMs, phase: 0.25 * Math.PI * 2 });
+  assert.deepEqual(move, { baseY: mid, amp: M.ampPx[1], periodMs: pipeMoveParams(M.fromLevel + 1, T).periodMs, phase: 0.25 * Math.PI * 2, holdMs: M.holdMs });
   assert.equal(rollPipeMove(seq([0.999]), M.fromLevel + 1, mid, bounds, T), null);
   const edge = rollPipeMove(seq([0, 0]), M.fromLevel, bounds.minY, bounds, T);
   assert.equal(edge.amp, 0, 'a pair on the band edge gets no swing');
@@ -98,4 +98,35 @@ test('every row keeps the gap\'s shift during a column crossing under three quar
     const shift = pipeMoveShiftPx(M.ampPx[i], pipeMoveParams(level, T).periodMs, levelSpeed(level, T), T);
     assert.ok(shift <= 0.75 * clearance, `row ${i}: shift ${shift.toFixed(1)} px vs ${(0.75 * clearance).toFixed(1)}`);
   }
+});
+
+test('gapBobY with holdMs: rests at each extreme for holdMs, joins smoothly, swings at the sine\'s own peak speed; holdMs 0 is the old sine', () => {
+  const P = 4000;
+  const H = M.holdMs;
+  assert.ok(H > 0, 'pipeMove.holdMs is on');
+  const amp = 60;
+  const y = (t, phase = 0, h = H) => gapBobY(t, 500, amp, P, phase, h);
+  // holdMs 0 (or left out) is exactly the old formula, any phase.
+  for (const phase of [0, 1.3, 4.0]) {
+    for (let t = 0; t < 2 * P; t += 37) assert.ok(Math.abs(gapBobY(t, 500, amp, P, phase, 0) - (500 + amp * Math.sin((2 * Math.PI * t) / P + phase))) < 1e-9);
+  }
+  // From the middle (phase 0): up to +amp at P/4, rests there for H, down to −amp, rests H, back up.
+  const top = [];
+  const bottom = [];
+  for (let t = 0; t < P + 2 * H; t += 1) {
+    if (Math.abs(y(t) - (500 + amp)) < 1e-9) top.push(t);
+    if (Math.abs(y(t) - (500 - amp)) < 1e-9) bottom.push(t);
+  }
+  assert.ok(top.length >= H && top.length <= H + 1, `rests ${top.length} ms at the top`);
+  assert.ok(bottom.length >= H && bottom.length <= H + 1, `rests ${bottom.length} ms at the bottom`);
+  // Periodic over the longer cycle, continuous everywhere (no jump between two 1 ms samples).
+  for (let t = 0; t < P + 2 * H; t += 13) assert.ok(Math.abs(y(t) - y(t + P + 2 * H)) < 1e-9);
+  let maxStep = 0;
+  for (let t = 0; t < 2 * (P + 2 * H); t += 1) maxStep = Math.max(maxStep, Math.abs(y(t + 1) - y(t)));
+  const sinePeakPerMs = (amp * 2 * Math.PI) / P;
+  assert.ok(maxStep <= sinePeakPerMs + 1e-6, `fastest 1 ms step ${maxStep.toFixed(4)} px vs the sine's ${sinePeakPerMs.toFixed(4)}`);
+  assert.ok(maxStep >= sinePeakPerMs * 0.999, 'and it does reach the sine\'s speed (the swing itself is unchanged)');
+  // The phase spreads the start over the whole cycle, holds included: a quarter turn lands inside the top rest.
+  assert.equal(y(0, 0), 500);
+  assert.ok(Math.abs(y(0, Math.PI / 2) - (500 + amp)) < 1e-9);
 });

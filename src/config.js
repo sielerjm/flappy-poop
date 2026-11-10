@@ -193,6 +193,7 @@ export const TUNING = {
     ampPx: [30, 40, 60, 80], // px the gap centre swings each way (before the bounds clamp)
     speedPx: 20, // px/s the gap centre averages on fromLevel (30 px each way every 6 s)
     speedStepPx: 20, // px/s added per level after fromLevel: L5 40, L6 60, L7 80
+    holdMs: 300, // ms a moving gap rests at each end of its swing, added to the cycle (the swing's speed is unchanged)
     lightenFrac: 0.25, // 0–1 share of white laid over a moving pair's pink (createLightTexture), so it reads apart from still pairs
   },
   mystery: {
