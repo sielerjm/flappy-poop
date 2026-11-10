@@ -8,6 +8,26 @@ import { LOCALES } from './i18n.js';
 
 export const CHANGELOG = [
   {
+    version: '0.12.0',
+    date: '10 Nov 2026',
+    notes: {
+      en: [
+        'Game over has Play again: straight into the next run. Beat your best and the panel says "New personal best!".',
+        "Sharing sends the picture of your run with just the game's link.",
+        'Moving pipes rest for a moment at the top and bottom of each swing.',
+        'The ? and Load user buttons pulse until you have used them, like the 🌞.',
+        'New usernames: 4–16 characters (2+ in Chinese, Japanese or Korean), no spaces, emoji or rude words. Existing names keep working.',
+      ],
+      'zh-Hans': [
+        '游戏结束新增“再玩一次”：直接开始下一局。打破个人纪录时会显示“新的个人最佳！”。',
+        '分享时只附上游戏链接和这局的图片。',
+        '移动的管道在每次摆动的最高点和最低点会停一下。',
+        '“?”和“载入用户”按钮在你用过之前会跳动提示，就像🌞一样。',
+        '新用户名：4–16 个字符（中文、日文或韩文至少 2 个），不能有空格、表情符号或不雅词。已有的用户名照常可用。',
+      ],
+    },
+  },
+  {
     version: '0.11.2',
     date: '10 Nov 2026',
     notes: {

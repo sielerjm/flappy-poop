@@ -8,7 +8,7 @@ A Flappy Bird–style game for phone browsers: flap a poop through the gut, dodg
 
 **Play now → [sielerjm.github.io/flappy-poop](https://sielerjm.github.io/flappy-poop/)**
 
-Works best on your phone — add it to your home screen for a full-screen, app-like launch. On a desktop or landscape window the gut widens to fill the screen. English and Simplified Chinese in-game. Version **0.11.2 beta**.
+Works best on your phone — add it to your home screen for a full-screen, app-like launch. On a desktop or landscape window the gut widens to fill the screen. English and Simplified Chinese in-game. Version **0.12.0 beta**.
 
 Tip: on iPhone, turn **Silent mode off** to hear sound.
 
@@ -28,6 +28,7 @@ Tip: on iPhone, turn **Silent mode off** to hear sound.
 - Hit a pipe, the ceiling, or the floor and the run ends.
 - Each gut segment ends at a **checkered finish line**. Cross it for a short break, then keep going.
 - Level 7 (the rectum) is the last: clear it and you win — **YOU MADE IT OUT!**
+- After a crash: **Play again** starts the next run at once, **Home** goes back to the home screen, and **Share** sends a picture of your run with the game's link. Beat your best and the panel says so.
 
 Open the round **?** on the ready screen anytime for the in-game guide (pickups, levels, controls, toilet mode, two players, tournament, and what each tray button does). Tap the version number at the bottom of any panel for **What’s new**.
 
@@ -83,7 +84,7 @@ The gut is cut into seven segments (stomach → rectum). You advance by **pipe p
 | 3–7 | 50 each | 85 … 285 |
 
 - **Level 1** is a scripted intro: probiotic at pair 3, fiber after pairs 4 and 7, a bean after pair 9 — no bad bacteria, no random rolls.
-- From **level 4**, some pipe pairs (a lighter pink) move up and down, faster with every level.
+- From **level 4**, some pipe pairs (a lighter pink) move up and down, faster with every level, resting for a moment at the top and bottom of each swing.
 - A fart never carries you past a finish line: if the line is closer than the burst, the fart ends at the line and the break starts.
 
 ### 💰 The shop
@@ -214,7 +215,7 @@ The 🌞 board, like the others, is for friends, not prizes: the course comes fr
 ### Username & save code
 
 1. Tap **Load user** (or your name, once set) on the ready screen.
-2. Pick a username (1–16 characters) and press **Save** — it appears on the public leaderboard with your best.
+2. Pick a username and press **Save** — it appears on the public leaderboard with your best. A new username has 4–16 characters (at least 2 in Chinese, Japanese or Korean), no spaces or emoji, and no rude words; names chosen before these rules keep working. (The game checks this, not the server.)
 3. **Copy** your `fp1.…` user code and keep it somewhere safe.
 4. On another phone or browser, **Load** that code to bring your name and best 6 scores with you.
 5. To change your username, type a new one and press **Save**: every phone and browser that uses your code picks up the new name on its own.

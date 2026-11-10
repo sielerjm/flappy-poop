@@ -71,7 +71,9 @@ levels 3+ share one cruise and later difficulty is content), applied when the br
 is `levelGap()` (`gapHeight` × `levels.gapScale[level − 1]`: 1.1, 1.05, then 1). **Moving pipes:** from
 `pipeMove.fromLevel` (4) a share of the pairs (`pipeMove.chance` and `ampPx` per level) bob their gap
 centre on a sine whose average vertical speed rises linearly (`speedPx` 20 px/s on L4, + `speedStepPx`
-20 per level; `pipeMoveParams` derives each row's period: 6 / 4 / 4 / 4 s). A moving pair wears a
+20 per level; `pipeMoveParams` derives each row's period: 6 / 4 / 4 / 4 s), resting `pipeMove.holdMs`
+(300) at each end: `gapBobY`'s `holdMs` freezes the sine's time at its peaks, added to the cycle, so the
+swing's speed (and `pipeMoveShiftPx`) is unchanged. A moving pair wears a
 lighter pink (`pipe-moving`, painted once by `createLightTexture` in `ui/pipeShade.js` at
 `pipeMove.lightenFrac`): `rollPipeMove` at spawn (after the item and bean
 draws; never for the centred pair after a fart; amplitude clamped into `gapBounds`), `gapBobY` in
@@ -243,7 +245,7 @@ moves; `endRun` makes it final and queues it (`dailyQueue`, `flappyPoop.dailyQue
 touching the 🏆 list or best; `syncLeaderboard` finalises an *unfinished* record left by a reload
 (never the run in flight) and `drainDaily` posts under the current name. Over shows the daily
 result: date headline, the score as a link to the board's 🌞 tab, the rank read off
-`daily_board` once the post settles, the countdown to 00:00 UTC, Share with `dailyShareText`.
+`daily_board` once the post settles, the countdown to 00:00 UTC, Share (the card, and the link as its message).
 The server (`submit_daily_score`) takes today or yesterday (UTC), checks the day's level with its
 own FNV-1a (`daily_level` = the client's `dailyLevel`), keeps the first post per player and day
 ('duplicate' after), and follows the score board's name claim.
@@ -442,7 +444,12 @@ src/
                             (navigator.share called synchronously inside the tap;
                             AbortError = cancelled; other errors and no share sheet
                             → <a download> PNG; never rejects).
-  save.js                   Save codes, NO Phaser/DOM: loadLocal / saveLocal
+  save.js                   Save codes, NO Phaser/DOM. checkNewName (the save
+                            panel only): a new username is 4–16 code points (2+
+                            with CJK), no whitespace, emoji or NAME_BLOCKED word;
+                            the name already saved always passes (legacy names).
+                            validateName (1–16, every other path) is unchanged;
+                            the server's rules are unchanged too. loadLocal / saveLocal
                             (flappyPoop.save, schema 3: top entries { score,
                             toilet, level }; schema 1 numbers and schema 2 still
                             load at level 1; MAX_TOP = 6), recordScore(state,
@@ -533,7 +540,10 @@ src/
                             resolves canvas.toBlob's PNG or null (never rejects).
     button.js               createButton(): Graphics rounded rect + centred text
                             for the ready-screen boxes from readyLayout. No pointer
-                            handlers; Play resolves taps with readyHit().
+                            handlers; Play resolves taps with readyHit(). pulse(on)
+                            breathes the label around its fitted scale (the ? and
+                            the user button while their prompts are due).
+                            labelScale() for the smoke.
     toggle.js               createToggle(scene, box, { on, glyph, glyphLeft }): the toilet switch
                             (pill track, knob tween, 🚽 alpha) from readyLayout().toilet,
                             with glyph 👥 the two-player switch from
@@ -945,12 +955,21 @@ src/
                             box (the board's 🌞 tab), the rank in the coin cell
                             (loadDailyRank after daily.sync: the queue's outcome,
                             else its row off daily_board; the card is drawn again
-                            with it), the countdown in the test note's slot, and
-                            dailyShareText; `view` (today's result from the popup)
-                            lets Home work while Play is on its ready screen.
+                            with it) and the countdown in the test note's slot.
+                            Today's result from the popup sits on a 'dead' Play
+                            (Play.showDailyResult), as any game over does. A
+                            full-field zone at Over's bottom is the top of the
+                            input stack: no tap under the panel reaches Play.
+                            Play again (overButtonsLayout 'again', not on a Daily
+                            Dump; the panel grows over.againPanelGrowPx downward)
+                            sets the one-shot registry 'playAgain' and goes home;
+                            Play's create() clears it and launch({ solo }) starts
+                            a one-player run. data.personalBest (Play.endRun: above
+                            every earlier score) shows the gold newPersonalBest
+                            line, never on the card.
                             pointerdown on Share marks it pressed (no home);
                             pointerup over it runs shareRun() → shareScoreImage
-                            with shareText(). { test: true }: the gold
+                            with the card and SHARE.url as the only text. { test: true }: the gold
                             testRunNotSaved line, no Share, Home alone at centre.
                             With { won: true } the headline is the gold runWon text.
                             retry(pointer) is a method (the pad's A calls it with no
