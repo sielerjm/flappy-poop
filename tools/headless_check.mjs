@@ -2637,6 +2637,15 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         const board = await evaluate(`JSON.stringify({ open: __flappy.scene.isActive('Leaderboard'), tab: __flappy.registry.get('leaderboardTab'), title: __flappy.scene.getScene('Leaderboard').title?.text, over: __flappy.scene.isActive('Over') })`).then(JSON.parse);
         await evaluate(`(__flappy.scene.getScene('Leaderboard').close(), __flappy.registry.set('leaderboardTab', 'scores'), true)`);
         await sleep(300);
+        // The rank's cell is the same link.
+        const rankAt = await evaluate(`JSON.stringify(${O}.buttons.rank)`).then(JSON.parse);
+        await tapAt(rankAt.x, rankAt.y);
+        await waitFor(`__flappy.scene.isActive('Leaderboard')`, 30);
+        await sleep(400);
+        const board2 = await evaluate(`JSON.stringify({ tab: __flappy.registry.get('leaderboardTab'), title: __flappy.scene.getScene('Leaderboard').title?.text })`).then(JSON.parse);
+        await evaluate(`(__flappy.scene.getScene('Leaderboard').close(), __flappy.registry.set('leaderboardTab', 'scores'), true)`);
+        await sleep(300);
+        ok(board2.tab === 'daily' && board2.title === 'DAILY DUMP', `a real click on the rank cell opens the board on 🌞 too ("${board2.title}")`);
         ok(ov0.texts.some((x) => x.startsWith('DAILY DUMP · ')) && ov0.rank === 'Posts when online' && /^Next Daily Dump in \d\d:\d\d:\d\d$/.test(ov0.cd ?? '') && cd1 !== ov0.cd && board.open && board.tab === 'daily' && board.title === 'DAILY DUMP' && board.over, `the daily result: "${ov0.texts[0]}", rank "${ov0.rank}", "${ov0.cd}" → "${cd1}"; a real click on the score opens the board on 🌞 ("${board.title}")`);
 
         // Same day, same course: a second run on the pinned day lays the same gaps.
@@ -2672,7 +2681,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await waitFor(`__flappy.scene.getScene('Over')?.dailyRank != null`, 40);
         const ranked = await evaluate(`import('./src/i18n.js').then((m) => JSON.stringify({ rank: ${O}.rankText?.text, share: m.dailyShareText('en', { day: '${DAY}', score: 23, ...${O}.dailyRank, url: 'u' }) }))`).then(JSON.parse);
         await evaluate(`(globalThis.fetch = globalThis.__fetch2, __flappy.scene.stop('Over'), import('./src/config.js').then((m) => { m.LEADERBOARD.dataApi = ''; return true; }))`);
-        ok(ranked.rank === '#4 of 9' && /#4 of 9/.test(ranked.share), `online, the result reads its rank off the board ("${ranked.rank}") and the share text carries it`);
+        ok(ranked.rank === '\u{1F3C6} #4 of 9' && /, #4 of 9!/.test(ranked.share), `online, the result reads its rank off the board ("${ranked.rank}") and the share text carries it`);
         const days = sent.posts.map((b) => b.p_day).sort();
         ok(days.join() === [DAY2, DAY].join() && sent.posts.every((b) => b.p_name === 'DailySmoke' && b.p_level === (b.p_day === DAY ? want.level : b.p_level)) && sent.q === 0 && sent.out === 'sent', `online, one sync posts both days once (${days.join(', ')}) under the current name; the queue empties (${sent.q}, ${sent.out})`);
 

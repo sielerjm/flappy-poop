@@ -299,7 +299,7 @@ The top three take the podium 🥇 🥈 🥉. Players who joined with their user
 | dailyPracticeNote | Test mode: practice runs are not saved and do not use up the day. | 测试模式：练习不会保存，也不会用掉今天的机会。 |
 | dailyNext | Next Daily Dump in {time} | 下一次每日一拉：{time}后 |
 | dailyOverTitle | DAILY DUMP · {day} | 每日一拉 · {day} |
-| dailyRank | #{rank} of {total} | 第{rank}名 / 共{total}人 |
+| dailyRank | 🏆 #{rank} of {total} | 🏆 第{rank}名 / 共{total}人 |
 | dailyRankLoading | Rank… | 排名… |
 | dailyRankQueued | Posts when online | 联网后上传 |
 | dailyRankNameTaken | Name taken | 名字已被占用 |

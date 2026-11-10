@@ -158,8 +158,9 @@ test('the result panel words: the day as each locale writes it, the rank, and th
   assert.equal(dailyDayText('zh-Hans', '2026-11-10'), '11月10日');
   assert.equal(dailyDayText('en', '2026-01-01'), '1 Jan', 'UTC, not the local zone');
   assert.equal(dailyDayText('en', 'garbage'), 'garbage');
-  assert.equal(dailyRankText('en', { rank: 3, total: 12 }), '#3 of 12');
-  assert.equal(dailyRankText('zh-Hans', { rank: 3, total: 12 }), '第3名 / 共12人');
+  assert.equal(dailyRankText('en', { rank: 3, total: 12 }), '🏆 #3 of 12');
+  assert.equal(dailyRankText('zh-Hans', { rank: 3, total: 12 }), '🏆 第3名 / 共12人');
+  assert.ok(!dailyShareText('en', { day: '2026-11-10', score: 1, rank: 3, total: 12, url: '' }).includes('🏆'), 'the share text words the rank without the 🏆');
   const url = 'https://example.test/';
   assert.equal(dailyShareText('en', { day: '2026-11-10', score: 87, rank: 3, total: 12, url }), '🌞 I scored 87 in the Flappy Poop Daily Dump (10 Nov), #3 of 12! https://example.test/');
   assert.equal(dailyShareText('en', { day: '2026-11-10', score: 87, url }), '🌞 I scored 87 in the Flappy Poop Daily Dump (10 Nov)! https://example.test/', 'no rank yet: no rank words');

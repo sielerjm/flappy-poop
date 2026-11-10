@@ -224,7 +224,7 @@ Inspired by Flappy Bird`,
     dailyPracticeNote: 'Test mode: practice runs are not saved and do not use up the day.',
     dailyNext: 'Next Daily Dump in {time}',
     dailyOverTitle: 'DAILY DUMP · {day}',
-    dailyRank: '#{rank} of {total}',
+    dailyRank: '🏆 #{rank} of {total}',
     dailyRankLoading: 'Rank…',
     dailyRankQueued: 'Posts when online',
     dailyRankNameTaken: 'Name taken',
@@ -458,7 +458,7 @@ Inspired by Flappy Bird`,
     dailyPracticeNote: '测试模式：练习不会保存，也不会用掉今天的机会。',
     dailyNext: '下一次每日一拉：{time}后',
     dailyOverTitle: '每日一拉 · {day}',
-    dailyRank: '第{rank}名 / 共{total}人',
+    dailyRank: '🏆 第{rank}名 / 共{total}人',
     dailyRankLoading: '排名…',
     dailyRankQueued: '联网后上传',
     dailyRankNameTaken: '名字已被占用',
@@ -610,7 +610,7 @@ export function dailyYouText(locale, { rank, total, score }) {
   return t(locale, 'dailyBoardYou').replace('{rank}', String(rank)).replace('{total}', String(total)).replace('{score}', String(score));
 }
 
-/** The rank on a Daily Dump result: "#3 of 12". */
+/** The rank on a Daily Dump result: "🏆 #3 of 12" (the share text words it without the 🏆: dailyShareRank). */
 export function dailyRankText(locale, { rank, total }) {
   return t(locale, 'dailyRank').replace('{rank}', String(rank)).replace('{total}', String(total));
 }

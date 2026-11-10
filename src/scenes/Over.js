@@ -1,5 +1,5 @@
 import { GAME_HEIGHT, FIELD, TUNING as T, SHARE, LEVEL_COLORS } from '../config.js';
-import { canRestart, chromeIntent, trayLayout, trayHit, overButtonsLayout, overHit, shareCardLayout, levelColor, uiColumn, msUntilUtcMidnight, countdownText } from '../logic.js';
+import { canRestart, chromeIntent, trayLayout, trayHit, overButtonsLayout, overHit, shareCardLayout, levelColor, uiColumn, msUntilUtcMidnight, countdownText, fitScale } from '../logic.js';
 import { t, levelLabel, shareText, shareCardFooter, dailyDayText, dailyRankText, dailyShareText } from '../i18n.js';
 import { fetchDailyBoard, dailyEntryId } from '../leaderboard.js';
 import { shareMode, shareScoreImage } from '../share.js';
@@ -75,8 +75,10 @@ export class Over extends Phaser.Scene {
     this.add.image(pipeX - 30, cy + 60, 'pipe').setOrigin(0.5, 80 / 1280).setCrop(0, 0, 128, 160).setScale(40 / 128);
     this.add.text(pipeX + 2, cy + 60, `×${pipes}`, { ...style, fontSize: '40px', color: '#c9b8dc' }).setOrigin(0, 0.5);
     if (daily) {
-      // No coins in a Daily Dump: the cell holds the day's rank (loadDailyRank fills it in).
-      this.rankText = this.add.text(coinX + 10, cy + 60, linked ? t(locale, 'dailyRankLoading') : '', { ...style, fontSize: '30px', color: '#ffd700' }).setOrigin(0.5);
+      // No coins in a Daily Dump: the cell holds the day's rank (loadDailyRank fills it in), and the
+      // cell is a link to the 🌞 board like the score (overHit 'rank', over.rankBox).
+      this.rankText = this.add.text(cx + T.over.rankBox.dx, cy + T.over.rankBox.dy, '', { ...style, fontSize: '30px', color: '#ffd700' }).setOrigin(0.5);
+      if (linked) this.setRank(t(locale, 'dailyRankLoading'));
     } else {
       this.add.image(coinX - 30, cy + 60, 'coin').setDisplaySize(48, 48);
       this.add.text(coinX + 2, cy + 60, `×${collected.coin}`, { ...style, fontSize: '40px', color: '#c9b8dc' }).setOrigin(0, 0.5);
@@ -131,6 +133,7 @@ export class Over extends Phaser.Scene {
       items: [
         { id: 'home', box: home, activate: () => this.retry() },
         ...(this.buttons.score ? [{ id: 'score', box: this.buttons.score, activate: () => this.openDailyBoard() }] : []),
+        ...(this.buttons.rank ? [{ id: 'rank', box: this.buttons.rank, activate: () => this.openDailyBoard() }] : []),
         ...(this.buttons.share ? [{ id: 'share', box: this.buttons.share, visible: () => Boolean(this.shareFile), activate: () => this.shareRun() }] : []),
         ...['info', 'lang', 'feedback', 'leaderboard', 'mute', 'settings'].map((id) => ({ id, obj: this.tray.buttons[id], activate: () => play?.handleChrome(id) })),
       ],
@@ -149,7 +152,8 @@ export class Over extends Phaser.Scene {
     // navigator.share() needs, and Phaser emits it from inside that DOM event.
     const onShare = (pointer) => Boolean(this.shareFile) && overHit(pointer.x, pointer.y, this.buttons) === 'share';
     this.input.on('pointerdown', (pointer) => {
-      if (overHit(pointer.x, pointer.y, this.buttons) === 'score') {
+      const link = overHit(pointer.x, pointer.y, this.buttons);
+      if (link === 'score' || link === 'rank') {
         this.openDailyBoard();
         return;
       }
@@ -232,7 +236,14 @@ export class Over extends Phaser.Scene {
     });
   }
 
-  /** The daily score's link: the leaderboard on its 🌞 tab (past the death-tap lockout, like Home). */
+  /** The rank cell's text, shrunk to its box (a long zh rank stays inside the panel). */
+  setRank(text) {
+    if (!this.rankText) return;
+    this.rankText.setScale(1).setText(text);
+    this.rankText.setScale(fitScale(this.rankText.width, T.over.rankBox.width));
+  }
+
+  /** The daily score's and rank's link: the leaderboard on its 🌞 tab (past the death-tap lockout, like Home). */
   openDailyBoard() {
     if (!this.buttons?.score || !canRestart(this.openedAt, this.time.now, T.retryLockoutMs)) return;
     this.registry.set('leaderboardTab', 'daily');
@@ -246,7 +257,7 @@ export class Over extends Phaser.Scene {
    */
   loadDailyRank(play) {
     const { day, playerId } = this.daily;
-    const say = (key) => this.rankText?.setText(t(this.shareInfo.locale, key));
+    const say = (key) => this.setRank(t(this.shareInfo.locale, key));
     Promise.resolve(this.daily.sync)
       .catch(() => {})
       .then(() => {
@@ -261,7 +272,7 @@ export class Over extends Phaser.Scene {
           if (!me) return say('dailyRankUnavailable');
           this.dailyRank = { rank: me.rank, total: me.total };
           const rank = dailyRankText(this.shareInfo.locale, this.dailyRank);
-          this.rankText.setText(rank);
+          this.setRank(rank);
           if (this.buttons.share) this.makeShareCard({ ...this.cardData, scoreLine: `${this.cardData.scoreLine}  ·  ${rank}` });
         });
       });

@@ -99,6 +99,19 @@ test('a Daily Dump result: the score line is a box of its own, apart from Share 
       assert.ok(Math.abs(b.y - box.y) > (b.height + box.height) / 2, `${b.id} is on another row`);
     }
   }
+  for (const share of [true, false]) {
+    const layout = overButtonsLayout(cx, cy, T, { share, score: true });
+    const r = layout.rank;
+    assert.equal(r.id, 'rank');
+    assert.ok(r.height >= T.trayHitMin);
+    assert.ok(r.x - r.width / 2 >= cx - PANEL.width / 2 + STROKE && r.x + r.width / 2 <= cx + PANEL.width / 2 - STROKE, 'the rank cell inside the panel');
+    assert.equal(overHit(r.x, r.y, layout), 'rank');
+    for (const b of [layout.share, layout.home, layout.score].filter(Boolean)) {
+      const apart = Math.abs(b.y - r.y) > (b.height + r.height) / 2 || Math.abs(b.x - r.x) > (b.width + r.width) / 2;
+      assert.ok(apart, `the rank cell clears ${b.id}`);
+    }
+  }
+  assert.equal(overButtonsLayout(cx, cy, T).rank, null, 'a normal game over has no rank box');
   assert.equal(overButtonsLayout(cx, cy, T).score, null, 'a normal game over has no score box');
   assert.equal(overHit(cx, cy + T.over.scoreOffsetY, overButtonsLayout(cx, cy, T)), null);
 });

@@ -1,6 +1,6 @@
 # Plan: Daily Dump feedback (rank link, popup emoji and copy) + the leaderboard's own-row highlight
 - Created: 2026-11-10
-- Status: in progress (step 2)
+- Status: in progress (step 3)
 - Baseline: `a2e0c5a` on `main` (pushed; tree clean).
 - Whole-suite verification: `npm test` (473 pass), `npm run smoke` (357, full).
 - Repo plan copy: `.claude/plans/2026-11-10-daily-feedback.md` (`git add -f`), archived when done.
@@ -26,7 +26,7 @@ Michael's feedback after playing 0.11.0:
 - **Commit:** `fix(leaderboard): highlight all of the player's rows, not just the kinds this device has played`
 - **Result:** the new overlays check failed first (🚽 261 white, only the off-toilet rank asked for), passes after; npm test 473/473; full smoke 358/358.
 
-### Step 2/3: the daily rank reads "🏆 #1 of 1" and opens the 🌞 board  [pending]
+### Step 2/3: the daily rank reads "🏆 #1 of 1" and opens the 🌞 board  [done]
 - **Change:**
   - `src/i18n.js` `dailyRankText` → `🏆 #{rank} of {total}`. The 🏆 goes in the string catalog (`dailyRank`, en + zh-Hans + notes row), so the share text keeps its own plain wording (`dailyShareRank`, unchanged).
   - The status lines ("Posts when online", "Not saved", …) stay without the 🏆.
@@ -40,6 +40,7 @@ Michael's feedback after playing 0.11.0:
   - a real click on the rank cell opens the board on 🌞 (as the score link does).
 - **Screenshots:** the result in en + zh.
 - **Commit:** `feat(daily): the result's rank carries a 🏆 and opens the 🌞 board`
+- **Result:** npm test 473/473; full smoke 359/359 (daily 18: a real click on the rank cell opens the 🌞 board; the stubbed rank reads "🏆 #4 of 9", the share text has it without the 🏆). Screenshots en + zh (the zh rank shrinks to its cell). The rank box's place is `TUNING.over.rankBox`, read by both the layout and Over's text.
 
 ### Step 3/3: the popup's emoji line and new copy; 0.11.1  [pending]
 - **Change:**
