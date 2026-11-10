@@ -353,6 +353,15 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         const taken = await evaluate(`JSON.stringify({ name: ${play}.getSaveState().name, stored: JSON.parse(localStorage.getItem('flappyPoop.save')).name, open: !${el('save-panel')}.hidden, checks: globalThis.__nameChecks.slice(${checks0}) })`).then(JSON.parse);
         const takenStatus = await status();
         ok(taken.name === 'Smoke' && taken.stored === 'Smoke' && taken.open && takenStatus.text === (await tx('saveNameTaken')) && takenStatus.cls.includes('error') && taken.checks.length === 1 && taken.checks[0][0] === 'Taken' && /^[A-Za-z0-9_-]{22}$/.test(taken.checks[0][1]), `a username another player holds is refused with the user-code steps; nothing stored (still "${taken.name}"); blur and Save asked the board once`);
+        // The new-name rules come before the board: a name with a space is refused with its reason,
+        // nothing stored and nothing asked; so is a 3-letter one.
+        const checks1 = await evaluate(`globalThis.__nameChecks.length`);
+        await evaluate(`globalThis.__nameFree = true, true`);
+        await typeAndSave('ab c');
+        const spaced = { name: await evaluate(`${play}.getSaveState().name`), status: await status() };
+        await typeAndSave('Abc');
+        const shortName = { name: await evaluate(`${play}.getSaveState().name`), status: await status(), asked: (await evaluate(`globalThis.__nameChecks.length`)) - checks1 };
+        ok(spaced.name === 'Smoke' && spaced.status.text === (await tx('saveNameSpace')) && spaced.status.cls.includes('error') && shortName.name === 'Smoke' && shortName.status.text === (await tx('saveNameShort')) && shortName.asked === 0, `new names follow the rules: "ab c" → "${spaced.status.text}", "Abc" → "${shortName.status.text}"; nothing stored, the board never asked`);
         // Offline (the board cannot say): stored on the device, with the note.
         await evaluate(`globalThis.__nameFree = null, true`);
         await typeAndSave('Offline');

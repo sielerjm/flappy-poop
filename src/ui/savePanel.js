@@ -9,7 +9,7 @@
 import { TUNING as T, TEST_MODE } from '../config.js';
 import { t, welcomeText } from '../i18n.js';
 import { isTestWord } from '../logic.js';
-import { loadLocal, saveLocal, ensureId, validateName, exportCode, importCode } from '../save.js';
+import { loadLocal, saveLocal, ensureId, validateName, checkNewName, exportCode, importCode } from '../save.js';
 
 const PANEL_ID = 'save-panel';
 const COPIED_MS = 2000;
@@ -221,9 +221,10 @@ function claimName(name) {
 async function onNameChange() {
   // The test-mode trigger word is never stored as a name (on a phone, tapping Save blurs the field first).
   if (isTestWord(dom.name.value, TEST_MODE.words)) return false;
-  const { ok, name } = validateName(dom.name.value);
+  // New names follow checkNewName's rules; the name already saved here always passes (legacy names).
+  const { ok, name, reason } = checkNewName(dom.name.value, { current: getState().name });
   if (!ok) {
-    if (name.length > 0) setStatus(t(ctx.locale, 'saveNameRequired'), 'error');
+    if (name.length > 0) setStatus(nameRuleText(reason), 'error');
     return false;
   }
   if (name === getState().name) return 'stored';
@@ -249,15 +250,21 @@ async function onNameChange() {
   return verdict === 'unknown' ? 'offline' : 'stored';
 }
 
+/** The status line for a name checkNewName refused. */
+function nameRuleText(reason) {
+  const key = { long: 'saveNameLong', space: 'saveNameSpace', emoji: 'saveNameEmoji', short: 'saveNameShort', blocked: 'saveNameBlocked' }[reason] ?? 'saveNameRequired';
+  return t(ctx.locale, key);
+}
+
 /** Save button: store the username and say so, so the player knows it stuck. */
 async function onSave() {
   if (isTestWord(dom.name.value, TEST_MODE.words)) {
     toggleTestMode();
     return;
   }
-  const { ok } = validateName(dom.name.value);
+  const { ok, reason } = checkNewName(dom.name.value, { current: getState().name });
   if (!ok) {
-    setStatus(t(ctx.locale, 'saveNameRequired'), 'error');
+    setStatus(nameRuleText(reason), 'error');
     dom.name.focus();
     return;
   }

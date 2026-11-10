@@ -375,3 +375,39 @@ test('save codes carry levels as an optional l key: round trip, absent on old co
     assert.equal(r.error, 'unrecognised');
   }
 });
+
+test('checkNewName: new usernames are 4–16 characters (2+ with CJK), with no spaces, emoji or listed words', async () => {
+  const { checkNewName, NAME_BLOCKED } = await import('../src/save.js');
+  const reason = (raw, opts) => checkNewName(raw, opts).reason;
+  assert.equal(reason('Abcd'), null, 'four letters');
+  assert.equal(reason('  Abcd  '), null, 'trimmed first');
+  assert.equal(checkNewName('  Abcd  ').name, 'Abcd');
+  assert.equal(reason('Abc'), 'short');
+  assert.equal(reason(''), 'empty');
+  assert.equal(reason('   '), 'empty');
+  assert.equal(reason('A'.repeat(16)), null);
+  assert.equal(reason('A'.repeat(17)), 'long');
+  assert.equal(reason('张伟'), null, 'two CJK characters');
+  assert.equal(reason('张'), 'short', 'one is too few');
+  assert.equal(reason('すし'), null, 'Japanese counts as CJK');
+  assert.equal(reason('김민'), null, 'Korean counts as CJK');
+  assert.equal(reason('best players'), 'space');
+  assert.equal(reason('tab\there'), 'space');
+  assert.equal(reason('💩💩💩💩'), 'emoji');
+  assert.equal(reason('Poop💩Man'), 'emoji');
+  assert.equal(reason('Flag🇨🇭Name'), 'emoji', 'a flag');
+  assert.equal(reason('Player1234'), null, 'digits are not emoji');
+  for (const word of NAME_BLOCKED) assert.equal(reason(`xx${word.toUpperCase()}xx`), 'blocked', word);
+  for (const fine of ['Scunthorpe', 'Hancock', 'Peacock', 'Shiitake', 'therapist', 'Grapefruit', 'Cockatoo', 'Pussycat', 'Assassin', 'Classic']) assert.equal(reason(fine), null, fine);
+  assert.ok(NAME_BLOCKED.every((w) => w.length >= 4 && w === w.toLowerCase()), 'no short stems; stored lowercase');
+});
+
+test('checkNewName grandfathers the name already saved (any case); validateName still takes every legacy name', async () => {
+  const { checkNewName } = await import('../src/save.js');
+  for (const legacy of ['best players A&G', '💩', 'Bo', 'shithead']) {
+    assert.equal(checkNewName(legacy, { current: legacy }).ok, true, `${legacy} re-saved as its own name`);
+    assert.equal(checkNewName(legacy.toUpperCase(), { current: legacy }).ok, true, `${legacy} in another case`);
+    assert.equal(checkNewName(legacy).ok, false, `${legacy} as a new name`);
+    assert.equal(validateName(legacy).ok, true, `${legacy} still loads`);
+  }
+});

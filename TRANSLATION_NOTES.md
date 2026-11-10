@@ -190,7 +190,7 @@ Short, playful, clear. Fit a 720×1280 logical field; How to play / About body w
 3. 在其他手机或浏览器上，把它粘贴到“载入用户码”：你的名字和分数会跟着你，排行榜也会把两边合并为同一位玩家。
 4. 要更改用户名，输入新名字并按“保存”。使用你用户码的其他设备和浏览器会自动更新为新名字。 |
 | saveNameLabel | Username | 用户名 |
-| saveNamePlaceholder | 1–16 characters | 1–16 个字符 |
+| saveNamePlaceholder | 4–16 characters | 4–16 个字符 |
 | saveYourCode | Save user code | 保存用户码 |
 | saveCopy | Copy | 复制 |
 | saveCopied | Copied | 已复制 |
@@ -199,11 +199,16 @@ Short, playful, clear. Fit a 720×1280 logical field; How to play / About body w
 | saveLoadPlaceholder | Paste a code | 粘贴存档码 |
 | saveSave | Save | 保存 |
 | saveNameSaved | Username saved | 用户名已保存 |
+| saveNameShort | Usernames need at least 4 characters (2 in Chinese, Japanese or Korean) | 用户名至少需要4个字符（中文、日文或韩文至少2个） |
+| saveNameSpace | Usernames cannot have spaces | 用户名不能包含空格 |
+| saveNameEmoji | Usernames cannot have emoji | 用户名不能包含表情符号 |
+| saveNameBlocked | Please pick a different username | 请换一个用户名 |
+| saveNameLong | Usernames can have at most 16 characters | 用户名最多16个字符 |
 | testModeOn | Test mode on — scores won't be saved | 测试模式已开启——分数不会保存 |
 | testModeOff | Test mode off | 测试模式已关闭 |
 | saveWelcome | Welcome back, {name} — {scores} | 欢迎回来，{name}——{scores} |
 | saveWelcomeNoScores | Welcome back, {name} | 欢迎回来，{name} |
-| saveNameRequired | Enter a username first (1–16 characters) | 请先输入用户名（1–16 个字符） |
+| saveNameRequired | Enter a username first (4–16 characters) | 请先输入用户名（4–16 个字符） |
 | saveErrorDamaged | Save code is damaged or was edited | 存档码已损坏或被修改 |
 | saveErrorUnrecognised | Unrecognised save code | 无法识别的存档码 |
 | saveNameChecking | Checking the leaderboard… | 正在查询排行榜… |

@@ -85,6 +85,39 @@ export function validateName(raw) {
   return { ok: n >= NAME_MIN && n <= NAME_MAX, name };
 }
 
+/** Fewest code points in a new username: 4, or 2 when it holds Chinese / Japanese / Korean characters. */
+export const NEW_NAME_MIN = 4;
+export const NEW_NAME_MIN_CJK = 2;
+/**
+ * Words a new username may not contain (lowercased substring match). Kept to longer, explicit
+ * words with no short stems, so ordinary names (Scunthorpe, Hancock, therapist) still pass.
+ */
+export const NAME_BLOCKED = ['fuck', 'shit', 'bitch', 'whore', 'slut', 'nigger', 'nigga', 'faggot', 'retard', 'dildo', 'wanker', 'twat', 'hitler'];
+const CJK_RE = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Hangul}]/u;
+const EMOJI_RE = /\p{Extended_Pictographic}|\p{Regional_Indicator}/u;
+
+/**
+ * The rules for a username typed now (the save panel only): validateName's trim and 16-character
+ * cap, plus no whitespace, no emoji, at least NEW_NAME_MIN code points (NEW_NAME_MIN_CJK with CJK
+ * characters) and none of NAME_BLOCKED. A name equal to `current` (case-insensitive) always passes:
+ * names saved before these rules keep working, and re-saving one is not a new name. Returns
+ * { ok, name, reason: null | 'empty' | 'long' | 'space' | 'emoji' | 'short' | 'blocked' }.
+ */
+export function checkNewName(raw, { current = '' } = {}) {
+  const { name } = validateName(raw);
+  const n = Array.from(name).length;
+  const out = (reason) => ({ ok: reason === null, name, reason });
+  if (n === 0) return out('empty');
+  if (n > NAME_MAX) return out('long');
+  if (typeof current === 'string' && current.trim() && name.toLowerCase() === current.trim().toLowerCase()) return out(null);
+  if (/\s/u.test(name)) return out('space');
+  if (EMOJI_RE.test(name)) return out('emoji');
+  if (n < (CJK_RE.test(name) ? NEW_NAME_MIN_CJK : NEW_NAME_MIN)) return out('short');
+  const lower = name.toLowerCase();
+  if (NAME_BLOCKED.some((w) => lower.includes(w))) return out('blocked');
+  return out(null);
+}
+
 /** Level (≥ 1) from a stored / wire value; anything else is level 1. */
 function normalizeLevel(v) {
   return Number.isInteger(v) && v >= 1 ? v : 1;
