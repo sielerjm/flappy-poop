@@ -20,6 +20,10 @@ import {
   isFinalLevel,
   levelProgress,
   withLevelPipes,
+  utcDayKey,
+  dailySeed,
+  dailyLevel,
+  dailyRunStart,
   levelBarLayout,
   tutorialSpawn,
   levelColor,
@@ -107,7 +111,7 @@ import { createGlow, createRectGlow } from '../ui/glow.js';
 import { createFinishTexture } from '../ui/finish.js';
 import { createLightTexture } from '../ui/pipeShade.js';
 import { createLevelBar } from '../ui/levelBar.js';
-import { createSubmitStore, createMergeStore, createRenameStore, createTournamentQueue, submitPlans, submitScore, submitTournament, checkNameAvailable, mergePlayers, fetchPlayerName, nameAction } from '../leaderboard.js';
+import { createSubmitStore, createMergeStore, createRenameStore, createTournamentQueue, createDailyStore, createDailyQueue, submitPlans, submitScore, submitTournament, checkNameAvailable, mergePlayers, fetchPlayerName, nameAction } from '../leaderboard.js';
 import { createButton } from '../ui/button.js';
 import { createToggle } from '../ui/toggle.js';
 import { openSavePanel, isSavePanelOpen, showAdoptedName } from '../ui/savePanel.js';
@@ -185,6 +189,13 @@ export class Play extends Phaser.Scene {
     this.submitStore = createSubmitStore(); // last confirmed leaderboard submit
     this.mergeStore = createMergeStore(); // account merges (a pasted user code) the board has not confirmed yet
     this.tournamentQueue = createTournamentQueue(); // finished tournaments (🏅) the board has not confirmed yet
+    this.dailyStore = createDailyStore(); // this device's Daily Dump (🌞) attempt: claimed at the start, final at the crash
+    this.dailyQueue = createDailyQueue(); // daily scores the board has not confirmed yet
+    // The Daily Dump run (startDaily → start): { day, level, startPipes, playerId } while one runs, else null.
+    // runIsDaily latches per run like runIsTest; dailyNext carries startDaily's day through the launch slide.
+    this.runIsDaily = false;
+    this.daily = null;
+    this.dailyNext = null;
     this.renameStore = createRenameStore(); // a rename typed on this device, until a post carries it to the board
     this.boardNameTaken = false; // the last sync was refused because another player holds this username
     // Levels: pipe pairs passed decide the level; speed is per level, gap is fixed.
@@ -329,6 +340,8 @@ export class Play extends Phaser.Scene {
     // Level progress bar above the score: hidden on the ready screen, shown from start(), kept through breaks and death.
     this.levelBar = createLevelBar(this, levelBarLayout(T, this.col.width, this.col.x)).setVisible(false);
     this.refreshLevelBar();
+    // A Daily Dump run has no levels to cross: "🌞 LV n" stands where the level bar would.
+    this.dailyHud = this.add.text(W / 2, levelBarLayout(T, this.col.width, this.col.x).y, '', { ...TEXT_STYLE, fontSize: '34px', color: '#ffd700', strokeThickness: 8 }).setOrigin(0.5).setDepth(20).setVisible(false);
     // 🚽 left of the score while a toilet-mode run is on.
     this.toiletHud = this.add.text(W / 2 - 96, T.hudScoreY, TOILET_EMOJI, { fontFamily: 'sans-serif', fontSize: '44px' }).setOrigin(0.5).setDepth(20).setVisible(false);
     // Test mode badge (refreshTestBadge): "🧪 TEST MODE" top-left on the ready screen, a bare 🧪 at the
@@ -559,9 +572,9 @@ export class Play extends Phaser.Scene {
    * The start tap: the poop slides into place, then the run starts with a flap. `hold` (a match's
    * countdown): it slides and waits there; the Versus GO starts it (startRace).
    */
-  launch({ hold = false } = {}) {
+  launch({ hold = false, daily = false } = {}) {
     if (this.launching || this.state !== 'ready') return;
-    if (this.versusOn && this.versusOffered()) {
+    if (!daily && this.versusOn && this.versusOffered()) {
       // Two-player mode: the Versus scene takes over (it stops this scene and launches the halves).
       this.focus?.hide();
       this.scene.start('Versus', { match: null });
@@ -589,6 +602,19 @@ export class Play extends Phaser.Scene {
         if (this.chromeArgs('tap').overlay) this.pauseRun();
       },
     });
+  }
+
+  /**
+   * Today's Daily Dump (🌞), from the popup's Play (Practice in test mode): the launch slide, then
+   * start() builds the day's shared course at the day's level. The 👥 toggle is ignored. `day`
+   * pins a date for the smoke; the game never passes one. False when no run can start here.
+   */
+  startDaily({ day } = {}) {
+    if (this.match || this.launching || this.state !== 'ready') return false;
+    const d = day ?? utcDayKey();
+    this.dailyNext = { day: d, level: dailyLevel(d, T) };
+    this.launch({ daily: true });
+    return this.launching;
   }
 
   /**
@@ -622,6 +648,15 @@ export class Play extends Phaser.Scene {
   }
 
   start() {
+    // A Daily Dump run (startDaily): the day's shared course replaces this page's random one, no 🚽.
+    const daily = this.dailyNext;
+    this.dailyNext = null;
+    this.runIsDaily = Boolean(daily);
+    this.dailySync = null;
+    if (daily) {
+      this.toilet = false; // this run only: create() reads the toggle again for the next one
+      this.course = createCourse(dailySeed(daily.day), this.tune, { shared: true });
+    }
     this.state = 'playing';
     this.bob.stop();
     this.scoreText.setVisible(true);
@@ -630,8 +665,9 @@ export class Play extends Phaser.Scene {
     this.poop.body.setGravityY(T.gravity);
     // A test run may start on a later level (testRunStart: the pairs before it passed, a par score);
     // a normal run is testRunStart(1): level 1, nothing passed, score 0.
+    // A daily run starts at the day's level with a score of 0 (dailyRunStart) and never leaves it.
     this.runIsTest = this.isTestMode();
-    const begin = testRunStart(this.runIsTest ? this.testSettings().startLevel : 1, this.tune);
+    const begin = daily ? dailyRunStart(daily.level, this.tune) : testRunStart(this.runIsTest ? this.testSettings().startLevel : 1, this.tune);
     this.level = begin.level;
     this.pipesPassed = begin.pipes;
     this.pipesSpawned = begin.pipes;
@@ -644,7 +680,8 @@ export class Play extends Phaser.Scene {
     // The purse: every run starts empty (coins last across the levels of one run only).
     this.effects.spendCoins(this.effects.coins());
     this.refreshCoinHud();
-    this.armKernel();
+    if (daily) this.kernel = null; // no kernels, coins or shop in a Daily Dump
+    else this.armKernel();
     this.crashesThisLevel = 0; // a two-player crash forfeits the level's +3 (levelClearCoins)
     this.distance = 0;
     this.popupOrder = [];
@@ -655,12 +692,32 @@ export class Play extends Phaser.Scene {
     this.finishSpawned = false;
     this.levelBreak = false;
     this.applyLevel();
-    this.levelBar.setVisible(true);
+    this.levelBar.setVisible(!daily);
     this.refreshLevelBar();
+    this.dailyHud.setText(daily ? `\u{1F31E} ${levelLabel(this.locale, this.level)}` : '').setVisible(Boolean(daily));
     this.bgFade?.stop();
     this.bgFade = null;
     this.bgColor.setFillStyle(levelColor(this.level, LEVEL_COLORS, T.levels.whiteBlend), 1);
     this.prefillPipes();
+    // The attempt is claimed now (not at the crash), so a reload mid-run cannot hand the day back.
+    // Practice (a test run) claims nothing.
+    this.daily = null;
+    if (daily) {
+      if (!this.save.id) this.save = ensureId(this.save);
+      this.daily = { day: daily.day, level: daily.level, startPipes: begin.pipes, playerId: this.save.id, saved: null };
+      this.saveDailyAttempt(false);
+    }
+  }
+
+  /**
+   * This device's Daily Dump attempt (dailyStore): the day, the level, the score and pipes so far and
+   * what was picked up; `final` once the run is over. Practice writes nothing. Returns the record.
+   */
+  saveDailyAttempt(final = false) {
+    if (!this.runIsDaily || this.runIsTest || !this.daily) return null;
+    const pipes = Math.max(0, this.pipesPassed - this.daily.startPipes);
+    this.daily.saved = { score: this.score, pipes };
+    return this.dailyStore.save({ day: this.daily.day, playerId: this.daily.playerId, level: this.daily.level, score: this.score, pipes, collected: { ...this.collected }, final });
   }
 
   /** Crossfade the background to the current level's colour (used at each break). */
@@ -1000,6 +1057,9 @@ export class Play extends Phaser.Scene {
    * post is retried on the next game over or board open.
    */
   syncLeaderboard() {
+    // A Daily Dump record left unfinished (a reload mid-run) is that day's attempt as it stands
+    // (never the run this page is flying right now, paused under the board or not).
+    if (!(this.runIsDaily && this.state !== 'dead')) this.finishAbandonedDaily();
     // Queued account merges go first, so the rows the posts land on are already one player's.
     const merges = this.mergeStore.load().reduce(
       (chain, pair) =>
@@ -1194,8 +1254,8 @@ export class Play extends Phaser.Scene {
   grantTest(draw) {
     if (!this.runIsTest || !this.isTestMode()) return null;
     if (this.state !== 'playing' && this.state !== 'paused') return null;
-    const pairsLeft = this.finishSpawned ? 0 : skipPairs(this.pipesPassed, this.level, this.tune);
-    const resolved = resolveMystery(draw, { beans: this.effects.beans(), pairsLeft }, T);
+    const pairsLeft = this.finishSpawned || this.runIsDaily ? 0 : skipPairs(this.pipesPassed, this.level, this.tune);
+    const resolved = this.dailyDraw(resolveMystery(draw, { beans: this.effects.beans(), pairsLeft }, T));
     this.openMystery(resolved);
     if (this.state === 'paused') this.pauseEffects();
     return resolved;
@@ -1224,6 +1284,7 @@ export class Play extends Phaser.Scene {
     if (this.shopOpen) this.refreshShop();
     this.showEscapedBanner(); // a finished match half keeps its banner in the new language
     this.refreshLevelBar();
+    if (this.runIsDaily) this.dailyHud.setText(`\u{1F31E} ${levelLabel(this.locale, this.level)}`);
     this.refreshTestBadge();
   }
 
@@ -1657,7 +1718,7 @@ export class Play extends Phaser.Scene {
     const before = new Set(this.worldObjects());
     let last = edge;
     for (const x of xs) {
-      if (this.pipesSpawned >= levelEnd(this.level, this.tune)) break;
+      if (!this.runIsDaily && this.pipesSpawned >= levelEnd(this.level, this.tune)) break; // a Daily Dump never ends its level
       this.spawnPipePair(edge - x);
       last = x;
     }
@@ -1811,7 +1872,7 @@ export class Play extends Phaser.Scene {
     // An extra coin from level 2 (course.coin) only fills a band slot nothing else took, so it never
     // costs a fiber, a box, a bean or the guaranteed kernel its place.
     const slotTaken = boxHere || beanHere || band || kernelBand || kernelPast;
-    if (!slotTaken && scripted === undefined && this.level >= 2 && this.course.coin(n)) this.spawnBandItem('coin', still ? stillY() : null, shift);
+    if (!slotTaken && scripted === undefined && this.level >= 2 && !this.runIsDaily && this.course.coin(n)) this.spawnBandItem('coin', still ? stillY() : null, shift);
     if (kind && !band) this.spawnGapItem(kind, x, gapY, gapH, move ? top : null);
 
     // Beans ride halfway between this pair and the next, bobbing top to bottom (still in level 1).
@@ -1844,6 +1905,7 @@ export class Play extends Phaser.Scene {
     this.finishItem(item, kind);
     if (stillY == null) item.setData({ bob: 'band', elapsed: 0, phase, period });
     if (kind === 'mystery') {
+      item.setData('pair', this.pipesSpawned); // its reward stream on a shared course (course.reward)
       const frames = this.anims.get('mystery-spin').frames.length;
       item.play({ key: 'mystery-spin', startFrame: this.course.spinFrame(this.pipesSpawned, frames) });
       if (this.state === 'paused') item.anims.pause();
@@ -2285,6 +2347,7 @@ export class Play extends Phaser.Scene {
     if (this.effects.powerActive()) return; // farting: fiber, probiotic, bacteria and boxes scroll straight through
     const kind = item.getData('kind');
     const kernel = Boolean(item.getData('kernel')); // read before destroy() takes the item's data with it
+    const itemPair = item.getData('pair'); // a box's pair (spawnBandItem)
     const { x, y } = item;
     // The burst uses the item's current frame (a spinning box keeps its angle) and its own size (a kernel is drawn smaller).
     const ghost = this.add.image(x, y, item.texture.key, item.frame.name).setScale(item.scaleX).setDepth(12);
@@ -2304,8 +2367,9 @@ export class Play extends Phaser.Scene {
       const pairsLeft = this.finishSpawned ? 0 : skipPairs(this.pipesPassed, this.level, this.tune);
       const other = this.match?.slots[this.player === 1 ? 1 : 0];
       const draws = this.match ? catchUpDraws(catchUpTier((other?.pipesPassed ?? 0) - this.pipesPassed, T), T) : T.mystery.draws;
-      const draw = rollMystery(this.match ? this.rngDraw : this.course.rng, T, draws);
-      this.openMystery(resolveMystery(draw, { beans: this.effects.beans(), pairsLeft }, T), x, y);
+      const pair = itemPair ?? this.pipesSpawned;
+      const draw = rollMystery(this.match ? this.rngDraw : this.course.reward(pair), T, draws);
+      this.openMystery(this.dailyDraw(resolveMystery(draw, { beans: this.effects.beans(), pairsLeft: this.runIsDaily ? 0 : pairsLeft }, T)), x, y);
     } else if (kind === 'fiber') {
       this.eatFiber();
     } else if (kind === 'probiotic') {
@@ -2344,6 +2408,11 @@ export class Play extends Phaser.Scene {
     sfx.pickup();
   }
 
+  /** A Daily Dump has no purse: a box's coin draw opens as fiber there (a skip already does: no line to skip to). */
+  dailyDraw(draw) {
+    return this.runIsDaily && MYSTERY_COINS[draw] !== undefined ? 'fiber' : draw;
+  }
+
   /** Probiotic, picked up or from a box: probioticPipes more on the stack. */
   takeProbiotic() {
     this.collected.probiotic += 1;
@@ -2354,6 +2423,7 @@ export class Play extends Phaser.Scene {
 
   /** Coins picked up or paid by a box: into the purse, counted for the run (collected.coin counts coins), the HUD and the coin sound. */
   takeCoins(n) {
+    if (this.runIsDaily) return; // no coins in a Daily Dump (nothing should pay any: this is the backstop)
     this.effects.addCoins(n);
     this.collected.coin += n;
     this.refreshCoinHud();
@@ -2652,6 +2722,7 @@ export class Play extends Phaser.Scene {
    * (the right edge on a phone).
    */
   skipToFinish() {
+    if (this.runIsDaily) return; // endless: no line to skip to (resolveMystery already turned the draw into fiber)
     const pairs = skipPairs(this.pipesPassed, this.level, this.tune);
     const mult = this.effects.multiplier();
     const end = levelEnd(this.level, this.tune);
@@ -2704,6 +2775,14 @@ export class Play extends Phaser.Scene {
     }
     // A test run records nothing: no legacy best, no top-list entry, no leaderboard sync.
     if (this.runIsTest) return;
+    // A Daily Dump records only itself: the attempt is final and its score queued for the 🌞 board,
+    // never the 🏆 top list or best (an endless score above maxScore would stop every 🏆 post).
+    if (this.runIsDaily) {
+      const rec = this.saveDailyAttempt(true);
+      if (rec) this.dailyQueue.add(rec);
+      this.dailySync = this.syncLeaderboard();
+      return;
+    }
     this.best.save(this.score); // legacy store, kept for first-run seeding
     this.save = saveLocal(recordScore(this.save, this.score, { toilet: this.toilet, level: this.level }));
     this.syncLeaderboard(); // fire and forget; never awaited inside the update loop
@@ -2755,12 +2834,21 @@ export class Play extends Phaser.Scene {
     slot.alpha = this.poop.alpha; // the respawn blink, so the ghost blinks too
   }
 
+  /** A Daily Dump record still unfinished (its run was cut off by a reload): final as it stands, its score queued. */
+  finishAbandonedDaily() {
+    const rec = this.dailyStore.peek();
+    if (!rec || rec.final) return;
+    this.dailyQueue.add(this.dailyStore.save({ ...rec, final: true }));
+  }
+
   /** The game-over panel after deathToOverMs; `won` swaps its headline, `test` hides Share. A match has no Over: the Versus scene shows the result. */
   showOver(won = false) {
     if (this.match) return;
     this.time.delayedCall(T.deathToOverMs, () => {
       this.physics.pause();
-      this.scene.launch('Over', { score: this.score, won, test: this.runIsTest, toilet: this.toilet, level: this.level, pipes: this.pipesPassed, collected: { ...this.collected } });
+      const daily = this.runIsDaily ? { day: this.daily?.day ?? null, level: this.level, practice: this.runIsTest, sync: this.dailySync ?? null } : null;
+      const pipes = this.runIsDaily && this.daily ? this.pipesPassed - this.daily.startPipes : this.pipesPassed;
+      this.scene.launch('Over', { score: this.score, won, test: this.runIsTest, toilet: this.toilet, level: this.level, pipes, collected: { ...this.collected }, daily });
     });
   }
 
@@ -2933,6 +3021,9 @@ export class Play extends Phaser.Scene {
     }
 
     if (this.state === 'playing') {
+      // A Daily Dump attempt is rewritten whenever the score or pipe count moved, so a reload loses nothing.
+      const ds = this.daily?.saved;
+      if (ds && (ds.score !== this.score || ds.pipes !== this.pipesPassed - this.daily.startPipes)) this.saveDailyAttempt(false);
       // Fart power clock and envelope; grace countdown; distance-based spawning.
       this.effects.tickPower(delta);
       if (this.effects.powerActive()) {
@@ -2963,7 +3054,7 @@ export class Play extends Phaser.Scene {
         this.distanceSinceSpawn += this.scrollSpeed() * dt;
         if (this.distanceSinceSpawn >= spacing) {
           this.distanceSinceSpawn -= spacing;
-          if (this.pipesSpawned === levelEnd(this.level, this.tune) && !this.finishSpawned) {
+          if (!this.runIsDaily && this.pipesSpawned === levelEnd(this.level, this.tune) && !this.finishSpawned) {
             this.spawnFinishLine();
           } else if (this.finishSpawned) {
             this.distanceSinceSpawn = 0; // nothing follows the line until the break ends, fart or not

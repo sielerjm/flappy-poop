@@ -66,6 +66,7 @@ export const SECTIONS = [
   { name: 'versus-match', needs: [], about: 'two players: shared pause, level sync and ready check, catch-up, respawn, result, rematch' },
   { name: 'versus-ghost', needs: [], about: "two players: the ghost at the distance gap and the rival marker on the level bar" },
   { name: 'tournament', needs: [], about: '🏅 tournament: the join-screen button, the lobby (guest, pasted code, host), the bracket, named races, Continue, the podium, abandon' },
+  { name: 'daily', needs: [], about: "🌞 Daily Dump: the day's level and shared course, endless (no finish line), no coins or skips, the attempt claimed at the start and final at the crash, nothing on the 🏆 lists, an abandoned run finalised" },
 ];
 
 /** What a section needs: its own list, or (omitted) every section before it. */
@@ -2518,6 +2519,102 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await metrics(720, 1280);
         for (let i = 0; i < 60 && (await evaluate('__flappy.scale.width')) !== 720; i += 1) await sleep(100);
         await cdp.send('Emulation.clearDeviceMetricsOverride');
+      }
+    });
+
+    await section('daily', async () => {
+      // Daily Dump (🌞), on a pinned day so the checks never depend on today's level. The run is kept
+      // alive by a long grace (die() ignores hits while it lasts); the board is muzzled, so the score
+      // waits in the daily queue. Everything the section writes is put back at the end.
+      {
+        const P = `__flappy.scene.getScene('Play')`;
+        const L = `Promise.all([import('./src/logic.js'), import('./src/config.js'), import('./src/leaderboard.js')])`;
+        const DAY = '2026-11-10';
+        const DAY2 = '2026-11-09';
+        const keys = await evaluate(`import('./src/config.js').then((m) => JSON.stringify([m.LEADERBOARD.dailyKey, m.LEADERBOARD.dailyQueueKey]))`).then(JSON.parse);
+        const waitFor = async (expr, tries = 60) => {
+          for (let i = 0; i < tries; i += 1) {
+            if (await evaluate(expr)) return true;
+            await sleep(100);
+          }
+          return false;
+        };
+        // scene.restart() is queued: wait for the new create() (a fresh readyBoxes), not the old instance's 'ready'.
+        const home = async () => {
+          await evaluate(`(globalThis.__dailyBoxes = ${P}.readyBoxes, __flappy.scene.stop('Over'), ${P}.scene.restart(), true)`);
+          await waitFor(`${P}.readyBoxes !== globalThis.__dailyBoxes && ${P}.state === 'ready' && !${P}.launching`);
+        };
+        const stored = () => evaluate(`JSON.stringify({ rec: JSON.parse(localStorage.getItem('${keys[0]}') ?? 'null'), queue: JSON.parse(localStorage.getItem('${keys[1]}') ?? '[]') })`).then(JSON.parse);
+        await evaluate(`(${keys.map((k) => `localStorage.removeItem('${k}')`).join(', ')}, true)`);
+        await home();
+        const before = await evaluate(`JSON.stringify({ top: ${P}.save.top ?? null, best: localStorage.getItem(${JSON.stringify(TT.bestKey)}) })`);
+        const want = await evaluate(`${L}.then(([l, c]) => { const lv = l.dailyLevel('${DAY}', c.TUNING); return JSON.stringify({ level: lv, pipes: l.levelEnd(lv - 1, c.TUNING), end: l.levelEnd(lv, c.TUNING), seed: l.dailySeed('${DAY}') }); })`).then(JSON.parse);
+
+        // Start on the pinned day, with the 🚽 and 👥 toggles on: the run ignores both.
+        await evaluate(`__flappy.registry.set('toilet', true), __flappy.registry.set('versus', true), true`);
+        await home();
+        const started = await evaluate(`${P}.startDaily({ day: '${DAY}' })`);
+        await waitFor(`${P}.state === 'playing'`);
+        await evaluate(`${P}.graceLeftMs = 1e9, true`);
+        const s0 = await evaluate(`JSON.stringify({ daily: ${P}.runIsDaily, test: ${P}.runIsTest, level: ${P}.level, score: ${P}.score, passed: ${P}.pipesPassed, shared: ${P}.course.shared, seed: ${P}.course.seed, toilet: ${P}.toilet, toiletHud: ${P}.toiletHud.visible, bar: ${P}.levelBar.visible, hud: ${P}.dailyHud.visible ? ${P}.dailyHud.text : null, kernel: ${P}.kernel, versus: __flappy.scene.isActive('Versus') })`).then(JSON.parse);
+        // The day's first pairs (the pre-fill plus 8 more spawned at once): a second run must lay the same.
+        const gapsNow = () => evaluate(`(() => { const p = ${P}; for (let i = 0; i < 8; i += 1) p.spawnPipePair(); return JSON.stringify(p.pipes.getChildren().filter((c) => c.getData('scoring')).map((c) => Math.round(c.y))); })()`);
+        const gaps0 = await gapsNow();
+        ok(
+          started && s0.daily && !s0.test && s0.level === want.level && s0.score === 0 && s0.passed === want.pipes && s0.shared && s0.seed === want.seed && !s0.toilet && !s0.toiletHud && !s0.bar && s0.hud === `\u{1F31E} LV ${want.level}` && s0.kernel === null && !s0.versus,
+          `startDaily(${DAY}): level ${s0.level} (want ${want.level}), score ${s0.score}, pairs ${s0.passed} passed, the day's shared course, no 🚽 / 👥 / level bar / kernel, HUD "${s0.hud}"`,
+        );
+        const r0 = await stored();
+        ok(r0.rec && r0.rec.day === DAY && r0.rec.level === want.level && r0.rec.final === false && r0.rec.score === 0 && r0.queue.length === 0, `the attempt is claimed at the start (final ${r0.rec?.final}, score ${r0.rec?.score}); nothing queued yet`);
+
+        // Endless: put the run one pair before its level's end and let it spawn past it.
+        await evaluate(`(() => { const p = ${P}; p.pipesSpawned = ${want.end} - 1; p.pipesPassed = ${want.end} - 3; return true; })()`);
+        await waitFor(`${P}.pipesSpawned >= ${want.end} + 3`, 80);
+        const s1 = await evaluate(`JSON.stringify({ spawned: ${P}.pipesSpawned, line: Boolean(${P}.finishLine), lineOut: ${P}.finishSpawned, level: ${P}.level, state: ${P}.state })`).then(JSON.parse);
+        ok(s1.spawned >= want.end + 3 && !s1.line && !s1.lineOut && s1.level === want.level && s1.state === 'playing', `endless: pairs keep coming past the level's end (${s1.spawned} > ${want.end}), no finish line, still level ${s1.level}`);
+
+        // The score is saved as it grows.
+        await evaluate(`(${P}.score = 17, ${P}.scoreText.setText('17'), true)`);
+        await sleep(200);
+        const r1 = await stored();
+        ok(r1.rec?.score === 17 && r1.rec.final === false && r1.rec.pipes > 0, `mid-run the record follows the score (${r1.rec?.score}, ${r1.rec?.pipes} pipes, final ${r1.rec?.final})`);
+
+        // No coins: 40 more pairs spawn no coin; a box's coin and skip draws open as fiber; the purse stays empty.
+        const pick = await evaluate(`${L}.then(([l, c]) => { const find = (want) => { for (let x = 0; x < 1; x += 0.0005) if (l.rollMystery(() => x, c.TUNING) === want) return x; return null; }; return JSON.stringify({ coin: find('coin5'), skip: find('skip') }); })`).then(JSON.parse);
+        const draws = await evaluate(`(() => { const p = ${P}; for (let i = 0; i < 40; i += 1) p.spawnPipePair(); const coins = p.items.getChildren().filter((c) => c.getData('kind') === 'coin').length; const out = []; for (const x of [${pick.coin}, ${pick.skip}]) { const fiber0 = p.collected.fiber; const passed0 = p.pipesPassed; const box = p.spawnBandItem('mystery'); box.x = p.poop.x + 400; const saved = p.course.reward; p.course.reward = () => () => x; p.collectItem(box); p.course.reward = saved; out.push({ fiber: p.collected.fiber - fiber0, jumped: p.pipesPassed - passed0, line: Boolean(p.finishLine) }); } return JSON.stringify({ coins, out, purse: p.effects.coins(), coinCount: p.collected.coin }); })()`).then(JSON.parse);
+        ok(draws.coins === 0 && draws.out.every((d) => d.fiber === 1 && d.jumped === 0 && !d.line) && draws.purse === 0 && draws.coinCount === 0, `no coins: none in 40 pairs (${draws.coins}); a box's coin and skip draws open as fiber (${JSON.stringify(draws.out)}); purse ${draws.purse}`);
+
+        // The crash: final, queued, Over told it was a daily run; the 🏆 list and best untouched.
+        await evaluate(`(${P}.graceLeftMs = 0, ${P}.die(), true)`);
+        await waitFor(`__flappy.scene.isActive('Over')`, 40);
+        const r2 = await stored();
+        const over = await evaluate(`JSON.stringify(__flappy.scene.getScene('Over').scene.settings.data?.daily ?? null)`).then(JSON.parse);
+        const after = await evaluate(`JSON.stringify({ top: ${P}.save.top ?? null, best: localStorage.getItem(${JSON.stringify(TT.bestKey)}) })`);
+        ok(r2.rec?.final === true && r2.queue.length === 1 && r2.queue[0].day === DAY && r2.queue[0].score === r2.rec.score && over?.day === DAY && over.level === want.level && after === before, `the crash: the record is final (score ${r2.rec?.score}), its score queued for the board (${r2.queue.length}), Over gets the day; the 🏆 top list and best are untouched`);
+
+        // Same day, same course: a second run on the pinned day lays the same gaps.
+        await home();
+        await evaluate(`${P}.startDaily({ day: '${DAY}' })`);
+        await waitFor(`${P}.state === 'playing'`);
+        const gaps1 = await gapsNow();
+        ok(gaps0 === gaps1 && JSON.parse(gaps0).length >= 9 && new Set(JSON.parse(gaps0)).size > 3, `two runs on ${DAY} lay the same ${JSON.parse(gaps0).length} gaps (${gaps0})`);
+
+        // A run cut off mid-flight (a reload; restart stands in) is the day's result all the same.
+        await home();
+        await evaluate(`${P}.startDaily({ day: '${DAY2}' })`);
+        await waitFor(`${P}.state === 'playing'`);
+        await evaluate(`(${P}.graceLeftMs = 1e9, ${P}.score = 9, true)`);
+        await sleep(200);
+        await evaluate(`(globalThis.__dailyBoxes = ${P}.readyBoxes, ${P}.scene.restart(), true)`);
+        await waitFor(`${P}.readyBoxes !== globalThis.__dailyBoxes && ${P}.state === 'ready'`);
+        const r3a = await stored();
+        await evaluate(`${P}.syncLeaderboard(), true`);
+        const r3 = await stored();
+        ok(r3a.rec?.day === DAY2 && r3a.rec.final === false && r3.rec?.final === true && r3.rec.score === 9 && r3.queue.some((q) => q.day === DAY2 && q.score === 9), `a run abandoned at 9 is left unfinished (final ${r3a.rec?.final}); the next sync makes it final and queues it (${r3.queue.map((q) => q.day).join(', ')})`);
+
+        // Put everything back.
+        await evaluate(`(${keys.map((k) => `localStorage.removeItem('${k}')`).join(', ')}, __flappy.registry.set('toilet', false), __flappy.registry.set('versus', false), true)`);
+        await home();
       }
     });
 

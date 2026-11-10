@@ -1,6 +1,6 @@
 # Plan: Daily Dump mode (audited revision of `daily_dump_mode_f097792f.plan.md`)
 - Created: 2026-11-10 (an audit of Michael's draft against the code)
-- Status: in progress (step 2)
+- Status: in progress (step 3)
 - Baseline: `2690200` on `main` (pushed; tree clean).
 - Whole-suite verification: `npm test` (449 pass), `npm run smoke` (337, full).
 - On approval, this revision replaces the draft at `.claude/plans/daily_dump_mode_f097792f.plan.md`. Repo copy: `.claude/plans/2026-11-10-daily-dump.md` (`git add -f`, only that file).
@@ -196,10 +196,11 @@ Each step is verified, then committed. The full suite runs at every step.
 - **Commit:** `feat(daily, step 1/8): day key, seed, level, reward stream and the daily stores`
 - **Result:** npm test 457/457 (8 new in tests/daily.test.js); full smoke 337/337. The tournament queue now runs on a shared `createPostQueue` (its tests and the tournament smoke unchanged). Config: `TUNING.daily { minLevel, maxLevel }`, `LEADERBOARD.dailyKey / dailyQueueKey / dailyQueueMax / dailyMaxScore`.
 
-### Step 2/8: the daily run in Play (no entry point yet)  [pending]
+### Step 2/8: the daily run in Play (no entry point yet)  [done]
 - **Change:** `runIsDaily` in `start({ daily })`, all the guards above, the HUD badge, the store writes (claim at start, each score change, final at `endRun`), the unfinished-record finalise in `syncLeaderboard`, and `endRun` / `showOver` routing. `startDaily({ day })` is reached from the smoke.
 - **Smoke (a new `daily` section, always with a pinned day so the checks don't depend on today's level):** the run reaches pair `levelEnd(L)+20` with no finish line and the level unchanged; it has no coin, kernel or shop; a forced skip draw becomes fiber; the store reads `final: false` with the live score mid-run; dying writes `final: true` and leaves the 🏆 top list and best untouched; a `scene.restart()` mid-run (standing in for a reload) leaves an unfinished record that the next sync finalises and queues; two runs on the same pinned day reach the same gap sequence.
 - **Commit:** `feat(daily, step 2/8): an endless, date-seeded, coin-free run at the day's level`
+- **Result:** npm test 457/457; full smoke 345/345 with the new `daily` section (8 checks; it failed 8/8 until its own `home()` waited for the restarted scene). The record is rewritten from `update()` whenever the score or pipe count moves; `syncLeaderboard` finalises only an *unfinished* record (never the run in flight), and `endRun` queues its own.
 
 ### Step 3/8: schema and PGlite tests  [pending]
 - **Change:** the server section above.
