@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { GAME_WIDTH, GAME_HEIGHT, TUNING as T } from '../src/config.js';
-import { overButtonsLayout, overHit, shareCardLayout } from '../src/logic.js';
+import { overButtonsLayout, overCellsLayout, overHit, shareCardLayout } from '../src/logic.js';
 
 const cx = GAME_WIDTH / 2;
 const cy = GAME_HEIGHT / 2;
@@ -141,3 +141,29 @@ test('Play again sits centred under Share | Home with its glow inside the panel;
   assert.equal(overButtonsLayout(cx, cy, T, { score: true }).again, null, 'a Daily Dump result has none');
 });
 
+
+test('the game-over summary cells: inside the panel, clear of each other and the buttons; no coin cell in a Daily Dump', () => {
+  const cx = GAME_WIDTH / 2;
+  const cy = GAME_HEIGHT / 2 - T.over.againLiftPx;
+  const panel = { left: cx - 280, right: cx + 280, top: cy - 360 };
+  for (const daily of [false, true]) {
+    const cells = overCellsLayout(cx, cy, T, { daily });
+    assert.deepEqual(cells.map((c) => c.id), ['fiber', 'probiotic', 'postbiotic', 'bacteria', 'bean', 'mystery', 'falls', 'closeCalls', 'pipes', ...(daily ? [] : ['coin'])]);
+    const buttons = overButtonsLayout(cx, cy, T, { share: true, score: daily, again: !daily });
+    const edges = (b) => ({ l: b.x - b.width / 2, r: b.x + b.width / 2, t: b.y - b.height / 2, b: b.y + b.height / 2 });
+    const overlap = (a, b) => a.l < b.r && b.l < a.r && a.t < b.b && b.t < a.b;
+    for (const c of cells) {
+      const e = edges(c);
+      assert.ok(e.l >= panel.left && e.r <= panel.right && e.t > panel.top, `${c.id} inside the panel`);
+      for (const o of cells) if (o !== c) assert.ok(!overlap(e, edges(o)), `${c.id} clear of ${o.id}`);
+      for (const b of [buttons.share, buttons.home, buttons.again, buttons.rank].filter(Boolean)) assert.ok(!overlap(e, edges(b)), `${c.id} clear of ${b.id}`);
+      assert.ok(c.textX > c.iconX && c.iconX > e.l && c.textX < e.r, `${c.id}: icon then ×n inside its box`);
+    }
+    // A tap on a cell names it; a button wins over nothing else.
+    const layout = { ...buttons, cells };
+    assert.equal(overHit(cells[0].x, cells[0].y, layout), 'cell:fiber');
+    assert.equal(overHit(cells.at(-1).x, cells.at(-1).y, layout), `cell:${cells.at(-1).id}`);
+    assert.equal(overHit(buttons.home.x, buttons.home.y, layout), 'home');
+  }
+  assert.equal(overCellsLayout(cx, cy, T).find((c) => c.id === 'coin').y, cy + T.over.rankBox.dy, "the coin cell is where a Daily Dump's rank goes");
+});

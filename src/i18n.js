@@ -351,6 +351,7 @@ Inspired by Flappy Bird`,
     splashController: 'On desktop, you can play with a game controller.',
     careerFalls: 'Long falls',
     careerCloseCalls: 'Close calls',
+    overCardRun: 'This run: {n}',
   },
   'zh-Hans': {
     readyTitle: 'FLAPPY POOP',
@@ -694,6 +695,7 @@ Inspired by Flappy Bird`,
     splashController: '在电脑上，可以用游戏手柄来玩。',
     careerFalls: '长距离下坠',
     careerCloseCalls: '擦身而过',
+    overCardRun: '本局：{n}',
   },
 };
 

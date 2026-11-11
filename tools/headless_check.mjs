@@ -1270,8 +1270,9 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
       for (let i = 0; i < 60 && (await playState()) !== 'dead'; i += 1) await sleep(100);
       await sleep(TT.deathToOverMs + 300);
       const over = await evaluate(`JSON.stringify({ dead: ${play}.state === 'dead', active: __flappy.scene.isActive('Over'), counts: __flappy.scene.getScene('Over').children.list.filter((c) => c.type === 'Text' && /^×\\d+$/.test(c.text)).map((c) => c.text), collected: ${play}.collected, pipes: ${play}.pipesPassed })`).then(JSON.parse);
-      const expected = [...['fiber', 'probiotic', 'postbiotic', 'bacteria', 'bean', 'mystery'].map((k) => `×${over.collected[k]}`), `×${over.pipes}`, `×${over.collected.coin}`];
-      ok(over.dead && over.active && JSON.stringify(over.counts) === JSON.stringify(expected) && over.collected.postbiotic >= 1 && over.collected.mystery >= 1, `game over shows the run summary ${expected.slice(0, 6).join(' ')} (postbiotics started: ${over.collected.postbiotic}, boxes: ${over.collected.mystery}) and ${over.pipes} pipes crossed`);
+      const runFC = await evaluate(`JSON.stringify([${play}.runFalls, ${play}.runCloseCalls])`).then(JSON.parse);
+      const expected = [...['fiber', 'probiotic', 'postbiotic', 'bacteria', 'bean', 'mystery'].map((k) => `×${over.collected[k]}`), `×${runFC[0]}`, `×${runFC[1]}`, `×${over.pipes}`, `×${over.collected.coin}`];
+      ok(over.dead && over.active && JSON.stringify(over.counts) === JSON.stringify(expected) && over.collected.postbiotic >= 1 && over.collected.mystery >= 1, `game over shows the run summary ${expected.slice(0, 8).join(' ')} (‼️ and 😢 included; postbiotics started: ${over.collected.postbiotic}, boxes: ${over.collected.mystery}) and ${over.pipes} pipes crossed`);
       const cleared = await evaluate(`JSON.stringify({ coins: ${play}.effects.coins(), beans: ${play}.effects.beans(), probiotic: ${play}.effects.hasProbiotic(), rows: [${play}.coinIcon.visible, ${play}.beanIcon.visible, ${play}.probioticHud.visible], coinIcon: __flappy.scene.getScene('Over').children.list.some((c) => c.type === 'Image' && c.texture.key === 'coin'), collected: ${play}.collected.coin })`).then(JSON.parse);
       ok(cleared.coins === 0 && cleared.beans === 0 && !cleared.probiotic && cleared.rows.every((v) => !v) && cleared.coinIcon && cleared.collected >= 3, `death empties the purse and clears the beans and the probiotic (HUD rows gone); Over counts the ${cleared.collected} coins the run collected beside the pipes`);
       const box = await evaluate(`(() => { const o = __flappy.scene.getScene('Over'); const panel = o.children.list.find((c) => c.type === 'Rectangle' && c.width === 560); const L = panel.x - panel.width / 2 + 8, R = panel.x + panel.width / 2 - 8; const parts = o.children.list.filter((c) => (c.type === 'Text' && /^×\\d+$/.test(c.text)) || (c.type === 'Image' && ['fiber', 'probiotic', 'postbiotic', 'bacteria', 'bean', 'mystery-icon'].includes(c.texture.key))).map((c) => { const b = c.getBounds(); return { k: c.texture?.key ?? c.text, l: b.left, r: b.right }; }); return JSON.stringify({ L, R, inside: parts.every((b) => b.l >= L && b.r <= R), icons: parts.filter((b) => b.k !== undefined && !b.k.startsWith('×')).length, minL: Math.min(...parts.map((b) => b.l)), maxR: Math.max(...parts.map((b) => b.r)) }); })()`).then(JSON.parse);
@@ -1289,6 +1290,41 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         const sent = await evaluate(`(() => { const p = ${play}; const c = p.careerStore.load(); return JSON.stringify({ name: p.save?.name ?? null, posts: __career.posts.length, sentGames: __career.posts[0]?.counters.games ?? 0, claimed: __career.claims.flat(), inflight: c.inflight, base: c.base?.id === p.save?.id, left: c.claims }); })()`).then(JSON.parse);
         await evaluate(`(globalThis.__careerAnswer = 'keep', import('./src/config.js').then((m) => { m.LEADERBOARD.dataApi = globalThis.__api; return true; }))`);
         ok(sent.name && sent.posts === 1 && sent.sentGames >= 1 && sent.inflight === null && sent.base && sent.left.length === 0 && c.badges.every((id) => sent.claimed.includes(id)), `a sync (named "${sent.name}") sends the career batch once (${sent.sentGames} games) and the claims; both settle`);
+      }
+      // The summary cells explain themselves: a real click on the fiber cell opens its card and stays on
+      // Over; the next click only closes it; inside the death-tap lockout a cell opens nothing. A on a
+      // ringed cell opens its card, B closes it, Space with a card up closes the card, not the panel.
+      {
+        const O = `__flappy.scene.getScene('Over')`;
+        const cardOf = () => evaluate(`JSON.stringify({ open: ${O}.card.open, title: ${O}.card.title.text, body: ${O}.card.body.text, over: __flappy.scene.isActive('Over'), state: ${play}.state })`).then(JSON.parse);
+        const cellAt = (id) => evaluate(`JSON.stringify(${O}.cells.find((c) => c.id === '${id}'))`).then(JSON.parse);
+        await evaluate(`${O}.openedAt = __flappy.loop.time + 5000, true`); // inside the lockout
+        const fiber = await cellAt('fiber');
+        await tapAt(fiber.x + 40, fiber.y);
+        const locked = await cardOf();
+        await evaluate(`${O}.openedAt = __flappy.loop.time - 5000, true`); // past it
+        await tapAt(fiber.x + 40, fiber.y);
+        const opened = await cardOf();
+        const wantFiber = await evaluate(`import('./src/i18n.js').then((m) => m.t('en', 'careerFiber'))`);
+        await tapAt(fiber.x + 40, fiber.y);
+        const closed = await cardOf();
+        ok(!locked.open && opened.open && opened.title === wantFiber && opened.body === `This run: ${over.collected.fiber}` && opened.over && closed.over && !closed.open && closed.state === 'dead', `a click on a summary cell opens its card ("${opened.title}" · ${opened.body}), not inside the death-tap lockout; the next click only closes it (Over still up)`);
+        const falls = await cellAt('falls');
+        await tapAt(falls.x, falls.y);
+        const fc = await cardOf();
+        await evaluate(`${O}.closeCard(), true`);
+        ok(fc.open && fc.title === 'Long falls' && fc.body === `This run: ${runFC[0]}`, `‼️ explains itself ("${fc.title}" · ${fc.body})`);
+        const G = TT.gamepad;
+        await evaluate(`(${play}.registry.set('padMode', true), ${O}.focus.show(), ${O}.focus.setIndex(${O}.focus.indexOf('cell:closeCalls')), true)`);
+        await evaluate(`${play}.padDown(${G.select}), true`);
+        const padOpen = await cardOf();
+        await evaluate(`${play}.padDown(${G.back}), true`);
+        const padClosed = await cardOf();
+        await evaluate(`${play}.padDown(${G.select}), true`);
+        await evaluate(`${O}.retry(), true`); // Space / A with no ring: the card first
+        const spaced = await cardOf();
+        await evaluate(`(${O}.closeCard(), ${play}.registry.set('padMode', false), ${O}.focus.hide(), true)`);
+        ok(padOpen.open && padOpen.title === 'Close calls' && !padClosed.open && padClosed.over && spaced.over && !spaced.open, 'controller: A on a ringed cell opens its card, B closes it; Space / Home with a card up closes the card and stays on Over');
       }
       // The game-over panel is the top of the input stack: a real tap on it, or on the field around it,
       // never reaches Play (its flap() runs on no tap). The lockout is re-armed so neither tap goes home.

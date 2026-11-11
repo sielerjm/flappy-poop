@@ -1564,13 +1564,42 @@ export function overButtonsLayout(cx, cy, t, { share = true, score = false, agai
   return { share: box('share', cx - offset), home: box('home', cx + offset), score: scoreBox, rank: rankBox, again: againBox };
 }
 
-/** 'share' | 'home' | 'score' | 'rank' | 'again' | null for a tap at (x, y) on overButtonsLayout's boxes. */
+/**
+ * 'share' | 'home' | 'score' | 'rank' | 'again' for a tap at (x, y) on overButtonsLayout's boxes,
+ * else 'cell:<id>' on one of layout.cells (overCellsLayout), else null.
+ */
 export function overHit(x, y, layout) {
   if (!layout) return null;
   for (const box of [layout.share, layout.home, layout.score, layout.rank, layout.again]) {
     if (box && inBox(x, y, box)) return box.id;
   }
+  for (const cell of layout.cells ?? []) {
+    if (inBox(x, y, cell)) return `cell:${cell.id}`;
+  }
   return null;
+}
+
+/**
+ * The game-over panel's summary cells, each an icon then ×n, and each a tap target that explains
+ * itself: fiber / probiotic / postbiotic, bacteria / bean / mystery, ‼️ long falls / 😢 close calls,
+ * then pipes / coins (no coin cell in a Daily Dump: that spot is the rank link, over.rankBox).
+ * Each cell: { id, x (where its icon sits + 30), y, width, height } around the icon and count.
+ */
+export function overCellsLayout(cx, cy, t, { daily = false } = {}) {
+  const o = t.over;
+  const rows = [
+    [o.cellRowsY[0], ['fiber', 'probiotic', 'postbiotic']],
+    [o.cellRowsY[1], ['bacteria', 'bean', 'mystery']],
+    [o.cellRowsY[2], ['falls', 'closeCalls']],
+    [o.rankBox.dy, daily ? ['pipes'] : ['pipes', 'coin']],
+  ];
+  const columnX = { 2: [-120, 120], 3: [-170, 0, 170] };
+  const cells = [];
+  for (const [dy, ids] of rows) {
+    const xs = columnX[ids.length === 1 ? 2 : ids.length];
+    ids.forEach((id, i) => cells.push({ id, x: cx + xs[i], y: cy + dy, box: { x: cx + xs[i] + 10, y: cy + dy, width: o.cellW, height: o.cellH } }));
+  }
+  return cells.map((c) => ({ id: c.id, x: c.box.x, y: c.box.y, width: c.box.width, height: c.box.height, iconX: c.x - 30, textX: c.x + 2 }));
 }
 
 /**

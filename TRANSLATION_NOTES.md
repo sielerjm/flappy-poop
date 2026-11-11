@@ -464,6 +464,7 @@ Inspired by Flappy Bird
 | splashController | On desktop, you can play with a game controller. | 在电脑上，可以用游戏手柄来玩。 |
 | careerFalls | Long falls | 长距离下坠 |
 | careerCloseCalls | Close calls | 擦身而过 |
+| overCardRun | This run: {n} | 本局：{n} |
 
 ## Reviewer checklist
 

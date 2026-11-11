@@ -1659,6 +1659,8 @@ export class Play extends Phaser.Scene {
    */
   onPadAction(action, padIndex = 0) {
     const { top, scene } = this.padTop();
+    // A card up on the game-over panel: B takes it down (padIntent's B there only hides the ring).
+    if (top === 'over' && action === 'back' && scene?.closeCard?.()) return;
     const tournamentPanelOpen = isTournamentPanelOpen();
     const ringPress = action === 'select' && Boolean(this.focus?.shown); // A on P1's ring presses the ringed button (⏸, 💰, 🏅)
     if (this.match && top === 'play' && !tournamentPanelOpen && !ringPress && (action === 'select' || action === 'power')) {
@@ -3208,7 +3210,7 @@ export class Play extends Phaser.Scene {
       const pipes = this.runIsDaily && this.daily ? this.pipesPassed - this.daily.startPipes : this.pipesPassed;
       const personalBest = Boolean(this.personalBest && !this.runIsTest && !this.runIsDaily);
       const badges = this.runIsTest ? [] : [...(this.runBadges ?? [])];
-      this.scene.launch('Over', { score: this.score, won, test: this.runIsTest, toilet: this.toilet, level: this.level, pipes, collected: { ...this.collected }, daily, personalBest, badges });
+      this.scene.launch('Over', { score: this.score, won, test: this.runIsTest, toilet: this.toilet, level: this.level, pipes, collected: { ...this.collected }, daily, personalBest, badges, falls: this.runFalls ?? 0, closeCalls: this.runCloseCalls ?? 0 });
     });
   }
 
