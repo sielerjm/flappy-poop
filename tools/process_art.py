@@ -2,18 +2,20 @@
 """process_art.py — crop, knock out background white, and resize Michael's
 drawings into the gameplay art-contract PNGs.
 
-Created by Michael Sieler. Last updated: 2026-11-11 (the corn kernel's spin sheet).
+Created by Michael Sieler. Last updated: 2026-11-11 (the corn kernel's spin sheet, the near-miss faces).
 
 Run:    uv run --with pillow python3 tools/process_art.py   (or any Python with Pillow)
 Input:  assets/src/{Poop_Emoji_Alive,Poop_Emoji_Dead,Poop_Stink1,Poop_Stink2,PoopFalling,
-                    PoopStinkFalling1,PoopStinkFalling2,Poop_Fart,Poop_Speech,
+                    PoopStinkFalling1,PoopStinkFalling2,PoopScared,PoopScaredStink1,PoopScaredStink2,
+                    Poop_Fart,Poop_Speech,
                     Fiber,Good_Bacteria,Bad_Bacteria,Kidney_Bean,Postbiotic,MysteryBox_Icon}.png,
         assets/src/{MysteryBox,CornKernel}.gif (animated) and assets/src/FlappyPoopAppArt.png (the app icon)
 Output: assets/{poop,poop-dead,fiber,probiotic,bacteria,bean,postbiotic,mystery-icon}.png at 384x384 RGBA,
         assets/coin.png: the kernel GIF's frames side by side, 106x106 each (drawn at 53 px: a clean
         2:1 shrink instead of 8:1),
+        assets/poop-scared.png (the near-miss face) at 384x384 too,
         assets/{poop-stink1,poop-stink2,poop-falling,poop-stink-falling1,poop-stink-falling2,
-                poop-fart,poop-speech}.png on larger squares,
+                poop-stink-scared1,poop-stink-scared2,poop-fart,poop-speech}.png on larger squares,
         assets/mystery.png: the GIF's frames side by side, 384x384 each (a Phaser spritesheet), and
         assets/{icon-192,icon-512,apple-touch-icon}.png from the app art (see process_icons).
 
@@ -167,6 +169,9 @@ def process_poop_set():
         ("PoopFalling.png", "poop-falling.png"),
         ("PoopStinkFalling1.png", "poop-stink-falling1.png"),
         ("PoopStinkFalling2.png", "poop-stink-falling2.png"),
+        ("PoopScared.png", "poop-scared.png"),  # near miss with a pipe: no lines, so the body box (384)
+        ("PoopScaredStink1.png", "poop-stink-scared1.png"),
+        ("PoopScaredStink2.png", "poop-stink-scared2.png"),
     ):
         im = knock_background(Image.open(SRC / src_name))
         bbox = content_bbox(im)

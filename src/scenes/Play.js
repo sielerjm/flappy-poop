@@ -14,6 +14,7 @@ import {
   resumeFlapVelocity,
   HANDS,
   poopFrame,
+  pipeClearance,
   levelSpeed,
   levelGap,
   levelEnd,
@@ -233,6 +234,7 @@ export class Play extends Phaser.Scene {
     // this.time.now: they advance by delta only while playing, so pausing freezes them.
     this.scrollMul = 1;
     this.graceLeftMs = 0;
+    this.scaredMs = 0; // ms left of the near-miss face (tickScared)
     this.distanceSinceSpawn = 0;
     this.fartDurationMs = 0;
     this.fartPeak = 1;
@@ -693,6 +695,7 @@ export class Play extends Phaser.Scene {
     this.personalBest = false; // endRun decides
     this.dailyRunDay = daily?.day ?? null; // the day on the result panel (practice too)
     this.dailySync = null;
+    this.scaredMs = 0;
     if (daily) {
       this.toilet = false; // this run only: create() reads the toggle again for the next one
       this.course = createCourse(dailySeed(daily.day), this.tune, { shared: true });
@@ -924,6 +927,7 @@ export class Play extends Phaser.Scene {
     this.pausePlay();
     this.fadeBackground();
     this.poop.setVelocity(0, 0);
+    this.scaredMs = 0;
     this.refreshPoopLook(); // no scared face on the break's gliding poop (update() does not run it while paused)
     this.poop.body.setAllowGravity(false);
     this.breakGlide = this.tweens.add({
@@ -2199,6 +2203,21 @@ export class Play extends Phaser.Scene {
     }
   }
 
+  /**
+   * The near-miss clock, each playing frame outside a fart: a pipe's body within scaredNearPx of the
+   * poop's hitbox (pipeClearance) holds the near-miss face for scaredHoldMs past the last such frame.
+   * Never while the poop cannot be hurt (the grace after a fart or a respawn, test mode's Invincible):
+   * it flies through pipes then.
+   */
+  tickScared(delta) {
+    if (this.graceLeftMs > 0 || this.testInvincible()) {
+      this.scaredMs = 0;
+      return;
+    }
+    const near = this.pipes.getChildren().some((pipe) => pipe.body && pipeClearance(this.poop.x, this.poop.y, T.poopRadius, pipe.body) <= T.scaredNearPx);
+    this.scaredMs = near ? T.scaredHoldMs : Math.max(0, this.scaredMs - delta);
+  }
+
   /** Swap the player texture and rebuild the circle body for that frame size. */
   setPoopTexture(key) {
     this.poop.setTexture(key);
@@ -2208,13 +2227,14 @@ export class Play extends Phaser.Scene {
 
   /**
    * The live poop's face from poopFrame(): plain or the current stink frame,
-   * the falling face (sweat marks) once it drops at fallLookVy or faster. Only
+   * the falling face (sweat marks) once it drops at fallLookVy or faster, the
+   * near-miss face for scaredHoldMs after a close call with a pipe. Only
    * swaps when the key changes, so the body circle is rebuilt only then. Callers
    * keep it off the fart, dead and speech frames.
    */
   refreshPoopLook() {
     // A start boost wears the fart face.
-    const key = this.boost ? 'poop-fart' : poopFrame({ charged: this.charged, stinkFrame: this.stinkFrame, vy: this.poop.body.velocity.y }, T);
+    const key = this.boost ? 'poop-fart' : poopFrame({ charged: this.charged, stinkFrame: this.stinkFrame, vy: this.poop.body.velocity.y, scared: this.scaredMs > 0 }, T);
     if (this.poop.texture.key !== key) this.setPoopTexture(key);
   }
 
@@ -3046,6 +3066,7 @@ export class Play extends Phaser.Scene {
     this.endRun();
     this.poop.body.setAllowGravity(false);
     this.poop.setVelocity(0, 0);
+    this.scaredMs = 0;
     this.refreshPoopLook(); // the plain face (endRun uncharged it), even if the line was crossed mid-drop
     this.poop.setAngle(0);
     this.cameras.main.flash(250, 255, 215, 0);
@@ -3125,6 +3146,7 @@ export class Play extends Phaser.Scene {
       this.poop.setVelocity(0, 0);
       this.respawnFrom = { y: this.poop.y, angle: this.poop.angle };
       this.clearFieldAhead();
+      this.scaredMs = 0;
       this.refreshPoopLook(); // the plain face back for the ride to mid-screen
       pose = respawnPose(this.respawnElapsed, this.respawnFrom, T);
     }
@@ -3273,7 +3295,8 @@ export class Play extends Phaser.Scene {
 
       if (!this.effects.powerActive()) {
         this.poop.setAngle(angleForVelocity(this.poop.body.velocity.y, T));
-        this.refreshPoopLook(); // the falling face past fallLookVy, back to plain / stink on the next flap
+        this.tickScared(delta);
+        this.refreshPoopLook(); // the near-miss face, else the falling face past fallLookVy, back to plain / stink on the next flap
       }
       const top = T.ceilingHeight + T.poopRadius; // the strips' edges, like the floor
       const floor = GAME_HEIGHT - T.groundHeight - T.poopRadius;

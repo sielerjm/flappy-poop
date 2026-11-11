@@ -8,6 +8,18 @@ import { LOCALES } from './i18n.js';
 
 export const CHANGELOG = [
   {
+    version: '0.13.2',
+    date: '11 Nov 2026',
+    notes: {
+      en: [
+        'The poop now looks scared for a moment after a close call with a pipe.',
+      ],
+      'zh-Hans': [
+        '与管道擦身而过后，便便会露出一会儿害怕的表情。',
+      ],
+    },
+  },
+  {
     version: '0.13.1',
     date: '11 Nov 2026',
     notes: {

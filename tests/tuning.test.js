@@ -41,6 +41,8 @@ test('every item weight is ≥ 0 and the sum is > 0', () => {
 
 test('the falling face shows on a long fall but before the tilt maxes out', () => {
   assert.ok(T.fallLookVy > 0, `fallLookVy ${T.fallLookVy}`);
+  assert.ok(T.scaredNearPx > 0 && T.scaredNearPx < T.gapHeight / 2 - T.poopRadius, `scaredNearPx ${T.scaredNearPx}: a poop centred in the narrowest gap must not be scared`);
+  assert.ok(T.scaredHoldMs > 0, `scaredHoldMs ${T.scaredHoldMs}`);
   assert.ok(T.fallLookVy <= T.angleFallRefVy, `fallLookVy ${T.fallLookVy} should not wait past angleFallRefVy ${T.angleFallRefVy}`);
   // Quick taps never reach it: one flap's rise never ends above the threshold.
   assert.ok(T.fallLookVy > -T.flapVelocity * 0.5, `fallLookVy ${T.fallLookVy} is reached too soon after a flap`);

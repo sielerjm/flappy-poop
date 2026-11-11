@@ -4,7 +4,7 @@
 
 import { isLocale, DEFAULT_LOCALE, t } from './i18n.js';
 
-export const VERSION = '0.13.1'; // bumped when art under an existing name changes (Boot's ?v= cache-bust)
+export const VERSION = '0.13.2'; // bumped when art under an existing name changes (Boot's ?v= cache-bust)
 /** The version line every overlay shows: `v{VERSION} beta` in the locale's words (i18n versionLine); What's new passes older versions. */
 export function versionText(locale, version = VERSION) {
   return t(locale, 'versionLine').replace('{version}', version);
@@ -209,13 +209,26 @@ export function resumeFlapVelocity(t) {
 /**
  * Texture key for the live poop (not farting, dead or on the ready screen):
  * the plain face or the current stink frame while charged, swapped for its
- * falling face once the body falls at fallLookVy px/s or faster.
+ * falling face once the body falls at fallLookVy px/s or faster. `scared` (a
+ * near miss with a pipe, Play.tickScared) wins over both with the near-miss face.
  */
-export function poopFrame({ charged, stinkFrame = 0, vy }, { fallLookVy }) {
+export function poopFrame({ charged, stinkFrame = 0, vy, scared = false }, { fallLookVy }) {
   const falling = vy >= fallLookVy;
-  if (!charged) return falling ? 'poop-falling' : 'poop';
+  if (!charged) return scared ? 'poop-scared' : falling ? 'poop-falling' : 'poop';
   const n = stinkFrame ? 2 : 1;
+  if (scared) return `poop-stink-scared${n}`;
   return falling ? `poop-stink-falling${n}` : `poop-stink${n}`;
+}
+
+/**
+ * Px between a circle's edge (centre cx, cy, radius r) and an axis-aligned rect
+ * { x, y, width, height } (top-left corner): 0 when they touch, negative when they
+ * overlap. The near-miss check reads it against each pipe's body.
+ */
+export function pipeClearance(cx, cy, r, rect) {
+  const dx = Math.max(rect.x - cx, 0, cx - (rect.x + rect.width));
+  const dy = Math.max(rect.y - cy, 0, cy - (rect.y + rect.height));
+  return Math.hypot(dx, dy) - r;
 }
 
 /** Retry is allowed once lockoutMs have elapsed since the game-over screen opened. */

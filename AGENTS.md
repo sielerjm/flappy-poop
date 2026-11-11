@@ -385,7 +385,9 @@ src/
                             beanButtonHit's circle is twice the
                             drawn button), poopFrame (the live poop's texture
                             key: plain / stink frame, or the falling faces at
-                            fallLookVy px/s down), fart envelope (pipeSpacing,
+                            fallLookVy px/s down; `scared` wins with the near-miss
+                            face, poop-scared or poop-stink-scared1/2), pipeClearance
+                            (px from the poop's circle to a pipe's rect), fart envelope (pipeSpacing,
                             fartPeakMul, fartMul, fartRemainingDistance), fartFloat
                             (wave + tilt), moving pipes (pipeMoveParams,
                             pipeMoveAmplitude, pipeMoveShiftPx, rollPipeMove), hsvToRgb / rainbowHue, glowAlphaAt /
@@ -752,7 +754,13 @@ src/
                             every playing frame outside a fart, so a drop at
                             fallLookVy or faster wears poop-falling (or
                             poop-stink-falling1/2 while charged) until the next
-                            flap; startLevelBreak and win() call it once so the
+                            flap; tickScared (same frames) holds the near-miss face
+                            (poop-scared, or poop-stink-scared1/2 while charged) for
+                            scaredHoldMs after a pipe's body comes within
+                            scaredNearPx of the hitbox, never while the poop cannot
+                            be hurt (grace, test Invincible);
+                            startLevelBreak, win() and a respawn zero scaredMs and
+                            call it once so the
                             break glide / the win never keep the scared face;
                             die's poop-dead and the fart frame are untouched;
                             applyRainbow() each frame recolours glow + button disc
@@ -1110,13 +1118,16 @@ src/
 assets/                     Contract PNGs + README.md (the art contract).
   README.md                 File name, pixel size, orientation rules. tests enforce it.
   poop.png poop-dead.png poop-stink1.png poop-stink2.png poop-falling.png
-  poop-stink-falling1.png poop-stink-falling2.png poop-fart.png
+  poop-stink-falling1.png poop-stink-falling2.png poop-scared.png
+  poop-stink-scared1.png poop-stink-scared2.png poop-fart.png
   poop-speech.png fiber.png probiotic.png postbiotic.png bacteria.png bean.png coin.png
                             (coin.png: the golden corn kernel's spin, 12 frames of
                             106x106 side by side (1272x106), loaded as a spritesheet;
                             postbiotic.png: HUD icon only, never spawned;
                             the falling frames: scared face + sweat marks for a
-                            long drop, with / without stink lines)
+                            long drop, with / without stink lines; the scared
+                            frames: the near-miss face after a close call with a
+                            pipe, with / without stink lines)
   mystery.png               Mystery box spin: 8 frames of 384x384 side by side (3072x384),
                             loaded as a spritesheet; mystery-icon.png is its static view
                             for the game-over summary and How to play (never spawned).
@@ -1370,7 +1381,8 @@ tools/
   process_art.py            Crops assets/src/ drawings into 384x384 contract PNGs
                             (drawn at spriteDisplayScale 0.25 → 96 logical px);
                             the poop set (alive / dead / stink1 / stink2 / falling /
-                            stink-falling1 / stink-falling2 / fart / speech) shares
+                            stink-falling1 / stink-falling2 / scared / stink-scared1 /
+                            stink-scared2 / fart / speech) shares
                             one body scale and centre, stink / falling / fart /
                             speech on bigger squares; bean.png from Kidney_Bean.png,
                             postbiotic.png from Postbiotic.png, mystery-icon.png from

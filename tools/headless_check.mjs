@@ -726,6 +726,31 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
           ok(/^poop-stink-falling[12]$/.test(stink.key) && /^poop-stink[12]$/.test(stink.after), `charged, the fall shows the sweat face with stink lines (${stink.key}) and the flap goes back to the stink frames (${stink.after})`);
           ok((await evaluate(`${play}.poop.texture.key`)) === 'poop', 'uncharged and still: the plain face');
         }
+        // Near-miss face: a pipe's body within scaredNearPx of the hitbox (never touching) swaps the poop to
+        // poop-scared (the scared stink frames while charged) for scaredHoldMs; never while it cannot be hurt.
+        {
+          const P = play;
+          // A still pipe under the poop, its top `gap` px below the hitbox; the field's own pipes are cleared.
+          const near = async (gap, charged, grace) => {
+            await evaluate(`(() => { const p = ${P}; p.pipes.clear(true, true); p.setCharged(${charged}); p.poop.setVelocity(0, 0); p.poop.y = 640; p.scaredMs = 0; const q = p.pipes.create(p.poop.x, 640 + ${TT.poopRadius} + ${gap}, 'pipe', '__BASE'); q.setOrigin(0.5, 0); q.body.setSize(q.frame.width, q.frame.height); q.body.setAllowGravity(false); globalThis.__nearPipe = q; p.graceLeftMs = ${grace}; return true; })()`);
+            await sleep(120);
+            const out = await evaluate(`JSON.stringify({ key: ${P}.poop.texture.key, state: ${P}.state, ms: ${P}.scaredMs })`).then(JSON.parse);
+            await evaluate(`(globalThis.__nearPipe?.destroy(), true)`);
+            return out;
+          };
+          const close = await near(10, false, 0);
+          await sleep(TT.scaredHoldMs + 150);
+          const calm = await evaluate(`${P}.poop.texture.key`);
+          const far = await near(TT.scaredNearPx + 30, false, 0);
+          const stink = await near(10, true, 0);
+          const safe = await near(10, false, 1e9);
+          await evaluate(`${P}.setCharged(false), ${P}.graceLeftMs = 1e9, ${P}.scaredMs = 0, true`);
+          await sleep(60);
+          ok(close.key === 'poop-scared' && close.state === 'playing' && calm === 'poop', `a pipe 10 px from the hitbox shows the near-miss face (${close.key}, still ${close.state}); ${TT.scaredHoldMs} ms after it is gone the plain face is back (${calm})`);
+          ok(far.key === 'poop', `a pipe ${TT.scaredNearPx + 30} px away keeps the plain face (${far.key})`);
+          ok(/^poop-stink-scared[12]$/.test(stink.key), `charged, the near miss shows the scared stink frames (${stink.key})`);
+          ok(safe.key === 'poop' && safe.ms === 0, `in the grace after a fart the poop is never scared (${safe.key})`);
+        }
         const popupHit = async (kind) => {
           // Both scores are read inside the hit: real pipes keep passing the pinned poop and would add +1 between two samples.
           const { before, score } = await evaluate(`(() => { const p = ${play}; while (p.effects.hasProbiotic()) p.effects.consumeProbiotic(); const before = p.score; const it = p.items.create(p.poop.x, p.poop.y, '${kind}'); it.setData('kind', '${kind}'); p.collectItem(it); return JSON.stringify({ before, score: p.score }); })()`).then(JSON.parse);

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createRng, gapBounds, pipeGapY, centredGapY, hasPassed, angleForVelocity, clampToPlayArea, resumeFlapVelocity, poopFrame } from '../src/logic.js';
+import { createRng, gapBounds, pipeGapY, centredGapY, hasPassed, angleForVelocity, clampToPlayArea, resumeFlapVelocity, poopFrame, pipeClearance } from '../src/logic.js';
 import { GAME_HEIGHT, TUNING as T } from '../src/config.js';
 
 const cfg = { gameHeight: GAME_HEIGHT, ceilingHeight: T.ceilingHeight, groundHeight: T.groundHeight, gapHeight: T.gapHeight, gapMargin: T.gapMargin };
@@ -79,6 +79,24 @@ test('resumeFlapVelocity: the resume tap lifts at resumeFlapScale of a flap', ()
   assert.ok(vy < 0, `resume lift ${vy} points up`);
   assert.ok(Math.abs(vy) < Math.abs(T.flapVelocity), 'softer than a flap');
   assert.equal(resumeFlapVelocity({ flapVelocity: -800, resumeFlapScale: 0.5 }), -400);
+});
+
+test('poopFrame: a near miss wears the near-miss face, charged or not, over the falling face', () => {
+  assert.equal(poopFrame({ charged: false, vy: 0, scared: true }, T), 'poop-scared');
+  assert.equal(poopFrame({ charged: false, vy: T.fallLookVy + 500, scared: true }, T), 'poop-scared', 'beats the falling face');
+  assert.equal(poopFrame({ charged: true, stinkFrame: 0, vy: 0, scared: true }, T), 'poop-stink-scared1');
+  assert.equal(poopFrame({ charged: true, stinkFrame: 1, vy: T.fallLookVy, scared: true }, T), 'poop-stink-scared2');
+  assert.equal(poopFrame({ charged: false, vy: 0, scared: false }, T), 'poop');
+});
+
+test('pipeClearance: px from the circle\'s edge to the rect, 0 touching, negative overlapping', () => {
+  const rect = { x: 100, y: 200, width: 128, height: 600 };
+  assert.equal(pipeClearance(40, 400, 48, rect), 12, 'beside it');
+  assert.equal(pipeClearance(160, 132, 48, rect), 20, 'above it');
+  assert.equal(pipeClearance(260, 400, 48, rect), -16, 'overlapping its right side');
+  assert.equal(pipeClearance(70, 160, 48, rect), 2, 'at its corner (30, 40 away: 50)');
+  assert.equal(pipeClearance(52, 400, 48, rect), 0, 'touching');
+  assert.equal(pipeClearance(160, 400, 48, rect), -48, 'centre inside');
 });
 
 test('poopFrame: the plain or stink face until the fall reaches fallLookVy, then the falling faces', () => {

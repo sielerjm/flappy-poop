@@ -43,6 +43,8 @@ export const TUNING = {
   maxRiseAngle: -25, // degrees nose-up right after a flap
   angleFallRefVy: 1200, // px/s; vy at which fall tilt reaches maxFallAngle
   fallLookVy: 1000, // px/s downward speed from which the poop wears its falling face (scared eyes, sweat marks): ≈0.4 s of free fall after the apex (0.7 s after the tap), so a tap-tap-tap never shows it and any flap clears it at once
+  scaredNearPx: 25, // px between the poop's hitbox and a pipe's that counts as a near miss: the poop wears its near-miss face (poop-scared, or the scared stink frames while charged)
+  scaredHoldMs: 500, // ms the near-miss face stays after the last frame that close
   deathToOverMs: 700, // tumble time before the game-over panel appears
   retryLockoutMs: 400, // ignore taps on the panel for this long so a death tap can't restart
   bestKey: 'flappy-poop:best', // localStorage key
