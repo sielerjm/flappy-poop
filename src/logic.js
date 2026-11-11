@@ -2002,6 +2002,7 @@ export function statsLayout(cx, cy) {
     versionY: cy + 522,
     left: cx - 272,
     right: cx + 272,
+    careerCols: 6,
     badgeCols: 4,
   };
 }

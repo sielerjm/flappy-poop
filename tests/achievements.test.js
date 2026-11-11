@@ -30,6 +30,8 @@ test('the catalog: unique well-formed ids, a known kind, a glyph, and copy in ev
   }
   // The level badges are named after the segment they reach.
   for (let n = 2; n <= T.levels.lastLevel; n += 1) assert.equal(achievementById(`level_${n}`).title, `level.${LEVELS[n - 1].key}`);
+  assert.equal(badgeDesc('en', achievementById('fiber_1000')), 'Collect 1000 🥦 in all', 'fiber is 🥦');
+  assert.equal(badgeDesc('en', achievementById('coin_1000')), 'Collect 1000 🟡 in all', 'coins are 🟡');
   assert.equal(achievementById('nope'), null);
 });
 
@@ -68,6 +70,8 @@ test('runDeltas: a single-player run, a Daily Dump, and nothing for anything els
   });
   assert.deepEqual(runDeltas(single({ score: 300, level: 7, won: true })), { games: 1, wins: 1, sumScore: 300, sumLevel: 7, maxLevel: 7 }, 'a win is not a death');
   assert.deepEqual(runDeltas({ mode: 'daily', score: 4000, level: 5, collected: { fiber: 2 }, farts: 1 }), { dailyGames: 1, deaths: 1, farts: 1, fiber: 2 }, 'a Daily Dump: no score or level sums');
+  assert.deepEqual(runDeltas(single({ score: 12, level: 2, pipes: 14 })), { games: 1, sumScore: 12, sumLevel: 2, maxLevel: 2, deaths: 1, pipes: 14 }, 'pipes passed');
+  assert.deepEqual(runDeltas({ mode: 'daily', pipes: 37 }), { dailyGames: 1, deaths: 1, pipes: 37 }, "a Daily Dump's pipes (the pairs flown that day)");
   assert.deepEqual(runDeltas({ mode: 'test' }), {});
   assert.deepEqual(runDeltas(null), {});
   // The server's per-run caps: a score past maxScore and a level past the last are clamped.

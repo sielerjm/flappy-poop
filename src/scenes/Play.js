@@ -3062,7 +3062,9 @@ export class Play extends Phaser.Scene {
    */
   recordCareer(mode) {
     const day = utcDayKey();
-    const facts = { mode, score: this.score, level: this.level, won: Boolean(this.won), toilet: Boolean(this.toilet), collected: { ...this.collected }, farts: this.runFarts ?? 0, superFarts: this.runSuperFarts ?? 0 };
+    // Pipes passed: fart and skipped pairs included (as for levels); a Daily Dump counts only the pairs flown that day.
+    const pipes = mode === 'daily' && this.daily ? Math.max(0, this.pipesPassed - this.daily.startPipes) : this.pipesPassed;
+    const facts = { mode, score: this.score, level: this.level, won: Boolean(this.won), toilet: Boolean(this.toilet), collected: { ...this.collected }, farts: this.runFarts ?? 0, superFarts: this.runSuperFarts ?? 0, pipes };
     this.careerStore.addRun(runDeltas(facts));
     const earned = evaluate({ totals: this.careerStore.totals(this.save?.id ?? null), facts, unlocked: this.careerStore.unlocked(), day });
     this.runBadges = this.careerStore.unlock(earned, day);

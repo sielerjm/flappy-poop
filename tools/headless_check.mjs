@@ -1194,9 +1194,9 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
       // unlocked, queued as claims and named on Over; then a sync the stubs accept sends both.
       {
         const now = await careerNow();
-        const c = await evaluate(`(() => { const p = ${play}; const o = __flappy.scene.getScene('Over'); const b = o.badgeLine; return JSON.stringify({ collected: p.collected, farts: p.runFarts, supers: p.runSuperFarts, badges: p.runBadges, unlocked: p.careerStore.unlocked(), claims: p.careerStore.claims(), line: b?.text ?? null, lineIn: b ? b.getBounds().width <= 520 : true }); })()`).then(JSON.parse);
+        const c = await evaluate(`(() => { const p = ${play}; const o = __flappy.scene.getScene('Over'); const b = o.badgeLine; return JSON.stringify({ pipes: p.pipesPassed, collected: p.collected, farts: p.runFarts, supers: p.runSuperFarts, badges: p.runBadges, unlocked: p.careerStore.unlocked(), claims: p.careerStore.claims(), line: b?.text ?? null, lineIn: b ? b.getBounds().width <= 520 : true }); })()`).then(JSON.parse);
         const d = (k) => (now[k] ?? 0) - (career0[k] ?? 0);
-        ok(d('games') === 1 && d('deaths') === 1 && !d('wins') && ['fiber', 'probiotic', 'postbiotic', 'bacteria', 'bean', 'mystery', 'coin'].every((k) => d(k) === c.collected[k]) && d('farts') === c.farts && c.farts >= 2 && d('superFarts') === c.supers && c.supers >= 1, `the run is counted once in the career: +1 game, +1 death, its pickups and ${c.farts} farts (${c.supers} super)`);
+        ok(d('games') === 1 && d('deaths') === 1 && !d('wins') && ['fiber', 'probiotic', 'postbiotic', 'bacteria', 'bean', 'mystery', 'coin'].every((k) => d(k) === c.collected[k]) && d('farts') === c.farts && c.farts >= 2 && d('superFarts') === c.supers && c.supers >= 1 && d('pipes') === c.pipes && c.pipes > 0, `the run is counted once in the career: +1 game, +1 death, ${c.pipes} pipes, its pickups and ${c.farts} farts (${c.supers} super)`);
         ok(c.badges.includes('level_2') && c.badges.every((id) => id in c.unlocked && c.claims.includes(id)) && c.line?.startsWith('🏆') && c.lineIn, `the run unlocked ${c.badges.join(', ')}: queued as claims and named on Over ("${c.line}")`);
         await evaluate(`import('./src/config.js').then((m) => { globalThis.__api = m.LEADERBOARD.dataApi; m.LEADERBOARD.dataApi = ''; return true; })`);
         await evaluate(`(globalThis.__careerAnswer = 'ok', __career.posts.length = 0, __career.claims.length = 0, ${play}.syncLeaderboard().then(() => true))`);
@@ -2974,6 +2974,8 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
           const careerD = await careerNow();
           const dd = (k) => (careerD[k] ?? 0) - (careerD0[k] ?? 0);
           const runBadges = await evaluate(`JSON.stringify(${P}.runBadges)`).then(JSON.parse);
+          const flown = await evaluate(`${P}.pipesPassed - ${P}.daily.startPipes`);
+          ok(dd('pipes') === flown, `the Daily Dump adds the ${flown} pairs flown that day to the career's pipes (${dd('pipes')})`);
           ok(dd('dailyGames') === 1 && dd('games') === 0 && dd('sumScore') === 0 && dd('deaths') === 1 && !runBadges.some((id) => /^(score|level)_|win/.test(id)), `the Daily Dump counts in the career as a daily game (+1) with its pickups, never as a 🏆 game, and earns no score or level badge (${runBadges.join(', ') || 'none'})`);
         }
 

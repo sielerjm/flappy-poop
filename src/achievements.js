@@ -41,13 +41,13 @@ export const ACHIEVEMENTS = [
   total('deaths_1000', '💀', 'achDeaths', 'achDescDeaths', ['deaths'], 1000),
   total('fart_100', '💨', 'achFarts', 'achDescFarts', ['farts'], 100),
   total('super_fart_25', '🌈', 'achSuperFarts', 'achDescSuperFarts', ['superFarts'], 25),
-  total('fiber_1000', '🌾', 'achFiber', 'achDescCollect', ['fiber'], 1000),
+  total('fiber_1000', '🥦', 'achFiber', 'achDescCollect', ['fiber'], 1000),
   total('probiotic_1000', '💊', 'achProbiotic', 'achDescCollect', ['probiotic'], 1000),
   total('postbiotic_100', '✨', 'achPostbiotic', 'achDescPostbiotic', ['postbiotic'], 100),
   total('bacteria_1000', '🦠', 'achBacteria', 'achDescBacteria', ['bacteria'], 1000),
   total('bean_100', '🫘', 'achBeans', 'achDescCollect', ['bean'], 100),
   total('mystery_100', '📦', 'achMystery', 'achDescMystery', ['mystery'], 100),
-  total('coin_1000', '🌽', 'achCoins', 'achDescCollect', ['coin'], 1000),
+  total('coin_1000', '🟡', 'achCoins', 'achDescCollect', ['coin'], 1000),
 ];
 
 const ID_RE = /^[a-z0-9_]{1,40}$/;
@@ -79,10 +79,10 @@ export function addCounters(a, b) {
 
 /**
  * One finished run's counters. facts: { mode: 'single' | 'daily', score, level, won, collected,
- * farts, superFarts }. A single-player run adds games / wins / sumScore / sumLevel / maxLevel
+ * farts, superFarts, pipes }. A single-player run adds games / wins / sumScore / sumLevel / maxLevel
  * (score capped at LEADERBOARD.maxScore, level at the last level, as submit_counters checks);
- * a Daily Dump adds dailyGames. Both add deaths (a run that did not win), farts, super farts and
- * the pickups. Zero counts are left out.
+ * a Daily Dump adds dailyGames. Both add deaths (a run that did not win), pipes passed, farts,
+ * super farts and the pickups. Zero counts are left out.
  */
 export function runDeltas(facts, { maxScore = LEADERBOARD.maxScore, lastLevel = TUNING.levels.lastLevel } = {}) {
   const f = facts ?? {};
@@ -103,6 +103,7 @@ export function runDeltas(facts, { maxScore = LEADERBOARD.maxScore, lastLevel = 
     return out;
   }
   add('deaths', f.won ? 0 : 1);
+  add('pipes', count(f.pipes));
   add('farts', count(f.farts));
   add('superFarts', count(f.superFarts));
   const got = f.collected && typeof f.collected === 'object' ? f.collected : {};

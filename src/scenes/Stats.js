@@ -13,17 +13,18 @@ const MUTED = '#c9b8dc';
 const GOLD = '#ffd700';
 const DASH = '–';
 
-/** The career grid: counter → glyph, in the order shown (two rows of five). */
+/** The career grid: counter → glyph, in the order shown (two rows of L.careerCols). */
 const CAREER = [
+  ['pipes', '#️⃣'],
   ['farts', '💨'],
   ['superFarts', '🌈'],
-  ['fiber', '🌾'],
+  ['fiber', '🥦'],
   ['probiotic', '💊'],
   ['postbiotic', '✨'],
   ['bacteria', '🦠'],
   ['bean', '🫘'],
   ['mystery', '📦'],
-  ['coin', '🌽'],
+  ['coin', '🟡'],
   ['deaths', '💀'],
 ];
 
@@ -229,16 +230,17 @@ export class Stats extends Phaser.Scene {
     row('statsRival', rival ? t(locale, 'statsRivalLine').replace('{name}', rival.name).replace('{losses}', String(rival.losses)).replace('{meetings}', String(rival.meetings)) : DASH, rival ? GOLD : '#ffffff');
     y += 16;
 
-    // Career totals: a glyph over its count, five to a row.
+    // Career totals: a glyph over its count, L.careerCols to a row.
     header('statsCareer');
-    const colW = (L.right - L.left) / 5;
+    const colW = (L.right - L.left) / L.careerCols;
     CAREER.forEach(([key, glyph], i) => {
-      const x = L.left + colW * (i % 5) + colW / 2;
-      const gy = y + Math.floor(i / 5) * 92;
+      const x = L.left + colW * (i % L.careerCols) + colW / 2;
+      const gy = y + Math.floor(i / L.careerCols) * 92;
       sv.add(this.add.text(x, gy, glyph, { fontFamily: 'sans-serif', fontSize: '36px' }).setOrigin(0.5));
-      sv.add(this.add.text(x, gy + 38, String(view.counters?.[key] ?? 0), { ...STYLE, fontSize: '22px', color: MUTED }).setOrigin(0.5));
+      const n = sv.add(this.add.text(x, gy + 38, String(view.counters?.[key] ?? 0), { ...STYLE, fontSize: '22px', color: MUTED }).setOrigin(0.5));
+      n.setScale(fitScale(n.width, colW - 6, 0));
     });
-    y += 2 * 92 + 10;
+    y += Math.ceil(CAREER.length / L.careerCols) * 92 + 10;
 
     // Achievements: earned first (full colour), then what is still to earn (dimmed; for another
     // player only the quests open now). A tap explains one in the strip under the band.
