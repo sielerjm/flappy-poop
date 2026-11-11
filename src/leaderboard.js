@@ -859,7 +859,7 @@ function normalizeProfile(raw) {
   return {
     found: true,
     name,
-    single: { games: whole(s.games), wins: whole(s.wins), maxLevel: whole(s.maxLevel), avgLevel: avg(s.avgLevel), avgScore: avg(s.avgScore) },
+    single: { games: whole(s.games), bestScore: whole(s.bestScore), wins: whole(s.wins), maxLevel: whole(s.maxLevel), avgLevel: avg(s.avgLevel), avgScore: avg(s.avgScore) },
     daily: { dumps: whole(d.dumps), gold: whole(d.gold), silver: whole(d.silver), bronze: whole(d.bronze) },
     tournament: { events: whole(t.events), gold: whole(t.gold), silver: whole(t.silver), bronze: whole(t.bronze), rival },
     counters: cleanCounters(raw.counters),

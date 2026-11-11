@@ -418,6 +418,7 @@ Inspired by Flappy Bird
 | statsNotFound | No stats for {name} yet | 还没有 {name} 的数据 |
 | statsOfflineOwn | Offline: this device's numbers only | 离线：只显示本设备的数据 |
 | saveProfile | 👤 Profile | 👤 个人资料 |
+| statsBestScore | Highest score | 最高分 |
 
 ## Reviewer checklist
 

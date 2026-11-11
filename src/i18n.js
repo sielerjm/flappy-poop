@@ -309,6 +309,7 @@ Inspired by Flappy Bird`,
     statsNotFound: 'No stats for {name} yet',
     statsOfflineOwn: "Offline: this device's numbers only",
     saveProfile: '👤 Profile',
+    statsBestScore: 'Highest score',
   },
   'zh-Hans': {
     readyTitle: 'FLAPPY POOP',
@@ -611,6 +612,7 @@ Inspired by Flappy Bird`,
     statsNotFound: '还没有 {name} 的数据',
     statsOfflineOwn: '离线：只显示本设备的数据',
     saveProfile: '👤 个人资料',
+    statsBestScore: '最高分',
   },
 };
 

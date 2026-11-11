@@ -3222,11 +3222,11 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
       ok((await shut()) && (await evaluate(`${P}.state`)) === 'ready', '✕ closes it back to the home screen');
 
       // Another player's profile, from a stubbed player_stats.
-      await evaluate(`(globalThis.__profile = { found: true, name: 'Rival', single: { games: 12, wins: 2, maxLevel: 6, avgLevel: 3.5, avgScore: 88.2 }, daily: { dumps: 4, gold: 1, silver: 0, bronze: 2 }, tournament: { events: 3, gold: 1, silver: 1, bronze: 0, rival: { name: 'Smoke', meetings: 3, losses: 1 } }, counters: { farts: 40, fiber: 120 }, achievements: [{ id: 'win_game', at: '2026-11-09' }] }, ${P}.openStats({ name: 'Rival' }), true)`);
+      await evaluate(`(globalThis.__profile = { found: true, name: 'Rival', single: { games: 12, bestScore: 307, wins: 2, maxLevel: 6, avgLevel: 3.5, avgScore: 88.2 }, daily: { dumps: 4, gold: 1, silver: 0, bronze: 2 }, tournament: { events: 3, gold: 1, silver: 1, bronze: 0, rival: { name: 'Smoke', meetings: 3, losses: 1 } }, counters: { farts: 40, fiber: 120 }, achievements: [{ id: 'win_game', at: '2026-11-09' }] }, ${P}.openStats({ name: 'Rival' }), true)`);
       ok(await waitFor(`__flappy.scene.isActive('Stats') && ${ST}.view`), "another player's profile opens by name");
       const other = await texts();
       const asked = await evaluate(`JSON.stringify(__career.profiles.at(-1))`).then(JSON.parse);
-      ok(asked?.name === 'Rival' && ['Rival', '12', '2', 'LV 6', '3.5', '88.2', '4', '🥇1 🥈0 🥉2', '🥇1 🥈1 🥉0', '120', '40', '🎉'].every((x) => other.includes(x)) && other.some((x) => x.startsWith('Smoke · ')), `it shows their numbers, medals, rival and badges (asked for ${JSON.stringify(asked)})`);
+      ok(asked?.name === 'Rival' && ['Rival', '12', '307', 'Highest score', '2', 'LV 6', '3.5', '88.2', '4', '🥇1 🥈0 🥉2', '🥇1 🥈1 🥉0', '120', '40', '🎉'].every((x) => other.includes(x)) && other.some((x) => x.startsWith('Smoke · ')), `it shows their numbers (Highest score 307), medals, rival and badges (asked for ${JSON.stringify(asked)})`);
       ok((await evaluate(`${ST}.badgeItems.length`)) === 1, 'only the badges they earned (no quest is open)');
       await evaluate(`${ST}.badgeItems[0].glyph.emit('pointerup'), true`);
       const explained = await evaluate(`${ST}.detail.text`);

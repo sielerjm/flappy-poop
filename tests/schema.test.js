@@ -551,7 +551,7 @@ test('player_stats: single-player averages and the board level, daily podiums ra
   const s = await pstats(db, A);
   assert.equal(s.found, true);
   assert.equal(s.name, 'Alice', 'the score-board name');
-  assert.deepEqual(s.single, { games: 4, wins: 1, maxLevel: 4, avgLevel: 2.5, avgScore: 50 }, 'maxLevel from the board row (4) over the counter (3)');
+  assert.deepEqual(s.single, { games: 4, bestScore: 120, wins: 1, maxLevel: 4, avgLevel: 2.5, avgScore: 50 }, 'maxLevel from the board row (4) over the counter (3); the best score from the board');
   // The podium counts agree with what daily_board showed on each day.
   for (const pid of [A, B, C, D]) {
     const want = { dumps: 0, gold: 0, silver: 0, bronze: 0 };
@@ -580,7 +580,7 @@ test('player_stats: single-player averages and the board level, daily podiums ra
   assert.deepEqual(await pstats(db, id('NEW')), {
     found: true,
     name: null,
-    single: { games: 0, wins: 0, maxLevel: 0, avgLevel: null, avgScore: null },
+    single: { games: 0, bestScore: 0, wins: 0, maxLevel: 0, avgLevel: null, avgScore: null },
     daily: { dumps: 0, gold: 0, silver: 0, bronze: 0 },
     tournament: { events: 0, gold: 0, silver: 0, bronze: 0, rival: null },
     counters: {},
@@ -673,4 +673,15 @@ test('anon reads none of the profile tables and cannot call their helpers', asyn
   await assert.rejects(asAnon(db, "insert into public.player_achievements (player_id, achievement_id) values ('AAAAAAAAAAAAAAAAAAAAAA', 'x')"), /permission denied/);
   await assert.rejects(asAnon(db, "select public.merge_counters('{}', '{}')"), /permission denied/);
   await assert.rejects(asAnon(db, "select public.player_by_name('x')"), /permission denied/);
+});
+
+test("player_stats' bestScore is the higher of the player's off- and on-toilet rows", async () => {
+  const db = await freshDb();
+  const P = id('BS');
+  await asAnon(db, 'select public.submit_score($1, $2, 140, false, 3)', [P, 'Best']);
+  await db.query("update public.scores set updated_at = now() - interval '6 seconds'");
+  await asAnon(db, 'select public.submit_score($1, $2, 261, true, 6)', [P, 'Best']);
+  assert.equal((await pstats(db, P)).single.bestScore, 261, 'the toilet row wins here');
+  assert.equal((await pstats(db, null, 'best')).single.bestScore, 261, 'by name too');
+  assert.equal((await pstats(db, id('NONE'))).single.bestScore, 0);
 });

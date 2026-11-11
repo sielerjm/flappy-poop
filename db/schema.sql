@@ -1138,7 +1138,8 @@ $$;
 -- or by a name as a board shows it (player_by_name); a valid id wins. Never an id
 -- in the answer. {found: false} for a name nobody shows under; otherwise
 --   name         the board's name for them (null with no rows anywhere)
---   single       games, wins, maxLevel (the counter or their best board row's
+--   single       games, bestScore (their best score-board row, either kind),
+--                wins, maxLevel (the counter or their best board row's
 --                level, whichever is higher), avgLevel, avgScore (null at 0 games)
 --   daily        dumps played; gold / silver / bronze = days they ranked 1st / 2nd
 --                / 3rd, ranked as daily_board ranks (score, then earlier post)
@@ -1225,6 +1226,7 @@ begin
     'name', v_name,
     'single', jsonb_build_object(
       'games', v_games,
+      'bestScore', coalesce((select max(s.score) from public.scores s where s.player_id = v_id), 0),
       'wins', coalesce((v_c->>'wins')::bigint, 0),
       'maxLevel', greatest(coalesce((v_c->>'maxLevel')::int, 0),
                            coalesce((select max(s.level) from public.scores s where s.player_id = v_id), 0)),

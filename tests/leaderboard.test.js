@@ -623,7 +623,7 @@ test('fetchPlayerStats asks by id or by name, and cleans the answer', async () =
   const body = {
     found: true,
     name: 'Alice',
-    single: { games: 4, wins: 1, maxLevel: 4, avgLevel: 2.5, avgScore: 50, extra: 1 },
+    single: { games: 4, bestScore: 260, wins: 1, maxLevel: 4, avgLevel: 2.5, avgScore: 50, extra: 1 },
     daily: { dumps: 3, gold: 1, silver: 1, bronze: 0 },
     tournament: { events: 3, gold: 1, silver: 0, bronze: 2, rival: { name: 'Bob', meetings: 3, losses: 2 } },
     counters: { games: 4, fiber: 9, bad: 'x' },
@@ -635,7 +635,7 @@ test('fetchPlayerStats asks by id or by name, and cleans the answer', async () =
   assert.deepEqual(p, {
     found: true,
     name: 'Alice',
-    single: { games: 4, wins: 1, maxLevel: 4, avgLevel: 2.5, avgScore: 50 },
+    single: { games: 4, bestScore: 260, wins: 1, maxLevel: 4, avgLevel: 2.5, avgScore: 50 },
     daily: { dumps: 3, gold: 1, silver: 1, bronze: 0 },
     tournament: { events: 3, gold: 1, silver: 0, bronze: 2, rival: { name: 'Bob', meetings: 3, losses: 2 } },
     counters: { games: 4, fiber: 9 },
@@ -648,6 +648,6 @@ test('fetchPlayerStats asks by id or by name, and cleans the answer', async () =
   assert.equal(await fetchPlayerStats({ name: 'X' }, { fetch: fakeFetch({ status: 200, body: [1] }), config }), null, 'junk');
   assert.equal(await fetchPlayerStats({}, { fetch, config }), null, 'nobody asked for');
   const bare = await fetchPlayerStats({ id: ID }, { fetch: fakeFetch({ status: 200, body: { found: true, name: null } }), config });
-  assert.deepEqual(bare.single, { games: 0, wins: 0, maxLevel: 0, avgLevel: null, avgScore: null });
+  assert.deepEqual(bare.single, { games: 0, bestScore: 0, wins: 0, maxLevel: 0, avgLevel: null, avgScore: null }, 'an older server without bestScore reads 0');
   assert.equal(bare.tournament.rival, null);
 });

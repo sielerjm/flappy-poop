@@ -137,6 +137,7 @@ export class Stats extends Phaser.Scene {
       note: !save.name ? 'leaderboardJoin' : online ? null : 'statsOfflineOwn',
       single: {
         games,
+        bestScore: Math.max(server?.single?.bestScore ?? 0, (save.top ?? []).reduce((m, e) => Math.max(m, e?.score ?? 0), 0)),
         wins: totals.wins ?? 0,
         maxLevel: Math.max(totals.maxLevel ?? 0, server?.single?.maxLevel ?? 0, bestLevel),
         avgLevel: games ? round1((totals.sumLevel ?? 0) / games) : null,
@@ -210,6 +211,7 @@ export class Stats extends Phaser.Scene {
     header('statsSingle');
     const s = view.single;
     row('statsGames', num(s.games));
+    row('statsBestScore', s.bestScore ? String(s.bestScore) : DASH);
     row('statsWins', num(s.wins));
     row('statsMaxLevel', s.maxLevel ? levelLabel(locale, s.maxLevel) : DASH);
     row('statsAvgLevel', num(s.avgLevel));
