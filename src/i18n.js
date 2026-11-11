@@ -252,6 +252,36 @@ Inspired by Flappy Bird`,
     tournamentBack: 'Back to the race',
     tournamentBracketPill: '🏅 Bracket',
     tournamentSaveTwo: "Two-player tournaments aren't saved to the 🏅 board",
+    achScore10: 'Tiny Plop',
+    achScore100: 'Century Stool',
+    achScore250: 'On a Roll',
+    achScore500: 'Express Transit',
+    achScore1000: 'Royal Flush',
+    achWin: 'Made It Out',
+    achToiletWin: 'Porcelain Throne',
+    achGames: 'Regular',
+    achDeaths: 'Thousand Flushes',
+    achFarts: 'Windbreaker',
+    achSuperFarts: 'Rainbow Blast',
+    achFiber: 'Fiber Fanatic',
+    achProbiotic: 'Probiotic Pro',
+    achPostbiotic: 'Postbiotic Alchemist',
+    achBacteria: 'Germ Magnet',
+    achBeans: 'Bean Counter',
+    achMystery: 'Unboxer',
+    achCoins: 'Corn Hoarder',
+    achDescScore: 'Score {n} in one run',
+    achDescLevel: 'Reach level {n} in one run',
+    achDescWin: 'Clear the rectum and make it out',
+    achDescToiletWin: 'Make it out with toilet mode on',
+    achDescGames: 'Play {n} runs (Daily Dumps count)',
+    achDescDeaths: 'Crash {n} times in all',
+    achDescFarts: 'Fart {n} times in all',
+    achDescSuperFarts: 'Fire {n} super farts in all',
+    achDescCollect: 'Collect {n} {glyph} in all',
+    achDescBacteria: 'Bump into {n} 🦠 in all',
+    achDescPostbiotic: 'Make {n} postbiotics ✨',
+    achDescMystery: 'Open {n} mystery boxes 📦',
   },
   'zh-Hans': {
     readyTitle: 'FLAPPY POOP',
@@ -497,6 +527,36 @@ Inspired by Flappy Bird`,
     tournamentBack: '回到比赛',
     tournamentBracketPill: '🏅 赛程',
     tournamentSaveTwo: '双人锦标赛不会记到 🏅 榜上',
+    achScore10: '小小一坨',
+    achScore100: '百分便便',
+    achScore250: '势如破竹',
+    achScore500: '一泻千里',
+    achScore1000: '王者冲水',
+    achWin: '成功脱出',
+    achToiletWin: '马桶王座',
+    achGames: '规律达人',
+    achDeaths: '千次冲走',
+    achFarts: '放屁大王',
+    achSuperFarts: '彩虹屁',
+    achFiber: '纤维狂热',
+    achProbiotic: '益生菌达人',
+    achPostbiotic: '后生元炼金师',
+    achBacteria: '细菌磁铁',
+    achBeans: '数豆达人',
+    achMystery: '开箱达人',
+    achCoins: '玉米囤囤',
+    achDescScore: '单局得分达到 {n}',
+    achDescLevel: '单局到达第 {n} 关',
+    achDescWin: '通过直肠，成功脱出',
+    achDescToiletWin: '开启马桶模式并成功脱出',
+    achDescGames: '累计游玩 {n} 局（每日一拉也算）',
+    achDescDeaths: '累计撞毁 {n} 次',
+    achDescFarts: '累计放屁 {n} 次',
+    achDescSuperFarts: '累计放出 {n} 次超级屁',
+    achDescCollect: '累计收集 {n} 个 {glyph}',
+    achDescBacteria: '累计碰到 {n} 个 🦠',
+    achDescPostbiotic: '累计制造 {n} 次后生元 ✨',
+    achDescMystery: '累计打开 {n} 个神秘盒子 📦',
   },
 };
 
@@ -574,6 +634,19 @@ export function countText(n) {
 /** Short level label for the progress bar and score lines: "LV 2". */
 export function levelLabel(locale, level) {
   return t(locale, 'levelShort').replace('{n}', String(level));
+}
+
+/** An achievement's name (ACHIEVEMENTS in achievements.js: its `title` key). */
+export function badgeTitle(locale, entry) {
+  return entry?.title ? t(locale, entry.title) : '';
+}
+
+/** An achievement's requirement: its `desc` template with {n} and {glyph} filled in. */
+export function badgeDesc(locale, entry) {
+  if (!entry?.desc) return '';
+  return t(locale, entry.desc)
+    .replace('{n}', String(entry.n ?? ''))
+    .replace('{glyph}', entry.descGlyph ?? entry.glyph ?? '');
 }
 
 /** A match half's display name: the tournament competitor's (match.names), else "P1" / "P2" (versusPlayer). */

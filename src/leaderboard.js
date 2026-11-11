@@ -5,12 +5,15 @@
 // Every network function resolves (never rejects) and reports failure as
 // false / null (submitScore: { ok: false, reason }): the game treats the
 // leaderboard as garnish and never waits on it. Writes go through the SQL
-// functions in db/schema.sql (submit_score, merge_players, submit_tournament);
+// functions in db/schema.sql (submit_score, merge_players, submit_tournament,
+// submit_daily_score, submit_counters, claim_achievements);
 // reads are a plain select on the columns the publishable key is allowed to see,
-// plus the name_available, player_rank, player_name and tournament_board functions.
+// plus the name_available, player_rank, player_name, tournament_board,
+// daily_board and player_stats functions.
 
 import { LEADERBOARD } from './config.js';
 import { recordScore, bestByToilet, validateName } from './save.js';
+import { addCounters, cleanCounters, isAchievementId } from './achievements.js';
 
 // ---------------------------------------------------------------------------
 // Pure helpers
@@ -656,4 +659,222 @@ export async function fetchRank(playerId, toiletOrOpts = false, maybeOpts = {}) 
   const { rank, total, score, toilet, level } = out;
   if (!Number.isInteger(rank) || rank < 1 || !Number.isInteger(total) || total < rank || !Number.isInteger(score)) return null;
   return { rank, total, score, toilet: Boolean(toilet), level: levelOf(level) };
+}
+
+// ---------------------------------------------------------------------------
+// Player profiles (plan 08): lifetime counters, achievements, and the profile read.
+
+const DAY = /^\d{4}-\d{2}-\d{2}$/;
+const MAX_CLAIMS = 300; // claim_achievements' per-player cap
+
+/** A stored career, normalised: { v, base, pending, inflight, unlocked, claims }. */
+function normalizeCareer(raw) {
+  const r = raw && typeof raw === 'object' ? raw : {};
+  const base = r.base && typeof r.base === 'object' && typeof r.base.id === 'string' && ID_RE.test(r.base.id) ? { id: r.base.id, counters: cleanCounters(r.base.counters) } : null;
+  const inflight =
+    r.inflight && typeof r.inflight === 'object' && typeof r.inflight.batch === 'string' && ID_RE.test(r.inflight.batch) && Object.keys(cleanCounters(r.inflight.counters)).length
+      ? { batch: r.inflight.batch, counters: cleanCounters(r.inflight.counters) }
+      : null;
+  const unlocked = {};
+  if (r.unlocked && typeof r.unlocked === 'object' && !Array.isArray(r.unlocked)) {
+    for (const [id, day] of Object.entries(r.unlocked)) if (isAchievementId(id) && typeof day === 'string' && DAY.test(day)) unlocked[id] = day;
+  }
+  const claims = Array.isArray(r.claims) ? [...new Set(r.claims.filter((id) => isAchievementId(id) && id in unlocked))].slice(0, MAX_CLAIMS) : [];
+  return { v: 1, base, pending: cleanCounters(r.pending), inflight, unlocked, claims };
+}
+
+/**
+ * This device's career (flappyPoop.career): the server's last totals for a player (`base`, with
+ * that player's id), counters not sent yet (`pending`), one batch on its way (`inflight`, resent
+ * unchanged until the server confirms it: its id is the receipt), the achievements unlocked here or
+ * learned from the server (`unlocked`: id → UTC day), and the claims not confirmed yet (`claims`).
+ * Every read normalises, every write is guarded; it never throws.
+ */
+export function createCareerStore(storage = globalThis.localStorage, key = LEADERBOARD.careerKey) {
+  const read = () => {
+    try {
+      const raw = storage?.getItem(key);
+      return normalizeCareer(raw == null ? null : JSON.parse(raw));
+    } catch {
+      return normalizeCareer(null);
+    }
+  };
+  const write = (c) => {
+    try {
+      storage?.setItem(key, JSON.stringify(c));
+    } catch {
+      /* storage unavailable: the career lives for this page load only */
+    }
+    return c;
+  };
+  return {
+    load: read,
+    /** The player's totals as this device knows them: the server's last (when they are for `playerId`) + in flight + pending. */
+    totals(playerId = null) {
+      const c = read();
+      const base = c.base && c.base.id === playerId ? c.base.counters : {};
+      return addCounters(addCounters(base, c.inflight?.counters), c.pending);
+    },
+    /** Add one run's counters (runDeltas) to what is waiting to be sent. */
+    addRun(deltas) {
+      const c = read();
+      c.pending = addCounters(c.pending, deltas);
+      write(c);
+    },
+    /** The batch to send: the one already in flight, else the pending counters under a new id (makeId); null when nothing waits. */
+    beginBatch(makeId) {
+      const c = read();
+      if (!c.inflight && Object.keys(c.pending).length) {
+        const batch = makeId();
+        if (typeof batch !== 'string' || !ID_RE.test(batch)) return null;
+        c.inflight = { batch, counters: c.pending };
+        c.pending = {};
+        write(c);
+      }
+      return c.inflight;
+    },
+    /** The server has the batch: forget it, and keep the totals it answered with as `playerId`'s. */
+    confirmBatch(batch, totals, playerId) {
+      const c = read();
+      if (c.inflight?.batch !== batch) return;
+      c.inflight = null;
+      if (typeof playerId === 'string' && ID_RE.test(playerId)) c.base = { id: playerId, counters: cleanCounters(totals) };
+      write(c);
+    },
+    /** The server will never take the batch: drop it. */
+    dropBatch(batch) {
+      const c = read();
+      if (c.inflight?.batch !== batch) return;
+      c.inflight = null;
+      write(c);
+    },
+    /** The server's totals for a player (a profile read). */
+    setBase(playerId, counters) {
+      if (typeof playerId !== 'string' || !ID_RE.test(playerId)) return;
+      const c = read();
+      c.base = { id: playerId, counters: cleanCounters(counters) };
+      write(c);
+    },
+    /** Forget the server's totals (a Load: the device may now be another player); pending counts and unlocks stay. */
+    clearBase() {
+      const c = read();
+      c.base = null;
+      write(c);
+    },
+    /** The ids unlocked on this device or learned from the server: id → UTC day. */
+    unlocked() {
+      return read().unlocked;
+    },
+    /** Record newly earned ids on `day` and queue their claims. Returns the ids that were new. */
+    unlock(ids, day) {
+      const c = read();
+      const fresh = (Array.isArray(ids) ? ids : []).filter((id) => isAchievementId(id) && !(id in c.unlocked));
+      if (!fresh.length || typeof day !== 'string' || !DAY.test(day)) return [];
+      for (const id of fresh) c.unlocked[id] = day;
+      c.claims = [...new Set([...c.claims, ...fresh])].slice(0, MAX_CLAIMS);
+      write(c);
+      return fresh;
+    },
+    /** The server's achievements ([{ id, at }]): learned here (the earlier day kept), and no claim needed for them. */
+    mergeUnlocked(list) {
+      const c = read();
+      for (const a of Array.isArray(list) ? list : []) {
+        if (!a || !isAchievementId(a.id) || typeof a.at !== 'string' || !DAY.test(a.at)) continue;
+        if (!(a.id in c.unlocked) || a.at < c.unlocked[a.id]) c.unlocked[a.id] = a.at;
+        c.claims = c.claims.filter((id) => id !== a.id);
+      }
+      write(c);
+    },
+    /** The claims to send (oldest first). */
+    claims() {
+      return read().claims;
+    },
+    /** claim_achievements answered: stored ones are done; closed ones (a quest out of its window) are forgotten. */
+    settleClaims(stored = [], closed = []) {
+      const c = read();
+      const done = new Set([...stored, ...closed]);
+      c.claims = c.claims.filter((id) => !done.has(id));
+      for (const id of closed) delete c.unlocked[id];
+      write(c);
+    },
+    /** The server will never take these claims: stop sending them (the badges stay on this device). */
+    dropClaims(ids = []) {
+      const c = read();
+      const drop = new Set(ids);
+      c.claims = c.claims.filter((id) => !drop.has(id));
+      write(c);
+    },
+    clear() {
+      try {
+        storage?.removeItem(key);
+      } catch {
+        /* ignore */
+      }
+    },
+  };
+}
+
+/**
+ * Add a batch of runs to the player's lifetime counters (submit_counters). { status: 'ok', totals }
+ * when the server has it (now, or a resend of the batch it last took), { status: 'rejected' } when it
+ * never will ('bad …'), else { status: 'keep' } (offline, rate limited, not deployed yet).
+ */
+export async function submitCounters(playerId, batch, counters, opts = {}) {
+  const c = cleanCounters(counters);
+  if (typeof playerId !== 'string' || !ID_RE.test(playerId) || typeof batch !== 'string' || !ID_RE.test(batch) || !Object.keys(c).length) return { status: 'rejected' };
+  const out = await request('/rpc/submit_counters', { method: 'POST', errors: true, body: { p_player_id: playerId, p_batch: batch, p_counters: c } }, opts);
+  if (out === null || out === undefined) return { status: 'keep' };
+  if (out.error) return out.status === 400 && /bad (counters|batch|player id)/i.test(out.message) ? { status: 'rejected' } : { status: 'keep' };
+  if (typeof out !== 'object' || Array.isArray(out)) return { status: 'keep' };
+  return { status: 'ok', totals: cleanCounters(out) };
+}
+
+/**
+ * Claim achievements for the player (claim_achievements): { stored, closed } (each a list of ids),
+ * 'rejected' when the server will never take this claim ('bad …'), or null (offline, not deployed).
+ */
+export async function claimAchievements(playerId, ids, opts = {}) {
+  const list = [...new Set((Array.isArray(ids) ? ids : []).filter(isAchievementId))].slice(0, 50);
+  if (typeof playerId !== 'string' || !ID_RE.test(playerId) || !list.length) return 'rejected';
+  const out = await request('/rpc/claim_achievements', { method: 'POST', errors: true, body: { p_player_id: playerId, p_ids: list } }, opts);
+  if (out === null || out === undefined) return null;
+  if (out.error) return out.status === 400 && /bad (ids|player id)/i.test(out.message) ? 'rejected' : null;
+  const pick = (v) => (Array.isArray(v) ? v.filter(isAchievementId) : []);
+  return { stored: pick(out.stored), closed: pick(out.closed) };
+}
+
+const whole = (v) => (Number.isInteger(v) && v >= 0 ? v : 0);
+const avg = (v) => (typeof v === 'number' && Number.isFinite(v) && v >= 0 ? v : null);
+
+/** A player_stats answer, cleaned: { found: false } or the full profile; null for junk. */
+function normalizeProfile(raw) {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+  if (raw.found !== true) return raw.found === false ? { found: false } : null;
+  const s = raw.single ?? {};
+  const d = raw.daily ?? {};
+  const t = raw.tournament ?? {};
+  const r = t.rival;
+  const name = typeof raw.name === 'string' && validateName(raw.name).ok ? raw.name : null;
+  const rival = r && typeof r === 'object' && typeof r.name === 'string' && r.name ? { name: r.name, meetings: whole(r.meetings), losses: whole(r.losses) } : null;
+  return {
+    found: true,
+    name,
+    single: { games: whole(s.games), wins: whole(s.wins), maxLevel: whole(s.maxLevel), avgLevel: avg(s.avgLevel), avgScore: avg(s.avgScore) },
+    daily: { dumps: whole(d.dumps), gold: whole(d.gold), silver: whole(d.silver), bronze: whole(d.bronze) },
+    tournament: { events: whole(t.events), gold: whole(t.gold), silver: whole(t.silver), bronze: whole(t.bronze), rival },
+    counters: cleanCounters(raw.counters),
+    achievements: (Array.isArray(raw.achievements) ? raw.achievements : []).filter((a) => a && isAchievementId(a.id) && typeof a.at === 'string' && DAY.test(a.at)).map((a) => ({ id: a.id, at: a.at })),
+  };
+}
+
+/**
+ * A player's public profile (player_stats), by their id (the player's own) or by the name a board
+ * shows: the profile, { found: false } for a name nobody shows under, or null (offline, not deployed).
+ */
+export async function fetchPlayerStats({ id = null, name = null } = {}, opts = {}) {
+  const pid = typeof id === 'string' && ID_RE.test(id) ? id : null;
+  const pname = typeof name === 'string' && name.trim() ? name : null;
+  if (!pid && !pname) return null;
+  const out = await request('/rpc/player_stats', { method: 'POST', body: { p_player_id: pid, p_name: pid ? null : pname } }, opts);
+  return normalizeProfile(out);
 }

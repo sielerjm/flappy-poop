@@ -360,6 +360,36 @@ Inspired by Flappy Bird
 感谢 Tori Schummer 协助构思
 灵感来自 Flappy Bird
 ```
+| achScore10 | Tiny Plop | 小小一坨 |
+| achScore100 | Century Stool | 百分便便 |
+| achScore250 | On a Roll | 势如破竹 |
+| achScore500 | Express Transit | 一泻千里 |
+| achScore1000 | Royal Flush | 王者冲水 |
+| achWin | Made It Out | 成功脱出 |
+| achToiletWin | Porcelain Throne | 马桶王座 |
+| achGames | Regular | 规律达人 |
+| achDeaths | Thousand Flushes | 千次冲走 |
+| achFarts | Windbreaker | 放屁大王 |
+| achSuperFarts | Rainbow Blast | 彩虹屁 |
+| achFiber | Fiber Fanatic | 纤维狂热 |
+| achProbiotic | Probiotic Pro | 益生菌达人 |
+| achPostbiotic | Postbiotic Alchemist | 后生元炼金师 |
+| achBacteria | Germ Magnet | 细菌磁铁 |
+| achBeans | Bean Counter | 数豆达人 |
+| achMystery | Unboxer | 开箱达人 |
+| achCoins | Corn Hoarder | 玉米囤囤 |
+| achDescScore | Score {n} in one run | 单局得分达到 {n} |
+| achDescLevel | Reach level {n} in one run | 单局到达第 {n} 关 |
+| achDescWin | Clear the rectum and make it out | 通过直肠，成功脱出 |
+| achDescToiletWin | Make it out with toilet mode on | 开启马桶模式并成功脱出 |
+| achDescGames | Play {n} runs (Daily Dumps count) | 累计游玩 {n} 局（每日一拉也算） |
+| achDescDeaths | Crash {n} times in all | 累计撞毁 {n} 次 |
+| achDescFarts | Fart {n} times in all | 累计放屁 {n} 次 |
+| achDescSuperFarts | Fire {n} super farts in all | 累计放出 {n} 次超级屁 |
+| achDescCollect | Collect {n} {glyph} in all | 累计收集 {n} 个 {glyph} |
+| achDescBacteria | Bump into {n} 🦠 in all | 累计碰到 {n} 个 🦠 |
+| achDescPostbiotic | Make {n} postbiotics ✨ | 累计制造 {n} 次后生元 ✨ |
+| achDescMystery | Open {n} mystery boxes 📦 | 累计打开 {n} 个神秘盒子 📦 |
 
 ## Reviewer checklist
 

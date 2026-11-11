@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { LEADERBOARD } from '../src/config.js';
-import { createSubmitStore, createMergeStore, createRenameStore, createTournamentQueue, nameAction, submitPlan, submitPlans, submitScore, submitTournament, checkNameAvailable, mergePlayers, fetchPlayerName, fetchTop, fetchRank, fetchTournamentBoard, submitDailyScore, fetchDailyBoard } from '../src/leaderboard.js';
+import { createSubmitStore, createMergeStore, createRenameStore, createTournamentQueue, nameAction, submitPlan, submitPlans, submitScore, submitTournament, checkNameAvailable, mergePlayers, fetchPlayerName, fetchTop, fetchRank, fetchTournamentBoard, submitDailyScore, fetchDailyBoard, createCareerStore, submitCounters, claimAchievements, fetchPlayerStats } from '../src/leaderboard.js';
 
 const config = { dataApi: 'https://x.example/rest/v1', publishableKey: 'sb_publishable_test', timeoutMs: 50, limit: 10, maxScore: 200 };
 
@@ -47,7 +47,7 @@ test('LEADERBOARD config is complete and points at a Supabase Data API over http
   assert.equal(typeof LEADERBOARD.mergesKey, 'string');
   assert.notEqual(LEADERBOARD.mergesKey, LEADERBOARD.storageKey);
   assert.equal(typeof LEADERBOARD.renameKey, 'string');
-  assert.equal(new Set([LEADERBOARD.storageKey, LEADERBOARD.mergesKey, LEADERBOARD.renameKey, LEADERBOARD.tournamentsKey, LEADERBOARD.dailyKey, LEADERBOARD.dailyQueueKey]).size, 6);
+  assert.equal(new Set([LEADERBOARD.storageKey, LEADERBOARD.mergesKey, LEADERBOARD.renameKey, LEADERBOARD.tournamentsKey, LEADERBOARD.dailyKey, LEADERBOARD.dailyQueueKey, LEADERBOARD.careerKey]).size, 7);
   assert.ok(Number.isInteger(LEADERBOARD.tournamentQueueMax) && LEADERBOARD.tournamentQueueMax >= 1);
   assert.ok(Number.isInteger(LEADERBOARD.dailyQueueMax) && LEADERBOARD.dailyQueueMax >= 1);
   assert.ok(Number.isInteger(LEADERBOARD.dailyMaxScore) && LEADERBOARD.dailyMaxScore > LEADERBOARD.maxScore, 'an endless run gets more headroom than the 🏆 cap');
@@ -524,4 +524,130 @@ test('fetchDailyBoard: the rows in rank order with me and the total, or null on 
   assert.equal(await fetchDailyBoard(DPID, null, { fetch: fakeFetch({ body: [row(1, { score: 'x' })] }), config }), null);
   assert.equal(await fetchDailyBoard(DPID, null, { fetch: fakeFetch({ status: 500, body: 'x' }), config }), null);
   assert.equal(await fetchDailyBoard(DPID, null, { fetch: fakeFetch(), config: { ...config, dataApi: '' } }), null);
+});
+
+// ---------------------------------------------------------------------------
+// Player profiles (plan 08): the career store, submitCounters, claimAchievements, fetchPlayerStats
+
+const BATCH1 = 'BBBBBBBBBBBBBBBBBBBBB1';
+const BATCH2 = 'BBBBBBBBBBBBBBBBBBBBB2';
+
+test('career store: runs add up as pending; one batch goes out and is resent unchanged until confirmed', () => {
+  const storage = fakeStorage();
+  const c = createCareerStore(storage, 'k');
+  assert.equal(c.beginBatch(() => BATCH1), null, 'nothing to send');
+  c.addRun({ games: 1, sumScore: 40, maxLevel: 2 });
+  c.addRun({ games: 1, sumScore: 10, maxLevel: 3, fiber: 2 });
+  assert.deepEqual(c.totals(), { games: 2, sumScore: 50, maxLevel: 3, fiber: 2 });
+  const b = c.beginBatch(() => BATCH1);
+  assert.deepEqual(b, { batch: BATCH1, counters: { games: 2, sumScore: 50, maxLevel: 3, fiber: 2 } });
+  c.addRun({ games: 1, deaths: 1 });
+  assert.deepEqual(c.beginBatch(() => BATCH2), b, 'a lost reply: the same batch again, later runs wait');
+  assert.deepEqual(c.totals(ID), { games: 3, sumScore: 50, maxLevel: 3, fiber: 2, deaths: 1 }, 'in flight + pending, before any server totals');
+  c.confirmBatch('CCCCCCCCCCCCCCCCCCCCCC', { games: 99 }, ID);
+  assert.deepEqual(c.load().inflight, b, 'another batch id confirms nothing');
+  c.confirmBatch(BATCH1, { games: 12, sumScore: 500, maxLevel: 6, fiber: 2 }, ID);
+  assert.equal(c.load().inflight, null);
+  assert.deepEqual(c.totals(ID), { games: 13, sumScore: 500, maxLevel: 6, fiber: 2, deaths: 1 }, "the server's totals (every device) + what waits here");
+  assert.deepEqual(c.totals('OTHERxxxxxxxxxxxxxxxxx'), { games: 1, deaths: 1 }, "another player's view ignores this player's server totals");
+  assert.deepEqual(c.beginBatch(() => BATCH2), { batch: BATCH2, counters: { games: 1, deaths: 1 } });
+  c.dropBatch(BATCH2);
+  assert.equal(c.load().inflight, null, 'a refused batch is dropped');
+  c.clearBase();
+  assert.deepEqual(c.totals(ID), {}, 'a Load forgets the server totals');
+  c.setBase(ID, { games: 5 });
+  assert.deepEqual(c.totals(ID), { games: 5 });
+  assert.deepEqual(createCareerStore(storage, 'k').load().base, { id: ID, counters: { games: 5 } }, 'stored');
+  assert.equal(c.beginBatch(() => 'not an id'), null, 'a bad batch id makes no batch');
+});
+
+test('career store: unlocks queue claims; the server settles them, closes quests, and teaches its own', () => {
+  const c = createCareerStore(fakeStorage(), 'k');
+  assert.deepEqual(c.unlock(['win_game', 'score_10', 'Bad Id'], '2026-11-11'), ['win_game', 'score_10']);
+  assert.deepEqual(c.unlock(['win_game'], '2026-11-12'), [], 'already unlocked');
+  assert.deepEqual(c.unlock(['level_2'], 'not a day'), []);
+  assert.deepEqual(c.unlocked(), { win_game: '2026-11-11', score_10: '2026-11-11' });
+  assert.deepEqual(c.claims(), ['win_game', 'score_10']);
+  c.unlock(['quest_x'], '2026-11-11');
+  c.settleClaims(['win_game'], ['quest_x']);
+  assert.deepEqual(c.claims(), ['score_10']);
+  assert.equal('quest_x' in c.unlocked(), false, 'a closed quest is forgotten');
+  c.mergeUnlocked([{ id: 'score_10', at: '2026-11-01' }, { id: 'fart_100', at: '2026-11-05' }, { id: 'junk', at: 'x' }]);
+  assert.deepEqual(c.unlocked(), { win_game: '2026-11-11', score_10: '2026-11-01', fart_100: '2026-11-05' }, 'the earlier day kept; a badge from another device learned');
+  assert.deepEqual(c.claims(), [], 'the server already has score_10');
+  c.unlock(['level_3'], '2026-11-11');
+  c.dropClaims(['level_3']);
+  assert.deepEqual(c.claims(), []);
+  assert.equal(c.unlocked().level_3, '2026-11-11', 'a dropped claim keeps the badge on the device');
+  c.clear();
+  assert.deepEqual(c.load(), { v: 1, base: null, pending: {}, inflight: null, unlocked: {}, claims: [] });
+});
+
+test('career store: junk in storage and storage that throws never break it', () => {
+  const storage = fakeStorage();
+  storage.setItem('k', '{not json');
+  assert.deepEqual(createCareerStore(storage, 'k').load().pending, {});
+  storage.setItem('k', JSON.stringify({ pending: { games: 'x', fiber: 2 }, inflight: { batch: 'short', counters: { games: 1 } }, unlocked: { ok_id: '2026-11-11', BAD: '2026-11-11' }, claims: ['ok_id', 'not_unlocked'] }));
+  assert.deepEqual(createCareerStore(storage, 'k').load(), { v: 1, base: null, pending: { fiber: 2 }, inflight: null, unlocked: { ok_id: '2026-11-11' }, claims: ['ok_id'] });
+  const c = createCareerStore(boom, 'k');
+  c.addRun({ games: 1 });
+  assert.deepEqual(c.totals(), {});
+  assert.doesNotThrow(() => c.clear());
+});
+
+test('submitCounters posts the batch and reads the totals; a refusal drops it, anything else keeps it', async () => {
+  const fetch = fakeFetch({ status: 200, body: { games: 7, fiber: 3, bad: -1 } });
+  assert.deepEqual(await submitCounters(ID, BATCH1, { games: 2, fiber: 3 }, { fetch, config }), { status: 'ok', totals: { games: 7, fiber: 3 } });
+  assert.equal(fetch.calls[0].url, 'https://x.example/rest/v1/rpc/submit_counters');
+  assert.deepEqual(fetch.calls[0].body, { p_player_id: ID, p_batch: BATCH1, p_counters: { games: 2, fiber: 3 } });
+  const answer = (status, message) => submitCounters(ID, BATCH1, { games: 1 }, { fetch: fakeFetch({ status, body: { message } }), config });
+  assert.deepEqual(await answer(400, 'bad counters: totals'), { status: 'rejected' });
+  assert.deepEqual(await answer(400, 'bad batch'), { status: 'rejected' });
+  assert.deepEqual(await answer(400, 'rate limited'), { status: 'keep' });
+  assert.deepEqual(await answer(404, 'function not found'), { status: 'keep' }, 'not deployed yet');
+  assert.deepEqual(await submitCounters(ID, BATCH1, { games: 1 }, { fetch: async () => { throw new Error('offline'); }, config }), { status: 'keep' });
+  assert.deepEqual(await submitCounters(ID, BATCH1, {}, { fetch, config }), { status: 'rejected' }, 'nothing to send');
+  assert.deepEqual(await submitCounters('short', BATCH1, { games: 1 }, { fetch, config }), { status: 'rejected' });
+});
+
+test('claimAchievements: stored and closed lists; a refusal is rejected; offline is null', async () => {
+  const fetch = fakeFetch({ status: 200, body: { stored: ['win_game', 'BAD'], closed: ['quest_x'] } });
+  assert.deepEqual(await claimAchievements(ID, ['win_game', 'win_game', 'quest_x', 'Nope'], { fetch, config }), { stored: ['win_game'], closed: ['quest_x'] });
+  assert.deepEqual(fetch.calls[0].body, { p_player_id: ID, p_ids: ['win_game', 'quest_x'] });
+  assert.equal(await claimAchievements(ID, ['a'], { fetch: fakeFetch({ status: 400, body: { message: 'bad ids: too many achievements' } }), config }), 'rejected');
+  assert.equal(await claimAchievements(ID, ['a'], { fetch: fakeFetch({ status: 500, body: '' }), config }), null);
+  assert.equal(await claimAchievements(ID, [], { fetch, config }), 'rejected');
+});
+
+test('fetchPlayerStats asks by id or by name, and cleans the answer', async () => {
+  const body = {
+    found: true,
+    name: 'Alice',
+    single: { games: 4, wins: 1, maxLevel: 4, avgLevel: 2.5, avgScore: 50, extra: 1 },
+    daily: { dumps: 3, gold: 1, silver: 1, bronze: 0 },
+    tournament: { events: 3, gold: 1, silver: 0, bronze: 2, rival: { name: 'Bob', meetings: 3, losses: 2 } },
+    counters: { games: 4, fiber: 9, bad: 'x' },
+    achievements: [{ id: 'win_game', at: '2026-11-09' }, { id: 'BAD', at: '2026-11-09' }],
+  };
+  const fetch = fakeFetch({ status: 200, body });
+  const p = await fetchPlayerStats({ name: 'Alice' }, { fetch, config });
+  assert.deepEqual(fetch.calls[0].body, { p_player_id: null, p_name: 'Alice' });
+  assert.deepEqual(p, {
+    found: true,
+    name: 'Alice',
+    single: { games: 4, wins: 1, maxLevel: 4, avgLevel: 2.5, avgScore: 50 },
+    daily: { dumps: 3, gold: 1, silver: 1, bronze: 0 },
+    tournament: { events: 3, gold: 1, silver: 0, bronze: 2, rival: { name: 'Bob', meetings: 3, losses: 2 } },
+    counters: { games: 4, fiber: 9 },
+    achievements: [{ id: 'win_game', at: '2026-11-09' }],
+  });
+  await fetchPlayerStats({ id: ID, name: 'Alice' }, { fetch, config });
+  assert.deepEqual(fetch.calls[1].body, { p_player_id: ID, p_name: null }, 'the id wins');
+  assert.deepEqual(await fetchPlayerStats({ name: 'Nobody' }, { fetch: fakeFetch({ status: 200, body: { found: false } }), config }), { found: false });
+  assert.equal(await fetchPlayerStats({ name: 'X' }, { fetch: fakeFetch({ status: 500 }), config }), null, 'offline');
+  assert.equal(await fetchPlayerStats({ name: 'X' }, { fetch: fakeFetch({ status: 200, body: [1] }), config }), null, 'junk');
+  assert.equal(await fetchPlayerStats({}, { fetch, config }), null, 'nobody asked for');
+  const bare = await fetchPlayerStats({ id: ID }, { fetch: fakeFetch({ status: 200, body: { found: true, name: null } }), config });
+  assert.deepEqual(bare.single, { games: 0, wins: 0, maxLevel: 0, avgLevel: null, avgScore: null });
+  assert.equal(bare.tournament.rival, null);
 });
