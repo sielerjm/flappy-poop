@@ -2059,7 +2059,8 @@ export class Play extends Phaser.Scene {
     // after the item and bean draws so levels below fromLevel and the draws before it keep their sequence.
     const move = this.course.pipeMove(n, this.level, gapY, gapBounds(gapCfg), { centred });
     if (move) {
-      top.setData({ move, elapsed: 0, mate: bottom, gapH });
+      top.setData({ move, mate: bottom, gapH });
+      top.clockMs = 0; // its sine's clock (update(); a plain field: setData every frame emits events)
       for (const p of [top, bottom]) p.setTexture('pipe-moving', '__BASE'); // lighter pink: same size, so the bodies stay as set
     }
     // Fiber, mystery boxes and coins sit between pairs like a bean (and yield to a bean rolled for the same pair);
@@ -2104,7 +2105,8 @@ export class Play extends Phaser.Scene {
       const beanBody = scaledCircleBody(bean.frame.width, T.spriteDisplayScale, T.beans.beanRadius);
       bean.body.setCircle(beanBody.radius, beanBody.offset, beanBody.offset);
       bean.setVelocityX(-this.scrollSpeed());
-      bean.setData({ elapsed: 0, phase, still, baseScale: T.spriteDisplayScale, radius: T.beans.beanRadius });
+      bean.setData({ phase, still, baseScale: T.spriteDisplayScale, radius: T.beans.beanRadius });
+      bean.clockMs = 0; // its bob / pulse clock (update())
     }
   }
 
@@ -2121,7 +2123,10 @@ export class Play extends Phaser.Scene {
     const item = this.items.create(beanSpawnX(this.fieldW, T.pipeWidth, pipeSpacing(this.level, T)) - shift, y, kind);
     item.setDepth(8);
     this.finishItem(item, kind);
-    if (stillY == null) item.setData({ bob: 'band', elapsed: 0, phase, period });
+    if (stillY == null) {
+      item.setData({ bob: 'band', phase, period });
+      item.clockMs = 0;
+    }
     if (kind === 'mystery') {
       item.setData('pair', this.pipesSpawned); // its reward stream on a shared course (course.reward)
       const frames = this.anims.get('mystery-spin').frames.length;
@@ -2148,8 +2153,8 @@ export class Play extends Phaser.Scene {
 
   /** A still item's frame: advance its clock (only while playing, so a pause freezes it) and pulse it. */
   pulseStill(item, delta) {
-    const elapsed = (item.getData('elapsed') ?? 0) + delta;
-    item.setData('elapsed', elapsed);
+    const elapsed = (item.clockMs ?? 0) + delta;
+    item.clockMs = elapsed;
     this.pulseScale(item, elapsed);
   }
 
@@ -2201,11 +2206,13 @@ export class Play extends Phaser.Scene {
     item.setDepth(-1); // under the pipes (0), over the background layers
     this.finishItem(item, kind);
     if (pair) {
-      item.setData({ bob: 'pair', pair, elapsed: 0 });
+      item.setData({ bob: 'pair', pair });
+      item.clockMs = 0;
       item.y = gapY;
     } else if (this.level >= T.items.moveFromLevel) {
       const amp = gapBobAmplitude(gapH, T.items.itemRadius, T.items.moveMarginPx);
-      item.setData({ bob: 'gap', baseY: gapY, amp, elapsed: 0, phase: this.course.phase(this.pipesSpawned, 'gap') });
+      item.setData({ bob: 'gap', baseY: gapY, amp, phase: this.course.phase(this.pipesSpawned, 'gap') });
+      item.clockMs = 0;
       item.y = gapBobY(0, gapY, amp, T.items.movePeriodMs, item.getData('phase'));
     }
     return item;
@@ -2216,7 +2223,8 @@ export class Play extends Phaser.Scene {
     const scale = coin ? T.coin.displayPx / item.frame.width : T.spriteDisplayScale;
     const radius = coin ? T.coin.radius : T.items.itemRadius;
     item.setScale(scale);
-    item.setData({ baseScale: scale, radius, elapsed: 0 }); // the still pulse's base (pulseStill); a bobbing item resets elapsed with its bob
+    item.setData({ baseScale: scale, radius }); // the still pulse's base (pulseStill)
+    item.clockMs = 0; // its pulse / bob clock (update()); a bobbing item resets it with its bob
     const itemBody = scaledCircleBody(item.frame.width, scale, radius);
     item.body.setCircle(itemBody.radius, itemBody.offset, itemBody.offset);
     item.setVelocityX(-this.scrollSpeed());
@@ -3480,8 +3488,8 @@ export class Play extends Phaser.Scene {
       // mate stays gapH below. Arcade reads the sprites' positions each step, so the bodies follow.
       const move = pipe.getData('move');
       if (move && this.state === 'playing') {
-        const elapsed = pipe.getData('elapsed') + delta;
-        pipe.setData('elapsed', elapsed);
+        const elapsed = pipe.clockMs + delta;
+        pipe.clockMs = elapsed;
         const gapY = gapBobY(elapsed, move.baseY, move.amp, move.periodMs, move.phase, move.holdMs); // rests at each end (pipeMove.holdMs)
         const gapH = pipe.getData('gapH');
         pipe.y = gapY - gapH / 2;
@@ -3507,8 +3515,8 @@ export class Play extends Phaser.Scene {
       const bob = item.getData('bob');
       if (!bob && this.state === 'playing') this.pulseStill(item, delta);
       if (bob && this.state === 'playing') {
-        const elapsed = item.getData('elapsed') + delta;
-        item.setData('elapsed', elapsed);
+        const elapsed = item.clockMs + delta;
+        item.clockMs = elapsed;
         if (bob === 'band') item.y = bobY(elapsed, item.getData('phase'), this.beanBounds, item.getData('period') ?? T.items.fiberPeriodMs);
         else if (bob === 'pair') {
           const pair = item.getData('pair'); // the moving pair's top pipe (updated above in this frame)
@@ -3519,8 +3527,8 @@ export class Play extends Phaser.Scene {
     }
     for (const bean of this.beans.getChildren()) {
       if (this.state === 'playing') {
-        const elapsed = bean.getData('elapsed') + delta;
-        bean.setData('elapsed', elapsed);
+        const elapsed = bean.clockMs + delta;
+        bean.clockMs = elapsed;
         if (!bean.getData('still')) bean.y = beanY(elapsed, bean.getData('phase'), this.beanBounds, T);
         else this.pulseScale(bean, elapsed);
         bean.setAngle(beanAngle(elapsed, T));

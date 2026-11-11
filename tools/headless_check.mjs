@@ -1838,7 +1838,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         const mvB = await mvRead();
         // The rest at each end (pipeMove.holdMs): wind the pair to just before its top and watch it stand
         // still. A plain sine is this still for only ~190 ms near its peak at this level.
-        await evaluate(`(() => { const p = ${play}; const top = globalThis.__mvTop; const move = top.getData('move'); move.phase = 0; top.setData('elapsed', move.periodMs / 4 - 250); globalThis.__mvSamples = []; globalThis.__mvSample = () => globalThis.__mvSamples.push([__flappy.loop.time, top.y]); p.events.on('postupdate', globalThis.__mvSample); return true; })()`);
+        await evaluate(`(() => { const p = ${play}; const top = globalThis.__mvTop; const move = top.getData('move'); move.phase = 0; top.clockMs = move.periodMs / 4 - 250; globalThis.__mvSamples = []; globalThis.__mvSample = () => globalThis.__mvSamples.push([__flappy.loop.time, top.y]); p.events.on('postupdate', globalThis.__mvSample); return true; })()`);
         await sleep(1100);
         const rest = await evaluate(`(() => { ${play}.events.off('postupdate', globalThis.__mvSample); const s = globalThis.__mvSamples; let best = 0; let from = 0; for (let i = 1; i < s.length; i += 1) { if (Math.abs(s[i][1] - s[i - 1][1]) >= 0.05) from = i; best = Math.max(best, s[i][0] - s[from][0]); } return JSON.stringify({ still: Math.round(best), n: s.length, hold: globalThis.__mvTop.getData('move').holdMs }); })()`).then(JSON.parse);
         ok(rest.hold === TT.pipeMove.holdMs && rest.still >= TT.pipeMove.holdMs + 100, `a moving gap rests at the end of its swing: still for ${rest.still} ms (holdMs ${rest.hold}; a plain sine is still ~190 ms)`);
