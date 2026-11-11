@@ -2474,7 +2474,8 @@ export class Play extends Phaser.Scene {
     this.setMultiplierBadge(this.effects.hasPostbiotic());
     this.setProbioticPulse(show);
     if (!show) return;
-    this.probioticIcon.setTexture(this.effects.hasPostbiotic() ? 'postbiotic' : 'probiotic').setDisplaySize(T.hudProbioticSize, T.hudProbioticSize);
+    const icon = this.effects.hasPostbiotic() ? 'postbiotic' : 'probiotic';
+    if (this.probioticIcon.texture.key !== icon) this.probioticIcon.setTexture(icon).setDisplaySize(T.hudProbioticSize, T.hudProbioticSize);
     this.probioticText.setText(`×${n}`);
     const { textX, iconX } = hudRightLayout(this.col.x + this.col.width, this.probioticText.width, { iconSize: T.hudProbioticSize });
     this.probioticText.setX(textX);
@@ -2529,7 +2530,8 @@ export class Play extends Phaser.Scene {
     const p = scorePopup(kind, T, mult, pairs, level);
     if (!p) return;
     this.popupTween?.stop();
-    this.scorePopup.setText(p.text).setColor(p.color).setAlpha(0);
+    this.scorePopup.setText(p.text).setAlpha(0);
+    if (this.scorePopup.style.color !== p.color) this.scorePopup.setColor(p.color); // setColor always redraws; setText skips the same string
     this.enqueuePopup('item');
     this.popupTween = this.tweens.add({ targets: this.scorePopup, alpha: 1, duration: T.popup.fadeMs, hold: T.popup.holdMs, yoyo: true, onComplete: () => this.dequeuePopup('item') });
   }
@@ -2538,7 +2540,8 @@ export class Play extends Phaser.Scene {
   showPipePopup(mult = 1) {
     const p = scorePopup('pipe', T, mult);
     this.pipePopupTween?.stop();
-    this.pipePopup.setText(p.text).setColor(p.color).setAlpha(0);
+    this.pipePopup.setText(p.text).setAlpha(0);
+    if (this.pipePopup.style.color !== p.color) this.pipePopup.setColor(p.color); // usually "+1" in the same colour: no redraw at all
     this.enqueuePopup('pipe');
     this.pipePopupTween = this.tweens.add({ targets: this.pipePopup, alpha: 1, duration: T.popup.pipeFadeMs, hold: T.popup.pipeHoldMs, yoyo: true, onComplete: () => this.dequeuePopup('pipe') });
   }
