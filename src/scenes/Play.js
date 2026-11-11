@@ -1093,6 +1093,7 @@ export class Play extends Phaser.Scene {
     this.refreshProfile();
     this.refreshDailyPrompt();
     this.scene.get('Daily')?.refresh?.(); // the popup's button: Create user ⟷ Play / See today's result
+    this.scene.get('Stats')?.refresh?.(); // the profile's gate ⟷ the profile (a name saved, or Clear)
   }
 
   /** Has this player used today's Daily Dump on this device (a record for today, finished or cut off)? */

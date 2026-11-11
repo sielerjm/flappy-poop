@@ -69,7 +69,7 @@ export const SECTIONS = [
   { name: 'versus-ghost', needs: [], about: "two players: the ghost at the distance gap and the rival marker on the level bar" },
   { name: 'tournament', needs: [], about: '🏅 tournament (every two-player session): the lobby (guest, pasted code, host, help), the pad in the panel, seeding (↑ ↓, 🎲, drag), the 🏅 pill in a level break, Bracket / Continue after a race, the podium, abandon to the lobby, two players' },
   { name: 'daily', needs: [], about: "🌞 Daily Dump: the day's level and shared course, endless (no finish line), no coins or skips, the attempt claimed at the start and final at the crash, nothing on the 🏆 lists, an abandoned run finalised" },
-  { name: 'profile', about: "player profiles (plan 08): the own profile (local counters, a locked badge's progress), another player's from a stubbed player_stats, the explanation card (a badge, a career cell, by mouse and controller), the wheel and a drag, the controller walking the grid, not found, offline, a board name opening a profile (not on a drag), the save panel's Profile button" },
+  { name: 'profile', about: "player profiles (plan 08): the own profile (local counters, a locked badge's progress), another player's from a stubbed player_stats, the explanation card (a badge, a career cell, by mouse and controller), the wheel and a drag, the controller walking the grid, not found, offline, a board name opening a profile (not on a drag), the sign-in gate (no username), the save panel's Profile button" },
 ];
 
 /** What a section needs: its own list, or (omitted) every section before it. */
@@ -3345,6 +3345,50 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await evaluate(`${LB}.close(), true`);
         await waitFor(`!__flappy.scene.isActive('Leaderboard')`, 20);
         await evaluate(`(globalThis.fetch = globalThis.__fetchP, globalThis.__profile = null, import('./src/config.js').then((m) => { m.LEADERBOARD.dataApi = globalThis.__apiP; return true; }))`);
+      }
+
+      // The sign-in gate: no username, no profile (own or anyone's), and nothing asked of the server.
+      // Create user opens the save panel on its name field over the gate; saving a name turns the gate
+      // into the profile asked for, and Clear turns it back. The save panel's Profile waits for a name.
+      {
+        const saved = await evaluate(`JSON.stringify(${P}.getSaveState())`);
+        const unnamed = () => evaluate(`(${P}.setSaveState({ ...JSON.parse(${JSON.stringify(saved)}), name: '' }), true)`);
+        const named = () => evaluate(`(${P}.setSaveState(JSON.parse(${JSON.stringify(saved)})), true)`);
+        await unnamed();
+        const asked0 = await evaluate(`__career.profiles.length`);
+        await evaluate(`(globalThis.__profile = { found: true, name: 'Rival', single: { games: 3, bestScore: 50, wins: 0, maxLevel: 2, avgLevel: 1.5, avgScore: 20 }, daily: { dumps: 0, gold: 0, silver: 0, bronze: 0 }, tournament: { events: 0, gold: 0, silver: 0, bronze: 0, rival: null }, counters: {}, achievements: [] }, ${P}.openStats({ name: 'Rival' }), true)`);
+        ok(await waitFor(`__flappy.scene.isActive('Stats') && ${ST}.view?.state === 'gate'`), 'no username: a board name opens the gate, not the profile');
+        const gateTexts = await texts();
+        ok(gateTexts.includes(await t('statsGateTitle')) && gateTexts.includes(await t('statsGateBody')) && (await evaluate(`__career.profiles.length`)) === asked0, 'the gate invites them to create a user and asks the server nothing');
+        await evaluate(`${ST}.createUser(), true`);
+        await sleep(300);
+        const panel = await evaluate(`JSON.stringify({ open: !document.getElementById('save-panel').hidden, focus: document.activeElement?.id ?? null, profile: document.getElementById('save-profile-btn').disabled })`).then(JSON.parse);
+        ok(panel.open && panel.focus === 'save-name' && panel.profile, `Create user opens the save panel on the name field (focus ${panel.focus}); its Profile button is greyed out without a name`);
+        await evaluate(`import('./src/ui/savePanel.js').then((m) => (m.closeSavePanel(), true))`);
+        ok((await active('Stats')) && (await evaluate(`${ST}.view?.state`)) === 'gate', 'closing the panel without a name leaves the gate up');
+        await named();
+        ok(await waitFor(`__flappy.scene.isActive('Stats') && ${ST}.view?.state === 'ok' && ${ST}.title.text === 'Rival'`), "a username saved turns the gate into the profile asked for (Rival's)");
+        await unnamed();
+        ok(await waitFor(`__flappy.scene.isActive('Stats') && ${ST}.view?.state === 'gate'`), 'Clear with a profile open turns it back into the gate');
+        // The controller on the gate: ✕, then down to Create user, A opens the panel.
+        await evaluate(`${P}.registry.set('padMode', true), true`);
+        await evaluate(`${ST}.focus.show(), true`);
+        await evaluate(`${P}.padNav('down'), true`);
+        const ringId = await evaluate(`${ST}.focus.items[${ST}.focus.index]?.id ?? null`);
+        await evaluate(`${P}.padDown(${TT.gamepad.select}), true`);
+        await sleep(300);
+        const viaPad = await evaluate(`!document.getElementById('save-panel').hidden`);
+        await evaluate(`import('./src/ui/savePanel.js').then((m) => (m.closeSavePanel(), true))`);
+        await evaluate(`${P}.registry.set('padMode', false), true`);
+        ok(ringId === 'create' && viaPad, `controller: down rings Create user (${ringId}) and A opens the save panel`);
+        await named();
+        await waitFor(`${ST}.view?.state === 'ok'`);
+        await shut();
+        await evaluate(`(${P}.openSavePanel(), true)`);
+        await sleep(200);
+        ok(!(await evaluate(`document.getElementById('save-profile-btn').disabled`)), 'with a username the Profile button is enabled');
+        await evaluate(`import('./src/ui/savePanel.js').then((m) => (m.closeSavePanel(), true))`);
+        await evaluate(`globalThis.__profile = null, true`);
       }
 
       // The save panel's Profile button: the panel closes and the own profile opens.

@@ -3,6 +3,7 @@ import { versionText, chromeIntent, overlayOutsideHit, fitScale, statsLayout, ut
 import { createFocus, pressable } from '../ui/focus.js';
 import { isTopOverlay, hasOverlayUnder, openChangelog } from '../ui/overlayStack.js';
 import { createScrollView } from '../ui/scrollView.js';
+import { createButton } from '../ui/button.js';
 import { t, metaFontSize, levelLabel, badgeTitle, badgeDesc, dailyDayText } from '../i18n.js';
 import { ACHIEVEMENTS, achievementById, openQuests, progressOf } from '../achievements.js';
 import { validateName } from '../save.js';
@@ -36,7 +37,8 @@ const sameName = (a, b) => typeof a === 'string' && typeof b === 'string' && a.t
  * every player. Launched by Play.openStats: with { name } (a name tapped on a board) it reads
  * that player's player_stats; with no name it is this device's own player, drawn from the
  * career store and topped up from the server when there is a username (the server's totals
- * and badges from other devices join the store). Sections scroll; a tapped career emoji or badge
+ * and badges from other devices join the store). A player with no username gets the gate instead
+ * (buildGate): an invitation and a Create user button. Sections scroll; a tapped career emoji or badge
  * (its whole cell) opens a card that says what it is, on a camera of its own above the band; a
  * tap anywhere, A, B or a nav press closes it. ✕ / Esc / B / a tap outside close the profile,
  * back to the board or the 🌞 popup when it opened over one. A controller walks the cells: left /
@@ -64,13 +66,21 @@ export class Stats extends Phaser.Scene {
     const asked = typeof data?.name === 'string' && data.name.trim() ? data.name : null;
     this.own = !asked || sameName(asked, play?.save?.name);
     this.askedName = asked;
+    this.card = null;
+    this.cardOpen = false;
+    // No username: the gate, whatever opened it. Saving one turns it into the profile asked for (refresh).
+    this.gated = !play?.save?.name;
+    if (this.gated) {
+      this.buildGate();
+      return;
+    }
 
     const dimmer = this.add.rectangle(W / 2, GAME_HEIGHT / 2, W, GAME_HEIGHT, 0x000000, 0.55).setInteractive();
     dimmer.on('pointerdown', (pointer) => {
       if (overlayOutsideHit(pointer.x, pointer.y, L.panel)) this.close();
     });
     const panelRect = this.add.rectangle(cx, cy, L.panel.width, L.panel.height, 0x1a0b14, 1).setStrokeStyle(8, 0xe85e96); // opaque: a board under it never shows through
-    const titleText = this.own ? (play?.save?.name || t(locale, 'statsYou')) : asked;
+    const titleText = this.own ? play.save.name : asked;
     this.title = this.add.text(L.title.x, L.title.y, titleText, { ...STYLE, fontSize: '52px', color: PINK }).setOrigin(0.5);
     this.title.setScale(fitScale(this.title.width, L.titleMaxW, 0));
     this.status = this.add.text(cx, cy - 40, t(locale, 'leaderboardLoading'), { ...STYLE, fontSize: '36px', color: MUTED, fontStyle: 'normal', wordWrap: { width: 520, useAdvancedWrap: true } }).setOrigin(0.5);
@@ -89,8 +99,6 @@ export class Stats extends Phaser.Scene {
     this.fixed = [dimmer, panelRect, this.title, this.status, this.detail, version, close];
     this.scroll = null;
     this.view = null; // what is drawn, once it is in (the smoke reads it)
-    this.card = null; // the explanation card, built with the profile
-    this.cardOpen = false;
     this.badgeItems = [];
     this.careerItems = [];
     this.input.keyboard?.on('keydown-ESC', () => this.close());
@@ -141,7 +149,7 @@ export class Stats extends Phaser.Scene {
       state: 'ok',
       own: true,
       name: save.name || null,
-      note: !save.name ? 'leaderboardJoin' : online ? null : 'statsOfflineOwn',
+      note: online ? null : 'statsOfflineOwn',
       single: {
         games,
         bestScore: Math.max(server?.single?.bestScore ?? 0, (save.top ?? []).reduce((m, e) => Math.max(m, e?.score ?? 0), 0)),
@@ -293,6 +301,63 @@ export class Stats extends Phaser.Scene {
     this.focus.move = (dir) => this.navigate(dir);
     if (wasShown) this.focus.show();
     this.buildCard();
+  }
+
+  /**
+   * The sign-in gate: a player with no username sees no profile (their own or anyone's), only an
+   * invitation to create one. Create user opens the save panel on the name field, over this popup.
+   */
+  buildGate() {
+    const { locale } = this;
+    const G = this.L.gate;
+    const W = this.scale.width;
+    const dimmer = this.add.rectangle(W / 2, GAME_HEIGHT / 2, W, GAME_HEIGHT, 0x000000, 0.55).setInteractive();
+    dimmer.on('pointerdown', (pointer) => {
+      if (overlayOutsideHit(pointer.x, pointer.y, G.panel)) this.close();
+    });
+    this.add.rectangle(G.panel.x, G.panel.y, G.panel.width, G.panel.height, 0x1a0b14, 1).setStrokeStyle(8, 0xe85e96);
+    this.title = this.add.text(G.title.x, G.title.y, t(locale, 'statsGateTitle'), { ...STYLE, fontSize: '52px', color: PINK }).setOrigin(0.5);
+    this.title.setScale(fitScale(this.title.width, G.panel.width - 140, 0));
+    this.gateBody = this.add
+      .text(G.panel.x, G.bodyY, t(locale, 'statsGateBody'), { ...STYLE, fontSize: '30px', color: MUTED, fontStyle: 'normal', wordWrap: { width: G.bodyW, useAdvancedWrap: true }, lineSpacing: 6 })
+      .setOrigin(0.5);
+    this.gateButton = createButton(this, G.button, t(locale, 'dailyCreateUser'), { ...STYLE, fontSize: '40px', color: PINK }, { depth: 2, fillAlpha: 1 });
+    const zone = this.add
+      .zone(G.button.x, G.button.y, G.button.width, G.button.height)
+      .setInteractive({ useHandCursor: true })
+      .on('pointerdown', () => this.createUser());
+    const version = this.add
+      .text(G.panel.x, G.versionY, versionText(locale), { ...STYLE, fontSize: metaFontSize(locale), color: PINK, fontStyle: 'normal' })
+      .setOrigin(0.5)
+      .setInteractive({ useHandCursor: true });
+    version.on('pointerdown', () => openChangelog(this));
+    const close = this.add.text(G.close.x, G.close.y, '✕', { ...STYLE, fontSize: '48px' }).setOrigin(0.5).setInteractive({ useHandCursor: true });
+    close.on('pointerdown', () => this.close());
+    this.closeBtn = close;
+    this.scroll = null;
+    this.view = { state: 'gate' };
+    this.input.keyboard?.on('keydown-ESC', () => this.close());
+    this.focus = createFocus(this, T, { items: [pressable('close', close), pressable('create', zone), pressable('changelog', version)] });
+    this.focus.show(); // only under a controller (registry padMode)
+  }
+
+  /** The gate's Create user: the save panel on its name field, this popup left under it. */
+  createUser() {
+    if (!isTopOverlay(this)) return;
+    this.scene.get('Play')?.openSavePanel?.({ focusName: true });
+  }
+
+  /**
+   * Play.setSaveState calls this: when having a username no longer matches what is drawn, start
+   * again. A name just saved turns the gate into the profile asked for; Clear turns a profile back
+   * into the gate.
+   */
+  refresh() {
+    if (!this.sys.isActive()) return;
+    const named = Boolean(this.scene.get('Play')?.save?.name);
+    if (named === !this.gated) return;
+    this.gen += 1; // drop any in-flight load
+    this.scene.restart({ name: this.askedName });
   }
 
   /** A pad / stick press on the ring (Play.onPadAction calls focus.move). */

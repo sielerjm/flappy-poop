@@ -393,7 +393,6 @@ Inspired by Flappy Bird
 | achDescMystery | Open {n} mystery boxes 📦 | 累计打开 {n} 个神秘盒子 📦 |
 | overBadges | 🏆 New: {badges} | 🏆 新成就：{badges} |
 | overBadgesMore | +{n} | 等另外 {n} 个 |
-| statsYou | Your profile | 我的资料 |
 | statsSingle | Singleplayer | 单人模式 |
 | statsGames | Games played | 游玩局数 |
 | statsWins | Made it out | 成功脱出 |
@@ -431,6 +430,8 @@ Inspired by Flappy Bird
 | careerCoin | Corn kernels (coins) | 玉米粒（金币） |
 | careerDeaths | Deaths | 死亡次数 |
 | statsCardTotal | Total: {n} | 累计：{n} |
+| statsGateTitle | Profiles 👤 | 个人资料 👤 |
+| statsGateBody | Create a user to see profiles: stats, medals and achievements. Your runs are already counting. | 创建用户即可查看个人资料：统计、奖牌和成就。你的每一局已经在计数了。 |
 
 ## Reviewer checklist
 

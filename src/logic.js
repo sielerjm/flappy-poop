@@ -2003,6 +2003,16 @@ export function statsLayout(cx, cy) {
     left: cx - 272,
     right: cx + 272,
     card: { x: cx, y: cy - 40, width: 520 }, // the explanation card over the band (its height follows its text)
+    // The sign-in gate (no username): a smaller panel, its title, body, Create user button and version line.
+    gate: {
+      panel: { x: cx, y: cy, width: 600, height: 640 },
+      title: { x: cx, y: cy - 236 },
+      close: { x: cx + 256, y: cy - 276 },
+      bodyY: cy - 70,
+      bodyW: 500,
+      button: { x: cx, y: cy + 130, width: 380, height: 96 },
+      versionY: cy + 272,
+    },
     careerCols: 6,
     badgeCols: 4,
   };

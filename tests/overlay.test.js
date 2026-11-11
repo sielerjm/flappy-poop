@@ -109,6 +109,10 @@ test('the Profile panel (statsLayout): inside the field, ✕ and title above the
     assert.ok(L.left > p.x - p.width / 2 && L.right < p.x + p.width / 2 && L.titleMaxW < p.width - 100, 'rows and title clear of the edges and the ✕');
     assert.ok(Number.isInteger(L.badgeCols) && L.badgeCols >= 3);
     assert.equal(L.careerCols, 6, 'the 11 career counters fit two rows');
+    const g = L.gate;
+    assert.ok(g.panel.y - g.panel.height / 2 >= 0 && g.panel.y + g.panel.height / 2 <= GAME_HEIGHT && g.panel.width <= GAME_WIDTH, 'the gate fits the field and the phone column');
+    assert.ok(g.title.y < g.bodyY && g.bodyY < g.button.y - g.button.height / 2 && g.button.y + g.button.height / 2 < g.versionY - 20 && g.versionY < g.panel.y + g.panel.height / 2, 'gate: title, body, Create user, then the version line');
+    assert.ok(g.button.height >= T.trayHitMin && g.bodyW < g.panel.width && g.close.x < g.panel.x + g.panel.width / 2, "the gate's button is thumb-sized; body and ✕ inside");
     assert.ok(L.card.width <= p.width - 80 && Math.abs(L.card.x - p.x) < 1 && L.card.y > top + 200 && L.card.y < bottom - 200, 'the explanation card sits inside the panel, over the band');
   }
 });

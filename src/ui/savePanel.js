@@ -154,8 +154,8 @@ function applyLocale(locale) {
 
 /**
  * The Profile button: the panel closes (its backdrop would cover the canvas) and Play opens this
- * player's profile, over the 🌞 popup when the panel was opened from it. Always enabled: an unnamed
- * player's profile shows this device's numbers.
+ * player's profile, over the 🌞 popup when the panel was opened from it. Enabled once a username is
+ * stored (refreshClear): profiles need one.
  */
 function onProfile() {
   const play = ctx?.play;
@@ -163,9 +163,10 @@ function onProfile() {
   play?.openStats?.();
 }
 
-/** Clear has something to clear only while a username is stored. */
+/** Clear has something to clear, and Profile something to show, only while a username is stored. */
 function refreshClear() {
   dom.clearBtn.disabled = !getState().name;
+  dom.profileBtn.disabled = !getState().name;
 }
 
 function setStatus(text, kind = '') {
