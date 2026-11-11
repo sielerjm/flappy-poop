@@ -164,7 +164,7 @@ Short, playful, clear. Fit a 720×1280 logical field; How to play / About body w
 | itemFeedbackName | Feedback | 反馈 |
 | itemFeedbackDetail | Report a bug or suggest a feature on GitHub. Key: F. | 在GitHub上报告问题或提出功能建议。按键：F。 |
 | itemLeaderboardName | Leaderboard | 排行榜 |
-| itemLeaderboardDetail | The top 25 scores. Its 🌞 tab has today's Daily Dump, its 🏅 tab the tournament medals. Key: T. | 前25名的成绩。🌞页是今天的每日一拉，🏅页是锦标赛奖牌榜。按键：T。 |
+| itemLeaderboardDetail | The top 25 scores. Its 🌞 tab has today's Daily Dump, its 🏅 tab the tournament medals. Tap a name to see that player's profile. Key: T. | 前25名的成绩。🌞页是今天的每日一拉，🏅页是锦标赛奖牌榜。点名字可查看该玩家的资料。按键：T。 |
 | itemSettingsName | Settings | 设置 |
 | itemSettingsDetail | Sound, haptics (Android only), the bean button's side in landscape, and Reload game to fetch the newest version. Key: S. | 音效、震动（仅限Android）、横屏时豆子按钮的位置，以及“刷新游戏”获取最新版本。按键：S。 |
 | itemSoundName | Sound | 声音 |
@@ -239,7 +239,7 @@ Short, playful, clear. Fit a 720×1280 logical field; How to play / About body w
 | medalBoardEmpty | No medals yet: finish a tournament to start the board | 还没有奖牌：完成一届锦标赛就能上榜 |
 | medalBoardJoin | Join a tournament with your user code to get on this board | 用你的用户码参加锦标赛，就能上这个榜 |
 | medalBoardYou | You: #{rank} · {events} tournaments | 你：第 {rank} 名 · 参赛 {events} 届 |
-| saveLeaderboardNote | Your username and best score are shown on the public leaderboard | 你的用户名和最高分会显示在公开排行榜上 |
+| saveLeaderboardNote | Your username, scores, stats and achievements are public | 你的用户名、成绩、统计数据和成就都是公开的 |
 | loadUserButton | Load user | 载入用户 |
 | versusTitle | 2 PLAYERS | 双人模式 |
 | versusPlayer | P{n} | 玩家{n} |

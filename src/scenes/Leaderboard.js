@@ -29,6 +29,7 @@ const TAB_TITLES = { scores: 'leaderboardTitle', daily: 'dailyBoardTitle', medal
  * while the title, the switch, the header and the footer stay put. Switching
  * restarts the scene on the chosen board (no second sync); the board shown last
  * is remembered for the session (registry TAB_KEY; a Daily Dump result's score sets 🌞).
+ * A tapped name opens that player's profile over the board (linkName, plan 08).
  */
 export class Leaderboard extends Phaser.Scene {
   constructor() {
@@ -194,6 +195,7 @@ export class Leaderboard extends Phaser.Scene {
         const name = sv.add(this.add.text(L.cols.name, y, row ? row.name : '–', { ...STYLE, fontSize: '34px', color, align: 'left' }).setOrigin(0, 0.5));
         // A 16-character name is wider than its column: shrink it to the room left of the 🚽 column.
         name.setScale(fitScale(name.width, toiletX - 24 - name.x, 8));
+        if (row) this.linkName(sv, name, row.name);
       }
       sv.finish(y + L.pitch / 2 - 40); // finish() adds 40 px of slack; the band ends half a pitch under the last row
       this.scroll = sv;
@@ -246,6 +248,7 @@ export class Leaderboard extends Phaser.Scene {
       // The name gets the room left of the medals (a long name shrinks, as on 🏆).
       const room = (medals ? medals.x - medals.width : L.cols.toilet) - 8 - name.x;
       name.setScale(fitScale(name.width, room, 4));
+      if (row) this.linkName(sv, name, row.name);
     }
     sv.finish(y + L.pitch / 2 - 40);
     this.scroll = sv;
@@ -284,9 +287,21 @@ export class Leaderboard extends Phaser.Scene {
       sv.add(this.add.text(L.cols.right, y, row ? String(row.score) : '–', { ...STYLE, fontSize: '34px', color }).setOrigin(1, 0.5));
       const name = sv.add(this.add.text(L.cols.name, y, row ? row.name : '–', { ...STYLE, fontSize: '34px', color, align: 'left' }).setOrigin(0, 0.5));
       name.setScale(fitScale(name.width, L.cols.level - name.x, 8)); // no 🚽 or LV columns here: the name gets the room up to the score
+      if (row) this.linkName(sv, name, row.name);
     }
     sv.finish(y + L.pitch / 2 - 40);
     this.scroll = sv;
+  }
+
+  /**
+   * A name on any board opens that player's profile (plan 08) over the board: a tap, never a drag
+   * of the rows (sv.link), and only while the board is on top. The – rows are not names.
+   */
+  linkName(sv, text, name) {
+    sv.link(text, () => {
+      if (!isTopOverlay(this)) return;
+      this.scene.get('Play')?.openStats?.({ name });
+    });
   }
 
   close() {

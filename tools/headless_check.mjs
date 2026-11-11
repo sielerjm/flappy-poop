@@ -69,7 +69,7 @@ export const SECTIONS = [
   { name: 'versus-ghost', needs: [], about: "two players: the ghost at the distance gap and the rival marker on the level bar" },
   { name: 'tournament', needs: [], about: '🏅 tournament (every two-player session): the lobby (guest, pasted code, host, help), the pad in the panel, seeding (↑ ↓, 🎲, drag), the 🏅 pill in a level break, Bracket / Continue after a race, the podium, abandon to the lobby, two players' },
   { name: 'daily', needs: [], about: "🌞 Daily Dump: the day's level and shared course, endless (no finish line), no coins or skips, the attempt claimed at the start and final at the crash, nothing on the 🏆 lists, an abandoned run finalised" },
-  { name: 'profile', about: "player profiles (plan 08): the own profile (local counters, a locked badge's progress), another player's from a stubbed player_stats, a badge explained, not found, offline, the save panel's Profile button" },
+  { name: 'profile', about: "player profiles (plan 08): the own profile (local counters, a locked badge's progress), another player's from a stubbed player_stats, a badge explained, not found, offline, a board name opening a profile (not on a drag), the save panel's Profile button" },
 ];
 
 /** What a section needs: its own list, or (omitted) every section before it. */
@@ -3243,6 +3243,40 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
       await waitFor(`__flappy.scene.isActive('Stats') && ${ST}.view`);
       ok((await evaluate(`${ST}.status.text`)) === (await t('leaderboardOffline')), "offline, another player's profile says the board can't be reached");
       await shut();
+
+      // A name on the board opens that player's profile over it (a real click through the rows' scroll
+      // camera); a drag across the names scrolls and opens nothing; the – rows are not names. The board's
+      // fetch is stubbed (never the live board).
+      {
+        await evaluate(`(() => { globalThis.__fetchP = globalThis.fetch; const top = [{ name: 'Rival', score: 300, toilet: false, level: 7 }, { name: 'Other', score: 120, toilet: false, level: 4 }]; globalThis.fetch = async (url) => (String(url).includes('/scores?') ? new Response(JSON.stringify(top), { status: 200 }) : new Response('{"message":"stub"}', { status: 503 })); return import('./src/config.js').then((m) => { globalThis.__apiP = m.LEADERBOARD.dataApi; m.LEADERBOARD.dataApi = 'https://stub.invalid/rest/v1'; return true; }); })()`);
+        await evaluate(`(__flappy.registry.set('leaderboardTab', 'scores'), globalThis.__profile = { found: true, name: 'Rival', single: { games: 5, wins: 1, maxLevel: 7, avgLevel: 4, avgScore: 120 }, daily: { dumps: 0, gold: 0, silver: 0, bronze: 0 }, tournament: { events: 0, gold: 0, silver: 0, bronze: 0, rival: null }, counters: {}, achievements: [] }, true)`);
+        await chrome('leaderboard');
+        const LB = `__flappy.scene.getScene('Leaderboard')`;
+        ok(await waitFor(`__flappy.scene.isActive('Leaderboard') && ${LB}.scroll`, 80), 'the board loads (stubbed rows)');
+        const nameAt = (name) => evaluate(`(() => { const o = ${LB}.children.list.find((c) => c.type === 'Text' && c.text === ${JSON.stringify(name)}); const c = o.getCenter(); return JSON.stringify({ x: c.x, y: c.y + ${LB}.scroll.offset, live: Boolean(o.input?.enabled) }); })()`).then(JSON.parse);
+        const dashes = await evaluate(`${LB}.children.list.filter((c) => c.type === 'Text' && c.text === '–' && c.input?.enabled).length`);
+        const rival = await nameAt('Rival');
+        // A drag that starts on a name: press, move 60 px, release.
+        const toPage = (x, y) => evaluate(`(() => { const r = __flappy.canvas.getBoundingClientRect(); const s = __flappy.scale; return JSON.stringify({ x: r.left + ${x} * r.width / s.width, y: r.top + ${y} * r.height / s.height }); })()`).then(JSON.parse);
+        const a = await toPage(rival.x, rival.y);
+        const b = await toPage(rival.x, rival.y + 60);
+        await cdp.send('Input.dispatchMouseEvent', { type: 'mousePressed', x: a.x, y: a.y, button: 'left', buttons: 1, clickCount: 1 });
+        await cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: b.x, y: b.y, button: 'left', buttons: 1 });
+        await cdp.send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: b.x, y: b.y, button: 'left', buttons: 0, clickCount: 1 });
+        await sleep(400);
+        const dragged = await active('Stats');
+        await evaluate(`${LB}.scroll.setScroll(0), true`);
+        const again = await nameAt('Rival');
+        await tapAt(again.x, again.y);
+        const opened = await waitFor(`__flappy.scene.isActive('Stats') && ${ST}.view`, 40);
+        const stack = await evaluate(`JSON.stringify({ lb: __flappy.scene.isActive('Leaderboard'), top: __flappy.scene.getIndex('Stats') > __flappy.scene.getIndex('Leaderboard'), name: ${ST}.title.text, asked: __career.profiles.at(-1) })`).then(JSON.parse);
+        ok(rival.live && dashes === 0 && !dragged && opened && stack.lb && stack.top && stack.name === 'Rival' && stack.asked?.name === 'Rival', `a click on a board name opens their profile over the board ("${stack.name}"); a drag opens nothing; the – rows are not links (${dashes})`);
+        await shut();
+        ok((await active('Leaderboard')) && (await evaluate(`${LB}.scroll !== null`)), '✕ on the profile goes back to the board');
+        await evaluate(`${LB}.close(), true`);
+        await waitFor(`!__flappy.scene.isActive('Leaderboard')`, 20);
+        await evaluate(`(globalThis.fetch = globalThis.__fetchP, globalThis.__profile = null, import('./src/config.js').then((m) => { m.LEADERBOARD.dataApi = globalThis.__apiP; return true; }))`);
+      }
 
       // The save panel's Profile button: the panel closes and the own profile opens.
       await evaluate(`(${P}.openSavePanel(), true)`);

@@ -216,7 +216,7 @@ The 🌞 board, like the others, is for friends, not prizes: the course comes fr
 ### Username & save code
 
 1. Tap **Load user** (or your name, once set) on the ready screen.
-2. Pick a username and press **Save** — it appears on the public leaderboard with your best. A new username has 4–16 characters (at least 2 in Chinese, Japanese or Korean), no spaces or emoji, and no rude words; names chosen before these rules keep working. (The game checks this, not the server.)
+2. Pick a username and press **Save** — it appears on the public leaderboard with your best, and your profile (stats and achievements) is public too. A new username has 4–16 characters (at least 2 in Chinese, Japanese or Korean), no spaces or emoji, and no rude words; names chosen before these rules keep working. (The game checks this, not the server.)
 3. **Copy** your `fp1.…` user code and keep it somewhere safe.
 4. On another phone or browser, **Load** that code to bring your name and best 6 scores with you. Your best score on the leaderboard (with and without the toilet) comes back too, even if you played it on a different phone after you copied the code.
 5. To change your username, type a new one and press **Save**: every phone and browser that uses your code picks up the new name on its own.
@@ -225,7 +225,11 @@ A username belongs to one player on the board: if a name is taken, paste your co
 
 ### Leaderboard
 
-The 🏆 tray button (or **T**) shows a shared **Top 25**. You need a username to appear. Toilet runs keep their 🚽. Offline, the board says it can’t be reached and posts your best next time it can. The tabs under the title switch to the **🌞 Daily Dump** board for today and the **🏅 medal board** from tournaments.
+The 🏆 tray button (or **T**) shows a shared **Top 25**. You need a username to appear. Toilet runs keep their 🚽. Offline, the board says it can’t be reached and posts your best next time it can. The tabs under the title switch to the **🌞 Daily Dump** board for today and the **🏅 medal board** from tournaments. Tap any name to open that player’s profile.
+
+### 👤 Profile & achievements
+
+Every player has a public profile: the save panel’s **👤 Profile** opens yours, and a name on any board opens theirs. It shows single-player stats (games, times you made it out, highest and average level, average score), your Daily Dump podiums, tournament medals and biggest rival, career totals (farts, fiber, coins, …) and **achievements**: badges for a score or level in one run, for making it out, and for lifetime milestones such as 100 farts. A badge earned in a run shows on the game-over panel; tap one in a profile to see what it takes. Some badges are time-limited quests that come and go. Counting started with v0.14.0, so lifetime totals begin there; score and level badges were credited from your saved bests. Test runs and two-player matches count nothing.
 
 ![Finish line](docs/finish-divider.svg)
 
@@ -259,11 +263,11 @@ Fork or push this repo to GitHub, enable Pages (Settings → Pages → Deploy fr
 
 ### Leaderboard (self-host)
 
-The board is a free-tier [Supabase](https://supabase.com) project. The browser talks to the REST API with the public URL and publishable key in `LEADERBOARD` in [`src/config.js`](src/config.js). Safety comes from [`db/schema.sql`](db/schema.sql): the key can read name / score / toilet / level / time (not ids) and write only through its functions (`submit_score()`, `merge_players()`, `submit_tournament()`, `submit_daily_score()`); the 🏅 and 🌞 boards are read through `tournament_board()` and `daily_board()`, which never return ids.
+The board is a free-tier [Supabase](https://supabase.com) project. The browser talks to the REST API with the public URL and publishable key in `LEADERBOARD` in [`src/config.js`](src/config.js). Safety comes from [`db/schema.sql`](db/schema.sql): the key can read name / score / toilet / level / time (not ids) and write only through its functions (`submit_score()`, `merge_players()`, `submit_tournament()`, `submit_daily_score()`, `submit_counters()`, `claim_achievements()`); the 🏅 and 🌞 boards and every profile are read through `tournament_board()`, `daily_board()` and `player_stats()`, which never return ids.
 
 To run your own: create a free Supabase project, run `db/schema.sql` in the SQL editor, then put the Data API URL and publishable key into `LEADERBOARD`. Leave either blank to turn the feature off.
 
-What leaves the phone: username, best scores with level, Daily Dump scores (day, level, pipes), finished tournaments' results, and the random id inside your save code. The save code itself never leaves the device.
+What leaves the phone: username, best scores with level, Daily Dump scores (day, level, pipes), finished tournaments' results, lifetime counters (games, wins, score and level sums, pickups, farts, deaths) and earned achievements, and the random id inside your save code. All of it except the id is public on the player's profile. The save code itself never leaves the device.
 
 ### Credits & lineage
 
