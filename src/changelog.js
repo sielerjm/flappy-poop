@@ -8,6 +8,26 @@ import { LOCALES } from './i18n.js';
 
 export const CHANGELOG = [
   {
+    version: '0.14.0',
+    date: '11 Nov 2026',
+    notes: {
+      en: [
+        'Every player now has a profile: 👤 Profile in the save panel opens yours, and tapping a name on any leaderboard opens theirs.',
+        'A profile shows single-player stats, Daily Dump podiums, tournament medals and your biggest rival, plus career totals such as farts and fiber.',
+        'Achievements: 24 badges for scores, levels, making it out and lifetime milestones. The ones a run earns show on the game-over panel.',
+        'Counting starts with this version. Score and level badges you had already reached are credited from your saved bests.',
+        'Profiles are public, like the leaderboard. Test runs and two-player matches count nothing.',
+      ],
+      'zh-Hans': [
+        '现在每位玩家都有个人资料：在存档面板点 👤 个人资料查看自己的，在任一排行榜点名字查看别人的。',
+        '个人资料显示单人模式数据、每日一拉领奖台、锦标赛奖牌和最大对手，以及放屁、纤维等生涯累计。',
+        '成就：24 个徽章，涵盖得分、关卡、成功脱出和生涯里程碑。单局获得的成就会显示在游戏结束面板上。',
+        '从这个版本开始计数。你之前已达到的得分和关卡成就，会根据已保存的最高分补发。',
+        '个人资料和排行榜一样公开。测试局和双人比赛不计入。',
+      ],
+    },
+  },
+  {
     version: '0.13.3',
     date: '11 Nov 2026',
     notes: {

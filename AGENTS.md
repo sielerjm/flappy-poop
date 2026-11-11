@@ -267,7 +267,8 @@ is queued once (`queueFinished`: `tournamentPayload(tour, newId())` with the hos
 (`submit_tournament`) re-checks the bracket round by round, derives the medals, keeps a receipt per
 tournament id (a resend is 'duplicate') and paces one per host per 60 s; stats feed `tournament_board`,
 the 🏅 tab of the Leaderboard overlay; races between two linked players become `tournament_matchups`
-rows for the owner's head-to-head analysis (no role can read them).
+rows for the owner's head-to-head analysis (no role can read them; a profile shows only each
+player's biggest rival, by name, through `player_stats`).
 
 **Daily Dump** (🌞, 2026-11-10, plan `.claude/plans/Archive/2026-11-10-daily-dump.md`): once per UTC
 day every player flies the same endless course. The ready screen's 🌞 (`readyLayout.daily`, top
@@ -294,6 +295,29 @@ result: date headline, the score as a link to the board's 🌞 tab, the rank rea
 The server (`submit_daily_score`) takes today or yesterday (UTC), checks the day's level with its
 own FNV-1a (`daily_level` = the client's `dailyLevel`), keeps the first post per player and day
 ('duplicate' after), and follows the score board's name claim.
+
+**Player profiles and achievements** (👤, 2026-11-11, v0.14.0, plan `.claude/plans/Archive/08-user-stats.plan.md`):
+every player has a **public** profile (`scenes/Stats.js`, chromeIntent `'stats'`), opened by the save
+panel's 👤 Profile (own) or a name on any board (`Leaderboard.linkName` → `Play.openStats({ name })`).
+**Counting:** `Play.endRun`'s single-player and Daily branches call `recordCareer`: `runDeltas`
+(`src/achievements.js`) turns the run into counters (games / wins / sumScore / sumLevel / maxLevel
+for single player, dailyGames for a Daily Dump, deaths / farts / superFarts / the pickups for both;
+`runFarts` / `runSuperFarts` from `activatePower`) that wait in the career store (`createCareerStore`,
+`flappyPoop.career`); test runs and match halves return before it. **Badges:** `evaluate` judges the
+`ACHIEVEMENTS` catalog (run feats from a normal single-player run only; lifetime milestones on the
+totals; time-boxed quests by UTC day) and `careerStore.unlock` records them with a claim; Over names
+the run's (`runBadges`, "🏆 New: …"). `creditCareer` quietly credits the score and level badges the
+saved top list already reaches (at boot and after `pullBoardBests`) and lifetime badges on the
+totals. **Sync:** `drainCareer`, in `syncLeaderboard`'s named path after `drainDaily`, sends one batch
+(`submit_counters`: the batch id is the receipt, so a lost reply resends the same batch; the answer is
+the player's totals across every device, kept as `base` for that id), then the claims
+(`claim_achievements`). `postCounters` / `claimBadges` / `fetchProfile` are Play methods so the smoke
+stubs them. Clear empties the store; a Load forgets only `base`. **Server:** `player_counters` (one
+jsonb of counters, `merge_counters`: sum, or the larger value for `max*` keys), `achievement_defs`
+(windows of time-boxed quests only), `player_achievements`; `player_stats(id or board name)` is the
+profile (no ids): single-player numbers, daily podiums ranked as `daily_board` ranks, medals, the
+biggest rival (self-races ignored), counters, achievements. The game claims, the server checks the
+id format and a quest's window (+2 days' grace): accepted risk ACC-001 like scores.
 
 It is deliberately small: plain ES modules, no bundler, no runtime npm
 dependencies (one devDependency for the schema tests), Phaser 4 loaded from a CDN, deployed to GitHub Pages straight from
@@ -328,7 +352,7 @@ src/
                             Play), scene order
                             [Boot, Play, new Play('PlayB'), Over, Versus, Settings,
                             About, HowTo, Changelog, Language, Feedback,
-                            Leaderboard] ('PlayB' is the right half of a match,
+                            Leaderboard, Daily, Stats] ('PlayB' is the right half of a match,
                             launched only by Versus).
   config.js                 GAME_WIDTH / GAME_HEIGHT (the portrait field = the
                             chrome column), FIELD (height, minWidth, maxWidth,
@@ -339,7 +363,8 @@ src/
                             field), and LEADERBOARD
                             (Supabase Data API URL + publishable key, both public
                             by design; timeout, limit = the Top 25, visibleRows = the
-                            ten in the board's window, storage key, score cap),
+                            ten in the board's window, storage keys incl.
+                            careerKey = flappyPoop.career, score cap),
                             LEVELS (gut segment name keys, in order), LEVEL_COLORS
                             (Set2 backgrounds, cycling) and BACKGROUND (overlay
                             layers: key + parallax), TEST_MODE (trigger words,
@@ -434,6 +459,15 @@ src/
                             version, newest first: version, date like LAST_UPDATED's
                             day, notes per locale), changelogEntry, changelogNotes
                             (bulleted block for a locale, English fallback).
+  achievements.js           Achievements and lifetime counters (plan 08), NO
+                            Phaser/DOM: ACHIEVEMENTS (id, kind 'run' / 'lifetime' /
+                            'seasonal', glyph, title / desc i18n keys, n, counters,
+                            from / to, check), runDeltas (one run's counters, capped
+                            as submit_counters checks), addCounters (= the SQL's
+                            merge_counters), cleanCounters, evaluate (newly earned
+                            ids), windowOpen, progressOf, bestFacts (veteran
+                            credit), openQuests, achievementById, isAchievementId.
+                            Fully unit-tested (tests/achievements.test.js).
   tournament.js             Tournament (🏅) logic, NO Phaser/DOM: createTournament
                             (seeded 2-, 4- or 8-slot bracket, byes; buildBracket
                             from tour.order), seedSlots / canReseed / reseed (swap
@@ -488,8 +522,16 @@ src/
                             player and day, outcome 'nameTaken' kept),
                             submitDailyScore ('ok' / 'keep' / 'rejected' /
                             'nameTaken'), fetchDailyBoard (rows with me and total).
+                            Profiles (plan 08): createCareerStore (flappyPoop.career:
+                            pending counters, one batch in flight resent until
+                            confirmed, the server's totals per player id, unlocks and
+                            claims), submitCounters ({ status: 'ok', totals } / 'keep'
+                            / 'rejected'), claimAchievements ({ stored, closed } /
+                            'rejected' / null), fetchPlayerStats({ id } or { name }:
+                            the profile, { found: false }, or null).
                             Writes go through the submit_score(), merge_players(),
-                            submit_tournament() and submit_daily_score() SQL
+                            submit_tournament(), submit_daily_score(),
+                            submit_counters() and claim_achievements() SQL
                             functions.
                             Fully unit-tested with a fake fetch.
   share.js                  Game-over share, NO Phaser; navigator / document / URL
@@ -651,6 +693,9 @@ src/
                             not flap. The test-mode word in Username: Save toggles
                             Play.setTestMode instead of renaming; blur never stores it. Copy calls clipboard.writeText inside the tap
                             handler (iOS); falls back to selecting the field.
+                            👤 Profile (an outline button on its own row, always
+                            enabled): closes the panel, then Play.openStats() (the
+                            own profile; over the 🌞 popup when it was under).
   scenes/
     Boot.js                 preload() gameplay PNGs (mystery.png as a 384 px
                             spritesheet; coin.png as a 106 px one) + the sfx MP3s (coin, coin-spend,
@@ -697,9 +742,9 @@ src/
                             Never read GAME_WIDTH in a scene (tests/scenes.test.js).
                             Spawns pipes and items, tray, auto-pause, haptics, dies,
                             then launches Over as an overlay scene. Tray / keyboard
-                            go through chromeIntent. Overlay order is feedback >
-                            language > howto > changelog > about > settings >
-                            leaderboard > scores. Opening Settings, About, HowTo, Changelog, Language,
+                            go through chromeIntent. The top overlay is the one
+                            launched or brought to top last (ui/overlayStack.js).
+                            Opening Settings, About, HowTo, Changelog, Language,
                             Feedback, or Leaderboard while playing pauses;
                             closing them does not resume. Unpause applies
                             resumeFlapVelocity (resumeFlapScale × a flap, 0.5) as
@@ -1120,7 +1165,23 @@ src/
                             best race, the caller pink and appended below the top,
                             footer medalYouText); registry 'leaderboardTab' ('scores' |
                             'daily' | 'medals') keeps the choice for the session (a
-                            daily result's score link sets 'daily').
+                            daily result's score link sets 'daily'). linkName: every
+                            name on the three boards opens that player's profile
+                            over the board (sv.link: a tap, not a drag; only while
+                            the board is on top); the – rows are not names.
+    Stats.js                Overlay (plan 08; chromeIntent 'stats': on its own, or
+                            over the board or the 🌞 popup, closing back to it
+                            without the lockout): a player's profile, launched by
+                            Play.openStats with { name } (anyone's player_stats) or
+                            nothing (the own: the career store, topped up by the
+                            server when named; offline / unnamed notes). Sections in
+                            a scroll view (statsLayout): Singleplayer, Daily Dump
+                            podiums, Tournaments (medals, biggest rival), Career (a
+                            glyph grid of the counters), Achievements (earned, then
+                            the rest dimmed with lifetime progress; for others only
+                            open quests); a tapped badge explains itself in the
+                            fixed strip (explain). The ring is rebuilt with the
+                            badges once the profile is in; up / down scroll.
 
 assets/                     Contract PNGs + README.md (the art contract).
   README.md                 File name, pixel size, orientation rules. tests enforce it.
@@ -1171,7 +1232,8 @@ db/schema.sql               Supabase schema: scores table (player_id = save-code
                             name for an id, aliases resolved); admin_merge_name /
                             admin_merge_all_duplicates for the owner only.
                             Tournaments (🏅): tournaments (receipts), tournament_stats,
-                            tournament_matchups (no role reads any of them);
+                            tournament_matchups (no role reads any of them; a
+                            profile's biggest rival is derived from the matchups);
                             submit_tournament(host, payload) (receipt under a host
                             lock → 'duplicate'; 60 s per host; per-round bracket
                             checks; medals derived; names from scores, else the
@@ -1185,7 +1247,15 @@ db/schema.sql               Supabase schema: scores table (player_id = save-code
                             day's level, the name claim, the first post kept →
                             'duplicate'); daily_board (a day's top, `me`, `total`);
                             fold_player moves daily rows (the kept row wins a
-                            shared day). Run by
+                            shared day). Profiles (plan 08): player_counters
+                            (jsonb counters, last_batch receipt) + merge_counters
+                            (internal) + submit_counters (5 s per player, caps per
+                            run: maxScore, lastLevel); achievement_defs (quest
+                            windows, seeded in the file) + player_achievements +
+                            claim_achievements (window + 2 days' grace, 50 a call,
+                            300 a player); player_by_name (internal: the boards'
+                            naming) and player_stats (anyone's profile, no ids);
+                            fold_player merges counters and achievements. Run by
                             hand in the SQL editor, never by any integration; it is
                             the source of truth for the backend. Apply it BEFORE
                             pushing a client that depends on new functions.
@@ -1330,7 +1400,13 @@ tests/                      node --test (schema.test.js needs `npm install`: PGl
                             submit store incl. throwing storage; submitTournament
                             (ok / keep / rejected), fetchTournamentBoard, the
                             tournament queue (cap, order, joined drains);
-                            submitDailyScore's answer mapping, fetchDailyBoard
+                            submitDailyScore's answer mapping, fetchDailyBoard;
+                            the career store's batch / claim life cycle,
+                            submitCounters, claimAchievements, fetchPlayerStats
+  achievements.test.js      The catalog (ids, copy in every locale, every badge
+                            earnable), evaluate (run badges from single player only),
+                            runDeltas and its caps, addCounters = merge_counters,
+                            quest windows, bestFacts, catalog ↔ achievement_defs
   daily.test.js             Daily Dump: the UTC day key and countdown, FNV-1a
                             vectors, seed / level stable and spread over 3–7,
                             dailyRunStart, the per-pair reward stream, the daily
@@ -1684,6 +1760,16 @@ Commits follow `type(scope): summary` (`feat`, `fix`, `docs`, `chore`, `test`, `
   loop; fire and forget from gameplay, `await` only in an overlay's `create()`.
 - Backend change → edit `db/schema.sql`, run it by hand in the Supabase SQL
   editor, keep `LEADERBOARD.maxScore` and the schema's score cap in step.
+- New achievement → one `ACHIEVEMENTS` entry in `src/achievements.js` (a new,
+  permanent id) and its title (and, if no template fits, description) in both
+  locales + `TRANSLATION_NOTES.md`. No SQL: any well-formed id is claimable.
+- Time-boxed quest → the same with `from` / `to` (UTC days), plus its row in the
+  `achievement_defs` seed in `db/schema.sql` (tests/achievements.test.js checks they
+  agree) and a run of the file in Supabase; a VERSION bump and a changelog bullet
+  announce it. A `kind: 'seasonal'` entry's `check(facts, totals)` may take a Daily
+  Dump run's facts (`mode: 'daily'`).
+- New lifetime counter → a key in `runDeltas` (+ its glyph in `Stats.js`'s CAREER
+  grid if players should see it). No SQL: the server stores whatever keys come.
 - New UI chrome → `src/ui/` (Phaser wrapper) with any pure layout helper in
   `src/logic.js`, positioned inside the chrome column (`this.col`: pass
   `col.width` as the width and `col.x` as the helper's `x0`, or add `col.x`
