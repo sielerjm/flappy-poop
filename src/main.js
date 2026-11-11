@@ -1,5 +1,6 @@
 import { FIELD } from './config.js';
-import { fieldWidth } from './logic.js';
+import { fieldWidth, perfMode } from './logic.js';
+import { attachPerfMeter } from './ui/perfMeter.js';
 import { Boot } from './scenes/Boot.js';
 import { Play } from './scenes/Play.js';
 import { Over } from './scenes/Over.js';
@@ -13,6 +14,10 @@ import { Feedback } from './scenes/Feedback.js';
 import { Leaderboard } from './scenes/Leaderboard.js';
 import { Daily } from './scenes/Daily.js';
 import { Stats } from './scenes/Stats.js';
+
+// ?perf shows the frame meter (src/ui/perfMeter.js); ?perf=var also lets Arcade step by each
+// frame's delta instead of its fixed 60 Hz, to A/B the physics step on a phone. Debug only.
+const perf = perfMode(globalThis.location?.search);
 
 // Logical field: 1280 tall; as wide as the window's aspect asks, between a phone
 // portrait (720) and 2:1 (FIELD). Scale.FIT then letterboxes only what is left.
@@ -32,7 +37,7 @@ const game = new Phaser.Game({
   },
   physics: {
     default: 'arcade',
-    arcade: { gravity: { x: 0, y: 0 }, debug: false },
+    arcade: { gravity: { x: 0, y: 0 }, debug: false, fixedStep: perf !== 'var' },
   },
   input: {
     activePointers: 2, // two: a versus match on a tablet takes one thumb per half
@@ -54,6 +59,8 @@ globalThis.addEventListener?.('resize', () => {
     if (want !== game.scale.width) game.scene.getScene('Play')?.onFieldResize?.(want);
   }, FIELD.resizeDebounceMs);
 });
+
+if (perf) attachPerfMeter(game, perf);
 
 // Debug / automation handle (headless drivers reach scenes through it). No gameplay effect.
 globalThis.__flappy = game;

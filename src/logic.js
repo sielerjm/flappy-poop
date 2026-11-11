@@ -2076,3 +2076,91 @@ export function settingsLayout(width, height, t, { test = false } = {}) {
   const powers = TEST_POWERS.map((draw, i) => ({ id: draw, x: cx + (i - (TEST_POWERS.length - 1) / 2) * 96, y: rows.powers, width: hit, height: hit, icon: 72 }));
   return { panel, close, rows, hand: handRow(rows.hand), test: { divider: top + 680, levelDown: arrow(-230), levelUp: arrow(230), powers } };
 }
+
+// --- Frame meter (?perf; src/ui/perfMeter.js) ---
+
+/** `?perf` → 'meter'; `?perf=var` → 'var' (the meter with a variable physics step, for an A/B); else null. */
+export function perfMode(search) {
+  const v = new URLSearchParams(search ?? '').get('perf');
+  if (v == null) return null;
+  return v === 'var' ? 'var' : 'meter';
+}
+
+/** What a frame did, as bits (perfMark): a long frame blames the frame before it. */
+export const PERF_TAGS = { pipe: 1, spawn: 2, pickup: 4, daily: 8 };
+
+/**
+ * Frame statistics for the meter, allocation-free per frame. record() takes the frame's raw
+ * delta (ms between animation frames, not Phaser's smoothed delta), its script ms, its physics
+ * steps, its PERF_TAGS bits and whether a run was in flight. The display period is the median raw
+ * delta of the last periodFrames (refreshPeriod()); during a run, a frame of longFactor × that
+ * or more is long and is blamed on the previous frame's tags (its work delayed this frame).
+ * steps ≠ 1 counts frames where the fixed physics step froze (0) or jumped (2+) the world.
+ */
+export function createFrameStats({ periodFrames = 120, longFactor = 1.5 } = {}) {
+  const recent = new Float32Array(periodFrames);
+  const scratch = new Float32Array(periodFrames);
+  const tagNames = Object.keys(PERF_TAGS);
+  let filled = 0;
+  let head = 0;
+  let periodMs = 1000 / 60;
+  let prevTags = 0;
+  let run;
+  const resetRun = () => {
+    run = { frames: 0, ms: 0, cpuMs: 0, cpuMaxMs: 0, long: 0, worstMs: 0, stepsOff: 0, longTags: Object.fromEntries(tagNames.map((k) => [k, 0])) };
+  };
+  resetRun();
+  return {
+    record(rawMs, cpuMs, steps, tags, playing) {
+      recent[head] = rawMs;
+      head = (head + 1) % periodFrames;
+      if (filled < periodFrames) filled += 1;
+      const blame = prevTags;
+      prevTags = tags;
+      if (!playing) return;
+      run.frames += 1;
+      run.ms += rawMs;
+      run.cpuMs += cpuMs;
+      if (cpuMs > run.cpuMaxMs) run.cpuMaxMs = cpuMs;
+      if (rawMs > run.worstMs) run.worstMs = rawMs;
+      if (steps !== 1) run.stepsOff += 1;
+      if (rawMs >= longFactor * periodMs) {
+        run.long += 1;
+        for (const k of tagNames) if (blame & PERF_TAGS[k]) run.longTags[k] += 1;
+      }
+    },
+    refreshPeriod() {
+      if (!filled) return periodMs;
+      const view = scratch.subarray(0, filled);
+      view.set(recent.subarray(0, filled));
+      view.sort();
+      periodMs = view[filled >> 1];
+      return periodMs;
+    },
+    resetRun,
+    summary() {
+      const f = run.frames;
+      return {
+        periodMs,
+        fps: periodMs > 0 ? 1000 / periodMs : 0,
+        frames: f,
+        long: run.long,
+        longTags: { ...run.longTags },
+        worstMs: run.worstMs,
+        stepsOffPct: f ? (100 * run.stepsOff) / f : 0,
+        cpuMs: f ? run.cpuMs / f : 0,
+        cpuMaxMs: run.cpuMaxMs,
+      };
+    },
+  };
+}
+
+/** The meter's two lines: the display now, then the run so far (frames counted only in flight). */
+export function perfLines(s, mode) {
+  const step = mode === 'var' ? 'var step' : 'fixed step';
+  const tags = Object.entries(s.longTags).map(([k, n]) => `${k} ${n}`).join(' ');
+  return [
+    `${step} · ${Math.round(s.fps)} Hz (${s.periodMs.toFixed(1)} ms) · cpu ${s.cpuMs.toFixed(1)} ms, max ${s.cpuMaxMs.toFixed(1)}`,
+    `run ${s.frames} f · long ${s.long} (${tags}) · worst ${Math.round(s.worstMs)} ms · steps≠1 ${s.stepsOffPct.toFixed(1)} %`,
+  ].join('\n');
+}

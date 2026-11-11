@@ -379,6 +379,12 @@ export const TUNING = {
     repeatDelayMs: 350, // ms a stick is held before it starts repeating
     repeatEveryMs: 150, // ms between repeats while held
   },
+  // The frame meter (?perf in the URL, src/ui/perfMeter.js): debug only, off for players.
+  perf: {
+    periodFrames: 120, // frames whose median raw delta is the display's frame period
+    longFactor: 1.5, // × that period: a frame this long or longer counts as a hitch
+    refreshMs: 500, // ms between meter redraws (the meter must not cause what it measures)
+  },
   focus: {
     ringPad: 10, // px the ring sits outside the focused button's bounds
     ringWidth: 4, // px stroke

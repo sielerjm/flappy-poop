@@ -103,6 +103,7 @@ import {
   LAST_UPDATED,
   padIntent,
   storedLocale,
+  PERF_TAGS,
 } from '../logic.js';
 import { t, pauseBannerText, levelBannerText, levelLabel, initialLocale, isLocale, profileButtonText, coinLabel, countText, versusName } from '../i18n.js';
 import { loadLocal, saveLocal, ensureId, recordScore, mergeBoardBests, newId, TOILET_EMOJI } from '../save.js';
@@ -112,6 +113,7 @@ import { createTray } from '../ui/tray.js';
 import { createFocus } from '../ui/focus.js';
 import { activeOverlays, OVERLAY_SCENES } from '../ui/overlayStack.js';
 import { createGlow, createRectGlow } from '../ui/glow.js';
+import { perfMark, perfSteps, perfRunStart } from '../ui/perfMeter.js';
 import { createFinishTexture } from '../ui/finish.js';
 import { createLightTexture } from '../ui/pipeShade.js';
 import { createLevelBar } from '../ui/levelBar.js';
@@ -624,6 +626,7 @@ export class Play extends Phaser.Scene {
       return;
     }
     this.launching = true;
+    perfRunStart(); // ?perf: the meter's run totals start with this run
     this.focus?.hide(); // the ring has no job while the poop flies
     this.bob.stop();
     this.setReadyUiVisible(false);
@@ -767,6 +770,7 @@ export class Play extends Phaser.Scene {
    */
   saveDailyAttempt(final = false) {
     if (!this.runIsDaily || this.runIsTest || !this.daily) return null;
+    perfMark(PERF_TAGS.daily);
     const pipes = Math.max(0, this.pipesPassed - this.daily.startPipes);
     this.daily.saved = { score: this.score, pipes };
     return this.dailyStore.save({ day: this.daily.day, playerId: this.daily.playerId, level: this.daily.level, score: this.score, pipes, collected: { ...this.collected }, final });
@@ -1997,6 +2001,7 @@ export class Play extends Phaser.Scene {
    * it (prefillPipes fills a wide field with pairs that are already on screen).
    */
   spawnPipePair(shift = 0) {
+    perfMark(PERF_TAGS.spawn);
     this.pipesSpawned += 1;
     const gapCfg = {
       gameHeight: GAME_HEIGHT,
@@ -2296,6 +2301,7 @@ export class Play extends Phaser.Scene {
   collectBean(bean) {
     if (this.state !== 'playing' || !bean.active) return;
     if (this.effects.holdingBean()) return; // already carrying one: let it float past
+    perfMark(PERF_TAGS.pickup);
     const ghost = this.add.image(bean.x, bean.y, 'bean').setScale(T.spriteDisplayScale).setDepth(12);
     this.tweens.add({
       targets: ghost,
@@ -2579,6 +2585,7 @@ export class Play extends Phaser.Scene {
 
   collectItem(item) {
     if (this.state !== 'playing' || !item.active) return;
+    perfMark(PERF_TAGS.pickup);
     if (this.effects.powerActive()) return; // farting: fiber, probiotic, bacteria and boxes scroll straight through
     const kind = item.getData('kind');
     const kernel = Boolean(item.getData('kernel')); // read before destroy() takes the item's data with it
@@ -3348,6 +3355,8 @@ export class Play extends Phaser.Scene {
         return;
       }
     }
+    // ?perf: this frame's physics steps (read before Arcade's postUpdate zeroes them). Single / left half only.
+    if (this.scene.key === 'Play') perfSteps(this.physics.world.stepsLastFrame, this.state === 'playing');
     const dt = delta / 1000;
     this.rainbowMs += delta; // keeps cycling while paused: it is only colour
     this.applyRainbow();
@@ -3478,6 +3487,7 @@ export class Play extends Phaser.Scene {
       }
       if (this.state === 'playing' && pipe.getData('scoring') && !pipe.getData('passed') && hasPassed(pipe.x, T.pipeWidth, this.poop.x)) {
         pipe.setData('passed', true);
+        perfMark(PERF_TAGS.pipe);
         const mult = this.effects.multiplier(); // read before the countdown: the last postbiotic pipe still counts double
         this.score += pipePoints(T, mult);
         this.pipesPassed += 1;

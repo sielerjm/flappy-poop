@@ -381,7 +381,9 @@ src/
                             a debounced window resize (a phone rotation too) →
                             Play.onFieldResize() when the width would change,
                             roundPixels,
-                            arcade physics, activePointers 2 (two thumbs in a
+                            arcade physics (fixed 60 Hz step; ?perf=var steps by
+                            each frame's delta for a phone A/B), ?perf attaches
+                            ui/perfMeter.js, activePointers 2 (two thumbs in a
                             match), input.gamepad on (bound once, in
                             Play), scene order
                             [Boot, Play, new Play('PlayB'), Over, Versus, Settings,
@@ -668,6 +670,16 @@ src/
                             rival(): the other player's marker in a match (a small
                             faded poop at rivalMarker's share; gold at the 🏁 a level
                             ahead, grey at the start behind).
+    perfMeter.js            The frame meter, debug only (?perf / ?perf=var, perfMode):
+                            a DOM <pre> over the canvas (no texture upload, survives
+                            Play's restarts) redrawn every perf.refreshMs from
+                            createFrameStats / perfLines (logic.js): the display's
+                            period (median raw delta), script ms, and per run
+                            (perfRunStart at launch) long frames blamed on the
+                            previous frame's PERF_TAGS (perfMark: pipe, spawn,
+                            pickup, daily), the worst frame and the share of frames
+                            whose physics stepped 0 or 2+ times (perfSteps from
+                            Play.update). Also globalThis.__flappyPerf.
     glow.js                 createGlow(): white radial-gradient canvas texture
                             (solid core, outer glowFadeFrac fading to 0, from
                             glowStops) as an Image behind the poop; tinted for
@@ -1362,6 +1374,8 @@ tests/                      node --test (schema.test.js needs `npm install`: PGl
                             names + colours, levelProgress, lerpColor, gap + grace
                             sanity, levelBannerText, levelBarLayout, levelLabel
   state.test.js             retry lockout
+  perf.test.js              the frame meter's pure parts: perfMode, the median period,
+                            long frames blamed on the previous frame's tags, perfLines
   store.test.js             best-score store incl. throwing/missing storage
   settings.test.js          settings store (incl. hand) + vibrate helper
   sound.test.js             sfx keys, mute, Node import
@@ -1772,6 +1786,10 @@ npm start         # tools/serve.py: http://localhost:8000 plus a printed
                   # signs with sha256.js)
 # Test mode: type pooptest or testpoop as the username + Save (again to leave; a reload also
 #   leaves). Settings then has start level, Invincible, power-ups; nothing is saved.
+# Frame meter: add ?perf to the URL (the LAN one on a phone) for a live line of frame
+#   rate, long frames and what they followed, and physics steps ≠ 1; ?perf=var does the same
+#   with a variable physics step, to A/B the fixed one (plan 20). Debug only; numbers also on
+#   globalThis.__flappyPerf.summary().
 npm run smoke     # with npm start running: headless Chrome drives the real game
                   # (needs Google Chrome; CHROME=/path overrides), ~3 min.
 npm run smoke -- --list            # the sections and what each needs
