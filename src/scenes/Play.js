@@ -102,6 +102,7 @@ import {
   testRunStart,
   LAST_UPDATED,
   padIntent,
+  fallStarted,
   storedLocale,
   PERF_TAGS,
 } from '../logic.js';
@@ -730,6 +731,9 @@ export class Play extends Phaser.Scene {
     this.collected = { fiber: 0, probiotic: 0, postbiotic: 0, bacteria: 0, bean: 0, mystery: 0, coin: 0 };
     this.runFarts = 0; // this run's farts and super farts, for the career counters
     this.runSuperFarts = 0;
+    this.runFalls = 0; // ‼️ long falls this run (fallStarted)
+    this.runCloseCalls = 0; // 😢 close calls this run (tickScared)
+    this.fallingNow = false;
     this.runBadges = [];
     this.mysteryPair = this.course.mysteryPair(); // the pair the guaranteed first box (early level 3) rides after
     // The purse: every run starts empty (coins last across the levels of one run only).
@@ -2283,6 +2287,7 @@ export class Play extends Phaser.Scene {
       return;
     }
     const near = this.pipes.getChildren().some((pipe) => pipe.body && pipeClearance(this.poop.x, this.poop.y, T.poopRadius, pipe.body) <= T.scaredNearPx);
+    if (near && this.scaredMs <= 0) this.runCloseCalls = (this.runCloseCalls ?? 0) + 1; // 😢 a close call starts the clock
     this.scaredMs = near ? T.scaredHoldMs : Math.max(0, this.scaredMs - delta);
   }
 
@@ -3075,7 +3080,7 @@ export class Play extends Phaser.Scene {
     const day = utcDayKey();
     // Pipes passed: fart and skipped pairs included (as for levels); a Daily Dump counts only the pairs flown that day.
     const pipes = mode === 'daily' && this.daily ? Math.max(0, this.pipesPassed - this.daily.startPipes) : this.pipesPassed;
-    const facts = { mode, score: this.score, level: this.level, won: Boolean(this.won), toilet: Boolean(this.toilet), collected: { ...this.collected }, farts: this.runFarts ?? 0, superFarts: this.runSuperFarts ?? 0, pipes };
+    const facts = { mode, score: this.score, level: this.level, won: Boolean(this.won), toilet: Boolean(this.toilet), collected: { ...this.collected }, farts: this.runFarts ?? 0, superFarts: this.runSuperFarts ?? 0, pipes, falls: this.runFalls ?? 0, closeCalls: this.runCloseCalls ?? 0 };
     this.careerStore.addRun(runDeltas(facts));
     const earned = evaluate({ totals: this.careerStore.totals(this.save?.id ?? null), facts, unlocked: this.careerStore.unlocked(), day });
     this.runBadges = this.careerStore.unlock(earned, day);
@@ -3450,6 +3455,10 @@ export class Play extends Phaser.Scene {
 
       if (!this.effects.powerActive()) {
         this.poop.setAngle(angleForVelocity(this.poop.body.velocity.y, T));
+        // ‼️ one long fall per drop past fallLookVy (never while the poop cannot be hurt).
+        const fall = fallStarted(this.fallingNow, this.poop.body.velocity.y, T);
+        this.fallingNow = fall.falling;
+        if (fall.started && this.graceLeftMs <= 0 && !this.testInvincible()) this.runFalls = (this.runFalls ?? 0) + 1;
         this.tickScared(delta);
         this.refreshPoopLook(); // the near-miss face, else the falling face past fallLookVy, back to plain / stink on the next flap
       }

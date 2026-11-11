@@ -26,6 +26,8 @@ const CAREER = [
   ['bean', '🫘', 'careerBean'],
   ['mystery', '📦', 'careerMystery'],
   ['coin', '🟡', 'careerCoin'],
+  ['falls', '‼️', 'careerFalls'],
+  ['closeCalls', '😢', 'careerCloseCalls'],
   ['deaths', '💀', 'careerDeaths'],
 ];
 

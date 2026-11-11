@@ -462,6 +462,8 @@ Inspired by Flappy Bird
 | splashTwoPlayer | Toggle 👥 on to play multiplayer mode up to 8 players. | 打开 👥 开关，就能玩多人模式，最多 8 名玩家。 |
 | splashUserCode | Your user code moves your name and scores to another phone. | 用户码能把你的名字和分数带到另一部手机上。 |
 | splashController | On desktop, you can play with a game controller. | 在电脑上，可以用游戏手柄来玩。 |
+| careerFalls | Long falls | 长距离下坠 |
+| careerCloseCalls | Close calls | 擦身而过 |
 
 ## Reviewer checklist
 

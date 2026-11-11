@@ -1241,6 +1241,30 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
       await evaluate(`${play}.graceLeftMs = 0, true`);
       // Going in with coins, a bean and a probiotic: death clears the purse and every power-up as the run ends.
       await evaluate(`(() => { const p = ${play}; p.takeCoins(3); if (!p.effects.beans()) p.effects.addBean(); p.effects.applyProbiotic(); p.refreshInventory(); p.refreshProbioticHud(); return true; })()`);
+      // ‼️ long falls and 😢 close calls. A drop past fallLookVy counts once, even when a near-miss face
+      // interrupts it; a flap and a second drop count again. A pipe within scaredNearPx (one faked for
+      // the check, never touching) counts one close call, not more while it stays close.
+      {
+        const fallState = () => evaluate(`JSON.stringify({ falls: ${play}.runFalls, calls: ${play}.runCloseCalls, state: ${play}.state })`).then(JSON.parse);
+        const drop = (vy) => evaluate(`(${play}.poop.setY(320), ${play}.poop.setVelocityY(${vy}), true)`);
+        const f0 = await fallState();
+        await drop(TT.fallLookVy + 150);
+        await sleep(80);
+        const f1 = await fallState();
+        const near = `(() => { const p = ${play}; const R = ${TT.poopRadius}; const fake = [{ body: { x: p.poop.x + R + 4, y: p.poop.y - 40, width: 40, height: 80 } }]; const real = p.pipes.getChildren; p.pipes.getChildren = () => fake; try { p.tickScared(16); p.tickScared(16); } finally { p.pipes.getChildren = real; } return true; })()`;
+        await evaluate(near);
+        await drop(TT.fallLookVy + 150);
+        await sleep(80);
+        const f2 = await fallState();
+        await drop(-400);
+        await sleep(60);
+        await drop(TT.fallLookVy + 150);
+        await sleep(80);
+        const f3 = await fallState();
+        ok(f0.state === 'playing' && f1.falls === f0.falls + 1 && f2.falls === f1.falls && f3.falls === f1.falls + 1, `‼️ one long fall per drop (${f0.falls} → ${f1.falls}; a near miss mid-drop keeps it ${f2.falls}; a flap and a new drop make ${f3.falls})`);
+        ok(f2.calls === f1.calls + 1, `😢 a pipe within scaredNearPx counts one close call, not one per frame (${f1.calls} → ${f2.calls})`);
+        await evaluate(`(${play}.poop.setY(320), ${play}.poop.setVelocityY(0), true)`);
+      }
       // Let the poop fall and die: the game-over panel carries the run summary.
       await evaluate(`${play}.poop.body.setAllowGravity(true), true`);
       for (let i = 0; i < 60 && (await playState()) !== 'dead'; i += 1) await sleep(100);
@@ -1256,9 +1280,9 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
       // unlocked, queued as claims and named on Over; then a sync the stubs accept sends both.
       {
         const now = await careerNow();
-        const c = await evaluate(`(() => { const p = ${play}; const o = __flappy.scene.getScene('Over'); const b = o.badgeLine; return JSON.stringify({ pipes: p.pipesPassed, collected: p.collected, farts: p.runFarts, supers: p.runSuperFarts, badges: p.runBadges, unlocked: p.careerStore.unlocked(), claims: p.careerStore.claims(), line: b?.text ?? null, lineIn: b ? b.getBounds().width <= 520 : true }); })()`).then(JSON.parse);
+        const c = await evaluate(`(() => { const p = ${play}; const o = __flappy.scene.getScene('Over'); const b = o.badgeLine; return JSON.stringify({ pipes: p.pipesPassed, falls: p.runFalls, calls: p.runCloseCalls, collected: p.collected, farts: p.runFarts, supers: p.runSuperFarts, badges: p.runBadges, unlocked: p.careerStore.unlocked(), claims: p.careerStore.claims(), line: b?.text ?? null, lineIn: b ? b.getBounds().width <= 520 : true }); })()`).then(JSON.parse);
         const d = (k) => (now[k] ?? 0) - (career0[k] ?? 0);
-        ok(d('games') === 1 && d('deaths') === 1 && !d('wins') && ['fiber', 'probiotic', 'postbiotic', 'bacteria', 'bean', 'mystery', 'coin'].every((k) => d(k) === c.collected[k]) && d('farts') === c.farts && c.farts >= 2 && d('superFarts') === c.supers && c.supers >= 1 && d('pipes') === c.pipes && c.pipes > 0, `the run is counted once in the career: +1 game, +1 death, ${c.pipes} pipes, its pickups and ${c.farts} farts (${c.supers} super)`);
+        ok(d('games') === 1 && d('deaths') === 1 && !d('wins') && ['fiber', 'probiotic', 'postbiotic', 'bacteria', 'bean', 'mystery', 'coin'].every((k) => d(k) === c.collected[k]) && d('farts') === c.farts && c.farts >= 2 && d('superFarts') === c.supers && c.supers >= 1 && d('pipes') === c.pipes && c.pipes > 0 && d('falls') === c.falls && c.falls >= 2 && d('closeCalls') === c.calls && c.calls >= 1, `the run is counted once in the career: +1 game, +1 death, ${c.pipes} pipes, ${c.falls} long falls, ${c.calls} close calls, its pickups and ${c.farts} farts (${c.supers} super)`);
         ok(c.badges.includes('level_2') && c.badges.every((id) => id in c.unlocked && c.claims.includes(id)) && c.line?.startsWith('🏆') && c.lineIn, `the run unlocked ${c.badges.join(', ')}: queued as claims and named on Over ("${c.line}")`);
         await evaluate(`import('./src/config.js').then((m) => { globalThis.__api = m.LEADERBOARD.dataApi; m.LEADERBOARD.dataApi = ''; return true; })`);
         await evaluate(`(globalThis.__careerAnswer = 'ok', __career.posts.length = 0, __career.claims.length = 0, ${play}.syncLeaderboard().then(() => true))`);
@@ -3281,6 +3305,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
       ok(await waitFor(`__flappy.scene.isActive('Stats') && ${ST}.view`), 'the own profile opens from Play.openStats()');
       const own = await evaluate(`(() => { const s = ${ST}; const p = ${P}; return JSON.stringify({ own: s.view.own, fiber: s.view.counters.fiber, want: p.careerStore.totals(p.save?.id ?? null).fiber, detail: s.detail.text, badges: s.badgeItems.length, locked: s.badgeItems.filter((b) => !b.done).length }); })()`).then(JSON.parse);
       const ownTexts = await texts();
+      ok((await evaluate(`${ST}.careerItems.map((c) => c.key).join()`)) === 'pipes,farts,superFarts,fiber,probiotic,postbiotic,bacteria,bean,mystery,coin,falls,closeCalls,deaths', 'the career grid: 13 counters, ‼️ long falls and 😢 close calls before 💀');
       ok(own.own && own.fiber === own.want && own.fiber >= 7 && ownTexts.includes(String(own.want)) && own.badges === (await evaluate(`import('./src/achievements.js').then((m) => m.ACHIEVEMENTS.length)`)) && own.locked > 0 && ownTexts.some((x) => /^\d+ \/ 1000$/.test(x)), `the own profile lists every badge (${own.locked} still locked, lifetime ones with their progress) and this device's career (${own.fiber} fiber)`);
       ok(ownTexts.includes(await t('statsSingle')) && ownTexts.includes(await t('statsCareer')) && (own.detail === (await t('statsTapBadge')) || own.detail === (await t('leaderboardJoin')) || own.detail === (await t('statsOfflineOwn'))), `its sections and the strip under them ("${own.detail}")`);
       ok((await shut()) && (await evaluate(`${P}.state`)) === 'ready', '✕ closes it back to the home screen');

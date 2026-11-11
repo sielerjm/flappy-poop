@@ -79,10 +79,10 @@ export function addCounters(a, b) {
 
 /**
  * One finished run's counters. facts: { mode: 'single' | 'daily', score, level, won, collected,
- * farts, superFarts, pipes }. A single-player run adds games / wins / sumScore / sumLevel / maxLevel
+ * farts, superFarts, pipes, falls, closeCalls }. A single-player run adds games / wins / sumScore / sumLevel / maxLevel
  * (score capped at LEADERBOARD.maxScore, level at the last level, as submit_counters checks);
- * a Daily Dump adds dailyGames. Both add deaths (a run that did not win), pipes passed, farts,
- * super farts and the pickups. Zero counts are left out.
+ * a Daily Dump adds dailyGames. Both add deaths (a run that did not win), pipes passed, long falls,
+ * close calls, farts, super farts and the pickups. Zero counts are left out.
  */
 export function runDeltas(facts, { maxScore = LEADERBOARD.maxScore, lastLevel = TUNING.levels.lastLevel } = {}) {
   const f = facts ?? {};
@@ -104,6 +104,8 @@ export function runDeltas(facts, { maxScore = LEADERBOARD.maxScore, lastLevel = 
   }
   add('deaths', f.won ? 0 : 1);
   add('pipes', count(f.pipes));
+  add('falls', count(f.falls));
+  add('closeCalls', count(f.closeCalls));
   add('farts', count(f.farts));
   add('superFarts', count(f.superFarts));
   const got = f.collected && typeof f.collected === 'object' ? f.collected : {};

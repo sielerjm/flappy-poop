@@ -349,6 +349,8 @@ Inspired by Flappy Bird`,
     splashTwoPlayer: 'Toggle 👥 on to play multiplayer mode up to 8 players.',
     splashUserCode: 'Your user code moves your name and scores to another phone.',
     splashController: 'On desktop, you can play with a game controller.',
+    careerFalls: 'Long falls',
+    careerCloseCalls: 'Close calls',
   },
   'zh-Hans': {
     readyTitle: 'FLAPPY POOP',
@@ -690,6 +692,8 @@ Inspired by Flappy Bird`,
     splashTwoPlayer: '打开 👥 开关，就能玩多人模式，最多 8 名玩家。',
     splashUserCode: '用户码能把你的名字和分数带到另一部手机上。',
     splashController: '在电脑上，可以用游戏手柄来玩。',
+    careerFalls: '长距离下坠',
+    careerCloseCalls: '擦身而过',
   },
 };
 

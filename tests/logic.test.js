@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createRng, gapBounds, pipeGapY, centredGapY, hasPassed, angleForVelocity, clampToPlayArea, resumeFlapVelocity, poopFrame, pipeClearance, storedLocale } from '../src/logic.js';
+import { createRng, gapBounds, pipeGapY, centredGapY, hasPassed, angleForVelocity, clampToPlayArea, resumeFlapVelocity, poopFrame, pipeClearance, storedLocale, fallStarted } from '../src/logic.js';
 import { GAME_HEIGHT, TUNING as T } from '../src/config.js';
 
 const cfg = { gameHeight: GAME_HEIGHT, ceilingHeight: T.ceilingHeight, groundHeight: T.groundHeight, gapHeight: T.gapHeight, gapMargin: T.gapMargin };
@@ -124,4 +124,13 @@ test('storedLocale: the chosen locale, or null when nothing (or nothing valid) i
   assert.equal(storedLocale(store('{broken'), key), null, 'broken JSON');
   assert.equal(storedLocale({ getItem: () => { throw new Error('blocked'); } }, key), null, 'private mode');
   assert.equal(storedLocale(null, key), null);
+});
+
+test('fallStarted: a long fall starts once per drop past fallLookVy, again only after the speed dropped back', () => {
+  const v = T.fallLookVy;
+  assert.deepEqual(fallStarted(false, v - 1, T), { falling: false, started: false });
+  assert.deepEqual(fallStarted(false, v, T), { falling: true, started: true }, 'the frame it reaches fallLookVy');
+  assert.deepEqual(fallStarted(true, v + 400, T), { falling: true, started: false }, 'still the same drop');
+  assert.deepEqual(fallStarted(true, -300, T), { falling: false, started: false }, 'a flap ends it');
+  assert.deepEqual(fallStarted(false, v + 10, T), { falling: true, started: true }, 'the next drop is a new fall');
 });

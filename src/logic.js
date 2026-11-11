@@ -212,6 +212,16 @@ export function resumeFlapVelocity(t) {
  * falling face once the body falls at fallLookVy px/s or faster. `scared` (a
  * near miss with a pipe, Play.tickScared) wins over both with the near-miss face.
  */
+/**
+ * A long fall (‼️ on the game-over panel and the career): it starts on the frame the poop's downward
+ * speed first reaches fallLookVy (the falling face) and can start again only once the speed dropped
+ * back below it (a flap). A near-miss face shown in between does not make it a second fall.
+ */
+export function fallStarted(wasFalling, vy, { fallLookVy }) {
+  const falling = vy >= fallLookVy;
+  return { falling, started: falling && !wasFalling };
+}
+
 export function poopFrame({ charged, stinkFrame = 0, vy, scared = false }, { fallLookVy }) {
   const falling = vy >= fallLookVy;
   if (!charged) return scared ? 'poop-scared' : falling ? 'poop-falling' : 'poop';
@@ -2029,7 +2039,7 @@ export function statsLayout(cx, cy) {
       button: { x: cx, y: cy + 130, width: 380, height: 96 },
       versionY: cy + 272,
     },
-    careerCols: 6,
+    careerCols: 5,
     badgeCols: 4,
   };
 }

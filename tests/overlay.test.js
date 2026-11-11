@@ -108,7 +108,8 @@ test('the Profile panel (statsLayout): inside the field, ✕ and title above the
     assert.ok(L.detailY - 30 > bandBottom && L.versionY - 20 > L.detailY + 30 && L.versionY + 20 < bottom, 'the detail strip and then the version line below the band');
     assert.ok(L.left > p.x - p.width / 2 && L.right < p.x + p.width / 2 && L.titleMaxW < p.width - 100, 'rows and title clear of the edges and the ✕');
     assert.ok(Number.isInteger(L.badgeCols) && L.badgeCols >= 3);
-    assert.equal(L.careerCols, 6, 'the 11 career counters fit two rows');
+    assert.equal(L.careerCols, 5, 'the 13 career counters on three rows, each cell at least a thumb wide');
+    assert.ok((L.right - L.left) / L.careerCols >= T.trayHitMin, 'a career cell is at least trayHitMin wide');
     const g = L.gate;
     assert.ok(g.panel.y - g.panel.height / 2 >= 0 && g.panel.y + g.panel.height / 2 <= GAME_HEIGHT && g.panel.width <= GAME_WIDTH, 'the gate fits the field and the phone column');
     assert.ok(g.title.y < g.bodyY && g.bodyY < g.button.y - g.button.height / 2 && g.button.y + g.button.height / 2 < g.versionY - 20 && g.versionY < g.panel.y + g.panel.height / 2, 'gate: title, body, Create user, then the version line');

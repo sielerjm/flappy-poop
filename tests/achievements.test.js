@@ -72,6 +72,8 @@ test('runDeltas: a single-player run, a Daily Dump, and nothing for anything els
   assert.deepEqual(runDeltas({ mode: 'daily', score: 4000, level: 5, collected: { fiber: 2 }, farts: 1 }), { dailyGames: 1, deaths: 1, farts: 1, fiber: 2 }, 'a Daily Dump: no score or level sums');
   assert.deepEqual(runDeltas(single({ score: 12, level: 2, pipes: 14 })), { games: 1, sumScore: 12, sumLevel: 2, maxLevel: 2, deaths: 1, pipes: 14 }, 'pipes passed');
   assert.deepEqual(runDeltas({ mode: 'daily', pipes: 37 }), { dailyGames: 1, deaths: 1, pipes: 37 }, "a Daily Dump's pipes (the pairs flown that day)");
+  assert.deepEqual(runDeltas({ mode: 'daily', falls: 3, closeCalls: 2 }), { dailyGames: 1, deaths: 1, falls: 3, closeCalls: 2 }, 'long falls and close calls');
+  assert.deepEqual(runDeltas(single({ falls: 0, closeCalls: 0 })), { games: 1, sumLevel: 1, maxLevel: 1, deaths: 1 }, 'none: left out');
   assert.deepEqual(runDeltas({ mode: 'test' }), {});
   assert.deepEqual(runDeltas(null), {});
   // The server's per-run caps: a score past maxScore and a level past the last are clamped.
