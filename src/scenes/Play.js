@@ -1586,6 +1586,15 @@ export class Play extends Phaser.Scene {
         if (!this.scene.isActive('Daily')) this.scene.launch('Daily');
         this.scene.bringToTop('Daily');
         break;
+      case 'openStats': {
+        if (this.overlayPause(result)) this.pauseRun();
+        // Always with its player: a launch without data would reuse the last profile's.
+        const target = this.statsTarget ?? null;
+        this.statsTarget = null;
+        if (!this.scene.isActive('Stats')) this.scene.launch('Stats', { name: target?.name ?? null });
+        this.scene.bringToTop('Stats');
+        break;
+      }
       case 'openChangelog':
         if (this.overlayPause(result)) this.pauseRun();
         // Always on the latest version: a launch without data would reuse the last version link's { version }.
@@ -3092,6 +3101,15 @@ export class Play extends Phaser.Scene {
     } catch {
       /* the next sync tries again */
     }
+  }
+
+  /**
+   * Open a profile (plan 08): { name } for the player a board shows under that name, nothing for
+   * this device's own player. From the save panel (own) or a tapped board name (anyone's).
+   */
+  openStats(target = null) {
+    this.statsTarget = target?.name ? { name: target.name } : null;
+    this.handleChrome('stats');
   }
 
   /** submit_counters for the career; a method so the smoke can stub it (never the live board). */

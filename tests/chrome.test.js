@@ -206,3 +206,19 @@ test('the shop open: overlays still open over it without pausing again, mute sti
   assert.deepEqual(intent({ ...open, overlay: 'settings', input: 'close' }), { do: 'closeTop', armResumeLockout: true });
   assert.deepEqual(intent({ state: 'paused', breaking: true, input: 'tap' }), { do: 'resume' }, 'shop closed: the break\'s tap resumes as before');
 });
+
+test('a profile (stats) opens from no overlay, or over the board or the 🌞 popup; closing goes back to the one underneath without the lockout', () => {
+  for (const state of STATES) {
+    assert.deepEqual(intent({ state, input: 'stats' }), { do: 'openStats', pause: state === 'playing' || state === 'respawn' }, state);
+    assert.deepEqual(intent({ state, overlay: 'leaderboard', input: 'stats' }), { do: 'openStats', pause: false }, 'a name tapped on the board');
+    assert.deepEqual(intent({ state, overlay: 'daily', input: 'stats' }), { do: 'openStats', pause: false }, 'the save panel over the 🌞 popup');
+    for (const overlay of ['settings', 'about', 'howto', 'changelog', 'language', 'feedback', 'stats']) {
+      assert.deepEqual(intent({ state, overlay, input: 'stats' }), { do: 'ignore' }, overlay);
+    }
+    assert.deepEqual(intent({ state, overlay: 'stats', stackedUnder: true, input: 'close' }), { do: 'closeTop', armResumeLockout: false });
+    assert.deepEqual(intent({ state, overlay: 'stats', input: 'close' }), { do: 'closeTop', armResumeLockout: true });
+    assert.deepEqual(intent({ state, overlay: 'stats', input: 'changelog' }), { do: 'openChangelog', pause: false }, 'its version line');
+    assert.deepEqual(intent({ state, overlay: 'stats', input: 'feedback' }), { do: 'openFeedback', pause: false });
+    for (const input of ['pause', 'tap', 'esc', 'settings', 'leaderboard', 'daily']) assert.deepEqual(intent({ state, overlay: 'stats', input }), { do: 'ignore' }, input);
+  }
+});

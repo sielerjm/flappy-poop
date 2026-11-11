@@ -1630,11 +1630,11 @@ export function overlayOutsideHit(x, y, panel) {
  * result; this function is Phaser-free so the matrix can be tested in Node.
  *
  * @param {'ready'|'playing'|'paused'|'respawn'|'dead'} state ('respawn': a match half between a crash and its restart; pauses like 'playing', ignores taps)
- * @param {null|'settings'|'about'|'howto'|'changelog'|'language'|'feedback'|'leaderboard'|'daily'} overlay topmost overlay (pause is a state)
+ * @param {null|'settings'|'about'|'howto'|'changelog'|'language'|'feedback'|'leaderboard'|'daily'|'stats'} overlay topmost overlay (pause is a state)
  * @param {boolean} stackedSettings true when About sits on top of Settings
  * @param {boolean} stackedAbout true when HowTo or Changelog (What's new) sits on top of About
- * @param {boolean} stackedUnder true when Feedback or What's new sits on top of another overlay
- * @param {'pause'|'mute'|'settings'|'info'|'howto'|'changelog'|'lang'|'feedback'|'leaderboard'|'daily'|'shop'|'tap'|'esc'|'close'} input ('shop': the 💰 button in a level break; 'daily': the 🌞, ready screen only)
+ * @param {boolean} stackedUnder true when Feedback, What's new or a profile sits on top of another overlay
+ * @param {'pause'|'mute'|'settings'|'info'|'howto'|'changelog'|'lang'|'feedback'|'leaderboard'|'daily'|'stats'|'shop'|'tap'|'esc'|'close'} input ('shop': the 💰 button in a level break; 'daily': the 🌞, ready screen only; 'stats': a profile, from the save panel or a board name)
  * @param {boolean} resumeLocked true during pauseResumeLockoutMs after overlay close
  * @param {boolean} shop true while this half's level-break shop panel is open
  * @param {boolean} breaking true while this half is in its own level break (the only place the shop opens)
@@ -1664,11 +1664,16 @@ export function chromeIntent({
       if (overlay === 'changelog') {
         return { do: 'closeTop', armResumeLockout: !(stackedAbout || stackedUnder) }; // back to the overlay underneath
       }
+      if (overlay === 'stats') {
+        return { do: 'closeTop', armResumeLockout: !stackedUnder }; // back to the board or the 🌞 popup underneath
+      }
       return { do: 'closeTop', armResumeLockout: !(overlay === 'about' && stackedSettings) };
     }
     if (input === 'feedback') return { do: 'openFeedback', pause: false };
     if (input === 'info' && overlay === 'settings') return { do: 'openAbout', pause: false };
     if (input === 'howto' && overlay === 'about') return { do: 'openHowTo', pause: false };
+    // A profile (plan 08) opens over the board (a tapped name) or the 🌞 popup (the save panel over it).
+    if (input === 'stats' && (overlay === 'leaderboard' || overlay === 'daily')) return { do: 'openStats', pause: false };
     // A version line: What's new opens over any overlay (its own version links restart it instead).
     if (input === 'changelog' && overlay !== 'changelog') return { do: 'openChangelog', pause: false };
     return { do: 'ignore' };
@@ -1699,6 +1704,7 @@ export function chromeIntent({
   if (input === 'lang') return { do: 'openLanguage', pause: live };
   if (input === 'feedback') return { do: 'openFeedback', pause: live };
   if (input === 'leaderboard') return { do: 'openLeaderboard', pause: live };
+  if (input === 'stats') return { do: 'openStats', pause: live };
   if (input === 'tap') {
     if (state === 'playing') return { do: 'flap' };
     if (state === 'paused') return resumeLocked ? { do: 'ignore' } : { do: 'resume' };
@@ -1975,6 +1981,28 @@ export function leaderboardLayout(cx, cy) {
     versionY: cy + 374,
     cols: { rank: cx - 224, name: cx - 160, toilet: cx + 36, level: cx + 120, right: cx + 224, medalsRight: cx + 158 },
     titleMaxW: 420, // a longer title (MEDAL BOARD) shrinks to stay clear of the ✕
+  };
+}
+
+/**
+ * The Profile overlay's geometry (scenes/Stats.js, plan 08): a 640 × 1120 panel; the player's
+ * name as the title, the ✕, the scrolled band for the sections, a fixed detail strip under it
+ * (a tapped badge's explanation), and the version line. left / right are the rows' label and
+ * value edges; badgeCols badges per row in the achievements grid.
+ */
+export function statsLayout(cx, cy) {
+  return {
+    panel: { x: cx, y: cy, width: 640, height: 1120 },
+    title: { x: cx, y: cy - 505 },
+    titleMaxW: 500,
+    close: { x: cx + 282, y: cy - 515 },
+    band: { x: cx, y: cy - 40, width: 640, height: 840 },
+    detailY: cy + 432,
+    detailW: 560,
+    versionY: cy + 522,
+    left: cx - 272,
+    right: cx + 272,
+    badgeCols: 4,
   };
 }
 

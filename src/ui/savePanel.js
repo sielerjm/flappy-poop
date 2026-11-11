@@ -45,6 +45,8 @@ const CSS = `
 #${PANEL_ID} .save-row button { flex: 1; padding: 12px 14px; font-size: 18px; }
 #${PANEL_ID} .save-row button.outline { flex: 0 0 auto; min-width: 96px; }
 #${PANEL_ID} .note { margin: 2px 0 10px; font-size: 14px; opacity: 0.75; }
+#${PANEL_ID} .profile-row { margin-top: 10px; }
+#${PANEL_ID} .profile-row button { flex: 1; }
 `;
 
 let dom = null;
@@ -85,6 +87,7 @@ function build() {
   const loadBtn = h('button', { type: 'button', id: 'save-load-btn' });
   const saveBtn = h('button', { type: 'button', id: 'save-save-btn' });
   const clearBtn = h('button', { type: 'button', id: 'save-clear-btn', class: 'outline' }); // sign this device out (two taps)
+  const profileBtn = h('button', { type: 'button', id: 'save-profile-btn', class: 'outline' }); // this player's profile: stats and achievements (plan 08)
   const status = h('p', { class: 'status', id: 'save-status' });
   const close = h('button', { type: 'button', class: 'close', 'aria-label': 'close' }, '✕');
 
@@ -102,6 +105,7 @@ function build() {
     loadLabel,
     h('div', { class: 'row' }, load, loadBtn),
     h('div', { class: 'row save-row' }, clearBtn, saveBtn),
+    h('div', { class: 'row profile-row' }, profileBtn),
     status,
   );
   const root = h('div', { id: PANEL_ID, role: 'dialog', 'aria-modal': 'true', hidden: true }, card);
@@ -122,13 +126,14 @@ function build() {
   });
   saveBtn.addEventListener('click', () => onSave());
   clearBtn.addEventListener('click', () => onClear());
+  profileBtn.addEventListener('click', () => onProfile());
   copy.addEventListener('click', () => onCopy());
   loadBtn.addEventListener('click', () => onLoad());
   load.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') onLoad();
   });
 
-  dom = { root, title, intro, nameLabel, name, note, codeLabel, code, copy, loadLabel, load, loadBtn, saveBtn, clearBtn, status };
+  dom = { root, title, intro, nameLabel, name, note, codeLabel, code, copy, loadLabel, load, loadBtn, saveBtn, clearBtn, profileBtn, status };
 }
 
 function applyLocale(locale) {
@@ -144,6 +149,18 @@ function applyLocale(locale) {
   dom.loadBtn.textContent = t(locale, 'saveLoad');
   dom.saveBtn.textContent = t(locale, 'saveSave');
   dom.clearBtn.textContent = t(locale, 'saveClear');
+  dom.profileBtn.textContent = t(locale, 'saveProfile');
+}
+
+/**
+ * The Profile button: the panel closes (its backdrop would cover the canvas) and Play opens this
+ * player's profile, over the 🌞 popup when the panel was opened from it. Always enabled: an unnamed
+ * player's profile shows this device's numbers.
+ */
+function onProfile() {
+  const play = ctx?.play;
+  closeSavePanel();
+  play?.openStats?.();
 }
 
 /** Clear has something to clear only while a username is stored. */

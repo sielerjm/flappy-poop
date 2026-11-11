@@ -392,6 +392,31 @@ Inspired by Flappy Bird
 | achDescMystery | Open {n} mystery boxes 📦 | 累计打开 {n} 个神秘盒子 📦 |
 | overBadges | 🏆 New: {badges} | 🏆 新成就：{badges} |
 | overBadgesMore | +{n} | 等另外 {n} 个 |
+| statsYou | Your profile | 我的资料 |
+| statsSingle | Singleplayer | 单人模式 |
+| statsGames | Games played | 游玩局数 |
+| statsWins | Made it out | 成功脱出 |
+| statsMaxLevel | Highest level | 最高关卡 |
+| statsAvgLevel | Average level | 平均关卡 |
+| statsAvgScore | Average score | 平均得分 |
+| statsDaily | Daily Dump 🌞 | 每日一拉 🌞 |
+| statsDumps | Daily Dumps played | 参加次数 |
+| statsPodiums | Podiums | 领奖台 |
+| statsTournament | Tournaments 🏅 | 锦标赛 🏅 |
+| statsEvents | Tournaments played | 参赛次数 |
+| statsMedals | Medals | 奖牌 |
+| statsRival | Biggest rival | 最大对手 |
+| statsRivalLine | {name} · lost {losses} of {meetings} | {name} · {meetings} 场输 {losses} 场 |
+| statsCareer | Career | 生涯 |
+| statsAchievements | Achievements {n} / {total} | 成就 {n} / {total} |
+| statsAchievementsOther | Achievements ({n}) | 成就（{n}） |
+| statsNoBadges | No achievements yet | 还没有成就 |
+| statsTapBadge | Tap a badge to see what it takes | 点击徽章查看获得条件 |
+| statsEarned | earned {day} | 获得于 {day} |
+| statsQuestOpen | open until {day} | 截止 {day} |
+| statsNotFound | No stats for {name} yet | 还没有 {name} 的数据 |
+| statsOfflineOwn | Offline: this device's numbers only | 离线：只显示本设备的数据 |
+| saveProfile | 👤 Profile | 👤 个人资料 |
 
 ## Reviewer checklist
 

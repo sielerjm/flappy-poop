@@ -35,6 +35,7 @@ export const OVERLAYS = {
   feedback: 'Feedback',
   leaderboard: 'Leaderboard',
   daily: 'Daily',
+  stats: 'Stats',
 };
 
 /**
@@ -68,6 +69,7 @@ export const SECTIONS = [
   { name: 'versus-ghost', needs: [], about: "two players: the ghost at the distance gap and the rival marker on the level bar" },
   { name: 'tournament', needs: [], about: '🏅 tournament (every two-player session): the lobby (guest, pasted code, host, help), the pad in the panel, seeding (↑ ↓, 🎲, drag), the 🏅 pill in a level break, Bracket / Continue after a race, the podium, abandon to the lobby, two players' },
   { name: 'daily', needs: [], about: "🌞 Daily Dump: the day's level and shared course, endless (no finish line), no coins or skips, the attempt claimed at the start and final at the crash, nothing on the 🏆 lists, an abandoned run finalised" },
+  { name: 'profile', about: "player profiles (plan 08): the own profile (local counters, a locked badge's progress), another player's from a stubbed player_stats, a badge explained, not found, offline, the save panel's Profile button" },
 ];
 
 /** What a section needs: its own list, or (omitted) every section before it. */
@@ -1511,8 +1513,8 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
           await padNav('down');
           await sleep(100);
           const r1 = await ring(key);
-          const scrolls = key === 'About' || key === 'HowTo' || key === 'Changelog';
-          // About, HowTo and Changelog (every version listed) are all longer than their panel, so a down press scrolls.
+          const scrolls = key === 'About' || key === 'HowTo' || key === 'Changelog' || key === 'Stats';
+          // About, HowTo, Changelog (every version listed) and a profile (every badge) are all longer than their panel, so a down press scrolls.
           const walked = scrolls ? r1.id === 'close' && r1.offset < 0 : key === 'Leaderboard' ? r1.id === 'close' : Boolean(r1.id) && r1.id !== 'close';
           await padDown(G.back);
           await sleep(400);
@@ -3188,6 +3190,66 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await evaluate(`(${keys.map((k) => `localStorage.removeItem('${k}')`).join(', ')}, __flappy.registry.set('toilet', false), __flappy.registry.set('versus', false), true)`);
         await home();
       }
+    });
+
+    await section('profile', async () => {
+      // Profiles (plan 08) with player_stats stubbed (globalThis.__profile, set up at boot): nothing reaches the board.
+      const P = `__flappy.scene.getScene('Play')`;
+      const ST = `__flappy.scene.getScene('Stats')`;
+      const waitFor = async (expr, tries = 60) => {
+        for (let i = 0; i < tries; i += 1) {
+          if (await evaluate(`Boolean(${expr})`)) return true;
+          await sleep(100);
+        }
+        return false;
+      };
+      const texts = () => evaluate(`JSON.stringify(${ST}.children.list.filter((c) => c.type === 'Text' && c.visible).map((c) => c.text))`).then(JSON.parse);
+      const shut = async () => {
+        await evaluate(`${ST}.close(), true`);
+        return waitFor(`!__flappy.scene.isActive('Stats')`, 20);
+      };
+      await evaluate(`(__flappy.scene.stop('Over'), __flappy.scene.isActive('Stats') && __flappy.scene.stop('Stats'), ${P}.scene.restart(), true)`);
+      await waitFor(`${P}.state === 'ready' && !${P}.launching`);
+      const t = (key) => evaluate(`import('./src/i18n.js').then((m) => m.t('en', '${key}'))`);
+
+      // The own profile: this device's counters, a locked lifetime badge with its progress, the tap-a-badge hint.
+      await evaluate(`(globalThis.__profile = null, ${P}.careerStore.addRun({ farts: 3, fiber: 7 }), ${P}.openStats(), true)`);
+      ok(await waitFor(`__flappy.scene.isActive('Stats') && ${ST}.view`), 'the own profile opens from Play.openStats()');
+      const own = await evaluate(`(() => { const s = ${ST}; const p = ${P}; return JSON.stringify({ own: s.view.own, fiber: s.view.counters.fiber, want: p.careerStore.totals(p.save?.id ?? null).fiber, detail: s.detail.text, badges: s.badgeItems.length, locked: s.badgeItems.filter((b) => !b.done).length }); })()`).then(JSON.parse);
+      const ownTexts = await texts();
+      ok(own.own && own.fiber === own.want && own.fiber >= 7 && ownTexts.includes(String(own.want)) && own.badges === (await evaluate(`import('./src/achievements.js').then((m) => m.ACHIEVEMENTS.length)`)) && own.locked > 0 && ownTexts.some((x) => /^\d+ \/ 1000$/.test(x)), `the own profile lists every badge (${own.locked} still locked, lifetime ones with their progress) and this device's career (${own.fiber} fiber)`);
+      ok(ownTexts.includes(await t('statsSingle')) && ownTexts.includes(await t('statsCareer')) && (own.detail === (await t('statsTapBadge')) || own.detail === (await t('leaderboardJoin')) || own.detail === (await t('statsOfflineOwn'))), `its sections and the strip under them ("${own.detail}")`);
+      ok((await shut()) && (await evaluate(`${P}.state`)) === 'ready', '✕ closes it back to the home screen');
+
+      // Another player's profile, from a stubbed player_stats.
+      await evaluate(`(globalThis.__profile = { found: true, name: 'Rival', single: { games: 12, wins: 2, maxLevel: 6, avgLevel: 3.5, avgScore: 88.2 }, daily: { dumps: 4, gold: 1, silver: 0, bronze: 2 }, tournament: { events: 3, gold: 1, silver: 1, bronze: 0, rival: { name: 'Smoke', meetings: 3, losses: 1 } }, counters: { farts: 40, fiber: 120 }, achievements: [{ id: 'win_game', at: '2026-11-09' }] }, ${P}.openStats({ name: 'Rival' }), true)`);
+      ok(await waitFor(`__flappy.scene.isActive('Stats') && ${ST}.view`), "another player's profile opens by name");
+      const other = await texts();
+      const asked = await evaluate(`JSON.stringify(__career.profiles.at(-1))`).then(JSON.parse);
+      ok(asked?.name === 'Rival' && ['Rival', '12', '2', 'LV 6', '3.5', '88.2', '4', '🥇1 🥈0 🥉2', '🥇1 🥈1 🥉0', '120', '40', '🎉'].every((x) => other.includes(x)) && other.some((x) => x.startsWith('Smoke · ')), `it shows their numbers, medals, rival and badges (asked for ${JSON.stringify(asked)})`);
+      ok((await evaluate(`${ST}.badgeItems.length`)) === 1, 'only the badges they earned (no quest is open)');
+      await evaluate(`${ST}.badgeItems[0].glyph.emit('pointerup'), true`);
+      const explained = await evaluate(`${ST}.detail.text`);
+      ok(explained.includes('Made It Out') && explained.includes('9 Nov'), `a tapped badge explains itself ("${explained}")`);
+      ok(await shut(), 'and closes');
+
+      // Not found, and offline.
+      await evaluate(`(globalThis.__profile = { found: false }, ${P}.openStats({ name: 'Nobody' }), true)`);
+      ok(await waitFor(`__flappy.scene.isActive('Stats') && ${ST}.view`), 'an unknown name opens too');
+      const missing = await evaluate(`${ST}.status.text`);
+      ok(missing === (await t('statsNotFound')).replace('{name}', 'Nobody'), `"${missing}"`);
+      await shut();
+      await evaluate(`(globalThis.__profile = null, ${P}.openStats({ name: 'Rival' }), true)`);
+      await waitFor(`__flappy.scene.isActive('Stats') && ${ST}.view`);
+      ok((await evaluate(`${ST}.status.text`)) === (await t('leaderboardOffline')), "offline, another player's profile says the board can't be reached");
+      await shut();
+
+      // The save panel's Profile button: the panel closes and the own profile opens.
+      await evaluate(`(${P}.openSavePanel(), true)`);
+      await sleep(200);
+      await evaluate(`document.getElementById('save-profile-btn').click(), true`);
+      ok((await waitFor(`__flappy.scene.isActive('Stats') && ${ST}.view && ${ST}.view.own`)) && (await evaluate(`document.getElementById('save-panel').hidden`)), "the save panel's Profile button closes the panel and opens the own profile");
+      await shut();
     });
 
     const f2 = await frame();

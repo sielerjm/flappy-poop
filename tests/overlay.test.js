@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { GAME_WIDTH, GAME_HEIGHT, TUNING as T } from '../src/config.js';
-import { overlayOutsideHit, clampScroll, settingsLayout, leaderboardLayout } from '../src/logic.js';
+import { overlayOutsideHit, clampScroll, settingsLayout, leaderboardLayout, statsLayout } from '../src/logic.js';
 import { nearestTab } from '../src/ui/tabs.js';
 import { dailyYouText } from '../src/i18n.js';
 
@@ -91,4 +91,22 @@ test('a tap on the tab row picks the nearest glyph; the 🌞 footer names your r
   assert.equal(nearestTab((tab.xs[0] + tab.xs[1]) / 2 + 1, tab.xs), 1, 'just past halfway');
   assert.equal(dailyYouText('en', { rank: 3, total: 12, score: 87 }), 'You: #3 of 12 · 87');
   assert.equal(dailyYouText('zh-Hans', { rank: 3, total: 12, score: 87 }), '你：第3名 / 共12人 · 87');
+});
+
+test('the Profile panel (statsLayout): inside the field, ✕ and title above the band, the detail strip and version line below it', () => {
+  for (const W of [GAME_WIDTH, 1440]) {
+    const L = statsLayout(W / 2, GAME_HEIGHT / 2);
+    const p = L.panel;
+    const top = p.y - p.height / 2;
+    const bottom = p.y + p.height / 2;
+    assert.ok(top >= 0 && bottom <= GAME_HEIGHT && p.x - p.width / 2 >= 0 && p.x + p.width / 2 <= W, 'the panel fits the field');
+    assert.ok(p.width <= GAME_WIDTH, 'and the phone column');
+    const bandTop = L.band.y - L.band.height / 2;
+    const bandBottom = L.band.y + L.band.height / 2;
+    assert.ok(bandTop >= top && bandBottom <= bottom, 'the band is inside the panel');
+    assert.ok(L.title.y + 30 < bandTop && L.close.y + 30 < bandTop && L.close.y - 30 > top, 'title and ✕ sit above the band, inside the panel');
+    assert.ok(L.detailY - 30 > bandBottom && L.versionY - 20 > L.detailY + 30 && L.versionY + 20 < bottom, 'the detail strip and then the version line below the band');
+    assert.ok(L.left > p.x - p.width / 2 && L.right < p.x + p.width / 2 && L.titleMaxW < p.width - 100, 'rows and title clear of the edges and the ✕');
+    assert.ok(Number.isInteger(L.badgeCols) && L.badgeCols >= 3);
+  }
 });
