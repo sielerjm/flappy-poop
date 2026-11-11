@@ -1624,7 +1624,8 @@ tools/
 .claude/skills/audit-repo/   The repo audit procedure as a Claude skill (/audit-repo):
                             SKILL.md (phases, hard rules), zones.md (which zone owns
                             which file: add new src/ files there), prompts.md,
-                            report-format.md, follow-up.md, examples.md.
+                            report-format.md, follow-up.md, examples.md. Local
+                            only: untracked, so a fresh clone does not have it.
 .claude/audits/             ACCEPTED.md (accepted risks, kept across audits) and one
                             dated folder per audit (report, findings, repro tests).
                             Written by the audit's lead only; untracked until
@@ -1809,7 +1810,7 @@ Commits follow `type(scope): summary` (`feat`, `fix`, `docs`, `chore`, `test`, `
   (next free `NN-`, `Created:` date inside) plus a row in `.claude/plans/ROADMAP.md`;
   when Status is complete, move it into `.claude/plans/Archive/` and mark the row.
 - An audit of the repo, a zone or a feature → the `audit-repo` skill
-  (`.claude/skills/audit-repo/SKILL.md`; example prompts in its `examples.md`). It is
-  read-only: reports go to `.claude/audits/<date>/`, fixes only on Michael's word.
+  (`.claude/skills/audit-repo/SKILL.md`, local and untracked; example prompts in its
+  `examples.md`). It is read-only: reports go to `.claude/audits/<date>/`, fixes only on Michael's word.
 - Repo-wide conventions → this file. Player-facing docs → `README.md`.
 - Locale copy review for LLMs → `TRANSLATION_NOTES.md` (keep in sync with `src/i18n.js`).
