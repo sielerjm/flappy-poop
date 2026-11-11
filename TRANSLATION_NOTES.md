@@ -50,7 +50,7 @@ formal medical language.
 - First run with **no** stored `locale`: if `navigator.language` starts with `zh`, use `zh-Hans`; else `en`. Then persist.
 - Once the player picks a language in the 🌐 panel, the stored value always wins.
 - Brand title **Flappy Poop** stays Latin in both locales.
-- Untranslated tokens (must appear across About strings): `Flappy Poop`, `Michael Sieler`, `Phaser 4.2.1`, `MacKaffee`, `Pixabay`, `fart sound effect (reed)`, `Tori Schummer`, version numbers.
+- Untranslated tokens (must appear across About strings): `Flappy Poop`, `Michael Sieler`, `Phaser 4.2.1`, `MacKaffee`, `Pixabay`, `fart sound effect (reed)`, `Tori Schummer`, `Niklas Werner`, version numbers.
 - **Silent mode** = iPhone **hardware** ringer/silent switch → **静音模式** (not the in-game mute toggle).
 - **Toilet mode** (如厕模式) = the ready-screen switch; scores from such runs carry a 🚽 (not translated).
 - **User code** / save code (用户码 / 存档码) = the `fp1.…` string players copy between devices. The home-screen user button reads **Load user** (载入用户) until a username is set, then the name and best; it opens the panel titled **SAVE / LOAD USER**, whose labels are **Username**, **Save user code**, **Load user code**, and a **Save** button at the bottom that stores the username. `{name}` and `{scores}` are placeholders filled at runtime; keep them verbatim.
@@ -348,7 +348,7 @@ New level: "Shine 11" by BenKirb (Pixabay)
 Coin: "Drop Coin" by freesound_gamestudio (Pixabay)
 Purchase: "Coin Drop" by Universfield (Pixabay)
 Shop: "Money Bag" by PhilSavlem (Pixabay)
-Thanks to Tori Schummer for help with ideation
+Thanks to Tori Schummer and Niklas Werner for help with ideation and testing
 Inspired by Flappy Bird
 ```
 
@@ -363,7 +363,7 @@ Inspired by Flappy Bird
 金币音效："Drop Coin"，freesound_gamestudio（Pixabay）
 购买音效："Coin Drop"，Universfield（Pixabay）
 商店音效："Money Bag"，PhilSavlem（Pixabay）
-感谢 Tori Schummer 协助构思
+感谢 Tori Schummer 和 Niklas Werner 协助构思和测试
 灵感来自 Flappy Bird
 ```
 | achScore10 | Tiny Plop | 小小一坨 |

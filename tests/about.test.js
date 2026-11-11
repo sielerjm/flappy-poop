@@ -26,6 +26,7 @@ test('ABOUT_TEXT names the author, LLM assistance, engine, language, and sound c
     assert.match(body, /Shine 11/);
     assert.match(body, /BenKirb/);
     assert.match(body, /Tori Schummer/);
+    assert.match(body, /Niklas Werner/);
     assert.match(body, /Flappy Poop/);
   }
 });

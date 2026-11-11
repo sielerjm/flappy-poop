@@ -149,6 +149,7 @@ test('both About catalogs keep untranslated brand and credit tokens', () => {
     assert.match(body, /Pixabay/);
     assert.match(body, /fart sound effect \(reed\)/);
     assert.match(body, /Tori Schummer/);
+    assert.match(body, /Niklas Werner/);
   }
 });
 

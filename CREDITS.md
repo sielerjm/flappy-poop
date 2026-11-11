@@ -3,7 +3,7 @@
 ## Author
 
 - Idea, game design, and all art by Michael Sieler.
-- Thanks to Tori Schummer for her help with the ideation of the game.
+- Thanks to Tori Schummer and Niklas Werner for their help with the ideation and testing of the game.
 - Code is JavaScript (ES modules) on Phaser 4.2.1, written with LLM assistance.
 
 ## Engine
