@@ -298,10 +298,14 @@ own FNV-1a (`daily_level` = the client's `dailyLevel`), keeps the first post per
 
 **Player profiles and achievements** (👤, 2026-11-11, v0.14.0, plan `.claude/plans/Archive/08-user-stats.plan.md`):
 every player has a **public** profile (`scenes/Stats.js`, chromeIntent `'stats'`), opened by the save
-panel's 👤 Profile (own) or a name on any board (`Leaderboard.linkName` → `Play.openStats({ name })`).
+panel's 👤 Profile (own; disabled until a username is stored) or a name on any board
+(`Leaderboard.linkName` → `Play.openStats({ name })`). A player with no username gets a **gate**
+instead (`buildGate`: Create user opens the save panel; `Stats.refresh`, from `Play.setSaveState`,
+turns it into the profile once a name is saved, and back on Clear).
 **Counting:** `Play.endRun`'s single-player and Daily branches call `recordCareer`: `runDeltas`
 (`src/achievements.js`) turns the run into counters (games / wins / sumScore / sumLevel / maxLevel
-for single player, dailyGames for a Daily Dump, deaths / farts / superFarts / the pickups for both;
+for single player, dailyGames for a Daily Dump, deaths / pipes / farts / superFarts / the pickups
+for both, pipes being the pairs flown that day in a Daily Dump;
 `runFarts` / `runSuperFarts` from `activatePower`) that wait in the career store (`createCareerStore`,
 `flappyPoop.career`); test runs and match halves return before it. **Badges:** `evaluate` judges the
 `ACHIEVEMENTS` catalog (run feats from a normal single-player run only; lifetime milestones on the
@@ -315,7 +319,7 @@ the player's totals across every device, kept as `base` for that id), then the c
 stubs them. Clear empties the store; a Load forgets only `base`. **Server:** `player_counters` (one
 jsonb of counters, `merge_counters`: sum, or the larger value for `max*` keys), `achievement_defs`
 (windows of time-boxed quests only), `player_achievements`; `player_stats(id or board name)` is the
-profile (no ids): single-player numbers, daily podiums ranked as `daily_board` ranks, medals, the
+profile (no ids): single-player numbers (bestScore = the best score-board row), daily podiums ranked as `daily_board` ranks, medals, the
 biggest rival (self-races ignored), counters, achievements. The game claims, the server checks the
 id format and a quest's window (+2 days' grace): accepted risk ACC-001 like scores.
 
@@ -656,7 +660,8 @@ src/
     scrollView.js           createScrollView(): second camera clipped to a panel
                             interior, drag / wheel via clampScroll(), thumb, link()
                             that fires on pointerup only when moved < 12 px; offset,
-                            scrollBy, scrollTo and addScrolled for the focus ring.
+                            scrollBy, scrollTo and addScrolled for the focus ring;
+                            ignore(objs) and setEnabled(on) for a layer above the band.
                             Used by HowTo and About.
     tabs.js                 createTabs(scene, box, { glyphs, index }): the
                             leaderboard's 🏆 · 🌞 · 🏅 row (a track, a pill that
@@ -693,9 +698,10 @@ src/
                             not flap. The test-mode word in Username: Save toggles
                             Play.setTestMode instead of renaming; blur never stores it. Copy calls clipboard.writeText inside the tap
                             handler (iOS); falls back to selecting the field.
-                            👤 Profile (an outline button on its own row, always
-                            enabled): closes the panel, then Play.openStats() (the
-                            own profile; over the 🌞 popup when it was under).
+                            👤 Profile (an outline button on its own row, disabled
+                            with Clear until a username is stored): closes the panel,
+                            then Play.openStats() (the own profile; over the 🌞
+                            popup when it was under).
   scenes/
     Boot.js                 preload() gameplay PNGs (mystery.png as a 384 px
                             spritesheet; coin.png as a 106 px one) + the sfx MP3s (coin, coin-spend,
@@ -1177,11 +1183,19 @@ src/
                             server when named; offline / unnamed notes). Sections in
                             a scroll view (statsLayout): Singleplayer, Daily Dump
                             podiums, Tournaments (medals, biggest rival), Career (a
-                            glyph grid of the counters), Achievements (earned, then
-                            the rest dimmed with lifetime progress; for others only
-                            open quests); a tapped badge explains itself in the
-                            fixed strip (explain). The ring is rebuilt with the
-                            badges once the profile is in; up / down scroll.
+                            glyph grid of the 11 counters, CAREER), Achievements
+                            (earned, then the rest dimmed with lifetime progress; for
+                            others only open quests). Every cell is a zone (sv.link)
+                            whose tap opens the explanation card (toggleCard /
+                            explain): on a camera of its own added after the band's,
+                            so it draws on top and takes taps first; a release
+                            anywhere, ✕, Esc, A or B close it, and the band ignores
+                            drags meanwhile (scrollView.setEnabled). The ring is
+                            rebuilt with the cells once the profile is in and moved
+                            by navigate(): left / right in list order, up / down to
+                            the nearest cell (focusNearest over cells only), ✕ above
+                            the first row (scrolls to the top). No username: the gate
+                            (buildGate) instead; refresh() restarts it either way.
 
 assets/                     Contract PNGs + README.md (the art contract).
   README.md                 File name, pixel size, orientation rules. tests enforce it.

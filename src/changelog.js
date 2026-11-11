@@ -8,6 +8,24 @@ import { LOCALES } from './i18n.js';
 
 export const CHANGELOG = [
   {
+    version: '0.14.1',
+    date: '12 Nov 2026',
+    notes: {
+      en: [
+        'Tap an emoji or a badge on a profile to see what it is. A controller walks the grid too.',
+        'Profiles show your highest score.',
+        'A new career total, #️⃣ pipes passed, counts from this version. Fiber is now 🥦 and coins 🟡.',
+        'Profiles need a username: without one, a popup offers Create user.',
+      ],
+      'zh-Hans': [
+        '在个人资料里点表情或徽章，即可查看说明。手柄也能在其中移动。',
+        '个人资料现在会显示最高分。',
+        '新的生涯累计 #️⃣ 穿过的管道数，从这个版本开始计数。纤维改为 🥦，金币改为 🟡。',
+        '查看个人资料需要用户名：没有用户名时会弹出“创建用户”。',
+      ],
+    },
+  },
+  {
     version: '0.14.0',
     date: '11 Nov 2026',
     notes: {
