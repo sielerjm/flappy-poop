@@ -304,9 +304,9 @@ instead (`buildGate`: Create user opens the save panel; `Stats.refresh`, from `P
 turns it into the profile once a name is saved, and back on Clear).
 **Counting:** `Play.endRun`'s single-player and Daily branches call `recordCareer`: `runDeltas`
 (`src/achievements.js`) turns the run into counters (games / wins / sumScore / sumLevel / maxLevel
-for single player, dailyGames for a Daily Dump, deaths / pipes / farts / superFarts / the pickups
+for single player, dailyGames for a Daily Dump, deaths / pipes / falls / closeCalls / farts / superFarts / the pickups
 for both, pipes being the pairs flown that day in a Daily Dump;
-`runFarts` / `runSuperFarts` from `activatePower`) that wait in the career store (`createCareerStore`,
+`runFarts` / `runSuperFarts` from `activatePower`; `runFalls` once per drop past `fallLookVy` (`fallStarted`) and `runCloseCalls` when the near-miss clock starts in `tickScared`, both outside a fart, its grace and Invincible) that wait in the career store (`createCareerStore`,
 `flappyPoop.career`); test runs and match halves return before it. **Badges:** `evaluate` judges the
 `ACHIEVEMENTS` catalog (run feats from a normal single-player run only; lifetime milestones on the
 totals; time-boxed quests by UTC day) and `careerStore.unlock` records them with a claim; Over names
@@ -718,6 +718,11 @@ src/
                             guard, so one Esc closes only the top panel),
                             hasOverlayUnder(), and openChangelog() for the version
                             lines. Play.chromeArgs and padTop read the top from it.
+    infoCard.js             createInfoCard(scene, { x, y, width }, { ownCamera, depth,
+                            onShow, onHide }): the explanation card (a dim, an emoji or
+                            a texture, a title, lines, ✕; a release anywhere closes
+                            it). The profile puts it on its own camera above its
+                            scroll band; Over at a depth above the ring.
     scrollView.js           createScrollView(): second camera clipped to a panel
                             interior, drag / wheel via clampScroll(), thumb, link()
                             that fires on pointerup only when moved < 12 px; offset,
@@ -1125,7 +1130,7 @@ src/
                             join screen the bracket; bothInBreak / openPeek for
                             the 🏅 pill; restartWith(match) starts the next race or
                             the lobby after Abandon.
-    Over.js                 Game-over panel (score, run summary of fiber / probiotic / postbiotic over bacteria / bean / mystery box (mystery-icon.png), pipes crossed, then Share | Home on one row from overButtonsLayout and, on a normal or test run, a glowing Play again under them, the panel lifted over.againLiftPx so it clears the ⏸) with a
+    Over.js                 Game-over panel (score, run summary of fiber / probiotic / postbiotic over bacteria / bean / mystery box (mystery-icon.png) over ‼️ long falls / 😢 close calls (data.falls / closeCalls; ×– for a stored Daily result), pipes crossed, then Share | Home on one row from overButtonsLayout and, on a normal or test run, a glowing Play again under them, the panel lifted over.againLiftPx so it clears the ⏸) with a
                             tap lockout (openedAt = game.loop.time: a relaunched
                             scene's this.time.now is stale) and its own tray (mute
                             still works). makeShareCard() at create (not on a
@@ -1160,6 +1165,14 @@ src/
                             pointer); this.focus rings Home, Share (once the card
                             exists) and the tray, shown as the buttons fade in under
                             a controller; tray and focus are nulled on shutdown.
+                            Summary cells (overCellsLayout, T.over.cellRowsY / cellW
+                            / cellH; the coin cell is the rank link in a Daily Dump)
+                            explain themselves: a release over the cell it was
+                            pressed on opens the shared card (ui/infoCard.js: its
+                            icon, a career note, "This run: n") past the death-tap
+                            lockout; with a card up the next tap, B
+                            (Play.onPadAction), a nav press, Space or Home only
+                            closes it (closeCard). The cells ring after the buttons.
     Settings.js             Overlay (geometry from settingsLayout): sound, haptics (Android only), the
                             hand row (👈 pill 👉 from createToggle with glyphLeft, a
                             Zone over the row, a hint line; toggleHand →
@@ -1246,7 +1259,7 @@ src/
                             server when named; offline / unnamed notes). Sections in
                             a scroll view (statsLayout): Singleplayer, Daily Dump
                             podiums, Tournaments (medals, biggest rival), Career (a
-                            glyph grid of the 11 counters, CAREER), Achievements
+                            glyph grid of the 13 counters, CAREER, five to a row), Achievements
                             (earned, then the rest dimmed with lifetime progress; for
                             others only open quests). Every cell is a zone (sv.link)
                             whose tap opens the explanation card (toggleCard /

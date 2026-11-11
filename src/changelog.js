@@ -8,6 +8,22 @@ import { LOCALES } from './i18n.js';
 
 export const CHANGELOG = [
   {
+    version: '0.15.1',
+    date: '12 Nov 2026',
+    notes: {
+      en: [
+        'Tap an icon on the game-over panel to see what it counts. A controller can walk to it too.',
+        'The game-over panel now counts ‼️ long falls and 😢 close calls with a pipe.',
+        'Both join the career totals on your profile, counting from this version.',
+      ],
+      'zh-Hans': [
+        '在游戏结束面板上点图标，即可查看它统计的是什么。也可以用手柄移过去查看。',
+        '游戏结束面板现在会统计 ‼️ 长距离下坠和 😢 与管道擦身而过的次数。',
+        '这两项也会计入个人资料的生涯累计，从这个版本开始计数。',
+      ],
+    },
+  },
+  {
     version: '0.15.0',
     date: '12 Nov 2026',
     notes: {
