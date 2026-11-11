@@ -20,7 +20,9 @@ export class Boot extends Phaser.Scene {
     this.load.image('mystery-icon', 'assets/mystery-icon.png' + V); // static view for the game-over summary and How to play
     this.load.image('bacteria', 'assets/bacteria.png' + V);
     this.load.image('bean', 'assets/bean.png' + V);
-    this.load.image('coin', 'assets/coin.png' + V); // golden corn kernel: the purse's coin (pickup, HUD, box reveal, shop)
+    // Golden corn kernel: the purse's coin. 12 spin frames side by side; a field kernel plays 'coin-spin'
+    // (made in create()), every still use (HUD, box reveal, shop, Over) shows frame 0.
+    this.load.spritesheet('coin', 'assets/coin.png' + V, { frameWidth: 106, frameHeight: 106 });
     this.load.image('poop-stink1', 'assets/poop-stink1.png' + V);
     this.load.image('poop-stink2', 'assets/poop-stink2.png' + V);
     this.load.image('poop-falling', 'assets/poop-falling.png' + V); // long fall, no power ready (fallLookVy)
@@ -46,6 +48,9 @@ export class Boot extends Phaser.Scene {
     // Global animation manager: every scene can play it.
     if (!this.anims.exists('mystery-spin')) {
       this.anims.create({ key: 'mystery-spin', frames: this.anims.generateFrameNumbers('mystery'), frameRate: 1000 / T.mystery.frameMs, repeat: -1 });
+    }
+    if (!this.anims.exists('coin-spin')) {
+      this.anims.create({ key: 'coin-spin', frames: this.anims.generateFrameNumbers('coin'), frameRate: 1000 / T.coin.frameMs, repeat: -1 });
     }
     this.scene.start('Play');
   }

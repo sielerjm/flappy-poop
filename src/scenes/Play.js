@@ -2117,10 +2117,10 @@ export class Play extends Phaser.Scene {
     this.kernel = { level: this.level, pair: this.course.kernelPair(this.level), item: null, done: false };
   }
 
-  /** Pause or resume the boxes' spin with the run (the scene keeps updating while paused). */
+  /** Pause or resume the boxes' and kernels' spin with the run (the scene keeps updating while paused). */
   setBoxSpin(on) {
     for (const item of this.items.getChildren()) {
-      if (item.getData('kind') !== 'mystery') continue;
+      if (item.getData('kind') !== 'mystery' && item.getData('kind') !== 'coin') continue;
       if (on) item.anims.resume();
       else item.anims.pause();
     }
@@ -2148,7 +2148,7 @@ export class Play extends Phaser.Scene {
   }
 
   finishItem(item, kind) {
-    const coin = kind === 'coin'; // a kernel is drawn at coin.displayPx (from its 96 px image), its hitbox the whole drawing
+    const coin = kind === 'coin'; // a kernel is drawn at coin.displayPx (from its 106 px frames), its hitbox the whole drawing
     const scale = coin ? T.coin.displayPx / item.frame.width : T.spriteDisplayScale;
     const radius = coin ? T.coin.radius : T.items.itemRadius;
     item.setScale(scale);
@@ -2157,6 +2157,10 @@ export class Play extends Phaser.Scene {
     item.body.setCircle(itemBody.radius, itemBody.offset, itemBody.offset);
     item.setVelocityX(-this.scrollSpeed());
     item.setData('kind', kind);
+    if (coin) {
+      item.play('coin-spin'); // every field kernel spins (Boot); setBoxSpin freezes it with the run
+      if (this.state === 'paused') item.anims.pause();
+    }
   }
 
   /** Speed for the current level (the gap never changes); pushes it onto everything scrolling. */

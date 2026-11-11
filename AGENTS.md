@@ -21,7 +21,8 @@ paused, like a fart), clears what is ahead and brings the finish line in from th
 box is guaranteed after one of level 3's first four pairs (`scriptedMysteryPair`, so before pipe 5); on every
 later pair boxes roll at half fiber's weight (`mysteryRolls`). On level 3 they hold still midway between two
 gaps; from level 4 they bob at half fiber's speed (`mysteryMoves`). **Coins** (`coin.png`, a golden corn
-kernel, a 96 px image drawn at `coin.displayPx` 48 with a `coin.radius` hitbox) are not in the item roll:
+kernel: 12 spin frames of 106 px drawn at `coin.displayPx` 53 with a `coin.radius` hitbox, spinning in the
+field at `coin.frameMs` 100 ('coin-spin'), frame 0 wherever it is shown still) are not in the item roll:
 from level 2 an extra coin fills a band slot nothing else took (`course.coin(n)` at `coin.chance`, its own
 stream in both modes), and every level carries **one guaranteed kernel**
 (`Play.armKernel` from `course.kernelPair(level)`: level 1's waits `coin.firstAfterPipePx` past its last pair
@@ -643,9 +644,10 @@ src/
                             handler (iOS); falls back to selecting the field.
   scenes/
     Boot.js                 preload() gameplay PNGs (mystery.png as a 384 px
-                            spritesheet; coin.png) + the sfx MP3s (coin, coin-spend,
+                            spritesheet; coin.png as a 106 px one) + the sfx MP3s (coin, coin-spend,
                             shop beside fart / fart-accelerate / level-up); create() makes the global
-                            'mystery-spin' anim (mystery.frameMs), then starts Play.
+                            'mystery-spin' (mystery.frameMs) and 'coin-spin' (coin.frameMs)
+                            anims, then starts Play.
     Play.js                 State machine: 'ready' -> 'playing' -> 'paused'/'dead'
                             (+ 'respawn' in a match: between a crash and its restart).
                             The constructor takes the scene key ('Play'; 'PlayB' is
@@ -1110,8 +1112,8 @@ assets/                     Contract PNGs + README.md (the art contract).
   poop.png poop-dead.png poop-stink1.png poop-stink2.png poop-falling.png
   poop-stink-falling1.png poop-stink-falling2.png poop-fart.png
   poop-speech.png fiber.png probiotic.png postbiotic.png bacteria.png bean.png coin.png
-                            (coin.png: the golden corn kernel, a placeholder cut from
-                            assets/src/Kernel_0.png until a spin GIF replaces it;
+                            (coin.png: the golden corn kernel's spin, 12 frames of
+                            106x106 side by side (1272x106), loaded as a spritesheet;
                             postbiotic.png: HUD icon only, never spawned;
                             the falling frames: scared face + sweat marks for a
                             long drop, with / without stink lines)
@@ -1372,8 +1374,9 @@ tools/
                             one body scale and centre, stink / falling / fart /
                             speech on bigger squares; bean.png from Kidney_Bean.png,
                             postbiotic.png from Postbiotic.png, mystery-icon.png from
-                            MysteryBox_Icon.png, coin.png from Kernel_0.png; process_sheet cuts MysteryBox.gif's
-                            frames on one shared square into the mystery.png strip;
+                            MysteryBox_Icon.png; process_sheet cuts MysteryBox.gif's
+                            frames on one shared square into the mystery.png strip
+                            and CornKernel.gif's into the coin.png strip (106 px frames);
                             process_icons cuts icon-192 / icon-512 (padded to the
                             maskable safe zone) and apple-touch-icon (full bleed)
                             from FlappyPoopAppArt.png.

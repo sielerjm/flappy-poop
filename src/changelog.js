@@ -8,6 +8,18 @@ import { LOCALES } from './i18n.js';
 
 export const CHANGELOG = [
   {
+    version: '0.13.1',
+    date: '11 Nov 2026',
+    notes: {
+      en: [
+        'Coins are now a spinning golden corn kernel, a little bigger in the field.',
+      ],
+      'zh-Hans': [
+        '金币现在是一颗旋转的金色玉米粒，在场上也稍大了一些。',
+      ],
+    },
+  },
+  {
     version: '0.13.0',
     date: '10 Nov 2026',
     notes: {
