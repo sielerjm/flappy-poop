@@ -23,16 +23,8 @@ const ALLOWED_EXPORTS = {
   topScores: 'test hook: tests/save.test.js reads top lists as plain numbers (its last game use, isNewTop, is gone)',
   // Daily Dump (plan .claude/plans/2026-11-10-daily-dump.md): helpers land before their callers.
   // Player profiles (plan 08): step 2 lands the pure helpers; steps 3 and 4 wire them (and drop these lines).
-  runDeltas: 'plan 08 step 3: Play.endRun counts each run',
-  bestFacts: 'plan 08 step 3: Play.creditBests (veteran credit)',
-  createCareerStore: 'plan 08 step 3: Play.careerStore',
-  submitCounters: 'plan 08 step 3: Play.postCounters',
-  claimAchievements: 'plan 08 step 3: Play.claimBadges',
-  achievementById: 'plan 08 step 3: Over lists the badges a run unlocked',
-  badgeTitle: 'plan 08 step 3: Over lists the badges a run unlocked',
   openQuests: 'plan 08 step 4: the Profile lists the quests open now',
   badgeDesc: 'plan 08 step 4: the Profile explains a badge',
-  fetchPlayerStats: 'plan 08 step 4: Play.fetchProfile',
 };
 
 /** UI string keys no source names literally: prefix → why (they are built at run time). */

@@ -262,6 +262,13 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
       if (exceptions.length) console.log(`  page exceptions:\n  ${exceptions.join('\n  ')}`);
       return failures;
     }
+    // Hermetic career (plan 08): the counters, the claims and the profile never reach the live board.
+    // Each stub answers as globalThis.__careerAnswer says ('keep' / offline by default) and records the call.
+    await evaluate(`(() => { const p = __flappy.scene.getScene('Play'); globalThis.__career = { posts: [], claims: [], profiles: [] }; globalThis.__careerAnswer = 'keep'; globalThis.__profile = null;
+      p.postCounters = (id, batch, counters) => (__career.posts.push({ id, batch, counters }), Promise.resolve(globalThis.__careerAnswer === 'ok' ? { status: 'ok', totals: counters } : { status: 'keep' }));
+      p.claimBadges = (id, ids) => (__career.claims.push(ids), Promise.resolve(globalThis.__careerAnswer === 'ok' ? { stored: ids, closed: [] } : null));
+      p.fetchProfile = (who) => (__career.profiles.push(who), Promise.resolve(globalThis.__profile));
+      return true; })()`);
     ok((await evaluate(`__flappy.scene.getScene('Play').diff.gapHeight`)) === 374, 'level 1 pipe gap is 10 % wider (374 px)');
     const field0 = await evaluate(`JSON.stringify({ W: __flappy.scale.width, H: __flappy.scale.height, inner: [innerWidth, innerHeight], poopX: __flappy.scene.getScene('Play').poopX })`).then(JSON.parse);
     ok(field0.W === 720 && field0.H === 1280 && field0.poopX === 180, `a portrait viewport (${field0.inner.join('×')}) gets the ${field0.W}×${field0.H} phone field, poop at ${field0.poopX}`);
@@ -273,6 +280,8 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
     }
 
     const frame = () => evaluate('__flappy.loop.frame');
+    /** The career totals this device knows (plan 08): pending + in flight (+ the server's, never set under the stubs' 'keep'). */
+    const careerNow = () => evaluate(`(() => { const p = __flappy.scene.getScene('Play'); return JSON.stringify(p.careerStore.totals(p.save?.id ?? null)); })()`).then(JSON.parse);
     const playState = () => evaluate(`__flappy.scene.getScene('Play').state`);
     const active = (key) => evaluate(`__flappy.scene.isActive('${key}')`);
     const chrome = (input) => evaluate(`__flappy.scene.getScene('Play').handleChrome('${input}'), true`);
@@ -1161,6 +1170,10 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
       ok(bar.label === 'LV 3' && Math.abs(bar.value - expect) < 1e-9 && bar.color === pinkHex, `progress bar reads "${bar.label}" at ${(bar.value * 100).toFixed(0)} % in ${bar.color} (${bar.passed - end2} of ${len3} pipes into level 3)`);
     });
     await section('death', async () => {
+      const career0 = await careerNow();
+      // Earlier sections (the home section's board bests) already credited every score and level badge
+      // this run reaches; forget level_2 so the run (on level 3 by now) earns it again and Over names it.
+      await evaluate(`${play}.careerStore.settleClaims([], ['level_2']), true`);
       await evaluate(`${play}.graceLeftMs = 0, true`);
       // Going in with coins, a bean and a probiotic: death clears the purse and every power-up as the run ends.
       await evaluate(`(() => { const p = ${play}; p.takeCoins(3); if (!p.effects.beans()) p.effects.addBean(); p.effects.applyProbiotic(); p.refreshInventory(); p.refreshProbioticHud(); return true; })()`);
@@ -1175,6 +1188,20 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
       ok(cleared.coins === 0 && cleared.beans === 0 && !cleared.probiotic && cleared.rows.every((v) => !v) && cleared.coinIcon && cleared.collected >= 3, `death empties the purse and clears the beans and the probiotic (HUD rows gone); Over counts the ${cleared.collected} coins the run collected beside the pipes`);
       const box = await evaluate(`(() => { const o = __flappy.scene.getScene('Over'); const panel = o.children.list.find((c) => c.type === 'Rectangle' && c.width === 560); const L = panel.x - panel.width / 2 + 8, R = panel.x + panel.width / 2 - 8; const parts = o.children.list.filter((c) => (c.type === 'Text' && /^×\\d+$/.test(c.text)) || (c.type === 'Image' && ['fiber', 'probiotic', 'postbiotic', 'bacteria', 'bean', 'mystery-icon'].includes(c.texture.key))).map((c) => { const b = c.getBounds(); return { k: c.texture?.key ?? c.text, l: b.left, r: b.right }; }); return JSON.stringify({ L, R, inside: parts.every((b) => b.l >= L && b.r <= R), icons: parts.filter((b) => b.k !== undefined && !b.k.startsWith('×')).length, minL: Math.min(...parts.map((b) => b.l)), maxR: Math.max(...parts.map((b) => b.r)) }); })()`).then(JSON.parse);
       ok(box.inside && box.icons >= 6, `run summary (fiber · probiotic · postbiotic / bacteria · bean · mystery box) fits inside the panel (${box.minL.toFixed(0)}–${box.maxR.toFixed(0)} within ${box.L}–${box.R})`);
+      // The career (plan 08): the run is counted once, with its pickups and farts; the badges it earned are
+      // unlocked, queued as claims and named on Over; then a sync the stubs accept sends both.
+      {
+        const now = await careerNow();
+        const c = await evaluate(`(() => { const p = ${play}; const o = __flappy.scene.getScene('Over'); const b = o.badgeLine; return JSON.stringify({ collected: p.collected, farts: p.runFarts, supers: p.runSuperFarts, badges: p.runBadges, unlocked: p.careerStore.unlocked(), claims: p.careerStore.claims(), line: b?.text ?? null, lineIn: b ? b.getBounds().width <= 520 : true }); })()`).then(JSON.parse);
+        const d = (k) => (now[k] ?? 0) - (career0[k] ?? 0);
+        ok(d('games') === 1 && d('deaths') === 1 && !d('wins') && ['fiber', 'probiotic', 'postbiotic', 'bacteria', 'bean', 'mystery', 'coin'].every((k) => d(k) === c.collected[k]) && d('farts') === c.farts && c.farts >= 2 && d('superFarts') === c.supers && c.supers >= 1, `the run is counted once in the career: +1 game, +1 death, its pickups and ${c.farts} farts (${c.supers} super)`);
+        ok(c.badges.includes('level_2') && c.badges.every((id) => id in c.unlocked && c.claims.includes(id)) && c.line?.startsWith('🏆') && c.lineIn, `the run unlocked ${c.badges.join(', ')}: queued as claims and named on Over ("${c.line}")`);
+        await evaluate(`import('./src/config.js').then((m) => { globalThis.__api = m.LEADERBOARD.dataApi; m.LEADERBOARD.dataApi = ''; return true; })`);
+        await evaluate(`(globalThis.__careerAnswer = 'ok', __career.posts.length = 0, __career.claims.length = 0, ${play}.syncLeaderboard().then(() => true))`);
+        const sent = await evaluate(`(() => { const p = ${play}; const c = p.careerStore.load(); return JSON.stringify({ name: p.save?.name ?? null, posts: __career.posts.length, sentGames: __career.posts[0]?.counters.games ?? 0, claimed: __career.claims.flat(), inflight: c.inflight, base: c.base?.id === p.save?.id, left: c.claims }); })()`).then(JSON.parse);
+        await evaluate(`(globalThis.__careerAnswer = 'keep', import('./src/config.js').then((m) => { m.LEADERBOARD.dataApi = globalThis.__api; return true; }))`);
+        ok(sent.name && sent.posts === 1 && sent.sentGames >= 1 && sent.inflight === null && sent.base && sent.left.length === 0 && c.badges.every((id) => sent.claimed.includes(id)), `a sync (named "${sent.name}") sends the career batch once (${sent.sentGames} games) and the claims; both settle`);
+      }
       // The game-over panel is the top of the input stack: a real tap on it, or on the field around it,
       // never reaches Play (its flap() runs on no tap). The lockout is re-armed so neither tap goes home.
       {
@@ -1694,6 +1721,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await sleep(400);
 
         const stores0 = await stores();
+        const career0 = await careerNow();
         await startRun();
         const begin = await evaluate(`Promise.all([import('./src/logic.js'), import('./src/config.js')]).then(([l, c]) => JSON.stringify({ level: ${play}.level, passed: ${play}.pipesPassed, spawned: ${play}.pipesSpawned, score: ${play}.score, speed: ${play}.diff.pipeSpeed, want: l.levelSpeed(4, c.TUNING), bg: ${play}.bgColor.fillColor, wantBg: l.levelColor(4, c.LEVEL_COLORS, c.TUNING.levels.whiteBlend), end3: l.levelEnd(3, c.TUNING), test: ${play}.runIsTest, badge: ${play}.testBadge.visible ? ${play}.testBadge.text : null }))`).then(JSON.parse);
         ok(begin.test && begin.level === 4 && begin.passed === begin.end3 && begin.spawned >= begin.end3 && begin.score >= begin.end3 && begin.speed === begin.want && begin.bg === begin.wantBg && begin.badge === '\u{1F9EA}', `a test run starts on level ${begin.level}: ${begin.passed} pipes passed, par score ${begin.score}, ${begin.speed} px/s, level-4 colour, 🧪 in the HUD`);
@@ -1779,6 +1807,9 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         const after = await stores();
         const texts = await overTexts();
         ok((await playState()) === 'dead' && after === stores0 && texts.includes(await tx('testRunNotSaved')), `a test run's death records nothing (save, best, and leaderboard storage byte-identical) and Over shows "${await tx('testRunNotSaved')}"`);
+        const careerT = await careerNow();
+        const testBadges = await evaluate(`JSON.stringify({ run: ${play}.runBadges, line: __flappy.scene.getScene('Over').badgeLine?.text ?? null })`).then(JSON.parse);
+        ok(JSON.stringify(careerT) === JSON.stringify(career0) && testBadges.run.length === 0 && testBadges.line === null, `a test run adds nothing to the career and unlocks no badge (${JSON.stringify(careerT) === JSON.stringify(career0) ? 'totals unchanged' : `totals ${JSON.stringify(career0)} → ${JSON.stringify(careerT)}`}; ${JSON.stringify(testBadges)})`);
         await sleep(1000);
         const testOver = await evaluate(`(() => { const o = __flappy.scene.getScene('Over'); const home = o.children.list.find((c) => c.type === 'Text' && c.text === o.homeButton.getText()); return JSON.stringify({ share: o.shareButton, file: o.shareFile, homeX: home?.x, texts: o.children.list.filter((c) => c.type === 'Text').map((c) => c.text) }); })()`).then(JSON.parse);
         ok(testOver.share === null && testOver.file === null && testOver.homeX === 360 && !testOver.texts.includes(await tx('shareButton')), `a test run's game over has no Share (nothing captured) and Home alone at the centre (x ${testOver.homeX})`);
@@ -2169,6 +2200,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await metrics(1800, 1000);
         await settle(want.W);
         const saveBefore = await evaluate(`localStorage.getItem('flappyPoop.save')`);
+        const careerBefore = await careerNow();
         await evaluate(`${P1}.toggleVersus(), ${P1}.launch(), true`);
         ok(await lobbyToRace(), 'the 👥 toggle (toggleVersus) and the start tap open the lobby; Play opens a race\'s join screen');
         ok(await race(), 'a keyboard-only match: W / Space is P1, ↑ / Enter is P2, both playing after the countdown');
@@ -2422,6 +2454,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         const flags = await evaluate(`(() => { const v = ${VS}; const wide = v.children.list.find((c) => c.type === 'Rectangle' && c.depth === 70); const t = (s) => v.children.list.find((c) => c.type === 'Text' && c.text === s); return JSON.stringify({ wins: v.match.slots.map((s) => s.levelWins), w: wide?.width, p1: t('🏁 ×2')?.x, p2: t('🏁 ×0')?.x, cx: v.layout.totalW / 2 }); })()`).then(JSON.parse);
         ok(flags.wins[0] === 2 && flags.wins[1] === 0 && flags.w === TT.versus.resultPanelW && flags.p1 < flags.cx && flags.p2 > flags.cx, `level wins: P1 first over level 1's line and first out (🏁 ×${flags.wins[0]}), P2 🏁 ×${flags.wins[1]}, on a ${flags.w} px panel`);
         ok(panel.syncs === 0 && panel.save === saveBefore, 'a match records nothing: no leaderboard sync, the save state untouched');
+        ok(JSON.stringify(await careerNow()) === JSON.stringify(careerBefore), 'nor anything in the career (counters and badges)');
         await evaluate(`[${P1}, ${P2}].forEach((p) => { delete p.syncLeaderboard; }), true`); // the counting stub off: scene instances outlive restarts, and later sections sync for real
         // Rematch (the smoke's restart, Versus.rematch: no button offers it): the same devices, a fresh
         // seed, straight through the countdown into play. Pinned to equal points, the fewer crashes win.
@@ -2891,6 +2924,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await evaluate(`(${keys.map((k) => `localStorage.removeItem('${k}')`).join(', ')}, true)`);
         await home();
         const before = await evaluate(`JSON.stringify({ top: ${P}.save.top ?? null, best: localStorage.getItem(${JSON.stringify(TT.bestKey)}) })`);
+        const careerD0 = await careerNow();
         const want = await evaluate(`${L}.then(([l, c]) => { const lv = l.dailyLevel('${DAY}', c.TUNING); return JSON.stringify({ level: lv, pipes: l.levelEnd(lv - 1, c.TUNING), end: l.levelEnd(lv, c.TUNING), seed: l.dailySeed('${DAY}') }); })`).then(JSON.parse);
 
         // Start on the pinned day, with the 🚽 and 👥 toggles on: the run ignores both.
@@ -2934,6 +2968,12 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         const over = await evaluate(`JSON.stringify(__flappy.scene.getScene('Over').scene.settings.data?.daily ?? null)`).then(JSON.parse);
         const after = await evaluate(`JSON.stringify({ top: ${P}.save.top ?? null, best: localStorage.getItem(${JSON.stringify(TT.bestKey)}) })`);
         ok(r2.rec?.final === true && r2.queue.length === 1 && r2.queue[0].day === DAY && r2.queue[0].score === r2.rec.score && over?.day === DAY && over.level === want.level && after === before, `the crash: the record is final (score ${r2.rec?.score}), its score queued for the board (${r2.queue.length}), Over gets the day; the 🏆 top list and best are untouched`);
+        {
+          const careerD = await careerNow();
+          const dd = (k) => (careerD[k] ?? 0) - (careerD0[k] ?? 0);
+          const runBadges = await evaluate(`JSON.stringify(${P}.runBadges)`).then(JSON.parse);
+          ok(dd('dailyGames') === 1 && dd('games') === 0 && dd('sumScore') === 0 && dd('deaths') === 1 && !runBadges.some((id) => /^(score|level)_|win/.test(id)), `the Daily Dump counts in the career as a daily game (+1) with its pickups, never as a 🏆 game, and earns no score or level badge (${runBadges.join(', ') || 'none'})`);
+        }
 
         // The daily result panel: its headline, the rank cell (the board is muzzled: the post waits), the
         // countdown ticking, and the score as a real link to the board's 🌞 tab.

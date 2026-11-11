@@ -282,6 +282,8 @@ Inspired by Flappy Bird`,
     achDescBacteria: 'Bump into {n} 🦠 in all',
     achDescPostbiotic: 'Make {n} postbiotics ✨',
     achDescMystery: 'Open {n} mystery boxes 📦',
+    overBadges: '🏆 New: {badges}',
+    overBadgesMore: '+{n}',
   },
   'zh-Hans': {
     readyTitle: 'FLAPPY POOP',
@@ -557,6 +559,8 @@ Inspired by Flappy Bird`,
     achDescBacteria: '累计碰到 {n} 个 🦠',
     achDescPostbiotic: '累计制造 {n} 次后生元 ✨',
     achDescMystery: '累计打开 {n} 个神秘盒子 📦',
+    overBadges: '🏆 新成就：{badges}',
+    overBadgesMore: '等另外 {n} 个',
   },
 };
 

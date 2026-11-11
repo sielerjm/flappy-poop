@@ -104,7 +104,8 @@ import {
   padIntent,
 } from '../logic.js';
 import { t, pauseBannerText, levelBannerText, levelLabel, initialLocale, isLocale, profileButtonText, coinLabel, countText, versusName } from '../i18n.js';
-import { loadLocal, saveLocal, ensureId, recordScore, mergeBoardBests, TOILET_EMOJI } from '../save.js';
+import { loadLocal, saveLocal, ensureId, recordScore, mergeBoardBests, newId, TOILET_EMOJI } from '../save.js';
+import { runDeltas, evaluate, bestFacts } from '../achievements.js';
 import { unlock, attachGame, setMuted, isMuted, sfx } from '../sound.js';
 import { createTray } from '../ui/tray.js';
 import { createFocus } from '../ui/focus.js';
@@ -113,7 +114,7 @@ import { createGlow, createRectGlow } from '../ui/glow.js';
 import { createFinishTexture } from '../ui/finish.js';
 import { createLightTexture } from '../ui/pipeShade.js';
 import { createLevelBar } from '../ui/levelBar.js';
-import { createSubmitStore, createMergeStore, createRenameStore, createTournamentQueue, createDailyStore, createDailyQueue, submitDailyScore, fetchDailyBoard, submitPlans, submitScore, submitTournament, checkNameAvailable, mergePlayers, fetchPlayerName, fetchRank, nameAction } from '../leaderboard.js';
+import { createSubmitStore, createMergeStore, createRenameStore, createTournamentQueue, createDailyStore, createDailyQueue, submitDailyScore, fetchDailyBoard, submitPlans, submitScore, submitTournament, checkNameAvailable, mergePlayers, fetchPlayerName, fetchRank, nameAction, createCareerStore, submitCounters, claimAchievements, fetchPlayerStats } from '../leaderboard.js';
 import { createButton } from '../ui/button.js';
 import { createToggle } from '../ui/toggle.js';
 import { openSavePanel, isSavePanelOpen, showAdoptedName, showBoardScores } from '../ui/savePanel.js';
@@ -194,6 +195,8 @@ export class Play extends Phaser.Scene {
     this.tournamentQueue = createTournamentQueue(); // finished tournaments (🏅) the board has not confirmed yet
     this.dailyStore = createDailyStore(); // this device's Daily Dump (🌞) attempt: claimed at the start, final at the crash
     this.dailyQueue = createDailyQueue(); // daily scores the board has not confirmed yet
+    this.careerStore = createCareerStore(); // lifetime counters and achievements (plan 08): counted at endRun, sent by syncLeaderboard
+    this.runBadges = []; // the achievements the last run unlocked, for Over
     // The Daily Dump run (startDaily → start): { day, level, startPipes, playerId } while one runs, else null.
     // runIsDaily latches per run like runIsTest; dailyNext carries startDaily's day through the launch slide.
     this.runIsDaily = false;
@@ -420,6 +423,7 @@ export class Play extends Phaser.Scene {
     this.refreshTestBadge(); // still on after a restart: test mode lives in the registry
     if (!this.match && !bootSynced) {
       bootSynced = true;
+      this.creditCareer(); // badges the saved bests already earn (unnamed and offline players too)
       this.syncLeaderboard(); // fire and forget: picks up the board's name (a rename made on another device)
     }
     if (this.match) this.setReadyUiVisible(false); // a half of a match: the Versus scene draws the join screen
@@ -720,6 +724,9 @@ export class Play extends Phaser.Scene {
     this.beanSpawned = begin.beanSpawned;
     this.refreshTestBadge();
     this.collected = { fiber: 0, probiotic: 0, postbiotic: 0, bacteria: 0, bean: 0, mystery: 0, coin: 0 };
+    this.runFarts = 0; // this run's farts and super farts, for the career counters
+    this.runSuperFarts = 0;
+    this.runBadges = [];
     this.mysteryPair = this.course.mysteryPair(); // the pair the guaranteed first box (early level 3) rides after
     // The purse: every run starts empty (coins last across the levels of one run only).
     this.effects.spendCoins(this.effects.coins());
@@ -1168,6 +1175,7 @@ export class Play extends Phaser.Scene {
     this.submitStore.clear();
     this.mergeStore.clear();
     this.renameStore.clear();
+    this.careerStore.clear(); // counters and badges go with the player
     this.best.clear();
     this.boardNameTaken = false;
     this.boardBestsFor = null;
@@ -1179,8 +1187,9 @@ export class Play extends Phaser.Scene {
    * the shared leaderboard when it is newer than the last confirmed submit. Named players only; the id is created on first use
    * (same as the first save-code export). Before posting, the device takes the
    * board's name for its player unless the player renamed here (nameAction), so
-   * a rename made on another device sticks. Resolves on every outcome; a failed
-   * post is retried on the next game over or board open.
+   * a rename made on another device sticks. After the daily scores, the career
+   * (lifetime counters and achievement claims, drainCareer). Resolves on every
+   * outcome; a failed post is retried on the next game over or board open.
    */
   syncLeaderboard() {
     // A Daily Dump record left unfinished (a reload mid-run) is that day's attempt as it stands
@@ -1213,7 +1222,9 @@ export class Play extends Phaser.Scene {
         if (this.save?.id === id && nameAction({ local: this.save.name, board, pending: this.renameStore.load(), id }) === 'adopt') this.adoptBoardName(board);
       })
       .then(() => this.pullBoardBests(id))
+      .then(() => this.creditCareer()) // bests from other devices earn their score and level badges here
       .then(() => this.drainDaily())
+      .then(() => this.drainCareer(id))
       .then(() =>
         // Up to two rows per player: best off the toilet and best on it, posted one after the other.
         submitPlans(this.save, this.submitStore.load()).reduce(
@@ -1311,6 +1322,7 @@ export class Play extends Phaser.Scene {
   forgetRename() {
     this.renameStore.clear();
     this.boardBestsFor = null;
+    this.careerStore.clearBase(); // the device may now be another player: their totals come with the next sync
   }
 
   /** Is `name` free on the board for this player's id? true / false / null (the board cannot say). The save panel asks before storing a name. */
@@ -2381,6 +2393,8 @@ export class Play extends Phaser.Scene {
     const durationMs = fartDuration(this.effects.superReady(), snd && snd.duration > 0 ? snd.duration * 1000 : 0, T);
     this.stopFartSound(); // a clip still fading from the last fart
     this.effects.activatePower(durationMs);
+    this.runFarts = (this.runFarts ?? 0) + 1;
+    if (this.effects.powerIsSuper()) this.runSuperFarts = (this.runSuperFarts ?? 0) + 1;
     this.fartDurationMs = durationMs;
     this.fartPeak = fartPeakMul(durationMs, this.effects.powerPipeCount(), pipeSpacing(this.level, T), this.diff.pipeSpeed); // 5 pipes, or 20 for a super fart, at this level's speed and spacing
     if (snd) {
@@ -3017,6 +3031,7 @@ export class Play extends Phaser.Scene {
     if (this.runIsDaily) {
       const rec = this.saveDailyAttempt(true);
       if (rec) this.dailyQueue.add({ ...rec, name: this.save?.name ?? null });
+      this.recordCareer('daily');
       this.dailySync = this.syncLeaderboard();
       return;
     }
@@ -3026,7 +3041,72 @@ export class Play extends Phaser.Scene {
     this.personalBest = this.score > 0 && this.score > prevBest;
     this.best.save(this.score); // legacy store, kept for first-run seeding
     this.save = saveLocal(recordScore(this.save, this.score, { toilet: this.toilet, level: this.level }));
+    this.recordCareer('single');
     this.syncLeaderboard(); // fire and forget; never awaited inside the update loop
+  }
+
+  /**
+   * One finished run into the career (plan 08): a normal single-player run or a Daily Dump, never a
+   * test run or a match half (endRun returns before). Its counters wait in the career store for the
+   * next sync; the badges it earns (judged on this device's totals) are unlocked here and listed on
+   * Over (this.runBadges), their claims queued.
+   */
+  recordCareer(mode) {
+    const day = utcDayKey();
+    const facts = { mode, score: this.score, level: this.level, won: Boolean(this.won), toilet: Boolean(this.toilet), collected: { ...this.collected }, farts: this.runFarts ?? 0, superFarts: this.runSuperFarts ?? 0 };
+    this.careerStore.addRun(runDeltas(facts));
+    const earned = evaluate({ totals: this.careerStore.totals(this.save?.id ?? null), facts, unlocked: this.careerStore.unlocked(), day });
+    this.runBadges = this.careerStore.unlock(earned, day);
+  }
+
+  /**
+   * Badges earned without a run to show them on: the score and level badges the saved top list
+   * already reaches (a veteran's, or bests pulled from the board) and lifetime badges on the
+   * current totals. Unlocked quietly, their claims queued.
+   */
+  creditCareer() {
+    const day = utcDayKey();
+    const earned = evaluate({ totals: this.careerStore.totals(this.save?.id ?? null), facts: bestFacts(this.save?.top), unlocked: this.careerStore.unlocked(), day });
+    this.careerStore.unlock(earned, day);
+  }
+
+  /**
+   * Send the career for player `id`: the batch of counters (resent unchanged until the board has it;
+   * its answer is the player's totals across every device), lifetime badges on those totals, then
+   * the claims. Never rejects, so the score posts after it always run.
+   */
+  async drainCareer(id) {
+    try {
+      const batch = this.careerStore.beginBatch(newId);
+      if (batch) {
+        const res = await this.postCounters(id, batch.batch, batch.counters);
+        if (res?.status === 'ok') this.careerStore.confirmBatch(batch.batch, res.totals, id);
+        else if (res?.status === 'rejected') this.careerStore.dropBatch(batch.batch);
+      }
+      if (this.save?.id === id) this.creditCareer();
+      const claims = this.careerStore.claims().slice(0, 50);
+      if (!claims.length) return;
+      const out = await this.claimBadges(id, claims);
+      if (out === 'rejected') this.careerStore.dropClaims(claims);
+      else if (out) this.careerStore.settleClaims(out.stored, out.closed);
+    } catch {
+      /* the next sync tries again */
+    }
+  }
+
+  /** submit_counters for the career; a method so the smoke can stub it (never the live board). */
+  postCounters(id, batch, counters) {
+    return submitCounters(id, batch, counters);
+  }
+
+  /** claim_achievements for the career; a method so the smoke can stub it. */
+  claimBadges(id, ids) {
+    return claimAchievements(id, ids);
+  }
+
+  /** A player's profile (player_stats) by { id } or { name }; a method so the smoke can stub it. */
+  fetchProfile(who) {
+    return fetchPlayerStats(who);
   }
 
   /**
@@ -3091,7 +3171,8 @@ export class Play extends Phaser.Scene {
       const daily = this.runIsDaily ? { day: this.dailyRunDay ?? null, level: this.level, playerId: this.save?.id ?? null, practice: this.runIsTest, sync: this.dailySync ?? null } : null;
       const pipes = this.runIsDaily && this.daily ? this.pipesPassed - this.daily.startPipes : this.pipesPassed;
       const personalBest = Boolean(this.personalBest && !this.runIsTest && !this.runIsDaily);
-      this.scene.launch('Over', { score: this.score, won, test: this.runIsTest, toilet: this.toilet, level: this.level, pipes, collected: { ...this.collected }, daily, personalBest });
+      const badges = this.runIsTest ? [] : [...(this.runBadges ?? [])];
+      this.scene.launch('Over', { score: this.score, won, test: this.runIsTest, toilet: this.toilet, level: this.level, pipes, collected: { ...this.collected }, daily, personalBest, badges });
     });
   }
 

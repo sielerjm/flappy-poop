@@ -1,6 +1,7 @@
 import { GAME_HEIGHT, FIELD, TUNING as T, SHARE, LEVEL_COLORS } from '../config.js';
 import { canRestart, chromeIntent, trayLayout, trayHit, overButtonsLayout, overHit, shareCardLayout, levelColor, uiColumn, msUntilUtcMidnight, countdownText, fitScale } from '../logic.js';
-import { t, levelLabel, shareCardFooter, dailyDayText, dailyRankText } from '../i18n.js';
+import { t, levelLabel, shareCardFooter, dailyDayText, dailyRankText, badgeTitle } from '../i18n.js';
+import { achievementById } from '../achievements.js';
 import { fetchDailyBoard, dailyEntryId } from '../leaderboard.js';
 import { shareMode, shareScoreImage } from '../share.js';
 import { renderShareCard } from '../ui/shareCard.js';
@@ -93,6 +94,18 @@ export class Over extends Phaser.Scene {
     if (data?.personalBest && !testRun && !daily) {
       // On this screen only: the share card never carries it.
       this.add.text(cx, cy + 130, t(locale, 'newPersonalBest'), { ...style, fontSize: '34px', color: '#ffd700' }).setOrigin(0.5);
+    }
+    // Achievements this run unlocked (plan 08): the first two by glyph and name, then "+n". Under the
+    // personal-best or countdown line when there is one, else in its place; above the buttons.
+    this.badgeLine = null; // the scene instance outlives a restart: never keep the last panel's line
+    const badges = testRun ? [] : (Array.isArray(data?.badges) ? data.badges : []).map((id) => achievementById(id)).filter(Boolean);
+    if (badges.length) {
+      const named = badges.slice(0, 2).map((e) => `${e.glyph} ${badgeTitle(locale, e)}`).join(' · ');
+      const more = badges.length > 2 ? ` ${t(locale, 'overBadgesMore').replace('{n}', String(badges.length - 2))}` : '';
+      const lineY = cy + (data?.personalBest || daily ? 174 : 130);
+      const line = this.add.text(cx, lineY, t(locale, 'overBadges').replace('{badges}', named + more), { ...style, fontSize: '28px', color: '#ffd700' }).setOrigin(0.5);
+      line.setScale(fitScale(line.width, 500, 0));
+      this.badgeLine = line;
     }
     if (testRun) {
       this.add.text(cx, cy + 130, t(locale, 'testRunNotSaved'), { ...style, fontSize: '30px', color: '#ffd700', wordWrap: { width: 460, useAdvancedWrap: true } }).setOrigin(0.5);

@@ -390,6 +390,8 @@ Inspired by Flappy Bird
 | achDescBacteria | Bump into {n} 🦠 in all | 累计碰到 {n} 个 🦠 |
 | achDescPostbiotic | Make {n} postbiotics ✨ | 累计制造 {n} 次后生元 ✨ |
 | achDescMystery | Open {n} mystery boxes 📦 | 累计打开 {n} 个神秘盒子 📦 |
+| overBadges | 🏆 New: {badges} | 🏆 新成就：{badges} |
+| overBadgesMore | +{n} | 等另外 {n} 个 |
 
 ## Reviewer checklist
 
