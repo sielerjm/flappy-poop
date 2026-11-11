@@ -456,3 +456,221 @@ test('anon cannot read daily_scores or call its internal helpers', async () => {
   await assert.rejects(asAnon(db, "select public.fnv1a32('a')"), /permission denied/);
   await assert.rejects(asAnon(db, 'select public.daily_level(now()::date)'), /permission denied/);
 });
+
+// ---------------------------------------------------------------------------
+// Player profiles (plan 08): player_counters / submit_counters, player_stats,
+// achievement_defs / player_achievements / claim_achievements, and the fold.
+
+const csubmit = (db, pid, batch, counters) =>
+  asAnon(db, 'select public.submit_counters($1, $2, $3::jsonb) as r', [pid, batch, JSON.stringify(counters)]).then((r) => r.rows[0].r);
+const pstats = (db, pid = null, name = null) => asAnon(db, 'select public.player_stats($1, $2) as r', [pid, name]).then((r) => r.rows[0].r);
+const claim = (db, pid, ids) => asAnon(db, 'select public.claim_achievements($1, $2::text[]) as r', [pid, ids]).then((r) => r.rows[0].r);
+/** Let the next submit_counters through the 5 s limit. */
+const ageCounters = (db) => db.query("update public.player_counters set updated_at = now() - interval '6 seconds'");
+const matchup = (db, tid, a, b, winner) =>
+  db.query(
+    "insert into public.tournament_matchups (tournament_id, match_id, round, player_a, player_b, winner_id, score_a, score_b, deaths_a, deaths_b, level_wins_a, level_wins_b, decided_by) values ($1, 'final', 'final', $2, $3, $4, 1, 0, 0, 0, 0, 0, 'score')",
+    [tid, a, b, winner],
+  );
+
+test('the profile schema pins the per-run caps the game uses', () => {
+  assert.match(SQL, new RegExp(`'maxLevel'\\)::bigint, 0\\) > ${T.levels.lastLevel}\\b`), 'submit_counters: maxLevel ≤ TUNING.levels.lastLevel');
+  assert.match(SQL, new RegExp(`'sumScore'\\)::bigint, 0\\) > v_games \\* ${LEADERBOARD.maxScore}\\b`), 'sumScore ≤ games × LEADERBOARD.maxScore');
+  assert.match(SQL, new RegExp(`'sumLevel'\\)::bigint, 0\\) > v_games \\* ${T.levels.lastLevel}\\b`), 'sumLevel ≤ games × lastLevel');
+  // The 🏆 caps still read first in the file (tests/leaderboard.test.js pins them by first match).
+  assert.equal(/score\s+int\s+not null check \(score between 0 and (\d+)\)/.exec(SQL)[1], String(LEADERBOARD.maxScore));
+  assert.equal(/p_score > (\d+) then/.exec(SQL)[1], String(LEADERBOARD.maxScore));
+});
+
+test('submit_counters sums a batch into the totals, keeps the larger max*, and a resent batch changes nothing', async () => {
+  const db = await freshDb();
+  const P = id('CP');
+  assert.deepEqual(await csubmit(db, P, id('B1'), { games: 2, sumScore: 90, sumLevel: 5, maxLevel: 3, fiber: 4 }), { games: 2, sumScore: 90, sumLevel: 5, maxLevel: 3, fiber: 4 });
+  await assert.rejects(csubmit(db, P, id('B2'), { games: 1 }), /rate limited/, 'a second batch inside 5 s');
+  assert.deepEqual(await csubmit(db, P, id('B1'), { games: 2, sumScore: 90, sumLevel: 5, maxLevel: 3, fiber: 4 }), { games: 2, sumScore: 90, sumLevel: 5, maxLevel: 3, fiber: 4 }, 'the same batch again (a lost reply): the totals, unchanged, even inside 5 s');
+  await ageCounters(db);
+  const totals = await csubmit(db, P, id('B2'), { games: 1, sumScore: 10, sumLevel: 2, maxLevel: 2, deaths: 1 });
+  assert.deepEqual(totals, { games: 3, sumScore: 100, sumLevel: 7, maxLevel: 3, fiber: 4, deaths: 1 }, 'sums, the larger maxLevel, a new key joins');
+  assert.deepEqual(await csubmit(db, P, id('B2'), { games: 1, sumScore: 10, sumLevel: 2, maxLevel: 2, deaths: 1 }), totals, 'the latest batch is the receipt');
+  // Only the latest batch is a receipt: the game resends its one batch in flight until it is
+  // confirmed and never an older one, so an older id arriving later counts as new.
+  await ageCounters(db);
+  assert.equal((await csubmit(db, P, id('B1'), { games: 2, sumLevel: 2 })).games, 5);
+  await ageCounters(db);
+  assert.equal((await csubmit(db, P, id('B3'), { dailyGames: 1, farts: 3 })).dailyGames, 1, 'a Daily-only batch (no games)');
+  assert.equal((await db.query('select count(*)::int as n from public.player_counters')).rows[0].n, 1);
+});
+
+test('submit_counters refuses impossible batches, and they change nothing', async () => {
+  const db = await freshDb();
+  const P = id('CR');
+  const bad = {
+    'no keys': {},
+    'a bad key': { 'Games!': 1 },
+    'a negative value': { games: -1 },
+    'a fraction': { games: 1.5 },
+    'a string': { games: '3' },
+    'over a million': { fiber: 1000001 },
+    'too many keys': Object.fromEntries(Array.from({ length: 41 }, (_, i) => [`k${i}`, 1])),
+    'a level past the last': { games: 1, sumLevel: 1, maxLevel: T.levels.lastLevel + 1 },
+    'more score than the games allow': { games: 1, sumScore: LEADERBOARD.maxScore + 1, sumLevel: 1 },
+    'more levels than the games allow': { games: 2, sumLevel: 2 * T.levels.lastLevel + 1 },
+    'more wins than games': { games: 1, wins: 2, sumLevel: 7 },
+    'a score with no games': { sumScore: 1 },
+  };
+  for (const [why, counters] of Object.entries(bad)) await assert.rejects(csubmit(db, P, id('BB'), counters), /bad counters|invalid input/, why);
+  await assert.rejects(csubmit(db, 'short', id('BB'), { games: 1 }), /bad player id/);
+  await assert.rejects(csubmit(db, P, 'short', { games: 1 }), /bad batch/);
+  await assert.rejects(asAnon(db, 'select public.submit_counters($1, $2, $3::jsonb)', [P, id('BB'), '[1]']), /bad counters/, 'an array, not an object');
+  assert.equal((await db.query('select count(*)::int as n from public.player_counters')).rows[0].n, 0);
+  assert.ok(await csubmit(db, P, id('BB'), { games: 1, sumScore: LEADERBOARD.maxScore, sumLevel: T.levels.lastLevel, maxLevel: T.levels.lastLevel, wins: 1 }), 'the caps themselves are allowed');
+});
+
+test('player_stats: single-player averages and the board level, daily podiums ranked as daily_board, medals, the rival, no ids', async () => {
+  const db = await freshDb();
+  const today = await utcToday(db);
+  const [A, B, C, D, R1, R2] = ['SA', 'SB', 'SC', 'SD', 'SR1', 'SR2'].map(id);
+  await asAnon(db, 'select public.submit_score($1, $2, 120, false, 4)', [A, 'Alice']);
+  await csubmit(db, A, id('BA'), { games: 4, wins: 1, sumScore: 200, sumLevel: 10, maxLevel: 3, fiber: 9 });
+  // Three days: a tie on day 1 (the earlier post ranks higher), A 4th on day 2, A alone on day 3.
+  const put = (pid, day, score, minutesAgo, name = 'X') =>
+    db.query("insert into public.daily_scores (player_id, day, name, score, level, pipes, submitted_at) values ($1, $2::date, $3, $4, 3, 0, now() - make_interval(mins => $5))", [pid, day, name, score, minutesAgo]);
+  const d1 = shiftDay(today, -2);
+  const d2 = shiftDay(today, -1);
+  await put(C, d1, 600, 10);
+  await put(A, d1, 500, 50);
+  await put(B, d1, 500, 30);
+  for (const [pid, score] of [[A, 10], [B, 20], [C, 30], [D, 40]]) await put(pid, d2, score, 5);
+  await put(A, today, 5, 1);
+  // Medals and matchups: R2 beat A twice in three meetings, R1 twice in two; S raced itself (a merge) and beat R1 once.
+  await db.query("insert into public.tournaments (id, host_id, players, level_pipes) values ($1, $2, 3, '{10}')", [id('ST'), A]);
+  await db.query("insert into public.tournament_stats (player_id, name, gold, silver, bronze, events) values ($1, 'AliceT', 1, 0, 2, 3), ($2, 'Rone', 0, 1, 0, 1), ($3, 'Rtwo', 2, 0, 0, 2)", [A, R1, R2]);
+  await asAnon(db, 'select public.submit_score($1, $2, 3)', [R2, 'RtwoScore']);
+  for (const [a, b, w] of [[A, R1, R1], [R1, A, R1], [A, R2, R2], [R2, A, R2], [A, R2, A]]) await matchup(db, id('ST'), a, b, w);
+
+  const s = await pstats(db, A);
+  assert.equal(s.found, true);
+  assert.equal(s.name, 'Alice', 'the score-board name');
+  assert.deepEqual(s.single, { games: 4, wins: 1, maxLevel: 4, avgLevel: 2.5, avgScore: 50 }, 'maxLevel from the board row (4) over the counter (3)');
+  // The podium counts agree with what daily_board showed on each day.
+  for (const pid of [A, B, C, D]) {
+    const want = { dumps: 0, gold: 0, silver: 0, bronze: 0 };
+    for (const day of [d1, d2, today]) {
+      const mine = (await dboard(db, pid, day)).find((r) => r.me);
+      if (!mine) continue;
+      want.dumps += 1;
+      if (mine.rank <= 3) want[['gold', 'silver', 'bronze'][mine.rank - 1]] += 1;
+    }
+    assert.deepEqual((await pstats(db, pid)).daily, want, `daily podiums for ${pid}`);
+  }
+  assert.deepEqual(s.daily, { dumps: 3, gold: 1, silver: 1, bronze: 0 }, 'A: day 1 second on the tie-break, day 3 alone');
+  assert.deepEqual(s.tournament, { events: 3, gold: 1, silver: 0, bronze: 2, rival: { name: 'RtwoScore', meetings: 3, losses: 2 } }, 'two losses each: more meetings wins; the rival under their board name');
+  assert.deepEqual(s.counters, { games: 4, wins: 1, sumScore: 200, sumLevel: 10, maxLevel: 3, fiber: 9 });
+  assert.deepEqual(s.achievements, []);
+  assert.equal(JSON.stringify(s).includes('_'), false, 'no ids in the answer (ids are padded with _ here)');
+
+  // Self-races left by a merge are not a rival.
+  const S = id('SS');
+  await db.query("insert into public.tournament_stats (player_id, name, events) values ($1, 'Selfie', 1)", [S]);
+  for (let i = 0; i < 3; i += 1) await matchup(db, id('ST'), S, S, S);
+  await matchup(db, id('ST'), S, R1, S);
+  assert.deepEqual((await pstats(db, S)).tournament.rival, { name: 'Rone', meetings: 1, losses: 0 }, 'not itself');
+
+  // A brand-new id: found, zeros and nulls.
+  assert.deepEqual(await pstats(db, id('NEW')), {
+    found: true,
+    name: null,
+    single: { games: 0, wins: 0, maxLevel: 0, avgLevel: null, avgScore: null },
+    daily: { dumps: 0, gold: 0, silver: 0, bronze: 0 },
+    tournament: { events: 0, gold: 0, silver: 0, bronze: 0, rival: null },
+    counters: {},
+    achievements: [],
+  });
+});
+
+test('player_stats by name follows the name a board shows: score board first, then 🏅 or 🌞 for players with no score row', async () => {
+  const db = await freshDb();
+  const today = await utcToday(db);
+  const [A, T1, D1, OLD] = ['NA', 'NT', 'ND', 'NOLD'].map(id);
+  await asAnon(db, 'select public.submit_score($1, $2, 10)', [A, 'Alice']);
+  await db.query("insert into public.tournament_stats (player_id, name, events) values ($1, 'Medalist', 1), ($2, 'OldName', 1)", [T1, A]);
+  await db.query("insert into public.daily_scores (player_id, day, name, score, level, pipes) values ($1, $2::date, 'Dumper', 7, 3, 0)", [D1, today]);
+  assert.equal((await pstats(db, null, ' alice ')).name, 'Alice', 'case and spaces ignored');
+  const medal = await pstats(db, null, 'Medalist');
+  assert.equal(medal.name, 'Medalist');
+  assert.equal(medal.tournament.events, 1, 'a tournament-only player');
+  const dumper = await pstats(db, null, 'Dumper');
+  assert.equal(dumper.name, 'Dumper');
+  assert.equal(dumper.daily.dumps, 1, 'a daily-only player');
+  assert.deepEqual(await pstats(db, null, 'OldName'), { found: false }, "A's 🏅 name: the 🏅 board shows A as Alice, so OldName is nobody");
+  assert.deepEqual(await pstats(db, null, 'Nobody'), { found: false });
+  assert.deepEqual(await pstats(db, null, 'x'.repeat(17)), { found: false }, 'not a name');
+  assert.deepEqual(await pstats(db, 'garbage', null), { found: false });
+  assert.equal((await pstats(db, D1, 'Alice')).name, 'Dumper', 'a valid id wins over the name');
+  // An alias resolves: the merged id's profile is the kept player's.
+  await asAnon(db, 'select public.merge_players($1, $2)', [A, OLD]);
+  assert.equal((await pstats(db, OLD)).name, 'Alice');
+});
+
+test('claim_achievements keeps always-available ids, holds quests to their window plus two days, and caps the shelf', async () => {
+  const db = await freshDb();
+  const today = await utcToday(db);
+  const P = id('AP');
+  assert.deepEqual(await claim(db, P, ['win_game', 'score_10', 'win_game']), { stored: ['score_10', 'win_game'], closed: [] }, 'duplicates in one call count once');
+  assert.deepEqual(await claim(db, P, ['win_game']), { stored: ['win_game'], closed: [] }, 'already held: stored again, nothing added');
+  assert.equal((await db.query('select count(*)::int as n from public.player_achievements')).rows[0].n, 2);
+  const def = (qid, from, to) => db.query('insert into public.achievement_defs (id, starts, ends) values ($1, $2::date, $3::date)', [qid, from, to]);
+  await def('quest_over', shiftDay(today, -10), shiftDay(today, -3));
+  await def('quest_grace', shiftDay(today, -10), shiftDay(today, -2));
+  await def('quest_soon', shiftDay(today, 1), shiftDay(today, 5));
+  await def('quest_today', today, today);
+  assert.deepEqual(await claim(db, P, ['quest_over', 'quest_grace', 'quest_soon', 'quest_today']), { stored: ['quest_grace', 'quest_today'], closed: ['quest_over', 'quest_soon'] });
+  await db.query("update public.player_achievements set earned_at = now() - interval '2 days' where achievement_id = 'win_game'");
+  const shelf = (await pstats(db, P)).achievements;
+  assert.deepEqual(shelf.map((a) => a.id), ['win_game', 'score_10', 'quest_grace', 'quest_today'], 'oldest first (win_game moved back two days; score_10 claimed a call earlier), then by id');
+  assert.equal(shelf[0].at, shiftDay(today, -2));
+  assert.equal(shelf[1].at, today);
+  for (const [why, ids] of [['none', []], ['51', Array.from({ length: 51 }, (_, i) => `a${i}`)], ['upper case', ['Win']], ['a space', ['win game']], ['too long', ['a'.repeat(41)]]]) {
+    await assert.rejects(claim(db, P, ids), /bad ids/, why);
+  }
+  await assert.rejects(claim(db, 'short', ['a']), /bad player id/);
+  // The shelf holds 300: a claim past it is refused whole.
+  const Q = id('AQ');
+  await db.query("insert into public.player_achievements (player_id, achievement_id) select $1, 'x' || g from generate_series(1, 299) g", [Q]);
+  assert.deepEqual(await claim(db, Q, ['one_more']), { stored: ['one_more'], closed: [] });
+  await assert.rejects(claim(db, Q, ['past_the_cap']), /too many achievements/);
+  assert.equal((await db.query('select count(*)::int as n from public.player_achievements where player_id = $1', [Q])).rows[0].n, 300);
+});
+
+test('merging players merges their counters and their achievements (the earlier date kept); the merged id posts into the kept one', async () => {
+  const db = await freshDb();
+  const K = id('FK');
+  const M = id('FM');
+  await csubmit(db, K, id('BK'), { games: 2, sumLevel: 4, maxLevel: 3, fiber: 5 });
+  await csubmit(db, M, id('BM'), { games: 3, sumLevel: 9, maxLevel: 5, deaths: 1 });
+  await claim(db, K, ['win_game']);
+  await claim(db, M, ['win_game', 'score_10']);
+  await db.query("update public.player_achievements set earned_at = now() - interval '3 days' where player_id = $1 and achievement_id = 'win_game'", [M]);
+  await asAnon(db, 'select public.merge_players($1, $2)', [K, M]);
+  const rows = (await db.query('select player_id, counters from public.player_counters')).rows;
+  assert.deepEqual(rows, [{ player_id: K, counters: { games: 5, sumLevel: 13, maxLevel: 5, fiber: 5, deaths: 1 } }]);
+  const shelf = (await db.query("select player_id, achievement_id, earned_at < now() - interval '2 days' as old from public.player_achievements order by achievement_id")).rows;
+  assert.deepEqual(shelf, [
+    { player_id: K, achievement_id: 'score_10', old: false },
+    { player_id: K, achievement_id: 'win_game', old: true },
+  ]);
+  await ageCounters(db);
+  assert.equal((await csubmit(db, M, id('BM2'), { games: 1, sumLevel: 1 })).games, 6, "the merged id's device posts into the kept player");
+  assert.deepEqual((await claim(db, M, ['level_2'])).stored, ['level_2']);
+  assert.equal((await db.query('select count(*)::int as n from public.player_achievements where player_id = $1', [M])).rows[0].n, 0);
+});
+
+test('anon reads none of the profile tables and cannot call their helpers', async () => {
+  const db = await freshDb();
+  for (const table of ['player_counters', 'achievement_defs', 'player_achievements']) {
+    await assert.rejects(asAnon(db, `select * from public.${table}`), /permission denied/, table);
+  }
+  await assert.rejects(asAnon(db, "insert into public.player_achievements (player_id, achievement_id) values ('AAAAAAAAAAAAAAAAAAAAAA', 'x')"), /permission denied/);
+  await assert.rejects(asAnon(db, "select public.merge_counters('{}', '{}')"), /permission denied/);
+  await assert.rejects(asAnon(db, "select public.player_by_name('x')"), /permission denied/);
+});

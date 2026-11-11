@@ -19,11 +19,16 @@
 --   * call tournament_board(...)  the 🏅 medal board (names and counts, never ids)
 --   * call submit_daily_score(...) a Daily Dump (🌞) score, once per player and UTC day (2026-11-10)
 --   * call daily_board(...)        the 🌞 board for a day (names and scores, never ids)
+--   * call submit_counters(...)    add a batch of runs to the player's lifetime counters (2026-11-11)
+--   * call claim_achievements(...) record achievements the game says the player earned (2026-11-11)
+--   * call player_stats(...)       any player's public profile, by id or board name (never ids)
 -- A player has up to two rows: their best on the toilet and their best off it
 -- (primary key player_id + toilet, since 2026-11-04).
 -- and nothing else: no INSERT / UPDATE / DELETE on the table, and nothing at all
 -- on player_aliases, the tournament tables (tournaments, tournament_stats,
--- tournament_matchups) or daily_scores.
+-- tournament_matchups), daily_scores, player_counters, achievement_defs or
+-- player_achievements. Profiles are public (2026-11-11): player_stats returns
+-- anyone's stats, counters, achievements and biggest rival, by the name a board shows.
 --
 -- One player across devices (2026-11-08). Every browser mints its own secret id,
 -- so one person playing on a second phone used to become a second player. Now:
@@ -47,8 +52,8 @@
 --     others, and a phone holding the old name no longer renames them back.
 -- Apply this file BEFORE pushing a client that calls name_available /
 -- merge_players / player_name / submit_tournament / tournament_board /
--- submit_daily_score / daily_board; an old
--- client keeps working (same submit_score signature).
+-- submit_daily_score / daily_board / submit_counters / claim_achievements /
+-- player_stats; an old client keeps working (same submit_score signature).
 --
 -- Maintenance (SQL editor):
 --   remove a cheater or a ghost row:
@@ -64,9 +69,19 @@
 --   remove a player's medals: delete from public.tournament_stats where name = 'somebody';
 --   wipe the 🌞 Daily Dump boards: truncate public.daily_scores;
 --   remove a daily cheat: delete from public.daily_scores where name = 'somebody' and day = '2026-11-10';
---   head-to-head (owner only), e.g. wins per pair:
+--   head-to-head, e.g. wins per pair (the rows stay owner-only; a profile shows
+--   only each player's biggest rival, by name):
 --     select player_a, player_b, winner_id, count(*) from public.tournament_matchups
 --     where player_a <> player_b group by 1, 2, 3;
+--   wipe the profiles' counters and achievements:
+--     truncate public.player_counters; truncate public.player_achievements;
+--   remove one wrongly earned achievement from everyone:
+--     delete from public.player_achievements where achievement_id = 'some_id';
+--   undo plan 08 (profiles): drop function public.player_stats(text, text),
+--     public.submit_counters(text, text, jsonb), public.claim_achievements(text, text[]),
+--     public.player_by_name(text), public.merge_counters(jsonb, jsonb);
+--     drop table public.player_counters, public.player_achievements, public.achievement_defs;
+--     then restore fold_player from the git history and run this file.
 --   fold one person's duplicate ids (same username from several browsers) into
 --   one player, keeping the top scorer's id and aliasing the rest so their
 --   devices keep working. Only when you know the rows are one person:
@@ -269,8 +284,9 @@ $$;
 --   tournaments          one receipt per tournament (its client-minted id): a resend
 --                        is a no-op, and the host's last receipt paces the next one
 --   tournament_stats     one row per linked player: medals, events, best race score
---   tournament_matchups  one row per race between two linked players, for the
---                        owner's head-to-head analysis in the SQL editor
+--   tournament_matchups  one row per race between two linked players: the owner's
+--                        head-to-head analysis in the SQL editor, and each
+--                        profile's biggest rival (player_stats, by name only)
 -- Guests never reach the server: the payload carries { id: null, name: null }.
 create table if not exists public.tournaments (
   id           text primary key check (id ~ '^[A-Za-z0-9_-]{22}$'),
@@ -369,6 +385,98 @@ as $$
 $$;
 revoke execute on function public.daily_level(date) from public, anon, authenticated;
 
+-- Added 2026-11-11 (player profiles, plan 08). Lifetime counters: one flat jsonb
+-- object of whole numbers per (resolved) player, summed batch by batch
+-- (submit_counters); a key starting "max" keeps the larger value instead. The
+-- client names the keys (games, wins, sumScore, sumLevel, maxLevel, dailyGames,
+-- deaths, farts, fiber, ...), so a new counter needs no change here. last_batch
+-- is the receipt: a resend of the same batch changes nothing. No name is stored
+-- (the claim rule only guards names in scores). Readable by no role: the profile
+-- is player_stats().
+create table if not exists public.player_counters (
+  player_id  text primary key check (player_id ~ '^[A-Za-z0-9_-]{22}$'),
+  counters   jsonb not null default '{}'::jsonb,
+  last_batch text,
+  updated_at timestamptz not null default now()
+);
+alter table public.player_counters enable row level security;
+revoke all on public.player_counters from public, anon, authenticated;
+
+-- Achievements (plan 08). The game decides a badge was earned and claims its id
+-- (claim_achievements); the server keeps the first claim per player and id.
+-- achievement_defs lists only the time-boxed quests, each with its UTC window: a
+-- claim outside it (plus two days' grace) is refused. Every other id is an
+-- always-available badge and needs no row here. Neither table is readable by any
+-- role: player_stats() returns a player's ids and dates.
+create table if not exists public.achievement_defs (
+  id     text primary key check (id ~ '^[a-z0-9_]{1,40}$'),  -- an id in ACHIEVEMENTS (src/achievements.js)
+  starts date not null,                                      -- its from (UTC day)
+  ends   date not null,                                      -- its to (UTC day, inclusive)
+  check (ends >= starts)
+);
+alter table public.achievement_defs enable row level security;
+revoke all on public.achievement_defs from public, anon, authenticated;
+-- Time-boxed quests: one row per catalog entry with from / to (tests/achievements.test.js
+-- checks they agree). Re-running the file updates a window. None yet; for example:
+--   insert into public.achievement_defs (id, starts, ends) values
+--     ('quest_example', '2026-12-01', '2026-12-31')
+--   on conflict (id) do update set starts = excluded.starts, ends = excluded.ends;
+
+create table if not exists public.player_achievements (
+  player_id      text not null check (player_id ~ '^[A-Za-z0-9_-]{22}$'),
+  achievement_id text not null check (achievement_id ~ '^[a-z0-9_]{1,40}$'),
+  earned_at      timestamptz not null default now(),
+  primary key (player_id, achievement_id)
+);
+alter table public.player_achievements enable row level security;
+revoke all on public.player_achievements from public, anon, authenticated;
+
+-- Profiles look players up by the name a board shows (player_by_name).
+create index if not exists tournament_stats_name_key on public.tournament_stats (public.name_key(name));
+create index if not exists daily_scores_name_key on public.daily_scores (public.name_key(name));
+
+-- Two counter objects as one: per key the larger value for keys starting "max",
+-- else the sum (addCounters in src/achievements.js). Internal.
+create or replace function public.merge_counters(a jsonb, b jsonb)
+returns jsonb
+language sql
+immutable
+as $$
+  select coalesce(jsonb_object_agg(k,
+           case when k like 'max%'
+                then greatest(coalesce((a->>k)::bigint, 0), coalesce((b->>k)::bigint, 0))
+                else coalesce((a->>k)::bigint, 0) + coalesce((b->>k)::bigint, 0) end), '{}'::jsonb)
+  from (select jsonb_object_keys(coalesce(a, '{}'::jsonb)) as k
+        union
+        select jsonb_object_keys(coalesce(b, '{}'::jsonb))) keys;
+$$;
+revoke execute on function public.merge_counters(jsonb, jsonb) from public, anon, authenticated;
+
+-- The player a board name belongs to, as the boards pick a display name: the
+-- latest score-board name first; then a tournament or daily name, for a player
+-- with no score-board rows. Null when nobody shows under that name. Internal.
+create or replace function public.player_by_name(p_name text)
+returns text
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select coalesce(
+    (select s.player_id from public.scores s
+      where public.name_key(s.name) = public.name_key(p_name)
+      order by s.updated_at desc limit 1),
+    (select t.player_id from public.tournament_stats t
+      where public.name_key(t.name) = public.name_key(p_name)
+        and not exists (select 1 from public.scores s where s.player_id = t.player_id)
+      order by t.updated_at desc limit 1),
+    (select d.player_id from public.daily_scores d
+      where public.name_key(d.name) = public.name_key(p_name)
+        and not exists (select 1 from public.scores s where s.player_id = d.player_id)
+      order by d.submitted_at desc limit 1));
+$$;
+revoke execute on function public.player_by_name(text) from public, anon, authenticated;
+
 -- Fold the player v_merge into v_keep (both already resolved, distinct): per
 -- toilet kind the kept row takes the higher score with that score's level and
 -- write time, every kept row carries the kept player's name (the merged one's
@@ -377,7 +485,8 @@ revoke execute on function public.daily_level(date) from public, anon, authentic
 -- stats fold too (medals and events summed, best race score kept, the kept
 -- player's stats name), and matchups and receipts are re-pointed. Daily Dump
 -- rows move to the kept id; on a day both played, the kept player's row stays.
--- Internal.
+-- Lifetime counters merge (merge_counters) and achievements join, each keeping
+-- its earlier date. Internal.
 create or replace function public.fold_player(v_keep text, v_merge text)
 returns void
 language plpgsql
@@ -429,6 +538,19 @@ begin
   from public.daily_scores d where d.player_id = v_merge
   on conflict (player_id, day) do nothing;
   delete from public.daily_scores where player_id = v_merge;
+  insert into public.player_counters (player_id, counters, last_batch, updated_at)
+  select v_keep, m.counters, m.last_batch, m.updated_at
+  from public.player_counters m where m.player_id = v_merge
+  on conflict (player_id) do update
+    set counters   = public.merge_counters(public.player_counters.counters, excluded.counters),
+        updated_at = greatest(public.player_counters.updated_at, excluded.updated_at);
+  delete from public.player_counters where player_id = v_merge;
+  insert into public.player_achievements (player_id, achievement_id, earned_at)
+  select v_keep, a.achievement_id, a.earned_at
+  from public.player_achievements a where a.player_id = v_merge
+  on conflict (player_id, achievement_id) do update
+    set earned_at = least(public.player_achievements.earned_at, excluded.earned_at);
+  delete from public.player_achievements where player_id = v_merge;
   update public.player_aliases set canonical_id = v_keep, merged_at = now() where canonical_id = v_merge;
   insert into public.player_aliases (alias_id, canonical_id)
   values (v_merge, v_keep)
@@ -942,6 +1064,229 @@ as $$
   order by r.prank;
 $$;
 
+-- Lifetime counters (plan 08): add one batch of this device's runs to the
+-- player's totals and return the totals (merged across every device and merged
+-- id), so the game can judge lifetime badges on them. p_batch is the receipt: the
+-- same batch again (a reply lost on the way back) changes nothing and returns the
+-- totals. One batch per player per 5 s ('rate limited': the client keeps it and
+-- retries). A batch is checked as a whole: every value a whole number up to
+-- 1,000,000; a run scores at most LEADERBOARD.maxScore and reaches at most level
+-- TUNING.levels.lastLevel. Errors raise ('bad ...': the client drops the batch).
+create or replace function public.submit_counters(p_player_id text, p_batch text, p_counters jsonb)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_id text;
+  v_row public.player_counters%rowtype;
+  v_merged jsonb;
+  v_games bigint;
+  r record;
+begin
+  if p_player_id is null or p_player_id !~ '^[A-Za-z0-9_-]{22}$' then
+    raise exception 'bad player id';
+  end if;
+  if p_batch is null or p_batch !~ '^[A-Za-z0-9_-]{22}$' then
+    raise exception 'bad batch';
+  end if;
+  if p_counters is null or jsonb_typeof(p_counters) <> 'object' then
+    raise exception 'bad counters';
+  end if;
+  if (select count(*) from jsonb_object_keys(p_counters)) not between 1 and 40 then
+    raise exception 'bad counters: keys';
+  end if;
+  for r in select e.key, e.value from jsonb_each(p_counters) e loop
+    if r.key !~ '^[a-z][A-Za-z0-9]{0,23}$' or jsonb_typeof(r.value) <> 'number' or (r.value #>> '{}') !~ '^[0-9]{1,7}$' then
+      raise exception 'bad counters: %', r.key;
+    end if;
+    if (r.value #>> '{}')::bigint > 1000000 then
+      raise exception 'bad counters: %', r.key;
+    end if;
+  end loop;
+  v_games := coalesce((p_counters->>'games')::bigint, 0);
+  if coalesce((p_counters->>'maxLevel')::bigint, 0) > 7
+     or coalesce((p_counters->>'sumScore')::bigint, 0) > v_games * 1000
+     or coalesce((p_counters->>'sumLevel')::bigint, 0) > v_games * 7
+     or coalesce((p_counters->>'wins')::bigint, 0) > v_games then
+    raise exception 'bad counters: totals';
+  end if;
+
+  v_id := public.resolve_player(p_player_id);
+  perform pg_advisory_xact_lock(hashtext('counters:' || v_id));
+  select * into v_row from public.player_counters where player_id = v_id;
+  if found and v_row.last_batch = p_batch then
+    return v_row.counters;
+  end if;
+  if found and v_row.updated_at > now() - interval '5 seconds' then
+    raise exception 'rate limited';
+  end if;
+  v_merged := public.merge_counters(coalesce(v_row.counters, '{}'::jsonb), p_counters);
+  if (select count(*) from jsonb_object_keys(v_merged)) > 60 then
+    raise exception 'bad counters: too many keys';
+  end if;
+  insert into public.player_counters (player_id, counters, last_batch, updated_at)
+  values (v_id, v_merged, p_batch, now())
+  on conflict (player_id) do update
+    set counters = excluded.counters, last_batch = excluded.last_batch, updated_at = excluded.updated_at;
+  return v_merged;
+end;
+$$;
+
+-- A player's profile (plan 08), for anyone: by id (the player's own, resolved)
+-- or by a name as a board shows it (player_by_name); a valid id wins. Never an id
+-- in the answer. {found: false} for a name nobody shows under; otherwise
+--   name         the board's name for them (null with no rows anywhere)
+--   single       games, wins, maxLevel (the counter or their best board row's
+--                level, whichever is higher), avgLevel, avgScore (null at 0 games)
+--   daily        dumps played; gold / silver / bronze = days they ranked 1st / 2nd
+--                / 3rd, ranked as daily_board ranks (score, then earlier post)
+--   tournament   events and medals (tournament_stats), and rival: the opponent
+--                they lost to most (then met most, then by name) in
+--                tournament_matchups, self-races left by merges ignored; or null
+--   counters     their lifetime counters as stored
+--   achievements [{ id, at: 'YYYY-MM-DD' (UTC) }], oldest first
+create or replace function public.player_stats(p_player_id text default null, p_name text default null)
+returns jsonb
+language plpgsql
+stable
+security definer
+set search_path = public
+as $$
+declare
+  v_id text;
+  v_name text;
+  v_c jsonb;
+  v_games bigint;
+  v_daily jsonb;
+  v_tour jsonb;
+  v_rival jsonb;
+  v_ach jsonb;
+begin
+  if p_player_id ~ '^[A-Za-z0-9_-]{22}$' then
+    v_id := public.resolve_player(p_player_id);
+  elsif p_name ~ '^[^[:cntrl:]]{1,16}$' then
+    v_id := public.player_by_name(p_name);
+  end if;
+  if v_id is null then
+    return jsonb_build_object('found', false);
+  end if;
+
+  v_name := coalesce(
+    (select s.name from public.scores s where s.player_id = v_id order by s.updated_at desc limit 1),
+    (select t.name from public.tournament_stats t where t.player_id = v_id),
+    (select d.name from public.daily_scores d where d.player_id = v_id order by d.submitted_at desc limit 1));
+  v_c := coalesce((select pc.counters from public.player_counters pc where pc.player_id = v_id), '{}'::jsonb);
+  v_games := coalesce((v_c->>'games')::bigint, 0);
+
+  select jsonb_build_object(
+           'dumps', count(*),
+           'gold', count(*) filter (where x.rk = 1),
+           'silver', count(*) filter (where x.rk = 2),
+           'bronze', count(*) filter (where x.rk = 3))
+  into v_daily
+  from (
+    select 1 + (select count(*) from public.daily_scores o
+                where o.day = d.day and (o.score > d.score or (o.score = d.score and o.submitted_at < d.submitted_at))) as rk
+    from public.daily_scores d
+    where d.player_id = v_id
+  ) x;
+
+  select jsonb_build_object('name', y.oname, 'meetings', y.meetings, 'losses', y.losses)
+  into v_rival
+  from (
+    select coalesce((select s.name from public.scores s where s.player_id = x.opp order by s.updated_at desc limit 1),
+                    (select t.name from public.tournament_stats t where t.player_id = x.opp)) as oname,
+           x.meetings, x.losses
+    from (
+      select case when m.player_a = v_id then m.player_b else m.player_a end as opp,
+             count(*)::int as meetings,
+             count(*) filter (where m.winner_id <> v_id)::int as losses
+      from public.tournament_matchups m
+      where v_id in (m.player_a, m.player_b) and m.player_a <> m.player_b
+      group by 1
+    ) x
+  ) y
+  order by y.losses desc, y.meetings desc, y.oname asc nulls last
+  limit 1;
+
+  select jsonb_build_object('events', t.events, 'gold', t.gold, 'silver', t.silver, 'bronze', t.bronze)
+  into v_tour
+  from public.tournament_stats t where t.player_id = v_id;
+
+  select coalesce(jsonb_agg(jsonb_build_object('id', a.achievement_id, 'at', to_char(a.earned_at at time zone 'utc', 'YYYY-MM-DD'))
+                            order by a.earned_at, a.achievement_id), '[]'::jsonb)
+  into v_ach
+  from public.player_achievements a where a.player_id = v_id;
+
+  return jsonb_build_object(
+    'found', true,
+    'name', v_name,
+    'single', jsonb_build_object(
+      'games', v_games,
+      'wins', coalesce((v_c->>'wins')::bigint, 0),
+      'maxLevel', greatest(coalesce((v_c->>'maxLevel')::int, 0),
+                           coalesce((select max(s.level) from public.scores s where s.player_id = v_id), 0)),
+      'avgLevel', case when v_games > 0 then round(coalesce((v_c->>'sumLevel')::numeric, 0) / v_games, 1) end,
+      'avgScore', case when v_games > 0 then round(coalesce((v_c->>'sumScore')::numeric, 0) / v_games, 1) end),
+    'daily', v_daily,
+    'tournament', coalesce(v_tour, jsonb_build_object('events', 0, 'gold', 0, 'silver', 0, 'bronze', 0))
+                  || jsonb_build_object('rival', v_rival),
+    'counters', v_c,
+    'achievements', v_ach);
+end;
+$$;
+
+-- Claim achievements the game says this player earned (plan 08). Returns
+-- { stored: [...], closed: [...] }: stored = kept (or already held); closed = a
+-- time-boxed quest (achievement_defs) claimed outside its window plus two days'
+-- grace, which the game then forgets. Any other well-formed id is an
+-- always-available badge and is kept. 1–50 ids a call, 300 per player. Errors
+-- raise ('bad ...': the client drops those claims).
+create or replace function public.claim_achievements(p_player_id text, p_ids text[])
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_id text;
+  v_today date := (now() at time zone 'utc')::date;
+  v_stored text[] := '{}';
+  v_closed text[] := '{}';
+  x text;
+  d record;
+begin
+  if p_player_id is null or p_player_id !~ '^[A-Za-z0-9_-]{22}$' then
+    raise exception 'bad player id';
+  end if;
+  if p_ids is null or cardinality(p_ids) not between 1 and 50 then
+    raise exception 'bad ids';
+  end if;
+  if exists (select 1 from unnest(p_ids) u where u is null or u !~ '^[a-z0-9_]{1,40}$') then
+    raise exception 'bad ids';
+  end if;
+
+  v_id := public.resolve_player(p_player_id);
+  perform pg_advisory_xact_lock(hashtext('achievements:' || v_id));
+  foreach x in array array(select distinct u from unnest(p_ids) u order by u) loop
+    select ad.starts, ad.ends into d from public.achievement_defs ad where ad.id = x;
+    if found and (v_today < d.starts or v_today > d.ends + 2) then
+      v_closed := v_closed || x;
+      continue;
+    end if;
+    insert into public.player_achievements (player_id, achievement_id) values (v_id, x)
+    on conflict (player_id, achievement_id) do nothing;
+    v_stored := v_stored || x;
+  end loop;
+  if (select count(*) from public.player_achievements pa where pa.player_id = v_id) > 300 then
+    raise exception 'bad ids: too many achievements';
+  end if;
+  return jsonb_build_object('stored', to_jsonb(v_stored), 'closed', to_jsonb(v_closed));
+end;
+$$;
+
 revoke execute on function public.submit_score(text, text, int, boolean, int) from public, authenticated;
 grant  execute on function public.submit_score(text, text, int, boolean, int) to anon;
 revoke execute on function public.player_rank(text, boolean) from public, authenticated;
@@ -960,6 +1305,12 @@ revoke execute on function public.submit_daily_score(text, text, date, int, int,
 grant  execute on function public.submit_daily_score(text, text, date, int, int, int) to anon;
 revoke execute on function public.daily_board(text, date, int) from public, authenticated;
 grant  execute on function public.daily_board(text, date, int) to anon;
+revoke execute on function public.submit_counters(text, text, jsonb) from public, authenticated;
+grant  execute on function public.submit_counters(text, text, jsonb) to anon;
+revoke execute on function public.player_stats(text, text) from public, authenticated;
+grant  execute on function public.player_stats(text, text) to anon;
+revoke execute on function public.claim_achievements(text, text[]) from public, authenticated;
+grant  execute on function public.claim_achievements(text, text[]) to anon;
 
 -- Tell PostgREST about the new functions right away.
 notify pgrst, 'reload schema';
