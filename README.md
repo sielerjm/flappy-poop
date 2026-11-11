@@ -8,7 +8,7 @@ A Flappy Bird–style game for phone browsers: flap a poop through the gut, dodg
 
 **Play now → [sielerjm.github.io/flappy-poop](https://sielerjm.github.io/flappy-poop/)**
 
-Works best on your phone — add it to your home screen for a full-screen, app-like launch. On a desktop or landscape window the gut widens to fill the screen. English and Simplified Chinese in-game. Version **0.13.0 beta**.
+Works best on your phone — add it to your home screen for a full-screen, app-like launch. On a desktop or landscape window the gut widens to fill the screen. English and Simplified Chinese in-game. Version **0.15.0 beta**.
 
 Tip: on iPhone, turn **Silent mode off** to hear sound.
 
@@ -23,6 +23,7 @@ Tip: on iPhone, turn **Silent mode off** to hear sound.
 
 ## 👆 How to play
 
+- While the game loads, swipe (or use **‹ ›**, **← →** or a controller's d-pad) through tips and new features, then press **Continue**.
 - **Tap** (or press **Space** / **↑**) to flap.
 - Fly through gaps in the pink pipe pairs — each pair you pass is **+1**.
 - Hit a pipe, the ceiling, or the floor and the run ends.

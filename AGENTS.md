@@ -323,6 +323,22 @@ profile (no ids): single-player numbers (bestScore = the best score-board row), 
 biggest rival (self-races ignored), counters, achievements. The game claims, the server checks the
 id format and a quest's window (+2 days' grace): accepted risk ACC-001 like scores.
 
+**Loading splash** (2026-11-12, v0.15.0, plan `.claude/plans/01-loading-screen.plan.md`): the page's front
+door on every load, phone and desktop. `index.html`'s `#splash` (cream, the bobbing `poop.png` inside a
+brown ring that spins until Boot's loader reports progress) paints at once; an inline
+`import('./src/splash.js')` placed **before** the Phaser tag starts `startSplash` while Phaser is still
+downloading, so the note cards show during that wait too. A card is a hint or a major feature
+(`SPLASH_NOTES`: TIP or NEW, its emoji, one line; a note about something the profile counts wears that
+badge's glyph via `achievementById`), dealt from a shuffled deck kept in `flappyPoop.splash`
+(`nextNote`: a feature this device never showed comes first; every card once per cycle; a reshuffle
+never repeats the last card; `splashPool` keeps the newest `splash.featureMax` features). The player
+browses at any time (swipe or mouse drag, ‹ ›, ← →, the d-pad by its own `getGamepads` poll, since
+Phaser's pad plugin is bound only in Play); the first browse stops the `hintMs` auto-advance. Boot
+drives the ring (`load.on('progress', setSplashProgress)`) and its `create()` hands
+`splashReady(() => scene.start('Play'))`: Continue lights up and glows, and **Play starts only on its
+release** (click, Enter / Space up, the pad's A up), since Play's keydown-SPACE flap repeats while held
+and the pad plugin reports a held button. Any error in the splash removes it and starts the game.
+
 It is deliberately small: plain ES modules, no bundler, no runtime npm
 dependencies (one devDependency for the schema tests), Phaser 4 loaded from a CDN, deployed to GitHub Pages straight from
 `main`. Keep it that way unless the game clearly outgrows it.
@@ -337,8 +353,14 @@ dependencies (one devDependency for the schema tests), Phaser 4 loaded from a CD
 ## Repo map
 
 ```
-index.html                  Entry page. Viewport/touch CSS, <script> for Phaser from
-                            jsDelivr, then <script type=module src=src/main.js>.
+index.html                  Entry page. Viewport/touch CSS; the loading splash's
+                            markup (#splash: ring, poop, #splash-note card, ‹ ›,
+                            #splash-continue; no words, they come from i18n.js) and
+                            CSS (colour tokens on #splash, data-theme for a themed
+                            skin, bob / spin / slide / Continue's glow, a landscape
+                            row, reduced motion); an inline import() of
+                            src/splash.js, then <script> for Phaser from jsDelivr,
+                            then <script type=module src=src/main.js>.
 manifest.webmanifest        PWA "Add to Home Screen" metadata (fullscreen, portrait).
 package.json                `npm test`, `npm start`, `npm run push`; one devDependency,
                             @electric-sql/pglite (pinned; tests/schema.test.js), so
@@ -381,7 +403,9 @@ src/
                             standard-mapping button indices (A / B / Y / RT /
                             Menu / d-pad), RT threshold, stick deadzone + repeat;
                             TUNING.focus = the focus ring's geometry, fill alpha,
-                            pulse and the overlay scroll step. TUNING.versus = the
+                            pulse and the overlay scroll step. TUNING.splash = the
+                            loading splash (hintMs, slideMs, fadeMs, swipePx,
+                            featureMax, storageKey). TUNING.versus = the
                             two-player knobs: minViewportH (the gate), keys (the
                             two keyboard groups), countdownMs, ghostRangePx /
                             ghostAlpha / ghostFadeMs, barRivalPx / barRivalAlpha,
@@ -544,6 +568,19 @@ src/
                             (navigator.share called synchronously inside the tap;
                             AbortError = cancelled; other errors and no share sheet
                             → <a download> PNG; never rejects).
+  splash.js                 The loading splash (plan 01). Pure, Node-safe:
+                            SPLASH_NOTES (id, kind 'feature' | 'hint', glyph, i18n
+                            key; features newest first), splashPool, nextNote (the
+                            deck: unseen features first, every card once per cycle,
+                            no repeat across a reshuffle, ids that left or joined
+                            the pool handled), createBrowser (one load's history:
+                            back / forward replay without drawing), swipeIntent,
+                            createSplashStore (flappyPoop.splash, throw-guarded).
+                            DOM, document / window injected: startSplash
+                            (idempotent; the inline import or Boot, whichever is
+                            first), setSplashProgress, splashReady(onContinue).
+                            Fails open: an error removes the splash and starts the
+                            game. tests/splash.test.js.
   save.js                   Save codes, NO Phaser/DOM. checkNewName (the save
                             panel only): a new username is 4–16 code points (2+
                             with CJK), no whitespace, emoji or NAME_BLOCKED word;
@@ -707,7 +744,9 @@ src/
                             spritesheet; coin.png as a 106 px one) + the sfx MP3s (coin, coin-spend,
                             shop beside fart / fart-accelerate / level-up); create() makes the global
                             'mystery-spin' (mystery.frameMs) and 'coin-spin' (coin.frameMs)
-                            anims, then starts Play.
+                            anims, then hands splashReady() the start of Play: Play
+                            starts on the splash's Continue. The loader's progress
+                            fills the splash's ring.
     Play.js                 State machine: 'ready' -> 'playing' -> 'paused'/'dead'
                             (+ 'respawn' in a match: between a crash and its restart).
                             The constructor takes the scene key ('Play'; 'PlayB' is
@@ -1286,7 +1325,15 @@ tests/                      node --test (schema.test.js needs `npm install`: PGl
                             filled from its lead to its edge), sweepOffset
                             (ends, midpoint, monotonic, fastest off the edge,
                             peak extra speed bound)
-  html.test.js              index.html invariants (viewport, no scroll, pinned Phaser)
+  html.test.js              index.html invariants (viewport, no scroll, pinned Phaser;
+                            the splash's parts, no words in its markup, the inline
+                            import before Phaser, its colour tokens)
+  splash.test.js            the splash's catalog (copy in every locale under the
+                            four-line cap, one glyph per thing: badge glyphs, no
+                            borrowed ones), splashPool, the deck (features first and
+                            NEW once, every card once per cycle, no repeat across a
+                            reshuffle, pool changes), createBrowser, swipeIntent,
+                            the store, the inert DOM part in Node
   assets.test.js            load.image / load.spritesheet / load.audio paths; README
                             sizes; a spritesheet is a whole number of frames; sfx credits;
                             the sound triangle: every tracked sfx file is loaded, every
@@ -1506,7 +1553,11 @@ tools/
                             need (needs omitted = every earlier section; [] = passes alone,
                             set only once shown), skipping and never reordering; the
                             hermetic stubs, the boot wait and the leaderboard muzzle sit
-                            outside every section. It launches headless Chrome (CHROME env
+                            outside every section. The boot wait goes through the loading
+                            splash: a card shows, Continue lights up and glows, Play waits,
+                            → changes the card, Space down alone does nothing, its release
+                            continues; then the splash is gone and the ready screen did
+                            not start a run. It launches headless Chrome (CHROME env
                             overrides the path), drives the running game over the
                             DevTools protocol through globalThis.__flappy, and fails
                             on a page exception, a stalled __flappy.loop.frame, or an
@@ -1765,7 +1816,9 @@ Commits follow `type(scope): summary` (`feat`, `fix`, `docs`, `chore`, `test`, `
   and `padIntent` (+ `tests/gamepad.test.js`), a `case` in `Play.onPadAction`
   that calls an existing handler (it receives the pad's index too). Never bind the
   Gamepad plugin in another scene: Play's binding sees every press and routes it
-  to the scene on top, or to the half that claimed the pad in a match.
+  to the scene on top, or to the half that claimed the pad in a match. (The one
+  exception is the loading splash: it polls `navigator.getGamepads()` itself,
+  before Play exists, and stops the moment Continue starts Play.)
 - Two-player rule or knob → pure parts in `src/versus.js` (+ `tests/versus.test.js`),
   a knob in `TUNING.versus`, wiring in `scenes/Versus.js` (the match) or `Play.js`
   (a half); anything random a run spawns goes through the course (`createCourse`),
@@ -1785,6 +1838,13 @@ Commits follow `type(scope): summary` (`feat`, `fix`, `docs`, `chore`, `test`, `
   Dump run's facts (`mode: 'daily'`).
 - New lifetime counter → a key in `runDeltas` (+ its glyph in `Stats.js`'s CAREER
   grid if players should see it). No SQL: the server stores whatever keys come.
+- New loading-screen card → one `SPLASH_NOTES` entry in `src/splash.js` (a new,
+  permanent id; a major feature goes at the top of the features, newest first,
+  and the oldest beyond `splash.featureMax` drops out on its own) and its line in
+  both locales + `TRANSLATION_NOTES.md`, at most 140 characters in English and 70
+  in Chinese. Its emoji is the badge's glyph when the profile counts the thing
+  (`badge('<achievement id>')`), else the game's chrome glyph; `tests/splash.test.js`
+  holds the table and refuses a glyph another badge means.
 - New UI chrome → `src/ui/` (Phaser wrapper) with any pure layout helper in
   `src/logic.js`, positioned inside the chrome column (`this.col`: pass
   `col.width` as the width and `col.x` as the helper's `x0`, or add `col.x`

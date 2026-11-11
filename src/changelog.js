@@ -8,6 +8,20 @@ import { LOCALES } from './i18n.js';
 
 export const CHANGELOG = [
   {
+    version: '0.15.0',
+    date: '12 Nov 2026',
+    notes: {
+      en: [
+        'A new loading screen: while the game loads, a card shows a tip or a new feature with its emoji. Each load starts on a different one.',
+        "Swipe (or use ‹ ›, ← → or a controller's d-pad) to flip through the cards, then press Continue to reach the home screen.",
+      ],
+      'zh-Hans': [
+        '全新的加载画面：游戏加载时，卡片会显示一条小提示或新功能，并配上表情。每次加载看到的都不一样。',
+        '滑动（或用 ‹ ›、← → 或手柄方向键）翻看卡片，然后点“继续”进入主界面。',
+      ],
+    },
+  },
+  {
     version: '0.14.1',
     date: '12 Nov 2026',
     notes: {
