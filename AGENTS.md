@@ -1523,12 +1523,22 @@ tools/
                             and its presses would otherwise reach the game.
                             Zero dependencies (fetch + WebSocket).
 
-.claude/plans/              Active / incomplete dated build plans + living specs
-                            (e.g. the Save Code Spec). Add a new dated plan here
-                            for new multi-step work; when Status is complete, move
-                            it into Archive/.
+.claude/plans/              Pending build plans numbered in build order
+                            (NN-name.plan.md), indexed by ROADMAP.md (order,
+                            dependencies, open decisions), + living specs (e.g.
+                            the Save Code Spec). A new plan takes the next free
+                            number and a ROADMAP row; when Status is complete,
+                            move it into Archive/ and mark its row.
 .claude/plans/Archive/      Completed build plans (historical record + decision
                             log). Don't edit archived plans.
+.claude/skills/audit-repo/   The repo audit procedure as a Claude skill (/audit-repo):
+                            SKILL.md (phases, hard rules), zones.md (which zone owns
+                            which file: add new src/ files there), prompts.md,
+                            report-format.md, follow-up.md, examples.md.
+.claude/audits/             ACCEPTED.md (accepted risks, kept across audits) and one
+                            dated folder per audit (report, findings, repro tests).
+                            Written by the audit's lead only; untracked until
+                            Michael decides.
 meta/                       Local-only project notes and reports (gitignored;
                             never commit).
 ```
@@ -1695,7 +1705,11 @@ Commits follow `type(scope): summary` (`feat`, `fix`, `docs`, `chore`, `test`, `
   A new section → a `SECTIONS` entry (with `about`) and a `section()` call in the
   same order; leave `needs` out (it then runs after everything before it) until
   `--only=<it>` passes alone with the same checks as the full run.
-- Multi-step work worth planning → a dated markdown plan in `.claude/plans/`;
-  when Status is complete, move it into `.claude/plans/Archive/`.
+- Multi-step work worth planning → a numbered markdown plan in `.claude/plans/`
+  (next free `NN-`, `Created:` date inside) plus a row in `.claude/plans/ROADMAP.md`;
+  when Status is complete, move it into `.claude/plans/Archive/` and mark the row.
+- An audit of the repo, a zone or a feature → the `audit-repo` skill
+  (`.claude/skills/audit-repo/SKILL.md`; example prompts in its `examples.md`). It is
+  read-only: reports go to `.claude/audits/<date>/`, fixes only on Michael's word.
 - Repo-wide conventions → this file. Player-facing docs → `README.md`.
 - Locale copy review for LLMs → `TRANSLATION_NOTES.md` (keep in sync with `src/i18n.js`).
