@@ -207,6 +207,18 @@ export function merge(local, incoming) {
   };
 }
 
+/**
+ * `state` with the player's board rows ({ score, toilet, level } from player_rank, one per kind;
+ * null or ≤ 0 skipped) folded into its top list (sorted, deduplicated by score with the local
+ * entry winning, MAX_TOP). Scores played on another device come back this way; id, name and
+ * exportedAt are untouched.
+ */
+export function mergeBoardBests(state, rows) {
+  const s = normalizeState(state);
+  const extra = (Array.isArray(rows) ? rows : []).filter((r) => r && Number.isInteger(r.score) && r.score > 0);
+  return { ...s, top: normalizeTop([...s.top, ...extra]) };
+}
+
 /** Home-screen line: "Name · 41" (best only, 🚽 when on the toilet), "Name" when no scores, "" when no name. */
 export function profileLine(state) {
   const s = normalizeState(state);

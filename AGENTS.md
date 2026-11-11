@@ -106,7 +106,13 @@ id resolves to one player. **The board's name wins** (2026-11-09): `syncLeaderbo
 `player_name` (`Play.fetchPlayerName`) and adopts it (`nameAction`, `Play.adoptBoardName`,
 `showAdoptedName` in an open panel) unless the name is a rename typed on this device
 (`createRenameStore`, flappyPoop.rename, set by the panel's store, cleared once a post
-carries it, by Load and by Clear); the first `Play.create` of a page load syncs. The panel's **Clear** (`Play.signOut`, two taps inside
+carries it, by Load and by Clear); the first `Play.create` of a page load syncs. **Scores flow down
+too** (2026-11-11): after the name step `syncLeaderboard` runs `Play.pullBoardBests`, which reads the
+player's two board rows (`Play.fetchBoardBests` → `fetchRank` off / on the toilet, aliases resolved) once
+per page and id (Load and Clear ask again) and folds them into `save.top` (`mergeBoardBests`), so a
+code or device that never played them catches up (the home button, the code and, via `showBoardScores`,
+the Load's welcome line follow); a pulled row that is now the device's best of its kind is filed in
+`submitStore`, so it is not posted back. The panel's **Clear** (`Play.signOut`, two taps inside
 `saveClearConfirmMs`) forgets the player on the device only.
 **Test mode** is a session-only sandbox: typing either of `TEST_MODE.words` (`pooptest` or `testpoop`, any
 case) as the username and pressing Save toggles it (a trigger word is never stored as a name, so it can
@@ -502,7 +508,8 @@ src/
                             toilet, level }; schema 1 numbers and schema 2 still
                             load at level 1; MAX_TOP = 6), recordScore(state,
                             score, { toilet, level }),
-                            merge, topScores (the numbers; tests read it), formatScore ("🚽 41"),
+                            merge, mergeBoardBests (the board's rows into top),
+                            topScores (the numbers; tests read it), formatScore ("🚽 41"),
                             profileLine, exportCode / importCode (HMAC-SHA256,
                             v1 payload {i, n, s, p, [l], [h], t}; p = optional toilet
                             flags; h = 'l' only for a left-handed player, handed

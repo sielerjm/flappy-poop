@@ -16,6 +16,7 @@ import {
   validateName,
   recordScore,
   merge,
+  mergeBoardBests,
   profileLine,
   topScores,
   formatScore,
@@ -410,4 +411,20 @@ test('checkNewName grandfathers the name already saved (any case); validateName 
     assert.equal(checkNewName(legacy).ok, false, `${legacy} as a new name`);
     assert.equal(validateName(legacy).ok, true, `${legacy} still loads`);
   }
+});
+
+test('mergeBoardBests: the board\'s rows join the top list, local first on a tie, MAX_TOP kept, id and name untouched', () => {
+  const local = { id: 'l8IrAM42blHWwokdQDsTmA', name: 'GutMichaelBiome', top: [160, 143, 136, 134, 116, 111].map((score) => ({ score, toilet: false, level: 4 })), exportedAt: 1794383432 };
+  const rows = [{ rank: 8, total: 40, score: 229, toilet: false, level: 6 }, { rank: 5, total: 40, score: 261, toilet: true, level: 6 }];
+  const out = mergeBoardBests(local, rows);
+  assert.deepEqual(out.top.slice(0, 3), [{ score: 261, toilet: true, level: 6 }, { score: 229, toilet: false, level: 6 }, { score: 160, toilet: false, level: 4 }]);
+  assert.equal(out.top.length, MAX_TOP, 'the two lowest drop off');
+  assert.equal(out.id, local.id);
+  assert.equal(out.name, local.name);
+  assert.equal(out.exportedAt, local.exportedAt);
+  const tie = mergeBoardBests({ ...local, top: [{ score: 160, toilet: false, level: 4 }] }, [{ score: 160, toilet: false, level: 4 }]);
+  assert.deepEqual(tie.top, [{ score: 160, toilet: false, level: 4 }], 'a row the device already has is not doubled');
+  assert.deepEqual(mergeBoardBests(local, [null, null]).top, local.top, 'offline / no rows: unchanged');
+  assert.deepEqual(mergeBoardBests(local, [{ score: 0, toilet: false, level: 1 }, { score: -5 }]).top, local.top, 'scores ≤ 0 are skipped');
+  assert.deepEqual(mergeBoardBests(local, undefined).top, local.top);
 });

@@ -55,7 +55,7 @@ let copiedTimer = null;
 let claim = null; // { name, promise } the last username check this panel session (one check per name: blur and Save share it)
 let clearArmedAt = 0; // Date.now() of a first tap on Clear; a second inside saveClearConfirmMs signs out
 let clearTimer = null;
-let loaded = null; // { name, text(name) } after a Load: the welcome line, rebuilt if the board's newer name replaces the code's
+let loaded = null; // { name, text(name), shown } after a Load: the welcome line as shown, rebuilt when the board's newer name or scores arrive
 
 function h(tag, attrs = {}, ...children) {
   const el = document.createElement(tag);
@@ -378,9 +378,10 @@ async function onLoad() {
     claim = null;
     dom.name.value = res.state.name;
     dom.load.value = '';
-    const statusFor = (name) => (merged ? t(locale, 'saveMerged').replace('{name}', name) : welcomeText(locale, { ...res.state, name }));
-    loaded = { name: res.state.name, text: statusFor };
-    setStatus(statusFor(res.state.name), 'ok');
+    // The scores are read when the line is drawn, so the board's (pullBoardBests) show once they arrive.
+    const statusFor = (name) => (merged ? t(locale, 'saveMerged').replace('{name}', name) : welcomeText(locale, { ...getState(), name }));
+    loaded = { name: res.state.name, text: statusFor, shown: statusFor(res.state.name) };
+    setStatus(loaded.shown, 'ok');
     refreshClear();
     if (!merged) ctx.play?.syncLeaderboard?.(); // a merge already started one; either way the board's name for this player comes back
     if (ctx) await refreshCode();
@@ -448,11 +449,24 @@ export function showAdoptedName(prev, next) {
   if (validateName(dom.name.value).name !== prev) return; // typing something else: leave the field alone
   claim = null;
   dom.name.value = next;
-  if (loaded && loaded.name === prev && dom.status.textContent === loaded.text(prev)) {
-    setStatus(loaded.text(next), 'ok');
-    loaded = { ...loaded, name: next };
+  if (loaded && loaded.name === prev && dom.status.textContent === loaded.shown) {
+    loaded = { ...loaded, name: next, shown: loaded.text(next) };
+    setStatus(loaded.shown, 'ok');
   }
   refreshClear();
+  refreshCode();
+}
+
+/**
+ * Play pulled the player's board scores into this device's list (pullBoardBests). In an open
+ * panel the code picks them up, and so does the welcome line while it is still the Load's.
+ */
+export function showBoardScores() {
+  if (!ctx || !dom || dom.root.hidden) return;
+  if (loaded && dom.status.textContent === loaded.shown) {
+    loaded = { ...loaded, shown: loaded.text(loaded.name) };
+    setStatus(loaded.shown, 'ok');
+  }
   refreshCode();
 }
 

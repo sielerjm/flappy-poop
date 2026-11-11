@@ -218,7 +218,7 @@ The 🌞 board, like the others, is for friends, not prizes: the course comes fr
 1. Tap **Load user** (or your name, once set) on the ready screen.
 2. Pick a username and press **Save** — it appears on the public leaderboard with your best. A new username has 4–16 characters (at least 2 in Chinese, Japanese or Korean), no spaces or emoji, and no rude words; names chosen before these rules keep working. (The game checks this, not the server.)
 3. **Copy** your `fp1.…` user code and keep it somewhere safe.
-4. On another phone or browser, **Load** that code to bring your name and best 6 scores with you.
+4. On another phone or browser, **Load** that code to bring your name and best 6 scores with you. Your best score on the leaderboard (with and without the toilet) comes back too, even if you played it on a different phone after you copied the code.
 5. To change your username, type a new one and press **Save**: every phone and browser that uses your code picks up the new name on its own.
 
 A username belongs to one player on the board: if a name is taken, paste your code instead (or pick another name). **Clear** (two taps) signs this device out only — the board keeps your rows; the code brings them back.

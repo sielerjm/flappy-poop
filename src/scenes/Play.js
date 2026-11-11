@@ -104,7 +104,7 @@ import {
   padIntent,
 } from '../logic.js';
 import { t, pauseBannerText, levelBannerText, levelLabel, initialLocale, isLocale, profileButtonText, coinLabel, countText, versusName } from '../i18n.js';
-import { loadLocal, saveLocal, ensureId, recordScore, TOILET_EMOJI } from '../save.js';
+import { loadLocal, saveLocal, ensureId, recordScore, mergeBoardBests, TOILET_EMOJI } from '../save.js';
 import { unlock, attachGame, setMuted, isMuted, sfx } from '../sound.js';
 import { createTray } from '../ui/tray.js';
 import { createFocus } from '../ui/focus.js';
@@ -113,10 +113,10 @@ import { createGlow, createRectGlow } from '../ui/glow.js';
 import { createFinishTexture } from '../ui/finish.js';
 import { createLightTexture } from '../ui/pipeShade.js';
 import { createLevelBar } from '../ui/levelBar.js';
-import { createSubmitStore, createMergeStore, createRenameStore, createTournamentQueue, createDailyStore, createDailyQueue, submitDailyScore, fetchDailyBoard, submitPlans, submitScore, submitTournament, checkNameAvailable, mergePlayers, fetchPlayerName, nameAction } from '../leaderboard.js';
+import { createSubmitStore, createMergeStore, createRenameStore, createTournamentQueue, createDailyStore, createDailyQueue, submitDailyScore, fetchDailyBoard, submitPlans, submitScore, submitTournament, checkNameAvailable, mergePlayers, fetchPlayerName, fetchRank, nameAction } from '../leaderboard.js';
 import { createButton } from '../ui/button.js';
 import { createToggle } from '../ui/toggle.js';
-import { openSavePanel, isSavePanelOpen, showAdoptedName } from '../ui/savePanel.js';
+import { openSavePanel, isSavePanelOpen, showAdoptedName, showBoardScores } from '../ui/savePanel.js';
 import { isTournamentPanelOpen, tournamentPadAction } from '../ui/tournamentPanel.js';
 import { bindPad } from '../input/pad.js';
 import { keyGroup, sameDevice, catchUpTier, catchUpDraws, versusAvailable, ghostPlacement, rivalMarker, respawnPose, courseDistance, VERSUS_EMOJI } from '../versus.js';
@@ -201,6 +201,7 @@ export class Play extends Phaser.Scene {
     this.dailyNext = null;
     this.renameStore = createRenameStore(); // a rename typed on this device, until a post carries it to the board
     this.boardNameTaken = false; // the last sync was refused because another player holds this username
+    this.boardBestsFor = null; // the id whose board scores this page already pulled (pullBoardBests)
     // Levels: pipe pairs passed decide the level; speed is per level, gap is fixed.
     this.level = 1;
     this.pipesPassed = 0;
@@ -1169,6 +1170,7 @@ export class Play extends Phaser.Scene {
     this.renameStore.clear();
     this.best.clear();
     this.boardNameTaken = false;
+    this.boardBestsFor = null;
   }
 
   /**
@@ -1210,6 +1212,7 @@ export class Play extends Phaser.Scene {
       .then((board) => {
         if (this.save?.id === id && nameAction({ local: this.save.name, board, pending: this.renameStore.load(), id }) === 'adopt') this.adoptBoardName(board);
       })
+      .then(() => this.pullBoardBests(id))
       .then(() => this.drainDaily())
       .then(() =>
         // Up to two rows per player: best off the toilet and best on it, posted one after the other.
@@ -1250,6 +1253,43 @@ export class Play extends Phaser.Scene {
     });
   }
 
+  /** The player's two board rows [off the toilet, on it] (player_rank: aliases resolved), each null when missing or unreachable. A method so the smoke can stub it. */
+  fetchBoardBests(id) {
+    return Promise.all([fetchRank(id, false), fetchRank(id, true)]);
+  }
+
+  /**
+   * Scores flow down too: the board's best off and on the toilet (played on another device, or
+   * under an id merged into this one) join this device's top list, once per page load and id
+   * (a Load asks again: forgetRename). The home button, an open save panel's welcome line and
+   * code follow. A pulled row that is now this device's best of its kind is filed as its last
+   * confirmed submit, so submitPlans does not post the board's own score back. Never rejects.
+   */
+  pullBoardBests(id) {
+    if (!this.save?.name || this.boardBestsFor === id) return Promise.resolve();
+    return this.fetchBoardBests(id)
+      .then((rows) => {
+        const got = (rows ?? []).filter((r) => r && Number.isInteger(r.score) && r.score > 0);
+        if (!got.length || this.save?.id !== id) return; // offline, no rows yet, or another player by now
+        this.boardBestsFor = id;
+        const before = this.save.top.map((e) => `${e.score}${e.toilet ? 't' : ''}`).join();
+        const next = mergeBoardBests(this.save, got);
+        if (next.top.map((e) => `${e.score}${e.toilet ? 't' : ''}`).join() !== before) {
+          this.setSaveState(saveLocal(next));
+          showBoardScores();
+        }
+        const best = { off: this.save.top.find((e) => !e.toilet), on: this.save.top.find((e) => e.toilet) };
+        for (const r of got) {
+          const kind = r.toilet ? 'on' : 'off';
+          const mine = best[kind];
+          if (mine && mine.score === r.score && Boolean(mine.toilet) === Boolean(r.toilet)) {
+            this.submitStore.save({ playerId: id, name: this.save.name, score: mine.score, toilet: mine.toilet, level: mine.level });
+          }
+        }
+      })
+      .catch(() => {});
+  }
+
   /** The board's name for this player's id, or null (none, or the board cannot say). A method so the smoke can stub it. */
   fetchPlayerName(id) {
     return fetchPlayerName(id);
@@ -1267,9 +1307,10 @@ export class Play extends Phaser.Scene {
     if (this.save?.id) this.renameStore.set({ id: this.save.id, name });
   }
 
-  /** A Load: the code's name is not a rename, so the next sync takes the board's latest. */
+  /** A Load: the code's name is not a rename, so the next sync takes the board's latest (and pulls its scores again). */
   forgetRename() {
     this.renameStore.clear();
+    this.boardBestsFor = null;
   }
 
   /** Is `name` free on the board for this player's id? true / false / null (the board cannot say). The save panel asks before storing a name. */

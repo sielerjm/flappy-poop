@@ -8,6 +8,18 @@ import { LOCALES } from './i18n.js';
 
 export const CHANGELOG = [
   {
+    version: '0.13.3',
+    date: '11 Nov 2026',
+    notes: {
+      en: [
+        'Loading your user code now brings back your best scores from the leaderboard, even ones played on another phone.',
+      ],
+      'zh-Hans': [
+        '载入用户代码时，现在也会从排行榜取回你的最高分，包括在其他手机上打出的成绩。',
+      ],
+    },
+  },
+  {
     version: '0.13.2',
     date: '11 Nov 2026',
     notes: {

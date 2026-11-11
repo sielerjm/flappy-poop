@@ -344,6 +344,8 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         // (deterministic, and never the live board).
         await evaluate(`(globalThis.__nameFree = true, globalThis.__nameChecks = [], ${play}.checkNameAvailable = (name, id) => (globalThis.__nameChecks.push([name, id]), Promise.resolve(globalThis.__nameFree)), true)`);
         await evaluate(`(globalThis.__boardName = null, globalThis.__nameFetches = [], ${play}.fetchPlayerName = (id) => (globalThis.__nameFetches.push(id), Promise.resolve(globalThis.__boardName)), true)`);
+        // The player's board rows (pullBoardBests) answer "none" for the whole run, except in the check that sets them.
+        await evaluate(`(globalThis.__boardRows = [null, null], ${play}.fetchBoardBests = () => Promise.resolve(globalThis.__boardRows), true)`);
         await evaluate(`document.getElementById('save-name').value = 'Smoke', document.getElementById('save-save-btn').click(), true`);
         await sleep(1200);
         const after = await evaluate(`JSON.stringify({ open: !document.getElementById('save-panel').hidden, code: document.getElementById('save-code').value })`).then(JSON.parse);
@@ -449,6 +451,31 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await evaluate(`import('./src/ui/savePanel.js').then((m) => (m.closeSavePanel(), true))`);
         const back = await evaluate(`JSON.stringify({ name: ${play}.getSaveState().name, id: ${play}.getSaveState().id, halo: ${play}.profileHalo.visible })`).then(JSON.parse);
         ok(back.name === 'Smoke' && /^[A-Za-z0-9_-]{22}$/.test(back.id) && !back.halo, `a new username after Clear starts a new player (fresh id), the halo off again`);
+        // Scores flow down: a code carrying only this device's 160 loads; the board's best off (229, LV 6) and
+        // on the toilet (261, LV 6), played on another device, join the list, the profile, the welcome line and
+        // the code, and are filed as confirmed (no post back). Offline the code's list stands. Data API muzzled.
+        {
+          await evaluate(`import('./src/config.js').then((m) => { globalThis.__api = m.LEADERBOARD.dataApi; m.LEADERBOARD.dataApi = ''; return true; })`);
+          const mine = await evaluate(`import('./src/save.js').then((m) => m.exportCode({ id: '${back.id}', name: 'Smoke', top: [{ score: 160, toilet: false, level: 4 }, { score: 143, toilet: false, level: 3 }], exportedAt: null }))`);
+          await evaluate(`${play}.submitStore.clear(), ${play}.openSavePanel(), true`);
+          await sleep(200);
+          await evaluate(`${el('save-load')}.value = ${JSON.stringify(mine)}, ${el('save-load-btn')}.click(), true`);
+          await sleep(500);
+          const offline = await evaluate(`JSON.stringify({ top: ${play}.getSaveState().top.map((e) => e.score), pulled: ${play}.boardBestsFor })`).then(JSON.parse);
+          ok(offline.top.join() === '160,143' && offline.pulled === null, `offline the board's scores cannot come down: the loaded code's list stands (${offline.top.join(' · ')}) and the next sync asks again`);
+          await evaluate(`globalThis.__boardRows = [{ rank: 8, total: 40, score: 229, toilet: false, level: 6 }, { rank: 5, total: 40, score: 261, toilet: true, level: 6 }], ${play}.syncLeaderboard().then(() => true)`);
+          await sleep(300);
+          const pulled = await evaluate(`JSON.stringify({ top: ${play}.getSaveState().top, stored: JSON.parse(localStorage.getItem('flappyPoop.save')).top.map((e) => e.score), profile: ${play}.profileBtn.getText(), status: ${el('save-status')}.textContent, code: ${el('save-code')}.value, confirmed: ${play}.submitStore.load() })`).then(JSON.parse);
+          const carried = await evaluate(`import('./src/save.js').then((m) => m.importCode(${el('save-code')}.value, { storage: { getItem: () => null, setItem() {} } })).then((r) => r.ok ? r.state.top.map((e) => e.score).join() : '')`);
+          const welcome = await evaluate(`import('./src/i18n.js').then((m) => m.welcomeText('en', ${play}.getSaveState()))`);
+          const top = pulled.top.map((e) => `${e.score}${e.toilet ? 't' : ''}@${e.level}`).join();
+          ok(top === '261t@6,229@6,160@4,143@3' && pulled.stored.join() === '261,229,160,143' && pulled.profile === 'Smoke · 🚽 261' && pulled.status === welcome && welcome.includes('261') && carried === '261,229,160,143', `the board's 229 and 261 🚽 (LV 6) join the loaded list (${top}): stored, on the user button ("${pulled.profile}"), in the welcome line and in the code`);
+          ok(pulled.confirmed.off?.score === 229 && pulled.confirmed.on?.score === 261 && pulled.confirmed.on?.toilet === true, `the pulled bests are filed as confirmed, so the next sync does not post them back (off ${pulled.confirmed.off?.score}, on ${pulled.confirmed.on?.score})`);
+          // Back to a clean player for the rest of the run.
+          await evaluate(`globalThis.__boardRows = [null, null], ${play}.setSaveState(JSON.parse(JSON.stringify({ ...${play}.getSaveState(), top: [] }))), import('./src/save.js').then((m) => (m.saveLocal(${play}.getSaveState()), ${play}.submitStore.clear(), true))`);
+          await evaluate(`import('./src/ui/savePanel.js').then((m) => m.closeSavePanel()).then(() => import('./src/config.js')).then((m) => { m.LEADERBOARD.dataApi = globalThis.__api; return true; })`);
+          await sleep(100);
+        }
       }
     });
 
