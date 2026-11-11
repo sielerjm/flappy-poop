@@ -4,6 +4,7 @@ import { createFocus, pressable } from '../ui/focus.js';
 import { isTopOverlay, hasOverlayUnder, openChangelog } from '../ui/overlayStack.js';
 import { createScrollView } from '../ui/scrollView.js';
 import { createButton } from '../ui/button.js';
+import { createInfoCard } from '../ui/infoCard.js';
 import { t, metaFontSize, levelLabel, badgeTitle, badgeDesc, dailyDayText } from '../i18n.js';
 import { ACHIEVEMENTS, achievementById, openQuests, progressOf } from '../achievements.js';
 import { validateName } from '../save.js';
@@ -69,7 +70,6 @@ export class Stats extends Phaser.Scene {
     this.own = !asked || sameName(asked, play?.save?.name);
     this.askedName = asked;
     this.card = null;
-    this.cardOpen = false;
     // No username: the gate, whatever opened it. Saving one turns it into the profile asked for (refresh).
     this.gated = !play?.save?.name;
     if (this.gated) {
@@ -390,67 +390,35 @@ export class Stats extends Phaser.Scene {
   }
 
   /**
-   * The explanation card: a dim, the card, the emoji, a title, the lines under it and an ✕, on a
-   * camera of its own added after the band's, so it draws over the sections and takes taps first.
-   * Hidden, the camera neither draws nor takes input. A release anywhere closes it.
+   * The explanation card (ui/infoCard.js) on a camera of its own added after the band's, so it draws
+   * over the sections and takes taps first; the band ignores it and its drags pause while it is up.
    */
   buildCard() {
-    const { L } = this;
-    const W = this.scale.width;
-    const dim = this.add.rectangle(W / 2, GAME_HEIGHT / 2, W, GAME_HEIGHT, 0x000000, 0.5).setInteractive();
-    dim.on('pointerup', () => this.hideCard());
-    const box = this.add.rectangle(L.card.x, L.card.y, L.card.width, 300, 0x2a1522, 1).setStrokeStyle(6, 0xe85e96);
-    const glyph = this.add.text(L.card.x, 0, '', { fontFamily: 'sans-serif', fontSize: '64px' }).setOrigin(0.5);
-    const title = this.add.text(L.card.x, 0, '', { ...STYLE, fontSize: '34px', color: PINK, wordWrap: { width: L.card.width - 60, useAdvancedWrap: true } }).setOrigin(0.5, 0);
-    const body = this.add.text(L.card.x, 0, '', { ...STYLE, fontSize: '26px', color: MUTED, fontStyle: 'normal', wordWrap: { width: L.card.width - 60, useAdvancedWrap: true }, lineSpacing: 6 }).setOrigin(0.5, 0);
-    const x = this.add.text(0, 0, '✕', { ...STYLE, fontSize: '40px' }).setOrigin(0.5).setInteractive({ useHandCursor: true });
-    x.on('pointerup', () => this.hideCard());
-    const objs = [dim, box, glyph, title, body, x];
-    for (const o of objs) o.setVisible(false);
-    const cam = this.cameras.add(0, 0, W, GAME_HEIGHT);
-    cam.ignore(this.children.list.filter((o) => !objs.includes(o)));
-    this.cameras.main.ignore(objs);
-    this.scroll?.ignore(objs);
-    cam.setVisible(false);
-    cam.inputEnabled = false;
-    this.card = { cam, objs, dim, box, glyph, title, body, x };
+    this.card = createInfoCard(this, this.L.card, {
+      ownCamera: true,
+      onShow: () => this.scroll?.setEnabled(false),
+      onHide: () => this.scroll?.setEnabled(true),
+    });
+    this.scroll?.ignore(this.card.objs);
   }
 
-  /** Open the card with { glyph, title, lines }, or close it when one is already up (A on the ringed cell). */
+  /** True while the explanation card is up. */
+  get cardOpen() {
+    return Boolean(this.card?.open);
+  }
+
+  /** Open the card with { glyph, title, lines, color }, or close it when one is already up (A on the ringed cell). */
   toggleCard(content) {
     if (!isTopOverlay(this)) return;
     if (this.cardOpen) {
       this.hideCard();
       return;
     }
-    const c = this.card;
-    if (!c) return;
-    const { L } = this;
-    c.glyph.setText(content.glyph);
-    c.title.setText(content.title).setColor(content.color ?? PINK);
-    c.body.setText((content.lines ?? []).filter(Boolean).join('\n'));
-    // Stack the parts and fit the card around them, centred on L.card.
-    const h = 40 + 70 + 16 + c.title.height + (c.body.text ? 14 + c.body.height : 0) + 36;
-    const top = L.card.y - h / 2;
-    c.box.setSize(L.card.width, h).setPosition(L.card.x, L.card.y);
-    c.glyph.setPosition(L.card.x, top + 40 + 35);
-    c.title.setPosition(L.card.x, top + 40 + 70 + 16);
-    c.body.setPosition(L.card.x, c.title.y + c.title.height + 14);
-    c.x.setPosition(L.card.x + L.card.width / 2 - 34, top + 32);
-    for (const o of c.objs) o.setVisible(true);
-    c.cam.setVisible(true);
-    c.cam.inputEnabled = true;
-    this.scroll?.setEnabled(false);
-    this.cardOpen = true;
+    this.card?.show(content);
   }
 
   hideCard() {
-    if (!this.cardOpen || !this.card) return;
-    for (const o of this.card.objs) o.setVisible(false);
-    this.card.cam.setVisible(false);
-    this.card.cam.inputEnabled = false;
-    this.scroll?.setEnabled(true);
-    this.cardOpen = false;
+    this.card?.hide();
   }
 
   /** A badge's card: its name, what it takes, and when it was earned (or the progress, or the quest's last day). */
