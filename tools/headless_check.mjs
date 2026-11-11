@@ -251,10 +251,27 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
     await cdp.send('Emulation.setDeviceMetricsOverride', { width: 720, height: 1280, deviceScaleFactor: 1, mobile: false });
     await cdp.send('Page.navigate', { url: `${url}/?r=${Date.now()}` });
 
-    // Boot, first the loading splash (src/splash.js): a note card shows, Continue lights up once Boot
-    // has loaded (Phaser comes from a CDN), and Play waits for it. Continue fires on the key's release.
+    // Boot, first the loading splash (src/splash.js): a note card shows, the ring fills and Continue
+    // lights up once it is full (Phaser comes from a CDN), and Play waits for it. Continue fires on the
+    // key's release.
     const splashNow = () =>
-      evaluate(`JSON.stringify((() => { const b = document.getElementById('splash-continue'); return { present: Boolean(document.getElementById('splash')), live: Boolean(document.querySelector('#splash.live')), enabled: Boolean(b && !b.disabled), glow: Boolean(document.querySelector('#splash.ready')), text: document.querySelector('#splash-note .text')?.textContent ?? '', play: typeof __flappy !== 'undefined' && __flappy.scene.isActive('Play') }; })())`).then(JSON.parse);
+      evaluate(`JSON.stringify((() => {
+        const b = document.getElementById('splash-continue');
+        const rect = (sel) => { const r = document.querySelector(sel)?.getBoundingClientRect(); return r ? { top: r.top, bottom: r.bottom, mid: r.top + r.height / 2, h: r.height } : null; };
+        const img = document.querySelector('#splash-note .art img');
+        return {
+          present: Boolean(document.getElementById('splash')),
+          live: Boolean(document.querySelector('#splash.live')),
+          enabled: Boolean(b && !b.disabled),
+          glow: Boolean(document.querySelector('#splash.ready')),
+          text: document.querySelector('#splash-note .text.on')?.textContent ?? '',
+          ring: parseFloat(document.querySelector('.splash-arc')?.style.strokeDashoffset ?? 'NaN'),
+          card: rect('#splash-note'), prev: rect('#splash-prev'), next: rect('#splash-next'), cont: rect('#splash-continue'),
+          art: document.querySelector('#splash-note .art')?.dataset.kind ?? null,
+          img: img ? { done: img.complete, w: img.naturalWidth, src: img.getAttribute('src') } : null,
+          play: typeof __flappy !== 'undefined' && __flappy.scene.isActive('Play'),
+        };
+      })())`).then(JSON.parse);
     const splashKey = (type, key) => evaluate(`(document.activeElement ?? document.body).dispatchEvent(new KeyboardEvent('${type}', { key: '${key}', bubbles: true, cancelable: true })), true`);
     let splash = null;
     for (let i = 0; i < 120 && !splash?.enabled && (i < 4 || splash?.present); i += 1) {
@@ -263,11 +280,25 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
     }
     ok(Boolean(splash?.live && splash.text), `splash: a note card shows (${JSON.stringify(splash?.text ?? null)})`);
     ok(Boolean(splash?.enabled && splash.glow), 'splash: Continue lights up and glows once Boot has loaded');
+    ok(splash?.enabled && splash.ring < 0.5, `splash: the ring is full when Continue lights up (offset ${splash?.ring})`);
     ok(splash?.play === false, 'splash: Play waits for Continue');
     if (splash?.enabled) {
+      const { card, prev, next, cont } = splash;
+      ok(Math.abs(prev.mid - card.mid) < 2 && Math.abs(next.mid - card.mid) < 2 && cont.top > card.bottom, `splash: ‹ › sit on the card's centre, Continue on the row below (card ${Math.round(card.mid)}, ‹ ${Math.round(prev.mid)}, › ${Math.round(next.mid)}, Continue top ${Math.round(cont.top)})`);
       await splashKey('keydown', 'ArrowRight');
       const browsed = await splashNow();
       ok(Boolean(browsed.text) && browsed.text !== splash.text, 'splash: → shows another card');
+      ok(Math.abs(browsed.card.h - card.h) < 0.5, `splash: the card keeps its height from card to card (${card.h} → ${browsed.card.h})`);
+      let sprite = browsed;
+      for (let i = 0; i < 25 && !sprite.img; i += 1) {
+        await splashKey('keydown', 'ArrowRight');
+        sprite = await splashNow();
+      }
+      for (let i = 0; i < 20 && sprite.img && !(sprite.img.done && sprite.img.w > 0); i += 1) {
+        await sleep(100);
+        sprite = await splashNow();
+      }
+      ok(Boolean(sprite.img?.done && sprite.img.w > 0), `splash: a sprite card shows its loaded sprite (${sprite.img?.src ?? 'none found'})`);
       await splashKey('keydown', ' ');
       await sleep(300);
       ok((await splashNow()).play === false, 'splash: Space down alone does not continue (it waits for the release)');

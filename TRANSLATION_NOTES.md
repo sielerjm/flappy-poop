@@ -33,9 +33,10 @@ Game over has a Share button: the share sheet gets a picture card (GAME OVER, th
 pickup counts, and shareCardPlay's "Play: <link>" footer); the message under it is only the game's
 link (nothing to translate).
 Loading splash (the cream screen while the game downloads): one note card at a time under the
-progress ring, an emoji then one short line, labelled **TIP** (小提示) for a hint or **NEW** (新功能)
-for a major feature. The player swipes through them, then presses **Continue** (继续). Each card
-must fit four lines on a phone: at most 140 characters in English and 70 in Chinese (a test checks).
+progress ring, a picture (the game's sprite, or an emoji) then one short line, labelled **TIP** (小提示)
+for a hint or **NEW** (新功能) for a major feature, with ‹ › beside the card. The player swipes through
+them, then presses **Continue** (继续). Keep cards short: at most 100 characters in English and 50 in
+Chinese (a test checks); the card is as tall as the longest one.
 Author / designer / artist: Michael Sieler. Side project, short playful copy — not
 formal medical language.
 
@@ -442,7 +443,7 @@ Inspired by Flappy Bird
 | splashContinue | Continue | 继续 |
 | splashPrev | Previous card | 上一张 |
 | splashNext | Next card | 下一张 |
-| splashProfile | Your username now has a profile showing your stats and achievements. You can click on other users on the leaderboard to see theirs. | 你的用户名现在有了个人资料，显示你的数据和成就。在排行榜上点其他玩家的名字，也能查看他们的。 |
+| splashProfile | Your profile shows your stats and achievements. Tap a name on the leaderboard to see theirs. | 你的个人资料会显示数据和成就。在排行榜上点名字，就能看别人的。 |
 | splashDaily | Daily Dump: one try a day on the same course as everyone. | 每日一拉：每天一次机会，和所有人飞同一条赛道。 |
 | splashTournament | Tournaments: up to 8 players, one bracket, one device. | 锦标赛：最多 8 名玩家，一张对阵表，一台设备。 |
 | splashShop | Spend corn kernels in the shop between levels. | 关卡之间可以在商店花掉玉米粒。 |
@@ -455,7 +456,7 @@ Inspired by Flappy Bird
 | splashSuperFart | Three beans make a super fart: 20 pipes, and you cannot die. | 集齐 3 颗豆子放超级屁：冲过 20 道管道，而且不会死。 |
 | splashMystery | Mystery boxes contain random objects with different probabilities. | 神秘盒子里装着随机道具，每种的概率不同。 |
 | splashCoin | Corn kernels are coins. They last one run, so spend them. | 玉米粒就是金币，只在本局有效，记得花掉。 |
-| splashToilet | Toggle 'Toilet mode' on when you play Flappy Poop on the Toilet. Leaderboard shows your highest on and off toilet scores. | 在马桶上玩 Flappy Poop 时，打开“如厕模式”。排行榜会分别显示你如厕和不如厕时的最高分。 |
+| splashToilet | Playing on the toilet? Turn on Toilet mode. The leaderboard keeps your best on and off the toilet. | 在马桶上玩？打开“如厕模式”。排行榜会分别记录你如厕和不如厕时的最高分。 |
 | splashRectum | Level 7 is the rectum. Cross the finish line to 'make it out'. | 第 7 关是直肠。冲过终点线，就能“成功脱出”。 |
 | splashLeaderboard | The leaderboard shows the Top 25, with tabs for the Daily Dump 🌞 and tournaments 🏅. | 排行榜显示前 25 名，还有每日一拉 🌞 和锦标赛 🏅 两个分页。 |
 | splashTwoPlayer | Toggle 👥 on to play multiplayer mode up to 8 players. | 打开 👥 开关，就能玩多人模式，最多 8 名玩家。 |

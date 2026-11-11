@@ -1,9 +1,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { SPLASH_NOTES, splashPool, nextNote, createBrowser, swipeIntent, createSplashStore, splashReady, setSplashProgress, startSplash } from '../src/splash.js';
+import { readFileSync, existsSync } from 'node:fs';
+import { SPLASH_NOTES, splashPool, nextNote, createBrowser, swipeIntent, createSplashStore, splashReady, setSplashProgress, startSplash, ringTarget, ringStep, splashArtUrl } from '../src/splash.js';
 import { ACHIEVEMENTS } from '../src/achievements.js';
 import { LOCALES, catalogFor } from '../src/i18n.js';
-import { createRng } from '../src/logic.js';
+import { createRng, VERSION } from '../src/logic.js';
 import { TUNING as T } from '../src/config.js';
 
 const POOL = splashPool();
@@ -34,10 +35,10 @@ function memoryStorage({ fail = false } = {}) {
   };
 }
 
-test('the catalog: unique ids, a known kind, a glyph and a string in every locale, short enough for four lines', () => {
+test('the catalog: unique ids, a known kind, a glyph and a string in every locale, short enough for a small card', () => {
   assert.equal(new Set(ids(SPLASH_NOTES)).size, SPLASH_NOTES.length, 'ids are unique');
   assert.ok(SPLASH_NOTES.some((n) => n.kind === 'feature') && SPLASH_NOTES.some((n) => n.kind === 'hint'));
-  const caps = { en: 140, 'zh-Hans': 70 };
+  const caps = { en: 100, 'zh-Hans': 50 }; // ‹ › beside the card leave ~22 characters a line on a 360 px phone
   for (const n of SPLASH_NOTES) {
     assert.ok(['feature', 'hint'].includes(n.kind), `${n.id}: kind ${n.kind}`);
     assert.ok(typeof n.glyph === 'string' && n.glyph.length > 0, `${n.id} has a glyph (a renamed badge id?)`);
@@ -213,4 +214,98 @@ test('without a #splash (Node) the DOM part is inert and splashReady starts the 
     started += 1;
   });
   assert.equal(started, 1);
+});
+
+// --- the cards' sprites ---
+
+const ROOT = new URL('..', import.meta.url);
+const BOOT = readFileSync(new URL('src/scenes/Boot.js', ROOT), 'utf8');
+const pngWidth = (file) => readFileSync(new URL(`assets/${file}`, ROOT)).readUInt32BE(16);
+
+test('sprites: every card art is a file Boot loads by that exact path, so the art contract and ?v= cover it', () => {
+  const withArt = SPLASH_NOTES.filter((n) => n.art);
+  assert.deepEqual(ids(withArt).sort(), ['bacteria', 'bean', 'coin', 'fart', 'fiber', 'mystery', 'postbiotic', 'probiotic']);
+  for (const n of withArt) {
+    assert.ok(existsSync(new URL(`assets/${n.art.file}`, ROOT)), `${n.id}: assets/${n.art.file} exists`);
+    assert.ok(BOOT.includes(`'assets/${n.art.file}' + V`), `${n.id}: Boot loads 'assets/${n.art.file}' + V`);
+  }
+  assert.equal(splashArtUrl('fiber.png'), `assets/fiber.png?v=${VERSION}`, "Boot's URL, so one download serves both");
+});
+
+test("sprites: the coin strip's frame count matches Boot's spritesheet; super fart keeps its emoji", () => {
+  const coin = SPLASH_NOTES.find((n) => n.id === 'coin');
+  const frameWidth = Number(/load\.spritesheet\('coin'[^)]*frameWidth: (\d+)/.exec(BOOT)?.[1]);
+  assert.ok(frameWidth > 0, "Boot's coin frameWidth");
+  assert.equal(coin.art.frames, pngWidth('coin.png') / frameWidth);
+  assert.equal(SPLASH_NOTES.find((n) => n.id === 'superFart').art, undefined);
+});
+
+test('sprites: a crop is a square inside its image', () => {
+  for (const n of SPLASH_NOTES.filter((x) => x.art?.crop)) {
+    const [x, y, side] = n.art.crop;
+    assert.ok(side > 0 && side < 1 && x >= 0 && y >= 0 && x + side <= 1 && y + side <= 1, `${n.id}: crop ${n.art.crop}`);
+    assert.equal(n.art.frames, undefined, `${n.id}: a crop or a strip, not both`);
+  }
+});
+
+// --- the ring ---
+
+const S = T.splash;
+
+test('ringTarget: the download creeps toward waitCap without reaching it; Boot fills the rest; ready is full', () => {
+  assert.equal(ringTarget({ elapsedMs: 0 }), 0);
+  assert.ok(Math.abs(ringTarget({ elapsedMs: S.waitHalfMs }) - S.waitCap / 2) < 1e-9, 'half of waitCap after waitHalfMs');
+  let before = 0;
+  for (const e of [100, 1000, 5000, 30000, 600000]) {
+    const v = ringTarget({ elapsedMs: e });
+    assert.ok(v > before && v < S.waitCap, `still creeping at ${e} ms (${v})`);
+    before = v;
+  }
+  assert.equal(ringTarget({ elapsedMs: 9e9, progress: 0 }), S.waitCap);
+  assert.ok(Math.abs(ringTarget({ progress: 0.5 }) - (S.waitCap + (1 - S.waitCap) / 2)) < 1e-9);
+  assert.equal(ringTarget({ progress: 1 }), 1);
+  assert.equal(ringTarget({ progress: 7 }), 1, 'clamped');
+  assert.equal(ringTarget({ progress: 0.1, ready: true }), 1);
+});
+
+/** Steps the ring from shown to target at a fixed frame length; returns the frames' values. */
+function fill(from, to, frameMs) {
+  const out = [from];
+  let shown = from;
+  for (let i = 0; i < 2000 && shown < to; i += 1) {
+    shown = ringStep(shown, to, frameMs);
+    out.push(shown);
+  }
+  return out;
+}
+
+test('ringStep: never back, never past the target, never faster than ringMaxPerSec in a frame', () => {
+  assert.equal(ringStep(0.5, 0.3, 16), 0.5, 'a lower target does not pull it back');
+  assert.equal(ringStep(0.5, 0.5, 16), 0.5);
+  assert.equal(ringStep(0.99, 1, 1000), 1, 'never past the target');
+  for (const frameMs of [1000 / 120, 1000 / 60, 1000 / 30, 200]) {
+    const values = fill(0, 1, frameMs);
+    for (let i = 1; i < values.length; i += 1) {
+      const dt = Math.min(frameMs, S.ringFrameCapMs) / 1000;
+      assert.ok(values[i] >= values[i - 1], 'monotonic');
+      assert.ok(values[i] - values[i - 1] <= S.ringMaxPerSec * dt + 1e-12, `frame ${i} at ${frameMs} ms jumps ${values[i] - values[i - 1]}`);
+    }
+  }
+});
+
+test('ringStep: an instant load still takes 0.6–1.1 s to fill, and the floor speed makes it finish', () => {
+  for (const frameMs of [1000 / 120, 1000 / 60, 1000 / 30]) {
+    const values = fill(0, 1, frameMs);
+    assert.equal(values.at(-1), 1, `reaches full at ${frameMs.toFixed(1)} ms frames`);
+    const ms = (values.length - 1) * frameMs;
+    assert.ok(ms >= 600 && ms <= 1100, `empty to full in ${Math.round(ms)} ms at ${frameMs.toFixed(1)} ms frames`);
+  }
+  const tail = fill(0.999, 1, 1000 / 60);
+  assert.ok(tail.length <= 3, 'a tiny gap closes within a frame or two, not asymptotically');
+});
+
+test('ringStep: a long frame (Phaser compiling) moves the ring no more than ringFrameCapMs would', () => {
+  assert.equal(ringStep(0, 1, 5000), ringStep(0, 1, S.ringFrameCapMs));
+  assert.equal(ringStep(0.2, 1, Number.NaN), 0.2);
+  assert.equal(ringStep(0.2, 1, -10), 0.2);
 });

@@ -8,13 +8,13 @@
 // to a flap and Phaser repeats it while held, and the Gamepad plugin reports a button already held
 // when Play binds it, so a press-triggered Continue would start a run on the ready screen.
 //
-// The pure part (catalog, deck, browser history, swipe test, store) is Node-safe and tested in
+// The pure part (catalog, deck, browser history, swipe test, ring maths, store) is Node-safe and tested in
 // tests/splash.test.js. The DOM part works on the document and window it is handed (the inline
 // script in index.html passes them; Boot's calls use the globals) and fails open: any error removes
 // the splash and lets the game start, so the splash is never the reason the game does not load.
 
 import { TUNING } from './config.js';
-import { padAction, storedLocale } from './logic.js';
+import { padAction, storedLocale, VERSION } from './logic.js';
 import { t, initialLocale } from './i18n.js';
 import { achievementById } from './achievements.js';
 
@@ -25,24 +25,28 @@ const badge = (id) => achievementById(id)?.glyph ?? '';
 
 /**
  * Every note card: id (stored in the deck), kind ('feature' = a major addition, labelled NEW;
- * 'hint' = how the game works, labelled TIP), glyph, key (the i18n string). Features newest first:
- * splashPool keeps only the newest TUNING.splash.featureMax, so old ones age out on their own. A
- * feature worth keeping for good gets reworded as a hint.
+ * 'hint' = how the game works, labelled TIP), glyph, key (the i18n string), and for a thing the game
+ * draws as a sprite its art: { file } under assets/ (Boot loads the same file), { file, frames } for a
+ * strip whose frame 0 is shown, { file, crop: [x, y, side] } for a square cut (shares of the image). The glyph stays on every note: it is the art's fallback. Features
+ * newest first: splashPool keeps only the newest TUNING.splash.featureMax, so old ones age out on
+ * their own. A feature worth keeping for good gets reworded as a hint.
  */
 export const SPLASH_NOTES = [
   { id: 'profile', kind: 'feature', glyph: '👤', key: 'splashProfile' },
   { id: 'daily', kind: 'feature', glyph: '🌞', key: 'splashDaily' },
   { id: 'tournament', kind: 'feature', glyph: '🏅', key: 'splashTournament' },
   { id: 'shop', kind: 'feature', glyph: '💰', key: 'splashShop' },
-  { id: 'fiber', kind: 'hint', glyph: badge('fiber_1000'), key: 'splashFiber' },
-  { id: 'bacteria', kind: 'hint', glyph: badge('bacteria_1000'), key: 'splashBacteria' },
-  { id: 'probiotic', kind: 'hint', glyph: badge('probiotic_1000'), key: 'splashProbiotic' },
-  { id: 'postbiotic', kind: 'hint', glyph: badge('postbiotic_100'), key: 'splashPostbiotic' },
-  { id: 'bean', kind: 'hint', glyph: badge('bean_100'), key: 'splashBean' },
-  { id: 'fart', kind: 'hint', glyph: badge('fart_100'), key: 'splashFart' },
+  { id: 'fiber', kind: 'hint', glyph: badge('fiber_1000'), key: 'splashFiber', art: { file: 'fiber.png' } },
+  { id: 'bacteria', kind: 'hint', glyph: badge('bacteria_1000'), key: 'splashBacteria', art: { file: 'bacteria.png' } },
+  { id: 'probiotic', kind: 'hint', glyph: badge('probiotic_1000'), key: 'splashProbiotic', art: { file: 'probiotic.png' } },
+  { id: 'postbiotic', kind: 'hint', glyph: badge('postbiotic_100'), key: 'splashPostbiotic', art: { file: 'postbiotic.png' } },
+  { id: 'bean', kind: 'hint', glyph: badge('bean_100'), key: 'splashBean', art: { file: 'bean.png' } },
+  // poop-fart.png's art fills only 72 % of its frame, left of centre: crop to it (x, y, side, as shares).
+  { id: 'fart', kind: 'hint', glyph: badge('fart_100'), key: 'splashFart', art: { file: 'poop-fart.png', crop: [0, 0.137, 0.73] } },
+  // No sprite of its own (in game it is the farting poop in a rainbow glow): the 🌈 stays (Michael, 11 Nov).
   { id: 'superFart', kind: 'hint', glyph: badge('super_fart_25'), key: 'splashSuperFart' },
-  { id: 'mystery', kind: 'hint', glyph: badge('mystery_100'), key: 'splashMystery' },
-  { id: 'coin', kind: 'hint', glyph: badge('coin_1000'), key: 'splashCoin' },
+  { id: 'mystery', kind: 'hint', glyph: badge('mystery_100'), key: 'splashMystery', art: { file: 'mystery-icon.png' } },
+  { id: 'coin', kind: 'hint', glyph: badge('coin_1000'), key: 'splashCoin', art: { file: 'coin.png', frames: 12 } },
   { id: 'toilet', kind: 'hint', glyph: badge('toilet_win'), key: 'splashToilet' },
   { id: 'rectum', kind: 'hint', glyph: badge('win_game'), key: 'splashRectum' },
   { id: 'leaderboard', kind: 'hint', glyph: '🏆', key: 'splashLeaderboard' },
@@ -148,6 +152,38 @@ export function swipeIntent(dx, dy, t = TUNING) {
   return dx < 0 ? 'next' : 'prev';
 }
 
+/** A card's sprite URL: exactly Boot's (`?v=VERSION`), so the card and Boot share one download. */
+export const splashArtUrl = (file) => `assets/${file}?v=${VERSION}`;
+
+/**
+ * Where the ring is heading (0–1). Before Boot reports (progress null) it creeps toward waitCap,
+ * waitCap · e / (e + waitHalfMs): half of it after waitHalfMs, still moving on a long download.
+ * Then Boot's progress fills the rest; ready means full. The caller keeps the maximum.
+ */
+export function ringTarget({ elapsedMs = 0, progress = null, ready = false } = {}, t = TUNING) {
+  const s = t.splash;
+  if (ready) return 1;
+  if (progress == null) {
+    const e = Math.max(0, Number(elapsedMs) || 0);
+    return (s.waitCap * e) / (e + s.waitHalfMs);
+  }
+  return s.waitCap + (1 - s.waitCap) * Math.min(1, Math.max(0, Number(progress) || 0));
+}
+
+/**
+ * The ring's fill after one frame: it chases the target at the gap ÷ ringEaseMs, held between
+ * ringMinPerSec and ringMaxPerSec, never past the target and never back. A frame longer than
+ * ringFrameCapMs counts as that long, so a stall pauses the ring rather than jumping it.
+ */
+export function ringStep(shown, target, dtMs, t = TUNING) {
+  const s = t.splash;
+  const gap = target - shown;
+  if (!(gap > 0)) return shown;
+  const dt = Math.min(Math.max(0, Number(dtMs) || 0), s.ringFrameCapMs) / 1000;
+  const speed = Math.min(s.ringMaxPerSec, Math.max(s.ringMinPerSec, gap / (s.ringEaseMs / 1000)));
+  return Math.min(target, shown + speed * dt);
+}
+
 /** The deck's store. Storage can throw (private mode): then the deck lives for this load only. */
 export function createSplashStore(storage, key = S.storageKey) {
   return {
@@ -208,16 +244,15 @@ const safe = (fn) => (...args) => {
 
 function mount(root, doc, win) {
   const $ = (sel) => root.querySelector(sel);
-  const ring = $('.splash-ring');
   const arc = $('.splash-arc');
   const card = $('#splash-note');
-  const glyph = card?.querySelector('.glyph');
   const label = card?.querySelector('.label');
-  const text = card?.querySelector('.text');
+  const artBox = card?.querySelector('.art');
+  const texts = card?.querySelector('.texts');
   const prev = $('#splash-prev');
   const next = $('#splash-next');
   const cont = $('#splash-continue');
-  if (!ring || !arc || !glyph || !label || !text || !prev || !next || !cont) throw new Error('splash markup is incomplete');
+  if (!arc || !label || !artBox || !texts || !prev || !next || !cont) throw new Error('splash markup is incomplete');
 
   let storage = null;
   try {
@@ -227,7 +262,8 @@ function mount(root, doc, win) {
   }
   const locale = initialLocale(win.navigator?.language, storedLocale(storage, TUNING.settingsKey));
   const store = createSplashStore(storage);
-  const browser = createBrowser(store.load(), splashPool(), Math.random);
+  const pool = splashPool();
+  const browser = createBrowser(store.load(), pool, Math.random);
 
   root.lang = locale;
   root.style.setProperty('--splash-slide', `${S.slideMs}ms`);
@@ -237,6 +273,69 @@ function mount(root, doc, win) {
   cont.textContent = t(locale, 'splashLoading');
   cont.disabled = true;
 
+  // Every card's text, stacked in one grid cell (index.html's .texts): the cell is as tall as the
+  // tallest card at this width, so the card never changes height and no resize listener is needed.
+  // Only the current one is visible.
+  const spans = new Map();
+  for (const n of pool) {
+    const span = doc.createElement('span');
+    span.className = 'text';
+    span.setAttribute('aria-hidden', 'true');
+    span.textContent = t(locale, n.key);
+    texts.appendChild(span);
+    spans.set(n.id, span);
+  }
+
+  // The sprites, fetched at once from Boot's own URLs (Boot then finds them cached), so a card's
+  // picture is usually ready before the card shows. A sprite that fails falls back to the emoji.
+  let current = null; // the note on the card
+  const arts = new Map(); // file → 'loading' | 'ok' | 'failed'
+  const drawArt = (note) => {
+    artBox.replaceChildren();
+    const state = note.art ? arts.get(note.art.file) : 'failed';
+    if (state === 'loading') {
+      artBox.dataset.kind = 'wait'; // an empty box until the sprite arrives: no emoji-then-sprite swap
+    } else if (state === 'ok') {
+      const { file, frames, crop } = note.art;
+      const el = doc.createElement(frames || crop ? 'span' : 'img');
+      if (frames || crop) {
+        // A strip's frame 0, or a square cut: the image as the background of the 48 px box.
+        el.className = 'sheet';
+        el.style.backgroundImage = `url("${splashArtUrl(file)}")`;
+        if (frames) el.style.backgroundSize = `${frames * 100}% 100%`;
+        else {
+          const [x, y, side] = crop;
+          el.style.backgroundSize = `${100 / side}% ${100 / side}%`;
+          el.style.backgroundPosition = `${(x / (1 - side)) * 100}% ${(y / (1 - side)) * 100}%`;
+        }
+      } else {
+        el.alt = '';
+        el.draggable = false;
+        el.src = splashArtUrl(file);
+      }
+      artBox.appendChild(el);
+      artBox.dataset.kind = 'sprite';
+    } else {
+      artBox.textContent = note.glyph;
+      artBox.dataset.kind = 'glyph';
+    }
+  };
+  for (const n of pool) {
+    const file = n.art?.file;
+    if (!file || arts.has(file)) continue;
+    arts.set(file, 'loading');
+    const img = doc.createElement('img');
+    const settle = (state) =>
+      safe(() => {
+        if (arts.get(file) !== 'loading') return;
+        arts.set(file, state);
+        if (!removed && current?.art?.file === file) drawArt(current);
+      });
+    img.addEventListener('load', settle('ok'));
+    img.addEventListener('error', settle('failed'));
+    img.src = splashArtUrl(file);
+  }
+
   // The status bar follows the cream while the splash is up.
   const theme = doc.querySelector('meta[name="theme-color"]');
   const themeBefore = theme?.getAttribute('content') ?? null;
@@ -244,20 +343,26 @@ function mount(root, doc, win) {
   if (theme && cream) theme.setAttribute('content', cream);
 
   let index = -1;
-  let shown = 0; // the ring's fill, 0–1 (never goes back)
   let isReady = false;
   let removed = false;
   let timer = null;
-  let poll = 0;
+  let frame = 0;
+  let backstop = null;
 
   const show = (step, dir) => {
     if (!step.note || (step.index === index && index >= 0)) return;
     index = step.index;
     if (step.drew) store.save(step.state);
-    glyph.textContent = step.note.glyph;
-    label.textContent = t(locale, step.note.kind === 'feature' ? 'splashNew' : 'splashTip');
-    card.dataset.kind = step.note.kind;
-    text.textContent = t(locale, step.note.key);
+    if (current) {
+      spans.get(current.id)?.classList.remove('on');
+      spans.get(current.id)?.setAttribute('aria-hidden', 'true');
+    }
+    current = step.note;
+    spans.get(current.id)?.classList.add('on');
+    spans.get(current.id)?.removeAttribute('aria-hidden');
+    label.textContent = t(locale, current.kind === 'feature' ? 'splashNew' : 'splashTip');
+    card.dataset.kind = current.kind;
+    drawArt(current);
     prev.disabled = index <= 0;
     card.classList.remove('slide-next', 'slide-prev');
     void card.offsetWidth; // restart the CSS slide
@@ -273,19 +378,31 @@ function mount(root, doc, win) {
     show(dir === 'prev' ? browser.back() : browser.forward(), dir);
   };
 
-  // The arc's dash is its circumference (index.html's CSS: r = 54); the offset uncovers the fraction.
+  // The ring only fills: each frame it chases ringTarget (the creep during the Phaser download, then
+  // Boot's progress, then full) at ringStep's capped speed. Its dash is its circumference (index.html:
+  // r = 54); the offset uncovers the fraction.
   const circumference = 2 * Math.PI * (arc.r?.baseVal?.value || 54);
-  const progress = (p) => {
-    if (removed) return;
-    ring.classList.remove('spin');
-    shown = Math.max(shown, Math.min(1, Math.max(0, Number(p) || 0)));
+  const clock = () => win.performance?.now?.() ?? Date.now();
+  const startedAt = clock();
+  const animated = typeof win.requestAnimationFrame === 'function';
+  let bootProgress = null; // null until Boot's loader reports
+  let wantReady = false; // Boot has loaded: Continue lights up once the ring is full
+  let goal = 0;
+  let shown = 0;
+  let lastFrame = null;
+  const drawRing = () => {
     arc.style.strokeDashoffset = String(circumference * (1 - shown));
   };
+  const aim = () => {
+    goal = Math.max(goal, ringTarget({ elapsedMs: clock() - startedAt, progress: bootProgress, ready: wantReady }));
+  };
 
-  const ready = () => {
+  const light = () => {
     if (removed || isReady) return;
     isReady = true;
-    progress(1);
+    if (backstop != null) win.clearTimeout(backstop);
+    shown = 1;
+    drawRing();
     cont.disabled = false;
     cont.textContent = t(locale, 'splashContinue');
     root.classList.add('ready');
@@ -295,6 +412,27 @@ function mount(root, doc, win) {
     } catch {
       /* focus is a nicety */
     }
+  };
+
+  const progress = (p) => {
+    if (removed) return;
+    bootProgress = Math.max(bootProgress ?? 0, Math.min(1, Math.max(0, Number(p) || 0)));
+    if (!animated) {
+      aim();
+      shown = goal;
+      drawRing();
+    }
+  };
+
+  const ready = () => {
+    if (removed || wantReady) return;
+    wantReady = true;
+    if (!animated) {
+      light();
+      return;
+    }
+    // rAF stops in a hidden tab: a timer of twice the full-ring time lights Continue regardless.
+    backstop = win.setTimeout(safe(light), 2000 / S.ringMaxPerSec);
   };
 
   // Continue: Boot's callback queues Play's start, then the splash fades over the ready screen. The
@@ -360,9 +498,8 @@ function mount(root, doc, win) {
   // The pad: Phaser's Gamepad plugin is bound only in Play, so the splash polls on its own. A button
   // first seen already down counts as a press (a browser exposes a pad only after its first press).
   const held = new Map();
-  const tick = safe(() => {
-    poll = 0;
-    if (removed) return;
+  const pollPads = () => {
+    if (typeof win.navigator?.getGamepads !== 'function') return;
     for (const pad of win.navigator.getGamepads() ?? []) {
       if (!pad) continue;
       const before = held.get(pad.index) ?? [];
@@ -376,14 +513,28 @@ function mount(root, doc, win) {
       });
       held.set(pad.index, now);
     }
-    if (!removed) poll = win.requestAnimationFrame(tick);
+  };
+
+  // One frame loop for the ring and the pad.
+  const tick = safe((ts) => {
+    frame = 0;
+    if (removed) return;
+    const dt = lastFrame == null ? 0 : ts - lastFrame;
+    lastFrame = ts;
+    aim();
+    shown = ringStep(shown, goal, dt);
+    drawRing();
+    if (wantReady && shown >= 1) light();
+    pollPads();
+    if (!removed) frame = win.requestAnimationFrame(tick);
   });
 
   const remove = (fade) => {
     if (removed) return;
     removed = true;
     if (timer != null) win.clearInterval(timer);
-    if (poll) win.cancelAnimationFrame?.(poll);
+    if (backstop != null) win.clearTimeout(backstop);
+    if (frame) win.cancelAnimationFrame?.(frame);
     for (const [el, type, fn, capture] of listeners) el.removeEventListener(type, fn, capture === true);
     const finish = () => {
       root.remove();
@@ -399,9 +550,7 @@ function mount(root, doc, win) {
     root.classList.add('live');
     show(browser.forward(), 'next');
     timer = win.setInterval(safe(() => browse('next', false)), S.hintMs);
-    if (typeof win.navigator?.getGamepads === 'function' && typeof win.requestAnimationFrame === 'function') {
-      poll = win.requestAnimationFrame(tick);
-    }
+    if (animated) frame = win.requestAnimationFrame(tick);
   } catch (err) {
     remove(false); // the window key listeners must not outlive a failed start: they swallow Space
     throw err;
@@ -427,7 +576,7 @@ export function startSplash(doc = globalThis.document, win = globalThis) {
   return ui;
 }
 
-/** Boot's load progress (0–1): the first call turns the spinning ring into a filling one. */
+/** Boot's load progress (0–1): the ring fills the share after the download's creep (ringTarget). */
 export function setSplashProgress(p) {
   const s = startSplash();
   if (!s) return;
@@ -439,8 +588,9 @@ export function setSplashProgress(p) {
 }
 
 /**
- * Boot has loaded: the ring completes and Continue lights up; onContinue (start Play) runs once on
- * its release. With no splash (Node, or it already failed) onContinue runs at once.
+ * Boot has loaded: the ring fills to the end and Continue lights up once it is full; onContinue
+ * (start Play) runs once on its release. With no splash (Node, or it already failed) onContinue runs
+ * at once.
  */
 export function splashReady(onContinue) {
   onGo = onContinue;

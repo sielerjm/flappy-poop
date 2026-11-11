@@ -352,6 +352,15 @@ export const TUNING = {
     swipePx: 40, // css px of horizontal travel a swipe (or a mouse drag) needs
     featureMax: 4, // the newest this many feature notes join the deck; older ones age out
     storageKey: 'flappyPoop.splash', // localStorage key: the deck and the features already shown
+    // The ring only ever fills, chasing a target (ringTarget) at a speed (ringStep) of the gap ÷
+    // ringEaseMs, held between ringMinPerSec and ringMaxPerSec (shares of the ring per second): the top
+    // speed is its viscosity (a cached load still takes ~0.8 s to fill), the floor makes it finish.
+    ringEaseMs: 200, // ms: the chase's time constant
+    ringMaxPerSec: 1.6, // ring / s at most
+    ringMinPerSec: 0.6, // ring / s at least, while behind its target
+    ringFrameCapMs: 50, // ms: a longer frame (Phaser compiling) pauses the ring instead of jumping it
+    waitCap: 0.2, // 0–1: the share the ring creeps to during the Phaser download, before Boot reports
+    waitHalfMs: 3000, // ms: the creep is half of waitCap after this long (and still moving at 30 s)
   },
   gamepad: {
     // Standard-mapping button indices (Xbox: A 0, B 1, X 2, Y 3, LB 4, RB 5, LT 6, RT 7, View 8, Menu 9, d-pad 12–15).
