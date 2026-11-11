@@ -412,13 +412,25 @@ Inspired by Flappy Bird
 | statsAchievements | Achievements {n} / {total} | 成就 {n} / {total} |
 | statsAchievementsOther | Achievements ({n}) | 成就（{n}） |
 | statsNoBadges | No achievements yet | 还没有成就 |
-| statsTapBadge | Tap a badge to see what it takes | 点击徽章查看获得条件 |
+| statsTapBadge | Tap an emoji or a badge to see what it is | 点击表情或徽章查看说明 |
 | statsEarned | earned {day} | 获得于 {day} |
 | statsQuestOpen | open until {day} | 截止 {day} |
 | statsNotFound | No stats for {name} yet | 还没有 {name} 的数据 |
 | statsOfflineOwn | Offline: this device's numbers only | 离线：只显示本设备的数据 |
 | saveProfile | 👤 Profile | 👤 个人资料 |
 | statsBestScore | Highest score | 最高分 |
+| careerPipes | Number of pipes passed | 穿过的管道数 |
+| careerFarts | Every bean power you fired, super farts included | 放屁次数（超级屁也算） |
+| careerSuperFarts | Super farts (three beans in the bag) | 超级屁（攒满三颗豆子） |
+| careerFiber | Fiber eaten | 吃到的纤维 |
+| careerProbiotic | Probiotics picked up | 拿到的益生菌 |
+| careerPostbiotic | Postbiotic (Probiotic + Fiber) | 后生元（益生菌 + 纤维） |
+| careerBacteria | Bad bacteria bumped into | 碰到的有害细菌 |
+| careerBean | Beans collected | 收集的豆子 |
+| careerMystery | Mystery boxes opened | 打开的神秘盒子 |
+| careerCoin | Corn kernels (coins) | 玉米粒（金币） |
+| careerDeaths | Deaths | 死亡次数 |
+| statsCardTotal | Total: {n} | 累计：{n} |
 
 ## Reviewer checklist
 

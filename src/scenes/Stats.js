@@ -1,5 +1,5 @@
 import { GAME_HEIGHT, TUNING as T } from '../config.js';
-import { versionText, chromeIntent, overlayOutsideHit, fitScale, statsLayout, utcDayKey } from '../logic.js';
+import { versionText, chromeIntent, overlayOutsideHit, fitScale, statsLayout, utcDayKey, focusNearest, focusStep } from '../logic.js';
 import { createFocus, pressable } from '../ui/focus.js';
 import { isTopOverlay, hasOverlayUnder, openChangelog } from '../ui/overlayStack.js';
 import { createScrollView } from '../ui/scrollView.js';
@@ -13,19 +13,19 @@ const MUTED = '#c9b8dc';
 const GOLD = '#ffd700';
 const DASH = '–';
 
-/** The career grid: counter → glyph, in the order shown (two rows of L.careerCols). */
+/** The career grid: counter, glyph and its card's note (an i18n key), in the order shown (L.careerCols to a row). */
 const CAREER = [
-  ['pipes', '#️⃣'],
-  ['farts', '💨'],
-  ['superFarts', '🌈'],
-  ['fiber', '🥦'],
-  ['probiotic', '💊'],
-  ['postbiotic', '✨'],
-  ['bacteria', '🦠'],
-  ['bean', '🫘'],
-  ['mystery', '📦'],
-  ['coin', '🟡'],
-  ['deaths', '💀'],
+  ['pipes', '#️⃣', 'careerPipes'],
+  ['farts', '💨', 'careerFarts'],
+  ['superFarts', '🌈', 'careerSuperFarts'],
+  ['fiber', '🥦', 'careerFiber'],
+  ['probiotic', '💊', 'careerProbiotic'],
+  ['postbiotic', '✨', 'careerPostbiotic'],
+  ['bacteria', '🦠', 'careerBacteria'],
+  ['bean', '🫘', 'careerBean'],
+  ['mystery', '📦', 'careerMystery'],
+  ['coin', '🟡', 'careerCoin'],
+  ['deaths', '💀', 'careerDeaths'],
 ];
 
 const round1 = (v) => Math.round(v * 10) / 10;
@@ -36,9 +36,11 @@ const sameName = (a, b) => typeof a === 'string' && typeof b === 'string' && a.t
  * every player. Launched by Play.openStats: with { name } (a name tapped on a board) it reads
  * that player's player_stats; with no name it is this device's own player, drawn from the
  * career store and topped up from the server when there is a username (the server's totals
- * and badges from other devices join the store). Sections scroll; a tapped badge explains
- * itself in the strip under them. ✕ / Esc / B / a tap outside close it, back to the board or
- * the 🌞 popup when it opened over one.
+ * and badges from other devices join the store). Sections scroll; a tapped career emoji or badge
+ * (its whole cell) opens a card that says what it is, on a camera of its own above the band; a
+ * tap anywhere, A, B or a nav press closes it. ✕ / Esc / B / a tap outside close the profile,
+ * back to the board or the 🌞 popup when it opened over one. A controller walks the cells: left /
+ * right in list order, up / down to the cell above or below (navVertical), ✕ above the first row.
  */
 export class Stats extends Phaser.Scene {
   constructor() {
@@ -67,7 +69,7 @@ export class Stats extends Phaser.Scene {
     dimmer.on('pointerdown', (pointer) => {
       if (overlayOutsideHit(pointer.x, pointer.y, L.panel)) this.close();
     });
-    const panelRect = this.add.rectangle(cx, cy, L.panel.width, L.panel.height, 0x1a0b14, 0.95).setStrokeStyle(8, 0xe85e96);
+    const panelRect = this.add.rectangle(cx, cy, L.panel.width, L.panel.height, 0x1a0b14, 1).setStrokeStyle(8, 0xe85e96); // opaque: a board under it never shows through
     const titleText = this.own ? (play?.save?.name || t(locale, 'statsYou')) : asked;
     this.title = this.add.text(L.title.x, L.title.y, titleText, { ...STYLE, fontSize: '52px', color: PINK }).setOrigin(0.5);
     this.title.setScale(fitScale(this.title.width, L.titleMaxW, 0));
@@ -87,6 +89,10 @@ export class Stats extends Phaser.Scene {
     this.fixed = [dimmer, panelRect, this.title, this.status, this.detail, version, close];
     this.scroll = null;
     this.view = null; // what is drawn, once it is in (the smoke reads it)
+    this.card = null; // the explanation card, built with the profile
+    this.cardOpen = false;
+    this.badgeItems = [];
+    this.careerItems = [];
     this.input.keyboard?.on('keydown-ESC', () => this.close());
     // Controller: ✕ and the version line until the profile is in; then the badges join (scrolled).
     this.focus = createFocus(this, T, { items: [pressable('close', close), pressable('changelog', version)] });
@@ -233,12 +239,19 @@ export class Stats extends Phaser.Scene {
     // Career totals: a glyph over its count, L.careerCols to a row.
     header('statsCareer');
     const colW = (L.right - L.left) / L.careerCols;
-    CAREER.forEach(([key, glyph], i) => {
+    const items = [];
+    CAREER.forEach(([key, glyph, note], i) => {
       const x = L.left + colW * (i % L.careerCols) + colW / 2;
       const gy = y + Math.floor(i / L.careerCols) * 92;
+      const count = view.counters?.[key] ?? 0;
       sv.add(this.add.text(x, gy, glyph, { fontFamily: 'sans-serif', fontSize: '36px' }).setOrigin(0.5));
-      const n = sv.add(this.add.text(x, gy + 38, String(view.counters?.[key] ?? 0), { ...STYLE, fontSize: '22px', color: MUTED }).setOrigin(0.5));
+      const n = sv.add(this.add.text(x, gy + 38, String(count), { ...STYLE, fontSize: '22px', color: MUTED }).setOrigin(0.5));
       n.setScale(fitScale(n.width, colW - 6, 0));
+      // The whole cell answers a tap (a fingertip), not just the glyph.
+      const zone = sv.add(this.add.zone(x, gy + 18, colW - 4, 86));
+      sv.link(zone, () => this.toggleCard({ glyph, title: t(locale, note), lines: [t(locale, 'statsCardTotal').replace('{n}', String(count))] }));
+      items.push(pressable(`career:${key}`, zone, { event: 'pointerup', scrolled: true }));
+      this.careerItems.push({ key, zone });
     });
     y += Math.ceil(CAREER.length / L.careerCols) * 92 + 10;
 
@@ -253,8 +266,6 @@ export class Stats extends Phaser.Scene {
       y += 50;
     }
     const cellW = (L.right - L.left) / L.badgeCols;
-    const items = [];
-    this.badgeItems = [];
     badges.forEach((b, i) => {
       const x = L.left + cellW * (i % L.badgeCols) + cellW / 2;
       const by = y + Math.floor(i / L.badgeCols) * 130;
@@ -265,40 +276,133 @@ export class Stats extends Phaser.Scene {
       if (!b.done && b.entry.kind === 'lifetime') {
         sv.add(this.add.text(x, by + 72, `${Math.min(progressOf(b.entry, view.counters), b.entry.n)} / ${b.entry.n}`, { ...STYLE, fontSize: '18px', color: MUTED, fontStyle: 'normal' }).setOrigin(0.5));
       }
-      sv.link(glyph, () => this.explain(b));
-      items.push(pressable(`badge:${b.entry.id}`, glyph, { event: 'pointerup', scrolled: true }));
-      this.badgeItems.push({ id: b.entry.id, done: b.done, glyph });
+      const zone = sv.add(this.add.zone(x, by + 30, cellW - 4, 120));
+      sv.link(zone, () => this.explain(b));
+      items.push(pressable(`badge:${b.entry.id}`, zone, { event: 'pointerup', scrolled: true }));
+      this.badgeItems.push({ id: b.entry.id, done: b.done, glyph, zone });
     });
     y += Math.ceil(badges.length / L.badgeCols) * 130;
     sv.finish(y - 40);
     this.scroll = sv;
 
-    // The ring again, now with the badges (left / right walk them; up / down scroll the band).
+    // The ring again, now with the cells. The profile moves it itself (navigate): left / right in
+    // list order, up / down to the cell above or below; any nav press closes an open card first.
     const wasShown = this.focus.shown;
     this.focus.destroy();
-    this.focus = createFocus(this, T, {
-      items: [pressable('close', this.closeBtn), ...items, pressable('changelog', this.versionLine)],
-      scrolled: sv,
-      onVertical: (dir) => sv.scrollBy(dir === 'up' ? T.focus.scrollStepPx : -T.focus.scrollStepPx),
-    });
+    this.focus = createFocus(this, T, { items: [pressable('close', this.closeBtn), ...items, pressable('changelog', this.versionLine)], scrolled: sv });
+    this.focus.move = (dir) => this.navigate(dir);
     if (wasShown) this.focus.show();
+    this.buildCard();
   }
 
-  /** A badge's line in the strip: glyph, name, what it takes, and when it was earned (or the progress). */
-  explain(b) {
+  /** A pad / stick press on the ring (Play.onPadAction calls focus.move). */
+  navigate(dir) {
+    this.hideCard();
+    const f = this.focus;
+    if (!f.items.length) return;
+    const id = (i) => f.items[i]?.id ?? '';
+    const isCell = (i) => /^(career|badge):/.test(id(i));
+    let next;
+    if (dir === 'left' || dir === 'right') {
+      next = focusStep(f.index, f.items.length, dir);
+    } else {
+      const cells = f.items.map((item, i) => ({ item, i })).filter(({ i }) => isCell(i));
+      if (!isCell(f.index)) {
+        // From ✕ (or nothing) down is the first cell; from the version line up is the last.
+        next = dir === 'down' && id(f.index) !== 'changelog' ? cells[0]?.i : dir === 'up' && id(f.index) === 'changelog' ? cells.at(-1)?.i : f.index;
+      } else {
+        const rect = (item) => item.obj.getBounds();
+        const others = cells.filter(({ i }) => i !== f.index).map(({ item, i }) => ({ index: i, rect: rect(item) }));
+        next = focusNearest(rect(f.items[f.index]), others, dir);
+        if (next < 0) next = f.items.findIndex((item) => item.id === (dir === 'up' ? 'close' : 'changelog'));
+      }
+    }
+    if (next === undefined || next < 0) return;
+    f.setIndex(next);
+    if (id(next) === 'close') this.scroll?.setScroll(0); // the stat rows above the grid come back into view
+  }
+
+  /**
+   * The explanation card: a dim, the card, the emoji, a title, the lines under it and an ✕, on a
+   * camera of its own added after the band's, so it draws over the sections and takes taps first.
+   * Hidden, the camera neither draws nor takes input. A release anywhere closes it.
+   */
+  buildCard() {
+    const { L } = this;
+    const W = this.scale.width;
+    const dim = this.add.rectangle(W / 2, GAME_HEIGHT / 2, W, GAME_HEIGHT, 0x000000, 0.5).setInteractive();
+    dim.on('pointerup', () => this.hideCard());
+    const box = this.add.rectangle(L.card.x, L.card.y, L.card.width, 300, 0x2a1522, 1).setStrokeStyle(6, 0xe85e96);
+    const glyph = this.add.text(L.card.x, 0, '', { fontFamily: 'sans-serif', fontSize: '64px' }).setOrigin(0.5);
+    const title = this.add.text(L.card.x, 0, '', { ...STYLE, fontSize: '34px', color: PINK, wordWrap: { width: L.card.width - 60, useAdvancedWrap: true } }).setOrigin(0.5, 0);
+    const body = this.add.text(L.card.x, 0, '', { ...STYLE, fontSize: '26px', color: MUTED, fontStyle: 'normal', wordWrap: { width: L.card.width - 60, useAdvancedWrap: true }, lineSpacing: 6 }).setOrigin(0.5, 0);
+    const x = this.add.text(0, 0, '✕', { ...STYLE, fontSize: '40px' }).setOrigin(0.5).setInteractive({ useHandCursor: true });
+    x.on('pointerup', () => this.hideCard());
+    const objs = [dim, box, glyph, title, body, x];
+    for (const o of objs) o.setVisible(false);
+    const cam = this.cameras.add(0, 0, W, GAME_HEIGHT);
+    cam.ignore(this.children.list.filter((o) => !objs.includes(o)));
+    this.cameras.main.ignore(objs);
+    this.scroll?.ignore(objs);
+    cam.setVisible(false);
+    cam.inputEnabled = false;
+    this.card = { cam, objs, dim, box, glyph, title, body, x };
+  }
+
+  /** Open the card with { glyph, title, lines }, or close it when one is already up (A on the ringed cell). */
+  toggleCard(content) {
     if (!isTopOverlay(this)) return;
+    if (this.cardOpen) {
+      this.hideCard();
+      return;
+    }
+    const c = this.card;
+    if (!c) return;
+    const { L } = this;
+    c.glyph.setText(content.glyph);
+    c.title.setText(content.title).setColor(content.color ?? PINK);
+    c.body.setText((content.lines ?? []).filter(Boolean).join('\n'));
+    // Stack the parts and fit the card around them, centred on L.card.
+    const h = 40 + 70 + 16 + c.title.height + (c.body.text ? 14 + c.body.height : 0) + 36;
+    const top = L.card.y - h / 2;
+    c.box.setSize(L.card.width, h).setPosition(L.card.x, L.card.y);
+    c.glyph.setPosition(L.card.x, top + 40 + 35);
+    c.title.setPosition(L.card.x, top + 40 + 70 + 16);
+    c.body.setPosition(L.card.x, c.title.y + c.title.height + 14);
+    c.x.setPosition(L.card.x + L.card.width / 2 - 34, top + 32);
+    for (const o of c.objs) o.setVisible(true);
+    c.cam.setVisible(true);
+    c.cam.inputEnabled = true;
+    this.scroll?.setEnabled(false);
+    this.cardOpen = true;
+  }
+
+  hideCard() {
+    if (!this.cardOpen || !this.card) return;
+    for (const o of this.card.objs) o.setVisible(false);
+    this.card.cam.setVisible(false);
+    this.card.cam.inputEnabled = false;
+    this.scroll?.setEnabled(true);
+    this.cardOpen = false;
+  }
+
+  /** A badge's card: its name, what it takes, and when it was earned (or the progress, or the quest's last day). */
+  explain(b) {
     const { locale } = this;
     const e = b.entry;
     let tail = '';
     if (b.done && b.at) tail = t(locale, 'statsEarned').replace('{day}', dailyDayText(locale, b.at));
     else if (e.to) tail = t(locale, 'statsQuestOpen').replace('{day}', dailyDayText(locale, e.to));
     else if (e.kind === 'lifetime') tail = `${Math.min(progressOf(e, this.view?.counters), e.n)} / ${e.n}`;
-    this.detail.setText(`${e.glyph} ${badgeTitle(locale, e)}: ${badgeDesc(locale, e)}${tail ? ` · ${tail}` : ''}`);
-    this.detail.setColor(b.done ? GOLD : MUTED);
+    this.toggleCard({ glyph: e.glyph, title: badgeTitle(locale, e), color: b.done ? GOLD : PINK, lines: [badgeDesc(locale, e), tail] });
   }
 
   close() {
     if (!isTopOverlay(this)) return; // What's new or Feedback is over it
+    if (this.cardOpen) {
+      this.hideCard(); // Esc / B / ✕ take the card down first
+      return;
+    }
     const play = this.scene.get('Play');
     const result = chromeIntent({ state: play?.state ?? 'ready', overlay: 'stats', stackedUnder: hasOverlayUnder(this), input: 'close' });
     if (result.do !== 'closeTop') return;

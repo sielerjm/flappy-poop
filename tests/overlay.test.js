@@ -108,5 +108,7 @@ test('the Profile panel (statsLayout): inside the field, ✕ and title above the
     assert.ok(L.detailY - 30 > bandBottom && L.versionY - 20 > L.detailY + 30 && L.versionY + 20 < bottom, 'the detail strip and then the version line below the band');
     assert.ok(L.left > p.x - p.width / 2 && L.right < p.x + p.width / 2 && L.titleMaxW < p.width - 100, 'rows and title clear of the edges and the ✕');
     assert.ok(Number.isInteger(L.badgeCols) && L.badgeCols >= 3);
+    assert.equal(L.careerCols, 6, 'the 11 career counters fit two rows');
+    assert.ok(L.card.width <= p.width - 80 && Math.abs(L.card.x - p.x) < 1 && L.card.y > top + 200 && L.card.y < bottom - 200, 'the explanation card sits inside the panel, over the band');
   }
 });

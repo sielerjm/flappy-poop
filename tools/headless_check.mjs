@@ -69,7 +69,7 @@ export const SECTIONS = [
   { name: 'versus-ghost', needs: [], about: "two players: the ghost at the distance gap and the rival marker on the level bar" },
   { name: 'tournament', needs: [], about: '🏅 tournament (every two-player session): the lobby (guest, pasted code, host, help), the pad in the panel, seeding (↑ ↓, 🎲, drag), the 🏅 pill in a level break, Bracket / Continue after a race, the podium, abandon to the lobby, two players' },
   { name: 'daily', needs: [], about: "🌞 Daily Dump: the day's level and shared course, endless (no finish line), no coins or skips, the attempt claimed at the start and final at the crash, nothing on the 🏆 lists, an abandoned run finalised" },
-  { name: 'profile', about: "player profiles (plan 08): the own profile (local counters, a locked badge's progress), another player's from a stubbed player_stats, a badge explained, not found, offline, a board name opening a profile (not on a drag), the save panel's Profile button" },
+  { name: 'profile', about: "player profiles (plan 08): the own profile (local counters, a locked badge's progress), another player's from a stubbed player_stats, the explanation card (a badge, a career cell, by mouse and controller), the wheel and a drag, the controller walking the grid, not found, offline, a board name opening a profile (not on a drag), the save panel's Profile button" },
 ];
 
 /** What a section needs: its own list, or (omitted) every section before it. */
@@ -1513,8 +1513,8 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
           await padNav('down');
           await sleep(100);
           const r1 = await ring(key);
-          const scrolls = key === 'About' || key === 'HowTo' || key === 'Changelog' || key === 'Stats';
-          // About, HowTo, Changelog (every version listed) and a profile (every badge) are all longer than their panel, so a down press scrolls.
+          const scrolls = key === 'About' || key === 'HowTo' || key === 'Changelog';
+          // About, HowTo and Changelog (every version listed) are all longer than their panel, so a down press scrolls; a profile walks its grid.
           const walked = scrolls ? r1.id === 'close' && r1.offset < 0 : key === 'Leaderboard' ? r1.id === 'close' : Boolean(r1.id) && r1.id !== 'close';
           await padDown(G.back);
           await sleep(400);
@@ -3230,10 +3230,77 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
       const asked = await evaluate(`JSON.stringify(__career.profiles.at(-1))`).then(JSON.parse);
       ok(asked?.name === 'Rival' && ['Rival', '12', '307', 'Highest score', '2', 'LV 6', '3.5', '88.2', '4', '🥇1 🥈0 🥉2', '🥇1 🥈1 🥉0', '120', '40', '🎉'].every((x) => other.includes(x)) && other.some((x) => x.startsWith('Smoke · ')), `it shows their numbers (Highest score 307), medals, rival and badges (asked for ${JSON.stringify(asked)})`);
       ok((await evaluate(`${ST}.badgeItems.length`)) === 1, 'only the badges they earned (no quest is open)');
-      await evaluate(`${ST}.badgeItems[0].glyph.emit('pointerup'), true`);
-      const explained = await evaluate(`${ST}.detail.text`);
-      ok(explained.includes('Made It Out') && explained.includes('9 Nov'), `a tapped badge explains itself ("${explained}")`);
+      const card = () => evaluate(`JSON.stringify({ open: ${ST}.cardOpen, title: ${ST}.card?.title.text ?? null, body: ${ST}.card?.body.text ?? null, cam: ${ST}.card?.cam.visible ?? null })`).then(JSON.parse);
+      await evaluate(`${ST}.badgeItems[0].zone.emit('pointerup'), true`);
+      const bc = await card();
+      ok(bc.open && bc.cam && bc.title === 'Made It Out' && bc.body.includes('Clear the rectum') && bc.body.includes('9 Nov'), `a tapped badge opens its card ("${bc.title}" · ${JSON.stringify(bc.body)})`);
+      // Mouse: a click anywhere closes the card, and the click never opens the cell under it.
+      await evaluate(`${ST}.scroll.setScroll(-260), true`);
+      const cellAt = (i, dx = 0, dy = 0) => evaluate(`(() => { const z = ${ST}.careerItems[${i}].zone; const c = z.getCenter(); return JSON.stringify({ x: c.x + ${dx}, y: c.y + ${dy} + ${ST}.scroll.offset }); })()`).then(JSON.parse);
+      const pipesCell = await cellAt(0);
+      await tapAt(pipesCell.x, pipesCell.y);
+      ok(!(await card()).open, 'a click while a card is up closes it, and the cell under the click stays shut');
+      // A click near a cell's edge (not on its emoji) opens that cell's card.
+      const edge = await cellAt(3, 36, 30);
+      await tapAt(edge.x, edge.y);
+      const fc = await card();
+      ok(fc.open && fc.title === 'Fiber eaten' && fc.body === 'Total: 120', `a click near the edge of the 🥦 cell opens its card ("${fc.title}" · ${fc.body})`);
+      await evaluate(`${ST}.close(), true`);
+      ok((await active('Stats')) && !(await card()).open, '✕ / Esc / B take the card down first; the profile stays');
+      // The wheel scrolls the band; a drag that starts on a cell scrolls and opens nothing.
+      const off0 = await evaluate(`${ST}.scroll.offset`);
+      const wp = await evaluate(`(() => { const r = __flappy.canvas.getBoundingClientRect(); return JSON.stringify({ x: r.left + r.width / 2, y: r.top + r.height / 2 }); })()`).then(JSON.parse);
+      await cdp.send('Input.dispatchMouseEvent', { type: 'mouseWheel', x: wp.x, y: wp.y, deltaX: 0, deltaY: 200 });
+      await sleep(200);
+      const off1 = await evaluate(`${ST}.scroll.offset`);
+      const from = await cellAt(1);
+      const a = await evaluate(`(() => { const r = __flappy.canvas.getBoundingClientRect(); const s = __flappy.scale; return JSON.stringify({ x: r.left + ${from.x} * r.width / s.width, y: r.top + ${from.y} * r.height / s.height, k: r.height / s.height }); })()`).then(JSON.parse);
+      await cdp.send('Input.dispatchMouseEvent', { type: 'mousePressed', x: a.x, y: a.y, button: 'left', buttons: 1, clickCount: 1 });
+      await cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: a.x, y: a.y + 70 * a.k, button: 'left', buttons: 1 });
+      await cdp.send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: a.x, y: a.y + 70 * a.k, button: 'left', buttons: 0, clickCount: 1 });
+      await sleep(300);
+      const off2 = await evaluate(`${ST}.scroll.offset`);
+      ok(off1 < off0 && off2 !== off1 && !(await card()).open, `the wheel scrolls the band (${off0} → ${off1}); a drag from a cell scrolls it (→ ${off2}) and opens no card`);
       ok(await shut(), 'and closes');
+
+      // The controller: down from ✕ rings the first career cell; A opens its card, B closes it (the profile
+      // stays); a nav press with a card up closes it and moves; down into the badges scrolls the band,
+      // up to ✕ brings it back to the top; B closes the profile.
+      {
+        const G = TT.gamepad;
+        const padDown = (i) => evaluate(`${P}.padDown(${i}), true`);
+        const padNav = (dir) => evaluate(`${P}.padNav('${dir}'), true`);
+        const ringAt = () => evaluate(`JSON.stringify({ id: ${ST}.focus.items[${ST}.focus.index]?.id ?? null, shown: ${ST}.focus.shown, open: ${ST}.cardOpen, offset: ${ST}.scroll?.offset ?? null })`).then(JSON.parse);
+        await evaluate(`${P}.registry.set('padMode', true), true`);
+        await evaluate(`${P}.openStats({ name: 'Rival' }), true`);
+        await waitFor(`__flappy.scene.isActive('Stats') && ${ST}.view`);
+        const r0 = await ringAt();
+        await padNav('down');
+        const r1 = await ringAt();
+        await padDown(G.select);
+        const r2 = await ringAt();
+        await padDown(G.back);
+        const r3 = await ringAt();
+        ok(r0.id === 'close' && r0.shown && r1.id === 'career:pipes' && r2.open && !r3.open && r3.id === 'career:pipes' && (await active('Stats')), `controller: ✕ → down rings #️⃣ (${r1.id}); A opens its card; B closes the card, the profile stays (ring on ${r3.id})`);
+        await padNav('right');
+        await padDown(G.select);
+        const r4 = await ringAt();
+        await padNav('right');
+        const r5 = await ringAt();
+        ok(r4.id === 'career:farts' && r4.open && r5.id === 'career:superFarts' && !r5.open, `right walks the cells in order (${r4.id} → ${r5.id}); a nav press with a card up closes it and moves`);
+        let r6 = await ringAt();
+        for (let i = 0; i < 4 && !r6.id?.startsWith('badge:'); i += 1) {
+          await padNav('down');
+          r6 = await ringAt();
+        }
+        for (let i = 0; i < 8; i += 1) await padNav('up');
+        const r7 = await ringAt();
+        ok(r6.id.startsWith('badge:') && r6.offset < 0 && r7.id === 'close' && r7.offset === 0, `down walks into the badges and the band follows (${r6.id}, offset ${r6.offset}); up returns to ✕ at the top (${r7.offset})`);
+        await padDown(G.back);
+        await sleep(300);
+        ok(!(await active('Stats')), 'B on the profile (no card up) closes it');
+        await evaluate(`${P}.registry.set('padMode', false), true`);
+      }
 
       // Not found, and offline.
       await evaluate(`(globalThis.__profile = { found: false }, ${P}.openStats({ name: 'Nobody' }), true)`);

@@ -13,6 +13,7 @@ const DRAG_TAP_PX = 12; // pointer movement below this still counts as a tap on 
  *   sv.link(textObj, () => ...);           // tap (not drag) handler
  *   sv.finish(lastContentBottomY);         // builds the camera + thumb
  *   sv.scrollBy(dy) / sv.scrollTo(top, bottom) / sv.addScrolled(obj)   // controller focus ring
+ *   sv.ignore(objs) / sv.setEnabled(on)    // a layer above the band (Stats' card)
  */
 export function createScrollView(scene, panel, { fixed = [] } = {}) {
   const view = { x: panel.x - panel.width / 2 + 8, y: panel.y - panel.height / 2 + 8, width: panel.width - 16, height: panel.height - 16 };
@@ -25,6 +26,7 @@ export function createScrollView(scene, panel, { fixed = [] } = {}) {
   let dragMoved = 0;
   let dragStartY = 0;
   let dragStartOffset = 0;
+  let enabled = true; // false: drags and the wheel leave the band alone (a card is over it)
 
   function drawThumb() {
     thumb.clear();
@@ -69,14 +71,14 @@ export function createScrollView(scene, panel, { fixed = [] } = {}) {
       setScroll(0);
 
       scene.input.on('pointerdown', (pointer) => {
-        if (overlayOutsideHit(pointer.x, pointer.y, panel)) return;
+        if (!enabled || overlayOutsideHit(pointer.x, pointer.y, panel)) return;
         dragging = true;
         dragMoved = 0;
         dragStartY = pointer.y;
         dragStartOffset = offset;
       });
       scene.input.on('pointermove', (pointer) => {
-        if (!dragging || !pointer.isDown) return;
+        if (!enabled || !dragging || !pointer.isDown) return;
         const dy = pointer.y - dragStartY;
         dragMoved = Math.max(dragMoved, Math.abs(dy));
         setScroll(dragStartOffset + dy);
@@ -84,7 +86,9 @@ export function createScrollView(scene, panel, { fixed = [] } = {}) {
       scene.input.on('pointerup', () => {
         dragging = false;
       });
-      scene.input.on('wheel', (_pointer, _objects, _dx, dy) => setScroll(offset - dy));
+      scene.input.on('wheel', (_pointer, _objects, _dx, dy) => {
+        if (enabled) setScroll(offset - dy);
+      });
     },
     setScroll,
     /** Current offset: 0 at the top, negative scrolled down (clampScroll). */
@@ -100,6 +104,15 @@ export function createScrollView(scene, panel, { fixed = [] } = {}) {
       const visibleTop = view.y - offset;
       if (top - margin < visibleTop) setScroll(view.y - top + margin);
       else if (bottom + margin > visibleTop + view.height) setScroll(view.y + view.height - bottom - margin);
+    },
+    /** Objects made after finish() that the scroll camera must not render (a layer above the band). */
+    ignore(objs) {
+      cam?.ignore(objs);
+    },
+    /** Drags and the wheel scroll the band only while enabled (off under a card); taps on links still fire. */
+    setEnabled(on) {
+      enabled = Boolean(on);
+      if (!enabled) dragging = false;
     },
     /** An object made after finish() that only the scroll camera should render (the focus ring over a link). */
     addScrolled(obj) {

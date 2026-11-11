@@ -1987,7 +1987,7 @@ export function leaderboardLayout(cx, cy) {
 /**
  * The Profile overlay's geometry (scenes/Stats.js, plan 08): a 640 × 1120 panel; the player's
  * name as the title, the ✕, the scrolled band for the sections, a fixed detail strip under it
- * (a tapped badge's explanation), and the version line. left / right are the rows' label and
+ * (a note or the hint), the version line, and the explanation card a tapped emoji or badge opens. left / right are the rows' label and
  * value edges; badgeCols badges per row in the achievements grid.
  */
 export function statsLayout(cx, cy) {
@@ -2002,6 +2002,7 @@ export function statsLayout(cx, cy) {
     versionY: cy + 522,
     left: cx - 272,
     right: cx + 272,
+    card: { x: cx, y: cy - 40, width: 520 }, // the explanation card over the band (its height follows its text)
     careerCols: 6,
     badgeCols: 4,
   };
