@@ -325,17 +325,23 @@ id format and a quest's window (+2 days' grace): accepted risk ACC-001 like scor
 
 **Loading splash** (2026-11-12, v0.15.0, plan `.claude/plans/01-loading-screen.plan.md`): the page's front
 door on every load, phone and desktop. `index.html`'s `#splash` (cream, the bobbing `poop.png` inside a
-brown ring that spins until Boot's loader reports progress) paints at once; an inline
-`import('./src/splash.js')` placed **before** the Phaser tag starts `startSplash` while Phaser is still
-downloading, so the note cards show during that wait too. A card is a hint or a major feature
-(`SPLASH_NOTES`: TIP or NEW, its emoji, one line; a note about something the profile counts wears that
-badge's glyph via `achievementById`), dealt from a shuffled deck kept in `flappyPoop.splash`
+brown ring's track) paints at once; an inline `import('./src/splash.js')` placed **before** the Phaser
+tag starts `startSplash` while Phaser is still downloading, so the note cards show during that wait
+too. The ring **only fills**, every frame chasing `ringTarget` (a creep toward `splash.waitCap` during
+the download, then Boot's progress, then full) at `ringStep`'s capped speed, so even a cached load
+takes ~0.8 s and never jumps. A card (‹ card › in one row, Continue on the row below; every card's text
+stacked in one grid cell, so the card is as tall as the tallest and never jumps) is a hint or a major
+feature (`SPLASH_NOTES`: TIP or NEW, a picture, one line). The picture is the game's own sprite where
+there is one (`art`: Boot's exact URL via `splashArtUrl`, all preloaded at start; a strip's frame 0 or a
+square `crop`; the emoji if it fails), else the emoji; a note about something the profile counts wears
+that badge's glyph via `achievementById`. Cards are dealt from a shuffled deck kept in `flappyPoop.splash`
 (`nextNote`: a feature this device never showed comes first; every card once per cycle; a reshuffle
 never repeats the last card; `splashPool` keeps the newest `splash.featureMax` features). The player
 browses at any time (swipe or mouse drag, ‹ ›, ← →, the d-pad by its own `getGamepads` poll, since
 Phaser's pad plugin is bound only in Play); the first browse stops the `hintMs` auto-advance. Boot
 drives the ring (`load.on('progress', setSplashProgress)`) and its `create()` hands
-`splashReady(() => scene.start('Play'))`: Continue lights up and glows, and **Play starts only on its
+`splashReady(() => scene.start('Play'))`: once the ring is full (or after a timer backstop, since rAF
+stops in a hidden tab) Continue lights up and glows, and **Play starts only on its
 release** (click, Enter / Space up, the pad's A up), since Play's keydown-SPACE flap repeats while held
 and the pad plugin reports a held button. Any error in the splash removes it and starts the game.
 
@@ -357,8 +363,10 @@ index.html                  Entry page. Viewport/touch CSS; the loading splash's
                             markup (#splash: ring, poop, #splash-note card, ‹ ›,
                             #splash-continue; no words, they come from i18n.js) and
                             CSS (colour tokens on #splash, data-theme for a themed
-                            skin, bob / spin / slide / Continue's glow, a landscape
-                            row, reduced motion); an inline import() of
+                            skin, the ‹ card › row, the .texts grid stack, the
+                            48 px .art box, bob / slide / Continue's glow, a
+                            landscape row, reduced motion; the poop's box is
+                            measured against the ring by tests/html.test.js); an inline import() of
                             src/splash.js, then <script> for Phaser from jsDelivr,
                             then <script type=module src=src/main.js>.
 manifest.webmanifest        PWA "Add to Home Screen" metadata (fullscreen, portrait).
@@ -405,7 +413,9 @@ src/
                             TUNING.focus = the focus ring's geometry, fill alpha,
                             pulse and the overlay scroll step. TUNING.splash = the
                             loading splash (hintMs, slideMs, fadeMs, swipePx,
-                            featureMax, storageKey). TUNING.versus = the
+                            featureMax, storageKey; the ring: ringEaseMs,
+                            ringMaxPerSec, ringMinPerSec, ringFrameCapMs, waitCap,
+                            waitHalfMs). TUNING.versus = the
                             two-player knobs: minViewportH (the gate), keys (the
                             two keyboard groups), countdownMs, ghostRangePx /
                             ghostAlpha / ghostFadeMs, barRivalPx / barRivalAlpha,
@@ -570,7 +580,9 @@ src/
                             → <a download> PNG; never rejects).
   splash.js                 The loading splash (plan 01). Pure, Node-safe:
                             SPLASH_NOTES (id, kind 'feature' | 'hint', glyph, i18n
-                            key; features newest first), splashPool, nextNote (the
+                            key, art { file, frames | crop } on the sprite cards;
+                            features newest first), splashArtUrl (Boot's URL),
+                            ringTarget / ringStep (the ring), splashPool, nextNote (the
                             deck: unseen features first, every card once per cycle,
                             no repeat across a reshuffle, ids that left or joined
                             the pool handled), createBrowser (one load's history:
@@ -1326,11 +1338,16 @@ tests/                      node --test (schema.test.js needs `npm install`: PGl
                             (ends, midpoint, monotonic, fastest off the edge,
                             peak extra speed bound)
   html.test.js              index.html invariants (viewport, no scroll, pinned Phaser;
-                            the splash's parts, no words in its markup, the inline
-                            import before Phaser, its colour tokens)
+                            the splash's parts, ‹ card › then Continue, no spinner,
+                            no words in its markup, the inline import before
+                            Phaser, its colour tokens; poop.png's pixels, decoded,
+                            stay 2 % inside the ring at both ends of the bob)
   splash.test.js            the splash's catalog (copy in every locale under the
-                            four-line cap, one glyph per thing: badge glyphs, no
-                            borrowed ones), splashPool, the deck (features first and
+                            100 / 50 character cap, one glyph per thing: badge glyphs,
+                            no borrowed ones), the sprites (files Boot loads by that
+                            path, the coin's frames, crops inside the image), the
+                            ring (creep, monotonic, capped per frame, 0.6–1.1 s
+                            empty to full), splashPool, the deck (features first and
                             NEW once, every card once per cycle, no repeat across a
                             reshuffle, pool changes), createBrowser, swipeIntent,
                             the store, the inert DOM part in Node
@@ -1841,10 +1858,13 @@ Commits follow `type(scope): summary` (`feat`, `fix`, `docs`, `chore`, `test`, `
 - New loading-screen card → one `SPLASH_NOTES` entry in `src/splash.js` (a new,
   permanent id; a major feature goes at the top of the features, newest first,
   and the oldest beyond `splash.featureMax` drops out on its own) and its line in
-  both locales + `TRANSLATION_NOTES.md`, at most 140 characters in English and 70
-  in Chinese. Its emoji is the badge's glyph when the profile counts the thing
-  (`badge('<achievement id>')`), else the game's chrome glyph; `tests/splash.test.js`
-  holds the table and refuses a glyph another badge means.
+  both locales + `TRANSLATION_NOTES.md`, at most 100 characters in English and 50
+  in Chinese (‹ › beside the card leave ~22 a line on a 360 px phone). Its emoji is
+  the badge's glyph when the profile counts the thing (`badge('<achievement id>')`),
+  else the game's chrome glyph; `tests/splash.test.js` holds the table and refuses
+  a glyph another badge means. A thing the game draws as a sprite also gets
+  `art: { file }` (a file Boot loads; `frames` for a strip, `crop` when the art
+  fills only part of its frame).
 - New UI chrome → `src/ui/` (Phaser wrapper) with any pure layout helper in
   `src/logic.js`, positioned inside the chrome column (`this.col`: pass
   `col.width` as the width and `col.x` as the helper's `x0`, or add `col.x`
