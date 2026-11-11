@@ -102,6 +102,7 @@ import {
   testRunStart,
   LAST_UPDATED,
   padIntent,
+  storedLocale,
 } from '../logic.js';
 import { t, pauseBannerText, levelBannerText, levelLabel, initialLocale, isLocale, profileButtonText, coinLabel, countText, versusName } from '../i18n.js';
 import { loadLocal, saveLocal, ensureId, recordScore, mergeBoardBests, newId, TOILET_EMOJI } from '../save.js';
@@ -1064,16 +1065,7 @@ export class Play extends Phaser.Scene {
   }
 
   resolveLocale() {
-    let stored = null;
-    try {
-      const raw = globalThis.localStorage?.getItem(T.settingsKey);
-      if (raw != null) {
-        const parsed = JSON.parse(raw);
-        if (isLocale(parsed?.locale)) stored = parsed.locale;
-      }
-    } catch {
-      /* private mode */
-    }
+    const stored = storedLocale(globalThis.localStorage, T.settingsKey);
     const locale = initialLocale(globalThis.navigator?.language, stored);
     if (stored == null) this.settings.set({ locale });
     return locale;

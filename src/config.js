@@ -342,6 +342,17 @@ export const TUNING = {
     minLevel: 3,
     maxLevel: 7,
   },
+  // The loading splash (src/splash.js, #splash in index.html): note cards over the Phaser download and
+  // Boot's preload, then a Continue button. Its colours and sizes are CSS in index.html (they paint
+  // before any module loads).
+  splash: {
+    hintMs: 4000, // ms each card stays before the next slides in, until the player browses
+    slideMs: 250, // ms a card takes to slide in
+    fadeMs: 200, // ms the splash takes to fade out after Continue
+    swipePx: 40, // css px of horizontal travel a swipe (or a mouse drag) needs
+    featureMax: 4, // the newest this many feature notes join the deck; older ones age out
+    storageKey: 'flappyPoop.splash', // localStorage key: the deck and the features already shown
+  },
   gamepad: {
     // Standard-mapping button indices (Xbox: A 0, B 1, X 2, Y 3, LB 4, RB 5, LT 6, RT 7, View 8, Menu 9, d-pad 12–15).
     // A pad that reports another layout (pad.mapping !== 'standard') is retuned here, not in code.

@@ -32,6 +32,10 @@ messages are terse developer copy; test runs never save a score.
 Game over has a Share button: the share sheet gets a picture card (GAME OVER, the poop, score,
 pickup counts, and shareCardPlay's "Play: <link>" footer); the message under it is only the game's
 link (nothing to translate).
+Loading splash (the cream screen while the game downloads): one note card at a time under the
+progress ring, an emoji then one short line, labelled **TIP** (小提示) for a hint or **NEW** (新功能)
+for a major feature. The player swipes through them, then presses **Continue** (继续). Each card
+must fit four lines on a phone: at most 140 characters in English and 70 in Chinese (a test checks).
 Author / designer / artist: Michael Sieler. Side project, short playful copy — not
 formal medical language.
 
@@ -432,6 +436,31 @@ Inspired by Flappy Bird
 | statsCardTotal | Total: {n} | 累计：{n} |
 | statsGateTitle | Profiles 👤 | 个人资料 👤 |
 | statsGateBody | Create a user to see profiles: stats, medals and achievements. Your runs are already counting. | 创建用户即可查看个人资料：统计、奖牌和成就。你的每一局已经在计数了。 |
+| splashTip | TIP | 小提示 |
+| splashNew | NEW | 新功能 |
+| splashLoading | Loading… | 加载中… |
+| splashContinue | Continue | 继续 |
+| splashPrev | Previous card | 上一张 |
+| splashNext | Next card | 下一张 |
+| splashProfile | Your username now has a profile showing your stats and achievements. You can click on other users on the leaderboard to see theirs. | 你的用户名现在有了个人资料，显示你的数据和成就。在排行榜上点其他玩家的名字，也能查看他们的。 |
+| splashDaily | Daily Dump: one try a day on the same course as everyone. | 每日一拉：每天一次机会，和所有人飞同一条赛道。 |
+| splashTournament | Tournaments: up to 8 players, one bracket, one device. | 锦标赛：最多 8 名玩家，一张对阵表，一台设备。 |
+| splashShop | Spend corn kernels in the shop between levels. | 关卡之间可以在商店花掉玉米粒。 |
+| splashFiber | Fiber is worth +3. Grab it between pipes. | 纤维 +3 分，在管道之间吃到它。 |
+| splashBacteria | Bad bacteria cost 3 points. | 碰到有害细菌扣 3 分。 |
+| splashProbiotic | A probiotic blocks one bad bacteria hit for 5 pipes. | 益生菌能挡住一次有害细菌，持续 5 道管道。 |
+| splashPostbiotic | Eat fiber while a probiotic is up: pipes and fiber score ×2. | 益生菌生效时吃到纤维：管道和纤维得分 ×2。 |
+| splashBean | A bean charges a fart. You can carry three. | 一颗豆子可以充能一次放屁，最多带 3 颗。 |
+| splashFart | Tap the poop or the bean button to fart past 5 pipes. | 点便便或豆子按钮放屁，冲过 5 道管道。 |
+| splashSuperFart | Three beans make a super fart: 20 pipes, and you cannot die. | 集齐 3 颗豆子放超级屁：冲过 20 道管道，而且不会死。 |
+| splashMystery | Mystery boxes contain random objects with different probabilities. | 神秘盒子里装着随机道具，每种的概率不同。 |
+| splashCoin | Corn kernels are coins. They last one run, so spend them. | 玉米粒就是金币，只在本局有效，记得花掉。 |
+| splashToilet | Toggle 'Toilet mode' on when you play Flappy Poop on the Toilet. Leaderboard shows your highest on and off toilet scores. | 在马桶上玩 Flappy Poop 时，打开“如厕模式”。排行榜会分别显示你如厕和不如厕时的最高分。 |
+| splashRectum | Level 7 is the rectum. Cross the finish line to 'make it out'. | 第 7 关是直肠。冲过终点线，就能“成功脱出”。 |
+| splashLeaderboard | The leaderboard shows the Top 25, with tabs for the Daily Dump 🌞 and tournaments 🏅. | 排行榜显示前 25 名，还有每日一拉 🌞 和锦标赛 🏅 两个分页。 |
+| splashTwoPlayer | Toggle 👥 on to play multiplayer mode up to 8 players. | 打开 👥 开关，就能玩多人模式，最多 8 名玩家。 |
+| splashUserCode | Your user code moves your name and scores to another phone. | 用户码能把你的名字和分数带到另一部手机上。 |
+| splashController | On desktop, you can play with a game controller. | 在电脑上，可以用游戏手柄来玩。 |
 
 ## Reviewer checklist
 

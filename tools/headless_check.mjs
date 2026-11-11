@@ -251,7 +251,30 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
     await cdp.send('Emulation.setDeviceMetricsOverride', { width: 720, height: 1280, deviceScaleFactor: 1, mobile: false });
     await cdp.send('Page.navigate', { url: `${url}/?r=${Date.now()}` });
 
-    // Boot: wait for Play to reach the ready screen (Phaser comes from a CDN).
+    // Boot, first the loading splash (src/splash.js): a note card shows, Continue lights up once Boot
+    // has loaded (Phaser comes from a CDN), and Play waits for it. Continue fires on the key's release.
+    const splashNow = () =>
+      evaluate(`JSON.stringify((() => { const b = document.getElementById('splash-continue'); return { present: Boolean(document.getElementById('splash')), live: Boolean(document.querySelector('#splash.live')), enabled: Boolean(b && !b.disabled), glow: Boolean(document.querySelector('#splash.ready')), text: document.querySelector('#splash-note .text')?.textContent ?? '', play: typeof __flappy !== 'undefined' && __flappy.scene.isActive('Play') }; })())`).then(JSON.parse);
+    const splashKey = (type, key) => evaluate(`(document.activeElement ?? document.body).dispatchEvent(new KeyboardEvent('${type}', { key: '${key}', bubbles: true, cancelable: true })), true`);
+    let splash = null;
+    for (let i = 0; i < 120 && !splash?.enabled && (i < 4 || splash?.present); i += 1) {
+      await sleep(500);
+      splash = await splashNow();
+    }
+    ok(Boolean(splash?.live && splash.text), `splash: a note card shows (${JSON.stringify(splash?.text ?? null)})`);
+    ok(Boolean(splash?.enabled && splash.glow), 'splash: Continue lights up and glows once Boot has loaded');
+    ok(splash?.play === false, 'splash: Play waits for Continue');
+    if (splash?.enabled) {
+      await splashKey('keydown', 'ArrowRight');
+      const browsed = await splashNow();
+      ok(Boolean(browsed.text) && browsed.text !== splash.text, 'splash: → shows another card');
+      await splashKey('keydown', ' ');
+      await sleep(300);
+      ok((await splashNow()).play === false, 'splash: Space down alone does not continue (it waits for the release)');
+      await splashKey('keyup', ' ');
+    }
+
+    // Then Play reaches the ready screen.
     let state = null;
     for (let i = 0; i < 120 && state !== 'ready'; i += 1) {
       await sleep(500);
@@ -264,6 +287,14 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
       if (exceptions.length) console.log(`  page exceptions:\n  ${exceptions.join('\n  ')}`);
       return failures;
     }
+    let splashGone = false;
+    for (let i = 0; i < 10 && !splashGone; i += 1) {
+      splashGone = !(await splashNow()).present;
+      if (!splashGone) await sleep(100);
+    }
+    ok(splashGone, 'splash: removed from the page after Continue');
+    await sleep(300);
+    ok((await evaluate(`__flappy.scene.getScene('Play').state`)) === 'ready', 'splash: the Continue key did not reach the ready screen (no run started)');
     // Hermetic career (plan 08): the counters, the claims and the profile never reach the live board.
     // Each stub answers as globalThis.__careerAnswer says ('keep' / offline by default) and records the call.
     await evaluate(`(() => { const p = __flappy.scene.getScene('Play'); globalThis.__career = { posts: [], claims: [], profiles: [] }; globalThis.__careerAnswer = 'keep'; globalThis.__profile = null;

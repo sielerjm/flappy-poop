@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createRng, gapBounds, pipeGapY, centredGapY, hasPassed, angleForVelocity, clampToPlayArea, resumeFlapVelocity, poopFrame, pipeClearance } from '../src/logic.js';
+import { createRng, gapBounds, pipeGapY, centredGapY, hasPassed, angleForVelocity, clampToPlayArea, resumeFlapVelocity, poopFrame, pipeClearance, storedLocale } from '../src/logic.js';
 import { GAME_HEIGHT, TUNING as T } from '../src/config.js';
 
 const cfg = { gameHeight: GAME_HEIGHT, ceilingHeight: T.ceilingHeight, groundHeight: T.groundHeight, gapHeight: T.gapHeight, gapMargin: T.gapMargin };
@@ -111,4 +111,17 @@ test('poopFrame: the plain or stink face until the fall reaches fallLookVy, then
   assert.equal(poopFrame({ charged: true, vy: T.fallLookVy - 1 }, T), 'poop-stink1', 'stinkFrame defaults to frame A');
   assert.equal(poopFrame({ charged: true, stinkFrame: 0, vy: T.fallLookVy }, T), 'poop-stink-falling1');
   assert.equal(poopFrame({ charged: true, stinkFrame: 1, vy: T.fallLookVy + 500 }, T), 'poop-stink-falling2');
+});
+
+test('storedLocale: the chosen locale, or null when nothing (or nothing valid) is stored or storage throws', () => {
+  const key = T.settingsKey;
+  const store = (value) => ({ getItem: (k) => (k === key ? value : null) });
+  assert.equal(storedLocale(store(JSON.stringify({ locale: 'zh-Hans', sound: false })), key), 'zh-Hans');
+  assert.equal(storedLocale(store(JSON.stringify({ locale: 'en' })), key), 'en');
+  assert.equal(storedLocale(store(null), key), null, 'a first visit');
+  assert.equal(storedLocale(store(JSON.stringify({ sound: true })), key), null, 'settings without a locale');
+  assert.equal(storedLocale(store(JSON.stringify({ locale: 'xx' })), key), null, 'an unknown locale');
+  assert.equal(storedLocale(store('{broken'), key), null, 'broken JSON');
+  assert.equal(storedLocale({ getItem: () => { throw new Error('blocked'); } }, key), null, 'private mode');
+  assert.equal(storedLocale(null, key), null);
 });

@@ -413,6 +413,22 @@ export const HANDS = ['left', 'right'];
 
 const SETTINGS_DEFAULTS = { sound: true, music: true, haptics: true, locale: DEFAULT_LOCALE, howToSeenAt: '', hand: 'right' };
 
+/**
+ * The locale the player chose, or null when the settings hold none (a first visit, broken JSON, a
+ * throwing storage). createSettingsStore().load() cannot tell "none" from English, and initialLocale
+ * needs that to fall back to the browser's language. Play and the loading splash both read it.
+ */
+export function storedLocale(storage, key) {
+  try {
+    const raw = storage?.getItem(key);
+    if (raw == null) return null;
+    const parsed = JSON.parse(raw);
+    return isLocale(parsed?.locale) ? parsed.locale : null;
+  } catch {
+    return null;
+  }
+}
+
 function normalizeSettings(raw) {
   const out = { ...SETTINGS_DEFAULTS };
   if (!raw || typeof raw !== 'object') return out;

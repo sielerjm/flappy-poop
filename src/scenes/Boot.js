@@ -1,5 +1,6 @@
 import { TUNING as T } from '../config.js';
 import { VERSION } from '../logic.js';
+import { setSplashProgress, splashReady } from '../splash.js';
 
 // Cache-bust so browsers pick up new PNGs after art/contract bumps.
 const V = `?v=${VERSION}`;
@@ -10,6 +11,7 @@ export class Boot extends Phaser.Scene {
   }
 
   preload() {
+    this.load.on('progress', setSplashProgress); // the loading splash's ring (index.html, src/splash.js)
     this.load.image('poop', 'assets/poop.png' + V);
     this.load.image('poop-dead', 'assets/poop-dead.png' + V);
     this.load.image('fiber', 'assets/fiber.png' + V);
@@ -55,6 +57,7 @@ export class Boot extends Phaser.Scene {
     if (!this.anims.exists('coin-spin')) {
       this.anims.create({ key: 'coin-spin', frames: this.anims.generateFrameNumbers('coin'), frameRate: 1000 / T.coin.frameMs, repeat: -1 });
     }
-    this.scene.start('Play');
+    // The splash's Continue starts Play (on its release, so the press cannot flap or start a run).
+    splashReady(() => this.scene.start('Play'));
   }
 }
