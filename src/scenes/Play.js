@@ -107,7 +107,7 @@ import {
   storedLocale,
   PERF_TAGS,
 } from '../logic.js';
-import { t, pauseBannerText, levelBannerText, levelLabel, initialLocale, isLocale, profileButtonText, coinLabel, countText, versusName } from '../i18n.js';
+import { t, pauseBannerText, levelBannerText, levelLabel, initialLocale, isLocale, profileButtonText, countText, versusName } from '../i18n.js';
 import { loadLocal, saveLocal, ensureId, recordScore, mergeBoardBests, newId, TOILET_EMOJI } from '../save.js';
 import { runDeltas, evaluate, bestFacts, levelCloseShave, winsInWindow, daysBetween, nextDrawStreak, FOUR_OF_A_KIND } from '../achievements.js';
 import { unlock, attachGame, setMuted, isMuted, sfx } from '../sound.js';
@@ -122,6 +122,7 @@ import { createLevelBar } from '../ui/levelBar.js';
 import { createSubmitStore, createMergeStore, createRenameStore, createTournamentQueue, createDailyStore, createDailyQueue, submitDailyScore, fetchDailyBoard, submitPlans, submitScore, submitTournament, checkNameAvailable, mergePlayers, fetchPlayerName, fetchRank, nameAction, createCareerStore, submitCounters, claimAchievements, fetchPlayerStats } from '../leaderboard.js';
 import { createButton } from '../ui/button.js';
 import { createToggle } from '../ui/toggle.js';
+import { createCoinText } from '../ui/coinText.js';
 import { openSavePanel, isSavePanelOpen, showAdoptedName, showBoardScores } from '../ui/savePanel.js';
 import { isTournamentPanelOpen, tournamentPadAction } from '../ui/tournamentPanel.js';
 import { bindPad } from '../input/pad.js';
@@ -505,7 +506,7 @@ export class Play extends Phaser.Scene {
     this.reelSpin = null; // the reel a bought box spins over the shop (spinReel), until its draw is granted
     this.shopButtonBox = shopButtonLayout(this.col.width, GAME_HEIGHT, T, this.col.x);
     this.shopBoxes = shopLayout(this.col.width, GAME_HEIGHT, T, this.col.x);
-    this.shopButton = createButton(this, this.shopButtonBox, coinLabel(0), { ...TEXT_STYLE, fontSize: '40px' }, { depth: 27 }).setVisible(false);
+    this.shopButton = createButton(this, this.shopButtonBox, countText(0), { ...TEXT_STYLE, fontSize: '40px' }, { depth: 27, icon: { key: 'coin', px: 48 } }).setVisible(false);
     // A tournament race's 🏅 Bracket pill under the 💰: once both halves are in their level break
     // (Versus.bothInBreak) it opens the bracket read-only (Versus.openPeek); it never readies the half.
     this.bracketButtonBox = this.match?.tournament ? bracketButtonLayout(this.col.width, GAME_HEIGHT, T, this.col.x) : null;
@@ -3017,13 +3018,13 @@ export class Play extends Phaser.Scene {
     return Boolean(this.quizButton && this.runIsEducation && this.levelBreak && this.state === 'paused' && !this.shopOpen && !this.quizOpen);
   }
 
-  /** The 💰 pill: shown by shopButtonShown, labelled with the purse, dimmed (trayAlpha) when it is empty. */
+  /** The shop pill (the corn kernel and the purse): shown by shopButtonShown, dimmed (trayAlpha) when the purse is empty. */
   refreshShopButton() {
     this.refreshBracketButton();
     this.quizButton?.setVisible(this.quizButtonShown());
     if (!this.shopButton) return;
     const coins = this.purseCoins();
-    this.shopButton.setText(coinLabel(coins)).setAlpha(coins > 0 ? 1 : T.trayAlpha).setVisible(this.shopButtonShown());
+    this.shopButton.setText(countText(coins)).setAlpha(coins > 0 ? 1 : T.trayAlpha).setVisible(this.shopButtonShown());
   }
 
   /** Open the shop panel (the 💰 in a level break): the rows, the purse, the open sound. */
@@ -3035,7 +3036,7 @@ export class Play extends Phaser.Scene {
     const tween = this.tweens.add({ targets: panel, scale: 1, duration: T.shop.panelInMs, ease: 'Back.easeOut' });
     const closeText = this.add.text(L.close.x, L.close.y, '\u2715', { ...TEXT_STYLE, fontSize: '48px' }).setOrigin(0.5).setDepth(29);
     const title = this.add.text(L.title.x, L.title.y, '', { ...TEXT_STYLE, fontSize: '48px', color: '#f8a0c8' }).setOrigin(0.5).setDepth(28);
-    const coins = this.add.text(L.coins.x, L.coins.y, '', { ...TEXT_STYLE, fontSize: '36px' }).setOrigin(0.5).setDepth(28);
+    const coins = createCoinText(this, L.coins.x, L.coins.y, { ...TEXT_STYLE, fontSize: '36px' }, { depth: 28, px: 44 }); // "Your coins", the kernel, the purse
     const icons = { fiber: 'fiber', bean: 'bean', superBean: 'bean', mystery: 'mystery-icon' };
     const rows = {};
     for (const row of L.rows) {
@@ -3043,7 +3044,7 @@ export class Play extends Phaser.Scene {
       const icon = this.add.image(row.iconX, row.y, icons[row.id]).setDisplaySize(row.icon, row.icon).setDepth(29);
       const extra = row.id === 'superBean' ? this.add.text(row.iconX + row.icon / 2 - 4, row.y + 18, `×${T.beans.superBeans}`, { ...TEXT_STYLE, fontSize: '28px' }).setOrigin(0.5).setDepth(29) : null;
       const name = this.add.text(row.nameX, row.y, '', nameStyle).setOrigin(0, 0.5).setDepth(29);
-      const price = this.add.text(row.priceX, row.y, '', nameStyle).setOrigin(1, 0.5).setDepth(29);
+      const price = createCoinText(this, row.priceX, row.y, nameStyle, { align: 'right', depth: 29, px: 40 }); // the kernel and the price, or "Bag full"
       rows[row.id] = { button, icon, extra, name, price };
     }
     this.shop = { panel, tween, closeText, title, coins, rows };
@@ -3062,14 +3063,14 @@ export class Play extends Phaser.Scene {
     const beans = this.effects.beans();
     const names = { fiber: 'shopFiber', bean: 'shopBean', superBean: 'shopSuperBean', mystery: 'shopMystery' };
     this.shop.title.setText(t(this.locale, 'shopTitle'));
-    this.shop.coins.setText(`${t(this.locale, 'shopCoins')}  ${coinLabel(coins)}`);
+    this.shop.coins.set(t(this.locale, 'shopCoins'), countText(coins));
     const prices = this.shopPrices();
     for (const row of this.shopBoxes.rows) {
       const r = this.shop.rows[row.id];
       const blocker = buyBlocker(row.id, { coins, beans, prices }, T);
       // A full bag reads "Bag full" even with the purse short too: coins would not help.
       const bagFull = buyBlocker(row.id, { coins: Infinity, beans, prices }, T) === 'full';
-      r.price.setText(bagFull ? t(this.locale, 'shopFull') : coinLabel(prices[row.id]));
+      r.price.setIcon(!bagFull).set('', bagFull ? t(this.locale, 'shopFull') : countText(prices[row.id]));
       r.name.setText(t(this.locale, names[row.id])).setScale(1);
       r.name.setScale(fitScale(r.name.width, row.priceX - r.price.width - 16 - row.nameX));
       const alpha = blocker ? T.shop.disabledAlpha : 1;

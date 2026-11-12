@@ -13,6 +13,7 @@ const PANEL = { width: 640, height: 1120 };
 const TEXT_W = 560;
 const OPTION_MIN_H = 92;
 const BUTTON = { width: 250, height: 88 };
+const COIN_PX = 36; // the corn kernel after a paid verdict
 /** Option fills: waiting, the right answer, the wrong one picked, the other wrong one. */
 const FILL = { idle: 0x2a1522, right: 0x2f7d4f, wrong: 0x9c2f4a, dim: 0x1a0b14 };
 const GOOD = '#9fe8b4';
@@ -74,6 +75,8 @@ export class Quiz extends Phaser.Scene {
     this.question = this.add.text(cx, this.top + 112, '', { ...STYLE, fontSize: '32px', lineSpacing: 6, wordWrap: { width: TEXT_W, useAdvancedWrap: true } }).setOrigin(0.5, 0);
     this.options = [0, 1, 2].map((i) => this.makeOption(i));
     this.verdict = this.add.text(cx, 0, '', { ...STYLE, fontSize: '32px', wordWrap: { width: TEXT_W, useAdvancedWrap: true } }).setOrigin(0.5, 0);
+    // The corn kernel after "Right! +1" (say): coins are drawn as the kernel, as in the HUD and the shop.
+    this.verdictCoin = this.add.image(cx, 0, 'coin', 0).setDisplaySize(COIN_PX, COIN_PX).setVisible(false);
     this.explain = this.add.text(cx, 0, '', { ...MUTED, fontSize: '26px', lineSpacing: 4, wordWrap: { width: TEXT_W, useAdvancedWrap: true } }).setOrigin(0.5, 0);
     this.source = this.add.text(cx, 0, '', { ...MUTED, fontSize: '20px', fontStyle: 'italic', wordWrap: { width: TEXT_W, useAdvancedWrap: true } }).setOrigin(0.5, 0);
     // Three button slots on the bottom row; each step says what they read and do (set).
@@ -243,6 +246,7 @@ export class Quiz extends Phaser.Scene {
       y += h + 16;
     });
     this.verdict.setY(y + 10).setText('').setVisible(false);
+    this.verdictCoin.setVisible(false);
     this.explain.setText('').setVisible(false);
     this.source.setText('').setVisible(false);
     this.clearButtons();
@@ -269,7 +273,7 @@ export class Quiz extends Phaser.Scene {
       o.mark.setVisible(false);
       o.zone.setVisible(false);
     }
-    for (const x of [this.verdict, this.explain, this.source]) x.setVisible(false);
+    for (const x of [this.verdict, this.verdictCoin, this.explain, this.source]) x.setVisible(false);
     this.clearButtons();
     if (revive) this.doneBtn.set(t(this.locale, 'reviveContinue'), () => this.finish());
     else if (this.closable()) this.doneBtn.set(t(this.locale, 'quizDone'), () => this.close());
@@ -319,9 +323,14 @@ export class Quiz extends Phaser.Scene {
     else this.breakStep(correct);
   }
 
-  /** The verdict line under the options. */
-  say(text, good) {
-    this.verdict.setText(text).setColor(good ? GOOD : BAD).setVisible(true);
+  /** The verdict line under the options; `coin` puts the corn kernel after it ("Right! +1" and the kernel), the pair centred. */
+  say(text, good, coin = false) {
+    this.verdict.setX(this.cx).setText(text).setColor(good ? GOOD : BAD).setVisible(true);
+    this.verdictCoin.setVisible(Boolean(coin));
+    if (!coin) return;
+    const gap = 8;
+    this.verdict.setX(this.cx - (COIN_PX + gap) / 2);
+    this.verdictCoin.setPosition(this.verdict.x + this.verdict.width / 2 + gap + COIN_PX / 2, this.verdict.y + this.verdict.height / 2);
   }
 
   /** A wrong answer holds the main button for explainMinMs, so the explanation gets read. */
@@ -334,7 +343,7 @@ export class Quiz extends Phaser.Scene {
   /** A level break: the verdict (+coins for a right answer), why, and Next. */
   breakStep(correct) {
     const coins = this.lastAnswer?.coins ?? 0;
-    this.say(correct && coins ? t(this.locale, 'quizRightCoins').replace('{n}', String(coins)) : t(this.locale, correct ? 'quizRight' : 'quizWrong'), correct);
+    this.say(correct && coins ? t(this.locale, 'quizRightCoins').replace('{n}', String(coins)) : t(this.locale, correct ? 'quizRight' : 'quizWrong'), correct, Boolean(correct && coins));
     if (correct) this.whyBtn.set(t(this.locale, 'quizWhy'), () => this.showWhy());
     else this.showWhy();
     this.holdAfterWrong(this.nextBtn.set(t(this.locale, 'quizNext'), () => this.nextCard()), correct);

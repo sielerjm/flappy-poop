@@ -224,7 +224,7 @@ const pngWidth = (file) => readFileSync(new URL(`assets/${file}`, ROOT)).readUIn
 
 test('sprites: every card art is a file Boot loads by that exact path, so the art contract and ?v= cover it', () => {
   const withArt = SPLASH_NOTES.filter((n) => n.art);
-  assert.deepEqual(ids(withArt).sort(), ['bacteria', 'bean', 'coin', 'fart', 'fiber', 'mystery', 'postbiotic', 'probiotic']);
+  assert.deepEqual(ids(withArt).sort(), ['bacteria', 'bean', 'coin', 'fart', 'fiber', 'mystery', 'postbiotic', 'probiotic', 'shop']);
   for (const n of withArt) {
     assert.ok(existsSync(new URL(`assets/${n.art.file}`, ROOT)), `${n.id}: assets/${n.art.file} exists`);
     assert.ok(BOOT.includes(`'assets/${n.art.file}' + V`), `${n.id}: Boot loads 'assets/${n.art.file}' + V`);
@@ -237,6 +237,7 @@ test("sprites: the coin strip's frame count matches Boot's spritesheet; super fa
   const frameWidth = Number(/load\.spritesheet\('coin'[^)]*frameWidth: (\d+)/.exec(BOOT)?.[1]);
   assert.ok(frameWidth > 0, "Boot's coin frameWidth");
   assert.equal(coin.art.frames, pngWidth('coin.png') / frameWidth);
+  assert.deepEqual(SPLASH_NOTES.find((n) => n.id === 'shop').art, coin.art, "the shop card shows the kernel too: it is the shop button's icon");
   assert.equal(SPLASH_NOTES.find((n) => n.id === 'superFart').art, undefined);
 });
 

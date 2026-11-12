@@ -72,9 +72,10 @@ test('HOW_TO_ITEMS names fiber, probiotic, and bacteria with their effects', () 
   assert.match(blob, /Kernels/, 'the coin row is called Kernels');
   assert.match(blob, /golden corn kernel/, 'the coin row');
   assert.match(blob, /purse/, 'kernels go into the purse');
-  assert.match(blob, /Tap 💰 to open the shop/, 'the coin row names the shop button');
+  assert.match(blob, /Tap the kernel button under the banner to open the shop/, 'the coin row names the shop button');
+  assert.doesNotMatch(blob, /💰/, 'no money bag: the shop button shows the kernel');
   assert.match(blob, /random surprise/, 'the short mystery box line');
-  assert.match(blob, /💰 shop/, 'the controls name the shop');
+  assert.match(blob, /opens and closes the shop/, 'the controls name the shop');
   const controls = items.find((item) => item.key === 'controls');
   assert.equal(controls.name, 'Controls');
   assert.match(controls.detail, /Space or ↑ flaps, B farts/, 'single-player keys');

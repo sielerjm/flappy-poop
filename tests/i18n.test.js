@@ -12,7 +12,7 @@ import {
   catalogKeys,
   catalogFor,
   howToItems,
-  coinLabel,
+  countText,
   pauseBannerText,
   metaFontSize,
   rankText,
@@ -183,8 +183,8 @@ test('shareCardFooter shows the bare link after Play: in both locales', () => {
   assert.equal(shareCardFooter('en', 'http://localhost:8000//'), 'Play: localhost:8000');
 });
 
-test('coinLabel is the 💰 glyph and the count, the same in every locale', () => {
-  assert.equal(coinLabel(12), '💰 12');
-  assert.equal(coinLabel(0), '💰 0');
-  assert.equal(coinLabel(Infinity), '💰 ∞', 'a test run\'s endless purse');
+test('countText is the coin count beside the kernel, the same in every locale', () => {
+  assert.equal(countText(12), '12');
+  assert.equal(countText(0), '0');
+  assert.equal(countText(Infinity), '∞', 'a test run\'s endless purse');
 });

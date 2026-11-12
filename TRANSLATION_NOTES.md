@@ -20,8 +20,10 @@ It opens into a random reward (fiber, probiotic, one or three beans, a 5-pipe po
 Coins (金币): golden corn kernels, one on every level (on level 1 just past the last pipe) and more
 between the pipes from level 2 (or out of a mystery box), kept in a purse for the run (a death empties it)
 and spent in the **shop** (商店) at the level break: the
-💰 button under the banner opens it (fiber, one bean, a super fart that fills the bean bag, a
-mystery box). 💰 is the coin glyph and is not translated; "💰 12" style labels need no strings.
+button under the banner opens it (fiber, one bean, a super fart that fills the bean bag, a
+mystery box). Coins are drawn as the corn kernel with a count (the shop button, the purse line, the
+prices, the quiz's "Right! +1"), so those labels need no strings. Only the level break's hint still
+names the shop with 💰 ("💰 to shop"), which is not translated.
 The How to play row calls them **Kernels** (玉米粒) and keeps to a short line; the shop and the rest of
 the UI keep **coins** (金币). The iPhone Silent-mode note is its own last How to play row, **Sound** (声音, shown with 🔊).
 In two players each half shops in its own level break, and a shop open on either half holds the
@@ -152,14 +154,14 @@ Short, playful, clear. Fit a 720×1280 logical field; How to play / About body w
 | itemBeanName | Beans | 豆子 |
 | itemBeanDetail | Grab a bean, then press the bean button at the bottom (or your poop) to fart past the next 5 pipes: nothing can touch you. A normal fart uses one bean; you can carry 3, and with all three the fart rockets you past 20 in a rainbow glow. | 吃到豆子后，点击底部的豆子按钮（或便便）放屁冲过接下来的 5 道管道，期间什么都碰不到你。普通放屁只用一颗豆子；最多可攒 3 颗，集齐 3 颗再放屁，就能顶着彩虹光芒一口气冲过 20 道管道。 |
 | itemCoinName | Kernels | 玉米粒 |
-| itemCoinDetail | A golden corn kernel. Kernels go into your purse and can be redeemed for items in the shop. Tap 💰 to open the shop in between levels. | 金黄的玉米粒。玉米粒会进入钱袋，可在商店兑换物品。关卡之间点击 💰 打开商店。 |
+| itemCoinDetail | A golden corn kernel. Kernels go into your purse and can be redeemed for items in the shop. Tap the kernel button under the banner to open the shop in between levels. | 金黄的玉米粒。玉米粒会进入钱袋，可在商店兑换物品。关卡之间点击横幅下方的玉米粒按钮打开商店。 |
 | itemMysteryName | Mystery box | 神秘盒子 |
 | itemMysteryDetail | Mystery boxes contain a random surprise item. | 神秘盒子里装有随机惊喜道具。 |
 | itemToiletName | On the toilet | 如厕模式 |
 | itemToiletDetail | Playing on the toilet? Flip the switch under the poop on the home screen. Those scores get a 🚽 next to them. | 在马桶上玩？打开主界面便便下方的开关，这些分数旁会显示 🚽。 |
 | itemLevelsName | Levels | 关卡 |
 | itemControlsName | Controls | 操作方式 |
-| itemControlsDetail | One player: tap or click to flap; the bean button (or the poop) farts. Keyboard: Space or ↑ flaps, B farts, P or Esc pauses. Controller: A flaps, RT farts, Menu pauses. Two players (the 👥 toggle): P1 flaps with W or Space and farts with E or Left Shift; P2 flaps with ↑ or Enter and farts with Right Shift or Numpad 0. A controller (A, RT) or a tap on your half works too. In a level break your fart button (B, RT, E…) opens and closes the 💰 shop. | 单人：点击起飞；按豆子按钮（或便便）放屁。键盘：空格或 ↑ 起飞，B 放屁，P 或 Esc 暂停。手柄：A 起飞，RT 放屁，Menu 暂停。双人模式（👥 开关）：玩家 1 用 W 或空格起飞、E 或左 Shift 放屁；玩家 2 用 ↑ 或回车起飞、右 Shift 或小键盘 0 放屁。也可以用手柄（A、RT）或点击你这一侧。过关休息时，放屁键（B、RT、E 等）可打开或关闭 💰 商店。 |
+| itemControlsDetail | One player: tap or click to flap; the bean button (or the poop) farts. Keyboard: Space or ↑ flaps, B farts, P or Esc pauses. Controller: A flaps, RT farts, Menu pauses. Two players (the 👥 toggle): P1 flaps with W or Space and farts with E or Left Shift; P2 flaps with ↑ or Enter and farts with Right Shift or Numpad 0. A controller (A, RT) or a tap on your half works too. In a level break your fart button (B, RT, E…) opens and closes the shop. | 单人：点击起飞；按豆子按钮（或便便）放屁。键盘：空格或 ↑ 起飞，B 放屁，P 或 Esc 暂停。手柄：A 起飞，RT 放屁，Menu 暂停。双人模式（👥 开关）：玩家 1 用 W 或空格起飞、E 或左 Shift 放屁；玩家 2 用 ↑ 或回车起飞、右 Shift 或小键盘 0 放屁。也可以用手柄（A、RT）或点击你这一侧。过关休息时，放屁键（B、RT、E 等）可打开或关闭商店。 |
 | itemTwoPlayerName | Two players | 双人模式 |
 | itemTwoPlayerDetail | On a wide screen, flip the 👥 switch under the toilet one and race friends side by side on the same course, two at a time. A crash costs points, not the race; first over each finish line gets +25, and the higher score wins. | 在宽屏上，打开马桶开关下方的👥开关，和朋友两两在同一条赛道上并排比赛。撞到只会扣分，不会输掉比赛；率先冲过每条终点线得25分，最后分高者胜。 |
 | itemTournamentName | Tournament | 锦标赛 |
@@ -220,7 +222,7 @@ Short, playful, clear. Fit a 720×1280 logical field; How to play / About body w
 | eduUnlocked | Education mode unlocked: 📚 is on the home screen | 教育模式已解锁：主屏幕上出现了 📚 |
 | eduLocked | Education mode locked | 教育模式已锁定 |
 | quizRight | Right! | 答对了！ |
-| quizRightCoins | Right! +{n} 💰 | 答对了！+{n} 💰 |
+| quizRightCoins | Right! +{n} | 答对了！+{n} |
 | quizPill | Quiz | 答题 |
 | quizWrong | Not quite: the right answer has a ✓ | 不太对：正确答案标有 ✓ |
 | quizWhy | Why? | 为什么？ |

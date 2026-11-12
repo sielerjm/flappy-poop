@@ -81,7 +81,7 @@ Inspired by Flappy Bird`,
     itemBeanName: 'Beans',
     itemBeanDetail: 'Grab a bean, then press the bean button at the bottom (or your poop) to fart past the next 5 pipes: nothing can touch you. A normal fart uses one bean; you can carry 3, and with all three the fart rockets you past 20 in a rainbow glow.',
     itemCoinName: 'Kernels',
-    itemCoinDetail: 'A golden corn kernel. Kernels go into your purse and can be redeemed for items in the shop. Tap 💰 to open the shop in between levels.',
+    itemCoinDetail: 'A golden corn kernel. Kernels go into your purse and can be redeemed for items in the shop. Tap the kernel button under the banner to open the shop in between levels.',
     itemMysteryName: 'Mystery box',
     itemMysteryDetail: 'Mystery boxes contain a random surprise item.',
     itemToiletName: 'On the toilet',
@@ -108,7 +108,7 @@ Inspired by Flappy Bird`,
     itemSoundDetail: 'Mute or unmute the game. Key: M. On iPhone, Silent mode mutes the game - turn it off to hear sound.',
     itemControlsName: 'Controls',
     itemControlsDetail:
-      'One player: tap or click to flap; the bean button (or the poop) farts. Keyboard: Space or ↑ flaps, B farts, P or Esc pauses. Controller: A flaps, RT farts, Menu pauses. Two players (the 👥 toggle): P1 flaps with W or Space and farts with E or Left Shift; P2 flaps with ↑ or Enter and farts with Right Shift or Numpad 0. A controller (A, RT) or a tap on your half works too. In a level break your fart button (B, RT, E…) opens and closes the 💰 shop.',
+      'One player: tap or click to flap; the bean button (or the poop) farts. Keyboard: Space or ↑ flaps, B farts, P or Esc pauses. Controller: A flaps, RT farts, Menu pauses. Two players (the 👥 toggle): P1 flaps with W or Space and farts with E or Left Shift; P2 flaps with ↑ or Enter and farts with Right Shift or Numpad 0. A controller (A, RT) or a tap on your half works too. In a level break your fart button (B, RT, E…) opens and closes the shop.',
     updatedPrefix: 'Updated',
     versionLine: 'v{version} beta',
     changelogTitle: "WHAT'S NEW",
@@ -152,7 +152,7 @@ Inspired by Flappy Bird`,
     eduUnlocked: 'Education mode unlocked: 📚 is on the home screen',
     eduLocked: 'Education mode locked',
     quizRight: 'Right!',
-    quizRightCoins: 'Right! +{n} 💰',
+    quizRightCoins: 'Right! +{n}',
     quizPill: 'Quiz',
     quizWrong: 'Not quite: the right answer has a ✓',
     quizWhy: 'Why?',
@@ -475,7 +475,7 @@ Inspired by Flappy Bird`,
     itemBeanName: '豆子',
     itemBeanDetail: '吃到豆子后，点击底部的豆子按钮（或便便）放屁冲过接下来的 5 道管道，期间什么都碰不到你。普通放屁只用一颗豆子；最多可攒 3 颗，集齐 3 颗再放屁，就能顶着彩虹光芒一口气冲过 20 道管道。',
     itemCoinName: '玉米粒',
-    itemCoinDetail: '金黄的玉米粒。玉米粒会进入钱袋，可在商店兑换物品。关卡之间点击 💰 打开商店。',
+    itemCoinDetail: '金黄的玉米粒。玉米粒会进入钱袋，可在商店兑换物品。关卡之间点击横幅下方的玉米粒按钮打开商店。',
     itemMysteryName: '神秘盒子',
     itemMysteryDetail: '神秘盒子里装有随机惊喜道具。',
     itemToiletName: '如厕模式',
@@ -502,7 +502,7 @@ Inspired by Flappy Bird`,
     itemSoundDetail: '静音或取消静音。按键：M。 iPhone需关闭静音模式才有声音。',
     itemControlsName: '操作方式',
     itemControlsDetail:
-      '单人：点击起飞；按豆子按钮（或便便）放屁。键盘：空格或 ↑ 起飞，B 放屁，P 或 Esc 暂停。手柄：A 起飞，RT 放屁，Menu 暂停。双人模式（👥 开关）：玩家 1 用 W 或空格起飞、E 或左 Shift 放屁；玩家 2 用 ↑ 或回车起飞、右 Shift 或小键盘 0 放屁。也可以用手柄（A、RT）或点击你这一侧。过关休息时，放屁键（B、RT、E 等）可打开或关闭 💰 商店。',
+      '单人：点击起飞；按豆子按钮（或便便）放屁。键盘：空格或 ↑ 起飞，B 放屁，P 或 Esc 暂停。手柄：A 起飞，RT 放屁，Menu 暂停。双人模式（👥 开关）：玩家 1 用 W 或空格起飞、E 或左 Shift 放屁；玩家 2 用 ↑ 或回车起飞、右 Shift 或小键盘 0 放屁。也可以用手柄（A、RT）或点击你这一侧。过关休息时，放屁键（B、RT、E 等）可打开或关闭商店。',
     updatedPrefix: '更新于',
     versionLine: 'v{version} 测试版',
     changelogTitle: '更新说明',
@@ -545,7 +545,7 @@ Inspired by Flappy Bird`,
     eduUnlocked: '教育模式已解锁：主屏幕上出现了 📚',
     eduLocked: '教育模式已锁定',
     quizRight: '答对了！',
-    quizRightCoins: '答对了！+{n} 💰',
+    quizRightCoins: '答对了！+{n}',
     quizPill: '答题',
     quizWrong: '不太对：正确答案标有 ✓',
     quizWhy: '为什么？',
@@ -857,12 +857,7 @@ export function levelBannerText(locale, level, levels, { shop = false, education
   return `${name ? `${title} · ${name}` : title}\n${t(locale, hint)}`;
 }
 
-/** The coin glyph and a count: "💰 12" (the shop button, the purse line, every price); a test run's endless purse reads "💰 ∞". Locale-free, like formatScore's "🚽 41". */
-export function coinLabel(n) {
-  return `💰 ${countText(n)}`;
-}
-
-/** A count for the coin labels: the number, or ∞ for a test run's endless purse (Infinity). */
+/** A coin count beside the corn kernel (the shop pill, the purse line, every price): the number, or ∞ for a test run's endless purse (Infinity). Locale-free. */
 export function countText(n) {
   return Number.isFinite(n) ? String(n) : '∞';
 }

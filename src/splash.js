@@ -35,7 +35,7 @@ export const SPLASH_NOTES = [
   { id: 'profile', kind: 'feature', glyph: '👤', key: 'splashProfile' },
   { id: 'daily', kind: 'feature', glyph: '🌞', key: 'splashDaily' },
   { id: 'tournament', kind: 'feature', glyph: '🏅', key: 'splashTournament' },
-  { id: 'shop', kind: 'feature', glyph: '💰', key: 'splashShop' },
+  { id: 'shop', kind: 'feature', glyph: '💰', key: 'splashShop', art: { file: 'coin.png', frames: 12 } }, // the shop pill shows the kernel
   { id: 'fiber', kind: 'hint', glyph: badge('fiber_1000'), key: 'splashFiber', art: { file: 'fiber.png' } },
   { id: 'bacteria', kind: 'hint', glyph: badge('bacteria_1000'), key: 'splashBacteria', art: { file: 'bacteria.png' } },
   { id: 'probiotic', kind: 'hint', glyph: badge('probiotic_1000'), key: 'splashProbiotic', art: { file: 'probiotic.png' } },
