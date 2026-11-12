@@ -22,6 +22,12 @@ const ALLOWED_EXPORTS = {
   glowAlphaAt: "test reference: the glow's alpha profile that glowStops() draws (tests/fart.test.js)",
   topScores: 'test hook: tests/save.test.js reads top lists as plain numbers (its last game use, isNewTop, is gone)',
   // Daily Dump (plan .claude/plans/2026-11-10-daily-dump.md): helpers land before their callers.
+  // v0.16.0 badges: step 2 lands the rules, step 3 (Play) wires them and drops these lines.
+  FOUR_OF_A_KIND: 'v0.16.0 step 3: Play.openMystery checks the streak',
+  levelCloseShave: 'v0.16.0 step 3: Play.recordCareer',
+  winsInWindow: 'v0.16.0 step 3: Play.recordCareer',
+  daysBetween: 'v0.16.0 step 3: Play.recordCareer',
+  nextDrawStreak: 'v0.16.0 step 3: Play.openMystery',
 };
 
 /** UI string keys no source names literally: prefix → why (they are built at run time). */

@@ -18,6 +18,13 @@ import { LEADERBOARD, TUNING } from './config.js';
 /** What a run's `collected` counts that the career counts too (Play.collected's keys). */
 export const PICKUP_COUNTERS = ['fiber', 'probiotic', 'postbiotic', 'bacteria', 'bean', 'mystery', 'coin'];
 
+/** 🏃 IBS: more than 21 wins (so 22) within WINDOW_DAYS. 🧱 Constipated: a run BREAK_DAYS or more after the last. 🃏: FOUR_OF_A_KIND boxes in a row. */
+export const IBS_WINS = 22;
+export const WINDOW_DAYS = 7;
+export const BREAK_DAYS = 7;
+export const FOUR_OF_A_KIND = 4;
+const DAY_MS = 86400000;
+
 const score = (id, glyph, title, n) => ({ id, kind: 'run', glyph, title, desc: 'achDescScore', n, check: (f) => f.score >= n });
 const level = (n, glyph, title) => ({ id: `level_${n}`, kind: 'run', glyph, title, desc: 'achDescLevel', n, check: (f) => f.level >= n });
 const total = (id, glyph, title, desc, counters, n, descGlyph = glyph) => ({ id, kind: 'lifetime', glyph, title, desc, counters, n, descGlyph });
@@ -28,7 +35,7 @@ export const ACHIEVEMENTS = [
   score('score_100', '💯', 'achScore100', 100),
   score('score_250', '🔥', 'achScore250', 250),
   score('score_500', '🚀', 'achScore500', 500),
-  score('score_1000', '👑', 'achScore1000', 1000),
+  score('score_1000', '💎', 'achScore1000', 1000), // 👑 is Dethroned's (the career grid)
   level(2, '2️⃣', 'level.duodenum'),
   level(3, '3️⃣', 'level.jejunum'),
   level(4, '4️⃣', 'level.ileum'),
@@ -48,6 +55,14 @@ export const ACHIEVEMENTS = [
   total('bean_100', '🫘', 'achBeans', 'achDescCollect', ['bean'], 100),
   total('mystery_100', '📦', 'achMystery', 'achDescMystery', ['mystery'], 100),
   total('coin_1000', '🟡', 'achCoins', 'achDescCollect', ['coin'], 1000),
+  // v0.16.0
+  total('sky_diver', '🪂', 'achSkyDiver', 'achDescFalls', ['falls'], 1000),
+  { id: 'close_shave', kind: 'run', glyph: '💈', title: 'achCloseShave', desc: 'achDescCloseShave', check: (f) => Boolean(f.closeShave) },
+  { id: 'ibs', kind: 'run', glyph: '🏃', title: 'achIbs', desc: 'achDescIbs', n: IBS_WINS, check: (f) => (f.winsLast7Days ?? 0) >= IBS_WINS },
+  { id: 'constipated', kind: 'run', modes: ['single', 'daily'], glyph: '🧱', title: 'achConstipated', desc: 'achDescConstipated', check: (f) => (f.daysSinceLastRun ?? 0) >= BREAK_DAYS },
+  total('icarus', '☀️', 'achIcarus', 'achDescCeiling', ['ceilingHits'], 100),
+  { id: 'four_of_a_kind', kind: 'run', modes: ['single', 'daily'], glyph: '🃏', title: 'achFourOfAKind', desc: 'achDescFourOfAKind', check: (f) => Boolean(f.fourOfAKind) },
+  total('lets_go_gambling', '🎰', 'achGambling', 'achDescBoxesBought', ['boxesBought'], 1000),
 ];
 
 const ID_RE = /^[a-z0-9_]{1,40}$/;
@@ -79,7 +94,8 @@ export function addCounters(a, b) {
 
 /**
  * One finished run's counters. facts: { mode: 'single' | 'daily', score, level, won, collected,
- * farts, superFarts, pipes, falls, closeCalls }. A single-player run adds games / wins / sumScore / sumLevel / maxLevel
+ * farts, superFarts, pipes, falls, closeCalls, ceilingHits, boxesBought } (run badges also read
+ * closeShave, fourOfAKind, winsLast7Days, daysSinceLastRun). A single-player run adds games / wins / sumScore / sumLevel / maxLevel
  * (score capped at LEADERBOARD.maxScore, level at the last level, as submit_counters checks);
  * a Daily Dump adds dailyGames. Both add deaths (a run that did not win), pipes passed, long falls,
  * close calls, farts, super farts and the pickups. Zero counts are left out.
@@ -106,6 +122,8 @@ export function runDeltas(facts, { maxScore = LEADERBOARD.maxScore, lastLevel = 
   add('pipes', count(f.pipes));
   add('falls', count(f.falls));
   add('closeCalls', count(f.closeCalls));
+  add('ceilingHits', count(f.ceilingHits));
+  add('boxesBought', count(f.boxesBought));
   add('farts', count(f.farts));
   add('superFarts', count(f.superFarts));
   const got = f.collected && typeof f.collected === 'object' ? f.collected : {};
@@ -137,7 +155,7 @@ export function evaluate({ totals = {}, facts = null, unlocked = {}, day = null,
   for (const e of catalog) {
     if (have.has(e.id) || !windowOpen(e, day)) continue;
     let earned = false;
-    if (e.kind === 'run') earned = facts?.mode === 'single' && e.check(facts);
+    if (e.kind === 'run') earned = (e.modes ?? ['single']).includes(facts?.mode) && e.check(facts); // most run badges: a normal single-player run only
     else if (e.kind === 'lifetime') earned = progressOf(e, totals) >= e.n;
     else if (e.kind === 'seasonal') earned = Boolean(e.check?.(facts, cleanCounters(totals)));
     if (earned) out.push(e.id);
@@ -165,4 +183,30 @@ export function openQuests(day, catalog = ACHIEVEMENTS) {
 /** The catalog entry for an id, or null (an id from a newer build, or a quest since removed). */
 export function achievementById(id, catalog = ACHIEVEMENTS) {
   return catalog.find((e) => e.id === id) ?? null;
+}
+
+/** 💈 Close Shave: did any level of the run see at least as many close calls as it has pipes? callsByLevel: { level: n }; pipesOf(level) → its pair count. */
+export function levelCloseShave(callsByLevel, pipesOf) {
+  if (!callsByLevel || typeof callsByLevel !== 'object') return false;
+  return Object.entries(callsByLevel).some(([lv, n]) => {
+    const pipes = pipesOf(Number(lv));
+    return Number.isInteger(pipes) && pipes > 0 && count(n) >= pipes;
+  });
+}
+
+/** How many of `times` (ms) fall in the `days` before `now` (🏃 IBS: wins in the last 7 days). */
+export function winsInWindow(times, now, days = WINDOW_DAYS) {
+  const from = now - days * DAY_MS;
+  return (Array.isArray(times) ? times : []).filter((t) => Number.isFinite(t) && t > from && t <= now).length;
+}
+
+/** Days from a to b (ms), fractional; null when a is unknown (🧱 Constipated never fires on a first run). */
+export function daysBetween(a, b) {
+  return Number.isFinite(a) && Number.isFinite(b) ? (b - a) / DAY_MS : null;
+}
+
+/** 🃏 The same-draw streak after one more box: { last, streak }; four of a kind is streak ≥ FOUR_OF_A_KIND. */
+export function nextDrawStreak(prev, draw) {
+  const p = prev ?? { last: null, streak: 0 };
+  return draw && draw === p.last ? { last: draw, streak: p.streak + 1 } : { last: draw ?? null, streak: draw ? 1 : 0 };
 }

@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { LEADERBOARD, TUNING as T, LEVELS } from '../src/config.js';
-import { ACHIEVEMENTS, PICKUP_COUNTERS, runDeltas, addCounters, cleanCounters, evaluate, windowOpen, progressOf, bestFacts, openQuests, achievementById, isAchievementId } from '../src/achievements.js';
+import { IBS_WINS, BREAK_DAYS, FOUR_OF_A_KIND, levelCloseShave, winsInWindow, daysBetween, nextDrawStreak, ACHIEVEMENTS, PICKUP_COUNTERS, runDeltas, addCounters, cleanCounters, evaluate, windowOpen, progressOf, bestFacts, openQuests, achievementById, isAchievementId } from '../src/achievements.js';
 import { t, badgeTitle, badgeDesc, LOCALES } from '../src/i18n.js';
 
 const SQL = readFileSync(fileURLToPath(new URL('../db/schema.sql', import.meta.url)), 'utf8');
@@ -30,16 +30,16 @@ test('the catalog: unique well-formed ids, a known kind, a glyph, and copy in ev
   }
   // The level badges are named after the segment they reach.
   for (let n = 2; n <= T.levels.lastLevel; n += 1) assert.equal(achievementById(`level_${n}`).title, `level.${LEVELS[n - 1].key}`);
-  assert.equal(badgeDesc('en', achievementById('fiber_1000')), 'Collect 1000 🥦 in all', 'fiber is 🥦');
-  assert.equal(badgeDesc('en', achievementById('coin_1000')), 'Collect 1000 🟡 in all', 'coins are 🟡');
+  assert.equal(badgeDesc('en', achievementById('fiber_1000')), 'Collect 1000 🥦', 'fiber is 🥦 (and no "in all")');
+  assert.equal(badgeDesc('en', achievementById('coin_1000')), 'Collect 1000 🟡', 'coins are 🟡');
   assert.equal(achievementById('nope'), null);
 });
 
 test('every catalog entry can be earned: run badges by some run, lifetime badges by enough totals', () => {
   for (const e of ACHIEVEMENTS) {
     if (e.kind === 'run') {
-      const facts = single({ score: LEADERBOARD.maxScore, level: T.levels.lastLevel, won: true, toilet: true });
-      assert.ok(evaluate({ facts }).includes(e.id), `${e.id} from a winning toilet run`);
+      const facts = single({ score: LEADERBOARD.maxScore, level: T.levels.lastLevel, won: true, toilet: true, closeShave: true, fourOfAKind: true, winsLast7Days: IBS_WINS, daysSinceLastRun: BREAK_DAYS });
+      assert.ok(evaluate({ facts }).includes(e.id), `${e.id} from a winning toilet run that did everything`);
     } else if (e.kind === 'lifetime') {
       const totals = Object.fromEntries(e.counters.map((k) => [k, e.n]));
       assert.ok(evaluate({ totals }).includes(e.id), `${e.id} at its threshold`);
@@ -124,4 +124,42 @@ test('every time-boxed quest has an achievement_defs row with the same window, a
   for (const e of quests) assert.deepEqual(seeded.get(e.id), [e.from, e.to], `${e.id}: seed row in db/schema.sql`);
   for (const [qid] of seeded) assert.ok(quests.some((e) => e.id === qid), `achievement_defs row ${qid} has no catalog entry`);
   assert.equal(t('en', 'achWin'), 'Made It Out');
+});
+
+test('v0.16.0 badges: each rule at its edge', () => {
+  const day = 86400000;
+  const now = Date.parse('2026-11-12T12:00:00Z');
+  const has = (facts, id) => evaluate({ facts }).includes(id);
+  // 💈 Close Shave: calls in one level ≥ that level's pipes; single player only.
+  const pipesOf = (lv) => T.levels.pipes[lv - 1];
+  assert.equal(levelCloseShave({ 1: pipesOf(1) - 1, 2: 3 }, pipesOf), false, 'one short on level 1');
+  assert.equal(levelCloseShave({ 1: pipesOf(1) }, pipesOf), true, 'exactly level 1\'s pipes');
+  assert.equal(levelCloseShave({ 3: pipesOf(3) + 4 }, pipesOf), true);
+  assert.equal(levelCloseShave({}, pipesOf), false);
+  assert.ok(has(single({ closeShave: true }), 'close_shave') && !has({ mode: 'daily', closeShave: true }, 'close_shave'), 'not from a Daily Dump');
+  // 🏃 IBS: more than 21 wins in 7 days.
+  const wins = (n, ago = 0) => Array.from({ length: n }, (_, i) => now - ago - i * 1000);
+  assert.equal(winsInWindow(wins(21), now), 21);
+  assert.equal(winsInWindow([...wins(21), now - 8 * day], now), 21, 'a win 8 days old is out of the window');
+  assert.ok(!has(single({ winsLast7Days: 21 }), 'ibs') && has(single({ winsLast7Days: 22 }), 'ibs'), '21 is not more than 21; 22 is');
+  // 🧱 Constipated: a run a week or more after the last; never on a first run.
+  assert.equal(daysBetween(null, now), null);
+  assert.ok(!has(single({ daysSinceLastRun: daysBetween(now - 7 * day + 60000, now) }), 'constipated'), 'a minute short of a week');
+  assert.ok(has(single({ daysSinceLastRun: daysBetween(now - 7 * day, now) }), 'constipated'), 'a week to the minute');
+  assert.ok(has({ mode: 'daily', daysSinceLastRun: 9 }, 'constipated'), 'a Daily Dump counts');
+  assert.ok(!has(single({ daysSinceLastRun: null }), 'constipated'), 'no earlier run on record');
+  // 🃏 Four of a Kind: the same draw four boxes in a row.
+  let st = null;
+  for (const d of ['probiotic', 'probiotic', 'probiotic']) st = nextDrawStreak(st, d);
+  assert.equal(st.streak, 3);
+  assert.equal(nextDrawStreak(st, 'probiotic').streak, FOUR_OF_A_KIND, 'the fourth');
+  assert.equal(nextDrawStreak(st, 'fiber').streak, 1, 'a different draw starts again');
+  assert.equal(nextDrawStreak(nextDrawStreak(null, 'bean1'), 'bean3').streak, 1, 'one bean and three beans are different rewards');
+  assert.ok(has({ mode: 'daily', fourOfAKind: true }, 'four_of_a_kind') && has(single({ fourOfAKind: true }), 'four_of_a_kind'));
+  // ☀️ / 🪂 / 🎰 lifetime thresholds, and the counters runDeltas adds.
+  assert.deepEqual(['icarus', 'sky_diver', 'lets_go_gambling'].map((bid) => achievementById(bid).n), [100, 1000, 1000]);
+  assert.deepEqual(runDeltas(single({ ceilingHits: 1, boxesBought: 2 })), { games: 1, sumLevel: 1, maxLevel: 1, deaths: 1, ceilingHits: 1, boxesBought: 2 });
+  // Royal Flush wears 💎 now: 👑 is Dethroned's.
+  assert.equal(achievementById('score_1000').glyph, '💎');
+  assert.ok(!ACHIEVEMENTS.some((e) => e.glyph === '👑'));
 });

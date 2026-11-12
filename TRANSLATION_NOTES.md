@@ -388,14 +388,14 @@ Inspired by Flappy Bird
 | achDescLevel | Reach level {n} in one run | 单局到达第 {n} 关 |
 | achDescWin | Clear the rectum and make it out | 通过直肠，成功脱出 |
 | achDescToiletWin | Make it out with toilet mode on | 开启马桶模式并成功脱出 |
-| achDescGames | Play {n} runs (Daily Dumps count) | 累计游玩 {n} 局（每日一拉也算） |
-| achDescDeaths | Crash {n} times in all | 累计撞毁 {n} 次 |
-| achDescFarts | Fart {n} times in all | 累计放屁 {n} 次 |
-| achDescSuperFarts | Fire {n} super farts in all | 累计放出 {n} 次超级屁 |
-| achDescCollect | Collect {n} {glyph} in all | 累计收集 {n} 个 {glyph} |
-| achDescBacteria | Bump into {n} 🦠 in all | 累计碰到 {n} 个 🦠 |
-| achDescPostbiotic | Make {n} postbiotics ✨ | 累计制造 {n} 次后生元 ✨ |
-| achDescMystery | Open {n} mystery boxes 📦 | 累计打开 {n} 个神秘盒子 📦 |
+| achDescGames | Play {n} runs (Daily Dumps count) | 游玩 {n} 局（每日一拉也算） |
+| achDescDeaths | Crash {n} times | 撞毁 {n} 次 |
+| achDescFarts | Fart {n} times | 放屁 {n} 次 |
+| achDescSuperFarts | Fire {n} super farts | 放出 {n} 次超级屁 |
+| achDescCollect | Collect {n} {glyph} | 收集 {n} 个 {glyph} |
+| achDescBacteria | Bump into {n} 🦠 | 碰到 {n} 个 🦠 |
+| achDescPostbiotic | Make {n} postbiotics ✨ | 制造 {n} 次后生元 ✨ |
+| achDescMystery | Open {n} mystery boxes 📦 | 打开 {n} 个神秘盒子 📦 |
 | overBadges | 🏆 New: {badges} | 🏆 新成就：{badges} |
 | overBadgesMore | +{n} | 等另外 {n} 个 |
 | statsSingle | Singleplayer | 单人模式 |
@@ -465,6 +465,20 @@ Inspired by Flappy Bird
 | careerFalls | Long falls | 长距离下坠 |
 | careerCloseCalls | Close calls | 擦身而过 |
 | overCardRun | This run: {n} | 本局：{n} |
+| achSkyDiver | Sky Diver | 高空跳伞 |
+| achCloseShave | Close Shave | 千钧一发 |
+| achIbs | IBS | 肠易激 |
+| achConstipated | Constipated | 便秘 |
+| achIcarus | Icarus | 伊卡洛斯 |
+| achFourOfAKind | Four of a Kind | 四条 |
+| achGambling | Let's Go Gambling | 来赌一把 |
+| achDescFalls | Free fall {n} times | 自由落体 {n} 次 |
+| achDescCloseShave | In one level, have as many close calls as it has pipes | 在一关里擦身而过的次数达到这一关的管道数 |
+| achDescIbs | Make it out more than 21 times in 7 days | 7 天内成功脱出超过 21 次 |
+| achDescConstipated | Play again after a week-long break | 隔了一周以上再玩一局 |
+| achDescCeiling | Hit the ceiling {n} times | 撞到顶部 {n} 次 |
+| achDescFourOfAKind | Open four mystery boxes in a row with the same reward | 连续 4 个神秘盒子开出同样的奖励 |
+| achDescBoxesBought | Buy {n} mystery boxes in the shop | 在商店买 {n} 个神秘盒子 |
 
 ## Reviewer checklist
 
