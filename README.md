@@ -90,7 +90,7 @@ The gut is cut into seven segments (stomach → rectum). You advance by **pipe p
 
 ### 💰 The shop
 
-At every level break, tap **💰** under the banner (dimmed when empty).
+At every level break, tap the **kernel button** under the banner (it shows your coins; dimmed when empty).
 
 | Item | Cost |
 | --- | ---: |

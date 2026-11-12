@@ -34,8 +34,10 @@ last **one run**: `start()` empties the purse, nothing is saved, a single-player
 every power-up (`effects.clearPowerups`), and a two-player crash keeps `crashCoins` (90 %, rounded down) and
 clears the power-ups. Pickups with no motion data pulse (`pulseStill` / `pulseScale`, `stillPulseScale`,
 `items.stillPulse`), their circle body re-fitted each frame so the hitbox holds. The **shop** (`TUNING.shop`): in a level break a
-💰 pill under the banner (`shopButtonLayout`; dimmed at 0 coins, the single-player hint then drops its
-"· 💰 to shop") opens a panel of rows (`shopLayout`, `SHOP_ITEMS`) in the chrome column: fiber 1, one bean 6,
+pill under the banner (`shopButtonLayout`; it shows the corn kernel and the purse, `createButton`'s
+`icon`, and these notes and the code's comments still call it the 💰 pill; dimmed at 0 coins, the
+single-player hint then drops its "· 💰 to shop", the one place the money bag is still drawn) opens a
+panel of rows (`shopLayout`, `SHOP_ITEMS`) in the chrome column: fiber 1, one bean 6,
 a super bean 16 (fills the bag to `superBeans`), a mystery box 5 (the plain draw table, `pairsLeft` 0 so a
 skip becomes fiber). `buyBlocker` / `canBuy` grey a row the purse or the bag refuses; `Play.buyItem` spends
 and applies it, and the reward animates in the paused break. A box bought from the panel (`shopBuy` passes
@@ -45,7 +47,7 @@ scrolls the strip right to left on a cubic ease-out (`sfx.tick` per face, `sfx.r
 holds `pauseMs`, then `openMystery(draw, …, { reveal: false })`; `shopBuy` refuses while it spins and
 `closeShop` (so the level start too) finishes it early with the rising reveal. A postbiotic doubles a kernel
 picked up (`collectItem` pays `effects.multiplier()`), never a box's coins or a level's. In a test run
-(`testCoins`, single player) the purse is endless (`purseCoins` → Infinity, `countText` / `coinLabel` read ∞,
+(`testCoins`, single player) the purse is endless (`purseCoins` → Infinity, `countText` reads ∞,
 `buyItem` spends nothing) and `setTestMode(false)` empties it. ✕, a tap outside the panel, Esc / P / B and
 the power input (B key, RT, a versus power key) close it (`chromeIntent` `closeShop`, arming the resume
 lockout); closing never continues the level. The game-over panel shows `collected.coin` beside the pipes
@@ -345,40 +347,71 @@ stops in a hidden tab) Continue lights up and glows, and **Play starts only on i
 release** (click, Enter / Space up, the pad's A up), since Play's keydown-SPACE flap repeats while held
 and the pad plugin reports a held button. Any error in the splash removes it and starts the game.
 
-**Education mode** (📚, 2026-11-12, v0.16.1, plan `.claude/plans/21-education.plan.md`, Stage 2: a
-tester build). Hidden until a device is unlocked: typing one of `EDUCATION.words` (`poopschool`) as the
-username and pressing Save (`toggleEducationUnlock` in the save panel, like the test word; never stored
-as a name) sets the setting `eduUnlocked` (`Play.setEduUnlocked`); typing it again locks it. The ready
-screen then offers a 📚 switch (settings `education`, remembered) under 🚽, in the 👥 slot on a phone; on
-a wide window the three switches pack into 64 px boxes (`readyLayout({ versus, education })`, y 808 /
-874 / 940); 👥 and 📚 switch each other off. `refreshReadySwitches` re-lays them in place when test mode
-or the word changes (stable `switchBoxes` for the focus ring); a gold count on the 📚 is the cards due
-(`dueCount`). A run with 📚 on latches `runIsEducation` (never a Daily Dump), shows 📚 in the HUD, and
-**records nothing** at its end (`endRun` returns after the test-run return: no best, top list, career or
-sync); with test mode on as well it is a test run too, and the cards' progress is not saved.
+**Education mode** (📚, 2026-11-12, v0.16.1, plans `.claude/plans/21-education.plan.md`, Stage 2: a
+tester build, and `22-education-ux-polish.plan.md`: its playtest polish). Hidden until a device is
+unlocked: typing one of `EDUCATION.words` (`poopschool`) as the username and pressing Save
+(`toggleEducationUnlock` in the save panel, like the test word; never stored as a name) sets the
+setting `eduUnlocked` (`Play.setEduUnlocked`); typing it again locks it. The ready screen then offers a
+📚 switch (settings `education`, remembered) under 🚽, in the 👥 slot on a phone; on a wide window the
+three switches pack into 64 px boxes (`readyLayout({ versus, education })`, y 808 / 874 / 940); 👥 and
+📚 switch each other off. `refreshReadySwitches` re-lays them in place when test mode or the word
+changes (stable `switchBoxes` for the focus ring); a gold count on the 📚 is the cards due (`dueCount`).
+A run with 📚 on latches `runIsEducation` (never a Daily Dump), shows 📚 in the HUD, and at its end
+records nothing on a board or in the career (`endRun`: no best, top list, career counters or sync);
+its own badges and average grade stay on the device (`recordEducation`, below). With test mode on as
+well it is a test run too: no card progress, badge or revive is saved.
 **Cards** (`src/questions.js`, 70 placeholder cards, audits in `src/questionAudits.js`, the audit tool
 `tools/audit_questions.mjs`) are scheduled per device by SM-2 (`src/education.js`; store
-`flappyPoop.eduSrs`, wiped by Clear). **The quiz card** (`scenes/Quiz.js`, overlay id `quiz`): Play owns
-the cards (`quizNext` → `pickCard`, `quizAnswer` → `gradeFor` / `schedule` / `eduStore`), the scene
-only shows them: three options (tap, keys 1–3, the ring), ✓ / ✗, the verdict, the explanation (at once
-after a wrong answer, which holds Next `explainMinMs`; behind "Why?" after a right one; its source only
-once audited), the card's id in a corner. **Level break**: a 📚 Quiz pill under the 💰 (the 🏅's row,
-`quizButtonShown`; chromeIntent's `'quiz'` input, only in an education run's break) asks about the
-segment just cleared (plus general cards); a right answer pays `education.breakCoins` (`takeCoins`); the
-shop's prices are `eduShopPrices(level)` (`Play.shopPrices`; `buyBlocker` takes `prices`). **Crash**
+`flappyPoop.eduSrs`, wiped by Clear). A **test run** saves no answers, so what is due would never
+clear: its quizzes walk the level's deck in id order instead (`pickCard` context `'browse'`; the cards
+shown are kept for the page load in the registry's `testQuizShown`), so skipping to a level shows that
+level's cards. **The quiz card** (`scenes/Quiz.js`, overlay id `quiz`): Play owns the cards (`quizNext`
+→ `pickCard`, `quizAnswer` → `gradeFor` / `schedule` / `eduStore`), the scene only shows them: three
+options (tap, keys 1–3, the ring), ✓ / ✗, the verdict, the explanation (at once after a wrong answer,
+which holds Next `explainMinMs`; behind "Why?" after a right one; its source only once audited), the
+card's id in a corner. **Its buttons**: a full-width Why on top, and a bottom row whose right button is
+the way forward (Next, Fly on, Go for it, End run) and whose left button is the way out (Return in a
+break; Give up or the choice's Fly on in a revive). Enter / Space press only the way forward (and
+Return on "All caught up"), never Give up: Space is the flap key. **Its sounds**: a book opens with the
+quiz (`book-open`), a page turns for each next card (`book-flip`), the book shuts when it is left
+(`book-close`); a right answer plays `sfx.score` and a wrong one `sfx.hazard`; the answer that wins
+everything back plays `sparkle` in the ding's place. **Level break**: a 📚 Quiz pill under the shop
+pill (the 🏅's row, `quizButtonShown`; chromeIntent's `'quiz'` input, only in an education run's
+break) asks about the segment just cleared (plus general cards); a right answer pays
+`education.breakCoins` (`takeCoins`); the shop's prices are `eduShopPrices(level)` (`Play.shopPrices`;
+`buyBlocker` takes `prices`). Under it, once the run has an answer, a pill reads the run's tally
+(`❔ answered ✅ right ❌ wrong`; `runQuiz`, built by `tallyAnswer` with one row per level) and opens
+it read-only (`openQuizStats` → `Quiz('stats')`); the bonus quiz's answers are not tallied. **Crash**
 (`die` → `startEduRevive`): the coins and power-ups go (`effects.snapshot`, kept in `reviveLost`), the
 world halts as in a match respawn (`startRespawn` / `endRespawn` keep their match parts behind
-`if (this.match)`), and `respawnHold` stops `tickRespawn` at the end of the tumble, before the field
-clears, while the **revive quiz** runs (`reviveStep` through `Play.reviveEvent`): ❤️ ×
-`education.strikes` misses end the run (`reviveDone` → `endRun`, the field untouched); the first right
-answer revives, and when the crash took something the player may go for ⭐ × `restoreStreak` in a row to
-get it all back (`effects.restore`); Give up ends it; Esc / B do nothing. A revive costs
-`education.revivePenaltyPerLevel` × level (`scoreAfterDeath` / `scorePopup` take the per-level amount),
-then "Tap when ready" (`reviveHint`; chromeIntent `reviveWait` → `reviveGo`, after the resume lockout)
-runs the glide and the blinks. **Over** shows `📚 right/answered · 💀 revives · ⭐ restores` and
-`eduNotSaved`, no Share; a won run offers 📚 Quiz in Share's place (`openBonus` → `Quiz('bonus')`, the
-rectum's questions, no coins). Still to come (plan 21): the server pilot, the privacy foundation, the
-public release with the age question, the 📚 board, the research beta and study.
+`if (this.match)`), and `respawnHold` (`'quiz'`) stops `tickRespawn` at the end of the tumble while the
+**revive quiz** runs (`reviveStep` through `Play.reviveEvent`): ❤️ × `education.strikes` misses end the
+run (`reviveDone` → `endRun`, the field untouched); the first right answer revives, and when the crash
+took something the player may go for ⭐ × `restoreStreak` in a row to get it all back
+(`effects.restore`); Give up ends it; Esc / B do nothing. The quiz is the pause: `autoPause` does
+nothing under it, and a revive already decided is settled, never asked again (`reviveSettled`). **The
+field refills under the card** at the first right answer, the moment the revive is certain
+(`prepareRevive` → `clearFieldAhead` + `refillAfterRespawn`; a game over comes before any right answer
+and so still shows the crash); `scrollSpeed()` is 0 through a respawn, so the refilled pairs stand
+still, and a wide field's pairs sweep in (`tickSweep`). At a level's end (every pair passed) a finish
+line no farther than the first-pair lead stays, else it is placed at that lead (`reviveFinishKept`,
+`finishLeadShift`). A revive costs `education.revivePenaltyPerLevel` × level (`scoreAfterDeath` /
+`scorePopup` take the per-level amount); **Fly on goes straight on**: the poop stands at mid-height and
+blinks for `education.reviveBlinkMs` (`standRevived`, `respawnBlinkStart`), with no glide and no "Tap
+when ready". A revive's way forward glows. **Badges and the average grade** (`EDU_ACHIEVEMENTS` in
+`src/achievements.js`, their own list: never in `ACHIEVEMENTS`, never claimed on the server): 🤓 Nerd
+Alert (10 perfect graded runs in a row), 💯 Full Marks, 🅰️ / 🅱️ / 📜 (90 %, 80 to under 90, 70 to
+under 80), 🏳️ Drop Out (Give up with nothing answered), 👼 / 🐦‍🔥 (100 / 1000 revives). A run is
+graded from `education.badgeMinAnswers` answers (`eduRunFacts`); the education store keeps the counters
+(`revives`, `perfectStreak`, `gradedRuns`, `gradeSum`) and the badges with the cards, and the average
+grade is the mean of the graded runs' grades (`averageGrade`). **Over** shows
+`❔ answered · ✅ right · ❌ wrong`, the run's education badges, and `eduNotSaved` (below the fold of
+its scroll band when a badge line is there), no Share; a won run offers 📚 Quiz in Share's place
+(`openBonus` → `Quiz('bonus')`, the rectum's questions, no coins). Your own **profile**, with education
+unlocked, ends with a 📚 Education section: the average grade, the graded runs and the eight badges.
+Still to come: the 📚 board by average grade with opt-in sharing (plan
+`23-education-board.plan.md`, a draft), then plan 21's server pilot, privacy foundation, public
+release with the age question, research beta and study.
 
 It is deliberately small: plain ES modules, no bundler, no runtime npm
 dependencies (one devDependency for the schema tests), Phaser 4 loaded from a CDN, deployed to GitHub Pages straight from
@@ -449,8 +482,10 @@ src/
                             Menu / d-pad), RT threshold, stick deadzone + repeat;
                             TUNING.focus = the focus ring's geometry, fill alpha,
                             pulse and the overlay scroll step. TUNING.education = Education
-                            mode (plan 21): grade thresholds, the SM-2 srs
+                            mode (plans 21, 22): grade thresholds, the SM-2 srs
                             knobs, minGap, generalShare, strikes, restoreStreak,
+                            reviveBlinkMs (the blink after Fly on), badgeMinAnswers
+                            (answers a run needs to be graded),
                             priceScale, masteredMs, explainMinMs, breakCoins,
                             revivePenaltyPerLevel. EDUCATION.words = the unlock word
                             (poopschool), matched like TEST_MODE.words. TUNING.splash = the
@@ -547,6 +582,11 @@ src/
                             merge_counters), cleanCounters, evaluate (newly earned
                             ids), windowOpen, progressOf, bestFacts (veteran
                             credit), openQuests, achievementById, isAchievementId;
+                            EDU_ACHIEVEMENTS (plan 22: the eight education badges,
+                            their own list with edu_ ids, kept on the device and
+                            never claimed), eduRunFacts (a run's tally → answered,
+                            right, graded, grade, perfect, gaveUp), nextPerfectStreak
+                            (🤓), averageGrade (the mean of the graded runs);
                             v0.16.0: a run entry's `modes` (default single player),
                             IBS_WINS / WINDOW_DAYS / BREAK_DAYS / FOUR_OF_A_KIND,
                             levelCloseShave, winsInWindow, daysBetween,
@@ -560,12 +600,19 @@ src/
                             then early reviews; revive: due learning, due reviews,
                             new from the decks up to the level, early; never a card of
                             the session or a retired one; the last minGap wait),
+                            a test run's 'browse' pick walks the level's deck in id
+                            order, then general, then the other decks, cards not yet
+                            shown first),
                             shuffleOptions, reviveStart / reviveStep (strikes →
-                            choice → streak → revived / restored / over; giveUp),
+                            choice → streak → revived / restored / over; giveUp marks
+                            gaveUp), reviveSettled, newTally / tallyAnswer (the
+                            run's answers in all and per level),
                             eduShopPrices (base × priceScale per level), masteryByDeck
                             (the profile's, plan 21 B2: orphans allowlist until then),
                             createEduStore (LEADERBOARD.eduKey = flappyPoop.eduSrs:
-                            each card's record and the last cards shown), dueCount
+                            each card's record and the last cards shown, and (plan
+                            22) the education counters and badges: addRevive,
+                            endRun(facts), unlock(ids, day)), dueCount
                             (the 📚 switch's count), cardText (zh-Hans when a card has
                             it) / optionText, cardSource (short citations: "Martinsen
                             et al. 2005"), EDUCATION_EMOJI. Fully unit-tested
@@ -606,6 +653,8 @@ src/
                             catchUpTier / catchUpDraws, matchResult (score, fewer
                             deaths, draw), respawnPose (the crash →
                             glide → blink → done timeline, pure in elapsed ms),
+                            respawnBlinkStart (the clock with only so much blinking
+                            left: an education revive skips the glide),
                             coursePairStart / courseDistance (a pair's place on the
                             course; what a half's distance reads with a pair a given
                             lead ahead), VERSUS_EMOJI; createMatch's options
@@ -698,7 +747,8 @@ src/
   i18n.js                   en / zh-Hans string catalog, t(), initialLocale,
                             howToItems, pauseBannerText, metaFontSize, welcomeText,
                             levelBannerText(locale, level, levels, { shop }),
-                            coinLabel ("💰 12", locale-free).
+                            countText (a coin count beside the corn kernel: "12", or
+                            ∞ for a test run's purse; locale-free).
                             Player copy lives here (not in logic.js). See
                             TRANSLATION_NOTES.md.
   sound.js                  WebAudio synth blips + setMuted/isMuted/attachGame.
@@ -781,7 +831,14 @@ src/
                             handlers; Play resolves taps with readyHit(). pulse(on)
                             breathes the label around its fitted scale (the ? and
                             the user button while their prompts are due).
-                            labelScale() for the smoke.
+                            labelScale() for the smoke. `icon` ({ key, frame, px }):
+                            an image left of the label, the pair centred (the shop
+                            pill's corn kernel); iconShown for the smoke.
+    coinText.js             createCoinText(scene, x, y, style, { align, px, depth }):
+                            text, the corn kernel ('coin', frame 0), text, on one
+                            line anchored left, centre or right; set(before, after),
+                            setIcon(on), setAlpha, width, destroy. The shop's purse
+                            line and prices ("Bag full" with no kernel).
     toggle.js               createToggle(scene, box, { on, glyph, glyphLeft }): the toilet switch
                             (pill track, knob tween, 🚽 alpha) from readyLayout().toilet,
                             with glyph 👥 the two-player switch from
@@ -847,7 +904,9 @@ src/
   scenes/
     Boot.js                 preload() gameplay PNGs (mystery.png as a 384 px
                             spritesheet; coin.png as a 106 px one) + the sfx MP3s (coin, coin-spend,
-                            shop beside fart / fart-accelerate / level-up); create() makes the global
+                            shop, flush, and the education quiz's book-open / book-flip /
+                            book-close / sparkle, beside fart / fart-accelerate /
+                            level-up); create() makes the global
                             'mystery-spin' (mystery.frameMs) and 'coin-spin' (coin.frameMs)
                             anims, then hands splashReady() the start of Play: Play
                             starts on the splash's Continue. The loader's progress
@@ -1249,6 +1308,20 @@ src/
                             lockout; with a card up the next tap, B
                             (Play.onPadAction), a nav press, Space or Home only
                             closes it (closeCard). The cells ring after the buttons.
+                            The summary band (plan 22; overBandLayout, T.over.band):
+                            the cells and the lines under them are on a
+                            createScrollView between the score line and the buttons;
+                            the buttons, halo and tray are made first and stay on
+                            the main camera, the card is on a camera of its own.
+                            Inside the band nothing fires on the press: a tap
+                            (released within 12 px) opens the cell or rank link
+                            under it (hitAt, at the band's scroll) and on empty
+                            space goes home; a drag or the wheel only scrolls. It
+                            scrolls only when a line runs past its bottom: an
+                            education run that earned a badge (tally, badge line,
+                            then the eduNote below the fold). { education }: the
+                            run's tally (❔ answered · ✅ right · ❌ wrong); its
+                            badges are looked up in EDU_ACHIEVEMENTS too.
     Settings.js             Overlay (geometry from settingsLayout): sound, haptics (Android only), the
                             hand row (👈 pill 👉 from createToggle with glyphLeft, a
                             Zone over the row, a hint line; toggleHand →
@@ -1349,18 +1422,32 @@ src/
                             the nearest cell (focusNearest over cells only), ✕ above
                             the first row (scrolls to the top). Tags (view.tags, TAGS: 🔧 🎖️ 🆕) lead the Achievements grid, each a card. No username: the gate
                             (buildGate) instead; refresh() restarts it either way.
+                            Your own profile, with education unlocked, ends with a
+                            📚 Education section (plan 22; eduView, from this device's
+                            education store): the average grade, the graded runs,
+                            and the eight education badges (eduBadgeItems) with
+                            progress on the education counters. The badge grid is one
+                            function (badgeGrid) used for both lists.
     Quiz.js                 Overlay (plan 21; chromeIntent 'quiz' in an education
                             run's level break, Play.openQuiz otherwise): the 📚 quiz
                             card, 640 × 1120. Modes 'break' (coins), 'revive' (after a
                             crash: ❤️ strikes, the ⭐ choice and streak, Give up; it
-                            cannot be closed and ends itself, finish) and 'bonus' (a
-                            won run's rectum questions from Over). Play owns the cards
-                            (quizNext, quizAnswer, reviveEvent / reviveGrant); its
-                            shutdown calls Play.onQuizClosed(mode). Options are drawn
-                            boxes with wrapped text (not createButton); three bottom
-                            button slots take a label and an action per step (set /
-                            hold / press). preview(card) lays any card out answered
-                            wrong for the smoke's fit check (fits()).
+                            cannot be closed and ends itself, finish), 'bonus' (a
+                            won run's rectum questions from Over) and 'stats' (plan
+                            22: the run's answers, read-only, showStats; no card,
+                            no sound). Play owns the cards (quizNext, quizAnswer,
+                            reviveEvent / reviveGrant); its shutdown calls
+                            Play.onQuizClosed(mode). Options are drawn boxes with
+                            wrapped text (not createButton). Three button slots by
+                            position take a label and an action per step (set / hold
+                            / press): topBtn (Why, full width), leftBtn (the way
+                            out: Return, Give up, the choice's Fly on) and rightBtn
+                            (the way forward, which Enter / Space press and which
+                            glows in a revive: halo, refreshHalo). sample() plays
+                            the book sounds through Play.playSample; choose() the
+                            answer's. preview(card, right) lays any card out
+                            answered wrong or right for the smoke's fit check
+                            (fits(): the last text ends above the buttons under it).
 
 assets/                     Contract PNGs + README.md (the art contract).
   README.md                 File name, pixel size, orientation rules. tests enforce it.
@@ -1396,6 +1483,10 @@ assets/                     Contract PNGs + README.md (the art contract).
   sfx/Coin_Spend.mp3        A shop purchase.
   sfx/ShopOpenClose.mp3     The shop opening and closing.
   sfx/ToiletFlush_Win.mp3   The toilet flush when GO appears in a two-player countdown.
+  sfx/Book_Open.mp3         An education quiz opening.
+  sfx/Book_PageTurn.mp3     Each next question of an education quiz.
+  sfx/Book_Close.mp3        An education quiz being left.
+  sfx/Sparkle_Restore.mp3   A revive's full streak winning everything back.
 
 db/schema.sql               Supabase schema: scores table (player_id = save-code id,
                             name, score, toilet, updated_at), RLS + a column grant
@@ -1538,7 +1629,9 @@ tests/                      node --test (schema.test.js needs `npm install`: PGl
                             called synchronously, cancel, error → download, download
                             name + revoke, never rejects)
   over.test.js              overButtonsLayout (Share | Home inside the panel, Home
-                            alone on a test run), overHit, shareCardLayout (inside
+                            alone on a test run), overHit, overBandLayout (the summary
+                            band between the score and the buttons, every cell in it,
+                            which lines fit), shareCardLayout (inside
                             the frame, top-to-bottom order, rows inside the card)
   shareCard.test.js         drawShareCard on a fake 2D context (text order, tan frame
                             before the poop, icons + pipe cap slice, win line, text
@@ -1819,9 +1912,13 @@ tools/
                             The education sections (plan 21, last, each putting the
                             device back): education-unlock (the word, the 📚 switch,
                             the three switches, nothing recorded), education-quiz (the
-                            pill, answers by tap / key / pad, coins, every card's fit,
-                            the level's prices), education-revive (every revive
-                            path), education-over (the tally, the bonus quiz, Clear).
+                            pill, answers by tap / key / pad, coins, every card's fit
+                            both ways, the buttons and keys, the ❔ pill and view, the
+                            sounds, the level's prices), education-revive (every
+                            revive path: the pause, the refill under the card, Fly
+                            on, a level's end, a wide field, a test run's quiz),
+                            education-over (the tally, the bonus quiz, the badges
+                            and the profile's section, the scroll band, Clear).
                             OVERLAYS lists Quiz; NEEDS_RUN keeps the ready-screen
                             overlay loops off it.
                             Zero dependencies (fetch + WebSocket).
