@@ -131,3 +131,28 @@ test('readyHit returns daily at the centre of the 🌞 and null just outside it'
   assert.equal(readyHit(box.x, box.y, layout), 'daily');
   assert.equal(readyHit(box.x, box.y + box.height / 2 + 2, layout), null);
 });
+
+test('the 📚 switch (plan 21): alone it takes the 👥 slot; with 👥 the three switches pack in and clear the user button\'s halo', () => {
+  const edu = readyLayout(GAME_WIDTH, GAME_HEIGHT, T, 0, { education: true });
+  const two = readyLayout(GAME_WIDTH, GAME_HEIGHT, T, 0, { versus: true });
+  assert.deepEqual({ ...edu.education, id: 'versus' }, two.versus, '📚 alone sits exactly where 👥 alone does');
+  assert.deepEqual(edu.toilet, layout.toilet, 'the 🚽 does not move for one extra switch');
+  assert.equal(two.education, undefined);
+  assert.equal(layout.versus, undefined);
+  assert.equal(layout.education, undefined);
+  const all = readyLayout(GAME_WIDTH, GAME_HEIGHT, T, 0, { versus: true, education: true });
+  const stack = [all.toilet, all.versus, all.education];
+  assert.deepEqual(stack.map((b) => b.id), ['toilet', 'versus', 'education']);
+  for (const b of stack) {
+    assert.ok(b.height >= 64, `${b.id} is thumb-sized`);
+    assert.ok(b.track.height <= b.height, `${b.id} track inside its box`);
+    assert.equal(overlaps(edges(b), POOP), false, `${b.id} clears the bobbing poop`);
+  }
+  for (let i = 1; i < stack.length; i += 1) assert.ok(edges(stack[i]).top >= edges(stack[i - 1]).bottom, `${stack[i].id} below ${stack[i - 1].id}`);
+  const halo = edges(all.profile).top - T.readyPromptGlowPx;
+  assert.ok(halo - edges(all.education).bottom >= 8, `📚 bottom ${edges(all.education).bottom} clears the user button's halo (${halo}) by 8 px`);
+  assert.deepEqual(all.profile, layout.profile, 'the user button never moves');
+  for (const b of stack) assert.equal(readyHit(b.x, b.y, all), b.id);
+  assert.equal(readyHit(edu.education.emojiX, edu.education.y, edu), 'education');
+  assert.equal(readyHit(edu.education.x, edu.education.y, layout), null, 'no 📚 box when it is not offered: a tap there starts the run');
+});

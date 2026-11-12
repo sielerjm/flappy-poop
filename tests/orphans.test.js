@@ -32,7 +32,6 @@ const ALLOWED_EXPORTS = {
   reviveStep: 'plan 21: the revive quiz moves on with it (step L6)',
   eduShopPrices: 'plan 21: the shop prices an education run with it (step L5)',
   masteryByDeck: "plan 21: the player's own profile shows it (step B2)",
-  createEduStore: 'plan 21: Play keeps the cards with it (step L3)',
 };
 
 /** UI string keys no source names literally: prefix → why (they are built at run time). */

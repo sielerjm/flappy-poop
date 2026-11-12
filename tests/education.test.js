@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { LEADERBOARD, TUNING as T } from '../src/config.js';
 import { createRng } from '../src/logic.js';
 import { CARDS, DECKS } from '../src/questions.js';
-import { createEduStore, eduShopPrices, gradeFor, masteryByDeck, pickCard, reviveStart, reviveStep, schedule, shuffleOptions } from '../src/education.js';
+import { createEduStore, dueCount, eduShopPrices, gradeFor, masteryByDeck, pickCard, reviveStart, reviveStep, schedule, shuffleOptions } from '../src/education.js';
 
 const S = T.education.srs;
 const MIN = 60000;
@@ -226,4 +226,12 @@ test('createEduStore: answers persist under eduKey; recent keeps the last minGap
   assert.doesNotThrow(() => off.answer('ST-01', rec));
   assert.deepEqual(off.load().cards['ST-01'], rec, 'private mode: the cards live for this load');
   assert.doesNotThrow(() => off.clear());
+});
+
+test('dueCount: seen live cards due now, nothing else', () => {
+  const cards = [{ id: 'ST-01' }, { id: 'ST-02' }, { id: 'ST-03' }, { id: 'ST-04', retired: true }];
+  const srs = { 'ST-01': reviewRec(DAY, NOW - 1), 'ST-02': reviewRec(DAY, NOW + 1), 'ST-04': reviewRec(DAY, NOW - DAY), 'XX-99': reviewRec(DAY, NOW - DAY) };
+  assert.equal(dueCount(srs, { cards, now: NOW }), 1, 'ST-01 only: ST-02 is not due, ST-03 unseen, ST-04 retired, XX-99 not a card');
+  assert.equal(dueCount({}, { cards, now: NOW }), 0);
+  assert.equal(dueCount(srs, { cards, now: NOW + 2 }), 2);
 });

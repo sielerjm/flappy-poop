@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { createSettingsStore, vibrate } from '../src/logic.js';
 import { initialLocale } from '../src/i18n.js';
 
-const DEFAULTS = { sound: true, music: true, haptics: true, locale: 'en', howToSeenAt: '', hand: 'right' };
+const DEFAULTS = { sound: true, music: true, haptics: true, locale: 'en', howToSeenAt: '', hand: 'right', eduUnlocked: false, education: false };
 
 function fakeStorage() {
   const m = new Map();
@@ -101,4 +101,14 @@ test('howToSeenAt keeps a string stamp, drops anything else, and persists', () =
   assert.equal(s.set({ howToSeenAt: 42 }).howToSeenAt, '', 'non-string reads as never');
   st.setItem('k', JSON.stringify({ sound: true, howToSeenAt: { a: 1 } }));
   assert.equal(createSettingsStore(st, 'k').load().howToSeenAt, '');
+});
+
+test('education mode (plan 21): the unlock and the 📚 switch are remembered booleans, false by default', () => {
+  const st = fakeStorage();
+  const s = createSettingsStore(st, 'k');
+  assert.deepEqual(s.set({ eduUnlocked: true, education: true }), { ...DEFAULTS, eduUnlocked: true, education: true });
+  assert.deepEqual(createSettingsStore(st, 'k').load(), { ...DEFAULTS, eduUnlocked: true, education: true }, 'read back after a reload');
+  assert.deepEqual(s.set({ eduUnlocked: 'yes', education: 1 }), DEFAULTS, 'a non-boolean reads as off, as for sound and music');
+  st.setItem('k', JSON.stringify({ eduUnlocked: 'yes', education: null }));
+  assert.deepEqual(createSettingsStore(st, 'k').load(), DEFAULTS, 'junk in storage reads as off');
 });

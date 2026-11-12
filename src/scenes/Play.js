@@ -126,6 +126,7 @@ import { openSavePanel, isSavePanelOpen, showAdoptedName, showBoardScores } from
 import { isTournamentPanelOpen, tournamentPadAction } from '../ui/tournamentPanel.js';
 import { bindPad } from '../input/pad.js';
 import { keyGroup, sameDevice, catchUpTier, catchUpDraws, versusAvailable, ghostPlacement, rivalMarker, respawnPose, courseDistance, VERSUS_EMOJI } from '../versus.js';
+import { createEduStore, dueCount, EDUCATION_EMOJI } from '../education.js';
 
 const TEXT_STYLE = {
   fontFamily: 'sans-serif',
@@ -201,6 +202,14 @@ export class Play extends Phaser.Scene {
     this.dailyStore = createDailyStore(); // this device's Daily Dump (🌞) attempt: claimed at the start, final at the crash
     this.dailyQueue = createDailyQueue(); // daily scores the board has not confirmed yet
     this.careerStore = createCareerStore(); // lifetime counters and achievements (plan 08): counted at endRun, sent by syncLeaderboard
+    // Education mode (📚, plan 21): unlocked on this device by its word in the save panel (setEduUnlocked),
+    // then the 📚 switch on the ready screen (toggleEducation); both live in the settings store. The cards'
+    // scheduler state lives in eduStore. runIsEducation latches per run like runIsTest.
+    const eduSettings = this.settings.load();
+    this.eduUnlocked = eduSettings.eduUnlocked;
+    this.educationOn = eduSettings.education;
+    this.eduStore = createEduStore(globalThis.localStorage);
+    this.runIsEducation = false;
     this.runBadges = []; // the achievements the last run unlocked, for Over
     // The Daily Dump run (startDaily → start): { day, level, startPipes, playerId } while one runs, else null.
     // runIsDaily latches per run like runIsTest; dailyNext carries startDaily's day through the launch slide.
@@ -292,7 +301,8 @@ export class Play extends Phaser.Scene {
 
     // Ready-screen geometry (title, poop spot, buttons). Taps resolve through
     // readyHit() in flap(), not GameObject handlers, so the chrome is visual only.
-    this.readyBoxes = readyLayout(this.col.width, GAME_HEIGHT, T, this.col.x, { versus: this.versusOffered() }); // centred boxes land on W / 2; the ? at the column's right edge
+    this.readyBoxes = null;
+    this.layoutReady(); // centred boxes land on W / 2; the ? at the column's right edge
     this.launching = false;
     // Toilet mode: session-only (registry survives scene.restart, not a reload).
     this.toilet = Boolean(this.registry.get('toilet'));
@@ -380,8 +390,9 @@ export class Play extends Phaser.Scene {
       .text(this.readyBoxes.title.x, this.readyBoxes.title.y, t(this.locale, 'readyTitle'), { ...TEXT_STYLE, fontSize: `${T.readyTitlePx}px` })
       .setOrigin(0.5)
       .setDepth(20);
-    this.toiletToggle = createToggle(this, this.readyBoxes.toilet, { on: this.toilet });
-    this.versusToggle = this.readyBoxes.versus ? createToggle(this, this.readyBoxes.versus, { on: this.versusOn, glyph: VERSUS_EMOJI }) : null;
+    this.readyUiShown = true; // setReadyUiVisible's last word: the switches rebuilt by refreshReadySwitches follow it
+    this.toiletToggle = this.versusToggle = this.educationToggle = this.eduDueText = null; // a restart destroyed the last ones
+    this.buildReadySwitches();
     // "?" in the top-right corner opens How to play. It pulses under a soft white
     // halo until the player acknowledges this build (opens it, or finishes a run).
     {
@@ -499,8 +510,10 @@ export class Play extends Phaser.Scene {
       ? createFocus(this, T, {
           items: [
             ...['info', 'lang', 'feedback', 'leaderboard', 'mute', 'settings', 'pause'].map((id) => ({ id, obj: this.tray.buttons[id], activate: () => this.handleChrome(id) })),
-            { id: 'toilet', box: this.readyBoxes.toilet, visible: onReady, activate: () => this.toggleToilet() },
-            ...(this.readyBoxes.versus ? [{ id: 'versus', box: this.readyBoxes.versus, visible: onReady, activate: () => this.toggleVersus() }] : []),
+            { id: 'toilet', box: this.switchBoxes.toilet, visible: onReady, activate: () => this.toggleToilet() },
+            // 👥 and 📚 always have an item; it shows only while its switch is offered (refreshReadySwitches).
+            { id: 'versus', box: this.switchBoxes.versus, visible: () => onReady() && Boolean(this.readyBoxes.versus), activate: () => this.toggleVersus() },
+            { id: 'education', box: this.switchBoxes.education, visible: () => onReady() && Boolean(this.readyBoxes.education), activate: () => this.toggleEducation() },
             { id: 'daily', box: this.readyBoxes.daily, visible: onReady, activate: () => this.handleChrome('daily') },
             { id: 'howto', box: this.readyBoxes.howto, visible: onReady, activate: () => this.handleChrome('howto') },
             // The level break: the 💰 pill, then (the shop open) its ✕ and rows down the column.
@@ -685,9 +698,12 @@ export class Play extends Phaser.Scene {
   }
 
   setReadyUiVisible(visible) {
+    this.readyUiShown = visible;
     this.readyTitle.setVisible(visible);
     this.toiletToggle.setVisible(visible);
     this.versusToggle?.setVisible(visible);
+    this.educationToggle?.setVisible(visible);
+    this.refreshEduDue();
     this.howToBtn.setVisible(visible);
     this.howToHalo.setVisible(visible && this.isHowToPromptDue());
     this.dailyBtn.setVisible(visible);
@@ -721,6 +737,8 @@ export class Play extends Phaser.Scene {
     // a normal run is testRunStart(1): level 1, nothing passed, score 0.
     // A daily run starts at the day's level with a score of 0 (dailyRunStart) and never leaves it.
     this.runIsTest = this.isTestMode();
+    // An education run (📚, plan 21): unlocked, the switch on, single player, never a Daily Dump.
+    this.runIsEducation = !daily && this.educationOn && this.educationOffered();
     const begin = daily ? dailyRunStart(daily.level, this.tune) : testRunStart(this.runIsTest ? this.testSettings().startLevel : 1, this.tune);
     this.level = begin.level;
     this.pipesPassed = begin.pipes;
@@ -1030,6 +1048,10 @@ export class Play extends Phaser.Scene {
         }
         if (hit === 'versus') {
           this.toggleVersus();
+          return;
+        }
+        if (hit === 'education') {
+          this.toggleEducation();
           return;
         }
         if (hit === 'profile') {
@@ -1389,6 +1411,96 @@ export class Play extends Phaser.Scene {
     this.versusOn = !this.versusOn;
     this.registry.set('versus', this.versusOn);
     this.versusToggle?.setOn(this.versusOn);
+    if (this.versusOn && this.educationOn) this.toggleEducation(); // 👥 and 📚 are never on together
+  }
+
+  /** The 📚 switch is offered once education mode is unlocked on this device, outside a match (plan 21). */
+  educationOffered() {
+    return !this.match && this.eduUnlocked;
+  }
+
+  /** The 📚 switch: remembered in the settings store; switching it on switches 👥 off. */
+  toggleEducation() {
+    this.educationOn = !this.educationOn;
+    this.settings.set({ education: this.educationOn });
+    this.educationToggle?.setOn(this.educationOn);
+    if (this.educationOn && this.versusOn) this.toggleVersus();
+  }
+
+  /** Is education mode unlocked here? (the save panel asks before toggling it with the word) */
+  isEduUnlocked() {
+    return this.eduUnlocked;
+  }
+
+  /**
+   * Unlock or lock education mode on this device (the save panel's word). Unlocking asks the browser
+   * to keep this site's storage (the cards' schedule lives there); the ready screen follows at once.
+   */
+  setEduUnlocked(on) {
+    this.eduUnlocked = Boolean(on);
+    this.settings.set({ eduUnlocked: this.eduUnlocked });
+    if (this.eduUnlocked) {
+      try {
+        globalThis.navigator?.storage?.persist?.()?.catch?.(() => {});
+      } catch {
+        /* no storage manager: nothing to ask */
+      }
+    }
+    this.refreshReadySwitches();
+  }
+
+  /**
+   * The ready-screen boxes for the switches offered now (🚽 always; 👥 and 📚 when offered). The
+   * switch boxes keep their objects across a re-layout (switchBoxes), because the focus ring holds
+   * them; a switch not offered has no box in readyBoxes, so readyHit never finds it.
+   */
+  layoutReady() {
+    const at = (opts) => readyLayout(this.col.width, GAME_HEIGHT, T, this.col.x, opts);
+    if (!this.switchBoxes) {
+      const all = at({ versus: true, education: true }); // real geometry for a switch not yet offered
+      this.switchBoxes = { toilet: { ...all.toilet }, versus: { ...all.versus }, education: { ...all.education } };
+    }
+    const next = at({ versus: this.versusOffered(), education: this.educationOffered() });
+    for (const id of ['toilet', 'versus', 'education']) {
+      if (next[id]) next[id] = Object.assign(this.switchBoxes[id], next[id]);
+    }
+    this.readyBoxes = next;
+  }
+
+  /** (Re)draw the 🚽 / 👥 / 📚 switches on their current boxes, shown while the ready UI is (readyUiShown). */
+  buildReadySwitches() {
+    this.toiletToggle?.destroy();
+    this.versusToggle?.destroy();
+    this.educationToggle?.destroy();
+    this.eduDueText?.destroy();
+    const b = this.readyBoxes;
+    this.toiletToggle = createToggle(this, b.toilet, { on: this.toilet });
+    this.versusToggle = b.versus ? createToggle(this, b.versus, { on: this.versusOn, glyph: VERSUS_EMOJI }) : null;
+    this.educationToggle = b.education ? createToggle(this, b.education, { on: this.educationOn, glyph: EDUCATION_EMOJI }) : null;
+    // The cards due for review, a small gold count on the 📚's top-right corner (refreshEduDue).
+    this.eduDueText = b.education
+      ? this.add
+          .text(b.education.emojiX + 30, b.education.y - 24, '', { ...TEXT_STYLE, fontSize: '26px', color: '#ffd700', strokeThickness: 6 })
+          .setOrigin(0.5)
+          .setDepth(22)
+      : null;
+    for (const toggle of [this.toiletToggle, this.versusToggle, this.educationToggle]) toggle?.setVisible(this.readyUiShown);
+    this.refreshEduDue();
+  }
+
+  /** Re-lay and redraw the switches when what is offered changes (test mode hides 👥; the word shows 📚). */
+  refreshReadySwitches() {
+    if (!this.readyBoxes) return;
+    this.layoutReady();
+    this.buildReadySwitches();
+  }
+
+  /** The 📚 switch's due count: shown with the switch, and only when a card is due. */
+  refreshEduDue() {
+    if (!this.eduDueText) return;
+    const n = dueCount(this.eduStore.load().cards);
+    this.eduDueText.setText(n > 0 ? String(n) : '');
+    this.eduDueText.setVisible(this.readyUiShown && n > 0);
   }
 
   /** Test mode is on for this session (the registry survives scene.restart, not a reload). */
@@ -1404,6 +1516,7 @@ export class Play extends Phaser.Scene {
   setTestMode(on) {
     this.registry.set('testMode', Boolean(on));
     if (on && (this.state === 'playing' || this.state === 'paused')) this.runIsTest = true;
+    this.refreshReadySwitches(); // test mode takes the 👥 switch away (versusOffered), and gives it back
     // Leaving test mode empties the purse: what the endless test purse hid is not kept.
     if (!on) this.effects?.spendCoins(this.effects.coins());
     this.refreshTestBadge();
@@ -1471,11 +1584,12 @@ export class Play extends Phaser.Scene {
   refreshTestBadge() {
     if (!this.testBadge) return;
     const ready = this.state === 'ready';
-    const show = ready ? this.isTestMode() && !this.launching : this.runIsTest;
+    // In a run it is the mode badge: 🧪 for a test run, 📚 for an education run (plan 21), or both.
+    const show = ready ? this.isTestMode() && !this.launching : this.runIsTest || this.runIsEducation;
     this.testBadge.setVisible(show);
     if (!show) return;
     if (ready) this.testBadge.setText(t(this.locale, 'testTitle')).setPosition(this.col.x + 24, 56);
-    else this.testBadge.setText('\u{1F9EA}').setPosition(this.col.x + 24, T.hudScoreY - 12);
+    else this.testBadge.setText(`${this.runIsTest ? '\u{1F9EA}' : ''}${this.runIsEducation ? EDUCATION_EMOJI : ''}`).setPosition(this.col.x + 24, T.hudScoreY - 12);
   }
 
   applyLocale(next) {
@@ -3066,6 +3180,9 @@ export class Play extends Phaser.Scene {
     }
     // A test run records nothing: no legacy best, no top-list entry, no leaderboard sync.
     if (this.runIsTest) return;
+    // Nor, before its public release, does an education run (plan 21): its cards were saved answer by
+    // answer; no best, top list, career counters, badges or sync.
+    if (this.runIsEducation) return;
     // A Daily Dump records only itself: the attempt is final and its score queued for the 🌞 board,
     // never the 🏆 top list or best (an endless score above maxScore would stop every 🏆 post).
     if (this.runIsDaily) {

@@ -421,7 +421,8 @@ export function createBestStore(storage, key = 'flappy-poop:best') {
 /** Which thumb the bean power button sits by on a wide field (Settings' 👈 👉 toggle; carried by the save code). */
 export const HANDS = ['left', 'right'];
 
-const SETTINGS_DEFAULTS = { sound: true, music: true, haptics: true, locale: DEFAULT_LOCALE, howToSeenAt: '', hand: 'right' };
+// eduUnlocked: education mode (📚, plan 21) unlocked on this device by its word; education: the 📚 switch.
+const SETTINGS_DEFAULTS = { sound: true, music: true, haptics: true, locale: DEFAULT_LOCALE, howToSeenAt: '', hand: 'right', eduUnlocked: false, education: false };
 
 /**
  * The locale the player chose, or null when the settings hold none (a first visit, broken JSON, a
@@ -442,7 +443,7 @@ export function storedLocale(storage, key) {
 function normalizeSettings(raw) {
   const out = { ...SETTINGS_DEFAULTS };
   if (!raw || typeof raw !== 'object') return out;
-  for (const key of ['sound', 'music', 'haptics']) {
+  for (const key of ['sound', 'music', 'haptics', 'eduUnlocked', 'education']) {
     if (typeof raw[key] === 'boolean') out[key] = raw[key];
   }
   out.locale = isLocale(raw.locale) ? raw.locale : SETTINGS_DEFAULTS.locale;
@@ -1514,7 +1515,7 @@ export function scaledCircleBody(frameSize, displayScale, logicalRadius) {
  * toggle sits under the toilet toggle (only offered when two halves fit the
  * window, versusAvailable).
  */
-export function readyLayout(width, height, t, x0 = 0, { versus = false } = {}) {
+export function readyLayout(width, height, t, x0 = 0, { versus = false, education = false } = {}) {
   const cx = x0 + width / 2;
   const boxH = Math.max(88, t.trayHitMin);
   const title = { id: 'title', x: cx, y: 380 };
@@ -1522,11 +1523,18 @@ export function readyLayout(width, height, t, x0 = 0, { versus = false } = {}) {
   // body centre, ×readyPoopScale); the poop bobs ±24 on top of that.
   const s = t.readyPoopScale ?? 1;
   const poop = { id: 'poop', x: cx, y: 672, bubble: { left: -48 * s, right: 116 * s, top: -127 * s, bottom: 46 * s } };
-  // Toilet toggle: 120x56 track left of centre, 🚽 to its right; the hit box spans both.
-  const toilet = { id: 'toilet', x: cx, y: 812, width: 240, height: 72, track: { x: cx - 50, y: 812, width: 120, height: 56 }, emojiX: cx + 80 };
-  // 👥 two-player toggle: the same switch directly under the toilet toggle (bottom 848), above
-  // the user button (top 1023); the bobbing bubble above leaves no other room.
-  const two = versus ? { id: 'versus', x: cx, y: 886, width: 240, height: 72, track: { x: cx - 50, y: 886, width: 120, height: 56 }, emojiX: cx + 80 } : undefined;
+  // The switches under the poop: the 🚽 toilet toggle always, then the 👥 two-player one and the 📚
+  // education one (plan 21) when offered, in that order. Each is a 120x56 track left of centre with
+  // its glyph to the right, the hit box spanning both. One or two switches keep 72 px boxes at y 812
+  // and 886 (the 🚽 bottom at 848); all three pack into 64 px boxes 66 px apart (808, 874, 940), so
+  // the last ends at 972: 51 px above the user button (top 1023), clear of its 40 px prompt halo.
+  // The bobbing bubble above leaves no other room.
+  const extra = [versus && 'versus', education && 'education'].filter(Boolean);
+  const three = extra.length === 2;
+  const switchBox = (id, y) => ({ id, x: cx, y, width: 240, height: three ? 64 : 72, track: { x: cx - 50, y, width: 120, height: 56 }, emojiX: cx + 80 });
+  const ys = three ? [808, 874, 940] : [812, 886];
+  const toilet = switchBox('toilet', ys[0]);
+  const switches = Object.fromEntries(extra.map((id, i) => [id, switchBox(id, ys[i + 1])]));
   // "?" button: a boxH circle in the top-right corner, inset so its pulsing halo
   // (readyPromptGlowPx past the rim) stays inside the field.
   const haloR = boxH / 2 + (t.readyPromptGlowPx ?? 0);
@@ -1536,7 +1544,7 @@ export function readyLayout(width, height, t, x0 = 0, { versus = false } = {}) {
   // The user button, its bottom at 1111: above the ground strip (1152) and the tray band (1168).
   // It does not move when the block above shifts.
   const profile = { id: 'profile', x: cx, y: 1111 - boxH / 2, width: 360, height: boxH };
-  return { title, poop, toilet, howto, daily, profile, ...(two ? { versus: two } : {}) };
+  return { title, poop, toilet, howto, daily, profile, ...switches };
 }
 
 function inBox(x, y, box) {
@@ -1640,13 +1648,13 @@ export function shareCardLayout(t) {
 }
 
 /**
- * Which ready-screen box contains (x, y): 'toilet' | 'versus' | 'howto' |
- * 'profile' | null (null = start the run). The profile (user) button is always
+ * Which ready-screen box contains (x, y): 'toilet' | 'versus' | 'education' | 'howto' |
+ * 'daily' | 'profile' | null (null = start the run). A switch not offered has no box, so it is never hit. The profile (user) button is always
  * there: it reads "Load user" until a name is set; either way it opens the save panel.
  */
 export function readyHit(x, y, layout) {
   if (!layout) return null;
-  for (const box of [layout.toilet, layout.versus, layout.howto, layout.daily, layout.profile]) {
+  for (const box of [layout.toilet, layout.versus, layout.education, layout.howto, layout.daily, layout.profile]) {
     if (box && inBox(x, y, box)) return box.id;
   }
   return null;

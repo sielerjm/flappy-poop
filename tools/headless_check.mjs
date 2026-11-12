@@ -70,6 +70,7 @@ export const SECTIONS = [
   { name: 'tournament', needs: [], about: '🏅 tournament (every two-player session): the lobby (guest, pasted code, host, help), the pad in the panel, seeding (↑ ↓, 🎲, drag), the 🏅 pill in a level break, Bracket / Continue after a race, the podium, abandon to the lobby, two players' },
   { name: 'daily', needs: [], about: "🌞 Daily Dump: the day's level and shared course, endless (no finish line), no coins or skips, the attempt claimed at the start and final at the crash, nothing on the 🏆 lists, an abandoned run finalised" },
   { name: 'profile', about: "player profiles (plan 08): the own profile (local counters, a locked badge's progress), another player's from a stubbed player_stats, the explanation card (a badge, a career cell, by mouse and controller), the wheel and a drag, the controller walking the grid, not found, offline, a board name opening a profile (not on a drag), the sign-in gate (no username), the save panel's Profile button" },
+  { name: 'education-unlock', needs: [], about: "📚 education mode's unlock (plan 21): the word in the save panel (never a name), the 📚 switch remembered across a restart, 👥 and 📚 never on together on a wide window, an education run recording nothing, a Daily Dump never an education run, locking it again" },
 ];
 
 /** What a section needs: its own list, or (omitted) every section before it. */
@@ -3541,6 +3542,122 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
       await evaluate(`document.getElementById('save-profile-btn').click(), true`);
       ok((await waitFor(`__flappy.scene.isActive('Stats') && ${ST}.view && ${ST}.view.own`)) && (await evaluate(`document.getElementById('save-panel').hidden`)), "the save panel's Profile button closes the panel and opens the own profile");
       await shut();
+    });
+
+    await section('education-unlock', async () => {
+      // Education mode (📚, plan 21) before its public release: the word typed as the username unlocks it
+      // on this device (never stored as a name), the 📚 switch appears and is remembered, 👥 and 📚 are
+      // never on together, an education run records nothing, a Daily Dump is never one, and the word
+      // locks it again. The section leaves the switch off and the mode locked, as it found them.
+      {
+        const play = `__flappy.scene.getScene('Play')`;
+        const tx = (key) => evaluate(`import('./src/i18n.js').then((m) => m.t('en', '${key}'))`);
+        const [word] = await evaluate(`import('./src/config.js').then((m) => m.EDUCATION.words)`);
+        const metrics = (width, height) => cdp.send('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 1, mobile: false });
+        const FIELD_DEBOUNCE = await evaluate(`import('./src/config.js').then((m) => m.FIELD.resizeDebounceMs)`);
+        const settle = async (w) => {
+          let W = null;
+          for (let i = 0; i < 60 && W !== w; i += 1) {
+            await sleep(100);
+            W = await evaluate('__flappy.scale.width');
+          }
+          for (let i = 0; i < 20 && (await playState()) !== 'ready'; i += 1) await sleep(100);
+          return W;
+        };
+        const home = async () => {
+          await evaluate(`__flappy.scene.stop('Over'), ${play}.scene.restart(), true`);
+          for (let i = 0; i < 40 && (await playState()) !== 'ready'; i += 1) await sleep(250);
+        };
+        const switches = () =>
+          evaluate(`(() => { const p = ${play}; const b = p.readyBoxes; return JSON.stringify({ toilet: b.toilet.y, versus: b.versus?.y ?? null, edu: b.education?.y ?? null, eduToggle: Boolean(p.educationToggle), on: p.educationOn, vOn: p.versusOn, unlocked: p.isEduUnlocked(), stored: JSON.parse(localStorage.getItem('${TT.settingsKey}') ?? '{}') }); })()`).then(JSON.parse);
+        const tap = (id) => evaluate(`(() => { const p = ${play}; const b = p.readyBoxes['${id}']; p.flap({ x: b.x, y: b.y }); return true; })()`);
+        const typeWord = async (typed) => {
+          await evaluate(`${play}.openSavePanel(), true`);
+          await sleep(200);
+          // Blur first, as a phone does when Save is tapped: that path must not store the word either.
+          await evaluate(`document.getElementById('save-name').value = ' ${typed} ', document.getElementById('save-name').dispatchEvent(new Event('blur')), document.getElementById('save-save-btn').click(), true`);
+          await sleep(200);
+          const seen = await evaluate(`JSON.stringify({ save: localStorage.getItem('flappyPoop.save'), field: document.getElementById('save-name').value, name: ${play}.getSaveState().name ?? '', status: document.getElementById('save-status').textContent })`).then(JSON.parse);
+          await evaluate(`import('./src/ui/savePanel.js').then((m) => (m.closeSavePanel(), true))`);
+          return seen;
+        };
+        const storeKeys = JSON.stringify(['flappyPoop.save', TT.bestKey, 'flappyPoop.leaderboard', 'flappyPoop.career']);
+        const stores = () => evaluate(`JSON.stringify(${storeKeys}.map((k) => localStorage.getItem(k)))`);
+
+        await home();
+        const s0 = await switches();
+        ok(s0.edu === null && !s0.eduToggle && !s0.unlocked, `no 📚 switch before the word (unlocked ${s0.unlocked}, box ${s0.edu})`);
+
+        const save0 = await evaluate(`localStorage.getItem('flappyPoop.save')`);
+        const seen = await typeWord(word.toUpperCase());
+        const s1 = await switches();
+        const wantOn = await tx('eduUnlocked');
+        ok(seen.save === save0 && seen.field === seen.name && seen.status === wantOn, `"${word.toUpperCase()}" + Save unlocks without renaming: the save record is unchanged, the field shows "${seen.field}", status "${seen.status}"`);
+        ok(s1.unlocked && s1.stored.eduUnlocked === true && s1.edu === 886 && s1.toilet === 812 && s1.eduToggle && !s1.on, `the 📚 switch appears in the 👥 slot (y ${s1.edu}, 🚽 at ${s1.toilet}), off, and the unlock is stored`);
+
+        await home();
+        const s2 = await switches();
+        ok(s2.unlocked && s2.edu === 886 && s2.eduToggle, 'a restart (create() reading the settings) keeps the unlock and the switch');
+        await tap('education');
+        const s3 = await switches();
+        ok(s3.on && s3.stored.education === true, 'a tap on the 📚 switch turns it on, and it is stored');
+        await home();
+        ok((await switches()).on, 'the 📚 switch stays on across a restart');
+
+        // A wide window offers 👥 too: three switches, and switching one on switches the other off.
+        const W = await evaluate(`Promise.all([import('./src/logic.js'), import('./src/config.js')]).then(([l, c]) => l.fieldWidth(1800, 1000, c.FIELD))`);
+        await metrics(1800, 1000);
+        await settle(W);
+        const w0 = await switches();
+        ok(w0.toilet === 808 && w0.versus === 874 && w0.edu === 940 && w0.on && !w0.vOn, `a wide window stacks 🚽 / 👥 / 📚 at ${w0.toilet} / ${w0.versus} / ${w0.edu}, 📚 still on`);
+        await tap('versus');
+        const w1 = await switches();
+        await tap('education');
+        const w2 = await switches();
+        ok(w1.vOn && !w1.on && w1.stored.education === false && w2.on && !w2.vOn, `👥 on switches 📚 off (${w1.vOn}/${w1.on}); 📚 on switches 👥 off (${w2.on}/${w2.vOn})`);
+        const ring = await evaluate(`JSON.stringify(${play}.focus.items.filter((i) => ['toilet', 'versus', 'education'].includes(i.id) && (!i.visible || i.visible())).map((i) => i.id))`).then(JSON.parse);
+        ok(ring.join() === 'toilet,versus,education', `the controller ring reaches all three switches (${ring.join(', ')})`);
+        await metrics(720, 1280); // the boot viewport
+        await settle(720);
+        await sleep(FIELD_DEBOUNCE + 400); // a late resize restart must not land in the run below
+        // Start a run from the ready screen (again if a restart took the first launch away).
+        const startRun = async () => {
+          for (let attempt = 0; attempt < 3 && (await playState()) !== 'playing'; attempt += 1) {
+            for (let i = 0; i < 20 && (await playState()) !== 'ready'; i += 1) await sleep(100);
+            await evaluate(`${play}.flap(), true`);
+            for (let i = 0; i < 40 && (await playState()) !== 'playing'; i += 1) await sleep(100);
+          }
+        };
+
+        // An education run: latched, badged, a real purse, and nothing recorded at its end.
+        await home();
+        const stores0 = await stores();
+        await startRun();
+        const run = await evaluate(`(() => { const p = ${play}; return JSON.stringify({ edu: p.runIsEducation, test: p.runIsTest, badge: p.testBadge.visible ? p.testBadge.text : null, purse: p.purseCoins() }); })()`).then(JSON.parse);
+        ok(run.edu && !run.test && run.badge === '\u{1F4DA}' && Number.isFinite(run.purse), `an education run: latched (${run.edu}), not a test run, 📚 in the HUD, a real purse (${run.purse})`);
+        await evaluate(`${play}.poop.body.setAllowGravity(false), ${play}.poop.setVelocity(0, 0), ${play}.poop.y = 640, ${play}.score = 7, ${play}.graceLeftMs = 0, ${play}.die(), true`);
+        await sleep(TT.deathToOverMs + 300);
+        ok((await stores()) === stores0, 'its end records nothing: no best, top list, submit or career change');
+
+        // A Daily Dump is never an education run, even with the 📚 switch on.
+        await home();
+        for (let attempt = 0; attempt < 3 && (await playState()) !== 'playing'; attempt += 1) {
+          for (let i = 0; i < 20 && (await playState()) !== 'ready'; i += 1) await sleep(100);
+          await evaluate(`${play}.startDaily({ day: '2026-01-05' })`);
+          for (let i = 0; i < 40 && (await playState()) !== 'playing'; i += 1) await sleep(100);
+        }
+        const daily = await evaluate(`JSON.stringify({ daily: ${play}.runIsDaily, edu: ${play}.runIsEducation })`).then(JSON.parse);
+        ok(daily.daily && !daily.edu, 'a Daily Dump run is not an education run');
+        await evaluate(`${play}.poop.body.setAllowGravity(false), ${play}.graceLeftMs = 0, ${play}.die(), true`);
+        await sleep(TT.deathToOverMs + 300);
+
+        // The word again locks it: the switch goes; the switch's own setting is left as it was.
+        await home();
+        await tap('education');
+        const locked = await typeWord(word);
+        const s4 = await switches();
+        ok(locked.status === (await tx('eduLocked')) && !s4.unlocked && s4.stored.eduUnlocked === false && s4.edu === null && !s4.eduToggle && !s4.on, `the word again locks it ("${locked.status}"): no 📚 switch, the switch left off`);
+      }
     });
 
     const f2 = await frame();

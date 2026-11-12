@@ -6,7 +6,7 @@
 // not flap / pause / open overlays. Canvas pointer events never reach the game
 // because the backdrop sits above the canvas.
 
-import { TUNING as T, TEST_MODE } from '../config.js';
+import { TUNING as T, TEST_MODE, EDUCATION } from '../config.js';
 import { t, welcomeText } from '../i18n.js';
 import { isTestWord } from '../logic.js';
 import { loadLocal, saveLocal, ensureId, validateName, checkNewName, exportCode, importCode } from '../save.js';
@@ -237,8 +237,8 @@ function claimName(name) {
  * button adds a confirmation on top.
  */
 async function onNameChange() {
-  // The test-mode trigger word is never stored as a name (on a phone, tapping Save blurs the field first).
-  if (isTestWord(dom.name.value, TEST_MODE.words)) return false;
+  // The test-mode and education words are never stored as a name (on a phone, tapping Save blurs the field first).
+  if (isTestWord(dom.name.value, TEST_MODE.words) || isTestWord(dom.name.value, EDUCATION.words)) return false;
   // New names follow checkNewName's rules; the name already saved here always passes (legacy names).
   const { ok, name, reason } = checkNewName(dom.name.value, { current: getState().name });
   if (!ok) {
@@ -278,6 +278,10 @@ function nameRuleText(reason) {
 async function onSave() {
   if (isTestWord(dom.name.value, TEST_MODE.words)) {
     toggleTestMode();
+    return;
+  }
+  if (isTestWord(dom.name.value, EDUCATION.words)) {
+    toggleEducationUnlock();
     return;
   }
   const { ok, reason } = checkNewName(dom.name.value, { current: getState().name });
@@ -338,6 +342,19 @@ function toggleTestMode() {
   play?.setTestMode?.(on);
   dom.name.value = getState().name;
   setStatus(t(ctx.locale, on ? 'testModeOn' : 'testModeOff'), 'ok');
+  dom.name.blur();
+}
+
+/**
+ * Save with the education word (plan 21): unlock education mode on this device, or lock it again,
+ * say which, and put the stored name back in the field. The word never becomes a name.
+ */
+function toggleEducationUnlock() {
+  const play = ctx.play;
+  const on = !play?.isEduUnlocked?.();
+  play?.setEduUnlocked?.(on);
+  dom.name.value = getState().name;
+  setStatus(t(ctx.locale, on ? 'eduUnlocked' : 'eduLocked'), 'ok');
   dom.name.blur();
 }
 

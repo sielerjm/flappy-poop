@@ -14,6 +14,14 @@
 import { LEADERBOARD, TUNING } from './config.js';
 import { CARDS, DECKS } from './questions.js';
 
+/** Education mode's glyph: the ready-screen switch, the HUD badge, the break pill. */
+export const EDUCATION_EMOJI = '\u{1F4DA}';
+
+/** How many live cards this device has seen that are due now (the 📚 switch's count). */
+export function dueCount(srs = {}, { cards = CARDS, now = Date.now() } = {}) {
+  return cards.filter((c) => !c.retired && srs[c.id] && srs[c.id].dueAt <= now).length;
+}
+
 /** The grade for one answer: 'again' when wrong; else 'easy' under grade.fastMs, 'hard' over grade.slowMs, 'good' between (and when the time is unknown, e.g. the tab was hidden). */
 export function gradeFor(correct, rtMs, t = TUNING) {
   if (!correct) return 'again';

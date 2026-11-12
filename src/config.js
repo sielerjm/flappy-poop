@@ -457,6 +457,13 @@ export const TEST_MODE = {
   defaultInvincible: true, // Invincible toggle state when test mode turns on
 };
 
+// Education mode (📚, plan 21) before its public release: typing one of these words as the username
+// and pressing Save unlocks it on this device (settings eduUnlocked), and typing it again locks it.
+// Like TEST_MODE's words it is never stored as a name; it is not a secret, it only shows a switch.
+export const EDUCATION = {
+  words: ['poopschool'], // matched like TEST_MODE.words (trimmed, any case; fits NAME_MAX 16)
+};
+
 // Share from the game-over panel (src/share.js): the image's file name, the share
 // sheet title, and the link in the message (always the live game, even from localhost).
 export const SHARE = {
