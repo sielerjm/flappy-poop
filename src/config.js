@@ -345,6 +345,30 @@ export const TUNING = {
     minLevel: 3,
     maxLevel: 7,
   },
+  // Education mode (📚, plan 21; src/education.js): quiz cards on a spaced-repetition scheduler (SM-2,
+  // as in Anki), graded from the tap alone: wrong = again, else by response time.
+  education: {
+    grade: { fastMs: 3000, slowMs: 8000 }, // ms: a right answer under fastMs is easy, over slowMs hard, between good (placeholders until real answer times)
+    srs: {
+      startEase: 2.5, // a new card's ease (SM-2's interval multiplier)
+      minEase: 1.3, // ease never drops below this
+      learnStepsMs: [60000, 600000], // ms: a new or lapsed card comes back after each step (1 min, 10 min), then graduates
+      graduateMs: 86400000, // ms: the first review interval after the steps (1 day)
+      easyMs: 345600000, // ms: the first interval when a learning card is answered easy (4 days)
+      hardMul: 1.2, // a review answered hard: interval × hardMul (and ease − easeHard)
+      easyMul: 1.3, // a review answered easy: interval × ease × easyMul (and ease + easeEasy)
+      easeAgain: 0.2, // ease lost on a lapse (a review answered wrong)
+      easeHard: 0.15, // ease lost on a review answered hard
+      easeEasy: 0.15, // ease gained on a review answered easy
+      maxIntervalMs: 31536000000, // ms: the longest interval (365 days)
+    },
+    minGap: 5, // the last minGap cards shown are skipped by the next pick, across quiz sessions, while anything else can be picked
+    generalShare: 0.25, // 0–1 chance a new-card pick takes a general card (when there is one) instead of the level's deck
+    strikes: 3, // wrong answers without a right one before a revive quiz ends the run
+    restoreStreak: 3, // right answers in a row (the revive's first included) that restore what the crash took
+    priceScale: [1, 1.25, 1.5, 2, 2.5, 3, 3.5], // shop prices × this per level in an education run (ceil; the last row past level 7)
+    masteredMs: 1814400000, // ms: a card in review at an interval this long or more counts as mastered (21 days, Anki's "mature")
+  },
   // The loading splash (src/splash.js, #splash in index.html): note cards over the Phaser download and
   // Boot's preload, then a Continue button. Its colours and sizes are CSS in index.html (they paint
   // before any module loads).
@@ -459,6 +483,7 @@ export const LEADERBOARD = {
   dailyKey: 'flappyPoop.daily', // localStorage key for this device's Daily Dump (🌞) attempt: claimed at the start, rewritten as the score grows
   dailyQueueKey: 'flappyPoop.dailyQueue', // localStorage key for Daily Dump scores the board has not confirmed yet (submit_daily_score)
   dailyQueueMax: 3, // daily scores kept for a later post (one per player and day); the oldest goes first when full
+  eduKey: 'flappyPoop.eduSrs', // localStorage key for this device's education cards (plan 21): each card's scheduler state and tallies, and the last cards shown
   careerKey: 'flappyPoop.career', // localStorage key for this device's lifetime counters and achievements (plan 08): what waits to be sent, the batch in flight, the server's last totals, unlocks and claims
   dailyMaxScore: 10000, // the Daily Dump cap (endless runs); matches daily_scores' CHECK and submit_daily_score() in db/schema.sql
   maxScore: 1000, // scores above this are not submitted (matches the CHECK and submit_score() in db/schema.sql); a full 285-pair run with ×2 fits

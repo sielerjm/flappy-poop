@@ -413,7 +413,10 @@ src/
                             standard-mapping button indices (A / B / Y / RT /
                             Menu / d-pad), RT threshold, stick deadzone + repeat;
                             TUNING.focus = the focus ring's geometry, fill alpha,
-                            pulse and the overlay scroll step. TUNING.splash = the
+                            pulse and the overlay scroll step. TUNING.education = Education
+                            mode (plan 21): grade thresholds, the SM-2 srs
+                            knobs, minGap, generalShare, strikes, restoreStreak,
+                            priceScale, masteredMs. TUNING.splash = the
                             loading splash (hintMs, slideMs, fadeMs, swipePx,
                             featureMax, storageKey; the ring: ringEaseMs,
                             ringMaxPerSec, ringMinPerSec, ringFrameCapMs, waitCap,
@@ -511,6 +514,22 @@ src/
                             IBS_WINS / WINDOW_DAYS / BREAK_DAYS / FOUR_OF_A_KIND,
                             levelCloseShave, winsInWindow, daysBetween,
                             nextDrawStreak. Fully unit-tested (tests/achievements.test.js).
+  education.js              Education mode's scheduler and local store (plan 21), NO
+                            Phaser/DOM: gradeFor (wrong = again; right = easy / good /
+                            hard by response time, TUNING.education.grade), schedule
+                            (SM-2 with learning steps, in ms; an early right answer
+                            leaves the schedule alone), pickCard (break: the cleared
+                            segment's new cards, general at generalShare, then due,
+                            then early reviews; revive: due learning, due reviews,
+                            new from the decks up to the level, early; never a card of
+                            the session or a retired one; the last minGap wait),
+                            shuffleOptions, reviveStart / reviveStep (strikes →
+                            choice → streak → revived / restored / over; giveUp),
+                            eduShopPrices (base × priceScale per level), masteryByDeck,
+                            createEduStore (LEADERBOARD.eduKey = flappyPoop.eduSrs:
+                            each card's record and the last cards shown). Nothing in
+                            the game calls it yet (steps L3–L6; orphans allowlist).
+                            Fully unit-tested (tests/education.test.js).
   questions.js              Education mode's question bank (plan 21), NO
                             Phaser/DOM: DECKS (the LEVELS keys, then 'general'),
                             CARDS ({ id, deck, q, answer, wrong: [w1, w2], explain,
