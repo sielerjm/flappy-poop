@@ -891,23 +891,6 @@ export const TAG_GLYPHS = { dev: '🔧', og: '🎖️', new: '🆕' };
 const cleanTags = (v) => (Array.isArray(v) ? PLAYER_TAGS.filter((tag) => v.includes(tag)) : []);
 
 /**
- * The tags of the names a board shows (board_tags, at most 100): { name: ['dev', …] } for the
- * names that have any, or null (offline, not deployed yet). Never rejects.
- */
-export async function fetchBoardTags(names, opts = {}) {
-  const list = [...new Set((Array.isArray(names) ? names : []).filter((n) => typeof n === 'string' && n.trim()))].slice(0, 100);
-  if (!list.length) return {};
-  const out = await request('/rpc/board_tags', { method: 'POST', body: { p_names: list } }, opts);
-  if (!Array.isArray(out)) return null;
-  const tags = {};
-  for (const row of out) {
-    const t = cleanTags(row?.tags);
-    if (typeof row?.name === 'string' && t.length) tags[row.name] = t;
-  }
-  return tags;
-}
-
-/**
  * A player's public profile (player_stats), by their id (the player's own) or by the name a board
  * shows: the profile, { found: false } for a name nobody shows under, or null (offline, not deployed).
  */

@@ -5,7 +5,7 @@ import { isTopOverlay, openChangelog } from '../ui/overlayStack.js';
 import { createTabs, nearestTab } from '../ui/tabs.js';
 import { t, metaFontSize, rankText, levelLabel, medalYouText, dailyYouText, dailyDayText } from '../i18n.js';
 import { bestByToilet, TOILET_EMOJI } from '../save.js';
-import { fetchTop, fetchRank, fetchTournamentBoard, fetchDailyBoard, TAG_GLYPHS } from '../leaderboard.js';
+import { fetchTop, fetchRank, fetchTournamentBoard, fetchDailyBoard } from '../leaderboard.js';
 import { createScrollView } from '../ui/scrollView.js';
 
 const STYLE = { fontFamily: 'sans-serif', fontStyle: 'bold', color: '#ffffff', align: 'center' };
@@ -14,8 +14,6 @@ const MUTED = '#c9b8dc';
 const DIM = '#6a5a74';
 /** The registry key for the board last shown this session: 'scores' (🏆), 'daily' (🌞) or 'medals' (🏅). */
 const TAB_KEY = 'leaderboardTab';
-/** A tagged name never shrinks below this for its tags: past it the board shows fewer tags (loadTags). */
-const MIN_NAME_SCALE = 0.45;
 /** The boards in tab order, with their glyphs and titles. */
 const TABS = ['scores', 'daily', 'medals'];
 const TAB_GLYPHS = ['\u{1F3C6}', '\u{1F31E}', '\u{1F3C5}'];
@@ -96,8 +94,6 @@ export class Leaderboard extends Phaser.Scene {
     // Everything outside the rows band stays on the main camera when the band becomes a scroll view.
     this.fixed = [dimmer, panelRect, title, ...this.tabs.objects(), tabZone, this.status, this.footer, version, close];
     this.scroll = null; // the rows' scroll view, once the board has loaded
-    this.nameSlots = []; // the real rows' name texts, for the tags (loadTags)
-    this.tagTexts = [];
     this.input.keyboard?.on('keydown-ESC', () => this.close());
     // Controller: the ring sits on ✕ (A on the tabs moves to the next board); up / down scroll the rows once they are in.
     this.focus = createFocus(this, T, {
@@ -199,14 +195,10 @@ export class Leaderboard extends Phaser.Scene {
         const name = sv.add(this.add.text(L.cols.name, y, row ? row.name : '–', { ...STYLE, fontSize: '34px', color, align: 'left' }).setOrigin(0, 0.5));
         // A 16-character name is wider than its column: shrink it to the room left of the 🚽 column.
         name.setScale(fitScale(name.width, toiletX - 24 - name.x, 8));
-        if (row) {
-          this.linkName(sv, name, row.name);
-          this.nameSlots.push({ text: name, name: row.name, fit: (extra) => name.setScale(fitScale(name.width, toiletX - 24 - name.x - extra, 8)) });
-        }
+        if (row) this.linkName(sv, name, row.name);
       }
       sv.finish(y + L.pitch / 2 - 40); // finish() adds 40 px of slack; the band ends half a pitch under the last row
       this.scroll = sv;
-      this.loadTags(sv);
     }
 
     if (!state.name) {
@@ -256,14 +248,10 @@ export class Leaderboard extends Phaser.Scene {
       // The name gets the room left of the medals (a long name shrinks, as on 🏆).
       const room = (medals ? medals.x - medals.width : L.cols.toilet) - 8 - name.x;
       name.setScale(fitScale(name.width, room, 4));
-      if (row) {
-        this.linkName(sv, name, row.name);
-        this.nameSlots.push({ text: name, name: row.name, fit: (extra) => name.setScale(fitScale(name.width, room - extra, 4)) });
-      }
+      if (row) this.linkName(sv, name, row.name);
     }
     sv.finish(y + L.pitch / 2 - 40);
     this.scroll = sv;
-    this.loadTags(sv);
   }
 
   /**
@@ -299,44 +287,10 @@ export class Leaderboard extends Phaser.Scene {
       sv.add(this.add.text(L.cols.right, y, row ? String(row.score) : '–', { ...STYLE, fontSize: '34px', color }).setOrigin(1, 0.5));
       const name = sv.add(this.add.text(L.cols.name, y, row ? row.name : '–', { ...STYLE, fontSize: '34px', color, align: 'left' }).setOrigin(0, 0.5));
       name.setScale(fitScale(name.width, L.cols.level - name.x, 8)); // no 🚽 or LV columns here: the name gets the room up to the score
-      if (row) {
-        this.linkName(sv, name, row.name);
-        this.nameSlots.push({ text: name, name: row.name, fit: (extra) => name.setScale(fitScale(name.width, L.cols.level - name.x - extra, 8)) });
-      }
+      if (row) this.linkName(sv, name, row.name);
     }
     sv.finish(y + L.pitch / 2 - 40);
     this.scroll = sv;
-    this.loadTags(sv);
-  }
-
-  /**
-   * The player tags (🔧 🎖️ 🆕, board_tags) after each name on the board, once the rows are in: one
-   * request for every name; a tagged name shrinks to leave room. Offline or not deployed: no tags.
-   */
-  async loadTags(sv) {
-    const slots = this.nameSlots;
-    if (!slots.length) return;
-    const gen = this.gen;
-    let tags = null;
-    try {
-      tags = await this.scene.get('Play')?.fetchBoardTags?.(slots.map((s) => s.name));
-    } catch {
-      tags = null;
-    }
-    if (!tags || gen !== this.gen || !this.sys.isActive()) return;
-    for (const slot of slots) {
-      const list = tags[slot.name];
-      if (!list?.length) continue;
-      // As many tags as leave the name legible (at least MIN_NAME_SCALE); always the first (🔧, then 🎖️, then 🆕).
-      const tagText = sv.addScrolled(this.add.text(0, slot.text.y, '', { fontFamily: 'sans-serif', fontSize: '22px' }).setOrigin(0, 0.5));
-      for (let k = list.length; k >= 1; k -= 1) {
-        tagText.setText(list.slice(0, k).map((tag) => TAG_GLYPHS[tag]).join(''));
-        slot.fit(tagText.width + 6);
-        if (slot.text.scaleX >= MIN_NAME_SCALE || k === 1) break;
-      }
-      tagText.x = slot.text.x + slot.text.displayWidth + 6;
-      this.tagTexts.push({ name: slot.name, text: tagText });
-    }
   }
 
   /**

@@ -1254,12 +1254,7 @@ src/
                             daily result's score link sets 'daily'). linkName: every
                             name on the three boards opens that player's profile
                             over the board (sv.link: a tap, not a drag; only while
-                            the board is on top); the – rows are not names. loadTags:
-                            once the rows are in, one Play.fetchBoardTags (board_tags)
-                            puts each name's tags (🔧 🎖️ 🆕, TAG_GLYPHS) after it; a
-                            tagged name never shrinks below MIN_NAME_SCALE (0.45), so
-                            a long name keeps only its first tag; a failed request
-                            leaves the board untagged.
+                            the board is on top); the – rows are not names.
     Stats.js                Overlay (plan 08; chromeIntent 'stats': on its own, or
                             over the board or the 🌞 popup, closing back to it
                             without the lockout): a player's profile, launched by
@@ -1358,8 +1353,8 @@ db/schema.sql               Supabase schema: scores table (player_id = save-code
                             player_meta (joined_at, exact, dev; touch_player from
                             every write function, an inexact backfill) and
                             player_tags ('dev', 'og' before 1 Dec 2026, 'new' an exact
-                            join in 7 days) for player_stats and board_tags (anon, 100
-                            names); admin_set_dev (owner only, by name); 👑 dethroned
+                            join in 7 days) for player_stats (board_tags, anon, 100 names, stays on
+                            the server unused: tags show on profiles only); admin_set_dev (owner only, by name); 👑 dethroned
                             (add_server_counter from submit_score / submit_daily_score
                             when a post takes the board's #1 from another player),
                             refused in a client batch. Run by
