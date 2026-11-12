@@ -3259,7 +3259,7 @@ export class Play extends Phaser.Scene {
     this.pipesPassed = end;
     this.pipesSpawned = end;
     this.levelBar.setProgress(levelProgress(this.pipesPassed, this.level, this.tune));
-    this.spawnFinishLine(this.fieldW + T.pipeWidth - (this.poopX + pipeLead(this.fieldW, T, FIELD)));
+    this.spawnFinishLine(this.finishLeadShift());
     this.distanceSinceSpawn = 0;
     this.rebaseDistance(); // a skip jumps along the course: the distance follows to the line
     this.nextGapY = null;
@@ -3662,12 +3662,30 @@ export class Play extends Phaser.Scene {
     if (pose.phase === 'done') this.endRespawn();
   }
 
+  /** An education revive with every pair of the level already passed: only the finish line is left to fly to (plan 22, F2). */
+  reviveAtLevelEnd() {
+    return this.runIsEducation && this.pipesPassed >= levelEnd(this.level, this.tune);
+  }
+
+  /** How far left of the right edge a finish line stands at the first-pair lead (spawnFinishLine's shift; a skip uses it too). On a phone: 0, the edge. */
+  finishLeadShift() {
+    return this.fieldW + T.pipeWidth - (this.poopX + pipeLead(this.fieldW, T, FIELD));
+  }
+
+  /** Does the finish line still ahead stay through this revive's clear? At a level's end, when it is no farther than the lead. */
+  reviveFinishKept() {
+    const leadX = this.fieldW + T.levels.finishWidthPx / 2 - this.finishLeadShift();
+    return this.reviveAtLevelEnd() && this.finishLine.x <= leadX;
+  }
+
   /**
    * The respawn's clear screen: every pipe, item and bean not yet credited (hasPassed, the
    * scoring rule: fully behind the poop) goes, and a finish line still ahead with it (it spawns
    * again once the level's pairs are done). Credited pairs stay and scroll off. The pair count
    * drops back to the pairs passed, so the cleared pairs come back from the shared course
-   * under the same numbers and the level's progress and finish stay in step.
+   * under the same numbers and the level's progress and finish stay in step. An education revive
+   * with no pair left in the level keeps a line that is nearer than the first-pair lead
+   * (reviveFinishKept), so the line the poop fell in front of is still there after the revive.
    */
   clearFieldAhead() {
     const k = this.kernel;
@@ -3675,7 +3693,7 @@ export class Play extends Phaser.Scene {
     for (const group of [this.pipes, this.items, this.beans]) {
       for (const obj of [...group.getChildren()]) if (!hasPassed(obj.x, obj.displayWidth, this.poop.x)) obj.destroy();
     }
-    if (this.finishLine && !this.finishLine.getData('crossed')) {
+    if (this.finishLine && !this.finishLine.getData('crossed') && !this.reviveFinishKept()) {
       this.finishLine.destroy();
       this.finishLine = null;
       this.finishSpawned = false;
@@ -3696,11 +3714,18 @@ export class Play extends Phaser.Scene {
     this.graceLeftMs = T.beans.graceMs;
     this.centreNextGap = true;
     this.nextGapY = null;
+    // An education revive at a level's end (plan 22, F2): with no pair left to refill, the cadence
+    // would bring the line in a spacing later at the far edge. It stands at the first-pair lead
+    // instead (as after a skip), unless a nearer one was kept (clearFieldAhead).
+    if (this.reviveAtLevelEnd() && !this.finishSpawned) this.spawnFinishLine(this.finishLeadShift());
     this.prefillPipes();
-    // No pair left in the level to carry a cleared kernel: it waits mid-screen, one lead ahead.
+    // No pair left in the level to carry a cleared kernel: it waits mid-screen, one lead ahead. In
+    // an education revive the line is no farther than that, so the kernel waits halfway to it.
     const k = this.kernel;
     if (k && !k.done && !k.item && k.level === this.level && this.pipesSpawned >= levelEnd(this.level, this.tune)) {
-      this.markKernel(this.spawnStillCoin(this.poopX + pipeLead(this.fieldW, T, FIELD), GAME_HEIGHT / 2));
+      const line = this.reviveAtLevelEnd() && this.finishLine && !this.finishLine.getData('crossed') ? this.finishLine : null;
+      const x = line ? Math.max(this.poop.x, (this.poop.x + line.x - T.levels.finishWidthPx / 2) / 2) : this.poopX + pipeLead(this.fieldW, T, FIELD);
+      this.markKernel(this.spawnStillCoin(x, GAME_HEIGHT / 2));
     }
     this.applyScroll();
     if (this.effects.powerReady()) this.setCharged(true);

@@ -3824,7 +3824,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
           await sleep(250);
         };
         const held = TT.education.explainMinMs + 200;
-        const playNow = () => evaluate(`(() => { const p = ${play}; return JSON.stringify({ state: p.state, hold: p.respawnHold, hint: p.reviveHint.visible ? p.reviveHint.text : null, score: p.score, coins: p.effects.coins(), beans: p.effects.beans(), probiotic: p.effects.hasProbiotic(), pipes: p.pipes.getChildren().length, quiz: __flappy.scene.isActive('Quiz'), over: __flappy.scene.isActive('Over'), revives: p.runQuiz.revives, restores: p.runQuiz.restores }); })()`).then(JSON.parse);
+        const playNow = () => evaluate(`(() => { const p = ${play}; return JSON.stringify({ state: p.state, hold: p.respawnHold, hint: p.reviveHint.visible ? p.reviveHint.text : null, score: p.score, coins: p.effects.coins(), beans: p.effects.beans(), probiotic: p.effects.hasProbiotic(), pipes: p.pipes.getChildren().length, quiz: __flappy.scene.isActive('Quiz'), over: __flappy.scene.isActive('Over'), revives: p.runQuiz.revives, restores: p.runQuiz.restores, finish: p.finishSpawned }); })()`).then(JSON.parse);
         const waitPlaying = async () => {
           for (let i = 0; i < 60 && (await playState()) !== 'playing'; i += 1) await sleep(100);
           return playState();
@@ -3877,6 +3877,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         const st1 = await waitPlaying();
         const after1 = await playNow();
         ok(st1 === 'playing' && !after1.hint && after1.hold === null, `a tap releases it: the glide and the blinks, then ${st1}`);
+        ok(!after1.finish && after1.pipes > 0, `with pairs still to come the field refills with pairs and no finish line yet (${after1.pipes} pipe parts)`);
 
         // A full streak: everything the crash took comes back; released by the controller.
         await startEdu(`p.score = 30; p.effects.addCoins(4); p.effects.addBean(); p.effects.addBean(); p.effects.applyProbiotic()`);
@@ -3949,6 +3950,54 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await sleep(TT.deathToOverMs + 400);
         const pg = await playNow();
         ok(pg.over && pg.state === 'dead' && !pg.quiz, `Give up under a paused run ends it (state ${pg.state})`);
+
+        // A revive at a level's end (plan 22, F2): every pair passed, only the finish line left. The
+        // line is never more than the first-pair lead ahead afterwards, and a kernel the crash cleared
+        // waits before it.
+        const lineNow = () =>
+          evaluate(
+            `(() => { const p = ${play}; const l = p.finishLine; const k = p.kernel; return JSON.stringify({ state: p.state, spawned: p.finishSpawned, x: l ? l.x : null, poopX: p.poop.x, leadX: p.fieldW + ${TT.levels.finishWidthPx} / 2 - p.finishLeadShift(), brk: Boolean(p.levelBreak), coins: p.effects.coins(), kernelX: k?.item?.active ? k.item.x : null, kernelDone: Boolean(k?.done), cleared: Boolean(p.respawnFrom) }); })()`,
+          ).then(JSON.parse);
+        const hover = () => evaluate(`(() => { const p = ${play}; p.poop.body.setAllowGravity(false); p.poop.setVelocity(0, 0); p.poop.y = 640; return true; })()`);
+        const flyOnAndTap = async () => {
+          await answer(true); // nothing lost: revived at once
+          await press('nextBtn'); // Fly on
+          await sleep(400); // past the resume lockout
+          await evaluate(`${play}.flap(), true`); // Tap when ready
+        };
+        const armKernel = `p.kernel = { level: p.level, pair: 1, item: null, done: false }`;
+        const halfLine = TT.levels.finishWidthPx / 2;
+
+        // The line a short way ahead of the crash stays where it is.
+        await startEdu(`p.skipToFinish(); p.finishLine.x = p.poop.x + 260; ${armKernel}`);
+        await crash();
+        const near0 = await lineNow();
+        await flyOnAndTap();
+        for (let i = 0; i < 30 && !(await lineNow()).cleared; i += 1) await sleep(50);
+        const near1 = await lineNow();
+        ok(near0.x !== null && near1.state === 'respawn' && near1.cleared && near1.spawned && near1.x === near0.x, `a finish line a short way ahead survives the revive's clear (x ${near0.x} → ${near1.x}, ${Math.round(near0.x - near0.poopX)} px ahead)`);
+        await waitPlaying();
+        await hover();
+        const near2 = await lineNow();
+        ok(near2.kernelDone || (near2.kernelX !== null && near2.kernelX >= near2.poopX && near2.kernelX < near2.x - halfLine), `the cleared kernel is re-armed before the line (kernel ${near2.kernelX === null ? 'taken' : Math.round(near2.kernelX)}, the line's near edge ${Math.round(near2.x - halfLine)})`);
+        let takenFirst = false; // the kernel is taken while the line is still to cross
+        let near3 = near2;
+        for (let i = 0; i < 120 && !near3.brk; i += 1) {
+          await sleep(50);
+          near3 = await lineNow();
+          takenFirst = takenFirst || (near3.kernelDone && !near3.brk);
+        }
+        ok(near3.brk && takenFirst && near3.coins > near0.coins, `the kernel is taken before the line, and crossing the line starts the level break (kernel first: ${takenFirst}, break ${near3.brk}, coins ${near0.coins} → ${near3.coins})`);
+
+        // No line out yet: it comes in at the lead, not a spacing later at the far edge.
+        await startEdu(`p.skipToFinish(); p.finishLine.destroy(); p.finishLine = null; p.finishSpawned = false; ${armKernel}`);
+        await crash();
+        await flyOnAndTap();
+        await waitPlaying();
+        await hover();
+        const far = await lineNow();
+        ok(far.spawned && far.x !== null && far.x <= far.leadX + 1 && far.x >= far.leadX - 150, `with no line out, the revive places it at the first-pair lead (x ${far.x === null ? 'none' : Math.round(far.x)}, lead ${Math.round(far.leadX)})`);
+        ok(far.kernelDone || (far.kernelX !== null && far.kernelX < far.x - halfLine), `and its kernel waits before the line (kernel ${far.kernelX === null ? 'taken' : Math.round(far.kernelX)})`);
 
         // Give up: the run ends at once.
         await startEdu('');
