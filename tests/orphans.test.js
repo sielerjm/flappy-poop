@@ -24,10 +24,6 @@ const ALLOWED_EXPORTS = {
   // Daily Dump (plan .claude/plans/2026-11-10-daily-dump.md): helpers land before their callers.
   // Education mode (plan 21, step L2): the scheduler lands before the game calls it. Drop each
   // entry when its step wires it in (this audit fails until you do).
-  gradeFor: 'plan 21: the quiz grades each answer with it (step L4)',
-  schedule: 'plan 21: each answer updates its card with it (step L4 / L7)',
-  pickCard: 'plan 21: the break and revive quizzes pick their cards with it (steps L5, L6)',
-  shuffleOptions: 'plan 21: the quiz orders its three options with it (step L4)',
   reviveStart: 'plan 21: a crash in an education run starts the revive quiz with it (step L6)',
   reviveStep: 'plan 21: the revive quiz moves on with it (step L6)',
   eduShopPrices: 'plan 21: the shop prices an education run with it (step L5)',

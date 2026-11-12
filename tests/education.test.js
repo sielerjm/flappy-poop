@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { LEADERBOARD, TUNING as T } from '../src/config.js';
 import { createRng } from '../src/logic.js';
 import { CARDS, DECKS } from '../src/questions.js';
-import { createEduStore, dueCount, eduShopPrices, gradeFor, masteryByDeck, pickCard, reviveStart, reviveStep, schedule, shuffleOptions } from '../src/education.js';
+import { cardSource, cardText, createEduStore, dueCount, eduShopPrices, optionText, gradeFor, masteryByDeck, pickCard, reviveStart, reviveStep, schedule, shuffleOptions } from '../src/education.js';
 
 const S = T.education.srs;
 const MIN = 60000;
@@ -234,4 +234,29 @@ test('dueCount: seen live cards due now, nothing else', () => {
   assert.equal(dueCount(srs, { cards, now: NOW }), 1, 'ST-01 only: ST-02 is not due, ST-03 unseen, ST-04 retired, XX-99 not a card');
   assert.equal(dueCount({}, { cards, now: NOW }), 0);
   assert.equal(dueCount(srs, { cards, now: NOW + 2 }), 2);
+});
+
+test('cardText: zh-Hans when the card has it, English otherwise (and says which); optionText by key', () => {
+  const card = { id: 'ZZ-01', q: 'Q?', answer: 'A', wrong: ['B', 'C'], explain: 'E.', refs: [1] };
+  const zh = { ...card, zh: { q: '问？', answer: '甲', wrong: ['乙', '丙'], explain: '因为。' } };
+  assert.deepEqual(cardText(card, 'zh-Hans'), { q: 'Q?', answer: 'A', wrong: ['B', 'C'], explain: 'E.', locale: 'en' }, 'no zh yet: English');
+  assert.deepEqual(cardText(zh, 'zh-Hans'), { q: '问？', answer: '甲', wrong: ['乙', '丙'], explain: '因为。', locale: 'zh-Hans' });
+  assert.equal(cardText(zh, 'en').q, 'Q?');
+  const text = cardText(card);
+  assert.deepEqual(['answer', 'w1', 'w2'].map((k) => optionText(text, k)), ['A', 'B', 'C']);
+});
+
+test('cardSource: first author, et al. when there are more, the year; joined for several refs', () => {
+  const refs = {
+    1: 'Martinsen TC, Bergh K, Waldum HL (2005). Gastric juice. Basic Clin Pharmacol Toxicol 96:94–102.',
+    2: 'Hooi JKY et al. (2017). Global prevalence. Gastroenterology.',
+    3: 'Human Microbiome Project Consortium (2012). Structure. Nature.',
+    4: 'Roediger WEW (1980). Role of anaerobic bacteria. Gut.',
+    5: 'no year here',
+  };
+  assert.equal(cardSource({ refs: [1] }, refs), 'Martinsen et al. 2005');
+  assert.equal(cardSource({ refs: [2, 3] }, refs), 'Hooi et al. 2017; Human Microbiome Project Consortium 2012');
+  assert.equal(cardSource({ refs: [4] }, refs), 'Roediger 1980');
+  assert.equal(cardSource({ refs: [5, 9] }, refs), '', 'unparsable or missing refs are left out');
+  for (const c of CARDS) assert.ok(cardSource(c).length > 0, `${c.id}: every bank card has a short source`);
 });

@@ -12,7 +12,7 @@
 // Times are ms since the epoch (Date.now()), passed in, so everything here is pure.
 
 import { LEADERBOARD, TUNING } from './config.js';
-import { CARDS, DECKS } from './questions.js';
+import { CARDS, DECKS, REFERENCES } from './questions.js';
 
 /** Education mode's glyph: the ready-screen switch, the HUD badge, the break pill. */
 export const EDUCATION_EMOJI = '\u{1F4DA}';
@@ -20,6 +20,34 @@ export const EDUCATION_EMOJI = '\u{1F4DA}';
 /** How many live cards this device has seen that are due now (the 📚 switch's count). */
 export function dueCount(srs = {}, { cards = CARDS, now = Date.now() } = {}) {
   return cards.filter((c) => !c.retired && srs[c.id] && srs[c.id].dueAt <= now).length;
+}
+
+/** A card's text in `locale`: its zh version when it has one and the locale is zh-Hans, else English. `locale` says which was shown. */
+export function cardText(card, locale = 'en') {
+  const zh = locale === 'zh-Hans' && card.zh ? card.zh : null;
+  const src = zh ?? card;
+  return { q: src.q, answer: src.answer, wrong: [...src.wrong], explain: src.explain, locale: zh ? 'zh-Hans' : 'en' };
+}
+
+/** One option's text: `key` is 'answer', 'w1' or 'w2' (shuffleOptions' keys). */
+export function optionText(text, key) {
+  return key === 'answer' ? text.answer : text.wrong[key === 'w1' ? 0 : 1];
+}
+
+/**
+ * A card's sources, short: "Martinsen et al. 2005; Bik et al. 2006" (the first author's surname, et al.
+ * when there are more, the year). The quiz shows it only once the card is audited.
+ */
+export function cardSource(card, refs = REFERENCES) {
+  const short = (text) => {
+    const m = /^(.*?)\s*\((\d{4})\)/.exec(text ?? '');
+    if (!m) return null;
+    const people = m[1].split(/,\s*/);
+    const first = people[0].replace(/\s+et al\.?$/, '').replace(/\s+[A-Z]{1,4}$/, '');
+    const etal = people.length > 1 || /\set al/.test(m[1]);
+    return `${first}${etal ? ' et al.' : ''} ${m[2]}`;
+  };
+  return (card.refs ?? []).map((n) => short(refs[n])).filter(Boolean).join('; ');
 }
 
 /** The grade for one answer: 'again' when wrong; else 'easy' under grade.fastMs, 'hard' over grade.slowMs, 'good' between (and when the time is unknown, e.g. the tab was hidden). */

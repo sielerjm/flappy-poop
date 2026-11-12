@@ -14,6 +14,7 @@ import { Feedback } from './scenes/Feedback.js';
 import { Leaderboard } from './scenes/Leaderboard.js';
 import { Daily } from './scenes/Daily.js';
 import { Stats } from './scenes/Stats.js';
+import { Quiz } from './scenes/Quiz.js';
 
 // ?perf shows the frame meter (src/ui/perfMeter.js); ?perf=var also lets Arcade step by each
 // frame's delta instead of its fixed 60 Hz, to A/B the physics step on a phone. Debug only.
@@ -45,7 +46,7 @@ const game = new Phaser.Game({
   },
   // Play twice: 'Play' is single player and the left half of a versus match, 'PlayB' the right half
   // (only Versus launches it). Versus owns the match and sits above both halves, below the overlays.
-  scene: [Boot, Play, new Play('PlayB'), Over, Versus, Settings, About, HowTo, Changelog, Language, Feedback, Leaderboard, Daily, Stats],
+  scene: [Boot, Play, new Play('PlayB'), Over, Versus, Settings, About, HowTo, Changelog, Language, Feedback, Leaderboard, Daily, Stats, Quiz],
 });
 
 // A window resize (or a phone rotating) asks Play for a new field width. Play

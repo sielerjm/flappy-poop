@@ -8,8 +8,9 @@ import { CARDS, DECKS, REFERENCES } from '../src/questions.js';
 import { QUESTION_AUDITS, auditState, cardHash } from '../src/questionAudits.js';
 import { auditCounts, formatAudits, listLines, localDay, markAudits, parseArgs, replaceBlock, reportMarkdown, unmarkAudits } from '../tools/audit_questions.mjs';
 
-// Card text limits: the quiz panel (plan 21, step L4) shows the question and three
-// option buttons at once on a phone; L4 checks these against its layout.
+// Card text limits: the quiz card (src/scenes/Quiz.js) shows the question and three option boxes at
+// once on a phone. These keep new cards short; the smoke's education-quiz section lays every card out
+// in the real card (answered wrong, explanation and source showing) and checks it fits.
 const LIMITS = { q: 120, option: 72, explainChars: 180, explainWords: 30 };
 // A level break offers the cleared segment's new cards first: every level deck keeps at least this many live.
 const MIN_LIVE_PER_LEVEL_DECK = 5;

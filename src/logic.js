@@ -1697,10 +1697,11 @@ export function overlayOutsideHit(x, y, panel) {
  * @param {boolean} stackedSettings true when About sits on top of Settings
  * @param {boolean} stackedAbout true when HowTo or Changelog (What's new) sits on top of About
  * @param {boolean} stackedUnder true when Feedback, What's new or a profile sits on top of another overlay
- * @param {'pause'|'mute'|'settings'|'info'|'howto'|'changelog'|'lang'|'feedback'|'leaderboard'|'daily'|'stats'|'shop'|'tap'|'esc'|'close'} input ('shop': the 💰 button in a level break; 'daily': the 🌞, ready screen only; 'stats': a profile, from the save panel or a board name)
+ * @param {'pause'|'mute'|'settings'|'info'|'howto'|'changelog'|'lang'|'feedback'|'leaderboard'|'daily'|'stats'|'shop'|'quiz'|'tap'|'esc'|'close'} input ('shop': the 💰 button in a level break; 'quiz': the 📚 pill in an education run's level break; 'daily': the 🌞, ready screen only; 'stats': a profile, from the save panel or a board name)
  * @param {boolean} resumeLocked true during pauseResumeLockoutMs after overlay close
  * @param {boolean} shop true while this half's level-break shop panel is open
  * @param {boolean} breaking true while this half is in its own level break (the only place the shop opens)
+ * @param {boolean} education true in an education run (plan 21): its level break also opens the 📚 quiz
  * @returns {{ do: string, pause?: boolean, armResumeLockout?: boolean, closeAbout?: boolean }}
  */
 export function chromeIntent({
@@ -1713,6 +1714,7 @@ export function chromeIntent({
   resumeLocked = false,
   shop = false,
   breaking = false,
+  education = false,
 }) {
   if (input === 'mute') return { do: 'toggleMute' };
 
@@ -1747,6 +1749,10 @@ export function chromeIntent({
   // still open over it (the rows below, pause false since the state is 'paused').
   if (input === 'shop') {
     return state === 'paused' && breaking && !shop ? { do: 'openShop' } : { do: 'ignore' };
+  }
+  // The 📚 quiz (plan 21): only in an education run's level break, never over the open shop.
+  if (input === 'quiz') {
+    return state === 'paused' && breaking && education && !shop ? { do: 'openQuiz' } : { do: 'ignore' };
   }
   if (shop && state === 'paused' && (input === 'tap' || input === 'esc' || input === 'pause')) {
     return { do: 'closeShop', armResumeLockout: true };

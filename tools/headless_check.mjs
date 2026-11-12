@@ -36,7 +36,11 @@ export const OVERLAYS = {
   leaderboard: 'Leaderboard',
   daily: 'Daily',
   stats: 'Stats',
+  quiz: 'Quiz',
 };
+
+/** Overlays that open only inside a run (the 📚 quiz: a level break or a crash), so the ready-screen loops skip them; their own sections cover them. */
+const NEEDS_RUN = new Set(['Quiz']);
 
 /**
  * The smoke's sections in run order; run() calls section(name) for each, in this
@@ -71,6 +75,7 @@ export const SECTIONS = [
   { name: 'daily', needs: [], about: "🌞 Daily Dump: the day's level and shared course, endless (no finish line), no coins or skips, the attempt claimed at the start and final at the crash, nothing on the 🏆 lists, an abandoned run finalised" },
   { name: 'profile', about: "player profiles (plan 08): the own profile (local counters, a locked badge's progress), another player's from a stubbed player_stats, the explanation card (a badge, a career cell, by mouse and controller), the wheel and a drag, the controller walking the grid, not found, offline, a board name opening a profile (not on a drag), the sign-in gate (no username), the save panel's Profile button" },
   { name: 'education-unlock', needs: [], about: "📚 education mode's unlock (plan 21): the word in the save panel (never a name), the 📚 switch remembered across a restart, 👥 and 📚 never on together on a wide window, an education run recording nothing, a Daily Dump never an education run, locking it again" },
+  { name: 'education-quiz', needs: [], about: "📚 the quiz card (plan 21) in an education run's level break: opened by the quiz input, answered by tap, key and controller (each answer saved to its card), Next held after a wrong answer, taps under it ignored, every bank card fitting the card, Esc closing it with the resume lockout" },
 ];
 
 /** What a section needs: its own list, or (omitted) every section before it. */
@@ -556,6 +561,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
     await section('overlays', async () => {
       // Every overlay opens from the ready screen, keeps the loop alive, and closes.
       for (const [input, key] of Object.entries(OVERLAYS)) {
+        if (NEEDS_RUN.has(key)) continue;
         const before = exceptions.length;
         const f0 = await frame();
         await chrome(input);
@@ -1643,6 +1649,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         const ring = (key) => evaluate(`JSON.stringify({ shown: __flappy.scene.getScene('${key}').focus.shown, id: __flappy.scene.getScene('${key}').focus.items[__flappy.scene.getScene('${key}').focus.index]?.id ?? null, offset: __flappy.scene.getScene('${key}').scroll?.offset ?? null })`).then(JSON.parse);
         await evaluate(`${play}.registry.set('padMode', true), true`);
         for (const [input, key] of Object.entries(OVERLAYS)) {
+          if (NEEDS_RUN.has(key)) continue;
           await chrome(input);
           await sleep(key === 'Leaderboard' ? 4000 : 600);
           const r0 = await ring(key);
@@ -3657,6 +3664,95 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         const locked = await typeWord(word);
         const s4 = await switches();
         ok(locked.status === (await tx('eduLocked')) && !s4.unlocked && s4.stored.eduUnlocked === false && s4.edu === null && !s4.eduToggle && !s4.on, `the word again locks it ("${locked.status}"): no 📚 switch, the switch left off`);
+      }
+    });
+
+    await section('education-quiz', async () => {
+      // The 📚 quiz card (plan 21) in an education run's level break. Unlocked and switched on directly
+      // (education-unlock covers the word); everything is put back at the end.
+      {
+        const play = `__flappy.scene.getScene('Play')`;
+        const Q = `__flappy.scene.getScene('Quiz')`;
+        const tx = (key) => evaluate(`import('./src/i18n.js').then((m) => m.t('en', '${key}'))`);
+        const home = async () => {
+          await evaluate(`__flappy.scene.stop('Over'), __flappy.scene.stop('Quiz'), ${play}.scene.restart(), true`);
+          for (let i = 0; i < 40 && (await playState()) !== 'ready'; i += 1) await sleep(250);
+        };
+        const cardRec = (id) => evaluate(`JSON.stringify((JSON.parse(localStorage.getItem('flappyPoop.eduSrs') ?? '{}').cards ?? {})['${id}'] ?? null)`).then(JSON.parse);
+        const quizNow = () => evaluate(`(() => { const q = ${Q}; return JSON.stringify({ active: __flappy.scene.isActive('Quiz'), id: q.card?.id ?? null, deck: q.card?.deck ?? null, answered: q.answered, last: q.lastAnswer ?? null, next: q.nextBtn.shown, nextAlpha: q.nextBtn.g.alpha, verdict: q.verdict.visible ? q.verdict.text : null, explain: q.explain.visible }); })()`).then(JSON.parse);
+
+        await evaluate(`localStorage.removeItem('flappyPoop.eduSrs'), ${play}.setEduUnlocked(true), ${play}.settings.set({ education: true }), true`);
+        await home();
+        for (let attempt = 0; attempt < 3 && (await playState()) !== 'playing'; attempt += 1) {
+          for (let i = 0; i < 20 && (await playState()) !== 'ready'; i += 1) await sleep(100);
+          await evaluate(`${play}.flap(), true`);
+          for (let i = 0; i < 40 && (await playState()) !== 'playing'; i += 1) await sleep(100);
+        }
+        await evaluate(`(() => { const p = ${play}; p.poop.body.setAllowGravity(false); p.poop.setVelocity(0, 0); p.poop.y = 640; p.graceLeftMs = 1e9; p.onFinishCrossed(); return true; })()`);
+        await sleep(400);
+        const brk = await evaluate(`JSON.stringify({ edu: ${play}.runIsEducation, state: ${play}.state, lb: ${play}.levelBreak, level: ${play}.level })`).then(JSON.parse);
+        ok(brk.edu && brk.state === 'paused' && brk.lb && brk.level === 2, `an education run reaches the level-2 break (${JSON.stringify(brk)})`);
+
+        await chrome('quiz');
+        await sleep(500);
+        const q0 = await quizNow();
+        ok(q0.active && ['stomach', 'general'].includes(q0.deck) && !q0.answered, `the quiz input opens the card on a ${q0.deck} card (${q0.id}): the segment just cleared, or a general one`);
+
+        // A tap under the card does nothing: the break stays paused.
+        await evaluate(`${play}.flap(), true`);
+        await sleep(200);
+        ok((await evaluate(`${play}.state === 'paused' && ${play}.levelBreak && __flappy.scene.isActive('Quiz')`)) === true, 'a tap under the quiz neither continues the level nor closes the card');
+
+        // Touch: the first option. The answer is saved to its card at once.
+        await evaluate(`${Q}.options[0].zone.emit('pointerdown'), true`);
+        await sleep(200);
+        const q1 = await quizNow();
+        const r1 = await cardRec(q1.id);
+        const verdictWant = await tx(q1.last?.correct ? 'quizRight' : 'quizWrong');
+        ok(q1.answered && q1.last?.id === q0.id && r1?.seen === 1 && r1.right === (q1.last.correct ? 1 : 0) && q1.verdict === verdictWant && q1.next, `a tap answers ${q0.id} (${q1.last?.correct ? 'right' : 'wrong'}, ${Math.round(q1.last?.rtMs ?? -1)} ms): saved (seen ${r1?.seen}), "${q1.verdict}", Next shown`);
+        if (!q1.last?.correct) ok(q1.explain && q1.nextAlpha < 1, 'a wrong answer shows the explanation at once and holds Next');
+        await sleep(TT.education.explainMinMs + 200);
+
+        // The keyboard: Enter is Next, 2 picks the second option.
+        await evaluate(`${Q}.input.keyboard.emit('keydown-ENTER'), true`);
+        await sleep(200);
+        const q2 = await quizNow();
+        ok(q2.id && q2.id !== q0.id && !q2.answered, `Enter moves to the next card (${q2.id}), never the same card in one quiz`);
+        await evaluate(`${Q}.input.keyboard.emit('keydown-TWO'), true`);
+        await sleep(200);
+        const q3 = await quizNow();
+        const r3 = await cardRec(q2.id);
+        ok(q3.answered && q3.last?.id === q2.id && r3?.seen === 1, `the 2 key answers ${q2.id}, saved`);
+        await sleep(TT.education.explainMinMs + 200);
+        await evaluate(`${Q}.input.keyboard.emit('keydown-SPACE'), true`);
+        await sleep(200);
+
+        // The controller: the ring on the first option, A picks it.
+        await evaluate(`(() => { ${play}.registry.set('padMode', true); const q = ${Q}; q.focus.show(); q.ring('option0'); return true; })()`);
+        const q4 = await quizNow();
+        await evaluate(`${play}.onPadAction('select'), true`);
+        await sleep(200);
+        const q5 = await quizNow();
+        const r5 = await cardRec(q4.id);
+        const ringNext = await evaluate(`${Q}.focus.items[${Q}.focus.index]?.id ?? null`);
+        ok(q5.answered && q5.last?.id === q4.id && r5?.seen === 1 && ringNext === 'next', `the controller's A answers ${q4.id} (saved) and the ring moves to Next`);
+        await evaluate(`${play}.registry.set('padMode', false), ${Q}.focus.hide(), true`);
+
+        // Every card in the bank, answered wrong with its explanation and source showing, fits the card.
+        const fit = await evaluate(`import('./src/questions.js').then(({ CARDS }) => { const q = ${Q}; const bad = []; for (const c of CARDS) { const f = q.preview(c); if (!f.ok) bad.push(c.id + ':' + Math.round(f.below) + '>' + Math.round(f.buttonsTop)); } return JSON.stringify({ n: CARDS.length, bad }); })`).then(JSON.parse);
+        ok(fit.bad.length === 0, `all ${fit.n} cards fit the quiz card answered wrong with explanation and source (${fit.bad.join(', ') || 'none over'})`);
+
+        // Esc closes it; the closing key cannot continue the level (the resume lockout).
+        // (The lockout is read in the same tick as the Esc: it lasts only pauseResumeLockoutMs.)
+        const locked = await evaluate(`(() => { const p = ${play}; ${Q}.input.keyboard.emit('keydown-ESC'); return p.time.now < p.flapLockedUntil; })()`);
+        await sleep(300);
+        const after = await evaluate(`JSON.stringify({ quiz: __flappy.scene.isActive('Quiz'), state: ${play}.state, lb: ${play}.levelBreak, answered: ${play}.runQuiz.answered })`).then(JSON.parse);
+        ok(!after.quiz && after.state === 'paused' && after.lb && locked && after.answered === 3, `Esc closes the quiz into the paused break with the resume lockout armed (${JSON.stringify({ ...after, locked })})`);
+
+        await evaluate(`${play}.resumePlay(), true`);
+        await home();
+        await evaluate(`localStorage.removeItem('flappyPoop.eduSrs'), ${play}.settings.set({ education: false }), ${play}.setEduUnlocked(false), true`);
+        await home();
       }
     });
 

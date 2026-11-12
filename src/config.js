@@ -368,6 +368,7 @@ export const TUNING = {
     restoreStreak: 3, // right answers in a row (the revive's first included) that restore what the crash took
     priceScale: [1, 1.25, 1.5, 2, 2.5, 3, 3.5], // shop prices × this per level in an education run (ceil; the last row past level 7)
     masteredMs: 1814400000, // ms: a card in review at an interval this long or more counts as mastered (21 days, Anki's "mature")
+    explainMinMs: 1500, // ms the quiz's Next waits after a wrong answer, so the explanation gets read
   },
   // The loading splash (src/splash.js, #splash in index.html): note cards over the Phaser download and
   // Boot's preload, then a Continue button. Its colours and sizes are CSS in index.html (they paint

@@ -222,3 +222,14 @@ test('a profile (stats) opens from no overlay, or over the board or the 🌞 pop
     for (const input of ['pause', 'tap', 'esc', 'settings', 'leaderboard', 'daily']) assert.deepEqual(intent({ state, overlay: 'stats', input }), { do: 'ignore' }, input);
   }
 });
+
+test('the 📚 quiz (plan 21): opens only in an education run\'s level break, never over the shop or an overlay; open, it closes with the lockout and swallows taps', () => {
+  assert.deepEqual(intent({ state: 'paused', breaking: true, education: true, input: 'quiz' }), { do: 'openQuiz' });
+  assert.deepEqual(intent({ state: 'paused', breaking: true, education: false, input: 'quiz' }), { do: 'ignore' }, 'not an education run');
+  assert.deepEqual(intent({ state: 'paused', breaking: false, education: true, input: 'quiz' }), { do: 'ignore' }, 'a plain pause');
+  assert.deepEqual(intent({ state: 'paused', breaking: true, education: true, shop: true, input: 'quiz' }), { do: 'ignore' }, 'the shop is open');
+  for (const state of STATES.filter((x) => x !== 'paused')) assert.deepEqual(intent({ state, breaking: true, education: true, input: 'quiz' }), { do: 'ignore' }, state);
+  for (const overlay of OVERLAYS) assert.deepEqual(intent({ state: 'paused', breaking: true, education: true, overlay, input: 'quiz' }), { do: 'ignore' }, `under ${overlay}`);
+  assert.deepEqual(intent({ state: 'paused', overlay: 'quiz', input: 'close' }), { do: 'closeTop', armResumeLockout: true });
+  for (const input of ['tap', 'esc', 'pause', 'shop', 'quiz']) assert.deepEqual(intent({ state: 'paused', breaking: true, education: true, overlay: 'quiz', input }), { do: 'ignore' }, `${input} under the quiz`);
+});

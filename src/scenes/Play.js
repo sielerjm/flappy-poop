@@ -126,7 +126,7 @@ import { openSavePanel, isSavePanelOpen, showAdoptedName, showBoardScores } from
 import { isTournamentPanelOpen, tournamentPadAction } from '../ui/tournamentPanel.js';
 import { bindPad } from '../input/pad.js';
 import { keyGroup, sameDevice, catchUpTier, catchUpDraws, versusAvailable, ghostPlacement, rivalMarker, respawnPose, courseDistance, VERSUS_EMOJI } from '../versus.js';
-import { createEduStore, dueCount, EDUCATION_EMOJI } from '../education.js';
+import { createEduStore, dueCount, pickCard, shuffleOptions, gradeFor, schedule, EDUCATION_EMOJI } from '../education.js';
 
 const TEXT_STYLE = {
   fontFamily: 'sans-serif',
@@ -210,6 +210,7 @@ export class Play extends Phaser.Scene {
     this.educationOn = eduSettings.education;
     this.eduStore = createEduStore(globalThis.localStorage);
     this.runIsEducation = false;
+    this.runQuiz = { answered: 0, right: 0 }; // this run's quiz answers (start() resets it)
     this.runBadges = []; // the achievements the last run unlocked, for Over
     // The Daily Dump run (startDaily → start): { day, level, startPipes, playerId } while one runs, else null.
     // runIsDaily latches per run like runIsTest; dailyNext carries startDaily's day through the launch slide.
@@ -739,6 +740,7 @@ export class Play extends Phaser.Scene {
     this.runIsTest = this.isTestMode();
     // An education run (📚, plan 21): unlocked, the switch on, single player, never a Daily Dump.
     this.runIsEducation = !daily && this.educationOn && this.educationOffered();
+    this.runQuiz = { answered: 0, right: 0 };
     const begin = daily ? dailyRunStart(daily.level, this.tune) : testRunStart(this.runIsTest ? this.testSettings().startLevel : 1, this.tune);
     this.level = begin.level;
     this.pipesPassed = begin.pipes;
@@ -1488,6 +1490,52 @@ export class Play extends Phaser.Scene {
     this.refreshEduDue();
   }
 
+  /**
+   * Open the 📚 quiz (plan 21) in an education run: 'break' in a level break (chromeIntent's
+   * 'quiz'). The Quiz scene asks quizNext for its cards and hands each answer to quizAnswer.
+   */
+  openQuiz(mode) {
+    if (!this.runIsEducation || this.scene.isActive('Quiz')) return;
+    this.focus?.hide();
+    this.scene.launch('Quiz', { mode });
+    this.scene.bringToTop('Quiz');
+  }
+
+  /**
+   * The quiz's next card: { card, reason, order } or null when nothing is left (pickCard). A break
+   * asks about the segment just cleared (the level before this.level, which already counts the next
+   * one); `exclude` is the session's cards so far. The draws use Math.random, never the course's rng.
+   */
+  quizNext({ mode = 'break', exclude = [] } = {}) {
+    const store = this.eduStore.load();
+    const level = Math.min(Math.max(1, this.level), LEVELS.length);
+    const segment = LEVELS[Math.max(0, (this.levelBreak ? this.level - 1 : this.level) - 1)]?.key ?? null;
+    const pick = pickCard({ srs: store.cards, context: mode === 'revive' ? 'revive' : 'break', level, segment, now: Date.now(), exclude, recent: store.recent, rng: Math.random });
+    return pick ? { ...pick, order: shuffleOptions(Math.random) } : null;
+  }
+
+  /**
+   * One answer from the quiz: graded (gradeFor; an interrupted answer's time is not used) and, outside
+   * a test run, scheduled and saved (schedule, eduStore). An early review answered right keeps its
+   * schedule. Counted in runQuiz. Returns { correct, grade }.
+   */
+  quizAnswer({ card, reason, chosen, rtMs, interrupted }) {
+    const correct = chosen === 'answer';
+    const grade = gradeFor(correct, interrupted ? null : rtMs);
+    if (!this.runIsTest) {
+      const rec = this.eduStore.load().cards[card.id] ?? null;
+      this.eduStore.answer(card.id, schedule(rec, grade, Date.now(), T, { early: reason === 'early' }));
+    }
+    this.runQuiz.answered += 1;
+    if (correct) this.runQuiz.right += 1;
+    return { correct, grade };
+  }
+
+  /** The quiz closed: the ring may come back (the closing tap is locked out by the caller). */
+  onQuizClosed() {
+    this.refreshEduDue();
+  }
+
   /** Re-lay and redraw the switches when what is offered changes (test mode hides 👥; the word shows 📚). */
   refreshReadySwitches() {
     if (!this.readyBoxes) return;
@@ -1647,6 +1695,7 @@ export class Play extends Phaser.Scene {
       resumeLocked: this.time.now < this.flapLockedUntil,
       shop: this.shopOpen,
       breaking: this.levelBreak,
+      education: this.runIsEducation,
     };
   }
 
@@ -1682,6 +1731,9 @@ export class Play extends Phaser.Scene {
         break;
       case 'openShop':
         this.openShop();
+        break;
+      case 'openQuiz':
+        this.openQuiz('break');
         break;
       case 'closeShop':
         this.closeShop();
