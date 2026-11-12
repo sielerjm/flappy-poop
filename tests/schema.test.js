@@ -586,6 +586,7 @@ test('player_stats: single-player averages and the board level, daily podiums ra
     counters: {},
     achievements: [],
     tags: [],
+    education: null,
   });
 });
 
@@ -807,4 +808,251 @@ test('anon reads no player_meta and cannot call the new helpers', async () => {
   for (const call of ["select public.touch_player('AAAAAAAAAAAAAAAAAAAAAA')", "select public.player_tags('AAAAAAAAAAAAAAAAAAAAAA')", "select public.add_server_counter('AAAAAAAAAAAAAAAAAAAAAA', 'dethroned', 1)"]) {
     await assert.rejects(asAnon(db, call), /permission denied/, call);
   }
+});
+
+// ---------------------------------------------------------------------------
+// The 📚 education board (plan 21, Stage 3b, step B1): sharing is a player's own choice.
+// ---------------------------------------------------------------------------
+
+const BOARD_MIN_RUNS = 3; // graded runs before a sharing player is listed (TUNING.education.boardMinRuns once the game reads it)
+const eshare = (db, pid, name, adult = true) => asAnon(db, 'select public.share_education($1, $2, $3)::text as r', [pid, name, adult]).then((r) => r.rows[0].r);
+const egrades = (db, pid, batch, at, runs, sum, badges = {}) =>
+  asAnon(db, 'select public.submit_education_grades($1, $2, $3::timestamptz, $4, $5, $6::jsonb) as r', [pid, batch, at, runs, sum, JSON.stringify(badges)]).then((r) => r.rows[0].r);
+const eunshare = (db, pid) => asAnon(db, 'select public.unshare_education($1) as r', [pid]).then((r) => r.rows[0].r);
+const eboard = (db, me = null, limit = 25) => asAnon(db, 'select * from public.education_board($1, $2)', [me, limit]).then((r) => r.rows.map((x) => ({ ...x, grade: Number(x.grade) })));
+const erows = (db) => db.query('select player_id, name, runs, grade_sum::int as grade_sum, badges, last_batch, shared_at::text as shared_at from public.education_public order by player_id').then((r) => r.rows);
+const ageEdu = (db) => db.query("update public.education_public set updated_at = now() - interval '6 seconds'");
+const openBoard = (db, on = true) => db.query('select public.admin_set_education_open($1) as r', [on]).then((r) => r.rows[0].r);
+
+test('the 📚 board schema pins the minimum runs and the grade scale the game uses', () => {
+  assert.match(SQL, new RegExp(`where e\\.runs >= ${BOARD_MIN_RUNS}\\b`), 'education_board lists players from BOARD_MIN_RUNS graded runs');
+  assert.match(SQL, /p_grade_sum > p_runs::bigint \* 10000\b/, 'a grade is at most 10000 hundredths of a percent (eduRunFacts)');
+  assert.match(SQL, /check \(grade_sum <= runs::bigint \* 10000\)/, 'and the table holds the same bound');
+  assert.match(SQL, /r\.key !~ '\^edu_\[a-z0-9_\]\{1,36\}\$'/, 'only edu_ badge ids (EDU_ACHIEVEMENTS)');
+});
+
+test('share_education: closed to all but 🔧 devs until the owner opens it; adults only; the row starts empty', async () => {
+  const db = await freshDb();
+  const [DEV, P] = ['EDV', 'EP1'].map(id);
+  assert.deepEqual((await db.query('select board_open, invite_hash, phase from public.education_settings')).rows, [{ board_open: false, invite_hash: null, phase: 'pilot' }], 'one settings row: closed, the pilot');
+  await assert.rejects(eshare(db, P, 'Pat'), /closed/, 'the board is closed');
+  // A dev shares while it is closed. The dev flag is set by name, so the dev has a score-board row.
+  await asAnon(db, 'select public.submit_score($1, $2, 5)', [DEV, 'Devvy']);
+  await db.query("select public.admin_set_dev('Devvy', true)");
+  const at = await eshare(db, DEV, 'Devvy');
+  assert.match(at, /^\d{4}-\d\d-\d\d \d\d:\d\d:\d\d(\.\d{1,3})?\+00$/, `shared_at, to the millisecond (${at})`);
+  assert.deepEqual(await erows(db), [{ player_id: DEV, name: 'Devvy', runs: 0, grade_sum: 0, badges: {}, last_batch: null, shared_at: at }]);
+  await assert.rejects(eshare(db, P, 'Pat'), /closed/, 'still closed for everyone else');
+  // Open: any adult may.
+  assert.equal(await openBoard(db, true), true);
+  await assert.rejects(eshare(db, P, 'Pat', false), /not adult/);
+  await assert.rejects(asAnon(db, 'select public.share_education($1, $2, null)', [P, 'Pat']), /not adult/, 'no answer is not a yes');
+  await assert.rejects(eshare(db, 'short', 'Pat'), /bad player id/);
+  await assert.rejects(eshare(db, P, ''), /bad name/);
+  await assert.rejects(eshare(db, P, 'x'.repeat(17)), /bad name/);
+  assert.equal((await erows(db)).length, 1, 'a refused share leaves nothing');
+  assert.ok(await eshare(db, P, 'Pat'), 'an adult shares');
+  // Closed again: rows stay, nobody new joins, a dev still can.
+  assert.equal(await openBoard(db, false), false);
+  assert.equal((await erows(db)).length, 2);
+  await assert.rejects(eshare(db, id('EP2'), 'Quinn'), /closed/);
+  await assert.rejects(asAnon(db, 'select public.admin_set_education_open(true)'), /permission denied/, 'only the owner opens it');
+});
+
+test('share_education follows the score board name claim; an education-only player needs no score row; a second share only renames', async () => {
+  const db = await freshDb();
+  await openBoard(db);
+  const [OWNER, E, F] = ['EOW', 'EE1', 'EF1'].map(id);
+  await asAnon(db, 'select public.submit_score($1, $2, 9)', [OWNER, 'Taken']);
+  await assert.rejects(eshare(db, E, 'taken'), /name taken/, "another player's score-board name, whatever the case");
+  // E has never posted a score: no row on the score board, and still E can share.
+  assert.equal((await db.query('select count(*)::int as n from public.scores where player_id = $1', [E])).rows[0].n, 0);
+  const at = await eshare(db, E, 'Edu Only');
+  assert.equal((await erows(db))[0].name, 'Edu Only');
+  assert.ok(await eshare(db, OWNER, 'Taken'), 'the owner of a name shares under it');
+  // The row has runs; a second share renames and changes nothing else (same round).
+  await egrades(db, E, id('EB1'), at, 3, 27000, { edu_grade_a: '2026-11-12' });
+  const before = (await erows(db)).find((r) => r.player_id === E);
+  assert.equal(await eshare(db, E, 'Renamed'), at, 'the same shared_at: the same round');
+  assert.deepEqual((await erows(db)).find((r) => r.player_id === E), { ...before, name: 'Renamed' });
+  await assert.rejects(eshare(db, E, 'Taken'), /name taken/, 'a rename follows the claim rule too');
+  // The profile and the name lookup know an education-only sharer by the name they shared under.
+  const prof = await pstats(db, null, 'renamed');
+  assert.equal(prof.found, true);
+  assert.equal(prof.name, 'Renamed');
+  assert.deepEqual(prof.education, { grade: 90, runs: 3, badges: { edu_grade_a: '2026-11-12' } });
+  assert.deepEqual(await pstats(db, null, 'Edu Only'), { found: false }, 'the old name is nobody');
+  // A sharer with a score-board row is found by that name, as on every board.
+  await asAnon(db, 'select public.submit_score($1, $2, 4)', [F, 'Scorer']);
+  await eshare(db, F, 'Scorer');
+  assert.deepEqual((await pstats(db, null, 'Scorer')).education, { grade: null, runs: 0, badges: {} }, 'shared, no graded run yet');
+  assert.equal((await pstats(db, OWNER)).education.runs, 0);
+  assert.equal((await pstats(db, id('NOSHARE'))).education, null, 'a player who does not share shows nothing');
+  assert.equal(JSON.stringify(prof).includes(E), false, 'no ids');
+});
+
+test('submit_education_grades adds a batch; a resent batch changes nothing; one batch per 5 s; the caps hold', async () => {
+  const db = await freshDb();
+  await openBoard(db);
+  const P = id('EG1');
+  const at = await eshare(db, P, 'Grader');
+  // The first batch is not rate limited by the share itself.
+  assert.deepEqual(await egrades(db, P, id('GB1'), at, 2, 17500, { edu_grade_b: '2026-11-12' }), { status: 'ok', shared_at: (await db.query('select to_jsonb(shared_at) as j from public.education_public')).rows[0].j, runs: 2, grade_sum: 17500 });
+  await assert.rejects(egrades(db, P, id('GB2'), at, 1, 9000), /rate limited/, 'a second batch inside 5 s');
+  assert.equal((await egrades(db, P, id('GB1'), at, 2, 17500, { edu_grade_b: '2026-11-12' })).runs, 2, 'the same batch again (a lost reply): unchanged, even inside 5 s');
+  await ageEdu(db);
+  const two = await egrades(db, P, id('GB2'), at, 1, 10000, { edu_perfect: '2026-11-13', edu_grade_b: '2026-11-13', edu_grade_a: '2026-11-13' });
+  assert.deepEqual([two.status, two.runs, two.grade_sum], ['ok', 3, 27500]);
+  assert.deepEqual((await erows(db))[0].badges, { edu_grade_b: '2026-11-12', edu_perfect: '2026-11-13', edu_grade_a: '2026-11-13' }, 'badges join; one held keeps its earlier day');
+  await ageEdu(db);
+  assert.equal((await egrades(db, P, id('GB3'), at, 0, 0, { edu_drop_out: '2026-11-13' })).runs, 3, 'a badge with no graded run (🏳️) is a batch too');
+  await ageEdu(db);
+  // Refused, and nothing changes.
+  const before = await erows(db);
+  const bad = [
+    ['more grade than the runs allow', [id('BX1'), at, 1, 10001, {}], /bad grade sum/],
+    ['a grade with no runs', [id('BX2'), at, 0, 1, { edu_perfect: '2026-11-13' }], /bad grade sum/],
+    ['a negative sum', [id('BX3'), at, 1, -1, {}], /bad grade sum/],
+    ['more than 50 runs', [id('BX4'), at, 51, 0, {}], /bad runs/],
+    ['negative runs', [id('BX5'), at, -1, 0, {}], /bad runs/],
+    ['an empty batch', [id('BX6'), at, 0, 0, {}], /bad runs/],
+    ['a career badge id', [id('BX7'), at, 1, 5000, { score_10: '2026-11-13' }], /bad badges/],
+    ['a badge with no day', [id('BX8'), at, 1, 5000, { edu_perfect: 'soon' }], /bad badges/],
+    ['a badge from the future', [id('BX9'), at, 1, 5000, { edu_perfect: '2099-01-01' }], /bad badges/],
+    ['a badge that is not a string', [id('BXA'), at, 1, 5000, { edu_perfect: 7 }], /bad badges/],
+    ['too many badges', [id('BXB'), at, 1, 5000, Object.fromEntries(Array.from({ length: 21 }, (_, i) => [`edu_x${i}`, '2026-11-13']))], /bad badges/],
+    ['a short batch id', ['short', at, 1, 5000, {}], /bad batch/],
+  ];
+  for (const [why, args, re] of bad) await assert.rejects(egrades(db, P, ...args), re, why);
+  await assert.rejects(asAnon(db, 'select public.submit_education_grades($1, $2, $3::timestamptz, 1, 5000, $4::jsonb)', [P, id('BXC'), at, '[1]']), /bad badges/, 'an array, not an object');
+  await assert.rejects(egrades(db, 'short', id('BXD'), at, 1, 5000), /bad player id/);
+  assert.deepEqual(await erows(db), before);
+  assert.equal((await egrades(db, P, id('GB4'), at, 50, 500000)).runs, 53, 'the caps themselves are allowed: 50 runs at 100 %');
+});
+
+test('a batch without sharing is refused; a batch from an older round is told to restart, and changes nothing', async () => {
+  const db = await freshDb();
+  await openBoard(db);
+  const P = id('ER1');
+  await assert.rejects(egrades(db, P, id('RB0'), '2026-11-13 10:00:00+00', 1, 9000), /not shared/, 'never shared');
+  const first = await eshare(db, P, 'Rounds');
+  await egrades(db, P, id('RB1'), first, 4, 36000);
+  // Stop, and share again (on another device, say): a new, empty round.
+  assert.equal(await eunshare(db, P), true);
+  assert.deepEqual(await erows(db), [], 'unshare deletes the row at once');
+  assert.equal((await pstats(db, P)).education, null);
+  assert.equal(await eunshare(db, P), false, 'nothing left to delete');
+  await assert.rejects(egrades(db, P, id('RB2'), first, 1, 9000), /not shared/, 'a device still sharing is told so');
+  await db.query('select pg_sleep(0.005)');
+  const second = await eshare(db, P, 'Rounds');
+  assert.notEqual(second, first, 'a new round');
+  // The first device still holds the old round: restart, with the round to adopt. Nothing is added.
+  const again = await egrades(db, P, id('RB3'), first, 1, 9000);
+  assert.equal(again.status, 'restart');
+  assert.equal(Object.keys(again).sort().join(), 'shared_at,status');
+  assert.equal((await erows(db))[0].runs, 0);
+  const adopt = (await db.query('select $1::jsonb #>> \'{}\' as t', [JSON.stringify(again.shared_at)])).rows[0].t;
+  // It sends its whole record again under the new round: counted once.
+  assert.deepEqual([(await egrades(db, P, id('RB4'), adopt, 5, 45000)).runs, (await erows(db))[0].grade_sum], [5, 45000]);
+  // No round at all (a device that only learned the player shares): restart too.
+  await ageEdu(db);
+  assert.equal((await egrades(db, P, id('RB5'), null, 1, 9000)).status, 'restart');
+});
+
+test('education_board: by average grade, then more runs, then who shared first; from 3 graded runs; the name a board shows; the caller flagged and appended', async () => {
+  const db = await freshDb();
+  await openBoard(db);
+  const rows = [
+    ['A', 'Ace', 4, 40000], // 100 %
+    ['B', 'Bee', 10, 92500], // 92.5 %
+    ['C', 'Cee', 3, 27750], // 92.5 %, fewer runs than Bee
+    ['D', 'Dee', 10, 92500], // 92.5 %, as many runs as Bee, shared later
+    ['E', 'Eve', 6, 40000], // 66.7 %
+    ['F', 'Few', BOARD_MIN_RUNS - 1, 20000], // 100 % of too few runs: not listed
+    ['G', 'Gap', 0, 0], // shared, nothing graded yet
+  ];
+  for (const [tag, name, runs, sum] of rows) {
+    const pid = id(`EB${tag}`);
+    const at = await eshare(db, pid, name);
+    if (runs) await egrades(db, pid, id(`BB${tag}`), at, runs, sum);
+    await db.query('select pg_sleep(0.003)');
+  }
+  const top = await eboard(db);
+  assert.deepEqual(top.map((r) => [r.rank, r.name, r.grade, r.runs, r.me, r.total]), [
+    [1, 'Ace', 100, 4, false, 5],
+    [2, 'Bee', 92.5, 10, false, 5],
+    [3, 'Dee', 92.5, 10, false, 5],
+    [4, 'Cee', 92.5, 3, false, 5],
+    [5, 'Eve', 66.7, 6, false, 5],
+  ]);
+  assert.equal(JSON.stringify(top).includes('_'), false, 'no ids');
+  // The caller: flagged in the top, appended with its true rank below it, absent with too few runs.
+  assert.deepEqual((await eboard(db, id('EBB'), 25)).filter((r) => r.me).map((r) => r.name), ['Bee']);
+  assert.deepEqual((await eboard(db, id('EBE'), 2)).map((r) => [r.rank, r.name, r.me]), [[1, 'Ace', false], [2, 'Bee', false], [5, 'Eve', true]]);
+  assert.deepEqual((await eboard(db, id('EBF'), 2)).map((r) => r.name), ['Ace', 'Bee'], 'a caller with too few runs is not on the board');
+  assert.deepEqual((await eboard(db, 'garbage', 1)).map((r) => r.name), ['Ace']);
+  assert.equal((await eboard(db, null, 1000)).length, 5, 'the limit is capped');
+  // A sharer with a score-board row shows under that name; a 🏆 rename shows at once.
+  await asAnon(db, 'select public.submit_score($1, $2, 7)', [id('EBA'), 'AceOnBoard']);
+  assert.equal((await eboard(db))[0].name, 'AceOnBoard');
+  // One more graded run brings Few onto the board.
+  await ageEdu(db);
+  await egrades(db, id('EBF'), id('BBF2'), (await erows(db)).find((r) => r.name === 'Few').shared_at, 1, 10000);
+  assert.deepEqual((await eboard(db)).slice(0, 2).map((r) => [r.name, r.runs, r.total]), [['AceOnBoard', 4, 6], ['Few', 3, 6]], 'tied at 100 %: more runs first');
+});
+
+test('merging players: one sharer keeps the row under the kept id; two sharers start a new, empty round so no device is counted twice', async () => {
+  const db = await freshDb();
+  await openBoard(db);
+  // Only the merged player shares: the row moves as it is, round and all.
+  const [K1, M1] = ['EK1', 'EM1'].map(id);
+  const at1 = await eshare(db, M1, 'Mover');
+  await egrades(db, M1, id('MB1'), at1, 4, 30000, { edu_grade_c: '2026-11-12' });
+  await asAnon(db, 'select public.merge_players($1, $2)', [K1, M1]);
+  assert.deepEqual(await erows(db), [{ player_id: K1, name: 'Mover', runs: 4, grade_sum: 30000, badges: { edu_grade_c: '2026-11-12' }, last_batch: id('MB1'), shared_at: at1 }]);
+  await ageEdu(db);
+  assert.equal((await egrades(db, M1, id('MB2'), at1, 1, 10000)).runs, 5, "the merged id's device posts into the kept player's row, same round");
+  // Only the kept player shares: nothing changes.
+  await asAnon(db, 'select public.merge_players($1, $2)', [K1, id('EM0')]);
+  assert.equal((await erows(db))[0].runs, 5);
+  // Both share: each device has sent its own runs under its own round. Adding the rows would
+  // count a device twice when it restarts, so the kept row starts a new round from zero.
+  const [K2, M2] = ['EK2', 'EM2'].map(id);
+  const atK = await eshare(db, K2, 'Keeper');
+  const atM = await eshare(db, M2, 'Merged');
+  await egrades(db, K2, id('KB1'), atK, 3, 30000, { edu_perfect: '2026-11-10' });
+  await egrades(db, M2, id('MB3'), atM, 7, 35000, { edu_drop_out: '2026-11-11' });
+  await db.query('select pg_sleep(0.005)');
+  await asAnon(db, 'select public.merge_players($1, $2)', [K2, M2]);
+  const row = (await erows(db)).find((r) => r.player_id === K2);
+  assert.deepEqual({ ...row, shared_at: null }, { player_id: K2, name: 'Keeper', runs: 0, grade_sum: 0, badges: {}, last_batch: null, shared_at: null });
+  assert.ok(row.shared_at !== atK && row.shared_at !== atM, 'a new round');
+  assert.equal((await erows(db)).some((r) => r.player_id === M2), false, 'the merged row is gone');
+  // Both devices are told to restart and send their whole records: each counted once.
+  const rk = await egrades(db, K2, id('KB2'), atK, 1, 10000);
+  const rm = await egrades(db, M2, id('MB4'), atM, 1, 10000);
+  assert.deepEqual([rk.status, rm.status], ['restart', 'restart']);
+  await egrades(db, K2, id('KB3'), row.shared_at, 4, 40000, { edu_perfect: '2026-11-10' });
+  await ageEdu(db);
+  await egrades(db, M2, id('MB5'), row.shared_at, 8, 45000, { edu_drop_out: '2026-11-11' });
+  assert.deepEqual((await erows(db)).find((r) => r.player_id === K2), { player_id: K2, name: 'Keeper', runs: 12, grade_sum: 85000, badges: { edu_perfect: '2026-11-10', edu_drop_out: '2026-11-11' }, last_batch: id('MB5'), shared_at: row.shared_at });
+  assert.equal((await pstats(db, M2)).education.runs, 12, "the merged id's profile is the kept player's");
+});
+
+test('anon reads neither 📚 table and cannot open the board; unshare needs only the id', async () => {
+  const db = await freshDb();
+  for (const table of ['education_settings', 'education_public']) {
+    await assert.rejects(asAnon(db, `select * from public.${table}`), /permission denied/, table);
+  }
+  await assert.rejects(asAnon(db, "insert into public.education_public (player_id, name) values ('AAAAAAAAAAAAAAAAAAAAAA', 'x')"), /permission denied/);
+  await assert.rejects(asAnon(db, 'update public.education_settings set board_open = true'), /permission denied/);
+  await assert.rejects(asAnon(db, 'select public.admin_set_education_open(true)'), /permission denied/);
+  await assert.rejects(eunshare(db, 'short'), /bad player id/);
+  assert.equal(await eunshare(db, id('NEVER')), false);
+  // Re-running the file keeps the owner's setting and the rows.
+  await openBoard(db);
+  await eshare(db, id('EKEEP'), 'Keeps');
+  await db.exec(SQL);
+  assert.deepEqual((await db.query('select board_open from public.education_settings')).rows, [{ board_open: true }], 're-running the file does not close the board');
+  assert.equal((await erows(db)).length, 1);
 });
