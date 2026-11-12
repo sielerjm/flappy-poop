@@ -4438,7 +4438,12 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
           }
           await evaluate(`(() => { const p = ${play}; p.poop.body.setAllowGravity(false); p.poop.setVelocity(0, 0); p.poop.y = 640; return true; })()`);
         };
-        const panel = () => evaluate(`(() => { const o = ${O}; const texts = o.children.list.filter((c) => c.type === 'Text').map((c) => c.text); return JSON.stringify({ active: __flappy.scene.isActive('Over'), tally: o.eduLine?.text ?? null, texts, share: Boolean(o.shareButton), bonus: Boolean(o.bonusButton) }); })()`).then(JSON.parse);
+        const panel = () => evaluate(`(() => { const o = ${O}; const texts = o.children.list.filter((c) => c.type === 'Text').map((c) => c.text); return JSON.stringify({ active: __flappy.scene.isActive('Over'), tally: o.cells.some((c) => c.id === 'eduAnswered') ? '❔ ' + o.cellCounts.eduAnswered + '  ·  ✅ ' + o.cellCounts.eduRight + '  ·  ❌ ' + o.cellCounts.eduWrong : null, texts, share: Boolean(o.shareButton), bonus: Boolean(o.bonusButton) }); })()`).then(JSON.parse);
+        // The education panel's layout (plan 21, E5): the tally cells, the rows under the coins, the buttons and the band.
+        const eduPanel = () =>
+          evaluate(
+            `(() => { const o = ${O}; const at = (id) => o.cells.find((c) => c.id === id) ?? null; const b = o.buttons; const halo = o.homeHalo.getBounds(); const n = o.eduNote?.getBounds() ?? null; const texts = o.children.list.filter((c) => c.type === 'Text'); const beside = (cell) => cell ? (texts.find((x) => x.text.startsWith('×') && Math.abs(x.y - cell.y) < 2 && Math.abs(x.x - cell.textX) < 2)?.text ?? null) : null; return JSON.stringify({ ids: o.cells.map((c) => c.id), tallyY: ['eduAnswered', 'eduRight', 'eduWrong'].map((id) => at(id)?.y ?? null), tallyText: ['eduAnswered', 'eduRight', 'eduWrong'].map((id) => beside(at(id))), mysteryY: at('mystery').y, coinY: at('coin').y, fallsY: at('falls').y, badgeY: o.badgeLine ? o.badgeLine.y : null, noteTop: n ? n.y : null, noteBottom: n ? n.bottom : null, band: { top: o.bandBox.top, bottom: o.bandBox.bottom, offset: o.band.offset }, home: b.home, again: b.again, bonus: b.bonus ?? null, share: b.share ?? null, halo: { left: halo.left, right: halo.right, top: halo.top, bottom: halo.bottom, key: o.homeHalo.texture.key }, scales: [o.homeButton.labelScale(), o.againButton.labelScale()], cy: o.cells[0].y - ${TT.over.cellRowsY[0]}, ring: o.focus.items.map((i) => i.id) }); })()`,
+          ).then(JSON.parse);
         const all = JSON.stringify(await evaluate(`JSON.stringify(Object.fromEntries(Object.keys(localStorage).map((k) => [k, localStorage.getItem(k)])))`));
         await evaluate(`localStorage.removeItem('flappyPoop.eduSrs'), ${play}.setEduUnlocked(true), ${play}.settings.set({ education: true }), true`);
 
@@ -4455,6 +4460,31 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         const p1 = await panel();
         const note = await tx('eduNotSaved');
         ok(p1.active && p1.tally === '❔ 1  ·  ✅ 0  ·  ❌ 1' && !p1.texts.some((s) => /[\u{1F4DA}\u{1F480}⭐]/u.test(s)) && p1.texts.includes(note) && !p1.share && !p1.bonus, `an education game over: "${p1.tally}" (no 📚 / 💀 / ⭐ line), "${note}", no Share`);
+        // The panel (plan 21, E5): the tally is a row of cells in the grid, in the ‼️ 😢 row's old place;
+        // ‼️ 😢 sit under the coins and the note under them, a row apart; all of it in the band, at rest.
+        const e1 = await eduPanel();
+        ok(e1.ids.join() === 'fiber,probiotic,postbiotic,bacteria,bean,mystery,eduAnswered,eduRight,eduWrong,pipes,coin,falls,closeCalls' && e1.tallyY.every((y) => y === e1.cy + TT.over.cellRowsY[2]) && e1.tallyText.join() === '×1,×0,×1', `the tally is the grid's third row: ❔ ${e1.tallyText[0]}, ✅ ${e1.tallyText[1]}, ❌ ${e1.tallyText[2]}`);
+        const rowGap = [e1.fallsY - e1.coinY, (e1.noteTop + e1.noteBottom) / 2 - e1.fallsY];
+        ok(e1.fallsY > e1.coinY && e1.badgeY === null && rowGap.every((g) => g >= 50 && g <= 70) && e1.noteBottom <= e1.band.bottom && e1.band.offset === 0, `‼️ 😢 sit under the coins and the note under them, about a row apart (${rowGap.map(Math.round).join(', ')} px; the cells above are ${TT.over.cellRowsY[1] - TT.over.cellRowsY[0]}), all inside the band (it ends at ${e1.band.bottom}, the note at ${Math.round(e1.noteBottom)})`);
+        await evaluate(`(${O}.openedAt = __flappy.loop.time - 5000, ${O}.band.scrollBy(-300), true)`); // past the death-tap lockout
+        ok((await evaluate(`${O}.band.offset`)) === 0, 'a lost run has nothing to scroll: its band took the row Home left');
+        // Home | Play again, side by side where Play again sat; Play again glows, clear of Home and inside the panel.
+        const panelEdge = { right: e1.home.x + (e1.again.x - e1.home.x) / 2 + TT.over.panelWidth / 2 - 8, bottom: e1.cy + 360 + TT.over.againPanelGrowPx - 8 };
+        ok(e1.home.y === e1.again.y && e1.again.y === e1.cy + TT.over.againOffsetY && e1.home.x < e1.again.x && e1.share === null && e1.bonus === null && e1.home.width >= 2 * TT.trayHitMin && e1.home.height >= TT.trayHitMin, `Home | Play again sit side by side on Play again's row (y ${e1.again.y}), ${e1.home.width} × ${e1.home.height} each`);
+        ok(e1.halo.key === 'over-pair-halo' && e1.halo.left - (e1.home.x + e1.home.width / 2) >= 12 && e1.halo.right <= panelEdge.right && e1.halo.bottom <= panelEdge.bottom && e1.band.bottom <= e1.halo.top, `Play again's glow stops ${Math.round(e1.halo.left - (e1.home.x + e1.home.width / 2))} px short of Home, inside the panel's border, under the band`);
+        ok(e1.scales.every((k) => k >= 0.85) && e1.ring[0] === 'again' && e1.ring[1] === 'home', `the labels fit their buttons (scales ${e1.scales.map((k) => k.toFixed(2)).join(', ')}); the controller ring starts on Play again`);
+        // A tap on a tally cell opens the run's answers by level, where a cell's own card would be.
+        const tallyCell = await evaluate(`JSON.stringify(${O}.cells.find((c) => c.id === 'eduRight'))`).then(JSON.parse);
+        await tapAt(tallyCell.x, tallyCell.y);
+        const runCardOver = await evaluate(`JSON.stringify({ open: ${O}.card.open, title: ${O}.card.title.text, body: ${O}.card.body.text, over: __flappy.scene.isActive('Over') })`).then(JSON.parse);
+        const tallyGap = await evaluate(`import('./src/i18n.js').then((m) => m.TALLY_GAP)`);
+        ok(runCardOver.open && runCardOver.title === (await tx('quizStatsTitle')) && runCardOver.body === `LV 1 · Stomach${tallyGap}✅ 0${tallyGap}❌ 1` && runCardOver.over, `a tap on a tally cell opens "${runCardOver.title}": ${runCardOver.body}`);
+        await evaluate(`${O}.closeCard(), true`);
+        // Play again starts a new education run; Home (checked on the next panel) goes home.
+        await tapAt(e1.again.x, e1.again.y);
+        for (let i = 0; i < 60 && (await playState()) !== 'playing'; i += 1) await sleep(100);
+        const againRun = await evaluate(`JSON.stringify({ state: ${play}.state, edu: ${play}.runIsEducation, over: __flappy.scene.isActive('Over'), answered: ${play}.runQuiz.answered })`).then(JSON.parse);
+        ok(againRun.state === 'playing' && againRun.edu && !againRun.over && againRun.answered === 0, 'a tap on Play again starts a new education run, its tally at zero');
 
         // A won run: the bonus button opens the rectum's questions over the panel; no coins; Esc back.
         await startEdu();
@@ -4462,6 +4492,10 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await sleep(TT.deathToOverMs + TT.retryLockoutMs + 500);
         const p2 = await panel();
         ok(p2.active && p2.bonus && !p2.share, 'a won education run offers the 📚 bonus quiz where Share would be');
+        const e2 = await eduPanel();
+        const fallsBottom = e2.fallsY + TT.over.cellH / 2;
+        ok(e2.bonus && Math.abs(e2.bonus.x - (e2.home.x + e2.again.x) / 2) < 0.5 && e2.bonus.y === e2.cy + TT.over.buttonOffsetY && e2.home.y === e2.again.y && e2.home.y - e2.home.height / 2 - (e2.bonus.y + e2.bonus.height / 2) >= 16 && e2.halo.top >= e2.bonus.y + e2.bonus.height / 2 && e2.band.bottom <= e2.bonus.y - e2.bonus.height / 2, `the bonus button sits centred a row above Home | Play again (y ${e2.bonus.y} over ${e2.home.y}); the band ends at its top (${e2.band.bottom})`);
+        ok(fallsBottom <= e2.band.bottom - 16 && e2.noteTop >= e2.band.bottom && e2.ring.includes('bonus'), `with no badge line the ‼️ 😢 row is in view (it ends at ${fallsBottom}) and the note starts below the fold (${Math.round(e2.noteTop)}): nothing is cut by the band's bottom`);
         const c0 = await evaluate(`${play}.effects.coins()`);
         await evaluate(`${O}.openBonus(), true`);
         for (let i = 0; i < 30 && !(await evaluate(`__flappy.scene.isActive('Quiz') && Boolean(${Q}.card)`)); i += 1) await sleep(100);
@@ -4497,47 +4531,19 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         const rec1 = await eduRec();
         ok(dropPanel.active && dropPanel.tally === '❔ 0  ·  ✅ 0  ·  ❌ 0' && dropLine?.includes('🏳️') && dropPanel.texts.includes(note) && rec1.badges.join() === 'edu_drop_out' && !rec1.counters.gradedRuns, `giving up with nothing answered earns 🏳️: the game-over line reads "${dropLine}" under the tally, and the run is not graded`);
 
-        // The summary band (plan 22, U7): this panel, with a badge line, is the one whose lines run past
-        // the band, so the note sits below the fold and the band scrolls to it; the buttons stay put.
-        const bandNow = () =>
-          evaluate(
-            `(() => { const o = ${O}; const b = o.bandBox; const n = o.eduNote.getBounds(); return JSON.stringify({ offset: o.band.offset, top: b.top, bottom: b.bottom, left: b.left, noteTop: n.y, noteBottom: n.bottom, lineBottom: o.badgeLine.getBounds().bottom, card: o.card.open, title: o.card.title.text, over: __flappy.scene.isActive('Over') }); })()`,
-          ).then(JSON.parse);
-        const canvasPt = (x, y) => evaluate(`(() => { const r = __flappy.canvas.getBoundingClientRect(); const s = __flappy.scale; return JSON.stringify({ x: r.left + ${x} * r.width / s.width, y: r.top + ${y} * r.height / s.height, k: r.height / s.height }); })()`).then(JSON.parse);
-        await evaluate(`${O}.openedAt = __flappy.loop.time - 5000, true`); // past the death-tap lockout
-        const rest = await bandNow();
-        ok(rest.offset === 0 && rest.lineBottom <= rest.bottom && rest.noteTop >= rest.bottom, `at rest the badge line is in view and the note below the fold (the band ends at ${rest.bottom}, the note starts at ${Math.round(rest.noteTop)})`);
-        const mid = await canvasPt(rest.left + 20, (rest.top + rest.bottom) / 2);
-        await cdp.send('Input.dispatchMouseEvent', { type: 'mouseWheel', x: mid.x, y: mid.y, deltaX: 0, deltaY: 200 });
-        await sleep(200);
-        const wheeled = await bandNow();
-        ok(wheeled.offset < 0 && wheeled.noteBottom + wheeled.offset <= wheeled.bottom + 1 && wheeled.over, `the wheel scrolls the band (${wheeled.offset} px): the note is in view (its bottom at ${Math.round(wheeled.noteBottom + wheeled.offset)})`);
-        // A cell tapped after scrolling opens its own card, at where the scroll has put it.
-        // (The second row's: the first has scrolled out of the band's top.)
-        const beanCell = await evaluate(`JSON.stringify(${O}.cells.find((c) => c.id === 'bean'))`).then(JSON.parse);
-        await tapAt(beanCell.x + 40, beanCell.y + wheeled.offset);
-        const tapped = await bandNow();
-        await evaluate(`${O}.closeCard(), true`);
-        ok(tapped.card && tapped.title === (await tx('careerBean')) && tapped.over, `a cell tapped after scrolling opens its own card ("${tapped.title}")`);
-        // A drag scrolls and does nothing else, even when it ends on a cell.
-        const from = await canvasPt(rest.left + 20, beanCell.y + 20);
-        const to = await canvasPt(beanCell.x + 40, beanCell.y + 80);
-        await cdp.send('Input.dispatchMouseEvent', { type: 'mousePressed', x: from.x, y: from.y, button: 'left', buttons: 1, clickCount: 1 });
-        await cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: to.x, y: to.y, button: 'left', buttons: 1 });
-        await cdp.send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: to.x, y: to.y, button: 'left', buttons: 0, clickCount: 1 });
-        await sleep(300);
-        const dragged = await bandNow();
-        ok(dragged.offset === 0 && !dragged.card && dragged.over, `a drag scrolls the band back (${wheeled.offset} → ${dragged.offset}) and opens no card, though it ends on a cell`);
-        // The buttons are not in the band: Home is where it always was, and a tap on it goes home.
-        await evaluate(`${O}.band.scrollBy(-999), true`);
-        const homeBox = await evaluate(`JSON.stringify(${O}.buttons.home)`).then(JSON.parse);
-        await tapAt(homeBox.x, homeBox.y);
+        // A lost run with a badge line (plan 21, E5): the badge line, the ‼️ 😢 row and the note are all in
+        // the band, a row apart, and nothing scrolls. Home goes home.
+        const e3 = await eduPanel();
+        const dropGaps = [e3.badgeY - e3.coinY, e3.fallsY - e3.badgeY, (e3.noteTop + e3.noteBottom) / 2 - e3.fallsY];
+        await evaluate(`(${O}.openedAt = __flappy.loop.time - 5000, ${O}.band.scrollBy(-300), true)`); // past the death-tap lockout
+        ok(e3.badgeY > e3.coinY && e3.fallsY > e3.badgeY && e3.noteTop >= e3.fallsY + TT.over.cellH / 2 && dropGaps.every((g) => g >= 46 && g <= 70) && e3.noteBottom <= e3.band.bottom && (await evaluate(`${O}.band.offset`)) === 0, `with a badge line the rows run badge, ‼️ 😢, note (${dropGaps.map(Math.round).join(', ')} px apart), all in the band (it ends at ${e3.band.bottom}, the note at ${Math.round(e3.noteBottom)}): nothing scrolls`);
+        await tapAt(e3.home.x, e3.home.y);
         await sleep(400);
-        ok(!(await evaluate(`__flappy.scene.isActive('Over')`)) && (await playState()) === 'ready', 'with the band scrolled, Home has not moved: a tap on it goes home');
+        ok(!(await evaluate(`__flappy.scene.isActive('Over')`)) && (await playState()) === 'ready', 'a tap on Home goes home');
         // A run answered 5 of 5 that ends on Give up is not graded (plan 21, E1): no 💯, no 🅰️, no
         // graded run, the 🤓 streak untouched. (It used to earn both badges.)
         await startEdu();
-        await evaluate(`(() => { const p = ${play}; p.runQuiz = { ...p.runQuiz, answered: 5, right: 5, wrong: 0 }; p.graceLeftMs = 0; p.die(); return true; })()`);
+        await evaluate(`(() => { const p = ${play}; p.applyLocale('zh-Hans'); p.runQuiz = { ...p.runQuiz, answered: 5, right: 5, wrong: 0 }; p.graceLeftMs = 0; p.die(); return true; })()`); // zh-Hans for this panel: its buttons' labels must fit too (the restart after it reads the stored language again)
         for (let i = 0; i < 40 && !(await evaluate(`__flappy.scene.isActive('Quiz') && Boolean(${Q}.card)`)); i += 1) await sleep(100);
         await evaluate(`${Q}.leftBtn.press(), true`); // Give up
         await sleep(TT.deathToOverMs + 500);
@@ -4545,6 +4551,8 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         const quitLine = await badgeLine();
         const recQuit = await eduRec();
         ok(quitPanel.active && quitPanel.tally === '❔ 5  ·  ✅ 5  ·  ❌ 0' && quitLine === null && recQuit.badges.join() === 'edu_drop_out' && !recQuit.counters.gradedRuns && !recQuit.counters.perfectStreak && !recQuit.counters.gradeSum, `a run answered 5 of 5 that ends on Give up is not graded: "${quitPanel.tally}", no badge line (${quitLine}), the record ${JSON.stringify(recQuit.counters)}`);
+        const zhPanel = await evaluate(`import('./src/i18n.js').then((m) => { const o = ${O}; return JSON.stringify({ home: o.homeButton.getText(), again: o.againButton.getText(), want: [m.t('zh-Hans', 'tapToHome'), m.t('zh-Hans', 'playAgain')], scales: [o.homeButton.labelScale(), o.againButton.labelScale()] }); })`).then(JSON.parse);
+        ok(zhPanel.home === zhPanel.want[0] && zhPanel.again === zhPanel.want[1] && zhPanel.scales.every((k) => k >= 0.85), `in zh-Hans the two labels fit as well ("${zhPanel.home}" | "${zhPanel.again}", scales ${zhPanel.scales.map((k) => k.toFixed(2)).join(', ')})`);
         // A won run at 5 of 5: 💯 and 🅰️, the streak at 1, the average at 100 %.
         await startEdu();
         await winWith(5, 5);
@@ -4552,6 +4560,50 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         const aceLine = await badgeLine();
         const rec2 = await eduRec();
         ok(aceLine?.includes('💯') && aceLine.includes('🅰️') && rec2.badges.join() === 'edu_drop_out,edu_perfect,edu_grade_a' && rec2.counters.perfectStreak === 1 && rec2.counters.gradedRuns === 1 && rec2.counters.gradeSum === 10000, `a run answered 5 of 5 earns 💯 and 🅰️ ("${aceLine}"); the 🤓 streak is ${rec2.counters.perfectStreak}, the record ${JSON.stringify(rec2.counters)}`);
+        // The summary band (plan 22, U7; plan 21, E5): a won run's band is the short one (the bonus button
+        // takes a row), so with a badge line its ‼️ 😢 row and its note sit below the fold, whole, and the
+        // band scrolls to them; the buttons stay put.
+        const bandNow = () =>
+          evaluate(
+            `(() => { const o = ${O}; const b = o.bandBox; const n = o.eduNote.getBounds(); const f = o.cells.find((c) => c.id === 'falls'); return JSON.stringify({ offset: o.band.offset, top: b.top, bottom: b.bottom, left: b.left, noteTop: n.y, noteBottom: n.bottom, fallsTop: f.y - f.height / 2, lineBottom: o.badgeLine.getBounds().bottom, card: o.card.open, title: o.card.title.text, over: __flappy.scene.isActive('Over') }); })()`,
+          ).then(JSON.parse);
+        const canvasPt = (x, y) => evaluate(`(() => { const r = __flappy.canvas.getBoundingClientRect(); const s = __flappy.scale; return JSON.stringify({ x: r.left + ${x} * r.width / s.width, y: r.top + ${y} * r.height / s.height, k: r.height / s.height }); })()`).then(JSON.parse);
+        await evaluate(`${O}.openedAt = __flappy.loop.time - 5000, true`); // past the death-tap lockout
+        const rest = await bandNow();
+        ok(rest.offset === 0 && rest.lineBottom <= rest.bottom - 16 && rest.fallsTop >= rest.bottom && rest.noteTop >= rest.bottom, `at rest the badge line is in view, clear of the bonus button, and the ‼️ 😢 row and the note start below the fold (the band ends at ${rest.bottom}; they start at ${Math.round(rest.fallsTop)} and ${Math.round(rest.noteTop)})`);
+        const mid = await canvasPt(rest.left + 20, (rest.top + rest.bottom) / 2);
+        await cdp.send('Input.dispatchMouseEvent', { type: 'mouseWheel', x: mid.x, y: mid.y, deltaX: 0, deltaY: 400 });
+        await sleep(200);
+        const wheeled = await bandNow();
+        ok(wheeled.offset < 0 && wheeled.noteBottom + wheeled.offset <= wheeled.bottom + 1 && wheeled.over, `the wheel scrolls the band (${Math.round(wheeled.offset)} px): the note is in view (its bottom at ${Math.round(wheeled.noteBottom + wheeled.offset)})`);
+        // A cell tapped after scrolling opens its own card, at where the scroll has put it.
+        // (The ‼️ cell: the rows above it have scrolled out of the band's top.)
+        const fallsCell = await evaluate(`JSON.stringify(${O}.cells.find((c) => c.id === 'falls'))`).then(JSON.parse);
+        await tapAt(fallsCell.x, fallsCell.y + wheeled.offset);
+        const tapped = await bandNow();
+        await evaluate(`${O}.closeCard(), true`);
+        ok(tapped.card && tapped.title === (await tx('careerFalls')) && tapped.over, `a cell tapped after scrolling opens its own card ("${tapped.title}")`);
+        // A drag scrolls and does nothing else, even when it ends on a cell.
+        const coinCell = await evaluate(`JSON.stringify(${O}.cells.find((c) => c.id === 'coin'))`).then(JSON.parse);
+        const from = await canvasPt(rest.left + 20, coinCell.y + wheeled.offset - 20);
+        const to = await canvasPt(coinCell.x, coinCell.y + wheeled.offset + 80);
+        await cdp.send('Input.dispatchMouseEvent', { type: 'mousePressed', x: from.x, y: from.y, button: 'left', buttons: 1, clickCount: 1 });
+        await cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: to.x, y: to.y, button: 'left', buttons: 1 });
+        await cdp.send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: to.x, y: to.y, button: 'left', buttons: 0, clickCount: 1 });
+        await sleep(300);
+        const dragged = await bandNow();
+        ok(dragged.offset > wheeled.offset && !dragged.card && dragged.over, `a drag scrolls the band back (${Math.round(wheeled.offset)} → ${Math.round(dragged.offset)}) and opens no card, though it ends on a cell`);
+        // The buttons are not in the band: with it scrolled, Home has not moved and the bonus button still opens its quiz.
+        await evaluate(`${O}.band.scrollBy(-999), true`);
+        const e4 = await eduPanel();
+        await tapAt(e4.bonus.x, e4.bonus.y);
+        for (let i = 0; i < 30 && !(await evaluate(`__flappy.scene.isActive('Quiz') && Boolean(${Q}.card)`)); i += 1) await sleep(100);
+        const bonusUp = await evaluate(`__flappy.scene.isActive('Quiz') ? ${Q}.mode : null`);
+        await evaluate(`${Q}.input.keyboard.emit('keydown-ESC'), true`);
+        await sleep(300);
+        await tapAt(e4.home.x, e4.home.y);
+        await sleep(400);
+        ok(bonusUp === 'bonus' && !(await evaluate(`__flappy.scene.isActive('Over')`)) && (await playState()) === 'ready', 'with the band scrolled the buttons have not moved: a tap on the bonus button opens its quiz, and a tap on Home goes home');
         // A test run counts nothing: a revive in it, then the same tally, leave the record as it was.
         await evaluate(`(() => { const p = ${play}; p.setTestMode(true); p.setTestSettings({ startLevel: 1, invincible: false }); return true; })()`);
         await startEdu();
@@ -4621,6 +4673,8 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await evaluate(`(() => { const p = ${play}; p.graceLeftMs = 0; p.die(); return true; })()`);
         await sleep(TT.deathToOverMs + 500);
         const plainOver = await panel();
+        const plainButtons = await evaluate(`(() => { const o = ${O}; const b = o.buttons; return JSON.stringify({ halo: o.homeHalo.texture.key, homeY: b.home.y, againY: b.again.y, againX: b.again.x, cx: (b.share.x + b.home.x) / 2, bonus: b.bonus ?? null, ids: o.cells.map((c) => c.id).join() }); })()`).then(JSON.parse);
+        ok(plainButtons.halo === 'over-home-halo' && plainButtons.againY > plainButtons.homeY && plainButtons.againX === plainButtons.cx && plainButtons.bonus === null && plainButtons.ids === 'fiber,probiotic,postbiotic,bacteria,bean,mystery,falls,closeCalls,pipes,coin', 'a normal panel keeps its layout: Share | Home over Play again, the full glow, the ‼️ 😢 row in the grid');
         ok(plainOver.active && plainOver.tally === null && !plainOver.texts.some((s) => /[❔✅❌]/u.test(s)), `a normal run's game-over panel shows no ❔ / ✅ / ❌ line (active ${plainOver.active}, tally ${JSON.stringify(plainOver.tally)}, ${JSON.stringify(plainOver.texts.filter((s) => /[❔✅❌]/u.test(s)))})`);
         // Its summary band has nothing to scroll (plan 22, U7), and a tap on the band's empty space goes home, as a tap anywhere does.
         await evaluate(`(${O}.openedAt = __flappy.loop.time - 5000, ${O}.band.scrollBy(-300), true)`);

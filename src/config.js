@@ -137,6 +137,17 @@ export const TUNING = {
     againOffsetY: 362, // px below the panel centre of Play again (under Share | Home)
     againPanelGrowPx: 96, // px the panel grows downward when Play again is shown
     againLiftPx: 40, // px the whole panel moves up when Play again is shown, so its bottom clears the ⏸ above the cog
+    // An education panel (plan 21, E5): Home | Play again side by side on Play again's row, the
+    // tally as a row of cells, and the lines under the cells a row apart.
+    pairWidth: 220, // px: Home and Play again each, side by side (overButtonsLayout's `pair`)
+    pairGap: 44, // px between them: Play again's glow stops 20 px short of Home
+    pairGlowPx: 24, // px Play again's glow reaches past it on that row (a lone button's reaches readyPromptGlowPx): 10 px inside the panel's border
+    eduBandBottom: 290, // px from the panel centre: the summary band's bottom when no bonus button sits over the pair (the row Home left goes to the band; it ends just above the glow)
+    // The rows under the coins row, px from the panel centre (overEduLines): the badge line; the ‼️ 😢
+    // row in its place, or a row under it; the note a row under that. A won run's band is shorter
+    // (the bonus button takes a row): what does not fit above it starts cleanly below its bottom
+    // (band.bottom), never cut by it, and the band scrolls there.
+    eduLinesY: { badge: 156, falls: 160, fallsUnderBadge: 216, note: 220, noteUnderBadge: 268, wonFalls: 150, wonFallsUnderBadge: 236, wonNote: 236, wonNoteUnderBadge: 290 },
   },
   shareCard: {
     width: 1080, // px: the shared image, a 4:5 portrait (the largest shape Instagram's feed shows uncropped)

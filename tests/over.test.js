@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { GAME_WIDTH, GAME_HEIGHT, TUNING as T } from '../src/config.js';
-import { overButtonsLayout, overCellsLayout, overBandLayout, overHit, shareCardLayout } from '../src/logic.js';
+import { overButtonsLayout, overCellsLayout, overBandLayout, overEduLines, overHit, shareCardLayout, trayLayout } from '../src/logic.js';
 
 const cx = GAME_WIDTH / 2;
 const cy = GAME_HEIGHT / 2;
@@ -192,13 +192,153 @@ test("the summary band (plan 22): under the score line, down to the buttons' top
   assert.equal(T.over.panelWidth, PANEL.width);
 });
 
-test('the lines under the cells fit the band at rest: a personal best over a badge line, or a countdown; only a badge line over the education note runs past it', () => {
+test('the lines under the cells fit the band at rest: a personal best over a badge line, or a countdown', () => {
   const band = overBandLayout(cx, cy, T);
   const half = (px) => Math.ceil((px * 1.2) / 2); // a line's half height, generously
   // Over.js: a personal best (34 px) or a countdown (28 px) at +150, a badge line (28 px) at +186.
   assert.ok(cy + 150 + half(34) <= band.bottom, 'the personal-best line');
   assert.ok(cy + 186 + half(28) <= band.bottom + 2, 'the badge line under it (a pixel or two of a tall glyph does not make the band scroll)');
-  // An education panel: the tally (32 px) at +140, the note (24 px) at +184; with a badge line at +184 the note moves to +228.
-  assert.ok(cy + 184 + half(24) <= band.bottom, 'the education note');
-  assert.ok(cy + 228 - half(24) >= band.bottom, 'under a badge line the note starts below the fold');
+});
+
+// E5 (plan 21): the education game-over panel. Home | Play again side by side, the tally in the grid.
+const EDU_Y = cy - T.over.againLiftPx; // an education panel offers Play again: the lifted, grown panel
+const EDU_PANEL = { left: cx - PANEL.width / 2 + STROKE, right: cx + PANEL.width / 2 - STROKE, top: EDU_Y - PANEL.height / 2 + STROKE, bottom: EDU_Y + PANEL.height / 2 + T.over.againPanelGrowPx - STROKE };
+const box = (b) => ({ l: b.x - b.width / 2, r: b.x + b.width / 2, t: b.y - b.height / 2, b: b.y + b.height / 2 });
+const overlapping = (a, b) => a.l < b.r && b.l < a.r && a.t < b.b && b.t < a.b;
+const halfLine = (px) => Math.ceil((px * 1.2) / 2);
+
+test('an education panel: Home | Play again side by side on Play again\'s row; the glow stays off Home and inside the panel; a won run\'s bonus button sits over the pair', () => {
+  const glow = T.over.pairGlowPx;
+  for (const bonus of [false, true]) {
+    const L = overButtonsLayout(cx, EDU_Y, T, { pair: true, bonus });
+    const { home, again } = L;
+    assert.deepEqual([home.id, again.id, L.share, L.score, L.rank], ['home', 'again', null, null, null], 'Home and Play again, nothing to share');
+    assert.ok(home.x < again.x, 'Play again on the right');
+    assert.equal((home.x + again.x) / 2, cx, 'the pair is centred');
+    assert.equal(home.y, again.y, 'one row');
+    assert.equal(again.y, EDU_Y + T.over.againOffsetY, 'where Play again always sat: the panel keeps its size and place');
+    for (const b of [home, again]) {
+      const e = box(b);
+      assert.ok(b.height >= T.trayHitMin && b.width >= 2 * T.trayHitMin, `${b.id} is thumb-sized (${b.width} × ${b.height})`);
+      assert.ok(e.l >= EDU_PANEL.left && e.r <= EDU_PANEL.right && e.b <= EDU_PANEL.bottom, `${b.id} inside the panel's border`);
+    }
+    // Play again's glow reaches pairGlowPx past it on every side.
+    const halo = { l: box(again).l - glow, r: box(again).r + glow, t: box(again).t - glow, b: box(again).b + glow };
+    assert.ok(halo.l - box(home).r >= 12, `the glow clears Home by ${halo.l - box(home).r} px`);
+    assert.ok(halo.r <= EDU_PANEL.right - 4 && halo.b <= EDU_PANEL.bottom - 4, `the glow stays inside the panel's border (right ${EDU_PANEL.right - halo.r} px, bottom ${EDU_PANEL.bottom - halo.b} px to spare)`);
+    assert.ok(glow < T.readyPromptGlowPx && glow >= 16, `a shorter glow than a lone button's (${glow} < ${T.readyPromptGlowPx})`);
+    assert.equal(box(again).l - box(home).r, T.over.pairGap);
+    assert.equal(overHit(home.x, home.y, L), 'home');
+    assert.equal(overHit(again.x, again.y, L), 'again');
+    assert.equal(overHit(cx, home.y, L), null, 'the gap between them is neither');
+    // The summary band: down to just above the glow, or to the bonus button's top.
+    const band = overBandLayout(cx, EDU_Y, T, { tall: !bonus });
+    if (bonus) {
+      const bb = L.bonus;
+      assert.deepEqual([bb.id, bb.x, bb.y], ['bonus', cx, EDU_Y + T.over.buttonOffsetY], 'centred, where Share | Home sits on a normal panel');
+      assert.ok(bb.height >= T.trayHitMin && box(bb).l >= EDU_PANEL.left && box(bb).r <= EDU_PANEL.right);
+      assert.ok(box(home).t - box(bb).b >= 16, `the bonus button clears the pair by ${box(home).t - box(bb).b} px`);
+      assert.ok(halo.t >= box(bb).b, 'and the glow does not run over it');
+      assert.ok(band.bottom <= box(bb).t, 'the band ends where the bonus button begins');
+      assert.equal(band.bottom, EDU_Y + T.over.band.bottom, 'the band a normal panel has');
+      assert.equal(overHit(bb.x, bb.y, L), 'bonus');
+    } else {
+      assert.equal(L.bonus, null);
+      assert.equal(band.bottom, EDU_Y + T.over.eduBandBottom);
+      assert.ok(band.bottom <= halo.t && halo.t - band.bottom <= 12, `the band ends just above the glow (${halo.t - band.bottom} px)`);
+      assert.ok(band.bottom > EDU_Y + T.over.band.bottom, 'it took the row Home left');
+      assert.equal(overHit(cx, EDU_Y + T.over.buttonOffsetY, L), null, 'nothing where the bonus button would be');
+    }
+  }
+  // The panel's bottom still clears the ⏸ above the cog: the panel did not grow for the pair.
+  const pause = trayLayout(GAME_WIDTH, GAME_HEIGHT, T).pause;
+  assert.ok(EDU_PANEL.bottom + STROKE <= pause.y - pause.size / 2 - 12);
+});
+
+test('an education panel\'s cells: the tally is the third row, ‼️ 😢 move under the coins; nothing overlaps; a lost run\'s rows and lines all sit in its band', () => {
+  for (const badge of [false, true]) {
+    const cells = overCellsLayout(cx, EDU_Y, T, { education: true, badge });
+    assert.deepEqual(cells.map((c) => c.id), ['fiber', 'probiotic', 'postbiotic', 'bacteria', 'bean', 'mystery', 'eduAnswered', 'eduRight', 'eduWrong', 'pipes', 'coin', 'falls', 'closeCalls']);
+    const plain = overCellsLayout(cx, EDU_Y, T);
+    const at = (list, id) => list.find((c) => c.id === id);
+    for (const id of ['fiber', 'probiotic', 'postbiotic', 'bacteria', 'bean', 'mystery', 'pipes', 'coin']) assert.deepEqual(at(cells, id), at(plain, id), `${id} is where it is on every panel`);
+    const tally = ['eduAnswered', 'eduRight', 'eduWrong'].map((id) => at(cells, id));
+    assert.ok(tally.every((c) => c.y === at(plain, 'falls').y), "the tally takes the ‼️ 😢 row's place");
+    assert.deepEqual(tally.map((c) => c.x), ['fiber', 'probiotic', 'postbiotic'].map((id) => at(cells, id).x), 'in the three columns of the rows above');
+    const lines = overEduLines(T, { badge });
+    assert.equal(at(cells, 'falls').y, EDU_Y + lines.falls);
+    assert.equal(at(cells, 'closeCalls').y, at(cells, 'falls').y);
+    assert.deepEqual([at(cells, 'falls').x, at(cells, 'closeCalls').x], [at(plain, 'falls').x, at(plain, 'closeCalls').x], '‼️ 😢 keep their columns');
+    assert.ok(at(cells, 'falls').y > at(cells, 'coin').y, 'under the coins row');
+    for (const c of cells) {
+      const e = box(c);
+      assert.ok(e.l >= EDU_PANEL.left && e.r <= EDU_PANEL.right, `${c.id} inside the panel`);
+      for (const o of cells) if (o !== c) assert.ok(!overlapping(e, box(o)), `${c.id} clear of ${o.id}`);
+      assert.ok(c.height >= 44 && c.width >= 120, `${c.id} is a tap target`);
+    }
+    // The rows under the coins: the badge line (28 px), the ‼️ 😢 row (50 px cells), the note (24 px), each clear of the next.
+    const coinB = box(at(cells, 'coin')).b;
+    const fallsBox = box(at(cells, 'falls'));
+    if (badge) {
+      assert.equal(lines.badge, T.over.eduLinesY.badge);
+      assert.ok(EDU_Y + lines.badge - halfLine(28) >= coinB && EDU_Y + lines.badge + halfLine(28) <= fallsBox.t, 'the badge line sits between the coins row and the ‼️ 😢 row');
+    } else {
+      assert.equal(lines.badge, null);
+      assert.ok(fallsBox.t >= coinB, 'the ‼️ 😢 row sits under the coins row');
+    }
+    assert.ok(EDU_Y + lines.note - halfLine(24) >= fallsBox.b, 'the note sits under the ‼️ 😢 row');
+    const gaps = badge ? [lines.badge - T.over.rankBox.dy, lines.falls - lines.badge, lines.note - lines.falls] : [lines.falls - T.over.rankBox.dy, lines.note - lines.falls];
+    assert.ok(gaps.every((g) => g >= 50 && g <= 68), `the rows are a row apart, as the cells above are (${gaps.join(', ')} px; those are ${T.over.cellRowsY[1] - T.over.cellRowsY[0]})`);
+    // A lost run: the taller band holds every row and line, so nothing scrolls.
+    const tall = overBandLayout(cx, EDU_Y, T, { tall: true });
+    for (const c of cells) assert.ok(box(c).t >= tall.top && box(c).b <= tall.bottom, `lost: ${c.id} is in the band`);
+    assert.ok(EDU_Y + lines.note + halfLine(24) <= tall.bottom, `lost: the note ends inside the band (${tall.bottom - (EDU_Y + lines.note + halfLine(24))} px to spare)`);
+    // The buttons are clear of every cell.
+    for (const bonus of [false, true]) {
+      const L = overButtonsLayout(cx, EDU_Y, T, { pair: true, bonus });
+      if (!bonus) for (const c of cells) for (const b of [L.home, L.again]) assert.ok(!overlapping(box(c), box(b)), `${c.id} clear of ${b.id}`);
+      assert.equal(overHit(tally[1].x, tally[1].y, { ...L, cells }), 'cell:eduRight');
+    }
+  }
+  // A won run: the bonus button takes a row, so the band is the normal one. The first row under the
+  // coins stays in view; what does not fit starts below the band's bottom, whole: nothing is cut by it.
+  const fold = overBandLayout(cx, EDU_Y, T).bottom;
+  for (const badge of [false, true]) {
+    const lines = overEduLines(T, { badge, won: true });
+    const cells = overCellsLayout(cx, EDU_Y, T, { education: true, badge, won: true });
+    const falls = box(cells.find((c) => c.id === 'falls'));
+    assert.equal(falls.t, EDU_Y + lines.falls - T.over.cellH / 2);
+    const rows = [
+      ...(badge ? [['the badge line', EDU_Y + lines.badge - halfLine(28), EDU_Y + lines.badge + halfLine(28)]] : []),
+      ['the ‼️ 😢 row', falls.t, falls.b],
+      ['the note', EDU_Y + lines.note - halfLine(24), EDU_Y + lines.note + halfLine(24)],
+    ];
+    for (const [name, top, bottom] of rows) assert.ok(bottom <= fold || top >= fold, `won${badge ? ', a badge' : ''}: ${name} (${top}–${bottom}) is not cut by the band's bottom (${fold})`);
+    assert.ok(rows[0][2] <= fold - 16, `won${badge ? ', a badge' : ''}: ${rows[0][0]} is in view, clear of the bonus button by ${fold - rows[0][2]} px`);
+    assert.ok(rows.at(-1)[1] >= fold, `won${badge ? ', a badge' : ''}: the note is below the fold: the band scrolls to it`);
+    for (let i = 1; i < rows.length; i += 1) assert.ok(rows[i][1] >= rows[i - 1][2], `won: ${rows[i][0]} under ${rows[i - 1][0]}`);
+    for (const c of cells) for (const o of cells) if (o !== c) assert.ok(!overlapping(box(c), box(o)), `won: ${c.id} clear of ${o.id}`);
+  }
+  assert.notDeepEqual(overEduLines(T, { badge: true, won: true }), overEduLines(T, { badge: true, won: false }), 'a won run sets its rows for the shorter band');
+});
+
+test('the panels that are not education panels are laid out as before', () => {
+  const o = T.over;
+  const b = (id, x, y) => ({ id, x, y, width: o.buttonWidth, height: o.buttonHeight });
+  const off = (o.buttonWidth + o.buttonGap) / 2;
+  // A normal run: Share | Home, Play again under them.
+  assert.deepEqual(overButtonsLayout(cx, EDU_Y, T, { share: true, again: true }), { share: b('share', cx - off, EDU_Y + o.buttonOffsetY), home: b('home', cx + off, EDU_Y + o.buttonOffsetY), score: null, rank: null, again: b('again', cx, EDU_Y + o.againOffsetY) });
+  // A test run: Home alone, Play again under it.
+  assert.deepEqual(overButtonsLayout(cx, EDU_Y, T, { share: false, again: true }), { share: null, home: b('home', cx, EDU_Y + o.buttonOffsetY), score: null, rank: null, again: b('again', cx, EDU_Y + o.againOffsetY) });
+  // A Daily Dump: Share | Home, the score and rank links, no Play again.
+  const daily = overButtonsLayout(cx, cy, T, { share: true, score: true });
+  assert.deepEqual([daily.share, daily.home, daily.again], [b('share', cx - off, cy + o.buttonOffsetY), b('home', cx + off, cy + o.buttonOffsetY), null]);
+  assert.deepEqual([daily.score.id, daily.rank.id], ['score', 'rank']);
+  for (const L of [overButtonsLayout(cx, EDU_Y, T, { share: true, again: true }), daily]) assert.equal(L.bonus, undefined, 'no bonus box off an education panel');
+  // Their cells and their band.
+  assert.deepEqual(overCellsLayout(cx, cy, T).map((c) => c.id), ['fiber', 'probiotic', 'postbiotic', 'bacteria', 'bean', 'mystery', 'falls', 'closeCalls', 'pipes', 'coin']);
+  assert.deepEqual(overCellsLayout(cx, cy, T, { badge: true }), overCellsLayout(cx, cy, T), 'a badge line moves nothing off an education panel');
+  assert.equal(overCellsLayout(cx, cy, T).find((c) => c.id === 'falls').y, cy + o.cellRowsY[2]);
+  assert.deepEqual(overBandLayout(cx, cy, T), overBandLayout(cx, cy, T, { tall: false }));
+  assert.equal(overBandLayout(cx, cy, T).bottom, cy + o.band.bottom);
 });

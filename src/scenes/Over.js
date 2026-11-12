@@ -1,6 +1,6 @@
-import { GAME_HEIGHT, FIELD, TUNING as T, SHARE, LEVEL_COLORS } from '../config.js';
-import { canRestart, chromeIntent, trayLayout, trayHit, overButtonsLayout, overCellsLayout, overBandLayout, overHit, shareCardLayout, levelColor, uiColumn, msUntilUtcMidnight, countdownText, fitScale } from '../logic.js';
-import { t, levelLabel, shareCardFooter, dailyDayText, dailyRankText, badgeTitle } from '../i18n.js';
+import { GAME_HEIGHT, FIELD, TUNING as T, SHARE, LEVEL_COLORS, LEVELS } from '../config.js';
+import { canRestart, chromeIntent, trayLayout, trayHit, overButtonsLayout, overCellsLayout, overBandLayout, overEduLines, overHit, shareCardLayout, levelColor, uiColumn, msUntilUtcMidnight, countdownText, fitScale } from '../logic.js';
+import { t, levelLabel, shareCardFooter, dailyDayText, dailyRankText, badgeTitle, tallyLines } from '../i18n.js';
 import { achievementById, EDU_ACHIEVEMENTS } from '../achievements.js';
 import { EDUCATION_EMOJI } from '../education.js';
 import { fetchDailyBoard, dailyEntryId } from '../leaderboard.js';
@@ -17,7 +17,9 @@ import { createScrollView } from '../ui/scrollView.js';
 
 /** A summary cell's card art: a texture (CELL_ICON, else the id) or an emoji (CELL_GLYPH); its note (a career string). */
 const CELL_ICON = { mystery: 'mystery-icon' }; // the box's static view, not the spin sheet
-const CELL_GLYPH = { falls: '‼️', closeCalls: '😢', pipes: '#️⃣' };
+const CELL_GLYPH = { falls: '‼️', closeCalls: '😢', pipes: '#️⃣', eduAnswered: '❔', eduRight: '✅', eduWrong: '❌' };
+/** An education panel's tally cells (plan 21, E5): a tap on any of them opens the run's answers by level, not a cell's usual card. */
+const EDU_CELLS = new Set(['eduAnswered', 'eduRight', 'eduWrong']);
 const CELL_NOTE = {
   fiber: 'careerFiber',
   probiotic: 'careerProbiotic',
@@ -88,20 +90,30 @@ export class Over extends Phaser.Scene {
     // and nothing to share. Home is the ready-screen-style glowing button (any tap
     // outside the tray and off Share goes home too). Both fade in after the lockout
     // so a death tap cannot restart or share.
-    // An education run has nothing to share; after a win its left button opens the rectum's questions instead (openBonus).
+    // An education run (plan 21, E5) has nothing to share: its buttons are one row, Home | Play again
+    // side by side where Play again sits, and after a win the 📚 bonus button (the rectum's questions,
+    // openBonus) sits centred a row above them. Its third row of cells is the quiz tally, and the
+    // ‼️ / 😢 row moves under the coins (under the badge line when the run earned one).
     // They, the tray and everything above are made before the summary band below, so they stay on
     // the main camera: the band's own camera draws only what is added to it.
-    this.cells = overCellsLayout(cx, cy, T, { daily: Boolean(daily) });
+    // Achievements this run unlocked (plan 08), by their catalog entry; an education run's come from
+    // their own list (EDU_ACHIEVEMENTS, plan 22). The line itself is drawn in the band below.
+    const badges = testRun ? [] : (Array.isArray(data?.badges) ? data.badges : []).map((id) => achievementById(id) ?? achievementById(id, EDU_ACHIEVEMENTS)).filter(Boolean);
+    const eduLines = education ? overEduLines(T, { badge: badges.length > 0, won }) : null;
+    this.cells = overCellsLayout(cx, cy, T, { daily: Boolean(daily), education: Boolean(education), badge: badges.length > 0, won });
     this.bonus = Boolean(education && won);
-    this.buttons = { ...overButtonsLayout(cx, cy, T, { share: education ? this.bonus : !testRun, score: linked, again }), cells: this.cells };
+    this.buttons = { ...overButtonsLayout(cx, cy, T, education ? { pair: true, bonus: this.bonus } : { share: !testRun, score: linked, again }), cells: this.cells };
     const home = this.buttons.home;
-    // The suggested next step glows (the ready screen's prompt halo): Play again when offered, else Home.
+    // The suggested next step glows (the ready screen's prompt halo): Play again when offered, else
+    // Home. Beside Home (an education panel's pair) the glow is shorter, so it never reaches Home;
+    // a glow texture is painted once per key, so that size has a key of its own.
     const lead = this.buttons.again ?? home;
-    this.homeHalo = createRectGlow(this, lead.x, lead.y, { key: 'over-home-halo', width: lead.width, height: lead.height, radius: T.readyButtonRadius, pad: T.readyPromptGlowPx }).setAlpha(0);
+    const pair = Boolean(education);
+    this.homeHalo = createRectGlow(this, lead.x, lead.y, { key: pair ? 'over-pair-halo' : 'over-home-halo', width: lead.width, height: lead.height, radius: T.readyButtonRadius, pad: pair ? T.over.pairGlowPx : T.readyPromptGlowPx }).setAlpha(0);
     this.homeButton = createButton(this, home, t(locale, 'tapToHome'), { ...style, fontSize: '40px' }, { depth: 1 }).setAlpha(0);
     // Share stays hidden until its image exists (makeShareCard), so a tap on it always has a file to send.
-    this.shareButton = this.buttons.share && !this.bonus ? createButton(this, this.buttons.share, t(locale, 'shareButton'), { ...style, fontSize: '40px' }, { depth: 1 }).setAlpha(0).setVisible(false) : null;
-    this.bonusButton = this.bonus ? createButton(this, this.buttons.share, `${EDUCATION_EMOJI} ${t(locale, 'quizPill')}`, { ...style, fontSize: '40px', color: '#f8a0c8' }, { depth: 1 }).setAlpha(0) : null;
+    this.shareButton = this.buttons.share ? createButton(this, this.buttons.share, t(locale, 'shareButton'), { ...style, fontSize: '40px' }, { depth: 1 }).setAlpha(0).setVisible(false) : null;
+    this.bonusButton = this.buttons.bonus ? createButton(this, this.buttons.bonus, `${EDUCATION_EMOJI} ${t(locale, 'quizPill')}`, { ...style, fontSize: '40px', color: '#f8a0c8' }, { depth: 1 }).setAlpha(0) : null;
     this.againButton = this.buttons.again ? createButton(this, this.buttons.again, t(locale, 'playAgain'), { ...style, fontSize: '40px' }, { depth: 1 }).setAlpha(0) : null;
     this.buttonFade = { a: 0 };
     this.tweens.add({
@@ -124,9 +136,10 @@ export class Over extends Phaser.Scene {
     // The summary band (plan 22; overBandLayout): the cells and the lines under them, between the
     // score line and the buttons, on a scroll view (a second camera clipped to the band, as the
     // profile's). At rest everything sits where it always did; a panel whose lines run past the
-    // band's bottom (an education run that earned a badge) scrolls there by drag, wheel or the
-    // controller's ring, while the headline, the score and the buttons stay put.
-    const B = overBandLayout(cx, cy, T);
+    // band's bottom (a won education run) scrolls there by drag, wheel or the
+    // controller's ring, while the headline, the score and the buttons stay put. An education panel
+    // with no bonus button has the row Home left: its band is taller, and all its lines fit.
+    const B = overBandLayout(cx, cy, T, { tall: Boolean(education) && !this.bonus });
     const sv = createScrollView(this, B.panel, { fixed: [...this.children.list] });
     this.band = sv;
     this.bandBox = B;
@@ -139,8 +152,11 @@ export class Over extends Phaser.Scene {
     // Run summary (overCellsLayout): icon ×n cells, no words. Rows: fiber / probiotic / postbiotic
     // (times one started), bad bacteria / bean / mystery box (a box's reward also counts under its own
     // icon), ‼️ long falls / 😢 close calls, then pipes crossed (fart pipes included, as for levels) |
-    // the coins this run collected. Each cell explains itself in a card (openCell).
-    const counts = { ...collected, pipes, falls, closeCalls };
+    // the coins this run collected. Each cell explains itself in a card (openCell). An education
+    // panel's third row is its tally (❔ answered, ✅ right, ❌ wrong), cells like the rest; a tap on
+    // one opens the run's answers by level.
+    const counts = { ...collected, pipes, falls, closeCalls, ...(education ? { eduAnswered: education.answered ?? 0, eduRight: education.right ?? 0, eduWrong: education.wrong ?? 0 } : {}) };
+    this.eduTally = education; // the "This run" card reads its rows (byLevel)
     for (const cell of this.cells) {
       const n = counts[cell.id];
       const big = cell.id === 'pipes' || cell.id === 'coin';
@@ -171,26 +187,21 @@ export class Over extends Phaser.Scene {
     // Achievements this run unlocked (plan 08): the first two by glyph and name, then "+n". Under the
     // personal-best or countdown line when there is one, else in its place; above the buttons.
     this.badgeLine = null; // the scene instance outlives a restart: never keep the last panel's line
-    // An education run's badges come from their own list (EDU_ACHIEVEMENTS, plan 22).
-    const badges = testRun ? [] : (Array.isArray(data?.badges) ? data.badges : []).map((id) => achievementById(id) ?? achievementById(id, EDU_ACHIEVEMENTS)).filter(Boolean);
     if (badges.length) {
       const named = badges.slice(0, 2).map((e) => `${e.glyph} ${badgeTitle(locale, e)}`).join(' · ');
       const more = badges.length > 2 ? ` ${t(locale, 'overBadgesMore').replace('{n}', String(badges.length - 2))}` : '';
-      // An education panel: under its tally, with the "not on the boards yet" note below it.
-      const lineY = cy + (education ? 184 : data?.personalBest || daily ? 186 : 150);
+      // An education panel: under the coins row, with the ‼️ / 😢 row and the note below it (overEduLines).
+      const lineY = cy + (education ? eduLines.badge : data?.personalBest || daily ? 186 : 150);
       const text = this.add.text(cx, lineY, t(locale, 'overBadges').replace('{badges}', named + more), { ...style, fontSize: '28px', color: '#ffd700' }).setOrigin(0.5);
       text.setScale(fitScale(text.width, 500, 0));
       this.badgeLine = line(text);
     }
-    this.eduLine = null; // as with badgeLine: never the last panel's
-    this.eduNote = null;
+    this.eduNote = null; // as with badgeLine: never the last panel's
     if (education) {
-      // ❔ answered · ✅ right · ❌ wrong (glyphs and numbers: nothing to translate), then why it is not on a board.
-      const tally = `❔ ${education.answered}  ·  ✅ ${education.right}  ·  ❌ ${education.wrong ?? 0}`;
-      this.eduLine = line(this.add.text(cx, cy + 140, tally, { ...style, fontSize: '32px', color: '#ffd700' }).setOrigin(0.5));
-      // The note sits under the tally; a run that earned a badge has that line there, and the note
-      // one row lower, past the band's bottom: the one panel that scrolls.
-      this.eduNote = line(this.add.text(cx, cy + (this.badgeLine ? 228 : 184), t(locale, testRun ? 'testRunNotSaved' : 'eduNotSaved'), { ...style, fontSize: '24px', color: '#c9b8dc', fontStyle: 'normal', wordWrap: { width: 480, useAdvancedWrap: true } }).setOrigin(0.5));
+      // Why the run is on no board, under the ‼️ / 😢 row (overEduLines). A lost run's taller band
+      // holds all of it; a won run's shorter one (the bonus button takes a row) has this note, and
+      // under a badge line the ‼️ / 😢 row too, below its bottom: those panels scroll.
+      this.eduNote = line(this.add.text(cx, cy + eduLines.note, t(locale, testRun ? 'testRunNotSaved' : 'eduNotSaved'), { ...style, fontSize: '24px', color: '#c9b8dc', fontStyle: 'normal', wordWrap: { width: 480, useAdvancedWrap: true } }).setOrigin(0.5));
     } else if (testRun) {
       line(this.add.text(cx, cy + 150, t(locale, 'testRunNotSaved'), { ...style, fontSize: '30px', color: '#ffd700', wordWrap: { width: 460, useAdvancedWrap: true } }).setOrigin(0.5));
     } else if (daily) {
@@ -224,7 +235,7 @@ export class Over extends Phaser.Scene {
         ...(this.buttons.score ? [{ id: 'score', box: this.buttons.score, activate: () => this.openDailyBoard() }] : []),
         ...(this.buttons.rank ? [{ id: 'rank', box: this.buttons.rank, scrolled: true, activate: () => this.openDailyBoard() }] : []),
         ...(this.shareButton ? [{ id: 'share', box: this.buttons.share, visible: () => Boolean(this.shareFile), activate: () => this.shareRun() }] : []),
-        ...(this.bonusButton ? [{ id: 'bonus', box: this.buttons.share, activate: () => this.openBonus() }] : []),
+        ...(this.bonusButton ? [{ id: 'bonus', box: this.buttons.bonus, activate: () => this.openBonus() }] : []),
         // The summary cells: A opens (or closes) a cell's card.
         ...this.cells.map((cell) => ({ id: `cell:${cell.id}`, box: cell, scrolled: true, activate: () => this.openCell(cell.id) })),
         ...['info', 'lang', 'feedback', 'leaderboard', 'mute', 'settings'].map((id) => ({ id, obj: this.tray.buttons[id], activate: () => play?.handleChrome(id) })),
@@ -277,7 +288,7 @@ export class Over extends Phaser.Scene {
         this.playAgain();
         return;
       }
-      if (link === 'share' && this.bonusButton) {
+      if (link === 'bonus') {
         this.openBonus();
         return;
       }
@@ -326,8 +337,9 @@ export class Over extends Phaser.Scene {
   }
 
   /**
-   * A summary cell's card: its icon, what it counts and this run's number. Past the death-tap
-   * lockout only (a death tap on a cell opens nothing). A second press on the same cell closes it.
+   * A summary cell's card: its icon, what it counts and this run's number; an education panel's
+   * tally cells open the run's answers by level instead. Past the death-tap lockout only (a death
+   * tap on a cell opens nothing). A second press on the same cell closes it.
    */
   openCell(id) {
     if (!this.card || !canRestart(this.openedAt, this.time.now, T.retryLockoutMs)) return;
@@ -336,6 +348,12 @@ export class Over extends Phaser.Scene {
       return;
     }
     const locale = this.shareInfo?.locale ?? 'en';
+    if (EDU_CELLS.has(id)) {
+      // An education panel's tally: the run's answers, one line per level (the quiz card's "This run").
+      const lines = tallyLines(locale, this.eduTally, LEVELS);
+      this.card.show({ glyph: EDUCATION_EMOJI, title: t(locale, 'quizStatsTitle'), lines: lines.length ? lines : ['–'] });
+      return;
+    }
     const n = this.cellCounts?.[id];
     this.card.show({
       glyph: CELL_GLYPH[id] ?? '',

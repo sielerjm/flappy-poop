@@ -1591,9 +1591,21 @@ function inBox(x, y, box) {
  * (over.rankBox) are boxes too (both open the 🌞 board); otherwise both are null.
  * With again: true (a normal or test run) Play again sits centred under them at
  * cy + over.againOffsetY; otherwise again is null.
+ * With pair: true (an education panel; plan 21, E5) the row is Home | Play again instead, side by
+ * side at cy + over.againOffsetY (over.pairWidth each, over.pairGap apart; Play again on the right,
+ * where its glow, over.pairGlowPx, stays clear of Home and inside the panel), and nothing to share.
+ * With bonus: true as well (a won run) the 📚 bonus button sits centred one row above the pair, at
+ * cy + over.buttonOffsetY; otherwise bonus is null.
  */
-export function overButtonsLayout(cx, cy, t, { share = true, score = false, again = false } = {}) {
+export function overButtonsLayout(cx, cy, t, { share = true, score = false, again = false, pair = false, bonus = false } = {}) {
   const o = t.over;
+  if (pair) {
+    const rowY = cy + o.againOffsetY;
+    const dx = (o.pairWidth + o.pairGap) / 2;
+    const side = (id, x) => ({ id, x, y: rowY, width: o.pairWidth, height: o.buttonHeight });
+    const bonusBox = bonus ? { id: 'bonus', x: cx, y: cy + o.buttonOffsetY, width: o.buttonWidth, height: o.buttonHeight } : null;
+    return { share: null, home: side('home', cx - dx), score: null, rank: null, again: side('again', cx + dx), bonus: bonusBox };
+  }
   const y = cy + o.buttonOffsetY;
   const box = (id, x) => ({ id, x, y, width: o.buttonWidth, height: o.buttonHeight });
   const scoreBox = score ? { id: 'score', x: cx, y: cy + o.scoreOffsetY, width: o.scoreBoxWidth, height: o.buttonHeight } : null;
@@ -1609,23 +1621,25 @@ export function overButtonsLayout(cx, cy, t, { share = true, score = false, agai
  * (the cells, and the lines under them) sits in a scroll area, so a panel with more lines than fit
  * scrolls there while the headline, the score and the buttons stay put. { top, bottom, left, right }
  * are the band's visible edges; `panel` is the rect createScrollView takes (it insets 8 px a side,
- * which lands on those edges).
+ * which lands on those edges). `tall` (an education panel with no bonus button; plan 21, E5): the
+ * buttons are one row, Home | Play again, so the band runs down to over.eduBandBottom, just above
+ * that row's glow.
  */
-export function overBandLayout(cx, cy, t) {
+export function overBandLayout(cx, cy, t, { tall = false } = {}) {
   const o = t.over;
   const top = cy + o.band.top;
-  const bottom = cy + o.band.bottom;
+  const bottom = cy + (tall ? o.eduBandBottom : o.band.bottom);
   const inset = 8; // createScrollView's margin, and the panel's border
   return { top, bottom, left: cx - o.panelWidth / 2 + inset, right: cx + o.panelWidth / 2 - inset, panel: { x: cx, y: (top + bottom) / 2, width: o.panelWidth, height: bottom - top + 2 * inset } };
 }
 
 /**
- * 'share' | 'home' | 'score' | 'rank' | 'again' for a tap at (x, y) on overButtonsLayout's boxes,
- * else 'cell:<id>' on one of layout.cells (overCellsLayout), else null.
+ * 'share' | 'home' | 'score' | 'rank' | 'again' | 'bonus' for a tap at (x, y) on
+ * overButtonsLayout's boxes, else 'cell:<id>' on one of layout.cells (overCellsLayout), else null.
  */
 export function overHit(x, y, layout) {
   if (!layout) return null;
-  for (const box of [layout.share, layout.home, layout.score, layout.rank, layout.again]) {
+  for (const box of [layout.share, layout.home, layout.score, layout.rank, layout.again, layout.bonus]) {
     if (box && inBox(x, y, box)) return box.id;
   }
   for (const cell of layout.cells ?? []) {
@@ -1639,14 +1653,19 @@ export function overHit(x, y, layout) {
  * itself: fiber / probiotic / postbiotic, bacteria / bean / mystery, ‼️ long falls / 😢 close calls,
  * then pipes / coins (no coin cell in a Daily Dump: that spot is the rank link, over.rankBox).
  * Each cell: { id, x (where its icon sits + 30), y, width, height } around the icon and count.
+ * An education panel (plan 21, E5): the third row is the run's quiz tally, ❔ answered / ✅ right /
+ * ❌ wrong (eduAnswered, eduRight, eduWrong), and the ‼️ / 😢 row moves under the coins row: in the
+ * badge line's place, or with `badge` (the run earned one) a row under it; `won` sets it for a won
+ * run's shorter band (overEduLines).
  */
-export function overCellsLayout(cx, cy, t, { daily = false } = {}) {
+export function overCellsLayout(cx, cy, t, { daily = false, education = false, badge = false, won = false } = {}) {
   const o = t.over;
   const rows = [
     [o.cellRowsY[0], ['fiber', 'probiotic', 'postbiotic']],
     [o.cellRowsY[1], ['bacteria', 'bean', 'mystery']],
-    [o.cellRowsY[2], ['falls', 'closeCalls']],
+    [o.cellRowsY[2], education ? ['eduAnswered', 'eduRight', 'eduWrong'] : ['falls', 'closeCalls']],
     [o.rankBox.dy, daily ? ['pipes'] : ['pipes', 'coin']],
+    ...(education ? [[overEduLines(t, { badge, won }).falls, ['falls', 'closeCalls']]] : []),
   ];
   const columnX = { 2: [-120, 120], 3: [-170, 0, 170] };
   const cells = [];
@@ -1655,6 +1674,19 @@ export function overCellsLayout(cx, cy, t, { daily = false } = {}) {
     ids.forEach((id, i) => cells.push({ id, x: cx + xs[i], y: cy + dy, box: { x: cx + xs[i] + 10, y: cy + dy, width: o.cellW, height: o.cellH } }));
   }
   return cells.map((c) => ({ id: c.id, x: c.box.x, y: c.box.y, width: c.box.width, height: c.box.height, iconX: c.x - 30, textX: c.x + 2 }));
+}
+
+/**
+ * An education panel's rows under the coins row, as px from the panel centre (over.eduLinesY; plan
+ * 21, E5): { badge (the "🏆 New: …" line; null without one), falls (the ‼️ / 😢 row: in the badge
+ * line's place, or a row under it), note (why the run is on no board: a row under that) }. A lost
+ * run's tall band holds them all. A won run's band ends at the bonus button: the first row under
+ * the coins stays in view and the rest starts below the band's bottom, whole, where it scrolls to.
+ */
+export function overEduLines(t, { badge = false, won = false } = {}) {
+  const y = t.over.eduLinesY;
+  if (won) return badge ? { badge: y.badge, falls: y.wonFallsUnderBadge, note: y.wonNoteUnderBadge } : { badge: null, falls: y.wonFalls, note: y.wonNote };
+  return badge ? { badge: y.badge, falls: y.fallsUnderBadge, note: y.noteUnderBadge } : { badge: null, falls: y.falls, note: y.note };
 }
 
 /**
