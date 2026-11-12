@@ -1,5 +1,5 @@
 import { GAME_HEIGHT, LEVELS, TUNING as T } from '../config.js';
-import { chromeIntent } from '../logic.js';
+import { canRestart, chromeIntent } from '../logic.js';
 import { createFocus, pressable } from '../ui/focus.js';
 import { createRectGlow } from '../ui/glow.js';
 import { isTopOverlay } from '../ui/overlayStack.js';
@@ -32,7 +32,9 @@ const BAD = '#ff8da8';
  * the options appearing; an answer is flagged interrupted when the page was hidden meanwhile.
  * Sounds (plan 22): a book opens with the quiz, a page turns for each next question, and the book
  * shuts when the quiz is left; a right answer dings like a pipe passed, a wrong one sounds like the
- * bad bacteria, and the answer that wins everything back sparkles. The answers view is silent.
+ * bad bacteria, and the answer that wins everything back sparkles. An answer that pays a coin (a
+ * level break's) makes the coin's sound alone, with no ding. The answers view is silent.
+ * A revive's card ignores pointer taps for retryLockoutMs after it opens (tapLocked).
  * Buttons: a full-width Why on top, and a bottom row whose right button is the way forward (Next,
  * Fly on, Go for it, End run) and whose left button is the way out (Return; in a revive, Give up or
  * the choice's Fly on).
@@ -64,6 +66,7 @@ export class Quiz extends Phaser.Scene {
     this.answered = false;
     this.finishing = false;
     this.reviveState = this.mode === 'revive' ? (this.play?.revive ?? null) : null;
+    this.openedAt = this.game.loop.time; // a revive's card ignores taps for a moment after this (tapLocked)
     this.sample('book-open', T.bookOpenVolume);
     const W = this.scale.width; // the live field; the card stays centred
     const cx = W / 2;
@@ -187,7 +190,9 @@ export class Quiz extends Phaser.Scene {
     const zone = this.add
       .zone(this.cx, 0, TEXT_W, OPTION_MIN_H)
       .setInteractive({ useHandCursor: true })
-      .on('pointerdown', () => this.choose(i));
+      .on('pointerdown', (pointer) => {
+        if (!this.tapLocked(pointer)) this.choose(i);
+      });
     return { g, text, mark, zone, box: { x: this.cx, y: 0, width: TEXT_W, height: OPTION_MIN_H }, state: 'idle' };
   }
 
@@ -248,10 +253,20 @@ export class Quiz extends Phaser.Scene {
     button.zone = this.add
       .zone(x, y, width, BUTTON.height)
       .setInteractive({ useHandCursor: true })
-      .on('pointerdown', () => {
-        if (isTopOverlay(this)) button.press();
+      .on('pointerdown', (pointer) => {
+        if (isTopOverlay(this) && !this.tapLocked(pointer)) button.press();
       });
     return button.setShown(false);
+  }
+
+  /**
+   * A revive's card ignores pointer taps for retryLockoutMs after it opens (the game-over panel's
+   * lockout). The card comes up a moment after the crash and answers on the press, so a flap tap
+   * landing as it appears must not pick an answer or give up. The keys and the controller ring
+   * (which presses with no pointer: pressable) are not locked; a break's card never is.
+   */
+  tapLocked(pointer) {
+    return Boolean(pointer) && this.mode === 'revive' && !canRestart(this.openedAt, this.game.loop.time, T.retryLockoutMs);
   }
 
   /**
@@ -390,10 +405,12 @@ export class Quiz extends Phaser.Scene {
     this.lastAnswer = { id: this.card.id, chosen: key, correct: res.correct, coins: res.coins ?? 0, rtMs, interrupted: this.interrupted }; // the smoke reads it
     if (this.mode === 'revive') this.reviveState = this.play?.reviveEvent?.(res.correct ? 'correct' : 'wrong') ?? this.reviveState;
     // The answer's sound: a wrong one as the bad bacteria, a right one as a pipe passed; the right
-    // answer that wins everything back (a revive's full streak) sparkles in the ding's place.
+    // answer that wins everything back (a revive's full streak) sparkles in the ding's place. A
+    // right answer that pays (a level break's) has made the coin's sound already (Play.takeCoins):
+    // one sound for it, so no ding.
     if (!res.correct) sfx.hazard();
     else if (this.reviveState?.phase === 'restored') this.sample('sparkle', T.sparkleVolume, sfx.score);
-    else sfx.score();
+    else if (!(res.coins > 0)) sfx.score();
     this.reveal(i, res.correct);
   }
 

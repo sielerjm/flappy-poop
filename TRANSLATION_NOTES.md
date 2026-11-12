@@ -526,10 +526,10 @@ Inspired by Flappy Bird
 | achEduAngel | Angel Baby | 小天使 |
 | achEduPhoenix | Phoenix | 凤凰 |
 | achDescEduNerd | Get {n} perfect runs in a row ({min} answers or more each) | 连续 {n} 局全部答对（每局至少答 {min} 题） |
-| achDescEduPerfect | Answer everything right in one run ({min} answers or more) | 一局全部答对（至少答 {min} 题） |
-| achDescEduA | Get 90% or more right in one run ({min} answers or more) | 一局答对 90% 以上（至少答 {min} 题） |
-| achDescEduB | Get 80–89% right in one run ({min} answers or more) | 一局答对 80–89%（至少答 {min} 题） |
-| achDescEduC | Get 70–79% right in one run ({min} answers or more) | 一局答对 70–79%（至少答 {min} 题） |
+| achDescEduPerfect | Answer everything right in one run ({min} answers or more, without giving up) | 一局全部答对（至少答 {min} 题，中途放弃不算） |
+| achDescEduA | Get 90% or more right in one run ({min} answers or more, without giving up) | 一局答对 90% 以上（至少答 {min} 题，中途放弃不算） |
+| achDescEduB | Get 80–89% right in one run ({min} answers or more, without giving up) | 一局答对 80–89%（至少答 {min} 题，中途放弃不算） |
+| achDescEduC | Get 70–79% right in one run ({min} answers or more, without giving up) | 一局答对 70–79%（至少答 {min} 题，中途放弃不算） |
 | achDescEduDropOut | Give up a run without answering a single question | 一题没答就放弃这一局 |
 | achDescEduRevives | Revive yourself {n} times in education mode | 在教育模式中复活 {n} 次 |
 | statsEducation | 📚 Education {n} / {total} | 📚 教育 {n} / {total} |

@@ -190,7 +190,7 @@ test('the education catalog: eight badges in their own list, unique ids apart fr
       assert.ok(desc.length > 0 && !/\{n\}|\{min\}|\{glyph\}/.test(desc), `${e.id}: ${locale} description filled in (${desc})`);
     }
   }
-  assert.match(badgeDesc('en', achievementById('edu_grade_a', EDU_ACHIEVEMENTS)), new RegExp(`\\(${MIN} answers or more\\)`), 'the description quotes the knob');
+  assert.match(badgeDesc('en', achievementById('edu_grade_a', EDU_ACHIEVEMENTS)), new RegExp(`\\(${MIN} answers or more, without giving up\\)`), 'the description quotes the knob and the give-up rule');
   assert.ok(ACHIEVEMENTS.every((e) => !e.id.startsWith('edu_')), 'no education badge is ever claimed on the server');
 });
 
@@ -202,6 +202,27 @@ test('eduRunFacts: graded from badgeMinAnswers answers; the grade is a whole num
   assert.deepEqual(eduRunFacts({ answered: 0, right: 0 }, { gaveUp: true }), { mode: 'education', answered: 0, right: 0, wrong: 0, graded: false, grade: null, perfect: false, gaveUp: true });
   assert.equal(eduRunFacts(null).answered, 0, 'no tally');
   assert.equal(eduRunFacts({ answered: 5, right: 9 }).right, 5, 'never more right than answered');
+});
+
+// E1 (plan 21, Stage 3a): giving up right after a flawless stretch used to earn 💯 and 🅰️.
+test('a run that ends on Give up is never graded: no grade badge, no grade for the average, the 🤓 streak left alone', () => {
+  const gaveUp = eduRun(12, 12, { gaveUp: true });
+  assert.deepEqual(gaveUp, { mode: 'education', answered: 12, right: 12, wrong: 0, graded: false, grade: null, perfect: false, gaveUp: true }, '12 of 12, then Give up');
+  assert.equal(eduEarned(gaveUp).join(), '', 'no 💯 and no 🅰️');
+  assert.equal(nextPerfectStreak(4, gaveUp), 4, 'it neither counts toward the streak nor breaks it');
+  assert.equal(eduEarned(eduRun(9, 10, { gaveUp: true })).join(), '', 'nor an A at 90 %');
+  assert.equal(nextPerfectStreak(4, eduRun(3, 8, { gaveUp: true })), 4, 'a poor given-up run leaves the streak too');
+  // The same tally on a run that was not given up (a win) is graded as before.
+  const won = eduRun(12, 12);
+  assert.deepEqual([won.graded, won.grade, won.perfect], [true, 10000, true]);
+  assert.equal(eduEarned(won).join(), 'edu_perfect,edu_grade_a');
+  assert.equal(nextPerfectStreak(4, won), 5);
+  // A lost run that was not given up ended on its misses (education.strikes of them): graded, never perfect.
+  const lost = eduRun(12 - T.education.strikes, 12);
+  assert.deepEqual([lost.graded, lost.perfect, lost.gaveUp], [true, false, false]);
+  assert.equal(nextPerfectStreak(4, lost), 0, 'and it resets the streak');
+  // 🏳️ Drop Out is the one badge a given-up run can earn, and only with nothing answered.
+  assert.equal(eduEarned(eduRun(0, 0, { gaveUp: true })).join(), 'edu_drop_out');
 });
 
 test('the grade badges, each at its edge: A from 90 %, B 80 to under 90, C 70 to under 80; a perfect run is 💯 and an A', () => {

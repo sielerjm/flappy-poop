@@ -72,7 +72,8 @@ export const ACHIEVEMENTS = [
  * "Achievements n / total" and claim_achievements never see them. Ids start "edu_".
  *   run       one education run's facts (eduRunFacts; modes ['education']). The grades need a
  *             graded run: at least education.badgeMinAnswers answers (`min`, quoted in the
- *             description). Percentages are compared in whole numbers, so 89.5 % is a B.
+ *             description) and not ended on Give up. Percentages are compared in whole numbers,
+ *             so 89.5 % is a B.
  *   lifetime  the education store's counters: `revives`, and `perfectStreak` (🤓: graded runs with
  *             no wrong answer in a row; nextPerfectStreak).
  */
@@ -234,18 +235,22 @@ export function daysBetween(a, b) {
 /**
  * An education run's facts, for its badges and the average grade, from the run's tally
  * (tallyAnswer): { mode: 'education', answered, right, wrong, graded (at least
- * education.badgeMinAnswers answers), grade (a graded run's share right in hundredths of a percent,
- * a whole number: 4 of 6 is 6667; else null), perfect (graded, nothing wrong), gaveUp (the run
- * ended on the revive quiz's Give up) }.
+ * education.badgeMinAnswers answers, and the run did not end on Give up), grade (a graded run's
+ * share right in hundredths of a percent, a whole number: 4 of 6 is 6667; else null), perfect
+ * (graded, nothing wrong), gaveUp (the run ended on the revive quiz's Give up) }.
+ * A given-up run is never graded: giving up after a flawless stretch must not earn 💯 or an A, nor
+ * move the average, and (like a run too short to grade) it leaves the 🤓 streak alone. Give up is
+ * offered only before a revive's first right answer and a lost run that was not given up has
+ * education.strikes misses, so a perfect run is in practice a won one.
  */
 export function eduRunFacts(tally, { gaveUp = false } = {}, t = TUNING) {
   const answered = count(tally?.answered);
   const right = Math.min(count(tally?.right), answered);
-  const graded = answered >= t.education.badgeMinAnswers;
+  const graded = answered >= t.education.badgeMinAnswers && !gaveUp;
   return { mode: 'education', answered, right, wrong: answered - right, graded, grade: graded ? Math.round((10000 * right) / answered) : null, perfect: graded && right === answered, gaveUp: Boolean(gaveUp) };
 }
 
-/** 🤓 The perfect-run streak after one more education run: a graded run with nothing wrong adds one, a graded run with a wrong answer resets it, and a run too short to grade leaves it alone. */
+/** 🤓 The perfect-run streak after one more education run: a graded run with nothing wrong adds one, a graded run with a wrong answer resets it, and an ungraded run (too short, or given up) leaves it alone. */
 export function nextPerfectStreak(streak, facts) {
   if (!facts?.graded) return count(streak);
   return facts.perfect ? count(streak) + 1 : 0;

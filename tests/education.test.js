@@ -294,6 +294,8 @@ test('createEduStore, the badges and the average (plan 22): revives count at onc
   assert.deepEqual(store.endRun(perfect), { revives: 2, perfectStreak: 1, gradedRuns: 1, gradeSum: 10000 });
   const short = eduRunFacts({ answered: 3, right: 0 });
   assert.deepEqual(store.endRun(short), { revives: 2, perfectStreak: 1, gradedRuns: 1, gradeSum: 10000 }, 'a run too short to grade changes nothing');
+  const quit = eduRunFacts({ answered: 9, right: 9 }, { gaveUp: true });
+  assert.deepEqual(store.endRun(quit), { revives: 2, perfectStreak: 1, gradedRuns: 1, gradeSum: 10000 }, 'a run that ends on Give up changes nothing either: no graded run, no grade, the streak as it was');
   const flawed = eduRunFacts({ answered: 6, right: 4 });
   assert.deepEqual(store.endRun(flawed), { revives: 2, gradedRuns: 2, gradeSum: 16667 }, 'a graded run with a miss resets the streak (a zero is not stored) and joins the average');
   assert.deepEqual(store.unlock(['edu_perfect', 'edu_grade_a'], '2026-11-12'), ['edu_perfect', 'edu_grade_a']);

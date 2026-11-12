@@ -365,6 +365,17 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
       await cdp.send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: pt.x, y: pt.y, button: 'left', clickCount: 1 });
       await sleep(250);
     };
+    // The 📚 quiz's sounds, spied on: listen() starts a fresh list of what plays (Play.playSample's
+    // samples as 'sample:<key>', the synth's score and hazard as 'sfx:<name>'), heard() takes the
+    // list so far, unlisten() puts the synth back.
+    const quizSounds = {
+      listen: () =>
+        evaluate(
+          `import('./src/sound.js').then((m) => { const p = __flappy.scene.getScene('Play'); globalThis.__snd = []; if (!p.__sampleSpy) { const orig = p.playSample.bind(p); p.playSample = (key, volume, fallback) => { globalThis.__snd.push('sample:' + key); return orig(key, volume, fallback); }; p.__sampleSpy = true; } for (const k of ['score', 'hazard']) { if (!m.sfx['__spied_' + k]) { const orig = m.sfx[k]; m.sfx['__spied_' + k] = orig; m.sfx[k] = (...a) => { globalThis.__snd.push('sfx:' + k); return orig(...a); }; } } return true; })`,
+        ),
+      heard: () => evaluate(`JSON.stringify(globalThis.__snd.splice(0))`).then(JSON.parse),
+      unlisten: () => evaluate(`import('./src/sound.js').then((m) => { for (const k of ['score', 'hazard']) { if (m.sfx['__spied_' + k]) { m.sfx[k] = m.sfx['__spied_' + k]; delete m.sfx['__spied_' + k]; } } return true; })`),
+    };
     // Every two-player session is a tournament: the 👥 start tap (with the toggle on) opens the lobby
     // over Versus. lobbyToRace replaces the lobby's draw with a 2-player tournament of `names` (left
     // first), then presses Play: the race's join screen, devices unclaimed. True once it is up.
@@ -3819,14 +3830,11 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         ok(!svBack.quiz && svBack.state === 'paused' && svBack.lb && svBack.answered === 5 && svBack.pill, `${returnWant} closes it back to the paused break; the tally is unchanged (${svBack.answered}) and the pill is back`);
 
         // The quiz's sounds (plan 22, U5): a book opens with it, a page turns for each next question, the
-        // book shuts on leaving; a right answer dings like a pipe passed (with the coin's own sound in a
-        // break), a wrong one sounds like the bad bacteria. The ❔ view makes no sound.
-        const listen = () =>
-          evaluate(
-            `import('./src/sound.js').then((m) => { const p = ${play}; globalThis.__snd = []; if (!p.__sampleSpy) { const orig = p.playSample.bind(p); p.playSample = (key, volume, fallback) => { globalThis.__snd.push('sample:' + key); return orig(key, volume, fallback); }; p.__sampleSpy = true; } for (const k of ['score', 'hazard']) { if (!m.sfx['__spied_' + k]) { const orig = m.sfx[k]; m.sfx['__spied_' + k] = orig; m.sfx[k] = (...a) => { globalThis.__snd.push('sfx:' + k); return orig(...a); }; } } return true; })`,
-          );
-        const heard = () => evaluate(`JSON.stringify(globalThis.__snd.splice(0))`).then(JSON.parse);
-        const unlisten = () => evaluate(`import('./src/sound.js').then((m) => { for (const k of ['score', 'hazard']) { if (m.sfx['__spied_' + k]) { m.sfx[k] = m.sfx['__spied_' + k]; delete m.sfx['__spied_' + k]; } } return true; })`);
+        // book shuts on leaving; a wrong answer sounds like the bad bacteria. A right answer in a break
+        // pays a coin and makes the coin's sound alone (plan 21, E1: the ding no longer plays with it;
+        // a revive's and the bonus quiz's right answers, which pay nothing, still ding). The ❔ view
+        // makes no sound.
+        const { listen, heard, unlisten } = quizSounds;
         const loaded = await evaluate(`JSON.stringify(['book-open', 'book-flip', 'book-close', 'sparkle'].map((k) => __flappy.cache.audio.exists(k)))`).then(JSON.parse);
         ok(loaded.every(Boolean), `Boot loaded the four quiz sounds (${loaded.join(', ')})`);
         await listen();
@@ -3836,7 +3844,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await evaluate(`(() => { const q = ${Q}; q.choose(q.order.indexOf('answer')); return true; })()`);
         await sleep(150);
         const sRight = await heard();
-        ok(sRight.includes('sfx:score') && sRight.includes('sample:coin') && !sRight.includes('sfx:hazard'), `a right answer dings like a pipe passed, with the coin's sound (${sRight.join(', ')})`);
+        ok(sRight.join() === 'sample:coin', `a right answer in a break makes one sound, the coin's, with no ding (${sRight.join(', ')})`);
         await evaluate(`${Q}.rightBtn.press(), true`); // Next
         await sleep(200);
         const sFlip = await heard();
@@ -4009,12 +4017,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         // A full streak: everything the crash took comes back, and play goes on. Its sounds (plan 22,
         // U5): the book opens, each right answer dings, and the one that wins everything back sparkles
         // in the ding's place; Fly on shuts the book.
-        const listen = () =>
-          evaluate(
-            `import('./src/sound.js').then((m) => { const p = ${play}; globalThis.__snd = []; if (!p.__sampleSpy) { const orig = p.playSample.bind(p); p.playSample = (key, volume, fallback) => { globalThis.__snd.push('sample:' + key); return orig(key, volume, fallback); }; p.__sampleSpy = true; } for (const k of ['score', 'hazard']) { if (!m.sfx['__spied_' + k]) { const orig = m.sfx[k]; m.sfx['__spied_' + k] = orig; m.sfx[k] = (...a) => { globalThis.__snd.push('sfx:' + k); return orig(...a); }; } } return true; })`,
-          );
-        const heard = () => evaluate(`JSON.stringify(globalThis.__snd.splice(0))`).then(JSON.parse);
-        const unlisten = () => evaluate(`import('./src/sound.js').then((m) => { for (const k of ['score', 'hazard']) { if (m.sfx['__spied_' + k]) { m.sfx[k] = m.sfx['__spied_' + k]; delete m.sfx['__spied_' + k]; } } return true; })`);
+        const { listen, heard, unlisten } = quizSounds;
         await startEdu(`p.score = 30; p.effects.addCoins(4); p.effects.addBean(); p.effects.addBean(); p.effects.applyProbiotic()`);
         await listen();
         await crash();
@@ -4208,6 +4211,31 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         ok((await evaluate(`localStorage.getItem('flappyPoop.eduSrs')`)) === dueStore, "a test run's answers leave the stored cards as they were");
         await evaluate(`(() => { const p = ${play}; __flappy.scene.stop('Quiz'); p.setTestSettings({ startLevel: 1 }); p.setTestMode(false); p.registry.set('testQuizShown', []); localStorage.removeItem('flappyPoop.eduSrs'); return true; })()`);
 
+        // The card ignores taps as it appears (plan 21, E1): it comes up a moment after the crash and
+        // answers on the press, so a flap tap landing then must not pick an answer or give the run up.
+        // The taps are sent from the scene's own 'create' event, the first moment the card can be tapped.
+        await startEdu('');
+        await evaluate(
+          `(() => { const q = ${Q}; globalThis.__atOpen = null; q.events.once('create', () => { const ptr = q.input.activePointer; q.options[0].zone.emit('pointerdown', ptr); q.leftBtn.zone.emit('pointerdown', ptr); globalThis.__atOpen = { card: Boolean(q.card), giveUpShown: q.leftBtn.shown, answered: q.answered, finishing: q.finishing, locked: q.tapLocked(ptr), ringLocked: q.tapLocked() }; }); return true; })()`,
+        );
+        await crash();
+        const atOpen = await evaluate(`JSON.stringify(globalThis.__atOpen)`).then(JSON.parse);
+        const lk = await view();
+        const lkPlay = await playNow();
+        ok(atOpen?.card && atOpen.giveUpShown && atOpen.locked && !atOpen.answered && !atOpen.finishing && lk.active && lk.phase === 'strikes' && lk.verdict === null && lk.left === giveUp && lkPlay.state === 'respawn' && !lkPlay.over, `a tap on an option and one on Give up as the revive card appears do nothing: no answer, the run goes on (phase ${lk.phase}, state ${lkPlay.state})`);
+        ok(atOpen?.ringLocked === false, "the controller ring's press, which carries no pointer, is not locked");
+        await sleep(TT.retryLockoutMs + 100);
+        const optBox = await evaluate(`JSON.stringify(${Q}.options[0].box)`).then(JSON.parse);
+        await tapAt(optBox.x, optBox.y);
+        const lateTap = await view();
+        ok(lateTap.verdict !== null && lateTap.active, `once ${TT.retryLockoutMs} ms have passed, a tap on an option answers ("${lateTap.verdict}")`);
+        // The keys are not locked: 1 pressed as the card appears answers it.
+        await startEdu('');
+        await evaluate(`(() => { const q = ${Q}; globalThis.__atOpen = null; q.events.once('create', () => { q.input.keyboard.emit('keydown-ONE'); globalThis.__atOpen = { answered: q.answered }; }); return true; })()`);
+        await crash();
+        const keyAtOpen = await evaluate(`JSON.stringify(globalThis.__atOpen)`).then(JSON.parse);
+        ok(keyAtOpen?.answered === true, 'the 1 key pressed as the card appears answers it: the keys are not locked');
+
         // Give up: the run ends at once.
         await startEdu('');
         await crash();
@@ -4270,8 +4298,12 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await evaluate(`${O}.openBonus(), true`);
         for (let i = 0; i < 30 && !(await evaluate(`__flappy.scene.isActive('Quiz') && Boolean(${Q}.card)`)); i += 1) await sleep(100);
         const b = await evaluate(`JSON.stringify({ deck: ${Q}.card?.deck ?? null, mode: ${Q}.mode })`).then(JSON.parse);
+        await quizSounds.listen();
         await evaluate(`(() => { const q = ${Q}; q.choose(q.order.indexOf('answer')); return true; })()`);
         await sleep(200);
+        const sBonus = await quizSounds.heard();
+        await quizSounds.unlisten();
+        ok(sBonus.join() === 'sfx:score', `the bonus quiz's right answer, which pays nothing, dings (${sBonus.join(', ')})`);
         const after = await evaluate(`JSON.stringify({ coins: ${play}.effects.coins(), saved: Boolean(JSON.parse(localStorage.getItem('flappyPoop.eduSrs') ?? '{}').cards?.[${Q}.card.id]), answered: ${play}.runQuiz.answered, levels: Object.keys(${play}.runQuiz.byLevel).length })`).then(JSON.parse);
         ok(b.mode === 'bonus' && ['rectum', 'general'].includes(b.deck) && after.coins === c0 && after.saved, `the bonus quiz asks about the ${b.deck}: a right answer pays no coin (${c0} → ${after.coins}) and is saved`);
         ok(p2.tally === '❔ 0  ·  ✅ 0  ·  ❌ 0' && after.answered === 0 && after.levels === 0, `a bonus answer is practice: the run's tally stays as the panel showed it (${p2.tally})`);
@@ -4334,6 +4366,17 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await tapAt(homeBox.x, homeBox.y);
         await sleep(400);
         ok(!(await evaluate(`__flappy.scene.isActive('Over')`)) && (await playState()) === 'ready', 'with the band scrolled, Home has not moved: a tap on it goes home');
+        // A run answered 5 of 5 that ends on Give up is not graded (plan 21, E1): no 💯, no 🅰️, no
+        // graded run, the 🤓 streak untouched. (It used to earn both badges.)
+        await startEdu();
+        await evaluate(`(() => { const p = ${play}; p.runQuiz = { ...p.runQuiz, answered: 5, right: 5, wrong: 0 }; p.graceLeftMs = 0; p.die(); return true; })()`);
+        for (let i = 0; i < 40 && !(await evaluate(`__flappy.scene.isActive('Quiz') && Boolean(${Q}.card)`)); i += 1) await sleep(100);
+        await evaluate(`${Q}.leftBtn.press(), true`); // Give up
+        await sleep(TT.deathToOverMs + 500);
+        const quitPanel = await panel();
+        const quitLine = await badgeLine();
+        const recQuit = await eduRec();
+        ok(quitPanel.active && quitPanel.tally === '❔ 5  ·  ✅ 5  ·  ❌ 0' && quitLine === null && recQuit.badges.join() === 'edu_drop_out' && !recQuit.counters.gradedRuns && !recQuit.counters.perfectStreak && !recQuit.counters.gradeSum, `a run answered 5 of 5 that ends on Give up is not graded: "${quitPanel.tally}", no badge line (${quitLine}), the record ${JSON.stringify(recQuit.counters)}`);
         // A won run at 5 of 5: 💯 and 🅰️, the streak at 1, the average at 100 %.
         await startEdu();
         await winWith(5, 5);
