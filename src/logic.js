@@ -1526,7 +1526,9 @@ export function scaledCircleBody(frameSize, displayScale, logicalRadius) {
  * of the body at display scale, ×readyPoopScale) and the toilet toggle; then
  * the user button ("Load user", then "name · best"; it opens the save panel)
  * just above the ground strip and the tray band. Any tap that is not on a box
- * starts the run.
+ * starts the run. With `education`, the 📚 switch's glyph (and the gold due count on it) is a box
+ * of its own inside the switch's, `educationInfo`: a tap there explains the cards (Play's "Your
+ * cards" card) and the rest of the switch still toggles.
  * Buttons are at least trayHitMin tall. `x0` shifts everything right (the
  * chrome column's left edge on a wide field). With `versus` the 👥 two-player
  * toggle sits under the toilet toggle (only offered when two halves fit the
@@ -1552,6 +1554,9 @@ export function readyLayout(width, height, t, x0 = 0, { versus = false, educatio
   const ys = three ? [808, 874, 940] : [812, 886];
   const toilet = switchBox('toilet', ys[0]);
   const switches = Object.fromEntries(extra.map((id, i) => [id, switchBox(id, ys[i + 1])]));
+  // The 📚 glyph's box (plan 21, E3): the glyph at emojiX and the gold count on its corner, as tall
+  // as the switch, 18 px clear of the track's right edge (cx + 10). readyHit looks here first.
+  if (switches.education) switches.educationInfo = { id: 'educationInfo', x: cx + 84, y: switches.education.y, width: 112, height: switches.education.height };
   // "?" button: a boxH circle in the top-right corner, inset so its pulsing halo
   // (readyPromptGlowPx past the rim) stays inside the field.
   const haloR = boxH / 2 + (t.readyPromptGlowPx ?? 0);
@@ -1680,13 +1685,14 @@ export function shareCardLayout(t) {
 }
 
 /**
- * Which ready-screen box contains (x, y): 'toilet' | 'versus' | 'education' | 'howto' |
- * 'daily' | 'profile' | null (null = start the run). A switch not offered has no box, so it is never hit. The profile (user) button is always
- * there: it reads "Load user" until a name is set; either way it opens the save panel.
+ * Which ready-screen box contains (x, y): 'toilet' | 'versus' | 'educationInfo' | 'education' |
+ * 'howto' | 'daily' | 'profile' | null (null = start the run). A switch not offered has no box, so it is never hit. The profile (user) button is always
+ * there: it reads "Load user" until a name is set; either way it opens the save panel. The 📚
+ * glyph's box (educationInfo) lies inside the 📚 switch's, so it is looked at first.
  */
 export function readyHit(x, y, layout) {
   if (!layout) return null;
-  for (const box of [layout.toilet, layout.versus, layout.education, layout.howto, layout.daily, layout.profile]) {
+  for (const box of [layout.toilet, layout.versus, layout.educationInfo, layout.education, layout.howto, layout.daily, layout.profile]) {
     if (box && inBox(x, y, box)) return box.id;
   }
   return null;

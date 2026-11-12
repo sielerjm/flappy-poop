@@ -22,9 +22,6 @@ const ALLOWED_EXPORTS = {
   glowAlphaAt: "test reference: the glow's alpha profile that glowStops() draws (tests/fart.test.js)",
   topScores: 'test hook: tests/save.test.js reads top lists as plain numbers (its last game use, isNewTop, is gone)',
   // Daily Dump (plan .claude/plans/2026-11-10-daily-dump.md): helpers land before their callers.
-  // Education mode (plan 21, step L2): the scheduler lands before the game calls it. Drop each
-  // entry when its step wires it in (this audit fails until you do).
-  masteryByDeck: "plan 21: the player's own profile shows it (step B2)",
 };
 
 /** UI string keys no source names literally: prefix → why (they are built at run time). */

@@ -3625,6 +3625,54 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await home();
         ok((await switches()).on, 'the 📚 switch stays on across a restart');
 
+        // "Your cards" (plan 21, E3): a tap on the 📚 glyph says what the cards are and what the gold
+        // number counts. It does not toggle the switch; the tap, key or pad press that closes it presses
+        // nothing under it and starts no run. The track still toggles.
+        await sleep(500); // home()'s restart lands on the next frame: a real tap straddling it would lose its release
+        const srsBefore = await evaluate(`localStorage.getItem('flappyPoop.eduSrs')`);
+        // One card in the learning steps and due, two learned and due, one learned and not due yet.
+        const made = await evaluate(
+          `Promise.all([import('./src/education.js'), import('./src/questions.js')]).then(([e, q]) => { const now = Date.now(); const live = q.CARDS.filter((c) => !c.retired); const cards = {}; cards[live[0].id] = e.schedule(null, 'again', now - 20 * 60000); cards[live[1].id] = e.schedule(null, 'easy', now - 30 * 86400000); cards[live[2].id] = e.schedule(null, 'easy', now - 30 * 86400000); cards[live[3].id] = e.schedule(null, 'easy', now); localStorage.setItem('flappyPoop.eduSrs', JSON.stringify({ v: 1, cards, recent: [], counters: {}, badges: {} })); ${play}.refreshEduDue(); return JSON.stringify({ total: live.length }); })`,
+        ).then(JSON.parse);
+        const eduCard = () => evaluate(`(() => { const p = ${play}; return JSON.stringify({ open: p.eduCard.open, title: p.eduCard.title.text, body: p.eduCard.body.text, on: p.educationOn, toilet: p.toilet, state: p.state, launching: Boolean(p.launching), due: p.eduDueText.visible ? p.eduDueText.text : '' }); })()`).then(JSON.parse);
+        const boxes = await evaluate(`JSON.stringify({ info: ${play}.readyBoxes.educationInfo, edu: ${play}.readyBoxes.education, toilet: ${play}.readyBoxes.toilet, title: ${play}.readyBoxes.title })`).then(JSON.parse);
+        const yc0 = await eduCard();
+        await tapAt(boxes.info.x, boxes.info.y);
+        const yc1 = await eduCard();
+        const ycWant = await Promise.all(['eduCardsTitle', 'eduCardsNew', 'eduCardsLearning', 'eduCardsReview', 'eduCardsSeen', 'eduCardsDue'].map(tx));
+        const ycBody = [ycWant[1].replace('{n}', String(made.total - 4)), ycWant[2].replace('{n}', '1'), ycWant[3].replace('{n}', '2'), ycWant[4].replace('{n}', '4').replace('{total}', String(made.total)), ycWant[5]].join('\n');
+        ok(yc0.due === '3' && !yc0.open && yc1.open && yc1.title === ycWant[0] && yc1.body === ycBody && yc1.on === yc0.on && yc1.state === 'ready' && !yc1.launching, `a tap on the 📚 glyph (its gold number reads ${yc0.due}) opens "${yc1.title}": ${yc1.body.replace(/\n/g, ' · ')}; the switch is not toggled`);
+        await tapAt(boxes.title.x, boxes.title.y); // empty space: with no card up this tap would start a run
+        const yc2 = await eduCard();
+        ok(!yc2.open && yc2.state === 'ready' && !yc2.launching, 'a tap on empty space closes it and starts no run');
+        await tapAt(boxes.info.x, boxes.info.y);
+        await tapAt(boxes.toilet.x, boxes.toilet.y);
+        const yc3 = await eduCard();
+        ok(!yc3.open && yc3.toilet === yc0.toilet && yc3.on === yc0.on && yc3.state === 'ready', 'a tap on a switch under it closes it and toggles nothing');
+        await tapAt(boxes.info.x, boxes.info.y);
+        const yc4 = await eduCard();
+        await evaluate(`${play}.input.keyboard.emit('keydown-SPACE'), true`);
+        await sleep(200);
+        const yc5 = await eduCard();
+        ok(yc4.open && !yc5.open && yc5.state === 'ready' && !yc5.launching, 'Space closes it and starts no run');
+        await tapAt(boxes.edu.track.x, boxes.edu.y);
+        const yc6 = await eduCard();
+        await tapAt(boxes.edu.track.x, boxes.edu.y);
+        const yc7 = await eduCard();
+        ok(yc6.on === !yc0.on && !yc6.open && yc7.on === yc0.on, `a tap on the track still toggles the switch (${yc0.on} → ${yc6.on} → ${yc7.on})`);
+        // The controller: right of the switch the ring lands on the glyph; A opens the card, any press closes it.
+        await evaluate(`(() => { const p = ${play}; p.registry.set('padMode', true); p.focus.setIndex(p.focus.indexOf('education')); p.focus.show(); p.padNav('right'); return true; })()`);
+        const ycRing = await evaluate(`${play}.focus.items[${play}.focus.index]?.id ?? null`);
+        await evaluate(`${play}.onPadAction('select'), true`);
+        const yc8 = await eduCard();
+        await evaluate(`${play}.onPadAction('select'), true`);
+        const yc9 = await eduCard();
+        await evaluate(`${play}.onPadAction('select'), true`);
+        await evaluate(`${play}.onPadAction('back'), true`);
+        const yc10 = await eduCard();
+        ok(ycRing === 'educationInfo' && yc8.open && !yc9.open && yc9.on === yc0.on && !yc10.open && yc10.state === 'ready' && !yc10.launching, `the controller's ring reaches the glyph (${ycRing}): A opens the card, A again closes it and presses nothing, and so does B`);
+        await evaluate(`(() => { const p = ${play}; p.registry.set('padMode', false); p.focus.hide(); if (${JSON.stringify(srsBefore)} === null) localStorage.removeItem('flappyPoop.eduSrs'); else localStorage.setItem('flappyPoop.eduSrs', ${JSON.stringify(srsBefore)}); p.refreshEduDue(); return true; })()`);
+
         // A wide window offers 👥 too: three switches, and switching one on switches the other off.
         const W = await evaluate(`Promise.all([import('./src/logic.js'), import('./src/config.js')]).then(([l, c]) => l.fieldWidth(1800, 1000, c.FIELD))`);
         await metrics(1800, 1000);
@@ -3636,8 +3684,15 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await tap('education');
         const w2 = await switches();
         ok(w1.vOn && !w1.on && w1.stored.education === false && w2.on && !w2.vOn, `👥 on switches 📚 off (${w1.vOn}/${w1.on}); 📚 on switches 👥 off (${w2.on}/${w2.vOn})`);
-        const ring = await evaluate(`JSON.stringify(${play}.focus.items.filter((i) => ['toilet', 'versus', 'education'].includes(i.id) && (!i.visible || i.visible())).map((i) => i.id))`).then(JSON.parse);
-        ok(ring.join() === 'toilet,versus,education', `the controller ring reaches all three switches (${ring.join(', ')})`);
+        const ring = await evaluate(`JSON.stringify(${play}.focus.items.filter((i) => ['toilet', 'versus', 'education', 'educationInfo'].includes(i.id) && (!i.visible || i.visible())).map((i) => i.id))`).then(JSON.parse);
+        ok(ring.join() === 'toilet,versus,education,educationInfo', `the controller ring reaches all three switches and the 📚 glyph (${ring.join(', ')})`);
+        const wideInfo = await evaluate(`(() => { const p = ${play}; const b = p.readyBoxes; return JSON.stringify({ y: b.educationInfo.y, h: b.educationInfo.height, eduY: b.education.y, hit: [b.educationInfo.x, b.educationInfo.y] }); })()`).then(JSON.parse);
+        await sleep(FIELD_DEBOUNCE + 400); // a late resize restart must not land between this tap's press and release
+        const wideAt = await evaluate(`JSON.stringify([${play}.readyBoxes.educationInfo.x, ${play}.readyBoxes.educationInfo.y])`).then(JSON.parse);
+        await tapAt(wideAt[0], wideAt[1]);
+        const wideCard = await evaluate(`JSON.stringify({ open: ${play}.eduCard.open, on: ${play}.educationOn })`).then(JSON.parse);
+        await evaluate(`${play}.eduCard.hide(), true`);
+        ok(wideInfo.y === wideInfo.eduY && wideInfo.h >= 64 && wideCard.open && wideCard.on === w2.on, `with three switches the 📚 glyph still opens the card (its box ${wideInfo.h} px tall at y ${wideInfo.y})`);
         await metrics(720, 1280); // the boot viewport
         await settle(720);
         await sleep(FIELD_DEBOUNCE + 400); // a late resize restart must not land in the run below

@@ -153,6 +153,40 @@ test('the 📚 switch (plan 21): alone it takes the 👥 slot; with 👥 the thr
   assert.ok(halo - edges(all.education).bottom >= 8, `📚 bottom ${edges(all.education).bottom} clears the user button's halo (${halo}) by 8 px`);
   assert.deepEqual(all.profile, layout.profile, 'the user button never moves');
   for (const b of stack) assert.equal(readyHit(b.x, b.y, all), b.id);
-  assert.equal(readyHit(edu.education.emojiX, edu.education.y, edu), 'education');
   assert.equal(readyHit(edu.education.x, edu.education.y, layout), null, 'no 📚 box when it is not offered: a tap there starts the run');
+});
+
+// E3 (plan 21): the 📚 glyph explains the cards; the rest of the switch still toggles.
+test("the 📚 glyph is a hit target of its own (educationInfo): thumb-sized, clear of the track, inside the switch's box; the track still toggles", () => {
+  const two = readyLayout(GAME_WIDTH, GAME_HEIGHT, T, 0, { education: true });
+  const three = readyLayout(GAME_WIDTH, GAME_HEIGHT, T, 0, { versus: true, education: true });
+  for (const [name, L] of [['📚 alone', two], ['with 👥', three]]) {
+    const sw = L.education;
+    const info = L.educationInfo;
+    assert.equal(info.id, 'educationInfo', name);
+    assert.ok(info.height >= 64 && info.width >= 64, `${name}: thumb-sized by the switches' rule (${info.width} × ${info.height})`);
+    assert.deepEqual([info.y, info.height], [sw.y, sw.height], `${name}: the switch's row and height`);
+    const [i, o, track] = [edges(info), edges(sw), edges(sw.track)];
+    assert.ok(i.left >= track.right + 8, `${name}: the glyph box (from ${i.left}) clears the track (to ${track.right})`);
+    assert.equal(overlaps(i, track), false, `${name}: the glyph box and the track do not overlap`);
+    assert.ok(i.left >= o.left && i.top >= o.top && i.bottom <= o.bottom, `${name}: inside the switch's box, bar the right margin`);
+    assert.ok(i.right <= GAME_WIDTH - 16, `${name}: inside the field`);
+    // It holds the glyph (48 px at emojiX) and the gold due count on its corner (emojiX + 30, 24 px up).
+    assert.ok(i.left <= sw.emojiX - 24 && i.right >= sw.emojiX + 30 + 16 && i.top <= sw.y - 24, `${name}: the glyph and the count are inside it`);
+    assert.equal(overlaps(i, POOP), false, `${name}: clears the bobbing poop`);
+    assert.ok(edges(L.profile).top - T.readyPromptGlowPx - i.bottom >= 8, `${name}: clears the user button's halo`);
+    // Taps: the glyph and the count open the card; the track, the gap beside it and the box's left margin toggle.
+    assert.equal(readyHit(sw.emojiX, sw.y, L), 'educationInfo', `${name}: the glyph`);
+    assert.equal(readyHit(sw.emojiX + 30, sw.y - 24, L), 'educationInfo', `${name}: the gold count`);
+    assert.equal(readyHit(info.x, info.y, L), 'educationInfo');
+    assert.equal(readyHit(sw.track.x, sw.y, L), 'education', `${name}: the track toggles`);
+    assert.equal(readyHit(sw.x, sw.y, L), 'education', `${name}: the box's centre, between the track and the glyph, toggles`);
+    assert.equal(readyHit(o.left + 2, sw.y, L), 'education', `${name}: the left margin toggles`);
+  }
+  // The other switches' glyphs still toggle, and there is no glyph box without the 📚 switch.
+  assert.equal(readyHit(three.toilet.emojiX, three.toilet.y, three), 'toilet');
+  assert.equal(readyHit(three.versus.emojiX, three.versus.y, three), 'versus');
+  assert.equal(layout.educationInfo, undefined);
+  assert.equal(readyLayout(GAME_WIDTH, GAME_HEIGHT, T, 0, { versus: true }).educationInfo, undefined);
+  assert.equal(readyHit(two.educationInfo.x, two.educationInfo.y, layout), null, 'not offered: a tap there starts the run');
 });

@@ -124,11 +124,12 @@ import { createButton } from '../ui/button.js';
 import { createToggle } from '../ui/toggle.js';
 import { createCoinText } from '../ui/coinText.js';
 import { createCountLine } from '../ui/countLine.js';
+import { createInfoCard } from '../ui/infoCard.js';
 import { openSavePanel, isSavePanelOpen, showAdoptedName, showBoardScores } from '../ui/savePanel.js';
 import { isTournamentPanelOpen, tournamentPadAction } from '../ui/tournamentPanel.js';
 import { bindPad } from '../input/pad.js';
 import { keyGroup, sameDevice, catchUpTier, catchUpDraws, versusAvailable, ghostPlacement, rivalMarker, respawnPose, respawnBlinkStart, courseDistance, VERSUS_EMOJI } from '../versus.js';
-import { createEduStore, dueCount, cardCounts, pickCard, shuffleOptions, gradeFor, schedule, eduShopPrices, reviveStart, reviveStep, reviveSettled, newTally, tallyAnswer, EDUCATION_EMOJI } from '../education.js';
+import { createEduStore, dueCount, cardCounts, masteryByDeck, pickCard, shuffleOptions, gradeFor, schedule, eduShopPrices, reviveStart, reviveStep, reviveSettled, newTally, tallyAnswer, EDUCATION_EMOJI } from '../education.js';
 
 const TEXT_STYLE = {
   fontFamily: 'sans-serif',
@@ -519,6 +520,10 @@ export class Play extends Phaser.Scene {
       ? createCountLine(this, this.quizButtonBox.x, this.quizButtonBox.y, { style: TEXT_STYLE, px: 36, sep: ' · ', glyph: EDUCATION_EMOJI, depth: 28, maxWidth: this.quizButtonBox.width - 24 }).setVisible(false)
       : null;
 
+    // "Your cards" (plan 21, E3): the card a tap on the ready screen's 📚 opens (toggleEduCard), over
+    // everything here, the ring included. Single player only, as the 📚 switch is.
+    this.eduCard = this.match ? null : createInfoCard(this, { x: this.col.x + this.col.width / 2, y: GAME_HEIGHT / 2 - 40, width: 600 });
+
     // The tray and the controller ring belong to the chrome owner: single player, or P1 in a match (P2 has neither).
     this.tray = !this.match || this.player === 1 ? createTray(this, { muted: isMuted(), col: this.col }) : null;
     // Controller focus ring over the tray, in screen order; A on a ringed button runs the
@@ -535,6 +540,8 @@ export class Play extends Phaser.Scene {
             // 👥 and 📚 always have an item; it shows only while its switch is offered (refreshReadySwitches).
             { id: 'versus', box: this.switchBoxes.versus, visible: () => onReady() && Boolean(this.readyBoxes.versus), activate: () => this.toggleVersus() },
             { id: 'education', box: this.switchBoxes.education, visible: () => onReady() && Boolean(this.readyBoxes.education), activate: () => this.toggleEducation() },
+            // The 📚 glyph (and its gold count): what the cards are ("Your cards", toggleEduCard).
+            { id: 'educationInfo', box: this.switchBoxes.educationInfo, visible: () => onReady() && Boolean(this.readyBoxes.educationInfo), activate: () => this.toggleEduCard() },
             { id: 'daily', box: this.readyBoxes.daily, visible: onReady, activate: () => this.handleChrome('daily') },
             { id: 'howto', box: this.readyBoxes.howto, visible: onReady, activate: () => this.handleChrome('howto') },
             // The level break: the 💰 pill, then (the shop open) its ✕ and rows down the column.
@@ -663,6 +670,7 @@ export class Play extends Phaser.Scene {
       return;
     }
     this.launching = true;
+    this.eduCard?.hide(); // "Your cards" never rides into a run
     perfRunStart(); // ?perf: the meter's run totals start with this run
     this.focus?.hide(); // the ring has no job while the poop flies
     this.bob.stop();
@@ -1037,6 +1045,12 @@ export class Play extends Phaser.Scene {
 
   flap(pointer) {
     unlock();
+    // "Your cards" is up (the ready screen's 📚): a tap only closes it, on its release (the card's
+    // dim), and a key or the pad's A closes it here. Nothing under it is pressed and no run starts.
+    if (this.eduCard?.open) {
+      if (!pointer) this.eduCard.hide();
+      return;
+    }
     if (this.match && this.match.status !== 'playing') {
       // P1's tray works on the join screen and under the result panel (not in the countdown: a
       // menu there would cover the race as it starts). Any other tap on the join screen claims
@@ -1070,6 +1084,10 @@ export class Play extends Phaser.Scene {
         }
         if (hit === 'toilet') {
           this.toggleToilet();
+          return;
+        }
+        if (hit === 'educationInfo') {
+          this.openEduCardOnRelease(); // the 📚 glyph: "Your cards"
           return;
         }
         if (hit === 'versus') {
@@ -1491,10 +1509,10 @@ export class Play extends Phaser.Scene {
     const at = (opts) => readyLayout(this.col.width, GAME_HEIGHT, T, this.col.x, opts);
     if (!this.switchBoxes) {
       const all = at({ versus: true, education: true }); // real geometry for a switch not yet offered
-      this.switchBoxes = { toilet: { ...all.toilet }, versus: { ...all.versus }, education: { ...all.education } };
+      this.switchBoxes = { toilet: { ...all.toilet }, versus: { ...all.versus }, education: { ...all.education }, educationInfo: { ...all.educationInfo } };
     }
     const next = at({ versus: this.versusOffered(), education: this.educationOffered() });
-    for (const id of ['toilet', 'versus', 'education']) {
+    for (const id of ['toilet', 'versus', 'education', 'educationInfo']) {
       if (next[id]) next[id] = Object.assign(this.switchBoxes[id], next[id]);
     }
     this.readyBoxes = next;
@@ -1613,6 +1631,51 @@ export class Play extends Phaser.Scene {
     if (!this.readyBoxes) return;
     this.layoutReady();
     this.buildReadySwitches();
+  }
+
+  /**
+   * A press on the 📚 glyph opens "Your cards" when the finger lifts: the card's dim closes on a
+   * release, so a card opened on the press would shut again at once. A release outside the canvas
+   * opens nothing.
+   */
+  openEduCardOnRelease() {
+    const done = () => {
+      this.input.off('pointerup', open);
+      this.input.off('pointerupoutside', done);
+    };
+    const open = () => {
+      done();
+      this.toggleEduCard();
+    };
+    this.input.on('pointerup', open);
+    this.input.on('pointerupoutside', done);
+  }
+
+  /**
+   * "Your cards" (plan 21, E3): what the 📚 on the ready screen stands for, opened by a tap on the
+   * glyph (or A on its ring item) and closed by any tap, key or pad press. Over every deck: the
+   * cards not seen yet, the ones in the learning steps and due, the learned ones due (cardCounts
+   * 'all'), how many have been seen at all, and what the gold number on the 📚 counts. While it is
+   * up nothing under it is pressed and no run starts (flap, onPadAction, handleChrome).
+   */
+  toggleEduCard() {
+    if (!this.eduCard) return;
+    if (this.eduCard.open) {
+      this.eduCard.hide();
+      return;
+    }
+    if (this.state !== 'ready' || this.launching || this.match || !this.readyBoxes?.educationInfo) return;
+    const srs = this.eduStore.load().cards;
+    const counts = cardCounts(srs, { context: 'all' });
+    const decks = Object.values(masteryByDeck(srs));
+    const seen = decks.reduce((sum, d) => sum + d.seen, 0);
+    const total = decks.reduce((sum, d) => sum + d.total, 0);
+    const line = (key, n) => t(this.locale, key).replace('{n}', String(n));
+    this.eduCard.show({
+      glyph: EDUCATION_EMOJI,
+      title: t(this.locale, 'eduCardsTitle'),
+      lines: [line('eduCardsNew', counts.new), line('eduCardsLearning', counts.learning), line('eduCardsReview', counts.review), line('eduCardsSeen', seen).replace('{total}', String(total)), t(this.locale, 'eduCardsDue')],
+    });
   }
 
   /** The 📚 switch's due count: shown with the switch, and only when a card is due. */
@@ -1772,6 +1835,11 @@ export class Play extends Phaser.Scene {
   }
 
   handleChrome(input) {
+    // "Your cards" up on the ready screen: a chrome key takes it down first (Esc does only that).
+    if (this.eduCard?.open) {
+      this.eduCard.hide();
+      if (input === 'esc' || input === 'tap') return;
+    }
     // A match: the pause key / button / ⏸ toggles the shared pause, not this half's own state
     // (which may be its level break: 'paused' there must not read as "resume"). The rest is chromeIntent's.
     // With this half's shop open those keys close the shop first (chromeIntent's closeShop).
@@ -1903,6 +1971,11 @@ export class Play extends Phaser.Scene {
    */
   onPadAction(action, padIndex = 0) {
     const { top, scene } = this.padTop();
+    // "Your cards" up on the ready screen: any press takes it down and does nothing else.
+    if (top === 'play' && this.eduCard?.open) {
+      this.eduCard.hide();
+      return;
+    }
     // A card up on the game-over panel: B takes it down (padIntent's B there only hides the ring).
     if (top === 'over' && action === 'back' && scene?.closeCard?.()) return;
     const tournamentPanelOpen = isTournamentPanelOpen();
