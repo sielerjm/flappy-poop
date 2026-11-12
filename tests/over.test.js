@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { GAME_WIDTH, GAME_HEIGHT, TUNING as T } from '../src/config.js';
-import { overButtonsLayout, overCellsLayout, overHit, shareCardLayout } from '../src/logic.js';
+import { overButtonsLayout, overCellsLayout, overBandLayout, overHit, shareCardLayout } from '../src/logic.js';
 
 const cx = GAME_WIDTH / 2;
 const cy = GAME_HEIGHT / 2;
@@ -166,4 +166,39 @@ test('the game-over summary cells: inside the panel, clear of each other and the
     assert.equal(overHit(buttons.home.x, buttons.home.y, layout), 'home');
   }
   assert.equal(overCellsLayout(cx, cy, T).find((c) => c.id === 'coin').y, cy + T.over.rankBox.dy, "the coin cell is where a Daily Dump's rank goes");
+});
+
+test("the summary band (plan 22): under the score line, down to the buttons' top edge, inside the panel; every cell and the rank link sit in it", () => {
+  for (const again of [false, true]) {
+    const y0 = cy - (again ? T.over.againLiftPx : 0);
+    const band = overBandLayout(cx, y0, T);
+    assert.equal(band.top, y0 + T.over.band.top);
+    assert.equal(band.bottom, y0 + T.over.band.bottom);
+    assert.ok(band.top >= y0 + T.over.scoreOffsetY + 24, 'below the 48 px score line');
+    const { home, rank } = overButtonsLayout(cx, y0, T, { score: true, again });
+    assert.ok(band.bottom <= home.y - home.height / 2, 'it ends where the buttons begin');
+    assert.ok(band.left >= PANEL.x - PANEL.width / 2 + STROKE && band.right <= PANEL.x + PANEL.width / 2 - STROKE, 'inside the panel border');
+    for (const daily of [false, true]) {
+      for (const c of overCellsLayout(cx, y0, T, { daily })) {
+        assert.ok(c.y - c.height / 2 >= band.top && c.y + c.height / 2 <= band.bottom && c.x - c.width / 2 >= band.left && c.x + c.width / 2 <= band.right, `cell ${c.id} is in the band`);
+      }
+    }
+    assert.ok(rank.y - 20 >= band.top && rank.y + 20 <= band.bottom && rank.x + rank.width / 2 <= band.right, 'the daily rank is in the band');
+    // What createScrollView takes: it insets 8 px a side, which lands on the band's edges.
+    assert.deepEqual(band.panel, { x: cx, y: (band.top + band.bottom) / 2, width: T.over.panelWidth, height: band.bottom - band.top + 16 });
+    assert.equal(band.panel.y - band.panel.height / 2 + 8, band.top);
+    assert.equal(band.panel.x - band.panel.width / 2 + 8, band.left);
+  }
+  assert.equal(T.over.panelWidth, PANEL.width);
+});
+
+test('the lines under the cells fit the band at rest: a personal best over a badge line, or a countdown; only a badge line over the education note runs past it', () => {
+  const band = overBandLayout(cx, cy, T);
+  const half = (px) => Math.ceil((px * 1.2) / 2); // a line's half height, generously
+  // Over.js: a personal best (34 px) or a countdown (28 px) at +150, a badge line (28 px) at +186.
+  assert.ok(cy + 150 + half(34) <= band.bottom, 'the personal-best line');
+  assert.ok(cy + 186 + half(28) <= band.bottom + 2, 'the badge line under it (a pixel or two of a tall glyph does not make the band scroll)');
+  // An education panel: the tally (32 px) at +140, the note (24 px) at +184; with a badge line at +184 the note moves to +228.
+  assert.ok(cy + 184 + half(24) <= band.bottom, 'the education note');
+  assert.ok(cy + 228 - half(24) >= band.bottom, 'under a badge line the note starts below the fold');
 });

@@ -4295,7 +4295,45 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         const dropPanel = await panel();
         const dropLine = await badgeLine();
         const rec1 = await eduRec();
-        ok(dropPanel.active && dropPanel.tally === '❔ 0  ·  ✅ 0  ·  ❌ 0' && dropLine?.includes('🏳️') && !dropPanel.texts.includes(note) && rec1.badges.join() === 'edu_drop_out' && !rec1.counters.gradedRuns, `giving up with nothing answered earns 🏳️: the game-over line reads "${dropLine}" in the note's place, and the run is not graded`);
+        ok(dropPanel.active && dropPanel.tally === '❔ 0  ·  ✅ 0  ·  ❌ 0' && dropLine?.includes('🏳️') && dropPanel.texts.includes(note) && rec1.badges.join() === 'edu_drop_out' && !rec1.counters.gradedRuns, `giving up with nothing answered earns 🏳️: the game-over line reads "${dropLine}" under the tally, and the run is not graded`);
+
+        // The summary band (plan 22, U7): this panel, with a badge line, is the one whose lines run past
+        // the band, so the note sits below the fold and the band scrolls to it; the buttons stay put.
+        const bandNow = () =>
+          evaluate(
+            `(() => { const o = ${O}; const b = o.bandBox; const n = o.eduNote.getBounds(); return JSON.stringify({ offset: o.band.offset, top: b.top, bottom: b.bottom, left: b.left, noteTop: n.y, noteBottom: n.bottom, lineBottom: o.badgeLine.getBounds().bottom, card: o.card.open, title: o.card.title.text, over: __flappy.scene.isActive('Over') }); })()`,
+          ).then(JSON.parse);
+        const canvasPt = (x, y) => evaluate(`(() => { const r = __flappy.canvas.getBoundingClientRect(); const s = __flappy.scale; return JSON.stringify({ x: r.left + ${x} * r.width / s.width, y: r.top + ${y} * r.height / s.height, k: r.height / s.height }); })()`).then(JSON.parse);
+        await evaluate(`${O}.openedAt = __flappy.loop.time - 5000, true`); // past the death-tap lockout
+        const rest = await bandNow();
+        ok(rest.offset === 0 && rest.lineBottom <= rest.bottom && rest.noteTop >= rest.bottom, `at rest the badge line is in view and the note below the fold (the band ends at ${rest.bottom}, the note starts at ${Math.round(rest.noteTop)})`);
+        const mid = await canvasPt(rest.left + 20, (rest.top + rest.bottom) / 2);
+        await cdp.send('Input.dispatchMouseEvent', { type: 'mouseWheel', x: mid.x, y: mid.y, deltaX: 0, deltaY: 200 });
+        await sleep(200);
+        const wheeled = await bandNow();
+        ok(wheeled.offset < 0 && wheeled.noteBottom + wheeled.offset <= wheeled.bottom + 1 && wheeled.over, `the wheel scrolls the band (${wheeled.offset} px): the note is in view (its bottom at ${Math.round(wheeled.noteBottom + wheeled.offset)})`);
+        // A cell tapped after scrolling opens its own card, at where the scroll has put it.
+        // (The second row's: the first has scrolled out of the band's top.)
+        const beanCell = await evaluate(`JSON.stringify(${O}.cells.find((c) => c.id === 'bean'))`).then(JSON.parse);
+        await tapAt(beanCell.x + 40, beanCell.y + wheeled.offset);
+        const tapped = await bandNow();
+        await evaluate(`${O}.closeCard(), true`);
+        ok(tapped.card && tapped.title === (await tx('careerBean')) && tapped.over, `a cell tapped after scrolling opens its own card ("${tapped.title}")`);
+        // A drag scrolls and does nothing else, even when it ends on a cell.
+        const from = await canvasPt(rest.left + 20, beanCell.y + 20);
+        const to = await canvasPt(beanCell.x + 40, beanCell.y + 80);
+        await cdp.send('Input.dispatchMouseEvent', { type: 'mousePressed', x: from.x, y: from.y, button: 'left', buttons: 1, clickCount: 1 });
+        await cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: to.x, y: to.y, button: 'left', buttons: 1 });
+        await cdp.send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: to.x, y: to.y, button: 'left', buttons: 0, clickCount: 1 });
+        await sleep(300);
+        const dragged = await bandNow();
+        ok(dragged.offset === 0 && !dragged.card && dragged.over, `a drag scrolls the band back (${wheeled.offset} → ${dragged.offset}) and opens no card, though it ends on a cell`);
+        // The buttons are not in the band: Home is where it always was, and a tap on it goes home.
+        await evaluate(`${O}.band.scrollBy(-999), true`);
+        const homeBox = await evaluate(`JSON.stringify(${O}.buttons.home)`).then(JSON.parse);
+        await tapAt(homeBox.x, homeBox.y);
+        await sleep(400);
+        ok(!(await evaluate(`__flappy.scene.isActive('Over')`)) && (await playState()) === 'ready', 'with the band scrolled, Home has not moved: a tap on it goes home');
         // A won run at 5 of 5: 💯 and 🅰️, the streak at 1, the average at 100 %.
         await startEdu();
         await winWith(5, 5);
@@ -4373,6 +4411,12 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await sleep(TT.deathToOverMs + 500);
         const plainOver = await panel();
         ok(plainOver.active && plainOver.tally === null && !plainOver.texts.some((s) => /[❔✅❌]/u.test(s)), `a normal run's game-over panel shows no ❔ / ✅ / ❌ line (active ${plainOver.active}, tally ${JSON.stringify(plainOver.tally)}, ${JSON.stringify(plainOver.texts.filter((s) => /[❔✅❌]/u.test(s)))})`);
+        // Its summary band has nothing to scroll (plan 22, U7), and a tap on the band's empty space goes home, as a tap anywhere does.
+        await evaluate(`(${O}.openedAt = __flappy.loop.time - 5000, ${O}.band.scrollBy(-300), true)`);
+        const plainBand = await evaluate(`JSON.stringify({ offset: ${O}.band.offset, box: ${O}.bandBox, cell: ${O}.cells.find((c) => c.id === 'bacteria') })`).then(JSON.parse);
+        await tapAt(plainBand.box.left + 12, plainBand.cell.y);
+        await sleep(400);
+        ok(plainBand.offset === 0 && !(await evaluate(`__flappy.scene.isActive('Over')`)) && (await playState()) === 'ready', `a normal panel's band does not scroll (offset ${plainBand.offset}), and a tap on its empty space goes home`);
         await home();
       }
     });

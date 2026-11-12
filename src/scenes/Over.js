@@ -1,5 +1,5 @@
 import { GAME_HEIGHT, FIELD, TUNING as T, SHARE, LEVEL_COLORS } from '../config.js';
-import { canRestart, chromeIntent, trayLayout, trayHit, overButtonsLayout, overCellsLayout, overHit, shareCardLayout, levelColor, uiColumn, msUntilUtcMidnight, countdownText, fitScale } from '../logic.js';
+import { canRestart, chromeIntent, trayLayout, trayHit, overButtonsLayout, overCellsLayout, overBandLayout, overHit, shareCardLayout, levelColor, uiColumn, msUntilUtcMidnight, countdownText, fitScale } from '../logic.js';
 import { t, levelLabel, shareCardFooter, dailyDayText, dailyRankText, badgeTitle } from '../i18n.js';
 import { achievementById, EDU_ACHIEVEMENTS } from '../achievements.js';
 import { EDUCATION_EMOJI } from '../education.js';
@@ -13,6 +13,7 @@ import { createButton } from '../ui/button.js';
 import { createRectGlow } from '../ui/glow.js';
 import { createFocus } from '../ui/focus.js';
 import { createInfoCard } from '../ui/infoCard.js';
+import { createScrollView } from '../ui/scrollView.js';
 
 /** A summary cell's card art: a texture (CELL_ICON, else the id) or an emoji (CELL_GLYPH); its note (a career string). */
 const CELL_ICON = { mystery: 'mystery-icon' }; // the box's static view, not the spin sheet
@@ -29,6 +30,8 @@ const CELL_NOTE = {
   pipes: 'careerPipes',
   coin: 'careerCoin',
 };
+
+const BAND_TAP_PX = 12; // a release this close to its press, inside the summary band, is a tap (the scroll view's own rule)
 
 export class Over extends Phaser.Scene {
   constructor() {
@@ -74,80 +77,21 @@ export class Over extends Phaser.Scene {
     // tap here also reached Play underneath (harmless on a dead run, a new run on its ready screen).
     this.add.zone(W / 2, GAME_HEIGHT / 2, W, GAME_HEIGHT).setInteractive();
     const grow = again ? T.over.againPanelGrowPx : 0;
-    const panel = this.add.rectangle(cx, cy + grow / 2, 560, 720 + grow, 0x1a0b14, 0.85).setStrokeStyle(8, 0xe85e96);
+    const panel = this.add.rectangle(cx, cy + grow / 2, T.over.panelWidth, 720 + grow, 0x1a0b14, 0.85).setStrokeStyle(8, 0xe85e96);
     const style = { fontFamily: 'sans-serif', fontStyle: 'bold', color: '#ffffff', align: 'center' };
     const headline = daily ? t(locale, 'dailyOverTitle').replace('{day}', dailyDayText(locale, daily.day)) : t(locale, won ? 'runWon' : 'gameOver');
     const scoreLine = `${t(locale, 'scoreLabel')}  ${formatScore({ score, toilet })}  ·  ${daily ? '\u{1F31E} ' : ''}${levelLabel(locale, level)}`;
     this.add.text(cx, cy - 270, headline, { ...style, fontSize: daily ? '48px' : won ? '48px' : '64px', color: won ? '#ffd700' : '#f8a0c8' }).setOrigin(0.5);
     // A Daily Dump's score is pink: it is the link to the 🌞 board (overHit 'score').
     this.add.text(cx, cy + T.over.scoreOffsetY, scoreLine, { ...style, fontSize: '48px', color: linked ? '#f8a0c8' : '#ffffff' }).setOrigin(0.5);
-    // Run summary (overCellsLayout): icon ×n cells, no words. Rows: fiber / probiotic / postbiotic
-    // (times one started), bad bacteria / bean / mystery box (a box's reward also counts under its own
-    // icon), ‼️ long falls / 😢 close calls, then pipes crossed (fart pipes included, as for levels) |
-    // the coins this run collected. Each cell explains itself in a card (openCell).
-    this.cells = overCellsLayout(cx, cy, T, { daily: Boolean(daily) });
-    const counts = { ...collected, pipes, falls, closeCalls };
-    for (const cell of this.cells) {
-      const n = counts[cell.id];
-      const big = cell.id === 'pipes' || cell.id === 'coin';
-      if (cell.id === 'pipes') {
-        // Crop the cap slice instead of adding a frame to the shared 'pipe' texture: a named
-        // frame becomes the texture's default and every later pipe would spawn from it.
-        this.add.image(cell.iconX, cell.y, 'pipe').setOrigin(0.5, 80 / 1280).setCrop(0, 0, 128, 160).setScale(40 / 128);
-      } else if (CELL_GLYPH[cell.id]) {
-        this.add.text(cell.iconX, cell.y, CELL_GLYPH[cell.id], { fontFamily: 'sans-serif', fontSize: '40px' }).setOrigin(0.5);
-      } else {
-        this.add.image(cell.iconX, cell.y, CELL_ICON[cell.id] ?? cell.id).setDisplaySize(48, 48);
-      }
-      this.add.text(cell.textX, cell.y, `×${n ?? '–'}`, { ...style, fontSize: big ? '40px' : '32px', color: '#c9b8dc' }).setOrigin(0, 0.5);
-      this.add.zone(cell.x, cell.y, cell.width, cell.height).setInteractive({ useHandCursor: true }); // the hand cursor; Over's own handler routes the tap
-    }
-    this.cellCounts = counts;
-    if (daily) {
-      // No coins in a Daily Dump: the cell holds the day's rank (loadDailyRank fills it in), and the
-      // cell is a link to the 🌞 board like the score (overHit 'rank', over.rankBox).
-      this.rankText = this.add.text(cx + T.over.rankBox.dx, cy + T.over.rankBox.dy, '', { ...style, fontSize: '30px', color: '#ffd700' }).setOrigin(0.5);
-      if (linked) this.setRank(t(locale, 'dailyRankLoading'));
-    }
-    if (data?.personalBest && !testRun && !daily) {
-      // On this screen only: the share card never carries it.
-      this.add.text(cx, cy + 150, t(locale, 'newPersonalBest'), { ...style, fontSize: '34px', color: '#ffd700' }).setOrigin(0.5);
-    }
-    // Achievements this run unlocked (plan 08): the first two by glyph and name, then "+n". Under the
-    // personal-best or countdown line when there is one, else in its place; above the buttons.
-    this.badgeLine = null; // the scene instance outlives a restart: never keep the last panel's line
-    // An education run's badges come from their own list (EDU_ACHIEVEMENTS, plan 22).
-    const badges = testRun ? [] : (Array.isArray(data?.badges) ? data.badges : []).map((id) => achievementById(id) ?? achievementById(id, EDU_ACHIEVEMENTS)).filter(Boolean);
-    if (badges.length) {
-      const named = badges.slice(0, 2).map((e) => `${e.glyph} ${badgeTitle(locale, e)}`).join(' · ');
-      const more = badges.length > 2 ? ` ${t(locale, 'overBadgesMore').replace('{n}', String(badges.length - 2))}` : '';
-      // An education panel: under its tally, where the "not on the boards yet" note sits when no badge was earned.
-      const lineY = cy + (education ? 184 : data?.personalBest || daily ? 186 : 150);
-      const line = this.add.text(cx, lineY, t(locale, 'overBadges').replace('{badges}', named + more), { ...style, fontSize: '28px', color: '#ffd700' }).setOrigin(0.5);
-      line.setScale(fitScale(line.width, 500, 0));
-      this.badgeLine = line;
-    }
-    this.eduLine = null; // as with badgeLine: never the last panel's
-    if (education) {
-      // ❔ answered · ✅ right · ❌ wrong (glyphs and numbers: nothing to translate), then why it is not on a board.
-      const tally = `❔ ${education.answered}  ·  ✅ ${education.right}  ·  ❌ ${education.wrong ?? 0}`;
-      this.eduLine = this.add.text(cx, cy + 140, tally, { ...style, fontSize: '32px', color: '#ffd700' }).setOrigin(0.5);
-      // A run that earned a badge shows that line in the note's place (the panel has room for one).
-      if (!this.badgeLine) this.add.text(cx, cy + 184, t(locale, testRun ? 'testRunNotSaved' : 'eduNotSaved'), { ...style, fontSize: '24px', color: '#c9b8dc', fontStyle: 'normal', wordWrap: { width: 480, useAdvancedWrap: true } }).setOrigin(0.5);
-    } else if (testRun) {
-      this.add.text(cx, cy + 150, t(locale, 'testRunNotSaved'), { ...style, fontSize: '30px', color: '#ffd700', wordWrap: { width: 460, useAdvancedWrap: true } }).setOrigin(0.5);
-    } else if (daily) {
-      // The countdown to the next course, on the wall clock (this scene's clock is stale after a relaunch).
-      this.countdown = this.add.text(cx, cy + 150, '', { ...style, fontSize: '28px', color: '#c9b8dc', fontStyle: 'normal' }).setOrigin(0.5);
-      const tick = () => this.countdown?.setText(t(locale, 'dailyNext').replace('{time}', countdownText(msUntilUtcMidnight(new Date()))));
-      tick();
-      this.time.addEvent({ delay: 1000, loop: true, callback: tick });
-    }
     // Share | Home on one row (overButtonsLayout); a test run gets Home alone, centred,
     // and nothing to share. Home is the ready-screen-style glowing button (any tap
     // outside the tray and off Share goes home too). Both fade in after the lockout
     // so a death tap cannot restart or share.
     // An education run has nothing to share; after a win its left button opens the rectum's questions instead (openBonus).
+    // They, the tray and everything above are made before the summary band below, so they stay on
+    // the main camera: the band's own camera draws only what is added to it.
+    this.cells = overCellsLayout(cx, cy, T, { daily: Boolean(daily) });
     this.bonus = Boolean(education && won);
     this.buttons = { ...overButtonsLayout(cx, cy, T, { share: education ? this.bonus : !testRun, score: linked, again }), cells: this.cells };
     const home = this.buttons.home;
@@ -175,6 +119,90 @@ export class Over extends Phaser.Scene {
     });
     this.tweens.add({ targets: this.homeHalo, alpha: { from: T.readyPromptMinAlpha, to: T.readyPromptMaxAlpha }, delay: T.retryLockoutMs, yoyo: true, repeat: -1, duration: T.readyPromptPulseMs });
     this.tweens.add({ targets: panel, scale: { from: 0.8, to: 1 }, duration: T.over.panelInMs, ease: 'Back.easeOut' });
+    this.tray = createTray(this, { muted: isMuted(), col: this.col });
+
+    // The summary band (plan 22; overBandLayout): the cells and the lines under them, between the
+    // score line and the buttons, on a scroll view (a second camera clipped to the band, as the
+    // profile's). At rest everything sits where it always did; a panel whose lines run past the
+    // band's bottom (an education run that earned a badge) scrolls there by drag, wheel or the
+    // controller's ring, while the headline, the score and the buttons stay put.
+    const B = overBandLayout(cx, cy, T);
+    const sv = createScrollView(this, B.panel, { fixed: [...this.children.list] });
+    this.band = sv;
+    this.bandBox = B;
+    let lowest = B.top; // the band's lowest content edge
+    const inBand = (obj) => sv.add(obj);
+    const line = (obj) => {
+      lowest = Math.max(lowest, obj.getBounds().bottom);
+      return sv.add(obj);
+    };
+    // Run summary (overCellsLayout): icon ×n cells, no words. Rows: fiber / probiotic / postbiotic
+    // (times one started), bad bacteria / bean / mystery box (a box's reward also counts under its own
+    // icon), ‼️ long falls / 😢 close calls, then pipes crossed (fart pipes included, as for levels) |
+    // the coins this run collected. Each cell explains itself in a card (openCell).
+    const counts = { ...collected, pipes, falls, closeCalls };
+    for (const cell of this.cells) {
+      const n = counts[cell.id];
+      const big = cell.id === 'pipes' || cell.id === 'coin';
+      if (cell.id === 'pipes') {
+        // Crop the cap slice instead of adding a frame to the shared 'pipe' texture: a named
+        // frame becomes the texture's default and every later pipe would spawn from it.
+        inBand(this.add.image(cell.iconX, cell.y, 'pipe').setOrigin(0.5, 80 / 1280).setCrop(0, 0, 128, 160).setScale(40 / 128));
+      } else if (CELL_GLYPH[cell.id]) {
+        inBand(this.add.text(cell.iconX, cell.y, CELL_GLYPH[cell.id], { fontFamily: 'sans-serif', fontSize: '40px' }).setOrigin(0.5));
+      } else {
+        inBand(this.add.image(cell.iconX, cell.y, CELL_ICON[cell.id] ?? cell.id).setDisplaySize(48, 48));
+      }
+      inBand(this.add.text(cell.textX, cell.y, `×${n ?? '–'}`, { ...style, fontSize: big ? '40px' : '32px', color: '#c9b8dc' }).setOrigin(0, 0.5));
+      inBand(this.add.zone(cell.x, cell.y, cell.width, cell.height).setInteractive({ useHandCursor: true })); // the hand cursor; Over's own handlers route the tap
+      lowest = Math.max(lowest, cell.y + cell.height / 2);
+    }
+    this.cellCounts = counts;
+    if (daily) {
+      // No coins in a Daily Dump: the cell holds the day's rank (loadDailyRank fills it in), and the
+      // cell is a link to the 🌞 board like the score (hitAt 'rank', over.rankBox).
+      this.rankText = inBand(this.add.text(cx + T.over.rankBox.dx, cy + T.over.rankBox.dy, '', { ...style, fontSize: '30px', color: '#ffd700' }).setOrigin(0.5));
+      if (linked) this.setRank(t(locale, 'dailyRankLoading'));
+    }
+    if (data?.personalBest && !testRun && !daily) {
+      // On this screen only: the share card never carries it.
+      line(this.add.text(cx, cy + 150, t(locale, 'newPersonalBest'), { ...style, fontSize: '34px', color: '#ffd700' }).setOrigin(0.5));
+    }
+    // Achievements this run unlocked (plan 08): the first two by glyph and name, then "+n". Under the
+    // personal-best or countdown line when there is one, else in its place; above the buttons.
+    this.badgeLine = null; // the scene instance outlives a restart: never keep the last panel's line
+    // An education run's badges come from their own list (EDU_ACHIEVEMENTS, plan 22).
+    const badges = testRun ? [] : (Array.isArray(data?.badges) ? data.badges : []).map((id) => achievementById(id) ?? achievementById(id, EDU_ACHIEVEMENTS)).filter(Boolean);
+    if (badges.length) {
+      const named = badges.slice(0, 2).map((e) => `${e.glyph} ${badgeTitle(locale, e)}`).join(' · ');
+      const more = badges.length > 2 ? ` ${t(locale, 'overBadgesMore').replace('{n}', String(badges.length - 2))}` : '';
+      // An education panel: under its tally, with the "not on the boards yet" note below it.
+      const lineY = cy + (education ? 184 : data?.personalBest || daily ? 186 : 150);
+      const text = this.add.text(cx, lineY, t(locale, 'overBadges').replace('{badges}', named + more), { ...style, fontSize: '28px', color: '#ffd700' }).setOrigin(0.5);
+      text.setScale(fitScale(text.width, 500, 0));
+      this.badgeLine = line(text);
+    }
+    this.eduLine = null; // as with badgeLine: never the last panel's
+    this.eduNote = null;
+    if (education) {
+      // ❔ answered · ✅ right · ❌ wrong (glyphs and numbers: nothing to translate), then why it is not on a board.
+      const tally = `❔ ${education.answered}  ·  ✅ ${education.right}  ·  ❌ ${education.wrong ?? 0}`;
+      this.eduLine = line(this.add.text(cx, cy + 140, tally, { ...style, fontSize: '32px', color: '#ffd700' }).setOrigin(0.5));
+      // The note sits under the tally; a run that earned a badge has that line there, and the note
+      // one row lower, past the band's bottom: the one panel that scrolls.
+      this.eduNote = line(this.add.text(cx, cy + (this.badgeLine ? 228 : 184), t(locale, testRun ? 'testRunNotSaved' : 'eduNotSaved'), { ...style, fontSize: '24px', color: '#c9b8dc', fontStyle: 'normal', wordWrap: { width: 480, useAdvancedWrap: true } }).setOrigin(0.5));
+    } else if (testRun) {
+      line(this.add.text(cx, cy + 150, t(locale, 'testRunNotSaved'), { ...style, fontSize: '30px', color: '#ffd700', wordWrap: { width: 460, useAdvancedWrap: true } }).setOrigin(0.5));
+    } else if (daily) {
+      // The countdown to the next course, on the wall clock (this scene's clock is stale after a relaunch).
+      this.countdown = line(this.add.text(cx, cy + 150, '', { ...style, fontSize: '28px', color: '#c9b8dc', fontStyle: 'normal' }).setOrigin(0.5));
+      const tick = () => this.countdown?.setText(t(locale, 'dailyNext').replace('{time}', countdownText(msUntilUtcMidnight(new Date()))));
+      tick();
+      this.time.addEvent({ delay: 1000, loop: true, callback: tick });
+    }
+    // The band scrolls only when a line runs past its bottom (a pixel or two of a tall glyph does not count).
+    sv.finish((lowest - B.bottom > 2 ? lowest : B.bottom) - 40);
+
     // The share image: a card drawn now, long before any tap (navigator.share must run inside the tap).
     this.shareFile = null;
     this.shareMode = null;
@@ -184,20 +212,21 @@ export class Over extends Phaser.Scene {
     if (this.shareButton) this.makeShareCard(this.cardData);
     if (linked) this.loadDailyRank(play);
 
-    this.tray = createTray(this, { muted: isMuted(), col: this.col });
     // Controller focus ring: Home, Share (once its card exists), then the tray (no ⏸ here).
-    // A on Home is the panel tap; A on a tray button is that button's chrome.
+    // A on Home is the panel tap; A on a tray button is that button's chrome. The cells and the
+    // rank link are in the band: their ring is the band's own, and focusing one scrolls it into view.
     this.focus = createFocus(this, T, {
+      scrolled: sv,
       items: [
         // The ring starts on the glowing button: Play again when offered, else Home.
         ...(this.buttons.again ? [{ id: 'again', box: this.buttons.again, activate: () => this.playAgain() }] : []),
         { id: 'home', box: home, activate: () => this.retry() },
         ...(this.buttons.score ? [{ id: 'score', box: this.buttons.score, activate: () => this.openDailyBoard() }] : []),
-        ...(this.buttons.rank ? [{ id: 'rank', box: this.buttons.rank, activate: () => this.openDailyBoard() }] : []),
+        ...(this.buttons.rank ? [{ id: 'rank', box: this.buttons.rank, scrolled: true, activate: () => this.openDailyBoard() }] : []),
         ...(this.shareButton ? [{ id: 'share', box: this.buttons.share, visible: () => Boolean(this.shareFile), activate: () => this.shareRun() }] : []),
         ...(this.bonusButton ? [{ id: 'bonus', box: this.buttons.share, activate: () => this.openBonus() }] : []),
         // The summary cells: A opens (or closes) a cell's card.
-        ...this.cells.map((cell) => ({ id: `cell:${cell.id}`, box: cell, activate: () => this.openCell(cell.id) })),
+        ...this.cells.map((cell) => ({ id: `cell:${cell.id}`, box: cell, scrolled: true, activate: () => this.openCell(cell.id) })),
         ...['info', 'lang', 'feedback', 'leaderboard', 'mute', 'settings'].map((id) => ({ id, obj: this.tray.buttons[id], activate: () => play?.handleChrome(id) })),
       ],
     });
@@ -207,9 +236,14 @@ export class Over extends Phaser.Scene {
       this.closeCard();
       move(dir);
     };
-    // The explanation card, above everything (the ring included).
-    this.card = createInfoCard(this, { x: cx, y: cy - 40, width: 500 });
-    this.cellPressed = null;
+    // The explanation card, above everything (the ring and the band included): on a camera of its
+    // own, and the band holds still while it is up.
+    this.card = createInfoCard(this, { x: cx, y: cy - 40, width: 500 }, { ownCamera: true, onShow: () => sv.setEnabled(false), onHide: () => sv.setEnabled(true) });
+    // The band's camera draws the band alone: not the card, nor whatever else was made since the
+    // band was (the ring), which the main camera still draws.
+    sv.ignore(this.card.objs);
+    sv.ignore(this.children.list.filter((o) => (o.cameraFilter & this.cameras.main.id) === 0));
+    this.bandPress = null;
     // scene.stop destroys the tray's text objects and the ring; drop the handles so Play cannot
     // reach a dead label (setText on it throws inside Phaser) or a dead ring after the panel closes.
     this.events.once('shutdown', () => {
@@ -217,21 +251,25 @@ export class Over extends Phaser.Scene {
       this.focus = null;
       this.rankText = null;
       this.countdown = null;
+      this.band = null;
     });
 
-    // Share: pressed on pointerdown (so the tap does not go home), sent on pointerup over
+    // Taps. Share: pressed on pointerdown (so the tap does not go home), sent on pointerup over
     // the button. On touch only pointerup / touchend grants the user activation
     // navigator.share() needs, and Phaser emits it from inside that DOM event.
-    const onShare = (pointer) => Boolean(this.shareFile) && overHit(pointer.x, pointer.y, this.buttons) === 'share';
+    // Inside the band nothing fires on the press, which may be the start of a drag: a tap (a
+    // release within BAND_TAP_PX of the press) opens the cell or the rank link under it, and on
+    // empty space goes home as a tap anywhere else does; a drag only scrolls.
+    const onShare = (pointer) => Boolean(this.shareFile) && this.hitAt(pointer) === 'share';
     this.input.on('pointerdown', (pointer) => {
       // A card up: this tap only closes it (on release, by the card's dim), never goes home.
       if (this.card?.open) return;
-      const link = overHit(pointer.x, pointer.y, this.buttons);
-      if (link?.startsWith('cell:')) {
-        this.cellPressed = link; // opened on release over the same cell, so the release cannot close it again
+      const link = this.hitAt(pointer);
+      if (this.inBand(pointer) && link !== 'score') {
+        this.bandPress = { link };
         return;
       }
-      if (link === 'score' || link === 'rank') {
+      if (link === 'score') {
         this.openDailyBoard();
         return;
       }
@@ -252,10 +290,16 @@ export class Over extends Phaser.Scene {
       this.sharePressed = panelTap;
     });
     this.input.on('pointerup', (pointer) => {
-      const cell = this.cellPressed;
-      this.cellPressed = null;
-      if (cell && overHit(pointer.x, pointer.y, this.buttons) === cell) {
-        this.openCell(cell.slice(5));
+      const press = this.bandPress;
+      this.bandPress = null;
+      if (press) {
+        const moved = typeof pointer.getDistance === 'function' ? pointer.getDistance() : 0;
+        if (moved >= BAND_TAP_PX || this.card?.open) return; // a drag: the band scrolled, nothing else
+        const link = this.hitAt(pointer);
+        if (link !== press.link) return; // released somewhere else
+        if (link?.startsWith('cell:')) this.openCell(link.slice(5));
+        else if (link === 'rank') this.openDailyBoard();
+        else this.retry(pointer);
         return;
       }
       if (!this.sharePressed) return;
@@ -263,6 +307,22 @@ export class Over extends Phaser.Scene {
       if (onShare(pointer)) this.shareRun();
     });
     this.input.keyboard?.on('keydown-SPACE', () => this.retry());
+  }
+
+  /** Is the pointer inside the summary band's visible area? */
+  inBand(pointer) {
+    const B = this.bandBox;
+    return Boolean(B) && pointer.x >= B.left && pointer.x <= B.right && pointer.y >= B.top && pointer.y <= B.bottom;
+  }
+
+  /**
+   * What the pointer is on (overHit's ids), or null: a button or the daily score link by its box;
+   * inside the summary band, a cell or the daily rank link where the band's scroll has put it.
+   */
+  hitAt(pointer) {
+    const fixed = overHit(pointer.x, pointer.y, { ...this.buttons, rank: null, cells: [] });
+    if (fixed || !this.inBand(pointer)) return fixed;
+    return overHit(pointer.x, pointer.y - (this.band?.offset ?? 0), { rank: this.buttons.rank, cells: this.cells });
   }
 
   /**

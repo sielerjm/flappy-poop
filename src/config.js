@@ -128,6 +128,8 @@ export const TUNING = {
     cellRowsY: [-116, -48, 20], // px from the panel centre: the summary rows (pickups ×2, then ‼️ / 😢); pipes | coins sit at rankBox.dy (overCellsLayout)
     cellW: 150, // px: a summary cell's tap box (icon and ×n)
     cellH: 50, // px (rows 68 apart; the third row's bottom stays above the rank link's box)
+    panelWidth: 560, // px: the panel (its 8 px border included)
+    band: { top: -150, bottom: 206 }, // px from the panel centre: the summary's scroll area (the cells and the lines under them), under the score line and down to the buttons' top edge (overBandLayout); it scrolls only when its lines run past the bottom
     buttonOffsetY: 250, // px below the panel centre of the Share | Home row
     buttonWidth: 240, // px per button (Home alone on a test run, centred)
     buttonHeight: 88, // px (= trayHitMin, a thumb-sized Share target)

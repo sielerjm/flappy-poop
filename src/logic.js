@@ -1590,6 +1590,21 @@ export function overButtonsLayout(cx, cy, t, { share = true, score = false, agai
 }
 
 /**
+ * The game-over panel's summary band (plan 22): everything between the score line and the buttons
+ * (the cells, and the lines under them) sits in a scroll area, so a panel with more lines than fit
+ * scrolls there while the headline, the score and the buttons stay put. { top, bottom, left, right }
+ * are the band's visible edges; `panel` is the rect createScrollView takes (it insets 8 px a side,
+ * which lands on those edges).
+ */
+export function overBandLayout(cx, cy, t) {
+  const o = t.over;
+  const top = cy + o.band.top;
+  const bottom = cy + o.band.bottom;
+  const inset = 8; // createScrollView's margin, and the panel's border
+  return { top, bottom, left: cx - o.panelWidth / 2 + inset, right: cx + o.panelWidth / 2 - inset, panel: { x: cx, y: (top + bottom) / 2, width: o.panelWidth, height: bottom - top + 2 * inset } };
+}
+
+/**
  * 'share' | 'home' | 'score' | 'rank' | 'again' for a tap at (x, y) on overButtonsLayout's boxes,
  * else 'cell:<id>' on one of layout.cells (overCellsLayout), else null.
  */
