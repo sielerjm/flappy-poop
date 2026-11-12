@@ -1,5 +1,5 @@
 // Save codes (src/save.js): spec rows 1–10 from
-// .claude/plans/Flappy Poop — Save Code Spec.md plus helper coverage.
+// docs/save-code-spec.md plus helper coverage.
 // Top entries are { score, toilet }; topScores() gives just the numbers.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -414,7 +414,7 @@ test('checkNewName grandfathers the name already saved (any case); validateName 
 });
 
 test('mergeBoardBests: the board\'s rows join the top list, local first on a tie, MAX_TOP kept, id and name untouched', () => {
-  const local = { id: 'l8IrAM42blHWwokdQDsTmA', name: 'GutMichaelBiome', top: [160, 143, 136, 134, 116, 111].map((score) => ({ score, toilet: false, level: 4 })), exportedAt: 1794383432 };
+  const local = { id: 'TestPlayerAAAAAAAAAAAA', name: 'GutMichaelBiome', top: [160, 143, 136, 134, 116, 111].map((score) => ({ score, toilet: false, level: 4 })), exportedAt: 1794383432 };
   const rows = [{ rank: 8, total: 40, score: 229, toilet: false, level: 6 }, { rank: 5, total: 40, score: 261, toilet: true, level: 6 }];
   const out = mergeBoardBests(local, rows);
   assert.deepEqual(out.top.slice(0, 3), [{ score: 261, toilet: true, level: 6 }, { score: 229, toilet: false, level: 6 }, { score: 160, toilet: false, level: 4 }]);

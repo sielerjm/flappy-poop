@@ -93,7 +93,7 @@ so only the pairs actually passed have scored, and the break starts at once. A p
 step per pair. Each top score remembers its level. A signed
 **user code** (`fp1.<payload>.<sig>`, the save code) carries a player's username
 and best 6 scores between browsers via copy/paste (the save panel, opened by the
-ready screen's user button); spec in `.claude/plans/Flappy Poop — Save Code Spec.md`. The code's
+ready screen's user button); spec in `docs/save-code-spec.md`. The code's
 random `id` is also the leaderboard identity. **One player across devices** (2026-11-08):
 a username belongs to the player holding it on the board (`submit_score` raises
 'name taken'; the panel asks `name_available` first through `Play.checkNameAvailable`
@@ -1636,6 +1636,13 @@ tools/
                             current local time, runs npm test, commits the stamp, pushes
                             main. Refuses a dirty tree or a non-main branch; --dry skips
                             commit + push.
+  privacy_scan.mjs          Where a player id or username appears (plan 21, P1): the
+                            working tree (ignored files too: meta/db-backups,
+                            .claude/plans), every commit (git log --all -S), and with
+                            --issues GitHub Issues (sends the term to GitHub). Prints
+                            file:line / commit locations and a sha256 fingerprint, never
+                            the id, name or lines. Read a secret from stdin (`-`). Exit 1
+                            on a hit. tests/privacy.test.js uses its helpers.
   audit_questions.mjs       The question bank's audits (plan 21): list (unaudited and
                             stale cards), report [--out=f] (a markdown review sheet:
                             the checklist, every card with its status and hash, the
@@ -1759,12 +1766,15 @@ tools/
                             and its presses would otherwise reach the game.
                             Zero dependencies (fetch + WebSocket).
 
+docs/                       Living specs kept with the code: save-code-spec.md (the
+                            user code, fp1.<payload>.<sig>), finish-divider.svg.
 .claude/plans/              Pending build plans numbered in build order
                             (NN-name.plan.md), indexed by ROADMAP.md (order,
-                            dependencies, open decisions), + living specs (e.g.
-                            the Save Code Spec). A new plan takes the next free
-                            number and a ROADMAP row; when Status is complete,
-                            move it into Archive/ and mark its row.
+                            dependencies, open decisions). Local only: gitignored and
+                            untracked since 12 Nov (plan 21, P1), because plans can
+                            quote players; tests/privacy.test.js keeps it so. A new
+                            plan takes the next free number and a ROADMAP row; when
+                            Status is complete, move it into Archive/ and mark its row.
 .claude/plans/Archive/      Completed build plans (historical record + decision
                             log). Don't edit archived plans.
 .claude/skills/audit-repo/   The repo audit procedure as a Claude skill (/audit-repo):
@@ -1833,6 +1843,13 @@ meta/                       Local-only project notes and reports (gitignored;
    pointer-up, not pointer-down. Make the file before the tap (Over draws the
    share card as it opens) and call `shareScoreImage()` straight from the
    `pointerup` handler: no `await`, timer, or fetch before it.
+10. **Never commit player data** (plan 21, P1). A player id is a bearer secret
+   (anyone holding one can post and rename as that player), and usernames are
+   personal data. Tests use synthetic ids (`TestPlayerAAAAAAAAAAAA`); plans,
+   database dumps (`meta/`, `*_rows.sql`) and audit notes stay local.
+   `tests/privacy.test.js` fails on a tracked file under `meta/` or
+   `.claude/plans/`, a row dump, or a tracked file holding an id from
+   `meta/db-backups`; `node tools/privacy_scan.mjs -` finds every copy of one.
 
 ## How to work on it
 
