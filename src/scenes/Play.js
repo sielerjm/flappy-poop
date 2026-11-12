@@ -1536,12 +1536,22 @@ export class Play extends Phaser.Scene {
    * The quiz's next card: { card, reason, order } or null when nothing is left (pickCard). A break
    * asks about the segment just cleared (the level before this.level, which already counts the next
    * one); `exclude` is the session's cards so far. The draws use Math.random, never the course's rng.
+   * A test run saves no answers, so what is due never clears: its quizzes walk the level's deck
+   * instead ('browse'; the cleared level's in a break, this level's in a revive), and the cards they
+   * have shown are kept for the page load (the registry, like test mode itself).
    */
   quizNext({ mode = 'break', exclude = [] } = {}) {
     const store = this.eduStore.load();
     const level = Math.min(Math.max(1, this.level), LEVELS.length);
     const segment = LEVELS[Math.max(0, (this.levelBreak ? this.level - 1 : this.level) - 1)]?.key ?? null;
-    const pick = pickCard({ srs: store.cards, context: mode === 'revive' ? 'revive' : 'break', level, segment, now: Date.now(), exclude, recent: store.recent, rng: Math.random });
+    let pick;
+    if (this.runIsTest) {
+      const shown = this.registry.get('testQuizShown') ?? [];
+      pick = pickCard({ srs: store.cards, context: 'browse', segment, exclude, shown });
+      if (pick) this.registry.set('testQuizShown', [...shown.filter((id) => id !== pick.card.id), pick.card.id]);
+    } else {
+      pick = pickCard({ srs: store.cards, context: mode === 'revive' ? 'revive' : 'break', level, segment, now: Date.now(), exclude, recent: store.recent, rng: Math.random });
+    }
     return pick ? { ...pick, order: shuffleOptions(Math.random) } : null;
   }
 

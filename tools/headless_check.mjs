@@ -3999,6 +3999,38 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         ok(far.spawned && far.x !== null && far.x <= far.leadX + 1 && far.x >= far.leadX - 150, `with no line out, the revive places it at the first-pair lead (x ${far.x === null ? 'none' : Math.round(far.x)}, lead ${Math.round(far.leadX)})`);
         ok(far.kernelDone || (far.kernelX !== null && far.kernelX < far.x - halfLine), `and its kernel waits before the line (kernel ${far.kernelX === null ? 'taken' : Math.round(far.kernelX)})`);
 
+        // A test run's quiz follows the level (plan 22, F3). A test run saves no answers, so due cards
+        // never clear: with level 1's cards overdue, a normal revive asks one of them, and a test run
+        // started on level 5 asks level 5's deck in order instead, carrying on from quiz to quiz.
+        const decks = await evaluate(`import('./src/questions.js').then((m) => JSON.stringify(Object.fromEntries(['stomach', 'caecum'].map((d) => [d, m.CARDS.filter((c) => !c.retired && c.deck === d).map((c) => c.id).sort()]))))`).then(JSON.parse);
+        const dayAgo = Date.now() - 86400000;
+        const overdue = { phase: 'learning', step: 0, ease: TT.education.srs.startEase, intervalMs: 0, dueAt: dayAgo, reps: 0, lapses: 1, seen: 1, right: 0, firstAt: dayAgo - 86400000, lastAt: dayAgo };
+        const dueStore = JSON.stringify({ v: 1, cards: Object.fromEntries(decks.stomach.map((id) => [id, overdue])), recent: [] });
+        const storeDue = () => evaluate(`localStorage.setItem('flappyPoop.eduSrs', ${JSON.stringify(dueStore)}), true`);
+        const cardNow = () => evaluate(`(() => { const c = ${Q}.card; return JSON.stringify(c ? { id: c.id, deck: c.deck } : null); })()`).then(JSON.parse);
+        await storeDue();
+        await startEdu('');
+        await crash();
+        const normal = await cardNow();
+        ok(normal?.deck === 'stomach', `a normal revive asks what is due (${normal?.id})`);
+        await evaluate(`(() => { const p = ${play}; p.setTestMode(true); p.setTestSettings({ startLevel: 5, invincible: false }); p.registry.set('testQuizShown', []); return true; })()`);
+        await startEdu('');
+        const testRun = await evaluate(`JSON.stringify({ test: ${play}.runIsTest, edu: ${play}.runIsEducation, level: ${play}.level })`).then(JSON.parse);
+        await crash();
+        const t5 = await cardNow();
+        ok(testRun.test && testRun.edu && testRun.level === 5 && t5?.id === decks.caecum[0], `a test run started on level ${testRun.level} asks level 5's first card in its revive (${t5?.id}, ${t5?.deck})`);
+        await answer(true);
+        // The break after a 🏁 skip asks the cleared level's deck, carrying on after the card just shown.
+        await startEdu(`p.skipToFinish()`);
+        for (let i = 0; i < 80 && !(await evaluate(`Boolean(${play}.levelBreak)`)); i += 1) await sleep(100);
+        await evaluate(`${play}.openQuiz('break'), true`);
+        for (let i = 0; i < 40 && !(await evaluate(`__flappy.scene.isActive('Quiz') && Boolean(${Q}.card)`)); i += 1) await sleep(100);
+        const brk5 = await cardNow();
+        ok(brk5?.id === decks.caecum[1], `after a 🏁 skip the break quiz asks the cleared level's deck, carrying on (${brk5?.id}, ${brk5?.deck})`);
+        await answer(true);
+        ok((await evaluate(`localStorage.getItem('flappyPoop.eduSrs')`)) === dueStore, "a test run's answers leave the stored cards as they were");
+        await evaluate(`(() => { const p = ${play}; __flappy.scene.stop('Quiz'); p.setTestSettings({ startLevel: 1 }); p.setTestMode(false); p.registry.set('testQuizShown', []); localStorage.removeItem('flappyPoop.eduSrs'); return true; })()`);
+
         // Give up: the run ends at once.
         await startEdu('');
         await crash();

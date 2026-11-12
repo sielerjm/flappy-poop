@@ -147,6 +147,37 @@ test('pickCard: never a card of this session or a retired one; the last minGap c
   assert.ok(!old.slice(-T.education.minGap).includes(p.card.id), 'only the last minGap are held back');
 });
 
+test("pickCard, browse (a test run): the segment's deck in id order, whatever is due; then general, then the other decks", () => {
+  const live = CARDS.filter((c) => !c.retired);
+  const deck = (d) => live.filter((c) => c.deck === d).map((c) => c.id).sort();
+  const caecum = deck('caecum');
+  // Every stomach card is overdue in the learning steps: a revive would ask those first.
+  const srs = Object.fromEntries(deck('stomach').map((id) => [id, schedule(null, 'again', NOW - DAY)]));
+  assert.equal(pickCard({ context: 'revive', level: 5, srs, now: NOW, rng: always(0.5) }).card.deck, 'stomach', 'a normal revive asks what is due');
+  const first = pickCard({ context: 'browse', segment: 'caecum', srs, now: NOW });
+  assert.deepEqual([first.card.id, first.reason], [caecum[0], 'new'], "browse: level 5's first card");
+  // One quiz walks the deck in order, then the general cards, then the other decks by level.
+  const walk = [];
+  for (let pick = first; pick; pick = pickCard({ context: 'browse', segment: 'caecum', srs, now: NOW, exclude: walk })) walk.push(pick.card.id);
+  assert.deepEqual(walk, [...caecum, ...deck('general'), ...DECKS.filter((d) => d !== 'caecum' && d !== 'general').flatMap(deck)]);
+  assert.equal(walk.length, live.length, 'null only once every live card was shown in the quiz');
+  assert.equal(pickCard({ context: 'browse', segment: 'stomach', srs, now: NOW }).reason, 'early', 'a card with a record is an early review (nothing is saved anyway)');
+});
+
+test('pickCard, browse: a later quiz carries on after the cards already shown; a shown deck starts again from the one shown longest ago', () => {
+  const colon = CARDS.filter((c) => !c.retired && c.deck === 'colon').map((c) => c.id).sort();
+  assert.equal(pickCard({ context: 'browse', segment: 'colon', shown: colon.slice(0, 2) }).card.id, colon[2], 'the third card after two were shown');
+  assert.equal(pickCard({ context: 'browse', segment: 'colon', shown: colon.slice(0, 2), exclude: [colon[2]] }).card.id, colon[3]);
+  const again = [...colon.slice(1), colon[0]]; // every colon card shown, the first one last
+  assert.equal(pickCard({ context: 'browse', segment: 'colon', shown: again }).card.id, colon[1], 'the deck comes round again, oldest first, before any other deck');
+  const cards = [
+    { id: 'ST-01', deck: 'stomach', retired: true },
+    { id: 'ST-02', deck: 'stomach' },
+  ];
+  assert.equal(pickCard({ cards, context: 'browse', segment: 'stomach' }).card.id, 'ST-02', 'never a retired card');
+  assert.equal(pickCard({ cards, context: 'browse', segment: 'stomach', exclude: ['ST-02'] }), null);
+});
+
 test('shuffleOptions: always the three keys; every order turns up', () => {
   const rng = createRng(3);
   const orders = new Set();

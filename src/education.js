@@ -176,6 +176,22 @@ function chooseCard({ cards, srs, context, level, segment, now, blocked, rng, t 
 }
 
 /**
+ * A test run's pick (context 'browse'): the schedule is ignored, so skipping to a level shows that
+ * level's cards at once. The cards go in this order: the segment's deck, then the general cards,
+ * then the other decks by level; inside each group a card not in `shown` (the cards a test quiz has
+ * shown since the page loaded, oldest first) comes before one that is, the one shown longest ago
+ * first, and ties go in id order. So a second quiz carries on where the first stopped.
+ */
+function browseCard({ cards, srs, segment, blocked, shown }) {
+  const group = (c) => (c.deck === segment ? 0 : c.deck === 'general' ? 1 : 1 + levelOfDeck(c.deck));
+  const shownAt = (c) => shown.lastIndexOf(c.id); // −1: not shown yet
+  const card = cards
+    .filter((c) => !c.retired && !blocked.has(c.id))
+    .sort((a, b) => group(a) - group(b) || shownAt(a) - shownAt(b) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))[0];
+  return card ? { card, reason: srs[card.id] ? 'early' : 'new' } : null;
+}
+
+/**
  * The next card for a quiz: { card, reason: 'new' | 'learning' | 'due' | 'early' }, or null.
  * context 'break' (a level break; segment = the cleared level's deck): a new card of that segment
  * (a general one at generalShare), then a due card (the segment's first), then an early review
@@ -184,9 +200,12 @@ function chooseCard({ cards, srs, context, level, segment, now, blocked, rng, t 
  * then an early review. Reviews come from any card already seen, whatever the level.
  * `exclude` (this quiz session's cards) is never picked; the last minGap of `recent` are skipped
  * unless nothing else is left. Retired cards are never picked. `rng` returns [0, 1).
+ * 'browse' (a test run, which saves no answers): the segment's deck in order, whatever is due
+ * (browseCard); `shown` is the cards test quizzes have shown so far.
  */
-export function pickCard({ cards = CARDS, srs = {}, context, level = 1, segment = null, now, exclude = [], recent = [], rng = Math.random, t = TUNING }) {
+export function pickCard({ cards = CARDS, srs = {}, context, level = 1, segment = null, now, exclude = [], recent = [], shown = [], rng = Math.random, t = TUNING }) {
   const session = new Set(exclude);
+  if (context === 'browse') return browseCard({ cards, srs, segment, blocked: session, shown });
   const gap = new Set([...session, ...recent.slice(-t.education.minGap)]);
   const args = { cards, srs, context, level, segment, now, rng, t };
   return chooseCard({ ...args, blocked: gap }) ?? (gap.size > session.size ? chooseCard({ ...args, blocked: session }) : null);
