@@ -227,7 +227,7 @@ Short, playful, clear. Fit a 720×1280 logical field; How to play / About body w
 | quizWrong | Not quite: the right answer has a ✓ | 不太对：正确答案标有 ✓ |
 | quizWhy | Why? | 为什么？ |
 | quizNext | Next | 下一题 |
-| quizDone | Done | 完成 |
+| quizReturn | Return | 返回 |
 | quizCaughtUp | You're all caught up! New questions come with the next level, and old ones come back when they are due. | 全部完成！下一关会有新问题，旧问题到期后会再出现。 |
 | quizGeneral | Gut microbes | 肠道微生物 |
 | quizSource | Source: {source} | 来源：{source} |

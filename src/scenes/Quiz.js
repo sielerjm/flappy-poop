@@ -13,6 +13,8 @@ const PANEL = { width: 640, height: 1120 };
 const TEXT_W = 560;
 const OPTION_MIN_H = 92;
 const BUTTON = { width: 250, height: 88 };
+const WIDE_BUTTON = 540; // the top button (Why): edge to edge with the bottom row (two 250 px buttons, 40 px apart)
+const BUTTON_GAP = 12; // px between the top button and the bottom row
 const COIN_PX = 36; // the corn kernel after a paid verdict
 /** Option fills: waiting, the right answer, the wrong one picked, the other wrong one. */
 const FILL = { idle: 0x2a1522, right: 0x2f7d4f, wrong: 0x9c2f4a, dim: 0x1a0b14 };
@@ -23,11 +25,14 @@ const BAD = '#ff8da8';
  * The education quiz card (📚, plan 21): one question, three options, then the verdict and the
  * explanation, then the next step. Play owns the cards and their schedule (quizNext picks one,
  * quizAnswer grades and saves it), so this scene holds no storage. Answer by tap, the keys 1–3, or
- * the controller ring; Enter / Space presses the main button. The response time runs from the
- * options appearing; an answer is flagged interrupted when the page was hidden meanwhile.
+ * the controller ring; Enter / Space presses the way forward (primary). The response time runs from
+ * the options appearing; an answer is flagged interrupted when the page was hidden meanwhile.
+ * Buttons: a full-width Why on top, and a bottom row whose right button is the way forward (Next,
+ * Fly on, Go for it, End run) and whose left button is the way out (Return; in a revive, Give up or
+ * the choice's Fly on).
  * Modes:
  *   'break'  a level break: questions about the segment just cleared, +coins for a right answer;
- *            ✕ / Esc / B close it.
+ *            Return / ✕ / Esc / B close it, back to the break.
  *   'bonus'  over the game-over panel of a won run: the rectum's questions (it has no break), no
  *            coins; closed like a break's.
  *   'revive' after an education crash: Play's reviveStep state (play.revive) runs the card. Wrong
@@ -79,12 +84,16 @@ export class Quiz extends Phaser.Scene {
     this.verdictCoin = this.add.image(cx, 0, 'coin', 0).setDisplaySize(COIN_PX, COIN_PX).setVisible(false);
     this.explain = this.add.text(cx, 0, '', { ...MUTED, fontSize: '26px', lineSpacing: 4, wordWrap: { width: TEXT_W, useAdvancedWrap: true } }).setOrigin(0.5, 0);
     this.source = this.add.text(cx, 0, '', { ...MUTED, fontSize: '20px', fontStyle: 'italic', wordWrap: { width: TEXT_W, useAdvancedWrap: true } }).setOrigin(0.5, 0);
-    // Three button slots on the bottom row; each step says what they read and do (set).
-    const buttonsY = this.bottom - 24 - BUTTON.height / 2;
-    this.whyBtn = this.makeButton(cx - 145, buttonsY);
-    this.nextBtn = this.makeButton(cx + 145, buttonsY);
-    this.doneBtn = this.makeButton(cx, buttonsY);
-    this.buttonsTop = buttonsY - BUTTON.height / 2;
+    // Three button slots, named by where they sit; each step says what they read and do (set). The
+    // two on the bottom row never overlap, so a second tap on the way forward cannot land on the
+    // way out (Give up) of the next card.
+    const rowY = this.bottom - 24 - BUTTON.height / 2;
+    const topY = rowY - BUTTON.height - BUTTON_GAP;
+    this.topBtn = this.makeButton(cx, topY, WIDE_BUTTON);
+    this.leftBtn = this.makeButton(cx - 145, rowY);
+    this.rightBtn = this.makeButton(cx + 145, rowY);
+    this.rowTop = rowY - BUTTON.height / 2; // the explanation ends above the bottom row
+    this.whyTop = topY - BUTTON.height / 2; // and the verdict above the top button while it shows
 
     const kb = this.input.keyboard;
     ['ONE', 'TWO', 'THREE'].forEach((k, i) => {
@@ -108,9 +117,9 @@ export class Quiz extends Phaser.Scene {
     this.focus = createFocus(this, T, {
       items: [
         ...this.options.map((o, i) => pressable(`option${i}`, o.zone)),
-        pressable('why', this.whyBtn.zone),
-        pressable('next', this.nextBtn.zone),
-        pressable('done', this.doneBtn.zone),
+        pressable('top', this.topBtn.zone),
+        pressable('left', this.leftBtn.zone),
+        pressable('right', this.rightBtn.zone),
         pressable('close', this.closeBtn),
       ],
     });
@@ -142,14 +151,14 @@ export class Quiz extends Phaser.Scene {
     o.text.setAlpha(state === 'dim' ? 0.55 : 1);
   }
 
-  /** A bottom-row button slot: a rounded box, a label and a zone; set(label, onPress) says what it is now. */
-  makeButton(x, y) {
+  /** A button slot `width` wide: a rounded box, a label and a zone; set(label, onPress) says what it is now. */
+  makeButton(x, y, width = BUTTON.width) {
     const g = this.add.graphics();
     g.fillStyle(0x2a1522, 1);
-    g.fillRoundedRect(x - BUTTON.width / 2, y - BUTTON.height / 2, BUTTON.width, BUTTON.height, 18);
+    g.fillRoundedRect(x - width / 2, y - BUTTON.height / 2, width, BUTTON.height, 18);
     g.lineStyle(4, 0xe85e96, 1);
-    g.strokeRoundedRect(x - BUTTON.width / 2, y - BUTTON.height / 2, BUTTON.width, BUTTON.height, 18);
-    const text = this.add.text(x, y, '', { ...STYLE, fontSize: '30px', color: '#f8a0c8', wordWrap: { width: BUTTON.width - 16, useAdvancedWrap: true } }).setOrigin(0.5);
+    g.strokeRoundedRect(x - width / 2, y - BUTTON.height / 2, width, BUTTON.height, 18);
+    const text = this.add.text(x, y, '', { ...STYLE, fontSize: '30px', color: '#f8a0c8', wordWrap: { width: width - 16, useAdvancedWrap: true } }).setOrigin(0.5);
     const button = {
       g,
       text,
@@ -183,7 +192,7 @@ export class Quiz extends Phaser.Scene {
       },
     };
     button.zone = this.add
-      .zone(x, y, BUTTON.width, BUTTON.height)
+      .zone(x, y, width, BUTTON.height)
       .setInteractive({ useHandCursor: true })
       .on('pointerdown', () => {
         if (isTopOverlay(this)) button.press();
@@ -191,16 +200,26 @@ export class Quiz extends Phaser.Scene {
     return button.setShown(false);
   }
 
-  /** Enter / Space: the right-hand button when it shows, else the middle one. */
+  /**
+   * Enter / Space: the way forward (the right-hand button). With "All caught up" on show they press
+   * Return. Never Give up, and never Return while a card is up: Space is also the flap key, and a
+   * flap pressed just after a crash must not end the run or leave the quiz.
+   */
   primary() {
     if (!isTopOverlay(this)) return;
-    if (this.nextBtn.shown) this.nextBtn.press();
-    else if (this.doneBtn.shown) this.doneBtn.press();
+    if (this.rightBtn.shown) this.rightBtn.press();
+    else if (!this.card && this.closable()) this.leftBtn.press();
   }
 
-  /** Hide the bottom row. */
+  /** Hide every button. */
   clearButtons() {
-    for (const b of [this.whyBtn, this.nextBtn, this.doneBtn]) b.setShown(false);
+    for (const b of [this.topBtn, this.leftBtn, this.rightBtn]) b.setShown(false);
+  }
+
+  /** The way out while a card is up, bottom left: Return in a break or bonus; before a revive's first right answer, Give up ends the run. */
+  showWayOut() {
+    if (this.closable()) this.leftBtn.set(t(this.locale, 'quizReturn'), () => this.close());
+    else if (this.reviveState?.phase === 'strikes') this.leftBtn.set(t(this.locale, 'reviveGiveUp'), () => this.decide('giveUp'));
   }
 
   /** The next card from Play, or "All caught up" (a break) / a granted revive (no card left) when there is none. */
@@ -250,14 +269,13 @@ export class Quiz extends Phaser.Scene {
     this.explain.setText('').setVisible(false);
     this.source.setText('').setVisible(false);
     this.clearButtons();
-    // Before a revive's first right answer, Give up ends the run.
-    if (this.mode === 'revive' && this.reviveState?.phase === 'strikes') this.doneBtn.set(t(this.locale, 'reviveGiveUp'), () => this.decide('giveUp'));
+    this.showWayOut();
     this.closeBtn.setVisible(this.closable());
     this.shownAt = globalThis.performance?.now?.() ?? Date.now();
     this.ring('option0');
   }
 
-  /** Nothing left to ask: a break says "All caught up" (Done); a revive is granted (Continue). */
+  /** Nothing left to ask: a break says "All caught up" (Return); a revive is granted (Fly on). */
   showCaughtUp() {
     this.card = null;
     this.answered = true;
@@ -275,10 +293,10 @@ export class Quiz extends Phaser.Scene {
     }
     for (const x of [this.verdict, this.verdictCoin, this.explain, this.source]) x.setVisible(false);
     this.clearButtons();
-    if (revive) this.doneBtn.set(t(this.locale, 'reviveContinue'), () => this.finish());
-    else if (this.closable()) this.doneBtn.set(t(this.locale, 'quizDone'), () => this.close());
+    if (revive) this.rightBtn.set(t(this.locale, 'reviveContinue'), () => this.finish());
+    else this.showWayOut();
     this.closeBtn.setVisible(this.closable());
-    this.ring('done');
+    this.ring(revive ? 'right' : 'left');
   }
 
   /** A revive's ❤️ (tries left, then used) or ⭐ (the streak so far); nothing in a break. */
@@ -340,20 +358,22 @@ export class Quiz extends Phaser.Scene {
     this.time.delayedCall(T.education.explainMinMs, () => button.hold(false));
   }
 
-  /** A level break: the verdict (+coins for a right answer), why, and Next. */
+  /** A level break: the verdict (+coins for a right answer), Why on top, and Return | Next below. */
   breakStep(correct) {
     const coins = this.lastAnswer?.coins ?? 0;
     this.say(correct && coins ? t(this.locale, 'quizRightCoins').replace('{n}', String(coins)) : t(this.locale, correct ? 'quizRight' : 'quizWrong'), correct, Boolean(correct && coins));
-    if (correct) this.whyBtn.set(t(this.locale, 'quizWhy'), () => this.showWhy());
+    this.showWayOut();
+    if (correct) this.topBtn.set(t(this.locale, 'quizWhy'), () => this.showWhy());
     else this.showWhy();
-    this.holdAfterWrong(this.nextBtn.set(t(this.locale, 'quizNext'), () => this.nextCard()), correct);
-    this.ring('next');
+    this.holdAfterWrong(this.rightBtn.set(t(this.locale, 'quizNext'), () => this.nextCard()), correct);
+    this.ring('right');
   }
 
   /** A revive: what the answer did (reviveStep's phase) and what comes next. */
   reviveStep(correct) {
     const phase = this.reviveState?.phase;
-    const go = (label, fn) => this.nextBtn.set(label, fn);
+    const go = (label, fn) => this.rightBtn.set(label, fn);
+    const why = () => this.topBtn.set(t(this.locale, 'quizWhy'), () => this.showWhy());
     if (phase === 'strikes') {
       this.say(t(this.locale, 'quizWrong'), false);
       this.showWhy();
@@ -368,24 +388,24 @@ export class Quiz extends Phaser.Scene {
         .setY(this.verdict.y + this.verdict.height + 10)
         .setText(t(this.locale, 'reviveChoice').replace('{n}', String(T.education.restoreStreak - 1)))
         .setVisible(true);
-      this.whyBtn.set(t(this.locale, 'reviveContinue'), () => this.decide('continue'));
+      this.leftBtn.set(t(this.locale, 'reviveContinue'), () => this.decide('continue')); // settle for the revive
       go(`⭐ ${t(this.locale, 'reviveStreakGo')}`, () => this.decide('streak'));
     } else if (phase === 'streak') {
       this.say(t(this.locale, 'quizRight'), true);
-      this.whyBtn.set(t(this.locale, 'quizWhy'), () => this.showWhy());
+      why();
       go(t(this.locale, 'quizNext'), () => this.nextCard());
     } else if (phase === 'restored') {
       this.say(t(this.locale, 'reviveRestored'), true);
-      this.whyBtn.set(t(this.locale, 'quizWhy'), () => this.showWhy());
+      why();
       go(t(this.locale, 'reviveContinue'), () => this.finish());
     } else {
       // 'revived': the first right answer with nothing to win back, or a miss in the streak.
       this.say(t(this.locale, correct ? 'reviveBack' : 'reviveStreakMiss'), correct);
-      if (correct) this.whyBtn.set(t(this.locale, 'quizWhy'), () => this.showWhy());
+      if (correct) why();
       else this.showWhy();
       this.holdAfterWrong(go(t(this.locale, 'reviveContinue'), () => this.finish()), correct);
     }
-    this.ring('next');
+    this.ring('right');
   }
 
   /** A revive's choice or Give up (Play.reviveEvent): the streak goes on to the next card; anything final ends the quiz. */
@@ -404,33 +424,36 @@ export class Quiz extends Phaser.Scene {
     this.play?.armResumeLockout?.(); // the closing tap must not also be the "Tap when ready"
   }
 
-  /** The smoke's look at any card answered wrong, its explanation and source showing; nothing reaches Play. */
-  preview(card) {
+  /**
+   * The smoke's look at any card, answered wrong (its explanation and source showing) or, with
+   * `right`, answered right (the paid verdict over the Why button); nothing reaches Play.
+   */
+  preview(card, right = false) {
     this.showCard(card, ['answer', 'w1', 'w2']);
     this.answered = true;
-    this.lastAnswer = null;
-    this.reveal(1, false);
-    this.source.setText(t(this.locale, 'quizSource').replace('{source}', cardSource(card))).setVisible(true); // as tall as it will be once audited
+    this.lastAnswer = right ? { coins: T.education.breakCoins } : null;
+    this.reveal(right ? 0 : 1, right);
+    if (!right) this.source.setText(t(this.locale, 'quizSource').replace('{source}', cardSource(card))).setVisible(true); // as tall as it will be once audited
     return this.fits();
   }
 
   /** The explanation (and, for an audited card, its sources) under the verdict. */
   showWhy() {
     if (!this.card || !this.answered) return;
-    if (this.whyBtn.shown && this.whyBtn.text.text === t(this.locale, 'quizWhy')) this.whyBtn.setShown(false);
+    this.topBtn.setShown(false); // Why has been answered
     this.explain.setY(this.verdict.y + this.verdict.height + 10).setText(this.text.explain).setVisible(true);
     const audited = auditState(this.card) === 'audited';
     this.source
       .setY(this.explain.y + this.explain.height + 10)
       .setText(audited ? t(this.locale, 'quizSource').replace('{source}', cardSource(this.card)) : '')
       .setVisible(audited);
-    this.ring('next');
+    this.ring('right');
   }
 
   /** Next card (the break's Next and Enter): once answered and not held. */
   next() {
     if (!this.card || !this.answered || !isTopOverlay(this)) return;
-    this.nextBtn.press();
+    this.rightBtn.press();
   }
 
   /** Whether the player may leave the quiz here (a level break's or a won run's bonus quiz always; a revive never). */
@@ -446,13 +469,15 @@ export class Quiz extends Phaser.Scene {
   }
 
   /**
-   * The text boxes of the card on show, for the smoke: the explanation (and source) must end above
-   * the bottom buttons, and the options inside the panel.
+   * The text boxes of the card on show, for the smoke: the last text (the source, the explanation or
+   * the verdict) must end above the buttons under it (the top button while it shows, else the
+   * bottom row), and the options inside the panel.
    */
   fits() {
     const below = this.source.visible ? this.source.y + this.source.height : this.explain.visible ? this.explain.y + this.explain.height : this.verdict.y + this.verdict.height;
     const last = this.options[2].box;
-    return { below, buttonsTop: this.buttonsTop, optionsBottom: last.y + last.height / 2, ok: below <= this.buttonsTop - 8 && this.header.y >= this.top + 50 };
+    const buttonsTop = this.topBtn.shown ? this.whyTop : this.rowTop;
+    return { below, buttonsTop, optionsBottom: last.y + last.height / 2, ok: below <= buttonsTop - 8 && this.header.y >= this.top + 50 };
   }
 
   close() {

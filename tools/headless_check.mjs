@@ -3682,7 +3682,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
           for (let i = 0; i < 40 && (await playState()) !== 'ready'; i += 1) await sleep(250);
         };
         const cardRec = (id) => evaluate(`JSON.stringify((JSON.parse(localStorage.getItem('flappyPoop.eduSrs') ?? '{}').cards ?? {})['${id}'] ?? null)`).then(JSON.parse);
-        const quizNow = () => evaluate(`(() => { const q = ${Q}; return JSON.stringify({ active: __flappy.scene.isActive('Quiz'), id: q.card?.id ?? null, deck: q.card?.deck ?? null, answered: q.answered, last: q.lastAnswer ?? null, next: q.nextBtn.shown, nextAlpha: q.nextBtn.g.alpha, verdict: q.verdict.visible ? q.verdict.text : null, kernel: q.verdictCoin.visible, kernelAfter: q.verdictCoin.x > q.verdict.x + q.verdict.width / 2, explain: q.explain.visible }); })()`).then(JSON.parse);
+        const quizNow = () => evaluate(`(() => { const q = ${Q}; return JSON.stringify({ active: __flappy.scene.isActive('Quiz'), id: q.card?.id ?? null, deck: q.card?.deck ?? null, answered: q.answered, last: q.lastAnswer ?? null, next: q.rightBtn.shown, nextAlpha: q.rightBtn.g.alpha, top: q.topBtn.shown ? q.topBtn.text.text : null, left: q.leftBtn.shown ? q.leftBtn.text.text : null, right: q.rightBtn.shown ? q.rightBtn.text.text : null, verdict: q.verdict.visible ? q.verdict.text : null, kernel: q.verdictCoin.visible, kernelAfter: q.verdictCoin.x > q.verdict.x + q.verdict.width / 2, explain: q.explain.visible }); })()`).then(JSON.parse);
 
         await evaluate(`localStorage.removeItem('flappyPoop.eduSrs'), ${play}.setEduUnlocked(true), ${play}.settings.set({ education: true }), true`);
         await home();
@@ -3711,6 +3711,13 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await sleep(200);
         ok((await evaluate(`${play}.state === 'paused' && ${play}.levelBreak && __flappy.scene.isActive('Quiz')`)) === true, 'a tap under the quiz neither continues the level nor closes the card');
 
+        // The buttons (plan 22, U2): with a card up only Return, bottom left; Space and Enter press nothing.
+        const [returnWant, whyWant, nextWant] = await Promise.all(['quizReturn', 'quizWhy', 'quizNext'].map(tx));
+        await evaluate(`${Q}.input.keyboard.emit('keydown-SPACE'), ${Q}.input.keyboard.emit('keydown-ENTER'), true`);
+        await sleep(200);
+        const keyed = await quizNow();
+        ok(q0.left === returnWant && q0.right === null && q0.top === null && keyed.active && !keyed.answered && keyed.id === q0.id, `an open card shows only ${q0.left}, bottom left; Space and Enter on it press nothing`);
+
         // Touch: the first option. The answer is saved to its card at once.
         await evaluate(`${Q}.options[0].zone.emit('pointerdown'), true`);
         await sleep(200);
@@ -3719,6 +3726,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         const verdictWant = q1.last?.correct ? (await tx('quizRightCoins')).replace('{n}', String(TT.education.breakCoins)) : await tx('quizWrong');
         ok(q1.answered && q1.last?.id === q0.id && r1?.seen === 1 && r1.right === (q1.last.correct ? 1 : 0) && q1.verdict === verdictWant && q1.next, `a tap answers ${q0.id} (${q1.last?.correct ? 'right' : 'wrong'}, ${Math.round(q1.last?.rtMs ?? -1)} ms): saved (seen ${r1?.seen}), "${q1.verdict}", Next shown`);
         if (!q1.last?.correct) ok(q1.explain && q1.nextAlpha < 1, 'a wrong answer shows the explanation at once and holds Next');
+        ok(q1.left === returnWant && q1.right === nextWant && q1.top === (q1.last?.correct ? whyWant : null), `after the answer: ${q1.top ?? 'no Why (the explanation shows)'} on top, ${q1.left} | ${q1.right} below`);
         await sleep(TT.education.explainMinMs + 200);
 
         // The keyboard: Enter is Next, 2 picks the second option.
@@ -3743,7 +3751,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         const q5 = await quizNow();
         const r5 = await cardRec(q4.id);
         const ringNext = await evaluate(`${Q}.focus.items[${Q}.focus.index]?.id ?? null`);
-        ok(q5.answered && q5.last?.id === q4.id && r5?.seen === 1 && ringNext === 'next', `the controller's A answers ${q4.id} (saved) and the ring moves to Next`);
+        ok(q5.answered && q5.last?.id === q4.id && r5?.seen === 1 && ringNext === 'right', `the controller's A answers ${q4.id} (saved) and the ring moves to Next`);
         await evaluate(`${play}.registry.set('padMode', false), ${Q}.focus.hide(), true`);
         await sleep(TT.education.explainMinMs + 200);
 
@@ -3764,8 +3772,8 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         ok((await evaluate(`${play}.effects.coins()`)) === c1 && !(await quizNow()).kernel, 'a wrong answer pays nothing and shows no kernel');
 
         // Every card in the bank, answered wrong with its explanation and source showing, fits the card.
-        const fit = await evaluate(`import('./src/questions.js').then(({ CARDS }) => { const q = ${Q}; const bad = []; for (const c of CARDS) { const f = q.preview(c); if (!f.ok) bad.push(c.id + ':' + Math.round(f.below) + '>' + Math.round(f.buttonsTop)); } return JSON.stringify({ n: CARDS.length, bad }); })`).then(JSON.parse);
-        ok(fit.bad.length === 0, `all ${fit.n} cards fit the quiz card answered wrong with explanation and source (${fit.bad.join(', ') || 'none over'})`);
+        const fit = await evaluate(`import('./src/questions.js').then(({ CARDS }) => { const q = ${Q}; const bad = []; for (const c of CARDS) { for (const right of [false, true]) { const f = q.preview(c, right); if (!f.ok) bad.push(c.id + (right ? ' right:' : ' wrong:') + Math.round(f.below) + '>' + Math.round(f.buttonsTop)); } } return JSON.stringify({ n: CARDS.length, bad }); })`).then(JSON.parse);
+        ok(fit.bad.length === 0, `all ${fit.n} cards fit the quiz card both ways: answered wrong with explanation and source above the bottom row, answered right with the verdict above Why (${fit.bad.join(', ') || 'none over'})`);
 
         // Esc closes it; the closing key cannot continue the level (the resume lockout).
         // (The lockout is read in the same tick as the Esc: it lasts only pauseResumeLockoutMs.)
@@ -3773,6 +3781,25 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await sleep(300);
         const after = await evaluate(`JSON.stringify({ quiz: __flappy.scene.isActive('Quiz'), state: ${play}.state, lb: ${play}.levelBreak, answered: ${play}.runQuiz.answered })`).then(JSON.parse);
         ok(!after.quiz && after.state === 'paused' && after.lb && locked && after.answered === 5, `Esc closes the quiz into the paused break with the resume lockout armed (${JSON.stringify({ ...after, locked })})`);
+
+        // Return closes it the same way (plan 22, U2), and "All caught up" leaves Return alone for Enter.
+        const reopen = async () => {
+          await sleep(400); // past the resume lockout
+          await evaluate(`(() => { const p = ${play}; const b = p.quizButtonBox; p.flap({ x: b.x, y: b.y }); return true; })()`);
+          await sleep(500);
+        };
+        await reopen();
+        const re0 = await quizNow();
+        const lockedReturn = await evaluate(`(() => { const p = ${play}; ${Q}.leftBtn.press(); return p.time.now < p.flapLockedUntil; })()`);
+        await sleep(300);
+        const re1 = await evaluate(`JSON.stringify({ quiz: __flappy.scene.isActive('Quiz'), state: ${play}.state, lb: Boolean(${play}.levelBreak) })`).then(JSON.parse);
+        ok(re0.active && re0.left === returnWant && !re1.quiz && re1.state === 'paused' && re1.lb && lockedReturn, `${returnWant} closes the quiz into the paused break with the resume lockout armed`);
+        await reopen();
+        await evaluate(`${Q}.showCaughtUp(), true`);
+        const cu = await quizNow();
+        await evaluate(`${Q}.input.keyboard.emit('keydown-ENTER'), true`);
+        await sleep(300);
+        ok(cu.left === returnWant && cu.right === null && cu.top === null && !(await evaluate(`__flappy.scene.isActive('Quiz')`)), `"All caught up" shows ${returnWant} alone, and Enter presses it`);
 
         // The pill is back, and the shop sells at level 2's prices (eduShopPrices), not the base ones.
         await sleep(400);
@@ -3813,7 +3840,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
           await evaluate(`(() => { const p = ${play}; p.graceLeftMs = 0; p.die(); return true; })()`);
           for (let i = 0; i < 40 && !(await evaluate(`__flappy.scene.isActive('Quiz') && Boolean(${Q}.card)`)); i += 1) await sleep(100);
         };
-        const view = () => evaluate(`(() => { const q = ${Q}; return JSON.stringify({ active: __flappy.scene.isActive('Quiz'), phase: q.reviveState?.phase ?? null, verdict: q.verdict.visible ? q.verdict.text : null, left: q.whyBtn.shown ? q.whyBtn.text.text : null, right: q.nextBtn.shown ? q.nextBtn.text.text : null, mid: q.doneBtn.shown ? q.doneBtn.text.text : null, status: q.status.text, header: q.header.text }); })()`).then(JSON.parse);
+        const view = () => evaluate(`(() => { const q = ${Q}; return JSON.stringify({ active: __flappy.scene.isActive('Quiz'), phase: q.reviveState?.phase ?? null, verdict: q.verdict.visible ? q.verdict.text : null, top: q.topBtn.shown ? q.topBtn.text.text : null, left: q.leftBtn.shown ? q.leftBtn.text.text : null, right: q.rightBtn.shown ? q.rightBtn.text.text : null, status: q.status.text, header: q.header.text }); })()`).then(JSON.parse);
         const answer = async (right) => {
           await evaluate(`(() => { const q = ${Q}; q.choose(${right} ? q.order.indexOf('answer') : q.order.findIndex((k) => k !== 'answer')); return true; })()`);
           await sleep(150);
@@ -3842,17 +3869,23 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         const before = await playNow();
         await crash();
         const v0 = await view();
-        ok(v0.active && v0.phase === 'strikes' && v0.mid === giveUp && v0.status === '❤️'.repeat(TT.education.strikes), `a crash opens the revive quiz after the tumble: ${v0.header}, ${v0.status}, Give up offered`);
+        ok(v0.active && v0.phase === 'strikes' && v0.left === giveUp && v0.right === null && v0.status === '❤️'.repeat(TT.education.strikes), `a crash opens the revive quiz after the tumble: ${v0.header}, ${v0.status}, Give up offered`);
         await evaluate(`${Q}.input.keyboard.emit('keydown-ESC'), true`);
         await sleep(200);
         ok((await view()).active, 'Esc does not close a revive quiz');
+        // Space is the flap key (plan 22, U2): pressed on a fresh revive card it must not give the run up.
+        await evaluate(`${Q}.input.keyboard.emit('keydown-SPACE'), ${Q}.input.keyboard.emit('keydown-ENTER'), true`);
+        await sleep(300);
+        const keyed = await view();
+        const keyedPlay = await playNow();
+        ok(keyed.active && keyed.phase === 'strikes' && keyed.left === giveUp && keyedPlay.state === 'respawn' && !keyedPlay.over, `Space and Enter on a fresh revive card press nothing: the run goes on (phase ${keyed.phase}, state ${keyedPlay.state})`);
         const w1 = await answer(false);
-        await press('nextBtn', held);
+        await press('rightBtn', held);
         const w2 = await answer(false);
-        await press('nextBtn', held);
+        await press('rightBtn', held);
         const w3 = await answer(false);
         ok(w1.phase === 'strikes' && w1.verdict === wrong && w2.phase === 'strikes' && w3.phase === 'over' && w3.verdict === over && w3.right === endRun, `three misses: ${w1.status} → ${w2.status} → ${w3.status}, "${w3.verdict}", ${w3.right}`);
-        await press('nextBtn', held);
+        await press('rightBtn', held);
         await sleep(TT.deathToOverMs + 400);
         const gone = await playNow();
         ok(gone.over && gone.state === 'dead' && gone.pipes === before.pipes && gone.score === 9, `End run: game over (Over up, state ${gone.state}), the field untouched (${gone.pipes} pipe parts), no penalty (score ${gone.score})`);
@@ -3864,12 +3897,12 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         const lost = await playNow();
         ok(lost.coins === 0 && lost.beans === 0 && lost.state === 'respawn' && lost.hold === 'quiz', `the crash takes the coins and beans at once (${lost.coins} / ${lost.beans}); the respawn holds for the quiz`);
         await answer(false);
-        await press('nextBtn', held);
+        await press('rightBtn', held);
         const c1 = await answer(true);
         const choiceWant = choice.replace('{n}', String(TT.education.restoreStreak - 1));
         ok(c1.phase === 'choice' && c1.verdict === back && c1.left === flyOn && c1.right === `⭐ ${goFor}`, `a right answer after a miss revives and offers the choice: "${c1.verdict}" [${c1.left}] [${c1.right}]`);
         ok((await evaluate(`${Q}.explain.text`)) === choiceWant, `the choice says how: "${choiceWant}"`);
-        await press('whyBtn');
+        await press('leftBtn');
         const r1 = await playNow();
         const pen = TT.education.revivePenaltyPerLevel;
         ok(!r1.quiz && r1.state === 'respawn' && r1.hold === 'tap' && r1.hint === tapReady && r1.score === 20 - pen && r1.coins === 0 && r1.beans === 0 && r1.revives === 1, `Fly on: revived at −${pen} (score ${r1.score}), coins and beans not back, "${r1.hint}" waiting`);
@@ -3884,13 +3917,13 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await startEdu(`p.score = 30; p.effects.addCoins(4); p.effects.addBean(); p.effects.addBean(); p.effects.applyProbiotic()`);
         await crash();
         await answer(true);
-        await press('nextBtn'); // ⭐ Go for it
+        await press('rightBtn'); // ⭐ Go for it
         const s1 = await view();
         await answer(true);
-        await press('nextBtn'); // Next
+        await press('rightBtn'); // Next
         const s3 = await answer(true);
-        ok(s1.phase === 'streak' && s1.status === '⭐' + '☆'.repeat(TT.education.restoreStreak - 1) && s3.phase === 'restored' && s3.verdict === restored && s3.right === flyOn, `the streak: ${s1.status} → "${s3.verdict}" (${s3.status})`);
-        await press('nextBtn');
+        ok(s1.phase === 'streak' && s1.status === '⭐' + '☆'.repeat(TT.education.restoreStreak - 1) && s3.phase === 'restored' && s3.verdict === restored && s3.right === flyOn && s3.left === null && s3.top === (await tx('quizWhy')), `the streak: ${s1.status} → "${s3.verdict}" (${s3.status})`);
+        await press('rightBtn');
         const r2 = await playNow();
         ok(r2.coins === 4 && r2.beans === 2 && r2.probiotic && r2.score === 30 - pen && r2.restores === 1 && r2.hold === 'tap', `restored: ${r2.coins} coins, ${r2.beans} beans, the probiotic back; the penalty still taken (score ${r2.score})`);
         await sleep(400);
@@ -3902,7 +3935,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await crash();
         const n1 = await answer(true);
         ok(n1.phase === 'revived' && n1.verdict === back && n1.right === flyOn && !n1.left?.startsWith?.('⭐'), `nothing to win back: "${n1.verdict}", straight to ${n1.right}`);
-        await press('nextBtn');
+        await press('rightBtn');
         ok((await playNow()).hold === 'tap', 'and the respawn waits for the tap');
 
         // The card is the pause (plan 22, F1): losing focus under the revive quiz pauses nothing.
@@ -3914,7 +3947,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         const bl = await playNow();
         ok(bl.state === 'respawn' && bl.hold === 'quiz' && bl.quiz && !(await banner()), `a blur under the revive quiz pauses nothing (state ${bl.state}, no PAUSED banner)`);
         await answer(true);
-        await press('whyBtn'); // Fly on
+        await press('leftBtn'); // Fly on
         const bl2 = await playNow();
         ok(!bl2.quiz && bl2.state === 'respawn' && bl2.hold === 'tap' && bl2.revives === 1, `and Fly on goes on as usual (state ${bl2.state}, hold ${bl2.hold})`);
 
@@ -3924,7 +3957,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await evaluate(`${play}.pausePlay(), true`);
         const pz0 = await playNow();
         await answer(true);
-        await press('whyBtn'); // Fly on
+        await press('leftBtn'); // Fly on
         const pz1 = await playNow();
         ok(pz0.state === 'paused' && pz1.state === 'paused' && !pz1.quiz && pz1.hold === 'tap' && pz1.revives === 1 && pz1.score === 20 - pen, `Fly on under a paused run settles the revive (hold ${pz1.hold}, score ${pz1.score}, revives ${pz1.revives})`);
         await sleep(400); // past the resume lockout
@@ -3947,7 +3980,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await startEdu('');
         await crash();
         await evaluate(`${play}.pausePlay(), true`);
-        await press('doneBtn'); // Give up
+        await press('leftBtn'); // Give up
         await sleep(TT.deathToOverMs + 400);
         const pg = await playNow();
         ok(pg.over && pg.state === 'dead' && !pg.quiz, `Give up under a paused run ends it (state ${pg.state})`);
@@ -3962,7 +3995,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         const hover = () => evaluate(`(() => { const p = ${play}; p.poop.body.setAllowGravity(false); p.poop.setVelocity(0, 0); p.poop.y = 640; return true; })()`);
         const flyOnAndTap = async () => {
           await answer(true); // nothing lost: revived at once
-          await press('nextBtn'); // Fly on
+          await press('rightBtn'); // Fly on
           await sleep(400); // past the resume lockout
           await evaluate(`${play}.flap(), true`); // Tap when ready
         };
@@ -4035,7 +4068,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         // Give up: the run ends at once.
         await startEdu('');
         await crash();
-        await press('doneBtn');
+        await press('leftBtn');
         await sleep(TT.deathToOverMs + 400);
         const g = await playNow();
         ok(g.over && g.state === 'dead' && !g.quiz, 'Give up ends the run');
@@ -4076,9 +4109,9 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         for (let i = 0; i < 40 && !(await evaluate(`__flappy.scene.isActive('Quiz') && Boolean(${Q}.card)`)); i += 1) await sleep(100);
         await evaluate(`(() => { const q = ${Q}; q.choose(q.order.findIndex((k) => k !== 'answer')); return true; })()`);
         await sleep(TT.education.explainMinMs + 200);
-        await evaluate(`${Q}.nextBtn.press(), true`);
+        await evaluate(`${Q}.rightBtn.press(), true`);
         await sleep(300);
-        await evaluate(`${Q}.doneBtn.press(), true`); // Give up
+        await evaluate(`${Q}.leftBtn.press(), true`); // Give up
         await sleep(TT.deathToOverMs + 500);
         const p1 = await panel();
         const note = await tx('eduNotSaved');
