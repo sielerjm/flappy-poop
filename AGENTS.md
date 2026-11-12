@@ -511,6 +511,20 @@ src/
                             IBS_WINS / WINDOW_DAYS / BREAK_DAYS / FOUR_OF_A_KIND,
                             levelCloseShave, winsInWindow, daysBetween,
                             nextDrawStreak. Fully unit-tested (tests/achievements.test.js).
+  questions.js              Education mode's question bank (plan 21), NO
+                            Phaser/DOM: DECKS (the LEVELS keys, then 'general'),
+                            CARDS ({ id, deck, q, answer, wrong: [w1, w2], explain,
+                            refs, retired?, zh? }; ids permanent, a wrong card is
+                            retired, never deleted), REFERENCES (numbered sources).
+                            The source of truth for the cards since 12 Nov; 70
+                            placeholder cards, all unaudited. tests/questions.test.js.
+  questionAudits.js         Who checked which card, and when: QUESTION_AUDITS
+                            ({ id: { by, on, hash, note? } }, written by
+                            tools/audit_questions.mjs between its BEGIN / END lines),
+                            cardHash (FNV-1a over the English facts: q, options,
+                            explain, refs; not deck, retired or zh), auditState
+                            ('audited' while the hash matches, 'stale' after an
+                            edit, 'unaudited'). A stale audit fails the tests.
   tournament.js             Tournament (🏅) logic, NO Phaser/DOM: createTournament
                             (seeded 2-, 4- or 8-slot bracket, byes; buildBracket
                             from tour.order), seedSlots / canReseed / reseed (swap
@@ -1603,6 +1617,12 @@ tools/
                             current local time, runs npm test, commits the stamp, pushes
                             main. Refuses a dirty tree or a non-main branch; --dry skips
                             commit + push.
+  audit_questions.mjs       The question bank's audits (plan 21): list (unaudited and
+                            stale cards), report [--out=f] (a markdown review sheet:
+                            the checklist, every card with its status and hash, the
+                            references and who cites them), mark <ids> --by="Name"
+                            [--note=…] [--on=YYYY-MM-DD], unmark <ids>. mark / unmark
+                            rewrite only src/questionAudits.js's block and read it back.
   headless_check.mjs        npm run smoke [url] [--list] [--only=a,b]: the checks run in
                             named sections (SECTIONS, in run order, each printing its check
                             count); --list shows them; --only runs those plus what they
