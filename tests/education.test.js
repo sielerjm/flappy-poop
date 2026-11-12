@@ -4,8 +4,9 @@ import assert from 'node:assert/strict';
 import { LEADERBOARD, TUNING as T } from '../src/config.js';
 import { createRng } from '../src/logic.js';
 import { CARDS, DECKS } from '../src/questions.js';
+import { COUNT_COLORS } from '../src/ui/countLine.js';
 import { EDU_ACHIEVEMENTS, eduRunFacts, evaluate } from '../src/achievements.js';
-import { cardSource, cardText, createEduStore, dueCount, eduShopPrices, optionText, gradeFor, masteryByDeck, newTally, pickCard, reviveSettled, reviveStart, reviveStep, schedule, shuffleOptions, tallyAnswer } from '../src/education.js';
+import { cardCounts, cardSource, cardText, createEduStore, dueCount, eduShopPrices, optionText, gradeFor, masteryByDeck, newTally, pickCard, reviveSettled, reviveStart, reviveStep, schedule, shuffleOptions, tallyAnswer } from '../src/education.js';
 
 const S = T.education.srs;
 const MIN = 60000;
@@ -146,6 +147,79 @@ test('pickCard: never a card of this session or a retired one; the last minGap c
   const old = CARDS.filter((c) => c.deck === 'stomach').slice(0, T.education.minGap + 1).map((c) => c.id);
   const p = pickCard({ context: 'break', level: 2, segment: 'stomach', now: NOW, recent: old, rng: always(0.99) });
   assert.ok(!old.slice(-T.education.minGap).includes(p.card.id), 'only the last minGap are held back');
+});
+
+// The counts on the level break's pill and the quiz card (plan 21, E2): new + learning + review.
+const countsSrs = {
+  'DU-01': reviewRec(DAY, NOW - 2 * DAY), // a review, due
+  'IL-01': reviewRec(10 * DAY, NOW - 5 * DAY), // a review, due
+  'CA-01': { ...reviewRec(0, NOW - MIN), phase: 'learning', step: 1, intervalMs: 0 }, // learning, due
+  'CO-01': reviewRec(10 * DAY, NOW + DAY, { lastAt: NOW - 9 * DAY }), // a review, not due: an early review, not counted
+  'ST-01': { ...reviewRec(0, NOW + MIN), phase: 'learning', step: 0, intervalMs: 0 }, // learning, not due yet: not counted
+};
+
+test('cardCounts: new cards the context offers, learning cards due, reviews due; nothing else', () => {
+  const live = CARDS.filter((c) => !c.retired);
+  const fresh = live.filter((c) => !countsSrs[c.id]);
+  const inDecks = (decks) => fresh.filter((c) => decks.includes(c.deck)).length;
+  assert.deepEqual(cardCounts(countsSrs, { context: 'break', segment: 'stomach', level: 2, now: NOW }), { new: inDecks(['stomach', 'general']), learning: 1, review: 2 }, "a break: the cleared segment's new cards and the general ones");
+  assert.deepEqual(cardCounts(countsSrs, { context: 'break', segment: 'ileum', level: 5, now: NOW }), { new: inDecks(['ileum', 'general']), learning: 1, review: 2 }, 'due cards count whatever their deck');
+  assert.deepEqual(cardCounts(countsSrs, { context: 'revive', level: 1, now: NOW }), { new: inDecks(['stomach', 'general']), learning: 1, review: 2 }, 'a revive on level 1');
+  assert.deepEqual(cardCounts(countsSrs, { context: 'revive', level: 3, now: NOW }), { new: inDecks(['stomach', 'duodenum', 'jejunum', 'general']), learning: 1, review: 2 }, 'a revive: the decks up to the level');
+  assert.deepEqual(cardCounts(countsSrs, { context: 'all', now: NOW }), { new: fresh.length, learning: 1, review: 2 }, 'all: every deck');
+  assert.deepEqual(cardCounts(countsSrs, { now: NOW }), cardCounts(countsSrs, { context: 'all', now: NOW }), 'all is the default');
+  const all = cardCounts(countsSrs, { context: 'all', now: NOW });
+  assert.equal(all.learning + all.review, dueCount(countsSrs, { now: NOW }), "learning + review is the 📚 switch's due count");
+  assert.equal(all.new + Object.keys(countsSrs).length, live.length, 'every live card is new or seen');
+  assert.deepEqual(cardCounts(countsSrs, { context: 'all', now: NOW + 2 * MIN }), { new: fresh.length, learning: 2, review: 2 }, 'a learning step comes due');
+  assert.deepEqual(cardCounts({}, { context: 'break', segment: 'stomach', now: NOW }), { new: live.filter((c) => ['stomach', 'general'].includes(c.deck)).length, learning: 0, review: 0 }, 'a new device');
+  // The quiz's earlier cards are left out, each from its own count.
+  const base = cardCounts(countsSrs, { context: 'break', segment: 'stomach', now: NOW });
+  const aNew = fresh.find((c) => c.deck === 'stomach').id;
+  assert.deepEqual(cardCounts(countsSrs, { context: 'break', segment: 'stomach', now: NOW, exclude: [aNew] }), { ...base, new: base.new - 1 });
+  assert.deepEqual(cardCounts(countsSrs, { context: 'break', segment: 'stomach', now: NOW, exclude: ['CA-01'] }), { ...base, learning: 0 });
+  assert.deepEqual(cardCounts(countsSrs, { context: 'break', segment: 'stomach', now: NOW, exclude: ['DU-01', 'IL-01', 'CO-01'] }), { ...base, review: 0 }, 'an excluded early review changes nothing');
+  // Retired cards never count.
+  const cards = [{ id: 'ST-01', deck: 'stomach' }, { id: 'ST-02', deck: 'stomach', retired: true }, { id: 'ST-03', deck: 'stomach', retired: true }, { id: 'ST-04', deck: 'stomach' }];
+  assert.deepEqual(cardCounts({ 'ST-03': reviewRec(DAY, NOW - DAY) }, { cards, context: 'all', now: NOW }), { new: 2, learning: 0, review: 0 });
+});
+
+test('cardCounts matches what pickCard hands out: with nothing in the recent gap, exactly those cards come before the first early review', () => {
+  for (const [context, level, segment] of [['break', 2, 'stomach'], ['break', 5, 'ileum'], ['break', 7, 'colon'], ['revive', 1, null], ['revive', 3, null], ['revive', 7, null]]) {
+    for (const srs of [countsSrs, {}]) {
+      const counts = cardCounts(srs, { context, level, segment, now: NOW });
+      const got = { new: 0, learning: 0, due: 0, early: 0 };
+      const exclude = [];
+      const rng = createRng(11);
+      for (;;) {
+        const p = pickCard({ srs, context, level, segment, now: NOW, exclude, recent: [], rng });
+        if (!p) break;
+        if (p.reason !== 'early') assert.equal(got.early, 0, `${context} ${level}: ${p.card.id} (${p.reason}) came after an early review`);
+        // The count with the quiz's earlier cards left out still holds the card being asked.
+        const left = cardCounts(srs, { context, level, segment, now: NOW, exclude });
+        const kind = { new: 'new', learning: 'learning', due: 'review' }[p.reason];
+        if (kind) assert.ok(left[kind] >= 1, `${context} ${level}: ${p.card.id} is asked as ${p.reason}, so that count holds it`);
+        else assert.deepEqual(left, { new: 0, learning: 0, review: 0 }, `${context} ${level}: an early review only once nothing is waiting`);
+        got[p.reason] += 1;
+        exclude.push(p.card.id);
+      }
+      assert.deepEqual(counts, { new: got.new, learning: got.learning, review: got.due }, `${context} level ${level} ${segment ?? ''}: the counts are the picks`);
+    }
+  }
+});
+
+test('the count colours (new blue, learning orange, review green) are readable on the dark card and differ from one another', () => {
+  const lum = (hex) => {
+    const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255).map((v) => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4));
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  };
+  const contrast = (a, b) => (Math.max(lum(a), lum(b)) + 0.05) / (Math.min(lum(a), lum(b)) + 0.05);
+  assert.deepEqual(Object.keys(COUNT_COLORS), ['new', 'learning', 'review']);
+  for (const [kind, color] of Object.entries(COUNT_COLORS)) {
+    assert.match(color, /^#[0-9a-f]{6}$/, kind);
+    for (const dark of ['#1a0b14', '#2a1522']) assert.ok(contrast(color, dark) >= 7, `${kind} ${color} on ${dark}: ${contrast(color, dark).toFixed(1)} : 1 (WCAG AAA is 7)`);
+  }
+  assert.equal(new Set(Object.values(COUNT_COLORS)).size, 3);
 });
 
 test("pickCard, browse (a test run): the segment's deck in id order, whatever is due; then general, then the other decks", () => {

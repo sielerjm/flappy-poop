@@ -212,6 +212,33 @@ export function pickCard({ cards = CARDS, srs = {}, context, level = 1, segment 
   return chooseCard({ ...args, blocked: gap }) ?? (gap.size > session.size ? chooseCard({ ...args, blocked: session }) : null);
 }
 
+/**
+ * What a quiz can still ask now, as pickCard would hand it out: { new, learning, review } (plan 21,
+ * E2; the numbers on the level break's pill and on the quiz card, as in Anki).
+ *   new       unseen cards the context offers: 'break', the cleared segment's deck and the general
+ *             one; 'revive', the decks up to `level` and the general one; 'all', every deck (the
+ *             ready screen's "Your cards").
+ *   learning  cards in the learning steps that are due now (a missed card comes back here).
+ *   review    learned cards that are due now.
+ * Due cards count whatever their deck, as pickCard asks them. Early reviews (seen, not due yet) are
+ * not counted: they are extra practice, offered once these run out. `exclude` (the quiz's cards
+ * already asked) and retired cards never count. The filters are chooseCard's: with nothing held
+ * back by the recent gap, picking until nothing is left hands out exactly these cards before the
+ * first early review (tests/education.test.js).
+ */
+export function cardCounts(srs = {}, { cards = CARDS, context = 'all', level = 1, segment = null, now = Date.now(), exclude = [] } = {}) {
+  const blocked = new Set(exclude);
+  const counts = { new: 0, learning: 0, review: 0 };
+  for (const c of cards) {
+    if (c.retired || blocked.has(c.id)) continue;
+    const rec = srs[c.id];
+    if (rec) {
+      if (rec.dueAt <= now) counts[rec.phase === 'learning' ? 'learning' : 'review'] += 1;
+    } else if (context === 'all' || c.deck === 'general' || (context === 'break' ? c.deck === segment : levelOfDeck(c.deck) <= level)) counts.new += 1;
+  }
+  return counts;
+}
+
 /** The three options in display order, as keys: a shuffle of 'answer', 'w1', 'w2' (w1 / w2 = card.wrong[0] / [1]). */
 export function shuffleOptions(rng = Math.random) {
   const keys = ['answer', 'w1', 'w2'];

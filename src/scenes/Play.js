@@ -123,11 +123,12 @@ import { createSubmitStore, createMergeStore, createRenameStore, createTournamen
 import { createButton } from '../ui/button.js';
 import { createToggle } from '../ui/toggle.js';
 import { createCoinText } from '../ui/coinText.js';
+import { createCountLine } from '../ui/countLine.js';
 import { openSavePanel, isSavePanelOpen, showAdoptedName, showBoardScores } from '../ui/savePanel.js';
 import { isTournamentPanelOpen, tournamentPadAction } from '../ui/tournamentPanel.js';
 import { bindPad } from '../input/pad.js';
 import { keyGroup, sameDevice, catchUpTier, catchUpDraws, versusAvailable, ghostPlacement, rivalMarker, respawnPose, respawnBlinkStart, courseDistance, VERSUS_EMOJI } from '../versus.js';
-import { createEduStore, dueCount, pickCard, shuffleOptions, gradeFor, schedule, eduShopPrices, reviveStart, reviveStep, reviveSettled, newTally, tallyAnswer, EDUCATION_EMOJI } from '../education.js';
+import { createEduStore, dueCount, cardCounts, pickCard, shuffleOptions, gradeFor, schedule, eduShopPrices, reviveStart, reviveStep, reviveSettled, newTally, tallyAnswer, EDUCATION_EMOJI } from '../education.js';
 
 const TEXT_STYLE = {
   fontFamily: 'sans-serif',
@@ -509,12 +510,14 @@ export class Play extends Phaser.Scene {
     this.bracketButton = this.bracketButtonBox ? createButton(this, this.bracketButtonBox, t(this.locale, 'tournamentBracketPill'), { ...TEXT_STYLE, fontSize: '36px', color: '#ffd700' }, { depth: 27 }).setVisible(false) : null;
     // An education run's 📚 Questions pill (plan 21), in the 🏅's row under the 💰 (single player only:
     // the two never meet). It opens the quiz on the segment just cleared (chromeIntent's 'quiz').
+    // It reads what is waiting there, as Anki does: "📚 5 · 2 · 8", new cards in blue, cards being
+    // learned in orange, reviews due in green (quizCountLine; refreshShopButton). With nothing
+    // waiting, and in a test run (whose quizzes ignore the schedule), it reads "📚 Quiz".
     this.quizButtonBox = this.match ? null : { ...bracketButtonLayout(this.col.width, GAME_HEIGHT, T, this.col.x), id: 'quiz' };
     this.quizButton = this.quizButtonBox ? createButton(this, this.quizButtonBox, `${EDUCATION_EMOJI} ${t(this.locale, 'quizPill')}`, { ...TEXT_STYLE, fontSize: '36px', color: '#f8a0c8' }, { depth: 27 }).setVisible(false) : null;
-    // The run's answers so far (plan 22, U4): a ❔ pill one row under the 📚, once the run has an
-    // answer. It reads the tally (answered, right, wrong) and opens the per-level view (openQuizStats).
-    this.quizStatsBox = this.quizButtonBox ? { ...this.quizButtonBox, id: 'quizStats', y: this.quizButtonBox.y + T.trayHitMin + 16 } : null;
-    this.quizStatsButton = this.quizStatsBox ? createButton(this, this.quizStatsBox, '', { ...TEXT_STYLE, fontSize: '32px' }, { depth: 27 }).setVisible(false) : null;
+    this.quizCountLine = this.quizButtonBox
+      ? createCountLine(this, this.quizButtonBox.x, this.quizButtonBox.y, { style: TEXT_STYLE, px: 36, sep: ' · ', glyph: EDUCATION_EMOJI, depth: 28, maxWidth: this.quizButtonBox.width - 24 }).setVisible(false)
+      : null;
 
     // The tray and the controller ring belong to the chrome owner: single player, or P1 in a match (P2 has neither).
     this.tray = !this.match || this.player === 1 ? createTray(this, { muted: isMuted(), col: this.col }) : null;
@@ -538,7 +541,6 @@ export class Play extends Phaser.Scene {
             { id: 'shop', box: this.shopButtonBox, depth: 27, visible: () => this.shopButtonShown(), activate: () => this.handleChrome('shop') },
             ...(this.bracketButtonBox ? [{ id: 'bracket', box: this.bracketButtonBox, depth: 27, visible: () => this.bracketButtonShown(), activate: () => this.openBracketPeek() }] : []),
             ...(this.quizButtonBox ? [{ id: 'quiz', box: this.quizButtonBox, depth: 27, visible: () => this.quizButtonShown(), activate: () => this.handleChrome('quiz') }] : []),
-            ...(this.quizStatsBox ? [{ id: 'quizStats', box: this.quizStatsBox, depth: 27, visible: () => this.quizStatsShown(), activate: () => this.openQuizStats() }] : []),
             { id: 'shopClose', box: this.shopBoxes.close, depth: 29, visible: () => this.shopOpen, activate: () => this.handleChrome('esc') },
             ...this.shopBoxes.rows.map((row) => ({ id: `shop:${row.id}`, box: row, depth: 28, visible: () => this.shopOpen, activate: () => this.shopBuy(row.id) })),
           ],
@@ -1114,10 +1116,6 @@ export class Play extends Phaser.Scene {
       this.handleChrome('quiz'); // the 📚 pill: questions, never a continue tap
       return;
     }
-    if (pointer && this.quizStatsShown() && Math.abs(pointer.x - this.quizStatsBox.x) <= this.quizStatsBox.width / 2 && Math.abs(pointer.y - this.quizStatsBox.y) <= this.quizStatsBox.height / 2) {
-      this.openQuizStats(); // the ❔ pill: a look at the run's answers, never a continue tap
-      return;
-    }
     if (pointer && this.bracketButtonShown() && Math.abs(pointer.x - this.bracketButtonBox.x) <= this.bracketButtonBox.width / 2 && Math.abs(pointer.y - this.bracketButtonBox.y) <= this.bracketButtonBox.height / 2) {
       this.openBracketPeek(); // a look at the bracket, never a ready tap
       return;
@@ -1548,8 +1546,7 @@ export class Play extends Phaser.Scene {
    */
   quizNext({ mode = 'break', exclude = [] } = {}) {
     const store = this.eduStore.load();
-    const level = Math.min(Math.max(1, this.level), LEVELS.length);
-    const segment = LEVELS[Math.max(0, (this.levelBreak ? this.level - 1 : this.level) - 1)]?.key ?? null;
+    const { level, segment } = this.quizScope();
     let pick;
     if (this.runIsTest) {
       const shown = this.registry.get('testQuizShown') ?? [];
@@ -1559,6 +1556,23 @@ export class Play extends Phaser.Scene {
       pick = pickCard({ srs: store.cards, context: mode === 'revive' ? 'revive' : 'break', level, segment, now: Date.now(), exclude, recent: store.recent, rng: Math.random });
     }
     return pick ? { ...pick, order: shuffleOptions(Math.random) } : null;
+  }
+
+  /** Where the run is, for a quiz's cards: the level, and the segment a break asks about (the level just cleared; in a revive or the bonus quiz, the one being flown). */
+  quizScope() {
+    const level = Math.min(Math.max(1, this.level), LEVELS.length);
+    return { level, segment: LEVELS[Math.max(0, (this.levelBreak ? this.level - 1 : this.level) - 1)]?.key ?? null };
+  }
+
+  /**
+   * What a quiz in `mode` can still ask now: { new, learning, review } (cardCounts), with the same
+   * level and segment quizNext picks by. `exclude` is the quiz's cards already asked. Null in a test
+   * run, whose quizzes walk the deck and ignore the schedule. The level break's pill and the quiz
+   * card's count line show it.
+   */
+  quizCounts({ mode = 'break', exclude = [] } = {}) {
+    if (this.runIsTest) return null;
+    return cardCounts(this.eduStore.load().cards, { context: mode === 'revive' ? 'revive' : 'break', ...this.quizScope(), now: Date.now(), exclude });
   }
 
   /**
@@ -3051,23 +3065,25 @@ export class Play extends Phaser.Scene {
     return Boolean(this.quizButton && this.runIsEducation && this.levelBreak && this.state === 'paused' && !this.shopOpen && !this.quizOpen);
   }
 
-  /** The ❔ answers pill: with the 📚 pill, once this run has an answer to show. */
-  quizStatsShown() {
-    return Boolean(this.quizStatsButton && this.quizButtonShown() && this.runQuiz.answered > 0);
+  /**
+   * The 📚 pill's label: the cards waiting for this break's quiz as three coloured counts
+   * ("📚 5 · 2 · 8": new, learning, review; quizCounts), or "📚 Quiz" when nothing is waiting (early
+   * reviews are still on offer) and in a test run.
+   */
+  refreshQuizButton() {
+    if (!this.quizButton) return;
+    const shown = this.quizButtonShown();
+    const counts = shown ? this.quizCounts({ mode: 'break' }) : null;
+    const waiting = Boolean(counts) && counts.new + counts.learning + counts.review > 0;
+    this.quizButton.setText(waiting ? '' : `${EDUCATION_EMOJI} ${t(this.locale, 'quizPill')}`).setVisible(shown);
+    if (waiting) this.quizCountLine.set(counts);
+    this.quizCountLine.setVisible(shown && waiting);
   }
 
-  /** The run's answers so far, read-only (the Quiz scene's 'stats' view): the totals and a row per level. From the ❔ pill. */
-  openQuizStats() {
-    if (!this.quizStatsShown()) return;
-    this.openQuiz('stats');
-  }
-
-  /** The shop pill (the corn kernel and the purse): shown by shopButtonShown, dimmed (trayAlpha) when the purse is empty. */
+  /** The shop pill (the corn kernel and the purse): shown by shopButtonShown, dimmed (trayAlpha) when the purse is empty. The 🏅 and 📚 pills under it are refreshed with it. */
   refreshShopButton() {
     this.refreshBracketButton();
-    this.quizButton?.setVisible(this.quizButtonShown());
-    const q = this.runQuiz;
-    this.quizStatsButton?.setText(`❔ ${q.answered}  ✅ ${q.right}  ❌ ${q.wrong}`).setVisible(this.quizStatsShown());
+    this.refreshQuizButton();
     if (!this.shopButton) return;
     const coins = this.purseCoins();
     this.shopButton.setText(countText(coins)).setAlpha(coins > 0 ? 1 : T.trayAlpha).setVisible(this.shopButtonShown());

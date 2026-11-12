@@ -3711,12 +3711,25 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         const pill = await evaluate(`JSON.stringify({ shown: ${play}.quizButtonShown(), visible: ${play}.quizButton.visible, y: ${play}.quizButtonBox.y, shopY: ${play}.shopButtonBox.y, hint: ${play}.levelHint.text, coins: ${play}.effects.coins() })`).then(JSON.parse);
         const hintWant = await tx(pill.coins > 0 ? 'levelQuizShopHint' : 'levelQuizHint');
         ok(pill.shown && pill.visible && pill.y > pill.shopY && pill.hint === hintWant, `the break shows the 📚 pill under the 💰 (y ${pill.y} > ${pill.shopY}) and the hint "${pill.hint}"`);
-        ok((await evaluate(`${play}.quizStatsShown() || ${play}.quizStatsButton.visible`)) === false, 'no ❔ answers pill before the run has an answer');
+        // What is waiting, on the pill (plan 21, E2), as in Anki: "📚 new · learning · review", each count
+        // in its own colour. A new device's first break has only new cards waiting: the stomach's and the
+        // general ones. The ❔ answers pill is gone: the tally sits in the quiz card.
+        const want0 = await evaluate(`Promise.all([import('./src/questions.js'), import('./src/ui/countLine.js')]).then(([q, c]) => JSON.stringify({ n: q.CARDS.filter((x) => !x.retired && (x.deck === 'stomach' || x.deck === 'general')).length, colors: Object.values(c.COUNT_COLORS), fill: Object.fromEntries(Object.entries(c.COUNT_COLORS).map(([k, v]) => [k, parseInt(v.slice(1), 16)])) }))`).then(JSON.parse);
+        const pillLine = await evaluate(`(() => { const p = ${play}; const l = p.quizCountLine; return JSON.stringify({ visible: l.visible, counts: l.counts, text: l.text, colors: l.colors, width: l.width, room: p.quizButtonBox.width - 24, label: p.quizButton.getText() }); })()`).then(JSON.parse);
+        ok(pillLine.visible && pillLine.text === `📚 ${want0.n} · 0 · 0` && pillLine.label === '' && JSON.stringify(pillLine.colors) === JSON.stringify(want0.colors) && new Set(pillLine.colors).size === 3 && pillLine.width <= pillLine.room + 0.5, `the pill reads what is waiting, "${pillLine.text}" (new, learning, review in ${pillLine.colors.join(', ')}), ${Math.round(pillLine.width)} px wide inside its ${pillLine.room} px`);
+        ok((await evaluate(`${play}.quizStatsButton === undefined && ${play}.quizStatsBox === undefined && ${play}.focus.indexOf('quizStats') < 0`)) === true, 'the break has no ❔ answers pill, on the screen or on the ring');
+        const lineNow = () => evaluate(`(() => { const q = ${Q}; const l = q.counts; return JSON.stringify({ visible: l.visible, counts: l.counts, text: l.text, underlined: l.underlined, fill: l.underlineFill, tally: q.tally.visible ? q.tally.text : null, tallyZone: q.tallyZone.visible, runCard: q.runCard.open }); })()`).then(JSON.parse);
         await evaluate(`(() => { const p = ${play}; const b = p.quizButtonBox; p.flap({ x: b.x, y: b.y }); return true; })()`);
         await sleep(500);
         const q0 = await quizNow();
         const hidden = await evaluate(`${play}.quizButton.visible`);
         ok(q0.active && ['stomach', 'general'].includes(q0.deck) && !q0.answered && !hidden, `a tap on the pill opens the card on a ${q0.deck} card (${q0.id}): the segment just cleared, or a general one; the pill hides under it`);
+        // The same counts on the card, in a row of their own above the bottom buttons; the card on show
+        // is counted and its kind underlined in its colour. No tally before the run's first answer.
+        const line0 = await lineNow();
+        const lineBox = await evaluate(`(() => { const q = ${Q}; return JSON.stringify({ rowTop: q.rowTop, leftTop: q.leftBtn.zone.y - q.leftBtn.zone.height / 2, panel: q.bottom - q.top }); })()`).then(JSON.parse);
+        ok(line0.visible && line0.text === `${want0.n}  +  0  +  0` && JSON.stringify(line0.counts) === JSON.stringify(pillLine.counts) && line0.underlined === 'new' && line0.fill === want0.fill.new, `the card shows the same counts, "${line0.text}", with the new count underlined in blue (this card is new)`);
+        ok(lineBox.panel === 1160 && lineBox.leftTop - lineBox.rowTop === 40 && !line0.tally && !line0.tallyZone, `the count line has a 40 px row of its own above the bottom buttons (the card is ${lineBox.panel} px tall); no tally before the run's first answer`);
 
         // A tap under the card does nothing: the break stays paused.
         await evaluate(`${play}.flap(), true`);
@@ -3738,6 +3751,8 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         const verdictWant = q1.last?.correct ? (await tx('quizRightCoins')).replace('{n}', String(TT.education.breakCoins)) : await tx('quizWrong');
         ok(q1.answered && q1.last?.id === q0.id && r1?.seen === 1 && r1.right === (q1.last.correct ? 1 : 0) && q1.verdict === verdictWant && q1.next, `a tap answers ${q0.id} (${q1.last?.correct ? 'right' : 'wrong'}, ${Math.round(q1.last?.rtMs ?? -1)} ms): saved (seen ${r1?.seen}), "${q1.verdict}", Next shown`);
         if (!q1.last?.correct) ok(q1.explain && q1.nextAlpha < 1, 'a wrong answer shows the explanation at once and holds Next');
+        const line1 = await lineNow();
+        ok(line1.tally === `✅ ${q1.last?.correct ? 1 : 0}  ❌ ${q1.last?.correct ? 0 : 1}` && line1.tallyZone, `the run's tally appears in the card's top row with the first answer: "${line1.tally}"`);
         ok(q1.left === returnWant && q1.right === nextWant && q1.top === (q1.last?.correct ? whyWant : null) && !q1.halo, `after the answer: ${q1.top ?? 'no Why (the explanation shows)'} on top, ${q1.left} | ${q1.right} below, and no halo in a break`);
         await sleep(TT.education.explainMinMs + 200);
 
@@ -3746,6 +3761,8 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await sleep(200);
         const q2 = await quizNow();
         ok(q2.id && q2.id !== q0.id && !q2.answered, `Enter moves to the next card (${q2.id}), never the same card in one quiz`);
+        const line2 = await lineNow();
+        ok(line2.counts.new === want0.n - 1 && line2.counts.learning === 0 && line2.counts.review === 0 && line2.underlined === 'new', `the counts leave the answered card out: "${line2.text}"`);
         await evaluate(`${Q}.input.keyboard.emit('keydown-TWO'), true`);
         await sleep(200);
         const q3 = await quizNow();
@@ -3813,27 +3830,67 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await sleep(300);
         ok(cu.left === returnWant && cu.right === null && cu.top === null && !(await evaluate(`__flappy.scene.isActive('Quiz')`)), `"All caught up" shows ${returnWant} alone, and Enter presses it`);
 
-        // The run's answers so far (plan 22, U4): the ❔ pill under the 📚 reads the tally and opens the per-level view.
-        await sleep(400); // past the resume lockout
-        const tally = await evaluate(`(() => { const p = ${play}; return JSON.stringify({ q: p.runQuiz, shown: p.quizStatsShown(), visible: p.quizStatsButton.visible, text: p.quizStatsButton.getText(), y: p.quizStatsBox.y, quizY: p.quizButtonBox.y }); })()`).then(JSON.parse);
-        const tq = tally.q;
-        ok(tally.shown && tally.visible && tally.y > tally.quizY && tally.text === `❔ ${tq.answered}  ✅ ${tq.right}  ❌ ${tq.wrong}` && tq.answered === 5 && tq.right + tq.wrong === 5 && JSON.stringify(tq.byLevel) === JSON.stringify({ 1: { answered: 5, right: tq.right, wrong: tq.wrong } }), `the ❔ pill sits under the 📚 and reads the run's tally: "${tally.text}", all of it level 1's`);
-        await evaluate(`(() => { const p = ${play}; const b = p.quizStatsBox; p.flap({ x: b.x, y: b.y }); return true; })()`);
-        await sleep(500);
-        const sv = await evaluate(`(() => { const q = ${Q}; const p = ${play}; return JSON.stringify({ active: __flappy.scene.isActive('Quiz'), mode: q.mode, header: q.header.text, totals: q.question.text, rows: (q.statRows ?? []).map((r) => [r.level, r.name.text, r.counts.text]), options: q.options.some((o) => o.text.visible || o.zone.visible), left: q.leftBtn.shown ? q.leftBtn.text.text : null, right: q.rightBtn.shown, close: q.closeBtn.visible, state: p.state, lb: Boolean(p.levelBreak), pill: p.quizStatsButton.visible }); })()`).then(JSON.parse);
+        // The run's answers so far (plan 22, U4; plan 21, E2): the tally sits in the quiz card's top row
+        // and a tap on it opens the "This run" card over the quiz, one line per level answered. Any tap,
+        // Esc or B closes it and the question under it is still up, its answer marked interrupted.
+        await reopen();
+        const tq = await evaluate(`JSON.stringify(${play}.runQuiz)`).then(JSON.parse);
+        const t0 = await lineNow();
+        const cardUp = await quizNow();
+        ok(tq.answered === 5 && tq.right + tq.wrong === 5 && JSON.stringify(tq.byLevel) === JSON.stringify({ 1: { answered: 5, right: tq.right, wrong: tq.wrong } }) && t0.tally === `✅ ${tq.right}  ❌ ${tq.wrong}` && t0.tallyZone && !t0.runCard, `the card's top row reads the run's tally: "${t0.tally}", all of it level 1's`);
         const statsTitle = await tx('quizStatsTitle');
-        ok(sv.active && sv.mode === 'stats' && sv.header === `❔ ${statsTitle}` && sv.totals === `❔ 5  ·  ✅ ${tq.right}  ·  ❌ ${tq.wrong}` && JSON.stringify(sv.rows) === JSON.stringify([[1, 'LV 1 · Stomach', `✅ ${tq.right}   ❌ ${tq.wrong}`]]) && !sv.options && sv.left === returnWant && !sv.right && sv.close && sv.state === 'paused' && sv.lb && !sv.pill, `a tap on it opens "${sv.header}": ${sv.totals}, then ${sv.rows.map((r) => `${r[1]} ${r[2]}`).join('; ')}; no card, ${sv.left} to leave`);
-        await evaluate(`${Q}.input.keyboard.emit('keydown-ONE'), true`); // nothing to answer here
-        await evaluate(`${Q}.leftBtn.press(), true`);
+        const tallyAt = await evaluate(`JSON.stringify({ x: ${Q}.tallyZone.x, y: ${Q}.tallyZone.y, w: ${Q}.tallyZone.width, h: ${Q}.tallyZone.height, idRight: ${Q}.cardId.getBounds().right, closeLeft: ${Q}.closeBtn.getBounds().left })`).then(JSON.parse);
+        ok(tallyAt.h >= 56 && tallyAt.x - tallyAt.w / 2 > tallyAt.idRight && tallyAt.x + tallyAt.w / 2 < tallyAt.closeLeft, `its tap box is thumb-sized (${tallyAt.w} × ${tallyAt.h}) and clear of the card's id and the ✕`);
+        const runCard = () => evaluate(`(() => { const q = ${Q}; return JSON.stringify({ open: q.runCard.open, title: q.runCard.title.text, body: q.runCard.body.text, quiz: __flappy.scene.isActive('Quiz'), id: q.card?.id ?? null, answered: q.answered, interrupted: q.interrupted }); })()`).then(JSON.parse);
+        await quizSounds.listen();
+        await tapAt(tallyAt.x, tallyAt.y);
+        const rc = await runCard();
+        const gap = await evaluate(`import('./src/i18n.js').then((m) => m.TALLY_GAP)`);
+        ok(rc.open && rc.title === statsTitle && rc.body === `LV 1 · Stomach${gap}✅ ${tq.right}${gap}❌ ${tq.wrong}` && rc.id === cardUp.id && !rc.answered && rc.interrupted, `a tap on it opens "${rc.title}": ${rc.body}; the question (${rc.id}) waits under it, marked interrupted`);
+        await evaluate(`${Q}.input.keyboard.emit('keydown-ONE'), ${Q}.input.keyboard.emit('keydown-ENTER'), ${Q}.input.keyboard.emit('keydown-SPACE'), true`);
+        await sleep(150);
+        const rcKeys = await runCard();
+        ok(rcKeys.open && !rcKeys.answered && rcKeys.id === cardUp.id, "with that card up the quiz's keys do nothing");
+        await evaluate(`${Q}.input.keyboard.emit('keydown-ESC'), true`);
+        await sleep(150);
+        const rcEsc = await runCard();
+        ok(!rcEsc.open && rcEsc.quiz && rcEsc.id === cardUp.id, 'Esc takes that card down and leaves the quiz up');
+        // The controller: A on the ringed tally opens it, A again (on anything) or B closes it.
+        await evaluate(`(() => { ${play}.registry.set('padMode', true); const q = ${Q}; q.focus.show(); q.ring('tally'); return true; })()`);
+        const ringOn = await evaluate(`${Q}.focus.items[${Q}.focus.index]?.id ?? null`);
+        await evaluate(`${play}.onPadAction('select'), true`);
+        const rcPad = await runCard();
+        await evaluate(`${play}.onPadAction('back'), true`);
+        const rcBack = await runCard();
+        await evaluate(`${play}.onPadAction('select'), true`);
+        await evaluate(`${Q}.ring('option0'), ${play}.onPadAction('select'), true`);
+        const rcSelect = await runCard();
+        ok(ringOn === 'tally' && rcPad.open && !rcBack.open && rcBack.quiz && !rcSelect.open && !rcSelect.answered, "the controller's ring reaches the tally: A opens the card, B closes it, and with it up A on an option only closes it");
+        await evaluate(`${play}.registry.set('padMode', false), ${Q}.focus.hide(), true`);
+        // A tap anywhere closes it, and is not a tap on what lies under it.
+        await tapAt(tallyAt.x, tallyAt.y);
+        const optAt = await evaluate(`JSON.stringify(${Q}.options[0].box)`).then(JSON.parse);
+        const rcOpen = await runCard();
+        await tapAt(optAt.x, optAt.y);
+        const rcTap = await runCard();
+        const sCard = await quizSounds.heard();
+        await quizSounds.unlisten();
+        ok(rcOpen.open && !rcTap.open && rcTap.quiz && !rcTap.answered && rcTap.id === cardUp.id, 'a tap anywhere closes it and answers nothing: the same question is still up');
+        ok(sCard.length === 0, `that card opens and closes in silence (${sCard.join(', ') || 'nothing played'})`);
+        await evaluate(`${Q}.input.keyboard.emit('keydown-ONE'), true`);
+        await sleep(200);
+        const afterCard = await quizNow();
+        ok(afterCard.answered && afterCard.last?.id === cardUp.id && afterCard.last.interrupted === true, 'the answer given after looking is saved as interrupted: its time is not used for the grade');
+        await sleep(TT.education.explainMinMs + 200);
+        await evaluate(`${Q}.leftBtn.press(), true`); // Return
         await sleep(300);
-        const svBack = await evaluate(`JSON.stringify({ quiz: __flappy.scene.isActive('Quiz'), state: ${play}.state, lb: Boolean(${play}.levelBreak), answered: ${play}.runQuiz.answered, pill: ${play}.quizStatsButton.visible })`).then(JSON.parse);
-        ok(!svBack.quiz && svBack.state === 'paused' && svBack.lb && svBack.answered === 5 && svBack.pill, `${returnWant} closes it back to the paused break; the tally is unchanged (${svBack.answered}) and the pill is back`);
+        const svBack = await evaluate(`JSON.stringify({ quiz: __flappy.scene.isActive('Quiz'), state: ${play}.state, lb: Boolean(${play}.levelBreak), answered: ${play}.runQuiz.answered })`).then(JSON.parse);
+        ok(!svBack.quiz && svBack.state === 'paused' && svBack.lb && svBack.answered === 6, `${returnWant} closes the quiz back to the paused break (${svBack.answered} answers so far)`);
 
         // The quiz's sounds (plan 22, U5): a book opens with it, a page turns for each next question, the
         // book shuts on leaving; a wrong answer sounds like the bad bacteria. A right answer in a break
         // pays a coin and makes the coin's sound alone (plan 21, E1: the ding no longer plays with it;
-        // a revive's and the bonus quiz's right answers, which pay nothing, still ding). The ❔ view
-        // makes no sound.
+        // a revive's and the bonus quiz's right answers, which pay nothing, still ding).
         const { listen, heard, unlisten } = quizSounds;
         const loaded = await evaluate(`JSON.stringify(['book-open', 'book-flip', 'book-close', 'sparkle'].map((k) => __flappy.cache.audio.exists(k)))`).then(JSON.parse);
         ok(loaded.every(Boolean), `Boot loaded the four quiz sounds (${loaded.join(', ')})`);
@@ -3857,14 +3914,36 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await sleep(300);
         const sClose = await heard();
         ok(sClose.join() === 'sample:book-close' && !(await evaluate(`__flappy.scene.isActive('Quiz')`)), `Return shuts the book (${sClose.join(', ')})`);
-        await sleep(400); // past the resume lockout
-        await evaluate(`${play}.openQuizStats(), true`);
-        await sleep(400);
-        await evaluate(`${Q}.leftBtn.press(), true`);
-        await sleep(300);
-        const sStats = await heard();
-        ok(sStats.length === 0, `the ❔ answers view opens and closes in silence (${sStats.join(', ') || 'nothing played'})`);
         await unlisten();
+
+        // Each kind of card underlines its own count (plan 21, E2). A store where every stomach and
+        // general card has been seen: one in the learning steps and due, one learned and due, the rest
+        // not due yet. The break's quiz asks the learning card, then the review, then an early review.
+        await sleep(400); // past the resume lockout
+        const crafted = await evaluate(
+          `Promise.all([import('./src/education.js'), import('./src/questions.js')]).then(([e, q]) => { const now = Date.now(); const near = q.CARDS.filter((c) => !c.retired && (c.deck === 'stomach' || c.deck === 'general')); const cards = {}; near.forEach((c, i) => { cards[c.id] = i === 0 ? e.schedule(null, 'again', now - 20 * 60000) : i === 1 ? e.schedule(null, 'easy', now - 30 * 86400000) : e.schedule(null, 'easy', now); }); localStorage.setItem('flappyPoop.eduSrs', JSON.stringify({ v: 1, cards, recent: [], counters: {}, badges: {} })); const p = ${play}; p.refreshShopButton(); const l = p.quizCountLine; return JSON.stringify({ learning: near[0].id, review: near[1].id, visible: l.visible, text: l.text, label: p.quizButton.getText() }); })`,
+        ).then(JSON.parse);
+        ok(crafted.visible && crafted.text === '📚 0 · 1 · 1' && crafted.label === '', `with one card being learned and one review due, the pill reads "${crafted.text}"`);
+        await reopen();
+        const kindNow = async () => ({ ...(await lineNow()), id: (await quizNow()).id, reason: await evaluate(`${Q}.reason`) });
+        const answerRight = async () => {
+          await evaluate(`(() => { const q = ${Q}; q.choose(q.order.indexOf('answer')); return true; })()`);
+          await sleep(150);
+          await evaluate(`${Q}.rightBtn.press(), true`); // Next
+          await sleep(200);
+        };
+        const k1 = await kindNow();
+        await answerRight();
+        const k2 = await kindNow();
+        await answerRight();
+        const k3 = await kindNow();
+        ok(k1.id === crafted.learning && k1.reason === 'learning' && k1.text === '0  +  1  +  1' && k1.underlined === 'learning' && k1.fill === want0.fill.learning, `a card being learned underlines the learning count in orange: "${k1.text}" (${k1.id})`);
+        ok(k2.id === crafted.review && k2.reason === 'due' && k2.text === '0  +  0  +  1' && k2.underlined === 'review' && k2.fill === want0.fill.review, `a review due underlines the review count in green: "${k2.text}" (${k2.id})`);
+        ok(k3.reason === 'early' && k3.text === '0  +  0  +  0' && k3.underlined === null && k3.fill === null && k3.visible, `an early review underlines nothing: "${k3.text}" (${k3.id})`);
+        await evaluate(`${Q}.leftBtn.press(), true`); // Return
+        await sleep(300);
+        const idle = await evaluate(`(() => { const p = ${play}; return JSON.stringify({ line: p.quizCountLine.visible, label: p.quizButton.getText(), shown: p.quizButton.visible }); })()`).then(JSON.parse);
+        ok(!idle.line && idle.shown && idle.label === `📚 ${await tx('quizPill')}`, `with nothing waiting the pill reads "${idle.label}" (early reviews are still on offer)`);
 
         // The pill is back, and the shop sells at level 2's prices (eduShopPrices), not the base ones.
         await sleep(400);
@@ -3878,7 +3957,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await home();
         const base = await evaluate(`import('./src/config.js').then((c) => JSON.stringify(${play}.shopPrices()) === JSON.stringify(c.TUNING.shop.prices))`);
         ok(base, 'outside an education run the shop keeps its base prices');
-        // Nor does a normal run's break show the ❔ pill or the 📚, whatever its tally holds.
+        // Nor does a normal run's break show the 📚 pill or its counts, whatever its tally holds.
         for (let attempt = 0; attempt < 3 && (await playState()) !== 'playing'; attempt += 1) {
           for (let i = 0; i < 20 && (await playState()) !== 'ready'; i += 1) await sleep(100);
           await evaluate(`${play}.flap(), true`);
@@ -3886,8 +3965,8 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         }
         await evaluate(`(() => { const p = ${play}; p.poop.body.setAllowGravity(false); p.poop.setVelocity(0, 0); p.poop.y = 640; p.graceLeftMs = 1e9; p.runQuiz = { ...p.runQuiz, answered: 2, right: 1, wrong: 1 }; p.onFinishCrossed(); return true; })()`);
         for (let i = 0; i < 40 && !(await evaluate(`Boolean(${play}.levelBreak) && ${play}.state === 'paused'`)); i += 1) await sleep(100);
-        const plain = await evaluate(`(() => { const p = ${play}; p.refreshShopButton(); return JSON.stringify({ edu: p.runIsEducation, lb: Boolean(p.levelBreak), shop: p.shopButtonShown(), stats: p.quizStatsShown() || p.quizStatsButton.visible, quiz: p.quizButtonShown() || p.quizButton.visible }); })()`).then(JSON.parse);
-        ok(!plain.edu && plain.lb && plain.shop && !plain.stats && !plain.quiz, `a normal run's level break shows the shop pill, and neither the 📚 pill nor the ❔ answers pill (${JSON.stringify(plain)})`);
+        const plain = await evaluate(`(() => { const p = ${play}; p.refreshShopButton(); return JSON.stringify({ edu: p.runIsEducation, lb: Boolean(p.levelBreak), shop: p.shopButtonShown(), counts: p.quizCountLine.visible, quiz: p.quizButtonShown() || p.quizButton.visible }); })()`).then(JSON.parse);
+        ok(!plain.edu && plain.lb && plain.shop && !plain.counts && !plain.quiz, `a normal run's level break shows the shop pill, and neither the 📚 pill nor its counts (${JSON.stringify(plain)})`);
         await home();
       }
     });
@@ -4193,12 +4272,21 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await crash();
         const normal = await cardNow();
         ok(normal?.deck === 'stomach', `a normal revive asks what is due (${normal?.id})`);
+        // The revive card's count line (plan 21, E2): every stomach card is in the learning steps and
+        // due, and level 1 offers the general cards as new; the card on show is a learning one.
+        const reviveLine = await evaluate(`Promise.all([import('./src/questions.js'), import('./src/ui/countLine.js')]).then(([q, c]) => { const l = ${Q}.counts; return JSON.stringify({ visible: l.visible, text: l.text, underlined: l.underlined, fill: l.underlineFill, orange: parseInt(c.COUNT_COLORS.learning.slice(1), 16), general: q.CARDS.filter((x) => !x.retired && x.deck === 'general').length, tally: ${Q}.tally.visible }); })`).then(JSON.parse);
+        ok(reviveLine.visible && reviveLine.text === `${reviveLine.general}  +  ${decks.stomach.length}  +  0` && reviveLine.underlined === 'learning' && reviveLine.fill === reviveLine.orange && !reviveLine.tally, `a revive's card shows what it can ask, "${reviveLine.text}", the learning count underlined in orange; no tally before the run's first answer`);
+        await answer(false);
+        const reviveTally = await evaluate(`${Q}.tally.visible ? ${Q}.tally.text : null`);
+        ok(reviveTally === '✅ 0  ❌ 1', `and the tally appears in a revive too, with the first answer ("${reviveTally}")`);
+        await storeDue(); // that answer was saved (a normal run): put the store back for the test run below
         await evaluate(`(() => { const p = ${play}; p.setTestMode(true); p.setTestSettings({ startLevel: 5, invincible: false }); p.registry.set('testQuizShown', []); return true; })()`);
         await startEdu('');
         const testRun = await evaluate(`JSON.stringify({ test: ${play}.runIsTest, edu: ${play}.runIsEducation, level: ${play}.level })`).then(JSON.parse);
         await crash();
         const t5 = await cardNow();
         ok(testRun.test && testRun.edu && testRun.level === 5 && t5?.id === decks.caecum[0], `a test run started on level ${testRun.level} asks level 5's first card in its revive (${t5?.id}, ${t5?.deck})`);
+        ok((await evaluate(`${Q}.counts.visible`)) === false, "a test run's quiz, which ignores the schedule, shows no count line");
         await answer(true);
         // The break after a 🏁 skip asks the cleared level's deck, carrying on after the card just shown.
         await startEdu(`p.skipToFinish()`);
@@ -4207,6 +4295,8 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         for (let i = 0; i < 40 && !(await evaluate(`__flappy.scene.isActive('Quiz') && Boolean(${Q}.card)`)); i += 1) await sleep(100);
         const brk5 = await cardNow();
         ok(brk5?.id === decks.caecum[1], `after a 🏁 skip the break quiz asks the cleared level's deck, carrying on (${brk5?.id}, ${brk5?.deck})`);
+        const testPill = await evaluate(`(() => { const p = ${play}; return JSON.stringify({ label: p.quizButton.getText(), line: p.quizCountLine.visible, card: ${Q}.counts.visible }); })()`).then(JSON.parse);
+        ok(testPill.label === `📚 ${await tx('quizPill')}` && !testPill.line && !testPill.card, `a test run's pill reads "${testPill.label}" with no counts, and its break quiz shows no count line`);
         await answer(true);
         ok((await evaluate(`localStorage.getItem('flappyPoop.eduSrs')`)) === dueStore, "a test run's answers leave the stored cards as they were");
         await evaluate(`(() => { const p = ${play}; __flappy.scene.stop('Quiz'); p.setTestSettings({ startLevel: 1 }); p.setTestMode(false); p.registry.set('testQuizShown', []); localStorage.removeItem('flappyPoop.eduSrs'); return true; })()`);

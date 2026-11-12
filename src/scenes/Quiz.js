@@ -2,21 +2,29 @@ import { GAME_HEIGHT, LEVELS, TUNING as T } from '../config.js';
 import { canRestart, chromeIntent } from '../logic.js';
 import { createFocus, pressable } from '../ui/focus.js';
 import { createRectGlow } from '../ui/glow.js';
+import { createCountLine } from '../ui/countLine.js';
+import { createInfoCard } from '../ui/infoCard.js';
 import { isTopOverlay } from '../ui/overlayStack.js';
-import { t, levelLabel } from '../i18n.js';
+import { t, tallyLines } from '../i18n.js';
 import { cardText, optionText, cardSource, EDUCATION_EMOJI } from '../education.js';
 import { auditState } from '../questionAudits.js';
 import { sfx } from '../sound.js';
 
 const STYLE = { fontFamily: 'sans-serif', fontStyle: 'bold', color: '#ffffff', align: 'center' };
 const MUTED = { ...STYLE, fontStyle: 'normal', color: '#c9b8dc' };
-/** The card: a 640 × 1120 panel; text wraps at TEXT_W; option boxes are TEXT_W wide and at least OPTION_MIN_H tall. */
-const PANEL = { width: 640, height: 1120 };
+/**
+ * The card: a 640 × 1160 panel; text wraps at TEXT_W; option boxes are TEXT_W wide and at least
+ * OPTION_MIN_H tall. (It was 1120 tall: the 40 px more are the count line's row, COUNT_ROW, above
+ * the bottom buttons, so the card's text has the room it always had.)
+ */
+const PANEL = { width: 640, height: 1160 };
 const TEXT_W = 560;
 const OPTION_MIN_H = 92;
 const BUTTON = { width: 250, height: 88 };
 const WIDE_BUTTON = 540; // the top button (Why): edge to edge with the bottom row (two 250 px buttons, 40 px apart)
-const BUTTON_GAP = 12; // px between the top button and the bottom row
+const BUTTON_GAP = 12; // px between the top button and the count line's row
+const COUNT_ROW = 40; // px: the count line's row (new + learning + review), directly above the bottom row
+const TALLY_HIT = { width: 180, height: 56 }; // the run tally's tap box in the card's top row
 const HALO_PX = 24; // px a revive's halo reaches past its button (inside the card's border)
 const COIN_PX = 36; // the corn kernel after a paid verdict
 /** Option fills: waiting, the right answer, the wrong one picked, the other wrong one. */
@@ -33,11 +41,20 @@ const BAD = '#ff8da8';
  * Sounds (plan 22): a book opens with the quiz, a page turns for each next question, and the book
  * shuts when the quiz is left; a right answer dings like a pipe passed, a wrong one sounds like the
  * bad bacteria, and the answer that wins everything back sparkles. An answer that pays a coin (a
- * level break's) makes the coin's sound alone, with no ding. The answers view is silent.
+ * level break's) makes the coin's sound alone, with no ding.
  * A revive's card ignores pointer taps for retryLockoutMs after it opens (tapLocked).
  * Buttons: a full-width Why on top, and a bottom row whose right button is the way forward (Next,
  * Fly on, Go for it, End run) and whose left button is the way out (Return; in a revive, Give up or
  * the choice's Fly on).
+ * What is waiting (plan 21, E2), as in Anki: a line of three counts in a row of its own directly
+ * above the bottom buttons, "5 + 2 + 8": new cards (blue), cards being learned or missed (orange)
+ * and reviews due (green) that this quiz can still ask, the card on show included and its kind
+ * underlined (Play.quizCounts; refreshCounts). Hidden in a test run, whose quizzes ignore the schedule.
+ * The run's tally: "✅ 5  ❌ 0" in the top row between the card's id and the ✕ / ❤️ corner, once the
+ * run has an answer (never in the bonus quiz, whose answers are not tallied). A tap on it, or A on
+ * the ring, opens the "This run" card: one line per level answered (an info card over the quiz;
+ * toggleRunCard). Any tap, Esc or B closes it and the quiz is as it was; while it is up the quiz's
+ * keys do nothing, and a question left waiting under it is marked interrupted.
  * Modes:
  *   'break'  a level break: questions about the segment just cleared, +coins for a right answer;
  *            Return / ✕ / Esc / B close it, back to the break.
@@ -48,8 +65,6 @@ const BAD = '#ff8da8';
  *            crash took something, offers the ⭐ streak (education.restoreStreak in a row, the first
  *            included) to win it back. Give up ends the run. It cannot be closed: it ends itself
  *            (finish), and Play settles the outcome when it is down (reviveDone).
- *   'stats'  the run's answers so far (plan 22), read-only, from the ❔ pill in a level break: the
- *            totals and one row per level answered (showStats). No card; closed like a break's.
  */
 export class Quiz extends Phaser.Scene {
   constructor() {
@@ -89,6 +104,17 @@ export class Quiz extends Phaser.Scene {
       .setOrigin(0.5)
       .setInteractive({ useHandCursor: true })
       .on('pointerdown', () => this.close());
+    // The run's tally, in the top row between the id and the ✕ / ❤️ corner (refreshTally). It opens
+    // the "This run" card on the release: the card's dim closes on a release too, so a press that
+    // opened it would shut it again as the finger lifts.
+    this.tally = this.add.text(cx, this.top + 32, '', { ...STYLE, fontSize: '24px' }).setOrigin(0.5).setVisible(false);
+    this.tallyZone = this.add
+      .zone(cx, this.top + 32, TALLY_HIT.width, TALLY_HIT.height)
+      .setInteractive({ useHandCursor: true })
+      .setVisible(false)
+      .on('pointerup', (pointer) => {
+        if (!this.tapLocked(pointer)) this.toggleRunCard();
+      });
     this.question = this.add.text(cx, this.top + 112, '', { ...STYLE, fontSize: '32px', lineSpacing: 6, wordWrap: { width: TEXT_W, useAdvancedWrap: true } }).setOrigin(0.5, 0);
     this.options = [0, 1, 2].map((i) => this.makeOption(i));
     this.verdict = this.add.text(cx, 0, '', { ...STYLE, fontSize: '32px', wordWrap: { width: TEXT_W, useAdvancedWrap: true } }).setOrigin(0.5, 0);
@@ -100,7 +126,10 @@ export class Quiz extends Phaser.Scene {
     // two on the bottom row never overlap, so a second tap on the way forward cannot land on the
     // way out (Give up) of the next card.
     const rowY = this.bottom - 24 - BUTTON.height / 2;
-    const topY = rowY - BUTTON.height - BUTTON_GAP;
+    const topY = rowY - BUTTON.height - BUTTON_GAP - COUNT_ROW;
+    // What is waiting: the count line, in its own row directly above the bottom buttons (the same
+    // place whatever the card shows; Why sits above it).
+    this.counts = createCountLine(this, cx, rowY - BUTTON.height / 2 - 24, { px: 28, sep: '  +  ' }).setVisible(false);
     // A revive's way forward glows (the game-over panel's halo): behind the right button, while it
     // shows and can be pressed (refreshHalo). A break's buttons never glow.
     this.halo = createRectGlow(this, cx + 145, rowY, { key: 'quiz-halo', width: BUTTON.width, height: BUTTON.height, radius: 18, pad: HALO_PX }).setVisible(false);
@@ -108,7 +137,7 @@ export class Quiz extends Phaser.Scene {
     this.topBtn = this.makeButton(cx, topY, WIDE_BUTTON);
     this.leftBtn = this.makeButton(cx - 145, rowY);
     this.rightBtn = this.makeButton(cx + 145, rowY);
-    this.rowTop = rowY - BUTTON.height / 2; // the explanation ends above the bottom row
+    this.rowTop = rowY - BUTTON.height / 2 - COUNT_ROW; // the explanation ends above the count line's row
     this.whyTop = topY - BUTTON.height / 2; // and the verdict above the top button while it shows
 
     const kb = this.input.keyboard;
@@ -130,55 +159,63 @@ export class Quiz extends Phaser.Scene {
       this.play?.onQuizClosed?.(this.mode);
     });
 
+    // The "This run" card (the tally's): an info card over everything here, the ring included.
+    this.runCard = createInfoCard(this, { x: cx, y: cy, width: 520 });
+    // With that card up, A on any ringed item only takes it down (as a tap anywhere does).
+    const underCard = (item) => ({ ...item, activate: () => (this.runCard.open ? this.runCard.hide() : item.activate()) });
     this.focus = createFocus(this, T, {
       items: [
         ...this.options.map((o, i) => pressable(`option${i}`, o.zone)),
         pressable('top', this.topBtn.zone),
         pressable('left', this.leftBtn.zone),
         pressable('right', this.rightBtn.zone),
+        pressable('tally', this.tallyZone, { event: 'pointerup' }),
         pressable('close', this.closeBtn),
-      ],
+      ].map(underCard),
     });
-    if (this.mode === 'stats') this.showStats();
-    else this.nextCard();
+    this.nextCard();
     this.focus.show(); // only under a controller (registry padMode)
   }
 
+  /** The run's tally in the top row: "✅ right  ❌ wrong" from Play's runQuiz, once the run has an answer; never in the bonus quiz (practice: not tallied). */
+  refreshTally() {
+    const q = this.play?.runQuiz;
+    const shown = this.mode !== 'bonus' && (q?.answered ?? 0) > 0;
+    this.tally.setText(shown ? `✅ ${q.right}  ❌ ${q.wrong}` : '').setVisible(shown);
+    this.tallyZone.setVisible(shown);
+  }
+
   /**
-   * The run's answers so far (mode 'stats'), read-only: ❔ answered · ✅ right · ❌ wrong, then one
-   * row per level answered ("LV 2 · Duodenum", its ✅ and ❌). Play's runQuiz holds them
-   * (tallyAnswer). Return, ✕, Esc and B close it, back to the break.
+   * The "This run" card: the run's answers so far, one line per level answered (tallyLines). Opened
+   * by the tally (a tap, or A on the ring), closed by any tap, Esc, B or the same press again. A
+   * question waiting for its answer under it is marked interrupted: its time is not used for the
+   * grade, as for a hidden page.
    */
-  showStats() {
-    const q = this.play?.runQuiz ?? {};
-    this.card = null;
-    this.answered = true;
-    this.header.setText(`❔ ${t(this.locale, 'quizStatsTitle')}`);
-    this.cardId.setText('');
-    this.status.setText('');
-    this.question.setY(this.header.y + this.header.height + 26).setText(`❔ ${q.answered ?? 0}  ·  ✅ ${q.right ?? 0}  ·  ❌ ${q.wrong ?? 0}`).setVisible(true);
-    for (const o of this.options) {
-      o.g.setVisible(false);
-      o.text.setVisible(false);
-      o.mark.setVisible(false);
-      o.zone.setVisible(false);
+  toggleRunCard() {
+    if (!isTopOverlay(this) || this.finishing) return;
+    if (this.runCard.open) {
+      this.runCard.hide();
+      return;
     }
-    for (const x of [this.verdict, this.verdictCoin, this.explain, this.source]) x.setVisible(false);
-    const left = this.cx - TEXT_W / 2 + 12;
-    const right = this.cx + TEXT_W / 2 - 12;
-    let y = this.question.y + this.question.height + 48;
-    this.statRows = [];
-    for (const [lv, row] of Object.entries(q.byLevel ?? {}).sort((a, b) => Number(a[0]) - Number(b[0]))) {
-      const n = Number(lv);
-      const name = this.add.text(left, y, `${levelLabel(this.locale, n)} · ${t(this.locale, `level.${LEVELS[n - 1]?.key}`)}`, { ...STYLE, fontSize: '30px', align: 'left' }).setOrigin(0, 0.5);
-      const counts = this.add.text(right, y, `✅ ${row.right}   ❌ ${row.wrong}`, { ...STYLE, fontSize: '30px', align: 'right' }).setOrigin(1, 0.5);
-      this.statRows.push({ level: n, name, counts });
-      y += 56;
+    if (!this.tallyZone.visible) return;
+    if (this.card && !this.answered) this.interrupted = true;
+    this.runCard.show({ glyph: EDUCATION_EMOJI, title: t(this.locale, 'quizStatsTitle'), lines: tallyLines(this.locale, this.play?.runQuiz, LEVELS) });
+  }
+
+  /**
+   * What is waiting, on the count line: the cards this quiz can still ask (Play.quizCounts), the
+   * card on show included and the quiz's earlier cards left out; the kind of the card on show is
+   * underlined (an early review is none of the three: no underline). No line in a test run.
+   */
+  refreshCounts() {
+    const exclude = this.card ? this.session.filter((id) => id !== this.card.id) : this.session;
+    const counts = this.play?.quizCounts?.({ mode: this.mode, exclude }) ?? null;
+    if (!counts) {
+      this.counts.setVisible(false);
+      return;
     }
-    this.clearButtons();
-    this.showWayOut();
-    this.closeBtn.setVisible(true);
-    this.ring('left');
+    const kind = this.card ? ({ new: 'new', learning: 'learning', due: 'review' }[this.reason] ?? null) : null;
+    this.counts.set(counts, kind).setVisible(true);
   }
 
   /** One option: a rounded box (redrawn per state), its wrapped text, and a zone for taps and the ring. */
@@ -275,7 +312,7 @@ export class Quiz extends Phaser.Scene {
    * flap pressed just after a crash must not end the run or leave the quiz.
    */
   primary() {
-    if (!isTopOverlay(this)) return;
+    if (!isTopOverlay(this) || this.runCard?.open) return;
     if (this.rightBtn.shown) this.rightBtn.press();
     else if (!this.card && this.closable()) this.leftBtn.press();
   }
@@ -310,10 +347,9 @@ export class Quiz extends Phaser.Scene {
 
   /**
    * A quiz sample, through Play (so mute, and a file that did not load, behave as for every other
-   * sample); `fallback` is the synth sound for a missing file. The answers view makes no sound.
+   * sample); `fallback` is the synth sound for a missing file.
    */
   sample(key, volume, fallback = null) {
-    if (this.mode === 'stats') return;
     this.play?.playSample?.(key, volume, fallback);
   }
 
@@ -355,6 +391,8 @@ export class Quiz extends Phaser.Scene {
     this.clearButtons();
     this.showWayOut();
     this.closeBtn.setVisible(this.closable());
+    this.refreshTally();
+    this.refreshCounts();
     this.shownAt = globalThis.performance?.now?.() ?? Date.now();
     this.ring('option0');
   }
@@ -380,6 +418,8 @@ export class Quiz extends Phaser.Scene {
     if (revive) this.rightBtn.set(t(this.locale, 'reviveContinue'), () => this.finish());
     else this.showWayOut();
     this.closeBtn.setVisible(this.closable());
+    this.refreshTally();
+    this.refreshCounts();
     this.ring(revive ? 'right' : 'left');
   }
 
@@ -397,12 +437,13 @@ export class Quiz extends Phaser.Scene {
 
   /** Option i picked (a tap, a key, the ring): Play grades and saves it; the card shows the verdict. */
   choose(i) {
-    if (!this.card || this.answered || !isTopOverlay(this)) return;
+    if (!this.card || this.answered || !isTopOverlay(this) || this.runCard?.open) return;
     this.answered = true;
     const key = this.order[i];
     const rtMs = (globalThis.performance?.now?.() ?? Date.now()) - this.shownAt;
     const res = this.play?.quizAnswer?.({ card: this.card, reason: this.reason, order: this.order, chosen: key, rtMs, interrupted: this.interrupted, mode: this.mode }) ?? { correct: key === 'answer' };
     this.lastAnswer = { id: this.card.id, chosen: key, correct: res.correct, coins: res.coins ?? 0, rtMs, interrupted: this.interrupted }; // the smoke reads it
+    this.refreshTally();
     if (this.mode === 'revive') this.reviveState = this.play?.reviveEvent?.(res.correct ? 'correct' : 'wrong') ?? this.reviveState;
     // The answer's sound: a wrong one as the bad bacteria, a right one as a pipe passed; the right
     // answer that wins everything back (a revive's full streak) sparkles in the ding's place. A
@@ -548,7 +589,7 @@ export class Quiz extends Phaser.Scene {
     this.rightBtn.press();
   }
 
-  /** Whether the player may leave the quiz here (a level break's quiz, a won run's bonus quiz and the answers view always; a revive never). */
+  /** Whether the player may leave the quiz here (a level break's quiz and a won run's bonus quiz always; a revive never). */
   closable() {
     return this.mode !== 'revive';
   }
@@ -573,7 +614,12 @@ export class Quiz extends Phaser.Scene {
   }
 
   close() {
-    if (!this.closable() || !isTopOverlay(this)) return;
+    if (!isTopOverlay(this)) return;
+    if (this.runCard?.open) {
+      this.runCard.hide(); // Esc / B / ✕ take the "This run" card down first (in a revive too)
+      return;
+    }
+    if (!this.closable()) return;
     const play = this.play;
     const result = chromeIntent({ state: play?.state ?? 'paused', overlay: 'quiz', input: 'close' });
     if (result.do !== 'closeTop') return;

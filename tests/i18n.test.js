@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { LEVELS as CONFIG_LEVELS } from '../src/config.js';
 import {
   DEFAULT_LOCALE,
   LOCALES,
@@ -18,6 +19,8 @@ import {
   rankText,
   shareCardFooter,
   profileButtonText,
+  tallyLines,
+  TALLY_GAP,
 } from '../src/i18n.js';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -187,4 +190,17 @@ test('countText is the coin count beside the kernel, the same in every locale', 
   assert.equal(countText(12), '12');
   assert.equal(countText(0), '0');
   assert.equal(countText(Infinity), '∞', 'a test run\'s endless purse');
+});
+
+test("tallyLines: an education run's answers, one line per level answered, in level order, in both locales", () => {
+  const tally = { answered: 7, right: 5, wrong: 2, byLevel: { 3: { answered: 2, right: 2, wrong: 0 }, 1: { answered: 4, right: 2, wrong: 2 }, 2: { answered: 1, right: 1, wrong: 0 } } };
+  const G = TALLY_GAP;
+  assert.equal(G, '\u00A0\u00A0 ', 'two no-break spaces and a space: a wrapped Phaser text folds plain spaces into one');
+  assert.deepEqual(tallyLines('en', tally, CONFIG_LEVELS), [`LV 1 · Stomach${G}✅ 2${G}❌ 2`, `LV 2 · Duodenum${G}✅ 1${G}❌ 0`, `LV 3 · Jejunum${G}✅ 2${G}❌ 0`]);
+  const zh = tallyLines('zh-Hans', tally, CONFIG_LEVELS);
+  assert.equal(zh.length, 3);
+  assert.ok(zh[0].includes(t('zh-Hans', 'level.stomach')) && zh[0].endsWith(`✅ 2${G}❌ 2`), zh[0]);
+  assert.deepEqual(tallyLines('en', { byLevel: {} }, CONFIG_LEVELS), [], 'nothing answered: no lines');
+  assert.deepEqual(tallyLines('en', null, CONFIG_LEVELS), [], 'no tally');
+  assert.deepEqual(tallyLines('en', { byLevel: { 7: { right: 3 } } }, CONFIG_LEVELS), [`LV 7 · Rectum${G}✅ 3${G}❌ 0`], 'a row from before wrong was kept still reads');
 });

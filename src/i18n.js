@@ -905,6 +905,23 @@ export function levelLabel(locale, level) {
   return t(locale, 'levelShort').replace('{n}', String(level));
 }
 
+/** The gap before each count on a tally line: two no-break spaces and a space (a wrapped Phaser text folds a run of plain spaces into one). */
+export const TALLY_GAP = '\u00A0\u00A0 ';
+
+/**
+ * An education run's answers by level, one line per level answered, in level order:
+ * "LV 2 · Duodenum   ✅ 3   ❌ 1" (the gaps are TALLY_GAP). For the "This run" card (the quiz card's
+ * tally and the game-over panel's ❔ ✅ ❌ cells open it). `tally` is Play's runQuiz (tallyAnswer);
+ * `levels` is config's LEVELS.
+ */
+export function tallyLines(locale, tally, levels) {
+  return Object.entries(tally?.byLevel ?? {})
+    .map(([level, row]) => [Number(level), row])
+    .filter(([level]) => Number.isInteger(level) && level >= 1)
+    .sort((a, b) => a[0] - b[0])
+    .map(([level, row]) => `${levelLabel(locale, level)} · ${t(locale, `level.${levels[level - 1]?.key}`)}${TALLY_GAP}✅ ${row?.right ?? 0}${TALLY_GAP}❌ ${row?.wrong ?? 0}`);
+}
+
 /** An achievement's name (ACHIEVEMENTS in achievements.js: its `title` key). */
 export function badgeTitle(locale, entry) {
   return entry?.title ? t(locale, entry.title) : '';
