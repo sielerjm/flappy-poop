@@ -2023,19 +2023,20 @@ export const TEST_POWERS = ['probiotic', 'fiber', 'postbiotic', 'bean1', 'bean3'
  * number (score or best race), and the right edge of the 🥇 🥈 🥉 text.
  */
 export function leaderboardLayout(cx, cy) {
-  const tabY = cy - 282;
+  // 640 × 1120, the profile's size (statsLayout): 40 px clear of a phone field's sides, 80 px of its top and bottom.
+  const tabY = cy - 432;
   return {
-    panel: { x: cx, y: cy, width: 560, height: 800 },
-    title: { x: cx, y: cy - 344 },
-    close: { x: cx + 236, y: cy - 346 },
+    panel: { x: cx, y: cy, width: 640, height: 1120 },
+    title: { x: cx, y: cy - 500 },
+    close: { x: cx + 282, y: cy - 510 },
     tab: { y: tabY, xs: [cx - 96, cx, cx + 96], track: { x: cx, y: tabY, width: 288, height: 56 }, pill: { width: 88, height: 46 }, width: 320, height: 72 },
-    headerY: cy - 234,
-    firstY: cy - 196,
+    headerY: cy - 380,
+    firstY: cy - 344,
     pitch: 52,
-    footerY: cy + 326,
-    versionY: cy + 374,
-    cols: { rank: cx - 224, name: cx - 160, toilet: cx + 36, level: cx + 120, right: cx + 224, medalsRight: cx + 158 },
-    titleMaxW: 420, // a longer title (MEDAL BOARD) shrinks to stay clear of the ✕
+    footerY: cy + 456,
+    versionY: cy + 522,
+    cols: { rank: cx - 264, name: cx - 196, toilet: cx + 64, level: cx + 152, right: cx + 264, medalsRight: cx + 192 },
+    titleMaxW: 480, // a longer title (MEDAL BOARD) shrinks to stay clear of the ✕
   };
 }
 

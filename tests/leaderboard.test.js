@@ -41,7 +41,7 @@ test('LEADERBOARD config is complete and points at a Supabase Data API over http
   assert.match(LEADERBOARD.publishableKey, /^sb_publishable_/);
   assert.ok(LEADERBOARD.timeoutMs > 0 && LEADERBOARD.limit > 0 && LEADERBOARD.maxScore > 0);
   assert.equal(LEADERBOARD.limit, 25, 'the board is a Top 25');
-  assert.equal(LEADERBOARD.visibleRows, 10, 'ten rows in the window');
+  assert.equal(LEADERBOARD.visibleRows, 15, 'fifteen rows in the window');
   assert.ok(LEADERBOARD.visibleRows >= 1 && LEADERBOARD.visibleRows <= LEADERBOARD.limit);
   assert.equal(typeof LEADERBOARD.storageKey, 'string');
   assert.equal(typeof LEADERBOARD.mergesKey, 'string');

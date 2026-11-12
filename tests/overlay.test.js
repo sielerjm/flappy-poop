@@ -57,7 +57,7 @@ test('clampScroll is 0 when the content fits and clamps to the overflow otherwis
   assert.equal(clampScroll(Number.NaN, 1300, 1000), 0);
 });
 
-test('leaderboardLayout: the 🏆 · 🌞 · 🏅 tabs sit between the title and the header; ten rows, the footer and the version fit the panel', async () => {
+test('leaderboardLayout: the 🏆 · 🌞 · 🏅 tabs sit between the title and the header; the window\'s rows, the footer and the version fit the panel, the panel fits a phone', async () => {
   const { LEADERBOARD } = await import('../src/config.js');
   const cx = 360;
   const cy = 640;
@@ -77,7 +77,10 @@ test('leaderboardLayout: the 🏆 · 🌞 · 🏅 tabs sit between the title and
   assert.ok(L.tab.xs.every((x) => Math.abs(x - L.tab.track.x) <= L.tab.width / 2), 'the tap row spans every glyph');
   assert.ok(L.headerY < L.firstY - L.pitch / 2, 'the header sits above the first row');
   const lastRow = L.firstY + (LEADERBOARD.visibleRows - 1) * L.pitch;
-  assert.ok(lastRow + L.pitch / 2 <= L.footerY - 26, 'ten rows end above the footer');
+  assert.ok(lastRow + L.pitch / 2 <= L.footerY - 30, 'the window\'s rows end above the footer (two lines)');
+  assert.ok(top >= 0 && bottom <= GAME_HEIGHT && L.panel.width <= GAME_WIDTH - 80, 'the panel fits the phone field with 40 px each side');
+  assert.ok(L.cols.rank > cx - L.panel.width / 2 + 16 && L.cols.right < cx + L.panel.width / 2 - 16, 'rank and score inside the frame');
+  assert.ok(L.cols.toilet - 24 - L.cols.name >= 230, 'a 🏆 name gets at least 230 px (for its tags)');
   assert.ok(L.versionY + 12 <= bottom - 8 && L.title.y - 26 >= top + 8, 'title and version inside the frame');
   assert.ok(L.cols.medalsRight < L.cols.right - 60, 'the medals end before a three-digit best-race number');
   assert.ok(L.title.x + L.titleMaxW / 2 < L.close.x - 24, 'a title shrunk to titleMaxW clears the ✕');

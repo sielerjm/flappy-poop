@@ -450,7 +450,7 @@ export const LEADERBOARD = {
   publishableKey: 'sb_publishable_yPcLgM5m3UwiywHuSH2nVA_46Eq1Cle', // sent as the apikey header
   timeoutMs: 4000, // ms before a request is abandoned (the game never waits on it)
   limit: 25, // rows fetched and shown on the board (Top 25)
-  visibleRows: 10, // rows inside the board's window at once; the rest scroll (finger, wheel, d-pad)
+  visibleRows: 15, // rows inside the board's window at once; the rest scroll (finger, wheel, d-pad)
   storageKey: 'flappyPoop.leaderboard', // localStorage key for the last confirmed submit
   mergesKey: 'flappyPoop.merges', // localStorage key for account merges still to send (merge_players after a Load user code)
   renameKey: 'flappyPoop.rename', // localStorage key for a rename typed on this device, until a post carries it to the board (else the device adopts the board's name)

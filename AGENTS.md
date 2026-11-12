@@ -399,7 +399,7 @@ src/
                             field), and LEADERBOARD
                             (Supabase Data API URL + publishable key, both public
                             by design; timeout, limit = the Top 25, visibleRows = the
-                            ten in the board's window, storage keys incl.
+                            fifteen in the board's window, storage keys incl.
                             careerKey = flappyPoop.career, score cap),
                             LEVELS (gut segment name keys, in order), LEVEL_COLORS
                             (Set2 backgrounds, cycling) and BACKGROUND (overlay
@@ -1234,7 +1234,8 @@ src/
                             Play.syncLeaderboard() (posts a pending best), then
                             fetchTop + fetchRank in parallel behind a Loading line.
                             Top 25 (LEADERBOARD.limit): rank · name · 🚽 · LV n ·
-                            score rows in a band that shows visibleRows (10) at once
+                            score rows in a band that shows visibleRows (15) at once
+                            on a 640 × 1120 panel (the profile's size)
                             and scrolls (createScrollView over the band; title,
                             header, footer, version fixed), own row highlighted
                             by rank, footer = join hint (no username) / rankText
