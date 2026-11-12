@@ -3818,6 +3818,18 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         ok(q2.id && q2.id !== q0.id && !q2.answered, `Enter moves to the next card (${q2.id}), never the same card in one quiz`);
         const line2 = await lineNow();
         ok(line2.counts.new === want0.n - 1 && line2.counts.learning === 0 && line2.counts.review === 0 && line2.underlined === 'new', `the counts leave the answered card out: "${line2.text}"`);
+        // 🚩 Report this card (plan 21, E4): the id in the corner ends in 🚩 and is a link to GitHub's card
+        // report form, the card's code filled in. The opener is stubbed: nothing leaves this page.
+        const flag = await evaluate(
+          `(() => { const q = ${Q}; globalThis.__opened = []; q.__openUrl = q.__openUrl ?? q.openUrl; q.openUrl = (u) => { globalThis.__opened.push(u); return 'window'; }; const b = q.cardId.getBounds(); const z = q.reportZone; return JSON.stringify({ text: q.cardId.text, id: q.card.id, x: b.right - 10, y: b.centerY, zone: { left: z.x, right: z.x + z.width, h: z.height, visible: z.visible }, tallyLeft: q.tallyZone.x - q.tallyZone.width / 2, cardLeft: q.cx - 320, interrupted: q.interrupted }); })()`,
+        ).then(JSON.parse);
+        await tapAt(flag.x, flag.y);
+        const reported = await evaluate(`JSON.stringify({ urls: globalThis.__opened, id: ${Q}.card?.id ?? null, answered: ${Q}.answered, interrupted: ${Q}.interrupted, quiz: __flappy.scene.isActive('Quiz'), runCard: ${Q}.runCard.open })`).then(JSON.parse);
+        const reportUrl = reported.urls.length === 1 ? new URL(reported.urls[0]) : null;
+        ok(flag.text === `${flag.id} \u{1F6A9}` && flag.zone.visible && flag.zone.h >= 56 && flag.zone.left >= flag.cardLeft && flag.zone.right <= flag.tallyLeft, `the card's id reads "${flag.text}"; its link's tap box is ${flag.zone.h} px tall, inside the card and clear of the tally's`);
+        ok(reportUrl?.hostname === 'github.com' && reportUrl.searchParams.get('template') === 'card.yml' && reportUrl.searchParams.get('card-id') === flag.id && reportUrl.searchParams.get('title') === `[Card ${flag.id}] ` && /^v\d/.test(reportUrl.searchParams.get('version') ?? ''), `a tap on the 🚩 opens the card report with the card's code filled in (${reported.urls[0]})`);
+        ok(reported.id === flag.id && !reported.answered && reported.quiz && !reported.runCard && !flag.interrupted && reported.interrupted, 'the quiz stays as it was, the same question up; its answer is marked interrupted');
+        await evaluate(`${Q}.openUrl = ${Q}.__openUrl, true`);
         await evaluate(`${Q}.input.keyboard.emit('keydown-TWO'), true`);
         await sleep(200);
         const q3 = await quizNow();
@@ -4361,7 +4373,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         // The taps are sent from the scene's own 'create' event, the first moment the card can be tapped.
         await startEdu('');
         await evaluate(
-          `(() => { const q = ${Q}; globalThis.__atOpen = null; q.events.once('create', () => { const ptr = q.input.activePointer; q.options[0].zone.emit('pointerdown', ptr); q.leftBtn.zone.emit('pointerdown', ptr); globalThis.__atOpen = { card: Boolean(q.card), giveUpShown: q.leftBtn.shown, answered: q.answered, finishing: q.finishing, locked: q.tapLocked(ptr), ringLocked: q.tapLocked() }; }); return true; })()`,
+          `(() => { const q = ${Q}; globalThis.__atOpen = null; globalThis.__opened = []; q.__openUrl = q.__openUrl ?? q.openUrl; q.openUrl = (u) => { globalThis.__opened.push(u); return 'window'; }; q.events.once('create', () => { const ptr = q.input.activePointer; q.options[0].zone.emit('pointerdown', ptr); q.leftBtn.zone.emit('pointerdown', ptr); q.reportZone.emit('pointerup', ptr); globalThis.__atOpen = { card: Boolean(q.card), giveUpShown: q.leftBtn.shown, answered: q.answered, finishing: q.finishing, locked: q.tapLocked(ptr), ringLocked: q.tapLocked(), reports: globalThis.__opened.length }; }); return true; })()`,
         );
         await crash();
         const atOpen = await evaluate(`JSON.stringify(globalThis.__atOpen)`).then(JSON.parse);
@@ -4370,6 +4382,17 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         ok(atOpen?.card && atOpen.giveUpShown && atOpen.locked && !atOpen.answered && !atOpen.finishing && lk.active && lk.phase === 'strikes' && lk.verdict === null && lk.left === giveUp && lkPlay.state === 'respawn' && !lkPlay.over, `a tap on an option and one on Give up as the revive card appears do nothing: no answer, the run goes on (phase ${lk.phase}, state ${lkPlay.state})`);
         ok(atOpen?.ringLocked === false, "the controller ring's press, which carries no pointer, is not locked");
         await sleep(TT.retryLockoutMs + 100);
+        // 🚩 in a revive (plan 21, E4): locked with the rest of the card as it appears, then a link like
+        // a break's; the id line carries the segment here, and still ends clear of the tally.
+        const rFlag = await evaluate(`(() => { const q = ${Q}; const b = q.cardId.getBounds(); return JSON.stringify({ text: q.cardId.text, id: q.card.id, x: b.right - 10, y: b.centerY }); })()`).then(JSON.parse);
+        await tapAt(rFlag.x, rFlag.y);
+        const rReported = await evaluate(`JSON.stringify({ urls: globalThis.__opened, quiz: __flappy.scene.isActive('Quiz'), state: ${play}.state, hold: ${play}.respawnHold, answered: ${Q}.answered })`).then(JSON.parse);
+        ok(atOpen?.reports === 0 && rReported.urls.length === 1 && new URL(rReported.urls[0]).searchParams.get('card-id') === rFlag.id && rFlag.text.startsWith(`${rFlag.id} · `) && rFlag.text.endsWith('\u{1F6A9}') && rReported.quiz && rReported.state === 'respawn' && rReported.hold === 'quiz' && !rReported.answered, `a revive's 🚩 ("${rFlag.text}") does nothing as the card appears, then opens the report; the revive waits as it was`);
+        const fitId = await evaluate(
+          `import('./src/i18n.js').then((i) => { const q = ${Q}; const p = ${play}; const keep = { text: q.cardId.text.replace(/ \u{1F6A9}$/u, ''), tally: p.runQuiz }; p.runQuiz = { ...p.runQuiz, answered: 99, right: 55, wrong: 44 }; const bad = []; for (const locale of i.LOCALES) { for (const key of ['level.stomach', 'level.duodenum', 'level.jejunum', 'level.ileum', 'level.caecum', 'level.colon', 'level.rectum', 'quizGeneral']) { q.setCardId('WW-00 · ' + i.t(locale, key)); q.refreshTally(); const id = q.cardId.getBounds(); const tally = q.tally.getBounds(); const zone = q.reportZone; const tz = q.tallyZone; if (!(id.right + 6 <= tally.left && zone.x + zone.width <= tz.x - tz.width / 2 + 0.5 && tz.width >= 100 && tz.x - tz.width / 2 <= tally.left && q.cardId.scale >= 0.8)) bad.push(locale + ' ' + key + ' id→' + Math.round(id.right) + ' tally←' + Math.round(tally.left) + ' scale ' + q.cardId.scale.toFixed(2)); } } p.runQuiz = keep.tally; q.setCardId(keep.text); q.refreshTally(); return JSON.stringify(bad); })`,
+        ).then(JSON.parse);
+        ok(fitId.length === 0, `every segment's id line, in both languages, ends clear of a two-digit tally, and the two tap boxes do not overlap (${fitId.join('; ') || 'none over'})`);
+        await evaluate(`${Q}.openUrl = ${Q}.__openUrl, true`);
         const optBox = await evaluate(`JSON.stringify(${Q}.options[0].box)`).then(JSON.parse);
         await tapAt(optBox.x, optBox.y);
         const lateTap = await view();

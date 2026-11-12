@@ -1,5 +1,5 @@
 import { GAME_HEIGHT, LEVELS, TUNING as T } from '../config.js';
-import { canRestart, chromeIntent } from '../logic.js';
+import { canRestart, chromeIntent, fitScale, issueUrl, openExternalUrl } from '../logic.js';
 import { createFocus, pressable } from '../ui/focus.js';
 import { createRectGlow } from '../ui/glow.js';
 import { createCountLine } from '../ui/countLine.js';
@@ -25,6 +25,8 @@ const WIDE_BUTTON = 540; // the top button (Why): edge to edge with the bottom r
 const BUTTON_GAP = 12; // px between the top button and the count line's row
 const COUNT_ROW = 40; // px: the count line's row (new + learning + review), directly above the bottom row
 const TALLY_HIT = { width: 180, height: 56 }; // the run tally's tap box in the card's top row
+const REPORT_FLAG = '\u{1F6A9}'; // 🚩 after the card's id: report this card
+const ID_MAX_W = 220; // px the id line may take, so it ends clear of the tally (two two-digit counts); a longer one shrinks
 const HALO_PX = 24; // px a revive's halo reaches past its button (inside the card's border)
 const COIN_PX = 36; // the corn kernel after a paid verdict
 /** Option fills: waiting, the right answer, the wrong one picked, the other wrong one. */
@@ -55,6 +57,9 @@ const BAD = '#ff8da8';
  * the ring, opens the "This run" card: one line per level answered (an info card over the quiz;
  * toggleRunCard). Any tap, Esc or B closes it and the quiz is as it was; while it is up the quiz's
  * keys do nothing, and a question left waiting under it is marked interrupted.
+ * Reporting a card (plan 21, E4): the id in the top-left corner ends in 🚩 and is a link: a tap opens
+ * GitHub's card report form in a new tab with the card's code filled in (openReport). The run is
+ * never navigated away: when the browser refuses the new tab, nothing happens.
  * Modes:
  *   'break'  a level break: questions about the segment just cleared, +coins for a right answer;
  *            Return / ✕ / Esc / B close it, back to the break.
@@ -95,8 +100,18 @@ export class Quiz extends Phaser.Scene {
 
     // The header sits under the corner row (the id on the left, ❤️ / ⭐ or ✕ on the right); the question follows it.
     this.header = this.add.text(cx, this.top + 54, '', { ...STYLE, fontSize: '34px', color: '#f8a0c8', wordWrap: { width: TEXT_W - 40, useAdvancedWrap: true } }).setOrigin(0.5, 0);
-    // The card's id (and in a revive its segment), small in the corner, so a tester can name a card that is wrong.
+    // The card's id (and in a revive its segment), small in the corner, so a tester can name a card
+    // that is wrong; it ends in 🚩 and its row is a link to the card report (openReport). The link
+    // opens on the release: a touch's press does not let a browser open a tab, its release does.
     this.cardId = this.add.text(cx - PANEL.width / 2 + 22, this.top + 20, '', { ...MUTED, fontSize: '20px', align: 'left' }).setOrigin(0, 0);
+    this.reportZone = this.add
+      .zone(cx - PANEL.width / 2 + 8, this.top + 32, 10, TALLY_HIT.height)
+      .setOrigin(0, 0.5)
+      .setInteractive({ useHandCursor: true })
+      .setVisible(false)
+      .on('pointerup', (pointer) => {
+        if (!this.tapLocked(pointer)) this.openReport();
+      });
     // A revive's ❤️ (tries left) or ⭐ (the streak), in the corner the ✕ takes in a break.
     this.status = this.add.text(cx + PANEL.width / 2 - 22, this.top + 20, '', { fontFamily: 'sans-serif', fontSize: '26px' }).setOrigin(1, 0);
     this.closeBtn = this.add
@@ -177,12 +192,47 @@ export class Quiz extends Phaser.Scene {
     this.focus.show(); // only under a controller (registry padMode)
   }
 
-  /** The run's tally in the top row: "✅ right  ❌ wrong" from Play's runQuiz, once the run has an answer; never in the bonus quiz (practice: not tallied). */
+  /**
+   * The run's tally in the top row: "✅ right  ❌ wrong" from Play's runQuiz, once the run has an
+   * answer; never in the bonus quiz (practice: not tallied). Its tap box starts clear of the id
+   * link's (a revive's id line, with its segment, reaches further right).
+   */
   refreshTally() {
     const q = this.play?.runQuiz;
     const shown = this.mode !== 'bonus' && (q?.answered ?? 0) > 0;
     this.tally.setText(shown ? `✅ ${q.right}  ❌ ${q.wrong}` : '').setVisible(shown);
-    this.tallyZone.setVisible(shown);
+    const right = this.cx + TALLY_HIT.width / 2;
+    const left = Math.max(this.cx - TALLY_HIT.width / 2, this.reportZone.visible ? this.reportZone.x + this.reportZone.width + 4 : -Infinity);
+    this.tallyZone.setPosition((left + right) / 2, this.top + 32).setSize(right - left, TALLY_HIT.height).setVisible(shown);
+  }
+
+  /**
+   * The card's id line: `text` then 🚩, shrunk to ID_MAX_W, with the report link's tap box over it
+   * (from the card's edge to just past the flag, TALLY_HIT.height tall). No card: no line, no link.
+   */
+  setCardId(text) {
+    this.cardId.setScale(1).setText(text ? `${text} ${REPORT_FLAG}` : '');
+    this.cardId.setScale(fitScale(this.cardId.width, ID_MAX_W, 0));
+    this.reportZone.setSize(this.cardId.x + this.cardId.displayWidth + 8 - this.reportZone.x, TALLY_HIT.height).setVisible(Boolean(text));
+  }
+
+  /**
+   * 🚩 Report this card: GitHub's card report form in a new tab, the card's code in its title and
+   * its fields (issueUrl 'card'). A question waiting for its answer is marked interrupted (the
+   * player is off reading a form). Nothing happens under the "This run" card or with no card up.
+   */
+  openReport() {
+    if (!this.card || !isTopOverlay(this) || this.finishing || this.runCard?.open) return;
+    if (!this.answered) this.interrupted = true;
+    this.openUrl(issueUrl('card', { cardId: this.card.id }));
+  }
+
+  /**
+   * Open `url` in a new tab, and only there: openExternalUrl's same-tab fallback would navigate the
+   * game away and lose the run, so it is not offered one. 'window' when a tab opened, else 'none'.
+   */
+  openUrl(url) {
+    return openExternalUrl(url, { open: (...args) => globalThis.open?.(...args) });
   }
 
   /**
@@ -365,10 +415,10 @@ export class Quiz extends Phaser.Scene {
     if (this.mode === 'revive') {
       const streak = this.reviveState?.phase === 'streak';
       this.header.setText(streak ? `⭐ ${t(this.locale, 'reviveStreakHeader')}` : `\u{1F480} ${t(this.locale, 'reviveHeader')}`);
-      this.cardId.setText(`${card.id} · ${deck}`);
+      this.setCardId(`${card.id} · ${deck}`);
     } else {
       this.header.setText(`${EDUCATION_EMOJI} ${deck}`);
-      this.cardId.setText(card.id);
+      this.setCardId(card.id);
     }
     this.refreshStatus();
     this.question.setY(this.header.y + this.header.height + 22).setText(this.text.q).setVisible(true);
@@ -404,7 +454,7 @@ export class Quiz extends Phaser.Scene {
     const revive = this.mode === 'revive';
     if (revive) this.reviveState = this.play?.reviveGrant?.() ?? this.reviveState;
     this.header.setText(EDUCATION_EMOJI);
-    this.cardId.setText('');
+    this.setCardId('');
     this.refreshStatus();
     this.question.setY(this.header.y + this.header.height + 22).setText(t(this.locale, revive ? 'reviveFree' : 'quizCaughtUp')).setVisible(true);
     for (const o of this.options) {

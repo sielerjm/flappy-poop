@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { issueUrl, openExternalUrl, reloadUrl, reloadGame, loadedScriptUrls, hardReloadGame } from '../src/logic.js';
+import { readFileSync } from 'node:fs';
+import { issueUrl, openExternalUrl, reloadUrl, reloadGame, loadedScriptUrls, hardReloadGame, VERSION } from '../src/logic.js';
 import { t, LOCALES } from '../src/i18n.js';
 
 test('issueUrl returns GitHub new-issue template URLs for bug and feature', () => {
@@ -10,6 +11,23 @@ test('issueUrl returns GitHub new-issue template URLs for bug and feature', () =
     'https://github.com/sielerjm/flappy-poop/issues/new?template=feature.yml',
   );
   assert.throws(() => issueUrl('other'), /unknown kind/);
+});
+
+// E4 (plan 21): the 🚩 on an education quiz card opens the card report form with the card's code filled in.
+test("issueUrl('card'): the card report form, the card's code in the title and in the form's card-id field, the version in its version field", () => {
+  const url = new URL(issueUrl('card', { cardId: 'ST-03', version: '9.8.7' }));
+  assert.equal(`${url.origin}${url.pathname}`, 'https://github.com/sielerjm/flappy-poop/issues/new');
+  assert.deepEqual(Object.fromEntries(url.searchParams), { template: 'card.yml', title: '[Card ST-03] ', 'card-id': 'ST-03', version: 'v9.8.7' });
+  assert.equal(new URL(issueUrl('card', { cardId: 'JE-06' })).searchParams.get('version'), `v${VERSION}`, 'this build by default');
+  const odd = issueUrl('card', { cardId: ' A&B #1 ' });
+  assert.ok(!/[ #]/.test(odd.slice(odd.indexOf('?'))), `the query is encoded (${odd})`);
+  assert.equal(new URL(odd).searchParams.get('card-id'), 'A&B #1', 'and decodes to the trimmed code');
+  assert.equal(new URL(issueUrl('card')).searchParams.get('title'), '[Card ] ', 'no code: still a card report');
+  // The fields the URL fills in are the form's: the template declares both ids, and the card label.
+  const form = readFileSync(new URL('../.github/ISSUE_TEMPLATE/card.yml', import.meta.url), 'utf8');
+  for (const id of ['card-id', 'version']) assert.match(form, new RegExp(`^\\s+id: ${id}$`, 'm'), `card.yml has the ${id} field`);
+  assert.match(form, /^labels: \["card"\]$/m);
+  assert.match(form, /^title: "\[Card\] "$/m);
 });
 
 test('openExternalUrl uses window.open when it returns a window', () => {
