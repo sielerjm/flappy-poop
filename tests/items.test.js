@@ -840,3 +840,37 @@ test('buyBlocker / canBuy with an education run\'s prices (plan 21): the passed 
   assert.equal(buyBlocker('mystery', { coins: 9, prices }, T), 'coins');
   assert.equal(buyBlocker('fiber', { coins: T.shop.prices.fiber }, T), null, 'no prices: shop.prices, as before');
 });
+
+test('deathPenalty / scoreAfterDeath / the death popup take a per-level amount (plan 21: an education revive), the two-player one by default', () => {
+  const vs = T.versus.scoring.deathPenaltyPerLevel;
+  assert.equal(deathPenalty(3, T), 3 * vs);
+  assert.equal(deathPenalty(3, T, 5), 15);
+  assert.equal(scoreAfterDeath(20, 3, T, 5), 5);
+  assert.equal(scoreAfterDeath(10, 3, T, 5), 0, 'floored at 0');
+  assert.equal(scorePopup('death', T, 1, 0, 4, 5).text, '\u221220');
+  assert.equal(scorePopup('death', T, 1, 0, 4).text, `\u2212${4 * vs}`);
+  assert.equal(scorePopup('death', T, 1, 0, 4, T.education.revivePenaltyPerLevel).text, `\u2212${4 * T.education.revivePenaltyPerLevel}`);
+});
+
+test('effects snapshot / restore (plan 21): what a crash took comes back, its coins added to the purse', () => {
+  const e = createEffects(T);
+  e.addCoins(7);
+  e.addBean();
+  e.addBean();
+  e.applyProbiotic();
+  e.applyFiber(); // a postbiotic under the probiotic
+  const snap = e.snapshot();
+  assert.deepEqual({ coins: snap.coins, probiotic: snap.probiotic, postbiotic: snap.postbiotic }, { coins: 7, probiotic: T.items.probioticPipes, postbiotic: true });
+  e.spendCoins(e.coins());
+  e.clearPowerups();
+  assert.deepEqual([e.coins(), e.beans(), e.hasProbiotic(), e.multiplier()], [0, 0, false, 1]);
+  e.addCoins(1); // a coin picked up in between is kept
+  e.restore(snap);
+  assert.equal(e.coins(), 8);
+  assert.equal(e.beans(), 2);
+  assert.equal(e.hasProbiotic(), true);
+  assert.equal(e.multiplier(), T.items.postbioticMultiplier, 'the postbiotic is back with its probiotic');
+  assert.deepEqual(e.snapshot(), { ...snap, coins: 8 });
+  e.restore(null);
+  assert.equal(e.coins(), 8, 'restoring nothing changes nothing');
+});

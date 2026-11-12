@@ -738,14 +738,18 @@ export function scoreAfterItem(score, kind, t, mult = 1) {
   return score;
 }
 
-/** What a crash costs in a two-player match: versus.scoring.deathPenaltyPerLevel × the level number. */
-export function deathPenalty(level, t) {
-  return t.versus.scoring.deathPenaltyPerLevel * Math.max(1, level | 0);
+/**
+ * What a crash costs: `perLevel` × the level number. A two-player match uses
+ * versus.scoring.deathPenaltyPerLevel (the default); an education revive (plan 21)
+ * passes education.revivePenaltyPerLevel.
+ */
+export function deathPenalty(level, t, perLevel = t.versus.scoring.deathPenaltyPerLevel) {
+  return perLevel * Math.max(1, level | 0);
 }
 
-/** The score after a crash in a match: the death penalty off, floored at 0. */
-export function scoreAfterDeath(score, level, t) {
-  return Math.max(0, score - deathPenalty(level, t));
+/** The score after a crash: the death penalty (deathPenalty, `perLevel`) off, floored at 0. */
+export function scoreAfterDeath(score, level, t, perLevel = t.versus.scoring.deathPenaltyPerLevel) {
+  return Math.max(0, score - deathPenalty(level, t, perLevel));
 }
 
 /**
@@ -814,12 +818,12 @@ export function stillPulseScale(elapsed, t) {
   return 1 + p.amount * Math.sin((2 * Math.PI * Math.max(0, elapsed || 0)) / p.periodMs);
 }
 
-export function scorePopup(kind, t, mult = 1, pairs = 0, level = 1) {
+export function scorePopup(kind, t, mult = 1, pairs = 0, level = 1, perLevel = t.versus.scoring.deathPenaltyPerLevel) {
   if (kind === 'pipe') return { text: `+${pipePoints(t, mult)}`, color: t.popup.pipeColor };
   if (kind === 'skip') return { text: `+${pairs * pipePoints(t, mult)}`, color: t.mystery.color };
   if (kind === 'fiber') return { text: `+${t.items.fiberPoints * mult}`, color: t.popup.fiberColor };
   if (kind === 'bacteria') return { text: `\u2212${t.items.bacteriaPenalty}`, color: t.popup.bacteriaColor };
-  if (kind === 'death') return { text: `\u2212${deathPenalty(level, t)}`, color: t.popup.bacteriaColor };
+  if (kind === 'death') return { text: `\u2212${deathPenalty(level, t, perLevel)}`, color: t.popup.bacteriaColor };
   if (kind === 'levelClear') return { text: `+${t.versus.scoring.levelClearBonus}`, color: t.mystery.color };
   return null;
 }
@@ -1400,6 +1404,18 @@ export function createEffects(t) {
       powerClock = powerDuration;
       return true;
     },
+    /** What a crash can take, for an education revive's streak to give back (restore). */
+    snapshot() {
+      return { beans: beanCount, probiotic: probioticPipesLeft, postbiotic, coins: coinCount };
+    },
+    /** Give back a snapshot: the beans, the probiotic stack and its postbiotic; its coins are added to the purse. */
+    restore(snap) {
+      if (!snap) return;
+      beanCount = snap.beans;
+      probioticPipesLeft = snap.probiotic;
+      postbiotic = Boolean(snap.postbiotic) && probioticPipesLeft > 0;
+      coinCount += snap.coins;
+    },
     /** A death: every power-up goes (the beans, so no fart or super fart ready; the probiotic stack and a postbiotic; a running fart). Coins stay. */
     clearPowerups() {
       powerOn = false;
@@ -1703,6 +1719,7 @@ export function overlayOutsideHit(x, y, panel) {
  * @param {boolean} shop true while this half's level-break shop panel is open
  * @param {boolean} breaking true while this half is in its own level break (the only place the shop opens)
  * @param {boolean} education true in an education run (plan 21): its level break also opens the 📚 quiz
+ * @param {boolean} reviveWait true while an education revive waits for "Tap when ready" (state 'respawn'): a tap releases it
  * @returns {{ do: string, pause?: boolean, armResumeLockout?: boolean, closeAbout?: boolean }}
  */
 export function chromeIntent({
@@ -1716,6 +1733,7 @@ export function chromeIntent({
   shop = false,
   breaking = false,
   education = false,
+  reviveWait = false,
 }) {
   if (input === 'mute') return { do: 'toggleMute' };
 
@@ -1776,6 +1794,8 @@ export function chromeIntent({
   if (input === 'leaderboard') return { do: 'openLeaderboard', pause: live };
   if (input === 'stats') return { do: 'openStats', pause: live };
   if (input === 'tap') {
+    // An education revive (plan 21), answered: the tap that says the player is ready flies on.
+    if (state === 'respawn' && reviveWait) return resumeLocked ? { do: 'ignore' } : { do: 'reviveGo' };
     if (state === 'playing') return { do: 'flap' };
     if (state === 'paused') return resumeLocked ? { do: 'ignore' } : { do: 'resume' };
     if (state === 'ready') return { do: 'start' };

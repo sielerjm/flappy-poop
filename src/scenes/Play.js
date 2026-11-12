@@ -126,7 +126,7 @@ import { openSavePanel, isSavePanelOpen, showAdoptedName, showBoardScores } from
 import { isTournamentPanelOpen, tournamentPadAction } from '../ui/tournamentPanel.js';
 import { bindPad } from '../input/pad.js';
 import { keyGroup, sameDevice, catchUpTier, catchUpDraws, versusAvailable, ghostPlacement, rivalMarker, respawnPose, courseDistance, VERSUS_EMOJI } from '../versus.js';
-import { createEduStore, dueCount, pickCard, shuffleOptions, gradeFor, schedule, eduShopPrices, EDUCATION_EMOJI } from '../education.js';
+import { createEduStore, dueCount, pickCard, shuffleOptions, gradeFor, schedule, eduShopPrices, reviveStart, reviveStep, EDUCATION_EMOJI } from '../education.js';
 
 const TEXT_STYLE = {
   fontFamily: 'sans-serif',
@@ -210,8 +210,13 @@ export class Play extends Phaser.Scene {
     this.educationOn = eduSettings.education;
     this.eduStore = createEduStore(globalThis.localStorage);
     this.runIsEducation = false;
-    this.runQuiz = { answered: 0, right: 0 }; // this run's quiz answers (start() resets it)
+    this.runQuiz = { answered: 0, right: 0, revives: 0, restores: 0 }; // this run's quiz answers and revives (start() resets it)
     this.quizOpen = false; // the Quiz scene is up (openQuiz → onQuizClosed)
+    // An education crash (plan 21): the respawn holds after the tumble ('quiz' while the revive quiz
+    // runs, 'tap' until "Tap when ready"); revive is reviveStep's state, reviveLost what the crash took.
+    this.respawnHold = null;
+    this.revive = null;
+    this.reviveLost = null;
     this.runBadges = []; // the achievements the last run unlocked, for Over
     // The Daily Dump run (startDaily → start): { day, level, startPipes, playerId } while one runs, else null.
     // runIsDaily latches per run like runIsTest; dailyNext carries startDaily's day through the launch slide.
@@ -469,6 +474,12 @@ export class Play extends Phaser.Scene {
     this.hintPulseMs = 0;
     this.levelSubHint = this.add
       .text(W / 2, GAME_HEIGHT * 0.4 + 72 + 50, '', { ...TEXT_STYLE, fontSize: '26px', color: '#c9b8dc', strokeThickness: 8 })
+      .setOrigin(0.5)
+      .setDepth(26)
+      .setVisible(false);
+    // An education revive's "Tap when ready" (plan 21): where the level break's hint sits, shown while the respawn waits.
+    this.reviveHint = this.add
+      .text(W / 2, GAME_HEIGHT * 0.4 + 72, '', { ...TEXT_STYLE, fontSize: '36px' })
       .setOrigin(0.5)
       .setDepth(26)
       .setVisible(false);
@@ -746,7 +757,10 @@ export class Play extends Phaser.Scene {
     this.runIsTest = this.isTestMode();
     // An education run (📚, plan 21): unlocked, the switch on, single player, never a Daily Dump.
     this.runIsEducation = !daily && this.educationOn && this.educationOffered();
-    this.runQuiz = { answered: 0, right: 0 };
+    this.runQuiz = { answered: 0, right: 0, revives: 0, restores: 0 };
+    this.respawnHold = null;
+    this.revive = null;
+    this.reviveLost = null;
     const begin = daily ? dailyRunStart(daily.level, this.tune) : testRunStart(this.runIsTest ? this.testSettings().startLevel : 1, this.tune);
     this.level = begin.level;
     this.pipesPassed = begin.pipes;
@@ -1502,7 +1516,8 @@ export class Play extends Phaser.Scene {
 
   /**
    * Open the 📚 quiz (plan 21) in an education run: 'break' in a level break (chromeIntent's
-   * 'quiz'). The Quiz scene asks quizNext for its cards and hands each answer to quizAnswer.
+   * 'quiz') or 'revive' after an education crash (tickRespawn). The Quiz scene asks quizNext for its
+   * cards and hands each answer to quizAnswer (a revive's moves to reviveEvent).
    */
   openQuiz(mode) {
     if (!this.runIsEducation || this.quizOpen) return;
@@ -1551,10 +1566,11 @@ export class Play extends Phaser.Scene {
   }
 
   /** The quiz closed: the 📚 and 💰 pills come back (the closing tap is locked out by the caller). */
-  onQuizClosed() {
+  onQuizClosed(mode) {
     this.quizOpen = false;
     this.refreshEduDue();
     this.refreshShopButton();
+    if (mode === 'revive') this.reviveDone();
   }
 
   /** Re-lay and redraw the switches when what is offered changes (test mode hides 👥; the word shows 📚). */
@@ -1717,6 +1733,7 @@ export class Play extends Phaser.Scene {
       shop: this.shopOpen,
       breaking: this.levelBreak,
       education: this.runIsEducation,
+      reviveWait: this.respawnHold === 'tap',
     };
   }
 
@@ -1755,6 +1772,9 @@ export class Play extends Phaser.Scene {
         break;
       case 'openQuiz':
         this.openQuiz('break');
+        break;
+      case 'reviveGo':
+        this.releaseRevive();
         break;
       case 'closeShop':
         this.closeShop();
@@ -2737,8 +2757,8 @@ export class Play extends Phaser.Scene {
   }
 
   /** Fade a "+3" / "−3" in and out; a new hit restarts it with its own text and colour and re-enters it at the bottom of the stack. */
-  showScorePopup(kind, mult = 1, pairs = 0, level = 1) {
-    const p = scorePopup(kind, T, mult, pairs, level);
+  showScorePopup(kind, mult = 1, pairs = 0, level = 1, perLevel = undefined) {
+    const p = scorePopup(kind, T, mult, pairs, level, perLevel);
     if (!p) return;
     this.popupTween?.stop();
     this.scorePopup.setText(p.text).setAlpha(0);
@@ -3462,9 +3482,11 @@ export class Play extends Phaser.Scene {
     if (this.state !== 'playing') return;
     // Farting (or just finished and still clearing the pipe) cannot die; nor can an Invincible test run.
     if (this.effects.powerActive() || this.graceLeftMs > 0 || this.testInvincible()) return;
-    // A match: the crash costs points and a respawn, never the run. Single player: the run ends, and
-    // the coins and every power-up go with it (Over still shows what the run collected).
+    // A match: the crash costs points and a respawn, never the run. An education run (plan 21): the
+    // revive quiz decides (startEduRevive). Single player: the run ends, and the coins and every
+    // power-up go with it (Over still shows what the run collected).
     if (this.match) this.startRespawn();
+    else if (this.runIsEducation) this.startEduRevive();
     else {
       this.endRun();
       this.effects.spendCoins(this.effects.coins());
@@ -3480,8 +3502,80 @@ export class Play extends Phaser.Scene {
     this.poop.setVelocityY(Math.max(this.poop.body.velocity.y, 0));
     this.poop.body.setCollideWorldBounds(false);
     this.deathTween?.stop();
-    this.deathTween = this.tweens.add({ targets: this.poop, angle: 180, duration: this.match ? T.versus.respawn.crashMs : T.deathToOverMs, ease: 'Quad.easeIn' });
-    if (!this.match) this.showOver();
+    const respawning = this.state === 'respawn'; // a match, or an education revive
+    this.deathTween = this.tweens.add({ targets: this.poop, angle: 180, duration: respawning ? T.versus.respawn.crashMs : T.deathToOverMs, ease: 'Quad.easeIn' });
+    if (!respawning) this.showOver();
+  }
+
+  /**
+   * An education run's crash (plan 21): the coins and power-ups go now (kept in reviveLost for a
+   * streak to give back), the world halts as in a match's respawn, and the respawn holds after the
+   * tumble for the revive quiz (tickRespawn opens it). What it costs is settled when the quiz ends
+   * (reviveDone): game over, or a revive that takes revivePenaltyPerLevel × level points.
+   */
+  startEduRevive() {
+    const lost = this.effects.snapshot();
+    this.reviveLost = lost;
+    this.effects.spendCoins(this.effects.coins());
+    this.clearPowerups();
+    this.refreshCoinHud();
+    this.revive = reviveStart({ lost: lost.coins > 0 || lost.beans > 0 || lost.probiotic > 0 || lost.postbiotic });
+    this.respawnHold = 'quiz';
+    this.startRespawn();
+  }
+
+  /** The revive quiz moves on: an answer ('correct' / 'wrong'), the choice ('continue' / 'streak') or 'giveUp' (reviveStep). */
+  reviveEvent(event) {
+    if (!this.revive) return null;
+    this.revive = reviveStep(this.revive, event);
+    return this.revive;
+  }
+
+  /** No card left to ask (pickCard null): the revive is granted rather than left without a way on. */
+  reviveGrant() {
+    if (!this.revive) return null;
+    this.revive = { ...this.revive, phase: 'revived' };
+    return this.revive;
+  }
+
+  /**
+   * The revive quiz has closed (onQuizClosed): 'over' ends the run (endRun records nothing for an
+   * education run; Over follows). 'revived' / 'restored' cost the revive penalty (its −N popup),
+   * 'restored' gives back what the crash took, and the respawn waits for "Tap when ready".
+   */
+  reviveDone() {
+    const phase = this.revive?.phase;
+    if (this.state !== 'respawn' || this.respawnHold !== 'quiz') return; // the run ended under it (a restart)
+    if (phase === 'over') {
+      this.respawnHold = null;
+      this.endRun();
+      this.showOver();
+      return;
+    }
+    if (phase !== 'revived' && phase !== 'restored') return;
+    this.runQuiz.revives += 1;
+    const per = T.education.revivePenaltyPerLevel;
+    this.score = scoreAfterDeath(this.score, this.level, T, per);
+    this.scoreText.setText(String(this.score));
+    this.showScorePopup('death', 1, 0, this.level, per);
+    if (phase === 'restored') {
+      this.runQuiz.restores += 1;
+      this.effects.restore(this.reviveLost);
+      this.refreshCoinHud();
+      this.refreshInventory();
+      this.refreshProbioticHud();
+    }
+    this.refreshProbioticHud(); // the score may have lost a digit: re-place the ×2 badge
+    this.reviveLost = null;
+    this.respawnHold = 'tap';
+    this.reviveHint.setText(t(this.locale, 'versusTapReady')).setVisible(true);
+  }
+
+  /** "Tap when ready" (chromeIntent's reviveGo): the held respawn runs on: the glide, the blinks, play. */
+  releaseRevive() {
+    if (this.respawnHold !== 'tap') return;
+    this.respawnHold = null;
+    this.reviveHint.setVisible(false);
   }
 
   /**
@@ -3499,6 +3593,7 @@ export class Play extends Phaser.Scene {
     this.respawnPaused = false;
     this.endSweep();
     for (const obj of this.worldObjects()) obj.setVelocityX(0);
+    if (!this.match) return; // an education revive (plan 21): what the crash costs is the quiz's to settle (reviveDone)
     this.crashesThisLevel += 1; // no +3 at this level's finish line
     // A crash keeps versus.crashCoinKeep of the coins (rounded down) and takes every power-up.
     this.effects.spendCoins(this.effects.coins() - crashCoins(this.effects.coins(), T));
@@ -3523,6 +3618,13 @@ export class Play extends Phaser.Scene {
     this.respawnElapsed += delta;
     let pose = respawnPose(this.respawnElapsed, this.respawnFrom, T);
     if (pose.phase === 'crash') return;
+    // An education revive (plan 21) holds at the end of the tumble, before the field ahead clears (a
+    // game over leaves it as it was): first for the revive quiz, then for "Tap when ready".
+    if (this.respawnHold) {
+      this.respawnElapsed = T.versus.respawn.crashMs;
+      if (this.respawnHold === 'quiz' && !this.quizOpen) this.openQuiz('revive');
+      return;
+    }
     if (!this.respawnFrom) {
       this.deathTween?.stop();
       this.deathTween = null;
@@ -3583,6 +3685,7 @@ export class Play extends Phaser.Scene {
     this.applyScroll();
     if (this.effects.powerReady()) this.setCharged(true);
     this.refreshPoopLook();
+    if (!this.match) return; // an education revive: back in play
     const slot = this.match.slots[this.player - 1];
     slot.respawning = false;
     this.publishSlot();

@@ -24,8 +24,6 @@ const ALLOWED_EXPORTS = {
   // Daily Dump (plan .claude/plans/2026-11-10-daily-dump.md): helpers land before their callers.
   // Education mode (plan 21, step L2): the scheduler lands before the game calls it. Drop each
   // entry when its step wires it in (this audit fails until you do).
-  reviveStart: 'plan 21: a crash in an education run starts the revive quiz with it (step L6)',
-  reviveStep: 'plan 21: the revive quiz moves on with it (step L6)',
   masteryByDeck: "plan 21: the player's own profile shows it (step B2)",
 };
 

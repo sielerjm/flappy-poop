@@ -76,6 +76,7 @@ export const SECTIONS = [
   { name: 'profile', about: "player profiles (plan 08): the own profile (local counters, a locked badge's progress), another player's from a stubbed player_stats, the explanation card (a badge, a career cell, by mouse and controller), the wheel and a drag, the controller walking the grid, not found, offline, a board name opening a profile (not on a drag), the sign-in gate (no username), the save panel's Profile button" },
   { name: 'education-unlock', needs: [], about: "📚 education mode's unlock (plan 21): the word in the save panel (never a name), the 📚 switch remembered across a restart, 👥 and 📚 never on together on a wide window, an education run recording nothing, a Daily Dump never an education run, locking it again" },
   { name: 'education-quiz', needs: [], about: "📚 the quiz card (plan 21) in an education run's level break: the 📚 pill and its hint, the card answered by tap, key and controller (each answer saved to its card), +1 coin for a right answer and none for a wrong one, Next held after a wrong answer, taps under it ignored, every bank card fitting the card, Esc closing it with the resume lockout, the shop at the level's prices" },
+  { name: 'education-revive', needs: [], about: "📚 the revive after an education crash (plan 21): three misses end the run with the field and score untouched; wrong then right then Fly on revives without the power-ups at the penalty; a full streak gives coins and power-ups back; nothing lost skips the choice; Give up; Esc cannot close it; Tap when ready by tap and by the controller, then play" },
 ];
 
 /** What a section needs: its own list, or (omitted) every section before it. */
@@ -3783,6 +3784,135 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await home();
         const base = await evaluate(`import('./src/config.js').then((c) => JSON.stringify(${play}.shopPrices()) === JSON.stringify(c.TUNING.shop.prices))`);
         ok(base, 'outside an education run the shop keeps its base prices');
+      }
+    });
+
+    await section('education-revive', async () => {
+      // The revive after a crash in an education run (plan 21): the held respawn opens the quiz, the
+      // quiz's phases (reviveStep) settle it, and "Tap when ready" lets the respawn run on.
+      {
+        const play = `__flappy.scene.getScene('Play')`;
+        const Q = `__flappy.scene.getScene('Quiz')`;
+        const tx = (key) => evaluate(`import('./src/i18n.js').then((m) => m.t('en', '${key}'))`);
+        const home = async () => {
+          await evaluate(`__flappy.scene.stop('Over'), __flappy.scene.stop('Quiz'), ${play}.scene.restart(), true`);
+          for (let i = 0; i < 40 && (await playState()) !== 'ready'; i += 1) await sleep(250);
+        };
+        const startEdu = async (setup = '') => {
+          await home();
+          for (let attempt = 0; attempt < 3 && (await playState()) !== 'playing'; attempt += 1) {
+            for (let i = 0; i < 20 && (await playState()) !== 'ready'; i += 1) await sleep(100);
+            await evaluate(`${play}.flap(), true`);
+            for (let i = 0; i < 40 && (await playState()) !== 'playing'; i += 1) await sleep(100);
+          }
+          await evaluate(`(() => { const p = ${play}; p.poop.body.setAllowGravity(false); p.poop.setVelocity(0, 0); p.poop.y = 640; ${setup}; p.refreshCoinHud(); p.refreshInventory(); p.refreshProbioticHud(); return true; })()`);
+        };
+        const crash = async () => {
+          await evaluate(`(() => { const p = ${play}; p.graceLeftMs = 0; p.die(); return true; })()`);
+          for (let i = 0; i < 40 && !(await evaluate(`__flappy.scene.isActive('Quiz') && Boolean(${Q}.card)`)); i += 1) await sleep(100);
+        };
+        const view = () => evaluate(`(() => { const q = ${Q}; return JSON.stringify({ active: __flappy.scene.isActive('Quiz'), phase: q.reviveState?.phase ?? null, verdict: q.verdict.visible ? q.verdict.text : null, left: q.whyBtn.shown ? q.whyBtn.text.text : null, right: q.nextBtn.shown ? q.nextBtn.text.text : null, mid: q.doneBtn.shown ? q.doneBtn.text.text : null, status: q.status.text, header: q.header.text }); })()`).then(JSON.parse);
+        const answer = async (right) => {
+          await evaluate(`(() => { const q = ${Q}; q.choose(${right} ? q.order.indexOf('answer') : q.order.findIndex((k) => k !== 'answer')); return true; })()`);
+          await sleep(150);
+          return view();
+        };
+        const press = async (slot, wait = 0) => {
+          if (wait) await sleep(wait);
+          await evaluate(`${Q}.${slot}.press(), true`);
+          await sleep(250);
+        };
+        const held = TT.education.explainMinMs + 200;
+        const playNow = () => evaluate(`(() => { const p = ${play}; return JSON.stringify({ state: p.state, hold: p.respawnHold, hint: p.reviveHint.visible ? p.reviveHint.text : null, score: p.score, coins: p.effects.coins(), beans: p.effects.beans(), probiotic: p.effects.hasProbiotic(), pipes: p.pipes.getChildren().length, quiz: __flappy.scene.isActive('Quiz'), over: __flappy.scene.isActive('Over'), revives: p.runQuiz.revives, restores: p.runQuiz.restores }); })()`).then(JSON.parse);
+        const waitPlaying = async () => {
+          for (let i = 0; i < 60 && (await playState()) !== 'playing'; i += 1) await sleep(100);
+          return playState();
+        };
+        const storeKeys = JSON.stringify(['flappyPoop.save', TT.bestKey, 'flappyPoop.leaderboard', 'flappyPoop.career']);
+        const stores = () => evaluate(`JSON.stringify(${storeKeys}.map((k) => localStorage.getItem(k)))`);
+        const [wrong, over, back, choice, tapReady, restored] = await Promise.all(['quizWrong', 'reviveOver', 'reviveBack', 'reviveChoice', 'versusTapReady', 'reviveRestored'].map(tx));
+        const [flyOn, goFor, endRun, giveUp] = await Promise.all(['reviveContinue', 'reviveStreakGo', 'reviveEnd', 'reviveGiveUp'].map(tx));
+        await evaluate(`localStorage.removeItem('flappyPoop.eduSrs'), ${play}.setEduUnlocked(true), ${play}.settings.set({ education: true }), true`);
+
+        // Three misses: game over, the field as it was, no penalty, nothing recorded.
+        await startEdu(`p.score = 9`);
+        const stores0 = await stores();
+        const before = await playNow();
+        await crash();
+        const v0 = await view();
+        ok(v0.active && v0.phase === 'strikes' && v0.mid === giveUp && v0.status === '❤️'.repeat(TT.education.strikes), `a crash opens the revive quiz after the tumble: ${v0.header}, ${v0.status}, Give up offered`);
+        await evaluate(`${Q}.input.keyboard.emit('keydown-ESC'), true`);
+        await sleep(200);
+        ok((await view()).active, 'Esc does not close a revive quiz');
+        const w1 = await answer(false);
+        await press('nextBtn', held);
+        const w2 = await answer(false);
+        await press('nextBtn', held);
+        const w3 = await answer(false);
+        ok(w1.phase === 'strikes' && w1.verdict === wrong && w2.phase === 'strikes' && w3.phase === 'over' && w3.verdict === over && w3.right === endRun, `three misses: ${w1.status} → ${w2.status} → ${w3.status}, "${w3.verdict}", ${w3.right}`);
+        await press('nextBtn', held);
+        await sleep(TT.deathToOverMs + 400);
+        const gone = await playNow();
+        ok(gone.over && gone.state === 'dead' && gone.pipes === before.pipes && gone.score === 9, `End run: game over (Over up, state ${gone.state}), the field untouched (${gone.pipes} pipe parts), no penalty (score ${gone.score})`);
+        ok((await stores()) === stores0, 'an education game over records nothing');
+
+        // Wrong, right, Fly on: revived without what the crash took, at the penalty; released by a tap.
+        await startEdu(`p.score = 20; p.effects.addCoins(5); p.effects.addBean()`);
+        await crash();
+        const lost = await playNow();
+        ok(lost.coins === 0 && lost.beans === 0 && lost.state === 'respawn' && lost.hold === 'quiz', `the crash takes the coins and beans at once (${lost.coins} / ${lost.beans}); the respawn holds for the quiz`);
+        await answer(false);
+        await press('nextBtn', held);
+        const c1 = await answer(true);
+        const choiceWant = choice.replace('{n}', String(TT.education.restoreStreak - 1));
+        ok(c1.phase === 'choice' && c1.verdict === back && c1.left === flyOn && c1.right === `⭐ ${goFor}`, `a right answer after a miss revives and offers the choice: "${c1.verdict}" [${c1.left}] [${c1.right}]`);
+        ok((await evaluate(`${Q}.explain.text`)) === choiceWant, `the choice says how: "${choiceWant}"`);
+        await press('whyBtn');
+        const r1 = await playNow();
+        const pen = TT.education.revivePenaltyPerLevel;
+        ok(!r1.quiz && r1.state === 'respawn' && r1.hold === 'tap' && r1.hint === tapReady && r1.score === 20 - pen && r1.coins === 0 && r1.beans === 0 && r1.revives === 1, `Fly on: revived at −${pen} (score ${r1.score}), coins and beans not back, "${r1.hint}" waiting`);
+        await sleep(400); // past the resume lockout
+        await evaluate(`${play}.flap(), true`);
+        const st1 = await waitPlaying();
+        const after1 = await playNow();
+        ok(st1 === 'playing' && !after1.hint && after1.hold === null, `a tap releases it: the glide and the blinks, then ${st1}`);
+
+        // A full streak: everything the crash took comes back; released by the controller.
+        await startEdu(`p.score = 30; p.effects.addCoins(4); p.effects.addBean(); p.effects.addBean(); p.effects.applyProbiotic()`);
+        await crash();
+        await answer(true);
+        await press('nextBtn'); // ⭐ Go for it
+        const s1 = await view();
+        await answer(true);
+        await press('nextBtn'); // Next
+        const s3 = await answer(true);
+        ok(s1.phase === 'streak' && s1.status === '⭐' + '☆'.repeat(TT.education.restoreStreak - 1) && s3.phase === 'restored' && s3.verdict === restored && s3.right === flyOn, `the streak: ${s1.status} → "${s3.verdict}" (${s3.status})`);
+        await press('nextBtn');
+        const r2 = await playNow();
+        ok(r2.coins === 4 && r2.beans === 2 && r2.probiotic && r2.score === 30 - pen && r2.restores === 1 && r2.hold === 'tap', `restored: ${r2.coins} coins, ${r2.beans} beans, the probiotic back; the penalty still taken (score ${r2.score})`);
+        await sleep(400);
+        await evaluate(`${play}.onPadAction('select'), true`);
+        ok((await waitPlaying()) === 'playing', "the controller's A is a tap when ready too");
+
+        // Nothing lost: the first right answer revives without a choice.
+        await startEdu('');
+        await crash();
+        const n1 = await answer(true);
+        ok(n1.phase === 'revived' && n1.verdict === back && n1.right === flyOn && !n1.left?.startsWith?.('⭐'), `nothing to win back: "${n1.verdict}", straight to ${n1.right}`);
+        await press('nextBtn');
+        ok((await playNow()).hold === 'tap', 'and the respawn waits for the tap');
+
+        // Give up: the run ends at once.
+        await startEdu('');
+        await crash();
+        await press('doneBtn');
+        await sleep(TT.deathToOverMs + 400);
+        const g = await playNow();
+        ok(g.over && g.state === 'dead' && !g.quiz, 'Give up ends the run');
+
+        await home();
+        await evaluate(`localStorage.removeItem('flappyPoop.eduSrs'), ${play}.settings.set({ education: false }), ${play}.setEduUnlocked(false), true`);
+        await home();
       }
     });
 
