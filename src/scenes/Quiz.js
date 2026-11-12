@@ -79,7 +79,11 @@ export class Quiz extends Phaser.Scene {
       if (globalThis.document?.hidden && this.card && !this.answered) this.interrupted = true;
     };
     globalThis.document?.addEventListener?.('visibilitychange', this.onVisibility);
-    this.events.once('shutdown', () => globalThis.document?.removeEventListener?.('visibilitychange', this.onVisibility));
+    // However the card goes (✕, Esc, B, or the run ending under it), Play hears it once it is down.
+    this.events.once('shutdown', () => {
+      globalThis.document?.removeEventListener?.('visibilitychange', this.onVisibility);
+      this.play?.onQuizClosed?.(this.mode);
+    });
 
     this.focus = createFocus(this, T, {
       items: [
@@ -224,7 +228,7 @@ export class Quiz extends Phaser.Scene {
     const key = this.order[i];
     const rtMs = (globalThis.performance?.now?.() ?? Date.now()) - this.shownAt;
     const res = this.play?.quizAnswer?.({ card: this.card, reason: this.reason, order: this.order, chosen: key, rtMs, interrupted: this.interrupted, mode: this.mode }) ?? { correct: key === 'answer' };
-    this.lastAnswer = { id: this.card.id, chosen: key, correct: res.correct, rtMs, interrupted: this.interrupted }; // the smoke reads it
+    this.lastAnswer = { id: this.card.id, chosen: key, correct: res.correct, coins: res.coins ?? 0, rtMs, interrupted: this.interrupted }; // the smoke reads it
     this.reveal(i, res.correct);
   }
 
@@ -240,8 +244,9 @@ export class Quiz extends Phaser.Scene {
         o.mark.setText('✗');
       } else this.drawOption(o, 'dim');
     });
+    const coins = this.lastAnswer?.coins ?? 0;
     this.verdict
-      .setText(t(this.locale, correct ? 'quizRight' : 'quizWrong'))
+      .setText(correct && coins ? t(this.locale, 'quizRightCoins').replace('{n}', String(coins)) : t(this.locale, correct ? 'quizRight' : 'quizWrong'))
       .setColor(correct ? '#9fe8b4' : '#ff8da8')
       .setVisible(true);
     // A wrong answer shows why at once and holds Next a moment; a right one offers "Why?".
@@ -257,6 +262,7 @@ export class Quiz extends Phaser.Scene {
   preview(card) {
     this.showCard(card, ['answer', 'w1', 'w2']);
     this.answered = true;
+    this.lastAnswer = null;
     this.reveal(1, false);
     this.source.setText(t(this.locale, 'quizSource').replace('{source}', cardSource(card))).setVisible(true); // as tall as it will be once audited
     return this.fits();
@@ -309,8 +315,7 @@ export class Quiz extends Phaser.Scene {
     const play = this.play;
     const result = chromeIntent({ state: play?.state ?? 'paused', overlay: 'quiz', input: 'close' });
     if (result.do !== 'closeTop') return;
-    this.scene.stop();
-    play?.onQuizClosed?.(this.mode);
+    this.scene.stop(); // its shutdown tells Play (onQuizClosed)
     if (result.armResumeLockout) play?.armResumeLockout?.();
   }
 }

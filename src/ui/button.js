@@ -46,6 +46,10 @@ export function createButton(scene, box, label, style, { depth = 20, fillAlpha =
       text.setVisible(visible);
       return this;
     },
+    /** Whether it is showing (setVisible's last word). */
+    get visible() {
+      return g.visible;
+    },
     setText(value) {
       text.setText(value);
       if (pulseOpts) startPulse();

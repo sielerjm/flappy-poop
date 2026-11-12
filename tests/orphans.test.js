@@ -26,7 +26,6 @@ const ALLOWED_EXPORTS = {
   // entry when its step wires it in (this audit fails until you do).
   reviveStart: 'plan 21: a crash in an education run starts the revive quiz with it (step L6)',
   reviveStep: 'plan 21: the revive quiz moves on with it (step L6)',
-  eduShopPrices: 'plan 21: the shop prices an education run with it (step L5)',
   masteryByDeck: "plan 21: the player's own profile shows it (step B2)",
 };
 

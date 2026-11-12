@@ -15,6 +15,8 @@ const STRINGS = {
     levelBanner: 'LEVEL {n}',
     levelContinue: 'Tap to continue',
     levelShopHint: 'Tap to continue · 💰 to shop',
+    levelQuizHint: 'Tap to continue · 📚 for a quiz',
+    levelQuizShopHint: 'Tap to continue · 📚 quiz · 💰 shop',
     shopTitle: 'SHOP',
     shopCoins: 'Your coins',
     shopFiber: 'Fiber · +3 points',
@@ -150,6 +152,8 @@ Inspired by Flappy Bird`,
     eduUnlocked: 'Education mode unlocked: 📚 is on the home screen',
     eduLocked: 'Education mode locked',
     quizRight: 'Right!',
+    quizRightCoins: 'Right! +{n} 💰',
+    quizPill: 'Quiz',
     quizWrong: 'Not quite: the right answer has a ✓',
     quizWhy: 'Why?',
     quizNext: 'Next',
@@ -392,6 +396,8 @@ Inspired by Flappy Bird`,
     levelBanner: '第 {n} 关',
     levelContinue: '点击继续',
     levelShopHint: '点击继续 · 💰 进商店',
+    levelQuizHint: '点击继续 · 📚 答题',
+    levelQuizShopHint: '点击继续 · 📚 答题 · 💰 商店',
     shopTitle: '商店',
     shopCoins: '你的金币',
     shopFiber: '纤维 · +3 分',
@@ -526,6 +532,8 @@ Inspired by Flappy Bird`,
     eduUnlocked: '教育模式已解锁：主屏幕上出现了 📚',
     eduLocked: '教育模式已锁定',
     quizRight: '答对了！',
+    quizRightCoins: '答对了！+{n} 💰',
+    quizPill: '答题',
     quizWrong: '不太对：正确答案标有 ✓',
     quizWhy: '为什么？',
     quizNext: '下一题',
@@ -815,11 +823,12 @@ export function howToItems(locale) {
  * omitted past the named list) and "Tap to continue", or with `shop` (coins in
  * the purse) "Tap to continue · 💰 to shop".
  */
-export function levelBannerText(locale, level, levels, { shop = false } = {}) {
+export function levelBannerText(locale, level, levels, { shop = false, education = false } = {}) {
   const key = levels?.[level - 1]?.key;
   const title = t(locale, 'levelBanner').replace('{n}', String(level));
   const name = key ? t(locale, `level.${key}`) : '';
-  return `${name ? `${title} · ${name}` : title}\n${t(locale, shop ? 'levelShopHint' : 'levelContinue')}`;
+  const hint = education ? (shop ? 'levelQuizShopHint' : 'levelQuizHint') : shop ? 'levelShopHint' : 'levelContinue';
+  return `${name ? `${title} · ${name}` : title}\n${t(locale, hint)}`;
 }
 
 /** The coin glyph and a count: "💰 12" (the shop button, the purse line, every price); a test run's endless purse reads "💰 ∞". Locale-free, like formatScore's "🚽 41". */

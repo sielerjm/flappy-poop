@@ -126,7 +126,7 @@ import { openSavePanel, isSavePanelOpen, showAdoptedName, showBoardScores } from
 import { isTournamentPanelOpen, tournamentPadAction } from '../ui/tournamentPanel.js';
 import { bindPad } from '../input/pad.js';
 import { keyGroup, sameDevice, catchUpTier, catchUpDraws, versusAvailable, ghostPlacement, rivalMarker, respawnPose, courseDistance, VERSUS_EMOJI } from '../versus.js';
-import { createEduStore, dueCount, pickCard, shuffleOptions, gradeFor, schedule, EDUCATION_EMOJI } from '../education.js';
+import { createEduStore, dueCount, pickCard, shuffleOptions, gradeFor, schedule, eduShopPrices, EDUCATION_EMOJI } from '../education.js';
 
 const TEXT_STYLE = {
   fontFamily: 'sans-serif',
@@ -211,6 +211,7 @@ export class Play extends Phaser.Scene {
     this.eduStore = createEduStore(globalThis.localStorage);
     this.runIsEducation = false;
     this.runQuiz = { answered: 0, right: 0 }; // this run's quiz answers (start() resets it)
+    this.quizOpen = false; // the Quiz scene is up (openQuiz → onQuizClosed)
     this.runBadges = []; // the achievements the last run unlocked, for Over
     // The Daily Dump run (startDaily → start): { day, level, startPipes, playerId } while one runs, else null.
     // runIsDaily latches per run like runIsTest; dailyNext carries startDaily's day through the launch slide.
@@ -498,6 +499,10 @@ export class Play extends Phaser.Scene {
     // (Versus.bothInBreak) it opens the bracket read-only (Versus.openPeek); it never readies the half.
     this.bracketButtonBox = this.match?.tournament ? bracketButtonLayout(this.col.width, GAME_HEIGHT, T, this.col.x) : null;
     this.bracketButton = this.bracketButtonBox ? createButton(this, this.bracketButtonBox, t(this.locale, 'tournamentBracketPill'), { ...TEXT_STYLE, fontSize: '36px', color: '#ffd700' }, { depth: 27 }).setVisible(false) : null;
+    // An education run's 📚 Questions pill (plan 21), in the 🏅's row under the 💰 (single player only:
+    // the two never meet). It opens the quiz on the segment just cleared (chromeIntent's 'quiz').
+    this.quizButtonBox = this.match ? null : { ...bracketButtonLayout(this.col.width, GAME_HEIGHT, T, this.col.x), id: 'quiz' };
+    this.quizButton = this.quizButtonBox ? createButton(this, this.quizButtonBox, `${EDUCATION_EMOJI} ${t(this.locale, 'quizPill')}`, { ...TEXT_STYLE, fontSize: '36px', color: '#f8a0c8' }, { depth: 27 }).setVisible(false) : null;
 
     // The tray and the controller ring belong to the chrome owner: single player, or P1 in a match (P2 has neither).
     this.tray = !this.match || this.player === 1 ? createTray(this, { muted: isMuted(), col: this.col }) : null;
@@ -520,6 +525,7 @@ export class Play extends Phaser.Scene {
             // The level break: the 💰 pill, then (the shop open) its ✕ and rows down the column.
             { id: 'shop', box: this.shopButtonBox, depth: 27, visible: () => this.shopButtonShown(), activate: () => this.handleChrome('shop') },
             ...(this.bracketButtonBox ? [{ id: 'bracket', box: this.bracketButtonBox, depth: 27, visible: () => this.bracketButtonShown(), activate: () => this.openBracketPeek() }] : []),
+            ...(this.quizButtonBox ? [{ id: 'quiz', box: this.quizButtonBox, depth: 27, visible: () => this.quizButtonShown(), activate: () => this.handleChrome('quiz') }] : []),
             { id: 'shopClose', box: this.shopBoxes.close, depth: 29, visible: () => this.shopOpen, activate: () => this.handleChrome('esc') },
             ...this.shopBoxes.rows.map((row) => ({ id: `shop:${row.id}`, box: row, depth: 28, visible: () => this.shopOpen, activate: () => this.shopBuy(row.id) })),
           ],
@@ -881,7 +887,7 @@ export class Play extends Phaser.Scene {
   refreshLevelBanner() {
     // Single player with coins in the purse: "Tap to continue · 💰 to shop".
     const shop = !this.match && this.purseCoins() > 0;
-    const [title, hint] = levelBannerText(this.locale, this.level, LEVELS, { shop }).split('\n');
+    const [title, hint] = levelBannerText(this.locale, this.level, LEVELS, { shop, education: this.runIsEducation }).split('\n');
     this.levelTitle?.setText(title);
     // A match's break is a ready check: the hint is this player's state ("Tap when ready", then
     // "Ready! Waiting for P2…"); the shared count starts once both are ready (Versus.onLevelTap).
@@ -1086,6 +1092,10 @@ export class Play extends Phaser.Scene {
     }
     if (pointer && this.shopButtonShown() && shopButtonHit(pointer.x, pointer.y, this.shopButtonBox)) {
       this.handleChrome('shop');
+      return;
+    }
+    if (pointer && this.quizButtonShown() && Math.abs(pointer.x - this.quizButtonBox.x) <= this.quizButtonBox.width / 2 && Math.abs(pointer.y - this.quizButtonBox.y) <= this.quizButtonBox.height / 2) {
+      this.handleChrome('quiz'); // the 📚 pill: questions, never a continue tap
       return;
     }
     if (pointer && this.bracketButtonShown() && Math.abs(pointer.x - this.bracketButtonBox.x) <= this.bracketButtonBox.width / 2 && Math.abs(pointer.y - this.bracketButtonBox.y) <= this.bracketButtonBox.height / 2) {
@@ -1495,10 +1505,12 @@ export class Play extends Phaser.Scene {
    * 'quiz'). The Quiz scene asks quizNext for its cards and hands each answer to quizAnswer.
    */
   openQuiz(mode) {
-    if (!this.runIsEducation || this.scene.isActive('Quiz')) return;
+    if (!this.runIsEducation || this.quizOpen) return;
+    this.quizOpen = true; // until the Quiz scene shuts down (onQuizClosed)
     this.focus?.hide();
     this.scene.launch('Quiz', { mode });
     this.scene.bringToTop('Quiz');
+    this.refreshShopButton(); // the 📚 pill hides under its quiz
   }
 
   /**
@@ -1517,9 +1529,10 @@ export class Play extends Phaser.Scene {
   /**
    * One answer from the quiz: graded (gradeFor; an interrupted answer's time is not used) and, outside
    * a test run, scheduled and saved (schedule, eduStore). An early review answered right keeps its
-   * schedule. Counted in runQuiz. Returns { correct, grade }.
+   * schedule. Counted in runQuiz. A right answer in a level break pays break.coins (takeCoins: the
+   * purse, the coin sound). Returns { correct, grade, coins }.
    */
-  quizAnswer({ card, reason, chosen, rtMs, interrupted }) {
+  quizAnswer({ card, reason, chosen, rtMs, interrupted, mode = 'break' }) {
     const correct = chosen === 'answer';
     const grade = gradeFor(correct, interrupted ? null : rtMs);
     if (!this.runIsTest) {
@@ -1528,12 +1541,20 @@ export class Play extends Phaser.Scene {
     }
     this.runQuiz.answered += 1;
     if (correct) this.runQuiz.right += 1;
-    return { correct, grade };
+    const coins = correct && mode === 'break' ? T.education.breakCoins : 0;
+    if (coins) {
+      this.takeCoins(coins);
+      this.refreshLevelBanner(); // the hint gains "💰 shop" with the first coin
+      this.refreshShopButton();
+    }
+    return { correct, grade, coins };
   }
 
-  /** The quiz closed: the ring may come back (the closing tap is locked out by the caller). */
+  /** The quiz closed: the 📚 and 💰 pills come back (the closing tap is locked out by the caller). */
   onQuizClosed() {
+    this.quizOpen = false;
     this.refreshEduDue();
+    this.refreshShopButton();
   }
 
   /** Re-lay and redraw the switches when what is offered changes (test mode hides 👥; the word shows 📚). */
@@ -2900,8 +2921,9 @@ export class Play extends Phaser.Scene {
    * Nothing it starts is frozen with the paused run: the reward animates in the break.
    */
   buyItem(id, opts = {}) {
-    if (!canBuy(id, { coins: this.purseCoins(), beans: this.effects.beans() }, T)) return false;
-    if (!this.testCoins()) this.effects.spendCoins(T.shop.prices[id]);
+    const prices = this.shopPrices();
+    if (!canBuy(id, { coins: this.purseCoins(), beans: this.effects.beans(), prices }, T)) return false;
+    if (!this.testCoins()) this.effects.spendCoins(prices[id]);
     if (id === 'fiber') this.eatFiber();
     else if (id === 'bean') this.giveBeans(1);
     else if (id === 'superBean') this.giveBeans(T.beans.superBeans);
@@ -2944,9 +2966,20 @@ export class Play extends Phaser.Scene {
     this.versusHost()?.openPeek?.();
   }
 
+  /** The shop's prices now: shop.prices, or in an education run the level's (eduShopPrices: the level about to be played). */
+  shopPrices() {
+    return this.runIsEducation ? eduShopPrices(this.level) : T.shop.prices;
+  }
+
+  /** The 📚 pill shows in an education run's level break, the shop and the quiz closed. */
+  quizButtonShown() {
+    return Boolean(this.quizButton && this.runIsEducation && this.levelBreak && this.state === 'paused' && !this.shopOpen && !this.quizOpen);
+  }
+
   /** The 💰 pill: shown by shopButtonShown, labelled with the purse, dimmed (trayAlpha) when it is empty. */
   refreshShopButton() {
     this.refreshBracketButton();
+    this.quizButton?.setVisible(this.quizButtonShown());
     if (!this.shopButton) return;
     const coins = this.purseCoins();
     this.shopButton.setText(coinLabel(coins)).setAlpha(coins > 0 ? 1 : T.trayAlpha).setVisible(this.shopButtonShown());
@@ -2989,12 +3022,13 @@ export class Play extends Phaser.Scene {
     const names = { fiber: 'shopFiber', bean: 'shopBean', superBean: 'shopSuperBean', mystery: 'shopMystery' };
     this.shop.title.setText(t(this.locale, 'shopTitle'));
     this.shop.coins.setText(`${t(this.locale, 'shopCoins')}  ${coinLabel(coins)}`);
+    const prices = this.shopPrices();
     for (const row of this.shopBoxes.rows) {
       const r = this.shop.rows[row.id];
-      const blocker = buyBlocker(row.id, { coins, beans }, T);
+      const blocker = buyBlocker(row.id, { coins, beans, prices }, T);
       // A full bag reads "Bag full" even with the purse short too: coins would not help.
-      const bagFull = buyBlocker(row.id, { coins: Infinity, beans }, T) === 'full';
-      r.price.setText(bagFull ? t(this.locale, 'shopFull') : coinLabel(T.shop.prices[row.id]));
+      const bagFull = buyBlocker(row.id, { coins: Infinity, beans, prices }, T) === 'full';
+      r.price.setText(bagFull ? t(this.locale, 'shopFull') : coinLabel(prices[row.id]));
       r.name.setText(t(this.locale, names[row.id])).setScale(1);
       r.name.setScale(fitScale(r.name.width, row.priceX - r.price.width - 16 - row.nameX));
       const alpha = blocker ? T.shop.disabledAlpha : 1;

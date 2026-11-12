@@ -831,3 +831,12 @@ test('reelProgress: 0 → 1 over shop.reel.spinMs, never backwards, fastest at t
   }
   assert.ok(reelProgress(S / 10, T) - reelProgress(0, T) > reelProgress(S, T) - reelProgress(S * 0.9, T), 'eases out');
 });
+
+test('buyBlocker / canBuy with an education run\'s prices (plan 21): the passed prices decide, the bag rule is the same', () => {
+  const prices = { fiber: 3, bean: 12, superBean: 32, mystery: 10 };
+  assert.equal(buyBlocker('fiber', { coins: T.shop.prices.fiber, prices }, T), 'coins', 'the base price is not enough at a higher level');
+  assert.equal(buyBlocker('fiber', { coins: 3, prices }, T), null);
+  assert.equal(canBuy('bean', { coins: 12, beans: T.beans.maxBeans, prices }, T), false, 'a full bag still refuses');
+  assert.equal(buyBlocker('mystery', { coins: 9, prices }, T), 'coins');
+  assert.equal(buyBlocker('fiber', { coins: T.shop.prices.fiber }, T), null, 'no prices: shop.prices, as before');
+});

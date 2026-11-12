@@ -96,6 +96,8 @@ Short, playful, clear. Fit a 720×1280 logical field; How to play / About body w
 | levelBanner | LEVEL {n} | 第 {n} 关 |
 | levelContinue | Tap to continue | 点击继续 |
 | levelShopHint | Tap to continue · 💰 to shop | 点击继续 · 💰 进商店 |
+| levelQuizHint | Tap to continue · 📚 for a quiz | 点击继续 · 📚 答题 |
+| levelQuizShopHint | Tap to continue · 📚 quiz · 💰 shop | 点击继续 · 📚 答题 · 💰 商店 |
 | shopTitle | SHOP | 商店 |
 | shopCoins | Your coins | 你的金币 |
 | shopFiber | Fiber · +3 points | 纤维 · +3 分 |
@@ -218,6 +220,8 @@ Short, playful, clear. Fit a 720×1280 logical field; How to play / About body w
 | eduUnlocked | Education mode unlocked: 📚 is on the home screen | 教育模式已解锁：主屏幕上出现了 📚 |
 | eduLocked | Education mode locked | 教育模式已锁定 |
 | quizRight | Right! | 答对了！ |
+| quizRightCoins | Right! +{n} 💰 | 答对了！+{n} 💰 |
+| quizPill | Quiz | 答题 |
 | quizWrong | Not quite: the right answer has a ✓ | 不太对：正确答案标有 ✓ |
 | quizWhy | Why? | 为什么？ |
 | quizNext | Next | 下一题 |

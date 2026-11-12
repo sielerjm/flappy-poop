@@ -75,7 +75,7 @@ export const SECTIONS = [
   { name: 'daily', needs: [], about: "🌞 Daily Dump: the day's level and shared course, endless (no finish line), no coins or skips, the attempt claimed at the start and final at the crash, nothing on the 🏆 lists, an abandoned run finalised" },
   { name: 'profile', about: "player profiles (plan 08): the own profile (local counters, a locked badge's progress), another player's from a stubbed player_stats, the explanation card (a badge, a career cell, by mouse and controller), the wheel and a drag, the controller walking the grid, not found, offline, a board name opening a profile (not on a drag), the sign-in gate (no username), the save panel's Profile button" },
   { name: 'education-unlock', needs: [], about: "📚 education mode's unlock (plan 21): the word in the save panel (never a name), the 📚 switch remembered across a restart, 👥 and 📚 never on together on a wide window, an education run recording nothing, a Daily Dump never an education run, locking it again" },
-  { name: 'education-quiz', needs: [], about: "📚 the quiz card (plan 21) in an education run's level break: opened by the quiz input, answered by tap, key and controller (each answer saved to its card), Next held after a wrong answer, taps under it ignored, every bank card fitting the card, Esc closing it with the resume lockout" },
+  { name: 'education-quiz', needs: [], about: "📚 the quiz card (plan 21) in an education run's level break: the 📚 pill and its hint, the card answered by tap, key and controller (each answer saved to its card), +1 coin for a right answer and none for a wrong one, Next held after a wrong answer, taps under it ignored, every bank card fitting the card, Esc closing it with the resume lockout, the shop at the level's prices" },
 ];
 
 /** What a section needs: its own list, or (omitted) every section before it. */
@@ -3693,10 +3693,15 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         const brk = await evaluate(`JSON.stringify({ edu: ${play}.runIsEducation, state: ${play}.state, lb: ${play}.levelBreak, level: ${play}.level })`).then(JSON.parse);
         ok(brk.edu && brk.state === 'paused' && brk.lb && brk.level === 2, `an education run reaches the level-2 break (${JSON.stringify(brk)})`);
 
-        await chrome('quiz');
+        // The 📚 pill under the 💰, and the hint naming both (level 1's line paid its coin).
+        const pill = await evaluate(`JSON.stringify({ shown: ${play}.quizButtonShown(), visible: ${play}.quizButton.visible, y: ${play}.quizButtonBox.y, shopY: ${play}.shopButtonBox.y, hint: ${play}.levelHint.text, coins: ${play}.effects.coins() })`).then(JSON.parse);
+        const hintWant = await tx(pill.coins > 0 ? 'levelQuizShopHint' : 'levelQuizHint');
+        ok(pill.shown && pill.visible && pill.y > pill.shopY && pill.hint === hintWant, `the break shows the 📚 pill under the 💰 (y ${pill.y} > ${pill.shopY}) and the hint "${pill.hint}"`);
+        await evaluate(`(() => { const p = ${play}; const b = p.quizButtonBox; p.flap({ x: b.x, y: b.y }); return true; })()`);
         await sleep(500);
         const q0 = await quizNow();
-        ok(q0.active && ['stomach', 'general'].includes(q0.deck) && !q0.answered, `the quiz input opens the card on a ${q0.deck} card (${q0.id}): the segment just cleared, or a general one`);
+        const hidden = await evaluate(`${play}.quizButton.visible`);
+        ok(q0.active && ['stomach', 'general'].includes(q0.deck) && !q0.answered && !hidden, `a tap on the pill opens the card on a ${q0.deck} card (${q0.id}): the segment just cleared, or a general one; the pill hides under it`);
 
         // A tap under the card does nothing: the break stays paused.
         await evaluate(`${play}.flap(), true`);
@@ -3708,7 +3713,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await sleep(200);
         const q1 = await quizNow();
         const r1 = await cardRec(q1.id);
-        const verdictWant = await tx(q1.last?.correct ? 'quizRight' : 'quizWrong');
+        const verdictWant = q1.last?.correct ? (await tx('quizRightCoins')).replace('{n}', String(TT.education.breakCoins)) : await tx('quizWrong');
         ok(q1.answered && q1.last?.id === q0.id && r1?.seen === 1 && r1.right === (q1.last.correct ? 1 : 0) && q1.verdict === verdictWant && q1.next, `a tap answers ${q0.id} (${q1.last?.correct ? 'right' : 'wrong'}, ${Math.round(q1.last?.rtMs ?? -1)} ms): saved (seen ${r1?.seen}), "${q1.verdict}", Next shown`);
         if (!q1.last?.correct) ok(q1.explain && q1.nextAlpha < 1, 'a wrong answer shows the explanation at once and holds Next');
         await sleep(TT.education.explainMinMs + 200);
@@ -3737,6 +3742,23 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         const ringNext = await evaluate(`${Q}.focus.items[${Q}.focus.index]?.id ?? null`);
         ok(q5.answered && q5.last?.id === q4.id && r5?.seen === 1 && ringNext === 'next', `the controller's A answers ${q4.id} (saved) and the ring moves to Next`);
         await evaluate(`${play}.registry.set('padMode', false), ${Q}.focus.hide(), true`);
+        await sleep(TT.education.explainMinMs + 200);
+
+        // Coins: a right answer pays breakCoins (and says so); a wrong one pays nothing.
+        await evaluate(`${Q}.next(), true`);
+        await sleep(200);
+        const c0 = await evaluate(`${play}.effects.coins()`);
+        await evaluate(`(() => { const q = ${Q}; q.options[q.order.indexOf('answer')].zone.emit('pointerdown'); return true; })()`);
+        await sleep(200);
+        const c1 = await evaluate(`${play}.effects.coins()`);
+        const qr = await quizNow();
+        const rightWant = (await tx('quizRightCoins')).replace('{n}', String(TT.education.breakCoins));
+        ok(c1 - c0 === TT.education.breakCoins && qr.verdict === rightWant, `a right answer pays ${c1 - c0} coin (${c0} → ${c1}) and says "${qr.verdict}"`);
+        await evaluate(`${Q}.next(), true`);
+        await sleep(200);
+        await evaluate(`(() => { const q = ${Q}; q.options[q.order.findIndex((k) => k !== 'answer')].zone.emit('pointerdown'); return true; })()`);
+        await sleep(200);
+        ok((await evaluate(`${play}.effects.coins()`)) === c1, 'a wrong answer pays nothing');
 
         // Every card in the bank, answered wrong with its explanation and source showing, fits the card.
         const fit = await evaluate(`import('./src/questions.js').then(({ CARDS }) => { const q = ${Q}; const bad = []; for (const c of CARDS) { const f = q.preview(c); if (!f.ok) bad.push(c.id + ':' + Math.round(f.below) + '>' + Math.round(f.buttonsTop)); } return JSON.stringify({ n: CARDS.length, bad }); })`).then(JSON.parse);
@@ -3747,12 +3769,20 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         const locked = await evaluate(`(() => { const p = ${play}; ${Q}.input.keyboard.emit('keydown-ESC'); return p.time.now < p.flapLockedUntil; })()`);
         await sleep(300);
         const after = await evaluate(`JSON.stringify({ quiz: __flappy.scene.isActive('Quiz'), state: ${play}.state, lb: ${play}.levelBreak, answered: ${play}.runQuiz.answered })`).then(JSON.parse);
-        ok(!after.quiz && after.state === 'paused' && after.lb && locked && after.answered === 3, `Esc closes the quiz into the paused break with the resume lockout armed (${JSON.stringify({ ...after, locked })})`);
+        ok(!after.quiz && after.state === 'paused' && after.lb && locked && after.answered === 5, `Esc closes the quiz into the paused break with the resume lockout armed (${JSON.stringify({ ...after, locked })})`);
+
+        // The pill is back, and the shop sells at level 2's prices (eduShopPrices), not the base ones.
+        await sleep(400);
+        const shop = await evaluate(`Promise.all([import('./src/education.js'), import('./src/i18n.js')]).then(([e, i]) => { const p = ${play}; const pillBack = p.quizButton.visible; p.handleChrome('shop'); const want = e.eduShopPrices(2); const shown = Object.fromEntries(Object.entries(p.shop.rows).map(([id, r]) => [id, r.price.text])); const label = Object.fromEntries(Object.keys(want).map((id) => [id, i.coinLabel(want[id])])); p.closeShop(); return JSON.stringify({ pillBack, shown, label, want, base: p.shopPrices === undefined ? null : JSON.stringify(p.shopPrices()) === JSON.stringify(want) }); })`).then(JSON.parse);
+        const sameLabels = Object.keys(shop.label).every((id) => shop.shown[id] === shop.label[id] || shop.shown[id] === (null));
+        ok(shop.pillBack && shop.base && sameLabels, `the 📚 pill is back, and the shop prices level 2 at ${JSON.stringify(shop.want)} (shown ${JSON.stringify(shop.shown)})`);
 
         await evaluate(`${play}.resumePlay(), true`);
         await home();
         await evaluate(`localStorage.removeItem('flappyPoop.eduSrs'), ${play}.settings.set({ education: false }), ${play}.setEduUnlocked(false), true`);
         await home();
+        const base = await evaluate(`import('./src/config.js').then((c) => JSON.stringify(${play}.shopPrices()) === JSON.stringify(c.TUNING.shop.prices))`);
+        ok(base, 'outside an education run the shop keeps its base prices');
       }
     });
 

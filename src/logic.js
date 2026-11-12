@@ -643,11 +643,12 @@ export const SHOP_ITEMS = ['fiber', 'bean', 'superBean', 'mystery'];
 
 /**
  * Why `item` cannot be bought now, or null when it can: 'price' (not a shop item),
- * 'coins' (the purse is short of shop.prices[item]), 'full' (a bean with beans.maxBeans
+ * 'coins' (the purse is short of its price), 'full' (a bean with beans.maxBeans
  * held, a super bean with beans.superBeans held). Fiber and a mystery box need coins only.
+ * `prices` defaults to shop.prices; an education run passes its level's (eduShopPrices).
  */
-export function buyBlocker(item, { coins = 0, beans = 0 } = {}, t) {
-  const price = t.shop.prices[item];
+export function buyBlocker(item, { coins = 0, beans = 0, prices = null } = {}, t) {
+  const price = (prices ?? t.shop.prices)[item];
   if (!SHOP_ITEMS.includes(item) || !(price >= 0)) return 'price';
   if (coins < price) return 'coins';
   if (item === 'bean' && beans >= t.beans.maxBeans) return 'full';
