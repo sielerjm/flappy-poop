@@ -40,7 +40,7 @@ export class Over extends Phaser.Scene {
     const pipes = Number.isInteger(data?.pipes) && data.pipes >= 0 ? data.pipes : 0;
     const won = Boolean(data?.won); // crossed the final level's finish line
     const testRun = Boolean(data?.test); // test mode: nothing was recorded (Play.endRun)
-    // An education run (plan 21): { answered, right, revives, restores }; not saved to the boards yet, nothing to share.
+    // An education run (plan 21): its tally { answered, right, wrong, … }; not saved to the boards yet, nothing to share.
     const education = data?.education ?? null;
     const toilet = Boolean(data?.toilet);
     const level = Number.isInteger(data?.level) && data.level >= 1 ? data.level : 1;
@@ -125,9 +125,10 @@ export class Over extends Phaser.Scene {
       line.setScale(fitScale(line.width, 500, 0));
       this.badgeLine = line;
     }
+    this.eduLine = null; // as with badgeLine: never the last panel's
     if (education) {
-      // 📚 right / answered · 💀 revives · ⭐ restores (glyphs and numbers: nothing to translate), then why it is not on a board.
-      const tally = `${EDUCATION_EMOJI} ${education.right}/${education.answered}  ·  \u{1F480} ${education.revives}  ·  ⭐ ${education.restores}`;
+      // ❔ answered · ✅ right · ❌ wrong (glyphs and numbers: nothing to translate), then why it is not on a board.
+      const tally = `❔ ${education.answered}  ·  ✅ ${education.right}  ·  ❌ ${education.wrong ?? 0}`;
       this.eduLine = this.add.text(cx, cy + 140, tally, { ...style, fontSize: '32px', color: '#ffd700' }).setOrigin(0.5);
       this.add.text(cx, cy + 184, t(locale, testRun ? 'testRunNotSaved' : 'eduNotSaved'), { ...style, fontSize: '24px', color: '#c9b8dc', fontStyle: 'normal', wordWrap: { width: 480, useAdvancedWrap: true } }).setOrigin(0.5);
     } else if (testRun) {

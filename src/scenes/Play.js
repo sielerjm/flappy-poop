@@ -127,7 +127,7 @@ import { openSavePanel, isSavePanelOpen, showAdoptedName, showBoardScores } from
 import { isTournamentPanelOpen, tournamentPadAction } from '../ui/tournamentPanel.js';
 import { bindPad } from '../input/pad.js';
 import { keyGroup, sameDevice, catchUpTier, catchUpDraws, versusAvailable, ghostPlacement, rivalMarker, respawnPose, respawnBlinkStart, courseDistance, VERSUS_EMOJI } from '../versus.js';
-import { createEduStore, dueCount, pickCard, shuffleOptions, gradeFor, schedule, eduShopPrices, reviveStart, reviveStep, reviveSettled, EDUCATION_EMOJI } from '../education.js';
+import { createEduStore, dueCount, pickCard, shuffleOptions, gradeFor, schedule, eduShopPrices, reviveStart, reviveStep, reviveSettled, newTally, tallyAnswer, EDUCATION_EMOJI } from '../education.js';
 
 const TEXT_STYLE = {
   fontFamily: 'sans-serif',
@@ -211,7 +211,7 @@ export class Play extends Phaser.Scene {
     this.educationOn = eduSettings.education;
     this.eduStore = createEduStore(globalThis.localStorage);
     this.runIsEducation = false;
-    this.runQuiz = { answered: 0, right: 0, revives: 0, restores: 0 }; // this run's quiz answers and revives (start() resets it)
+    this.runQuiz = newTally(); // this run's quiz answers (in all and per level) and revives (start() resets it)
     this.quizOpen = false; // the Quiz scene is up (openQuiz → onQuizClosed)
     // An education crash (plan 21): the respawn holds after the tumble ('quiz') while the revive quiz
     // runs; revive is reviveStep's state, reviveLost what the crash took; respawnFilled says the
@@ -511,6 +511,10 @@ export class Play extends Phaser.Scene {
     // the two never meet). It opens the quiz on the segment just cleared (chromeIntent's 'quiz').
     this.quizButtonBox = this.match ? null : { ...bracketButtonLayout(this.col.width, GAME_HEIGHT, T, this.col.x), id: 'quiz' };
     this.quizButton = this.quizButtonBox ? createButton(this, this.quizButtonBox, `${EDUCATION_EMOJI} ${t(this.locale, 'quizPill')}`, { ...TEXT_STYLE, fontSize: '36px', color: '#f8a0c8' }, { depth: 27 }).setVisible(false) : null;
+    // The run's answers so far (plan 22, U4): a ❔ pill one row under the 📚, once the run has an
+    // answer. It reads the tally (answered, right, wrong) and opens the per-level view (openQuizStats).
+    this.quizStatsBox = this.quizButtonBox ? { ...this.quizButtonBox, id: 'quizStats', y: this.quizButtonBox.y + T.trayHitMin + 16 } : null;
+    this.quizStatsButton = this.quizStatsBox ? createButton(this, this.quizStatsBox, '', { ...TEXT_STYLE, fontSize: '32px' }, { depth: 27 }).setVisible(false) : null;
 
     // The tray and the controller ring belong to the chrome owner: single player, or P1 in a match (P2 has neither).
     this.tray = !this.match || this.player === 1 ? createTray(this, { muted: isMuted(), col: this.col }) : null;
@@ -534,6 +538,7 @@ export class Play extends Phaser.Scene {
             { id: 'shop', box: this.shopButtonBox, depth: 27, visible: () => this.shopButtonShown(), activate: () => this.handleChrome('shop') },
             ...(this.bracketButtonBox ? [{ id: 'bracket', box: this.bracketButtonBox, depth: 27, visible: () => this.bracketButtonShown(), activate: () => this.openBracketPeek() }] : []),
             ...(this.quizButtonBox ? [{ id: 'quiz', box: this.quizButtonBox, depth: 27, visible: () => this.quizButtonShown(), activate: () => this.handleChrome('quiz') }] : []),
+            ...(this.quizStatsBox ? [{ id: 'quizStats', box: this.quizStatsBox, depth: 27, visible: () => this.quizStatsShown(), activate: () => this.openQuizStats() }] : []),
             { id: 'shopClose', box: this.shopBoxes.close, depth: 29, visible: () => this.shopOpen, activate: () => this.handleChrome('esc') },
             ...this.shopBoxes.rows.map((row) => ({ id: `shop:${row.id}`, box: row, depth: 28, visible: () => this.shopOpen, activate: () => this.shopBuy(row.id) })),
           ],
@@ -754,7 +759,7 @@ export class Play extends Phaser.Scene {
     this.runIsTest = this.isTestMode();
     // An education run (📚, plan 21): unlocked, the switch on, single player, never a Daily Dump.
     this.runIsEducation = !daily && this.educationOn && this.educationOffered();
-    this.runQuiz = { answered: 0, right: 0, revives: 0, restores: 0 };
+    this.runQuiz = newTally();
     this.respawnHold = null;
     this.revive = null;
     this.reviveLost = null;
@@ -1107,6 +1112,10 @@ export class Play extends Phaser.Scene {
     }
     if (pointer && this.quizButtonShown() && Math.abs(pointer.x - this.quizButtonBox.x) <= this.quizButtonBox.width / 2 && Math.abs(pointer.y - this.quizButtonBox.y) <= this.quizButtonBox.height / 2) {
       this.handleChrome('quiz'); // the 📚 pill: questions, never a continue tap
+      return;
+    }
+    if (pointer && this.quizStatsShown() && Math.abs(pointer.x - this.quizStatsBox.x) <= this.quizStatsBox.width / 2 && Math.abs(pointer.y - this.quizStatsBox.y) <= this.quizStatsBox.height / 2) {
+      this.openQuizStats(); // the ❔ pill: a look at the run's answers, never a continue tap
       return;
     }
     if (pointer && this.bracketButtonShown() && Math.abs(pointer.x - this.bracketButtonBox.x) <= this.bracketButtonBox.width / 2 && Math.abs(pointer.y - this.bracketButtonBox.y) <= this.bracketButtonBox.height / 2) {
@@ -1555,7 +1564,7 @@ export class Play extends Phaser.Scene {
   /**
    * One answer from the quiz: graded (gradeFor; an interrupted answer's time is not used) and, outside
    * a test run, scheduled and saved (schedule, eduStore). An early review answered right keeps its
-   * schedule. Counted in runQuiz. A right answer in a level break pays break.coins (takeCoins: the
+   * schedule. Counted in runQuiz (tallyAnswer). A right answer in a level break pays break.coins (takeCoins: the
    * purse, the coin sound). Returns { correct, grade, coins }.
    */
   quizAnswer({ card, reason, chosen, rtMs, interrupted, mode = 'break' }) {
@@ -1565,8 +1574,9 @@ export class Play extends Phaser.Scene {
       const rec = this.eduStore.load().cards[card.id] ?? null;
       this.eduStore.answer(card.id, schedule(rec, grade, Date.now(), T, { early: reason === 'early' }));
     }
-    this.runQuiz.answered += 1;
-    if (correct) this.runQuiz.right += 1;
+    // The run's tally (plan 22, U4), by level: a break asks about the level just cleared, a revive
+    // about the one being flown. The bonus quiz after a win is practice: its answers are not tallied.
+    if (mode !== 'bonus') this.runQuiz = tallyAnswer(this.runQuiz, this.levelBreak ? this.level - 1 : this.level, correct);
     const coins = correct && mode === 'break' ? T.education.breakCoins : 0;
     if (coins) {
       this.takeCoins(coins);
@@ -3041,10 +3051,23 @@ export class Play extends Phaser.Scene {
     return Boolean(this.quizButton && this.runIsEducation && this.levelBreak && this.state === 'paused' && !this.shopOpen && !this.quizOpen);
   }
 
+  /** The ❔ answers pill: with the 📚 pill, once this run has an answer to show. */
+  quizStatsShown() {
+    return Boolean(this.quizStatsButton && this.quizButtonShown() && this.runQuiz.answered > 0);
+  }
+
+  /** The run's answers so far, read-only (the Quiz scene's 'stats' view): the totals and a row per level. From the ❔ pill. */
+  openQuizStats() {
+    if (!this.quizStatsShown()) return;
+    this.openQuiz('stats');
+  }
+
   /** The shop pill (the corn kernel and the purse): shown by shopButtonShown, dimmed (trayAlpha) when the purse is empty. */
   refreshShopButton() {
     this.refreshBracketButton();
     this.quizButton?.setVisible(this.quizButtonShown());
+    const q = this.runQuiz;
+    this.quizStatsButton?.setText(`❔ ${q.answered}  ✅ ${q.right}  ❌ ${q.wrong}`).setVisible(this.quizStatsShown());
     if (!this.shopButton) return;
     const coins = this.purseCoins();
     this.shopButton.setText(countText(coins)).setAlpha(coins > 0 ? 1 : T.trayAlpha).setVisible(this.shopButtonShown());

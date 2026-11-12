@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { LEADERBOARD, TUNING as T } from '../src/config.js';
 import { createRng } from '../src/logic.js';
 import { CARDS, DECKS } from '../src/questions.js';
-import { cardSource, cardText, createEduStore, dueCount, eduShopPrices, optionText, gradeFor, masteryByDeck, pickCard, reviveSettled, reviveStart, reviveStep, schedule, shuffleOptions } from '../src/education.js';
+import { cardSource, cardText, createEduStore, dueCount, eduShopPrices, optionText, gradeFor, masteryByDeck, newTally, pickCard, reviveSettled, reviveStart, reviveStep, schedule, shuffleOptions, tallyAnswer } from '../src/education.js';
 
 const S = T.education.srs;
 const MIN = 60000;
@@ -223,6 +223,20 @@ test('reviveSettled: only a decided revive (revived, restored, over) is settled'
   assert.equal(reviveSettled(reviveStep(choice, 'continue')), true, 'revived');
   assert.equal(reviveSettled(reviveStep(reviveStart(), 'giveUp')), true, 'over');
   assert.equal(reviveSettled({ ...choice, phase: 'restored' }), true, 'restored');
+});
+
+test("tallyAnswer: the run's totals and the level's row each gain the answer; pure; revives and restores are kept", () => {
+  const start = newTally();
+  assert.deepEqual(start, { answered: 0, right: 0, wrong: 0, revives: 0, restores: 0, byLevel: {} });
+  let q = tallyAnswer(start, 1, true);
+  q = tallyAnswer(q, 1, false);
+  q = tallyAnswer({ ...q, revives: 2, restores: 1 }, 3, true);
+  assert.deepEqual(q, { answered: 3, right: 2, wrong: 1, revives: 2, restores: 1, byLevel: { 1: { answered: 2, right: 1, wrong: 1 }, 3: { answered: 1, right: 1, wrong: 0 } } });
+  assert.deepEqual(start, newTally(), 'the tally passed in is left alone');
+  assert.equal(q.answered, q.right + q.wrong, 'every answer is right or wrong');
+  for (const row of Object.values(q.byLevel)) assert.equal(row.answered, row.right + row.wrong);
+  assert.deepEqual(tallyAnswer(null, 0, false), { ...newTally(), answered: 1, wrong: 1, byLevel: { 1: { answered: 1, right: 0, wrong: 1 } } }, 'no tally yet, and a level below 1 counts as 1');
+  assert.deepEqual(tallyAnswer({ answered: 4, right: 4, revives: 1, restores: 0 }, 2, true).wrong, 0, "a tally from before 'wrong' existed still adds up");
 });
 
 test('eduShopPrices: level 1 is the base price; each level scales it (rounded up); past the table, its last row', () => {

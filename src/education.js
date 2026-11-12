@@ -221,6 +221,23 @@ export function shuffleOptions(rng = Math.random) {
   return keys;
 }
 
+/** A run's quiz tally before any answer: the totals, the revives and restores, and one row per level answered. */
+export function newTally() {
+  return { answered: 0, right: 0, wrong: 0, revives: 0, restores: 0, byLevel: {} };
+}
+
+/**
+ * The run's tally after one more answer given at `level` (the level just cleared for a break's
+ * card, the level being flown for a revive's): the totals and that level's row each gain the
+ * answer. Pure: the tally passed in is left as it was.
+ */
+export function tallyAnswer(tally, level, correct) {
+  const base = { ...newTally(), ...(tally ?? {}) };
+  const lv = Math.max(1, Math.floor(level) || 1);
+  const plus = (row) => ({ answered: (row?.answered ?? 0) + 1, right: (row?.right ?? 0) + (correct ? 1 : 0), wrong: (row?.wrong ?? 0) + (correct ? 0 : 1) });
+  return { ...base, ...plus(base), byLevel: { ...base.byLevel, [lv]: plus(base.byLevel?.[lv]) } };
+}
+
 /** A revive quiz's first state. lost: whether the crash took anything (coins or power-ups) a streak could restore. */
 export function reviveStart({ lost = false } = {}) {
   return { phase: 'strikes', strikes: 0, streak: 0, lost: Boolean(lost) };

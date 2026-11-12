@@ -1,9 +1,9 @@
-import { GAME_HEIGHT, TUNING as T } from '../config.js';
+import { GAME_HEIGHT, LEVELS, TUNING as T } from '../config.js';
 import { chromeIntent } from '../logic.js';
 import { createFocus, pressable } from '../ui/focus.js';
 import { createRectGlow } from '../ui/glow.js';
 import { isTopOverlay } from '../ui/overlayStack.js';
-import { t } from '../i18n.js';
+import { t, levelLabel } from '../i18n.js';
 import { cardText, optionText, cardSource, EDUCATION_EMOJI } from '../education.js';
 import { auditState } from '../questionAudits.js';
 
@@ -42,6 +42,8 @@ const BAD = '#ff8da8';
  *            crash took something, offers the ⭐ streak (education.restoreStreak in a row, the first
  *            included) to win it back. Give up ends the run. It cannot be closed: it ends itself
  *            (finish), and Play settles the outcome when it is down (reviveDone).
+ *   'stats'  the run's answers so far (plan 22), read-only, from the ❔ pill in a level break: the
+ *            totals and one row per level answered (showStats). No card; closed like a break's.
  */
 export class Quiz extends Phaser.Scene {
   constructor() {
@@ -129,8 +131,46 @@ export class Quiz extends Phaser.Scene {
         pressable('close', this.closeBtn),
       ],
     });
-    this.nextCard();
+    if (this.mode === 'stats') this.showStats();
+    else this.nextCard();
     this.focus.show(); // only under a controller (registry padMode)
+  }
+
+  /**
+   * The run's answers so far (mode 'stats'), read-only: ❔ answered · ✅ right · ❌ wrong, then one
+   * row per level answered ("LV 2 · Duodenum", its ✅ and ❌). Play's runQuiz holds them
+   * (tallyAnswer). Return, ✕, Esc and B close it, back to the break.
+   */
+  showStats() {
+    const q = this.play?.runQuiz ?? {};
+    this.card = null;
+    this.answered = true;
+    this.header.setText(`❔ ${t(this.locale, 'quizStatsTitle')}`);
+    this.cardId.setText('');
+    this.status.setText('');
+    this.question.setY(this.header.y + this.header.height + 26).setText(`❔ ${q.answered ?? 0}  ·  ✅ ${q.right ?? 0}  ·  ❌ ${q.wrong ?? 0}`).setVisible(true);
+    for (const o of this.options) {
+      o.g.setVisible(false);
+      o.text.setVisible(false);
+      o.mark.setVisible(false);
+      o.zone.setVisible(false);
+    }
+    for (const x of [this.verdict, this.verdictCoin, this.explain, this.source]) x.setVisible(false);
+    const left = this.cx - TEXT_W / 2 + 12;
+    const right = this.cx + TEXT_W / 2 - 12;
+    let y = this.question.y + this.question.height + 48;
+    this.statRows = [];
+    for (const [lv, row] of Object.entries(q.byLevel ?? {}).sort((a, b) => Number(a[0]) - Number(b[0]))) {
+      const n = Number(lv);
+      const name = this.add.text(left, y, `${levelLabel(this.locale, n)} · ${t(this.locale, `level.${LEVELS[n - 1]?.key}`)}`, { ...STYLE, fontSize: '30px', align: 'left' }).setOrigin(0, 0.5);
+      const counts = this.add.text(right, y, `✅ ${row.right}   ❌ ${row.wrong}`, { ...STYLE, fontSize: '30px', align: 'right' }).setOrigin(1, 0.5);
+      this.statRows.push({ level: n, name, counts });
+      y += 56;
+    }
+    this.clearButtons();
+    this.showWayOut();
+    this.closeBtn.setVisible(true);
+    this.ring('left');
   }
 
   /** One option: a rounded box (redrawn per state), its wrapped text, and a zone for taps and the ring. */
@@ -470,9 +510,9 @@ export class Quiz extends Phaser.Scene {
     this.rightBtn.press();
   }
 
-  /** Whether the player may leave the quiz here (a level break's or a won run's bonus quiz always; a revive never). */
+  /** Whether the player may leave the quiz here (a level break's quiz, a won run's bonus quiz and the answers view always; a revive never). */
   closable() {
-    return this.mode === 'break' || this.mode === 'bonus';
+    return this.mode !== 'revive';
   }
 
   /** Put the controller ring on an item (a no-op unless the ring is showing). */

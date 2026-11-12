@@ -3700,6 +3700,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         const pill = await evaluate(`JSON.stringify({ shown: ${play}.quizButtonShown(), visible: ${play}.quizButton.visible, y: ${play}.quizButtonBox.y, shopY: ${play}.shopButtonBox.y, hint: ${play}.levelHint.text, coins: ${play}.effects.coins() })`).then(JSON.parse);
         const hintWant = await tx(pill.coins > 0 ? 'levelQuizShopHint' : 'levelQuizHint');
         ok(pill.shown && pill.visible && pill.y > pill.shopY && pill.hint === hintWant, `the break shows the 📚 pill under the 💰 (y ${pill.y} > ${pill.shopY}) and the hint "${pill.hint}"`);
+        ok((await evaluate(`${play}.quizStatsShown() || ${play}.quizStatsButton.visible`)) === false, 'no ❔ answers pill before the run has an answer');
         await evaluate(`(() => { const p = ${play}; const b = p.quizButtonBox; p.flap({ x: b.x, y: b.y }); return true; })()`);
         await sleep(500);
         const q0 = await quizNow();
@@ -3801,6 +3802,22 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await sleep(300);
         ok(cu.left === returnWant && cu.right === null && cu.top === null && !(await evaluate(`__flappy.scene.isActive('Quiz')`)), `"All caught up" shows ${returnWant} alone, and Enter presses it`);
 
+        // The run's answers so far (plan 22, U4): the ❔ pill under the 📚 reads the tally and opens the per-level view.
+        await sleep(400); // past the resume lockout
+        const tally = await evaluate(`(() => { const p = ${play}; return JSON.stringify({ q: p.runQuiz, shown: p.quizStatsShown(), visible: p.quizStatsButton.visible, text: p.quizStatsButton.getText(), y: p.quizStatsBox.y, quizY: p.quizButtonBox.y }); })()`).then(JSON.parse);
+        const tq = tally.q;
+        ok(tally.shown && tally.visible && tally.y > tally.quizY && tally.text === `❔ ${tq.answered}  ✅ ${tq.right}  ❌ ${tq.wrong}` && tq.answered === 5 && tq.right + tq.wrong === 5 && JSON.stringify(tq.byLevel) === JSON.stringify({ 1: { answered: 5, right: tq.right, wrong: tq.wrong } }), `the ❔ pill sits under the 📚 and reads the run's tally: "${tally.text}", all of it level 1's`);
+        await evaluate(`(() => { const p = ${play}; const b = p.quizStatsBox; p.flap({ x: b.x, y: b.y }); return true; })()`);
+        await sleep(500);
+        const sv = await evaluate(`(() => { const q = ${Q}; const p = ${play}; return JSON.stringify({ active: __flappy.scene.isActive('Quiz'), mode: q.mode, header: q.header.text, totals: q.question.text, rows: (q.statRows ?? []).map((r) => [r.level, r.name.text, r.counts.text]), options: q.options.some((o) => o.text.visible || o.zone.visible), left: q.leftBtn.shown ? q.leftBtn.text.text : null, right: q.rightBtn.shown, close: q.closeBtn.visible, state: p.state, lb: Boolean(p.levelBreak), pill: p.quizStatsButton.visible }); })()`).then(JSON.parse);
+        const statsTitle = await tx('quizStatsTitle');
+        ok(sv.active && sv.mode === 'stats' && sv.header === `❔ ${statsTitle}` && sv.totals === `❔ 5  ·  ✅ ${tq.right}  ·  ❌ ${tq.wrong}` && JSON.stringify(sv.rows) === JSON.stringify([[1, 'LV 1 · Stomach', `✅ ${tq.right}   ❌ ${tq.wrong}`]]) && !sv.options && sv.left === returnWant && !sv.right && sv.close && sv.state === 'paused' && sv.lb && !sv.pill, `a tap on it opens "${sv.header}": ${sv.totals}, then ${sv.rows.map((r) => `${r[1]} ${r[2]}`).join('; ')}; no card, ${sv.left} to leave`);
+        await evaluate(`${Q}.input.keyboard.emit('keydown-ONE'), true`); // nothing to answer here
+        await evaluate(`${Q}.leftBtn.press(), true`);
+        await sleep(300);
+        const svBack = await evaluate(`JSON.stringify({ quiz: __flappy.scene.isActive('Quiz'), state: ${play}.state, lb: Boolean(${play}.levelBreak), answered: ${play}.runQuiz.answered, pill: ${play}.quizStatsButton.visible })`).then(JSON.parse);
+        ok(!svBack.quiz && svBack.state === 'paused' && svBack.lb && svBack.answered === 5 && svBack.pill, `${returnWant} closes it back to the paused break; the tally is unchanged (${svBack.answered}) and the pill is back`);
+
         // The pill is back, and the shop sells at level 2's prices (eduShopPrices), not the base ones.
         await sleep(400);
         const shop = await evaluate(`Promise.all([import('./src/education.js'), import('./src/i18n.js')]).then(([e, i]) => { const p = ${play}; const pillBack = p.quizButton.visible; p.handleChrome('shop'); const want = e.eduShopPrices(2); const shown = Object.fromEntries(Object.entries(p.shop.rows).map(([id, r]) => [id, r.price.text])); const label = Object.fromEntries(Object.keys(want).map((id) => [id, i.countText(want[id])])); p.closeShop(); return JSON.stringify({ pillBack, shown, label, want, base: p.shopPrices === undefined ? null : JSON.stringify(p.shopPrices()) === JSON.stringify(want) }); })`).then(JSON.parse);
@@ -3813,6 +3830,17 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await home();
         const base = await evaluate(`import('./src/config.js').then((c) => JSON.stringify(${play}.shopPrices()) === JSON.stringify(c.TUNING.shop.prices))`);
         ok(base, 'outside an education run the shop keeps its base prices');
+        // Nor does a normal run's break show the ❔ pill or the 📚, whatever its tally holds.
+        for (let attempt = 0; attempt < 3 && (await playState()) !== 'playing'; attempt += 1) {
+          for (let i = 0; i < 20 && (await playState()) !== 'ready'; i += 1) await sleep(100);
+          await evaluate(`${play}.flap(), true`);
+          for (let i = 0; i < 40 && (await playState()) !== 'playing'; i += 1) await sleep(100);
+        }
+        await evaluate(`(() => { const p = ${play}; p.poop.body.setAllowGravity(false); p.poop.setVelocity(0, 0); p.poop.y = 640; p.graceLeftMs = 1e9; p.runQuiz = { ...p.runQuiz, answered: 2, right: 1, wrong: 1 }; p.onFinishCrossed(); return true; })()`);
+        for (let i = 0; i < 40 && !(await evaluate(`Boolean(${play}.levelBreak) && ${play}.state === 'paused'`)); i += 1) await sleep(100);
+        const plain = await evaluate(`(() => { const p = ${play}; p.refreshShopButton(); return JSON.stringify({ edu: p.runIsEducation, lb: Boolean(p.levelBreak), shop: p.shopButtonShown(), stats: p.quizStatsShown() || p.quizStatsButton.visible, quiz: p.quizButtonShown() || p.quizButton.visible }); })()`).then(JSON.parse);
+        ok(!plain.edu && plain.lb && plain.shop && !plain.stats && !plain.quiz, `a normal run's level break shows the shop pill, and neither the 📚 pill nor the ❔ answers pill (${JSON.stringify(plain)})`);
+        await home();
       }
     });
 
@@ -4171,7 +4199,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await sleep(TT.deathToOverMs + 500);
         const p1 = await panel();
         const note = await tx('eduNotSaved');
-        ok(p1.active && p1.tally === '\u{1F4DA} 0/1  ·  \u{1F480} 0  ·  ⭐ 0' && p1.texts.includes(note) && !p1.share && !p1.bonus, `an education game over: "${p1.tally}", "${note}", no Share`);
+        ok(p1.active && p1.tally === '❔ 1  ·  ✅ 0  ·  ❌ 1' && !p1.texts.some((s) => /[\u{1F4DA}\u{1F480}⭐]/u.test(s)) && p1.texts.includes(note) && !p1.share && !p1.bonus, `an education game over: "${p1.tally}" (no 📚 / 💀 / ⭐ line), "${note}", no Share`);
 
         // A won run: the bonus button opens the rectum's questions over the panel; no coins; Esc back.
         await startEdu();
@@ -4185,8 +4213,9 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         const b = await evaluate(`JSON.stringify({ deck: ${Q}.card?.deck ?? null, mode: ${Q}.mode })`).then(JSON.parse);
         await evaluate(`(() => { const q = ${Q}; q.choose(q.order.indexOf('answer')); return true; })()`);
         await sleep(200);
-        const after = await evaluate(`JSON.stringify({ coins: ${play}.effects.coins(), saved: Boolean(JSON.parse(localStorage.getItem('flappyPoop.eduSrs') ?? '{}').cards?.[${Q}.card.id]) })`).then(JSON.parse);
+        const after = await evaluate(`JSON.stringify({ coins: ${play}.effects.coins(), saved: Boolean(JSON.parse(localStorage.getItem('flappyPoop.eduSrs') ?? '{}').cards?.[${Q}.card.id]), answered: ${play}.runQuiz.answered, levels: Object.keys(${play}.runQuiz.byLevel).length })`).then(JSON.parse);
         ok(b.mode === 'bonus' && ['rectum', 'general'].includes(b.deck) && after.coins === c0 && after.saved, `the bonus quiz asks about the ${b.deck}: a right answer pays no coin (${c0} → ${after.coins}) and is saved`);
+        ok(p2.tally === '❔ 0  ·  ✅ 0  ·  ❌ 0' && after.answered === 0 && after.levels === 0, `a bonus answer is practice: the run's tally stays as the panel showed it (${p2.tally})`);
         await evaluate(`${Q}.input.keyboard.emit('keydown-ESC'), true`);
         await sleep(300);
         ok((await evaluate(`!__flappy.scene.isActive('Quiz') && __flappy.scene.isActive('Over')`)) === true, 'Esc closes it back to the game-over panel');
@@ -4202,6 +4231,17 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await home();
         const back = await evaluate(`JSON.stringify({ unlocked: ${play}.isEduUnlocked(), name: ${play}.getSaveState().name ?? null })`).then(JSON.parse);
         ok(!back.unlocked, `the device is put back (education locked, player "${back.name}")`);
+        // A normal run's game-over panel has no tally line (nor a stale one from the education panels above).
+        for (let attempt = 0; attempt < 3 && (await playState()) !== 'playing'; attempt += 1) {
+          for (let i = 0; i < 20 && (await playState()) !== 'ready'; i += 1) await sleep(100);
+          await evaluate(`${play}.flap(), true`);
+          for (let i = 0; i < 40 && (await playState()) !== 'playing'; i += 1) await sleep(100);
+        }
+        await evaluate(`(() => { const p = ${play}; p.graceLeftMs = 0; p.die(); return true; })()`);
+        await sleep(TT.deathToOverMs + 500);
+        const plainOver = await panel();
+        ok(plainOver.active && plainOver.tally === null && !plainOver.texts.some((s) => /[❔✅❌]/u.test(s)), `a normal run's game-over panel shows no ❔ / ✅ / ❌ line (active ${plainOver.active}, tally ${JSON.stringify(plainOver.tally)}, ${JSON.stringify(plainOver.texts.filter((s) => /[❔✅❌]/u.test(s)))})`);
+        await home();
       }
     });
 
