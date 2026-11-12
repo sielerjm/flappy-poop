@@ -39,6 +39,13 @@ progress ring, a picture (the game's sprite, or an emoji) then one short line, l
 for a hint or **NEW** (新功能) for a major feature, with ‹ › beside the card. The player swipes through
 them, then presses **Continue** (继续). Keep cards short: at most 100 characters in English and 50 in
 Chinese (a test checks); the card is as tall as the longest one.
+Education badges (plan 22; shown on the game-over line and in the profile's 📚 Education section,
+on devices where education mode is unlocked): eight badges with playful school titles. Four are
+puns the Chinese drafts only approximate, so **check these four**: Nerd Alert (学霸警报: 学霸 is
+the admiring word for a top student), C's Get Degrees (六十分万岁, the student saying that a bare
+pass is enough), Drop Out (退学: quitting school, here giving up a run without one answer), and
+Angel Baby (小天使: revived, so back from the dead). A run is **graded** (计分) only with at least
+`{min}` answers; "Graded runs" (计分局数) counts those, and "Average grade" (平均成绩) is their mean.
 Author / designer / artist: Michael Sieler. Side project, short playful copy — not
 formal medical language.
 
@@ -510,6 +517,24 @@ Inspired by Flappy Bird
 | achDescCeiling | Hit the ceiling {n} times | 撞到顶部 {n} 次 |
 | achDescFourOfAKind | Open four mystery boxes in a row with the same reward | 连续 4 个神秘盒子开出同样的奖励 |
 | achDescBoxesBought | Buy {n} mystery boxes in the shop | 在商店买 {n} 个神秘盒子 |
+| achEduNerd | Nerd Alert | 学霸警报 |
+| achEduPerfect | Full Marks | 满分 |
+| achEduA | A Student | 优等生 |
+| achEduB | B Student | 良好生 |
+| achEduC | C's Get Degrees | 六十分万岁 |
+| achEduDropOut | Drop Out | 退学 |
+| achEduAngel | Angel Baby | 小天使 |
+| achEduPhoenix | Phoenix | 凤凰 |
+| achDescEduNerd | Get {n} perfect runs in a row ({min} answers or more each) | 连续 {n} 局全部答对（每局至少答 {min} 题） |
+| achDescEduPerfect | Answer everything right in one run ({min} answers or more) | 一局全部答对（至少答 {min} 题） |
+| achDescEduA | Get 90% or more right in one run ({min} answers or more) | 一局答对 90% 以上（至少答 {min} 题） |
+| achDescEduB | Get 80–89% right in one run ({min} answers or more) | 一局答对 80–89%（至少答 {min} 题） |
+| achDescEduC | Get 70–79% right in one run ({min} answers or more) | 一局答对 70–79%（至少答 {min} 题） |
+| achDescEduDropOut | Give up a run without answering a single question | 一题没答就放弃这一局 |
+| achDescEduRevives | Revive yourself {n} times in education mode | 在教育模式中复活 {n} 次 |
+| statsEducation | 📚 Education {n} / {total} | 📚 教育 {n} / {total} |
+| statsEduGrade | Average grade | 平均成绩 |
+| statsEduRuns | Graded runs | 计分局数 |
 | careerDethroned | Dethroned: took 1st place from someone | 夺冠：从别人手里抢下第一名 |
 | tagDev | Game dev | 游戏开发者 |
 | tagDevDesc | Makes Flappy Poop | Flappy Poop 的开发者 |

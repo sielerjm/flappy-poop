@@ -65,6 +65,32 @@ export const ACHIEVEMENTS = [
   total('lets_go_gambling', '🎰', 'achGambling', 'achDescBoxesBought', ['boxesBought'], 1000),
 ];
 
+/**
+ * Education badges (📚, plan 22). Judged like the catalog above (evaluate, with this catalog), but
+ * kept on the device with the cards (createEduStore in education.js) and never claimed on the
+ * server: education data stays on the device. So they are their own list: the profile's
+ * "Achievements n / total" and claim_achievements never see them. Ids start "edu_".
+ *   run       one education run's facts (eduRunFacts; modes ['education']). The grades need a
+ *             graded run: at least education.badgeMinAnswers answers (`min`, quoted in the
+ *             description). Percentages are compared in whole numbers, so 89.5 % is a B.
+ *   lifetime  the education store's counters: `revives`, and `perfectStreak` (🤓: graded runs with
+ *             no wrong answer in a row; nextPerfectStreak).
+ */
+const eduMin = TUNING.education.badgeMinAnswers;
+const eduRun = (id, glyph, title, desc, check) => ({ id, kind: 'run', modes: ['education'], glyph, title, desc, min: eduMin, check: (f) => Boolean(f.graded) && check(f) });
+const eduTotal = (id, glyph, title, desc, counter, n) => ({ id, kind: 'lifetime', glyph, title, desc, counters: [counter], n, min: eduMin });
+
+export const EDU_ACHIEVEMENTS = [
+  eduTotal('edu_nerd_alert', '🤓', 'achEduNerd', 'achDescEduNerd', 'perfectStreak', 10),
+  eduRun('edu_perfect', '💯', 'achEduPerfect', 'achDescEduPerfect', (f) => f.perfect),
+  eduRun('edu_grade_a', '🅰️', 'achEduA', 'achDescEduA', (f) => 10 * f.right >= 9 * f.answered),
+  eduRun('edu_grade_b', '🅱️', 'achEduB', 'achDescEduB', (f) => 10 * f.right >= 8 * f.answered && 10 * f.right < 9 * f.answered),
+  eduRun('edu_grade_c', '📜', 'achEduC', 'achDescEduC', (f) => 10 * f.right >= 7 * f.answered && 10 * f.right < 8 * f.answered),
+  { id: 'edu_drop_out', kind: 'run', modes: ['education'], glyph: '🏳️', title: 'achEduDropOut', desc: 'achDescEduDropOut', check: (f) => Boolean(f.gaveUp) && f.answered === 0 },
+  eduTotal('edu_angel_baby', '👼', 'achEduAngel', 'achDescEduRevives', 'revives', 100),
+  eduTotal('edu_phoenix', '🐦‍🔥', 'achEduPhoenix', 'achDescEduRevives', 'revives', 1000),
+];
+
 const ID_RE = /^[a-z0-9_]{1,40}$/;
 const KEY_RE = /^[a-z][A-Za-z0-9]{0,23}$/;
 const count = (v) => (Number.isInteger(v) && v > 0 ? v : 0);
@@ -203,6 +229,32 @@ export function winsInWindow(times, now, days = WINDOW_DAYS) {
 /** Days from a to b (ms), fractional; null when a is unknown (🧱 Constipated never fires on a first run). */
 export function daysBetween(a, b) {
   return Number.isFinite(a) && Number.isFinite(b) ? (b - a) / DAY_MS : null;
+}
+
+/**
+ * An education run's facts, for its badges and the average grade, from the run's tally
+ * (tallyAnswer): { mode: 'education', answered, right, wrong, graded (at least
+ * education.badgeMinAnswers answers), grade (a graded run's share right in hundredths of a percent,
+ * a whole number: 4 of 6 is 6667; else null), perfect (graded, nothing wrong), gaveUp (the run
+ * ended on the revive quiz's Give up) }.
+ */
+export function eduRunFacts(tally, { gaveUp = false } = {}, t = TUNING) {
+  const answered = count(tally?.answered);
+  const right = Math.min(count(tally?.right), answered);
+  const graded = answered >= t.education.badgeMinAnswers;
+  return { mode: 'education', answered, right, wrong: answered - right, graded, grade: graded ? Math.round((10000 * right) / answered) : null, perfect: graded && right === answered, gaveUp: Boolean(gaveUp) };
+}
+
+/** 🤓 The perfect-run streak after one more education run: a graded run with nothing wrong adds one, a graded run with a wrong answer resets it, and a run too short to grade leaves it alone. */
+export function nextPerfectStreak(streak, facts) {
+  if (!facts?.graded) return count(streak);
+  return facts.perfect ? count(streak) + 1 : 0;
+}
+
+/** The average grade in percent, to one decimal (87.5): the mean of the graded runs' grades, each run counting once; null before the first graded run. */
+export function averageGrade(counters) {
+  const runs = count(counters?.gradedRuns);
+  return runs ? Math.round(count(counters?.gradeSum) / runs / 10) / 10 : null;
 }
 
 /** 🃏 The same-draw streak after one more box: { last, streak }; four of a kind is streak ≥ FOUR_OF_A_KIND. */

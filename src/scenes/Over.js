@@ -1,7 +1,7 @@
 import { GAME_HEIGHT, FIELD, TUNING as T, SHARE, LEVEL_COLORS } from '../config.js';
 import { canRestart, chromeIntent, trayLayout, trayHit, overButtonsLayout, overCellsLayout, overHit, shareCardLayout, levelColor, uiColumn, msUntilUtcMidnight, countdownText, fitScale } from '../logic.js';
 import { t, levelLabel, shareCardFooter, dailyDayText, dailyRankText, badgeTitle } from '../i18n.js';
-import { achievementById } from '../achievements.js';
+import { achievementById, EDU_ACHIEVEMENTS } from '../achievements.js';
 import { EDUCATION_EMOJI } from '../education.js';
 import { fetchDailyBoard, dailyEntryId } from '../leaderboard.js';
 import { shareMode, shareScoreImage } from '../share.js';
@@ -116,11 +116,13 @@ export class Over extends Phaser.Scene {
     // Achievements this run unlocked (plan 08): the first two by glyph and name, then "+n". Under the
     // personal-best or countdown line when there is one, else in its place; above the buttons.
     this.badgeLine = null; // the scene instance outlives a restart: never keep the last panel's line
-    const badges = testRun ? [] : (Array.isArray(data?.badges) ? data.badges : []).map((id) => achievementById(id)).filter(Boolean);
+    // An education run's badges come from their own list (EDU_ACHIEVEMENTS, plan 22).
+    const badges = testRun ? [] : (Array.isArray(data?.badges) ? data.badges : []).map((id) => achievementById(id) ?? achievementById(id, EDU_ACHIEVEMENTS)).filter(Boolean);
     if (badges.length) {
       const named = badges.slice(0, 2).map((e) => `${e.glyph} ${badgeTitle(locale, e)}`).join(' · ');
       const more = badges.length > 2 ? ` ${t(locale, 'overBadgesMore').replace('{n}', String(badges.length - 2))}` : '';
-      const lineY = cy + (data?.personalBest || daily ? 186 : 150);
+      // An education panel: under its tally, where the "not on the boards yet" note sits when no badge was earned.
+      const lineY = cy + (education ? 184 : data?.personalBest || daily ? 186 : 150);
       const line = this.add.text(cx, lineY, t(locale, 'overBadges').replace('{badges}', named + more), { ...style, fontSize: '28px', color: '#ffd700' }).setOrigin(0.5);
       line.setScale(fitScale(line.width, 500, 0));
       this.badgeLine = line;
@@ -130,7 +132,8 @@ export class Over extends Phaser.Scene {
       // ❔ answered · ✅ right · ❌ wrong (glyphs and numbers: nothing to translate), then why it is not on a board.
       const tally = `❔ ${education.answered}  ·  ✅ ${education.right}  ·  ❌ ${education.wrong ?? 0}`;
       this.eduLine = this.add.text(cx, cy + 140, tally, { ...style, fontSize: '32px', color: '#ffd700' }).setOrigin(0.5);
-      this.add.text(cx, cy + 184, t(locale, testRun ? 'testRunNotSaved' : 'eduNotSaved'), { ...style, fontSize: '24px', color: '#c9b8dc', fontStyle: 'normal', wordWrap: { width: 480, useAdvancedWrap: true } }).setOrigin(0.5);
+      // A run that earned a badge shows that line in the note's place (the panel has room for one).
+      if (!this.badgeLine) this.add.text(cx, cy + 184, t(locale, testRun ? 'testRunNotSaved' : 'eduNotSaved'), { ...style, fontSize: '24px', color: '#c9b8dc', fontStyle: 'normal', wordWrap: { width: 480, useAdvancedWrap: true } }).setOrigin(0.5);
     } else if (testRun) {
       this.add.text(cx, cy + 150, t(locale, 'testRunNotSaved'), { ...style, fontSize: '30px', color: '#ffd700', wordWrap: { width: 460, useAdvancedWrap: true } }).setOrigin(0.5);
     } else if (daily) {

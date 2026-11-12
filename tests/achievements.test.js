@@ -7,7 +7,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { LEADERBOARD, TUNING as T, LEVELS } from '../src/config.js';
-import { IBS_WINS, BREAK_DAYS, FOUR_OF_A_KIND, levelCloseShave, winsInWindow, daysBetween, nextDrawStreak, ACHIEVEMENTS, PICKUP_COUNTERS, runDeltas, addCounters, cleanCounters, evaluate, windowOpen, progressOf, bestFacts, openQuests, achievementById, isAchievementId } from '../src/achievements.js';
+import { IBS_WINS, BREAK_DAYS, FOUR_OF_A_KIND, levelCloseShave, winsInWindow, daysBetween, nextDrawStreak, ACHIEVEMENTS, EDU_ACHIEVEMENTS, PICKUP_COUNTERS, runDeltas, addCounters, cleanCounters, evaluate, windowOpen, progressOf, bestFacts, openQuests, achievementById, isAchievementId, eduRunFacts, nextPerfectStreak, averageGrade } from '../src/achievements.js';
 import { t, badgeTitle, badgeDesc, LOCALES } from '../src/i18n.js';
 
 const SQL = readFileSync(fileURLToPath(new URL('../db/schema.sql', import.meta.url)), 'utf8');
@@ -162,4 +162,92 @@ test('v0.16.0 badges: each rule at its edge', () => {
   // Royal Flush wears 💎 now: 👑 is Dethroned's.
   assert.equal(achievementById('score_1000').glyph, '💎');
   assert.ok(!ACHIEVEMENTS.some((e) => e.glyph === '👑'));
+});
+
+// Education badges (plan 22): their own list, kept on the device (createEduStore), judged by the
+// same evaluate. The grades need a graded run (education.badgeMinAnswers answers).
+const MIN = T.education.badgeMinAnswers;
+const eduRun = (right, answered, extra = {}) => eduRunFacts({ answered, right }, extra);
+const eduEarned = (facts, totals = {}, unlocked = {}) => evaluate({ totals, facts, unlocked, catalog: EDU_ACHIEVEMENTS });
+
+test('the education catalog: eight badges in their own list, unique ids apart from the career catalog, a glyph, and copy in every locale', () => {
+  const ids = EDU_ACHIEVEMENTS.map((e) => e.id);
+  assert.deepEqual(ids, ['edu_nerd_alert', 'edu_perfect', 'edu_grade_a', 'edu_grade_b', 'edu_grade_c', 'edu_drop_out', 'edu_angel_baby', 'edu_phoenix'], 'the order Michael listed');
+  assert.deepEqual(EDU_ACHIEVEMENTS.map((e) => e.glyph), ['🤓', '💯', '🅰️', '🅱️', '📜', '🏳️', '👼', '🐦‍🔥']);
+  assert.equal(new Set(ids).size, ids.length);
+  const career = new Set(ACHIEVEMENTS.map((e) => e.id));
+  for (const e of EDU_ACHIEVEMENTS) {
+    assert.ok(e.id.startsWith('edu_') && isAchievementId(e.id), `${e.id}: an edu_ id`);
+    assert.ok(!career.has(e.id), `${e.id}: not in the career catalog, which is claimed on the server`);
+    assert.equal(achievementById(e.id), null, `${e.id}: the career lookup does not find it`);
+    assert.equal(achievementById(e.id, EDU_ACHIEVEMENTS), e);
+    assert.ok(['run', 'lifetime'].includes(e.kind), `${e.id}: kind`);
+    if (e.kind === 'run') assert.deepEqual(e.modes, ['education'], `${e.id}: an education run only`);
+    if (e.kind === 'lifetime') assert.ok(e.counters.length === 1 && e.n > 0, `${e.id}: a counter and a threshold`);
+    for (const locale of LOCALES) {
+      assert.notEqual(badgeTitle(locale, e), e.title, `${e.id}: ${locale} title is a catalog string`);
+      const desc = badgeDesc(locale, e);
+      assert.ok(desc.length > 0 && !/\{n\}|\{min\}|\{glyph\}/.test(desc), `${e.id}: ${locale} description filled in (${desc})`);
+    }
+  }
+  assert.match(badgeDesc('en', achievementById('edu_grade_a', EDU_ACHIEVEMENTS)), new RegExp(`\\(${MIN} answers or more\\)`), 'the description quotes the knob');
+  assert.ok(ACHIEVEMENTS.every((e) => !e.id.startsWith('edu_')), 'no education badge is ever claimed on the server');
+});
+
+test('eduRunFacts: graded from badgeMinAnswers answers; the grade is a whole number of hundredths of a percent', () => {
+  assert.deepEqual(eduRun(4, MIN - 1), { mode: 'education', answered: MIN - 1, right: 4, wrong: 0, graded: false, grade: null, perfect: false, gaveUp: false }, 'one answer short: not graded, even all right');
+  assert.deepEqual(eduRun(5, 5), { mode: 'education', answered: 5, right: 5, wrong: 0, graded: true, grade: 10000, perfect: true, gaveUp: false });
+  assert.equal(eduRun(4, 6).grade, 6667, '4 of 6');
+  assert.equal(eduRun(0, 5).grade, 0);
+  assert.deepEqual(eduRunFacts({ answered: 0, right: 0 }, { gaveUp: true }), { mode: 'education', answered: 0, right: 0, wrong: 0, graded: false, grade: null, perfect: false, gaveUp: true });
+  assert.equal(eduRunFacts(null).answered, 0, 'no tally');
+  assert.equal(eduRunFacts({ answered: 5, right: 9 }).right, 5, 'never more right than answered');
+});
+
+test('the grade badges, each at its edge: A from 90 %, B 80 to under 90, C 70 to under 80; a perfect run is 💯 and an A', () => {
+  const got = (right, answered) => eduEarned(eduRun(right, answered)).join();
+  assert.equal(got(4, 4), '', 'four answers: ungraded, nothing');
+  assert.equal(got(5, 5), 'edu_perfect,edu_grade_a', '100 %: 💯 and 🅰️ together');
+  assert.equal(got(9, 10), 'edu_grade_a', '90 % is an A');
+  assert.equal(got(17, 19), 'edu_grade_b', '89.5 % is a B: never rounded up');
+  assert.equal(got(8, 10), 'edu_grade_b', '80 % is a B');
+  assert.equal(got(15, 19), 'edu_grade_c', '78.9 % is a C');
+  assert.equal(got(7, 10), 'edu_grade_c', '70 % is a C');
+  assert.equal(got(6, 10), '', '60 %: none');
+  assert.equal(got(0, 5), '', 'nothing right: none');
+  assert.equal(eduEarned(eduRun(9, 10), {}, { edu_grade_a: '2026-11-12' }).join(), '', 'a held badge is not earned again');
+  assert.equal(evaluate({ facts: { ...eduRun(5, 5), mode: 'single' }, catalog: EDU_ACHIEVEMENTS }).join(), '', 'only an education run');
+  assert.equal(evaluate({ facts: eduRun(5, 5) }).join(), '', 'and the career catalog never sees one');
+});
+
+test('🏳️ Drop Out: the run ends on Give up with no card answered; 👼 at 100 revives, 🐦‍🔥 at 1000', () => {
+  assert.equal(eduEarned(eduRun(0, 0, { gaveUp: true })).join(), 'edu_drop_out');
+  assert.equal(eduEarned(eduRun(0, 0)).join(), '', 'three misses are not a drop-out');
+  assert.equal(eduEarned(eduRun(0, 1, { gaveUp: true })).join(), '', 'nor is giving up after an answer');
+  assert.equal(eduEarned(eduRun(2, 3), { revives: 99 }).join(), '');
+  assert.equal(eduEarned(eduRun(2, 3), { revives: 100 }).join(), 'edu_angel_baby');
+  assert.equal(eduEarned(eduRun(2, 3), { revives: 1000 }).join(), 'edu_angel_baby,edu_phoenix');
+  assert.equal(progressOf(achievementById('edu_phoenix', EDU_ACHIEVEMENTS), { revives: 250 }), 250, 'the profile shows the progress');
+});
+
+test('🤓 Nerd Alert: ten perfect graded runs in a row; a graded miss resets, an ungraded run leaves the streak', () => {
+  const perfect = eduRun(5, 5);
+  const flawed = eduRun(5, 6);
+  const short = eduRun(2, 3);
+  assert.equal(nextPerfectStreak(0, perfect), 1);
+  assert.equal(nextPerfectStreak(4, perfect), 5);
+  assert.equal(nextPerfectStreak(4, flawed), 0);
+  assert.equal(nextPerfectStreak(4, short), 4, 'too short to grade');
+  assert.equal(nextPerfectStreak(4, eduRun(0, 0, { gaveUp: true })), 4, 'a Drop Out neither counts nor breaks it');
+  assert.equal(nextPerfectStreak(undefined, perfect), 1);
+  assert.equal(eduEarned(perfect, { perfectStreak: 9 }, { edu_perfect: 'x', edu_grade_a: 'x' }).join(), '');
+  assert.equal(eduEarned(perfect, { perfectStreak: 10 }, { edu_perfect: 'x', edu_grade_a: 'x' }).join(), 'edu_nerd_alert');
+});
+
+test('averageGrade: the mean of the graded runs, each run once, to one decimal; null before the first', () => {
+  assert.equal(averageGrade({}), null);
+  assert.equal(averageGrade({ gradedRuns: 0, gradeSum: 0 }), null);
+  assert.equal(averageGrade({ gradedRuns: 2, gradeSum: eduRun(5, 5).grade + eduRun(4, 5).grade }), 90, '100 % and 80 %');
+  assert.equal(averageGrade({ gradedRuns: 1, gradeSum: eduRun(4, 6).grade }), 66.7);
+  assert.equal(averageGrade({ gradedRuns: 3, gradeSum: 10000 + 10000 + 8750 }), 95.8, 'a long run counts no more than a short one');
 });

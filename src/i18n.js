@@ -394,6 +394,24 @@ Inspired by Flappy Bird`,
     achDescCeiling: 'Hit the ceiling {n} times',
     achDescFourOfAKind: 'Open four mystery boxes in a row with the same reward',
     achDescBoxesBought: 'Buy {n} mystery boxes in the shop',
+    achEduNerd: 'Nerd Alert',
+    achEduPerfect: 'Full Marks',
+    achEduA: 'A Student',
+    achEduB: 'B Student',
+    achEduC: "C's Get Degrees",
+    achEduDropOut: 'Drop Out',
+    achEduAngel: 'Angel Baby',
+    achEduPhoenix: 'Phoenix',
+    achDescEduNerd: 'Get {n} perfect runs in a row ({min} answers or more each)',
+    achDescEduPerfect: 'Answer everything right in one run ({min} answers or more)',
+    achDescEduA: 'Get 90% or more right in one run ({min} answers or more)',
+    achDescEduB: 'Get 80–89% right in one run ({min} answers or more)',
+    achDescEduC: 'Get 70–79% right in one run ({min} answers or more)',
+    achDescEduDropOut: 'Give up a run without answering a single question',
+    achDescEduRevives: 'Revive yourself {n} times in education mode',
+    statsEducation: '📚 Education {n} / {total}',
+    statsEduGrade: 'Average grade',
+    statsEduRuns: 'Graded runs',
     careerDethroned: 'Dethroned: took 1st place from someone',
     tagDev: 'Game dev',
     tagDevDesc: 'Makes Flappy Poop',
@@ -787,6 +805,24 @@ Inspired by Flappy Bird`,
     achDescCeiling: '撞到顶部 {n} 次',
     achDescFourOfAKind: '连续 4 个神秘盒子开出同样的奖励',
     achDescBoxesBought: '在商店买 {n} 个神秘盒子',
+    achEduNerd: '学霸警报',
+    achEduPerfect: '满分',
+    achEduA: '优等生',
+    achEduB: '良好生',
+    achEduC: '六十分万岁',
+    achEduDropOut: '退学',
+    achEduAngel: '小天使',
+    achEduPhoenix: '凤凰',
+    achDescEduNerd: '连续 {n} 局全部答对（每局至少答 {min} 题）',
+    achDescEduPerfect: '一局全部答对（至少答 {min} 题）',
+    achDescEduA: '一局答对 90% 以上（至少答 {min} 题）',
+    achDescEduB: '一局答对 80–89%（至少答 {min} 题）',
+    achDescEduC: '一局答对 70–79%（至少答 {min} 题）',
+    achDescEduDropOut: '一题没答就放弃这一局',
+    achDescEduRevives: '在教育模式中复活 {n} 次',
+    statsEducation: '📚 教育 {n} / {total}',
+    statsEduGrade: '平均成绩',
+    statsEduRuns: '计分局数',
     careerDethroned: '夺冠：从别人手里抢下第一名',
     tagDev: '游戏开发者',
     tagDevDesc: 'Flappy Poop 的开发者',
@@ -874,11 +910,12 @@ export function badgeTitle(locale, entry) {
   return entry?.title ? t(locale, entry.title) : '';
 }
 
-/** An achievement's requirement: its `desc` template with {n} and {glyph} filled in. */
+/** An achievement's requirement: its `desc` template with {n}, {min} (an education badge's answers a run needs to be graded) and {glyph} filled in. */
 export function badgeDesc(locale, entry) {
   if (!entry?.desc) return '';
   return t(locale, entry.desc)
     .replace('{n}', String(entry.n ?? ''))
+    .replace('{min}', String(entry.min ?? ''))
     .replace('{glyph}', entry.descGlyph ?? entry.glyph ?? '');
 }
 

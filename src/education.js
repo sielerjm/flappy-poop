@@ -12,6 +12,7 @@
 // Times are ms since the epoch (Date.now()), passed in, so everything here is pure.
 
 import { LEADERBOARD, TUNING } from './config.js';
+import { nextPerfectStreak } from './achievements.js';
 import { CARDS, DECKS, REFERENCES } from './questions.js';
 
 /** Education mode's glyph: the ready-screen switch, the HUD badge, the break pill. */
@@ -256,12 +257,13 @@ export function reviveSettled(state) {
  * education.strikes wrong ones end the run: 'over') → 'choice' (only when the crash took
  * something; else straight to 'revived') → 'streak' (right answers in a row up to
  * education.restoreStreak, the first included: 'restored'; a miss: 'revived'). 'giveUp' ends the
- * run from any phase. The final phases ('revived', 'restored', 'over') ignore every event.
+ * run from any phase and marks the state gaveUp (🏳️ Drop Out reads it). The final phases ('revived',
+ * 'restored', 'over') ignore every event.
  */
 export function reviveStep(state, event, t = TUNING) {
   if (FINAL.has(state.phase)) return state;
   const { strikes, restoreStreak } = t.education;
-  if (event === 'giveUp') return { ...state, phase: 'over' };
+  if (event === 'giveUp') return { ...state, phase: 'over', gaveUp: true };
   if (state.phase === 'strikes') {
     if (event === 'correct') return { ...state, streak: 1, phase: state.lost ? 'choice' : 'revived' };
     if (event === 'wrong') {
@@ -307,6 +309,10 @@ export function masteryByDeck(srs = {}, { cards = CARDS, t = TUNING } = {}) {
 
 const ID_RE = /^[A-Z]{2}-\d{2}$/;
 const NUM_FIELDS = ['step', 'ease', 'intervalMs', 'dueAt', 'reps', 'lapses', 'seen', 'right', 'firstAt'];
+/** The store's counters (plan 22): revives made, the 🤓 streak of perfect graded runs, and the graded runs with the sum of their grades (the average grade). */
+const EDU_COUNTERS = ['revives', 'perfectStreak', 'gradedRuns', 'gradeSum'];
+const BADGE_RE = /^edu_[a-z0-9_]{1,36}$/;
+const DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 function cleanRecord(r) {
   if (!r || typeof r !== 'object' || (r.phase !== 'learning' && r.phase !== 'review')) return null;
@@ -324,14 +330,24 @@ function cleanEdu(raw, keep) {
     if (rec) cards[id] = rec;
   }
   const recent = (Array.isArray(raw?.recent) ? raw.recent : []).filter((id) => typeof id === 'string' && ID_RE.test(id)).slice(-keep);
-  return { v: 1, cards, recent };
+  const counters = {};
+  for (const k of EDU_COUNTERS) if (Number.isInteger(raw?.counters?.[k]) && raw.counters[k] > 0) counters[k] = raw.counters[k];
+  const badges = {};
+  for (const [id, day] of Object.entries(raw?.badges && typeof raw.badges === 'object' ? raw.badges : {})) {
+    if (BADGE_RE.test(id) && typeof day === 'string' && DAY_RE.test(day)) badges[id] = day;
+  }
+  return { v: 1, cards, recent, counters, badges };
 }
 
 /**
- * This device's education cards (LEADERBOARD.eduKey): { v: 1, cards: { id: record }, recent: [ids] }.
+ * This device's education record (LEADERBOARD.eduKey): { v: 1, cards: { id: record }, recent: [ids],
+ * counters: { revives, perfectStreak, gradedRuns, gradeSum }, badges: { id: 'YYYY-MM-DD' } }.
  * answer(id, record) stores a card's record after an answer and appends it to `recent` (the last
- * education.minGap cards shown). Storage can throw (private mode): then the cards live for this
- * load only, and a broken entry is read as empty.
+ * education.minGap cards shown). The counters and badges (plan 22) are the education badges' and the
+ * average grade's: addRevive counts a revive as it happens, endRun(facts) moves the 🤓 streak and
+ * adds a graded run's grade, unlock(ids, day) stores badges not held yet. A record from before them
+ * reads as none. They stay on this device: nothing here is ever sent. Storage can throw (private
+ * mode): then the record lives for this load only, and a broken entry is read as empty.
  */
 export function createEduStore(storage, { key = LEADERBOARD.eduKey, t = TUNING } = {}) {
   const keep = t.education.minGap;
@@ -358,6 +374,30 @@ export function createEduStore(storage, { key = LEADERBOARD.eduKey, t = TUNING }
     answer(id, record) {
       const state = read();
       write({ ...state, cards: { ...state.cards, [id]: record }, recent: [...state.recent, id] });
+    },
+    /** A revive just happened (👼 / 🐦‍🔥): counted at once, so a closed tab loses none. */
+    addRevive() {
+      const state = read();
+      write({ ...state, counters: { ...state.counters, revives: (state.counters.revives ?? 0) + 1 } });
+    },
+    /** An education run ended with `facts` (eduRunFacts): the 🤓 streak moves, and a graded run's grade joins the average. Returns the counters. */
+    endRun(facts) {
+      const state = read();
+      const counters = { ...state.counters, perfectStreak: nextPerfectStreak(state.counters.perfectStreak, facts) };
+      if (facts?.graded) {
+        counters.gradedRuns = (counters.gradedRuns ?? 0) + 1;
+        counters.gradeSum = (counters.gradeSum ?? 0) + facts.grade;
+      }
+      write({ ...state, counters });
+      return read().counters;
+    },
+    /** Hold the badges in `ids` not held yet, dated `day` (YYYY-MM-DD); returns the ids newly held, in order. */
+    unlock(ids, day) {
+      const state = read();
+      const fresh = (Array.isArray(ids) ? ids : []).filter((id) => BADGE_RE.test(id) && !(id in state.badges));
+      if (!fresh.length || !DAY_RE.test(day ?? '')) return [];
+      write({ ...state, badges: { ...state.badges, ...Object.fromEntries(fresh.map((id) => [id, day])) } });
+      return fresh;
     },
     clear() {
       memory = cleanEdu(null, keep);

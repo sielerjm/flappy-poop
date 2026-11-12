@@ -109,7 +109,7 @@ import {
 } from '../logic.js';
 import { t, pauseBannerText, levelBannerText, levelLabel, initialLocale, isLocale, profileButtonText, countText, versusName } from '../i18n.js';
 import { loadLocal, saveLocal, ensureId, recordScore, mergeBoardBests, newId, TOILET_EMOJI } from '../save.js';
-import { runDeltas, evaluate, bestFacts, levelCloseShave, winsInWindow, daysBetween, nextDrawStreak, FOUR_OF_A_KIND } from '../achievements.js';
+import { runDeltas, evaluate, bestFacts, levelCloseShave, winsInWindow, daysBetween, nextDrawStreak, FOUR_OF_A_KIND, EDU_ACHIEVEMENTS, eduRunFacts } from '../achievements.js';
 import { unlock, attachGame, setMuted, isMuted, sfx } from '../sound.js';
 import { createTray } from '../ui/tray.js';
 import { createFocus } from '../ui/focus.js';
@@ -3355,8 +3355,12 @@ export class Play extends Phaser.Scene {
     // A test run records nothing: no legacy best, no top-list entry, no leaderboard sync.
     if (this.runIsTest) return;
     // Nor, before its public release, does an education run (plan 21): its cards were saved answer by
-    // answer; no best, top list, career counters, badges or sync.
-    if (this.runIsEducation) return;
+    // answer; no best, top list, career counters, career badges or sync. Its own badges and average
+    // grade (plan 22) stay on this device with the cards (recordEducation).
+    if (this.runIsEducation) {
+      this.recordEducation();
+      return;
+    }
     // A Daily Dump records only itself: the attempt is final and its score queued for the 🌞 board,
     // never the 🏆 top list or best (an endless score above maxScore would stop every 🏆 post).
     if (this.runIsDaily) {
@@ -3374,6 +3378,21 @@ export class Play extends Phaser.Scene {
     this.save = saveLocal(recordScore(this.save, this.score, { toilet: this.toilet, level: this.level }));
     this.recordCareer('single');
     this.syncLeaderboard(); // fire and forget; never awaited inside the update loop
+  }
+
+  /**
+   * One finished education run into this device's education record (plan 22): the 🤓 streak moves, a
+   * graded run's grade joins the average, and the education badges the run earns (EDU_ACHIEVEMENTS,
+   * judged on the record's counters) are held there and listed on Over (this.runBadges). Nothing is
+   * sent: the career store, which uploads what it holds, never sees any of it. Never a test run
+   * (endRun returns before).
+   */
+  recordEducation() {
+    const day = utcDayKey();
+    const facts = eduRunFacts(this.runQuiz, { gaveUp: Boolean(this.revive?.gaveUp) }, T);
+    const counters = this.eduStore.endRun(facts);
+    const earned = evaluate({ totals: counters, facts, unlocked: this.eduStore.load().badges, day, catalog: EDU_ACHIEVEMENTS });
+    this.runBadges = this.eduStore.unlock(earned, day);
   }
 
   /**
@@ -3644,6 +3663,7 @@ export class Play extends Phaser.Scene {
     }
     if (phase !== 'revived' && phase !== 'restored') return;
     this.runQuiz.revives += 1;
+    if (!this.runIsTest) this.eduStore.addRevive(); // 👼 / 🐦‍🔥 count every revive as it happens; a test run counts nothing
     const per = T.education.revivePenaltyPerLevel;
     this.score = scoreAfterDeath(this.score, this.level, T, per);
     this.scoreText.setText(String(this.score));

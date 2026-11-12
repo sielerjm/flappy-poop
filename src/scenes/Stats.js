@@ -7,7 +7,7 @@ import { createButton } from '../ui/button.js';
 import { createInfoCard } from '../ui/infoCard.js';
 import { TAG_GLYPHS } from '../leaderboard.js';
 import { t, metaFontSize, levelLabel, badgeTitle, badgeDesc, dailyDayText } from '../i18n.js';
-import { ACHIEVEMENTS, achievementById, openQuests, progressOf } from '../achievements.js';
+import { ACHIEVEMENTS, EDU_ACHIEVEMENTS, achievementById, averageGrade, openQuests, progressOf } from '../achievements.js';
 import { validateName } from '../save.js';
 
 const STYLE = { fontFamily: 'sans-serif', fontStyle: 'bold', color: '#ffffff', align: 'center' };
@@ -50,7 +50,10 @@ const sameName = (a, b) => typeof a === 'string' && typeof b === 'string' && a.t
  * that player's player_stats; with no name it is this device's own player, drawn from the
  * career store and topped up from the server when there is a username (the server's totals
  * and badges from other devices join the store). A player with no username gets the gate instead
- * (buildGate): an invitation and a Create user button. Sections scroll; a tapped career emoji or badge
+ * (buildGate): an invitation and a Create user button. Your own profile, on a device with education
+ * mode unlocked, ends with a 📚 Education section (plan 22): the average grade, the graded runs and
+ * the education badges, all from this device's education store (nothing of it is on the server, so
+ * no other player's profile has it). Sections scroll; a tapped career emoji or badge
  * (its whole cell) opens a card that says what it is, on a camera of its own above the band; a
  * tap anywhere, A, B or a nav press closes it. ✕ / Esc / B / a tap outside close the profile,
  * back to the board or the 🌞 popup when it opened over one. A controller walks the cells: left /
@@ -111,6 +114,7 @@ export class Stats extends Phaser.Scene {
     this.scroll = null;
     this.view = null; // what is drawn, once it is in (the smoke reads it)
     this.badgeItems = [];
+    this.eduBadgeItems = []; // the 📚 Education section's cells (your own profile, education unlocked)
     this.tagItems = [];
     this.careerItems = [];
     this.input.keyboard?.on('keydown-ESC', () => this.close());
@@ -176,7 +180,23 @@ export class Stats extends Phaser.Scene {
       earned,
       locked,
       tags: online ? (server.tags ?? []) : [],
+      education: play.eduUnlocked ? this.eduView(play.eduStore.load()) : null,
     };
+  }
+
+  /**
+   * The 📚 Education section's data (your own profile, education unlocked): this device's education
+   * counters, the average grade (null before the first graded run), and the education badges held
+   * (oldest first) and still to earn.
+   */
+  eduView(record) {
+    const counters = record?.counters ?? {};
+    const held = record?.badges ?? {};
+    const earned = Object.entries(held)
+      .map(([id, at]) => ({ entry: achievementById(id, EDU_ACHIEVEMENTS), at }))
+      .filter((b) => b.entry)
+      .sort((a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : 0));
+    return { counters, grade: averageGrade(counters), runs: counters.gradedRuns ?? 0, earned, locked: EDU_ACHIEVEMENTS.filter((e) => !(e.id in held)) };
   }
 
   /** Another player, by the name a board shows: their public profile. */
@@ -289,23 +309,42 @@ export class Stats extends Phaser.Scene {
       sv.add(this.add.text(cx, y, t(locale, 'statsNoBadges'), { ...STYLE, fontSize: '26px', color: MUTED, fontStyle: 'normal' }).setOrigin(0.5));
       y += 50;
     }
+    // One grid of badge cells from `top`: the glyph, the name, a lifetime badge's progress on
+    // `counters`, and the whole cell a tap target (explain). Returns the y under it.
     const cellW = (L.right - L.left) / L.badgeCols;
-    badges.forEach((b, i) => {
-      const x = L.left + cellW * (i % L.badgeCols) + cellW / 2;
-      const by = y + Math.floor(i / L.badgeCols) * 130;
-      const alpha = b.done ? 1 : 0.35;
-      const glyph = sv.add(this.add.text(x, by, b.entry.glyph, { fontFamily: 'sans-serif', fontSize: '52px' }).setOrigin(0.5).setAlpha(alpha));
-      const name = sv.add(this.add.text(x, by + 46, badgeTitle(locale, b.entry), { ...STYLE, fontSize: '20px', color: b.done ? '#ffffff' : MUTED }).setOrigin(0.5).setAlpha(b.done ? 1 : 0.7));
-      name.setScale(fitScale(name.width, cellW - 8, 0));
-      if (!b.done && b.entry.kind === 'lifetime') {
-        sv.add(this.add.text(x, by + 72, `${Math.min(progressOf(b.entry, view.counters), b.entry.n)} / ${b.entry.n}`, { ...STYLE, fontSize: '18px', color: MUTED, fontStyle: 'normal' }).setOrigin(0.5));
-      }
-      const zone = sv.add(this.add.zone(x, by + 30, cellW - 4, 120));
-      sv.link(zone, () => this.explain(b));
-      items.push(pressable(b.tag ? `tag:${b.tag}` : `badge:${b.entry.id}`, zone, { event: 'pointerup', scrolled: true }));
-      (b.tag ? (this.tagItems ??= []) : this.badgeItems).push({ id: b.entry.id, done: b.done, glyph, zone });
-    });
-    y += Math.ceil(badges.length / L.badgeCols) * 130;
+    const badgeGrid = (cells, top, counters, list = this.badgeItems) => {
+      cells.forEach((b, i) => {
+        const x = L.left + cellW * (i % L.badgeCols) + cellW / 2;
+        const by = top + Math.floor(i / L.badgeCols) * 130;
+        const alpha = b.done ? 1 : 0.35;
+        const glyph = sv.add(this.add.text(x, by, b.entry.glyph, { fontFamily: 'sans-serif', fontSize: '52px' }).setOrigin(0.5).setAlpha(alpha));
+        const name = sv.add(this.add.text(x, by + 46, badgeTitle(locale, b.entry), { ...STYLE, fontSize: '20px', color: b.done ? '#ffffff' : MUTED }).setOrigin(0.5).setAlpha(b.done ? 1 : 0.7));
+        name.setScale(fitScale(name.width, cellW - 8, 0));
+        if (!b.done && b.entry.kind === 'lifetime') {
+          sv.add(this.add.text(x, by + 72, `${Math.min(progressOf(b.entry, counters), b.entry.n)} / ${b.entry.n}`, { ...STYLE, fontSize: '18px', color: MUTED, fontStyle: 'normal' }).setOrigin(0.5));
+        }
+        const zone = sv.add(this.add.zone(x, by + 30, cellW - 4, 120));
+        sv.link(zone, () => this.explain({ ...b, counters }));
+        items.push(pressable(b.tag ? `tag:${b.tag}` : `badge:${b.entry.id}`, zone, { event: 'pointerup', scrolled: true }));
+        (b.tag ? (this.tagItems ??= []) : list).push({ id: b.entry.id, done: b.done, glyph, zone });
+      });
+      return top + Math.ceil(cells.length / L.badgeCols) * 130;
+    };
+    y = badgeGrid(badges, y, view.counters);
+
+    // 📚 Education (plan 22; your own profile, education unlocked): the average grade and the graded
+    // runs, then the education badges: earned first, then the rest dimmed, progress on the
+    // education counters. All of it from this device's education store.
+    const edu = view.education;
+    if (edu) {
+      y += 14;
+      sv.add(this.add.text(L.left, y, t(locale, 'statsEducation').replace('{n}', String(edu.earned.length)).replace('{total}', String(EDU_ACHIEVEMENTS.length)), { ...STYLE, fontSize: '32px', color: PINK, align: 'left' }).setOrigin(0, 0.5));
+      y += 52;
+      row('statsEduGrade', edu.grade === null ? DASH : `${edu.grade.toFixed(1)} %`, edu.grade === null ? '#ffffff' : GOLD);
+      row('statsEduRuns', String(edu.runs));
+      y += 44;
+      y = badgeGrid([...edu.earned.map((b) => ({ ...b, done: true })), ...edu.locked.map((entry) => ({ entry, done: false }))], y, edu.counters, this.eduBadgeItems);
+    }
     sv.finish(y - 40);
     this.scroll = sv;
 
@@ -446,7 +485,7 @@ export class Stats extends Phaser.Scene {
     let tail = '';
     if (b.done && b.at) tail = t(locale, 'statsEarned').replace('{day}', dailyDayText(locale, b.at));
     else if (e.to) tail = t(locale, 'statsQuestOpen').replace('{day}', dailyDayText(locale, e.to));
-    else if (e.kind === 'lifetime') tail = `${Math.min(progressOf(e, this.view?.counters), e.n)} / ${e.n}`;
+    else if (e.kind === 'lifetime') tail = `${Math.min(progressOf(e, b.counters ?? this.view?.counters), e.n)} / ${e.n}`;
     this.toggleCard({ glyph: e.glyph, title: badgeTitle(locale, e), color: b.done ? GOLD : PINK, lines: [badgeDesc(locale, e), tail] });
   }
 

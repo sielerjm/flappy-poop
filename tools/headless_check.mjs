@@ -4279,10 +4279,83 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await sleep(300);
         ok((await evaluate(`!__flappy.scene.isActive('Quiz') && __flappy.scene.isActive('Over')`)) === true, 'Esc closes it back to the game-over panel');
 
+        // Education badges and the average grade (plan 22, U6): kept on this device with the cards, shown
+        // on the game-over line and in the profile's 📚 section, and never handed to the career store.
+        const ST = `__flappy.scene.getScene('Stats')`;
+        const eduRec = () => evaluate(`JSON.stringify((() => { const r = ${play}.eduStore.load(); return { counters: r.counters, badges: Object.keys(r.badges) }; })())`).then(JSON.parse);
+        const badgeLine = () => evaluate(`${O}.badgeLine?.text ?? null`);
+        const winWith = (right, answered) => evaluate(`(() => { const p = ${play}; p.runQuiz = { ...p.runQuiz, answered: ${answered}, right: ${right}, wrong: ${answered} - ${right} }; p.level = 7; p.applyLevel(); p.win(); return true; })()`);
+        const rec0 = await eduRec();
+        // 🏳️ Drop Out: a crash, then Give up at the first card with nothing answered.
+        await startEdu();
+        await evaluate(`(() => { const p = ${play}; p.graceLeftMs = 0; p.die(); return true; })()`);
+        for (let i = 0; i < 40 && !(await evaluate(`__flappy.scene.isActive('Quiz') && Boolean(${Q}.card)`)); i += 1) await sleep(100);
+        await evaluate(`${Q}.leftBtn.press(), true`); // Give up
+        await sleep(TT.deathToOverMs + 500);
+        const dropPanel = await panel();
+        const dropLine = await badgeLine();
+        const rec1 = await eduRec();
+        ok(dropPanel.active && dropPanel.tally === '❔ 0  ·  ✅ 0  ·  ❌ 0' && dropLine?.includes('🏳️') && !dropPanel.texts.includes(note) && rec1.badges.join() === 'edu_drop_out' && !rec1.counters.gradedRuns, `giving up with nothing answered earns 🏳️: the game-over line reads "${dropLine}" in the note's place, and the run is not graded`);
+        // A won run at 5 of 5: 💯 and 🅰️, the streak at 1, the average at 100 %.
+        await startEdu();
+        await winWith(5, 5);
+        await sleep(TT.deathToOverMs + 500);
+        const aceLine = await badgeLine();
+        const rec2 = await eduRec();
+        ok(aceLine?.includes('💯') && aceLine.includes('🅰️') && rec2.badges.join() === 'edu_drop_out,edu_perfect,edu_grade_a' && rec2.counters.perfectStreak === 1 && rec2.counters.gradedRuns === 1 && rec2.counters.gradeSum === 10000, `a run answered 5 of 5 earns 💯 and 🅰️ ("${aceLine}"); the 🤓 streak is ${rec2.counters.perfectStreak}, the record ${JSON.stringify(rec2.counters)}`);
+        // A test run counts nothing: a revive in it, then the same tally, leave the record as it was.
+        await evaluate(`(() => { const p = ${play}; p.setTestMode(true); p.setTestSettings({ startLevel: 1, invincible: false }); return true; })()`);
+        await startEdu();
+        await evaluate(`(() => { const p = ${play}; p.graceLeftMs = 0; p.die(); return true; })()`);
+        for (let i = 0; i < 40 && !(await evaluate(`__flappy.scene.isActive('Quiz') && Boolean(${Q}.card)`)); i += 1) await sleep(100);
+        await evaluate(`(() => { const q = ${Q}; q.choose(q.order.indexOf('answer')); return true; })()`);
+        await sleep(200);
+        await evaluate(`${Q}.rightBtn.press(), true`); // Fly on
+        for (let i = 0; i < 40 && (await playState()) !== 'playing'; i += 1) await sleep(100);
+        const testRevives = await evaluate(`${play}.runQuiz.revives`);
+        await evaluate(`(() => { const p = ${play}; p.poop.body.setAllowGravity(false); p.poop.setVelocity(0, 0); p.poop.y = 640; return true; })()`);
+        await winWith(9, 10);
+        await sleep(TT.deathToOverMs + 500);
+        const rec3 = await eduRec();
+        const testLine = await badgeLine();
+        ok(testRevives === 1 && JSON.stringify(rec3) === JSON.stringify(rec2) && testLine === null, `a test run counts nothing: its revive (${testRevives}) and its 9 of 10 leave the record as it was, and its panel names no badge`);
+        await evaluate(`(() => { const p = ${play}; p.setTestMode(false); p.registry.set('testQuizShown', []); return true; })()`);
+        const career = await evaluate(`JSON.stringify({ claims: ${play}.careerStore.claims(), unlocked: Object.keys(${play}.careerStore.unlocked()) })`).then(JSON.parse);
+        ok(![...career.claims, ...career.unlocked].some((id) => String(id).startsWith('edu_')), `the career store, which uploads what it holds, has no education badge (${career.claims.length} claims waiting, ${career.unlocked.length} unlocked)`);
+        // The profile's 📚 Education section, on this device only while education is unlocked.
+        await home();
+        // The profile needs a username (without one it is the sign-in gate): lend this device one in memory.
+        const lentName = await evaluate(`(() => { const p = ${play}; if (p.save?.name) return false; p.save = { ...p.save, name: 'EduSmoke' }; return true; })()`);
+        const openProfile = async () => {
+          await evaluate(`(globalThis.__profile = null, ${play}.openStats(), true)`);
+          for (let i = 0; i < 60 && !(await evaluate(`__flappy.scene.isActive('Stats') && Boolean(${ST}.view)`)); i += 1) await sleep(100);
+          return evaluate(`JSON.stringify({ gated: ${ST}.gated, edu: ${ST}.view?.education ? { grade: ${ST}.view.education.grade, runs: ${ST}.view.education.runs, earned: ${ST}.view.education.earned.map((b) => b.entry.id) } : null, cells: (${ST}.eduBadgeItems ?? []).map((c) => [c.id, c.done]), career: (${ST}.badgeItems ?? []).length, texts: ${ST}.children.list.filter((c) => c.type === 'Text').map((c) => c.text) })`).then(JSON.parse);
+        };
+        const shutProfile = async () => {
+          await evaluate(`${ST}.close(), true`);
+          for (let i = 0; i < 30 && (await evaluate(`__flappy.scene.isActive('Stats')`)); i += 1) await sleep(100);
+        };
+        const mine = await openProfile();
+        const [eduHead, gradeRow, runsRow] = await Promise.all(['statsEducation', 'statsEduGrade', 'statsEduRuns'].map(tx));
+        const careerTotal = await evaluate(`import('./src/achievements.js').then((m) => m.ACHIEVEMENTS.length)`);
+        ok(!mine.gated && mine.edu?.grade === 100 && mine.edu.runs === 1 && mine.edu.earned.join() === 'edu_drop_out,edu_perfect,edu_grade_a' && mine.texts.includes(eduHead.replace('{n}', '3').replace('{total}', '8')) && mine.texts.includes(gradeRow) && mine.texts.includes('100.0 %') && mine.texts.includes(runsRow), `your own profile ends with "${eduHead.replace('{n}', '3').replace('{total}', '8')}": ${gradeRow} 100.0 %, ${runsRow} 1`);
+        ok(mine.cells.length === 8 && mine.cells.filter((c) => c[1]).length === 3 && mine.career === careerTotal && mine.texts.includes('1 / 10') && mine.texts.includes('0 / 100') && mine.texts.includes('0 / 1000'), `its grid holds the eight education badges, three earned, with progress for 🤓 (1 / 10), 👼 (0 / 100) and 🐦‍🔥 (0 / 1000); the Achievements grid still holds its ${mine.career}`);
+        await evaluate(`(() => { const c = ${ST}.eduBadgeItems.find((b) => b.id === 'edu_nerd_alert'); c.zone.emit('pointerup'); return true; })()`);
+        const nerd = await evaluate(`JSON.stringify({ open: ${ST}.cardOpen, title: ${ST}.card.title.text, body: ${ST}.card.body.text })`).then(JSON.parse);
+        ok(nerd.open && nerd.title === (await tx('achEduNerd')) && nerd.body.includes(String(TT.education.badgeMinAnswers)) && nerd.body.includes('1 / 10'), `a tap explains a badge: "${nerd.title}": ${nerd.body.replace(/\n/g, ' · ')}`);
+        await evaluate(`${ST}.hideCard(), true`);
+        await shutProfile();
+        await evaluate(`${play}.eduUnlocked = false, true`);
+        const lockedProfile = await openProfile();
+        ok(lockedProfile.edu === null && lockedProfile.cells.length === 0 && !lockedProfile.texts.some((x) => x.includes('\u{1F4DA}')), 'a device without education unlocked has no 📚 section on its profile');
+        await shutProfile();
+        await evaluate(`(() => { const p = ${play}; p.eduUnlocked = true; if (${lentName}) p.save = { ...p.save, name: null }; return true; })()`);
+        ok(JSON.stringify(rec0) === JSON.stringify({ counters: {}, badges: [] }), 'the section began from an empty education record');
+
         // Clear (the save panel's sign-out) wipes the cards' progress; the unlock, a setting, stays.
         await home();
-        const cleared = await evaluate(`(() => { const p = ${play}; const had = Boolean(localStorage.getItem('flappyPoop.eduSrs')); p.signOut(); return JSON.stringify({ had, gone: Object.keys(p.eduStore.load().cards).length === 0, unlocked: p.isEduUnlocked() }); })()`).then(JSON.parse);
-        ok(cleared.had && cleared.gone && cleared.unlocked, 'Clear wipes the cards\' progress and keeps the unlock');
+        const cleared = await evaluate(`(() => { const p = ${play}; const had = Boolean(localStorage.getItem('flappyPoop.eduSrs')); const before = p.eduStore.load(); p.signOut(); const r = p.eduStore.load(); return JSON.stringify({ had, hadBadges: Object.keys(before.badges).length, gone: Object.keys(r.cards).length === 0 && Object.keys(r.counters).length === 0 && Object.keys(r.badges).length === 0, unlocked: p.isEduUnlocked() }); })()`).then(JSON.parse);
+        ok(cleared.had && cleared.hadBadges === 3 && cleared.gone && cleared.unlocked, 'Clear wipes the cards\' progress, the education badges and the average, and keeps the unlock');
 
         // Put the device back as it was (the player Clear forgot, the settings), then home.
         await evaluate(`(() => { const want = JSON.parse(${all}); for (const k of Object.keys(localStorage)) if (!(k in want)) localStorage.removeItem(k); for (const [k, v] of Object.entries(want)) localStorage.setItem(k, v); return true; })()`);

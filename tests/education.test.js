@@ -4,6 +4,7 @@ import assert from 'node:assert/strict';
 import { LEADERBOARD, TUNING as T } from '../src/config.js';
 import { createRng } from '../src/logic.js';
 import { CARDS, DECKS } from '../src/questions.js';
+import { EDU_ACHIEVEMENTS, eduRunFacts, evaluate } from '../src/achievements.js';
 import { cardSource, cardText, createEduStore, dueCount, eduShopPrices, optionText, gradeFor, masteryByDeck, newTally, pickCard, reviveSettled, reviveStart, reviveStep, schedule, shuffleOptions, tallyAnswer } from '../src/education.js';
 
 const S = T.education.srs;
@@ -261,7 +262,7 @@ test('masteryByDeck: per deck, cards seen, mastered (review at masteredMs or mor
 test('createEduStore: answers persist under eduKey; recent keeps the last minGap; junk is dropped; storage errors never throw', () => {
   const st = fakeStorage();
   const store = createEduStore(st);
-  assert.deepEqual(store.load(), { v: 1, cards: {}, recent: [] });
+  assert.deepEqual(store.load(), { v: 1, cards: {}, recent: [], counters: {}, badges: {} });
   const rec = schedule(null, 'good', NOW);
   for (let i = 1; i <= T.education.minGap + 2; i += 1) store.answer(`ST-0${i}`, rec);
   const back = createEduStore(st).load();
@@ -270,7 +271,7 @@ test('createEduStore: answers persist under eduKey; recent keeps the last minGap
   assert.equal(back.recent.at(-1), `ST-0${T.education.minGap + 2}`);
   assert.ok(st.m.has(LEADERBOARD.eduKey));
   st.setItem(LEADERBOARD.eduKey, JSON.stringify({ cards: { 'ST-01': rec, 'bad id': rec, 'ST-02': { phase: 'learning', ease: 'x' } }, recent: ['ST-01', 7] }));
-  assert.deepEqual(createEduStore(st).load(), { v: 1, cards: { 'ST-01': rec }, recent: ['ST-01'] });
+  assert.deepEqual(createEduStore(st).load(), { v: 1, cards: { 'ST-01': rec }, recent: ['ST-01'], counters: {}, badges: {} }, 'a record from before the counters and badges reads as none');
   st.setItem(LEADERBOARD.eduKey, '{not json');
   assert.deepEqual(createEduStore(st).load().cards, {});
   store.clear();
@@ -279,6 +280,48 @@ test('createEduStore: answers persist under eduKey; recent keeps the last minGap
   assert.doesNotThrow(() => off.answer('ST-01', rec));
   assert.deepEqual(off.load().cards['ST-01'], rec, 'private mode: the cards live for this load');
   assert.doesNotThrow(() => off.clear());
+});
+
+test('createEduStore, the badges and the average (plan 22): revives count at once, endRun moves the streak and the average, unlock holds a badge once; junk is dropped; Clear takes it all', () => {
+  const st = fakeStorage();
+  const store = createEduStore(st);
+  const rec = schedule(null, 'good', NOW);
+  store.answer('ST-01', rec);
+  store.addRevive();
+  store.addRevive();
+  assert.deepEqual(createEduStore(st).load().counters, { revives: 2 }, 'kept across loads');
+  const perfect = eduRunFacts({ answered: 5, right: 5 });
+  assert.deepEqual(store.endRun(perfect), { revives: 2, perfectStreak: 1, gradedRuns: 1, gradeSum: 10000 });
+  const short = eduRunFacts({ answered: 3, right: 0 });
+  assert.deepEqual(store.endRun(short), { revives: 2, perfectStreak: 1, gradedRuns: 1, gradeSum: 10000 }, 'a run too short to grade changes nothing');
+  const flawed = eduRunFacts({ answered: 6, right: 4 });
+  assert.deepEqual(store.endRun(flawed), { revives: 2, gradedRuns: 2, gradeSum: 16667 }, 'a graded run with a miss resets the streak (a zero is not stored) and joins the average');
+  assert.deepEqual(store.unlock(['edu_perfect', 'edu_grade_a'], '2026-11-12'), ['edu_perfect', 'edu_grade_a']);
+  assert.deepEqual(store.unlock(['edu_perfect', 'edu_grade_b', 'not_edu', 7], '2026-11-13'), ['edu_grade_b'], 'held badges and junk ids are skipped');
+  assert.deepEqual(store.unlock(['edu_grade_c'], 'yesterday'), [], 'a badge needs a day');
+  const back = createEduStore(st).load();
+  assert.deepEqual(back.badges, { edu_perfect: '2026-11-12', edu_grade_a: '2026-11-12', edu_grade_b: '2026-11-13' }, 'the first day is kept');
+  assert.deepEqual(back.cards['ST-01'], rec, 'the cards are untouched');
+  store.answer('ST-02', rec);
+  assert.deepEqual(createEduStore(st).load().counters, back.counters, 'an answer keeps the counters and badges');
+  // What evaluate needs is what the store holds.
+  assert.deepEqual(evaluate({ totals: back.counters, facts: perfect, unlocked: back.badges, catalog: EDU_ACHIEVEMENTS }), [], 'nothing is earned twice');
+  st.setItem(LEADERBOARD.eduKey, JSON.stringify({ cards: {}, recent: [], counters: { revives: 3, perfectStreak: -1, gradedRuns: 1.5, gradeSum: '9', other: 4 }, badges: { edu_perfect: '2026-11-12', score_10: '2026-11-12', edu_grade_a: 'soon', 'EDU bad': '2026-11-12' } }));
+  assert.deepEqual(createEduStore(st).load(), { v: 1, cards: {}, recent: [], counters: { revives: 3 }, badges: { edu_perfect: '2026-11-12' } }, 'only whole positive counts of known counters, and edu_ ids with a day');
+  store.clear();
+  assert.deepEqual(createEduStore(st).load(), { v: 1, cards: {}, recent: [], counters: {}, badges: {} }, 'Clear removes the counters and badges with the cards');
+  const off = createEduStore(throwing);
+  assert.doesNotThrow(() => off.addRevive());
+  assert.deepEqual(off.endRun(perfect), { revives: 1, perfectStreak: 1, gradedRuns: 1, gradeSum: 10000 }, 'private mode: they live for this load');
+  assert.deepEqual(off.unlock(['edu_perfect'], '2026-11-12'), ['edu_perfect']);
+});
+
+test('reviveStep: Give up marks the state gaveUp; no other way out does', () => {
+  assert.equal(reviveStep(reviveStart(), 'giveUp').gaveUp, true);
+  let s = reviveStart();
+  for (let i = 0; i < T.education.strikes; i += 1) s = reviveStep(s, 'wrong');
+  assert.deepEqual([s.phase, Boolean(s.gaveUp)], ['over', false], 'three misses end the run without giving up');
+  assert.ok(!reviveStep(reviveStart(), 'correct').gaveUp);
 });
 
 test('dueCount: seen live cards due now, nothing else', () => {
