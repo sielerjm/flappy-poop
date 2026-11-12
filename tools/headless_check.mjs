@@ -3818,6 +3818,46 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         const svBack = await evaluate(`JSON.stringify({ quiz: __flappy.scene.isActive('Quiz'), state: ${play}.state, lb: Boolean(${play}.levelBreak), answered: ${play}.runQuiz.answered, pill: ${play}.quizStatsButton.visible })`).then(JSON.parse);
         ok(!svBack.quiz && svBack.state === 'paused' && svBack.lb && svBack.answered === 5 && svBack.pill, `${returnWant} closes it back to the paused break; the tally is unchanged (${svBack.answered}) and the pill is back`);
 
+        // The quiz's sounds (plan 22, U5): a book opens with it, a page turns for each next question, the
+        // book shuts on leaving; a right answer dings like a pipe passed (with the coin's own sound in a
+        // break), a wrong one sounds like the bad bacteria. The ❔ view makes no sound.
+        const listen = () =>
+          evaluate(
+            `import('./src/sound.js').then((m) => { const p = ${play}; globalThis.__snd = []; if (!p.__sampleSpy) { const orig = p.playSample.bind(p); p.playSample = (key, volume, fallback) => { globalThis.__snd.push('sample:' + key); return orig(key, volume, fallback); }; p.__sampleSpy = true; } for (const k of ['score', 'hazard']) { if (!m.sfx['__spied_' + k]) { const orig = m.sfx[k]; m.sfx['__spied_' + k] = orig; m.sfx[k] = (...a) => { globalThis.__snd.push('sfx:' + k); return orig(...a); }; } } return true; })`,
+          );
+        const heard = () => evaluate(`JSON.stringify(globalThis.__snd.splice(0))`).then(JSON.parse);
+        const unlisten = () => evaluate(`import('./src/sound.js').then((m) => { for (const k of ['score', 'hazard']) { if (m.sfx['__spied_' + k]) { m.sfx[k] = m.sfx['__spied_' + k]; delete m.sfx['__spied_' + k]; } } return true; })`);
+        const loaded = await evaluate(`JSON.stringify(['book-open', 'book-flip', 'book-close', 'sparkle'].map((k) => __flappy.cache.audio.exists(k)))`).then(JSON.parse);
+        ok(loaded.every(Boolean), `Boot loaded the four quiz sounds (${loaded.join(', ')})`);
+        await listen();
+        await reopen();
+        const sOpen = await heard();
+        ok(sOpen.join() === 'sample:book-open', `opening the quiz plays the book opening, and no page turn (${sOpen.join(', ')})`);
+        await evaluate(`(() => { const q = ${Q}; q.choose(q.order.indexOf('answer')); return true; })()`);
+        await sleep(150);
+        const sRight = await heard();
+        ok(sRight.includes('sfx:score') && sRight.includes('sample:coin') && !sRight.includes('sfx:hazard'), `a right answer dings like a pipe passed, with the coin's sound (${sRight.join(', ')})`);
+        await evaluate(`${Q}.rightBtn.press(), true`); // Next
+        await sleep(200);
+        const sFlip = await heard();
+        ok(sFlip.join() === 'sample:book-flip', `Next turns a page (${sFlip.join(', ')})`);
+        await evaluate(`(() => { const q = ${Q}; q.choose(q.order.findIndex((k) => k !== 'answer')); return true; })()`);
+        await sleep(150);
+        const sWrong = await heard();
+        ok(sWrong.join() === 'sfx:hazard', `a wrong answer sounds like the bad bacteria (${sWrong.join(', ')})`);
+        await evaluate(`${Q}.leftBtn.press(), true`); // Return
+        await sleep(300);
+        const sClose = await heard();
+        ok(sClose.join() === 'sample:book-close' && !(await evaluate(`__flappy.scene.isActive('Quiz')`)), `Return shuts the book (${sClose.join(', ')})`);
+        await sleep(400); // past the resume lockout
+        await evaluate(`${play}.openQuizStats(), true`);
+        await sleep(400);
+        await evaluate(`${Q}.leftBtn.press(), true`);
+        await sleep(300);
+        const sStats = await heard();
+        ok(sStats.length === 0, `the ❔ answers view opens and closes in silence (${sStats.join(', ') || 'nothing played'})`);
+        await unlisten();
+
         // The pill is back, and the shop sells at level 2's prices (eduShopPrices), not the base ones.
         await sleep(400);
         const shop = await evaluate(`Promise.all([import('./src/education.js'), import('./src/i18n.js')]).then(([e, i]) => { const p = ${play}; const pillBack = p.quizButton.visible; p.handleChrome('shop'); const want = e.eduShopPrices(2); const shown = Object.fromEntries(Object.entries(p.shop.rows).map(([id, r]) => [id, r.price.text])); const label = Object.fromEntries(Object.keys(want).map((id) => [id, i.countText(want[id])])); p.closeShop(); return JSON.stringify({ pillBack, shown, label, want, base: p.shopPrices === undefined ? null : JSON.stringify(p.shopPrices()) === JSON.stringify(want) }); })`).then(JSON.parse);
@@ -3966,17 +4006,36 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         ok(st1 === 'playing' && after1.hold === null && took < TT.education.reviveBlinkMs + 800, `play resumes by itself ${took} ms after Fly on (the blink is ${TT.education.reviveBlinkMs} ms; the glide and the full blinks took 2200)`);
         ok(!after1.finish && after1.pipes > 0 && after1.vx > 0 && !after1.filled, `with pairs still to come the field holds pairs and no finish line, now scrolling (${after1.pipes} pipe parts, ${Math.round(after1.vx)} px/s)`);
 
-        // A full streak: everything the crash took comes back, and play goes on.
+        // A full streak: everything the crash took comes back, and play goes on. Its sounds (plan 22,
+        // U5): the book opens, each right answer dings, and the one that wins everything back sparkles
+        // in the ding's place; Fly on shuts the book.
+        const listen = () =>
+          evaluate(
+            `import('./src/sound.js').then((m) => { const p = ${play}; globalThis.__snd = []; if (!p.__sampleSpy) { const orig = p.playSample.bind(p); p.playSample = (key, volume, fallback) => { globalThis.__snd.push('sample:' + key); return orig(key, volume, fallback); }; p.__sampleSpy = true; } for (const k of ['score', 'hazard']) { if (!m.sfx['__spied_' + k]) { const orig = m.sfx[k]; m.sfx['__spied_' + k] = orig; m.sfx[k] = (...a) => { globalThis.__snd.push('sfx:' + k); return orig(...a); }; } } return true; })`,
+          );
+        const heard = () => evaluate(`JSON.stringify(globalThis.__snd.splice(0))`).then(JSON.parse);
+        const unlisten = () => evaluate(`import('./src/sound.js').then((m) => { for (const k of ['score', 'hazard']) { if (m.sfx['__spied_' + k]) { m.sfx[k] = m.sfx['__spied_' + k]; delete m.sfx['__spied_' + k]; } } return true; })`);
         await startEdu(`p.score = 30; p.effects.addCoins(4); p.effects.addBean(); p.effects.addBean(); p.effects.applyProbiotic()`);
+        await listen();
         await crash();
+        const sCrash = await heard();
         await answer(true);
+        const sFirst = await heard();
         await press('rightBtn'); // ⭐ Go for it
+        const sGo = await heard();
         const s1 = await view();
         await answer(true);
+        const sSecond = await heard();
         await press('rightBtn'); // Next
+        await heard();
         const s3 = await answer(true);
+        const sThird = await heard();
+        ok(sCrash.includes('sample:book-open') && sFirst.join() === 'sfx:score' && sGo.join() === 'sample:book-flip' && sSecond.join() === 'sfx:score' && sThird.join() === 'sample:sparkle', `the streak's sounds: the book opens (${sCrash.join(', ')}), a ding (${sFirst.join(', ')}), a page (${sGo.join(', ')}), a ding (${sSecond.join(', ')}), then the sparkle and no ding (${sThird.join(', ')})`);
         ok(s1.phase === 'streak' && s1.status === '⭐' + '☆'.repeat(TT.education.restoreStreak - 1) && s3.phase === 'restored' && s3.verdict === restored && s3.right === flyOn && s3.left === null && s3.top === (await tx('quizWhy')), `the streak: ${s1.status} → "${s3.verdict}" (${s3.status})`);
         await press('rightBtn');
+        const sFly = await heard();
+        ok(sFly.join() === 'sample:book-close', `Fly on shuts the book (${sFly.join(', ')})`);
+        await unlisten();
         const r2 = await playNow();
         ok(r2.coins === 4 && r2.beans === 2 && r2.probiotic && r2.score === 30 - pen && r2.restores === 1 && r2.hold === null, `restored: ${r2.coins} coins, ${r2.beans} beans, the probiotic back; the penalty still taken (score ${r2.score})`);
         ok((await waitPlaying()) === 'playing', 'and play resumes with no tap and no button');

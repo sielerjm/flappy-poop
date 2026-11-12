@@ -48,6 +48,28 @@
   Pixabay Content License, published 2025-09-08. Plays when GO appears in a
   two-player countdown. Bundled inside the game only; not redistributed as a
   standalone file.
+- `assets/sfx/Book_Open.mp3` — "Book Opening" by Soumages,
+  https://pixabay.com/sound-effects/film-special-effects-book-opening-345808/,
+  Pixabay Content License, published 2025-05-23. Plays when an education quiz
+  opens. Bundled inside the game only; not redistributed as a standalone file.
+- `assets/sfx/Book_PageTurn.mp3` — "Turning Book Page" by krnash (Freesound),
+  uploaded by freesound_community,
+  https://pixabay.com/sound-effects/film-special-effects-turning-book-page-79935/,
+  Pixabay Content License, published 2022-08-05. Plays at each next question
+  of an education quiz. Bundled inside the game only; not redistributed as a
+  standalone file.
+- `assets/sfx/Book_Close.mp3` — "Book Closing" by chancelombardo (Freesound),
+  uploaded by freesound_community,
+  https://pixabay.com/sound-effects/household-book-closing-48184/,
+  Pixabay Content License, published 2022-06-21. Plays when an education quiz
+  is left. Bundled inside the game only; not redistributed as a standalone
+  file.
+- `assets/sfx/Sparkle_Restore.mp3` — "Sound Effect: Twinkle/Sparkle" by
+  ShidenBeatsMusic,
+  https://pixabay.com/sound-effects/film-special-effects-sound-effect-twinklesparkle-115095/,
+  Pixabay Content License, published 2022-07-19. Plays when three right
+  answers in a row win back what an education crash took. Bundled inside the
+  game only; not redistributed as a standalone file.
 
 ## Services
 

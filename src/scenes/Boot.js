@@ -46,6 +46,11 @@ export class Boot extends Phaser.Scene {
     this.load.audio('coin-spend', 'assets/sfx/Coin_Spend.mp3' + V); // a shop purchase
     this.load.audio('shop', 'assets/sfx/ShopOpenClose.mp3' + V); // the shop panel opening / closing
     this.load.audio('flush', 'assets/sfx/ToiletFlush_Win.mp3' + V); // a two-player GO
+    // The education quiz (plan 22): a book opening with the card, a page turned for each next question, the book shut on leaving.
+    this.load.audio('book-open', 'assets/sfx/Book_Open.mp3' + V);
+    this.load.audio('book-flip', 'assets/sfx/Book_PageTurn.mp3' + V);
+    this.load.audio('book-close', 'assets/sfx/Book_Close.mp3' + V);
+    this.load.audio('sparkle', 'assets/sfx/Sparkle_Restore.mp3' + V); // a revive's streak wins everything back
   }
 
   create() {

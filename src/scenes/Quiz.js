@@ -6,6 +6,7 @@ import { isTopOverlay } from '../ui/overlayStack.js';
 import { t, levelLabel } from '../i18n.js';
 import { cardText, optionText, cardSource, EDUCATION_EMOJI } from '../education.js';
 import { auditState } from '../questionAudits.js';
+import { sfx } from '../sound.js';
 
 const STYLE = { fontFamily: 'sans-serif', fontStyle: 'bold', color: '#ffffff', align: 'center' };
 const MUTED = { ...STYLE, fontStyle: 'normal', color: '#c9b8dc' };
@@ -29,6 +30,9 @@ const BAD = '#ff8da8';
  * quizAnswer grades and saves it), so this scene holds no storage. Answer by tap, the keys 1–3, or
  * the controller ring; Enter / Space presses the way forward (primary). The response time runs from
  * the options appearing; an answer is flagged interrupted when the page was hidden meanwhile.
+ * Sounds (plan 22): a book opens with the quiz, a page turns for each next question, and the book
+ * shuts when the quiz is left; a right answer dings like a pipe passed, a wrong one sounds like the
+ * bad bacteria, and the answer that wins everything back sparkles. The answers view is silent.
  * Buttons: a full-width Why on top, and a bottom row whose right button is the way forward (Next,
  * Fly on, Go for it, End run) and whose left button is the way out (Return; in a revive, Give up or
  * the choice's Fly on).
@@ -60,6 +64,7 @@ export class Quiz extends Phaser.Scene {
     this.answered = false;
     this.finishing = false;
     this.reviveState = this.mode === 'revive' ? (this.play?.revive ?? null) : null;
+    this.sample('book-open', T.bookOpenVolume);
     const W = this.scale.width; // the live field; the card stays centred
     const cx = W / 2;
     const cy = GAME_HEIGHT / 2;
@@ -284,7 +289,17 @@ export class Quiz extends Phaser.Scene {
       return;
     }
     this.session.push(pick.card.id);
+    if (this.session.length > 1) this.sample('book-flip', T.bookFlipVolume); // a page turned: every card after the first
     this.showCard(pick.card, pick.order, pick.reason);
+  }
+
+  /**
+   * A quiz sample, through Play (so mute, and a file that did not load, behave as for every other
+   * sample); `fallback` is the synth sound for a missing file. The answers view makes no sound.
+   */
+  sample(key, volume, fallback = null) {
+    if (this.mode === 'stats') return;
+    this.play?.playSample?.(key, volume, fallback);
   }
 
   /** Lay a card out: header, question, the three options in `order`, everything below hidden until the answer. */
@@ -374,6 +389,11 @@ export class Quiz extends Phaser.Scene {
     const res = this.play?.quizAnswer?.({ card: this.card, reason: this.reason, order: this.order, chosen: key, rtMs, interrupted: this.interrupted, mode: this.mode }) ?? { correct: key === 'answer' };
     this.lastAnswer = { id: this.card.id, chosen: key, correct: res.correct, coins: res.coins ?? 0, rtMs, interrupted: this.interrupted }; // the smoke reads it
     if (this.mode === 'revive') this.reviveState = this.play?.reviveEvent?.(res.correct ? 'correct' : 'wrong') ?? this.reviveState;
+    // The answer's sound: a wrong one as the bad bacteria, a right one as a pipe passed; the right
+    // answer that wins everything back (a revive's full streak) sparkles in the ding's place.
+    if (!res.correct) sfx.hazard();
+    else if (this.reviveState?.phase === 'restored') this.sample('sparkle', T.sparkleVolume, sfx.score);
+    else sfx.score();
     this.reveal(i, res.correct);
   }
 
@@ -474,6 +494,7 @@ export class Quiz extends Phaser.Scene {
   finish() {
     if (this.mode !== 'revive' || this.finishing) return;
     this.finishing = true;
+    this.sample('book-close', T.bookCloseVolume);
     this.scene.stop();
     this.play?.armResumeLockout?.(); // the closing tap's twin must not flap as play resumes
   }
@@ -539,6 +560,7 @@ export class Quiz extends Phaser.Scene {
     const play = this.play;
     const result = chromeIntent({ state: play?.state ?? 'paused', overlay: 'quiz', input: 'close' });
     if (result.do !== 'closeTop') return;
+    this.sample('book-close', T.bookCloseVolume);
     this.scene.stop(); // its shutdown tells Play (onQuizClosed)
     if (result.armResumeLockout) play?.armResumeLockout?.();
   }

@@ -75,6 +75,10 @@ export const TUNING = {
   coinSpendVolume: 0.6, // 0–1 Phaser volume for a shop purchase (Coin_Spend.mp3)
   shopVolume: 0.6, // 0–1 Phaser volume for the shop opening / closing (ShopOpenClose.mp3)
   flushVolume: 0.6, // 0–1 Phaser volume for the toilet flush on a two-player GO (ToiletFlush_Win.mp3)
+  bookOpenVolume: 0.6, // 0–1 Phaser volume for the book opening as an education quiz comes up (Book_Open.mp3)
+  bookFlipVolume: 0.6, // 0–1 Phaser volume for the page turned at each next question (Book_PageTurn.mp3)
+  bookCloseVolume: 0.6, // 0–1 Phaser volume for the book shut as the quiz is left (Book_Close.mp3)
+  sparkleVolume: 0.6, // 0–1 Phaser volume for the sparkle when a revive's streak wins everything back (Sparkle_Restore.mp3)
   // The level break's tap prompt ("Tap to continue", "Tap when ready") breathes: its scale swells by
   // `amount` and back each periodMs, while a white copy behind it swells by glowSpread and fades from glowAlpha.
   hintPulse: { periodMs: 1400, amount: 0.05, glowAlpha: 0.5, glowSpread: 0.16 },
