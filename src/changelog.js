@@ -8,6 +8,24 @@ import { LOCALES } from './i18n.js';
 
 export const CHANGELOG = [
   {
+    version: '0.16.0',
+    date: '12 Nov 2026',
+    notes: {
+      en: [
+        'Seven new badges: 🪂 Sky Diver, 💈 Close Shave, 🏃 IBS, 🧱 Constipated, ☀️ Icarus, 🃏 Four of a Kind and 🎰 Let\'s Go Gambling. Royal Flush is now 💎.',
+        '👑 Dethroned joins your career totals: each time you take 1st place from someone on the 🏆 or 🌞 board.',
+        'Player tags on profiles and next to names on the boards: 🔧 game dev, 🎖️ played in the first month, 🆕 new this week.',
+        'Badge descriptions are shorter.',
+      ],
+      'zh-Hans': [
+        '七个新徽章：🪂 高空跳伞、💈 千钧一发、🏃 肠易激、🧱 便秘、☀️ 伊卡洛斯、🃏 四条和 🎰 来赌一把。王者冲水改为 💎。',
+        '👑 夺冠加入生涯累计：每次在 🏆 或 🌞 榜上从别人手里抢下第一名都算一次。',
+        '个人资料和排行榜名字旁会显示玩家标签：🔧 游戏开发者、🎖️ 第一个月就来玩、🆕 本周新玩家。',
+        '徽章说明更简短了。',
+      ],
+    },
+  },
+  {
     version: '0.15.1',
     date: '12 Nov 2026',
     notes: {

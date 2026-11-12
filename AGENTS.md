@@ -306,7 +306,7 @@ turns it into the profile once a name is saved, and back on Clear).
 (`src/achievements.js`) turns the run into counters (games / wins / sumScore / sumLevel / maxLevel
 for single player, dailyGames for a Daily Dump, deaths / pipes / falls / closeCalls / farts / superFarts / the pickups
 for both, pipes being the pairs flown that day in a Daily Dump;
-`runFarts` / `runSuperFarts` from `activatePower`; `runFalls` once per drop past `fallLookVy` (`fallStarted`) and `runCloseCalls` when the near-miss clock starts in `tickScared`, both outside a fart, its grace and Invincible) that wait in the career store (`createCareerStore`,
+`runFarts` / `runSuperFarts` from `activatePower`; `runFalls` once per drop past `fallLookVy` (`fallStarted`) and `runCloseCalls` when the near-miss clock starts in `tickScared`, both outside a fart, its grace and Invincible; `runCeilingHits` (☀️, set before `die()` when the poop ended on the ceiling) and `runBoxesBought` (🎰, `buyItem('mystery')`). Run facts for v0.16.0 badges: `closeCallsByLevel` → `closeShave` (💈, `levelCloseShave` on `levelPipes`), the same-draw streak in `openMystery` → `fourOfAKind` (🃏, `nextDrawStreak`), and from `careerStore.markRun` this device's `daysSinceLastRun` (🧱) and `winsLast7Days` (🏃). that wait in the career store (`createCareerStore`,
 `flappyPoop.career`); test runs and match halves return before it. **Badges:** `evaluate` judges the
 `ACHIEVEMENTS` catalog (run feats from a normal single-player run only; lifetime milestones on the
 totals; time-boxed quests by UTC day) and `careerStore.unlock` records them with a claim; Over names
@@ -506,8 +506,11 @@ src/
                             as submit_counters checks), addCounters (= the SQL's
                             merge_counters), cleanCounters, evaluate (newly earned
                             ids), windowOpen, progressOf, bestFacts (veteran
-                            credit), openQuests, achievementById, isAchievementId.
-                            Fully unit-tested (tests/achievements.test.js).
+                            credit), openQuests, achievementById, isAchievementId;
+                            v0.16.0: a run entry's `modes` (default single player),
+                            IBS_WINS / WINDOW_DAYS / BREAK_DAYS / FOUR_OF_A_KIND,
+                            levelCloseShave, winsInWindow, daysBetween,
+                            nextDrawStreak. Fully unit-tested (tests/achievements.test.js).
   tournament.js             Tournament (🏅) logic, NO Phaser/DOM: createTournament
                             (seeded 2-, 4- or 8-slot bracket, byes; buildBracket
                             from tour.order), seedSlots / canReseed / reseed (swap
@@ -1250,7 +1253,12 @@ src/
                             daily result's score link sets 'daily'). linkName: every
                             name on the three boards opens that player's profile
                             over the board (sv.link: a tap, not a drag; only while
-                            the board is on top); the – rows are not names.
+                            the board is on top); the – rows are not names. loadTags:
+                            once the rows are in, one Play.fetchBoardTags (board_tags)
+                            puts each name's tags (🔧 🎖️ 🆕, TAG_GLYPHS) after it; a
+                            tagged name never shrinks below MIN_NAME_SCALE (0.45), so
+                            a long name keeps only its first tag; a failed request
+                            leaves the board untagged.
     Stats.js                Overlay (plan 08; chromeIntent 'stats': on its own, or
                             over the board or the 🌞 popup, closing back to it
                             without the lockout): a player's profile, launched by
@@ -1270,7 +1278,7 @@ src/
                             rebuilt with the cells once the profile is in and moved
                             by navigate(): left / right in list order, up / down to
                             the nearest cell (focusNearest over cells only), ✕ above
-                            the first row (scrolls to the top). No username: the gate
+                            the first row (scrolls to the top). Tags (view.tags, TAGS: 🔧 🎖️ 🆕) lead the Achievements grid, each a card. No username: the gate
                             (buildGate) instead; refresh() restarts it either way.
 
 assets/                     Contract PNGs + README.md (the art contract).
@@ -1345,7 +1353,15 @@ db/schema.sql               Supabase schema: scores table (player_id = save-code
                             claim_achievements (window + 2 days' grace, 50 a call,
                             300 a player); player_by_name (internal: the boards'
                             naming) and player_stats (anyone's profile, no ids);
-                            fold_player merges counters and achievements. Run by
+                            fold_player merges counters and achievements. v0.16.0:
+                            player_meta (joined_at, exact, dev; touch_player from
+                            every write function, an inexact backfill) and
+                            player_tags ('dev', 'og' before 1 Dec 2026, 'new' an exact
+                            join in 7 days) for player_stats and board_tags (anon, 100
+                            names); admin_set_dev (owner only, by name); 👑 dethroned
+                            (add_server_counter from submit_score / submit_daily_score
+                            when a post takes the board's #1 from another player),
+                            refused in a client batch. Run by
                             hand in the SQL editor, never by any integration; it is
                             the source of truth for the backend. Apply it BEFORE
                             pushing a client that depends on new functions.
@@ -1886,6 +1902,10 @@ Commits follow `type(scope): summary` (`feat`, `fix`, `docs`, `chore`, `test`, `
   Dump run's facts (`mode: 'daily'`).
 - New lifetime counter → a key in `runDeltas` (+ its glyph in `Stats.js`'s CAREER
   grid if players should see it). No SQL: the server stores whatever keys come.
+- Server-only counter (one the server counts, like 👑 `dethroned`) → count it with
+  `add_server_counter` inside the SQL function that sees it happen, refuse the key in
+  `submit_counters`, and add its glyph to CAREER; never put it in `runDeltas`.
+- A game dev's 🔧 → `select public.admin_set_dev('<username>', true);` in the SQL editor.
 - New loading-screen card → one `SPLASH_NOTES` entry in `src/splash.js` (a new,
   permanent id; a major feature goes at the top of the features, newest first,
   and the oldest beyond `splash.featureMax` drops out on its own) and its line in
