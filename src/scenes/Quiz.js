@@ -27,6 +27,8 @@ const BAD = '#ff8da8';
  * Modes:
  *   'break'  a level break: questions about the segment just cleared, +coins for a right answer;
  *            ✕ / Esc / B close it.
+ *   'bonus'  over the game-over panel of a won run: the rectum's questions (it has no break), no
+ *            coins; closed like a break's.
  *   'revive' after an education crash: Play's reviveStep state (play.revive) runs the card. Wrong
  *            answers use up the ❤️ (education.strikes); the first right one revives, and when the
  *            crash took something, offers the ⭐ streak (education.restoreStreak in a row, the first
@@ -422,9 +424,9 @@ export class Quiz extends Phaser.Scene {
     this.nextBtn.press();
   }
 
-  /** Whether the player may leave the quiz here (a level break's quiz always; a revive never). */
+  /** Whether the player may leave the quiz here (a level break's or a won run's bonus quiz always; a revive never). */
   closable() {
-    return this.mode === 'break';
+    return this.mode === 'break' || this.mode === 'bonus';
   }
 
   /** Put the controller ring on an item (a no-op unless the ring is showing). */

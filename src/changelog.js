@@ -8,6 +8,18 @@ import { LOCALES } from './i18n.js';
 
 export const CHANGELOG = [
   {
+    version: '0.16.1',
+    date: '12 Nov 2026',
+    notes: {
+      en: [
+        'A test build of a learning mode for invited testers: quiz cards about the gut and its microbes, in level breaks and after a crash. Hidden for everyone else for now.',
+      ],
+      'zh-Hans': [
+        '为受邀测试者准备的学习模式测试版：在关卡间歇和撞到之后回答关于肠道及其微生物的问答卡。目前对其他玩家隐藏。',
+      ],
+    },
+  },
+  {
     version: '0.16.0',
     date: '12 Nov 2026',
     notes: {

@@ -345,6 +345,41 @@ stops in a hidden tab) Continue lights up and glows, and **Play starts only on i
 release** (click, Enter / Space up, the pad's A up), since Play's keydown-SPACE flap repeats while held
 and the pad plugin reports a held button. Any error in the splash removes it and starts the game.
 
+**Education mode** (📚, 2026-11-12, v0.16.1, plan `.claude/plans/21-education.plan.md`, Stage 2: a
+tester build). Hidden until a device is unlocked: typing one of `EDUCATION.words` (`poopschool`) as the
+username and pressing Save (`toggleEducationUnlock` in the save panel, like the test word; never stored
+as a name) sets the setting `eduUnlocked` (`Play.setEduUnlocked`); typing it again locks it. The ready
+screen then offers a 📚 switch (settings `education`, remembered) under 🚽, in the 👥 slot on a phone; on
+a wide window the three switches pack into 64 px boxes (`readyLayout({ versus, education })`, y 808 /
+874 / 940); 👥 and 📚 switch each other off. `refreshReadySwitches` re-lays them in place when test mode
+or the word changes (stable `switchBoxes` for the focus ring); a gold count on the 📚 is the cards due
+(`dueCount`). A run with 📚 on latches `runIsEducation` (never a Daily Dump), shows 📚 in the HUD, and
+**records nothing** at its end (`endRun` returns after the test-run return: no best, top list, career or
+sync); with test mode on as well it is a test run too, and the cards' progress is not saved.
+**Cards** (`src/questions.js`, 70 placeholder cards, audits in `src/questionAudits.js`, the audit tool
+`tools/audit_questions.mjs`) are scheduled per device by SM-2 (`src/education.js`; store
+`flappyPoop.eduSrs`, wiped by Clear). **The quiz card** (`scenes/Quiz.js`, overlay id `quiz`): Play owns
+the cards (`quizNext` → `pickCard`, `quizAnswer` → `gradeFor` / `schedule` / `eduStore`), the scene
+only shows them: three options (tap, keys 1–3, the ring), ✓ / ✗, the verdict, the explanation (at once
+after a wrong answer, which holds Next `explainMinMs`; behind "Why?" after a right one; its source only
+once audited), the card's id in a corner. **Level break**: a 📚 Quiz pill under the 💰 (the 🏅's row,
+`quizButtonShown`; chromeIntent's `'quiz'` input, only in an education run's break) asks about the
+segment just cleared (plus general cards); a right answer pays `education.breakCoins` (`takeCoins`); the
+shop's prices are `eduShopPrices(level)` (`Play.shopPrices`; `buyBlocker` takes `prices`). **Crash**
+(`die` → `startEduRevive`): the coins and power-ups go (`effects.snapshot`, kept in `reviveLost`), the
+world halts as in a match respawn (`startRespawn` / `endRespawn` keep their match parts behind
+`if (this.match)`), and `respawnHold` stops `tickRespawn` at the end of the tumble, before the field
+clears, while the **revive quiz** runs (`reviveStep` through `Play.reviveEvent`): ❤️ ×
+`education.strikes` misses end the run (`reviveDone` → `endRun`, the field untouched); the first right
+answer revives, and when the crash took something the player may go for ⭐ × `restoreStreak` in a row to
+get it all back (`effects.restore`); Give up ends it; Esc / B do nothing. A revive costs
+`education.revivePenaltyPerLevel` × level (`scoreAfterDeath` / `scorePopup` take the per-level amount),
+then "Tap when ready" (`reviveHint`; chromeIntent `reviveWait` → `reviveGo`, after the resume lockout)
+runs the glide and the blinks. **Over** shows `📚 right/answered · 💀 revives · ⭐ restores` and
+`eduNotSaved`, no Share; a won run offers 📚 Quiz in Share's place (`openBonus` → `Quiz('bonus')`, the
+rectum's questions, no coins). Still to come (plan 21): the server pilot, the privacy foundation, the
+public release with the age question, the 📚 board, the research beta and study.
+
 It is deliberately small: plain ES modules, no bundler, no runtime npm
 dependencies (one devDependency for the schema tests), Phaser 4 loaded from a CDN, deployed to GitHub Pages straight from
 `main`. Keep it that way unless the game clearly outgrows it.
@@ -416,7 +451,9 @@ src/
                             pulse and the overlay scroll step. TUNING.education = Education
                             mode (plan 21): grade thresholds, the SM-2 srs
                             knobs, minGap, generalShare, strikes, restoreStreak,
-                            priceScale, masteredMs. TUNING.splash = the
+                            priceScale, masteredMs, explainMinMs, breakCoins,
+                            revivePenaltyPerLevel. EDUCATION.words = the unlock word
+                            (poopschool), matched like TEST_MODE.words. TUNING.splash = the
                             loading splash (hintMs, slideMs, fadeMs, swipePx,
                             featureMax, storageKey; the ring: ringEaseMs,
                             ringMaxPerSec, ringMinPerSec, ringFrameCapMs, waitCap,
@@ -525,11 +562,14 @@ src/
                             the session or a retired one; the last minGap wait),
                             shuffleOptions, reviveStart / reviveStep (strikes →
                             choice → streak → revived / restored / over; giveUp),
-                            eduShopPrices (base × priceScale per level), masteryByDeck,
+                            eduShopPrices (base × priceScale per level), masteryByDeck
+                            (the profile's, plan 21 B2: orphans allowlist until then),
                             createEduStore (LEADERBOARD.eduKey = flappyPoop.eduSrs:
-                            each card's record and the last cards shown). Nothing in
-                            the game calls it yet (steps L3–L6; orphans allowlist).
-                            Fully unit-tested (tests/education.test.js).
+                            each card's record and the last cards shown), dueCount
+                            (the 📚 switch's count), cardText (zh-Hans when a card has
+                            it) / optionText, cardSource (short citations: "Martinsen
+                            et al. 2005"), EDUCATION_EMOJI. Fully unit-tested
+                            (tests/education.test.js).
   questions.js              Education mode's question bank (plan 21), NO
                             Phaser/DOM: DECKS (the LEVELS keys, then 'general'),
                             CARDS ({ id, deck, q, answer, wrong: [w1, w2], explain,
@@ -1309,6 +1349,18 @@ src/
                             the nearest cell (focusNearest over cells only), ✕ above
                             the first row (scrolls to the top). Tags (view.tags, TAGS: 🔧 🎖️ 🆕) lead the Achievements grid, each a card. No username: the gate
                             (buildGate) instead; refresh() restarts it either way.
+    Quiz.js                 Overlay (plan 21; chromeIntent 'quiz' in an education
+                            run's level break, Play.openQuiz otherwise): the 📚 quiz
+                            card, 640 × 1120. Modes 'break' (coins), 'revive' (after a
+                            crash: ❤️ strikes, the ⭐ choice and streak, Give up; it
+                            cannot be closed and ends itself, finish) and 'bonus' (a
+                            won run's rectum questions from Over). Play owns the cards
+                            (quizNext, quizAnswer, reviveEvent / reviveGrant); its
+                            shutdown calls Play.onQuizClosed(mode). Options are drawn
+                            boxes with wrapped text (not createButton); three bottom
+                            button slots take a label and an action per step (set /
+                            hold / press). preview(card) lays any card out answered
+                            wrong for the smoke's fit check (fits()).
 
 assets/                     Contract PNGs + README.md (the art contract).
   README.md                 File name, pixel size, orientation rules. tests enforce it.
@@ -1764,6 +1816,14 @@ tools/
                             navigator.getGamepads is stubbed to [] before load: a
                             pad paired to the machine is visible to headless Chrome
                             and its presses would otherwise reach the game.
+                            The education sections (plan 21, last, each putting the
+                            device back): education-unlock (the word, the 📚 switch,
+                            the three switches, nothing recorded), education-quiz (the
+                            pill, answers by tap / key / pad, coins, every card's fit,
+                            the level's prices), education-revive (every revive
+                            path), education-over (the tally, the bonus quiz, Clear).
+                            OVERLAYS lists Quiz; NEEDS_RUN keeps the ready-screen
+                            overlay loops off it.
                             Zero dependencies (fetch + WebSocket).
 
 docs/                       Living specs kept with the code: save-code-spec.md (the

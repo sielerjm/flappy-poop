@@ -1222,8 +1222,9 @@ export class Play extends Phaser.Scene {
 
   /**
    * The save panel's Clear: this device forgets its player (name, id, top scores), the last
-   * confirmed submits, any queued merge and the legacy best (create() would re-seed it), so the
-   * next username starts a brand-new player. Settings stay. The board keeps the old id's rows.
+   * confirmed submits, any queued merge, the legacy best (create() would re-seed it) and the
+   * education cards' progress, so the next username starts a brand-new player. Settings stay
+   * (the education unlock among them). The board keeps the old id's rows.
    */
   signOut() {
     this.setSaveState(saveLocal({}));
@@ -1231,6 +1232,8 @@ export class Play extends Phaser.Scene {
     this.mergeStore.clear();
     this.renameStore.clear();
     this.careerStore.clear(); // counters and badges go with the player
+    this.eduStore.clear(); // and the education cards' progress (plan 21); the unlock is a setting and stays
+    this.refreshEduDue();
     this.best.clear();
     this.boardNameTaken = false;
     this.boardBestsFor = null;
@@ -1516,7 +1519,8 @@ export class Play extends Phaser.Scene {
 
   /**
    * Open the 📚 quiz (plan 21) in an education run: 'break' in a level break (chromeIntent's
-   * 'quiz') or 'revive' after an education crash (tickRespawn). The Quiz scene asks quizNext for its
+   * 'quiz'), 'revive' after an education crash (tickRespawn), or 'bonus' from the game-over panel of
+   * a won run (the rectum's questions, no coins). The Quiz scene asks quizNext for its
    * cards and hands each answer to quizAnswer (a revive's moves to reviveEvent).
    */
   openQuiz(mode) {
@@ -3454,7 +3458,8 @@ export class Play extends Phaser.Scene {
       const pipes = this.runIsDaily && this.daily ? this.pipesPassed - this.daily.startPipes : this.pipesPassed;
       const personalBest = Boolean(this.personalBest && !this.runIsTest && !this.runIsDaily);
       const badges = this.runIsTest ? [] : [...(this.runBadges ?? [])];
-      this.scene.launch('Over', { score: this.score, won, test: this.runIsTest, toilet: this.toilet, level: this.level, pipes, collected: { ...this.collected }, daily, personalBest, badges, falls: this.runFalls ?? 0, closeCalls: this.runCloseCalls ?? 0 });
+      const education = this.runIsEducation ? { ...this.runQuiz } : null; // the 📚 tally (plan 21)
+      this.scene.launch('Over', { score: this.score, won, test: this.runIsTest, toilet: this.toilet, level: this.level, pipes, collected: { ...this.collected }, daily, personalBest, badges, falls: this.runFalls ?? 0, closeCalls: this.runCloseCalls ?? 0, education });
     });
   }
 

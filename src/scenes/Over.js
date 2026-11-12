@@ -2,6 +2,7 @@ import { GAME_HEIGHT, FIELD, TUNING as T, SHARE, LEVEL_COLORS } from '../config.
 import { canRestart, chromeIntent, trayLayout, trayHit, overButtonsLayout, overCellsLayout, overHit, shareCardLayout, levelColor, uiColumn, msUntilUtcMidnight, countdownText, fitScale } from '../logic.js';
 import { t, levelLabel, shareCardFooter, dailyDayText, dailyRankText, badgeTitle } from '../i18n.js';
 import { achievementById } from '../achievements.js';
+import { EDUCATION_EMOJI } from '../education.js';
 import { fetchDailyBoard, dailyEntryId } from '../leaderboard.js';
 import { shareMode, shareScoreImage } from '../share.js';
 import { renderShareCard } from '../ui/shareCard.js';
@@ -39,6 +40,8 @@ export class Over extends Phaser.Scene {
     const pipes = Number.isInteger(data?.pipes) && data.pipes >= 0 ? data.pipes : 0;
     const won = Boolean(data?.won); // crossed the final level's finish line
     const testRun = Boolean(data?.test); // test mode: nothing was recorded (Play.endRun)
+    // An education run (plan 21): { answered, right, revives, restores }; not saved to the boards yet, nothing to share.
+    const education = data?.education ?? null;
     const toilet = Boolean(data?.toilet);
     const level = Number.isInteger(data?.level) && data.level >= 1 ? data.level : 1;
     const collected = { fiber: 0, probiotic: 0, postbiotic: 0, bacteria: 0, bean: 0, mystery: 0, coin: 0, ...(data?.collected ?? {}) };
@@ -122,7 +125,12 @@ export class Over extends Phaser.Scene {
       line.setScale(fitScale(line.width, 500, 0));
       this.badgeLine = line;
     }
-    if (testRun) {
+    if (education) {
+      // 📚 right / answered · 💀 revives · ⭐ restores (glyphs and numbers: nothing to translate), then why it is not on a board.
+      const tally = `${EDUCATION_EMOJI} ${education.right}/${education.answered}  ·  \u{1F480} ${education.revives}  ·  ⭐ ${education.restores}`;
+      this.eduLine = this.add.text(cx, cy + 140, tally, { ...style, fontSize: '32px', color: '#ffd700' }).setOrigin(0.5);
+      this.add.text(cx, cy + 184, t(locale, testRun ? 'testRunNotSaved' : 'eduNotSaved'), { ...style, fontSize: '24px', color: '#c9b8dc', fontStyle: 'normal', wordWrap: { width: 480, useAdvancedWrap: true } }).setOrigin(0.5);
+    } else if (testRun) {
       this.add.text(cx, cy + 150, t(locale, 'testRunNotSaved'), { ...style, fontSize: '30px', color: '#ffd700', wordWrap: { width: 460, useAdvancedWrap: true } }).setOrigin(0.5);
     } else if (daily) {
       // The countdown to the next course, on the wall clock (this scene's clock is stale after a relaunch).
@@ -135,14 +143,17 @@ export class Over extends Phaser.Scene {
     // and nothing to share. Home is the ready-screen-style glowing button (any tap
     // outside the tray and off Share goes home too). Both fade in after the lockout
     // so a death tap cannot restart or share.
-    this.buttons = { ...overButtonsLayout(cx, cy, T, { share: !testRun, score: linked, again }), cells: this.cells };
+    // An education run has nothing to share; after a win its left button opens the rectum's questions instead (openBonus).
+    this.bonus = Boolean(education && won);
+    this.buttons = { ...overButtonsLayout(cx, cy, T, { share: education ? this.bonus : !testRun, score: linked, again }), cells: this.cells };
     const home = this.buttons.home;
     // The suggested next step glows (the ready screen's prompt halo): Play again when offered, else Home.
     const lead = this.buttons.again ?? home;
     this.homeHalo = createRectGlow(this, lead.x, lead.y, { key: 'over-home-halo', width: lead.width, height: lead.height, radius: T.readyButtonRadius, pad: T.readyPromptGlowPx }).setAlpha(0);
     this.homeButton = createButton(this, home, t(locale, 'tapToHome'), { ...style, fontSize: '40px' }, { depth: 1 }).setAlpha(0);
     // Share stays hidden until its image exists (makeShareCard), so a tap on it always has a file to send.
-    this.shareButton = this.buttons.share ? createButton(this, this.buttons.share, t(locale, 'shareButton'), { ...style, fontSize: '40px' }, { depth: 1 }).setAlpha(0).setVisible(false) : null;
+    this.shareButton = this.buttons.share && !this.bonus ? createButton(this, this.buttons.share, t(locale, 'shareButton'), { ...style, fontSize: '40px' }, { depth: 1 }).setAlpha(0).setVisible(false) : null;
+    this.bonusButton = this.bonus ? createButton(this, this.buttons.share, `${EDUCATION_EMOJI} ${t(locale, 'quizPill')}`, { ...style, fontSize: '40px', color: '#f8a0c8' }, { depth: 1 }).setAlpha(0) : null;
     this.againButton = this.buttons.again ? createButton(this, this.buttons.again, t(locale, 'playAgain'), { ...style, fontSize: '40px' }, { depth: 1 }).setAlpha(0) : null;
     this.buttonFade = { a: 0 };
     this.tweens.add({
@@ -153,6 +164,7 @@ export class Over extends Phaser.Scene {
       onUpdate: () => {
         this.homeButton.setAlpha(this.buttonFade.a);
         this.shareButton?.setAlpha(this.buttonFade.a);
+        this.bonusButton?.setAlpha(this.buttonFade.a);
         this.againButton?.setAlpha(this.buttonFade.a);
       },
       onComplete: () => this.focus?.show(), // under a controller the ring lands on Home once it is visible
@@ -165,7 +177,7 @@ export class Over extends Phaser.Scene {
     this.cardToken = null;
     this.sharePressed = false;
     this.cardData = { headline, won, scoreLine, collected, pipes, locale };
-    if (this.buttons.share) this.makeShareCard(this.cardData);
+    if (this.shareButton) this.makeShareCard(this.cardData);
     if (linked) this.loadDailyRank(play);
 
     this.tray = createTray(this, { muted: isMuted(), col: this.col });
@@ -178,7 +190,8 @@ export class Over extends Phaser.Scene {
         { id: 'home', box: home, activate: () => this.retry() },
         ...(this.buttons.score ? [{ id: 'score', box: this.buttons.score, activate: () => this.openDailyBoard() }] : []),
         ...(this.buttons.rank ? [{ id: 'rank', box: this.buttons.rank, activate: () => this.openDailyBoard() }] : []),
-        ...(this.buttons.share ? [{ id: 'share', box: this.buttons.share, visible: () => Boolean(this.shareFile), activate: () => this.shareRun() }] : []),
+        ...(this.shareButton ? [{ id: 'share', box: this.buttons.share, visible: () => Boolean(this.shareFile), activate: () => this.shareRun() }] : []),
+        ...(this.bonusButton ? [{ id: 'bonus', box: this.buttons.share, activate: () => this.openBonus() }] : []),
         // The summary cells: A opens (or closes) a cell's card.
         ...this.cells.map((cell) => ({ id: `cell:${cell.id}`, box: cell, activate: () => this.openCell(cell.id) })),
         ...['info', 'lang', 'feedback', 'leaderboard', 'mute', 'settings'].map((id) => ({ id, obj: this.tray.buttons[id], activate: () => play?.handleChrome(id) })),
@@ -220,6 +233,10 @@ export class Over extends Phaser.Scene {
       }
       if (link === 'again') {
         this.playAgain();
+        return;
+      }
+      if (link === 'share' && this.bonusButton) {
+        this.openBonus();
         return;
       }
       if (!onShare(pointer)) {
@@ -347,6 +364,13 @@ export class Over extends Phaser.Scene {
     this.registry.set('playAgain', true);
     this.scene.stop('Over');
     play.scene.restart();
+  }
+
+  /** After an education run is won: the rectum's questions (Quiz 'bonus', no coins), over this panel. Past the death-tap lockout, like Home. */
+  openBonus() {
+    if (!this.bonusButton || this.closeCard()) return;
+    if (!canRestart(this.openedAt, this.time.now, T.retryLockoutMs)) return;
+    this.scene.get('Play')?.openQuiz?.('bonus');
   }
 
   /** The rank cell's text, shrunk to its box (a long zh rank stays inside the panel). */

@@ -77,6 +77,7 @@ export const SECTIONS = [
   { name: 'education-unlock', needs: [], about: "📚 education mode's unlock (plan 21): the word in the save panel (never a name), the 📚 switch remembered across a restart, 👥 and 📚 never on together on a wide window, an education run recording nothing, a Daily Dump never an education run, locking it again" },
   { name: 'education-quiz', needs: [], about: "📚 the quiz card (plan 21) in an education run's level break: the 📚 pill and its hint, the card answered by tap, key and controller (each answer saved to its card), +1 coin for a right answer and none for a wrong one, Next held after a wrong answer, taps under it ignored, every bank card fitting the card, Esc closing it with the resume lockout, the shop at the level's prices" },
   { name: 'education-revive', needs: [], about: "📚 the revive after an education crash (plan 21): three misses end the run with the field and score untouched; wrong then right then Fly on revives without the power-ups at the penalty; a full streak gives coins and power-ups back; nothing lost skips the choice; Give up; Esc cannot close it; Tap when ready by tap and by the controller, then play" },
+  { name: 'education-over', needs: [], about: "📚 the end of an education run (plan 21): the game-over panel's 📚 tally and note, no Share; a won run's bonus button opening the rectum's questions over the panel (no coins, the card saved, Esc back to the panel); Clear wiping the cards' progress" },
 ];
 
 /** What a section needs: its own list, or (omitted) every section before it. */
@@ -3913,6 +3914,76 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await home();
         await evaluate(`localStorage.removeItem('flappyPoop.eduSrs'), ${play}.settings.set({ education: false }), ${play}.setEduUnlocked(false), true`);
         await home();
+      }
+    });
+
+    await section('education-over', async () => {
+      // The end of an education run (plan 21): the game-over panel, the bonus quiz after a win, and Clear.
+      {
+        const play = `__flappy.scene.getScene('Play')`;
+        const Q = `__flappy.scene.getScene('Quiz')`;
+        const O = `__flappy.scene.getScene('Over')`;
+        const tx = (key) => evaluate(`import('./src/i18n.js').then((m) => m.t('en', '${key}'))`);
+        const home = async () => {
+          await evaluate(`__flappy.scene.stop('Over'), __flappy.scene.stop('Quiz'), ${play}.scene.restart(), true`);
+          for (let i = 0; i < 40 && (await playState()) !== 'ready'; i += 1) await sleep(250);
+        };
+        const startEdu = async () => {
+          await home();
+          for (let attempt = 0; attempt < 3 && (await playState()) !== 'playing'; attempt += 1) {
+            for (let i = 0; i < 20 && (await playState()) !== 'ready'; i += 1) await sleep(100);
+            await evaluate(`${play}.flap(), true`);
+            for (let i = 0; i < 40 && (await playState()) !== 'playing'; i += 1) await sleep(100);
+          }
+          await evaluate(`(() => { const p = ${play}; p.poop.body.setAllowGravity(false); p.poop.setVelocity(0, 0); p.poop.y = 640; return true; })()`);
+        };
+        const panel = () => evaluate(`(() => { const o = ${O}; const texts = o.children.list.filter((c) => c.type === 'Text').map((c) => c.text); return JSON.stringify({ active: __flappy.scene.isActive('Over'), tally: o.eduLine?.text ?? null, texts, share: Boolean(o.shareButton), bonus: Boolean(o.bonusButton) }); })()`).then(JSON.parse);
+        const all = JSON.stringify(await evaluate(`JSON.stringify(Object.fromEntries(Object.keys(localStorage).map((k) => [k, localStorage.getItem(k)])))`));
+        await evaluate(`localStorage.removeItem('flappyPoop.eduSrs'), ${play}.setEduUnlocked(true), ${play}.settings.set({ education: true }), true`);
+
+        // A game over (one miss, then Give up): the tally and the note; nothing to share.
+        await startEdu();
+        await evaluate(`(() => { const p = ${play}; p.graceLeftMs = 0; p.die(); return true; })()`);
+        for (let i = 0; i < 40 && !(await evaluate(`__flappy.scene.isActive('Quiz') && Boolean(${Q}.card)`)); i += 1) await sleep(100);
+        await evaluate(`(() => { const q = ${Q}; q.choose(q.order.findIndex((k) => k !== 'answer')); return true; })()`);
+        await sleep(TT.education.explainMinMs + 200);
+        await evaluate(`${Q}.nextBtn.press(), true`);
+        await sleep(300);
+        await evaluate(`${Q}.doneBtn.press(), true`); // Give up
+        await sleep(TT.deathToOverMs + 500);
+        const p1 = await panel();
+        const note = await tx('eduNotSaved');
+        ok(p1.active && p1.tally === '\u{1F4DA} 0/1  ·  \u{1F480} 0  ·  ⭐ 0' && p1.texts.includes(note) && !p1.share && !p1.bonus, `an education game over: "${p1.tally}", "${note}", no Share`);
+
+        // A won run: the bonus button opens the rectum's questions over the panel; no coins; Esc back.
+        await startEdu();
+        await evaluate(`(() => { const p = ${play}; p.level = 7; p.applyLevel(); p.win(); return true; })()`);
+        await sleep(TT.deathToOverMs + TT.retryLockoutMs + 500);
+        const p2 = await panel();
+        ok(p2.active && p2.bonus && !p2.share, 'a won education run offers the 📚 bonus quiz where Share would be');
+        const c0 = await evaluate(`${play}.effects.coins()`);
+        await evaluate(`${O}.openBonus(), true`);
+        for (let i = 0; i < 30 && !(await evaluate(`__flappy.scene.isActive('Quiz') && Boolean(${Q}.card)`)); i += 1) await sleep(100);
+        const b = await evaluate(`JSON.stringify({ deck: ${Q}.card?.deck ?? null, mode: ${Q}.mode })`).then(JSON.parse);
+        await evaluate(`(() => { const q = ${Q}; q.choose(q.order.indexOf('answer')); return true; })()`);
+        await sleep(200);
+        const after = await evaluate(`JSON.stringify({ coins: ${play}.effects.coins(), saved: Boolean(JSON.parse(localStorage.getItem('flappyPoop.eduSrs') ?? '{}').cards?.[${Q}.card.id]) })`).then(JSON.parse);
+        ok(b.mode === 'bonus' && ['rectum', 'general'].includes(b.deck) && after.coins === c0 && after.saved, `the bonus quiz asks about the ${b.deck}: a right answer pays no coin (${c0} → ${after.coins}) and is saved`);
+        await evaluate(`${Q}.input.keyboard.emit('keydown-ESC'), true`);
+        await sleep(300);
+        ok((await evaluate(`!__flappy.scene.isActive('Quiz') && __flappy.scene.isActive('Over')`)) === true, 'Esc closes it back to the game-over panel');
+
+        // Clear (the save panel's sign-out) wipes the cards' progress; the unlock, a setting, stays.
+        await home();
+        const cleared = await evaluate(`(() => { const p = ${play}; const had = Boolean(localStorage.getItem('flappyPoop.eduSrs')); p.signOut(); return JSON.stringify({ had, gone: Object.keys(p.eduStore.load().cards).length === 0, unlocked: p.isEduUnlocked() }); })()`).then(JSON.parse);
+        ok(cleared.had && cleared.gone && cleared.unlocked, 'Clear wipes the cards\' progress and keeps the unlock');
+
+        // Put the device back as it was (the player Clear forgot, the settings), then home.
+        await evaluate(`(() => { const want = JSON.parse(${all}); for (const k of Object.keys(localStorage)) if (!(k in want)) localStorage.removeItem(k); for (const [k, v] of Object.entries(want)) localStorage.setItem(k, v); return true; })()`);
+        await evaluate(`(() => { const p = ${play}; p.eduUnlocked = false; p.educationOn = false; return true; })()`);
+        await home();
+        const back = await evaluate(`JSON.stringify({ unlocked: ${play}.isEduUnlocked(), name: ${play}.getSaveState().name ?? null })`).then(JSON.parse);
+        ok(!back.unlocked, `the device is put back (education locked, player "${back.name}")`);
       }
     });
 

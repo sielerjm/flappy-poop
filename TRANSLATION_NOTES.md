@@ -241,6 +241,7 @@ Short, playful, clear. Fit a 720×1280 logical field; How to play / About body w
 | reviveEnd | End run | 结束本局 |
 | reviveGiveUp | Give up | 放弃 |
 | reviveFree | No questions left: you're back in. | 没有题了：可以继续飞了。 |
+| eduNotSaved | Education runs are not on the boards yet | 教育模式的成绩暂不上排行榜 |
 | saveWelcome | Welcome back, {name} — {scores} | 欢迎回来，{name}——{scores} |
 | saveWelcomeNoScores | Welcome back, {name} | 欢迎回来，{name} |
 | saveNameRequired | Enter a username first (4–16 characters) | 请先输入用户名（4–16 个字符） |
