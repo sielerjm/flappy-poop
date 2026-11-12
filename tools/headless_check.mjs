@@ -76,7 +76,7 @@ export const SECTIONS = [
   { name: 'profile', about: "player profiles (plan 08): the own profile (local counters, a locked badge's progress), another player's from a stubbed player_stats, the explanation card (a badge, a career cell, by mouse and controller), the wheel and a drag, the controller walking the grid, not found, offline, a board name opening a profile (not on a drag), the sign-in gate (no username), the save panel's Profile button" },
   { name: 'education-unlock', needs: [], about: "📚 education mode's unlock (plan 21): the word in the save panel (never a name), the 📚 switch remembered across a restart, 👥 and 📚 never on together on a wide window, an education run recording nothing, a Daily Dump never an education run, locking it again" },
   { name: 'education-quiz', needs: [], about: "📚 the quiz card (plan 21) in an education run's level break: the 📚 pill and its hint, the card answered by tap, key and controller (each answer saved to its card), +1 coin for a right answer and none for a wrong one, Next held after a wrong answer, taps under it ignored, every bank card fitting the card, Esc closing it with the resume lockout, the shop at the level's prices" },
-  { name: 'education-revive', needs: [], about: "📚 the revive after an education crash (plan 21): three misses end the run with the field and score untouched; wrong then right then Fly on revives without the power-ups at the penalty; a full streak gives coins and power-ups back; nothing lost skips the choice; Give up; Esc cannot close it; Tap when ready by tap and by the controller, then play" },
+  { name: 'education-revive', needs: [], about: "📚 the revive after an education crash (plan 21): three misses end the run with the field and score untouched; wrong then right then Fly on revives without the power-ups at the penalty; a full streak gives coins and power-ups back; nothing lost skips the choice; Give up; Esc cannot close it; the field refills at the first right answer and Fly on goes straight on (plan 22)" },
   { name: 'education-over', needs: [], about: "📚 the end of an education run (plan 21): the game-over panel's 📚 tally and note, no Share; a won run's bonus button opening the rectum's questions over the panel (no coins, the card saved, Esc back to the panel); Clear wiping the cards' progress" },
 ];
 
@@ -3682,7 +3682,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
           for (let i = 0; i < 40 && (await playState()) !== 'ready'; i += 1) await sleep(250);
         };
         const cardRec = (id) => evaluate(`JSON.stringify((JSON.parse(localStorage.getItem('flappyPoop.eduSrs') ?? '{}').cards ?? {})['${id}'] ?? null)`).then(JSON.parse);
-        const quizNow = () => evaluate(`(() => { const q = ${Q}; return JSON.stringify({ active: __flappy.scene.isActive('Quiz'), id: q.card?.id ?? null, deck: q.card?.deck ?? null, answered: q.answered, last: q.lastAnswer ?? null, next: q.rightBtn.shown, nextAlpha: q.rightBtn.g.alpha, top: q.topBtn.shown ? q.topBtn.text.text : null, left: q.leftBtn.shown ? q.leftBtn.text.text : null, right: q.rightBtn.shown ? q.rightBtn.text.text : null, verdict: q.verdict.visible ? q.verdict.text : null, kernel: q.verdictCoin.visible, kernelAfter: q.verdictCoin.x > q.verdict.x + q.verdict.width / 2, explain: q.explain.visible }); })()`).then(JSON.parse);
+        const quizNow = () => evaluate(`(() => { const q = ${Q}; return JSON.stringify({ active: __flappy.scene.isActive('Quiz'), id: q.card?.id ?? null, deck: q.card?.deck ?? null, answered: q.answered, last: q.lastAnswer ?? null, next: q.rightBtn.shown, nextAlpha: q.rightBtn.g.alpha, top: q.topBtn.shown ? q.topBtn.text.text : null, left: q.leftBtn.shown ? q.leftBtn.text.text : null, right: q.rightBtn.shown ? q.rightBtn.text.text : null, halo: Boolean(q.halo?.visible), verdict: q.verdict.visible ? q.verdict.text : null, kernel: q.verdictCoin.visible, kernelAfter: q.verdictCoin.x > q.verdict.x + q.verdict.width / 2, explain: q.explain.visible }); })()`).then(JSON.parse);
 
         await evaluate(`localStorage.removeItem('flappyPoop.eduSrs'), ${play}.setEduUnlocked(true), ${play}.settings.set({ education: true }), true`);
         await home();
@@ -3726,7 +3726,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         const verdictWant = q1.last?.correct ? (await tx('quizRightCoins')).replace('{n}', String(TT.education.breakCoins)) : await tx('quizWrong');
         ok(q1.answered && q1.last?.id === q0.id && r1?.seen === 1 && r1.right === (q1.last.correct ? 1 : 0) && q1.verdict === verdictWant && q1.next, `a tap answers ${q0.id} (${q1.last?.correct ? 'right' : 'wrong'}, ${Math.round(q1.last?.rtMs ?? -1)} ms): saved (seen ${r1?.seen}), "${q1.verdict}", Next shown`);
         if (!q1.last?.correct) ok(q1.explain && q1.nextAlpha < 1, 'a wrong answer shows the explanation at once and holds Next');
-        ok(q1.left === returnWant && q1.right === nextWant && q1.top === (q1.last?.correct ? whyWant : null), `after the answer: ${q1.top ?? 'no Why (the explanation shows)'} on top, ${q1.left} | ${q1.right} below`);
+        ok(q1.left === returnWant && q1.right === nextWant && q1.top === (q1.last?.correct ? whyWant : null) && !q1.halo, `after the answer: ${q1.top ?? 'no Why (the explanation shows)'} on top, ${q1.left} | ${q1.right} below, and no halo in a break`);
         await sleep(TT.education.explainMinMs + 200);
 
         // The keyboard: Enter is Next, 2 picks the second option.
@@ -3817,8 +3817,9 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
     });
 
     await section('education-revive', async () => {
-      // The revive after a crash in an education run (plan 21): the held respawn opens the quiz, the
-      // quiz's phases (reviveStep) settle it, and "Tap when ready" lets the respawn run on.
+      // The revive after a crash in an education run (plan 21): the held respawn opens the quiz and the
+      // quiz's phases (reviveStep) settle it. The field refills under the card at the first right
+      // answer, and Fly on goes straight on: a short blink at mid-height, then play (plan 22, U3).
       {
         const play = `__flappy.scene.getScene('Play')`;
         const Q = `__flappy.scene.getScene('Quiz')`;
@@ -3852,14 +3853,14 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
           await sleep(250);
         };
         const held = TT.education.explainMinMs + 200;
-        const playNow = () => evaluate(`(() => { const p = ${play}; return JSON.stringify({ state: p.state, hold: p.respawnHold, hint: p.reviveHint.visible ? p.reviveHint.text : null, score: p.score, coins: p.effects.coins(), beans: p.effects.beans(), probiotic: p.effects.hasProbiotic(), pipes: p.pipes.getChildren().length, quiz: __flappy.scene.isActive('Quiz'), over: __flappy.scene.isActive('Over'), revives: p.runQuiz.revives, restores: p.runQuiz.restores, finish: p.finishSpawned }); })()`).then(JSON.parse);
+        const playNow = () => evaluate(`(() => { const p = ${play}; return JSON.stringify({ state: p.state, hold: p.respawnHold, score: p.score, coins: p.effects.coins(), beans: p.effects.beans(), probiotic: p.effects.hasProbiotic(), pipes: p.pipes.getChildren().length, quiz: __flappy.scene.isActive('Quiz'), over: __flappy.scene.isActive('Over'), revives: p.runQuiz.revives, restores: p.runQuiz.restores, finish: p.finishSpawned, filled: p.respawnFilled, sweeping: Boolean(p.sweep), stood: Boolean(p.respawnFrom), face: p.poop.texture.key, y: p.poop.y, angle: p.poop.angle, alpha: p.poop.alpha, ahead: p.pipes.getChildren().filter((q) => q.x > p.poop.x).map((q) => Math.round(q.x)).sort((a, b) => a - b), vx: Math.max(0, ...p.pipes.getChildren().map((q) => Math.abs(q.body.velocity.x))), gapY: (() => { const a = p.pipes.getChildren().filter((q) => q.getData('scoring') && q.x > p.poop.x).sort((a, b) => a.x - b.x)[0]; return a ? a.y + p.diff.gapHeight / 2 : null; })(), halo: Boolean(${Q}.halo?.visible) }); })()`).then(JSON.parse);
         const waitPlaying = async () => {
           for (let i = 0; i < 60 && (await playState()) !== 'playing'; i += 1) await sleep(100);
           return playState();
         };
         const storeKeys = JSON.stringify(['flappyPoop.save', TT.bestKey, 'flappyPoop.leaderboard', 'flappyPoop.career']);
         const stores = () => evaluate(`JSON.stringify(${storeKeys}.map((k) => localStorage.getItem(k)))`);
-        const [wrong, over, back, choice, tapReady, restored] = await Promise.all(['quizWrong', 'reviveOver', 'reviveBack', 'reviveChoice', 'versusTapReady', 'reviveRestored'].map(tx));
+        const [wrong, over, back, choice, restored] = await Promise.all(['quizWrong', 'reviveOver', 'reviveBack', 'reviveChoice', 'reviveRestored'].map(tx));
         const [flyOn, goFor, endRun, giveUp] = await Promise.all(['reviveContinue', 'reviveStreakGo', 'reviveEnd', 'reviveGiveUp'].map(tx));
         await evaluate(`localStorage.removeItem('flappyPoop.eduSrs'), ${play}.setEduUnlocked(true), ${play}.settings.set({ education: true }), true`);
 
@@ -3888,32 +3889,56 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await press('rightBtn', held);
         await sleep(TT.deathToOverMs + 400);
         const gone = await playNow();
-        ok(gone.over && gone.state === 'dead' && gone.pipes === before.pipes && gone.score === 9, `End run: game over (Over up, state ${gone.state}), the field untouched (${gone.pipes} pipe parts), no penalty (score ${gone.score})`);
+        ok(gone.over && gone.state === 'dead' && gone.pipes === before.pipes && !gone.filled && gone.face === 'poop-dead' && gone.score === 9, `End run: game over (Over up, state ${gone.state}), the field never cleared or refilled (${gone.pipes} pipe parts, the dead poop), no penalty (score ${gone.score})`);
         ok((await stores()) === stores0, 'an education game over records nothing');
 
-        // Wrong, right, Fly on: revived without what the crash took, at the penalty; released by a tap.
+        // Wrong, right, Fly on: revived without what the crash took, at the penalty. The field stays as
+        // the crash left it until the right answer, then refills under the card and stands still; Fly
+        // on stands the poop at mid-height to blink, and play resumes by itself (plan 22, U3).
         await startEdu(`p.score = 20; p.effects.addCoins(5); p.effects.addBean()`);
+        const before2 = await playNow();
         await crash();
         const lost = await playNow();
         ok(lost.coins === 0 && lost.beans === 0 && lost.state === 'respawn' && lost.hold === 'quiz', `the crash takes the coins and beans at once (${lost.coins} / ${lost.beans}); the respawn holds for the quiz`);
-        await answer(false);
-        await press('rightBtn', held);
+        ok(!lost.filled && lost.pipes === before2.pipes && lost.face === 'poop-dead' && !lost.halo, `when the quiz opens the field is as the crash left it (${lost.pipes} pipe parts, the dead poop)`);
+        const miss = await answer(false);
+        const missPlay = await playNow();
+        ok(!missPlay.filled && missPlay.pipes === before2.pipes && !missPlay.halo, `a miss prepares nothing, and the held ${miss.right} does not glow`);
+        await sleep(held);
+        ok((await playNow()).halo, 'once it can be pressed, the way forward glows');
+        await press('rightBtn');
         const c1 = await answer(true);
+        // A field a little wider than a phone's sweeps its pairs in: read them once they have settled.
+        const settled = async () => {
+          let now = await playNow();
+          for (let i = 0; i < 100 && now.sweeping; i += 1) {
+            await sleep(100);
+            now = await playNow();
+          }
+          return now;
+        };
+        const filled = await settled();
+        ok(filled.filled && filled.state === 'respawn' && filled.ahead.length > 0 && Math.abs(filled.gapY - 640) < 1 && filled.face === 'poop-dead' && !filled.stood && filled.halo, `the first right answer refills the field under the card (pairs ahead at x ${filled.ahead.join(', ')}; the first gap at mid-height ${Math.round(filled.gapY)}), the poop still where it fell`);
+        await sleep(1000);
+        const waited = await playNow();
+        ok(JSON.stringify(waited.ahead) === JSON.stringify(filled.ahead) && waited.vx === 0, `the refilled pairs stand still under the card (x ${filled.ahead.join(', ')} → ${waited.ahead.join(', ')} a second later, speed ${waited.vx})`);
         const choiceWant = choice.replace('{n}', String(TT.education.restoreStreak - 1));
         ok(c1.phase === 'choice' && c1.verdict === back && c1.left === flyOn && c1.right === `⭐ ${goFor}`, `a right answer after a miss revives and offers the choice: "${c1.verdict}" [${c1.left}] [${c1.right}]`);
         ok((await evaluate(`${Q}.explain.text`)) === choiceWant, `the choice says how: "${choiceWant}"`);
-        await press('leftBtn');
+        const flown = Date.now();
+        await evaluate(`${Q}.leftBtn.press(), true`); // Fly on
+        await sleep(120);
         const r1 = await playNow();
         const pen = TT.education.revivePenaltyPerLevel;
-        ok(!r1.quiz && r1.state === 'respawn' && r1.hold === 'tap' && r1.hint === tapReady && r1.score === 20 - pen && r1.coins === 0 && r1.beans === 0 && r1.revives === 1, `Fly on: revived at −${pen} (score ${r1.score}), coins and beans not back, "${r1.hint}" waiting`);
-        await sleep(400); // past the resume lockout
-        await evaluate(`${play}.flap(), true`);
+        ok(!r1.quiz && r1.state === 'respawn' && r1.hold === null && r1.score === 20 - pen && r1.coins === 0 && r1.beans === 0 && r1.revives === 1, `Fly on: revived at −${pen} (score ${r1.score}), coins and beans not back, nothing to tap`);
+        ok(r1.stood && r1.y === 640 && Math.abs(r1.angle) < 1 && r1.face !== 'poop-dead' && r1.alpha < 1, `no glide: the poop stands at mid-height at once, upright, plain-faced and blinking (y ${r1.y}, alpha ${r1.alpha.toFixed(2)})`);
         const st1 = await waitPlaying();
-        const after1 = await playNow();
-        ok(st1 === 'playing' && !after1.hint && after1.hold === null, `a tap releases it: the glide and the blinks, then ${st1}`);
-        ok(!after1.finish && after1.pipes > 0, `with pairs still to come the field refills with pairs and no finish line yet (${after1.pipes} pipe parts)`);
+        const took = Date.now() - flown;
+        const after1 = await settled();
+        ok(st1 === 'playing' && after1.hold === null && took < TT.education.reviveBlinkMs + 800, `play resumes by itself ${took} ms after Fly on (the blink is ${TT.education.reviveBlinkMs} ms; the glide and the full blinks took 2200)`);
+        ok(!after1.finish && after1.pipes > 0 && after1.vx > 0 && !after1.filled, `with pairs still to come the field holds pairs and no finish line, now scrolling (${after1.pipes} pipe parts, ${Math.round(after1.vx)} px/s)`);
 
-        // A full streak: everything the crash took comes back; released by the controller.
+        // A full streak: everything the crash took comes back, and play goes on.
         await startEdu(`p.score = 30; p.effects.addCoins(4); p.effects.addBean(); p.effects.addBean(); p.effects.applyProbiotic()`);
         await crash();
         await answer(true);
@@ -3925,18 +3950,18 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         ok(s1.phase === 'streak' && s1.status === '⭐' + '☆'.repeat(TT.education.restoreStreak - 1) && s3.phase === 'restored' && s3.verdict === restored && s3.right === flyOn && s3.left === null && s3.top === (await tx('quizWhy')), `the streak: ${s1.status} → "${s3.verdict}" (${s3.status})`);
         await press('rightBtn');
         const r2 = await playNow();
-        ok(r2.coins === 4 && r2.beans === 2 && r2.probiotic && r2.score === 30 - pen && r2.restores === 1 && r2.hold === 'tap', `restored: ${r2.coins} coins, ${r2.beans} beans, the probiotic back; the penalty still taken (score ${r2.score})`);
-        await sleep(400);
-        await evaluate(`${play}.onPadAction('select'), true`);
-        ok((await waitPlaying()) === 'playing', "the controller's A is a tap when ready too");
+        ok(r2.coins === 4 && r2.beans === 2 && r2.probiotic && r2.score === 30 - pen && r2.restores === 1 && r2.hold === null, `restored: ${r2.coins} coins, ${r2.beans} beans, the probiotic back; the penalty still taken (score ${r2.score})`);
+        ok((await waitPlaying()) === 'playing', 'and play resumes with no tap and no button');
 
         // Nothing lost: the first right answer revives without a choice.
         await startEdu('');
         await crash();
         const n1 = await answer(true);
         ok(n1.phase === 'revived' && n1.verdict === back && n1.right === flyOn && !n1.left?.startsWith?.('⭐'), `nothing to win back: "${n1.verdict}", straight to ${n1.right}`);
+        const n2 = await playNow();
+        ok(n2.filled && n2.halo, 'its field is refilled at that answer too, and Fly on glows');
         await press('rightBtn');
-        ok((await playNow()).hold === 'tap', 'and the respawn waits for the tap');
+        ok((await playNow()).hold === null && (await waitPlaying()) === 'playing', 'and Fly on goes straight on');
 
         // The card is the pause (plan 22, F1): losing focus under the revive quiz pauses nothing.
         const banner = () => evaluate(`${play}.pauseText.visible`);
@@ -3949,7 +3974,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await answer(true);
         await press('leftBtn'); // Fly on
         const bl2 = await playNow();
-        ok(!bl2.quiz && bl2.state === 'respawn' && bl2.hold === 'tap' && bl2.revives === 1, `and Fly on goes on as usual (state ${bl2.state}, hold ${bl2.hold})`);
+        ok(!bl2.quiz && bl2.hold === null && bl2.revives === 1 && (bl2.state === 'respawn' || bl2.state === 'playing'), `and Fly on goes on as usual (state ${bl2.state}, hold ${bl2.hold})`);
 
         // A run paused under the quiz all the same is still settled, and the resume does not ask again.
         await startEdu(`p.score = 20; p.effects.addCoins(3)`);
@@ -3959,12 +3984,15 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await answer(true);
         await press('leftBtn'); // Fly on
         const pz1 = await playNow();
-        ok(pz0.state === 'paused' && pz1.state === 'paused' && !pz1.quiz && pz1.hold === 'tap' && pz1.revives === 1 && pz1.score === 20 - pen, `Fly on under a paused run settles the revive (hold ${pz1.hold}, score ${pz1.score}, revives ${pz1.revives})`);
+        ok(pz0.state === 'paused' && pz1.state === 'paused' && !pz1.quiz && pz1.hold === null && pz1.stood && pz1.filled && pz1.revives === 1 && pz1.score === 20 - pen, `Fly on under a paused run settles the revive (hold ${pz1.hold}, score ${pz1.score}, revives ${pz1.revives})`);
         await sleep(400); // past the resume lockout
         await evaluate(`${play}.flap(), true`);
         await sleep(300);
         const pz2 = await playNow();
-        ok(pz2.state === 'respawn' && !pz2.quiz && pz2.revives === 1, `the tap that resumes it returns to the respawn, not to a quiz (state ${pz2.state}, quiz ${pz2.quiz})`);
+        ok((pz2.state === 'respawn' || pz2.state === 'playing') && !pz2.quiz && pz2.revives === 1, `the tap that resumes it returns to the respawn's blink, not to a quiz (state ${pz2.state}, quiz ${pz2.quiz})`);
+        const pz3 = await waitPlaying();
+        const pz4 = await settled(); // a sweep that began under the pause ends in play, and only then do its pairs take their speed
+        ok(pz3 === 'playing' && pz4.vx > 0, `and it plays on from there, the field scrolling (state ${pz3}, ${Math.round(pz4.vx)} px/s, ${pz4.pipes} pipe parts)`);
 
         // A revive already decided is never asked again: the respawn settles it instead of reopening the quiz.
         await startEdu(`p.score = 20`);
@@ -3974,7 +4002,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await sleep(200);
         const dn = await playNow();
         const kept = await evaluate(`Boolean(${Q}.session.marked)`);
-        ok(dn.hold === 'tap' && dn.revives === 1 && dn.score === 20 - pen && kept, `a decided revive is settled, not reopened (hold ${dn.hold}, revives ${dn.revives}, the quiz left alone: ${kept})`);
+        ok(dn.hold === null && dn.revives === 1 && dn.score === 20 - pen && dn.filled && kept, `a decided revive is settled, not reopened (hold ${dn.hold}, revives ${dn.revives}, the quiz left alone: ${kept})`);
 
         // A game over under a paused run still ends it.
         await startEdu('');
@@ -3990,15 +4018,10 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         // waits before it.
         const lineNow = () =>
           evaluate(
-            `(() => { const p = ${play}; const l = p.finishLine; const k = p.kernel; return JSON.stringify({ state: p.state, spawned: p.finishSpawned, x: l ? l.x : null, poopX: p.poop.x, leadX: p.fieldW + ${TT.levels.finishWidthPx} / 2 - p.finishLeadShift(), brk: Boolean(p.levelBreak), coins: p.effects.coins(), kernelX: k?.item?.active ? k.item.x : null, kernelDone: Boolean(k?.done), cleared: Boolean(p.respawnFrom) }); })()`,
+            `(() => { const p = ${play}; const l = p.finishLine; const k = p.kernel; return JSON.stringify({ state: p.state, spawned: p.finishSpawned, x: l ? l.x : null, poopX: p.poop.x, leadX: p.fieldW + ${TT.levels.finishWidthPx} / 2 - p.finishLeadShift(), brk: Boolean(p.levelBreak), coins: p.effects.coins(), kernelX: k?.item?.active ? k.item.x : null, kernelDone: Boolean(k?.done), filled: p.respawnFilled }); })()`,
           ).then(JSON.parse);
         const hover = () => evaluate(`(() => { const p = ${play}; p.poop.body.setAllowGravity(false); p.poop.setVelocity(0, 0); p.poop.y = 640; return true; })()`);
-        const flyOnAndTap = async () => {
-          await answer(true); // nothing lost: revived at once
-          await press('rightBtn'); // Fly on
-          await sleep(400); // past the resume lockout
-          await evaluate(`${play}.flap(), true`); // Tap when ready
-        };
+
         const armKernel = `p.kernel = { level: p.level, pair: 1, item: null, done: false }`;
         const halfLine = TT.levels.finishWidthPx / 2;
 
@@ -4006,10 +4029,10 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await startEdu(`p.skipToFinish(); p.finishLine.x = p.poop.x + 260; ${armKernel}`);
         await crash();
         const near0 = await lineNow();
-        await flyOnAndTap();
-        for (let i = 0; i < 30 && !(await lineNow()).cleared; i += 1) await sleep(50);
+        await answer(true); // nothing lost: revived at once, and the field cleared and refilled under the card
         const near1 = await lineNow();
-        ok(near0.x !== null && near1.state === 'respawn' && near1.cleared && near1.spawned && near1.x === near0.x, `a finish line a short way ahead survives the revive's clear (x ${near0.x} → ${near1.x}, ${Math.round(near0.x - near0.poopX)} px ahead)`);
+        ok(near0.x !== null && near1.state === 'respawn' && near1.filled && near1.spawned && near1.x === near0.x, `a finish line a short way ahead survives the revive's clear (x ${near0.x} → ${near1.x}, ${Math.round(near0.x - near0.poopX)} px ahead)`);
+        await press('rightBtn'); // Fly on
         await waitPlaying();
         await hover();
         const near2 = await lineNow();
@@ -4026,12 +4049,45 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         // No line out yet: it comes in at the lead, not a spacing later at the far edge.
         await startEdu(`p.skipToFinish(); p.finishLine.destroy(); p.finishLine = null; p.finishSpawned = false; ${armKernel}`);
         await crash();
-        await flyOnAndTap();
+        await answer(true);
+        await press('rightBtn'); // Fly on
         await waitPlaying();
         await hover();
         const far = await lineNow();
         ok(far.spawned && far.x !== null && far.x <= far.leadX + 1 && far.x >= far.leadX - 150, `with no line out, the revive places it at the first-pair lead (x ${far.x === null ? 'none' : Math.round(far.x)}, lead ${Math.round(far.leadX)})`);
         ok(far.kernelDone || (far.kernelX !== null && far.kernelX < far.x - halfLine), `and its kernel waits before the line (kernel ${far.kernelX === null ? 'taken' : Math.round(far.kernelX)})`);
+
+        // A wide window (plan 22, U3): the refilled pairs sweep in under the card with no scroll, and are
+        // settled, opaque and in place (the first at the lead, inside the field) when play resumes.
+        {
+          const metrics = (width, height) => cdp.send('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 1, mobile: false });
+          const widthIs = async (test) => {
+            for (let i = 0; i < 50 && !test(await evaluate(`__flappy.scale.width`)); i += 1) await sleep(100);
+          };
+          const fieldNow = () =>
+            evaluate(
+              `(() => { const p = ${play}; const ahead = p.pipes.getChildren().filter((q) => q.x > p.poop.x); return JSON.stringify({ W: p.fieldW, sweeping: Boolean(p.sweep), xs: [...new Set(ahead.map((q) => Math.round(q.x)))].sort((a, b) => a - b), opaque: ahead.every((q) => q.alpha === 1), tagged: ahead.some((q) => q.getData('sweep')), vx: Math.max(0, ...ahead.map((q) => Math.abs(q.body.velocity.x))), state: p.state }); })()`,
+            ).then(JSON.parse);
+          await home();
+          await metrics(1800, 1000);
+          await widthIs((w) => w > 720);
+          await startEdu('');
+          await crash();
+          await answer(true);
+          const w0 = await fieldNow();
+          // The sweep runs on the game clock, which a wide software-rendered frame slows: wait for it, not for wall time.
+          for (let i = 0; i < 100 && (await fieldNow()).sweeping; i += 1) await sleep(100);
+          const w1 = await fieldNow();
+          ok(w0.W > 720 && w0.sweeping && w0.state === 'respawn' && !w1.sweeping && w1.opaque && !w1.tagged && w1.vx === 0 && w1.xs.length >= 2 && w1.xs[0] < w1.W, `on a ${w0.W} px field the refilled pairs sweep in under the card and settle, opaque and still (x ${w1.xs.join(', ')}; the first inside the field; sweeping ${w0.sweeping} → ${w1.sweeping}, opaque ${w1.opaque}, speed ${w1.vx}, state ${w0.state})`);
+          await press('rightBtn'); // Fly on
+          const wide = await waitPlaying();
+          const w2 = await fieldNow();
+          ok(wide === 'playing' && w2.opaque && !w2.sweeping && w2.vx > 0 && w2.xs.length >= 2, `and they are in place, scrolling, when play resumes (x ${w2.xs.join(', ')})`);
+          await home();
+          await metrics(720, 1280);
+          await widthIs((w) => w === 720);
+          for (let i = 0; i < 20 && (await playState()) !== 'ready'; i += 1) await sleep(100);
+        }
 
         // A test run's quiz follows the level (plan 22, F3). A test run saves no answers, so due cards
         // never clear: with level 1's cards overdue, a normal revive asks one of them, and a test run

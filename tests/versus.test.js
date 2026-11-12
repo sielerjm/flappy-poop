@@ -20,6 +20,7 @@ import {
   catchUpTier,
   catchUpDraws,
   respawnPose,
+  respawnBlinkStart,
   coursePairStart,
   courseDistance,
 } from '../src/versus.js';
@@ -265,6 +266,21 @@ test('matchResult: score, then fewer crashes, else a draw; pipes passed never de
   assert.deepEqual(matchResult([slot({ score: 9, pipesPassed: 9 }), slot({ score: 9, pipesPassed: 6 })]), { winner: null, by: 'draw' }, 'pipes passed are not a tiebreak');
   assert.deepEqual(matchResult([slot({ score: 9, deaths: 2 }), slot({ score: 9, deaths: 2 })]), { winner: null, by: 'draw' });
   assert.deepEqual(matchResult(null), { winner: null, by: 'draw' });
+});
+
+test('respawnBlinkStart: the respawn clock with only so much blinking left (an education revive skips the glide)', () => {
+  const r = T.versus.respawn;
+  const blink = 2 * r.blinkMs * r.blinkCycles;
+  const end = r.crashMs + r.glideMs + blink;
+  const ms = T.education.reviveBlinkMs;
+  const at = respawnBlinkStart(T, ms);
+  assert.equal(at, end - ms, `${ms} ms before the blinks end`);
+  assert.equal(respawnPose(at, { y: GAME_HEIGHT / 2, angle: 0 }, T).phase, 'blink', 'inside the blink phase');
+  assert.equal(respawnPose(at + ms - 1, { y: GAME_HEIGHT / 2, angle: 0 }, T).phase, 'blink');
+  assert.equal(respawnPose(at + ms, { y: GAME_HEIGHT / 2, angle: 0 }, T).phase, 'done', `play resumes ${ms} ms later`);
+  assert.ok(ms > 0 && ms <= blink, 'the knob fits inside the whole blink');
+  assert.equal(respawnBlinkStart(T, blink * 3), r.crashMs + r.glideMs, 'capped at the whole blink: never back in the glide');
+  assert.equal(respawnBlinkStart(T, -5), end, 'and never past the end');
 });
 
 test('respawnPose: a crash, a glide from where the poop fell to mid-screen, blinks at mid-screen, then done; pure in elapsed time', () => {

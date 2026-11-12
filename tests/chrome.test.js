@@ -234,11 +234,10 @@ test('the 📚 quiz (plan 21): opens only in an education run\'s level break, ne
   for (const input of ['tap', 'esc', 'pause', 'shop', 'quiz']) assert.deepEqual(intent({ state: 'paused', breaking: true, education: true, overlay: 'quiz', input }), { do: 'ignore' }, `${input} under the quiz`);
 });
 
-test('an education revive (plan 21): while the respawn waits for "Tap when ready" a tap releases it, never during the lockout; otherwise taps in a respawn do nothing', () => {
-  assert.deepEqual(intent({ state: 'respawn', reviveWait: true, input: 'tap' }), { do: 'reviveGo' });
-  assert.deepEqual(intent({ state: 'respawn', reviveWait: true, input: 'tap', resumeLocked: true }), { do: 'ignore' }, 'the quiz\'s closing tap is locked out');
-  assert.deepEqual(intent({ state: 'respawn', input: 'tap' }), { do: 'ignore' }, 'a match half respawning, or the quiz still up');
-  assert.deepEqual(intent({ state: 'respawn', reviveWait: true, input: 'pause' }), { do: 'pause' }, 'the pause key still pauses');
-  assert.deepEqual(intent({ state: 'paused', reviveWait: true, input: 'tap' }), { do: 'resume' }, 'paused: the tap resumes first');
-  assert.deepEqual(intent({ state: 'respawn', reviveWait: true, overlay: 'settings', input: 'tap' }), { do: 'ignore' }, 'under an overlay');
+test('a respawn (a match half, or an education revive): a tap does nothing; the pause key still pauses, and a tap resumes a pause taken in one', () => {
+  assert.deepEqual(intent({ state: 'respawn', input: 'tap' }), { do: 'ignore' }, 'the revive flies on by itself after Fly on: there is no "Tap when ready"');
+  assert.deepEqual(intent({ state: 'respawn', input: 'tap', resumeLocked: true }), { do: 'ignore' });
+  assert.deepEqual(intent({ state: 'respawn', input: 'pause' }), { do: 'pause' });
+  assert.deepEqual(intent({ state: 'paused', input: 'tap' }), { do: 'resume' });
+  assert.deepEqual(intent({ state: 'respawn', overlay: 'settings', input: 'tap' }), { do: 'ignore' }, 'under an overlay');
 });

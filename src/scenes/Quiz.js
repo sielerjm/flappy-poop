@@ -1,6 +1,7 @@
 import { GAME_HEIGHT, TUNING as T } from '../config.js';
 import { chromeIntent } from '../logic.js';
 import { createFocus, pressable } from '../ui/focus.js';
+import { createRectGlow } from '../ui/glow.js';
 import { isTopOverlay } from '../ui/overlayStack.js';
 import { t } from '../i18n.js';
 import { cardText, optionText, cardSource, EDUCATION_EMOJI } from '../education.js';
@@ -15,6 +16,7 @@ const OPTION_MIN_H = 92;
 const BUTTON = { width: 250, height: 88 };
 const WIDE_BUTTON = 540; // the top button (Why): edge to edge with the bottom row (two 250 px buttons, 40 px apart)
 const BUTTON_GAP = 12; // px between the top button and the bottom row
+const HALO_PX = 24; // px a revive's halo reaches past its button (inside the card's border)
 const COIN_PX = 36; // the corn kernel after a paid verdict
 /** Option fills: waiting, the right answer, the wrong one picked, the other wrong one. */
 const FILL = { idle: 0x2a1522, right: 0x2f7d4f, wrong: 0x9c2f4a, dim: 0x1a0b14 };
@@ -89,6 +91,10 @@ export class Quiz extends Phaser.Scene {
     // way out (Give up) of the next card.
     const rowY = this.bottom - 24 - BUTTON.height / 2;
     const topY = rowY - BUTTON.height - BUTTON_GAP;
+    // A revive's way forward glows (the game-over panel's halo): behind the right button, while it
+    // shows and can be pressed (refreshHalo). A break's buttons never glow.
+    this.halo = createRectGlow(this, cx + 145, rowY, { key: 'quiz-halo', width: BUTTON.width, height: BUTTON.height, radius: 18, pad: HALO_PX }).setVisible(false);
+    this.tweens.add({ targets: this.halo, alpha: { from: T.readyPromptMinAlpha, to: T.readyPromptMaxAlpha }, yoyo: true, repeat: -1, duration: T.readyPromptPulseMs });
     this.topBtn = this.makeButton(cx, topY, WIDE_BUTTON);
     this.leftBtn = this.makeButton(cx - 145, rowY);
     this.rightBtn = this.makeButton(cx + 145, rowY);
@@ -153,6 +159,7 @@ export class Quiz extends Phaser.Scene {
 
   /** A button slot `width` wide: a rounded box, a label and a zone; set(label, onPress) says what it is now. */
   makeButton(x, y, width = BUTTON.width) {
+    const refreshHalo = () => this.refreshHalo(); // the methods below are the button's own: `this` is not the scene there
     const g = this.add.graphics();
     g.fillStyle(0x2a1522, 1);
     g.fillRoundedRect(x - width / 2, y - BUTTON.height / 2, width, BUTTON.height, 18);
@@ -178,6 +185,7 @@ export class Quiz extends Phaser.Scene {
         g.setVisible(button.shown);
         text.setVisible(button.shown);
         button.zone.setVisible(button.shown);
+        refreshHalo();
         return button;
       },
       /** Held: dimmed, and a press does nothing until released (after a wrong answer, explainMinMs). */
@@ -185,6 +193,7 @@ export class Quiz extends Phaser.Scene {
         button.held = Boolean(on);
         g.setAlpha(button.held ? 0.4 : 1);
         text.setAlpha(button.held ? 0.4 : 1);
+        refreshHalo();
         return button;
       },
       press() {
@@ -209,6 +218,11 @@ export class Quiz extends Phaser.Scene {
     if (!isTopOverlay(this)) return;
     if (this.rightBtn.shown) this.rightBtn.press();
     else if (!this.card && this.closable()) this.leftBtn.press();
+  }
+
+  /** A revive's halo: on while its way forward (the right button) shows and is not held. */
+  refreshHalo() {
+    this.halo?.setVisible(this.mode === 'revive' && Boolean(this.rightBtn?.shown) && !this.rightBtn.held);
   }
 
   /** Hide every button. */
@@ -421,7 +435,7 @@ export class Quiz extends Phaser.Scene {
     if (this.mode !== 'revive' || this.finishing) return;
     this.finishing = true;
     this.scene.stop();
-    this.play?.armResumeLockout?.(); // the closing tap must not also be the "Tap when ready"
+    this.play?.armResumeLockout?.(); // the closing tap's twin must not flap as play resumes
   }
 
   /**

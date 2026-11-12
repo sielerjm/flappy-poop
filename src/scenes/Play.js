@@ -126,7 +126,7 @@ import { createCoinText } from '../ui/coinText.js';
 import { openSavePanel, isSavePanelOpen, showAdoptedName, showBoardScores } from '../ui/savePanel.js';
 import { isTournamentPanelOpen, tournamentPadAction } from '../ui/tournamentPanel.js';
 import { bindPad } from '../input/pad.js';
-import { keyGroup, sameDevice, catchUpTier, catchUpDraws, versusAvailable, ghostPlacement, rivalMarker, respawnPose, courseDistance, VERSUS_EMOJI } from '../versus.js';
+import { keyGroup, sameDevice, catchUpTier, catchUpDraws, versusAvailable, ghostPlacement, rivalMarker, respawnPose, respawnBlinkStart, courseDistance, VERSUS_EMOJI } from '../versus.js';
 import { createEduStore, dueCount, pickCard, shuffleOptions, gradeFor, schedule, eduShopPrices, reviveStart, reviveStep, reviveSettled, EDUCATION_EMOJI } from '../education.js';
 
 const TEXT_STYLE = {
@@ -213,9 +213,11 @@ export class Play extends Phaser.Scene {
     this.runIsEducation = false;
     this.runQuiz = { answered: 0, right: 0, revives: 0, restores: 0 }; // this run's quiz answers and revives (start() resets it)
     this.quizOpen = false; // the Quiz scene is up (openQuiz → onQuizClosed)
-    // An education crash (plan 21): the respawn holds after the tumble ('quiz' while the revive quiz
-    // runs, 'tap' until "Tap when ready"); revive is reviveStep's state, reviveLost what the crash took.
+    // An education crash (plan 21): the respawn holds after the tumble ('quiz') while the revive quiz
+    // runs; revive is reviveStep's state, reviveLost what the crash took; respawnFilled says the
+    // field was refilled under the quiz (prepareRevive), so endRespawn does not refill it again.
     this.respawnHold = null;
+    this.respawnFilled = false;
     this.revive = null;
     this.reviveLost = null;
     this.runBadges = []; // the achievements the last run unlocked, for Over
@@ -475,12 +477,6 @@ export class Play extends Phaser.Scene {
     this.hintPulseMs = 0;
     this.levelSubHint = this.add
       .text(W / 2, GAME_HEIGHT * 0.4 + 72 + 50, '', { ...TEXT_STYLE, fontSize: '26px', color: '#c9b8dc', strokeThickness: 8 })
-      .setOrigin(0.5)
-      .setDepth(26)
-      .setVisible(false);
-    // An education revive's "Tap when ready" (plan 21): where the level break's hint sits, shown while the respawn waits.
-    this.reviveHint = this.add
-      .text(W / 2, GAME_HEIGHT * 0.4 + 72, '', { ...TEXT_STYLE, fontSize: '36px' })
       .setOrigin(0.5)
       .setDepth(26)
       .setVisible(false);
@@ -1748,7 +1744,6 @@ export class Play extends Phaser.Scene {
       shop: this.shopOpen,
       breaking: this.levelBreak,
       education: this.runIsEducation,
-      reviveWait: this.respawnHold === 'tap',
     };
   }
 
@@ -1787,9 +1782,6 @@ export class Play extends Phaser.Scene {
         break;
       case 'openQuiz':
         this.openQuiz('break');
-        break;
-      case 'reviveGo':
-        this.releaseRevive();
         break;
       case 'closeShop':
         this.closeShop();
@@ -2483,8 +2475,39 @@ export class Play extends Phaser.Scene {
   }
 
   /** Current scroll speed (px/s): level speed × the fart envelope. */
+  /**
+   * px/s the world scrolls left. Zero through a respawn (and a pause taken in one): the world stands
+   * still, so whatever is spawned or re-speeded meanwhile (an education revive refills the field
+   * under its quiz card: prepareRevive) waits in place until endRespawn starts it.
+   */
   scrollSpeed() {
+    if (this.respawning()) return 0;
     return this.diff.pipeSpeed * this.scrollMul;
+  }
+
+  /** In a respawn, or paused in the middle of one (pausePlay keeps respawnPaused). */
+  respawning() {
+    return this.state === 'respawn' || (this.state === 'paused' && this.respawnPaused);
+  }
+
+  /**
+   * One frame of the pre-fill's sweep-in on a wide field (prefillPipes): every swept object's x and
+   * alpha from the curve, on top of the normal scroll; endSweep once the curve is done. Runs in play
+   * and through a respawn.
+   */
+  tickSweep(delta, dt) {
+    if (!this.sweep) return;
+    const sw = this.sweep;
+    sw.elapsed += delta;
+    sw.scrolled += this.scrollSpeed() * dt;
+    const { dx, alpha, done } = sweepOffset(sw.elapsed, sw.o0, sw.ms);
+    for (const obj of this.worldObjects()) {
+      const tag = obj.getData('sweep');
+      if (!tag) continue;
+      obj.x = tag.baseX - sw.scrolled + dx;
+      obj.setAlpha(alpha);
+    }
+    if (done) this.endSweep();
   }
 
   /** Single place that pushes the scroll speed onto everything that moves left. */
@@ -3551,27 +3574,44 @@ export class Play extends Phaser.Scene {
   reviveEvent(event) {
     if (!this.revive) return null;
     this.revive = reviveStep(this.revive, event);
+    if (this.revive.phase !== 'strikes' && this.revive.phase !== 'over') this.prepareRevive(); // a right answer: the revive is certain
     return this.revive;
+  }
+
+  /**
+   * An education revive is certain (its first right answer; plan 22, U3): the field ahead clears and
+   * refills now, under the quiz card, so the pipes are in place by Fly on and nobody waits for them.
+   * Once per revive. Before that the field stays as the crash left it, and so a game over (three
+   * misses, or Give up: both come before any right answer) shows the crash, never a fresh field.
+   * The world stands still meanwhile (scrollSpeed), and a wide field's pairs sweep in (tickSweep).
+   */
+  prepareRevive() {
+    if (this.respawnFilled || !this.respawning()) return;
+    this.respawnFilled = true;
+    this.clearFieldAhead();
+    this.refillAfterRespawn();
   }
 
   /** No card left to ask (pickCard null): the revive is granted rather than left without a way on. */
   reviveGrant() {
     if (!this.revive) return null;
     this.revive = { ...this.revive, phase: 'revived' };
+    this.prepareRevive();
     return this.revive;
   }
 
   /**
    * The revive quiz has closed (onQuizClosed): 'over' ends the run (endRun records nothing for an
    * education run; Over follows). 'revived' / 'restored' cost the revive penalty (its −N popup),
-   * 'restored' gives back what the crash took, and the respawn waits for "Tap when ready". A run
-   * paused under the quiz (pausePlay mid-respawn) is settled all the same, so the quiz's result
-   * always takes effect; the resume then carries on from here.
+   * 'restored' gives back what the crash took, and play goes straight on (plan 22, U3): no "Tap when
+   * ready" and no glide; the poop stands at mid-height and blinks for education.reviveBlinkMs
+   * (standRevived), then endRespawn starts the field that prepareRevive filled. A run paused under
+   * the quiz (pausePlay mid-respawn) is settled all the same, so the quiz's result always takes
+   * effect; the resume then carries on from here.
    */
   reviveDone() {
     const phase = this.revive?.phase;
-    const respawning = this.state === 'respawn' || (this.state === 'paused' && this.respawnPaused);
-    if (!respawning || this.respawnHold !== 'quiz') return; // the run ended under it (a restart)
+    if (!this.respawning() || this.respawnHold !== 'quiz') return; // the run ended under it (a restart)
     if (phase === 'over') {
       this.respawnHold = null;
       this.respawnPaused = false;
@@ -3594,15 +3634,29 @@ export class Play extends Phaser.Scene {
     }
     this.refreshProbioticHud(); // the score may have lost a digit: re-place the ×2 badge
     this.reviveLost = null;
-    this.respawnHold = 'tap';
-    this.reviveHint.setText(t(this.locale, 'versusTapReady')).setVisible(true);
+    this.respawnHold = null;
+    this.prepareRevive(); // already done at the right answer; a revive granted some other way gets its field here
+    this.standRevived();
   }
 
-  /** "Tap when ready" (chromeIntent's reviveGo): the held respawn runs on: the glide, the blinks, play. */
-  releaseRevive() {
-    if (this.respawnHold !== 'tap') return;
-    this.respawnHold = null;
-    this.reviveHint.setVisible(false);
+  /**
+   * Fly on: the poop leaves where it fell for mid-height, upright with its plain face (what the
+   * glide ends on, without the glide), and the respawn clock jumps to the last
+   * education.reviveBlinkMs of the blinks (respawnBlinkStart). tickRespawn blinks it from there.
+   */
+  standRevived() {
+    this.deathTween?.stop();
+    this.deathTween = null;
+    this.poop.body.setAllowGravity(false);
+    this.poop.setVelocity(0, 0);
+    this.respawnFrom = { y: GAME_HEIGHT / 2, angle: 0 };
+    this.scaredMs = 0;
+    this.refreshPoopLook();
+    this.respawnElapsed = respawnBlinkStart(T, T.education.reviveBlinkMs);
+    const pose = respawnPose(this.respawnElapsed, this.respawnFrom, T);
+    this.poop.y = pose.y;
+    this.poop.setAngle(pose.angle);
+    this.poop.setAlpha(pose.alpha);
   }
 
   /**
@@ -3618,6 +3672,7 @@ export class Play extends Phaser.Scene {
     this.respawnElapsed = 0;
     this.respawnFrom = null;
     this.respawnPaused = false;
+    this.respawnFilled = false;
     this.endSweep();
     for (const obj of this.worldObjects()) obj.setVelocityX(0);
     if (!this.match) return; // an education revive (plan 21): what the crash costs is the quiz's to settle (reviveDone)
@@ -3645,8 +3700,9 @@ export class Play extends Phaser.Scene {
     this.respawnElapsed += delta;
     let pose = respawnPose(this.respawnElapsed, this.respawnFrom, T);
     if (pose.phase === 'crash') return;
-    // An education revive (plan 21) holds at the end of the tumble, before the field ahead clears (a
-    // game over leaves it as it was): first for the revive quiz, then for "Tap when ready".
+    // An education revive (plan 21) holds at the end of the tumble for its quiz, the poop where it
+    // fell. The field ahead clears and refills at the first right answer (prepareRevive; a game
+    // over leaves it as it was), and Fly on stands the poop up to blink (reviveDone).
     if (this.respawnHold) {
       this.respawnElapsed = T.versus.respawn.crashMs;
       if (this.respawnHold === 'quiz' && !this.quizOpen) {
@@ -3715,14 +3771,12 @@ export class Play extends Phaser.Scene {
     if (kernelCleared) k.item = null; // the guaranteed kernel comes back with the re-filled stretch (endRespawn)
   }
 
-  /** The restart after the blinks: like the end of a fart, with the next pair opening at mid-screen and the usual grace. */
-  endRespawn() {
-    this.poop.setAlpha(1);
-    this.poop.setAngle(0);
-    this.state = 'playing';
-    this.poop.body.setAllowGravity(true);
-    this.poop.setVelocityY(0);
-    this.graceLeftMs = T.beans.graceMs;
+  /**
+   * The field after a respawn's clear: the next pair opens at mid-screen, the stretch ahead is
+   * pre-filled, and a kernel the clear took is re-armed. A match runs it at the end of its blinks
+   * (endRespawn); an education revive at its first right answer, under the card (prepareRevive).
+   */
+  refillAfterRespawn() {
     this.centreNextGap = true;
     this.nextGapY = null;
     // An education revive at a level's end (plan 22, F2): with no pair left to refill, the cadence
@@ -3738,7 +3792,20 @@ export class Play extends Phaser.Scene {
       const x = line ? Math.max(this.poop.x, (this.poop.x + line.x - T.levels.finishWidthPx / 2) / 2) : this.poopX + pipeLead(this.fieldW, T, FIELD);
       this.markKernel(this.spawnStillCoin(x, GAME_HEIGHT / 2));
     }
-    this.applyScroll();
+  }
+
+  /** The restart after the blinks: like the end of a fart, with the next pair opening at mid-screen and the usual grace. */
+  endRespawn() {
+    this.poop.setAlpha(1);
+    this.poop.setAngle(0);
+    this.state = 'playing';
+    this.poop.body.setAllowGravity(true);
+    this.poop.setVelocityY(0);
+    this.graceLeftMs = T.beans.graceMs;
+    // An education revive refilled the field under its quiz (prepareRevive); a match refills it now.
+    if (this.respawnFilled) this.respawnFilled = false;
+    else this.refillAfterRespawn();
+    this.applyScroll(); // the field starts (a sweep still running carries on into play)
     if (this.effects.powerReady()) this.setCharged(true);
     this.refreshPoopLook();
     if (!this.match) return; // an education revive: back in play
@@ -3812,20 +3879,7 @@ export class Play extends Phaser.Scene {
           }
         }
       }
-      if (this.sweep) {
-        // The pre-filled stretch rushing in: x and alpha from the curve, on top of the normal scroll.
-        const sw = this.sweep;
-        sw.elapsed += delta;
-        sw.scrolled += this.scrollSpeed() * dt;
-        const { dx, alpha, done } = sweepOffset(sw.elapsed, sw.o0, sw.ms);
-        for (const obj of this.worldObjects()) {
-          const tag = obj.getData('sweep');
-          if (!tag) continue;
-          obj.x = tag.baseX - sw.scrolled + dx;
-          obj.setAlpha(alpha);
-        }
-        if (done) this.endSweep();
-      }
+      this.tickSweep(delta, dt);
       if (this.finishLine) {
         this.finishLine.x -= this.scrollSpeed() * dt;
         if (!this.finishLine.getData('crossed') && hasPassed(this.finishLine.x, T.levels.finishWidthPx, this.poop.x)) {
@@ -3868,7 +3922,10 @@ export class Play extends Phaser.Scene {
       this.refreshRival();
     }
 
-    if (this.state === 'respawn') this.tickRespawn(delta);
+    if (this.state === 'respawn') {
+      this.tickSweep(delta, dt); // an education revive's refilled pairs sweep in under its quiz card (no scroll: scrollSpeed is 0)
+      this.tickRespawn(delta);
+    }
     if (this.state === 'dead' || (this.state === 'respawn' && !this.respawnFrom)) {
       // Pin the tumbling poop to the ground instead of letting it fall off-screen.
       const floor = GAME_HEIGHT - T.groundHeight - T.poopRadius;

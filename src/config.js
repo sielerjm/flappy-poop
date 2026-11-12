@@ -371,6 +371,7 @@ export const TUNING = {
     explainMinMs: 1500, // ms the quiz's Next waits after a wrong answer, so the explanation gets read
     breakCoins: 1, // coins a right answer in a level break's quiz pays
     revivePenaltyPerLevel: 2, // points a quiz revive costs per level number (level 3: −6), charged when the player is revived; the two-player crash's value to start
+    reviveBlinkMs: 750, // ms the revived poop blinks at mid-height after Fly on, before play resumes (no glide; the field was refilled under the quiz)
   },
   // The loading splash (src/splash.js, #splash in index.html): note cards over the Phaser download and
   // Boot's preload, then a Continue button. Its colours and sizes are CSS in index.html (they paint

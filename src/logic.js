@@ -1719,7 +1719,6 @@ export function overlayOutsideHit(x, y, panel) {
  * @param {boolean} shop true while this half's level-break shop panel is open
  * @param {boolean} breaking true while this half is in its own level break (the only place the shop opens)
  * @param {boolean} education true in an education run (plan 21): its level break also opens the 📚 quiz
- * @param {boolean} reviveWait true while an education revive waits for "Tap when ready" (state 'respawn'): a tap releases it
  * @returns {{ do: string, pause?: boolean, armResumeLockout?: boolean, closeAbout?: boolean }}
  */
 export function chromeIntent({
@@ -1733,7 +1732,6 @@ export function chromeIntent({
   shop = false,
   breaking = false,
   education = false,
-  reviveWait = false,
 }) {
   if (input === 'mute') return { do: 'toggleMute' };
 
@@ -1794,8 +1792,6 @@ export function chromeIntent({
   if (input === 'leaderboard') return { do: 'openLeaderboard', pause: live };
   if (input === 'stats') return { do: 'openStats', pause: live };
   if (input === 'tap') {
-    // An education revive (plan 21), answered: the tap that says the player is ready flies on.
-    if (state === 'respawn' && reviveWait) return resumeLocked ? { do: 'ignore' } : { do: 'reviveGo' };
     if (state === 'playing') return { do: 'flap' };
     if (state === 'paused') return resumeLocked ? { do: 'ignore' } : { do: 'resume' };
     if (state === 'ready') return { do: 'start' };

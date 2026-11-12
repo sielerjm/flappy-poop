@@ -230,6 +230,17 @@ export function respawnPose(elapsed, from, t) {
 }
 
 /**
+ * The respawn clock (respawnPose's `elapsed`) at which `ms` of blinking are left, capped at the
+ * whole blink. An education revive (plan 22) skips the glide: its poop is stood at mid-screen and
+ * the clock set here, so it blinks only this long before play.
+ */
+export function respawnBlinkStart(t, ms) {
+  const r = t.versus.respawn;
+  const blink = 2 * r.blinkMs * r.blinkCycles;
+  return r.crashMs + r.glideMs + blink - Math.min(Math.max(0, ms ?? 0), blink);
+}
+
+/**
  * The catch-up a trailing player gets from a mystery box, by how many pipes
  * behind the other they are when it opens: 'super' from catchUp.superBehind
  * (a super fart ready), 'beans' from catchUp.beanBehindMin (double bean odds),
