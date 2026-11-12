@@ -22,12 +22,13 @@
 --   * call submit_counters(...)    add a batch of runs to the player's lifetime counters (2026-11-11)
 --   * call claim_achievements(...) record achievements the game says the player earned (2026-11-11)
 --   * call player_stats(...)       any player's public profile, by id or board name (never ids)
+--   * call board_tags(...)         the 🔧 / 🎖️ / 🆕 tags of the names a board shows (2026-11-12)
 -- A player has up to two rows: their best on the toilet and their best off it
 -- (primary key player_id + toilet, since 2026-11-04).
 -- and nothing else: no INSERT / UPDATE / DELETE on the table, and nothing at all
 -- on player_aliases, the tournament tables (tournaments, tournament_stats,
--- tournament_matchups), daily_scores, player_counters, achievement_defs or
--- player_achievements. Profiles are public (2026-11-11): player_stats returns
+-- tournament_matchups), daily_scores, player_counters, achievement_defs,
+-- player_achievements or player_meta. Profiles are public (2026-11-11): player_stats returns
 -- anyone's stats, counters, achievements and biggest rival, by the name a board shows.
 --
 -- One player across devices (2026-11-08). Every browser mints its own secret id,
@@ -53,7 +54,7 @@
 -- Apply this file BEFORE pushing a client that calls name_available /
 -- merge_players / player_name / submit_tournament / tournament_board /
 -- submit_daily_score / daily_board / submit_counters / claim_achievements /
--- player_stats; an old client keeps working (same submit_score signature).
+-- player_stats / board_tags; an old client keeps working (same submit_score signature).
 --
 -- Maintenance (SQL editor):
 --   remove a cheater or a ghost row:
@@ -77,6 +78,12 @@
 --     truncate public.player_counters; truncate public.player_achievements;
 --   remove one wrongly earned achievement from everyone:
 --     delete from public.player_achievements where achievement_id = 'some_id';
+--   tag a game dev 🔧 (or untag with false), by the name a board shows:
+--     select public.admin_set_dev('somebody', true);
+--   undo the v0.16.0 tags: drop function public.board_tags(text[]), public.player_tags(text),
+--     public.admin_set_dev(text, boolean), public.touch_player(text), public.add_server_counter(text, text, int);
+--     drop table public.player_meta; then restore submit_score, submit_daily_score,
+--     submit_counters, claim_achievements, submit_tournament, fold_player and player_stats from git.
 --   undo plan 08 (profiles): drop function public.player_stats(text, text),
 --     public.submit_counters(text, text, jsonb), public.claim_achievements(text, text[]),
 --     public.player_by_name(text), public.merge_counters(jsonb, jsonb);
@@ -206,6 +213,8 @@ declare
   last_write timestamptz;
   v_id text;
   v_key text;
+  v_top_before text;
+  v_top_after text;
 begin
   if p_player_id is null or p_player_id !~ '^[A-Za-z0-9_-]{22}$' then
     raise exception 'bad player id';
@@ -232,7 +241,11 @@ begin
   if last_write is not null and last_write > now() - interval '5 seconds' then
     raise exception 'rate limited';
   end if;
+  perform public.touch_player(v_id);
 
+  -- 👑 Dethroned: the 🏆 #1 (score, then the earlier write) before and after this post.
+  perform pg_advisory_xact_lock(hashtext('board:scores'));
+  select s.player_id into v_top_before from public.scores s order by s.score desc, s.updated_at asc limit 1;
   insert into public.scores (player_id, name, score, toilet, level, updated_at)
   values (v_id, p_name, p_score, coalesce(p_toilet, false), p_level, now())
   on conflict (player_id, toilet) do update
@@ -242,6 +255,10 @@ begin
         updated_at = now();
   -- The player's other row (the other toilet kind) follows the name too.
   update public.scores set name = p_name where player_id = v_id and name <> p_name;
+  select s.player_id into v_top_after from public.scores s order by s.score desc, s.updated_at asc limit 1;
+  if v_top_after = v_id and v_top_before is not null and v_top_before <> v_id then
+    perform public.add_server_counter(v_id, 'dethroned', 1);
+  end if;
 end;
 $$;
 
@@ -431,6 +448,47 @@ create table if not exists public.player_achievements (
 alter table public.player_achievements enable row level security;
 revoke all on public.player_achievements from public, anon, authenticated;
 
+-- Added 2026-11-12 (player tags, v0.16.0). One row per (resolved) player: when the
+-- server first saw them (joined_at; exact = recorded by a write function, false
+-- for the backfill below, which only knows the earliest timestamp a table still
+-- holds) and whether they are a game dev (set by the owner: admin_set_dev).
+-- Readable by no role: player_stats and board_tags return the tags.
+create table if not exists public.player_meta (
+  player_id text primary key check (player_id ~ '^[A-Za-z0-9_-]{22}$'),
+  joined_at timestamptz not null default now(),
+  exact     boolean not null default true,
+  dev       boolean not null default false
+);
+alter table public.player_meta enable row level security;
+revoke all on public.player_meta from public, anon, authenticated;
+
+-- Backfill: every player the tables already know, at their earliest timestamp
+-- (inexact: a score row's time moves when the best improves). Re-running adds
+-- nobody new: the write functions record players as they post (touch_player).
+insert into public.player_meta (player_id, joined_at, exact)
+select pid, min(ts), false from (
+  select player_id as pid, updated_at as ts from public.scores
+  union all select player_id, submitted_at from public.daily_scores
+  union all select player_id, updated_at from public.tournament_stats
+  union all select host_id, submitted_at from public.tournaments
+  union all select player_id, updated_at from public.player_counters
+  union all select player_id, earned_at from public.player_achievements
+) x
+group by pid
+on conflict (player_id) do nothing;
+
+-- A (resolved) player seen by a write function: recorded once, exact. Internal.
+create or replace function public.touch_player(v_id text)
+returns void
+language sql
+security definer
+set search_path = public
+as $$
+  insert into public.player_meta (player_id, joined_at, exact) values (v_id, now(), true)
+  on conflict (player_id) do nothing;
+$$;
+revoke execute on function public.touch_player(text) from public, anon, authenticated;
+
 -- Profiles look players up by the name a board shows (player_by_name).
 create index if not exists tournament_stats_name_key on public.tournament_stats (public.name_key(name));
 create index if not exists daily_scores_name_key on public.daily_scores (public.name_key(name));
@@ -451,6 +509,22 @@ as $$
         select jsonb_object_keys(coalesce(b, '{}'::jsonb))) keys;
 $$;
 revoke execute on function public.merge_counters(jsonb, jsonb) from public, anon, authenticated;
+
+-- Add n to a server-only counter (SERVER_COUNTERS: dethroned) of a (resolved)
+-- player. Leaves last_batch and updated_at alone; a row it creates starts an hour
+-- back, so the player's next counter batch is not rate limited by it. Internal.
+create or replace function public.add_server_counter(v_id text, p_key text, p_n int)
+returns void
+language sql
+security definer
+set search_path = public
+as $$
+  insert into public.player_counters (player_id, counters, last_batch, updated_at)
+  values (v_id, jsonb_build_object(p_key, p_n), null, now() - interval '1 hour')
+  on conflict (player_id) do update
+    set counters = public.merge_counters(public.player_counters.counters, excluded.counters);
+$$;
+revoke execute on function public.add_server_counter(text, text, int) from public, anon, authenticated;
 
 -- The player a board name belongs to, as the boards pick a display name: the
 -- latest score-board name first; then a tournament or daily name, for a player
@@ -486,7 +560,7 @@ revoke execute on function public.player_by_name(text) from public, anon, authen
 -- player's stats name), and matchups and receipts are re-pointed. Daily Dump
 -- rows move to the kept id; on a day both played, the kept player's row stays.
 -- Lifetime counters merge (merge_counters) and achievements join, each keeping
--- its earlier date. Internal.
+-- its earlier date; player_meta keeps the earlier join and either's dev flag. Internal.
 create or replace function public.fold_player(v_keep text, v_merge text)
 returns void
 language plpgsql
@@ -551,6 +625,13 @@ begin
   on conflict (player_id, achievement_id) do update
     set earned_at = least(public.player_achievements.earned_at, excluded.earned_at);
   delete from public.player_achievements where player_id = v_merge;
+  insert into public.player_meta (player_id, joined_at, exact, dev)
+  select v_keep, m.joined_at, m.exact, m.dev from public.player_meta m where m.player_id = v_merge
+  on conflict (player_id) do update
+    set exact     = case when excluded.joined_at < public.player_meta.joined_at then excluded.exact else public.player_meta.exact end,
+        joined_at = least(public.player_meta.joined_at, excluded.joined_at),
+        dev       = public.player_meta.dev or excluded.dev;
+  delete from public.player_meta where player_id = v_merge;
   update public.player_aliases set canonical_id = v_keep, merged_at = now() where canonical_id = v_merge;
   insert into public.player_aliases (alias_id, canonical_id)
   values (v_merge, v_keep)
@@ -923,6 +1004,7 @@ begin
         v_name := v_names[i + 1];
       end if;
     end if;
+    perform public.touch_player(v_pid);
     insert into public.tournament_stats (player_id, name, best_score, gold, silver, bronze, events, updated_at)
     values (v_pid, v_name, coalesce(v_best, 0),
             case when i = v_gold then 1 else 0 end, case when i = v_silver then 1 else 0 end, case when i = v_bronze then 1 else 0 end,
@@ -997,6 +1079,8 @@ declare
   v_id text;
   v_key text;
   v_rows int;
+  v_top_before text;
+  v_top_after text;
 begin
   if p_player_id is null or p_player_id !~ '^[A-Za-z0-9_-]{22}$' then
     raise exception 'bad player id';
@@ -1024,10 +1108,21 @@ begin
     raise exception 'name taken';
   end if;
 
+  perform public.touch_player(v_id);
+
+  -- 👑 Dethroned: that day's #1 (score, then the earlier post) before and after this post.
+  perform pg_advisory_xact_lock(hashtext('board:daily:' || p_day::text));
+  select ds.player_id into v_top_before from public.daily_scores ds where ds.day = p_day order by ds.score desc, ds.submitted_at asc limit 1;
   insert into public.daily_scores (player_id, day, name, score, level, pipes)
   values (v_id, p_day, p_name, p_score, p_level, p_pipes)
   on conflict (player_id, day) do nothing;
   get diagnostics v_rows = row_count;
+  if v_rows > 0 then
+    select ds.player_id into v_top_after from public.daily_scores ds where ds.day = p_day order by ds.score desc, ds.submitted_at asc limit 1;
+    if v_top_after = v_id and v_top_before is not null and v_top_before <> v_id then
+      perform public.add_server_counter(v_id, 'dethroned', 1);
+    end if;
+  end if;
   return case when v_rows = 0 then 'duplicate' else 'ok' end;
 end;
 $$;
@@ -1105,6 +1200,10 @@ begin
       raise exception 'bad counters: %', r.key;
     end if;
   end loop;
+  -- Server-only counters (add_server_counter) never come from a client.
+  if p_counters ? 'dethroned' then
+    raise exception 'bad counters: dethroned';
+  end if;
   v_games := coalesce((p_counters->>'games')::bigint, 0);
   if coalesce((p_counters->>'maxLevel')::bigint, 0) > 7
      or coalesce((p_counters->>'sumScore')::bigint, 0) > v_games * 1000
@@ -1114,6 +1213,7 @@ begin
   end if;
 
   v_id := public.resolve_player(p_player_id);
+  perform public.touch_player(v_id);
   perform pg_advisory_xact_lock(hashtext('counters:' || v_id));
   select * into v_row from public.player_counters where player_id = v_id;
   if found and v_row.last_batch = p_batch then
@@ -1134,6 +1234,62 @@ begin
 end;
 $$;
 
+-- A player's tags (v0.16.0), in display order: 'dev' (🔧 set by the owner),
+-- 'og' (🎖️ first seen before 1 Dec 2026: the game's first month), 'new' (🆕
+-- first seen by a write function in the last 7 days; the backfill never is).
+-- Internal: player_stats and board_tags return them.
+create or replace function public.player_tags(v_id text)
+returns text[]
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select coalesce((
+    select array_remove(array[
+      case when m.dev then 'dev' end,
+      case when m.joined_at < timestamptz '2026-12-01 00:00:00+00' then 'og' end,
+      case when m.exact and m.joined_at > now() - interval '7 days' then 'new' end], null)
+    from public.player_meta m where m.player_id = v_id), '{}'::text[]);
+$$;
+revoke execute on function public.player_tags(text) from public, anon, authenticated;
+
+-- The tags of the names a board shows (at most 100), each looked up as the boards
+-- name players (player_by_name): [{ name, tags }]. No ids leave the server.
+create or replace function public.board_tags(p_names text[])
+returns jsonb
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select coalesce(jsonb_agg(jsonb_build_object('name', x.n, 'tags', to_jsonb(public.player_tags(public.player_by_name(x.n))))), '[]'::jsonb)
+  from (select distinct n from unnest((coalesce(p_names, '{}'::text[]))[1:100]) n where n ~ '^[^[:cntrl:]]{1,16}$') x;
+$$;
+
+-- Maintenance only (no role may call it): mark the player a board shows under
+-- p_name as a game dev (🔧), or not. Returns 1, or 0 when nobody has that name.
+--   select public.admin_set_dev('somebody', true);
+create or replace function public.admin_set_dev(p_name text, p_on boolean)
+returns int
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_id text;
+begin
+  v_id := public.player_by_name(p_name);
+  if v_id is null then
+    return 0;
+  end if;
+  insert into public.player_meta (player_id, joined_at, exact, dev) values (v_id, now(), false, coalesce(p_on, false))
+  on conflict (player_id) do update set dev = coalesce(p_on, false);
+  return 1;
+end;
+$$;
+revoke execute on function public.admin_set_dev(text, boolean) from public, anon, authenticated;
+
 -- A player's profile (plan 08), for anyone: by id (the player's own, resolved)
 -- or by a name as a board shows it (player_by_name); a valid id wins. Never an id
 -- in the answer. {found: false} for a name nobody shows under; otherwise
@@ -1148,6 +1304,7 @@ $$;
 --                tournament_matchups, self-races left by merges ignored; or null
 --   counters     their lifetime counters as stored
 --   achievements [{ id, at: 'YYYY-MM-DD' (UTC) }], oldest first
+--   tags         player_tags: 'dev' / 'og' / 'new'
 create or replace function public.player_stats(p_player_id text default null, p_name text default null)
 returns jsonb
 language plpgsql
@@ -1236,7 +1393,8 @@ begin
     'tournament', coalesce(v_tour, jsonb_build_object('events', 0, 'gold', 0, 'silver', 0, 'bronze', 0))
                   || jsonb_build_object('rival', v_rival),
     'counters', v_c,
-    'achievements', v_ach);
+    'achievements', v_ach,
+    'tags', to_jsonb(public.player_tags(v_id)));
 end;
 $$;
 
@@ -1271,6 +1429,7 @@ begin
   end if;
 
   v_id := public.resolve_player(p_player_id);
+  perform public.touch_player(v_id);
   perform pg_advisory_xact_lock(hashtext('achievements:' || v_id));
   foreach x in array array(select distinct u from unnest(p_ids) u order by u) loop
     select ad.starts, ad.ends into d from public.achievement_defs ad where ad.id = x;
@@ -1313,6 +1472,8 @@ revoke execute on function public.player_stats(text, text) from public, authenti
 grant  execute on function public.player_stats(text, text) to anon;
 revoke execute on function public.claim_achievements(text, text[]) from public, authenticated;
 grant  execute on function public.claim_achievements(text, text[]) to anon;
+revoke execute on function public.board_tags(text[]) from public, authenticated;
+grant  execute on function public.board_tags(text[]) to anon;
 
 -- Tell PostgREST about the new functions right away.
 notify pgrst, 'reload schema';

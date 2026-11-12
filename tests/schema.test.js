@@ -585,6 +585,7 @@ test('player_stats: single-player averages and the board level, daily podiums ra
     tournament: { events: 0, gold: 0, silver: 0, bronze: 0, rival: null },
     counters: {},
     achievements: [],
+    tags: [],
   });
 });
 
@@ -684,4 +685,126 @@ test("player_stats' bestScore is the higher of the player's off- and on-toilet r
   assert.equal((await pstats(db, P)).single.bestScore, 261, 'the toilet row wins here');
   assert.equal((await pstats(db, null, 'best')).single.bestScore, 261, 'by name too');
   assert.equal((await pstats(db, id('NONE'))).single.bestScore, 0);
+});
+
+// ---------------------------------------------------------------------------
+// v0.16.0: 👑 dethroned (server-only counter), player_meta (join dates, devs) and the tags.
+
+const counters = (db, pid) => db.query('select counters from public.player_counters where player_id = $1', [pid]).then((r) => r.rows[0]?.counters ?? {});
+const ageScores = (db) => db.query("update public.scores set updated_at = updated_at - interval '1 minute'");
+
+test('👑 dethroned on the 🏆 board: counted when a post takes #1 from another player, not when keeping #1, rising to #2 or tying an earlier post', async () => {
+  const db = await freshDb();
+  const [A, B, C] = ['DTA', 'DTB', 'DTC'].map(id);
+  await asAnon(db, 'select public.submit_score($1, $2, 50)', [A, 'Alpha']);
+  assert.equal((await counters(db, A)).dethroned, undefined, 'the first post on an empty board takes nobody\'s place');
+  await ageScores(db);
+  await asAnon(db, 'select public.submit_score($1, $2, 40)', [B, 'Bravo']);
+  assert.equal((await counters(db, B)).dethroned, undefined, '#2 is not a crown');
+  await ageScores(db);
+  await asAnon(db, 'select public.submit_score($1, $2, 50)', [C, 'Charlie']);
+  assert.equal((await counters(db, C)).dethroned, undefined, 'a tie: the earlier post keeps #1');
+  await ageScores(db);
+  await asAnon(db, 'select public.submit_score($1, $2, 60)', [B, 'Bravo']);
+  assert.equal((await counters(db, B)).dethroned, 1, 'B takes #1 from A');
+  await ageScores(db);
+  await asAnon(db, 'select public.submit_score($1, $2, 70)', [B, 'Bravo']);
+  assert.equal((await counters(db, B)).dethroned, 1, 'keeping #1 is no second crown');
+  await ageScores(db);
+  await asAnon(db, 'select public.submit_score($1, $2, 80, true, 3)', [A, 'Alpha']);
+  assert.equal((await counters(db, A)).dethroned, 1, "A's toilet row takes #1 back");
+  // The crown does not rate-limit the player's next counter batch (the row starts an hour back).
+  assert.ok(await csubmit(db, A, id('DTBATCH'), { games: 1, sumLevel: 1 }), 'a counter batch right after a crown goes through');
+  assert.equal((await counters(db, A)).dethroned, 1, 'and keeps the crown');
+});
+
+test('👑 dethroned on a 🌞 board: the day\'s #1 by score then earlier post; another day is its own board', async () => {
+  const db = await freshDb();
+  const { dailyLevel } = await import('../src/logic.js');
+  const today = await utcToday(db);
+  const yesterday = shiftDay(today, -1);
+  const [A, B, C] = ['DDA', 'DDB', 'DDC'].map(id);
+  await dsubmit(db, A, 'Alpha', today, 50, dailyLevel(today, T));
+  await dsubmit(db, B, 'Bravo', today, 50, dailyLevel(today, T));
+  assert.equal((await counters(db, B)).dethroned, undefined, 'a tie: the earlier post stays #1');
+  await dsubmit(db, C, 'Charlie', today, 90, dailyLevel(today, T));
+  assert.equal((await counters(db, C)).dethroned, 1, 'C takes the day from A');
+  await dsubmit(db, A, 'Alpha', yesterday, 10, dailyLevel(yesterday, T));
+  assert.equal((await counters(db, A)).dethroned, undefined, 'first on an empty day');
+  assert.equal(await dsubmit(db, C, 'Charlie', today, 95, dailyLevel(today, T)), 'duplicate');
+  assert.equal((await counters(db, C)).dethroned, 1, 'a duplicate counts nothing');
+});
+
+test('a client batch cannot post dethroned', async () => {
+  const db = await freshDb();
+  await assert.rejects(csubmit(db, id('DX'), id('BX'), { games: 1, sumLevel: 1, dethroned: 5 }), /bad counters: dethroned/);
+});
+
+test('player_meta: every write records a player once (exact); the backfill is inexact; the fold keeps the earlier join and a dev flag', async () => {
+  const db = await freshDb();
+  const meta = (pid) => db.query('select joined_at, exact, dev from public.player_meta where player_id = $1', [pid]).then((r) => r.rows[0] ?? null);
+  const today = await utcToday(db);
+  const { dailyLevel } = await import('../src/logic.js');
+  const [S, D, K, CL] = ['MS', 'MD', 'MK', 'MCL'].map(id);
+  await asAnon(db, 'select public.submit_score($1, $2, 5)', [S, 'Scorer']);
+  await dsubmit(db, D, 'Dailyer', today, 5, dailyLevel(today, T));
+  await csubmit(db, K, id('MKB'), { games: 1, sumLevel: 1 });
+  await claim(db, CL, ['win_game']);
+  for (const pid of [S, D, K, CL]) assert.equal((await meta(pid))?.exact, true, `${pid} recorded`);
+  const first = (await meta(S)).joined_at;
+  await ageScores(db);
+  await asAnon(db, 'select public.submit_score($1, $2, 9)', [S, 'Scorer']);
+  assert.deepEqual((await meta(S)).joined_at, first, 'recorded once');
+  // The backfill: a player only the tables know (inserted behind the functions' backs), then the file re-run.
+  const O = id('MOLD');
+  await db.query("insert into public.scores (player_id, name, score, updated_at) values ($1, 'Oldie', 3, now() - interval '3 days')", [O]);
+  await db.exec(SQL);
+  assert.equal((await meta(O))?.exact, false, 'backfilled players are inexact');
+  // The fold: the earlier join (with its exactness) and either's dev flag.
+  await db.query("update public.player_meta set dev = true where player_id = $1", [S]);
+  await asAnon(db, 'select public.merge_players($1, $2)', [D, S]);
+  const kept = await meta(D);
+  assert.equal(kept.dev, true);
+  assert.deepEqual(kept.joined_at, first, "the merged player's earlier join");
+  assert.equal(await meta(S), null);
+});
+
+test('player_tags: 🔧 dev, 🎖️ first seen before December 2026, 🆕 an exact join in the last 7 days; profiles and board_tags carry them', async () => {
+  const db = await freshDb();
+  const tags = (pid) => db.query('select public.player_tags($1) as t', [pid]).then((r) => r.rows[0].t);
+  const [N, O, X] = ['TN', 'TO', 'TX'].map(id);
+  await asAnon(db, 'select public.submit_score($1, $2, 5)', [N, 'Newbie']);
+  await asAnon(db, 'select public.submit_score($1, $2, 6)', [O, 'Oldtimer']);
+  await asAnon(db, 'select public.submit_score($1, $2, 7)', [X, 'Inexact']);
+  await db.query("update public.player_meta set joined_at = timestamptz '2026-11-01 00:00:00+00' where player_id = $1", [O]);
+  await db.query("update public.player_meta set exact = false where player_id = $1", [X]);
+  const now = (await db.query("select now() < timestamptz '2026-12-01 00:00:00+00' as nov")).rows[0].nov;
+  assert.deepEqual(await tags(N), now ? ['og', 'new'] : ['new'], 'just joined');
+  assert.deepEqual(await tags(O), ['og'], 'November, more than 7 days ago');
+  assert.deepEqual(await tags(X), now ? ['og'] : [], 'an inexact (backfilled) join is never new');
+  await db.query("update public.player_meta set joined_at = timestamptz '2026-12-03 12:00:00+00', exact = true where player_id = $1", [O]);
+  assert.ok(!(await tags(O)).includes('og'), 'December is not the first month');
+  assert.deepEqual(await tags(id('NOBODY')), []);
+  // The owner's 🔧, by name; anon cannot.
+  assert.equal((await db.query("select public.admin_set_dev('newbie', true) as n")).rows[0].n, 1);
+  assert.equal((await db.query("select public.admin_set_dev('Ghost', true) as n")).rows[0].n, 0);
+  await assert.rejects(asAnon(db, "select public.admin_set_dev('Newbie', true)"), /permission denied/);
+  assert.equal((await tags(N))[0], 'dev', 'dev first');
+  assert.deepEqual((await pstats(db, null, 'Newbie')).tags, await tags(N), 'the profile carries them');
+  const bt = (names) => asAnon(db, 'select public.board_tags($1::text[]) as r', [names]).then((r) => r.rows[0].r);
+  const got = await bt(['Newbie', 'Oldtimer', 'Ghost', 'Newbie', 'x'.repeat(17)]);
+  const byName = Object.fromEntries(got.map((g) => [g.name, g.tags]));
+  assert.deepEqual(byName.Newbie, await tags(N));
+  assert.deepEqual(byName.Ghost, [], 'an unknown name: no tags');
+  assert.equal(got.length, 3, 'distinct names only; a non-name dropped');
+  assert.equal(JSON.stringify(got).includes('_'), false, 'no ids');
+  assert.equal((await bt(Array.from({ length: 150 }, (_, i) => `Name${i}`))).length, 100, 'at most 100 names');
+});
+
+test('anon reads no player_meta and cannot call the new helpers', async () => {
+  const db = await freshDb();
+  await assert.rejects(asAnon(db, 'select * from public.player_meta'), /permission denied/);
+  for (const call of ["select public.touch_player('AAAAAAAAAAAAAAAAAAAAAA')", "select public.player_tags('AAAAAAAAAAAAAAAAAAAAAA')", "select public.add_server_counter('AAAAAAAAAAAAAAAAAAAAAA', 'dethroned', 1)"]) {
+    await assert.rejects(asAnon(db, call), /permission denied/, call);
+  }
 });
