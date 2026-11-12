@@ -5,6 +5,7 @@ import { isTopOverlay, hasOverlayUnder, openChangelog } from '../ui/overlayStack
 import { createScrollView } from '../ui/scrollView.js';
 import { createButton } from '../ui/button.js';
 import { createInfoCard } from '../ui/infoCard.js';
+import { TAG_GLYPHS } from '../leaderboard.js';
 import { t, metaFontSize, levelLabel, badgeTitle, badgeDesc, dailyDayText } from '../i18n.js';
 import { ACHIEVEMENTS, achievementById, openQuests, progressOf } from '../achievements.js';
 import { validateName } from '../save.js';
@@ -17,6 +18,7 @@ const DASH = '–';
 
 /** The career grid: counter, glyph and its card's note (an i18n key), in the order shown (L.careerCols to a row). */
 const CAREER = [
+  ['dethroned', '👑', 'careerDethroned'], // server-only: counted by submit_score / submit_daily_score
   ['pipes', '#️⃣', 'careerPipes'],
   ['farts', '💨', 'careerFarts'],
   ['superFarts', '🌈', 'careerSuperFarts'],
@@ -31,6 +33,13 @@ const CAREER = [
   ['closeCalls', '😢', 'careerCloseCalls'],
   ['deaths', '💀', 'careerDeaths'],
 ];
+
+/** Player tags (player_tags): 🔧 game dev, 🎖️ first month, 🆕 new this week, shown first in Achievements. */
+const TAGS = {
+  dev: { glyph: TAG_GLYPHS.dev, title: 'tagDev', desc: 'tagDevDesc' },
+  og: { glyph: TAG_GLYPHS.og, title: 'tagOg', desc: 'tagOgDesc' },
+  new: { glyph: TAG_GLYPHS.new, title: 'tagNew', desc: 'tagNewDesc' },
+};
 
 const round1 = (v) => Math.round(v * 10) / 10;
 const sameName = (a, b) => typeof a === 'string' && typeof b === 'string' && a.trim().toLowerCase() === b.trim().toLowerCase();
@@ -102,6 +111,7 @@ export class Stats extends Phaser.Scene {
     this.scroll = null;
     this.view = null; // what is drawn, once it is in (the smoke reads it)
     this.badgeItems = [];
+    this.tagItems = [];
     this.careerItems = [];
     this.input.keyboard?.on('keydown-ESC', () => this.close());
     // Controller: ✕ and the version line until the profile is in; then the badges join (scrolled).
@@ -165,6 +175,7 @@ export class Stats extends Phaser.Scene {
       counters: totals,
       earned,
       locked,
+      tags: online ? (server.tags ?? []) : [],
     };
   }
 
@@ -186,6 +197,7 @@ export class Stats extends Phaser.Scene {
       counters: server.counters,
       earned: server.achievements.map((a) => ({ entry: achievementById(a.id), at: a.at })).filter((b) => b.entry),
       locked: openQuests(utcDayKey()).filter((e) => !earnedIds.has(e.id)),
+      tags: server.tags ?? [],
     };
   }
 
@@ -270,7 +282,9 @@ export class Stats extends Phaser.Scene {
     const total = view.own ? ACHIEVEMENTS.length : view.earned.length;
     sv.add(this.add.text(L.left, y, view.own ? t(locale, 'statsAchievements').replace('{n}', String(view.earned.length)).replace('{total}', String(total)) : t(locale, 'statsAchievementsOther').replace('{n}', String(view.earned.length)), { ...STYLE, fontSize: '32px', color: PINK, align: 'left' }).setOrigin(0, 0.5));
     y += 60;
-    const badges = [...view.earned.map((b) => ({ ...b, done: true })), ...view.locked.map((entry) => ({ entry, done: false }))];
+    // The player's tags first (not counted in n / total), then earned badges, then the rest.
+    const tagCells = (view.tags ?? []).filter((tag) => TAGS[tag]).map((tag) => ({ tag, entry: { id: tag, glyph: TAGS[tag].glyph, title: TAGS[tag].title, desc: TAGS[tag].desc }, done: true }));
+    const badges = [...tagCells, ...view.earned.map((b) => ({ ...b, done: true })), ...view.locked.map((entry) => ({ entry, done: false }))];
     if (!badges.length) {
       sv.add(this.add.text(cx, y, t(locale, 'statsNoBadges'), { ...STYLE, fontSize: '26px', color: MUTED, fontStyle: 'normal' }).setOrigin(0.5));
       y += 50;
@@ -288,8 +302,8 @@ export class Stats extends Phaser.Scene {
       }
       const zone = sv.add(this.add.zone(x, by + 30, cellW - 4, 120));
       sv.link(zone, () => this.explain(b));
-      items.push(pressable(`badge:${b.entry.id}`, zone, { event: 'pointerup', scrolled: true }));
-      this.badgeItems.push({ id: b.entry.id, done: b.done, glyph, zone });
+      items.push(pressable(b.tag ? `tag:${b.tag}` : `badge:${b.entry.id}`, zone, { event: 'pointerup', scrolled: true }));
+      (b.tag ? (this.tagItems ??= []) : this.badgeItems).push({ id: b.entry.id, done: b.done, glyph, zone });
     });
     y += Math.ceil(badges.length / L.badgeCols) * 130;
     sv.finish(y - 40);
@@ -368,7 +382,7 @@ export class Stats extends Phaser.Scene {
     const f = this.focus;
     if (!f.items.length) return;
     const id = (i) => f.items[i]?.id ?? '';
-    const isCell = (i) => /^(career|badge):/.test(id(i));
+    const isCell = (i) => /^(career|tag|badge):/.test(id(i));
     let next;
     if (dir === 'left' || dir === 'right') {
       next = focusStep(f.index, f.items.length, dir);
@@ -425,6 +439,10 @@ export class Stats extends Phaser.Scene {
   explain(b) {
     const { locale } = this;
     const e = b.entry;
+    if (b.tag) {
+      this.toggleCard({ glyph: e.glyph, title: t(locale, e.title), color: GOLD, lines: [t(locale, e.desc)] });
+      return;
+    }
     let tail = '';
     if (b.done && b.at) tail = t(locale, 'statsEarned').replace('{day}', dailyDayText(locale, b.at));
     else if (e.to) tail = t(locale, 'statsQuestOpen').replace('{day}', dailyDayText(locale, e.to));

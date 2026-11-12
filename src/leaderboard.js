@@ -881,7 +881,30 @@ function normalizeProfile(raw) {
     tournament: { events: whole(t.events), gold: whole(t.gold), silver: whole(t.silver), bronze: whole(t.bronze), rival },
     counters: cleanCounters(raw.counters),
     achievements: (Array.isArray(raw.achievements) ? raw.achievements : []).filter((a) => a && isAchievementId(a.id) && typeof a.at === 'string' && DAY.test(a.at)).map((a) => ({ id: a.id, at: a.at })),
+    tags: cleanTags(raw.tags),
   };
+}
+
+/** The player tags the server may send (player_tags), in its order: 'dev' 🔧, 'og' 🎖️, 'new' 🆕. */
+export const PLAYER_TAGS = ['dev', 'og', 'new'];
+export const TAG_GLYPHS = { dev: '🔧', og: '🎖️', new: '🆕' };
+const cleanTags = (v) => (Array.isArray(v) ? PLAYER_TAGS.filter((tag) => v.includes(tag)) : []);
+
+/**
+ * The tags of the names a board shows (board_tags, at most 100): { name: ['dev', …] } for the
+ * names that have any, or null (offline, not deployed yet). Never rejects.
+ */
+export async function fetchBoardTags(names, opts = {}) {
+  const list = [...new Set((Array.isArray(names) ? names : []).filter((n) => typeof n === 'string' && n.trim()))].slice(0, 100);
+  if (!list.length) return {};
+  const out = await request('/rpc/board_tags', { method: 'POST', body: { p_names: list } }, opts);
+  if (!Array.isArray(out)) return null;
+  const tags = {};
+  for (const row of out) {
+    const t = cleanTags(row?.tags);
+    if (typeof row?.name === 'string' && t.length) tags[row.name] = t;
+  }
+  return tags;
 }
 
 /**

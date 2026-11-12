@@ -119,7 +119,7 @@ import { perfMark, perfSteps, perfRunStart } from '../ui/perfMeter.js';
 import { createFinishTexture } from '../ui/finish.js';
 import { createLightTexture } from '../ui/pipeShade.js';
 import { createLevelBar } from '../ui/levelBar.js';
-import { createSubmitStore, createMergeStore, createRenameStore, createTournamentQueue, createDailyStore, createDailyQueue, submitDailyScore, fetchDailyBoard, submitPlans, submitScore, submitTournament, checkNameAvailable, mergePlayers, fetchPlayerName, fetchRank, nameAction, createCareerStore, submitCounters, claimAchievements, fetchPlayerStats } from '../leaderboard.js';
+import { createSubmitStore, createMergeStore, createRenameStore, createTournamentQueue, createDailyStore, createDailyQueue, submitDailyScore, fetchDailyBoard, submitPlans, submitScore, submitTournament, checkNameAvailable, mergePlayers, fetchPlayerName, fetchRank, nameAction, createCareerStore, submitCounters, claimAchievements, fetchPlayerStats, fetchBoardTags } from '../leaderboard.js';
 import { createButton } from '../ui/button.js';
 import { createToggle } from '../ui/toggle.js';
 import { openSavePanel, isSavePanelOpen, showAdoptedName, showBoardScores } from '../ui/savePanel.js';
@@ -3161,6 +3161,11 @@ export class Play extends Phaser.Scene {
   /** claim_achievements for the career; a method so the smoke can stub it. */
   claimBadges(id, ids) {
     return claimAchievements(id, ids);
+  }
+
+  /** The tags of the names a board shows (board_tags); a method so the smoke can stub it. */
+  fetchBoardTags(names) {
+    return fetchBoardTags(names);
   }
 
   /** A player's profile (player_stats) by { id } or { name }; a method so the smoke can stub it. */

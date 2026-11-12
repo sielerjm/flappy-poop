@@ -3354,18 +3354,23 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
       ok(await waitFor(`__flappy.scene.isActive('Stats') && ${ST}.view`), 'the own profile opens from Play.openStats()');
       const own = await evaluate(`(() => { const s = ${ST}; const p = ${P}; return JSON.stringify({ own: s.view.own, fiber: s.view.counters.fiber, want: p.careerStore.totals(p.save?.id ?? null).fiber, detail: s.detail.text, badges: s.badgeItems.length, locked: s.badgeItems.filter((b) => !b.done).length }); })()`).then(JSON.parse);
       const ownTexts = await texts();
-      ok((await evaluate(`${ST}.careerItems.map((c) => c.key).join()`)) === 'pipes,farts,superFarts,fiber,probiotic,postbiotic,bacteria,bean,mystery,coin,falls,closeCalls,deaths', 'the career grid: 13 counters, ‼️ long falls and 😢 close calls before 💀');
+      ok((await evaluate(`${ST}.careerItems.map((c) => c.key).join()`)) === 'dethroned,pipes,farts,superFarts,fiber,probiotic,postbiotic,bacteria,bean,mystery,coin,falls,closeCalls,deaths', 'the career grid: 14 counters, 👑 first, ‼️ long falls and 😢 close calls before 💀');
       ok(own.own && own.fiber === own.want && own.fiber >= 7 && ownTexts.includes(String(own.want)) && own.badges === (await evaluate(`import('./src/achievements.js').then((m) => m.ACHIEVEMENTS.length)`)) && own.locked > 0 && ownTexts.some((x) => /^\d+ \/ 1000$/.test(x)), `the own profile lists every badge (${own.locked} still locked, lifetime ones with their progress) and this device's career (${own.fiber} fiber)`);
       ok(ownTexts.includes(await t('statsSingle')) && ownTexts.includes(await t('statsCareer')) && (own.detail === (await t('statsTapBadge')) || own.detail === (await t('leaderboardJoin')) || own.detail === (await t('statsOfflineOwn'))), `its sections and the strip under them ("${own.detail}")`);
       ok((await shut()) && (await evaluate(`${P}.state`)) === 'ready', '✕ closes it back to the home screen');
 
       // Another player's profile, from a stubbed player_stats.
-      await evaluate(`(globalThis.__profile = { found: true, name: 'Rival', single: { games: 12, bestScore: 307, wins: 2, maxLevel: 6, avgLevel: 3.5, avgScore: 88.2 }, daily: { dumps: 4, gold: 1, silver: 0, bronze: 2 }, tournament: { events: 3, gold: 1, silver: 1, bronze: 0, rival: { name: 'Smoke', meetings: 3, losses: 1 } }, counters: { farts: 40, fiber: 120 }, achievements: [{ id: 'win_game', at: '2026-11-09' }] }, ${P}.openStats({ name: 'Rival' }), true)`);
+      await evaluate(`(globalThis.__profile = { found: true, name: 'Rival', single: { games: 12, bestScore: 307, wins: 2, maxLevel: 6, avgLevel: 3.5, avgScore: 88.2 }, daily: { dumps: 4, gold: 1, silver: 0, bronze: 2 }, tournament: { events: 3, gold: 1, silver: 1, bronze: 0, rival: { name: 'Smoke', meetings: 3, losses: 1 } }, counters: { farts: 40, fiber: 120 }, achievements: [{ id: 'win_game', at: '2026-11-09' }], tags: ['dev', 'og'] }, ${P}.openStats({ name: 'Rival' }), true)`);
       ok(await waitFor(`__flappy.scene.isActive('Stats') && ${ST}.view`), "another player's profile opens by name");
       const other = await texts();
       const asked = await evaluate(`JSON.stringify(__career.profiles.at(-1))`).then(JSON.parse);
       ok(asked?.name === 'Rival' && ['Rival', '12', '307', 'Highest score', '2', 'LV 6', '3.5', '88.2', '4', '🥇1 🥈0 🥉2', '🥇1 🥈1 🥉0', '120', '40', '🎉'].every((x) => other.includes(x)) && other.some((x) => x.startsWith('Smoke · ')), `it shows their numbers (Highest score 307), medals, rival and badges (asked for ${JSON.stringify(asked)})`);
       ok((await evaluate(`${ST}.badgeItems.length`)) === 1, 'only the badges they earned (no quest is open)');
+      const tagCells = await evaluate(`JSON.stringify(${ST}.tagItems.map((c) => c.id))`).then(JSON.parse);
+      await evaluate(`${ST}.tagItems[0].zone.emit('pointerup'), true`);
+      const tagCard = await evaluate(`JSON.stringify({ open: ${ST}.cardOpen, title: ${ST}.card.title.text, body: ${ST}.card.body.text })`).then(JSON.parse);
+      await evaluate(`${ST}.hideCard(), true`);
+      ok(tagCells.join() === 'dev,og' && tagCard.open && tagCard.title === 'Game dev' && tagCard.body === 'Makes Flappy Poop', `their tags lead the achievements (🔧 🎖️: ${tagCells.join(', ')}) and explain themselves ("${tagCard.title}")`);
       const card = () => evaluate(`JSON.stringify({ open: ${ST}.cardOpen, title: ${ST}.card?.title.text ?? null, body: ${ST}.card?.body.text ?? null, cam: ${ST}.card?.cam.visible ?? null })`).then(JSON.parse);
       await evaluate(`${ST}.badgeItems[0].zone.emit('pointerup'), true`);
       const bc = await card();
@@ -3377,7 +3382,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
       await tapAt(pipesCell.x, pipesCell.y);
       ok(!(await card()).open, 'a click while a card is up closes it, and the cell under the click stays shut');
       // A click near a cell's edge (not on its emoji) opens that cell's card.
-      const edge = await cellAt(3, 36, 30);
+      const edge = await cellAt(4, 36, 30);
       await tapAt(edge.x, edge.y);
       const fc = await card();
       ok(fc.open && fc.title === 'Fiber eaten' && fc.body === 'Total: 120', `a click near the edge of the 🥦 cell opens its card ("${fc.title}" · ${fc.body})`);
@@ -3417,21 +3422,21 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         const r2 = await ringAt();
         await padDown(G.back);
         const r3 = await ringAt();
-        ok(r0.id === 'close' && r0.shown && r1.id === 'career:pipes' && r2.open && !r3.open && r3.id === 'career:pipes' && (await active('Stats')), `controller: ✕ → down rings #️⃣ (${r1.id}); A opens its card; B closes the card, the profile stays (ring on ${r3.id})`);
+        ok(r0.id === 'close' && r0.shown && r1.id === 'career:dethroned' && r2.open && !r3.open && r3.id === 'career:dethroned' && (await active('Stats')), `controller: ✕ → down rings 👑 (${r1.id}); A opens its card; B closes the card, the profile stays (ring on ${r3.id})`);
         await padNav('right');
         await padDown(G.select);
         const r4 = await ringAt();
         await padNav('right');
         const r5 = await ringAt();
-        ok(r4.id === 'career:farts' && r4.open && r5.id === 'career:superFarts' && !r5.open, `right walks the cells in order (${r4.id} → ${r5.id}); a nav press with a card up closes it and moves`);
+        ok(r4.id === 'career:pipes' && r4.open && r5.id === 'career:farts' && !r5.open, `right walks the cells in order (${r4.id} → ${r5.id}); a nav press with a card up closes it and moves`);
         let r6 = await ringAt();
-        for (let i = 0; i < 4 && !r6.id?.startsWith('badge:'); i += 1) {
+        for (let i = 0; i < 4 && !/^(tag|badge):/.test(r6.id ?? ''); i += 1) {
           await padNav('down');
           r6 = await ringAt();
         }
         for (let i = 0; i < 8; i += 1) await padNav('up');
         const r7 = await ringAt();
-        ok(r6.id.startsWith('badge:') && r6.offset < 0 && r7.id === 'close' && r7.offset === 0, `down walks into the badges and the band follows (${r6.id}, offset ${r6.offset}); up returns to ✕ at the top (${r7.offset})`);
+        ok(/^(tag|badge):/.test(r6.id) && r6.offset < 0 && r7.id === 'close' && r7.offset === 0, `down walks into the achievements (tags first) and the band follows (${r6.id}, offset ${r6.offset}); up returns to ✕ at the top (${r7.offset})`);
         await padDown(G.back);
         await sleep(300);
         ok(!(await active('Stats')), 'B on the profile (no card up) closes it');
@@ -3453,11 +3458,14 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
       // camera); a drag across the names scrolls and opens nothing; the – rows are not names. The board's
       // fetch is stubbed (never the live board).
       {
-        await evaluate(`(() => { globalThis.__fetchP = globalThis.fetch; const top = [{ name: 'Rival', score: 300, toilet: false, level: 7 }, { name: 'Other', score: 120, toilet: false, level: 4 }]; globalThis.fetch = async (url) => (String(url).includes('/scores?') ? new Response(JSON.stringify(top), { status: 200 }) : new Response('{"message":"stub"}', { status: 503 })); return import('./src/config.js').then((m) => { globalThis.__apiP = m.LEADERBOARD.dataApi; m.LEADERBOARD.dataApi = 'https://stub.invalid/rest/v1'; return true; }); })()`);
+        await evaluate(`(() => { globalThis.__fetchP = globalThis.fetch; const top = [{ name: 'Rival', score: 300, toilet: false, level: 7 }, { name: 'Other', score: 120, toilet: false, level: 4 }]; globalThis.__boardTags = [{ name: 'Rival', tags: ['dev', 'og'] }, { name: 'Other', tags: [] }]; globalThis.fetch = async (url) => (String(url).includes('/scores?') ? new Response(JSON.stringify(top), { status: 200 }) : String(url).endsWith('/rpc/board_tags') && globalThis.__boardTags ? new Response(JSON.stringify(globalThis.__boardTags), { status: 200 }) : new Response('{"message":"stub"}', { status: 503 })); return import('./src/config.js').then((m) => { globalThis.__apiP = m.LEADERBOARD.dataApi; m.LEADERBOARD.dataApi = 'https://stub.invalid/rest/v1'; return true; }); })()`);
         await evaluate(`(__flappy.registry.set('leaderboardTab', 'scores'), globalThis.__profile = { found: true, name: 'Rival', single: { games: 5, wins: 1, maxLevel: 7, avgLevel: 4, avgScore: 120 }, daily: { dumps: 0, gold: 0, silver: 0, bronze: 0 }, tournament: { events: 0, gold: 0, silver: 0, bronze: 0, rival: null }, counters: {}, achievements: [] }, true)`);
         await chrome('leaderboard');
         const LB = `__flappy.scene.getScene('Leaderboard')`;
         ok(await waitFor(`__flappy.scene.isActive('Leaderboard') && ${LB}.scroll`, 80), 'the board loads (stubbed rows)');
+        ok(await waitFor(`${LB}.tagTexts.length === 1`, 40), 'the board asks for its names\' tags');
+        const tagged = await evaluate(`(() => { const lb = ${LB}; const t = lb.tagTexts[0]; const n = lb.nameSlots.find((s) => s.name === t.name).text; return JSON.stringify({ name: t.name, glyphs: t.text.text, after: t.text.x >= n.x + n.displayWidth, inside: t.text.x + t.text.width <= lb.L.cols.toilet - 16 }); })()`).then(JSON.parse);
+        ok(tagged.name === 'Rival' && tagged.glyphs === '🔧🎖️' && tagged.after && tagged.inside, `tags sit right after a name and inside its column (${tagged.name} ${tagged.glyphs}); untagged names get none`);
         const nameAt = (name) => evaluate(`(() => { const o = ${LB}.children.list.find((c) => c.type === 'Text' && c.text === ${JSON.stringify(name)}); const c = o.getCenter(); return JSON.stringify({ x: c.x, y: c.y + ${LB}.scroll.offset, live: Boolean(o.input?.enabled) }); })()`).then(JSON.parse);
         const dashes = await evaluate(`${LB}.children.list.filter((c) => c.type === 'Text' && c.text === '–' && c.input?.enabled).length`);
         const rival = await nameAt('Rival');
@@ -3478,6 +3486,15 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         ok(rival.live && dashes === 0 && !dragged && opened && stack.lb && stack.top && stack.name === 'Rival' && stack.asked?.name === 'Rival', `a click on a board name opens their profile over the board ("${stack.name}"); a drag opens nothing; the – rows are not links (${dashes})`);
         await shut();
         ok((await active('Leaderboard')) && (await evaluate(`${LB}.scroll !== null`)), '✕ on the profile goes back to the board');
+        await evaluate(`${LB}.close(), true`);
+        await waitFor(`!__flappy.scene.isActive('Leaderboard')`, 20);
+        // The tags request failing (offline, not deployed yet) leaves the board as it was.
+        await evaluate(`globalThis.__boardTags = null, true`);
+        await chrome('leaderboard');
+        await waitFor(`__flappy.scene.isActive('Leaderboard') && ${LB}.scroll`, 80);
+        await sleep(400);
+        const plain = await evaluate(`JSON.stringify({ tags: ${LB}.tagTexts.length, rows: ${LB}.nameSlots.length, live: ${LB}.nameSlots.every((s) => s.text.input?.enabled) })`).then(JSON.parse);
+        ok(plain.tags === 0 && plain.rows === 2 && plain.live, `a failed tags request leaves the board working (${plain.rows} names, still links, no tags)`);
         await evaluate(`${LB}.close(), true`);
         await waitFor(`!__flappy.scene.isActive('Leaderboard')`, 20);
         await evaluate(`(globalThis.fetch = globalThis.__fetchP, globalThis.__profile = null, import('./src/config.js').then((m) => { m.LEADERBOARD.dataApi = globalThis.__apiP; return true; }))`);

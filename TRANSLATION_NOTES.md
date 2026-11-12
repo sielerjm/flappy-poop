@@ -479,6 +479,13 @@ Inspired by Flappy Bird
 | achDescCeiling | Hit the ceiling {n} times | 撞到顶部 {n} 次 |
 | achDescFourOfAKind | Open four mystery boxes in a row with the same reward | 连续 4 个神秘盒子开出同样的奖励 |
 | achDescBoxesBought | Buy {n} mystery boxes in the shop | 在商店买 {n} 个神秘盒子 |
+| careerDethroned | Dethroned: took 1st place from someone | 夺冠：从别人手里抢下第一名 |
+| tagDev | Game dev | 游戏开发者 |
+| tagDevDesc | Makes Flappy Poop | Flappy Poop 的开发者 |
+| tagOg | First month | 元老 |
+| tagOgDesc | Played in the game's first month, November 2026 | 2026 年 11 月，游戏第一个月就来玩了 |
+| tagNew | New player | 新玩家 |
+| tagNewDesc | Joined in the last 7 days | 最近 7 天内加入 |
 
 ## Reviewer checklist
 

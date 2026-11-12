@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { LEADERBOARD } from '../src/config.js';
-import { createSubmitStore, createMergeStore, createRenameStore, createTournamentQueue, nameAction, submitPlan, submitPlans, submitScore, submitTournament, checkNameAvailable, mergePlayers, fetchPlayerName, fetchTop, fetchRank, fetchTournamentBoard, submitDailyScore, fetchDailyBoard, createCareerStore, submitCounters, claimAchievements, fetchPlayerStats } from '../src/leaderboard.js';
+import { createSubmitStore, createMergeStore, createRenameStore, createTournamentQueue, nameAction, submitPlan, submitPlans, submitScore, submitTournament, checkNameAvailable, mergePlayers, fetchPlayerName, fetchTop, fetchRank, fetchTournamentBoard, submitDailyScore, fetchDailyBoard, createCareerStore, submitCounters, claimAchievements, fetchPlayerStats, fetchBoardTags } from '../src/leaderboard.js';
 
 const config = { dataApi: 'https://x.example/rest/v1', publishableKey: 'sb_publishable_test', timeoutMs: 50, limit: 10, maxScore: 200 };
 
@@ -628,6 +628,7 @@ test('fetchPlayerStats asks by id or by name, and cleans the answer', async () =
     tournament: { events: 3, gold: 1, silver: 0, bronze: 2, rival: { name: 'Bob', meetings: 3, losses: 2 } },
     counters: { games: 4, fiber: 9, bad: 'x' },
     achievements: [{ id: 'win_game', at: '2026-11-09' }, { id: 'BAD', at: '2026-11-09' }],
+    tags: ['new', 'admin', 'dev'],
   };
   const fetch = fakeFetch({ status: 200, body });
   const p = await fetchPlayerStats({ name: 'Alice' }, { fetch, config });
@@ -640,6 +641,7 @@ test('fetchPlayerStats asks by id or by name, and cleans the answer', async () =
     tournament: { events: 3, gold: 1, silver: 0, bronze: 2, rival: { name: 'Bob', meetings: 3, losses: 2 } },
     counters: { games: 4, fiber: 9 },
     achievements: [{ id: 'win_game', at: '2026-11-09' }],
+    tags: ['dev', 'new'],
   });
   await fetchPlayerStats({ id: ID, name: 'Alice' }, { fetch, config });
   assert.deepEqual(fetch.calls[1].body, { p_player_id: ID, p_name: null }, 'the id wins');
@@ -663,4 +665,17 @@ test('career store: markRun keeps the last run time and the wins of the last 7 d
   assert.deepEqual(r.winTimes, [t0 + 8 * day], 'wins older than 7 days are dropped');
   for (let i = 0; i < 40; i += 1) c.markRun(t0 + 8 * day + i * 1000, true);
   assert.equal(c.load().winTimes.length, 30, 'at most 30 kept');
+});
+
+test('fetchBoardTags: one request for a board\'s names; known tags only, in order; offline is null', async () => {
+  const fetch = fakeFetch({ status: 200, body: [{ name: 'Alice', tags: ['new', 'dev'] }, { name: 'Bob', tags: [] }, { name: 'Eve', tags: ['admin'] }] });
+  assert.deepEqual(await fetchBoardTags(['Alice', 'Bob', 'Alice', 'Eve', ''], { fetch, config }), { Alice: ['dev', 'new'] });
+  assert.equal(fetch.calls.length, 1);
+  assert.deepEqual(fetch.calls[0].body, { p_names: ['Alice', 'Bob', 'Eve'] }, 'distinct, non-empty names');
+  assert.equal(fetch.calls[0].url, 'https://x.example/rest/v1/rpc/board_tags');
+  assert.equal(await fetchBoardTags(['A'], { fetch: fakeFetch({ status: 404, body: { message: 'not found' } }), config }), null, 'not deployed yet');
+  assert.deepEqual(await fetchBoardTags([], { fetch, config }), {}, 'no names, no request');
+  const many = fakeFetch({ status: 200, body: [] });
+  await fetchBoardTags(Array.from({ length: 150 }, (_, i) => `N${i}`), { fetch: many, config });
+  assert.equal(many.calls[0].body.p_names.length, 100, 'at most 100');
 });
