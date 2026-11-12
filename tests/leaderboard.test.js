@@ -580,7 +580,7 @@ test('career store: unlocks queue claims; the server settles them, closes quests
   assert.deepEqual(c.claims(), []);
   assert.equal(c.unlocked().level_3, '2026-11-11', 'a dropped claim keeps the badge on the device');
   c.clear();
-  assert.deepEqual(c.load(), { v: 1, base: null, pending: {}, inflight: null, unlocked: {}, claims: [] });
+  assert.deepEqual(c.load(), { v: 1, base: null, pending: {}, inflight: null, unlocked: {}, claims: [], lastRunAt: null, winTimes: [] });
 });
 
 test('career store: junk in storage and storage that throws never break it', () => {
@@ -588,7 +588,7 @@ test('career store: junk in storage and storage that throws never break it', () 
   storage.setItem('k', '{not json');
   assert.deepEqual(createCareerStore(storage, 'k').load().pending, {});
   storage.setItem('k', JSON.stringify({ pending: { games: 'x', fiber: 2 }, inflight: { batch: 'short', counters: { games: 1 } }, unlocked: { ok_id: '2026-11-11', BAD: '2026-11-11' }, claims: ['ok_id', 'not_unlocked'] }));
-  assert.deepEqual(createCareerStore(storage, 'k').load(), { v: 1, base: null, pending: { fiber: 2 }, inflight: null, unlocked: { ok_id: '2026-11-11' }, claims: ['ok_id'] });
+  assert.deepEqual(createCareerStore(storage, 'k').load(), { v: 1, base: null, pending: { fiber: 2 }, inflight: null, unlocked: { ok_id: '2026-11-11' }, claims: ['ok_id'], lastRunAt: null, winTimes: [] });
   const c = createCareerStore(boom, 'k');
   c.addRun({ games: 1 });
   assert.deepEqual(c.totals(), {});
@@ -650,4 +650,17 @@ test('fetchPlayerStats asks by id or by name, and cleans the answer', async () =
   const bare = await fetchPlayerStats({ id: ID }, { fetch: fakeFetch({ status: 200, body: { found: true, name: null } }), config });
   assert.deepEqual(bare.single, { games: 0, bestScore: 0, wins: 0, maxLevel: 0, avgLevel: null, avgScore: null }, 'an older server without bestScore reads 0');
   assert.equal(bare.tournament.rival, null);
+});
+
+test('career store: markRun keeps the last run time and the wins of the last 7 days (🧱 / 🏃)', () => {
+  const c = createCareerStore(fakeStorage(), 'k');
+  const day = 86400000;
+  const t0 = Date.parse('2026-11-01T10:00:00Z');
+  assert.deepEqual(c.markRun(t0, true), { prevRunAt: null, winTimes: [t0] }, 'the first run: no earlier one');
+  assert.deepEqual(c.markRun(t0 + day, false), { prevRunAt: t0, winTimes: [t0] }, 'a loss adds no win');
+  const r = c.markRun(t0 + 8 * day, true);
+  assert.equal(r.prevRunAt, t0 + day);
+  assert.deepEqual(r.winTimes, [t0 + 8 * day], 'wins older than 7 days are dropped');
+  for (let i = 0; i < 40; i += 1) c.markRun(t0 + 8 * day + i * 1000, true);
+  assert.equal(c.load().winTimes.length, 30, 'at most 30 kept');
 });

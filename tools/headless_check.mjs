@@ -1265,6 +1265,17 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         ok(f2.calls === f1.calls + 1, `😢 a pipe within scaredNearPx counts one close call, not one per frame (${f1.calls} → ${f2.calls})`);
         await evaluate(`(${play}.poop.setY(320), ${play}.poop.setVelocityY(0), true)`);
       }
+      // v0.16.0, set up before this run ends: a shop box (🎰), four probiotics in a row (🃏), a week since the
+      // last run on this device (🧱), a level's worth of close calls (💈); then the run ends on the ceiling (☀️).
+      {
+        const bought0 = await evaluate(`${play}.runBoxesBought`);
+        await evaluate(`(() => { const p = ${play}; p.effects.addCoins(10); p.buyItem('mystery'); for (let i = 0; i < 4; i += 1) p.openMystery('probiotic'); p.careerStore.markRun(Date.now() - 8 * 86400000, false); p.closeCallsByLevel[p.level] = 60; return true; })()`);
+        const pre = await evaluate(`JSON.stringify({ bought: ${play}.runBoxesBought, four: ${play}.fourOfAKind, streak: ${play}.drawStreak })`).then(JSON.parse);
+        ok(pre.bought === bought0 + 1 && pre.four && pre.streak.last === 'probiotic' && pre.streak.streak >= 4, `a shop box counts one more 🎰 (${bought0} → ${pre.bought}); four probiotics in a row make 🃏 (streak ${pre.streak.streak})`);
+        await evaluate(`(${play}.poop.setVelocityY(0), ${play}.poop.setY(${TT.ceilingHeight + TT.poopRadius - 6}), true)`);
+        for (let i = 0; i < 30 && (await playState()) !== 'dead'; i += 1) await sleep(50);
+        ok((await evaluate(`${play}.runCeilingHits`)) === 1, 'the run ends on the ceiling: one ☀️ ceiling hit');
+      }
       // Let the poop fall and die: the game-over panel carries the run summary.
       await evaluate(`${play}.poop.body.setAllowGravity(true), true`);
       for (let i = 0; i < 60 && (await playState()) !== 'dead'; i += 1) await sleep(100);
@@ -1281,9 +1292,11 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
       // unlocked, queued as claims and named on Over; then a sync the stubs accept sends both.
       {
         const now = await careerNow();
-        const c = await evaluate(`(() => { const p = ${play}; const o = __flappy.scene.getScene('Over'); const b = o.badgeLine; return JSON.stringify({ pipes: p.pipesPassed, falls: p.runFalls, calls: p.runCloseCalls, collected: p.collected, farts: p.runFarts, supers: p.runSuperFarts, badges: p.runBadges, unlocked: p.careerStore.unlocked(), claims: p.careerStore.claims(), line: b?.text ?? null, lineIn: b ? b.getBounds().width <= 520 : true }); })()`).then(JSON.parse);
+        const c = await evaluate(`(() => { const p = ${play}; const o = __flappy.scene.getScene('Over'); const b = o.badgeLine; return JSON.stringify({ ceil: p.runCeilingHits, bought: p.runBoxesBought, pipes: p.pipesPassed, falls: p.runFalls, calls: p.runCloseCalls, collected: p.collected, farts: p.runFarts, supers: p.runSuperFarts, badges: p.runBadges, unlocked: p.careerStore.unlocked(), claims: p.careerStore.claims(), line: b?.text ?? null, lineIn: b ? b.getBounds().width <= 520 : true }); })()`).then(JSON.parse);
         const d = (k) => (now[k] ?? 0) - (career0[k] ?? 0);
         ok(d('games') === 1 && d('deaths') === 1 && !d('wins') && ['fiber', 'probiotic', 'postbiotic', 'bacteria', 'bean', 'mystery', 'coin'].every((k) => d(k) === c.collected[k]) && d('farts') === c.farts && c.farts >= 2 && d('superFarts') === c.supers && c.supers >= 1 && d('pipes') === c.pipes && c.pipes > 0 && d('falls') === c.falls && c.falls >= 2 && d('closeCalls') === c.calls && c.calls >= 1, `the run is counted once in the career: +1 game, +1 death, ${c.pipes} pipes, ${c.falls} long falls, ${c.calls} close calls, its pickups and ${c.farts} farts (${c.supers} super)`);
+        ok(d('ceilingHits') === c.ceil && c.ceil === 1 && d('boxesBought') === c.bought && c.bought >= 1, `the career counts the ☀️ ceiling hit and the run's 🎰 shop boxes (${d('ceilingHits')}, ${d('boxesBought')})`);
+        ok(['four_of_a_kind', 'constipated', 'close_shave'].every((bid) => c.badges.includes(bid)) && !c.badges.includes('ibs'), `the run unlocks 🃏, 🧱 and 💈, not 🏃 (${c.badges.join(', ')})`);
         ok(c.badges.includes('level_2') && c.badges.every((id) => id in c.unlocked && c.claims.includes(id)) && c.line?.startsWith('🏆') && c.lineIn, `the run unlocked ${c.badges.join(', ')}: queued as claims and named on Over ("${c.line}")`);
         await evaluate(`import('./src/config.js').then((m) => { globalThis.__api = m.LEADERBOARD.dataApi; m.LEADERBOARD.dataApi = ''; return true; })`);
         await evaluate(`(globalThis.__careerAnswer = 'ok', __career.posts.length = 0, __career.claims.length = 0, ${play}.syncLeaderboard().then(() => true))`);

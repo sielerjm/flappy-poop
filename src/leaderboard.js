@@ -666,6 +666,8 @@ export async function fetchRank(playerId, toiletOrOpts = false, maybeOpts = {}) 
 
 const DAY = /^\d{4}-\d{2}-\d{2}$/;
 const MAX_CLAIMS = 300; // claim_achievements' per-player cap
+const MAX_WIN_TIMES = 30; // 🏃 IBS needs 22 wins in 7 days: the last 30 wins' times are plenty
+const WIN_KEEP_MS = 7 * 86400000;
 
 /** A stored career, normalised: { v, base, pending, inflight, unlocked, claims }. */
 function normalizeCareer(raw) {
@@ -680,14 +682,17 @@ function normalizeCareer(raw) {
     for (const [id, day] of Object.entries(r.unlocked)) if (isAchievementId(id) && typeof day === 'string' && DAY.test(day)) unlocked[id] = day;
   }
   const claims = Array.isArray(r.claims) ? [...new Set(r.claims.filter((id) => isAchievementId(id) && id in unlocked))].slice(0, MAX_CLAIMS) : [];
-  return { v: 1, base, pending: cleanCounters(r.pending), inflight, unlocked, claims };
+  const lastRunAt = Number.isFinite(r.lastRunAt) && r.lastRunAt > 0 ? r.lastRunAt : null;
+  const winTimes = Array.isArray(r.winTimes) ? r.winTimes.filter((t) => Number.isFinite(t) && t > 0).slice(-MAX_WIN_TIMES) : [];
+  return { v: 1, base, pending: cleanCounters(r.pending), inflight, unlocked, claims, lastRunAt, winTimes };
 }
 
 /**
  * This device's career (flappyPoop.career): the server's last totals for a player (`base`, with
  * that player's id), counters not sent yet (`pending`), one batch on its way (`inflight`, resent
  * unchanged until the server confirms it: its id is the receipt), the achievements unlocked here or
- * learned from the server (`unlocked`: id → UTC day), and the claims not confirmed yet (`claims`).
+ * learned from the server (`unlocked`: id → UTC day), the claims not confirmed yet (`claims`), and this
+ * device's last run time and recent win times (`lastRunAt`, `winTimes`: 🧱 / 🏃).
  * Every read normalises, every write is guarded; it never throws.
  */
 export function createCareerStore(storage = globalThis.localStorage, key = LEADERBOARD.careerKey) {
@@ -714,6 +719,18 @@ export function createCareerStore(storage = globalThis.localStorage, key = LEADE
       const c = read();
       const base = c.base && c.base.id === playerId ? c.base.counters : {};
       return addCounters(addCounters(base, c.inflight?.counters), c.pending);
+    },
+    /**
+     * A run just finished at `now` (ms): returns the previous run's time (🧱 Constipated) and the wins of
+     * the last 7 days including this one when `won` (🏃 IBS), and stores both. This device's runs only.
+     */
+    markRun(now, won = false) {
+      const c = read();
+      const prevRunAt = c.lastRunAt;
+      c.lastRunAt = now;
+      c.winTimes = [...c.winTimes, ...(won ? [now] : [])].filter((t) => t > now - WIN_KEEP_MS).slice(-MAX_WIN_TIMES);
+      write(c);
+      return { prevRunAt, winTimes: c.winTimes };
     },
     /** Add one run's counters (runDeltas) to what is waiting to be sent. */
     addRun(deltas) {

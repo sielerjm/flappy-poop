@@ -103,12 +103,13 @@ import {
   LAST_UPDATED,
   padIntent,
   fallStarted,
+  levelPipes,
   storedLocale,
   PERF_TAGS,
 } from '../logic.js';
 import { t, pauseBannerText, levelBannerText, levelLabel, initialLocale, isLocale, profileButtonText, coinLabel, countText, versusName } from '../i18n.js';
 import { loadLocal, saveLocal, ensureId, recordScore, mergeBoardBests, newId, TOILET_EMOJI } from '../save.js';
-import { runDeltas, evaluate, bestFacts } from '../achievements.js';
+import { runDeltas, evaluate, bestFacts, levelCloseShave, winsInWindow, daysBetween, nextDrawStreak, FOUR_OF_A_KIND } from '../achievements.js';
 import { unlock, attachGame, setMuted, isMuted, sfx } from '../sound.js';
 import { createTray } from '../ui/tray.js';
 import { createFocus } from '../ui/focus.js';
@@ -734,6 +735,11 @@ export class Play extends Phaser.Scene {
     this.runFalls = 0; // ‼️ long falls this run (fallStarted)
     this.runCloseCalls = 0; // 😢 close calls this run (tickScared)
     this.fallingNow = false;
+    this.closeCallsByLevel = {}; // 💈 close calls per level this run
+    this.drawStreak = null; // 🃏 the same-draw streak of this run's mystery boxes
+    this.fourOfAKind = false;
+    this.runCeilingHits = 0; // ☀️ (0 or 1: the ceiling ends a run)
+    this.runBoxesBought = 0; // 🎰 boxes bought in the shop this run
     this.runBadges = [];
     this.mysteryPair = this.course.mysteryPair(); // the pair the guaranteed first box (early level 3) rides after
     // The purse: every run starts empty (coins last across the levels of one run only).
@@ -2289,7 +2295,10 @@ export class Play extends Phaser.Scene {
       return;
     }
     const near = this.pipes.getChildren().some((pipe) => pipe.body && pipeClearance(this.poop.x, this.poop.y, T.poopRadius, pipe.body) <= T.scaredNearPx);
-    if (near && this.scaredMs <= 0) this.runCloseCalls = (this.runCloseCalls ?? 0) + 1; // 😢 a close call starts the clock
+    if (near && this.scaredMs <= 0) {
+      this.runCloseCalls = (this.runCloseCalls ?? 0) + 1; // 😢 a close call starts the clock
+      if (this.closeCallsByLevel) this.closeCallsByLevel[this.level] = (this.closeCallsByLevel[this.level] ?? 0) + 1; // 💈 per level
+    }
     this.scaredMs = near ? T.scaredHoldMs : Math.max(0, this.scaredMs - delta);
   }
 
@@ -2731,6 +2740,7 @@ export class Play extends Phaser.Scene {
     else if (id === 'bean') this.giveBeans(1);
     else if (id === 'superBean') this.giveBeans(T.beans.superBeans);
     else if (id === 'mystery') {
+      this.runBoxesBought = (this.runBoxesBought ?? 0) + 1; // 🎰
       const draw = resolveMystery(rollMystery(this.match ? this.rngDraw : this.course.rng, T), { beans: this.effects.beans(), pairsLeft: 0 }, T);
       if (opts.reel) this.spinReel(draw, opts);
       else this.openMystery(draw, opts.x, opts.y, opts);
@@ -2933,6 +2943,9 @@ export class Play extends Phaser.Scene {
    * Separate from collectItem so the smoke test can force each draw.
    */
   openMystery(draw, x = this.poop.x, y = this.poop.y, opts = {}) {
+    // 🃏 four boxes in a row with the same reward (the draw as it opens: field, shop or reel).
+    this.drawStreak = nextDrawStreak(this.drawStreak, draw);
+    if (this.drawStreak.streak >= FOUR_OF_A_KIND) this.fourOfAKind = true;
     if (draw === 'probiotic') {
       this.takeProbiotic();
     } else if (draw === 'postbiotic') {
@@ -3083,6 +3096,14 @@ export class Play extends Phaser.Scene {
     // Pipes passed: fart and skipped pairs included (as for levels); a Daily Dump counts only the pairs flown that day.
     const pipes = mode === 'daily' && this.daily ? Math.max(0, this.pipesPassed - this.daily.startPipes) : this.pipesPassed;
     const facts = { mode, score: this.score, level: this.level, won: Boolean(this.won), toilet: Boolean(this.toilet), collected: { ...this.collected }, farts: this.runFarts ?? 0, superFarts: this.runSuperFarts ?? 0, pipes, falls: this.runFalls ?? 0, closeCalls: this.runCloseCalls ?? 0 };
+    facts.ceilingHits = this.runCeilingHits ?? 0;
+    facts.boxesBought = this.runBoxesBought ?? 0;
+    facts.closeShave = mode === 'single' && levelCloseShave(this.closeCallsByLevel, (lv) => levelPipes(lv, this.tune));
+    facts.fourOfAKind = Boolean(this.fourOfAKind);
+    const now = Date.now();
+    const { prevRunAt, winTimes } = this.careerStore.markRun(now, mode === 'single' && Boolean(this.won));
+    facts.daysSinceLastRun = daysBetween(prevRunAt, now); // 🧱 null on this device's first run
+    facts.winsLast7Days = winsInWindow(winTimes, now); // 🏃
     this.careerStore.addRun(runDeltas(facts));
     const earned = evaluate({ totals: this.careerStore.totals(this.save?.id ?? null), facts, unlocked: this.careerStore.unlocked(), day });
     this.runBadges = this.careerStore.unlock(earned, day);
@@ -3473,6 +3494,7 @@ export class Play extends Phaser.Scene {
           this.poop.y = held.y;
           if (held.vy !== vy) this.poop.setVelocityY(held.vy);
         } else {
+          if (this.poop.y < top) this.runCeilingHits = (this.runCeilingHits ?? 0) + 1; // ☀️ before die(): endRun counts the run
           this.die();
         }
       }
