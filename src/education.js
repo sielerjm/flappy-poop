@@ -209,6 +209,11 @@ export function reviveStart({ lost = false } = {}) {
 
 const FINAL = new Set(['revived', 'restored', 'over']);
 
+/** Has this revive quiz been decided ('revived', 'restored' or 'over')? Nothing is left to ask then. */
+export function reviveSettled(state) {
+  return FINAL.has(state?.phase);
+}
+
 /**
  * The revive quiz after one event: 'correct' / 'wrong' (an answer), 'continue' / 'streak' (the
  * choice after the first right answer), 'giveUp'. Phases: 'strikes' (until one right answer;

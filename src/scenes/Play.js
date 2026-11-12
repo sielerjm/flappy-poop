@@ -126,7 +126,7 @@ import { openSavePanel, isSavePanelOpen, showAdoptedName, showBoardScores } from
 import { isTournamentPanelOpen, tournamentPadAction } from '../ui/tournamentPanel.js';
 import { bindPad } from '../input/pad.js';
 import { keyGroup, sameDevice, catchUpTier, catchUpDraws, versusAvailable, ghostPlacement, rivalMarker, respawnPose, courseDistance, VERSUS_EMOJI } from '../versus.js';
-import { createEduStore, dueCount, pickCard, shuffleOptions, gradeFor, schedule, eduShopPrices, reviveStart, reviveStep, EDUCATION_EMOJI } from '../education.js';
+import { createEduStore, dueCount, pickCard, shuffleOptions, gradeFor, schedule, eduShopPrices, reviveStart, reviveStep, reviveSettled, EDUCATION_EMOJI } from '../education.js';
 
 const TEXT_STYLE = {
   fontFamily: 'sans-serif',
@@ -1969,7 +1969,14 @@ export class Play extends Phaser.Scene {
     this.scene.get('Over')?.tray?.setMuted(!next);
   }
 
+  /**
+   * The window lost focus, the tab was hidden or the field was resized: pause a run in progress.
+   * Not while an education revive's quiz is up (plan 22, F1): the world is already halted and the
+   * respawn held under the card, so the card is the pause, and Fly on is the deliberate tap a resize
+   * asks for. A pause there would leave the quiz's result with nothing to settle (reviveDone).
+   */
   autoPause() {
+    if (this.respawnHold === 'quiz') return;
     if (this.state === 'playing' || this.state === 'respawn') this.pauseRun();
   }
 
@@ -3546,13 +3553,17 @@ export class Play extends Phaser.Scene {
   /**
    * The revive quiz has closed (onQuizClosed): 'over' ends the run (endRun records nothing for an
    * education run; Over follows). 'revived' / 'restored' cost the revive penalty (its −N popup),
-   * 'restored' gives back what the crash took, and the respawn waits for "Tap when ready".
+   * 'restored' gives back what the crash took, and the respawn waits for "Tap when ready". A run
+   * paused under the quiz (pausePlay mid-respawn) is settled all the same, so the quiz's result
+   * always takes effect; the resume then carries on from here.
    */
   reviveDone() {
     const phase = this.revive?.phase;
-    if (this.state !== 'respawn' || this.respawnHold !== 'quiz') return; // the run ended under it (a restart)
+    const respawning = this.state === 'respawn' || (this.state === 'paused' && this.respawnPaused);
+    if (!respawning || this.respawnHold !== 'quiz') return; // the run ended under it (a restart)
     if (phase === 'over') {
       this.respawnHold = null;
+      this.respawnPaused = false;
       this.endRun();
       this.showOver();
       return;
@@ -3627,7 +3638,11 @@ export class Play extends Phaser.Scene {
     // game over leaves it as it was): first for the revive quiz, then for "Tap when ready".
     if (this.respawnHold) {
       this.respawnElapsed = T.versus.respawn.crashMs;
-      if (this.respawnHold === 'quiz' && !this.quizOpen) this.openQuiz('revive');
+      if (this.respawnHold === 'quiz' && !this.quizOpen) {
+        // A revive already decided is settled, never asked again (its quiz would ignore every answer).
+        if (reviveSettled(this.revive)) this.reviveDone();
+        else this.openQuiz('revive');
+      }
       return;
     }
     if (!this.respawnFrom) {

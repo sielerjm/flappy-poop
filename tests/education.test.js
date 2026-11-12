@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { LEADERBOARD, TUNING as T } from '../src/config.js';
 import { createRng } from '../src/logic.js';
 import { CARDS, DECKS } from '../src/questions.js';
-import { cardSource, cardText, createEduStore, dueCount, eduShopPrices, optionText, gradeFor, masteryByDeck, pickCard, reviveStart, reviveStep, schedule, shuffleOptions } from '../src/education.js';
+import { cardSource, cardText, createEduStore, dueCount, eduShopPrices, optionText, gradeFor, masteryByDeck, pickCard, reviveSettled, reviveStart, reviveStep, schedule, shuffleOptions } from '../src/education.js';
 
 const S = T.education.srs;
 const MIN = 60000;
@@ -184,6 +184,14 @@ test('reviveStep: the choice, the streak (the first right answer counts), a miss
     for (const ev of ['correct', 'wrong', 'continue', 'streak', 'giveUp']) assert.equal(reviveStep(fin, ev), fin);
   }
   assert.equal(reviveStep(reviveStart(), 'continue').phase, 'strikes', 'events out of turn change nothing');
+});
+
+test('reviveSettled: only a decided revive (revived, restored, over) is settled', () => {
+  const choice = reviveStep(reviveStart({ lost: true }), 'correct');
+  for (const st of [null, undefined, reviveStart(), choice, reviveStep(choice, 'streak')]) assert.equal(reviveSettled(st), false, JSON.stringify(st));
+  assert.equal(reviveSettled(reviveStep(choice, 'continue')), true, 'revived');
+  assert.equal(reviveSettled(reviveStep(reviveStart(), 'giveUp')), true, 'over');
+  assert.equal(reviveSettled({ ...choice, phase: 'restored' }), true, 'restored');
 });
 
 test('eduShopPrices: level 1 is the base price; each level scales it (rounded up); past the table, its last row', () => {

@@ -3903,6 +3903,53 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await press('nextBtn');
         ok((await playNow()).hold === 'tap', 'and the respawn waits for the tap');
 
+        // The card is the pause (plan 22, F1): losing focus under the revive quiz pauses nothing.
+        const banner = () => evaluate(`${play}.pauseText.visible`);
+        await startEdu(`p.score = 20; p.effects.addCoins(3)`);
+        await crash();
+        await evaluate(`__flappy.events.emit('blur'), true`);
+        await sleep(200);
+        const bl = await playNow();
+        ok(bl.state === 'respawn' && bl.hold === 'quiz' && bl.quiz && !(await banner()), `a blur under the revive quiz pauses nothing (state ${bl.state}, no PAUSED banner)`);
+        await answer(true);
+        await press('whyBtn'); // Fly on
+        const bl2 = await playNow();
+        ok(!bl2.quiz && bl2.state === 'respawn' && bl2.hold === 'tap' && bl2.revives === 1, `and Fly on goes on as usual (state ${bl2.state}, hold ${bl2.hold})`);
+
+        // A run paused under the quiz all the same is still settled, and the resume does not ask again.
+        await startEdu(`p.score = 20; p.effects.addCoins(3)`);
+        await crash();
+        await evaluate(`${play}.pausePlay(), true`);
+        const pz0 = await playNow();
+        await answer(true);
+        await press('whyBtn'); // Fly on
+        const pz1 = await playNow();
+        ok(pz0.state === 'paused' && pz1.state === 'paused' && !pz1.quiz && pz1.hold === 'tap' && pz1.revives === 1 && pz1.score === 20 - pen, `Fly on under a paused run settles the revive (hold ${pz1.hold}, score ${pz1.score}, revives ${pz1.revives})`);
+        await sleep(400); // past the resume lockout
+        await evaluate(`${play}.flap(), true`);
+        await sleep(300);
+        const pz2 = await playNow();
+        ok(pz2.state === 'respawn' && !pz2.quiz && pz2.revives === 1, `the tap that resumes it returns to the respawn, not to a quiz (state ${pz2.state}, quiz ${pz2.quiz})`);
+
+        // A revive already decided is never asked again: the respawn settles it instead of reopening the quiz.
+        await startEdu(`p.score = 20`);
+        await crash();
+        // The card on show is marked: a relaunched quiz would build a new session and lose the mark.
+        await evaluate(`(() => { const p = ${play}; ${Q}.session.marked = true; p.revive = { ...p.revive, phase: 'revived' }; p.quizOpen = false; return true; })()`);
+        await sleep(200);
+        const dn = await playNow();
+        const kept = await evaluate(`Boolean(${Q}.session.marked)`);
+        ok(dn.hold === 'tap' && dn.revives === 1 && dn.score === 20 - pen && kept, `a decided revive is settled, not reopened (hold ${dn.hold}, revives ${dn.revives}, the quiz left alone: ${kept})`);
+
+        // A game over under a paused run still ends it.
+        await startEdu('');
+        await crash();
+        await evaluate(`${play}.pausePlay(), true`);
+        await press('doneBtn'); // Give up
+        await sleep(TT.deathToOverMs + 400);
+        const pg = await playNow();
+        ok(pg.over && pg.state === 'dead' && !pg.quiz, `Give up under a paused run ends it (state ${pg.state})`);
+
         // Give up: the run ends at once.
         await startEdu('');
         await crash();
