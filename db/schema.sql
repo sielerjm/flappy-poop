@@ -1530,7 +1530,8 @@ $$;
 -- submit_education_grades: add one batch of this device's graded education runs to a sharing
 -- player's row. p_runs graded runs (0–50) whose grades add up to p_grade_sum (hundredths of a
 -- percent: at most p_runs × 10000), and p_badges = { edu_id: 'YYYY-MM-DD' } (a badge keeps its
--- earlier day). p_shared_at is the round the device believes it is in. Answers
+-- earlier day; a day after tomorrow or before 2000 is stored as today). p_shared_at is the round
+-- the device believes it is in. Answers
 --   { status: 'ok', shared_at, runs, grade_sum }   added (or p_batch, the receipt, was already in:
 --                                                  a resend changes nothing)
 --   { status: 'restart', shared_at }               the row is another round's: nothing changed; the
@@ -1550,6 +1551,8 @@ declare
   v_id text;
   v_row public.education_public%rowtype;
   v_badges jsonb;
+  v_in jsonb := '{}'::jsonb;
+  v_today text := to_char((now() at time zone 'utc')::date, 'YYYY-MM-DD');
   r record;
 begin
   if p_player_id is null or p_player_id !~ '^[A-Za-z0-9_-]{22}$' then
@@ -1567,13 +1570,15 @@ begin
   if p_badges is null or jsonb_typeof(p_badges) <> 'object' or (select count(*) from jsonb_object_keys(p_badges)) > 20 then
     raise exception 'bad badges';
   end if;
+  -- A badge's day is the device's clock: one after tomorrow or before 2000 (a clock set wrong) is
+  -- stored as today, so the batch's runs still reach the board (plan 24, AUD-010).
   for r in select e.key, e.value from jsonb_each(p_badges) e loop
-    if r.key !~ '^edu_[a-z0-9_]{1,36}$' or jsonb_typeof(r.value) <> 'string' or (r.value #>> '{}') !~ '^20[0-9]{2}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$' then
+    if r.key !~ '^edu_[a-z0-9_]{1,36}$' or jsonb_typeof(r.value) <> 'string' or (r.value #>> '{}') !~ '^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$' then
       raise exception 'bad badges: %', r.key;
     end if;
-    if (r.value #>> '{}') > to_char((now() at time zone 'utc')::date + 1, 'YYYY-MM-DD') then
-      raise exception 'bad badges: %', r.key;
-    end if;
+    v_in := v_in || jsonb_build_object(r.key, case
+      when (r.value #>> '{}') < '2000-01-01' or (r.value #>> '{}') > to_char((now() at time zone 'utc')::date + 1, 'YYYY-MM-DD') then v_today
+      else r.value #>> '{}' end);
   end loop;
   v_id := public.resolve_player(p_player_id);
   perform pg_advisory_xact_lock(hashtext('education:' || v_id));
@@ -1599,9 +1604,9 @@ begin
     raise exception 'bad runs: too many';
   end if;
   -- Badges join; one held already keeps the earlier of its two days (ISO days compare as text).
-  select coalesce(jsonb_object_agg(k, least(v_row.badges ->> k, p_badges ->> k)), '{}'::jsonb)
+  select coalesce(jsonb_object_agg(k, least(v_row.badges ->> k, v_in ->> k)), '{}'::jsonb)
   into v_badges
-  from (select jsonb_object_keys(v_row.badges) as k union select jsonb_object_keys(p_badges)) keys;
+  from (select jsonb_object_keys(v_row.badges) as k union select jsonb_object_keys(v_in)) keys;
   if (select count(*) from jsonb_object_keys(v_badges)) > 40 then
     raise exception 'bad badges: too many';
   end if;
@@ -2208,7 +2213,7 @@ returns text
 language sql
 immutable
 as $$
-  select 'b2a1e7fc1c266ced'::text; -- schema stamp
+  select '5def8e9bdfc2a5b7'::text; -- schema stamp
 $$;
 revoke execute on function public.schema_version() from public, authenticated;
 grant  execute on function public.schema_version() to anon;

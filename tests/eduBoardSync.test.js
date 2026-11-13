@@ -156,3 +156,21 @@ test('after a merge of two sharers (a new, empty round), each device sends its r
     net.restore();
   }
 });
+
+test("a badge earned on a device whose clock is wrong no longer drops the batch's runs (AUD-010)", async () => {
+  const db = await freshDb();
+  const net = installPostgrest(db);
+  try {
+    for (const [tag, day] of [['Fast', '2099-03-01'], ['Reset', '1970-01-01']]) {
+      const P = id(tag);
+      const a = device(P, tag);
+      await a.startEduShare(true);
+      for (let i = 0; i < 11; i += 1) gradedRun(a, 5);
+      a.eduStore.unlock(['edu_grade_a'], day);
+      await a.drainEduShare(P);
+      assert.equal((await row(db, P)).runs, 11, `${tag}: every graded run is on the board`);
+    }
+  } finally {
+    net.restore();
+  }
+});

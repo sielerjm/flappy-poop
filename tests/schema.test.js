@@ -949,7 +949,6 @@ test('submit_education_grades adds a batch; a resent batch changes nothing; one 
     ['negative runs', [id('BX5'), at, -1, 0, {}], /bad runs/],
     ['a career badge id', [id('BX7'), at, 1, 5000, { score_10: '2026-11-13' }], /bad badges/],
     ['a badge with no day', [id('BX8'), at, 1, 5000, { edu_perfect: 'soon' }], /bad badges/],
-    ['a badge from the future', [id('BX9'), at, 1, 5000, { edu_perfect: '2099-01-01' }], /bad badges/],
     ['a badge that is not a string', [id('BXA'), at, 1, 5000, { edu_perfect: 7 }], /bad badges/],
     ['too many badges', [id('BXB'), at, 1, 5000, Object.fromEntries(Array.from({ length: 21 }, (_, i) => [`edu_x${i}`, '2026-11-13']))], /bad badges/],
     ['a short batch id', ['short', at, 1, 5000, {}], /bad batch/],
@@ -1519,4 +1518,18 @@ test('an empty batch is a probe (AUD-009): from this round the totals, from anot
   assert.equal(older.status, 'restart', 'another round: restart');
   assert.deepEqual((await db.query('select runs, grade_sum, last_batch, recent_batches, updated_at from public.education_public where player_id = $1', [P])).rows[0], rowBefore, 'nothing written, no receipt, no rate-limit slot');
   await assert.rejects(asAnon(db, "select public.submit_education_grades($1, $2, $3::timestamptz, 0, 0, '{}'::jsonb)", [id('NOBODY'), id('PP3'), round]), /not shared/, 'a probe from a player with no row: not shared');
+});
+
+test("a badge day after tomorrow or before 2000 (a device clock set wrong) is stored as today, and the batch's runs count (AUD-010)", async () => {
+  const db = await freshDb();
+  await db.query('select public.admin_set_education_open(true)');
+  const P = id('CLK');
+  const round = (await asAnon(db, "select public.share_education($1, 'Clocky', true)::text as r", [P])).rows[0].r;
+  const today = (await db.query("select to_char((now() at time zone 'utc')::date, 'YYYY-MM-DD') as d")).rows[0].d;
+  const send = (batch, badges) => asAnon(db, 'select public.submit_education_grades($1, $2, $3::timestamptz, 2, 18000, $4::jsonb) as r', [P, batch, round, JSON.stringify(badges)]).then((r) => r.rows[0].r);
+  assert.equal((await send(id('CK1'), { edu_grade_a: '2099-01-01', edu_perfect: '1970-01-01' })).runs, 2, 'the runs reach the board');
+  const row = (await db.query('select runs, badges from public.education_public where player_id = $1', [P])).rows[0];
+  assert.deepEqual(row.badges, { edu_grade_a: today, edu_perfect: today });
+  await db.query("update public.education_public set updated_at = now() - interval '6 seconds'");
+  await assert.rejects(send(id('CK2'), { edu_grade_a: 'soon' }), /bad badges/, 'a day that is not a day is still refused');
 });
