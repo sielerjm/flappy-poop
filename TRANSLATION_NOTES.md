@@ -237,11 +237,11 @@ Short, playful, clear. Fit a 720×1280 logical field; How to play / About body w
 | quizReturn | Return | 返回 |
 | quizStatsTitle | This run | 本局 |
 | eduCardsTitle | Your cards | 你的卡片 |
-| eduCardsNew | 🔵 {n} new: not seen yet | 🔵 {n} 张新卡：还没见过 |
-| eduCardsLearning | 🟠 {n} learning: seen lately or missed, due now | 🟠 {n} 张学习中：刚学或答错，已到期 |
-| eduCardsReview | 🟢 {n} to review: learned, due now | 🟢 {n} 张待复习：已学会，已到期 |
-| eduCardsSeen | Seen {n} of {total} cards | 已见过 {n} / {total} 张卡片 |
-| eduCardsDue | The number on 📚 = learning + to review | 📚 上的数字 = 学习中 + 待复习 |
+| eduCardsNew | 🔵 {n} new (not seen yet) | 🔵 {n} 张新卡（还没见过） |
+| eduCardsLearning | 🟠 {n} learning (due now) | 🟠 {n} 张学习中（已到期） |
+| eduCardsReview | 🟢 {n} to review (due now) | 🟢 {n} 张待复习（已到期） |
+| eduCardsSeen | 👁️ Seen {n} of {total} cards | 👁️ 已见过 {n} / {total} 张卡片 |
+| eduCardsDue | The number on 📚 = # of cards to review (Michael's wording, 13 Nov: the gold number counts learning + to review; # stands for that number) | 📚 上的数字 = 待复习的卡片数 |
 | quizCaughtUp | You're all caught up! New questions come with the next level, and old ones come back when they are due. | 全部完成！下一关会有新问题，旧问题到期后会再出现。 |
 | quizGeneral | Gut microbes | 肠道微生物 |
 | quizSource | Source: {source} | 来源：{source} |
