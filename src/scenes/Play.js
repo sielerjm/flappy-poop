@@ -329,6 +329,8 @@ export class Play extends Phaser.Scene {
     this.toilet = Boolean(this.registry.get('toilet'));
     // Two-player mode (the 👥 toggle under the toilet one): session-only too; the start tap then goes to Versus.
     this.versusOn = Boolean(this.registry.get('versus'));
+    // 📚 is remembered on the device and 👥 only in this tab, so another tab can leave both on here.
+    this.reconcileSwitches();
     // Test mode is session-only too (registry 'testMode', 'testStartLevel', 'testInvincible').
     // runIsTest latches per run: set in start() or when test mode turns on mid-run, and only
     // cleared by the next start(), so a run that ever had test tools can never be recorded.
@@ -1493,6 +1495,17 @@ export class Play extends Phaser.Scene {
     this.registry.set('versus', this.versusOn);
     this.versusToggle?.setOn(this.versusOn);
     if (this.versusOn && this.educationOn) this.toggleEducation(); // 👥 and 📚 are never on together
+  }
+
+  /**
+   * 👥 and 📚 both read on (📚 turned on in another tab, 👥 on in this one): where 👥 is offered,
+   * launch() starts a match, so 👥 wins in this tab and 📚 reads off here. The stored 📚 setting
+   * is left as it is, for the other tab (plan 24, AUD-020). True when it turned 📚 off.
+   */
+  reconcileSwitches() {
+    if (!(this.educationOn && this.versusOn && this.versusOffered())) return false;
+    this.educationOn = false;
+    return true;
   }
 
   /** The 📚 switch is offered once education mode is unlocked on this device, outside a match (plan 21). */

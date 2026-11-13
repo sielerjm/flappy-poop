@@ -76,3 +76,26 @@ test('on a locked device, turning 👥 on forgets the hidden, remembered 📚 sw
   s.toggleVersus(); // 👥 on
   assert.equal(s.settings.load().education, false, 'the hidden 📚 was switched off and stored off');
 });
+
+test("two tabs: 📚 stored on in one and 👥 on in the other's session: 👥 wins in that tab, as launch() would start a match, and the stored 📚 is left alone (AUD-020)", () => {
+  globalThis.innerWidth = 2400;
+  globalThis.innerHeight = 1200;
+  const shared = new Map();
+  const a = half({ eduUnlocked: true, storage: fakeStorage(shared) });
+  const regB = registry();
+  const b = half({ eduUnlocked: true, storage: fakeStorage(shared), reg: regB });
+  b.toggleVersus(); // tab B: 👥 on (session registry)
+  a.toggleEducation(); // tab A: 📚 on (shared settings)
+  // B's next create() reads both, as Play.create does, then reconciles them.
+  b.educationOn = b.settings.load().education;
+  b.versusOn = Boolean(regB.get('versus'));
+  assert.equal(b.reconcileSwitches(), true);
+  assert.deepEqual([b.educationOn, b.versusOn], [false, true], 'never both on');
+  assert.equal(b.settings.load().education, true, "tab A's stored 📚 stays");
+  // Where 👥 is not offered (a phone), launch() ignores it, so 📚 stays on there.
+  globalThis.innerWidth = 400;
+  globalThis.innerHeight = 800;
+  b.educationOn = true;
+  assert.equal(b.reconcileSwitches(), false);
+  assert.equal(b.educationOn, true);
+});
