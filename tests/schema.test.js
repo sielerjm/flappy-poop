@@ -1218,6 +1218,24 @@ test('submit_research_events stores answers under the research id, never the pla
   assert.equal((await parts(db))[0].last_batch, id('B2'));
 });
 
+test('a since_ms past bigint (1e30) is stored at 2^53 − 1, not refused for ever (plan 25, A7)', async () => {
+  const db = await freshDb();
+  await setInvite(db, CODE);
+  const P = id('RHUGE');
+  await enrol(db, P);
+  assert.deepEqual(await revents(db, P, id('BHUGE'), [ev('A', { since_ms: 1e30 })]), { status: 'ok', stored: 1 });
+  const row = await db.query('select since_ms::text as s from public.research_responses').then((r) => r.rows[0]);
+  assert.equal(row.s, '9007199254740991');
+});
+
+test('db/schema.sql stops on a Postgres older than 15 before it changes anything (plan 25, A9)', async () => {
+  const sql = readFileSync(new URL('../db/schema.sql', import.meta.url), 'utf8');
+  const statements = sql.replace(/^--.*$/gm, '').trim();
+  assert.match(statements, /^do \$\$\s*begin\s*if current_setting\('server_version_num'\)::int < 150000 then/, 'the guard is the first statement');
+  const db = await freshDb(); // PGlite is Postgres 17: the guard lets the file through
+  assert.ok(Number((await db.query("select current_setting('server_version_num') as v")).rows[0].v) >= 150000);
+});
+
 test('submit_research_events refuses malformed batches, and they change nothing', async () => {
   const db = await freshDb();
   await setInvite(db, CODE);

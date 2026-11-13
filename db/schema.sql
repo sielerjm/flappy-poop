@@ -115,7 +115,8 @@
 --   undo the receipt lists (plan 24): alter table public.player_counters drop column recent_batches;
 --     alter table public.education_public drop column recent_batches; then restore submit_counters,
 --     submit_education_grades and fold_player from git and run this file.
---   undo the pilot: drop view public.research_summary, public.research_by_card,
+--   undo the pilot (before the 📚 board's undo: the pilot reads education_settings):
+--     drop view public.research_summary, public.research_by_card,
 --     public.research_by_participant, public.research_retention;
 --     drop function public.enrol_research(text, text, boolean, text),
 --     public.submit_research_events(text, text, jsonb, timestamptz), public.delete_research(text),
@@ -143,6 +144,16 @@
 --     select public.admin_merge_name('somebody');
 --   or every duplicated username at once (the 2026-11-08 one-off):
 --     select * from public.admin_merge_all_duplicates();
+
+-- Postgres 15 or later (the pilot's security_invoker views need it): the paste stops here, before
+-- anything is changed, on an older server (plan 25).
+do $$
+begin
+  if current_setting('server_version_num')::int < 150000 then
+    raise exception 'db/schema.sql needs Postgres 15 or later (this server is %)', current_setting('server_version');
+  end if;
+end;
+$$;
 
 create table if not exists public.scores (
   player_id  text not null check (player_id ~ '^[A-Za-z0-9_-]{22}$'), -- save-code id: 16 random bytes, base64url
@@ -1880,7 +1891,7 @@ begin
       e ->> 'event_id', v_part.research_id, v_part.phase, e ->> 'card_id', e ->> 'context', (e ->> 'correct')::boolean,
       case when jsonb_typeof(e -> 'rt_ms') = 'number' then least(greatest(round((e ->> 'rt_ms')::numeric), 0), 3600000)::int end,
       case when jsonb_typeof(e -> 'seen') = 'number' then least(greatest(round((e ->> 'seen')::numeric), 0), 1000000)::int else 0 end,
-      case when jsonb_typeof(e -> 'since_ms') = 'number' then greatest(round((e ->> 'since_ms')::numeric), 0)::bigint end,
+      case when jsonb_typeof(e -> 'since_ms') = 'number' then least(greatest(round((e ->> 'since_ms')::numeric), 0), 9007199254740991)::bigint end,
       to_timestamp((e ->> 'client_at')::bigint / 1000.0),
       (select coalesce(jsonb_object_agg(f.key, f.value), '{}'::jsonb) from jsonb_each(e) f where f.key = any(v_keys)))
     on conflict (event_id) do nothing;
@@ -2235,7 +2246,7 @@ returns text
 language sql
 immutable
 as $$
-  select '0d1f41ec41347638'::text; -- schema stamp
+  select 'eb2cb5e2b56b931c'::text; -- schema stamp
 $$;
 revoke execute on function public.schema_version() from public, authenticated;
 grant  execute on function public.schema_version() to anon;
