@@ -84,3 +84,23 @@ test('the revive card ignores taps for its first moments, never keys or the ring
   assert.equal(lock('revive', 1000), false, 'a tap later counts');
   assert.equal(lock('break', 100), false, "a break's card is never locked");
 });
+
+test("a tap on the card's numbers says what they mean, with this quiz's counts; a waiting question is marked interrupted, and no answer is taken under it (plan 25, B3)", () => {
+  const shown = [];
+  const answers = [];
+  const runCard = { open: false, show(opts) { shown.push(opts); this.open = true; }, hide() { this.open = false; } };
+  const q = quizScene({
+    scene: scenes(['Play', 'Quiz']), locale: 'en', finishing: false, card: { id: 'ST-01' }, answered: false, interrupted: false, runCard,
+    shownCounts: { new: 2, learning: 1, review: 3 }, mode: 'break', order: ['answer', 'w1', 'w2'],
+    play: { quizAnswer: (a) => (answers.push(a), { correct: true, grade: 'good', coins: 0 }) },
+  });
+  q.toggleCountsCard();
+  assert.equal(runCard.open, true);
+  assert.deepEqual(shown[0].lines, ['🔵 2 new (not seen yet)', '🟠 1 learning (due now)', '🟢 3 to review (due now)']);
+  assert.equal(shown[0].title, 'Waiting in this quiz');
+  assert.equal(q.interrupted, true, 'its time is no longer a fair answer time');
+  q.choose(0, 'key');
+  assert.equal(answers.length, 0, 'no answer under the card');
+  q.toggleCountsCard();
+  assert.equal(runCard.open, false, 'a second press closes it');
+});

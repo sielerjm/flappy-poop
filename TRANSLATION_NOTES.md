@@ -237,6 +237,7 @@ Short, playful, clear. Fit a 720×1280 logical field; How to play / About body w
 | quizReturn | Return | 返回 |
 | quizStatsTitle | This run | 本局 |
 | eduCardsTitle | Your cards | 你的卡片 |
+| quizCountsTitle | Waiting in this quiz (the title of the card a tap on a quiz card's numbers opens: the 🔵 🟠 🟢 lines with this quiz's counts) | 本次答题还剩 |
 | eduCardsNew | 🔵 {n} new (not seen yet) | 🔵 {n} 张新卡（还没见过） |
 | eduCardsLearning | 🟠 {n} learning (due now) | 🟠 {n} 张学习中（已到期） |
 | eduCardsReview | 🟢 {n} to review (due now) | 🟢 {n} 张待复习（已到期） |

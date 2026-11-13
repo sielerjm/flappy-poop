@@ -160,6 +160,7 @@ Inspired by Flappy Bird`,
     quizReturn: 'Return',
     quizStatsTitle: 'This run',
     eduCardsTitle: 'Your cards',
+    quizCountsTitle: 'Waiting in this quiz',
     eduCardsNew: '🔵 {n} new (not seen yet)',
     eduCardsLearning: '🟠 {n} learning (due now)',
     eduCardsReview: '🟢 {n} to review (due now)',
@@ -628,6 +629,7 @@ Inspired by Flappy Bird`,
     quizReturn: '返回',
     quizStatsTitle: '本局',
     eduCardsTitle: '你的卡片',
+    quizCountsTitle: '本次答题还剩',
     eduCardsNew: '🔵 {n} 张新卡（还没见过）',
     eduCardsLearning: '🟠 {n} 张学习中（已到期）',
     eduCardsReview: '🟢 {n} 张待复习（已到期）',
@@ -1032,6 +1034,16 @@ export function tallyLines(locale, tally, levels) {
     .filter(([level]) => Number.isInteger(level) && level >= 1)
     .sort((a, b) => a[0] - b[0])
     .map(([level, row]) => `${levelLabel(locale, level)} · ${t(locale, `level.${levels[level - 1]?.key}`)}${TALLY_GAP}✅ ${row?.right ?? 0}${TALLY_GAP}❌ ${row?.wrong ?? 0}`);
+}
+
+/**
+ * What the three numbers mean (plan 25): 🔵 new, 🟠 learning, 🟢 to review, each with its count
+ * ({ new, learning, review }, cardCounts). "Your cards" (Play.toggleEduCard) and the quiz card's
+ * explainer (Quiz.toggleCountsCard) both show these lines.
+ */
+export function countLines(locale, counts) {
+  const line = (key, n) => t(locale, key).replace('{n}', String(n ?? 0));
+  return [line('eduCardsNew', counts?.new), line('eduCardsLearning', counts?.learning), line('eduCardsReview', counts?.review)];
 }
 
 /** An achievement's name (ACHIEVEMENTS in achievements.js: its `title` key). */

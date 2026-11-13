@@ -5,7 +5,7 @@ import { createRectGlow } from '../ui/glow.js';
 import { createCountLine } from '../ui/countLine.js';
 import { createInfoCard } from '../ui/infoCard.js';
 import { isTopOverlay } from '../ui/overlayStack.js';
-import { t, tallyLines } from '../i18n.js';
+import { t, tallyLines, countLines } from '../i18n.js';
 import { cardText, optionText, cardSource, EDUCATION_EMOJI } from '../education.js';
 import { auditState } from '../questionAudits.js';
 import { sfx } from '../sound.js';
@@ -23,7 +23,8 @@ const OPTION_MIN_H = 92;
 const BUTTON = { width: 250, height: 88 };
 const WIDE_BUTTON = 540; // the top button (Why): edge to edge with the bottom row (two 250 px buttons, 40 px apart)
 const BUTTON_GAP = 12; // px between the top button and the count line's row
-const COUNT_ROW = 40; // px: the count line's row (new + learning + review), directly above the bottom row
+const COUNT_ROW = 52; // px: the count line's row (new + learning + review), directly above the bottom row (plan 25: 12 px more room above Give up / Fly on)
+const COUNT_GAP = 36; // px from the bottom buttons' top edge to the count line's centre
 const TALLY_HIT = { width: 180, height: 56 }; // the run tally's tap box in the card's top row
 const REPORT_FLAG = '\u{1F6A9}'; // 🚩 after the card's id: report this card
 const ID_MAX_W = 220; // px the id line may take, so it ends clear of the tally (two two-digit counts); a longer one shrinks
@@ -144,7 +145,16 @@ export class Quiz extends Phaser.Scene {
     const topY = rowY - BUTTON.height - BUTTON_GAP - COUNT_ROW;
     // What is waiting: the count line, in its own row directly above the bottom buttons (the same
     // place whatever the card shows; Why sits above it).
-    this.counts = createCountLine(this, cx, rowY - BUTTON.height / 2 - 24, { px: 28, sep: '  +  ' }).setVisible(false);
+    this.counts = createCountLine(this, cx, rowY - BUTTON.height / 2 - COUNT_GAP, { px: 28, sep: '  +  ' }).setVisible(false);
+    // A tap on the numbers (or A on their ring item) says what they mean (plan 25): an info card, as
+    // the tally's, with this quiz's counts. It opens on the release, as the tally's does.
+    this.countsZone = this.add
+      .zone(cx, rowY - BUTTON.height / 2 - COUNT_GAP, 300, 48)
+      .setInteractive({ useHandCursor: true })
+      .setVisible(false)
+      .on('pointerup', (pointer) => {
+        if (!this.tapLocked(pointer)) this.toggleCountsCard();
+      });
     // A revive's way forward glows (the game-over panel's halo): behind the right button, while it
     // shows and can be pressed (refreshHalo). A break's buttons never glow.
     this.halo = createRectGlow(this, cx + 145, rowY, { key: 'quiz-halo', width: BUTTON.width, height: BUTTON.height, radius: 18, pad: HALO_PX }).setVisible(false);
@@ -191,6 +201,7 @@ export class Quiz extends Phaser.Scene {
         pressable('left', this.leftBtn.zone),
         pressable('right', this.rightBtn.zone),
         pressable('tally', this.tallyZone, { event: 'pointerup' }),
+        pressable('counts', this.countsZone, { event: 'pointerup' }),
         pressable('close', this.closeBtn),
       ].map(underCard),
     });
@@ -266,12 +277,31 @@ export class Quiz extends Phaser.Scene {
   refreshCounts() {
     const exclude = this.card ? this.session.filter((id) => id !== this.card.id) : this.session;
     const counts = this.play?.quizCounts?.({ mode: this.mode, exclude }) ?? null;
+    this.shownCounts = counts;
     if (!counts) {
       this.counts.setVisible(false);
+      this.countsZone?.setVisible(false);
       return;
     }
     const kind = this.card ? ({ new: 'new', learning: 'learning', due: 'review' }[this.reason] ?? null) : null;
     this.counts.set(counts, kind).setVisible(true);
+    this.countsZone?.setSize(Math.max(160, this.counts.width + 40), 48).setVisible(true);
+  }
+
+  /**
+   * What the numbers mean (plan 25): the "Your cards" lines with this quiz's counts, on the tally's
+   * info card. Any tap, Esc or B closes it; under it the quiz's keys do nothing, and a question left
+   * waiting is marked interrupted.
+   */
+  toggleCountsCard() {
+    if (!isTopOverlay(this) || this.finishing) return;
+    if (this.runCard.open) {
+      this.runCard.hide();
+      return;
+    }
+    if (!this.shownCounts) return;
+    if (this.card && !this.answered) this.interrupted = true;
+    this.runCard.show({ glyph: EDUCATION_EMOJI, title: t(this.locale, 'quizCountsTitle'), lines: countLines(this.locale, this.shownCounts) });
   }
 
   /** One option: a rounded box (redrawn per state), its wrapped text, and a zone for taps and the ring. */

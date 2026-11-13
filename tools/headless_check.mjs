@@ -3859,7 +3859,19 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         const line0 = await lineNow();
         const lineBox = await evaluate(`(() => { const q = ${Q}; return JSON.stringify({ rowTop: q.rowTop, leftTop: q.leftBtn.zone.y - q.leftBtn.zone.height / 2, panel: q.bottom - q.top }); })()`).then(JSON.parse);
         ok(line0.visible && line0.text === `${want0.n}  +  0  +  0` && JSON.stringify(line0.counts) === JSON.stringify(pillLine.counts) && line0.underlined === 'new' && line0.fill === want0.fill.new, `the card shows the same counts, "${line0.text}", with the new count underlined in blue (this card is new)`);
-        ok(lineBox.panel === 1160 && lineBox.leftTop - lineBox.rowTop === 40 && !line0.tally && !line0.tallyZone, `the count line has a 40 px row of its own above the bottom buttons (the card is ${lineBox.panel} px tall); no tally before the run's first answer`);
+        ok(lineBox.panel === 1160 && lineBox.leftTop - lineBox.rowTop === 52 && !line0.tally && !line0.tallyZone, `the count line has a 52 px row of its own (plan 25: 12 px more room above the buttons) above the bottom buttons (the card is ${lineBox.panel} px tall); no tally before the run's first answer`);
+        // A tap on the numbers says what they mean, with this quiz's counts (plan 25, B3): the waiting
+        // question is marked interrupted while it is up, and Esc takes it down, the quiz as it was.
+        const cz = await evaluate(`JSON.stringify({ x: ${Q}.countsZone.x, y: ${Q}.countsZone.y, visible: ${Q}.countsZone.visible })`).then(JSON.parse);
+        await tapAt(cz.x, cz.y);
+        await sleep(200);
+        const explainer = await evaluate(`JSON.stringify({ open: ${Q}.runCard.open, title: ${Q}.runCard.title.text, body: ${Q}.runCard.body.text, interrupted: ${Q}.interrupted })`).then(JSON.parse);
+        const explainWant = await evaluate(`import('./src/i18n.js').then((m) => JSON.stringify({ title: m.t('en', 'quizCountsTitle'), body: m.countLines('en', ${JSON.stringify(line0.counts)}).join('\\n') }))`).then(JSON.parse);
+        await evaluate(`${Q}.input.keyboard.emit('keydown-ESC'), true`);
+        await sleep(200);
+        const afterEsc = await evaluate(`JSON.stringify({ open: ${Q}.runCard.open, active: __flappy.scene.isActive('Quiz'), answered: ${Q}.answered })`).then(JSON.parse);
+        await evaluate(`${Q}.interrupted = false, true`); // the Feedback check below proves its own mark
+        ok(cz.visible && explainer.open && explainer.title === explainWant.title && explainer.body === explainWant.body && explainer.interrupted && !afterEsc.open && afterEsc.active && !afterEsc.answered, `a tap on the numbers opens "${explainer.title}": ${explainer.body.split('\n').join(' · ')}; Esc takes it down, the question still waiting`);
 
         // A tap under the card does nothing: the break stays paused.
         await evaluate(`${play}.flap(), true`);

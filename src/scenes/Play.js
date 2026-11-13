@@ -107,7 +107,7 @@ import {
   storedLocale,
   PERF_TAGS,
 } from '../logic.js';
-import { t, pauseBannerText, levelBannerText, levelLabel, initialLocale, isLocale, profileButtonText, countText, versusName } from '../i18n.js';
+import { t, pauseBannerText, levelBannerText, levelLabel, initialLocale, isLocale, profileButtonText, countText, versusName, countLines } from '../i18n.js';
 import { loadLocal, saveLocal, ensureId, recordScore, mergeBoardBests, newId, TOILET_EMOJI } from '../save.js';
 import { runDeltas, evaluate, bestFacts, levelCloseShave, winsInWindow, daysBetween, nextDrawStreak, FOUR_OF_A_KIND, EDU_ACHIEVEMENTS, eduRunFacts } from '../achievements.js';
 import { unlock, attachGame, setMuted, isMuted, sfx } from '../sound.js';
@@ -1783,11 +1783,10 @@ export class Play extends Phaser.Scene {
     const decks = Object.values(masteryByDeck(srs));
     const seen = decks.reduce((sum, d) => sum + d.seen, 0);
     const total = decks.reduce((sum, d) => sum + d.total, 0);
-    const line = (key, n) => t(this.locale, key).replace('{n}', String(n));
     this.eduCard.show({
       glyph: EDUCATION_EMOJI,
       title: t(this.locale, 'eduCardsTitle'),
-      lines: [line('eduCardsNew', counts.new), line('eduCardsLearning', counts.learning), line('eduCardsReview', counts.review), line('eduCardsSeen', seen).replace('{total}', String(total)), t(this.locale, 'eduCardsDue')],
+      lines: [...countLines(this.locale, counts), t(this.locale, 'eduCardsSeen').replace('{n}', String(seen)).replace('{total}', String(total)), t(this.locale, 'eduCardsDue')],
     });
   }
 
