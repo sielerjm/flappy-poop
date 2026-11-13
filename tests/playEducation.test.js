@@ -110,7 +110,7 @@ test('a test run answers a card without saving it or recording a pilot event; a 
   const saved = [];
   const events = [];
   const s = playScene({
-    runIsTest: true, runQuiz: newTally(), levelBreak: true, level: 2,
+    runIsTest: true, runQuiz: newTally(), levelBreak: true, level: 2, registry: registry(),
     eduStore: { load: () => ({ cards: {} }), answer: (cardId) => saved.push(cardId) },
     researchJoined: () => true, recordAnswerEvent: (e) => events.push(e),
     takeCoins() {}, refreshLevelBanner() {}, refreshShopButton() {},
@@ -137,6 +137,30 @@ test("an education run's end syncs what was already queued (answers, 📚 grades
   };
   assert.deepEqual(ending(false), ['recordEducation', 'sync']);
   assert.deepEqual(ending(true), [], 'a test run records and sends nothing');
+});
+
+test("test mode turned on after the run started (the game-over screen's bonus quiz) saves no card and records no event; in a one-player revive it makes the run a test run (plan 25, A5)", () => {
+  const saved = [];
+  const events = [];
+  let testMode = true;
+  const s = playScene({
+    runIsTest: false, runQuiz: newTally(), levelBreak: false, level: 7, state: 'dead',
+    isTestMode: () => testMode,
+    eduStore: { load: () => ({ cards: {} }), answer: (cardId) => saved.push(cardId) },
+    researchJoined: () => true, recordAnswerEvent: (e) => events.push(e),
+  });
+  s.quizAnswer({ card: CARDS[0], reason: 'new', order: ['answer', 'w1', 'w2'], chosen: 'answer', rtMs: 1000, mode: 'bonus' });
+  assert.deepEqual([saved, events], [[], []], 'test mode on: nothing saved or recorded');
+  testMode = false;
+  s.quizAnswer({ card: CARDS[0], reason: 'new', order: ['answer', 'w1', 'w2'], chosen: 'answer', rtMs: 1000, mode: 'bonus' });
+  assert.deepEqual([saved.length, events.length], [1, 1], 'the control: test mode off, the bonus answer is saved and recorded');
+  // setTestMode in a one-player revive (state 'respawn') latches the run; in a match it does not.
+  for (const [match, want] of [[null, true], [{ seed: 1 }, false]]) {
+    const r = playScene({ state: 'respawn', match, runIsTest: false, registry: registry(), effects: { spendCoins() {}, coins: () => 0 } });
+    for (const m of ['refreshReadySwitches', 'refreshTestBadge', 'refreshPurse']) r[m] = () => {};
+    r.setTestMode(true);
+    assert.equal(r.runIsTest, want, match ? 'a match half is not latched' : 'a one-player revive is latched');
+  }
 });
 
 test('🔬 never shows in a test run; in a joined education run it does (AUD-014)', () => {

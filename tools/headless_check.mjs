@@ -4592,6 +4592,22 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await evaluate(`${Q}.input.keyboard.emit('keydown-ESC'), true`);
         await sleep(300);
         ok((await evaluate(`!__flappy.scene.isActive('Quiz') && __flappy.scene.isActive('Over')`)) === true, 'Esc closes it back to the game-over panel');
+        // Test mode turned on from here (the profile opens over the game-over screen, and its save panel
+        // takes the word: plan 25, A5): the bonus quiz then saves nothing.
+        await chrome('stats');
+        for (let i = 0; i < 20 && !(await evaluate(`__flappy.scene.isActive('Stats')`)); i += 1) await sleep(100);
+        const statsUp = await evaluate(`__flappy.scene.isActive('Stats')`);
+        await evaluate(`__flappy.scene.stop('Stats'), ${play}.setTestMode(true), true`);
+        const srs0 = await evaluate(`localStorage.getItem('flappyPoop.eduSrs')`);
+        await evaluate(`${O}.openBonus(), true`);
+        for (let i = 0; i < 30 && !(await evaluate(`__flappy.scene.isActive('Quiz') && Boolean(${Q}.card)`)); i += 1) await sleep(100);
+        await evaluate(`(() => { const q = ${Q}; q.choose(q.order.indexOf('answer')); return true; })()`);
+        await sleep(200);
+        const srs1 = await evaluate(`localStorage.getItem('flappyPoop.eduSrs')`);
+        await evaluate(`${Q}.input.keyboard.emit('keydown-ESC'), true`);
+        await sleep(300);
+        await evaluate(`${play}.setTestMode(false), true`);
+        ok(statsUp && srs1 === srs0 && (await evaluate(`__flappy.scene.isActive('Over')`)), 'the profile opens over the game-over screen; with test mode turned on there, a bonus answer saves nothing');
 
         // Education badges and the average grade (plan 22, U6): kept on this device with the cards, shown
         // on the game-over line and in the profile's 📚 section, and never handed to the career store.

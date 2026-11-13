@@ -1645,7 +1645,9 @@ export class Play extends Phaser.Scene {
   quizAnswer({ card, reason, order = [], chosen, rtMs, interrupted, mode = 'break', input = 'key' }) {
     const correct = chosen === 'answer';
     const grade = gradeFor(correct, interrupted ? null : rtMs);
-    if (!this.runIsTest) {
+    // Nothing is saved or recorded in a test run, nor while test mode is on: it can be turned on
+    // after the run ended, from the game-over screen's profile (plan 25, A5), before the bonus quiz.
+    if (!this.runIsTest && !this.isTestMode()) {
       const now = Date.now();
       const rec = this.eduStore.load().cards[card.id] ?? null;
       this.eduStore.answer(card.id, schedule(rec, grade, now, T, { early: reason === 'early' }));
@@ -1784,7 +1786,8 @@ export class Play extends Phaser.Scene {
    */
   setTestMode(on) {
     this.registry.set('testMode', Boolean(on));
-    if (on && (this.state === 'playing' || this.state === 'paused')) this.runIsTest = true;
+    // A run under way becomes a test run, a one-player revive quiz's included (plan 25, A5).
+    if (on && (this.state === 'playing' || this.state === 'paused' || (this.state === 'respawn' && !this.match))) this.runIsTest = true;
     this.refreshReadySwitches(); // test mode takes the 👥 switch away (versusOffered), and gives it back
     // Leaving test mode empties the purse: what the endless test purse hid is not kept.
     if (!on) this.effects?.spendCoins(this.effects.coins());
