@@ -22,14 +22,14 @@ Each record is stored under a **random id** made by the server. It does not hold
 | Field | What it is |
 | --- | --- |
 | `event_id`, `session_id`, `run_id` | Random ids for this answer, for the time the game was open, and for the run. They let answers be grouped and stop one answer being stored twice. |
-| `card_id`, `card_hash`, `audited`, `deck` | Which card was asked, a fingerprint of its text, whether its text has been checked, and its section of the gut. |
+| `card_id`, `card_hash`, `audited`, `deck` | Which card was asked, a fingerprint of its English text, whether that text has been checked, and its section of the gut. |
 | `context`, `seq`, `step`, `level` | Where the card came up (a level break, a crash, the bonus quiz), its number in the run, how far into a crash quiz you were, and the level. |
 | `order`, `chosen`, `correct` | The order the three answers were shown in, which one you picked, and whether it was right. |
 | `rt_ms`, `interrupted` | How long you took, in milliseconds, and whether the time is unreliable (the game was in the background, or another card covered the question). |
 | `grade`, `reason` | How the game's review schedule rated the answer, and why the card was chosen (new, being learned, due, or early). |
-| `ease`, `interval_ms`, `reps`, `lapses`, `seen`, `since_ms` | What your device knew about this card before the answer: its place in the review schedule, how often you had seen it, and how long ago. |
+| `ease`, `interval_ms`, `reps`, `lapses`, `seen`, `since_ms` | What your device knew about this card before the answer: its place in the review schedule, how many times you had answered it, and how long ago. |
 | `client_at` | Your device's clock when you answered. |
-| `app`, `tuning`, `locale`, `field`, `input` | The game version, a fingerprint of its quiz settings, the language, whether the screen was phone-shaped or wide, and whether you used touch, a mouse, keys or a controller. |
+| `app`, `tuning`, `locale`, `field`, `input` | The game version, a fingerprint of its quiz settings, the game's language (a card not yet translated is shown in English), whether the screen was phone-shaped or wide, and whether you used touch, a mouse, keys or a controller. |
 | `consent`, `phase` | The version of this notice you agreed to (`pilot-1`) and the phase (`pilot`). |
 
 The server also records when each record arrived.
