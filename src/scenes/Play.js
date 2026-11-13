@@ -101,6 +101,7 @@ import {
   beanButtonHit,
   howToPromptDue,
   testRunStart,
+  nextEduStartLevel,
   LAST_UPDATED,
   padIntent,
   fallStarted,
@@ -557,6 +558,9 @@ export class Play extends Phaser.Scene {
             { id: 'education', box: this.switchBoxes.education, visible: () => onReady() && Boolean(this.readyBoxes.education), activate: () => this.toggleEducation() },
             // The 📚 glyph (and its gold count): what the cards are ("Your cards", toggleEduCard).
             { id: 'educationInfo', box: this.switchBoxes.educationInfo, visible: () => onReady() && Boolean(this.readyBoxes.educationInfo), activate: () => this.toggleEduCard() },
+            // The start stepper (plan 25), while 📚 is on and a later level is unlocked.
+            { id: 'eduStartDown', box: this.switchBoxes.eduStartDown, visible: () => onReady() && this.educationOn && Boolean(this.readyBoxes.eduStartDown), activate: () => this.stepEduStart(-1) },
+            { id: 'eduStartUp', box: this.switchBoxes.eduStartUp, visible: () => onReady() && this.educationOn && Boolean(this.readyBoxes.eduStartUp), activate: () => this.stepEduStart(1) },
             { id: 'daily', box: this.readyBoxes.daily, visible: onReady, activate: () => this.handleChrome('daily') },
             { id: 'howto', box: this.readyBoxes.howto, visible: onReady, activate: () => this.handleChrome('howto') },
             // The level break: the 💰 pill, then (the shop open) its ✕ and rows down the column.
@@ -750,6 +754,7 @@ export class Play extends Phaser.Scene {
     this.versusToggle?.setVisible(visible);
     this.educationToggle?.setVisible(visible);
     this.refreshEduDue();
+    this.refreshEduStart();
     this.howToBtn.setVisible(visible);
     this.howToHalo.setVisible(visible && this.isHowToPromptDue());
     this.dailyBtn.setVisible(visible);
@@ -792,7 +797,11 @@ export class Play extends Phaser.Scene {
     this.respawnHold = null;
     this.revive = null;
     this.reviveLost = null;
-    const begin = daily ? dailyRunStart(daily.level, this.tune) : testRunStart(this.runIsTest ? this.testSettings().startLevel : 1, this.tune);
+    // An education run may start at a level it unlocked before (plan 25: the ready screen's stepper).
+    const startLevel = this.runIsTest ? this.testSettings().startLevel : this.runIsEducation ? this.eduStartLevel() : 1;
+    const begin = daily ? dailyRunStart(daily.level, this.tune) : testRunStart(startLevel, this.tune);
+    this.runStartLevel = begin.level; // a full run (💯, 🤓) starts at level 1 and skips nothing (plan 25)
+    this.runSkipped = false;
     this.level = begin.level;
     this.pipesPassed = begin.pipes;
     this.pipesSpawned = begin.pipes;
@@ -1046,6 +1055,8 @@ export class Play extends Phaser.Scene {
    */
   endLevelBreak() {
     this.closeShop({ silent: true }); // never left open into the level (a match's shared start waits for it anyway)
+    // An education run continuing into this level unlocks it as a start level (plan 25); a test run never does.
+    if (this.runIsEducation && !this.runIsTest) this.eduStore.unlockLevel(this.level);
     this.levelBreak = false;
     this.breakGlide?.stop();
     this.breakGlide = null;
@@ -1116,6 +1127,10 @@ export class Play extends Phaser.Scene {
         }
         if (hit === 'education') {
           this.toggleEducation();
+          return;
+        }
+        if ((hit === 'eduStartDown' || hit === 'eduStartUp') && this.educationOn) {
+          this.stepEduStart(hit === 'eduStartUp' ? 1 : -1); // the start stepper (plan 25)
           return;
         }
         if (hit === 'profile') {
@@ -1530,6 +1545,7 @@ export class Play extends Phaser.Scene {
     this.settings.set({ education: this.educationOn });
     this.educationToggle?.setOn(this.educationOn);
     if (this.educationOn && this.versusOn) this.toggleVersus();
+    this.refreshEduStart();
   }
 
   /** Is education mode unlocked here? (the save panel asks before toggling it with the word) */
@@ -1562,11 +1578,11 @@ export class Play extends Phaser.Scene {
   layoutReady() {
     const at = (opts) => readyLayout(this.col.width, GAME_HEIGHT, T, this.col.x, opts);
     if (!this.switchBoxes) {
-      const all = at({ versus: true, education: true }); // real geometry for a switch not yet offered
-      this.switchBoxes = { toilet: { ...all.toilet }, versus: { ...all.versus }, education: { ...all.education }, educationInfo: { ...all.educationInfo } };
+      const all = at({ versus: true, education: true, eduStart: true }); // real geometry for a switch not yet offered
+      this.switchBoxes = Object.fromEntries(['toilet', 'versus', 'education', 'educationInfo', 'eduStartDown', 'eduStartLabel', 'eduStartUp'].map((id) => [id, { ...all[id] }]));
     }
-    const next = at({ versus: this.versusOffered(), education: this.educationOffered() });
-    for (const id of ['toilet', 'versus', 'education', 'educationInfo']) {
+    const next = at({ versus: this.versusOffered(), education: this.educationOffered(), eduStart: this.eduStartOffered() });
+    for (const id of ['toilet', 'versus', 'education', 'educationInfo', 'eduStartDown', 'eduStartLabel', 'eduStartUp']) {
       if (next[id]) next[id] = Object.assign(this.switchBoxes[id], next[id]);
     }
     this.readyBoxes = next;
@@ -1591,6 +1607,44 @@ export class Play extends Phaser.Scene {
       : null;
     for (const toggle of [this.toiletToggle, this.versusToggle, this.educationToggle]) toggle?.setVisible(this.readyUiShown);
     this.refreshEduDue();
+    // The start stepper (plan 25): ◀ level ▶ in the 📚 row, while 📚 is on and a later level is unlocked.
+    for (const obj of Object.values(this.eduStartTexts ?? {})) obj.destroy();
+    this.eduStartTexts = b.eduStartDown
+      ? {
+          down: this.add.text(b.eduStartDown.x, b.eduStartDown.y, '◀', { ...TEXT_STYLE, fontSize: '34px', color: '#f8a0c8' }).setOrigin(0.5).setDepth(22),
+          label: this.add.text(b.eduStartLabel.x, b.eduStartLabel.y, '', { ...TEXT_STYLE, fontSize: '24px' }).setOrigin(0.5).setDepth(22),
+          up: this.add.text(b.eduStartUp.x, b.eduStartUp.y, '▶', { ...TEXT_STYLE, fontSize: '34px', color: '#f8a0c8' }).setOrigin(0.5).setDepth(22),
+        }
+      : null;
+    this.refreshEduStart();
+  }
+
+  /** May an education run start at a later level here? 📚 offered, not in test mode, and a level past 1 unlocked (plan 25). */
+  eduStartOffered() {
+    return this.educationOffered() && !this.isTestMode() && (this.eduStore?.load().unlockedLevel ?? 1) > 1;
+  }
+
+  /** The level the next education run starts at: the stepper's choice, never past the levels unlocked. */
+  eduStartLevel() {
+    const top = this.eduStore?.load().unlockedLevel ?? 1;
+    return Math.min(Math.max(1, Math.round(this.settings.load().eduStartLevel ?? 1) || 1), top);
+  }
+
+  /** ◀ / ▶ on the start stepper: one level down or up, wrapping within the levels unlocked. */
+  stepEduStart(step) {
+    this.settings.set({ eduStartLevel: nextEduStartLevel(this.eduStartLevel(), step, this.eduStore.load().unlockedLevel) });
+    this.refreshEduStart();
+  }
+
+  /** The stepper shows with the ready UI, while 📚 is on; its label is the start level. */
+  refreshEduStart() {
+    const texts = this.eduStartTexts;
+    if (!texts) return;
+    const shown = Boolean(this.readyUiShown && this.educationOn && this.readyBoxes?.eduStartDown);
+    texts.label.setText(levelLabel(this.locale, this.eduStartLevel()));
+    const box = this.readyBoxes?.eduStartLabel;
+    texts.label.setScale(box && texts.label.width > box.width ? box.width / texts.label.width : 1);
+    for (const obj of Object.values(texts)) obj.setVisible(shown);
   }
 
   /**
@@ -3617,7 +3671,7 @@ export class Play extends Phaser.Scene {
    */
   recordEducation() {
     const day = utcDayKey();
-    const facts = eduRunFacts(this.runQuiz, { gaveUp: Boolean(this.revive?.gaveUp) }, T);
+    const facts = eduRunFacts(this.runQuiz, { gaveUp: Boolean(this.revive?.gaveUp), full: this.runStartLevel === 1 && !this.runSkipped && this.won }, T);
     const counters = this.eduStore.endRun(facts);
     const earned = evaluate({ totals: counters, facts, unlocked: this.eduStore.load().badges, day, catalog: EDU_ACHIEVEMENTS });
     this.runBadges = this.eduStore.unlock(earned, day);

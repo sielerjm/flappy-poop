@@ -431,8 +431,10 @@ export function createBestStore(storage, key = 'flappy-poop:best') {
 /** Which thumb the bean power button sits by on a wide field (Settings' 👈 👉 toggle; carried by the save code). */
 export const HANDS = ['left', 'right'];
 
-// eduUnlocked: education mode (📚, plan 21) unlocked on this device by its word; education: the 📚 switch.
-const SETTINGS_DEFAULTS = { sound: true, music: true, haptics: true, locale: DEFAULT_LOCALE, howToSeenAt: '', hand: 'right', eduUnlocked: false, education: false };
+// eduUnlocked: education mode (📚, plan 21) unlocked on this device by its word; education: the 📚 switch;
+// eduStartLevel: the level the ready screen's stepper starts an education run at (plan 25; Play clamps it
+// to the levels unlocked).
+const SETTINGS_DEFAULTS = { sound: true, music: true, haptics: true, locale: DEFAULT_LOCALE, howToSeenAt: '', hand: 'right', eduUnlocked: false, education: false, eduStartLevel: 1 };
 
 /**
  * The locale the player chose, or null when the settings hold none (a first visit, broken JSON, a
@@ -460,6 +462,7 @@ function normalizeSettings(raw) {
   // The build (LAST_UPDATED) on which the player last opened How to play or finished a run.
   out.howToSeenAt = typeof raw.howToSeenAt === 'string' ? raw.howToSeenAt : '';
   out.hand = HANDS.includes(raw.hand) ? raw.hand : SETTINGS_DEFAULTS.hand;
+  out.eduStartLevel = Number.isInteger(raw.eduStartLevel) && raw.eduStartLevel >= 1 && raw.eduStartLevel <= 7 ? raw.eduStartLevel : 1;
   return out;
 }
 
@@ -1560,7 +1563,7 @@ export function scaledCircleBody(frameSize, displayScale, logicalRadius) {
  * toggle sits under the toilet toggle (only offered when two halves fit the
  * window, versusAvailable).
  */
-export function readyLayout(width, height, t, x0 = 0, { versus = false, education = false } = {}) {
+export function readyLayout(width, height, t, x0 = 0, { versus = false, education = false, eduStart = false } = {}) {
   const cx = x0 + width / 2;
   const boxH = Math.max(88, t.trayHitMin);
   const title = { id: 'title', x: cx, y: 380 };
@@ -1583,6 +1586,15 @@ export function readyLayout(width, height, t, x0 = 0, { versus = false, educatio
   // The 📚 glyph's box (plan 21, E3): the glyph at emojiX and the gold count on its corner, as tall
   // as the switch, 18 px clear of the track's right edge (cx + 10). readyHit looks here first.
   if (switches.education) switches.educationInfo = { id: 'educationInfo', x: cx + 84, y: switches.education.y, width: 112, height: switches.education.height };
+  // The start stepper (plan 25), in the 📚 row right of the glyph's box (which ends at cx + 140):
+  // ◀ (cx + 142–198), the level (cx + 198–262), ▶ (cx + 262–318), as tall as the switch.
+  if (switches.education && eduStart) {
+    const ey = switches.education.y;
+    const eh = switches.education.height;
+    switches.eduStartDown = { id: 'eduStartDown', x: cx + 170, y: ey, width: 56, height: eh };
+    switches.eduStartLabel = { id: 'eduStartLabel', x: cx + 230, y: ey, width: 64, height: eh };
+    switches.eduStartUp = { id: 'eduStartUp', x: cx + 290, y: ey, width: 56, height: eh };
+  }
   // "?" button: a boxH circle in the top-right corner, inset so its pulsing halo
   // (readyPromptGlowPx past the rim) stays inside the field.
   const haloR = boxH / 2 + (t.readyPromptGlowPx ?? 0);
@@ -1750,7 +1762,7 @@ export function shareCardLayout(t) {
  */
 export function readyHit(x, y, layout) {
   if (!layout) return null;
-  for (const box of [layout.toilet, layout.versus, layout.educationInfo, layout.education, layout.howto, layout.daily, layout.profile]) {
+  for (const box of [layout.toilet, layout.versus, layout.eduStartDown, layout.eduStartUp, layout.educationInfo, layout.education, layout.howto, layout.daily, layout.profile]) {
     if (box && inBox(x, y, box)) return box.id;
   }
   return null;
@@ -2111,6 +2123,13 @@ export function dailyLevel(day, t) {
  */
 export function dailyRunStart(level, t) {
   return { ...testRunStart(level, t), score: 0 };
+}
+
+/** An education run's start level one `step` (±1) from `level`, wrapping within the levels unlocked (1..unlocked; plan 25). */
+export function nextEduStartLevel(level, step, unlocked) {
+  const top = Math.max(1, Math.floor(unlocked) || 1);
+  const cur = Math.min(Math.max(1, Math.round(level) || 1), top);
+  return ((((cur - 1 + step) % top) + top) % top) + 1;
 }
 
 /** The test start level one `step` (±1) from `level`, wrapping within 1..levels.lastLevel. */

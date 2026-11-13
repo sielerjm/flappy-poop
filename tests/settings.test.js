@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { createSettingsStore, vibrate } from '../src/logic.js';
 import { initialLocale } from '../src/i18n.js';
 
-const DEFAULTS = { sound: true, music: true, haptics: true, locale: 'en', howToSeenAt: '', hand: 'right', eduUnlocked: false, education: false };
+const DEFAULTS = { sound: true, music: true, haptics: true, locale: 'en', howToSeenAt: '', hand: 'right', eduUnlocked: false, education: false, eduStartLevel: 1 };
 
 function fakeStorage() {
   const m = new Map();
@@ -111,4 +111,13 @@ test('education mode (plan 21): the unlock and the 📚 switch are remembered bo
   assert.deepEqual(s.set({ eduUnlocked: 'yes', education: 1 }), DEFAULTS, 'a non-boolean reads as off, as for sound and music');
   st.setItem('k', JSON.stringify({ eduUnlocked: 'yes', education: null }));
   assert.deepEqual(createSettingsStore(st, 'k').load(), DEFAULTS, 'junk in storage reads as off');
+});
+
+test("eduStartLevel (plan 25): the stepper's start level is kept as a whole number 1–7; anything else reads as 1", () => {
+  const m = new Map();
+  const st = { getItem: (k) => m.get(k) ?? null, setItem: (k, v) => m.set(k, v), removeItem: (k) => m.delete(k) };
+  const s = createSettingsStore(st, 'k');
+  assert.equal(s.set({ eduStartLevel: 3 }).eduStartLevel, 3);
+  assert.equal(createSettingsStore(st, 'k').load().eduStartLevel, 3, 'read back after a reload');
+  for (const bad of [0, 8, 2.5, '3', null]) assert.equal(s.set({ eduStartLevel: bad }).eduStartLevel, 1, `${bad} reads as 1`);
 });

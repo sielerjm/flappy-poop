@@ -3802,6 +3802,42 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await evaluate(`${play}.poop.body.setAllowGravity(false), ${play}.graceLeftMs = 0, ${play}.die(), true`);
         await sleep(TT.deathToOverMs + 300);
 
+        // The start stepper and unlocked levels (plan 25, B5): hidden until a later level is unlocked;
+        // ◀ / ▶ step and wrap within the levels unlocked; the run starts there; continuing past a level
+        // break unlocks the next level; 📚 off or test mode hides it.
+        await home();
+        const stepper = () => evaluate(`(() => { const p = ${play}; const t = p.eduStartTexts; return JSON.stringify({ shown: Boolean(t && t.label.visible), label: t?.label.text ?? null, unlocked: p.eduStore.load().unlockedLevel, start: p.eduStartLevel() }); })()`).then(JSON.parse);
+        const st0 = await stepper();
+        await evaluate(`${play}.eduStore.unlockLevel(3), ${play}.settings.set({ eduStartLevel: 1 }), ${play}.refreshReadySwitches(), true`);
+        const st1 = await stepper();
+        const stepAt = async (id) => {
+          const b = await evaluate(`JSON.stringify(${play}.readyBoxes.${id})`).then(JSON.parse);
+          await tapAt(b.x, b.y);
+          await sleep(150);
+          return stepper();
+        };
+        const st2 = await stepAt('eduStartUp');
+        const st3 = await stepAt('eduStartUp');
+        const st4 = await stepAt('eduStartUp');
+        const st5 = await stepAt('eduStartDown');
+        ok(!st0.shown && st1.shown && st1.label === 'LV 1' && st2.label === 'LV 2' && st3.label === 'LV 3' && st4.label === 'LV 1' && st5.label === 'LV 3' && st5.start === 3 && (await playState()) === 'ready', `the start stepper shows once a later level is unlocked (hidden at ${st0.unlocked}); ▶ ${st1.label} → ${st2.label} → ${st3.label} → wraps to ${st4.label}, ◀ back to ${st5.label}; no tap on it starts a run`);
+        await startRun();
+        const atStart = await evaluate(`JSON.stringify({ level: ${play}.level, edu: ${play}.runIsEducation, start: ${play}.runStartLevel })`).then(JSON.parse);
+        await evaluate(`(() => { const p = ${play}; p.poop.body.setAllowGravity(false); p.poop.setVelocity(0, 0); p.poop.y = 640; p.graceLeftMs = 1e9; p.onFinishCrossed(); return true; })()`);
+        for (let i = 0; i < 40 && !(await evaluate(`Boolean(${play}.levelBreak) && ${play}.state === 'paused'`)); i += 1) await sleep(100);
+        await sleep(TT.retryLockoutMs + 200);
+        await evaluate(`${play}.resumePlay(), true`);
+        await sleep(300);
+        const afterBreak = await stepper();
+        ok(atStart.edu && atStart.level === 3 && atStart.start === 3 && afterBreak.unlocked === 4, `the education run starts on level ${atStart.level}; continuing past its break unlocks level ${afterBreak.unlocked}`);
+        await home();
+        await evaluate(`${play}.toggleEducation(), true`);
+        const off = await stepper();
+        await evaluate(`${play}.toggleEducation(), ${play}.setTestMode(true), ${play}.refreshReadySwitches(), true`);
+        const test = await stepper();
+        await evaluate(`${play}.setTestMode(false), ${play}.refreshReadySwitches(), true`);
+        ok(!off.shown && !test.shown, 'with 📚 off, or in test mode, the stepper is hidden');
+
         // The word again locks it: the switch goes; the switch's own setting is left as it was.
         await home();
         await tap('education');

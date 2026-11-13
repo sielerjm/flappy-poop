@@ -395,7 +395,7 @@ function cleanRecord(r) {
   return out;
 }
 
-function cleanEdu(raw, keep) {
+function cleanEdu(raw, keep, lastLevel = 7) {
   const cards = {};
   for (const [id, r] of Object.entries(raw?.cards && typeof raw.cards === 'object' ? raw.cards : {})) {
     const rec = ID_RE.test(id) ? cleanRecord(r) : null;
@@ -408,7 +408,9 @@ function cleanEdu(raw, keep) {
   for (const [id, day] of Object.entries(raw?.badges && typeof raw.badges === 'object' ? raw.badges : {})) {
     if (BADGE_RE.test(id) && typeof day === 'string' && DAY_RE.test(day)) badges[id] = day;
   }
-  return { v: 1, cards, recent, counters, badges };
+  // The highest level an education run (not a test run) has continued into (plan 25): a run may start there.
+  const unlockedLevel = Number.isInteger(raw?.unlockedLevel) && raw.unlockedLevel >= 1 && raw.unlockedLevel <= lastLevel ? raw.unlockedLevel : 1;
+  return { v: 1, cards, recent, counters, badges, unlockedLevel };
 }
 
 /**
@@ -423,7 +425,7 @@ function cleanEdu(raw, keep) {
  */
 export function createEduStore(storage, { key = LEADERBOARD.eduKey, t = TUNING } = {}) {
   const keep = t.education.minGap;
-  const box = createJsonStore(storage, key, (raw) => cleanEdu(raw, keep));
+  const box = createJsonStore(storage, key, (raw) => cleanEdu(raw, keep, t.levels.lastLevel));
   const read = box.read;
   const write = box.write;
   return {
@@ -431,6 +433,12 @@ export function createEduStore(storage, { key = LEADERBOARD.eduKey, t = TUNING }
     answer(id, record) {
       const state = read();
       write({ ...state, cards: { ...state.cards, [id]: record }, recent: [...state.recent, id] });
+    },
+    /** An education run continued into `level` (plan 25): it is unlocked, as a start level, from now on. */
+    unlockLevel(level) {
+      const state = read();
+      const n = Math.min(Math.max(1, Math.floor(level) || 1), t.levels.lastLevel);
+      if (n > state.unlockedLevel) write({ ...state, unlockedLevel: n });
     },
     /** A revive just happened (👼 / 🐦‍🔥): counted at once, so a closed tab loses none. */
     addRevive() {

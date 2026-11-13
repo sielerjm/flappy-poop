@@ -197,3 +197,22 @@ test("the ready screen's switch rows stay where main has them: 🚽 at y 812 and
   assert.deepEqual([one.toilet.y, one.toilet.height], [812, 72], 'no extra switch: 🚽 alone');
   assert.deepEqual([two.toilet.y, two.versus.y, two.versus.height], [812, 886, 72], '🚽 and 👥');
 });
+
+test('the start stepper (plan 25): in the 📚 row right of the glyph, inside the column, on phone and wide layouts; readyHit finds ◀ and ▶; nextEduStartLevel wraps within the levels unlocked', async () => {
+  const { readyLayout, readyHit, nextEduStartLevel } = await import('../src/logic.js');
+  for (const [w, x0, opts] of [[720, 0, { education: true, eduStart: true }], [720, 0, { versus: true, education: true, eduStart: true }], [720, 778, { versus: true, education: true, eduStart: true }]]) {
+    const L = readyLayout(w, 1280, T, x0, opts);
+    const [down, label, up, info] = [L.eduStartDown, L.eduStartLabel, L.eduStartUp, L.educationInfo];
+    for (const b of [down, label, up]) {
+      assert.equal(b.y, L.education.y, `${b.id} in the 📚 row`);
+      assert.ok(b.x + b.width / 2 <= x0 + w - 16, `${b.id} inside the column`);
+    }
+    assert.ok(down.x - down.width / 2 >= info.x + info.width / 2, 'right of the glyph and its gold count');
+    assert.ok(down.x + down.width / 2 <= label.x - label.width / 2 && label.x + label.width / 2 <= up.x - up.width / 2, '◀ | level | ▶ in a row, apart');
+    assert.equal(readyHit(down.x, down.y, L), 'eduStartDown');
+    assert.equal(readyHit(up.x, up.y, L), 'eduStartUp');
+    assert.equal(readyHit(info.x, info.y, L), 'educationInfo', 'the glyph is still the glyph');
+  }
+  assert.equal(readyLayout(720, 1280, T, 0, { education: true }).eduStartDown, undefined, 'no stepper unless offered');
+  assert.deepEqual([nextEduStartLevel(1, 1, 3), nextEduStartLevel(3, 1, 3), nextEduStartLevel(1, -1, 3), nextEduStartLevel(5, 1, 3), nextEduStartLevel(2, 1, 1)], [2, 1, 3, 1, 1]);
+});

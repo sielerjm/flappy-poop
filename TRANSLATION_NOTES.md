@@ -583,8 +583,8 @@ Inspired by Flappy Bird
 | achEduDropOut | Drop Out | 退学 |
 | achEduAngel | Angel Baby | 小天使 |
 | achEduPhoenix | Phoenix | 凤凰 |
-| achDescEduNerd | Get {n} perfect runs in a row ({min} answers or more each) | 连续 {n} 局全部答对（每局至少答 {min} 题） |
-| achDescEduPerfect | Answer everything right in one run ({min} answers or more, without giving up) | 一局全部答对（至少答 {min} 题，中途放弃不算） |
+| achDescEduNerd | Get {n} perfect runs in a row, each a win from level 1 ({min} answers or more) | 连续 {n} 局全部答对，每局都从第 1 关打到通关（至少答 {min} 题） |
+| achDescEduPerfect | Answer everything right in a run you win from level 1 ({min} answers or more; plan 25: a run started later or skipped ahead does not count) | 从第 1 关打到通关，全部答对（至少答 {min} 题） |
 | achDescEduA | Get 90% or more right in one run ({min} answers or more, without giving up) | 一局答对 90% 以上（至少答 {min} 题，中途放弃不算） |
 | achDescEduB | Get 80–89% right in one run ({min} answers or more, without giving up) | 一局答对 80–89%（至少答 {min} 题，中途放弃不算） |
 | achDescEduC | Get 70–79% right in one run ({min} answers or more, without giving up) | 一局答对 70–79%（至少答 {min} 题，中途放弃不算） |

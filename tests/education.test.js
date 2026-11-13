@@ -383,7 +383,7 @@ test('masteryByDeck: per deck, cards seen, mastered (review at masteredMs or mor
 test('createEduStore: answers persist under eduKey; recent keeps the last minGap; junk is dropped; storage errors never throw', () => {
   const st = fakeStorage();
   const store = createEduStore(st);
-  assert.deepEqual(store.load(), { v: 1, cards: {}, recent: [], counters: {}, badges: {} });
+  assert.deepEqual(store.load(), { v: 1, cards: {}, recent: [], counters: {}, badges: {}, unlockedLevel: 1 });
   const rec = schedule(null, 'good', NOW);
   for (let i = 1; i <= T.education.minGap + 2; i += 1) store.answer(`ST-0${i}`, rec);
   const back = createEduStore(st).load();
@@ -392,7 +392,7 @@ test('createEduStore: answers persist under eduKey; recent keeps the last minGap
   assert.equal(back.recent.at(-1), `ST-0${T.education.minGap + 2}`);
   assert.ok(st.m.has(LEADERBOARD.eduKey));
   st.setItem(LEADERBOARD.eduKey, JSON.stringify({ cards: { 'ST-01': rec, 'bad id': rec, 'ST-02': { phase: 'learning', ease: 'x' } }, recent: ['ST-01', 7] }));
-  assert.deepEqual(createEduStore(st).load(), { v: 1, cards: { 'ST-01': rec }, recent: ['ST-01'], counters: {}, badges: {} }, 'a record from before the counters and badges reads as none');
+  assert.deepEqual(createEduStore(st).load(), { v: 1, cards: { 'ST-01': rec }, recent: ['ST-01'], counters: {}, badges: {}, unlockedLevel: 1 }, 'a record from before the counters and badges reads as none');
   st.setItem(LEADERBOARD.eduKey, '{not json');
   assert.deepEqual(createEduStore(st).load().cards, {});
   store.clear();
@@ -411,7 +411,7 @@ test('createEduStore, the badges and the average (plan 22): revives count at onc
   store.addRevive();
   store.addRevive();
   assert.deepEqual(createEduStore(st).load().counters, { revives: 2 }, 'kept across loads');
-  const perfect = eduRunFacts({ answered: 5, right: 5 });
+  const perfect = eduRunFacts({ answered: 5, right: 5 }, { full: true });
   assert.deepEqual(store.endRun(perfect), { revives: 2, perfectStreak: 1, gradedRuns: 1, gradeSum: 10000 });
   const short = eduRunFacts({ answered: 3, right: 0 });
   assert.deepEqual(store.endRun(short), { revives: 2, perfectStreak: 1, gradedRuns: 1, gradeSum: 10000 }, 'a run too short to grade changes nothing');
@@ -430,9 +430,9 @@ test('createEduStore, the badges and the average (plan 22): revives count at onc
   // What evaluate needs is what the store holds.
   assert.deepEqual(evaluate({ totals: back.counters, facts: perfect, unlocked: back.badges, catalog: EDU_ACHIEVEMENTS }), [], 'nothing is earned twice');
   st.setItem(LEADERBOARD.eduKey, JSON.stringify({ cards: {}, recent: [], counters: { revives: 3, perfectStreak: -1, gradedRuns: 1.5, gradeSum: '9', other: 4 }, badges: { edu_perfect: '2026-11-12', score_10: '2026-11-12', edu_grade_a: 'soon', 'EDU bad': '2026-11-12' } }));
-  assert.deepEqual(createEduStore(st).load(), { v: 1, cards: {}, recent: [], counters: { revives: 3 }, badges: { edu_perfect: '2026-11-12' } }, 'only whole positive counts of known counters, and edu_ ids with a day');
+  assert.deepEqual(createEduStore(st).load(), { v: 1, cards: {}, recent: [], counters: { revives: 3 }, badges: { edu_perfect: '2026-11-12' }, unlockedLevel: 1 }, 'only whole positive counts of known counters, and edu_ ids with a day');
   store.clear();
-  assert.deepEqual(createEduStore(st).load(), { v: 1, cards: {}, recent: [], counters: {}, badges: {} }, 'Clear removes the counters and badges with the cards');
+  assert.deepEqual(createEduStore(st).load(), { v: 1, cards: {}, recent: [], counters: {}, badges: {}, unlockedLevel: 1 }, 'Clear removes the counters and badges with the cards');
   const off = createEduStore(throwing);
   assert.doesNotThrow(() => off.addRevive());
   assert.deepEqual(off.endRun(perfect), { revives: 1, perfectStreak: 1, gradedRuns: 1, gradeSum: 10000 }, 'private mode: they live for this load');
@@ -513,4 +513,22 @@ test('createEduStore: Clear on the same instance empties what that instance read
   const good = schedule(null, 'good', NOW);
   m.set(LEADERBOARD.eduKey, JSON.stringify({ v: 1, cards: { [CARDS[0].id]: good, [CARDS[1].id]: { ...good, phase: 'mastered' } }, recent: [], counters: {}, badges: {} }));
   assert.deepEqual(Object.keys(store.load().cards), [CARDS[0].id], 'a phase the scheduler does not know is junk');
+});
+
+test('createEduStore.unlockLevel (plan 25): a run may start at the highest level an education run continued into; never down, never past the last; junk reads as 1; Clear resets it', () => {
+  const m = new Map();
+  const st = { getItem: (k) => m.get(k) ?? null, setItem: (k, v) => m.set(k, v), removeItem: (k) => m.delete(k) };
+  const store = createEduStore(st);
+  assert.equal(store.load().unlockedLevel, 1);
+  store.unlockLevel(3);
+  store.unlockLevel(2);
+  assert.equal(store.load().unlockedLevel, 3, 'never down');
+  store.unlockLevel(99);
+  assert.equal(store.load().unlockedLevel, T.levels.lastLevel, 'never past the last level');
+  m.set(LEADERBOARD.eduKey, JSON.stringify({ v: 1, cards: {}, recent: [], unlockedLevel: 'x' }));
+  assert.equal(createEduStore(st).load().unlockedLevel, 1, 'junk reads as 1');
+  store.unlockLevel(4);
+  store.clear?.();
+  m.delete(LEADERBOARD.eduKey);
+  assert.equal(createEduStore(st).load().unlockedLevel, 1, 'Clear (the key removed) resets it');
 });

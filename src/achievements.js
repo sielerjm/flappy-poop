@@ -84,7 +84,7 @@ const eduTotal = (id, glyph, title, desc, counter, n) => ({ id, kind: 'lifetime'
 
 export const EDU_ACHIEVEMENTS = [
   eduTotal('edu_nerd_alert', '🤓', 'achEduNerd', 'achDescEduNerd', 'perfectStreak', 10),
-  eduRun('edu_perfect', '💯', 'achEduPerfect', 'achDescEduPerfect', (f) => f.perfect),
+  eduRun('edu_perfect', '💯', 'achEduPerfect', 'achDescEduPerfect', (f) => f.perfect && f.full),
   eduRun('edu_grade_a', '🅰️', 'achEduA', 'achDescEduA', (f) => 10 * f.right >= 9 * f.answered),
   eduRun('edu_grade_b', '🅱️', 'achEduB', 'achDescEduB', (f) => 10 * f.right >= 8 * f.answered && 10 * f.right < 9 * f.answered),
   eduRun('edu_grade_c', '📜', 'achEduC', 'achDescEduC', (f) => 10 * f.right >= 7 * f.answered && 10 * f.right < 8 * f.answered),
@@ -244,17 +244,22 @@ export function daysBetween(a, b) {
  * offered only before a revive's first right answer and a lost run that was not given up has
  * education.strikes misses, so a perfect run is in practice a won one.
  */
-export function eduRunFacts(tally, { gaveUp = false } = {}, t = TUNING) {
+export function eduRunFacts(tally, { gaveUp = false, full = false } = {}, t = TUNING) {
   const answered = count(tally?.answered);
   const right = Math.min(count(tally?.right), answered);
   const graded = answered >= t.education.badgeMinAnswers && !gaveUp;
-  return { mode: 'education', answered, right, wrong: answered - right, graded, grade: graded ? Math.round((10000 * right) / answered) : null, perfect: graded && right === answered, gaveUp: Boolean(gaveUp) };
+  return { mode: 'education', answered, right, wrong: answered - right, graded, grade: graded ? Math.round((10000 * right) / answered) : null, perfect: graded && right === answered, gaveUp: Boolean(gaveUp), full: Boolean(full) };
 }
 
-/** 🤓 The perfect-run streak after one more education run: a graded run with nothing wrong adds one, a graded run with a wrong answer resets it, and an ungraded run (too short, or given up) leaves it alone. */
+/**
+ * 🤓 The perfect-run streak after one more education run: a perfect full run (from level 1, nothing
+ * skipped, won: plan 25) adds one; a perfect run that is not full leaves it alone, as an ungraded
+ * run (too short, or given up) does; a graded run with a wrong answer resets it.
+ */
 export function nextPerfectStreak(streak, facts) {
   if (!facts?.graded) return count(streak);
-  return facts.perfect ? count(streak) + 1 : 0;
+  if (!facts.perfect) return 0;
+  return facts.full ? count(streak) + 1 : count(streak);
 }
 
 /** The average grade in percent, to one decimal (87.5): the mean of the graded runs' grades, each run counting once; null before the first graded run. */

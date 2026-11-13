@@ -195,11 +195,11 @@ test('the education catalog: eight badges in their own list, unique ids apart fr
 });
 
 test('eduRunFacts: graded from badgeMinAnswers answers; the grade is a whole number of hundredths of a percent', () => {
-  assert.deepEqual(eduRun(4, MIN - 1), { mode: 'education', answered: MIN - 1, right: 4, wrong: 0, graded: false, grade: null, perfect: false, gaveUp: false }, 'one answer short: not graded, even all right');
-  assert.deepEqual(eduRun(5, 5), { mode: 'education', answered: 5, right: 5, wrong: 0, graded: true, grade: 10000, perfect: true, gaveUp: false });
+  assert.deepEqual(eduRun(4, MIN - 1), { mode: 'education', answered: MIN - 1, right: 4, wrong: 0, graded: false, grade: null, perfect: false, gaveUp: false, full: false }, 'one answer short: not graded, even all right');
+  assert.deepEqual(eduRun(5, 5), { mode: 'education', answered: 5, right: 5, wrong: 0, graded: true, grade: 10000, perfect: true, gaveUp: false, full: false });
   assert.equal(eduRun(4, 6).grade, 6667, '4 of 6');
   assert.equal(eduRun(0, 5).grade, 0);
-  assert.deepEqual(eduRunFacts({ answered: 0, right: 0 }, { gaveUp: true }), { mode: 'education', answered: 0, right: 0, wrong: 0, graded: false, grade: null, perfect: false, gaveUp: true });
+  assert.deepEqual(eduRunFacts({ answered: 0, right: 0 }, { gaveUp: true }), { mode: 'education', answered: 0, right: 0, wrong: 0, graded: false, grade: null, perfect: false, gaveUp: true, full: false });
   assert.equal(eduRunFacts(null).answered, 0, 'no tally');
   assert.equal(eduRunFacts({ answered: 5, right: 9 }).right, 5, 'never more right than answered');
 });
@@ -207,16 +207,21 @@ test('eduRunFacts: graded from badgeMinAnswers answers; the grade is a whole num
 // E1 (plan 21, Stage 3a): giving up right after a flawless stretch used to earn 💯 and 🅰️.
 test('a run that ends on Give up is never graded: no grade badge, no grade for the average, the 🤓 streak left alone', () => {
   const gaveUp = eduRun(12, 12, { gaveUp: true });
-  assert.deepEqual(gaveUp, { mode: 'education', answered: 12, right: 12, wrong: 0, graded: false, grade: null, perfect: false, gaveUp: true }, '12 of 12, then Give up');
+  assert.deepEqual(gaveUp, { mode: 'education', answered: 12, right: 12, wrong: 0, graded: false, grade: null, perfect: false, gaveUp: true, full: false }, '12 of 12, then Give up');
   assert.equal(eduEarned(gaveUp).join(), '', 'no 💯 and no 🅰️');
   assert.equal(nextPerfectStreak(4, gaveUp), 4, 'it neither counts toward the streak nor breaks it');
   assert.equal(eduEarned(eduRun(9, 10, { gaveUp: true })).join(), '', 'nor an A at 90 %');
   assert.equal(nextPerfectStreak(4, eduRun(3, 8, { gaveUp: true })), 4, 'a poor given-up run leaves the streak too');
   // The same tally on a run that was not given up (a win) is graded as before.
-  const won = eduRun(12, 12);
+  const won = eduRun(12, 12, { full: true });
   assert.deepEqual([won.graded, won.grade, won.perfect], [true, 10000, true]);
   assert.equal(eduEarned(won).join(), 'edu_perfect,edu_grade_a');
   assert.equal(nextPerfectStreak(4, won), 5);
+  // Perfect but not a full run (started later, skipped ahead, or quit at a break: plan 25): an A, no 💯,
+  // and the 🤓 streak neither grows nor breaks.
+  const part = eduRun(12, 12);
+  assert.equal(eduEarned(part).join(), 'edu_grade_a');
+  assert.equal(nextPerfectStreak(4, part), 4);
   // A lost run that was not given up ended on its misses (education.strikes of them): graded, never perfect.
   const lost = eduRun(12 - T.education.strikes, 12);
   assert.deepEqual([lost.graded, lost.perfect, lost.gaveUp], [true, false, false]);
@@ -228,7 +233,8 @@ test('a run that ends on Give up is never graded: no grade badge, no grade for t
 test('the grade badges, each at its edge: A from 90 %, B 80 to under 90, C 70 to under 80; a perfect run is 💯 and an A', () => {
   const got = (right, answered) => eduEarned(eduRun(right, answered)).join();
   assert.equal(got(4, 4), '', 'four answers: ungraded, nothing');
-  assert.equal(got(5, 5), 'edu_perfect,edu_grade_a', '100 %: 💯 and 🅰️ together');
+  assert.equal(eduEarned(eduRun(5, 5, { full: true })).join(), 'edu_perfect,edu_grade_a', '100 % in a full run: 💯 and 🅰️ together');
+  assert.equal(got(5, 5), 'edu_grade_a', '100 % in a run that was not full: 🅰️ alone (plan 25)');
   assert.equal(got(9, 10), 'edu_grade_a', '90 % is an A');
   assert.equal(got(17, 19), 'edu_grade_b', '89.5 % is a B: never rounded up');
   assert.equal(got(8, 10), 'edu_grade_b', '80 % is a B');
@@ -252,13 +258,14 @@ test('🏳️ Drop Out: the run ends on Give up with no card answered; 👼 at 1
 });
 
 test('🤓 Nerd Alert: ten perfect graded runs in a row; a graded miss resets, an ungraded run leaves the streak', () => {
-  const perfect = eduRun(5, 5);
+  const perfect = eduRun(5, 5, { full: true });
   const flawed = eduRun(5, 6);
   const short = eduRun(2, 3);
   assert.equal(nextPerfectStreak(0, perfect), 1);
   assert.equal(nextPerfectStreak(4, perfect), 5);
   assert.equal(nextPerfectStreak(4, flawed), 0);
   assert.equal(nextPerfectStreak(4, short), 4, 'too short to grade');
+  assert.equal(nextPerfectStreak(4, eduRun(5, 5)), 4, 'a perfect run that was not full neither counts nor breaks it (plan 25)');
   assert.equal(nextPerfectStreak(4, eduRun(0, 0, { gaveUp: true })), 4, 'a Drop Out neither counts nor breaks it');
   assert.equal(nextPerfectStreak(undefined, perfect), 1);
   assert.equal(eduEarned(perfect, { perfectStreak: 9 }, { edu_perfect: 'x', edu_grade_a: 'x' }).join(), '');
