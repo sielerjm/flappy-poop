@@ -1218,6 +1218,27 @@ test('submit_research_events stores answers under the research id, never the pla
   assert.equal((await parts(db))[0].last_batch, id('B2'));
 });
 
+/** Is an advisory lock on hashtext(key) held in this session (pg_locks, a bigint key: classid high, objid low)? */
+const holds = (db, key) =>
+  db.query("select count(*)::int as n from pg_locks where locktype = 'advisory' and objsubid = 1 and ((classid::bigint << 32) | objid::bigint) = hashtext($1)::bigint", [key]).then((r) => r.rows[0].n > 0);
+
+test("a fold takes both players' 📚 locks, and education_lock follows an id merged meanwhile to the kept player (plan 25, A2)", async () => {
+  const db = await freshDb();
+  const [K, M, X] = [id('LKEEP'), id('LMERGE'), id('LOTHER')];
+  await db.query('begin');
+  await db.query('select public.merge_players($1, $2)', [K, M]);
+  assert.deepEqual([await holds(db, `education:${K}`), await holds(db, `education:${M}`), await holds(db, `education:${X}`)], [true, true, false], 'the fold holds both 📚 locks until it commits');
+  await db.query('commit');
+  assert.equal(await holds(db, `education:${K}`), false, 'released with the transaction');
+  // A 📚 write that resolved M before the fold committed holds M's lock once the fold is done:
+  // education_lock resolves it again and takes K's lock too, so it writes K's row.
+  await db.query('begin');
+  assert.equal((await db.query('select public.education_lock($1) as v', [M])).rows[0].v, K);
+  assert.deepEqual([await holds(db, `education:${M}`), await holds(db, `education:${K}`)], [true, true]);
+  await db.query('rollback');
+  await assert.rejects(asAnon(db, 'select public.education_lock($1)', [K]), /permission denied/, 'internal: anon cannot call it');
+});
+
 test('a since_ms past bigint (1e30) is stored at 2^53 − 1, not refused for ever (plan 25, A7)', async () => {
   const db = await freshDb();
   await setInvite(db, CODE);

@@ -126,7 +126,8 @@
 --   undo the 📚 board: drop function public.share_education(text, text, boolean),
 --     public.submit_education_grades(text, text, timestamptz, int, bigint, jsonb),
 --     public.rename_education(text, text), public.unshare_education(text),
---     public.education_board(text, int), public.admin_set_education_open(boolean);
+--     public.education_board(text, int), public.admin_set_education_open(boolean),
+--     public.education_lock(text);
 --     drop table public.education_public, public.education_settings; then restore
 --     player_by_name, fold_player and player_stats from git and run this file.
 --   undo the v0.16.0 tags: drop function public.board_tags(text[]), public.player_tags(text),
@@ -764,6 +765,10 @@ begin
   -- Both players' rows, locked in a fixed order so two folds cannot deadlock.
   perform pg_advisory_xact_lock(hashtext(least(v_keep, v_merge)));
   perform pg_advisory_xact_lock(hashtext(greatest(v_keep, v_merge)));
+  -- And their 📚 rows (plan 25, A2): a grade batch, share, rename or unshare waits for the fold
+  -- instead of writing a row the fold is moving, then follows the alias (education_lock).
+  perform pg_advisory_xact_lock(hashtext('education:' || least(v_keep, v_merge)));
+  perform pg_advisory_xact_lock(hashtext('education:' || greatest(v_keep, v_merge)));
   select name into v_name from public.scores where player_id = v_keep order by updated_at desc limit 1;
   if v_name is null then
     select name into v_name from public.scores where player_id = v_merge order by updated_at desc limit 1;
@@ -1503,6 +1508,31 @@ revoke execute on function public.admin_set_dev(text, boolean) from public, anon
 -- The 📚 education board (plan 21, Stage 3b). Sharing is the player's own choice, made in the
 -- game's Education data panel, for adults only.
 --
+-- education_lock (internal, plan 25): take this player's 📚 lock and return the id it holds. The
+-- caller resolved the id before the lock; a fold that held it meanwhile (fold_player takes both
+-- players' 📚 locks) may have made that id an alias, so the id is resolved again under the lock
+-- and the kept player's lock taken too, until they agree.
+create or replace function public.education_lock(p_id text)
+returns text
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_id text := p_id;
+  v_now text;
+begin
+  loop
+    perform pg_advisory_xact_lock(hashtext('education:' || v_id));
+    v_now := public.resolve_player(v_id);
+    exit when v_now = v_id;
+    v_id := v_now;
+  end loop;
+  return v_id;
+end;
+$$;
+revoke execute on function public.education_lock(text) from public, anon, authenticated;
+--
 -- share_education: put this player on the board under p_name, or rename a player already on it
 -- (the game calls it again after a rename; nothing else about the row changes). p_adult must be
 -- true: the game's "I am 18 or older" box. While the board is closed (education_settings) only
@@ -1546,7 +1576,7 @@ begin
     raise exception 'name taken';
   end if;
   perform public.touch_player(v_id);
-  perform pg_advisory_xact_lock(hashtext('education:' || v_id));
+  v_id := public.education_lock(v_id);
   insert into public.education_public (player_id, name) values (v_id, p_name)
   on conflict (player_id) do update set name = excluded.name
   returning shared_at into v_at;
@@ -1608,7 +1638,7 @@ begin
       else r.value #>> '{}' end);
   end loop;
   v_id := public.resolve_player(p_player_id);
-  perform pg_advisory_xact_lock(hashtext('education:' || v_id));
+  v_id := public.education_lock(v_id);
   select * into v_row from public.education_public where player_id = v_id;
   if not found then
     raise exception 'not shared';
@@ -1679,7 +1709,7 @@ begin
      and not exists (select 1 from public.scores s where s.player_id = v_id and public.name_key(s.name) = v_key) then
     raise exception 'name taken';
   end if;
-  perform pg_advisory_xact_lock(hashtext('education:' || v_id));
+  v_id := public.education_lock(v_id);
   update public.education_public set name = p_name where player_id = v_id;
   get diagnostics v_rows = row_count;
   return v_rows > 0;
@@ -1702,7 +1732,7 @@ begin
     raise exception 'bad player id';
   end if;
   v_id := public.resolve_player(p_player_id);
-  perform pg_advisory_xact_lock(hashtext('education:' || v_id));
+  v_id := public.education_lock(v_id);
   delete from public.education_public where player_id = v_id;
   get diagnostics v_rows = row_count;
   return v_rows > 0;
@@ -2246,7 +2276,7 @@ returns text
 language sql
 immutable
 as $$
-  select 'eb2cb5e2b56b931c'::text; -- schema stamp
+  select 'ca08a57db143acc9'::text; -- schema stamp
 $$;
 revoke execute on function public.schema_version() from public, authenticated;
 grant  execute on function public.schema_version() to anon;
