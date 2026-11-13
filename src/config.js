@@ -389,6 +389,7 @@ export const TUNING = {
     breakCoins: 1, // coins a right answer in a level break's quiz pays
     revivePenaltyPerLevel: 2, // points a quiz revive costs per level number (level 3: −6), charged when the player is revived; the two-player crash's value to start
     reviveBlinkMs: 750, // ms the revived poop blinks at mid-height after Fly on, before play resumes (no glide; the field was refilled under the quiz)
+    boardMinRuns: 3, // graded runs before a sharing player is listed on the 📚 board (education_board in db/schema.sql lists from the same number)
     badgeMinAnswers: 5, // answers (in breaks and revives) a run needs to be graded: for the grade badges, the 🤓 streak and the average grade (a run that ends on Give up is never graded)
   },
   // The loading splash (src/splash.js, #splash in index.html): note cards over the Phaser download and

@@ -150,6 +150,9 @@ export class Stats extends Phaser.Scene {
       if (!store.load().inflight) store.setBase(id, server.counters);
       store.mergeUnlocked(server.achievements);
       play.creditCareer?.();
+      // Whether this player shares on the 📚 board, as the server has it: sharing started (or
+      // stopped) on another device reaches this one here.
+      if (play.eduUnlocked) play.noteEduShared?.(Boolean(server.education));
     }
     const totals = store.totals(id);
     const games = totals.games ?? 0;
@@ -180,7 +183,7 @@ export class Stats extends Phaser.Scene {
       earned,
       locked,
       tags: online ? (server.tags ?? []) : [],
-      education: play.eduUnlocked ? this.eduView(play.eduStore.load()) : null,
+      education: play.eduUnlocked ? { ...this.eduView(play.eduStore.load()), shared: Boolean(play.eduShareOn?.()) } : null,
     };
   }
 
@@ -197,6 +200,19 @@ export class Stats extends Phaser.Scene {
       .filter((b) => b.entry)
       .sort((a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : 0));
     return { counters, grade: averageGrade(counters), runs: counters.gradedRuns ?? 0, earned, locked: EDU_ACHIEVEMENTS.filter((e) => !(e.id in held)) };
+  }
+
+  /**
+   * Another player's 📚 Education section (plan 21): what they chose to share on the 📚 board (the
+   * profile's `education`: their average grade, graded runs and badges), in eduView's shape. Their
+   * badges earned only: what they have not earned, and their progress, are not shared.
+   */
+  sharedEduView(education) {
+    const earned = Object.entries(education.badges ?? {})
+      .map(([id, at]) => ({ entry: achievementById(id, EDU_ACHIEVEMENTS), at }))
+      .filter((b) => b.entry)
+      .sort((a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : 0));
+    return { counters: {}, grade: education.grade, runs: education.runs, earned, locked: [], shared: null };
   }
 
   /** Another player, by the name a board shows: their public profile. */
@@ -218,6 +234,8 @@ export class Stats extends Phaser.Scene {
       earned: server.achievements.map((a) => ({ entry: achievementById(a.id), at: a.at })).filter((b) => b.entry),
       locked: openQuests(utcDayKey()).filter((e) => !earnedIds.has(e.id)),
       tags: server.tags ?? [],
+      // Only when they share it, and only on a device with education mode unlocked.
+      education: play.eduUnlocked && server.education ? this.sharedEduView(server.education) : null,
     };
   }
 
@@ -332,16 +350,28 @@ export class Stats extends Phaser.Scene {
     };
     y = badgeGrid(badges, y, view.counters);
 
-    // 📚 Education (plan 22; your own profile, education unlocked): the average grade and the graded
-    // runs, then the education badges: earned first, then the rest dimmed, progress on the
-    // education counters. All of it from this device's education store.
+    // 📚 Education (plans 21 and 22), on a device with education mode unlocked: the average grade and
+    // the graded runs, then the education badges. Your own profile: from this device's education
+    // store, with the badges still to earn dimmed and their progress, and a row that says whether
+    // you share on the 📚 board and opens the Education data panel. Another player's: only what they
+    // chose to share (their grade, runs and earned badges).
     const edu = view.education;
+    this.eduSharedItem = null;
     if (edu) {
       y += 14;
       sv.add(this.add.text(L.left, y, t(locale, 'statsEducation').replace('{n}', String(edu.earned.length)).replace('{total}', String(EDU_ACHIEVEMENTS.length)), { ...STYLE, fontSize: '32px', color: PINK, align: 'left' }).setOrigin(0, 0.5));
       y += 52;
       row('statsEduGrade', edu.grade === null ? DASH : `${edu.grade.toFixed(1)} %`, edu.grade === null ? '#ffffff' : GOLD);
       row('statsEduRuns', String(edu.runs));
+      if (view.own) {
+        const rowY = y;
+        row('statsEduShared', t(locale, edu.shared ? 'statsEduSharedOn' : 'statsEduSharedOff'), PINK);
+        // The whole row is the link, a thumb tall.
+        const zone = sv.add(this.add.zone((L.left + L.right) / 2, rowY, L.right - L.left, 56));
+        sv.link(zone, () => this.openEduData());
+        items.push(pressable('eduShared', zone, { event: 'pointerup', scrolled: true }));
+        this.eduSharedItem = { zone, shared: edu.shared };
+      }
       y += 44;
       y = badgeGrid([...edu.earned.map((b) => ({ ...b, done: true })), ...edu.locked.map((entry) => ({ entry, done: false }))], y, edu.counters, this.eduBadgeItems);
     }
@@ -356,6 +386,18 @@ export class Stats extends Phaser.Scene {
     this.focus.move = (dir) => this.navigate(dir);
     if (wasShown) this.focus.show();
     this.buildCard();
+  }
+
+  /** The Education data panel over the profile; when sharing was turned on or off there, the profile is drawn again. */
+  openEduData() {
+    if (!isTopOverlay(this) || this.cardOpen) return;
+    this.scene.get('Play')?.openEduData?.({
+      onClose: (changed) => {
+        if (!changed || !this.sys.isActive()) return;
+        this.gen += 1; // drop any in-flight load
+        this.scene.restart({ name: this.askedName });
+      },
+    });
   }
 
   /**

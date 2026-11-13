@@ -47,6 +47,7 @@ const CSS = `
 #${PANEL_ID} .note { margin: 2px 0 10px; font-size: 14px; opacity: 0.75; }
 #${PANEL_ID} .profile-row { margin-top: 10px; }
 #${PANEL_ID} .profile-row button { flex: 1; }
+#${PANEL_ID} .profile-row button[hidden] { display: none; }
 `;
 
 let dom = null;
@@ -88,6 +89,7 @@ function build() {
   const saveBtn = h('button', { type: 'button', id: 'save-save-btn' });
   const clearBtn = h('button', { type: 'button', id: 'save-clear-btn', class: 'outline' }); // sign this device out (two taps)
   const profileBtn = h('button', { type: 'button', id: 'save-profile-btn', class: 'outline' }); // this player's profile: stats and achievements (plan 08)
+  const eduBtn = h('button', { type: 'button', id: 'save-edu-btn', class: 'outline', hidden: true }); // 📚 Education data (plan 21): only while education mode is unlocked here
   const status = h('p', { class: 'status', id: 'save-status' });
   const close = h('button', { type: 'button', class: 'close', 'aria-label': 'close' }, '✕');
 
@@ -105,7 +107,7 @@ function build() {
     loadLabel,
     h('div', { class: 'row' }, load, loadBtn),
     h('div', { class: 'row save-row' }, clearBtn, saveBtn),
-    h('div', { class: 'row profile-row' }, profileBtn),
+    h('div', { class: 'row profile-row' }, profileBtn, eduBtn),
     status,
   );
   const root = h('div', { id: PANEL_ID, role: 'dialog', 'aria-modal': 'true', hidden: true }, card);
@@ -127,13 +129,14 @@ function build() {
   saveBtn.addEventListener('click', () => onSave());
   clearBtn.addEventListener('click', () => onClear());
   profileBtn.addEventListener('click', () => onProfile());
+  eduBtn.addEventListener('click', () => onEduData());
   copy.addEventListener('click', () => onCopy());
   loadBtn.addEventListener('click', () => onLoad());
   load.addEventListener('keydown', (e) => {
     if (e.key === 'Enter') onLoad();
   });
 
-  dom = { root, title, intro, nameLabel, name, note, codeLabel, code, copy, loadLabel, load, loadBtn, saveBtn, clearBtn, profileBtn, status };
+  dom = { root, title, intro, nameLabel, name, note, codeLabel, code, copy, loadLabel, load, loadBtn, saveBtn, clearBtn, profileBtn, eduBtn, status };
 }
 
 function applyLocale(locale) {
@@ -150,6 +153,7 @@ function applyLocale(locale) {
   dom.saveBtn.textContent = t(locale, 'saveSave');
   dom.clearBtn.textContent = t(locale, 'saveClear');
   dom.profileBtn.textContent = t(locale, 'saveProfile');
+  dom.eduBtn.textContent = t(locale, 'saveEduData');
 }
 
 /**
@@ -163,10 +167,24 @@ function onProfile() {
   play?.openStats?.();
 }
 
-/** Clear has something to clear, and Profile something to show, only while a username is stored. */
+/**
+ * The 📚 Education data button (plan 21): this panel closes (its backdrop would cover the other)
+ * and Play opens the Education data panel, where sharing on the 📚 board is chosen.
+ */
+function onEduData() {
+  const play = ctx?.play;
+  closeSavePanel();
+  play?.openEduData?.();
+}
+
+/**
+ * Clear has something to clear, and Profile something to show, only while a username is stored.
+ * 📚 Education data shows only while education mode is unlocked on this device.
+ */
 function refreshClear() {
   dom.clearBtn.disabled = !getState().name;
   dom.profileBtn.disabled = !getState().name;
+  dom.eduBtn.hidden = !ctx?.play?.isEduUnlocked?.();
 }
 
 function setStatus(text, kind = '') {
@@ -324,11 +342,14 @@ function onClear() {
     return;
   }
   clearArmedAt = now;
-  setStatus(t(locale, 'saveClearConfirm'), 'error');
+  // A player who shares their education grades is told those stay on the 📚 board (Clear only
+  // forgets the player here; Stop sharing, in 📚 Education data, deletes the board's row).
+  const warning = t(locale, ctx.play?.eduShareOn?.() ? 'saveClearConfirmShared' : 'saveClearConfirm');
+  setStatus(warning, 'error');
   clearTimeout(clearTimer);
   clearTimer = setTimeout(() => {
     clearArmedAt = 0;
-    if (dom && ctx && dom.status.textContent === t(locale, 'saveClearConfirm')) setStatus('');
+    if (dom && ctx && dom.status.textContent === warning) setStatus('');
   }, T.saveClearConfirmMs);
 }
 
@@ -355,6 +376,7 @@ function toggleEducationUnlock() {
   play?.setEduUnlocked?.(on);
   dom.name.value = getState().name;
   setStatus(t(ctx.locale, on ? 'eduUnlocked' : 'eduLocked'), 'ok');
+  refreshClear(); // the 📚 Education data button comes and goes with the unlock
   dom.name.blur();
 }
 

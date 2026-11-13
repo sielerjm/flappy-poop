@@ -119,7 +119,7 @@ import { perfMark, perfSteps, perfRunStart } from '../ui/perfMeter.js';
 import { createFinishTexture } from '../ui/finish.js';
 import { createLightTexture } from '../ui/pipeShade.js';
 import { createLevelBar } from '../ui/levelBar.js';
-import { createEduShareStore, shareEducation, renameEducation, unshareEducation, submitEducationGrades, createSubmitStore, createMergeStore, createRenameStore, createTournamentQueue, createDailyStore, createDailyQueue, submitDailyScore, fetchDailyBoard, submitPlans, submitScore, submitTournament, checkNameAvailable, mergePlayers, fetchPlayerName, fetchRank, nameAction, createCareerStore, submitCounters, claimAchievements, fetchPlayerStats } from '../leaderboard.js';
+import { createEduShareStore, shareEducation, renameEducation, unshareEducation, submitEducationGrades, fetchEducationBoard, createSubmitStore, createMergeStore, createRenameStore, createTournamentQueue, createDailyStore, createDailyQueue, submitDailyScore, fetchDailyBoard, submitPlans, submitScore, submitTournament, checkNameAvailable, mergePlayers, fetchPlayerName, fetchRank, nameAction, createCareerStore, submitCounters, claimAchievements, fetchPlayerStats } from '../leaderboard.js';
 import { createButton } from '../ui/button.js';
 import { createToggle } from '../ui/toggle.js';
 import { createCoinText } from '../ui/coinText.js';
@@ -127,6 +127,7 @@ import { createCountLine } from '../ui/countLine.js';
 import { createInfoCard } from '../ui/infoCard.js';
 import { openSavePanel, isSavePanelOpen, showAdoptedName, showBoardScores } from '../ui/savePanel.js';
 import { isTournamentPanelOpen, tournamentPadAction } from '../ui/tournamentPanel.js';
+import { openEduDataPanel, isEduDataPanelOpen } from '../ui/eduDataPanel.js';
 import { bindPad } from '../input/pad.js';
 import { keyGroup, sameDevice, catchUpTier, catchUpDraws, versusAvailable, ghostPlacement, rivalMarker, respawnPose, respawnBlinkStart, courseDistance, VERSUS_EMOJI } from '../versus.js';
 import { createEduStore, dueCount, cardCounts, masteryByDeck, pickCard, shuffleOptions, gradeFor, schedule, eduShopPrices, reviveStart, reviveStep, reviveSettled, newTally, tallyAnswer, EDUCATION_EMOJI } from '../education.js';
@@ -650,7 +651,7 @@ export class Play extends Phaser.Scene {
 
   /** A re-fit can happen now: on the ready screen, nothing sliding, no overlay, panel or game-over on top. */
   canRefitField() {
-    return this.state === 'ready' && !this.launching && !this.chromeArgs('tap').overlay && !this.scene.isActive('Over') && !isSavePanelOpen();
+    return this.state === 'ready' && !this.launching && !this.chromeArgs('tap').overlay && !this.scene.isActive('Over') && !isSavePanelOpen() && !isEduDataPanelOpen();
   }
 
   /**
@@ -1451,6 +1452,16 @@ export class Play extends Phaser.Scene {
     openSavePanel({ game: this.game, play: this, locale: this.locale, ...opts });
   }
 
+  /**
+   * The 📚 Education data panel (plan 21): where a player chooses to share their education grades
+   * on the 📚 board. From the user panel's button, the 📚 board's footer and the profile's row;
+   * only on a device with education mode unlocked. `onClose(changed)` runs when it closes.
+   */
+  openEduData(opts = {}) {
+    if (!this.eduUnlocked) return;
+    openEduDataPanel({ game: this.game, play: this, locale: this.locale, ...opts });
+  }
+
   toggleToilet() {
     this.toilet = !this.toilet;
     this.registry.set('toilet', this.toilet);
@@ -1997,7 +2008,7 @@ export class Play extends Phaser.Scene {
       state: this.chromeState(),
       top,
       ringShown: Boolean(scene?.focus?.shown),
-      savePanelOpen: isSavePanelOpen(),
+      savePanelOpen: isSavePanelOpen() || isEduDataPanelOpen(), // a DOM panel is up: the pad waits
       tournamentPanelOpen,
     });
     if (result.do === 'ignore') return;
@@ -3645,6 +3656,11 @@ export class Play extends Phaser.Scene {
    */
   noteEduShared(shared) {
     this.eduShare.noteShared(shared);
+  }
+
+  /** The 📚 board's rows (education_board) with this player's own row flagged; a method so the smoke can stub it. */
+  fetchEduBoard(id) {
+    return fetchEducationBoard(id);
   }
 
   /** share_education for the 📚 board; a method so the smoke can stub it (never the live board). */

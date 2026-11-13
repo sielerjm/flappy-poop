@@ -78,6 +78,7 @@ export const SECTIONS = [
   { name: 'education-quiz', needs: [], about: "📚 the quiz card (plan 21) in an education run's level break: the 📚 pill and its hint, the card answered by tap, key and controller (each answer saved to its card), +1 coin for a right answer and none for a wrong one, Next held after a wrong answer, taps under it ignored, every bank card fitting the card, Esc closing it with the resume lockout, the shop at the level's prices" },
   { name: 'education-revive', needs: [], about: "📚 the revive after an education crash (plan 21): three misses end the run with the field and score untouched; wrong then right then Fly on revives without the power-ups at the penalty; a full streak gives coins and power-ups back; nothing lost skips the choice; Give up; Esc cannot close it; the field refills at the first right answer and Fly on goes straight on (plan 22)" },
   { name: 'education-over', needs: [], about: "📚 the end of an education run (plan 21): the game-over panel's 📚 tally and note, no Share; a won run's bonus button opening the rectum's questions over the panel (no coins, the card saved, Esc back to the panel); Clear wiping the cards' progress" },
+  { name: 'education-share', needs: [], about: "📚 sharing by choice (plan 21, Stage 3b), the server stubbed: the user panel's 📚 Education data button only on an unlocked device, the Education data panel (the 18+ box, Share and Stop sharing, each refusal's message), the 📚 tab on the leaderboard (four tabs, the stubbed board, the footer's link and the player's own row), the profiles' 📚 sections (your own Shared row, another player's only when they share), and Clear's warning while sharing" },
 ];
 
 /** What a section needs: its own list, or (omitted) every section before it. */
@@ -4784,6 +4785,209 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await sleep(400);
         ok(plainBand.offset === 0 && !(await evaluate(`__flappy.scene.isActive('Over')`)) && (await playState()) === 'ready', `a normal panel's band does not scroll (offset ${plainBand.offset}), and a tap on its empty space goes home`);
         await home();
+      }
+    });
+
+    await section('education-share', async () => {
+      // 📚 sharing by choice (plan 21, Stage 3b). The server is stubbed: the four calls at boot
+      // (globalThis.__edu / __eduAnswer), the 📚 board and the profiles here. Everything is put back.
+      {
+        const play = `__flappy.scene.getScene('Play')`;
+        const LB = `__flappy.scene.getScene('Leaderboard')`;
+        const ST = `__flappy.scene.getScene('Stats')`;
+        const tx = (key) => evaluate(`import('./src/i18n.js').then((m) => m.t('en', '${key}'))`);
+        const home = async () => {
+          await evaluate(`(['Over', 'Leaderboard', 'Stats', 'Quiz'].forEach((k) => __flappy.scene.stop(k)), ${play}.scene.restart(), true)`);
+          await sleep(300);
+          for (let i = 0; i < 40 && (await playState()) !== 'ready'; i += 1) await sleep(250);
+        };
+        const all = JSON.stringify(await evaluate(`JSON.stringify(Object.fromEntries(Object.keys(localStorage).map((k) => [k, localStorage.getItem(k)])))`));
+        const el = (id) => `document.getElementById('${id}')`;
+        const dataPanel = () =>
+          evaluate(
+            `JSON.stringify({ open: Boolean(${el('edu-data-panel')}) && !${el('edu-data-panel')}.hidden, state: ${el('edu-share-state')}?.textContent ?? null, btn: ${el('edu-share-btn')}?.textContent ?? null, disabled: ${el('edu-share-btn')}?.disabled ?? null, adult: ${el('edu-adult')}?.checked ?? null, status: ${el('edu-data-status')}?.textContent ?? null, sharing: ${play}.eduShareOn(), keys: __flappy.input.keyboard.enabled })`,
+          ).then(JSON.parse);
+        const closeData = () => evaluate(`import('./src/ui/eduDataPanel.js').then((m) => (m.closeEduDataPanel(), true))`);
+        const closeSave = () => evaluate(`import('./src/ui/savePanel.js').then((m) => (m.closeSavePanel(), true))`);
+        const nameAs = (name) => evaluate(`import('./src/save.js').then((m) => { const p = ${play}; p.setSaveState(m.saveLocal({ ...p.save, name: '${name}', id: p.save?.id ?? 'S'.repeat(22) })); return p.save.id; })`);
+        const resetNet = () => evaluate(`(() => { for (const k of Object.keys(__edu)) __edu[k].length = 0; globalThis.__eduAnswer = { share: { status: 'offline' }, rename: null, unshare: null, grades: { status: 'keep' } }; return true; })()`);
+        const board = [
+          { rank: 1, name: 'MicrobeMaven', grade: 100, runs: 4, me: false, total: 3 },
+          { rank: 2, name: 'ShareSmoke', grade: 92.5, runs: 10, me: true, total: 3 },
+          { rank: 3, name: 'Villus', grade: 81.3, runs: 112, me: false, total: 3 },
+        ];
+        // The stubbed board: this player's row is on it only while this device shares.
+        await evaluate(`(${play}.__fetchEduBoard = ${play}.fetchEduBoard, ${play}.fetchEduBoard = () => Promise.resolve(${JSON.stringify(board)}.filter((r) => !r.me || ${play}.eduShareOn()).map((r, i) => ({ ...r, rank: i + 1 }))), true)`);
+        await resetNet();
+        const openBoard = async () => {
+          await evaluate(`(__flappy.registry.set('leaderboardTab', 'education'), ${play}.handleChrome('leaderboard'), true)`);
+          for (let i = 0; i < 40 && !(await evaluate(`__flappy.scene.isActive('Leaderboard') && (${LB}.footer.text !== '' || ${LB}.status.text !== '' && !${LB}.status.visible === false)`)); i += 1) await sleep(150);
+          await sleep(500);
+          return evaluate(`(() => { const b = ${LB}; const texts = b.children.list.filter((c) => c.type === 'Text' && c.visible).map((c) => c.text); const L = b.L; return JSON.stringify({ tab: b.tab, tabs: b.tabList, xs: L.tab.xs, track: L.tab.track, panel: L.panel, title: b.title.text, footer: b.footer.text, link: Boolean(b.footerAction), texts, footerAt: { x: b.footer.x, y: b.footer.y } }); })()`).then(JSON.parse);
+        };
+        const closeBoard = async () => {
+          await evaluate(`__flappy.scene.isActive('Leaderboard') && ${LB}.close(), true`);
+          await sleep(300);
+        };
+
+        // A device without education unlocked: no button, no tab, no panel.
+        await evaluate(`${play}.setEduUnlocked(false), ${play}.settings.set({ education: false }), ${play}.eduShare.clear(), true`);
+        await home();
+        await nameAs('ShareSmoke');
+        await evaluate(`${play}.openSavePanel(), true`);
+        await sleep(200);
+        const lockedBtn = await evaluate(`${el('save-edu-btn')}.hidden`);
+        await closeSave();
+        const lockedBoard = await openBoard();
+        await closeBoard();
+        await evaluate(`${play}.openEduData(), true`);
+        const lockedPanel = await dataPanel();
+        ok(lockedBtn === true && lockedBoard.tabs.join() === 'scores,daily,medals' && lockedBoard.tab === 'scores' && lockedBoard.xs.length === 3 && !lockedPanel.open, `a device without education unlocked has no 📚 Education data button, three tabs (${lockedBoard.tabs.join(' ')}; asked for 📚 it shows ${lockedBoard.tab}) and no panel`);
+
+        // Typing the word shows the button at once; it closes the user panel and opens the data panel.
+        const [word] = await evaluate(`import('./src/config.js').then((m) => m.EDUCATION.words)`);
+        await evaluate(`${play}.openSavePanel(), true`);
+        await sleep(200);
+        await evaluate(`(${el('save-name')}.value = '${word}', ${el('save-save-btn')}.click(), true)`);
+        await sleep(300);
+        const btnNow = await evaluate(`JSON.stringify({ hidden: ${el('save-edu-btn')}.hidden, text: ${el('save-edu-btn')}.textContent, unlocked: ${play}.isEduUnlocked() })`).then(JSON.parse);
+        await evaluate(`${el('save-edu-btn')}.click(), true`);
+        await sleep(300);
+        const d0 = await dataPanel();
+        const savePanelOpen = await evaluate(`import('./src/ui/savePanel.js').then((m) => m.isSavePanelOpen())`);
+        const [offText, onText, shareBtn, stopBtn] = await Promise.all(['eduShareOff', 'eduShareOn', 'eduShareTitle', 'eduShareStop'].map(tx));
+        ok(btnNow.unlocked && btnNow.hidden === false && btnNow.text === (await tx('saveEduData')) && d0.open && !savePanelOpen, `typing the word shows "${btnNow.text}" in the user panel at once; it closes that panel and opens the data panel`);
+        ok(d0.state === offText && d0.btn === shareBtn && d0.disabled === true && d0.adult === false && !d0.keys, `the panel opens with sharing off, the 18+ box unticked and "${d0.btn}" waiting for it; the game's keyboard is off under it`);
+        // The controller waits while a DOM panel is up.
+        await evaluate(`${play}.onPadAction('nav:down'), true`);
+        ok((await evaluate(`Boolean(${play}.focus.shown)`)) === false, 'the controller does nothing under the panel');
+        // The box ticked: Share. Each refusal says why, and nothing is turned on.
+        await evaluate(`${el('edu-adult')}.click(), true`);
+        const d1 = await dataPanel();
+        const tryShare = async (answer) => {
+          await evaluate(`(globalThis.__eduAnswer.share = ${JSON.stringify(answer)}, ${el('edu-share-btn')}.click(), true)`);
+          await sleep(400);
+          return dataPanel();
+        };
+        const dClosed = await tryShare({ status: 'closed' });
+        const dTaken = await tryShare({ status: 'nameTaken' });
+        const dOffline = await tryShare({ status: 'offline' });
+        const want = Object.fromEntries(await Promise.all(['eduShareClosed', 'eduShareNameTaken', 'eduShareOffline', 'eduShareStarted', 'eduShareStopped', 'eduShareStopOffline', 'eduShareNeedName'].map(async (k) => [k, await tx(k)])));
+        ok(d1.adult === true && d1.disabled === false && dClosed.status === want.eduShareClosed && dTaken.status === want.eduShareNameTaken && dOffline.status === want.eduShareOffline && !dOffline.sharing && dOffline.state === offText, `with the box ticked Share works; a closed board ("${dClosed.status}"), a taken name and an unreachable board each say so, and sharing stays off`);
+        // Shared: the name went with the adult box; the panel now offers Stop sharing.
+        const dOn = await tryShare({ status: 'ok', sharedAt: '2026-11-13T10:00:00.000+00:00' });
+        const shares = await evaluate(`JSON.stringify(__edu.shares)`).then(JSON.parse);
+        ok(dOn.sharing && dOn.state === onText && dOn.btn === stopBtn && dOn.status === want.eduShareStarted && shares.length === 4 && shares.every((x) => x.name === 'ShareSmoke' && x.adult === true), `Share turns sharing on ("${dOn.state}", "${dOn.status}"): the name went to the board with the adult box`);
+        // Esc closes it; reopened, the box is unticked again (never remembered) and Stop needs no box.
+        await evaluate(`${el('edu-data-panel')}.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })), true`);
+        const dShut = await dataPanel();
+        await evaluate(`${play}.openEduData(), true`);
+        const dAgain = await dataPanel();
+        ok(!dShut.open && dShut.keys && dAgain.open && dAgain.adult === false && dAgain.btn === stopBtn && dAgain.disabled === false, 'Esc closes it and the keyboard is back; reopened, the 18+ box is unticked again and Stop sharing needs no box');
+        // Stop sharing: off only once the server has deleted the row.
+        await evaluate(`(globalThis.__eduAnswer.unshare = null, ${el('edu-share-btn')}.click(), true)`);
+        await sleep(400);
+        const dStuck = await dataPanel();
+        await evaluate(`(globalThis.__eduAnswer.unshare = true, ${el('edu-share-btn')}.click(), true)`);
+        await sleep(400);
+        const dOff = await dataPanel();
+        ok(dStuck.sharing && dStuck.status === want.eduShareStopOffline && !dOff.sharing && dOff.status === want.eduShareStopped && dOff.state === offText && dOff.btn === shareBtn && dOff.disabled === true, `Stop sharing stays on while the board cannot be reached ("${dStuck.status}"), then turns off ("${dOff.status}")`);
+        await closeData();
+        // Without a username the panel says to save one, and Share answers the same.
+        await evaluate(`import('./src/save.js').then((m) => (${play}.setSaveState(m.saveLocal({ ...${play}.save, name: '' })), ${play}.openEduData(), true))`);
+        const dNoName = await dataPanel();
+        await evaluate(`(${el('edu-adult')}.click(), ${el('edu-share-btn')}.click(), true)`);
+        await sleep(300);
+        const dNoName2 = await dataPanel();
+        ok(dNoName.status === want.eduShareNeedName && dNoName2.status === want.eduShareNeedName && !dNoName2.sharing, `without a username it says "${dNoName.status}"`);
+        await closeData();
+        await nameAs('ShareSmoke');
+
+        // The 📚 tab: a fourth tab, the stubbed board, and for a player who does not share a footer link to the panel.
+        const b0 = await openBoard();
+        const panelL = b0.panel.x - b0.panel.width / 2;
+        const panelR = b0.panel.x + b0.panel.width / 2;
+        ok(b0.tab === 'education' && b0.tabs.join() === 'scores,daily,medals,education' && b0.xs.length === 4 && b0.track.x - b0.track.width / 2 >= panelL + 24 && b0.track.x + b0.track.width / 2 <= panelR - 24 && b0.title === (await tx('eduBoardTitle')), `an unlocked device has a fourth tab, 📚 ("${b0.title}"), its four glyphs inside the panel at phone width`);
+        ok(['MicrobeMaven', '100.0 %', 'Villus', '81.3 %', '112'].every((x) => b0.texts.includes(x)) && !b0.texts.includes('ShareSmoke') && b0.footer === (await tx('eduBoardShare')) && b0.link, `the 📚 tab lists the board (name, grade, runs); not sharing, the footer invites: "${b0.footer}"`);
+        await tapAt(b0.footerAt.x, b0.footerAt.y);
+        const dFromBoard = await dataPanel();
+        // Share from there: when the panel closes, the board loads again with the player's own row.
+        await evaluate(`(globalThis.__eduAnswer.share = { status: 'ok', sharedAt: '2026-11-13T10:00:00.000+00:00' }, globalThis.__eduAnswer.grades = { status: 'ok' }, ${el('edu-adult')}.click(), ${el('edu-share-btn')}.click(), true)`);
+        await sleep(400);
+        await closeData();
+        for (let i = 0; i < 40 && (await evaluate(`${LB}.footer?.text ?? ''`)) === b0.footer; i += 1) await sleep(150);
+        await sleep(500);
+        const b1 = await evaluate(`(() => { const b = ${LB}; return JSON.stringify({ active: __flappy.scene.isActive('Leaderboard'), footer: b.footer.text, link: Boolean(b.footerAction), texts: b.children.list.filter((c) => c.type === 'Text' && c.visible).map((c) => c.text) }); })()`).then(JSON.parse);
+        ok(dFromBoard.open && b1.active && b1.texts.includes('ShareSmoke') && b1.footer === 'You: #2 of 3 · 92.5 %' && !b1.link, `a tap on the footer opens the panel; after sharing there the board loads again with the player's own row ("${b1.footer}")`);
+        await closeBoard();
+        // Sharing, but not listed yet: the footer counts the graded runs still missing.
+        await evaluate(`(${play}.fetchEduBoard = () => Promise.resolve(${JSON.stringify(board)}.filter((r) => !r.me)), localStorage.removeItem('flappyPoop.eduSrs'), true)`);
+        const b2 = await openBoard();
+        await closeBoard();
+        ok(b2.footer === (await tx('eduBoardMore')).replace('{n}', String(TT.education.boardMinRuns)) && !b2.link, `sharing with no graded run yet, the footer reads "${b2.footer}"`);
+
+        // Profiles. Your own: an "On the 📚 board" row that follows the server and opens the panel.
+        const openProfile = async (target) => {
+          await evaluate(`${play}.openStats(${target ? JSON.stringify(target) : ''}), true`);
+          for (let i = 0; i < 60 && !(await evaluate(`__flappy.scene.isActive('Stats') && Boolean(${ST}.view)`)); i += 1) await sleep(100);
+          return evaluate(`JSON.stringify({ edu: ${ST}.view?.education ? { grade: ${ST}.view.education.grade, runs: ${ST}.view.education.runs, earned: ${ST}.view.education.earned.map((b) => b.entry.id), shared: ${ST}.view.education.shared } : null, row: ${ST}.eduSharedItem ? { shared: ${ST}.eduSharedItem.shared } : null, texts: ${ST}.children.list.filter((c) => c.type === 'Text').map((c) => c.text), sharing: ${play}.eduShareOn() })`).then(JSON.parse);
+        };
+        const shutProfile = async () => {
+          await evaluate(`__flappy.scene.isActive('Stats') && ${ST}.close(), true`);
+          for (let i = 0; i < 30 && (await evaluate(`__flappy.scene.isActive('Stats')`)); i += 1) await sleep(100);
+        };
+        const prof = (education) => ({ found: true, name: 'ShareSmoke', single: { games: 2, bestScore: 30, wins: 0, maxLevel: 2, avgLevel: 1.5, avgScore: 20 }, daily: { dumps: 0, gold: 0, silver: 0, bronze: 0 }, tournament: { events: 0, gold: 0, silver: 0, bronze: 0, rival: null }, counters: { games: 2 }, achievements: [], tags: [], education });
+        const [sharedLabel, sharedOn, sharedOff] = await Promise.all(['statsEduShared', 'statsEduSharedOn', 'statsEduSharedOff'].map(tx));
+        await evaluate(`globalThis.__profile = ${JSON.stringify(prof({ grade: null, runs: 0, badges: {} }))}, true`);
+        const own1 = await openProfile(null);
+        ok(own1.row?.shared === true && own1.texts.includes(sharedLabel) && own1.texts.includes(sharedOn) && own1.sharing, `your own profile's 📚 section says "${sharedLabel}: ${sharedOn}"`);
+        // The server says this player no longer shares (stopped on another device): the device follows.
+        await shutProfile();
+        await evaluate(`globalThis.__profile = ${JSON.stringify(prof(null))}, true`);
+        const own2 = await openProfile(null);
+        ok(own2.row?.shared === false && own2.texts.includes(sharedOff) && !own2.sharing, `when the server says the player does not share, the device follows: "${sharedOff}", sharing off here`);
+        // The row opens the panel.
+        const rowAt = await evaluate(`(() => { const z = ${ST}.eduSharedItem.zone; ${ST}.scroll.scrollBy(-99999); return JSON.stringify({ x: z.x, y: z.y + ${ST}.scroll.offset }); })()`).then(JSON.parse);
+        await sleep(200);
+        await tapAt(rowAt.x, rowAt.y);
+        const dFromProfile = await dataPanel();
+        await closeData();
+        ok(dFromProfile.open, 'a tap on that row opens the Education data panel');
+        await shutProfile();
+        // Another player's profile: a 📚 section only when they share, and only on an unlocked device.
+        await evaluate(`globalThis.__profile = ${JSON.stringify({ ...prof({ grade: 96.4, runs: 28, badges: { edu_grade_a: '2026-11-12', edu_perfect: '2026-11-13' } }), name: 'Rival' })}, true`);
+        const other1 = await openProfile({ name: 'Rival' });
+        await shutProfile();
+        await evaluate(`globalThis.__profile = ${JSON.stringify({ ...prof(null), name: 'Rival' })}, true`);
+        const other2 = await openProfile({ name: 'Rival' });
+        await shutProfile();
+        await evaluate(`(globalThis.__profile = ${JSON.stringify({ ...prof({ grade: 96.4, runs: 28, badges: { edu_grade_a: '2026-11-12' } }), name: 'Rival' })}, ${play}.eduUnlocked = false, true)`);
+        const other3 = await openProfile({ name: 'Rival' });
+        await shutProfile();
+        await evaluate(`${play}.eduUnlocked = true, true`);
+        ok(other1.edu?.grade === 96.4 && other1.edu.runs === 28 && other1.edu.earned.join() === 'edu_grade_a,edu_perfect' && other1.row === null && other1.texts.includes('96.4 %') && !other1.texts.includes(sharedLabel), `another player's profile shows what they share: ${other1.edu?.grade} % over ${other1.edu?.runs} runs and their earned badges, with no sharing row`);
+        ok(other2.edu === null && other3.edu === null, 'no 📚 section for a player who does not share, nor on a device without education unlocked');
+
+        // Clear warns a player who shares that the grades stay on the board.
+        await evaluate(`${play}.eduShare.turnOn('2026-11-13T10:00:00.000+00:00', 'ShareSmoke'), ${play}.openSavePanel(), true`);
+        await sleep(200);
+        await evaluate(`${el('save-clear-btn')}.click(), true`);
+        const warnShared = await evaluate(`${el('save-status')}.textContent`);
+        await closeSave();
+        await evaluate(`${play}.eduShare.turnOff(), ${play}.openSavePanel(), true`);
+        await sleep(200);
+        await evaluate(`${el('save-clear-btn')}.click(), true`);
+        const warnPlain = await evaluate(`${el('save-status')}.textContent`);
+        await closeSave();
+        ok(warnShared === (await tx('saveClearConfirmShared')) && warnPlain === (await tx('saveClearConfirm')) && warnShared.includes('\u{1F4DA}'), 'Clear warns a player who shares that the grades stay on the 📚 board; a player who does not gets the plain warning');
+
+        // Put the device back as it was.
+        await resetNet();
+        await evaluate(`(() => { const p = ${play}; p.fetchEduBoard = p.__fetchEduBoard; delete p.__fetchEduBoard; globalThis.__profile = null; __flappy.registry.set('leaderboardTab', 'scores'); const want = JSON.parse(${all}); for (const k of Object.keys(localStorage)) if (!(k in want)) localStorage.removeItem(k); for (const [k, v] of Object.entries(want)) localStorage.setItem(k, v); p.eduUnlocked = false; p.educationOn = false; return true; })()`);
+        await evaluate(`import('./src/save.js').then((m) => (${play}.setSaveState(m.loadLocal()), true))`);
+        await home();
+        const back = await evaluate(`JSON.stringify({ unlocked: ${play}.isEduUnlocked(), sharing: ${play}.eduShareOn(), name: ${play}.getSaveState().name ?? '' })`).then(JSON.parse);
+        ok(!back.unlocked && !back.sharing, `the device is put back (education locked, not sharing, player "${back.name}")`);
       }
     });
 

@@ -814,7 +814,7 @@ test('anon reads no player_meta and cannot call the new helpers', async () => {
 // The 📚 education board (plan 21, Stage 3b, step B1): sharing is a player's own choice.
 // ---------------------------------------------------------------------------
 
-const BOARD_MIN_RUNS = 3; // graded runs before a sharing player is listed (TUNING.education.boardMinRuns once the game reads it)
+const BOARD_MIN_RUNS = T.education.boardMinRuns; // graded runs before a sharing player is listed: the 📚 tab's footer counts down to the same number
 const eshare = (db, pid, name, adult = true) => asAnon(db, 'select public.share_education($1, $2, $3)::text as r', [pid, name, adult]).then((r) => r.rows[0].r);
 const egrades = (db, pid, batch, at, runs, sum, badges = {}) =>
   asAnon(db, 'select public.submit_education_grades($1, $2, $3::timestamptz, $4, $5, $6::jsonb) as r', [pid, batch, at, runs, sum, JSON.stringify(badges)]).then((r) => r.rows[0].r);

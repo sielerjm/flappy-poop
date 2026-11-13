@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { GAME_WIDTH, GAME_HEIGHT, TUNING as T } from '../src/config.js';
 import { overlayOutsideHit, clampScroll, settingsLayout, leaderboardLayout, statsLayout } from '../src/logic.js';
 import { nearestTab } from '../src/ui/tabs.js';
-import { dailyYouText } from '../src/i18n.js';
+import { dailyYouText, eduYouText } from '../src/i18n.js';
 
 const howto = { x: GAME_WIDTH / 2, y: GAME_HEIGHT / 2, width: 600, height: 1000 };
 const settings = { x: GAME_WIDTH / 2, y: GAME_HEIGHT / 2, width: 600, height: 860 };
@@ -94,6 +94,37 @@ test('a tap on the tab row picks the nearest glyph; the 🌞 footer names your r
   assert.equal(nearestTab((tab.xs[0] + tab.xs[1]) / 2 + 1, tab.xs), 1, 'just past halfway');
   assert.equal(dailyYouText('en', { rank: 3, total: 12, score: 87 }), 'You: #3 of 12 · 87');
   assert.equal(dailyYouText('zh-Hans', { rank: 3, total: 12, score: 87 }), '你：第3名 / 共12人 · 87');
+});
+
+// B3 (plan 21): a device with education mode unlocked has a fourth board, 📚.
+test('leaderboardLayout with four tabs (🏆 · 🌞 · 🏅 · 📚): the same row, wider; every glyph inside the panel, a pill apart, in a tap row that spans them; three tabs are as they were', () => {
+  const cx = 360;
+  const cy = 640;
+  const three = leaderboardLayout(cx, cy);
+  assert.deepEqual(leaderboardLayout(cx, cy, { tabs: 3 }), three, 'three is the default');
+  assert.deepEqual(three.tab, { y: cy - 432, xs: [cx - 96, cx, cx + 96], track: { x: cx, y: cy - 432, width: 288, height: 56 }, pill: { width: 88, height: 46 }, width: 320, height: 72 }, 'the three-tab row has not moved');
+  const four = leaderboardLayout(cx, cy, { tabs: 4 });
+  const { tab } = four;
+  assert.equal(tab.xs.length, 4);
+  assert.equal(tab.y, three.tab.y, 'the same row');
+  assert.equal((tab.xs[0] + tab.xs[3]) / 2, cx, 'centred');
+  for (let i = 1; i < 4; i += 1) assert.ok(tab.xs[i] - tab.xs[i - 1] >= tab.pill.width, 'the pill behind one glyph never covers its neighbour');
+  assert.ok(tab.track.x - tab.track.width / 2 <= tab.xs[0] - tab.pill.width / 2 && tab.track.x + tab.track.width / 2 >= tab.xs[3] + tab.pill.width / 2, 'the pill stays inside the track');
+  assert.ok(tab.track.x - tab.track.width / 2 >= cx - four.panel.width / 2 + 24 && tab.track.x + tab.track.width / 2 <= cx + four.panel.width / 2 - 24, 'the track inside the panel');
+  assert.ok(tab.xs.every((x) => Math.abs(x - tab.track.x) <= tab.width / 2) && tab.width <= four.panel.width - 16, 'the tap row spans every glyph, inside the panel');
+  assert.ok(four.title.y + 52 / 2 <= tab.y - tab.track.height / 2, 'the row sits under the title (and the ✕ beside it)');
+  assert.ok(tab.height >= T.trayHitMin * 0.8, 'a thumb-sized row');
+  assert.deepEqual(tab.xs.map((x) => nearestTab(x, tab.xs)), [0, 1, 2, 3], 'a tap on a glyph picks it');
+  assert.equal(nearestTab(tab.track.x + tab.width / 2, tab.xs), 3, 'the right end is 📚');
+  // Everything but the tab row is the same panel.
+  for (const key of ['panel', 'title', 'close', 'headerY', 'firstY', 'pitch', 'footerY', 'versionY', 'cols', 'titleMaxW']) assert.deepEqual(four[key], three[key], key);
+  // The 📚 board's columns: the grade ends left of the run count, and a name keeps its room.
+  const c = four.cols;
+  assert.ok(c.gradeRight < c.right - 56, 'the grade ends before a three-digit run count');
+  assert.ok(c.gradeRight - 140 - 12 - c.name >= 220, `a name gets at least 220 px left of "100.0 %" (${c.gradeRight - 140 - 12 - c.name})`);
+  assert.equal(eduYouText('en', { rank: 3, total: 12, grade: 92.5 }), 'You: #3 of 12 · 92.5 %');
+  assert.equal(eduYouText('en', { rank: 1, total: 1, grade: 100 }), 'You: #1 of 1 · 100.0 %', 'one decimal, always');
+  assert.equal(eduYouText('zh-Hans', { rank: 3, total: 12, grade: 92.5 }), '你：第3名 / 共12人 · 92.5 %');
 });
 
 test('the Profile panel (statsLayout): inside the field, ✕ and title above the band, the detail strip and version line below it', () => {

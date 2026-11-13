@@ -257,7 +257,36 @@ Short, playful, clear. Fit a 720×1280 logical field; How to play / About body w
 | reviveEnd | End run | 结束本局 |
 | reviveGiveUp | Give up | 放弃 |
 | reviveFree | No questions left: you're back in. | 没有题了：可以继续飞了。 |
-| eduNotSaved | Education runs are not on the boards yet | 教育模式的成绩暂不上排行榜 |
+| eduNotSaved | Education runs are not on the 🏆 boards | 教育模式的成绩不上 🏆 排行榜 |
+| saveEduData | 📚 Education data | 📚 教育数据 |
+| eduDataTitle | 📚 Education data | 📚 教育数据 |
+| eduDataIntro | Education mode keeps your answers, grades and badges on this device. Nothing leaves it unless you choose to share below. | 教育模式的答题记录、成绩和徽章都保存在这台设备上。除非你在下面选择分享，否则不会离开设备。 |
+| eduDataAdult | I am 18 or older | 我已年满 18 岁 |
+| eduShareTitle | Share my grades | 分享我的成绩 |
+| eduShareBody | Puts your username, your average grade, the number of graded runs and your education badges on the 📚 board, where players with education mode can see them. Your answers are not shared, and this is not research. Stopping deletes it from the board at once. | 把你的用户名、平均成绩、计分局数和教育徽章放到 📚 排行榜上，开启教育模式的玩家都能看到。不会分享你的具体答题，这也不是研究。停止分享会立即从榜上删除。 |
+| eduShareOn | Sharing is on. | 正在分享。 |
+| eduShareOff | Sharing is off. | 未分享。 |
+| eduShareStop | Stop sharing | 停止分享 |
+| eduShareNeedName | Save a username first: tap the user button on the home screen. | 请先保存用户名：点首页的用户按钮。 |
+| eduShareNeedAdult | Sharing is for adults: tick the box if you are 18 or older. | 仅限成年人分享：如果你已年满 18 岁，请勾选上面的选项。 |
+| eduShareClosed | Sharing is not open yet. It opens soon. | 分享功能尚未开放，敬请期待。 |
+| eduShareNameTaken | Another player holds this username. Pick another one, or load your user code. | 这个用户名已被其他玩家使用。请换一个，或载入你的用户码。 |
+| eduShareOffline | Couldn't reach the board. Try again in a moment. | 无法连接排行榜，请稍后再试。 |
+| eduShareStarted | Your grades are going to the 📚 board. | 你的成绩正在上传到 📚 排行榜。 |
+| eduShareStopped | Sharing stopped: your grades are off the board. | 已停止分享：你的成绩已从榜上删除。 |
+| eduShareStopOffline | Couldn't reach the board, so your grades are still on it. Try again. | 无法连接排行榜，你的成绩仍在榜上。请再试一次。 |
+| eduBoardTitle | EDUCATION | 教育榜 |
+| eduBoardGrade | Grade | 成绩 |
+| eduBoardRuns | Runs | 局数 |
+| eduBoardEmpty | No grades shared yet | 还没有人分享成绩 |
+| eduBoardYou | You: #{rank} of {total} · {grade} % | 你：第{rank}名 / 共{total}人 · {grade} % |
+| eduBoardShare | Share my grades to join › | 分享我的成绩即可上榜 › |
+| eduBoardMore | {n} more graded runs to appear on the board | 再完成 {n} 局计分局即可上榜 |
+| eduBoardQueued | Your grades are on their way to the board | 你的成绩正在上传 |
+| statsEduShared | On the 📚 board | 在 📚 榜上 |
+| statsEduSharedOn | Shared › | 已分享 › |
+| statsEduSharedOff | Not shared › | 未分享 › |
+| saveClearConfirmShared | Copy your user code first: without it this username and its scores can't come back. Your shared grades stay on the 📚 board until you stop sharing in 📚 Education data. Tap Clear again to sign out. | 请先复制你的用户码：没有它，这个用户名和分数就找不回来了。你分享的成绩会留在 📚 榜上，除非先在“📚 教育数据”里停止分享。再点一次“清除”即可退出。 |
 | saveWelcome | Welcome back, {name} — {scores} | 欢迎回来，{name}——{scores} |
 | saveWelcomeNoScores | Welcome back, {name} | 欢迎回来，{name} |
 | saveNameRequired | Enter a username first (4–16 characters) | 请先输入用户名（4–16 个字符） |

@@ -3,7 +3,7 @@ import { versionText, chromeIntent, overlayOutsideHit, fitScale, leaderboardLayo
 import { createFocus, pressable } from '../ui/focus.js';
 import { isTopOverlay, openChangelog } from '../ui/overlayStack.js';
 import { createTabs, nearestTab } from '../ui/tabs.js';
-import { t, metaFontSize, rankText, levelLabel, medalYouText, dailyYouText, dailyDayText } from '../i18n.js';
+import { t, metaFontSize, rankText, levelLabel, medalYouText, dailyYouText, dailyDayText, eduYouText } from '../i18n.js';
 import { bestByToilet, TOILET_EMOJI } from '../save.js';
 import { fetchTop, fetchRank, fetchTournamentBoard, fetchDailyBoard } from '../leaderboard.js';
 import { createScrollView } from '../ui/scrollView.js';
@@ -12,17 +12,20 @@ const STYLE = { fontFamily: 'sans-serif', fontStyle: 'bold', color: '#ffffff', a
 const PINK = '#f8a0c8';
 const MUTED = '#c9b8dc';
 const DIM = '#6a5a74';
-/** The registry key for the board last shown this session: 'scores' (🏆), 'daily' (🌞) or 'medals' (🏅). */
+/** The registry key for the board last shown this session: 'scores' (🏆), 'daily' (🌞), 'medals' (🏅) or 'education' (📚). */
 const TAB_KEY = 'leaderboardTab';
-/** The boards in tab order, with their glyphs and titles. */
-const TABS = ['scores', 'daily', 'medals'];
-const TAB_GLYPHS = ['\u{1F3C6}', '\u{1F31E}', '\u{1F3C5}'];
-const TAB_TITLES = { scores: 'leaderboardTitle', daily: 'dailyBoardTitle', medals: 'medalBoardTitle' };
+/** The boards in tab order, with their glyphs and titles. The 📚 board is a fourth tab only on a device with education mode unlocked (plan 21). */
+const BASE_TABS = ['scores', 'daily', 'medals'];
+const TAB_GLYPH = { scores: '\u{1F3C6}', daily: '\u{1F31E}', medals: '\u{1F3C5}', education: '\u{1F4DA}' };
+const TAB_TITLES = { scores: 'leaderboardTitle', daily: 'dailyBoardTitle', medals: 'medalBoardTitle', education: 'eduBoardTitle' };
 
 /**
  * Shared board overlay (🏆 in the tray or T), three boards behind the 🏆 · 🌞 · 🏅 tabs
  * under the title: the Top 25 scores, today's Daily Dump (daily_board), or the 🏅 medal
- * board (tournament_board: 🥇, then 🥈, 🥉, best race). Posts anything pending first (Play.syncLeaderboard),
+ * board (tournament_board: 🥇, then 🥈, 🥉, best race). On a device with education mode
+ * unlocked a fourth tab, 📚, is the education board (education_board): players who chose to
+ * share, by average grade; its footer invites a player who does not share to the Education
+ * data panel. Posts anything pending first (Play.syncLeaderboard),
  * then loads the board and the player's own standing. Network work happens only
  * here, in create(), behind a Loading line; the game itself never waits on it.
  * LEADERBOARD.visibleRows rows show at once; the band scrolls (ui/scrollView.js)
@@ -44,6 +47,8 @@ export class Leaderboard extends Phaser.Scene {
     const play = this.scene.get('Play');
     const locale = play?.getLocale?.() ?? 'en';
     this.locale = locale;
+    const TABS = play?.isEduUnlocked?.() ? [...BASE_TABS, 'education'] : BASE_TABS;
+    this.tabList = TABS;
     this.tab = TABS.includes(this.registry.get(TAB_KEY)) ? this.registry.get(TAB_KEY) : 'scores';
     this.switching = false;
     const skipSync = this.skipSync;
@@ -52,7 +57,7 @@ export class Leaderboard extends Phaser.Scene {
     const W = this.scale.width; // the live field (wider than 720 on desktop); the panel stays centred
     const cx = W / 2;
     const cy = GAME_HEIGHT / 2;
-    const L = leaderboardLayout(cx, cy);
+    const L = leaderboardLayout(cx, cy, { tabs: TABS.length });
     this.L = L;
     this.cx = cx;
     this.cy = cy;
@@ -67,8 +72,8 @@ export class Leaderboard extends Phaser.Scene {
     const title = this.add.text(L.title.x, L.title.y, titleText, { ...STYLE, fontSize: '52px', color: PINK }).setOrigin(0.5);
     title.setScale(fitScale(title.width, L.titleMaxW, 0));
     this.title = title;
-    // 🏆 · 🌞 · 🏅: a tap picks the nearest glyph; the pad's A (no pointer) moves to the next tab.
-    this.tabs = createTabs(this, L.tab, { glyphs: TAB_GLYPHS, index: TABS.indexOf(this.tab), depth: 1 });
+    // 🏆 · 🌞 · 🏅 (· 📚): a tap picks the nearest glyph; the pad's A (no pointer) moves to the next tab.
+    this.tabs = createTabs(this, L.tab, { glyphs: TABS.map((id) => TAB_GLYPH[id]), index: TABS.indexOf(this.tab), depth: 1 });
     const tabZone = this.add
       .zone(L.tab.track.x, L.tab.y, L.tab.width, L.tab.height)
       .setInteractive({ useHandCursor: true })
@@ -80,9 +85,16 @@ export class Leaderboard extends Phaser.Scene {
     this.status = this.add
       .text(cx, cy, t(locale, 'leaderboardLoading'), { ...STYLE, fontSize: '36px', color: MUTED, fontStyle: 'normal', wordWrap: { width: 480, useAdvancedWrap: true } })
       .setOrigin(0.5);
+    // The footer is a link while footerAction is set (the 📚 board's "Share my grades"): a tap, or A
+    // on the ring, runs it. It takes taps only once it has its text (linkFooter: a Text's tap box is
+    // measured when it is made interactive).
+    this.footerAction = null;
     this.footer = this.add
       .text(cx, L.footerY, '', { ...STYLE, fontSize: '26px', color: PINK, fontStyle: 'normal', wordWrap: { width: 500, useAdvancedWrap: true } })
-      .setOrigin(0.5);
+      .setOrigin(0.5)
+      .on('pointerdown', () => {
+        if (isTopOverlay(this)) this.footerAction?.();
+      });
     const version = this.add
       .text(cx, L.versionY, versionText(locale), { ...STYLE, fontSize: metaFontSize(locale), color: PINK, fontStyle: 'normal' })
       .setOrigin(0.5)
@@ -97,7 +109,7 @@ export class Leaderboard extends Phaser.Scene {
     this.input.keyboard?.on('keydown-ESC', () => this.close());
     // Controller: the ring sits on ✕ (A on the tabs moves to the next board); up / down scroll the rows once they are in.
     this.focus = createFocus(this, T, {
-      items: [pressable('close', close), pressable('tab', tabZone), pressable('changelog', version)],
+      items: [pressable('close', close), pressable('tab', tabZone), { ...pressable('footer', this.footer), visible: () => Boolean(this.footerAction) }, pressable('changelog', version)],
       onVertical: (dir) => this.scroll?.scrollBy(dir === 'up' ? T.focus.scrollStepPx : -T.focus.scrollStepPx),
     });
     this.focus.show(); // only under a controller (registry padMode)
@@ -108,8 +120,9 @@ export class Leaderboard extends Phaser.Scene {
     this.loadBoard(gen, play, { skipSync });
   }
 
-  /** Show board `next` ('scores' | 'daily' | 'medals'): remember it, slide the pill, then restart on it. */
+  /** Show board `next` ('scores' | 'daily' | 'medals' | 'education'): remember it, slide the pill, then restart on it. */
   switchTab(next) {
+    const TABS = this.tabList;
     if (this.switching || next === this.tab || !TABS.includes(next)) return;
     this.switching = true;
     this.registry.set(TAB_KEY, next);
@@ -131,6 +144,12 @@ export class Leaderboard extends Phaser.Scene {
       }
     }
     const state = play?.getSaveState?.() ?? { name: '', top: [] };
+    if (this.tab === 'education') {
+      const rows = await play.fetchEduBoard(state.id ?? null);
+      if (gen !== this.gen || !this.scene.isActive()) return;
+      this.showEducation(rows, play);
+      return;
+    }
     if (this.tab === 'medals') {
       const rows = await fetchTournamentBoard(state.id ?? null);
       if (gen !== this.gen || !this.scene.isActive()) return;
@@ -291,6 +310,69 @@ export class Leaderboard extends Phaser.Scene {
     }
     sv.finish(y + L.pitch / 2 - 40);
     this.scroll = sv;
+  }
+
+  /**
+   * The 📚 board (plan 21): rank · name · average grade · graded runs, the player's own row in pink
+   * (appended below the top when it is lower). Only players who chose to share are on it, from
+   * education.boardMinRuns graded runs. The footer: the player's rank; or, sharing but not listed
+   * yet, how many graded runs are missing (or that the grades are on their way); or, not sharing,
+   * a link to the Education data panel. A row of the player's own means the server has them as
+   * sharing: a device that did not know turns sharing on (Play.noteEduShared).
+   */
+  showEducation(rows, play) {
+    const { locale, L } = this;
+    const mine = rows?.find((r) => r.me) ?? null;
+    if (mine) play?.noteEduShared?.(true);
+    if (mine) {
+      this.footer.setText(eduYouText(locale, mine));
+    } else if (play?.eduShareOn?.()) {
+      const need = T.education.boardMinRuns - (play.eduStore?.load().counters.gradedRuns ?? 0);
+      this.footer.setText(need > 0 ? t(locale, 'eduBoardMore').replace('{n}', String(need)) : t(locale, 'eduBoardQueued'));
+    } else {
+      this.footer.setText(t(locale, 'eduBoardShare'));
+      this.footerAction = () => this.openEduData(play);
+      this.footer.setInteractive({ useHandCursor: true }); // now that it has its text: the tap box is the line
+    }
+    if (rows === null) {
+      this.status.setText(t(locale, 'leaderboardOffline'));
+      return;
+    }
+    if (rows.length === 0) {
+      this.status.setText(t(locale, 'eduBoardEmpty'));
+      return;
+    }
+    this.status.setVisible(false);
+    this.fixed.push(this.add.text(L.cols.gradeRight, L.headerY, t(locale, 'eduBoardGrade'), { ...STYLE, fontSize: '20px', color: DIM }).setOrigin(1, 0.5));
+    this.fixed.push(this.add.text(L.cols.right, L.headerY, t(locale, 'eduBoardRuns'), { ...STYLE, fontSize: '20px', color: DIM }).setOrigin(1, 0.5));
+    const { sv, visible } = this.rowsBand();
+    const count = Math.max(rows.length, visible);
+    let y = L.firstY;
+    for (let i = 0; i < count; i += 1) {
+      y = L.firstY + i * L.pitch;
+      const row = rows[i];
+      const color = row?.me ? PINK : row ? '#ffffff' : DIM;
+      sv.add(this.add.text(L.cols.rank, y, `${row ? row.rank : i + 1}.`, { ...STYLE, fontSize: '34px', color: row ? PINK : DIM }).setOrigin(0, 0.5));
+      sv.add(this.add.text(L.cols.right, y, row ? String(row.runs) : '–', { ...STYLE, fontSize: '26px', color: row?.me ? PINK : row ? MUTED : DIM, fontStyle: 'normal' }).setOrigin(1, 0.5));
+      const grade = row ? sv.add(this.add.text(L.cols.gradeRight, y, `${row.grade.toFixed(1)} %`, { ...STYLE, fontSize: '34px', color }).setOrigin(1, 0.5)) : null;
+      const name = sv.add(this.add.text(L.cols.name, y, row ? row.name : '–', { ...STYLE, fontSize: '34px', color, align: 'left' }).setOrigin(0, 0.5));
+      // The name gets the room left of the grade (a long name shrinks, as on 🏆).
+      name.setScale(fitScale(name.width, (grade ? grade.x - grade.width : L.cols.toilet) - 12 - name.x, 4));
+      if (row) this.linkName(sv, name, row.name);
+    }
+    sv.finish(y + L.pitch / 2 - 40);
+    this.scroll = sv;
+  }
+
+  /** The Education data panel over the board; when sharing was turned on or off there, the board loads again (and syncs: the first grades go out). */
+  openEduData(play) {
+    play?.openEduData?.({
+      onClose: (changed) => {
+        if (!changed || !this.scene.isActive()) return;
+        this.gen += 1;
+        this.scene.restart();
+      },
+    });
   }
 
   /**

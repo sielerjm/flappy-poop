@@ -2111,25 +2111,30 @@ export const TEST_POWERS = ['probiotic', 'fiber', 'postbiotic', 'bean1', 'bean3'
  * Leaderboard overlay geometry around its centre (cx, cy): a 560 × 800 panel; the
  * title and the ✕ along the top; under them the 🏆 · 🌞 · 🏅 tabs (createTabs' box: a
  * track with a glyph at each of `xs` and a pill behind the chosen one, the whole row
- * tappable); the column header; the
+ * tappable). `tabs` is how many boards there are: three, or four on a device with
+ * education mode unlocked (the 📚 board); the glyphs stay 96 px apart and the track
+ * grows with them. Then the column header; the
  * rows (LEADERBOARD.visibleRows at `pitch`, from `firstY`); the footer and the
  * version line. Column x's for both boards: rank, name, 🚽, LV, the right-hand
  * number (score or best race), and the right edge of the 🥇 🥈 🥉 text.
  */
-export function leaderboardLayout(cx, cy) {
+export function leaderboardLayout(cx, cy, { tabs = 3 } = {}) {
   // 640 × 1120, the profile's size (statsLayout): 40 px clear of a phone field's sides, 80 px of its top and bottom.
   const tabY = cy - 432;
+  const n = Math.max(1, Math.floor(tabs) || 3);
+  const step = 96; // px between glyphs: wider than the pill behind one
+  const xs = Array.from({ length: n }, (_, i) => cx + (i - (n - 1) / 2) * step);
   return {
     panel: { x: cx, y: cy, width: 640, height: 1120 },
     title: { x: cx, y: cy - 500 },
     close: { x: cx + 282, y: cy - 510 },
-    tab: { y: tabY, xs: [cx - 96, cx, cx + 96], track: { x: cx, y: tabY, width: 288, height: 56 }, pill: { width: 88, height: 46 }, width: 320, height: 72 },
+    tab: { y: tabY, xs, track: { x: cx, y: tabY, width: n * step, height: 56 }, pill: { width: 88, height: 46 }, width: n * step + 32, height: 72 },
     headerY: cy - 380,
     firstY: cy - 344,
     pitch: 52,
     footerY: cy + 456,
     versionY: cy + 522,
-    cols: { rank: cx - 264, name: cx - 196, toilet: cx + 64, level: cx + 152, right: cx + 264, medalsRight: cx + 192 },
+    cols: { rank: cx - 264, name: cx - 196, toilet: cx + 64, level: cx + 152, right: cx + 264, medalsRight: cx + 192, gradeRight: cx + 184 }, // gradeRight: the 📚 board's "92.5 %", left of its run count at `right`
     titleMaxW: 480, // a longer title (MEDAL BOARD) shrinks to stay clear of the ✕
   };
 }
