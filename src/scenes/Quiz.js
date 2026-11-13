@@ -494,7 +494,9 @@ export class Quiz extends Phaser.Scene {
 
   /** Option i picked (a tap, a key, the ring: `input` says which, for a pilot tester's answer event): Play grades and saves it; the card shows the verdict. */
   choose(i, input = 'key') {
-    if (!this.card || this.answered || !isTopOverlay(this) || this.runCard?.open) return;
+    // Finishing (Give up taken, or Return): the scene's stop is queued to the next step, and a key or
+    // a second thumb in this frame must not answer under it (plan 24, AUD-019).
+    if (!this.card || this.answered || this.finishing || !isTopOverlay(this) || this.runCard?.open) return;
     this.answered = true;
     const key = this.order[i];
     const rtMs = (globalThis.performance?.now?.() ?? Date.now()) - this.shownAt;
@@ -690,6 +692,7 @@ export class Quiz extends Phaser.Scene {
     const play = this.play;
     const result = chromeIntent({ state: play?.state ?? 'paused', overlay: 'quiz', input: 'close' });
     if (result.do !== 'closeTop') return;
+    this.finishing = true; // nothing more is answered in the frame before the stop runs
     this.sample('book-close', T.bookCloseVolume);
     this.scene.stop(); // its shutdown tells Play (onQuizClosed)
     if (result.armResumeLockout) play?.armResumeLockout?.();

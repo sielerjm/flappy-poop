@@ -27,3 +27,36 @@ test('a question left waiting under another overlay is marked interrupted; on to
   none.update();
   assert.equal(none.interrupted, false, 'no card, nothing to mark');
 });
+
+/** A revive quiz on Quiz.prototype whose scene stop is only queued, as Phaser's is, and a Play that records answers. */
+function reviveQuiz() {
+  const answers = [];
+  const stops = [];
+  const play = {
+    revive: { phase: 'strikes', strikes: 0, streak: 0, lost: false, gaveUp: false },
+    quizAnswer(a) {
+      answers.push(a);
+      return { correct: a.chosen === 'answer', grade: 'good', coins: 0 };
+    },
+    reviveEvent(event) {
+      if (event === 'giveUp') this.revive = { ...this.revive, phase: 'over', gaveUp: true };
+      return this.revive;
+    },
+    armResumeLockout() {},
+  };
+  const q = quizScene({
+    scene: { ...scenes(['Play', 'Quiz']), stop: () => stops.push('Quiz') },
+    play, mode: 'revive', reviveState: play.revive, finishing: false,
+    card: { id: 'ST-01' }, answered: false, order: ['answer', 'w1', 'w2'], reason: 'new', shownAt: 0, interrupted: false,
+    runCard: { open: false }, refreshTally() {}, reveal() {}, sample() {},
+  });
+  return { q, play, answers, stops };
+}
+
+test('Give up, then a key or a second thumb before the queued stop runs: no answer is recorded (AUD-019)', () => {
+  const { q, play, answers, stops } = reviveQuiz();
+  q.decide('giveUp');
+  assert.deepEqual([play.revive.phase, play.revive.gaveUp, q.finishing, stops], ['over', true, true, ['Quiz']], 'the stop is only queued');
+  q.choose(0, 'key');
+  assert.equal(answers.length, 0, 'nothing answered under a finishing quiz');
+});

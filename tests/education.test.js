@@ -284,7 +284,8 @@ test('reviveStep: the choice, the streak (the first right answer counts), a miss
   assert.deepEqual([s.phase, s.streak], ['streak', 2]);
   assert.equal(reviveStep(s, 'correct').phase, 'restored', `${T.education.restoreStreak} in a row`);
   assert.equal(reviveStep(s, 'wrong').phase, 'revived', 'a miss in the streak still revives');
-  for (const st of [reviveStart(), choice, s]) assert.equal(reviveStep(st, 'giveUp').phase, 'over');
+  assert.deepEqual([reviveStep(reviveStart(), 'giveUp').phase, reviveStep(reviveStart(), 'giveUp').gaveUp], ['over', true], 'Give up before the first right answer ends the run');
+  for (const st of [choice, s]) assert.equal(reviveStep(st, 'giveUp'), st, `after a right answer (${st.phase}) Give up changes nothing (AUD-023)`);
   for (const phase of ['revived', 'restored', 'over']) {
     const fin = { ...s, phase };
     for (const ev of ['correct', 'wrong', 'continue', 'streak', 'giveUp']) assert.equal(reviveStep(fin, ev), fin);

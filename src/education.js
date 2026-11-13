@@ -285,13 +285,16 @@ export function reviveSettled(state) {
  * education.strikes wrong ones end the run: 'over') → 'choice' (only when the crash took
  * something; else straight to 'revived') → 'streak' (right answers in a row up to
  * education.restoreStreak, the first included: 'restored'; a miss: 'revived'). 'giveUp' ends the
- * run from any phase and marks the state gaveUp (🏳️ Drop Out reads it). The final phases ('revived',
- * 'restored', 'over') ignore every event.
+ * run while in 'strikes' (before the first right answer) and marks the state gaveUp (🏳️ Drop Out
+ * reads it); later it changes nothing. The final phases ('revived', 'restored', 'over') ignore
+ * every event.
  */
 export function reviveStep(state, event, t = TUNING) {
   if (FINAL.has(state.phase)) return state;
   const { strikes, restoreStreak } = t.education;
-  if (event === 'giveUp') return { ...state, phase: 'over', gaveUp: true };
+  // Give up is offered before the first right answer only (plan 24, AUD-023): after it, the revive
+  // is certain and the field has been refilled, so it changes nothing.
+  if (event === 'giveUp') return state.phase === 'strikes' ? { ...state, phase: 'over', gaveUp: true } : state;
   if (state.phase === 'strikes') {
     if (event === 'correct') return { ...state, streak: 1, phase: state.lost ? 'choice' : 'revived' };
     if (event === 'wrong') {
