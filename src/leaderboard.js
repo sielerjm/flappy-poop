@@ -1108,7 +1108,8 @@ export async function unshareEducation(playerId, opts = {}) {
  */
 export async function submitEducationGrades(playerId, batch, { sharedAt = null, runs = 0, gradeSum = 0, badges = {} } = {}, opts = {}) {
   const b = cleanEduBadges(badges);
-  const sane = Number.isInteger(runs) && runs >= 0 && runs <= EDU_BATCH_RUNS && Number.isInteger(gradeSum) && gradeSum >= 0 && gradeSum <= runs * GRADE_MAX && (runs > 0 || Object.keys(b).length > 0);
+  // No runs and no badges is a probe (plan 24): does the row still hold this round?
+  const sane = Number.isInteger(runs) && runs >= 0 && runs <= EDU_BATCH_RUNS && Number.isInteger(gradeSum) && gradeSum >= 0 && gradeSum <= runs * GRADE_MAX;
   if (typeof playerId !== 'string' || !ID_RE.test(playerId) || typeof batch !== 'string' || !ID_RE.test(batch) || !sane) return { status: 'rejected' };
   const body = { p_player_id: playerId, p_batch: batch, p_shared_at: cleanRound(sharedAt), p_runs: runs, p_grade_sum: gradeSum, p_badges: b };
   const out = await request('/rpc/submit_education_grades', { method: 'POST', errors: true, body }, opts);

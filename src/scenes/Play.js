@@ -145,6 +145,8 @@ const TEXT_STYLE = {
 // The first Play.create of a page load also syncs the leaderboard (later restarts don't), so a
 // rename made on another device shows as soon as the game opens online.
 let bootSynced = false;
+/** The game registry's flag: this page load has asked the 📚 row for its round (drainEduShare's probe). */
+const EDU_ROUND_PROBED = 'eduRoundProbed';
 
 export class Play extends Phaser.Scene {
   /** 'Play' is the single-player scene and the left half (P1) of a versus match; 'PlayB' is the right half. */
@@ -3649,7 +3651,21 @@ export class Play extends Phaser.Scene {
       }
       for (let turn = 0; turn < 2; turn += 1) {
         const batch = this.eduShare.beginBatch(this.eduStore.load(), newId);
-        if (!batch) return;
+        if (!batch) {
+          // Nothing new to send. Once a page load, ask whether the row is still this device's round
+          // (plan 24, AUD-009): a fold of two sharers, or Stop and Share on another device, starts a
+          // new one, and this device's whole record must go into it. The flag lives in the game's
+          // registry (it outlives a scene restart, not a reload) and is set once the server answered.
+          if (this.registry?.get?.(EDU_ROUND_PROBED)) return;
+          const probe = await this.postEduGrades(id, newId(), { sharedAt: this.eduShare.load().sharedAt, runs: 0, gradeSum: 0, badges: {} });
+          if (['ok', 'restart', 'notShared', 'rejected'].includes(probe?.status)) this.registry?.set?.(EDU_ROUND_PROBED, true);
+          if (probe?.status === 'restart') {
+            this.eduShare.restart(probe.sharedAt);
+            continue;
+          }
+          if (probe?.status === 'notShared') this.eduShare.turnOff();
+          return;
+        }
         const res = await this.postEduGrades(id, batch.batch, { sharedAt: this.eduShare.load().sharedAt, runs: batch.runs, gradeSum: batch.gradeSum, badges: batch.badges });
         if (res?.status === 'restart') {
           this.eduShare.restart(res.sharedAt);

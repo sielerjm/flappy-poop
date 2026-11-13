@@ -844,12 +844,15 @@ test('submitEducationGrades: ok, restart with the round to adopt, not shared, re
   assert.deepEqual(await submitEducationGrades(ID, batch, body, { fetch: fakeFetch({ status: 200, body: { status: 'restart', shared_at: 'never' } }), config }), { status: 'keep' }, 'a restart with no round is no answer');
   // Batches the server would refuse are not sent.
   const none = fakeFetch({ status: 200, body: { status: 'ok' } });
-  for (const [why, b] of [['an empty batch', { ...body, runs: 0, gradeSum: 0, badges: {} }], ['51 runs', { ...body, runs: 51 }], ['more grade than the runs allow', { ...body, gradeSum: 20001 }], ['a fraction', { ...body, runs: 1.5 }]]) {
+  for (const [why, b] of [['51 runs', { ...body, runs: 51 }], ['more grade than the runs allow', { ...body, gradeSum: 20001 }], ['a fraction', { ...body, runs: 1.5 }]]) {
     assert.deepEqual(await submitEducationGrades(ID, batch, b, { fetch: none, config }), { status: 'rejected' }, why);
   }
   assert.deepEqual(await submitEducationGrades(ID, 'short', body, { fetch: none, config }), { status: 'rejected' });
   assert.equal(none.calls.length, 0);
   assert.deepEqual(await submitEducationGrades(ID, batch, { sharedAt: ROUND, runs: 0, gradeSum: 0, badges: { edu_drop_out: '2026-11-13' } }, { fetch: ok, config }), { status: 'ok' }, 'a badge alone is a batch');
+  const probe = fakeFetch({ status: 200, body: { status: 'restart', shared_at: ROUND2 } });
+  assert.deepEqual(await submitEducationGrades(ID, batch, { sharedAt: ROUND, runs: 0, gradeSum: 0, badges: {} }, { fetch: probe, config }), { status: 'restart', sharedAt: ROUND2 }, 'no runs and no badges is a probe (plan 24): sent, and it can learn of a new round');
+  assert.deepEqual([probe.calls[0].body.p_runs, probe.calls[0].body.p_badges], [0, {}]);
 });
 
 test('fetchEducationBoard asks for the limit with the caller, and cleans the rows', async () => {

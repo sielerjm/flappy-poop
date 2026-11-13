@@ -947,7 +947,6 @@ test('submit_education_grades adds a batch; a resent batch changes nothing; one 
     ['a negative sum', [id('BX3'), at, 1, -1, {}], /bad grade sum/],
     ['more than 50 runs', [id('BX4'), at, 51, 0, {}], /bad runs/],
     ['negative runs', [id('BX5'), at, -1, 0, {}], /bad runs/],
-    ['an empty batch', [id('BX6'), at, 0, 0, {}], /bad runs/],
     ['a career badge id', [id('BX7'), at, 1, 5000, { score_10: '2026-11-13' }], /bad badges/],
     ['a badge with no day', [id('BX8'), at, 1, 5000, { edu_perfect: 'soon' }], /bad badges/],
     ['a badge from the future', [id('BX9'), at, 1, 5000, { edu_perfect: '2099-01-01' }], /bad badges/],
@@ -1503,4 +1502,21 @@ test('recent receipts (AUD-003): a resend after another device\'s batch adds not
   await asAnon(db, 'select public.merge_players($1, $2)', [K, M]);
   await ageCounters(db);
   assert.equal((await csubmit(db, M, id('RMB'), { games: 2 })).games, 3, "the merged device's resend is a receipt in the kept row");
+});
+
+test('an empty batch is a probe (AUD-009): from this round the totals, from another a restart; it writes nothing and takes no rate-limit slot', async () => {
+  const db = await freshDb();
+  await db.query('select public.admin_set_education_open(true)');
+  const P = id('PRB');
+  const round = (await asAnon(db, "select public.share_education($1, 'Prober', true)::text as r", [P])).rows[0].r;
+  const probe = (batch, sharedAt) => asAnon(db, "select public.submit_education_grades($1, $2, $3::timestamptz, 0, 0, '{}'::jsonb) as r", [P, batch, sharedAt]).then((r) => r.rows[0].r);
+  const send = (batch, runs, sum) => asAnon(db, "select public.submit_education_grades($1, $2, $3::timestamptz, $4, $5, '{}'::jsonb) as r", [P, batch, round, runs, sum]).then((r) => r.rows[0].r);
+  assert.equal((await send(id('PB1'), 2, 18000)).status, 'ok');
+  const rowBefore = (await db.query('select runs, grade_sum, last_batch, recent_batches, updated_at from public.education_public where player_id = $1', [P])).rows[0];
+  const same = await probe(id('PP1'), round);
+  assert.deepEqual([same.status, same.runs, same.grade_sum], ['ok', 2, 18000], 'this round: the totals');
+  const older = await probe(id('PP2'), '2026-01-01T00:00:00Z');
+  assert.equal(older.status, 'restart', 'another round: restart');
+  assert.deepEqual((await db.query('select runs, grade_sum, last_batch, recent_batches, updated_at from public.education_public where player_id = $1', [P])).rows[0], rowBefore, 'nothing written, no receipt, no rate-limit slot');
+  await assert.rejects(asAnon(db, "select public.submit_education_grades($1, $2, $3::timestamptz, 0, 0, '{}'::jsonb)", [id('NOBODY'), id('PP3'), round]), /not shared/, 'a probe from a player with no row: not shared');
 });

@@ -4,7 +4,7 @@
 // stand-in (tests/support/postgrest.js; nothing reaches the network).
 import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { playScene, fakeStorage } from './support/scenes.js';
+import { playScene, fakeStorage, registry } from './support/scenes.js';
 import { freshDb, installPostgrest, asAnon, id } from './support/postgrest.js';
 import { LEADERBOARD } from '../src/config.js';
 import { createEduShareStore } from '../src/leaderboard.js';
@@ -22,7 +22,7 @@ function device(pid, name) {
     save: { id: pid, name },
     eduShare: createEduShareStore(storage, LEADERBOARD.eduShareKey),
     eduStore: createEduStore(storage),
-    registry: { get: () => undefined, set() {} },
+    registry: registry(), // one page load: a new device() is a new load
     syncLeaderboard: () => Promise.resolve(), // startEduShare starts a whole sync; the tests drive drainEduShare themselves
   });
 }
@@ -94,6 +94,64 @@ test("a resend never moves another player's rank (AUD-003)", async () => {
     await a.drainEduShare(P);
     assert.deepEqual((await boardOf(db)).map((r) => r.name), honest.map((r) => r.name));
     assert.deepEqual(honest.map((r) => r.name), ['Other', 'Twin']);
+  } finally {
+    net.restore();
+  }
+});
+
+test('a device with nothing new learns of a new round started on another device (Stop, then Share) and sends its whole record into it (AUD-009)', async () => {
+  const db = await freshDb();
+  const net = installPostgrest(db);
+  try {
+    const P = id('Roundy');
+    const a = device(P, 'Roundy');
+    assert.deepEqual(await a.startEduShare(true), { status: 'ok' });
+    for (let i = 0; i < 6; i += 1) gradedRun(a, 5);
+    await a.drainEduShare(P);
+    assert.equal((await row(db, P)).runs, 6);
+    // Device B stops sharing and shares again: a new, empty round.
+    const b = device(P, 'Roundy');
+    assert.equal(await b.stopEduShare(), true);
+    assert.deepEqual(await b.startEduShare(true), { status: 'ok' });
+    assert.equal((await row(db, P)).runs, 0, 'the new round starts empty');
+    // A, a new page load with nothing new: one probe, the restart, then its whole record.
+    const a2 = device(P, 'Roundy');
+    a2.eduShare = a.eduShare;
+    a2.eduStore = a.eduStore;
+    await ageEdu(db);
+    await a2.drainEduShare(P);
+    assert.equal((await row(db, P)).runs, 6, "A's runs are in the new round");
+    const calls = net.log.filter((l) => l.fn === 'submit_education_grades');
+    await a2.drainEduShare(P);
+    assert.equal(net.log.filter((l) => l.fn === 'submit_education_grades').length, calls.length, 'once a page load: the second sync with nothing new sends nothing');
+  } finally {
+    net.restore();
+  }
+});
+
+test('after a merge of two sharers (a new, empty round), each device sends its record again with no new run (AUD-009)', async () => {
+  const db = await freshDb();
+  const net = installPostgrest(db);
+  try {
+    const [K, M] = [id('Keeper'), id('Merged')];
+    const k = device(K, 'Keeper');
+    const m = device(M, 'Merged');
+    await k.startEduShare(true);
+    await m.startEduShare(true);
+    for (let i = 0; i < 3; i += 1) gradedRun(k, 5);
+    for (let i = 0; i < 5; i += 1) gradedRun(m, 4);
+    await k.drainEduShare(K);
+    await m.drainEduShare(M);
+    await asAnon(db, 'select public.merge_players($1, $2)', [K, M]);
+    assert.equal((await row(db, K)).runs, 0, 'the decided fold: a new, empty round');
+    const [k2, m2] = [device(K, 'Keeper'), device(M, 'Merged')];
+    Object.assign(k2, { eduShare: k.eduShare, eduStore: k.eduStore });
+    Object.assign(m2, { eduShare: m.eduShare, eduStore: m.eduStore });
+    await ageEdu(db);
+    await k2.drainEduShare(K);
+    await ageEdu(db);
+    await m2.drainEduShare(M);
+    assert.deepEqual([(await row(db, K)).runs, (await row(db, K)).grade_sum], [8, 3 * 10000 + 5 * 8000], 'both devices, each once');
   } finally {
     net.restore();
   }

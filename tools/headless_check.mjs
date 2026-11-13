@@ -344,12 +344,19 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
       return true; })()`);
     // Hermetic 📚 board (plan 21, B2) too: share, rename, unshare and the grade batches never reach the
     // live board. Each stub records its call in globalThis.__edu and answers as globalThis.__eduAnswer
-    // says (offline by default); `grades` may be a function of the batch.
-    await evaluate(`(() => { const p = __flappy.scene.getScene('Play'); globalThis.__edu = { shares: [], renames: [], unshares: [], grades: [] }; globalThis.__eduAnswer = { share: { status: 'offline' }, rename: null, unshare: null, grades: { status: 'keep' } };
+    // says (offline by default); `grades` and `probe` may be functions of the batch. A batch with no
+    // runs and no badges is drainEduShare's round probe (plan 24): it goes to __edu.probes, so the
+    // grade-call counts below stay counts of real batches.
+    await evaluate(`(() => { const p = __flappy.scene.getScene('Play'); globalThis.__edu = { shares: [], renames: [], unshares: [], grades: [], probes: [] }; globalThis.__eduAnswer = { share: { status: 'offline' }, rename: null, unshare: null, grades: { status: 'keep' }, probe: { status: 'keep' } };
       p.postEduShare = (id, name, adult) => (__edu.shares.push({ id, name, adult }), Promise.resolve(globalThis.__eduAnswer.share));
       p.postEduRename = (id, name) => (__edu.renames.push({ id, name }), Promise.resolve(globalThis.__eduAnswer.rename));
       p.postEduUnshare = (id) => (__edu.unshares.push(id), Promise.resolve(globalThis.__eduAnswer.unshare));
-      p.postEduGrades = (id, batch, body) => (__edu.grades.push({ id, batch, ...body }), Promise.resolve(typeof globalThis.__eduAnswer.grades === 'function' ? globalThis.__eduAnswer.grades(body) : globalThis.__eduAnswer.grades));
+      p.postEduGrades = (id, batch, body) => {
+        const probe = !body.runs && !Object.keys(body.badges ?? {}).length;
+        const answer = probe ? globalThis.__eduAnswer.probe : globalThis.__eduAnswer.grades;
+        (probe ? __edu.probes : __edu.grades).push({ id, batch, ...body });
+        return Promise.resolve(typeof answer === 'function' ? answer(body) : answer);
+      };
       // The tester pilot's calls (plan 21, R2): join, the answer events, withdraw. Offline unless __eduAnswer says otherwise.
       for (const k of ['enrols', 'events', 'withdrawals']) __edu[k] = [];
       p.postResearchEnrol = (id, invite, adult, consent) => (__edu.enrols.push({ id, invite, adult, consent }), Promise.resolve(globalThis.__eduAnswer.enrol ?? { status: 'offline' }));
@@ -4721,6 +4728,17 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         const n4 = await eduNet();
         const [old, whole] = n4.calls.grades;
         ok(n4.calls.grades.length === 2 && old.sharedAt === R1 && old.runs === 1 && whole.sharedAt === R2 && whole.runs === 5 && whole.gradeSum === 43000 && Object.keys(whole.badges).length === 3 && n4.share.sharedAt === R2 && n4.share.sent.runs === 5 && n4.share.sent.gradeSum === 43000, `told to restart, the device takes the new round and sends its whole record again (${whole?.runs} runs, sum ${whole?.gradeSum}, its badges)`);
+        // Nothing new here, and the round moved on elsewhere (a fold, or Stop and Share on another
+        // device): the page load's one probe learns it, and the whole record goes into the new round
+        // (plan 24, AUD-009). A second sync with nothing new sends nothing.
+        await resetNet();
+        const R3 = '2026-11-15T08:00:00.500+00:00';
+        await evaluate(`(${play}.registry.remove('eduRoundProbed'), globalThis.__eduAnswer.probe = (b) => (b.sharedAt === '${R3}' ? { status: 'ok' } : { status: 'restart', sharedAt: '${R3}' }), globalThis.__eduAnswer.grades = { status: 'ok' }, true)`);
+        await drain(shareId);
+        await drain(shareId);
+        const n4b = await eduNet();
+        ok(n4b.calls.probes.length === 1 && n4b.calls.probes[0].sharedAt === R2 && n4b.calls.grades.length === 1 && n4b.calls.grades[0].sharedAt === R3 && n4b.calls.grades[0].runs === n4.share.sent.runs && n4b.share.sharedAt === R3, `with nothing new, one probe a page load learns of a new round and the whole record (${n4b.calls.grades[0]?.runs} runs) goes into it`);
+        await evaluate(`(globalThis.__eduAnswer.probe = { status: 'keep' }, true)`);
         // A rename here goes to the board's row, and never adds one.
         await resetNet();
         await evaluate(`(globalThis.__eduAnswer.grades = { status: 'ok' }, globalThis.__eduAnswer.rename = true, true)`);

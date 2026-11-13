@@ -1538,7 +1538,8 @@ $$;
 --                                                  record again, from zero
 -- and raises 'not shared' for a player with no row (the device then turns sharing off), 'rate
 -- limited' (one batch per player per 5 s: the device keeps it and retries), or 'bad ...' (the
--- device drops the batch).
+-- device drops the batch). A batch with no runs and no badges is a probe: it gets 'restart' or the
+-- totals and changes nothing, so a device with nothing new still learns of a new round (plan 24).
 create or replace function public.submit_education_grades(p_player_id text, p_batch text, p_shared_at timestamptz, p_runs int, p_grade_sum bigint, p_badges jsonb)
 returns jsonb
 language plpgsql
@@ -1574,10 +1575,6 @@ begin
       raise exception 'bad badges: %', r.key;
     end if;
   end loop;
-  if p_runs = 0 and p_badges = '{}'::jsonb then
-    raise exception 'bad runs: empty batch';
-  end if;
-
   v_id := public.resolve_player(p_player_id);
   perform pg_advisory_xact_lock(hashtext('education:' || v_id));
   select * into v_row from public.education_public where player_id = v_id;
@@ -1586,6 +1583,11 @@ begin
   end if;
   if p_shared_at is distinct from v_row.shared_at then
     return jsonb_build_object('status', 'restart', 'shared_at', v_row.shared_at);
+  end if;
+  -- An empty batch is a probe (plan 24, AUD-009): a device with nothing new asks whether its round
+  -- is still the row's. It writes nothing and takes no receipt and no rate-limit slot.
+  if p_runs = 0 and p_badges = '{}'::jsonb then
+    return jsonb_build_object('status', 'ok', 'shared_at', v_row.shared_at, 'runs', v_row.runs, 'grade_sum', v_row.grade_sum);
   end if;
   if v_row.last_batch = p_batch or p_batch = any(v_row.recent_batches) then
     return jsonb_build_object('status', 'ok', 'shared_at', v_row.shared_at, 'runs', v_row.runs, 'grade_sum', v_row.grade_sum);
@@ -2206,7 +2208,7 @@ returns text
 language sql
 immutable
 as $$
-  select 'ce9ee1eee44a68d5'::text; -- schema stamp
+  select 'b2a1e7fc1c266ced'::text; -- schema stamp
 $$;
 revoke execute on function public.schema_version() from public, authenticated;
 grant  execute on function public.schema_version() to anon;
