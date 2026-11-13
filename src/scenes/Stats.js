@@ -52,10 +52,11 @@ const sameName = (a, b) => typeof a === 'string' && typeof b === 'string' && a.t
  * and badges from other devices join the store). A player with no username gets the gate instead
  * (buildGate): an invitation and a Create user button. Your own profile, on a device with education
  * mode unlocked, ends with a 📚 Education section (plan 22): the average grade, the graded runs and
- * the education badges, all from this device's education store (nothing of it is on the server, so
- * no other player's profile has it). Sections scroll; a tapped career emoji or badge
- * (its whole cell) opens a card that says what it is, on a camera of its own above the band; a
- * tap anywhere, A, B or a nav press closes it. ✕ / Esc / B / a tap outside close the profile,
+ * the education badges, all from this device's education store, and whether this player shares
+ * them on the 📚 board. A player who shares has the same on their profile for anyone
+ * (player_stats' `education`), drawn only on devices with education unlocked. Sections scroll;
+ * a tapped career emoji or badge (its whole cell) opens a card that says what it is, on a camera
+ * of its own above the band; a tap anywhere, A, B or a nav press closes it. ✕ / Esc / B / a tap outside close the profile,
  * back to the board or the 🌞 popup when it opened over one. A controller walks the cells: left /
  * right in list order, up / down to the cell above or below (navVertical), ✕ above the first row.
  */

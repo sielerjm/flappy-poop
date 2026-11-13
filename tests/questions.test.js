@@ -49,8 +49,11 @@ test('card text fits the quiz panel: question, options and explanation under the
   }
 });
 
-test('a Chinese version, where there is one, has every field', () => {
-  for (const c of CARDS.filter((x) => x.zh)) {
+test('a Chinese version, where there is one, has every field', (t) => {
+  const translated = CARDS.filter((x) => x.zh);
+  // Say so rather than pass on an empty loop: no card has a Chinese version yet (plan 24, AUD-024).
+  if (translated.length === 0) return t.skip('no card has a Chinese version yet');
+  for (const c of translated) {
     for (const f of ['q', 'answer', 'explain']) assert.ok(typeof c.zh[f] === 'string' && c.zh[f].length > 0, `${c.id}: zh.${f}`);
     assert.ok(Array.isArray(c.zh.wrong) && c.zh.wrong.length === 2, `${c.id}: zh.wrong`);
   }

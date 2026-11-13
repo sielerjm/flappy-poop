@@ -68,8 +68,9 @@ export const ACHIEVEMENTS = [
 /**
  * Education badges (📚, plan 22). Judged like the catalog above (evaluate, with this catalog), but
  * kept on the device with the cards (createEduStore in education.js) and never claimed on the
- * server: education data stays on the device. So they are their own list: the profile's
- * "Achievements n / total" and claim_achievements never see them. Ids start "edu_".
+ * server: they reach it only on the 📚 board, when the player shares (Play.drainEduShare). So they
+ * are their own list: the profile's "Achievements n / total" and claim_achievements never see
+ * them. Ids start "edu_".
  *   run       one education run's facts (eduRunFacts; modes ['education']). The grades need a
  *             graded run: at least education.badgeMinAnswers answers (`min`, quoted in the
  *             description) and not ended on Give up. Percentages are compared in whole numbers,

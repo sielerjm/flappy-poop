@@ -15,11 +15,13 @@ export const CHANGELOG = [
         'A test build of a learning mode for invited testers: quiz cards about the gut and its microbes, in level breaks and after a crash. Hidden for everyone else for now.',
         'Testers of the learning mode can choose to share their average grade on a 📚 board, and can report a card with the 🚩 beside its code.',
         'The shop shows your coins and its prices with the corn kernel, as the rest of the game does.',
+        'On the game-over screen the summary can scroll: a tap on it takes you home when you lift your finger, and a drag only scrolls.',
       ],
       'zh-Hans': [
         '为受邀测试者准备的学习模式测试版：在关卡间歇和撞到之后回答关于肠道及其微生物的问答卡。目前对其他玩家隐藏。',
         '学习模式的测试者可以选择把平均成绩分享到 📚 排行榜，也可以点卡片编号旁的 🚩 报告有问题的卡片。',
         '商店里的金币数和价格改用玉米粒图标显示，和游戏其他地方一致。',
+        '游戏结束画面的总结可以滚动了：点一下，松开手指时回到主页；拖动只会滚动。',
       ],
     },
   },

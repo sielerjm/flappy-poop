@@ -365,7 +365,8 @@ release), and any tap, key or pad press closes it without pressing what is under
 run. The rest of the switch still toggles.
 A run with 📚 on latches `runIsEducation` (never a Daily Dump), shows 📚 in the HUD, and at its end
 records nothing on a board or in the career (`endRun`: no best, top list, career counters or sync);
-its own badges and average grade stay on the device (`recordEducation`, below). With test mode on as
+its own badges and average grade are kept on the device (`recordEducation`, below) and leave it only
+when the player shares them on the 📚 board (below). With test mode on as
 well it is a test run too: no card progress, badge or revive is saved.
 **Cards** (`src/questions.js`, 70 placeholder cards, audits in `src/questionAudits.js`, the audit tool
 `tools/audit_questions.mjs`) are scheduled per device by SM-2 (`src/education.js`; store
@@ -398,7 +399,9 @@ card on show counted and its kind underlined (`refreshCounts`; no line in a test
 tally** (`runQuiz`, built by `tallyAnswer` with one row per level) sits in the card's top row
 (`✅ right ❌ wrong`, once the run has an answer); a tap on it, or A on the ring, opens "This run", one
 line per level (`tallyLines`), as an info card over the quiz (`toggleRunCard`): any tap, Esc or B closes
-it, the quiz's keys do nothing under it, and a question left waiting is marked interrupted. The bonus
+it, the quiz's keys do nothing under it, and a question left waiting is marked interrupted, as it is
+under any other overlay (F, What's new: `Quiz.update` checks the card is the top overlay) and when the
+page is hidden or the window loses focus. The bonus
 quiz's answers are not tallied. **Crash**
 (`die` → `startEduRevive`): the coins and power-ups go (`effects.snapshot`, kept in `reviveLost`), the
 world halts as in a match respawn (`startRespawn` / `endRespawn` keep their match parts behind
@@ -406,7 +409,9 @@ world halts as in a match respawn (`startRespawn` / `endRespawn` keep their matc
 **revive quiz** runs (`reviveStep` through `Play.reviveEvent`): ❤️ × `education.strikes` misses end the
 run (`reviveDone` → `endRun`, the field untouched); the first right answer revives, and when the crash
 took something the player may go for ⭐ × `restoreStreak` in a row to get it all back
-(`effects.restore`); Give up ends it; Esc / B do nothing. A revive's card ignores pointer taps for
+(`effects.restore`); Give up ends it, and only before a right answer (`reviveStep` takes it in
+`'strikes'` alone); Esc / B do nothing. Once Give up or Return has started closing the quiz
+(`finishing`), no key or second thumb answers. A revive's card ignores pointer taps for
 `retryLockoutMs` after it opens (`tapLocked`: a flap tap landing as it appears must not answer or give
 up; the keys and the ring are not locked). The quiz is the pause: `autoPause` does
 nothing under it, and a revive already decided is settled, never asked again (`reviveSettled`). **The
@@ -451,7 +456,15 @@ round of sharing the server named (`shared_at`) and what the board already has, 
 batch: `'restart'` (another round: sharing was stopped and started elsewhere) takes the server's
 round and sends the whole record again; `'not shared'` turns sharing off here; a rename goes through
 `rename_education`, which never adds a player. Stop sharing deletes the row and stays on until the
-server has done so. The board is a fourth leaderboard tab on unlocked devices
+server has done so. A batch resent after a lost reply is never counted twice: the server keeps each
+row's newest 64 batch ids (`recent_batches`, on `player_counters` too), so a resend is answered with
+the totals even after another device sent in between. With nothing new to send, a device sends one
+empty batch per page load (a probe; the registry's `eduRoundProbed`, set once the server answered),
+so it learns of a round started on another device. The share store remembers the last round it sent
+into, even after sharing is turned off, so turning it off and on, or two syncs both told to restart,
+never send a round's runs twice. A badge day the server finds out of range (a device with a wrong
+clock) is stored as today. A 📚 name belongs to one player: `name_blocked` counts the 📚 board's
+rows, and sharing or a rename refuses a name another player holds on any board. The board is a fourth leaderboard tab on unlocked devices
 (`leaderboardLayout({ tabs })`, `Leaderboard.showEducation`, `education_board`: from
 `education.boardMinRuns` graded runs, by average grade); a sharing player's profile carries
 `education` for anyone (`player_stats`), drawn only on unlocked devices. **🔬 Tester data** (the
@@ -461,11 +474,21 @@ nowhere), after which `quizAnswer` records each answer as an event (`src/researc
 `answerEvent`, whose fields are exactly the server's list; `createConsentStore`
 `flappyPoop.eduConsent`; `createResearchQueue` `flappyPoop.researchQueue`), never in a test run and
 only under the current notice; `Play.drainResearch` sends them early in the sync, username or not
-(`submit_research_events`, under a random research id, never the player id). Withdraw
+(`submit_research_events`, under a random research id, never the player id). The consent keeps the
+player id it joined with (`Play.researchConsent()`, `researchPlayerId()`), so its answers and a
+Withdraw still find the participant after a Load merges that id away, and the participation's start
+(`since`: the server's `joined_at`, set once when the participant is made): a device whose `since`
+is not the participant's (a withdrawal and a new join elsewhere) is told `'not enrolled'` and stops.
+A join empties the queue, so nothing recorded under an older notice goes out; a re-join keeps the
+participant's phase, so `admin_purge_phase` still removes them. Under an older notice the panel
+offers Join and Withdraw both (`eduPilotStale`). Withdraw
 (`leaveResearch`, `delete_research`) deletes the participant and their answers. 🔬 shows beside 📚
 in the HUD while answers are recorded. The pilot tests the tools: its answers are never analysed
 and are purged before any later phase (`admin_purge_phase`). Clear forgets the sharing and the
-consent on the device and warns that what was sent stays until Stop sharing / Withdraw.
+consent on the device and warns that what was sent stays until Stop sharing / Withdraw. The
+education, consent, queue and share stores are each one JSON value through `createJsonStore`
+(`src/store.js`): another tab's Clear holds at once, and storage that is full or throws keeps this
+page load's answers in memory.
 Still to come (plan 21): the privacy foundation (delete account, export, the age question, a
 privacy notice), the public release (audited cards only), the research beta and the study.
 
@@ -512,7 +535,7 @@ src/
                             Play), scene order
                             [Boot, Play, new Play('PlayB'), Over, Versus, Settings,
                             About, HowTo, Changelog, Language, Feedback,
-                            Leaderboard, Daily, Stats] ('PlayB' is the right half of a match,
+                            Leaderboard, Daily, Stats, Quiz] ('PlayB' is the right half of a match,
                             launched only by Versus).
   config.js                 GAME_WIDTH / GAME_HEIGHT (the portrait field = the
                             chrome column), FIELD (height, minWidth, maxWidth,
@@ -682,7 +705,8 @@ src/
                             fields, pinned by tests/research.test.js), cleanEvent,
                             tuningVersion (a fingerprint of TUNING.education),
                             createConsentStore (flappyPoop.eduConsent: version,
-                            phase, at; never the invite code), createResearchQueue
+                            phase, at, the player id it joined with and since, the
+                            participation's start; never the invite code), createResearchQueue
                             (flappyPoop.researchQueue: pending events and one batch
                             in flight). Nothing here runs unless a tester joined.
   questions.js              Education mode's question bank (plan 21), NO
@@ -764,16 +788,20 @@ src/
                             the profile, { found: false }, or null).
                             The 📚 board (plan 21): createEduShareStore
                             (flappyPoop.eduShare: on, the round sharedAt, the name
-                            last sent, what was sent, one batch in flight;
+                            last sent, what was sent, one batch in flight, and the
+                            last round it sent into, kept so a round never starts
+                            over (restart into it does nothing);
                             beginBatch(record, makeId) works out what is new, 50 runs
                             a batch), shareEducation ({ status: 'ok', sharedAt } /
                             'closed' / 'notAdult' / 'nameTaken' / 'rejected' /
                             'offline'), renameEducation, unshareEducation (true /
                             null), submitEducationGrades ('ok' / 'restart' with
-                            sharedAt / 'notShared' / 'rejected' / 'keep'),
+                            sharedAt / 'notShared' / 'rejected' / 'keep'; an empty
+                            batch is the round probe),
                             fetchEducationBoard; normalizeProfile keeps a cleaned
-                            `education`. The tester pilot: enrolResearch,
-                            submitResearchEvents ('ok' / 'notEnrolled' / 'rejected'
+                            `education`. The tester pilot: enrolResearch (the phase
+                            and since), submitResearchEvents(playerId, batch,
+                            events, since) ('ok' / 'notEnrolled' / 'rejected'
                             / 'keep'), deleteResearch.
                             Writes go through the submit_score(), merge_players(),
                             submit_tournament(), submit_daily_score(),
@@ -985,24 +1013,14 @@ src/
                             from another id → Play.queueMerge, "saveMerged". Clear
                             → warn, then Play.signOut on a second tap inside
                             saveClearConfirmMs; the warning adds a note for a player
-                            who shares on the 📚 board and one for a pilot tester
-                            (what was sent stays until Stop sharing / Withdraw).
+                            who shares on the 📚 board and one for a device holding a
+                            pilot consent, an older notice's too (what was sent stays
+                            until Stop sharing / Withdraw). Load queues the merge
+                            also when the device holds a pilot consent.
                             A 📚 Education data button beside Profile, shown only
                             while education mode is unlocked (refreshClear; it
                             appears as soon as the word is typed), closes this
                             panel and opens ui/eduDataPanel.js.
-    eduDataPanel.js         Plain DOM panel (plan 21, Stage 3b), built like
-                            savePanel.js: the one place a player chooses what of
-                            their education record leaves the device. An "I am 18
-                            or older" box (unticked on every open), Share my grades
-                            (Play.startEduShare / stopEduShare; each refusal its own
-                            line) and 🔬 Tester data (the notice's link, the invite
-                            code and Join, then Withdraw and delete my data:
-                            Play.joinResearch / leaveResearch). openEduDataPanel({
-                            game, play, locale, onClose }), closeEduDataPanel,
-                            isEduDataPanelOpen (the pad waits under it: padIntent's
-                            savePanelOpen). onClose(changed) lets the board and the
-                            profile reload when sharing changed.
                             Opened by the ready screen's user button, with
                             { focusName: true } while there is no username (caret
                             in the field at once). It stays open after Save so the
@@ -1015,6 +1033,26 @@ src/
                             with Clear until a username is stored): closes the panel,
                             then Play.openStats() (the own profile; over the 🌞
                             popup when it was under).
+    eduDataPanel.js         Plain DOM panel (plan 21, Stage 3b), built like
+                            savePanel.js, from the user panel's 📚 Education data
+                            button, the 📚 board's footer or the profile's row: the
+                            one place a player chooses what of their education
+                            record leaves the device. An "I am 18 or older" box
+                            (unticked on every open, needed to share or join), Share
+                            my grades (Play.startEduShare / stopEduShare; each
+                            refusal its own line) and 🔬 Tester data: the notice's
+                            link, the invite code and Join (shown unless joined under
+                            the current notice), and Withdraw and delete my data,
+                            shown whenever the device holds a consent, an older
+                            notice's included (the state line then reads
+                            eduPilotStale): Play.joinResearch / leaveResearch /
+                            researchConsent. Keyboard off and the pad ignored while
+                            open (padIntent's savePanelOpen); the card takes focus
+                            on open (tabindex -1), so Esc closes it with no click
+                            first. openEduDataPanel({ game, play, locale, onClose }),
+                            closeEduDataPanel, isEduDataPanelOpen. onClose(changed)
+                            lets the board and the profile reload when sharing
+                            changed.
   scenes/
     Boot.js                 preload() gameplay PNGs (mystery.png as a 384 px
                             spritesheet; coin.png as a 106 px one) + the sfx MP3s (coin, coin-spend,
@@ -1026,7 +1064,9 @@ src/
                             starts on the splash's Continue. The loader's progress
                             fills the splash's ring.
     Play.js                 State machine: 'ready' -> 'playing' -> 'paused'/'dead'
-                            (+ 'respawn' in a match: between a crash and its restart).
+                            (+ 'respawn' in a match, between a crash and its restart,
+                            and in an education run, from a crash through its revive
+                            quiz).
                             The constructor takes the scene key ('Play'; 'PlayB' is
                             the second instance for a match's right half); init(data)
                             reads { player, match, fieldW, fieldX } (nothing in
@@ -1666,14 +1706,16 @@ db/schema.sql               Supabase schema: scores table (player_id = save-code
                             'duplicate'); daily_board (a day's top, `me`, `total`);
                             fold_player moves daily rows (the kept row wins a
                             shared day). Profiles (plan 08): player_counters
-                            (jsonb counters, last_batch receipt) + merge_counters
+                            (jsonb counters, last_batch receipt; recent_batches, the
+                            newest 64, since plan 24) + merge_counters
                             (internal) + submit_counters (5 s per player, caps per
                             run: maxScore, lastLevel); achievement_defs (quest
                             windows, seeded in the file) + player_achievements +
                             claim_achievements (window + 2 days' grace, 50 a call,
                             300 a player); player_by_name (internal: the boards'
                             naming) and player_stats (anyone's profile, no ids);
-                            fold_player merges counters and achievements. v0.16.0:
+                            fold_player merges counters and achievements (and both
+                            rows' receipts). v0.16.0:
                             player_meta (joined_at, exact, dev; touch_player from
                             every write function, an inexact backfill) and
                             player_tags ('dev', 'og' before 1 Dec 2026, 'new' an exact
@@ -1696,15 +1738,30 @@ db/schema.sql               Supabase schema: scores table (player_id = save-code
                             characters or more), admin_purge_phase and four
                             security_invoker views, owner only). fold_player moves
                             a shared row or a participant; two shared rows start a
-                            new, empty round. Run by
+                            new, empty round. Plan 24: education_public keeps the
+                            newest 64 batch ids (recent_batches) as receipts; an
+                            empty batch is a probe ('restart' or the totals,
+                            nothing written); a badge day after tomorrow or before
+                            2000 is stored as today; name_blocked (plpgsql) counts
+                            the 📚 rows, and share / rename refuse a name another
+                            player holds on any board; research_participants.joined_at
+                            is the participation's token (submit_research_events'
+                            p_since; another participation → 'not enrolled');
+                            enrol_research keeps the first phase. schema_version()
+                            (anon) is the file's stamp: `npm run schema:stamp`
+                            after an edit (a test fails on a stale one), `npm run
+                            schema:check` reads the live one. Run by
                             hand in the SQL editor, never by any integration; it is
                             the source of truth for the backend. Apply it BEFORE
-                            pushing a client that depends on new functions.
+                            pushing a client that depends on new functions (npm run
+                            push refuses until the live stamp is this file's).
                             tests/schema.test.js runs it in PGlite (Postgres in
-                            WebAssembly). PL/pgSQL gotcha: a bare CASE inside
+                            WebAssembly), on an empty database and over
+                            tests/fixtures/schema-applied.sql. PL/pgSQL gotcha: a bare CASE inside
                             `IF … THEN` ends the condition at its THEN; parenthesise.
 
-tests/                      node --test (schema.test.js needs `npm install`: PGlite). Each file is self-describing:
+tests/                      node --test (schema.test.js, pilot.test.js, eduBoardSync.test.js and
+                            schemaCheck.test.js need `npm install`: PGlite). Each file is self-describing:
   field.test.js             fieldWidth (phone, desktop, 2:1 cap, bad input, even),
                             uiColumn, poopX, the x0 shift of trayLayout /
                             levelBarLayout / readyLayout, hits on a shifted column,
@@ -1893,7 +1950,83 @@ tests/                      node --test (schema.test.js needs `npm install`: PGl
                             order and minimum, rename, unshare, the fold) and the
                             pilot (the invite code, events under a research id with
                             no player id, malformed batches, withdrawal, the owner's
-                            views, a purge, the fold)
+                            views, a purge, the fold). Run under Supabase's default
+                            grants (every new table and function open to anon unless
+                            revoked), so a missing revoke or RLS fails. Plan 24: the
+                            stamp is current and anon reads it; the header lists
+                            exactly anon's functions; the upgrade (the fixture's
+                            schema holding rows of every kind, then this file twice:
+                            every row and old call answers as before); recent
+                            receipts on both tables; the probe; badge days clamped;
+                            the 📚 name rule; the participation token and the kept
+                            phase
+  schemaCheck.test.js       tools/schema_check.mjs: the stamp (blanked, idempotent),
+                            the one read-only live call (an injected fetch), each
+                            state it reports (current, fixture, other, none,
+                            unreachable), push going ahead only on current and then
+                            copying the fixture, and the pasted comparison query run
+                            in PGlite over the fixture
+  education.test.js         src/education.js: gradeFor, SM-2 schedule (learning,
+                            review, early, the ease floor), pickCard in each context
+                            (break, revive, browse) and its exclusions, cardCounts ==
+                            what pickCard hands out, reviveStep (strikes, the choice,
+                            the streak, Give up only in strikes), reviveSettled,
+                            tallyAnswer, eduShopPrices (rounded up), masteryByDeck
+                            (retired cards out), createEduStore (records, badges, the
+                            average, Clear on the same instance), dueCount, cardText
+  questions.test.js         src/questions.js: decks, ids, a question and three
+                            different options per card, text limits, complete zh versions (skipped while no
+                            card has one), references cited and existing, enough live
+                            cards per deck; src/questionAudits.js (no stale audit,
+                            cardHash, auditState); tools/audit_questions.mjs
+  playEducation.test.js     Play's education rules in Node (tests/support/scenes.js):
+                            a match half never latches education; 👥 / 📚 exclusion,
+                            two tabs included; a test run saves no card and records
+                            no event; 🔬 never in a test run; the revive's own
+                            penalty; drainEduShare never rejects and follows 'rejected'
+                            / 'not shared' / a rename answered false
+  pilot.test.js             the tester pilot end to end: Play's pilot methods, the
+                            real stores and leaderboard.js calls and the real save and
+                            education data panels, against db/schema.sql through
+                            tests/support/postgrest.js: Load then Withdraw (merge
+                            before or after), two devices, a new participation, the
+                            queue emptied on join, the kept phase, an older notice
+                            (Withdraw offered, nothing recorded or sent), an offline
+                            Withdraw, Clear, the unlock word never saved as a name
+  eduBoardSync.test.js      the 📚 board's sync end to end through the same stand-in:
+                            a resend after another device's batch, a resend never
+                            moving another player, the round probe, a merge of two
+                            sharers, a wrong clock's badge day, sharing off then on,
+                            two syncs both told to restart, the share store's rounds
+  quiz.test.js              Quiz's rules in Node: a card under another overlay is
+                            interrupted, nothing answered once the quiz is finishing,
+                            the 🚩 never navigates the game's tab, tapLocked
+  jsonStore.test.js         src/store.js and the stores on it: storage is the truth,
+                            a broken entry reads as empty, memory when storage throws
+                            or is full, another tab's Clear holds
+  privacy.test.js           no local-only path tracked (meta/, .claude/plans/, row
+                            dumps) and no player id from meta/db-backups in a tracked
+                            file (failures name a fingerprint, never the id);
+                            tools/privacy_scan.mjs's helpers
+  sha256.test.js            sha256 / hmacSha256 against FIPS and RFC 4231 vectors and
+                            Node's crypto; user codes sign and load without
+                            crypto.subtle (plain http)
+  tournament.test.js        src/tournament.js: brackets for 2–8 players, races and
+                            byes, the bronze match, recordResult's refusals, seeding
+                            (reseed, reshuffle, the lock), raceOutcome, the code
+                            claim, the race's own level table, tournamentPayload
+  tournamentNames.test.js   guest names: the word lists, every name fits a username,
+                            rollGuestName (seeded, rerolled in the lobby)
+  support/                  not test files (the glob is tests/**/*.test.js): scenes.js
+                            (a scene in Node: Object.create(Scene.prototype), sinks,
+                            fakeStorage, registry), postgrest.js (a PostgREST stand-in
+                            over PGlite that answers only LEADERBOARD.dataApi, with
+                            Supabase's roles and default grants), dom.js (a fake DOM
+                            for the DOM panels)
+  fixtures/schema-applied.sql  db/schema.sql as last applied to the live database
+                            (main's b497a0c until the next apply); the upgrade test
+                            starts from it. Never edited by hand: npm run push copies
+                            db/schema.sql over it once the live stamp matches
   research.test.js          src/research.js: answerEvent's fields (exactly the
                             server's list in db/schema.sql), cleanEvent, the consent
                             store, the queue; RESEARCH.md names every field and the
@@ -1961,10 +2094,23 @@ tools/
                             fresh ES modules (an old scene with a new config.js
                             once looked like a broken leaderboard). Pages caches
                             ~10 min: Settings → Reload game there.
-  push.mjs                  npm run push: stamps LAST_UPDATED in src/logic.js with the
-                            current local time, runs npm test, commits the stamp, pushes
-                            main. Refuses a dirty tree or a non-main branch; --dry skips
-                            commit + push.
+  push.mjs                  npm run push: asks the live database for schema_version()
+                            (tools/schema_check.mjs, one read-only call) and stops
+                            unless it is this db/schema.sql's stamp; stamps
+                            LAST_UPDATED in src/logic.js with the current local time,
+                            runs npm test, then copies db/schema.sql over
+                            tests/fixtures/schema-applied.sql when they differ, commits
+                            both, pushes main. Refuses a dirty tree or a non-main
+                            branch; --dry skips commit + push; --no-schema-check skips
+                            the live check and leaves the fixture.
+  schema_check.mjs          npm run schema:check: which db/schema.sql the live database
+                            last ran (its schema_version(), one read-only call): this
+                            file, the fixture's (this file has changes to apply),
+                            another, or none yet. --query [--detail] prints a
+                            read-only query for Supabase's SQL editor and the value it
+                            shows when the live database holds the fixture's schema
+                            (for a database with no stamp yet). npm run schema:stamp
+                            (--stamp) rewrites the stamp after an edit.
   privacy_scan.mjs          Where a player id or username appears (plan 21, P1): the
                             working tree (ignored files too: meta/db-backups,
                             .claude/plans), every commit (git log --all -S), and with
@@ -2202,10 +2348,14 @@ meta/                       Local-only project notes and reports (gitignored;
 ## How to work on it
 
 ```bash
-npm test          # every unit + audit test (~10 s); must pass before committing
+npm test          # every unit + audit test (~30 s); must pass before committing
 node --test tests/items.test.js   # one file while iterating
-npm run push      # stamp LAST_UPDATED = now, run tests, commit the stamp, push main
+npm run push      # check the live schema is db/schema.sql, stamp LAST_UPDATED = now, run
+                  # tests, copy the schema to the test fixture, commit, push main
                   # (always push this way so the About overlay's "Updated" is the push time)
+npm run schema:stamp   # after editing db/schema.sql (a test fails on a stale stamp)
+npm run schema:check   # which db/schema.sql the live database has (one read-only call);
+                       # -- --query prints a query to paste in Supabase's SQL editor instead
 # In a browser, globalThis.__flappy is the Phaser.Game (debug / automation only):
 #   __flappy.scene.getScene('Play').spawnPipePair()
 npm start         # tools/serve.py: http://localhost:8000 plus a printed
@@ -2290,8 +2440,10 @@ Commits follow `type(scope): summary` (`feat`, `fix`, `docs`, `chore`, `test`, `
 - Network call → `src/leaderboard.js` only, with `fetch` injected and a timeout;
   tests pass a fake `fetch`. Never `await` a request inside a Phaser update
   loop; fire and forget from gameplay, `await` only in an overlay's `create()`.
-- Backend change → edit `db/schema.sql`, run it by hand in the Supabase SQL
-  editor, keep `LEADERBOARD.maxScore` and the schema's score cap in step.
+- Backend change → edit `db/schema.sql`, `npm run schema:stamp`, list a new anon
+  function and its undo line in the file's header, run it by hand in the Supabase
+  SQL editor before `npm run push` (which checks), keep `LEADERBOARD.maxScore` and
+  the schema's score cap in step.
 - New achievement → one `ACHIEVEMENTS` entry in `src/achievements.js` (a new,
   permanent id) and its title (and, if no template fits, description) in both
   locales + `TRANSLATION_NOTES.md`. No SQL: any well-formed id is claimable.

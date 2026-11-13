@@ -257,7 +257,7 @@ export class Play extends Phaser.Scene {
     this.breakGlide = null;
     createFinishTexture(this, 'finish', { width: T.levels.finishWidthPx, height: GAME_HEIGHT, check: T.levels.finishCheckPx });
     createLightTexture(this, 'pipe', 'pipe-moving', T.pipeMove.lightenFrac); // a moving pair's lighter pink
-    this.state = 'ready'; // 'ready' | 'playing' | 'paused' | 'respawn' | 'dead' ('respawn': a match half between a crash and its restart)
+    this.state = 'ready'; // 'ready' | 'playing' | 'paused' | 'respawn' | 'dead' ('respawn': a match half between a crash and its restart, or an education run from a crash through its revive quiz)
     this.won = false; // set by win(): the run ended past the final level's finish line
     // A match's respawn (startRespawn / tickRespawn / endRespawn): the clock advances by delta
     // only while the state is 'respawn', so the shared pause freezes it; respawnFrom is the pose
@@ -2657,9 +2657,8 @@ export class Play extends Phaser.Scene {
     this.applyScroll();
   }
 
-  /** Current scroll speed (px/s): level speed × the fart envelope. */
   /**
-   * px/s the world scrolls left. Zero through a respawn (and a pause taken in one): the world stands
+   * px/s the world scrolls left: the level's speed × the fart envelope. Zero through a respawn (and a pause taken in one): the world stands
    * still, so whatever is spawned or re-speeded meanwhile (an education revive refills the field
    * under its quiz card: prepareRevive) waits in place until endRespawn starts it.
    */
@@ -3558,9 +3557,9 @@ export class Play extends Phaser.Scene {
   /**
    * One finished education run into this device's education record (plan 22): the 🤓 streak moves, a
    * graded run's grade joins the average, and the education badges the run earns (EDU_ACHIEVEMENTS,
-   * judged on the record's counters) are held there and listed on Over (this.runBadges). Nothing is
-   * sent: the career store, which uploads what it holds, never sees any of it. Never a test run
-   * (endRun returns before).
+   * judged on the record's counters) are held there and listed on Over (this.runBadges). The career
+   * store, which uploads what it holds, never sees any of it; the record leaves the device only when
+   * the player shares it on the 📚 board (drainEduShare). Never a test run (endRun returns before).
    */
   recordEducation() {
     const day = utcDayKey();
@@ -3645,8 +3644,10 @@ export class Play extends Phaser.Scene {
    * sharing was stopped elsewhere). Then one batch (the server takes one per 5 s; a long record goes
    * over several syncs). 'restart': the row is another round's (sharing was stopped and started
    * again on another device), so this device takes that round and sends its whole record again, at
-   * once. 'notShared': sharing was stopped elsewhere, so it stops here. A test run adds nothing to
-   * the record, so nothing of it is ever sent. Never rejects.
+   * once. 'notShared': sharing was stopped elsewhere, so it stops here. With nothing new to send, one
+   * empty batch per page load (the probe; the registry's eduRoundProbed, set once the server answered)
+   * asks whether the round is still this one, so a device learns of a new round without a new run.
+   * A test run adds nothing to the record, so nothing of it is ever sent. Never rejects.
    */
   async drainEduShare(id) {
     try {

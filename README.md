@@ -277,7 +277,7 @@ The board is a free-tier [Supabase](https://supabase.com) project. The browser t
 
 To run your own: create a free Supabase project, run `db/schema.sql` in the SQL editor, then put the Data API URL and publishable key into `LEADERBOARD`. Leave either blank to turn the feature off.
 
-What leaves the phone: username, best scores with level, Daily Dump scores (day, level, pipes), finished tournaments' results, lifetime counters (games, wins, score and level sums, pickups, farts, deaths) and earned achievements, and the random id inside your save code. All of it except the id is public on the player's profile. The save code itself never leaves the device.
+What leaves the phone: username, best scores with level, Daily Dump scores (day, level, pipes), finished tournaments' results, lifetime counters (games, wins, score and level sums, pickups, farts, deaths) and earned achievements, and the random id inside your save code. All of it except the id is public on the player's profile. Only if you choose to, your 📚 grades and, for an invited tester, quiz answers leave it too (see 📚 Education mode above). The save code itself never leaves the device.
 
 ### Credits & lineage
 
