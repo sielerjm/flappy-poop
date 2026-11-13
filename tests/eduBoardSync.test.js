@@ -112,6 +112,7 @@ test('a device with nothing new learns of a new round started on another device 
     // Device B stops sharing and shares again: a new, empty round.
     const b = device(P, 'Roundy');
     assert.equal(await b.stopEduShare(), true);
+    await db.query('update public.player_meta set edu_named_at = null'); // share waits 5 s per player (plan 25, A4)
     assert.deepEqual(await b.startEduShare(true), { status: 'ok' });
     assert.equal((await row(db, P)).runs, 0, 'the new round starts empty');
     // A, a new page load with nothing new: one probe, the restart, then its whole record.

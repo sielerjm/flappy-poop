@@ -825,7 +825,9 @@ test('anon reads no player_meta and cannot call the new helpers', async () => {
 // ---------------------------------------------------------------------------
 
 const BOARD_MIN_RUNS = T.education.boardMinRuns; // graded runs before a sharing player is listed: the 📚 tab's footer counts down to the same number
-const eshare = (db, pid, name, adult = true) => asAnon(db, 'select public.share_education($1, $2, $3)::text as r', [pid, name, adult]).then((r) => r.rows[0].r);
+/** Share and rename wait 5 s per player (plan 25, A4; its own test below): tests of other rules clear the pace first. */
+const unpace = (db) => db.query('update public.player_meta set edu_named_at = null');
+const eshare = async (db, pid, name, adult = true) => (await unpace(db), asAnon(db, 'select public.share_education($1, $2, $3)::text as r', [pid, name, adult]).then((r) => r.rows[0].r));
 const egrades = (db, pid, batch, at, runs, sum, badges = {}) =>
   asAnon(db, 'select public.submit_education_grades($1, $2, $3::timestamptz, $4, $5, $6::jsonb) as r', [pid, batch, at, runs, sum, JSON.stringify(badges)]).then((r) => r.rows[0].r);
 const eunshare = (db, pid) => asAnon(db, 'select public.unshare_education($1) as r', [pid]).then((r) => r.rows[0].r);
@@ -839,6 +841,33 @@ test('the 📚 board schema pins the minimum runs and the grade scale the game u
   assert.match(SQL, /p_grade_sum > p_runs::bigint \* 10000\b/, 'a grade is at most 10000 hundredths of a percent (eduRunFacts)');
   assert.match(SQL, /check \(grade_sum <= runs::bigint \* 10000\)/, 'and the table holds the same bound');
   assert.match(SQL, /r\.key !~ '\^edu_\[a-z0-9_\]\{1,36\}\$'/, 'only edu_ badge ids (EDU_ACHIEVEMENTS)');
+});
+
+test('share and rename wait 5 s per player, across Stop sharing; a new sharer and Stop are never paced; a fold keeps the later time (plan 25, A4)', async () => {
+  const db = await freshDb();
+  await db.query('select public.admin_set_education_open(true)');
+  const share = (pid, name) => asAnon(db, 'select public.share_education($1, $2, true)::text as r', [pid, name]).then((r) => r.rows[0].r);
+  const rename = (pid, name) => asAnon(db, 'select public.rename_education($1, $2) as r', [pid, name]).then((r) => r.rows[0].r);
+  const age = (pid) => db.query("update public.player_meta set edu_named_at = now() - interval '6 seconds' where player_id = $1", [pid]);
+  const [P, Q, R] = [id('PaceP'), id('PaceQ'), id('PaceR')];
+  assert.ok(await share(P, 'Pacer'), 'a first share');
+  assert.ok(await share(Q, 'Quick'), 'another player at once: paced per player');
+  await assert.rejects(share(P, 'Pacer2'), /too soon/, 'a second share inside 5 s');
+  await assert.rejects(rename(P, 'Pacer3'), /too soon/, 'a rename inside 5 s');
+  assert.equal(await asAnon(db, 'select public.unshare_education($1) as r', [P]).then((r) => r.rows[0].r), true, 'Stop is never paced');
+  await assert.rejects(share(P, 'Pacer'), /too soon/, 'Stop then Share does not dodge it');
+  assert.equal(await rename(R, 'Nobody'), false, 'a rename of a non-sharer answers false at once');
+  await age(P);
+  assert.ok(await share(P, 'Pacer'), 'after 5 s it goes');
+  // A grade batch right after a share still counts (its own limit is on the 📚 row).
+  const round = await db.query('select shared_at::text as s from public.education_public where player_id = $1', [P]).then((r) => r.rows[0].s);
+  const sent = await asAnon(db, 'select public.submit_education_grades($1, $2, $3::timestamptz, $4, $5, $6::jsonb) as r', [P, id('PaceB1'), round, 3, 27000, '{}']).then((r) => r.rows[0].r);
+  assert.equal(sent.status, 'ok');
+  // A fold keeps the later time.
+  await age(Q);
+  await share(P, 'Pacer9').catch(() => {}); // inside 5 s of the last share: refused, time unchanged
+  await asAnon(db, 'select public.merge_players($1, $2)', [Q, P]);
+  await assert.rejects(rename(Q, 'Merged'), /too soon/, "the kept player inherits P's recent share time");
 });
 
 test('share_education: closed to all but 🔧 devs until the owner opens it; adults only; the row starts empty', async () => {
@@ -904,7 +933,7 @@ test('share_education follows the score board name claim; an education-only play
 test('rename_education renames a sharing player and never adds one; the claim rule holds', async () => {
   const db = await freshDb();
   await openBoard(db);
-  const erename = (pid, name) => asAnon(db, 'select public.rename_education($1, $2) as r', [pid, name]).then((r) => r.rows[0].r);
+  const erename = async (pid, name) => (await unpace(db), asAnon(db, 'select public.rename_education($1, $2) as r', [pid, name]).then((r) => r.rows[0].r));
   const [P, Q] = ['ERN', 'ERQ'].map(id);
   assert.equal(await erename(P, 'Nobody'), false, 'not sharing: false');
   assert.deepEqual(await erows(db), [], 'and no row appears: a rename never shares for the player');
@@ -1576,8 +1605,8 @@ test("a badge day after tomorrow or before 2000 (a device clock set wrong) is st
 test('a 📚 name belongs to one player (AUD-022): no second sharer, no 🌞-only name, no score-board claim of a 📚-only name; a player keeps a name they already hold', async () => {
   const db = await freshDb();
   await db.query('select public.admin_set_education_open(true)');
-  const share = (pid, name) => asAnon(db, 'select public.share_education($1, $2, true)::text as r', [pid, name]).then((r) => r.rows[0].r);
-  const rename = (pid, name) => asAnon(db, 'select public.rename_education($1, $2) as r', [pid, name]).then((r) => r.rows[0].r);
+  const share = async (pid, name) => (await unpace(db), asAnon(db, 'select public.share_education($1, $2, true)::text as r', [pid, name]).then((r) => r.rows[0].r));
+  const rename = async (pid, name) => (await unpace(db), asAnon(db, 'select public.rename_education($1, $2) as r', [pid, name]).then((r) => r.rows[0].r));
   const [A, B, C, D, E] = ['NA', 'NB', 'NC', 'ND', 'NE'].map(id);
   assert.ok(await share(A, 'Sam'), 'A, an education-only player, shares as Sam');
   await assert.rejects(share(B, 'sam'), /name taken/, 'a second sharer under the same name key');

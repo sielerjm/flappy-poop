@@ -801,6 +801,7 @@ test('shareEducation posts the name and the adult box; each refusal has its own 
   assert.deepEqual(await refused('bad name'), { status: 'rejected' });
   assert.deepEqual(await refused('Could not find the function', 404), { status: 'offline' }, 'not deployed yet');
   assert.deepEqual(await refused('something else'), { status: 'offline' });
+  assert.deepEqual(await refused('too soon'), { status: 'offline' }, "the server's 5 s pace (plan 25, A4): try again later");
   assert.deepEqual(await shareEducation(ID, 'Alice', true, { fetch: async () => { throw new Error('down'); }, config }), { status: 'offline' });
   assert.deepEqual(await shareEducation(ID, 'Alice', true, { fetch: fakeFetch({ status: 200, body: JSON.stringify('soon') }), config }), { status: 'offline' }, 'an answer that is no round');
 });
@@ -813,6 +814,7 @@ test('renameEducation and unshareEducation report what the server did', async ()
   assert.equal(await renameEducation(ID, 'Alicia', { fetch: fakeFetch({ status: 400, body: { message: 'name taken' } }), config }), 'nameTaken');
   assert.equal(await renameEducation(ID, 'Alicia', { fetch: fakeFetch({ status: 400, body: { message: 'bad name' } }), config }), 'rejected');
   assert.equal(await renameEducation(ID, 'Alicia', { fetch: fakeFetch({ status: 404, body: { message: 'no function' } }), config }), null);
+  assert.equal(await renameEducation(ID, 'Alicia', { fetch: fakeFetch({ status: 400, body: { message: 'too soon' } }), config }), null, "the 5 s pace is \"try again\", never false (false turns sharing off)");
   assert.equal(await renameEducation(ID, 'Alicia', { fetch: fakeFetch({ status: 200, body: '"maybe"' }), config }), null);
   assert.equal(await renameEducation(ID, '', { fetch: yes, config }), 'rejected');
   const gone = fakeFetch({ status: 200, body: 'true' });

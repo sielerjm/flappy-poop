@@ -127,7 +127,8 @@
 --     public.submit_education_grades(text, text, timestamptz, int, bigint, jsonb),
 --     public.rename_education(text, text), public.unshare_education(text),
 --     public.education_board(text, int), public.admin_set_education_open(boolean),
---     public.education_lock(text);
+--     public.education_lock(text), public.education_paced(text);
+--     alter table public.player_meta drop column edu_named_at;
 --     drop table public.education_public, public.education_settings; then restore
 --     player_by_name, fold_player and player_stats from git and run this file.
 --   undo the v0.16.0 tags: drop function public.board_tags(text[]), public.player_tags(text),
@@ -536,6 +537,10 @@ create table if not exists public.player_meta (
   exact     boolean not null default true,
   dev       boolean not null default false
 );
+-- When this player last shared or renamed on the 📚 board (plan 25): share_education and
+-- rename_education wait 5 s between two (education_paced). Here, not on the 📚 row, because Stop
+-- sharing deletes that row.
+alter table public.player_meta add column if not exists edu_named_at timestamptz;
 alter table public.player_meta enable row level security;
 revoke all on public.player_meta from public, anon, authenticated;
 
@@ -818,12 +823,13 @@ begin
   on conflict (player_id, achievement_id) do update
     set earned_at = least(public.player_achievements.earned_at, excluded.earned_at);
   delete from public.player_achievements where player_id = v_merge;
-  insert into public.player_meta (player_id, joined_at, exact, dev)
-  select v_keep, m.joined_at, m.exact, m.dev from public.player_meta m where m.player_id = v_merge
+  insert into public.player_meta (player_id, joined_at, exact, dev, edu_named_at)
+  select v_keep, m.joined_at, m.exact, m.dev, m.edu_named_at from public.player_meta m where m.player_id = v_merge
   on conflict (player_id) do update
     set exact     = case when excluded.joined_at < public.player_meta.joined_at then excluded.exact else public.player_meta.exact end,
         joined_at = least(public.player_meta.joined_at, excluded.joined_at),
-        dev       = public.player_meta.dev or excluded.dev;
+        dev       = public.player_meta.dev or excluded.dev,
+        edu_named_at = greatest(public.player_meta.edu_named_at, excluded.edu_named_at);
   delete from public.player_meta where player_id = v_merge;
   if exists (select 1 from public.education_public where player_id = v_keep) then
     if exists (select 1 from public.education_public where player_id = v_merge) then
@@ -1532,6 +1538,25 @@ begin
 end;
 $$;
 revoke execute on function public.education_lock(text) from public, anon, authenticated;
+
+-- education_paced (internal, plan 25): a share or rename on the 📚 board, at most one per 5 s per
+-- player ('too soon'; the game reads it as offline and tries again later). Called under the
+-- player's 📚 lock. Stop sharing is never paced.
+create or replace function public.education_paced(v_id text)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  perform public.touch_player(v_id);
+  if exists (select 1 from public.player_meta where player_id = v_id and edu_named_at > now() - interval '5 seconds') then
+    raise exception 'too soon';
+  end if;
+  update public.player_meta set edu_named_at = now() where player_id = v_id;
+end;
+$$;
+revoke execute on function public.education_paced(text) from public, anon, authenticated;
 --
 -- share_education: put this player on the board under p_name, or rename a player already on it
 -- (the game calls it again after a rename; nothing else about the row changes). p_adult must be
@@ -1577,6 +1602,7 @@ begin
   end if;
   perform public.touch_player(v_id);
   v_id := public.education_lock(v_id);
+  perform public.education_paced(v_id);
   insert into public.education_public (player_id, name) values (v_id, p_name)
   on conflict (player_id) do update set name = excluded.name
   returning shared_at into v_at;
@@ -1710,6 +1736,10 @@ begin
     raise exception 'name taken';
   end if;
   v_id := public.education_lock(v_id);
+  if not exists (select 1 from public.education_public where player_id = v_id) then
+    return false; -- not sharing: nothing to rename, and no pace taken
+  end if;
+  perform public.education_paced(v_id);
   update public.education_public set name = p_name where player_id = v_id;
   get diagnostics v_rows = row_count;
   return v_rows > 0;
@@ -2276,7 +2306,7 @@ returns text
 language sql
 immutable
 as $$
-  select 'ca08a57db143acc9'::text; -- schema stamp
+  select '95e322c1278a209f'::text; -- schema stamp
 $$;
 revoke execute on function public.schema_version() from public, authenticated;
 grant  execute on function public.schema_version() to anon;
