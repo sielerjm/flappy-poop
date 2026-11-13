@@ -20,9 +20,19 @@ try {
 
 const SQL = readFileSync(fileURLToPath(new URL('../db/schema.sql', import.meta.url)), 'utf8');
 
+/**
+ * The roles as Supabase makes them: anon and authenticated, and the default privileges that hand
+ * them every new table, sequence and function in `public`. So a table or function the schema
+ * forgets to revoke is readable or callable here too, as it would be on the live database.
+ */
+const SUPABASE_ROLES = `create role anon nologin; create role authenticated nologin;
+  alter default privileges in schema public grant all on tables to anon, authenticated;
+  alter default privileges in schema public grant all on sequences to anon, authenticated;
+  alter default privileges in schema public grant all on functions to anon, authenticated;`;
+
 async function freshDb() {
   const db = new PGlite();
-  await db.exec('create role anon nologin; create role authenticated nologin;');
+  await db.exec(SUPABASE_ROLES);
   await db.exec(SQL);
   await db.exec(SQL);
   return db;
