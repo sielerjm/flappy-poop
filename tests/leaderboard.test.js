@@ -881,8 +881,8 @@ test('fetchEducationBoard asks for the limit with the caller, and cleans the row
 // The education tester pilot (plan 21, step R2): joining, sending events, withdrawing.
 
 test('enrolResearch sends the code once with the adult box and the consent version; each refusal has its own status', async () => {
-  const ok = fakeFetch({ status: 200, body: { status: 'ok', phase: 'pilot' } });
-  assert.deepEqual(await enrolResearch(ID, '  the-invite-code-2026  ', true, 'pilot-1', { fetch: ok, config }), { status: 'ok', phase: 'pilot' });
+  const ok = fakeFetch({ status: 200, body: { status: 'ok', phase: 'pilot', since: '2026-11-13T10:00:00.123+00:00' } });
+  assert.deepEqual(await enrolResearch(ID, '  the-invite-code-2026  ', true, 'pilot-1', { fetch: ok, config }), { status: 'ok', phase: 'pilot', since: '2026-11-13T10:00:00.123+00:00' }, 'the participation token comes back with it');
   assert.equal(ok.calls[0].url, 'https://x.example/rest/v1/rpc/enrol_research');
   assert.deepEqual(ok.calls[0].body, { p_player_id: ID, p_invite: 'the-invite-code-2026', p_adult: true, p_consent_version: 'pilot-1' });
   const none = fakeFetch({ status: 200, body: { status: 'ok', phase: 'pilot' } });
@@ -903,21 +903,22 @@ test('enrolResearch sends the code once with the adult box and the consent versi
 
 test('submitResearchEvents and deleteResearch report what the server did', async () => {
   const batch = 'B'.repeat(22);
+  const SINCE = '2026-11-13T10:00:00.123+00:00';
   const events = [{ event_id: 'E'.repeat(22), card_id: 'ST-03', context: 'break', correct: true, client_at: 1763035200000 }];
   const ok = fakeFetch({ status: 200, body: { status: 'ok', stored: 1 } });
-  assert.deepEqual(await submitResearchEvents(ID, batch, events, { fetch: ok, config }), { status: 'ok' });
+  assert.deepEqual(await submitResearchEvents(ID, batch, events, SINCE, { fetch: ok, config }), { status: 'ok' });
   assert.equal(ok.calls[0].url, 'https://x.example/rest/v1/rpc/submit_research_events');
-  assert.deepEqual(ok.calls[0].body, { p_player_id: ID, p_batch: batch, p_events: events });
-  const answer = (status, message) => submitResearchEvents(ID, batch, events, { fetch: fakeFetch({ status, body: { message } }), config });
+  assert.deepEqual(ok.calls[0].body, { p_player_id: ID, p_batch: batch, p_events: events, p_since: SINCE }, 'the batch carries the participation token');
+  const answer = (status, message) => submitResearchEvents(ID, batch, events, SINCE, { fetch: fakeFetch({ status, body: { message } }), config });
   assert.deepEqual(await answer(400, 'not enrolled'), { status: 'notEnrolled' });
   assert.deepEqual(await answer(400, 'bad events: card'), { status: 'rejected' });
   assert.deepEqual(await answer(400, 'rate limited'), { status: 'keep' });
   assert.deepEqual(await answer(404, 'no function'), { status: 'keep' });
-  assert.deepEqual(await submitResearchEvents(ID, batch, events, { fetch: async () => { throw new Error('down'); }, config }), { status: 'keep' });
+  assert.deepEqual(await submitResearchEvents(ID, batch, events, SINCE, { fetch: async () => { throw new Error('down'); }, config }), { status: 'keep' });
   const none = fakeFetch({ status: 200, body: { status: 'ok' } });
-  assert.deepEqual(await submitResearchEvents(ID, batch, [], { fetch: none, config }), { status: 'rejected' }, 'no events');
-  assert.deepEqual(await submitResearchEvents(ID, batch, Array.from({ length: 201 }, () => events[0]), { fetch: none, config }), { status: 'rejected' }, 'more than the server takes');
-  assert.deepEqual(await submitResearchEvents(ID, 'short', events, { fetch: none, config }), { status: 'rejected' });
+  assert.deepEqual(await submitResearchEvents(ID, batch, [], SINCE, { fetch: none, config }), { status: 'rejected' }, 'no events');
+  assert.deepEqual(await submitResearchEvents(ID, batch, Array.from({ length: 201 }, () => events[0]), SINCE, { fetch: none, config }), { status: 'rejected' }, 'more than the server takes');
+  assert.deepEqual(await submitResearchEvents(ID, 'short', events, SINCE, { fetch: none, config }), { status: 'rejected' });
   assert.equal(none.calls.length, 0);
   const gone = fakeFetch({ status: 200, body: 'true' });
   assert.equal(await deleteResearch(ID, { fetch: gone, config }), true);

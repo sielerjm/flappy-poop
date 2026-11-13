@@ -1097,7 +1097,13 @@ const CODE = 'pilot-code-2026-xyz'; // 19 characters
 const CONSENT = 'pilot-1';
 const setInvite = (db, code) => db.query('select public.admin_set_invite($1) as r', [code]).then((r) => r.rows[0].r);
 const enrol = (db, pid, invite = CODE, adult = true, consent = CONSENT) => asAnon(db, 'select public.enrol_research($1, $2, $3, $4) as r', [pid, invite, adult, consent]).then((r) => r.rows[0].r);
-const revents = (db, pid, batch, events) => asAnon(db, 'select public.submit_research_events($1, $2, $3::jsonb) as r', [pid, batch, JSON.stringify(events)]).then((r) => r.rows[0].r);
+/** The participation token a device holds: what enrol_research gave the player `pid` (resolved). */
+const sinceOf = (db, pid) => db.query('select p.joined_at::text as s from public.research_participants p where p.player_id = public.resolve_player($1)', [pid]).then((r) => r.rows[0]?.s ?? null);
+/** A device's batch, sent with its participation's token (by default the one the server holds for this player now). */
+const revents = async (db, pid, batch, events, since) => {
+  const token = since === undefined ? await sinceOf(db, pid) : since;
+  return asAnon(db, 'select public.submit_research_events($1, $2, $3::jsonb, $4::timestamptz) as r', [pid, batch, JSON.stringify(events), token]).then((r) => r.rows[0].r);
+};
 const withdraw = (db, pid) => asAnon(db, 'select public.delete_research($1) as r', [pid]).then((r) => r.rows[0].r);
 const parts = (db) => db.query('select player_id, research_id, phase, adult, consent_version, last_batch from public.research_participants order by player_id').then((r) => r.rows);
 const responses = (db) => db.query('select event_id, research_id, phase, card_id, context, correct, rt_ms, seen, since_ms::int as since_ms, data from public.research_responses order by client_at, event_id').then((r) => r.rows);
@@ -1158,14 +1164,21 @@ test('enrol_research: closed until a code is set; the code, adults only and a co
   await assert.rejects(enrol(db, P, CODE, true, 'Version 1!'), /bad consent/);
   await assert.rejects(enrol(db, 'short', CODE), /bad player id/);
   assert.deepEqual(await parts(db), [], 'a refused join leaves nothing');
-  assert.deepEqual(await enrol(db, P), { status: 'ok', phase: 'pilot' });
+  const joined = await enrol(db, P);
+  assert.deepEqual({ ...joined, since: null }, { status: 'ok', phase: 'pilot', since: null });
+  assert.ok(Number.isFinite(Date.parse(joined.since)), `the participation's token: ${joined.since}`);
   const [row] = await parts(db);
   assert.deepEqual({ ...row, research_id: null }, { player_id: P, research_id: null, phase: 'pilot', adult: true, consent_version: CONSENT, last_batch: null });
   assert.match(row.research_id, /^[0-9a-f]{32}$/, 'a random research id');
   assert.notEqual(row.research_id, P);
-  // Joining again keeps the research id and records the newer consent.
-  await enrol(db, P, CODE, true, 'pilot-2');
-  assert.deepEqual((await parts(db)).map((r) => [r.research_id, r.consent_version]), [[row.research_id, 'pilot-2']]);
+  // Joining again keeps the research id, the token and the phase joined in, and records the newer
+  // consent (plan 24: a re-join after the owner moved the phase on stays in its own phase, so the
+  // purge of that phase takes it).
+  await db.query("update public.education_settings set phase = 'beta'");
+  const again = await enrol(db, P, CODE, true, 'pilot-2');
+  assert.deepEqual([again.phase, again.since], ['pilot', joined.since], 'the phase and the token it joined with');
+  assert.deepEqual((await parts(db)).map((r) => [r.research_id, r.consent_version, r.phase]), [[row.research_id, 'pilot-2', 'pilot']]);
+  await db.query("update public.education_settings set phase = 'pilot'");
   // A new code stops the old one; null closes enrolment. Those who joined stay.
   await setInvite(db, 'another-code-entirely');
   await assert.rejects(enrol(db, id('RP2'), CODE), /bad invite/, 'the old code no longer works');
@@ -1229,7 +1242,7 @@ test('submit_research_events refuses malformed batches, and they change nothing'
     ['an oversized event', [ev('A', { tuning: 'x'.repeat(2100) })], /bad events: shape/],
   ];
   for (const [why, events, re] of bad) await assert.rejects(revents(db, P, id('BX'), events), re, why);
-  await assert.rejects(asAnon(db, 'select public.submit_research_events($1, $2, $3::jsonb)', [P, id('BX'), '{}']), /bad events/, 'an object, not a list');
+  await assert.rejects(asAnon(db, 'select public.submit_research_events($1, $2, $3::jsonb, $4::timestamptz)', [P, id('BX'), '{}', await sinceOf(db, P)]), /bad events/, 'an object, not a list');
   await assert.rejects(revents(db, P, 'short', [ev('A')]), /bad batch/);
   await assert.rejects(revents(db, 'short', id('BX'), [ev('A')]), /bad player id/);
   assert.deepEqual(await responses(db), []);

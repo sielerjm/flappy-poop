@@ -107,7 +107,9 @@ export function cleanEvent(raw) {
  * tester is joined, else null. version = the notice they agreed to (EDUCATION.consentVersion then),
  * phase = the server's phase when they joined, at = when (ms), id = the player id they joined under
  * (plan 24, AUD-001: a user code loaded later changes the device's id, and the answers and Withdraw
- * still go under the id that joined; the server follows a merge from it). The invite code is never kept.
+ * still go under the id that joined; the server follows a merge from it), since = the participation's
+ * token from the server (AUD-002: sent with every batch, so answers from before a withdrawal never
+ * reach a later participation). The invite code is never kept.
  * Every read normalises; storage follows src/store.js (another tab's change shows at once, a full
  * storage keeps the consent for this page load); it never throws.
  */
@@ -117,6 +119,7 @@ export function createConsentStore(storage = globalThis.localStorage, key = LEAD
     if (typeof raw.version !== 'string' || !CONSENT_RE.test(raw.version) || !PHASES.includes(raw.phase) || !Number.isFinite(raw.at) || raw.at <= 0) return null;
     const out = { version: raw.version, phase: raw.phase, at: raw.at };
     if (typeof raw.id === 'string' && ID_RE.test(raw.id)) out.id = raw.id;
+    if (typeof raw.since === 'string' && raw.since.length <= 40 && Number.isFinite(Date.parse(raw.since))) out.since = raw.since;
     return out;
   };
   const box = createJsonStore(storage, key, clean);

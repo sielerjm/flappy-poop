@@ -115,7 +115,7 @@
 --   undo the pilot: drop view public.research_summary, public.research_by_card,
 --     public.research_by_participant, public.research_retention;
 --     drop function public.enrol_research(text, text, boolean, text),
---     public.submit_research_events(text, text, jsonb), public.delete_research(text),
+--     public.submit_research_events(text, text, jsonb, timestamptz), public.delete_research(text),
 --     public.admin_set_invite(text), public.admin_purge_phase(text);
 --     drop table public.research_responses, public.research_participants; then restore
 --     fold_player from git and run this file.
@@ -594,8 +594,13 @@ create table if not exists public.research_participants (
   consent_version text not null check (consent_version ~ '^[a-z0-9._-]{1,24}$'),
   consented_at    timestamptz not null default now(),
   last_batch      text,
-  updated_at      timestamptz not null default now() - interval '1 hour'
+  updated_at      timestamptz not null default now() - interval '1 hour',
+  joined_at       timestamptz not null default date_trunc('milliseconds', clock_timestamp())
 );
+-- joined_at (plan 24): this participation's token. Set when the row is made and never changed, so
+-- every device of one participation holds the same value (enrol_research hands it out); a withdrawal
+-- and a new join make a new one, and a device still holding the old one is refused ('not enrolled').
+alter table public.research_participants add column if not exists joined_at timestamptz not null default date_trunc('milliseconds', clock_timestamp());
 alter table public.research_participants enable row level security;
 revoke all on public.research_participants from public, anon, authenticated;
 
@@ -1701,7 +1706,9 @@ revoke execute on function public.admin_set_education_open(boolean) from public,
 -- player ids are free to make, so a limit on guesses per player would stop nobody, and
 -- admin_set_invite refuses a short code. p_adult must be true. p_consent_version names the
 -- notice the tester agreed to (RESEARCH.md's version, from the game). Joining again keeps the
--- research id and records the newer consent. Returns { status: 'ok', phase }. Errors raise.
+-- research id, the phase they joined in (so admin_purge_phase removes everyone who joined in it)
+-- and the participation's token, and records the newer consent. Returns { status: 'ok', phase,
+-- since }: since is joined_at, the token the device sends with its answers. Errors raise.
 create or replace function public.enrol_research(p_player_id text, p_invite text, p_adult boolean, p_consent_version text)
 returns jsonb
 language plpgsql
@@ -1711,6 +1718,8 @@ as $$
 declare
   v_id text;
   v_set public.education_settings%rowtype;
+  v_phase text;
+  v_since timestamptz;
 begin
   if p_player_id is null or p_player_id !~ '^[A-Za-z0-9_-]{22}$' then
     raise exception 'bad player id';
@@ -1734,21 +1743,25 @@ begin
   insert into public.research_participants (player_id, phase, adult, consent_version)
   values (v_id, v_set.phase, true, p_consent_version)
   on conflict (player_id) do update
-    set consent_version = excluded.consent_version, consented_at = now(), phase = excluded.phase;
-  return jsonb_build_object('status', 'ok', 'phase', v_set.phase);
+    set consent_version = excluded.consent_version, consented_at = now()
+  returning phase, joined_at into v_phase, v_since;
+  return jsonb_build_object('status', 'ok', 'phase', v_phase, 'since', v_since);
 end;
 $$;
 
 -- submit_research_events: a participant's answer events, 1–200 a batch, stored under their
--- research id and the phase they joined in. Only a player who joined may send: 'not enrolled'
--- otherwise (the device then stops recording). p_batch is the receipt: the same batch again
+-- research id and the phase they joined in. Only a player who joined may send, from this
+-- participation: p_since must be the token enrol_research gave (joined_at), so a device that joined
+-- before a withdrawal and a new join cannot send its older answers under the new research id
+-- (plan 24, AUD-002). 'not enrolled' otherwise (the device then stops recording). p_batch is the receipt: the same batch again
 -- changes nothing; one batch per participant per 5 s ('rate limited': the device keeps it). An
 -- event already stored (its event_id) is skipped, so a resend never doubles an answer. Each
 -- event is checked: its ids, the card id, the context, a boolean `correct`, a device time no
 -- more than 90 days old or a day ahead; only the fields the game is known to record are kept
 -- (src/research.js answerEvent), and an event may not exceed 2000 characters. Returns
 -- { status: 'ok', stored } (how many were new). Errors raise ('bad ...': the device drops the batch).
-create or replace function public.submit_research_events(p_player_id text, p_batch text, p_events jsonb)
+drop function if exists public.submit_research_events(text, text, jsonb);
+create or replace function public.submit_research_events(p_player_id text, p_batch text, p_events jsonb, p_since timestamptz)
 returns jsonb
 language plpgsql
 security definer
@@ -1805,7 +1818,7 @@ begin
   v_id := public.resolve_player(p_player_id);
   perform pg_advisory_xact_lock(hashtext('research:' || v_id));
   select * into v_part from public.research_participants where player_id = v_id;
-  if not found then
+  if not found or p_since is distinct from v_part.joined_at then
     raise exception 'not enrolled';
   end if;
   if v_part.last_batch = p_batch then
@@ -2160,8 +2173,8 @@ revoke execute on function public.education_board(text, int) from public, authen
 grant  execute on function public.education_board(text, int) to anon;
 revoke execute on function public.enrol_research(text, text, boolean, text) from public, authenticated;
 grant  execute on function public.enrol_research(text, text, boolean, text) to anon;
-revoke execute on function public.submit_research_events(text, text, jsonb) from public, authenticated;
-grant  execute on function public.submit_research_events(text, text, jsonb) to anon;
+revoke execute on function public.submit_research_events(text, text, jsonb, timestamptz) from public, authenticated;
+grant  execute on function public.submit_research_events(text, text, jsonb, timestamptz) to anon;
 revoke execute on function public.delete_research(text) from public, authenticated;
 grant  execute on function public.delete_research(text) to anon;
 
@@ -2175,7 +2188,7 @@ returns text
 language sql
 immutable
 as $$
-  select '04ec5118d2b421b9'::text; -- schema stamp
+  select '65c381d7b4e27e8c'::text; -- schema stamp
 $$;
 revoke execute on function public.schema_version() from public, authenticated;
 grant  execute on function public.schema_version() to anon;

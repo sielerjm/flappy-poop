@@ -1152,8 +1152,8 @@ export async function fetchEducationBoard(playerId = null, opts = {}) {
 
 /**
  * Join the pilot (enrol_research) with the invite code; `adult` is the panel's "I am 18 or older"
- * box, `consent` the notice's version. { status: 'ok', phase } when the server has the tester,
- * else { status }: 'badInvite' (a wrong code), 'closed' (no code is set), 'notAdult', 'rejected'
+ * box, `consent` the notice's version. { status: 'ok', phase, since } when the server has the
+ * tester (since: the participation's token, sent with every batch), else { status }: 'badInvite' (a wrong code), 'closed' (no code is set), 'notAdult', 'rejected'
  * ('bad …'), or 'offline' (unreachable, or not deployed). The code is sent and not kept.
  */
 export async function enrolResearch(playerId, invite, adult, consent, opts = {}) {
@@ -1169,18 +1169,20 @@ export async function enrolResearch(playerId, invite, adult, consent, opts = {})
     if (/not adult/i.test(out.message)) return { status: 'notAdult' };
     return /bad (consent|player id)/i.test(out.message) ? { status: 'rejected' } : { status: 'offline' };
   }
-  return out?.status === 'ok' && ['pilot', 'beta', 'study'].includes(out.phase) ? { status: 'ok', phase: out.phase } : { status: 'offline' };
+  if (out?.status !== 'ok' || !['pilot', 'beta', 'study'].includes(out.phase)) return { status: 'offline' };
+  return { status: 'ok', phase: out.phase, since: cleanRound(out.since) };
 }
 
 /**
- * Send a batch of a tester's answer events (submit_research_events): { status: 'ok' } when the
- * server has it (now, or a resend), { status: 'notEnrolled' } when this player is no participant
- * (the device then stops recording), { status: 'rejected' } when the server never will take it
+ * Send a batch of a tester's answer events (submit_research_events) under `since`, the token their
+ * join was given: { status: 'ok' } when the server has it (now, or a resend), { status:
+ * 'notEnrolled' } when this player is no participant, or not this participation any more (they
+ * withdrew and joined again elsewhere: the device then stops recording), { status: 'rejected' } when the server never will take it
  * ('bad …'), else { status: 'keep' } (offline, rate limited, not deployed yet).
  */
-export async function submitResearchEvents(playerId, batch, events, opts = {}) {
+export async function submitResearchEvents(playerId, batch, events, since, opts = {}) {
   if (typeof playerId !== 'string' || !ID_RE.test(playerId) || typeof batch !== 'string' || !ID_RE.test(batch) || !Array.isArray(events) || events.length < 1 || events.length > 200) return { status: 'rejected' };
-  const out = await request('/rpc/submit_research_events', { method: 'POST', errors: true, body: { p_player_id: playerId, p_batch: batch, p_events: events } }, opts);
+  const out = await request('/rpc/submit_research_events', { method: 'POST', errors: true, body: { p_player_id: playerId, p_batch: batch, p_events: events, p_since: cleanRound(since) } }, opts);
   if (out === null || out === undefined) return { status: 'keep' };
   if (out.error) {
     if (out.status !== 400) return { status: 'keep' };

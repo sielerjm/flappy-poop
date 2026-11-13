@@ -31,8 +31,7 @@ async function pilotDb() {
  * the real chain's head (Play.syncLeaderboard: queued merges first, then drainResearch); the rest of
  * that chain needs a username and the board.
  */
-function device(save) {
-  const storage = globalThis.localStorage;
+function device(save, storage = globalThis.localStorage) {
   const reg = new Map();
   const p = playScene({
     save,
@@ -170,6 +169,87 @@ test('Withdraw that reaches the server before the queued merge still deletes the
     await phone.lastSync;
     assert.deepEqual([(await rows(db)).parts.length, (await rows(db)).answers], [0, 0], 'and the merge that lands later brings nothing back');
     assert.equal(phone.researchJoined(), false);
+  } finally {
+    api.restore();
+  }
+});
+
+test('after a withdrawal and a new join, a second device of the same player cannot send its older answers into the new participation (AUD-002)', async () => {
+  const db = await pilotDb();
+  const api = installPostgrest(db);
+  try {
+    const pid = 'TWINAAAAAAAAAAAAAAAAAA';
+    const phone = device({ id: pid, name: 'Twin', top: [], exportedAt: null }, fakeStorage());
+    const laptop = device({ id: pid, name: 'Twin', top: [], exportedAt: null }, fakeStorage());
+    assert.equal((await phone.joinResearch(CODE, true)).status, 'ok');
+    assert.equal((await laptop.joinResearch(CODE, true)).status, 'ok', 'the second device joins the same participation');
+    assert.equal(laptop.researchConsent().since, phone.researchConsent().since, 'and holds the same token');
+    answer(laptop); // recorded under the first participation
+    assert.equal(await phone.leaveResearch(), true, 'withdrawn on the phone');
+    answer(laptop); // the laptop has not heard: it still records
+    assert.equal((await phone.joinResearch(CODE, true)).status, 'ok', 'joined again on the phone: a new participation');
+    const newResearchId = (await rows(db)).parts[0].research_id;
+    await laptop.drainResearch();
+    assert.equal((await db.query('select count(*)::int as n from public.research_responses where research_id = $1', [newResearchId])).rows[0].n, 0, 'nothing from before the new join is stored under the new research id');
+    assert.equal(laptop.researchJoined(), false, 'the laptop is told it is not in this participation and stops recording');
+    assert.equal(laptop.researchQueue.size(), 0, 'and its old answers are dropped, not kept for later');
+  } finally {
+    api.restore();
+  }
+});
+
+test('two devices of one player that join one after the other both keep sending (AUD-002)', async () => {
+  const db = await pilotDb();
+  const api = installPostgrest(db);
+  try {
+    const pid = 'PAIRAAAAAAAAAAAAAAAAAA';
+    const phone = device({ id: pid, name: 'Pair', top: [], exportedAt: null }, fakeStorage());
+    const laptop = device({ id: pid, name: 'Pair', top: [], exportedAt: null }, fakeStorage());
+    assert.equal((await phone.joinResearch(CODE, true)).status, 'ok');
+    answer(phone);
+    await phone.drainResearch();
+    assert.equal((await laptop.joinResearch(CODE, true)).status, 'ok');
+    await ageParticipants(db);
+    answer(laptop);
+    await laptop.drainResearch();
+    await ageParticipants(db);
+    answer(phone);
+    await phone.drainResearch();
+    assert.deepEqual([phone.researchJoined(), laptop.researchJoined()], [true, true], 'joining on the laptop did not throw the phone out');
+    assert.equal((await rows(db)).answers, 3);
+  } finally {
+    api.restore();
+  }
+});
+
+test('joining empties the queue: nothing recorded before this join is sent under it (AUD-005)', async () => {
+  const db = await pilotDb();
+  const api = installPostgrest(db);
+  try {
+    const phone = device({ id: 'QUEUEAAAAAAAAAAAAAAAAA', name: 'Q', top: [], exportedAt: null }, fakeStorage());
+    assert.equal((await phone.joinResearch(CODE, true)).status, 'ok');
+    answer(phone); // queued, not sent
+    assert.equal(phone.researchQueue.size(), 1);
+    assert.equal((await phone.joinResearch(CODE, true)).status, 'ok', 'joining again (a newer notice, say)');
+    assert.equal(phone.researchQueue.size(), 0);
+  } finally {
+    api.restore();
+  }
+});
+
+test('a participant who joined again after the owner moved the phase on is still removed by that phase\'s purge (AUD-005)', async () => {
+  const db = await pilotDb();
+  const api = installPostgrest(db);
+  try {
+    const phone = device({ id: 'PHASEAAAAAAAAAAAAAAAAA', name: 'P', top: [], exportedAt: null }, fakeStorage());
+    assert.equal((await phone.joinResearch(CODE, true)).status, 'ok');
+    answer(phone);
+    await phone.drainResearch();
+    await db.query("update public.education_settings set phase = 'beta'");
+    assert.equal((await phone.joinResearch(CODE, true)).status, 'ok');
+    assert.equal(phone.researchConsent().phase, 'pilot', 'still the pilot participant');
+    await db.query("select public.admin_purge_phase('pilot')");
+    assert.deepEqual([(await rows(db)).parts.length, (await rows(db)).answers], [0, 0], "the pilot's purge leaves nothing of it");
   } finally {
     api.restore();
   }

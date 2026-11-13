@@ -3699,7 +3699,7 @@ export class Play extends Phaser.Scene {
       if (!id || !this.researchJoined()) return;
       const batch = this.researchQueue.beginBatch(newId);
       if (!batch) return;
-      const res = await this.postResearch(id, batch.batch, batch.events);
+      const res = await this.postResearch(id, batch.batch, batch.events, this.consentStore.load()?.since ?? null);
       if (res?.status === 'ok' || res?.status === 'rejected') this.researchQueue.confirmBatch(batch.batch);
       else if (res?.status === 'notEnrolled') {
         this.consentStore.clear();
@@ -3723,7 +3723,10 @@ export class Play extends Phaser.Scene {
     const id = this.save.id;
     const res = await this.postResearchEnrol(id, invite, adult === true, EDUCATION.consentVersion);
     if (res?.status === 'ok' && this.save?.id === id) {
-      this.consentStore.join({ version: EDUCATION.consentVersion, phase: res.phase, at: Date.now(), id });
+      this.consentStore.join({ version: EDUCATION.consentVersion, phase: res.phase, at: Date.now(), id, since: res.since });
+      // Nothing recorded before this join is sent under it (RESEARCH.md: answers given before joining
+      // are not sent): a queue left from an older notice's consent goes (plan 24, AUD-005).
+      this.researchQueue.clear();
       this.researchEnded = false;
       this.refreshTestBadge();
     }
@@ -3754,8 +3757,8 @@ export class Play extends Phaser.Scene {
   }
 
   /** submit_research_events; a method so the smoke can stub it. */
-  postResearch(id, batch, events) {
-    return submitResearchEvents(id, batch, events);
+  postResearch(id, batch, events, since) {
+    return submitResearchEvents(id, batch, events, since);
   }
 
   /** delete_research; a method so the smoke can stub it. */

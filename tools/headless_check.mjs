@@ -353,7 +353,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
       // The tester pilot's calls (plan 21, R2): join, the answer events, withdraw. Offline unless __eduAnswer says otherwise.
       for (const k of ['enrols', 'events', 'withdrawals']) __edu[k] = [];
       p.postResearchEnrol = (id, invite, adult, consent) => (__edu.enrols.push({ id, invite, adult, consent }), Promise.resolve(globalThis.__eduAnswer.enrol ?? { status: 'offline' }));
-      p.postResearch = (id, batch, events) => (__edu.events.push({ id, batch, events }), Promise.resolve(globalThis.__eduAnswer.events ?? { status: 'keep' }));
+      p.postResearch = (id, batch, events, since) => (__edu.events.push({ id, batch, events, since }), Promise.resolve(globalThis.__eduAnswer.events ?? { status: 'keep' }));
       p.postResearchDelete = (id) => (__edu.withdrawals.push(id), Promise.resolve(globalThis.__eduAnswer.withdraw ?? null));
       return true; })()`);
     ok((await evaluate(`__flappy.scene.getScene('Play').diff.gapHeight`)) === 374, 'level 1 pipe gap is 10 % wider (374 px)');
@@ -5026,7 +5026,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         ok(jBad.status === pw.eduPilotBadCode && jClosed.status === pw.eduPilotClosed && !jClosed.joined && jClosed.consent === null && jClosed.code === 'wrong-code-entirely-2026', `a wrong code ("${jBad.status}") and a closed pilot ("${jClosed.status}") join nothing`);
         // The right code: joined. The code went once, with the adult box and the notice's version, and is not kept.
         await typeCode('the-right-invite-code-2026');
-        const jOk = await tryJoin({ status: 'ok', phase: 'pilot' });
+        const jOk = await tryJoin({ status: 'ok', phase: 'pilot', since: '2026-11-13T10:00:00.123+00:00' });
         const enrols = await evaluate(`JSON.stringify(__edu.enrols)`).then(JSON.parse);
         const keptCode = await evaluate(`Object.keys(localStorage).some((k) => (localStorage.getItem(k) ?? '').includes('the-right-invite-code-2026'))`);
         const lastEnrol = enrols.at(-1) ?? {};
@@ -5046,8 +5046,8 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         ok(!evText.includes(saveNow.id) && !evText.includes('ShareSmoke') && !Object.keys(e1).some((k) => /player|name/i.test(k)), 'an event holds no username and no player id');
         // The sync sends them: one batch, then the queue is empty.
         await evaluate(`(globalThis.__eduAnswer.events = { status: 'ok' }, ${play}.syncLeaderboard().then(() => true))`);
-        const sent = await evaluate(`JSON.stringify({ calls: __edu.events.map((c) => ({ id: c.id, n: c.events.length, first: c.events[0]?.event_id })), left: ${play}.researchQueue.size() })`).then(JSON.parse);
-        ok(sent.calls.length === 1 && sent.calls[0].id === saveNow.id && sent.calls[0].n === 2 && sent.calls[0].first === e1.event_id && sent.left === 0, `the next sync sends both events in one batch, and the queue is empty (${sent.left} left)`);
+        const sent = await evaluate(`JSON.stringify({ calls: __edu.events.map((c) => ({ id: c.id, n: c.events.length, first: c.events[0]?.event_id, since: c.since })), left: ${play}.researchQueue.size() })`).then(JSON.parse);
+        ok(sent.calls.length === 1 && sent.calls[0].id === saveNow.id && sent.calls[0].n === 2 && sent.calls[0].first === e1.event_id && sent.calls[0].since === '2026-11-13T10:00:00.123+00:00' && sent.left === 0, `the next sync sends both events in one batch, with the token the join gave, and the queue is empty (${sent.left} left)`);
         // A test run records nothing, joined or not.
         await evaluate(`(${play}.setTestMode(true), ${play}.setTestSettings({ startLevel: 1, invincible: false }), true)`);
         const hudT = await eduRunToQuiz();
