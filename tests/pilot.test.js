@@ -15,6 +15,8 @@ const { createConsentStore, createResearchQueue } = await import('../src/researc
 const { mergePlayers, createMergeStore } = await import('../src/leaderboard.js');
 const { exportCode } = await import('../src/save.js');
 const { openSavePanel, closeSavePanel } = await import('../src/ui/savePanel.js');
+const { openEduDataPanel, closeEduDataPanel } = await import('../src/ui/eduDataPanel.js');
+const { EDUCATION } = await import('../src/config.js');
 const { t } = await import('../src/i18n.js');
 const { CARDS } = await import('../src/questions.js');
 
@@ -250,6 +252,58 @@ test('a participant who joined again after the owner moved the phase on is still
     assert.equal(phone.researchConsent().phase, 'pilot', 'still the pilot participant');
     await db.query("select public.admin_purge_phase('pilot')");
     assert.deepEqual([(await rows(db)).parts.length, (await rows(db)).answers], [0, 0], "the pilot's purge leaves nothing of it");
+  } finally {
+    api.restore();
+  }
+});
+
+/** The Education data panel's 🔬 section as this device shows it. */
+function pilotSection(play) {
+  openEduDataPanel({ game: null, play, locale: 'en' });
+  const leave = body.find('edu-pilot-leave');
+  const join = body.find('edu-pilot-join');
+  const out = { state: body.find('edu-pilot-state').textContent, withdraw: !leave.hidden, join: !join.parent.hidden };
+  closeEduDataPanel();
+  return out;
+}
+
+test('the Education data panel offers Withdraw whenever this device holds a consent, an older notice\'s included (AUD-005)', () => {
+  const play = device({ id: 'PANELAAAAAAAAAAAAAAAAA', name: 'Tester', top: [], exportedAt: null }, fakeStorage());
+  play.eduShare = { load: () => ({ on: false }) };
+  assert.deepEqual(pilotSection(play), { state: t('en', 'eduPilotOff'), withdraw: false, join: true }, 'not joined: Join');
+  play.consentStore.join({ version: EDUCATION.consentVersion, phase: 'pilot', at: Date.now() });
+  assert.deepEqual(pilotSection(play), { state: t('en', 'eduPilotOn'), withdraw: true, join: false }, 'joined: Withdraw');
+  play.consentStore.join({ version: 'pilot-0', phase: 'pilot', at: Date.now() });
+  assert.equal(play.researchJoined(), false, 'an older notice: nothing is recorded (decided)');
+  assert.deepEqual(pilotSection(play), { state: t('en', 'eduPilotStale'), withdraw: true, join: true }, 'an older notice: join again, or withdraw');
+});
+
+test("Clear's warning names the pilot whenever this device holds a consent, an older notice's included (AUD-005)", async () => {
+  globalThis.localStorage = fakeStorage();
+  const play = device({ id: 'CLEARAAAAAAAAAAAAAAAAA', name: 'Tester', top: [], exportedAt: null }, fakeStorage());
+  play.eduShareOn = () => false;
+  play.consentStore.join({ version: 'pilot-0', phase: 'pilot', at: Date.now() });
+  openSavePanel({ game: {}, play, locale: 'en' });
+  const root = body.find('save-panel') ?? body.children.find((c) => c.attrs?.role === 'dialog');
+  await root.find('save-clear-btn').click(); // the first tap arms Clear and says what stays
+  const status = root.find('save-status').textContent;
+  closeSavePanel();
+  assert.ok(status.includes(t('en', 'saveClearNotePilot')), status);
+});
+
+test('Withdraw under an older notice still deletes the participant and every answer (AUD-005)', async () => {
+  const db = await pilotDb();
+  const api = installPostgrest(db);
+  try {
+    const phone = device({ id: 'STALEAAAAAAAAAAAAAAAAA', name: 'S', top: [], exportedAt: null }, fakeStorage());
+    assert.equal((await phone.joinResearch(CODE, true)).status, 'ok');
+    answer(phone);
+    await phone.drainResearch();
+    phone.consentStore.join({ ...phone.researchConsent(), version: 'pilot-0' }); // the notice moved on since
+    assert.equal(phone.researchJoined(), false);
+    assert.equal(await phone.leaveResearch(), true);
+    assert.deepEqual([(await rows(db)).parts.length, (await rows(db)).answers], [0, 0]);
+    assert.equal(phone.researchConsent(), null);
   } finally {
     api.restore();
   }

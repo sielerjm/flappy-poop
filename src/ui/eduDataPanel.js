@@ -145,18 +145,23 @@ function refresh() {
   dom.shareBtn.textContent = t(locale, on ? 'eduShareStop' : 'eduShareTitle');
   dom.shareBtn.className = on ? 'wide outline' : 'wide';
   dom.shareBtn.disabled = busy || (!on && !dom.adult.checked);
-  // 🔬 Tester data: the code and Join until joined (Join waits for the 18+ box and a code), then Withdraw.
+  // 🔬 Tester data: the code and Join until joined under this notice (Join waits for the 18+ box and
+  // a code); Withdraw whenever this device holds a consent, of any notice version, since the server
+  // may hold its answers (plan 24, AUD-005). A consent to an older notice records nothing: the
+  // tester joins again to go on, or withdraws.
   const joined = Boolean(play?.researchJoined?.());
+  const held = Boolean(play?.researchConsent?.());
+  const stale = held && !joined;
   dom.pilotTitle.textContent = t(locale, 'eduPilotTitle');
   dom.pilotBody.textContent = t(locale, 'eduPilotBody');
   dom.pilotLink.textContent = t(locale, 'eduPilotMore');
-  dom.pilotState.textContent = t(locale, joined ? 'eduPilotOn' : 'eduPilotOff');
+  dom.pilotState.textContent = t(locale, joined ? 'eduPilotOn' : stale ? 'eduPilotStale' : 'eduPilotOff');
   dom.pilotState.className = joined ? 'state on' : 'state';
   dom.code.placeholder = t(locale, 'eduPilotCode');
   dom.joinBtn.textContent = t(locale, 'eduPilotJoin');
   dom.leaveBtn.textContent = t(locale, 'eduPilotLeave');
   dom.joinRow.hidden = joined;
-  dom.leaveBtn.hidden = !joined;
+  dom.leaveBtn.hidden = !held;
   dom.joinBtn.disabled = busy || !dom.adult.checked || !dom.code.value.trim();
   dom.leaveBtn.disabled = busy;
 }

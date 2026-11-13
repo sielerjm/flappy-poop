@@ -345,7 +345,7 @@ function onClear() {
   // A player who shares their education grades, or sent answers as a pilot tester, is told those
   // stay where they are: Clear only forgets the player here. Stop sharing and Withdraw, in
   // 📚 Education data, delete them.
-  const warning = [t(locale, 'saveClearConfirm'), ctx.play?.eduShareOn?.() ? t(locale, 'saveClearNoteShared') : '', ctx.play?.researchJoined?.() ? t(locale, 'saveClearNotePilot') : ''].filter(Boolean).join(' ');
+  const warning = [t(locale, 'saveClearConfirm'), ctx.play?.eduShareOn?.() ? t(locale, 'saveClearNoteShared') : '', ctx.play?.researchConsent?.() ? t(locale, 'saveClearNotePilot') : ''].filter(Boolean).join(' ');
   setStatus(warning, 'error');
   clearTimeout(clearTimer);
   clearTimer = setTimeout(() => {

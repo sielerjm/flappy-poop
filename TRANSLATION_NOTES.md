@@ -293,6 +293,7 @@ Short, playful, clear. Fit a 720×1280 logical field; How to play / About body w
 | eduPilotJoin | Join | 加入 |
 | eduPilotOn | You are in the tester pilot. | 你已加入测试。 |
 | eduPilotOff | You are not in the tester pilot. | 你未加入测试。 |
+| eduPilotStale | The notice changed: join again to keep sending, or withdraw. | 测试说明已更新：重新加入以继续发送，或退出。 |
 | eduPilotLeave | Withdraw and delete my data | 退出并删除我的数据 |
 | eduPilotNeedAdult | The pilot is for adults: tick the box if you are 18 or older. | 测试仅限成年人：如果你已年满 18 岁，请勾选上面的选项。 |
 | eduPilotNeedCode | Type the invite code you were given. | 请输入你收到的邀请码。 |
