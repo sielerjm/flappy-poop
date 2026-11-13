@@ -1,4 +1,4 @@
-import { GAME_HEIGHT, FIELD, TUNING as T, LEVELS, LEVEL_COLORS, BACKGROUND, TEST_MODE } from '../config.js';
+import { GAME_HEIGHT, FIELD, TUNING as T, LEVELS, LEVEL_COLORS, BACKGROUND, TEST_MODE, EDUCATION } from '../config.js';
 import {
   createRng,
   createCourse,
@@ -119,7 +119,7 @@ import { perfMark, perfSteps, perfRunStart } from '../ui/perfMeter.js';
 import { createFinishTexture } from '../ui/finish.js';
 import { createLightTexture } from '../ui/pipeShade.js';
 import { createLevelBar } from '../ui/levelBar.js';
-import { createEduShareStore, shareEducation, renameEducation, unshareEducation, submitEducationGrades, fetchEducationBoard, createSubmitStore, createMergeStore, createRenameStore, createTournamentQueue, createDailyStore, createDailyQueue, submitDailyScore, fetchDailyBoard, submitPlans, submitScore, submitTournament, checkNameAvailable, mergePlayers, fetchPlayerName, fetchRank, nameAction, createCareerStore, submitCounters, claimAchievements, fetchPlayerStats } from '../leaderboard.js';
+import { enrolResearch, submitResearchEvents, deleteResearch, createEduShareStore, shareEducation, renameEducation, unshareEducation, submitEducationGrades, fetchEducationBoard, createSubmitStore, createMergeStore, createRenameStore, createTournamentQueue, createDailyStore, createDailyQueue, submitDailyScore, fetchDailyBoard, submitPlans, submitScore, submitTournament, checkNameAvailable, mergePlayers, fetchPlayerName, fetchRank, nameAction, createCareerStore, submitCounters, claimAchievements, fetchPlayerStats } from '../leaderboard.js';
 import { createButton } from '../ui/button.js';
 import { createToggle } from '../ui/toggle.js';
 import { createCoinText } from '../ui/coinText.js';
@@ -128,6 +128,7 @@ import { createInfoCard } from '../ui/infoCard.js';
 import { openSavePanel, isSavePanelOpen, showAdoptedName, showBoardScores } from '../ui/savePanel.js';
 import { isTournamentPanelOpen, tournamentPadAction } from '../ui/tournamentPanel.js';
 import { openEduDataPanel, isEduDataPanelOpen } from '../ui/eduDataPanel.js';
+import { answerEvent, createConsentStore, createResearchQueue } from '../research.js';
 import { bindPad } from '../input/pad.js';
 import { keyGroup, sameDevice, catchUpTier, catchUpDraws, versusAvailable, ghostPlacement, rivalMarker, respawnPose, respawnBlinkStart, courseDistance, VERSUS_EMOJI } from '../versus.js';
 import { createEduStore, dueCount, cardCounts, masteryByDeck, pickCard, shuffleOptions, gradeFor, schedule, eduShopPrices, reviveStart, reviveStep, reviveSettled, newTally, tallyAnswer, EDUCATION_EMOJI } from '../education.js';
@@ -214,6 +215,10 @@ export class Play extends Phaser.Scene {
     this.educationOn = eduSettings.education;
     this.eduStore = createEduStore(globalThis.localStorage);
     this.eduShare = createEduShareStore(); // the 📚 board (plan 21): whether this player shares their grades, and what the board already has (drainEduShare)
+    // The tester pilot (plan 21): this device's consent (none unless the tester joined in the
+    // Education data panel) and the answer events on their way to the server (drainResearch).
+    this.consentStore = createConsentStore();
+    this.researchQueue = createResearchQueue();
     this.runIsEducation = false;
     this.runQuiz = newTally(); // this run's quiz answers (in all and per level) and revives (start() resets it)
     this.quizOpen = false; // the Quiz scene is up (openQuiz → onQuizClosed)
@@ -772,6 +777,8 @@ export class Play extends Phaser.Scene {
     // An education run (📚, plan 21): unlocked, the switch on, single player, never a Daily Dump.
     this.runIsEducation = !daily && this.educationOn && this.educationOffered();
     this.runQuiz = newTally();
+    this.runId = null; // a pilot tester's answer events name their run (made with the run's first event)
+    this.runEvents = 0;
     this.respawnHold = null;
     this.revive = null;
     this.reviveLost = null;
@@ -1258,6 +1265,9 @@ export class Play extends Phaser.Scene {
     this.careerStore.clear(); // counters and badges go with the player
     this.eduStore.clear(); // and the education cards' progress (plan 21); the unlock is a setting and stays
     this.eduShare.clear(); // this device stops sending to the 📚 board; a row the old player shared stays there until they stop sharing
+    this.consentStore.clear(); // and stops recording for the pilot: answers already sent stay on the server until the tester withdraws
+    this.researchQueue.clear();
+    this.refreshTestBadge();
     this.refreshEduDue();
     this.best.clear();
     this.boardNameTaken = false;
@@ -1272,7 +1282,8 @@ export class Play extends Phaser.Scene {
    * board's name for its player unless the player renamed here (nameAction), so
    * a rename made on another device sticks. After the daily scores, the career
    * (lifetime counters and achievement claims, drainCareer), then the education
-   * grades of a player who shares them (drainEduShare). Resolves on every
+   * grades of a player who shares them (drainEduShare). A pilot tester's answer
+   * events go early, username or not (drainResearch). Resolves on every
    * outcome; a failed post is retried on the next game over or board open.
    */
   syncLeaderboard() {
@@ -1291,16 +1302,18 @@ export class Play extends Phaser.Scene {
     );
     // Finished tournaments next: they carry their own host id, so they post even without a username here.
     const tournaments = merges.then(() => this.tournamentQueue.drain((payload, hostId) => submitTournament(payload, hostId)));
+    // A pilot tester's answer events (plan 21) need no username either: joining made the id.
+    const research = tournaments.then(() => this.drainResearch());
     // Daily Dump scores carry their own id too; a device with no username sends them under the
     // name they were queued with (a named device sends after the name check below).
-    if (!this.save?.name) return tournaments.then(() => this.drainDaily()).catch(() => {});
+    if (!this.save?.name) return research.then(() => this.drainDaily()).catch(() => {});
     if (!this.save.id) this.save = ensureId(this.save);
     const id = this.save.id;
     const renamedHere = () => {
       const p = this.renameStore.load();
       return Boolean(p && p.id === id && p.name === this.save.name);
     };
-    return tournaments
+    return research
       .then(() => (renamedHere() ? null : this.fetchPlayerName(id))) // a rename typed here goes to the board, not the other way round
       .then((board) => {
         if (this.save?.id === id && nameAction({ local: this.save.name, board, pending: this.renameStore.load(), id }) === 'adopt') this.adoptBoardName(board);
@@ -1614,12 +1627,16 @@ export class Play extends Phaser.Scene {
    * schedule. Counted in runQuiz (tallyAnswer). A right answer in a level break pays break.coins (takeCoins: the
    * purse, the coin sound). Returns { correct, grade, coins }.
    */
-  quizAnswer({ card, reason, chosen, rtMs, interrupted, mode = 'break' }) {
+  quizAnswer({ card, reason, order = [], chosen, rtMs, interrupted, mode = 'break', input = 'key' }) {
     const correct = chosen === 'answer';
     const grade = gradeFor(correct, interrupted ? null : rtMs);
     if (!this.runIsTest) {
+      const now = Date.now();
       const rec = this.eduStore.load().cards[card.id] ?? null;
-      this.eduStore.answer(card.id, schedule(rec, grade, Date.now(), T, { early: reason === 'early' }));
+      this.eduStore.answer(card.id, schedule(rec, grade, now, T, { early: reason === 'early' }));
+      // A pilot tester's answer is recorded as an event (plan 21; never in a test run, and only
+      // while joined): what was asked and picked, and what the device knew of the card before.
+      if (this.researchJoined()) this.recordAnswerEvent({ card, reason, order, chosen, correct, rtMs, interrupted, grade, mode, input, before: rec, now });
     }
     // The run's tally (plan 22, U4), by level: a break asks about the level just cleared, a revive
     // about the one being flown. The bonus quiz after a win is practice: its answers are not tallied.
@@ -1631,6 +1648,45 @@ export class Play extends Phaser.Scene {
       this.refreshShopButton();
     }
     return { correct, grade, coins };
+  }
+
+  /**
+   * One answer into the pilot's queue (src/research.js answerEvent). Its ids: the event's own, this
+   * page load's (the registry's researchSession) and this run's. step: a revive's misses so far, or
+   * its streak so far. Sent with the next sync (drainResearch).
+   */
+  recordAnswerEvent({ card, reason, order, chosen, correct, rtMs, interrupted, grade, mode, input, before, now }) {
+    const consent = this.consentStore.load();
+    if (!consent || !this.researchJoined()) return;
+    if (!this.registry.get('researchSession')) this.registry.set('researchSession', newId());
+    this.runId ??= newId();
+    this.runEvents += 1;
+    const phase = this.revive?.phase;
+    const step = mode !== 'revive' ? null : phase === 'strikes' ? this.revive.strikes : phase === 'streak' ? this.revive.streak : null;
+    this.researchQueue.add(
+      answerEvent({
+        ids: { event: newId(), session: this.registry.get('researchSession'), run: this.runId },
+        card,
+        context: mode === 'revive' || mode === 'bonus' ? mode : 'break',
+        seq: this.runEvents,
+        step,
+        level: this.levelBreak ? this.level - 1 : this.level,
+        order,
+        chosen,
+        correct,
+        rtMs,
+        interrupted,
+        grade,
+        reason,
+        before,
+        now,
+        locale: this.locale,
+        field: this.fieldW > FIELD.minWidth ? 'wide' : 'phone',
+        input,
+        consent: consent.version,
+        phase: consent.phase,
+      }),
+    );
   }
 
   /** The quiz closed: the 📚 and 💰 pills come back (the closing tap is locked out by the caller). */
@@ -1787,7 +1843,7 @@ export class Play extends Phaser.Scene {
     this.testBadge.setVisible(show);
     if (!show) return;
     if (ready) this.testBadge.setText(t(this.locale, 'testTitle')).setPosition(this.col.x + 24, 56);
-    else this.testBadge.setText(`${this.runIsTest ? '\u{1F9EA}' : ''}${this.runIsEducation ? EDUCATION_EMOJI : ''}`).setPosition(this.col.x + 24, T.hudScoreY - 12);
+    else this.testBadge.setText(`${this.runIsTest ? '\u{1F9EA}' : ''}${this.runIsEducation ? EDUCATION_EMOJI : ''}${this.runIsEducation && !this.runIsTest && this.researchJoined() ? '\u{1F52C}' : ''}`).setPosition(this.col.x + 24, T.hudScoreY - 12); // 🔬: a pilot tester's answers are being recorded
   }
 
   applyLocale(next) {
@@ -3607,6 +3663,90 @@ export class Play extends Phaser.Scene {
     } catch {
       /* the next sync tries again */
     }
+  }
+
+  /**
+   * Is this device's tester in the pilot (plan 21)? Answers are recorded only then. A consent given
+   * to an older notice (EDUCATION.consentVersion has moved on) does not count: nothing is sent under
+   * a notice the tester has not seen, and the panel asks them to join again.
+   */
+  researchJoined() {
+    return this.consentStore.load()?.version === EDUCATION.consentVersion;
+  }
+
+  /**
+   * Send the pilot's queued answer events, one batch a sync (the server takes one per 5 s). 'not
+   * enrolled' (the tester withdrew on another device, or the pilot was purged): this device stops
+   * recording and forgets the consent; researchEnded tells the panel why. Never rejects.
+   */
+  async drainResearch() {
+    try {
+      const id = this.save?.id ?? null;
+      if (!id || !this.researchJoined()) return;
+      const batch = this.researchQueue.beginBatch(newId);
+      if (!batch) return;
+      const res = await this.postResearch(id, batch.batch, batch.events);
+      if (res?.status === 'ok' || res?.status === 'rejected') this.researchQueue.confirmBatch(batch.batch);
+      else if (res?.status === 'notEnrolled') {
+        this.consentStore.clear();
+        this.researchQueue.clear();
+        this.researchEnded = true;
+        this.refreshTestBadge();
+      }
+    } catch {
+      /* the next sync tries again */
+    }
+  }
+
+  /**
+   * Join the pilot (the Education data panel): the invite code and the "I am 18 or older" box go to
+   * the server (enrol_research) with the notice's version; the code is not kept. A device with no
+   * player id yet gets one here (no username needed). Resolves to { status }: 'ok', 'badInvite',
+   * 'closed', 'notAdult', 'rejected' or 'offline'.
+   */
+  async joinResearch(invite, adult) {
+    if (!this.save?.id) this.setSaveState(ensureId(this.save ?? {}));
+    const id = this.save.id;
+    const res = await this.postResearchEnrol(id, invite, adult === true, EDUCATION.consentVersion);
+    if (res?.status === 'ok' && this.save?.id === id) {
+      this.consentStore.join({ version: EDUCATION.consentVersion, phase: res.phase, at: Date.now() });
+      this.researchEnded = false;
+      this.refreshTestBadge();
+    }
+    return { status: res?.status ?? 'offline' };
+  }
+
+  /**
+   * Withdraw from the pilot (the Education data panel): the participant and every answer they sent
+   * are deleted on the server (delete_research), and this device forgets the consent and its queue.
+   * True once the server has none of it; false when it could not be reached, and the tester then
+   * stays joined here: the answers are still on the server.
+   */
+  async leaveResearch() {
+    const id = this.save?.id ?? null;
+    if (id) {
+      const gone = await this.postResearchDelete(id);
+      if (gone === null) return false;
+    }
+    this.consentStore.clear();
+    this.researchQueue.clear();
+    this.refreshTestBadge();
+    return true;
+  }
+
+  /** enrol_research for the pilot; a method so the smoke can stub it (never the live server). */
+  postResearchEnrol(id, invite, adult, consent) {
+    return enrolResearch(id, invite, adult, consent);
+  }
+
+  /** submit_research_events; a method so the smoke can stub it. */
+  postResearch(id, batch, events) {
+    return submitResearchEvents(id, batch, events);
+  }
+
+  /** delete_research; a method so the smoke can stub it. */
+  postResearchDelete(id) {
+    return deleteResearch(id);
   }
 
   /** Does this device send the player's education grades to the 📚 board? */

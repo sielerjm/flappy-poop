@@ -33,7 +33,7 @@ const ALLOWED_KEY_PREFIXES = {
 const ALLOWED_KEYS = {};
 
 /** The config objects whose every leaf must be read somewhere in src/ (outside config.js). */
-const CONFIG_ROOTS = ['TUNING', 'FIELD', 'LEADERBOARD', 'TEST_MODE', 'SHARE', 'BACKGROUND'];
+const CONFIG_ROOTS = ['TUNING', 'FIELD', 'LEADERBOARD', 'TEST_MODE', 'EDUCATION', 'SHARE', 'BACKGROUND'];
 
 /** Config leaves nothing reads, kept on purpose: dotted path → why. */
 const ALLOWED_KNOBS = {};

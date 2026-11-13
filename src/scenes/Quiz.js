@@ -157,8 +157,8 @@ export class Quiz extends Phaser.Scene {
 
     const kb = this.input.keyboard;
     ['ONE', 'TWO', 'THREE'].forEach((k, i) => {
-      kb?.on(`keydown-${k}`, () => this.choose(i));
-      kb?.on(`keydown-NUMPAD_${k}`, () => this.choose(i));
+      kb?.on(`keydown-${k}`, () => this.choose(i, 'key'));
+      kb?.on(`keydown-NUMPAD_${k}`, () => this.choose(i, 'key'));
     });
     kb?.on('keydown-ENTER', () => this.primary());
     kb?.on('keydown-SPACE', () => this.primary());
@@ -278,7 +278,8 @@ export class Quiz extends Phaser.Scene {
       .zone(this.cx, 0, TEXT_W, OPTION_MIN_H)
       .setInteractive({ useHandCursor: true })
       .on('pointerdown', (pointer) => {
-        if (!this.tapLocked(pointer)) this.choose(i);
+        // A pointer: a finger or the mouse. No pointer: the controller's ring pressed it (pressable).
+        if (!this.tapLocked(pointer)) this.choose(i, pointer ? (pointer.wasTouch ? 'touch' : 'mouse') : 'pad');
       });
     return { g, text, mark, zone, box: { x: this.cx, y: 0, width: TEXT_W, height: OPTION_MIN_H }, state: 'idle' };
   }
@@ -485,13 +486,13 @@ export class Quiz extends Phaser.Scene {
     else this.status.setText('⭐'.repeat(Math.min(st.streak, restoreStreak)) + '☆'.repeat(Math.max(0, restoreStreak - st.streak)));
   }
 
-  /** Option i picked (a tap, a key, the ring): Play grades and saves it; the card shows the verdict. */
-  choose(i) {
+  /** Option i picked (a tap, a key, the ring: `input` says which, for a pilot tester's answer event): Play grades and saves it; the card shows the verdict. */
+  choose(i, input = 'key') {
     if (!this.card || this.answered || !isTopOverlay(this) || this.runCard?.open) return;
     this.answered = true;
     const key = this.order[i];
     const rtMs = (globalThis.performance?.now?.() ?? Date.now()) - this.shownAt;
-    const res = this.play?.quizAnswer?.({ card: this.card, reason: this.reason, order: this.order, chosen: key, rtMs, interrupted: this.interrupted, mode: this.mode }) ?? { correct: key === 'answer' };
+    const res = this.play?.quizAnswer?.({ card: this.card, reason: this.reason, order: this.order, chosen: key, rtMs, interrupted: this.interrupted, mode: this.mode, input }) ?? { correct: key === 'answer' };
     this.lastAnswer = { id: this.card.id, chosen: key, correct: res.correct, coins: res.coins ?? 0, rtMs, interrupted: this.interrupted }; // the smoke reads it
     this.refreshTally();
     if (this.mode === 'revive') this.reviveState = this.play?.reviveEvent?.(res.correct ? 'correct' : 'wrong') ?? this.reviveState;

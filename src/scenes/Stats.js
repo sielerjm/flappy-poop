@@ -183,7 +183,7 @@ export class Stats extends Phaser.Scene {
       earned,
       locked,
       tags: online ? (server.tags ?? []) : [],
-      education: play.eduUnlocked ? { ...this.eduView(play.eduStore.load()), shared: Boolean(play.eduShareOn?.()) } : null,
+      education: play.eduUnlocked ? { ...this.eduView(play.eduStore.load()), shared: Boolean(play.eduShareOn?.()), pilot: Boolean(play.researchJoined?.()) } : null,
     };
   }
 
@@ -371,6 +371,14 @@ export class Stats extends Phaser.Scene {
         sv.link(zone, () => this.openEduData());
         items.push(pressable('eduShared', zone, { event: 'pointerup', scrolled: true }));
         this.eduSharedItem = { zone, shared: edu.shared };
+        // A pilot tester sees that their answers are being sent, and the way to the panel (Withdraw is there).
+        if (edu.pilot) {
+          const pilotY = y;
+          row('statsEduPilot', t(locale, 'statsEduPilotOn'), PINK);
+          const pilotZone = sv.add(this.add.zone((L.left + L.right) / 2, pilotY, L.right - L.left, 44));
+          sv.link(pilotZone, () => this.openEduData());
+          items.push(pressable('eduPilot', pilotZone, { event: 'pointerup', scrolled: true }));
+        }
       }
       y += 44;
       y = badgeGrid([...edu.earned.map((b) => ({ ...b, done: true })), ...edu.locked.map((entry) => ({ entry, done: false }))], y, edu.counters, this.eduBadgeItems);

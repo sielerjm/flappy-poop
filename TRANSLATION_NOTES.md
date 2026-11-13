@@ -286,7 +286,27 @@ Short, playful, clear. Fit a 720×1280 logical field; How to play / About body w
 | statsEduShared | On the 📚 board | 在 📚 榜上 |
 | statsEduSharedOn | Shared › | 已分享 › |
 | statsEduSharedOff | Not shared › | 未分享 › |
-| saveClearConfirmShared | Copy your user code first: without it this username and its scores can't come back. Your shared grades stay on the 📚 board until you stop sharing in 📚 Education data. Tap Clear again to sign out. | 请先复制你的用户码：没有它，这个用户名和分数就找不回来了。你分享的成绩会留在 📚 榜上，除非先在“📚 教育数据”里停止分享。再点一次“清除”即可退出。 |
+| eduPilotTitle | 🔬 Tester data | 🔬 测试数据 |
+| eduPilotBody | For invited testers. This tests the tools only: no research is being done with it. Your answers are not analysed, and they are deleted before any study starts. If you join, each answer you give in education mode is sent (the card, what you picked, right or wrong, how long it took) under a random id, never your username. | 仅限受邀测试者。这只是在测试工具：不会用它做任何研究。你的答题不会被分析，并会在任何研究开始前删除。加入后，你在教育模式里的每次答题（哪张卡片、你选了什么、对或错、用时多久）都会以随机编号发送，绝不带你的用户名。 |
+| eduPilotMore | What is collected, and how to withdraw | 收集哪些内容，以及如何退出 |
+| eduPilotCode | Invite code | 邀请码 |
+| eduPilotJoin | Join | 加入 |
+| eduPilotOn | You are in the tester pilot. | 你已加入测试。 |
+| eduPilotOff | You are not in the tester pilot. | 你未加入测试。 |
+| eduPilotLeave | Withdraw and delete my data | 退出并删除我的数据 |
+| eduPilotNeedAdult | The pilot is for adults: tick the box if you are 18 or older. | 测试仅限成年人：如果你已年满 18 岁，请勾选上面的选项。 |
+| eduPilotNeedCode | Type the invite code you were given. | 请输入你收到的邀请码。 |
+| eduPilotBadCode | That code is not right. | 邀请码不正确。 |
+| eduPilotClosed | The pilot is not open at the moment. | 测试目前未开放。 |
+| eduPilotOffline | Couldn't reach the server. Try again in a moment. | 无法连接服务器，请稍后再试。 |
+| eduPilotJoined | You are in: answers you give from now on are sent. | 已加入：从现在起你的答题会被发送。 |
+| eduPilotLeft | Withdrawn: your answers were deleted from the server. | 已退出：你的答题已从服务器删除。 |
+| eduPilotLeaveOffline | Couldn't reach the server, so your answers are still there. Try again. | 无法连接服务器，你的答题仍在服务器上。请再试一次。 |
+| eduPilotEnded | The server no longer has you in the pilot: this device stopped sending. | 服务器上已没有你的测试记录：此设备已停止发送。 |
+| statsEduPilot | Tester pilot | 测试计划 |
+| statsEduPilotOn | Joined › | 已加入 › |
+| saveClearNoteShared | Your shared grades stay on the 📚 board until you stop sharing in 📚 Education data. | 你分享的成绩会留在 📚 榜上，除非先在“📚 教育数据”里停止分享。 |
+| saveClearNotePilot | The answers you sent as a tester stay on the server until you withdraw in 📚 Education data. | 你作为测试者发送的答题会留在服务器上，除非先在“📚 教育数据”里退出测试。 |
 | saveWelcome | Welcome back, {name} — {scores} | 欢迎回来，{name}——{scores} |
 | saveWelcomeNoScores | Welcome back, {name} | 欢迎回来，{name} |
 | saveNameRequired | Enter a username first (4–16 characters) | 请先输入用户名（4–16 个字符） |

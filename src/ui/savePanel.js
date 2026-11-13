@@ -342,9 +342,10 @@ function onClear() {
     return;
   }
   clearArmedAt = now;
-  // A player who shares their education grades is told those stay on the 📚 board (Clear only
-  // forgets the player here; Stop sharing, in 📚 Education data, deletes the board's row).
-  const warning = t(locale, ctx.play?.eduShareOn?.() ? 'saveClearConfirmShared' : 'saveClearConfirm');
+  // A player who shares their education grades, or sent answers as a pilot tester, is told those
+  // stay where they are: Clear only forgets the player here. Stop sharing and Withdraw, in
+  // 📚 Education data, delete them.
+  const warning = [t(locale, 'saveClearConfirm'), ctx.play?.eduShareOn?.() ? t(locale, 'saveClearNoteShared') : '', ctx.play?.researchJoined?.() ? t(locale, 'saveClearNotePilot') : ''].filter(Boolean).join(' ');
   setStatus(warning, 'error');
   clearTimeout(clearTimer);
   clearTimer = setTimeout(() => {

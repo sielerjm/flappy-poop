@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { LEADERBOARD } from '../src/config.js';
-import { createSubmitStore, createMergeStore, createRenameStore, createTournamentQueue, nameAction, submitPlan, submitPlans, submitScore, submitTournament, checkNameAvailable, mergePlayers, fetchPlayerName, fetchTop, fetchRank, fetchTournamentBoard, submitDailyScore, fetchDailyBoard, createCareerStore, submitCounters, claimAchievements, fetchPlayerStats, createEduShareStore, shareEducation, renameEducation, unshareEducation, submitEducationGrades, fetchEducationBoard } from '../src/leaderboard.js';
+import { createSubmitStore, createMergeStore, createRenameStore, createTournamentQueue, nameAction, submitPlan, submitPlans, submitScore, submitTournament, checkNameAvailable, mergePlayers, fetchPlayerName, fetchTop, fetchRank, fetchTournamentBoard, submitDailyScore, fetchDailyBoard, createCareerStore, submitCounters, claimAchievements, fetchPlayerStats, createEduShareStore, shareEducation, renameEducation, unshareEducation, submitEducationGrades, fetchEducationBoard, enrolResearch, submitResearchEvents, deleteResearch } from '../src/leaderboard.js';
 
 const config = { dataApi: 'https://x.example/rest/v1', publishableKey: 'sb_publishable_test', timeoutMs: 50, limit: 10, maxScore: 200 };
 
@@ -47,7 +47,7 @@ test('LEADERBOARD config is complete and points at a Supabase Data API over http
   assert.equal(typeof LEADERBOARD.mergesKey, 'string');
   assert.notEqual(LEADERBOARD.mergesKey, LEADERBOARD.storageKey);
   assert.equal(typeof LEADERBOARD.renameKey, 'string');
-  assert.equal(new Set([LEADERBOARD.storageKey, LEADERBOARD.mergesKey, LEADERBOARD.renameKey, LEADERBOARD.tournamentsKey, LEADERBOARD.dailyKey, LEADERBOARD.dailyQueueKey, LEADERBOARD.careerKey, LEADERBOARD.eduKey, LEADERBOARD.eduShareKey]).size, 9);
+  assert.equal(new Set([LEADERBOARD.storageKey, LEADERBOARD.mergesKey, LEADERBOARD.renameKey, LEADERBOARD.tournamentsKey, LEADERBOARD.dailyKey, LEADERBOARD.dailyQueueKey, LEADERBOARD.careerKey, LEADERBOARD.eduKey, LEADERBOARD.eduShareKey, LEADERBOARD.eduConsentKey, LEADERBOARD.researchQueueKey]).size, 11);
   assert.ok(Number.isInteger(LEADERBOARD.tournamentQueueMax) && LEADERBOARD.tournamentQueueMax >= 1);
   assert.ok(Number.isInteger(LEADERBOARD.dailyQueueMax) && LEADERBOARD.dailyQueueMax >= 1);
   assert.ok(Number.isInteger(LEADERBOARD.dailyMaxScore) && LEADERBOARD.dailyMaxScore > LEADERBOARD.maxScore, 'an endless run gets more headroom than the 🏆 cap');
@@ -875,4 +875,54 @@ test('fetchEducationBoard asks for the limit with the caller, and cleans the row
   assert.deepEqual(await fetchEducationBoard(ID, { fetch: fakeFetch({ status: 200, body: [] }), config }), [], 'an empty board');
   assert.equal(await fetchEducationBoard(ID, { fetch: fakeFetch({ status: 404, body: { message: 'x' } }), config }), null, 'not deployed yet');
   assert.equal(await fetchEducationBoard(ID, { fetch: fakeFetch({ status: 200, body: { rows: [] } }), config }), null, 'not a list');
+});
+
+// ---------------------------------------------------------------------------
+// The education tester pilot (plan 21, step R2): joining, sending events, withdrawing.
+
+test('enrolResearch sends the code once with the adult box and the consent version; each refusal has its own status', async () => {
+  const ok = fakeFetch({ status: 200, body: { status: 'ok', phase: 'pilot' } });
+  assert.deepEqual(await enrolResearch(ID, '  the-invite-code-2026  ', true, 'pilot-1', { fetch: ok, config }), { status: 'ok', phase: 'pilot' });
+  assert.equal(ok.calls[0].url, 'https://x.example/rest/v1/rpc/enrol_research');
+  assert.deepEqual(ok.calls[0].body, { p_player_id: ID, p_invite: 'the-invite-code-2026', p_adult: true, p_consent_version: 'pilot-1' });
+  const none = fakeFetch({ status: 200, body: { status: 'ok', phase: 'pilot' } });
+  assert.deepEqual(await enrolResearch(ID, 'the-invite-code-2026', false, 'pilot-1', { fetch: none, config }), { status: 'notAdult' });
+  assert.deepEqual(await enrolResearch(ID, '   ', true, 'pilot-1', { fetch: none, config }), { status: 'badInvite' }, 'no code');
+  assert.deepEqual(await enrolResearch('short', 'the-invite-code-2026', true, 'pilot-1', { fetch: none, config }), { status: 'rejected' });
+  assert.deepEqual(await enrolResearch(ID, 'the-invite-code-2026', true, '', { fetch: none, config }), { status: 'rejected' });
+  assert.equal(none.calls.length, 0, 'none of those is sent');
+  const refused = (message, status = 400) => enrolResearch(ID, 'the-invite-code-2026', true, 'pilot-1', { fetch: fakeFetch({ status, body: { message } }), config });
+  assert.deepEqual(await refused('bad invite'), { status: 'badInvite' });
+  assert.deepEqual(await refused('closed'), { status: 'closed' });
+  assert.deepEqual(await refused('not adult'), { status: 'notAdult' });
+  assert.deepEqual(await refused('bad consent'), { status: 'rejected' });
+  assert.deepEqual(await refused('no function', 404), { status: 'offline' }, 'not deployed yet');
+  assert.deepEqual(await enrolResearch(ID, 'the-invite-code-2026', true, 'pilot-1', { fetch: fakeFetch({ status: 200, body: { status: 'ok', phase: 'exam' } }), config }), { status: 'offline' }, 'a phase the game does not know is no answer');
+  assert.deepEqual(await enrolResearch(ID, 'the-invite-code-2026', true, 'pilot-1', { fetch: async () => { throw new Error('down'); }, config }), { status: 'offline' });
+});
+
+test('submitResearchEvents and deleteResearch report what the server did', async () => {
+  const batch = 'B'.repeat(22);
+  const events = [{ event_id: 'E'.repeat(22), card_id: 'ST-03', context: 'break', correct: true, client_at: 1763035200000 }];
+  const ok = fakeFetch({ status: 200, body: { status: 'ok', stored: 1 } });
+  assert.deepEqual(await submitResearchEvents(ID, batch, events, { fetch: ok, config }), { status: 'ok' });
+  assert.equal(ok.calls[0].url, 'https://x.example/rest/v1/rpc/submit_research_events');
+  assert.deepEqual(ok.calls[0].body, { p_player_id: ID, p_batch: batch, p_events: events });
+  const answer = (status, message) => submitResearchEvents(ID, batch, events, { fetch: fakeFetch({ status, body: { message } }), config });
+  assert.deepEqual(await answer(400, 'not enrolled'), { status: 'notEnrolled' });
+  assert.deepEqual(await answer(400, 'bad events: card'), { status: 'rejected' });
+  assert.deepEqual(await answer(400, 'rate limited'), { status: 'keep' });
+  assert.deepEqual(await answer(404, 'no function'), { status: 'keep' });
+  assert.deepEqual(await submitResearchEvents(ID, batch, events, { fetch: async () => { throw new Error('down'); }, config }), { status: 'keep' });
+  const none = fakeFetch({ status: 200, body: { status: 'ok' } });
+  assert.deepEqual(await submitResearchEvents(ID, batch, [], { fetch: none, config }), { status: 'rejected' }, 'no events');
+  assert.deepEqual(await submitResearchEvents(ID, batch, Array.from({ length: 201 }, () => events[0]), { fetch: none, config }), { status: 'rejected' }, 'more than the server takes');
+  assert.deepEqual(await submitResearchEvents(ID, 'short', events, { fetch: none, config }), { status: 'rejected' });
+  assert.equal(none.calls.length, 0);
+  const gone = fakeFetch({ status: 200, body: 'true' });
+  assert.equal(await deleteResearch(ID, { fetch: gone, config }), true);
+  assert.deepEqual(gone.calls[0].body, { p_player_id: ID });
+  assert.equal(await deleteResearch(ID, { fetch: fakeFetch({ status: 200, body: 'false' }), config }), true, 'nothing was there: the server has none of it either way');
+  assert.equal(await deleteResearch(ID, { fetch: fakeFetch({ status: 500, body: { message: 'x' } }), config }), null, 'unreachable: the answers may still be there');
+  assert.equal(await deleteResearch('short', { fetch: gone, config }), null);
 });

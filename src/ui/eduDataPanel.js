@@ -8,10 +8,16 @@
 // the 📚 board (Play.startEduShare / stopEduShare; db/schema.sql's share_education). Adults only:
 // the "I am 18 or older" box is asked for every time and never remembered. Stopping needs no box.
 //
+// 🔬 Tester data: an invited tester joins the pilot with the invite code (Play.joinResearch /
+// leaveResearch; enrol_research, delete_research), after which each quiz answer is sent under a
+// random id (src/research.js; the notice is RESEARCH.md, linked here). The same 18+ box; the code
+// is sent once and never kept. Withdrawing deletes what was sent and needs no box.
+//
 // While open, Phaser's keyboard manager is disabled and the controller is ignored (padIntent's
 // savePanelOpen), as for the user panel. Canvas pointer events never reach the game: the backdrop
 // sits above the canvas.
 
+import { EDUCATION } from '../config.js';
 import { t } from '../i18n.js';
 
 const PANEL_ID = 'edu-data-panel';
@@ -39,6 +45,13 @@ const CSS = `
 #${PANEL_ID} button.wide { display: block; width: 100%; box-sizing: border-box; }
 #${PANEL_ID} .close { position: absolute; top: 8px; right: 8px; width: 40px; height: 40px; padding: 0; font-size: 22px;
   background: transparent; color: #ffffff; }
+#${PANEL_ID} a { color: #f8a0c8; }
+#${PANEL_ID} .more { margin: 0 0 10px; font-size: 14px; }
+#${PANEL_ID} .row { display: flex; gap: 8px; margin: 0 0 4px; }
+#${PANEL_ID} .row[hidden], #${PANEL_ID} button[hidden] { display: none; }
+#${PANEL_ID} input[type='text'] { flex: 1; min-width: 0; box-sizing: border-box; padding: 10px 12px; font-size: 16px; font-family: ui-monospace, Menlo, monospace;
+  color: #ffffff; background: #2a1522; border: 2px solid #5a2a44; border-radius: 10px; touch-action: auto;
+  -webkit-user-select: text; user-select: text; }
 #${PANEL_ID} .status { min-height: 1.4em; margin: 12px 0 0; font-size: 14px; line-height: 1.4; color: #c9b8dc; }
 #${PANEL_ID} .status.error { color: #ff8da8; }
 #${PANEL_ID} .status.ok { color: #9fe8b4; }
@@ -74,10 +87,20 @@ function build() {
   const shareBody = h('p');
   const shareState = h('p', { class: 'state', id: 'edu-share-state' });
   const shareBtn = h('button', { type: 'button', id: 'edu-share-btn', class: 'wide' });
+  // 🔬 Tester data: the notice and its link, then the invite code and Join, or (joined) Withdraw.
+  const pilotTitle = h('h3');
+  const pilotBody = h('p');
+  const pilotLink = h('a', { id: 'edu-pilot-link', href: EDUCATION.researchUrl, target: '_blank', rel: 'noopener noreferrer' });
+  const pilotMore = h('p', { class: 'more' }, pilotLink);
+  const pilotState = h('p', { class: 'state', id: 'edu-pilot-state' });
+  const code = h('input', { id: 'edu-pilot-code', type: 'text', maxlength: '200', autocomplete: 'off', autocapitalize: 'off', spellcheck: 'false' });
+  const joinBtn = h('button', { type: 'button', id: 'edu-pilot-join' });
+  const joinRow = h('div', { class: 'row' }, code, joinBtn);
+  const leaveBtn = h('button', { type: 'button', id: 'edu-pilot-leave', class: 'wide outline', hidden: true });
   const status = h('p', { class: 'status', id: 'edu-data-status' });
   const close = h('button', { type: 'button', class: 'close', 'aria-label': 'close' }, '✕');
 
-  const card = h('div', { class: 'card' }, close, title, intro, adultRow, shareTitle, shareBody, shareState, shareBtn, status);
+  const card = h('div', { class: 'card' }, close, title, intro, adultRow, shareTitle, shareBody, shareState, shareBtn, pilotTitle, pilotBody, pilotMore, pilotState, joinRow, leaveBtn, status);
   const root = h('div', { id: PANEL_ID, role: 'dialog', 'aria-modal': 'true', hidden: true }, card);
   document.body.append(root);
 
@@ -91,8 +114,14 @@ function build() {
   });
   adult.addEventListener('change', () => refresh());
   shareBtn.addEventListener('click', () => onShare());
+  code.addEventListener('input', () => refresh());
+  code.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') onJoin();
+  });
+  joinBtn.addEventListener('click', () => onJoin());
+  leaveBtn.addEventListener('click', () => onLeave());
 
-  dom = { root, title, intro, adult, adultText, shareTitle, shareBody, shareState, shareBtn, status };
+  dom = { root, title, intro, adult, adultText, shareTitle, shareBody, shareState, shareBtn, pilotTitle, pilotBody, pilotLink, pilotState, code, joinRow, joinBtn, leaveBtn, status };
 }
 
 function setStatus(text, kind = '') {
@@ -116,6 +145,20 @@ function refresh() {
   dom.shareBtn.textContent = t(locale, on ? 'eduShareStop' : 'eduShareTitle');
   dom.shareBtn.className = on ? 'wide outline' : 'wide';
   dom.shareBtn.disabled = busy || (!on && !dom.adult.checked);
+  // 🔬 Tester data: the code and Join until joined (Join waits for the 18+ box and a code), then Withdraw.
+  const joined = Boolean(play?.researchJoined?.());
+  dom.pilotTitle.textContent = t(locale, 'eduPilotTitle');
+  dom.pilotBody.textContent = t(locale, 'eduPilotBody');
+  dom.pilotLink.textContent = t(locale, 'eduPilotMore');
+  dom.pilotState.textContent = t(locale, joined ? 'eduPilotOn' : 'eduPilotOff');
+  dom.pilotState.className = joined ? 'state on' : 'state';
+  dom.code.placeholder = t(locale, 'eduPilotCode');
+  dom.joinBtn.textContent = t(locale, 'eduPilotJoin');
+  dom.leaveBtn.textContent = t(locale, 'eduPilotLeave');
+  dom.joinRow.hidden = joined;
+  dom.leaveBtn.hidden = !joined;
+  dom.joinBtn.disabled = busy || !dom.adult.checked || !dom.code.value.trim();
+  dom.leaveBtn.disabled = busy;
 }
 
 const SHARE_STATUS = {
@@ -160,6 +203,64 @@ async function onShare() {
   refresh();
 }
 
+const JOIN_STATUS = {
+  ok: ['eduPilotJoined', 'ok'],
+  badInvite: ['eduPilotBadCode', 'error'],
+  closed: ['eduPilotClosed', 'error'],
+  notAdult: ['eduPilotNeedAdult', 'error'],
+  rejected: ['eduPilotOffline', 'error'],
+  offline: ['eduPilotOffline', 'error'],
+};
+
+/** Join the pilot with the code typed. The code goes to the server once and the field is emptied: it is never kept. */
+async function onJoin() {
+  if (busy || !ctx) return;
+  const { play, locale } = ctx;
+  if (!dom.adult.checked) {
+    setStatus(t(locale, 'eduPilotNeedAdult'), 'error');
+    return;
+  }
+  const invite = dom.code.value.trim();
+  if (!invite) {
+    setStatus(t(locale, 'eduPilotNeedCode'), 'error');
+    return;
+  }
+  busy = true;
+  setStatus(t(locale, 'leaderboardLoading'));
+  refresh();
+  let line;
+  try {
+    const res = await play.joinResearch(invite, dom.adult.checked);
+    line = JOIN_STATUS[res?.status] ?? JOIN_STATUS.offline;
+    if (res?.status === 'ok' && dom) dom.code.value = '';
+  } catch {
+    line = JOIN_STATUS.offline;
+  }
+  busy = false;
+  if (!ctx || !dom) return; // closed while the request was out
+  setStatus(t(ctx.locale, line[0]), line[1]);
+  refresh();
+}
+
+/** Withdraw and delete my data: off only once the server has deleted it. */
+async function onLeave() {
+  if (busy || !ctx) return;
+  const { play, locale } = ctx;
+  busy = true;
+  setStatus(t(locale, 'leaderboardLoading'));
+  refresh();
+  let gone = false;
+  try {
+    gone = await play.leaveResearch();
+  } catch {
+    gone = false;
+  }
+  busy = false;
+  if (!ctx || !dom) return;
+  setStatus(t(ctx.locale, gone ? 'eduPilotLeft' : 'eduPilotLeaveOffline'), gone ? 'ok' : 'error');
+  refresh();
+}
+
 function setGameKeyboard(enabled) {
   const kb = ctx?.game?.input?.keyboard;
   if (!kb) return;
@@ -183,8 +284,13 @@ export function openEduDataPanel(options) {
   busy = false;
   changed = false;
   dom.adult.checked = false;
+  dom.code.value = '';
   setGameKeyboard(false);
-  setStatus(ctx.play?.save?.name ? '' : t(ctx.locale, 'eduShareNeedName'), ctx.play?.save?.name ? '' : 'error');
+  // What the player should know first: the server ended their pilot (once), else that sharing needs a username.
+  const ended = Boolean(ctx.play?.researchEnded);
+  if (ended) ctx.play.researchEnded = false;
+  const first = ended ? 'eduPilotEnded' : ctx.play?.save?.name ? '' : 'eduShareNeedName';
+  setStatus(first ? t(ctx.locale, first) : '', first ? 'error' : '');
   refresh();
   dom.root.hidden = false;
 }

@@ -485,6 +485,11 @@ export const TEST_MODE = {
 // Like TEST_MODE's words it is never stored as a name; it is not a secret, it only shows a switch.
 export const EDUCATION = {
   words: ['poopschool'], // matched like TEST_MODE.words (trimmed, any case; fits NAME_MAX 16)
+  // The tester pilot (plan 21, Stage 3b; src/research.js, RESEARCH.md): answers sent by choice.
+  consentVersion: 'pilot-1', // the version of RESEARCH.md a tester agrees to on joining; change it when the notice changes what is collected or why
+  researchUrl: 'https://github.com/sielerjm/flappy-poop/blob/main/RESEARCH.md', // the notice, linked from the Education data panel
+  researchBatch: 200, // answer events sent per batch at most (submit_research_events takes up to 200)
+  researchQueueMax: 2000, // answer events kept on the device while they cannot be sent; the oldest go first when full
 };
 
 // Share from the game-over panel (src/share.js): the image's file name, the share
@@ -514,6 +519,8 @@ export const LEADERBOARD = {
   dailyQueueKey: 'flappyPoop.dailyQueue', // localStorage key for Daily Dump scores the board has not confirmed yet (submit_daily_score)
   dailyQueueMax: 3, // daily scores kept for a later post (one per player and day); the oldest goes first when full
   eduKey: 'flappyPoop.eduSrs', // localStorage key for this device's education cards (plan 21): each card's scheduler state and tallies, and the last cards shown
+  eduConsentKey: 'flappyPoop.eduConsent', // localStorage key for this device's consent to the education tester pilot (plan 21): the notice's version, the phase and when; absent unless the tester joined
+  researchQueueKey: 'flappyPoop.researchQueue', // localStorage key for a pilot tester's answer events the server has not confirmed yet (submit_research_events)
   eduShareKey: 'flappyPoop.eduShare', // localStorage key for this device's 📚 board sharing (plan 21): whether the player shares their education grades, the round of sharing, and what of this device's record the board already has
   careerKey: 'flappyPoop.career', // localStorage key for this device's lifetime counters and achievements (plan 08): what waits to be sent, the batch in flight, the server's last totals, unlocks and claims
   dailyMaxScore: 10000, // the Daily Dump cap (endless runs); matches daily_scores' CHECK and submit_daily_score() in db/schema.sql

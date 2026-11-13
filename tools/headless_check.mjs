@@ -78,7 +78,7 @@ export const SECTIONS = [
   { name: 'education-quiz', needs: [], about: "📚 the quiz card (plan 21) in an education run's level break: the 📚 pill and its hint, the card answered by tap, key and controller (each answer saved to its card), +1 coin for a right answer and none for a wrong one, Next held after a wrong answer, taps under it ignored, every bank card fitting the card, Esc closing it with the resume lockout, the shop at the level's prices" },
   { name: 'education-revive', needs: [], about: "📚 the revive after an education crash (plan 21): three misses end the run with the field and score untouched; wrong then right then Fly on revives without the power-ups at the penalty; a full streak gives coins and power-ups back; nothing lost skips the choice; Give up; Esc cannot close it; the field refills at the first right answer and Fly on goes straight on (plan 22)" },
   { name: 'education-over', needs: [], about: "📚 the end of an education run (plan 21): the game-over panel's 📚 tally and note, no Share; a won run's bonus button opening the rectum's questions over the panel (no coins, the card saved, Esc back to the panel); Clear wiping the cards' progress" },
-  { name: 'education-share', needs: [], about: "📚 sharing by choice (plan 21, Stage 3b), the server stubbed: the user panel's 📚 Education data button only on an unlocked device, the Education data panel (the 18+ box, Share and Stop sharing, each refusal's message), the 📚 tab on the leaderboard (four tabs, the stubbed board, the footer's link and the player's own row), the profiles' 📚 sections (your own Shared row, another player's only when they share), and Clear's warning while sharing" },
+  { name: 'education-share', needs: [], about: "📚 sharing by choice (plan 21, Stage 3b), the server stubbed: the user panel's 📚 Education data button only on an unlocked device, the Education data panel (the 18+ box, Share and Stop sharing, each refusal's message), the 📚 tab on the leaderboard (four tabs, the stubbed board, the footer's link and the player's own row), the profiles' 📚 sections (your own Shared row, another player's only when they share), Clear's warning while sharing; and the tester pilot: 🔬 Tester data (the invite code, Join, Withdraw), answers recorded only while joined and never in a test run, 🔬 in the HUD, the events sent and the queue emptied" },
 ];
 
 /** What a section needs: its own list, or (omitted) every section before it. */
@@ -350,6 +350,11 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
       p.postEduRename = (id, name) => (__edu.renames.push({ id, name }), Promise.resolve(globalThis.__eduAnswer.rename));
       p.postEduUnshare = (id) => (__edu.unshares.push(id), Promise.resolve(globalThis.__eduAnswer.unshare));
       p.postEduGrades = (id, batch, body) => (__edu.grades.push({ id, batch, ...body }), Promise.resolve(typeof globalThis.__eduAnswer.grades === 'function' ? globalThis.__eduAnswer.grades(body) : globalThis.__eduAnswer.grades));
+      // The tester pilot's calls (plan 21, R2): join, the answer events, withdraw. Offline unless __eduAnswer says otherwise.
+      for (const k of ['enrols', 'events', 'withdrawals']) __edu[k] = [];
+      p.postResearchEnrol = (id, invite, adult, consent) => (__edu.enrols.push({ id, invite, adult, consent }), Promise.resolve(globalThis.__eduAnswer.enrol ?? { status: 'offline' }));
+      p.postResearch = (id, batch, events) => (__edu.events.push({ id, batch, events }), Promise.resolve(globalThis.__eduAnswer.events ?? { status: 'keep' }));
+      p.postResearchDelete = (id) => (__edu.withdrawals.push(id), Promise.resolve(globalThis.__eduAnswer.withdraw ?? null));
       return true; })()`);
     ok((await evaluate(`__flappy.scene.getScene('Play').diff.gapHeight`)) === 374, 'level 1 pipe gap is 10 % wider (374 px)');
     const field0 = await evaluate(`JSON.stringify({ W: __flappy.scale.width, H: __flappy.scale.height, inner: [innerWidth, innerHeight], poopX: __flappy.scene.getScene('Play').poopX })`).then(JSON.parse);
@@ -4968,18 +4973,141 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         ok(other1.edu?.grade === 96.4 && other1.edu.runs === 28 && other1.edu.earned.join() === 'edu_grade_a,edu_perfect' && other1.row === null && other1.texts.includes('96.4 %') && !other1.texts.includes(sharedLabel), `another player's profile shows what they share: ${other1.edu?.grade} % over ${other1.edu?.runs} runs and their earned badges, with no sharing row`);
         ok(other2.edu === null && other3.edu === null, 'no 📚 section for a player who does not share, nor on a device without education unlocked');
 
-        // Clear warns a player who shares that the grades stay on the board.
-        await evaluate(`${play}.eduShare.turnOn('2026-11-13T10:00:00.000+00:00', 'ShareSmoke'), ${play}.openSavePanel(), true`);
-        await sleep(200);
-        await evaluate(`${el('save-clear-btn')}.click(), true`);
-        const warnShared = await evaluate(`${el('save-status')}.textContent`);
-        await closeSave();
-        await evaluate(`${play}.eduShare.turnOff(), ${play}.openSavePanel(), true`);
-        await sleep(200);
-        await evaluate(`${el('save-clear-btn')}.click(), true`);
-        const warnPlain = await evaluate(`${el('save-status')}.textContent`);
-        await closeSave();
-        ok(warnShared === (await tx('saveClearConfirmShared')) && warnPlain === (await tx('saveClearConfirm')) && warnShared.includes('\u{1F4DA}'), 'Clear warns a player who shares that the grades stay on the 📚 board; a player who does not gets the plain warning');
+        // The tester pilot (plan 21, R2): 🔬 Tester data in the same panel. Nothing is recorded before joining.
+        const Q = `__flappy.scene.getScene('Quiz')`;
+        const pilot = () =>
+          evaluate(
+            `JSON.stringify({ state: ${el('edu-pilot-state')}?.textContent ?? null, joinHidden: ${el('edu-pilot-join')}?.parentElement.hidden ?? null, joinDisabled: ${el('edu-pilot-join')}?.disabled ?? null, leaveHidden: ${el('edu-pilot-leave')}?.hidden ?? null, code: ${el('edu-pilot-code')}?.value ?? null, link: ${el('edu-pilot-link')}?.href ?? null, status: ${el('edu-data-status')}?.textContent ?? null, joined: ${play}.researchJoined(), consent: ${play}.consentStore.load(), queued: ${play}.researchQueue.size() })`,
+          ).then(JSON.parse);
+        const eduRunToQuiz = async () => {
+          await home();
+          for (let attempt = 0; attempt < 3 && (await playState()) !== 'playing'; attempt += 1) {
+            for (let i = 0; i < 20 && (await playState()) !== 'ready'; i += 1) await sleep(100);
+            await evaluate(`${play}.flap(), true`);
+            for (let i = 0; i < 40 && (await playState()) !== 'playing'; i += 1) await sleep(100);
+          }
+          const hud = await evaluate(`(() => { const p = ${play}; p.poop.body.setAllowGravity(false); p.poop.setVelocity(0, 0); p.poop.y = 640; p.graceLeftMs = 1e9; const badge = p.testBadge.visible ? p.testBadge.text : ''; p.onFinishCrossed(); return JSON.stringify({ badge, edu: p.runIsEducation, test: p.runIsTest }); })()`).then(JSON.parse);
+          for (let i = 0; i < 60 && !(await evaluate(`Boolean(${play}.levelBreak) && ${play}.state === 'paused'`)); i += 1) await sleep(100);
+          await evaluate(`${play}.openQuiz('break'), true`);
+          for (let i = 0; i < 40 && !(await evaluate(`__flappy.scene.isActive('Quiz') && Boolean(${Q}.card)`)); i += 1) await sleep(100);
+          return hud;
+        };
+        const answerOne = async (right, input) => {
+          await evaluate(`(() => { const q = ${Q}; q.choose(${right} ? q.order.indexOf('answer') : q.order.findIndex((k) => k !== 'answer'), '${input}'); return true; })()`);
+          await sleep(200);
+        };
+        const pw = Object.fromEntries(await Promise.all(['eduPilotOff', 'eduPilotOn', 'eduPilotBadCode', 'eduPilotClosed', 'eduPilotJoined', 'eduPilotLeft', 'eduPilotLeaveOffline', 'eduPilotEnded', 'eduPilotNeedCode'].map(async (k) => [k, await tx(k)])));
+        const consentVersion = await evaluate(`import('./src/config.js').then((m) => m.EDUCATION.consentVersion)`);
+        await evaluate(`(${play}.consentStore.clear(), ${play}.researchQueue.clear(), ${play}.eduShare.turnOff(), ${play}.settings.set({ education: true }), ${play}.educationOn = true, localStorage.removeItem('flappyPoop.eduSrs'), true)`);
+        await resetNet();
+        // Not joined: an education run's answer is recorded nowhere, and the HUD shows 📚 alone.
+        const hud0 = await eduRunToQuiz();
+        await answerOne(true, 'touch');
+        const p0 = await pilot();
+        ok(hud0.edu && hud0.badge === '\u{1F4DA}' && !p0.joined && p0.queued === 0, `before joining, an answer is recorded nowhere and the HUD shows ${hud0.badge} alone`);
+        await home();
+        // The panel: the notice with its link, the code field; Join waits for the 18+ box and a code.
+        await evaluate(`${play}.openEduData(), true`);
+        const j0 = await pilot();
+        await evaluate(`${el('edu-adult')}.click(), true`);
+        const j1 = await pilot();
+        const typeCode = (code) => evaluate(`(${el('edu-pilot-code')}.value = '${code}', ${el('edu-pilot-code')}.dispatchEvent(new Event('input', { bubbles: true })), true)`);
+        await typeCode('wrong-code-entirely-2026');
+        const j2 = await pilot();
+        ok(j0.state === pw.eduPilotOff && j0.joinHidden === false && j0.leaveHidden === true && j0.joinDisabled && j1.joinDisabled && !j2.joinDisabled && j0.link.endsWith('/RESEARCH.md'), `🔬 Tester data: "${j0.state}", a link to the notice, and Join waiting for the 18+ box and a code`);
+        // A wrong code, a closed pilot: each says so, and nothing is joined or stored.
+        const tryJoin = async (answer) => {
+          await evaluate(`(globalThis.__eduAnswer.enrol = ${JSON.stringify(answer)}, ${el('edu-pilot-join')}.click(), true)`);
+          await sleep(400);
+          return pilot();
+        };
+        const jBad = await tryJoin({ status: 'badInvite' });
+        const jClosed = await tryJoin({ status: 'closed' });
+        ok(jBad.status === pw.eduPilotBadCode && jClosed.status === pw.eduPilotClosed && !jClosed.joined && jClosed.consent === null && jClosed.code === 'wrong-code-entirely-2026', `a wrong code ("${jBad.status}") and a closed pilot ("${jClosed.status}") join nothing`);
+        // The right code: joined. The code went once, with the adult box and the notice's version, and is not kept.
+        await typeCode('the-right-invite-code-2026');
+        const jOk = await tryJoin({ status: 'ok', phase: 'pilot' });
+        const enrols = await evaluate(`JSON.stringify(__edu.enrols)`).then(JSON.parse);
+        const keptCode = await evaluate(`Object.keys(localStorage).some((k) => (localStorage.getItem(k) ?? '').includes('the-right-invite-code-2026'))`);
+        const lastEnrol = enrols.at(-1) ?? {};
+        ok(jOk.joined && jOk.state === pw.eduPilotOn && jOk.status === pw.eduPilotJoined && jOk.joinHidden === true && jOk.leaveHidden === false && jOk.code === '' && jOk.consent?.version === consentVersion && jOk.consent.phase === 'pilot' && lastEnrol.invite === 'the-right-invite-code-2026' && lastEnrol.adult === true && lastEnrol.consent === consentVersion && keptCode === false, `the right code joins ("${jOk.status}"): it went once with the adult box and notice ${consentVersion}, the field is emptied and the code is stored nowhere`);
+        await closeData();
+        // Joined: 🔬 beside 📚 in the HUD, and each answer becomes an event: no name, no player id.
+        const hud1 = await eduRunToQuiz();
+        await answerOne(true, 'pad');
+        await evaluate(`${Q}.rightBtn.press(), true`);
+        await sleep(300);
+        await answerOne(false, 'key');
+        const queued = await evaluate(`JSON.stringify(${play}.researchQueue.load().pending)`).then(JSON.parse);
+        const saveNow = await evaluate(`JSON.stringify({ id: ${play}.save.id, name: ${play}.save.name })`).then(JSON.parse);
+        const [e1, e2] = queued;
+        const evText = JSON.stringify(queued);
+        ok(hud1.badge === '\u{1F4DA}\u{1F52C}' && queued.length === 2 && e1.context === 'break' && e1.correct === true && e1.input === 'pad' && e1.seq === 1 && e1.seen === 0 && e1.level === 1 && e1.consent === consentVersion && e1.phase === 'pilot' && e2.correct === false && e2.input === 'key' && e2.seq === 2 && e1.run_id === e2.run_id && e1.session_id === e2.session_id && e1.event_id !== e2.event_id && Array.isArray(e1.order) && e1.order.length === 3, `joined, the HUD shows ${hud1.badge} and each answer is recorded: ${e1.card_id} (${e1.input}, right, first sight), then ${e2.card_id} (${e2.input}, wrong)`);
+        ok(!evText.includes(saveNow.id) && !evText.includes('ShareSmoke') && !Object.keys(e1).some((k) => /player|name/i.test(k)), 'an event holds no username and no player id');
+        // The sync sends them: one batch, then the queue is empty.
+        await evaluate(`(globalThis.__eduAnswer.events = { status: 'ok' }, ${play}.syncLeaderboard().then(() => true))`);
+        const sent = await evaluate(`JSON.stringify({ calls: __edu.events.map((c) => ({ id: c.id, n: c.events.length, first: c.events[0]?.event_id })), left: ${play}.researchQueue.size() })`).then(JSON.parse);
+        ok(sent.calls.length === 1 && sent.calls[0].id === saveNow.id && sent.calls[0].n === 2 && sent.calls[0].first === e1.event_id && sent.left === 0, `the next sync sends both events in one batch, and the queue is empty (${sent.left} left)`);
+        // A test run records nothing, joined or not.
+        await evaluate(`(${play}.setTestMode(true), ${play}.setTestSettings({ startLevel: 1, invincible: false }), true)`);
+        const hudT = await eduRunToQuiz();
+        await answerOne(true, 'touch');
+        const queuedT = await evaluate(`${play}.researchQueue.size()`);
+        await evaluate(`(${play}.setTestMode(false), ${play}.registry.set('testQuizShown', []), true)`);
+        ok(hudT.test && hudT.edu && !hudT.badge.includes('\u{1F52C}') && queuedT === 0, `a test run records nothing, and its HUD shows no 🔬 (${hudT.badge})`);
+        // A consent to an older notice does not count: nothing is recorded until the tester joins again.
+        const stale = await evaluate(`(() => { const p = ${play}; const was = p.consentStore.load(); p.consentStore.join({ ...was, version: 'pilot-0' }); const j = p.researchJoined(); p.consentStore.join(was); return JSON.stringify({ stale: j, back: p.researchJoined() }); })()`).then(JSON.parse);
+        ok(stale.stale === false && stale.back === true, 'a consent given to an older notice does not count as joined');
+        // Your own profile names the pilot while joined.
+        await home();
+        await evaluate(`globalThis.__profile = ${JSON.stringify(prof(null))}, true`);
+        const ownPilot = await openProfile(null);
+        await shutProfile();
+        ok(ownPilot.texts.includes(await tx('statsEduPilot')) && ownPilot.texts.includes(await tx('statsEduPilotOn')), 'your own profile says you are in the tester pilot');
+        // Withdraw: off only once the server has deleted everything; then the queue is empty and 🔬 is gone.
+        await evaluate(`${play}.researchQueue.add(${JSON.stringify(e1)}), ${play}.openEduData(), true`);
+        await evaluate(`(globalThis.__eduAnswer.withdraw = null, ${el('edu-pilot-leave')}.click(), true)`);
+        await sleep(400);
+        const wStuck = await pilot();
+        await evaluate(`(globalThis.__eduAnswer.withdraw = true, ${el('edu-pilot-leave')}.click(), true)`);
+        await sleep(400);
+        const wGone = await pilot();
+        await closeData();
+        const withdrawals = await evaluate(`JSON.stringify(__edu.withdrawals)`).then(JSON.parse);
+        ok(wStuck.joined && wStuck.status === pw.eduPilotLeaveOffline && wStuck.queued === 1 && !wGone.joined && wGone.status === pw.eduPilotLeft && wGone.queued === 0 && wGone.consent === null && wGone.state === pw.eduPilotOff && wGone.joinHidden === false && withdrawals.length === 2 && withdrawals.every((x) => x === saveNow.id), `Withdraw stays joined while the server cannot be reached ("${wStuck.status}"), then deletes: "${wGone.status}", the queue emptied`);
+        const hud2 = await eduRunToQuiz();
+        await answerOne(true, 'touch');
+        ok(hud2.badge === '\u{1F4DA}' && (await evaluate(`${play}.researchQueue.size()`)) === 0, 'after withdrawing, the HUD shows 📚 alone and nothing is recorded');
+        await home();
+        // The server no longer has this tester (withdrawn elsewhere, or the pilot purged): the device stops, and the panel says why once.
+        await evaluate(`(${play}.consentStore.join({ version: '${consentVersion}', phase: 'pilot', at: Date.now() }), ${play}.researchQueue.add(${JSON.stringify(e1)}), globalThis.__eduAnswer.events = { status: 'notEnrolled' }, ${play}.drainResearch().then(() => true))`);
+        const ended = await pilot();
+        await evaluate(`${play}.openEduData(), true`);
+        const endedPanel = await pilot();
+        await closeData();
+        await evaluate(`${play}.openEduData(), true`);
+        const endedAgain = await pilot();
+        await closeData();
+        ok(!ended.joined && ended.queued === 0 && endedPanel.status === pw.eduPilotEnded && endedAgain.status !== pw.eduPilotEnded, `told "not enrolled", the device stops recording and empties its queue; the panel says so once ("${endedPanel.status}")`);
+
+        // Clear warns a player who shares, or who sent answers as a tester, that those stay where they are; Clear then forgets both on this device.
+        const clearWarning = async () => {
+          await evaluate(`${play}.openSavePanel(), true`);
+          await sleep(200);
+          await evaluate(`${el('save-clear-btn')}.click(), true`);
+          const text = await evaluate(`${el('save-status')}.textContent`);
+          await closeSave();
+          return text;
+        };
+        const [warnBase, noteShared, notePilot] = await Promise.all(['saveClearConfirm', 'saveClearNoteShared', 'saveClearNotePilot'].map(tx));
+        const warnPlain = await clearWarning();
+        await evaluate(`${play}.eduShare.turnOn('2026-11-13T10:00:00.000+00:00', 'ShareSmoke'), true`);
+        const warnShared = await clearWarning();
+        await evaluate(`${play}.consentStore.join({ version: '${consentVersion}', phase: 'pilot', at: Date.now() }), true`);
+        const warnBoth = await clearWarning();
+        ok(warnPlain === warnBase && warnShared === `${warnBase} ${noteShared}` && warnBoth === `${warnBase} ${noteShared} ${notePilot}`, 'Clear warns a player who shares that the grades stay on the 📚 board, and a tester that the answers stay on the server; a player who does neither gets the plain warning');
+        const forgot = await evaluate(`(() => { const p = ${play}; p.researchQueue.add(${JSON.stringify(e1)}); p.signOut(); return JSON.stringify({ joined: p.researchJoined(), queued: p.researchQueue.size(), sharing: p.eduShareOn(), consent: localStorage.getItem('flappyPoop.eduConsent') }); })()`).then(JSON.parse);
+        ok(!forgot.joined && forgot.queued === 0 && !forgot.sharing && forgot.consent === null, 'Clear forgets the consent, the queue and the sharing on this device');
 
         // Put the device back as it was.
         await resetNet();

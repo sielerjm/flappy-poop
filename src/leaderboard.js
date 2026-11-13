@@ -6,8 +6,9 @@
 // false / null (submitScore: { ok: false, reason }): the game treats the
 // leaderboard as garnish and never waits on it. Writes go through the SQL
 // functions in db/schema.sql (submit_score, merge_players, submit_tournament,
-// submit_daily_score, submit_counters, claim_achievements, and the 📚 board's
-// share_education, submit_education_grades, rename_education, unshare_education);
+// submit_daily_score, submit_counters, claim_achievements, the 📚 board's
+// share_education, submit_education_grades, rename_education, unshare_education,
+// and the tester pilot's enrol_research, submit_research_events, delete_research);
 // reads are a plain select on the columns the publishable key is allowed to see,
 // plus the name_available, player_rank, player_name, tournament_board,
 // daily_board, player_stats and education_board functions.
@@ -1158,4 +1159,55 @@ export async function fetchEducationBoard(playerId = null, opts = {}) {
   const out = await request('/rpc/education_board', { method: 'POST', body: { p_player_id: pid, p_limit: config.limit ?? 25 } }, opts);
   if (!Array.isArray(out)) return null;
   return out.map(normalizeEduRow).filter(Boolean);
+}
+
+// ---------------------------------------------------------------------------
+// The education tester pilot (plan 21, Stage 3b): a tester who joined sends their quiz answers
+// (src/research.js builds and queues the events). The functions are in db/schema.sql.
+
+/**
+ * Join the pilot (enrol_research) with the invite code; `adult` is the panel's "I am 18 or older"
+ * box, `consent` the notice's version. { status: 'ok', phase } when the server has the tester,
+ * else { status }: 'badInvite' (a wrong code), 'closed' (no code is set), 'notAdult', 'rejected'
+ * ('bad …'), or 'offline' (unreachable, or not deployed). The code is sent and not kept.
+ */
+export async function enrolResearch(playerId, invite, adult, consent, opts = {}) {
+  if (typeof playerId !== 'string' || !ID_RE.test(playerId) || typeof consent !== 'string' || !consent) return { status: 'rejected' };
+  if (adult !== true) return { status: 'notAdult' };
+  if (typeof invite !== 'string' || !invite.trim() || invite.length > 200) return { status: 'badInvite' };
+  const out = await request('/rpc/enrol_research', { method: 'POST', errors: true, body: { p_player_id: playerId, p_invite: invite.trim(), p_adult: true, p_consent_version: consent } }, opts);
+  if (out === null || out === undefined) return { status: 'offline' };
+  if (out.error) {
+    if (out.status !== 400) return { status: 'offline' };
+    if (/bad invite/i.test(out.message)) return { status: 'badInvite' };
+    if (/closed/i.test(out.message)) return { status: 'closed' };
+    if (/not adult/i.test(out.message)) return { status: 'notAdult' };
+    return /bad (consent|player id)/i.test(out.message) ? { status: 'rejected' } : { status: 'offline' };
+  }
+  return out?.status === 'ok' && ['pilot', 'beta', 'study'].includes(out.phase) ? { status: 'ok', phase: out.phase } : { status: 'offline' };
+}
+
+/**
+ * Send a batch of a tester's answer events (submit_research_events): { status: 'ok' } when the
+ * server has it (now, or a resend), { status: 'notEnrolled' } when this player is no participant
+ * (the device then stops recording), { status: 'rejected' } when the server never will take it
+ * ('bad …'), else { status: 'keep' } (offline, rate limited, not deployed yet).
+ */
+export async function submitResearchEvents(playerId, batch, events, opts = {}) {
+  if (typeof playerId !== 'string' || !ID_RE.test(playerId) || typeof batch !== 'string' || !ID_RE.test(batch) || !Array.isArray(events) || events.length < 1 || events.length > 200) return { status: 'rejected' };
+  const out = await request('/rpc/submit_research_events', { method: 'POST', errors: true, body: { p_player_id: playerId, p_batch: batch, p_events: events } }, opts);
+  if (out === null || out === undefined) return { status: 'keep' };
+  if (out.error) {
+    if (out.status !== 400) return { status: 'keep' };
+    if (/not enrolled/i.test(out.message)) return { status: 'notEnrolled' };
+    return /bad (events|batch|player id)/i.test(out.message) ? { status: 'rejected' } : { status: 'keep' };
+  }
+  return out?.status === 'ok' ? { status: 'ok' } : { status: 'keep' };
+}
+
+/** Withdraw from the pilot (delete_research: the participant and their answers are deleted): true once the server has none of it, null when it could not be reached. */
+export async function deleteResearch(playerId, opts = {}) {
+  if (typeof playerId !== 'string' || !ID_RE.test(playerId)) return null;
+  const out = await request('/rpc/delete_research', { method: 'POST', errors: true, body: { p_player_id: playerId } }, opts);
+  return typeof out === 'boolean' ? true : null;
 }
