@@ -135,6 +135,12 @@ export class Stats extends Phaser.Scene {
       view = { state: 'offline' };
     }
     if (gen !== this.gen || !this.sys.isActive()) return; // closed while it loaded
+    // Sharing started (or stopped) on another device reaches this one here, from a current answer
+    // only: a stale one could turn sharing back on after it was stopped (plan 24, AUD-011).
+    if (view?.eduShared !== undefined) {
+      play?.noteEduShared?.(view.eduShared);
+      if (view.education) view.education.shared = Boolean(play?.eduShareOn?.()); // the 📚 row shows what this device now does
+    }
     this.showProfile(view);
   }
 
@@ -150,9 +156,6 @@ export class Stats extends Phaser.Scene {
       if (!store.load().inflight) store.setBase(id, server.counters);
       store.mergeUnlocked(server.achievements);
       play.creditCareer?.();
-      // Whether this player shares on the 📚 board, as the server has it: sharing started (or
-      // stopped) on another device reaches this one here.
-      if (play.eduUnlocked) play.noteEduShared?.(Boolean(server.education));
     }
     const totals = store.totals(id);
     const games = totals.games ?? 0;
@@ -167,6 +170,9 @@ export class Stats extends Phaser.Scene {
     return {
       state: 'ok',
       own: true,
+      // Whether this player shares on the 📚 board, as the server has it (loadProfile notes it once
+      // the answer is known to be current).
+      eduShared: online && play.eduUnlocked ? Boolean(server.education) : undefined,
       name: save.name || null,
       note: online ? null : 'statsOfflineOwn',
       single: {

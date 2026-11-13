@@ -939,11 +939,25 @@ function cleanEduBadges(raw) {
 /** A round of sharing as the server names it (share_education's shared_at): a timestamp string, or null. */
 const cleanRound = (v) => (typeof v === 'string' && v.length <= 40 && Number.isFinite(Date.parse(v)) ? v : null);
 
-/** A stored share record, normalised: { v, on, sharedAt, name, sent: { runs, gradeSum }, sentBadges, inflight }. */
+const cleanSentBadges = (v) => [...new Set((Array.isArray(v) ? v : []).filter((id) => typeof id === 'string' && EDU_BADGE.test(id)))];
+
+/** The last round this device sent into, and what it sent there (plan 24, AUD-011), or null. */
+function cleanLastRound(l) {
+  const sharedAt = l && typeof l === 'object' ? cleanRound(l.sharedAt) : null;
+  if (!sharedAt) return null;
+  return { sharedAt, sent: { runs: whole(l.sent?.runs), gradeSum: whole(l.sent?.gradeSum) }, sentBadges: cleanSentBadges(l.sentBadges) };
+}
+
+/**
+ * A stored share record, normalised: { v, on, sharedAt, name, sent: { runs, gradeSum }, sentBadges,
+ * inflight, last }. `last` (kept even while sharing is off) is the last round this device sent into
+ * and what it sent there; the store's readers never see it.
+ */
 function normalizeEduShare(raw) {
   const r = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
   const on = r.on === true;
-  if (!on) return { v: 1, on: false, sharedAt: null, name: null, sent: { runs: 0, gradeSum: 0 }, sentBadges: [], inflight: null };
+  const last = cleanLastRound(r.last);
+  if (!on) return { v: 1, on: false, sharedAt: null, name: null, sent: { runs: 0, gradeSum: 0 }, sentBadges: [], inflight: null, last };
   const f = r.inflight;
   const inflight =
     f && typeof f === 'object' && typeof f.batch === 'string' && ID_RE.test(f.batch) && Number.isInteger(f.runs) && f.runs >= 0 && f.runs <= EDU_BATCH_RUNS && Number.isInteger(f.gradeSum) && f.gradeSum >= 0 && f.gradeSum <= f.runs * GRADE_MAX
@@ -955,8 +969,9 @@ function normalizeEduShare(raw) {
     sharedAt: cleanRound(r.sharedAt),
     name: typeof r.name === 'string' && validateName(r.name).ok ? r.name : null,
     sent: { runs: whole(r.sent?.runs), gradeSum: whole(r.sent?.gradeSum) },
-    sentBadges: [...new Set((Array.isArray(r.sentBadges) ? r.sentBadges : []).filter((id) => typeof id === 'string' && EDU_BADGE.test(id)))],
+    sentBadges: cleanSentBadges(r.sentBadges),
     inflight: inflight && (inflight.runs > 0 || Object.keys(inflight.badges).length) ? inflight : null,
+    last,
   };
 }
 
@@ -975,34 +990,50 @@ export function createEduShareStore(storage = globalThis.localStorage, key = LEA
   // Storage full or blocked: the choice lives for this page load only (src/store.js).
   const box = createJsonStore(storage, key, normalizeEduShare);
   const read = box.read;
-  const write = box.write;
-  const fresh = (sharedAt, name) => ({ v: 1, on: true, sharedAt: cleanRound(sharedAt), name: typeof name === 'string' ? name : null, sent: { runs: 0, gradeSum: 0 }, sentBadges: [], inflight: null });
+  // Every write remembers the round this device is sending into and what it sent there (`last`);
+  // a reader never sees it.
+  const write = (c) => box.write(c.on && c.sharedAt ? { ...c, last: { sharedAt: c.sharedAt, sent: c.sent, sentBadges: c.sentBadges } } : c);
+  const shown = ({ last, ...c }) => c;
+  const sameRound = (a, b) => Boolean(a && b) && Date.parse(a) === Date.parse(b);
+  // A round adopted here: from zero, unless it is the round this device last sent into, whose runs
+  // and badges the board already has (plan 24, AUD-011: adopting it from zero counted them twice).
+  const fresh = (sharedAt, name, last) => {
+    const round = cleanRound(sharedAt);
+    const resume = Boolean(round && last && sameRound(last.sharedAt, round));
+    return { v: 1, on: true, sharedAt: round, name: typeof name === 'string' ? name : null, sent: resume ? { ...last.sent } : { runs: 0, gradeSum: 0 }, sentBadges: resume ? [...last.sentBadges] : [], inflight: null, last };
+  };
   return {
-    load: read,
-    /** The player turned sharing on here (share_education answered `sharedAt`), under `name`: a new round, from zero. */
+    load: () => shown(read()),
+    /** The player turned sharing on here (share_education answered `sharedAt`), under `name`: a new round, from zero (or where this device left that round). */
     turnOn(sharedAt, name = null) {
-      return write(fresh(sharedAt, name));
+      return shown(write(fresh(sharedAt, name, read().last)));
     },
-    /** The server named another round (a 'restart'): take it and start from zero; the name stays. */
+    /**
+     * The server named another round (a 'restart'): take it, from zero (or where this device left
+     * it); the name stays. Already in that round (two syncs told the same thing): nothing changes.
+     */
     restart(sharedAt) {
-      return write(fresh(sharedAt, read().name));
+      const c = read();
+      if (c.on && sameRound(c.sharedAt, sharedAt)) return shown(c);
+      return shown(write(fresh(sharedAt, c.name, c.last)));
     },
     /**
      * The server says this player shares (their own row on the board, their own profile) or does
      * not. Shared, and off here: on, with no round and no name yet, so the next sync learns the
-     * round and sends the whole record. Not shared, and on here: off (stopped on another device).
+     * round and sends what the board does not have. Not shared, and on here: off (stopped on
+     * another device).
      */
     noteShared(shared) {
       const c = read();
-      if (Boolean(shared) === c.on) return c;
-      return write(shared ? fresh(null, null) : normalizeEduShare(null));
+      if (Boolean(shared) === c.on) return shown(c);
+      return shown(write(shared ? fresh(null, null, c.last) : { ...normalizeEduShare(null), last: c.last }));
     },
     /** The board has this name for the player now (or will never take it): do not send it again. */
     setName(name) {
       const c = read();
-      if (!c.on) return c;
+      if (!c.on) return shown(c);
       c.name = typeof name === 'string' ? name : null;
-      return write(c);
+      return shown(write(c));
     },
     /**
      * The batch to send: the one already in flight, else what of `record` (the education store's
@@ -1033,19 +1064,19 @@ export function createEduShareStore(storage = globalThis.localStorage, key = LEA
     /** The server has the batch: its runs, grades and badges count as sent. */
     confirmBatch(batch) {
       const c = read();
-      if (c.inflight?.batch !== batch) return c;
+      if (c.inflight?.batch !== batch) return shown(c);
       c.sent = { runs: c.sent.runs + c.inflight.runs, gradeSum: c.sent.gradeSum + c.inflight.gradeSum };
       c.sentBadges = [...new Set([...c.sentBadges, ...Object.keys(c.inflight.badges)])];
       c.inflight = null;
-      return write(c);
+      return shown(write(c));
     },
     /** The server will never take the batch ('bad …'): count it as sent all the same, so it is not built again on every sync. */
     dropBatch(batch) {
       return this.confirmBatch(batch);
     },
-    /** Sharing is off on this device (the player stopped, or the server says they do not share). */
+    /** Sharing is off on this device (the player stopped, or the server says they do not share); the last round's progress is kept. */
     turnOff() {
-      return write(normalizeEduShare(null));
+      return shown(write({ ...normalizeEduShare(null), last: read().last }));
     },
     clear() {
       box.clear();

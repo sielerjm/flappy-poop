@@ -174,3 +174,68 @@ test("a badge earned on a device whose clock is wrong no longer drops the batch'
     net.restore();
   }
 });
+
+test('turned off here while its runs stay in the round, then told it shares: nothing is counted twice (AUD-011)', async () => {
+  const db = await freshDb();
+  const net = installPostgrest(db);
+  try {
+    const P = id('Offon');
+    const a = device(P, 'Offon');
+    await a.startEduShare(true);
+    for (let i = 0; i < 5; i += 1) gradedRun(a, 5);
+    await a.drainEduShare(P);
+    assert.equal((await row(db, P)).runs, 5);
+    a.eduShare.turnOff(); // e.g. a 'not shared' answered while a merge was on its way
+    a.noteEduShared(true); // then the profile says the player shares
+    await ageEdu(db);
+    await a.drainEduShare(P);
+    await ageEdu(db);
+    await a.drainEduShare(P);
+    assert.deepEqual([(await row(db, P)).runs, (await row(db, P)).grade_sum], [5, 50000], 'the round this device already sent into resumes where it was');
+    gradedRun(a, 5);
+    await ageEdu(db);
+    await a.drainEduShare(P);
+    assert.equal((await row(db, P)).runs, 6, 'and only what is new goes after it');
+  } finally {
+    net.restore();
+  }
+});
+
+test('two syncs at once, both told to restart: the record goes once (AUD-011)', async () => {
+  const db = await freshDb();
+  const net = installPostgrest(db);
+  try {
+    const P = id('Twosync');
+    const owner = device(P, 'Twosync');
+    await owner.startEduShare(true); // the row, from another device
+    const a = device(P, 'Twosync');
+    a.noteEduShared(true); // this device: on, no round yet
+    for (let i = 0; i < 5; i += 1) gradedRun(a, 5);
+    await Promise.all([a.drainEduShare(P), a.drainEduShare(P)]);
+    await ageEdu(db);
+    await a.drainEduShare(P);
+    assert.equal((await row(db, P)).runs, 5);
+  } finally {
+    net.restore();
+  }
+});
+
+test('the share store: a round this device already sent into resumes; another round starts from zero; a restart into the round it holds changes nothing (AUD-011)', () => {
+  const s = createEduShareStore(fakeStorage(), 'k');
+  const R1 = '2026-11-13T10:00:00.000+00:00';
+  const R2 = '2026-11-14T10:00:00.000+00:00';
+  const rec = { counters: { gradedRuns: 4, gradeSum: 36000 }, badges: { edu_grade_a: '2026-11-13' } };
+  s.turnOn(R1, 'Sam');
+  const b = s.beginBatch(rec, () => 'B1'.padEnd(22, '_'));
+  s.confirmBatch(b.batch);
+  assert.equal(s.restart(R1).sent.runs, 4, 'a restart into the round it holds changes nothing');
+  s.turnOff();
+  assert.equal(s.load().on, false);
+  assert.equal('last' in s.load(), false, 'readers never see what the store remembers');
+  s.noteShared(true);
+  assert.deepEqual([s.load().sharedAt, s.load().sent.runs], [null, 0], 'on again, no round known yet');
+  assert.deepEqual(s.restart(R1).sent, { runs: 4, gradeSum: 36000 }, 'told its old round: resumes there');
+  assert.deepEqual(s.load().sentBadges, ['edu_grade_a']);
+  assert.equal(s.restart(R2).sent.runs, 0, 'another round: from zero');
+  assert.equal(s.turnOn(R1, 'Sam').sent.runs, 0, 'R2 was the last round sent into now; R1 is not resumed from it');
+});
