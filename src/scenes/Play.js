@@ -3674,6 +3674,20 @@ export class Play extends Phaser.Scene {
     return this.consentStore.load()?.version === EDUCATION.consentVersion;
   }
 
+  /** This device's stored pilot consent, of any notice version, or null (the save panel and the Education data panel read it). */
+  researchConsent() {
+    return this.consentStore.load();
+  }
+
+  /**
+   * The player id the pilot's calls go under: the one the tester joined with (plan 24, AUD-001),
+   * which a user code loaded since may have replaced on this device; the server resolves it through
+   * a merge. A consent from before the id was kept falls back to this device's id.
+   */
+  researchPlayerId() {
+    return this.consentStore.load()?.id ?? this.save?.id ?? null;
+  }
+
   /**
    * Send the pilot's queued answer events, one batch a sync (the server takes one per 5 s). 'not
    * enrolled' (the tester withdrew on another device, or the pilot was purged): this device stops
@@ -3681,7 +3695,7 @@ export class Play extends Phaser.Scene {
    */
   async drainResearch() {
     try {
-      const id = this.save?.id ?? null;
+      const id = this.researchPlayerId();
       if (!id || !this.researchJoined()) return;
       const batch = this.researchQueue.beginBatch(newId);
       if (!batch) return;
@@ -3709,7 +3723,7 @@ export class Play extends Phaser.Scene {
     const id = this.save.id;
     const res = await this.postResearchEnrol(id, invite, adult === true, EDUCATION.consentVersion);
     if (res?.status === 'ok' && this.save?.id === id) {
-      this.consentStore.join({ version: EDUCATION.consentVersion, phase: res.phase, at: Date.now() });
+      this.consentStore.join({ version: EDUCATION.consentVersion, phase: res.phase, at: Date.now(), id });
       this.researchEnded = false;
       this.refreshTestBadge();
     }
@@ -3723,7 +3737,7 @@ export class Play extends Phaser.Scene {
    * stays joined here: the answers are still on the server.
    */
   async leaveResearch() {
-    const id = this.save?.id ?? null;
+    const id = this.researchPlayerId();
     if (id) {
       const gone = await this.postResearchDelete(id);
       if (gone === null) return false;

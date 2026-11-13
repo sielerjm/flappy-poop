@@ -430,9 +430,11 @@ async function onLoad() {
     ctx.play?.forgetRename?.(); // the code's name is not a rename: the board's latest name wins on the next sync
     setState(res.state);
     if (res.hand) ctx.play?.setHand?.(res.hand); // the code's bean button side becomes this device's
-    // This device had its own player (a name or scores under another id): the pasted code's id
-    // takes over locally (merge in save.js), and the board is told the two ids are one player.
-    const merged = Boolean(before.id && res.state.id && before.id !== res.state.id && (before.name || before.top.length) && ctx.play?.queueMerge?.(res.state.id, before.id));
+    // This device had its own player (a name, scores, or a pilot tester who joined under it, who
+    // needs no name: plan 24, AUD-001) under another id: the pasted code's id takes over locally
+    // (merge in save.js), and the board is told the two ids are one player.
+    const ownPlayer = before.name || before.top.length || ctx.play?.researchConsent?.();
+    const merged = Boolean(before.id && res.state.id && before.id !== res.state.id && ownPlayer && ctx.play?.queueMerge?.(res.state.id, before.id));
     claim = null;
     dom.name.value = res.state.name;
     dom.load.value = '';

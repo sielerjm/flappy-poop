@@ -42,6 +42,8 @@ export async function asAnon(db, sql, params = []) {
 
 /** Functions that return a table (PostgREST answers an array of rows). */
 const TABLE_FNS = new Set(['education_board', 'tournament_board', 'daily_board']);
+/** Functions that return nothing (PostgREST answers 204 with no body). */
+const VOID_FNS = new Set(['merge_players', 'submit_score']);
 /** Argument types PostgREST would take from the function's signature (the rest are text). */
 const CASTS = {
   p_shared_at: '::timestamptz',
@@ -77,12 +79,15 @@ export function postgrest(db, { base = LEADERBOARD.dataApi } = {}) {
     const keys = Object.keys(body);
     const args = keys.map((k, i) => `${k} => $${i + 1}${CASTS[k] ?? ''}`).join(', ');
     const params = keys.map((k) => (body[k] !== null && typeof body[k] === 'object' ? JSON.stringify(body[k]) : body[k]));
-    const sql = TABLE_FNS.has(fn) ? `select * from public.${fn}(${args})` : `select to_json(public.${fn}(${args})) as r`;
+    const sql = TABLE_FNS.has(fn) ? `select * from public.${fn}(${args})` : VOID_FNS.has(fn) ? `select public.${fn}(${args})` : `select to_json(public.${fn}(${args})) as r`;
     let status = 200;
     let text;
     try {
       const res = await asAnon(db, sql, params);
-      text = TABLE_FNS.has(fn) ? JSON.stringify(res.rows) : JSON.stringify(res.rows[0].r);
+      if (VOID_FNS.has(fn)) {
+        status = 204;
+        text = '';
+      } else text = TABLE_FNS.has(fn) ? JSON.stringify(res.rows) : JSON.stringify(res.rows[0].r);
     } catch (e) {
       status = 400;
       text = JSON.stringify({ message: e.message });

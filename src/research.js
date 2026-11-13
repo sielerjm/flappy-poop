@@ -103,9 +103,11 @@ export function cleanEvent(raw) {
 }
 
 /**
- * This device's consent to the pilot (flappyPoop.eduConsent): { version, phase, at } while the
+ * This device's consent to the pilot (flappyPoop.eduConsent): { version, phase, at, id } while the
  * tester is joined, else null. version = the notice they agreed to (EDUCATION.consentVersion then),
- * phase = the server's phase when they joined, at = when (ms). The invite code is never kept.
+ * phase = the server's phase when they joined, at = when (ms), id = the player id they joined under
+ * (plan 24, AUD-001: a user code loaded later changes the device's id, and the answers and Withdraw
+ * still go under the id that joined; the server follows a merge from it). The invite code is never kept.
  * Every read normalises; storage follows src/store.js (another tab's change shows at once, a full
  * storage keeps the consent for this page load); it never throws.
  */
@@ -113,7 +115,9 @@ export function createConsentStore(storage = globalThis.localStorage, key = LEAD
   const clean = (raw) => {
     if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
     if (typeof raw.version !== 'string' || !CONSENT_RE.test(raw.version) || !PHASES.includes(raw.phase) || !Number.isFinite(raw.at) || raw.at <= 0) return null;
-    return { version: raw.version, phase: raw.phase, at: raw.at };
+    const out = { version: raw.version, phase: raw.phase, at: raw.at };
+    if (typeof raw.id === 'string' && ID_RE.test(raw.id)) out.id = raw.id;
+    return out;
   };
   const box = createJsonStore(storage, key, clean);
   const read = box.read;
