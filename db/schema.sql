@@ -112,6 +112,9 @@
 --   delete every participant and answer of a phase (the pilot's, before the beta):
 --     select public.admin_purge_phase('pilot');
 --   undo the stamp: drop function public.schema_version();
+--   undo the receipt lists (plan 24): alter table public.player_counters drop column recent_batches;
+--     alter table public.education_public drop column recent_batches; then restore submit_counters,
+--     submit_education_grades and fold_player from git and run this file.
 --   undo the pilot: drop view public.research_summary, public.research_by_card,
 --     public.research_by_participant, public.research_retention;
 --     drop function public.enrol_research(text, text, boolean, text),
@@ -456,11 +459,18 @@ revoke execute on function public.daily_level(date) from public, anon, authentic
 -- (the claim rule only guards names in scores). Readable by no role: the profile
 -- is player_stats().
 create table if not exists public.player_counters (
-  player_id  text primary key check (player_id ~ '^[A-Za-z0-9_-]{22}$'),
-  counters   jsonb not null default '{}'::jsonb,
-  last_batch text,
-  updated_at timestamptz not null default now()
+  player_id      text primary key check (player_id ~ '^[A-Za-z0-9_-]{22}$'),
+  counters       jsonb not null default '{}'::jsonb,
+  last_batch     text,
+  updated_at     timestamptz not null default now(),
+  recent_batches text[] not null default '{}'
 );
+-- recent_batches (plan 24): the receipts of the latest 64 batches, newest first. A player's devices
+-- each resend their own batch until it is confirmed, so one receipt (last_batch) let a device's
+-- resend after another device's batch count twice. last_batch stays the latest, for older rows.
+alter table public.player_counters add column if not exists recent_batches text[] not null default '{}';
+-- A row from before the list keeps its one receipt in it (a re-run finds the list filled and leaves it).
+update public.player_counters set recent_batches = array[last_batch] where last_batch is not null and recent_batches = '{}';
 alter table public.player_counters enable row level security;
 revoke all on public.player_counters from public, anon, authenticated;
 
@@ -571,8 +581,13 @@ create table if not exists public.education_public (
   last_batch text,
   shared_at  timestamptz not null default date_trunc('milliseconds', clock_timestamp()),
   updated_at timestamptz not null default now() - interval '1 hour',
+  recent_batches text[] not null default '{}',
   check (grade_sum <= runs::bigint * 10000)
 );
+-- recent_batches (plan 24): the receipts of the latest 64 batches in this round, newest first (as
+-- player_counters', above: several devices feed one row).
+alter table public.education_public add column if not exists recent_batches text[] not null default '{}';
+update public.education_public set recent_batches = array[last_batch] where last_batch is not null and recent_batches = '{}';
 create index if not exists education_public_name_key on public.education_public (public.name_key(name));
 alter table public.education_public enable row level security;
 revoke all on public.education_public from public, anon, authenticated;
@@ -763,12 +778,13 @@ begin
   from public.daily_scores d where d.player_id = v_merge
   on conflict (player_id, day) do nothing;
   delete from public.daily_scores where player_id = v_merge;
-  insert into public.player_counters (player_id, counters, last_batch, updated_at)
-  select v_keep, m.counters, m.last_batch, m.updated_at
+  insert into public.player_counters (player_id, counters, last_batch, updated_at, recent_batches)
+  select v_keep, m.counters, m.last_batch, m.updated_at, m.recent_batches
   from public.player_counters m where m.player_id = v_merge
   on conflict (player_id) do update
     set counters   = public.merge_counters(public.player_counters.counters, excluded.counters),
-        updated_at = greatest(public.player_counters.updated_at, excluded.updated_at);
+        updated_at = greatest(public.player_counters.updated_at, excluded.updated_at),
+        recent_batches = (public.player_counters.recent_batches || array_remove(array[excluded.last_batch], null) || excluded.recent_batches)[1:64];
   delete from public.player_counters where player_id = v_merge;
   insert into public.player_achievements (player_id, achievement_id, earned_at)
   select v_keep, a.achievement_id, a.earned_at
@@ -786,7 +802,7 @@ begin
   if exists (select 1 from public.education_public where player_id = v_keep) then
     if exists (select 1 from public.education_public where player_id = v_merge) then
       update public.education_public
-        set runs = 0, grade_sum = 0, badges = '{}'::jsonb, last_batch = null,
+        set runs = 0, grade_sum = 0, badges = '{}'::jsonb, last_batch = null, recent_batches = '{}',
             shared_at = date_trunc('milliseconds', clock_timestamp()), updated_at = now() - interval '1 hour'
       where player_id = v_keep;
       delete from public.education_public where player_id = v_merge;
@@ -1388,7 +1404,7 @@ begin
   perform public.touch_player(v_id);
   perform pg_advisory_xact_lock(hashtext('counters:' || v_id));
   select * into v_row from public.player_counters where player_id = v_id;
-  if found and v_row.last_batch = p_batch then
+  if found and (v_row.last_batch = p_batch or p_batch = any(v_row.recent_batches)) then
     return v_row.counters;
   end if;
   if found and v_row.updated_at > now() - interval '5 seconds' then
@@ -1398,10 +1414,11 @@ begin
   if (select count(*) from jsonb_object_keys(v_merged)) > 60 then
     raise exception 'bad counters: too many keys';
   end if;
-  insert into public.player_counters (player_id, counters, last_batch, updated_at)
-  values (v_id, v_merged, p_batch, now())
+  insert into public.player_counters (player_id, counters, last_batch, updated_at, recent_batches)
+  values (v_id, v_merged, p_batch, now(), array[p_batch])
   on conflict (player_id) do update
-    set counters = excluded.counters, last_batch = excluded.last_batch, updated_at = excluded.updated_at;
+    set counters = excluded.counters, last_batch = excluded.last_batch, updated_at = excluded.updated_at,
+        recent_batches = (array[excluded.last_batch] || public.player_counters.recent_batches)[1:64];
   return v_merged;
 end;
 $$;
@@ -1570,7 +1587,7 @@ begin
   if p_shared_at is distinct from v_row.shared_at then
     return jsonb_build_object('status', 'restart', 'shared_at', v_row.shared_at);
   end if;
-  if v_row.last_batch = p_batch then
+  if v_row.last_batch = p_batch or p_batch = any(v_row.recent_batches) then
     return jsonb_build_object('status', 'ok', 'shared_at', v_row.shared_at, 'runs', v_row.runs, 'grade_sum', v_row.grade_sum);
   end if;
   if v_row.updated_at > now() - interval '5 seconds' then
@@ -1587,7 +1604,8 @@ begin
     raise exception 'bad badges: too many';
   end if;
   update public.education_public
-    set runs = runs + p_runs, grade_sum = grade_sum + p_grade_sum, badges = v_badges, last_batch = p_batch, updated_at = now()
+    set runs = runs + p_runs, grade_sum = grade_sum + p_grade_sum, badges = v_badges, last_batch = p_batch, updated_at = now(),
+        recent_batches = (array[p_batch] || recent_batches)[1:64]
   where player_id = v_id;
   return jsonb_build_object('status', 'ok', 'shared_at', v_row.shared_at, 'runs', v_row.runs + p_runs, 'grade_sum', v_row.grade_sum + p_grade_sum);
 end;
@@ -2188,7 +2206,7 @@ returns text
 language sql
 immutable
 as $$
-  select '65c381d7b4e27e8c'::text; -- schema stamp
+  select 'ce9ee1eee44a68d5'::text; -- schema stamp
 $$;
 revoke execute on function public.schema_version() from public, authenticated;
 grant  execute on function public.schema_version() to anon;

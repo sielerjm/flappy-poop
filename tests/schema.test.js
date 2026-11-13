@@ -502,10 +502,10 @@ test('submit_counters sums a batch into the totals, keeps the larger max*, and a
   const totals = await csubmit(db, P, id('B2'), { games: 1, sumScore: 10, sumLevel: 2, maxLevel: 2, deaths: 1 });
   assert.deepEqual(totals, { games: 3, sumScore: 100, sumLevel: 7, maxLevel: 3, fiber: 4, deaths: 1 }, 'sums, the larger maxLevel, a new key joins');
   assert.deepEqual(await csubmit(db, P, id('B2'), { games: 1, sumScore: 10, sumLevel: 2, maxLevel: 2, deaths: 1 }), totals, 'the latest batch is the receipt');
-  // Only the latest batch is a receipt: the game resends its one batch in flight until it is
-  // confirmed and never an older one, so an older id arriving later counts as new.
+  // Every recent batch is a receipt (plan 24, AUD-003): a player's devices each resend their own
+  // batch until it is confirmed, so an older batch arriving after another device's changes nothing.
   await ageCounters(db);
-  assert.equal((await csubmit(db, P, id('B1'), { games: 2, sumLevel: 2 })).games, 5);
+  assert.deepEqual(await csubmit(db, P, id('B1'), { games: 2, sumScore: 90, sumLevel: 5, maxLevel: 3, fiber: 4 }), totals, "a device's resend after another device's batch: nothing added twice");
   await ageCounters(db);
   assert.equal((await csubmit(db, P, id('B3'), { dailyGames: 1, farts: 3 })).dailyGames, 1, 'a Daily-only batch (no games)');
   assert.equal((await db.query('select count(*)::int as n from public.player_counters')).rows[0].n, 1);
@@ -1466,7 +1466,41 @@ test('the upgrade: the live schema (tests/fixtures/schema-applied.sql) holding r
   assert.equal((await asAnon(db, "select public.submit_education_grades($1, $2, $3::timestamptz, 3, 27000, '{}'::jsonb) as r", [id('UpAlice'), id('UpEB1'), round])).rows[0].r.status, 'ok');
   assert.ok((await asAnon(db, 'select public.share_education($1, $2, true)::text as r', [id('UpCarolOld'), 'UpCarol'])).rows[0].r, 'an old id shares as its canonical player');
   assert.deepEqual((await db.query('select player_id from public.education_public order by 1')).rows.map((r) => r.player_id), [id('UpAlice'), id('UpCarol')].sort());
+  // A counters batch sent before the upgrade is still a receipt after another batch (plan 24, AUD-003).
+  await db.exec("update public.player_counters set updated_at = now() - interval '6 seconds'");
+  const counted = await csubmit(db, id('UpAlice'), id('UpCB9'), { games: 1 });
+  await db.exec("update public.player_counters set updated_at = now() - interval '6 seconds'");
+  assert.deepEqual(await csubmit(db, id('UpAlice'), id('UpCB1'), { games: 3, sumScore: 100, sumLevel: 8, maxLevel: 4, fiber: 5 }), counted, 'the batch from before the upgrade is not added twice');
   // A merge after the upgrade still folds a daily row.
   await asAnon(db, 'select public.merge_players($1, $2)', [id('UpBob'), id('UpDave')]);
   assert.equal((await db.query('select count(*)::int as n from public.daily_scores where player_id = $1', [id('UpBob')])).rows[0].n, 1);
+});
+
+test('recent receipts (AUD-003): a resend after another device\'s batch adds nothing to a 📚 row; the list keeps 64; a merge keeps both players\' counter receipts', async () => {
+  const db = await freshDb();
+  await db.query('select public.admin_set_education_open(true)');
+  const P = id('RXP');
+  const round = (await asAnon(db, "select public.share_education($1, 'Rx', true)::text as r", [P])).rows[0].r;
+  const grades = (batch, runs, sum) => asAnon(db, "select public.submit_education_grades($1, $2, $3::timestamptz, $4, $5, '{}'::jsonb) as r", [P, batch, round, runs, sum]).then((r) => r.rows[0].r);
+  const age = () => db.query("update public.education_public set updated_at = now() - interval '6 seconds'");
+  await grades(id('RX'), 5, 50000); // device A: its reply is lost
+  await age();
+  await grades(id('RY'), 3, 12000); // device B
+  await age();
+  const resent = await grades(id('RX'), 5, 50000); // device A resends the same batch
+  assert.deepEqual([resent.status, resent.runs, resent.grade_sum], ['ok', 8, 62000], "A's runs count once");
+  for (let i = 0; i < 70; i += 1) {
+    await age();
+    await grades(id(`RZ${i}`), 1, 10000);
+  }
+  const kept = (await db.query('select recent_batches from public.education_public where player_id = $1', [P])).rows[0].recent_batches;
+  assert.equal(kept.length, 64, 'the newest 64');
+  assert.equal(kept[0], id('RZ69'), 'newest first');
+  // A merge: the kept counters row holds both players' receipts, so the merged player's device can resend safely.
+  const [K, M] = [id('RXK'), id('RXM')];
+  await csubmit(db, K, id('RKB'), { games: 1 });
+  await csubmit(db, M, id('RMB'), { games: 2 });
+  await asAnon(db, 'select public.merge_players($1, $2)', [K, M]);
+  await ageCounters(db);
+  assert.equal((await csubmit(db, M, id('RMB'), { games: 2 })).games, 3, "the merged device's resend is a receipt in the kept row");
 });
