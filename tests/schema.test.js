@@ -1533,3 +1533,31 @@ test("a badge day after tomorrow or before 2000 (a device clock set wrong) is st
   await db.query("update public.education_public set updated_at = now() - interval '6 seconds'");
   await assert.rejects(send(id('CK2'), { edu_grade_a: 'soon' }), /bad badges/, 'a day that is not a day is still refused');
 });
+
+test('a 📚 name belongs to one player (AUD-022): no second sharer, no 🌞-only name, no score-board claim of a 📚-only name; a player keeps a name they already hold', async () => {
+  const db = await freshDb();
+  await db.query('select public.admin_set_education_open(true)');
+  const share = (pid, name) => asAnon(db, 'select public.share_education($1, $2, true)::text as r', [pid, name]).then((r) => r.rows[0].r);
+  const rename = (pid, name) => asAnon(db, 'select public.rename_education($1, $2) as r', [pid, name]).then((r) => r.rows[0].r);
+  const [A, B, C, D, E] = ['NA', 'NB', 'NC', 'ND', 'NE'].map(id);
+  assert.ok(await share(A, 'Sam'), 'A, an education-only player, shares as Sam');
+  await assert.rejects(share(B, 'sam'), /name taken/, 'a second sharer under the same name key');
+  // A player only the 🌞 board shows.
+  const day = (await db.query("select to_char((now() at time zone 'utc')::date, 'YYYY-MM-DD') as d")).rows[0].d;
+  const level = (await db.query('select public.daily_level($1::date) as l', [day])).rows[0].l;
+  await asAnon(db, 'select public.submit_daily_score($1, $2, $3::date, $4, $5, $6)', [C, 'Dana', day, 20, level, 10]);
+  await assert.rejects(share(B, 'Dana'), /name taken/, "a 🌞-only player's name");
+  // The score board cannot take a 📚-only name either.
+  await assert.rejects(asAnon(db, 'select public.submit_score($1, $2, 40, false, 3)', [D, 'Sam']), /name taken/);
+  assert.equal((await asAnon(db, 'select public.name_available($1, $2) as r', ['Sam', D])).rows[0].r, false);
+  assert.equal((await asAnon(db, 'select public.name_available($1, $2) as r', ['Sam', A])).rows[0].r, true, 'the sharer may still claim it');
+  // A rename onto someone else's 📚 name is refused too; onto one's own, fine.
+  assert.ok(await share(B, 'Bea'));
+  await assert.rejects(rename(B, 'SAM'), /name taken/);
+  assert.equal(await rename(A, 'SAM'), true, "A's own name, another case");
+  // A player who holds a name on the score board shares under it.
+  await asAnon(db, 'select public.submit_score($1, $2, 40, false, 3)', [E, 'Eve']);
+  assert.ok(await share(E, 'Eve'));
+  assert.equal((await asAnon(db, "select public.player_stats(null, 'sam') as r")).rows[0].r.education !== null, true, "the name leads to the sharer's profile");
+  assert.deepEqual((await asAnon(db, 'select name from public.education_board(null, 25)')).rows, [], 'nobody has 3 graded runs yet');
+});

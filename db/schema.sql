@@ -220,16 +220,26 @@ revoke execute on function public.resolve_player(text) from public, anon, authen
 
 -- The claim rule: a name key is blocked for a (resolved) id when another id has
 -- rows under it and this id has none. Rows that already share a key stay as
--- they are (grandfathered).
+-- they are (grandfathered). A name another player shows under on the 📚 board
+-- (education_public, below) is held the same way, unless this player holds it
+-- there or on the score board (plan 24, AUD-022). plpgsql, so the 📚 table may be
+-- made further down this file.
 create or replace function public.name_blocked(p_key text, p_id text)
 returns boolean
-language sql
+language plpgsql
 stable
 security definer
 set search_path = public
 as $$
-  select exists (select 1 from public.scores s where public.name_key(s.name) = p_key and s.player_id <> p_id)
-     and not exists (select 1 from public.scores s where public.name_key(s.name) = p_key and s.player_id = p_id);
+begin
+  if exists (select 1 from public.scores s where public.name_key(s.name) = p_key and s.player_id <> p_id)
+     and not exists (select 1 from public.scores s where public.name_key(s.name) = p_key and s.player_id = p_id) then
+    return true;
+  end if;
+  return exists (select 1 from public.education_public e where public.name_key(e.name) = p_key and e.player_id <> p_id)
+     and not exists (select 1 from public.scores s where public.name_key(s.name) = p_key and s.player_id = p_id)
+     and not exists (select 1 from public.education_public e where public.name_key(e.name) = p_key and e.player_id = p_id);
+end;
 $$;
 revoke execute on function public.name_blocked(text, text) from public, anon, authenticated;
 
@@ -1518,6 +1528,12 @@ begin
   if public.name_blocked(v_key, v_id) then
     raise exception 'name taken';
   end if;
+  -- A name a 🌞 or 🏅 player shows under (player_by_name) is theirs on the 📚 board too, unless
+  -- this player holds it on the score board (plan 24, AUD-022).
+  if coalesce(public.player_by_name(p_name) <> v_id, false)
+     and not exists (select 1 from public.scores s where s.player_id = v_id and public.name_key(s.name) = v_key) then
+    raise exception 'name taken';
+  end if;
   perform public.touch_player(v_id);
   perform pg_advisory_xact_lock(hashtext('education:' || v_id));
   insert into public.education_public (player_id, name) values (v_id, p_name)
@@ -1644,6 +1660,12 @@ begin
   v_key := public.name_key(p_name);
   perform pg_advisory_xact_lock(hashtext(v_key));
   if public.name_blocked(v_key, v_id) then
+    raise exception 'name taken';
+  end if;
+  -- A name a 🌞 or 🏅 player shows under (player_by_name) is theirs on the 📚 board too, unless
+  -- this player holds it on the score board (plan 24, AUD-022).
+  if coalesce(public.player_by_name(p_name) <> v_id, false)
+     and not exists (select 1 from public.scores s where s.player_id = v_id and public.name_key(s.name) = v_key) then
     raise exception 'name taken';
   end if;
   perform pg_advisory_xact_lock(hashtext('education:' || v_id));
@@ -2213,7 +2235,7 @@ returns text
 language sql
 immutable
 as $$
-  select '5def8e9bdfc2a5b7'::text; -- schema stamp
+  select '0d1f41ec41347638'::text; -- schema stamp
 $$;
 revoke execute on function public.schema_version() from public, authenticated;
 grant  execute on function public.schema_version() to anon;
