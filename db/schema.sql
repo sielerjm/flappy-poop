@@ -25,6 +25,7 @@
 --   * call board_tags(...)         the 🔧 / 🎖️ / 🆕 tags of the names a board shows (2026-11-12)
 --   * call share_education(...)    put the player on the 📚 education board, by their own choice (2026-11-13)
 --   * call submit_education_grades(...) add a batch of graded education runs to a sharing player's row
+--   * call rename_education(...)   a sharing player's name on the 📚 board follows a rename (never adds a player)
 --   * call unshare_education(...)  take the player off the 📚 board: the row is deleted
 --   * call education_board(...)    the 📚 board: names, average grades and run counts, never ids
 -- A player has up to two rows: their best on the toilet and their best off it
@@ -59,8 +60,8 @@
 -- Apply this file BEFORE pushing a client that calls name_available /
 -- merge_players / player_name / submit_tournament / tournament_board /
 -- submit_daily_score / daily_board / submit_counters / claim_achievements /
--- player_stats / board_tags / share_education / submit_education_grades / unshare_education /
--- education_board; an old client keeps working (same submit_score signature).
+-- player_stats / board_tags / share_education / submit_education_grades / rename_education /
+-- unshare_education / education_board; an old client keeps working (same submit_score signature).
 --
 -- Maintenance (SQL editor):
 --   remove a cheater or a ghost row:
@@ -93,8 +94,8 @@
 --   wipe the 📚 board: truncate public.education_public;
 --   undo the 📚 board: drop function public.share_education(text, text, boolean),
 --     public.submit_education_grades(text, text, timestamptz, int, bigint, jsonb),
---     public.unshare_education(text), public.education_board(text, int),
---     public.admin_set_education_open(boolean);
+--     public.rename_education(text, text), public.unshare_education(text),
+--     public.education_board(text, int), public.admin_set_education_open(boolean);
 --     drop table public.education_public, public.education_settings; then restore
 --     player_by_name, fold_player and player_stats from git and run this file.
 --   undo the v0.16.0 tags: drop function public.board_tags(text[]), public.player_tags(text),
@@ -1503,6 +1504,41 @@ begin
 end;
 $$;
 
+-- rename_education: a sharing player's name on the 📚 board follows a rename made on their
+-- device. It changes the name of an existing row and nothing else, and never puts a player on
+-- the board (a device that has not heard the player stopped sharing must not share for them
+-- again): true when renamed, false when the player does not share. The name follows the score
+-- board's claim rule ('name taken'). Errors raise.
+create or replace function public.rename_education(p_player_id text, p_name text)
+returns boolean
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_id text;
+  v_key text;
+  v_rows int;
+begin
+  if p_player_id is null or p_player_id !~ '^[A-Za-z0-9_-]{22}$' then
+    raise exception 'bad player id';
+  end if;
+  if p_name is null or p_name !~ '^[^[:cntrl:]]{1,16}$' then
+    raise exception 'bad name';
+  end if;
+  v_id := public.resolve_player(p_player_id);
+  v_key := public.name_key(p_name);
+  perform pg_advisory_xact_lock(hashtext(v_key));
+  if public.name_blocked(v_key, v_id) then
+    raise exception 'name taken';
+  end if;
+  perform pg_advisory_xact_lock(hashtext('education:' || v_id));
+  update public.education_public set name = p_name where player_id = v_id;
+  get diagnostics v_rows = row_count;
+  return v_rows > 0;
+end;
+$$;
+
 -- unshare_education: take this player off the 📚 board. The row is deleted at once; true when
 -- there was one. Their other devices are told 'not shared' when they next send a batch.
 create or replace function public.unshare_education(p_player_id text)
@@ -1770,6 +1806,8 @@ revoke execute on function public.share_education(text, text, boolean) from publ
 grant  execute on function public.share_education(text, text, boolean) to anon;
 revoke execute on function public.submit_education_grades(text, text, timestamptz, int, bigint, jsonb) from public, authenticated;
 grant  execute on function public.submit_education_grades(text, text, timestamptz, int, bigint, jsonb) to anon;
+revoke execute on function public.rename_education(text, text) from public, authenticated;
+grant  execute on function public.rename_education(text, text) to anon;
 revoke execute on function public.unshare_education(text) from public, authenticated;
 grant  execute on function public.unshare_education(text) to anon;
 revoke execute on function public.education_board(text, int) from public, authenticated;

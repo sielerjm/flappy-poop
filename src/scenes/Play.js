@@ -119,7 +119,7 @@ import { perfMark, perfSteps, perfRunStart } from '../ui/perfMeter.js';
 import { createFinishTexture } from '../ui/finish.js';
 import { createLightTexture } from '../ui/pipeShade.js';
 import { createLevelBar } from '../ui/levelBar.js';
-import { createSubmitStore, createMergeStore, createRenameStore, createTournamentQueue, createDailyStore, createDailyQueue, submitDailyScore, fetchDailyBoard, submitPlans, submitScore, submitTournament, checkNameAvailable, mergePlayers, fetchPlayerName, fetchRank, nameAction, createCareerStore, submitCounters, claimAchievements, fetchPlayerStats } from '../leaderboard.js';
+import { createEduShareStore, shareEducation, renameEducation, unshareEducation, submitEducationGrades, createSubmitStore, createMergeStore, createRenameStore, createTournamentQueue, createDailyStore, createDailyQueue, submitDailyScore, fetchDailyBoard, submitPlans, submitScore, submitTournament, checkNameAvailable, mergePlayers, fetchPlayerName, fetchRank, nameAction, createCareerStore, submitCounters, claimAchievements, fetchPlayerStats } from '../leaderboard.js';
 import { createButton } from '../ui/button.js';
 import { createToggle } from '../ui/toggle.js';
 import { createCoinText } from '../ui/coinText.js';
@@ -212,6 +212,7 @@ export class Play extends Phaser.Scene {
     this.eduUnlocked = eduSettings.eduUnlocked;
     this.educationOn = eduSettings.education;
     this.eduStore = createEduStore(globalThis.localStorage);
+    this.eduShare = createEduShareStore(); // the 📚 board (plan 21): whether this player shares their grades, and what the board already has (drainEduShare)
     this.runIsEducation = false;
     this.runQuiz = newTally(); // this run's quiz answers (in all and per level) and revives (start() resets it)
     this.quizOpen = false; // the Quiz scene is up (openQuiz → onQuizClosed)
@@ -1255,6 +1256,7 @@ export class Play extends Phaser.Scene {
     this.renameStore.clear();
     this.careerStore.clear(); // counters and badges go with the player
     this.eduStore.clear(); // and the education cards' progress (plan 21); the unlock is a setting and stays
+    this.eduShare.clear(); // this device stops sending to the 📚 board; a row the old player shared stays there until they stop sharing
     this.refreshEduDue();
     this.best.clear();
     this.boardNameTaken = false;
@@ -1268,7 +1270,8 @@ export class Play extends Phaser.Scene {
    * (same as the first save-code export). Before posting, the device takes the
    * board's name for its player unless the player renamed here (nameAction), so
    * a rename made on another device sticks. After the daily scores, the career
-   * (lifetime counters and achievement claims, drainCareer). Resolves on every
+   * (lifetime counters and achievement claims, drainCareer), then the education
+   * grades of a player who shares them (drainEduShare). Resolves on every
    * outcome; a failed post is retried on the next game over or board open.
    */
   syncLeaderboard() {
@@ -1305,6 +1308,7 @@ export class Play extends Phaser.Scene {
       .then(() => this.creditCareer()) // bests from other devices earn their score and level badges here
       .then(() => this.drainDaily())
       .then(() => this.drainCareer(id))
+      .then(() => this.drainEduShare(id))
       .then(() =>
         // Up to two rows per player: best off the toilet and best on it, posted one after the other.
         submitPlans(this.save, this.submitStore.load()).reduce(
@@ -3550,6 +3554,117 @@ export class Play extends Phaser.Scene {
   openStats(target = null) {
     this.statsTarget = target?.name ? { name: target.name } : null;
     this.handleChrome('stats');
+  }
+
+  /**
+   * The 📚 board (plan 21, Stage 3b): send what the board does not have yet of this device's
+   * education record (graded runs, their grade sum, badges) for player `id`, when that player
+   * shares. First the name, if it changed here (rename_education never adds a player: false means
+   * sharing was stopped elsewhere). Then one batch (the server takes one per 5 s; a long record goes
+   * over several syncs). 'restart': the row is another round's (sharing was stopped and started
+   * again on another device), so this device takes that round and sends its whole record again, at
+   * once. 'notShared': sharing was stopped elsewhere, so it stops here. A test run adds nothing to
+   * the record, so nothing of it is ever sent. Never rejects.
+   */
+  async drainEduShare(id) {
+    try {
+      const share = this.eduShare.load();
+      if (!share.on || this.save?.id !== id) return;
+      const name = this.save.name;
+      if (name && share.name !== name) {
+        const renamed = await this.postEduRename(id, name);
+        if (renamed === false) {
+          this.eduShare.turnOff();
+          return;
+        }
+        // 'nameTaken' or 'rejected': the board keeps the name it has; this one is not sent again.
+        if (renamed !== null) this.eduShare.setName(name);
+      }
+      for (let turn = 0; turn < 2; turn += 1) {
+        const batch = this.eduShare.beginBatch(this.eduStore.load(), newId);
+        if (!batch) return;
+        const res = await this.postEduGrades(id, batch.batch, { sharedAt: this.eduShare.load().sharedAt, runs: batch.runs, gradeSum: batch.gradeSum, badges: batch.badges });
+        if (res?.status === 'restart') {
+          this.eduShare.restart(res.sharedAt);
+          continue;
+        }
+        if (res?.status === 'ok') this.eduShare.confirmBatch(batch.batch);
+        else if (res?.status === 'notShared') this.eduShare.turnOff();
+        else if (res?.status === 'rejected') this.eduShare.dropBatch(batch.batch);
+        return;
+      }
+    } catch {
+      /* the next sync tries again */
+    }
+  }
+
+  /** Does this device send the player's education grades to the 📚 board? */
+  eduShareOn() {
+    return this.eduShare.load().on;
+  }
+
+  /**
+   * Turn sharing on (the Education data panel): the player's name goes on the 📚 board
+   * (share_education; `adult` is the panel's "I am 18 or older" box), and this device's record
+   * follows with the next syncs. Resolves to { status }: 'ok', 'noName' (save a username first),
+   * 'closed', 'notAdult', 'nameTaken', 'rejected' or 'offline'.
+   */
+  async startEduShare(adult) {
+    if (!this.save?.name) return { status: 'noName' };
+    if (!this.save.id) this.save = ensureId(this.save);
+    const { id, name } = this.save;
+    const res = await this.postEduShare(id, name, adult === true);
+    if (res?.status === 'ok' && this.save?.id === id) {
+      this.eduShare.turnOn(res.sharedAt, name);
+      this.syncLeaderboard();
+    }
+    return { status: res?.status ?? 'offline' };
+  }
+
+  /**
+   * Stop sharing (the Education data panel): the player's row is deleted on the server
+   * (unshare_education) and this device stops sending. True once the server has no row; false when
+   * it could not be reached, and sharing then stays on here: the row is still on the board.
+   */
+  async stopEduShare() {
+    const id = this.save?.id ?? null;
+    if (!id) {
+      this.eduShare.turnOff();
+      return true;
+    }
+    const gone = await this.postEduUnshare(id);
+    if (gone === null) return false;
+    this.eduShare.turnOff();
+    return true;
+  }
+
+  /**
+   * The server says whether this device's player shares (their own profile's `education`, their own
+   * row on the 📚 board): a device that did not know turns sharing on and sends its record, and one
+   * that still thought so (sharing was stopped elsewhere) turns it off.
+   */
+  noteEduShared(shared) {
+    this.eduShare.noteShared(shared);
+  }
+
+  /** share_education for the 📚 board; a method so the smoke can stub it (never the live board). */
+  postEduShare(id, name, adult) {
+    return shareEducation(id, name, adult);
+  }
+
+  /** rename_education; a method so the smoke can stub it. */
+  postEduRename(id, name) {
+    return renameEducation(id, name);
+  }
+
+  /** unshare_education; a method so the smoke can stub it. */
+  postEduUnshare(id) {
+    return unshareEducation(id);
+  }
+
+  /** submit_education_grades; a method so the smoke can stub it. */
+  postEduGrades(id, batch, body) {
+    return submitEducationGrades(id, batch, body);
   }
 
   /** submit_counters for the career; a method so the smoke can stub it (never the live board). */

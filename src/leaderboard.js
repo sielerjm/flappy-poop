@@ -6,10 +6,11 @@
 // false / null (submitScore: { ok: false, reason }): the game treats the
 // leaderboard as garnish and never waits on it. Writes go through the SQL
 // functions in db/schema.sql (submit_score, merge_players, submit_tournament,
-// submit_daily_score, submit_counters, claim_achievements);
+// submit_daily_score, submit_counters, claim_achievements, and the 📚 board's
+// share_education, submit_education_grades, rename_education, unshare_education);
 // reads are a plain select on the columns the publishable key is allowed to see,
 // plus the name_available, player_rank, player_name, tournament_board,
-// daily_board and player_stats functions.
+// daily_board, player_stats and education_board functions.
 
 import { LEADERBOARD } from './config.js';
 import { recordScore, bestByToilet, validateName } from './save.js';
@@ -882,7 +883,19 @@ function normalizeProfile(raw) {
     counters: cleanCounters(raw.counters),
     achievements: (Array.isArray(raw.achievements) ? raw.achievements : []).filter((a) => a && isAchievementId(a.id) && typeof a.at === 'string' && DAY.test(a.at)).map((a) => ({ id: a.id, at: a.at })),
     tags: cleanTags(raw.tags),
+    education: cleanEducation(raw.education),
   };
+}
+
+/**
+ * A profile's `education` (player_stats: only for a player who shares it on the 📚 board): { grade
+ * (their average in percent, or null before a graded run), runs, badges { id: 'YYYY-MM-DD' } }, or
+ * null for a player who does not share (or junk).
+ */
+function cleanEducation(raw) {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+  const grade = typeof raw.grade === 'number' && Number.isFinite(raw.grade) && raw.grade >= 0 && raw.grade <= 100 ? raw.grade : null;
+  return { grade, runs: whole(raw.runs), badges: cleanEduBadges(raw.badges) };
 }
 
 /** The player tags the server may send (player_tags), in its order: 'dev' 🔧, 'og' 🎖️, 'new' 🆕. */
@@ -900,4 +913,249 @@ export async function fetchPlayerStats({ id = null, name = null } = {}, opts = {
   if (!pid && !pname) return null;
   const out = await request('/rpc/player_stats', { method: 'POST', body: { p_player_id: pid, p_name: pid ? null : pname } }, opts);
   return normalizeProfile(out);
+}
+
+// ---------------------------------------------------------------------------
+// The 📚 education board (plan 21, Stage 3b). Education mode keeps its record on the device; a
+// player may choose to show their average grade, how many runs it is over, and their education
+// badges. The functions are in db/schema.sql.
+
+const EDU_BADGE = /^edu_[a-z0-9_]{1,36}$/;
+/** submit_education_grades takes at most this many graded runs a batch: a longer record goes in several. */
+const EDU_BATCH_RUNS = 50;
+const EDU_BATCH_BADGES = 20;
+const GRADE_MAX = 10000; // a run's grade, in hundredths of a percent (eduRunFacts)
+
+/** Education badges as { id: 'YYYY-MM-DD' }: edu_ ids with a day; anything else is dropped. */
+function cleanEduBadges(raw) {
+  const out = {};
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return out;
+  for (const [id, day] of Object.entries(raw)) if (EDU_BADGE.test(id) && typeof day === 'string' && DAY.test(day)) out[id] = day;
+  return out;
+}
+
+/** A round of sharing as the server names it (share_education's shared_at): a timestamp string, or null. */
+const cleanRound = (v) => (typeof v === 'string' && v.length <= 40 && Number.isFinite(Date.parse(v)) ? v : null);
+
+/** A stored share record, normalised: { v, on, sharedAt, name, sent: { runs, gradeSum }, sentBadges, inflight }. */
+function normalizeEduShare(raw) {
+  const r = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};
+  const on = r.on === true;
+  if (!on) return { v: 1, on: false, sharedAt: null, name: null, sent: { runs: 0, gradeSum: 0 }, sentBadges: [], inflight: null };
+  const f = r.inflight;
+  const inflight =
+    f && typeof f === 'object' && typeof f.batch === 'string' && ID_RE.test(f.batch) && Number.isInteger(f.runs) && f.runs >= 0 && f.runs <= EDU_BATCH_RUNS && Number.isInteger(f.gradeSum) && f.gradeSum >= 0 && f.gradeSum <= f.runs * GRADE_MAX
+      ? { batch: f.batch, runs: f.runs, gradeSum: f.gradeSum, badges: cleanEduBadges(f.badges) }
+      : null;
+  return {
+    v: 1,
+    on: true,
+    sharedAt: cleanRound(r.sharedAt),
+    name: typeof r.name === 'string' && validateName(r.name).ok ? r.name : null,
+    sent: { runs: whole(r.sent?.runs), gradeSum: whole(r.sent?.gradeSum) },
+    sentBadges: [...new Set((Array.isArray(r.sentBadges) ? r.sentBadges : []).filter((id) => typeof id === 'string' && EDU_BADGE.test(id)))],
+    inflight: inflight && (inflight.runs > 0 || Object.keys(inflight.badges).length) ? inflight : null,
+  };
+}
+
+/**
+ * This device's sharing on the 📚 board (flappyPoop.eduShare): whether the player shares (`on`), the
+ * round of sharing the server named (`sharedAt`; null until the device has heard it), the name the
+ * board last got from this device (`name`), what of this device's education record the board
+ * already has (`sent`: graded runs and their grade sum; `sentBadges`), and one batch on its way
+ * (`inflight`, resent unchanged until the server answers: its id is the receipt).
+ * The device's record itself is the education store's (createEduStore: counters.gradedRuns /
+ * gradeSum and badges); beginBatch takes it and works out what is new. A round starts from zero:
+ * turning sharing on, or being told to restart, sends the whole record again.
+ * Every read normalises, every write is guarded; it never throws.
+ */
+export function createEduShareStore(storage = globalThis.localStorage, key = LEADERBOARD.eduShareKey) {
+  const read = () => {
+    try {
+      const raw = storage?.getItem(key);
+      return normalizeEduShare(raw == null ? null : JSON.parse(raw));
+    } catch {
+      return normalizeEduShare(null);
+    }
+  };
+  const write = (c) => {
+    try {
+      storage?.setItem(key, JSON.stringify(c));
+    } catch {
+      /* storage unavailable: the choice lives for this page load only */
+    }
+    return c;
+  };
+  const fresh = (sharedAt, name) => ({ v: 1, on: true, sharedAt: cleanRound(sharedAt), name: typeof name === 'string' ? name : null, sent: { runs: 0, gradeSum: 0 }, sentBadges: [], inflight: null });
+  return {
+    load: read,
+    /** The player turned sharing on here (share_education answered `sharedAt`), under `name`: a new round, from zero. */
+    turnOn(sharedAt, name = null) {
+      return write(fresh(sharedAt, name));
+    },
+    /** The server named another round (a 'restart'): take it and start from zero; the name stays. */
+    restart(sharedAt) {
+      return write(fresh(sharedAt, read().name));
+    },
+    /**
+     * The server says this player shares (their own row on the board, their own profile) or does
+     * not. Shared, and off here: on, with no round and no name yet, so the next sync learns the
+     * round and sends the whole record. Not shared, and on here: off (stopped on another device).
+     */
+    noteShared(shared) {
+      const c = read();
+      if (Boolean(shared) === c.on) return c;
+      return write(shared ? fresh(null, null) : normalizeEduShare(null));
+    },
+    /** The board has this name for the player now (or will never take it): do not send it again. */
+    setName(name) {
+      const c = read();
+      if (!c.on) return c;
+      c.name = typeof name === 'string' ? name : null;
+      return write(c);
+    },
+    /**
+     * The batch to send: the one already in flight, else what of `record` (the education store's
+     * { counters: { gradedRuns, gradeSum }, badges }) the board does not have yet, under a new id
+     * (makeId): at most EDU_BATCH_RUNS runs with their share of the grade sum (a whole number; the
+     * last batch takes the rest, so the total is exact), and the badges not sent yet. Null when
+     * sharing is off or nothing is new. A record smaller than what was sent (the cards were wiped
+     * on this device) sends nothing: the board keeps what it has.
+     */
+    beginBatch(record, makeId) {
+      const c = read();
+      if (!c.on) return null;
+      if (c.inflight) return c.inflight;
+      const runsNow = whole(record?.counters?.gradedRuns);
+      const sumNow = Math.min(whole(record?.counters?.gradeSum), runsNow * GRADE_MAX);
+      const runsLeft = Math.max(0, runsNow - c.sent.runs);
+      const sumLeft = Math.min(Math.max(0, sumNow - c.sent.gradeSum), runsLeft * GRADE_MAX);
+      const badges = Object.fromEntries(Object.entries(cleanEduBadges(record?.badges)).filter(([id]) => !c.sentBadges.includes(id)).slice(0, EDU_BATCH_BADGES));
+      if (!runsLeft && !Object.keys(badges).length) return null;
+      const runs = Math.min(EDU_BATCH_RUNS, runsLeft);
+      const gradeSum = runs === runsLeft ? sumLeft : Math.floor((sumLeft * runs) / runsLeft);
+      const batch = makeId();
+      if (typeof batch !== 'string' || !ID_RE.test(batch)) return null;
+      c.inflight = { batch, runs, gradeSum, badges };
+      write(c);
+      return c.inflight;
+    },
+    /** The server has the batch: its runs, grades and badges count as sent. */
+    confirmBatch(batch) {
+      const c = read();
+      if (c.inflight?.batch !== batch) return c;
+      c.sent = { runs: c.sent.runs + c.inflight.runs, gradeSum: c.sent.gradeSum + c.inflight.gradeSum };
+      c.sentBadges = [...new Set([...c.sentBadges, ...Object.keys(c.inflight.badges)])];
+      c.inflight = null;
+      return write(c);
+    },
+    /** The server will never take the batch ('bad …'): count it as sent all the same, so it is not built again on every sync. */
+    dropBatch(batch) {
+      return this.confirmBatch(batch);
+    },
+    /** Sharing is off on this device (the player stopped, or the server says they do not share). */
+    turnOff() {
+      return write(normalizeEduShare(null));
+    },
+    clear() {
+      try {
+        storage?.removeItem(key);
+      } catch {
+        /* ignore */
+      }
+    },
+  };
+}
+
+/**
+ * Put the player on the 📚 board under `name` (share_education); `adult` is the panel's "I am 18 or
+ * older" box. { status: 'ok', sharedAt } when the server has them (now, or already), else
+ * { status }: 'closed' (sharing is not open yet), 'notAdult', 'nameTaken', 'rejected' ('bad …'), or
+ * 'offline' (unreachable, or not deployed).
+ */
+export async function shareEducation(playerId, name, adult, opts = {}) {
+  if (typeof playerId !== 'string' || !ID_RE.test(playerId) || typeof name !== 'string' || !validateName(name).ok) return { status: 'rejected' };
+  if (adult !== true) return { status: 'notAdult' };
+  const out = await request('/rpc/share_education', { method: 'POST', errors: true, body: { p_player_id: playerId, p_name: name, p_adult: true } }, opts);
+  if (out === null || out === undefined) return { status: 'offline' };
+  if (out.error) {
+    if (out.status !== 400) return { status: 'offline' };
+    if (/closed/i.test(out.message)) return { status: 'closed' };
+    if (/not adult/i.test(out.message)) return { status: 'notAdult' };
+    if (/name taken/i.test(out.message)) return { status: 'nameTaken' };
+    return /bad (name|player id)/i.test(out.message) ? { status: 'rejected' } : { status: 'offline' };
+  }
+  const sharedAt = cleanRound(out);
+  return sharedAt ? { status: 'ok', sharedAt } : { status: 'offline' };
+}
+
+/**
+ * A sharing player's name on the 📚 board follows a rename (rename_education; it never adds a
+ * player): true when renamed, false when the player does not share, 'nameTaken', 'rejected', or
+ * null (offline, not deployed).
+ */
+export async function renameEducation(playerId, name, opts = {}) {
+  if (typeof playerId !== 'string' || !ID_RE.test(playerId) || typeof name !== 'string' || !validateName(name).ok) return 'rejected';
+  const out = await request('/rpc/rename_education', { method: 'POST', errors: true, body: { p_player_id: playerId, p_name: name } }, opts);
+  if (out === null || out === undefined) return null;
+  if (out.error) {
+    if (out.status !== 400) return null;
+    if (/name taken/i.test(out.message)) return 'nameTaken';
+    return /bad (name|player id)/i.test(out.message) ? 'rejected' : null;
+  }
+  return typeof out === 'boolean' ? out : null;
+}
+
+/** Take the player off the 📚 board (unshare_education: the row is deleted): true once the server has no row for them, null when it could not be reached. */
+export async function unshareEducation(playerId, opts = {}) {
+  if (typeof playerId !== 'string' || !ID_RE.test(playerId)) return null;
+  const out = await request('/rpc/unshare_education', { method: 'POST', errors: true, body: { p_player_id: playerId } }, opts);
+  return typeof out === 'boolean' ? true : null;
+}
+
+/**
+ * Add a batch of this device's graded education runs to the player's row (submit_education_grades):
+ * { status: 'ok' } when the server has it (now, or a resend), { status: 'restart', sharedAt } when
+ * the row is another round's (take that round and send the whole record again),
+ * { status: 'notShared' } when the player has no row, { status: 'rejected' } when the server never
+ * will take it ('bad …'), else { status: 'keep' } (offline, rate limited, not deployed yet).
+ */
+export async function submitEducationGrades(playerId, batch, { sharedAt = null, runs = 0, gradeSum = 0, badges = {} } = {}, opts = {}) {
+  const b = cleanEduBadges(badges);
+  const sane = Number.isInteger(runs) && runs >= 0 && runs <= EDU_BATCH_RUNS && Number.isInteger(gradeSum) && gradeSum >= 0 && gradeSum <= runs * GRADE_MAX && (runs > 0 || Object.keys(b).length > 0);
+  if (typeof playerId !== 'string' || !ID_RE.test(playerId) || typeof batch !== 'string' || !ID_RE.test(batch) || !sane) return { status: 'rejected' };
+  const body = { p_player_id: playerId, p_batch: batch, p_shared_at: cleanRound(sharedAt), p_runs: runs, p_grade_sum: gradeSum, p_badges: b };
+  const out = await request('/rpc/submit_education_grades', { method: 'POST', errors: true, body }, opts);
+  if (out === null || out === undefined) return { status: 'keep' };
+  if (out.error) {
+    if (out.status !== 400) return { status: 'keep' };
+    if (/not shared/i.test(out.message)) return { status: 'notShared' };
+    return /bad (runs|grade sum|badges|batch|player id)/i.test(out.message) ? { status: 'rejected' } : { status: 'keep' };
+  }
+  if (out?.status === 'ok') return { status: 'ok' };
+  if (out?.status === 'restart' && cleanRound(out.shared_at)) return { status: 'restart', sharedAt: cleanRound(out.shared_at) };
+  return { status: 'keep' };
+}
+
+/** One 📚 board row: { rank, name, grade (percent, one decimal), runs, me, total }; null for junk. */
+function normalizeEduRow(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+  const { rank, name, runs, me, total } = raw;
+  const grade = typeof raw.grade === 'string' ? Number(raw.grade) : raw.grade;
+  if (!Number.isInteger(rank) || rank < 1 || typeof name !== 'string' || !name || name.length > 16) return null;
+  if (typeof grade !== 'number' || !Number.isFinite(grade) || grade < 0 || grade > 100 || !Number.isInteger(runs) || runs < 1) return null;
+  return { rank, name, grade, runs, me: me === true, total: Number.isInteger(total) && total >= rank ? total : rank };
+}
+
+/**
+ * The 📚 board (education_board): the top LEADERBOARD.limit sharing players by average grade, with
+ * `playerId`'s own row flagged `me` (and appended when it is below the top). An array, or null
+ * (offline, not deployed).
+ */
+export async function fetchEducationBoard(playerId = null, opts = {}) {
+  const pid = typeof playerId === 'string' && ID_RE.test(playerId) ? playerId : null;
+  const config = opts.config ?? LEADERBOARD;
+  const out = await request('/rpc/education_board', { method: 'POST', body: { p_player_id: pid, p_limit: config.limit ?? 25 } }, opts);
+  if (!Array.isArray(out)) return null;
+  return out.map(normalizeEduRow).filter(Boolean);
 }

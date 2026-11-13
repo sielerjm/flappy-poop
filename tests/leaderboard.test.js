@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { LEADERBOARD } from '../src/config.js';
-import { createSubmitStore, createMergeStore, createRenameStore, createTournamentQueue, nameAction, submitPlan, submitPlans, submitScore, submitTournament, checkNameAvailable, mergePlayers, fetchPlayerName, fetchTop, fetchRank, fetchTournamentBoard, submitDailyScore, fetchDailyBoard, createCareerStore, submitCounters, claimAchievements, fetchPlayerStats } from '../src/leaderboard.js';
+import { createSubmitStore, createMergeStore, createRenameStore, createTournamentQueue, nameAction, submitPlan, submitPlans, submitScore, submitTournament, checkNameAvailable, mergePlayers, fetchPlayerName, fetchTop, fetchRank, fetchTournamentBoard, submitDailyScore, fetchDailyBoard, createCareerStore, submitCounters, claimAchievements, fetchPlayerStats, createEduShareStore, shareEducation, renameEducation, unshareEducation, submitEducationGrades, fetchEducationBoard } from '../src/leaderboard.js';
 
 const config = { dataApi: 'https://x.example/rest/v1', publishableKey: 'sb_publishable_test', timeoutMs: 50, limit: 10, maxScore: 200 };
 
@@ -47,7 +47,7 @@ test('LEADERBOARD config is complete and points at a Supabase Data API over http
   assert.equal(typeof LEADERBOARD.mergesKey, 'string');
   assert.notEqual(LEADERBOARD.mergesKey, LEADERBOARD.storageKey);
   assert.equal(typeof LEADERBOARD.renameKey, 'string');
-  assert.equal(new Set([LEADERBOARD.storageKey, LEADERBOARD.mergesKey, LEADERBOARD.renameKey, LEADERBOARD.tournamentsKey, LEADERBOARD.dailyKey, LEADERBOARD.dailyQueueKey, LEADERBOARD.careerKey]).size, 7);
+  assert.equal(new Set([LEADERBOARD.storageKey, LEADERBOARD.mergesKey, LEADERBOARD.renameKey, LEADERBOARD.tournamentsKey, LEADERBOARD.dailyKey, LEADERBOARD.dailyQueueKey, LEADERBOARD.careerKey, LEADERBOARD.eduKey, LEADERBOARD.eduShareKey]).size, 9);
   assert.ok(Number.isInteger(LEADERBOARD.tournamentQueueMax) && LEADERBOARD.tournamentQueueMax >= 1);
   assert.ok(Number.isInteger(LEADERBOARD.dailyQueueMax) && LEADERBOARD.dailyQueueMax >= 1);
   assert.ok(Number.isInteger(LEADERBOARD.dailyMaxScore) && LEADERBOARD.dailyMaxScore > LEADERBOARD.maxScore, 'an endless run gets more headroom than the 🏆 cap');
@@ -629,6 +629,7 @@ test('fetchPlayerStats asks by id or by name, and cleans the answer', async () =
     counters: { games: 4, fiber: 9, bad: 'x' },
     achievements: [{ id: 'win_game', at: '2026-11-09' }, { id: 'BAD', at: '2026-11-09' }],
     tags: ['new', 'admin', 'dev'],
+    education: { grade: 92.5, runs: 4, badges: { edu_grade_a: '2026-11-12', score_10: '2026-11-12', edu_perfect: 'soon' }, right: 99 },
   };
   const fetch = fakeFetch({ status: 200, body });
   const p = await fetchPlayerStats({ name: 'Alice' }, { fetch, config });
@@ -642,7 +643,16 @@ test('fetchPlayerStats asks by id or by name, and cleans the answer', async () =
     counters: { games: 4, fiber: 9 },
     achievements: [{ id: 'win_game', at: '2026-11-09' }],
     tags: ['dev', 'new'],
+    education: { grade: 92.5, runs: 4, badges: { edu_grade_a: '2026-11-12' } },
   });
+  // education: null for a player who does not share (or junk); a grade out of range reads as none.
+  const eduOf = async (education) => (await fetchPlayerStats({ name: 'Alice' }, { fetch: fakeFetch({ status: 200, body: { ...body, education } }), config })).education;
+  assert.equal(await eduOf(null), null);
+  assert.equal(await eduOf(undefined), null);
+  assert.equal(await eduOf('yes'), null);
+  assert.equal(await eduOf([1]), null);
+  assert.deepEqual(await eduOf({ grade: null, runs: 0, badges: {} }), { grade: null, runs: 0, badges: {} }, 'shared, nothing graded yet');
+  assert.deepEqual(await eduOf({ grade: 140, runs: -2, badges: 'x' }), { grade: null, runs: 0, badges: {} });
   await fetchPlayerStats({ id: ID, name: 'Alice' }, { fetch, config });
   assert.deepEqual(fetch.calls[1].body, { p_player_id: ID, p_name: null }, 'the id wins');
   assert.deepEqual(await fetchPlayerStats({ name: 'Nobody' }, { fetch: fakeFetch({ status: 200, body: { found: false } }), config }), { found: false });
@@ -665,4 +675,204 @@ test('career store: markRun keeps the last run time and the wins of the last 7 d
   assert.deepEqual(r.winTimes, [t0 + 8 * day], 'wins older than 7 days are dropped');
   for (let i = 0; i < 40; i += 1) c.markRun(t0 + 8 * day + i * 1000, true);
   assert.equal(c.load().winTimes.length, 30, 'at most 30 kept');
+});
+
+// ---------------------------------------------------------------------------
+// The 📚 education board (plan 21, step B2): the share record and its calls.
+
+const ROUND = '2026-11-13T10:11:12.123+00:00';
+const ROUND2 = '2026-11-14T08:00:00.5+00:00';
+const record = (gradedRuns, gradeSum, badges = {}) => ({ counters: { gradedRuns, gradeSum }, badges });
+const ids = (...names) => {
+  const list = names.map((n) => n.padEnd(22, '_'));
+  let i = 0;
+  return () => list[i++] ?? `Z${String(i).padStart(21, '0')}`;
+};
+
+test('createEduShareStore: off until turned on; a round starts from zero and sends the whole record', () => {
+  const storage = fakeStorage();
+  const s = createEduShareStore(storage, 'k');
+  const off = { v: 1, on: false, sharedAt: null, name: null, sent: { runs: 0, gradeSum: 0 }, sentBadges: [], inflight: null };
+  assert.deepEqual(s.load(), off);
+  assert.equal(s.beginBatch(record(4, 36000), ids('B1')), null, 'off: nothing to send');
+  s.turnOn(ROUND, 'Alice');
+  assert.deepEqual(s.load(), { ...off, on: true, sharedAt: ROUND, name: 'Alice' });
+  const b1 = s.beginBatch(record(4, 36000, { edu_grade_a: '2026-11-12', score_10: '2026-11-12' }), ids('B1'));
+  assert.deepEqual(b1, { batch: 'B1'.padEnd(22, '_'), runs: 4, gradeSum: 36000, badges: { edu_grade_a: '2026-11-12' } }, 'the whole record, edu_ badges only');
+  assert.deepEqual(s.beginBatch(record(9, 80000), ids('B2')), b1, 'a batch in flight is resent unchanged, whatever was played since');
+  assert.deepEqual(createEduShareStore(storage, 'k').load().inflight, b1, 'stored');
+  s.confirmBatch('other'.padEnd(22, '_'));
+  assert.deepEqual(s.load().inflight, b1, 'another id confirms nothing');
+  s.confirmBatch(b1.batch);
+  assert.deepEqual(s.load(), { ...off, on: true, sharedAt: ROUND, name: 'Alice', sent: { runs: 4, gradeSum: 36000 }, sentBadges: ['edu_grade_a'] });
+  assert.equal(s.beginBatch(record(4, 36000, { edu_grade_a: '2026-11-12' }), ids('B2')), null, 'nothing new');
+  // Two more graded runs and a badge: only what is new.
+  assert.deepEqual(s.beginBatch(record(6, 53500, { edu_grade_a: '2026-11-12', edu_perfect: '2026-11-13' }), ids('B2')), { batch: 'B2'.padEnd(22, '_'), runs: 2, gradeSum: 17500, badges: { edu_perfect: '2026-11-13' } });
+  s.confirmBatch('B2'.padEnd(22, '_'));
+  // A badge with no graded run (🏳️) is a batch too.
+  assert.deepEqual(s.beginBatch(record(6, 53500, { edu_grade_a: 'x', edu_perfect: '2026-11-13', edu_drop_out: '2026-11-14' }), ids('B3')), { batch: 'B3'.padEnd(22, '_'), runs: 0, gradeSum: 0, badges: { edu_drop_out: '2026-11-14' } });
+  // The server will never take it: counted as sent, not built again.
+  s.dropBatch('B3'.padEnd(22, '_'));
+  assert.equal(s.beginBatch(record(6, 53500, { edu_drop_out: '2026-11-14' }), ids('B4')), null);
+  // Restart (another round): from zero under it, the name kept.
+  s.restart(ROUND2);
+  assert.deepEqual(s.load(), { ...off, on: true, sharedAt: ROUND2, name: 'Alice' });
+  assert.equal(s.beginBatch(record(6, 53500), ids('B5')).runs, 6, 'the whole record again');
+  s.turnOff();
+  assert.deepEqual(s.load(), off);
+  s.clear();
+  assert.equal(storage._map.has('k'), false);
+});
+
+test('createEduShareStore: a long record goes 50 runs a batch, the grade sum split in whole numbers and exact in total; a shrunken record sends nothing', () => {
+  const s = createEduShareStore(fakeStorage(), 'k');
+  s.turnOn(ROUND, 'Alice');
+  const rec = record(120, 987654, { edu_phoenix: '2026-11-13' });
+  const sent = [];
+  for (let i = 0; i < 5; i += 1) {
+    const b = s.beginBatch(rec, ids(`C${i}`));
+    if (!b) break;
+    assert.ok(b.runs <= 50 && Number.isInteger(b.gradeSum) && b.gradeSum >= 0 && b.gradeSum <= b.runs * 10000, `batch ${i}: ${b.runs} runs, sum ${b.gradeSum}`);
+    sent.push(b);
+    s.confirmBatch(b.batch);
+  }
+  assert.deepEqual(sent.map((b) => b.runs), [50, 50, 20]);
+  assert.equal(sent.reduce((n, b) => n + b.gradeSum, 0), 987654, 'the batches add up to the record');
+  assert.deepEqual(sent.map((b) => Object.keys(b.badges)), [['edu_phoenix'], [], []], 'badges go with the first batch');
+  // Every run perfect: each batch is exactly its runs × 10000 (the server's cap).
+  const p = createEduShareStore(fakeStorage(), 'k');
+  p.turnOn(ROUND);
+  const first = p.beginBatch(record(75, 750000), ids('P1'));
+  assert.deepEqual([first.runs, first.gradeSum], [50, 500000]);
+  p.confirmBatch(first.batch);
+  assert.deepEqual([p.beginBatch(record(75, 750000), ids('P2')).runs, p.load().inflight.gradeSum], [25, 250000]);
+  // A sum the runs cannot hold (a damaged record) is capped; a record below what was sent sends nothing.
+  const d = createEduShareStore(fakeStorage(), 'k');
+  d.turnOn(ROUND);
+  assert.deepEqual([d.beginBatch(record(2, 99999), ids('D1')).gradeSum], [20000]);
+  d.confirmBatch('D1'.padEnd(22, '_'));
+  assert.equal(d.beginBatch(record(1, 5000), ids('D2')), null, 'the cards were wiped here: the board keeps what it has');
+  assert.equal(d.beginBatch(record(3, 30000), () => 'short'), null, 'a bad batch id makes no batch');
+  assert.equal(d.load().inflight, null);
+});
+
+test('createEduShareStore: noteShared follows the server; junk in storage reads as off; storage errors never throw', () => {
+  const storage = fakeStorage();
+  const s = createEduShareStore(storage, 'k');
+  s.noteShared(true);
+  assert.deepEqual(s.load(), { v: 1, on: true, sharedAt: null, name: null, sent: { runs: 0, gradeSum: 0 }, sentBadges: [], inflight: null }, 'shares, says the server: on, with no round yet');
+  s.turnOn(ROUND, 'Alice');
+  s.noteShared(true);
+  assert.equal(s.load().sharedAt, ROUND, 'already on: unchanged');
+  s.setName('Alicia');
+  assert.equal(s.load().name, 'Alicia');
+  s.noteShared(false);
+  assert.equal(s.load().on, false, 'stopped on another device');
+  s.setName('Ghost');
+  assert.equal(s.load().name, null, 'no name while off');
+  storage.setItem('k', '{not json');
+  assert.equal(s.load().on, false);
+  storage.setItem('k', JSON.stringify({ on: true, sharedAt: 'never', name: 'x'.repeat(17), sent: { runs: -3, gradeSum: 2.5 }, sentBadges: ['edu_a', 'score_10', 7], inflight: { batch: ID, runs: 60, gradeSum: 1, badges: {} } }));
+  assert.deepEqual(s.load(), { v: 1, on: true, sharedAt: null, name: null, sent: { runs: 0, gradeSum: 0 }, sentBadges: ['edu_a'], inflight: null }, 'each field cleaned; an impossible batch dropped');
+  storage.setItem('k', JSON.stringify({ on: 'yes', sharedAt: ROUND }));
+  assert.equal(s.load().on, false, 'only true is on');
+  const broken = createEduShareStore(boom, 'k');
+  assert.equal(broken.load().on, false);
+  assert.doesNotThrow(() => broken.turnOn(ROUND, 'Alice'));
+  assert.doesNotThrow(() => broken.clear());
+});
+
+test('shareEducation posts the name and the adult box; each refusal has its own status', async () => {
+  const ok = fakeFetch({ status: 200, body: JSON.stringify(ROUND) });
+  assert.deepEqual(await shareEducation(ID, 'Alice', true, { fetch: ok, config }), { status: 'ok', sharedAt: ROUND });
+  assert.equal(ok.calls[0].url, 'https://x.example/rest/v1/rpc/share_education');
+  assert.deepEqual(ok.calls[0].body, { p_player_id: ID, p_name: 'Alice', p_adult: true });
+  const none = fakeFetch({ status: 200, body: JSON.stringify(ROUND) });
+  assert.deepEqual(await shareEducation(ID, 'Alice', false, { fetch: none, config }), { status: 'notAdult' });
+  assert.deepEqual(await shareEducation(ID, 'Alice', 'yes', { fetch: none, config }), { status: 'notAdult' }, 'only true is a yes');
+  assert.deepEqual(await shareEducation('short', 'Alice', true, { fetch: none, config }), { status: 'rejected' });
+  assert.deepEqual(await shareEducation(ID, 'x'.repeat(17), true, { fetch: none, config }), { status: 'rejected' }, 'too long for a username');
+  assert.deepEqual(await shareEducation(ID, '  ', true, { fetch: none, config }), { status: 'rejected' }, 'no name');
+  assert.equal(none.calls.length, 0, 'none of those is sent');
+  const refused = (message, status = 400) => shareEducation(ID, 'Alice', true, { fetch: fakeFetch({ status, body: { message } }), config });
+  assert.deepEqual(await refused('closed'), { status: 'closed' });
+  assert.deepEqual(await refused('not adult'), { status: 'notAdult' });
+  assert.deepEqual(await refused('name taken'), { status: 'nameTaken' });
+  assert.deepEqual(await refused('bad name'), { status: 'rejected' });
+  assert.deepEqual(await refused('Could not find the function', 404), { status: 'offline' }, 'not deployed yet');
+  assert.deepEqual(await refused('something else'), { status: 'offline' });
+  assert.deepEqual(await shareEducation(ID, 'Alice', true, { fetch: async () => { throw new Error('down'); }, config }), { status: 'offline' });
+  assert.deepEqual(await shareEducation(ID, 'Alice', true, { fetch: fakeFetch({ status: 200, body: JSON.stringify('soon') }), config }), { status: 'offline' }, 'an answer that is no round');
+});
+
+test('renameEducation and unshareEducation report what the server did', async () => {
+  const yes = fakeFetch({ status: 200, body: 'true' });
+  assert.equal(await renameEducation(ID, 'Alicia', { fetch: yes, config }), true);
+  assert.deepEqual(yes.calls[0].body, { p_player_id: ID, p_name: 'Alicia' });
+  assert.equal(await renameEducation(ID, 'Alicia', { fetch: fakeFetch({ status: 200, body: 'false' }), config }), false, 'the player does not share');
+  assert.equal(await renameEducation(ID, 'Alicia', { fetch: fakeFetch({ status: 400, body: { message: 'name taken' } }), config }), 'nameTaken');
+  assert.equal(await renameEducation(ID, 'Alicia', { fetch: fakeFetch({ status: 400, body: { message: 'bad name' } }), config }), 'rejected');
+  assert.equal(await renameEducation(ID, 'Alicia', { fetch: fakeFetch({ status: 404, body: { message: 'no function' } }), config }), null);
+  assert.equal(await renameEducation(ID, 'Alicia', { fetch: fakeFetch({ status: 200, body: '"maybe"' }), config }), null);
+  assert.equal(await renameEducation(ID, '', { fetch: yes, config }), 'rejected');
+  const gone = fakeFetch({ status: 200, body: 'true' });
+  assert.equal(await unshareEducation(ID, { fetch: gone, config }), true);
+  assert.deepEqual(gone.calls[0].body, { p_player_id: ID });
+  assert.equal(await unshareEducation(ID, { fetch: fakeFetch({ status: 200, body: 'false' }), config }), true, 'no row was there: the server has none now either way');
+  assert.equal(await unshareEducation(ID, { fetch: fakeFetch({ status: 500, body: { message: 'x' } }), config }), null, 'unreachable: the row may still be there');
+  assert.equal(await unshareEducation(ID, { fetch: async () => { throw new Error('down'); }, config }), null);
+  assert.equal(await unshareEducation('short', { fetch: gone, config }), null);
+});
+
+test('submitEducationGrades: ok, restart with the round to adopt, not shared, rejected, keep', async () => {
+  const batch = 'B'.repeat(22);
+  const body = { sharedAt: ROUND, runs: 2, gradeSum: 17500, badges: { edu_grade_b: '2026-11-12', score_10: '2026-11-12' } };
+  const ok = fakeFetch({ status: 200, body: { status: 'ok', shared_at: ROUND, runs: 2, grade_sum: 17500 } });
+  assert.deepEqual(await submitEducationGrades(ID, batch, body, { fetch: ok, config }), { status: 'ok' });
+  assert.equal(ok.calls[0].url, 'https://x.example/rest/v1/rpc/submit_education_grades');
+  assert.deepEqual(ok.calls[0].body, { p_player_id: ID, p_batch: batch, p_shared_at: ROUND, p_runs: 2, p_grade_sum: 17500, p_badges: { edu_grade_b: '2026-11-12' } });
+  const restart = fakeFetch({ status: 200, body: { status: 'restart', shared_at: ROUND2 } });
+  assert.deepEqual(await submitEducationGrades(ID, batch, { ...body, sharedAt: null }, { fetch: restart, config }), { status: 'restart', sharedAt: ROUND2 });
+  assert.equal(restart.calls[0].body.p_shared_at, null, 'a device with no round yet says so');
+  const answer = (status, message) => submitEducationGrades(ID, batch, body, { fetch: fakeFetch({ status, body: { message } }), config });
+  assert.deepEqual(await answer(400, 'not shared'), { status: 'notShared' });
+  assert.deepEqual(await answer(400, 'bad grade sum'), { status: 'rejected' });
+  assert.deepEqual(await answer(400, 'bad badges: edu_x'), { status: 'rejected' });
+  assert.deepEqual(await answer(400, 'rate limited'), { status: 'keep' });
+  assert.deepEqual(await answer(404, 'no function'), { status: 'keep' }, 'not deployed yet');
+  assert.deepEqual(await submitEducationGrades(ID, batch, body, { fetch: async () => { throw new Error('down'); }, config }), { status: 'keep' });
+  assert.deepEqual(await submitEducationGrades(ID, batch, body, { fetch: fakeFetch({ status: 200, body: { status: 'restart', shared_at: 'never' } }), config }), { status: 'keep' }, 'a restart with no round is no answer');
+  // Batches the server would refuse are not sent.
+  const none = fakeFetch({ status: 200, body: { status: 'ok' } });
+  for (const [why, b] of [['an empty batch', { ...body, runs: 0, gradeSum: 0, badges: {} }], ['51 runs', { ...body, runs: 51 }], ['more grade than the runs allow', { ...body, gradeSum: 20001 }], ['a fraction', { ...body, runs: 1.5 }]]) {
+    assert.deepEqual(await submitEducationGrades(ID, batch, b, { fetch: none, config }), { status: 'rejected' }, why);
+  }
+  assert.deepEqual(await submitEducationGrades(ID, 'short', body, { fetch: none, config }), { status: 'rejected' });
+  assert.equal(none.calls.length, 0);
+  assert.deepEqual(await submitEducationGrades(ID, batch, { sharedAt: ROUND, runs: 0, gradeSum: 0, badges: { edu_drop_out: '2026-11-13' } }, { fetch: ok, config }), { status: 'ok' }, 'a badge alone is a batch');
+});
+
+test('fetchEducationBoard asks for the limit with the caller, and cleans the rows', async () => {
+  const rows = [
+    { rank: 1, name: 'Ace', grade: 100, runs: 4, me: false, total: 3 },
+    { rank: 2, name: 'Bee', grade: '92.5', runs: 10, me: true, total: 3 },
+    { rank: 3, name: '', grade: 80, runs: 5, me: false, total: 3 },
+    { rank: 0, name: 'Zero', grade: 80, runs: 5, me: false, total: 3 },
+    { rank: 4, name: 'Over', grade: 120, runs: 5, me: false, total: 3 },
+    { rank: 5, name: 'NoRuns', grade: 50, runs: 0, me: false, total: 3 },
+    null,
+  ];
+  const fetch = fakeFetch({ status: 200, body: rows });
+  const got = await fetchEducationBoard(ID, { fetch, config });
+  assert.equal(fetch.calls[0].url, 'https://x.example/rest/v1/rpc/education_board');
+  assert.deepEqual(fetch.calls[0].body, { p_player_id: ID, p_limit: 10 });
+  assert.deepEqual(got, [
+    { rank: 1, name: 'Ace', grade: 100, runs: 4, me: false, total: 3 },
+    { rank: 2, name: 'Bee', grade: 92.5, runs: 10, me: true, total: 3 },
+  ]);
+  await fetchEducationBoard('garbage', { fetch, config });
+  assert.equal(fetch.calls[1].body.p_player_id, null, 'no id: the board without a caller');
+  assert.deepEqual(await fetchEducationBoard(ID, { fetch: fakeFetch({ status: 200, body: [] }), config }), [], 'an empty board');
+  assert.equal(await fetchEducationBoard(ID, { fetch: fakeFetch({ status: 404, body: { message: 'x' } }), config }), null, 'not deployed yet');
+  assert.equal(await fetchEducationBoard(ID, { fetch: fakeFetch({ status: 200, body: { rows: [] } }), config }), null, 'not a list');
 });

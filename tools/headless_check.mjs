@@ -341,6 +341,15 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
       p.claimBadges = (id, ids) => (__career.claims.push(ids), Promise.resolve(globalThis.__careerAnswer === 'ok' ? { stored: ids, closed: [] } : null));
       p.fetchProfile = (who) => (__career.profiles.push(who), Promise.resolve(globalThis.__profile));
       return true; })()`);
+    // Hermetic 📚 board (plan 21, B2) too: share, rename, unshare and the grade batches never reach the
+    // live board. Each stub records its call in globalThis.__edu and answers as globalThis.__eduAnswer
+    // says (offline by default); `grades` may be a function of the batch.
+    await evaluate(`(() => { const p = __flappy.scene.getScene('Play'); globalThis.__edu = { shares: [], renames: [], unshares: [], grades: [] }; globalThis.__eduAnswer = { share: { status: 'offline' }, rename: null, unshare: null, grades: { status: 'keep' } };
+      p.postEduShare = (id, name, adult) => (__edu.shares.push({ id, name, adult }), Promise.resolve(globalThis.__eduAnswer.share));
+      p.postEduRename = (id, name) => (__edu.renames.push({ id, name }), Promise.resolve(globalThis.__eduAnswer.rename));
+      p.postEduUnshare = (id) => (__edu.unshares.push(id), Promise.resolve(globalThis.__eduAnswer.unshare));
+      p.postEduGrades = (id, batch, body) => (__edu.grades.push({ id, batch, ...body }), Promise.resolve(typeof globalThis.__eduAnswer.grades === 'function' ? globalThis.__eduAnswer.grades(body) : globalThis.__eduAnswer.grades));
+      return true; })()`);
     ok((await evaluate(`__flappy.scene.getScene('Play').diff.gapHeight`)) === 374, 'level 1 pipe gap is 10 % wider (374 px)');
     const field0 = await evaluate(`JSON.stringify({ W: __flappy.scale.width, H: __flappy.scale.height, inner: [innerWidth, innerHeight], poopX: __flappy.scene.getScene('Play').poopX })`).then(JSON.parse);
     ok(field0.W === 720 && field0.H === 1280 && field0.poopX === 180, `a portrait viewport (${field0.inner.join('×')}) gets the ${field0.W}×${field0.H} phone field, poop at ${field0.poopX}`);
@@ -4653,10 +4662,102 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await evaluate(`(() => { const p = ${play}; p.eduUnlocked = true; if (${lentName}) p.save = { ...p.save, name: null }; return true; })()`);
         ok(JSON.stringify(rec0) === JSON.stringify({ counters: {}, badges: [] }), 'the section began from an empty education record');
 
+        // The 📚 board's sending (plan 21, B2), the server stubbed (globalThis.__edu / __eduAnswer, set up
+        // at boot): a player who shares sends what the board does not have yet of this device's record.
+        await home();
+        const R1 = '2026-11-13T10:00:00.000+00:00';
+        const R2 = '2026-11-14T09:30:00.250+00:00';
+        const eduNet = () => evaluate(`JSON.stringify({ calls: globalThis.__edu, share: ${play}.eduShare.load(), record: ${play}.eduStore.load().counters })`).then(JSON.parse);
+        const resetNet = () => evaluate(`(() => { for (const k of Object.keys(__edu)) __edu[k].length = 0; return true; })()`);
+        const drain = (pid) => evaluate(`${play}.drainEduShare('${pid}').then(() => true)`);
+        const gradedRun = (right, answered) => evaluate(`import('./src/achievements.js').then((m) => (${play}.eduStore.endRun(m.eduRunFacts({ answered: ${answered}, right: ${right} })), true))`);
+        // A named player for these checks, stored as the save panel stores one (a sync reads the save back from storage).
+        const nameAs = (name) => evaluate(`import('./src/save.js').then((m) => { const p = ${play}; p.setSaveState(m.saveLocal({ ...p.save, name: '${name}', id: p.save?.id ?? 'S'.repeat(22) })); return p.save.id; })`);
+        const saveWas = await evaluate(`JSON.stringify(${play}.save)`);
+        const shareId = await nameAs('EduSmoke');
+        await evaluate(`${play}.eduShare.clear(), true`);
+        await resetNet();
+        await drain(shareId);
+        const n0 = await eduNet();
+        ok(!n0.share.on && n0.calls.grades.length === 0 && n0.record.gradedRuns === 1 && n0.record.gradeSum === 10000, `a player who does not share sends nothing (this device holds ${n0.record.gradedRuns} graded run)`);
+        // Sharing turned on: the name goes to the board, and the whole record follows with the sync.
+        const started = await evaluate(`(globalThis.__eduAnswer.share = { status: 'ok', sharedAt: '${R1}' }, globalThis.__eduAnswer.grades = { status: 'ok' }, ${play}.startEduShare(true).then((r) => JSON.stringify(r)))`).then(JSON.parse);
+        for (let i = 0; i < 40 && (await eduNet()).calls.grades.length < 1; i += 1) await sleep(100);
+        await sleep(200);
+        const n1 = await eduNet();
+        const g1 = n1.calls.grades[0] ?? {};
+        ok(started.status === 'ok' && JSON.stringify(n1.calls.shares) === JSON.stringify([{ id: shareId, name: 'EduSmoke', adult: true }]) && n1.share.on && n1.share.sharedAt === R1 && n1.share.name === 'EduSmoke', `turning sharing on posts the name with the adult box (${JSON.stringify(n1.calls.shares[0])}) and keeps the round`);
+        ok(n1.calls.grades.length === 1 && g1.id === shareId && g1.sharedAt === R1 && g1.runs === 1 && g1.gradeSum === 10000 && Object.keys(g1.badges).sort().join() === 'edu_drop_out,edu_grade_a,edu_perfect' && n1.share.sent.runs === 1 && n1.share.sent.gradeSum === 10000 && n1.share.sentBadges.length === 3 && n1.share.inflight === null && n1.calls.renames.length === 0, `the next sync sends the whole record, once: ${g1.runs} run, sum ${g1.gradeSum}, badges ${Object.keys(g1.badges ?? {}).join(' ')}`);
+        // A graded run later: only what is new. An ungraded one: nothing.
+        await resetNet();
+        await gradedRun(4, 5);
+        await drain(shareId);
+        await gradedRun(1, 2); // two answers: not graded
+        await drain(shareId);
+        const n2 = await eduNet();
+        ok(n2.calls.grades.length === 1 && n2.calls.grades[0].runs === 1 && n2.calls.grades[0].gradeSum === 8000 && Object.keys(n2.calls.grades[0].badges).length === 0 && n2.share.sent.runs === 2 && n2.share.sent.gradeSum === 18000, `a graded run sends itself alone (sum ${n2.calls.grades[0]?.gradeSum}); a run too short to grade sends nothing`);
+        // The server keeps a batch waiting (offline, rate limited): the same batch goes again, unchanged.
+        await resetNet();
+        await evaluate(`globalThis.__eduAnswer.grades = { status: 'keep' }, true`);
+        await gradedRun(5, 5);
+        await drain(shareId);
+        await gradedRun(3, 5);
+        await evaluate(`globalThis.__eduAnswer.grades = { status: 'ok' }, true`);
+        await drain(shareId);
+        await drain(shareId);
+        const n3 = await eduNet();
+        ok(n3.calls.grades.length === 3 && n3.calls.grades[0].batch === n3.calls.grades[1].batch && n3.calls.grades[1].runs === 1 && n3.calls.grades[1].gradeSum === 10000 && n3.calls.grades[2].batch !== n3.calls.grades[1].batch && n3.calls.grades[2].gradeSum === 6000 && n3.share.sent.runs === 4 && n3.share.sent.gradeSum === 34000, 'a batch the server did not take is resent unchanged; the run played meanwhile follows in the next');
+        // Another round on the server (sharing was stopped and started elsewhere): restart, and the whole record again, at once.
+        await resetNet();
+        await evaluate(`globalThis.__eduAnswer.grades = (b) => (b.sharedAt === '${R2}' ? { status: 'ok' } : { status: 'restart', sharedAt: '${R2}' }), true`);
+        await gradedRun(9, 10);
+        await drain(shareId);
+        const n4 = await eduNet();
+        const [old, whole] = n4.calls.grades;
+        ok(n4.calls.grades.length === 2 && old.sharedAt === R1 && old.runs === 1 && whole.sharedAt === R2 && whole.runs === 5 && whole.gradeSum === 43000 && Object.keys(whole.badges).length === 3 && n4.share.sharedAt === R2 && n4.share.sent.runs === 5 && n4.share.sent.gradeSum === 43000, `told to restart, the device takes the new round and sends its whole record again (${whole?.runs} runs, sum ${whole?.gradeSum}, its badges)`);
+        // A rename here goes to the board's row, and never adds one.
+        await resetNet();
+        await evaluate(`(globalThis.__eduAnswer.grades = { status: 'ok' }, globalThis.__eduAnswer.rename = true, true)`);
+        await nameAs('EduSmoke2');
+        await drain(shareId);
+        await drain(shareId);
+        const n5 = await eduNet();
+        ok(JSON.stringify(n5.calls.renames) === JSON.stringify([{ id: shareId, name: 'EduSmoke2' }]) && n5.share.name === 'EduSmoke2' && n5.calls.grades.length === 0 && n5.calls.shares.length === 0, 'a rename is sent to the board once, by the call that never adds a player');
+        // Stopped on another device: the rename (or a batch) says so, and this device stops.
+        await resetNet();
+        await evaluate(`(globalThis.__eduAnswer.rename = false, true)`);
+        await nameAs('EduSmoke3');
+        await gradedRun(5, 5);
+        await drain(shareId);
+        const n6 = await eduNet();
+        ok(!n6.share.on && n6.calls.grades.length === 0, 'the board says this player no longer shares (stopped elsewhere): the device turns sharing off and sends nothing');
+        await evaluate(`(globalThis.__eduAnswer.share = { status: 'ok', sharedAt: '${R2}' }, globalThis.__eduAnswer.grades = { status: 'notShared' }, ${play}.eduShare.turnOn('${R2}', 'EduSmoke3'), true)`);
+        await drain(shareId);
+        ok(!(await eduNet()).share.on, 'a batch answered "not shared" turns it off too');
+        // Stop sharing: only once the server has deleted the row.
+        await resetNet();
+        await evaluate(`(${play}.eduShare.turnOn('${R2}', 'EduSmoke3'), globalThis.__eduAnswer.unshare = null, true)`);
+        const stop1 = await evaluate(`${play}.stopEduShare()`);
+        const n7 = await eduNet();
+        await evaluate(`globalThis.__eduAnswer.unshare = true, true`);
+        const stop2 = await evaluate(`${play}.stopEduShare()`);
+        const n8 = await eduNet();
+        ok(stop1 === false && n7.share.on && stop2 === true && !n8.share.on && JSON.stringify(n8.calls.unshares) === JSON.stringify([shareId, shareId]), 'Stop sharing stays on while the board cannot be reached (the row is still there), and turns off once the row is deleted');
+        // Without a username there is nothing to share under; the other refusals come back as they are.
+        await evaluate(`import('./src/save.js').then((m) => (${play}.setSaveState(m.saveLocal({ ...${play}.save, name: '' })), true))`);
+        const noName = await evaluate(`${play}.startEduShare(true).then((r) => r.status)`);
+        await nameAs('EduSmoke3');
+        await evaluate(`(globalThis.__eduAnswer.share = { status: 'closed' }, true)`);
+        const closed = await evaluate(`${play}.startEduShare(true).then((r) => r.status)`);
+        ok(noName === 'noName' && closed === 'closed' && !(await eduNet()).share.on, `sharing needs a username ("${noName}"), and a closed board says so ("${closed}"): nothing is turned on`);
+        // Left on for Clear below; the lent player goes back.
+        await evaluate(`import('./src/save.js').then((m) => { const p = ${play}; globalThis.__eduAnswer = { share: { status: 'offline' }, rename: null, unshare: null, grades: { status: 'keep' } }; p.eduShare.turnOn('${R2}', 'EduSmoke3'); p.setSaveState(m.saveLocal(JSON.parse(${JSON.stringify(saveWas)}))); return true; })`);
+
         // Clear (the save panel's sign-out) wipes the cards' progress; the unlock, a setting, stays.
         await home();
-        const cleared = await evaluate(`(() => { const p = ${play}; const had = Boolean(localStorage.getItem('flappyPoop.eduSrs')); const before = p.eduStore.load(); p.signOut(); const r = p.eduStore.load(); return JSON.stringify({ had, hadBadges: Object.keys(before.badges).length, gone: Object.keys(r.cards).length === 0 && Object.keys(r.counters).length === 0 && Object.keys(r.badges).length === 0, unlocked: p.isEduUnlocked() }); })()`).then(JSON.parse);
+        const cleared = await evaluate(`(() => { const p = ${play}; const had = Boolean(localStorage.getItem('flappyPoop.eduSrs')); const before = p.eduStore.load(); const sharing = p.eduShare.load().on; p.signOut(); const r = p.eduStore.load(); return JSON.stringify({ had, hadBadges: Object.keys(before.badges).length, gone: Object.keys(r.cards).length === 0 && Object.keys(r.counters).length === 0 && Object.keys(r.badges).length === 0, unlocked: p.isEduUnlocked(), sharing, sharingAfter: p.eduShare.load().on, stored: localStorage.getItem('flappyPoop.eduShare') }); })()`).then(JSON.parse);
         ok(cleared.had && cleared.hadBadges === 3 && cleared.gone && cleared.unlocked, 'Clear wipes the cards\' progress, the education badges and the average, and keeps the unlock');
+        ok(cleared.sharing && !cleared.sharingAfter && cleared.stored === null, 'Clear forgets the 📚 board sharing on this device');
 
         // Put the device back as it was (the player Clear forgot, the settings), then home.
         await evaluate(`(() => { const want = JSON.parse(${all}); for (const k of Object.keys(localStorage)) if (!(k in want)) localStorage.removeItem(k); for (const [k, v] of Object.entries(want)) localStorage.setItem(k, v); return true; })()`);

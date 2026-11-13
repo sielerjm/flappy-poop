@@ -891,6 +891,28 @@ test('share_education follows the score board name claim; an education-only play
   assert.equal(JSON.stringify(prof).includes(E), false, 'no ids');
 });
 
+test('rename_education renames a sharing player and never adds one; the claim rule holds', async () => {
+  const db = await freshDb();
+  await openBoard(db);
+  const erename = (pid, name) => asAnon(db, 'select public.rename_education($1, $2) as r', [pid, name]).then((r) => r.rows[0].r);
+  const [P, Q] = ['ERN', 'ERQ'].map(id);
+  assert.equal(await erename(P, 'Nobody'), false, 'not sharing: false');
+  assert.deepEqual(await erows(db), [], 'and no row appears: a rename never shares for the player');
+  const at = await eshare(db, P, 'Before');
+  await egrades(db, P, id('RN1'), at, 3, 24000, { edu_grade_b: '2026-11-12' });
+  const before = (await erows(db))[0];
+  assert.equal(await erename(P, 'After'), true);
+  assert.deepEqual(await erows(db), [{ ...before, name: 'After' }], 'only the name changes: the round, the runs and the receipt stay');
+  await asAnon(db, 'select public.submit_score($1, $2, 3)', [Q, 'Held']);
+  await assert.rejects(erename(P, 'held'), /name taken/);
+  await assert.rejects(erename(P, ''), /bad name/);
+  await assert.rejects(erename('short', 'After'), /bad player id/);
+  // Stopped on another device: the rename answers false, and the row stays gone.
+  await eunshare(db, P);
+  assert.equal(await erename(P, 'Again'), false);
+  assert.deepEqual(await erows(db), []);
+});
+
 test('submit_education_grades adds a batch; a resent batch changes nothing; one batch per 5 s; the caps hold', async () => {
   const db = await freshDb();
   await openBoard(db);

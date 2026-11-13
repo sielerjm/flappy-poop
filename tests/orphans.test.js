@@ -22,6 +22,9 @@ const ALLOWED_EXPORTS = {
   glowAlphaAt: "test reference: the glow's alpha profile that glowStops() draws (tests/fart.test.js)",
   topScores: 'test hook: tests/save.test.js reads top lists as plain numbers (its last game use, isNewTop, is gone)',
   // Daily Dump (plan .claude/plans/2026-11-10-daily-dump.md): helpers land before their callers.
+  // The 📚 education board (plan 21, step B2): the client lands before its screens. Drop the
+  // entry when step B3's 📚 tab calls it (this audit fails until you do).
+  fetchEducationBoard: 'plan 21: the 📚 tab on the leaderboard reads it (step B3)',
 };
 
 /** UI string keys no source names literally: prefix → why (they are built at run time). */
