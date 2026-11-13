@@ -4863,6 +4863,47 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         ok(cleared.had && cleared.hadBadges === 3 && cleared.gone && cleared.unlocked, 'Clear wipes the cards\' progress, the education badges and the average, and keeps the unlock');
         ok(cleared.sharing && !cleared.sharingAfter && cleared.stored === null, 'Clear forgets the 📚 board sharing on this device');
 
+        // The education panels at a wide field (plan 25, A10): 1600 × 900, after the field re-fits.
+        // Play again's glow stays clear of Home, and the band clips no row.
+        // 👥 off for these runs (an earlier section may have left it on, and wide it would start a match).
+        const versusWas = await evaluate(`Boolean(__flappy.registry.get('versus'))`);
+        await evaluate(`__flappy.registry.set('versus', false), ${play}.setEduUnlocked(true), ${play}.settings.set({ education: true }), true`);
+        await home();
+        const until = async (expr) => {
+          for (let i = 0; i < 60 && !(await evaluate(expr)); i += 1) await sleep(100);
+        };
+        await cdp.send('Emulation.setDeviceMetricsOverride', { width: 1600, height: 900, deviceScaleFactor: 1, mobile: false });
+        await until(`__flappy.scale.width > 1000 && ${play}.state === 'ready' && !${play}.launching`);
+        const wideW = await evaluate(`__flappy.scale.width`);
+        await startEdu();
+        await evaluate(`(() => { const p = ${play}; p.graceLeftMs = 0; p.die(); return true; })()`);
+        await until(`__flappy.scene.isActive('Quiz') && Boolean(${Q}.card)`);
+        await evaluate(`(() => { const q = ${Q}; q.choose(q.order.findIndex((k) => k !== 'answer')); return true; })()`);
+        await sleep(300);
+        // Give up (one miss, so the note shows), retried until the panel is up: under load a press can
+        // land before the card takes it.
+        for (let i = 0; i < 40 && !(await evaluate(`__flappy.scene.isActive('Over')`)); i += 1) {
+          await evaluate(`__flappy.scene.isActive('Quiz') && ${Q}.decide('giveUp'), true`);
+          await sleep(200);
+        }
+        await sleep(400);
+        const w1 = await eduPanel();
+        const w1Gap = w1.halo.left - (w1.home.x + w1.home.width / 2);
+        ok(w1Gap >= 12 && w1.band.bottom <= w1.halo.top && w1.noteBottom <= w1.band.bottom && w1.band.offset === 0, `wide (${wideW} px field), a lost run: Play again's glow stops ${Math.round(w1Gap)} px short of Home, under the band, and the note ends inside the band (${Math.round(w1.noteBottom)} ≤ ${w1.band.bottom})`);
+        await startEdu();
+        await evaluate(`(() => { const p = ${play}; p.level = 7; p.applyLevel(); p.win(); return true; })()`);
+        await until(`__flappy.scene.isActive('Over')`);
+        await sleep(TT.retryLockoutMs + 400);
+        const w2 = await eduPanel();
+        const w2Falls = w2.fallsY + TT.over.cellH / 2;
+        const w2Gap = w2.halo.left - (w2.home.x + w2.home.width / 2);
+        ok(w2Gap >= 12 && w2Falls <= w2.band.bottom - 16 && (w2.noteTop >= w2.band.bottom || w2.noteBottom <= w2.band.bottom), `wide, a won run: the glow stops ${Math.round(w2Gap)} px short of Home; the ‼️ 😢 row ends in view (${Math.round(w2Falls)}) and the note is whole, in the band or below its bottom (${w2.band.bottom})`);
+        await home();
+        await cdp.send('Emulation.setDeviceMetricsOverride', { width: 720, height: 1280, deviceScaleFactor: 1, mobile: false });
+        await until(`__flappy.scale.width === 720`);
+        await evaluate(`__flappy.registry.set('versus', ${versusWas}), ${play}.scene.restart(), true`);
+        await until(`${play}.state === 'ready' && !${play}.launching`);
+
         // Put the device back as it was (the player Clear forgot, the settings), then home.
         await evaluate(`(() => { const want = JSON.parse(${all}); for (const k of Object.keys(localStorage)) if (!(k in want)) localStorage.removeItem(k); for (const [k, v] of Object.entries(want)) localStorage.setItem(k, v); return true; })()`);
         await evaluate(`(() => { const p = ${play}; p.eduUnlocked = false; p.educationOn = false; return true; })()`);
@@ -4887,6 +4928,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await tapAt(plainBand.box.left + 12, plainBand.cell.y);
         await sleep(400);
         ok(plainBand.offset === 0 && !(await evaluate(`__flappy.scene.isActive('Over')`)) && (await playState()) === 'ready', `a normal panel's band does not scroll (offset ${plainBand.offset}), and a tap on its empty space goes home`);
+
         await home();
       }
     });
