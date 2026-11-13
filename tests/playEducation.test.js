@@ -123,6 +123,22 @@ test('a test run answers a card without saving it or recording a pilot event; a 
   assert.deepEqual([saved.length, events.length], [1, 1], 'the control: a real run saves the card and, joined, records the answer');
 });
 
+test("an education run's end syncs what was already queued (answers, 📚 grades), records nothing of its own; a test run's end does neither (plan 25, A1)", () => {
+  const ending = (runIsTest) => {
+    const calls = [];
+    const s = playScene({
+      match: null, runIsTest, runIsEducation: true, pipes: { getChildren: () => [] }, items: { getChildren: () => [] }, beans: { getChildren: () => [] },
+      recordEducation: () => calls.push('recordEducation'), syncLeaderboard: () => calls.push('sync'), recordCareer: () => calls.push('career'),
+      best: { save: () => calls.push('best'), load: () => 0 },
+    });
+    for (const m of ['closeShop', 'endBoost', 'endSweep', 'markHowToSeen', 'setCharged', 'setMultiplierBadge', 'setProbioticPulse', 'setPauseBanner']) s[m] = () => {};
+    s.endRun();
+    return calls;
+  };
+  assert.deepEqual(ending(false), ['recordEducation', 'sync']);
+  assert.deepEqual(ending(true), [], 'a test run records and sends nothing');
+});
+
 test('🔬 never shows in a test run; in a joined education run it does (AUD-014)', () => {
   const badge = { text: '', visible: null, setVisible(v) { this.visible = v; return this; }, setText(t) { this.text = t; return this; }, setPosition() { return this; } };
   const s = playScene({ testBadge: badge, state: 'playing', runIsTest: true, runIsEducation: true, researchJoined: () => true, col: { x: 0 }, locale: 'en' });

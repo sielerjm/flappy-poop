@@ -3770,13 +3770,19 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         // The run really ends (an education crash opens the revive quiz: Give up), at a score above any
         // best, and neither the stores nor the career calls see it (plan 24, AUD-016: the old check
         // read the stores while the quiz was still up).
-        const career0 = await evaluate(`JSON.stringify({ posts: __career.posts.length, claims: __career.claims.length })`).then(JSON.parse);
+        // The run's end syncs what was already queued (plan 25, A1), so an earlier batch or claim may be
+        // sent again; nothing new may be: no new batch id, no new badge claimed, the career unchanged.
+        const sent = () => evaluate(`JSON.stringify({ batches: __career.posts.map((x) => x.batch), claims: __career.claims.flat() })`).then(JSON.parse);
+        const career0 = { ...(await sent()), totals: await careerNow() };
         await evaluate(`${play}.poop.body.setAllowGravity(false), ${play}.poop.setVelocity(0, 0), ${play}.poop.y = 640, ${play}.score = 999, ${play}.graceLeftMs = 0, ${play}.die(), true`);
         for (let i = 0; i < 40 && !(await evaluate(`__flappy.scene.isActive('Quiz')`)); i += 1) await sleep(100);
         await evaluate(`__flappy.scene.isActive('Quiz') && __flappy.scene.getScene('Quiz').decide('giveUp'), true`);
         for (let i = 0; i < 60 && !(await evaluate(`__flappy.scene.isActive('Over')`)); i += 1) await sleep(100);
-        const ended = await evaluate(`JSON.stringify({ over: __flappy.scene.isActive('Over'), state: ${play}.state, posts: __career.posts.length, claims: __career.claims.length })`).then(JSON.parse);
-        ok(ended.over && ended.state === 'dead' && (await stores()) === stores0 && ended.posts === career0.posts && ended.claims === career0.claims, `its end (a game over at 999, after Give up) records nothing: no best, top list, submit, career counters or badges`);
+        await sleep(300); // the end's sync
+        const ended = { ...(await evaluate(`JSON.stringify({ over: __flappy.scene.isActive('Over'), state: ${play}.state })`).then(JSON.parse)), ...(await sent()), totals: await careerNow() };
+        const newBatches = ended.batches.filter((b) => !career0.batches.includes(b));
+        const newClaims = ended.claims.filter((c) => !career0.claims.includes(c));
+        ok(ended.over && ended.state === 'dead' && (await stores()) === stores0 && newBatches.length === 0 && newClaims.length === 0 && JSON.stringify(ended.totals) === JSON.stringify(career0.totals), `its end (a game over at 999, after Give up) records nothing: no best, top list, submit, career counters or badges`);
 
         // A Daily Dump is never an education run, even with the 📚 switch on.
         await home();

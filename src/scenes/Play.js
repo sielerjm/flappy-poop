@@ -3529,10 +3529,13 @@ export class Play extends Phaser.Scene {
     // A test run records nothing: no legacy best, no top-list entry, no leaderboard sync.
     if (this.runIsTest) return;
     // Nor, before its public release, does an education run (plan 21): its cards were saved answer by
-    // answer; no best, top list, career counters, career badges or sync. Its own badges and average
-    // grade (plan 22) stay on this device with the cards (recordEducation).
+    // answer; no best, top list, career counters or career badges. Its own badges and average grade
+    // (plan 22) stay on this device with the cards (recordEducation). The sync still runs, for what
+    // was already queued (plan 25, A1): a tester's answers, the 📚 board's grades, an earlier run's
+    // best or counters; nothing of this run is in it.
     if (this.runIsEducation) {
       this.recordEducation();
+      this.syncLeaderboard();
       return;
     }
     // A Daily Dump records only itself: the attempt is final and its score queued for the 🌞 board,
