@@ -8,6 +8,26 @@ import { LOCALES } from './i18n.js';
 
 export const CHANGELOG = [
   {
+    version: '0.17.0',
+    date: '13 Nov 2026',
+    notes: {
+      en: [
+        'Learning mode: a level break offers 📚 Review, with what is waiting on a line underneath (new in blue, being learned in orange, due for review in green). Tap the numbers to see what they mean.',
+        'Before a level you have not reached yet, review the cards that are due. A card you miss comes back until you get it right, or bury it until tomorrow for coins (up to 3 a day).',
+        'Start a learning run at any level you have reached, skip ahead at a level break, or quit there: with your cards caught up, quitting costs nothing.',
+        'The quiz asks the cards that are due first and its numbers move with every answer; early reviews no longer pay coins. 💯 and 🤓 now count runs won from level 1.',
+        'Your cards reads more simply: new (not seen yet), learning (due now), to review (due now).',
+      ],
+      'zh-Hans': [
+        '学习模式：关卡间歇有 📚 复习按钮，下方一行显示还剩多少卡片（蓝色是新卡，橙色是学习中，绿色是待复习）。点数字可以看说明。',
+        '进入还没到过的关卡之前，要先复习到期的卡片。答错的卡片会再出现，直到答对；也可以花金币把它推到明天（每天最多 3 张）。',
+        '学习模式可以从到过的任何一关开始，也可以在关卡间歇跳过关卡或结束：卡片都复习完时，结束不会有任何损失。',
+        '答题先问到期的卡片，数字随每次作答变化；提前复习不再给金币。💯 和 🤓 现在只算从第 1 关打到通关的局。',
+        '「你的卡片」更简洁：新卡（还没见过）、学习中（已到期）、待复习（已到期）。',
+      ],
+    },
+  },
+  {
     version: '0.16.1',
     date: '12 Nov 2026',
     notes: {

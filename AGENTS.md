@@ -391,15 +391,33 @@ Return on "All caught up"), never Give up: Space is the flap key. **Its sounds**
 quiz (`book-open`), a page turns for each next card (`book-flip`), the book shuts when it is left
 (`book-close`); a wrong answer plays `sfx.hazard`; a right one that pays nothing (a revive, the bonus
 quiz) plays `sfx.score`, and one that pays (a break's) makes the coin's sound alone (`takeCoins`); the
-answer that wins everything back plays `sparkle` in the ding's place. **Level break**: a 📚 pill under
-the shop pill (the 🏅's row, `quizButtonShown`; chromeIntent's `'quiz'` input, only in an education
-run's break) asks about the segment just cleared (plus general cards); a right answer pays
-`education.breakCoins` (`takeCoins`); the shop's prices are `eduShopPrices(level)` (`Play.shopPrices`;
-`buyBlocker` takes `prices`). **What is waiting**, as in Anki (`cardCounts`: new, learning and review
-cards a quiz can still ask now, by `pickCard`'s filters; `Play.quizCounts`): the pill reads
-`📚 5 · 2 · 8` in blue, orange and green (`ui/countLine.js`; `📚 Quiz` with nothing waiting and in a
-test run), and the card shows `5 + 2 + 8` in a row of its own directly above its bottom buttons, the
-card on show counted and its kind underlined (`refreshCounts`; no line in a test run). **The run's
+answer that wins everything back plays `sparkle` in the ding's place. **Level break** (plan 25 laid it
+out: `eduBreakLayout` in logic.js): a **📚 Review** pill under the shop pill (the 🏅's row,
+`quizButtonShown`; chromeIntent's `'quiz'` input, only in an education run's break) opens the break's
+quiz, which asks due learning cards, then due reviews, then the cards missed in this break
+(`Play.breakMissed`, asked again as learning until answered right; the one just shown waits), then new
+cards of the segment just cleared (and general ones), then early reviews (`pickCard`'s `dueFirst`; the
+bonus quiz keeps new first). A counted card always comes before an early review, whatever the recent
+gap holds. A right answer to a counted card pays `education.breakCoins` (`takeCoins`); an early review
+pays nothing. The shop's prices are `eduShopPrices(level)` (`Play.shopPrices`; `buyBlocker` takes
+`prices`). **What is waiting**, as in Anki (`cardCounts`: new, learning (a miss of this break
+included) and review cards a quiz can still ask now; `Play.quizCounts`): three numbers in blue, orange
+and green on a line of their own under Review (`ui/countLine.js`; none in a test run; a tap, or A on
+their ring item, opens "Waiting in this quiz": `toggleBreakCounts`, `countLines`), and on the card
+`5 + 2 + 8` in a row of its own above its bottom buttons, the card on show counted and its kind
+underlined (`refreshCounts`; no line in a test run); a tap on the card's numbers opens the same lines
+(`Quiz.toggleCountsCard`). **The gate** (`breakGated`): a break into a level above the store's
+`unlockedLevel` (the highest level an education run, never a test run, has continued into) holds
+while the orange or green number is above 0: `resumePlay` keeps the break, the hint reads "📚 Review
+to continue", Review pulses. New cards stay optional. After a miss there the quiz offers **Bury**
+in its left slot (`canBury` / `buryCard`): `education.buryCoinsPerLevel` × the level just cleared,
+at most `buryPerDay` a local day, the card due again `buryMs` later; no pilot event. **Skip ▸ and
+Quit** sit in the break's right-hand column: Skip passes the next level at par per tap while a later
+level is unlocked (not in a test run); Quit takes two taps and ends the run, graded as a normal end
+when nothing is due, as a Give up (`breakGaveUp`) otherwise. **Start level**: with 📚 on and a later
+level unlocked, a ◀ level ▶ stepper sits in the 📚 row of the ready screen (`readyLayout`'s eduStart
+boxes, settings `eduStartLevel`); the run starts there through `testRunStart`. 💯 and the 🤓 streak
+count only **full** runs (`eduRunFacts`' `full`: from level 1, nothing skipped, won). **The run's
 tally** (`runQuiz`, built by `tallyAnswer` with one row per level) sits in the card's top row
 (`✅ right ❌ wrong`, once the run has an answer); a tap on it, or A on the ring, opens "This run", one
 line per level (`tallyLines`), as an info card over the quiz (`toggleRunCard`): any tap, Esc or B closes
@@ -631,8 +649,12 @@ src/
                             levelBarLayout, lerpColor),
                             best-score store, settings store (incl. locale,
                             howToSeenAt and hand: HANDS 'left' | 'right', the
-                            bean button's side) + howToPromptDue, vibrate
-                            helper, trayLayout, trayHit, readyLayout, readyHit,
+                            bean button's side; eduStartLevel 1–7, plan 25) +
+                            howToPromptDue, vibrate helper, trayLayout, trayHit,
+                            readyLayout (eduStart: the ◀ level ▶ stepper's boxes in
+                            the 📚 row), readyHit, nextEduStartLevel (wraps within
+                            the levels unlocked), eduBreakLayout (an education
+                            break: 💰, Review, the numbers under it, Skip and Quit),
                             LAST_UPDATED, issueUrl, openExternalUrl, chromeIntent
                             (inputs incl. 'changelog'; a Changelog over About closes
                             back to About without the lockout),
@@ -697,6 +719,10 @@ src/
                             'revive' or 'all'; the pill's and the card's numbers),
                             eduShopPrices (base × priceScale per level), masteryByDeck
                             (per deck: seen, mastered, total; "Your cards" sums it),
+                            plan 25: pickCard's dueFirst and missed (a level break's
+                            own order; counted cards before early reviews), cardCounts'
+                            missed, unlockLevel / unlockedLevel, bury / buriedOn,
+                            localDayKey;
                             createEduStore (LEADERBOARD.eduKey = flappyPoop.eduSrs:
                             each card's record and the last cards shown, and (plan
                             22) the education counters and badges: addRevive,
@@ -1989,7 +2015,10 @@ tests/                      node --test (schema.test.js, pilot.test.js, eduBoard
                             the streak, Give up only in strikes), reviveSettled,
                             tallyAnswer, eduShopPrices (rounded up), masteryByDeck
                             (retired cards out), createEduStore (records, badges, the
-                            average, Clear on the same instance), dueCount, cardText
+                            average, Clear on the same instance), dueCount, cardText.
+                            Plan 25: a break's own order, counted cards before early
+                            reviews, missed counts, the drain test with any recent gap,
+                            unlockLevel, bury and the local day
   questions.test.js         src/questions.js: decks, ids, a question and three
                             different options per card, text limits, complete zh versions (skipped while no
                             card has one), references cited and existing, enough live
@@ -2003,7 +2032,9 @@ tests/                      node --test (schema.test.js, pilot.test.js, eduBoard
                             / 'not shared' / a rename answered false. Plan 25: an
                             education run's end syncs (a test run's does not); test
                             mode turned on after the start saves nothing; the 📚
-                            glyph opens on its own pointer's release
+                            glyph opens on its own pointer's release; a break's misses
+                            asked again and early reviews unpaid; the gate; Bury;
+                            Skip ▸ and Quit (grading both ways)
   pilot.test.js             the tester pilot end to end: Play's pilot methods, the
                             real stores and leaderboard.js calls and the real save and
                             education data panels, against db/schema.sql through
@@ -2019,7 +2050,8 @@ tests/                      node --test (schema.test.js, pilot.test.js, eduBoard
                             two syncs both told to restart, the share store's rounds
   quiz.test.js              Quiz's rules in Node: a card under another overlay is
                             interrupted, nothing answered once the quiz is finishing,
-                            the 🚩 never navigates the game's tab, tapLocked
+                            the 🚩 never navigates the game's tab, tapLocked, the
+                            numbers' explainer (plan 25)
   jsonStore.test.js         src/store.js and the stores on it: storage is the truth,
                             a broken entry reads as empty, memory when storage throws
                             or is full, another tab's Clear holds
