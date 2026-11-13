@@ -232,6 +232,15 @@ The 🏆 tray button (or **T**) shows a shared **Top 25**. You need a username t
 
 Every player has a public profile: the save panel’s **👤 Profile** opens yours, and a name on any board opens theirs. You need a username to see profiles; without one, a popup offers **Create user**. A profile shows single-player stats (games, highest score, times you made it out, highest and average level, average score), your Daily Dump podiums, tournament medals and biggest rival, career totals (👑 times you took 1st place from someone, #️⃣ pipes passed, farts, 🥦 fiber, 🟡 coins, ‼️ long falls, 😢 close calls, …), player tags (🔧 game dev, 🎖️ played in the first month, 🆕 new this week) and **achievements**: badges for a score or level in one run, for making it out, and for lifetime milestones such as 100 farts, plus oddities like 🃏 four mystery boxes in a row with the same reward or 🧱 coming back after a week away. A badge earned in a run shows on the game-over panel, and every icon there (pickups, ‼️ long falls, 😢 close calls with a pipe, pipes, coins) explains itself when tapped. Tap any emoji or badge in a profile (or walk to it with a controller and press A) to see what it is; the pipes total counts from v0.14.1, long falls and close calls from v0.15.1. Some badges are time-limited quests that come and go. Counting started with v0.14.0, so lifetime totals begin there; score and level badges were credited from your saved bests. Test runs and two-player matches count nothing.
 
+### 📚 Education mode (test build)
+
+A learning mode is being tested with invited players: quiz cards about the gut and its microbes come up between levels and after a crash, and a review schedule decides which card comes back when. It is hidden unless a tester turns it on, and its cards are placeholders that are still being checked.
+
+- **Everything stays on your device** by default: your answers, your grades and the badges you earn there. These runs are not on the 🏆 boards.
+- **The 📚 board is opt-in.** In the user panel, **📚 Education data → Share my grades** puts your username, your average grade, the number of graded runs and your education badges on a 📚 board that other testers can see. It is for adults, and **Stop sharing** deletes it from the board at once.
+- **🔬 Tester data is opt-in too**, for adults with an invite code: the game then sends each quiz answer under a random id, to test the tools. No research is being done with it. [RESEARCH.md](RESEARCH.md) says exactly what is sent and how to withdraw.
+- **A card looks wrong?** Tap the 🚩 beside its code on the quiz card to report it.
+
 ![Finish line](docs/finish-divider.svg)
 
 ## 🛠️ For developers

@@ -348,8 +348,8 @@ release** (click, Enter / Space up, the pad's A up), since Play's keydown-SPACE 
 and the pad plugin reports a held button. Any error in the splash removes it and starts the game.
 
 **Education mode** (📚, 2026-11-13, v0.16.1, plan `.claude/plans/21-education.plan.md`: the tester
-build, its playtest polish and Stage 3a; the old plans 22 and 23 are merged into it). Hidden until a
-device is unlocked: typing one of `EDUCATION.words` (`poopschool`) as the username and pressing Save
+build, its playtest polish and Stage 3, "tester-complete"; the old plans 22 and 23 are merged into
+it). Hidden until a device is unlocked: typing one of `EDUCATION.words` (`poopschool`) as the username and pressing Save
 (`toggleEducationUnlock` in the save panel, like the test word; never stored as a name) sets the
 setting `eduUnlocked` (`Play.setEduUnlocked`); typing it again locks it. The ready screen then offers a
 📚 switch (settings `education`, remembered) under 🚽, in the 👥 slot on a phone; on a wide window the
@@ -438,9 +438,36 @@ Play again glows `over.pairGlowPx`, clear of Home), so a lost run's band is the 
 so the first row under the coins stays in view and the rest starts below the band's bottom, whole,
 where it scrolls. Your own **profile**, with education unlocked, ends with a 📚 Education section: the
 average grade, the graded runs and the eight badges.
-Still to come (plan 21): Stage 3b, the 📚 board by average grade with opt-in sharing and the tester
-pilot; then the privacy foundation, the public release with the age question (audited cards only),
-the research beta and the study.
+**What leaves the device, and only by choice** (plan 21, Stage 3b): the **📚 Education data** panel
+(`src/ui/eduDataPanel.js`, a DOM panel like the user panel; from a button in the user panel shown
+while the mode is unlocked, the 📚 board's footer and the profile's row; `Play.openEduData`). An "I
+am 18 or older" box is asked every time and never remembered. **Share my grades** puts the player's
+name, average grade, graded-run count and education badges on the **📚 board**
+(`Play.startEduShare` / `stopEduShare`; `share_education` / `unshare_education` in `db/schema.sql`,
+closed to all but 🔧 devs until the owner runs `admin_set_education_open(true)`). The device's
+record stays the education store's; `createEduShareStore` (`flappyPoop.eduShare`) remembers the
+round of sharing the server named (`shared_at`) and what the board already has, and
+`Play.drainEduShare` (after the career in `syncLeaderboard`) sends what is new, at most 50 runs a
+batch: `'restart'` (another round: sharing was stopped and started elsewhere) takes the server's
+round and sends the whole record again; `'not shared'` turns sharing off here; a rename goes through
+`rename_education`, which never adds a player. Stop sharing deletes the row and stays on until the
+server has done so. The board is a fourth leaderboard tab on unlocked devices
+(`leaderboardLayout({ tabs })`, `Leaderboard.showEducation`, `education_board`: from
+`education.boardMinRuns` graded runs, by average grade); a sharing player's profile carries
+`education` for anyone (`player_stats`), drawn only on unlocked devices. **🔬 Tester data** (the
+pilot; the notice is `RESEARCH.md`, its version `EDUCATION.consentVersion`): an invited adult joins
+with the invite code (`Play.joinResearch`; `enrol_research` checks its SHA-256 and the code is kept
+nowhere), after which `quizAnswer` records each answer as an event (`src/research.js`:
+`answerEvent`, whose fields are exactly the server's list; `createConsentStore`
+`flappyPoop.eduConsent`; `createResearchQueue` `flappyPoop.researchQueue`), never in a test run and
+only under the current notice; `Play.drainResearch` sends them early in the sync, username or not
+(`submit_research_events`, under a random research id, never the player id). Withdraw
+(`leaveResearch`, `delete_research`) deletes the participant and their answers. 🔬 shows beside 📚
+in the HUD while answers are recorded. The pilot tests the tools: its answers are never analysed
+and are purged before any later phase (`admin_purge_phase`). Clear forgets the sharing and the
+consent on the device and warns that what was sent stays until Stop sharing / Withdraw.
+Still to come (plan 21): the privacy foundation (delete account, export, the age question, a
+privacy notice), the public release (audited cards only), the research beta and the study.
 
 It is deliberately small: plain ES modules, no bundler, no runtime npm
 dependencies (one devDependency for the schema tests), Phaser 4 loaded from a CDN, deployed to GitHub Pages straight from
@@ -649,6 +676,15 @@ src/
                             it) / optionText, cardSource (short citations: "Martinsen
                             et al. 2005"), EDUCATION_EMOJI. Fully unit-tested
                             (tests/education.test.js).
+  research.js               The education tester pilot's client (plan 21), NO
+                            Phaser/DOM: answerEvent (one quiz answer as a flat
+                            record; EVENT_FIELDS is the server's list of known
+                            fields, pinned by tests/research.test.js), cleanEvent,
+                            tuningVersion (a fingerprint of TUNING.education),
+                            createConsentStore (flappyPoop.eduConsent: version,
+                            phase, at; never the invite code), createResearchQueue
+                            (flappyPoop.researchQueue: pending events and one batch
+                            in flight). Nothing here runs unless a tester joined.
   questions.js              Education mode's question bank (plan 21), NO
                             Phaser/DOM: DECKS (the LEVELS keys, then 'general'),
                             CARDS ({ id, deck, q, answer, wrong: [w1, w2], explain,
@@ -726,10 +762,23 @@ src/
                             / 'rejected'), claimAchievements ({ stored, closed } /
                             'rejected' / null), fetchPlayerStats({ id } or { name }:
                             the profile, { found: false }, or null).
+                            The 📚 board (plan 21): createEduShareStore
+                            (flappyPoop.eduShare: on, the round sharedAt, the name
+                            last sent, what was sent, one batch in flight;
+                            beginBatch(record, makeId) works out what is new, 50 runs
+                            a batch), shareEducation ({ status: 'ok', sharedAt } /
+                            'closed' / 'notAdult' / 'nameTaken' / 'rejected' /
+                            'offline'), renameEducation, unshareEducation (true /
+                            null), submitEducationGrades ('ok' / 'restart' with
+                            sharedAt / 'notShared' / 'rejected' / 'keep'),
+                            fetchEducationBoard; normalizeProfile keeps a cleaned
+                            `education`. The tester pilot: enrolResearch,
+                            submitResearchEvents ('ok' / 'notEnrolled' / 'rejected'
+                            / 'keep'), deleteResearch.
                             Writes go through the submit_score(), merge_players(),
                             submit_tournament(), submit_daily_score(),
-                            submit_counters() and claim_achievements() SQL
-                            functions.
+                            submit_counters(), claim_achievements(), the 📚 board's
+                            and the pilot's SQL functions.
                             Fully unit-tested with a fake fetch.
   share.js                  Game-over share, NO Phaser; navigator / document / URL
                             injected: shareMode ('share' when
@@ -927,7 +976,25 @@ src/
                             steps, unknown → saved with the offline note. Load
                             from another id → Play.queueMerge, "saveMerged". Clear
                             → warn, then Play.signOut on a second tap inside
-                            saveClearConfirmMs.
+                            saveClearConfirmMs; the warning adds a note for a player
+                            who shares on the 📚 board and one for a pilot tester
+                            (what was sent stays until Stop sharing / Withdraw).
+                            A 📚 Education data button beside Profile, shown only
+                            while education mode is unlocked (refreshClear; it
+                            appears as soon as the word is typed), closes this
+                            panel and opens ui/eduDataPanel.js.
+    eduDataPanel.js         Plain DOM panel (plan 21, Stage 3b), built like
+                            savePanel.js: the one place a player chooses what of
+                            their education record leaves the device. An "I am 18
+                            or older" box (unticked on every open), Share my grades
+                            (Play.startEduShare / stopEduShare; each refusal its own
+                            line) and 🔬 Tester data (the notice's link, the invite
+                            code and Join, then Withdraw and delete my data:
+                            Play.joinResearch / leaveResearch). openEduDataPanel({
+                            game, play, locale, onClose }), closeEduDataPanel,
+                            isEduDataPanelOpen (the pad waits under it: padIntent's
+                            savePanelOpen). onClose(changed) lets the board and the
+                            profile reload when sharing changed.
                             Opened by the ready screen's user button, with
                             { focusName: true } while there is no username (caret
                             in the field at once). It stays open after Save so the
@@ -1452,6 +1519,14 @@ src/
                             name on the three boards opens that player's profile
                             over the board (sv.link: a tap, not a drag; only while
                             the board is on top); the – rows are not names.
+                            A fourth tab, 📚 ('education'), only when
+                            Play.isEduUnlocked() (tabList; leaderboardLayout takes
+                            the tab count): showEducation draws rank, name, grade
+                            and runs from Play.fetchEduBoard; the footer is the
+                            player's rank (eduYouText), the graded runs still
+                            missing, or a link to the Education data panel
+                            (footerAction; the scene restarts when sharing changed
+                            there).
     Stats.js                Overlay (plan 08; chromeIntent 'stats': on its own, or
                             over the board or the 🌞 popup, closing back to it
                             without the lockout): a player's profile, launched by
@@ -1473,6 +1548,13 @@ src/
                             the nearest cell (focusNearest over cells only), ✕ above
                             the first row (scrolls to the top). Tags (view.tags, TAGS: 🔧 🎖️ 🆕) lead the Achievements grid, each a card. No username: the gate
                             (buildGate) instead; refresh() restarts it either way.
+                            The 📚 Education section (education unlocked): your own
+                            has an "On the 📚 board" row (Shared / Not shared) that
+                            opens the Education data panel, follows the server's
+                            answer both ways (Play.noteEduShared), and a Tester
+                            pilot row while joined; another player's shows only
+                            what they share (sharedEduView: grade, runs, earned
+                            badges).
                             Your own profile, with education unlocked, ends with a
                             📚 Education section (plan 22; eduView, from this device's
                             education store): the average grade, the graded runs,
@@ -1591,7 +1673,22 @@ db/schema.sql               Supabase schema: scores table (player_id = save-code
                             the server unused: tags show on profiles only); admin_set_dev (owner only, by name); 👑 dethroned
                             (add_server_counter from submit_score / submit_daily_score
                             when a post takes the board's #1 from another player),
-                            refused in a client batch. Run by
+                            refused in a client batch. Plan 21 (2026-11-13): the 📚
+                            board (education_settings: board_open, invite_hash,
+                            phase; education_public: one row per sharing player;
+                            share_education, submit_education_grades with the
+                            shared_at round and 'restart', rename_education,
+                            unshare_education, education_board; player_stats gains
+                            `education`; admin_set_education_open, owner only) and
+                            the tester pilot (research_participants, the one place
+                            a player id meets a research id; research_responses,
+                            answers under the research id; enrol_research with the
+                            invite's SHA-256, submit_research_events with the known
+                            fields only, delete_research; admin_set_invite (16
+                            characters or more), admin_purge_phase and four
+                            security_invoker views, owner only). fold_player moves
+                            a shared row or a participant; two shared rows start a
+                            new, empty round. Run by
                             hand in the SQL editor, never by any integration; it is
                             the source of truth for the backend. Apply it BEFORE
                             pushing a client that depends on new functions.
@@ -1782,7 +1879,17 @@ tests/                      node --test (schema.test.js needs `npm install`: PGl
                             daily: the cap / level pins, client = server level over
                             a year, today / yesterday only, first post kept, the
                             name claim, the board (`me`, `total`), the day in UTC
-                            under other session time zones, the fold, anon access
+                            under other session time zones, the fold, anon access;
+                            the 📚 board (closed until opened, adults only, the name
+                            claim, batches and their receipt, 'restart', the board's
+                            order and minimum, rename, unshare, the fold) and the
+                            pilot (the invite code, events under a research id with
+                            no player id, malformed batches, withdrawal, the owner's
+                            views, a purge, the fold)
+  research.test.js          src/research.js: answerEvent's fields (exactly the
+                            server's list in db/schema.sql), cleanEvent, the consent
+                            store, the queue; RESEARCH.md names every field and the
+                            consent version, and holds no email address
   scenes.test.js            no scene method is named after a Phaser.Scene property
                             (add, load, input, time, render, …): such a method is
                             shadowed by the plugin and throws inside create(), which
@@ -1982,12 +2089,18 @@ tools/
                             device back): education-unlock (the word, the 📚 switch,
                             the three switches, nothing recorded), education-quiz (the
                             pill, answers by tap / key / pad, coins, every card's fit
-                            both ways, the buttons and keys, the ❔ pill and view, the
-                            sounds, the level's prices), education-revive (every
+                            both ways, the buttons and keys, the counts on the pill
+                            and the card, the tally and its "This run" card, the 🚩,
+                            the sounds, the level's prices), education-revive (every
                             revive path: the pause, the refill under the card, Fly
                             on, a level's end, a wide field, a test run's quiz),
                             education-over (the tally, the bonus quiz, the badges
-                            and the profile's section, the scroll band, Clear).
+                            and the profile's section, the scroll band, the 📚
+                            board's sending, Clear), education-share (the Education
+                            data panel, the 📚 tab, the profiles' sections, the
+                            tester pilot: join, record, send, withdraw). The 📚
+                            board's and the pilot's calls are stubbed at boot
+                            (globalThis.__edu / __eduAnswer), like the career's.
                             OVERLAYS lists Quiz; NEEDS_RUN keeps the ready-screen
                             overlay loops off it.
                             Zero dependencies (fetch + WebSocket).

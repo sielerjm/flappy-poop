@@ -13,10 +13,12 @@ export const CHANGELOG = [
     notes: {
       en: [
         'A test build of a learning mode for invited testers: quiz cards about the gut and its microbes, in level breaks and after a crash. Hidden for everyone else for now.',
+        'Testers of the learning mode can choose to share their average grade on a 📚 board, and can report a card with the 🚩 beside its code.',
         'The shop shows your coins and its prices with the corn kernel, as the rest of the game does.',
       ],
       'zh-Hans': [
         '为受邀测试者准备的学习模式测试版：在关卡间歇和撞到之后回答关于肠道及其微生物的问答卡。目前对其他玩家隐藏。',
+        '学习模式的测试者可以选择把平均成绩分享到 📚 排行榜，也可以点卡片编号旁的 🚩 报告有问题的卡片。',
         '商店里的金币数和价格改用玉米粒图标显示，和游戏其他地方一致。',
       ],
     },
