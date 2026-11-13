@@ -941,7 +941,7 @@ export class Play extends Phaser.Scene {
   refreshLevelBanner() {
     // Single player with coins in the purse: "Tap to continue · 💰 to shop".
     const shop = !this.match && this.purseCoins() > 0;
-    const [title, hint] = levelBannerText(this.locale, this.level, LEVELS, { shop, education: this.runIsEducation }).split('\n');
+    const [title, hint] = levelBannerText(this.locale, this.level, LEVELS, { shop, education: this.runIsEducation, gate: this.breakGated() }).split('\n');
     this.levelTitle?.setText(title);
     // A match's break is a ready check: the hint is this player's state ("Tap when ready", then
     // "Ready! Waiting for P2…"); the shared count starts once both are ready (Versus.onLevelTap).
@@ -1785,6 +1785,7 @@ export class Play extends Phaser.Scene {
     this.quizOpen = false;
     this.refreshEduDue();
     this.refreshShopButton();
+    if (this.levelBreak) this.refreshLevelBanner(); // the gate's hint follows what the quiz cleared (plan 25)
     if (mode === 'revive') this.reviveDone();
   }
 
@@ -2366,6 +2367,13 @@ export class Play extends Phaser.Scene {
 
   resumePlay() {
     if (this.state !== 'paused') return;
+    // The gate (plan 25): a break before a level not yet unlocked stays while cards are due; the hint
+    // says so and Review pulses (refreshQuizButton).
+    if (this.levelBreak && !this.respawnPaused && this.breakGated()) {
+      this.refreshLevelBanner();
+      this.refreshShopButton();
+      return;
+    }
     this.focus?.hide();
     if (this.respawnPaused) {
       // A pause taken mid-respawn: the respawn clock picks up where it stopped. No bounce and no
@@ -3322,8 +3330,22 @@ export class Play extends Phaser.Scene {
     const shown = this.quizButtonShown();
     const counts = shown ? this.quizCounts({ mode: 'break' }) : null;
     this.quizButton.setText(`${EDUCATION_EMOJI} ${t(this.locale, 'reviewPill')}`).setVisible(shown);
+    this.quizButton.pulse(shown && this.breakGated());
     if (counts) this.quizCountLine.set(counts);
     this.quizCountLine.setVisible(shown && Boolean(counts));
+  }
+
+  /**
+   * The gate (plan 25, B6): an education run's level break into a level not yet unlocked
+   * (eduStore.unlockedLevel), with a card due: a learning or review card due now, or one missed in
+   * this break and not yet answered right (the orange and green numbers). New cards stay optional.
+   * Never in a test run or a match. resumePlay holds the break while it is true.
+   */
+  breakGated() {
+    if (!this.levelBreak || !this.runIsEducation || this.runIsTest || this.match) return false;
+    if (this.level <= (this.eduStore?.load().unlockedLevel ?? 1)) return false;
+    const counts = this.quizCounts({ mode: 'break' });
+    return Boolean(counts) && counts.learning + counts.review > 0;
   }
 
   /**

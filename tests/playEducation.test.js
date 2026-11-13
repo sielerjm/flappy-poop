@@ -221,6 +221,36 @@ test("a level break's quiz: a miss is asked again and counted as learning until 
   assert.deepEqual(s.breakMissed, [], 'outside a break (a revive) nothing is kept for later');
 });
 
+test('the gate (plan 25, B6): a break into a level not yet unlocked holds while a learning or review card is due; new cards, an unlocked level, a test run or a match never hold it', () => {
+  const now = Date.now();
+  const store = createEduStore(fakeStorage());
+  const due = CARDS.find((c) => c.deck === 'stomach');
+  store.answer(due.id, { phase: 'learning', step: 0, ease: 2.5, intervalMs: 0, dueAt: now - 1000, reps: 0, lapses: 0, seen: 1, right: 0, firstAt: now - 60000, lastAt: now - 60000 });
+  const gate = (over = {}) => {
+    const s = playScene({ eduStore: store, level: 2, levelBreak: true, runIsEducation: true, runIsTest: false, match: null, registry: registry(), breakMissed: [], ...over });
+    return s.breakGated();
+  };
+  assert.equal(gate(), true, 'level 2 is not unlocked, and a learning card is due');
+  assert.equal(gate({ runIsTest: true }), false, 'never in a test run');
+  assert.equal(gate({ match: { seed: 1 } }), false, 'never in a match');
+  assert.equal(gate({ levelBreak: false }), false, 'only in a break');
+  store.unlockLevel(2);
+  assert.equal(gate(), false, 'an unlocked level opens whatever is due');
+  assert.equal(gate({ level: 3 }), true);
+  // Answered right: nothing due, the gate opens; new cards stay optional.
+  store.answer(due.id, { ...store.load().cards[due.id], step: 1, dueAt: now + 600000 });
+  assert.equal(gate({ level: 3 }), false);
+  // A miss in this break holds it again, until answered right.
+  assert.equal(gate({ level: 3, breakMissed: [due.id] }), true);
+});
+
+test('resumePlay keeps a gated break: the state stays paused and the break stays (plan 25, B6)', () => {
+  const calls = [];
+  const s = playScene({ state: 'paused', levelBreak: true, respawnPaused: false, refreshLevelBanner: () => calls.push('banner'), refreshShopButton: () => calls.push('pill'), breakGated: () => true, endLevelBreak: () => calls.push('end') });
+  s.resumePlay();
+  assert.deepEqual([s.state, s.levelBreak, calls], ['paused', true, ['banner', 'pill']]);
+});
+
 test('🔬 never shows in a test run; in a joined education run it does (AUD-014)', () => {
   const badge = { text: '', visible: null, setVisible(v) { this.visible = v; return this; }, setText(t) { this.text = t; return this; }, setPosition() { return this; } };
   const s = playScene({ testBadge: badge, state: 'playing', runIsTest: true, runIsEducation: true, researchJoined: () => true, col: { x: 0 }, locale: 'en' });

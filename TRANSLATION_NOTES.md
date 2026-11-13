@@ -107,6 +107,8 @@ Short, playful, clear. Fit a 720×1280 logical field; How to play / About body w
 | levelShopHint | Tap to continue · 💰 to shop | 点击继续 · 💰 进商店 |
 | levelQuizHint | Tap to continue · 📚 review | 点击继续 · 📚 复习 |
 | levelQuizShopHint | Tap to continue · 📚 review · 💰 shop | 点击继续 · 📚 复习 · 💰 商店 |
+| levelGateHint | 📚 Review to continue (plan 25: kept short, it pulses at the screen's width; a break before a level not yet unlocked; a tap does not continue until the orange and green numbers are 0) | 📚 复习后才能继续 |
+| levelGateShopHint | 📚 Review to continue · 💰 shop | 📚 复习后继续 · 💰 商店 |
 | shopTitle | SHOP | 商店 |
 | shopCoins | Your coins | 你的金币 |
 | shopFiber | Fiber · +3 points | 纤维 · +3 分 |

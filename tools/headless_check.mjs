@@ -4175,6 +4175,27 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await evaluate(`${Q}.leftBtn.press(), true`); // Return
         await sleep(300);
 
+        // The gate (plan 25, B6): this break leads into level 2, not unlocked yet. With a card due, a tap
+        // does not continue and the hint says why; once the due cards are answered right it does.
+        await sleep(400);
+        const crafted3 = await evaluate(
+          `Promise.all([import('./src/education.js'), import('./src/questions.js')]).then(([e, q]) => { const now = Date.now(); const near = q.CARDS.filter((c) => !c.retired && (c.deck === 'stomach' || c.deck === 'general')); const cards = {}; near.forEach((c, i) => { cards[c.id] = i === 0 ? e.schedule(null, 'again', now - 20 * 60000) : i === 1 ? e.schedule(null, 'easy', now - 30 * 86400000) : e.schedule(null, 'easy', now); }); localStorage.setItem('flappyPoop.eduSrs', JSON.stringify({ v: 1, cards, recent: [], counters: {}, badges: {} })); const p = ${play}; p.breakMissed = []; p.refreshShopButton(); const l = p.quizCountLine; return JSON.stringify({ learning: near[0].id, review: near[1].id, visible: l.visible, text: l.text, label: p.quizButton.getText() }); })`,
+        ).then(JSON.parse);
+        await evaluate(`${play}.refreshLevelBanner(), true`);
+        const gate0 = await evaluate(`JSON.stringify({ gated: ${play}.breakGated(), hint: ${play}.levelHint.text, unlocked: ${play}.eduStore.load().unlockedLevel })`).then(JSON.parse);
+        await sleep(TT.retryLockoutMs + 100);
+        await chrome('tap');
+        await sleep(200);
+        const gate1 = await evaluate(`JSON.stringify({ state: ${play}.state, lb: ${play}.levelBreak })`).then(JSON.parse);
+        const gateHint = await tx(gate0.hint.includes('💰') ? 'levelGateShopHint' : 'levelGateHint');
+        ok(gate0.gated && gate0.unlocked === 1 && gate0.hint === gateHint && gate1.state === 'paused' && gate1.lb, `a break into a level not yet unlocked, with cards due, holds: "${gate0.hint}", and a tap does not continue`);
+        await reopen();
+        await answerRight();
+        await answerRight();
+        await evaluate(`${Q}.leftBtn.press(), true`); // Return
+        await sleep(300);
+        const gate2 = await evaluate(`JSON.stringify({ gated: ${play}.breakGated(), hint: ${play}.levelHint.text })`).then(JSON.parse);
+        ok(!gate2.gated && !gate2.hint.startsWith('📚'), `the due cards answered right, the gate opens: "${gate2.hint}"`);
         // The pill is back, and the shop sells at level 2's prices (eduShopPrices), not the base ones.
         await sleep(400);
         const shop = await evaluate(`Promise.all([import('./src/education.js'), import('./src/i18n.js')]).then(([e, i]) => { const p = ${play}; const pillBack = p.quizButton.visible; p.handleChrome('shop'); const want = e.eduShopPrices(2); const shown = Object.fromEntries(Object.entries(p.shop.rows).map(([id, r]) => [id, r.price.text])); const label = Object.fromEntries(Object.keys(want).map((id) => [id, i.countText(want[id])])); p.closeShop(); return JSON.stringify({ pillBack, shown, label, want, base: p.shopPrices === undefined ? null : JSON.stringify(p.shopPrices()) === JSON.stringify(want) }); })`).then(JSON.parse);

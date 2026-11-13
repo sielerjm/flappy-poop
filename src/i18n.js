@@ -17,6 +17,8 @@ const STRINGS = {
     levelShopHint: 'Tap to continue · 💰 to shop',
     levelQuizHint: 'Tap to continue · 📚 review',
     levelQuizShopHint: 'Tap to continue · 📚 review · 💰 shop',
+    levelGateHint: '📚 Review to continue',
+    levelGateShopHint: '📚 Review to continue · 💰 shop',
     shopTitle: 'SHOP',
     shopCoins: 'Your coins',
     shopFiber: 'Fiber · +3 points',
@@ -488,6 +490,8 @@ Inspired by Flappy Bird`,
     levelShopHint: '点击继续 · 💰 进商店',
     levelQuizHint: '点击继续 · 📚 复习',
     levelQuizShopHint: '点击继续 · 📚 复习 · 💰 商店',
+    levelGateHint: '📚 复习后才能继续',
+    levelGateShopHint: '📚 复习后继续 · 💰 商店',
     shopTitle: '商店',
     shopCoins: '你的金币',
     shopFiber: '纤维 · +3 分',
@@ -1003,11 +1007,12 @@ export function howToItems(locale) {
  * omitted past the named list) and "Tap to continue", or with `shop` (coins in
  * the purse) "Tap to continue · 💰 to shop".
  */
-export function levelBannerText(locale, level, levels, { shop = false, education = false } = {}) {
+export function levelBannerText(locale, level, levels, { shop = false, education = false, gate = false } = {}) {
   const key = levels?.[level - 1]?.key;
   const title = t(locale, 'levelBanner').replace('{n}', String(level));
   const name = key ? t(locale, `level.${key}`) : '';
-  const hint = education ? (shop ? 'levelQuizShopHint' : 'levelQuizHint') : shop ? 'levelShopHint' : 'levelContinue';
+  // A gated break (plan 25): the next level opens only once the cards due are answered right.
+  const hint = gate ? (shop ? 'levelGateShopHint' : 'levelGateHint') : education ? (shop ? 'levelQuizShopHint' : 'levelQuizHint') : shop ? 'levelShopHint' : 'levelContinue';
   return `${name ? `${title} · ${name}` : title}\n${t(locale, hint)}`;
 }
 
