@@ -349,7 +349,8 @@ export class Quiz extends Phaser.Scene {
       onPress: null,
       /** Label and action; shows it, not held. */
       set(label, onPress) {
-        text.setText(label);
+        text.setText(label).setScale(1);
+        if (text.width > width - 24) text.setScale((width - 24) / text.width); // a long label fits its button (plan 25)
         button.onPress = onPress;
         button.hold(false);
         return button.setShown(true);
@@ -583,7 +584,13 @@ export class Quiz extends Phaser.Scene {
   breakStep(correct) {
     const coins = this.lastAnswer?.coins ?? 0;
     this.say(correct && coins ? t(this.locale, 'quizRightCoins').replace('{n}', String(coins)) : t(this.locale, correct ? 'quizRight' : 'quizWrong'), correct, Boolean(correct && coins));
-    this.showWayOut();
+    // At a gate, a miss may be buried until tomorrow for coins (plan 25, B7): Bury takes the way out's
+    // place (the ✕ still closes the quiz).
+    if (!correct && this.mode === 'break' && this.play?.canBury?.(this.card.id)) {
+      this.leftBtn.set(t(this.locale, 'quizBury').replace('{n}', String(this.play.buryPrice())), () => this.bury());
+    } else {
+      this.showWayOut();
+    }
     if (correct) this.topBtn.set(t(this.locale, 'quizWhy'), () => this.showWhy());
     else this.showWhy();
     this.holdAfterWrong(this.rightBtn.set(t(this.locale, 'quizNext'), () => this.nextCard()), correct);
@@ -680,6 +687,12 @@ export class Quiz extends Phaser.Scene {
       .setText(audited ? t(this.locale, 'quizSource').replace('{source}', cardSource(this.card)) : '')
       .setVisible(audited);
     this.ring('right');
+  }
+
+  /** Bury the card just missed (Play.buryCard: the coins, 24 h), then the next card. */
+  bury() {
+    if (!this.card || !this.answered || this.finishing || !isTopOverlay(this) || this.runCard?.open) return;
+    if (this.play?.buryCard?.(this.card.id)) this.nextCard();
   }
 
   /** Next card (the break's Next and Enter): once answered and not held. */

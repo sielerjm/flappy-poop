@@ -251,6 +251,42 @@ test('resumePlay keeps a gated break: the state stays paused and the break stays
   assert.deepEqual([s.state, s.levelBreak, calls], ['paused', true, ['banner', 'pill']]);
 });
 
+test('bury at a gate (plan 25, B7): only a card missed in this break, 3 × the level cleared, while the purse covers it and under the day\'s cap; never in a test run; it records no pilot event', async () => {
+  const { localDayKey } = await import('../src/education.js');
+  const now = Date.now();
+  const store = createEduStore(fakeStorage());
+  const card = CARDS.find((c) => c.deck === 'duodenum') ?? CARDS[0];
+  const seen = { phase: 'learning', step: 0, ease: 2.5, intervalMs: 0, dueAt: now + 60000, reps: 0, lapses: 0, seen: 1, right: 0, firstAt: now - 60000, lastAt: now };
+  store.answer(card.id, seen);
+  let coins = 20;
+  const events = [];
+  const make = (over = {}) => {
+    const s = playScene({
+      eduStore: store, level: 3, levelBreak: true, runIsEducation: true, runIsTest: false, match: null, registry: registry(), breakMissed: [card.id],
+      effects: { coins: () => coins, spendCoins: (n) => (coins -= n) }, refreshLevelBanner() {}, refreshShopButton() {}, refreshCoinHud() {}, recordAnswerEvent: (e) => events.push(e), ...over,
+    });
+    return s;
+  };
+  const s = make();
+  assert.equal(s.buryPrice(), 3 * 2, 'the break before level 3: level 2 cleared, 6 coins');
+  assert.equal(s.canBury(card.id), true);
+  assert.equal(make({ breakMissed: [] }).canBury(card.id), false, 'only a card missed in this break');
+  assert.equal(make({ runIsTest: true }).canBury(card.id), false, 'never in a test run');
+  coins = 5;
+  assert.equal(s.canBury(card.id), false, 'the purse must cover it');
+  coins = 20;
+  assert.equal(s.buryCard(card.id), true);
+  assert.equal(coins, 14, 'the price is paid');
+  assert.ok(store.load().cards[card.id].dueAt >= now + T.education.buryMs, 'the card waits a day');
+  assert.deepEqual(s.breakMissed, [], 'and is no longer missed here');
+  assert.equal(events.length, 0, 'no pilot event');
+  // The day's cap.
+  for (let i = store.buriedOn(localDayKey()); i < T.education.buryPerDay; i += 1) store.bury(card.id, now, localDayKey());
+  assert.equal(make().canBury(card.id), false, `at most ${T.education.buryPerDay} a day`);
+  store.unlockLevel(3);
+  assert.equal(make({ level: 3 }).canBury(card.id), false, 'not at an unlocked level\'s break');
+});
+
 test('🔬 never shows in a test run; in a joined education run it does (AUD-014)', () => {
   const badge = { text: '', visible: null, setVisible(v) { this.visible = v; return this; }, setText(t) { this.text = t; return this; }, setPosition() { return this; } };
   const s = playScene({ testBadge: badge, state: 'playing', runIsTest: true, runIsEducation: true, researchJoined: () => true, col: { x: 0 }, locale: 'en' });

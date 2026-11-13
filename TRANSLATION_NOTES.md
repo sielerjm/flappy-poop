@@ -234,6 +234,7 @@ Short, playful, clear. Fit a 720×1280 logical field; How to play / About body w
 | quizRightCoins | Right! +{n} | 答对了！+{n} |
 | quizPill | Quiz (the won game-over panel's 📚 bonus button) | 答题 |
 | reviewPill | Review (an education level break's 📚 button, plan 25: the numbers sit under it) | 复习 |
+| quizBury | Bury · {n} coins (plan 25: at a gate, after a miss, the card waits 24 h for a price in coins; Anki's word "bury"; zh says "push to tomorrow") | 推到明天 · {n} 金币 |
 | quizWrong | Not quite: the right answer has a ✓ | 不太对：正确答案标有 ✓ |
 | quizWhy | Why? | 为什么？ |
 | quizNext | Next | 下一题 |

@@ -532,3 +532,21 @@ test('createEduStore.unlockLevel (plan 25): a run may start at the highest level
   m.delete(LEADERBOARD.eduKey);
   assert.equal(createEduStore(st).load().unlockedLevel, 1, 'Clear (the key removed) resets it');
 });
+
+test('createEduStore.bury (plan 25): the card waits until the time given, nothing else of it changes; buries are counted per local day', async () => {
+  const { localDayKey } = await import('../src/education.js');
+  const m = new Map();
+  const st = { getItem: (k) => m.get(k) ?? null, setItem: (k, v) => m.set(k, v), removeItem: (k) => m.delete(k) };
+  const store = createEduStore(st);
+  const rec = { phase: 'learning', step: 0, ease: 2.5, intervalMs: 0, dueAt: NOW, reps: 0, lapses: 1, seen: 3, right: 1, firstAt: NOW - DAY, lastAt: NOW };
+  store.answer('ST-01', rec);
+  assert.equal(store.bury('ST-01', NOW + DAY, '2026-11-13'), true);
+  assert.deepEqual(store.load().cards['ST-01'], { ...rec, dueAt: NOW + DAY }, 'only dueAt moves');
+  assert.equal(store.bury('ST-99', NOW + DAY, '2026-11-13'), false, 'an unseen card cannot be buried');
+  store.bury('ST-01', NOW + DAY, '2026-11-13');
+  assert.equal(store.buriedOn('2026-11-13'), 2);
+  assert.equal(store.buriedOn('2026-11-14'), 0, 'a new day starts at 0');
+  store.bury('ST-01', NOW + DAY, '2026-11-14');
+  assert.deepEqual([store.buriedOn('2026-11-13'), store.buriedOn('2026-11-14')], [0, 1]);
+  assert.equal(localDayKey(new Date(2026, 0, 5, 23, 59)), '2026-01-05', 'the local day, not UTC');
+});

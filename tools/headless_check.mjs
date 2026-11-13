@@ -3835,7 +3835,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         const off = await stepper();
         await evaluate(`${play}.toggleEducation(), ${play}.setTestMode(true), ${play}.refreshReadySwitches(), true`);
         const test = await stepper();
-        await evaluate(`${play}.setTestMode(false), ${play}.refreshReadySwitches(), true`);
+        await evaluate(`${play}.setTestMode(false), ${play}.settings.set({ eduStartLevel: 1 }), ${play}.refreshReadySwitches(), true`); // the start level back to 1 for later sections
         ok(!off.shown && !test.shown, 'with 📚 off, or in test mode, the stepper is hidden');
 
         // The word again locks it: the switch goes; the switch's own setting is left as it was.
@@ -3861,7 +3861,9 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         const cardRec = (id) => evaluate(`JSON.stringify((JSON.parse(localStorage.getItem('flappyPoop.eduSrs') ?? '{}').cards ?? {})['${id}'] ?? null)`).then(JSON.parse);
         const quizNow = () => evaluate(`(() => { const q = ${Q}; return JSON.stringify({ active: __flappy.scene.isActive('Quiz'), id: q.card?.id ?? null, deck: q.card?.deck ?? null, answered: q.answered, last: q.lastAnswer ?? null, next: q.rightBtn.shown, nextAlpha: q.rightBtn.g.alpha, top: q.topBtn.shown ? q.topBtn.text.text : null, left: q.leftBtn.shown ? q.leftBtn.text.text : null, right: q.rightBtn.shown ? q.rightBtn.text.text : null, halo: Boolean(q.halo?.visible), verdict: q.verdict.visible ? q.verdict.text : null, kernel: q.verdictCoin.visible, kernelAfter: q.verdictCoin.x > q.verdict.x + q.verdict.width / 2, explain: q.explain.visible }); })()`).then(JSON.parse);
 
-        await evaluate(`localStorage.removeItem('flappyPoop.eduSrs'), ${play}.setEduUnlocked(true), ${play}.settings.set({ education: true }), true`);
+        // Level 2 unlocked, so this break is no gate and the quiz's own checks below run as they were; the
+        // gate and Bury have their own checks further on, on stores of their own (plan 25).
+        await evaluate(`localStorage.removeItem('flappyPoop.eduSrs'), ${play}.eduStore.unlockLevel(2), ${play}.setEduUnlocked(true), ${play}.settings.set({ education: true }), true`);
         await home();
         for (let attempt = 0; attempt < 3 && (await playState()) !== 'playing'; attempt += 1) {
           for (let i = 0; i < 20 && (await playState()) !== 'ready'; i += 1) await sleep(100);
@@ -4196,6 +4198,27 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await sleep(300);
         const gate2 = await evaluate(`JSON.stringify({ gated: ${play}.breakGated(), hint: ${play}.levelHint.text })`).then(JSON.parse);
         ok(!gate2.gated && !gate2.hint.startsWith('📚'), `the due cards answered right, the gate opens: "${gate2.hint}"`);
+        // Bury (plan 25, B7): at the gate, a miss can wait until tomorrow for 3 × the level cleared; the
+        // coins go, the card is due a day later, and the quiz moves on.
+        await sleep(400);
+        const crafted4 = await evaluate(
+          `Promise.all([import('./src/education.js'), import('./src/questions.js')]).then(([e, q]) => { const now = Date.now(); const near = q.CARDS.filter((c) => !c.retired && (c.deck === 'stomach' || c.deck === 'general')); const cards = {}; near.forEach((c, i) => { cards[c.id] = i === 0 ? e.schedule(null, 'again', now - 20 * 60000) : i === 1 ? e.schedule(null, 'easy', now - 30 * 86400000) : e.schedule(null, 'easy', now); }); localStorage.setItem('flappyPoop.eduSrs', JSON.stringify({ v: 1, cards, recent: [], counters: {}, badges: {} })); const p = ${play}; p.breakMissed = []; p.refreshShopButton(); const l = p.quizCountLine; return JSON.stringify({ learning: near[0].id, review: near[1].id, visible: l.visible, text: l.text, label: p.quizButton.getText() }); })`,
+        ).then(JSON.parse);
+        await evaluate(`${play}.takeCoins(5), true`);
+        await reopen();
+        const b0 = await evaluate(`JSON.stringify({ id: ${Q}.card.id, coins: ${play}.effects.coins(), price: ${play}.buryPrice() })`).then(JSON.parse);
+        await evaluate(`(() => { const q = ${Q}; q.choose(q.order.findIndex((k) => k !== 'answer')); return true; })()`);
+        await sleep(200);
+        const buryLabel = await evaluate(`${Q}.leftBtn.shown ? ${Q}.leftBtn.text.text : null`);
+        const buryWant = (await tx('quizBury')).replace('{n}', String(b0.price));
+        await evaluate(`${Q}.leftBtn.press(), true`);
+        await sleep(300);
+        const b1 = await evaluate(`JSON.stringify({ coins: ${play}.effects.coins(), due: ${play}.eduStore.load().cards['${b0.id}'].dueAt, now: Date.now(), next: ${Q}.card?.id ?? null, missed: ${play}.breakMissed })`).then(JSON.parse);
+        ok(b0.id === crafted4.learning && b0.price === 3 * 1 && buryLabel === buryWant && b1.coins === b0.coins - b0.price && b1.due >= b1.now + TT.education.buryMs - 60000 && b1.next !== b0.id && b1.missed.length === 0, `after a miss at the gate, "${buryLabel}" sends ${b0.id} to tomorrow: purse ${b0.coins} → ${b1.coins}, the next card ${b1.next}`);
+        await answerRight();
+        await evaluate(`${Q}.leftBtn.press(), true`); // Return
+        await sleep(300);
+        ok(!(await evaluate(`${play}.breakGated()`)), 'with the miss buried and the review answered, the gate opens');
         // The pill is back, and the shop sells at level 2's prices (eduShopPrices), not the base ones.
         await sleep(400);
         const shop = await evaluate(`Promise.all([import('./src/education.js'), import('./src/i18n.js')]).then(([e, i]) => { const p = ${play}; const pillBack = p.quizButton.visible; p.handleChrome('shop'); const want = e.eduShopPrices(2); const shown = Object.fromEntries(Object.entries(p.shop.rows).map(([id, r]) => [id, r.price.text])); const label = Object.fromEntries(Object.keys(want).map((id) => [id, i.countText(want[id])])); p.closeShop(); return JSON.stringify({ pillBack, shown, label, want, base: p.shopPrices === undefined ? null : JSON.stringify(p.shopPrices()) === JSON.stringify(want) }); })`).then(JSON.parse);

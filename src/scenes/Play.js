@@ -133,7 +133,7 @@ import { openEduDataPanel, isEduDataPanelOpen } from '../ui/eduDataPanel.js';
 import { answerEvent, createConsentStore, createResearchQueue } from '../research.js';
 import { bindPad } from '../input/pad.js';
 import { keyGroup, sameDevice, catchUpTier, catchUpDraws, versusAvailable, ghostPlacement, rivalMarker, respawnPose, respawnBlinkStart, courseDistance, VERSUS_EMOJI } from '../versus.js';
-import { createEduStore, dueCount, cardCounts, masteryByDeck, pickCard, shuffleOptions, gradeFor, schedule, eduShopPrices, reviveStart, reviveStep, reviveSettled, newTally, tallyAnswer, EDUCATION_EMOJI } from '../education.js';
+import { createEduStore, dueCount, cardCounts, masteryByDeck, pickCard, shuffleOptions, gradeFor, schedule, eduShopPrices, reviveStart, reviveStep, reviveSettled, newTally, tallyAnswer, EDUCATION_EMOJI, localDayKey } from '../education.js';
 
 const TEXT_STYLE = {
   fontFamily: 'sans-serif',
@@ -3346,6 +3346,36 @@ export class Play extends Phaser.Scene {
     if (this.level <= (this.eduStore?.load().unlockedLevel ?? 1)) return false;
     const counts = this.quizCounts({ mode: 'break' });
     return Boolean(counts) && counts.learning + counts.review > 0;
+  }
+
+  /** A gate's Bury (plan 25, B7): 3 × the level just cleared (education.buryCoinsPerLevel). */
+  buryPrice() {
+    return T.education.buryCoinsPerLevel * Math.max(1, this.level - 1);
+  }
+
+  /**
+   * May card `cardId` be buried now? At a gate (a break into a level not yet unlocked) of a real
+   * one-player education run, for a card missed in this break, while the purse covers the price and
+   * fewer than education.buryPerDay cards were buried today (local day).
+   */
+  canBury(cardId) {
+    if (!this.levelBreak || !this.runIsEducation || this.runIsTest || this.isTestMode() || this.match) return false;
+    if (this.level <= (this.eduStore?.load().unlockedLevel ?? 1)) return false;
+    if (!(this.breakMissed ?? []).includes(cardId)) return false;
+    if (this.effects.coins() < this.buryPrice()) return false;
+    return this.eduStore.buriedOn(localDayKey()) < T.education.buryPerDay;
+  }
+
+  /** Bury it: the coins go, the card waits education.buryMs, it is no longer missed here; no pilot event. */
+  buryCard(cardId) {
+    if (!this.canBury(cardId)) return false;
+    this.effects.spendCoins(this.buryPrice());
+    this.eduStore.bury(cardId, Date.now() + T.education.buryMs, localDayKey());
+    this.breakMissed = (this.breakMissed ?? []).filter((id) => id !== cardId);
+    this.refreshCoinHud?.();
+    this.refreshLevelBanner();
+    this.refreshShopButton();
+    return true;
   }
 
   /**

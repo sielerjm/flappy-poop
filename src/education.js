@@ -410,7 +410,15 @@ function cleanEdu(raw, keep, lastLevel = 7) {
   }
   // The highest level an education run (not a test run) has continued into (plan 25): a run may start there.
   const unlockedLevel = Number.isInteger(raw?.unlockedLevel) && raw.unlockedLevel >= 1 && raw.unlockedLevel <= lastLevel ? raw.unlockedLevel : 1;
-  return { v: 1, cards, recent, counters, badges, unlockedLevel };
+  // Today's buries (plan 25): { day: local YYYY-MM-DD, n }; kept only while it is well formed.
+  const b = raw?.buried;
+  const buried = b && typeof b.day === 'string' && DAY_RE.test(b.day) && Number.isInteger(b.n) && b.n > 0 ? { day: b.day, n: b.n } : null;
+  return { v: 1, cards, recent, counters, badges, unlockedLevel, ...(buried ? { buried } : {}) };
+}
+
+/** The device's local day as YYYY-MM-DD (a bury's daily cap counts local days: plan 25). */
+export function localDayKey(date = new Date()) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 }
 
 /**
@@ -439,6 +447,20 @@ export function createEduStore(storage, { key = LEADERBOARD.eduKey, t = TUNING }
       const state = read();
       const n = Math.min(Math.max(1, Math.floor(level) || 1), t.levels.lastLevel);
       if (n > state.unlockedLevel) write({ ...state, unlockedLevel: n });
+    },
+    /** How many cards this device buried on local `day` (plan 25). */
+    buriedOn(day) {
+      const b = read().buried;
+      return b && b.day === day ? b.n : 0;
+    },
+    /** Bury card `id` until `until` (ms): its record waits, nothing else of it changes; counted for `day`. */
+    bury(id, until, day) {
+      const state = read();
+      const rec = state.cards[id];
+      if (!rec) return false;
+      const n = state.buried?.day === day ? state.buried.n + 1 : 1;
+      write({ ...state, cards: { ...state.cards, [id]: { ...rec, dueAt: until } }, buried: { day, n } });
+      return true;
     },
     /** A revive just happened (👼 / 🐦‍🔥): counted at once, so a closed tab loses none. */
     addRevive() {
