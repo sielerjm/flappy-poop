@@ -422,11 +422,18 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
       // Home screen: no score shown; the ? pulses on a build this profile has not acknowledged.
       {
         const play = `__flappy.scene.getScene('Play')`;
-        const h1 = await evaluate(`${play}.howToHalo.alpha`);
-        await sleep(300);
-        const h2 = await evaluate(`${play}.howToHalo.alpha`);
+        // Several samples over ~600 ms, once the loop is seen to advance: two reads 300 ms apart on a
+        // 900 ms yoyo could match when a loaded machine stalled the loop (a flake, plan 24, AUD-016).
+        const frame0 = await evaluate(`__flappy.loop.frame`);
+        for (let i = 0; i < 40 && (await evaluate(`__flappy.loop.frame`)) === frame0; i += 1) await sleep(50);
+        const alphas = [];
+        for (let i = 0; i < 5; i += 1) {
+          alphas.push(await evaluate(`${play}.howToHalo.alpha`));
+          await sleep(150);
+        }
+        const [h1, h2] = [Math.min(...alphas), Math.max(...alphas)];
         const home = await evaluate(`JSON.stringify({ score: ${play}.scoreText.visible, halo: ${play}.howToHalo.visible, due: ${play}.isHowToPromptDue(), round: ${play}.readyBoxes.howto.round })`).then(JSON.parse);
-        ok(!home.score && home.halo && home.due && home.round && h1 !== h2, `home screen hides the score; the ? pulses on a fresh profile (alpha ${h1.toFixed(2)} → ${h2.toFixed(2)})`);
+        ok(!home.score && home.halo && home.due && home.round && h2 - h1 > 0.05, `home screen hides the score; the ? pulses on a fresh profile (alpha ${h1.toFixed(2)} … ${h2.toFixed(2)})`);
         // The ? and the user button's label breathe with their halos too (button.pulse).
         const scales = [];
         for (let i = 0; i < 3; i += 1) {
@@ -1092,12 +1099,17 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await tapAt(prep.box.x, prep.box.y);
         const full = await evaluate(`(() => { const p = ${play}; const ok = p.shopBuy('superBean'); return JSON.stringify({ ok, beans: p.effects.beans(), super: p.effects.superReady(), coins: p.effects.coins(), grey: Object.values(p.shop.rows).every((r) => r.name.alpha === ${TT.shop.disabledAlpha}), bagFull: p.shop.rows.bean.price.text, bagKernel: p.shop.rows.bean.price.iconShown, hint: p.levelHint.text, hud: p.coinIcon.visible }); })()`).then(JSON.parse);
         ok(full.ok && full.beans === TT.beans.superBeans && full.super && full.coins === 0 && full.grey && full.bagFull === 'Bag full' && !full.bagKernel && full.hint === 'Tap to continue' && !full.hud, `the super bean row fills the bag (${full.beans}, super ready) for the last ${TT.shop.prices.superBean} coins: every row greys, the bean row reads "${full.bagFull}", the hint drops the 💰`);
+        // The lockout is stretched to 3 s for this pair of taps, so the twin lands inside it however
+        // slow the machine is (plan 24: under load the read between the taps outlasted 400 ms, the twin
+        // continued the level, and every later check in the section failed with it).
+        const lockMs = await evaluate(`import('./src/config.js').then((c) => { const was = c.TUNING.pauseResumeLockoutMs; c.TUNING.pauseResumeLockoutMs = 3000; return was; })`);
         await tapAt(360, 1000); // below the panel
-        const outside = await evaluate(`JSON.stringify({ open: ${play}.shopOpen, state: ${play}.state, lb: ${play}.levelBreak })`).then(JSON.parse);
+        const outside = await evaluate(`JSON.stringify({ open: ${play}.shopOpen, state: ${play}.state, lb: ${play}.levelBreak, locked: ${play}.time.now < ${play}.flapLockedUntil })`).then(JSON.parse);
         await chrome('tap'); // inside the resume lockout the closing tap's twin
         const twin = await evaluate(`JSON.stringify({ state: ${play}.state, lb: ${play}.levelBreak })`).then(JSON.parse);
-        ok(!outside.open && outside.state === 'paused' && outside.lb && twin.state === 'paused' && twin.lb, 'a tap outside the panel closes it without continuing, and a second tap inside the lockout does not continue either');
-        await sleep(400);
+        await evaluate(`import('./src/config.js').then((c) => { c.TUNING.pauseResumeLockoutMs = ${lockMs}; return true; })`);
+        ok(!outside.open && outside.locked && outside.state === 'paused' && outside.lb && twin.state === 'paused' && twin.lb, 'a tap outside the panel closes it without continuing and arms the lockout, and a second tap inside the lockout does not continue either');
+        for (let i = 0; i < 50 && (await evaluate(`${play}.time.now < ${play}.flapLockedUntil`)); i += 1) await sleep(100);
         await evaluate(`${play}.padDown(${GP.power}), true`);
         const rt1 = await evaluate(`${play}.shopOpen`);
         await evaluate(`${play}.padDown(${GP.power}), true`);
@@ -3755,9 +3767,16 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await startRun();
         const run = await evaluate(`(() => { const p = ${play}; return JSON.stringify({ edu: p.runIsEducation, test: p.runIsTest, badge: p.testBadge.visible ? p.testBadge.text : null, purse: p.purseCoins() }); })()`).then(JSON.parse);
         ok(run.edu && !run.test && run.badge === '\u{1F4DA}' && Number.isFinite(run.purse), `an education run: latched (${run.edu}), not a test run, 📚 in the HUD, a real purse (${run.purse})`);
-        await evaluate(`${play}.poop.body.setAllowGravity(false), ${play}.poop.setVelocity(0, 0), ${play}.poop.y = 640, ${play}.score = 7, ${play}.graceLeftMs = 0, ${play}.die(), true`);
-        await sleep(TT.deathToOverMs + 300);
-        ok((await stores()) === stores0, 'its end records nothing: no best, top list, submit or career change');
+        // The run really ends (an education crash opens the revive quiz: Give up), at a score above any
+        // best, and neither the stores nor the career calls see it (plan 24, AUD-016: the old check
+        // read the stores while the quiz was still up).
+        const career0 = await evaluate(`JSON.stringify({ posts: __career.posts.length, claims: __career.claims.length })`).then(JSON.parse);
+        await evaluate(`${play}.poop.body.setAllowGravity(false), ${play}.poop.setVelocity(0, 0), ${play}.poop.y = 640, ${play}.score = 999, ${play}.graceLeftMs = 0, ${play}.die(), true`);
+        for (let i = 0; i < 40 && !(await evaluate(`__flappy.scene.isActive('Quiz')`)); i += 1) await sleep(100);
+        await evaluate(`__flappy.scene.isActive('Quiz') && __flappy.scene.getScene('Quiz').decide('giveUp'), true`);
+        for (let i = 0; i < 60 && !(await evaluate(`__flappy.scene.isActive('Over')`)); i += 1) await sleep(100);
+        const ended = await evaluate(`JSON.stringify({ over: __flappy.scene.isActive('Over'), state: ${play}.state, posts: __career.posts.length, claims: __career.claims.length })`).then(JSON.parse);
+        ok(ended.over && ended.state === 'dead' && (await stores()) === stores0 && ended.posts === career0.posts && ended.claims === career0.claims, `its end (a game over at 999, after Give up) records nothing: no best, top list, submit, career counters or badges`);
 
         // A Daily Dump is never an education run, even with the 📚 switch on.
         await home();
@@ -3802,7 +3821,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
           for (let i = 0; i < 40 && (await playState()) !== 'playing'; i += 1) await sleep(100);
         }
         await evaluate(`(() => { const p = ${play}; p.poop.body.setAllowGravity(false); p.poop.setVelocity(0, 0); p.poop.y = 640; p.graceLeftMs = 1e9; p.onFinishCrossed(); return true; })()`);
-        await sleep(400);
+        for (let i = 0; i < 40 && !(await evaluate(`Boolean(${play}.levelBreak) && ${play}.state === 'paused'`)); i += 1) await sleep(100); // polled, as the levels section does (plan 24: a fixed 400 ms lost the race under load)
         const brk = await evaluate(`JSON.stringify({ edu: ${play}.runIsEducation, state: ${play}.state, lb: ${play}.levelBreak, level: ${play}.level })`).then(JSON.parse);
         ok(brk.edu && brk.state === 'paused' && brk.lb && brk.level === 2, `an education run reaches the level-2 break (${JSON.stringify(brk)})`);
 
@@ -3849,15 +3868,15 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await evaluate(`__flappy.scene.getScene('Feedback').close(), true`);
         for (let i = 0; i < 20 && (await evaluate(`__flappy.scene.isActive('Feedback')`)); i += 1) await sleep(100);
 
-        // Touch: the first option. The answer is saved to its card at once.
-        await evaluate(`${Q}.options[0].zone.emit('pointerdown'), true`);
+        // Touch: a wrong option, so the explanation check below always runs (plan 24, AUD-016). The answer is saved to its card at once.
+        await evaluate(`(() => { const q = ${Q}; q.options[q.order.findIndex((k) => k !== 'answer')].zone.emit('pointerdown'); return true; })()`);
         await sleep(200);
         const q1 = await quizNow();
         ok(covered.fb && covered.interrupted && q1.last?.interrupted === true, 'Feedback opened over the waiting card marks its answer interrupted (its time is not used)');
         const r1 = await cardRec(q1.id);
         const verdictWant = q1.last?.correct ? (await tx('quizRightCoins')).replace('{n}', String(TT.education.breakCoins)) : await tx('quizWrong');
         ok(q1.answered && q1.last?.id === q0.id && r1?.seen === 1 && r1.right === (q1.last.correct ? 1 : 0) && q1.verdict === verdictWant && q1.next, `a tap answers ${q0.id} (${q1.last?.correct ? 'right' : 'wrong'}, ${Math.round(q1.last?.rtMs ?? -1)} ms): saved (seen ${r1?.seen}), "${q1.verdict}", Next shown`);
-        if (!q1.last?.correct) ok(q1.explain && q1.nextAlpha < 1, 'a wrong answer shows the explanation at once and holds Next');
+        ok(q1.last?.correct === false && q1.explain && q1.nextAlpha < 1, 'a wrong answer shows the explanation at once and holds Next');
         const line1 = await lineNow();
         ok(line1.tally === `✅ ${q1.last?.correct ? 1 : 0}  ❌ ${q1.last?.correct ? 0 : 1}` && line1.tallyZone, `the run's tally appears in the card's top row with the first answer: "${line1.tally}"`);
         ok(q1.left === returnWant && q1.right === nextWant && q1.top === (q1.last?.correct ? whyWant : null) && !q1.halo, `after the answer: ${q1.top ?? 'no Why (the explanation shows)'} on top, ${q1.left} | ${q1.right} below, and no halo in a break`);
@@ -4067,7 +4086,8 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         // The pill is back, and the shop sells at level 2's prices (eduShopPrices), not the base ones.
         await sleep(400);
         const shop = await evaluate(`Promise.all([import('./src/education.js'), import('./src/i18n.js')]).then(([e, i]) => { const p = ${play}; const pillBack = p.quizButton.visible; p.handleChrome('shop'); const want = e.eduShopPrices(2); const shown = Object.fromEntries(Object.entries(p.shop.rows).map(([id, r]) => [id, r.price.text])); const label = Object.fromEntries(Object.keys(want).map((id) => [id, i.countText(want[id])])); p.closeShop(); return JSON.stringify({ pillBack, shown, label, want, base: p.shopPrices === undefined ? null : JSON.stringify(p.shopPrices()) === JSON.stringify(want) }); })`).then(JSON.parse);
-        const sameLabels = Object.keys(shop.label).every((id) => shop.shown[id] === shop.label[id] || shop.shown[id] === (null));
+        const level2 = Object.fromEntries(Object.entries(TT.shop.prices).map(([id, price]) => [id, Math.ceil(price * TT.education.priceScale[1])])); // computed here, not by the game (plan 24, AUD-016)
+        const sameLabels = Object.keys(shop.label).length > 0 && Object.keys(shop.label).every((id) => shop.shown[id] === shop.label[id]) && JSON.stringify(shop.want) === JSON.stringify(level2);
         ok(shop.pillBack && shop.base && sameLabels, `the 📚 pill is back, and the shop prices level 2 at ${JSON.stringify(shop.want)} (shown ${JSON.stringify(shop.shown)})`);
 
         await evaluate(`${play}.resumePlay(), true`);
@@ -4322,9 +4342,10 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         ok(near0.x !== null && near1.state === 'respawn' && near1.filled && near1.spawned && near1.x === near0.x, `a finish line a short way ahead survives the revive's clear (x ${near0.x} → ${near1.x}, ${Math.round(near0.x - near0.poopX)} px ahead)`);
         await press('rightBtn'); // Fly on
         await waitPlaying();
+        const armed = await lineNow(); // right after Fly on, before it can be collected (plan 24, AUD-016)
         await hover();
         const near2 = await lineNow();
-        ok(near2.kernelDone || (near2.kernelX !== null && near2.kernelX >= near2.poopX && near2.kernelX < near2.x - halfLine), `the cleared kernel is re-armed before the line (kernel ${near2.kernelX === null ? 'taken' : Math.round(near2.kernelX)}, the line's near edge ${Math.round(near2.x - halfLine)})`);
+        ok(!armed.kernelDone && armed.kernelX !== null && armed.kernelX >= armed.poopX && armed.kernelX < armed.x - halfLine, `the cleared kernel is re-armed before the line (kernel ${armed.kernelX === null ? 'none' : Math.round(armed.kernelX)}, the line's near edge ${Math.round(armed.x - halfLine)})`);
         let takenFirst = false; // the kernel is taken while the line is still to cross
         let near3 = near2;
         for (let i = 0; i < 120 && !near3.brk; i += 1) {
@@ -4340,10 +4361,11 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await answer(true);
         await press('rightBtn'); // Fly on
         await waitPlaying();
+        const farArmed = await lineNow(); // right after Fly on (plan 24, AUD-016)
         await hover();
         const far = await lineNow();
         ok(far.spawned && far.x !== null && far.x <= far.leadX + 1 && far.x >= far.leadX - 150, `with no line out, the revive places it at the first-pair lead (x ${far.x === null ? 'none' : Math.round(far.x)}, lead ${Math.round(far.leadX)})`);
-        ok(far.kernelDone || (far.kernelX !== null && far.kernelX < far.x - halfLine), `and its kernel waits before the line (kernel ${far.kernelX === null ? 'taken' : Math.round(far.kernelX)})`);
+        ok(!farArmed.kernelDone && farArmed.kernelX !== null && farArmed.kernelX < farArmed.x - halfLine, `and its kernel waits before the line (kernel ${farArmed.kernelX === null ? 'none' : Math.round(farArmed.kernelX)})`);
 
         // A wide window (plan 22, U3): the refilled pairs sweep in under the card with no scroll, and are
         // settled, opaque and in place (the first at the lead, inside the field) when play resumes.
@@ -5097,7 +5119,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         const [e1, e2] = queued;
         const evText = JSON.stringify(queued);
         ok(hud1.badge === '\u{1F4DA}\u{1F52C}' && queued.length === 2 && e1.context === 'break' && e1.correct === true && e1.input === 'pad' && e1.seq === 1 && e1.seen === 0 && e1.level === 1 && e1.consent === consentVersion && e1.phase === 'pilot' && e2.correct === false && e2.input === 'key' && e2.seq === 2 && e1.run_id === e2.run_id && e1.session_id === e2.session_id && e1.event_id !== e2.event_id && Array.isArray(e1.order) && e1.order.length === 3, `joined, the HUD shows ${hud1.badge} and each answer is recorded: ${e1.card_id} (${e1.input}, right, first sight), then ${e2.card_id} (${e2.input}, wrong)`);
-        ok(!evText.includes(saveNow.id) && !evText.includes('ShareSmoke') && !Object.keys(e1).some((k) => /player|name/i.test(k)), 'an event holds no username and no player id');
+        ok(typeof saveNow.id === 'string' && saveNow.id.length === 22 && !evText.includes(saveNow.id) && !evText.includes('ShareSmoke') && !Object.keys(e1).some((k) => /player|name/i.test(k)), 'an event holds no username and no player id');
         // The sync sends them: one batch, then the queue is empty.
         await evaluate(`(globalThis.__eduAnswer.events = { status: 'ok' }, ${play}.syncLeaderboard().then(() => true))`);
         const sent = await evaluate(`JSON.stringify({ calls: __edu.events.map((c) => ({ id: c.id, n: c.events.length, first: c.events[0]?.event_id, since: c.since })), left: ${play}.researchQueue.size() })`).then(JSON.parse);
@@ -5110,8 +5132,8 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await evaluate(`(${play}.setTestMode(false), ${play}.registry.set('testQuizShown', []), true)`);
         ok(hudT.test && hudT.edu && !hudT.badge.includes('\u{1F52C}') && queuedT === 0, `a test run records nothing, and its HUD shows no 🔬 (${hudT.badge})`);
         // A consent to an older notice does not count: nothing is recorded until the tester joins again.
-        const stale = await evaluate(`(() => { const p = ${play}; const was = p.consentStore.load(); p.consentStore.join({ ...was, version: 'pilot-0' }); const j = p.researchJoined(); p.consentStore.join(was); return JSON.stringify({ stale: j, back: p.researchJoined() }); })()`).then(JSON.parse);
-        ok(stale.stale === false && stale.back === true, 'a consent given to an older notice does not count as joined');
+        const stale = await evaluate(`import('./src/questions.js').then((qm) => { const p = ${play}; const was = p.consentStore.load(); const n0 = p.researchQueue.size(); p.consentStore.join({ ...was, version: 'pilot-0' }); const j = p.researchJoined(); const wasTest = p.runIsTest; p.runIsTest = false; p.quizAnswer({ card: qm.CARDS[0], reason: 'new', order: ['answer', 'w1', 'w2'], chosen: 'w1', rtMs: 1500, mode: 'bonus', input: 'key' }); const n1 = p.researchQueue.size(); p.runIsTest = wasTest; p.consentStore.join(was); return JSON.stringify({ stale: j, back: p.researchJoined(), n0, n1 }); })`).then(JSON.parse);
+        ok(stale.stale === false && stale.back === true && stale.n1 === stale.n0, 'a consent given to an older notice does not count as joined: an answer under it is not recorded (plan 24, AUD-016)');
         // Your own profile names the pilot while joined.
         await home();
         await evaluate(`globalThis.__profile = ${JSON.stringify(prof(null))}, true`);
