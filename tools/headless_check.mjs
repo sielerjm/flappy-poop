@@ -4931,8 +4931,14 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         const dOn = await tryShare({ status: 'ok', sharedAt: '2026-11-13T10:00:00.000+00:00' });
         const shares = await evaluate(`JSON.stringify(__edu.shares)`).then(JSON.parse);
         ok(dOn.sharing && dOn.state === onText && dOn.btn === stopBtn && dOn.status === want.eduShareStarted && shares.length === 4 && shares.every((x) => x.name === 'ShareSmoke' && x.adult === true), `Share turns sharing on ("${dOn.state}", "${dOn.status}"): the name went to the board with the adult box`);
-        // Esc closes it; reopened, the box is unticked again (never remembered) and Stop needs no box.
-        await evaluate(`${el('edu-data-panel')}.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })), true`);
+        // Esc closes it: a real key, on a panel opened with no click inside it (the card takes the
+        // focus: plan 24, AUD-018); reopened, the box is unticked again (never remembered) and Stop needs no box.
+        await closeData();
+        await evaluate(`${play}.openEduData(), true`);
+        await sleep(150);
+        await cdp.send('Input.dispatchKeyEvent', { type: 'keyDown', key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27 });
+        await cdp.send('Input.dispatchKeyEvent', { type: 'keyUp', key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27 });
+        await sleep(150);
         const dShut = await dataPanel();
         await evaluate(`${play}.openEduData(), true`);
         const dAgain = await dataPanel();

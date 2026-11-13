@@ -34,6 +34,7 @@ const CSS = `
 #${PANEL_ID} .adult { display: flex; align-items: center; gap: 12px; margin: 12px 0 4px; padding: 10px 12px; min-height: 28px;
   font-size: 16px; font-weight: bold; color: #ffffff; background: #2a1522; border: 2px solid #5a2a44; border-radius: 10px; cursor: pointer; }
 #${PANEL_ID} .adult input { flex: 0 0 auto; width: 26px; height: 26px; margin: 0; accent-color: #e85e96; cursor: pointer; touch-action: manipulation; }
+#${PANEL_ID} .card:focus { outline: none; }
 #${PANEL_ID} .state { margin: 0 0 8px; font-size: 15px; font-weight: bold; color: #ffffff; }
 #${PANEL_ID} .state.on { color: #9fe8b4; }
 #${PANEL_ID} button { padding: 12px 14px; font-size: 17px; font-weight: bold; color: #1a0b14; background: #f8a0c8;
@@ -100,7 +101,9 @@ function build() {
   const status = h('p', { class: 'status', id: 'edu-data-status' });
   const close = h('button', { type: 'button', class: 'close', 'aria-label': 'close' }, '✕');
 
-  const card = h('div', { class: 'card' }, close, title, intro, adultRow, shareTitle, shareBody, shareState, shareBtn, pilotTitle, pilotBody, pilotMore, pilotState, joinRow, leaveBtn, status);
+  // The card takes focus when nothing in it has any, so Esc reaches the root's keydown (the game
+  // keyboard is off while the panel is open), as tournamentPanel's does (plan 24, AUD-018).
+  const card = h('div', { class: 'card', tabindex: '-1' }, close, title, intro, adultRow, shareTitle, shareBody, shareState, shareBtn, pilotTitle, pilotBody, pilotMore, pilotState, joinRow, leaveBtn, status);
   const root = h('div', { id: PANEL_ID, role: 'dialog', 'aria-modal': 'true', hidden: true }, card);
   document.body.append(root);
 
@@ -121,7 +124,7 @@ function build() {
   joinBtn.addEventListener('click', () => onJoin());
   leaveBtn.addEventListener('click', () => onLeave());
 
-  dom = { root, title, intro, adult, adultText, shareTitle, shareBody, shareState, shareBtn, pilotTitle, pilotBody, pilotLink, pilotState, code, joinRow, joinBtn, leaveBtn, status };
+  dom = { root, card, title, intro, adult, adultText, shareTitle, shareBody, shareState, shareBtn, pilotTitle, pilotBody, pilotLink, pilotState, code, joinRow, joinBtn, leaveBtn, status };
 }
 
 function setStatus(text, kind = '') {
@@ -298,6 +301,7 @@ export function openEduDataPanel(options) {
   setStatus(first ? t(ctx.locale, first) : '', first ? 'error' : '');
   refresh();
   dom.root.hidden = false;
+  if (!dom.root.contains(document.activeElement)) dom.card.focus?.({ preventScroll: true });
 }
 
 export function closeEduDataPanel() {
