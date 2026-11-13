@@ -1341,3 +1341,119 @@ test('anon reads none of the research tables or views and cannot call the owner 
   assert.deepEqual(await parts(db), before);
   assert.equal((await enrol(db, id('RA2'))).status, 'ok', 'the code set before still works');
 });
+
+// --- The schema's stamp, its header, and the upgrade from the live schema (plan 24, step 2) ---
+
+const FIXTURE = readFileSync(fileURLToPath(new URL('./fixtures/schema-applied.sql', import.meta.url)), 'utf8');
+const { stampOf, computeStamp } = await import('../tools/schema_check.mjs');
+
+async function asAuthenticated(db, sql, params = []) {
+  await db.exec('set role authenticated');
+  try {
+    return await db.query(sql, params);
+  } finally {
+    await db.exec('reset role');
+  }
+}
+
+test('db/schema.sql carries a current stamp, and anon can read it through schema_version()', async () => {
+  assert.equal(stampOf(SQL), computeStamp(SQL), 'db/schema.sql changed since its stamp: run npm run schema:stamp');
+  const db = await freshDb();
+  assert.equal((await asAnon(db, 'select public.schema_version() as v')).rows[0].v, stampOf(SQL), 'the live check (npm run schema:check, npm run push) reads it as anon');
+  await assert.rejects(asAuthenticated(db, 'select public.schema_version()'), /permission denied/);
+  const last = [...SQL.matchAll(/^create or replace function public\.([a-z_]+)\(/gm)].at(-1)[1];
+  assert.equal(last, 'schema_version', 'it is the last function the file makes, so it changes only once a whole paste has run');
+});
+
+test("the header lists exactly the functions anon may call, and an undo line for the stamp", () => {
+  const granted = [...SQL.matchAll(/^grant\s+execute on function public\.([a-z_]+)\(/gm)].map((m) => m[1]).sort();
+  const listed = [...SQL.matchAll(/^--\s+\* call ([a-z_]+)\(/gm)].map((m) => m[1]).sort();
+  assert.deepEqual(listed, granted, 'every anon grant is in the header list, and the list names nothing anon cannot call');
+  assert.match(SQL, /^--\s+undo the stamp: drop function public\.schema_version\(\);$/m);
+});
+
+/** Rows a live database holds today, written through the fixture's own functions. */
+async function seedLive(db) {
+  const age = () => db.exec("update public.scores set updated_at = updated_at - interval '1 minute'; update public.player_counters set updated_at = updated_at - interval '1 minute';");
+  await asAnon(db, 'select public.submit_score($1, $2, $3, $4, $5)', [id('UpAlice'), 'UpAlice', 40, false, 3]);
+  await age();
+  await asAnon(db, 'select public.submit_score($1, $2, $3, $4, $5)', [id('UpAlice'), 'UpAlice', 55, true, 4]);
+  await asAnon(db, 'select public.submit_score($1, $2, $3, $4, $5)', [id('UpBob'), 'UpBob', 70, false, 5]);
+  await asAnon(db, 'select public.submit_score($1, $2, $3, $4, $5)', [id('UpCarol'), 'UpCarol', 12, true, 1]);
+  await asAnon(db, 'select public.submit_score($1, $2, $3, $4, $5)', [id('UpCarolOld'), 'UpCarolOld', 33, false, 2]);
+  await asAnon(db, 'select public.merge_players($1, $2)', [id('UpCarol'), id('UpCarolOld')]);
+  const day = (await db.query("select to_char((now() at time zone 'utc')::date, 'YYYY-MM-DD') as d")).rows[0].d;
+  const level = (await db.query('select public.daily_level($1::date) as l', [day])).rows[0].l;
+  await asAnon(db, 'select public.submit_daily_score($1, $2, $3::date, $4, $5, $6)', [id('UpAlice'), 'UpAlice', day, 20, level, 10]);
+  await asAnon(db, 'select public.submit_daily_score($1, $2, $3::date, $4, $5, $6)', [id('UpDave'), 'UpDave', day, 25, level, 12]);
+  await age();
+  await asAnon(db, 'select public.submit_counters($1, $2, $3::jsonb)', [id('UpAlice'), id('UpCB1'), JSON.stringify({ games: 3, sumScore: 100, sumLevel: 8, maxLevel: 4, fiber: 5 })]);
+  await asAnon(db, 'select public.submit_counters($1, $2, $3::jsonb)', [id('UpBob'), id('UpCB2'), JSON.stringify({ games: 1, sumScore: 70, sumLevel: 5, maxLevel: 5 })]);
+  await asAnon(db, 'select public.claim_achievements($1, $2::text[])', [id('UpAlice'), ['score_10', 'score_25']]);
+  const names = ['UpAlice', 'UpBob', 'UpTina', 'UpTom'];
+  const rng = createRng(3);
+  const tour = createTournament(names.map((name) => ({ name, playerId: id(name), guest: false })), rng);
+  for (let guard = 0; guard < 20; guard += 1) {
+    const m = nextMatch(tour);
+    if (!m) break;
+    const slot = () => ({ score: Math.floor(rng() * 5) * 10, deaths: Math.floor(rng() * 2), levelWins: Math.floor(rng() * 3), finalFirst: false });
+    const slots = [slot(), slot()];
+    slots[rng() < 0.5 ? 0 : 1].finalFirst = true;
+    const out = raceOutcome(slots);
+    recordResult(tour, m.id, out.winner, { by: out.by, slots });
+  }
+  assert.equal((await asAnon(db, 'select public.submit_tournament($1, $2::jsonb) as r', [id('UpHost'), JSON.stringify(tournamentPayload(tour, id('UpTour1')))])).rows[0].r, 'ok');
+  await db.query("select public.admin_set_dev('UpBob', true)");
+}
+
+/** Every row, and what each of the fixture's anon calls answers, with `education` (new on a profile) set aside. */
+async function liveView(db) {
+  const rows = async (sql) => (await db.query(sql)).rows;
+  const call = async (sql, params) => (await asAnon(db, sql, params)).rows;
+  const profile = async (pid, name) => {
+    const p = (await call('select public.player_stats($1, $2) as r', [pid, name]))[0].r;
+    delete p.education;
+    return p;
+  };
+  return {
+    scores: await rows('select player_id, name, score, toilet, level from public.scores order by player_id, toilet'),
+    aliases: await rows('select alias_id, canonical_id from public.player_aliases order by alias_id'),
+    daily: await rows("select player_id, to_char(day, 'YYYY-MM-DD') as d, name, score, level, pipes from public.daily_scores order by player_id"),
+    counters: await rows('select player_id, counters, last_batch from public.player_counters order by player_id'),
+    achievements: await rows('select player_id, achievement_id from public.player_achievements order by 1, 2'),
+    tournaments: await rows('select player_id, name, events, gold, silver, bronze, best_score from public.tournament_stats order by player_id'),
+    meta: await rows('select player_id, dev, exact from public.player_meta order by player_id'),
+    board: await call('select name, score, toilet, level from public.scores order by name, toilet'),
+    medals: await call('select * from public.tournament_board($1, 25)', [id('UpAlice')]),
+    dailyBoard: await call('select * from public.daily_board($1, null, 25)', [id('UpAlice')]),
+    rank: await call('select public.player_rank($1, false) as r', [id('UpAlice')]),
+    aliasName: await call('select public.player_name($1) as r', [id('UpCarolOld')]),
+    available: await call('select public.name_available($1, $2) as r', ['upalice', id('UpZed')]),
+    profiles: [await profile(id('UpAlice'), null), await profile(null, 'UpDave'), await profile(id('UpCarolOld'), null)],
+    tags: (await call('select public.board_tags($1::text[]) as r', [['UpAlice', 'UpBob', 'UpDave', 'Nobody']]))[0].r,
+  };
+}
+
+test('the upgrade: the live schema (tests/fixtures/schema-applied.sql) holding rows, then db/schema.sql twice: every row and old call answers as before', async () => {
+  const db = new PGlite();
+  await db.exec(SUPABASE_ROLES);
+  await db.exec(FIXTURE);
+  await seedLive(db);
+  await db.exec(FIXTURE); // the live schema re-run on itself first: its own backfills settle, as they did live
+  const before = await liveView(db);
+  assert.ok(before.scores.length >= 5 && before.aliases.length === 1 && before.daily.length === 2 && before.counters.length >= 2 && before.tournaments.length === 4, 'the seed wrote every kind of row');
+  await db.exec(SQL);
+  assert.deepEqual(await liveView(db), before, 'after the first apply');
+  await db.exec(SQL);
+  assert.deepEqual(await liveView(db), before, 'after a second apply');
+  assert.equal((await asAnon(db, 'select public.schema_version() as v')).rows[0].v, stampOf(SQL), 'the upgraded database answers the new stamp');
+  // The new parts work on the upgraded database, an aliased id included.
+  await db.query('select public.admin_set_education_open(true)');
+  const round = (await asAnon(db, 'select public.share_education($1, $2, true)::text as r', [id('UpAlice'), 'UpAlice'])).rows[0].r;
+  assert.equal((await asAnon(db, "select public.submit_education_grades($1, $2, $3::timestamptz, 3, 27000, '{}'::jsonb) as r", [id('UpAlice'), id('UpEB1'), round])).rows[0].r.status, 'ok');
+  assert.ok((await asAnon(db, 'select public.share_education($1, $2, true)::text as r', [id('UpCarolOld'), 'UpCarol'])).rows[0].r, 'an old id shares as its canonical player');
+  assert.deepEqual((await db.query('select player_id from public.education_public order by 1')).rows.map((r) => r.player_id), [id('UpAlice'), id('UpCarol')].sort());
+  // A merge after the upgrade still folds a daily row.
+  await asAnon(db, 'select public.merge_players($1, $2)', [id('UpBob'), id('UpDave')]);
+  assert.equal((await db.query('select count(*)::int as n from public.daily_scores where player_id = $1', [id('UpBob')])).rows[0].n, 1);
+});

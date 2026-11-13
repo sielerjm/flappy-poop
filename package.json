@@ -8,7 +8,9 @@
     "test": "node --test \"tests/**/*.test.js\"",
     "start": "python3 tools/serve.py",
     "push": "node tools/push.mjs",
-    "smoke": "node tools/headless_check.mjs"
+    "smoke": "node tools/headless_check.mjs",
+    "schema:check": "node tools/schema_check.mjs",
+    "schema:stamp": "node tools/schema_check.mjs --stamp"
   },
   "license": "MIT",
   "devDependencies": {

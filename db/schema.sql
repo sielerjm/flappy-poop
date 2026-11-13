@@ -2,6 +2,9 @@
 --
 -- How to apply: Supabase dashboard -> SQL editor -> paste this whole file -> Run.
 -- Expect "Success. No rows returned". Safe to re-run (idempotent).
+-- After an edit, `npm run schema:stamp` rewrites the stamp at the end of the file (schema_version()).
+-- `npm run schema:check` says which version the live database has; `npm run push` refuses to push
+-- until the live database has this one, then keeps tests/fixtures/schema-applied.sql equal to it.
 -- This file is run by hand only. It is the source of truth: a deleted project
 -- can be recreated by running it again. Nothing pushed to GitHub touches the
 -- database (the GitHub integration is disabled on purpose).
@@ -31,6 +34,7 @@
 --   * call enrol_research(...)     join the education tester pilot with the invite code (2026-11-13)
 --   * call submit_research_events(...) a pilot participant's answer events, under their research id
 --   * call delete_research(...)    withdraw from the pilot: the participant and their answers are deleted
+--   * call schema_version()        which version of this file the database last ran (a stamp of the file; 2026-11-13)
 -- A player has up to two rows: their best on the toilet and their best off it
 -- (primary key player_id + toilet, since 2026-11-04).
 -- and nothing else: no INSERT / UPDATE / DELETE on the table, and nothing at all
@@ -65,7 +69,8 @@
 -- merge_players / player_name / submit_tournament / tournament_board /
 -- submit_daily_score / daily_board / submit_counters / claim_achievements /
 -- player_stats / board_tags / share_education / submit_education_grades / rename_education /
--- unshare_education / education_board / enrol_research / submit_research_events / delete_research;
+-- unshare_education / education_board / enrol_research / submit_research_events / delete_research /
+-- schema_version;
 -- an old client keeps working (same submit_score signature).
 --
 -- Maintenance (SQL editor):
@@ -106,6 +111,7 @@
 --     select * from public.research_retention; select * from public.research_responses;
 --   delete every participant and answer of a phase (the pilot's, before the beta):
 --     select public.admin_purge_phase('pilot');
+--   undo the stamp: drop function public.schema_version();
 --   undo the pilot: drop view public.research_summary, public.research_by_card,
 --     public.research_by_participant, public.research_retention;
 --     drop function public.enrol_research(text, text, boolean, text),
@@ -2158,6 +2164,21 @@ revoke execute on function public.submit_research_events(text, text, jsonb) from
 grant  execute on function public.submit_research_events(text, text, jsonb) to anon;
 revoke execute on function public.delete_research(text) from public, authenticated;
 grant  execute on function public.delete_research(text) to anon;
+
+-- Which version of this file the database last ran: a short SHA-256 of the file with the value
+-- below blanked (tools/schema_check.mjs). `npm run schema:stamp` rewrites it after an edit, and
+-- tests/schema.test.js fails until it does. It is the last thing this file makes, so the live
+-- database answers the new value only once a whole paste has run. Anyone may ask: the file is
+-- public, so the value says nothing new. `npm run schema:check` and `npm run push` read it.
+create or replace function public.schema_version()
+returns text
+language sql
+immutable
+as $$
+  select '04ec5118d2b421b9'::text; -- schema stamp
+$$;
+revoke execute on function public.schema_version() from public, authenticated;
+grant  execute on function public.schema_version() to anon;
 
 -- Tell PostgREST about the new functions right away.
 notify pgrst, 'reload schema';
