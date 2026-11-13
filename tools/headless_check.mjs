@@ -1434,6 +1434,28 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await tapAt(sh.x, sh.y);
         const fell = await evaluate(`JSON.stringify({ shared: window.__shared.length, downloads: window.__downloads, over: __flappy.scene.isActive('Over') })`).then(JSON.parse);
         ok(fell.shared === 2 && fell.downloads.length === 1 && fell.downloads[0] === 'flappy-poop-score.png' && fell.over, `with no share sheet for images the PNG downloads (${fell.downloads[0]})`);
+        // The summary band never swallows Share (plan 24, AUD-004): a band press released off the
+        // window (Phaser: pointerupoutside) is forgotten; Share's top edge is Share's, not the band's;
+        // another pointer resting in the band does not take Share's release.
+        await evaluate(`(window.__canShare = true, window.__shareReject = false, true)`);
+        const geo = await evaluate(`JSON.stringify({ share: ${over}.buttons.share, cell: ${over}.cells.find((c) => c.id === 'fiber') ?? ${over}.cells[0] })`).then(JSON.parse);
+        const client = (x, y) => evaluate(`(() => { const r = __flappy.canvas.getBoundingClientRect(); const s = __flappy.scale; return JSON.stringify({ x: r.left + ${x} * r.width / s.width, y: r.top + ${y} * r.height / s.height }); })()`).then(JSON.parse);
+        const sharedNow = () => evaluate(`window.__shared.length`);
+        const c0 = await client(geo.cell.x, geo.cell.y);
+        await cdp.send('Input.dispatchMouseEvent', { type: 'mousePressed', x: c0.x, y: c0.y, button: 'left', buttons: 1, clickCount: 1 });
+        await cdp.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: c0.x, y: 1290, button: 'left', buttons: 1 });
+        await cdp.send('Input.dispatchMouseEvent', { type: 'mouseReleased', x: c0.x, y: 1290, button: 'left', clickCount: 1 });
+        await sleep(250);
+        const s0 = await sharedNow();
+        await tapAt(geo.share.x, geo.share.y);
+        const afterOutside = await sharedNow();
+        await tapAt(geo.share.x, geo.share.y - geo.share.height / 2);
+        const afterEdge = await sharedNow();
+        await evaluate(`(() => { const o = ${over}; const at = (id, x, y) => ({ id, x, y, getDistance: () => 0 }); o.input.emit('pointerdown', at(7, ${geo.cell.x}, ${geo.cell.y})); o.input.emit('pointerdown', at(8, ${geo.share.x}, ${geo.share.y})); o.input.emit('pointerup', at(8, ${geo.share.x}, ${geo.share.y})); o.input.emit('pointerupoutside', at(7, ${geo.cell.x}, ${geo.cell.y})); return true; })()`);
+        await sleep(250);
+        const afterTwo = await sharedNow();
+        const still = await evaluate(`__flappy.scene.isActive('Over') && !${over}.card?.open`);
+        ok(afterOutside === s0 + 1 && afterEdge === s0 + 2 && afterTwo === s0 + 3 && still, `the band never takes Share: after a press released off the window (${afterOutside - s0}), on Share's top edge (${afterEdge - afterOutside}), with another pointer resting in the band (${afterTwo - afterEdge})`);
         await evaluate(`(() => { HTMLAnchorElement.prototype.click = window.__realClick; delete navigator.share; delete navigator.canShare; return true; })()`);
         await tapAt(hm.x, hm.y);
         for (let i = 0; i < 40 && (await playState()) !== 'ready'; i += 1) await sleep(250);

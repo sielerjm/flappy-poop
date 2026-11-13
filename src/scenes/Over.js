@@ -218,7 +218,7 @@ export class Over extends Phaser.Scene {
     this.shareFile = null;
     this.shareMode = null;
     this.cardToken = null;
-    this.sharePressed = false;
+    this.sharePressed = null; // the id of the pointer that pressed Share, until it is released
     this.cardData = { headline, won, scoreLine, collected, pipes, locale };
     if (this.shareButton) this.makeShareCard(this.cardData);
     if (linked) this.loadDailyRank(play);
@@ -270,14 +270,16 @@ export class Over extends Phaser.Scene {
     // navigator.share() needs, and Phaser emits it from inside that DOM event.
     // Inside the band nothing fires on the press, which may be the start of a drag: a tap (a
     // release within BAND_TAP_PX of the press) opens the cell or the rank link under it, and on
-    // empty space goes home as a tap anywhere else does; a drag only scrolls.
+    // empty space goes home as a tap anywhere else does; a drag only scrolls. A band press belongs
+    // to the pointer that made it: another finger's tap on Share is still a share, and a press
+    // released off the canvas (pointerupoutside) is forgotten (plan 24, AUD-004).
     const onShare = (pointer) => Boolean(this.shareFile) && this.hitAt(pointer) === 'share';
     this.input.on('pointerdown', (pointer) => {
       // A card up: this tap only closes it (on release, by the card's dim), never goes home.
       if (this.card?.open) return;
       const link = this.hitAt(pointer);
       if (this.inBand(pointer) && link !== 'score') {
-        this.bandPress = { link };
+        this.bandPress = { link, id: pointer.id };
         return;
       }
       if (link === 'score') {
@@ -298,24 +300,31 @@ export class Over extends Phaser.Scene {
       }
       unlock();
       const panelTap = chromeIntent(play.chromeArgs('tap')).do === 'retry' && canRestart(this.openedAt, this.time.now, T.retryLockoutMs);
-      this.sharePressed = panelTap;
+      this.sharePressed = panelTap ? pointer.id : null;
     });
     this.input.on('pointerup', (pointer) => {
       const press = this.bandPress;
-      this.bandPress = null;
-      if (press) {
+      if (press && press.id === pointer.id) {
+        this.bandPress = null;
         const moved = typeof pointer.getDistance === 'function' ? pointer.getDistance() : 0;
         if (moved >= BAND_TAP_PX || this.card?.open) return; // a drag: the band scrolled, nothing else
         const link = this.hitAt(pointer);
-        if (link !== press.link) return; // released somewhere else
-        if (link?.startsWith('cell:')) this.openCell(link.slice(5));
-        else if (link === 'rank') this.openDailyBoard();
-        else this.retry(pointer);
-        return;
+        if (link === press.link) {
+          if (link?.startsWith('cell:')) this.openCell(link.slice(5));
+          else if (link === 'rank') this.openDailyBoard();
+          else this.retry(pointer);
+          return;
+        }
+        // Released somewhere else: not the band's tap; a Share press is looked at below.
       }
-      if (!this.sharePressed) return;
-      this.sharePressed = false;
+      if (this.sharePressed === null || this.sharePressed !== pointer.id) return;
+      this.sharePressed = null;
       if (onShare(pointer)) this.shareRun();
+    });
+    // A press released off the canvas never reaches pointerup: forget it, so the next tap is its own.
+    this.input.on('pointerupoutside', (pointer) => {
+      if (this.bandPress?.id === pointer.id) this.bandPress = null;
+      if (this.sharePressed === pointer.id) this.sharePressed = null;
     });
     this.input.keyboard?.on('keydown-SPACE', () => this.retry());
   }
@@ -323,7 +332,7 @@ export class Over extends Phaser.Scene {
   /** Is the pointer inside the summary band's visible area? */
   inBand(pointer) {
     const B = this.bandBox;
-    return Boolean(B) && pointer.x >= B.left && pointer.x <= B.right && pointer.y >= B.top && pointer.y <= B.bottom;
+    return Boolean(B) && pointer.x >= B.left && pointer.x <= B.right && pointer.y >= B.top && pointer.y < B.bottom; // its bottom edge is the buttons' top: theirs
   }
 
   /**
