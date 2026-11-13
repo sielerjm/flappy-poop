@@ -112,6 +112,8 @@
 --   delete every participant and answer of a phase (the pilot's, before the beta):
 --     select public.admin_purge_phase('pilot');
 --   undo the stamp: drop function public.schema_version();
+--   undo the 🌞 / 🏅 name rule (plan 25): drop index public.daily_scores_name_key; then restore
+--     name_blocked and submit_daily_score from git and run this file.
 --   undo the receipt lists (plan 24): alter table public.player_counters drop column recent_batches;
 --     alter table public.education_public drop column recent_batches; then restore submit_counters,
 --     submit_education_grades and fold_player from git and run this file.
@@ -245,13 +247,29 @@ security definer
 set search_path = public
 as $$
 begin
+  -- The score board's claim: another player's score row holds the name and this player has none
+  -- under it.
   if exists (select 1 from public.scores s where public.name_key(s.name) = p_key and s.player_id <> p_id)
      and not exists (select 1 from public.scores s where public.name_key(s.name) = p_key and s.player_id = p_id) then
     return true;
   end if;
+  -- A name this player already shows under, on any board, stays theirs (plan 25).
+  if exists (select 1 from public.scores s where public.name_key(s.name) = p_key and s.player_id = p_id)
+     or exists (select 1 from public.daily_scores d where public.name_key(d.name) = p_key and d.player_id = p_id)
+     or exists (select 1 from public.tournament_stats t where public.name_key(t.name) = p_key and t.player_id = p_id)
+     or exists (select 1 from public.education_public e where public.name_key(e.name) = p_key and e.player_id = p_id) then
+    return false;
+  end if;
+  -- Otherwise the name is another player's when they show under it on the 📚 board (plan 24,
+  -- AUD-022), or on the 🌞 or 🏅 board with no score row (the players a tapped name opens,
+  -- player_by_name; plan 25). The 🏅 placeholder 'Player' is no one's.
   return exists (select 1 from public.education_public e where public.name_key(e.name) = p_key and e.player_id <> p_id)
-     and not exists (select 1 from public.scores s where public.name_key(s.name) = p_key and s.player_id = p_id)
-     and not exists (select 1 from public.education_public e where public.name_key(e.name) = p_key and e.player_id = p_id);
+      or exists (select 1 from public.daily_scores d
+                  where public.name_key(d.name) = p_key and d.player_id <> p_id
+                    and not exists (select 1 from public.scores s where s.player_id = d.player_id))
+      or (p_key <> 'player' and exists (select 1 from public.tournament_stats t
+                  where public.name_key(t.name) = p_key and t.player_id <> p_id
+                    and not exists (select 1 from public.scores s where s.player_id = t.player_id)));
 end;
 $$;
 revoke execute on function public.name_blocked(text, text) from public, anon, authenticated;
@@ -441,6 +459,7 @@ create table if not exists public.daily_scores (
   primary key (player_id, day)
 );
 create index if not exists daily_scores_board on public.daily_scores (day, score desc, submitted_at asc);
+create index if not exists daily_scores_name_key on public.daily_scores (public.name_key(name)); -- name_blocked (plan 25)
 alter table public.daily_scores enable row level security;
 revoke all on public.daily_scores from public, anon, authenticated;
 
@@ -1338,6 +1357,9 @@ begin
   on conflict (player_id, day) do nothing;
   get diagnostics v_rows = row_count;
   if v_rows > 0 then
+    -- The player's earlier days follow the name posted now, as score rows do, so a rename frees the
+    -- old name (name_blocked counts 🌞 names; plan 25).
+    update public.daily_scores set name = p_name where player_id = v_id and name <> p_name;
     select ds.player_id into v_top_after from public.daily_scores ds where ds.day = p_day order by ds.score desc, ds.submitted_at asc limit 1;
     if v_top_after = v_id and v_top_before is not null and v_top_before <> v_id then
       perform public.add_server_counter(v_id, 'dethroned', 1);
@@ -2306,7 +2328,7 @@ returns text
 language sql
 immutable
 as $$
-  select '95e322c1278a209f'::text; -- schema stamp
+  select '111567b9f960e940'::text; -- schema stamp
 $$;
 revoke execute on function public.schema_version() from public, authenticated;
 grant  execute on function public.schema_version() to anon;

@@ -1465,6 +1465,9 @@ async function seedLive(db) {
   const level = (await db.query('select public.daily_level($1::date) as l', [day])).rows[0].l;
   await asAnon(db, 'select public.submit_daily_score($1, $2, $3::date, $4, $5, $6)', [id('UpAlice'), 'UpAlice', day, 20, level, 10]);
   await asAnon(db, 'select public.submit_daily_score($1, $2, $3::date, $4, $5, $6)', [id('UpDave'), 'UpDave', day, 25, level, 12]);
+  // Two 🌞-only players under one name: the live rule allowed it (plan 25 stops new ones).
+  await asAnon(db, 'select public.submit_daily_score($1, $2, $3::date, $4, $5, $6)', [id('UpTwinA'), 'UpTwin', day, 5, level, 3]);
+  await asAnon(db, 'select public.submit_daily_score($1, $2, $3::date, $4, $5, $6)', [id('UpTwinB'), 'uptwin', day, 6, level, 4]);
   await age();
   await asAnon(db, 'select public.submit_counters($1, $2, $3::jsonb)', [id('UpAlice'), id('UpCB1'), JSON.stringify({ games: 3, sumScore: 100, sumLevel: 8, maxLevel: 4, fiber: 5 })]);
   await asAnon(db, 'select public.submit_counters($1, $2, $3::jsonb)', [id('UpBob'), id('UpCB2'), JSON.stringify({ games: 1, sumScore: 70, sumLevel: 5, maxLevel: 5 })]);
@@ -1520,7 +1523,7 @@ test('the upgrade: the live schema (tests/fixtures/schema-applied.sql) holding r
   await seedLive(db);
   await db.exec(FIXTURE); // the live schema re-run on itself first: its own backfills settle, as they did live
   const before = await liveView(db);
-  assert.ok(before.scores.length >= 5 && before.aliases.length === 1 && before.daily.length === 2 && before.counters.length >= 2 && before.tournaments.length === 4, 'the seed wrote every kind of row');
+  assert.ok(before.scores.length >= 5 && before.aliases.length === 1 && before.daily.length === 4 && before.counters.length >= 2 && before.tournaments.length === 4, 'the seed wrote every kind of row');
   await db.exec(SQL);
   assert.deepEqual(await liveView(db), before, 'after the first apply');
   await db.exec(SQL);
@@ -1537,6 +1540,13 @@ test('the upgrade: the live schema (tests/fixtures/schema-applied.sql) holding r
   const counted = await csubmit(db, id('UpAlice'), id('UpCB9'), { games: 1 });
   await db.exec("update public.player_counters set updated_at = now() - interval '6 seconds'");
   assert.deepEqual(await csubmit(db, id('UpAlice'), id('UpCB1'), { games: 3, sumScore: 100, sumLevel: 8, maxLevel: 4, fiber: 5 }), counted, 'the batch from before the upgrade is not added twice');
+  // Both 🌞 players who already shared a name keep posting under it; a third player cannot take it (plan 25).
+  const yesterday = (await db.query("select to_char((now() at time zone 'utc')::date - 1, 'YYYY-MM-DD') as d")).rows[0].d;
+  const ylevel = (await db.query('select public.daily_level($1::date) as l', [yesterday])).rows[0].l;
+  for (const [who, name] of [['UpTwinA', 'UpTwin'], ['UpTwinB', 'uptwin']]) {
+    assert.equal((await asAnon(db, 'select public.submit_daily_score($1, $2, $3::date, 7, $4, 4) as r', [id(who), name, yesterday, ylevel])).rows[0].r, 'ok', `${who} still posts`);
+  }
+  await assert.rejects(asAnon(db, 'select public.submit_daily_score($1, $2, $3::date, 7, $4, 4)', [id('UpThird'), 'UPTWIN', yesterday, ylevel]), /name taken/);
   // A merge after the upgrade still folds a daily row.
   await asAnon(db, 'select public.merge_players($1, $2)', [id('UpBob'), id('UpDave')]);
   assert.equal((await db.query('select count(*)::int as n from public.daily_scores where player_id = $1', [id('UpBob')])).rows[0].n, 1);
@@ -1600,6 +1610,42 @@ test("a badge day after tomorrow or before 2000 (a device clock set wrong) is st
   assert.deepEqual(row.badges, { edu_grade_a: today, edu_perfect: today });
   await db.query("update public.education_public set updated_at = now() - interval '6 seconds'");
   await assert.rejects(send(id('CK2'), { edu_grade_a: 'soon' }), /bad badges/, 'a day that is not a day is still refused');
+});
+
+test("a 🌞 or 🏅 name belongs to one player on every board; its holder keeps it; a renamed 🌞 player frees the old one; 'Player' is no one's (plan 25, A11)", async () => {
+  const db = await freshDb();
+  await db.query('select public.admin_set_education_open(true)');
+  const { dailyLevel } = await import('../src/logic.js');
+  const today = await utcToday(db);
+  const yesterday = shiftDay(today, -1);
+  const daily = (pid, name, day = today) => dsubmit(db, pid, name, day, 10, dailyLevel(day, T));
+  const score = (pid, name) => asAnon(db, 'select public.submit_score($1, $2, 40, false, 3)', [pid, name]);
+  const available = (name, pid) => asAnon(db, 'select public.name_available($1, $2) as r', [name, pid]).then((r) => r.rows[0].r);
+  const share = async (pid, name) => (await unpace(db), asAnon(db, 'select public.share_education($1, $2, true)::text as r', [pid, name]).then((r) => r.rows[0].r));
+  const medals = (pid, name) => db.query('insert into public.tournament_stats (player_id, name, best_score, gold, silver, bronze, events, updated_at) values ($1, $2, 30, 1, 0, 0, 1, now())', [pid, name]);
+  const [D, T1, X, R, P1] = ['NDana', 'NTina', 'NOther', 'NRex', 'NPlaceholder'].map(id);
+  // A 🌞-only player.
+  assert.equal(await daily(D, 'Dana', yesterday), 'ok');
+  await assert.rejects(score(X, 'dana'), /name taken/, 'the 🏆 board');
+  await assert.rejects(daily(X, 'DANA'), /name taken/, 'the 🌞 board');
+  await assert.rejects(share(X, 'Dana'), /name taken/, 'the 📚 board');
+  assert.equal(await available('Dana', X), false, "the save panel's check");
+  assert.equal(await daily(D, 'Dana'), 'ok', 'the holder keeps it');
+  // A 🏅-only player (medals from a tournament they joined by code).
+  await medals(T1, 'Tina');
+  await assert.rejects(score(X, 'tina'), /name taken/);
+  await assert.rejects(daily(X, 'Tina'), /name taken/);
+  assert.equal(await available('Tina', T1), true, 'the holder may claim it on the 🏆 board');
+  await score(T1, 'Tina');
+  // A 🌞 player who posts under a new name frees the old one: their earlier days follow it.
+  assert.equal(await daily(R, 'Rex', yesterday), 'ok');
+  assert.equal(await daily(R, 'Rox'), 'ok');
+  assert.deepEqual((await drows(db)).filter((r) => r.player_id === R).map((r) => r.name), ['Rox', 'Rox']);
+  assert.equal(await available('Rex', X), true, 'the old name is free');
+  assert.equal(await available('Rox', X), false);
+  // The 🏅 placeholder for a player whose code name was taken is no one's.
+  await medals(P1, 'Player');
+  assert.equal(await available('Player', X), true);
 });
 
 test('a 📚 name belongs to one player (AUD-022): no second sharer, no 🌞-only name, no score-board claim of a 📚-only name; a player keeps a name they already hold', async () => {
