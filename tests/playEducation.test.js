@@ -6,6 +6,10 @@ import assert from 'node:assert/strict';
 import { playScene, absorb, fakeStorage, registry, toggleStub } from './support/scenes.js';
 import { TUNING as T } from '../src/config.js';
 import { createSettingsStore } from '../src/logic.js';
+import { CARDS } from '../src/questions.js';
+import { newTally, createEduStore } from '../src/education.js';
+import { eduRunFacts } from '../src/achievements.js';
+import { createEduShareStore } from '../src/leaderboard.js';
 
 /** A Play with what start() and the switches read; heavy scene objects are sinks. */
 function half({ match = null, educationOn = false, eduUnlocked = false, versusOn = false, storage = fakeStorage(), reg = registry() } = {}) {
@@ -98,4 +102,73 @@ test("two tabs: 📚 stored on in one and 👥 on in the other's session: 👥 w
   b.educationOn = true;
   assert.equal(b.reconcileSwitches(), false);
   assert.equal(b.educationOn, true);
+});
+
+// --- Scene-level gates with no unit test before plan 24 (AUD-014, AUD-017) ---
+
+test('a test run answers a card without saving it or recording a pilot event; a real run does both (AUD-014)', () => {
+  const saved = [];
+  const events = [];
+  const s = playScene({
+    runIsTest: true, runQuiz: newTally(), levelBreak: true, level: 2,
+    eduStore: { load: () => ({ cards: {} }), answer: (cardId) => saved.push(cardId) },
+    researchJoined: () => true, recordAnswerEvent: (e) => events.push(e),
+    takeCoins() {}, refreshLevelBanner() {}, refreshShopButton() {},
+  });
+  const ask = () => s.quizAnswer({ card: CARDS[0], reason: 'new', order: ['answer', 'w1', 'w2'], chosen: 'answer', rtMs: 1000, mode: 'break' });
+  assert.equal(ask().correct, true);
+  assert.deepEqual([saved, events], [[], []], 'a test run counts nothing');
+  s.runIsTest = false;
+  ask();
+  assert.deepEqual([saved.length, events.length], [1, 1], 'the control: a real run saves the card and, joined, records the answer');
+});
+
+test('🔬 never shows in a test run; in a joined education run it does (AUD-014)', () => {
+  const badge = { text: '', visible: null, setVisible(v) { this.visible = v; return this; }, setText(t) { this.text = t; return this; }, setPosition() { return this; } };
+  const s = playScene({ testBadge: badge, state: 'playing', runIsTest: true, runIsEducation: true, researchJoined: () => true, col: { x: 0 }, locale: 'en' });
+  s.refreshTestBadge();
+  assert.equal(badge.text, '\u{1F9EA}\u{1F4DA}', 'test and education, no 🔬');
+  s.runIsTest = false;
+  s.refreshTestBadge();
+  assert.equal(badge.text, '\u{1F4DA}\u{1F52C}');
+});
+
+test('a revive costs education.revivePenaltyPerLevel × level, not the versus penalty (AUD-017)', () => {
+  const knob = T.education.revivePenaltyPerLevel;
+  T.education.revivePenaltyPerLevel = 5; // apart from the versus value (2), so the two cannot be mixed up
+  try {
+    const popups = [];
+    const s = playScene({
+      revive: { phase: 'revived' }, respawnHold: 'quiz', respawning: () => true, runQuiz: newTally(), runIsTest: false,
+      eduStore: { addRevive() {} }, score: 100, level: 3, scoreText: { setText() {} }, showScorePopup: (...a) => popups.push(a),
+      effects: { restore() {} }, refreshProbioticHud() {}, prepareRevive() {}, standRevived() {}, refreshCoinHud() {}, refreshInventory() {},
+    });
+    s.reviveDone();
+    assert.equal(s.score, 85, '100 − 5 × level 3');
+    assert.equal(popups[0][4], 5, 'the popup shows the same penalty');
+  } finally {
+    T.education.revivePenaltyPerLevel = knob;
+  }
+});
+
+test("drainEduShare never rejects, and follows the server: 'rejected' counts the batch as sent, 'not shared' and a rename answered false turn sharing off (AUD-014)", async () => {
+  const sharer = (post, rename = async () => true) => {
+    const storage = fakeStorage();
+    const s = playScene({ save: { id: 'SHAREAAAAAAAAAAAAAAAAA', name: 'Sam' }, eduShare: createEduShareStore(storage, 's'), eduStore: createEduStore(storage), registry: registry(), postEduGrades: post, postEduRename: rename });
+    s.eduShare.turnOn('2026-11-13T10:00:00.000+00:00', 'Sam');
+    for (let i = 0; i < 3; i += 1) s.eduStore.endRun(eduRunFacts({ answered: 5, right: 5 }));
+    return s;
+  };
+  const boom = sharer(() => { throw new Error('boom'); });
+  await assert.doesNotReject(boom.drainEduShare('SHAREAAAAAAAAAAAAAAAAA'), 'a throw never reaches the sync (the score post after it)');
+  const refused = sharer(async () => ({ status: 'rejected' }));
+  await refused.drainEduShare('SHAREAAAAAAAAAAAAAAAAA');
+  assert.equal(refused.eduShare.load().sent.runs, 3, "'rejected': counted as sent, not built again");
+  const gone = sharer(async () => ({ status: 'notShared' }));
+  await gone.drainEduShare('SHAREAAAAAAAAAAAAAAAAA');
+  assert.equal(gone.eduShare.load().on, false, "'not shared': off here");
+  const renamed = sharer(async () => ({ status: 'ok' }), async () => false);
+  renamed.save.name = 'Samuel';
+  await renamed.drainEduShare('SHAREAAAAAAAAAAAAAAAAA');
+  assert.equal(renamed.eduShare.load().on, false, 'a rename answered false (no row): off here');
 });

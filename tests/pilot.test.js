@@ -308,3 +308,49 @@ test('Withdraw under an older notice still deletes the participant and every ans
     api.restore();
   }
 });
+
+test('under an older notice nothing is recorded, and a queue left from before is not sent (AUD-014)', async () => {
+  const phone = device({ id: 'OLDNOTICEAAAAAAAAAAAAA', name: 'O', top: [], exportedAt: null }, fakeStorage());
+  const sent = [];
+  phone.postResearch = (...a) => (sent.push(a), Promise.resolve({ status: 'ok' }));
+  phone.consentStore.join({ version: EDUCATION.consentVersion, phase: 'pilot', at: Date.now(), id: phone.save.id });
+  answer(phone); // queued under the current notice
+  phone.consentStore.join({ ...phone.researchConsent(), version: 'pilot-0' }); // the notice moved on
+  answer(phone);
+  assert.equal(phone.researchQueue.size(), 1, 'nothing more recorded');
+  await phone.drainResearch();
+  assert.equal(sent.length, 0, 'and nothing sent');
+});
+
+test('a Withdraw that cannot reach the server keeps the tester joined (RESEARCH.md: try again) (AUD-014)', async () => {
+  const phone = device({ id: 'OFFLINEAAAAAAAAAAAAAAA', name: 'O', top: [], exportedAt: null }, fakeStorage());
+  phone.consentStore.join({ version: EDUCATION.consentVersion, phase: 'pilot', at: Date.now(), id: phone.save.id });
+  phone.postResearchDelete = async () => null;
+  assert.equal(await phone.leaveResearch(), false);
+  assert.equal(phone.researchJoined(), true);
+});
+
+test('Clear forgets the consent and empties the queue on this device (AUD-014)', () => {
+  const phone = device({ id: 'CLEAREDAAAAAAAAAAAAAAA', name: 'C', top: [], exportedAt: null }, fakeStorage());
+  phone.consentStore.join({ version: EDUCATION.consentVersion, phase: 'pilot', at: Date.now(), id: phone.save.id });
+  answer(phone);
+  const none = { clear() {} };
+  Object.assign(phone, { setSaveState() {}, submitStore: none, renameStore: none, careerStore: none, eduStore: none, eduShare: none, best: none, refreshEduDue() {} });
+  phone.signOut();
+  assert.deepEqual([phone.researchConsent(), phone.researchQueue.size()], [null, 0]);
+});
+
+test("the unlock word is never saved as a name: Save toggles education mode and the name stays the player's (AUD-014)", async () => {
+  let unlocked = false;
+  let saved = null;
+  const play = { getSaveState: () => ({ id: 'WORDAAAAAAAAAAAAAAAAAA', name: 'Keeper', top: [] }), isEduUnlocked: () => unlocked, setEduUnlocked: (on) => (unlocked = on), setSaveState: (st) => (saved = st), researchConsent: () => null };
+  openSavePanel({ game: {}, play, locale: 'en' });
+  const root = body.find('save-panel') ?? body.children.find((c) => c.attrs?.role === 'dialog');
+  root.find('save-name').value = EDUCATION.words[0].toUpperCase();
+  await root.find('save-save-btn').click();
+  const name = root.find('save-name').value;
+  closeSavePanel();
+  assert.equal(unlocked, true, 'the word unlocks education mode');
+  assert.equal(saved, null, 'nothing is saved');
+  assert.equal(name, 'Keeper', 'the field shows the name again');
+});

@@ -60,3 +60,27 @@ test('Give up, then a key or a second thumb before the queued stop runs: no answ
   q.choose(0, 'key');
   assert.equal(answers.length, 0, 'nothing answered under a finishing quiz');
 });
+
+test("the 🚩's link opens only in a new tab: with the popup blocked, nothing navigates the game's tab (AUD-014)", () => {
+  const before = { open: globalThis.open, location: globalThis.location };
+  let navigated = false;
+  try {
+    globalThis.open = () => null; // a blocked popup
+    globalThis.location = { href: 'http://localhost/', assign() { navigated = true; } };
+    assert.equal(quizScene().openUrl('https://example.com/card'), 'none');
+    assert.equal(navigated, false, 'no same-tab fallback: the run would be lost');
+    globalThis.open = () => ({ opener: {} });
+    assert.equal(quizScene().openUrl('https://example.com/card'), 'window');
+  } finally {
+    globalThis.open = before.open;
+    globalThis.location = before.location;
+  }
+});
+
+test('the revive card ignores taps for its first moments, never keys or the ring, and a break card never (AUD-014)', () => {
+  const lock = (mode, ms, pointer = {}) => quizScene({ mode, openedAt: 1000, game: { loop: { time: 1000 + ms } } }).tapLocked(pointer);
+  assert.equal(lock('revive', 100), true, 'a tap as the card appears');
+  assert.equal(lock('revive', 100, null), false, 'a key or the ring has no pointer');
+  assert.equal(lock('revive', 1000), false, 'a tap later counts');
+  assert.equal(lock('break', 100), false, "a break's card is never locked");
+});

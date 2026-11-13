@@ -191,7 +191,9 @@ test('cardCounts matches what pickCard hands out: with nothing in the recent gap
       const got = { new: 0, learning: 0, due: 0, early: 0 };
       const exclude = [];
       const rng = createRng(11);
-      for (;;) {
+      for (let guard = 0; ; guard += 1) {
+        // Capped (plan 24, AUD-017): a pickCard that asked a card of this quiz again would loop forever.
+        assert.ok(guard <= CARDS.length, `${context} ${level}: pickCard kept handing out cards past the bank's ${CARDS.length}`);
         const p = pickCard({ srs, context, level, segment, now: NOW, exclude, recent: [], rng });
         if (!p) break;
         if (p.reason !== 'early') assert.equal(got.early, 0, `${context} ${level}: ${p.card.id} (${p.reason}) came after an early review`);
@@ -432,4 +434,39 @@ test('cardSource: first author, et al. when there are more, the year; joined for
   assert.equal(cardSource({ refs: [4] }, refs), 'Roediger 1980');
   assert.equal(cardSource({ refs: [5, 9] }, refs), '', 'unparsable or missing refs are left out');
   for (const c of CARDS) assert.ok(cardSource(c).length > 0, `${c.id}: every bank card has a short source`);
+});
+
+// --- Rules with no test before plan 24 (AUD-017) ---
+
+test('schedule: a review answered "hard" again and again never takes the ease under minEase', () => {
+  let rec = schedule(null, 'good', NOW);
+  for (let i = 0; i < 6; i += 1) rec = schedule(rec, 'good', rec.dueAt);
+  assert.equal(rec.phase, 'review');
+  for (let i = 0; i < 40; i += 1) rec = schedule(rec, 'hard', rec.dueAt);
+  assert.ok(rec.ease >= T.education.srs.minEase, `ease ${rec.ease}`);
+  assert.equal(rec.ease, T.education.srs.minEase, 'and it rests on the floor');
+});
+
+test('eduShopPrices rounds up: level 2 is ceil(price × 1.25), not the rounded-down table', () => {
+  assert.deepEqual(eduShopPrices(2), { fiber: 2, bean: 8, superBean: 20, mystery: 7 });
+});
+
+test('masteryByDeck leaves a retired card out of its deck', () => {
+  const [a, b] = CARDS.filter((c) => c.deck === CARDS[0].deck).slice(0, 2);
+  const cards = [a, { ...b, retired: true }];
+  const srs = { [a.id]: schedule(null, 'good', NOW), [b.id]: schedule(null, 'good', NOW) };
+  assert.deepEqual(masteryByDeck(srs, { cards })[a.deck], { seen: 1, mastered: 0, total: 1 });
+});
+
+test('createEduStore: Clear on the same instance empties what that instance reads; a record with no known phase is dropped', () => {
+  const m = new Map();
+  const storage = { getItem: (k) => (m.has(k) ? m.get(k) : null), setItem: (k, v) => m.set(k, String(v)), removeItem: (k) => m.delete(k) };
+  const store = createEduStore(storage);
+  store.answer(CARDS[0].id, schedule(null, 'good', NOW));
+  store.addRevive();
+  store.clear();
+  assert.deepEqual([Object.keys(store.load().cards), store.load().counters], [[], {}], 'this very instance reads the wiped record');
+  const good = schedule(null, 'good', NOW);
+  m.set(LEADERBOARD.eduKey, JSON.stringify({ v: 1, cards: { [CARDS[0].id]: good, [CARDS[1].id]: { ...good, phase: 'mastered' } }, recent: [], counters: {}, badges: {} }));
+  assert.deepEqual(Object.keys(store.load().cards), [CARDS[0].id], 'a phase the scheduler does not know is junk');
 });

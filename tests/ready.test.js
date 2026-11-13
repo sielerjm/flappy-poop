@@ -190,3 +190,10 @@ test("the 📚 glyph is a hit target of its own (educationInfo): thumb-sized, cl
   assert.equal(readyLayout(GAME_WIDTH, GAME_HEIGHT, T, 0, { versus: true }).educationInfo, undefined);
   assert.equal(readyHit(two.educationInfo.x, two.educationInfo.y, layout), null, 'not offered: a tap there starts the run');
 });
+
+test("the ready screen's switch rows stay where main has them: 🚽 at y 812 and 👥 at 886, 72 px tall (AUD-017)", () => {
+  const one = readyLayout(GAME_WIDTH, GAME_HEIGHT, T);
+  const two = readyLayout(GAME_WIDTH, GAME_HEIGHT, T, 0, { versus: true });
+  assert.deepEqual([one.toilet.y, one.toilet.height], [812, 72], 'no extra switch: 🚽 alone');
+  assert.deepEqual([two.toilet.y, two.versus.y, two.versus.height], [812, 886, 72], '🚽 and 👥');
+});
