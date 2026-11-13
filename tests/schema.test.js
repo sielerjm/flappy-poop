@@ -1078,3 +1078,256 @@ test('anon reads neither 📚 table and cannot open the board; unshare needs onl
   assert.deepEqual((await db.query('select board_open from public.education_settings')).rows, [{ board_open: true }], 're-running the file does not close the board');
   assert.equal((await erows(db)).length, 1);
 });
+
+// ---------------------------------------------------------------------------
+// The education tester pilot (plan 21, Stage 3b, step R1): answer events under a research id.
+// ---------------------------------------------------------------------------
+
+const CODE = 'pilot-code-2026-xyz'; // 19 characters
+const CONSENT = 'pilot-1';
+const setInvite = (db, code) => db.query('select public.admin_set_invite($1) as r', [code]).then((r) => r.rows[0].r);
+const enrol = (db, pid, invite = CODE, adult = true, consent = CONSENT) => asAnon(db, 'select public.enrol_research($1, $2, $3, $4) as r', [pid, invite, adult, consent]).then((r) => r.rows[0].r);
+const revents = (db, pid, batch, events) => asAnon(db, 'select public.submit_research_events($1, $2, $3::jsonb) as r', [pid, batch, JSON.stringify(events)]).then((r) => r.rows[0].r);
+const withdraw = (db, pid) => asAnon(db, 'select public.delete_research($1) as r', [pid]).then((r) => r.rows[0].r);
+const parts = (db) => db.query('select player_id, research_id, phase, adult, consent_version, last_batch from public.research_participants order by player_id').then((r) => r.rows);
+const responses = (db) => db.query('select event_id, research_id, phase, card_id, context, correct, rt_ms, seen, since_ms::int as since_ms, data from public.research_responses order by client_at, event_id').then((r) => r.rows);
+const ageResearch = (db) => db.query("update public.research_participants set updated_at = now() - interval '6 seconds'");
+/** One answer event as the game records it (src/research.js answerEvent). */
+const ev = (tag, extra = {}) => ({
+  event_id: id(`EV${tag}`),
+  session_id: id('SESS'),
+  run_id: id('RUN'),
+  card_id: 'ST-03',
+  card_hash: '0a1b2c3d',
+  audited: false,
+  deck: 'stomach',
+  context: 'break',
+  seq: 1,
+  step: null,
+  level: 1,
+  order: ['w1', 'answer', 'w2'],
+  chosen: 'answer',
+  correct: true,
+  rt_ms: 2400,
+  interrupted: false,
+  grade: 'easy',
+  reason: 'new',
+  ease: null,
+  interval_ms: null,
+  reps: null,
+  lapses: null,
+  seen: 0,
+  since_ms: null,
+  client_at: Date.now(),
+  app: '0.16.1',
+  tuning: 'abcd1234',
+  locale: 'en',
+  field: 'phone',
+  input: 'touch',
+  consent: CONSENT,
+  phase: 'pilot',
+  ...extra,
+});
+
+test('enrol_research: closed until a code is set; the code, adults only and a consent version; a new code stops the old one', async () => {
+  const db = await freshDb();
+  const P = id('RP1');
+  await assert.rejects(enrol(db, P), /closed/, 'no code set: nobody can join');
+  await assert.rejects(setInvite(db, 'short-code'), /bad code/, 'a code under 16 characters is refused');
+  await assert.rejects(setInvite(db, 'x'.repeat(201)), /bad code/);
+  assert.equal(await setInvite(db, CODE), 'set');
+  const hash = (await db.query('select invite_hash from public.education_settings')).rows[0].invite_hash;
+  assert.match(hash, /^[0-9a-f]{64}$/, 'only the SHA-256 of the code is stored');
+  assert.equal(SQL.includes(CODE), false);
+  await assert.rejects(enrol(db, P, 'pilot-code-2026-xyZ'), /bad invite/, 'a wrong code');
+  await assert.rejects(enrol(db, P, ''), /bad invite/, 'an empty code');
+  await assert.rejects(enrol(db, P, null), /bad invite/, 'no code');
+  await assert.rejects(enrol(db, P, hash), /bad invite/, 'the hash is not the code');
+  await assert.rejects(enrol(db, P, CODE, false), /not adult/);
+  await assert.rejects(asAnon(db, 'select public.enrol_research($1, $2, null, $3)', [P, CODE, CONSENT]), /not adult/, 'no answer is not a yes');
+  await assert.rejects(enrol(db, P, CODE, true, 'Version 1!'), /bad consent/);
+  await assert.rejects(enrol(db, 'short', CODE), /bad player id/);
+  assert.deepEqual(await parts(db), [], 'a refused join leaves nothing');
+  assert.deepEqual(await enrol(db, P), { status: 'ok', phase: 'pilot' });
+  const [row] = await parts(db);
+  assert.deepEqual({ ...row, research_id: null }, { player_id: P, research_id: null, phase: 'pilot', adult: true, consent_version: CONSENT, last_batch: null });
+  assert.match(row.research_id, /^[0-9a-f]{32}$/, 'a random research id');
+  assert.notEqual(row.research_id, P);
+  // Joining again keeps the research id and records the newer consent.
+  await enrol(db, P, CODE, true, 'pilot-2');
+  assert.deepEqual((await parts(db)).map((r) => [r.research_id, r.consent_version]), [[row.research_id, 'pilot-2']]);
+  // A new code stops the old one; null closes enrolment. Those who joined stay.
+  await setInvite(db, 'another-code-entirely');
+  await assert.rejects(enrol(db, id('RP2'), CODE), /bad invite/, 'the old code no longer works');
+  assert.equal((await enrol(db, id('RP2'), 'another-code-entirely')).status, 'ok');
+  assert.equal(await setInvite(db, null), 'closed');
+  await assert.rejects(enrol(db, id('RP3'), 'another-code-entirely'), /closed/);
+  assert.equal((await parts(db)).length, 2);
+  await assert.rejects(asAnon(db, "select public.admin_set_invite('a-long-enough-code')"), /permission denied/, 'only the owner sets the code');
+});
+
+test('submit_research_events stores answers under the research id, never the player id; a resent batch or event adds nothing; one batch per 5 s', async () => {
+  const db = await freshDb();
+  await setInvite(db, CODE);
+  const P = id('RS1');
+  await assert.rejects(revents(db, P, id('B0'), [ev('A')]), /not enrolled/, 'only a participant may send');
+  await enrol(db, P);
+  const rid = (await parts(db))[0].research_id;
+  // The first batch is not rate limited by the join itself.
+  assert.deepEqual(await revents(db, P, id('B1'), [ev('A'), ev('B', { card_id: 'JE-06', correct: false, context: 'revive', rt_ms: 5100.6, seen: 2, since_ms: 65000, junk: 'dropped', player_id: P })]), { status: 'ok', stored: 2 });
+  const rows = await responses(db);
+  assert.deepEqual(rows.map((r) => [r.event_id, r.research_id, r.phase, r.card_id, r.context, r.correct, r.rt_ms, r.seen, r.since_ms]), [
+    [id('EVA'), rid, 'pilot', 'ST-03', 'break', true, 2400, 0, null],
+    [id('EVB'), rid, 'pilot', 'JE-06', 'revive', false, 5101, 2, 65000],
+  ]);
+  assert.equal(rows[0].data.order.join(), 'w1,answer,w2', 'the whole event is kept');
+  assert.equal(rows[0].data.app, '0.16.1');
+  assert.deepEqual([rows[1].data.junk, rows[1].data.player_id], [undefined, undefined], 'fields the game is not known to record are dropped');
+  // No player id anywhere in the answers.
+  const dump = JSON.stringify((await db.query('select * from public.research_responses')).rows);
+  assert.equal(dump.includes(P), false, 'responses hold no player id');
+  const cols = (await db.query("select column_name from information_schema.columns where table_name = 'research_responses'")).rows.map((r) => r.column_name);
+  assert.equal(cols.includes('player_id'), false);
+  // The receipt, the rate limit, and event ids already stored.
+  await assert.rejects(revents(db, P, id('B2'), [ev('C')]), /rate limited/, 'a second batch inside 5 s');
+  assert.deepEqual(await revents(db, P, id('B1'), [ev('A'), ev('B')]), { status: 'ok', stored: 0 }, 'the same batch again (a lost reply): nothing, even inside 5 s');
+  await ageResearch(db);
+  assert.deepEqual(await revents(db, P, id('B2'), [ev('B', { correct: true }), ev('C')]), { status: 'ok', stored: 1 }, 'an event already stored is skipped, not overwritten');
+  assert.equal((await responses(db)).find((r) => r.event_id === id('EVB')).correct, false);
+  assert.equal((await parts(db))[0].last_batch, id('B2'));
+});
+
+test('submit_research_events refuses malformed batches, and they change nothing', async () => {
+  const db = await freshDb();
+  await setInvite(db, CODE);
+  const P = id('RB1');
+  await enrol(db, P);
+  const now = Date.now();
+  const bad = [
+    ['no events', [], /bad events/],
+    ['more than 200', Array.from({ length: 201 }, (_, i) => ev(`N${i}`)), /bad events/],
+    ['not an object', ['x'], /bad events/],
+    ['a short event id', [ev('A', { event_id: 'short' })], /bad events: event id/],
+    ['no card', [ev('A', { card_id: 'stomach' })], /bad events: card/],
+    ['a context the game has not', [ev('A', { context: 'exam' })], /bad events: answer/],
+    ['correct as a string', [ev('A', { correct: 'true' })], /bad events: answer/],
+    ['no time', [ev('A', { client_at: null })], /bad events: time/],
+    ['a time as text', [ev('A', { client_at: String(now) })], /bad events: time/],
+    ['a time 91 days old', [ev('A', { client_at: now - 91 * 86400000 })], /bad events: time/],
+    ['a time two days ahead', [ev('A', { client_at: now + 2 * 86400000 })], /bad events: time/],
+    ['a response time as text', [ev('A', { rt_ms: 'fast' })], /bad events: numbers/],
+    ['an oversized event', [ev('A', { tuning: 'x'.repeat(2100) })], /bad events: shape/],
+  ];
+  for (const [why, events, re] of bad) await assert.rejects(revents(db, P, id('BX'), events), re, why);
+  await assert.rejects(asAnon(db, 'select public.submit_research_events($1, $2, $3::jsonb)', [P, id('BX'), '{}']), /bad events/, 'an object, not a list');
+  await assert.rejects(revents(db, P, 'short', [ev('A')]), /bad batch/);
+  await assert.rejects(revents(db, 'short', id('BX'), [ev('A')]), /bad player id/);
+  assert.deepEqual(await responses(db), []);
+  assert.equal((await parts(db))[0].last_batch, null);
+  // The edges are allowed: 200 events, a time 89 days old, an interrupted answer with no response time.
+  const many = Array.from({ length: 200 }, (_, i) => ev(`M${i}`, { client_at: now - i, rt_ms: i % 2 ? null : 900 }));
+  assert.deepEqual(await revents(db, P, id('BM'), many), { status: 'ok', stored: 200 });
+  await ageResearch(db);
+  assert.equal((await revents(db, P, id('BO'), [ev('OLD', { client_at: now - 89 * 86400000 })])).stored, 1);
+});
+
+test('delete_research withdraws: the participant and every answer go; joining again starts a new research id', async () => {
+  const db = await freshDb();
+  await setInvite(db, CODE);
+  const [P, Q] = ['RW1', 'RW2'].map(id);
+  await enrol(db, P);
+  await enrol(db, Q);
+  await revents(db, P, id('WB1'), [ev('A'), ev('B')]);
+  await revents(db, Q, id('WB2'), [ev('C')]);
+  const before = (await parts(db)).find((r) => r.player_id === P).research_id;
+  assert.equal(await withdraw(db, P), true);
+  assert.deepEqual((await parts(db)).map((r) => r.player_id), [Q], 'the participant is gone');
+  assert.deepEqual((await responses(db)).map((r) => r.event_id), [id('EVC')], "and so are their answers; another participant's stay");
+  assert.equal(await withdraw(db, P), false, 'nothing left to delete');
+  await assert.rejects(revents(db, P, id('WB3'), [ev('D')]), /not enrolled/, 'a device still recording is told so');
+  await assert.rejects(withdraw(db, 'short'), /bad player id/);
+  await enrol(db, P);
+  assert.notEqual((await parts(db)).find((r) => r.player_id === P).research_id, before, 'a new research id: the old answers cannot be tied to the new ones');
+});
+
+test("the owner's views count answers by card (first sight and later), by participant and by time since last seen; a purge empties a phase", async () => {
+  const db = await freshDb();
+  await setInvite(db, CODE);
+  const [P, Q] = ['RV1', 'RV2'].map(id);
+  await enrol(db, P);
+  await enrol(db, Q);
+  await revents(db, P, id('VB1'), [
+    ev('A', { card_id: 'ST-03', correct: false, seen: 0, since_ms: null }),
+    ev('B', { card_id: 'ST-03', correct: true, seen: 1, since_ms: 60000 }),
+    ev('C', { card_id: 'ST-03', correct: true, seen: 2, since_ms: 2 * 86400000 }),
+    ev('D', { card_id: 'JE-06', correct: true, seen: 0, since_ms: null }),
+  ]);
+  await revents(db, Q, id('VB2'), [ev('E', { card_id: 'ST-03', correct: true, seen: 0, since_ms: null }), ev('F', { card_id: 'ST-03', correct: false, seen: 3, since_ms: 8 * 86400000 })]);
+  const q = (sql) => db.query(sql).then((r) => r.rows);
+  assert.deepEqual(await q('select phase, participants, answers from public.research_summary'), [{ phase: 'pilot', participants: 2, answers: 6 }]);
+  assert.deepEqual(await q('select card_id, answers, correct, first_answers, first_correct, later_answers, later_correct from public.research_by_card order by card_id'), [
+    { card_id: 'JE-06', answers: 1, correct: 1, first_answers: 1, first_correct: 1, later_answers: 0, later_correct: 0 },
+    { card_id: 'ST-03', answers: 5, correct: 3, first_answers: 2, first_correct: 1, later_answers: 3, later_correct: 2 },
+  ]);
+  assert.deepEqual(await q('select answers, correct, cards from public.research_by_participant order by answers desc'), [{ answers: 4, correct: 3, cards: 2 }, { answers: 2, correct: 1, cards: 1 }]);
+  assert.deepEqual(await q('select since_last_seen, answers, correct from public.research_retention order by since_last_seen'), [
+    { since_last_seen: '0 first sight', answers: 3, correct: 2 },
+    { since_last_seen: '1 under 10 min', answers: 1, correct: 1 },
+    { since_last_seen: '3 under 1 week', answers: 1, correct: 1 },
+    { since_last_seen: '4 1 week or more', answers: 1, correct: 0 },
+  ]);
+  const viewed = JSON.stringify([await q('select * from public.research_by_participant'), await q('select * from public.research_summary')]);
+  assert.equal(viewed.includes(P) || viewed.includes(Q), false, 'no player id in the views');
+  // A purge deletes a phase's participants and answers, and only that phase's.
+  await db.query("update public.research_participants set phase = 'beta' where player_id = $1", [Q]);
+  await db.query("update public.research_responses set phase = 'beta' where research_id = (select research_id from public.research_participants where player_id = $1)", [Q]);
+  assert.equal((await q("select public.admin_purge_phase('pilot') as n"))[0].n, 4);
+  assert.deepEqual((await parts(db)).map((r) => [r.player_id, r.phase]), [[Q, 'beta']]);
+  assert.deepEqual((await responses(db)).map((r) => r.phase), ['beta', 'beta']);
+  await assert.rejects(asAnon(db, "select public.admin_purge_phase('beta')"), /permission denied/);
+});
+
+test('merging players moves the participant to the kept id; two participants become one, with every answer under the kept research id', async () => {
+  const db = await freshDb();
+  await setInvite(db, CODE);
+  // Only the merged player joined: the row moves, research id and all.
+  const [K1, M1] = ['RK1', 'RM1'].map(id);
+  await enrol(db, M1);
+  await revents(db, M1, id('FB1'), [ev('A')]);
+  const rid1 = (await parts(db))[0].research_id;
+  await asAnon(db, 'select public.merge_players($1, $2)', [K1, M1]);
+  assert.deepEqual((await parts(db)).map((r) => [r.player_id, r.research_id]), [[K1, rid1]]);
+  await ageResearch(db);
+  assert.equal((await revents(db, M1, id('FB2'), [ev('B')])).stored, 1, "the merged id's device keeps sending, into the kept player's participant");
+  assert.deepEqual((await responses(db)).map((r) => r.research_id), [rid1, rid1]);
+  // Both joined: one participant is left, and the merged one's answers are under its research id.
+  const [K2, M2] = ['RK2', 'RM2'].map(id);
+  await enrol(db, K2);
+  await enrol(db, M2);
+  await revents(db, K2, id('FB3'), [ev('C')]);
+  await revents(db, M2, id('FB4'), [ev('D'), ev('E')]);
+  const ridK = (await parts(db)).find((r) => r.player_id === K2).research_id;
+  await asAnon(db, 'select public.merge_players($1, $2)', [K2, M2]);
+  assert.deepEqual((await parts(db)).map((r) => r.player_id).sort(), [K1, K2].sort());
+  assert.deepEqual((await responses(db)).filter((r) => [id('EVC'), id('EVD'), id('EVE')].includes(r.event_id)).map((r) => r.research_id), [ridK, ridK, ridK]);
+  // Withdrawing from either device deletes them all.
+  assert.equal(await withdraw(db, M2), true);
+  assert.equal((await responses(db)).some((r) => r.research_id === ridK), false);
+});
+
+test('anon reads none of the research tables or views and cannot call the owner functions', async () => {
+  const db = await freshDb();
+  await setInvite(db, CODE);
+  await enrol(db, id('RA1'));
+  for (const rel of ['research_participants', 'research_responses', 'research_summary', 'research_by_card', 'research_by_participant', 'research_retention']) {
+    await assert.rejects(asAnon(db, `select * from public.${rel}`), /permission denied/, rel);
+  }
+  await assert.rejects(asAnon(db, "insert into public.research_responses (event_id, research_id, phase, card_id, context, correct, client_at) values ('AAAAAAAAAAAAAAAAAAAAAA', 'x', 'pilot', 'ST-01', 'break', true, now())"), /permission denied/);
+  await assert.rejects(asAnon(db, 'delete from public.research_participants'), /permission denied/);
+  await assert.rejects(asAnon(db, 'select invite_hash from public.education_settings'), /permission denied/, 'the code hash stays with the owner');
+  // Re-running the file keeps the code, the participants and their research ids.
+  const before = await parts(db);
+  await db.exec(SQL);
+  assert.deepEqual(await parts(db), before);
+  assert.equal((await enrol(db, id('RA2'))).status, 'ok', 'the code set before still works');
+});
