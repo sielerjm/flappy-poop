@@ -801,6 +801,14 @@ src/
                             first), setSplashProgress, splashReady(onContinue).
                             Fails open: an error removes the splash and starts the
                             game. tests/splash.test.js.
+  store.js                  createJsonStore(storage, key, clean) (plan 24), NO
+                            Phaser, no imports: one JSON value in browser storage,
+                            the pattern the education stores share (education.js,
+                            research.js, leaderboard.js's share store). Storage that
+                            can be read is the truth (another tab's Clear shows at
+                            once); a missing key or broken entry reads as empty;
+                            memory serves only when storage throws or is full, for
+                            this page load. tests/jsonStore.test.js.
   save.js                   Save codes, NO Phaser/DOM. checkNewName (the save
                             panel only): a new username is 4–16 code points (2+
                             with CJK), no whitespace, emoji or NAME_BLOCKED word;
@@ -2169,7 +2177,8 @@ meta/                       Local-only project notes and reports (gitignored;
 7. **Storage can throw.** Private-mode Safari and blocked storage throw on
    `localStorage` access. Go through `createBestStore()`,
    `createSettingsStore()`, `loadLocal()` / `saveLocal()` from `save.js`, or
-   `createSubmitStore()` from `leaderboard.js`; never touch `localStorage`
+   `createSubmitStore()` from `leaderboard.js`; a new store of one JSON value
+   is built on `createJsonStore()` (`src/store.js`). Never touch `localStorage`
    directly in scenes.
 8. **Player-facing copy is multi-locale.** Change UI strings only in
    `src/i18n.js` for **every** locale (`en` and `zh-Hans`), update matching

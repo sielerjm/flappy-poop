@@ -16,6 +16,7 @@
 import { LEADERBOARD } from './config.js';
 import { recordScore, bestByToilet, validateName } from './save.js';
 import { addCounters, cleanCounters, isAchievementId } from './achievements.js';
+import { createJsonStore } from './store.js';
 
 // ---------------------------------------------------------------------------
 // Pure helpers
@@ -968,25 +969,13 @@ function normalizeEduShare(raw) {
  * The device's record itself is the education store's (createEduStore: counters.gradedRuns /
  * gradeSum and badges); beginBatch takes it and works out what is new. A round starts from zero:
  * turning sharing on, or being told to restart, sends the whole record again.
- * Every read normalises, every write is guarded; it never throws.
+ * Every read normalises; storage follows src/store.js; it never throws.
  */
 export function createEduShareStore(storage = globalThis.localStorage, key = LEADERBOARD.eduShareKey) {
-  const read = () => {
-    try {
-      const raw = storage?.getItem(key);
-      return normalizeEduShare(raw == null ? null : JSON.parse(raw));
-    } catch {
-      return normalizeEduShare(null);
-    }
-  };
-  const write = (c) => {
-    try {
-      storage?.setItem(key, JSON.stringify(c));
-    } catch {
-      /* storage unavailable: the choice lives for this page load only */
-    }
-    return c;
-  };
+  // Storage full or blocked: the choice lives for this page load only (src/store.js).
+  const box = createJsonStore(storage, key, normalizeEduShare);
+  const read = box.read;
+  const write = box.write;
   const fresh = (sharedAt, name) => ({ v: 1, on: true, sharedAt: cleanRound(sharedAt), name: typeof name === 'string' ? name : null, sent: { runs: 0, gradeSum: 0 }, sentBadges: [], inflight: null });
   return {
     load: read,
@@ -1059,11 +1048,7 @@ export function createEduShareStore(storage = globalThis.localStorage, key = LEA
       return write(normalizeEduShare(null));
     },
     clear() {
-      try {
-        storage?.removeItem(key);
-      } catch {
-        /* ignore */
-      }
+      box.clear();
     },
   };
 }

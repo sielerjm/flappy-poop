@@ -11,6 +11,7 @@
 import { EDUCATION, LEADERBOARD, TUNING } from './config.js';
 import { fnv1a32, VERSION } from './logic.js';
 import { cardHash, auditState } from './questionAudits.js';
+import { createJsonStore } from './store.js';
 
 const ID_RE = /^[A-Za-z0-9_-]{22}$/;
 const CARD_RE = /^[A-Z]{2}-\d{2}$/;
@@ -105,7 +106,8 @@ export function cleanEvent(raw) {
  * This device's consent to the pilot (flappyPoop.eduConsent): { version, phase, at } while the
  * tester is joined, else null. version = the notice they agreed to (EDUCATION.consentVersion then),
  * phase = the server's phase when they joined, at = when (ms). The invite code is never kept.
- * Every read normalises, every write is guarded; it never throws.
+ * Every read normalises; storage follows src/store.js (another tab's change shows at once, a full
+ * storage keeps the consent for this page load); it never throws.
  */
 export function createConsentStore(storage = globalThis.localStorage, key = LEADERBOARD.eduConsentKey) {
   const clean = (raw) => {
@@ -113,14 +115,8 @@ export function createConsentStore(storage = globalThis.localStorage, key = LEAD
     if (typeof raw.version !== 'string' || !CONSENT_RE.test(raw.version) || !PHASES.includes(raw.phase) || !Number.isFinite(raw.at) || raw.at <= 0) return null;
     return { version: raw.version, phase: raw.phase, at: raw.at };
   };
-  const read = () => {
-    try {
-      const raw = storage?.getItem(key);
-      return clean(raw == null ? null : JSON.parse(raw));
-    } catch {
-      return null;
-    }
-  };
+  const box = createJsonStore(storage, key, clean);
+  const read = box.read;
   return {
     load: read,
     /** Is this device's tester joined? */
@@ -131,20 +127,11 @@ export function createConsentStore(storage = globalThis.localStorage, key = LEAD
     join(consent) {
       const c = clean(consent);
       if (!c) return null;
-      try {
-        storage?.setItem(key, JSON.stringify(c));
-      } catch {
-        /* storage unavailable: the consent lives for this page load only, so nothing is recorded after a reload */
-      }
-      return c;
+      return box.write(c); // storage full or blocked: the consent lives for this page load only
     },
     /** The tester withdrew, was told they are not enrolled, or Clear forgot the player: nothing more is recorded. */
     clear() {
-      try {
-        storage?.removeItem(key);
-      } catch {
-        /* ignore */
-      }
+      box.clear();
     },
   };
 }
@@ -163,22 +150,10 @@ export function createResearchQueue(storage = globalThis.localStorage, { key = L
     const inflight = f && typeof f === 'object' && typeof f.batch === 'string' && ID_RE.test(f.batch) && list(f.events).length ? { batch: f.batch, events: list(f.events).slice(0, batchMax) } : null;
     return { v: 1, pending: list(r.pending).slice(-max), inflight };
   };
-  const read = () => {
-    try {
-      const raw = storage?.getItem(key);
-      return clean(raw == null ? null : JSON.parse(raw));
-    } catch {
-      return clean(null);
-    }
-  };
-  const write = (q) => {
-    try {
-      storage?.setItem(key, JSON.stringify(q));
-    } catch {
-      /* storage unavailable or full: the queue lives for this page load only */
-    }
-    return q;
-  };
+  // Storage full or blocked: the queue lives for this page load only (src/store.js).
+  const box = createJsonStore(storage, key, clean);
+  const read = box.read;
+  const write = box.write;
   return {
     load: read,
     /** How many events wait here (pending and in flight). */
@@ -215,11 +190,7 @@ export function createResearchQueue(storage = globalThis.localStorage, { key = L
       write(q);
     },
     clear() {
-      try {
-        storage?.removeItem(key);
-      } catch {
-        /* ignore */
-      }
+      box.clear();
     },
   };
 }

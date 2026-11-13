@@ -191,7 +191,7 @@ test('createResearchQueue: events wait, go a batch at a time, and a batch in fli
   assert.equal(q.size(), 0);
   const broken = createResearchQueue(boom, { key: 'k' });
   assert.doesNotThrow(() => broken.add(ev(1)));
-  assert.equal(broken.size(), 0);
+  assert.equal(broken.size(), 1, 'storage blocked: the event lives for this page load (src/store.js), as the comment always said');
   // The defaults are the config's.
   const d = createResearchQueue(fakeStorage());
   for (let n = 0; n < EDUCATION.researchBatch + 5; n += 1) d.add(ev(n));

@@ -14,6 +14,7 @@
 import { LEADERBOARD, TUNING } from './config.js';
 import { nextPerfectStreak } from './achievements.js';
 import { CARDS, DECKS, REFERENCES } from './questions.js';
+import { createJsonStore } from './store.js';
 
 /** Education mode's glyph: the ready-screen switch, the HUD badge, the break pill. */
 export const EDUCATION_EMOJI = '\u{1F4DA}';
@@ -373,29 +374,14 @@ function cleanEdu(raw, keep) {
  * education.minGap cards shown). The counters and badges (plan 22) are the education badges' and the
  * average grade's: addRevive counts a revive as it happens, endRun(facts) moves the 🤓 streak and
  * adds a graded run's grade, unlock(ids, day) stores badges not held yet. A record from before them
- * reads as none. They stay on this device: nothing here is ever sent. Storage can throw (private
- * mode): then the record lives for this load only, and a broken entry is read as empty.
+ * reads as none. Storage follows src/store.js: another tab's Clear shows at once, a broken entry
+ * reads as empty, and when storage throws or is full the record lives for this load only.
  */
 export function createEduStore(storage, { key = LEADERBOARD.eduKey, t = TUNING } = {}) {
   const keep = t.education.minGap;
-  let memory = cleanEdu(null, keep);
-  const read = () => {
-    try {
-      const raw = storage?.getItem(key);
-      if (raw != null) return cleanEdu(JSON.parse(raw), keep);
-    } catch {
-      /* unreadable: fall back to this load's copy */
-    }
-    return memory;
-  };
-  const write = (state) => {
-    memory = cleanEdu(state, keep);
-    try {
-      storage?.setItem(key, JSON.stringify(memory));
-    } catch {
-      /* storage unavailable: the copy in memory serves this load */
-    }
-  };
+  const box = createJsonStore(storage, key, (raw) => cleanEdu(raw, keep));
+  const read = box.read;
+  const write = box.write;
   return {
     load: read,
     answer(id, record) {
@@ -427,12 +413,7 @@ export function createEduStore(storage, { key = LEADERBOARD.eduKey, t = TUNING }
       return fresh;
     },
     clear() {
-      memory = cleanEdu(null, keep);
-      try {
-        storage?.removeItem(key);
-      } catch {
-        /* nothing to clear */
-      }
+      box.clear();
     },
   };
 }
