@@ -3701,6 +3701,12 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await tapAt(boxes.title.x, boxes.title.y); // empty space: with no card up this tap would start a run
         const yc2 = await eduCard();
         ok(!yc2.open && yc2.state === 'ready' && !yc2.launching, 'a tap on empty space closes it and starts no run');
+        // Two thumbs on the glyph (plan 25, A6), through the scene's own pointer events: the card opens on
+        // the last press's release, and the other thumb's release does not toggle it shut again.
+        await evaluate(`(() => { const p = ${play}; const b = p.readyBoxes.educationInfo; const at = (id) => ({ id, x: b.x, y: b.y, wasCanceled: false }); p.input.emit('pointerdown', at(91)); p.input.emit('pointerdown', at(92)); p.input.emit('pointerup', at(91)); p.input.emit('pointerup', at(92)); return true; })()`);
+        const thumbs = await eduCard();
+        await evaluate(`${play}.eduCard.open && ${play}.toggleEduCard(), true`);
+        ok(thumbs.open && thumbs.state === 'ready' && !thumbs.launching, 'two thumbs on the 📚 glyph open "Your cards" once: the other release does not shut it again');
         await tapAt(boxes.info.x, boxes.info.y);
         await tapAt(boxes.toilet.x, boxes.toilet.y);
         const yc3 = await eduCard();

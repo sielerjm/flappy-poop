@@ -1100,7 +1100,7 @@ export class Play extends Phaser.Scene {
           return;
         }
         if (hit === 'educationInfo') {
-          this.openEduCardOnRelease(); // the 📚 glyph: "Your cards"
+          this.openEduCardOnRelease(pointer); // the 📚 glyph: "Your cards"
           return;
         }
         if (hit === 'versus') {
@@ -1723,20 +1723,34 @@ export class Play extends Phaser.Scene {
 
   /**
    * A press on the 📚 glyph opens "Your cards" when the finger lifts: the card's dim closes on a
-   * release, so a card opened on the press would shut again at once. A release outside the canvas
-   * opens nothing.
+   * release, so a card opened on the press would shut again at once. The release must be that
+   * pointer's (plan 25, A6): one press is armed at a time, a second press on the glyph replaces it,
+   * another finger's release does nothing, and a release outside the canvas or a cancelled touch
+   * (Phaser's pointer.wasCanceled) disarms it without opening.
    */
-  openEduCardOnRelease() {
-    const done = () => {
-      this.input.off('pointerup', open);
-      this.input.off('pointerupoutside', done);
+  openEduCardOnRelease(pointer = null) {
+    this.eduCardPress?.done();
+    const id = pointer?.id ?? null;
+    const mine = (p) => id === null || p?.id === id;
+    const press = {
+      id,
+      done: () => {
+        this.input.off('pointerup', open);
+        this.input.off('pointerupoutside', away);
+        if (this.eduCardPress === press) this.eduCardPress = null;
+      },
     };
-    const open = () => {
-      done();
-      this.toggleEduCard();
+    const open = (p) => {
+      if (!mine(p)) return;
+      press.done();
+      if (!p?.wasCanceled) this.toggleEduCard();
     };
+    const away = (p) => {
+      if (mine(p)) press.done();
+    };
+    this.eduCardPress = press;
     this.input.on('pointerup', open);
-    this.input.on('pointerupoutside', done);
+    this.input.on('pointerupoutside', away);
   }
 
   /**

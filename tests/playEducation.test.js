@@ -163,6 +163,35 @@ test("test mode turned on after the run started (the game-over screen's bonus qu
   }
 });
 
+test("the 📚 glyph opens \"Your cards\" on its own pointer's release: a second thumb or another finger's release does not toggle it twice; a cancel or a release off the canvas opens nothing (plan 25, A6)", () => {
+  const handlers = { pointerup: new Set(), pointerupoutside: new Set() };
+  const input = { on: (ev, fn) => handlers[ev].add(fn), off: (ev, fn) => handlers[ev].delete(fn), emit: (ev, p) => [...handlers[ev]].forEach((fn) => fn(p)) };
+  let toggles = 0;
+  const s = playScene({ input, toggleEduCard: () => (toggles += 1) });
+  // Two thumbs on the glyph, released one after the other: one toggle, nothing left armed.
+  s.openEduCardOnRelease({ id: 1 });
+  s.openEduCardOnRelease({ id: 2 });
+  input.emit('pointerup', { id: 1 });
+  assert.equal(toggles, 0, "the first thumb's press was replaced");
+  input.emit('pointerup', { id: 2 });
+  assert.equal(toggles, 1);
+  assert.equal(handlers.pointerup.size + handlers.pointerupoutside.size, 0, 'disarmed');
+  // Another finger lifting (one resting elsewhere) does not open it; the press's own release does.
+  s.openEduCardOnRelease({ id: 3 });
+  input.emit('pointerup', { id: 4 });
+  assert.equal(toggles, 1);
+  input.emit('pointerup', { id: 3 });
+  assert.equal(toggles, 2);
+  // A cancelled touch, or a release off the canvas, disarms without opening.
+  s.openEduCardOnRelease({ id: 5 });
+  input.emit('pointerup', { id: 5, wasCanceled: true });
+  s.openEduCardOnRelease({ id: 6 });
+  input.emit('pointerupoutside', { id: 6 });
+  input.emit('pointerup', { id: 6 });
+  assert.equal(toggles, 2);
+  assert.equal(handlers.pointerup.size + handlers.pointerupoutside.size, 0);
+});
+
 test('🔬 never shows in a test run; in a joined education run it does (AUD-014)', () => {
   const badge = { text: '', visible: null, setVisible(v) { this.visible = v; return this; }, setText(t) { this.text = t; return this; }, setPosition() { return this; } };
   const s = playScene({ testBadge: badge, state: 'playing', runIsTest: true, runIsEducation: true, researchJoined: () => true, col: { x: 0 }, locale: 'en' });
