@@ -25,7 +25,7 @@ Each record is stored under a **random id** made by the server. It does not hold
 | `card_id`, `card_hash`, `audited`, `deck` | Which card was asked, a fingerprint of its English text, whether that text has been checked, and its section of the gut. |
 | `context`, `seq`, `step`, `level` | Where the card came up (a level break, a crash, the bonus quiz), its number in the run, how far into a crash quiz you were, and the level. |
 | `order`, `chosen`, `correct` | The order the three answers were shown in, which one you picked, and whether it was right. |
-| `rt_ms`, `interrupted` | How long you took, in milliseconds, and whether the time is unreliable (the game was in the background, or another card covered the question). |
+| `rt_ms`, `interrupted` | How long you took, in milliseconds, and whether the time is unreliable (the game was in the background or lost focus, or another card or panel covered the question). |
 | `grade`, `reason` | How the game's review schedule rated the answer, and why the card was chosen (new, being learned, due, or early). |
 | `ease`, `interval_ms`, `reps`, `lapses`, `seen`, `since_ms` | What your device knew about this card before the answer: its place in the review schedule, how many times you had answered it, and how long ago. |
 | `client_at` | Your device's clock when you answered. |

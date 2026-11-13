@@ -3842,10 +3842,18 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         const keyed = await quizNow();
         ok(q0.left === returnWant && q0.right === null && q0.top === null && keyed.active && !keyed.answered && keyed.id === q0.id, `an open card shows only ${q0.left}, bottom left; Space and Enter on it press nothing`);
 
+        // Another overlay over the waiting card (F: Feedback) makes its answer's time unreliable (plan 24, AUD-006).
+        await evaluate(`${play}.handleChrome('feedback'), true`);
+        await sleep(300);
+        const covered = await evaluate(`JSON.stringify({ fb: __flappy.scene.isActive('Feedback'), interrupted: ${Q}.interrupted })`).then(JSON.parse);
+        await evaluate(`__flappy.scene.getScene('Feedback').close(), true`);
+        for (let i = 0; i < 20 && (await evaluate(`__flappy.scene.isActive('Feedback')`)); i += 1) await sleep(100);
+
         // Touch: the first option. The answer is saved to its card at once.
         await evaluate(`${Q}.options[0].zone.emit('pointerdown'), true`);
         await sleep(200);
         const q1 = await quizNow();
+        ok(covered.fb && covered.interrupted && q1.last?.interrupted === true, 'Feedback opened over the waiting card marks its answer interrupted (its time is not used)');
         const r1 = await cardRec(q1.id);
         const verdictWant = q1.last?.correct ? (await tx('quizRightCoins')).replace('{n}', String(TT.education.breakCoins)) : await tx('quizWrong');
         ok(q1.answered && q1.last?.id === q0.id && r1?.seen === 1 && r1.right === (q1.last.correct ? 1 : 0) && q1.verdict === verdictWant && q1.next, `a tap answers ${q0.id} (${q1.last?.correct ? 'right' : 'wrong'}, ${Math.round(q1.last?.rtMs ?? -1)} ms): saved (seen ${r1?.seen}), "${q1.verdict}", Next shown`);

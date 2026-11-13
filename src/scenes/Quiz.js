@@ -163,14 +163,20 @@ export class Quiz extends Phaser.Scene {
     kb?.on('keydown-ENTER', () => this.primary());
     kb?.on('keydown-SPACE', () => this.primary());
     kb?.on('keydown-ESC', () => this.close());
-    // A hidden page while a card waits for its answer makes the response time meaningless.
+    // A hidden page, or a window that lost focus, while a card waits for its answer makes the
+    // response time meaningless (the blur: plan 24, AUD-006).
     this.onVisibility = () => {
       if (globalThis.document?.hidden && this.card && !this.answered) this.interrupted = true;
     };
+    this.onBlur = () => {
+      if (this.card && !this.answered) this.interrupted = true;
+    };
     globalThis.document?.addEventListener?.('visibilitychange', this.onVisibility);
+    globalThis.addEventListener?.('blur', this.onBlur);
     // However the card goes (✕, Esc, B, the end of a revive, or the run ending under it), Play hears it once it is down.
     this.events.once('shutdown', () => {
       globalThis.document?.removeEventListener?.('visibilitychange', this.onVisibility);
+      globalThis.removeEventListener?.('blur', this.onBlur);
       this.play?.onQuizClosed?.(this.mode);
     });
 
@@ -589,6 +595,16 @@ export class Quiz extends Phaser.Scene {
       this.holdAfterWrong(go(t(this.locale, 'reviveContinue'), () => this.finish()), correct);
     }
     this.ring('right');
+  }
+
+  /**
+   * Every frame: another overlay over the card (What's new, Feedback, …) while its question waits
+   * makes the answer's time unreliable, as a hidden page does (plan 24, AUD-006; RESEARCH.md's
+   * `interrupted`).
+   */
+  update() {
+    if (!this.card || this.answered || this.interrupted) return;
+    if (!isTopOverlay(this)) this.interrupted = true;
   }
 
   /** A revive's choice or Give up (Play.reviveEvent): the streak goes on to the next card; anything final ends the quiz. */
