@@ -192,6 +192,35 @@ test("the 📚 glyph opens \"Your cards\" on its own pointer's release: a second
   assert.equal(handlers.pointerup.size + handlers.pointerupoutside.size, 0);
 });
 
+test("a level break's quiz: a miss is asked again and counted as learning until answered right; an early review pays no coin; counted answers do (plan 25, B1)", () => {
+  const storage = fakeStorage();
+  const store = createEduStore(storage);
+  const coins = [];
+  const s = playScene({
+    eduStore: store, level: 2, levelBreak: true, runIsTest: false, runQuiz: newTally(), registry: registry(), researchJoined: () => false,
+    takeCoins: (n) => coins.push(n), refreshLevelBanner() {}, refreshShopButton() {},
+  });
+  s.breakMissed = [];
+  const card = CARDS.find((c) => c.deck === 'stomach');
+  const answer = (reason, chosen) => s.quizAnswer({ card, reason, order: ['answer', 'w1', 'w2'], chosen, rtMs: 4000, mode: 'break' });
+  const before = s.quizCounts({ mode: 'break', exclude: [card.id] });
+  answer('new', 'w1');
+  assert.deepEqual(s.breakMissed, [card.id], 'the miss is kept for this break');
+  const after = s.quizCounts({ mode: 'break', exclude: [card.id] });
+  assert.equal(after.learning, before.learning + 1, 'and counted as learning, though this quiz asked it already');
+  const pick = s.quizNext({ mode: 'break', exclude: CARDS.filter((c) => c.id !== card.id).map((c) => c.id).concat(card.id) });
+  assert.deepEqual([pick?.card.id, pick?.reason], [card.id, 'learning'], 'asked again, as learning, once nothing else is left');
+  answer('learning', 'answer');
+  assert.deepEqual(s.breakMissed, [], 'answered right: no longer missed');
+  assert.equal(store.load().cards[card.id].step, 1, 'and the answer counted as its learning step (not an early one)');
+  assert.deepEqual(coins, [T.education.breakCoins], 'the right answer paid');
+  answer('early', 'answer');
+  assert.deepEqual(coins, [T.education.breakCoins], 'an early review pays nothing');
+  s.levelBreak = false;
+  answer('learning', 'w1');
+  assert.deepEqual(s.breakMissed, [], 'outside a break (a revive) nothing is kept for later');
+});
+
 test('🔬 never shows in a test run; in a joined education run it does (AUD-014)', () => {
   const badge = { text: '', visible: null, setVisible(v) { this.visible = v; return this; }, setText(t) { this.text = t; return this; }, setPosition() { return this; } };
   const s = playScene({ testBadge: badge, state: 'playing', runIsTest: true, runIsEducation: true, researchJoined: () => true, col: { x: 0 }, locale: 'en' });

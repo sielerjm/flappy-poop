@@ -3898,9 +3898,9 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await evaluate(`${Q}.input.keyboard.emit('keydown-ENTER'), true`);
         await sleep(200);
         const q2 = await quizNow();
-        ok(q2.id && q2.id !== q0.id && !q2.answered, `Enter moves to the next card (${q2.id}), never the same card in one quiz`);
+        ok(q2.id && q2.id !== q0.id && !q2.answered, `Enter moves to the next card (${q2.id}), not the one just missed`);
         const line2 = await lineNow();
-        ok(line2.counts.new === want0.n - 1 && line2.counts.learning === 0 && line2.counts.review === 0 && line2.underlined === 'new', `the counts leave the answered card out: "${line2.text}"`);
+        ok(line2.counts.new === want0.n - 1 && line2.counts.learning === 1 && line2.counts.review === 0 && line2.underlined === 'new', `the answered card leaves the new count, and missed, it waits in the learning one until answered right (plan 25): "${line2.text}"`);
         // 🚩 Report this card (plan 21, E4): the id in the corner ends in 🚩 and is a link to GitHub's card
         // report form, the card's code filled in. The opener is stubbed: nothing leaves this page.
         const flag = await evaluate(
@@ -3925,12 +3925,13 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         // The controller: the ring on the first option, A picks it.
         await evaluate(`(() => { ${play}.registry.set('padMode', true); const q = ${Q}; q.focus.show(); q.ring('option0'); return true; })()`);
         const q4 = await quizNow();
+        const r4 = await cardRec(q4.id); // the card may be a miss asked again (plan 25): its record goes one answer on
         await evaluate(`${play}.onPadAction('select'), true`);
         await sleep(200);
         const q5 = await quizNow();
         const r5 = await cardRec(q4.id);
         const ringNext = await evaluate(`${Q}.focus.items[${Q}.focus.index]?.id ?? null`);
-        ok(q5.answered && q5.last?.id === q4.id && r5?.seen === 1 && ringNext === 'right', `the controller's A answers ${q4.id} (saved) and the ring moves to Next`);
+        ok(q5.answered && q5.last?.id === q4.id && r5?.seen === (r4?.seen ?? 0) + 1 && ringNext === 'right', `the controller's A answers ${q4.id} (saved) and the ring moves to Next`);
         await evaluate(`${play}.registry.set('padMode', false), ${Q}.focus.hide(), true`);
         await sleep(TT.education.explainMinMs + 200);
 
@@ -4071,7 +4072,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         // not due yet. The break's quiz asks the learning card, then the review, then an early review.
         await sleep(400); // past the resume lockout
         const crafted = await evaluate(
-          `Promise.all([import('./src/education.js'), import('./src/questions.js')]).then(([e, q]) => { const now = Date.now(); const near = q.CARDS.filter((c) => !c.retired && (c.deck === 'stomach' || c.deck === 'general')); const cards = {}; near.forEach((c, i) => { cards[c.id] = i === 0 ? e.schedule(null, 'again', now - 20 * 60000) : i === 1 ? e.schedule(null, 'easy', now - 30 * 86400000) : e.schedule(null, 'easy', now); }); localStorage.setItem('flappyPoop.eduSrs', JSON.stringify({ v: 1, cards, recent: [], counters: {}, badges: {} })); const p = ${play}; p.refreshShopButton(); const l = p.quizCountLine; return JSON.stringify({ learning: near[0].id, review: near[1].id, visible: l.visible, text: l.text, label: p.quizButton.getText() }); })`,
+          `Promise.all([import('./src/education.js'), import('./src/questions.js')]).then(([e, q]) => { const now = Date.now(); const near = q.CARDS.filter((c) => !c.retired && (c.deck === 'stomach' || c.deck === 'general')); const cards = {}; near.forEach((c, i) => { cards[c.id] = i === 0 ? e.schedule(null, 'again', now - 20 * 60000) : i === 1 ? e.schedule(null, 'easy', now - 30 * 86400000) : e.schedule(null, 'easy', now); }); localStorage.setItem('flappyPoop.eduSrs', JSON.stringify({ v: 1, cards, recent: [], counters: {}, badges: {} })); const p = ${play}; p.breakMissed = []; p.refreshShopButton(); const l = p.quizCountLine; return JSON.stringify({ learning: near[0].id, review: near[1].id, visible: l.visible, text: l.text, label: p.quizButton.getText() }); })`,
         ).then(JSON.parse);
         ok(crafted.visible && crafted.text === '📚 0 · 1 · 1' && crafted.label === '', `with one card being learned and one review due, the pill reads "${crafted.text}"`);
         await reopen();
@@ -4094,6 +4095,27 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await sleep(300);
         const idle = await evaluate(`(() => { const p = ${play}; return JSON.stringify({ line: p.quizCountLine.visible, label: p.quizButton.getText(), shown: p.quizButton.visible }); })()`).then(JSON.parse);
         ok(!idle.line && idle.shown && idle.label === `📚 ${await tx('quizPill')}`, `with nothing waiting the pill reads "${idle.label}" (early reviews are still on offer)`);
+
+        // A miss stays counted, as learning, and comes back in this break until it is answered right; due
+        // cards come first, so the numbers move with every answer (plan 25, B1).
+        await sleep(400);
+        const crafted2 = await evaluate(
+          `Promise.all([import('./src/education.js'), import('./src/questions.js')]).then(([e, q]) => { const now = Date.now(); const near = q.CARDS.filter((c) => !c.retired && (c.deck === 'stomach' || c.deck === 'general')); const cards = {}; near.forEach((c, i) => { cards[c.id] = i === 0 ? e.schedule(null, 'again', now - 20 * 60000) : i === 1 ? e.schedule(null, 'easy', now - 30 * 86400000) : e.schedule(null, 'easy', now); }); localStorage.setItem('flappyPoop.eduSrs', JSON.stringify({ v: 1, cards, recent: [], counters: {}, badges: {} })); const p = ${play}; p.breakMissed = []; p.refreshShopButton(); const l = p.quizCountLine; return JSON.stringify({ learning: near[0].id, review: near[1].id, visible: l.visible, text: l.text, label: p.quizButton.getText() }); })`,
+        ).then(JSON.parse);
+        await reopen();
+        const m1 = await kindNow();
+        await evaluate(`(() => { const q = ${Q}; q.choose(q.order.findIndex((k) => k !== 'answer')); return true; })()`);
+        await sleep(TT.education.explainMinMs + 200);
+        await evaluate(`${Q}.rightBtn.press(), true`); // Next
+        await sleep(200);
+        const m2 = await kindNow();
+        await answerRight();
+        const m3 = await kindNow();
+        await answerRight();
+        const m4 = await kindNow();
+        ok(m1.id === crafted2.learning && m1.text === '0  +  1  +  1' && m2.id === crafted2.review && m2.text === '0  +  1  +  1' && m3.id === crafted2.learning && m3.reason === 'learning' && m3.text === '0  +  1  +  0' && m4.reason === 'early' && m4.text === '0  +  0  +  0', `a missed card stays counted and comes back after the due review: ${[m1, m2, m3, m4].map((k) => `${k.id} "${k.text}"`).join(' → ')}`);
+        await evaluate(`${Q}.leftBtn.press(), true`); // Return
+        await sleep(300);
 
         // The pill is back, and the shop sells at level 2's prices (eduShopPrices), not the base ones.
         await sleep(400);

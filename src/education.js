@@ -135,7 +135,7 @@ function pickNew(general, pools, rng, t) {
   return pickFrom(primary, rng);
 }
 
-function chooseCard({ cards, srs, context, level, segment, now, blocked, rng, t }) {
+function chooseCard({ cards, srs, context, level, segment, now, blocked, rng, t, early = true, dueFirst = false, missed = [], last = null }) {
   const live = cards.filter((c) => !c.retired && !blocked.has(c.id));
   const fresh = live.filter((c) => !srs[c.id]);
   const seen = live.filter((c) => srs[c.id]);
@@ -146,15 +146,36 @@ function chooseCard({ cards, srs, context, level, segment, now, blocked, rng, t 
   const dueReason = (c) => (srs[c.id].phase === 'learning' ? 'learning' : 'due');
   if (context === 'break') {
     const near = (c) => (c.deck === segment || c.deck === 'general' ? 0 : 1); // the cleared segment's cards (and general ones) first
-    const card = pickNew(
-      fresh.filter((c) => c.deck === 'general'),
-      [fresh.filter((c) => c.deck === segment)],
-      rng,
-      t,
-    );
-    if (card) return { card, reason: 'new' };
-    const d = [...due].sort((a, b) => near(a) - near(b) || overdue(b) - overdue(a))[0];
-    if (d) return { card: d, reason: dueReason(d) };
+    const newPick = () => {
+      const card = pickNew(fresh.filter((c) => c.deck === 'general'), [fresh.filter((c) => c.deck === segment)], rng, t);
+      return card ? { card, reason: 'new' } : null;
+    };
+    const duePick = (list) => {
+      const d = [...list].sort((a, b) => near(a) - near(b) || overdue(b) - overdue(a))[0];
+      return d ? { card: d, reason: dueReason(d) } : null;
+    };
+    let pick;
+    if (dueFirst) {
+      // A level break (plan 25): due learning cards, due reviews, the cards missed in this break (oldest
+      // miss first; the one just shown waits while anything else is counted), then new cards.
+      const isMissed = new Set(missed);
+      const dueNow = due.filter((c) => !isMissed.has(c.id));
+      const byId = new Map(cards.map((c) => [c.id, c]));
+      const retry = missed.map((id) => byId.get(id)).filter((c) => c && !c.retired);
+      const retryPick = (allowLast) => {
+        const c = retry.find((x) => allowLast || x.id !== last);
+        return c ? { card: c, reason: 'learning' } : null;
+      };
+      pick =
+        duePick(dueNow.filter((c) => srs[c.id].phase === 'learning')) ??
+        duePick(dueNow.filter((c) => srs[c.id].phase !== 'learning')) ??
+        retryPick(false) ??
+        newPick() ??
+        retryPick(true);
+    } else {
+      pick = newPick() ?? duePick(due);
+    }
+    if (pick || !early) return pick;
     const e = [...notDue].sort((a, b) => near(a) - near(b) || leastRecent(a, b))[0];
     return e ? { card: e, reason: 'early' } : null;
   }
@@ -173,6 +194,7 @@ function chooseCard({ cards, srs, context, level, segment, now, blocked, rng, t 
     t,
   );
   if (card) return { card, reason: 'new' };
+  if (!early) return null;
   const e = [...notDue].sort(leastRecent)[0];
   return e ? { card: e, reason: 'early' } : null;
 }
@@ -201,16 +223,28 @@ function browseCard({ cards, srs, segment, blocked, shown }) {
  * review, a new card from the decks up to `level` (its own deck first; general at generalShare),
  * then an early review. Reviews come from any card already seen, whatever the level.
  * `exclude` (this quiz session's cards) is never picked; the last minGap of `recent` are skipped
- * unless nothing else is left. Retired cards are never picked. `rng` returns [0, 1).
+ * unless nothing else is left, and a counted card (new, learning, due) always comes before an early
+ * review, the gap only ordering cards within those two groups (plan 25). Retired cards are never
+ * picked. `rng` returns [0, 1).
+ * `dueFirst` (a level break's own quiz, plan 25; the bonus quiz keeps 'break' as it was): due
+ * learning cards, then due reviews, then `missed` (cards missed in this break and not yet answered
+ * right, oldest miss first; asked again as 'learning' even though they are in `exclude`, the card
+ * just shown waiting while another counted card is left), then new cards, then early reviews.
  * 'browse' (a test run, which saves no answers): the segment's deck in order, whatever is due
  * (browseCard); `shown` is the cards test quizzes have shown so far.
  */
-export function pickCard({ cards = CARDS, srs = {}, context, level = 1, segment = null, now, exclude = [], recent = [], shown = [], rng = Math.random, t = TUNING }) {
+export function pickCard({ cards = CARDS, srs = {}, context, level = 1, segment = null, now, exclude = [], recent = [], shown = [], rng = Math.random, t = TUNING, dueFirst = false, missed = [] }) {
   const session = new Set(exclude);
   if (context === 'browse') return browseCard({ cards, srs, segment, blocked: session, shown });
   const gap = new Set([...session, ...recent.slice(-t.education.minGap)]);
-  const args = { cards, srs, context, level, segment, now, rng, t };
-  return chooseCard({ ...args, blocked: gap }) ?? (gap.size > session.size ? chooseCard({ ...args, blocked: session }) : null);
+  const args = { cards, srs, context, level, segment, now, rng, t, dueFirst, missed, last: exclude.at(-1) ?? null };
+  // Counted cards first, the recent gap only ordering them; early reviews only once none is left.
+  return (
+    chooseCard({ ...args, blocked: gap, early: false }) ??
+    chooseCard({ ...args, blocked: session, early: false }) ??
+    chooseCard({ ...args, blocked: gap }) ??
+    (gap.size > session.size ? chooseCard({ ...args, blocked: session }) : null)
+  );
 }
 
 /**
@@ -223,15 +257,22 @@ export function pickCard({ cards = CARDS, srs = {}, context, level = 1, segment 
  *   review    learned cards that are due now.
  * Due cards count whatever their deck, as pickCard asks them. Early reviews (seen, not due yet) are
  * not counted: they are extra practice, offered once these run out. `exclude` (the quiz's cards
- * already asked) and retired cards never count. The filters are chooseCard's: with nothing held
- * back by the recent gap, picking until nothing is left hands out exactly these cards before the
- * first early review (tests/education.test.js).
+ * already asked) and retired cards never count; `missed` (a level break's cards missed and not yet
+ * answered right, plan 25) count as learning, once each, though they are in `exclude`. The filters
+ * are chooseCard's: whatever the recent gap holds, picking until nothing is left hands out exactly
+ * these cards before the first early review (tests/education.test.js).
  */
-export function cardCounts(srs = {}, { cards = CARDS, context = 'all', level = 1, segment = null, now = Date.now(), exclude = [] } = {}) {
+export function cardCounts(srs = {}, { cards = CARDS, context = 'all', level = 1, segment = null, now = Date.now(), exclude = [], missed = [] } = {}) {
   const blocked = new Set(exclude);
+  const isMissed = new Set(missed);
   const counts = { new: 0, learning: 0, review: 0 };
   for (const c of cards) {
-    if (c.retired || blocked.has(c.id)) continue;
+    if (c.retired) continue;
+    if (isMissed.has(c.id)) {
+      counts.learning += 1; // missed in this break and not yet answered right: it is asked again (plan 25)
+      continue;
+    }
+    if (blocked.has(c.id)) continue;
     const rec = srs[c.id];
     if (rec) {
       if (rec.dueAt <= now) counts[rec.phase === 'learning' ? 'learning' : 'review'] += 1;

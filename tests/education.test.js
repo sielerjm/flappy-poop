@@ -184,8 +184,11 @@ test('cardCounts: new cards the context offers, learning cards due, reviews due;
   assert.deepEqual(cardCounts({ 'ST-03': reviewRec(DAY, NOW - DAY) }, { cards, context: 'all', now: NOW }), { new: 2, learning: 0, review: 0 });
 });
 
-test('cardCounts matches what pickCard hands out: with nothing in the recent gap, exactly those cards come before the first early review', () => {
-  for (const [context, level, segment] of [['break', 2, 'stomach'], ['break', 5, 'ileum'], ['break', 7, 'colon'], ['revive', 1, null], ['revive', 3, null], ['revive', 7, null]]) {
+test('cardCounts matches what pickCard hands out: whatever the recent gap holds, exactly those cards come before the first early review (plan 25)', () => {
+  const runs = [['break', 2, 'stomach'], ['break', 5, 'ileum'], ['break', 7, 'colon'], ['revive', 1, null], ['revive', 3, null], ['revive', 7, null]];
+  // The recent gap full of the counted cards (the case that froze the counts: plan 25, B1), or empty.
+  const gaps = [[], ['DU-01', 'IL-01', 'CA-01', 'ST-02', 'JE-06']];
+  for (const [context, level, segment] of runs) for (const recent of gaps) for (const dueFirst of context === 'break' ? [false, true] : [false]) {
     for (const srs of [countsSrs, {}]) {
       const counts = cardCounts(srs, { context, level, segment, now: NOW });
       const got = { new: 0, learning: 0, due: 0, early: 0 };
@@ -194,7 +197,7 @@ test('cardCounts matches what pickCard hands out: with nothing in the recent gap
       for (let guard = 0; ; guard += 1) {
         // Capped (plan 24, AUD-017): a pickCard that asked a card of this quiz again would loop forever.
         assert.ok(guard <= CARDS.length, `${context} ${level}: pickCard kept handing out cards past the bank's ${CARDS.length}`);
-        const p = pickCard({ srs, context, level, segment, now: NOW, exclude, recent: [], rng });
+        const p = pickCard({ srs, context, level, segment, now: NOW, exclude, recent, rng, dueFirst });
         if (!p) break;
         if (p.reason !== 'early') assert.equal(got.early, 0, `${context} ${level}: ${p.card.id} (${p.reason}) came after an early review`);
         // The count with the quiz's earlier cards left out still holds the card being asked.
@@ -208,6 +211,47 @@ test('cardCounts matches what pickCard hands out: with nothing in the recent gap
       assert.deepEqual(counts, { new: got.new, learning: got.learning, review: got.due }, `${context} level ${level} ${segment ?? ''}: the counts are the picks`);
     }
   }
+});
+
+test("pickCard, a level break's own quiz (dueFirst, plan 25): due learning, due reviews, then cards missed in this break (oldest first, the one just shown waiting), then new, then early", () => {
+  const ask = (exclude, missed = []) => pickCard({ srs: countsSrs, context: 'break', level: 2, segment: 'stomach', now: NOW, exclude, missed, dueFirst: true, rng: createRng(5) });
+  const first = ask([]);
+  assert.deepEqual([first.card.id, first.reason], ['CA-01', 'learning'], 'a due learning card first');
+  const second = ask(['CA-01']);
+  assert.equal(second.reason, 'due', 'then the due reviews');
+  const third = ask(['CA-01', 'DU-01', 'IL-01']);
+  assert.equal(third.reason, 'new', 'then new cards');
+  // CA-01 missed, then DU-01 missed: the oldest miss comes back first, as learning, before new cards.
+  const retry = ask(['CA-01', 'DU-01', 'IL-01'], ['CA-01', 'DU-01']);
+  assert.deepEqual([retry.card.id, retry.reason], ['CA-01', 'learning']);
+  // The card just shown (the last of exclude) waits while a new card is left, then comes back.
+  const waits = ask(['CA-01', 'DU-01', 'IL-01'], ['IL-01']);
+  assert.equal(waits.reason, 'new', 'the miss just shown is not asked again at once');
+  const live = CARDS.filter((c) => !c.retired);
+  const everyNew = live.filter((c) => !countsSrs[c.id] && ['stomach', 'general'].includes(c.deck)).map((c) => c.id);
+  const back = ask(['CA-01', 'DU-01', ...everyNew, 'IL-01'], ['IL-01']);
+  assert.deepEqual([back.card.id, back.reason], ['IL-01', 'learning'], 'with nothing else counted it comes back');
+  const early = ask(['CA-01', 'DU-01', 'IL-01', ...everyNew]);
+  assert.equal(early.reason, 'early', 'early reviews last');
+});
+
+test('a counted card always comes before an early review, whatever the recent gap holds (plan 25, B1)', () => {
+  // Every counted card is among the last minGap shown: before plan 25 an early review came first.
+  const recent = ['CA-01', 'DU-01', 'IL-01'];
+  const srs = { 'CA-01': countsSrs['CA-01'], 'DU-01': countsSrs['DU-01'], 'IL-01': countsSrs['IL-01'], 'CO-01': countsSrs['CO-01'] };
+  const onlyThese = CARDS.filter((c) => c.id in srs);
+  for (const context of ['break', 'revive']) {
+    const p = pickCard({ cards: onlyThese, srs, context, level: 7, segment: 'colon', now: NOW, exclude: [], recent, rng: createRng(2) });
+    assert.notEqual(p.reason, 'early', `${context}: ${p.card.id}`);
+  }
+});
+
+test('cardCounts: a card missed in this break counts once, as learning, though it is in exclude or due again (plan 25)', () => {
+  const base = cardCounts(countsSrs, { context: 'break', segment: 'stomach', level: 2, now: NOW });
+  const missedOne = cardCounts(countsSrs, { context: 'break', segment: 'stomach', level: 2, now: NOW, exclude: ['DU-01'], missed: ['DU-01'] });
+  assert.deepEqual(missedOne, { ...base, learning: base.learning + 1, review: base.review - 1 }, 'DU-01 missed: out of review, into learning');
+  const dueAgain = cardCounts(countsSrs, { context: 'break', segment: 'stomach', level: 2, now: NOW, missed: ['CA-01'] });
+  assert.deepEqual(dueAgain, base, 'a missed card that is also due counts once');
 });
 
 test('the count colours (new blue, learning orange, review green) are readable on the dark card and differ from one another', () => {

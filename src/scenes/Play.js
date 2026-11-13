@@ -781,6 +781,7 @@ export class Play extends Phaser.Scene {
     // An education run (📚, plan 21): unlocked, the switch on, single player, never a Daily Dump.
     this.runIsEducation = !daily && this.educationOn && this.educationOffered();
     this.runQuiz = newTally();
+    this.breakMissed = []; // a level break's cards missed and not yet answered right (plan 25): asked again, counted as learning
     this.runId = null; // a pilot tester's answer events name their run (made with the run's first event)
     this.runEvents = 0;
     this.respawnHold = null;
@@ -1011,6 +1012,7 @@ export class Play extends Phaser.Scene {
   startLevelBreak() {
     if (this.state !== 'playing') return;
     this.levelBreak = true;
+    this.breakMissed = []; // each break starts with nothing missed (plan 25)
     this.refreshLevelBanner();
     this.pausePlay();
     this.fadeBackground();
@@ -1614,7 +1616,10 @@ export class Play extends Phaser.Scene {
       pick = pickCard({ srs: store.cards, context: 'browse', segment, exclude, shown });
       if (pick) this.registry.set('testQuizShown', [...shown.filter((id) => id !== pick.card.id), pick.card.id]);
     } else {
-      pick = pickCard({ srs: store.cards, context: mode === 'revive' ? 'revive' : 'break', level, segment, now: Date.now(), exclude, recent: store.recent, rng: Math.random });
+      // A level break's own quiz asks what is due first, then what it missed, then new cards (plan 25);
+      // the bonus quiz keeps the break context's new-first order.
+      const own = mode === 'break';
+      pick = pickCard({ srs: store.cards, context: mode === 'revive' ? 'revive' : 'break', level, segment, now: Date.now(), exclude, recent: store.recent, rng: Math.random, dueFirst: own, missed: own ? (this.breakMissed ?? []) : [] });
     }
     return pick ? { ...pick, order: shuffleOptions(Math.random) } : null;
   }
@@ -1633,7 +1638,7 @@ export class Play extends Phaser.Scene {
    */
   quizCounts({ mode = 'break', exclude = [] } = {}) {
     if (this.runIsTest) return null;
-    return cardCounts(this.eduStore.load().cards, { context: mode === 'revive' ? 'revive' : 'break', ...this.quizScope(), now: Date.now(), exclude });
+    return cardCounts(this.eduStore.load().cards, { context: mode === 'revive' ? 'revive' : 'break', ...this.quizScope(), now: Date.now(), exclude, missed: mode === 'break' ? (this.breakMissed ?? []) : [] });
   }
 
   /**
@@ -1654,11 +1659,17 @@ export class Play extends Phaser.Scene {
       // A pilot tester's answer is recorded as an event (plan 21; never in a test run, and only
       // while joined): what was asked and picked, and what the device knew of the card before.
       if (this.researchJoined()) this.recordAnswerEvent({ card, reason, order, chosen, correct, rtMs, interrupted, grade, mode, input, before: rec, now });
+      // A break's miss is asked again in this break until it is answered right (plan 25).
+      if (mode === 'break' && this.levelBreak) {
+        const missed = (this.breakMissed ?? []).filter((id) => id !== card.id);
+        this.breakMissed = correct ? missed : [...missed, card.id];
+      }
     }
     // The run's tally (plan 22, U4), by level: a break asks about the level just cleared, a revive
     // about the one being flown. The bonus quiz after a win is practice: its answers are not tallied.
     if (mode !== 'bonus') this.runQuiz = tallyAnswer(this.runQuiz, this.levelBreak ? this.level - 1 : this.level, correct);
-    const coins = correct && mode === 'break' ? T.education.breakCoins : 0;
+    // A right answer to a counted card pays; an early review is extra practice and pays nothing (plan 25).
+    const coins = correct && mode === 'break' && reason !== 'early' ? T.education.breakCoins : 0;
     if (coins) {
       this.takeCoins(coins);
       this.refreshLevelBanner(); // the hint gains "💰 shop" with the first coin
