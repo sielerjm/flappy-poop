@@ -2,7 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { GAME_WIDTH, GAME_HEIGHT, TUNING as T } from '../src/config.js';
-import { shopButtonLayout, bracketButtonLayout, shopButtonHit, shopLayout, shopHit, SHOP_ITEMS, overlayOutsideHit, trayLayout, trayHit, beanButtonLayout, poopX } from '../src/logic.js';
+import { shopButtonLayout, bracketButtonLayout, eduBreakLayout, shopButtonHit, shopLayout, shopHit, SHOP_ITEMS, overlayOutsideHit, trayLayout, trayHit, beanButtonLayout, poopX } from '../src/logic.js';
 
 const W = GAME_WIDTH; // the chrome column (a phone field)
 const button = shopButtonLayout(W, GAME_HEIGHT, T);
@@ -47,6 +47,28 @@ test('the 🏅 Bracket pill sits one row under the 💰, above the bean button, 
   assert.equal(trayHit(pill.x, pill.y, tray), null, 'not on a tray button');
   assert.equal(shopButtonHit(pill.x, pill.y, button), null, 'not on the 💰');
   assert.equal(bracketButtonLayout(W, GAME_HEIGHT, T, 500).x, pill.x + 500, 'x follows the column');
+});
+
+test("an education break (eduBreakLayout, plan 25): 💰 and Review keep their boxes; the numbers under Review, Skip and Quit on the right; nothing overlaps, all above the bean button, inside the column", () => {
+  for (const x0 of [0, 500]) {
+    const L = eduBreakLayout(W, GAME_HEIGHT, T, x0);
+    assert.deepEqual(L.shop, shopButtonLayout(W, GAME_HEIGHT, T, x0), 'the 💰 pill as always');
+    assert.deepEqual({ ...L.review, id: 'bracket' }, bracketButtonLayout(W, GAME_HEIGHT, T, x0), "Review in the 🏅's box");
+    const boxes = [L.shop, L.review, L.counts, L.skip, L.quit];
+    for (const b of boxes) {
+      const e = edges(b);
+      assert.ok(e.left >= x0 + 16 && e.right <= x0 + W - 16, `${b.id} inside the column (${e.left}–${e.right})`);
+      assert.ok(e.bottom <= bean.y - bean.size, `${b.id} above the bean button's hit circle (bottom ${e.bottom})`);
+      assert.ok(e.left - x0 > poopX(W, T) + T.poopRadius, `${b.id} clear of the bobbing poop`);
+    }
+    for (let i = 0; i < boxes.length; i += 1) for (let j = i + 1; j < boxes.length; j += 1) {
+      const [a, b] = [edges(boxes[i]), edges(boxes[j])];
+      const apart = a.right <= b.left || b.right <= a.left || a.bottom <= b.top || b.bottom <= a.top;
+      assert.ok(apart, `${boxes[i].id} and ${boxes[j].id} do not overlap`);
+    }
+    assert.ok(edges(L.counts).top >= edges(L.review).bottom, 'the numbers sit under Review');
+    for (const b of [L.skip, L.quit]) assert.ok(b.height >= T.trayHitMin && b.width >= T.trayHitMin, `${b.id} is thumb-sized`);
+  }
 });
 
 test('shopButtonHit: on the pill, not off it', () => {

@@ -105,8 +105,8 @@ Short, playful, clear. Fit a 720×1280 logical field; How to play / About body w
 | levelBanner | LEVEL {n} | 第 {n} 关 |
 | levelContinue | Tap to continue | 点击继续 |
 | levelShopHint | Tap to continue · 💰 to shop | 点击继续 · 💰 进商店 |
-| levelQuizHint | Tap to continue · 📚 for a quiz | 点击继续 · 📚 答题 |
-| levelQuizShopHint | Tap to continue · 📚 quiz · 💰 shop | 点击继续 · 📚 答题 · 💰 商店 |
+| levelQuizHint | Tap to continue · 📚 review | 点击继续 · 📚 复习 |
+| levelQuizShopHint | Tap to continue · 📚 review · 💰 shop | 点击继续 · 📚 复习 · 💰 商店 |
 | shopTitle | SHOP | 商店 |
 | shopCoins | Your coins | 你的金币 |
 | shopFiber | Fiber · +3 points | 纤维 · +3 分 |
@@ -230,7 +230,8 @@ Short, playful, clear. Fit a 720×1280 logical field; How to play / About body w
 | eduLocked | Education mode locked | 教育模式已锁定 |
 | quizRight | Right! | 答对了！ |
 | quizRightCoins | Right! +{n} | 答对了！+{n} |
-| quizPill | Quiz | 答题 |
+| quizPill | Quiz (the won game-over panel's 📚 bonus button) | 答题 |
+| reviewPill | Review (an education level break's 📚 button, plan 25: the numbers sit under it) | 复习 |
 | quizWrong | Not quite: the right answer has a ✓ | 不太对：正确答案标有 ✓ |
 | quizWhy | Why? | 为什么？ |
 | quizNext | Next | 下一题 |

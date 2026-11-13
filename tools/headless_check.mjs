@@ -3845,8 +3845,17 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         // in its own colour. A new device's first break has only new cards waiting: the stomach's and the
         // general ones. The ❔ answers pill is gone: the tally sits in the quiz card.
         const want0 = await evaluate(`Promise.all([import('./src/questions.js'), import('./src/ui/countLine.js')]).then(([q, c]) => JSON.stringify({ n: q.CARDS.filter((x) => !x.retired && (x.deck === 'stomach' || x.deck === 'general')).length, colors: Object.values(c.COUNT_COLORS), fill: Object.fromEntries(Object.entries(c.COUNT_COLORS).map(([k, v]) => [k, parseInt(v.slice(1), 16)])) }))`).then(JSON.parse);
-        const pillLine = await evaluate(`(() => { const p = ${play}; const l = p.quizCountLine; return JSON.stringify({ visible: l.visible, counts: l.counts, text: l.text, colors: l.colors, width: l.width, room: p.quizButtonBox.width - 24, label: p.quizButton.getText() }); })()`).then(JSON.parse);
-        ok(pillLine.visible && pillLine.text === `📚 ${want0.n} · 0 · 0` && pillLine.label === '' && JSON.stringify(pillLine.colors) === JSON.stringify(want0.colors) && new Set(pillLine.colors).size === 3 && pillLine.width <= pillLine.room + 0.5, `the pill reads what is waiting, "${pillLine.text}" (new, learning, review in ${pillLine.colors.join(', ')}), ${Math.round(pillLine.width)} px wide inside its ${pillLine.room} px`);
+        const pillLine = await evaluate(`(() => { const p = ${play}; const l = p.quizCountLine; return JSON.stringify({ visible: l.visible, counts: l.counts, text: l.text, colors: l.colors, width: l.width, room: p.quizCountsBox.width, label: p.quizButton.getText(), under: p.quizCountsBox.y - p.quizCountsBox.height / 2 >= p.quizButtonBox.y + p.quizButtonBox.height / 2 }); })()`).then(JSON.parse);
+        ok(pillLine.visible && pillLine.text === `${want0.n}   0   0` && pillLine.label === `📚 ${await tx('reviewPill')}` && pillLine.under && JSON.stringify(pillLine.colors) === JSON.stringify(want0.colors) && new Set(pillLine.colors).size === 3 && pillLine.width <= pillLine.room + 0.5, `the break offers "${pillLine.label}" with what is waiting on a line under it, "${pillLine.text}" (new, learning, review in ${pillLine.colors.join(', ')}), ${Math.round(pillLine.width)} px wide inside its ${pillLine.room} px (plan 25)`);
+        // A tap on the numbers says what they mean (plan 25, B4), and the break does not continue.
+        const nb = await evaluate(`JSON.stringify(${play}.quizCountsBox)`).then(JSON.parse);
+        await tapAt(nb.x, nb.y);
+        await sleep(250);
+        const nbCard = await evaluate(`JSON.stringify({ open: ${play}.eduCard.open, title: ${play}.eduCard.title.text, body: ${play}.eduCard.body.text, state: ${play}.state, lb: ${play}.levelBreak, hint: ${play}.levelHint.text })`).then(JSON.parse);
+        await tapAt(nb.x, nb.y - 300); // any tap closes it, and only closes it
+        await sleep(250);
+        const nbAfter = await evaluate(`JSON.stringify({ open: ${play}.eduCard.open, state: ${play}.state, lb: ${play}.levelBreak })`).then(JSON.parse);
+        ok(nbCard.open && nbCard.title === (await tx('quizCountsTitle')) && nbCard.body.split('\n').length === 3 && nbCard.state === 'paused' && nbCard.lb && nbCard.hint.includes(`📚 ${(await tx('reviewPill')).toLowerCase()}`) && !nbAfter.open && nbAfter.state === 'paused' && nbAfter.lb, `a tap on the numbers opens "${nbCard.title}" (${nbCard.body.split('\n').join(' · ')}); a tap closes it and the break stays (hint "${nbCard.hint}")`);
         ok((await evaluate(`${play}.quizStatsButton === undefined && ${play}.quizStatsBox === undefined && ${play}.focus.indexOf('quizStats') < 0`)) === true, 'the break has no ❔ answers pill, on the screen or on the ring');
         const lineNow = () => evaluate(`(() => { const q = ${Q}; const l = q.counts; return JSON.stringify({ visible: l.visible, counts: l.counts, text: l.text, underlined: l.underlined, fill: l.underlineFill, tally: q.tally.visible ? q.tally.text : null, tallyZone: q.tallyZone.visible, runCard: q.runCard.open }); })()`).then(JSON.parse);
         await evaluate(`(() => { const p = ${play}; const b = p.quizButtonBox; p.flap({ x: b.x, y: b.y }); return true; })()`);
@@ -4086,7 +4095,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         const crafted = await evaluate(
           `Promise.all([import('./src/education.js'), import('./src/questions.js')]).then(([e, q]) => { const now = Date.now(); const near = q.CARDS.filter((c) => !c.retired && (c.deck === 'stomach' || c.deck === 'general')); const cards = {}; near.forEach((c, i) => { cards[c.id] = i === 0 ? e.schedule(null, 'again', now - 20 * 60000) : i === 1 ? e.schedule(null, 'easy', now - 30 * 86400000) : e.schedule(null, 'easy', now); }); localStorage.setItem('flappyPoop.eduSrs', JSON.stringify({ v: 1, cards, recent: [], counters: {}, badges: {} })); const p = ${play}; p.breakMissed = []; p.refreshShopButton(); const l = p.quizCountLine; return JSON.stringify({ learning: near[0].id, review: near[1].id, visible: l.visible, text: l.text, label: p.quizButton.getText() }); })`,
         ).then(JSON.parse);
-        ok(crafted.visible && crafted.text === '📚 0 · 1 · 1' && crafted.label === '', `with one card being learned and one review due, the pill reads "${crafted.text}"`);
+        ok(crafted.visible && crafted.text === '0   1   1' && crafted.label === `📚 ${await tx('reviewPill')}`, `with one card being learned and one review due, the pill reads "${crafted.text}"`);
         await reopen();
         const kindNow = async () => ({ ...(await lineNow()), id: (await quizNow()).id, reason: await evaluate(`${Q}.reason`) });
         const answerRight = async () => {
@@ -4106,7 +4115,8 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await evaluate(`${Q}.leftBtn.press(), true`); // Return
         await sleep(300);
         const idle = await evaluate(`(() => { const p = ${play}; return JSON.stringify({ line: p.quizCountLine.visible, label: p.quizButton.getText(), shown: p.quizButton.visible }); })()`).then(JSON.parse);
-        ok(!idle.line && idle.shown && idle.label === `📚 ${await tx('quizPill')}`, `with nothing waiting the pill reads "${idle.label}" (early reviews are still on offer)`);
+        const idleLine = await evaluate(`${play}.quizCountLine.text`);
+        ok(idle.line && idleLine === '0   0   0' && idle.shown && idle.label === `📚 ${await tx('reviewPill')}`, `with nothing waiting Review stays and its numbers read "${idleLine}" (early reviews are still on offer)`);
 
         // A miss stays counted, as learning, and comes back in this break until it is answered right; due
         // cards come first, so the numbers move with every answer (plan 25, B1).
@@ -4483,7 +4493,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         const brk5 = await cardNow();
         ok(brk5?.id === decks.caecum[1], `after a 🏁 skip the break quiz asks the cleared level's deck, carrying on (${brk5?.id}, ${brk5?.deck})`);
         const testPill = await evaluate(`(() => { const p = ${play}; return JSON.stringify({ label: p.quizButton.getText(), line: p.quizCountLine.visible, card: ${Q}.counts.visible }); })()`).then(JSON.parse);
-        ok(testPill.label === `📚 ${await tx('quizPill')}` && !testPill.line && !testPill.card, `a test run's pill reads "${testPill.label}" with no counts, and its break quiz shows no count line`);
+        ok(testPill.label === `📚 ${await tx('reviewPill')}` && !testPill.line && !testPill.card, `a test run's break offers "${testPill.label}" with no numbers under it, and its break quiz shows no count line`);
         await answer(true);
         ok((await evaluate(`localStorage.getItem('flappyPoop.eduSrs')`)) === dueStore, "a test run's answers leave the stored cards as they were");
         await evaluate(`(() => { const p = ${play}; __flappy.scene.stop('Quiz'); p.setTestSettings({ startLevel: 1 }); p.setTestMode(false); p.registry.set('testQuizShown', []); localStorage.removeItem('flappyPoop.eduSrs'); return true; })()`);

@@ -689,6 +689,22 @@ export function bracketButtonLayout(width, height, t, x0 = 0) {
   return { id: 'bracket', x: shop.x, y: shop.y + t.trayHitMin + 16, width: shop.width, height: t.trayHitMin };
 }
 
+/**
+ * An education run's level break (plan 25): the 💰 pill where it always is (shopButtonLayout), the
+ * 📚 Review pill in the 🏅's row under it (bracketButtonLayout's box; the two never meet), the three
+ * numbers on a line of their own under Review, and a right-hand column on the same two rows for
+ * Skip ▸ (the 💰's row) and Quit (Review's). All above the bean button, clear of the bobbing poop
+ * on the left and of the tray. `x0` = the column's left edge.
+ */
+export function eduBreakLayout(width, height, t, x0 = 0) {
+  const shop = shopButtonLayout(width, height, t, x0);
+  const review = { ...bracketButtonLayout(width, height, t, x0), id: 'quiz' };
+  const counts = { id: 'quizCounts', x: review.x, y: review.y + review.height / 2 + 34, width: review.width, height: 48 };
+  const side = { width: 180, height: t.trayHitMin };
+  const sx = x0 + width - 24 - side.width / 2;
+  return { shop, review, counts, skip: { id: 'skip', x: sx, y: shop.y, ...side }, quit: { id: 'quit', x: sx, y: review.y, ...side } };
+}
+
 /** 'shop' when (x, y) is on the 💰 button, else null. */
 export function shopButtonHit(x, y, box) {
   if (!box) return null;

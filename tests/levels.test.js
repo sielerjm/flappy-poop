@@ -137,9 +137,9 @@ test('levelBannerText names the segment while there is one and drops it past the
   assert.equal(levelBannerText('en', 2, LEVELS, { shop: true }), 'LEVEL 2 · Duodenum\nTap to continue · 💰 to shop');
   assert.equal(levelBannerText('zh-Hans', 3, LEVELS, { shop: true }), '第 3 关 · 空肠\n点击继续 · 💰 进商店');
   assert.equal(levelBannerText('en', 2, LEVELS, { shop: false }), levelBannerText('en', 2, LEVELS), 'no coins: the plain hint');
-  assert.equal(levelBannerText('en', 2, LEVELS, { education: true }), 'LEVEL 2 · Duodenum\nTap to continue · 📚 for a quiz', 'an education run names the 📚');
-  assert.equal(levelBannerText('en', 2, LEVELS, { education: true, shop: true }), 'LEVEL 2 · Duodenum\nTap to continue · 📚 quiz · 💰 shop');
-  assert.equal(levelBannerText('zh-Hans', 3, LEVELS, { education: true, shop: true }), '第 3 关 · 空肠\n点击继续 · 📚 答题 · 💰 商店');
+  assert.equal(levelBannerText('en', 2, LEVELS, { education: true }), 'LEVEL 2 · Duodenum\nTap to continue · 📚 review', 'an education run names the 📚');
+  assert.equal(levelBannerText('en', 2, LEVELS, { education: true, shop: true }), 'LEVEL 2 · Duodenum\nTap to continue · 📚 review · 💰 shop');
+  assert.equal(levelBannerText('zh-Hans', 3, LEVELS, { education: true, shop: true }), '第 3 关 · 空肠\n点击继续 · 📚 复习 · 💰 商店');
   for (const locale of LOCALES) {
     for (let n = 1; n <= 9; n += 1) {
       const [title, hint] = levelBannerText(locale, n, LEVELS).split('\n');

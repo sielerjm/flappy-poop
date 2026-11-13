@@ -54,6 +54,7 @@ import {
   SHOP_ITEMS,
   shopButtonLayout,
   bracketButtonLayout,
+  eduBreakLayout,
   shopButtonHit,
   shopLayout,
   shopHit,
@@ -520,15 +521,18 @@ export class Play extends Phaser.Scene {
     // (Versus.bothInBreak) it opens the bracket read-only (Versus.openPeek); it never readies the half.
     this.bracketButtonBox = this.match?.tournament ? bracketButtonLayout(this.col.width, GAME_HEIGHT, T, this.col.x) : null;
     this.bracketButton = this.bracketButtonBox ? createButton(this, this.bracketButtonBox, t(this.locale, 'tournamentBracketPill'), { ...TEXT_STYLE, fontSize: '36px', color: '#ffd700' }, { depth: 27 }).setVisible(false) : null;
-    // An education run's 📚 Questions pill (plan 21), in the 🏅's row under the 💰 (single player only:
-    // the two never meet). It opens the quiz on the segment just cleared (chromeIntent's 'quiz').
-    // It reads what is waiting there, as Anki does: "📚 5 · 2 · 8", new cards in blue, cards being
-    // learned in orange, reviews due in green (quizCountLine; refreshShopButton). With nothing
-    // waiting, and in a test run (whose quizzes ignore the schedule), it reads "📚 Quiz".
-    this.quizButtonBox = this.match ? null : { ...bracketButtonLayout(this.col.width, GAME_HEIGHT, T, this.col.x), id: 'quiz' };
-    this.quizButton = this.quizButtonBox ? createButton(this, this.quizButtonBox, `${EDUCATION_EMOJI} ${t(this.locale, 'quizPill')}`, { ...TEXT_STYLE, fontSize: '36px', color: '#f8a0c8' }, { depth: 27 }).setVisible(false) : null;
-    this.quizCountLine = this.quizButtonBox
-      ? createCountLine(this, this.quizButtonBox.x, this.quizButtonBox.y, { style: TEXT_STYLE, px: 36, sep: ' · ', glyph: EDUCATION_EMOJI, depth: 28, maxWidth: this.quizButtonBox.width - 24 }).setVisible(false)
+    // An education run's 📚 Review pill (plan 21; plan 25 named it), in the 🏅's row under the 💰
+    // (single player only: the two never meet). It opens the quiz on the segment just cleared
+    // (chromeIntent's 'quiz'). Under it, a line of its own says what is waiting there, as Anki does:
+    // new cards in blue, cards being learned in orange, reviews due in green (quizCountLine;
+    // refreshShopButton; none in a test run, whose quizzes ignore the schedule). A tap on the line
+    // says what the numbers mean (toggleBreakCounts). eduBreakLayout also places Skip and Quit.
+    this.eduBreakBoxes = this.match ? null : eduBreakLayout(this.col.width, GAME_HEIGHT, T, this.col.x);
+    this.quizButtonBox = this.eduBreakBoxes?.review ?? null;
+    this.quizCountsBox = this.eduBreakBoxes?.counts ?? null;
+    this.quizButton = this.quizButtonBox ? createButton(this, this.quizButtonBox, `${EDUCATION_EMOJI} ${t(this.locale, 'reviewPill')}`, { ...TEXT_STYLE, fontSize: '36px', color: '#f8a0c8' }, { depth: 27 }).setVisible(false) : null;
+    this.quizCountLine = this.quizCountsBox
+      ? createCountLine(this, this.quizCountsBox.x, this.quizCountsBox.y, { style: TEXT_STYLE, px: 34, sep: '   ', depth: 28, maxWidth: this.quizCountsBox.width }).setVisible(false)
       : null;
 
     // "Your cards" (plan 21, E3): the card a tap on the ready screen's 📚 opens (toggleEduCard), over
@@ -559,6 +563,7 @@ export class Play extends Phaser.Scene {
             { id: 'shop', box: this.shopButtonBox, depth: 27, visible: () => this.shopButtonShown(), activate: () => this.handleChrome('shop') },
             ...(this.bracketButtonBox ? [{ id: 'bracket', box: this.bracketButtonBox, depth: 27, visible: () => this.bracketButtonShown(), activate: () => this.openBracketPeek() }] : []),
             ...(this.quizButtonBox ? [{ id: 'quiz', box: this.quizButtonBox, depth: 27, visible: () => this.quizButtonShown(), activate: () => this.handleChrome('quiz') }] : []),
+            ...(this.quizCountsBox ? [{ id: 'quizCounts', box: this.quizCountsBox, depth: 27, visible: () => this.quizButtonShown() && this.quizCountLine.visible, activate: () => this.toggleBreakCounts() }] : []),
             { id: 'shopClose', box: this.shopBoxes.close, depth: 29, visible: () => this.shopOpen, activate: () => this.handleChrome('esc') },
             ...this.shopBoxes.rows.map((row) => ({ id: `shop:${row.id}`, box: row, depth: 28, visible: () => this.shopOpen, activate: () => this.shopBuy(row.id) })),
           ],
@@ -1147,6 +1152,10 @@ export class Play extends Phaser.Scene {
     }
     if (pointer && this.quizButtonShown() && Math.abs(pointer.x - this.quizButtonBox.x) <= this.quizButtonBox.width / 2 && Math.abs(pointer.y - this.quizButtonBox.y) <= this.quizButtonBox.height / 2) {
       this.handleChrome('quiz'); // the 📚 pill: questions, never a continue tap
+      return;
+    }
+    if (pointer && this.quizButtonShown() && this.quizCountLine?.visible && Math.abs(pointer.x - this.quizCountsBox.x) <= this.quizCountsBox.width / 2 && Math.abs(pointer.y - this.quizCountsBox.y) <= this.quizCountsBox.height / 2) {
+      this.openEduCardOnRelease(pointer, () => this.toggleBreakCounts()); // the numbers under Review: what they mean, never a continue tap
       return;
     }
     if (pointer && this.bracketButtonShown() && Math.abs(pointer.x - this.bracketButtonBox.x) <= this.bracketButtonBox.width / 2 && Math.abs(pointer.y - this.bracketButtonBox.y) <= this.bracketButtonBox.height / 2) {
@@ -1739,7 +1748,7 @@ export class Play extends Phaser.Scene {
    * another finger's release does nothing, and a release outside the canvas or a cancelled touch
    * (Phaser's pointer.wasCanceled) disarms it without opening.
    */
-  openEduCardOnRelease(pointer = null) {
+  openEduCardOnRelease(pointer = null, show = () => this.toggleEduCard()) {
     this.eduCardPress?.done();
     const id = pointer?.id ?? null;
     const mine = (p) => id === null || p?.id === id;
@@ -1754,7 +1763,7 @@ export class Play extends Phaser.Scene {
     const open = (p) => {
       if (!mine(p)) return;
       press.done();
-      if (!p?.wasCanceled) this.toggleEduCard();
+      if (!p?.wasCanceled) show();
     };
     const away = (p) => {
       if (mine(p)) press.done();
@@ -3251,18 +3260,33 @@ export class Play extends Phaser.Scene {
   }
 
   /**
-   * The 📚 pill's label: the cards waiting for this break's quiz as three coloured counts
-   * ("📚 5 · 2 · 8": new, learning, review; quizCounts), or "📚 Quiz" when nothing is waiting (early
-   * reviews are still on offer) and in a test run.
+   * The 📚 Review pill, and under it what this break's quiz can still ask, as three coloured
+   * numbers (new, learning, review; quizCounts), 0 · 0 · 0 included. No numbers in a test run.
    */
   refreshQuizButton() {
     if (!this.quizButton) return;
     const shown = this.quizButtonShown();
     const counts = shown ? this.quizCounts({ mode: 'break' }) : null;
-    const waiting = Boolean(counts) && counts.new + counts.learning + counts.review > 0;
-    this.quizButton.setText(waiting ? '' : `${EDUCATION_EMOJI} ${t(this.locale, 'quizPill')}`).setVisible(shown);
-    if (waiting) this.quizCountLine.set(counts);
-    this.quizCountLine.setVisible(shown && waiting);
+    this.quizButton.setText(`${EDUCATION_EMOJI} ${t(this.locale, 'reviewPill')}`).setVisible(shown);
+    if (counts) this.quizCountLine.set(counts);
+    this.quizCountLine.setVisible(shown && Boolean(counts));
+  }
+
+  /**
+   * What the numbers under Review mean (plan 25, B4): the "Your cards" lines with this break's
+   * counts, on the same info card ("Waiting in this quiz"). It opens on the tap's release
+   * (openEduCardOnRelease) or A on its ring item; any tap, key or pad press closes it, and nothing
+   * under it is pressed: the break does not continue.
+   */
+  toggleBreakCounts() {
+    if (!this.eduCard) return;
+    if (this.eduCard.open) {
+      this.eduCard.hide();
+      return;
+    }
+    const counts = this.quizButtonShown() ? this.quizCounts({ mode: 'break' }) : null;
+    if (!counts) return;
+    this.eduCard.show({ glyph: EDUCATION_EMOJI, title: t(this.locale, 'quizCountsTitle'), lines: countLines(this.locale, counts) });
   }
 
   /** The shop pill (the corn kernel and the purse): shown by shopButtonShown, dimmed (trayAlpha) when the purse is empty. The 🏅 and 📚 pills under it are refreshed with it. */
