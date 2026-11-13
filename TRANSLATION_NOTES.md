@@ -234,6 +234,11 @@ Short, playful, clear. Fit a 720×1280 logical field; How to play / About body w
 | quizRightCoins | Right! +{n} | 答对了！+{n} |
 | quizPill | Quiz (the won game-over panel's 📚 bonus button) | 答题 |
 | reviewPill | Review (an education level break's 📚 button, plan 25: the numbers sit under it) | 复习 |
+| breakSkip | Skip ▸ (plan 25: an education level break's button; each tap skips one level the player has unlocked before) | 跳过 ▸ |
+| breakQuit | Quit (ends the run at a level break; caught up, it costs nothing) | 结束 |
+| breakGiveUp | Give up (the same button while cards are due: it ends the run as a revive's Give up does) | 放弃 |
+| breakQuitSure | Quit? Tap again (the first tap arms it for a few seconds) | 结束？再点一次 |
+| breakGiveUpSure | Give up? Tap again | 放弃？再点一次 |
 | quizBury | Bury · {n} coins (plan 25: at a gate, after a miss, the card waits 24 h for a price in coins; Anki's word "bury"; zh says "push to tomorrow") | 推到明天 · {n} 金币 |
 | quizWrong | Not quite: the right answer has a ✓ | 不太对：正确答案标有 ✓ |
 | quizWhy | Why? | 为什么？ |

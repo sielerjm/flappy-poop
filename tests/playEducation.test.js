@@ -287,6 +287,46 @@ test('bury at a gate (plan 25, B7): only a card missed in this break, 3 × the l
   assert.equal(make({ level: 3 }).canBury(card.id), false, 'not at an unlocked level\'s break');
 });
 
+test('Skip ▸ at a break (plan 25, B8): one level passed at par per tap, only as far as the levels unlocked; never in a test run; the run is no longer full', async () => {
+  const { levelEnd } = await import('../src/logic.js');
+  const store = createEduStore(fakeStorage());
+  store.unlockLevel(4);
+  const s = playScene({
+    eduStore: store, level: 2, levelBreak: true, state: 'paused', runIsEducation: true, runIsTest: false, match: null, registry: registry(), tune: T,
+    shopOpen: false, quizOpen: false, quizButton: {}, pipesPassed: levelEnd(1, T), pipesSpawned: levelEnd(1, T), score: 30, runSkipped: false, breakMissed: [],
+    scoreText: { setText() {} }, refreshLevelBanner() {}, refreshLevelBar() {}, refreshShopButton() {},
+  });
+  s.breakSkip();
+  assert.deepEqual([s.level, s.pipesPassed, s.score, s.runSkipped], [3, levelEnd(2, T), 30 + levelEnd(2, T) - levelEnd(1, T), true]);
+  s.breakSkip();
+  assert.equal(s.level, 4, 'level 4 is unlocked');
+  s.breakSkip();
+  assert.equal(s.level, 4, 'not past the levels unlocked');
+  s.runIsTest = true;
+  s.level = 2;
+  assert.equal(s.breakSkipShown(), false, 'never in a test run');
+});
+
+test('Quit at a break (plan 25, B8): two taps; caught up it ends as a normal run (graded); with cards due it is a Give up', () => {
+  const runEnd = (due) => {
+    const calls = [];
+    let now = 1000;
+    const s = playScene({
+      levelBreak: true, state: 'paused', runIsEducation: true, runIsTest: false, match: null, shopOpen: false, quizOpen: false, quizButton: {}, breakQuitArmedAt: null,
+      time: { get now() { return now; }, delayedCall() {} },
+      quizCounts: () => ({ new: 4, learning: due ? 1 : 0, review: 0 }),
+      endRun: () => calls.push('endRun'), showOver: () => calls.push('showOver'), refreshShopButton() {},
+    });
+    s.breakQuitTap();
+    assert.deepEqual(calls, [], 'the first tap only arms it');
+    now += 500;
+    s.breakQuitTap();
+    return { calls, gaveUp: s.breakGaveUp, lb: s.levelBreak };
+  };
+  assert.deepEqual(runEnd(false), { calls: ['endRun', 'showOver'], gaveUp: false, lb: false }, 'caught up: a normal end');
+  assert.deepEqual(runEnd(true), { calls: ['endRun', 'showOver'], gaveUp: true, lb: false }, 'cards due: a Give up');
+});
+
 test('🔬 never shows in a test run; in a joined education run it does (AUD-014)', () => {
   const badge = { text: '', visible: null, setVisible(v) { this.visible = v; return this; }, setText(t) { this.text = t; return this; }, setPosition() { return this; } };
   const s = playScene({ testBadge: badge, state: 'playing', runIsTest: true, runIsEducation: true, researchJoined: () => true, col: { x: 0 }, locale: 'en' });

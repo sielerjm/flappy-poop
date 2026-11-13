@@ -532,6 +532,10 @@ export class Play extends Phaser.Scene {
     this.quizButtonBox = this.eduBreakBoxes?.review ?? null;
     this.quizCountsBox = this.eduBreakBoxes?.counts ?? null;
     this.quizButton = this.quizButtonBox ? createButton(this, this.quizButtonBox, `${EDUCATION_EMOJI} ${t(this.locale, 'reviewPill')}`, { ...TEXT_STYLE, fontSize: '36px', color: '#f8a0c8' }, { depth: 27 }).setVisible(false) : null;
+    // Skip ▸ and Quit (plan 25, B8), in eduBreakLayout's right-hand column (refreshQuizButton).
+    const sideStyle = { ...TEXT_STYLE, fontSize: '30px', color: '#f8a0c8' };
+    this.breakSkipButton = this.eduBreakBoxes ? createButton(this, this.eduBreakBoxes.skip, t(this.locale, 'breakSkip'), sideStyle, { depth: 27 }).setVisible(false) : null;
+    this.breakQuitButton = this.eduBreakBoxes ? createButton(this, this.eduBreakBoxes.quit, t(this.locale, 'breakQuit'), sideStyle, { depth: 27 }).setVisible(false) : null;
     this.quizCountLine = this.quizCountsBox
       ? createCountLine(this, this.quizCountsBox.x, this.quizCountsBox.y, { style: TEXT_STYLE, px: 34, sep: '   ', depth: 28, maxWidth: this.quizCountsBox.width }).setVisible(false)
       : null;
@@ -568,6 +572,8 @@ export class Play extends Phaser.Scene {
             ...(this.bracketButtonBox ? [{ id: 'bracket', box: this.bracketButtonBox, depth: 27, visible: () => this.bracketButtonShown(), activate: () => this.openBracketPeek() }] : []),
             ...(this.quizButtonBox ? [{ id: 'quiz', box: this.quizButtonBox, depth: 27, visible: () => this.quizButtonShown(), activate: () => this.handleChrome('quiz') }] : []),
             ...(this.quizCountsBox ? [{ id: 'quizCounts', box: this.quizCountsBox, depth: 27, visible: () => this.quizButtonShown() && this.quizCountLine.visible, activate: () => this.toggleBreakCounts() }] : []),
+            ...(this.eduBreakBoxes ? [{ id: 'breakSkip', box: this.eduBreakBoxes.skip, depth: 27, visible: () => this.breakSkipShown(), activate: () => this.breakSkip() }] : []),
+            ...(this.eduBreakBoxes ? [{ id: 'breakQuit', box: this.eduBreakBoxes.quit, depth: 27, visible: () => this.quizButtonShown(), activate: () => this.breakQuitTap() }] : []),
             { id: 'shopClose', box: this.shopBoxes.close, depth: 29, visible: () => this.shopOpen, activate: () => this.handleChrome('esc') },
             ...this.shopBoxes.rows.map((row) => ({ id: `shop:${row.id}`, box: row, depth: 28, visible: () => this.shopOpen, activate: () => this.shopBuy(row.id) })),
           ],
@@ -802,6 +808,8 @@ export class Play extends Phaser.Scene {
     const begin = daily ? dailyRunStart(daily.level, this.tune) : testRunStart(startLevel, this.tune);
     this.runStartLevel = begin.level; // a full run (💯, 🤓) starts at level 1 and skips nothing (plan 25)
     this.runSkipped = false;
+    this.breakGaveUp = false; // Quit at a break with cards due (plan 25)
+    this.breakQuitArmedAt = null;
     this.level = begin.level;
     this.pipesPassed = begin.pipes;
     this.pipesSpawned = begin.pipes;
@@ -1167,6 +1175,15 @@ export class Play extends Phaser.Scene {
     }
     if (pointer && this.quizButtonShown() && Math.abs(pointer.x - this.quizButtonBox.x) <= this.quizButtonBox.width / 2 && Math.abs(pointer.y - this.quizButtonBox.y) <= this.quizButtonBox.height / 2) {
       this.handleChrome('quiz'); // the 📚 pill: questions, never a continue tap
+      return;
+    }
+    const onBox = (box) => pointer && box && Math.abs(pointer.x - box.x) <= box.width / 2 && Math.abs(pointer.y - box.y) <= box.height / 2;
+    if (this.breakSkipShown() && onBox(this.eduBreakBoxes?.skip)) {
+      this.breakSkip(); // Skip ▸ (plan 25): never a continue tap
+      return;
+    }
+    if (this.quizButtonShown() && onBox(this.eduBreakBoxes?.quit)) {
+      this.breakQuitTap(); // Quit / Give up (plan 25): never a continue tap
       return;
     }
     if (pointer && this.quizButtonShown() && this.quizCountLine?.visible && Math.abs(pointer.x - this.quizCountsBox.x) <= this.quizCountsBox.width / 2 && Math.abs(pointer.y - this.quizCountsBox.y) <= this.quizCountsBox.height / 2) {
@@ -3333,6 +3350,69 @@ export class Play extends Phaser.Scene {
     this.quizButton.pulse(shown && this.breakGated());
     if (counts) this.quizCountLine.set(counts);
     this.quizCountLine.setVisible(shown && Boolean(counts));
+    this.breakSkipButton?.setVisible(this.breakSkipShown());
+    if (this.breakQuitButton) {
+      const due = Boolean(counts) && counts.learning + counts.review > 0;
+      const armed = this.breakQuitArmed();
+      this.breakQuitButton.setText(t(this.locale, due ? (armed ? 'breakGiveUpSure' : 'breakGiveUp') : armed ? 'breakQuitSure' : 'breakQuit')).setVisible(shown);
+    }
+  }
+
+  /** Skip ▸ at an education break (plan 25, B8): while the level after the next one is unlocked; never in a test run. */
+  breakSkipShown() {
+    return this.quizButtonShown() && !this.runIsTest && this.level < (this.eduStore?.load().unlockedLevel ?? 1);
+  }
+
+  /**
+   * Skip one level from this break: the level about to be flown is passed at par (its pairs added
+   * to the score and the count, as testRunStart passes the levels before a test run's start), and
+   * the run stands at the next level's break. Each tap skips one more, as far as the levels unlocked.
+   * A skipped run is not a full one (💯, 🤓).
+   */
+  breakSkip() {
+    if (!this.breakSkipShown()) return;
+    const end = levelEnd(this.level, this.tune);
+    this.score += Math.max(0, end - this.pipesPassed);
+    this.pipesPassed = end;
+    this.pipesSpawned = Math.max(this.pipesSpawned, end);
+    this.level += 1;
+    this.runSkipped = true;
+    this.breakMissed = [];
+    this.breakQuitArmedAt = null;
+    this.scoreText.setText(String(this.score));
+    this.refreshLevelBanner();
+    this.refreshLevelBar();
+    this.refreshShopButton();
+  }
+
+  /** Is Quit armed (its first tap less than saveClearConfirmMs ago)? */
+  breakQuitArmed() {
+    return this.breakQuitArmedAt != null && this.time.now - this.breakQuitArmedAt < T.saveClearConfirmMs;
+  }
+
+  /**
+   * Quit at an education break (plan 25, B8): the first tap arms it, a second inside the confirm time
+   * ends the run. Caught up (nothing due), it ends as a normal run, graded on its answers; with cards
+   * due it is a Give up (no grade, the 🤓 streak untouched).
+   */
+  breakQuitTap() {
+    if (!this.quizButtonShown()) return;
+    if (!this.breakQuitArmed()) {
+      this.breakQuitArmedAt = this.time.now;
+      this.refreshShopButton();
+      this.time.delayedCall(T.saveClearConfirmMs + 50, () => this.refreshShopButton());
+      return;
+    }
+    const counts = this.quizCounts({ mode: 'break' });
+    this.breakGaveUp = Boolean(counts) && counts.learning + counts.review > 0;
+    this.breakQuitArmedAt = null;
+    this.levelBreak = false;
+    this.levelTitle?.setVisible(false);
+    this.levelHint?.setVisible(false);
+    this.levelHintGlow?.setVisible(false);
+    this.endRun();
+    this.refreshShopButton();
+    this.showOver();
   }
 
   /**
@@ -3723,7 +3803,7 @@ export class Play extends Phaser.Scene {
    */
   recordEducation() {
     const day = utcDayKey();
-    const facts = eduRunFacts(this.runQuiz, { gaveUp: Boolean(this.revive?.gaveUp), full: this.runStartLevel === 1 && !this.runSkipped && this.won }, T);
+    const facts = eduRunFacts(this.runQuiz, { gaveUp: Boolean(this.revive?.gaveUp || this.breakGaveUp), full: this.runStartLevel === 1 && !this.runSkipped && this.won }, T);
     const counters = this.eduStore.endRun(facts);
     const earned = evaluate({ totals: counters, facts, unlocked: this.eduStore.load().badges, day, catalog: EDU_ACHIEVEMENTS });
     this.runBadges = this.eduStore.unlock(earned, day);

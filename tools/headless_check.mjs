@@ -3838,6 +3838,43 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await evaluate(`${play}.setTestMode(false), ${play}.settings.set({ eduStartLevel: 1 }), ${play}.refreshReadySwitches(), true`); // the start level back to 1 for later sections
         ok(!off.shown && !test.shown, 'with 📚 off, or in test mode, the stepper is hidden');
 
+        // Skip ▸ and Quit at a break (plan 25, B8). Levels up to 4 are unlocked by now: from level 2's
+        // break, Skip passes a level per tap as far as level 4; the run then flies on there. Quit needs two
+        // taps and ends the run (nothing due: a normal end).
+        await home();
+        await startRun();
+        const toBreak = async () => {
+          await evaluate(`(() => { const p = ${play}; p.poop.body.setAllowGravity(false); p.poop.setVelocity(0, 0); p.poop.y = 640; p.graceLeftMs = 1e9; p.onFinishCrossed(); return true; })()`);
+          for (let i = 0; i < 40 && !(await evaluate(`Boolean(${play}.levelBreak) && ${play}.state === 'paused'`)); i += 1) await sleep(100);
+          await sleep(TT.retryLockoutMs + 200);
+        };
+        await toBreak();
+        const sideNow = () => evaluate(`(() => { const p = ${play}; return JSON.stringify({ level: p.level, skip: p.breakSkipButton.visible, quit: p.breakQuitButton.visible, quitLabel: p.breakQuitButton.getText(), passed: p.pipesPassed, skipped: p.runSkipped, unlocked: p.eduStore.load().unlockedLevel, state: p.state, lb: p.levelBreak }); })()`).then(JSON.parse);
+        const box = (id) => evaluate(`JSON.stringify(${play}.eduBreakBoxes.${id})`).then(JSON.parse);
+        const sk0 = await sideNow();
+        const skipBox = await box('skip');
+        await tapAt(skipBox.x, skipBox.y);
+        await sleep(200);
+        const sk1 = await sideNow();
+        await tapAt(skipBox.x, skipBox.y);
+        await sleep(200);
+        const sk2 = await sideNow();
+        ok(sk0.level === 2 && sk0.skip && sk0.quit && sk1.level === 3 && sk1.skipped && sk1.state === 'paused' && sk1.lb && sk2.level === 4 && !sk2.skip, `from level 2's break, Skip ▸ passes a level per tap (2 → ${sk1.level} → ${sk2.level}), then hides at the last level unlocked (${sk2.unlocked}); the break stays`);
+        await evaluate(`${play}.resumePlay(), true`);
+        await sleep(400);
+        const flying = await sideNow();
+        await toBreak();
+        const next = await sideNow();
+        ok(flying.state === 'playing' && flying.level === 4 && next.level === 5 && next.lb, `the run flies on at level ${flying.level} and reaches level ${next.level}'s break`);
+        const quitBox = await box('quit');
+        await tapAt(quitBox.x, quitBox.y);
+        await sleep(200);
+        const armed = await sideNow();
+        await tapAt(quitBox.x, quitBox.y);
+        for (let i = 0; i < 40 && !(await evaluate(`__flappy.scene.isActive('Over')`)); i += 1) await sleep(100);
+        const quitOver = await evaluate(`JSON.stringify({ over: __flappy.scene.isActive('Over'), state: ${play}.state, gaveUp: ${play}.breakGaveUp })`).then(JSON.parse);
+        ok(armed.state === 'paused' && armed.quitLabel === (await tx('breakQuitSure')) && quitOver.over && quitOver.state === 'dead' && !quitOver.gaveUp, `Quit: the first tap arms it ("${armed.quitLabel}"), the second ends the run, caught up, so not as a Give up`);
+
         // The word again locks it: the switch goes; the switch's own setting is left as it was.
         await home();
         await tap('education');
