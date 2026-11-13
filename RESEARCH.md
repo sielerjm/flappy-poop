@@ -34,13 +34,16 @@ Each record is stored under a **random id** made by the server. It does not hold
 
 The server also records when each record arrived.
 
-Not sent: your username, your scores, your device model, your location, or anything about your health or habits. The cards ask about biology, never about you.
+Not sent with your answers: your username, your scores, or anything about your health or habits. The cards ask about biology, never about you.
+
+Like every website, the database host sees each request's IP address and browser details, which can tell roughly where you are and what kind of device you use. It keeps them in its own logs for a short time, apart from your answers, and they are never stored with them. The exact period will be added here once it is confirmed.
 
 ## Who can see it
 
 - Only the game's developer, Michael Sieler, reads it. No other player can see it, and it is not passed on to anyone else.
 - It is stored in the game's database, which is hosted by Supabase (a database company).
-- The server keeps one more table that links the random id to your device's player id. It is there so that only your device can add to your answers and delete them. It is readable by the developer only.
+- The server keeps one more table that links the random id to your player id (the id inside your user code). It is there so that only your devices can add to your answers and delete them. It is readable by the developer only.
+- Every device where you load the same user code is the same player, so their answers go under the same random id, and Withdraw on any of them deletes them all.
 - With only a few testers, the developer may be able to tell which answers are yours, for example from when you played. Please join only if you are comfortable with that.
 
 ## How long it is kept

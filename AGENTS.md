@@ -360,14 +360,18 @@ The 📚 glyph and that count are a box of their own inside the switch's (`ready
 `educationInfo`, which `readyHit` looks at first): a tap there, or A on its ring item, opens **"Your
 cards"** (`Play.toggleEduCard`, an info card): the cards not seen yet, the ones being learned and due,
 the learned ones due (`cardCounts` over every deck), how many have been seen (`masteryByDeck`), and that
-the gold number is learning plus to review. It opens on the tap's release (the card's dim closes on a
-release), and any tap, key or pad press closes it without pressing what is under it or starting a
+the gold number is learning plus to review. It opens on the release of the pointer that pressed it
+(the card's dim closes on a release; one press is armed at a time, so a second thumb or a cancelled
+touch does not toggle it twice: plan 25), and any tap, key or pad press closes it without pressing what is under it or starting a
 run. The rest of the switch still toggles.
 A run with 📚 on latches `runIsEducation` (never a Daily Dump), shows 📚 in the HUD, and at its end
-records nothing on a board or in the career (`endRun`: no best, top list, career counters or sync);
-its own badges and average grade are kept on the device (`recordEducation`, below) and leave it only
-when the player shares them on the 📚 board (below). With test mode on as
-well it is a test run too: no card progress, badge or revive is saved.
+records nothing on a board or in the career (`endRun`: no best, top list, career counters or career
+badges; the sync that follows sends only what was already queued, such as a tester's answers and the
+📚 board's grades: plan 25); its own badges and average grade are kept on the device
+(`recordEducation`, below) and leave it only when the player shares them on the 📚 board (below).
+With test mode on as well it is a test run too: no card progress, badge or revive is saved, and
+nothing is saved while test mode is on even when it was turned on after the run started (the
+game-over screen's profile, then the save panel; `setTestMode` also latches a one-player revive).
 **Cards** (`src/questions.js`, 70 placeholder cards, audits in `src/questionAudits.js`, the audit tool
 `tools/audit_questions.mjs`) are scheduled per device by SM-2 (`src/education.js`; store
 `flappyPoop.eduSrs`, wiped by Clear). A **test run** saves no answers, so what is due would never
@@ -464,7 +468,9 @@ so it learns of a round started on another device. The share store remembers the
 into, even after sharing is turned off, so turning it off and on, or two syncs both told to restart,
 never send a round's runs twice. A badge day the server finds out of range (a device with a wrong
 clock) is stored as today. A 📚 name belongs to one player: `name_blocked` counts the 📚 board's
-rows, and sharing or a rename refuses a name another player holds on any board. The board is a fourth leaderboard tab on unlocked devices
+rows, and sharing or a rename refuses a name another player holds on any board (since plan 25 a
+🌞-only or 🏅-only name is likewise one player's on every board). Share and rename wait 5 s per
+player (`'too soon'`, read as offline), and a fold takes both players' 📚 locks. The board is a fourth leaderboard tab on unlocked devices
 (`leaderboardLayout({ tabs })`, `Leaderboard.showEducation`, `education_board`: from
 `education.boardMinRuns` graded runs, by average grade); a sharing player's profile carries
 `education` for anyone (`player_stats`), drawn only on unlocked devices. **🔬 Tester data** (the
@@ -1747,7 +1753,15 @@ db/schema.sql               Supabase schema: scores table (player_id = save-code
                             player holds on any board; research_participants.joined_at
                             is the participation's token (submit_research_events'
                             p_since; another participation → 'not enrolled');
-                            enrol_research keeps the first phase. schema_version()
+                            enrol_research keeps the first phase. Plan 25: the file
+                            stops first on Postgres < 15; since_ms is clamped;
+                            fold_player takes both players' education: locks and the
+                            📚 functions lock through education_lock (resolved again
+                            under the lock); share / rename wait 5 s per player
+                            (education_paced, player_meta.edu_named_at); name_blocked
+                            also counts other players' 🌞 / 🏅 names when they have
+                            no score row (never 'Player'), and submit_daily_score
+                            renames the player's earlier days. schema_version()
                             (anon) is the file's stamp: `npm run schema:stamp`
                             after an edit (a test fails on a stale one), `npm run
                             schema:check` reads the live one. Run by
@@ -1959,7 +1973,9 @@ tests/                      node --test (schema.test.js, pilot.test.js, eduBoard
                             every row and old call answers as before); recent
                             receipts on both tables; the probe; badge days clamped;
                             the 📚 name rule; the participation token and the kept
-                            phase
+                            phase. Plan 25: the Postgres guard, since_ms clamped,
+                            the fold's 📚 locks (pg_locks), the 5 s share pace, the
+                            🌞 / 🏅 name rule (and old duplicates through the upgrade)
   schemaCheck.test.js       tools/schema_check.mjs: the stamp (blanked, idempotent),
                             the one read-only live call (an injected fetch), each
                             state it reports (current, fixture, other, none,
@@ -1984,7 +2000,10 @@ tests/                      node --test (schema.test.js, pilot.test.js, eduBoard
                             two tabs included; a test run saves no card and records
                             no event; 🔬 never in a test run; the revive's own
                             penalty; drainEduShare never rejects and follows 'rejected'
-                            / 'not shared' / a rename answered false
+                            / 'not shared' / a rename answered false. Plan 25: an
+                            education run's end syncs (a test run's does not); test
+                            mode turned on after the start saves nothing; the 📚
+                            glyph opens on its own pointer's release
   pilot.test.js             the tester pilot end to end: Play's pilot methods, the
                             real stores and leaderboard.js calls and the real save and
                             education data panels, against db/schema.sql through
