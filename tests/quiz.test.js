@@ -2,7 +2,8 @@
 // tests/support/scenes.js).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { quizScene } from './support/scenes.js';
+import { quizScene, absorb } from './support/scenes.js';
+import { TUNING } from '../src/config.js';
 
 /** Phaser's scene plugin as overlayStack reads it: the active scenes, bottom to top. */
 function scenes(active) {
@@ -175,24 +176,62 @@ test('the purse under the ✕ (plan 26): a break shows the coins held and pops w
   }
 });
 
-test("a revive's Give up warns once per device: the first press shows the warning and gives nothing up; the next press, and every one after, gives up (plan 26)", async () => {
-  const { createSettingsStore } = await import('../src/logic.js');
-  const m = new Map();
-  const settings = createSettingsStore({ getItem: (k) => m.get(k) ?? null, setItem: (k, v) => m.set(k, v), removeItem: (k) => m.delete(k) }, 'k');
+test("a revive's Quit warns on every card: the first press shows the warning, arms the button and holds it; the second press quits; the next card's Quit starts unarmed (plan 26, A2)", () => {
   const text = () => ({ text: '', visible: false, color: null, setX() { return this; }, setText(v) { this.text = v; return this; }, setColor(v) { this.color = v; return this; }, setVisible(v) { this.visible = v; return this; } });
   const decided = [];
-  const make = () => quizScene({ mode: 'revive', finishing: false, scene: scenes(['Play', 'Quiz']), runCard: { open: false }, locale: 'en', cx: 360, verdict: text(), verdictCoin: text(), nextWait: text(), play: { settings }, decide: (e) => decided.push(e) });
-  const q = make();
-  q.giveUp();
-  assert.deepEqual(decided, [], 'the first press gives nothing up');
-  assert.deepEqual([q.verdict.visible, q.verdict.text], [true, 'Giving up ends this run, and its progress is lost. Tap Give up again to end it.']);
-  assert.equal(settings.load().reviveGiveUpWarned, true, 'remembered on this device');
-  q.giveUp();
-  assert.deepEqual(decided, ['giveUp'], 'the second press gives up');
-  make().giveUp();
-  assert.deepEqual(decided, ['giveUp', 'giveUp'], 'a later revive: one press');
-  const covered = make();
-  covered.runCard = { open: true };
-  covered.giveUp();
-  assert.equal(decided.length, 2, 'nothing under the "This run" card');
+  const left = { label: null, onPress: null, heldMs: null, set(label, onPress) { this.label = label; this.onPress = onPress; this.heldMs = null; return this; }, holdFor(ms) { this.heldMs = ms; return this; } };
+  const settingsCalls = [];
+  const play = { settings: { load: () => (settingsCalls.push('load'), {}), set: () => settingsCalls.push('set') } };
+  const q = quizScene({ mode: 'revive', reviveState: { phase: 'strikes' }, finishing: false, scene: scenes(['Play', 'Quiz']), runCard: { open: false }, locale: 'en', cx: 360, verdict: text(), verdictCoin: text(), nextWait: text(), leftBtn: left, play, decide: (e) => decided.push(e) });
+  q.showWayOut();
+  assert.deepEqual([left.label, q.quitArmed], ['Quit', false], 'a card opens with Quit unarmed');
+  left.onPress();
+  assert.deepEqual(decided, [], 'the first press quits nothing');
+  assert.deepEqual([q.verdict.visible, q.verdict.text], [true, 'Quitting ends this run, and its progress is lost. Tap Quit again to end it.']);
+  assert.deepEqual([left.label, left.heldMs, q.quitArmed], ['Quit? Tap again', TUNING.education.explainMinMs, true], 'armed, and held as Next is after a miss: a double tap cannot pass the warning unread');
+  left.onPress();
+  assert.deepEqual(decided, ['giveUp'], 'the second press quits (the event keeps its name)');
+  q.showWayOut(); // the next card of the same revive
+  assert.deepEqual([left.label, q.quitArmed, left.heldMs], ['Quit', false, null], "the next card's Quit is unarmed again");
+  left.onPress();
+  assert.deepEqual(decided, ['giveUp'], 'and its first press only warns: no single press ever ends a run');
+  q.showWayOut();
+  q.runCard = { open: true };
+  left.onPress();
+  assert.deepEqual([decided.length, q.quitArmed], [1, false], 'nothing under the "This run" card');
+  assert.deepEqual(settingsCalls, [], 'nothing is remembered on the device any more (reviveGiveUpWarned is gone)');
+  const brk = quizScene({ mode: 'break', leftBtn: left, locale: 'en', close() {} });
+  brk.showWayOut();
+  assert.equal(left.label, 'End Review', "a break's way out is End Review, as before");
+});
+
+test("a quiz button's holdFor keeps its timer: the release comes when the time is up, and setting or hiding the button first cancels it, so an old hold never releases a later one (plan 26, A2)", () => {
+  const timers = [];
+  const time = { delayedCall(ms, fn) { const tm = { ms, fn, removed: false, remove() { this.removed = true; } }; timers.push(tm); return tm; } };
+  const q = quizScene({ add: absorb(), time, refreshHalo() {} });
+  const b = q.makeButton(0, 0);
+  const pressed = [];
+  b.set('Next Card', () => pressed.push('next')).holdFor(1500);
+  b.press();
+  assert.deepEqual([b.held, pressed, timers[0].ms], [true, [], 1500], 'held: a press does nothing');
+  timers[0].fn();
+  b.press();
+  assert.deepEqual([b.held, pressed], [false, ['next']], 'released when the time is up');
+  b.set('Quit? Tap again', () => pressed.push('quit')).holdFor(1500); // a warning's hold
+  b.set('Next Card', () => pressed.push('next2')).holdFor(1500); // then a wrong answer's, 0.3 s later
+  assert.deepEqual([timers[1].removed, timers[2].removed, b.held], [true, false, true], "set() cancelled the first hold's timer; the second holds");
+  b.holdFor(700);
+  assert.deepEqual([timers[2].removed, timers[3].ms, b.held], [true, 700, true], 'a new hold replaces the one before');
+  b.setShown(false);
+  assert.equal(timers[3].removed, true, 'a hidden button drops its timer');
+  b.set('Fly on', () => pressed.push('fly'));
+  assert.equal(b.held, false, 'and is not held when it is set again');
+  b.hold(true);
+  b.press();
+  assert.deepEqual([b.held, pressed], [true, ['next']], 'hold(true) with no time: held until set again (a button that cannot be used now)');
+  // A wrong answer's hold goes through it.
+  const held = [];
+  quizScene({}).holdAfterWrong({ holdFor: (ms) => held.push(ms) }, false);
+  quizScene({}).holdAfterWrong({ holdFor: (ms) => held.push(ms) }, true);
+  assert.deepEqual(held, [TUNING.education.explainMinMs], 'only after a wrong answer');
 });

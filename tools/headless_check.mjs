@@ -76,7 +76,7 @@ export const SECTIONS = [
   { name: 'profile', about: "player profiles (plan 08): the own profile (local counters, a locked badge's progress), another player's from a stubbed player_stats, the explanation card (a badge, a career cell, by mouse and controller), the wheel and a drag, the controller walking the grid, not found, offline, a board name opening a profile (not on a drag), the sign-in gate (no username), the save panel's Profile button" },
   { name: 'education-unlock', needs: [], about: "📚 education mode's unlock (plan 21): the word in the save panel (never a name), the 📚 switch remembered across a restart, 👥 and 📚 never on together on a wide window, an education run recording nothing, a Daily Dump never an education run, locking it again" },
   { name: 'education-quiz', needs: [], about: "📚 the quiz card (plan 21) in an education run's level break: the 📚 pill and its hint, the card answered by tap, key and controller (each answer saved to its card), +1 coin for a right answer and none for a wrong one, Next held after a wrong answer, taps under it ignored, every bank card fitting the card, Esc closing it with the resume lockout, the shop at the level's prices" },
-  { name: 'education-revive', needs: [], about: "📚 the revive after an education crash (plan 21): three misses end the run with the field and score untouched; wrong then right then Fly on revives without the power-ups at the penalty; a full streak gives coins and power-ups back; nothing lost skips the choice; Give up; Esc cannot close it; the field refills at the first right answer and Fly on goes straight on (plan 22)" },
+  { name: 'education-revive', needs: [], about: "📚 the revive after an education crash (plan 21): three misses end the run with the field and score untouched; wrong then right then Fly on revives without the power-ups at the penalty; a full streak gives coins and power-ups back; nothing lost skips the choice; Quit, warned on every card (plan 26, A2); Esc cannot close it; the field refills at the first right answer and Fly on goes straight on (plan 22)" },
   { name: 'education-over', needs: [], about: "📚 the end of an education run (plan 21): the game-over panel's 📚 tally and note, no Share; a won run's bonus button opening the rectum's questions over the panel (no coins, the card saved, Esc back to the panel); Clear wiping the cards' progress" },
   { name: 'education-share', needs: [], about: "📚 sharing by choice (plan 21, Stage 3b), the server stubbed: the user panel's 📚 Education data button only on an unlocked device, the Education data panel (the 18+ box, Share and Stop sharing, each refusal's message), the 📚 tab on the leaderboard (four tabs, the stubbed board, the footer's link and the player's own row), the profiles' 📚 sections (your own Shared row, another player's only when they share), Clear's warning while sharing; and the tester pilot: 🔬 Tester data (the invite code, Join, Withdraw), answers recorded only while joined and never in a test run, 🔬 in the HUD, the events sent and the queue emptied" },
 ];
@@ -3786,7 +3786,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await startRun();
         const run = await evaluate(`(() => { const p = ${play}; return JSON.stringify({ edu: p.runIsEducation, test: p.runIsTest, badge: p.testBadge.visible ? p.testBadge.text : null, purse: p.purseCoins() }); })()`).then(JSON.parse);
         ok(run.edu && !run.test && run.badge === '\u{1F4DA}' && Number.isFinite(run.purse), `an education run: latched (${run.edu}), not a test run, 📚 in the HUD, a real purse (${run.purse})`);
-        // The run really ends (an education crash opens the revive quiz: Give up), at a score above any
+        // The run really ends (an education crash opens the revive quiz: Quit), at a score above any
         // best, and neither the stores nor the career calls see it (plan 24, AUD-016: the old check
         // read the stores while the quiz was still up).
         // The run's end syncs what was already queued (plan 25, A1), so an earlier batch or claim may be
@@ -3801,7 +3801,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         const ended = { ...(await evaluate(`JSON.stringify({ over: __flappy.scene.isActive('Over'), state: ${play}.state })`).then(JSON.parse)), ...(await sent()), totals: await careerNow() };
         const newBatches = ended.batches.filter((b) => !career0.batches.includes(b));
         const newClaims = ended.claims.filter((c) => !career0.claims.includes(c));
-        ok(ended.over && ended.state === 'dead' && (await stores()) === stores0 && newBatches.length === 0 && newClaims.length === 0 && JSON.stringify(ended.totals) === JSON.stringify(career0.totals), `its end (a game over at 999, after Give up) records nothing: no best, top list, submit, career counters or badges`);
+        ok(ended.over && ended.state === 'dead' && (await stores()) === stores0 && newBatches.length === 0 && newClaims.length === 0 && JSON.stringify(ended.totals) === JSON.stringify(career0.totals), `its end (a game over at 999, after Quit) records nothing: no best, top list, submit, career counters or badges`);
 
         // A Daily Dump is never an education run, even with the 📚 switch on.
         await home();
@@ -3895,7 +3895,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await tapAt(quitBox.x, quitBox.y);
         for (let i = 0; i < 40 && !(await evaluate(`__flappy.scene.isActive('Over')`)); i += 1) await sleep(100);
         const quitOver = await evaluate(`JSON.stringify({ over: __flappy.scene.isActive('Over'), state: ${play}.state, gaveUp: ${play}.breakGaveUp })`).then(JSON.parse);
-        ok(armed.state === 'paused' && armed.quitLabel === (await tx('breakQuitSure')) && quitOver.over && quitOver.state === 'dead' && !quitOver.gaveUp, `Quit: the first tap arms it ("${armed.quitLabel}"), the second ends the run, caught up, so not as a Give up`);
+        ok(armed.state === 'paused' && armed.quitLabel === (await tx('breakQuitSure')) && quitOver.over && quitOver.state === 'dead' && quitOver.gaveUp, `Quit: the first tap arms it ("${armed.quitLabel}"), the second ends the run; caught up but nothing answered, so it counts as quitting, for 🏳️ (plan 26, A2)`);
 
         // The word again locks it: the switch goes; the switch's own setting is left as it was.
         await home();
@@ -4377,7 +4377,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         const storeKeys = JSON.stringify(['flappyPoop.save', TT.bestKey, 'flappyPoop.leaderboard', 'flappyPoop.career']);
         const stores = () => evaluate(`JSON.stringify(${storeKeys}.map((k) => localStorage.getItem(k)))`);
         const [wrong, over, back, choice, restored] = await Promise.all(['quizWrong', 'reviveOver', 'reviveBack', 'reviveChoice', 'reviveRestored'].map(tx));
-        const [flyOn, goFor, endRun, giveUp] = await Promise.all(['reviveContinue', 'reviveStreakGo', 'reviveEnd', 'reviveGiveUp'].map(tx));
+        const [flyOn, goFor, endRun, giveUp, quitSure, quitWarn] = await Promise.all(['reviveContinue', 'reviveStreakGo', 'reviveEnd', 'reviveQuit', 'reviveQuitSure', 'reviveQuitWarn'].map(tx));
         await evaluate(`localStorage.removeItem('flappyPoop.eduSrs'), ${play}.setEduUnlocked(true), ${play}.settings.set({ education: true }), true`);
 
         // Three misses: game over, the field as it was, no penalty, nothing recorded.
@@ -4386,7 +4386,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         const before = await playNow();
         await crash();
         const v0 = await view();
-        ok(v0.active && v0.phase === 'strikes' && v0.left === giveUp && v0.right === null && v0.status === '❤️'.repeat(TT.education.strikes), `a crash opens the revive quiz after the tumble: ${v0.header}, ${v0.status}, Give up offered`);
+        ok(v0.active && v0.phase === 'strikes' && v0.left === giveUp && v0.right === null && v0.status === '❤️'.repeat(TT.education.strikes), `a crash opens the revive quiz after the tumble: ${v0.header}, ${v0.status}, Quit offered ("${v0.left}")`);
         await evaluate(`${Q}.input.keyboard.emit('keydown-ESC'), true`);
         await sleep(200);
         ok((await view()).active, 'Esc does not close a revive quiz');
@@ -4534,20 +4534,30 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         const kept = await evaluate(`Boolean(${Q}.session.marked)`);
         ok(dn.hold === null && dn.revives === 1 && dn.score === 20 - pen && dn.filled && kept, `a decided revive is settled, not reopened (hold ${dn.hold}, revives ${dn.revives}, the quiz left alone: ${kept})`);
 
-        // A game over under a paused run still ends it. Give up warns once per device first (plan 26):
-        // the first press only says what giving up costs; the second gives up.
-        await evaluate(`${play}.settings.set({ reviveGiveUpWarned: false }), true`);
+        // A game over under a paused run still ends it. Quit warns on every card (plan 26, A2): the first
+        // press only says what quitting costs, arms the button and holds it; a press inside the hold does
+        // nothing; once the hold is over the second press quits. A new card starts unarmed again.
         await startEdu('');
         await crash();
         await evaluate(`${play}.pausePlay(), true`);
-        await press('leftBtn'); // Give up: the warning
-        await sleep(200);
-        const warned = await evaluate(`JSON.stringify({ verdict: ${Q}.verdict.visible ? ${Q}.verdict.text : null, quiz: __flappy.scene.isActive('Quiz'), over: Boolean(${play}.over), remembered: ${play}.settings.load().reviveGiveUpWarned })`).then(JSON.parse);
-        ok(warned.verdict === (await tx('reviveGiveUpWarn')) && warned.quiz && !warned.over && warned.remembered, `the first Give up on this device only warns: "${warned.verdict}"`);
-        await press('leftBtn'); // Give up
+        await press('leftBtn'); // Quit: the warning
+        const quitView = () => evaluate(`JSON.stringify({ verdict: ${Q}.verdict.visible ? ${Q}.verdict.text : null, left: ${Q}.leftBtn.shown ? ${Q}.leftBtn.text.text : null, held: ${Q}.leftBtn.held, armed: ${Q}.quitArmed, quiz: __flappy.scene.isActive('Quiz'), over: Boolean(${play}.over) })`).then(JSON.parse);
+        const warned = await quitView();
+        ok(warned.verdict === quitWarn && warned.left === quitSure && warned.held && warned.armed && warned.quiz && !warned.over, `the first Quit on a card only warns: "${warned.verdict}", the button reads "${warned.left}" and is held`);
+        await press('leftBtn'); // inside the hold: nothing
+        const stillWarned = await quitView();
+        ok(stillWarned.quiz && !stillWarned.over && stillWarned.armed, 'a second press inside the hold does nothing: a double tap cannot pass the warning unread');
+        // A wrong answer moves to the next card of the same revive: its Quit is unarmed again.
+        await evaluate(`(() => { const q = ${Q}; q.choose(q.order.findIndex((k) => k !== 'answer')); return true; })()`);
+        await press('rightBtn', held); // Next
+        const nextCardQuit = await quitView();
+        ok(nextCardQuit.quiz && nextCardQuit.left === giveUp && !nextCardQuit.armed && !nextCardQuit.held, `the next card's Quit is unarmed ("${nextCardQuit.left}"): it warns again`);
+        await press('leftBtn'); // the warning again
+        ok((await quitView()).verdict === quitWarn, 'and its first press warns again');
+        await press('leftBtn', held); // past the hold: quit
         await sleep(TT.deathToOverMs + 400);
         const pg = await playNow();
-        ok(pg.over && pg.state === 'dead' && !pg.quiz, `Give up under a paused run ends it (state ${pg.state})`);
+        ok(pg.over && pg.state === 'dead' && !pg.quiz, `the second press, after the hold, quits; under a paused run it still ends it (state ${pg.state})`);
 
         // A revive at a level's end (plan 22, F2): every pair passed, only the finish line left. The
         // line is never more than the first-pair lead ahead afterwards, and a kernel the crash cleared
@@ -4682,7 +4692,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         const atOpen = await evaluate(`JSON.stringify(globalThis.__atOpen)`).then(JSON.parse);
         const lk = await view();
         const lkPlay = await playNow();
-        ok(atOpen?.card && atOpen.giveUpShown && atOpen.locked && !atOpen.answered && !atOpen.finishing && lk.active && lk.phase === 'strikes' && lk.verdict === null && lk.left === giveUp && lkPlay.state === 'respawn' && !lkPlay.over, `a tap on an option and one on Give up as the revive card appears do nothing: no answer, the run goes on (phase ${lk.phase}, state ${lkPlay.state})`);
+        ok(atOpen?.card && atOpen.giveUpShown && atOpen.locked && !atOpen.answered && !atOpen.finishing && lk.active && lk.phase === 'strikes' && lk.verdict === null && lk.left === giveUp && lkPlay.state === 'respawn' && !lkPlay.over, `a tap on an option and one on Quit as the revive card appears do nothing: no answer, the run goes on (phase ${lk.phase}, state ${lkPlay.state})`);
         ok(atOpen?.ringLocked === false, "the controller ring's press, which carries no pointer, is not locked");
         await sleep(TT.retryLockoutMs + 100);
         // 🚩 in a revive (plan 21, E4): locked with the rest of the card as it appears, then a link like
@@ -4707,13 +4717,17 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         const keyAtOpen = await evaluate(`JSON.stringify(globalThis.__atOpen)`).then(JSON.parse);
         ok(keyAtOpen?.answered === true, 'the 1 key pressed as the card appears answers it: the keys are not locked');
 
-        // Give up: the run ends at once.
+        // Every card fits with Quit's warning in the verdict's place (plan 26, A2), in both languages,
+        // on a revive's card (its 💀 header). Then Quit, warned, ends the run.
         await startEdu('');
         await crash();
-        await press('leftBtn');
+        const quitFit = await evaluate(`import('./src/questions.js').then(({ CARDS }) => { const q = ${Q}; const keep = q.locale; const bad = []; for (const locale of ['en', 'zh-Hans']) { q.locale = locale; for (const c of CARDS) { const f = q.preview(c, false, { state: 'quit' }); if (!f.ok) bad.push(locale + ' ' + c.id + ':' + Math.round(f.below) + '>' + Math.round(f.buttonsTop)); } } q.locale = keep; q.showCard(q.card, q.order, q.reason); return JSON.stringify({ n: CARDS.length, bad }); })`).then(JSON.parse);
+        ok(quitFit.bad.length === 0, `all ${quitFit.n} cards fit a revive's card with Quit's warning showing, en and zh-Hans (${quitFit.bad.join(', ') || 'none over'})`);
+        await press('leftBtn'); // the warning
+        await press('leftBtn', held); // Quit
         await sleep(TT.deathToOverMs + 400);
         const g = await playNow();
-        ok(g.over && g.state === 'dead' && !g.quiz, 'Give up ends the run');
+        ok(g.over && g.state === 'dead' && !g.quiz, 'Quit, warned, ends the run');
 
         await home();
         await evaluate(`localStorage.removeItem('flappyPoop.eduSrs'), ${play}.settings.set({ education: false }), ${play}.setEduUnlocked(false), true`);
@@ -4748,10 +4762,16 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
             `(() => { const o = ${O}; const at = (id) => o.cells.find((c) => c.id === id) ?? null; const b = o.buttons; const halo = o.homeHalo.getBounds(); const n = o.eduNote?.getBounds() ?? null; const texts = o.children.list.filter((c) => c.type === 'Text'); const beside = (cell) => cell ? (texts.find((x) => x.text.startsWith('×') && Math.abs(x.y - cell.y) < 2 && Math.abs(x.x - cell.textX) < 2)?.text ?? null) : null; return JSON.stringify({ ids: o.cells.map((c) => c.id), tallyY: ['eduAnswered', 'eduRight', 'eduWrong'].map((id) => at(id)?.y ?? null), tallyText: ['eduAnswered', 'eduRight', 'eduWrong'].map((id) => beside(at(id))), mysteryY: at('mystery').y, coinY: at('coin').y, fallsY: at('falls').y, tallyRowY: at('eduAnswered').y, badgeY: o.badgeLine ? o.badgeLine.y : null, noteTop: n ? n.y : null, noteBottom: n ? n.bottom : null, band: { top: o.bandBox.top, bottom: o.bandBox.bottom, offset: o.band.offset }, home: b.home, again: b.again, bonus: b.bonus ?? null, share: b.share ?? null, halo: { left: halo.left, right: halo.right, top: halo.top, bottom: halo.bottom, key: o.homeHalo.texture.key }, scales: [o.homeButton.labelScale(), o.againButton.labelScale()], cy: o.cells[0].y - ${TT.over.cellRowsY[0]}, ring: o.focus.items.map((i) => i.id) }); })()`,
           ).then(JSON.parse);
         const all = JSON.stringify(await evaluate(`JSON.stringify(Object.fromEntries(Object.keys(localStorage).map((k) => [k, localStorage.getItem(k)])))`));
-        // This device has seen Give up's one-time warning (plan 26; education-revive checks it): one press gives up.
-        await evaluate(`localStorage.removeItem('flappyPoop.eduSrs'), ${play}.setEduUnlocked(true), ${play}.settings.set({ education: true, reviveGiveUpWarned: true }), true`);
+        // A revive's Quit warns on every card (plan 26, A2; education-revive checks it): quitQuiz presses it,
+        // waits out the hold, and presses again.
+        await evaluate(`localStorage.removeItem('flappyPoop.eduSrs'), ${play}.setEduUnlocked(true), ${play}.settings.set({ education: true }), true`);
+        const quitQuiz = async () => {
+          await evaluate(`${Q}.leftBtn.press(), true`); // the warning
+          await sleep(TT.education.explainMinMs + 200);
+          await evaluate(`${Q}.leftBtn.press(), true`); // Quit
+        };
 
-        // A game over (one miss, then Give up): the tally and the note; nothing to share.
+        // A game over (one miss, then Quit): the tally and the note; nothing to share.
         await startEdu();
         await evaluate(`(() => { const p = ${play}; p.graceLeftMs = 0; p.die(); return true; })()`);
         for (let i = 0; i < 40 && !(await evaluate(`__flappy.scene.isActive('Quiz') && Boolean(${Q}.card)`)); i += 1) await sleep(100);
@@ -4759,7 +4779,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await sleep(TT.education.explainMinMs + 200);
         await evaluate(`${Q}.rightBtn.press(), true`);
         await sleep(300);
-        await evaluate(`${Q}.leftBtn.press(), true`); // Give up
+        await quitQuiz();
         await sleep(TT.deathToOverMs + 500);
         const p1 = await panel();
         const note = await tx('eduNotSaved');
@@ -4846,16 +4866,16 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         const badgeLine = () => evaluate(`${O}.badgeLine?.text ?? null`);
         const winWith = (right, answered) => evaluate(`(() => { const p = ${play}; p.runQuiz = { ...p.runQuiz, answered: ${answered}, right: ${right}, wrong: ${answered} - ${right} }; p.level = 7; p.applyLevel(); p.win(); return true; })()`);
         const rec0 = await eduRec();
-        // 🏳️ Drop Out: a crash, then Give up at the first card with nothing answered.
+        // 🏳️ Drop Out: a crash, then Quit at the first card with nothing answered.
         await startEdu();
         await evaluate(`(() => { const p = ${play}; p.graceLeftMs = 0; p.die(); return true; })()`);
         for (let i = 0; i < 40 && !(await evaluate(`__flappy.scene.isActive('Quiz') && Boolean(${Q}.card)`)); i += 1) await sleep(100);
-        await evaluate(`${Q}.leftBtn.press(), true`); // Give up
+        await quitQuiz();
         await sleep(TT.deathToOverMs + 500);
         const dropPanel = await panel();
         const dropLine = await badgeLine();
         const rec1 = await eduRec();
-        ok(dropPanel.active && dropPanel.tally === '❔ 0  ·  ✅ 0  ·  ❌ 0' && dropLine?.includes('🏳️') && dropPanel.texts.includes(note) && rec1.badges.join() === 'edu_drop_out' && !rec1.counters.gradedRuns, `giving up with nothing answered earns 🏳️: the game-over line reads "${dropLine}" under the tally, and the run is not graded`);
+        ok(dropPanel.active && dropPanel.tally === '❔ 0  ·  ✅ 0  ·  ❌ 0' && dropLine?.includes('🏳️') && dropPanel.texts.includes(note) && rec1.badges.join() === 'edu_drop_out' && !rec1.counters.gradedRuns, `quitting with nothing answered earns 🏳️: the game-over line reads "${dropLine}" under the tally, and the run is not graded`);
 
         // A lost run with a badge line (plan 21, E5): the badge line, the ❔ ✅ ❌ row and the note are all in
         // the band, a row apart, and nothing scrolls. Home goes home.
@@ -4866,17 +4886,17 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await tapAt(e3.home.x, e3.home.y);
         await sleep(400);
         ok(!(await evaluate(`__flappy.scene.isActive('Over')`)) && (await playState()) === 'ready', 'a tap on Home goes home');
-        // A run answered 5 of 5 that ends on Give up is not graded (plan 21, E1): no 💯, no 🅰️, no
+        // A run answered 5 of 5 that ends on Quit is not graded (plan 21, E1): no 💯, no 🅰️, no
         // graded run, the 🤓 streak untouched. (It used to earn both badges.)
         await startEdu();
         await evaluate(`(() => { const p = ${play}; p.applyLocale('zh-Hans'); p.runQuiz = { ...p.runQuiz, answered: 5, right: 5, wrong: 0 }; p.graceLeftMs = 0; p.die(); return true; })()`); // zh-Hans for this panel: its buttons' labels must fit too (the restart after it reads the stored language again)
         for (let i = 0; i < 40 && !(await evaluate(`__flappy.scene.isActive('Quiz') && Boolean(${Q}.card)`)); i += 1) await sleep(100);
-        await evaluate(`${Q}.leftBtn.press(), true`); // Give up
+        await quitQuiz();
         await sleep(TT.deathToOverMs + 500);
         const quitPanel = await panel();
         const quitLine = await badgeLine();
         const recQuit = await eduRec();
-        ok(quitPanel.active && quitPanel.tally === '❔ 5  ·  ✅ 5  ·  ❌ 0' && quitLine === null && recQuit.badges.join() === 'edu_drop_out' && !recQuit.counters.gradedRuns && !recQuit.counters.perfectStreak && !recQuit.counters.gradeSum, `a run answered 5 of 5 that ends on Give up is not graded: "${quitPanel.tally}", no badge line (${quitLine}), the record ${JSON.stringify(recQuit.counters)}`);
+        ok(quitPanel.active && quitPanel.tally === '❔ 5  ·  ✅ 5  ·  ❌ 0' && quitLine === null && recQuit.badges.join() === 'edu_drop_out' && !recQuit.counters.gradedRuns && !recQuit.counters.perfectStreak && !recQuit.counters.gradeSum, `a run answered 5 of 5 that ends on Quit is not graded: "${quitPanel.tally}", no badge line (${quitLine}), the record ${JSON.stringify(recQuit.counters)}`);
         const zhPanel = await evaluate(`import('./src/i18n.js').then((m) => { const o = ${O}; return JSON.stringify({ home: o.homeButton.getText(), again: o.againButton.getText(), want: [m.t('zh-Hans', 'tapToHome'), m.t('zh-Hans', 'playAgain')], scales: [o.homeButton.labelScale(), o.againButton.labelScale()] }); })`).then(JSON.parse);
         ok(zhPanel.home === zhPanel.want[0] && zhPanel.again === zhPanel.want[1] && zhPanel.scales.every((k) => k >= 0.85), `in zh-Hans the two labels fit as well ("${zhPanel.home}" | "${zhPanel.again}", scales ${zhPanel.scales.map((k) => k.toFixed(2)).join(', ')})`);
         // A won run at 5 of 5: 💯 and 🅰️ on its panel at once; it waits to be recorded until the panel is
@@ -5107,7 +5127,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await until(`__flappy.scene.isActive('Quiz') && Boolean(${Q}.card)`);
         await evaluate(`(() => { const q = ${Q}; q.choose(q.order.findIndex((k) => k !== 'answer')); return true; })()`);
         await sleep(300);
-        // Give up (one miss, so the note shows), retried until the panel is up: under load a press can
+        // Quit (one miss, so the note shows), retried until the panel is up: under load a press can
         // land before the card takes it.
         for (let i = 0; i < 40 && !(await evaluate(`__flappy.scene.isActive('Over')`)); i += 1) {
           await evaluate(`__flappy.scene.isActive('Quiz') && ${Q}.decide('giveUp'), true`);

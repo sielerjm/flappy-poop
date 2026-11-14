@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { createSettingsStore, vibrate } from '../src/logic.js';
 import { initialLocale } from '../src/i18n.js';
 
-const DEFAULTS = { sound: true, music: true, haptics: true, locale: 'en', howToSeenAt: '', hand: 'right', eduUnlocked: false, education: false, eduStartLevel: 1, eduNewOrder: 'after', reviveGiveUpWarned: false };
+const DEFAULTS = { sound: true, music: true, haptics: true, locale: 'en', howToSeenAt: '', hand: 'right', eduUnlocked: false, education: false, eduStartLevel: 1, eduNewOrder: 'after' };
 
 function fakeStorage() {
   const m = new Map();
@@ -135,12 +135,12 @@ test("eduNewOrder (plan 26): where a quiz puts new cards is kept as one of educa
   for (const bad of ['random', '', null, 3, 'AFTER']) assert.equal(s.set({ eduNewOrder: bad }).eduNewOrder, 'after', `${bad} reads as after`);
 });
 
-test('reviveGiveUpWarned (plan 26): a boolean, false until the revive\'s Give up has warned once; junk reads as false', () => {
-  const m = new Map();
+test("reviveGiveUpWarned is gone (plan 26, A2: a revive's Quit warns on every card): a stored value is ignored and never written back", () => {
+  const m = new Map([['k', JSON.stringify({ sound: false, reviveGiveUpWarned: true })]]);
   const st = { getItem: (k) => m.get(k) ?? null, setItem: (k, v) => m.set(k, v), removeItem: (k) => m.delete(k) };
   const s = createSettingsStore(st, 'k');
-  assert.equal(s.load().reviveGiveUpWarned, false);
-  assert.equal(s.set({ reviveGiveUpWarned: true }).reviveGiveUpWarned, true);
-  assert.equal(createSettingsStore(st, 'k').load().reviveGiveUpWarned, true, 'kept across reloads');
-  for (const bad of ['yes', 1, null]) assert.equal(s.set({ reviveGiveUpWarned: bad }).reviveGiveUpWarned, false, String(bad));
+  assert.equal('reviveGiveUpWarned' in s.load(), false, 'not read');
+  assert.equal(s.load().sound, false, 'the rest of the record is');
+  assert.equal('reviveGiveUpWarned' in s.set({ reviveGiveUpWarned: true, music: false }), false, 'not settable');
+  assert.equal('reviveGiveUpWarned' in JSON.parse(m.get('k')), false, 'and dropped from storage with the next write');
 });

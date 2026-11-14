@@ -413,7 +413,7 @@ GitHub's card report form in a new tab with the card's code in the title and the
 (`issueUrl('card')`, `.github/ISSUE_TEMPLATE/card.yml`); never a same-tab navigation, which would lose
 the run, and not on the controller ring (a pad press cannot open a tab). **Its rows**, as Michael drew
 them (plan 26): a full-width Why on top, then two buttons whose right one is the way forward (Next
-Card, Fly on, Go for it, End run) and whose left one is the way out (End Review in a break; Give up or
+Card, Fly on, Go for it, End run) and whose left one is the way out (End Review in a break; Quit or
 the choice's Fly on in a revive), then the numbers on the card's bottom row. **Caught up**: with
 nothing counted left, a break's or the bonus quiz stops at the first practice card: "You're all
 caught up!" with End Review and **Keep practicing** (`Quiz.practicing`: practice cards from then on,
@@ -426,7 +426,7 @@ quiz (`book-open`), a page turns for each next card (`book-flip`), the book shut
 quiz) plays `sfx.score`, and one that pays (a break's) makes the coin's sound alone (`takeCoins`); the
 answer that wins everything back plays `sparkle` in the ding's place. **Level break** (plan 25 laid it
 out, plan 26 to Michael's sketch: `eduBreakLayout` in logic.js): the banner higher (`titleY`); the 🌽
-pill with Skip ▸ right of it; on the 🏅's row under it **📚 Review** and Quit / Give up side by side;
+pill with Skip ▸ right of it; on the 🏅's row under it **📚 Review** and Quit side by side;
 the three numbers on the bean button's line (it hides in a break). The **📚 Review** pill
 (`quizButtonShown`; chromeIntent's `'quiz'` input, only in an education run's break) opens the break's
 quiz, which asks missed cards, then due reviews (the least remembered first), then the cards missed
@@ -449,7 +449,10 @@ in its left slot (`canBury` / `buryCard`): `education.buryCoinsPerLevel` × the 
 at most `buryPerDay` a local day, the card due again `buryMs` later; no pilot event. **Skip ▸ and
 Quit**: Skip passes the next level at par per tap while a later
 level is unlocked (not in a test run); Quit takes two taps and ends the run, graded as a normal end
-when nothing is due, as a Give up (`breakGaveUp`) otherwise. **Start level**: with a later level
+when nothing is due and something was answered; with cards due, or with nothing answered, it counts as
+quitting the run (`breakGaveUp`: ungraded, and 🏳️ with nothing answered; plan 26, A2). It reads Quit
+either way; armed it reads "Quit? Tap again", or "Quit ungraded? Tap again" while cards are due
+(`breakQuitDueSure`). **Start level**: with a later level
 unlocked, the 📚 popup's ◀ LV n ▶ sets it (settings `eduStartLevel`; on the ready screen's 📚 row
 until plan 26); the run starts there through `testRunStart`. 💯 and the 🤓 streak
 count only **full** runs (`eduRunFacts`' `full`: from level 1, nothing skipped, won). **The run's
@@ -466,10 +469,13 @@ world halts as in a match respawn (`startRespawn` / `endRespawn` keep their matc
 **revive quiz** runs (`reviveStep` through `Play.reviveEvent`): ❤️ × `education.strikes` misses end the
 run (`reviveDone` → `endRun`, the field untouched); the first right answer revives, and when the crash
 took something the player may go for ⭐ × `restoreStreak` in a row to get it all back
-(`effects.restore`); Give up ends it, and only before a right answer (`reviveStep` takes it in
-`'strikes'` alone); the first Give up on a device only warns that the run and its progress would be
-lost (`Quiz.giveUp`, settings `reviveGiveUpWarned`; plan 26), and the next press gives up; Esc / B do
-nothing. Once Give up or Return has started closing the quiz
+(`effects.restore`); **Quit** ends it ("Give up" until plan 26's A2; the method `Quiz.giveUp`, the
+`'giveUp'` event and `gaveUp` keep the name), and only before a right answer (`reviveStep` takes it in
+`'strikes'` alone). On every card its first press only warns, in the verdict's place, that the run
+and its progress would be lost (`reviveQuitWarn`), arms the button ("Quit? Tap again", `quitArmed`)
+and holds it for `education.explainMinMs`, as Next is held after a miss; the next press on that card
+quits, and the next card starts unarmed, so no single press ends a run. Esc / B do
+nothing. Once Quit or Return has started closing the quiz
 (`finishing`), no key or second thumb answers. A revive's card ignores pointer taps for
 `retryLockoutMs` after it opens (`tapLocked`: a flap tap landing as it appears must not answer or give
 up; the keys and the ring are not locked). The quiz is the pause: `autoPause` does
@@ -485,9 +491,9 @@ blinks for `education.reviveBlinkMs` (`standRevived`, `respawnBlinkStart`), with
 when ready". A revive's way forward glows. **Badges and the average grade** (`EDU_ACHIEVEMENTS` in
 `src/achievements.js`, their own list: never in `ACHIEVEMENTS`, never claimed on the server): 🤓 Nerd
 Alert (10 perfect graded runs in a row), 💯 Full Marks, 🅰️ / 🅱️ / 📜 (90 %, 80 to under 90, 70 to
-under 80), 🏳️ Drop Out (Give up with nothing answered), 👼 / 🐦‍🔥 (100 / 1000 revives). A run is
-graded from `education.badgeMinAnswers` answers and only when it did not end on Give up
-(`eduRunFacts`: a given-up run earns no grade badge, adds nothing to the average and leaves the 🤓
+under 80), 🏳️ Drop Out (a Quit with nothing answered: a revive's, or the break's), 👼 / 🐦‍🔥 (100 / 1000 revives). A run is
+graded from `education.badgeMinAnswers` answers and only when it did not end on a Quit that counts
+(`gaveUp`; `eduRunFacts`: a quit run earns no grade badge, adds nothing to the average and leaves the 🤓
 streak alone, so 💯 needs a won run); the education store keeps the counters
 (`revives`, `perfectStreak`, `gradedRuns`, `gradeSum`) and the badges with the cards, and the average
 grade is the mean of the graded runs' grades (`averageGrade`). **Over**, on an education panel (the
@@ -695,8 +701,8 @@ src/
                             best-score store, settings store (incl. locale,
                             howToSeenAt and hand: HANDS 'left' | 'right', the
                             bean button's side; eduStartLevel 1–7, plan 25;
-                            eduNewOrder after / mixed / before and
-                            reviveGiveUpWarned, plan 26) +
+                            eduNewOrder after / mixed / before, plan 26;
+                            reviveGiveUpWarned is gone since plan 26's A2) +
                             howToPromptDue, vibrate helper, trayLayout, trayHit,
                             readyLayout (plan 25's ◀ level ▶ stepper boxes went to
                             the 📚 popup in plan 26), readyHit, nextEduStartLevel (wraps within
@@ -1721,7 +1727,8 @@ src/
     Quiz.js                 Overlay (plan 21; chromeIntent 'quiz' in an education
                             run's level break, Play.openQuiz otherwise): the 📚 quiz
                             card, 640 × 1160. Modes 'break' (coins), 'revive' (after a
-                            crash: ❤️ strikes, the ⭐ choice and streak, Give up; it
+                            crash: ❤️ strikes, the ⭐ choice and streak, Quit (warned on
+                            every card: giveUp, quitArmed); it
                             cannot be closed and ends itself, finish; its card
                             ignores pointer taps for retryLockoutMs, tapLocked) and
                             'bonus' (a won run's rectum questions from Over). The
@@ -1735,16 +1742,20 @@ src/
                             reviveEvent / reviveGrant); its shutdown calls
                             Play.onQuizClosed(mode). Options are drawn boxes with
                             wrapped text (not createButton). Three button slots by
-                            position take a label and an action per step (set / hold
-                            / press): topBtn (Why, full width), leftBtn (the way
-                            out: End Review, Give up, the choice's Fly on) and rightBtn
+                            position take a label and an action per step (set / hold /
+                            holdFor, whose timer set / setShown / hold drop, so an old
+                            hold never releases a new one; press): topBtn (Why, full
+                            width), leftBtn (the way out: End Review, Quit, the
+                            choice's Fly on) and rightBtn
                             (the way forward, which Enter / Space press and which
                             glows in a revive: halo, refreshHalo). sample() plays
                             the book sounds through Play.playSample; choose() the
                             answer's (no ding for an answer that paid a coin).
-                            preview(card, right) lays any card out
+                            preview(card, right, { state }) lays any card out
                             answered wrong or right for the smoke's fit check
-                            (fits(): the last text ends above the buttons under it).
+                            (fits(): the last text ends above the buttons under it);
+                            `state` 'quit' (plan 26 A2) shows a revive card with
+                            Quit's warning, run over all cards in education-revive.
 
 assets/                     Contract PNGs + README.md (the art contract).
   README.md                 File name, pixel size, orientation rules. tests enforce it.
@@ -2095,7 +2106,7 @@ tests/                      node --test (schema.test.js, pilot.test.js, eduBoard
                             365-day cap), the SM-2 records' conversion, pickCard in each context
                             (break, revive, browse) and its exclusions, cardCounts ==
                             what pickCard hands out, reviveStep (strikes, the choice,
-                            the streak, Give up only in strikes), reviveSettled,
+                            the streak, Quit ('giveUp') only in strikes), reviveSettled,
                             tallyAnswer, eduShopPrices (rounded up), masteryByDeck
                             (retired cards out), createEduStore (records, badges, the
                             average, Clear on the same instance), dueCount, cardText.
@@ -2139,8 +2150,8 @@ tests/                      node --test (schema.test.js, pilot.test.js, eduBoard
                             interrupted, nothing answered once the quiz is finishing,
                             the 🚩 never navigates the game's tab, tapLocked, the
                             numbers' explainer (plan 25); plan 26: the next wait,
-                            caught up with Keep practicing, the purse, Give up's
-                            one-time warning
+                            caught up with Keep practicing, the purse; plan 26 A2:
+                            Quit's warning on every card, holdFor's timer
   richText.test.js          src/richText.js: linkSpans (whole words, overlaps,
                             missing terms) and layoutRich (greedy wrap, centred
                             lines, parts that add up, links across a break)

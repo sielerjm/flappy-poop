@@ -53,7 +53,7 @@ const LINK_ZONES = 8; // tap boxes for the explanation's links: 3 terms a card, 
  * A revive's card ignores pointer taps for retryLockoutMs after it opens (tapLocked).
  * Rows, as Michael drew them (plan 26): a full-width Why on top, then a row of two buttons whose
  * right one is the way forward (Next Card, Fly on, Go for it, End run) and whose left one is the way
- * out (End Review; in a revive, Give up or the choice's Fly on), then the numbers.
+ * out (End Review; in a revive, Quit or the choice's Fly on), then the numbers.
  * What is waiting (plan 21, E2), as in Anki: a line of three counts on the card's bottom row,
  * "5 + 2 + 8": new cards (blue), missed cards (red) and reviews due (green) that this quiz can still
  * ask, the card on show included and its kind underlined (Play.quizCounts; refreshCounts). Hidden in
@@ -77,7 +77,8 @@ const LINK_ZONES = 8; // tap boxes for the explanation's links: 3 terms a card, 
  *   'revive' after an education crash: Play's reviveStep state (play.revive) runs the card. Wrong
  *            answers use up the ❤️ (education.strikes); the first right one revives, and when the
  *            crash took something, offers the ⭐ streak (education.restoreStreak in a row, the first
- *            included) to win it back. Give up ends the run. It cannot be closed: it ends itself
+ *            included) to win it back. Quit ends the run, after a warning on every card (giveUp;
+ *            it read "Give up" until plan 26's A2). It cannot be closed: it ends itself
  *            (finish), and Play settles the outcome when it is down (reviveDone).
  */
 export class Quiz extends Phaser.Scene {
@@ -95,6 +96,7 @@ export class Quiz extends Phaser.Scene {
     this.card = null;
     this.answered = false;
     this.finishing = false;
+    this.quitArmed = false; // a revive's Quit: armed by its first press on a card (giveUp), unarmed again with each card (showWayOut)
     this.reviveState = this.mode === 'revive' ? (this.play?.revive ?? null) : null;
     this.openedAt = this.game.loop.time; // a revive's card ignores taps for a moment after this (tapLocked)
     this.sample('book-open', T.bookOpenVolume);
@@ -176,7 +178,7 @@ export class Quiz extends Phaser.Scene {
       });
     // Three button slots, named by where they sit; each step says what they read and do (set). The
     // two on the bottom row never overlap, so a second tap on the way forward cannot land on the
-    // way out (Give up) of the next card.
+    // way out (Quit) of the next card.
     const countY = this.bottom - BOTTOM_PAD - COUNT_ROW / 2;
     const rowY = this.bottom - BOTTOM_PAD - COUNT_ROW - BUTTON.height / 2;
     const topY = rowY - BUTTON.height - BUTTON_GAP;
@@ -377,6 +379,7 @@ export class Quiz extends Phaser.Scene {
   /** A button slot `width` wide: a rounded box, a label and a zone; set(label, onPress) says what it is now. */
   makeButton(x, y, width = BUTTON.width) {
     const refreshHalo = () => this.refreshHalo(); // the methods below are the button's own: `this` is not the scene there
+    const time = this.time;
     const g = this.add.graphics();
     g.fillStyle(0x2a1522, 1);
     g.fillRoundedRect(x - width / 2, y - BUTTON.height / 2, width, BUTTON.height, 18);
@@ -390,6 +393,7 @@ export class Quiz extends Phaser.Scene {
       shown: false,
       held: false,
       onPress: null,
+      holdTimer: null,
       /** Label and action; shows it, not held. */
       set(label, onPress) {
         text.setText(label).setScale(1);
@@ -400,19 +404,38 @@ export class Quiz extends Phaser.Scene {
       },
       setShown(on) {
         button.shown = Boolean(on);
+        if (!button.shown) button.dropHoldTimer(); // a hidden button's hold releases nothing later
         g.setVisible(button.shown);
         text.setVisible(button.shown);
         button.zone.setVisible(button.shown);
         refreshHalo();
         return button;
       },
-      /** Held: dimmed, and a press does nothing until released (after a wrong answer, explainMinMs). */
+      /** Held: dimmed, and a press does nothing, until hold(false) or the button is set again. Any timed release (holdFor) is dropped. */
       hold(on) {
+        button.dropHoldTimer();
         button.held = Boolean(on);
         g.setAlpha(button.held ? 0.4 : 1);
         text.setAlpha(button.held ? 0.4 : 1);
         refreshHalo();
         return button;
+      },
+      /**
+       * Held for `ms`, then released (after a wrong answer, and after a warning that must be read:
+       * explainMinMs). The timer is the button's own (plan 26, A2): setting, hiding or holding the
+       * button again drops it, so an earlier hold can never release a later one early.
+       */
+      holdFor(ms) {
+        button.hold(true);
+        button.holdTimer = time.delayedCall(ms, () => {
+          button.holdTimer = null;
+          button.hold(false);
+        });
+        return button;
+      },
+      dropHoldTimer() {
+        button.holdTimer?.remove(false);
+        button.holdTimer = null;
       },
       press() {
         if (button.shown && !button.held) button.onPress?.();
@@ -439,7 +462,7 @@ export class Quiz extends Phaser.Scene {
 
   /**
    * Enter / Space: the way forward (the right-hand button). With "All caught up" on show they press
-   * Keep practicing when it shows, else End Review. Never Give up, and never Return while a card is up: Space is also the flap key, and a
+   * Keep practicing when it shows, else End Review. Never Quit, and never Return while a card is up: Space is also the flap key, and a
    * flap pressed just after a crash must not end the run or leave the quiz.
    */
   primary() {
@@ -458,25 +481,31 @@ export class Quiz extends Phaser.Scene {
     for (const b of [this.topBtn, this.leftBtn, this.rightBtn]) b.setShown(false);
   }
 
-  /** The way out while a card is up, bottom left: End Review in a break or bonus; before a revive's first right answer, Give up ends the run. */
+  /**
+   * The way out while a card is up, bottom left: End Review in a break or bonus; before a revive's
+   * first right answer, Quit ends the run. Quit is drawn unarmed each time (every card: giveUp).
+   */
   showWayOut() {
+    this.quitArmed = false;
     if (this.closable()) this.leftBtn.set(t(this.locale, 'quizReturn'), () => this.close());
-    else if (this.reviveState?.phase === 'strikes') this.leftBtn.set(t(this.locale, 'reviveGiveUp'), () => this.giveUp());
+    else if (this.reviveState?.phase === 'strikes') this.leftBtn.set(t(this.locale, 'reviveQuit'), () => this.giveUp());
   }
 
   /**
-   * A revive's Give up (plan 26): the first press on this device only warns, in the verdict's place
-   * (the run and its progress would be lost; settings reviveGiveUpWarned is set), and the next press
-   * gives up. After that one press is enough.
+   * A revive's Quit (plan 26; "Give up" until its A2, and the method and the 'giveUp' event keep
+   * that name). On every card the first press only warns, in the verdict's place (the run and its
+   * progress would be lost), arms the button ("Quit? Tap again") and holds it for explainMinMs, as
+   * Next is held after a miss, so a double tap cannot pass the warning unread. The next press on
+   * that card quits. A new card's Quit is unarmed again (showWayOut): no single press ends a run.
    */
   giveUp() {
     if (this.mode !== 'revive' || this.finishing || this.runCard?.open) return;
-    const settings = this.play?.settings;
-    if (settings && !settings.load().reviveGiveUpWarned) {
-      settings.set({ reviveGiveUpWarned: true });
-      this.verdict.setX(this.cx).setText(t(this.locale, 'reviveGiveUpWarn')).setColor(BAD).setVisible(true);
+    if (!this.quitArmed) {
+      this.quitArmed = true;
+      this.verdict.setX(this.cx).setText(t(this.locale, 'reviveQuitWarn')).setColor(BAD).setVisible(true);
       this.verdictCoin.setVisible(false);
       this.nextWait.setVisible(false);
+      this.leftBtn.set(t(this.locale, 'reviveQuitSure'), () => this.giveUp()).holdFor(T.education.explainMinMs);
       return;
     }
     this.decide('giveUp');
@@ -629,7 +658,7 @@ export class Quiz extends Phaser.Scene {
 
   /** Option i picked (a tap, a key, the ring: `input` says which, for a pilot tester's answer event): Play grades and saves it; the card shows the verdict. */
   choose(i, input = 'key') {
-    // Finishing (Give up taken, or Return): the scene's stop is queued to the next step, and a key or
+    // Finishing (Quit taken, or Return): the scene's stop is queued to the next step, and a key or
     // a second thumb in this frame must not answer under it (plan 24, AUD-019).
     if (!this.card || this.answered || this.finishing || !isTopOverlay(this) || this.runCard?.open) return;
     this.answered = true;
@@ -696,9 +725,7 @@ export class Quiz extends Phaser.Scene {
 
   /** A wrong answer holds the main button for explainMinMs, so the explanation gets read. */
   holdAfterWrong(button, correct) {
-    if (correct) return;
-    button.hold(true);
-    this.time.delayedCall(T.education.explainMinMs, () => button.hold(false));
+    if (!correct) button.holdFor(T.education.explainMinMs);
   }
 
   /** A level break: the verdict (+coins for a right answer), Why on top, and End Review | Next Card below. */
@@ -768,7 +795,7 @@ export class Quiz extends Phaser.Scene {
     if (!isTopOverlay(this)) this.interrupted = true;
   }
 
-  /** A revive's choice or Give up (Play.reviveEvent): the streak goes on to the next card; anything final ends the quiz. */
+  /** A revive's choice or Quit (the 'giveUp' event; Play.reviveEvent): the streak goes on to the next card; anything final ends the quiz. */
   decide(event) {
     if (this.mode !== 'revive' || this.finishing) return;
     this.reviveState = this.play?.reviveEvent?.(event) ?? this.reviveState;
@@ -788,9 +815,15 @@ export class Quiz extends Phaser.Scene {
   /**
    * The smoke's look at any card, answered wrong (its explanation and source showing) or, with
    * `right`, answered right (the paid verdict over the Why button); nothing reaches Play.
+   * `state` lays out a state an answer does not reach (plan 26, A2), and needs the quiz it belongs
+   * to: 'quit', an unanswered revive card with Quit's warning in the verdict's place.
    */
-  preview(card, right = false) {
+  preview(card, right = false, { state = null } = {}) {
     this.showCard(card, ['answer', 'w1', 'w2']);
+    if (state === 'quit') {
+      this.giveUp();
+      return this.fits();
+    }
     this.answered = true;
     // As tall as it gets: the wait under the verdict ("Next: in 2 days" after the usual first answer).
     this.lastAnswer = right ? { coins: T.education.breakCoins, dueAt: Date.now() + 2 * 86400000 } : { dueAt: Date.now() };

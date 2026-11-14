@@ -536,7 +536,7 @@ export class Play extends Phaser.Scene {
     this.quizButtonBox = this.eduBreakBoxes?.review ?? null;
     this.quizCountsBox = this.eduBreakBoxes?.counts ?? null;
     this.quizButton = this.quizButtonBox ? createButton(this, this.quizButtonBox, `${EDUCATION_EMOJI} ${t(this.locale, 'reviewPill')}`, { ...TEXT_STYLE, fontSize: '36px', color: '#f8a0c8' }, { depth: 27 }).setVisible(false) : null;
-    // Skip ▸ right of the 🌽 pill, and Quit / Give up beside Review (plan 25, B8; plan 26, Michael's sketch: refreshQuizButton).
+    // Skip ▸ right of the 🌽 pill, and Quit beside Review (plan 25, B8; plan 26, Michael's sketch: refreshQuizButton).
     const sideStyle = { ...TEXT_STYLE, fontSize: '30px', color: '#f8a0c8' };
     this.breakSkipButton = this.eduBreakBoxes ? createButton(this, this.eduBreakBoxes.skip, t(this.locale, 'breakSkip'), sideStyle, { depth: 27 }).setVisible(false) : null;
     this.breakQuitButton = this.eduBreakBoxes ? createButton(this, this.eduBreakBoxes.quit, t(this.locale, 'breakQuit'), sideStyle, { depth: 27 }).setVisible(false) : null;
@@ -810,7 +810,7 @@ export class Play extends Phaser.Scene {
     const begin = daily ? dailyRunStart(daily.level, this.tune) : testRunStart(startLevel, this.tune);
     this.runStartLevel = begin.level; // a full run (💯, 🤓) starts at level 1 and skips nothing (plan 25)
     this.runSkipped = false;
-    this.breakGaveUp = false; // Quit at a break with cards due (plan 25)
+    this.breakGaveUp = false; // Quit at a break with cards due, or with nothing answered (plan 25; plan 26, A2)
     this.breakQuitArmedAt = null;
     this.level = begin.level;
     this.pipesPassed = begin.pipes;
@@ -1203,7 +1203,7 @@ export class Play extends Phaser.Scene {
       return;
     }
     if (this.quizButtonShown() && onBox(this.eduBreakBoxes?.quit)) {
-      this.breakQuitTap(); // Quit / Give up (plan 25): never a continue tap
+      this.breakQuitTap(); // Quit (plan 25): never a continue tap
       return;
     }
     if (pointer && this.quizButtonShown() && this.quizCountLine?.visible && Math.abs(pointer.x - this.quizCountsBox.x) <= this.quizCountsBox.width / 2 && Math.abs(pointer.y - this.quizCountsBox.y) <= this.quizCountsBox.height / 2) {
@@ -3385,7 +3385,8 @@ export class Play extends Phaser.Scene {
     if (this.breakQuitButton) {
       const due = Boolean(counts) && counts.missed + counts.review > 0;
       const armed = this.breakQuitArmed();
-      this.breakQuitButton.setText(t(this.locale, due ? (armed ? 'breakGiveUpSure' : 'breakGiveUp') : armed ? 'breakQuitSure' : 'breakQuit')).setVisible(shown);
+      // One word, Quit, cards due or not (plan 26, A2); armed, it says when the second tap ends the run ungraded.
+      this.breakQuitButton.setText(t(this.locale, armed ? (due ? 'breakQuitDueSure' : 'breakQuitSure') : 'breakQuit')).setVisible(shown);
     }
   }
 
@@ -3424,7 +3425,9 @@ export class Play extends Phaser.Scene {
   /**
    * Quit at an education break (plan 25, B8): the first tap arms it, a second inside the confirm time
    * ends the run. Caught up (nothing due), it ends as a normal run, graded on its answers; with cards
-   * due it is a Give up (no grade, the 🤓 streak untouched).
+   * due it counts as quitting the run (breakGaveUp: no grade, the 🤓 streak untouched), and so does a
+   * Quit with nothing answered (plan 26, A2), so 🏳️'s "Quit a run without answering a single question"
+   * holds for this Quit as for a revive's. A run with no answers is never graded, so nothing else moves.
    */
   breakQuitTap() {
     if (!this.quizButtonShown()) return;
@@ -3435,7 +3438,8 @@ export class Play extends Phaser.Scene {
       return;
     }
     const counts = this.quizCounts({ mode: 'break' });
-    this.breakGaveUp = Boolean(counts) && counts.missed + counts.review > 0;
+    const due = Boolean(counts) && counts.missed + counts.review > 0;
+    this.breakGaveUp = due || !((this.runQuiz?.answered ?? 0) > 0);
     this.breakQuitArmedAt = null;
     this.levelBreak = false;
     this.levelTitle?.setVisible(false);
@@ -3450,7 +3454,7 @@ export class Play extends Phaser.Scene {
    * The gate (plan 25, B6; every break since plan 26): an education run's level break with a card
    * due: a missed card or a review due now, or one missed in this break and not yet answered right
    * (the second and third numbers). New cards stay optional. Never in a test run or a match.
-   * resumePlay holds the break while it is true; Bury and Give up are the other ways out.
+   * resumePlay holds the break while it is true; Bury and Quit are the other ways out.
    */
   breakGated() {
     if (!this.levelBreak || !this.runIsEducation || this.runIsTest || this.match) return false;
@@ -3843,7 +3847,7 @@ export class Play extends Phaser.Scene {
     this.runBadges = this.eduStore.unlock(earned, day);
   }
 
-  /** This run's education facts (eduRunFacts): its tally, whether it ended on Give up, whether it was full (from level 1, nothing skipped, won). */
+  /** This run's education facts (eduRunFacts): its tally, whether it ended on a Quit that counts as quitting (a revive's, or the break's with cards due or nothing answered: gaveUp), whether it was full (from level 1, nothing skipped, won). */
   eduFactsNow() {
     return eduRunFacts(this.runQuiz, { gaveUp: Boolean(this.revive?.gaveUp || this.breakGaveUp), full: this.runStartLevel === 1 && !this.runSkipped && this.won }, T);
   }
@@ -4345,7 +4349,7 @@ export class Play extends Phaser.Scene {
    * An education revive is certain (its first right answer; plan 22, U3): the field ahead clears and
    * refills now, under the quiz card, so the pipes are in place by Fly on and nobody waits for them.
    * Once per revive. Before that the field stays as the crash left it, and so a game over (three
-   * misses, or Give up: both come before any right answer) shows the crash, never a fresh field.
+   * misses, or Quit: both come before any right answer) shows the crash, never a fresh field.
    * The world stands still meanwhile (scrollSpeed), and a wide field's pairs sweep in (tickSweep).
    */
   prepareRevive() {

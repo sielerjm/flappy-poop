@@ -394,7 +394,7 @@ export function reviveSettled(state) {
 export function reviveStep(state, event, t = TUNING) {
   if (FINAL.has(state.phase)) return state;
   const { strikes, restoreStreak } = t.education;
-  // Give up is offered before the first right answer only (plan 24, AUD-023): after it, the revive
+  // Quit ('giveUp'; "Give up" until plan 26's A2) is offered before the first right answer only (plan 24, AUD-023): after it, the revive
   // is certain and the field has been refilled, so it changes nothing.
   if (event === 'giveUp') return state.phase === 'strikes' ? { ...state, phase: 'over', gaveUp: true } : state;
   if (state.phase === 'strikes') {

@@ -316,12 +316,13 @@ test('Skip ▸ at a break (plan 25, B8): one level passed at par per tap, only a
   assert.equal(s.breakSkipShown(), false, 'never in a test run');
 });
 
-test('Quit at a break (plan 25, B8): two taps; caught up it ends as a normal run (graded); with cards due it is a Give up', () => {
-  const runEnd = (due) => {
+test('Quit at a break (plan 25, B8; plan 26, A2): two taps; caught up with answers it ends as a normal run (graded); with cards due, or with nothing answered (🏳️), it counts as quitting the run', () => {
+  const runEnd = (due, answered) => {
     const calls = [];
     let now = 1000;
     const s = playScene({
       levelBreak: true, state: 'paused', runIsEducation: true, runIsTest: false, match: null, shopOpen: false, quizOpen: false, quizButton: {}, breakQuitArmedAt: null,
+      runQuiz: { ...newTally(), answered, right: answered },
       time: { get now() { return now; }, delayedCall() {} },
       quizCounts: () => ({ new: 4, missed: due ? 1 : 0, review: 0 }),
       endRun: () => calls.push('endRun'), showOver: () => calls.push('showOver'), refreshShopButton() {},
@@ -332,8 +333,26 @@ test('Quit at a break (plan 25, B8): two taps; caught up it ends as a normal run
     s.breakQuitTap();
     return { calls, gaveUp: s.breakGaveUp, lb: s.levelBreak };
   };
-  assert.deepEqual(runEnd(false), { calls: ['endRun', 'showOver'], gaveUp: false, lb: false }, 'caught up: a normal end');
-  assert.deepEqual(runEnd(true), { calls: ['endRun', 'showOver'], gaveUp: true, lb: false }, 'cards due: a Give up');
+  assert.deepEqual(runEnd(false, 3), { calls: ['endRun', 'showOver'], gaveUp: false, lb: false }, 'caught up, cards answered: a normal end');
+  assert.deepEqual(runEnd(true, 3), { calls: ['endRun', 'showOver'], gaveUp: true, lb: false }, 'cards due: the run ends ungraded');
+  assert.deepEqual(runEnd(false, 0), { calls: ['endRun', 'showOver'], gaveUp: true, lb: false }, 'nothing answered: quitting the run, for 🏳️');
+  assert.equal(eduRunFacts(newTally(), { gaveUp: true }, T).graded, false, 'a run with no answers is never graded, so nothing else moves');
+});
+
+test("the break's Quit label (plan 26, A2): Quit; armed it asks for a second tap, and says the run ends ungraded while cards are due", () => {
+  const label = (due, armed) => {
+    const quit = { text: null, setText(v) { this.text = v; return this; }, setVisible() { return this; } };
+    const s = playScene({
+      locale: 'en', levelBreak: true, state: 'paused', runIsEducation: true, runIsTest: false, match: null, shopOpen: false, quizOpen: false,
+      quizButton: absorb(), quizCountLine: absorb(), breakQuitButton: quit, breakQuitArmedAt: armed ? 900 : null, time: { now: 1000 },
+      quizCounts: () => ({ new: 4, missed: due ? 2 : 0, review: 0 }), eduStore: { load: () => ({ unlockedLevel: 1 }) }, level: 2,
+    });
+    s.refreshQuizButton();
+    return quit.text;
+  };
+  assert.deepEqual([label(false, false), label(true, false)], ['Quit', 'Quit'], 'one word, cards due or not');
+  assert.equal(label(false, true), 'Quit? Tap again');
+  assert.equal(label(true, true), 'Quit ungraded? Tap again', 'with cards due the armed label says what the second tap costs');
 });
 
 test('🔬 never shows in a test run; in a joined education run it does (AUD-014)', () => {

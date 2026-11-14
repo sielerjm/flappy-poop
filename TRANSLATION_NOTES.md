@@ -43,7 +43,7 @@ Education badges (plan 22; shown on the game-over line and in the profile's 📚
 on devices where education mode is unlocked): eight badges with playful school titles. Four are
 puns the Chinese drafts only approximate, so **check these four**: Nerd Alert (学霸警报: 学霸 is
 the admiring word for a top student), C's Get Degrees (六十分万岁, the student saying that a bare
-pass is enough), Drop Out (退学: quitting school, here giving up a run without one answer), and
+pass is enough), Drop Out (退学: quitting school, here quitting a run without one answer), and
 Angel Baby (小天使: revived, so back from the dead). A run is **graded** (计分) only with at least
 `{min}` answers; "Graded runs" (计分局数) counts those, and "Average grade" (平均成绩) is their mean.
 Author / designer / artist: Michael Sieler. Side project, short playful copy — not
@@ -242,10 +242,9 @@ Short, playful, clear. Fit a 720×1280 logical field; How to play / About body w
 | quizPill | Quiz (the won game-over panel's 📚 bonus button) | 答题 |
 | reviewPill | Review (an education level break's 📚 button, plan 25: the numbers sit under it) | 复习 |
 | breakSkip | Skip ▸ (plan 25: an education level break's button; each tap skips one level the player has unlocked before) | 跳过 ▸ |
-| breakQuit | Quit (ends the run at a level break; caught up, it costs nothing) | 结束 |
-| breakGiveUp | Give up (the same button while cards are due: it ends the run as a revive's Give up does) | 放弃 |
-| breakQuitSure | Quit? Tap again (the first tap arms it for a few seconds) | 结束？再点一次 |
-| breakGiveUpSure | Give up? Tap again | 放弃？再点一次 |
+| breakQuit | Quit (ends the run at a level break; plan 26, A2: the one word for it, cards due or not. "Give up" is gone everywhere: Michael found it too negative) | 结束 |
+| breakQuitSure | Quit? Tap again (the first tap arms it for a few seconds; shown when nothing is due, so the run ends as a normal one) | 结束？再点一次 |
+| breakQuitDueSure | Quit ungraded? Tap again (the armed label while missed or review cards are still due: quitting then ends the run with no grade. "Ungraded" is 不计成绩, as in the profile's 计分 rows) | 不计成绩结束？再点一次 |
 | quizBury | Bury · {n} coins (plan 25: at a gate, after a miss, the card waits 24 h for a price in coins; Anki's word "bury"; zh says "push to tomorrow") | 推到明天 · {n} 金币 |
 | quizWrong | Not quite: the right answer has a ✓ | 不太对：正确答案标有 ✓ |
 | quizWhy | Why? | 为什么？ |
@@ -274,8 +273,9 @@ Short, playful, clear. Fit a 720×1280 logical field; How to play / About body w
 | reviveStreakMiss | Missed, but you're still back in. | 没答对，但你仍可继续飞。 |
 | reviveOver | Out of tries: game over. | 机会用完了：游戏结束。 |
 | reviveEnd | End run | 结束本局 |
-| reviveGiveUp | Give up | 放弃 |
-| reviveGiveUpWarn | Giving up ends this run, and its progress is lost. Tap Give up again to end it. (plan 26: shown once per device, on the first press of a revive's Give up, in the verdict's place) | 放弃会结束这一局，本局的进度也会丢失。再点一次“放弃”即可结束。 |
+| reviveQuit | Quit (a revive's way out before the first right answer; it was "Give up" until plan 26's A2) | 结束 |
+| reviveQuitSure | Quit? Tap again (the button's label after its first press on a card) | 结束？再点一次 |
+| reviveQuitWarn | Quitting ends this run, and its progress is lost. Tap Quit again to end it. (plan 26, A2: shown on the first press of Quit on every card of a revive, in the verdict's place; the button is then held a moment) | 结束会终止这一局，本局的进度也会丢失。再点一次“结束”即可。 |
 | reviveFree | No questions left: you're back in. | 没有题了：可以继续飞了。 |
 | eduNotSaved | Education runs are not on the 🏆 boards | 教育模式的成绩不上 🏆 排行榜 |
 | saveEduData | 📚 Education data | 📚 教育数据 |
@@ -284,7 +284,7 @@ Short, playful, clear. Fit a 720×1280 logical field; How to play / About body w
 | eduIntroHowTitle | How it works | 玩法 |
 | eduIntroHowLevels | Each level break asks cards about the part of the gut you just flew through. Cards you missed, and cards due for review, must be answered right before you fly on. | 每次关卡休息时，会问你刚飞过的那段肠道的卡片。答错的卡片和到期要复习的卡片，答对之后才能继续飞。 |
 | eduIntroHowRevive | Crash, and a card is your way back: ❤️ three tries to get one right, then ⭐ three in a row to win back your coins and power-ups. | 撞到了？答对卡片就能继续：❤️ 有三次机会答对一张，然后连续答对 ⭐ 三张，就能赢回金币和道具。 |
-| eduIntroHowBury | Stuck on a card at a break? Bury it until tomorrow for a few 🌽, or give up the run. | 在休息时卡在一张卡片上？花几个 🌽 把它推到明天，或者放弃这一局。 |
+| eduIntroHowBury | Stuck on a card at a break? Bury it until tomorrow for a few 🌽, or quit the run. | 在休息时卡在一张卡片上？花几个 🌽 把它推到明天，或者结束这一局。 |
 | eduIntroHowCoins | Right answers in a break pay 🌽. Each card comes back just before you would forget it (FSRS, as in Anki). (FSRS and Anki are names: kept) | 休息时答对会得到 🌽。每张卡片都会在你快要忘记时再出现（FSRS，和 Anki 一样）。 |
 | eduIntroChoices | Your choices (the heading over the start level and the new-card order) | 你的选择 |
 | eduIntroStart | Start at (◀ LV n ▶ follows: the level the next education run starts at) | 从这一关开始 |
@@ -621,10 +621,10 @@ Inspired by Flappy Bird
 | achEduPhoenix | Phoenix | 凤凰 |
 | achDescEduNerd | Get {n} perfect runs in a row, each a win from level 1 ({min} answers or more) | 连续 {n} 局全部答对，每局都从第 1 关打到通关（至少答 {min} 题） |
 | achDescEduPerfect | Answer everything right in a run you win from level 1 ({min} answers or more; plan 25: a run started later or skipped ahead does not count) | 从第 1 关打到通关，全部答对（至少答 {min} 题） |
-| achDescEduA | Get 90% or more right in one run ({min} answers or more, without giving up) | 一局答对 90% 以上（至少答 {min} 题，中途放弃不算） |
-| achDescEduB | Get 80–89% right in one run ({min} answers or more, without giving up) | 一局答对 80–89%（至少答 {min} 题，中途放弃不算） |
-| achDescEduC | Get 70–79% right in one run ({min} answers or more, without giving up) | 一局答对 70–79%（至少答 {min} 题，中途放弃不算） |
-| achDescEduDropOut | Give up a run without answering a single question | 一题没答就放弃这一局 |
+| achDescEduA | Get 90% or more right in one run ({min} answers or more, without quitting) | 一局答对 90% 以上（至少答 {min} 题，中途结束不算） |
+| achDescEduB | Get 80–89% right in one run ({min} answers or more, without quitting) | 一局答对 80–89%（至少答 {min} 题，中途结束不算） |
+| achDescEduC | Get 70–79% right in one run ({min} answers or more, without quitting) | 一局答对 70–79%（至少答 {min} 题，中途结束不算） |
+| achDescEduDropOut | Quit a run without answering a single question (a revive's Quit, or the break's Quit, with no card answered) | 一题没答就结束这一局 |
 | achDescEduRevives | Revive yourself {n} times in education mode | 在教育模式中复活 {n} 次 |
 | statsEducation | 📚 Education {n} / {total} | 📚 教育 {n} / {total} |
 | statsEduGrade | Average grade | 平均成绩 |

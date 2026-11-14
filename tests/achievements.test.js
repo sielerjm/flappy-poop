@@ -190,7 +190,7 @@ test('the education catalog: eight badges in their own list, unique ids apart fr
       assert.ok(desc.length > 0 && !/\{n\}|\{min\}|\{glyph\}/.test(desc), `${e.id}: ${locale} description filled in (${desc})`);
     }
   }
-  assert.match(badgeDesc('en', achievementById('edu_grade_a', EDU_ACHIEVEMENTS)), new RegExp(`\\(${MIN} answers or more, without giving up\\)`), 'the description quotes the knob and the give-up rule');
+  assert.match(badgeDesc('en', achievementById('edu_grade_a', EDU_ACHIEVEMENTS)), new RegExp(`\\(${MIN} answers or more, without quitting\\)`), 'the description quotes the knob and the give-up rule');
   assert.ok(ACHIEVEMENTS.every((e) => !e.id.startsWith('edu_')), 'no education badge is ever claimed on the server');
 });
 
