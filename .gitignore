@@ -4,3 +4,4 @@ __pycache__/
 .claude/plans/
 meta/
 *_rows.sql
+Claude outputs/
