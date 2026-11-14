@@ -34,9 +34,9 @@ last **one run**: `start()` empties the purse, nothing is saved, a single-player
 every power-up (`effects.clearPowerups`), and a two-player crash keeps `crashCoins` (90 %, rounded down) and
 clears the power-ups. Pickups with no motion data pulse (`pulseStill` / `pulseScale`, `stillPulseScale`,
 `items.stillPulse`), their circle body re-fitted each frame so the hitbox holds. The **shop** (`TUNING.shop`): in a level break a
-pill under the banner (`shopButtonLayout`; it shows the corn kernel and the purse, `createButton`'s
-`icon`, and these notes and the code's comments still call it the 💰 pill; dimmed at 0 coins; the
-break's hint never names it since plan 26, coins or not) opens a
+pill under the banner (`shopButtonLayout`; it reads "Shop" beside the corn kernel with no number since
+plan 26's A2 (`shopPill`; the HUD shows the purse), `createButton`'s `icon`, and these notes and the
+code's comments still call it the 💰 pill; dimmed at 0 coins; the break's hint never names it) opens a
 panel of rows (`shopLayout`, `SHOP_ITEMS`) in the chrome column: fiber 1, one bean 6,
 a super bean 16 (fills the bag to `superBeans`), a mystery box 5 (the plain draw table, `pairsLeft` 0 so a
 skip becomes fiber). `buyBlocker` / `canBuy` grey a row the purse or the bag refuses; `Play.buyItem` spends
@@ -191,7 +191,9 @@ P2…" with "Tap again to un-ready" under it, the 💰 hidden while ready); both
 that player and cancels it (`cancelLevelCount`, a token), and GO's `beginLevel` ends both breaks in the same
 frame (the flush and the start boost again). The break's tap prompt, single player's too, breathes under a
 white glow copy (`Play.syncLevelHint` each frame on `hintPulse`, `TUNING.hintPulse`); `levelSubHint` is the
-smaller un-ready line. A tap while the
+smaller line under it: a match's un-ready line, or in one player the education gate's line after a refused
+tap (`levelGateTap`, plan 26 A2; `refreshLevelBanner` sets its text, `syncLevelHint` its visibility; it
+wraps). A tap while the
 shared pause is on only lifts it. Each half shops in its own break (the panel is Play's, in its strip;
 the other half plays on); a shopper is never ready, so the count cannot start under an open shop. The pause key / ⏸ / Menu toggle the
 **shared pause** (`Versus.setPaused`, remembering which halves it paused so a break is never ended by
@@ -449,8 +451,12 @@ their ring item, opens "Waiting in this quiz": `toggleBreakCounts`, `countLines`
 underlined (`refreshCounts`; no line in a test run); a tap on the card's numbers opens the same lines
 (`Quiz.toggleCountsCard`). **The gate** (`breakGated`): every level break of an education run
 (plan 26; before it, only a break into a level not yet unlocked) holds while the missed or review
-number is above 0: `resumePlay` keeps the break, the hint reads "📚 Review
-to continue", Review pulses. New cards stay optional. **Skip** (plan 26, A2; it replaced Bury and the
+number is above 0: `resumePlay` keeps the break. The hint still reads "Tap to continue" (plan 26, A2:
+every break's, as Michael asked) but holds still while the gate holds, since a tap there only explains:
+a refused continue (a tap, Space, ↑, Esc, P, ⏸ or the pad) sets `gateTapped`, and the smaller line
+under it says "Tap 📚 to review all cards before continuing." until the gate opens or the break ends.
+`refreshLevelBanner` reads the gate once per break event into `breakGate` (`breakGated` reads the store,
+so never per frame); Review pulses. New cards stay optional. **Skip** (plan 26, A2; it replaced Bury and the
 level Skip ▸): an open card in a break's quiz shows "Skip · n 🌽" in its right slot (`Quiz.offerSkip`;
 "Skip" alone and free in a test run, which saves nothing); after an answer that slot is Next Card. Every
 Skip costs `buryPrice()` (`education.buryCoinsPerLevel` × the level just cleared) and moves on
@@ -991,7 +997,8 @@ src/
                             FIPS / RFC 4231 vectors and parity with Node's HMAC.
   i18n.js                   en / zh-Hans string catalog, t(), initialLocale,
                             howToItems, pauseBannerText, metaFontSize, welcomeText,
-                            levelBannerText(locale, level, levels, { shop }),
+                            levelBannerText(locale, level, levels) ("Tap to
+                            continue" in every break since plan 26's A2),
                             countText (a coin count beside the corn kernel: "12", or
                             ∞ for a test run's purse; locale-free).
                             Player copy lives here (not in logic.js). See

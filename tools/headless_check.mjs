@@ -1035,7 +1035,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
       {
         const GP = TT.gamepad;
         const prep = await evaluate(`(() => { const p = ${play}; p.effects.spendCoins(p.effects.coins()); p.effects.addCoins(20); while (p.effects.hasProbiotic()) p.effects.consumeProbiotic(); p.refreshProbioticHud(); p.refreshCoinHud(); p.refreshLevelBanner(); p.refreshShopButton(); return JSON.stringify({ hint: p.levelHint.text, btn: p.shopButton.getText(), kernel: p.shopButton.iconShown, shown: p.shopButtonShown(), beans: p.effects.beans(), box: p.shopButtonBox, rows: p.shopBoxes.rows, close: p.shopBoxes.close }); })()`).then(JSON.parse);
-        ok(prep.hint === 'Tap to continue' && prep.btn === '20' && prep.kernel && prep.shown && prep.beans === 0, `with 20 coins the break hint still reads "${prep.hint}" (plan 26: the pill shows itself) and the pill shows the kernel and "${prep.btn}"`);
+        ok(prep.hint === 'Tap to continue' && prep.btn === 'Shop' && prep.kernel && prep.shown && prep.beans === 0, `with 20 coins the break hint still reads "${prep.hint}" (plan 26: the pill shows itself) and the pill shows the kernel and "${prep.btn}", no number (plan 26, A2: the HUD shows the purse)`);
         const hudUp = await evaluate(`JSON.stringify({ coin: ${play}.coinIcon.visible && ${play}.coinIcon.depth > ${play}.pauseShade.depth && ${play}.coinText.depth > ${play}.pauseShade.depth, shade: ${play}.pauseShade.visible, poopY: Math.round(${play}.poop.y), hintBottom: ${play}.levelHint.getBounds().bottom })`).then(JSON.parse);
         ok(hudUp.coin && hudUp.shade && hudUp.poopY >= TT.levels.breakPoopY - 2 && hudUp.poopY - TT.poopRadius > hudUp.hintBottom, `in a break the purse draws above the pause shade, at full brightness, and the poop bobs low (y ${hudUp.poopY}), clear of the hint (plan 26)`);
         const row = (id) => prep.rows.find((r) => r.id === id);
@@ -1089,7 +1089,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         const cutReel = await evaluate(`JSON.stringify({ on: Boolean(${play}.reelSpin), coins: ${play}.effects.coins(), reveal: ${play}.reveal?.getData('draw'), running: Boolean(${play}.revealTween?.isPlaying()), objs: (() => { const r = ${play}.lastReel; return r ? [r.dim, r.frame, r.marker, ...r.strip].filter((c) => c.scene).length : -1; })() })`).then(JSON.parse);
         ok(spun.on && spun.draw === 'coin10' && spun.coins === m.coins - TT.shop.prices.mystery && !cutReel.on && cutReel.coins === spun.coins + 10 && cutReel.reveal === 'coin10' && cutReel.running && cutReel.objs === 0, `closing the shop mid-spin grants the draw at once (+10, purse ${cutReel.coins}) with its reveal rising; the reel's objects are gone`);
         const closed = await evaluate(`JSON.stringify({ open: ${play}.shopOpen, shop: ${play}.shop, state: ${play}.state, lb: ${play}.levelBreak, pill: ${play}.shopButtonShown(), btn: ${play}.shopButton.getText(), title: ${play}.levelTitle.visible })`).then(JSON.parse);
-        ok(!closed.open && closed.shop === null && closed.state === 'paused' && closed.lb && closed.pill && closed.btn === String(cutReel.coins) && closed.title, `✕ closes the shop and the break goes on: the pill reads "${closed.btn}"`);
+        ok(!closed.open && closed.shop === null && closed.state === 'paused' && closed.lb && closed.pill && closed.btn === 'Shop' && closed.title, `✕ closes the shop and the break goes on: the pill reads "${closed.btn}"`);
         // The break's "Tap to continue" breathes under a white glow; no un-ready line in single player.
         const sp1 = await evaluate(`JSON.stringify({ s: ${play}.levelHint.scale, g: ${play}.levelHintGlow.alpha, on: ${play}.levelHintGlow.visible, text: ${play}.levelHintGlow.text, hint: ${play}.levelHint.text, sub: ${play}.levelSubHint.visible })`).then(JSON.parse);
         await sleep(TT.hintPulse.periodMs / 3);
@@ -1855,7 +1855,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
           const empty = await evaluate(`(() => { const p = ${play}; p.effects.spendCoins(p.effects.coins()); p.refreshCoinHud(); p.refreshLevelBanner(); p.refreshShopButton(); const pill = { shown: p.shopButtonShown(), text: p.shopButton.getText(), hint: p.levelHint.text }; p.handleChrome('shop'); const s0 = p.score; const ok = p.shopBuy('fiber'); return JSON.stringify({ pill, open: p.shopOpen, grey: Object.values(p.shop?.rows ?? {}).every((r) => r.name.alpha === ${TT.shop.disabledAlpha}), ok, score: p.score - s0 }); })()`).then(JSON.parse);
           await evaluate(`${play}.padDown(${TT.gamepad.back}), true`);
           const after = await evaluate(`JSON.stringify({ open: ${play}.shopOpen, lb: ${play}.levelBreak, state: ${play}.state })`).then(JSON.parse);
-          ok(empty.pill.shown && empty.pill.text === '0' && empty.pill.hint === 'Tap to continue' && empty.open && empty.grey && !empty.ok && empty.score === 0 && !after.open && after.lb && after.state === 'paused', 'with no coins the pill reads "0" beside its kernel, the hint drops the 💰, the shop opens with every row greyed and buys nothing; B closes it and the break goes on');
+          ok(empty.pill.shown && empty.pill.text === 'Shop' && empty.pill.hint === 'Tap to continue' && empty.open && empty.grey && !empty.ok && empty.score === 0 && !after.open && after.lb && after.state === 'paused', 'with no coins the pill still reads "Shop" beside its kernel (dimmed), the hint is the plain one, the shop opens with every row greyed and buys nothing; B closes it and the break goes on');
           await sleep(400);
         }
         await chrome('tap');
@@ -1972,7 +1972,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
 
         // The endless test purse: ∞ in the HUD, the pill and the shop; buying spends nothing; Exit empties the purse.
         const inf = await evaluate(`(() => { const p = ${play}; p.takeCoins(4); const purse = p.purseCoins(); const real0 = p.effects.coins(); const fiber = p.buyItem('fiber'); const bean = p.buyItem('superBean'); const real1 = p.effects.coins(); p.refreshShopButton(); const out = { purse, hud: p.coinText.visible ? p.coinText.text : null, pill: p.shopButton.getText(), fiber, bean, real0, real1 }; p.setTestMode(false); Object.assign(out, { offPurse: p.purseCoins(), offReal: p.effects.coins(), offHud: p.coinText.visible }); p.setTestMode(true); out.back = p.purseCoins(); return JSON.stringify(out); })()`).then(JSON.parse);
-        ok(inf.purse === null && inf.hud === "×∞" && inf.pill === "∞" && inf.fiber && inf.bean && inf.real1 === inf.real0 && inf.offPurse === 0 && inf.offReal === 0 && !inf.offHud && inf.back === null, `a test run's purse is endless (HUD "${inf.hud}", pill "${inf.pill}"): fiber and a super bean bought, the real purse still ${inf.real1}; leaving test mode empties it (${inf.offReal}, row hidden)`);
+        ok(inf.purse === null && inf.hud === "×∞" && inf.pill === "Shop" && inf.fiber && inf.bean && inf.real1 === inf.real0 && inf.offPurse === 0 && inf.offReal === 0 && !inf.offHud && inf.back === null, `a test run's purse is endless (HUD "${inf.hud}", pill "${inf.pill}"): fiber and a super bean bought, the real purse still ${inf.real1}; leaving test mode empties it (${inf.offReal}, row hidden)`);
 
         // Moving pipes (pipeMove.fromLevel = 4, this run's level): with the level-4 chance forced to 1 (and
         // the rng flat at 0.5: no item, no bean) a spawn makes a bobbing pair; a probiotic is added riding
@@ -3929,7 +3929,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
 
         // The 📚 pill under the 💰, and the hint naming both (level 1's line paid its coin).
         const pill = await evaluate(`JSON.stringify({ shown: ${play}.quizButtonShown(), visible: ${play}.quizButton.visible, y: ${play}.quizButtonBox.y, shopY: ${play}.shopButtonBox.y, hint: ${play}.levelHint.text, coins: ${play}.effects.coins() })`).then(JSON.parse);
-        const hintWant = await tx('levelQuizHint'); // the shop is not named, coins or not (plan 26)
+        const hintWant = await tx('levelContinue'); // "Tap to continue" in every break (plan 26, A2)
         ok(pill.shown && pill.visible && pill.y > pill.shopY && pill.hint === hintWant, `the break shows the 📚 pill under the 💰 (y ${pill.y} > ${pill.shopY}) and the hint "${pill.hint}"`);
         // What is waiting, on the pill (plan 21, E2), as in Anki: "📚 new · missed · review", each count
         // in its own colour. A new device's first break has only new cards waiting: the stomach's and the
@@ -3945,7 +3945,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await tapAt(nb.x, nb.y - 300); // any tap closes it, and only closes it
         await sleep(250);
         const nbAfter = await evaluate(`JSON.stringify({ open: ${play}.eduCard.open, state: ${play}.state, lb: ${play}.levelBreak })`).then(JSON.parse);
-        ok(nbCard.open && nbCard.title === (await tx('quizCountsTitle')) && nbCard.body.split('\n').length === 3 && nbCard.state === 'paused' && nbCard.lb && nbCard.hint.includes(`📚 ${(await tx('reviewPill')).toLowerCase()}`) && !nbAfter.open && nbAfter.state === 'paused' && nbAfter.lb, `a tap on the numbers opens "${nbCard.title}" (${nbCard.body.split('\n').join(' · ')}); a tap closes it and the break stays (hint "${nbCard.hint}")`);
+        ok(nbCard.open && nbCard.title === (await tx('quizCountsTitle')) && nbCard.body.split('\n').length === 3 && nbCard.state === 'paused' && nbCard.lb && nbCard.hint === (await tx('levelContinue')) && !nbAfter.open && nbAfter.state === 'paused' && nbAfter.lb, `a tap on the numbers opens "${nbCard.title}" (${nbCard.body.split('\n').join(' · ')}); a tap closes it and the break stays (hint "${nbCard.hint}")`);
         ok((await evaluate(`${play}.quizStatsButton === undefined && ${play}.quizStatsBox === undefined && ${play}.focus.indexOf('quizStats') < 0`)) === true, 'the break has no ❔ answers pill, on the screen or on the ring');
         const lineNow = () => evaluate(`(() => { const q = ${Q}; const l = q.counts; return JSON.stringify({ visible: l.visible, counts: l.counts, text: l.text, underlined: l.underlined, fill: l.underlineFill, tally: q.tally.visible ? q.tally.text : null, tallyZone: q.tallyZone.visible, runCard: q.runCard.open }); })()`).then(JSON.parse);
         await evaluate(`(() => { const p = ${play}; const b = p.quizButtonBox; p.flap({ x: b.x, y: b.y }); return true; })()`);
@@ -4285,20 +4285,24 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
           `Promise.all([import('./src/education.js'), import('./src/questions.js')]).then(([e, q]) => { const now = Date.now(); const near = q.CARDS.filter((c) => !c.retired && (c.deck === 'stomach' || c.deck === 'general')); const cards = {}; near.forEach((c, i) => { cards[c.id] = i === 0 ? e.schedule(null, 'again', now - 20 * 60000) : i === 1 ? e.schedule(null, 'easy', now - 30 * 86400000) : e.schedule(null, 'easy', now); }); localStorage.setItem('flappyPoop.eduSrs', JSON.stringify({ v: 2, cards, recent: [], counters: {}, badges: {}, unlockedLevel: 2 })); const p = ${play}; p.breakMissed = []; p.refreshShopButton(); const l = p.quizCountLine; return JSON.stringify({ missed: near[0].id, review: near[1].id, visible: l.visible, text: l.text, label: p.quizButton.getText() }); })`,
         ).then(JSON.parse);
         await evaluate(`${play}.refreshLevelBanner(), true`);
-        const gate0 = await evaluate(`JSON.stringify({ gated: ${play}.breakGated(), hint: ${play}.levelHint.text, unlocked: ${play}.eduStore.load().unlockedLevel })`).then(JSON.parse);
+        await sleep(100);
+        const gateView = () => evaluate(`JSON.stringify({ gated: ${play}.breakGated(), hint: ${play}.levelHint.text, sub: ${play}.levelSubHint.visible ? ${play}.levelSubHint.text : null, still: ${play}.levelHint.scale === 1 && !${play}.levelHintGlow.visible, unlocked: ${play}.eduStore.load().unlockedLevel, state: ${play}.state, lb: ${play}.levelBreak })`).then(JSON.parse);
+        const gate0 = await gateView();
         await sleep(TT.retryLockoutMs + 100);
         await chrome('tap');
         await sleep(200);
-        const gate1 = await evaluate(`JSON.stringify({ state: ${play}.state, lb: ${play}.levelBreak })`).then(JSON.parse);
-        const gateHint = await tx('levelGateHint');
-        ok(gate0.gated && gate0.unlocked === 2 && gate0.hint === gateHint && gate1.state === 'paused' && gate1.lb, `a break with cards due holds, even into a level already unlocked (plan 26): "${gate0.hint}", and a tap does not continue`);
+        const gate1 = await gateView();
+        const [continueHint, gateTap] = await Promise.all(['levelContinue', 'levelGateTap'].map(tx));
+        ok(gate0.gated && gate0.unlocked === 2 && gate0.hint === continueHint && gate0.sub === null && gate0.still && gate1.state === 'paused' && gate1.lb, `a break with cards due holds, even into a level already unlocked (plan 26): the hint reads "${gate0.hint}" and holds still (plan 26, A2), and a tap does not continue`);
+        ok(gate1.sub === gateTap && gate1.hint === continueHint, `the refused tap adds a line under it: "${gate1.sub}"`);
         await reopen();
         await answerRight();
         await answerRight();
         await evaluate(`${Q}.leftBtn.press(), true`); // Return
         await sleep(300);
-        const gate2 = await evaluate(`JSON.stringify({ gated: ${play}.breakGated(), hint: ${play}.levelHint.text })`).then(JSON.parse);
-        ok(!gate2.gated && !gate2.hint.startsWith('📚'), `the due cards answered right, the gate opens: "${gate2.hint}"`);
+        await sleep(200);
+        const gate2 = await gateView();
+        ok(!gate2.gated && gate2.hint === continueHint && gate2.sub === null && !gate2.still, `the due cards answered right, the gate opens: "${gate2.hint}" pulses again and the line is gone`);
         // Skip (plan 26, A2; Bury before it): at the gate, the missed card on show is skipped for 3 × the
         // level cleared. The first Skip in a break warns and holds; the next press pays, sends the card to
         // tomorrow and moves on. A press right after the next card appears does nothing (the double tap on

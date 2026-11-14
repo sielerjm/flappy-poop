@@ -14,8 +14,8 @@ const STRINGS = {
     pauseHint: 'tap anywhere to resume game',
     levelBanner: 'LEVEL {n}',
     levelContinue: 'Tap to continue',
-    levelQuizHint: 'Tap to continue · 📚 review',
-    levelGateHint: '📚 Review to continue',
+    levelGateTap: 'Tap 📚 to review all cards before continuing.',
+    shopPill: 'Shop',
     shopTitle: 'SHOP',
     shopCoins: 'Your coins',
     shopFiber: 'Fiber · +3 points',
@@ -529,8 +529,8 @@ Inspired by Flappy Bird`,
     pauseHint: '点击任意处继续游戏',
     levelBanner: '第 {n} 关',
     levelContinue: '点击继续',
-    levelQuizHint: '点击继续 · 📚 复习',
-    levelGateHint: '📚 复习后才能继续',
+    levelGateTap: '先点 📚 复习完所有卡片，才能继续。',
+    shopPill: '商店',
     shopTitle: '商店',
     shopCoins: '你的金币',
     shopFiber: '纤维 · +3 分',
@@ -1092,13 +1092,12 @@ export function howToItems(locale) {
  * 📚 ("Tap to continue · 📚 review", or "📚 Review to continue" at a gate). The shop
  * is no longer named (plan 26: the 🌽 pill shows itself).
  */
-export function levelBannerText(locale, level, levels, { education = false, gate = false } = {}) {
+export function levelBannerText(locale, level, levels) {
   const key = levels?.[level - 1]?.key;
   const title = t(locale, 'levelBanner').replace('{n}', String(level));
   const name = key ? t(locale, `level.${key}`) : '';
-  // A gated break (plan 25): the next level opens only once the cards due are answered right.
-  const hint = gate ? 'levelGateHint' : education ? 'levelQuizHint' : 'levelContinue';
-  return `${name ? `${title} · ${name}` : title}\n${t(locale, hint)}`;
+  // Every break says "Tap to continue" (plan 26, A2): a gate says why only after a tap (levelGateTap, on Play's levelSubHint).
+  return `${name ? `${title} · ${name}` : title}\n${t(locale, 'levelContinue')}`;
 }
 
 /** A coin count beside the corn kernel (the shop pill, the purse line, every price): the number, or ∞ for a test run's endless purse (Infinity). Locale-free. */

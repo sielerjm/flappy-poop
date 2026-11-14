@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { TUNING as T, LEVELS, LEVEL_COLORS, BACKGROUND, GAME_HEIGHT } from '../src/config.js';
-import { levelBannerText, levelLabel, LOCALES } from '../src/i18n.js';
+import { levelBannerText, levelLabel, LOCALES, t } from '../src/i18n.js';
 import { GAME_WIDTH } from '../src/config.js';
 import { levelPipes, levelEnd, levelFor, levelSpeed, levelGap, levelColor, levelProgress, lerpColor, pipeSpacing, gapBounds, levelBarLayout, levelBarLabelOnFill, hudRightLayout, multiplierLayout, tutorialSpawn, isFinalLevel } from '../src/logic.js';
 
@@ -134,10 +134,11 @@ test('levelBannerText names the segment while there is one and drops it past the
   assert.equal(levelBannerText('en', 2, LEVELS), 'LEVEL 2 · Duodenum\nTap to continue');
   assert.equal(levelBannerText('zh-Hans', 3, LEVELS), '第 3 关 · 空肠\n点击继续');
   assert.equal(levelBannerText('en', 8, LEVELS), 'LEVEL 8\nTap to continue');
-  assert.equal(levelBannerText('en', 2, LEVELS, { shop: true }), levelBannerText('en', 2, LEVELS), 'the shop is never named (plan 26): coins or not, the plain hint');
-  assert.equal(levelBannerText('en', 2, LEVELS, { education: true }), 'LEVEL 2 · Duodenum\nTap to continue · 📚 review', 'an education run names the 📚');
-  assert.equal(levelBannerText('zh-Hans', 3, LEVELS, { education: true }), '第 3 关 · 空肠\n点击继续 · 📚 复习');
-  assert.equal(levelBannerText('en', 2, LEVELS, { education: true, gate: true }), 'LEVEL 2 · Duodenum\n📚 Review to continue', 'a gate says what holds it');
+  assert.equal(levelBannerText('en', 2, LEVELS, { education: true, gate: true }), 'LEVEL 2 · Duodenum\nTap to continue', 'every break says "Tap to continue" (plan 26, A2: Michael asked); a gate says why only after a tap, on the line under it');
+  assert.equal(t('en', 'levelGateTap'), 'Tap 📚 to review all cards before continuing.');
+  assert.equal(t('en', 'levelQuizHint'), 'levelQuizHint', '"Tap to continue · 📚 review" is gone');
+  assert.equal(t('en', 'levelGateHint'), 'levelGateHint', '"📚 Review to continue" is gone');
+  assert.deepEqual([t('en', 'shopPill'), t('zh-Hans', 'shopPill')], ['Shop', '商店'], 'the pill reads Shop, beside its kernel, with no number');
   for (const locale of LOCALES) {
     for (let n = 1; n <= 9; n += 1) {
       const [title, hint] = levelBannerText(locale, n, LEVELS).split('\n');

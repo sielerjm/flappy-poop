@@ -486,7 +486,8 @@ export class Play extends Phaser.Scene {
       .setDepth(26)
       .setVisible(false);
     // The tap prompt breathes under a soft white copy that swells and fades (syncLevelHint, hintPulse);
-    // a match's "Ready!" line has a smaller one under it: a second tap takes the ready back.
+    // a smaller line under it (levelSubHint): a match's "Tap again to un-ready" under "Ready!", or, at
+    // an education gate after a refused tap, what holds the break (plan 26, A2).
     this.levelHintGlow = this.add
       .text(W / 2, GAME_HEIGHT * 0.4 + 72, '', { ...TEXT_STYLE, fontSize: '36px', stroke: '#ffffff', strokeThickness: 10 })
       .setShadow(0, 0, '#ffffff', 18, true, true)
@@ -495,7 +496,7 @@ export class Play extends Phaser.Scene {
       .setVisible(false);
     this.hintPulseMs = 0;
     this.levelSubHint = this.add
-      .text(W / 2, GAME_HEIGHT * 0.4 + 72 + 50, '', { ...TEXT_STYLE, fontSize: '26px', color: '#c9b8dc', strokeThickness: 8 })
+      .text(W / 2, GAME_HEIGHT * 0.4 + 72 + 50, '', { ...TEXT_STYLE, fontSize: '26px', color: '#c9b8dc', strokeThickness: 8, align: 'center', wordWrap: { width: this.col.width - 64, useAdvancedWrap: true } })
       .setOrigin(0.5)
       .setDepth(26)
       .setVisible(false);
@@ -521,7 +522,7 @@ export class Play extends Phaser.Scene {
     this.reelSpin = null; // the reel a bought box spins over the shop (spinReel), until its draw is granted
     this.shopButtonBox = shopButtonLayout(this.col.width, GAME_HEIGHT, T, this.col.x);
     this.shopBoxes = shopLayout(this.col.width, GAME_HEIGHT, T, this.col.x);
-    this.shopButton = createButton(this, this.shopButtonBox, countText(0), { ...TEXT_STYLE, fontSize: '40px' }, { depth: 27, icon: { key: 'coin', px: 48 } }).setVisible(false);
+    this.shopButton = createButton(this, this.shopButtonBox, t(this.locale, 'shopPill'), { ...TEXT_STYLE, fontSize: '40px' }, { depth: 27, icon: { key: 'coin', px: 48 } }).setVisible(false);
     // A tournament race's 🏅 Bracket pill under the 💰: once both halves are in their level break
     // (Versus.bothInBreak) it opens the bracket read-only (Versus.openPeek); it never readies the half.
     this.bracketButtonBox = this.match?.tournament ? bracketButtonLayout(this.col.width, GAME_HEIGHT, T, this.col.x) : null;
@@ -947,9 +948,12 @@ export class Play extends Phaser.Scene {
   }
 
   refreshLevelBanner() {
-    // "Tap to continue" (plan 26: the 🌽 pill shows itself, the hint no longer names the shop); an
-    // education run's names the 📚, and sits higher, over its rows (eduBreakLayout's titleY).
-    const [title, hint] = levelBannerText(this.locale, this.level, LEVELS, { education: this.runIsEducation, gate: this.breakGated() }).split('\n');
+    // "Tap to continue" in every one-player break (plan 26, A2: the gate no longer changes it); an
+    // education run's sits higher, over its rows (eduBreakLayout's titleY). The gate is read here,
+    // once per break event, and kept for syncLevelHint (breakGated reads the store: never per frame).
+    this.breakGate = this.breakGated();
+    if (!this.breakGate) this.gateTapped = false; // the gate opened: its line goes
+    const [title, hint] = levelBannerText(this.locale, this.level, LEVELS).split('\n');
     const eduRows = Boolean(this.runIsEducation && !this.match && this.eduBreakBoxes);
     const titleY = eduRows ? this.eduBreakBoxes.titleY : GAME_HEIGHT * 0.4;
     this.levelTitle?.setY(titleY);
@@ -958,7 +962,8 @@ export class Play extends Phaser.Scene {
     this.levelTitle?.setText(title);
     // A match's break is a ready check: the hint is this player's state ("Tap when ready", then
     // "Ready! Waiting for P2…"); the shared count starts once both are ready (Versus.onLevelTap).
-    this.levelSubHint?.setText(t(this.locale, 'versusUnreadyHint'));
+    // The line under it: a match's un-ready line, else the gate's (shown after a refused tap).
+    this.levelSubHint?.setText(t(this.locale, this.match ? 'versusUnreadyHint' : 'levelGateTap'));
     if (this.match && this.levelBreak) {
       const ready = Boolean(this.versusHost()?.isReady?.(this));
       this.levelHint?.setText(ready ? t(this.locale, 'versusReadyWaiting').replace('{name}', versusName(this.locale, this.match, this.player === 1 ? 1 : 0)) : t(this.locale, 'versusTapReady'));
@@ -970,14 +975,18 @@ export class Play extends Phaser.Scene {
   /**
    * Every frame: the level break's tap prompt ("Tap to continue", "Tap when ready") pulses with its
    * glow copy (hintPulse); a match player who is ready instead gets the smaller "Tap again to
-   * un-ready" under "Ready! Waiting for P2…". Both follow the hint's own visibility.
+   * un-ready" under "Ready! Waiting for P2…"; at an education gate the hint holds still, and after a
+   * refused tap the smaller line says what holds it (plan 26, A2). All follow the hint's visibility.
    */
   syncLevelHint(delta) {
     const hint = this.levelHint;
     if (!hint || !this.levelHintGlow) return;
     const ready = Boolean(this.match && this.levelBreak && this.versusHost()?.isReady?.(this));
-    this.levelSubHint.setVisible(hint.visible && ready);
-    if (!hint.visible || !this.levelBreak || ready) {
+    // At an education gate (plan 26, A2): the line after a refused tap, and no pulse, since a tap there
+    // only explains; Review pulses instead (refreshQuizButton). breakGate is kept by refreshLevelBanner.
+    const gate = Boolean(this.levelBreak && !this.match && this.breakGate);
+    this.levelSubHint.setVisible(hint.visible && (ready || (gate && Boolean(this.gateTapped))));
+    if (!hint.visible || !this.levelBreak || ready || gate) {
       hint.setScale(1);
       this.levelHintGlow.setVisible(false);
       this.hintPulseMs = 0;
@@ -1046,6 +1055,7 @@ export class Play extends Phaser.Scene {
     this.levelBreak = true;
     this.breakMissed = []; // each break starts with nothing missed (plan 25)
     this.quizSkipWarned = false; // the first Skip in each break warns (plan 26, A2)
+    this.gateTapped = false; // the gate's line shows only after a refused tap in this break (plan 26, A2)
     this.refreshLevelBanner();
     this.pausePlay();
     this.breakHud(true);
@@ -1088,6 +1098,7 @@ export class Play extends Phaser.Scene {
     // An education run continuing into this level unlocks it as a start level (plan 25); a test run never does.
     if (this.runIsEducation && !this.runIsTest) this.eduStore.unlockLevel(this.level);
     this.levelBreak = false;
+    this.gateTapped = false;
     this.breakHud(false);
     this.breakGlide?.stop();
     this.breakGlide = null;
@@ -2420,6 +2431,7 @@ export class Play extends Phaser.Scene {
     // The gate (plan 25; every education break since plan 26): the break stays while cards are due;
     // the hint says so and Review pulses (refreshQuizButton).
     if (this.levelBreak && !this.respawnPaused && this.breakGated()) {
+      this.gateTapped = true; // the line under "Tap to continue" says why (plan 26, A2)
       this.refreshLevelBanner();
       this.refreshShopButton();
       return;
@@ -3514,7 +3526,8 @@ export class Play extends Phaser.Scene {
     this.refreshQuizButton();
     if (!this.shopButton) return;
     const coins = this.purseCoins();
-    this.shopButton.setText(countText(coins)).setAlpha(coins > 0 ? 1 : T.trayAlpha).setVisible(this.shopButtonShown());
+    // "Shop" beside the kernel, no number (plan 26, A2: the HUD shows the purse); dimmed at 0 corn.
+    this.shopButton.setText(t(this.locale, 'shopPill')).setAlpha(coins > 0 ? 1 : T.trayAlpha).setVisible(this.shopButtonShown());
   }
 
   /** Open the shop panel (the 💰 in a level break): the rows, the purse, the open sound. */

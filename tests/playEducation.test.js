@@ -304,6 +304,34 @@ test('the gate (plan 26: every education break) holds while a missed or review c
   assert.equal(gate({ level: 3, breakMissed: [due.id] }), true);
 });
 
+test("the gate's line (plan 26, A2): a continue refused at a gate shows \"Tap 📚 to review all cards before continuing.\" under \"Tap to continue\"; it goes when the gate opens or the break ends; the hint stops pulsing while the gate holds", () => {
+  let due = 1;
+  const text = () => ({ text: '', visible: false, scale: 1, x: 0, y: 0, setText(v) { this.text = v; return this; }, setVisible(v) { this.visible = v; return this; }, setY(v) { this.y = v; return this; }, setScale(v) { this.scale = v; return this; }, setPosition() { return this; }, setAlpha() { return this; } });
+  const s = playScene({
+    locale: 'en', level: 2, levelBreak: true, state: 'paused', runIsEducation: true, runIsTest: false, match: null, respawnPaused: false, eduBreakBoxes: null,
+    levelTitle: text(), levelHint: { ...text(), visible: true }, levelHintGlow: text(), levelSubHint: text(), hintPulseMs: 0,
+    quizCounts: () => ({ new: 3, missed: due, review: 0 }), refreshShopButton() {},
+  });
+  s.refreshLevelBanner();
+  s.syncLevelHint(16);
+  assert.deepEqual([s.levelHint.text, s.levelSubHint.visible, s.levelHint.scale, s.levelHintGlow.visible], ['Tap to continue', false, 1, false], 'gated: "Tap to continue", no line yet, and no pulse (a tap only explains here)');
+  s.resumePlay();
+  s.syncLevelHint(16);
+  assert.deepEqual([s.state, s.levelSubHint.visible, s.levelSubHint.text], ['paused', true, 'Tap 📚 to review all cards before continuing.'], 'a refused continue shows the line');
+  due = 0;
+  s.refreshLevelBanner(); // what a closed quiz does (onQuizClosed)
+  s.syncLevelHint(16);
+  assert.equal(s.levelSubHint.visible, false, 'the gate open: the line goes');
+  s.syncLevelHint(400);
+  assert.ok(s.levelHint.scale !== 1 || s.levelHintGlow.visible, 'and the hint pulses again');
+  due = 1;
+  s.refreshLevelBanner();
+  s.resumePlay();
+  s.levelBreak = false; // the break over (startLevelBreak and endLevelBreak also clear gateTapped)
+  s.syncLevelHint(16);
+  assert.equal(s.levelSubHint.visible, false, 'outside a break: no line');
+});
+
 test('resumePlay keeps a gated break: the state stays paused and the break stays (plan 25, B6)', () => {
   const calls = [];
   const s = playScene({ state: 'paused', levelBreak: true, respawnPaused: false, refreshLevelBanner: () => calls.push('banner'), refreshShopButton: () => calls.push('pill'), breakGated: () => true, endLevelBreak: () => calls.push('end') });

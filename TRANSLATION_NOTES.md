@@ -104,8 +104,8 @@ Short, playful, clear. Fit a 720×1280 logical field; How to play / About body w
 | pauseHint | tap anywhere to resume game | 点击任意处继续游戏 |
 | levelBanner | LEVEL {n} | 第 {n} 关 |
 | levelContinue | Tap to continue | 点击继续 |
-| levelQuizHint | Tap to continue · 📚 review | 点击继续 · 📚 复习 |
-| levelGateHint | 📚 Review to continue (plan 25: kept short, it pulses at the screen's width; a break before a level not yet unlocked; a tap does not continue until the orange and green numbers are 0) | 📚 复习后才能继续 |
+| levelGateTap | Tap 📚 to review all cards before continuing. (plan 26, A2: a smaller line under "Tap to continue" once a tap at a level break was refused because missed or review cards are due; it goes when they are answered) | 先点 📚 复习完所有卡片，才能继续。 |
+| shopPill | Shop (plan 26, A2: the level break's shop button, beside the corn kernel, with no number: the HUD shows the purse. The panel's own title is shopTitle, SHOP) | 商店 |
 | shopTitle | SHOP | 商店 |
 | shopCoins | Your coins | 你的金币 |
 | shopFiber | Fiber · +3 points | 纤维 · +3 分 |
