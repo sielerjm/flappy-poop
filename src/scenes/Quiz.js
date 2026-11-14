@@ -6,7 +6,8 @@ import { createCountLine } from '../ui/countLine.js';
 import { createInfoCard } from '../ui/infoCard.js';
 import { isTopOverlay } from '../ui/overlayStack.js';
 import { t, tallyLines, countLines, nextWaitText } from '../i18n.js';
-import { cardText, optionText, cardSource, EDUCATION_EMOJI } from '../education.js';
+import { cardText, optionText, cardSource, cardLinks, cardLearnMoreUrl, EDUCATION_EMOJI } from '../education.js';
+import { layoutRich, linkSpans } from '../richText.js';
 import { auditState } from '../questionAudits.js';
 import { sfx } from '../sound.js';
 
@@ -36,6 +37,8 @@ const COIN_PX = 36; // the corn kernel after a paid verdict
 const FILL = { idle: 0x2a1522, right: 0x2f7d4f, wrong: 0x9c2f4a, dim: 0x1a0b14 };
 const GOOD = '#9fe8b4';
 const BAD = '#ff8da8';
+const LINK = '#8fc9ff'; // a link in the explanation, underlined (plan 26; 10.9 : 1 on the card)
+const LINK_ZONES = 8; // tap boxes for the explanation's links: 3 terms a card, each split over two lines at most
 
 /**
  * The education quiz card (📚, plan 21): one question, three options, then the verdict and the
@@ -146,6 +149,31 @@ export class Quiz extends Phaser.Scene {
     this.nextWait = this.add.text(cx, 0, '', { ...MUTED, fontSize: '24px', wordWrap: { width: TEXT_W, useAdvancedWrap: true } }).setOrigin(0.5, 0).setVisible(false);
     this.explain = this.add.text(cx, 0, '', { ...MUTED, fontSize: '26px', lineSpacing: 4, wordWrap: { width: TEXT_W, useAdvancedWrap: true } }).setOrigin(0.5, 0);
     this.source = this.add.text(cx, 0, '', { ...MUTED, fontSize: '20px', fontStyle: 'italic', wordWrap: { width: TEXT_W, useAdvancedWrap: true } }).setOrigin(0.5, 0);
+    // The explanation's links (plan 26): when it holds a linked term, the explanation is drawn word by
+    // word (richText's layoutRich) in richBox, each link underlined in LINK with a tap box over it that
+    // opens Wikipedia in a new tab; "📄 Learn more 🔗" under it opens the card's first reference. All of
+    // it sits under the "This run" card, which is made later. No ring items: a pad press cannot open a
+    // tab (as the 🚩).
+    this.explainProbe = this.add.text(0, -1000, '', { ...MUTED, fontSize: '26px' }).setVisible(false);
+    this.richBox = this.add.container(0, 0);
+    this.richUnder = this.add.graphics();
+    this.richBottom = null;
+    this.richZones = Array.from({ length: LINK_ZONES }, () => {
+      const z = this.add.zone(0, 0, 10, 10).setInteractive({ useHandCursor: true }).setVisible(false);
+      z.on('pointerup', (pointer) => {
+        if (!this.tapLocked(pointer)) this.openLink(z.getData('href'));
+      });
+      return z;
+    });
+    this.learnMore = this.add.text(cx, 0, '', { ...MUTED, fontSize: '24px', color: LINK }).setOrigin(0.5, 0).setVisible(false);
+    this.learnMoreUrl = null;
+    this.learnMoreZone = this.add
+      .zone(cx, 0, 10, 10)
+      .setInteractive({ useHandCursor: true })
+      .setVisible(false)
+      .on('pointerup', (pointer) => {
+        if (!this.tapLocked(pointer)) this.openLink(this.learnMoreUrl);
+      });
     // Three button slots, named by where they sit; each step says what they read and do (set). The
     // two on the bottom row never overlap, so a second tap on the way forward cannot land on the
     // way out (Give up) of the next card.
@@ -516,6 +544,7 @@ export class Quiz extends Phaser.Scene {
     this.verdict.setY(y + 10).setText('').setVisible(false);
     this.verdictCoin.setVisible(false);
     this.nextWait.setText('').setVisible(false);
+    this.clearRich();
     this.explain.setText('').setVisible(false);
     this.source.setText('').setVisible(false);
     this.clearButtons();
@@ -547,6 +576,7 @@ export class Quiz extends Phaser.Scene {
       o.mark.setVisible(false);
       o.zone.setVisible(false);
     }
+    this.clearRich();
     for (const x of [this.verdict, this.verdictCoin, this.nextWait, this.explain, this.source]) x.setVisible(false);
     this.clearButtons();
     if (revive) this.rightBtn.set(t(this.locale, 'reviveContinue'), () => this.finish());
@@ -703,6 +733,7 @@ export class Quiz extends Phaser.Scene {
       this.holdAfterWrong(go(t(this.locale, 'reviveEnd'), () => this.finish()), false);
     } else if (phase === 'choice') {
       this.say(t(this.locale, 'reviveBack'), true);
+      this.clearRich();
       this.explain
         .setY(this.verdictBottom() + 10)
         .setText(t(this.locale, 'reviveChoice').replace('{n}', String(T.education.restoreStreak - 1)))
@@ -768,17 +799,85 @@ export class Quiz extends Phaser.Scene {
     return this.fits();
   }
 
-  /** The explanation (and, for an audited card, its sources) under the verdict. */
+  /**
+   * The explanation under the verdict, its links underlined (renderExplain); "📄 Learn more 🔗" when one
+   * of the card's references has a DOI (plan 26); and, for an audited card, its sources.
+   */
   showWhy() {
     if (!this.card || !this.answered) return;
     this.topBtn.setShown(false); // Why has been answered
-    this.explain.setY(this.verdictBottom() + 10).setText(this.text.explain).setVisible(true);
+    this.renderExplain(this.text.explain, this.verdictBottom() + 10);
+    let y = this.explainBottom() + 10;
+    this.learnMoreUrl = cardLearnMoreUrl(this.card);
+    const more = Boolean(this.learnMoreUrl);
+    this.learnMore.setText(more ? t(this.locale, 'quizLearnMore') : '').setPosition(this.cx, y).setVisible(more);
+    this.learnMoreZone
+      .setPosition(this.cx, y + this.learnMore.height / 2)
+      .setSize(this.learnMore.width + 32, Math.max(48, this.learnMore.height + 16))
+      .setVisible(more);
+    if (more) y = this.learnMore.y + this.learnMore.height + 10;
     const audited = auditState(this.card) === 'audited';
     this.source
-      .setY(this.explain.y + this.explain.height + 10)
+      .setY(y)
       .setText(audited ? t(this.locale, 'quizSource').replace('{source}', cardSource(this.card)) : '')
       .setVisible(audited);
     this.ring('right');
+  }
+
+  /**
+   * The explanation at `y`: plain (this.explain), or, when it holds a linked term of the card
+   * (cardLinks; the English text only), drawn word by word with the links underlined and a tap box over
+   * each (plan 26). The plain text stays set, transparent, for whatever reads it.
+   */
+  renderExplain(text, y) {
+    this.clearRich();
+    this.explain.setY(y).setText(text).setVisible(true);
+    const spans = linkSpans(text, this.text?.locale === 'en' ? cardLinks(this.card) : []);
+    if (!spans.some((s) => s.href)) return;
+    const measure = (s) => this.explainProbe.setText(s.replace(/ /g, '\u00a0')).width;
+    const lines = layoutRich(spans, { measure, maxWidth: TEXT_W });
+    const lineH = this.explainProbe.setText('Ag').height;
+    const step = lineH + 4; // the explanation's lineSpacing
+    const linkColor = Phaser.Display.Color.HexStringToColor(LINK).color;
+    let zone = 0;
+    lines.forEach((line, i) => {
+      const top = y + i * step;
+      for (const part of line.parts) {
+        const x = this.cx + line.x + part.x;
+        this.richBox.add(this.add.text(x, top, part.text, { ...MUTED, fontSize: '26px', color: part.href ? LINK : MUTED.color }));
+        if (!part.href) continue;
+        this.richUnder.lineStyle(2, linkColor, 1).lineBetween(x, top + lineH - 2, x + part.width, top + lineH - 2);
+        this.richZones[zone++]
+          ?.setData('href', part.href)
+          .setPosition(x + part.width / 2, top + lineH / 2)
+          .setSize(part.width + 8, step)
+          .setVisible(true);
+      }
+    });
+    this.explain.setAlpha(0);
+    this.richBottom = y + lines.length * step - 4;
+  }
+
+  /** Take the drawn explanation and its links down (a new card, caught up, a revive's choice). */
+  clearRich() {
+    this.richBox?.removeAll(true);
+    this.richUnder?.clear();
+    for (const z of this.richZones ?? []) z.setVisible(false);
+    this.richBottom = null;
+    this.explain?.setAlpha(1);
+    this.learnMore?.setVisible(false);
+    this.learnMoreZone?.setVisible(false);
+  }
+
+  /** Where the explanation ends: the drawn lines' bottom, or the plain text's. */
+  explainBottom() {
+    return this.richBottom ?? this.explain.y + this.explain.height;
+  }
+
+  /** A link of the explanation or Learn more (plan 26): a new tab, never this one (openUrl); nothing under the "This run" card. */
+  openLink(url) {
+    if (!url || !isTopOverlay(this) || this.finishing || this.runCard?.open) return;
+    this.openUrl(url);
   }
 
   /** Bury the card just missed (Play.buryCard: the coins, 24 h), then the next card. */
@@ -811,7 +910,7 @@ export class Quiz extends Phaser.Scene {
    * bottom row), and the options inside the panel.
    */
   fits() {
-    const below = this.source.visible ? this.source.y + this.source.height : this.explain.visible ? this.explain.y + this.explain.height : this.verdictBottom();
+    const below = this.source.visible ? this.source.y + this.source.height : this.learnMore.visible ? this.learnMore.y + this.learnMore.height : this.explain.visible ? this.explainBottom() : this.verdictBottom();
     const last = this.options[2].box;
     const buttonsTop = this.topBtn.shown ? this.whyTop : this.rowTop;
     return { below, buttonsTop, optionsBottom: last.y + last.height / 2, ok: below <= buttonsTop - 8 && this.header.y >= this.top + 50 };

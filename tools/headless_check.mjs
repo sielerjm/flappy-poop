@@ -3991,6 +3991,19 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         const waitLine = () => evaluate(`(() => { const q = ${Q}; return JSON.stringify({ visible: q.nextWait.visible, text: q.nextWait.text, top: q.nextWait.y, verdictBottom: q.verdict.y + q.verdict.height, explainTop: q.explain.visible ? q.explain.y : null }); })()`).then(JSON.parse);
         const wait1 = await waitLine();
         ok(wait1.visible && wait1.text === (await tx('quizNextSoon')) && wait1.top >= wait1.verdictBottom && wait1.explainTop > wait1.top, `a miss says "${wait1.text}" under the verdict, above the explanation`);
+        // The explanation's links (plan 26): its Wikipedia words underlined with a tap box each, and
+        // "📄 Learn more 🔗" for the card's first reference with a DOI. A tap opens a new tab (the opener
+        // is stubbed: nothing leaves this page) and the quiz stays as it was.
+        const linksWant = await evaluate(`import('./src/education.js').then((e) => JSON.stringify({ hrefs: e.cardLinks(${Q}.card).map((l) => l.href), more: e.cardLearnMoreUrl(${Q}.card) }))`).then(JSON.parse);
+        const linksShown = await evaluate(`(() => { const q = ${Q}; globalThis.__opened = []; q.__openUrl = q.__openUrl ?? q.openUrl; q.openUrl = (u) => { globalThis.__opened.push(u); return 'window'; }; return JSON.stringify({ zones: q.richZones.filter((z) => z.visible).map((z) => ({ href: z.getData('href'), x: z.x, y: z.y })), more: q.learnMoreZone.visible ? { x: q.learnMoreZone.x, y: q.learnMoreZone.y, text: q.learnMore.text } : null, plainAlpha: q.explain.alpha }); })()`).then(JSON.parse);
+        if (linksShown.zones[0]) await tapAt(linksShown.zones[0].x, linksShown.zones[0].y);
+        if (linksShown.more) await tapAt(linksShown.more.x, linksShown.more.y);
+        await sleep(150);
+        const linksOpened = await evaluate(`JSON.stringify({ urls: globalThis.__opened, quiz: __flappy.scene.isActive('Quiz'), id: ${Q}.card?.id ?? null })`).then(JSON.parse);
+        await evaluate(`${Q}.openUrl = ${Q}.__openUrl, true`);
+        const zoneHrefs = [...new Set(linksShown.zones.map((z) => z.href))].sort();
+        ok(linksWant.hrefs.length >= 1 && JSON.stringify(zoneHrefs) === JSON.stringify([...linksWant.hrefs].sort()) && linksShown.plainAlpha === 0 && linksOpened.urls[0] === linksShown.zones[0]?.href && linksOpened.quiz && linksOpened.id === q1.id, `the explanation links ${linksWant.hrefs.length} Wikipedia word(s), each with a tap box; a tap opens ${linksOpened.urls[0]} in a new tab and the quiz stays`);
+        ok(linksWant.more ? linksShown.more?.text === (await tx('quizLearnMore')) && linksOpened.urls[1] === linksWant.more : linksShown.more === null, linksWant.more ? `"${linksShown.more?.text}" opens ${linksOpened.urls[1]}` : 'no reference of this card has a DOI: no Learn more');
         const line1 = await lineNow();
         ok(line1.tally === `✅ ${q1.last?.correct ? 1 : 0}  ❌ ${q1.last?.correct ? 0 : 1}` && line1.tallyZone, `the run's tally appears in the card's top row with the first answer: "${line1.tally}"`);
         ok(q1.left === returnWant && q1.right === nextWant && q1.top === (q1.last?.correct ? whyWant : null) && !q1.halo, `after the answer: ${q1.top ?? 'no Why (the explanation shows)'} on top, ${q1.left} | ${q1.right} below, and no halo in a break`);
@@ -4767,8 +4780,12 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         ok(e2.bonus && Math.abs(e2.bonus.x - (e2.home.x + e2.again.x) / 2) < 0.5 && e2.bonus.y === e2.cy + TT.over.buttonOffsetY && e2.home.y === e2.again.y && e2.home.y - e2.home.height / 2 - (e2.bonus.y + e2.bonus.height / 2) >= 16 && e2.halo.top >= e2.bonus.y + e2.bonus.height / 2 && e2.band.bottom <= e2.bonus.y - e2.bonus.height / 2, `the bonus button sits centred a row above Home | Play again (y ${e2.bonus.y} over ${e2.home.y}); the band ends at its top (${e2.band.bottom})`);
         ok(fallsBottom <= e2.band.bottom - 16 && e2.noteTop >= e2.band.bottom && e2.ring.includes('bonus'), `with no badge line the ‼️ 😢 row is in view (it ends at ${fallsBottom}) and the note starts below the fold (${Math.round(e2.noteTop)}): nothing is cut by the band's bottom`);
         const c0 = await evaluate(`${play}.effects.coins()`);
-        await evaluate(`${O}.openBonus(), true`);
-        for (let i = 0; i < 30 && !(await evaluate(`__flappy.scene.isActive('Quiz') && Boolean(${Q}.card)`)); i += 1) await sleep(100);
+        // Opened, retried until the bonus card is up: under load the first press can land inside the
+        // death-tap lockout and open nothing, and the scene's last card (a revive's) would be read instead.
+        for (let i = 0; i < 40 && !(await evaluate(`__flappy.scene.isActive('Quiz') && ${Q}.mode === 'bonus' && Boolean(${Q}.card)`)); i += 1) {
+          if (!(await evaluate(`__flappy.scene.isActive('Quiz')`))) await evaluate(`${O}.openBonus(), true`);
+          await sleep(150);
+        }
         const b = await evaluate(`JSON.stringify({ deck: ${Q}.card?.deck ?? null, mode: ${Q}.mode })`).then(JSON.parse);
         await quizSounds.listen();
         await evaluate(`(() => { const q = ${Q}; q.choose(q.order.indexOf('answer')); return true; })()`);

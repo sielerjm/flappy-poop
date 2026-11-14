@@ -266,6 +266,7 @@ Short, playful, clear. Fit a 720×1280 logical field; How to play / About body w
 | quizCaughtUp | You're all caught up! New cards come with the next level, up to {n} a day, and old ones come back when they are due. ({n} is education.newPerDay, plan 26) | 全部完成！下一关会有新卡片（每天最多 {n} 张），旧卡片到期后会再出现。 |
 | quizGeneral | Gut microbes | 肠道微生物 |
 | quizSource | Source: {source} | 来源：{source} |
+| quizLearnMore | 📄 Learn more 🔗 (plan 26: under a quiz card's explanation; opens the card's first reference, by its DOI, in a new tab) | 📄 了解更多 🔗 |
 | reviveHeader | Crashed! Answer to fly on | 撞到了！答对继续飞 |
 | reviveStreakHeader | Win back your coins and power-ups | 赢回金币和道具 |
 | reviveBack | Right! You're back in. | 答对了！可以继续飞了。 |

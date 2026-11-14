@@ -157,3 +157,38 @@ test('audit tool: list and report cover every card and count each state', () => 
   assert.match(reportMarkdown().split('\n')[2], new RegExp(`${CARDS.length} cards: .* unaudited`));
   assert.match(localDay(new Date(2026, 10, 2)), /^2026-11-02$/);
 });
+
+test('CARD_LINKS (plan 26): 1 to 3 Wikipedia links on every live card, each term a whole word or phrase of its English explanation, not overlapping; titles of English Wikipedia articles; only known cards', async () => {
+  const { CARD_LINKS } = await import('../src/questions.js');
+  const { cardLinks } = await import('../src/education.js');
+  const { linkSpans } = await import('../src/richText.js');
+  const byId = new Map(CARDS.map((c) => [c.id, c]));
+  for (const id of Object.keys(CARD_LINKS)) assert.ok(byId.has(id), `${id} is a card`);
+  for (const card of CARDS.filter((c) => !c.retired)) {
+    const links = CARD_LINKS[card.id] ?? [];
+    assert.ok(links.length >= 1 && links.length <= 3, `${card.id}: ${links.length} links (1 to 3)`);
+    for (const { term, title } of links) {
+      assert.equal(typeof term, 'string');
+      assert.ok(typeof title === 'string' && title.trim() === title && title.length > 0 && !title.includes('_'), `${card.id}: "${title}" is an article title (spaces, not underscores)`);
+    }
+    const spans = linkSpans(card.explain, cardLinks(card));
+    assert.deepEqual(spans.filter((s) => s.href).map((s) => s.text).sort(), links.map((l) => l.term).sort(), `${card.id}: every term is linked in "${card.explain}"`);
+    for (const { href } of cardLinks(card)) assert.match(href, /^https:\/\/en\.wikipedia\.org\/wiki\/[^\s#?]+$/);
+  }
+});
+
+test('REFERENCE_DOIS (plan 26): DOIs of known references only, in the DOI shape, without a resolver prefix', async () => {
+  const { REFERENCE_DOIS } = await import('../src/questions.js');
+  const { cardLearnMoreUrl } = await import('../src/education.js');
+  for (const [n, doi] of Object.entries(REFERENCE_DOIS)) {
+    assert.ok(n in REFERENCES, `reference ${n} exists`);
+    assert.match(doi, /^10\.\d{4,9}\/\S+$/, `reference ${n}: ${doi}`);
+    assert.equal(doi, doi.toLowerCase(), `reference ${n}: lower case`);
+  }
+  for (const card of CARDS) {
+    const url = cardLearnMoreUrl(card);
+    const first = card.refs.find((r) => REFERENCE_DOIS[r]);
+    assert.equal(url === null, first === undefined, `${card.id}: Learn more exactly when a reference has a DOI`);
+    if (url) assert.ok(url.startsWith('https://doi.org/10.'), url);
+  }
+});

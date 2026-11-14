@@ -394,7 +394,12 @@ options (tap, keys 1–3, the ring), ✓ / ✗, the verdict, under it when the c
 days", "Next: again soon" after a miss: `nextWaitText`, `Quiz.showNextWait`, from `quizAnswer`'s
 `dueAt`; none in a test run), the explanation (at once after a wrong answer,
 which holds Next `explainMinMs`; behind "Why?" after a right one; its source only once audited), the
-card's id in a corner. **The id ends in 🚩 and is a link** (`openReport`): on its release it opens
+card's id in a corner. **The explanation's links** (plan 26): 1–3 words of each card's English
+explanation link to English Wikipedia (`CARD_LINKS`, `cardLinks`, `wikiUrl`): drawn word by word
+(`renderExplain`, richText's `layoutRich`), underlined in blue with a tap box each; "📄 Learn more 🔗"
+under it opens the card's first reference with a DOI (`REFERENCE_DOIS`, `cardLearnMoreUrl`). They open
+in a new tab only (`openLink` → `openUrl`), are not ring items (as the 🚩), and are drafted for
+Michael's review. **The id ends in 🚩 and is a link** (`openReport`): on its release it opens
 GitHub's card report form in a new tab with the card's code in the title and the form's fields
 (`issueUrl('card')`, `.github/ISSUE_TEMPLATE/card.yml`); never a same-tab navigation, which would lose
 the run, and not on the controller ring (a pad press cannot open a tab). **Its rows**, as Michael drew
@@ -780,9 +785,17 @@ src/
                             Phaser/DOM: DECKS (the LEVELS keys, then 'general'),
                             CARDS ({ id, deck, q, answer, wrong: [w1, w2], explain,
                             refs, retired?, zh? }; ids permanent, a wrong card is
-                            retired, never deleted), REFERENCES (numbered sources).
+                            retired, never deleted), REFERENCES (numbered sources);
+                            plan 26: CARD_LINKS (card id → 1–3 { term, title }: the
+                            explanation's Wikipedia words) and REFERENCE_DOIS (number
+                            → DOI, Crossref-matched), outside a card's audit hash.
                             The source of truth for the cards since 12 Nov; 70
                             placeholder cards, all unaudited. tests/questions.test.js.
+  richText.js               Text with links in it (plan 26), NO Phaser/DOM: linkSpans
+                            (the first whole-word occurrence of each term) and
+                            layoutRich (greedy word wrap into centred lines of parts,
+                            from a measure the scene passes), so the quiz can draw
+                            each link underlined with a tap box. tests/richText.test.js.
   questionAudits.js         Who checked which card, and when: QUESTION_AUDITS
                             ({ id: { by, on, hash, note? } }, written by
                             tools/audit_questions.mjs between its BEGIN / END lines),
@@ -2063,7 +2076,10 @@ tests/                      node --test (schema.test.js, pilot.test.js, eduBoard
   questions.test.js         src/questions.js: decks, ids, a question and three
                             different options per card, text limits, complete zh versions (skipped while no
                             card has one), references cited and existing, enough live
-                            cards per deck; src/questionAudits.js (no stale audit,
+                            cards per deck; plan 26: CARD_LINKS (1–3 per live card,
+                            every term linked in its explanation, Wikipedia URLs)
+                            and REFERENCE_DOIS (DOI shape, known references, Learn
+                            more exactly when one exists); src/questionAudits.js (no stale audit,
                             cardHash, auditState); tools/audit_questions.mjs
   playEducation.test.js     Play's education rules in Node (tests/support/scenes.js):
                             a match half never latches education; 👥 / 📚 exclusion,
@@ -2093,7 +2109,12 @@ tests/                      node --test (schema.test.js, pilot.test.js, eduBoard
   quiz.test.js              Quiz's rules in Node: a card under another overlay is
                             interrupted, nothing answered once the quiz is finishing,
                             the 🚩 never navigates the game's tab, tapLocked, the
-                            numbers' explainer (plan 25)
+                            numbers' explainer (plan 25); plan 26: the next wait,
+                            caught up with Keep practicing, the purse, Give up's
+                            one-time warning
+  richText.test.js          src/richText.js: linkSpans (whole words, overlaps,
+                            missing terms) and layoutRich (greedy wrap, centred
+                            lines, parts that add up, links across a break)
   jsonStore.test.js         src/store.js and the stores on it: storage is the truth,
                             a broken entry reads as empty, memory when storage throws
                             or is full, another tab's Clear holds

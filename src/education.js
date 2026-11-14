@@ -15,7 +15,7 @@
 import { LEADERBOARD, TUNING } from './config.js';
 import { nextPerfectStreak } from './achievements.js';
 import { GRADE_NUM, initDifficulty, initStability, nextDifficulty, nextIntervalDays, nextStability, retrievability, shortTermStability } from './fsrs.js';
-import { CARDS, DECKS, REFERENCES } from './questions.js';
+import { CARD_LINKS, CARDS, DECKS, REFERENCE_DOIS, REFERENCES } from './questions.js';
 import { createJsonStore } from './store.js';
 
 const DAY_MS = 86400000;
@@ -56,6 +56,22 @@ export function cardSource(card, refs = REFERENCES) {
     return `${first}${etal ? ' et al.' : ''} ${m[2]}`;
   };
   return (card.refs ?? []).map((n) => short(refs[n])).filter(Boolean).join('; ');
+}
+
+/** An English Wikipedia article's address from its title ("Paneth cell" → …/wiki/Paneth_cell). */
+export function wikiUrl(title) {
+  return `https://en.wikipedia.org/wiki/${encodeURIComponent(String(title).replace(/ /g, '_'))}`;
+}
+
+/** The links in a card's explanation (plan 26): [{ term, href }] from CARD_LINKS, for richText's linkSpans. */
+export function cardLinks(card, links = CARD_LINKS) {
+  return (links[card?.id] ?? []).map(({ term, title }) => ({ term, href: wikiUrl(title) }));
+}
+
+/** "Learn more" (plan 26): https://doi.org/… for the card's first reference with a DOI, else null. */
+export function cardLearnMoreUrl(card, dois = REFERENCE_DOIS) {
+  const n = (card?.refs ?? []).find((r) => dois[r]);
+  return n ? `https://doi.org/${dois[n].split('/').map(encodeURIComponent).join('/')}` : null;
 }
 
 /**
