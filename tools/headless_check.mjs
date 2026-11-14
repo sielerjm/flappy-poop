@@ -5138,6 +5138,19 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         ok(nerd.open && nerd.title === (await tx('achEduNerd')) && nerd.body.includes(String(TT.education.badgeMinAnswers)) && nerd.body.includes('1 / 10'), `a tap explains a badge: "${nerd.title}": ${nerd.body.replace(/\n/g, ' · ')}`);
         await evaluate(`${ST}.hideCard(), true`);
         await shutProfile();
+        // Your own learning streaks and the highest level unlocked (plan 26, A2: Michael's checklist), from
+        // this device's store; another player's profile, though it shares its 📚 grades, shows none of them.
+        const [streakRow, bestRow, levelRow] = await Promise.all(['statsEduStreak', 'statsEduBest', 'statsEduLevel'].map(tx));
+        const learnWant = await evaluate(`Promise.all([import('./src/education.js'), import('./src/i18n.js')]).then(([e, i]) => { const r = ${play}.eduStore.load(); return JSON.stringify(i.eduProfileRows('en', { streak: e.studyStreakNow(r.study ?? null, e.localDayKey()), best: r.study?.best ?? 0, level: r.unlockedLevel })); })`).then(JSON.parse);
+        const learn = await openProfile();
+        ok(learnWant.every(([key, value], k) => learn.texts.includes([streakRow, bestRow, levelRow][k]) && learn.texts.includes(value)) && learnWant[0][1] !== '0 days', `your own profile's 📚 section adds ${learnWant.map(([, v], k) => `${[streakRow, bestRow, levelRow][k]}: ${v}`).join(', ')}`);
+        await shutProfile();
+        await evaluate(`(globalThis.__profile = { found: true, name: 'Rival', single: { games: 3, bestScore: 50, wins: 0, maxLevel: 2, avgLevel: 1.5, avgScore: 20 }, daily: { dumps: 0, gold: 0, silver: 0, bronze: 0 }, tournament: { events: 0, gold: 0, silver: 0, bronze: 0, rival: null }, counters: {}, achievements: [], tags: [], education: { grade: 85, runs: 4, badges: { edu_grade_b: '2026-11-10' } } }, ${play}.openStats({ name: 'Rival' }), true)`);
+        for (let i = 0; i < 60 && !(await evaluate(`__flappy.scene.isActive('Stats') && Boolean(${ST}.view)`)); i += 1) await sleep(100);
+        const rival = await evaluate(`JSON.stringify({ edu: Boolean(${ST}.view?.education), texts: ${ST}.children.list.filter((c) => c.type === 'Text').map((c) => c.text) })`).then(JSON.parse);
+        ok(rival.edu && rival.texts.includes(gradeRow) && ![streakRow, bestRow, levelRow].some((x) => rival.texts.includes(x)), "another player's shared 📚 section has their grade but no learning streak or level rows (those stay on the device)");
+        await shutProfile();
+        await evaluate(`globalThis.__profile = null, true`);
         await evaluate(`${play}.eduUnlocked = false, true`);
         const lockedProfile = await openProfile();
         ok(lockedProfile.edu === null && lockedProfile.cells.length === 0 && !lockedProfile.texts.some((x) => x.includes('\u{1F4DA}')), 'a device without education unlocked has no 📚 section on its profile');

@@ -548,7 +548,37 @@ function cleanEdu(raw, keep, t = TUNING) {
   const q = raw?.paid;
   const paidIds = q && typeof q.day === 'string' && DAY_RE.test(q.day) && Array.isArray(q.ids) ? [...new Set(q.ids.filter((id) => typeof id === 'string' && ID_RE.test(id)))] : [];
   const paid = paidIds.length ? { day: q.day, ids: paidIds } : null;
-  return { v: 2, cards, recent, counters, badges, unlockedLevel, ...(buried ? { buried } : {}), ...(pending ? { pending } : {}), ...(paid ? { paid } : {}) };
+  // The learning streak (plan 26, A2): { day, streak, best }, the last local day with an answer, the
+  // days in a row up to it, the most ever in a row; kept only while well formed.
+  const st = raw?.study;
+  const study = st && typeof st.day === 'string' && DAY_RE.test(st.day) && Number.isInteger(st.streak) && st.streak >= 1 ? { day: st.day, streak: st.streak, best: Math.max(st.streak, Number.isInteger(st.best) ? st.best : 0) } : null;
+  return { v: 2, cards, recent, counters, badges, unlockedLevel, ...(buried ? { buried } : {}), ...(pending ? { pending } : {}), ...(paid ? { paid } : {}), ...(study ? { study } : {}) };
+}
+
+/** A local YYYY-MM-DD day key as a day count (UTC midnights: a clock change inside a day moves nothing). */
+function dayNumber(key) {
+  const [y, m, d] = key.split('-').map(Number);
+  return Math.round(Date.UTC(y, m - 1, d) / 86400000);
+}
+
+/**
+ * The learning streak after an answer on local `day` (plan 26, A2): a local day with at least one
+ * answer saved in an education run is a study day. None yet: 1. The same day, or an earlier one (a
+ * clock set back, a trip west): nothing moves, and the stored day never goes back, so toggling a clock
+ * cannot add days. The next day: one more. A gap: 1 again, the best kept. Pure.
+ */
+export function nextStudyStreak(study, day) {
+  if (!study) return { day, streak: 1, best: 1 };
+  const gap = dayNumber(day) - dayNumber(study.day);
+  if (gap <= 0) return study;
+  const streak = gap === 1 ? study.streak + 1 : 1;
+  return { day, streak, best: Math.max(study.best ?? 0, streak) };
+}
+
+/** The learning streak as of local `today`: the stored one while its last day is today or yesterday (or later: a clock behind), else 0. */
+export function studyStreakNow(study, today) {
+  if (!study) return 0;
+  return dayNumber(today) - dayNumber(study.day) <= 1 ? study.streak : 0;
 }
 
 /** The ids of the cards whose right answer paid on local `day` (the store's `paid`; plan 26, A2), or none. */
@@ -569,7 +599,8 @@ export function localDayKey(date = new Date()) {
 /**
  * This device's education record (LEADERBOARD.eduKey): { v: 2, cards: { id: record }, recent: [ids],
  * counters: { revives, perfectStreak, gradedRuns, gradeSum }, badges: { id: 'YYYY-MM-DD' }, and when
- * set unlockedLevel, buried { day, n }, pending { tally, full, at }, paid { day, ids } (plan 26, A2) }.
+ * set unlockedLevel, buried { day, n, ids }, pending { tally, full, at }, paid { day, ids } and study
+ * { day, streak, best } (plan 26, A2) }.
  * answer(id, record) stores a card's record after an answer and appends it to `recent` (the last
  * education.minGap cards shown). The counters and badges (plan 22) are the education badges' and the
  * average grade's: addRevive counts a revive as it happens, endRun(facts) moves the 🤓 streak and
@@ -586,16 +617,19 @@ export function createEduStore(storage, { key = LEADERBOARD.eduKey, t = TUNING }
   return {
     load: read,
     /**
-     * A card's record after an answer, appended to `recent`. `paidDay` (a local YYYY-MM-DD; plan 26,
-     * A2): the answer paid, so the card is marked as paid that day (a new day starts the list over).
+     * A card's record after an answer, appended to `recent`. Plan 26, A2 (both local YYYY-MM-DD days):
+     * `paidDay`, the answer paid, so the card is marked as paid that day (a new day starts the list
+     * over); `studyDay`, the answer was saved in an education run, so the learning streak moves
+     * (nextStudyStreak). One write.
      */
-    answer(id, record, { paidDay = null } = {}) {
+    answer(id, record, { paidDay = null, studyDay = null } = {}) {
       const state = read();
       const next = { ...state, cards: { ...state.cards, [id]: record }, recent: [...state.recent, id] };
       if (paidDay) {
         const ids = paidOn(state.paid, paidDay);
         next.paid = { day: paidDay, ids: ids.includes(id) ? ids : [...ids, id] };
       }
+      if (studyDay) next.study = nextStudyStreak(state.study ?? null, studyDay);
       write(next);
     },
     /** An education run continued into `level` (plan 25): it is unlocked, as a start level, from now on. */

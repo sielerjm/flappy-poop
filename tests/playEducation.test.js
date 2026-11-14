@@ -675,6 +675,33 @@ test('"Your cards" on the 📚 glyph (plan 26, A2): the three counts in his word
   }
 });
 
+test("your own profile's 📚 section (plan 26, A2): eduView carries the learning streak now, the longest, and the highest level unlocked from this device's store; another player's shared view carries none of them", async () => {
+  const { Stats } = await import('../src/scenes/Stats.js');
+  const view = Stats.prototype.eduView.call({}, { counters: {}, badges: {}, unlockedLevel: 3, study: { day: '2026-11-13', streak: 4, best: 9 } }, '2026-11-14');
+  assert.deepEqual([view.streak, view.best, view.level], [4, 9, 3], 'yesterday was a study day: the streak holds');
+  const lapsed = Stats.prototype.eduView.call({}, { counters: {}, badges: {}, unlockedLevel: 3, study: { day: '2026-11-10', streak: 4, best: 9 } }, '2026-11-14');
+  assert.deepEqual([lapsed.streak, lapsed.best], [0, 9], 'a missed day: 0 now, the best kept');
+  const none = Stats.prototype.eduView.call({}, { counters: {}, badges: {} }, '2026-11-14');
+  assert.deepEqual([none.streak, none.best, none.level], [0, 0, 1]);
+  const shared = Stats.prototype.sharedEduView.call({}, { grade: 90, runs: 3, badges: {} });
+  assert.equal('streak' in shared || 'best' in shared || 'level' in shared, false, 'nothing of it is shared on the 📚 board');
+});
+
+test('a saved answer in an education run moves the learning streak (any quiz: a break, a revive, the bonus); a test run never does (plan 26, A2)', () => {
+  const card = CARDS.find((c) => c.deck === 'stomach');
+  for (const mode of ['break', 'revive', 'bonus']) {
+    const store = createEduStore(fakeStorage());
+    const s = playScene({ eduStore: store, level: 2, levelBreak: mode === 'break', runIsTest: false, runQuiz: newTally(), registry: registry(), researchJoined: () => false, takeCoins() {}, refreshLevelBanner() {}, refreshShopButton() {} });
+    s.breakMissed = [];
+    s.quizAnswer({ card, reason: 'new', order: ['answer', 'w1', 'w2'], chosen: 'w1', rtMs: 4000, mode });
+    assert.deepEqual(store.load().study, { day: localDayKey(), streak: 1, best: 1 }, `${mode}: a wrong answer counts as a study day too`);
+  }
+  const store = createEduStore(fakeStorage());
+  const t = playScene({ eduStore: store, level: 2, levelBreak: true, runIsTest: true, runQuiz: newTally(), registry: registry(), takeCoins() {}, refreshLevelBanner() {}, refreshShopButton() {} });
+  t.quizAnswer({ card, reason: 'new', order: ['answer', 'w1', 'w2'], chosen: 'answer', rtMs: 4000, mode: 'break' });
+  assert.equal('study' in store.load(), false, 'a test run saves nothing');
+});
+
 test('the 📚 switch toggles 📚 and opens nothing (plan 26, A2: the popup opens at a start instead); the popup\'s Play starts a run with 📚 on', () => {
   const calls = [];
   const s = playScene({

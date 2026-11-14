@@ -1787,7 +1787,8 @@ export class Play extends Phaser.Scene {
     if (!this.runIsTest && !this.isTestMode()) {
       const rec = known;
       const next = schedule(rec, grade, now, T, { practice: reason === 'practice' });
-      this.eduStore.answer(card.id, next, coins ? { paidDay: day } : undefined);
+      // One write: the card, today's pay mark if it paid, and the learning streak (plan 26, A2).
+      this.eduStore.answer(card.id, next, { ...(coins ? { paidDay: day } : {}), studyDay: day });
       dueAt = next.dueAt;
       // A pilot tester's answer is recorded as an event (plan 21; never in a test run, and only
       // while joined): what was asked and picked, and what the device knew of the card before.

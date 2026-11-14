@@ -637,6 +637,9 @@ Inspired by Flappy Bird
 | statsEducation | 📚 Education {n} / {total} | 📚 教育 {n} / {total} |
 | statsEduGrade | Average grade | 平均成绩 |
 | statsEduRuns | Graded runs | 计分局数 |
+| statsEduStreak | 🔥 Learning streak (plan 26, A2: your own profile's 📚 section; the local days in a row with at least one card answered in an education run; the value is in days, waitDay / waitDays) | 🔥 连续学习 |
+| statsEduBest | ❤️‍🔥 Longest streak (the most such days in a row ever) | ❤️‍🔥 最长连续 |
+| statsEduLevel | Highest level unlocked (the highest level an education run has continued into, which a run may start at; not the single-player "Highest level", statsMaxLevel, which counts levels reached) | 已解锁的最高关卡 |
 | careerDethroned | Dethroned: took 1st place from someone | 夺冠：从别人手里抢下第一名 |
 | tagDev | Game dev | 游戏开发者 |
 | tagDevDesc | Makes Flappy Poop | Flappy Poop 的开发者 |

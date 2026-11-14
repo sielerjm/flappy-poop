@@ -514,6 +514,9 @@ Inspired by Flappy Bird`,
     statsEducation: '📚 Education {n} / {total}',
     statsEduGrade: 'Average grade',
     statsEduRuns: 'Graded runs',
+    statsEduStreak: '🔥 Learning streak',
+    statsEduBest: '❤️‍🔥 Longest streak',
+    statsEduLevel: 'Highest level unlocked',
     careerDethroned: 'Dethroned: took 1st place from someone',
     tagDev: 'Game dev',
     tagDevDesc: 'Makes Flappy Poop',
@@ -1027,6 +1030,9 @@ Inspired by Flappy Bird`,
     statsEducation: '📚 教育 {n} / {total}',
     statsEduGrade: '平均成绩',
     statsEduRuns: '计分局数',
+    statsEduStreak: '🔥 连续学习',
+    statsEduBest: '❤️‍🔥 最长连续',
+    statsEduLevel: '已解锁的最高关卡',
     careerDethroned: '夺冠：从别人手里抢下第一名',
     tagDev: '游戏开发者',
     tagDevDesc: 'Flappy Poop 的开发者',
@@ -1135,6 +1141,20 @@ export function tallyLines(locale, tally, levels) {
 export function countLines(locale, counts) {
   const line = (key, n) => t(locale, key).replace('{n}', String(n ?? 0));
   return [line('eduCardsNew', counts?.new), line('eduCardsMissed', counts?.missed), line('eduCardsReview', counts?.review)];
+}
+
+/**
+ * Your own profile's learning rows (plan 26, A2: Michael's checklist), as [label key, value]: 🔥 the
+ * learning streak now, ❤️‍🔥 the longest, in days (the wait line's day words), and the highest level
+ * unlocked (LV n). `view` is Stats.eduView's { streak, best, level }.
+ */
+export function eduProfileRows(locale, { streak = 0, best = 0, level = 1 } = {}) {
+  const days = (n) => (n === 1 ? t(locale, 'waitDay') : t(locale, 'waitDays').replace('{n}', String(n)));
+  return [
+    ['statsEduStreak', days(streak)],
+    ['statsEduBest', days(best)],
+    ['statsEduLevel', levelLabel(locale, level)],
+  ];
 }
 
 /**

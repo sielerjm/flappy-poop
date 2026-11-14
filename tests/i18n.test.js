@@ -22,6 +22,7 @@ import {
   tallyLines,
   nextWaitText,
   countLines,
+  eduProfileRows,
   TALLY_GAP,
 } from '../src/i18n.js';
 
@@ -252,4 +253,12 @@ test("the 📚 popup's words (plan 26, A2): where the data is kept, what a right
     for (const h of hints) assert.ok(h.length > 10 && !h.startsWith('eduOrder'), `${locale}: ${h}`);
   }
   assert.match(t('en', 'eduOrderBeforeHint'), /before.*missed and review cards/i, 'before: says the new cards come ahead of the cards a break waits for');
+});
+
+test("eduProfileRows (plan 26, A2: Michael's checklist): your own profile's 🔥 learning streak, ❤️‍🔥 longest streak and highest level unlocked, in days and as LV n; both locales", () => {
+  assert.deepEqual(eduProfileRows('en', { streak: 3, best: 7, level: 4 }), [['statsEduStreak', '3 days'], ['statsEduBest', '7 days'], ['statsEduLevel', 'LV 4']]);
+  assert.deepEqual(eduProfileRows('en', { streak: 1, best: 1, level: 1 }).map((r) => r[1]), ['1 day', '1 day', 'LV 1']);
+  assert.deepEqual(eduProfileRows('en', { streak: 0, best: 0 }).map((r) => r[1]), ['0 days', '0 days', 'LV 1'], 'nothing yet: 0, and level 1');
+  assert.deepEqual(eduProfileRows('zh-Hans', { streak: 3, best: 7, level: 4 }).map((r) => r[1]), ['3 天', '7 天', '第4关']);
+  assert.deepEqual([t('en', 'statsEduStreak'), t('en', 'statsEduBest'), t('en', 'statsEduLevel')], ['🔥 Learning streak', '❤️‍🔥 Longest streak', 'Highest level unlocked']);
 });

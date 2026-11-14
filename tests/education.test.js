@@ -732,6 +732,48 @@ test("pickCard's skipped (plan 26, A2): a card skipped today is never practice t
   assert.deepEqual([buriedIdsOn({ day: '2026-11-14', n: 1, ids: ['ST-01'] }, '2026-11-14'), buriedIdsOn({ day: '2026-11-13', n: 1, ids: ['ST-01'] }, '2026-11-14'), buriedIdsOn(undefined, '2026-11-14')], [['ST-01'], [], []], 'buriedIdsOn: that day only');
 });
 
+test("learning streaks (plan 26, A2: Michael's checklist): nextStudyStreak counts local days with an answer; the same or an earlier day changes nothing, the next day adds one, a gap starts over and keeps the best; studyStreakNow is 0 once a day is missed; days come from the date keys, so month and year ends and clock changes within a day cannot break one", async () => {
+  const { nextStudyStreak, studyStreakNow } = await import('../src/education.js');
+  let st = nextStudyStreak(null, '2026-11-14');
+  assert.deepEqual(st, { day: '2026-11-14', streak: 1, best: 1 }, 'the first day');
+  assert.deepEqual(nextStudyStreak(st, '2026-11-14'), st, 'the same day: no change');
+  st = nextStudyStreak(st, '2026-11-15');
+  assert.deepEqual(st, { day: '2026-11-15', streak: 2, best: 2 }, 'the next day: one more');
+  assert.deepEqual(nextStudyStreak(st, '2026-11-13'), st, 'an earlier day (a clock set back, a trip west): nothing moves, and the stored day never goes back');
+  st = nextStudyStreak(nextStudyStreak(st, '2026-11-16'), '2026-11-20');
+  assert.deepEqual(st, { day: '2026-11-20', streak: 1, best: 3 }, 'a gap: back to 1, the best kept');
+  let ny = nextStudyStreak(null, '2026-12-31');
+  ny = nextStudyStreak(ny, '2027-01-01');
+  assert.equal(ny.streak, 2, 'over a year end');
+  assert.equal(nextStudyStreak({ day: '2027-02-28', streak: 4, best: 4 }, '2027-03-01').streak, 5, 'over the end of February');
+  assert.equal(nextStudyStreak({ day: '2028-02-28', streak: 4, best: 4 }, '2028-03-01').streak, 1, 'a leap year has a 29th: a day was missed');
+  assert.deepEqual([studyStreakNow(null, '2026-11-20'), studyStreakNow(st, '2026-11-20'), studyStreakNow(st, '2026-11-21'), studyStreakNow(st, '2026-11-22'), studyStreakNow(st, '2026-11-19')], [0, 1, 1, 0, 1], 'now: today or yesterday keeps it; a missed day is 0; a clock behind the stored day shows it');
+});
+
+test("createEduStore's study record (plan 26, A2): written through answer(id, record, { studyDay }), kept when well formed, dropped when broken, wiped by Clear; an answer without a day leaves it alone", () => {
+  const m = new Map();
+  const st = { getItem: (k) => m.get(k) ?? null, setItem: (k, v) => m.set(k, v), removeItem: (k) => m.delete(k) };
+  const store = createEduStore(st);
+  const rec = missedRec(NOW);
+  store.answer('ST-01', rec);
+  assert.equal('study' in store.load(), false, 'no answer told a day: no record (the whole-store shapes stay as they were)');
+  store.answer('ST-01', rec, { studyDay: '2026-11-14' });
+  store.answer('ST-02', rec, { studyDay: '2026-11-14' });
+  store.answer('ST-03', rec, { studyDay: '2026-11-15', paidDay: '2026-11-15' });
+  assert.deepEqual(store.load().study, { day: '2026-11-15', streak: 2, best: 2 });
+  assert.deepEqual(store.load().paid, { day: '2026-11-15', ids: ['ST-03'] }, 'with the paid record in the same write');
+  store.answer('ST-04', rec);
+  assert.deepEqual(store.load().study.day, '2026-11-15', 'left alone');
+  for (const bad of [{ day: 'x', streak: 2, best: 2 }, { day: '2026-11-15', streak: 0, best: 2 }, { day: '2026-11-15', streak: 1.5, best: 2 }, 3]) {
+    m.set(LEADERBOARD.eduKey, JSON.stringify({ v: 2, cards: {}, recent: [], study: bad }));
+    assert.equal('study' in createEduStore(st).load(), false, JSON.stringify(bad));
+  }
+  m.set(LEADERBOARD.eduKey, JSON.stringify({ v: 2, cards: {}, recent: [], study: { day: '2026-11-15', streak: 5, best: 2 } }));
+  assert.deepEqual(createEduStore(st).load().study, { day: '2026-11-15', streak: 5, best: 5 }, 'the best is never below the streak');
+  store.clear();
+  assert.equal('study' in createEduStore(st).load(), false, 'Clear wipes it with the rest');
+});
+
 test('countersAfterRun (plan 26): the 🤓 streak moves and a graded run joins the average; pure', () => {
   const before = { revives: 2, perfectStreak: 1, gradedRuns: 1, gradeSum: 10000 };
   const perfect = eduRunFacts({ answered: 5, right: 5 }, { full: true });

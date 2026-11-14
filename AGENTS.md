@@ -570,7 +570,14 @@ level row, the grade), so `endRun` keeps it in the education store as `pending` 
 Play again restart Play: `finishPendingEducation` in `create`, then a sync) or at the next page load;
 nothing reaches the 📚 board before. A lost run is recorded at once. Under test mode a bonus answer
 counts nowhere. Your own **profile**, with education unlocked, ends with a 📚 Education section: the
-average grade, the graded runs and the eight badges.
+average grade, the graded runs, and (plan 26 A2, Michael's checklist; your own profile only, never shared)
+🔥 Learning streak, ❤️‍🔥 Longest streak and Highest level unlocked (`eduProfileRows`, `Stats.eduView`), then the
+eight badges. **Learning streaks**: a local day on which at least one card was answered and saved in an
+education run (any quiz; never a test run or under test mode) is a study day; `quizAnswer`'s one write
+(`eduStore.answer(id, record, { studyDay })`) moves the store's `study` { day, streak, best } by
+`nextStudyStreak` (the same or an earlier day changes nothing and the stored day never goes back, the next day
+adds one, a gap starts over and keeps the best), and `studyStreakNow` reads it (0 once a day is missed). Day
+gaps come from the date keys (`localDayKey`), never from milliseconds.
 **What leaves the device, and only by choice** (plan 21, Stage 3b): the **📚 Education data** panel
 (`src/ui/eduDataPanel.js`, a DOM panel like the user panel; from a button in the user panel shown
 while the mode is unlocked, the 📚 board's footer and the profile's row; `Play.openEduData`). An "I
@@ -851,7 +858,9 @@ src/
                             each card's record and the last cards shown, and (plan
                             22) the education counters and badges: addRevive,
                             endRun(facts), unlock(ids, day); plan 26 A2: answer's
-                            paidDay and the paid { day, ids } record, paidOn), dueCount
+                            paidDay and the paid { day, ids } record, paidOn;
+                            studyDay and the study { day, streak, best } record,
+                            nextStudyStreak / studyStreakNow), dueCount
                             (the 📚 switch's count), cardText (zh-Hans when a card has
                             it) / optionText, cardSource (short citations: "Martinsen
                             et al. 2005"), EDUCATION_EMOJI. Fully unit-tested
@@ -1030,6 +1039,8 @@ src/
                             howToItems, pauseBannerText, metaFontSize, welcomeText,
                             levelBannerText(locale, level, levels) ("Tap to
                             continue" in every break since plan 26's A2),
+                            eduProfileRows (your own profile's learning streaks and
+                            highest level unlocked, plan 26 A2),
                             countText (a coin count beside the corn kernel: "12", or
                             ∞ for a test run's purse; locale-free).
                             Player copy lives here (not in logic.js). See
@@ -1761,7 +1772,9 @@ src/
                             nothing (the own: the career store, topped up by the
                             server when named; offline / unnamed notes). Sections in
                             a scroll view (statsLayout): Singleplayer, Daily Dump
-                            podiums, Tournaments (medals, biggest rival), Career (a
+                            podiums, Tournaments (medals, biggest rival), 📚 Education
+                            on an unlocked device (eduView; your own adds the learning
+                            streaks and the highest level unlocked: plan 26 A2), Career (a
                             glyph grid of the 13 counters, CAREER, five to a row), Achievements
                             (earned, then the rest dimmed with lifetime progress; for
                             others only open quests). Every cell is a zone (sv.link)
@@ -2040,7 +2053,9 @@ tests/                      node --test (schema.test.js, pilot.test.js, eduBoard
                             card.yml declares); openExternalUrl paths; feedback
                             i18n keys
   i18n.test.js              catalog key parity, zh≠en (allowlist), TRANSLATION_NOTES
-                            key coverage, scene English denylist, initialLocale
+                            key coverage, scene English denylist, initialLocale;
+                            plan 26 A2: the wait line, the count lines, the popup's
+                            words, eduProfileRows
   share.test.js             shareMode branches, shareScoreImage (share
                             called synchronously, cancel, error → download, download
                             name + revoke, never rejects)
@@ -2181,7 +2196,9 @@ tests/                      node --test (schema.test.js, pilot.test.js, eduBoard
                             Plan 25: a break's own order, counted cards before early
                             reviews, missed counts, the drain test with any recent gap,
                             unlockLevel, bury and the local day; plan 26 A2: the paid
-                            record
+                            record, the study record and the streak helpers (same
+                            day, next day, a gap, an earlier day, month and year
+                            ends)
   questions.test.js         src/questions.js: decks, ids, a question and three
                             different options per card, text limits, complete zh versions (skipped while no
                             card has one), references cited and existing, enough live

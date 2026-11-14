@@ -6,9 +6,10 @@ import { createScrollView } from '../ui/scrollView.js';
 import { createButton } from '../ui/button.js';
 import { createInfoCard } from '../ui/infoCard.js';
 import { TAG_GLYPHS } from '../leaderboard.js';
-import { t, metaFontSize, levelLabel, badgeTitle, badgeDesc, dailyDayText } from '../i18n.js';
+import { t, metaFontSize, levelLabel, badgeTitle, badgeDesc, dailyDayText, eduProfileRows } from '../i18n.js';
 import { ACHIEVEMENTS, EDU_ACHIEVEMENTS, achievementById, averageGrade, openQuests, progressOf } from '../achievements.js';
 import { validateName } from '../save.js';
+import { localDayKey, studyStreakNow } from '../education.js';
 
 const STYLE = { fontFamily: 'sans-serif', fontStyle: 'bold', color: '#ffffff', align: 'center' };
 const PINK = '#f8a0c8';
@@ -197,16 +198,18 @@ export class Stats extends Phaser.Scene {
   /**
    * The 📚 Education section's data (your own profile, education unlocked): this device's education
    * counters, the average grade (null before the first graded run), and the education badges held
-   * (oldest first) and still to earn.
+   * (oldest first) and still to earn; plan 26, A2: the learning streak as of `today` (a local day),
+   * the longest, and the highest level unlocked.
    */
-  eduView(record) {
+  eduView(record, today = localDayKey()) {
     const counters = record?.counters ?? {};
     const held = record?.badges ?? {};
     const earned = Object.entries(held)
       .map(([id, at]) => ({ entry: achievementById(id, EDU_ACHIEVEMENTS), at }))
       .filter((b) => b.entry)
       .sort((a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : 0));
-    return { counters, grade: averageGrade(counters), runs: counters.gradedRuns ?? 0, earned, locked: EDU_ACHIEVEMENTS.filter((e) => !(e.id in held)) };
+    const study = record?.study ?? null;
+    return { counters, grade: averageGrade(counters), runs: counters.gradedRuns ?? 0, earned, locked: EDU_ACHIEVEMENTS.filter((e) => !(e.id in held)), streak: studyStreakNow(study, today), best: study?.best ?? 0, level: record?.unlockedLevel ?? 1 };
   }
 
   /**
@@ -370,6 +373,8 @@ export class Stats extends Phaser.Scene {
       y += 52;
       row('statsEduGrade', edu.grade === null ? DASH : `${edu.grade.toFixed(1)} %`, edu.grade === null ? '#ffffff' : GOLD);
       row('statsEduRuns', String(edu.runs));
+      // Your own learning streaks and the highest level unlocked (plan 26, A2): this device's, never shared.
+      if (view.own) for (const [key, value] of eduProfileRows(locale, edu)) row(key, value);
       if (view.own) {
         const rowY = y;
         row('statsEduShared', t(locale, edu.shared ? 'statsEduSharedOn' : 'statsEduSharedOff'), PINK);
