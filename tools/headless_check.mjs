@@ -3881,6 +3881,47 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         const box = (id) => evaluate(`JSON.stringify(${play}.eduBreakBoxes.${id})`).then(JSON.parse);
         const sk0 = await sideNow();
         ok(sk0.lb && sk0.quit && sk0.noSkip, `level ${sk0.level}'s break offers Quit and no level skip (Skip ▸ is gone: plan 26, A2)`);
+        // The level choice (plan 26, A2: Michael's image 12): caught up, [◀] LV n [▶] right of the poop
+        // cycles the levels unlocked (4 by now, so 1 to 4), wrapping; the title, the bar's label and the
+        // background follow, and the run's level does not move until it continues.
+        const pickView = () => evaluate(`(() => { const p = ${play}; return JSON.stringify({ shown: p.levelPickShown(), label: p.levelPickLabel.visible ? p.levelPickLabel.text : null, level: p.level, pick: p.breakLevelPick, title: p.levelTitle.text, bar: p.levelBar.labelText(), fill: p.levelBar.value(), bg: p.bgColor.fillColor, pipes: p.pipesPassed, spawned: p.pipesSpawned, score: p.score, speed: p.diff.pipeSpeed, skipped: p.runSkipped, state: p.state, lb: p.levelBreak }); })()`).then(JSON.parse);
+        const levelFacts = (n) => evaluate(`Promise.all([import('./src/logic.js'), import('./src/config.js')]).then(([lg, c]) => JSON.stringify({ bg: lg.levelColor(${n}, c.LEVEL_COLORS, c.TUNING.levels.whiteBlend), start: lg.levelEnd(${n} - 1, ${play}.tune), speed: lg.levelSpeed(${n}, c.TUNING) }))`).then(JSON.parse);
+        const tapBox = async (id) => {
+          const b = await box(id);
+          await tapAt(b.x, b.y);
+          await sleep(150);
+        };
+        const lp0 = await pickView();
+        ok(lp0.shown && lp0.label === 'LV 2' && lp0.pick === null, `caught up, the break offers the level choice: "${lp0.label}"`);
+        await tapBox('levelUp');
+        await sleep(TT.levels.fadeMs + 100);
+        const lp1 = await pickView();
+        const l3 = await levelFacts(3);
+        ok(lp1.label === 'LV 3' && lp1.level === 2 && lp1.title.startsWith('LEVEL 3') && lp1.bar === 'LV 3' && lp1.fill === 0 && lp1.bg === l3.bg && lp1.state === 'paused' && lp1.lb, `▶ shows level 3 ("${lp1.title}", the bar's "${lp1.bar}", its colour) while the run is still at level ${lp1.level}; the break stays`);
+        await tapBox('levelUp');
+        await tapBox('levelUp');
+        const lp2 = await pickView();
+        await tapBox('levelDown');
+        const lp3 = await pickView();
+        ok(lp2.label === 'LV 1' && lp3.label === 'LV 4', `past the last level unlocked it wraps (▶ to ${lp2.label}), and ◀ wraps back (${lp3.label})`);
+        await evaluate(`${play}.resumePlay(), true`);
+        await sleep(300);
+        const lp4 = await pickView();
+        const l4 = await levelFacts(4);
+        ok(lp4.state === 'playing' && lp4.level === 4 && lp4.pipes === l4.start && lp4.spawned >= l4.start && lp4.speed === l4.speed && lp4.score === lp3.score && lp4.skipped && lp4.bg === l4.bg && lp4.bar === 'LV 4', `continuing goes on from level 4's first pair (${lp4.pipes} pairs passed) at its speed, the score left at ${lp4.score}, the run no longer full`);
+        // Back to an easy level: from level 5's break (5 is the top now), ▶ wraps to level 1; the run
+        // plays level 1 from its first pair and reaches its finish line once its pairs are spawned.
+        await toBreak();
+        await tapBox('levelUp');
+        const lp5 = await pickView();
+        await evaluate(`${play}.resumePlay(), true`);
+        await sleep(300);
+        const lp6 = await pickView();
+        await evaluate(`import('./src/logic.js').then((lg) => { const p = ${play}; p.poop.body.setAllowGravity(false); p.poop.setVelocity(0, 0); p.poop.y = 640; p.graceLeftMs = 1e9; p.pipesSpawned = lg.levelEnd(1, p.tune); p.distanceSinceSpawn = 1e9; return true; })`);
+        for (let i = 0; i < 20 && !(await evaluate(`Boolean(${play}.finishSpawned)`)); i += 1) await sleep(50);
+        const finish = await evaluate(`Boolean(${play}.finishSpawned)`);
+        ok(lp5.label === 'LV 1' && lp6.level === 1 && lp6.pipes === 0 && lp6.spawned <= 4 && finish, `from level 5's break ▶ wraps to level 1; the run plays level 1 from its first pair, and its finish line comes once its pairs are spawned (${JSON.stringify({ label: lp5.label, level: lp6.level, pipes: lp6.pipes, spawned: lp6.spawned, finish })})`);
+        await toBreak();
         const quitBox = await box('quit');
         await tapAt(quitBox.x, quitBox.y);
         await sleep(200);
@@ -4287,14 +4328,14 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         ).then(JSON.parse);
         await evaluate(`${play}.refreshLevelBanner(), true`);
         await sleep(100);
-        const gateView = () => evaluate(`JSON.stringify({ gated: ${play}.breakGated(), hint: ${play}.levelHint.text, sub: ${play}.levelSubHint.visible ? ${play}.levelSubHint.text : null, still: ${play}.levelHint.scale === 1 && !${play}.levelHintGlow.visible, unlocked: ${play}.eduStore.load().unlockedLevel, state: ${play}.state, lb: ${play}.levelBreak })`).then(JSON.parse);
+        const gateView = () => evaluate(`JSON.stringify({ pick: ${play}.levelPickShown(), gated: ${play}.breakGated(), hint: ${play}.levelHint.text, sub: ${play}.levelSubHint.visible ? ${play}.levelSubHint.text : null, still: ${play}.levelHint.scale === 1 && !${play}.levelHintGlow.visible, unlocked: ${play}.eduStore.load().unlockedLevel, state: ${play}.state, lb: ${play}.levelBreak })`).then(JSON.parse);
         const gate0 = await gateView();
         await sleep(TT.retryLockoutMs + 100);
         await chrome('tap');
         await sleep(200);
         const gate1 = await gateView();
         const [continueHint, gateTap] = await Promise.all(['levelContinue', 'levelGateTap'].map(tx));
-        ok(gate0.gated && gate0.unlocked === 2 && gate0.hint === continueHint && gate0.sub === null && gate0.still && gate1.state === 'paused' && gate1.lb, `a break with cards due holds, even into a level already unlocked (plan 26): the hint reads "${gate0.hint}" and holds still (plan 26, A2), and a tap does not continue`);
+        ok(gate0.gated && !gate0.pick && gate0.unlocked === 2 && gate0.hint === continueHint && gate0.sub === null && gate0.still && gate1.state === 'paused' && gate1.lb, `a break with cards due holds, even into a level already unlocked (plan 26): the hint reads "${gate0.hint}" and holds still (plan 26, A2), and a tap does not continue`);
         ok(gate1.sub === gateTap && gate1.hint === continueHint, `the refused tap adds a line under it: "${gate1.sub}"`);
         await reopen();
         await answerRight();
@@ -4303,7 +4344,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await sleep(300);
         await sleep(200);
         const gate2 = await gateView();
-        ok(!gate2.gated && gate2.hint === continueHint && gate2.sub === null && !gate2.still, `the due cards answered right, the gate opens: "${gate2.hint}" pulses again and the line is gone`);
+        ok(!gate2.gated && gate2.pick && gate2.hint === continueHint && gate2.sub === null && !gate2.still, `the due cards answered right, the gate opens: "${gate2.hint}" pulses again, the line is gone, and the level choice shows (none while it held)`);
         // Skip (plan 26, A2; Bury before it): at the gate, the missed card on show is skipped for 3 × the
         // level cleared. The first Skip in a break warns and holds; the next press pays, sends the card to
         // tomorrow and moves on. A press right after the next card appears does nothing (the double tap on

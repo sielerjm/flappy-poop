@@ -372,6 +372,82 @@ test("the shop pill's place (plan 26, A2): at a run's start it moves into the ed
   assert.deepEqual([at(match.shopButtonBox), match.shopButton === matchPill], [at(shopButtonLayout(720, 1280, T, 0)), true], 'a match half has no education row: centred, left alone');
 });
 
+/** An education run's level break into `level`, with the choice's preview calls recorded. */
+function levelPickScene({ level = 3, unlocked = 5, gate = false, ...over } = {}) {
+  const store = createEduStore(fakeStorage());
+  store.unlockLevel(unlocked);
+  const calls = [];
+  const s = playScene({
+    eduStore: store, level, levelBreak: true, state: 'paused', runIsEducation: true, runIsTest: false, match: null, registry: registry(), tune: T,
+    shopOpen: false, quizOpen: false, quizButton: {}, breakGate: gate, breakLevelPick: null, runSkipped: false, runTopLevel: level, runStartLevel: 1,
+    refreshLevelBanner: () => calls.push('banner'), refreshLevelBar: () => calls.push('bar'), fadeBackground: (n) => calls.push(`fade:${n}`), refreshShopButton() {},
+    ...over,
+  });
+  return { s, store, calls };
+}
+
+test("the level choice at a break (plan 26, A2: Michael's image 12): shown once nothing is missed or due; ◀ ▶ cycle 1 to the higher of the next level and the levels unlocked, wrapping; the title, the bar and the background follow; the run's level does not move until it continues", () => {
+  const { s, calls } = levelPickScene();
+  assert.deepEqual([s.levelPickShown(), s.breakShownLevel()], [true, 3]);
+  s.stepBreakLevel(1);
+  assert.deepEqual([s.breakLevelPick, s.breakShownLevel(), s.level], [4, 4, 3], '▶: level 4 is shown, the run is still at 3');
+  assert.deepEqual(calls, ['banner', 'bar', 'fade:4'], 'the title, the bar and the background follow the choice');
+  s.stepBreakLevel(1);
+  s.stepBreakLevel(1);
+  assert.equal(s.breakShownLevel(), 1, 'past the levels unlocked (5) it wraps to 1');
+  s.stepBreakLevel(-1);
+  assert.equal(s.breakShownLevel(), 5, '◀ wraps back');
+  s.stepBreakLevel(-1);
+  s.stepBreakLevel(-1);
+  assert.deepEqual([s.breakShownLevel(), s.breakLevelPick], [3, null], 'back at the next level: no choice made');
+  const fresh = levelPickScene({ level: 4, unlocked: 2 }).s;
+  fresh.stepBreakLevel(1);
+  assert.equal(fresh.breakShownLevel(), 1, 'the next level counts as unlocked though the store says 2 (it unlocks as the run continues)');
+  for (const [name, over] of [['gated', { gate: true }], ['a test run', { runIsTest: true }], ['a match', { match: {} }], ['the shop open', { shopOpen: true }], ['the quiz open', { quizOpen: true }]]) {
+    const x = levelPickScene(over).s;
+    x.stepBreakLevel(1);
+    assert.deepEqual([x.levelPickShown(), x.breakLevelPick], [false, null], `${name}: no choice`);
+  }
+});
+
+test('the level choice is dropped when it stops being offered (the gate comes back after a miss, test mode turns on), and the background goes back (plan 26, A2)', () => {
+  const { s, calls } = levelPickScene({ quizButton: absorb(), quizCountLine: absorb(), quizCountChip: absorb(), breakQuitButton: absorb(), levelPickUi: null, locale: 'en', quizCounts: () => ({ new: 1, missed: 0, review: 0 }), breakQuitArmedAt: null, time: { now: 0 } });
+  s.stepBreakLevel(1);
+  calls.length = 0;
+  s.breakGate = true;
+  s.refreshQuizButton();
+  assert.deepEqual([s.breakLevelPick, calls], [null, ['banner', 'bar', 'fade:3']], 'dropped, and the preview back to the next level');
+});
+
+test('continuing into the chosen level (plan 26, A2): from that level\'s first pair, forward or back; both pipe counters reset (the finish line needs them equal); pipes on the field are counted as passed; the score left alone; the run no longer full', async () => {
+  const { levelEnd } = await import('../src/logic.js');
+  const pipes = [{ d: { scoring: true, passed: false } }, { d: { scoring: false } }].map((p) => ({ getData: (k) => p.d[k], setData: (k, v) => { p.d[k] = v; }, d: p.d }));
+  for (const pick of [5, 1]) {
+    const { s } = levelPickScene({ pipesPassed: levelEnd(2, T), pipesSpawned: levelEnd(2, T) + 2, score: 77, pipes: { getChildren: () => pipes } });
+    s.breakLevelPick = pick;
+    s.applyLevelPick();
+    assert.deepEqual([s.level, s.pipesPassed, s.pipesSpawned, s.score, s.runSkipped, s.breakLevelPick], [pick, levelEnd(pick - 1, T), levelEnd(pick - 1, T), 77, true, null], `to level ${pick}`);
+    assert.equal(pipes[0].d.passed, true, 'a pair still on the field is not scored again into the new count');
+    assert.equal(s.runTopLevel, Math.max(3, pick), 'the highest level reached follows');
+    assert.equal(s.eduFactsNow().full, false, 'a run that changed level is not full (no 💯 / 🤓)');
+  }
+  const same = levelPickScene({ pipesPassed: levelEnd(2, T), pipesSpawned: levelEnd(2, T), score: 9, pipes: { getChildren: () => [] } }).s;
+  same.applyLevelPick();
+  assert.deepEqual([same.level, same.runSkipped], [3, false], 'no choice: the run goes on as it was, still full');
+});
+
+test("prices follow the highest level the run has reached (plan 26, A2, Michael's choice): going back to an easy level never makes the shop or a Skip cheaper", async () => {
+  const { eduShopPrices } = await import('../src/education.js');
+  const { s } = levelPickScene({ level: 2, runTopLevel: 6 }); // back at level 1, now at the break into 2, having reached 6
+  assert.deepEqual(s.shopPrices(), eduShopPrices(6), 'the shop at level 6\'s prices');
+  assert.equal(s.buryPrice(), T.education.buryCoinsPerLevel * 5, "a Skip at level 6's: 3 × the 5 cleared");
+  const natural = levelPickScene({ level: 4, runTopLevel: 4 }).s;
+  assert.deepEqual([natural.shopPrices(), natural.buryPrice()], [eduShopPrices(4), T.education.buryCoinsPerLevel * 3], 'a run that never went back: as before');
+  const picked = levelPickScene({ level: 3, runTopLevel: 3 }).s;
+  picked.stepBreakLevel(-1);
+  assert.deepEqual(picked.shopPrices(), eduShopPrices(3), 'a choice made in the break moves no price before the run continues');
+});
+
 test("Skip a card (plan 26, A2, in place of Bury): every kind of card costs 3 × the level cleared; a due card (stored, or missed in this break) also goes to tomorrow, leaves the gate and counts toward the day's 3; a new or practice card just moves on; a skip is no answer", () => {
   const now = Date.now();
   const store = createEduStore(fakeStorage());

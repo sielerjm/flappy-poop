@@ -447,7 +447,8 @@ answer pays there). A card already paid today pays nothing more, even missed on 
 right; `quizAnswer` returns `paidToday`, and the card shows "🌽 already earned today" (`quizPaidToday`,
 `Quiz.paidNote`) small and muted beside "Right!", on the verdict's row, so the card grows no taller. A
 wrong answer never costs corn or points. The shop's prices are `eduShopPrices(level)` (`Play.shopPrices`; `buyBlocker` takes
-`prices`). **What is waiting**, as in Anki (`cardCounts`: new, missed (a miss of this break
+`prices`), at the highest level the run has reached (`runTopLevel`, plan 26 A2, Michael's choice; a Skip's
+`buryPrice` too), so going back to an easy level never makes them cheaper. **What is waiting**, as in Anki (`cardCounts`: new, missed (a miss of this break
 included) and review cards a quiz can still ask now; `Play.quizCounts`): three numbers in blue, red
 and green on the chip under Review (`ui/countLine.js`; none in a test run; a tap, or A on
 their ring item, opens "Waiting in this quiz": `toggleBreakCounts`, `countLines`), and on the card
@@ -478,7 +479,19 @@ event. A revive and the bonus quiz have none. **Quit**: Quit takes two taps and 
 when nothing is due and something was answered; with cards due, or with nothing answered, it counts as
 quitting the run (`breakGaveUp`: ungraded, and 🏳️ with nothing answered; plan 26, A2). It reads Quit
 either way; armed it reads "Quit? Tap again", or "Quit ungraded? Tap again" while cards are due
-(`breakQuitDueSure`). **Start level**: with a later level
+(`breakQuitDueSure`). **The level choice** (plan 26, A2: Michael's image 12): once nothing is missed or due
+(`breakGate`), never in a test run (or with test mode on) or a match, **[◀] LV n [▶]** shows right of the poop
+(`eduBreakLayout`'s `levelDown` / `levelLabel` / `levelUp`, `levelStrip` swallowing the tap; ring items `levelDown`,
+`levelUp`). ◀ ▶ cycle 1 … the higher of the next level and `unlockedLevel`, wrapping (`stepBreakLevel` →
+`nextEduStartLevel`; `breakLevelPick`, null for the next level). During the break only the preview follows it
+(`breakShownLevel`: the banner's title, the bar's label with an empty fill, `fadeBackground(level)`); the quiz,
+the tally, the shop and Skip keep reading the run's level. It is dropped, the preview going back, when it
+stops being offered (the gate back after a miss, test mode on: `refreshQuizButton` → `dropLevelPick`). On
+continue, `endLevelBreak` unlocks the next level as always, then `applyLevelPick`: the run goes on from the
+chosen level's first pair (`testRunStart(pick, this.tune)`), forward or back, both pipe counters reset
+together (the finish line needs `pipesSpawned` to equal the level's end), pipes still on the field counted
+as passed; the score and the bean guarantee are left alone, `runSkipped` makes the run not full, and a
+replayed level plays and pays as that level always does. **Start level**: with a later level
 unlocked, the 📚 popup's ◀ LV n ▶ sets it (settings `eduStartLevel`; on the ready screen's 📚 row
 until plan 26); the run starts there through `testRunStart`. 💯 and the 🤓 streak
 count only **full** runs (`eduRunFacts`' `full`: from level 1, nothing skipped, won). **The run's
@@ -737,7 +750,7 @@ src/
                             the levels unlocked), eduBreakLayout (an education
                             break, plan 26 and its A2: the banner's titleY, Shop |
                             Review | Quit on one row, the numbers' chip under
-                            Review),
+                            Review, the level choice's ◀ LV n ▶ right of the poop),
                             LAST_UPDATED, issueUrl, openExternalUrl, chromeIntent
                             (inputs incl. 'changelog'; a Changelog over About closes
                             back to About without the lockout),
@@ -2173,7 +2186,10 @@ tests/                      node --test (schema.test.js, pilot.test.js, eduBoard
                             cards, the gate, a test run free, none outside a break),
                             Skip ▸ gone; a wrong
                             answer costs nothing; every card pays once a local day,
-                            practice included; a test run pays every right answer
+                            practice included; a test run pays every right answer;
+                            the gate's line; the shop pill's place; the level
+                            choice (steps, wrap, dropped, applied forward and back,
+                            not full) and the top-level prices
   pilot.test.js             the tester pilot end to end: Play's pilot methods, the
                             real stores and leaderboard.js calls and the real save and
                             education data panels, against db/schema.sql through

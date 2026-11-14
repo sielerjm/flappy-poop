@@ -701,8 +701,10 @@ export function bracketButtonLayout(width, height, t, x0 = 0) {
  * (titleY, hintY); [🌽 Shop] [📚 Review] [Quit] on one row where the 💰 pill sits (shopButtonLayout's
  * y), 216 px each, 12 apart, so the three fit a phone; under Review, inside its width, the three
  * numbers on a dark rounded chip (`chip`, with the count line's box `counts` inside it). The poop bobs
- * at the left under the row (levels.breakPoopY), clear of the tray. Play moves the shop pill into
- * `shop` at an education run's start (placeShopPill). `x0` = the column's left edge.
+ * at the left under the row (levels.breakPoopY), clear of the tray; right of it, at its height, the
+ * level choice [◀] LV n [▶] (`levelDown`, `levelLabel`, `levelUp`; `levelStrip` covers the three, so a
+ * tap anywhere on it never continues). Play moves the shop pill into `shop` at an education run's
+ * start (placeShopPill). `x0` = the column's left edge.
  */
 export function eduBreakLayout(width, height, t, x0 = 0) {
   const centre = shopButtonLayout(width, height, t, x0);
@@ -714,8 +716,14 @@ export function eduBreakLayout(width, height, t, x0 = 0) {
   const quit = at('quit', 1);
   const chip = { id: 'quizCounts', x: review.x, y: review.y + pill.height / 2 + 8 + 26, width: pill.width, height: 52 };
   const counts = { id: 'quizCounts', x: chip.x, y: chip.y, width: chip.width - 24, height: 44 };
+  const levelY = t.levels.breakPoopY + 12;
+  const step = { width: t.trayHitMin, height: t.trayHitMin };
+  const levelLabel = { id: 'levelLabel', x: centre.x + 100, y: levelY, width: 168, height: t.trayHitMin };
+  const levelDown = { id: 'levelDown', x: levelLabel.x - levelLabel.width / 2 - 16 - step.width / 2, y: levelY, ...step };
+  const levelUp = { id: 'levelUp', x: levelLabel.x + levelLabel.width / 2 + 16 + step.width / 2, y: levelY, ...step };
+  const levelStrip = { id: 'levelStrip', x: levelLabel.x, y: levelY, width: levelUp.x + step.width / 2 - (levelDown.x - step.width / 2), height: t.trayHitMin };
   const titleY = Math.round(height * 0.4) - 72;
-  return { shop, review, quit, chip, counts, titleY, hintY: titleY + 72 };
+  return { shop, review, quit, chip, counts, levelDown, levelLabel, levelUp, levelStrip, titleY, hintY: titleY + 72 };
 }
 
 /** 'shop' when (x, y) is on the 💰 button, else null. */

@@ -539,6 +539,11 @@ export class Play extends Phaser.Scene {
     this.quizButton = this.quizButtonBox ? createButton(this, this.quizButtonBox, `${EDUCATION_EMOJI} ${t(this.locale, 'reviewPill')}`, { ...TEXT_STYLE, fontSize: '36px', color: '#f8a0c8' }, { depth: 27 }).setVisible(false) : null;
     // Quit beside Review (plan 25, B8; plan 26, Michael's sketch: refreshQuizButton). Skip ▸ (levels) is gone since plan 26's A2.
     const sideStyle = { ...TEXT_STYLE, fontSize: '30px', color: '#f8a0c8' };
+    // The level choice, [◀] LV n [▶], right of the poop (plan 26, A2: refreshLevelPickUi).
+    const eb = this.eduBreakBoxes;
+    this.levelPickDown = eb ? createButton(this, eb.levelDown, '◀', sideStyle, { depth: 27 }).setVisible(false) : null;
+    this.levelPickUp = eb ? createButton(this, eb.levelUp, '▶', sideStyle, { depth: 27 }).setVisible(false) : null;
+    this.levelPickLabel = eb ? this.add.text(eb.levelLabel.x, eb.levelLabel.y, '', { ...TEXT_STYLE, fontSize: '36px' }).setOrigin(0.5).setDepth(27).setVisible(false) : null;
     this.breakQuitButton = this.eduBreakBoxes ? createButton(this, this.eduBreakBoxes.quit, t(this.locale, 'breakQuit'), sideStyle, { depth: 27 }).setVisible(false) : null;
     // The numbers on a dark rounded chip under Review, inside its width (plan 26, A2: Michael's images 2 and 9).
     const chip = this.eduBreakBoxes?.chip;
@@ -581,6 +586,8 @@ export class Play extends Phaser.Scene {
             ...(this.quizButtonBox ? [{ id: 'quiz', box: this.quizButtonBox, depth: 27, visible: () => this.quizButtonShown(), activate: () => this.handleChrome('quiz') }] : []),
             ...(this.quizCountsBox ? [{ id: 'quizCounts', box: this.quizCountsBox, depth: 27, visible: () => this.quizButtonShown() && this.quizCountLine.visible, activate: () => this.toggleBreakCounts() }] : []),
             ...(this.eduBreakBoxes ? [{ id: 'breakQuit', box: this.eduBreakBoxes.quit, depth: 27, visible: () => this.quizButtonShown(), activate: () => this.breakQuitTap() }] : []),
+            ...(this.eduBreakBoxes ? [{ id: 'levelDown', box: this.eduBreakBoxes.levelDown, depth: 27, visible: () => this.levelPickShown(), activate: () => this.stepBreakLevel(-1) }] : []),
+            ...(this.eduBreakBoxes ? [{ id: 'levelUp', box: this.eduBreakBoxes.levelUp, depth: 27, visible: () => this.levelPickShown(), activate: () => this.stepBreakLevel(1) }] : []),
             { id: 'shopClose', box: this.shopBoxes.close, depth: 29, visible: () => this.shopOpen, activate: () => this.handleChrome('esc') },
             ...this.shopBoxes.rows.map((row) => ({ id: `shop:${row.id}`, box: row, depth: 28, visible: () => this.shopOpen, activate: () => this.shopBuy(row.id) })),
           ],
@@ -815,6 +822,8 @@ export class Play extends Phaser.Scene {
     const startLevel = this.runIsTest ? this.testSettings().startLevel : this.runIsEducation ? this.eduStartLevel() : 1;
     const begin = daily ? dailyRunStart(daily.level, this.tune) : testRunStart(startLevel, this.tune);
     this.runStartLevel = begin.level; // a full run (💯, 🤓) starts at level 1 and skips nothing (plan 25)
+    this.runTopLevel = begin.level; // the highest level this run has been on: the shop's and Skip's prices (plan 26, A2)
+    this.breakLevelPick = null; // a level chosen at a break (plan 26, A2), applied when the break ends
     this.runSkipped = false;
     this.breakGaveUp = false; // Quit at a break with cards due, or with nothing answered (plan 25; plan 26, A2)
     this.breakQuitArmedAt = null;
@@ -882,10 +891,10 @@ export class Play extends Phaser.Scene {
     return this.dailyStore.save({ day: this.daily.day, playerId: this.daily.playerId, level: this.daily.level, score: this.score, pipes, collected: { ...this.collected }, final });
   }
 
-  /** Crossfade the background to the current level's colour (used at each break). */
-  fadeBackground() {
+  /** Crossfade the background to `level`'s colour (the current level's at each break; a level chosen there: plan 26, A2). */
+  fadeBackground(level = this.level) {
     const from = this.bgColor.fillColor;
-    const to = levelColor(this.level, LEVEL_COLORS, T.levels.whiteBlend);
+    const to = levelColor(level, LEVEL_COLORS, T.levels.whiteBlend);
     this.bgFade?.stop();
     const o = { f: 0 };
     this.bgFade = this.tweens.add({
@@ -897,10 +906,11 @@ export class Play extends Phaser.Scene {
     });
   }
 
-  /** Bar label and fill for the current level and pipes passed. */
+  /** Bar label and fill for the current level and pipes passed; in a break, the level chosen there (plan 26, A2), empty. */
   refreshLevelBar() {
-    this.levelBar?.setLabel(levelLabel(this.locale, this.level));
-    this.levelBar?.setProgress(levelProgress(this.pipesPassed, this.level, this.tune));
+    const level = this.levelBreak ? this.breakShownLevel() : this.level;
+    this.levelBar?.setLabel(levelLabel(this.locale, level));
+    this.levelBar?.setProgress(level === this.level ? levelProgress(this.pipesPassed, this.level, this.tune) : 0);
   }
 
   /** The checkered line one spacing after a level's last pair, at the right edge or `shift` px left of it; crossing it ends the level. */
@@ -922,6 +932,7 @@ export class Play extends Phaser.Scene {
     const final = isFinalLevel(this.level, T);
     if (!final) {
       this.level += 1;
+      this.runTopLevel = Math.max(this.runTopLevel ?? 0, this.level);
       this.refreshLevelBar(); // new level: label steps, fill back to 0
     }
     this.playSample('level-up', T.levelUpVolume, sfx.levelUp);
@@ -960,7 +971,7 @@ export class Play extends Phaser.Scene {
     // once per break event, and kept for syncLevelHint (breakGated reads the store: never per frame).
     this.breakGate = this.breakGated();
     if (!this.breakGate) this.gateTapped = false; // the gate opened: its line goes
-    const [title, hint] = levelBannerText(this.locale, this.level, LEVELS).split('\n');
+    const [title, hint] = levelBannerText(this.locale, this.levelBreak ? this.breakShownLevel() : this.level, LEVELS).split('\n');
     const eduRows = Boolean(this.runIsEducation && !this.match && this.eduBreakBoxes);
     const titleY = eduRows ? this.eduBreakBoxes.titleY : GAME_HEIGHT * 0.4;
     this.levelTitle?.setY(titleY);
@@ -1063,6 +1074,7 @@ export class Play extends Phaser.Scene {
     this.breakMissed = []; // each break starts with nothing missed (plan 25)
     this.quizSkipWarned = false; // the first Skip in each break warns (plan 26, A2)
     this.gateTapped = false; // the gate's line shows only after a refused tap in this break (plan 26, A2)
+    this.breakLevelPick = null; // no level chosen yet (plan 26, A2)
     this.refreshLevelBanner();
     this.pausePlay();
     this.breakHud(true);
@@ -1104,6 +1116,7 @@ export class Play extends Phaser.Scene {
     this.closeShop({ silent: true }); // never left open into the level (a match's shared start waits for it anyway)
     // An education run continuing into this level unlocks it as a start level (plan 25); a test run never does.
     if (this.runIsEducation && !this.runIsTest) this.eduStore.unlockLevel(this.level);
+    this.applyLevelPick(); // a level chosen at this break: the run goes on from its first pair (plan 26, A2)
     this.levelBreak = false;
     this.gateTapped = false;
     this.breakHud(false);
@@ -1121,6 +1134,7 @@ export class Play extends Phaser.Scene {
     this.armKernel(); // the new level's guaranteed kernel
     this.crashesThisLevel = 0;
     this.prefillPipes();
+    this.refreshLevelBar();
   }
 
   flap(pointer) {
@@ -1217,6 +1231,12 @@ export class Play extends Phaser.Scene {
     const onBox = (box) => pointer && box && Math.abs(pointer.x - box.x) <= box.width / 2 && Math.abs(pointer.y - box.y) <= box.height / 2;
     if (this.quizButtonShown() && onBox(this.eduBreakBoxes?.quit)) {
       this.breakQuitTap(); // Quit (plan 25): never a continue tap
+      return;
+    }
+    if (this.levelPickShown() && onBox(this.eduBreakBoxes?.levelStrip)) {
+      // The level choice (plan 26, A2): ◀ / ▶ step it; the label between them does nothing; never a continue tap.
+      if (onBox(this.eduBreakBoxes.levelDown)) this.stepBreakLevel(-1);
+      else if (onBox(this.eduBreakBoxes.levelUp)) this.stepBreakLevel(1);
       return;
     }
     if (pointer && this.quizButtonShown() && this.quizCountLine?.visible && Math.abs(pointer.x - this.quizCountsBox.x) <= this.quizCountsBox.width / 2 && Math.abs(pointer.y - this.quizCountsBox.y) <= this.quizCountsBox.height / 2) {
@@ -3381,9 +3401,13 @@ export class Play extends Phaser.Scene {
     this.versusHost()?.openPeek?.();
   }
 
-  /** The shop's prices now: shop.prices, or in an education run the level's (eduShopPrices: the level about to be played). */
+  /**
+   * The shop's prices now: shop.prices, or in an education run the level's (eduShopPrices): the
+   * highest level the run has reached (plan 26, A2, Michael's choice), so going back to an easy level
+   * never makes the shop cheaper; in a break that is at least the level about to be played.
+   */
   shopPrices() {
-    return this.runIsEducation ? eduShopPrices(this.level) : T.shop.prices;
+    return this.runIsEducation ? eduShopPrices(Math.max(this.level, this.runTopLevel ?? 0)) : T.shop.prices;
   }
 
   /** The 📚 pill shows in an education run's level break, the shop and the quiz closed. */
@@ -3410,6 +3434,83 @@ export class Play extends Phaser.Scene {
       // One word, Quit, cards due or not (plan 26, A2); armed, it says when the second tap ends the run ungraded.
       this.breakQuitButton.setText(t(this.locale, armed ? (due ? 'breakQuitDueSure' : 'breakQuitSure') : 'breakQuit')).setVisible(shown);
     }
+    if (this.breakLevelPick != null && !this.levelPickOffered()) this.dropLevelPick(); // the gate came back, or test mode turned on
+    this.refreshLevelPickUi();
+  }
+
+  /**
+   * The level choice at an education break (plan 26, A2: Michael's image 12): [◀] LV n [▶] once nothing
+   * is missed or due (breakGate, kept by refreshLevelBanner), never in a test run (or with test mode
+   * on) or a match. It cycles 1 … the higher of the next level and the levels unlocked, wrapping
+   * (nextEduStartLevel). Only the preview follows it during the break (the banner's title, the bar's
+   * label, the background): the quiz, the tally, the shop and Skip keep reading the run's level, so a
+   * choice cannot make them cheap. endLevelBreak applies it (applyLevelPick). null: the next level.
+   */
+  levelPickOffered() {
+    return Boolean(this.levelBreak && this.runIsEducation && !this.runIsTest && !this.isTestMode() && !this.match && !this.breakGate);
+  }
+
+  /** The choice shows: offered, and the break's own buttons show (no shop or quiz over them). */
+  levelPickShown() {
+    return this.levelPickOffered() && this.quizButtonShown();
+  }
+
+  /** The level the break shows: the one chosen, else the next one (this.level). */
+  breakShownLevel() {
+    return this.breakLevelPick ?? this.level;
+  }
+
+  /** ◀ (-1) or ▶ (+1): the next choice, wrapping; the preview follows. */
+  stepBreakLevel(step) {
+    if (!this.levelPickShown()) return;
+    const top = Math.min(Math.max(this.level, this.eduStore.load().unlockedLevel), LEVELS.length);
+    const next = nextEduStartLevel(this.breakShownLevel(), step, top);
+    this.breakLevelPick = next === this.level ? null : next;
+    this.showLevelPick();
+  }
+
+  /** The choice withdrawn (no longer offered): the preview back to the next level. */
+  dropLevelPick() {
+    this.breakLevelPick = null;
+    this.showLevelPick();
+  }
+
+  /** The preview of the level shown: the banner's title, the bar, the background, the choice's label. */
+  showLevelPick() {
+    this.refreshLevelBanner();
+    this.refreshLevelBar();
+    this.fadeBackground(this.breakShownLevel());
+    this.refreshLevelPickUi();
+  }
+
+  refreshLevelPickUi() {
+    if (!this.levelPickLabel) return;
+    const shown = this.levelPickShown();
+    this.levelPickDown.setVisible(shown);
+    this.levelPickUp.setVisible(shown);
+    this.levelPickLabel.setText(levelLabel(this.locale, this.breakShownLevel())).setVisible(shown);
+  }
+
+  /**
+   * At the end of a break with a level chosen (endLevelBreak, after the next level unlocks): the run
+   * goes on from that level's first pair (testRunStart gives the pairs before it), forward or back.
+   * Both pipe counters reset together, since the finish line needs pipesSpawned to equal the level's
+   * end exactly; a pair still on the field is counted as passed, so it scores nothing into the new
+   * count. The score is left as it is, and the run is no longer full (no 💯 / 🤓). The bean guarantee
+   * is left alone. A replayed level plays and pays as that level always does.
+   */
+  applyLevelPick() {
+    const pick = this.breakLevelPick;
+    this.breakLevelPick = null;
+    if (pick != null && pick !== this.level) {
+      const begin = testRunStart(pick, this.tune);
+      this.level = begin.level;
+      this.pipesPassed = begin.pipes;
+      this.pipesSpawned = begin.pipes;
+      this.runSkipped = true;
+      for (const pipe of this.pipes?.getChildren?.() ?? []) if (pipe.getData('scoring')) pipe.setData('passed', true);
+    }
+    this.runTopLevel = Math.max(this.runTopLevel ?? 0, this.level);
   }
 
   /** Is Quit armed (its first tap less than saveClearConfirmMs ago)? */
@@ -3436,6 +3537,7 @@ export class Play extends Phaser.Scene {
     const due = Boolean(counts) && counts.missed + counts.review > 0;
     this.breakGaveUp = due || !((this.runQuiz?.answered ?? 0) > 0);
     this.breakQuitArmedAt = null;
+    this.breakLevelPick = null;
     this.levelBreak = false;
     this.levelTitle?.setVisible(false);
     this.levelHint?.setVisible(false);
@@ -3457,9 +3559,12 @@ export class Play extends Phaser.Scene {
     return Boolean(counts) && counts.missed + counts.review > 0;
   }
 
-  /** A card's Skip (plan 26, A2; a gate's Bury in plan 25, B7): 3 × the level just cleared (education.buryCoinsPerLevel). */
+  /**
+   * A card's Skip (plan 26, A2; a gate's Bury in plan 25, B7): 3 × the level just cleared
+   * (education.buryCoinsPerLevel), counted from the highest level the run has reached, as the shop is.
+   */
   buryPrice() {
-    return T.education.buryCoinsPerLevel * Math.max(1, this.level - 1);
+    return T.education.buryCoinsPerLevel * Math.max(1, Math.max(this.level, this.runTopLevel ?? 0) - 1);
   }
 
   /**

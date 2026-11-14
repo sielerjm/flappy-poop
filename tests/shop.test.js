@@ -78,6 +78,17 @@ test("an education break (eduBreakLayout; plan 26 A2, Michael's checklist): [�
     for (let i = 0; i < boxes.length; i += 1) for (let j = i + 1; j < boxes.length; j += 1) {
       assert.ok(!overlaps(edges(boxes[i]), edges(boxes[j])), `${boxes[i].id} and ${boxes[j].id} do not overlap`);
     }
+    // The level choice (plan 26, A2: Michael's image 12): [◀] LV n [▶] under the row, right of the poop.
+    for (const b of [L.levelDown, L.levelLabel, L.levelUp]) {
+      const e = edges(b);
+      assert.ok(e.left >= x0 + 16 && e.right <= x0 + W - 16, `${b.id} inside the column`);
+      if (x0 === 0) assert.ok(!overlaps(e, poop), `${b.id} clear of the bobbing poop`);
+      assert.ok(!overlaps(e, pauseEdges) && e.top >= edges(L.chip).bottom, `${b.id} clear of ⏸, under the chip`);
+      assert.equal(trayHit(b.x, b.y, trayLayout(W, GAME_HEIGHT, T, x0)), null, `${b.id} not on a tray button`);
+    }
+    assert.ok(L.levelDown.x < L.levelLabel.x && L.levelLabel.x < L.levelUp.x && L.levelDown.y === L.levelUp.y && L.levelDown.width >= T.trayHitMin && L.levelUp.height >= T.trayHitMin, '◀ LV n ▶, thumb-sized');
+    assert.ok(edges(L.levelStrip).left === edges(L.levelDown).left && edges(L.levelStrip).right === edges(L.levelUp).right, 'the strip covers all three (a tap on the label does nothing, but never continues)');
+    if (x0 === 0) assert.ok(edges(L.levelDown).left > px + T.poopRadius, 'right of the poop');
     assert.equal(T.levels.breakPoopY, 920, 'the poop keeps its place (plan 26, A2)');
     assert.ok(poop.top >= edges(L.chip).bottom, 'the poop bobs under the row and the chip');
   }
