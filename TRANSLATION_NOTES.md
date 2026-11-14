@@ -277,6 +277,7 @@ Short, playful, clear. Fit a 720×1280 logical field; How to play / About body w
 | reviveOver | Out of tries: game over. | 机会用完了：游戏结束。 |
 | reviveEnd | End run | 结束本局 |
 | reviveGiveUp | Give up | 放弃 |
+| reviveGiveUpWarn | Giving up ends this run, and its progress is lost. Tap Give up again to end it. (plan 26: shown once per device, on the first press of a revive's Give up, in the verdict's place) | 放弃会结束这一局，本局的进度也会丢失。再点一次“放弃”即可结束。 |
 | reviveFree | No questions left: you're back in. | 没有题了：可以继续飞了。 |
 | eduNotSaved | Education runs are not on the 🏆 boards | 教育模式的成绩不上 🏆 排行榜 |
 | saveEduData | 📚 Education data | 📚 教育数据 |

@@ -174,3 +174,25 @@ test('the purse under the ✕ (plan 26): a break shows the coins held and pops w
     assert.deepEqual([text.visible, coin.visible], [false, false], mode);
   }
 });
+
+test("a revive's Give up warns once per device: the first press shows the warning and gives nothing up; the next press, and every one after, gives up (plan 26)", async () => {
+  const { createSettingsStore } = await import('../src/logic.js');
+  const m = new Map();
+  const settings = createSettingsStore({ getItem: (k) => m.get(k) ?? null, setItem: (k, v) => m.set(k, v), removeItem: (k) => m.delete(k) }, 'k');
+  const text = () => ({ text: '', visible: false, color: null, setX() { return this; }, setText(v) { this.text = v; return this; }, setColor(v) { this.color = v; return this; }, setVisible(v) { this.visible = v; return this; } });
+  const decided = [];
+  const make = () => quizScene({ mode: 'revive', finishing: false, scene: scenes(['Play', 'Quiz']), runCard: { open: false }, locale: 'en', cx: 360, verdict: text(), verdictCoin: text(), nextWait: text(), play: { settings }, decide: (e) => decided.push(e) });
+  const q = make();
+  q.giveUp();
+  assert.deepEqual(decided, [], 'the first press gives nothing up');
+  assert.deepEqual([q.verdict.visible, q.verdict.text], [true, 'Giving up ends this run, and its progress is lost. Tap Give up again to end it.']);
+  assert.equal(settings.load().reviveGiveUpWarned, true, 'remembered on this device');
+  q.giveUp();
+  assert.deepEqual(decided, ['giveUp'], 'the second press gives up');
+  make().giveUp();
+  assert.deepEqual(decided, ['giveUp', 'giveUp'], 'a later revive: one press');
+  const covered = make();
+  covered.runCard = { open: true };
+  covered.giveUp();
+  assert.equal(decided.length, 2, 'nothing under the "This run" card');
+});

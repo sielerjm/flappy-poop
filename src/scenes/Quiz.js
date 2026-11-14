@@ -433,7 +433,25 @@ export class Quiz extends Phaser.Scene {
   /** The way out while a card is up, bottom left: End Review in a break or bonus; before a revive's first right answer, Give up ends the run. */
   showWayOut() {
     if (this.closable()) this.leftBtn.set(t(this.locale, 'quizReturn'), () => this.close());
-    else if (this.reviveState?.phase === 'strikes') this.leftBtn.set(t(this.locale, 'reviveGiveUp'), () => this.decide('giveUp'));
+    else if (this.reviveState?.phase === 'strikes') this.leftBtn.set(t(this.locale, 'reviveGiveUp'), () => this.giveUp());
+  }
+
+  /**
+   * A revive's Give up (plan 26): the first press on this device only warns, in the verdict's place
+   * (the run and its progress would be lost; settings reviveGiveUpWarned is set), and the next press
+   * gives up. After that one press is enough.
+   */
+  giveUp() {
+    if (this.mode !== 'revive' || this.finishing || this.runCard?.open) return;
+    const settings = this.play?.settings;
+    if (settings && !settings.load().reviveGiveUpWarned) {
+      settings.set({ reviveGiveUpWarned: true });
+      this.verdict.setX(this.cx).setText(t(this.locale, 'reviveGiveUpWarn')).setColor(BAD).setVisible(true);
+      this.verdictCoin.setVisible(false);
+      this.nextWait.setVisible(false);
+      return;
+    }
+    this.decide('giveUp');
   }
 
   /**

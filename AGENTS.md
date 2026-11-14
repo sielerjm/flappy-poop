@@ -451,7 +451,9 @@ world halts as in a match respawn (`startRespawn` / `endRespawn` keep their matc
 run (`reviveDone` → `endRun`, the field untouched); the first right answer revives, and when the crash
 took something the player may go for ⭐ × `restoreStreak` in a row to get it all back
 (`effects.restore`); Give up ends it, and only before a right answer (`reviveStep` takes it in
-`'strikes'` alone); Esc / B do nothing. Once Give up or Return has started closing the quiz
+`'strikes'` alone); the first Give up on a device only warns that the run and its progress would be
+lost (`Quiz.giveUp`, settings `reviveGiveUpWarned`; plan 26), and the next press gives up; Esc / B do
+nothing. Once Give up or Return has started closing the quiz
 (`finishing`), no key or second thumb answers. A revive's card ignores pointer taps for
 `retryLockoutMs` after it opens (`tapLocked`: a flap tap landing as it appears must not answer or give
 up; the keys and the ring are not locked). The quiz is the pause: `autoPause` does
@@ -669,7 +671,8 @@ src/
                             best-score store, settings store (incl. locale,
                             howToSeenAt and hand: HANDS 'left' | 'right', the
                             bean button's side; eduStartLevel 1–7, plan 25;
-                            eduNewOrder after / mixed / before, plan 26) +
+                            eduNewOrder after / mixed / before and
+                            reviveGiveUpWarned, plan 26) +
                             howToPromptDue, vibrate helper, trayLayout, trayHit,
                             readyLayout (eduStart: the ◀ level ▶ stepper's boxes in
                             the 📚 row), readyHit, nextEduStartLevel (wraps within
@@ -1692,7 +1695,7 @@ src/
                             wrapped text (not createButton). Three button slots by
                             position take a label and an action per step (set / hold
                             / press): topBtn (Why, full width), leftBtn (the way
-                            out: Return, Give up, the choice's Fly on) and rightBtn
+                            out: End Review, Give up, the choice's Fly on) and rightBtn
                             (the way forward, which Enter / Space press and which
                             glows in a revive: halo, refreshHalo). sample() plays
                             the book sounds through Play.playSample; choose() the

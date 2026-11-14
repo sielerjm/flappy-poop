@@ -4500,10 +4500,16 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         const kept = await evaluate(`Boolean(${Q}.session.marked)`);
         ok(dn.hold === null && dn.revives === 1 && dn.score === 20 - pen && dn.filled && kept, `a decided revive is settled, not reopened (hold ${dn.hold}, revives ${dn.revives}, the quiz left alone: ${kept})`);
 
-        // A game over under a paused run still ends it.
+        // A game over under a paused run still ends it. Give up warns once per device first (plan 26):
+        // the first press only says what giving up costs; the second gives up.
+        await evaluate(`${play}.settings.set({ reviveGiveUpWarned: false }), true`);
         await startEdu('');
         await crash();
         await evaluate(`${play}.pausePlay(), true`);
+        await press('leftBtn'); // Give up: the warning
+        await sleep(200);
+        const warned = await evaluate(`JSON.stringify({ verdict: ${Q}.verdict.visible ? ${Q}.verdict.text : null, quiz: __flappy.scene.isActive('Quiz'), over: Boolean(${play}.over), remembered: ${play}.settings.load().reviveGiveUpWarned })`).then(JSON.parse);
+        ok(warned.verdict === (await tx('reviveGiveUpWarn')) && warned.quiz && !warned.over && warned.remembered, `the first Give up on this device only warns: "${warned.verdict}"`);
         await press('leftBtn'); // Give up
         await sleep(TT.deathToOverMs + 400);
         const pg = await playNow();
@@ -4708,7 +4714,8 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
             `(() => { const o = ${O}; const at = (id) => o.cells.find((c) => c.id === id) ?? null; const b = o.buttons; const halo = o.homeHalo.getBounds(); const n = o.eduNote?.getBounds() ?? null; const texts = o.children.list.filter((c) => c.type === 'Text'); const beside = (cell) => cell ? (texts.find((x) => x.text.startsWith('×') && Math.abs(x.y - cell.y) < 2 && Math.abs(x.x - cell.textX) < 2)?.text ?? null) : null; return JSON.stringify({ ids: o.cells.map((c) => c.id), tallyY: ['eduAnswered', 'eduRight', 'eduWrong'].map((id) => at(id)?.y ?? null), tallyText: ['eduAnswered', 'eduRight', 'eduWrong'].map((id) => beside(at(id))), mysteryY: at('mystery').y, coinY: at('coin').y, fallsY: at('falls').y, badgeY: o.badgeLine ? o.badgeLine.y : null, noteTop: n ? n.y : null, noteBottom: n ? n.bottom : null, band: { top: o.bandBox.top, bottom: o.bandBox.bottom, offset: o.band.offset }, home: b.home, again: b.again, bonus: b.bonus ?? null, share: b.share ?? null, halo: { left: halo.left, right: halo.right, top: halo.top, bottom: halo.bottom, key: o.homeHalo.texture.key }, scales: [o.homeButton.labelScale(), o.againButton.labelScale()], cy: o.cells[0].y - ${TT.over.cellRowsY[0]}, ring: o.focus.items.map((i) => i.id) }); })()`,
           ).then(JSON.parse);
         const all = JSON.stringify(await evaluate(`JSON.stringify(Object.fromEntries(Object.keys(localStorage).map((k) => [k, localStorage.getItem(k)])))`));
-        await evaluate(`localStorage.removeItem('flappyPoop.eduSrs'), ${play}.setEduUnlocked(true), ${play}.settings.set({ education: true }), true`);
+        // This device has seen Give up's one-time warning (plan 26; education-revive checks it): one press gives up.
+        await evaluate(`localStorage.removeItem('flappyPoop.eduSrs'), ${play}.setEduUnlocked(true), ${play}.settings.set({ education: true, reviveGiveUpWarned: true }), true`);
 
         // A game over (one miss, then Give up): the tally and the note; nothing to share.
         await startEdu();
