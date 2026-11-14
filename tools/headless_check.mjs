@@ -4724,7 +4724,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         // The education panel's layout (plan 21, E5): the tally cells, the rows under the coins, the buttons and the band.
         const eduPanel = () =>
           evaluate(
-            `(() => { const o = ${O}; const at = (id) => o.cells.find((c) => c.id === id) ?? null; const b = o.buttons; const halo = o.homeHalo.getBounds(); const n = o.eduNote?.getBounds() ?? null; const texts = o.children.list.filter((c) => c.type === 'Text'); const beside = (cell) => cell ? (texts.find((x) => x.text.startsWith('×') && Math.abs(x.y - cell.y) < 2 && Math.abs(x.x - cell.textX) < 2)?.text ?? null) : null; return JSON.stringify({ ids: o.cells.map((c) => c.id), tallyY: ['eduAnswered', 'eduRight', 'eduWrong'].map((id) => at(id)?.y ?? null), tallyText: ['eduAnswered', 'eduRight', 'eduWrong'].map((id) => beside(at(id))), mysteryY: at('mystery').y, coinY: at('coin').y, fallsY: at('falls').y, badgeY: o.badgeLine ? o.badgeLine.y : null, noteTop: n ? n.y : null, noteBottom: n ? n.bottom : null, band: { top: o.bandBox.top, bottom: o.bandBox.bottom, offset: o.band.offset }, home: b.home, again: b.again, bonus: b.bonus ?? null, share: b.share ?? null, halo: { left: halo.left, right: halo.right, top: halo.top, bottom: halo.bottom, key: o.homeHalo.texture.key }, scales: [o.homeButton.labelScale(), o.againButton.labelScale()], cy: o.cells[0].y - ${TT.over.cellRowsY[0]}, ring: o.focus.items.map((i) => i.id) }); })()`,
+            `(() => { const o = ${O}; const at = (id) => o.cells.find((c) => c.id === id) ?? null; const b = o.buttons; const halo = o.homeHalo.getBounds(); const n = o.eduNote?.getBounds() ?? null; const texts = o.children.list.filter((c) => c.type === 'Text'); const beside = (cell) => cell ? (texts.find((x) => x.text.startsWith('×') && Math.abs(x.y - cell.y) < 2 && Math.abs(x.x - cell.textX) < 2)?.text ?? null) : null; return JSON.stringify({ ids: o.cells.map((c) => c.id), tallyY: ['eduAnswered', 'eduRight', 'eduWrong'].map((id) => at(id)?.y ?? null), tallyText: ['eduAnswered', 'eduRight', 'eduWrong'].map((id) => beside(at(id))), mysteryY: at('mystery').y, coinY: at('coin').y, fallsY: at('falls').y, tallyRowY: at('eduAnswered').y, badgeY: o.badgeLine ? o.badgeLine.y : null, noteTop: n ? n.y : null, noteBottom: n ? n.bottom : null, band: { top: o.bandBox.top, bottom: o.bandBox.bottom, offset: o.band.offset }, home: b.home, again: b.again, bonus: b.bonus ?? null, share: b.share ?? null, halo: { left: halo.left, right: halo.right, top: halo.top, bottom: halo.bottom, key: o.homeHalo.texture.key }, scales: [o.homeButton.labelScale(), o.againButton.labelScale()], cy: o.cells[0].y - ${TT.over.cellRowsY[0]}, ring: o.focus.items.map((i) => i.id) }); })()`,
           ).then(JSON.parse);
         const all = JSON.stringify(await evaluate(`JSON.stringify(Object.fromEntries(Object.keys(localStorage).map((k) => [k, localStorage.getItem(k)])))`));
         // This device has seen Give up's one-time warning (plan 26; education-revive checks it): one press gives up.
@@ -4743,12 +4743,12 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         const p1 = await panel();
         const note = await tx('eduNotSaved');
         ok(p1.active && p1.tally === '❔ 1  ·  ✅ 0  ·  ❌ 1' && !p1.texts.some((s) => /[\u{1F4DA}\u{1F480}⭐]/u.test(s)) && p1.texts.includes(note) && !p1.share && !p1.bonus, `an education game over: "${p1.tally}" (no 📚 / 💀 / ⭐ line), "${note}", no Share`);
-        // The panel (plan 21, E5): the tally is a row of cells in the grid, in the ‼️ 😢 row's old place;
-        // ‼️ 😢 sit under the coins and the note under them, a row apart; all of it in the band, at rest.
+        // The panel (plan 26, Michael's image 9): ‼️ 😢 are the grid's third row, as on every panel; the
+        // tally is the bottom row, under the coins, and the note under it, a row apart; all of it in the band, at rest.
         const e1 = await eduPanel();
-        ok(e1.ids.join() === 'fiber,probiotic,postbiotic,bacteria,bean,mystery,eduAnswered,eduRight,eduWrong,pipes,coin,falls,closeCalls' && e1.tallyY.every((y) => y === e1.cy + TT.over.cellRowsY[2]) && e1.tallyText.join() === '×1,×0,×1', `the tally is the grid's third row: ❔ ${e1.tallyText[0]}, ✅ ${e1.tallyText[1]}, ❌ ${e1.tallyText[2]}`);
-        const rowGap = [e1.fallsY - e1.coinY, (e1.noteTop + e1.noteBottom) / 2 - e1.fallsY];
-        ok(e1.fallsY > e1.coinY && e1.badgeY === null && rowGap.every((g) => g >= 50 && g <= 70) && e1.noteBottom <= e1.band.bottom && e1.band.offset === 0, `‼️ 😢 sit under the coins and the note under them, about a row apart (${rowGap.map(Math.round).join(', ')} px; the cells above are ${TT.over.cellRowsY[1] - TT.over.cellRowsY[0]}), all inside the band (it ends at ${e1.band.bottom}, the note at ${Math.round(e1.noteBottom)})`);
+        ok(e1.ids.join() === 'fiber,probiotic,postbiotic,bacteria,bean,mystery,falls,closeCalls,pipes,coin,eduAnswered,eduRight,eduWrong' && e1.fallsY === e1.cy + TT.over.cellRowsY[2] && e1.tallyY.every((y) => y === e1.tallyRowY) && e1.tallyText.join() === '×1,×0,×1', `‼️ 😢 are the grid's third row; the tally is its bottom row: ❔ ${e1.tallyText[0]}, ✅ ${e1.tallyText[1]}, ❌ ${e1.tallyText[2]}`);
+        const rowGap = [e1.tallyRowY - e1.coinY, (e1.noteTop + e1.noteBottom) / 2 - e1.tallyRowY];
+        ok(e1.tallyRowY > e1.coinY && e1.badgeY === null && rowGap.every((g) => g >= 50 && g <= 70) && e1.noteBottom <= e1.band.bottom && e1.band.offset === 0, `❔ ✅ ❌ sit under the coins and the note under them, about a row apart (${rowGap.map(Math.round).join(', ')} px; the cells above are ${TT.over.cellRowsY[1] - TT.over.cellRowsY[0]}), all inside the band (it ends at ${e1.band.bottom}, the note at ${Math.round(e1.noteBottom)})`);
         await evaluate(`(${O}.openedAt = __flappy.loop.time - 5000, ${O}.band.scrollBy(-300), true)`); // past the death-tap lockout
         ok((await evaluate(`${O}.band.offset`)) === 0, 'a lost run has nothing to scroll: its band took the row Home left');
         // Home | Play again, side by side where Play again sat; Play again glows, clear of Home and inside the panel.
@@ -4776,9 +4776,9 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         const p2 = await panel();
         ok(p2.active && p2.bonus && !p2.share, 'a won education run offers the 📚 bonus quiz where Share would be');
         const e2 = await eduPanel();
-        const fallsBottom = e2.fallsY + TT.over.cellH / 2;
+        const fallsBottom = e2.tallyRowY + TT.over.cellH / 2;
         ok(e2.bonus && Math.abs(e2.bonus.x - (e2.home.x + e2.again.x) / 2) < 0.5 && e2.bonus.y === e2.cy + TT.over.buttonOffsetY && e2.home.y === e2.again.y && e2.home.y - e2.home.height / 2 - (e2.bonus.y + e2.bonus.height / 2) >= 16 && e2.halo.top >= e2.bonus.y + e2.bonus.height / 2 && e2.band.bottom <= e2.bonus.y - e2.bonus.height / 2, `the bonus button sits centred a row above Home | Play again (y ${e2.bonus.y} over ${e2.home.y}); the band ends at its top (${e2.band.bottom})`);
-        ok(fallsBottom <= e2.band.bottom - 16 && e2.noteTop >= e2.band.bottom && e2.ring.includes('bonus'), `with no badge line the ‼️ 😢 row is in view (it ends at ${fallsBottom}) and the note starts below the fold (${Math.round(e2.noteTop)}): nothing is cut by the band's bottom`);
+        ok(fallsBottom <= e2.band.bottom - 16 && e2.noteTop >= e2.band.bottom && e2.ring.includes('bonus'), `with no badge line the ❔ ✅ ❌ row is in view (it ends at ${fallsBottom}) and the note starts below the fold (${Math.round(e2.noteTop)}): nothing is cut by the band's bottom`);
         const c0 = await evaluate(`${play}.effects.coins()`);
         // Opened, retried until the bonus card is up: under load the first press can land inside the
         // death-tap lockout and open nothing, and the scene's last card (a revive's) would be read instead.
@@ -4793,12 +4793,14 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         const sBonus = await quizSounds.heard();
         await quizSounds.unlisten();
         ok(sBonus.join() === 'sfx:score', `the bonus quiz's right answer, which pays nothing, dings (${sBonus.join(', ')})`);
-        const after = await evaluate(`JSON.stringify({ coins: ${play}.effects.coins(), saved: Boolean(JSON.parse(localStorage.getItem('flappyPoop.eduSrs') ?? '{}').cards?.[${Q}.card.id]), answered: ${play}.runQuiz.answered, levels: Object.keys(${play}.runQuiz.byLevel).length })`).then(JSON.parse);
+        const after = await evaluate(`JSON.stringify({ coins: ${play}.effects.coins(), saved: Boolean(JSON.parse(localStorage.getItem('flappyPoop.eduSrs') ?? '{}').cards?.[${Q}.card.id]), answered: ${play}.runQuiz.answered, levels: Object.keys(${play}.runQuiz.byLevel).join(), pending: ${play}.eduStore.load().pending?.tally.answered ?? null, graded: ${play}.eduStore.load().counters.gradedRuns ?? 0, quizTally: ${Q}.tally.visible ? ${Q}.tally.text : null })`).then(JSON.parse);
         ok(b.mode === 'bonus' && ['rectum', 'general'].includes(b.deck) && after.coins === c0 && after.saved, `the bonus quiz asks about the ${b.deck}: a right answer pays no coin (${c0} → ${after.coins}) and is saved`);
-        ok(p2.tally === '❔ 0  ·  ✅ 0  ·  ❌ 0' && after.answered === 0 && after.levels === 0, `a bonus answer is practice: the run's tally stays as the panel showed it (${p2.tally})`);
+        ok(p2.tally === '❔ 0  ·  ✅ 0  ·  ❌ 0' && after.answered === 1 && after.levels === '7' && after.pending === 1 && after.quizTally === '✅ 1  ❌ 0', `a bonus answer is part of the won run (plan 26): the run's tally and the waiting run hold it, in level 7's row ("${after.quizTally}" on the card)`);
         await evaluate(`${Q}.input.keyboard.emit('keydown-ESC'), true`);
-        await sleep(300);
+        await sleep(400);
         ok((await evaluate(`!__flappy.scene.isActive('Quiz') && __flappy.scene.isActive('Over')`)) === true, 'Esc closes it back to the game-over panel');
+        const p3 = await panel();
+        ok(p3.tally === '❔ 1  ·  ✅ 1  ·  ❌ 0' && after.graded === (await evaluate(`${play}.eduStore.load().counters.gradedRuns ?? 0`)), `the panel shows the run's new numbers ("${p3.tally}"); nothing is recorded before it is left`);
         // Test mode turned on from here (the profile opens over the game-over screen, and its save panel
         // takes the word: plan 25, A5): the bonus quiz then saves nothing.
         await chrome('stats');
@@ -4819,7 +4821,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         // Education badges and the average grade (plan 22, U6): kept on this device with the cards, shown
         // on the game-over line and in the profile's 📚 section, and never handed to the career store.
         const ST = `__flappy.scene.getScene('Stats')`;
-        const eduRec = () => evaluate(`JSON.stringify((() => { const r = ${play}.eduStore.load(); return { counters: r.counters, badges: Object.keys(r.badges) }; })())`).then(JSON.parse);
+        const eduRec = () => evaluate(`JSON.stringify((() => { const r = ${play}.eduStore.load(); return { counters: r.counters, badges: Object.keys(r.badges), pending: r.pending ? r.pending.tally.answered : null }; })())`).then(JSON.parse);
         const badgeLine = () => evaluate(`${O}.badgeLine?.text ?? null`);
         const winWith = (right, answered) => evaluate(`(() => { const p = ${play}; p.runQuiz = { ...p.runQuiz, answered: ${answered}, right: ${right}, wrong: ${answered} - ${right} }; p.level = 7; p.applyLevel(); p.win(); return true; })()`);
         const rec0 = await eduRec();
@@ -4834,12 +4836,12 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         const rec1 = await eduRec();
         ok(dropPanel.active && dropPanel.tally === '❔ 0  ·  ✅ 0  ·  ❌ 0' && dropLine?.includes('🏳️') && dropPanel.texts.includes(note) && rec1.badges.join() === 'edu_drop_out' && !rec1.counters.gradedRuns, `giving up with nothing answered earns 🏳️: the game-over line reads "${dropLine}" under the tally, and the run is not graded`);
 
-        // A lost run with a badge line (plan 21, E5): the badge line, the ‼️ 😢 row and the note are all in
+        // A lost run with a badge line (plan 21, E5): the badge line, the ❔ ✅ ❌ row and the note are all in
         // the band, a row apart, and nothing scrolls. Home goes home.
         const e3 = await eduPanel();
-        const dropGaps = [e3.badgeY - e3.coinY, e3.fallsY - e3.badgeY, (e3.noteTop + e3.noteBottom) / 2 - e3.fallsY];
+        const dropGaps = [e3.badgeY - e3.coinY, e3.tallyRowY - e3.badgeY, (e3.noteTop + e3.noteBottom) / 2 - e3.tallyRowY];
         await evaluate(`(${O}.openedAt = __flappy.loop.time - 5000, ${O}.band.scrollBy(-300), true)`); // past the death-tap lockout
-        ok(e3.badgeY > e3.coinY && e3.fallsY > e3.badgeY && e3.noteTop >= e3.fallsY + TT.over.cellH / 2 && dropGaps.every((g) => g >= 46 && g <= 70) && e3.noteBottom <= e3.band.bottom && (await evaluate(`${O}.band.offset`)) === 0, `with a badge line the rows run badge, ‼️ 😢, note (${dropGaps.map(Math.round).join(', ')} px apart), all in the band (it ends at ${e3.band.bottom}, the note at ${Math.round(e3.noteBottom)}): nothing scrolls`);
+        ok(e3.badgeY > e3.coinY && e3.tallyRowY > e3.badgeY && e3.noteTop >= e3.tallyRowY + TT.over.cellH / 2 && dropGaps.every((g) => g >= 46 && g <= 70) && e3.noteBottom <= e3.band.bottom && (await evaluate(`${O}.band.offset`)) === 0, `with a badge line the rows run badge, ‼️ 😢, note (${dropGaps.map(Math.round).join(', ')} px apart), all in the band (it ends at ${e3.band.bottom}, the note at ${Math.round(e3.noteBottom)}): nothing scrolls`);
         await tapAt(e3.home.x, e3.home.y);
         await sleep(400);
         ok(!(await evaluate(`__flappy.scene.isActive('Over')`)) && (await playState()) === 'ready', 'a tap on Home goes home');
@@ -4856,24 +4858,25 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         ok(quitPanel.active && quitPanel.tally === '❔ 5  ·  ✅ 5  ·  ❌ 0' && quitLine === null && recQuit.badges.join() === 'edu_drop_out' && !recQuit.counters.gradedRuns && !recQuit.counters.perfectStreak && !recQuit.counters.gradeSum, `a run answered 5 of 5 that ends on Give up is not graded: "${quitPanel.tally}", no badge line (${quitLine}), the record ${JSON.stringify(recQuit.counters)}`);
         const zhPanel = await evaluate(`import('./src/i18n.js').then((m) => { const o = ${O}; return JSON.stringify({ home: o.homeButton.getText(), again: o.againButton.getText(), want: [m.t('zh-Hans', 'tapToHome'), m.t('zh-Hans', 'playAgain')], scales: [o.homeButton.labelScale(), o.againButton.labelScale()] }); })`).then(JSON.parse);
         ok(zhPanel.home === zhPanel.want[0] && zhPanel.again === zhPanel.want[1] && zhPanel.scales.every((k) => k >= 0.85), `in zh-Hans the two labels fit as well ("${zhPanel.home}" | "${zhPanel.again}", scales ${zhPanel.scales.map((k) => k.toFixed(2)).join(', ')})`);
-        // A won run at 5 of 5: 💯 and 🅰️, the streak at 1, the average at 100 %.
+        // A won run at 5 of 5: 💯 and 🅰️ on its panel at once; it waits to be recorded until the panel is
+        // left (plan 26: bonus answers count), then the streak is 1 and the average 100 %.
         await startEdu();
         await winWith(5, 5);
         await sleep(TT.deathToOverMs + 500);
         const aceLine = await badgeLine();
-        const rec2 = await eduRec();
-        ok(aceLine?.includes('💯') && aceLine.includes('🅰️') && rec2.badges.join() === 'edu_drop_out,edu_perfect,edu_grade_a' && rec2.counters.perfectStreak === 1 && rec2.counters.gradedRuns === 1 && rec2.counters.gradeSum === 10000, `a run answered 5 of 5 earns 💯 and 🅰️ ("${aceLine}"); the 🤓 streak is ${rec2.counters.perfectStreak}, the record ${JSON.stringify(rec2.counters)}`);
+        const recWait = await eduRec();
+        ok(aceLine?.includes('💯') && aceLine.includes('🅰️') && recWait.badges.join() === 'edu_drop_out' && !recWait.counters.gradedRuns && recWait.pending === 5, `a run answered 5 of 5 shows 💯 and 🅰️ on its panel ("${aceLine}") and waits, unrecorded (${JSON.stringify(recWait)}), until the panel is left`);
         // The summary band (plan 22, U7; plan 21, E5): a won run's band is the short one (the bonus button
-        // takes a row), so with a badge line its ‼️ 😢 row and its note sit below the fold, whole, and the
+        // takes a row), so with a badge line its ❔ ✅ ❌ row and its note sit below the fold, whole, and the
         // band scrolls to them; the buttons stay put.
         const bandNow = () =>
           evaluate(
-            `(() => { const o = ${O}; const b = o.bandBox; const n = o.eduNote.getBounds(); const f = o.cells.find((c) => c.id === 'falls'); return JSON.stringify({ offset: o.band.offset, top: b.top, bottom: b.bottom, left: b.left, noteTop: n.y, noteBottom: n.bottom, fallsTop: f.y - f.height / 2, lineBottom: o.badgeLine.getBounds().bottom, card: o.card.open, title: o.card.title.text, over: __flappy.scene.isActive('Over') }); })()`,
+            `(() => { const o = ${O}; const b = o.bandBox; const n = o.eduNote.getBounds(); const f = o.cells.find((c) => c.id === 'eduAnswered'); return JSON.stringify({ offset: o.band.offset, top: b.top, bottom: b.bottom, left: b.left, noteTop: n.y, noteBottom: n.bottom, fallsTop: f.y - f.height / 2, lineBottom: o.badgeLine.getBounds().bottom, card: o.card.open, title: o.card.title.text, over: __flappy.scene.isActive('Over') }); })()`,
           ).then(JSON.parse);
         const canvasPt = (x, y) => evaluate(`(() => { const r = __flappy.canvas.getBoundingClientRect(); const s = __flappy.scale; return JSON.stringify({ x: r.left + ${x} * r.width / s.width, y: r.top + ${y} * r.height / s.height, k: r.height / s.height }); })()`).then(JSON.parse);
         await evaluate(`${O}.openedAt = __flappy.loop.time - 5000, true`); // past the death-tap lockout
         const rest = await bandNow();
-        ok(rest.offset === 0 && rest.lineBottom <= rest.bottom - 16 && rest.fallsTop >= rest.bottom && rest.noteTop >= rest.bottom, `at rest the badge line is in view, clear of the bonus button, and the ‼️ 😢 row and the note start below the fold (the band ends at ${rest.bottom}; they start at ${Math.round(rest.fallsTop)} and ${Math.round(rest.noteTop)})`);
+        ok(rest.offset === 0 && rest.lineBottom <= rest.bottom - 16 && rest.fallsTop >= rest.bottom && rest.noteTop >= rest.bottom, `at rest the badge line is in view, clear of the bonus button, and the ❔ ✅ ❌ row and the note start below the fold (the band ends at ${rest.bottom}; they start at ${Math.round(rest.fallsTop)} and ${Math.round(rest.noteTop)})`);
         const mid = await canvasPt(rest.left + 20, (rest.top + rest.bottom) / 2);
         await cdp.send('Input.dispatchMouseEvent', { type: 'mouseWheel', x: mid.x, y: mid.y, deltaX: 0, deltaY: 400 });
         await sleep(200);
@@ -4907,6 +4910,8 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await tapAt(e4.home.x, e4.home.y);
         await sleep(400);
         ok(bonusUp === 'bonus' && !(await evaluate(`__flappy.scene.isActive('Over')`)) && (await playState()) === 'ready', 'with the band scrolled the buttons have not moved: a tap on the bonus button opens its quiz, and a tap on Home goes home');
+        const rec2 = await eduRec();
+        ok(rec2.badges.join() === 'edu_drop_out,edu_perfect,edu_grade_a' && rec2.counters.perfectStreak === 1 && rec2.counters.gradedRuns === 1 && rec2.counters.gradeSum === 10000 && rec2.pending === null, `Home records the waiting run, once: 💯 and 🅰️ held, the 🤓 streak ${rec2.counters.perfectStreak}, the record ${JSON.stringify(rec2.counters)}`);
         // A test run counts nothing: a revive in it, then the same tally, leave the record as it was.
         await evaluate(`(() => { const p = ${play}; p.setTestMode(true); p.setTestSettings({ startLevel: 1, invincible: false }); return true; })()`);
         await startEdu();
@@ -4954,7 +4959,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         ok(lockedProfile.edu === null && lockedProfile.cells.length === 0 && !lockedProfile.texts.some((x) => x.includes('\u{1F4DA}')), 'a device without education unlocked has no 📚 section on its profile');
         await shutProfile();
         await evaluate(`(() => { const p = ${play}; p.eduUnlocked = true; if (${lentName}) p.save = { ...p.save, name: null }; return true; })()`);
-        ok(JSON.stringify(rec0) === JSON.stringify({ counters: {}, badges: [] }), 'the section began from an empty education record');
+        ok(JSON.stringify(rec0.counters) === '{}' && rec0.badges.length === 0, `the section began from an empty education record (the won run above still waiting: ${rec0.pending} answer)`);
 
         // The 📚 board's sending (plan 21, B2), the server stubbed (globalThis.__edu / __eduAnswer, set up
         // at boot): a player who shares sends what the board does not have yet of this device's record.
@@ -5096,9 +5101,9 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await until(`__flappy.scene.isActive('Over')`);
         await sleep(TT.retryLockoutMs + 400);
         const w2 = await eduPanel();
-        const w2Falls = w2.fallsY + TT.over.cellH / 2;
+        const w2Falls = w2.tallyRowY + TT.over.cellH / 2;
         const w2Gap = w2.halo.left - (w2.home.x + w2.home.width / 2);
-        ok(w2Gap >= 12 && w2Falls <= w2.band.bottom - 16 && (w2.noteTop >= w2.band.bottom || w2.noteBottom <= w2.band.bottom), `wide, a won run: the glow stops ${Math.round(w2Gap)} px short of Home; the ‼️ 😢 row ends in view (${Math.round(w2Falls)}) and the note is whole, in the band or below its bottom (${w2.band.bottom})`);
+        ok(w2Gap >= 12 && w2Falls <= w2.band.bottom - 16 && (w2.noteTop >= w2.band.bottom || w2.noteBottom <= w2.band.bottom), `wide, a won run: the glow stops ${Math.round(w2Gap)} px short of Home; the ❔ ✅ ❌ row ends in view (${Math.round(w2Falls)}) and the note is whole, in the band or below its bottom (${w2.band.bottom})`);
         await home();
         await cdp.send('Emulation.setDeviceMetricsOverride', { width: 720, height: 1280, deviceScaleFactor: 1, mobile: false });
         await until(`__flappy.scale.width === 720`);

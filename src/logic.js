@@ -1685,19 +1685,19 @@ export function overHit(x, y, layout) {
  * itself: fiber / probiotic / postbiotic, bacteria / bean / mystery, ‼️ long falls / 😢 close calls,
  * then pipes / coins (no coin cell in a Daily Dump: that spot is the rank link, over.rankBox).
  * Each cell: { id, x (where its icon sits + 30), y, width, height } around the icon and count.
- * An education panel (plan 21, E5): the third row is the run's quiz tally, ❔ answered / ✅ right /
- * ❌ wrong (eduAnswered, eduRight, eduWrong), and the ‼️ / 😢 row moves under the coins row: in the
- * badge line's place, or with `badge` (the run earned one) a row under it; `won` sets it for a won
- * run's shorter band (overEduLines).
+ * An education panel (plan 21, E5; plan 26, Michael's image 9): the run's quiz tally, ❔ answered /
+ * ✅ right / ❌ wrong (eduAnswered, eduRight, eduWrong), is the bottom row, under the coins row and the
+ * ‼️ / 😢 row: in the badge line's place, or with `badge` (the run earned one) a row under it; `won`
+ * sets it for a won run's shorter band (overEduLines).
  */
 export function overCellsLayout(cx, cy, t, { daily = false, education = false, badge = false, won = false } = {}) {
   const o = t.over;
   const rows = [
     [o.cellRowsY[0], ['fiber', 'probiotic', 'postbiotic']],
     [o.cellRowsY[1], ['bacteria', 'bean', 'mystery']],
-    [o.cellRowsY[2], education ? ['eduAnswered', 'eduRight', 'eduWrong'] : ['falls', 'closeCalls']],
+    [o.cellRowsY[2], ['falls', 'closeCalls']],
     [o.rankBox.dy, daily ? ['pipes'] : ['pipes', 'coin']],
-    ...(education ? [[overEduLines(t, { badge, won }).falls, ['falls', 'closeCalls']]] : []),
+    ...(education ? [[overEduLines(t, { badge, won }).tally, ['eduAnswered', 'eduRight', 'eduWrong']]] : []),
   ];
   const columnX = { 2: [-120, 120], 3: [-170, 0, 170] };
   const cells = [];
@@ -1710,15 +1710,15 @@ export function overCellsLayout(cx, cy, t, { daily = false, education = false, b
 
 /**
  * An education panel's rows under the coins row, as px from the panel centre (over.eduLinesY; plan
- * 21, E5): { badge (the "🏆 New: …" line; null without one), falls (the ‼️ / 😢 row: in the badge
- * line's place, or a row under it), note (why the run is on no board: a row under that) }. A lost
+ * 21, E5): { badge (the "🏆 New: …" line; null without one), tally (the ❔ ✅ ❌ row, plan 26: in the
+ * badge line's place, or a row under it), note (why the run is on no board: a row under that) }. A lost
  * run's tall band holds them all. A won run's band ends at the bonus button: the first row under
  * the coins stays in view and the rest starts below the band's bottom, whole, where it scrolls to.
  */
 export function overEduLines(t, { badge = false, won = false } = {}) {
   const y = t.over.eduLinesY;
-  if (won) return badge ? { badge: y.badge, falls: y.wonFallsUnderBadge, note: y.wonNoteUnderBadge } : { badge: null, falls: y.wonFalls, note: y.wonNote };
-  return badge ? { badge: y.badge, falls: y.fallsUnderBadge, note: y.noteUnderBadge } : { badge: null, falls: y.falls, note: y.note };
+  if (won) return badge ? { badge: y.badge, tally: y.wonTallyUnderBadge, note: y.wonNoteUnderBadge } : { badge: null, tally: y.wonTally, note: y.wonNote };
+  return badge ? { badge: y.badge, tally: y.tallyUnderBadge, note: y.noteUnderBadge } : { badge: null, tally: y.tally, note: y.note };
 }
 
 /**

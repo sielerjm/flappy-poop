@@ -133,7 +133,7 @@ import { openEduDataPanel, isEduDataPanelOpen } from '../ui/eduDataPanel.js';
 import { answerEvent, createConsentStore, createResearchQueue } from '../research.js';
 import { bindPad } from '../input/pad.js';
 import { keyGroup, sameDevice, catchUpTier, catchUpDraws, versusAvailable, ghostPlacement, rivalMarker, respawnPose, respawnBlinkStart, courseDistance, VERSUS_EMOJI } from '../versus.js';
-import { createEduStore, dueCount, cardCounts, masteryByDeck, pickCard, shuffleOptions, gradeFor, schedule, eduShopPrices, reviveStart, reviveStep, reviveSettled, newTally, tallyAnswer, EDUCATION_EMOJI, localDayKey } from '../education.js';
+import { createEduStore, countersAfterRun, dueCount, cardCounts, masteryByDeck, pickCard, shuffleOptions, gradeFor, schedule, eduShopPrices, reviveStart, reviveStep, reviveSettled, newTally, tallyAnswer, EDUCATION_EMOJI, localDayKey } from '../education.js';
 
 const TEXT_STYLE = {
   fontFamily: 'sans-serif',
@@ -462,11 +462,14 @@ export class Play extends Phaser.Scene {
     this.profileBtn = createButton(this, this.readyBoxes.profile, profileButtonText(this.locale, this.save), { ...TEXT_STYLE, fontSize: '32px' }); // white: the player's own line, not a menu item
     this.refreshProfile();
     this.refreshTestBadge(); // still on after a restart: test mode lives in the registry
+    // A won education run left waiting by its game-over panel (plan 26) is recorded now: the panel was
+    // left (Home, Play again), or the page was closed on it. The sync that follows sends its grade.
+    const eduRecorded = this.finishPendingEducation();
     if (!this.match && !bootSynced) {
       bootSynced = true;
       this.creditCareer(); // badges the saved bests already earn (unnamed and offline players too)
       this.syncLeaderboard(); // fire and forget: picks up the board's name (a rename made on another device)
-    }
+    } else if (eduRecorded && !this.match) this.syncLeaderboard();
     if (this.match) this.setReadyUiVisible(false); // a half of a match: the Versus scene draws the join screen
 
     this.pauseShade = this.add.rectangle(W / 2, GAME_HEIGHT / 2, W, GAME_HEIGHT, 0x000000, 0.45).setDepth(25).setVisible(false);
@@ -1752,8 +1755,15 @@ export class Play extends Phaser.Scene {
       }
     }
     // The run's tally (plan 22, U4), by level: a break asks about the level just cleared, a revive
-    // about the one being flown. The bonus quiz after a win is practice: its answers are not tallied.
-    if (mode !== 'bonus') this.runQuiz = tallyAnswer(this.runQuiz, this.levelBreak ? this.level - 1 : this.level, correct);
+    // about the one being flown. The bonus quiz's answers after a win are part of the run too (plan
+    // 26), in the last level's row, and the run waiting to be recorded follows them; none counts in a
+    // test run or under test mode, which save nothing.
+    const bonus = mode === 'bonus';
+    if (!bonus || (!this.runIsTest && !this.isTestMode())) this.runQuiz = tallyAnswer(this.runQuiz, this.levelBreak ? this.level - 1 : this.level, correct);
+    if (bonus && !this.runIsTest && !this.isTestMode()) {
+      const pending = this.eduStore.load().pending;
+      if (pending) this.eduStore.setPending({ ...pending, tally: { ...this.runQuiz } });
+    }
     // A right answer to a counted card pays; practice pays nothing (plan 25).
     const coins = correct && mode === 'break' && reason !== 'practice' ? T.education.breakCoins : 0;
     if (coins) {
@@ -1810,6 +1820,7 @@ export class Play extends Phaser.Scene {
     this.refreshShopButton();
     if (this.levelBreak) this.refreshLevelBanner(); // the gate's hint follows what the quiz cleared (plan 25)
     if (mode === 'revive') this.reviveDone();
+    if (mode === 'bonus') this.refreshOverEducation();
   }
 
   /** Re-lay and redraw the switches when what is offered changes (test mode hides 👥; the word shows 📚). */
@@ -3771,11 +3782,17 @@ export class Play extends Phaser.Scene {
     if (this.runIsTest) return;
     // Nor, before its public release, does an education run (plan 21): its cards were saved answer by
     // answer; no best, top list, career counters or career badges. Its own badges and average grade
-    // (plan 22) stay on this device with the cards (recordEducation). The sync still runs, for what
-    // was already queued (plan 25, A1): a tester's answers, the 📚 board's grades, an earlier run's
-    // best or counters; nothing of this run is in it.
+    // (plan 22) stay on this device with the cards (recordEducation). A won run waits (plan 26): its
+    // bonus answers count, so it is recorded once its game-over panel is left (finishPendingEducation),
+    // and the panel shows the badges it would earn so far. The sync still runs, for what was already
+    // queued (plan 25, A1): a tester's answers, the 📚 board's grades, an earlier run's best or
+    // counters; nothing of this run is in it.
     if (this.runIsEducation) {
-      this.recordEducation();
+      if (this.won) {
+        const facts = this.eduFactsNow();
+        this.eduStore.setPending({ tally: { ...this.runQuiz }, full: facts.full, at: Date.now() });
+        this.runBadges = this.eduPreviewBadges(facts);
+      } else this.recordEducation();
       this.syncLeaderboard();
       return;
     }
@@ -3805,12 +3822,49 @@ export class Play extends Phaser.Scene {
    * store, which uploads what it holds, never sees any of it; the record leaves the device only when
    * the player shares it on the 📚 board (drainEduShare). Never a test run (endRun returns before).
    */
-  recordEducation() {
+  recordEducation(facts = this.eduFactsNow()) {
     const day = utcDayKey();
-    const facts = eduRunFacts(this.runQuiz, { gaveUp: Boolean(this.revive?.gaveUp || this.breakGaveUp), full: this.runStartLevel === 1 && !this.runSkipped && this.won }, T);
     const counters = this.eduStore.endRun(facts);
     const earned = evaluate({ totals: counters, facts, unlocked: this.eduStore.load().badges, day, catalog: EDU_ACHIEVEMENTS });
     this.runBadges = this.eduStore.unlock(earned, day);
+  }
+
+  /** This run's education facts (eduRunFacts): its tally, whether it ended on Give up, whether it was full (from level 1, nothing skipped, won). */
+  eduFactsNow() {
+    return eduRunFacts(this.runQuiz, { gaveUp: Boolean(this.revive?.gaveUp || this.breakGaveUp), full: this.runStartLevel === 1 && !this.runSkipped && this.won }, T);
+  }
+
+  /** The education badges a run with `facts` would earn if recorded now (plan 26: a won run's panel, before it is recorded). Nothing is stored. */
+  eduPreviewBadges(facts) {
+    const state = this.eduStore.load();
+    return evaluate({ totals: countersAfterRun(state.counters, facts), facts, unlocked: state.badges, day: utcDayKey(), catalog: EDU_ACHIEVEMENTS });
+  }
+
+  /**
+   * A won education run waiting since its game-over panel (plan 26), recorded now: when the panel is
+   * left (Home and Play again restart this scene) or at the next page load. Once: the store hands it
+   * over (takePending). Returns whether one was recorded.
+   */
+  finishPendingEducation() {
+    const p = this.eduStore?.takePending();
+    if (!p) return false;
+    this.recordEducation(eduRunFacts(p.tally, { gaveUp: false, full: p.full }, T));
+    this.runBadges = null; // this scene's next run starts with none
+    return true;
+  }
+
+  /**
+   * After the bonus quiz (plan 26): its answers are part of the won run, so the game-over panel is
+   * drawn again with the run's numbers, its "This run" rows and the badges it would earn now (a
+   * wrong answer can take 💯 back off). The waiting run in the store follows each answer (quizAnswer).
+   */
+  refreshOverEducation() {
+    const over = this.scene.get('Over');
+    if (!this.overData?.education || !over?.scene.isActive()) return;
+    if (this.overData.education.answered === this.runQuiz.answered) return;
+    const pending = !this.runIsTest && this.eduStore.load().pending;
+    this.overData = { ...this.overData, education: { ...this.runQuiz }, badges: pending ? this.eduPreviewBadges(eduRunFacts(pending.tally, { gaveUp: false, full: pending.full }, T)) : this.overData.badges };
+    over.scene.restart(this.overData);
   }
 
   /**
@@ -4193,7 +4247,9 @@ export class Play extends Phaser.Scene {
       const personalBest = Boolean(this.personalBest && !this.runIsTest && !this.runIsDaily);
       const badges = this.runIsTest ? [] : [...(this.runBadges ?? [])];
       const education = this.runIsEducation ? { ...this.runQuiz } : null; // the 📚 tally (plan 21)
-      this.scene.launch('Over', { score: this.score, won, test: this.runIsTest, toilet: this.toilet, level: this.level, pipes, collected: { ...this.collected }, daily, personalBest, badges, falls: this.runFalls ?? 0, closeCalls: this.runCloseCalls ?? 0, education });
+      // Kept: the bonus quiz draws the panel again with the run's new numbers (refreshOverEducation).
+      this.overData = { score: this.score, won, test: this.runIsTest, toilet: this.toilet, level: this.level, pipes, collected: { ...this.collected }, daily, personalBest, badges, falls: this.runFalls ?? 0, closeCalls: this.runCloseCalls ?? 0, education };
+      this.scene.launch('Over', this.overData);
     });
   }
 

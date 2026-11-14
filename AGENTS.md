@@ -448,7 +448,7 @@ line per level (`tallyLines`), as an info card over the quiz (`toggleRunCard`): 
 it, the quiz's keys do nothing under it, and a question left waiting is marked interrupted, as it is
 under any other overlay (F, What's new: `Quiz.update` checks the card is the top overlay) and when the
 page is hidden or the window loses focus. The bonus
-quiz's answers are not tallied. **Crash**
+quiz's answers are tallied too, in the last level's row (plan 26; see "A won run waits"). **Crash**
 (`die` → `startEduRevive`): the coins and power-ups go (`effects.snapshot`, kept in `reviveLost`), the
 world halts as in a match respawn (`startRespawn` / `endRespawn` keep their match parts behind
 `if (this.match)`), and `respawnHold` (`'quiz'`) stops `tickRespawn` at the end of the tumble while the
@@ -480,16 +480,24 @@ graded from `education.badgeMinAnswers` answers and only when it did not end on 
 streak alone, so 💯 needs a won run); the education store keeps the counters
 (`revives`, `perfectStreak`, `gradedRuns`, `gradeSum`) and the badges with the cards, and the average
 grade is the mean of the graded runs' grades (`averageGrade`). **Over**, on an education panel (the
-other panels are untouched): the tally is the grid's third row, three cells (❔ answered, ✅ right,
-❌ wrong; a tap on one opens "This run"); the ‼️ 😢 row sits under the coins and `eduNotSaved` under
-it, a row apart, with the run's education badges on a line between the coins and that row
-(`overCellsLayout({ education, badge, won })`, `overEduLines`); no Share. Its buttons are one row,
+other panels are untouched): ‼️ 😢 are the grid's third row, as everywhere; the tally is the bottom
+row (plan 26, Michael's image 9), three cells (❔ answered, ✅ right, ❌ wrong; a tap on one opens "This
+run") under the coins with `eduNotSaved` under it, a row apart, and the run's education badges on a
+line between the coins and that row (`overCellsLayout({ education, badge, won })`, `overEduLines`); no
+Share. Its buttons are one row,
 Home | Play again side by side where Play again sits on other panels (`overButtonsLayout({ pair })`;
 Play again glows `over.pairGlowPx`, clear of Home), so a lost run's band is the tall one
 (`overBandLayout({ tall })`) and nothing scrolls. A won run offers 📚 Quiz centred a row above the pair
 (`bonus`; `openBonus` → `Quiz('bonus')`, the rectum's questions, no coins); its band is the short one,
 so the first row under the coins stays in view and the rest starts below the band's bottom, whole,
-where it scrolls. Your own **profile**, with education unlocked, ends with a 📚 Education section: the
+where it scrolls. **A won run waits** (plan 26): its bonus answers are part of it (the tally's last
+level row, the grade), so `endRun` keeps it in the education store as `pending` ({ tally, full, at };
+`setPending`, updated by each bonus answer) and shows the badges it would earn so far
+(`eduPreviewBadges`, `countersAfterRun`); closing the bonus quiz draws the panel again
+(`refreshOverEducation`). It is recorded once, from its final tally, when the panel is left (Home and
+Play again restart Play: `finishPendingEducation` in `create`, then a sync) or at the next page load;
+nothing reaches the 📚 board before. A lost run is recorded at once. Under test mode a bonus answer
+counts nowhere. Your own **profile**, with education unlocked, ends with a 📚 Education section: the
 average grade, the graded runs and the eight badges.
 **What leaves the device, and only by choice** (plan 21, Stage 3b): the **📚 Education data** panel
 (`src/ui/eduDataPanel.js`, a DOM panel like the user panel; from a button in the user panel shown

@@ -419,6 +419,20 @@ export function reviveStep(state, event, t = TUNING) {
   return state;
 }
 
+/**
+ * The counters after one more finished education run with `facts` (eduRunFacts): the 🤓 streak moves
+ * and a graded run's grade joins the average. Pure: the store's endRun saves it, and the game-over
+ * panel previews it for a won run not recorded yet (plan 26).
+ */
+export function countersAfterRun(counters = {}, facts = null) {
+  const out = { ...counters, perfectStreak: nextPerfectStreak(counters.perfectStreak, facts) };
+  if (facts?.graded) {
+    out.gradedRuns = (out.gradedRuns ?? 0) + 1;
+    out.gradeSum = (out.gradeSum ?? 0) + facts.grade;
+  }
+  return out;
+}
+
 /** The shop's prices in an education run at `level`: each base price × education.priceScale[level − 1], rounded up (past the table, its last row). */
 export function eduShopPrices(level, t = TUNING) {
   const scale = t.education.priceScale;
@@ -448,6 +462,20 @@ const SM2_FIELDS = ['step', 'ease', 'intervalMs', 'dueAt', 'reps', 'lapses', 'se
 const EDU_COUNTERS = ['revives', 'perfectStreak', 'gradedRuns', 'gradeSum'];
 const BADGE_RE = /^edu_[a-z0-9_]{1,36}$/;
 const DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
+const TALLY_KEYS = ['answered', 'right', 'wrong', 'revives', 'restores'];
+const isCount = (v) => Number.isInteger(v) && v >= 0;
+
+/** A run's quiz tally (newTally's shape) as stored, or null when it is not one. */
+function cleanTally(raw, lastLevel) {
+  if (!raw || typeof raw !== 'object' || !TALLY_KEYS.every((k) => isCount(raw[k]))) return null;
+  const byLevel = {};
+  for (const [lv, row] of Object.entries(raw.byLevel && typeof raw.byLevel === 'object' ? raw.byLevel : {})) {
+    const n = Number(lv);
+    if (!Number.isInteger(n) || n < 1 || n > lastLevel || !['answered', 'right', 'wrong'].every((k) => isCount(row?.[k]))) return null;
+    byLevel[n] = { answered: row.answered, right: row.right, wrong: row.wrong };
+  }
+  return { ...Object.fromEntries(TALLY_KEYS.map((k) => [k, raw[k]])), byLevel };
+}
 
 /**
  * An SM-2 record as FSRS would hold it (plan 26), so no player starts over:
@@ -507,7 +535,11 @@ function cleanEdu(raw, keep, t = TUNING) {
   // Today's buries (plan 25): { day: local YYYY-MM-DD, n }; kept only while it is well formed.
   const b = raw?.buried;
   const buried = b && typeof b.day === 'string' && DAY_RE.test(b.day) && Number.isInteger(b.n) && b.n > 0 ? { day: b.day, n: b.n } : null;
-  return { v: 2, cards, recent, counters, badges, unlockedLevel, ...(buried ? { buried } : {}) };
+  // A won run not recorded yet (plan 26): its tally (bonus answers included), whether it was full, when it was won.
+  const p = raw?.pending;
+  const tally = cleanTally(p?.tally, lastLevel);
+  const pending = tally && typeof p.full === 'boolean' && Number.isFinite(p.at) && p.at > 0 ? { tally, full: p.full, at: p.at } : null;
+  return { v: 2, cards, recent, counters, badges, unlockedLevel, ...(buried ? { buried } : {}), ...(pending ? { pending } : {}) };
 }
 
 /** The device's local day as YYYY-MM-DD (a bury's daily cap counts local days: plan 25). */
@@ -562,16 +594,27 @@ export function createEduStore(storage, { key = LEADERBOARD.eduKey, t = TUNING }
       const state = read();
       write({ ...state, counters: { ...state.counters, revives: (state.counters.revives ?? 0) + 1 } });
     },
-    /** An education run ended with `facts` (eduRunFacts): the 🤓 streak moves, and a graded run's grade joins the average. Returns the counters. */
+    /** An education run ended with `facts` (eduRunFacts): the 🤓 streak moves, and a graded run's grade joins the average (countersAfterRun). Returns the counters. */
     endRun(facts) {
       const state = read();
-      const counters = { ...state.counters, perfectStreak: nextPerfectStreak(state.counters.perfectStreak, facts) };
-      if (facts?.graded) {
-        counters.gradedRuns = (counters.gradedRuns ?? 0) + 1;
-        counters.gradeSum = (counters.gradeSum ?? 0) + facts.grade;
-      }
-      write({ ...state, counters });
+      write({ ...state, counters: countersAfterRun(state.counters, facts) });
       return read().counters;
+    },
+    /**
+     * A won run waits here until its game-over panel is left (plan 26): { tally, full, at }. Its bonus
+     * answers update the tally (setPending again); takePending hands it over once, for recording.
+     */
+    setPending({ tally, full, at }) {
+      const state = read();
+      write({ ...state, pending: { tally, full: Boolean(full), at } });
+    },
+    /** The won run waiting to be recorded, taken off the store (null when there is none): it is recorded once. */
+    takePending() {
+      const state = read();
+      if (!state.pending) return null;
+      const { pending, ...rest } = state;
+      write(rest);
+      return pending;
     },
     /** Hold the badges in `ids` not held yet, dated `day` (YYYY-MM-DD); returns the ids newly held, in order. */
     unlock(ids, day) {

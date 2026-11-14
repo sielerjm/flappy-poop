@@ -143,11 +143,11 @@ export const TUNING = {
     pairGap: 44, // px between them: Play again's glow stops 20 px short of Home
     pairGlowPx: 24, // px Play again's glow reaches past it on that row (a lone button's reaches readyPromptGlowPx): 10 px inside the panel's border
     eduBandBottom: 290, // px from the panel centre: the summary band's bottom when no bonus button sits over the pair (the row Home left goes to the band; it ends just above the glow)
-    // The rows under the coins row, px from the panel centre (overEduLines): the badge line; the ‼️ 😢
-    // row in its place, or a row under it; the note a row under that. A won run's band is shorter
-    // (the bonus button takes a row): what does not fit above it starts cleanly below its bottom
-    // (band.bottom), never cut by it, and the band scrolls there.
-    eduLinesY: { badge: 156, falls: 160, fallsUnderBadge: 216, note: 220, noteUnderBadge: 268, wonFalls: 150, wonFallsUnderBadge: 236, wonNote: 236, wonNoteUnderBadge: 290 },
+    // The rows under the coins row, px from the panel centre (overEduLines): the badge line; the ❔ ✅ ❌
+    // tally row in its place, or a row under it (plan 26: the panel's bottom row); the note a row under
+    // that. A won run's band is shorter (the bonus button takes a row): what does not fit above it
+    // starts cleanly below its bottom (band.bottom), never cut by it, and the band scrolls there.
+    eduLinesY: { badge: 156, tally: 160, tallyUnderBadge: 216, note: 220, noteUnderBadge: 268, wonTally: 150, wonTallyUnderBadge: 236, wonNote: 236, wonNoteUnderBadge: 290 },
   },
   shareCard: {
     width: 1080, // px: the shared image, a 4:5 portrait (the largest shape Instagram's feed shows uncropped)

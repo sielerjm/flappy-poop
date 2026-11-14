@@ -7,7 +7,7 @@ import { playScene, absorb, fakeStorage, registry, toggleStub } from './support/
 import { LEADERBOARD, TUNING as T } from '../src/config.js';
 import { createSettingsStore } from '../src/logic.js';
 import { CARDS } from '../src/questions.js';
-import { newTally, createEduStore, schedule } from '../src/education.js';
+import { newTally, createEduStore, schedule, tallyAnswer } from '../src/education.js';
 import { eduRunFacts } from '../src/achievements.js';
 import { createEduShareStore } from '../src/leaderboard.js';
 
@@ -403,4 +403,50 @@ test("quizNext passes the player's new-card order (settings eduNewOrder, plan 26
   assert.equal(s.quizNext({ mode: 'revive' }).reason, 'new', 'a revive too');
   settings.set({ eduNewOrder: 'after' });
   assert.equal(s.quizNext({ mode: 'revive' }).reason, 'missed');
+});
+
+test('a won education run waits (plan 26): nothing is recorded at the win; its bonus answers count in the tally, the waiting run and the grade (a wrong one takes 💯 off the panel); the next create records it once', () => {
+  const store = createEduStore(fakeStorage());
+  let tally = newTally();
+  for (let i = 0; i < 5; i += 1) tally = tallyAnswer(tally, 1 + (i % 3), true);
+  const s = playScene({
+    match: null, runIsTest: false, runIsEducation: true, won: true, runStartLevel: 1, runSkipped: false, revive: null, breakGaveUp: false,
+    runQuiz: tally, eduStore: store, level: 7, levelBreak: false, state: 'dead', registry: registry(), isTestMode: () => false, researchJoined: () => false,
+    pipes: { getChildren: () => [] }, items: { getChildren: () => [] }, beans: { getChildren: () => [] },
+    syncLeaderboard() {}, recordCareer() {}, best: { save() {}, load: () => 0 },
+  });
+  for (const m of ['closeShop', 'endBoost', 'endSweep', 'markHowToSeen', 'setCharged', 'setMultiplierBadge', 'setProbioticPulse', 'setPauseBanner']) s[m] = () => {};
+  s.endRun();
+  assert.deepEqual(store.load().counters, {}, 'nothing recorded at the win: no graded run, so nothing for the 📚 board either');
+  assert.deepEqual(store.load().pending.tally, tally, 'the run waits with its tally');
+  assert.ok(s.runBadges.includes('edu_perfect'), `the panel shows what it would earn so far: ${s.runBadges}`);
+  // A bonus answer, wrong: the run's numbers, the waiting run and the preview move with it.
+  const card = CARDS.find((c) => c.deck === 'rectum');
+  s.quizAnswer({ card, reason: 'new', order: ['answer', 'w1', 'w2'], chosen: 'w1', rtMs: 4000, mode: 'bonus' });
+  assert.deepEqual([s.runQuiz.answered, s.runQuiz.wrong, s.runQuiz.byLevel[7]], [6, 1, { answered: 1, right: 0, wrong: 1 }], "in the last level's row");
+  assert.deepEqual(store.load().pending.tally, s.runQuiz);
+  const preview = s.eduPreviewBadges(eduRunFacts(store.load().pending.tally, { full: true }));
+  assert.ok(!preview.includes('edu_perfect'), 'a wrong bonus answer takes 💯 off');
+  // Leaving the panel restarts the scene: the run is recorded there, once, from its final tally.
+  assert.equal(s.finishPendingEducation(), true);
+  assert.deepEqual([store.load().counters.gradedRuns, store.load().counters.gradeSum, store.load().pending], [1, Math.round((10000 * 5) / 6), undefined]);
+  assert.equal(s.finishPendingEducation(), false, 'once');
+  assert.equal(store.load().counters.gradedRuns, 1);
+});
+
+test('a lost education run is recorded at once, as before; a bonus answer under test mode counts nowhere (plan 26)', () => {
+  const store = createEduStore(fakeStorage());
+  let tally = newTally();
+  for (let i = 0; i < 5; i += 1) tally = tallyAnswer(tally, 1, i > 0);
+  const s = playScene({
+    match: null, runIsTest: false, runIsEducation: true, won: false, runStartLevel: 1, runSkipped: false, revive: null, breakGaveUp: false,
+    runQuiz: tally, eduStore: store, level: 2, levelBreak: false, state: 'dead', registry: registry(), isTestMode: () => true, researchJoined: () => false,
+    pipes: { getChildren: () => [] }, items: { getChildren: () => [] }, beans: { getChildren: () => [] },
+    syncLeaderboard() {}, recordCareer() {}, best: { save() {}, load: () => 0 },
+  });
+  for (const m of ['closeShop', 'endBoost', 'endSweep', 'markHowToSeen', 'setCharged', 'setMultiplierBadge', 'setProbioticPulse', 'setPauseBanner']) s[m] = () => {};
+  s.endRun();
+  assert.deepEqual([store.load().counters.gradedRuns, store.load().pending], [1, undefined]);
+  s.quizAnswer({ card: CARDS[0], reason: 'new', order: ['answer', 'w1', 'w2'], chosen: 'answer', rtMs: 4000, mode: 'bonus' });
+  assert.equal(s.runQuiz.answered, 5, 'test mode: the bonus answer is not counted');
 });

@@ -62,7 +62,7 @@ const LINK_ZONES = 8; // tap boxes for the explanation's links: 3 terms a card, 
  * nothing and leave the schedule alone; plan 26).
  * The purse (plan 26): in a break, "🌽 n" under the ✕, counting up as right answers pay.
  * The run's tally: "✅ 5  ❌ 0" in the top row between the card's id and the ✕ / ❤️ corner, once the
- * run has an answer (never in the bonus quiz, whose answers are not tallied). A tap on it, or A on
+ * run has an answer (the bonus quiz's too: they are part of a won run, plan 26). A tap on it, or A on
  * the ring, opens the "This run" card: one line per level answered (an info card over the quiz;
  * toggleRunCard). Any tap, Esc or B closes it and the quiz is as it was; while it is up the quiz's
  * keys do nothing, and a question left waiting under it is marked interrupted.
@@ -73,7 +73,7 @@ const LINK_ZONES = 8; // tap boxes for the explanation's links: 3 terms a card, 
  *   'break'  a level break: questions about the segment just cleared, +coins for a right answer;
  *            Return / ✕ / Esc / B close it, back to the break.
  *   'bonus'  over the game-over panel of a won run: the rectum's questions (it has no break), no
- *            coins; closed like a break's.
+ *            coins, its answers part of the run (plan 26); closed like a break's.
  *   'revive' after an education crash: Play's reviveStep state (play.revive) runs the card. Wrong
  *            answers use up the ❤️ (education.strikes); the first right one revives, and when the
  *            crash took something, offers the ⭐ streak (education.restoreStreak in a row, the first
@@ -254,12 +254,12 @@ export class Quiz extends Phaser.Scene {
 
   /**
    * The run's tally in the top row: "✅ right  ❌ wrong" from Play's runQuiz, once the run has an
-   * answer; never in the bonus quiz (practice: not tallied). Its tap box starts clear of the id
+   * answer (the bonus quiz's answers count too since plan 26). Its tap box starts clear of the id
    * link's (a revive's id line, with its segment, reaches further right).
    */
   refreshTally() {
     const q = this.play?.runQuiz;
-    const shown = this.mode !== 'bonus' && (q?.answered ?? 0) > 0;
+    const shown = (q?.answered ?? 0) > 0;
     this.tally.setText(shown ? `✅ ${q.right}  ❌ ${q.wrong}` : '').setVisible(shown);
     const right = this.cx + TALLY_HIT.width / 2;
     const left = Math.max(this.cx - TALLY_HIT.width / 2, this.reportZone.visible ? this.reportZone.x + this.reportZone.width + 4 : -Infinity);

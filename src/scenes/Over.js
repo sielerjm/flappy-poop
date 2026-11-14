@@ -92,8 +92,8 @@ export class Over extends Phaser.Scene {
     // so a death tap cannot restart or share.
     // An education run (plan 21, E5) has nothing to share: its buttons are one row, Home | Play again
     // side by side where Play again sits, and after a win the 📚 bonus button (the rectum's questions,
-    // openBonus) sits centred a row above them. Its third row of cells is the quiz tally, and the
-    // ‼️ / 😢 row moves under the coins (under the badge line when the run earned one).
+    // openBonus) sits centred a row above them. Its quiz tally (❔ ✅ ❌) is the bottom row of cells,
+    // under the coins and ‼️ / 😢 (under the badge line when the run earned one; plan 26).
     // They, the tray and everything above are made before the summary band below, so they stay on
     // the main camera: the band's own camera draws only what is added to it.
     // Achievements this run unlocked (plan 08), by their catalog entry; an education run's come from
@@ -153,8 +153,8 @@ export class Over extends Phaser.Scene {
     // (times one started), bad bacteria / bean / mystery box (a box's reward also counts under its own
     // icon), ‼️ long falls / 😢 close calls, then pipes crossed (fart pipes included, as for levels) |
     // the coins this run collected. Each cell explains itself in a card (openCell). An education
-    // panel's third row is its tally (❔ answered, ✅ right, ❌ wrong), cells like the rest; a tap on
-    // one opens the run's answers by level.
+    // panel's bottom row is its tally (❔ answered, ✅ right, ❌ wrong; plan 26), cells like the rest;
+    // a tap on one opens the run's answers by level (a won run's bonus answers in the last level's).
     const counts = { ...collected, pipes, falls, closeCalls, ...(education ? { eduAnswered: education.answered ?? 0, eduRight: education.right ?? 0, eduWrong: education.wrong ?? 0 } : {}) };
     this.eduTally = education; // the "This run" card reads its rows (byLevel)
     for (const cell of this.cells) {
@@ -190,7 +190,7 @@ export class Over extends Phaser.Scene {
     if (badges.length) {
       const named = badges.slice(0, 2).map((e) => `${e.glyph} ${badgeTitle(locale, e)}`).join(' · ');
       const more = badges.length > 2 ? ` ${t(locale, 'overBadgesMore').replace('{n}', String(badges.length - 2))}` : '';
-      // An education panel: under the coins row, with the ‼️ / 😢 row and the note below it (overEduLines).
+      // An education panel: under the coins row, with the ❔ ✅ ❌ row and the note below it (overEduLines).
       const lineY = cy + (education ? eduLines.badge : data?.personalBest || daily ? 186 : 150);
       const text = this.add.text(cx, lineY, t(locale, 'overBadges').replace('{badges}', named + more), { ...style, fontSize: '28px', color: '#ffd700' }).setOrigin(0.5);
       text.setScale(fitScale(text.width, 500, 0));
@@ -198,9 +198,9 @@ export class Over extends Phaser.Scene {
     }
     this.eduNote = null; // as with badgeLine: never the last panel's
     if (education) {
-      // Why the run is on no board, under the ‼️ / 😢 row (overEduLines). A lost run's taller band
+      // Why the run is on no board, under the ❔ ✅ ❌ row (overEduLines). A lost run's taller band
       // holds all of it; a won run's shorter one (the bonus button takes a row) has this note, and
-      // under a badge line the ‼️ / 😢 row too, below its bottom: those panels scroll.
+      // under a badge line the ❔ ✅ ❌ row too, below its bottom: those panels scroll.
       this.eduNote = line(this.add.text(cx, cy + eduLines.note, t(locale, testRun ? 'testRunNotSaved' : 'eduNotSaved'), { ...style, fontSize: '24px', color: '#c9b8dc', fontStyle: 'normal', wordWrap: { width: 480, useAdvancedWrap: true } }).setOrigin(0.5));
     } else if (testRun) {
       line(this.add.text(cx, cy + 150, t(locale, 'testRunNotSaved'), { ...style, fontSize: '30px', color: '#ffd700', wordWrap: { width: 460, useAdvancedWrap: true } }).setOrigin(0.5));

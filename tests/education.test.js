@@ -6,7 +6,7 @@ import { createRng } from '../src/logic.js';
 import { CARDS, DECKS } from '../src/questions.js';
 import { COUNT_COLORS } from '../src/ui/countLine.js';
 import { EDU_ACHIEVEMENTS, eduRunFacts, evaluate } from '../src/achievements.js';
-import { cardCounts, cardRetrievability, cardSource, cardText, createEduStore, dueCount, eduShopPrices, localDayStart, NEW_ORDERS, newAllowance, optionText, gradeFor, masteryByDeck, newTally, pickCard, reviveSettled, reviveStart, reviveStep, schedule, shuffleOptions, tallyAnswer } from '../src/education.js';
+import { cardCounts, cardRetrievability, countersAfterRun, cardSource, cardText, createEduStore, dueCount, eduShopPrices, localDayStart, NEW_ORDERS, newAllowance, optionText, gradeFor, masteryByDeck, newTally, pickCard, reviveSettled, reviveStart, reviveStep, schedule, shuffleOptions, tallyAnswer } from '../src/education.js';
 import { initDifficulty, initStability } from '../src/fsrs.js';
 
 const MIN = 60000;
@@ -682,4 +682,36 @@ test('createEduStore.bury (plan 25): the card waits until the time given, nothin
   store.bury('ST-01', NOW + DAY, '2026-11-14');
   assert.deepEqual([store.buriedOn('2026-11-13'), store.buriedOn('2026-11-14')], [0, 1]);
   assert.equal(localDayKey(new Date(2026, 0, 5, 23, 59)), '2026-01-05', 'the local day, not UTC');
+});
+
+test('countersAfterRun (plan 26): the 🤓 streak moves and a graded run joins the average; pure', () => {
+  const before = { revives: 2, perfectStreak: 1, gradedRuns: 1, gradeSum: 10000 };
+  const perfect = eduRunFacts({ answered: 5, right: 5 }, { full: true });
+  assert.deepEqual(countersAfterRun(before, perfect), { revives: 2, perfectStreak: 2, gradedRuns: 2, gradeSum: 20000 });
+  assert.deepEqual(before, { revives: 2, perfectStreak: 1, gradedRuns: 1, gradeSum: 10000 }, 'the counters passed in are left as they were');
+  assert.deepEqual(countersAfterRun(before, eduRunFacts({ answered: 6, right: 5 })), { revives: 2, perfectStreak: 0, gradedRuns: 2, gradeSum: 18333 });
+  assert.deepEqual(countersAfterRun({}, eduRunFacts({ answered: 2, right: 2 })), { perfectStreak: 0 }, 'too short to grade');
+});
+
+test('createEduStore pending (plan 26): a won run waits with its tally; setPending again follows bonus answers; it survives a reload; takePending hands it over once; junk reads as none; Clear removes it', () => {
+  const m = new Map();
+  const st = { getItem: (k) => m.get(k) ?? null, setItem: (k, v) => m.set(k, v), removeItem: (k) => m.delete(k) };
+  const store = createEduStore(st);
+  assert.equal(store.load().pending, undefined);
+  const tally = tallyAnswer(tallyAnswer(newTally(), 1, true), 7, false);
+  store.setPending({ tally, full: true, at: NOW });
+  assert.deepEqual(createEduStore(st).load().pending, { tally, full: true, at: NOW }, 'kept across a reload');
+  const more = tallyAnswer(tally, 7, true);
+  store.setPending({ ...store.load().pending, tally: more });
+  assert.deepEqual(store.load().pending.tally, more);
+  assert.deepEqual(store.takePending(), { tally: more, full: true, at: NOW });
+  assert.equal(store.takePending(), null, 'once');
+  assert.equal(createEduStore(st).load().pending, undefined);
+  for (const junk of [{ tally: { answered: 'x' }, full: true, at: NOW }, { tally, full: 'yes', at: NOW }, { tally, full: true }, { tally: { ...tally, byLevel: { 9: { answered: 1, right: 1, wrong: 0 } } }, full: true, at: NOW }]) {
+    m.set(LEADERBOARD.eduKey, JSON.stringify({ v: 2, cards: {}, recent: [], pending: junk }));
+    assert.equal(createEduStore(st).load().pending, undefined, JSON.stringify(junk));
+  }
+  store.setPending({ tally, full: false, at: NOW });
+  store.clear();
+  assert.equal(createEduStore(st).load().pending, undefined, 'Clear takes it with the rest');
 });
