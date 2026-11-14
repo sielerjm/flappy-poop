@@ -58,8 +58,9 @@ const LINK_ZONES = 8; // tap boxes for the explanation's links: 3 terms a card, 
  * "5 + 2 + 8": new cards (blue), missed cards (red) and reviews due (green) that this quiz can still
  * ask, the card on show included and its kind underlined (Play.quizCounts; refreshCounts). Hidden in
  * a test run, whose quizzes ignore the schedule. With nothing counted left, a break's or the bonus
- * quiz stops asking: "You're all caught up!" with End Review and Keep practicing (practice cards pay
- * nothing and leave the schedule alone; plan 26).
+ * quiz stops asking: "You're all caught up!" with End Review and Keep practicing (practice cards
+ * leave the schedule alone; plan 26). A right answer in a break pays once per card a local day,
+ * practice too; one that paid nothing because the card paid today says so (paidNote; its A2).
  * The purse (plan 26): in a break, "🌽 n" under the ✕, counting up as right answers pay.
  * The run's tally: "✅ 5  ❌ 0" in the top row between the card's id and the ✕ / ❤️ corner, once the
  * run has an answer (the bonus quiz's too: they are part of a won run, plan 26). A tap on it, or A on
@@ -147,6 +148,9 @@ export class Quiz extends Phaser.Scene {
     this.verdict = this.add.text(cx, 0, '', { ...STYLE, fontSize: '32px', wordWrap: { width: TEXT_W, useAdvancedWrap: true } }).setOrigin(0.5, 0);
     // The corn kernel after "Right! +1" (say): coins are drawn as the kernel, as in the HUD and the shop.
     this.verdictCoin = this.add.image(cx, 0, 'coin', 0).setDisplaySize(COIN_PX, COIN_PX).setVisible(false);
+    // In the kernel's place, a right answer that paid nothing because the card paid today says so
+    // (plan 26, A2): small and muted, on the verdict's row, so the card grows no taller.
+    this.paidNote = this.add.text(cx, 0, '', { ...MUTED, fontSize: '24px' }).setOrigin(0.5).setVisible(false);
     // When the card comes back (plan 26, as Anki shows it): "Next review: in 2 days" under the verdict.
     this.nextWait = this.add.text(cx, 0, '', { ...MUTED, fontSize: '24px', wordWrap: { width: TEXT_W, useAdvancedWrap: true } }).setOrigin(0.5, 0).setVisible(false);
     this.explain = this.add.text(cx, 0, '', { ...MUTED, fontSize: '26px', lineSpacing: 4, wordWrap: { width: TEXT_W, useAdvancedWrap: true } }).setOrigin(0.5, 0);
@@ -504,6 +508,7 @@ export class Quiz extends Phaser.Scene {
       this.quitArmed = true;
       this.verdict.setX(this.cx).setText(t(this.locale, 'reviveQuitWarn')).setColor(BAD).setVisible(true);
       this.verdictCoin.setVisible(false);
+      this.paidNote.setVisible(false);
       this.nextWait.setVisible(false);
       this.leftBtn.set(t(this.locale, 'reviveQuitSure'), () => this.giveUp()).holdFor(T.education.explainMinMs);
       return;
@@ -572,6 +577,7 @@ export class Quiz extends Phaser.Scene {
     });
     this.verdict.setY(y + 10).setText('').setVisible(false);
     this.verdictCoin.setVisible(false);
+    this.paidNote.setVisible(false);
     this.nextWait.setText('').setVisible(false);
     this.clearRich();
     this.explain.setText('').setVisible(false);
@@ -606,7 +612,7 @@ export class Quiz extends Phaser.Scene {
       o.zone.setVisible(false);
     }
     this.clearRich();
-    for (const x of [this.verdict, this.verdictCoin, this.nextWait, this.explain, this.source]) x.setVisible(false);
+    for (const x of [this.verdict, this.verdictCoin, this.paidNote, this.nextWait, this.explain, this.source]) x.setVisible(false);
     this.clearButtons();
     if (revive) this.rightBtn.set(t(this.locale, 'reviveContinue'), () => this.finish());
     else {
@@ -665,7 +671,7 @@ export class Quiz extends Phaser.Scene {
     const key = this.order[i];
     const rtMs = (globalThis.performance?.now?.() ?? Date.now()) - this.shownAt;
     const res = this.play?.quizAnswer?.({ card: this.card, reason: this.reason, order: this.order, chosen: key, rtMs, interrupted: this.interrupted, mode: this.mode, input }) ?? { correct: key === 'answer' };
-    this.lastAnswer = { id: this.card.id, chosen: key, correct: res.correct, coins: res.coins ?? 0, dueAt: res.dueAt ?? null, rtMs, interrupted: this.interrupted }; // the smoke reads it
+    this.lastAnswer = { id: this.card.id, chosen: key, correct: res.correct, coins: res.coins ?? 0, paidToday: Boolean(res.paidToday), dueAt: res.dueAt ?? null, rtMs, interrupted: this.interrupted }; // the smoke reads it
     this.refreshTally();
     this.refreshPurse();
     if (this.mode === 'revive') this.reviveState = this.play?.reviveEvent?.(res.correct ? 'correct' : 'wrong') ?? this.reviveState;
@@ -697,15 +703,26 @@ export class Quiz extends Phaser.Scene {
     else this.breakStep(correct);
   }
 
-  /** The verdict line under the options; `coin` puts the corn kernel after it ("Right! +1" and the kernel), the pair centred. */
-  say(text, good, coin = false) {
+  /**
+   * The verdict line under the options; `coin` puts the corn kernel after it ("Right! +1" and the
+   * kernel), `note` a short muted line in the kernel's place ("🌽 already earned today"; plan 26, A2),
+   * the pair centred on the verdict's row.
+   */
+  say(text, good, coin = false, note = null) {
     this.verdict.setX(this.cx).setText(text).setColor(good ? GOOD : BAD).setVisible(true);
     this.verdictCoin.setVisible(Boolean(coin));
+    this.paidNote?.setText(note ?? '').setVisible(Boolean(note) && !coin);
     this.showNextWait();
-    if (!coin) return;
-    const gap = 8;
-    this.verdict.setX(this.cx - (COIN_PX + gap) / 2);
-    this.verdictCoin.setPosition(this.verdict.x + this.verdict.width / 2 + gap + COIN_PX / 2, this.verdict.y + this.verdict.height / 2);
+    const rowY = this.verdict.y + this.verdict.height / 2;
+    if (coin) {
+      const gap = 8;
+      this.verdict.setX(this.cx - (COIN_PX + gap) / 2);
+      this.verdictCoin.setPosition(this.verdict.x + this.verdict.width / 2 + gap + COIN_PX / 2, rowY);
+    } else if (note) {
+      const gap = 12;
+      this.verdict.setX(this.cx - (this.paidNote.width + gap) / 2);
+      this.paidNote.setPosition(this.verdict.x + this.verdict.width / 2 + gap + this.paidNote.width / 2, rowY);
+    }
   }
 
   /** Under the verdict, when the answered card comes back (lastAnswer.dueAt; nextWaitText). Nothing when nothing was saved (a test run). */
@@ -731,7 +748,8 @@ export class Quiz extends Phaser.Scene {
   /** A level break: the verdict (+coins for a right answer), Why on top, and End Review | Next Card below. */
   breakStep(correct) {
     const coins = this.lastAnswer?.coins ?? 0;
-    this.say(correct && coins ? t(this.locale, 'quizRightCoins').replace('{n}', String(coins)) : t(this.locale, correct ? 'quizRight' : 'quizWrong'), correct, Boolean(correct && coins));
+    const note = correct && !coins && this.lastAnswer?.paidToday ? t(this.locale, 'quizPaidToday') : null; // the card paid today (plan 26, A2)
+    this.say(correct && coins ? t(this.locale, 'quizRightCoins').replace('{n}', String(coins)) : t(this.locale, correct ? 'quizRight' : 'quizWrong'), correct, Boolean(correct && coins), note);
     // At a gate, a miss may be buried until tomorrow for coins (plan 25, B7): Bury takes the way out's
     // place (the ✕ still closes the quiz).
     if (!correct && this.mode === 'break' && this.play?.canBury?.(this.card.id)) {

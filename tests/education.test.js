@@ -684,6 +684,33 @@ test('createEduStore.bury (plan 25): the card waits until the time given, nothin
   assert.equal(localDayKey(new Date(2026, 0, 5, 23, 59)), '2026-01-05', 'the local day, not UTC');
 });
 
+test("createEduStore's paid record (plan 26, A2): the cards whose right answer paid on a local day; answer() adds one only when told the day, a new day starts the list over, a broken record reads as none", async () => {
+  const { paidOn } = await import('../src/education.js');
+  const m = new Map();
+  const st = { getItem: (k) => m.get(k) ?? null, setItem: (k, v) => m.set(k, v), removeItem: (k) => m.delete(k) };
+  const store = createEduStore(st);
+  const rec = missedRec(NOW);
+  store.answer('ST-01', rec);
+  assert.equal('paid' in store.load(), false, 'an answer that paid nothing leaves no record (the whole-store shapes stay as they were)');
+  store.answer('ST-01', rec, { paidDay: '2026-11-13' });
+  store.answer('ST-02', rec, { paidDay: '2026-11-13' });
+  store.answer('ST-02', rec, { paidDay: '2026-11-13' });
+  assert.deepEqual(store.load().paid, { day: '2026-11-13', ids: ['ST-01', 'ST-02'] }, 'each card once');
+  assert.deepEqual([paidOn(store.load().paid, '2026-11-13'), paidOn(store.load().paid, '2026-11-14')], [['ST-01', 'ST-02'], []], 'paidOn: that day only');
+  store.answer('ST-03', rec);
+  assert.deepEqual(store.load().paid.ids, ['ST-01', 'ST-02'], 'an answer that did not pay leaves it alone');
+  store.answer('ST-01', rec, { paidDay: '2026-11-14' });
+  assert.deepEqual(store.load().paid, { day: '2026-11-14', ids: ['ST-01'] }, 'a new local day starts the list over');
+  assert.deepEqual(store.load().cards['ST-01'], rec, 'the card is saved as always');
+  for (const bad of [{ day: 'x', ids: ['ST-01'] }, { day: '2026-11-14', ids: 'ST-01' }, { day: '2026-11-14', ids: [] }, { day: '2026-11-14', ids: ['nope!'] }, 7]) {
+    m.set(LEADERBOARD.eduKey, JSON.stringify({ v: 2, cards: {}, recent: [], paid: bad }));
+    assert.equal('paid' in createEduStore(st).load(), false, JSON.stringify(bad));
+  }
+  m.set(LEADERBOARD.eduKey, JSON.stringify({ v: 2, cards: {}, recent: [], paid: { day: '2026-11-14', ids: ['ST-01', 'bad id', 'ST-01', 'GE-02'] } }));
+  assert.deepEqual(createEduStore(st).load().paid, { day: '2026-11-14', ids: ['ST-01', 'GE-02'] }, 'a bad id or a repeat is dropped, the rest kept');
+  assert.deepEqual(paidOn(undefined, '2026-11-14'), [], 'no record: nothing paid');
+});
+
 test('countersAfterRun (plan 26): the 🤓 streak moves and a graded run joins the average; pure', () => {
   const before = { revives: 2, perfectStreak: 1, gradedRuns: 1, gradeSum: 10000 };
   const perfect = eduRunFacts({ answered: 5, right: 5 }, { full: true });

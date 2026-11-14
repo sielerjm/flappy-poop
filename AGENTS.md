@@ -418,13 +418,13 @@ Card, Fly on, Go for it, End run) and whose left one is the way out (End Review 
 the choice's Fly on in a revive), then the numbers on the card's bottom row. **Caught up**: with
 nothing counted left, a break's or the bonus quiz stops at the first practice card: "You're all
 caught up!" with End Review and **Keep practicing** (`Quiz.practicing`: practice cards from then on,
-paying nothing and leaving the schedule alone); with nothing at all, End Review alone. **The purse**
+leaving the schedule alone, and paying as any card does: once a day); with nothing at all, End Review alone. **The purse**
 (plan 26): in a break, "🌽 n" under the ✕ (`refreshPurse`), popping as right answers pay. Enter /
 Space press only the way forward (and End Review on "All caught up" when it is alone), never Give
 up: Space is the flap key. **Its sounds**: a book opens with the
 quiz (`book-open`), a page turns for each next card (`book-flip`), the book shuts when it is left
 (`book-close`); a wrong answer plays `sfx.hazard`; a right one that pays nothing (a revive, the bonus
-quiz) plays `sfx.score`, and one that pays (a break's) makes the coin's sound alone (`takeCoins`); the
+quiz, a card that paid today) plays `sfx.score`, and one that pays (a break's) makes the coin's sound alone (`takeCoins`); the
 answer that wins everything back plays `sparkle` in the ding's place. **Level break** (plan 25 laid it
 out, plan 26 to Michael's sketch: `eduBreakLayout` in logic.js): the banner higher (`titleY`); the 🌽
 pill with Skip ▸ right of it; on the 🏅's row under it **📚 Review** and Quit side by side;
@@ -434,8 +434,13 @@ quiz, which asks missed cards, then due reviews (the least remembered first), th
 in this break (`Play.breakMissed`, asked again as missed until answered right; the one just shown
 waits), then new cards of the segment just cleared (and general ones), then practice (`pickCard`'s
 `dueFirst`; the bonus quiz keeps new first). A counted card always comes before practice, whatever the
-recent gap holds. A right answer to a counted card pays `education.breakCoins` (`takeCoins`); practice
-pays nothing. The shop's prices are `eduShopPrices(level)` (`Play.shopPrices`; `buyBlocker` takes
+recent gap holds. A right answer in a break pays `education.breakCoins` (`takeCoins`), **once per card a
+local day**, practice included (plan 26, A2: the store's `paid` { day, ids }, written through
+`eduStore.answer(id, record, { paidDay })`, read with `paidOn`; a test run keeps no record, so every right
+answer pays there). A card already paid today pays nothing more, even missed on purpose and then answered
+right; `quizAnswer` returns `paidToday`, and the card shows "🌽 already earned today" (`quizPaidToday`,
+`Quiz.paidNote`) small and muted beside "Right!", on the verdict's row, so the card grows no taller. A
+wrong answer never costs corn or points. The shop's prices are `eduShopPrices(level)` (`Play.shopPrices`; `buyBlocker` takes
 `prices`). **What is waiting**, as in Anki (`cardCounts`: new, missed (a miss of this break
 included) and review cards a quiz can still ask now; `Play.quizCounts`): three numbers in blue, red
 and green on a line of their own, low under the break's rows (`ui/countLine.js`; none in a test run; a tap, or A on
@@ -794,7 +799,8 @@ src/
                             createEduStore (LEADERBOARD.eduKey = flappyPoop.eduSrs:
                             each card's record and the last cards shown, and (plan
                             22) the education counters and badges: addRevive,
-                            endRun(facts), unlock(ids, day)), dueCount
+                            endRun(facts), unlock(ids, day); plan 26 A2: answer's
+                            paidDay and the paid { day, ids } record, paidOn), dueCount
                             (the 📚 switch's count), cardText (zh-Hans when a card has
                             it) / optionText, cardSource (short citations: "Martinsen
                             et al. 2005"), EDUCATION_EMOJI. Fully unit-tested
@@ -2113,7 +2119,8 @@ tests/                      node --test (schema.test.js, pilot.test.js, eduBoard
                             average, Clear on the same instance), dueCount, cardText.
                             Plan 25: a break's own order, counted cards before early
                             reviews, missed counts, the drain test with any recent gap,
-                            unlockLevel, bury and the local day
+                            unlockLevel, bury and the local day; plan 26 A2: the paid
+                            record
   questions.test.js         src/questions.js: decks, ids, a question and three
                             different options per card, text limits, complete zh versions (skipped while no
                             card has one), references cited and existing, enough live
@@ -2131,9 +2138,11 @@ tests/                      node --test (schema.test.js, pilot.test.js, eduBoard
                             education run's end syncs (a test run's does not); test
                             mode turned on after the start saves nothing; the 📚
                             glyph opens on its own pointer's release; a break's misses
-                            asked again and practice unpaid; the gate (every break
+                            asked again; the gate (every break
                             since plan 26); Bury;
-                            Skip ▸ and Quit (grading both ways)
+                            Skip ▸ and Quit (grading both ways). Plan 26 A2: a wrong
+                            answer costs nothing; every card pays once a local day,
+                            practice included; a test run pays every right answer
   pilot.test.js             the tester pilot end to end: Play's pilot methods, the
                             real stores and leaderboard.js calls and the real save and
                             education data panels, against db/schema.sql through

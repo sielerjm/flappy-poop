@@ -182,7 +182,7 @@ test("a revive's Quit warns on every card: the first press shows the warning, ar
   const left = { label: null, onPress: null, heldMs: null, set(label, onPress) { this.label = label; this.onPress = onPress; this.heldMs = null; return this; }, holdFor(ms) { this.heldMs = ms; return this; } };
   const settingsCalls = [];
   const play = { settings: { load: () => (settingsCalls.push('load'), {}), set: () => settingsCalls.push('set') } };
-  const q = quizScene({ mode: 'revive', reviveState: { phase: 'strikes' }, finishing: false, scene: scenes(['Play', 'Quiz']), runCard: { open: false }, locale: 'en', cx: 360, verdict: text(), verdictCoin: text(), nextWait: text(), leftBtn: left, play, decide: (e) => decided.push(e) });
+  const q = quizScene({ mode: 'revive', reviveState: { phase: 'strikes' }, finishing: false, scene: scenes(['Play', 'Quiz']), runCard: { open: false }, locale: 'en', cx: 360, verdict: text(), verdictCoin: text(), paidNote: text(), nextWait: text(), leftBtn: left, play, decide: (e) => decided.push(e) });
   q.showWayOut();
   assert.deepEqual([left.label, q.quitArmed], ['Quit', false], 'a card opens with Quit unarmed');
   left.onPress();
@@ -234,4 +234,28 @@ test("a quiz button's holdFor keeps its timer: the release comes when the time i
   quizScene({}).holdAfterWrong({ holdFor: (ms) => held.push(ms) }, false);
   quizScene({}).holdAfterWrong({ holdFor: (ms) => held.push(ms) }, true);
   assert.deepEqual(held, [TUNING.education.explainMinMs], 'only after a wrong answer');
+});
+
+test("a right answer that pays nothing because the card paid today says so on the verdict's row, where the kernel sits after a paying answer; the stack below does not move (plan 26, A2)", () => {
+  const text = (w = 100) => ({ x: 0, y: 500, width: w, height: 40, text: '', visible: false, color: null, setX(v) { this.x = v; return this; }, setY(v) { this.y = v; return this; }, setText(v) { this.text = v; return this; }, setColor(v) { this.color = v; return this; }, setVisible(v) { this.visible = v; return this; }, setPosition(x, y) { this.x = x; this.y = y; return this; } });
+  const make = (lastAnswer) => {
+    const q = quizScene({
+      mode: 'break', locale: 'en', cx: 360, card: { id: 'ST-01' }, lastAnswer, verdict: text(90), verdictCoin: text(36), paidNote: { ...text(260), height: 28 }, nextWait: text(),
+      play: { canBury: () => false }, showWayOut() {}, showWhy() {}, holdAfterWrong() {}, ring() {}, topBtn: absorb(), rightBtn: absorb(), leftBtn: absorb(),
+    });
+    q.breakStep(true);
+    return q;
+  };
+  const paidAlready = make({ coins: 0, paidToday: true, dueAt: null });
+  assert.deepEqual([paidAlready.verdict.text, paidAlready.paidNote.visible, paidAlready.paidNote.text, paidAlready.verdictCoin.visible], ['Right!', true, '🌽 already earned today', false]);
+  const v = paidAlready.verdict;
+  const n = paidAlready.paidNote;
+  assert.ok(n.x - n.width / 2 > v.x + v.width / 2, 'the note sits right of the verdict');
+  assert.ok(Math.abs(v.x - 360 + (n.width + 12) / 2) < 1, 'the pair is centred');
+  assert.equal(n.y, v.y + v.height / 2, "on the verdict's row");
+  assert.equal(paidAlready.verdictBottom(), 540, 'the explanation still starts under the verdict: nothing grows');
+  const paying = make({ coins: 1, paidToday: false, dueAt: null });
+  assert.deepEqual([paying.verdict.text, paying.paidNote.visible, paying.verdictCoin.visible], ['Right! +1', false, true], 'a paying answer: the kernel, no note');
+  const plain = make({ coins: 0, paidToday: false, dueAt: null });
+  assert.deepEqual([plain.verdict.text, plain.paidNote.visible], ['Right!', false], 'a right answer that pays nothing for another reason (a test run saves nothing, a revive): no note');
 });

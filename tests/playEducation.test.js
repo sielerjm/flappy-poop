@@ -7,7 +7,7 @@ import { playScene, absorb, fakeStorage, registry, toggleStub } from './support/
 import { LEADERBOARD, TUNING as T } from '../src/config.js';
 import { createSettingsStore } from '../src/logic.js';
 import { CARDS } from '../src/questions.js';
-import { newTally, createEduStore, schedule, tallyAnswer } from '../src/education.js';
+import { newTally, createEduStore, schedule, tallyAnswer, localDayKey } from '../src/education.js';
 import { eduRunFacts } from '../src/achievements.js';
 import { createEduShareStore } from '../src/leaderboard.js';
 
@@ -192,7 +192,7 @@ test("the 📚 glyph opens the 📚 popup (plan 26; \"Your cards\" before) on it
   assert.equal(handlers.pointerup.size + handlers.pointerupoutside.size, 0);
 });
 
-test("a level break's quiz: a miss is asked again and counted as missed until answered right; practice pays no coin; counted answers do (plan 25, B1)", () => {
+test("a level break's quiz: a miss is asked again and counted as missed until answered right; a right answer pays, once per card a day (plan 25, B1; plan 26, A2)", () => {
   const storage = fakeStorage();
   const store = createEduStore(storage);
   const coins = [];
@@ -217,13 +217,64 @@ test("a level break's quiz: a miss is asked again and counted as missed until an
   const rec = store.load().cards[card.id];
   assert.equal(back.dueAt, rec.dueAt, 'and a right one, when its saved record is due');
   assert.deepEqual([rec.state, rec.reps], ['review', 2], 'and the answer moved its schedule (not practice): in review again');
-  assert.deepEqual(coins, [T.education.breakCoins], 'the right answer paid');
-  answer('practice', 'answer');
-  assert.deepEqual(coins, [T.education.breakCoins], 'practice pays nothing');
+  assert.deepEqual([coins, back.coins, back.paidToday], [[T.education.breakCoins], T.education.breakCoins, false], 'the right answer paid');
+  const again = answer('practice', 'answer');
+  assert.deepEqual([coins, again.coins, again.paidToday], [[T.education.breakCoins], 0, true], 'the same card again today, as practice: paid already, and quizAnswer says so');
   assert.deepEqual(store.load().cards[card.id].dueAt, rec.dueAt, 'and leaves the schedule alone');
   s.levelBreak = false;
   answer('missed', 'w1');
   assert.deepEqual(s.breakMissed, [], 'outside a break (a revive) nothing is kept for later');
+});
+
+/** A one-player education run's break over a real store, with the purse and the score watched: what quizAnswer pays. */
+function payScene({ store = createEduStore(fakeStorage()), runIsTest = false, levelBreak = true } = {}) {
+  const paid = [];
+  const spent = [];
+  const s = playScene({
+    eduStore: store, level: 3, levelBreak, runIsTest, runQuiz: newTally(), registry: registry(), researchJoined: () => false, isTestMode: () => runIsTest, score: 40,
+    effects: { spendCoins: (n) => spent.push(n), coins: () => 0 },
+    takeCoins: (n) => paid.push(n), refreshLevelBanner() {}, refreshShopButton() {},
+  });
+  s.breakMissed = [];
+  const answer = (card, reason, chosen, mode = 'break') => s.quizAnswer({ card, reason, order: ['answer', 'w1', 'w2'], chosen, rtMs: 4000, mode });
+  return { s, store, paid, spent, answer };
+}
+
+test('a wrong answer costs nothing anywhere (plan 26, A2: Michael asked): no corn spent, no corn paid, the score as it was, in a break, a revive and the bonus quiz', () => {
+  const card = CARDS.find((c) => c.deck === 'stomach');
+  for (const mode of ['break', 'revive', 'bonus']) {
+    const { s, paid, spent, answer } = payScene({ levelBreak: mode === 'break' });
+    const res = answer(card, 'new', 'w1', mode);
+    assert.deepEqual([res.correct, res.coins, paid, spent, s.score], [false, 0, [], [], 40], mode);
+  }
+});
+
+test('practice pays (plan 26, A2): every card pays once a local day, practice included; a card that paid on an earlier day pays again; a revive and the bonus quiz never pay; a test run pays every right answer', () => {
+  const [a, b] = CARDS.filter((c) => c.deck === 'stomach');
+  const { store, paid, answer } = payScene();
+  const yesterday = localDayKey(new Date(Date.now() - 86400000));
+  store.answer(a.id, schedule(null, 'good', Date.now() - 30 * 86400000), { paidDay: yesterday }); // a review card that paid yesterday
+  store.answer(b.id, schedule(null, 'good', Date.now() - 30 * 86400000));
+  const first = answer(a, 'practice', 'answer');
+  assert.deepEqual([first.coins, first.paidToday, paid], [T.education.breakCoins, false, [T.education.breakCoins]], 'practice pays: the card paid yesterday, not today');
+  assert.deepEqual(store.load().paid, { day: localDayKey(), ids: [a.id] }, 'and is now marked for today');
+  const second = answer(a, 'practice', 'answer');
+  assert.deepEqual([second.coins, second.paidToday, paid.length], [0, true, 1], 'the same card again today pays nothing, and says why');
+  answer(b, 'practice', 'w1');
+  const missedThenRight = answer(b, 'missed', 'answer');
+  assert.deepEqual([missedThenRight.coins, paid.length], [T.education.breakCoins, 2], 'another card: missed, then right, pays once');
+  const missAgain = answer(a, 'missed', 'w1');
+  const rightAgain = answer(a, 'missed', 'answer');
+  assert.deepEqual([missAgain.coins, rightAgain.coins, rightAgain.paidToday, paid.length], [0, 0, true, 2], 'a card that paid today, missed and then answered right, pays nothing: no farming by missing on purpose');
+  for (const mode of ['revive', 'bonus']) {
+    const c = CARDS.find((x) => x.deck === 'colon');
+    const res = payScene({ levelBreak: false }).answer(c, 'new', 'answer', mode);
+    assert.deepEqual([res.coins, res.paidToday], [0, false], `${mode}: no pay, and no "already earned" either`);
+  }
+  const test = payScene({ runIsTest: true });
+  test.answer(a, 'practice', 'answer');
+  test.answer(a, 'practice', 'answer');
+  assert.deepEqual([test.paid, 'paid' in test.store.load()], [[T.education.breakCoins, T.education.breakCoins], false], 'a test run keeps no record: every right answer pays');
 });
 
 test('the gate (plan 26: every education break) holds while a missed or review card is due; new cards, a test run or a match never hold it', () => {

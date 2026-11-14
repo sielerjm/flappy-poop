@@ -229,6 +229,7 @@ Short, playful, clear. Fit a 720×1280 logical field; How to play / About body w
 | eduLocked | Education mode locked | 教育模式已锁定 |
 | quizRight | Right! | 答对了！ |
 | quizRightCoins | Right! +{n} | 答对了！+{n} |
+| quizPaidToday | 🌽 already earned today (plan 26, A2: small and muted beside "Right!" when a right answer pays nothing because this card already paid today; each card pays once a local day) | 🌽 今天已经得过了 |
 | quizNextSoon | Next review: again soon (plan 26: under the verdict after a wrong answer: the card is due again at once; "review" added in its A2, Michael's wording) | 下次复习：很快 |
 | quizNextIn | Next review: in {t} (plan 26: under the verdict, when the card comes back; {t} is one of the wait* strings below) | 下次复习：{t}后 |
 | waitMin | {n} min | {n} 分钟 |

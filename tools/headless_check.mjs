@@ -4242,6 +4242,24 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         const [keepWant, caughtWant] = await Promise.all([tx('quizKeepPracticing'), evaluate(`import('./src/i18n.js').then((m) => m.t('en', 'quizCaughtUp').replace('{n}', String(${TT.education.newPerDay})))`)]);
         ok(caught.card === null && caught.left === returnWant && caught.right === keepWant && caught.question === caughtWant, `with nothing counted left the quiz stops asking (plan 26): "${caught.question}" with ${caught.left} and ${caught.right}`);
         ok(k3.reason === 'practice' && k3.text === '0  +  0  +  0' && k3.underlined === null && k3.fill === null && k3.visible, `Enter on ${keepWant} asks a practice card, which underlines nothing: "${k3.text}" (${k3.id})`);
+        // Practice pays (plan 26, A2): once per card a local day. This card has not paid today: it pays.
+        // The next one is marked as paid today, as a right answer earlier today would have left it: it
+        // pays nothing, and says so beside "Right!".
+        const pc0 = await evaluate(`${play}.effects.coins()`);
+        await evaluate(`(() => { const q = ${Q}; q.choose(q.order.indexOf('answer')); return true; })()`);
+        await sleep(150);
+        const pc1 = await evaluate(`${play}.effects.coins()`);
+        const practicePaid = await evaluate(`JSON.stringify({ verdict: ${Q}.verdict.text, note: ${Q}.paidNote.visible, kernel: ${Q}.verdictCoin.visible })`).then(JSON.parse);
+        ok(pc1 - pc0 === TT.education.breakCoins && practicePaid.verdict === rightWant && practicePaid.kernel && !practicePaid.note, `a practice card answered right pays ${pc1 - pc0} (practice pays, once a day): "${practicePaid.verdict}"`);
+        await evaluate(`${Q}.rightBtn.press(), true`); // Next: another practice card
+        await sleep(200);
+        await evaluate(`import('./src/education.js').then((e) => { const p = ${play}; const id = ${Q}.card.id; p.eduStore.answer(id, p.eduStore.load().cards[id], { paidDay: e.localDayKey() }); return true; })`);
+        await evaluate(`(() => { const q = ${Q}; q.choose(q.order.indexOf('answer')); return true; })()`);
+        await sleep(150);
+        const pc2 = await evaluate(`${play}.effects.coins()`);
+        const [plainRight, paidNoteWant] = await Promise.all(['quizRight', 'quizPaidToday'].map(tx));
+        const noted = await evaluate(`(() => { const q = ${Q}; const v = q.verdict.getBounds(); const n = q.paidNote.getBounds(); return JSON.stringify({ reason: q.reason, verdict: q.verdict.text, note: q.paidNote.visible ? q.paidNote.text : null, kernel: q.verdictCoin.visible, sameRow: Math.abs(v.centerY - n.centerY) < 2, after: n.left > v.right, inside: n.left >= q.cx - 280 && n.right <= q.cx + 280, paid: q.lastAnswer.paidToday }); })()`).then(JSON.parse);
+        ok(pc2 === pc1 && noted.reason === 'practice' && noted.verdict === plainRight && noted.note === paidNoteWant && !noted.kernel && noted.sameRow && noted.after && noted.inside && noted.paid, `a card that already paid today pays nothing and says "${noted.note}" beside "${noted.verdict}", on its row`);
         await evaluate(`${Q}.leftBtn.press(), true`); // Return
         await sleep(300);
         const idle = await evaluate(`(() => { const p = ${play}; return JSON.stringify({ line: p.quizCountLine.visible, label: p.quizButton.getText(), shown: p.quizButton.visible }); })()`).then(JSON.parse);

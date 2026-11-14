@@ -539,7 +539,17 @@ function cleanEdu(raw, keep, t = TUNING) {
   const p = raw?.pending;
   const tally = cleanTally(p?.tally, lastLevel);
   const pending = tally && typeof p.full === 'boolean' && Number.isFinite(p.at) && p.at > 0 ? { tally, full: p.full, at: p.at } : null;
-  return { v: 2, cards, recent, counters, badges, unlockedLevel, ...(buried ? { buried } : {}), ...(pending ? { pending } : {}) };
+  // The cards whose right answer paid on a local day (plan 26, A2): { day, ids }; kept only while
+  // well formed and not empty, so a record with nothing paid has no key (as buried).
+  const q = raw?.paid;
+  const paidIds = q && typeof q.day === 'string' && DAY_RE.test(q.day) && Array.isArray(q.ids) ? [...new Set(q.ids.filter((id) => typeof id === 'string' && ID_RE.test(id)))] : [];
+  const paid = paidIds.length ? { day: q.day, ids: paidIds } : null;
+  return { v: 2, cards, recent, counters, badges, unlockedLevel, ...(buried ? { buried } : {}), ...(pending ? { pending } : {}), ...(paid ? { paid } : {}) };
+}
+
+/** The ids of the cards whose right answer paid on local `day` (the store's `paid`; plan 26, A2), or none. */
+export function paidOn(paid, day) {
+  return paid && paid.day === day && Array.isArray(paid.ids) ? paid.ids : [];
 }
 
 /** The device's local day as YYYY-MM-DD (a bury's daily cap counts local days: plan 25). */
@@ -549,7 +559,8 @@ export function localDayKey(date = new Date()) {
 
 /**
  * This device's education record (LEADERBOARD.eduKey): { v: 2, cards: { id: record }, recent: [ids],
- * counters: { revives, perfectStreak, gradedRuns, gradeSum }, badges: { id: 'YYYY-MM-DD' } }.
+ * counters: { revives, perfectStreak, gradedRuns, gradeSum }, badges: { id: 'YYYY-MM-DD' }, and when
+ * set unlockedLevel, buried { day, n }, pending { tally, full, at }, paid { day, ids } (plan 26, A2) }.
  * answer(id, record) stores a card's record after an answer and appends it to `recent` (the last
  * education.minGap cards shown). The counters and badges (plan 22) are the education badges' and the
  * average grade's: addRevive counts a revive as it happens, endRun(facts) moves the 🤓 streak and
@@ -565,9 +576,18 @@ export function createEduStore(storage, { key = LEADERBOARD.eduKey, t = TUNING }
   const write = box.write;
   return {
     load: read,
-    answer(id, record) {
+    /**
+     * A card's record after an answer, appended to `recent`. `paidDay` (a local YYYY-MM-DD; plan 26,
+     * A2): the answer paid, so the card is marked as paid that day (a new day starts the list over).
+     */
+    answer(id, record, { paidDay = null } = {}) {
       const state = read();
-      write({ ...state, cards: { ...state.cards, [id]: record }, recent: [...state.recent, id] });
+      const next = { ...state, cards: { ...state.cards, [id]: record }, recent: [...state.recent, id] };
+      if (paidDay) {
+        const ids = paidOn(state.paid, paidDay);
+        next.paid = { day: paidDay, ids: ids.includes(id) ? ids : [...ids, id] };
+      }
+      write(next);
     },
     /** An education run continued into `level` (plan 25): it is unlocked, as a start level, from now on. */
     unlockLevel(level) {

@@ -134,7 +134,7 @@ import { openEduIntroPanel, closeEduIntroPanel, isEduIntroPanelOpen, eduIntroPad
 import { answerEvent, createConsentStore, createResearchQueue } from '../research.js';
 import { bindPad } from '../input/pad.js';
 import { keyGroup, sameDevice, catchUpTier, catchUpDraws, versusAvailable, ghostPlacement, rivalMarker, respawnPose, respawnBlinkStart, courseDistance, VERSUS_EMOJI } from '../versus.js';
-import { createEduStore, countersAfterRun, dueCount, cardCounts, masteryByDeck, pickCard, shuffleOptions, gradeFor, schedule, eduShopPrices, reviveStart, reviveStep, reviveSettled, newTally, tallyAnswer, EDUCATION_EMOJI, localDayKey } from '../education.js';
+import { createEduStore, countersAfterRun, dueCount, cardCounts, masteryByDeck, pickCard, shuffleOptions, gradeFor, schedule, eduShopPrices, reviveStart, reviveStep, reviveSettled, newTally, tallyAnswer, EDUCATION_EMOJI, localDayKey, paidOn } from '../education.js';
 
 const TEXT_STYLE = {
   fontFamily: 'sans-serif',
@@ -1724,22 +1724,32 @@ export class Play extends Phaser.Scene {
   /**
    * One answer from the quiz: graded (gradeFor: right on a card's first sight is good; an interrupted
    * answer's time is not used) and, outside a test run, scheduled and saved (schedule, eduStore). A
-   * practice card answered right keeps its schedule. Counted in runQuiz (tallyAnswer). A right answer in a level break pays break.coins (takeCoins: the
-   * purse, the coin sound). Returns { correct, grade, coins, dueAt }: dueAt is when the card comes
+   * practice card answered right keeps its schedule. Counted in runQuiz (tallyAnswer). A right answer
+   * in a level break pays education.breakCoins (takeCoins: the purse, the coin sound), once per card a
+   * local day, practice included (plan 26, A2; the store's `paid`); a test run keeps no record, so
+   * every right answer pays there. Returns { correct, grade, coins, paidToday, dueAt }: paidToday, a
+   * right answer in a break that paid nothing because the card paid today; dueAt, when the card comes
    * back (its saved record's), null when nothing was saved (a test run, test mode).
    */
   quizAnswer({ card, reason, order = [], chosen, rtMs, interrupted, mode = 'break', input = 'key' }) {
     const correct = chosen === 'answer';
-    const known = this.runIsTest ? null : (this.eduStore.load().cards[card.id] ?? null);
+    const store = this.runIsTest ? null : this.eduStore.load();
+    const known = store?.cards[card.id] ?? null;
     const grade = gradeFor(correct, interrupted ? null : rtMs, T, { first: !known });
     let dueAt = null;
+    const now = Date.now();
+    const day = localDayKey(new Date(now));
+    // A right answer in a level break pays, once per card a local day (plan 26, A2: practice too,
+    // and a card missed on purpose and then answered right pays nothing more that day).
+    const payable = correct && mode === 'break';
+    const paidToday = payable && Boolean(store) && paidOn(store.paid, day).includes(card.id);
+    const coins = payable && !paidToday ? T.education.breakCoins : 0;
     // Nothing is saved or recorded in a test run, nor while test mode is on: it can be turned on
     // after the run ended, from the game-over screen's profile (plan 25, A5), before the bonus quiz.
     if (!this.runIsTest && !this.isTestMode()) {
-      const now = Date.now();
       const rec = known;
       const next = schedule(rec, grade, now, T, { practice: reason === 'practice' });
-      this.eduStore.answer(card.id, next);
+      this.eduStore.answer(card.id, next, coins ? { paidDay: day } : undefined);
       dueAt = next.dueAt;
       // A pilot tester's answer is recorded as an event (plan 21; never in a test run, and only
       // while joined): what was asked and picked, and what the device knew of the card before.
@@ -1760,14 +1770,12 @@ export class Play extends Phaser.Scene {
       const pending = this.eduStore.load().pending;
       if (pending) this.eduStore.setPending({ ...pending, tally: { ...this.runQuiz } });
     }
-    // A right answer to a counted card pays; practice pays nothing (plan 25).
-    const coins = correct && mode === 'break' && reason !== 'practice' ? T.education.breakCoins : 0;
     if (coins) {
       this.takeCoins(coins);
-      this.refreshLevelBanner(); // the hint gains "💰 shop" with the first coin
+      this.refreshLevelBanner();
       this.refreshShopButton();
     }
-    return { correct, grade, coins, dueAt };
+    return { correct, grade, coins, paidToday, dueAt };
   }
 
   /**
