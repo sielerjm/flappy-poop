@@ -23,7 +23,7 @@ const OPTION_MIN_H = 92;
 const BUTTON = { width: 250, height: 88 };
 const WIDE_BUTTON = 540; // the top button (Why): edge to edge with the bottom row (two 250 px buttons, 40 px apart)
 const BUTTON_GAP = 12; // px between the top button and the count line's row
-const COUNT_ROW = 52; // px: the count line's row (new + learning + review), directly above the bottom row (plan 25: 12 px more room above Give up / Fly on)
+const COUNT_ROW = 52; // px: the count line's row (new + missed + review), directly above the bottom row (plan 25: 12 px more room above Give up / Fly on)
 const COUNT_GAP = 36; // px from the bottom buttons' top edge to the count line's centre
 const TALLY_HIT = { width: 180, height: 56 }; // the run tally's tap box in the card's top row
 const REPORT_FLAG = '\u{1F6A9}'; // 🚩 after the card's id: report this card
@@ -272,7 +272,7 @@ export class Quiz extends Phaser.Scene {
   /**
    * What is waiting, on the count line: the cards this quiz can still ask (Play.quizCounts), the
    * card on show included and the quiz's earlier cards left out; the kind of the card on show is
-   * underlined (an early review is none of the three: no underline). No line in a test run.
+   * underlined (a practice card is none of the three: no underline). No line in a test run.
    */
   refreshCounts() {
     const exclude = this.card ? this.session.filter((id) => id !== this.card.id) : this.session;
@@ -283,7 +283,7 @@ export class Quiz extends Phaser.Scene {
       this.countsZone?.setVisible(false);
       return;
     }
-    const kind = this.card ? ({ new: 'new', learning: 'learning', due: 'review' }[this.reason] ?? null) : null;
+    const kind = this.card && ['new', 'missed', 'review'].includes(this.reason) ? this.reason : null;
     this.counts.set(counts, kind).setVisible(true);
     this.countsZone?.setSize(Math.max(160, this.counts.width + 40), 48).setVisible(true);
   }

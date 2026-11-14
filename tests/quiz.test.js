@@ -91,7 +91,7 @@ test("a tap on the card's numbers says what they mean, with this quiz's counts; 
   const runCard = { open: false, show(opts) { shown.push(opts); this.open = true; }, hide() { this.open = false; } };
   const q = quizScene({
     scene: scenes(['Play', 'Quiz']), locale: 'en', finishing: false, card: { id: 'ST-01' }, answered: false, interrupted: false, runCard,
-    shownCounts: { new: 2, learning: 1, review: 3 }, mode: 'break', order: ['answer', 'w1', 'w2'],
+    shownCounts: { new: 2, missed: 1, review: 3 }, mode: 'break', order: ['answer', 'w1', 'w2'],
     play: { quizAnswer: (a) => (answers.push(a), { correct: true, grade: 'good', coins: 0 }) },
   });
   q.toggleCountsCard();

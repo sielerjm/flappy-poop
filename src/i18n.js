@@ -1056,13 +1056,13 @@ export function tallyLines(locale, tally, levels) {
 }
 
 /**
- * What the three numbers mean (plan 25): 🔵 new, 🟠 learning, 🟢 to review, each with its count
- * ({ new, learning, review }, cardCounts). "Your cards" (Play.toggleEduCard) and the quiz card's
+ * What the three numbers mean (plan 25): 🔵 new, 🟠 missed, 🟢 to review, each with its count
+ * ({ new, missed, review }, cardCounts). "Your cards" (Play.toggleEduCard) and the quiz card's
  * explainer (Quiz.toggleCountsCard) both show these lines.
  */
 export function countLines(locale, counts) {
   const line = (key, n) => t(locale, key).replace('{n}', String(n ?? 0));
-  return [line('eduCardsNew', counts?.new), line('eduCardsLearning', counts?.learning), line('eduCardsReview', counts?.review)];
+  return [line('eduCardsNew', counts?.new), line('eduCardsLearning', counts?.missed), line('eduCardsReview', counts?.review)];
 }
 
 /** An achievement's name (ACHIEVEMENTS in achievements.js: its `title` key). */

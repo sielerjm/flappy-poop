@@ -11,6 +11,18 @@
 - [Phaser](https://phaser.io) 4.2.1 — © Phaser Studio Inc. MIT License.
   https://github.com/phaserjs/phaser
 
+## Review scheduler
+
+- Education mode schedules its cards with **FSRS-6**, the Free Spaced Repetition
+  Scheduler, by Jarrett Ye, Jingyi Su and Yilong Cao: "A Stochastic Shortest Path
+  Algorithm for Optimizing Spaced Repetition Scheduling", KDD 2022,
+  https://doi.org/10.1145/3534678.3539081, and the Open Spaced Repetition project's
+  notes, https://github.com/open-spaced-repetition. Anki uses it too.
+- `src/fsrs.js` ports the formulas and default weights of
+  [py-fsrs](https://github.com/open-spaced-repetition/py-fsrs) — Copyright (c) 2022
+  Open Spaced Repetition. MIT License (its full text is in `src/fsrs.js`'s header).
+  No code from Anki is used.
+
 ## Sounds
 
 - `assets/sfx/fart.mp3` — "fart" by MacKaffee (Freesound), uploaded by

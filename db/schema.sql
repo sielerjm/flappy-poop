@@ -1898,7 +1898,8 @@ $$;
 -- event already stored (its event_id) is skipped, so a resend never doubles an answer. Each
 -- event is checked: its ids, the card id, the context, a boolean `correct`, a device time no
 -- more than 90 days old or a day ahead; only the fields the game is known to record are kept
--- (src/research.js answerEvent), and an event may not exceed 2000 characters. Returns
+-- (src/research.js answerEvent; since 2026-11-14 the schedule's FSRS stability, difficulty and
+-- retrievability in place of SM-2's ease and interval_ms), and an event may not exceed 2000 characters. Returns
 -- { status: 'ok', stored } (how many were new). Errors raise ('bad ...': the device drops the batch).
 drop function if exists public.submit_research_events(text, text, jsonb);
 create or replace function public.submit_research_events(p_player_id text, p_batch text, p_events jsonb, p_since timestamptz)
@@ -1912,7 +1913,7 @@ declare
   v_part public.research_participants%rowtype;
   v_keys text[] := array['event_id', 'session_id', 'run_id', 'card_id', 'card_hash', 'audited', 'deck', 'context', 'seq', 'step', 'level',
                          'order', 'chosen', 'correct', 'rt_ms', 'interrupted', 'grade', 'reason',
-                         'ease', 'interval_ms', 'reps', 'lapses', 'seen', 'since_ms',
+                         'stability', 'difficulty', 'retrievability', 'reps', 'lapses', 'seen', 'since_ms',
                          'client_at', 'app', 'tuning', 'locale', 'field', 'input', 'consent', 'phase'];
   e jsonb;
   v_at timestamptz;
@@ -2328,7 +2329,7 @@ returns text
 language sql
 immutable
 as $$
-  select '111567b9f960e940'::text; -- schema stamp
+  select '86a60e01e2949cf3'::text; -- schema stamp
 $$;
 revoke execute on function public.schema_version() from public, authenticated;
 grant  execute on function public.schema_version() to anon;

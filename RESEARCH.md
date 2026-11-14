@@ -1,6 +1,6 @@
 # Tester data in education mode
 
-Notice version: `pilot-1` (13 November 2026)
+Notice version: `pilot-2` (14 November 2026)
 
 Flappy Poop has a hidden learning mode (📚 education mode) with quiz cards about the gut and its microbes. This page is for invited testers of that mode. It says what the game sends when you join the **tester pilot**, and how to stop.
 
@@ -26,11 +26,11 @@ Each record is stored under a **random id** made by the server. It does not hold
 | `context`, `seq`, `step`, `level` | Where the card came up (a level break, a crash, the bonus quiz), its number in the run, how far into a crash quiz you were, and the level. |
 | `order`, `chosen`, `correct` | The order the three answers were shown in, which one you picked, and whether it was right. |
 | `rt_ms`, `interrupted` | How long you took, in milliseconds, and whether the time is unreliable (the game was in the background or lost focus, or another card or panel covered the question). |
-| `grade`, `reason` | How the game's review schedule rated the answer, and why the card was chosen (new, being learned, due, or early). |
-| `ease`, `interval_ms`, `reps`, `lapses`, `seen`, `since_ms` | What your device knew about this card before the answer: its place in the review schedule, how many times you had answered it, and how long ago. |
+| `grade`, `reason` | How the game's review schedule rated the answer, and why the card was chosen (new, missed, due for review, or extra practice). |
+| `stability`, `difficulty`, `retrievability`, `reps`, `lapses`, `seen`, `since_ms` | What your device knew about this card before the answer: its place in the review schedule (the FSRS scheduler's estimate of how well you know it), how many times you had answered it, and how long ago. |
 | `client_at` | Your device's clock when you answered. |
 | `app`, `tuning`, `locale`, `field`, `input` | The game version, a fingerprint of its quiz settings, the game's language (a card not yet translated is shown in English), whether the screen was phone-shaped or wide, and whether you used touch, a mouse, keys or a controller. |
-| `consent`, `phase` | The version of this notice you agreed to (`pilot-1`) and the phase (`pilot`). |
+| `consent`, `phase` | The version of this notice you agreed to (`pilot-2`) and the phase (`pilot`). |
 
 The server also records when each record arrived.
 
@@ -67,3 +67,6 @@ Until then, please ask the developer in the same way you received your invite.
 ## Changes to this notice
 
 If what is collected, or why, ever changes, this notice gets a new version and the game asks you again before sending anything under it.
+
+- `pilot-2` (14 November 2026): the game's review schedule changed to FSRS, so the schedule fields are now `stability`, `difficulty` and `retrievability` instead of `ease` and `interval_ms`, and the reasons a card is chosen are new, missed, review or practice.
+- `pilot-1` (13 November 2026): the first version.

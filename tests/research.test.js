@@ -67,8 +67,9 @@ test('answerEvent: a first sight. Every field the server keeps, and nothing else
     interrupted: false,
     grade: 'easy',
     reason: 'new',
-    ease: null,
-    interval_ms: null,
+    stability: null,
+    difficulty: null,
+    retrievability: null,
     reps: null,
     lapses: null,
     seen: 0,
@@ -89,10 +90,14 @@ test('answerEvent: a first sight. Every field the server keeps, and nothing else
 });
 
 test('answerEvent: a later sight carries the scheduler state from before the answer; an interrupted answer has no response time', () => {
-  const before = { ...schedule(schedule(null, 'good', NOW - 3 * 86400000), 'good', NOW - 2 * 86400000), seen: 2, right: 2, lastAt: NOW - 2 * 86400000 };
-  const e = answerEvent(base({ before, context: 'revive', step: 2, correct: false, chosen: 'w2', grade: 'again', reason: 'due', rtMs: 9000, level: 4, seq: 12, input: 'pad', field: 'wide', locale: 'zh-Hans' }));
-  assert.deepEqual([e.seen, e.since_ms, e.ease, e.interval_ms, e.reps, e.lapses], [2, 2 * 86400000, before.ease, before.intervalMs, before.reps, before.lapses]);
-  assert.deepEqual([e.context, e.step, e.correct, e.chosen, e.grade, e.reason, e.level, e.seq, e.input, e.field, e.locale], ['revive', 2, false, 'w2', 'again', 'due', 4, 12, 'pad', 'wide', 'zh-Hans']);
+  const DAY = 86400000;
+  const before = schedule(schedule(null, 'good', NOW - 13 * DAY), 'good', NOW - 11 * DAY); // in review, stability 10.96 days, reviewed 11 days ago
+  const e = answerEvent(base({ before, context: 'revive', step: 2, correct: false, chosen: 'w2', grade: 'again', reason: 'review', rtMs: 9000, level: 4, seq: 12, input: 'pad', field: 'wide', locale: 'zh-Hans' }));
+  assert.deepEqual([e.seen, e.since_ms, e.reps, e.lapses], [2, 11 * DAY, 2, 0]);
+  assert.deepEqual([e.stability, e.difficulty], [Math.round(before.stability * 1e4) / 1e4, Math.round(before.difficulty * 1e4) / 1e4], 'FSRS stability (days) and difficulty, to 4 decimals');
+  assert.ok(Math.abs(e.retrievability - 0.9) < 0.01, `due today: about 90 % (${e.retrievability})`);
+  assert.equal(answerEvent(base({ before, now: NOW - 11 * DAY + 3600000 })).retrievability, 1, 'within the day of a review: 1');
+  assert.deepEqual([e.context, e.step, e.correct, e.chosen, e.grade, e.reason, e.level, e.seq, e.input, e.field, e.locale], ['revive', 2, false, 'w2', 'again', 'review', 4, 12, 'pad', 'wide', 'zh-Hans']);
   const cut = answerEvent(base({ interrupted: true, rtMs: 40000 }));
   assert.deepEqual([cut.interrupted, cut.rt_ms], [true, null], 'the time of an interrupted answer means nothing');
   assert.equal(answerEvent(base({ rtMs: null })).rt_ms, null);

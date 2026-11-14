@@ -9,6 +9,7 @@
 // before any study.
 
 import { EDUCATION, LEADERBOARD, TUNING } from './config.js';
+import { retrievability } from './fsrs.js';
 import { fnv1a32, VERSION } from './logic.js';
 import { cardHash, auditState } from './questionAudits.js';
 import { createJsonStore } from './store.js';
@@ -20,9 +21,12 @@ const PHASES = ['pilot', 'beta', 'study'];
 const CONTEXTS = ['break', 'revive', 'bonus'];
 const OPTION_KEYS = ['answer', 'w1', 'w2'];
 /** What an event may hold, as the server keeps it (submit_research_events' list of known fields). */
-export const EVENT_FIELDS = ['event_id', 'session_id', 'run_id', 'card_id', 'card_hash', 'audited', 'deck', 'context', 'seq', 'step', 'level', 'order', 'chosen', 'correct', 'rt_ms', 'interrupted', 'grade', 'reason', 'ease', 'interval_ms', 'reps', 'lapses', 'seen', 'since_ms', 'client_at', 'app', 'tuning', 'locale', 'field', 'input', 'consent', 'phase'];
+export const EVENT_FIELDS = ['event_id', 'session_id', 'run_id', 'card_id', 'card_hash', 'audited', 'deck', 'context', 'seq', 'step', 'level', 'order', 'chosen', 'correct', 'rt_ms', 'interrupted', 'grade', 'reason', 'stability', 'difficulty', 'retrievability', 'reps', 'lapses', 'seen', 'since_ms', 'client_at', 'app', 'tuning', 'locale', 'field', 'input', 'consent', 'phase'];
 
 const whole = (v) => (Number.isFinite(v) && v >= 0 ? Math.round(v) : null);
+/** A non-negative number to 4 decimals, else null. */
+const fixed4 = (v) => (Number.isFinite(v) && v >= 0 ? Math.round(v * 1e4) / 1e4 : null);
+const DAY_MS = 86400000;
 
 /**
  * The education tuning's fingerprint (8 hex digits): the grade thresholds, the scheduler's numbers
@@ -44,13 +48,16 @@ export function tuningVersion(t = TUNING) {
  *            unknown); interrupted (the page was hidden, or a card covered the question); grade and
  *            reason as the scheduler saw them
  *   before   the card's record before this answer (education.js schedule), or null at first
- *            sight: its ease, interval, reps and lapses, how often it was seen (`seen`: 0 = first
- *            sight) and how long ago (`since_ms`)
+ *            sight: its FSRS stability (days) and difficulty (1 to 10), the chance of recalling it
+ *            at `now` (retrievability, 0 to 1), its reps and lapses, how often it was seen
+ *            (`seen`: 0 = first sight) and how long ago (`since_ms`)
  *   now      the device's clock (ms); app, tuning, locale, field ('phone' | 'wide'), input
  *            ('touch' | 'mouse' | 'key' | 'pad'), consent (the notice's version), phase
  */
-export function answerEvent({ ids, card, context, seq, step = null, level, order, chosen, correct, rtMs = null, interrupted = false, grade, reason, before = null, now, app = VERSION, tuning = tuningVersion(), locale, field, input, consent, phase }) {
+export function answerEvent({ ids, card, context, seq, step = null, level, order, chosen, correct, rtMs = null, interrupted = false, grade, reason, before = null, now, app = VERSION, tuning = tuningVersion(), locale, field, input, consent, phase, t = TUNING }) {
   const seen = whole(before?.seen) ?? 0;
+  const s = before && before.stability > 0 ? before.stability : null;
+  const days = s && Number.isFinite(before.reviewedAt) ? Math.max(0, Math.floor((now - before.reviewedAt) / DAY_MS)) : null;
   return {
     event_id: ids.event,
     session_id: ids.session,
@@ -70,8 +77,9 @@ export function answerEvent({ ids, card, context, seq, step = null, level, order
     interrupted: Boolean(interrupted),
     grade,
     reason,
-    ease: before && Number.isFinite(before.ease) ? before.ease : null,
-    interval_ms: before ? whole(before.intervalMs) : null,
+    stability: fixed4(s),
+    difficulty: before ? fixed4(before.difficulty) : null,
+    retrievability: days === null ? null : fixed4(retrievability(days, s, t.education.fsrs.w)),
     reps: before ? whole(before.reps) : null,
     lapses: before ? whole(before.lapses) : null,
     seen,

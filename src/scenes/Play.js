@@ -797,7 +797,7 @@ export class Play extends Phaser.Scene {
     // An education run (📚, plan 21): unlocked, the switch on, single player, never a Daily Dump.
     this.runIsEducation = !daily && this.educationOn && this.educationOffered();
     this.runQuiz = newTally();
-    this.breakMissed = []; // a level break's cards missed and not yet answered right (plan 25): asked again, counted as learning
+    this.breakMissed = []; // a level break's cards missed and not yet answered right (plan 25): asked again, counted as missed
     this.runId = null; // a pilot tester's answer events name their run (made with the run's first event)
     this.runEvents = 0;
     this.respawnHold = null;
@@ -1711,7 +1711,7 @@ export class Play extends Phaser.Scene {
   }
 
   /**
-   * What a quiz in `mode` can still ask now: { new, learning, review } (cardCounts), with the same
+   * What a quiz in `mode` can still ask now: { new, missed, review } (cardCounts), with the same
    * level and segment quizNext picks by. `exclude` is the quiz's cards already asked. Null in a test
    * run, whose quizzes walk the deck and ignore the schedule. The level break's pill and the quiz
    * card's count line show it.
@@ -1722,20 +1722,21 @@ export class Play extends Phaser.Scene {
   }
 
   /**
-   * One answer from the quiz: graded (gradeFor; an interrupted answer's time is not used) and, outside
-   * a test run, scheduled and saved (schedule, eduStore). An early review answered right keeps its
-   * schedule. Counted in runQuiz (tallyAnswer). A right answer in a level break pays break.coins (takeCoins: the
+   * One answer from the quiz: graded (gradeFor: right on a card's first sight is good; an interrupted
+   * answer's time is not used) and, outside a test run, scheduled and saved (schedule, eduStore). A
+   * practice card answered right keeps its schedule. Counted in runQuiz (tallyAnswer). A right answer in a level break pays break.coins (takeCoins: the
    * purse, the coin sound). Returns { correct, grade, coins }.
    */
   quizAnswer({ card, reason, order = [], chosen, rtMs, interrupted, mode = 'break', input = 'key' }) {
     const correct = chosen === 'answer';
-    const grade = gradeFor(correct, interrupted ? null : rtMs);
+    const known = this.runIsTest ? null : (this.eduStore.load().cards[card.id] ?? null);
+    const grade = gradeFor(correct, interrupted ? null : rtMs, T, { first: !known });
     // Nothing is saved or recorded in a test run, nor while test mode is on: it can be turned on
     // after the run ended, from the game-over screen's profile (plan 25, A5), before the bonus quiz.
     if (!this.runIsTest && !this.isTestMode()) {
       const now = Date.now();
-      const rec = this.eduStore.load().cards[card.id] ?? null;
-      this.eduStore.answer(card.id, schedule(rec, grade, now, T, { early: reason === 'early' }));
+      const rec = known;
+      this.eduStore.answer(card.id, schedule(rec, grade, now, T, { practice: reason === 'practice' }));
       // A pilot tester's answer is recorded as an event (plan 21; never in a test run, and only
       // while joined): what was asked and picked, and what the device knew of the card before.
       if (this.researchJoined()) this.recordAnswerEvent({ card, reason, order, chosen, correct, rtMs, interrupted, grade, mode, input, before: rec, now });
@@ -1748,8 +1749,8 @@ export class Play extends Phaser.Scene {
     // The run's tally (plan 22, U4), by level: a break asks about the level just cleared, a revive
     // about the one being flown. The bonus quiz after a win is practice: its answers are not tallied.
     if (mode !== 'bonus') this.runQuiz = tallyAnswer(this.runQuiz, this.levelBreak ? this.level - 1 : this.level, correct);
-    // A right answer to a counted card pays; an early review is extra practice and pays nothing (plan 25).
-    const coins = correct && mode === 'break' && reason !== 'early' ? T.education.breakCoins : 0;
+    // A right answer to a counted card pays; practice pays nothing (plan 25).
+    const coins = correct && mode === 'break' && reason !== 'practice' ? T.education.breakCoins : 0;
     if (coins) {
       this.takeCoins(coins);
       this.refreshLevelBanner(); // the hint gains "💰 shop" with the first coin
@@ -1848,7 +1849,7 @@ export class Play extends Phaser.Scene {
   /**
    * "Your cards" (plan 21, E3): what the 📚 on the ready screen stands for, opened by a tap on the
    * glyph (or A on its ring item) and closed by any tap, key or pad press. Over every deck: the
-   * cards not seen yet, the ones in the learning steps and due, the learned ones due (cardCounts
+   * cards not seen yet, the missed ones due, the reviews due (cardCounts
    * 'all'), how many have been seen at all, and what the gold number on the 📚 counts. While it is
    * up nothing under it is pressed and no run starts (flap, onPadAction, handleChrome).
    */
@@ -2384,8 +2385,8 @@ export class Play extends Phaser.Scene {
 
   resumePlay() {
     if (this.state !== 'paused') return;
-    // The gate (plan 25): a break before a level not yet unlocked stays while cards are due; the hint
-    // says so and Review pulses (refreshQuizButton).
+    // The gate (plan 25; every education break since plan 26): the break stays while cards are due;
+    // the hint says so and Review pulses (refreshQuizButton).
     if (this.levelBreak && !this.respawnPaused && this.breakGated()) {
       this.refreshLevelBanner();
       this.refreshShopButton();
@@ -3340,7 +3341,7 @@ export class Play extends Phaser.Scene {
 
   /**
    * The 📚 Review pill, and under it what this break's quiz can still ask, as three coloured
-   * numbers (new, learning, review; quizCounts), 0 · 0 · 0 included. No numbers in a test run.
+   * numbers (new, missed, review; quizCounts), 0 · 0 · 0 included. No numbers in a test run.
    */
   refreshQuizButton() {
     if (!this.quizButton) return;
@@ -3352,7 +3353,7 @@ export class Play extends Phaser.Scene {
     this.quizCountLine.setVisible(shown && Boolean(counts));
     this.breakSkipButton?.setVisible(this.breakSkipShown());
     if (this.breakQuitButton) {
-      const due = Boolean(counts) && counts.learning + counts.review > 0;
+      const due = Boolean(counts) && counts.missed + counts.review > 0;
       const armed = this.breakQuitArmed();
       this.breakQuitButton.setText(t(this.locale, due ? (armed ? 'breakGiveUpSure' : 'breakGiveUp') : armed ? 'breakQuitSure' : 'breakQuit')).setVisible(shown);
     }
@@ -3404,7 +3405,7 @@ export class Play extends Phaser.Scene {
       return;
     }
     const counts = this.quizCounts({ mode: 'break' });
-    this.breakGaveUp = Boolean(counts) && counts.learning + counts.review > 0;
+    this.breakGaveUp = Boolean(counts) && counts.missed + counts.review > 0;
     this.breakQuitArmedAt = null;
     this.levelBreak = false;
     this.levelTitle?.setVisible(false);
@@ -3416,16 +3417,15 @@ export class Play extends Phaser.Scene {
   }
 
   /**
-   * The gate (plan 25, B6): an education run's level break into a level not yet unlocked
-   * (eduStore.unlockedLevel), with a card due: a learning or review card due now, or one missed in
-   * this break and not yet answered right (the orange and green numbers). New cards stay optional.
-   * Never in a test run or a match. resumePlay holds the break while it is true.
+   * The gate (plan 25, B6; every break since plan 26): an education run's level break with a card
+   * due: a missed card or a review due now, or one missed in this break and not yet answered right
+   * (the second and third numbers). New cards stay optional. Never in a test run or a match.
+   * resumePlay holds the break while it is true; Bury and Give up are the other ways out.
    */
   breakGated() {
     if (!this.levelBreak || !this.runIsEducation || this.runIsTest || this.match) return false;
-    if (this.level <= (this.eduStore?.load().unlockedLevel ?? 1)) return false;
     const counts = this.quizCounts({ mode: 'break' });
-    return Boolean(counts) && counts.learning + counts.review > 0;
+    return Boolean(counts) && counts.missed + counts.review > 0;
   }
 
   /** A gate's Bury (plan 25, B7): 3 × the level just cleared (education.buryCoinsPerLevel). */
@@ -3434,13 +3434,12 @@ export class Play extends Phaser.Scene {
   }
 
   /**
-   * May card `cardId` be buried now? At a gate (a break into a level not yet unlocked) of a real
-   * one-player education run, for a card missed in this break, while the purse covers the price and
+   * May card `cardId` be buried now? At a level break of a real one-player education run (the card
+   * keeps it gated: every break is a gate since plan 26), for a card missed in this break, while the purse covers the price and
    * fewer than education.buryPerDay cards were buried today (local day).
    */
   canBury(cardId) {
     if (!this.levelBreak || !this.runIsEducation || this.runIsTest || this.isTestMode() || this.match) return false;
-    if (this.level <= (this.eduStore?.load().unlockedLevel ?? 1)) return false;
     if (!(this.breakMissed ?? []).includes(cardId)) return false;
     if (this.effects.coins() < this.buryPrice()) return false;
     return this.eduStore.buriedOn(localDayKey()) < T.education.buryPerDay;

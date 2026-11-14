@@ -6,10 +6,11 @@ import { createRng } from '../src/logic.js';
 import { CARDS, DECKS } from '../src/questions.js';
 import { COUNT_COLORS } from '../src/ui/countLine.js';
 import { EDU_ACHIEVEMENTS, eduRunFacts, evaluate } from '../src/achievements.js';
-import { cardCounts, cardSource, cardText, createEduStore, dueCount, eduShopPrices, optionText, gradeFor, masteryByDeck, newTally, pickCard, reviveSettled, reviveStart, reviveStep, schedule, shuffleOptions, tallyAnswer } from '../src/education.js';
+import { cardCounts, cardRetrievability, cardSource, cardText, createEduStore, dueCount, eduShopPrices, optionText, gradeFor, masteryByDeck, newTally, pickCard, reviveSettled, reviveStart, reviveStep, schedule, shuffleOptions, tallyAnswer } from '../src/education.js';
+import { initDifficulty, initStability } from '../src/fsrs.js';
 
-const S = T.education.srs;
 const MIN = 60000;
+const HOUR = 3600000;
 const DAY = 86400000;
 const NOW = Date.UTC(2026, 10, 12, 12);
 const always = (x) => () => x; // an rng stuck at x
@@ -20,10 +21,12 @@ function fakeStorage() {
 }
 const throwing = { getItem() { throw new Error('no'); }, setItem() { throw new Error('no'); }, removeItem() { throw new Error('no'); } };
 
-/** A record in review at `intervalMs`, due at `dueAt`. */
-const reviewRec = (intervalMs, dueAt, extra = {}) => ({ phase: 'review', step: 0, ease: S.startEase, intervalMs, dueAt, reps: 2, lapses: 0, seen: 3, right: 3, firstAt: NOW - 30 * DAY, lastAt: dueAt - intervalMs, ...extra });
+/** A card in review with a stability of `days`, due at `dueAt` (so reviewed `days` before it). */
+const reviewRec = (days, dueAt, extra = {}) => ({ state: 'review', stability: days, difficulty: 5, dueAt, reviewedAt: dueAt - days * DAY, lastAt: dueAt - days * DAY, reps: 2, lapses: 0, seen: 3, right: 3, firstAt: NOW - 30 * DAY, ...extra });
+/** A missed card, due at `dueAt` (later than now: buried). */
+const missedRec = (dueAt, extra = {}) => ({ state: 'missed', stability: 0.5, difficulty: 7, dueAt, reviewedAt: Math.min(dueAt, NOW) - MIN, lastAt: Math.min(dueAt, NOW) - MIN, reps: 2, lapses: 1, seen: 3, right: 2, firstAt: NOW - 30 * DAY, ...extra });
 
-test('gradeFor: wrong is again; right is easy under fastMs, hard over slowMs, good between or when the time is unknown', () => {
+test('gradeFor: wrong is again; right is easy under fastMs, hard over slowMs, good between or when the time is unknown; right on first sight is always good', () => {
   const { fastMs, slowMs } = T.education.grade;
   assert.equal(gradeFor(false, 100), 'again');
   assert.equal(gradeFor(true, fastMs - 1), 'easy');
@@ -31,51 +34,85 @@ test('gradeFor: wrong is again; right is easy under fastMs, hard over slowMs, go
   assert.equal(gradeFor(true, slowMs), 'good');
   assert.equal(gradeFor(true, slowMs + 1), 'hard');
   for (const rt of [null, undefined, NaN, -5]) assert.equal(gradeFor(true, rt), 'good', String(rt));
+  for (const rt of [1, fastMs - 1, slowMs + 1, 60000, null]) assert.equal(gradeFor(true, rt, T, { first: true }), 'good', `first sight, ${rt} ms: reading time, not recall`);
+  assert.equal(gradeFor(false, 100, T, { first: true }), 'again');
 });
 
-test('schedule, learning: a new card walks the steps on good and graduates to graduateMs; easy graduates at easyMs', () => {
+test('schedule, a new card: right goes straight to review (good: 2 days), wrong is missed and due now (not a lapse)', () => {
+  const w = T.education.fsrs.w;
   const a = schedule(null, 'good', NOW);
-  assert.deepEqual([a.phase, a.step, a.dueAt - NOW, a.seen, a.right, a.firstAt, a.lastAt], ['learning', 1, S.learnStepsMs[1], 1, 1, NOW, NOW]);
-  const b = schedule(a, 'good', NOW + 10 * MIN);
-  assert.deepEqual([b.phase, b.intervalMs, b.dueAt - (NOW + 10 * MIN), b.reps], ['review', S.graduateMs, S.graduateMs, 1]);
+  assert.deepEqual([a.state, a.stability, a.difficulty, a.dueAt - NOW, a.reviewedAt, a.lastAt, a.firstAt, a.reps, a.lapses, a.seen, a.right], ['review', initStability(3, w), initDifficulty(3, w), 2 * DAY, NOW, NOW, NOW, 1, 0, 1, 1]);
   const e = schedule(null, 'easy', NOW);
-  assert.deepEqual([e.phase, e.intervalMs, e.dueAt - NOW], ['review', S.easyMs, S.easyMs]);
-  const w = schedule(a, 'again', NOW);
-  assert.deepEqual([w.phase, w.step, w.dueAt - NOW, w.right, w.lapses], ['learning', 0, S.learnStepsMs[0], 1, 0], 'a miss while learning restarts the steps; not a lapse');
-  const h = schedule(a, 'hard', NOW);
-  assert.deepEqual([h.step, h.dueAt - NOW], [1, S.learnStepsMs[1]], 'hard repeats the step');
+  assert.equal(e.dueAt - NOW, 8 * DAY, 'easy at first: 8 days (w3)');
+  const h = schedule(null, 'hard', NOW);
+  assert.equal(h.dueAt - NOW, DAY, 'hard at first: 1 day (w1)');
+  const m = schedule(null, 'again', NOW);
+  assert.deepEqual([m.state, m.dueAt, m.lapses, m.seen, m.right], ['missed', NOW, 0, 1, 0]);
 });
 
-test('schedule, review: again < hard < good < easy, with the ease moving as SM-2 says', () => {
-  const rec = reviewRec(4 * DAY, NOW);
-  const [again, hard, good, easy] = ['again', 'hard', 'good', 'easy'].map((g) => schedule(rec, g, NOW));
-  assert.ok(again.dueAt < hard.dueAt && hard.dueAt < good.dueAt && good.dueAt < easy.dueAt, 'interval order');
-  assert.deepEqual([again.phase, again.step, again.lapses, again.reps, again.dueAt - NOW], ['learning', 0, 1, 0, S.learnStepsMs[0]]);
-  assert.ok(Math.abs(again.ease - (S.startEase - S.easeAgain)) < 1e-9);
-  assert.equal(hard.intervalMs, Math.round(4 * DAY * S.hardMul));
-  assert.ok(Math.abs(hard.ease - (S.startEase - S.easeHard)) < 1e-9);
-  assert.equal(good.intervalMs, Math.round(4 * DAY * S.startEase));
-  assert.equal(good.ease, S.startEase);
-  assert.equal(easy.intervalMs, Math.round(4 * DAY * S.startEase * S.easyMul));
-  assert.ok(Math.abs(easy.ease - (S.startEase + S.easeEasy)) < 1e-9);
-  assert.equal(good.reps, 3);
+test('schedule: the game sequence new good (2 d), good (11 d), again (missed), good the same day (2 d), easy (8 d)', () => {
+  const near = (x, y) => Math.abs(x - y) < 1e-3;
+  let at = NOW;
+  let r = schedule(null, 'good', at);
+  assert.ok(near(r.stability, 2.3065) && near(r.difficulty, 2.1181), `${r.stability} ${r.difficulty}`);
+  assert.equal(r.dueAt - at, 2 * DAY);
+  at = r.dueAt;
+  r = schedule(r, 'good', at);
+  assert.ok(near(r.stability, 10.9643) && near(r.difficulty, 2.1112), `${r.stability} ${r.difficulty}`);
+  assert.equal(r.dueAt - at, 11 * DAY);
+  at = r.dueAt;
+  r = schedule(r, 'again', at);
+  assert.ok(near(r.stability, 1.5383) && near(r.difficulty, 7.3922), `${r.stability} ${r.difficulty}`);
+  assert.deepEqual([r.state, r.dueAt, r.lapses], ['missed', at, 1], 'a review answered wrong: a lapse, due at once');
+  at += 30 * MIN;
+  r = schedule(r, 'good', at);
+  assert.ok(near(r.stability, 1.5712) && near(r.difficulty, 7.3801), `same day: ${r.stability} ${r.difficulty}`);
+  assert.deepEqual([r.state, r.dueAt - at], ['review', 2 * DAY]);
+  at = r.dueAt;
+  r = schedule(r, 'easy', at);
+  assert.ok(near(r.stability, 7.8653) && near(r.difficulty, 6.4898), `${r.stability} ${r.difficulty}`);
+  assert.equal(r.dueAt - at, 8 * DAY);
+  assert.deepEqual([r.reps, r.lapses, r.seen, r.right], [5, 1, 5, 4]);
 });
 
-test('schedule: the ease never drops under minEase; the interval never passes maxIntervalMs', () => {
-  let r = reviewRec(DAY, NOW);
-  for (let i = 0; i < 20; i += 1) r = schedule({ ...r, phase: 'review', intervalMs: DAY }, 'again', NOW);
-  assert.equal(r.ease, S.minEase);
-  const long = schedule(reviewRec(S.maxIntervalMs, NOW), 'easy', NOW);
-  assert.equal(long.intervalMs, S.maxIntervalMs);
+test('schedule: a missed card answered wrong again stays missed, due now, with no new lapse; easy ≥ good ≥ hard for one record', () => {
+  const m = schedule(schedule(null, 'again', NOW), 'again', NOW + MIN);
+  assert.deepEqual([m.state, m.dueAt, m.lapses, m.seen, m.right], ['missed', NOW + MIN, 0, 2, 0]);
+  for (const rec of [reviewRec(4, NOW), reviewRec(30, NOW - 3 * DAY), missedRec(NOW), schedule(null, 'again', NOW - 2 * DAY)]) {
+    const [hard, good, easy] = ['hard', 'good', 'easy'].map((g) => schedule(rec, g, NOW));
+    assert.ok(hard.dueAt <= good.dueAt && good.dueAt <= easy.dueAt, `${rec.state}: ${[hard, good, easy].map((x) => (x.dueAt - NOW) / DAY).join(' ')}`);
+    for (const x of [hard, good, easy]) {
+      assert.equal(x.state, 'review');
+      assert.ok(x.dueAt - NOW >= DAY, 'at least a day');
+      assert.ok(x.stability >= rec.stability, 'a right answer never lowers stability');
+    }
+  }
+  const long = schedule(reviewRec(5000, NOW), 'easy', NOW);
+  assert.equal(long.dueAt - NOW, T.education.fsrs.maxDays * DAY, 'never past maxDays');
 });
 
-test('schedule, early: a right answer before the card is due leaves its schedule alone; a wrong one is a lapse', () => {
-  const rec = reviewRec(10 * DAY, NOW + 5 * DAY);
-  const ok = schedule(rec, 'easy', NOW, T, { early: true });
-  for (const k of ['phase', 'step', 'ease', 'intervalMs', 'dueAt', 'reps', 'lapses']) assert.equal(ok[k], rec[k], k);
-  assert.deepEqual([ok.seen, ok.right, ok.lastAt], [rec.seen + 1, rec.right + 1, NOW]);
-  const miss = schedule(rec, 'again', NOW, T, { early: true });
-  assert.deepEqual([miss.phase, miss.lapses, miss.right], ['learning', 1, rec.right]);
+test("schedule, practice: a right answer before the card is due leaves its schedule alone; a wrong one is a lapse (his image 4: a right answer is not Missed 30 min later)", () => {
+  const rec = reviewRec(10, NOW + 5 * DAY);
+  for (const g of ['hard', 'good', 'easy']) {
+    const ok = schedule(rec, g, NOW, T, { practice: true });
+    for (const k of ['state', 'stability', 'difficulty', 'dueAt', 'reviewedAt', 'reps', 'lapses']) assert.equal(ok[k], rec[k], `${g} ${k}`);
+    assert.deepEqual([ok.seen, ok.right, ok.lastAt], [rec.seen + 1, rec.right + 1, NOW]);
+  }
+  const miss = schedule(rec, 'again', NOW, T, { practice: true });
+  assert.deepEqual([miss.state, miss.lapses, miss.right, miss.dueAt], ['missed', 1, rec.right, NOW]);
+  // A new card answered right is in review, not due, and counts nowhere half an hour later.
+  const fresh = schedule(null, 'good', NOW);
+  const card = CARDS.find((c) => c.deck === 'stomach' && !c.retired);
+  const later = cardCounts({ [card.id]: fresh }, { context: 'all', now: NOW + 30 * MIN });
+  assert.deepEqual([later.missed, later.review], [0, 0]);
+});
+
+test('cardRetrievability: null for a new card; 1 on the day of a review; 0.9 when due; lower when overdue', () => {
+  assert.equal(cardRetrievability(null, NOW), null);
+  const r = schedule(null, 'good', NOW);
+  assert.equal(cardRetrievability(r, NOW + HOUR), 1);
+  assert.ok(Math.abs(cardRetrievability(reviewRec(4, NOW), NOW) - 0.9) < 1e-9);
+  assert.ok(cardRetrievability(reviewRec(4, NOW - 4 * DAY), NOW) < 0.9);
 });
 
 test('pickCard, break: the cleared segment\'s new cards first, general ones at generalShare', () => {
@@ -88,27 +125,31 @@ test('pickCard, break: the cleared segment\'s new cards first, general ones at g
   assert.equal(pickCard({ context: 'break', level: 2, segment: 'stomach', now: NOW, exclude: stomachIds, rng: always(0.99) }).card.deck, 'general');
 });
 
-test('pickCard, break: then due cards (the segment\'s first), then early reviews (the longest unseen first), then null', () => {
+test('pickCard, break (the bonus quiz): new cards, then missed, then due reviews (least remembered first, the segment\'s first on a tie), then practice (the longest unseen first), then null', () => {
   const ids = CARDS.filter((c) => c.deck === 'stomach' || c.deck === 'general').map((c) => c.id);
-  const srs = Object.fromEntries(ids.map((id, i) => [id, reviewRec(10 * DAY, NOW + DAY, { lastAt: NOW - i * MIN })]));
-  srs['CO-01'] = reviewRec(DAY, NOW - DAY); // a colon card, overdue
-  srs['ST-03'] = reviewRec(DAY, NOW - MIN); // a stomach card, barely due
-  const d = pickCard({ context: 'break', level: 7, segment: 'stomach', srs, now: NOW, rng: always(0.5) });
-  assert.deepEqual([d.card.id, d.reason], ['ST-03', 'due'], 'the segment\'s due card beats a more overdue one elsewhere');
-  const d2 = pickCard({ context: 'break', level: 7, segment: 'stomach', srs, now: NOW, exclude: ['ST-03'], rng: always(0.5) });
-  assert.deepEqual([d2.card.id, d2.reason], ['CO-01', 'due']);
-  const e = pickCard({ context: 'break', level: 7, segment: 'stomach', srs, now: NOW, exclude: ['ST-03', 'CO-01'], rng: always(0.5) });
-  assert.equal(e.reason, 'early');
-  assert.equal(e.card.id, ids.filter((id) => !['ST-03'].includes(id)).at(-1), 'the stomach / general card seen longest ago');
+  const srs = Object.fromEntries(ids.map((id, i) => [id, reviewRec(10, NOW + DAY, { lastAt: NOW - i * MIN })]));
+  srs['CO-01'] = reviewRec(1, NOW - DAY); // a colon card, due a day ago
+  srs['ST-03'] = reviewRec(1, NOW - DAY); // a stomach card, due as long
+  srs['IL-01'] = reviewRec(1, NOW - 3 * DAY); // an ileum card, more overdue: the least remembered
+  srs['DU-02'] = missedRec(NOW - HOUR); // missed
+  const pick = (exclude) => pickCard({ context: 'break', level: 7, segment: 'stomach', srs, now: NOW, exclude, rng: always(0.5) });
+  assert.deepEqual([pick([]).card.id, pick([]).reason], ['DU-02', 'missed'], 'a missed card first: nothing new is left in the segment');
+  assert.deepEqual([pick(['DU-02']).card.id, pick(['DU-02']).reason], ['IL-01', 'review'], 'then the least remembered review, whatever its deck');
+  assert.deepEqual([pick(['DU-02', 'IL-01']).card.id], ['ST-03'], "on a tie, the segment's card");
+  assert.deepEqual([pick(['DU-02', 'IL-01', 'ST-03']).card.id], ['CO-01']);
+  const e = pick(['DU-02', 'IL-01', 'ST-03', 'CO-01']);
+  assert.equal(e.reason, 'practice');
+  assert.equal(e.card.id, ids.filter((id) => id !== 'ST-03').at(-1), 'the stomach / general card answered longest ago');
   assert.equal(pickCard({ context: 'break', level: 7, segment: 'stomach', now: NOW, exclude: ids, rng: always(0.5) }), null, 'nothing new in the segment and nothing seen: caught up');
 });
 
-test('pickCard, revive: due learning, then due reviews (most overdue for their interval), then new, then early', () => {
+test('pickCard, revive: missed, then due reviews (least remembered first), then new, then practice; a buried card is never picked', () => {
   const srs = {
-    'DU-01': reviewRec(DAY, NOW - 2 * DAY), // 2 intervals overdue
-    'IL-01': reviewRec(10 * DAY, NOW - 5 * DAY), // half an interval overdue
-    'CA-01': { ...reviewRec(0, NOW - MIN), phase: 'learning', step: 1, intervalMs: 0 },
-    'CO-01': reviewRec(10 * DAY, NOW + DAY, { lastAt: NOW - 9 * DAY }),
+    'DU-01': reviewRec(1, NOW - 2 * DAY), // due 2 days ago at a 1-day stability: R 0.81
+    'IL-01': reviewRec(10, NOW - 5 * DAY), // due 5 days ago at 10 days: R 0.87
+    'CA-01': missedRec(NOW - MIN),
+    'CO-01': reviewRec(10, NOW + DAY, { lastAt: NOW - 9 * DAY }),
+    'JE-01': missedRec(NOW + DAY), // buried until tomorrow
   };
   const order = [];
   const exclude = [];
@@ -117,12 +158,13 @@ test('pickCard, revive: due learning, then due reviews (most overdue for their i
     order.push(`${p.card.id}:${p.reason}`);
     exclude.push(p.card.id);
   }
-  assert.deepEqual(order.slice(0, 3), ['CA-01:learning', 'DU-01:due', 'IL-01:due']);
+  assert.deepEqual(order.slice(0, 3), ['CA-01:missed', 'DU-01:review', 'IL-01:review']);
   assert.match(order[3], /^ST-\d\d:new$/, 'then a new card from the level\'s own deck');
-  // With every unlocked new card used up, the early review: the card seen longest ago.
+  // With every unlocked new card used up, practice: the card answered longest ago, never the buried one.
   const fresh = CARDS.filter((c) => c.deck === 'stomach' || c.deck === 'general').map((c) => c.id);
   const late = pickCard({ context: 'revive', level: 1, srs, now: NOW, exclude: [...exclude, ...fresh], rng: always(0.99) });
-  assert.deepEqual([late.card.id, late.reason], ['CO-01', 'early']);
+  assert.deepEqual([late.card.id, late.reason], ['CO-01', 'practice']);
+  assert.equal(pickCard({ context: 'revive', level: 1, srs, now: NOW, exclude: [...exclude, ...fresh, 'CO-01'], rng: always(0.99) }), null, 'JE-01 stays buried');
 });
 
 test('pickCard: new cards only from the decks up to the level; reviews from any card already seen', () => {
@@ -131,7 +173,7 @@ test('pickCard: new cards only from the decks up to the level; reviews from any 
     const p = pickCard({ context: 'revive', level: 2, now: NOW, rng });
     assert.ok(['stomach', 'duodenum', 'general'].includes(p.card.deck), `level 2 drew ${p.card.id}`);
   }
-  const seenColon = { 'CO-05': reviewRec(DAY, NOW - DAY) };
+  const seenColon = { 'CO-05': reviewRec(1, NOW - DAY) };
   assert.equal(pickCard({ context: 'revive', level: 1, srs: seenColon, now: NOW, rng: always(0.5) }).card.id, 'CO-05');
 });
 
@@ -149,49 +191,49 @@ test('pickCard: never a card of this session or a retired one; the last minGap c
   assert.ok(!old.slice(-T.education.minGap).includes(p.card.id), 'only the last minGap are held back');
 });
 
-// The counts on the level break's pill and the quiz card (plan 21, E2): new + learning + review.
+// The counts on the level break's pill and the quiz card (plan 21, E2): new + missed + review.
 const countsSrs = {
-  'DU-01': reviewRec(DAY, NOW - 2 * DAY), // a review, due
-  'IL-01': reviewRec(10 * DAY, NOW - 5 * DAY), // a review, due
-  'CA-01': { ...reviewRec(0, NOW - MIN), phase: 'learning', step: 1, intervalMs: 0 }, // learning, due
-  'CO-01': reviewRec(10 * DAY, NOW + DAY, { lastAt: NOW - 9 * DAY }), // a review, not due: an early review, not counted
-  'ST-01': { ...reviewRec(0, NOW + MIN), phase: 'learning', step: 0, intervalMs: 0 }, // learning, not due yet: not counted
+  'DU-01': reviewRec(1, NOW - 2 * DAY), // a review, due
+  'IL-01': reviewRec(10, NOW - 5 * DAY), // a review, due
+  'CA-01': missedRec(NOW - MIN), // missed, due
+  'CO-01': reviewRec(10, NOW + DAY, { lastAt: NOW - 9 * DAY }), // a review, not due: practice, not counted
+  'ST-01': missedRec(NOW + DAY), // missed and buried until tomorrow: not counted, never picked
 };
 
-test('cardCounts: new cards the context offers, learning cards due, reviews due; nothing else', () => {
+test('cardCounts: new cards the context offers, missed cards due, reviews due; nothing else', () => {
   const live = CARDS.filter((c) => !c.retired);
   const fresh = live.filter((c) => !countsSrs[c.id]);
   const inDecks = (decks) => fresh.filter((c) => decks.includes(c.deck)).length;
-  assert.deepEqual(cardCounts(countsSrs, { context: 'break', segment: 'stomach', level: 2, now: NOW }), { new: inDecks(['stomach', 'general']), learning: 1, review: 2 }, "a break: the cleared segment's new cards and the general ones");
-  assert.deepEqual(cardCounts(countsSrs, { context: 'break', segment: 'ileum', level: 5, now: NOW }), { new: inDecks(['ileum', 'general']), learning: 1, review: 2 }, 'due cards count whatever their deck');
-  assert.deepEqual(cardCounts(countsSrs, { context: 'revive', level: 1, now: NOW }), { new: inDecks(['stomach', 'general']), learning: 1, review: 2 }, 'a revive on level 1');
-  assert.deepEqual(cardCounts(countsSrs, { context: 'revive', level: 3, now: NOW }), { new: inDecks(['stomach', 'duodenum', 'jejunum', 'general']), learning: 1, review: 2 }, 'a revive: the decks up to the level');
-  assert.deepEqual(cardCounts(countsSrs, { context: 'all', now: NOW }), { new: fresh.length, learning: 1, review: 2 }, 'all: every deck');
+  assert.deepEqual(cardCounts(countsSrs, { context: 'break', segment: 'stomach', level: 2, now: NOW }), { new: inDecks(['stomach', 'general']), missed: 1, review: 2 }, "a break: the cleared segment's new cards and the general ones");
+  assert.deepEqual(cardCounts(countsSrs, { context: 'break', segment: 'ileum', level: 5, now: NOW }), { new: inDecks(['ileum', 'general']), missed: 1, review: 2 }, 'due cards count whatever their deck');
+  assert.deepEqual(cardCounts(countsSrs, { context: 'revive', level: 1, now: NOW }), { new: inDecks(['stomach', 'general']), missed: 1, review: 2 }, 'a revive on level 1');
+  assert.deepEqual(cardCounts(countsSrs, { context: 'revive', level: 3, now: NOW }), { new: inDecks(['stomach', 'duodenum', 'jejunum', 'general']), missed: 1, review: 2 }, 'a revive: the decks up to the level');
+  assert.deepEqual(cardCounts(countsSrs, { context: 'all', now: NOW }), { new: fresh.length, missed: 1, review: 2 }, 'all: every deck');
   assert.deepEqual(cardCounts(countsSrs, { now: NOW }), cardCounts(countsSrs, { context: 'all', now: NOW }), 'all is the default');
   const all = cardCounts(countsSrs, { context: 'all', now: NOW });
-  assert.equal(all.learning + all.review, dueCount(countsSrs, { now: NOW }), "learning + review is the 📚 switch's due count");
+  assert.equal(all.missed + all.review, dueCount(countsSrs, { now: NOW }), "missed + review is the 📚 switch's due count");
   assert.equal(all.new + Object.keys(countsSrs).length, live.length, 'every live card is new or seen');
-  assert.deepEqual(cardCounts(countsSrs, { context: 'all', now: NOW + 2 * MIN }), { new: fresh.length, learning: 2, review: 2 }, 'a learning step comes due');
-  assert.deepEqual(cardCounts({}, { context: 'break', segment: 'stomach', now: NOW }), { new: live.filter((c) => ['stomach', 'general'].includes(c.deck)).length, learning: 0, review: 0 }, 'a new device');
+  assert.deepEqual(cardCounts(countsSrs, { context: 'all', now: NOW + DAY }), { new: fresh.length, missed: 2, review: 3 }, 'tomorrow: the buried card is back, and the practice card is due');
+  assert.deepEqual(cardCounts({}, { context: 'break', segment: 'stomach', now: NOW }), { new: live.filter((c) => ['stomach', 'general'].includes(c.deck)).length, missed: 0, review: 0 }, 'a new device');
   // The quiz's earlier cards are left out, each from its own count.
   const base = cardCounts(countsSrs, { context: 'break', segment: 'stomach', now: NOW });
   const aNew = fresh.find((c) => c.deck === 'stomach').id;
   assert.deepEqual(cardCounts(countsSrs, { context: 'break', segment: 'stomach', now: NOW, exclude: [aNew] }), { ...base, new: base.new - 1 });
-  assert.deepEqual(cardCounts(countsSrs, { context: 'break', segment: 'stomach', now: NOW, exclude: ['CA-01'] }), { ...base, learning: 0 });
-  assert.deepEqual(cardCounts(countsSrs, { context: 'break', segment: 'stomach', now: NOW, exclude: ['DU-01', 'IL-01', 'CO-01'] }), { ...base, review: 0 }, 'an excluded early review changes nothing');
+  assert.deepEqual(cardCounts(countsSrs, { context: 'break', segment: 'stomach', now: NOW, exclude: ['CA-01'] }), { ...base, missed: 0 });
+  assert.deepEqual(cardCounts(countsSrs, { context: 'break', segment: 'stomach', now: NOW, exclude: ['DU-01', 'IL-01', 'CO-01'] }), { ...base, review: 0 }, 'an excluded practice card changes nothing');
   // Retired cards never count.
   const cards = [{ id: 'ST-01', deck: 'stomach' }, { id: 'ST-02', deck: 'stomach', retired: true }, { id: 'ST-03', deck: 'stomach', retired: true }, { id: 'ST-04', deck: 'stomach' }];
-  assert.deepEqual(cardCounts({ 'ST-03': reviewRec(DAY, NOW - DAY) }, { cards, context: 'all', now: NOW }), { new: 2, learning: 0, review: 0 });
+  assert.deepEqual(cardCounts({ 'ST-03': reviewRec(1, NOW - DAY) }, { cards, context: 'all', now: NOW }), { new: 2, missed: 0, review: 0 });
 });
 
-test('cardCounts matches what pickCard hands out: whatever the recent gap holds, exactly those cards come before the first early review (plan 25)', () => {
+test('cardCounts matches what pickCard hands out: whatever the recent gap holds, exactly those cards come before the first practice card (plan 25)', () => {
   const runs = [['break', 2, 'stomach'], ['break', 5, 'ileum'], ['break', 7, 'colon'], ['revive', 1, null], ['revive', 3, null], ['revive', 7, null]];
   // The recent gap full of the counted cards (the case that froze the counts: plan 25, B1), or empty.
   const gaps = [[], ['DU-01', 'IL-01', 'CA-01', 'ST-02', 'JE-06']];
   for (const [context, level, segment] of runs) for (const recent of gaps) for (const dueFirst of context === 'break' ? [false, true] : [false]) {
     for (const srs of [countsSrs, {}]) {
       const counts = cardCounts(srs, { context, level, segment, now: NOW });
-      const got = { new: 0, learning: 0, due: 0, early: 0 };
+      const got = { new: 0, missed: 0, review: 0, practice: 0 };
       const exclude = [];
       const rng = createRng(11);
       for (let guard = 0; ; guard += 1) {
@@ -199,68 +241,68 @@ test('cardCounts matches what pickCard hands out: whatever the recent gap holds,
         assert.ok(guard <= CARDS.length, `${context} ${level}: pickCard kept handing out cards past the bank's ${CARDS.length}`);
         const p = pickCard({ srs, context, level, segment, now: NOW, exclude, recent, rng, dueFirst });
         if (!p) break;
-        if (p.reason !== 'early') assert.equal(got.early, 0, `${context} ${level}: ${p.card.id} (${p.reason}) came after an early review`);
+        if (p.reason !== 'practice') assert.equal(got.practice, 0, `${context} ${level}: ${p.card.id} (${p.reason}) came after a practice card`);
+        else assert.equal(srs[p.card.id]?.state, 'review', `${context} ${level}: practice is a review card, never a buried missed one`);
         // The count with the quiz's earlier cards left out still holds the card being asked.
         const left = cardCounts(srs, { context, level, segment, now: NOW, exclude });
-        const kind = { new: 'new', learning: 'learning', due: 'review' }[p.reason];
-        if (kind) assert.ok(left[kind] >= 1, `${context} ${level}: ${p.card.id} is asked as ${p.reason}, so that count holds it`);
-        else assert.deepEqual(left, { new: 0, learning: 0, review: 0 }, `${context} ${level}: an early review only once nothing is waiting`);
+        if (p.reason !== 'practice') assert.ok(left[p.reason] >= 1, `${context} ${level}: ${p.card.id} is asked as ${p.reason}, so that count holds it`);
+        else assert.deepEqual(left, { new: 0, missed: 0, review: 0 }, `${context} ${level}: practice only once nothing is waiting`);
         got[p.reason] += 1;
         exclude.push(p.card.id);
       }
-      assert.deepEqual(counts, { new: got.new, learning: got.learning, review: got.due }, `${context} level ${level} ${segment ?? ''}: the counts are the picks`);
+      assert.deepEqual(counts, { new: got.new, missed: got.missed, review: got.review }, `${context} level ${level} ${segment ?? ''}: the counts are the picks`);
     }
   }
 });
 
-test("pickCard, a level break's own quiz (dueFirst, plan 25): due learning, due reviews, then cards missed in this break (oldest first, the one just shown waiting), then new, then early", () => {
+test("pickCard, a level break's own quiz (dueFirst, plan 25): missed, due reviews, then cards missed in this break (oldest first, the one just shown waiting), then new, then practice", () => {
   const ask = (exclude, missed = []) => pickCard({ srs: countsSrs, context: 'break', level: 2, segment: 'stomach', now: NOW, exclude, missed, dueFirst: true, rng: createRng(5) });
   const first = ask([]);
-  assert.deepEqual([first.card.id, first.reason], ['CA-01', 'learning'], 'a due learning card first');
+  assert.deepEqual([first.card.id, first.reason], ['CA-01', 'missed'], 'a missed card first');
   const second = ask(['CA-01']);
-  assert.equal(second.reason, 'due', 'then the due reviews');
+  assert.equal(second.reason, 'review', 'then the due reviews');
   const third = ask(['CA-01', 'DU-01', 'IL-01']);
   assert.equal(third.reason, 'new', 'then new cards');
-  // CA-01 missed, then DU-01 missed: the oldest miss comes back first, as learning, before new cards.
+  // CA-01 missed, then DU-01 missed: the oldest miss comes back first, before new cards.
   const retry = ask(['CA-01', 'DU-01', 'IL-01'], ['CA-01', 'DU-01']);
-  assert.deepEqual([retry.card.id, retry.reason], ['CA-01', 'learning']);
+  assert.deepEqual([retry.card.id, retry.reason], ['CA-01', 'missed']);
   // The card just shown (the last of exclude) waits while a new card is left, then comes back.
   const waits = ask(['CA-01', 'DU-01', 'IL-01'], ['IL-01']);
   assert.equal(waits.reason, 'new', 'the miss just shown is not asked again at once');
   const live = CARDS.filter((c) => !c.retired);
   const everyNew = live.filter((c) => !countsSrs[c.id] && ['stomach', 'general'].includes(c.deck)).map((c) => c.id);
   const back = ask(['CA-01', 'DU-01', ...everyNew, 'IL-01'], ['IL-01']);
-  assert.deepEqual([back.card.id, back.reason], ['IL-01', 'learning'], 'with nothing else counted it comes back');
-  const early = ask(['CA-01', 'DU-01', 'IL-01', ...everyNew]);
-  assert.equal(early.reason, 'early', 'early reviews last');
+  assert.deepEqual([back.card.id, back.reason], ['IL-01', 'missed'], 'with nothing else counted it comes back');
+  const practice = ask(['CA-01', 'DU-01', 'IL-01', ...everyNew]);
+  assert.deepEqual([practice.card.id, practice.reason], ['CO-01', 'practice'], 'practice last, never the buried ST-01');
 });
 
-test('a counted card always comes before an early review, whatever the recent gap holds (plan 25, B1)', () => {
+test('a counted card always comes before practice, whatever the recent gap holds (plan 25, B1)', () => {
   // Every counted card is among the last minGap shown: before plan 25 an early review came first.
   const recent = ['CA-01', 'DU-01', 'IL-01'];
   const srs = { 'CA-01': countsSrs['CA-01'], 'DU-01': countsSrs['DU-01'], 'IL-01': countsSrs['IL-01'], 'CO-01': countsSrs['CO-01'] };
   const onlyThese = CARDS.filter((c) => c.id in srs);
   for (const context of ['break', 'revive']) {
     const p = pickCard({ cards: onlyThese, srs, context, level: 7, segment: 'colon', now: NOW, exclude: [], recent, rng: createRng(2) });
-    assert.notEqual(p.reason, 'early', `${context}: ${p.card.id}`);
+    assert.notEqual(p.reason, 'practice', `${context}: ${p.card.id}`);
   }
 });
 
-test('cardCounts: a card missed in this break counts once, as learning, though it is in exclude or due again (plan 25)', () => {
+test('cardCounts: a card missed in this break counts once, as missed, though it is in exclude or due again (plan 25)', () => {
   const base = cardCounts(countsSrs, { context: 'break', segment: 'stomach', level: 2, now: NOW });
   const missedOne = cardCounts(countsSrs, { context: 'break', segment: 'stomach', level: 2, now: NOW, exclude: ['DU-01'], missed: ['DU-01'] });
-  assert.deepEqual(missedOne, { ...base, learning: base.learning + 1, review: base.review - 1 }, 'DU-01 missed: out of review, into learning');
+  assert.deepEqual(missedOne, { ...base, missed: base.missed + 1, review: base.review - 1 }, 'DU-01 missed: out of review, into missed');
   const dueAgain = cardCounts(countsSrs, { context: 'break', segment: 'stomach', level: 2, now: NOW, missed: ['CA-01'] });
   assert.deepEqual(dueAgain, base, 'a missed card that is also due counts once');
 });
 
-test('the count colours (new blue, learning orange, review green) are readable on the dark card and differ from one another', () => {
+test('the count colours (new blue, missed, review green) are readable on the dark card and differ from one another', () => {
   const lum = (hex) => {
     const [r, g, b] = [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255).map((v) => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4));
     return 0.2126 * r + 0.7152 * g + 0.0722 * b;
   };
   const contrast = (a, b) => (Math.max(lum(a), lum(b)) + 0.05) / (Math.min(lum(a), lum(b)) + 0.05);
-  assert.deepEqual(Object.keys(COUNT_COLORS), ['new', 'learning', 'review']);
+  assert.deepEqual(Object.keys(COUNT_COLORS), ['new', 'missed', 'review']);
   for (const [kind, color] of Object.entries(COUNT_COLORS)) {
     assert.match(color, /^#[0-9a-f]{6}$/, kind);
     for (const dark of ['#1a0b14', '#2a1522']) assert.ok(contrast(color, dark) >= 7, `${kind} ${color} on ${dark}: ${contrast(color, dark).toFixed(1)} : 1 (WCAG AAA is 7)`);
@@ -272,7 +314,7 @@ test("pickCard, browse (a test run): the segment's deck in id order, whatever is
   const live = CARDS.filter((c) => !c.retired);
   const deck = (d) => live.filter((c) => c.deck === d).map((c) => c.id).sort();
   const caecum = deck('caecum');
-  // Every stomach card is overdue in the learning steps: a revive would ask those first.
+  // Every stomach card is missed: a revive would ask those first.
   const srs = Object.fromEntries(deck('stomach').map((id) => [id, schedule(null, 'again', NOW - DAY)]));
   assert.equal(pickCard({ context: 'revive', level: 5, srs, now: NOW, rng: always(0.5) }).card.deck, 'stomach', 'a normal revive asks what is due');
   const first = pickCard({ context: 'browse', segment: 'caecum', srs, now: NOW });
@@ -282,7 +324,7 @@ test("pickCard, browse (a test run): the segment's deck in id order, whatever is
   for (let pick = first; pick; pick = pickCard({ context: 'browse', segment: 'caecum', srs, now: NOW, exclude: walk })) walk.push(pick.card.id);
   assert.deepEqual(walk, [...caecum, ...deck('general'), ...DECKS.filter((d) => d !== 'caecum' && d !== 'general').flatMap(deck)]);
   assert.equal(walk.length, live.length, 'null only once every live card was shown in the quiz');
-  assert.equal(pickCard({ context: 'browse', segment: 'stomach', srs, now: NOW }).reason, 'early', 'a card with a record is an early review (nothing is saved anyway)');
+  assert.equal(pickCard({ context: 'browse', segment: 'stomach', srs, now: NOW }).reason, 'practice', 'a card with a record is practice (nothing is saved anyway)');
 });
 
 test('pickCard, browse: a later quiz carries on after the cards already shown; a shown deck starts again from the one shown longest ago', () => {
@@ -372,8 +414,8 @@ test('eduShopPrices: level 1 is the base price; each level scales it (rounded up
   for (let i = 1; i < scale.length; i += 1) assert.ok(scale[i] >= scale[i - 1], 'prices never fall with the level');
 });
 
-test('masteryByDeck: per deck, cards seen, mastered (review at masteredMs or more) and live total', () => {
-  const srs = { 'ST-01': reviewRec(T.education.masteredMs, NOW), 'ST-02': reviewRec(DAY, NOW), 'CO-01': { ...reviewRec(0, NOW), phase: 'learning' } };
+test('masteryByDeck: per deck, cards seen, mastered (in review at a stability of masteredDays or more) and live total', () => {
+  const srs = { 'ST-01': reviewRec(T.education.masteredDays, NOW), 'ST-02': reviewRec(T.education.masteredDays - 0.5, NOW), 'CO-01': missedRec(NOW, { stability: 40 }) };
   const m = masteryByDeck(srs);
   assert.deepEqual(Object.keys(m), DECKS);
   assert.deepEqual(m.stomach, { seen: 2, mastered: 1, total: CARDS.filter((c) => c.deck === 'stomach' && !c.retired).length });
@@ -383,7 +425,7 @@ test('masteryByDeck: per deck, cards seen, mastered (review at masteredMs or mor
 test('createEduStore: answers persist under eduKey; recent keeps the last minGap; junk is dropped; storage errors never throw', () => {
   const st = fakeStorage();
   const store = createEduStore(st);
-  assert.deepEqual(store.load(), { v: 1, cards: {}, recent: [], counters: {}, badges: {}, unlockedLevel: 1 });
+  assert.deepEqual(store.load(), { v: 2, cards: {}, recent: [], counters: {}, badges: {}, unlockedLevel: 1 });
   const rec = schedule(null, 'good', NOW);
   for (let i = 1; i <= T.education.minGap + 2; i += 1) store.answer(`ST-0${i}`, rec);
   const back = createEduStore(st).load();
@@ -391,8 +433,8 @@ test('createEduStore: answers persist under eduKey; recent keeps the last minGap
   assert.equal(back.recent.length, T.education.minGap);
   assert.equal(back.recent.at(-1), `ST-0${T.education.minGap + 2}`);
   assert.ok(st.m.has(LEADERBOARD.eduKey));
-  st.setItem(LEADERBOARD.eduKey, JSON.stringify({ cards: { 'ST-01': rec, 'bad id': rec, 'ST-02': { phase: 'learning', ease: 'x' } }, recent: ['ST-01', 7] }));
-  assert.deepEqual(createEduStore(st).load(), { v: 1, cards: { 'ST-01': rec }, recent: ['ST-01'], counters: {}, badges: {}, unlockedLevel: 1 }, 'a record from before the counters and badges reads as none');
+  st.setItem(LEADERBOARD.eduKey, JSON.stringify({ cards: { 'ST-01': rec, 'bad id': rec, 'ST-02': { phase: 'learning', ease: 'x' }, 'ST-03': { ...rec, stability: 0 }, 'ST-04': { ...rec, difficulty: 11 }, 'ST-05': { ...rec, reviewedAt: null } }, recent: ['ST-01', 7] }));
+  assert.deepEqual(createEduStore(st).load(), { v: 2, cards: { 'ST-01': rec }, recent: ['ST-01'], counters: {}, badges: {}, unlockedLevel: 1 }, 'a record from before the counters and badges reads as none');
   st.setItem(LEADERBOARD.eduKey, '{not json');
   assert.deepEqual(createEduStore(st).load().cards, {});
   store.clear();
@@ -430,9 +472,9 @@ test('createEduStore, the badges and the average (plan 22): revives count at onc
   // What evaluate needs is what the store holds.
   assert.deepEqual(evaluate({ totals: back.counters, facts: perfect, unlocked: back.badges, catalog: EDU_ACHIEVEMENTS }), [], 'nothing is earned twice');
   st.setItem(LEADERBOARD.eduKey, JSON.stringify({ cards: {}, recent: [], counters: { revives: 3, perfectStreak: -1, gradedRuns: 1.5, gradeSum: '9', other: 4 }, badges: { edu_perfect: '2026-11-12', score_10: '2026-11-12', edu_grade_a: 'soon', 'EDU bad': '2026-11-12' } }));
-  assert.deepEqual(createEduStore(st).load(), { v: 1, cards: {}, recent: [], counters: { revives: 3 }, badges: { edu_perfect: '2026-11-12' }, unlockedLevel: 1 }, 'only whole positive counts of known counters, and edu_ ids with a day');
+  assert.deepEqual(createEduStore(st).load(), { v: 2, cards: {}, recent: [], counters: { revives: 3 }, badges: { edu_perfect: '2026-11-12' }, unlockedLevel: 1 }, 'only whole positive counts of known counters, and edu_ ids with a day');
   store.clear();
-  assert.deepEqual(createEduStore(st).load(), { v: 1, cards: {}, recent: [], counters: {}, badges: {}, unlockedLevel: 1 }, 'Clear removes the counters and badges with the cards');
+  assert.deepEqual(createEduStore(st).load(), { v: 2, cards: {}, recent: [], counters: {}, badges: {}, unlockedLevel: 1 }, 'Clear removes the counters and badges with the cards');
   const off = createEduStore(throwing);
   assert.doesNotThrow(() => off.addRevive());
   assert.deepEqual(off.endRun(perfect), { revives: 1, perfectStreak: 1, gradedRuns: 1, gradeSum: 10000 }, 'private mode: they live for this load');
@@ -449,7 +491,7 @@ test('reviveStep: Give up marks the state gaveUp; no other way out does', () => 
 
 test('dueCount: seen live cards due now, nothing else', () => {
   const cards = [{ id: 'ST-01' }, { id: 'ST-02' }, { id: 'ST-03' }, { id: 'ST-04', retired: true }];
-  const srs = { 'ST-01': reviewRec(DAY, NOW - 1), 'ST-02': reviewRec(DAY, NOW + 1), 'ST-04': reviewRec(DAY, NOW - DAY), 'XX-99': reviewRec(DAY, NOW - DAY) };
+  const srs = { 'ST-01': reviewRec(1, NOW - 1), 'ST-02': reviewRec(1, NOW + 1), 'ST-04': reviewRec(1, NOW - DAY), 'XX-99': reviewRec(1, NOW - DAY) };
   assert.equal(dueCount(srs, { cards, now: NOW }), 1, 'ST-01 only: ST-02 is not due, ST-03 unseen, ST-04 retired, XX-99 not a card');
   assert.equal(dueCount({}, { cards, now: NOW }), 0);
   assert.equal(dueCount(srs, { cards, now: NOW + 2 }), 2);
@@ -482,13 +524,50 @@ test('cardSource: first author, et al. when there are more, the year; joined for
 
 // --- Rules with no test before plan 24 (AUD-017) ---
 
-test('schedule: a review answered "hard" again and again never takes the ease under minEase', () => {
+test('schedule: a review answered "hard" again and again keeps its difficulty at 10 or under and its stability rising', () => {
   let rec = schedule(null, 'good', NOW);
   for (let i = 0; i < 6; i += 1) rec = schedule(rec, 'good', rec.dueAt);
-  assert.equal(rec.phase, 'review');
-  for (let i = 0; i < 40; i += 1) rec = schedule(rec, 'hard', rec.dueAt);
-  assert.ok(rec.ease >= T.education.srs.minEase, `ease ${rec.ease}`);
-  assert.equal(rec.ease, T.education.srs.minEase, 'and it rests on the floor');
+  assert.equal(rec.state, 'review');
+  for (let i = 0; i < 40; i += 1) {
+    const next = schedule(rec, 'hard', rec.dueAt);
+    assert.ok(next.difficulty <= 10 && next.stability >= rec.stability, `${next.difficulty} ${next.stability}`);
+    rec = next;
+  }
+  assert.ok(rec.difficulty > 9.9, `and it rests near the ceiling: ${rec.difficulty}`);
+});
+
+test('the store converts an SM-2 record as it reads it (plan 26): a review keeps its due time; learning last missed is missed; learning last right is a review due 2 days after', () => {
+  const m = new Map();
+  const st = { getItem: (k) => m.get(k) ?? null, setItem: (k, v) => m.set(k, v), removeItem: (k) => m.delete(k) };
+  const sm2 = {
+    'ST-01': { phase: 'review', step: 0, ease: 2.5, intervalMs: 10 * DAY, dueAt: NOW + 3 * DAY, reps: 3, lapses: 0, seen: 4, right: 4, firstAt: NOW - 20 * DAY, lastAt: NOW - 7 * DAY },
+    'ST-02': { phase: 'review', step: 0, ease: 1.3, intervalMs: 10 * DAY, dueAt: NOW + 3 * DAY, reps: 1, lapses: 3, seen: 9, right: 5, firstAt: NOW - 40 * DAY, lastAt: NOW - 7 * DAY },
+    'ST-03': { phase: 'learning', step: 0, ease: 2.5, intervalMs: 0, dueAt: NOW + MIN, reps: 0, lapses: 0, seen: 1, right: 0, firstAt: NOW, lastAt: NOW },
+    'ST-04': { phase: 'learning', step: 1, ease: 2.5, intervalMs: 0, dueAt: NOW + 10 * MIN, reps: 0, lapses: 0, seen: 1, right: 1, firstAt: NOW, lastAt: NOW },
+    'ST-05': { phase: 'learning', step: 0, ease: 2.3, intervalMs: 0, dueAt: NOW + DAY, reps: 0, lapses: 1, seen: 5, right: 3, firstAt: NOW - 9 * DAY, lastAt: NOW }, // missed, then buried
+  };
+  m.set(LEADERBOARD.eduKey, JSON.stringify({ v: 1, cards: sm2, recent: ['ST-01'], counters: { revives: 2 }, badges: {}, unlockedLevel: 3 }));
+  const store = createEduStore(st);
+  const { cards, counters, unlockedLevel } = store.load();
+  assert.deepEqual([counters, unlockedLevel], [{ revives: 2 }, 3], 'the rest of the record is kept');
+  const a = cards['ST-01'];
+  assert.deepEqual([a.state, a.stability, a.dueAt, a.reviewedAt, a.lastAt, a.reps, a.lapses, a.seen, a.right, a.firstAt], ['review', 10, NOW + 3 * DAY, NOW - 7 * DAY, NOW - 7 * DAY, 3, 0, 4, 4, NOW - 20 * DAY]);
+  assert.ok(a.difficulty >= 1 && a.difficulty <= 10);
+  assert.ok(cards['ST-02'].difficulty > a.difficulty, 'a lower ease is a harder card');
+  // FSRS grows the old interval about as SM-2's ease did, at 90 % recall.
+  const next = schedule(a, 'good', a.dueAt);
+  assert.ok(Math.abs((next.dueAt - a.dueAt) / DAY - 25) <= 2, `ease 2.5 on 10 days: about 25 days, got ${(next.dueAt - a.dueAt) / DAY}`);
+  assert.deepEqual([cards['ST-03'].state, cards['ST-03'].dueAt], ['missed', NOW + MIN], 'last answered wrong: missed');
+  assert.deepEqual([cards['ST-04'].state, cards['ST-04'].dueAt, cards['ST-04'].reviewedAt], ['review', NOW + 2 * DAY, NOW], 'last answered right: as a new card answered good');
+  assert.deepEqual([cards['ST-05'].state, cards['ST-05'].dueAt, cards['ST-05'].lapses], ['missed', NOW + DAY, 1], 'a bury is kept');
+  assert.deepEqual(cardCounts(cards, { context: 'all', now: NOW + 30 * MIN }).missed, 1, "his phone's right answers do not all turn red: only ST-03");
+  // Reading again gives the same records; a write saves them converted; converting twice changes nothing.
+  assert.deepEqual(createEduStore(st).load().cards, cards);
+  store.answer('ST-06', schedule(null, 'good', NOW));
+  const saved = JSON.parse(m.get(LEADERBOARD.eduKey));
+  assert.equal(saved.v, 2);
+  assert.deepEqual(saved.cards['ST-01'], cards['ST-01']);
+  assert.deepEqual(createEduStore(st).load().cards['ST-04'], cards['ST-04']);
 });
 
 test('eduShopPrices rounds up: level 2 is ceil(price × 1.25), not the rounded-down table', () => {
@@ -502,7 +581,7 @@ test('masteryByDeck leaves a retired card out of its deck', () => {
   assert.deepEqual(masteryByDeck(srs, { cards })[a.deck], { seen: 1, mastered: 0, total: 1 });
 });
 
-test('createEduStore: Clear on the same instance empties what that instance reads; a record with no known phase is dropped', () => {
+test('createEduStore: Clear on the same instance empties what that instance reads; a record with no known state is dropped', () => {
   const m = new Map();
   const storage = { getItem: (k) => (m.has(k) ? m.get(k) : null), setItem: (k, v) => m.set(k, String(v)), removeItem: (k) => m.delete(k) };
   const store = createEduStore(storage);
@@ -511,8 +590,8 @@ test('createEduStore: Clear on the same instance empties what that instance read
   store.clear();
   assert.deepEqual([Object.keys(store.load().cards), store.load().counters], [[], {}], 'this very instance reads the wiped record');
   const good = schedule(null, 'good', NOW);
-  m.set(LEADERBOARD.eduKey, JSON.stringify({ v: 1, cards: { [CARDS[0].id]: good, [CARDS[1].id]: { ...good, phase: 'mastered' } }, recent: [], counters: {}, badges: {} }));
-  assert.deepEqual(Object.keys(store.load().cards), [CARDS[0].id], 'a phase the scheduler does not know is junk');
+  m.set(LEADERBOARD.eduKey, JSON.stringify({ v: 2, cards: { [CARDS[0].id]: good, [CARDS[1].id]: { ...good, state: 'mastered' }, [CARDS[2].id]: { ...good, state: undefined, phase: 'mastered' } }, recent: [], counters: {}, badges: {} }));
+  assert.deepEqual(Object.keys(store.load().cards), [CARDS[0].id], 'a state the scheduler does not know is junk');
 });
 
 test('createEduStore.unlockLevel (plan 25): a run may start at the highest level an education run continued into; never down, never past the last; junk reads as 1; Clear resets it', () => {
@@ -525,7 +604,7 @@ test('createEduStore.unlockLevel (plan 25): a run may start at the highest level
   assert.equal(store.load().unlockedLevel, 3, 'never down');
   store.unlockLevel(99);
   assert.equal(store.load().unlockedLevel, T.levels.lastLevel, 'never past the last level');
-  m.set(LEADERBOARD.eduKey, JSON.stringify({ v: 1, cards: {}, recent: [], unlockedLevel: 'x' }));
+  m.set(LEADERBOARD.eduKey, JSON.stringify({ v: 2, cards: {}, recent: [], unlockedLevel: 'x' }));
   assert.equal(createEduStore(st).load().unlockedLevel, 1, 'junk reads as 1');
   store.unlockLevel(4);
   store.clear?.();
@@ -538,7 +617,7 @@ test('createEduStore.bury (plan 25): the card waits until the time given, nothin
   const m = new Map();
   const st = { getItem: (k) => m.get(k) ?? null, setItem: (k, v) => m.set(k, v), removeItem: (k) => m.delete(k) };
   const store = createEduStore(st);
-  const rec = { phase: 'learning', step: 0, ease: 2.5, intervalMs: 0, dueAt: NOW, reps: 0, lapses: 1, seen: 3, right: 1, firstAt: NOW - DAY, lastAt: NOW };
+  const rec = missedRec(NOW);
   store.answer('ST-01', rec);
   assert.equal(store.bury('ST-01', NOW + DAY, '2026-11-13'), true);
   assert.deepEqual(store.load().cards['ST-01'], { ...rec, dueAt: NOW + DAY }, 'only dueAt moves');

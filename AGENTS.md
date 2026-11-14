@@ -358,9 +358,9 @@ three switches pack into 64 px boxes (`readyLayout({ versus, education })`, y 80
 changes (stable `switchBoxes` for the focus ring); a gold count on the 📚 is the cards due (`dueCount`).
 The 📚 glyph and that count are a box of their own inside the switch's (`readyLayout`'s
 `educationInfo`, which `readyHit` looks at first): a tap there, or A on its ring item, opens **"Your
-cards"** (`Play.toggleEduCard`, an info card): the cards not seen yet, the ones being learned and due,
-the learned ones due (`cardCounts` over every deck), how many have been seen (`masteryByDeck`), and that
-the gold number is learning plus to review. It opens on the release of the pointer that pressed it
+cards"** (`Play.toggleEduCard`, an info card): the cards not seen yet, the missed ones due, the
+reviews due (`cardCounts` over every deck), how many have been seen (`masteryByDeck`), and that
+the gold number is missed plus to review. It opens on the release of the pointer that pressed it
 (the card's dim closes on a release; one press is armed at a time, so a second thumb or a cancelled
 touch does not toggle it twice: plan 25), and any tap, key or pad press closes it without pressing what is under it or starting a
 run. The rest of the switch still toggles.
@@ -373,8 +373,14 @@ With test mode on as well it is a test run too: no card progress, badge or reviv
 nothing is saved while test mode is on even when it was turned on after the run started (the
 game-over screen's profile, then the save panel; `setTestMode` also latches a one-player revive).
 **Cards** (`src/questions.js`, 70 placeholder cards, audits in `src/questionAudits.js`, the audit tool
-`tools/audit_questions.mjs`) are scheduled per device by SM-2 (`src/education.js`; store
-`flappyPoop.eduSrs`, wiped by Clear). A **test run** saves no answers, so what is due would never
+`tools/audit_questions.mjs`) are scheduled per device by **FSRS-6** (plan 26: `src/fsrs.js`, the
+formulas ported from py-fsrs (MIT) with its default weights, `TUNING.education.fsrs`; `src/education.js`;
+store `flappyPoop.eduSrs`, wiped by Clear), as in Anki but with no learning steps: a card with no
+record is **new**; a right answer puts it in **review**, due when its recall chance falls to
+`fsrs.retention` (whole days, at least 1, at most `maxDays`; right on first sight is always good:
+2 days); a wrong one makes it **missed**, due at once until answered right. A **practice** card (a
+review not due yet, offered once nothing is counted) answered right leaves the schedule alone. An
+SM-2 record from before plan 26 is converted as it is read (`fromSm2`). A **test run** saves no answers, so what is due would never
 clear: its quizzes walk the level's deck in id order instead (`pickCard` context `'browse'`; the cards
 shown are kept for the page load in the registry's `testQuizShown`), so skipping to a level shows that
 level's cards. **The quiz card** (`scenes/Quiz.js`, overlay id `quiz`): Play owns the cards (`quizNext`
@@ -394,21 +400,21 @@ quiz) plays `sfx.score`, and one that pays (a break's) makes the coin's sound al
 answer that wins everything back plays `sparkle` in the ding's place. **Level break** (plan 25 laid it
 out: `eduBreakLayout` in logic.js): a **📚 Review** pill under the shop pill (the 🏅's row,
 `quizButtonShown`; chromeIntent's `'quiz'` input, only in an education run's break) opens the break's
-quiz, which asks due learning cards, then due reviews, then the cards missed in this break
-(`Play.breakMissed`, asked again as learning until answered right; the one just shown waits), then new
-cards of the segment just cleared (and general ones), then early reviews (`pickCard`'s `dueFirst`; the
-bonus quiz keeps new first). A counted card always comes before an early review, whatever the recent
-gap holds. A right answer to a counted card pays `education.breakCoins` (`takeCoins`); an early review
+quiz, which asks missed cards, then due reviews (the least remembered first), then the cards missed
+in this break (`Play.breakMissed`, asked again as missed until answered right; the one just shown
+waits), then new cards of the segment just cleared (and general ones), then practice (`pickCard`'s
+`dueFirst`; the bonus quiz keeps new first). A counted card always comes before practice, whatever the
+recent gap holds. A right answer to a counted card pays `education.breakCoins` (`takeCoins`); practice
 pays nothing. The shop's prices are `eduShopPrices(level)` (`Play.shopPrices`; `buyBlocker` takes
-`prices`). **What is waiting**, as in Anki (`cardCounts`: new, learning (a miss of this break
+`prices`). **What is waiting**, as in Anki (`cardCounts`: new, missed (a miss of this break
 included) and review cards a quiz can still ask now; `Play.quizCounts`): three numbers in blue, orange
 and green on a line of their own under Review (`ui/countLine.js`; none in a test run; a tap, or A on
 their ring item, opens "Waiting in this quiz": `toggleBreakCounts`, `countLines`), and on the card
 `5 + 2 + 8` in a row of its own above its bottom buttons, the card on show counted and its kind
 underlined (`refreshCounts`; no line in a test run); a tap on the card's numbers opens the same lines
-(`Quiz.toggleCountsCard`). **The gate** (`breakGated`): a break into a level above the store's
-`unlockedLevel` (the highest level an education run, never a test run, has continued into) holds
-while the orange or green number is above 0: `resumePlay` keeps the break, the hint reads "📚 Review
+(`Quiz.toggleCountsCard`). **The gate** (`breakGated`): every level break of an education run
+(plan 26; before it, only a break into a level not yet unlocked) holds while the missed or review
+number is above 0: `resumePlay` keeps the break, the hint reads "📚 Review
 to continue", Review pulses. New cards stay optional. After a miss there the quiz offers **Bury**
 in its left slot (`canBury` / `buryCard`): `education.buryCoinsPerLevel` × the level just cleared,
 at most `buryPerDay` a local day, the card due again `buryMs` later; no pilot event. **Skip ▸ and
@@ -585,11 +591,11 @@ src/
                             Menu / d-pad), RT threshold, stick deadzone + repeat;
                             TUNING.focus = the focus ring's geometry, fill alpha,
                             pulse and the overlay scroll step. TUNING.education = Education
-                            mode (plans 21, 22): grade thresholds, the SM-2 srs
-                            knobs, minGap, generalShare, strikes, restoreStreak,
+                            mode (plans 21, 22): grade thresholds, fsrs (FSRS-6's 21
+                            weights, retention, maxDays; plan 26), minGap, generalShare, strikes, restoreStreak,
                             reviveBlinkMs (the blink after Fly on), badgeMinAnswers
                             (answers a run needs to be graded),
-                            priceScale, masteredMs, explainMinMs, breakCoins,
+                            priceScale, masteredDays, explainMinMs, breakCoins,
                             revivePenaltyPerLevel. EDUCATION.words = the unlock word
                             (poopschool), matched like TEST_MODE.words. TUNING.splash = the
                             loading splash (hintMs, slideMs, fadeMs, swipePx,
@@ -698,14 +704,24 @@ src/
                             IBS_WINS / WINDOW_DAYS / BREAK_DAYS / FOUR_OF_A_KIND,
                             levelCloseShave, winsInWindow, daysBetween,
                             nextDrawStreak. Fully unit-tested (tests/achievements.test.js).
+  fsrs.js                   FSRS-6's maths (plan 26), NO imports: FSRS_W (the 21
+                            default weights), GRADE_NUM, retrievability,
+                            initStability / initDifficulty, nextDifficulty,
+                            shortTermStability (a second answer the same day),
+                            nextStability (recall or lapse), nextIntervalDays. Ported
+                            from py-fsrs (MIT, its notice in the header); checked
+                            against py-fsrs's own test results (tests/fsrs.test.js).
   education.js              Education mode's scheduler and local store (plan 21), NO
-                            Phaser/DOM: gradeFor (wrong = again; right = easy / good /
-                            hard by response time, TUNING.education.grade), schedule
-                            (SM-2 with learning steps, in ms; an early right answer
-                            leaves the schedule alone), pickCard (break: the cleared
-                            segment's new cards, general at generalShare, then due,
-                            then early reviews; revive: due learning, due reviews,
-                            new from the decks up to the level, early; never a card of
+                            Phaser/DOM: gradeFor (wrong = again; right on first sight
+                            = good; later easy / good / hard by response time,
+                            TUNING.education.grade), schedule (FSRS-6, no learning
+                            steps: new → review or missed; a practice right answer
+                            leaves the schedule alone), cardRetrievability, pickCard
+                            (break: the cleared segment's new cards, general at
+                            generalShare, then missed, then due reviews (least
+                            remembered first), then practice; revive: missed, due
+                            reviews, new from the decks up to the level, practice;
+                            a buried missed card is never picked; never a card of
                             the session or a retired one; the last minGap wait),
                             a test run's 'browse' pick walks the level's deck in id
                             order, then general, then the other decks, cards not yet
@@ -714,13 +730,13 @@ src/
                             choice → streak → revived / restored / over; giveUp marks
                             gaveUp), reviveSettled, newTally / tallyAnswer (the
                             run's answers in all and per level),
-                            cardCounts (what a quiz can still ask now: new, learning
+                            cardCounts (what a quiz can still ask now: new, missed
                             and review, by pickCard's filters; context 'break',
                             'revive' or 'all'; the pill's and the card's numbers),
                             eduShopPrices (base × priceScale per level), masteryByDeck
                             (per deck: seen, mastered, total; "Your cards" sums it),
                             plan 25: pickCard's dueFirst and missed (a level break's
-                            own order; counted cards before early reviews), cardCounts'
+                            own order; counted cards before practice), cardCounts'
                             missed, unlockLevel / unlockedLevel, bury / buriedOn,
                             localDayKey;
                             createEduStore (LEADERBOARD.eduKey = flappyPoop.eduSrs:
@@ -2008,8 +2024,14 @@ tests/                      node --test (schema.test.js, pilot.test.js, eduBoard
                             unreachable), push going ahead only on current and then
                             copying the fixture, and the pasted comparison query run
                             in PGlite over the fixture
-  education.test.js         src/education.js: gradeFor, SM-2 schedule (learning,
-                            review, early, the ease floor), pickCard in each context
+  fsrs.test.js              src/fsrs.js against py-fsrs's test_review_card and
+                            test_memo_state (on a harness with py-fsrs's learning
+                            steps), the default weights, and properties over random
+                            histories (S > 0, D in [1, 10], easy ≥ good ≥ hard, a
+                            right answer never lowers S, a lapse never raises it)
+  education.test.js         src/education.js: gradeFor (first sight = good), FSRS
+                            schedule (new, the game sequence, missed, practice, the
+                            365-day cap), the SM-2 records' conversion, pickCard in each context
                             (break, revive, browse) and its exclusions, cardCounts ==
                             what pickCard hands out, reviveStep (strikes, the choice,
                             the streak, Give up only in strikes), reviveSettled,
@@ -2033,7 +2055,8 @@ tests/                      node --test (schema.test.js, pilot.test.js, eduBoard
                             education run's end syncs (a test run's does not); test
                             mode turned on after the start saves nothing; the 📚
                             glyph opens on its own pointer's release; a break's misses
-                            asked again and early reviews unpaid; the gate; Bury;
+                            asked again and practice unpaid; the gate (every break
+                            since plan 26); Bury;
                             Skip ▸ and Quit (grading both ways)
   pilot.test.js             the tester pilot end to end: Play's pilot methods, the
                             real stores and leaderboard.js calls and the real save and

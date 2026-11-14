@@ -7,7 +7,7 @@ import { playScene, absorb, fakeStorage, registry, toggleStub } from './support/
 import { TUNING as T } from '../src/config.js';
 import { createSettingsStore } from '../src/logic.js';
 import { CARDS } from '../src/questions.js';
-import { newTally, createEduStore } from '../src/education.js';
+import { newTally, createEduStore, schedule } from '../src/education.js';
 import { eduRunFacts } from '../src/achievements.js';
 import { createEduShareStore } from '../src/leaderboard.js';
 
@@ -192,7 +192,7 @@ test("the 📚 glyph opens \"Your cards\" on its own pointer's release: a second
   assert.equal(handlers.pointerup.size + handlers.pointerupoutside.size, 0);
 });
 
-test("a level break's quiz: a miss is asked again and counted as learning until answered right; an early review pays no coin; counted answers do (plan 25, B1)", () => {
+test("a level break's quiz: a miss is asked again and counted as missed until answered right; practice pays no coin; counted answers do (plan 25, B1)", () => {
   const storage = fakeStorage();
   const store = createEduStore(storage);
   const coins = [];
@@ -207,39 +207,46 @@ test("a level break's quiz: a miss is asked again and counted as learning until 
   answer('new', 'w1');
   assert.deepEqual(s.breakMissed, [card.id], 'the miss is kept for this break');
   const after = s.quizCounts({ mode: 'break', exclude: [card.id] });
-  assert.equal(after.learning, before.learning + 1, 'and counted as learning, though this quiz asked it already');
+  assert.equal(after.missed, before.missed + 1, 'and counted as missed, though this quiz asked it already');
+  assert.equal(store.load().cards[card.id].state, 'missed');
   const pick = s.quizNext({ mode: 'break', exclude: CARDS.filter((c) => c.id !== card.id).map((c) => c.id).concat(card.id) });
-  assert.deepEqual([pick?.card.id, pick?.reason], [card.id, 'learning'], 'asked again, as learning, once nothing else is left');
-  answer('learning', 'answer');
+  assert.deepEqual([pick?.card.id, pick?.reason], [card.id, 'missed'], 'asked again, as missed, once nothing else is left');
+  answer('missed', 'answer');
   assert.deepEqual(s.breakMissed, [], 'answered right: no longer missed');
-  assert.equal(store.load().cards[card.id].step, 1, 'and the answer counted as its learning step (not an early one)');
+  const rec = store.load().cards[card.id];
+  assert.deepEqual([rec.state, rec.reps], ['review', 2], 'and the answer moved its schedule (not practice): in review again');
   assert.deepEqual(coins, [T.education.breakCoins], 'the right answer paid');
-  answer('early', 'answer');
-  assert.deepEqual(coins, [T.education.breakCoins], 'an early review pays nothing');
+  answer('practice', 'answer');
+  assert.deepEqual(coins, [T.education.breakCoins], 'practice pays nothing');
+  assert.deepEqual(store.load().cards[card.id].dueAt, rec.dueAt, 'and leaves the schedule alone');
   s.levelBreak = false;
-  answer('learning', 'w1');
+  answer('missed', 'w1');
   assert.deepEqual(s.breakMissed, [], 'outside a break (a revive) nothing is kept for later');
 });
 
-test('the gate (plan 25, B6): a break into a level not yet unlocked holds while a learning or review card is due; new cards, an unlocked level, a test run or a match never hold it', () => {
+test('the gate (plan 26: every education break) holds while a missed or review card is due; new cards, a test run or a match never hold it', () => {
   const now = Date.now();
   const store = createEduStore(fakeStorage());
   const due = CARDS.find((c) => c.deck === 'stomach');
-  store.answer(due.id, { phase: 'learning', step: 0, ease: 2.5, intervalMs: 0, dueAt: now - 1000, reps: 0, lapses: 0, seen: 1, right: 0, firstAt: now - 60000, lastAt: now - 60000 });
+  store.answer(due.id, schedule(null, 'again', now - 60000));
   const gate = (over = {}) => {
     const s = playScene({ eduStore: store, level: 2, levelBreak: true, runIsEducation: true, runIsTest: false, match: null, registry: registry(), breakMissed: [], ...over });
     return s.breakGated();
   };
-  assert.equal(gate(), true, 'level 2 is not unlocked, and a learning card is due');
+  assert.equal(gate(), true, 'a missed card is due');
   assert.equal(gate({ runIsTest: true }), false, 'never in a test run');
   assert.equal(gate({ match: { seed: 1 } }), false, 'never in a match');
   assert.equal(gate({ levelBreak: false }), false, 'only in a break');
-  store.unlockLevel(2);
-  assert.equal(gate(), false, 'an unlocked level opens whatever is due');
+  store.unlockLevel(3);
+  assert.equal(gate(), true, 'an unlocked level is gated too (plan 26)');
   assert.equal(gate({ level: 3 }), true);
   // Answered right: nothing due, the gate opens; new cards stay optional.
-  store.answer(due.id, { ...store.load().cards[due.id], step: 1, dueAt: now + 600000 });
+  store.answer(due.id, schedule(store.load().cards[due.id], 'good', now));
   assert.equal(gate({ level: 3 }), false);
+  // A review that comes due holds it too.
+  store.answer(due.id, { ...store.load().cards[due.id], dueAt: now - 1000 });
+  assert.equal(gate({ level: 3 }), true);
+  store.answer(due.id, schedule(store.load().cards[due.id], 'good', now));
   // A miss in this break holds it again, until answered right.
   assert.equal(gate({ level: 3, breakMissed: [due.id] }), true);
 });
@@ -251,13 +258,12 @@ test('resumePlay keeps a gated break: the state stays paused and the break stays
   assert.deepEqual([s.state, s.levelBreak, calls], ['paused', true, ['banner', 'pill']]);
 });
 
-test('bury at a gate (plan 25, B7): only a card missed in this break, 3 × the level cleared, while the purse covers it and under the day\'s cap; never in a test run; it records no pilot event', async () => {
+test('bury at a gate (plan 25, B7; every break since plan 26): only a card missed in this break, 3 × the level cleared, while the purse covers it and under the day\'s cap; never in a test run; it records no pilot event', async () => {
   const { localDayKey } = await import('../src/education.js');
   const now = Date.now();
   const store = createEduStore(fakeStorage());
   const card = CARDS.find((c) => c.deck === 'duodenum') ?? CARDS[0];
-  const seen = { phase: 'learning', step: 0, ease: 2.5, intervalMs: 0, dueAt: now + 60000, reps: 0, lapses: 0, seen: 1, right: 0, firstAt: now - 60000, lastAt: now };
-  store.answer(card.id, seen);
+  store.answer(card.id, schedule(null, 'again', now));
   let coins = 20;
   const events = [];
   const make = (over = {}) => {
@@ -284,7 +290,8 @@ test('bury at a gate (plan 25, B7): only a card missed in this break, 3 × the l
   for (let i = store.buriedOn(localDayKey()); i < T.education.buryPerDay; i += 1) store.bury(card.id, now, localDayKey());
   assert.equal(make().canBury(card.id), false, `at most ${T.education.buryPerDay} a day`);
   store.unlockLevel(3);
-  assert.equal(make({ level: 3 }).canBury(card.id), false, 'not at an unlocked level\'s break');
+  store.bury(card.id, now, '2000-01-01'); // a new day's count
+  assert.equal(make({ level: 3 }).canBury(card.id), true, "an unlocked level's break is a gate too (plan 26)");
 });
 
 test('Skip ▸ at a break (plan 25, B8): one level passed at par per tap, only as far as the levels unlocked; never in a test run; the run is no longer full', async () => {
@@ -314,7 +321,7 @@ test('Quit at a break (plan 25, B8): two taps; caught up it ends as a normal run
     const s = playScene({
       levelBreak: true, state: 'paused', runIsEducation: true, runIsTest: false, match: null, shopOpen: false, quizOpen: false, quizButton: {}, breakQuitArmedAt: null,
       time: { get now() { return now; }, delayedCall() {} },
-      quizCounts: () => ({ new: 4, learning: due ? 1 : 0, review: 0 }),
+      quizCounts: () => ({ new: 4, missed: due ? 1 : 0, review: 0 }),
       endRun: () => calls.push('endRun'), showOver: () => calls.push('showOver'), refreshShopButton() {},
     });
     s.breakQuitTap();

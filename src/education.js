@@ -1,20 +1,26 @@
 // Education mode's scheduler and local store (plan 21), NO Phaser/DOM.
 //
 // Each card a player has seen has a record on this device (createEduStore):
-//   { phase: 'learning' | 'review', step, ease, intervalMs, dueAt, reps, lapses,
-//     seen, right, firstAt, lastAt }
-// schedule() is SM-2 with learning steps, as in Anki, in milliseconds: a new or
-// lapsed card walks TUNING.education.srs.learnStepsMs, then graduates to review,
-// where each right answer multiplies the interval. The grade comes from the tap
-// alone (gradeFor): wrong = again, right = easy / good / hard by response time.
-// pickCard() decides which card a quiz asks next; reviveStep() is the revive
-// quiz's strike / streak state machine; eduShopPrices() the shop's price ladder.
+//   { state: 'review' | 'missed', stability, difficulty, dueAt, reviewedAt, lastAt, reps, lapses,
+//     seen, right, firstAt }
+// A card with no record is new. schedule() is FSRS-6 (src/fsrs.js, plan 26), as in Anki but with no
+// learning steps: a right answer puts a card in review, due when the chance of recalling it has
+// fallen to education.fsrs.retention (whole days, at least 1); a wrong one makes it missed, due at
+// once, until it is answered right. The grade comes from the tap alone (gradeFor): wrong = again;
+// right on a card's first sight = good; right later = easy / good / hard by response time.
+// pickCard() decides which card a quiz asks next; reviveStep() is the revive quiz's strike / streak
+// state machine; eduShopPrices() the shop's price ladder.
 // Times are ms since the epoch (Date.now()), passed in, so everything here is pure.
 
 import { LEADERBOARD, TUNING } from './config.js';
 import { nextPerfectStreak } from './achievements.js';
+import { GRADE_NUM, initDifficulty, initStability, nextDifficulty, nextIntervalDays, nextStability, retrievability, shortTermStability } from './fsrs.js';
 import { CARDS, DECKS, REFERENCES } from './questions.js';
 import { createJsonStore } from './store.js';
+
+const DAY_MS = 86400000;
+/** Whole days from `from` to `to` (FSRS counts the time since a review in whole days). */
+const wholeDays = (from, to) => Math.max(0, Math.floor((to - from) / DAY_MS));
 
 /** Education mode's glyph: the ready-screen switch, the HUD badge, the break pill. */
 export const EDUCATION_EMOJI = '\u{1F4DA}';
@@ -52,9 +58,14 @@ export function cardSource(card, refs = REFERENCES) {
   return (card.refs ?? []).map((n) => short(refs[n])).filter(Boolean).join('; ');
 }
 
-/** The grade for one answer: 'again' when wrong; else 'easy' under grade.fastMs, 'hard' over grade.slowMs, 'good' between (and when the time is unknown, e.g. the tab was hidden). */
-export function gradeFor(correct, rtMs, t = TUNING) {
+/**
+ * The grade for one answer: 'again' when wrong. Right on the card's first sight (`first`) is always
+ * 'good': that time is reading time (plan 26). Right later: 'easy' under grade.fastMs, 'hard' over
+ * grade.slowMs, 'good' between (and when the time is unknown, e.g. the tab was hidden).
+ */
+export function gradeFor(correct, rtMs, t = TUNING, { first = false } = {}) {
   if (!correct) return 'again';
+  if (first) return 'good';
   const { fastMs, slowMs } = t.education.grade;
   if (!Number.isFinite(rtMs) || rtMs < 0) return 'good';
   if (rtMs < fastMs) return 'easy';
@@ -62,63 +73,53 @@ export function gradeFor(correct, rtMs, t = TUNING) {
   return 'good';
 }
 
-function newRecord(now, srs) {
-  return { phase: 'learning', step: 0, ease: srs.startEase, intervalMs: 0, dueAt: now, reps: 0, lapses: 0, seen: 0, right: 0, firstAt: now, lastAt: null };
+/** The chance (0 to 1) of recalling a card now, from its record (FSRS's retrievability); null for a new card. */
+export function cardRetrievability(rec, now, t = TUNING) {
+  if (!rec || !(rec.stability > 0)) return null;
+  return retrievability(wholeDays(rec.reviewedAt, now), rec.stability, t.education.fsrs.w);
+}
+
+/** The wait (ms) FSRS gives a card in review at `stability`: whole days, at least 1, at most fsrs.maxDays. */
+function intervalMs(stability, t) {
+  const { w, retention, maxDays } = t.education.fsrs;
+  return nextIntervalDays(stability, { w, retention, maxDays }) * DAY_MS;
 }
 
 /**
  * A card's record after one answer graded `grade` at `now` (rec null = the card's first answer).
- * Learning: again → the first step; hard → the same step again; good → the next step, or
- * graduation to review at srs.graduateMs after the last; easy → graduation at srs.easyMs.
- * Review: again → a lapse (ease − easeAgain, back to the learning steps); hard → interval ×
- * hardMul (ease − easeHard); good → × ease; easy → × ease × easyMul (ease + easeEasy); capped at
- * maxIntervalMs. `early` (the card was not due): a right answer leaves the schedule as it was and
- * only counts; a wrong one is a lapse as usual. Every answer counts toward seen / right and lastAt.
+ *   New: FSRS's first stability and difficulty for the grade; right → review, due after its
+ *        interval (good: 2 days); wrong → missed, due now (not a lapse).
+ *   Missed or review, a whole day or more since the last review: FSRS's recall update (right) or
+ *        lapse update (wrong); less than a day: the same-day update. Difficulty moves either way.
+ *        Right → review, due after the interval; wrong → missed, due now (a lapse when it was in
+ *        review).
+ * `practice` (the card was not due: extra practice): a right answer leaves the schedule as it was
+ * and only counts; a wrong one updates it as above. Every answer counts toward seen / right and
+ * lastAt; reps counts the answers that moved the schedule, reviewedAt is the last of them.
  */
-export function schedule(rec, grade, now, t = TUNING, { early = false } = {}) {
-  const srs = t.education.srs;
-  const r = { ...(rec ?? newRecord(now, srs)) };
-  r.seen += 1;
-  if (grade !== 'again') r.right += 1;
-  r.lastAt = now;
-  if (early && grade !== 'again') return r;
-  const steps = srs.learnStepsMs;
-  if (r.phase === 'review') {
-    if (grade === 'again') {
-      r.lapses += 1;
-      r.reps = 0;
-      r.ease = Math.max(srs.minEase, r.ease - srs.easeAgain);
-      r.phase = 'learning';
-      r.step = 0;
-      r.intervalMs = 0;
-      r.dueAt = now + steps[0];
-      return r;
-    }
-    let next = r.intervalMs * r.ease;
-    if (grade === 'hard') {
-      next = r.intervalMs * srs.hardMul;
-      r.ease = Math.max(srs.minEase, r.ease - srs.easeHard);
-    } else if (grade === 'easy') {
-      next = r.intervalMs * r.ease * srs.easyMul;
-      r.ease += srs.easeEasy;
-    }
-    r.intervalMs = Math.min(srs.maxIntervalMs, Math.round(next));
-    r.reps += 1;
-    r.dueAt = now + r.intervalMs;
-    return r;
+export function schedule(rec, grade, now, t = TUNING, { practice = false } = {}) {
+  const w = t.education.fsrs.w;
+  const g = GRADE_NUM[grade] ?? GRADE_NUM.good;
+  const right = g > 1;
+  if (!rec) {
+    const stability = initStability(g, w);
+    return { state: right ? 'review' : 'missed', stability, difficulty: initDifficulty(g, w), dueAt: right ? now + intervalMs(stability, t) : now, reviewedAt: now, lastAt: now, reps: 1, lapses: 0, seen: 1, right: right ? 1 : 0, firstAt: now };
   }
-  // Learning (a new card, or a lapsed one walking the steps again).
-  if (grade === 'again') r.step = 0;
-  else if (grade === 'good') r.step += 1;
-  if (grade === 'easy' || r.step >= steps.length) {
-    r.phase = 'review';
-    r.step = 0;
-    r.intervalMs = grade === 'easy' ? srs.easyMs : srs.graduateMs;
-    r.reps = 1;
-    r.dueAt = now + r.intervalMs;
-    return r;
+  const r = { ...rec, seen: rec.seen + 1, right: rec.right + (right ? 1 : 0), lastAt: now };
+  if (practice && right) return r;
+  const days = wholeDays(rec.reviewedAt, now);
+  r.stability = days < 1 ? shortTermStability(rec.stability, g, w) : nextStability(rec.difficulty, rec.stability, retrievability(days, rec.stability, w), g, w);
+  r.difficulty = nextDifficulty(rec.difficulty, g, w);
+  r.reviewedAt = now;
+  r.reps = rec.reps + 1;
+  if (right) {
+    r.state = 'review';
+    r.dueAt = now + intervalMs(r.stability, t);
+  } else {
+    if (rec.state === 'review') r.lapses = rec.lapses + 1;
+    r.state = 'missed';
+    r.dueAt = now;
   }
-  r.dueAt = now + steps[r.step];
   return r;
 }
 
@@ -135,28 +136,36 @@ function pickNew(general, pools, rng, t) {
   return pickFrom(primary, rng);
 }
 
-function chooseCard({ cards, srs, context, level, segment, now, blocked, rng, t, early = true, dueFirst = false, missed = [], last = null }) {
+function chooseCard({ cards, srs, context, level, segment, now, blocked, rng, t, practice = true, dueFirst = false, missed = [], last = null }) {
   const live = cards.filter((c) => !c.retired && !blocked.has(c.id));
   const fresh = live.filter((c) => !srs[c.id]);
-  const seen = live.filter((c) => srs[c.id]);
-  const due = seen.filter((c) => srs[c.id].dueAt <= now);
-  const notDue = seen.filter((c) => srs[c.id].dueAt > now);
-  const overdue = (c) => (now - srs[c.id].dueAt) / Math.max(srs[c.id].intervalMs, 1);
+  const due = live.filter((c) => srs[c.id] && srs[c.id].dueAt <= now);
+  // Practice: review cards not due yet. A missed card that is not due was buried: it stays buried.
+  const notDue = live.filter((c) => srs[c.id] && srs[c.id].dueAt > now && srs[c.id].state === 'review');
+  const recall = (c) => cardRetrievability(srs[c.id], now, t);
   const leastRecent = (a, b) => (srs[a.id].lastAt ?? 0) - (srs[b.id].lastAt ?? 0);
-  const dueReason = (c) => (srs[c.id].phase === 'learning' ? 'learning' : 'due');
+  const near = (c) => (context === 'break' && c.deck !== segment && c.deck !== 'general' ? 1 : 0); // a break: the cleared segment's cards (and general ones) first
+  // Missed cards, the longest due first; reviews, the least remembered first (lowest retrievability).
+  const missedPick = (list) => {
+    const c = list.filter((x) => srs[x.id].state === 'missed').sort((a, b) => srs[a.id].dueAt - srs[b.id].dueAt || near(a) - near(b))[0];
+    return c ? { card: c, reason: 'missed' } : null;
+  };
+  const reviewPick = (list) => {
+    const c = list.filter((x) => srs[x.id].state === 'review').sort((a, b) => recall(a) - recall(b) || near(a) - near(b) || srs[a.id].dueAt - srs[b.id].dueAt)[0];
+    return c ? { card: c, reason: 'review' } : null;
+  };
+  const practicePick = () => {
+    const c = [...notDue].sort((a, b) => near(a) - near(b) || leastRecent(a, b))[0];
+    return c ? { card: c, reason: 'practice' } : null;
+  };
   if (context === 'break') {
-    const near = (c) => (c.deck === segment || c.deck === 'general' ? 0 : 1); // the cleared segment's cards (and general ones) first
     const newPick = () => {
       const card = pickNew(fresh.filter((c) => c.deck === 'general'), [fresh.filter((c) => c.deck === segment)], rng, t);
       return card ? { card, reason: 'new' } : null;
     };
-    const duePick = (list) => {
-      const d = [...list].sort((a, b) => near(a) - near(b) || overdue(b) - overdue(a))[0];
-      return d ? { card: d, reason: dueReason(d) } : null;
-    };
     let pick;
     if (dueFirst) {
-      // A level break (plan 25): due learning cards, due reviews, the cards missed in this break (oldest
+      // A level break (plan 25): missed cards, due reviews, the cards missed in this break (oldest
       // miss first; the one just shown waits while anything else is counted), then new cards.
       const isMissed = new Set(missed);
       const dueNow = due.filter((c) => !isMissed.has(c.id));
@@ -164,27 +173,17 @@ function chooseCard({ cards, srs, context, level, segment, now, blocked, rng, t,
       const retry = missed.map((id) => byId.get(id)).filter((c) => c && !c.retired);
       const retryPick = (allowLast) => {
         const c = retry.find((x) => allowLast || x.id !== last);
-        return c ? { card: c, reason: 'learning' } : null;
+        return c ? { card: c, reason: 'missed' } : null;
       };
-      pick =
-        duePick(dueNow.filter((c) => srs[c.id].phase === 'learning')) ??
-        duePick(dueNow.filter((c) => srs[c.id].phase !== 'learning')) ??
-        retryPick(false) ??
-        newPick() ??
-        retryPick(true);
+      pick = missedPick(dueNow) ?? reviewPick(dueNow) ?? retryPick(false) ?? newPick() ?? retryPick(true);
     } else {
-      pick = newPick() ?? duePick(due);
+      pick = newPick() ?? missedPick(due) ?? reviewPick(due);
     }
-    if (pick || !early) return pick;
-    const e = [...notDue].sort((a, b) => near(a) - near(b) || leastRecent(a, b))[0];
-    return e ? { card: e, reason: 'early' } : null;
+    return pick ?? (practice ? practicePick() : null);
   }
-  // A revive: due learning cards (most overdue first), due reviews (most overdue for their
-  // interval first), a new card (the level's deck first), then the card seen longest ago.
-  const learning = due.filter((c) => srs[c.id].phase === 'learning').sort((a, b) => srs[a.id].dueAt - srs[b.id].dueAt)[0];
-  if (learning) return { card: learning, reason: 'learning' };
-  const review = due.filter((c) => srs[c.id].phase === 'review').sort((a, b) => overdue(b) - overdue(a))[0];
-  if (review) return { card: review, reason: 'due' };
+  // A revive: missed cards, due reviews, a new card (the level's deck first), then practice.
+  const due1 = missedPick(due) ?? reviewPick(due);
+  if (due1) return due1;
   const here = DECKS[Math.max(1, level) - 1];
   const unlocked = fresh.filter((c) => c.deck !== 'general' && levelOfDeck(c.deck) <= level);
   const card = pickNew(
@@ -194,9 +193,7 @@ function chooseCard({ cards, srs, context, level, segment, now, blocked, rng, t,
     t,
   );
   if (card) return { card, reason: 'new' };
-  if (!early) return null;
-  const e = [...notDue].sort(leastRecent)[0];
-  return e ? { card: e, reason: 'early' } : null;
+  return practice ? practicePick() : null;
 }
 
 /**
@@ -212,24 +209,27 @@ function browseCard({ cards, srs, segment, blocked, shown }) {
   const card = cards
     .filter((c) => !c.retired && !blocked.has(c.id))
     .sort((a, b) => group(a) - group(b) || shownAt(a) - shownAt(b) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))[0];
-  return card ? { card, reason: srs[card.id] ? 'early' : 'new' } : null;
+  return card ? { card, reason: srs[card.id] ? 'practice' : 'new' } : null;
 }
 
 /**
- * The next card for a quiz: { card, reason: 'new' | 'learning' | 'due' | 'early' }, or null.
- * context 'break' (a level break; segment = the cleared level's deck): a new card of that segment
- * (a general one at generalShare), then a due card (the segment's first), then an early review
- * (the segment's first, the one seen longest ago). 'revive' (a crash): a due learning card, a due
- * review, a new card from the decks up to `level` (its own deck first; general at generalShare),
- * then an early review. Reviews come from any card already seen, whatever the level.
+ * The next card for a quiz: { card, reason: 'new' | 'missed' | 'review' | 'practice' }, or null.
+ * context 'break' (the bonus quiz after a win; segment = the level's deck): a new card of that
+ * segment (a general one at generalShare), then a missed card, then a due review, then practice.
+ * 'revive' (a crash): a missed card, a due review, a new card from the decks up to `level` (its own
+ * deck first; general at generalShare), then practice. Missed cards and reviews come from any card
+ * already seen, whatever the level: missed ones the longest due first, reviews the least remembered
+ * first (lowest retrievability), a break's own segment first on a tie. Practice is a review card not
+ * due yet, the one answered longest ago first (a break's segment first); a missed card that is not
+ * due was buried and is never picked.
  * `exclude` (this quiz session's cards) is never picked; the last minGap of `recent` are skipped
- * unless nothing else is left, and a counted card (new, learning, due) always comes before an early
- * review, the gap only ordering cards within those two groups (plan 25). Retired cards are never
+ * unless nothing else is left, and a counted card (new, missed, review) always comes before
+ * practice, the gap only ordering cards within those two groups (plan 25). Retired cards are never
  * picked. `rng` returns [0, 1).
- * `dueFirst` (a level break's own quiz, plan 25; the bonus quiz keeps 'break' as it was): due
- * learning cards, then due reviews, then `missed` (cards missed in this break and not yet answered
- * right, oldest miss first; asked again as 'learning' even though they are in `exclude`, the card
- * just shown waiting while another counted card is left), then new cards, then early reviews.
+ * `dueFirst` (a level break's own quiz, plan 25): missed cards, then due reviews, then `missed`
+ * (cards missed in this break and not yet answered right, oldest miss first; asked again though
+ * they are in `exclude`, the card just shown waiting while another counted card is left), then new
+ * cards, then practice.
  * 'browse' (a test run, which saves no answers): the segment's deck in order, whatever is due
  * (browseCard); `shown` is the cards test quizzes have shown so far.
  */
@@ -238,44 +238,44 @@ export function pickCard({ cards = CARDS, srs = {}, context, level = 1, segment 
   if (context === 'browse') return browseCard({ cards, srs, segment, blocked: session, shown });
   const gap = new Set([...session, ...recent.slice(-t.education.minGap)]);
   const args = { cards, srs, context, level, segment, now, rng, t, dueFirst, missed, last: exclude.at(-1) ?? null };
-  // Counted cards first, the recent gap only ordering them; early reviews only once none is left.
+  // Counted cards first, the recent gap only ordering them; practice only once none is left.
   return (
-    chooseCard({ ...args, blocked: gap, early: false }) ??
-    chooseCard({ ...args, blocked: session, early: false }) ??
+    chooseCard({ ...args, blocked: gap, practice: false }) ??
+    chooseCard({ ...args, blocked: session, practice: false }) ??
     chooseCard({ ...args, blocked: gap }) ??
     (gap.size > session.size ? chooseCard({ ...args, blocked: session }) : null)
   );
 }
 
 /**
- * What a quiz can still ask now, as pickCard would hand it out: { new, learning, review } (plan 21,
- * E2; the numbers on the level break's pill and on the quiz card, as in Anki).
- *   new       unseen cards the context offers: 'break', the cleared segment's deck and the general
- *             one; 'revive', the decks up to `level` and the general one; 'all', every deck (the
- *             ready screen's "Your cards").
- *   learning  cards in the learning steps that are due now (a missed card comes back here).
- *   review    learned cards that are due now.
- * Due cards count whatever their deck, as pickCard asks them. Early reviews (seen, not due yet) are
- * not counted: they are extra practice, offered once these run out. `exclude` (the quiz's cards
- * already asked) and retired cards never count; `missed` (a level break's cards missed and not yet
- * answered right, plan 25) count as learning, once each, though they are in `exclude`. The filters
- * are chooseCard's: whatever the recent gap holds, picking until nothing is left hands out exactly
- * these cards before the first early review (tests/education.test.js).
+ * What a quiz can still ask now, as pickCard would hand it out: { new, missed, review } (the numbers
+ * on the level break's pill and on the quiz card, as in Anki).
+ *   new     unseen cards the context offers: 'break', the cleared segment's deck and the general
+ *           one; 'revive', the decks up to `level` and the general one; 'all', every deck (the
+ *           "Your cards" count).
+ *   missed  cards answered wrong and not yet right since, due now (a buried one waits).
+ *   review  cards in review that are due now.
+ * Due cards count whatever their deck, as pickCard asks them. Practice (review cards not due yet)
+ * is not counted: it is offered once these run out. `exclude` (the quiz's cards already asked) and
+ * retired cards never count; `missed` (a level break's cards missed and not yet answered right,
+ * plan 25) count as missed, once each, though they are in `exclude`. The filters are chooseCard's:
+ * whatever the recent gap holds, picking until nothing is left hands out exactly these cards before
+ * the first practice card (tests/education.test.js).
  */
 export function cardCounts(srs = {}, { cards = CARDS, context = 'all', level = 1, segment = null, now = Date.now(), exclude = [], missed = [] } = {}) {
   const blocked = new Set(exclude);
   const isMissed = new Set(missed);
-  const counts = { new: 0, learning: 0, review: 0 };
+  const counts = { new: 0, missed: 0, review: 0 };
   for (const c of cards) {
     if (c.retired) continue;
     if (isMissed.has(c.id)) {
-      counts.learning += 1; // missed in this break and not yet answered right: it is asked again (plan 25)
+      counts.missed += 1; // missed in this break and not yet answered right: it is asked again (plan 25)
       continue;
     }
     if (blocked.has(c.id)) continue;
     const rec = srs[c.id];
     if (rec) {
-      if (rec.dueAt <= now) counts[rec.phase === 'learning' ? 'learning' : 'review'] += 1;
+      if (rec.dueAt <= now) counts[rec.state === 'missed' ? 'missed' : 'review'] += 1;
     } else if (context === 'all' || c.deck === 'general' || (context === 'break' ? c.deck === segment : levelOfDeck(c.deck) <= level)) counts.new += 1;
   }
   return counts;
@@ -365,7 +365,7 @@ export function eduShopPrices(level, t = TUNING) {
   return Object.fromEntries(Object.entries(t.shop.prices).map(([item, price]) => [item, Math.ceil(price * k)]));
 }
 
-/** Per deck: { seen, mastered (in review at an interval of education.masteredMs or more), total } over the live cards. */
+/** Per deck: { seen, mastered (in review with a stability of education.masteredDays or more), total } over the live cards. */
 export function masteryByDeck(srs = {}, { cards = CARDS, t = TUNING } = {}) {
   const out = Object.fromEntries(DECKS.map((d) => [d, { seen: 0, mastered: 0, total: 0 }]));
   for (const c of cards) {
@@ -374,31 +374,64 @@ export function masteryByDeck(srs = {}, { cards = CARDS, t = TUNING } = {}) {
     const r = srs[c.id];
     row.total += 1;
     if (r) row.seen += 1;
-    if (r?.phase === 'review' && r.intervalMs >= t.education.masteredMs) row.mastered += 1;
+    if (r?.state === 'review' && r.stability >= t.education.masteredDays) row.mastered += 1;
   }
   return out;
 }
 
 const ID_RE = /^[A-Z]{2}-\d{2}$/;
-const NUM_FIELDS = ['step', 'ease', 'intervalMs', 'dueAt', 'reps', 'lapses', 'seen', 'right', 'firstAt'];
+const NUM_FIELDS = ['stability', 'difficulty', 'dueAt', 'reviewedAt', 'lastAt', 'reps', 'lapses', 'seen', 'right', 'firstAt'];
+/** A record from before FSRS (plan 21 to 25: SM-2 with learning steps). */
+const SM2_FIELDS = ['step', 'ease', 'intervalMs', 'dueAt', 'reps', 'lapses', 'seen', 'right', 'firstAt'];
 /** The store's counters (plan 22): revives made, the 🤓 streak of perfect graded runs, and the graded runs with the sum of their grades (the average grade). */
 const EDU_COUNTERS = ['revives', 'perfectStreak', 'gradedRuns', 'gradeSum'];
 const BADGE_RE = /^edu_[a-z0-9_]{1,36}$/;
 const DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
 
-function cleanRecord(r) {
-  if (!r || typeof r !== 'object' || (r.phase !== 'learning' && r.phase !== 'review')) return null;
-  if (!NUM_FIELDS.every((k) => Number.isFinite(r[k]) && r[k] >= 0)) return null;
-  if (r.lastAt !== null && !(Number.isFinite(r.lastAt) && r.lastAt >= 0)) return null;
-  const out = { phase: r.phase, lastAt: r.lastAt };
-  for (const k of NUM_FIELDS) out[k] = r[k];
-  return out;
+/**
+ * An SM-2 record as FSRS would hold it (plan 26), so no player starts over:
+ *   review    keeps its due time; its stability is its interval in days, and its difficulty is the
+ *             one at which FSRS would grow that interval as its ease did (at 90 % recall).
+ *   learning  last answered wrong (the first step): missed, keeping its due time (a bury's too).
+ *             Last answered right (a later step): in review, as a new card answered good at that
+ *             answer, so due 2 days after it.
+ * Pure and fixed: converting on every read gives the same record until one is written.
+ */
+function fromSm2(r, t) {
+  const w = t.education.fsrs.w;
+  const lastAt = Number.isFinite(r.lastAt) && r.lastAt >= 0 ? r.lastAt : r.firstAt;
+  const keep = { reps: r.reps, lapses: r.lapses, seen: r.seen, right: r.right, firstAt: r.firstAt, lastAt };
+  if (r.phase === 'review') {
+    const stability = Math.max(r.intervalMs / DAY_MS, 0.001);
+    const growth = Math.exp(w[8]) * stability ** -w[9] * (Math.exp(0.1 * w[10]) - 1);
+    const difficulty = Math.min(Math.max(11 - (r.ease - 1) / growth, 1), 10);
+    return { state: 'review', stability, difficulty, dueAt: r.dueAt, reviewedAt: Math.max(0, r.dueAt - r.intervalMs), ...keep };
+  }
+  if (r.step === 0) return { state: 'missed', stability: initStability(GRADE_NUM.again, w), difficulty: initDifficulty(GRADE_NUM.again, w), dueAt: r.dueAt, reviewedAt: lastAt, ...keep };
+  const stability = initStability(GRADE_NUM.good, w);
+  return { state: 'review', stability, difficulty: initDifficulty(GRADE_NUM.good, w), dueAt: lastAt + intervalMs(stability, t), reviewedAt: lastAt, ...keep };
 }
 
-function cleanEdu(raw, keep, lastLevel = 7) {
+function cleanRecord(r, t) {
+  if (!r || typeof r !== 'object') return null;
+  if (r.state === 'review' || r.state === 'missed') {
+    if (!NUM_FIELDS.every((k) => Number.isFinite(r[k]) && r[k] >= 0)) return null;
+    if (!(r.stability > 0) || r.difficulty < 1 || r.difficulty > 10) return null;
+    const out = { state: r.state };
+    for (const k of NUM_FIELDS) out[k] = r[k];
+    return out;
+  }
+  if (r.phase !== 'learning' && r.phase !== 'review') return null;
+  if (!SM2_FIELDS.every((k) => Number.isFinite(r[k]) && r[k] >= 0)) return null;
+  if (r.lastAt !== null && r.lastAt !== undefined && !(Number.isFinite(r.lastAt) && r.lastAt >= 0)) return null;
+  return fromSm2(r, t);
+}
+
+function cleanEdu(raw, keep, t = TUNING) {
+  const lastLevel = t.levels.lastLevel;
   const cards = {};
   for (const [id, r] of Object.entries(raw?.cards && typeof raw.cards === 'object' ? raw.cards : {})) {
-    const rec = ID_RE.test(id) ? cleanRecord(r) : null;
+    const rec = ID_RE.test(id) ? cleanRecord(r, t) : null;
     if (rec) cards[id] = rec;
   }
   const recent = (Array.isArray(raw?.recent) ? raw.recent : []).filter((id) => typeof id === 'string' && ID_RE.test(id)).slice(-keep);
@@ -413,7 +446,7 @@ function cleanEdu(raw, keep, lastLevel = 7) {
   // Today's buries (plan 25): { day: local YYYY-MM-DD, n }; kept only while it is well formed.
   const b = raw?.buried;
   const buried = b && typeof b.day === 'string' && DAY_RE.test(b.day) && Number.isInteger(b.n) && b.n > 0 ? { day: b.day, n: b.n } : null;
-  return { v: 1, cards, recent, counters, badges, unlockedLevel, ...(buried ? { buried } : {}) };
+  return { v: 2, cards, recent, counters, badges, unlockedLevel, ...(buried ? { buried } : {}) };
 }
 
 /** The device's local day as YYYY-MM-DD (a bury's daily cap counts local days: plan 25). */
@@ -422,18 +455,19 @@ export function localDayKey(date = new Date()) {
 }
 
 /**
- * This device's education record (LEADERBOARD.eduKey): { v: 1, cards: { id: record }, recent: [ids],
+ * This device's education record (LEADERBOARD.eduKey): { v: 2, cards: { id: record }, recent: [ids],
  * counters: { revives, perfectStreak, gradedRuns, gradeSum }, badges: { id: 'YYYY-MM-DD' } }.
  * answer(id, record) stores a card's record after an answer and appends it to `recent` (the last
  * education.minGap cards shown). The counters and badges (plan 22) are the education badges' and the
  * average grade's: addRevive counts a revive as it happens, endRun(facts) moves the 🤓 streak and
  * adds a graded run's grade, unlock(ids, day) stores badges not held yet. A record from before them
- * reads as none. Storage follows src/store.js: another tab's Clear shows at once, a broken entry
+ * reads as none. A card record from before FSRS (v 1, SM-2) is converted as it is read (fromSm2), and
+ * saved as converted with the next write. Storage follows src/store.js: another tab's Clear shows at once, a broken entry
  * reads as empty, and when storage throws or is full the record lives for this load only.
  */
 export function createEduStore(storage, { key = LEADERBOARD.eduKey, t = TUNING } = {}) {
   const keep = t.education.minGap;
-  const box = createJsonStore(storage, key, (raw) => cleanEdu(raw, keep, t.levels.lastLevel));
+  const box = createJsonStore(storage, key, (raw) => cleanEdu(raw, keep, t));
   const read = box.read;
   const write = box.write;
   return {

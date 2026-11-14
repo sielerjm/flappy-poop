@@ -1,16 +1,16 @@
 import { fitScale } from '../logic.js';
 
 /**
- * The colours of the three card counts (plan 21, E2), as in Anki: new cards blue, cards being
- * learned (or missed) orange, learned cards due for review green. Light tints, each well over
+ * The colours of the three card counts (plan 21, E2), as in Anki: new cards blue, missed cards
+ * orange, cards due for review green. Light tints, each well over
  * WCAG AA (4.5 : 1) on the dark card and the dark pill (tests/education.test.js checks it).
  */
-export const COUNT_COLORS = { new: '#8fd3ff', learning: '#ff9a66', review: '#86e05a' };
-const KINDS = ['new', 'learning', 'review'];
+export const COUNT_COLORS = { new: '#8fd3ff', missed: '#ff9a66', review: '#86e05a' };
+const KINDS = ['new', 'missed', 'review'];
 
 /**
  * What is waiting in an education quiz, on one line: an optional leading glyph, then the three
- * counts (new, learning, review), each in its own colour (COUNT_COLORS), with `sep` between them:
+ * counts (new, missed, review), each in its own colour (COUNT_COLORS), with `sep` between them:
  * "5 + 2 + 8" on the quiz card, "📚 5 · 2 · 8" on the level break's pill. The count named by
  * set()'s `underline` gets a bar of its colour under it (the kind of the card on show).
  * The line is centred on (x, y) and shrinks to `maxWidth` when it is given. Purely visual: no
@@ -29,7 +29,7 @@ export function createCountLine(scene, x, y, { style = {}, px = 28, sep = ' + ',
   let shown = true;
   let underlined = null;
   let width = 0;
-  let counts = { new: 0, learning: 0, review: 0 };
+  let counts = { new: 0, missed: 0, review: 0 };
 
   // Lay the parts out left to right, the whole line centred on x and shrunk to maxWidth.
   const layout = () => {
@@ -52,9 +52,9 @@ export function createCountLine(scene, x, y, { style = {}, px = 28, sep = ' + ',
   layout();
 
   return {
-    /** The three counts ({ new, learning, review }) and which one is underlined ('new' | 'learning' | 'review', or null for none). */
+    /** The three counts ({ new, missed, review }) and which one is underlined ('new' | 'missed' | 'review', or null for none). */
     set(next, underline = null) {
-      counts = { new: next?.new ?? 0, learning: next?.learning ?? 0, review: next?.review ?? 0 };
+      counts = { new: next?.new ?? 0, missed: next?.missed ?? 0, review: next?.review ?? 0 };
       KINDS.forEach((kind, i) => numbers[i].setText(String(counts[kind])));
       underlined = KINDS.includes(underline) ? underline : null;
       layout();

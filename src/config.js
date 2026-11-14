@@ -362,29 +362,23 @@ export const TUNING = {
     minLevel: 3,
     maxLevel: 7,
   },
-  // Education mode (📚, plan 21; src/education.js): quiz cards on a spaced-repetition scheduler (SM-2,
-  // as in Anki), graded from the tap alone: wrong = again, else by response time.
+  // Education mode (📚, plan 21; src/education.js): quiz cards on a spaced-repetition scheduler (FSRS-6,
+  // as in Anki: src/fsrs.js, plan 26), graded from the tap alone: wrong = again; right on a card's
+  // first sight = good; right later = easy / good / hard by response time.
   education: {
     grade: { fastMs: 3000, slowMs: 8000 }, // ms: a right answer under fastMs is easy, over slowMs hard, between good (placeholders until real answer times)
-    srs: {
-      startEase: 2.5, // a new card's ease (SM-2's interval multiplier)
-      minEase: 1.3, // ease never drops below this
-      learnStepsMs: [60000, 600000], // ms: a new or lapsed card comes back after each step (1 min, 10 min), then graduates
-      graduateMs: 86400000, // ms: the first review interval after the steps (1 day)
-      easyMs: 345600000, // ms: the first interval when a learning card is answered easy (4 days)
-      hardMul: 1.2, // a review answered hard: interval × hardMul (and ease − easeHard)
-      easyMul: 1.3, // a review answered easy: interval × ease × easyMul (and ease + easeEasy)
-      easeAgain: 0.2, // ease lost on a lapse (a review answered wrong)
-      easeHard: 0.15, // ease lost on a review answered hard
-      easeEasy: 0.15, // ease gained on a review answered easy
-      maxIntervalMs: 31536000000, // ms: the longest interval (365 days)
+    fsrs: {
+      // FSRS-6's 21 default weights (py-fsrs DEFAULT_PARAMETERS; src/fsrs.js FSRS_W): fitted to Anki users' ratings, not to this game's
+      w: [0.212, 1.2931, 2.3065, 8.2956, 6.4133, 0.8334, 3.0194, 0.001, 1.8722, 0.1666, 0.796, 1.4835, 0.0614, 0.2629, 1.6483, 0.6014, 1.8729, 0.5425, 0.0912, 0.0658, 0.1542],
+      retention: 0.9, // 0–1: a card comes back when the chance of recalling it has fallen to this
+      maxDays: 365, // the longest wait between reviews, in days
     },
     minGap: 5, // the last minGap cards shown are skipped by the next pick, across quiz sessions, while anything else can be picked
     generalShare: 0.25, // 0–1 chance a new-card pick takes a general card (when there is one) instead of the level's deck
     strikes: 3, // wrong answers without a right one before a revive quiz ends the run
     restoreStreak: 3, // right answers in a row (the revive's first included) that restore what the crash took
     priceScale: [1, 1.25, 1.5, 2, 2.5, 3, 3.5], // shop prices × this per level in an education run (ceil; the last row past level 7)
-    masteredMs: 1814400000, // ms: a card in review at an interval this long or more counts as mastered (21 days, Anki's "mature")
+    masteredDays: 21, // days: a card in review with a stability this long or more counts as mastered (Anki's "mature" is a 21-day interval)
     explainMinMs: 1500, // ms the quiz's Next waits after a wrong answer, so the explanation gets read
     breakCoins: 1, // coins a right answer in a level break's quiz pays
     buryCoinsPerLevel: 3, // a gate's Bury (plan 25): coins × the level just cleared, to send a card missed there to tomorrow
@@ -489,7 +483,7 @@ export const TEST_MODE = {
 export const EDUCATION = {
   words: ['poopschool'], // matched like TEST_MODE.words (trimmed, any case; fits NAME_MAX 16)
   // The tester pilot (plan 21, Stage 3b; src/research.js, RESEARCH.md): answers sent by choice.
-  consentVersion: 'pilot-1', // the version of RESEARCH.md a tester agrees to on joining; change it when the notice changes what is collected or why
+  consentVersion: 'pilot-2', // the version of RESEARCH.md a tester agrees to on joining; change it when the notice changes what is collected or why
   researchUrl: 'https://github.com/sielerjm/flappy-poop/blob/main/RESEARCH.md', // the notice, linked from the Education data panel
   researchBatch: 200, // answer events sent per batch at most (submit_research_events takes up to 200)
   researchQueueMax: 2000, // answer events kept on the device while they cannot be sent; the oldest go first when full
