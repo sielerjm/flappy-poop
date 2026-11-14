@@ -3682,7 +3682,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await sleep(500); // home()'s restart lands on the next frame: a tap before it would open the popup on the scene going away
         await tap('education');
         const s3 = await switches();
-        const intro = () => evaluate(`(() => { const r = document.getElementById('edu-intro-panel'); const open = Boolean(r && !r.hidden); return JSON.stringify({ open, title: open ? r.querySelector('h2').textContent : null, beta: open ? r.querySelector('.beta').textContent : null, counts: open ? [...r.querySelectorAll('#edu-intro-counts p')].map((p) => p.textContent) : [], level: open ? r.querySelector('#edu-intro-level')?.textContent ?? null : null, up: Boolean(r?.querySelector('#edu-intro-up')), order: open ? [...r.querySelectorAll('.order button')].filter((b) => b.getAttribute('aria-pressed') === 'true').map((b) => b.id) : [], pad: open ? r.querySelector('button.pad')?.id ?? null : null, state: ${play}.state, launching: Boolean(${play}.launching), on: ${play}.educationOn, toilet: ${play}.toilet, kb: __flappy.input.keyboard.enabled }); })()`).then(JSON.parse);
+        const intro = () => evaluate(`(() => { const r = document.getElementById('edu-intro-panel'); const open = Boolean(r && !r.hidden); return JSON.stringify({ open, title: open ? r.querySelector('h2').textContent : null, beta: open ? r.querySelector('.beta').textContent : null, counts: open ? [...r.querySelectorAll('#edu-intro-counts p')].map((p) => p.textContent) : [], level: open ? r.querySelector('#edu-intro-level')?.textContent ?? null : null, up: Boolean(r?.querySelector('#edu-intro-up')), order: open ? [...r.querySelectorAll('.order button')].filter((b) => b.getAttribute('aria-pressed') === 'true').map((b) => b.id) : [], orderHint: open ? r.querySelector('#edu-intro-order-hint')?.textContent ?? null : null, device: open ? r.querySelector('#edu-intro-device')?.textContent ?? null : null, pad: open ? r.querySelector('button.pad')?.id ?? null : null, state: ${play}.state, launching: Boolean(${play}.launching), on: ${play}.educationOn, toilet: ${play}.toilet, kb: __flappy.input.keyboard.enabled }); })()`).then(JSON.parse);
         const introClick = (id) => evaluate(`(document.getElementById('${id}')?.click(), true)`);
         const introEsc = () => evaluate(`(document.querySelector('#edu-intro-panel .card').dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })), true)`);
         const i3 = await intro();
@@ -3838,10 +3838,17 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         const st4 = await stepIntro('edu-intro-up');
         const st5 = await stepIntro('edu-intro-down');
         ok(!st0.up && st0.level === 'LV 1' && st1.up && st1.level === 'LV 1' && st2.level === 'LV 2' && st3.level === 'LV 3' && st4.level === 'LV 1' && st5.level === 'LV 3' && st5.start === 3 && (await playState()) === 'ready', `the popup's ◀ ▶ show once a later level is unlocked; ▶ ${st1.level} → ${st2.level} → ${st3.level} → wraps to ${st4.level}, ◀ back to ${st5.level}; no run starts`);
-        const ord0 = (await intro()).order;
+        const ord0Full = await intro();
+        const ord0 = ord0Full.order;
         await introClick('edu-intro-order-mixed');
         const ord1 = await intro();
         ok(ord0.join() === 'edu-intro-order-after' && ord1.order.join() === 'edu-intro-order-mixed' && (await evaluate(`${play}.settings.load().eduNewOrder`)) === 'mixed', `new cards after the due ones by default; a tap chooses "mixed", pressed and stored`);
+        // Under the buttons, one line says what the pressed one does (plan 26, A2); the data line names the servers.
+        await introClick('edu-intro-order-before');
+        const ord2 = await intro();
+        const [hintAfter, hintMixed, hintBefore, deviceLine] = await Promise.all(['eduOrderAfterHint', 'eduOrderMixedHint', 'eduOrderBeforeHint', 'eduIntroDevice'].map(tx));
+        const dataLink = await tx('eduDataTitle');
+        ok(ord0Full.orderHint === hintAfter && ord1.orderHint === hintMixed && ord2.orderHint === hintBefore && ord2.device === `${deviceLine} ${dataLink}`, `the line under the order buttons follows the pressed one ("${ord2.orderHint}"); the data line: "${ord2.device}"`);
         await introClick('edu-intro-order-after');
         await introClick('edu-intro-play');
         for (let i = 0; i < 40 && (await playState()) !== 'playing'; i += 1) await sleep(100);
@@ -4082,7 +4089,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         const rightWant = (await tx('quizRightCoins')).replace('{n}', String(TT.education.breakCoins));
         ok(c1 - c0 === TT.education.breakCoins && qr.verdict === rightWant && qr.kernel && qr.kernelAfter, `a right answer pays ${c1 - c0} coin (${c0} → ${c1}) and says "${qr.verdict}" with the kernel after it`);
         const waitRight = await waitLine();
-        ok(waitRight.visible && /^Next: in \d+ days?$/.test(waitRight.text), `and when the card comes back: "${waitRight.text}" (whole days, at least one)`);
+        ok(waitRight.visible && /^Next review: in \d+ days?$/.test(waitRight.text), `and when the card comes back: "${waitRight.text}" (whole days, at least one)`);
         await evaluate(`${Q}.next(), true`);
         await sleep(200);
         await evaluate(`(() => { const q = ${Q}; q.options[q.order.findIndex((k) => k !== 'answer')].zone.emit('pointerdown'); return true; })()`);

@@ -229,8 +229,8 @@ Short, playful, clear. Fit a 720×1280 logical field; How to play / About body w
 | eduLocked | Education mode locked | 教育模式已锁定 |
 | quizRight | Right! | 答对了！ |
 | quizRightCoins | Right! +{n} | 答对了！+{n} |
-| quizNextSoon | Next: again soon (plan 26: under the verdict after a wrong answer: the card is due again at once) | 下次：很快再来 |
-| quizNextIn | Next: in {t} (plan 26: under the verdict, when the card comes back; {t} is one of the wait* strings below) | 下次：{t}后 |
+| quizNextSoon | Next review: again soon (plan 26: under the verdict after a wrong answer: the card is due again at once; "review" added in its A2, Michael's wording) | 下次复习：很快 |
+| quizNextIn | Next review: in {t} (plan 26: under the verdict, when the card comes back; {t} is one of the wait* strings below) | 下次复习：{t}后 |
 | waitMin | {n} min | {n} 分钟 |
 | waitHours | {n} h | {n} 小时 |
 | waitDay | 1 day | 1 天 |
@@ -255,8 +255,8 @@ Short, playful, clear. Fit a 720×1280 logical field; How to play / About body w
 | eduCardsTitle | Your cards | 你的卡片 |
 | quizCountsTitle | Waiting in this quiz (the title of the card a tap on a quiz card's numbers opens: the 🔵 🔴 🟢 lines with this quiz's counts) | 本次答题还剩 |
 | eduCardsNew | 🔵 {n} new (not seen yet) | 🔵 {n} 张新卡（还没见过） |
-| eduCardsMissed | 🔴 {n} missed (comes back until you get it right) (plan 26: a card answered wrong and not yet right since; it is asked again until it is, as Anki's relearning cards; red, as Anki shows them) | 🔴 {n} 张答错（答对之前会再出现） |
-| eduCardsReview | 🟢 {n} to review (due now) | 🟢 {n} 张待复习（已到期） |
+| eduCardsMissed | 🔴 {n} missed (due now) (plan 26 A2, Michael's wording: a card answered wrong and not yet right since; it is due again at once and asked until it is right, as Anki's relearning cards; red, as Anki shows them) | 🔴 {n} 张答错（现在到期） |
+| eduCardsReview | 🟢 {n} to review (due today) (plan 26 A2: Michael wrote "due soon" and chose "due today" when told the number counts only cards due now, which hold a break's gate) | 🟢 {n} 张待复习（今天到期） |
 | eduCardsSeen | 👁️ Seen {n} of {total} cards | 👁️ 已见过 {n} / {total} 张卡片 |
 | eduCardsDue | The number on 📚 = # of cards to review (Michael's wording, 13 Nov: the gold number counts missed + to review; # stands for that number) | 📚 上的数字 = 待复习的卡片数 |
 | quizCaughtUp | You're all caught up! New cards come with the next level, up to {n} a day, and old ones come back when they are due. ({n} is education.newPerDay, plan 26) | 全部完成！下一关会有新卡片（每天最多 {n} 张），旧卡片到期后会再出现。 |
@@ -285,7 +285,7 @@ Short, playful, clear. Fit a 720×1280 logical field; How to play / About body w
 | eduIntroHowLevels | Each level break asks cards about the part of the gut you just flew through. Cards you missed, and cards due for review, must be answered right before you fly on. | 每次关卡休息时，会问你刚飞过的那段肠道的卡片。答错的卡片和到期要复习的卡片，答对之后才能继续飞。 |
 | eduIntroHowRevive | Crash, and a card is your way back: ❤️ three tries to get one right, then ⭐ three in a row to win back your coins and power-ups. | 撞到了？答对卡片就能继续：❤️ 有三次机会答对一张，然后连续答对 ⭐ 三张，就能赢回金币和道具。 |
 | eduIntroHowBury | Stuck on a card at a break? Bury it until tomorrow for a few 🌽, or quit the run. | 在休息时卡在一张卡片上？花几个 🌽 把它推到明天，或者结束这一局。 |
-| eduIntroHowCoins | Right answers in a break pay 🌽. Each card comes back just before you would forget it (FSRS, as in Anki). (FSRS and Anki are names: kept) | 休息时答对会得到 🌽。每张卡片都会在你快要忘记时再出现（FSRS，和 Anki 一样）。 |
+| eduIntroHowCoins | Right answers in a level break earn you corn kernels. Cards are automatically ordered to be shown right before you're likely to forget them. (plan 26 A2: Michael's wording, as written) | 在关卡休息时答对会得到玉米粒。卡片会自动排序，在你快要忘记之前出现。 |
 | eduIntroChoices | Your choices (the heading over the start level and the new-card order) | 你的选择 |
 | eduIntroStart | Start at (◀ LV n ▶ follows: the level the next education run starts at) | 从这一关开始 |
 | eduIntroStartLocked | Reach a level in an education run to start there next time. | 在教育模式中到达某一关后，下次就能从那里开始。 |
@@ -293,8 +293,11 @@ Short, playful, clear. Fit a 720×1280 logical field; How to play / About body w
 | eduOrderBefore | Before reviews | 先学新卡 |
 | eduOrderMixed | Mixed in | 穿插 |
 | eduOrderAfter | After reviews (the default) | 先复习 |
+| eduOrderBeforeHint | New cards come first, before the missed and review cards a level break waits for. (plan 26 A2: the line under the three new-card buttons while "Before reviews" is pressed; a level break holds until its missed and review cards are answered) | 新卡片先出现，排在关卡休息要等你答完的答错卡和待复习卡之前。 |
+| eduOrderMixedHint | New cards are mixed in with the missed and review cards. (the same line while "Mixed in" is pressed) | 新卡片和答错卡、待复习卡穿插出现。 |
+| eduOrderAfterHint | New cards come once the missed and review cards are answered. (the same line while "After reviews" is pressed) | 答完答错卡和待复习卡之后，才会出现新卡片。 |
 | eduIntroPerDay | Up to {n} new cards a day. ({n} is education.newPerDay) | 每天最多 {n} 张新卡片。 |
-| eduIntroDevice | Your cards are kept in this browser, on this device. (the 📚 Education data link follows) | 你的卡片保存在这台设备的浏览器里。 |
+| eduIntroDevice | Your data is stored locally on your device in the browser, not on our servers, unless you choose to share it. (plan 26 A2: Michael's wording plus "unless you choose to share it", his choice, since Share my grades and the tester pilot do send data; the 📚 Education data link follows) | 你的数据保存在这台设备的浏览器里，不在我们的服务器上，除非你选择分享。 |
 | eduIntroPlay | Play (starts an education run from the popup) | 开始 |
 | eduIntroClose | Close | 关闭 |
 | eduDataTitle | 📚 Education data | 📚 教育数据 |

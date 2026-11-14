@@ -45,6 +45,7 @@ const CSS = `
 #${PANEL_ID} .order { display: flex; gap: 6px; margin: 0 0 6px; }
 #${PANEL_ID} .order button { flex: 1; padding: 10px 6px; font-size: 14px; color: #f8a0c8; background: transparent; border: 2px solid #5a2a44; }
 #${PANEL_ID} .order button[aria-pressed='true'] { color: #1a0b14; background: #f8a0c8; border-color: #f8a0c8; }
+#${PANEL_ID} p.hint { color: #ffffff; }
 #${PANEL_ID} .actions { position: sticky; bottom: 0; display: flex; gap: 10px; margin: 14px 0 0; padding: 10px 0 16px; background: #1a0b14; }
 #${PANEL_ID} .actions button { flex: 1; padding: 12px 14px; font-size: 17px; }
 #${PANEL_ID} .close { position: absolute; top: 8px; right: 8px; width: 40px; height: 40px; padding: 0; font-size: 22px;
@@ -99,6 +100,13 @@ function setGameKeyboard(enabled) {
 
 const tr = (key) => t(ctx.locale, key);
 
+/** The new-card orders, as pressed buttons: [settings value, label, the line under the buttons while pressed]. */
+const ORDERS = [
+  ['before', 'eduOrderBefore', 'eduOrderBeforeHint'],
+  ['mixed', 'eduOrderMixed', 'eduOrderMixedHint'],
+  ['after', 'eduOrderAfter', 'eduOrderAfterHint'],
+];
+
 /** Draw the popup from Play's state now (Play.eduIntroInfo): called on open and after each choice. */
 function render() {
   const info = ctx.play.eduIntroInfo();
@@ -122,16 +130,14 @@ function render() {
   const order = h(
     'div',
     { class: 'order', role: 'group', 'aria-label': tr('eduIntroOrder') },
-    ...[
-      ['before', 'eduOrderBefore'],
-      ['mixed', 'eduOrderMixed'],
-      ['after', 'eduOrderAfter'],
-    ].map(([id, key]) => {
+    ...ORDERS.map(([id, key]) => {
       const b = h('button', { type: 'button', id: `edu-intro-order-${id}`, 'aria-pressed': String(info.order === id) }, tr(key));
       b.addEventListener('click', () => setOrder(id));
       return b;
     }),
   );
+  // Under the buttons, what the pressed one does (plan 26, A2: Michael's image 6).
+  const orderHint = h('p', { class: 'hint', id: 'edu-intro-order-hint' }, tr((ORDERS.find(([id]) => id === info.order) ?? ORDERS[2])[2]));
   const data = h('button', { class: 'link', id: 'edu-intro-data', type: 'button' }, tr('eduDataTitle'));
   data.addEventListener('click', () => openData());
   const play = h('button', { id: 'edu-intro-play', type: 'button', 'data-primary': true }, tr('eduIntroPlay'));
@@ -151,6 +157,7 @@ function render() {
     ...(startNote ? [startNote] : []),
     h('div', { class: 'row' }, h('span', { class: 'label' }, tr('eduIntroOrder'))),
     order,
+    orderHint,
     h('p', {}, tr('eduIntroPerDay').replace('{n}', String(info.newPerDay))),
     h('p', { id: 'edu-intro-device' }, tr('eduIntroDevice'), ' ', data),
     h('div', { class: 'actions' }, shut, play),

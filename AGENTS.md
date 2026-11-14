@@ -366,8 +366,9 @@ switch on does: a DOM panel with the beta note, how the mode works, the player's
 seen yet, the missed ones due, the reviews due over every deck: `cardCounts`; how many have been seen:
 `masteryByDeck`; and that the gold number is missed plus to review: `Play.eduIntroInfo`), the start
 level (◀ LV n ▶ while a later level is unlocked, not in test mode: `stepEduStart`), where new cards go
-(`setEduNewOrder`), the daily cap, a line that the cards live in this browser with a link to 📚
-Education data, and Close | Play (`startFromEduIntro`). The game's keyboard is off under it, a
+(`setEduNewOrder`; under the three buttons a line says what the pressed one does, `ORDERS` in the
+panel, plan 26 A2), the daily cap, a line that the data stays in this browser, not on the game's
+servers, unless the player chooses to share it, with a link to 📚 Education data, and Close | Play (`startFromEduIntro`). The game's keyboard is off under it, a
 controller walks its buttons with a gold ring (`eduIntroPadAction` through padIntent's `'panel'`),
 Esc, ✕, Close and B close it, and a restart of Play takes it down. It opens on the release of the
 pointer that pressed the glyph (one press is armed at a time, so a second thumb or a cancelled
@@ -399,8 +400,8 @@ clear: its quizzes walk the level's deck in id order instead (`pickCard` context
 shown are kept for the page load in the registry's `testQuizShown`), so skipping to a level shows that
 level's cards. **The quiz card** (`scenes/Quiz.js`, overlay id `quiz`): Play owns the cards (`quizNext`
 → `pickCard`, `quizAnswer` → `gradeFor` / `schedule` / `eduStore`), the scene only shows them: three
-options (tap, keys 1–3, the ring), ✓ / ✗, the verdict, under it when the card comes back ("Next: in 2
-days", "Next: again soon" after a miss: `nextWaitText`, `Quiz.showNextWait`, from `quizAnswer`'s
+options (tap, keys 1–3, the ring), ✓ / ✗, the verdict, under it when the card comes back ("Next review: in 2
+days", "Next review: again soon" after a miss: `nextWaitText`, `Quiz.showNextWait`, from `quizAnswer`'s
 `dueAt`; none in a test run), the explanation (at once after a wrong answer,
 which holds Next `explainMinMs`; behind "Why?" after a right one; its source only once audited), the
 card's id in a corner. **The explanation's links** (plan 26): 1–3 words of each card's English

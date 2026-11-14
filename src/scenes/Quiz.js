@@ -147,7 +147,7 @@ export class Quiz extends Phaser.Scene {
     this.verdict = this.add.text(cx, 0, '', { ...STYLE, fontSize: '32px', wordWrap: { width: TEXT_W, useAdvancedWrap: true } }).setOrigin(0.5, 0);
     // The corn kernel after "Right! +1" (say): coins are drawn as the kernel, as in the HUD and the shop.
     this.verdictCoin = this.add.image(cx, 0, 'coin', 0).setDisplaySize(COIN_PX, COIN_PX).setVisible(false);
-    // When the card comes back (plan 26, as Anki shows it): "Next: in 2 days" under the verdict.
+    // When the card comes back (plan 26, as Anki shows it): "Next review: in 2 days" under the verdict.
     this.nextWait = this.add.text(cx, 0, '', { ...MUTED, fontSize: '24px', wordWrap: { width: TEXT_W, useAdvancedWrap: true } }).setOrigin(0.5, 0).setVisible(false);
     this.explain = this.add.text(cx, 0, '', { ...MUTED, fontSize: '26px', lineSpacing: 4, wordWrap: { width: TEXT_W, useAdvancedWrap: true } }).setOrigin(0.5, 0);
     this.source = this.add.text(cx, 0, '', { ...MUTED, fontSize: '20px', fontStyle: 'italic', wordWrap: { width: TEXT_W, useAdvancedWrap: true } }).setOrigin(0.5, 0);
@@ -825,7 +825,7 @@ export class Quiz extends Phaser.Scene {
       return this.fits();
     }
     this.answered = true;
-    // As tall as it gets: the wait under the verdict ("Next: in 2 days" after the usual first answer).
+    // As tall as it gets: the wait under the verdict ("Next review: in 2 days" after the usual first answer).
     this.lastAnswer = right ? { coins: T.education.breakCoins, dueAt: Date.now() + 2 * 86400000 } : { dueAt: Date.now() };
     this.reveal(right ? 0 : 1, right);
     if (!right) this.source.setText(t(this.locale, 'quizSource').replace('{source}', cardSource(card))).setVisible(true); // as tall as it will be once audited

@@ -21,6 +21,7 @@ import {
   profileButtonText,
   tallyLines,
   nextWaitText,
+  countLines,
   TALLY_GAP,
 } from '../src/i18n.js';
 
@@ -206,33 +207,49 @@ test("tallyLines: an education run's answers, one line per level answered, in le
   assert.deepEqual(tallyLines('en', { byLevel: { 7: { right: 3 } } }, CONFIG_LEVELS), [`LV 7 · Rectum${G}✅ 3${G}❌ 0`], 'a row from before wrong was kept still reads');
 });
 
-test('nextWaitText: again soon under a minute; then minutes, hours, days, months, years, rounded, a unit that rounds up moving to the next; both locales (plan 26)', () => {
+test('nextWaitText: again soon under a minute; then minutes, hours, days, months, years, rounded, a unit that rounds up moving to the next; both locales (plan 26; "Next review:" since its A2, as Michael asked)', () => {
   const MIN = 60000;
   const HOUR = 60 * MIN;
   const DAY = 24 * HOUR;
   const cases = [
-    [-5, 'Next: again soon'],
-    [0, 'Next: again soon'],
-    [59 * 1000, 'Next: again soon'],
-    [MIN, 'Next: in 1 min'],
-    [10 * MIN, 'Next: in 10 min'],
-    [HOUR, 'Next: in 1 h'],
-    [5.4 * HOUR, 'Next: in 5 h'],
-    [DAY, 'Next: in 1 day'],
-    [2 * DAY + HOUR, 'Next: in 2 days'],
-    [30 * DAY, 'Next: in 30 days'],
-    [46 * DAY, 'Next: in 2 months'],
-    [30.6 * DAY, 'Next: in 1 month'],
-    [31 * DAY, 'Next: in 1 month'],
-    [DAY - 5, 'Next: in 1 day'],
-    [2 * DAY - 5, 'Next: in 2 days'],
-    [HOUR - 5, 'Next: in 1 h'],
-    [364 * DAY, 'Next: in 1 year'],
-    [200 * DAY, 'Next: in 7 months'],
-    [365 * DAY, 'Next: in 1 year'],
-    [NaN, 'Next: again soon'],
+    [-5, 'Next review: again soon'],
+    [0, 'Next review: again soon'],
+    [59 * 1000, 'Next review: again soon'],
+    [MIN, 'Next review: in 1 min'],
+    [10 * MIN, 'Next review: in 10 min'],
+    [HOUR, 'Next review: in 1 h'],
+    [5.4 * HOUR, 'Next review: in 5 h'],
+    [DAY, 'Next review: in 1 day'],
+    [2 * DAY + HOUR, 'Next review: in 2 days'],
+    [30 * DAY, 'Next review: in 30 days'],
+    [46 * DAY, 'Next review: in 2 months'],
+    [30.6 * DAY, 'Next review: in 1 month'],
+    [31 * DAY, 'Next review: in 1 month'],
+    [DAY - 5, 'Next review: in 1 day'],
+    [2 * DAY - 5, 'Next review: in 2 days'],
+    [HOUR - 5, 'Next review: in 1 h'],
+    [364 * DAY, 'Next review: in 1 year'],
+    [200 * DAY, 'Next review: in 7 months'],
+    [365 * DAY, 'Next review: in 1 year'],
+    [NaN, 'Next review: again soon'],
   ];
   for (const [ms, want] of cases) assert.equal(nextWaitText('en', ms), want, String(ms));
-  assert.equal(nextWaitText('zh-Hans', 2 * DAY), '下次：2 天后');
-  assert.equal(nextWaitText('zh-Hans', 0), '下次：很快再来');
+  assert.equal(nextWaitText('zh-Hans', 2 * DAY), '下次复习：2 天后');
+  assert.equal(nextWaitText('zh-Hans', 0), '下次复习：很快');
+});
+
+test("countLines: the three lines Michael worded (plan 26, A2): new (not seen yet), missed (due now), to review (due today); both locales", () => {
+  assert.deepEqual(countLines('en', { new: 2, missed: 1, review: 3 }), ['🔵 2 new (not seen yet)', '🔴 1 missed (due now)', '🟢 3 to review (due today)']);
+  assert.deepEqual(countLines('zh-Hans', { new: 2, missed: 1, review: 3 }), ['🔵 2 张新卡（还没见过）', '🔴 1 张答错（现在到期）', '🟢 3 张待复习（今天到期）']);
+});
+
+test("the 📚 popup's words (plan 26, A2): where the data is kept, what a right answer earns, and a line for each new-card order; both locales", () => {
+  assert.equal(t('en', 'eduIntroDevice'), 'Your data is stored locally on your device in the browser, not on our servers, unless you choose to share it.');
+  assert.equal(t('en', 'eduIntroHowCoins'), "Right answers in a level break earn you corn kernels. Cards are automatically ordered to be shown right before you're likely to forget them.");
+  for (const locale of ['en', 'zh-Hans']) {
+    const hints = ['eduOrderBeforeHint', 'eduOrderMixedHint', 'eduOrderAfterHint'].map((k) => t(locale, k));
+    assert.equal(new Set(hints).size, 3, `${locale}: three different lines`);
+    for (const h of hints) assert.ok(h.length > 10 && !h.startsWith('eduOrder'), `${locale}: ${h}`);
+  }
+  assert.match(t('en', 'eduOrderBeforeHint'), /before.*missed and review cards/i, 'before: says the new cards come ahead of the cards a break waits for');
 });
