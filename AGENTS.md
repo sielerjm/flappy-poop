@@ -2147,8 +2147,9 @@ tests/                      node --test (schema.test.js, pilot.test.js, eduBoard
   jsonStore.test.js         src/store.js and the stores on it: storage is the truth,
                             a broken entry reads as empty, memory when storage throws
                             or is full, another tab's Clear holds
-  privacy.test.js           no local-only path tracked (meta/, .claude/plans/, row
-                            dumps) and no player id from meta/db-backups in a tracked
+  privacy.test.js           no local-only path tracked (meta/, .claude/plans/,
+                            Claude outputs/, row dumps) and no player id from
+                            meta/db-backups in a tracked
                             file (failures name a fingerprint, never the id);
                             tools/privacy_scan.mjs's helpers
   sha256.test.js            sha256 / hmacSha256 against FIPS and RFC 4231 vectors and
@@ -2260,7 +2261,8 @@ tools/
                             --issues GitHub Issues (sends the term to GitHub). Prints
                             file:line / commit locations and a sha256 fingerprint, never
                             the id, name or lines. Read a secret from stdin (`-`). Exit 1
-                            on a hit. tests/privacy.test.js uses its helpers.
+                            on a hit. tests/privacy.test.js uses its helpers
+                            (forbiddenPaths: the paths git must never track).
   audit_questions.mjs       The question bank's audits (plan 21): list (unaudited and
                             stale cards), report [--out=f] (a markdown review sheet:
                             the checklist, every card with its status and hash, the
@@ -2424,6 +2426,8 @@ docs/                       Living specs kept with the code: save-code-spec.md (
                             Michael decides.
 meta/                       Local-only project notes and reports (gitignored;
                             never commit).
+Claude outputs/             Michael's private hand-over notes (gitignored; never
+                            commit, and never edit, move or delete what is in it).
 ```
 
 ## Rules the code depends on
@@ -2484,8 +2488,9 @@ meta/                       Local-only project notes and reports (gitignored;
    (anyone holding one can post and rename as that player), and usernames are
    personal data. Tests use synthetic ids (`TestPlayerAAAAAAAAAAAA`); plans,
    database dumps (`meta/`, `*_rows.sql`) and audit notes stay local.
-   `tests/privacy.test.js` fails on a tracked file under `meta/` or
-   `.claude/plans/`, a row dump, or a tracked file holding an id from
+   `tests/privacy.test.js` fails on a tracked file under `meta/`,
+   `.claude/plans/` or `Claude outputs/` (Michael's private hand-over notes,
+   gitignored: plan 26, A2), a row dump, or a tracked file holding an id from
    `meta/db-backups`; `node tools/privacy_scan.mjs -` finds every copy of one.
 
 ## How to work on it

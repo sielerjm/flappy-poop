@@ -61,9 +61,13 @@ export function lineHits(text, needle) {
   return out;
 }
 
-/** Tracked paths that must never be in git: anything under meta/ or .claude/plans/, and database row dumps (*_rows.sql). */
+/**
+ * Tracked paths that must never be in git: anything under meta/, .claude/plans/ or Claude outputs/
+ * (Michael's private hand-over notes at the repo's root: plan 26, A2), and database row dumps
+ * (*_rows.sql).
+ */
 export function forbiddenPaths(paths) {
-  return paths.filter((p) => p.startsWith('meta/') || p.startsWith('.claude/plans/') || /_rows\.sql$/.test(p));
+  return paths.filter((p) => p.startsWith('meta/') || p.startsWith('.claude/plans/') || p.startsWith('Claude outputs/') || /_rows\.sql$/.test(p));
 }
 
 /** The ids in a SQL dump: every quoted 22-character base64url token, once each. */

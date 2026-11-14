@@ -1,7 +1,8 @@
 // Privacy guard (plan 21, P1; the compliance report's R7): no player data is ever committed
 // again. npm test (so npm run push) fails when git tracks a local-only path (meta/,
-// .claude/plans/, a *_rows.sql dump) or a tracked file holds an id from the local database
-// dumps in meta/db-backups/. Failures name files and a fingerprint, never the id.
+// .claude/plans/, Claude outputs/, a *_rows.sql dump) or a tracked file holds an id from the
+// local database dumps in meta/db-backups/. Failures name files and a fingerprint, never the id.
+// Claude outputs/ (plan 26, A2) holds Michael's hand-over notes: private, never player data.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
@@ -23,10 +24,10 @@ function tracked() {
   }
 }
 
-test('git tracks nothing local-only: no meta/, no .claude/plans/, no *_rows.sql dump', (t) => {
+test('git tracks nothing local-only: no meta/, no .claude/plans/, no Claude outputs/, no *_rows.sql dump', (t) => {
   const paths = tracked();
   if (!paths) return t.skip('not a git checkout');
-  assert.deepEqual(forbiddenPaths(paths), [], 'untrack these (git rm --cached <path>); they may hold player data');
+  assert.deepEqual(forbiddenPaths(paths), [], 'untrack these (git rm --cached <path>); they are private or may hold player data');
 });
 
 test('no tracked file holds a player id from the local database dumps (meta/db-backups)', (t) => {
@@ -45,9 +46,9 @@ test('no tracked file holds a player id from the local database dumps (meta/db-b
   assert.deepEqual(leaks, [], 'player ids in tracked files: replace them with synthetic ids (node tools/privacy_scan.mjs - finds every copy)');
 });
 
-test('forbiddenPaths flags meta/, .claude/plans/ and row dumps, nothing else', () => {
-  const paths = ['meta/db-backups/x.sql', '.claude/plans/Archive/a.md', 'db/scores_rows.sql', 'docs/save-code-spec.md', 'db/schema.sql', '.claude/skills/x/SKILL.md', 'src/meta.js'];
-  assert.deepEqual(forbiddenPaths(paths), ['meta/db-backups/x.sql', '.claude/plans/Archive/a.md', 'db/scores_rows.sql']);
+test('forbiddenPaths flags meta/, .claude/plans/, Claude outputs/ and row dumps, nothing else', () => {
+  const paths = ['meta/db-backups/x.sql', '.claude/plans/Archive/a.md', 'db/scores_rows.sql', 'Claude outputs/handoff.md', 'Claude outputs/pack/skills/x.md', 'docs/save-code-spec.md', 'db/schema.sql', '.claude/skills/x/SKILL.md', 'src/meta.js', 'docs/Claude outputs.md', 'docs/Claude outputs/x.md'];
+  assert.deepEqual(forbiddenPaths(paths), ['meta/db-backups/x.sql', '.claude/plans/Archive/a.md', 'db/scores_rows.sql', 'Claude outputs/handoff.md', 'Claude outputs/pack/skills/x.md']);
 });
 
 test('dumpIds reads each quoted 22-character token once; isIdLike and fingerprint', () => {
