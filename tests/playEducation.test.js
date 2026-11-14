@@ -4,7 +4,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { playScene, absorb, fakeStorage, registry, toggleStub } from './support/scenes.js';
-import { TUNING as T } from '../src/config.js';
+import { LEADERBOARD, TUNING as T } from '../src/config.js';
 import { createSettingsStore } from '../src/logic.js';
 import { CARDS } from '../src/questions.js';
 import { newTally, createEduStore, schedule } from '../src/education.js';
@@ -384,4 +384,23 @@ test("drainEduShare never rejects, and follows the server: 'rejected' counts the
   renamed.save.name = 'Samuel';
   await renamed.drainEduShare('SHAREAAAAAAAAAAAAAAAAA');
   assert.equal(renamed.eduShare.load().on, false, 'a rename answered false (no row): off here');
+});
+
+test("quizNext passes the player's new-card order (settings eduNewOrder, plan 26) to a break's own quiz and a revive", async () => {
+  const { createSettingsStore } = await import('../src/logic.js');
+  const storage = fakeStorage();
+  const settings = createSettingsStore(storage, T.settingsKey);
+  const st = fakeStorage();
+  const due = CARDS.find((c) => c.deck === 'colon');
+  // Saved straight to storage, so the card is not among the recent ones (the gap would hold it back).
+  st.setItem(LEADERBOARD.eduKey, JSON.stringify({ v: 2, cards: { [due.id]: schedule(null, 'again', Date.now() - 60000) }, recent: [] }));
+  const store = createEduStore(st);
+  const s = playScene({ eduStore: store, settings, level: 2, levelBreak: true, runIsTest: false, registry: registry(), breakMissed: [] });
+  assert.equal(s.quizNext({ mode: 'break' }).reason, 'missed', 'after (the default): the missed card first');
+  settings.set({ eduNewOrder: 'before' });
+  assert.equal(s.quizNext({ mode: 'break' }).reason, 'new', 'before: a new card first');
+  s.levelBreak = false;
+  assert.equal(s.quizNext({ mode: 'revive' }).reason, 'new', 'a revive too');
+  settings.set({ eduNewOrder: 'after' });
+  assert.equal(s.quizNext({ mode: 'revive' }).reason, 'missed');
 });

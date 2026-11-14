@@ -6,7 +6,7 @@ import { createRng } from '../src/logic.js';
 import { CARDS, DECKS } from '../src/questions.js';
 import { COUNT_COLORS } from '../src/ui/countLine.js';
 import { EDU_ACHIEVEMENTS, eduRunFacts, evaluate } from '../src/achievements.js';
-import { cardCounts, cardRetrievability, cardSource, cardText, createEduStore, dueCount, eduShopPrices, optionText, gradeFor, masteryByDeck, newTally, pickCard, reviveSettled, reviveStart, reviveStep, schedule, shuffleOptions, tallyAnswer } from '../src/education.js';
+import { cardCounts, cardRetrievability, cardSource, cardText, createEduStore, dueCount, eduShopPrices, localDayStart, NEW_ORDERS, newAllowance, optionText, gradeFor, masteryByDeck, newTally, pickCard, reviveSettled, reviveStart, reviveStep, schedule, shuffleOptions, tallyAnswer } from '../src/education.js';
 import { initDifficulty, initStability } from '../src/fsrs.js';
 
 const MIN = 60000;
@@ -14,6 +14,9 @@ const HOUR = 3600000;
 const DAY = 86400000;
 const NOW = Date.UTC(2026, 10, 12, 12);
 const always = (x) => () => x; // an rng stuck at x
+/** The tuning with daily new cards capped at `n` (Infinity: no cap). */
+const capped = (n) => ({ ...T, education: { ...T.education, newPerDay: n } });
+const UNCAPPED = capped(Infinity);
 
 function fakeStorage() {
   const m = new Map();
@@ -200,57 +203,58 @@ const countsSrs = {
   'ST-01': missedRec(NOW + DAY), // missed and buried until tomorrow: not counted, never picked
 };
 
-test('cardCounts: new cards the context offers, missed cards due, reviews due; nothing else', () => {
+test('cardCounts (uncapped): new cards the context offers, missed cards due, reviews due; nothing else', () => {
   const live = CARDS.filter((c) => !c.retired);
   const fresh = live.filter((c) => !countsSrs[c.id]);
   const inDecks = (decks) => fresh.filter((c) => decks.includes(c.deck)).length;
-  assert.deepEqual(cardCounts(countsSrs, { context: 'break', segment: 'stomach', level: 2, now: NOW }), { new: inDecks(['stomach', 'general']), missed: 1, review: 2 }, "a break: the cleared segment's new cards and the general ones");
-  assert.deepEqual(cardCounts(countsSrs, { context: 'break', segment: 'ileum', level: 5, now: NOW }), { new: inDecks(['ileum', 'general']), missed: 1, review: 2 }, 'due cards count whatever their deck');
-  assert.deepEqual(cardCounts(countsSrs, { context: 'revive', level: 1, now: NOW }), { new: inDecks(['stomach', 'general']), missed: 1, review: 2 }, 'a revive on level 1');
-  assert.deepEqual(cardCounts(countsSrs, { context: 'revive', level: 3, now: NOW }), { new: inDecks(['stomach', 'duodenum', 'jejunum', 'general']), missed: 1, review: 2 }, 'a revive: the decks up to the level');
-  assert.deepEqual(cardCounts(countsSrs, { context: 'all', now: NOW }), { new: fresh.length, missed: 1, review: 2 }, 'all: every deck');
-  assert.deepEqual(cardCounts(countsSrs, { now: NOW }), cardCounts(countsSrs, { context: 'all', now: NOW }), 'all is the default');
-  const all = cardCounts(countsSrs, { context: 'all', now: NOW });
+  assert.deepEqual(cardCounts(countsSrs, { t: UNCAPPED, context: 'break', segment: 'stomach', level: 2, now: NOW }), { new: inDecks(['stomach', 'general']), missed: 1, review: 2 }, "a break: the cleared segment's new cards and the general ones");
+  assert.deepEqual(cardCounts(countsSrs, { t: UNCAPPED, context: 'break', segment: 'ileum', level: 5, now: NOW }), { new: inDecks(['ileum', 'general']), missed: 1, review: 2 }, 'due cards count whatever their deck');
+  assert.deepEqual(cardCounts(countsSrs, { t: UNCAPPED, context: 'revive', level: 1, now: NOW }), { new: inDecks(['stomach', 'general']), missed: 1, review: 2 }, 'a revive on level 1');
+  assert.deepEqual(cardCounts(countsSrs, { t: UNCAPPED, context: 'revive', level: 3, now: NOW }), { new: inDecks(['stomach', 'duodenum', 'jejunum', 'general']), missed: 1, review: 2 }, 'a revive: the decks up to the level');
+  assert.deepEqual(cardCounts(countsSrs, { t: UNCAPPED, context: 'all', now: NOW }), { new: fresh.length, missed: 1, review: 2 }, 'all: every deck');
+  assert.deepEqual(cardCounts(countsSrs, { t: UNCAPPED, now: NOW }), cardCounts(countsSrs, { t: UNCAPPED, context: 'all', now: NOW }), 'all is the default');
+  const all = cardCounts(countsSrs, { t: UNCAPPED, context: 'all', now: NOW });
   assert.equal(all.missed + all.review, dueCount(countsSrs, { now: NOW }), "missed + review is the 📚 switch's due count");
   assert.equal(all.new + Object.keys(countsSrs).length, live.length, 'every live card is new or seen');
-  assert.deepEqual(cardCounts(countsSrs, { context: 'all', now: NOW + DAY }), { new: fresh.length, missed: 2, review: 3 }, 'tomorrow: the buried card is back, and the practice card is due');
-  assert.deepEqual(cardCounts({}, { context: 'break', segment: 'stomach', now: NOW }), { new: live.filter((c) => ['stomach', 'general'].includes(c.deck)).length, missed: 0, review: 0 }, 'a new device');
+  assert.deepEqual(cardCounts(countsSrs, { t: UNCAPPED, context: 'all', now: NOW + DAY }), { new: fresh.length, missed: 2, review: 3 }, 'tomorrow: the buried card is back, and the practice card is due');
+  assert.deepEqual(cardCounts({}, { t: UNCAPPED, context: 'break', segment: 'stomach', now: NOW }), { new: live.filter((c) => ['stomach', 'general'].includes(c.deck)).length, missed: 0, review: 0 }, 'a new device');
   // The quiz's earlier cards are left out, each from its own count.
-  const base = cardCounts(countsSrs, { context: 'break', segment: 'stomach', now: NOW });
+  const base = cardCounts(countsSrs, { t: UNCAPPED, context: 'break', segment: 'stomach', now: NOW });
   const aNew = fresh.find((c) => c.deck === 'stomach').id;
-  assert.deepEqual(cardCounts(countsSrs, { context: 'break', segment: 'stomach', now: NOW, exclude: [aNew] }), { ...base, new: base.new - 1 });
-  assert.deepEqual(cardCounts(countsSrs, { context: 'break', segment: 'stomach', now: NOW, exclude: ['CA-01'] }), { ...base, missed: 0 });
-  assert.deepEqual(cardCounts(countsSrs, { context: 'break', segment: 'stomach', now: NOW, exclude: ['DU-01', 'IL-01', 'CO-01'] }), { ...base, review: 0 }, 'an excluded practice card changes nothing');
+  assert.deepEqual(cardCounts(countsSrs, { t: UNCAPPED, context: 'break', segment: 'stomach', now: NOW, exclude: [aNew] }), { ...base, new: base.new - 1 });
+  assert.deepEqual(cardCounts(countsSrs, { t: UNCAPPED, context: 'break', segment: 'stomach', now: NOW, exclude: ['CA-01'] }), { ...base, missed: 0 });
+  assert.deepEqual(cardCounts(countsSrs, { t: UNCAPPED, context: 'break', segment: 'stomach', now: NOW, exclude: ['DU-01', 'IL-01', 'CO-01'] }), { ...base, review: 0 }, 'an excluded practice card changes nothing');
   // Retired cards never count.
   const cards = [{ id: 'ST-01', deck: 'stomach' }, { id: 'ST-02', deck: 'stomach', retired: true }, { id: 'ST-03', deck: 'stomach', retired: true }, { id: 'ST-04', deck: 'stomach' }];
-  assert.deepEqual(cardCounts({ 'ST-03': reviewRec(1, NOW - DAY) }, { cards, context: 'all', now: NOW }), { new: 2, missed: 0, review: 0 });
+  assert.deepEqual(cardCounts({ 'ST-03': reviewRec(1, NOW - DAY) }, { t: UNCAPPED, cards, context: 'all', now: NOW }), { new: 2, missed: 0, review: 0 });
 });
 
-test('cardCounts matches what pickCard hands out: whatever the recent gap holds, exactly those cards come before the first practice card (plan 25)', () => {
+test('cardCounts matches what pickCard hands out: whatever the recent gap holds, in every new-card order and under any daily cap, exactly those cards come before the first practice card (plan 25, 26)', () => {
   const runs = [['break', 2, 'stomach'], ['break', 5, 'ileum'], ['break', 7, 'colon'], ['revive', 1, null], ['revive', 3, null], ['revive', 7, null]];
   // The recent gap full of the counted cards (the case that froze the counts: plan 25, B1), or empty.
   const gaps = [[], ['DU-01', 'IL-01', 'CA-01', 'ST-02', 'JE-06']];
   for (const [context, level, segment] of runs) for (const recent of gaps) for (const dueFirst of context === 'break' ? [false, true] : [false]) {
-    for (const srs of [countsSrs, {}]) {
-      const counts = cardCounts(srs, { context, level, segment, now: NOW });
+    for (const [srs, t, order] of [[countsSrs, T, 'after'], [{}, T, 'after'], ...NEW_ORDERS.flatMap((o) => [0, 3, Infinity].map((n) => [countsSrs, capped(n), o]))]) {
+      const counts = cardCounts(srs, { context, level, segment, now: NOW, t });
       const got = { new: 0, missed: 0, review: 0, practice: 0 };
       const exclude = [];
       const rng = createRng(11);
       for (let guard = 0; ; guard += 1) {
         // Capped (plan 24, AUD-017): a pickCard that asked a card of this quiz again would loop forever.
         assert.ok(guard <= CARDS.length, `${context} ${level}: pickCard kept handing out cards past the bank's ${CARDS.length}`);
-        const p = pickCard({ srs, context, level, segment, now: NOW, exclude, recent, rng, dueFirst });
+        const p = pickCard({ srs, context, level, segment, now: NOW, exclude, recent, rng, dueFirst, t, order });
         if (!p) break;
         if (p.reason !== 'practice') assert.equal(got.practice, 0, `${context} ${level}: ${p.card.id} (${p.reason}) came after a practice card`);
         else assert.equal(srs[p.card.id]?.state, 'review', `${context} ${level}: practice is a review card, never a buried missed one`);
         // The count with the quiz's earlier cards left out still holds the card being asked.
-        const left = cardCounts(srs, { context, level, segment, now: NOW, exclude });
+        const left = cardCounts(srs, { context, level, segment, now: NOW, exclude, t });
         if (p.reason !== 'practice') assert.ok(left[p.reason] >= 1, `${context} ${level}: ${p.card.id} is asked as ${p.reason}, so that count holds it`);
         else assert.deepEqual(left, { new: 0, missed: 0, review: 0 }, `${context} ${level}: practice only once nothing is waiting`);
         got[p.reason] += 1;
         exclude.push(p.card.id);
       }
-      assert.deepEqual(counts, { new: got.new, missed: got.missed, review: got.review }, `${context} level ${level} ${segment ?? ''}: the counts are the picks`);
+      assert.deepEqual(counts, { new: got.new, missed: got.missed, review: got.review }, `${context} level ${level} ${segment ?? ''} (${order}, cap ${t.education.newPerDay}): the counts are the picks`);
+      assert.ok(got.new <= t.education.newPerDay, `never past the day's cap: ${got.new}`);
     }
   }
 });
@@ -308,6 +312,56 @@ test('the count colours (new blue, missed, review green) are readable on the dar
     for (const dark of ['#1a0b14', '#2a1522']) assert.ok(contrast(color, dark) >= 7, `${kind} ${color} on ${dark}: ${contrast(color, dark).toFixed(1)} : 1 (WCAG AAA is 7)`);
   }
   assert.equal(new Set(Object.values(COUNT_COLORS)).size, 3);
+});
+
+test('newAllowance (plan 26): newPerDay less the cards first seen since local midnight and the new cards this quiz showed unsaved; never below 0', () => {
+  const day = localDayStart(NOW);
+  assert.equal(new Date(day).getHours(), 0);
+  assert.ok(day <= NOW && NOW - day < DAY);
+  const srs = {
+    'ST-01': schedule(null, 'good', day + MIN), // today
+    'ST-02': schedule(null, 'again', NOW), // today
+    'ST-03': schedule(null, 'good', day - MIN), // yesterday
+  };
+  const cap = T.education.newPerDay;
+  assert.equal(cap, 20);
+  assert.equal(newAllowance(srs, { now: NOW }), cap - 2);
+  assert.equal(newAllowance(srs, { now: NOW, exclude: ['ST-01', 'DU-01', 'DU-02', 'DU-01'] }), cap - 4, 'two unsaved new cards shown in this quiz; a saved one counts once');
+  assert.equal(newAllowance(srs, { now: NOW, t: capped(1) }), 0, 'never below 0');
+  assert.equal(newAllowance(srs, { now: NOW, t: UNCAPPED }), Infinity);
+  assert.equal(newAllowance(srs, { now: day + DAY + MIN }), cap, 'a new day starts afresh');
+});
+
+test('the daily cap (plan 26): past it, a break asks due cards then practice; a revive asks a due card, else practice; the counts say so', () => {
+  const t = capped(2);
+  const day = localDayStart(NOW);
+  const two = { 'ST-01': schedule(null, 'good', day + MIN), 'ST-02': schedule(null, 'good', day + 2 * MIN) };
+  const srs = { ...two, 'CO-01': reviewRec(10, NOW - DAY) };
+  assert.deepEqual(cardCounts(srs, { context: 'break', segment: 'stomach', level: 2, now: NOW, t }), { new: 0, missed: 0, review: 1 });
+  const b = pickCard({ srs, context: 'break', segment: 'stomach', level: 2, now: NOW, t, dueFirst: true, rng: always(0.5) });
+  assert.deepEqual([b.card.id, b.reason], ['CO-01', 'review']);
+  const r = pickCard({ srs, context: 'revive', level: 1, now: NOW, t, rng: always(0.5), exclude: ['CO-01'] });
+  assert.equal(r.reason, 'practice', 'a revive at the cap with nothing due: practice, not a new card');
+  assert.equal(pickCard({ srs: two, context: 'revive', level: 1, now: NOW, t, rng: always(0.5), exclude: ['ST-01', 'ST-02'] }), null, 'nothing at all: null (the revive is granted)');
+  const one = { 'ST-01': two['ST-01'] };
+  assert.equal(cardCounts(one, { context: 'all', now: NOW, t }).new, 1, '"Your cards" shows what today still offers');
+});
+
+test('the new-card order (plan 26): after the due cards (the default), before them, or mixed in by their share; the bonus quiz keeps new first', () => {
+  assert.deepEqual(NEW_ORDERS, ['after', 'mixed', 'before']);
+  const srs = { 'CO-01': reviewRec(10, NOW - DAY), 'CA-01': missedRec(NOW - MIN) };
+  const ask = (order, context, rng = always(0.5), dueFirst = context === 'break') => pickCard({ srs, context, segment: 'stomach', level: 2, now: NOW, order, dueFirst, rng, t: UNCAPPED }).reason;
+  for (const context of ['break', 'revive']) {
+    assert.equal(ask('after', context), 'missed', `${context}: after`);
+    assert.equal(ask(undefined, context), 'missed', `${context}: after is the default`);
+    assert.equal(ask('nonsense', context), 'missed', `${context}: an unknown order reads as after`);
+    assert.equal(ask('before', context), 'new', `${context}: before`);
+    assert.equal(ask('mixed', context, always(0)), 'new', `${context}: mixed, the roll under the new share`);
+    assert.equal(ask('mixed', context, always(0.999)), 'missed', `${context}: mixed, the roll over it`);
+  }
+  assert.equal(ask('after', 'break', always(0.5), false), 'new', 'the bonus quiz: new first whatever the order');
+  // With no new card left today, every order asks the due cards.
+  for (const order of NEW_ORDERS) assert.equal(pickCard({ srs, context: 'revive', level: 1, now: NOW, order, rng: always(0), t: capped(0) }).reason, 'missed', order);
 });
 
 test("pickCard, browse (a test run): the segment's deck in id order, whatever is due; then general, then the other decks", () => {

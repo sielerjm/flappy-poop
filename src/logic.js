@@ -433,8 +433,10 @@ export const HANDS = ['left', 'right'];
 
 // eduUnlocked: education mode (📚, plan 21) unlocked on this device by its word; education: the 📚 switch;
 // eduStartLevel: the level the ready screen's stepper starts an education run at (plan 25; Play clamps it
-// to the levels unlocked).
-const SETTINGS_DEFAULTS = { sound: true, music: true, haptics: true, locale: DEFAULT_LOCALE, howToSeenAt: '', hand: 'right', eduUnlocked: false, education: false, eduStartLevel: 1 };
+// to the levels unlocked); eduNewOrder: where a quiz puts new cards, 'after' / 'mixed' / 'before' the due
+// ones (plan 26; education.js NEW_ORDERS).
+const SETTINGS_DEFAULTS = { sound: true, music: true, haptics: true, locale: DEFAULT_LOCALE, howToSeenAt: '', hand: 'right', eduUnlocked: false, education: false, eduStartLevel: 1, eduNewOrder: 'after' };
+const EDU_NEW_ORDERS = ['after', 'mixed', 'before']; // education.js NEW_ORDERS (logic.js does not import education.js)
 
 /**
  * The locale the player chose, or null when the settings hold none (a first visit, broken JSON, a
@@ -463,6 +465,7 @@ function normalizeSettings(raw) {
   out.howToSeenAt = typeof raw.howToSeenAt === 'string' ? raw.howToSeenAt : '';
   out.hand = HANDS.includes(raw.hand) ? raw.hand : SETTINGS_DEFAULTS.hand;
   out.eduStartLevel = Number.isInteger(raw.eduStartLevel) && raw.eduStartLevel >= 1 && raw.eduStartLevel <= 7 ? raw.eduStartLevel : 1;
+  out.eduNewOrder = EDU_NEW_ORDERS.includes(raw.eduNewOrder) ? raw.eduNewOrder : SETTINGS_DEFAULTS.eduNewOrder;
   return out;
 }
 

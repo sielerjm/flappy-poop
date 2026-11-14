@@ -1696,10 +1696,11 @@ export class Play extends Phaser.Scene {
       pick = pickCard({ srs: store.cards, context: 'browse', segment, exclude, shown });
       if (pick) this.registry.set('testQuizShown', [...shown.filter((id) => id !== pick.card.id), pick.card.id]);
     } else {
-      // A level break's own quiz asks what is due first, then what it missed, then new cards (plan 25);
-      // the bonus quiz keeps the break context's new-first order.
+      // A level break's own quiz asks what is due first, then what it missed, with new cards where the
+      // player's order puts them (plan 25; settings eduNewOrder, plan 26); the bonus quiz keeps the
+      // break context's new-first order. New cards stop at the day's cap (newPerDay).
       const own = mode === 'break';
-      pick = pickCard({ srs: store.cards, context: mode === 'revive' ? 'revive' : 'break', level, segment, now: Date.now(), exclude, recent: store.recent, rng: Math.random, dueFirst: own, missed: own ? (this.breakMissed ?? []) : [] });
+      pick = pickCard({ srs: store.cards, context: mode === 'revive' ? 'revive' : 'break', level, segment, now: Date.now(), exclude, recent: store.recent, rng: Math.random, dueFirst: own, missed: own ? (this.breakMissed ?? []) : [], order: this.settings?.load().eduNewOrder });
     }
     return pick ? { ...pick, order: shuffleOptions(Math.random) } : null;
   }

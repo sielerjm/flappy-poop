@@ -373,6 +373,7 @@ export const TUNING = {
       retention: 0.9, // 0–1: a card comes back when the chance of recalling it has fallen to this
       maxDays: 365, // the longest wait between reviews, in days
     },
+    newPerDay: 20, // new cards a device may first see per local day (plan 26, Anki's daily limit), breaks and revives together; past it, quizzes ask due cards, then practice
     minGap: 5, // the last minGap cards shown are skipped by the next pick, across quiz sessions, while anything else can be picked
     generalShare: 0.25, // 0–1 chance a new-card pick takes a general card (when there is one) instead of the level's deck
     strikes: 3, // wrong answers without a right one before a revive quiz ends the run

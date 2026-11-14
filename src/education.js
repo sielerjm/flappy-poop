@@ -125,6 +125,35 @@ export function schedule(rec, grade, now, t = TUNING, { practice = false } = {})
 
 const levelOfDeck = (deck) => (deck === 'general' ? 0 : DECKS.indexOf(deck) + 1);
 
+/** Where new cards go in a quiz (plan 26, Anki's new / review order; settings eduNewOrder): after the due cards (the default), mixed with them, or before them. */
+export const NEW_ORDERS = ['after', 'mixed', 'before'];
+
+/** Local midnight before `now` (ms): the daily new-card cap counts local days, as Bury does. */
+export function localDayStart(now) {
+  const d = new Date(now);
+  d.setHours(0, 0, 0, 0);
+  return d.getTime();
+}
+
+/**
+ * New cards a quiz may still show today (plan 26): education.newPerDay, less the cards first seen
+ * since local midnight (`dayStart`) and the new cards this quiz has shown without a record (ids in
+ * `exclude` with no record: shown, not saved). Never below 0.
+ */
+export function newAllowance(srs = {}, { now = Date.now(), exclude = [], t = TUNING, dayStart = localDayStart(now) } = {}) {
+  const cap = t.education.newPerDay;
+  if (!Number.isFinite(cap)) return Infinity;
+  let used = 0;
+  for (const rec of Object.values(srs)) if (rec && rec.firstAt >= dayStart) used += 1;
+  for (const id of new Set(exclude)) if (!srs[id]) used += 1;
+  return Math.max(0, cap - used);
+}
+
+/** Is card `c` a new card the context offers? 'break': the segment's deck and the general one; 'revive': the decks up to `level` and the general one; 'all': every deck. */
+function inScope(c, { context, level, segment }) {
+  return context === 'all' || c.deck === 'general' || (context === 'break' ? c.deck === segment : levelOfDeck(c.deck) <= level);
+}
+
 function pickFrom(pool, rng) {
   return pool.length ? pool[Math.floor(rng() * pool.length) % pool.length] : null;
 }
@@ -136,7 +165,7 @@ function pickNew(general, pools, rng, t) {
   return pickFrom(primary, rng);
 }
 
-function chooseCard({ cards, srs, context, level, segment, now, blocked, rng, t, practice = true, dueFirst = false, missed = [], last = null }) {
+function chooseCard({ cards, srs, context, level, segment, now, blocked, rng, t, practice = true, dueFirst = false, missed = [], last = null, newLeft = Infinity, order = 'after' }) {
   const live = cards.filter((c) => !c.retired && !blocked.has(c.id));
   const fresh = live.filter((c) => !srs[c.id]);
   const due = live.filter((c) => srs[c.id] && srs[c.id].dueAt <= now);
@@ -158,15 +187,20 @@ function chooseCard({ cards, srs, context, level, segment, now, blocked, rng, t,
     const c = [...notDue].sort((a, b) => near(a) - near(b) || leastRecent(a, b))[0];
     return c ? { card: c, reason: 'practice' } : null;
   };
+  // New cards first? 'before' always; 'mixed' at the share new cards have of what is counted; 'after' never.
+  const newOffered = Math.min(newLeft, fresh.filter((c) => inScope(c, { context, level, segment })).length);
+  const newFirst = (dueLeft) => order === 'before' || (order === 'mixed' && newOffered > 0 && (dueLeft === 0 || rng() < newOffered / (newOffered + dueLeft)));
   if (context === 'break') {
     const newPick = () => {
+      if (newLeft <= 0) return null; // today's new cards are used up (plan 26)
       const card = pickNew(fresh.filter((c) => c.deck === 'general'), [fresh.filter((c) => c.deck === segment)], rng, t);
       return card ? { card, reason: 'new' } : null;
     };
     let pick;
     if (dueFirst) {
       // A level break (plan 25): missed cards, due reviews, the cards missed in this break (oldest
-      // miss first; the one just shown waits while anything else is counted), then new cards.
+      // miss first; the one just shown waits while anything else is counted); new cards after them,
+      // before them or mixed in, by `order` (plan 26).
       const isMissed = new Set(missed);
       const dueNow = due.filter((c) => !isMissed.has(c.id));
       const byId = new Map(cards.map((c) => [c.id, c]));
@@ -175,25 +209,29 @@ function chooseCard({ cards, srs, context, level, segment, now, blocked, rng, t,
         const c = retry.find((x) => allowLast || x.id !== last);
         return c ? { card: c, reason: 'missed' } : null;
       };
-      pick = missedPick(dueNow) ?? reviewPick(dueNow) ?? retryPick(false) ?? newPick() ?? retryPick(true);
+      const duePick = () => missedPick(dueNow) ?? reviewPick(dueNow) ?? retryPick(false);
+      pick = (newFirst(dueNow.length + retry.length) ? newPick() ?? duePick() : duePick() ?? newPick()) ?? retryPick(true);
     } else {
-      pick = newPick() ?? missedPick(due) ?? reviewPick(due);
+      pick = newPick() ?? missedPick(due) ?? reviewPick(due); // the bonus quiz: new first, whatever the order
     }
     return pick ?? (practice ? practicePick() : null);
   }
-  // A revive: missed cards, due reviews, a new card (the level's deck first), then practice.
-  const due1 = missedPick(due) ?? reviewPick(due);
-  if (due1) return due1;
-  const here = DECKS[Math.max(1, level) - 1];
-  const unlocked = fresh.filter((c) => c.deck !== 'general' && levelOfDeck(c.deck) <= level);
-  const card = pickNew(
-    fresh.filter((c) => c.deck === 'general'),
-    [unlocked.filter((c) => c.deck === here), unlocked],
-    rng,
-    t,
-  );
-  if (card) return { card, reason: 'new' };
-  return practice ? practicePick() : null;
+  // A revive: missed cards and due reviews, and a new card (the level's deck first), in `order`; then practice.
+  const duePick = () => missedPick(due) ?? reviewPick(due);
+  const newPick = () => {
+    if (newLeft <= 0) return null;
+    const here = DECKS[Math.max(1, level) - 1];
+    const unlocked = fresh.filter((c) => c.deck !== 'general' && levelOfDeck(c.deck) <= level);
+    const card = pickNew(
+      fresh.filter((c) => c.deck === 'general'),
+      [unlocked.filter((c) => c.deck === here), unlocked],
+      rng,
+      t,
+    );
+    return card ? { card, reason: 'new' } : null;
+  };
+  const pick = newFirst(due.length) ? newPick() ?? duePick() : duePick() ?? newPick();
+  return pick ?? (practice ? practicePick() : null);
 }
 
 /**
@@ -230,14 +268,19 @@ function browseCard({ cards, srs, segment, blocked, shown }) {
  * (cards missed in this break and not yet answered right, oldest miss first; asked again though
  * they are in `exclude`, the card just shown waiting while another counted card is left), then new
  * cards, then practice.
+ * New cards (plan 26) stop at today's allowance (newAllowance: education.newPerDay a local day,
+ * `dayStart` its midnight), and in a level break's own quiz and a revive they come after the due
+ * cards, mixed in with them, or before them, by `order` (NEW_ORDERS; the bonus quiz keeps new
+ * first).
  * 'browse' (a test run, which saves no answers): the segment's deck in order, whatever is due
  * (browseCard); `shown` is the cards test quizzes have shown so far.
  */
-export function pickCard({ cards = CARDS, srs = {}, context, level = 1, segment = null, now, exclude = [], recent = [], shown = [], rng = Math.random, t = TUNING, dueFirst = false, missed = [] }) {
+export function pickCard({ cards = CARDS, srs = {}, context, level = 1, segment = null, now, exclude = [], recent = [], shown = [], rng = Math.random, t = TUNING, dueFirst = false, missed = [], order = 'after', dayStart = localDayStart(now) }) {
   const session = new Set(exclude);
   if (context === 'browse') return browseCard({ cards, srs, segment, blocked: session, shown });
   const gap = new Set([...session, ...recent.slice(-t.education.minGap)]);
-  const args = { cards, srs, context, level, segment, now, rng, t, dueFirst, missed, last: exclude.at(-1) ?? null };
+  const newLeft = newAllowance(srs, { now, exclude, t, dayStart });
+  const args = { cards, srs, context, level, segment, now, rng, t, dueFirst, missed, last: exclude.at(-1) ?? null, newLeft, order: NEW_ORDERS.includes(order) ? order : 'after' };
   // Counted cards first, the recent gap only ordering them; practice only once none is left.
   return (
     chooseCard({ ...args, blocked: gap, practice: false }) ??
@@ -260,9 +303,10 @@ export function pickCard({ cards = CARDS, srs = {}, context, level = 1, segment 
  * retired cards never count; `missed` (a level break's cards missed and not yet answered right,
  * plan 25) count as missed, once each, though they are in `exclude`. The filters are chooseCard's:
  * whatever the recent gap holds, picking until nothing is left hands out exactly these cards before
- * the first practice card (tests/education.test.js).
+ * the first practice card (tests/education.test.js). New is at most today's allowance (newAllowance,
+ * plan 26).
  */
-export function cardCounts(srs = {}, { cards = CARDS, context = 'all', level = 1, segment = null, now = Date.now(), exclude = [], missed = [] } = {}) {
+export function cardCounts(srs = {}, { cards = CARDS, context = 'all', level = 1, segment = null, now = Date.now(), exclude = [], missed = [], t = TUNING, dayStart = localDayStart(now) } = {}) {
   const blocked = new Set(exclude);
   const isMissed = new Set(missed);
   const counts = { new: 0, missed: 0, review: 0 };
@@ -276,8 +320,9 @@ export function cardCounts(srs = {}, { cards = CARDS, context = 'all', level = 1
     const rec = srs[c.id];
     if (rec) {
       if (rec.dueAt <= now) counts[rec.state === 'missed' ? 'missed' : 'review'] += 1;
-    } else if (context === 'all' || c.deck === 'general' || (context === 'break' ? c.deck === segment : levelOfDeck(c.deck) <= level)) counts.new += 1;
+    } else if (inScope(c, { context, level, segment })) counts.new += 1;
   }
+  counts.new = Math.min(counts.new, newAllowance(srs, { now, exclude, t, dayStart }));
   return counts;
 }
 

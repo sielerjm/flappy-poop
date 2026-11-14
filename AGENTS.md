@@ -380,7 +380,12 @@ record is **new**; a right answer puts it in **review**, due when its recall cha
 `fsrs.retention` (whole days, at least 1, at most `maxDays`; right on first sight is always good:
 2 days); a wrong one makes it **missed**, due at once until answered right. A **practice** card (a
 review not due yet, offered once nothing is counted) answered right leaves the schedule alone. An
-SM-2 record from before plan 26 is converted as it is read (`fromSm2`). A **test run** saves no answers, so what is due would never
+SM-2 record from before plan 26 is converted as it is read (`fromSm2`). **New cards stop at
+`education.newPerDay`** (20) a local day, breaks and revives together (`newAllowance`: the cards
+first seen since local midnight, plus the new ones a quiz showed unsaved); past it a revive asks a
+due card, else practice. Settings' **`eduNewOrder`** puts new cards after the due ones (the
+default), mixed in by their share, or before them, in a break's own quiz and a revive (`pickCard`'s
+`order`; the bonus quiz keeps new first). A **test run** saves no answers, so what is due would never
 clear: its quizzes walk the level's deck in id order instead (`pickCard` context `'browse'`; the cards
 shown are kept for the page load in the registry's `testQuizShown`), so skipping to a level shows that
 level's cards. **The quiz card** (`scenes/Quiz.js`, overlay id `quiz`): Play owns the cards (`quizNext`
@@ -657,7 +662,8 @@ src/
                             levelBarLayout, lerpColor),
                             best-score store, settings store (incl. locale,
                             howToSeenAt and hand: HANDS 'left' | 'right', the
-                            bean button's side; eduStartLevel 1–7, plan 25) +
+                            bean button's side; eduStartLevel 1–7, plan 25;
+                            eduNewOrder after / mixed / before, plan 26) +
                             howToPromptDue, vibrate helper, trayLayout, trayHit,
                             readyLayout (eduStart: the ◀ level ▶ stepper's boxes in
                             the 📚 row), readyHit, nextEduStartLevel (wraps within
@@ -740,7 +746,9 @@ src/
                             plan 25: pickCard's dueFirst and missed (a level break's
                             own order; counted cards before practice), cardCounts'
                             missed, unlockLevel / unlockedLevel, bury / buriedOn,
-                            localDayKey;
+                            localDayKey; plan 26: NEW_ORDERS and pickCard's order,
+                            newAllowance and localDayStart (the daily new-card cap,
+                            which cardCounts' new respects too);
                             createEduStore (LEADERBOARD.eduKey = flappyPoop.eduSrs:
                             each card's record and the last cards shown, and (plan
                             22) the education counters and badges: addRevive,

@@ -3688,7 +3688,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         const srsBefore = await evaluate(`localStorage.getItem('flappyPoop.eduSrs')`);
         // One missed card, two in review and due, one in review and not due yet.
         const made = await evaluate(
-          `Promise.all([import('./src/education.js'), import('./src/questions.js')]).then(([e, q]) => { const now = Date.now(); const live = q.CARDS.filter((c) => !c.retired); const cards = {}; cards[live[0].id] = e.schedule(null, 'again', now - 20 * 60000); cards[live[1].id] = e.schedule(null, 'easy', now - 30 * 86400000); cards[live[2].id] = e.schedule(null, 'easy', now - 30 * 86400000); cards[live[3].id] = e.schedule(null, 'easy', now); localStorage.setItem('flappyPoop.eduSrs', JSON.stringify({ v: 1, cards, recent: [], counters: {}, badges: {} })); ${play}.refreshEduDue(); return JSON.stringify({ total: live.length }); })`,
+          `Promise.all([import('./src/education.js'), import('./src/questions.js')]).then(([e, q]) => { const now = Date.now(); const live = q.CARDS.filter((c) => !c.retired); const cards = {}; cards[live[0].id] = e.schedule(null, 'again', now - 20 * 60000); cards[live[1].id] = e.schedule(null, 'easy', now - 30 * 86400000); cards[live[2].id] = e.schedule(null, 'easy', now - 30 * 86400000); cards[live[3].id] = e.schedule(null, 'easy', now); localStorage.setItem('flappyPoop.eduSrs', JSON.stringify({ v: 1, cards, recent: [], counters: {}, badges: {} })); ${play}.refreshEduDue(); return JSON.stringify({ total: live.length, allowance: e.newAllowance(cards, { now }) }); })`,
         ).then(JSON.parse);
         const eduCard = () => evaluate(`(() => { const p = ${play}; return JSON.stringify({ open: p.eduCard.open, title: p.eduCard.title.text, body: p.eduCard.body.text, on: p.educationOn, toilet: p.toilet, state: p.state, launching: Boolean(p.launching), due: p.eduDueText.visible ? p.eduDueText.text : '' }); })()`).then(JSON.parse);
         const boxes = await evaluate(`JSON.stringify({ info: ${play}.readyBoxes.educationInfo, edu: ${play}.readyBoxes.education, toilet: ${play}.readyBoxes.toilet, title: ${play}.readyBoxes.title })`).then(JSON.parse);
@@ -3696,7 +3696,8 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await tapAt(boxes.info.x, boxes.info.y);
         const yc1 = await eduCard();
         const ycWant = await Promise.all(['eduCardsTitle', 'eduCardsNew', 'eduCardsMissed', 'eduCardsReview', 'eduCardsSeen', 'eduCardsDue'].map(tx));
-        const ycBody = [ycWant[1].replace('{n}', String(made.total - 4)), ycWant[2].replace('{n}', '1'), ycWant[3].replace('{n}', '2'), ycWant[4].replace('{n}', '4').replace('{total}', String(made.total)), ycWant[5]].join('\n');
+        // New is what today still offers (plan 26: education.newPerDay a local day, less the cards first seen today).
+        const ycBody = [ycWant[1].replace('{n}', String(Math.min(made.total - 4, made.allowance))), ycWant[2].replace('{n}', '1'), ycWant[3].replace('{n}', '2'), ycWant[4].replace('{n}', '4').replace('{total}', String(made.total)), ycWant[5]].join('\n');
         ok(yc0.due === '3' && !yc0.open && yc1.open && yc1.title === ycWant[0] && yc1.body === ycBody && yc1.on === yc0.on && yc1.state === 'ready' && !yc1.launching, `a tap on the 📚 glyph (its gold number reads ${yc0.due}) opens "${yc1.title}": ${yc1.body.replace(/\n/g, ' · ')}; the switch is not toggled`);
         await tapAt(boxes.title.x, boxes.title.y); // empty space: with no card up this tap would start a run
         const yc2 = await eduCard();

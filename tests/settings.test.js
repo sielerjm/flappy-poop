@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { createSettingsStore, vibrate } from '../src/logic.js';
 import { initialLocale } from '../src/i18n.js';
 
-const DEFAULTS = { sound: true, music: true, haptics: true, locale: 'en', howToSeenAt: '', hand: 'right', eduUnlocked: false, education: false, eduStartLevel: 1 };
+const DEFAULTS = { sound: true, music: true, haptics: true, locale: 'en', howToSeenAt: '', hand: 'right', eduUnlocked: false, education: false, eduStartLevel: 1, eduNewOrder: 'after' };
 
 function fakeStorage() {
   const m = new Map();
@@ -120,4 +120,17 @@ test("eduStartLevel (plan 25): the stepper's start level is kept as a whole numb
   assert.equal(s.set({ eduStartLevel: 3 }).eduStartLevel, 3);
   assert.equal(createSettingsStore(st, 'k').load().eduStartLevel, 3, 'read back after a reload');
   for (const bad of [0, 8, 2.5, '3', null]) assert.equal(s.set({ eduStartLevel: bad }).eduStartLevel, 1, `${bad} reads as 1`);
+});
+
+test("eduNewOrder (plan 26): where a quiz puts new cards is kept as one of education.js's NEW_ORDERS; anything else reads as after", async () => {
+  const { NEW_ORDERS } = await import('../src/education.js');
+  const m = new Map();
+  const st = { getItem: (k) => m.get(k) ?? null, setItem: (k, v) => m.set(k, v), removeItem: (k) => m.delete(k) };
+  const s = createSettingsStore(st, 'k');
+  assert.equal(s.load().eduNewOrder, 'after', 'after by default');
+  for (const order of NEW_ORDERS) {
+    assert.equal(s.set({ eduNewOrder: order }).eduNewOrder, order);
+    assert.equal(createSettingsStore(st, 'k').load().eduNewOrder, order, `${order} read back after a reload`);
+  }
+  for (const bad of ['random', '', null, 3, 'AFTER']) assert.equal(s.set({ eduNewOrder: bad }).eduNewOrder, 'after', `${bad} reads as after`);
 });
