@@ -311,60 +311,69 @@ test('resumePlay keeps a gated break: the state stays paused and the break stays
   assert.deepEqual([s.state, s.levelBreak, calls], ['paused', true, ['banner', 'pill']]);
 });
 
-test('bury at a gate (plan 25, B7; every break since plan 26): only a card missed in this break, 3 × the level cleared, while the purse covers it and under the day\'s cap; never in a test run; it records no pilot event', async () => {
-  const { localDayKey } = await import('../src/education.js');
+/** A one-player education run's level break (the break into level 3: level 2 cleared) over `store`, with a purse of `coins`. */
+function skipScene(store, { coins = 30, ...over } = {}) {
+  const wallet = { coins };
+  const events = [];
+  const s = playScene({
+    eduStore: store, level: 3, levelBreak: true, runIsEducation: true, runIsTest: false, match: null, registry: registry(), breakMissed: [], runQuiz: newTally(),
+    effects: { coins: () => wallet.coins, spendCoins: (n) => (wallet.coins -= n) }, refreshLevelBanner() {}, refreshShopButton() {}, refreshCoinHud() {}, recordAnswerEvent: (e) => events.push(e), ...over,
+  });
+  return { s, wallet, events };
+}
+
+test("Skip a card (plan 26, A2, in place of Bury): every kind of card costs 3 × the level cleared; a due card (stored, or missed in this break) also goes to tomorrow, leaves the gate and counts toward the day's 3; a new or practice card just moves on; a skip is no answer", () => {
   const now = Date.now();
   const store = createEduStore(fakeStorage());
-  const card = CARDS.find((c) => c.deck === 'duodenum') ?? CARDS[0];
-  store.answer(card.id, schedule(null, 'again', now));
-  let coins = 20;
-  const events = [];
-  const make = (over = {}) => {
-    const s = playScene({
-      eduStore: store, level: 3, levelBreak: true, runIsEducation: true, runIsTest: false, match: null, registry: registry(), breakMissed: [card.id],
-      effects: { coins: () => coins, spendCoins: (n) => (coins -= n) }, refreshLevelBanner() {}, refreshShopButton() {}, refreshCoinHud() {}, recordAnswerEvent: (e) => events.push(e), ...over,
-    });
-    return s;
-  };
-  const s = make();
-  assert.equal(s.buryPrice(), 3 * 2, 'the break before level 3: level 2 cleared, 6 coins');
-  assert.equal(s.canBury(card.id), true);
-  assert.equal(make({ breakMissed: [] }).canBury(card.id), false, 'only a card missed in this break');
-  assert.equal(make({ runIsTest: true }).canBury(card.id), false, 'never in a test run');
-  coins = 5;
-  assert.equal(s.canBury(card.id), false, 'the purse must cover it');
-  coins = 20;
-  assert.equal(s.buryCard(card.id), true);
-  assert.equal(coins, 14, 'the price is paid');
-  assert.ok(store.load().cards[card.id].dueAt >= now + T.education.buryMs, 'the card waits a day');
-  assert.deepEqual(s.breakMissed, [], 'and is no longer missed here');
-  assert.equal(events.length, 0, 'no pilot event');
-  // The day's cap.
-  for (let i = store.buriedOn(localDayKey()); i < T.education.buryPerDay; i += 1) store.bury(card.id, now, localDayKey());
-  assert.equal(make().canBury(card.id), false, `at most ${T.education.buryPerDay} a day`);
-  store.unlockLevel(3);
-  store.bury(card.id, now, '2000-01-01'); // a new day's count
-  assert.equal(make({ level: 3 }).canBury(card.id), true, "an unlocked level's break is a gate too (plan 26)");
+  const [missedStored, reviewDue, practice, fresh, missedHere, reviewDue2] = CARDS.filter((c) => c.deck === 'duodenum' || c.deck === 'general');
+  store.answer(missedStored.id, schedule(null, 'again', now - 20 * 60000));
+  store.answer(reviewDue.id, schedule(null, 'easy', now - 30 * 86400000));
+  store.answer(practice.id, schedule(null, 'good', now - 60000));
+  store.answer(missedHere.id, schedule(null, 'again', now - 60000));
+  const { s, wallet, events } = skipScene(store, { breakMissed: [missedHere.id] });
+  assert.equal(s.buryPrice(), 3 * 2, 'the break into level 3: level 2 cleared, 6 corn');
+  assert.equal(s.skipPrice(), 6);
+  const recOf = (c) => store.load().cards[c.id] ?? null;
+  const practiceRec = recOf(practice);
+  assert.deepEqual([s.skipBlocker(fresh.id), s.skipCard(fresh.id), wallet.coins, recOf(fresh), store.buriedOn(localDayKey())], [null, true, 24, null, 0], 'a new card: the price, nothing saved, no daily count');
+  assert.deepEqual([s.skipCard(practice.id), wallet.coins, recOf(practice), store.buriedOn(localDayKey())], [true, 18, practiceRec, 0], 'a practice card: the price, its schedule left alone');
+  assert.equal(s.breakGated(), true, 'three cards due: the gate holds');
+  for (const c of [reviewDue, missedHere, missedStored]) {
+    assert.equal(s.skipCard(c.id), true, c.id);
+    assert.ok(recOf(c).dueAt >= now + T.education.buryMs, `${c.id} waits until tomorrow`);
+  }
+  assert.deepEqual([wallet.coins, store.buriedOn(localDayKey()), s.breakMissed], [0, 3, []], 'three due cards skipped: paid, counted, and the miss of this break is no longer missed');
+  assert.equal(s.breakGated(), false, 'and the gate opens: nothing due is left');
+  assert.deepEqual(store.load().buried.ids, [reviewDue.id, missedHere.id, missedStored.id], "the day's skipped cards are kept (so practice leaves them out today)");
+  wallet.coins = 30;
+  store.answer(reviewDue2.id, schedule(null, 'easy', now - 30 * 86400000));
+  assert.deepEqual([s.skipBlocker(reviewDue2.id), s.skipCard(reviewDue2.id), wallet.coins], ['cap', false, 30], `a fourth due card: the day's ${T.education.buryPerDay} are used, nothing paid`);
+  assert.equal(s.skipBlocker(fresh.id), null, 'a new card has no daily limit: the price is the limit');
+  wallet.coins = 5;
+  assert.deepEqual([s.skipBlocker(fresh.id), s.skipCard(fresh.id), wallet.coins], ['coins', false, 5], 'the purse must cover it');
+  assert.deepEqual([events, s.runQuiz.answered], [[], 0], 'a skip is no answer: no pilot event, nothing tallied');
 });
 
-test('Skip ▸ at a break (plan 25, B8): one level passed at par per tap, only as far as the levels unlocked; never in a test run; the run is no longer full', async () => {
-  const { levelEnd } = await import('../src/logic.js');
+test('Skip in a test run is free and saves nothing; there is no Skip outside an education run\'s level break (a revive, the bonus quiz, a match) (plan 26, A2)', () => {
+  const now = Date.now();
   const store = createEduStore(fakeStorage());
-  store.unlockLevel(4);
-  const s = playScene({
-    eduStore: store, level: 2, levelBreak: true, state: 'paused', runIsEducation: true, runIsTest: false, match: null, registry: registry(), tune: T,
-    shopOpen: false, quizOpen: false, quizButton: {}, pipesPassed: levelEnd(1, T), pipesSpawned: levelEnd(1, T), score: 30, runSkipped: false, breakMissed: [],
-    scoreText: { setText() {} }, refreshLevelBanner() {}, refreshLevelBar() {}, refreshShopButton() {},
-  });
-  s.breakSkip();
-  assert.deepEqual([s.level, s.pipesPassed, s.score, s.runSkipped], [3, levelEnd(2, T), 30 + levelEnd(2, T) - levelEnd(1, T), true]);
-  s.breakSkip();
-  assert.equal(s.level, 4, 'level 4 is unlocked');
-  s.breakSkip();
-  assert.equal(s.level, 4, 'not past the levels unlocked');
-  s.runIsTest = true;
-  s.level = 2;
-  assert.equal(s.breakSkipShown(), false, 'never in a test run');
+  const card = CARDS.find((c) => c.deck === 'duodenum');
+  store.answer(card.id, schedule(null, 'again', now - 60000));
+  const before = JSON.stringify(store.load());
+  const test = skipScene(store, { runIsTest: true, coins: 0 });
+  assert.deepEqual([test.s.skipPrice(), test.s.skipBlocker(card.id), test.s.skipCard(card.id), test.wallet.coins, JSON.stringify(store.load())], [0, null, true, 0, before], 'free, and nothing is saved');
+  for (const over of [{ levelBreak: false }, { runIsEducation: false }, { match: {} }]) assert.equal(skipScene(store, over).s.skipBlocker(card.id), 'none', JSON.stringify(over));
+});
+
+test('Skip ▸ for levels is gone (plan 26, A2): the break has no level skip; its button, its box and its string are gone', async () => {
+  const { eduBreakLayout } = await import('../src/logic.js');
+  const { t } = await import('../src/i18n.js');
+  const s = playScene({});
+  assert.equal(typeof s.breakSkip, 'undefined');
+  assert.equal(typeof s.breakSkipShown, 'undefined');
+  assert.equal('skip' in eduBreakLayout(720, 1280, T, 0), false);
+  assert.equal(t('en', 'breakSkip'), 'breakSkip', 'no such string');
+  assert.equal(t('en', 'quizBury'), 'quizBury', 'nor Bury');
 });
 
 test('Quit at a break (plan 25, B8; plan 26, A2): two taps; caught up with answers it ends as a normal run (graded); with cards due, or with nothing answered (🏳️), it counts as quitting the run', () => {

@@ -242,11 +242,15 @@ Short, playful, clear. Fit a 720×1280 logical field; How to play / About body w
 | waitYears | {n} years | {n} 年 |
 | quizPill | Quiz (the won game-over panel's 📚 bonus button) | 答题 |
 | reviewPill | Review (an education level break's 📚 button, plan 25: the numbers sit under it) | 复习 |
-| breakSkip | Skip ▸ (plan 25: an education level break's button; each tap skips one level the player has unlocked before) | 跳过 ▸ |
 | breakQuit | Quit (ends the run at a level break; plan 26, A2: the one word for it, cards due or not. "Give up" is gone everywhere: Michael found it too negative) | 结束 |
 | breakQuitSure | Quit? Tap again (the first tap arms it for a few seconds; shown when nothing is due, so the run ends as a normal one) | 结束？再点一次 |
 | breakQuitDueSure | Quit ungraded? Tap again (the armed label while missed or review cards are still due: quitting then ends the run with no grade. "Ungraded" is 不计成绩, as in the profile's 计分 rows) | 不计成绩结束？再点一次 |
-| quizBury | Bury · {n} coins (plan 25: at a gate, after a miss, the card waits 24 h for a price in coins; Anki's word "bury"; zh says "push to tomorrow") | 推到明天 · {n} 金币 |
+| quizSkip | Skip · {n} 🌽 (plan 26, A2: the right button of an open card in a level break's quiz; it replaced Bury and the level skip. Every Skip costs {n} corn kernels; a missed or review card also waits until tomorrow) | 跳过 · {n} 🌽 |
+| quizSkipFree | Skip (the same button in a test run, where it is free) | 跳过 |
+| quizSkipWarn | Skipping costs {n} 🌽. Tap Skip again. (the first Skip in a level break shows this in the verdict's place; later ones in that break skip at once) | 跳过要花 {n} 🌽。再点一次“跳过”。 |
+| quizSkipWarnDue | Skipping costs {n} 🌽 and sends this card to tomorrow. Tap Skip again. (the same, for a missed or review card) | 跳过要花 {n} 🌽，这张卡片会推到明天。再点一次“跳过”。 |
+| quizSkipNoCoins | Skipping costs {n} 🌽: not enough corn yet. (a press on a dimmed Skip when the purse is short) | 跳过要花 {n} 🌽：玉米粒还不够。 |
+| quizSkipCap | You have skipped {n} due cards today: answer this one, or come back tomorrow. ({n} is education.buryPerDay, 3; a press on a dimmed Skip on a missed or review card once the day's are used) | 今天已经跳过 {n} 张到期的卡片：答这一张，或者明天再来。 |
 | quizWrong | Not quite: the right answer has a ✓ | 不太对：正确答案标有 ✓ |
 | quizWhy | Why? | 为什么？ |
 | quizNext | Next Card (plan 26, Michael's word: the quiz card's way forward, bottom row right) | 下一张 |
@@ -285,7 +289,7 @@ Short, playful, clear. Fit a 720×1280 logical field; How to play / About body w
 | eduIntroHowTitle | How it works | 玩法 |
 | eduIntroHowLevels | Each level break asks cards about the part of the gut you just flew through. Cards you missed, and cards due for review, must be answered right before you fly on. | 每次关卡休息时，会问你刚飞过的那段肠道的卡片。答错的卡片和到期要复习的卡片，答对之后才能继续飞。 |
 | eduIntroHowRevive | Crash, and a card is your way back: ❤️ three tries to get one right, then ⭐ three in a row to win back your coins and power-ups. | 撞到了？答对卡片就能继续：❤️ 有三次机会答对一张，然后连续答对 ⭐ 三张，就能赢回金币和道具。 |
-| eduIntroHowBury | Stuck on a card at a break? Bury it until tomorrow for a few 🌽, or quit the run. | 在休息时卡在一张卡片上？花几个 🌽 把它推到明天，或者结束这一局。 |
+| eduIntroHowSkip | Stuck on a card at a break? Skip it for a few 🌽 (a missed or review card waits until tomorrow), or quit the run. (plan 26, A2: Skip replaced Bury) | 在休息时卡在一张卡片上？花几个 🌽 跳过它（答错卡和待复习卡会推到明天），或者结束这一局。 |
 | eduIntroHowCoins | Right answers in a level break earn you corn kernels. Cards are automatically ordered to be shown right before you're likely to forget them. (plan 26 A2: Michael's wording, as written) | 在关卡休息时答对会得到玉米粒。卡片会自动排序，在你快要忘记之前出现。 |
 | eduIntroChoices | Your choices (the heading over the start level and the new-card order) | 你的选择 |
 | eduIntroStart | Start at (◀ LV n ▶ follows: the level the next education run starts at) | 从这一关开始 |

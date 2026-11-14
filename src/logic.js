@@ -698,8 +698,8 @@ export function bracketButtonLayout(width, height, t, x0 = 0) {
 
 /**
  * An education run's level break, as Michael drew it (plan 26): the banner higher (titleY, hintY);
- * the 💰 pill where it always is (shopButtonLayout) with Skip ▸ right of it; 📚 Review and Quit /
- * Give up side by side on the row under it (the 🏅's row: the two never meet); the three numbers
+ * the 💰 pill where it always is (shopButtonLayout); 📚 Review and Quit side by side on the row
+ * under it (Skip ▸ right of the pill is gone since plan 26's A2) (the 🏅's row: the two never meet); the three numbers
  * lower, on the bean button's line (it hides in a break). The poop bobs at the left under the rows
  * (levels.breakPoopY), clear of the tray. `x0` = the column's left edge.
  */
@@ -710,11 +710,9 @@ export function eduBreakLayout(width, height, t, x0 = 0) {
   const rowY = bracketButtonLayout(width, height, t, x0).y;
   const review = { id: 'quiz', x: shop.x - (pill.width + gap) / 2, y: rowY, ...pill };
   const quit = { id: 'quit', x: shop.x + (pill.width + gap) / 2, y: rowY, ...pill };
-  const side = { width: 180, height: t.trayHitMin };
-  const skip = { id: 'skip', x: shop.x + shop.width / 2 + gap + side.width / 2, y: shop.y, ...side };
   const counts = { id: 'quizCounts', x: shop.x, y: height - t.groundHeight - t.trayHitMin / 2 - 58, width: 300, height: 48 };
   const titleY = Math.round(height * 0.4) - 72;
-  return { shop, review, counts, skip, quit, titleY, hintY: titleY + 72 };
+  return { shop, review, counts, quit, titleY, hintY: titleY + 72 };
 }
 
 /** 'shop' when (x, y) is on the 💰 button, else null. */

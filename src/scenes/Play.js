@@ -134,7 +134,7 @@ import { openEduIntroPanel, closeEduIntroPanel, isEduIntroPanelOpen, eduIntroPad
 import { answerEvent, createConsentStore, createResearchQueue } from '../research.js';
 import { bindPad } from '../input/pad.js';
 import { keyGroup, sameDevice, catchUpTier, catchUpDraws, versusAvailable, ghostPlacement, rivalMarker, respawnPose, respawnBlinkStart, courseDistance, VERSUS_EMOJI } from '../versus.js';
-import { createEduStore, countersAfterRun, dueCount, cardCounts, masteryByDeck, pickCard, shuffleOptions, gradeFor, schedule, eduShopPrices, reviveStart, reviveStep, reviveSettled, newTally, tallyAnswer, EDUCATION_EMOJI, localDayKey, paidOn } from '../education.js';
+import { createEduStore, countersAfterRun, dueCount, cardCounts, masteryByDeck, pickCard, shuffleOptions, gradeFor, schedule, eduShopPrices, reviveStart, reviveStep, reviveSettled, newTally, tallyAnswer, EDUCATION_EMOJI, localDayKey, paidOn, buriedIdsOn } from '../education.js';
 
 const TEXT_STYLE = {
   fontFamily: 'sans-serif',
@@ -531,14 +531,13 @@ export class Play extends Phaser.Scene {
     // (chromeIntent's 'quiz'). Under it, a line of its own says what is waiting there, as Anki does:
     // new cards in blue, missed cards in red, reviews due in green (quizCountLine;
     // refreshShopButton; none in a test run, whose quizzes ignore the schedule). A tap on the line
-    // says what the numbers mean (toggleBreakCounts). eduBreakLayout also places Skip and Quit.
+    // says what the numbers mean (toggleBreakCounts). eduBreakLayout also places Quit.
     this.eduBreakBoxes = this.match ? null : eduBreakLayout(this.col.width, GAME_HEIGHT, T, this.col.x);
     this.quizButtonBox = this.eduBreakBoxes?.review ?? null;
     this.quizCountsBox = this.eduBreakBoxes?.counts ?? null;
     this.quizButton = this.quizButtonBox ? createButton(this, this.quizButtonBox, `${EDUCATION_EMOJI} ${t(this.locale, 'reviewPill')}`, { ...TEXT_STYLE, fontSize: '36px', color: '#f8a0c8' }, { depth: 27 }).setVisible(false) : null;
-    // Skip ▸ right of the 🌽 pill, and Quit beside Review (plan 25, B8; plan 26, Michael's sketch: refreshQuizButton).
+    // Quit beside Review (plan 25, B8; plan 26, Michael's sketch: refreshQuizButton). Skip ▸ (levels) is gone since plan 26's A2.
     const sideStyle = { ...TEXT_STYLE, fontSize: '30px', color: '#f8a0c8' };
-    this.breakSkipButton = this.eduBreakBoxes ? createButton(this, this.eduBreakBoxes.skip, t(this.locale, 'breakSkip'), sideStyle, { depth: 27 }).setVisible(false) : null;
     this.breakQuitButton = this.eduBreakBoxes ? createButton(this, this.eduBreakBoxes.quit, t(this.locale, 'breakQuit'), sideStyle, { depth: 27 }).setVisible(false) : null;
     this.quizCountLine = this.quizCountsBox
       ? createCountLine(this, this.quizCountsBox.x, this.quizCountsBox.y, { style: TEXT_STYLE, px: 34, sep: '   ', depth: 28, maxWidth: this.quizCountsBox.width }).setVisible(false)
@@ -574,7 +573,6 @@ export class Play extends Phaser.Scene {
             ...(this.bracketButtonBox ? [{ id: 'bracket', box: this.bracketButtonBox, depth: 27, visible: () => this.bracketButtonShown(), activate: () => this.openBracketPeek() }] : []),
             ...(this.quizButtonBox ? [{ id: 'quiz', box: this.quizButtonBox, depth: 27, visible: () => this.quizButtonShown(), activate: () => this.handleChrome('quiz') }] : []),
             ...(this.quizCountsBox ? [{ id: 'quizCounts', box: this.quizCountsBox, depth: 27, visible: () => this.quizButtonShown() && this.quizCountLine.visible, activate: () => this.toggleBreakCounts() }] : []),
-            ...(this.eduBreakBoxes ? [{ id: 'breakSkip', box: this.eduBreakBoxes.skip, depth: 27, visible: () => this.breakSkipShown(), activate: () => this.breakSkip() }] : []),
             ...(this.eduBreakBoxes ? [{ id: 'breakQuit', box: this.eduBreakBoxes.quit, depth: 27, visible: () => this.quizButtonShown(), activate: () => this.breakQuitTap() }] : []),
             { id: 'shopClose', box: this.shopBoxes.close, depth: 29, visible: () => this.shopOpen, activate: () => this.handleChrome('esc') },
             ...this.shopBoxes.rows.map((row) => ({ id: `shop:${row.id}`, box: row, depth: 28, visible: () => this.shopOpen, activate: () => this.shopBuy(row.id) })),
@@ -1047,6 +1045,7 @@ export class Play extends Phaser.Scene {
     if (this.state !== 'playing') return;
     this.levelBreak = true;
     this.breakMissed = []; // each break starts with nothing missed (plan 25)
+    this.quizSkipWarned = false; // the first Skip in each break warns (plan 26, A2)
     this.refreshLevelBanner();
     this.pausePlay();
     this.breakHud(true);
@@ -1198,10 +1197,6 @@ export class Play extends Phaser.Scene {
       return;
     }
     const onBox = (box) => pointer && box && Math.abs(pointer.x - box.x) <= box.width / 2 && Math.abs(pointer.y - box.y) <= box.height / 2;
-    if (this.breakSkipShown() && onBox(this.eduBreakBoxes?.skip)) {
-      this.breakSkip(); // Skip ▸ (plan 25): never a continue tap
-      return;
-    }
     if (this.quizButtonShown() && onBox(this.eduBreakBoxes?.quit)) {
       this.breakQuitTap(); // Quit (plan 25): never a continue tap
       return;
@@ -1699,7 +1694,7 @@ export class Play extends Phaser.Scene {
       // player's order puts them (plan 25; settings eduNewOrder, plan 26); the bonus quiz keeps the
       // break context's new-first order. New cards stop at the day's cap (newPerDay).
       const own = mode === 'break';
-      pick = pickCard({ srs: store.cards, context: mode === 'revive' ? 'revive' : 'break', level, segment, now: Date.now(), exclude, recent: store.recent, rng: Math.random, dueFirst: own, missed: own ? (this.breakMissed ?? []) : [], order: this.settings?.load().eduNewOrder });
+      pick = pickCard({ srs: store.cards, context: mode === 'revive' ? 'revive' : 'break', level, segment, now: Date.now(), exclude, recent: store.recent, rng: Math.random, dueFirst: own, missed: own ? (this.breakMissed ?? []) : [], order: this.settings?.load().eduNewOrder, skipped: buriedIdsOn(store.buried, localDayKey()) });
     }
     return pick ? { ...pick, order: shuffleOptions(Math.random) } : null;
   }
@@ -3389,40 +3384,12 @@ export class Play extends Phaser.Scene {
     this.quizButton.pulse(shown && this.breakGated());
     if (counts) this.quizCountLine.set(counts);
     this.quizCountLine.setVisible(shown && Boolean(counts));
-    this.breakSkipButton?.setVisible(this.breakSkipShown());
     if (this.breakQuitButton) {
       const due = Boolean(counts) && counts.missed + counts.review > 0;
       const armed = this.breakQuitArmed();
       // One word, Quit, cards due or not (plan 26, A2); armed, it says when the second tap ends the run ungraded.
       this.breakQuitButton.setText(t(this.locale, armed ? (due ? 'breakQuitDueSure' : 'breakQuitSure') : 'breakQuit')).setVisible(shown);
     }
-  }
-
-  /** Skip ▸ at an education break (plan 25, B8): while the level after the next one is unlocked; never in a test run. */
-  breakSkipShown() {
-    return this.quizButtonShown() && !this.runIsTest && this.level < (this.eduStore?.load().unlockedLevel ?? 1);
-  }
-
-  /**
-   * Skip one level from this break: the level about to be flown is passed at par (its pairs added
-   * to the score and the count, as testRunStart passes the levels before a test run's start), and
-   * the run stands at the next level's break. Each tap skips one more, as far as the levels unlocked.
-   * A skipped run is not a full one (💯, 🤓).
-   */
-  breakSkip() {
-    if (!this.breakSkipShown()) return;
-    const end = levelEnd(this.level, this.tune);
-    this.score += Math.max(0, end - this.pipesPassed);
-    this.pipesPassed = end;
-    this.pipesSpawned = Math.max(this.pipesSpawned, end);
-    this.level += 1;
-    this.runSkipped = true;
-    this.breakMissed = [];
-    this.breakQuitArmedAt = null;
-    this.scoreText.setText(String(this.score));
-    this.refreshLevelBanner();
-    this.refreshLevelBar();
-    this.refreshShopButton();
   }
 
   /** Is Quit armed (its first tap less than saveClearConfirmMs ago)? */
@@ -3462,7 +3429,7 @@ export class Play extends Phaser.Scene {
    * The gate (plan 25, B6; every break since plan 26): an education run's level break with a card
    * due: a missed card or a review due now, or one missed in this break and not yet answered right
    * (the second and third numbers). New cards stay optional. Never in a test run or a match.
-   * resumePlay holds the break while it is true; Bury and Quit are the other ways out.
+   * resumePlay holds the break while it is true; Skip (a due card goes to tomorrow) and Quit are the other ways out.
    */
   breakGated() {
     if (!this.levelBreak || !this.runIsEducation || this.runIsTest || this.match) return false;
@@ -3470,29 +3437,54 @@ export class Play extends Phaser.Scene {
     return Boolean(counts) && counts.missed + counts.review > 0;
   }
 
-  /** A gate's Bury (plan 25, B7): 3 × the level just cleared (education.buryCoinsPerLevel). */
+  /** A card's Skip (plan 26, A2; a gate's Bury in plan 25, B7): 3 × the level just cleared (education.buryCoinsPerLevel). */
   buryPrice() {
     return T.education.buryCoinsPerLevel * Math.max(1, this.level - 1);
   }
 
   /**
-   * May card `cardId` be buried now? At a level break of a real one-player education run (the card
-   * keeps it gated: every break is a gate since plan 26), for a card missed in this break, while the purse covers the price and
-   * fewer than education.buryPerDay cards were buried today (local day).
+   * Skip a card (plan 26, A2; it replaced Bury and the level Skip ▸): in an education run's level
+   * break, the card on show moves on for buryPrice() corn (3 × the level cleared). A due card (one
+   * missed in this break, or a stored record due now: it holds the gate) also goes to tomorrow
+   * (eduStore.bury, education.buryMs), leaves breakMissed and counts toward education.buryPerDay; a new
+   * or practice card is left as it was, with no daily limit. A test run's Skip is free and saves
+   * nothing. A skip is no answer: no tally, no pilot event. The quiz's right slot shows it (offerSkip).
    */
-  canBury(cardId) {
-    if (!this.levelBreak || !this.runIsEducation || this.runIsTest || this.isTestMode() || this.match) return false;
-    if (!(this.breakMissed ?? []).includes(cardId)) return false;
-    if (this.effects.coins() < this.buryPrice()) return false;
-    return this.eduStore.buriedOn(localDayKey()) < T.education.buryPerDay;
+  skipFree() {
+    return Boolean(this.runIsTest || this.isTestMode());
   }
 
-  /** Bury it: the coins go, the card waits education.buryMs, it is no longer missed here; no pilot event. */
-  buryCard(cardId) {
-    if (!this.canBury(cardId)) return false;
+  /** What a Skip costs now: buryPrice(), or 0 in a test run. */
+  skipPrice() {
+    return this.skipFree() ? 0 : this.buryPrice();
+  }
+
+  /** Is card `cardId` due now: missed in this break, or a stored record due (it holds the gate)? */
+  cardDue(cardId) {
+    if ((this.breakMissed ?? []).includes(cardId)) return true;
+    const rec = this.eduStore.load().cards[cardId];
+    return Boolean(rec) && rec.dueAt <= Date.now();
+  }
+
+  /** What stops a Skip of card `cardId`: 'none' (no Skip here: not an education run's level break, or a match), 'cap' (a due card, the day's skips used), 'coins' (the purse is short), or null. */
+  skipBlocker(cardId) {
+    if (!this.levelBreak || !this.runIsEducation || this.match) return 'none';
+    if (this.skipFree()) return null;
+    if (this.cardDue(cardId) && this.eduStore.buriedOn(localDayKey()) >= T.education.buryPerDay) return 'cap';
+    if (this.effects.coins() < this.buryPrice()) return 'coins';
+    return null;
+  }
+
+  /** Skip card `cardId` (the quiz then shows the next one): true when it was skipped. */
+  skipCard(cardId) {
+    if (this.skipBlocker(cardId)) return false;
+    if (this.skipFree()) return true;
+    const due = this.cardDue(cardId);
     this.effects.spendCoins(this.buryPrice());
-    this.eduStore.bury(cardId, Date.now() + T.education.buryMs, localDayKey());
-    this.breakMissed = (this.breakMissed ?? []).filter((id) => id !== cardId);
+    if (due) {
+      this.eduStore.bury(cardId, Date.now() + T.education.buryMs, localDayKey());
+      this.breakMissed = (this.breakMissed ?? []).filter((id) => id !== cardId);
+    }
     this.refreshCoinHud?.();
     this.refreshLevelBanner();
     this.refreshShopButton();

@@ -53,8 +53,9 @@ const LINK_ZONES = 8; // tap boxes for the explanation's links: 3 terms a card, 
  * level break's) makes the coin's sound alone, with no ding.
  * A revive's card ignores pointer taps for retryLockoutMs after it opens (tapLocked).
  * Rows, as Michael drew them (plan 26): a full-width Why on top, then a row of two buttons whose
- * right one is the way forward (Next Card, Fly on, Go for it, End run) and whose left one is the way
- * out (End Review; in a revive, Quit or the choice's Fly on), then the numbers.
+ * right one is the way forward (Next Card, Fly on, Go for it, End run; on a break's open card, Skip:
+ * plan 26 A2) and whose left one is the way out (End Review; in a revive, Quit or the choice's Fly
+ * on), then the numbers.
  * What is waiting (plan 21, E2), as in Anki: a line of three counts on the card's bottom row,
  * "5 + 2 + 8": new cards (blue), missed cards (red) and reviews due (green) that this quiz can still
  * ask, the card on show included and its kind underlined (Play.quizCounts; refreshCounts). Hidden in
@@ -445,6 +446,12 @@ export class Quiz extends Phaser.Scene {
         button.holdTimer?.remove(false);
         button.holdTimer = null;
       },
+      /** Dimmed but still pressable (plan 26, A2: a Skip that cannot be used says why when pressed); set() undims it. */
+      dim(on) {
+        g.setAlpha(on ? 0.4 : 1);
+        text.setAlpha(on ? 0.4 : 1);
+        return button;
+      },
       press() {
         if (button.shown && !button.held) button.onPress?.();
       },
@@ -475,6 +482,7 @@ export class Quiz extends Phaser.Scene {
    */
   primary() {
     if (!isTopOverlay(this) || this.runCard?.open) return;
+    if (this.card && !this.answered) return; // an open card: never Skip (plan 26, A2), nor anything else
     if (this.rightBtn.shown) this.rightBtn.press();
     else if (!this.card && this.closable()) this.leftBtn.press();
   }
@@ -510,14 +518,62 @@ export class Quiz extends Phaser.Scene {
     if (this.mode !== 'revive' || this.finishing || this.runCard?.open) return;
     if (!this.quitArmed) {
       this.quitArmed = true;
-      this.verdict.setX(this.cx).setText(t(this.locale, 'reviveQuitWarn')).setColor(BAD).setVisible(true);
-      this.verdictCoin.setVisible(false);
-      this.paidNote.setVisible(false);
-      this.nextWait.setVisible(false);
+      this.sayWarning(t(this.locale, 'reviveQuitWarn'));
       this.leftBtn.set(t(this.locale, 'reviveQuitSure'), () => this.giveUp()).holdFor(T.education.explainMinMs);
       return;
     }
     this.decide('giveUp');
+  }
+
+  /** A warning or a reason in the verdict's place on an open card (Quit's, Skip's: plan 26, A2), in red. */
+  sayWarning(text) {
+    this.verdict.setX(this.cx).setText(text).setColor(BAD).setVisible(true);
+    this.verdictCoin.setVisible(false);
+    this.paidNote.setVisible(false);
+    this.nextWait.setVisible(false);
+  }
+
+  /**
+   * Skip (plan 26, A2): an open card in a level break's quiz offers it in the right slot, "Skip · n 🌽"
+   * (Play.skipPrice; "Skip" alone in a test run, where it is free). Dimmed when Play says it cannot be
+   * used now (the purse is short, or a due card and the day's skips are used: skipBlocker); a press
+   * then says why. A revive and the bonus quiz have none (skipBlocker 'none').
+   */
+  offerSkip() {
+    if (this.mode !== 'break' || !this.card) return;
+    const blocker = this.play?.skipBlocker ? this.play.skipBlocker(this.card.id) : 'none'; // null: nothing blocks it
+    if (blocker === 'none') return;
+    const price = this.play.skipPrice();
+    this.rightBtn.set(price ? t(this.locale, 'quizSkip').replace('{n}', String(price)) : t(this.locale, 'quizSkipFree'), () => this.skip());
+    this.rightBtn.dim(Boolean(blocker));
+  }
+
+  /**
+   * Skip pressed. Nothing for retryLockoutMs after the card appeared: Skip sits where Next Card was,
+   * so a double tap on Next Card must not skip the card it opened. A blocked Skip says why. The first
+   * paid Skip in a break warns in the verdict's place (what it costs; a due card also goes to
+   * tomorrow) and holds Skip for explainMinMs (Play.quizSkipWarned, cleared when a break starts); the
+   * next press skips, as later ones in that break do at once. Then the next card.
+   */
+  skip() {
+    if (!this.card || this.answered || this.finishing || !isTopOverlay(this) || this.runCard?.open || this.mode !== 'break') return;
+    if (this.game.loop.time - (this.cardShownAt ?? 0) < T.retryLockoutMs) return;
+    const play = this.play;
+    const blocker = play?.skipBlocker ? play.skipBlocker(this.card.id) : 'none'; // null: nothing blocks it
+    if (blocker === 'none') return;
+    const price = play.skipPrice();
+    if (blocker === 'cap') return this.sayWarning(t(this.locale, 'quizSkipCap').replace('{n}', String(T.education.buryPerDay)));
+    if (blocker) return this.sayWarning(t(this.locale, 'quizSkipNoCoins').replace('{n}', String(price)));
+    if (price && !play.quizSkipWarned) {
+      play.quizSkipWarned = true;
+      this.sayWarning(t(this.locale, play.cardDue(this.card.id) ? 'quizSkipWarnDue' : 'quizSkipWarn').replace('{n}', String(price)));
+      this.rightBtn.holdFor(T.education.explainMinMs);
+      return;
+    }
+    if (play.skipCard(this.card.id)) {
+      this.refreshPurse();
+      this.nextCard();
+    }
   }
 
   /**
@@ -589,6 +645,8 @@ export class Quiz extends Phaser.Scene {
     this.source.setText('').setVisible(false);
     this.clearButtons();
     this.showWayOut();
+    this.cardShownAt = this.game.loop.time; // Skip waits retryLockoutMs from here (plan 26, A2)
+    this.offerSkip();
     this.closeBtn.setVisible(this.closable());
     this.refreshTally();
     this.refreshCounts();
@@ -756,13 +814,7 @@ export class Quiz extends Phaser.Scene {
     const coins = this.lastAnswer?.coins ?? 0;
     const note = correct && !coins && this.lastAnswer?.paidToday ? t(this.locale, 'quizPaidToday') : null; // the card paid today (plan 26, A2)
     this.say(correct && coins ? t(this.locale, 'quizRightCoins').replace('{n}', String(coins)) : t(this.locale, correct ? 'quizRight' : 'quizWrong'), correct, Boolean(correct && coins), note);
-    // At a gate, a miss may be buried until tomorrow for coins (plan 25, B7): Bury takes the way out's
-    // place (the ✕ still closes the quiz).
-    if (!correct && this.mode === 'break' && this.play?.canBury?.(this.card.id)) {
-      this.leftBtn.set(t(this.locale, 'quizBury').replace('{n}', String(this.play.buryPrice())), () => this.bury());
-    } else {
-      this.showWayOut();
-    }
+    this.showWayOut();
     if (correct) this.topBtn.set(t(this.locale, 'quizWhy'), () => this.showWhy());
     else this.showWhy();
     this.holdAfterWrong(this.rightBtn.set(t(this.locale, 'quizNext'), () => this.nextCard()), correct);
@@ -844,7 +896,7 @@ export class Quiz extends Phaser.Scene {
    * `right`, answered right (the paid verdict over the Why button); nothing reaches Play.
    * `state` lays out a state an answer does not reach (plan 26, A2), and needs the quiz it belongs
    * to (a revive's; the caller puts its reviveState back): 'quit', an unanswered card with Quit's
-   * warning in the verdict's place; 'choice', the ⭐ choice after a right answer (the verdict, the
+   * warning in the verdict's place; 'skip' (a level break's quiz), Skip's longest message there; 'choice', the ⭐ choice after a right answer (the verdict, the
    * wait, the choice line over Why); 'choiceWhy', the same with Why opened (the explanation, Learn
    * more and the source, as tall as it will be once audited).
    */
@@ -853,6 +905,17 @@ export class Quiz extends Phaser.Scene {
     if (state === 'quit') {
       this.giveUp();
       return this.fits();
+    }
+    if (state === 'skip') {
+      // Skip's longest message in the verdict's place (a level break's quiz; plan 26, A2), at a price of 18.
+      const msgs = ['quizSkipWarnDue', 'quizSkipNoCoins', 'quizSkipCap'].map((key) => t(this.locale, key).replace('{n}', key === 'quizSkipCap' ? String(T.education.buryPerDay) : '18'));
+      let worst = null;
+      for (const m of msgs) {
+        this.sayWarning(m);
+        const f = this.fits();
+        if (!worst || f.below > worst.below) worst = f;
+      }
+      return worst;
     }
     if (state === 'choice' || state === 'choiceWhy') {
       this.answered = true;
@@ -952,12 +1015,6 @@ export class Quiz extends Phaser.Scene {
   openLink(url) {
     if (!url || !isTopOverlay(this) || this.finishing || this.runCard?.open) return;
     this.openUrl(url);
-  }
-
-  /** Bury the card just missed (Play.buryCard: the coins, 24 h), then the next card. */
-  bury() {
-    if (!this.card || !this.answered || this.finishing || !isTopOverlay(this) || this.runCard?.open) return;
-    if (this.play?.buryCard?.(this.card.id)) this.nextCard();
   }
 
   /** Next card (the break's Next and Enter): once answered and not held. */

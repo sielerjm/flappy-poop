@@ -144,7 +144,7 @@ const levelOfDeck = (deck) => (deck === 'general' ? 0 : DECKS.indexOf(deck) + 1)
 /** Where new cards go in a quiz (plan 26, Anki's new / review order; settings eduNewOrder): after the due cards (the default), mixed with them, or before them. */
 export const NEW_ORDERS = ['after', 'mixed', 'before'];
 
-/** Local midnight before `now` (ms): the daily new-card cap counts local days, as Bury does. */
+/** Local midnight before `now` (ms): the daily new-card cap counts local days, as Skip (a due card's bury) does. */
 export function localDayStart(now) {
   const d = new Date(now);
   d.setHours(0, 0, 0, 0);
@@ -181,12 +181,13 @@ function pickNew(general, pools, rng, t) {
   return pickFrom(primary, rng);
 }
 
-function chooseCard({ cards, srs, context, level, segment, now, blocked, rng, t, practice = true, dueFirst = false, missed = [], last = null, newLeft = Infinity, order = 'after' }) {
+function chooseCard({ cards, srs, context, level, segment, now, blocked, rng, t, practice = true, dueFirst = false, missed = [], last = null, newLeft = Infinity, order = 'after', skipped = new Set() }) {
   const live = cards.filter((c) => !c.retired && !blocked.has(c.id));
   const fresh = live.filter((c) => !srs[c.id]);
   const due = live.filter((c) => srs[c.id] && srs[c.id].dueAt <= now);
-  // Practice: review cards not due yet. A missed card that is not due was buried: it stays buried.
-  const notDue = live.filter((c) => srs[c.id] && srs[c.id].dueAt > now && srs[c.id].state === 'review');
+  // Practice: review cards not due yet. A missed card that is not due was buried: it stays buried; a
+  // review card skipped today waits until tomorrow too (plan 26, A2: `skipped`).
+  const notDue = live.filter((c) => srs[c.id] && srs[c.id].dueAt > now && srs[c.id].state === 'review' && !skipped.has(c.id));
   const recall = (c) => cardRetrievability(srs[c.id], now, t);
   const leastRecent = (a, b) => (srs[a.id].lastAt ?? 0) - (srs[b.id].lastAt ?? 0);
   const near = (c) => (context === 'break' && c.deck !== segment && c.deck !== 'general' ? 1 : 0); // a break: the cleared segment's cards (and general ones) first
@@ -290,13 +291,14 @@ function browseCard({ cards, srs, segment, blocked, shown }) {
  * first).
  * 'browse' (a test run, which saves no answers): the segment's deck in order, whatever is due
  * (browseCard); `shown` is the cards test quizzes have shown so far.
+ * `skipped` (plan 26, A2): the cards skipped today (buriedIdsOn), never offered as practice.
  */
-export function pickCard({ cards = CARDS, srs = {}, context, level = 1, segment = null, now, exclude = [], recent = [], shown = [], rng = Math.random, t = TUNING, dueFirst = false, missed = [], order = 'after', dayStart = localDayStart(now) }) {
+export function pickCard({ cards = CARDS, srs = {}, context, level = 1, segment = null, now, exclude = [], recent = [], shown = [], rng = Math.random, t = TUNING, dueFirst = false, missed = [], order = 'after', dayStart = localDayStart(now), skipped = [] }) {
   const session = new Set(exclude);
   if (context === 'browse') return browseCard({ cards, srs, segment, blocked: session, shown });
   const gap = new Set([...session, ...recent.slice(-t.education.minGap)]);
   const newLeft = newAllowance(srs, { now, exclude, t, dayStart });
-  const args = { cards, srs, context, level, segment, now, rng, t, dueFirst, missed, last: exclude.at(-1) ?? null, newLeft, order: NEW_ORDERS.includes(order) ? order : 'after' };
+  const args = { cards, srs, context, level, segment, now, rng, t, dueFirst, missed, last: exclude.at(-1) ?? null, newLeft, order: NEW_ORDERS.includes(order) ? order : 'after', skipped: new Set(skipped) };
   // Counted cards first, the recent gap only ordering them; practice only once none is left.
   return (
     chooseCard({ ...args, blocked: gap, practice: false }) ??
@@ -532,9 +534,11 @@ function cleanEdu(raw, keep, t = TUNING) {
   }
   // The highest level an education run (not a test run) has continued into (plan 25): a run may start there.
   const unlockedLevel = Number.isInteger(raw?.unlockedLevel) && raw.unlockedLevel >= 1 && raw.unlockedLevel <= lastLevel ? raw.unlockedLevel : 1;
-  // Today's buries (plan 25): { day: local YYYY-MM-DD, n }; kept only while it is well formed.
+  // Today's buries (plan 25; since plan 26's A2 a due card's Skip): { day: local YYYY-MM-DD, n, ids },
+  // kept only while it is well formed; ids, the cards skipped that day (none in a record from before).
   const b = raw?.buried;
-  const buried = b && typeof b.day === 'string' && DAY_RE.test(b.day) && Number.isInteger(b.n) && b.n > 0 ? { day: b.day, n: b.n } : null;
+  const buriedIds = b && Array.isArray(b.ids) ? [...new Set(b.ids.filter((id) => typeof id === 'string' && ID_RE.test(id)))] : [];
+  const buried = b && typeof b.day === 'string' && DAY_RE.test(b.day) && Number.isInteger(b.n) && b.n > 0 ? { day: b.day, n: b.n, ids: buriedIds } : null;
   // A won run not recorded yet (plan 26): its tally (bonus answers included), whether it was full, when it was won.
   const p = raw?.pending;
   const tally = cleanTally(p?.tally, lastLevel);
@@ -550,6 +554,11 @@ function cleanEdu(raw, keep, t = TUNING) {
 /** The ids of the cards whose right answer paid on local `day` (the store's `paid`; plan 26, A2), or none. */
 export function paidOn(paid, day) {
   return paid && paid.day === day && Array.isArray(paid.ids) ? paid.ids : [];
+}
+
+/** The ids of the cards buried (a due card's Skip) on local `day` (the store's `buried`; plan 26, A2), or none: pickCard's `skipped`. */
+export function buriedIdsOn(buried, day) {
+  return buried && buried.day === day && Array.isArray(buried.ids) ? buried.ids : [];
 }
 
 /** The device's local day as YYYY-MM-DD (a bury's daily cap counts local days: plan 25). */
@@ -600,13 +609,15 @@ export function createEduStore(storage, { key = LEADERBOARD.eduKey, t = TUNING }
       const b = read().buried;
       return b && b.day === day ? b.n : 0;
     },
-    /** Bury card `id` until `until` (ms): its record waits, nothing else of it changes; counted for `day`. */
+    /** Bury card `id` until `until` (ms): its record waits, nothing else of it changes; counted for `day`, and kept among that day's ids (plan 26, A2). */
     bury(id, until, day) {
       const state = read();
       const rec = state.cards[id];
       if (!rec) return false;
-      const n = state.buried?.day === day ? state.buried.n + 1 : 1;
-      write({ ...state, cards: { ...state.cards, [id]: { ...rec, dueAt: until } }, buried: { day, n } });
+      const same = state.buried?.day === day;
+      const n = same ? state.buried.n + 1 : 1;
+      const ids = same ? state.buried.ids : [];
+      write({ ...state, cards: { ...state.cards, [id]: { ...rec, dueAt: until } }, buried: { day, n, ids: ids.includes(id) ? ids : [...ids, id] } });
       return true;
     },
     /** A revive just happened (👼 / 🐦‍🔥): counted at once, so a closed tab loses none. */

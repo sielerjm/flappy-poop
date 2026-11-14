@@ -168,7 +168,7 @@ test('the purse under the ✕ (plan 26): a break shows the coins held and pops w
   assert.deepEqual([text.text, tweened.length], ['5', 1], 'a coin paid: it pops');
   coins = 2;
   q.refreshPurse();
-  assert.deepEqual([text.text, tweened.length], ['2', 1], 'a Bury spends: no pop');
+  assert.deepEqual([text.text, tweened.length], ['2', 1], 'a Skip spends: no pop');
   for (const mode of ['revive', 'bonus']) {
     q.mode = mode;
     q.refreshPurse();
@@ -280,4 +280,68 @@ test("a revive's ⭐ choice (plan 26, A2: Michael's image 8): Why sits on top, t
   assert.equal(q.verdictBottom(), q.choiceLine.y + q.choiceLine.height, 'so the explanation opens under the choice line');
   q.choiceLine.setVisible(false);
   assert.equal(q.verdictBottom(), q.nextWait.y + q.nextWait.height, 'hidden, it takes no room');
+});
+
+/** A break's quiz card waiting for its answer, with a Play that prices and takes Skips. */
+function skipQuiz({ blocker = null, price = 6, due = false, time = 2000, mode = 'break' } = {}) {
+  const text = () => ({ x: 0, y: 500, width: 100, height: 40, text: '', visible: false, color: null, setX(v) { this.x = v; return this; }, setY(v) { this.y = v; return this; }, setText(v) { this.text = v; return this; }, setColor(v) { this.color = v; return this; }, setVisible(v) { this.visible = v; return this; } });
+  const skipped = [];
+  const right = { label: null, onPress: null, heldMs: null, dimmed: false, shown: false, set(label, onPress) { this.label = label; this.onPress = onPress; this.heldMs = null; this.dimmed = false; this.shown = true; return this; }, holdFor(ms) { this.heldMs = ms; return this; }, dim(on) { this.dimmed = on; return this; }, press() { this.onPress?.(); } };
+  const play = { quizSkipWarned: false, skipBlocker: () => blocker, skipPrice: () => price, cardDue: () => due, skipCard: (id) => (skipped.push(id), true) };
+  const calls = [];
+  const q = quizScene({
+    mode, locale: 'en', cx: 360, card: { id: 'DU-01' }, answered: false, finishing: false, scene: scenes(['Play', 'Quiz']), runCard: { open: false },
+    cardShownAt: 1000, game: { loop: { time } }, play, rightBtn: right, leftBtn: { shown: true, press: () => calls.push('left') },
+    verdict: text(), verdictCoin: text(), paidNote: text(), nextWait: text(), refreshPurse() {}, nextCard: () => calls.push('next'),
+  });
+  return { q, play, right, skipped, calls };
+}
+
+test("Skip on a break's open card (plan 26, A2): the right slot reads its price; the first Skip in a break warns and holds; later ones skip at once; a test run's is free and never warns; a dimmed Skip says why", () => {
+  const { q, play, right, skipped, calls } = skipQuiz();
+  q.offerSkip();
+  assert.deepEqual([right.label, right.dimmed], ['Skip · 6 🌽', false]);
+  right.press();
+  assert.deepEqual([skipped, q.verdict.text, right.heldMs, play.quizSkipWarned], [[], 'Skipping costs 6 🌽. Tap Skip again.', TUNING.education.explainMinMs, true], 'the first press warns and holds Skip');
+  right.press();
+  assert.deepEqual([skipped, calls], [['DU-01'], ['next']], 'the next press skips and moves on');
+  const due = skipQuiz({ due: true });
+  due.right.set('x', () => due.q.skip());
+  due.right.press();
+  assert.equal(due.q.verdict.text, 'Skipping costs 6 🌽 and sends this card to tomorrow. Tap Skip again.', 'a due card: it goes to tomorrow');
+  const later = skipQuiz();
+  later.play.quizSkipWarned = true; // warned earlier in this break
+  later.q.skip();
+  assert.deepEqual(later.skipped, ['DU-01'], 'later in the break: at once');
+  const free = skipQuiz({ price: 0 });
+  free.q.offerSkip();
+  free.right.press();
+  assert.deepEqual([free.right.label, free.skipped, free.play.quizSkipWarned], ['Skip', ['DU-01'], false], 'a test run: no price, no warning');
+  for (const [blocker, want] of [['coins', 'Skipping costs 6 🌽: not enough corn yet.'], ['cap', `You have skipped ${TUNING.education.buryPerDay} due cards today: answer this one, or come back tomorrow.`]]) {
+    const b = skipQuiz({ blocker });
+    b.q.offerSkip();
+    assert.equal(b.right.dimmed, true, `${blocker}: dimmed`);
+    b.right.press();
+    assert.deepEqual([b.skipped, b.q.verdict.text], [[], want], `${blocker}: a press says why`);
+  }
+});
+
+test("Skip ignores presses for retryLockoutMs after its card appears, so a double tap on Next Card cannot skip the card it opened; Enter and Space never press it; a revive and the bonus quiz have none (plan 26, A2)", () => {
+  const early = skipQuiz({ time: 1000 + TUNING.retryLockoutMs - 50 });
+  early.play.quizSkipWarned = true;
+  early.q.skip();
+  assert.deepEqual(early.skipped, [], 'inside the lockout: nothing');
+  early.q.game.loop.time = 1000 + TUNING.retryLockoutMs + 1;
+  early.q.skip();
+  assert.deepEqual(early.skipped, ['DU-01'], 'after it: the skip');
+  const keyed = skipQuiz();
+  keyed.play.quizSkipWarned = true;
+  keyed.q.offerSkip();
+  keyed.q.primary();
+  assert.deepEqual([keyed.skipped, keyed.calls], [[], []], 'Enter / Space on an open card press nothing (Space is the flap key)');
+  for (const mode of ['revive', 'bonus']) {
+    const r = skipQuiz({ mode, blocker: 'none' });
+    r.q.offerSkip();
+    assert.equal(r.right.shown, false, `${mode}: no Skip`);
+  }
 });

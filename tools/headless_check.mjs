@@ -3867,9 +3867,8 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await evaluate(`${play}.setTestMode(false), ${play}.settings.set({ eduStartLevel: 1 }), ${play}.refreshReadySwitches(), true`); // the start level back to 1 for later sections
         ok(test.open && !test.up && test.level === 'LV 1', 'in test mode the popup has no ◀ ▶ (a test run has its own start level)');
 
-        // Skip ▸ and Quit at a break (plan 25, B8). Levels up to 4 are unlocked by now: from level 2's
-        // break, Skip passes a level per tap as far as level 4; the run then flies on there. Quit needs two
-        // taps and ends the run (nothing due: a normal end).
+        // Quit at a break (plan 25, B8; the level Skip ▸ beside it is gone since plan 26's A2). Quit needs
+        // two taps and ends the run.
         await home();
         await startRun();
         const toBreak = async () => {
@@ -3878,23 +3877,10 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
           await sleep(TT.retryLockoutMs + 200);
         };
         await toBreak();
-        const sideNow = () => evaluate(`(() => { const p = ${play}; return JSON.stringify({ level: p.level, skip: p.breakSkipButton.visible, quit: p.breakQuitButton.visible, quitLabel: p.breakQuitButton.getText(), passed: p.pipesPassed, skipped: p.runSkipped, unlocked: p.eduStore.load().unlockedLevel, state: p.state, lb: p.levelBreak }); })()`).then(JSON.parse);
+        const sideNow = () => evaluate(`(() => { const p = ${play}; return JSON.stringify({ level: p.level, quit: p.breakQuitButton.visible, quitLabel: p.breakQuitButton.getText(), state: p.state, lb: p.levelBreak, noSkip: !('breakSkipButton' in p) && !('skip' in p.eduBreakBoxes) }); })()`).then(JSON.parse);
         const box = (id) => evaluate(`JSON.stringify(${play}.eduBreakBoxes.${id})`).then(JSON.parse);
         const sk0 = await sideNow();
-        const skipBox = await box('skip');
-        await tapAt(skipBox.x, skipBox.y);
-        await sleep(200);
-        const sk1 = await sideNow();
-        await tapAt(skipBox.x, skipBox.y);
-        await sleep(200);
-        const sk2 = await sideNow();
-        ok(sk0.level === 2 && sk0.skip && sk0.quit && sk1.level === 3 && sk1.skipped && sk1.state === 'paused' && sk1.lb && sk2.level === 4 && !sk2.skip, `from level 2's break, Skip ▸ passes a level per tap (2 → ${sk1.level} → ${sk2.level}), then hides at the last level unlocked (${sk2.unlocked}); the break stays`);
-        await evaluate(`${play}.resumePlay(), true`);
-        await sleep(400);
-        const flying = await sideNow();
-        await toBreak();
-        const next = await sideNow();
-        ok(flying.state === 'playing' && flying.level === 4 && next.level === 5 && next.lb, `the run flies on at level ${flying.level} and reaches level ${next.level}'s break`);
+        ok(sk0.lb && sk0.quit && sk0.noSkip, `level ${sk0.level}'s break offers Quit and no level skip (Skip ▸ is gone: plan 26, A2)`);
         const quitBox = await box('quit');
         await tapAt(quitBox.x, quitBox.y);
         await sleep(200);
@@ -3928,7 +3914,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         const quizNow = () => evaluate(`(() => { const q = ${Q}; return JSON.stringify({ active: __flappy.scene.isActive('Quiz'), id: q.card?.id ?? null, deck: q.card?.deck ?? null, answered: q.answered, last: q.lastAnswer ?? null, next: q.rightBtn.shown, nextAlpha: q.rightBtn.g.alpha, top: q.topBtn.shown ? q.topBtn.text.text : null, left: q.leftBtn.shown ? q.leftBtn.text.text : null, right: q.rightBtn.shown ? q.rightBtn.text.text : null, halo: Boolean(q.halo?.visible), verdict: q.verdict.visible ? q.verdict.text : null, kernel: q.verdictCoin.visible, kernelAfter: q.verdictCoin.x > q.verdict.x + q.verdict.width / 2, explain: q.explain.visible }); })()`).then(JSON.parse);
 
         // Level 2 unlocked, so this break is no gate and the quiz's own checks below run as they were; the
-        // gate and Bury have their own checks further on, on stores of their own (plan 25).
+        // gate and Skip have their own checks further on, on stores of their own (plan 25; Skip since plan 26's A2).
         await evaluate(`localStorage.removeItem('flappyPoop.eduSrs'), ${play}.eduStore.unlockLevel(2), ${play}.setEduUnlocked(true), ${play}.settings.set({ education: true }), true`);
         await home();
         for (let attempt = 0; attempt < 3 && (await playState()) !== 'playing'; attempt += 1) {
@@ -3992,12 +3978,14 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await sleep(200);
         ok((await evaluate(`${play}.state === 'paused' && ${play}.levelBreak && __flappy.scene.isActive('Quiz')`)) === true, 'a tap under the quiz neither continues the level nor closes the card');
 
-        // The buttons (plan 22, U2): with a card up only Return, bottom left; Space and Enter press nothing.
+        // The buttons (plan 22, U2; plan 26 A2): with a card up, Return bottom left and Skip with its price
+        // bottom right; Space and Enter press nothing (Space is the flap key: it must never skip).
         const [returnWant, whyWant, nextWant] = await Promise.all(['quizReturn', 'quizWhy', 'quizNext'].map(tx));
+        const skipWant = (await tx('quizSkip')).replace('{n}', String(await evaluate(`${play}.skipPrice()`)));
         await evaluate(`${Q}.input.keyboard.emit('keydown-SPACE'), ${Q}.input.keyboard.emit('keydown-ENTER'), true`);
         await sleep(200);
         const keyed = await quizNow();
-        ok(q0.left === returnWant && q0.right === null && q0.top === null && keyed.active && !keyed.answered && keyed.id === q0.id, `an open card shows only ${q0.left}, bottom left; Space and Enter on it press nothing`);
+        ok(q0.left === returnWant && q0.right === skipWant && q0.top === null && keyed.active && !keyed.answered && keyed.id === q0.id, `an open card shows ${q0.left} bottom left and "${q0.right}" bottom right; Space and Enter on it press nothing`);
 
         // Another overlay over the waiting card (F: Feedback) makes its answer's time unreliable (plan 24, AUD-006).
         await evaluate(`${play}.handleChrome('feedback'), true`);
@@ -4098,6 +4086,8 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
 
         // Every card in the bank, answered wrong with its explanation and source showing, fits the card.
         const fit = await evaluate(`import('./src/questions.js').then(({ CARDS }) => { const q = ${Q}; const bad = []; for (const c of CARDS) { for (const right of [false, true]) { const f = q.preview(c, right); if (!f.ok) bad.push(c.id + (right ? ' right:' : ' wrong:') + Math.round(f.below) + '>' + Math.round(f.buttonsTop)); } } return JSON.stringify({ n: CARDS.length, bad }); })`).then(JSON.parse);
+        const skipFit = await evaluate(`import('./src/questions.js').then(({ CARDS }) => { const q = ${Q}; const keep = q.locale; const bad = []; let tight = Infinity; for (const locale of ['en', 'zh-Hans']) { q.locale = locale; for (const c of CARDS) { const f = q.preview(c, false, { state: 'skip' }); tight = Math.min(tight, f.buttonsTop - 8 - f.below); if (!f.ok) bad.push(locale + ' ' + c.id); } } q.locale = keep; return JSON.stringify({ n: CARDS.length, bad, tight: Math.round(tight) }); })`).then(JSON.parse);
+        ok(skipFit.bad.length === 0, `all ${skipFit.n} cards fit with Skip's longest message in the verdict's place, en and zh-Hans (plan 26, A2; ${skipFit.bad.join(', ') || `${skipFit.tight} px to spare at the tightest`})`);
         ok(fit.bad.length === 0, `all ${fit.n} cards fit the quiz card both ways: answered wrong with explanation and source above the bottom row, answered right with the verdict above Why (${fit.bad.join(', ') || 'none over'})`);
 
         // Esc closes it; the closing key cannot continue the level (the resume lockout).
@@ -4178,7 +4168,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         const afterCard = await quizNow();
         ok(afterCard.answered && afterCard.last?.id === cardUp.id && afterCard.last.interrupted === true, 'the answer given after looking is saved as interrupted: its time is not used for the grade');
         await sleep(TT.education.explainMinMs + 200);
-        // The ✕: every break is a gate (plan 26), so after a miss Return's slot may hold Bury.
+        // The ✕ closes the quiz whatever the bottom row holds.
         await evaluate(`${Q}.closeBtn.emit('pointerdown'), true`);
         await sleep(300);
         const svBack = await evaluate(`JSON.stringify({ quiz: __flappy.scene.isActive('Quiz'), state: ${play}.state, lb: Boolean(${play}.levelBreak), answered: ${play}.runQuiz.answered })`).then(JSON.parse);
@@ -4207,7 +4197,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await sleep(150);
         const sWrong = await heard();
         ok(sWrong.join() === 'sfx:hazard', `a wrong answer sounds like the bad bacteria (${sWrong.join(', ')})`);
-        await evaluate(`${Q}.closeBtn.emit('pointerdown'), true`); // the ✕ (after a miss at a gate, Return's slot may be Bury)
+        await evaluate(`${Q}.closeBtn.emit('pointerdown'), true`); // the ✕
         await sleep(300);
         const sClose = await heard();
         ok(sClose.join() === 'sample:book-close' && !(await evaluate(`__flappy.scene.isActive('Quiz')`)), `the ✕ shuts the book (${sClose.join(', ')})`);
@@ -4309,27 +4299,38 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await sleep(300);
         const gate2 = await evaluate(`JSON.stringify({ gated: ${play}.breakGated(), hint: ${play}.levelHint.text })`).then(JSON.parse);
         ok(!gate2.gated && !gate2.hint.startsWith('📚'), `the due cards answered right, the gate opens: "${gate2.hint}"`);
-        // Bury (plan 25, B7): at the gate, a miss can wait until tomorrow for 3 × the level cleared; the
-        // coins go, the card is due a day later, and the quiz moves on.
+        // Skip (plan 26, A2; Bury before it): at the gate, the missed card on show is skipped for 3 × the
+        // level cleared. The first Skip in a break warns and holds; the next press pays, sends the card to
+        // tomorrow and moves on. A press right after the next card appears does nothing (the double tap on
+        // Next Card); a Skip the purse cannot pay says why.
         await sleep(400);
         const crafted4 = await evaluate(
           `Promise.all([import('./src/education.js'), import('./src/questions.js')]).then(([e, q]) => { const now = Date.now(); const near = q.CARDS.filter((c) => !c.retired && (c.deck === 'stomach' || c.deck === 'general')); const cards = {}; near.forEach((c, i) => { cards[c.id] = i === 0 ? e.schedule(null, 'again', now - 20 * 60000) : i === 1 ? e.schedule(null, 'easy', now - 30 * 86400000) : e.schedule(null, 'easy', now); }); localStorage.setItem('flappyPoop.eduSrs', JSON.stringify({ v: 1, cards, recent: [], counters: {}, badges: {} })); const p = ${play}; p.breakMissed = []; p.refreshShopButton(); const l = p.quizCountLine; return JSON.stringify({ missed: near[0].id, review: near[1].id, visible: l.visible, text: l.text, label: p.quizButton.getText() }); })`,
         ).then(JSON.parse);
-        await evaluate(`${play}.takeCoins(5), true`);
+        await evaluate(`(() => { const p = ${play}; p.effects.spendCoins(p.effects.coins()); p.takeCoins(5); return true; })()`); // exactly 5 corn: one Skip at 3, not two
         await reopen();
-        const b0 = await evaluate(`JSON.stringify({ id: ${Q}.card.id, coins: ${play}.effects.coins(), price: ${play}.buryPrice() })`).then(JSON.parse);
-        await evaluate(`(() => { const q = ${Q}; q.choose(q.order.findIndex((k) => k !== 'answer')); return true; })()`);
-        await sleep(200);
-        const buryLabel = await evaluate(`${Q}.leftBtn.shown ? ${Q}.leftBtn.text.text : null`);
-        const buryWant = (await tx('quizBury')).replace('{n}', String(b0.price));
-        await evaluate(`${Q}.leftBtn.press(), true`);
+        await sleep(TT.retryLockoutMs + 100);
+        const b0 = await evaluate(`JSON.stringify({ id: ${Q}.card.id, coins: ${play}.effects.coins(), price: ${play}.skipPrice(), label: ${Q}.rightBtn.shown ? ${Q}.rightBtn.text.text : null })`).then(JSON.parse);
+        await evaluate(`${Q}.rightBtn.press(), true`); // Skip: the warning
+        await sleep(150);
+        const bw = await evaluate(`JSON.stringify({ id: ${Q}.card.id, verdict: ${Q}.verdict.visible ? ${Q}.verdict.text : null, held: ${Q}.rightBtn.held, coins: ${play}.effects.coins() })`).then(JSON.parse);
+        const [skipLabelWant, warnDueWant, noCoinsWant] = await Promise.all(['quizSkip', 'quizSkipWarnDue', 'quizSkipNoCoins'].map(tx));
+        ok(b0.id === crafted4.missed && b0.price === 3 * 1 && b0.label === skipLabelWant.replace('{n}', '3') && bw.id === b0.id && bw.verdict === warnDueWant.replace('{n}', '3') && bw.held && bw.coins === b0.coins, `the first Skip in a break warns: "${bw.verdict}", held, nothing paid yet`);
+        await sleep(TT.education.explainMinMs + 200);
+        await evaluate(`(() => { const q = ${Q}; q.rightBtn.press(); globalThis.__afterSkip = { id: q.card?.id ?? null }; q.rightBtn.press(); return true; })()`); // Skip, then a second press as the next card appears
         await sleep(300);
-        const b1 = await evaluate(`JSON.stringify({ coins: ${play}.effects.coins(), due: ${play}.eduStore.load().cards['${b0.id}'].dueAt, now: Date.now(), next: ${Q}.card?.id ?? null, missed: ${play}.breakMissed })`).then(JSON.parse);
-        ok(b0.id === crafted4.missed && b0.price === 3 * 1 && buryLabel === buryWant && b1.coins === b0.coins - b0.price && b1.due >= b1.now + TT.education.buryMs - 60000 && b1.next !== b0.id && b1.missed.length === 0, `after a miss at the gate, "${buryLabel}" sends ${b0.id} to tomorrow: purse ${b0.coins} → ${b1.coins}, the next card ${b1.next}`);
+        const b1 = await evaluate(`JSON.stringify({ coins: ${play}.effects.coins(), due: ${play}.eduStore.load().cards['${b0.id}'].dueAt, now: Date.now(), next: ${Q}.card?.id ?? null, afterSkip: globalThis.__afterSkip.id, verdict: ${Q}.verdict.visible, missed: ${play}.breakMissed, skipped: ${play}.eduStore.load().buried?.ids ?? [] })`).then(JSON.parse);
+        ok(b1.coins === b0.coins - b0.price && b1.due >= b1.now + TT.education.buryMs - 60000 && b1.next !== b0.id && b1.missed.length === 0 && b1.skipped.includes(b0.id), `the next press skips ${b0.id} to tomorrow: purse ${b0.coins} → ${b1.coins}, the next card ${b1.next}`);
+        ok(b1.next === b1.afterSkip && !b1.verdict && b1.coins === b0.coins - b0.price, 'a second press as the next card appears does nothing: a double tap cannot skip the card it opened');
+        await sleep(TT.retryLockoutMs + 100);
+        await evaluate(`${Q}.rightBtn.press(), true`); // 2 corn left, the price is 3
+        await sleep(150);
+        const b2 = await evaluate(`JSON.stringify({ id: ${Q}.card?.id ?? null, verdict: ${Q}.verdict.visible ? ${Q}.verdict.text : null, coins: ${play}.effects.coins() })`).then(JSON.parse);
+        ok(b2.id === b1.next && b2.verdict === noCoinsWant.replace('{n}', '3') && b2.coins === b1.coins, `a Skip the purse cannot pay says why: "${b2.verdict}"`);
         await answerRight();
         await evaluate(`${Q}.leftBtn.press(), true`); // Return
         await sleep(300);
-        ok(!(await evaluate(`${play}.breakGated()`)), 'with the miss buried and the review answered, the gate opens');
+        ok(!(await evaluate(`${play}.breakGated()`)), 'with the missed card skipped and the review answered, the gate opens');
         // The pill is back, and the shop sells at level 2's prices (eduShopPrices), not the base ones.
         await sleep(400);
         const shop = await evaluate(`Promise.all([import('./src/education.js'), import('./src/i18n.js')]).then(([e, i]) => { const p = ${play}; const pillBack = p.quizButton.visible; p.handleChrome('shop'); const want = e.eduShopPrices(2); const shown = Object.fromEntries(Object.entries(p.shop.rows).map(([id, r]) => [id, r.price.text])); const label = Object.fromEntries(Object.keys(want).map((id) => [id, i.countText(want[id])])); p.closeShop(); return JSON.stringify({ pillBack, shown, label, want, base: p.shopPrices === undefined ? null : JSON.stringify(p.shopPrices()) === JSON.stringify(want) }); })`).then(JSON.parse);

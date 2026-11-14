@@ -3,7 +3,7 @@
 // Education data panel (ui/eduDataPanel.js): it holds more text than a canvas card fits.
 //
 // It says what the mode is (a beta: the cards are still being checked), how it works (the levels and
-// the review gate, revives, the three numbers, Bury, coins, the daily cap), the player's cards (the
+// the review gate, revives, the three numbers, Skip, coins, the daily cap), the player's cards (the
 // three counts, how many seen, what the gold number counts), and holds the mode's two choices: the
 // level a run starts at (◀ LV n ▶, moved here from the ready screen; while a later level is unlocked)
 // and where new cards go (before, mixed with or after the cards due: settings eduNewOrder). A line
@@ -112,7 +112,7 @@ function render() {
   const info = ctx.play.eduIntroInfo();
   const close = h('button', { class: 'close', id: 'edu-intro-x', type: 'button', 'aria-label': tr('eduIntroClose') }, '✕');
   close.addEventListener('click', () => closeEduIntroPanel());
-  const how = h('ul', {}, ...['eduIntroHowLevels', 'eduIntroHowRevive', 'eduIntroHowBury', 'eduIntroHowCoins'].map((key) => h('li', {}, tr(key))));
+  const how = h('ul', {}, ...['eduIntroHowLevels', 'eduIntroHowRevive', 'eduIntroHowSkip', 'eduIntroHowCoins'].map((key) => h('li', {}, tr(key))));
   const counts = h('div', { class: 'counts', id: 'edu-intro-counts' }, ...[...countLines(ctx.locale, info.counts), t(ctx.locale, 'eduCardsSeen').replace('{n}', String(info.seen)).replace('{total}', String(info.total)), tr('eduCardsDue')].map((line) => h('p', {}, line)));
   // The start level (plan 25's stepper, moved here): ◀ LV n ▶ while a later level is unlocked.
   const start = h('div', { class: 'row', id: 'edu-intro-start' }, h('span', { class: 'label' }, tr('eduIntroStart')));

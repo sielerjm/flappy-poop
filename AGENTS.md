@@ -427,7 +427,7 @@ quiz (`book-open`), a page turns for each next card (`book-flip`), the book shut
 quiz, a card that paid today) plays `sfx.score`, and one that pays (a break's) makes the coin's sound alone (`takeCoins`); the
 answer that wins everything back plays `sparkle` in the ding's place. **Level break** (plan 25 laid it
 out, plan 26 to Michael's sketch: `eduBreakLayout` in logic.js): the banner higher (`titleY`); the 🌽
-pill with Skip ▸ right of it; on the 🏅's row under it **📚 Review** and Quit side by side;
+pill (the level Skip ▸ right of it is gone since plan 26's A2); on the 🏅's row under it **📚 Review** and Quit side by side;
 the three numbers on the bean button's line (it hides in a break). The **📚 Review** pill
 (`quizButtonShown`; chromeIntent's `'quiz'` input, only in an education run's break) opens the break's
 quiz, which asks missed cards, then due reviews (the least remembered first), then the cards missed
@@ -450,11 +450,21 @@ underlined (`refreshCounts`; no line in a test run); a tap on the card's numbers
 (`Quiz.toggleCountsCard`). **The gate** (`breakGated`): every level break of an education run
 (plan 26; before it, only a break into a level not yet unlocked) holds while the missed or review
 number is above 0: `resumePlay` keeps the break, the hint reads "📚 Review
-to continue", Review pulses. New cards stay optional. After a miss there the quiz offers **Bury**
-in its left slot (`canBury` / `buryCard`): `education.buryCoinsPerLevel` × the level just cleared,
-at most `buryPerDay` a local day, the card due again `buryMs` later; no pilot event. **Skip ▸ and
-Quit**: Skip passes the next level at par per tap while a later
-level is unlocked (not in a test run); Quit takes two taps and ends the run, graded as a normal end
+to continue", Review pulses. New cards stay optional. **Skip** (plan 26, A2; it replaced Bury and the
+level Skip ▸): an open card in a break's quiz shows "Skip · n 🌽" in its right slot (`Quiz.offerSkip`;
+"Skip" alone and free in a test run, which saves nothing); after an answer that slot is Next Card. Every
+Skip costs `buryPrice()` (`education.buryCoinsPerLevel` × the level just cleared) and moves on
+(`Play.skipCard`); a due card (missed in this break, or a stored record due now: `cardDue`) also goes to
+tomorrow (`eduStore.bury`, `buryMs`), leaves `breakMissed` and so the gate, and counts toward
+`buryPerDay` (3) a local day; a new or practice card is left as it was, with no daily limit.
+`skipBlocker` says what stops it ('none': not an education break, a match; 'cap'; 'coins'): a blocked
+Skip shows dimmed (`button.dim`) and a press says why in the verdict's place. The first paid Skip in a
+break warns there and holds Skip for `explainMinMs` (`Play.quizSkipWarned`, cleared when a break
+starts); later ones skip at once. Skip ignores every press for `retryLockoutMs` after its card appears
+(`Quiz.cardShownAt`), since it sits where Next Card was, and Enter / Space never press it (`primary`
+does nothing on an open card). The day's skipped cards are kept by id (`buried.ids`; `buriedIdsOn`), and
+`pickCard`'s `skipped` leaves them out of practice that day. A skip is no answer: no tally, no pilot
+event. A revive and the bonus quiz have none. **Quit**: Quit takes two taps and ends the run, graded as a normal end
 when nothing is due and something was answered; with cards due, or with nothing answered, it counts as
 quitting the run (`breakGaveUp`: ungraded, and 🏳️ with nothing answered; plan 26, A2). It reads Quit
 either way; armed it reads "Quit? Tap again", or "Quit ungraded? Tap again" while cards are due
@@ -715,8 +725,8 @@ src/
                             readyLayout (plan 25's ◀ level ▶ stepper boxes went to
                             the 📚 popup in plan 26), readyHit, nextEduStartLevel (wraps within
                             the levels unlocked), eduBreakLayout (an education
-                            break, plan 26: the banner's titleY, 💰 with Skip ▸
-                            beside it, Review | Quit on the row under it, the
+                            break, plan 26: the banner's titleY, 💰 (Skip ▸ gone
+                            since its A2), Review | Quit on the row under it, the
                             numbers on the bean button's line),
                             LAST_UPDATED, issueUrl, openExternalUrl, chromeIntent
                             (inputs incl. 'changelog'; a Changelog over About closes
@@ -794,7 +804,9 @@ src/
                             (per deck: seen, mastered, total; "Your cards" sums it),
                             plan 25: pickCard's dueFirst and missed (a level break's
                             own order; counted cards before practice), cardCounts'
-                            missed, unlockLevel / unlockedLevel, bury / buriedOn,
+                            missed, unlockLevel / unlockedLevel, bury / buriedOn
+                            (plan 26 A2: buried keeps the day's ids, buriedIdsOn,
+                            pickCard's skipped),
                             localDayKey; plan 26: NEW_ORDERS and pickCard's order,
                             newAllowance and localDayStart (the daily new-card cap,
                             which cardCounts' new respects too);
@@ -2143,8 +2155,10 @@ tests/                      node --test (schema.test.js, pilot.test.js, eduBoard
                             mode turned on after the start saves nothing; the 📚
                             glyph opens on its own pointer's release; a break's misses
                             asked again; the gate (every break
-                            since plan 26); Bury;
-                            Skip ▸ and Quit (grading both ways). Plan 26 A2: a wrong
+                            since plan 26); Quit (grading both ways).
+                            Plan 26 A2: Skip (every kind of card, the cap on due
+                            cards, the gate, a test run free, none outside a break),
+                            Skip ▸ gone; a wrong
                             answer costs nothing; every card pays once a local day,
                             practice included; a test run pays every right answer
   pilot.test.js             the tester pilot end to end: Play's pilot methods, the
@@ -2165,7 +2179,9 @@ tests/                      node --test (schema.test.js, pilot.test.js, eduBoard
                             the 🚩 never navigates the game's tab, tapLocked, the
                             numbers' explainer (plan 25); plan 26: the next wait,
                             caught up with Keep practicing, the purse; plan 26 A2:
-                            Quit's warning on every card, holdFor's timer
+                            Quit's warning on every card, holdFor's timer, the
+                            ⭐ choice's own line, the already-earned note, Skip
+                            (price, warning, lockout, keys, why it is dimmed)
   richText.test.js          src/richText.js: linkSpans (whole words, overlaps,
                             missing terms) and layoutRich (greedy wrap, centred
                             lines, parts that add up, links across a break)

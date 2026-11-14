@@ -383,9 +383,9 @@ export const TUNING = {
     masteredDays: 21, // days: a card in review with a stability this long or more counts as mastered (Anki's "mature" is a 21-day interval)
     explainMinMs: 1500, // ms the quiz's Next waits after a wrong answer, so the explanation gets read
     breakCoins: 1, // coins a right answer in a level break's quiz pays
-    buryCoinsPerLevel: 3, // a gate's Bury (plan 25): coins × the level just cleared, to send a card missed there to tomorrow
-    buryPerDay: 3, // buries a device may make in one local day
-    buryMs: 86400000, // ms a buried card waits (24 h, so a bury just before midnight is not back at 00:00)
+    buryCoinsPerLevel: 3, // a Skip (plan 26, A2; a gate's Bury in plan 25): coins × the level just cleared; a due card also goes to tomorrow
+    buryPerDay: 3, // due cards a device may skip (bury) in one local day; new and practice cards have no limit (plan 26, A2)
+    buryMs: 86400000, // ms a skipped (buried) due card waits (24 h, so a bury just before midnight is not back at 00:00)
     revivePenaltyPerLevel: 2, // points a quiz revive costs per level number (level 3: −6), charged when the player is revived; the two-player crash's value to start
     reviveBlinkMs: 750, // ms the revived poop blinks at mid-height after Fly on, before play resumes (no glide; the field was refilled under the quiz)
     boardMinRuns: 3, // graded runs before a sharing player is listed on the 📚 board (education_board in db/schema.sql lists from the same number)

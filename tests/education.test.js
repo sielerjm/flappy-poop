@@ -681,6 +681,13 @@ test('createEduStore.bury (plan 25): the card waits until the time given, nothin
   assert.equal(store.buriedOn('2026-11-14'), 0, 'a new day starts at 0');
   store.bury('ST-01', NOW + DAY, '2026-11-14');
   assert.deepEqual([store.buriedOn('2026-11-13'), store.buriedOn('2026-11-14')], [0, 1]);
+  assert.deepEqual(store.load().buried, { day: '2026-11-14', n: 1, ids: ['ST-01'] }, "the day's buried (skipped) cards are kept by id (plan 26, A2), once each");
+  store.answer('ST-02', rec);
+  store.bury('ST-02', NOW + DAY, '2026-11-14');
+  store.bury('ST-02', NOW + DAY, '2026-11-14');
+  assert.deepEqual(store.load().buried, { day: '2026-11-14', n: 3, ids: ['ST-01', 'ST-02'] });
+  m.set(LEADERBOARD.eduKey, JSON.stringify({ v: 2, cards: {}, recent: [], buried: { day: '2026-11-14', n: 2 } }));
+  assert.deepEqual(createEduStore(st).load().buried, { day: '2026-11-14', n: 2, ids: [] }, 'a record from before plan 26 A2 reads with no ids');
   assert.equal(localDayKey(new Date(2026, 0, 5, 23, 59)), '2026-01-05', 'the local day, not UTC');
 });
 
@@ -709,6 +716,20 @@ test("createEduStore's paid record (plan 26, A2): the cards whose right answer p
   m.set(LEADERBOARD.eduKey, JSON.stringify({ v: 2, cards: {}, recent: [], paid: { day: '2026-11-14', ids: ['ST-01', 'bad id', 'ST-01', 'GE-02'] } }));
   assert.deepEqual(createEduStore(st).load().paid, { day: '2026-11-14', ids: ['ST-01', 'GE-02'] }, 'a bad id or a repeat is dropped, the rest kept');
   assert.deepEqual(paidOn(undefined, '2026-11-14'), [], 'no record: nothing paid');
+});
+
+test("pickCard's skipped (plan 26, A2): a card skipped today is never practice that day (a skipped review card waits until tomorrow, as a buried missed card does); the counted cards are unchanged", async () => {
+  const { buriedIdsOn } = await import('../src/education.js');
+  const now = NOW;
+  const cards = CARDS.filter((c) => c.deck === 'stomach').slice(0, 3);
+  const srs = {};
+  for (const c of cards) srs[c.id] = { ...schedule(null, 'good', now - DAY), dueAt: now + DAY }; // all review, not due: practice
+  const pick = (skipped) => pickCard({ cards, srs, context: 'break', segment: 'stomach', now, dueFirst: true, rng: () => 0, skipped });
+  assert.equal(pick([]).reason, 'practice');
+  const left = pick([cards[0].id, cards[1].id]);
+  assert.deepEqual([left.card.id, left.reason], [cards[2].id, 'practice'], 'the skipped ones are left out');
+  assert.equal(pick(cards.map((c) => c.id)), null, 'all skipped: nothing to practise');
+  assert.deepEqual([buriedIdsOn({ day: '2026-11-14', n: 1, ids: ['ST-01'] }, '2026-11-14'), buriedIdsOn({ day: '2026-11-13', n: 1, ids: ['ST-01'] }, '2026-11-14'), buriedIdsOn(undefined, '2026-11-14')], [['ST-01'], [], []], 'buriedIdsOn: that day only');
 });
 
 test('countersAfterRun (plan 26): the 🤓 streak moves and a graded run joins the average; pure', () => {
