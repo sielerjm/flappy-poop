@@ -3679,65 +3679,72 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await home();
         const s2 = await switches();
         ok(s2.unlocked && s2.edu === 886 && s2.eduToggle, 'a restart (create() reading the settings) keeps the unlock and the switch');
+        await sleep(500); // home()'s restart lands on the next frame: a tap before it would open the popup on the scene going away
         await tap('education');
         const s3 = await switches();
-        ok(s3.on && s3.stored.education === true, 'a tap on the 📚 switch turns it on, and it is stored');
+        const intro = () => evaluate(`(() => { const r = document.getElementById('edu-intro-panel'); const open = Boolean(r && !r.hidden); return JSON.stringify({ open, title: open ? r.querySelector('h2').textContent : null, beta: open ? r.querySelector('.beta').textContent : null, counts: open ? [...r.querySelectorAll('#edu-intro-counts p')].map((p) => p.textContent) : [], level: open ? r.querySelector('#edu-intro-level')?.textContent ?? null : null, up: Boolean(r?.querySelector('#edu-intro-up')), order: open ? [...r.querySelectorAll('.order button')].filter((b) => b.getAttribute('aria-pressed') === 'true').map((b) => b.id) : [], pad: open ? r.querySelector('button.pad')?.id ?? null : null, state: ${play}.state, launching: Boolean(${play}.launching), on: ${play}.educationOn, toilet: ${play}.toilet, kb: __flappy.input.keyboard.enabled }); })()`).then(JSON.parse);
+        const introClick = (id) => evaluate(`(document.getElementById('${id}')?.click(), true)`);
+        const introEsc = () => evaluate(`(document.querySelector('#edu-intro-panel .card').dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })), true)`);
+        const i3 = await intro();
+        const [introTitle, introBeta] = await Promise.all(['eduIntroTitle', 'eduIntroBeta'].map(tx));
+        ok(s3.on && s3.stored.education === true && i3.open && i3.title === introTitle && i3.beta === introBeta && !i3.kb, `a tap on the 📚 switch turns it on, stored, and opens the 📚 popup (plan 26): "${i3.title}", the beta note; the game's keys wait`);
+        await introEsc();
+        const i3b = await intro();
+        ok(!i3b.open && i3b.state === 'ready' && !i3b.launching && i3b.kb, 'Esc closes it; the keys come back and no run starts');
         await home();
         ok((await switches()).on, 'the 📚 switch stays on across a restart');
 
-        // "Your cards" (plan 21, E3): a tap on the 📚 glyph says what the cards are and what the gold
-        // number counts. It does not toggle the switch; the tap, key or pad press that closes it presses
-        // nothing under it and starts no run. The track still toggles.
+        // The 📚 popup from the glyph (plan 26; "Your cards" before it): what the mode is and how it works,
+        // the cards (the three numbers, how many seen, what the gold number counts) and the choices. It
+        // does not toggle the switch; nothing under it is pressed and no run starts. The track still toggles.
         await sleep(500); // home()'s restart lands on the next frame: a real tap straddling it would lose its release
         const srsBefore = await evaluate(`localStorage.getItem('flappyPoop.eduSrs')`);
         // One missed card, two in review and due, one in review and not due yet.
         const made = await evaluate(
           `Promise.all([import('./src/education.js'), import('./src/questions.js')]).then(([e, q]) => { const now = Date.now(); const live = q.CARDS.filter((c) => !c.retired); const cards = {}; cards[live[0].id] = e.schedule(null, 'again', now - 20 * 60000); cards[live[1].id] = e.schedule(null, 'easy', now - 30 * 86400000); cards[live[2].id] = e.schedule(null, 'easy', now - 30 * 86400000); cards[live[3].id] = e.schedule(null, 'easy', now); localStorage.setItem('flappyPoop.eduSrs', JSON.stringify({ v: 1, cards, recent: [], counters: {}, badges: {} })); ${play}.refreshEduDue(); return JSON.stringify({ total: live.length, allowance: e.newAllowance(cards, { now }) }); })`,
         ).then(JSON.parse);
-        const eduCard = () => evaluate(`(() => { const p = ${play}; return JSON.stringify({ open: p.eduCard.open, title: p.eduCard.title.text, body: p.eduCard.body.text, on: p.educationOn, toilet: p.toilet, state: p.state, launching: Boolean(p.launching), due: p.eduDueText.visible ? p.eduDueText.text : '' }); })()`).then(JSON.parse);
+        const dueNow = () => evaluate(`${play}.eduDueText.visible ? ${play}.eduDueText.text : ''`);
         const boxes = await evaluate(`JSON.stringify({ info: ${play}.readyBoxes.educationInfo, edu: ${play}.readyBoxes.education, toilet: ${play}.readyBoxes.toilet, title: ${play}.readyBoxes.title })`).then(JSON.parse);
-        const yc0 = await eduCard();
+        const yc0 = await intro();
+        const due0 = await dueNow();
         await tapAt(boxes.info.x, boxes.info.y);
-        const yc1 = await eduCard();
-        const ycWant = await Promise.all(['eduCardsTitle', 'eduCardsNew', 'eduCardsMissed', 'eduCardsReview', 'eduCardsSeen', 'eduCardsDue'].map(tx));
+        const yc1 = await intro();
+        const ycWant = await Promise.all(['eduCardsNew', 'eduCardsMissed', 'eduCardsReview', 'eduCardsSeen', 'eduCardsDue'].map(tx));
         // New is what today still offers (plan 26: education.newPerDay a local day, less the cards first seen today).
-        const ycBody = [ycWant[1].replace('{n}', String(Math.min(made.total - 4, made.allowance))), ycWant[2].replace('{n}', '1'), ycWant[3].replace('{n}', '2'), ycWant[4].replace('{n}', '4').replace('{total}', String(made.total)), ycWant[5]].join('\n');
-        ok(yc0.due === '3' && !yc0.open && yc1.open && yc1.title === ycWant[0] && yc1.body === ycBody && yc1.on === yc0.on && yc1.state === 'ready' && !yc1.launching, `a tap on the 📚 glyph (its gold number reads ${yc0.due}) opens "${yc1.title}": ${yc1.body.replace(/\n/g, ' · ')}; the switch is not toggled`);
-        await tapAt(boxes.title.x, boxes.title.y); // empty space: with no card up this tap would start a run
-        const yc2 = await eduCard();
-        ok(!yc2.open && yc2.state === 'ready' && !yc2.launching, 'a tap on empty space closes it and starts no run');
-        // Two thumbs on the glyph (plan 25, A6), through the scene's own pointer events: the card opens on
-        // the last press's release, and the other thumb's release does not toggle it shut again.
-        await evaluate(`(() => { const p = ${play}; const b = p.readyBoxes.educationInfo; const at = (id) => ({ id, x: b.x, y: b.y, wasCanceled: false }); p.input.emit('pointerdown', at(91)); p.input.emit('pointerdown', at(92)); p.input.emit('pointerup', at(91)); p.input.emit('pointerup', at(92)); return true; })()`);
-        const thumbs = await eduCard();
-        await evaluate(`${play}.eduCard.open && ${play}.toggleEduCard(), true`);
-        ok(thumbs.open && thumbs.state === 'ready' && !thumbs.launching, 'two thumbs on the 📚 glyph open "Your cards" once: the other release does not shut it again');
-        await tapAt(boxes.info.x, boxes.info.y);
-        await tapAt(boxes.toilet.x, boxes.toilet.y);
-        const yc3 = await eduCard();
-        ok(!yc3.open && yc3.toilet === yc0.toilet && yc3.on === yc0.on && yc3.state === 'ready', 'a tap on a switch under it closes it and toggles nothing');
-        await tapAt(boxes.info.x, boxes.info.y);
-        const yc4 = await eduCard();
-        await evaluate(`${play}.input.keyboard.emit('keydown-SPACE'), true`);
+        const ycLines = [ycWant[0].replace('{n}', String(Math.min(made.total - 4, made.allowance))), ycWant[1].replace('{n}', '1'), ycWant[2].replace('{n}', '2'), ycWant[3].replace('{n}', '4').replace('{total}', String(made.total)), ycWant[4]];
+        ok(due0 === '3' && !yc0.open && yc1.open && JSON.stringify(yc1.counts) === JSON.stringify(ycLines) && yc1.on === yc0.on && yc1.state === 'ready' && !yc1.launching, `a tap on the 📚 glyph (its gold number reads ${due0}) opens the popup: ${yc1.counts.join(' · ')}; the switch is not toggled`);
+        await tapAt(boxes.toilet.x, boxes.toilet.y); // under the backdrop: a tap there does nothing
+        const yc2 = await intro();
+        ok(yc2.open && yc2.toilet === yc0.toilet && yc2.state === 'ready' && !yc2.launching, 'a tap on the backdrop, over a switch, presses nothing under it and leaves the popup up');
+        // A real Space (through the browser, as a player's key): the game's keyboard is off under the popup.
+        for (const type of ['keyDown', 'keyUp']) await cdp.send('Input.dispatchKeyEvent', { type, key: ' ', code: 'Space', windowsVirtualKeyCode: 32 });
         await sleep(200);
-        const yc5 = await eduCard();
-        ok(yc4.open && !yc5.open && yc5.state === 'ready' && !yc5.launching, 'Space closes it and starts no run');
+        const yc3 = await intro();
+        await introClick('edu-intro-x');
+        const yc4 = await intro();
+        ok(yc3.open && yc3.state === 'ready' && !yc3.launching && !yc4.open, "the game's Space starts no run under it; ✕ closes it");
+        // Two thumbs on the glyph (plan 25, A6), through the scene's own pointer events: it opens once.
+        await evaluate(`(() => { const p = ${play}; const b = p.readyBoxes.educationInfo; const at = (id) => ({ id, x: b.x, y: b.y, wasCanceled: false }); p.input.emit('pointerdown', at(91)); p.input.emit('pointerdown', at(92)); p.input.emit('pointerup', at(91)); p.input.emit('pointerup', at(92)); return true; })()`);
+        const thumbs = await intro();
+        await introClick('edu-intro-close');
+        ok(thumbs.open && thumbs.state === 'ready' && !thumbs.launching && !(await intro()).open, 'two thumbs on the 📚 glyph open it once; Close closes it');
         await tapAt(boxes.edu.track.x, boxes.edu.y);
-        const yc6 = await eduCard();
+        const yc6 = await intro();
         await tapAt(boxes.edu.track.x, boxes.edu.y);
-        const yc7 = await eduCard();
-        ok(yc6.on === !yc0.on && !yc6.open && yc7.on === yc0.on, `a tap on the track still toggles the switch (${yc0.on} → ${yc6.on} → ${yc7.on})`);
-        // The controller: right of the switch the ring lands on the glyph; A opens the card, any press closes it.
+        const yc7 = await intro();
+        await introEsc();
+        ok(yc6.on === !yc0.on && !yc6.open && yc7.on === yc0.on && yc7.open, `a tap on the track still toggles the switch (${yc0.on} → ${yc6.on} → ${yc7.on}); turned on, it opens the popup`);
+        // The controller: right of the switch the ring lands on the glyph; A opens the popup with its own
+        // ring on Play, the d-pad moves it, B closes it and presses nothing.
         await evaluate(`(() => { const p = ${play}; p.registry.set('padMode', true); p.focus.setIndex(p.focus.indexOf('education')); p.focus.show(); p.padNav('right'); return true; })()`);
         const ycRing = await evaluate(`${play}.focus.items[${play}.focus.index]?.id ?? null`);
         await evaluate(`${play}.onPadAction('select'), true`);
-        const yc8 = await eduCard();
-        await evaluate(`${play}.onPadAction('select'), true`);
-        const yc9 = await eduCard();
-        await evaluate(`${play}.onPadAction('select'), true`);
+        const yc8 = await intro();
+        await evaluate(`${play}.onPadAction('nav:up'), true`);
+        const yc8b = await intro();
         await evaluate(`${play}.onPadAction('back'), true`);
-        const yc10 = await eduCard();
-        ok(ycRing === 'educationInfo' && yc8.open && !yc9.open && yc9.on === yc0.on && !yc10.open && yc10.state === 'ready' && !yc10.launching, `the controller's ring reaches the glyph (${ycRing}): A opens the card, A again closes it and presses nothing, and so does B`);
+        const yc10 = await intro();
+        ok(ycRing === 'educationInfo' && yc8.open && yc8.pad === 'edu-intro-play' && yc8b.pad && yc8b.pad !== 'edu-intro-play' && !yc10.open && yc10.state === 'ready' && !yc10.launching, `the controller's ring reaches the glyph (${ycRing}): A opens the popup, its ring on ${yc8.pad}; up moves it to ${yc8b.pad}; B closes it and presses nothing`);
         await evaluate(`(() => { const p = ${play}; p.registry.set('padMode', false); p.focus.hide(); if (${JSON.stringify(srsBefore)} === null) localStorage.removeItem('flappyPoop.eduSrs'); else localStorage.setItem('flappyPoop.eduSrs', ${JSON.stringify(srsBefore)}); p.refreshEduDue(); return true; })()`);
 
         // A wide window offers 👥 too: three switches, and switching one on switches the other off.
@@ -3750,6 +3757,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         const w1 = await switches();
         await tap('education');
         const w2 = await switches();
+        await introEsc(); // turned on, 📚 opened its popup
         ok(w1.vOn && !w1.on && w1.stored.education === false && w2.on && !w2.vOn, `👥 on switches 📚 off (${w1.vOn}/${w1.on}); 📚 on switches 👥 off (${w2.on}/${w2.vOn})`);
         const ring = await evaluate(`JSON.stringify(${play}.focus.items.filter((i) => ['toilet', 'versus', 'education', 'educationInfo'].includes(i.id) && (!i.visible || i.visible())).map((i) => i.id))`).then(JSON.parse);
         ok(ring.join() === 'toilet,versus,education,educationInfo', `the controller ring reaches all three switches and the 📚 glyph (${ring.join(', ')})`);
@@ -3757,9 +3765,9 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await sleep(FIELD_DEBOUNCE + 400); // a late resize restart must not land between this tap's press and release
         const wideAt = await evaluate(`JSON.stringify([${play}.readyBoxes.educationInfo.x, ${play}.readyBoxes.educationInfo.y])`).then(JSON.parse);
         await tapAt(wideAt[0], wideAt[1]);
-        const wideCard = await evaluate(`JSON.stringify({ open: ${play}.eduCard.open, on: ${play}.educationOn })`).then(JSON.parse);
-        await evaluate(`${play}.eduCard.hide(), true`);
-        ok(wideInfo.y === wideInfo.eduY && wideInfo.h >= 64 && wideCard.open && wideCard.on === w2.on, `with three switches the 📚 glyph still opens the card (its box ${wideInfo.h} px tall at y ${wideInfo.y})`);
+        const wideCard = await intro();
+        await introEsc();
+        ok(wideInfo.y === wideInfo.eduY && wideInfo.h >= 64 && wideCard.open && wideCard.on === w2.on, `with three switches the 📚 glyph still opens the popup (its box ${wideInfo.h} px tall at y ${wideInfo.y})`);
         await metrics(720, 1280); // the boot viewport
         await settle(720);
         await sleep(FIELD_DEBOUNCE + 400); // a late resize restart must not land in the run below
@@ -3807,41 +3815,50 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await evaluate(`${play}.poop.body.setAllowGravity(false), ${play}.graceLeftMs = 0, ${play}.die(), true`);
         await sleep(TT.deathToOverMs + 300);
 
-        // The start stepper and unlocked levels (plan 25, B5): hidden until a later level is unlocked;
-        // ◀ / ▶ step and wrap within the levels unlocked; the run starts there; continuing past a level
-        // break unlocks the next level; 📚 off or test mode hides it.
+        // The start level and unlocked levels (plan 25, B5; in the 📚 popup since plan 26): no ◀ ▶ until a
+        // later level is unlocked; ◀ / ▶ step and wrap within the levels unlocked; the popup's Play starts
+        // the run there; continuing past a level break unlocks the next level. The new-card order is
+        // chosen there too.
         await home();
-        const stepper = () => evaluate(`(() => { const p = ${play}; const t = p.eduStartTexts; return JSON.stringify({ shown: Boolean(t && t.label.visible), label: t?.label.text ?? null, unlocked: p.eduStore.load().unlockedLevel, start: p.eduStartLevel() }); })()`).then(JSON.parse);
-        const st0 = await stepper();
-        await evaluate(`${play}.eduStore.unlockLevel(3), ${play}.settings.set({ eduStartLevel: 1 }), ${play}.refreshReadySwitches(), true`);
-        const st1 = await stepper();
-        const stepAt = async (id) => {
-          const b = await evaluate(`JSON.stringify(${play}.readyBoxes.${id})`).then(JSON.parse);
-          await tapAt(b.x, b.y);
-          await sleep(150);
-          return stepper();
+        const openIntro = async () => {
+          await evaluate(`${play}.openEduIntro(), true`);
+          return intro();
         };
-        const st2 = await stepAt('eduStartUp');
-        const st3 = await stepAt('eduStartUp');
-        const st4 = await stepAt('eduStartUp');
-        const st5 = await stepAt('eduStartDown');
-        ok(!st0.shown && st1.shown && st1.label === 'LV 1' && st2.label === 'LV 2' && st3.label === 'LV 3' && st4.label === 'LV 1' && st5.label === 'LV 3' && st5.start === 3 && (await playState()) === 'ready', `the start stepper shows once a later level is unlocked (hidden at ${st0.unlocked}); ▶ ${st1.label} → ${st2.label} → ${st3.label} → wraps to ${st4.label}, ◀ back to ${st5.label}; no tap on it starts a run`);
-        await startRun();
-        const atStart = await evaluate(`JSON.stringify({ level: ${play}.level, edu: ${play}.runIsEducation, start: ${play}.runStartLevel })`).then(JSON.parse);
+        const st0 = await openIntro();
+        await introEsc();
+        await evaluate(`${play}.eduStore.unlockLevel(3), ${play}.settings.set({ eduStartLevel: 1 }), true`);
+        const st1 = await openIntro();
+        const stepIntro = async (id) => {
+          await introClick(id);
+          await sleep(100);
+          return { ...(await intro()), start: await evaluate(`${play}.eduStartLevel()`) };
+        };
+        const st2 = await stepIntro('edu-intro-up');
+        const st3 = await stepIntro('edu-intro-up');
+        const st4 = await stepIntro('edu-intro-up');
+        const st5 = await stepIntro('edu-intro-down');
+        ok(!st0.up && st0.level === 'LV 1' && st1.up && st1.level === 'LV 1' && st2.level === 'LV 2' && st3.level === 'LV 3' && st4.level === 'LV 1' && st5.level === 'LV 3' && st5.start === 3 && (await playState()) === 'ready', `the popup's ◀ ▶ show once a later level is unlocked; ▶ ${st1.level} → ${st2.level} → ${st3.level} → wraps to ${st4.level}, ◀ back to ${st5.level}; no run starts`);
+        const ord0 = (await intro()).order;
+        await introClick('edu-intro-order-mixed');
+        const ord1 = await intro();
+        ok(ord0.join() === 'edu-intro-order-after' && ord1.order.join() === 'edu-intro-order-mixed' && (await evaluate(`${play}.settings.load().eduNewOrder`)) === 'mixed', `new cards after the due ones by default; a tap chooses "mixed", pressed and stored`);
+        await introClick('edu-intro-order-after');
+        await introClick('edu-intro-play');
+        for (let i = 0; i < 40 && (await playState()) !== 'playing'; i += 1) await sleep(100);
+        const atStart = await evaluate(`JSON.stringify({ level: ${play}.level, edu: ${play}.runIsEducation, start: ${play}.runStartLevel, popup: !document.getElementById('edu-intro-panel').hidden })`).then(JSON.parse);
         await evaluate(`(() => { const p = ${play}; p.poop.body.setAllowGravity(false); p.poop.setVelocity(0, 0); p.poop.y = 640; p.graceLeftMs = 1e9; p.onFinishCrossed(); return true; })()`);
         for (let i = 0; i < 40 && !(await evaluate(`Boolean(${play}.levelBreak) && ${play}.state === 'paused'`)); i += 1) await sleep(100);
         await sleep(TT.retryLockoutMs + 200);
         await evaluate(`${play}.resumePlay(), true`);
         await sleep(300);
-        const afterBreak = await stepper();
-        ok(atStart.edu && atStart.level === 3 && atStart.start === 3 && afterBreak.unlocked === 4, `the education run starts on level ${atStart.level}; continuing past its break unlocks level ${afterBreak.unlocked}`);
+        const afterBreak = await evaluate(`${play}.eduStore.load().unlockedLevel`);
+        ok(atStart.edu && !atStart.popup && atStart.level === 3 && atStart.start === 3 && afterBreak === 4, `the popup's Play starts the education run on level ${atStart.level}; continuing past its break unlocks level ${afterBreak}`);
         await home();
-        await evaluate(`${play}.toggleEducation(), true`);
-        const off = await stepper();
-        await evaluate(`${play}.toggleEducation(), ${play}.setTestMode(true), ${play}.refreshReadySwitches(), true`);
-        const test = await stepper();
+        await evaluate(`${play}.setTestMode(true), ${play}.refreshReadySwitches(), true`);
+        const test = await openIntro();
+        await introEsc();
         await evaluate(`${play}.setTestMode(false), ${play}.settings.set({ eduStartLevel: 1 }), ${play}.refreshReadySwitches(), true`); // the start level back to 1 for later sections
-        ok(!off.shown && !test.shown, 'with 📚 off, or in test mode, the stepper is hidden');
+        ok(test.open && !test.up && test.level === 'LV 1', 'in test mode the popup has no ◀ ▶ (a test run has its own start level)');
 
         // Skip ▸ and Quit at a break (plan 25, B8). Levels up to 4 are unlocked by now: from level 2's
         // break, Skip passes a level per tap as far as level 4; the run then flies on there. Quit needs two

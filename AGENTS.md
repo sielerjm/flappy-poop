@@ -360,13 +360,19 @@ three switches pack into 64 px boxes (`readyLayout({ versus, education })`, y 80
 📚 switch each other off. `refreshReadySwitches` re-lays them in place when test mode or the word
 changes (stable `switchBoxes` for the focus ring); a gold count on the 📚 is the cards due (`dueCount`).
 The 📚 glyph and that count are a box of their own inside the switch's (`readyLayout`'s
-`educationInfo`, which `readyHit` looks at first): a tap there, or A on its ring item, opens **"Your
-cards"** (`Play.toggleEduCard`, an info card): the cards not seen yet, the missed ones due, the
-reviews due (`cardCounts` over every deck), how many have been seen (`masteryByDeck`), and that
-the gold number is missed plus to review. It opens on the release of the pointer that pressed it
-(the card's dim closes on a release; one press is armed at a time, so a second thumb or a cancelled
-touch does not toggle it twice: plan 25), and any tap, key or pad press closes it without pressing what is under it or starting a
-run. The rest of the switch still toggles.
+`educationInfo`, which `readyHit` looks at first): a tap there, or A on its ring item, opens **the 📚
+popup** (plan 26: `ui/eduIntroPanel.js`, `Play.openEduIntro`; it replaced "Your cards"), as turning the
+switch on does: a DOM panel with the beta note, how the mode works, the player's cards (the cards not
+seen yet, the missed ones due, the reviews due over every deck: `cardCounts`; how many have been seen:
+`masteryByDeck`; and that the gold number is missed plus to review: `Play.eduIntroInfo`), the start
+level (◀ LV n ▶ while a later level is unlocked, not in test mode: `stepEduStart`), where new cards go
+(`setEduNewOrder`), the daily cap, a line that the cards live in this browser with a link to 📚
+Education data, and Close | Play (`startFromEduIntro`). The game's keyboard is off under it, a
+controller walks its buttons with a gold ring (`eduIntroPadAction` through padIntent's `'panel'`),
+Esc, ✕, Close and B close it, and a restart of Play takes it down. It opens on the release of the
+pointer that pressed the glyph (one press is armed at a time, so a second thumb or a cancelled
+touch does not open it twice: plan 25), and nothing under it is pressed and no run starts. The rest
+of the switch still toggles.
 A run with 📚 on latches `runIsEducation` (never a Daily Dump), shows 📚 in the HUD, and at its end
 records nothing on a board or in the career (`endRun`: no best, top list, career counters or career
 badges; the sync that follows sends only what was already queued, such as a tester's answers and the
@@ -443,9 +449,9 @@ in its left slot (`canBury` / `buryCard`): `education.buryCoinsPerLevel` × the 
 at most `buryPerDay` a local day, the card due again `buryMs` later; no pilot event. **Skip ▸ and
 Quit**: Skip passes the next level at par per tap while a later
 level is unlocked (not in a test run); Quit takes two taps and ends the run, graded as a normal end
-when nothing is due, as a Give up (`breakGaveUp`) otherwise. **Start level**: with 📚 on and a later
-level unlocked, a ◀ level ▶ stepper sits in the 📚 row of the ready screen (`readyLayout`'s eduStart
-boxes, settings `eduStartLevel`); the run starts there through `testRunStart`. 💯 and the 🤓 streak
+when nothing is due, as a Give up (`breakGaveUp`) otherwise. **Start level**: with a later level
+unlocked, the 📚 popup's ◀ LV n ▶ sets it (settings `eduStartLevel`; on the ready screen's 📚 row
+until plan 26); the run starts there through `testRunStart`. 💯 and the 🤓 streak
 count only **full** runs (`eduRunFacts`' `full`: from level 1, nothing skipped, won). **The run's
 tally** (`runQuiz`, built by `tallyAnswer` with one row per level) sits in the card's top row
 (`✅ right ❌ wrong`, once the run has an answer); a tap on it, or A on the ring, opens "This run", one
@@ -692,8 +698,8 @@ src/
                             eduNewOrder after / mixed / before and
                             reviveGiveUpWarned, plan 26) +
                             howToPromptDue, vibrate helper, trayLayout, trayHit,
-                            readyLayout (eduStart: the ◀ level ▶ stepper's boxes in
-                            the 📚 row), readyHit, nextEduStartLevel (wraps within
+                            readyLayout (plan 25's ◀ level ▶ stepper boxes went to
+                            the 📚 popup in plan 26), readyHit, nextEduStartLevel (wraps within
                             the levels unlocked), eduBreakLayout (an education
                             break, plan 26: the banner's titleY, 💰 with Skip ▸
                             beside it, Review | Quit on the row under it, the
@@ -1128,6 +1134,14 @@ src/
                             with Clear until a username is stored): closes the panel,
                             then Play.openStats() (the own profile; over the 🌞
                             popup when it was under).
+    eduIntroPanel.js        The 📚 popup (plan 26): plain DOM, built like
+                            eduDataPanel.js; opened by the 📚 switch turned on and
+                            by the 📚 glyph. The beta note, how the mode works, the
+                            player's cards, the start level (◀ LV n ▶) and the
+                            new-card order, the daily cap, a link to 📚 Education
+                            data, Close | Play. A controller ring over its buttons
+                            (eduIntroPadAction), Esc / B close; Play's shutdown
+                            closes it.
     eduDataPanel.js         Plain DOM panel (plan 21, Stage 3b), built like
                             savePanel.js, from the user panel's 📚 Education data
                             button, the 📚 board's footer or the profile's row: the
@@ -1348,7 +1362,7 @@ src/
                             poopRadius; gapBounds keeps gapMargin inside both);
                             levelBar above the score. Nothing here reads time.now;
                             readyHit() routes taps (toilet, versus, education, the
-                            📚 glyph → "Your cards", howto, profile → the save
+                            📚 glyph → the 📚 popup, howto, profile → the save
                             panel; anything else starts). getSaveState / setSaveState for the panel.
                             Test mode: registry testMode / testStartLevel /
                             testInvincible (session, like toilet); isTestMode,

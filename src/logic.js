@@ -1572,7 +1572,7 @@ export function scaledCircleBody(frameSize, displayScale, logicalRadius) {
  * toggle sits under the toilet toggle (only offered when two halves fit the
  * window, versusAvailable).
  */
-export function readyLayout(width, height, t, x0 = 0, { versus = false, education = false, eduStart = false } = {}) {
+export function readyLayout(width, height, t, x0 = 0, { versus = false, education = false } = {}) {
   const cx = x0 + width / 2;
   const boxH = Math.max(88, t.trayHitMin);
   const title = { id: 'title', x: cx, y: 380 };
@@ -1595,15 +1595,7 @@ export function readyLayout(width, height, t, x0 = 0, { versus = false, educatio
   // The 📚 glyph's box (plan 21, E3): the glyph at emojiX and the gold count on its corner, as tall
   // as the switch, 18 px clear of the track's right edge (cx + 10). readyHit looks here first.
   if (switches.education) switches.educationInfo = { id: 'educationInfo', x: cx + 84, y: switches.education.y, width: 112, height: switches.education.height };
-  // The start stepper (plan 25), in the 📚 row right of the glyph's box (which ends at cx + 140):
-  // ◀ (cx + 142–198), the level (cx + 198–262), ▶ (cx + 262–318), as tall as the switch.
-  if (switches.education && eduStart) {
-    const ey = switches.education.y;
-    const eh = switches.education.height;
-    switches.eduStartDown = { id: 'eduStartDown', x: cx + 170, y: ey, width: 56, height: eh };
-    switches.eduStartLabel = { id: 'eduStartLabel', x: cx + 230, y: ey, width: 64, height: eh };
-    switches.eduStartUp = { id: 'eduStartUp', x: cx + 290, y: ey, width: 56, height: eh };
-  }
+  // (Plan 25's start stepper, once in this row, is in the 📚 popup since plan 26: ui/eduIntroPanel.js.)
   // "?" button: a boxH circle in the top-right corner, inset so its pulsing halo
   // (readyPromptGlowPx past the rim) stays inside the field.
   const haloR = boxH / 2 + (t.readyPromptGlowPx ?? 0);
@@ -1771,7 +1763,7 @@ export function shareCardLayout(t) {
  */
 export function readyHit(x, y, layout) {
   if (!layout) return null;
-  for (const box of [layout.toilet, layout.versus, layout.eduStartDown, layout.eduStartUp, layout.educationInfo, layout.education, layout.howto, layout.daily, layout.profile]) {
+  for (const box of [layout.toilet, layout.versus, layout.educationInfo, layout.education, layout.howto, layout.daily, layout.profile]) {
     if (box && inBox(x, y, box)) return box.id;
   }
   return null;

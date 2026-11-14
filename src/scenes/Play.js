@@ -130,6 +130,7 @@ import { createInfoCard } from '../ui/infoCard.js';
 import { openSavePanel, isSavePanelOpen, showAdoptedName, showBoardScores } from '../ui/savePanel.js';
 import { isTournamentPanelOpen, tournamentPadAction } from '../ui/tournamentPanel.js';
 import { openEduDataPanel, isEduDataPanelOpen } from '../ui/eduDataPanel.js';
+import { openEduIntroPanel, closeEduIntroPanel, isEduIntroPanelOpen, eduIntroPadAction } from '../ui/eduIntroPanel.js';
 import { answerEvent, createConsentStore, createResearchQueue } from '../research.js';
 import { bindPad } from '../input/pad.js';
 import { keyGroup, sameDevice, catchUpTier, catchUpDraws, versusAvailable, ghostPlacement, rivalMarker, respawnPose, respawnBlinkStart, courseDistance, VERSUS_EMOJI } from '../versus.js';
@@ -543,8 +544,9 @@ export class Play extends Phaser.Scene {
       ? createCountLine(this, this.quizCountsBox.x, this.quizCountsBox.y, { style: TEXT_STYLE, px: 34, sep: '   ', depth: 28, maxWidth: this.quizCountsBox.width }).setVisible(false)
       : null;
 
-    // "Your cards" (plan 21, E3): the card a tap on the ready screen's 📚 opens (toggleEduCard), over
-    // everything here, the ring included. Single player only, as the 📚 switch is.
+    // The info card a tap on a level break's numbers opens ("Waiting in this quiz": toggleBreakCounts),
+    // over everything here, the ring included (the ready screen's "Your cards" became the 📚 popup in
+    // plan 26). Single player only, as the 📚 switch is.
     this.eduCard = this.match ? null : createInfoCard(this, { x: this.col.x + this.col.width / 2, y: GAME_HEIGHT / 2 - 40, width: 600 });
 
     // The tray and the controller ring belong to the chrome owner: single player, or P1 in a match (P2 has neither).
@@ -563,11 +565,8 @@ export class Play extends Phaser.Scene {
             // 👥 and 📚 always have an item; it shows only while its switch is offered (refreshReadySwitches).
             { id: 'versus', box: this.switchBoxes.versus, visible: () => onReady() && Boolean(this.readyBoxes.versus), activate: () => this.toggleVersus() },
             { id: 'education', box: this.switchBoxes.education, visible: () => onReady() && Boolean(this.readyBoxes.education), activate: () => this.toggleEducation() },
-            // The 📚 glyph (and its gold count): what the cards are ("Your cards", toggleEduCard).
-            { id: 'educationInfo', box: this.switchBoxes.educationInfo, visible: () => onReady() && Boolean(this.readyBoxes.educationInfo), activate: () => this.toggleEduCard() },
-            // The start stepper (plan 25), while 📚 is on and a later level is unlocked.
-            { id: 'eduStartDown', box: this.switchBoxes.eduStartDown, visible: () => onReady() && this.educationOn && Boolean(this.readyBoxes.eduStartDown), activate: () => this.stepEduStart(-1) },
-            { id: 'eduStartUp', box: this.switchBoxes.eduStartUp, visible: () => onReady() && this.educationOn && Boolean(this.readyBoxes.eduStartUp), activate: () => this.stepEduStart(1) },
+            // The 📚 glyph (and its gold count): the 📚 popup (openEduIntro; plan 26).
+            { id: 'educationInfo', box: this.switchBoxes.educationInfo, visible: () => onReady() && Boolean(this.readyBoxes.educationInfo), activate: () => this.openEduIntro() },
             { id: 'daily', box: this.readyBoxes.daily, visible: onReady, activate: () => this.handleChrome('daily') },
             { id: 'howto', box: this.readyBoxes.howto, visible: onReady, activate: () => this.handleChrome('howto') },
             // The level break: the 💰 pill, then (the shop open) its ✕ and rows down the column.
@@ -638,6 +637,7 @@ export class Play extends Phaser.Scene {
     this.events.once('shutdown', () => {
       if (typeof document !== 'undefined') document.removeEventListener('visibilitychange', this.onHidden);
       this.game.events.off('blur', this.onBlur);
+      if (!this.match) closeEduIntroPanel(); // the 📚 popup belongs to this scene's ready screen (a restart takes it down)
       this.pad?.destroy();
       this.pad = null;
       this.focus?.destroy();
@@ -678,7 +678,7 @@ export class Play extends Phaser.Scene {
 
   /** A re-fit can happen now: on the ready screen, nothing sliding, no overlay, panel or game-over on top. */
   canRefitField() {
-    return this.state === 'ready' && !this.launching && !this.chromeArgs('tap').overlay && !this.scene.isActive('Over') && !isSavePanelOpen() && !isEduDataPanelOpen();
+    return this.state === 'ready' && !this.launching && !this.chromeArgs('tap').overlay && !this.scene.isActive('Over') && !isSavePanelOpen() && !isEduDataPanelOpen() && !isEduIntroPanelOpen();
   }
 
   /**
@@ -763,7 +763,6 @@ export class Play extends Phaser.Scene {
     this.versusToggle?.setVisible(visible);
     this.educationToggle?.setVisible(visible);
     this.refreshEduDue();
-    this.refreshEduStart();
     this.howToBtn.setVisible(visible);
     this.howToHalo.setVisible(visible && this.isHowToPromptDue());
     this.dailyBtn.setVisible(visible);
@@ -1151,7 +1150,7 @@ export class Play extends Phaser.Scene {
           return;
         }
         if (hit === 'educationInfo') {
-          this.openEduCardOnRelease(pointer); // the 📚 glyph: "Your cards"
+          this.openEduCardOnRelease(pointer); // the 📚 glyph: the 📚 popup (plan 26)
           return;
         }
         if (hit === 'versus') {
@@ -1160,10 +1159,6 @@ export class Play extends Phaser.Scene {
         }
         if (hit === 'education') {
           this.toggleEducation();
-          return;
-        }
-        if ((hit === 'eduStartDown' || hit === 'eduStartUp') && this.educationOn) {
-          this.stepEduStart(hit === 'eduStartUp' ? 1 : -1); // the start stepper (plan 25)
           return;
         }
         if (hit === 'profile') {
@@ -1582,12 +1577,13 @@ export class Play extends Phaser.Scene {
   }
 
   /** The 📚 switch: remembered in the settings store; switching it on switches 👥 off. */
-  toggleEducation() {
+  /** The 📚 switch: on or off; turned on, it opens the 📚 popup (plan 26) unless `intro` is false (the popup's own Play). */
+  toggleEducation({ intro = true } = {}) {
     this.educationOn = !this.educationOn;
     this.settings.set({ education: this.educationOn });
     this.educationToggle?.setOn(this.educationOn);
     if (this.educationOn && this.versusOn) this.toggleVersus();
-    this.refreshEduStart();
+    if (this.educationOn && intro) this.openEduIntro();
   }
 
   /** Is education mode unlocked here? (the save panel asks before toggling it with the word) */
@@ -1620,11 +1616,11 @@ export class Play extends Phaser.Scene {
   layoutReady() {
     const at = (opts) => readyLayout(this.col.width, GAME_HEIGHT, T, this.col.x, opts);
     if (!this.switchBoxes) {
-      const all = at({ versus: true, education: true, eduStart: true }); // real geometry for a switch not yet offered
-      this.switchBoxes = Object.fromEntries(['toilet', 'versus', 'education', 'educationInfo', 'eduStartDown', 'eduStartLabel', 'eduStartUp'].map((id) => [id, { ...all[id] }]));
+      const all = at({ versus: true, education: true }); // real geometry for a switch not yet offered
+      this.switchBoxes = Object.fromEntries(['toilet', 'versus', 'education', 'educationInfo'].map((id) => [id, { ...all[id] }]));
     }
-    const next = at({ versus: this.versusOffered(), education: this.educationOffered(), eduStart: this.eduStartOffered() });
-    for (const id of ['toilet', 'versus', 'education', 'educationInfo', 'eduStartDown', 'eduStartLabel', 'eduStartUp']) {
+    const next = at({ versus: this.versusOffered(), education: this.educationOffered() });
+    for (const id of ['toilet', 'versus', 'education', 'educationInfo']) {
       if (next[id]) next[id] = Object.assign(this.switchBoxes[id], next[id]);
     }
     this.readyBoxes = next;
@@ -1649,19 +1645,9 @@ export class Play extends Phaser.Scene {
       : null;
     for (const toggle of [this.toiletToggle, this.versusToggle, this.educationToggle]) toggle?.setVisible(this.readyUiShown);
     this.refreshEduDue();
-    // The start stepper (plan 25): ◀ level ▶ in the 📚 row, while 📚 is on and a later level is unlocked.
-    for (const obj of Object.values(this.eduStartTexts ?? {})) obj.destroy();
-    this.eduStartTexts = b.eduStartDown
-      ? {
-          down: this.add.text(b.eduStartDown.x, b.eduStartDown.y, '◀', { ...TEXT_STYLE, fontSize: '34px', color: '#f8a0c8' }).setOrigin(0.5).setDepth(22),
-          label: this.add.text(b.eduStartLabel.x, b.eduStartLabel.y, '', { ...TEXT_STYLE, fontSize: '24px' }).setOrigin(0.5).setDepth(22),
-          up: this.add.text(b.eduStartUp.x, b.eduStartUp.y, '▶', { ...TEXT_STYLE, fontSize: '34px', color: '#f8a0c8' }).setOrigin(0.5).setDepth(22),
-        }
-      : null;
-    this.refreshEduStart();
   }
 
-  /** May an education run start at a later level here? 📚 offered, not in test mode, and a level past 1 unlocked (plan 25). */
+  /** May an education run start at a later level? 📚 offered, not in test mode, and a level past 1 unlocked (plan 25; the 📚 popup's ◀ LV n ▶ since plan 26). */
   eduStartOffered() {
     return this.educationOffered() && !this.isTestMode() && (this.eduStore?.load().unlockedLevel ?? 1) > 1;
   }
@@ -1672,21 +1658,9 @@ export class Play extends Phaser.Scene {
     return Math.min(Math.max(1, Math.round(this.settings.load().eduStartLevel ?? 1) || 1), top);
   }
 
-  /** ◀ / ▶ on the start stepper: one level down or up, wrapping within the levels unlocked. */
+  /** ◀ / ▶ in the 📚 popup: one level down or up, wrapping within the levels unlocked. */
   stepEduStart(step) {
     this.settings.set({ eduStartLevel: nextEduStartLevel(this.eduStartLevel(), step, this.eduStore.load().unlockedLevel) });
-    this.refreshEduStart();
-  }
-
-  /** The stepper shows with the ready UI, while 📚 is on; its label is the start level. */
-  refreshEduStart() {
-    const texts = this.eduStartTexts;
-    if (!texts) return;
-    const shown = Boolean(this.readyUiShown && this.educationOn && this.readyBoxes?.eduStartDown);
-    texts.label.setText(levelLabel(this.locale, this.eduStartLevel()));
-    const box = this.readyBoxes?.eduStartLabel;
-    texts.label.setScale(box && texts.label.width > box.width ? box.width / texts.label.width : 1);
-    for (const obj of Object.values(texts)) obj.setVisible(shown);
   }
 
   /**
@@ -1859,7 +1833,7 @@ export class Play extends Phaser.Scene {
    * another finger's release does nothing, and a release outside the canvas or a cancelled touch
    * (Phaser's pointer.wasCanceled) disarms it without opening.
    */
-  openEduCardOnRelease(pointer = null, show = () => this.toggleEduCard()) {
+  openEduCardOnRelease(pointer = null, show = () => this.openEduIntro()) {
     this.eduCardPress?.done();
     const id = pointer?.id ?? null;
     const mine = (p) => id === null || p?.id === id;
@@ -1885,29 +1859,44 @@ export class Play extends Phaser.Scene {
   }
 
   /**
-   * "Your cards" (plan 21, E3): what the 📚 on the ready screen stands for, opened by a tap on the
-   * glyph (or A on its ring item) and closed by any tap, key or pad press. Over every deck: the
-   * cards not seen yet, the missed ones due, the reviews due (cardCounts
-   * 'all'), how many have been seen at all, and what the gold number on the 📚 counts. While it is
-   * up nothing under it is pressed and no run starts (flap, onPadAction, handleChrome).
+   * The 📚 popup (plan 26; ui/eduIntroPanel.js), on the ready screen: opened when the 📚 switch is
+   * turned on and by a tap on its glyph (or A on its ring item). It replaced "Your cards" there.
    */
-  toggleEduCard() {
-    if (!this.eduCard) return;
-    if (this.eduCard.open) {
-      this.eduCard.hide();
-      return;
-    }
-    if (this.state !== 'ready' || this.launching || this.match || !this.readyBoxes?.educationInfo) return;
+  openEduIntro() {
+    if (this.state !== 'ready' || this.launching || this.match || !this.readyBoxes?.educationInfo || isEduIntroPanelOpen()) return;
+    openEduIntroPanel({ game: this.game, play: this, locale: this.locale });
+  }
+
+  /** What the 📚 popup shows: the three counts over every deck, cards seen of all, the start level and whether it can move, the new-card order, the daily cap. */
+  eduIntroInfo() {
     const srs = this.eduStore.load().cards;
-    const counts = cardCounts(srs, { context: 'all' });
     const decks = Object.values(masteryByDeck(srs));
-    const seen = decks.reduce((sum, d) => sum + d.seen, 0);
-    const total = decks.reduce((sum, d) => sum + d.total, 0);
-    this.eduCard.show({
-      glyph: EDUCATION_EMOJI,
-      title: t(this.locale, 'eduCardsTitle'),
-      lines: [...countLines(this.locale, counts), t(this.locale, 'eduCardsSeen').replace('{n}', String(seen)).replace('{total}', String(total)), t(this.locale, 'eduCardsDue')],
-    });
+    return {
+      counts: cardCounts(srs, { context: 'all' }),
+      seen: decks.reduce((sum, d) => sum + d.seen, 0),
+      total: decks.reduce((sum, d) => sum + d.total, 0),
+      startOffered: this.eduStartOffered(),
+      startLevel: this.eduStartLevel(),
+      order: this.settings.load().eduNewOrder,
+      newPerDay: T.education.newPerDay,
+    };
+  }
+
+  /** The 📚 popup's new-card order: 'before', 'mixed' or 'after' the cards due (settings eduNewOrder; pickCard's order). */
+  setEduNewOrder(order) {
+    this.settings.set({ eduNewOrder: order });
+  }
+
+  /** The 📚 popup's Play: 📚 on (the popup can be opened with it off, from the glyph), then a run starts as a tap on the ready screen would. */
+  startFromEduIntro() {
+    if (this.state !== 'ready' || this.launching || this.match) return;
+    if (!this.educationOn) this.toggleEducation({ intro: false });
+    this.flap();
+  }
+
+  /** The popup closed: the ready screen's 📚 count follows what may have changed. */
+  onEduIntroClosed() {
+    this.refreshEduDue();
   }
 
   /** The 📚 switch's due count: shown with the switch, and only when a card is due. */
@@ -2211,7 +2200,8 @@ export class Play extends Phaser.Scene {
     }
     // A card up on the game-over panel: B takes it down (padIntent's B there only hides the ring).
     if (top === 'over' && action === 'back' && scene?.closeCard?.()) return;
-    const tournamentPanelOpen = isTournamentPanelOpen();
+    const eduIntroOpen = isEduIntroPanelOpen();
+    const tournamentPanelOpen = isTournamentPanelOpen() || eduIntroOpen; // both DOM panels walk their buttons with the pad
     const ringPress = action === 'select' && Boolean(this.focus?.shown); // A on P1's ring presses the ringed button (⏸, 💰, 🏅)
     if (this.match && top === 'play' && !tournamentPanelOpen && !ringPress && (action === 'select' || action === 'power')) {
       // A match: A and RT belong to the half that claimed this pad (versusInput); the other
@@ -2272,7 +2262,8 @@ export class Play extends Phaser.Scene {
         scene?.focus?.show();
         break;
       case 'panel':
-        tournamentPadAction(result.action); // the tournament panel walks its own buttons
+        if (eduIntroOpen) eduIntroPadAction(result.action); // the 📚 popup walks its own buttons (plan 26)
+        else tournamentPadAction(result.action); // the tournament panel walks its own buttons
         break;
       case 'versusSelect':
         scene?.onPadSelect?.(padIndex); // the join screen claims the pad; the result panel presses Continue

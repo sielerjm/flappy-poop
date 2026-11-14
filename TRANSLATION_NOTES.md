@@ -279,6 +279,24 @@ Short, playful, clear. Fit a 720×1280 logical field; How to play / About body w
 | reviveFree | No questions left: you're back in. | 没有题了：可以继续飞了。 |
 | eduNotSaved | Education runs are not on the 🏆 boards | 教育模式的成绩不上 🏆 排行榜 |
 | saveEduData | 📚 Education data | 📚 教育数据 |
+| eduIntroTitle | 📚 Education mode (plan 26: the popup the 📚 switch and glyph open) | 📚 教育模式 |
+| eduIntroBeta | Beta: the cards are still being checked. If one looks wrong, tap the 🚩 by its code to tell us. | 测试版：卡片仍在核对中。如果发现有误，请点卡片编号旁的 🚩 告诉我们。 |
+| eduIntroHowTitle | How it works | 玩法 |
+| eduIntroHowLevels | Each level break asks cards about the part of the gut you just flew through. Cards you missed, and cards due for review, must be answered right before you fly on. | 每次关卡休息时，会问你刚飞过的那段肠道的卡片。答错的卡片和到期要复习的卡片，答对之后才能继续飞。 |
+| eduIntroHowRevive | Crash, and a card is your way back: ❤️ three tries to get one right, then ⭐ three in a row to win back your coins and power-ups. | 撞到了？答对卡片就能继续：❤️ 有三次机会答对一张，然后连续答对 ⭐ 三张，就能赢回金币和道具。 |
+| eduIntroHowBury | Stuck on a card at a break? Bury it until tomorrow for a few 🌽, or give up the run. | 在休息时卡在一张卡片上？花几个 🌽 把它推到明天，或者放弃这一局。 |
+| eduIntroHowCoins | Right answers in a break pay 🌽. Each card comes back just before you would forget it (FSRS, as in Anki). (FSRS and Anki are names: kept) | 休息时答对会得到 🌽。每张卡片都会在你快要忘记时再出现（FSRS，和 Anki 一样）。 |
+| eduIntroChoices | Your choices (the heading over the start level and the new-card order) | 你的选择 |
+| eduIntroStart | Start at (◀ LV n ▶ follows: the level the next education run starts at) | 从这一关开始 |
+| eduIntroStartLocked | Reach a level in an education run to start there next time. | 在教育模式中到达某一关后，下次就能从那里开始。 |
+| eduIntroOrder | New cards (a heading over three choices: before, mixed in with, or after the cards due) | 新卡片 |
+| eduOrderBefore | Before reviews | 先学新卡 |
+| eduOrderMixed | Mixed in | 穿插 |
+| eduOrderAfter | After reviews (the default) | 先复习 |
+| eduIntroPerDay | Up to {n} new cards a day. ({n} is education.newPerDay) | 每天最多 {n} 张新卡片。 |
+| eduIntroDevice | Your cards are kept in this browser, on this device. (the 📚 Education data link follows) | 你的卡片保存在这台设备的浏览器里。 |
+| eduIntroPlay | Play (starts an education run from the popup) | 开始 |
+| eduIntroClose | Close | 关闭 |
 | eduDataTitle | 📚 Education data | 📚 教育数据 |
 | eduDataIntro | Education mode keeps your answers, grades and badges on this device. Nothing leaves it unless you choose to share below. | 教育模式的答题记录、成绩和徽章都保存在这台设备上。除非你在下面选择分享，否则不会离开设备。 |
 | eduDataAdult | I am 18 or older | 我已年满 18 岁 |

@@ -163,11 +163,11 @@ test("test mode turned on after the run started (the game-over screen's bonus qu
   }
 });
 
-test("the 📚 glyph opens \"Your cards\" on its own pointer's release: a second thumb or another finger's release does not toggle it twice; a cancel or a release off the canvas opens nothing (plan 25, A6)", () => {
+test("the 📚 glyph opens the 📚 popup (plan 26; \"Your cards\" before) on its own pointer's release: a second thumb or another finger's release does not open it twice; a cancel or a release off the canvas opens nothing (plan 25, A6)", () => {
   const handlers = { pointerup: new Set(), pointerupoutside: new Set() };
   const input = { on: (ev, fn) => handlers[ev].add(fn), off: (ev, fn) => handlers[ev].delete(fn), emit: (ev, p) => [...handlers[ev]].forEach((fn) => fn(p)) };
   let toggles = 0;
-  const s = playScene({ input, toggleEduCard: () => (toggles += 1) });
+  const s = playScene({ input, openEduIntro: () => (toggles += 1) });
   // Two thumbs on the glyph, released one after the other: one toggle, nothing left armed.
   s.openEduCardOnRelease({ id: 1 });
   s.openEduCardOnRelease({ id: 2 });
@@ -449,4 +449,38 @@ test('a lost education run is recorded at once, as before; a bonus answer under 
   assert.deepEqual([store.load().counters.gradedRuns, store.load().pending], [1, undefined]);
   s.quizAnswer({ card: CARDS[0], reason: 'new', order: ['answer', 'w1', 'w2'], chosen: 'answer', rtMs: 4000, mode: 'bonus' });
   assert.equal(s.runQuiz.answered, 5, 'test mode: the bonus answer is not counted');
+});
+
+test('the 📚 switch turned on opens the 📚 popup; turned off, or by the popup\'s own Play, it does not; the popup\'s Play starts a run with 📚 on (plan 26)', () => {
+  const calls = [];
+  const s = playScene({
+    educationOn: false, versusOn: false, state: 'ready', launching: false, match: null,
+    settings: { set: (o) => calls.push(['set', o]), load: () => ({}) },
+    educationToggle: { setOn: () => {} },
+    openEduIntro: () => calls.push(['intro']), flap: () => calls.push(['flap']), toggleVersus() {},
+  });
+  s.toggleEducation();
+  assert.deepEqual(calls.splice(0), [['set', { education: true }], ['intro']], 'on: the popup');
+  s.toggleEducation();
+  assert.deepEqual(calls.splice(0), [['set', { education: false }]], 'off: nothing to say');
+  s.startFromEduIntro();
+  assert.deepEqual(calls.splice(0), [['set', { education: true }], ['flap']], 'Play from the popup (opened by the glyph with 📚 off): 📚 goes on, no second popup, and a run starts');
+  s.startFromEduIntro();
+  assert.deepEqual(calls.splice(0), [['flap']], 'with 📚 on, straight to the run');
+});
+
+test("the 📚 popup's facts (eduIntroInfo): the counts over every deck, cards seen, the start level and whether it can move, the order, the daily cap (plan 26)", () => {
+  const store = createEduStore(fakeStorage());
+  store.answer(CARDS[0].id, schedule(null, 'again', Date.now() - 60000));
+  store.unlockLevel(3);
+  const settings = createSettingsStore(fakeStorage(), T.settingsKey);
+  settings.set({ eduStartLevel: 2, eduNewOrder: 'mixed' });
+  const s = playScene({ eduStore: store, settings, eduUnlocked: true, match: null, isTestMode: () => false, educationOffered: () => true });
+  const info = s.eduIntroInfo();
+  assert.deepEqual([info.counts.missed, info.seen, info.startOffered, info.startLevel, info.order, info.newPerDay], [1, 1, true, 2, 'mixed', T.education.newPerDay]);
+  assert.equal(info.total, CARDS.filter((c) => !c.retired).length, 'every live card, the general deck included');
+  s.stepEduStart(1);
+  assert.equal(s.eduIntroInfo().startLevel, 3);
+  s.setEduNewOrder('before');
+  assert.equal(settings.load().eduNewOrder, 'before');
 });
