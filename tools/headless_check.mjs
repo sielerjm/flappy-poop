@@ -382,11 +382,22 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
     // Retried: under load a start tap can land in the frame a restart takes.
     const startEducationRun = async () => {
       for (let attempt = 0; attempt < 3 && (await playState()) !== 'playing'; attempt += 1) {
+        // A settled ready screen: a home()'s restart lands on the next frame, and a start sent before
+        // it would open the 📚 popup on the scene being replaced (its shutdown closes the popup).
         for (let i = 0; i < 20 && (await playState()) !== 'ready'; i += 1) await sleep(100);
+        await sleep(300);
+        for (let i = 0; i < 20 && !(await evaluate(`(() => { const p = __flappy.scene.getScene('Play'); return p.state === 'ready' && !p.launching && !p.fieldResizeWanted && Boolean(p.poop?.body); })()`)); i += 1) await sleep(100);
         await evaluate(`__flappy.scene.getScene('Play').flap(), true`);
+        // With 📚 on, the start opens the 📚 popup (plan 26, A2): its Play starts the run, once the
+        // popup's click lockout is over.
+        if (await introShown()) {
+          await sleep(TT.retryLockoutMs + 100);
+          if (await introShown()) await evaluate(`document.getElementById('edu-intro-play').click(), true`);
+        }
         for (let i = 0; i < 40 && (await playState()) !== 'playing'; i += 1) await sleep(100);
       }
     };
+    const introShown = () => evaluate(`(() => { const r = document.getElementById('edu-intro-panel'); return Boolean(r && !r.hidden); })()`);
     const active = (key) => evaluate(`__flappy.scene.isActive('${key}')`);
     const chrome = (input) => evaluate(`__flappy.scene.getScene('Play').handleChrome('${input}'), true`);
     const closeTop = (key) => evaluate(`__flappy.scene.getScene('${key}').close(), true`);
@@ -3693,7 +3704,10 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await tap('education');
         const s3 = await switches();
         const intro = () => evaluate(`(() => { const r = document.getElementById('edu-intro-panel'); const open = Boolean(r && !r.hidden); return JSON.stringify({ open, title: open ? r.querySelector('h2').textContent : null, beta: open ? r.querySelector('.beta').textContent : null, counts: open ? [...r.querySelectorAll('#edu-intro-counts p')].map((p) => p.textContent) : [], level: open ? r.querySelector('#edu-intro-level')?.textContent ?? null : null, up: Boolean(r?.querySelector('#edu-intro-up')), order: open ? [...r.querySelectorAll('.order button')].filter((b) => b.getAttribute('aria-pressed') === 'true').map((b) => b.id) : [], orderHint: open ? r.querySelector('#edu-intro-order-hint')?.textContent ?? null : null, device: open ? r.querySelector('#edu-intro-device')?.textContent ?? null : null, pad: open ? r.querySelector('button.pad')?.id ?? null : null, state: ${play}.state, launching: Boolean(${play}.launching), on: ${play}.educationOn, toilet: ${play}.toilet, kb: __flappy.input.keyboard.enabled }); })()`).then(JSON.parse);
-        const introClick = (id) => evaluate(`(document.getElementById('${id}')?.click(), true)`);
+        const introClick = async (id) => {
+          await sleep(TT.retryLockoutMs + 50); // past the popup's click lockout (plan 26, A2)
+          return evaluate(`(document.getElementById('${id}')?.click(), true)`);
+        };
         const introEsc = () => evaluate(`(document.querySelector('#edu-intro-panel .card').dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })), true)`);
         const i3 = await intro();
         const [introTitle, introBeta] = await Promise.all(['eduIntroTitle', 'eduIntroBeta'].map(tx));
@@ -3871,7 +3885,47 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         const test = await openIntro();
         await introEsc();
         await evaluate(`${play}.setTestMode(false), ${play}.settings.set({ eduStartLevel: 1 }), ${play}.refreshReadySwitches(), true`); // the start level back to 1 for later sections
-        ok(test.open && !test.up && test.level === 'LV 1', 'in test mode the popup has no ◀ ▶ (a test run has its own start level)');
+        ok(test.open && !test.up && test.level === null, 'in test mode the popup has no start-level row (a test run has its own start level: plan 26, A2)');
+
+        // The 📚 popup at every start from the ready screen (plan 26, A2: Michael asked). A tap, Space,
+        // ↑ and the pad's A each open it and start nothing. A click in its first moments does nothing
+        // (a double tap's second tap); a held Space's repeats and its release press nothing; Enter on the
+        // card, which has the focus, presses Play.
+        const startBy = async (label, how) => {
+          await home();
+          await sleep(400);
+          await evaluate(how);
+          await sleep(150);
+          const v = await intro();
+          const focus = await evaluate(`document.activeElement === document.querySelector('#edu-intro-panel .card')`);
+          ok(v.open && v.state === 'ready' && !v.launching && focus, `${label} on the ready screen opens the 📚 popup and starts nothing; the focus is on the card`);
+          await introEsc();
+          await evaluate(`${play}.registry.remove('padMode'), true`);
+        };
+        await startBy('a start (Play.flap, as a tap or a key)', `${play}.flap(), true`);
+        await startBy('Space', `${play}.input.keyboard.emit('keydown-SPACE'), true`);
+        await startBy('↑', `${play}.input.keyboard.emit('keydown-UP'), true`);
+        await startBy("the pad's A", `${play}.padDown(${TT.gamepad.select}), true`);
+        await home();
+        await sleep(400);
+        const startSpot = await evaluate(`JSON.stringify({ x: ${play}.col.x + ${play}.col.width / 2, y: 440 })`).then(JSON.parse);
+        await tapAt(startSpot.x, startSpot.y);
+        await sleep(100);
+        const tapped = await intro();
+        ok(tapped.open && tapped.state === 'ready', 'a real tap on the ready screen opens it too');
+        await evaluate(`document.getElementById('edu-intro-play').click(), true`); // at once: inside the lockout
+        await sleep(150);
+        const early = await intro();
+        await evaluate(`(() => { const c = document.querySelector('#edu-intro-panel .card'); for (const t of ['keydown', 'keydown']) c.dispatchEvent(new KeyboardEvent(t, { key: ' ', code: 'Space', repeat: true, bubbles: true, cancelable: true })); c.dispatchEvent(new KeyboardEvent('keyup', { key: ' ', code: 'Space', bubbles: true, cancelable: true })); return true; })()`);
+        await sleep(150);
+        const held = await intro();
+        ok(early.open && early.state === 'ready' && held.open && held.state === 'ready', 'a click on Play inside its first moments does nothing, nor do a held Space\'s repeats and release');
+        await sleep(TT.retryLockoutMs);
+        await evaluate(`document.querySelector('#edu-intro-panel .card').dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', bubbles: true, cancelable: true })), true`);
+        for (let i = 0; i < 40 && (await playState()) !== 'playing'; i += 1) await sleep(100);
+        const entered = await evaluate(`JSON.stringify({ state: ${play}.state, edu: ${play}.runIsEducation, popup: !document.getElementById('edu-intro-panel').hidden })`).then(JSON.parse);
+        ok(entered.state === 'playing' && entered.edu && !entered.popup, 'Enter on the card presses Play: the education run starts and the popup is gone');
+        await home();
 
         // Quit at a break (plan 25, B8; the level Skip ▸ beside it is gone since plan 26's A2). Quit needs
         // two taps and ends the run.
@@ -4936,6 +4990,14 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await sleep(300);
         await evaluate(`${play}.setTestMode(false), true`);
         ok(statsUp && srs1 === srs0 && (await evaluate(`__flappy.scene.isActive('Over')`)), 'the profile opens over the game-over screen; with test mode turned on there, a bonus answer saves nothing');
+
+        // Play again goes straight into an education run: the 📚 popup opens only at a start from the
+        // ready screen (plan 26, A2).
+        await evaluate(`(${O}.openedAt = __flappy.loop.time - 5000, ${O}.playAgain(), true)`);
+        for (let i = 0; i < 40 && (await playState()) !== 'playing'; i += 1) await sleep(100);
+        const again = await evaluate(`JSON.stringify({ state: ${play}.state, edu: ${play}.runIsEducation, popup: !(document.getElementById('edu-intro-panel')?.hidden ?? true) })`).then(JSON.parse);
+        ok(again.state === 'playing' && again.edu && !again.popup, `Play again on an education game over goes straight into the next run, with no popup (${JSON.stringify(again)})`);
+        await home();
 
         // Education badges and the average grade (plan 22, U6): kept on this device with the cards, shown
         // on the game-over line and in the profile's 📚 section, and never handed to the career store.

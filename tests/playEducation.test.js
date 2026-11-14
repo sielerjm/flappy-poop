@@ -668,10 +668,45 @@ test('the 📚 switch turned on opens the 📚 popup; turned off, or by the popu
   assert.deepEqual(calls.splice(0), [['set', { education: true }], ['intro']], 'on: the popup');
   s.toggleEducation();
   assert.deepEqual(calls.splice(0), [['set', { education: false }]], 'off: nothing to say');
+  s.launch = (o) => calls.push(['launch', o]);
   s.startFromEduIntro();
-  assert.deepEqual(calls.splice(0), [['set', { education: true }], ['flap']], 'Play from the popup (opened by the glyph with 📚 off): 📚 goes on, no second popup, and a run starts');
+  assert.deepEqual(calls.splice(0), [['set', { education: true }], ['launch', { intro: false }]], 'Play from the popup (opened by the glyph with 📚 off): 📚 goes on, and a run starts without a second popup (plan 26, A2: launch({ intro: false }), not a tap, which would open it again)');
   s.startFromEduIntro();
-  assert.deepEqual(calls.splice(0), [['flap']], 'with 📚 on, straight to the run');
+  assert.deepEqual(calls.splice(0), [['launch', { intro: false }]], 'with 📚 on, straight to the run');
+});
+
+/** A ready screen whose launch() can run in Node: the slide's tween is recorded, the popup's opening stubbed. */
+function launchScene({ educationOn = true, opens = true, ...over } = {}) {
+  const tweens = [];
+  const opened = [];
+  const s = playScene({
+    state: 'ready', launching: false, versusOn: false, educationOn, eduUnlocked: true, match: null,
+    focus: absorb(), eduCard: absorb(), bob: absorb(), poop: absorb(), poopX: 180,
+    setReadyUiVisible() {}, setPoopTexture() {}, tweens: { add: (cfg) => (tweens.push(cfg), {}) },
+    openEduIntro: () => (opened.push(1), opens),
+    ...over,
+  });
+  return { s, tweens, opened };
+}
+
+test('the 📚 popup opens at every start from the ready screen with 📚 on (plan 26, A2: Michael asked; tap, Space, ↑ and the pad\'s A all reach launch()); no run starts under it; Play again, a Daily Dump, a match half and the popup\'s own Play go straight in', () => {
+  const plain = launchScene();
+  plain.s.launch();
+  assert.deepEqual([plain.opened.length, plain.s.launching, plain.tweens.length], [1, false, 0], 'a start from home: the popup, and no run');
+  for (const [name, opts] of [["the popup's Play", { intro: false }], ['Play again', { solo: true }], ['a Daily Dump', { daily: true }], ["a match half's slide", { hold: true }]]) {
+    const x = launchScene();
+    x.s.launch(opts);
+    assert.deepEqual([x.opened.length, x.s.launching, x.tweens.length], [0, true, 1], `${name}: straight into the run`);
+  }
+  const off = launchScene({ educationOn: false });
+  off.s.launch();
+  assert.deepEqual([off.opened.length, off.s.launching], [0, true], '📚 off: no popup');
+  const locked = launchScene({ eduUnlocked: false });
+  locked.s.launch();
+  assert.deepEqual([locked.opened.length, locked.s.launching], [0, true], 'education not unlocked here: no popup');
+  const stuck = launchScene({ opens: false });
+  stuck.s.launch();
+  assert.deepEqual([stuck.opened.length, stuck.s.launching], [1, true], 'a popup that cannot open never blocks the run');
 });
 
 test("the 📚 popup's facts (eduIntroInfo): the counts over every deck, cards seen, the start level and whether it can move, the order, the daily cap (plan 26)", () => {

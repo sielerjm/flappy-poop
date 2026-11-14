@@ -699,9 +699,13 @@ export class Play extends Phaser.Scene {
    */
   /**
    * The start tap: the poop slides into place, then the run starts with a flap. `hold` (a match's
-   * countdown): it slides and waits there; the Versus GO starts it (startRace).
+   * countdown): it slides and waits there; the Versus GO starts it (startRace). With 📚 on, a start
+   * from the ready screen (a tap, Space, ↑, the pad's A: all arrive here with no options) opens the
+   * 📚 popup instead and nothing starts (plan 26, A2: Michael asked); its Play starts the run
+   * (startFromEduIntro: `intro` false). Play again (`solo`), a Daily Dump and a match half go
+   * straight in, and a popup that cannot open never blocks the run.
    */
-  launch({ hold = false, daily = false, solo = false } = {}) {
+  launch({ hold = false, daily = false, solo = false, intro = true } = {}) {
     if (this.launching || this.state !== 'ready') return;
     // Play again (solo) and a Daily Dump are one-player runs whatever the 👥 toggle says.
     if (!daily && !solo && this.versusOn && this.versusOffered()) {
@@ -709,6 +713,9 @@ export class Play extends Phaser.Scene {
       this.focus?.hide();
       this.scene.start('Versus', { match: null });
       return;
+    }
+    if (intro && !hold && !daily && !solo && this.educationOn && this.educationOffered()) {
+      if (isEduIntroPanelOpen() || this.openEduIntro()) return;
     }
     this.launching = true;
     this.eduCard?.hide(); // "Your cards" never rides into a run
@@ -1904,8 +1911,9 @@ export class Play extends Phaser.Scene {
    * turned on and by a tap on its glyph (or A on its ring item). It replaced "Your cards" there.
    */
   openEduIntro() {
-    if (this.state !== 'ready' || this.launching || this.match || !this.readyBoxes?.educationInfo || isEduIntroPanelOpen()) return;
+    if (this.state !== 'ready' || this.launching || this.match || !this.readyBoxes?.educationInfo || isEduIntroPanelOpen()) return false;
     openEduIntroPanel({ game: this.game, play: this, locale: this.locale });
+    return isEduIntroPanelOpen(); // whether it opened (launch starts the run when it could not)
   }
 
   /** What the 📚 popup shows: the three counts over every deck, cards seen of all, the start level and whether it can move, the new-card order, the daily cap. */
@@ -1920,6 +1928,7 @@ export class Play extends Phaser.Scene {
       startLevel: this.eduStartLevel(),
       order: this.settings.load().eduNewOrder,
       newPerDay: T.education.newPerDay,
+      testMode: this.isTestMode(), // the start-level row is hidden: a test run starts at its own level (plan 26, A2)
     };
   }
 
@@ -1928,11 +1937,16 @@ export class Play extends Phaser.Scene {
     this.settings.set({ eduNewOrder: order });
   }
 
-  /** The 📚 popup's Play: 📚 on (the popup can be opened with it off, from the glyph), then a run starts as a tap on the ready screen would. */
+  /**
+   * The 📚 popup's Play: 📚 on (the popup can be opened with it off, from the glyph), then the run
+   * starts. Not through a tap (flap), which would open the popup again (plan 26, A2): launch with
+   * `intro` false. The audio unlocks here, as a tap's flap would do.
+   */
   startFromEduIntro() {
     if (this.state !== 'ready' || this.launching || this.match) return;
     if (!this.educationOn) this.toggleEducation({ intro: false });
-    this.flap();
+    unlock();
+    this.launch({ intro: false });
   }
 
   /** The popup closed: the ready screen's 📚 count follows what may have changed. */

@@ -1,5 +1,5 @@
-// DOM "📚 Education mode" popup (plan 26), opened when the ready screen's 📚 switch is turned on and by
-// a tap on its 📚 glyph (it replaces the "Your cards" card there). Plain DOM over the canvas, like the
+// DOM "📚 Education mode" popup (plan 26), opened at every start from the ready screen with 📚 on (plan
+// 26, A2: Play.launch), when the 📚 switch is turned on and by a tap on its 📚 glyph. Plain DOM over the canvas, like the
 // Education data panel (ui/eduDataPanel.js): it holds more text than a canvas card fits.
 //
 // It says what the mode is (a beta: the cards are still being checked), how it works (the levels and
@@ -10,11 +10,16 @@
 // says the cards live in this browser, with a link to 📚 Education data. Play starts a run; ✕, Close
 // and Esc close it (a tap on the backdrop does nothing: its release would reach the canvas).
 //
-// The page's keyboard drives it while it is open (Phaser's keyboard manager is off), and a controller
+// The page's keyboard drives it while it is open (Phaser's keyboard manager is off): Enter presses Play
+// when the card has focus, Space does nothing there, Esc closes; a held key's repeats, and the release
+// of a key pressed before it opened (the Space that started a run), are swallowed, so the popup never
+// flashes past. Clicks in its first retryLockoutMs are dropped (the second tap of a double tap that
+// opened it must not land on Close or Play). Focus starts on the card (plan 26, A2). A controller
 // walks its buttons with a gold ring, as in the tournament panel (eduIntroPadAction, from
 // Play.onPadAction): the d-pad moves it, A presses, B closes. Canvas pointer events never reach the
 // game: the backdrop sits above the canvas.
 
+import { TUNING as T } from '../config.js';
 import { t, countLines, levelLabel } from '../i18n.js';
 import { focusNearest, focusStep } from '../logic.js';
 
@@ -57,6 +62,11 @@ const CSS = `
 let dom = null;
 let ctx = null; // { game, play, locale }
 let keyboardWasEnabled = true;
+let openedAt = 0; // when it opened: clicks wait retryLockoutMs from here (plan 26, A2)
+let keysDown = new Set(); // Enter / Space keys pressed since it opened (a release of any other is swallowed)
+
+const clock = () => globalThis.performance?.now?.() ?? Date.now();
+const clickLocked = () => clock() - openedAt < T.retryLockoutMs;
 let padId = null; // the id of the button under the controller's ring, or null (no ring)
 
 function h(tag, attrs = {}, ...children) {
@@ -77,14 +87,53 @@ function build() {
   const root = h('div', { id: PANEL_ID, hidden: true }, card);
   // A touch or a mouse press hides the controller's ring (it comes back with the next d-pad press).
   root.addEventListener('pointerdown', () => setPad(null), true);
-  root.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') {
+  // A click in the popup's first moments is dropped (plan 26, A2): a quick second tap after the start
+  // tap that opened it must not land on Close or Play. The controller's A presses with click() too.
+  root.addEventListener(
+    'click',
+    (e) => {
+      if (!clickLocked()) return;
       e.preventDefault();
-      closeEduIntroPanel();
-    }
-  });
+      e.stopImmediatePropagation();
+    },
+    true,
+  );
+  root.addEventListener('keydown', (e) => onKey(e, true), true);
+  root.addEventListener('keyup', (e) => onKey(e, false), true);
   document.body.append(root);
   dom = { root, card };
+}
+
+/**
+ * The popup's keys (plan 26, A2). Esc closes. Enter and Space: a held key's repeats and the release
+ * of a key pressed before the popup opened are swallowed (the Space that started a run must not press
+ * Play as it lifts). A focused button keeps its own Enter / Space; with the card focused, Enter
+ * presses Play once the click lockout is over, and Space does nothing (it would scroll the card).
+ */
+function onKey(e, down) {
+  if (e.key === 'Escape') {
+    if (!down) return;
+    e.preventDefault();
+    closeEduIntroPanel();
+    return;
+  }
+  const enter = e.key === 'Enter';
+  const space = e.key === ' ' || e.code === 'Space';
+  if (!enter && !space) return;
+  const swallow = () => {
+    e.preventDefault();
+    e.stopImmediatePropagation();
+  };
+  if (down) {
+    if (e.repeat) return swallow();
+    keysDown.add(e.code || e.key);
+  } else if (!keysDown.delete(e.code || e.key)) {
+    return swallow();
+  }
+  const el = document.activeElement;
+  if (el && el.tagName === 'BUTTON' && dom.root.contains(el)) return;
+  swallow();
+  if (enter && down && !clickLocked()) onPlay();
 }
 
 function setGameKeyboard(enabled) {
@@ -153,8 +202,7 @@ function render() {
     h('h3', {}, tr('eduCardsTitle')),
     counts,
     h('h3', {}, tr('eduIntroChoices')),
-    start,
-    ...(startNote ? [startNote] : []),
+    ...(info.testMode ? [] : [start, ...(startNote ? [startNote] : [])]), // a test run starts at its own level (plan 26, A2)
     h('div', { class: 'row' }, h('span', { class: 'label' }, tr('eduIntroOrder'))),
     order,
     orderHint,
@@ -178,6 +226,7 @@ function setOrder(order) {
 }
 
 function onPlay() {
+  if (!ctx) return; // closed already (a restart of Play takes it down)
   const play = ctx.play;
   closeEduIntroPanel();
   play.startFromEduIntro();
@@ -199,10 +248,11 @@ function padButtons() {
 
 function setPad(id) {
   padId = id;
-  placePad();
+  placePad(true);
 }
 
-function placePad() {
+/** Draw the ring on the ringed button; `focus` moves the page focus there too (a d-pad move, not the popup opening: plan 26, A2). */
+function placePad(focus = false) {
   if (!dom) return;
   for (const b of dom.root.querySelectorAll('button.pad')) b.classList.remove('pad');
   if (!padId) return;
@@ -212,7 +262,7 @@ function placePad() {
   if (!el) return;
   padId = el.id;
   el.classList.add('pad');
-  el.focus?.({ preventScroll: true });
+  if (focus) el.focus?.({ preventScroll: true });
   el.scrollIntoView?.({ block: 'nearest' });
 }
 
@@ -264,6 +314,8 @@ export function openEduIntroPanel(options) {
   ctx = { game: options.game, play: options.play, locale: options.locale ?? 'en' };
   setGameKeyboard(false);
   dom.root.hidden = false;
+  openedAt = clock();
+  keysDown = new Set();
   // A controller that opened it (or drives the game) gets its ring at once.
   padId = ctx.game?.registry?.get('padMode') ? 'edu-intro-play' : null;
   render();

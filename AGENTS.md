@@ -367,15 +367,25 @@ popup** (plan 26: `ui/eduIntroPanel.js`, `Play.openEduIntro`; it replaced "Your 
 switch on does: a DOM panel with the beta note, how the mode works, the player's cards (the cards not
 seen yet, the missed ones due, the reviews due over every deck: `cardCounts`; how many have been seen:
 `masteryByDeck`; and that the gold number is missed plus to review: `Play.eduIntroInfo`), the start
-level (◀ LV n ▶ while a later level is unlocked, not in test mode: `stepEduStart`), where new cards go
+level (◀ LV n ▶ while a later level is unlocked; no start-level row at all in test mode, whose run starts at
+its own level: `eduIntroInfo().testMode`, plan 26 A2), where new cards go
 (`setEduNewOrder`; under the three buttons a line says what the pressed one does, `ORDERS` in the
 panel, plan 26 A2), the daily cap, a line that the data stays in this browser, not on the game's
-servers, unless the player chooses to share it, with a link to 📚 Education data, and Close | Play (`startFromEduIntro`). The game's keyboard is off under it, a
-controller walks its buttons with a gold ring (`eduIntroPadAction` through padIntent's `'panel'`),
-Esc, ✕, Close and B close it, and a restart of Play takes it down. It opens on the release of the
-pointer that pressed the glyph (one press is armed at a time, so a second thumb or a cancelled
-touch does not open it twice: plan 25), and nothing under it is pressed and no run starts. The rest
-of the switch still toggles.
+servers, unless the player chooses to share it, with a link to 📚 Education data, and Close | Play
+(`startFromEduIntro`: 📚 on, the audio unlocked, then `launch({ intro: false })`; not a tap, which would open the
+popup again). **It opens at every start from the ready screen with 📚 on** (plan 26, A2: Michael asked): a tap,
+Space, ↑ and the pad's A all reach `launch()` with no options, and `launch` opens the popup instead of starting
+(`openEduIntro` says whether it opened; one that cannot open never blocks the run). Play again (`solo`), a Daily
+Dump and a match half go straight in. The game's keyboard is off under it; the popup's own keys (`onKey`): Esc
+closes, and with the card focused Enter presses Play and Space does nothing; a held key's repeats and the
+release of a key pressed before it opened (the Space that started it) are swallowed, so it never flashes past.
+A click in its first `retryLockoutMs` is dropped (one capture listener on the panel: the second tap of a quick
+double tap must not land on Close or Play; the pad's A presses with `click()` too). Focus starts on the card; in
+pad mode the ring is drawn on Play but only a d-pad move focuses a button. A controller walks its buttons with a
+gold ring (`eduIntroPadAction` through padIntent's `'panel'`), Esc, ✕, Close and B close it, and a restart of
+Play takes it down (a click on its Play after that does nothing). From the glyph it opens on the release of the
+pointer that pressed it (one press is armed at a time, so a second thumb or a cancelled touch does not open it
+twice: plan 25), and nothing under it is pressed and no run starts. The rest of the switch still toggles.
 A run with 📚 on latches `runIsEducation` (never a Daily Dump), shows 📚 in the HUD, and at its end
 records nothing on a board or in the career (`endRun`: no best, top list, career counters or career
 badges; the sync that follows sends only what was already queued, such as a tester's answers and the
@@ -2189,7 +2199,8 @@ tests/                      node --test (schema.test.js, pilot.test.js, eduBoard
                             practice included; a test run pays every right answer;
                             the gate's line; the shop pill's place; the level
                             choice (steps, wrap, dropped, applied forward and back,
-                            not full) and the top-level prices
+                            not full) and the top-level prices; the popup at each
+                            start (launch: popup or run, by start)
   pilot.test.js             the tester pilot end to end: Play's pilot methods, the
                             real stores and leaderboard.js calls and the real save and
                             education data panels, against db/schema.sql through
@@ -2345,7 +2356,10 @@ tools/
                             need (needs omitted = every earlier section; [] = passes alone,
                             set only once shown), skipping and never reordering; the
                             hermetic stubs, the boot wait and the leaderboard muzzle sit
-                            outside every section. The boot wait goes through the loading
+                            outside every section, and so does startEducationRun (plan 26
+                            A2): every education section starts its runs through it (a
+                            settled ready screen, a start, the 📚 popup's Play once its
+                            click lockout is over). The boot wait goes through the loading
                             splash: a card shows, Continue lights up and glows, Play waits,
                             → changes the card, Space down alone does nothing, its release
                             continues; then the splash is gone and the ready screen did
