@@ -377,6 +377,16 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
     /** The career totals this device knows (plan 08): pending + in flight (+ the server's, never set under the stubs' 'keep'). */
     const careerNow = () => evaluate(`(() => { const p = __flappy.scene.getScene('Play'); return JSON.stringify(p.careerStore.totals(p.save?.id ?? null)); })()`).then(JSON.parse);
     const playState = () => evaluate(`__flappy.scene.getScene('Play').state`);
+    // Start an education run from the ready screen (plan 26, A2): every education section starts its runs
+    // here, so a change to how a run starts (the 📚 popup at each start, A2.8b) is handled in one place.
+    // Retried: under load a start tap can land in the frame a restart takes.
+    const startEducationRun = async () => {
+      for (let attempt = 0; attempt < 3 && (await playState()) !== 'playing'; attempt += 1) {
+        for (let i = 0; i < 20 && (await playState()) !== 'ready'; i += 1) await sleep(100);
+        await evaluate(`__flappy.scene.getScene('Play').flap(), true`);
+        for (let i = 0; i < 40 && (await playState()) !== 'playing'; i += 1) await sleep(100);
+      }
+    };
     const active = (key) => evaluate(`__flappy.scene.isActive('${key}')`);
     const chrome = (input) => evaluate(`__flappy.scene.getScene('Play').handleChrome('${input}'), true`);
     const closeTop = (key) => evaluate(`__flappy.scene.getScene('${key}').close(), true`);
@@ -3773,11 +3783,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await sleep(FIELD_DEBOUNCE + 400); // a late resize restart must not land in the run below
         // Start a run from the ready screen (again if a restart took the first launch away).
         const startRun = async () => {
-          for (let attempt = 0; attempt < 3 && (await playState()) !== 'playing'; attempt += 1) {
-            for (let i = 0; i < 20 && (await playState()) !== 'ready'; i += 1) await sleep(100);
-            await evaluate(`${play}.flap(), true`);
-            for (let i = 0; i < 40 && (await playState()) !== 'playing'; i += 1) await sleep(100);
-          }
+          await startEducationRun();
         };
 
         // An education run: latched, badged, a real purse, and nothing recorded at its end.
@@ -3958,11 +3964,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         // gate and Skip have their own checks further on, on stores of their own (plan 25; Skip since plan 26's A2).
         await evaluate(`localStorage.removeItem('flappyPoop.eduSrs'), ${play}.eduStore.unlockLevel(2), ${play}.setEduUnlocked(true), ${play}.settings.set({ education: true }), true`);
         await home();
-        for (let attempt = 0; attempt < 3 && (await playState()) !== 'playing'; attempt += 1) {
-          for (let i = 0; i < 20 && (await playState()) !== 'ready'; i += 1) await sleep(100);
-          await evaluate(`${play}.flap(), true`);
-          for (let i = 0; i < 40 && (await playState()) !== 'playing'; i += 1) await sleep(100);
-        }
+        await startEducationRun();
         await evaluate(`(() => { const p = ${play}; p.poop.body.setAllowGravity(false); p.poop.setVelocity(0, 0); p.poop.y = 640; p.graceLeftMs = 1e9; p.onFinishCrossed(); return true; })()`);
         for (let i = 0; i < 40 && !(await evaluate(`Boolean(${play}.levelBreak) && ${play}.state === 'paused'`)); i += 1) await sleep(100); // polled, as the levels section does (plan 24: a fixed 400 ms lost the race under load)
         const brk = await evaluate(`JSON.stringify({ edu: ${play}.runIsEducation, state: ${play}.state, lb: ${play}.levelBreak, level: ${play}.level })`).then(JSON.parse);
@@ -4418,11 +4420,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         };
         const startEdu = async (setup = '') => {
           await home();
-          for (let attempt = 0; attempt < 3 && (await playState()) !== 'playing'; attempt += 1) {
-            for (let i = 0; i < 20 && (await playState()) !== 'ready'; i += 1) await sleep(100);
-            await evaluate(`${play}.flap(), true`);
-            for (let i = 0; i < 40 && (await playState()) !== 'playing'; i += 1) await sleep(100);
-          }
+          await startEducationRun();
           await evaluate(`(() => { const p = ${play}; p.poop.body.setAllowGravity(false); p.poop.setVelocity(0, 0); p.poop.y = 640; ${setup}; p.refreshCoinHud(); p.refreshInventory(); p.refreshProbioticHud(); return true; })()`);
         };
         const crash = async () => {
@@ -4832,11 +4830,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         };
         const startEdu = async () => {
           await home();
-          for (let attempt = 0; attempt < 3 && (await playState()) !== 'playing'; attempt += 1) {
-            for (let i = 0; i < 20 && (await playState()) !== 'ready'; i += 1) await sleep(100);
-            await evaluate(`${play}.flap(), true`);
-            for (let i = 0; i < 40 && (await playState()) !== 'playing'; i += 1) await sleep(100);
-          }
+          await startEducationRun();
           await evaluate(`(() => { const p = ${play}; p.poop.body.setAllowGravity(false); p.poop.setVelocity(0, 0); p.poop.y = 640; return true; })()`);
         };
         const panel = () => evaluate(`(() => { const o = ${O}; const texts = o.children.list.filter((c) => c.type === 'Text').map((c) => c.text); return JSON.stringify({ active: __flappy.scene.isActive('Over'), tally: o.cells.some((c) => c.id === 'eduAnswered') ? '❔ ' + o.cellCounts.eduAnswered + '  ·  ✅ ' + o.cellCounts.eduRight + '  ·  ❌ ' + o.cellCounts.eduWrong : null, texts, share: Boolean(o.shareButton), bonus: Boolean(o.bonusButton) }); })()`).then(JSON.parse);
@@ -5458,11 +5452,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
           ).then(JSON.parse);
         const eduRunToQuiz = async () => {
           await home();
-          for (let attempt = 0; attempt < 3 && (await playState()) !== 'playing'; attempt += 1) {
-            for (let i = 0; i < 20 && (await playState()) !== 'ready'; i += 1) await sleep(100);
-            await evaluate(`${play}.flap(), true`);
-            for (let i = 0; i < 40 && (await playState()) !== 'playing'; i += 1) await sleep(100);
-          }
+          await startEducationRun();
           const hud = await evaluate(`(() => { const p = ${play}; p.poop.body.setAllowGravity(false); p.poop.setVelocity(0, 0); p.poop.y = 640; p.graceLeftMs = 1e9; const badge = p.testBadge.visible ? p.testBadge.text : ''; p.onFinishCrossed(); return JSON.stringify({ badge, edu: p.runIsEducation, test: p.runIsTest }); })()`).then(JSON.parse);
           for (let i = 0; i < 60 && !(await evaluate(`Boolean(${play}.levelBreak) && ${play}.state === 'paused'`)); i += 1) await sleep(100);
           await evaluate(`${play}.openQuiz('break'), true`);
