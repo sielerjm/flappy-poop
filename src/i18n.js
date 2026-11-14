@@ -155,6 +155,16 @@ Inspired by Flappy Bird`,
     eduLocked: 'Education mode locked',
     quizRight: 'Right!',
     quizRightCoins: 'Right! +{n}',
+    quizNextSoon: 'Next: again soon',
+    quizNextIn: 'Next: in {t}',
+    waitMin: '{n} min',
+    waitHours: '{n} h',
+    waitDay: '1 day',
+    waitDays: '{n} days',
+    waitMonth: '1 month',
+    waitMonths: '{n} months',
+    waitYear: '1 year',
+    waitYears: '{n} years',
     quizPill: 'Quiz',
     reviewPill: 'Review',
     quizBury: 'Bury · {n} coins',
@@ -171,7 +181,7 @@ Inspired by Flappy Bird`,
     eduCardsTitle: 'Your cards',
     quizCountsTitle: 'Waiting in this quiz',
     eduCardsNew: '🔵 {n} new (not seen yet)',
-    eduCardsLearning: '🟠 {n} learning (due now)',
+    eduCardsMissed: '🔴 {n} missed (comes back until you get it right)',
     eduCardsReview: '🟢 {n} to review (due now)',
     eduCardsSeen: '👁️ Seen {n} of {total} cards',
     eduCardsDue: 'The number on 📚 = # of cards to review',
@@ -633,6 +643,16 @@ Inspired by Flappy Bird`,
     eduLocked: '教育模式已锁定',
     quizRight: '答对了！',
     quizRightCoins: '答对了！+{n}',
+    quizNextSoon: '下次：很快再来',
+    quizNextIn: '下次：{t}后',
+    waitMin: '{n} 分钟',
+    waitHours: '{n} 小时',
+    waitDay: '1 天',
+    waitDays: '{n} 天',
+    waitMonth: '1 个月',
+    waitMonths: '{n} 个月',
+    waitYear: '1 年',
+    waitYears: '{n} 年',
     quizPill: '答题',
     reviewPill: '复习',
     quizBury: '推到明天 · {n} 金币',
@@ -649,7 +669,7 @@ Inspired by Flappy Bird`,
     eduCardsTitle: '你的卡片',
     quizCountsTitle: '本次答题还剩',
     eduCardsNew: '🔵 {n} 张新卡（还没见过）',
-    eduCardsLearning: '🟠 {n} 张学习中（已到期）',
+    eduCardsMissed: '🔴 {n} 张答错（答对之前会再出现）',
     eduCardsReview: '🟢 {n} 张待复习（已到期）',
     eduCardsSeen: '👁️ 已见过 {n} / {total} 张卡片',
     eduCardsDue: '📚 上的数字 = 待复习的卡片数',
@@ -1056,13 +1076,37 @@ export function tallyLines(locale, tally, levels) {
 }
 
 /**
- * What the three numbers mean (plan 25): 🔵 new, 🟠 missed, 🟢 to review, each with its count
- * ({ new, missed, review }, cardCounts). "Your cards" (Play.toggleEduCard) and the quiz card's
+ * What the three numbers mean (plan 25; plan 26's words): 🔵 new, 🔴 missed, 🟢 to review, each with
+ * its count ({ new, missed, review }, cardCounts). "Your cards" (Play.toggleEduCard) and the quiz card's
  * explainer (Quiz.toggleCountsCard) both show these lines.
  */
 export function countLines(locale, counts) {
   const line = (key, n) => t(locale, key).replace('{n}', String(n ?? 0));
-  return [line('eduCardsNew', counts?.new), line('eduCardsLearning', counts?.missed), line('eduCardsReview', counts?.review)];
+  return [line('eduCardsNew', counts?.new), line('eduCardsMissed', counts?.missed), line('eduCardsReview', counts?.review)];
+}
+
+/**
+ * When a card comes back, after an answer (plan 26, as Anki shows it): "Next: in 2 days" for a wait of
+ * `ms`; "Next: again soon" when it is due within a minute (a missed card is due at once). Rounded to
+ * the nearest minute, and a unit that rounds up to the next one moves to it (23 h 59 min reads
+ * "1 day", the moments between the answer and its display included): minutes under 60, hours under
+ * 24, days up to 30, months (30.44 days) under 12, else years.
+ */
+export function nextWaitText(locale, ms) {
+  const MIN = 60000;
+  const HOUR = 60 * MIN;
+  const DAY = 24 * HOUR;
+  const MONTH = 30.44 * DAY;
+  const YEAR = 365 * DAY;
+  if (!Number.isFinite(ms) || ms < MIN) return t(locale, 'quizNextSoon');
+  const unit = (n, one, many) => (n === 1 ? t(locale, one) : t(locale, many).replace('{n}', String(n)));
+  let text;
+  if (Math.round(ms / MIN) < 60) text = t(locale, 'waitMin').replace('{n}', String(Math.round(ms / MIN)));
+  else if (Math.round(ms / HOUR) < 24) text = t(locale, 'waitHours').replace('{n}', String(Math.round(ms / HOUR)));
+  else if (Math.round(ms / DAY) <= 30) text = unit(Math.round(ms / DAY), 'waitDay', 'waitDays');
+  else if (Math.round(ms / MONTH) < 12) text = unit(Math.round(ms / MONTH), 'waitMonth', 'waitMonths');
+  else text = unit(Math.round(ms / YEAR), 'waitYear', 'waitYears');
+  return t(locale, 'quizNextIn').replace('{t}', text);
 }
 
 /** An achievement's name (ACHIEVEMENTS in achievements.js: its `title` key). */

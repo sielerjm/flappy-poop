@@ -232,6 +232,16 @@ Short, playful, clear. Fit a 720×1280 logical field; How to play / About body w
 | eduLocked | Education mode locked | 教育模式已锁定 |
 | quizRight | Right! | 答对了！ |
 | quizRightCoins | Right! +{n} | 答对了！+{n} |
+| quizNextSoon | Next: again soon (plan 26: under the verdict after a wrong answer: the card is due again at once) | 下次：很快再来 |
+| quizNextIn | Next: in {t} (plan 26: under the verdict, when the card comes back; {t} is one of the wait* strings below) | 下次：{t}后 |
+| waitMin | {n} min | {n} 分钟 |
+| waitHours | {n} h | {n} 小时 |
+| waitDay | 1 day | 1 天 |
+| waitDays | {n} days | {n} 天 |
+| waitMonth | 1 month | 1 个月 |
+| waitMonths | {n} months | {n} 个月 |
+| waitYear | 1 year | 1 年 |
+| waitYears | {n} years | {n} 年 |
 | quizPill | Quiz (the won game-over panel's 📚 bonus button) | 答题 |
 | reviewPill | Review (an education level break's 📚 button, plan 25: the numbers sit under it) | 复习 |
 | breakSkip | Skip ▸ (plan 25: an education level break's button; each tap skips one level the player has unlocked before) | 跳过 ▸ |
@@ -246,12 +256,12 @@ Short, playful, clear. Fit a 720×1280 logical field; How to play / About body w
 | quizReturn | Return | 返回 |
 | quizStatsTitle | This run | 本局 |
 | eduCardsTitle | Your cards | 你的卡片 |
-| quizCountsTitle | Waiting in this quiz (the title of the card a tap on a quiz card's numbers opens: the 🔵 🟠 🟢 lines with this quiz's counts) | 本次答题还剩 |
+| quizCountsTitle | Waiting in this quiz (the title of the card a tap on a quiz card's numbers opens: the 🔵 🔴 🟢 lines with this quiz's counts) | 本次答题还剩 |
 | eduCardsNew | 🔵 {n} new (not seen yet) | 🔵 {n} 张新卡（还没见过） |
-| eduCardsLearning | 🟠 {n} learning (due now) | 🟠 {n} 张学习中（已到期） |
+| eduCardsMissed | 🔴 {n} missed (comes back until you get it right) (plan 26: a card answered wrong and not yet right since; it is asked again until it is, as Anki's relearning cards; red, as Anki shows them) | 🔴 {n} 张答错（答对之前会再出现） |
 | eduCardsReview | 🟢 {n} to review (due now) | 🟢 {n} 张待复习（已到期） |
 | eduCardsSeen | 👁️ Seen {n} of {total} cards | 👁️ 已见过 {n} / {total} 张卡片 |
-| eduCardsDue | The number on 📚 = # of cards to review (Michael's wording, 13 Nov: the gold number counts learning + to review; # stands for that number) | 📚 上的数字 = 待复习的卡片数 |
+| eduCardsDue | The number on 📚 = # of cards to review (Michael's wording, 13 Nov: the gold number counts missed + to review; # stands for that number) | 📚 上的数字 = 待复习的卡片数 |
 | quizCaughtUp | You're all caught up! New questions come with the next level, and old ones come back when they are due. | 全部完成！下一关会有新问题，旧问题到期后会再出现。 |
 | quizGeneral | Gut microbes | 肠道微生物 |
 | quizSource | Source: {source} | 来源：{source} |

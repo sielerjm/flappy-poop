@@ -3695,7 +3695,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         const yc0 = await eduCard();
         await tapAt(boxes.info.x, boxes.info.y);
         const yc1 = await eduCard();
-        const ycWant = await Promise.all(['eduCardsTitle', 'eduCardsNew', 'eduCardsLearning', 'eduCardsReview', 'eduCardsSeen', 'eduCardsDue'].map(tx));
+        const ycWant = await Promise.all(['eduCardsTitle', 'eduCardsNew', 'eduCardsMissed', 'eduCardsReview', 'eduCardsSeen', 'eduCardsDue'].map(tx));
         const ycBody = [ycWant[1].replace('{n}', String(made.total - 4)), ycWant[2].replace('{n}', '1'), ycWant[3].replace('{n}', '2'), ycWant[4].replace('{n}', '4').replace('{total}', String(made.total)), ycWant[5]].join('\n');
         ok(yc0.due === '3' && !yc0.open && yc1.open && yc1.title === ycWant[0] && yc1.body === ycBody && yc1.on === yc0.on && yc1.state === 'ready' && !yc1.launching, `a tap on the 📚 glyph (its gold number reads ${yc0.due}) opens "${yc1.title}": ${yc1.body.replace(/\n/g, ' · ')}; the switch is not toggled`);
         await tapAt(boxes.title.x, boxes.title.y); // empty space: with no card up this tap would start a run
@@ -3985,6 +3985,10 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         const verdictWant = q1.last?.correct ? (await tx('quizRightCoins')).replace('{n}', String(TT.education.breakCoins)) : await tx('quizWrong');
         ok(q1.answered && q1.last?.id === q0.id && r1?.seen === 1 && r1.right === (q1.last.correct ? 1 : 0) && q1.verdict === verdictWant && q1.next, `a tap answers ${q0.id} (${q1.last?.correct ? 'right' : 'wrong'}, ${Math.round(q1.last?.rtMs ?? -1)} ms): saved (seen ${r1?.seen}), "${q1.verdict}", Next shown`);
         ok(q1.last?.correct === false && q1.explain && q1.nextAlpha < 1, 'a wrong answer shows the explanation at once and holds Next');
+        // When the card comes back (plan 26): under the verdict, above the explanation.
+        const waitLine = () => evaluate(`(() => { const q = ${Q}; return JSON.stringify({ visible: q.nextWait.visible, text: q.nextWait.text, top: q.nextWait.y, verdictBottom: q.verdict.y + q.verdict.height, explainTop: q.explain.visible ? q.explain.y : null }); })()`).then(JSON.parse);
+        const wait1 = await waitLine();
+        ok(wait1.visible && wait1.text === (await tx('quizNextSoon')) && wait1.top >= wait1.verdictBottom && wait1.explainTop > wait1.top, `a miss says "${wait1.text}" under the verdict, above the explanation`);
         const line1 = await lineNow();
         ok(line1.tally === `✅ ${q1.last?.correct ? 1 : 0}  ❌ ${q1.last?.correct ? 0 : 1}` && line1.tallyZone, `the run's tally appears in the card's top row with the first answer: "${line1.tally}"`);
         ok(q1.left === returnWant && q1.right === nextWant && q1.top === (q1.last?.correct ? whyWant : null) && !q1.halo, `after the answer: ${q1.top ?? 'no Why (the explanation shows)'} on top, ${q1.left} | ${q1.right} below, and no halo in a break`);
@@ -4041,6 +4045,8 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         const qr = await quizNow();
         const rightWant = (await tx('quizRightCoins')).replace('{n}', String(TT.education.breakCoins));
         ok(c1 - c0 === TT.education.breakCoins && qr.verdict === rightWant && qr.kernel && qr.kernelAfter, `a right answer pays ${c1 - c0} coin (${c0} → ${c1}) and says "${qr.verdict}" with the kernel after it`);
+        const waitRight = await waitLine();
+        ok(waitRight.visible && /^Next: in \d+ days?$/.test(waitRight.text), `and when the card comes back: "${waitRight.text}" (whole days, at least one)`);
         await evaluate(`${Q}.next(), true`);
         await sleep(200);
         await evaluate(`(() => { const q = ${Q}; q.options[q.order.findIndex((k) => k !== 'answer')].zone.emit('pointerdown'); return true; })()`);

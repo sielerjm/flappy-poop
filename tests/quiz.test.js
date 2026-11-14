@@ -96,11 +96,30 @@ test("a tap on the card's numbers says what they mean, with this quiz's counts; 
   });
   q.toggleCountsCard();
   assert.equal(runCard.open, true);
-  assert.deepEqual(shown[0].lines, ['🔵 2 new (not seen yet)', '🟠 1 learning (due now)', '🟢 3 to review (due now)']);
+  assert.deepEqual(shown[0].lines, ['🔵 2 new (not seen yet)', '🔴 1 missed (comes back until you get it right)', '🟢 3 to review (due now)']);
   assert.equal(shown[0].title, 'Waiting in this quiz');
   assert.equal(q.interrupted, true, 'its time is no longer a fair answer time');
   q.choose(0, 'key');
   assert.equal(answers.length, 0, 'no answer under the card');
   q.toggleCountsCard();
   assert.equal(runCard.open, false, 'a second press closes it');
+});
+
+test('after an answer the card says when it comes back, under the verdict: "Next: in 2 days", "Next: again soon"; nothing when nothing was saved (plan 26)', () => {
+  const text = () => {
+    const o = { y: 0, height: 30, text: '', visible: false, setY(v) { this.y = v; return this; }, setText(v) { this.text = v; return this; }, setVisible(v) { this.visible = v; return this; } };
+    return o;
+  };
+  const q = quizScene({ locale: 'en', verdict: { ...text(), y: 500, height: 40 }, nextWait: text() });
+  q.lastAnswer = { dueAt: Date.now() + 2 * 86400000 + 5000 };
+  q.showNextWait();
+  assert.deepEqual([q.nextWait.visible, q.nextWait.text, q.nextWait.y], [true, 'Next: in 2 days', 544]);
+  assert.equal(q.verdictBottom(), 544 + 30, 'the explanation starts under the wait');
+  q.lastAnswer = { dueAt: Date.now() };
+  q.showNextWait();
+  assert.equal(q.nextWait.text, 'Next: again soon', 'a miss is due at once');
+  q.lastAnswer = { dueAt: null };
+  q.showNextWait();
+  assert.equal(q.nextWait.visible, false, 'a test run saves nothing: no wait');
+  assert.equal(q.verdictBottom(), 540);
 });

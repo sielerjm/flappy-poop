@@ -385,7 +385,9 @@ clear: its quizzes walk the level's deck in id order instead (`pickCard` context
 shown are kept for the page load in the registry's `testQuizShown`), so skipping to a level shows that
 level's cards. **The quiz card** (`scenes/Quiz.js`, overlay id `quiz`): Play owns the cards (`quizNext`
 → `pickCard`, `quizAnswer` → `gradeFor` / `schedule` / `eduStore`), the scene only shows them: three
-options (tap, keys 1–3, the ring), ✓ / ✗, the verdict, the explanation (at once after a wrong answer,
+options (tap, keys 1–3, the ring), ✓ / ✗, the verdict, under it when the card comes back ("Next: in 2
+days", "Next: again soon" after a miss: `nextWaitText`, `Quiz.showNextWait`, from `quizAnswer`'s
+`dueAt`; none in a test run), the explanation (at once after a wrong answer,
 which holds Next `explainMinMs`; behind "Why?" after a right one; its source only once audited), the
 card's id in a corner. **The id ends in 🚩 and is a link** (`openReport`): on its release it opens
 GitHub's card report form in a new tab with the card's code in the title and the form's fields
@@ -407,7 +409,7 @@ waits), then new cards of the segment just cleared (and general ones), then prac
 recent gap holds. A right answer to a counted card pays `education.breakCoins` (`takeCoins`); practice
 pays nothing. The shop's prices are `eduShopPrices(level)` (`Play.shopPrices`; `buyBlocker` takes
 `prices`). **What is waiting**, as in Anki (`cardCounts`: new, missed (a miss of this break
-included) and review cards a quiz can still ask now; `Play.quizCounts`): three numbers in blue, orange
+included) and review cards a quiz can still ask now; `Play.quizCounts`): three numbers in blue, red
 and green on a line of their own under Review (`ui/countLine.js`; none in a test run; a tap, or A on
 their ring item, opens "Waiting in this quiz": `toggleBreakCounts`, `countLines`), and on the card
 `5 + 2 + 8` in a row of its own above its bottom buttons, the card on show counted and its kind
@@ -1006,8 +1008,8 @@ src/
                             line and prices ("Bag full" with no kernel).
     countLine.js            createCountLine(scene, x, y, { style, px, sep, glyph,
                             depth, maxWidth }): education's three card counts on one
-                            line, new / learning / review in COUNT_COLORS (blue,
-                            orange, green), an optional leading glyph, shrunk to
+                            line, new / missed / review in COUNT_COLORS (blue,
+                            red, green), an optional leading glyph, shrunk to
                             maxWidth; set(counts, underline) underlines one count
                             in its colour. The 📚 pill ("📚 5 · 2 · 8") and the quiz
                             card ("5 + 2 + 8").

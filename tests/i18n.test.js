@@ -20,6 +20,7 @@ import {
   shareCardFooter,
   profileButtonText,
   tallyLines,
+  nextWaitText,
   TALLY_GAP,
 } from '../src/i18n.js';
 
@@ -203,4 +204,35 @@ test("tallyLines: an education run's answers, one line per level answered, in le
   assert.deepEqual(tallyLines('en', { byLevel: {} }, CONFIG_LEVELS), [], 'nothing answered: no lines');
   assert.deepEqual(tallyLines('en', null, CONFIG_LEVELS), [], 'no tally');
   assert.deepEqual(tallyLines('en', { byLevel: { 7: { right: 3 } } }, CONFIG_LEVELS), [`LV 7 · Rectum${G}✅ 3${G}❌ 0`], 'a row from before wrong was kept still reads');
+});
+
+test('nextWaitText: again soon under a minute; then minutes, hours, days, months, years, rounded, a unit that rounds up moving to the next; both locales (plan 26)', () => {
+  const MIN = 60000;
+  const HOUR = 60 * MIN;
+  const DAY = 24 * HOUR;
+  const cases = [
+    [-5, 'Next: again soon'],
+    [0, 'Next: again soon'],
+    [59 * 1000, 'Next: again soon'],
+    [MIN, 'Next: in 1 min'],
+    [10 * MIN, 'Next: in 10 min'],
+    [HOUR, 'Next: in 1 h'],
+    [5.4 * HOUR, 'Next: in 5 h'],
+    [DAY, 'Next: in 1 day'],
+    [2 * DAY + HOUR, 'Next: in 2 days'],
+    [30 * DAY, 'Next: in 30 days'],
+    [46 * DAY, 'Next: in 2 months'],
+    [30.6 * DAY, 'Next: in 1 month'],
+    [31 * DAY, 'Next: in 1 month'],
+    [DAY - 5, 'Next: in 1 day'],
+    [2 * DAY - 5, 'Next: in 2 days'],
+    [HOUR - 5, 'Next: in 1 h'],
+    [364 * DAY, 'Next: in 1 year'],
+    [200 * DAY, 'Next: in 7 months'],
+    [365 * DAY, 'Next: in 1 year'],
+    [NaN, 'Next: again soon'],
+  ];
+  for (const [ms, want] of cases) assert.equal(nextWaitText('en', ms), want, String(ms));
+  assert.equal(nextWaitText('zh-Hans', 2 * DAY), '下次：2 天后');
+  assert.equal(nextWaitText('zh-Hans', 0), '下次：很快再来');
 });

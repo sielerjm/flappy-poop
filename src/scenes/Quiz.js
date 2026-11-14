@@ -5,7 +5,7 @@ import { createRectGlow } from '../ui/glow.js';
 import { createCountLine } from '../ui/countLine.js';
 import { createInfoCard } from '../ui/infoCard.js';
 import { isTopOverlay } from '../ui/overlayStack.js';
-import { t, tallyLines, countLines } from '../i18n.js';
+import { t, tallyLines, countLines, nextWaitText } from '../i18n.js';
 import { cardText, optionText, cardSource, EDUCATION_EMOJI } from '../education.js';
 import { auditState } from '../questionAudits.js';
 import { sfx } from '../sound.js';
@@ -50,8 +50,8 @@ const BAD = '#ff8da8';
  * Fly on, Go for it, End run) and whose left button is the way out (Return; in a revive, Give up or
  * the choice's Fly on).
  * What is waiting (plan 21, E2), as in Anki: a line of three counts in a row of its own directly
- * above the bottom buttons, "5 + 2 + 8": new cards (blue), cards being learned or missed (orange)
- * and reviews due (green) that this quiz can still ask, the card on show included and its kind
+ * above the bottom buttons, "5 + 2 + 8": new cards (blue), missed cards (red) and reviews due
+ * (green) that this quiz can still ask, the card on show included and its kind
  * underlined (Play.quizCounts; refreshCounts). Hidden in a test run, whose quizzes ignore the schedule.
  * The run's tally: "✅ 5  ❌ 0" in the top row between the card's id and the ✕ / ❤️ corner, once the
  * run has an answer (never in the bonus quiz, whose answers are not tallied). A tap on it, or A on
@@ -136,6 +136,8 @@ export class Quiz extends Phaser.Scene {
     this.verdict = this.add.text(cx, 0, '', { ...STYLE, fontSize: '32px', wordWrap: { width: TEXT_W, useAdvancedWrap: true } }).setOrigin(0.5, 0);
     // The corn kernel after "Right! +1" (say): coins are drawn as the kernel, as in the HUD and the shop.
     this.verdictCoin = this.add.image(cx, 0, 'coin', 0).setDisplaySize(COIN_PX, COIN_PX).setVisible(false);
+    // When the card comes back (plan 26, as Anki shows it): "Next: in 2 days" under the verdict.
+    this.nextWait = this.add.text(cx, 0, '', { ...MUTED, fontSize: '24px', wordWrap: { width: TEXT_W, useAdvancedWrap: true } }).setOrigin(0.5, 0).setVisible(false);
     this.explain = this.add.text(cx, 0, '', { ...MUTED, fontSize: '26px', lineSpacing: 4, wordWrap: { width: TEXT_W, useAdvancedWrap: true } }).setOrigin(0.5, 0);
     this.source = this.add.text(cx, 0, '', { ...MUTED, fontSize: '20px', fontStyle: 'italic', wordWrap: { width: TEXT_W, useAdvancedWrap: true } }).setOrigin(0.5, 0);
     // Three button slots, named by where they sit; each step says what they read and do (set). The
@@ -474,6 +476,7 @@ export class Quiz extends Phaser.Scene {
     });
     this.verdict.setY(y + 10).setText('').setVisible(false);
     this.verdictCoin.setVisible(false);
+    this.nextWait.setText('').setVisible(false);
     this.explain.setText('').setVisible(false);
     this.source.setText('').setVisible(false);
     this.clearButtons();
@@ -501,7 +504,7 @@ export class Quiz extends Phaser.Scene {
       o.mark.setVisible(false);
       o.zone.setVisible(false);
     }
-    for (const x of [this.verdict, this.verdictCoin, this.explain, this.source]) x.setVisible(false);
+    for (const x of [this.verdict, this.verdictCoin, this.nextWait, this.explain, this.source]) x.setVisible(false);
     this.clearButtons();
     if (revive) this.rightBtn.set(t(this.locale, 'reviveContinue'), () => this.finish());
     else this.showWayOut();
@@ -532,7 +535,7 @@ export class Quiz extends Phaser.Scene {
     const key = this.order[i];
     const rtMs = (globalThis.performance?.now?.() ?? Date.now()) - this.shownAt;
     const res = this.play?.quizAnswer?.({ card: this.card, reason: this.reason, order: this.order, chosen: key, rtMs, interrupted: this.interrupted, mode: this.mode, input }) ?? { correct: key === 'answer' };
-    this.lastAnswer = { id: this.card.id, chosen: key, correct: res.correct, coins: res.coins ?? 0, rtMs, interrupted: this.interrupted }; // the smoke reads it
+    this.lastAnswer = { id: this.card.id, chosen: key, correct: res.correct, coins: res.coins ?? 0, dueAt: res.dueAt ?? null, rtMs, interrupted: this.interrupted }; // the smoke reads it
     this.refreshTally();
     if (this.mode === 'revive') this.reviveState = this.play?.reviveEvent?.(res.correct ? 'correct' : 'wrong') ?? this.reviveState;
     // The answer's sound: a wrong one as the bad bacteria, a right one as a pipe passed; the right
@@ -567,10 +570,26 @@ export class Quiz extends Phaser.Scene {
   say(text, good, coin = false) {
     this.verdict.setX(this.cx).setText(text).setColor(good ? GOOD : BAD).setVisible(true);
     this.verdictCoin.setVisible(Boolean(coin));
+    this.showNextWait();
     if (!coin) return;
     const gap = 8;
     this.verdict.setX(this.cx - (COIN_PX + gap) / 2);
     this.verdictCoin.setPosition(this.verdict.x + this.verdict.width / 2 + gap + COIN_PX / 2, this.verdict.y + this.verdict.height / 2);
+  }
+
+  /** Under the verdict, when the answered card comes back (lastAnswer.dueAt; nextWaitText). Nothing when nothing was saved (a test run). */
+  showNextWait() {
+    const dueAt = this.lastAnswer?.dueAt;
+    const shown = Number.isFinite(dueAt);
+    this.nextWait
+      .setY(this.verdict.y + this.verdict.height + 4)
+      .setText(shown ? nextWaitText(this.locale, dueAt - Date.now()) : '')
+      .setVisible(shown);
+  }
+
+  /** The bottom of the verdict, or of the wait under it: the explanation starts below it. */
+  verdictBottom() {
+    return this.nextWait.visible ? this.nextWait.y + this.nextWait.height : this.verdict.y + this.verdict.height;
   }
 
   /** A wrong answer holds the main button for explainMinMs, so the explanation gets read. */
@@ -613,7 +632,7 @@ export class Quiz extends Phaser.Scene {
     } else if (phase === 'choice') {
       this.say(t(this.locale, 'reviveBack'), true);
       this.explain
-        .setY(this.verdict.y + this.verdict.height + 10)
+        .setY(this.verdictBottom() + 10)
         .setText(t(this.locale, 'reviveChoice').replace('{n}', String(T.education.restoreStreak - 1)))
         .setVisible(true);
       this.leftBtn.set(t(this.locale, 'reviveContinue'), () => this.decide('continue')); // settle for the revive
@@ -670,7 +689,8 @@ export class Quiz extends Phaser.Scene {
   preview(card, right = false) {
     this.showCard(card, ['answer', 'w1', 'w2']);
     this.answered = true;
-    this.lastAnswer = right ? { coins: T.education.breakCoins } : null;
+    // As tall as it gets: the wait under the verdict ("Next: in 2 days" after the usual first answer).
+    this.lastAnswer = right ? { coins: T.education.breakCoins, dueAt: Date.now() + 2 * 86400000 } : { dueAt: Date.now() };
     this.reveal(right ? 0 : 1, right);
     if (!right) this.source.setText(t(this.locale, 'quizSource').replace('{source}', cardSource(card))).setVisible(true); // as tall as it will be once audited
     return this.fits();
@@ -680,7 +700,7 @@ export class Quiz extends Phaser.Scene {
   showWhy() {
     if (!this.card || !this.answered) return;
     this.topBtn.setShown(false); // Why has been answered
-    this.explain.setY(this.verdict.y + this.verdict.height + 10).setText(this.text.explain).setVisible(true);
+    this.explain.setY(this.verdictBottom() + 10).setText(this.text.explain).setVisible(true);
     const audited = auditState(this.card) === 'audited';
     this.source
       .setY(this.explain.y + this.explain.height + 10)
@@ -719,7 +739,7 @@ export class Quiz extends Phaser.Scene {
    * bottom row), and the options inside the panel.
    */
   fits() {
-    const below = this.source.visible ? this.source.y + this.source.height : this.explain.visible ? this.explain.y + this.explain.height : this.verdict.y + this.verdict.height;
+    const below = this.source.visible ? this.source.y + this.source.height : this.explain.visible ? this.explain.y + this.explain.height : this.verdictBottom();
     const last = this.options[2].box;
     const buttonsTop = this.topBtn.shown ? this.whyTop : this.rowTop;
     return { below, buttonsTop, optionsBottom: last.y + last.height / 2, ok: below <= buttonsTop - 8 && this.header.y >= this.top + 50 };

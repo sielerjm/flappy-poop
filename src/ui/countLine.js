@@ -1,11 +1,11 @@
 import { fitScale } from '../logic.js';
 
 /**
- * The colours of the three card counts (plan 21, E2), as in Anki: new cards blue, missed cards
- * orange, cards due for review green. Light tints, each well over
+ * The colours of the three card counts (plan 21, E2), as in Anki: new cards blue, missed cards red
+ * (plan 26), cards due for review green. Light tints, each well over
  * WCAG AA (4.5 : 1) on the dark card and the dark pill (tests/education.test.js checks it).
  */
-export const COUNT_COLORS = { new: '#8fd3ff', missed: '#ff9a66', review: '#86e05a' };
+export const COUNT_COLORS = { new: '#8fd3ff', missed: '#ff8a8a', review: '#86e05a' };
 const KINDS = ['new', 'missed', 'review'];
 
 /**

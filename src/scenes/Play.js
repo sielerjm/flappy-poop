@@ -525,7 +525,7 @@ export class Play extends Phaser.Scene {
     // An education run's 📚 Review pill (plan 21; plan 25 named it), in the 🏅's row under the 💰
     // (single player only: the two never meet). It opens the quiz on the segment just cleared
     // (chromeIntent's 'quiz'). Under it, a line of its own says what is waiting there, as Anki does:
-    // new cards in blue, cards being learned in orange, reviews due in green (quizCountLine;
+    // new cards in blue, missed cards in red, reviews due in green (quizCountLine;
     // refreshShopButton; none in a test run, whose quizzes ignore the schedule). A tap on the line
     // says what the numbers mean (toggleBreakCounts). eduBreakLayout also places Skip and Quit.
     this.eduBreakBoxes = this.match ? null : eduBreakLayout(this.col.width, GAME_HEIGHT, T, this.col.x);
@@ -1725,18 +1725,22 @@ export class Play extends Phaser.Scene {
    * One answer from the quiz: graded (gradeFor: right on a card's first sight is good; an interrupted
    * answer's time is not used) and, outside a test run, scheduled and saved (schedule, eduStore). A
    * practice card answered right keeps its schedule. Counted in runQuiz (tallyAnswer). A right answer in a level break pays break.coins (takeCoins: the
-   * purse, the coin sound). Returns { correct, grade, coins }.
+   * purse, the coin sound). Returns { correct, grade, coins, dueAt }: dueAt is when the card comes
+   * back (its saved record's), null when nothing was saved (a test run, test mode).
    */
   quizAnswer({ card, reason, order = [], chosen, rtMs, interrupted, mode = 'break', input = 'key' }) {
     const correct = chosen === 'answer';
     const known = this.runIsTest ? null : (this.eduStore.load().cards[card.id] ?? null);
     const grade = gradeFor(correct, interrupted ? null : rtMs, T, { first: !known });
+    let dueAt = null;
     // Nothing is saved or recorded in a test run, nor while test mode is on: it can be turned on
     // after the run ended, from the game-over screen's profile (plan 25, A5), before the bonus quiz.
     if (!this.runIsTest && !this.isTestMode()) {
       const now = Date.now();
       const rec = known;
-      this.eduStore.answer(card.id, schedule(rec, grade, now, T, { practice: reason === 'practice' }));
+      const next = schedule(rec, grade, now, T, { practice: reason === 'practice' });
+      this.eduStore.answer(card.id, next);
+      dueAt = next.dueAt;
       // A pilot tester's answer is recorded as an event (plan 21; never in a test run, and only
       // while joined): what was asked and picked, and what the device knew of the card before.
       if (this.researchJoined()) this.recordAnswerEvent({ card, reason, order, chosen, correct, rtMs, interrupted, grade, mode, input, before: rec, now });
@@ -1756,7 +1760,7 @@ export class Play extends Phaser.Scene {
       this.refreshLevelBanner(); // the hint gains "💰 shop" with the first coin
       this.refreshShopButton();
     }
-    return { correct, grade, coins };
+    return { correct, grade, coins, dueAt };
   }
 
   /**
