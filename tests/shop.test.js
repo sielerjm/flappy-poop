@@ -49,18 +49,20 @@ test('the 🏅 Bracket pill sits one row under the 💰, above the bean button, 
   assert.equal(bracketButtonLayout(W, GAME_HEIGHT, T, 500).x, pill.x + 500, 'x follows the column');
 });
 
-test("an education break (eduBreakLayout, plan 26: Michael's sketch): the 💰 pill as always, Review and Quit side by side under it (Skip ▸ gone: plan 26, A2), the numbers on the bean button's line, the banner higher; nothing overlaps, all inside the column, clear of the bobbing poop, ⏸ and the tray", () => {
+test("an education break (eduBreakLayout; plan 26 A2, Michael's checklist): [🌽 Shop] [📚 Review] [Quit] on one row where the 💰 pill sits, 216 px each 12 apart; the numbers on a dark chip under Review, inside its width; the banner higher; nothing overlaps, all inside the column, clear of the bobbing poop, ⏸ and the tray", () => {
   for (const x0 of [0, 500]) {
     const L = eduBreakLayout(W, GAME_HEIGHT, T, x0);
     const shopBox = shopButtonLayout(W, GAME_HEIGHT, T, x0);
-    assert.deepEqual(L.shop, shopBox, 'the 💰 pill as always');
-    const row = bracketButtonLayout(W, GAME_HEIGHT, T, x0).y;
-    assert.ok(L.review.y === row && L.quit.y === row && L.review.x < shopBox.x && L.quit.x > shopBox.x, "Review and Quit share the 🏅's row, either side of the centre");
+    const row = [L.shop, L.review, L.quit];
+    assert.deepEqual(row.map((b) => b.id), ['shop', 'quiz', 'quit']);
+    assert.ok(row.every((b) => b.y === shopBox.y && b.width === 216 && b.height === T.trayHitMin), "one row, at the 💰 pill's height, 216 px wide and thumb-tall");
+    assert.ok(edges(L.review).left - edges(L.shop).right === 12 && edges(L.quit).left - edges(L.review).right === 12, '12 px apart');
+    assert.equal(L.review.x, x0 + W / 2, 'Review in the middle');
+    assert.ok(L.chip.x === L.review.x && L.chip.width === L.review.width && edges(L.chip).top >= edges(L.review).bottom && edges(L.chip).top - edges(L.review).bottom <= 16, 'the chip right under Review, its width');
+    assert.deepEqual([L.counts.x, L.counts.y, L.counts.width <= L.chip.width - 16], [L.chip.x, L.chip.y, true], 'the numbers inside the chip');
     assert.equal('skip' in L, false, 'no Skip ▸ (plan 26, A2)');
-    assert.equal(L.counts.y, bean.y, "the numbers on the bean button's line (it hides in a break)");
-    assert.equal(L.counts.x, shopBox.x);
-    assert.ok(L.hintY === L.titleY + 72 && L.hintY + 18 + 8 <= edges(shopBox).top && L.titleY < GAME_HEIGHT * 0.4, `the banner sits higher, above the rows (title ${L.titleY})`);
-    const boxes = [L.shop, L.review, L.counts, L.quit];
+    assert.ok(L.hintY === L.titleY + 72 && L.hintY + 50 + 26 + 8 <= edges(L.shop).top && L.titleY < GAME_HEIGHT * 0.4, `the banner and the gate's line sit above the row (title ${L.titleY})`);
+    const boxes = [L.shop, L.review, L.quit, L.chip];
     const pauseBox = trayLayout(W, GAME_HEIGHT, T, x0).pause;
     const pauseEdges = { left: pauseBox.x - pauseBox.size / 2, right: pauseBox.x + pauseBox.size / 2, top: pauseBox.y - pauseBox.size / 2, bottom: pauseBox.y + pauseBox.size / 2 };
     // The poop bobs between breakPoopY and 24 px under it, at poopX (from the field's left edge).
@@ -76,9 +78,8 @@ test("an education break (eduBreakLayout, plan 26: Michael's sketch): the 💰 p
     for (let i = 0; i < boxes.length; i += 1) for (let j = i + 1; j < boxes.length; j += 1) {
       assert.ok(!overlaps(edges(boxes[i]), edges(boxes[j])), `${boxes[i].id} and ${boxes[j].id} do not overlap`);
     }
-    assert.ok(edges(L.counts).top >= edges(L.review).bottom, 'the numbers sit under Review');
-    assert.ok(poop.top >= edges(L.review).bottom && poop.bottom <= edges(L.counts).top + 48, 'the poop bobs under the rows, about level with the numbers above them');
-    for (const b of [L.quit, L.review]) assert.ok(b.height >= T.trayHitMin && b.width >= T.trayHitMin, `${b.id} is thumb-sized`);
+    assert.equal(T.levels.breakPoopY, 920, 'the poop keeps its place (plan 26, A2)');
+    assert.ok(poop.top >= edges(L.chip).bottom, 'the poop bobs under the row and the chip');
   }
 });
 

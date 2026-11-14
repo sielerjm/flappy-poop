@@ -350,6 +350,28 @@ function skipScene(store, { coins = 30, ...over } = {}) {
   return { s, wallet, events };
 }
 
+test("the shop pill's place (plan 26, A2): at a run's start it moves into the education row, or back to the centre for any other run; the same box object throughout (the ring and the tap test hold it), the pill redrawn on it", async () => {
+  const { shopButtonLayout, eduBreakLayout } = await import('../src/logic.js');
+  let destroyed = 0;
+  const s = playScene({
+    add: absorb(), locale: 'en', col: { width: 720, x: 0 }, shopButtonBox: shopButtonLayout(720, 1280, T, 0), eduBreakBoxes: eduBreakLayout(720, 1280, T, 0),
+    shopButton: { destroy: () => (destroyed += 1) },
+  });
+  const box = s.shopButtonBox;
+  const at = (b) => [b.x, b.y, b.width, b.height];
+  s.placeShopPill(true);
+  assert.deepEqual([s.shopButtonBox === box, at(box), destroyed], [true, at(s.eduBreakBoxes.shop), 1], 'an education run: in the row, redrawn');
+  const pill = s.shopButton;
+  s.placeShopPill(true);
+  assert.deepEqual([s.shopButton === pill, destroyed], [true, 1], 'already there: left alone');
+  s.placeShopPill(false);
+  assert.deepEqual([s.shopButtonBox === box, at(box), s.shopButton !== pill], [true, at(shopButtonLayout(720, 1280, T, 0)), true], 'any other run: centred, where it always was, redrawn');
+  const match = playScene({ add: absorb(), locale: 'en', col: { width: 720, x: 0 }, shopButtonBox: shopButtonLayout(720, 1280, T, 0), eduBreakBoxes: null, shopButton: { destroy: () => (destroyed += 1) } });
+  const matchPill = match.shopButton;
+  match.placeShopPill(true);
+  assert.deepEqual([at(match.shopButtonBox), match.shopButton === matchPill], [at(shopButtonLayout(720, 1280, T, 0)), true], 'a match half has no education row: centred, left alone');
+});
+
 test("Skip a card (plan 26, A2, in place of Bury): every kind of card costs 3 × the level cleared; a due card (stored, or missed in this break) also goes to tomorrow, leaves the gate and counts toward the day's 3; a new or practice card just moves on; a skip is no answer", () => {
   const now = Date.now();
   const store = createEduStore(fakeStorage());

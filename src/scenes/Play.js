@@ -535,13 +535,19 @@ export class Play extends Phaser.Scene {
     // says what the numbers mean (toggleBreakCounts). eduBreakLayout also places Quit.
     this.eduBreakBoxes = this.match ? null : eduBreakLayout(this.col.width, GAME_HEIGHT, T, this.col.x);
     this.quizButtonBox = this.eduBreakBoxes?.review ?? null;
-    this.quizCountsBox = this.eduBreakBoxes?.counts ?? null;
+    this.quizCountsBox = this.eduBreakBoxes?.chip ?? null; // the chip under Review: the numbers' tap box and ring item (plan 26, A2)
     this.quizButton = this.quizButtonBox ? createButton(this, this.quizButtonBox, `${EDUCATION_EMOJI} ${t(this.locale, 'reviewPill')}`, { ...TEXT_STYLE, fontSize: '36px', color: '#f8a0c8' }, { depth: 27 }).setVisible(false) : null;
     // Quit beside Review (plan 25, B8; plan 26, Michael's sketch: refreshQuizButton). Skip ▸ (levels) is gone since plan 26's A2.
     const sideStyle = { ...TEXT_STYLE, fontSize: '30px', color: '#f8a0c8' };
     this.breakQuitButton = this.eduBreakBoxes ? createButton(this, this.eduBreakBoxes.quit, t(this.locale, 'breakQuit'), sideStyle, { depth: 27 }).setVisible(false) : null;
-    this.quizCountLine = this.quizCountsBox
-      ? createCountLine(this, this.quizCountsBox.x, this.quizCountsBox.y, { style: TEXT_STYLE, px: 34, sep: '   ', depth: 28, maxWidth: this.quizCountsBox.width }).setVisible(false)
+    // The numbers on a dark rounded chip under Review, inside its width (plan 26, A2: Michael's images 2 and 9).
+    const chip = this.eduBreakBoxes?.chip;
+    this.quizCountChip = chip
+      ? this.add.graphics().fillStyle(0x1a0b14, 0.85).fillRoundedRect(chip.x - chip.width / 2, chip.y - chip.height / 2, chip.width, chip.height, 16).lineStyle(3, 0x5a2a44, 1).strokeRoundedRect(chip.x - chip.width / 2, chip.y - chip.height / 2, chip.width, chip.height, 16).setDepth(27.5).setVisible(false)
+      : null;
+    const counts = this.eduBreakBoxes?.counts;
+    this.quizCountLine = counts
+      ? createCountLine(this, counts.x, counts.y, { style: TEXT_STYLE, px: 32, sep: '   ', depth: 28, maxWidth: counts.width }).setVisible(false)
       : null;
 
     // The info card a tap on a level break's numbers opens ("Waiting in this quiz": toggleBreakCounts),
@@ -797,6 +803,7 @@ export class Play extends Phaser.Scene {
     this.runIsTest = this.isTestMode();
     // An education run (📚, plan 21): unlocked, the switch on, single player, never a Daily Dump.
     this.runIsEducation = !daily && this.educationOn && this.educationOffered();
+    this.placeShopPill(this.runIsEducation); // in the education row, or centred (plan 26, A2)
     this.runQuiz = newTally();
     this.breakMissed = []; // a level break's cards missed and not yet answered right (plan 25): asked again, counted as missed
     this.runId = null; // a pilot tester's answer events name their run (made with the run's first event)
@@ -3396,6 +3403,7 @@ export class Play extends Phaser.Scene {
     this.quizButton.pulse(shown && this.breakGated());
     if (counts) this.quizCountLine.set(counts);
     this.quizCountLine.setVisible(shown && Boolean(counts));
+    this.quizCountChip?.setVisible(shown && Boolean(counts));
     if (this.breakQuitButton) {
       const due = Boolean(counts) && counts.missed + counts.review > 0;
       const armed = this.breakQuitArmed();
@@ -3528,6 +3536,22 @@ export class Play extends Phaser.Scene {
     const coins = this.purseCoins();
     // "Shop" beside the kernel, no number (plan 26, A2: the HUD shows the purse); dimmed at 0 corn.
     this.shopButton.setText(t(this.locale, 'shopPill')).setAlpha(coins > 0 ? 1 : T.trayAlpha).setVisible(this.shopButtonShown());
+  }
+
+  /**
+   * The shop pill's place for the run about to start (plan 26, A2): in an education run's row (left of
+   * Review: eduBreakLayout's shop), else centred under the banner, where it always was (normal runs,
+   * test runs, a match's half). The box object is kept, since the ring and the tap test hold it: it is
+   * moved in place, and the pill (drawn once, at its box: createButton) is drawn again on it.
+   */
+  placeShopPill(education) {
+    if (!this.shopButtonBox || !this.col) return; // no pill on this scene (a test's bare scene)
+    const want = education && this.eduBreakBoxes ? this.eduBreakBoxes.shop : shopButtonLayout(this.col.width, GAME_HEIGHT, T, this.col.x);
+    const box = this.shopButtonBox;
+    if (box.x === want.x && box.y === want.y && box.width === want.width && box.height === want.height) return;
+    Object.assign(box, { x: want.x, y: want.y, width: want.width, height: want.height });
+    this.shopButton?.destroy();
+    this.shopButton = createButton(this, box, t(this.locale, 'shopPill'), { ...TEXT_STYLE, fontSize: '40px' }, { depth: 27, icon: { key: 'coin', px: 48 } }).setVisible(false);
   }
 
   /** Open the shop panel (the 💰 in a level break): the rows, the purse, the open sound. */

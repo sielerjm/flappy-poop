@@ -697,22 +697,25 @@ export function bracketButtonLayout(width, height, t, x0 = 0) {
 }
 
 /**
- * An education run's level break, as Michael drew it (plan 26): the banner higher (titleY, hintY);
- * the 💰 pill where it always is (shopButtonLayout); 📚 Review and Quit side by side on the row
- * under it (Skip ▸ right of the pill is gone since plan 26's A2) (the 🏅's row: the two never meet); the three numbers
- * lower, on the bean button's line (it hides in a break). The poop bobs at the left under the rows
- * (levels.breakPoopY), clear of the tray. `x0` = the column's left edge.
+ * An education run's level break (plan 26, then its A2 to Michael's checklist): the banner higher
+ * (titleY, hintY); [🌽 Shop] [📚 Review] [Quit] on one row where the 💰 pill sits (shopButtonLayout's
+ * y), 216 px each, 12 apart, so the three fit a phone; under Review, inside its width, the three
+ * numbers on a dark rounded chip (`chip`, with the count line's box `counts` inside it). The poop bobs
+ * at the left under the row (levels.breakPoopY), clear of the tray. Play moves the shop pill into
+ * `shop` at an education run's start (placeShopPill). `x0` = the column's left edge.
  */
 export function eduBreakLayout(width, height, t, x0 = 0) {
-  const shop = shopButtonLayout(width, height, t, x0);
-  const gap = 16;
-  const pill = { width: shop.width, height: t.trayHitMin };
-  const rowY = bracketButtonLayout(width, height, t, x0).y;
-  const review = { id: 'quiz', x: shop.x - (pill.width + gap) / 2, y: rowY, ...pill };
-  const quit = { id: 'quit', x: shop.x + (pill.width + gap) / 2, y: rowY, ...pill };
-  const counts = { id: 'quizCounts', x: shop.x, y: height - t.groundHeight - t.trayHitMin / 2 - 58, width: 300, height: 48 };
+  const centre = shopButtonLayout(width, height, t, x0);
+  const pill = { width: 216, height: t.trayHitMin };
+  const gap = 12;
+  const at = (id, dx) => ({ id, x: centre.x + dx * (pill.width + gap), y: centre.y, ...pill });
+  const shop = at('shop', -1);
+  const review = at('quiz', 0);
+  const quit = at('quit', 1);
+  const chip = { id: 'quizCounts', x: review.x, y: review.y + pill.height / 2 + 8 + 26, width: pill.width, height: 52 };
+  const counts = { id: 'quizCounts', x: chip.x, y: chip.y, width: chip.width - 24, height: 44 };
   const titleY = Math.round(height * 0.4) - 72;
-  return { shop, review, counts, quit, titleY, hintY: titleY + 72 };
+  return { shop, review, quit, chip, counts, titleY, hintY: titleY + 72 };
 }
 
 /** 'shop' when (x, y) is on the 💰 button, else null. */

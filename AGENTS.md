@@ -428,9 +428,13 @@ quiz (`book-open`), a page turns for each next card (`book-flip`), the book shut
 (`book-close`); a wrong answer plays `sfx.hazard`; a right one that pays nothing (a revive, the bonus
 quiz, a card that paid today) plays `sfx.score`, and one that pays (a break's) makes the coin's sound alone (`takeCoins`); the
 answer that wins everything back plays `sparkle` in the ding's place. **Level break** (plan 25 laid it
-out, plan 26 to Michael's sketch: `eduBreakLayout` in logic.js): the banner higher (`titleY`); the 🌽
-pill (the level Skip ▸ right of it is gone since plan 26's A2); on the 🏅's row under it **📚 Review** and Quit side by side;
-the three numbers on the bean button's line (it hides in a break). The **📚 Review** pill
+out, plan 26 to Michael's sketch, its A2 to his checklist: `eduBreakLayout` in logic.js): the banner higher
+(`titleY`); **[🌽 Shop] [📚 Review] [Quit] on one row** where the 💰 pill sits, 216 px each, 12 apart (the level
+Skip ▸ is gone); the three numbers under Review, inside its width, on a dark rounded chip (`chip`,
+`Play.quizCountChip`: their tap box and ring item). The shop pill is drawn once at its box
+(`createButton`), so `Play.placeShopPill` moves that same box object in place at a run's start (into the
+row for an education run, centred otherwise: the ring and the tap test hold it) and draws the pill again.
+The poop keeps its place (`levels.breakPoopY`), under the row and the chip. The **📚 Review** pill
 (`quizButtonShown`; chromeIntent's `'quiz'` input, only in an education run's break) opens the break's
 quiz, which asks missed cards, then due reviews (the least remembered first), then the cards missed
 in this break (`Play.breakMissed`, asked again as missed until answered right; the one just shown
@@ -445,7 +449,7 @@ right; `quizAnswer` returns `paidToday`, and the card shows "🌽 already earned
 wrong answer never costs corn or points. The shop's prices are `eduShopPrices(level)` (`Play.shopPrices`; `buyBlocker` takes
 `prices`). **What is waiting**, as in Anki (`cardCounts`: new, missed (a miss of this break
 included) and review cards a quiz can still ask now; `Play.quizCounts`): three numbers in blue, red
-and green on a line of their own, low under the break's rows (`ui/countLine.js`; none in a test run; a tap, or A on
+and green on the chip under Review (`ui/countLine.js`; none in a test run; a tap, or A on
 their ring item, opens "Waiting in this quiz": `toggleBreakCounts`, `countLines`), and on the card
 `5 + 2 + 8` on its bottom row, under its buttons, the card on show counted and its kind
 underlined (`refreshCounts`; no line in a test run); a tap on the card's numbers opens the same lines
@@ -731,9 +735,9 @@ src/
                             readyLayout (plan 25's ◀ level ▶ stepper boxes went to
                             the 📚 popup in plan 26), readyHit, nextEduStartLevel (wraps within
                             the levels unlocked), eduBreakLayout (an education
-                            break, plan 26: the banner's titleY, 💰 (Skip ▸ gone
-                            since its A2), Review | Quit on the row under it, the
-                            numbers on the bean button's line),
+                            break, plan 26 and its A2: the banner's titleY, Shop |
+                            Review | Quit on one row, the numbers' chip under
+                            Review),
                             LAST_UPDATED, issueUrl, openExternalUrl, chromeIntent
                             (inputs incl. 'changelog'; a Changelog over About closes
                             back to About without the lockout),
@@ -2034,7 +2038,9 @@ tests/                      node --test (schema.test.js, pilot.test.js, eduBoard
                             button, clear of the tray and the break's poop), the
                             panel and its rows (inside the strips, apart, covering the
                             pill), shopButtonHit / shopHit, bracketButtonLayout (a row
-                            under the 💰, above the bean button)
+                            under the 💰, above the bean button), eduBreakLayout
+                            (plan 26 A2: one row, the chip under Review, clear of the
+                            poop, ⏸ and the tray)
   gamepad.test.js           padAction (every knob, unmapped → null, a retuned layout),
                             stickNav deadzone / larger axis, focusStep wrapping,
                             focusRingLayout, padIntent matrix across top x state x
