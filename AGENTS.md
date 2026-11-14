@@ -397,10 +397,16 @@ which holds Next `explainMinMs`; behind "Why?" after a right one; its source onl
 card's id in a corner. **The id ends in 🚩 and is a link** (`openReport`): on its release it opens
 GitHub's card report form in a new tab with the card's code in the title and the form's fields
 (`issueUrl('card')`, `.github/ISSUE_TEMPLATE/card.yml`); never a same-tab navigation, which would lose
-the run, and not on the controller ring (a pad press cannot open a tab). **Its buttons**: a full-width Why on top, and a bottom row whose right button is
-the way forward (Next, Fly on, Go for it, End run) and whose left button is the way out (Return in a
-break; Give up or the choice's Fly on in a revive). Enter / Space press only the way forward (and
-Return on "All caught up"), never Give up: Space is the flap key. **Its sounds**: a book opens with the
+the run, and not on the controller ring (a pad press cannot open a tab). **Its rows**, as Michael drew
+them (plan 26): a full-width Why on top, then two buttons whose right one is the way forward (Next
+Card, Fly on, Go for it, End run) and whose left one is the way out (End Review in a break; Give up or
+the choice's Fly on in a revive), then the numbers on the card's bottom row. **Caught up**: with
+nothing counted left, a break's or the bonus quiz stops at the first practice card: "You're all
+caught up!" with End Review and **Keep practicing** (`Quiz.practicing`: practice cards from then on,
+paying nothing and leaving the schedule alone); with nothing at all, End Review alone. **The purse**
+(plan 26): in a break, "🌽 n" under the ✕ (`refreshPurse`), popping as right answers pay. Enter /
+Space press only the way forward (and End Review on "All caught up" when it is alone), never Give
+up: Space is the flap key. **Its sounds**: a book opens with the
 quiz (`book-open`), a page turns for each next card (`book-flip`), the book shuts when it is left
 (`book-close`); a wrong answer plays `sfx.hazard`; a right one that pays nothing (a revive, the bonus
 quiz) plays `sfx.score`, and one that pays (a break's) makes the coin's sound alone (`takeCoins`); the
@@ -417,7 +423,7 @@ pays nothing. The shop's prices are `eduShopPrices(level)` (`Play.shopPrices`; `
 included) and review cards a quiz can still ask now; `Play.quizCounts`): three numbers in blue, red
 and green on a line of their own under Review (`ui/countLine.js`; none in a test run; a tap, or A on
 their ring item, opens "Waiting in this quiz": `toggleBreakCounts`, `countLines`), and on the card
-`5 + 2 + 8` in a row of its own above its bottom buttons, the card on show counted and its kind
+`5 + 2 + 8` on its bottom row, under its buttons, the card on show counted and its kind
 underlined (`refreshCounts`; no line in a test run); a tap on the card's numbers opens the same lines
 (`Quiz.toggleCountsCard`). **The gate** (`breakGated`): every level break of an education run
 (plan 26; before it, only a break into a level not yet unlocked) holds while the missed or review

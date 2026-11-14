@@ -252,8 +252,9 @@ Short, playful, clear. Fit a 720×1280 logical field; How to play / About body w
 | quizBury | Bury · {n} coins (plan 25: at a gate, after a miss, the card waits 24 h for a price in coins; Anki's word "bury"; zh says "push to tomorrow") | 推到明天 · {n} 金币 |
 | quizWrong | Not quite: the right answer has a ✓ | 不太对：正确答案标有 ✓ |
 | quizWhy | Why? | 为什么？ |
-| quizNext | Next | 下一题 |
-| quizReturn | Return | 返回 |
+| quizNext | Next Card (plan 26, Michael's word: the quiz card's way forward, bottom row right) | 下一张 |
+| quizReturn | End Review (plan 26, Michael's word: the quiz card's way out in a break or the bonus quiz, bottom row left; it closes the quiz) | 结束复习 |
+| quizKeepPracticing | Keep practicing (plan 26: on "You're all caught up!", asks cards that are not due yet; they pay nothing and leave the schedule alone) | 继续练习 |
 | quizStatsTitle | This run | 本局 |
 | eduCardsTitle | Your cards | 你的卡片 |
 | quizCountsTitle | Waiting in this quiz (the title of the card a tap on a quiz card's numbers opens: the 🔵 🔴 🟢 lines with this quiz's counts) | 本次答题还剩 |
@@ -262,7 +263,7 @@ Short, playful, clear. Fit a 720×1280 logical field; How to play / About body w
 | eduCardsReview | 🟢 {n} to review (due now) | 🟢 {n} 张待复习（已到期） |
 | eduCardsSeen | 👁️ Seen {n} of {total} cards | 👁️ 已见过 {n} / {total} 张卡片 |
 | eduCardsDue | The number on 📚 = # of cards to review (Michael's wording, 13 Nov: the gold number counts missed + to review; # stands for that number) | 📚 上的数字 = 待复习的卡片数 |
-| quizCaughtUp | You're all caught up! New questions come with the next level, and old ones come back when they are due. | 全部完成！下一关会有新问题，旧问题到期后会再出现。 |
+| quizCaughtUp | You're all caught up! New cards come with the next level, up to {n} a day, and old ones come back when they are due. ({n} is education.newPerDay, plan 26) | 全部完成！下一关会有新卡片（每天最多 {n} 张），旧卡片到期后会再出现。 |
 | quizGeneral | Gut microbes | 肠道微生物 |
 | quizSource | Source: {source} | 来源：{source} |
 | reviveHeader | Crashed! Answer to fly on | 撞到了！答对继续飞 |

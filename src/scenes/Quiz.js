@@ -14,17 +14,19 @@ const STYLE = { fontFamily: 'sans-serif', fontStyle: 'bold', color: '#ffffff', a
 const MUTED = { ...STYLE, fontStyle: 'normal', color: '#c9b8dc' };
 /**
  * The card: a 640 × 1160 panel; text wraps at TEXT_W; option boxes are TEXT_W wide and at least
- * OPTION_MIN_H tall. (It was 1120 tall: the 40 px more are the count line's row, COUNT_ROW, above
- * the bottom buttons, so the card's text has the room it always had.)
+ * OPTION_MIN_H tall. (It was 1120 tall: the 40 px more are the count line's row, COUNT_ROW, so the
+ * card's text has the room it always had. Since plan 26 that row is the card's bottom one, under the
+ * buttons, as Michael drew it.)
  */
 const PANEL = { width: 640, height: 1160 };
 const TEXT_W = 560;
 const OPTION_MIN_H = 92;
 const BUTTON = { width: 250, height: 88 };
 const WIDE_BUTTON = 540; // the top button (Why): edge to edge with the bottom row (two 250 px buttons, 40 px apart)
-const BUTTON_GAP = 12; // px between the top button and the count line's row
-const COUNT_ROW = 52; // px: the count line's row (new + missed + review), directly above the bottom row (plan 25: 12 px more room above Give up / Fly on)
-const COUNT_GAP = 36; // px from the bottom buttons' top edge to the count line's centre
+const BUTTON_GAP = 12; // px between the top button (Why) and the button row
+const COUNT_ROW = 52; // px: the count line's row (new + missed + review), the card's bottom row, under the buttons (plan 26)
+const BOTTOM_PAD = 24; // px from the card's bottom edge to the count line's row
+const PURSE_PX = 30; // the corn kernel of the purse under the ✕ (a break's card)
 const TALLY_HIT = { width: 180, height: 56 }; // the run tally's tap box in the card's top row
 const REPORT_FLAG = '\u{1F6A9}'; // 🚩 after the card's id: report this card
 const ID_MAX_W = 220; // px the id line may take, so it ends clear of the tally (two two-digit counts); a longer one shrinks
@@ -46,13 +48,16 @@ const BAD = '#ff8da8';
  * bad bacteria, and the answer that wins everything back sparkles. An answer that pays a coin (a
  * level break's) makes the coin's sound alone, with no ding.
  * A revive's card ignores pointer taps for retryLockoutMs after it opens (tapLocked).
- * Buttons: a full-width Why on top, and a bottom row whose right button is the way forward (Next,
- * Fly on, Go for it, End run) and whose left button is the way out (Return; in a revive, Give up or
- * the choice's Fly on).
- * What is waiting (plan 21, E2), as in Anki: a line of three counts in a row of its own directly
- * above the bottom buttons, "5 + 2 + 8": new cards (blue), missed cards (red) and reviews due
- * (green) that this quiz can still ask, the card on show included and its kind
- * underlined (Play.quizCounts; refreshCounts). Hidden in a test run, whose quizzes ignore the schedule.
+ * Rows, as Michael drew them (plan 26): a full-width Why on top, then a row of two buttons whose
+ * right one is the way forward (Next Card, Fly on, Go for it, End run) and whose left one is the way
+ * out (End Review; in a revive, Give up or the choice's Fly on), then the numbers.
+ * What is waiting (plan 21, E2), as in Anki: a line of three counts on the card's bottom row,
+ * "5 + 2 + 8": new cards (blue), missed cards (red) and reviews due (green) that this quiz can still
+ * ask, the card on show included and its kind underlined (Play.quizCounts; refreshCounts). Hidden in
+ * a test run, whose quizzes ignore the schedule. With nothing counted left, a break's or the bonus
+ * quiz stops asking: "You're all caught up!" with End Review and Keep practicing (practice cards pay
+ * nothing and leave the schedule alone; plan 26).
+ * The purse (plan 26): in a break, "🌽 n" under the ✕, counting up as right answers pay.
  * The run's tally: "✅ 5  ❌ 0" in the top row between the card's id and the ✕ / ❤️ corner, once the
  * run has an answer (never in the bonus quiz, whose answers are not tallied). A tap on it, or A on
  * the ring, opens the "This run" card: one line per level answered (an info card over the quiz;
@@ -83,6 +88,7 @@ export class Quiz extends Phaser.Scene {
     this.mode = data?.mode ?? 'break';
     this.locale = this.play?.getLocale?.() ?? 'en';
     this.session = []; // the cards shown in this quiz, never asked twice in it
+    this.practicing = false; // Keep practicing pressed (plan 26): practice cards without stopping at "caught up"
     this.card = null;
     this.answered = false;
     this.finishing = false;
@@ -143,15 +149,16 @@ export class Quiz extends Phaser.Scene {
     // Three button slots, named by where they sit; each step says what they read and do (set). The
     // two on the bottom row never overlap, so a second tap on the way forward cannot land on the
     // way out (Give up) of the next card.
-    const rowY = this.bottom - 24 - BUTTON.height / 2;
-    const topY = rowY - BUTTON.height - BUTTON_GAP - COUNT_ROW;
-    // What is waiting: the count line, in its own row directly above the bottom buttons (the same
-    // place whatever the card shows; Why sits above it).
-    this.counts = createCountLine(this, cx, rowY - BUTTON.height / 2 - COUNT_GAP, { px: 28, sep: '  +  ' }).setVisible(false);
+    const countY = this.bottom - BOTTOM_PAD - COUNT_ROW / 2;
+    const rowY = this.bottom - BOTTOM_PAD - COUNT_ROW - BUTTON.height / 2;
+    const topY = rowY - BUTTON.height - BUTTON_GAP;
+    // What is waiting: the count line, on the card's bottom row under the buttons (plan 26; the same
+    // place whatever the card shows).
+    this.counts = createCountLine(this, cx, countY, { px: 28, sep: '  +  ' }).setVisible(false);
     // A tap on the numbers (or A on their ring item) says what they mean (plan 25): an info card, as
     // the tally's, with this quiz's counts. It opens on the release, as the tally's does.
     this.countsZone = this.add
-      .zone(cx, rowY - BUTTON.height / 2 - COUNT_GAP, 300, 48)
+      .zone(cx, countY, 300, 48)
       .setInteractive({ useHandCursor: true })
       .setVisible(false)
       .on('pointerup', (pointer) => {
@@ -164,8 +171,14 @@ export class Quiz extends Phaser.Scene {
     this.topBtn = this.makeButton(cx, topY, WIDE_BUTTON);
     this.leftBtn = this.makeButton(cx - 145, rowY);
     this.rightBtn = this.makeButton(cx + 145, rowY);
-    this.rowTop = rowY - BUTTON.height / 2 - COUNT_ROW; // the explanation ends above the count line's row
+    this.rowTop = rowY - BUTTON.height / 2; // the explanation ends above the button row
     this.whyTop = topY - BUTTON.height / 2; // and the verdict above the top button while it shows
+    // The purse in a break (plan 26): the kernel and the coins held, under the ✕ (refreshPurse).
+    const purseX = cx + PANEL.width / 2 - 24;
+    const purseY = this.top + 84;
+    this.purseText = this.add.text(purseX, purseY, '', { ...STYLE, fontSize: '26px', color: '#ffe58a' }).setOrigin(1, 0.5).setVisible(false);
+    this.purseCoin = this.add.image(purseX, purseY, 'coin', 0).setDisplaySize(PURSE_PX, PURSE_PX).setVisible(false);
+    this.purseShown = null;
 
     const kb = this.input.keyboard;
     ['ONE', 'TWO', 'THREE'].forEach((k, i) => {
@@ -398,7 +411,7 @@ export class Quiz extends Phaser.Scene {
 
   /**
    * Enter / Space: the way forward (the right-hand button). With "All caught up" on show they press
-   * Return. Never Give up, and never Return while a card is up: Space is also the flap key, and a
+   * Keep practicing when it shows, else End Review. Never Give up, and never Return while a card is up: Space is also the flap key, and a
    * flap pressed just after a crash must not end the run or leave the quiz.
    */
   primary() {
@@ -417,17 +430,25 @@ export class Quiz extends Phaser.Scene {
     for (const b of [this.topBtn, this.leftBtn, this.rightBtn]) b.setShown(false);
   }
 
-  /** The way out while a card is up, bottom left: Return in a break or bonus; before a revive's first right answer, Give up ends the run. */
+  /** The way out while a card is up, bottom left: End Review in a break or bonus; before a revive's first right answer, Give up ends the run. */
   showWayOut() {
     if (this.closable()) this.leftBtn.set(t(this.locale, 'quizReturn'), () => this.close());
     else if (this.reviveState?.phase === 'strikes') this.leftBtn.set(t(this.locale, 'reviveGiveUp'), () => this.decide('giveUp'));
   }
 
-  /** The next card from Play, or "All caught up" (a break) / a granted revive (no card left) when there is none. */
+  /**
+   * The next card from Play, or "All caught up" (a break) / a granted revive (no card left) when there
+   * is none. A break's or the bonus quiz stops at the first practice card too (plan 26): caught up,
+   * with Keep practicing, which asks practice cards from then on (this.practicing).
+   */
   nextCard() {
     const pick = this.play?.quizNext?.({ mode: this.mode, exclude: this.session }) ?? null;
     if (!pick) {
       this.showCaughtUp();
+      return;
+    }
+    if (pick.reason === 'practice' && this.closable() && !this.practicing) {
+      this.showCaughtUp({ practice: true });
       return;
     }
     this.session.push(pick.card.id);
@@ -484,12 +505,16 @@ export class Quiz extends Phaser.Scene {
     this.closeBtn.setVisible(this.closable());
     this.refreshTally();
     this.refreshCounts();
+    this.refreshPurse();
     this.shownAt = globalThis.performance?.now?.() ?? Date.now();
     this.ring('option0');
   }
 
-  /** Nothing left to ask: a break says "All caught up" (Return); a revive is granted (Fly on). */
-  showCaughtUp() {
+  /**
+   * Nothing counted left to ask: a break or the bonus quiz says "All caught up" with End Review, and
+   * Keep practicing when practice cards are on offer (`practice`); a revive is granted (Fly on).
+   */
+  showCaughtUp({ practice = false } = {}) {
     this.card = null;
     this.answered = true;
     const revive = this.mode === 'revive';
@@ -497,7 +522,7 @@ export class Quiz extends Phaser.Scene {
     this.header.setText(EDUCATION_EMOJI);
     this.setCardId('');
     this.refreshStatus();
-    this.question.setY(this.header.y + this.header.height + 22).setText(t(this.locale, revive ? 'reviveFree' : 'quizCaughtUp')).setVisible(true);
+    this.question.setY(this.header.y + this.header.height + 22).setText(revive ? t(this.locale, 'reviveFree') : t(this.locale, 'quizCaughtUp').replace('{n}', String(T.education.newPerDay))).setVisible(true);
     for (const o of this.options) {
       o.g.setVisible(false);
       o.text.setVisible(false);
@@ -507,11 +532,39 @@ export class Quiz extends Phaser.Scene {
     for (const x of [this.verdict, this.verdictCoin, this.nextWait, this.explain, this.source]) x.setVisible(false);
     this.clearButtons();
     if (revive) this.rightBtn.set(t(this.locale, 'reviveContinue'), () => this.finish());
-    else this.showWayOut();
+    else {
+      this.showWayOut();
+      if (practice) this.rightBtn.set(t(this.locale, 'quizKeepPracticing'), () => this.keepPracticing());
+    }
     this.closeBtn.setVisible(this.closable());
     this.refreshTally();
     this.refreshCounts();
-    this.ring(revive ? 'right' : 'left');
+    this.refreshPurse();
+    this.ring(revive || practice ? 'right' : 'left');
+  }
+
+  /** Keep practicing (plan 26): practice cards from now on in this quiz, without stopping again. */
+  keepPracticing() {
+    if (this.card || this.finishing || !isTopOverlay(this) || this.runCard?.open) return;
+    this.practicing = true;
+    this.nextCard();
+  }
+
+  /**
+   * The purse under the ✕ in a break (plan 26): "🌽 n", the coins held, so a player sees them while
+   * the card covers the HUD. It pops when it grows. Nowhere else (a revive's corner holds ❤️ / ⭐).
+   */
+  refreshPurse() {
+    const shown = this.mode === 'break' && Boolean(this.play?.effects);
+    const n = shown ? this.play.effects.coins() : null;
+    this.purseText.setText(shown ? String(n) : '').setVisible(shown);
+    this.purseCoin.setX(this.purseText.x - this.purseText.width - 6 - PURSE_PX / 2).setVisible(shown);
+    if (shown && this.purseShown !== null && n > this.purseShown) {
+      this.tweens.killTweensOf([this.purseText, this.purseCoin]);
+      this.purseText.setScale(1.3);
+      this.tweens.add({ targets: this.purseText, scale: 1, duration: 220, ease: 'Back.Out' });
+    }
+    this.purseShown = n;
   }
 
   /** A revive's ❤️ (tries left, then used) or ⭐ (the streak so far); nothing in a break. */
@@ -537,6 +590,7 @@ export class Quiz extends Phaser.Scene {
     const res = this.play?.quizAnswer?.({ card: this.card, reason: this.reason, order: this.order, chosen: key, rtMs, interrupted: this.interrupted, mode: this.mode, input }) ?? { correct: key === 'answer' };
     this.lastAnswer = { id: this.card.id, chosen: key, correct: res.correct, coins: res.coins ?? 0, dueAt: res.dueAt ?? null, rtMs, interrupted: this.interrupted }; // the smoke reads it
     this.refreshTally();
+    this.refreshPurse();
     if (this.mode === 'revive') this.reviveState = this.play?.reviveEvent?.(res.correct ? 'correct' : 'wrong') ?? this.reviveState;
     // The answer's sound: a wrong one as the bad bacteria, a right one as a pipe passed; the right
     // answer that wins everything back (a revive's full streak) sparkles in the ding's place. A
@@ -599,7 +653,7 @@ export class Quiz extends Phaser.Scene {
     this.time.delayedCall(T.education.explainMinMs, () => button.hold(false));
   }
 
-  /** A level break: the verdict (+coins for a right answer), Why on top, and Return | Next below. */
+  /** A level break: the verdict (+coins for a right answer), Why on top, and End Review | Next Card below. */
   breakStep(correct) {
     const coins = this.lastAnswer?.coins ?? 0;
     this.say(correct && coins ? t(this.locale, 'quizRightCoins').replace('{n}', String(coins)) : t(this.locale, correct ? 'quizRight' : 'quizWrong'), correct, Boolean(correct && coins));

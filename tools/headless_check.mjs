@@ -3942,9 +3942,10 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         // The same counts on the card, in a row of their own above the bottom buttons; the card on show
         // is counted and its kind underlined in its colour. No tally before the run's first answer.
         const line0 = await lineNow();
-        const lineBox = await evaluate(`(() => { const q = ${Q}; return JSON.stringify({ rowTop: q.rowTop, leftTop: q.leftBtn.zone.y - q.leftBtn.zone.height / 2, panel: q.bottom - q.top }); })()`).then(JSON.parse);
+        const lineBox = await evaluate(`(() => { const q = ${Q}; const b = q.counts.getBounds?.() ?? null; return JSON.stringify({ rowTop: q.rowTop, leftTop: q.leftBtn.zone.y - q.leftBtn.zone.height / 2, leftBottom: q.leftBtn.zone.y + q.leftBtn.zone.height / 2, rightY: q.rightBtn.zone.y, whyBottom: q.topBtn.zone.y + q.topBtn.zone.height / 2, countsY: q.countsZone.y, countsHalf: q.countsZone.height / 2, bottom: q.bottom, panel: q.bottom - q.top, purse: q.purseText.visible ? q.purseText.text : null, purseCoin: q.purseCoin.visible, coins: ${play}.effects.coins(), purseTop: q.purseText.y - q.purseText.height / 2, closeBottom: q.closeBtn.y + q.closeBtn.height / 2 }); })()`).then(JSON.parse);
         ok(line0.visible && line0.text === `${want0.n}  +  0  +  0` && JSON.stringify(line0.counts) === JSON.stringify(pillLine.counts) && line0.underlined === 'new' && line0.fill === want0.fill.new, `the card shows the same counts, "${line0.text}", with the new count underlined in blue (this card is new)`);
-        ok(lineBox.panel === 1160 && lineBox.leftTop - lineBox.rowTop === 52 && !line0.tally && !line0.tallyZone, `the count line has a 52 px row of its own (plan 25: 12 px more room above the buttons) above the bottom buttons (the card is ${lineBox.panel} px tall); no tally before the run's first answer`);
+        ok(lineBox.panel === 1160 && lineBox.leftTop === lineBox.rowTop && lineBox.whyBottom < lineBox.leftTop && lineBox.countsY - lineBox.countsHalf >= lineBox.leftBottom && lineBox.countsY + lineBox.countsHalf <= lineBox.bottom && lineBox.rightY === lineBox.leftTop + (lineBox.leftBottom - lineBox.leftTop) / 2 && !line0.tally && !line0.tallyZone, `the card's rows, as Michael drew them (plan 26): Why, then the two buttons, then the numbers on the bottom row (the card is ${lineBox.panel} px tall); no tally before the run's first answer`);
+        ok(lineBox.purse === String(lineBox.coins) && lineBox.purseCoin && lineBox.purseTop >= lineBox.closeBottom - 4, `the purse sits under the ✕: "🌽 ${lineBox.purse}" (the HUD's ${lineBox.coins})`);
         // A tap on the numbers says what they mean, with this quiz's counts (plan 25, B3): the waiting
         // question is marked interrupted while it is up, and Esc takes it down, the quiz as it was.
         const cz = await evaluate(`JSON.stringify({ x: ${Q}.countsZone.x, y: ${Q}.countsZone.y, visible: ${Q}.countsZone.visible })`).then(JSON.parse);
@@ -4191,10 +4192,15 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await answerRight();
         const k2 = await kindNow();
         await answerRight();
+        const caught = await evaluate(`(() => { const q = ${Q}; return JSON.stringify({ card: q.card?.id ?? null, left: q.leftBtn.shown ? q.leftBtn.text.text : null, right: q.rightBtn.shown ? q.rightBtn.text.text : null, question: q.question.text }); })()`).then(JSON.parse);
+        await evaluate(`${Q}.input.keyboard.emit('keydown-ENTER'), true`); // Enter: Keep practicing
+        await sleep(200);
         const k3 = await kindNow();
         ok(k1.id === crafted.missed && k1.reason === 'missed' && k1.text === '0  +  1  +  1' && k1.underlined === 'missed' && k1.fill === want0.fill.missed, `a missed card underlines the missed count in its colour: "${k1.text}" (${k1.id})`);
         ok(k2.id === crafted.review && k2.reason === 'review' && k2.text === '0  +  0  +  1' && k2.underlined === 'review' && k2.fill === want0.fill.review, `a review due underlines the review count in green: "${k2.text}" (${k2.id})`);
-        ok(k3.reason === 'practice' && k3.text === '0  +  0  +  0' && k3.underlined === null && k3.fill === null && k3.visible, `a practice card underlines nothing: "${k3.text}" (${k3.id})`);
+        const [keepWant, caughtWant] = await Promise.all([tx('quizKeepPracticing'), evaluate(`import('./src/i18n.js').then((m) => m.t('en', 'quizCaughtUp').replace('{n}', String(${TT.education.newPerDay})))`)]);
+        ok(caught.card === null && caught.left === returnWant && caught.right === keepWant && caught.question === caughtWant, `with nothing counted left the quiz stops asking (plan 26): "${caught.question}" with ${caught.left} and ${caught.right}`);
+        ok(k3.reason === 'practice' && k3.text === '0  +  0  +  0' && k3.underlined === null && k3.fill === null && k3.visible, `Enter on ${keepWant} asks a practice card, which underlines nothing: "${k3.text}" (${k3.id})`);
         await evaluate(`${Q}.leftBtn.press(), true`); // Return
         await sleep(300);
         const idle = await evaluate(`(() => { const p = ${play}; return JSON.stringify({ line: p.quizCountLine.visible, label: p.quizButton.getText(), shown: p.quizButton.visible }); })()`).then(JSON.parse);
@@ -4217,8 +4223,8 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await answerRight();
         const m3 = await kindNow();
         await answerRight();
-        const m4 = await kindNow();
-        ok(m1.id === crafted2.missed && m1.text === '0  +  1  +  1' && m2.id === crafted2.review && m2.text === '0  +  1  +  1' && m3.id === crafted2.missed && m3.reason === 'missed' && m3.text === '0  +  1  +  0' && m4.reason === 'practice' && m4.text === '0  +  0  +  0', `a missed card stays counted and comes back after the due review: ${[m1, m2, m3, m4].map((k) => `${k.id} "${k.text}"`).join(' → ')}`);
+        const m4 = { ...(await kindNow()), caught: await evaluate(`${Q}.card === null && ${Q}.rightBtn.shown`) };
+        ok(m1.id === crafted2.missed && m1.text === '0  +  1  +  1' && m2.id === crafted2.review && m2.text === '0  +  1  +  1' && m3.id === crafted2.missed && m3.reason === 'missed' && m3.text === '0  +  1  +  0' && m4.caught && m4.text === '0  +  0  +  0', `a missed card stays counted and comes back after the due review: ${[m1, m2, m3, m4].map((k) => `${k.id} "${k.text}"`).join(' → ')}`);
         await evaluate(`${Q}.leftBtn.press(), true`); // Return
         await sleep(300);
 

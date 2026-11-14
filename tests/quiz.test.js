@@ -123,3 +123,54 @@ test('after an answer the card says when it comes back, under the verdict: "Next
   assert.equal(q.nextWait.visible, false, 'a test run saves nothing: no wait');
   assert.equal(q.verdictBottom(), 540);
 });
+
+test('a break or the bonus quiz stops at the first practice card: caught up, with Keep practicing, which then asks practice cards without stopping; a revive asks it at once (plan 26)', () => {
+  const make = (mode) => {
+    const calls = [];
+    const q = quizScene({
+      mode, session: [], practicing: false, card: null, finishing: false, scene: scenes(['Play', 'Quiz']), runCard: { open: false },
+      play: { quizNext: () => ({ card: { id: 'ST-01' }, reason: 'practice', order: ['answer', 'w1', 'w2'] }) },
+      showCaughtUp: (o) => calls.push(`caught${o?.practice ? '+practice' : ''}`),
+      showCard: (c, order, reason) => calls.push(`${c.id}:${reason}`),
+      sample() {},
+    });
+    return { q, calls };
+  };
+  for (const mode of ['break', 'bonus']) {
+    const { q, calls } = make(mode);
+    q.nextCard();
+    assert.deepEqual(calls, ['caught+practice'], `${mode}: caught up, Keep practicing on offer`);
+    q.keepPracticing();
+    q.nextCard();
+    assert.deepEqual(calls, ['caught+practice', 'ST-01:practice', 'ST-01:practice'], `${mode}: then practice cards, one after another`);
+  }
+  const revive = make('revive');
+  revive.q.nextCard();
+  assert.deepEqual(revive.calls, ['ST-01:practice'], 'a revive must ask something: the practice card at once');
+  const none = make('break');
+  none.q.play = { quizNext: () => null };
+  none.q.nextCard();
+  assert.deepEqual(none.calls, ['caught'], 'nothing at all: caught up, End Review alone');
+});
+
+test('the purse under the ✕ (plan 26): a break shows the coins held and pops when they grow; a revive or the bonus quiz shows none', () => {
+  const text = { x: 600, width: 20, text: '', visible: false, scale: 1, setText(v) { this.text = v; return this; }, setVisible(v) { this.visible = v; return this; }, setScale(v) { this.scale = v; return this; }, setX(v) { this.x = v; return this; } };
+  const coin = { x: 0, visible: false, setX(v) { this.x = v; return this; }, setVisible(v) { this.visible = v; return this; } };
+  let coins = 4;
+  const tweened = [];
+  const q = quizScene({ mode: 'break', purseText: text, purseCoin: coin, purseShown: null, play: { effects: { coins: () => coins } }, tweens: { killTweensOf() {}, add: (cfg) => tweened.push(cfg) } });
+  q.refreshPurse();
+  assert.deepEqual([text.visible, text.text, coin.visible, tweened.length], [true, '4', true, 0], 'the purse shows, no pop at first');
+  assert.ok(coin.x < text.x - text.width, 'the kernel sits left of the number');
+  coins = 5;
+  q.refreshPurse();
+  assert.deepEqual([text.text, tweened.length], ['5', 1], 'a coin paid: it pops');
+  coins = 2;
+  q.refreshPurse();
+  assert.deepEqual([text.text, tweened.length], ['2', 1], 'a Bury spends: no pop');
+  for (const mode of ['revive', 'bonus']) {
+    q.mode = mode;
+    q.refreshPurse();
+    assert.deepEqual([text.visible, coin.visible], [false, false], mode);
+  }
+});
