@@ -475,7 +475,9 @@ world halts as in a match respawn (`startRespawn` / `endRespawn` keep their matc
 **revive quiz** runs (`reviveStep` through `Play.reviveEvent`): ❤️ × `education.strikes` misses end the
 run (`reviveDone` → `endRun`, the field untouched); the first right answer revives, and when the crash
 took something the player may go for ⭐ × `restoreStreak` in a row to get it all back
-(`effects.restore`); **Quit** ends it ("Give up" until plan 26's A2; the method `Quiz.giveUp`, the
+(`effects.restore`; the choice shows Why on top, as any right answer does, and says how on its own
+line under the verdict and the wait, `Quiz.choiceLine`, with the explanation opening under it: plan
+26 A2, Michael's image 8); **Quit** ends it ("Give up" until plan 26's A2; the method `Quiz.giveUp`, the
 `'giveUp'` event and `gaveUp` keep the name), and only before a right answer (`reviveStep` takes it in
 `'strikes'` alone). On every card its first press only warns, in the verdict's place, that the run
 and its progress would be lost (`reviveQuitWarn`), arms the button ("Quit? Tap again", `quitArmed`)
@@ -1761,8 +1763,10 @@ src/
                             preview(card, right, { state }) lays any card out
                             answered wrong or right for the smoke's fit check
                             (fits(): the last text ends above the buttons under it);
-                            `state` 'quit' (plan 26 A2) shows a revive card with
-                            Quit's warning, run over all cards in education-revive.
+                            `state` (plan 26 A2, a revive's card, run over all cards
+                            in both languages in education-revive): 'quit' with
+                            Quit's warning, 'choice' the ⭐ choice over Why,
+                            'choiceWhy' with Why open.
 
 assets/                     Contract PNGs + README.md (the art contract).
   README.md                 File name, pixel size, orientation rules. tests enforce it.

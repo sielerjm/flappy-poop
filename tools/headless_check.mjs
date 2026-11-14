@@ -4465,7 +4465,12 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         ok(JSON.stringify(waited.ahead) === JSON.stringify(filled.ahead) && waited.vx === 0, `the refilled pairs stand still under the card (x ${filled.ahead.join(', ')} → ${waited.ahead.join(', ')} a second later, speed ${waited.vx})`);
         const choiceWant = choice.replace('{n}', String(TT.education.restoreStreak - 1));
         ok(c1.phase === 'choice' && c1.verdict === back && c1.left === flyOn && c1.right === `⭐ ${goFor}`, `a right answer after a miss revives and offers the choice: "${c1.verdict}" [${c1.left}] [${c1.right}]`);
-        ok((await evaluate(`${Q}.explain.text`)) === choiceWant, `the choice says how: "${choiceWant}"`);
+        const choiceView = await evaluate(`JSON.stringify({ line: ${Q}.choiceLine.visible ? ${Q}.choiceLine.text : null, top: ${Q}.topBtn.shown ? ${Q}.topBtn.text.text : null, below: ${Q}.choiceLine.y >= ${Q}.verdict.y + ${Q}.verdict.height })`).then(JSON.parse);
+        ok(choiceView.line === choiceWant && choiceView.top === (await tx('quizWhy')) && choiceView.below, `the choice says how on its own line, under the verdict: "${choiceView.line}"; Why is on top (plan 26, A2: Michael's image 8)`);
+        await evaluate(`${Q}.topBtn.press(), true`); // Why
+        await sleep(150);
+        const choiceWhy = await evaluate(`JSON.stringify({ explain: ${Q}.explain.visible && ${Q}.explain.text.length > 0, under: ${Q}.explain.y >= ${Q}.choiceLine.y + ${Q}.choiceLine.height, line: ${Q}.choiceLine.visible, left: ${Q}.leftBtn.shown, right: ${Q}.rightBtn.shown })`).then(JSON.parse);
+        ok(choiceWhy.explain && choiceWhy.under && choiceWhy.line && choiceWhy.left && choiceWhy.right, 'Why opens the explanation under the choice line; the choice stays');
         const flown = Date.now();
         await evaluate(`${Q}.leftBtn.press(), true`); // Fly on
         await sleep(120);
@@ -4746,8 +4751,15 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         // on a revive's card (its 💀 header). Then Quit, warned, ends the run.
         await startEdu('');
         await crash();
-        const quitFit = await evaluate(`import('./src/questions.js').then(({ CARDS }) => { const q = ${Q}; const keep = q.locale; const bad = []; for (const locale of ['en', 'zh-Hans']) { q.locale = locale; for (const c of CARDS) { const f = q.preview(c, false, { state: 'quit' }); if (!f.ok) bad.push(locale + ' ' + c.id + ':' + Math.round(f.below) + '>' + Math.round(f.buttonsTop)); } } q.locale = keep; q.showCard(q.card, q.order, q.reason); return JSON.stringify({ n: CARDS.length, bad }); })`).then(JSON.parse);
-        ok(quitFit.bad.length === 0, `all ${quitFit.n} cards fit a revive's card with Quit's warning showing, en and zh-Hans (${quitFit.bad.join(', ') || 'none over'})`);
+        const reviveFit = (state) => evaluate(`import('./src/questions.js').then(({ CARDS }) => { const q = ${Q}; const keep = { locale: q.locale, st: q.reviveState, ans: q.answered, last: q.lastAnswer }; const bad = []; let tight = Infinity; for (const locale of ['en', 'zh-Hans']) { q.locale = locale; for (const c of CARDS) { const f = q.preview(c, false, { state: '${state}' }); tight = Math.min(tight, f.buttonsTop - 8 - f.below); if (!f.ok) bad.push(locale + ' ' + c.id + ':' + Math.round(f.below) + '>' + Math.round(f.buttonsTop)); } } q.locale = keep.locale; q.reviveState = keep.st; q.showCard(q.card, q.order, q.reason); return JSON.stringify({ n: CARDS.length, bad, tight: Math.round(tight) }); })`).then(JSON.parse);
+        const quitFit = await reviveFit('quit');
+        ok(quitFit.bad.length === 0, `all ${quitFit.n} cards fit a revive's card with Quit's warning showing, en and zh-Hans (${quitFit.bad.join(', ') || `none over; ${quitFit.tight} px to spare at the tightest`})`);
+        // The ⭐ choice (plan 26, A2): the verdict, the wait and the choice line above Why; then with
+        // Why open, the explanation, Learn more and the source above the bottom row.
+        const choiceFit = await reviveFit('choice');
+        ok(choiceFit.bad.length === 0, `all ${choiceFit.n} cards fit the ⭐ choice with Why closed, en and zh-Hans (${choiceFit.bad.join(', ') || `none over; ${choiceFit.tight} px to spare at the tightest`})`);
+        const choiceWhyFit = await reviveFit('choiceWhy');
+        ok(choiceWhyFit.bad.length === 0, `and with Why open (${choiceWhyFit.bad.join(', ') || `none over; ${choiceWhyFit.tight} px to spare at the tightest`})`);
         await press('leftBtn'); // the warning
         await press('leftBtn', held); // Quit
         await sleep(TT.deathToOverMs + 400);

@@ -259,3 +259,25 @@ test("a right answer that pays nothing because the card paid today says so on th
   const plain = make({ coins: 0, paidToday: false, dueAt: null });
   assert.deepEqual([plain.verdict.text, plain.paidNote.visible], ['Right!', false], 'a right answer that pays nothing for another reason (a test run saves nothing, a revive): no note');
 });
+
+test("a revive's ⭐ choice (plan 26, A2: Michael's image 8): Why sits on top, the choice line has its own text under the verdict and the wait, and the explanation opens under the choice line", () => {
+  const text = (y, h) => ({ x: 0, y, width: 100, height: h, text: '', visible: false, color: null, setX(v) { this.x = v; return this; }, setY(v) { this.y = v; return this; }, setText(v) { this.text = v; return this; }, setColor(v) { this.color = v; return this; }, setVisible(v) { this.visible = v; return this; }, setPosition(x, y2) { this.x = x; this.y = y2; return this; }, setFontSize() { return this; } });
+  const labels = {};
+  const btn = (slot) => ({ set(label) { labels[slot] = label; return this; }, holdFor() { return this; } });
+  const explained = [];
+  const q = quizScene({
+    mode: 'revive', locale: 'en', cx: 360, reviveState: { phase: 'choice' }, lastAnswer: { coins: 0, dueAt: Date.now() + 3 * 86400000 },
+    verdict: text(600, 40), verdictCoin: text(0, 36), paidNote: text(0, 28), nextWait: text(0, 30), choiceLine: text(0, 64), explain: text(0, 0),
+    topBtn: btn('top'), leftBtn: btn('left'), rightBtn: btn('right'), ring() {}, clearRich() {},
+    renderExplain: (txt, y) => explained.push(y),
+  });
+  q.reviveStep(true);
+  assert.deepEqual([q.verdict.text, q.nextWait.visible, q.choiceLine.visible], ["Right! You're back in.", true, true]);
+  assert.equal(q.choiceLine.text, `Answer ${TUNING.education.restoreStreak - 1} more in a row to win back your coins and power-ups.`);
+  assert.ok(q.choiceLine.y >= q.nextWait.y + q.nextWait.height, 'the choice line sits under the wait');
+  assert.deepEqual([labels.top, labels.left, labels.right], ['Why?', 'Fly on', '⭐ Go for it'], 'Why on top, the choice under it');
+  assert.equal(q.explain.visible, false, 'the explanation is not used for the choice line any more');
+  assert.equal(q.verdictBottom(), q.choiceLine.y + q.choiceLine.height, 'so the explanation opens under the choice line');
+  q.choiceLine.setVisible(false);
+  assert.equal(q.verdictBottom(), q.nextWait.y + q.nextWait.height, 'hidden, it takes no room');
+});

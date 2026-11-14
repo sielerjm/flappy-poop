@@ -33,6 +33,7 @@ const REPORT_FLAG = '\u{1F6A9}'; // 🚩 after the card's id: report this card
 const ID_MAX_W = 220; // px the id line may take, so it ends clear of the tally (two two-digit counts); a longer one shrinks
 const HALO_PX = 24; // px a revive's halo reaches past its button (inside the card's border)
 const COIN_PX = 36; // the corn kernel after a paid verdict
+const CHOICE_PX = 26; // a revive's ⭐ choice line (plan 26, A2), under the verdict and the wait
 /** Option fills: waiting, the right answer, the wrong one picked, the other wrong one. */
 const FILL = { idle: 0x2a1522, right: 0x2f7d4f, wrong: 0x9c2f4a, dim: 0x1a0b14 };
 const GOOD = '#9fe8b4';
@@ -153,6 +154,9 @@ export class Quiz extends Phaser.Scene {
     this.paidNote = this.add.text(cx, 0, '', { ...MUTED, fontSize: '24px' }).setOrigin(0.5).setVisible(false);
     // When the card comes back (plan 26, as Anki shows it): "Next review: in 2 days" under the verdict.
     this.nextWait = this.add.text(cx, 0, '', { ...MUTED, fontSize: '24px', wordWrap: { width: TEXT_W, useAdvancedWrap: true } }).setOrigin(0.5, 0).setVisible(false);
+    // A revive's ⭐ choice says how it works on a line of its own (plan 26, A2: it used the explanation's
+    // text, so Why could not show there; Michael's image 8). The explanation opens under it.
+    this.choiceLine = this.add.text(cx, 0, '', { ...MUTED, fontSize: `${CHOICE_PX}px`, wordWrap: { width: TEXT_W, useAdvancedWrap: true } }).setOrigin(0.5, 0).setVisible(false);
     this.explain = this.add.text(cx, 0, '', { ...MUTED, fontSize: '26px', lineSpacing: 4, wordWrap: { width: TEXT_W, useAdvancedWrap: true } }).setOrigin(0.5, 0);
     this.source = this.add.text(cx, 0, '', { ...MUTED, fontSize: '20px', fontStyle: 'italic', wordWrap: { width: TEXT_W, useAdvancedWrap: true } }).setOrigin(0.5, 0);
     // The explanation's links (plan 26): when it holds a linked term, the explanation is drawn word by
@@ -579,6 +583,7 @@ export class Quiz extends Phaser.Scene {
     this.verdictCoin.setVisible(false);
     this.paidNote.setVisible(false);
     this.nextWait.setText('').setVisible(false);
+    this.choiceLine.setVisible(false);
     this.clearRich();
     this.explain.setText('').setVisible(false);
     this.source.setText('').setVisible(false);
@@ -612,7 +617,7 @@ export class Quiz extends Phaser.Scene {
       o.zone.setVisible(false);
     }
     this.clearRich();
-    for (const x of [this.verdict, this.verdictCoin, this.paidNote, this.nextWait, this.explain, this.source]) x.setVisible(false);
+    for (const x of [this.verdict, this.verdictCoin, this.paidNote, this.nextWait, this.choiceLine, this.explain, this.source]) x.setVisible(false);
     this.clearButtons();
     if (revive) this.rightBtn.set(t(this.locale, 'reviveContinue'), () => this.finish());
     else {
@@ -735,8 +740,9 @@ export class Quiz extends Phaser.Scene {
       .setVisible(shown);
   }
 
-  /** The bottom of the verdict, or of the wait under it: the explanation starts below it. */
+  /** The bottom of the verdict, or of the wait under it, or of a revive's choice line under those: the explanation starts below it. */
   verdictBottom() {
+    if (this.choiceLine?.visible) return this.choiceLine.y + this.choiceLine.height;
     return this.nextWait.visible ? this.nextWait.y + this.nextWait.height : this.verdict.y + this.verdict.height;
   }
 
@@ -777,12 +783,15 @@ export class Quiz extends Phaser.Scene {
       this.showWhy();
       this.holdAfterWrong(go(t(this.locale, 'reviveEnd'), () => this.finish()), false);
     } else if (phase === 'choice') {
+      // Why on top, as after any right answer (plan 26, A2); the choice line under the verdict and the
+      // wait, on its own text, so the explanation can open under it.
       this.say(t(this.locale, 'reviveBack'), true);
-      this.clearRich();
-      this.explain
-        .setY(this.verdictBottom() + 10)
+      const y = this.verdictBottom() + 6;
+      this.choiceLine
+        .setY(y)
         .setText(t(this.locale, 'reviveChoice').replace('{n}', String(T.education.restoreStreak - 1)))
         .setVisible(true);
+      why();
       this.leftBtn.set(t(this.locale, 'reviveContinue'), () => this.decide('continue')); // settle for the revive
       go(`⭐ ${t(this.locale, 'reviveStreakGo')}`, () => this.decide('streak'));
     } else if (phase === 'streak') {
@@ -834,12 +843,26 @@ export class Quiz extends Phaser.Scene {
    * The smoke's look at any card, answered wrong (its explanation and source showing) or, with
    * `right`, answered right (the paid verdict over the Why button); nothing reaches Play.
    * `state` lays out a state an answer does not reach (plan 26, A2), and needs the quiz it belongs
-   * to: 'quit', an unanswered revive card with Quit's warning in the verdict's place.
+   * to (a revive's; the caller puts its reviveState back): 'quit', an unanswered card with Quit's
+   * warning in the verdict's place; 'choice', the ⭐ choice after a right answer (the verdict, the
+   * wait, the choice line over Why); 'choiceWhy', the same with Why opened (the explanation, Learn
+   * more and the source, as tall as it will be once audited).
    */
   preview(card, right = false, { state = null } = {}) {
     this.showCard(card, ['answer', 'w1', 'w2']);
     if (state === 'quit') {
       this.giveUp();
+      return this.fits();
+    }
+    if (state === 'choice' || state === 'choiceWhy') {
+      this.answered = true;
+      this.reviveState = { ...(this.reviveState ?? {}), phase: 'choice' };
+      this.lastAnswer = { coins: 0, dueAt: Date.now() + 2 * 86400000 };
+      this.reveal(0, true);
+      if (state === 'choiceWhy') {
+        this.showWhy();
+        this.source.setText(t(this.locale, 'quizSource').replace('{source}', cardSource(card))).setVisible(true);
+      }
       return this.fits();
     }
     this.answered = true;
@@ -909,7 +932,7 @@ export class Quiz extends Phaser.Scene {
     this.richBottom = y + lines.length * step - 4;
   }
 
-  /** Take the drawn explanation and its links down (a new card, caught up, a revive's choice). */
+  /** Take the drawn explanation and its links down (a new card, caught up). */
   clearRich() {
     this.richBox?.removeAll(true);
     this.richUnder?.clear();
