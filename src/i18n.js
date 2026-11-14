@@ -14,11 +14,8 @@ const STRINGS = {
     pauseHint: 'tap anywhere to resume game',
     levelBanner: 'LEVEL {n}',
     levelContinue: 'Tap to continue',
-    levelShopHint: 'Tap to continue · 💰 to shop',
     levelQuizHint: 'Tap to continue · 📚 review',
-    levelQuizShopHint: 'Tap to continue · 📚 review · 💰 shop',
     levelGateHint: '📚 Review to continue',
-    levelGateShopHint: '📚 Review to continue · 💰 shop',
     shopTitle: 'SHOP',
     shopCoins: 'Your coins',
     shopFiber: 'Fiber · +3 points',
@@ -506,11 +503,8 @@ Inspired by Flappy Bird`,
     pauseHint: '点击任意处继续游戏',
     levelBanner: '第 {n} 关',
     levelContinue: '点击继续',
-    levelShopHint: '点击继续 · 💰 进商店',
     levelQuizHint: '点击继续 · 📚 复习',
-    levelQuizShopHint: '点击继续 · 📚 复习 · 💰 商店',
     levelGateHint: '📚 复习后才能继续',
-    levelGateShopHint: '📚 复习后继续 · 💰 商店',
     shopTitle: '商店',
     shopCoins: '你的金币',
     shopFiber: '纤维 · +3 分',
@@ -1042,15 +1036,16 @@ export function howToItems(locale) {
 
 /**
  * Level-break banner as two lines: "LEVEL 2 · Jejunum" (the segment name is
- * omitted past the named list) and "Tap to continue", or with `shop` (coins in
- * the purse) "Tap to continue · 💰 to shop".
+ * omitted past the named list) and "Tap to continue"; an education run's names the
+ * 📚 ("Tap to continue · 📚 review", or "📚 Review to continue" at a gate). The shop
+ * is no longer named (plan 26: the 🌽 pill shows itself).
  */
-export function levelBannerText(locale, level, levels, { shop = false, education = false, gate = false } = {}) {
+export function levelBannerText(locale, level, levels, { education = false, gate = false } = {}) {
   const key = levels?.[level - 1]?.key;
   const title = t(locale, 'levelBanner').replace('{n}', String(level));
   const name = key ? t(locale, `level.${key}`) : '';
   // A gated break (plan 25): the next level opens only once the cards due are answered right.
-  const hint = gate ? (shop ? 'levelGateShopHint' : 'levelGateHint') : education ? (shop ? 'levelQuizShopHint' : 'levelQuizHint') : shop ? 'levelShopHint' : 'levelContinue';
+  const hint = gate ? 'levelGateHint' : education ? 'levelQuizHint' : 'levelContinue';
   return `${name ? `${title} · ${name}` : title}\n${t(locale, hint)}`;
 }
 

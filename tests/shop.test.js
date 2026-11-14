@@ -49,26 +49,46 @@ test('the 🏅 Bracket pill sits one row under the 💰, above the bean button, 
   assert.equal(bracketButtonLayout(W, GAME_HEIGHT, T, 500).x, pill.x + 500, 'x follows the column');
 });
 
-test("an education break (eduBreakLayout, plan 25): 💰 and Review keep their boxes; the numbers under Review, Skip and Quit on the right; nothing overlaps, all above the bean button, inside the column", () => {
+test("an education break (eduBreakLayout, plan 26: Michael's sketch): the 💰 pill as always with Skip ▸ right of it, Review and Quit side by side under it, the numbers on the bean button's line, the banner higher; nothing overlaps, all inside the column, clear of the bobbing poop, ⏸ and the tray", () => {
   for (const x0 of [0, 500]) {
     const L = eduBreakLayout(W, GAME_HEIGHT, T, x0);
-    assert.deepEqual(L.shop, shopButtonLayout(W, GAME_HEIGHT, T, x0), 'the 💰 pill as always');
-    assert.deepEqual({ ...L.review, id: 'bracket' }, bracketButtonLayout(W, GAME_HEIGHT, T, x0), "Review in the 🏅's box");
+    const shopBox = shopButtonLayout(W, GAME_HEIGHT, T, x0);
+    assert.deepEqual(L.shop, shopBox, 'the 💰 pill as always');
+    const row = bracketButtonLayout(W, GAME_HEIGHT, T, x0).y;
+    assert.ok(L.review.y === row && L.quit.y === row && L.review.x < shopBox.x && L.quit.x > shopBox.x, "Review and Quit share the 🏅's row, either side of the centre");
+    assert.ok(L.skip.y === shopBox.y && edges(L.skip).left >= edges(shopBox).right, 'Skip ▸ right of the 💰 pill');
+    assert.equal(L.counts.y, bean.y, "the numbers on the bean button's line (it hides in a break)");
+    assert.equal(L.counts.x, shopBox.x);
+    assert.ok(L.hintY === L.titleY + 72 && L.hintY + 18 + 8 <= edges(shopBox).top && L.titleY < GAME_HEIGHT * 0.4, `the banner sits higher, above the rows (title ${L.titleY})`);
     const boxes = [L.shop, L.review, L.counts, L.skip, L.quit];
+    const pauseBox = trayLayout(W, GAME_HEIGHT, T, x0).pause;
+    const pauseEdges = { left: pauseBox.x - pauseBox.size / 2, right: pauseBox.x + pauseBox.size / 2, top: pauseBox.y - pauseBox.size / 2, bottom: pauseBox.y + pauseBox.size / 2 };
+    // The poop bobs between breakPoopY and 24 px under it, at poopX (from the field's left edge).
+    const px = poopX(W, T);
+    const poop = { left: px - T.poopRadius, right: px + T.poopRadius, top: T.levels.breakPoopY - T.poopRadius, bottom: T.levels.breakPoopY + 24 + T.poopRadius };
     for (const b of boxes) {
       const e = edges(b);
       assert.ok(e.left >= x0 + 16 && e.right <= x0 + W - 16, `${b.id} inside the column (${e.left}–${e.right})`);
-      assert.ok(e.bottom <= bean.y - bean.size, `${b.id} above the bean button's hit circle (bottom ${e.bottom})`);
-      assert.ok(e.left - x0 > poopX(W, T) + T.poopRadius, `${b.id} clear of the bobbing poop`);
+      if (x0 === 0) assert.ok(!overlaps(e, poop), `${b.id} clear of the bobbing poop`);
+      assert.ok(!overlaps(e, pauseEdges), `${b.id} clear of ⏸`);
+      assert.equal(trayHit(b.x, b.y, trayLayout(W, GAME_HEIGHT, T, x0)), null, `${b.id} not on a tray button`);
     }
     for (let i = 0; i < boxes.length; i += 1) for (let j = i + 1; j < boxes.length; j += 1) {
-      const [a, b] = [edges(boxes[i]), edges(boxes[j])];
-      const apart = a.right <= b.left || b.right <= a.left || a.bottom <= b.top || b.bottom <= a.top;
-      assert.ok(apart, `${boxes[i].id} and ${boxes[j].id} do not overlap`);
+      assert.ok(!overlaps(edges(boxes[i]), edges(boxes[j])), `${boxes[i].id} and ${boxes[j].id} do not overlap`);
     }
     assert.ok(edges(L.counts).top >= edges(L.review).bottom, 'the numbers sit under Review');
-    for (const b of [L.skip, L.quit]) assert.ok(b.height >= T.trayHitMin && b.width >= T.trayHitMin, `${b.id} is thumb-sized`);
+    assert.ok(poop.top >= edges(L.review).bottom && poop.bottom <= edges(L.counts).top + 48, 'the poop bobs under the rows, about level with the numbers above them');
+    for (const b of [L.skip, L.quit, L.review]) assert.ok(b.height >= T.trayHitMin && b.width >= T.trayHitMin, `${b.id} is thumb-sized`);
   }
+});
+
+test("a one-player break's poop (levels.breakPoopY) bobs clear of the banner's hint and the 💰 pill", () => {
+  const px = poopX(W, T);
+  const top = T.levels.breakPoopY - T.poopRadius;
+  assert.ok(top > BANNER_HINT_Y + 18 + 8, 'under the hint');
+  const pill = edges(button);
+  assert.ok(top >= pill.bottom || px + T.poopRadius < pill.left, 'clear of the 💰 pill');
+  assert.ok(T.levels.breakPoopY + 24 + T.poopRadius < GAME_HEIGHT - T.groundHeight, 'above the ground');
 });
 
 test('shopButtonHit: on the pill, not off it', () => {

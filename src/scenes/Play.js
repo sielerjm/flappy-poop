@@ -535,7 +535,7 @@ export class Play extends Phaser.Scene {
     this.quizButtonBox = this.eduBreakBoxes?.review ?? null;
     this.quizCountsBox = this.eduBreakBoxes?.counts ?? null;
     this.quizButton = this.quizButtonBox ? createButton(this, this.quizButtonBox, `${EDUCATION_EMOJI} ${t(this.locale, 'reviewPill')}`, { ...TEXT_STYLE, fontSize: '36px', color: '#f8a0c8' }, { depth: 27 }).setVisible(false) : null;
-    // Skip ▸ and Quit (plan 25, B8), in eduBreakLayout's right-hand column (refreshQuizButton).
+    // Skip ▸ right of the 🌽 pill, and Quit / Give up beside Review (plan 25, B8; plan 26, Michael's sketch: refreshQuizButton).
     const sideStyle = { ...TEXT_STYLE, fontSize: '30px', color: '#f8a0c8' };
     this.breakSkipButton = this.eduBreakBoxes ? createButton(this, this.eduBreakBoxes.skip, t(this.locale, 'breakSkip'), sideStyle, { depth: 27 }).setVisible(false) : null;
     this.breakQuitButton = this.eduBreakBoxes ? createButton(this, this.eduBreakBoxes.quit, t(this.locale, 'breakQuit'), sideStyle, { depth: 27 }).setVisible(false) : null;
@@ -950,9 +950,14 @@ export class Play extends Phaser.Scene {
   }
 
   refreshLevelBanner() {
-    // Single player with coins in the purse: "Tap to continue · 💰 to shop".
-    const shop = !this.match && this.purseCoins() > 0;
-    const [title, hint] = levelBannerText(this.locale, this.level, LEVELS, { shop, education: this.runIsEducation, gate: this.breakGated() }).split('\n');
+    // "Tap to continue" (plan 26: the 🌽 pill shows itself, the hint no longer names the shop); an
+    // education run's names the 📚, and sits higher, over its rows (eduBreakLayout's titleY).
+    const [title, hint] = levelBannerText(this.locale, this.level, LEVELS, { education: this.runIsEducation, gate: this.breakGated() }).split('\n');
+    const eduRows = Boolean(this.runIsEducation && !this.match && this.eduBreakBoxes);
+    const titleY = eduRows ? this.eduBreakBoxes.titleY : GAME_HEIGHT * 0.4;
+    this.levelTitle?.setY(titleY);
+    this.levelHint?.setY(titleY + 72);
+    this.levelSubHint?.setY(titleY + 72 + 50);
     this.levelTitle?.setText(title);
     // A match's break is a ready check: the hint is this player's state ("Tap when ready", then
     // "Ready! Waiting for P2…"); the shared count starts once both are ready (Versus.onLevelTap).
@@ -1033,13 +1038,19 @@ export class Play extends Phaser.Scene {
     if (this.state === 'playing' && !this.effects.powerActive()) this.refreshPoopLook();
   }
 
-  /** Between levels: a real pause with the level banner, the poop gliding to mid-height and bobbing. */
+  /**
+   * Between levels: a real pause with the level banner, the poop gliding down and bobbing: to
+   * levels.breakPoopY in one player (plan 26: under the banner and the break's buttons), to
+   * mid-height in a match half. The bean button hides while the break lasts, and the purse and the
+   * beans draw above the pause shade (breakHud).
+   */
   startLevelBreak() {
     if (this.state !== 'playing') return;
     this.levelBreak = true;
     this.breakMissed = []; // each break starts with nothing missed (plan 25)
     this.refreshLevelBanner();
     this.pausePlay();
+    this.breakHud(true);
     this.fadeBackground();
     this.poop.setVelocity(0, 0);
     this.scaredMs = 0;
@@ -1047,7 +1058,7 @@ export class Play extends Phaser.Scene {
     this.poop.body.setAllowGravity(false);
     this.breakGlide = this.tweens.add({
       targets: this.poop,
-      y: GAME_HEIGHT / 2,
+      y: this.match ? GAME_HEIGHT / 2 : T.levels.breakPoopY,
       angle: 0,
       duration: T.beans.centreMs,
       ease: 'Sine.easeOut',
@@ -1056,6 +1067,16 @@ export class Play extends Phaser.Scene {
         this.breakBob = this.tweens.add({ targets: this.poop, y: '+=24', duration: 500, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
       },
     });
+  }
+
+  /**
+   * A level break's HUD (plan 26): the purse and the beans (and the 📚 / 🧪 badge) above the pause
+   * shade, at full brightness, so the coins held stay in view; the bean button hidden (a tap in a
+   * break continues the level, it never farts). `on` false puts them back.
+   */
+  breakHud(on) {
+    for (const o of [this.coinIcon, this.coinText, this.beanIcon, this.beanText, this.testBadge]) o?.setDepth(on ? 26 : 20);
+    this.beanButton?.setVisible(!on && Boolean(this.charged));
   }
 
   /**
@@ -1069,6 +1090,7 @@ export class Play extends Phaser.Scene {
     // An education run continuing into this level unlocks it as a start level (plan 25); a test run never does.
     if (this.runIsEducation && !this.runIsTest) this.eduStore.unlockLevel(this.level);
     this.levelBreak = false;
+    this.breakHud(false);
     this.breakGlide?.stop();
     this.breakGlide = null;
     this.breakBob?.stop();
@@ -2948,8 +2970,9 @@ export class Play extends Phaser.Scene {
       });
       this.glow.setAlpha(T.beans.glowMinAlpha);
       this.glowTween = this.tweens.add({ targets: this.glow, alpha: T.beans.glowMaxAlpha, yoyo: true, repeat: -1, duration: T.beans.glowPulseMs });
-      // Bean button: same period as the glow, started in the same frame so they stay in phase.
-      this.beanButton.setVisible(true).setScale(1).setAlpha(0.7);
+      // Bean button: same period as the glow, started in the same frame so they stay in phase. Hidden
+      // in a level break (plan 26; breakHud shows it again when the break ends).
+      this.beanButton.setVisible(!this.levelBreak).setScale(1).setAlpha(0.7);
       this.beanButtonTween = this.tweens.add({
         targets: this.beanButton,
         scale: 1.12,

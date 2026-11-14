@@ -85,6 +85,7 @@ export const TUNING = {
   levels: {
     pipes: [10, 25, 50], // pipe pairs in levels 1, 2, 3; every later level repeats the last entry (ends at 10, 35, 85, 135, …)
     lastLevel: 7, // the final level (rectum, = LEVELS.length): crossing its finish line wins the run
+    breakPoopY: 920, // px: a one-player level break's poop glides here and bobs 24 px down from it (plan 26: under the banner and the break's buttons, clear of the hint)
     spacingRefLevel: 3, // levels slower than this one space their pipes pipeSpacingPx × (its speed ÷ theirs): 487 px on level 1, 446 on level 2
     speedStep: 25, // px/s added to pipeSpeed per level after the first
     gapScale: [1.1, 1.05], // × gapHeight per level, index = level − 1 (374 / 357 px); later levels use gapHeight as is

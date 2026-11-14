@@ -697,19 +697,24 @@ export function bracketButtonLayout(width, height, t, x0 = 0) {
 }
 
 /**
- * An education run's level break (plan 25): the 💰 pill where it always is (shopButtonLayout), the
- * 📚 Review pill in the 🏅's row under it (bracketButtonLayout's box; the two never meet), the three
- * numbers on a line of their own under Review, and a right-hand column on the same two rows for
- * Skip ▸ (the 💰's row) and Quit (Review's). All above the bean button, clear of the bobbing poop
- * on the left and of the tray. `x0` = the column's left edge.
+ * An education run's level break, as Michael drew it (plan 26): the banner higher (titleY, hintY);
+ * the 💰 pill where it always is (shopButtonLayout) with Skip ▸ right of it; 📚 Review and Quit /
+ * Give up side by side on the row under it (the 🏅's row: the two never meet); the three numbers
+ * lower, on the bean button's line (it hides in a break). The poop bobs at the left under the rows
+ * (levels.breakPoopY), clear of the tray. `x0` = the column's left edge.
  */
 export function eduBreakLayout(width, height, t, x0 = 0) {
   const shop = shopButtonLayout(width, height, t, x0);
-  const review = { ...bracketButtonLayout(width, height, t, x0), id: 'quiz' };
-  const counts = { id: 'quizCounts', x: review.x, y: review.y + review.height / 2 + 34, width: review.width, height: 48 };
+  const gap = 16;
+  const pill = { width: shop.width, height: t.trayHitMin };
+  const rowY = bracketButtonLayout(width, height, t, x0).y;
+  const review = { id: 'quiz', x: shop.x - (pill.width + gap) / 2, y: rowY, ...pill };
+  const quit = { id: 'quit', x: shop.x + (pill.width + gap) / 2, y: rowY, ...pill };
   const side = { width: 180, height: t.trayHitMin };
-  const sx = x0 + width - 24 - side.width / 2;
-  return { shop, review, counts, skip: { id: 'skip', x: sx, y: shop.y, ...side }, quit: { id: 'quit', x: sx, y: review.y, ...side } };
+  const skip = { id: 'skip', x: shop.x + shop.width / 2 + gap + side.width / 2, y: shop.y, ...side };
+  const counts = { id: 'quizCounts', x: shop.x, y: height - t.groundHeight - t.trayHitMin / 2 - 58, width: 300, height: 48 };
+  const titleY = Math.round(height * 0.4) - 72;
+  return { shop, review, counts, skip, quit, titleY, hintY: titleY + 72 };
 }
 
 /** 'shop' when (x, y) is on the 💰 button, else null. */

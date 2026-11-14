@@ -35,8 +35,8 @@ every power-up (`effects.clearPowerups`), and a two-player crash keeps `crashCoi
 clears the power-ups. Pickups with no motion data pulse (`pulseStill` / `pulseScale`, `stillPulseScale`,
 `items.stillPulse`), their circle body re-fitted each frame so the hitbox holds. The **shop** (`TUNING.shop`): in a level break a
 pill under the banner (`shopButtonLayout`; it shows the corn kernel and the purse, `createButton`'s
-`icon`, and these notes and the code's comments still call it the 💰 pill; dimmed at 0 coins, the
-single-player hint then drops its "· 💰 to shop", the one place the money bag is still drawn) opens a
+`icon`, and these notes and the code's comments still call it the 💰 pill; dimmed at 0 coins; the
+break's hint never names it since plan 26, coins or not) opens a
 panel of rows (`shopLayout`, `SHOP_ITEMS`) in the chrome column: fiber 1, one bean 6,
 a super bean 16 (fills the bag to `superBeans`), a mystery box 5 (the plain draw table, `pairsLeft` 0 so a
 skip becomes fiber). `buyBlocker` / `canBuy` grey a row the purse or the bag refuses; `Play.buyItem` spends
@@ -88,7 +88,10 @@ line (generated texture, plain Image) scrolls in and no pair follows it outside 
 fart; crossing it (any level but the last) bumps `level`, plays `NewLevel.mp3` (`sfx.levelUp` blip if the
 sample is missing), and pauses the run as the
 level break (`levelBreak`, the normal `'paused'` state with its own banner "LEVEL n
-· segment / Tap to continue", the poop gliding to mid-height and bobbing, the
+· segment / Tap to continue", the poop gliding to `levels.breakPoopY` in one player (plan 26: under
+the banner and the break's buttons; a match half's still to mid-height) and bobbing; the bean
+button hides while it lasts, and the purse, the beans and the 📚 / 🧪 badge draw above the pause
+shade at full brightness (`breakHud`); the
 background crossfading to `levelColor(n, LEVEL_COLORS)`, Set2 colours cycling). A fart never carries the poop past
 the line: crossing it cancels the power (`effects.cancelPower()`, `endPower()`),
 so only the pairs actually passed have scored, and the break starts at once. A progress bar (`ui/levelBar.js`) fills one
@@ -416,8 +419,10 @@ quiz (`book-open`), a page turns for each next card (`book-flip`), the book shut
 (`book-close`); a wrong answer plays `sfx.hazard`; a right one that pays nothing (a revive, the bonus
 quiz) plays `sfx.score`, and one that pays (a break's) makes the coin's sound alone (`takeCoins`); the
 answer that wins everything back plays `sparkle` in the ding's place. **Level break** (plan 25 laid it
-out: `eduBreakLayout` in logic.js): a **📚 Review** pill under the shop pill (the 🏅's row,
-`quizButtonShown`; chromeIntent's `'quiz'` input, only in an education run's break) opens the break's
+out, plan 26 to Michael's sketch: `eduBreakLayout` in logic.js): the banner higher (`titleY`); the 🌽
+pill with Skip ▸ right of it; on the 🏅's row under it **📚 Review** and Quit / Give up side by side;
+the three numbers on the bean button's line (it hides in a break). The **📚 Review** pill
+(`quizButtonShown`; chromeIntent's `'quiz'` input, only in an education run's break) opens the break's
 quiz, which asks missed cards, then due reviews (the least remembered first), then the cards missed
 in this break (`Play.breakMissed`, asked again as missed until answered right; the one just shown
 waits), then new cards of the segment just cleared (and general ones), then practice (`pickCard`'s
@@ -426,7 +431,7 @@ recent gap holds. A right answer to a counted card pays `education.breakCoins` (
 pays nothing. The shop's prices are `eduShopPrices(level)` (`Play.shopPrices`; `buyBlocker` takes
 `prices`). **What is waiting**, as in Anki (`cardCounts`: new, missed (a miss of this break
 included) and review cards a quiz can still ask now; `Play.quizCounts`): three numbers in blue, red
-and green on a line of their own under Review (`ui/countLine.js`; none in a test run; a tap, or A on
+and green on a line of their own, low under the break's rows (`ui/countLine.js`; none in a test run; a tap, or A on
 their ring item, opens "Waiting in this quiz": `toggleBreakCounts`, `countLines`), and on the card
 `5 + 2 + 8` on its bottom row, under its buttons, the card on show counted and its kind
 underlined (`refreshCounts`; no line in a test run); a tap on the card's numbers opens the same lines
@@ -436,7 +441,7 @@ number is above 0: `resumePlay` keeps the break, the hint reads "📚 Review
 to continue", Review pulses. New cards stay optional. After a miss there the quiz offers **Bury**
 in its left slot (`canBury` / `buryCard`): `education.buryCoinsPerLevel` × the level just cleared,
 at most `buryPerDay` a local day, the card due again `buryMs` later; no pilot event. **Skip ▸ and
-Quit** sit in the break's right-hand column: Skip passes the next level at par per tap while a later
+Quit**: Skip passes the next level at par per tap while a later
 level is unlocked (not in a test run); Quit takes two taps and ends the run, graded as a normal end
 when nothing is due, as a Give up (`breakGaveUp`) otherwise. **Start level**: with 📚 on and a later
 level unlocked, a ◀ level ▶ stepper sits in the 📚 row of the ready screen (`readyLayout`'s eduStart
@@ -690,7 +695,9 @@ src/
                             readyLayout (eduStart: the ◀ level ▶ stepper's boxes in
                             the 📚 row), readyHit, nextEduStartLevel (wraps within
                             the levels unlocked), eduBreakLayout (an education
-                            break: 💰, Review, the numbers under it, Skip and Quit),
+                            break, plan 26: the banner's titleY, 💰 with Skip ▸
+                            beside it, Review | Quit on the row under it, the
+                            numbers on the bean button's line),
                             LAST_UPDATED, issueUrl, openExternalUrl, chromeIntent
                             (inputs incl. 'changelog'; a Changelog over About closes
                             back to About without the lockout),
