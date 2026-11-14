@@ -241,7 +241,7 @@ test("a right answer that pays nothing because the card paid today says so on th
   const make = (lastAnswer) => {
     const q = quizScene({
       mode: 'break', locale: 'en', cx: 360, card: { id: 'ST-01' }, lastAnswer, verdict: text(90), verdictCoin: text(36), paidNote: { ...text(260), height: 28 }, nextWait: text(),
-      play: { canBury: () => false }, showWayOut() {}, showWhy() {}, holdAfterWrong() {}, ring() {}, topBtn: absorb(), rightBtn: absorb(), leftBtn: absorb(),
+      play: {}, showWayOut() {}, showWhy() {}, holdAfterWrong() {}, ring() {}, topBtn: absorb(), rightBtn: absorb(), leftBtn: absorb(),
     });
     q.breakStep(true);
     return q;
