@@ -163,11 +163,11 @@ test("test mode turned on after the run started (the game-over screen's bonus qu
   }
 });
 
-test("the 📚 glyph opens the 📚 popup (plan 26; \"Your cards\" before) on its own pointer's release: a second thumb or another finger's release does not open it twice; a cancel or a release off the canvas opens nothing (plan 25, A6)", () => {
+test("the 📚 glyph opens \"Your cards\" (plan 26, A2: Michael asked; the popup took its place in step 9) on its own pointer's release: a second thumb or another finger's release does not open it twice; a cancel or a release off the canvas opens nothing (plan 25, A6)", () => {
   const handlers = { pointerup: new Set(), pointerupoutside: new Set() };
   const input = { on: (ev, fn) => handlers[ev].add(fn), off: (ev, fn) => handlers[ev].delete(fn), emit: (ev, p) => [...handlers[ev]].forEach((fn) => fn(p)) };
   let toggles = 0;
-  const s = playScene({ input, openEduIntro: () => (toggles += 1) });
+  const s = playScene({ input, toggleEduCard: () => (toggles += 1), openEduIntro: () => assert.fail('the glyph no longer opens the popup') });
   // Two thumbs on the glyph, released one after the other: one toggle, nothing left armed.
   s.openEduCardOnRelease({ id: 1 });
   s.openEduCardOnRelease({ id: 2 });
@@ -656,7 +656,26 @@ test('a lost education run is recorded at once, as before; a bonus answer under 
   assert.equal(s.runQuiz.answered, 5, 'test mode: the bonus answer is not counted');
 });
 
-test('the 📚 switch turned on opens the 📚 popup; turned off, or by the popup\'s own Play, it does not; the popup\'s Play starts a run with 📚 on (plan 26)', () => {
+test('"Your cards" on the 📚 glyph (plan 26, A2): the three counts in his wording, the cards seen of all, what the gold number counts; a second press closes it; only on the ready screen', () => {
+  const store = createEduStore(fakeStorage());
+  store.answer(CARDS[0].id, schedule(null, 'again', Date.now() - 60000));
+  const shown = [];
+  const card = { open: false, show(o) { shown.push(o); this.open = true; }, hide() { this.open = false; } };
+  const s = playScene({ eduStore: store, eduCard: card, locale: 'en', state: 'ready', launching: false, match: null, readyBoxes: { educationInfo: {} } });
+  s.toggleEduCard();
+  const total = CARDS.filter((c) => !c.retired).length;
+  assert.equal(shown[0].title, 'Your cards');
+  assert.deepEqual(shown[0].lines.slice(1), ['🔴 1 missed (due now)', '🟢 0 to review (due today)', `👁️ Seen 1 of ${total} cards`, 'The number on 📚 = # of cards to review']);
+  assert.match(shown[0].lines[0], /^🔵 \d+ new \(not seen yet\)$/, 'new cards: the ones a quiz may still offer today');
+  s.toggleEduCard();
+  assert.equal(card.open, false, 'a second press closes it');
+  for (const over of [{ state: 'playing' }, { launching: true }, { match: {} }, { readyBoxes: {} }]) {
+    const x = playScene({ eduStore: store, eduCard: { ...card, open: false, show: () => assert.fail(JSON.stringify(over)) }, locale: 'en', state: 'ready', launching: false, match: null, readyBoxes: { educationInfo: {} }, ...over });
+    x.toggleEduCard();
+  }
+});
+
+test('the 📚 switch toggles 📚 and opens nothing (plan 26, A2: the popup opens at a start instead); the popup\'s Play starts a run with 📚 on', () => {
   const calls = [];
   const s = playScene({
     educationOn: false, versusOn: false, state: 'ready', launching: false, match: null,
@@ -665,7 +684,7 @@ test('the 📚 switch turned on opens the 📚 popup; turned off, or by the popu
     openEduIntro: () => calls.push(['intro']), flap: () => calls.push(['flap']), toggleVersus() {},
   });
   s.toggleEducation();
-  assert.deepEqual(calls.splice(0), [['set', { education: true }], ['intro']], 'on: the popup');
+  assert.deepEqual(calls.splice(0), [['set', { education: true }]], 'on: no popup (it opens at the next start)');
   s.toggleEducation();
   assert.deepEqual(calls.splice(0), [['set', { education: false }]], 'off: nothing to say');
   s.launch = (o) => calls.push(['launch', o]);

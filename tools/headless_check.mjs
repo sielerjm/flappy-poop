@@ -3710,17 +3710,23 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         };
         const introEsc = () => evaluate(`(document.querySelector('#edu-intro-panel .card').dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })), true)`);
         const i3 = await intro();
+        ok(s3.on && s3.stored.education === true && !i3.open && i3.kb, 'a tap on the 📚 switch turns it on, stored, and opens nothing (plan 26, A2: the 📚 popup opens at a start instead)');
+        await sleep(300);
+        await evaluate(`${play}.flap(), true`); // a start: the popup
+        await sleep(150);
+        const i3a = await intro();
         const [introTitle, introBeta] = await Promise.all(['eduIntroTitle', 'eduIntroBeta'].map(tx));
-        ok(s3.on && s3.stored.education === true && i3.open && i3.title === introTitle && i3.beta === introBeta && !i3.kb, `a tap on the 📚 switch turns it on, stored, and opens the 📚 popup (plan 26): "${i3.title}", the beta note; the game's keys wait`);
+        ok(i3a.open && i3a.title === introTitle && i3a.beta === introBeta && !i3a.kb && i3a.state === 'ready', `a start opens the 📚 popup: "${i3a.title}", the beta note; the game's keys wait`);
         await introEsc();
         const i3b = await intro();
         ok(!i3b.open && i3b.state === 'ready' && !i3b.launching && i3b.kb, 'Esc closes it; the keys come back and no run starts');
         await home();
         ok((await switches()).on, 'the 📚 switch stays on across a restart');
 
-        // The 📚 popup from the glyph (plan 26; "Your cards" before it): what the mode is and how it works,
-        // the cards (the three numbers, how many seen, what the gold number counts) and the choices. It
-        // does not toggle the switch; nothing under it is pressed and no run starts. The track still toggles.
+        // "Your cards" on the 📚 glyph (plan 26, A2: Michael asked, his image 4; the popup had taken its
+        // place): the three numbers, how many seen, what the gold number counts. It does not toggle the
+        // switch; any tap, key or pad press closes it and presses nothing under it; no run starts. The
+        // track still toggles, and turning it on opens nothing.
         await sleep(500); // home()'s restart lands on the next frame: a real tap straddling it would lose its release
         const srsBefore = await evaluate(`localStorage.getItem('flappyPoop.eduSrs')`);
         // One missed card, two in review and due, one in review and not due yet.
@@ -3729,46 +3735,44 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         ).then(JSON.parse);
         const dueNow = () => evaluate(`${play}.eduDueText.visible ? ${play}.eduDueText.text : ''`);
         const boxes = await evaluate(`JSON.stringify({ info: ${play}.readyBoxes.educationInfo, edu: ${play}.readyBoxes.education, toilet: ${play}.readyBoxes.toilet, title: ${play}.readyBoxes.title })`).then(JSON.parse);
-        const yc0 = await intro();
+        const yourCards = () => evaluate(`(() => { const p = ${play}; const c = p.eduCard; return JSON.stringify({ open: c.open, title: c.open ? c.title.text : null, lines: c.open ? c.body.text.split('\\n') : [], on: p.educationOn, toilet: p.toilet, state: p.state, launching: Boolean(p.launching), popup: !(document.getElementById('edu-intro-panel')?.hidden ?? true) }); })()`).then(JSON.parse);
+        const yc0 = await yourCards();
         const due0 = await dueNow();
         await tapAt(boxes.info.x, boxes.info.y);
-        const yc1 = await intro();
+        const yc1 = await yourCards();
         const ycWant = await Promise.all(['eduCardsNew', 'eduCardsMissed', 'eduCardsReview', 'eduCardsSeen', 'eduCardsDue'].map(tx));
         // New is what today still offers (plan 26: education.newPerDay a local day, less the cards first seen today).
         const ycLines = [ycWant[0].replace('{n}', String(Math.min(made.total - 4, made.allowance))), ycWant[1].replace('{n}', '1'), ycWant[2].replace('{n}', '2'), ycWant[3].replace('{n}', '4').replace('{total}', String(made.total)), ycWant[4]];
-        ok(due0 === '3' && !yc0.open && yc1.open && JSON.stringify(yc1.counts) === JSON.stringify(ycLines) && yc1.on === yc0.on && yc1.state === 'ready' && !yc1.launching, `a tap on the 📚 glyph (its gold number reads ${due0}) opens the popup: ${yc1.counts.join(' · ')}; the switch is not toggled`);
-        await tapAt(boxes.toilet.x, boxes.toilet.y); // under the backdrop: a tap there does nothing
-        const yc2 = await intro();
-        ok(yc2.open && yc2.toilet === yc0.toilet && yc2.state === 'ready' && !yc2.launching, 'a tap on the backdrop, over a switch, presses nothing under it and leaves the popup up');
-        // A real Space (through the browser, as a player's key): the game's keyboard is off under the popup.
+        ok(due0 === '3' && !yc0.open && yc1.open && yc1.title === (await tx('eduCardsTitle')) && JSON.stringify(yc1.lines) === JSON.stringify(ycLines) && !yc1.popup && yc1.on === yc0.on && yc1.state === 'ready' && !yc1.launching, `a tap on the 📚 glyph (its gold number reads ${due0}) opens "${yc1.title}": ${yc1.lines.join(' · ')}; the switch untouched, no popup, no run`);
+        await tapAt(boxes.toilet.x, boxes.toilet.y); // over a switch: the tap only closes the card
+        const yc2 = await yourCards();
+        ok(!yc2.open && yc2.toilet === yc0.toilet && yc2.state === 'ready' && !yc2.launching, 'a tap closes it and presses nothing under it (the 🚽 switch over which it landed is untouched)');
+        // A real Space (through the browser, as a player's key) with the card up: it only closes it.
+        await tapAt(boxes.info.x, boxes.info.y);
+        const yc3a = await yourCards();
         for (const type of ['keyDown', 'keyUp']) await cdp.send('Input.dispatchKeyEvent', { type, key: ' ', code: 'Space', windowsVirtualKeyCode: 32 });
         await sleep(200);
-        const yc3 = await intro();
-        await introClick('edu-intro-x');
-        const yc4 = await intro();
-        ok(yc3.open && yc3.state === 'ready' && !yc3.launching && !yc4.open, "the game's Space starts no run under it; ✕ closes it");
+        const yc3 = await yourCards();
+        ok(yc3a.open && !yc3.open && yc3.state === 'ready' && !yc3.launching && !yc3.popup, "the game's Space with the card up only closes it: no run, no popup");
         // Two thumbs on the glyph (plan 25, A6), through the scene's own pointer events: it opens once.
         await evaluate(`(() => { const p = ${play}; const b = p.readyBoxes.educationInfo; const at = (id) => ({ id, x: b.x, y: b.y, wasCanceled: false }); p.input.emit('pointerdown', at(91)); p.input.emit('pointerdown', at(92)); p.input.emit('pointerup', at(91)); p.input.emit('pointerup', at(92)); return true; })()`);
-        const thumbs = await intro();
-        await introClick('edu-intro-close');
-        ok(thumbs.open && thumbs.state === 'ready' && !thumbs.launching && !(await intro()).open, 'two thumbs on the 📚 glyph open it once; Close closes it');
+        const thumbs = await yourCards();
+        await evaluate(`${play}.toggleEduCard(), true`);
+        ok(thumbs.open && thumbs.state === 'ready' && !thumbs.launching && !(await yourCards()).open, 'two thumbs on the 📚 glyph open it once; a second press closes it');
         await tapAt(boxes.edu.track.x, boxes.edu.y);
-        const yc6 = await intro();
+        const yc6 = await yourCards();
         await tapAt(boxes.edu.track.x, boxes.edu.y);
-        const yc7 = await intro();
-        await introEsc();
-        ok(yc6.on === !yc0.on && !yc6.open && yc7.on === yc0.on && yc7.open, `a tap on the track still toggles the switch (${yc0.on} → ${yc6.on} → ${yc7.on}); turned on, it opens the popup`);
-        // The controller: right of the switch the ring lands on the glyph; A opens the popup with its own
-        // ring on Play, the d-pad moves it, B closes it and presses nothing.
+        const yc7 = await yourCards();
+        ok(yc6.on === !yc0.on && !yc6.open && !yc6.popup && yc7.on === yc0.on && !yc7.open && !yc7.popup, `a tap on the track still toggles the switch (${yc0.on} → ${yc6.on} → ${yc7.on}), and opens nothing either way (plan 26, A2)`);
+        // The controller: right of the switch the ring lands on the glyph; A opens the card, B closes it
+        // and presses nothing.
         await evaluate(`(() => { const p = ${play}; p.registry.set('padMode', true); p.focus.setIndex(p.focus.indexOf('education')); p.focus.show(); p.padNav('right'); return true; })()`);
         const ycRing = await evaluate(`${play}.focus.items[${play}.focus.index]?.id ?? null`);
         await evaluate(`${play}.onPadAction('select'), true`);
-        const yc8 = await intro();
-        await evaluate(`${play}.onPadAction('nav:up'), true`);
-        const yc8b = await intro();
+        const yc8 = await yourCards();
         await evaluate(`${play}.onPadAction('back'), true`);
-        const yc10 = await intro();
-        ok(ycRing === 'educationInfo' && yc8.open && yc8.pad === 'edu-intro-play' && yc8b.pad && yc8b.pad !== 'edu-intro-play' && !yc10.open && yc10.state === 'ready' && !yc10.launching, `the controller's ring reaches the glyph (${ycRing}): A opens the popup, its ring on ${yc8.pad}; up moves it to ${yc8b.pad}; B closes it and presses nothing`);
+        const yc10 = await yourCards();
+        ok(ycRing === 'educationInfo' && yc8.open && !yc10.open && yc10.state === 'ready' && !yc10.launching && !yc10.popup, `the controller's ring reaches the glyph (${ycRing}): A opens "Your cards", B closes it and presses nothing`);
         await evaluate(`(() => { const p = ${play}; p.registry.set('padMode', false); p.focus.hide(); if (${JSON.stringify(srsBefore)} === null) localStorage.removeItem('flappyPoop.eduSrs'); else localStorage.setItem('flappyPoop.eduSrs', ${JSON.stringify(srsBefore)}); p.refreshEduDue(); return true; })()`);
 
         // A wide window offers 👥 too: three switches, and switching one on switches the other off.
@@ -3781,7 +3785,6 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         const w1 = await switches();
         await tap('education');
         const w2 = await switches();
-        await introEsc(); // turned on, 📚 opened its popup
         ok(w1.vOn && !w1.on && w1.stored.education === false && w2.on && !w2.vOn, `👥 on switches 📚 off (${w1.vOn}/${w1.on}); 📚 on switches 👥 off (${w2.on}/${w2.vOn})`);
         const ring = await evaluate(`JSON.stringify(${play}.focus.items.filter((i) => ['toilet', 'versus', 'education', 'educationInfo'].includes(i.id) && (!i.visible || i.visible())).map((i) => i.id))`).then(JSON.parse);
         ok(ring.join() === 'toilet,versus,education,educationInfo', `the controller ring reaches all three switches and the 📚 glyph (${ring.join(', ')})`);
@@ -3789,9 +3792,9 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await sleep(FIELD_DEBOUNCE + 400); // a late resize restart must not land between this tap's press and release
         const wideAt = await evaluate(`JSON.stringify([${play}.readyBoxes.educationInfo.x, ${play}.readyBoxes.educationInfo.y])`).then(JSON.parse);
         await tapAt(wideAt[0], wideAt[1]);
-        const wideCard = await intro();
-        await introEsc();
-        ok(wideInfo.y === wideInfo.eduY && wideInfo.h >= 64 && wideCard.open && wideCard.on === w2.on, `with three switches the 📚 glyph still opens the popup (its box ${wideInfo.h} px tall at y ${wideInfo.y})`);
+        const wideCard = await yourCards();
+        await evaluate(`${play}.toggleEduCard(), true`);
+        ok(wideInfo.y === wideInfo.eduY && wideInfo.h >= 64 && wideCard.open && wideCard.on === w2.on, `with three switches the 📚 glyph still opens "Your cards" (its box ${wideInfo.h} px tall at y ${wideInfo.y})`);
         await metrics(720, 1280); // the boot viewport
         await settle(720);
         await sleep(FIELD_DEBOUNCE + 400); // a late resize restart must not land in the run below

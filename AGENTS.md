@@ -362,9 +362,12 @@ three switches pack into 64 px boxes (`readyLayout({ versus, education })`, y 80
 📚 switch each other off. `refreshReadySwitches` re-lays them in place when test mode or the word
 changes (stable `switchBoxes` for the focus ring); a gold count on the 📚 is the cards due (`dueCount`).
 The 📚 glyph and that count are a box of their own inside the switch's (`readyLayout`'s
-`educationInfo`, which `readyHit` looks at first): a tap there, or A on its ring item, opens **the 📚
-popup** (plan 26: `ui/eduIntroPanel.js`, `Play.openEduIntro`; it replaced "Your cards"), as turning the
-switch on does: a DOM panel with the beta note, how the mode works, the player's cards (the cards not
+`educationInfo`, which `readyHit` looks at first): a tap there, or A on its ring item, opens **"Your cards"**
+(`Play.toggleEduCard` on the `eduCard` info card; plan 21's card, back on the glyph in plan 26's A2 at Michael's
+word): the three count lines (`countLines`, his wording), the cards seen of all and what the gold number
+counts; any tap, key or pad press closes it and presses nothing under it, and no run starts. Turning the switch
+on opens nothing since that step. **The 📚 popup** (plan 26: `ui/eduIntroPanel.js`, `Play.openEduIntro`) is a
+DOM panel with the beta note, how the mode works, the player's cards (the cards not
 seen yet, the missed ones due, the reviews due over every deck: `cardCounts`; how many have been seen:
 `masteryByDeck`; and that the gold number is missed plus to review: `Play.eduIntroInfo`), the start
 level (◀ LV n ▶ while a later level is unlocked; no start-level row at all in test mode, whose run starts at
@@ -385,7 +388,8 @@ pad mode the ring is drawn on Play but only a d-pad move focuses a button. A con
 gold ring (`eduIntroPadAction` through padIntent's `'panel'`), Esc, ✕, Close and B close it, and a restart of
 Play takes it down (a click on its Play after that does nothing). From the glyph it opens on the release of the
 pointer that pressed it (one press is armed at a time, so a second thumb or a cancelled touch does not open it
-twice: plan 25), and nothing under it is pressed and no run starts. The rest of the switch still toggles.
+twice: plan 25); that is "Your cards" since plan 26's A2, and nothing under it is pressed. The rest of the
+switch still toggles.
 A run with 📚 on latches `runIsEducation` (never a Daily Dump), shows 📚 in the HUD, and at its end
 records nothing on a board or in the career (`endRun`: no best, top list, career counters or career
 badges; the sync that follows sends only what was already queued, such as a tester's answers and the
@@ -1196,11 +1200,16 @@ src/
                             then Play.openStats() (the own profile; over the 🌞
                             popup when it was under).
     eduIntroPanel.js        The 📚 popup (plan 26): plain DOM, built like
-                            eduDataPanel.js; opened by the 📚 switch turned on and
-                            by the 📚 glyph. The beta note, how the mode works, the
-                            player's cards, the start level (◀ LV n ▶) and the
-                            new-card order, the daily cap, a link to 📚 Education
-                            data, Close | Play. A controller ring over its buttons
+                            eduDataPanel.js; opened at every start from the ready
+                            screen with 📚 on (plan 26 A2: Play.launch). The beta
+                            note, how the mode works, the player's cards, the start
+                            level (◀ LV n ▶; none in test mode) and the new-card
+                            order with a line for the pressed one (ORDERS), the
+                            daily cap, the data line with a link to 📚 Education
+                            data, Close | Play. Clicks wait retryLockoutMs after it
+                            opens; its keys (onKey: Enter presses Play from the card,
+                            repeats and a key held from before swallowed); focus on
+                            the card. A controller ring over its buttons
                             (eduIntroPadAction), Esc / B close; Play's shutdown
                             closes it.
     eduDataPanel.js         Plain DOM panel (plan 21, Stage 3b), built like
@@ -2189,7 +2198,8 @@ tests/                      node --test (schema.test.js, pilot.test.js, eduBoard
                             / 'not shared' / a rename answered false. Plan 25: an
                             education run's end syncs (a test run's does not); test
                             mode turned on after the start saves nothing; the 📚
-                            glyph opens on its own pointer's release; a break's misses
+                            glyph opens ("Your cards" again since plan 26's A2) on its
+                            own pointer's release; a break's misses
                             asked again; the gate (every break
                             since plan 26); Quit (grading both ways).
                             Plan 26 A2: Skip (every kind of card, the cap on due

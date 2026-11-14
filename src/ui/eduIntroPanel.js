@@ -1,5 +1,5 @@
 // DOM "📚 Education mode" popup (plan 26), opened at every start from the ready screen with 📚 on (plan
-// 26, A2: Play.launch), when the 📚 switch is turned on and by a tap on its 📚 glyph. Plain DOM over the canvas, like the
+// 26, A2: Play.launch). Since its A2 the 📚 glyph opens "Your cards" again and the switch opens nothing. Plain DOM over the canvas, like the
 // Education data panel (ui/eduDataPanel.js): it holds more text than a canvas card fits.
 //
 // It says what the mode is (a beta: the cards are still being checked), how it works (the levels and

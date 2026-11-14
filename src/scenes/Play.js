@@ -555,9 +555,9 @@ export class Play extends Phaser.Scene {
       ? createCountLine(this, counts.x, counts.y, { style: TEXT_STYLE, px: 32, sep: '   ', depth: 28, maxWidth: counts.width }).setVisible(false)
       : null;
 
-    // The info card a tap on a level break's numbers opens ("Waiting in this quiz": toggleBreakCounts),
-    // over everything here, the ring included (the ready screen's "Your cards" became the 📚 popup in
-    // plan 26). Single player only, as the 📚 switch is.
+    // The info card of the ready screen's 📚 glyph ("Your cards": toggleEduCard) and of a level break's
+    // numbers ("Waiting in this quiz": toggleBreakCounts), over everything here, the ring included.
+    // Single player only, as the 📚 switch is.
     this.eduCard = this.match ? null : createInfoCard(this, { x: this.col.x + this.col.width / 2, y: GAME_HEIGHT / 2 - 40, width: 600 });
 
     // The tray and the controller ring belong to the chrome owner: single player, or P1 in a match (P2 has neither).
@@ -576,8 +576,8 @@ export class Play extends Phaser.Scene {
             // 👥 and 📚 always have an item; it shows only while its switch is offered (refreshReadySwitches).
             { id: 'versus', box: this.switchBoxes.versus, visible: () => onReady() && Boolean(this.readyBoxes.versus), activate: () => this.toggleVersus() },
             { id: 'education', box: this.switchBoxes.education, visible: () => onReady() && Boolean(this.readyBoxes.education), activate: () => this.toggleEducation() },
-            // The 📚 glyph (and its gold count): the 📚 popup (openEduIntro; plan 26).
-            { id: 'educationInfo', box: this.switchBoxes.educationInfo, visible: () => onReady() && Boolean(this.readyBoxes.educationInfo), activate: () => this.openEduIntro() },
+            // The 📚 glyph (and its gold count): "Your cards" (toggleEduCard; plan 26, A2).
+            { id: 'educationInfo', box: this.switchBoxes.educationInfo, visible: () => onReady() && Boolean(this.readyBoxes.educationInfo), activate: () => this.toggleEduCard() },
             { id: 'daily', box: this.readyBoxes.daily, visible: onReady, activate: () => this.handleChrome('daily') },
             { id: 'howto', box: this.readyBoxes.howto, visible: onReady, activate: () => this.handleChrome('howto') },
             // The level break: the 💰 pill, then (the shop open) its ✕ and rows down the column.
@@ -1188,7 +1188,7 @@ export class Play extends Phaser.Scene {
           return;
         }
         if (hit === 'educationInfo') {
-          this.openEduCardOnRelease(pointer); // the 📚 glyph: the 📚 popup (plan 26)
+          this.openEduCardOnRelease(pointer); // the 📚 glyph: "Your cards" (plan 26, A2)
           return;
         }
         if (hit === 'versus') {
@@ -1616,14 +1616,12 @@ export class Play extends Phaser.Scene {
     return !this.match && this.eduUnlocked;
   }
 
-  /** The 📚 switch: remembered in the settings store; switching it on switches 👥 off. */
-  /** The 📚 switch: on or off; turned on, it opens the 📚 popup (plan 26) unless `intro` is false (the popup's own Play). */
-  toggleEducation({ intro = true } = {}) {
+  /** The 📚 switch: on or off, remembered in the settings store; switching it on switches 👥 off. It opens nothing (plan 26, A2: the 📚 popup opens at a start instead). */
+  toggleEducation() {
     this.educationOn = !this.educationOn;
     this.settings.set({ education: this.educationOn });
     this.educationToggle?.setOn(this.educationOn);
     if (this.educationOn && this.versusOn) this.toggleVersus();
-    if (this.educationOn && intro) this.openEduIntro();
   }
 
   /** Is education mode unlocked here? (the save panel asks before toggling it with the word) */
@@ -1879,9 +1877,10 @@ export class Play extends Phaser.Scene {
    * release, so a card opened on the press would shut again at once. The release must be that
    * pointer's (plan 25, A6): one press is armed at a time, a second press on the glyph replaces it,
    * another finger's release does nothing, and a release outside the canvas or a cancelled touch
-   * (Phaser's pointer.wasCanceled) disarms it without opening.
+   * (Phaser's pointer.wasCanceled) disarms it without opening. (The 📚 popup took the glyph in plan
+   * 26's step 9; "Your cards" came back in its A2, Michael's checklist.)
    */
-  openEduCardOnRelease(pointer = null, show = () => this.openEduIntro()) {
+  openEduCardOnRelease(pointer = null, show = () => this.toggleEduCard()) {
     this.eduCardPress?.done();
     const id = pointer?.id ?? null;
     const mine = (p) => id === null || p?.id === id;
@@ -1907,8 +1906,35 @@ export class Play extends Phaser.Scene {
   }
 
   /**
-   * The 📚 popup (plan 26; ui/eduIntroPanel.js), on the ready screen: opened when the 📚 switch is
-   * turned on and by a tap on its glyph (or A on its ring item). It replaced "Your cards" there.
+   * "Your cards" (plan 21, E3; back on the 📚 glyph in plan 26's A2): what the 📚 on the ready screen
+   * stands for, opened by a tap on the glyph (or A on its ring item) and closed by any tap, key or pad
+   * press. Over every deck: the cards not seen yet, the missed ones due, the reviews due (cardCounts
+   * 'all', the count lines in Michael's wording), how many have been seen at all, and what the gold
+   * number on the 📚 counts. While it is up nothing under it is pressed and no run starts (flap,
+   * onPadAction, handleChrome, launch).
+   */
+  toggleEduCard() {
+    if (!this.eduCard) return;
+    if (this.eduCard.open) {
+      this.eduCard.hide();
+      return;
+    }
+    if (this.state !== 'ready' || this.launching || this.match || !this.readyBoxes?.educationInfo) return;
+    const srs = this.eduStore.load().cards;
+    const counts = cardCounts(srs, { context: 'all' });
+    const decks = Object.values(masteryByDeck(srs));
+    const seen = decks.reduce((sum, d) => sum + d.seen, 0);
+    const total = decks.reduce((sum, d) => sum + d.total, 0);
+    this.eduCard.show({
+      glyph: EDUCATION_EMOJI,
+      title: t(this.locale, 'eduCardsTitle'),
+      lines: [...countLines(this.locale, counts), t(this.locale, 'eduCardsSeen').replace('{n}', String(seen)).replace('{total}', String(total)), t(this.locale, 'eduCardsDue')],
+    });
+  }
+
+  /**
+   * The 📚 popup (plan 26; ui/eduIntroPanel.js), on the ready screen: opened at every start with 📚 on
+   * (launch, plan 26 A2), and from nowhere else since then. Returns whether it opened.
    */
   openEduIntro() {
     if (this.state !== 'ready' || this.launching || this.match || !this.readyBoxes?.educationInfo || isEduIntroPanelOpen()) return false;
@@ -1938,13 +1964,13 @@ export class Play extends Phaser.Scene {
   }
 
   /**
-   * The 📚 popup's Play: 📚 on (the popup can be opened with it off, from the glyph), then the run
-   * starts. Not through a tap (flap), which would open the popup again (plan 26, A2): launch with
+   * The 📚 popup's Play: 📚 on (it already is: the popup opens at a start with 📚 on; kept for safety),
+   * then the run starts. Not through a tap (flap), which would open the popup again (plan 26, A2): launch with
    * `intro` false. The audio unlocks here, as a tap's flap would do.
    */
   startFromEduIntro() {
     if (this.state !== 'ready' || this.launching || this.match) return;
-    if (!this.educationOn) this.toggleEducation({ intro: false });
+    if (!this.educationOn) this.toggleEducation();
     unlock();
     this.launch({ intro: false });
   }
