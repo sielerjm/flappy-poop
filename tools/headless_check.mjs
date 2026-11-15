@@ -3922,6 +3922,14 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         const early = await evaluate(`(() => { const p = ${play}; const opened = p.openEduIntro(); document.getElementById('edu-intro-play').click(); return JSON.stringify({ opened, open: !document.getElementById('edu-intro-panel').hidden, state: p.state, launching: Boolean(p.launching) }); })()`).then(JSON.parse);
         ok(early.opened && early.open && early.state === 'ready' && !early.launching, 'a click on Play in the moment the popup opens does nothing (the second tap of a double tap)');
         await introEsc();
+        // A "Your cards" press pending as the popup opens (finger 1 on 📚, finger 2 starts) opens nothing
+        // under it, and the card cannot be toggled while the popup is up (AUD-034).
+        await sleep(300);
+        const twoFingers = await evaluate(`(() => { const p = ${play}; p.openEduCardOnRelease({ id: 7 }); const opened = p.openEduIntro(); p.input.emit('pointerup', { id: 7 }); const afterRelease = p.eduCard.open; p.toggleEduCard(); return JSON.stringify({ opened, afterRelease, afterToggle: p.eduCard.open, popup: !document.getElementById('edu-intro-panel').hidden }); })()`).then(JSON.parse);
+        ok(twoFingers.opened && twoFingers.popup && !twoFingers.afterRelease && !twoFingers.afterToggle, `a "Your cards" press pending as the popup opens, then released, opens nothing under it; nor does the glyph's toggle (${JSON.stringify(twoFingers)})`);
+        await introEsc();
+        await sleep(200);
+        ok(!(await evaluate(`${play}.eduCard.open`)), 'closing the popup leaves no card behind');
         // Real keys through CDP, as a player's reach the page, native button presses included (AUD-026,
         // AUD-032). Which key does what is eduIntroKey's, tested in Node (tests/ready.test.js); a lone
         // Space release never presses a button in Chrome, so that rule has no check here.

@@ -885,6 +885,22 @@ test('"Your cards" up on the ready screen: any other chrome key closes it, then 
   }
 });
 
+test('AUD-034: a "Your cards" press pending when the 📚 popup opens is dropped: its release (finger 1, after finger 2 started a run) opens nothing under the popup', () => {
+  const handlers = {};
+  const input = { on: (ev, fn) => { (handlers[ev] ??= new Set()).add(fn); }, off: (ev, fn) => handlers[ev]?.delete(fn) };
+  const fire = (ev, p) => [...(handlers[ev] ?? [])].forEach((fn) => fn(p));
+  const shown = [];
+  const card = { open: false, show(o) { shown.push(o); this.open = true; }, hide() { this.open = false; } };
+  const s = playScene({ eduStore: createEduStore(fakeStorage()), eduCard: card, locale: 'en', state: 'ready', launching: false, match: null, readyBoxes: { educationInfo: {} }, input, game: {} });
+  s.openEduCardOnRelease({ id: 1 }); // finger 1 down on the glyph
+  s.openEduIntro(); // finger 2 starts: the popup (no DOM here, so it stays shut, but the press is dropped first)
+  fire('pointerup', { id: 1 }); // finger 1 lifts
+  assert.deepEqual([shown.length, card.open, s.eduCardPress ?? null], [0, false, null], 'no card under the popup; the press disarmed');
+  s.openEduCardOnRelease({ id: 3 });
+  fire('pointerup', { id: 3 });
+  assert.equal(card.open, true, 'with no popup, a press on the glyph still opens the card on its release');
+});
+
 test("your own profile's 📚 section (plan 26, A2): eduView carries the learning streak now, the longest, and the highest level unlocked from this device's store; another player's shared view carries none of them", async () => {
   const { Stats } = await import('../src/scenes/Stats.js');
   const view = Stats.prototype.eduView.call({}, { counters: {}, badges: {}, unlockedLevel: 3, study: { day: '2026-11-13', streak: 4, best: 9 } }, '2026-11-14');

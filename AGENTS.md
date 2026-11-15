@@ -367,7 +367,8 @@ The 📚 glyph and that count are a box of their own inside the switch's (`ready
 word): the three count lines (`countLines`, his wording), the cards seen of all and what the gold number
 counts; any tap, key or pad press closes it and no run starts. A tap, Space, Esc, P (or ⏸, the pad's Menu)
 and the pad's A press nothing under it; another chrome key (S, I, L…) closes it and then does its own thing
-(`handleChrome`; P since AUD-027). Turning the switch
+(`handleChrome`; P since AUD-027). It never opens under the 📚 popup: `openEduIntro` drops a press still down
+on the glyph (`eduCardPress`), and `toggleEduCard` refuses while the popup is open (AUD-034). Turning the switch
 on opens nothing since that step. **The 📚 popup** (plan 26: `ui/eduIntroPanel.js`, `Play.openEduIntro`) is a
 DOM panel with the beta note, how the mode works, the player's cards (the cards not
 seen yet, the missed ones due, the reviews due over every deck: `cardCounts`; how many have been seen:

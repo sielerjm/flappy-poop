@@ -1920,7 +1920,7 @@ export class Play extends Phaser.Scene {
       this.eduCard.hide();
       return;
     }
-    if (this.state !== 'ready' || this.launching || this.match || !this.readyBoxes?.educationInfo) return;
+    if (this.state !== 'ready' || this.launching || this.match || !this.readyBoxes?.educationInfo || isEduIntroPanelOpen()) return; // never under the popup (AUD-034)
     const srs = this.eduStore.load().cards;
     const counts = cardCounts(srs, { context: 'all' });
     const decks = Object.values(masteryByDeck(srs));
@@ -1939,6 +1939,7 @@ export class Play extends Phaser.Scene {
    */
   openEduIntro() {
     if (this.state !== 'ready' || this.launching || this.match || !this.readyBoxes?.educationInfo || isEduIntroPanelOpen()) return false;
+    this.eduCardPress?.done(); // a "Your cards" press still down (finger 1 on 📚 as finger 2 starts) opens nothing under it (AUD-034)
     openEduIntroPanel({ game: this.game, play: this, locale: this.locale });
     return isEduIntroPanelOpen(); // whether it opened (launch starts the run when it could not)
   }
