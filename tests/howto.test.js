@@ -48,6 +48,16 @@ test('PAUSE_BANNER_TEXT is two centered lines, not a clipped em-dash row', () =>
   assert.match(pauseBannerText('en'), /resume game/);
 });
 
+test("How to play's 📚 row goes with education mode: howToItems' education option, which HowTo fills from Play.educationAvailable() like every other surface (AUD-044)", async () => {
+  const on = howToItems('en').map((item) => item.key);
+  const off = howToItems('en', { education: false }).map((item) => item.key);
+  assert.ok(on.includes('education'), 'available: the row is there');
+  assert.deepEqual(off, on.filter((k) => k !== 'education'), 'off: only the 📚 row goes, the rest in order');
+  const { readFileSync } = await import('node:fs');
+  const src = readFileSync(new URL('../src/scenes/HowTo.js', import.meta.url), 'utf8');
+  assert.match(src, /howToItems\(locale, \{ education: [^}]*educationAvailable/, 'HowTo asks Play, not the config, as the 📚 tab, Stats and the save panel do');
+});
+
 test('HOW_TO_ITEMS names fiber, probiotic, and bacteria with their effects', () => {
   const items = howToItems('en');
   assert.deepEqual(

@@ -87,3 +87,11 @@ test("the quiz card's wrap (Quiz.js cjkWrap, every wrapped Text's wordWrap.callb
   assert.equal(calls.length, 1, 'Phaser\'s wrap not asked for Chinese');
 });
 
+test('every wrapped Text on the quiz card wraps through cjkWrap (AUD-042: nothing else fails if one stops)', async () => {
+  const { readFileSync } = await import('node:fs');
+  const src = readFileSync(new URL('../src/scenes/Quiz.js', import.meta.url), 'utf8');
+  const wraps = src.match(/wordWrap: \{[^}]*\}/g) ?? [];
+  assert.ok(wraps.length >= 9, `the card's wrapped Texts are found (${wraps.length})`);
+  for (const w of wraps) assert.match(w, /callback: cjkWrap/, `a wrapped Text without the Chinese wrap: ${w}`);
+});
+

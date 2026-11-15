@@ -1581,6 +1581,12 @@ async function seedLive(db) {
     recordResult(tour, m.id, out.winner, { by: out.by, slots });
   }
   assert.equal((await asAnon(db, 'select public.submit_tournament($1, $2::jsonb) as r', [id('UpHost'), JSON.stringify(tournamentPayload(tour, id('UpTour1')))])).rows[0].r, 'ok');
+  // A 📚 board player and a pilot participant, through 0.18.0's own calls (the 3-argument share): the
+  // invitation's backfill and the old share's drop meet them on the upgrade (AUD-042).
+  await db.query('select public.admin_set_education_open(true)');
+  await db.query('select public.admin_set_invite($1)', [CODE]);
+  await asAnon(db, 'select public.share_education($1, $2, true)', [id('UpBob'), 'UpBob']);
+  await asAnon(db, 'select public.enrol_research($1, $2, true, $3)', [id('UpPilot'), CODE, CONSENT]);
   await db.query("select public.admin_set_dev('UpBob', true)");
 }
 
@@ -1612,7 +1618,10 @@ async function liveView(db) {
   };
 }
 
-test('the upgrade: the live schema (tests/fixtures/schema-applied.sql) holding rows, then db/schema.sql twice: every row and old call answers as before', async () => {
+test('the upgrade: the live schema (tests/fixtures/schema-applied.sql) holding rows, then db/schema.sql twice: every row and old call answers as before', async (t) => {
+  // After a push the fixture is this file (npm run push copies it), and the upgrade then checks only that
+  // the file runs over itself; it says so rather than passing as if it had upgraded something (AUD-042).
+  if (stampOf(FIXTURE) === stampOf(SQL)) t.diagnostic('the fixture is db/schema.sql itself: this run checks idempotency, not an upgrade');
   const db = new PGlite();
   await db.exec(SUPABASE_ROLES);
   await db.exec(FIXTURE);
@@ -1630,7 +1639,7 @@ test('the upgrade: the live schema (tests/fixtures/schema-applied.sql) holding r
   const round = (await ensureInvite(db), await asAnon(db, 'select public.share_education($1, $2, true, $3)::text as r', [id('UpAlice'), 'UpAlice', CODE])).rows[0].r;
   assert.equal((await asAnon(db, "select public.submit_education_grades($1, $2, $3::timestamptz, 3, 27000, '{}'::jsonb) as r", [id('UpAlice'), id('UpEB1'), round])).rows[0].r.status, 'ok');
   assert.ok((await asAnon(db, 'select public.share_education($1, $2, true, $3)::text as r', [id('UpCarolOld'), 'UpCarol', CODE])).rows[0].r, 'an old id shares as its canonical player');
-  assert.deepEqual((await db.query('select player_id from public.education_public order by 1')).rows.map((r) => r.player_id), [id('UpAlice'), id('UpCarol')].sort());
+  assert.deepEqual((await db.query('select player_id from public.education_public order by 1')).rows.map((r) => r.player_id), [id('UpAlice'), id('UpBob'), id('UpCarol')].sort());
   // A counters batch sent before the upgrade is still a receipt after another batch (plan 24, AUD-003).
   await db.exec("update public.player_counters set updated_at = now() - interval '6 seconds'");
   const counted = await csubmit(db, id('UpAlice'), id('UpCB9'), { games: 1 });
@@ -1646,6 +1655,18 @@ test('the upgrade: the live schema (tests/fixtures/schema-applied.sql) holding r
   // A merge after the upgrade still folds a daily row.
   await asAnon(db, 'select public.merge_players($1, $2)', [id('UpBob'), id('UpDave')]);
   assert.equal((await db.query('select count(*)::int as n from public.daily_scores where player_id = $1', [id('UpBob')])).rows[0].n, 1);
+  // The invitation on the upgraded database (AUD-042): one share_education, anon's alone; the board's
+  // player invited by the backfill; the pilot's participant given no player_meta row (AUD-040); 0.18.0's
+  // named call (as PostgREST sends it) still answers: a participant shares, a newcomer needs the invite.
+  const overloads = (await db.query("select pg_get_function_identity_arguments(p.oid) as a from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname = 'public' and p.proname = 'share_education'")).rows.map((r) => r.a);
+  assert.deepEqual(overloads, ['p_player_id text, p_name text, p_adult boolean, p_invite text'], 'the 3-argument share is gone');
+  const grants = (await db.query("select has_function_privilege('anon', 'public.share_education(text, text, boolean, text)', 'execute') as anon, has_function_privilege('authenticated', 'public.share_education(text, text, boolean, text)', 'execute') as auth")).rows[0];
+  assert.deepEqual(grants, { anon: true, auth: false });
+  assert.equal((await db.query('select edu_invited from public.player_meta where player_id = $1', [id('UpBob')])).rows[0].edu_invited, true, 'the board player is invited');
+  assert.deepEqual((await db.query('select 1 from public.player_meta where player_id = $1', [id('UpPilot')])).rows, [], 'the participant has no player_meta row');
+  const named = (pid, name) => asAnon(db, 'select to_json(public.share_education(p_player_id => $1, p_name => $2, p_adult => $3)) as r', [pid, name, true]);
+  assert.ok((await named(id('UpPilot'), 'UpPilot')).rows[0].r, "0.18.0's call: a participant shares");
+  await assert.rejects(named(id('UpNewcomer'), 'UpNewcomer'), /needs invite/, "0.18.0's call: a newcomer needs the invite");
 });
 
 test('recent receipts (AUD-003): a resend after another device\'s batch adds nothing to a 📚 row; the list keeps 64; a merge keeps both players\' counter receipts', async () => {

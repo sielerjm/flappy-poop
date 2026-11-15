@@ -1080,9 +1080,12 @@ export function t(locale, key) {
   return STRINGS[DEFAULT_LOCALE][key] ?? key;
 }
 
-/** How to play rows for a locale: pipe first, the pickups, levels, controls, toilet, two players, tournament, the Daily Dump, then the tray buttons left to right (ⓘ 🌐 💬 🏆 🔊 ⚙). key matches a Boot texture name or an emoji row in HowTo. */
-export function howToItems(locale) {
-  return [
+/**
+ * How to play rows for a locale: pipe first, the pickups, levels, controls, toilet, two players, tournament, the Daily Dump, then the tray buttons left to right (ⓘ 🌐 💬 🏆 🔊 ⚙). key matches a Boot texture name or an emoji row in HowTo.
+ * `education: false` leaves out the 📚 row (the off switch; HowTo passes Play.educationAvailable(): plan 28, AUD-044).
+ */
+export function howToItems(locale, { education = true } = {}) {
+  const rows = [
     { key: 'pipe', name: t(locale, 'itemPipeName'), detail: t(locale, 'itemPipeDetail') },
     { key: 'fiber', name: t(locale, 'itemFiberName'), detail: t(locale, 'itemFiberDetail') },
     { key: 'probiotic', name: t(locale, 'itemProbioticName'), detail: t(locale, 'itemProbioticDetail') },
@@ -1105,6 +1108,7 @@ export function howToItems(locale) {
     { key: 'sound', name: t(locale, 'itemSoundName'), detail: t(locale, 'itemSoundDetail') },
     { key: 'settings', name: t(locale, 'itemSettingsName'), detail: t(locale, 'itemSettingsDetail') },
   ];
+  return education ? rows : rows.filter((item) => item.key !== 'education');
 }
 
 /**

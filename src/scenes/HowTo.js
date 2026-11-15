@@ -66,7 +66,8 @@ export class HowTo extends Phaser.Scene {
     const ROW_PITCH = 136;
     let nextY = cy - 190;
     let lastBottom = nextY;
-    howToItems(locale).filter((item) => item.key !== 'education' || EDUCATION.enabled !== false).forEach((item) => { // the off switch (plan 28) hides the 📚 row
+    // The off switch (plan 28) hides the 📚 row: asked of Play, as the 📚 tab, Stats and the save panel ask (AUD-044).
+    howToItems(locale, { education: this.scene.get('Play')?.educationAvailable?.() ?? EDUCATION.enabled !== false }).forEach((item) => {
       const y = nextY;
       if (item.key === 'pipe') {
         // pipe.png is 128x1280 with the cap at the top: show a 64x80 cap slice.
