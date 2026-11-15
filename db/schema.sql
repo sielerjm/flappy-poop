@@ -43,7 +43,8 @@
 -- on player_aliases, the tournament tables (tournaments, tournament_stats,
 -- tournament_matchups), daily_scores, player_counters, achievement_defs,
 -- player_achievements, player_meta, education_settings, education_public, research_participants
--- or research_responses (nor the research_* views), run_log or run_rejects. Profiles are public
+-- or research_responses (nor the research_* views), run_log, run_rejects, held_scores,
+-- score_steps or board_settings. Profiles are public
 -- (2026-11-11): player_stats returns anyone's stats, counters, achievements and biggest rival, by
 -- the name a board shows; and, only for a player who shares them, their education grade (2026-11-13).
 --
@@ -80,6 +81,10 @@
 --   (plan 30; nothing is deleted, and the player's own device sees its rows as before):
 --     select public.admin_flag_player('somebody', 'why, for your own notes');
 --   show them again: select public.admin_unflag_player('somebody');
+--   a player's run summaries, newest first (plan 30): select * from public.admin_runs('somebody');
+--   hold one run (its best leaves the board for others; nothing is deleted), and release it:
+--     select public.hold_run('<player id>', '<run id>'); select public.release_run('<player id>', '<run id>');
+--   hold a best with no run behind it as well: select public.admin_set_require_run(true);
 --   who is hidden: select * from public.admin_flagged();
 --   remove a ghost row (a test name, say): delete from public.scores where name = 'somebody';
 --   raise the score cap: edit the CHECK below, the submit_score guard, and
@@ -331,6 +336,10 @@ declare
   v_top_before text;
   v_top_after text;
   v_hidden boolean;
+  v_current public.scores%rowtype;
+  v_score int := p_score;
+  v_level int := p_level;
+  v_raise boolean;
 begin
   if p_player_id is null or p_player_id !~ '^[A-Za-z0-9_-]{22}$' then
     raise exception 'bad player id';
@@ -354,24 +363,51 @@ begin
   end if;
 
   select updated_at into last_write from public.scores where player_id = v_id and toilet = coalesce(p_toilet, false);
+  if last_write is null then -- a held first post paces like a stored one (plan 30)
+    select max(h.posted_at) into last_write from public.held_scores h
+    where h.player_id = v_id and h.board = 'scores' and h.toilet = coalesce(p_toilet, false);
+  end if;
   if last_write is not null and last_write > now() - interval '5 seconds' then
     raise exception 'rate limited';
   end if;
   perform public.touch_player(v_id);
   v_hidden := public.player_hidden(v_id);
 
+  -- A post that raises the row (or makes the first) is matched to its run (plan 30): held, it is
+  -- kept in held_scores and the post goes on as one that raised nothing.
+  select * into v_current from public.scores where player_id = v_id and toilet = coalesce(p_toilet, false);
+  v_raise := v_current.player_id is null or p_score > v_current.score;
+  if v_raise and public.post_must_hold(v_id, coalesce(p_toilet, false), p_score, p_level, null) then
+    insert into public.held_scores (player_id, board, toilet, name, score, level, run_id)
+    values (v_id, 'scores', coalesce(p_toilet, false), p_name, p_score, p_level,
+            (select r.run_id from public.run_log r where r.player_id = v_id and r.mode = 'single' and r.held
+               and r.toilet = coalesce(p_toilet, false) and r.score = p_score and r.level = p_level
+             order by r.received_at desc limit 1));
+    v_raise := false;
+    if v_current.player_id is null then
+      update public.scores set name = p_name where player_id = v_id and name <> p_name;
+      return;
+    end if;
+    v_score := v_current.score;
+    v_level := v_current.level;
+  end if;
+
   -- 👑 Dethroned: the 🏆 #1 (score, then the earlier write) before and after this post, among the
   -- rows the board shows (plan 30).
   perform pg_advisory_xact_lock(hashtext('board:scores'));
   select s.player_id into v_top_before from public.scores s where not s.hidden order by s.score desc, s.updated_at asc limit 1;
   insert into public.scores (player_id, name, score, toilet, level, updated_at, hidden)
-  values (v_id, p_name, p_score, coalesce(p_toilet, false), p_level, now(), v_hidden)
+  values (v_id, p_name, v_score, coalesce(p_toilet, false), v_level, now(), v_hidden)
   on conflict (player_id, toilet) do update
     set name       = excluded.name,
         score      = greatest(public.scores.score, excluded.score),
         level      = case when excluded.score > public.scores.score then excluded.level else public.scores.level end,
         updated_at = now(),
         hidden     = excluded.hidden;
+  if v_raise then
+    insert into public.score_steps (player_id, toilet, score, level, run_id)
+    values (v_id, coalesce(p_toilet, false), p_score, p_level, public.post_run(v_id, coalesce(p_toilet, false), p_score, p_level, null));
+  end if;
   -- The player's other row (the other toilet kind) follows the name too.
   update public.scores set name = p_name where player_id = v_id and name <> p_name;
   select s.player_id into v_top_after from public.scores s where not s.hidden order by s.score desc, s.updated_at asc limit 1;
@@ -936,6 +972,8 @@ begin
   delete from public.run_log m where m.player_id = v_merge
     and exists (select 1 from public.run_log k where k.player_id = v_keep and k.run_id = m.run_id);
   update public.run_log set player_id = v_keep where player_id = v_merge; -- plan 30
+  update public.held_scores set player_id = v_keep where player_id = v_merge;
+  update public.score_steps set player_id = v_keep where player_id = v_merge;
   update public.player_aliases set canonical_id = v_keep, merged_at = now() where canonical_id = v_merge;
   insert into public.player_aliases (alias_id, canonical_id)
   values (v_merge, v_keep)
@@ -1416,6 +1454,22 @@ begin
   end if;
 
   perform public.touch_player(v_id);
+
+  -- The day's first post is matched to its run (plan 30): held, it is kept in held_scores and
+  -- answered as stored ('ok', then 'duplicate'); the player's earlier days follow the name as usual.
+  if not exists (select 1 from public.daily_scores ds where ds.player_id = v_id and ds.day = p_day) then
+    if exists (select 1 from public.held_scores h where h.player_id = v_id and h.board = 'daily' and h.day = p_day and h.released_at is null) then
+      return 'duplicate';
+    end if;
+    if public.post_must_hold(v_id, false, p_score, p_level, p_day) then
+      insert into public.held_scores (player_id, board, day, name, score, level, pipes, run_id)
+      values (v_id, 'daily', p_day, p_name, p_score, p_level, p_pipes,
+              (select r.run_id from public.run_log r where r.player_id = v_id and r.mode = 'daily' and r.held
+                 and r.day = p_day and r.score = p_score order by r.received_at desc limit 1));
+      update public.daily_scores set name = p_name where player_id = v_id and name <> p_name;
+      return 'ok';
+    end if;
+  end if;
 
   -- 👑 Dethroned: that day's #1 (score, then the earlier post) before and after this post.
   perform pg_advisory_xact_lock(hashtext('board:daily:' || p_day::text));
@@ -2737,6 +2791,212 @@ as $$
 $$;
 revoke execute on function public.admin_runs(text) from public, anon, authenticated;
 
+-- Holding a run (plan 30): a moderator can hold a stored run (hold_run). A score post whose only
+-- matching runs are held (or, with board_settings.require_run on, that has no run at all) does not
+-- reach the board for others: it is kept in held_scores, and the post is answered and paced as a
+-- post that raised nothing. The player's own views read held_scores too. A post is matched to its
+-- run by content: the same player, 🚽, score and level (a Daily: the same day and score). Only a
+-- post that would raise the player's row, or make their first, needs a run. Owner-only tables.
+create table if not exists public.held_scores (
+  id          bigserial primary key,
+  player_id   text not null,
+  board       text not null check (board in ('scores', 'daily')),
+  toilet      boolean not null default false,
+  day         date,
+  name        text not null,
+  score       int  not null,
+  level       int  not null,
+  pipes       int,
+  run_id      text,                                  -- the held run it matched, if any
+  posted_at   timestamptz not null default now(),
+  released_at timestamptz,
+  check ((board = 'daily') = (day is not null))
+);
+create index if not exists held_scores_player on public.held_scores (player_id, board);
+alter table public.held_scores enable row level security;
+revoke all on public.held_scores from public, anon, authenticated;
+revoke all on sequence public.held_scores_id_seq from public, anon, authenticated;
+
+-- Every raise of a 🏆 row: score, level and the run that backed it (null: none, or a row from
+-- before this table). hold_run reads it to put a row back to the best before a held run. Seeded
+-- once with the rows of the day it was made. Owner-only.
+create table if not exists public.score_steps (
+  player_id text not null,
+  toilet    boolean not null,
+  score     int  not null,
+  level     int  not null,
+  run_id    text,
+  at        timestamptz not null default now()
+);
+create index if not exists score_steps_player on public.score_steps (player_id, toilet, score);
+alter table public.score_steps enable row level security;
+revoke all on public.score_steps from public, anon, authenticated;
+insert into public.score_steps (player_id, toilet, score, level, run_id, at)
+select s.player_id, s.toilet, s.score, s.level, null, s.updated_at from public.scores s
+where not exists (select 1 from public.score_steps);
+
+-- Board switches (one row). require_run: a raise with no run behind it is held too.
+create table if not exists public.board_settings (
+  id          boolean primary key default true check (id),
+  require_run boolean not null default false
+);
+insert into public.board_settings (id) values (true) on conflict (id) do nothing;
+alter table public.board_settings enable row level security;
+revoke all on public.board_settings from public, anon, authenticated;
+
+-- Owner only (SQL editor): turn require_run on or off.
+create or replace function public.admin_set_require_run(p_on boolean)
+returns boolean
+language sql
+security definer
+set search_path = public
+as $$
+  update public.board_settings set require_run = coalesce(p_on, false) where id returning require_run;
+$$;
+revoke execute on function public.admin_set_require_run(boolean) from public, anon, authenticated;
+
+-- Whether a post of this content must be held: its only matching runs are held, or it has none
+-- and require_run is on. p_day null: a 🏆 post; else a Daily post (score and day only). Internal.
+create or replace function public.post_must_hold(p_id text, p_toilet boolean, p_score int, p_level int, p_day date)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  with m as (
+    select r.held from public.run_log r
+    where r.player_id = p_id and r.score = p_score
+      and case when p_day is null then r.mode = 'single' and r.toilet = coalesce(p_toilet, false) and r.level = p_level
+               else r.mode = 'daily' and r.day = p_day end
+  )
+  select case
+    when exists (select 1 from m where not m.held) then false
+    when exists (select 1 from m) then true
+    else coalesce((select b.require_run from public.board_settings b where b.id), false)
+  end;
+$$;
+revoke execute on function public.post_must_hold(text, boolean, int, int, date) from public, anon, authenticated;
+
+-- The latest unheld run behind a post of this content, or null. Internal.
+create or replace function public.post_run(p_id text, p_toilet boolean, p_score int, p_level int, p_day date)
+returns text
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select r.run_id from public.run_log r
+  where r.player_id = p_id and r.score = p_score and not r.held
+    and case when p_day is null then r.mode = 'single' and r.toilet = coalesce(p_toilet, false) and r.level = p_level
+             else r.mode = 'daily' and r.day = p_day end
+  order by r.received_at desc limit 1;
+$$;
+revoke execute on function public.post_run(text, boolean, int, int, date) from public, anon, authenticated;
+
+-- hold_run (owner only): hold one of a player's stored runs. If the board already shows the best that
+-- run set (and no other unheld run of the same content backs it), that best moves to held_scores and
+-- the row goes back to the best before it (score_steps), or leaves the board when there was none; a
+-- Daily row moves to held_scores. Nothing is deleted. True when the run was found and not yet held.
+create or replace function public.hold_run(p_player_id text, p_run_id text)
+returns boolean
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_id text := public.resolve_player(p_player_id);
+  r public.run_log%rowtype;
+  cur public.scores%rowtype;
+  prev record;
+  d public.daily_scores%rowtype;
+begin
+  perform pg_advisory_xact_lock(hashtext('runs:' || v_id));
+  update public.run_log x set held = true, held_at = now()
+  where x.player_id = v_id and x.run_id = p_run_id and not x.held
+  returning * into r;
+  if not found then
+    return false;
+  end if;
+  if r.mode = 'single' then
+    perform pg_advisory_xact_lock(hashtext('board:scores'));
+    select * into cur from public.scores s where s.player_id = v_id and s.toilet = r.toilet;
+    if found and cur.score = r.score and cur.level = r.level
+       and public.post_run(v_id, r.toilet, r.score, r.level, null) is null then
+      insert into public.held_scores (player_id, board, toilet, name, score, level, run_id, posted_at)
+      values (v_id, 'scores', r.toilet, cur.name, cur.score, cur.level, r.run_id, cur.updated_at);
+      select st.score, st.level, st.at into prev from public.score_steps st
+      where st.player_id = v_id and st.toilet = r.toilet and st.score < cur.score
+        and (st.run_id is null or not exists (select 1 from public.run_log y where y.player_id = v_id and y.run_id = st.run_id and y.held))
+      order by st.score desc, st.at desc limit 1;
+      if found then
+        update public.scores set score = prev.score, level = prev.level, updated_at = prev.at
+        where player_id = v_id and toilet = r.toilet;
+      else
+        delete from public.scores where player_id = v_id and toilet = r.toilet;
+      end if;
+    end if;
+  else
+    perform pg_advisory_xact_lock(hashtext('board:daily:' || r.day::text));
+    select * into d from public.daily_scores ds where ds.player_id = v_id and ds.day = r.day;
+    if found and d.score = r.score and public.post_run(v_id, false, r.score, r.level, r.day) is null then
+      insert into public.held_scores (player_id, board, day, name, score, level, pipes, run_id, posted_at)
+      values (v_id, 'daily', d.day, d.name, d.score, d.level, d.pipes, r.run_id, d.submitted_at);
+      delete from public.daily_scores where player_id = v_id and day = r.day;
+    end if;
+  end if;
+  return true;
+end;
+$$;
+revoke execute on function public.hold_run(text, text) from public, anon, authenticated;
+
+-- release_run (owner only): undo hold_run. The run counts again, and every held best of that
+-- player with the run's content goes onto the board through the normal rules (the higher score
+-- wins; a Daily day keeps the first). True when the run was found and held.
+create or replace function public.release_run(p_player_id text, p_run_id text)
+returns boolean
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_id text := public.resolve_player(p_player_id);
+  r public.run_log%rowtype;
+  h public.held_scores%rowtype;
+begin
+  perform pg_advisory_xact_lock(hashtext('runs:' || v_id));
+  update public.run_log x set held = false, held_at = null
+  where x.player_id = v_id and x.run_id = p_run_id and x.held
+  returning * into r;
+  if not found then
+    return false;
+  end if;
+  for h in select * from public.held_scores hs
+           where hs.player_id = v_id and hs.released_at is null and hs.score = r.score
+             and case when r.mode = 'single' then hs.board = 'scores' and hs.toilet = r.toilet and hs.level = r.level
+                      else hs.board = 'daily' and hs.day = r.day end loop
+    if h.board = 'scores' then
+      perform pg_advisory_xact_lock(hashtext('board:scores'));
+      insert into public.scores (player_id, name, score, toilet, level, updated_at, hidden)
+      values (v_id, coalesce((select s.name from public.scores s where s.player_id = v_id order by s.updated_at desc limit 1), h.name),
+              h.score, h.toilet, h.level, h.posted_at, public.player_hidden(v_id))
+      on conflict (player_id, toilet) do update
+        set score      = greatest(public.scores.score, excluded.score),
+            level      = case when excluded.score > public.scores.score then excluded.level else public.scores.level end,
+            updated_at = case when excluded.score > public.scores.score then excluded.updated_at else public.scores.updated_at end;
+      insert into public.score_steps (player_id, toilet, score, level, run_id, at) values (v_id, h.toilet, h.score, h.level, r.run_id, h.posted_at);
+    else
+      insert into public.daily_scores (player_id, day, name, score, level, pipes, submitted_at)
+      values (v_id, h.day, h.name, h.score, h.level, coalesce(h.pipes, 0), h.posted_at)
+      on conflict (player_id, day) do nothing;
+    end if;
+    update public.held_scores set released_at = now() where id = h.id;
+  end loop;
+  return true;
+end;
+$$;
+revoke execute on function public.release_run(text, text) from public, anon, authenticated;
+
 revoke execute on function public.submit_score(text, text, int, boolean, int) from public, authenticated;
 grant  execute on function public.submit_score(text, text, int, boolean, int) to anon;
 revoke execute on function public.player_rank(text, boolean) from public, authenticated;
@@ -2792,7 +3052,7 @@ returns text
 language sql
 immutable
 as $$
-  select '8b029e0d00fef40f'::text; -- schema stamp
+  select '1b187650ec4453f4'::text; -- schema stamp
 $$;
 revoke execute on function public.schema_version() from public, authenticated;
 grant  execute on function public.schema_version() to anon;
