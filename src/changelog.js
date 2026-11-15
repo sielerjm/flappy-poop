@@ -8,6 +8,20 @@ import { LOCALES } from './i18n.js';
 
 export const CHANGELOG = [
   {
+    version: '0.20.0',
+    date: '16 Nov 2026',
+    notes: {
+      en: [
+        'Back up your 📚 cards: in 📚 Education data, save them as a file or copy them as text, then restore them here or on another device. A restore brings back your cards, badges and learning streak; only runs played on this device go to the 📚 board.',
+        'A won education run that earns a badge now shows its ❔ ✅ ❌ row at once; the badge line is just below it.',
+      ],
+      'zh-Hans': [
+        '备份你的 📚 卡片：在“📚 教育数据”里把它们保存为文件或复制为文本，然后在这里或另一台设备上恢复。恢复会带回你的卡片、徽章和学习连续天数；只有在这台设备上玩的局会计入 📚 排行榜。',
+        '赢下的教育局获得徽章时，现在会直接显示 ❔ ✅ ❌ 那一行，徽章在它下面。',
+      ],
+    },
+  },
+  {
     version: '0.19.1',
     date: '15 Nov 2026',
     notes: {

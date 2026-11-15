@@ -8,7 +8,7 @@ A Flappy Bird–style game for phone browsers: flap a poop through the gut, dodg
 
 **Play now → [sielerjm.github.io/flappy-poop](https://sielerjm.github.io/flappy-poop/)**
 
-Works best on your phone — add it to your home screen for a full-screen, app-like launch. On a desktop or landscape window the gut widens to fill the screen. English and Simplified Chinese in-game. Version **0.19.1 beta**.
+Works best on your phone — add it to your home screen for a full-screen, app-like launch. On a desktop or landscape window the gut widens to fill the screen. English and Simplified Chinese in-game. Version **0.20.0 beta**.
 
 Tip: on iPhone, turn **Silent mode off** to hear sound.
 
@@ -237,6 +237,7 @@ Every player has a public profile: the save panel’s **👤 Profile** opens you
 A learning mode for everyone, in beta: turn on 📚 on the home screen, and quiz cards about the gut and its microbes come up between levels and after a crash, with a review schedule deciding which card comes back when (below). Every card is in English and Simplified Chinese and follows the game's language. The cards are about how the gut and its microbes work; they are still being checked, and they are not medical advice.
 
 - **Everything stays on your device** by default: your answers, your grades and the badges you earn there. These runs are not on the 🏆 boards.
+- **Back up your cards.** The browser can erase them (clearing site data, or Safari after weeks without a visit), so add the game to your home screen and save a copy now and then: **📚 Education data → 💾 Back up my cards** saves a file (or **Copy as text**), and **Restore** brings the cards, badges and learning streak back, on this device or another. The file holds no username or code, and it goes only where you put it. Runs from a backup never go to the 📚 board; only runs played on this device do.
 - **Sharing on the 📚 board is by invitation and opt-in** (anyone can read the board). With an invite code (type it in the user panel's **📚 Education data**) or an invite link (`…/flappy-poop/?invite=<code>`, which opens that panel with the code filled in and leaves the address bar at once), **Share my grades** puts your username, your average grade, the number of graded runs and your education badges on a 📚 board that every player can see. It is for adults, and **Stop sharing** deletes it from the board at once.
 - **🔬 Tester data is opt-in too**, for adults with an invitation (the same code or link): the game then sends each quiz answer under a random id, to test the tools. No research is being done with it. [RESEARCH.md](RESEARCH.md) says exactly what is sent and how to withdraw.
 - **A card looks wrong, or you have an idea?** Tap the 🚩 beside a card's code, or the report link in **📚 Education data**: one GitHub form takes a wrong card, an unclear explanation, a broken link or an idea for a card. Please never post personal data there.
@@ -287,7 +288,7 @@ The board is a free-tier [Supabase](https://supabase.com) project. The browser t
 
 To run your own: create a free Supabase project, run `db/schema.sql` in the SQL editor, then put the Data API URL and publishable key into `LEADERBOARD`. Leave either blank to turn the feature off.
 
-What leaves the phone: username, best scores with level, Daily Dump scores (day, level, pipes), finished tournaments' results, lifetime counters (games, wins, score and level sums, pickups, farts, deaths) and earned achievements, and the random id inside your save code. All of it except the id is public on the player's profile. Only if you choose to, your 📚 grades and, for an invited tester, quiz answers leave it too (see 📚 Education mode above). The save code itself never leaves the device.
+What leaves the phone: username, best scores with level, Daily Dump scores (day, level, pipes), finished tournaments' results, lifetime counters (games, wins, score and level sums, pickups, farts, deaths) and earned achievements, and the random id inside your save code. All of it except the id is public on the player's profile. Only if you choose to, your 📚 grades and, for an invited tester, quiz answers leave it too (see 📚 Education mode above). A 📚 card backup goes only where you save or paste it. The save code itself never leaves the device.
 
 ### Credits & lineage
 
