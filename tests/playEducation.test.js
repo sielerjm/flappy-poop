@@ -8,7 +8,7 @@ import { LEADERBOARD, LEVELS, TUNING as T } from '../src/config.js';
 import { levelBannerText } from '../src/i18n.js';
 import { createSettingsStore } from '../src/logic.js';
 import { CARDS } from '../src/questions.js';
-import { newTally, createEduStore, schedule, tallyAnswer, localDayKey } from '../src/education.js';
+import { newTally, createEduStore, schedule, tallyAnswer, localDayKey, buriedIdsOn } from '../src/education.js';
 import { eduRunFacts } from '../src/achievements.js';
 import { createEduShareStore } from '../src/leaderboard.js';
 
@@ -563,7 +563,7 @@ test("prices follow the highest level the run has reached (plan 26, A2, Michael'
   assert.deepEqual(picked.shopPrices(), eduShopPrices(3), 'a choice made in the break moves no price before the run continues');
 });
 
-test("Skip a card (plan 26, A2, in place of Bury): every kind of card costs 3 × the level cleared; a due card (stored, or missed in this break) also goes to tomorrow, leaves the gate and counts toward the day's 3; a new or practice card just moves on; a skip is no answer", () => {
+test("Skip a card (plan 26, A2, in place of Bury): every kind of card costs 3 × the level cleared; a due card (stored, or missed in this break) also goes to tomorrow, leaves the gate and counts toward the day's 3; a new card just moves on; a practice card is kept out of practice for the day, uncounted (AUD-028); a skip is no answer", () => {
   const now = Date.now();
   const store = createEduStore(fakeStorage());
   const [missedStored, reviewDue, practice, fresh, missedHere, reviewDue2] = CARDS.filter((c) => c.deck === 'duodenum' || c.deck === 'general');
@@ -577,7 +577,7 @@ test("Skip a card (plan 26, A2, in place of Bury): every kind of card costs 3 ×
   const recOf = (c) => store.load().cards[c.id] ?? null;
   const practiceRec = recOf(practice);
   assert.deepEqual([s.skipBlocker(fresh.id), s.skipCard(fresh.id), wallet.coins, recOf(fresh), store.buriedOn(localDayKey())], [null, true, 24, null, 0], 'a new card: the price, nothing saved, no daily count');
-  assert.deepEqual([s.skipCard(practice.id), wallet.coins, recOf(practice), store.buriedOn(localDayKey())], [true, 18, practiceRec, 0], 'a practice card: the price, its schedule left alone');
+  assert.deepEqual([s.skipCard(practice.id), wallet.coins, recOf(practice), store.buriedOn(localDayKey())], [true, 18, practiceRec, 0], 'a practice card: the price, its schedule left alone, not counted');
   assert.equal(s.breakGated(), true, 'three cards due: the gate holds');
   for (const c of [reviewDue, missedHere, missedStored]) {
     assert.equal(s.skipCard(c.id), true, c.id);
@@ -585,7 +585,7 @@ test("Skip a card (plan 26, A2, in place of Bury): every kind of card costs 3 ×
   }
   assert.deepEqual([wallet.coins, store.buriedOn(localDayKey()), s.breakMissed], [0, 3, []], 'three due cards skipped: paid, counted, and the miss of this break is no longer missed');
   assert.equal(s.breakGated(), false, 'and the gate opens: nothing due is left');
-  assert.deepEqual(store.load().buried.ids, [reviewDue.id, missedHere.id, missedStored.id], "the day's skipped cards are kept (so practice leaves them out today)");
+  assert.deepEqual(store.load().buried.ids, [practice.id, reviewDue.id, missedHere.id, missedStored.id], "the day's skipped cards are kept, the practice one too, not the new one (so practice leaves them out today)");
   wallet.coins = 30;
   store.answer(reviewDue2.id, schedule(null, 'easy', now - 30 * 86400000));
   assert.deepEqual([s.skipBlocker(reviewDue2.id), s.skipCard(reviewDue2.id), wallet.coins], ['cap', false, 30], `a fourth due card: the day's ${T.education.buryPerDay} are used, nothing paid`);
@@ -593,6 +593,24 @@ test("Skip a card (plan 26, A2, in place of Bury): every kind of card costs 3 ×
   wallet.coins = 5;
   assert.deepEqual([s.skipBlocker(fresh.id), s.skipCard(fresh.id), wallet.coins], ['coins', false, 5], 'the purse must cover it');
   assert.deepEqual([events, s.runQuiz.answered], [[], 0], 'a skip is no answer: no pilot event, nothing tallied');
+});
+
+test('AUD-028: a practice card paid away with Skip is not the next quiz\'s practice card that day: a fresh Review offers another one', () => {
+  const store = createEduStore(fakeStorage());
+  const now = Date.now();
+  const deck = CARDS.filter((c) => !c.retired);
+  // Every card seen, in review, not due: a caught-up break offers practice only.
+  deck.forEach((c, i) => store.answer(c.id, { ...schedule(null, 'good', now - (deck.length - i) * 60000), dueAt: now + 3 * 86400000 }));
+  const { s, wallet } = skipScene(store, { coins: 100, settings: createSettingsStore(fakeStorage(), T.settingsKey) });
+  const before = s.quizNext({ mode: 'break', exclude: [] });
+  assert.equal(before.reason, 'practice');
+  const rec = store.load().cards[before.card.id];
+  assert.equal(s.skipCard(before.card.id), true);
+  assert.equal(wallet.coins, 100 - s.buryPrice(), 'Skip paid');
+  assert.deepEqual([buriedIdsOn(store.load().buried, localDayKey()), store.buriedOn(localDayKey()), store.load().cards[before.card.id]], [[before.card.id], 0, rec], 'kept for the day, not counted toward the cap, the schedule as it was');
+  const next = s.quizNext({ mode: 'break', exclude: [] }); // End Review, then Review: a new session, the same day
+  assert.equal(next.reason, 'practice');
+  assert.notEqual(next.card.id, before.card.id, 'another practice card');
 });
 
 test('Skip in a test run is free and saves nothing; there is no Skip outside an education run\'s level break (a revive, the bonus quiz, a match) (plan 26, A2)', () => {

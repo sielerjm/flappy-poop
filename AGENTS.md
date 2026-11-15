@@ -485,14 +485,17 @@ level Skip ▸): an open card in a break's quiz shows "Skip · n 🌽" in its ri
 Skip costs `buryPrice()` (`education.buryCoinsPerLevel` × the level just cleared) and moves on
 (`Play.skipCard`); a due card (missed in this break, or a stored record due now: `cardDue`) also goes to
 tomorrow (`eduStore.bury`, `buryMs`), leaves `breakMissed` and so the gate, and counts toward
-`buryPerDay` (3) a local day; a new or practice card is left as it was, with no daily limit.
+`buryPerDay` (3) a local day; a practice card's schedule is left as it was, but it joins the day's
+skipped ids (`eduStore.skipPractice`, uncounted; AUD-028), and a new card just moves on; neither has a
+daily limit.
 `skipBlocker` says what stops it ('none': not an education break, a match; 'cap'; 'coins'): a blocked
 Skip shows dimmed (`button.dim`) and a press says why in the verdict's place. The first paid Skip in a
 break warns there and holds Skip for `explainMinMs` (`Play.quizSkipWarned`, cleared when a break
 starts); later ones skip at once. Skip ignores every press for `retryLockoutMs` after its card appears
 (`Quiz.cardShownAt`), since it sits where Next Card was, and Enter / Space never press it (`primary`
-does nothing on an open card). The day's skipped cards are kept by id (`buried.ids`; `buriedIdsOn`), and
-`pickCard`'s `skipped` leaves them out of practice that day. A skip is no answer: no tally, no pilot
+does nothing on an open card). The day's skipped cards, due and practice, are kept by id (`buried.ids`;
+`buriedIdsOn`; `buried.n` counts only the due ones), and `pickCard`'s `skipped` leaves them out of
+practice that day. A skip is no answer: no tally, no pilot
 event. A revive and the bonus quiz have none. **Quit**: Quit takes two taps and ends the run, graded as a normal end
 when nothing is due and something was answered; with cards due, or with nothing answered, it counts as
 quitting the run (`breakGaveUp`: ungraded, and 🏳️ with nothing answered; plan 26, A2). It reads Quit
@@ -856,7 +859,8 @@ src/
                             own order; counted cards before practice), cardCounts'
                             missed, unlockLevel / unlockedLevel, bury / buriedOn
                             (plan 26 A2: buried keeps the day's ids, buriedIdsOn,
-                            pickCard's skipped),
+                            pickCard's skipped; skipPractice adds a practice card's
+                            uncounted, AUD-028),
                             localDayKey; plan 26: NEW_ORDERS and pickCard's order,
                             newAllowance and localDayStart (the daily new-card cap,
                             which cardCounts' new respects too);

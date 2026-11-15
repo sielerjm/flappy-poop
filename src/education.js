@@ -535,10 +535,12 @@ function cleanEdu(raw, keep, t = TUNING) {
   // The highest level an education run (not a test run) has continued into (plan 25): a run may start there.
   const unlockedLevel = Number.isInteger(raw?.unlockedLevel) && raw.unlockedLevel >= 1 && raw.unlockedLevel <= lastLevel ? raw.unlockedLevel : 1;
   // Today's buries (plan 25; since plan 26's A2 a due card's Skip): { day: local YYYY-MM-DD, n, ids },
-  // kept only while it is well formed; ids, the cards skipped that day (none in a record from before).
+  // kept only while it is well formed; n, the due cards skipped that day (the cap counts them); ids,
+  // every card skipped that day, a practice card's too (AUD-028: n 0 with ids is a record; none in a
+  // record from before A2).
   const b = raw?.buried;
   const buriedIds = b && Array.isArray(b.ids) ? [...new Set(b.ids.filter((id) => typeof id === 'string' && ID_RE.test(id)))] : [];
-  const buried = b && typeof b.day === 'string' && DAY_RE.test(b.day) && Number.isInteger(b.n) && b.n > 0 ? { day: b.day, n: b.n, ids: buriedIds } : null;
+  const buried = b && typeof b.day === 'string' && DAY_RE.test(b.day) && Number.isInteger(b.n) && (b.n > 0 || (b.n === 0 && buriedIds.length > 0)) ? { day: b.day, n: b.n, ids: buriedIds } : null;
   // A won run not recorded yet (plan 26): its tally (bonus answers included), whether it was full, when it was won.
   const p = raw?.pending;
   const tally = cleanTally(p?.tally, lastLevel);
@@ -586,9 +588,19 @@ export function paidOn(paid, day) {
   return paid && paid.day === day && Array.isArray(paid.ids) ? paid.ids : [];
 }
 
-/** The ids of the cards buried (a due card's Skip) on local `day` (the store's `buried`; plan 26, A2), or none: pickCard's `skipped`. */
+/** The ids of the cards skipped on local `day` (the store's `buried`: a due card's Skip, plan 26 A2, and a practice card's, AUD-028), or none: pickCard's `skipped`. */
 export function buriedIdsOn(buried, day) {
   return buried && buried.day === day && Array.isArray(buried.ids) ? buried.ids : [];
+}
+
+/**
+ * The store's `buried` record after card `id` is skipped on local `day`: a new day starts it over;
+ * `counted` (a due card's Skip) adds one toward the day's buryPerDay; the id is kept once. Pure.
+ */
+function withSkip(buried, id, day, counted) {
+  const same = buried?.day === day;
+  const ids = same ? buried.ids : [];
+  return { day, n: (same ? buried.n : 0) + (counted ? 1 : 0), ids: ids.includes(id) ? ids : [...ids, id] };
 }
 
 /** The device's local day as YYYY-MM-DD (a bury's daily cap counts local days: plan 25). */
@@ -599,7 +611,7 @@ export function localDayKey(date = new Date()) {
 /**
  * This device's education record (LEADERBOARD.eduKey): { v: 2, cards: { id: record }, recent: [ids],
  * counters: { revives, perfectStreak, gradedRuns, gradeSum }, badges: { id: 'YYYY-MM-DD' }, and when
- * set unlockedLevel, buried { day, n, ids }, pending { tally, full, at }, paid { day, ids } and study
+ * set unlockedLevel, buried { day, n, ids } (n due skips, ids every card skipped that day), pending { tally, full, at }, paid { day, ids } and study
  * { day, streak, best } (plan 26, A2) }.
  * answer(id, record) stores a card's record after an answer and appends it to `recent` (the last
  * education.minGap cards shown). The counters and badges (plan 22) are the education badges' and the
@@ -648,10 +660,18 @@ export function createEduStore(storage, { key = LEADERBOARD.eduKey, t = TUNING }
       const state = read();
       const rec = state.cards[id];
       if (!rec) return false;
-      const same = state.buried?.day === day;
-      const n = same ? state.buried.n + 1 : 1;
-      const ids = same ? state.buried.ids : [];
-      write({ ...state, cards: { ...state.cards, [id]: { ...rec, dueAt: until } }, buried: { day, n, ids: ids.includes(id) ? ids : [...ids, id] } });
+      write({ ...state, cards: { ...state.cards, [id]: { ...rec, dueAt: until } }, buried: withSkip(state.buried, id, day, true) });
+      return true;
+    },
+    /**
+     * A practice card's Skip (AUD-028): card `id` joins local `day`'s skipped ids, so practice leaves
+     * it out that day (pickCard's `skipped`); it never counts toward the day's buryPerDay and its
+     * schedule is left alone. An unseen (new) card has nothing to keep: false.
+     */
+    skipPractice(id, day) {
+      const state = read();
+      if (!state.cards[id]) return false;
+      if (!buriedIdsOn(state.buried, day).includes(id)) write({ ...state, buried: withSkip(state.buried, id, day, false) });
       return true;
     },
     /** A revive just happened (👼 / 🐦‍🔥): counted at once, so a closed tab loses none. */

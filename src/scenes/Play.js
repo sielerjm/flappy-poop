@@ -3625,8 +3625,9 @@ export class Play extends Phaser.Scene {
    * Skip a card (plan 26, A2; it replaced Bury and the level Skip ▸): in an education run's level
    * break, the card on show moves on for buryPrice() corn (3 × the level cleared). A due card (one
    * missed in this break, or a stored record due now: it holds the gate) also goes to tomorrow
-   * (eduStore.bury, education.buryMs), leaves breakMissed and counts toward education.buryPerDay; a new
-   * or practice card is left as it was, with no daily limit. A test run's Skip is free and saves
+   * (eduStore.bury, education.buryMs), leaves breakMissed and counts toward education.buryPerDay; a
+   * practice card stays out of practice for the rest of the local day (eduStore.skipPractice: its
+   * schedule untouched, not counted; AUD-028), and a new card just moves on, neither with a daily limit. A test run's Skip is free and saves
    * nothing. A skip is no answer: no tally, no pilot event. The quiz's right slot shows it (offerSkip).
    */
   skipFree() {
@@ -3663,6 +3664,8 @@ export class Play extends Phaser.Scene {
     if (due) {
       this.eduStore.bury(cardId, Date.now() + T.education.buryMs, localDayKey());
       this.breakMissed = (this.breakMissed ?? []).filter((id) => id !== cardId);
+    } else {
+      this.eduStore.skipPractice(cardId, localDayKey()); // out of practice for the day (AUD-028); a new card keeps nothing
     }
     this.refreshCoinHud?.();
     this.refreshLevelBanner();

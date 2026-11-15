@@ -691,6 +691,30 @@ test('createEduStore.bury (plan 25): the card waits until the time given, nothin
   assert.equal(localDayKey(new Date(2026, 0, 5, 23, 59)), '2026-01-05', 'the local day, not UTC');
 });
 
+test("createEduStore.skipPractice (AUD-028): a practice card's Skip keeps it among the day's skipped ids, out of practice that day; it never counts toward the day's cap or moves the card's schedule; an unseen card is not kept", async () => {
+  const { buriedIdsOn } = await import('../src/education.js');
+  const m = new Map();
+  const st = { getItem: (k) => m.get(k) ?? null, setItem: (k, v) => m.set(k, v), removeItem: (k) => m.delete(k) };
+  const store = createEduStore(st);
+  const rec = { ...missedRec(NOW), state: 'review' };
+  store.answer('ST-01', rec);
+  store.answer('ST-02', rec);
+  assert.equal(store.skipPractice('ST-01', '2026-11-14'), true);
+  assert.deepEqual([store.load().buried, store.buriedOn('2026-11-14'), store.load().cards['ST-01']], [{ day: '2026-11-14', n: 0, ids: ['ST-01'] }, 0, rec], 'kept by id, counted nowhere, the schedule as it was');
+  assert.deepEqual(createEduStore(st).load().buried, { day: '2026-11-14', n: 0, ids: ['ST-01'] }, 'a record with no due skips, only practice ones, reads back (a fresh session, the same day)');
+  store.skipPractice('ST-01', '2026-11-14');
+  store.bury('ST-02', NOW + DAY, '2026-11-14');
+  assert.deepEqual(store.load().buried, { day: '2026-11-14', n: 1, ids: ['ST-01', 'ST-02'] }, 'once each; a due Skip after it counts from 0');
+  store.skipPractice('ST-02', '2026-11-14');
+  assert.equal(store.buriedOn('2026-11-14'), 1, 'never counted, even for a card buried that day');
+  assert.equal(store.skipPractice('ST-99', '2026-11-14'), false, 'an unseen (new) card is not kept');
+  assert.deepEqual(buriedIdsOn(store.load().buried, '2026-11-15'), [], 'the next day offers it again');
+  store.skipPractice('ST-01', '2026-11-15');
+  assert.deepEqual(store.load().buried, { day: '2026-11-15', n: 0, ids: ['ST-01'] }, 'a new day starts the record over');
+  m.set(LEADERBOARD.eduKey, JSON.stringify({ v: 2, cards: {}, recent: [], buried: { day: '2026-11-14', n: 0, ids: [] } }));
+  assert.equal(createEduStore(st).load().buried, undefined, 'nothing skipped and nothing counted: no record');
+});
+
 test("createEduStore's paid record (plan 26, A2): the cards whose right answer paid on a local day; answer() adds one only when told the day, a new day starts the list over, a broken record reads as none", async () => {
   const { paidOn } = await import('../src/education.js');
   const m = new Map();
