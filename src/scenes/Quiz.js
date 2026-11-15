@@ -250,8 +250,6 @@ export class Quiz extends Phaser.Scene {
 
     // The "This run" card (the tally's): an info card over everything here, the ring included.
     this.runCard = createInfoCard(this, { x: cx, y: cy, width: 520 });
-    // With that card up, A on any ringed item only takes it down (as a tap anywhere does).
-    const underCard = (item) => ({ ...item, activate: () => (this.runCard.open ? this.runCard.hide() : item.activate()) });
     this.focus = createFocus(this, T, {
       items: [
         ...this.options.map((o, i) => pressable(`option${i}`, o.zone)),
@@ -261,10 +259,11 @@ export class Quiz extends Phaser.Scene {
         pressable('tally', this.tallyZone, { event: 'pointerup' }),
         pressable('counts', this.countsZone, { event: 'pointerup' }),
         pressable('close', this.closeBtn),
-      ].map(underCard),
+      ].map((item) => this.padItem(item)),
     });
     this.nextCard();
     this.focus.show(); // only under a controller (registry padMode)
+    if (this.focus.shown) this.ringMovedAt = this.game.loop.time; // the ring appears on the first card: a double A on Review cannot answer it (ringLocked)
   }
 
   /**
@@ -472,8 +471,8 @@ export class Quiz extends Phaser.Scene {
   /**
    * A revive's card ignores pointer taps for retryLockoutMs after it opens (the game-over panel's
    * lockout). The card comes up a moment after the crash and answers on the press, so a flap tap
-   * landing as it appears must not pick an answer or give up. The keys and the controller ring
-   * (which presses with no pointer: pressable) are not locked; a break's card never is.
+   * landing as it appears must not pick an answer or give up. The keys are not locked; a break's card
+   * never is. The controller ring has its own wait after every jump of the ring (ringLocked).
    */
   tapLocked(pointer) {
     return Boolean(pointer) && this.mode === 'revive' && !canRestart(this.openedAt, this.game.loop.time, T.retryLockoutMs);
@@ -1054,7 +1053,28 @@ export class Quiz extends Phaser.Scene {
   ring(id) {
     if (!this.focus?.shown) return;
     const i = this.focus.indexOf(id);
-    if (i >= 0) this.focus.setIndex(i);
+    if (i < 0) return;
+    this.focus.setIndex(i);
+    this.ringMovedAt = this.game.loop.time; // A waits retryLockoutMs from here (ringLocked)
+  }
+
+  /**
+   * The quiz moved the ring itself (ring(): a card shows, an answer, caught up) less than retryLockoutMs
+   * ago (plan 28, 1.4: an audit leftover). An A then does nothing, so the second A of a quick double press
+   * never lands on what the ring jumped to: Next Card's double A cannot answer the next card's first
+   * option, an option's cannot skip the verdict, Keep practicing's cannot end the review. The player's
+   * own d-pad moves never lock.
+   */
+  ringLocked() {
+    return this.ringMovedAt != null && !canRestart(this.ringMovedAt, this.game.loop.time, T.retryLockoutMs);
+  }
+
+  /**
+   * A ringed item, as the controller presses it: nothing while ringLocked(); with the "This run" card up,
+   * A on any item only takes it down (as a tap anywhere does); else the item's own press.
+   */
+  padItem(item) {
+    return { ...item, activate: () => (this.ringLocked() ? undefined : this.runCard.open ? this.runCard.hide() : item.activate()) };
   }
 
   /**

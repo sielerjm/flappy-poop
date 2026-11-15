@@ -4229,19 +4229,22 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         const r3 = await cardRec(q2.id);
         ok(q3.answered && q3.last?.id === q2.id && r3?.seen === 1, `the 2 key answers ${q2.id}, saved`);
         await sleep(TT.education.explainMinMs + 200);
-        await evaluate(`${Q}.input.keyboard.emit('keydown-SPACE'), true`);
-        await sleep(200);
+        // A double A on Next Card (plan 28, 1.4: an audit leftover): the first press shows the next card with the
+        // ring on its first option; the second, in the same moment, must not answer it.
+        const dblA = await evaluate(`(() => { const p = ${play}; const q = ${Q}; p.registry.set('padMode', true); q.focus.show(); q.focus.setIndex(q.focus.indexOf('right')); const t0 = q.cardShownAt; p.onPadAction('select'); const shown = q.cardShownAt !== t0; const ring = q.focus.items[q.focus.index]?.id ?? null; p.onPadAction('select'); return JSON.stringify({ shown, ring, answered: q.answered, id: q.card?.id }); })()`).then(JSON.parse);
+        ok(dblA.shown && dblA.ring === 'option0' && !dblA.answered, `a double A on Next Card shows the next card (${dblA.id}, the ring on its first option) and leaves it unanswered (${JSON.stringify(dblA)})`);
+        await sleep(TT.retryLockoutMs + 100);
 
-        // The controller: the ring on the first option, A picks it.
-        await evaluate(`(() => { ${play}.registry.set('padMode', true); const q = ${Q}; q.focus.show(); q.ring('option0'); return true; })()`);
+        // The controller: the ring on the first option, A picks it (once the ring's jump is retryLockoutMs old).
+        await evaluate(`(() => { ${play}.registry.set('padMode', true); const q = ${Q}; q.focus.show(); q.focus.setIndex(q.focus.indexOf('option0')); return true; })()`); // as the d-pad moves it (the quiz's own jumps lock A a moment: ringLocked)
         const q4 = await quizNow();
         const r4 = await cardRec(q4.id); // the card may be a miss asked again (plan 25): its record goes one answer on
-        await evaluate(`${play}.onPadAction('select'), true`);
+        await evaluate(`${play}.onPadAction('select'), ${play}.onPadAction('select'), true`); // a double A on an option (plan 28, 1.4)
         await sleep(200);
         const q5 = await quizNow();
         const r5 = await cardRec(q4.id);
         const ringNext = await evaluate(`${Q}.focus.items[${Q}.focus.index]?.id ?? null`);
-        ok(q5.answered && q5.last?.id === q4.id && r5?.seen === (r4?.seen ?? 0) + 1 && ringNext === 'right', `the controller's A answers ${q4.id} (saved) and the ring moves to Next`);
+        ok(q5.answered && q5.id === q4.id && q5.last?.id === q4.id && r5?.seen === (r4?.seen ?? 0) + 1 && ringNext === 'right', `the controller's A answers ${q4.id} (saved) and the ring moves to Next; the second A of a double press does not go on past the verdict (plan 28, 1.4)`);
         await evaluate(`${play}.registry.set('padMode', false), ${Q}.focus.hide(), true`);
         await sleep(TT.education.explainMinMs + 200);
 
@@ -4328,14 +4331,14 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         const rcEsc = await runCard();
         ok(!rcEsc.open && rcEsc.quiz && rcEsc.id === cardUp.id, 'Esc takes that card down and leaves the quiz up');
         // The controller: A on the ringed tally opens it, A again (on anything) or B closes it.
-        await evaluate(`(() => { ${play}.registry.set('padMode', true); const q = ${Q}; q.focus.show(); q.ring('tally'); return true; })()`);
+        await evaluate(`(() => { ${play}.registry.set('padMode', true); const q = ${Q}; q.focus.show(); q.focus.setIndex(q.focus.indexOf('tally')); return true; })()`); // as the d-pad moves it
         const ringOn = await evaluate(`${Q}.focus.items[${Q}.focus.index]?.id ?? null`);
         await evaluate(`${play}.onPadAction('select'), true`);
         const rcPad = await runCard();
         await evaluate(`${play}.onPadAction('back'), true`);
         const rcBack = await runCard();
         await evaluate(`${play}.onPadAction('select'), true`);
-        await evaluate(`${Q}.ring('option0'), ${play}.onPadAction('select'), true`);
+        await evaluate(`${Q}.focus.setIndex(${Q}.focus.indexOf('option0')), ${play}.onPadAction('select'), true`);
         const rcSelect = await runCard();
         ok(ringOn === 'tally' && rcPad.open && !rcBack.open && rcBack.quiz && !rcSelect.open && !rcSelect.answered, "the controller's ring reaches the tally: A opens the card, B closes it, and with it up A on an option only closes it");
         await evaluate(`${play}.registry.set('padMode', false), ${Q}.focus.hide(), true`);

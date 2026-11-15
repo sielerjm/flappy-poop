@@ -214,6 +214,36 @@ test("a glow behind the corn when a right answer pays (plan 28, 1.2: Michael's 1
   assert.equal(kills(), 4);
 });
 
+test("a controller's A does nothing for retryLockoutMs after the quiz moves the ring itself (plan 28, 1.4: an audit leftover): a double A never lands on what the ring jumped to; the player's own moves and touch never lock", () => {
+  let now = 5000;
+  const ids = ['option0', 'option1', 'right'];
+  const focus = { shown: true, index: 0, indexOf: (id) => ids.indexOf(id), setIndex(i) { this.index = i; } };
+  const q = quizScene({ game: { loop: { get time() { return now; } } }, focus, runCard: { open: false, hide() { this.open = false; } } });
+  const pressed = [];
+  const item = q.padItem({ id: 'option0', activate: () => pressed.push('option0') });
+  item.activate();
+  assert.deepEqual([q.ringLocked(), pressed], [false, ['option0']], 'the ring never moved by itself: A presses at once');
+  q.ring('right'); // an answer: the ring jumps to Next Card
+  now += 50;
+  item.activate();
+  assert.deepEqual([q.ringLocked(), pressed.length, focus.index], [true, 1, 2], 'an A 50 ms after the jump does nothing');
+  now = 5000 + TUNING.retryLockoutMs - 1;
+  item.activate();
+  assert.equal(pressed.length, 1, 'nor one just inside the wait');
+  now = 5000 + TUNING.retryLockoutMs;
+  item.activate();
+  assert.deepEqual(pressed, ['option0', 'option0'], 'after it, A presses again');
+  q.ring('nowhere'); // no such item: the ring does not move, nothing locks
+  assert.equal(q.ringLocked(), false);
+  q.runCard.open = true;
+  item.activate();
+  assert.deepEqual([q.runCard.open, pressed.length], [false, 2], 'with the "This run" card up, A only takes it down');
+  focus.shown = false; // touch: no ring on show
+  now += 10000;
+  q.ring('option0');
+  assert.equal(q.ringLocked(), false, 'without a controller the ring never jumps, so nothing locks');
+});
+
 test("a revive's Quit warns on every card: the first press shows the warning, arms the button and holds it; the second press quits; the next card's Quit starts unarmed (plan 26, A2)", () => {
   const text = () => ({ text: '', visible: false, color: null, setX() { return this; }, setText(v) { this.text = v; return this; }, setColor(v) { this.color = v; return this; }, setVisible(v) { this.visible = v; return this; } });
   const decided = [];

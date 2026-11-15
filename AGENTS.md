@@ -423,7 +423,9 @@ clear: its quizzes walk the level's deck in id order instead (`pickCard` context
 shown are kept for the page load in the registry's `testQuizShown`), so skipping to a level shows that
 level's cards. **The quiz card** (`scenes/Quiz.js`, overlay id `quiz`): Play owns the cards (`quizNext`
 → `pickCard`, `quizAnswer` → `gradeFor` / `schedule` / `eduStore`), the scene only shows them: three
-options (tap, keys 1–3, the ring), ✓ / ✗, the verdict, under it when the card comes back ("Next review: in 2
+options (tap, keys 1–3, the ring: for `retryLockoutMs` after the quiz moves the ring itself, on a card, an answer or
+"caught up", an A does nothing, `ringLocked` / `padItem`, so a quick double A never lands on what the ring jumped to;
+plan 28, 1.4), ✓ / ✗, the verdict, under it when the card comes back ("Next review: in 2
 days", "Next review: again soon" after a miss: `nextWaitText`, `Quiz.showNextWait`, from `quizAnswer`'s
 `dueAt`; none in a test run), the explanation (at once after a wrong answer,
 which holds Next `explainMinMs`; behind "Why?" after a right one; its source only once audited), the
@@ -550,7 +552,7 @@ quits, and the next card starts unarmed, so no single press ends a run. Esc / B 
 nothing. Once Quit or Return has started closing the quiz
 (`finishing`), no key or second thumb answers. A revive's card ignores pointer taps for
 `retryLockoutMs` after it opens (`tapLocked`: a flap tap landing as it appears must not answer or give
-up; the keys and the ring are not locked). The quiz is the pause: `autoPause` does
+up; the keys are not locked, and the ring waits after each of its jumps, as on every card). The quiz is the pause: `autoPause` does
 nothing under it, and a revive already decided is settled, never asked again (`reviveSettled`). **The
 field refills under the card** at the first right answer, the moment the revive is certain
 (`prepareRevive` → `clearFieldAhead` + `refillAfterRespawn`; a game over comes before any right answer
