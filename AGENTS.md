@@ -965,8 +965,9 @@ src/
                             eduStartLevel settings; never an id, code, sharing state,
                             invitation, consent, recent, paid, buried or pending; its
                             counters are shownCounters), readEducationBackup (the text around the
-                            outermost { … } ignored; cleaned as the store cleans;
-                            'unrecognised' / 'newer' / 'tooBig'), mergeEducation (a
+                            outermost { … } ignored; cleaned as the store cleans; only
+                            the game's education badges, AUD-051; 'unrecognised' /
+                            'newer' / 'tooBig'), mergeEducation (a
                             card's later schedule wins, reviewedAt then lastAt, a record
                             dated over a day ahead never (AUD-048), a card skipped here today keeping
                             its wait; the counters this device's, revives the larger,

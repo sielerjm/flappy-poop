@@ -13,7 +13,7 @@
 // Times are ms since the epoch (Date.now()), passed in, so everything here is pure.
 
 import { EDUCATION, LEADERBOARD, TUNING } from './config.js';
-import { nextPerfectStreak, GRADE_MAX } from './achievements.js';
+import { nextPerfectStreak, GRADE_MAX, EDU_ACHIEVEMENTS } from './achievements.js';
 import { GRADE_NUM, initDifficulty, initStability, nextDifficulty, nextIntervalDays, nextStability, retrievability, shortTermStability } from './fsrs.js';
 import { CARD_LINKS, CARDS, DECKS, REFERENCE_DOIS, REFERENCES } from './questions.js';
 import { createJsonStore } from './store.js';
@@ -786,7 +786,8 @@ export function educationBackup(record, settings, now = Date.now(), t = TUNING) 
 /**
  * A backup's text (a file, or pasted: anything around the outermost { … } is ignored) read back:
  * { ok: true, backup: { record, settings, skipped } }, the record cleaned as the store cleans its own
- * (old SM-2 cards converted; `skipped` counts the cards that did not survive), or { ok: false, error }:
+ * (old SM-2 cards converted; `skipped` counts the cards that did not survive; only the game's education
+ * badges, EDU_ACHIEVEMENTS), or { ok: false, error }:
  * 'unrecognised' (not a backup of this game), 'newer' (a format this version cannot read), 'tooBig'.
  * Only the backup's own fields are read. Pure; never throws.
  */
@@ -808,7 +809,10 @@ export function readEducationBackup(text, t = TUNING) {
   }
   if (!raw || typeof raw !== 'object' || Array.isArray(raw) || raw.kind !== BACKUP_KIND || !Number.isInteger(raw.v) || raw.v < 1) return { ok: false, error: 'unrecognised' };
   if (raw.v > BACKUP_VERSION) return { ok: false, error: 'newer' };
-  const record = cleanEdu({ cards: raw.cards, counters: raw.counters, badges: raw.badges, unlockedLevel: raw.unlockedLevel, study: raw.study }, t.education.minGap, t);
+  // Only the game's education badges (AUD-051): a pasted text could carry any edu_ id to the 📚 board.
+  const known = new Set(EDU_ACHIEVEMENTS.map((a) => a.id));
+  const badges = Object.fromEntries(Object.entries(raw.badges && typeof raw.badges === 'object' ? raw.badges : {}).filter(([id]) => known.has(id)));
+  const record = cleanEdu({ cards: raw.cards, counters: raw.counters, badges, unlockedLevel: raw.unlockedLevel, study: raw.study }, t.education.minGap, t);
   const given = raw.cards && typeof raw.cards === 'object' ? Object.keys(raw.cards).length : 0;
   return { ok: true, backup: { record, settings: backupSettings(raw.settings, t), skipped: given - Object.keys(record.cards).length } };
 }

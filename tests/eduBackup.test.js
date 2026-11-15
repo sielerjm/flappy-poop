@@ -319,3 +319,14 @@ test('AUD-048: a backup card dated more than a day ahead (a clock set ahead) nev
   const soon = edu.schedule(null, 'good', now + 12 * H, TUNING); // half a day ahead: a time zone, not an error
   assert.equal(edu.mergeEducation({ ...bare(), cards: { 'ST-01': mine } }, { ...bare(), cards: { 'ST-01': soon } }, { today: '2026-11-11', now }).record.cards['ST-01'].reviewedAt, soon.reviewedAt);
 });
+
+// AUD-051 (the Checkpoint 3 audit): a restored file keeps only the game's education badges, so a pasted
+// text cannot put made-up ids on the 📚 board (more than its 40 would make the server refuse the batch,
+// and the runs riding in it would count as sent).
+test("AUD-051: a backup's badges are kept only when the game has them", () => {
+  const fake = Object.fromEntries(Array.from({ length: 45 }, (_, i) => [`edu_fake_${i}`, '2026-11-02']));
+  const text = JSON.stringify({ ...edu.educationBackup(localRecord(), {}, T0), badges: { edu_grade_a: '2026-11-03', edu_perfect: '2026-11-04', ...fake } });
+  const r = edu.readEducationBackup(text);
+  assert.equal(r.ok, true);
+  assert.deepEqual(Object.keys(r.backup.record.badges).sort(), ['edu_grade_a', 'edu_perfect']);
+});
