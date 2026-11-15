@@ -101,18 +101,20 @@ test('mergeEducation, the cards: the later answer wins (lastAt, then reviewedAt)
   assert.equal(m.changed, true);
 });
 
-test('mergeEducation, the rest: the grade pair from the longer history (a true mean); revives and the 🤓 streak the larger; badges joined at the earlier day; the higher level; the device-only fields stay', () => {
+test('mergeEducation, the rest: the counters stay this device\'s (revives the larger); the longer history\'s grade pair is shown (a true mean); badges joined at the earlier day; the higher level; the device-only fields stay', () => {
   const local = { ...localRecord(), counters: { revives: 3, perfectStreak: 1, gradedRuns: 5, gradeSum: 50000 }, badges: { edu_grade_a: '2026-11-05', edu_perfect: '2026-11-07' } };
   delete local.own;
   const back = { v: 2, cards: {}, recent: [], counters: { revives: 1, perfectStreak: 4, gradedRuns: 10, gradeSum: 30000 }, badges: { edu_grade_a: '2026-11-02', edu_streak_7: '2026-11-09' }, unlockedLevel: 6 };
   const m = edu.mergeEducation(local, back, { today: '2026-11-15' });
-  assert.deepEqual(m.record.counters, { revives: 3, perfectStreak: 4, gradedRuns: 10, gradeSum: 30000 }, 'runs and grades together, from the longer history; never 15 runs');
+  assert.deepEqual(m.record.counters, { revives: 3, perfectStreak: 1, gradedRuns: 5, gradeSum: 50000 }, 'this device\'s own: the board and the badges read them (AUD-047); the 🤓 streak is this device\'s');
+  assert.deepEqual(m.record.history, { gradedRuns: 10, gradeSum: 30000 }, 'the longer history, runs and grades together; never 15 runs');
+  assert.deepEqual(edu.shownCounters(m.record), { revives: 3, perfectStreak: 1, gradedRuns: 10, gradeSum: 30000 }, 'what the player sees');
   assert.deepEqual(m.record.badges, { edu_grade_a: '2026-11-02', edu_perfect: '2026-11-07', edu_streak_7: '2026-11-09' });
   assert.equal(m.badges, 1, 'one badge new to this device');
   assert.equal(m.record.unlockedLevel, 6);
   for (const k of ['recent', 'paid', 'buried', 'pending']) assert.deepEqual(m.record[k], local[k], `${k}: this device's`);
   const tie = edu.mergeEducation({ ...local, counters: { gradedRuns: 10, gradeSum: 90000 } }, back, { today: '2026-11-15' });
-  assert.deepEqual([tie.record.counters.gradedRuns, tie.record.counters.gradeSum], [10, 90000], 'the same number of runs: this device');
+  assert.deepEqual([tie.record.counters.gradedRuns, tie.record.counters.gradeSum, 'history' in tie.record], [10, 90000, false], 'the same number of runs: this device, no history');
 });
 
 test('mergeEducation, the learning streak: spans that overlap or touch join; apart, the later one is the streak and the best is kept; a stored day far ahead gives only its best', () => {
@@ -141,37 +143,40 @@ test('mergeEducation twice changes nothing the second time', () => {
   assert.deepEqual([twice.added, twice.updated, twice.badges], [0, 0, 0]);
 });
 
-test("own (this device's graded runs): kept with zeros, its runs capped by the counters; endRun grows it only when present; a restore sets it to this device's pair and never raises it", () => {
+test("history (a restore's longer history, display only): kept while longer than the counters, capped at 100 % a run; endRun grows it; a restore sets it from the backup and never from a shorter one", () => {
   const st = fakeStorage();
-  st.setItem('flappyPoop.edu', JSON.stringify({ v: 2, cards: {}, recent: [], counters: { gradedRuns: 2, gradeSum: 15000 }, badges: {}, unlockedLevel: 1, own: { runs: 0, gradeSum: 0 } }));
   const store = createEduStore(st, { key: 'flappyPoop.edu' });
-  assert.deepEqual(store.load().own, { runs: 0, gradeSum: 0 }, 'zeros are kept (a restore on a fresh device)');
-  st.setItem('flappyPoop.edu', JSON.stringify({ v: 2, cards: {}, recent: [], counters: { gradedRuns: 2, gradeSum: 15000 }, badges: {}, unlockedLevel: 1, own: { runs: 9, gradeSum: 99999 } }));
-  assert.deepEqual(store.load().own, { runs: 2, gradeSum: 20000 }, 'never more runs than the counters, and at most 100 % a run');
-  st.setItem('flappyPoop.edu', JSON.stringify({ v: 2, cards: {}, recent: [], counters: { gradedRuns: 2, gradeSum: 15000 }, badges: {}, unlockedLevel: 1, own: { runs: -1, gradeSum: 'x' } }));
-  assert.equal('own' in store.load(), false, 'junk: none');
-  // endRun: a graded run counts on `own` too, when there is one.
-  st.setItem('flappyPoop.edu', JSON.stringify({ v: 2, cards: {}, recent: [], counters: { gradedRuns: 7, gradeSum: 40000 }, badges: {}, unlockedLevel: 1, own: { runs: 2, gradeSum: 10000 } }));
+  const put = (rec) => st.setItem('flappyPoop.edu', JSON.stringify({ v: 2, cards: {}, recent: [], badges: {}, unlockedLevel: 1, ...rec }));
+  put({ counters: { gradedRuns: 2, gradeSum: 15000 }, history: { gradedRuns: 9, gradeSum: 99999 } });
+  assert.deepEqual(store.load().history, { gradedRuns: 9, gradeSum: 90000 }, 'at most 100 % a run');
+  put({ counters: { gradedRuns: 2, gradeSum: 15000 }, history: { gradedRuns: 2, gradeSum: 20000 } });
+  assert.equal('history' in store.load(), false, 'not longer than the counters: none');
+  put({ counters: { gradedRuns: 2, gradeSum: 15000 }, history: { gradedRuns: -1, gradeSum: 'x' } });
+  assert.equal('history' in store.load(), false, 'junk: none');
+  // endRun: a graded run counts on both.
+  put({ counters: { gradedRuns: 2, gradeSum: 10000 }, history: { gradedRuns: 7, gradeSum: 40000 } });
   store.endRun(eduRunFacts({ answered: 5, right: 4 }));
-  assert.deepEqual(store.load().own, { runs: 3, gradeSum: 18000 });
+  assert.deepEqual([store.load().counters.gradedRuns, store.load().counters.gradeSum], [3, 18000]);
+  assert.deepEqual(store.load().history, { gradedRuns: 8, gradeSum: 48000 });
   store.endRun(eduRunFacts({ answered: 1, right: 1 }));
-  assert.deepEqual(store.load().own, { runs: 3, gradeSum: 18000 }, 'a run too short to grade: no change');
+  assert.deepEqual(store.load().history, { gradedRuns: 8, gradeSum: 48000 }, 'a run too short to grade: no change');
   const plain = createEduStore(fakeStorage());
   plain.endRun(eduRunFacts({ answered: 5, right: 5 }));
-  assert.equal('own' in plain.load(), false, 'no own: none made (a record without own reads as its counters)');
-  // A restore that takes the backup's grade pair sets own to this device's pair from before.
+  assert.equal('history' in plain.load(), false, 'no restore: no history');
+  // A restore takes the backup's pair as the history only when it is longer than what this device shows.
   const local = { v: 2, cards: {}, recent: [], counters: { gradedRuns: 3, gradeSum: 21000 }, badges: {}, unlockedLevel: 1 };
   const back = { v: 2, cards: {}, recent: [], counters: { gradedRuns: 10, gradeSum: 80000 }, badges: {}, unlockedLevel: 1 };
   const m = edu.mergeEducation(local, back, { today: '2026-11-15' });
-  assert.deepEqual(m.record.own, { runs: 3, gradeSum: 21000 });
-  assert.deepEqual(edu.mergeEducation({ ...local, own: { runs: 1, gradeSum: 5000 } }, back, { today: '2026-11-15' }).record.own, { runs: 1, gradeSum: 5000 }, 'an own already there stays');
-  assert.equal('own' in edu.mergeEducation({ ...local, counters: { gradedRuns: 12, gradeSum: 1 } }, back, { today: '2026-11-15' }).record, false, 'this device kept its pair: no own needed');
-  assert.deepEqual(edu.mergeEducation(local, { ...back, own: { runs: 10, gradeSum: 80000 } }, { today: '2026-11-15' }).record.own, { runs: 3, gradeSum: 21000 }, "the file's own is never read");
+  assert.deepEqual([m.record.counters, m.record.history], [{ gradedRuns: 3, gradeSum: 21000 }, { gradedRuns: 10, gradeSum: 80000 }]);
+  assert.deepEqual(edu.mergeEducation({ ...local, history: { gradedRuns: 12, gradeSum: 1 } }, back, { today: '2026-11-15' }).record.history, { gradedRuns: 12, gradeSum: 1 }, 'a longer history already here stays');
+  assert.equal('history' in edu.mergeEducation({ ...local, counters: { gradedRuns: 12, gradeSum: 1 } }, back, { today: '2026-11-15' }).record, false, 'this device shows more: no history');
+  assert.deepEqual(edu.mergeEducation(local, { ...back, history: { gradedRuns: 50, gradeSum: 1 } }, { today: '2026-11-15' }).record.history, { gradedRuns: 10, gradeSum: 80000 }, "the other side's history field is never read: its counters are what it showed");
+  assert.deepEqual(edu.mergeEducation({ v: 2, cards: {}, recent: [], counters: {}, badges: {}, unlockedLevel: 1 }, back, { today: '2026-11-15' }).record.history, { gradedRuns: 10, gradeSum: 80000 }, 'a device with no runs yet takes the history');
 });
 
-test("boardRecord: the 📚 board's view of the record: own's runs and grades (the counters when there is none), and every badge", () => {
+test("boardRecord: the 📚 board's view of the record: this device's runs and grades (never a restored history), and every badge", () => {
   const badges = { edu_grade_a: '2026-11-02' };
-  assert.deepEqual(edu.boardRecord({ counters: { gradedRuns: 10, gradeSum: 80000, revives: 2 }, badges, own: { runs: 3, gradeSum: 21000 } }), { counters: { gradedRuns: 3, gradeSum: 21000 }, badges });
+  assert.deepEqual(edu.boardRecord({ counters: { gradedRuns: 3, gradeSum: 21000, revives: 2 }, badges, history: { gradedRuns: 10, gradeSum: 80000 } }), { counters: { gradedRuns: 3, gradeSum: 21000 }, badges });
   assert.deepEqual(edu.boardRecord({ counters: { gradedRuns: 4, gradeSum: 30000 }, badges }), { counters: { gradedRuns: 4, gradeSum: 30000 }, badges });
   assert.deepEqual(edu.boardRecord({ counters: {}, badges: {} }), { counters: { gradedRuns: 0, gradeSum: 0 }, badges: {} });
 });
@@ -184,7 +189,8 @@ test("the share store sends only this device's runs after a restore, before and 
   const fromA = edu.educationBackup({ v: 2, cards: { 'ST-01': card(T0) }, recent: [], counters: { gradedRuns: 6, gradeSum: 48000 }, badges: { edu_grade_a: '2026-11-02' }, unlockedLevel: 2 }, {}, T0);
   const r = store.restore(edu.readEducationBackup(JSON.stringify(fromA)).backup, { today: '2026-11-15' });
   assert.equal(r.changed, true);
-  assert.deepEqual(store.load().counters, { gradedRuns: 6, gradeSum: 48000 }, 'the longer history is shown on this device');
+  assert.deepEqual(edu.shownCounters(store.load()), { gradedRuns: 6, gradeSum: 48000 }, 'the longer history is shown on this device');
+  assert.deepEqual(store.load().counters, { gradedRuns: 2, gradeSum: 20000 }, "its counters stay this device's");
   let n = 0;
   const makeId = () => `B${n++}`.padEnd(22, '_');
   share.turnOn('2026-11-15T10:00:00.000+00:00', 'Sam');
@@ -201,7 +207,7 @@ test("the share store sends only this device's runs after a restore, before and 
   const b3 = share.beginBatch(edu.boardRecord(store.load()), makeId);
   assert.deepEqual([b3.runs, b3.gradeSum], [3, 28000]);
   store.clear();
-  assert.equal('own' in store.load(), false, 'Clear takes own with the record');
+  assert.equal('history' in store.load(), false, 'Clear takes the history with the record');
 });
 
 test('store.restore: one write, the summary, and whether it reached storage (blocked storage, a full one, none)', () => {
@@ -226,8 +232,8 @@ test("a merge never lowers this device's own grade sum (a longer history with a 
   const local = { v: 2, cards: {}, recent: [], counters: { gradedRuns: 3, gradeSum: 30000 }, badges: {}, unlockedLevel: 1 };
   const back = { v: 2, cards: {}, recent: [], counters: { gradedRuns: 4, gradeSum: 20000 }, badges: {}, unlockedLevel: 1 };
   const m = edu.mergeEducation(local, back, { today: '2026-11-15' });
-  assert.deepEqual(m.record.counters, { gradedRuns: 4, gradeSum: 20000 });
-  assert.deepEqual(m.record.own, { runs: 3, gradeSum: 30000 }, "this device's 3 runs at 100 %, as played");
+  assert.deepEqual(m.record.counters, { gradedRuns: 3, gradeSum: 30000 }, "this device's 3 runs at 100 %, as played");
+  assert.deepEqual(m.record.history, { gradedRuns: 4, gradeSum: 20000 }, 'the longer history, shown');
 });
 
 test('a card skipped today keeps its wait when a later answer comes from the backup', () => {
@@ -253,4 +259,34 @@ test('saved() is false when storage cannot be read back (reads throw, writes wor
   box.write({ a: 1 });
   box.read();
   assert.equal(box.saved(), false);
+});
+
+// From the Checkpoint 3 audit (2026-11-15-c, AUD-047): a restore writes nothing into the counters the
+// 📚 board and the badges read, so an older client (a 0.19.x tab, or a rollback) that rewrites the record
+// and sends its raw counters still sends only this device's runs; the longer history is for display.
+test("AUD-047: an older client's write or sync after a restore sends only this device's runs (the raw record's counters are this device's)", () => {
+  const storage = fakeStorage();
+  const store = createEduStore(storage);
+  for (let i = 0; i < 2; i += 1) store.endRun(eduRunFacts({ answered: 5, right: 5 }));
+  const fromA = edu.educationBackup({ v: 2, cards: { 'ST-01': card(T0) }, recent: [], counters: { gradedRuns: 6, gradeSum: 48000 }, badges: {}, unlockedLevel: 1 }, {}, T0);
+  store.restore(edu.readEducationBackup(JSON.stringify(fromA)).backup, { today: '2026-11-15' });
+  // What 0.19.x keeps of the record (its cleanEdu knows no field added by 0.20.0), and what its sync sends.
+  const { own: _o, history: _h, ...old } = store.load();
+  const share = createEduShareStore(storage, 'flappyPoop.eduShare');
+  share.turnOn('2026-11-15T10:00:00.000+00:00', 'Sam');
+  const batch = share.beginBatch(old, () => 'O'.repeat(22));
+  assert.deepEqual([batch.runs, batch.gradeSum], [2, 20000], 'the 0.19.x path sends the raw counters: they must be this device\'s 2 runs');
+  assert.deepEqual(edu.shownCounters(store.load()), { gradedRuns: 6, gradeSum: 48000 }, 'what the player sees: the longer history');
+});
+
+test("AUD-047: restoring this device's own older backup after a broken 🤓 streak changes nothing (the streak is this device's)", () => {
+  const store = createEduStore(fakeStorage());
+  for (let i = 0; i < 9; i += 1) store.endRun(eduRunFacts({ answered: 5, right: 5 }, { full: true }));
+  assert.equal(store.load().counters.perfectStreak, 9);
+  const older = edu.readEducationBackup(JSON.stringify(edu.educationBackup(store.load(), {}, T0))).backup;
+  store.endRun(eduRunFacts({ answered: 5, right: 3 }, { full: true }));
+  assert.equal(store.load().counters.perfectStreak ?? 0, 0);
+  const r = store.restore(older, { today: '2026-11-15' });
+  assert.equal(store.load().counters.perfectStreak ?? 0, 0, 'the broken streak stays broken');
+  assert.equal(r.changed, false, 'this device\'s own older backup: nothing new');
 });

@@ -8,7 +8,7 @@ import { playScene, fakeStorage, registry } from './support/scenes.js';
 import { INVITE, freshDb, installPostgrest, asAnon, id } from './support/postgrest.js';
 import { LEADERBOARD } from '../src/config.js';
 import { createEduShareStore } from '../src/leaderboard.js';
-import { createEduStore, educationBackup, readEducationBackup } from '../src/education.js';
+import { createEduStore, educationBackup, readEducationBackup, shownCounters } from '../src/education.js';
 import { eduRunFacts } from '../src/achievements.js';
 
 const timeoutMs = LEADERBOARD.timeoutMs;
@@ -260,7 +260,8 @@ test("a restored backup's runs never reach the 📚 board: A shares 5, B (the sa
     assert.equal(r.changed, true);
     gradedRun(b, 4);
     gradedRun(b, 4);
-    assert.equal(b.eduStore.load().counters.gradedRuns, 7, "B shows A's 5 and its own 2");
+    assert.equal(shownCounters(b.eduStore.load()).gradedRuns, 7, "B shows A's 5 and its own 2");
+    assert.equal(b.eduStore.load().counters.gradedRuns, 2, "B's counters are its own 2 (AUD-047)");
     await ageEdu(db);
     await b.drainEduShare(P);
     await ageEdu(db);

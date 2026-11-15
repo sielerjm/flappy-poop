@@ -617,7 +617,9 @@ Restore takes a file or pasted text (`EDUCATION.backupMaxBytes`, 1 MB, at most) 
 (`readEducationBackup`, `mergeEducation`): only on the home screen (`Play.canRestoreEducation`); when it
 changed something, the backup's new-card order and start level where this device still has the defaults
 (`restoredSettings`); the 📚 switch never carried, nothing sent;
-restored runs never reach the 📚 board (`own`, `boardRecord`, under the share paragraph below). A
+restored runs never reach the 📚 board: a restore adds nothing to the counters the board and the badges
+read, and a longer history goes into `history`, for display only (`shownCounters`; under the share
+paragraph below). A
 restore into a browser that is not saving says it lasts for this visit only. Clear's warning adds that
 the cards go too (`saveClearNoteCards`), and the 📚 popup says the browser can erase them
 (`eduIntroKeep`). With the off switch set, the part is reachable only where the panel is (a device that
@@ -644,10 +646,13 @@ closed to all but 🔧 devs until the owner runs `admin_set_education_open(true)
 record stays the education store's; `createEduShareStore` (`flappyPoop.eduShare`) remembers the
 round of sharing the server named (`shared_at`) and what the board already has, and
 `Play.drainEduShare` (after the career in `syncLeaderboard`) sends what is new, at most 50 runs a
-batch, of the record as `boardRecord` gives it: the graded runs played on this device (`own`, set
-by a restore from a backup; plan 28, 3.1a), so restored runs never reach the board, while restored
-badges do (the server joins them and keeps the earlier day). The 📚 tab's "runs still needed" line
-reads the same count. `'restart'` (another round: sharing was stopped and started elsewhere) takes the server's
+batch, of the record as `boardRecord` gives it: its counters, the graded runs played on this device
+(plan 28, 3.1a; the Checkpoint 3 audit, AUD-047). A restore never adds runs to them: another device's
+longer history goes into the record's `history`, which only what the player sees reads
+(`shownCounters`: the profile's average and runs; the backup file). So restored runs never reach the
+board, also from a tab still running an older version or after a rollback (an older client drops
+`history` and keeps and sends the counters), while restored badges do (the server joins them and keeps
+the earlier day). The 📚 tab's "runs still needed" line reads the same count. `'restart'` (another round: sharing was stopped and started elsewhere) takes the server's
 round and sends the whole record again; `'not shared'` turns sharing off here; a rename goes through
 `rename_education`, which never adds a player. Stop sharing deletes the row and stays on until the
 server has done so. A batch resent after a lost reply is never counted twice: the server keeps each
@@ -949,24 +954,27 @@ src/
                             endRun(facts), unlock(ids, day); plan 26 A2: answer's
                             paidDay and the paid { day, ids } record, paidOn;
                             studyDay and the study { day, streak, best } record,
-                            nextStudyStreak / studyStreakNow; plan 28, 3.1a: the own
-                            { runs, gradeSum } record, this device's graded runs, set
-                            by a restore and grown by endRun, and restore(backup,
+                            nextStudyStreak / studyStreakNow; plan 28, 3.1a: the
+                            history { gradedRuns, gradeSum } record, a restore's longer
+                            history, display only (kept while longer than the counters,
+                            grown by endRun; AUD-047), and restore(backup,
                             { today }): one merge and write, { added, updated, badges,
                             changed, saved }); the backup (plan 28, 3.1a):
                             educationBackup (a fixed list of fields: cards, counters,
                             badges, unlockedLevel, study, and the eduNewOrder and
                             eduStartLevel settings; never an id, code, sharing state,
-                            invitation, consent, own, recent, paid, buried or
-                            pending), readEducationBackup (the text around the
+                            invitation, consent, recent, paid, buried or pending; its
+                            counters are shownCounters), readEducationBackup (the text around the
                             outermost { … } ignored; cleaned as the store cleans;
                             'unrecognised' / 'newer' / 'tooBig'), mergeEducation (a
                             card's later answer wins, a card skipped here today keeping
-                            its wait; the grade pair from the longer
-                            history, badges at the earlier day, the higher level,
+                            its wait; the counters this device's, revives the larger,
+                            the longer history's grade pair into history; badges at
+                            the earlier day, the higher level,
                             learning streaks joined as spans; twice changes nothing),
-                            boardRecord (what the 📚 board is sent: own's runs, or the
-                            counters', and every badge: restored runs never go),
+                            boardRecord (what the 📚 board is sent: the counters'
+                            runs, never a history, and every badge), shownCounters
+                            (what the player sees: a longer history's runs and grades),
                             restoredSettings (plan 28, 3.1b: the backup's order and
                             start level where this device has the defaults), dueCount
                             (the 📚 switch's count), cardText (zh-Hans when a card has
@@ -2428,7 +2436,9 @@ tests/                      node --test (schema.test.js, pilot.test.js, eduBoard
                             fold where one id restored the other's backup
   eduBackup.test.js         plan 28, 3.1a: the backup's fields (nothing that names the
                             player or the device), reading one back, every merge rule,
-                            own (zeros, the cap, endRun, a restore), boardRecord, the
+                            history (the cap, endRun, a restore; an older client's
+                            write and sync sending only this device's runs and the 🤓
+                            streak not restored: AUD-047), boardRecord, the
                             share store after a restore (before and after Stop then
                             Share), store.restore's summary and saved (blocked, full,
                             no storage)

@@ -9,7 +9,7 @@ import { TAG_GLYPHS } from '../leaderboard.js';
 import { t, metaFontSize, levelLabel, badgeTitle, badgeDesc, dailyDayText, eduProfileRows } from '../i18n.js';
 import { ACHIEVEMENTS, EDU_ACHIEVEMENTS, achievementById, averageGrade, openQuests, progressOf } from '../achievements.js';
 import { validateName } from '../save.js';
-import { localDayKey, studyStreakNow } from '../education.js';
+import { localDayKey, studyStreakNow, shownCounters } from '../education.js';
 
 const STYLE = { fontFamily: 'sans-serif', fontStyle: 'bold', color: '#ffffff', align: 'center' };
 const PINK = '#f8a0c8';
@@ -202,14 +202,15 @@ export class Stats extends Phaser.Scene {
    * the longest, and the highest level unlocked.
    */
   eduView(record, today = localDayKey()) {
-    const counters = record?.counters ?? {};
+    const counters = record?.counters ?? {}; // this device's: the badges' progress (🤓, 👼, 🐦‍🔥)
+    const shown = shownCounters(record); // the average and the runs: a restored longer history's (AUD-047)
     const held = record?.badges ?? {};
     const earned = Object.entries(held)
       .map(([id, at]) => ({ entry: achievementById(id, EDU_ACHIEVEMENTS), at }))
       .filter((b) => b.entry)
       .sort((a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : 0));
     const study = record?.study ?? null;
-    return { counters, grade: averageGrade(counters), runs: counters.gradedRuns ?? 0, earned, locked: EDU_ACHIEVEMENTS.filter((e) => !(e.id in held)), streak: studyStreakNow(study, today), best: study?.best ?? 0, level: record?.unlockedLevel ?? 1 };
+    return { counters, grade: averageGrade(shown), runs: shown.gradedRuns ?? 0, earned, locked: EDU_ACHIEVEMENTS.filter((e) => !(e.id in held)), streak: studyStreakNow(study, today), best: study?.best ?? 0, level: record?.unlockedLevel ?? 1 };
   }
 
   /**
