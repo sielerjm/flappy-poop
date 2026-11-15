@@ -89,7 +89,7 @@ function build() {
   const saveBtn = h('button', { type: 'button', id: 'save-save-btn' });
   const clearBtn = h('button', { type: 'button', id: 'save-clear-btn', class: 'outline' }); // sign this device out (two taps)
   const profileBtn = h('button', { type: 'button', id: 'save-profile-btn', class: 'outline' }); // this player's profile: stats and achievements (plan 08)
-  const eduBtn = h('button', { type: 'button', id: 'save-edu-btn', class: 'outline', hidden: true }); // 📚 Education data (plan 21): only while education mode is unlocked here
+  const eduBtn = h('button', { type: 'button', id: 'save-edu-btn', class: 'outline', hidden: true }); // 📚 Education data (plan 21): while education mode is available, or a consent or a share needs it (AUD-037)
   const status = h('p', { class: 'status', id: 'save-status' });
   const close = h('button', { type: 'button', class: 'close', 'aria-label': 'close' }, '✕');
 
@@ -179,12 +179,13 @@ function onEduData() {
 
 /**
  * Clear has something to clear, and Profile something to show, only while a username is stored.
- * 📚 Education data shows while education mode is available (EDUCATION.enabled).
+ * 📚 Education data shows while education mode is available (EDUCATION.enabled), and with it off,
+ * while this device has a pilot consent or shares, so Withdraw and Stop sharing stay reachable (AUD-037).
  */
 function refreshClear() {
   dom.clearBtn.disabled = !getState().name;
   dom.profileBtn.disabled = !getState().name;
-  dom.eduBtn.hidden = !ctx?.play?.educationAvailable?.();
+  dom.eduBtn.hidden = !(ctx?.play?.eduDataReachable?.() ?? ctx?.play?.educationAvailable?.());
 }
 
 function setStatus(text, kind = '') {

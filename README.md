@@ -278,7 +278,7 @@ Fork or push this repo to GitHub, enable Pages (Settings → Pages → Deploy fr
 
 - Art contract and sizes: [`assets/README.md`](assets/README.md). Player/item redraws go through `assets/src/` + `tools/process_art.py`.
 - Feel numbers live in `TUNING` in [`src/config.js`](src/config.js) — change a number, reload.
-- Education mode's off switch is `EDUCATION.enabled` in the same file: `false` hides 📚 for everyone (the home switch, its tabs, panels and notes) and keeps each player's cards on their device.
+- Education mode's off switch is `EDUCATION.enabled` in the same file: `false` hides 📚 for everyone (the home switch, its tabs, panels and notes) and keeps each player's cards on their device; a tester who joined or shares still reaches **📚 Education data** to withdraw or stop.
 - Full repo map and agent rules: [`AGENTS.md`](AGENTS.md).
 
 ### Leaderboard (self-host)

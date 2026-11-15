@@ -1584,8 +1584,17 @@ export class Play extends Phaser.Scene {
    * only while education mode is available (EDUCATION.enabled). `onClose(changed)` runs when it closes.
    */
   openEduData(opts = {}) {
-    if (!this.educationAvailable()) return;
+    if (!this.eduDataReachable()) return;
     openEduDataPanel({ game: this.game, play: this, locale: this.locale, ...opts });
+  }
+
+  /**
+   * Can this device open 📚 Education data? While education is available; and with the off switch set,
+   * still while it holds a pilot consent or shares on the 📚 board, so Withdraw and Stop sharing stay
+   * reachable (RESEARCH.md) while the mode is hidden for everyone (AUD-037).
+   */
+  eduDataReachable() {
+    return this.educationAvailable() || Boolean(this.researchConsent?.()) || Boolean(this.eduShare?.load?.().on);
   }
 
   toggleToilet() {

@@ -357,7 +357,8 @@ and the pad plugin reports a held button. Any error in the splash removes it and
 build, its playtest polish and Stage 3, "tester-complete"; the old plans 22 and 23 are merged into
 it). **For everyone since plan 28 (0.19.0):** no unlock word; every device has the 📚 switch while
 `EDUCATION.enabled` (the off switch: false hides 📚, its tab, its profile sections and Education data for
-everyone, one change and a push; `Play.educationAvailable()`, read each time, `eduAvailable` standing in
+everyone, one change and a push, except that a device holding a pilot consent or sharing still opens
+Education data, so Withdraw and Stop sharing stay reachable: `Play.eduDataReachable`, AUD-037; `Play.educationAvailable()`, read each time, `eduAvailable` standing in
 for it in tests). The old word (`EDUCATION.words`, `poopschool`) typed as a username is still never stored
 as a name: the save panel says 📚 is on the home screen for everyone (`eduWordRetired`). Turning 📚 on asks
 the browser to keep the site's storage (`navigator.storage.persist`). The ready screen offers the

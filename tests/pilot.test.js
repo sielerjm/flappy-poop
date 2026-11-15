@@ -15,7 +15,7 @@ const { createConsentStore, createResearchQueue } = await import('../src/researc
 const { mergePlayers, createMergeStore } = await import('../src/leaderboard.js');
 const { exportCode } = await import('../src/save.js');
 const { openSavePanel, closeSavePanel } = await import('../src/ui/savePanel.js');
-const { openEduDataPanel, closeEduDataPanel } = await import('../src/ui/eduDataPanel.js');
+const { openEduDataPanel, closeEduDataPanel, isEduDataPanelOpen } = await import('../src/ui/eduDataPanel.js');
 const { EDUCATION } = await import('../src/config.js');
 const { t } = await import('../src/i18n.js');
 const { CARDS } = await import('../src/questions.js');
@@ -322,6 +322,31 @@ test('Enter in the shared invite field neither joins the pilot nor shares: only 
   play.consentStore.join({ version: EDUCATION.consentVersion, phase: 'pilot', at: Date.now() });
   await enter({ invited: true, invite: 'a-code-from-a-link-2026' });
   assert.deepEqual(calls, [], 'already joined (Join hidden): no second join, which would empty the unsent answers');
+});
+
+test('with education off for everyone (the off switch), a tester who joined or shares still reaches 📚 Education data to withdraw or stop; anyone else does not (AUD-037)', () => {
+  const play = device({ id: 'OFFSWAAAAAAAAAAAAAAAAA', name: 'Tester', top: [], exportedAt: null }, fakeStorage());
+  play.educationAvailable = () => false;
+  let sharing = false;
+  play.eduShare = { load: () => ({ on: sharing }) };
+  const saveButton = () => {
+    openSavePanel({ game: {}, play, locale: 'en' });
+    const shown = !body.find('save-edu-btn').hidden;
+    closeSavePanel();
+    return shown;
+  };
+  const opens = () => {
+    play.openEduData();
+    const open = isEduDataPanelOpen();
+    closeEduDataPanel();
+    return open;
+  };
+  assert.deepEqual([opens(), saveButton()], [false, false], 'nothing held: the panel goes with the mode');
+  play.consentStore.join({ version: EDUCATION.consentVersion, phase: 'pilot', at: Date.now() });
+  assert.deepEqual([opens(), saveButton()], [true, true], 'joined: Withdraw stays reachable (RESEARCH.md)');
+  play.consentStore.clear();
+  sharing = true;
+  assert.deepEqual([opens(), saveButton()], [true, true], 'sharing: Stop sharing stays reachable');
 });
 
 test("Clear's warning names the pilot whenever this device holds a consent, an older notice's included (AUD-005)", async () => {
