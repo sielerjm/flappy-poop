@@ -1080,6 +1080,7 @@ export class Play extends Phaser.Scene {
     this.quizSkipWarned = false; // the first Skip in each break warns (plan 26, A2)
     this.gateTapped = false; // the gate's line shows only after a refused tap in this break (plan 26, A2)
     this.breakLevelPick = null; // no level chosen yet (plan 26, A2)
+    this.breakQuitArmedAt = null; // a Quit armed at the last break never carries into this one (plan 27)
     this.refreshLevelBanner();
     this.pausePlay();
     this.breakHud(true);
@@ -1124,6 +1125,7 @@ export class Play extends Phaser.Scene {
     this.applyLevelPick(); // a level chosen at this break: the run goes on from its first pair (plan 26, A2)
     this.levelBreak = false;
     this.gateTapped = false;
+    this.breakQuitArmedAt = null; // an armed Quit ends with its break (plan 27)
     this.breakHud(false);
     this.breakGlide?.stop();
     this.breakGlide = null;

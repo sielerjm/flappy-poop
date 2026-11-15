@@ -658,6 +658,31 @@ test('Quit at a break (plan 25, B8; plan 26, A2): two taps; caught up with answe
   assert.equal(eduRunFacts(newTally(), { gaveUp: true }, T).graded, false, 'a run with no answers is never graded, so nothing else moves');
 });
 
+test('an armed Quit does not carry into the next break (plan 27: a hunch of the 2026-11-15 audit): endLevelBreak and startLevelBreak disarm it, so one tap at the next break only arms it', () => {
+  let now = 1000;
+  const calls = [];
+  const s = playScene({
+    levelBreak: true, state: 'paused', runIsEducation: true, runIsTest: false, match: null, shopOpen: false, quizOpen: false, quizButton: {}, breakQuitArmedAt: null,
+    runQuiz: { ...newTally(), answered: 2, right: 2 }, time: { get now() { return now; }, delayedCall() {} },
+    quizCounts: () => ({ new: 4, missed: 0, review: 0 }), eduStore: { unlockLevel() {} }, poop: absorb(), tweens: absorb(),
+    endRun: () => calls.push('endRun'), showOver: () => calls.push('showOver'), refreshShopButton() {},
+  });
+  for (const m of ['refreshLevelBanner', 'pausePlay', 'breakHud', 'fadeBackground', 'refreshPoopLook', 'closeShop', 'applyLevel', 'armKernel', 'prefillPipes', 'refreshLevelBar']) s[m] = () => {};
+  s.breakQuitTap();
+  assert.equal(s.breakQuitArmed(), true, 'the first tap arms Quit');
+  now += 500;
+  s.endLevelBreak(); // the break continued inside the confirm time
+  assert.equal(s.breakQuitArmedAt, null, 'the break ended: disarmed');
+  s.breakQuitArmedAt = now; // armed some other way: startLevelBreak disarms it too
+  s.state = 'playing';
+  s.startLevelBreak(); // the next level cleared within the confirm time
+  assert.equal(s.breakQuitArmedAt, null, 'a break starts disarmed');
+  s.state = 'paused'; // pausePlay's (a stub here)
+  now += 500;
+  s.breakQuitTap();
+  assert.deepEqual([calls, s.breakQuitArmed(), s.levelBreak], [[], true, true], 'one tap at the next break only arms it');
+});
+
 test("the break's Quit label (plan 26, A2): Quit; armed it asks for a second tap, and says the run ends ungraded while cards are due", () => {
   const label = (due, armed) => {
     const quit = { text: null, setText(v) { this.text = v; return this; }, setVisible() { return this; } };

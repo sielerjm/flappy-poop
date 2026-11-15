@@ -505,7 +505,8 @@ event. A revive and the bonus quiz have none. **Quit**: Quit takes two taps and 
 when nothing is due and something was answered; with cards due, or with nothing answered, it counts as
 quitting the run (`breakGaveUp`: ungraded, and 🏳️ with nothing answered; plan 26, A2). It reads Quit
 either way; armed it reads "Quit? Tap again", or "Quit ungraded? Tap again" while cards are due
-(`breakQuitDueSure`). **The level choice** (plan 26, A2: Michael's image 12): once nothing is missed or due
+(`breakQuitDueSure`), and an armed Quit ends with its break (`startLevelBreak` and `endLevelBreak` clear
+`breakQuitArmedAt`; plan 27), so a level cleared within the confirm time never opens a break armed. **The level choice** (plan 26, A2: Michael's image 12): once nothing is missed or due
 (`breakGate`), never in a test run (or with test mode on) or a match, **[◀] LV n [▶]** shows right of the poop
 (`eduBreakLayout`'s `levelDown` / `levelLabel` / `levelUp`, `levelStrip` swallowing the tap; ring items `levelDown`,
 `levelUp`). ◀ ▶ cycle 1 … the higher of the next level and `unlockedLevel`, wrapping (`stepBreakLevel` →
