@@ -2088,6 +2088,7 @@ export class Play extends Phaser.Scene {
     this.pauseText?.setText(pauseTitle);
     this.pauseHint?.setText(pauseHint);
     this.refreshLevelBanner();
+    this.refreshShopButton(); // the break row: Shop, Review, Quit and the level choice's label (AUD-031)
     if (this.shopOpen) this.refreshShop();
     this.showEscapedBanner(); // a finished match half keeps its banner in the new language
     this.refreshLevelBar();

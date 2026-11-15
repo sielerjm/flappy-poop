@@ -453,7 +453,8 @@ Skip ▸ is gone); the three numbers under Review, inside its width, on a dark r
 `Play.quizCountChip`: their tap box and ring item). The shop pill is drawn once at its box
 (`createButton`), so `Play.placeShopPill` moves that same box object in place at a run's start (into the
 row for an education run, centred otherwise: the ring and the tap test hold it) and draws the pill again.
-The poop keeps its place (`levels.breakPoopY`), under the row and the chip. The **📚 Review** pill
+The poop keeps its place (`levels.breakPoopY`), under the row and the chip. A language change mid-break
+(`applyLocale`) redraws the row and the level choice's label with the banner (AUD-031). The **📚 Review** pill
 (`quizButtonShown`; chromeIntent's `'quiz'` input, only in an education run's break) opens the break's
 quiz, which asks missed cards, then due reviews (the least remembered first), then the cards missed
 in this break (`Play.breakMissed`, asked again as missed until answered right; the one just shown

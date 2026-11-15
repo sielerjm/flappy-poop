@@ -683,6 +683,33 @@ test('an armed Quit does not carry into the next break (plan 27: a hunch of the 
   assert.deepEqual([calls, s.breakQuitArmed(), s.levelBreak], [[], true, true], 'one tap at the next break only arms it');
 });
 
+test('AUD-031: a language change mid-break redraws the break row in the new language: Shop, Review, Quit and the level choice\'s label', async () => {
+  const { t, levelLabel } = await import('../src/i18n.js');
+  const text = () => ({ text: '', visible: false, setText(v) { this.text = v; return this; }, setVisible(v) { this.visible = Boolean(v); return this; }, setY() { return this; }, setScale() { return this; }, setPosition() { return this; }, setAlpha() { return this; }, pulse() { return this; } });
+  const store = createEduStore(fakeStorage());
+  store.unlockLevel(5);
+  const s = playScene({
+    eduStore: store, level: 3, levelBreak: true, state: 'paused', runIsEducation: true, runIsTest: false, match: null, registry: registry(), tune: T, locale: 'en',
+    shopOpen: false, quizOpen: false, breakGate: false, breakLevelPick: null, runSkipped: false, runTopLevel: 3, runStartLevel: 1, pipesPassed: 35,
+    quizButton: text(), quizCountLine: { ...text(), set() { return this; } }, quizCountChip: text(), breakQuitButton: text(),
+    levelPickDown: text(), levelPickUp: text(), levelPickLabel: text(), quizButtonBox: {},
+    levelTitle: text(), levelHint: text(), levelSubHint: text(), eduBreakBoxes: null, pauseText: text(), pauseHint: text(), readyTitle: text(),
+    breakQuitArmedAt: null, time: { now: 0 }, levelBar: { setLabel() {}, setProgress() {} }, eduDueText: null, bracketButton: null,
+    shopButton: text(), effects: { coins: () => 3 },
+    fadeBackground() {}, refreshProfile() {}, refreshTestBadge() {}, runIsDaily: false,
+  });
+  s.refreshLevelBanner();
+  s.refreshShopButton();
+  s.stepBreakLevel(1);
+  assert.deepEqual([s.levelPickLabel.text, s.shopButton.text, s.breakQuitButton.text], ['LV 4', t('en', 'shopPill'), t('en', 'breakQuit')]);
+  s.applyLocale('zh-Hans');
+  assert.deepEqual(
+    [s.shopButton.text, s.quizButton.text.endsWith(t('zh-Hans', 'reviewPill')), s.breakQuitButton.text, s.levelPickLabel.text],
+    [t('zh-Hans', 'shopPill'), true, t('zh-Hans', 'breakQuit'), levelLabel('zh-Hans', 4)],
+    'the row and the choice in 中文',
+  );
+});
+
 test("the break's Quit label (plan 26, A2): Quit; armed it asks for a second tap, and says the run ends ungraded while cards are due", () => {
   const label = (due, armed) => {
     const quit = { text: null, setText(v) { this.text = v; return this; }, setVisible() { return this; } };
