@@ -1583,11 +1583,13 @@ async function seedLive(db) {
   assert.equal((await asAnon(db, 'select public.submit_tournament($1, $2::jsonb) as r', [id('UpHost'), JSON.stringify(tournamentPayload(tour, id('UpTour1')))])).rows[0].r, 'ok');
   // A 📚 board player and a pilot participant, through 0.18.0's own calls (the 3-argument share): the
   // invitation's backfill and the old share's drop meet them on the upgrade (AUD-042).
+  // UpBob is a 🔧 dev first: a dev shares without an invite code on the new schema too, so the seed
+  // still runs once the fixture is db/schema.sql itself (npm run push copies it there).
+  await db.query("select public.admin_set_dev('UpBob', true)");
   await db.query('select public.admin_set_education_open(true)');
   await db.query('select public.admin_set_invite($1)', [CODE]);
   await asAnon(db, 'select public.share_education($1, $2, true)', [id('UpBob'), 'UpBob']);
   await asAnon(db, 'select public.enrol_research($1, $2, true, $3)', [id('UpPilot'), CODE, CONSENT]);
-  await db.query("select public.admin_set_dev('UpBob', true)");
 }
 
 /** Every row, and what each of the fixture's anon calls answers, with `education` (new on a profile) set aside. */
