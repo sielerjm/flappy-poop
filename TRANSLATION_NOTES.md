@@ -71,7 +71,7 @@ formal medical language.
 - **Daily Dump** (每日一拉, 🌞) = the once-a-day challenge behind the 🌞 at the top of the home screen: everyone flies the same endless course that day (赛道, at one level, 关), with one try (一次机会); a new course starts at 00:00 UTC. The name is a pun (a "dump" is a poop); 每日一拉 keeps the joke ("one poop a day"). Its popup's button reads **Create user** (创建用户, no username yet), **Play** (开始), **See today's result** (查看今日成绩) or, in test mode, **Practice** (练习: never saved). `{level}` is a level label such as "LV 5" / "第5关", `{time}` a countdown hh:mm:ss, `{day}` a short date written by the browser for the locale ("10 Nov" / "11月10日"), `{rank}` / `{total}` / `{score}` numbers; keep them verbatim. The zh body text carries explicit line breaks so the game's wrap never starts a line with punctuation.
 - **Two players** (双人模式) = the 👥 switch under the toilet toggle, offered only on a landscape screen wide enough for two halves (desktop, tablet). P1 is the left half, P2 the right; `{n}` is the player number, and `{name}` is "P1" / "P2" (versusPlayer) or, in a tournament race, the competitor's name. A crash does not end a two-player run (the poop is put back mid-screen). Levels start together: the first one over a finish line waits under **Waiting for {name}…** until the other arrives; then each player taps ready (**Tap when ready**, then **Ready! Waiting for {name}…** with a smaller **Tap again to un-ready** under it), and once both are ready a shared 3-2-1-GO starts the level as **GO!** appears (with a toilet flush). The match is decided on points once both players have cleared the last level, and the first one out waits under **Made it out!** / **Waiting for P{n}…**. Two-player runs never reach the leaderboard or the save code.
 - **Profile** (个人资料, 👤) and **achievements** (成就, 2026-11-11) = every player's public page: the save panel's 👤 Profile opens your own, a name on any board opens theirs. Sections: **Singleplayer** (单人模式), **Daily Dump** podiums (领奖台), **Tournaments** medals and **Biggest rival** (最大对手: the player they lost to most), **Career** (生涯: lifetime totals as emoji and numbers: #️⃣ pipes, 💨 farts, 🌈 super farts, 🥦 fiber, 💊 probiotics, ✨ postbiotics, 🦠 bacteria, 🫘 beans, 📦 boxes, 🟡 coins, 💀 deaths; a tap opens a card with a short note, `career*`) and **Achievements** (成就): badges (徽章) for a score or level in one run, for making it out, and lifetime milestones; some are time-limited **quests** that close on a date (`statsQuestOpen`). Badge titles are short puns, keep them playful rather than literal (e.g. 一泻千里 for Express Transit, 彩虹屁 for Rainbow Blast); the seven level badges reuse the gut-segment names. `{n}`, `{total}`, `{glyph}`, `{name}`, `{losses}`, `{meetings}`, `{day}` and `{badges}` are filled at runtime; keep them verbatim. The save panel's note now says scores, stats and achievements are all public (`saveLeaderboardNote`). Without a username a profile opens as a gate (`statsGateTitle` / `statsGateBody`) with **Create user** (创建用户, the 🌞 popup's string).
-- **Education mode** (教育模式, 📚, plan 21) = quiz cards about the gut and its microbes, asked in level breaks (for coins) and after a crash (to keep flying). Before its public release it is unlocked by typing a word as the username in the save panel (like test mode), never stored as a name; `eduUnlocked` / `eduLocked` say which way it went. The 📚 glyph is not translated. Card text lives in `src/questions.js`, not in this catalog, and is English only until a card gets its `zh` version: a zh-Hans player sees the card in English (the quiz chrome around it is translated), and a pilot event records the game's language, not the card's. The quiz card (`quiz*`) names the gut segment with the `level.*` names, or **Gut microbes** (肠道微生物) for the general cards; `{source}` is a short citation such as "Martinsen et al. 2005" and stays as is. After a crash in an education run the same card is a **revive** (复活): `revive*` lines; ❤️ are the tries left, ⭐ the streak that wins back the coins and power-ups (金币和道具); `{n}` in `reviveChoice` is a number of questions. "Tap when ready" reuses `versusTapReady`.
+- **Education mode** (教育模式, 📚, plan 21) = quiz cards about the gut and its microbes, asked in level breaks (for coins) and after a crash (to keep flying). Before its public release it is unlocked by typing a word as the username in the save panel (like test mode), never stored as a name; `eduUnlocked` / `eduLocked` say which way it went. The 📚 glyph is not translated. Card text lives in `src/questions.js`, not in this catalog; every live card has its `zh` version (plan 28, 2.1; terms in the card glossary below the items glossary), so a zh-Hans player sees the whole card in Chinese, and a pilot event's language (the game's) is the card's too. The explanation's Wikipedia links are English only: a Chinese explanation shows none, and keeps 📄 了解更多 (the paper's DOI). The quiz card (`quiz*`) names the gut segment with the `level.*` names, or **Gut microbes** (肠道微生物) for the general cards; `{source}` is a short citation such as "Martinsen et al. 2005" and stays as is. After a crash in an education run the same card is a **revive** (复活): `revive*` lines; ❤️ are the tries left, ⭐ the streak that wins back the coins and power-ups (金币和道具); `{n}` in `reviveChoice` is a number of questions. "Tap when ready" reuses `versusTapReady`.
 
 ## Glossary (items)
 
@@ -88,6 +88,40 @@ formal medical language.
 | Shop | 商店 |
 
 Keep these consistent everywhere (How to play rows, future copy).
+
+## Card glossary (quiz cards, plan 28)
+
+Every live card in `src/questions.js` has its `zh` version (2026-11-15). The cards use these terms; keep
+new and edited cards consistent with them (and with the gut segments' `level.*` names: 胃, 十二指肠, 空肠,
+回肠, 盲肠, 结肠, 直肠). Latin genus and species names stay Latin where Chinese has no common name; numbers
+keep the English card's digits (the tests check the small numbers and years), large ones in 万 / 亿.
+
+| English | Simplified Chinese |
+|---|---|
+| microbe(s); gut microbiome | 微生物；肠道微生物组 |
+| microbial community; strain; species | 微生物群落 / 菌群；菌株；物种 |
+| bacteria; archaea; fungi; viruses (in the gut); bacteriophage | 细菌；古菌；真菌；肠道里的病毒（never 肠道病毒: that is Enterovirus）；噬菌体 |
+| small intestine; large intestine; upper small intestine | 小肠；大肠；小肠上段 |
+| stomach acid; gastric juice | 胃酸；胃液 |
+| bile; bile acids; secondary bile acids; bile salt hydrolase | 胆汁；胆汁酸；次级胆汁酸；胆盐水解酶 |
+| fibre (dietary) | 膳食纤维（游戏里的道具仍是“纤维”） |
+| short-chain fatty acids; acetate, propionate, butyrate | 短链脂肪酸；乙酸、丙酸、丁酸 |
+| probiotic; prebiotic | 益生菌；益生元 |
+| mucus (inner / outer layer) | 黏液（内层 / 外层） |
+| anaerobes | 厌氧菌 |
+| fermentation; hindgut fermenter | 发酵；后肠发酵动物 |
+| Paneth cells; antimicrobial peptides; crypts | 潘氏细胞；抗菌肽；肠隐窝 |
+| Peyer's patches; IgA; lymphoid tissue | 派尔集合淋巴结；IgA；淋巴组织 |
+| ileocecal valve; ileostomy; villi | 回盲瓣；回肠造口；绒毛 |
+| fecal microbiota transplant (always this term); donor stool | 粪菌移植；供体粪便 |
+| H. pylori; C. difficile; Vibrio cholerae | 幽门螺杆菌；艰难梭菌；霍乱弧菌 |
+| Bifidobacterium; Streptococcus; Saccharomyces; Candida | 双歧杆菌；链球菌；酵母属（Saccharomyces）；念珠菌属（Candida） |
+| Methanobrevibacter smithii | 史氏甲烷短杆菌 |
+| Bacillota (Firmicutes); Bacteroidota (Bacteroidetes) | 芽孢杆菌门（Bacillota，旧名厚壁菌门）；拟杆菌门（新旧同名，so give the Latin） |
+| lactase; lactose; lactose intolerance; amylase; urease | 乳糖酶；乳糖；乳糖不耐受；淀粉酶；脲酶 |
+| human milk oligosaccharides | 母乳低聚糖 |
+| Bristol Stool Scale; stool form; transit (fast / slow) | 布里斯托大便分类法；大便性状；通过（快 / 慢） |
+| vaginal birth; caesarean birth | 顺产；剖宫产 |
 
 ## Tone
 

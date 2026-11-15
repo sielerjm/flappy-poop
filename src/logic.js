@@ -2373,3 +2373,106 @@ export function perfLines(s, mode) {
     `run ${s.frames} f · long ${s.long} (${tags}) · worst ${Math.round(s.worstMs)} ms · steps≠1 ${s.stepsOffPct.toFixed(1)} %`,
   ].join('\n');
 }
+
+// ---------------------------------------------------------------------------
+// Chinese line breaking (plan 28, 2.1). Phaser's advanced wrap breaks only at spaces and moves a long
+// run whole to the next line, so a Chinese card ("2014 年的一项研究…") left the number alone on a line.
+// The quiz card wraps its Chinese text with these first (Quiz.cjk); English is left to Phaser.
+
+const CJK_CHAR = /[\p{Script=Han}\u3000-\u303f\uff00-\uffef“”‘’…·—]/u;
+const NO_LINE_START = new Set([...'，。、；：？！）」』》”’…%,.;:?!)]}']);
+const NO_LINE_END = new Set([...'（「『《“‘([{']);
+const GLUE = new Set([...'·—']); // never a break beside these: a name's dot (巴里·马歇尔), the dash ——
+
+/**
+ * The units a line may break between: each Chinese character or full-width mark alone, a run of other
+ * characters (a Latin word, a number) whole, a space on its own (a break point, dropped at a line's
+ * edge). A closing mark joins the unit before it (a space between them too), an opening mark the unit
+ * after it, and a glue mark (·, —) both, so no line starts with "，" or ends with "“", and neither a
+ * name's dot nor a dash is split from its neighbours. The units joined give the text back unchanged.
+ */
+export function cjkUnits(text) {
+  const raw = [];
+  let run = '';
+  const flush = () => {
+    if (run) raw.push(run);
+    run = '';
+  };
+  for (const ch of String(text)) {
+    if (ch === ' ') {
+      flush();
+      raw.push(' ');
+    } else if (CJK_CHAR.test(ch)) {
+      flush();
+      raw.push(ch);
+    } else {
+      run += ch;
+    }
+  }
+  flush();
+  const units = [];
+  let open = ''; // opening marks (and spaces after them) waiting for the next unit
+  let glued = false; // the last unit ended with a glue mark: the next one joins it
+  const last = () => units[units.length - 1];
+  for (const u of raw) {
+    if (open) {
+      if (u === ' ' || [...u].every((ch) => NO_LINE_END.has(ch))) open += u;
+      else {
+        units.push(open + u);
+        open = '';
+      }
+      continue;
+    }
+    if (u === ' ') {
+      units.push(' ');
+      glued = false;
+    } else if ([...u].every((ch) => NO_LINE_END.has(ch))) {
+      if (glued && units.length) {
+        units[units.length - 1] += u;
+        glued = false;
+      } else open = u;
+    } else if (GLUE.has(u) && units.length) {
+      if (last() === ' ' && units.length > 1) units.splice(-2, 2, units[units.length - 2] + ' ' + u);
+      else units[units.length - 1] += u;
+      glued = true;
+    } else if ((glued || NO_LINE_START.has([...u][0])) && units.length) {
+      if (last() === ' ' && units.length > 1) units.splice(-2, 2, units[units.length - 2] + ' ' + u);
+      else units[units.length - 1] += u;
+      glued = GLUE.has([...u].pop());
+    } else {
+      units.push(u);
+      glued = GLUE.has(u);
+    }
+  }
+  if (open) units.push(open);
+  return units;
+}
+
+/**
+ * The text broken into lines no wider than maxWidth (measure(s) gives px), breaking between cjkUnits; a
+ * unit wider than the line stands alone. Explicit line breaks are kept. Pure: the quiz passes a measure
+ * on its Text's canvas.
+ */
+export function wrapCjk(text, maxWidth, measure) {
+  const out = [];
+  for (const para of String(text).split('\n')) {
+    let line = '';
+    let space = false;
+    for (const u of cjkUnits(para)) {
+      if (u === ' ') {
+        space = line !== '';
+        continue;
+      }
+      const next = line + (space ? ' ' : '') + u;
+      if (line === '' || measure(next) <= maxWidth) {
+        line = next;
+      } else {
+        out.push(line);
+        line = u;
+      }
+      space = false;
+    }
+    out.push(line);
+  }
+  return out;
+}

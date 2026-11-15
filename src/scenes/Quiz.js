@@ -1,5 +1,5 @@
 import { GAME_HEIGHT, LEVELS, TUNING as T } from '../config.js';
-import { canRestart, chromeIntent, fitScale, issueUrl, openExternalUrl } from '../logic.js';
+import { canRestart, chromeIntent, fitScale, issueUrl, openExternalUrl, wrapCjk } from '../logic.js';
 import { createFocus, pressable } from '../ui/focus.js';
 import { createGlow, createRectGlow } from '../ui/glow.js';
 import { createCountLine } from '../ui/countLine.js';
@@ -21,6 +21,17 @@ const MUTED = { ...STYLE, fontStyle: 'normal', color: '#c9b8dc' };
  */
 const PANEL = { width: 640, height: 1160 };
 const TEXT_W = 560;
+/**
+ * Every wrapped Text on the card wraps through this (wordWrap.callback; plan 28, 2.1): text with Chinese in
+ * it is broken by wrapCjk (between characters, a number or Latin word whole, no line starting with "，"),
+ * since Phaser's advanced wrap breaks only at spaces and left a number alone on its line; other text gets
+ * Phaser's own advanced wrap, as before. Phaser syncs the font before it calls this.
+ */
+export function cjkWrap(text, obj) {
+  const width = obj.style.wordWrapWidth;
+  if (!/\p{Script=Han}/u.test(text)) return obj.advancedWordWrap(text, obj.context, width);
+  return wrapCjk(text, width, (s) => obj.context.measureText(s).width);
+}
 const OPTION_MIN_H = 92;
 const BUTTON = { width: 250, height: 88 };
 const WIDE_BUTTON = 540; // the top button (Why): edge to edge with the bottom row (two 250 px buttons, 40 px apart)
@@ -118,7 +129,7 @@ export class Quiz extends Phaser.Scene {
     this.purseGlow = createGlow(this, cx, this.top, { key: 'purse-glow', radius: glowSpec.radiusPx, fadeFrac: glowSpec.fadeFrac }).setTint(glowSpec.color).setAlpha(0);
 
     // The header sits under the corner row (the id on the left, ❤️ / ⭐ or ✕ on the right); the question follows it.
-    this.header = this.add.text(cx, this.top + 54, '', { ...STYLE, fontSize: '34px', color: '#f8a0c8', wordWrap: { width: TEXT_W - 40, useAdvancedWrap: true } }).setOrigin(0.5, 0);
+    this.header = this.add.text(cx, this.top + 54, '', { ...STYLE, fontSize: '34px', color: '#f8a0c8', wordWrap: { width: TEXT_W - 40, useAdvancedWrap: true, callback: cjkWrap } }).setOrigin(0.5, 0);
     // The card's id (and in a revive its segment), small in the corner, so a tester can name a card
     // that is wrong; it ends in 🚩 and its row is a link to the card report (openReport). The link
     // opens on the release: a touch's press does not let a browser open a tab, its release does.
@@ -149,21 +160,21 @@ export class Quiz extends Phaser.Scene {
       .on('pointerup', (pointer) => {
         if (!this.tapLocked(pointer)) this.toggleRunCard();
       });
-    this.question = this.add.text(cx, this.top + 112, '', { ...STYLE, fontSize: '32px', lineSpacing: 6, wordWrap: { width: TEXT_W, useAdvancedWrap: true } }).setOrigin(0.5, 0);
+    this.question = this.add.text(cx, this.top + 112, '', { ...STYLE, fontSize: '32px', lineSpacing: 6, wordWrap: { width: TEXT_W, useAdvancedWrap: true, callback: cjkWrap } }).setOrigin(0.5, 0);
     this.options = [0, 1, 2].map((i) => this.makeOption(i));
-    this.verdict = this.add.text(cx, 0, '', { ...STYLE, fontSize: '32px', wordWrap: { width: TEXT_W, useAdvancedWrap: true } }).setOrigin(0.5, 0);
+    this.verdict = this.add.text(cx, 0, '', { ...STYLE, fontSize: '32px', wordWrap: { width: TEXT_W, useAdvancedWrap: true, callback: cjkWrap } }).setOrigin(0.5, 0);
     // The corn kernel after "Right! +1" (say): coins are drawn as the kernel, as in the HUD and the shop.
     this.verdictCoin = this.add.image(cx, 0, 'coin', 0).setDisplaySize(COIN_PX, COIN_PX).setVisible(false);
     // In the kernel's place, a right answer that paid nothing because the card paid today says so
     // (plan 26, A2): small and muted, on the verdict's row, so the card grows no taller.
     this.paidNote = this.add.text(cx, 0, '', { ...MUTED, fontSize: '24px' }).setOrigin(0.5).setVisible(false);
     // When the card comes back (plan 26, as Anki shows it): "Next review: in 2 days" under the verdict.
-    this.nextWait = this.add.text(cx, 0, '', { ...MUTED, fontSize: '24px', wordWrap: { width: TEXT_W, useAdvancedWrap: true } }).setOrigin(0.5, 0).setVisible(false);
+    this.nextWait = this.add.text(cx, 0, '', { ...MUTED, fontSize: '24px', wordWrap: { width: TEXT_W, useAdvancedWrap: true, callback: cjkWrap } }).setOrigin(0.5, 0).setVisible(false);
     // A revive's ⭐ choice says how it works on a line of its own (plan 26, A2: it used the explanation's
     // text, so Why could not show there; Michael's image 8). The explanation opens under it.
-    this.choiceLine = this.add.text(cx, 0, '', { ...MUTED, fontSize: `${CHOICE_PX}px`, wordWrap: { width: TEXT_W, useAdvancedWrap: true } }).setOrigin(0.5, 0).setVisible(false);
-    this.explain = this.add.text(cx, 0, '', { ...MUTED, fontSize: '26px', lineSpacing: 4, wordWrap: { width: TEXT_W, useAdvancedWrap: true } }).setOrigin(0.5, 0);
-    this.source = this.add.text(cx, 0, '', { ...MUTED, fontSize: '20px', fontStyle: 'italic', wordWrap: { width: TEXT_W, useAdvancedWrap: true } }).setOrigin(0.5, 0);
+    this.choiceLine = this.add.text(cx, 0, '', { ...MUTED, fontSize: `${CHOICE_PX}px`, wordWrap: { width: TEXT_W, useAdvancedWrap: true, callback: cjkWrap } }).setOrigin(0.5, 0).setVisible(false);
+    this.explain = this.add.text(cx, 0, '', { ...MUTED, fontSize: '26px', lineSpacing: 4, wordWrap: { width: TEXT_W, useAdvancedWrap: true, callback: cjkWrap } }).setOrigin(0.5, 0);
+    this.source = this.add.text(cx, 0, '', { ...MUTED, fontSize: '20px', fontStyle: 'italic', wordWrap: { width: TEXT_W, useAdvancedWrap: true, callback: cjkWrap } }).setOrigin(0.5, 0);
     // The explanation's links (plan 26): when it holds a linked term, the explanation is drawn word by
     // word (richText's layoutRich) in richBox, each link underlined in LINK with a tap box over it that
     // opens Wikipedia in a new tab; "📄 Learn more 🔗" under it opens the card's first reference. All of
@@ -364,7 +375,7 @@ export class Quiz extends Phaser.Scene {
   /** One option: a rounded box (redrawn per state), its wrapped text, and a zone for taps and the ring. */
   makeOption(i) {
     const g = this.add.graphics();
-    const text = this.add.text(this.cx, 0, '', { ...STYLE, fontSize: '28px', lineSpacing: 4, wordWrap: { width: TEXT_W - 96, useAdvancedWrap: true } }).setOrigin(0.5);
+    const text = this.add.text(this.cx, 0, '', { ...STYLE, fontSize: '28px', lineSpacing: 4, wordWrap: { width: TEXT_W - 96, useAdvancedWrap: true, callback: cjkWrap } }).setOrigin(0.5);
     // ✓ / ✗ after the answer, in the box's left margin (so the label never re-wraps).
     const mark = this.add.text(this.cx - TEXT_W / 2 + 28, 0, '', { ...STYLE, fontSize: '32px' }).setOrigin(0.5);
     const zone = this.add
@@ -397,7 +408,7 @@ export class Quiz extends Phaser.Scene {
     g.fillRoundedRect(x - width / 2, y - BUTTON.height / 2, width, BUTTON.height, 18);
     g.lineStyle(4, 0xe85e96, 1);
     g.strokeRoundedRect(x - width / 2, y - BUTTON.height / 2, width, BUTTON.height, 18);
-    const text = this.add.text(x, y, '', { ...STYLE, fontSize: '30px', color: '#f8a0c8', wordWrap: { width: width - 16, useAdvancedWrap: true } }).setOrigin(0.5);
+    const text = this.add.text(x, y, '', { ...STYLE, fontSize: '30px', color: '#f8a0c8', wordWrap: { width: width - 16, useAdvancedWrap: true, callback: cjkWrap } }).setOrigin(0.5);
     const button = {
       g,
       text,

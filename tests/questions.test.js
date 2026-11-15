@@ -49,13 +49,44 @@ test('card text fits the quiz panel: question, options and explanation under the
   }
 });
 
-test('a Chinese version, where there is one, has every field', (t) => {
-  const translated = CARDS.filter((x) => x.zh);
-  // Say so rather than pass on an empty loop: no card has a Chinese version yet (plan 24, AUD-024).
-  if (translated.length === 0) return t.skip('no card has a Chinese version yet');
-  for (const c of translated) {
-    for (const f of ['q', 'answer', 'explain']) assert.ok(typeof c.zh[f] === 'string' && c.zh[f].length > 0, `${c.id}: zh.${f}`);
-    assert.ok(Array.isArray(c.zh.wrong) && c.zh.wrong.length === 2, `${c.id}: zh.wrong`);
+// Chinese text (plan 28, 2.1): about half the English limits, since a Chinese character is about two
+// Latin letters wide; the smoke's education-quiz section lays every card out in zh-Hans too.
+const ZH_LIMITS = { q: 60, option: 36, explain: 90 };
+// The numbers a Chinese field must keep: the English field's digit numbers under 1,000 and its years,
+// unless a scale word follows (Chinese counts "3.3 million" as 330 万). Thousands separators ignored.
+function keptNumbers(english) {
+  const out = [];
+  for (const m of english.replace(/(?<=\d),(?=\d{3})/g, '').matchAll(/\d+(?:\.\d+)?(?!\d)(\s*(?:million|billion|trillion))?/g)) {
+    const n = Number(m[0].match(/^[\d.]+/)[0]);
+    if (!m[1] && (n < 1000 || (n >= 1900 && n <= 2099))) out.push(n);
+  }
+  return out;
+}
+const zhNumbers = (s) => [...s.replace(/(?<=\d),(?=\d{3})/g, '').matchAll(/\d+(?:\.\d+)?/g)].map((m) => Number(m[0]));
+
+test('every live card has a Chinese version (plan 28, 2.1): every field, trimmed, three different options, under the Chinese limits', () => {
+  for (const c of CARDS.filter((x) => x.zh || !x.retired)) {
+    // Every live card, and a retired one that has a Chinese version (old answers still show it).
+    assert.ok(c.zh && typeof c.zh === 'object', `${c.id}: no zh`);
+    for (const f of ['q', 'answer', 'explain']) assert.ok(typeof c.zh[f] === 'string' && c.zh[f].length > 0 && c.zh[f].trim() === c.zh[f], `${c.id}: zh.${f}`);
+    assert.ok(Array.isArray(c.zh.wrong) && c.zh.wrong.length === 2 && c.zh.wrong.every((w) => typeof w === 'string' && w.length > 0 && w.trim() === w), `${c.id}: zh.wrong`);
+    assert.equal(new Set([c.zh.answer, ...c.zh.wrong]).size, 3, `${c.id}: the three Chinese options must differ`);
+    assert.deepEqual(Object.keys(c.zh).sort(), ['answer', 'explain', 'q', 'wrong'], `${c.id}: zh has only q, answer, wrong, explain`);
+    assert.ok(c.zh.q.length <= ZH_LIMITS.q, `${c.id}: zh question ${c.zh.q.length} chars > ${ZH_LIMITS.q}`);
+    for (const o of [c.zh.answer, ...c.zh.wrong]) assert.ok(o.length <= ZH_LIMITS.option, `${c.id}: zh option "${o}" ${o.length} chars > ${ZH_LIMITS.option}`);
+    assert.ok(c.zh.explain.length <= ZH_LIMITS.explain, `${c.id}: zh explanation ${c.zh.explain.length} chars > ${ZH_LIMITS.explain}`);
+  }
+});
+
+test('a Chinese card keeps its numbers (plan 28, 2.1): every small number and year of each English field is in its Chinese field', () => {
+  assert.deepEqual(keptNumbers('About 10 to 1,000, in 2014, pH 1.5, roughly 3.3 million genes and 38 trillion bacteria, 95% of them'), [10, 2014, 1.5, 95], 'the rule itself: 1,000 and the scaled numbers are free');
+  assert.deepEqual([keptNumbers('1,000,000 cells, 12 kinds'), zhNumbers('100 万个细胞，12 种')], [[12], [100, 12]], 'two thousands separators collapse whole');
+  for (const c of live) {
+    const pairs = [['q', c.q, c.zh.q], ['answer', c.answer, c.zh.answer], ['wrong 1', c.wrong[0], c.zh.wrong[0]], ['wrong 2', c.wrong[1], c.zh.wrong[1]], ['explain', c.explain, c.zh.explain]];
+    for (const [f, en, zh] of pairs) {
+      const have = zhNumbers(zh);
+      for (const n of keptNumbers(en)) assert.ok(have.includes(n), `${c.id}: ${f} drops ${n} ("${en}" → "${zh}")`);
+    }
   }
 });
 

@@ -423,7 +423,7 @@ clear: its quizzes walk the level's deck in id order instead (`pickCard` context
 shown are kept for the page load in the registry's `testQuizShown`), so skipping to a level shows that
 level's cards. **The quiz card** (`scenes/Quiz.js`, overlay id `quiz`): Play owns the cards (`quizNext`
 → `pickCard`, `quizAnswer` → `gradeFor` / `schedule` / `eduStore`), the scene only shows them: three
-options (tap, keys 1–3, the ring: for `retryLockoutMs` after the quiz moves the ring itself, on a card, an answer or
+options (every wrapped Text on the card wraps through `cjkWrap`, its wordWrap.callback: text with Chinese by `wrapCjk`, the rest by Phaser's advanced wrap, which breaks only at spaces; plan 28, 2.1; tap, keys 1–3, the ring: for `retryLockoutMs` after the quiz moves the ring itself, on a card, an answer or
 "caught up", an A does nothing, `ringLocked` / `padItem`, so a quick double A never lands on what the ring jumped to;
 plan 28, 1.4), ✓ / ✗, the verdict, under it when the card comes back ("Next review: in 2
 days", "Next review: again soon" after a miss: `nextWaitText`, `Quiz.showNextWait`, from `quizAnswer`'s
@@ -756,7 +756,8 @@ src/
                             respawn (crashMs, glideMs,
                             blinkMs, blinkCycles, blinkAlpha).
                             Pure data, Node-safe.
-  logic.js                  Pure functions, NO Phaser/DOM: field (fieldWidth,
+  logic.js                  Pure functions, NO Phaser/DOM: Chinese line breaking
+                            (cjkUnits, wrapCjk; plan 28, 2.1), field (fieldWidth,
                             uiColumn, poopX, pipeLeadPx, pipeLead, prefillPairs,
                             sweepOffset;
                             trayLayout /
@@ -919,7 +920,10 @@ src/
   questions.js              Education mode's question bank (plan 21), NO
                             Phaser/DOM: DECKS (the LEVELS keys, then 'general'),
                             CARDS ({ id, deck, q, answer, wrong: [w1, w2], explain,
-                            refs, retired?, zh? }; ids permanent, a wrong card is
+                            refs, retired?, zh }; every live card has its zh
+                            { q, answer, wrong, explain } since plan 28 (2.1; terms in
+                            TRANSLATION_NOTES' card glossary; zh is outside the audit
+                            hash); ids permanent, a wrong card is
                             retired, never deleted), REFERENCES (numbered sources);
                             plan 26: CARD_LINKS (card id → 1–3 { term, title }: the
                             explanation's Wikipedia words) and REFERENCE_DOIS (number
@@ -2253,9 +2257,13 @@ tests/                      node --test (schema.test.js, pilot.test.js, eduBoard
                             skipUntil on the fall-back, spring and a normal day,
                             and Play's Skip on the fall-back day (AUD-029); pay once
                             a day across a local midnight inside one break (AUD-035)
+  cjkWrap.test.js           cjkUnits / wrapCjk (plan 28, 2.1): Chinese breaks between characters, a
+                            number or Latin word whole, no line starting with "，" or ending with "“", a
+                            name's dot and a dash never split, the text kept whole; Quiz's cjkWrap callback.
   questions.test.js         src/questions.js: decks, ids, a question and three
-                            different options per card, text limits, complete zh versions (skipped while no
-                            card has one), references cited and existing, enough live
+                            different options per card, text limits, a complete zh version on every live
+                            card (trimmed, three different options, the Chinese limits, the small numbers
+                            and years kept; plan 28), references cited and existing, enough live
                             cards per deck; plan 26: CARD_LINKS (1–3 per live card,
                             every term linked in its explanation, Wikipedia URLs)
                             and REFERENCE_DOIS (DOI shape, known references, Learn
