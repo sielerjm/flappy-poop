@@ -1,7 +1,7 @@
 import { GAME_HEIGHT, LEVELS, TUNING as T } from '../config.js';
 import { canRestart, chromeIntent, fitScale, issueUrl, openExternalUrl } from '../logic.js';
 import { createFocus, pressable } from '../ui/focus.js';
-import { createRectGlow } from '../ui/glow.js';
+import { createGlow, createRectGlow } from '../ui/glow.js';
 import { createCountLine } from '../ui/countLine.js';
 import { createInfoCard } from '../ui/infoCard.js';
 import { isTopOverlay } from '../ui/overlayStack.js';
@@ -112,6 +112,10 @@ export class Quiz extends Phaser.Scene {
     // The dimmer swallows taps; a tap outside the card does nothing (a stray tap must not lose the card).
     this.add.rectangle(cx, cy, W, GAME_HEIGHT, 0x000000, 0.6).setInteractive();
     this.add.rectangle(cx, cy, PANEL.width, PANEL.height, 0x1a0b14, 0.97).setStrokeStyle(8, 0xe85e96);
+    // The glow behind the purse (under the ✕, placed below): drawn first, so the header, the ✕ and the purse
+    // sit on it. Off at alpha 0; it lights when a right answer pays and fades out (plan 28, 1.2: glowPurse).
+    const glowSpec = T.education.purseGlow;
+    this.purseGlow = createGlow(this, cx, this.top, { key: 'purse-glow', radius: glowSpec.radiusPx, fadeFrac: glowSpec.fadeFrac }).setTint(glowSpec.color).setAlpha(0);
 
     // The header sits under the corner row (the id on the left, ❤️ / ⭐ or ✕ on the right); the question follows it.
     this.header = this.add.text(cx, this.top + 54, '', { ...STYLE, fontSize: '34px', color: '#f8a0c8', wordWrap: { width: TEXT_W - 40, useAdvancedWrap: true } }).setOrigin(0.5, 0);
@@ -705,12 +709,30 @@ export class Quiz extends Phaser.Scene {
     const n = shown ? this.play.effects.coins() : null;
     this.purseText.setText(shown ? String(n) : '').setVisible(shown);
     this.purseCoin.setX(this.purseText.x - this.purseText.width - 6 - PURSE_PX / 2).setVisible(shown);
+    if (!shown) {
+      this.tweens.killTweensOf(this.purseGlow);
+      this.purseGlow.setAlpha(0);
+    }
     if (shown && this.purseShown !== null && n > this.purseShown) {
       this.tweens.killTweensOf([this.purseText, this.purseCoin]);
       this.purseText.setScale(1.3);
       this.tweens.add({ targets: this.purseText, scale: 1, duration: 220, ease: 'Back.Out' });
+      this.glowPurse();
     }
     this.purseShown = n;
+  }
+
+  /**
+   * The purse grew (a right answer paid): the glow behind it lights at its peak and fades to alpha 0
+   * (plan 28, 1.2: Michael's 15 Nov note), centred between the kernel's left edge and the number's
+   * right edge, which moves as the number grows. A second payment cuts the first fade short.
+   */
+  glowPurse() {
+    const glow = this.purseGlow;
+    const G = T.education.purseGlow;
+    this.tweens.killTweensOf(glow);
+    glow.setPosition((this.purseCoin.x - PURSE_PX / 2 + this.purseText.x) / 2, this.purseCoin.y).setAlpha(G.peakAlpha);
+    this.tweens.add({ targets: glow, alpha: 0, duration: G.fadeMs, ease: 'Sine.easeIn' });
   }
 
   /** A revive's ❤️ (tries left, then used) or ⭐ (the streak so far); nothing in a break. */

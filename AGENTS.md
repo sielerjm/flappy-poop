@@ -442,7 +442,8 @@ the choice's Fly on in a revive), then the numbers on the card's bottom row. **C
 nothing counted left, a break's or the bonus quiz stops at the first practice card: "You're all
 caught up!" with End Review and **Keep practicing** (`Quiz.practicing`: practice cards from then on,
 leaving the schedule alone, and paying as any card does: once a day); with nothing at all, End Review alone. **The purse**
-(plan 26): in a break, "🌽 n" under the ✕ (`refreshPurse`), popping as right answers pay. Enter /
+(plan 26): in a break, "🌽 n" under the ✕ (`refreshPurse`), popping as right answers pay, with a soft glow behind it that lights at
+each payment and fades out (`glowPurse`, `TUNING.education.purseGlow`; plan 28, 1.2: never for a purse that stays or shrinks). Enter /
 Space press only the way forward (and End Review on "All caught up" when it is alone), never Quit,
 and nothing on an open card (so never Skip): Space is the flap key. **Its sounds**: a book opens with the
 quiz (`book-open`), a page turns for each next card (`book-flip`), the book shuts when it is left

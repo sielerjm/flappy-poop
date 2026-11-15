@@ -4246,12 +4246,18 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await evaluate(`${Q}.next(), true`);
         await sleep(200);
         const c0 = await evaluate(`${play}.effects.coins()`);
-        await evaluate(`(() => { const q = ${Q}; q.options[q.order.indexOf('answer')].zone.emit('pointerdown'); return true; })()`);
+        // The glow behind the purse (plan 28, 1.2) is read in the same task as the answer: its fade is short.
+        const glowOn = await evaluate(`(() => { const q = ${Q}; q.options[q.order.indexOf('answer')].zone.emit('pointerdown'); const g = q.purseGlow; return JSON.stringify({ alpha: g.alpha, x: g.x, y: g.y, coinX: q.purseCoin.x, textX: q.purseText.x, coinY: q.purseCoin.y }); })()`).then(JSON.parse);
         await sleep(200);
         const c1 = await evaluate(`${play}.effects.coins()`);
         const qr = await quizNow();
         const rightWant = (await tx('quizRightCoins')).replace('{n}', String(TT.education.breakCoins));
         ok(c1 - c0 === TT.education.breakCoins && qr.verdict === rightWant && qr.kernel && qr.kernelAfter, `a right answer pays ${c1 - c0} coin (${c0} → ${c1}) and says "${qr.verdict}" with the kernel after it`);
+        // The glow behind the purse (plan 28, 1.2: Michael's 15 Nov note): lit by the payment, then faded out.
+        ok(glowOn.alpha === TT.education.purseGlow.peakAlpha && glowOn.x >= glowOn.coinX - 15 && glowOn.x < glowOn.textX && glowOn.y === glowOn.coinY, `the payment lights the glow behind the purse (alpha ${glowOn.alpha} at x ${Math.round(glowOn.x)}, between the kernel's left edge and the number)`);
+        let glowLeft = await evaluate(`${Q}.purseGlow.alpha`);
+        for (let i = 0; i < 40 && glowLeft > 0; i += 1) { await sleep(100); glowLeft = await evaluate(`${Q}.purseGlow.alpha`); }
+        ok(glowLeft === 0, `and it fades out (polled; its fade is ${TT.education.purseGlow.fadeMs} ms)`);
         const waitRight = await waitLine();
         ok(waitRight.visible && /^Next review: in \d+ days?$/.test(waitRight.text), `and when the card comes back: "${waitRight.text}" (whole days, at least one)`);
         await evaluate(`${Q}.next(), true`);
@@ -4259,6 +4265,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await evaluate(`(() => { const q = ${Q}; q.options[q.order.findIndex((k) => k !== 'answer')].zone.emit('pointerdown'); return true; })()`);
         await sleep(200);
         ok((await evaluate(`${play}.effects.coins()`)) === c1 && !(await quizNow()).kernel, 'a wrong answer pays nothing and shows no kernel');
+        ok((await evaluate(`${Q}.purseGlow.alpha`)) === 0, 'and lights no glow (plan 28, 1.2)');
 
         // Every card in the bank, answered wrong with its explanation and source showing, fits the card.
         const fit = await evaluate(`import('./src/questions.js').then(({ CARDS }) => { const q = ${Q}; const bad = []; for (const c of CARDS) { for (const right of [false, true]) { const f = q.preview(c, right); if (!f.ok) bad.push(c.id + (right ? ' right:' : ' wrong:') + Math.round(f.below) + '>' + Math.round(f.buttonsTop)); } } return JSON.stringify({ n: CARDS.length, bad }); })`).then(JSON.parse);

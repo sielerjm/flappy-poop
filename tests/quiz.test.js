@@ -159,7 +159,8 @@ test('the purse under the ✕ (plan 26): a break shows the coins held and pops w
   const coin = { x: 0, visible: false, setX(v) { this.x = v; return this; }, setVisible(v) { this.visible = v; return this; } };
   let coins = 4;
   const tweened = [];
-  const q = quizScene({ mode: 'break', purseText: text, purseCoin: coin, purseShown: null, play: { effects: { coins: () => coins } }, tweens: { killTweensOf() {}, add: (cfg) => tweened.push(cfg) } });
+  const glowStub = { setPosition() { return this; }, setAlpha() { return this; } };
+  const q = quizScene({ mode: 'break', purseText: text, purseCoin: coin, purseGlow: glowStub, purseShown: null, play: { effects: { coins: () => coins } }, tweens: { killTweensOf() {}, add: (cfg) => cfg.targets === text && tweened.push(cfg) } });
   q.refreshPurse();
   assert.deepEqual([text.visible, text.text, coin.visible, tweened.length], [true, '4', true, 0], 'the purse shows, no pop at first');
   assert.ok(coin.x < text.x - text.width, 'the kernel sits left of the number');
@@ -174,6 +175,43 @@ test('the purse under the ✕ (plan 26): a break shows the coins held and pops w
     q.refreshPurse();
     assert.deepEqual([text.visible, coin.visible], [false, false], mode);
   }
+});
+
+test("a glow behind the corn when a right answer pays (plan 28, 1.2: Michael's 15 Nov note): it lights at its peak behind the purse and fades to nothing; a purse that stays or shrinks (a Skip) lights nothing; a revive or the bonus quiz puts it out", () => {
+  const G = TUNING.education.purseGlow;
+  const text = { x: 600, width: 20, text: '', visible: false, scale: 1, setText(v) { this.text = v; return this; }, setVisible(v) { this.visible = v; return this; }, setScale(v) { this.scale = v; return this; }, setX(v) { this.x = v; return this; } };
+  const coin = { x: 0, y: 140, visible: false, setX(v) { this.x = v; return this; }, setVisible(v) { this.visible = v; return this; } };
+  const glow = { x: 0, y: 0, alpha: 0, setPosition(x, y) { this.x = x; this.y = y; return this; }, setAlpha(v) { this.alpha = v; return this; } };
+  let coins = 4;
+  const tweened = [];
+  const killed = [];
+  const q = quizScene({ mode: 'break', purseText: text, purseCoin: coin, purseGlow: glow, purseShown: null, play: { effects: { coins: () => coins } }, tweens: { killTweensOf: (o) => killed.push(o), add: (cfg) => tweened.push(cfg) } });
+  const glowTweens = () => tweened.filter((c) => c.targets === glow);
+  const kills = () => killed.filter((o) => o === glow).length;
+  q.refreshPurse();
+  assert.deepEqual([glow.alpha, glowTweens().length], [0, 0], 'the first sight of the purse: no glow');
+  coins = 5;
+  q.refreshPurse();
+  const [fade] = glowTweens();
+  assert.equal(glow.alpha, G.peakAlpha, 'a coin paid: the glow lights at its peak');
+  assert.ok(fade && fade.alpha === 0 && fade.duration === G.fadeMs, 'and fades to nothing over fadeMs');
+  assert.ok(glow.x < text.x && glow.x >= coin.x - 15 && glow.y === coin.y, `centred between the kernel and the number (x ${glow.x}, y ${glow.y})`);
+  assert.equal(kills(), 1);
+  coins = 5;
+  q.refreshPurse();
+  coins = 2;
+  q.refreshPurse();
+  assert.deepEqual([glowTweens().length, kills()], [1, 1], 'the same purse, then a Skip that spends: no glow, nothing touched');
+  coins = 3;
+  q.refreshPurse();
+  assert.deepEqual([glowTweens().length, kills(), glow.alpha], [2, 2, G.peakAlpha], 'paid again: the last fade cut short, lit again');
+  for (const mode of ['revive', 'bonus']) {
+    q.mode = mode;
+    glow.alpha = 0.3; // mid-fade
+    q.refreshPurse();
+    assert.equal(glow.alpha, 0, `${mode}: put out, its fade stopped`);
+  }
+  assert.equal(kills(), 4);
 });
 
 test("a revive's Quit warns on every card: the first press shows the warning, arms the button and holds it; the second press quits; the next card's Quit starts unarmed (plan 26, A2)", () => {
