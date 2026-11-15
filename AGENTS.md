@@ -2003,7 +2003,18 @@ db/schema.sql               Supabase schema: scores table (player_id = save-code
                             the server unused: tags show on profiles only); admin_set_dev (owner only, by name); 👑 dethroned
                             (add_server_counter from submit_score / submit_daily_score
                             when a post takes the board's #1 from another player),
-                            refused in a client batch. Plan 21 (2026-11-13): the 📚
+                            refused in a client batch. Plan 30: the 🏆 level is 1 to
+                            TUNING.levels.lastLevel (submit_score, the CHECK; the
+                            client caps too, levelOf); achievement_catalog()
+                            (internal, = the ACHIEVEMENTS ids) gates
+                            claim_achievements; owner-only admin_flag_player /
+                            admin_unflag_player / admin_flagged hide a player
+                            (scores.hidden, no anon grant, read by anon_read;
+                            player_meta.hidden_at, hidden_note; player_hidden()
+                            internal): every board, count and lookup by name leaves
+                            them out for everyone else, their own views (by id,
+                            and each board's caller row) stay as they were, a merge
+                            keeps them hidden, nothing is deleted. Plan 21 (2026-11-13): the 📚
                             board (education_settings: board_open, invite_hash,
                             phase; education_public: one row per sharing player;
                             share_education (by invitation since plan 28: p_invite,
@@ -2816,10 +2827,15 @@ Commits follow `type(scope): summary` (`feat`, `fix`, `docs`, `chore`, `test`, `
 - Backend change → edit `db/schema.sql`, `npm run schema:stamp`, list a new anon
   function and its undo line in the file's header, run it by hand in the Supabase
   SQL editor before `npm run push` (which checks), keep `LEADERBOARD.maxScore` and
-  the schema's score cap in step.
+  the schema's score cap in step, and `TUNING.levels.lastLevel` and the 🏆 level cap
+  (1 to 7) too (tests/leaderboard.test.js checks both).
 - New achievement → one `ACHIEVEMENTS` entry in `src/achievements.js` (a new,
   permanent id) and its title (and, if no template fits, description) in both
-  locales + `TRANSLATION_NOTES.md`. No SQL: any well-formed id is claimable.
+  locales + `TRANSLATION_NOTES.md`, plus its id in `achievement_catalog()` in
+  `db/schema.sql` (tests/achievements.test.js keeps the two equal) and a run of the file
+  in Supabase before `npm run push`: the server stores only ids it lists (a quest row in
+  `achievement_defs` counts too). A claim it does not know is ignored, not refused, and
+  stays queued on the device until the schema has it.
 - Time-boxed quest → the same with `from` / `to` (UTC days), plus its row in the
   `achievement_defs` seed in `db/schema.sql` (tests/achievements.test.js checks they
   agree) and a run of the file in Supabase; a VERSION bump and a changelog bullet
@@ -2831,6 +2847,10 @@ Commits follow `type(scope): summary` (`feat`, `fix`, `docs`, `chore`, `test`, `
   `add_server_counter` inside the SQL function that sees it happen, refuse the key in
   `submit_counters`, and add its glyph to CAREER; never put it in `runDeltas`.
 - A game dev's 🔧 → `select public.admin_set_dev('<username>', true);` in the SQL editor.
+- Hide a player (in place of deleting their rows) → `select public.admin_flag_player('<username>', '<note>');`;
+  undo with `admin_unflag_player('<username>')`; `select * from public.admin_flagged();` lists who is
+  hidden. Their own device sees its rows as before; the 🏆 board splices their own rows in at
+  their rank (withOwnRows).
 - New loading-screen card → one `SPLASH_NOTES` entry in `src/splash.js` (a new,
   permanent id; a major feature goes at the top of the features, newest first,
   and the oldest beyond `splash.featureMax` drops out on its own) and its line in
