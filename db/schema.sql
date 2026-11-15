@@ -2275,11 +2275,31 @@ begin
 end;
 $$;
 
+-- The ids of the game's badges: ACHIEVEMENTS in src/achievements.js, in its order
+-- (tests/achievements.test.js keeps the two the same; education badges are never claimed).
+-- A new badge adds its id here, and this file is applied before the client that awards it
+-- is pushed. Internal.
+create or replace function public.achievement_catalog()
+returns text[]
+language sql
+immutable
+as $$
+  select array[
+    'score_10', 'score_100', 'score_250', 'score_500', 'score_1000', 'level_2', 'level_3', 'level_4',
+    'level_5', 'level_6', 'level_7', 'win_game', 'toilet_win', 'games_1000', 'deaths_1000', 'fart_100',
+    'super_fart_25', 'fiber_1000', 'probiotic_1000', 'postbiotic_100', 'bacteria_1000', 'bean_100',
+    'mystery_100', 'coin_1000', 'sky_diver', 'close_shave', 'ibs', 'constipated', 'icarus',
+    'four_of_a_kind', 'lets_go_gambling'
+  ]::text[];
+$$;
+revoke execute on function public.achievement_catalog() from public, anon, authenticated;
+
 -- Claim achievements the game says this player earned (plan 08). Returns
 -- { stored: [...], closed: [...] }: stored = kept (or already held); closed = a
 -- time-boxed quest (achievement_defs) claimed outside its window plus two days'
--- grace, which the game then forgets. Any other well-formed id is an
--- always-available badge and is kept. 1–50 ids a call, 300 per player. Errors
+-- grace, which the game then forgets. Any other id in achievement_catalog() is an
+-- always-available badge and is kept. An id that is neither (plan 30) is left out
+-- of both lists and changes nothing. 1–50 ids a call, 300 per player. Errors
 -- raise ('bad ...': the client drops those claims).
 create or replace function public.claim_achievements(p_player_id text, p_ids text[])
 returns jsonb
@@ -2313,6 +2333,9 @@ begin
     if found and (v_today < d.starts or v_today > d.ends + 2) then
       v_closed := v_closed || x;
       continue;
+    end if;
+    if not found and not (x = any(public.achievement_catalog())) then
+      continue; -- not a badge the game has: neither stored nor closed (closed would delete it on the device)
     end if;
     insert into public.player_achievements (player_id, achievement_id) values (v_id, x)
     on conflict (player_id, achievement_id) do nothing;
@@ -2378,7 +2401,7 @@ returns text
 language sql
 immutable
 as $$
-  select '49802981f536a704'::text; -- schema stamp
+  select '2182ecda52f99af2'::text; -- schema stamp
 $$;
 revoke execute on function public.schema_version() from public, authenticated;
 grant  execute on function public.schema_version() to anon;

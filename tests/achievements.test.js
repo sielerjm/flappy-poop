@@ -114,6 +114,14 @@ test('progressOf and bestFacts', () => {
   assert.deepEqual(evaluate({ facts: bestFacts([{ score: 260, level: 6 }]) }), ['score_10', 'score_100', 'score_250', 'level_2', 'level_3', 'level_4', 'level_5', 'level_6'], 'veteran credit: no win from a top list');
 });
 
+test('achievement_catalog() in db/schema.sql lists exactly the ACHIEVEMENTS ids, in order, and no education badge (plan 30)', () => {
+  const body = SQL.match(/function public\.achievement_catalog\(\)[\s\S]*?select array\[([\s\S]*?)\]::text\[\]/);
+  assert.ok(body, 'achievement_catalog() found');
+  const ids = [...body[1].matchAll(/'([a-z0-9_]+)'/g)].map((m) => m[1]);
+  assert.deepEqual(ids, ACHIEVEMENTS.map((e) => e.id));
+  assert.ok(!ids.some((x) => EDU_ACHIEVEMENTS.some((e) => e.id === x)), 'education badges are never claimed');
+});
+
 test('every time-boxed quest has an achievement_defs row with the same window, and the other way round', () => {
   const code = SQL.split('\n').filter((l) => !/^\s*--/.test(l)).join('\n');
   const seeded = new Map();

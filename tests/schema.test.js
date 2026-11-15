@@ -672,9 +672,20 @@ test('claim_achievements keeps always-available ids, holds quests to their windo
   // The shelf holds 300: a claim past it is refused whole.
   const Q = id('AQ');
   await db.query("insert into public.player_achievements (player_id, achievement_id) select $1, 'x' || g from generate_series(1, 299) g", [Q]);
-  assert.deepEqual(await claim(db, Q, ['one_more']), { stored: ['one_more'], closed: [] });
-  await assert.rejects(claim(db, Q, ['past_the_cap']), /too many achievements/);
+  assert.deepEqual(await claim(db, Q, ['win_game']), { stored: ['win_game'], closed: [] });
+  await assert.rejects(claim(db, Q, ['score_10']), /too many achievements/);
   assert.equal((await db.query('select count(*)::int as n from public.player_achievements where player_id = $1', [Q])).rows[0].n, 300);
+});
+
+test('claim_achievements stores only badges the game has: an unknown id is in neither list and changes nothing; a quest row still counts (plan 30)', async () => {
+  const db = await freshDb();
+  const P = id('AU');
+  assert.deepEqual(await claim(db, P, ['made_up', 'win_game', 'edu_perfect']), { stored: ['win_game'], closed: [] }, 'unknown and education ids are left out');
+  assert.deepEqual((await db.query('select achievement_id from public.player_achievements where player_id = $1', [P])).rows, [{ achievement_id: 'win_game' }]);
+  assert.deepEqual(await claim(db, P, ['made_up']), { stored: [], closed: [] }, 'a call of unknown ids alone answers empty lists');
+  const catalog = (await db.query('select public.achievement_catalog() as c')).rows[0].c;
+  assert.deepEqual(await claim(db, P, catalog.slice(0, 50)), { stored: [...catalog].sort().slice(0, 50), closed: [] }, 'every catalog id is taken');
+  await assert.rejects(asAnon(db, 'select public.achievement_catalog()'), /permission denied/, 'internal: anon cannot call it');
 });
 
 test('merging players merges their counters and their achievements (the earlier date kept); the merged id posts into the kept one', async () => {
