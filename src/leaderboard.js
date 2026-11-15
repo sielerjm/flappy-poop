@@ -653,6 +653,29 @@ export async function fetchTop(opts = {}) {
   return rows.sort((a, b) => b.score - a.score).slice(0, limit);
 }
 
+/**
+ * The top list with the player's own rows at their ranks (plan 30). ranks: the player_rank answers
+ * ({ rank, score, toilet, level } or null, any order). Where the row at an own rank inside the list
+ * is another one (another score or 🚽: never compared by name, since a rename may be on its way), the
+ * own row goes in there under `name`; the list keeps `limit` rows. A rank past the end, or past the
+ * limit, is left to the footer, as before. A visible player's list comes back as it was.
+ */
+export function withOwnRows(rows, ranks, name, limit = LEADERBOARD.limit) {
+  if (!Array.isArray(rows)) return rows;
+  const out = rows.slice();
+  const own = (Array.isArray(ranks) ? ranks : [])
+    .filter((x) => x && Number.isInteger(x.rank) && x.rank >= 1 && x.rank <= limit && Number.isInteger(x.score))
+    .sort((a, b) => a.rank - b.rank);
+  for (const x of own) {
+    const i = x.rank - 1;
+    const there = out[i];
+    if (there && there.score === x.score && Boolean(there.toilet) === Boolean(x.toilet)) continue;
+    if (i > out.length) continue;
+    out.splice(i, 0, { name: String(name ?? ''), score: x.score, toilet: Boolean(x.toilet), level: levelOf(x.level) });
+  }
+  return out.slice(0, limit);
+}
+
 /** { rank, total, score, toilet, level } for one player, or null (no row, or unreachable). */
 /** Standing of one of the player's rows: toilet picks the on-toilet row, else the off-toilet one. */
 export async function fetchRank(playerId, toiletOrOpts = false, maybeOpts = {}) {

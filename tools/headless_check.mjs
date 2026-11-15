@@ -704,6 +704,22 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         ok(rowsPink.colors['261'] === '#f8a0c8' && rowsPink.colors['197'] === '#f8a0c8' && rowsPink.colors['243'] === '#ffffff' && [...new Set(rowsPink.asked)].join() === 'false,true', `with only off-toilet runs on this device, both of your board rows are pink (🚽 261 ${rowsPink.colors['261']}, 197 ${rowsPink.colors['197']}; ranks asked for ${rowsPink.asked.join(' and ')})`);
       }
 
+      // A top list that came back without your rows (plan 30): each still shows, pink, at the rank
+      // player_rank gives it, between the others.
+      {
+        const P = `__flappy.scene.getScene('Play')`;
+        const saved = await evaluate(`JSON.stringify(${P}.save)`);
+        await evaluate(`import('./src/save.js').then((m) => (${P}.setSaveState(m.ensureId(m.saveLocal({ ...${P}.save, name: 'OwnRowTester', top: [{ score: 160, toilet: false, level: 4 }] }))), true))`);
+        await evaluate(`(() => { globalThis.__fetch4 = globalThis.fetch; const top = [{ name: 'B', score: 243, toilet: false, level: 6 }, { name: 'C', score: 240, toilet: false, level: 6 }, { name: 'D', score: 199, toilet: false, level: 5 }]; globalThis.fetch = async (url, init) => { const u = String(url); if (u.includes('/scores?')) return new Response(JSON.stringify(top), { status: 200 }); if (u.endsWith('/rpc/player_rank')) { const b = JSON.parse(init.body); return new Response(JSON.stringify(b.p_toilet ? { rank: 1, total: 5, score: 261, toilet: true, level: 6 } : { rank: 5, total: 5, score: 197, toilet: false, level: 5 }), { status: 200 }); } return new Response('{"message":"stub"}', { status: 503 }); }; return import('./src/config.js').then((m) => { globalThis.__api4 = m.LEADERBOARD.dataApi; m.LEADERBOARD.dataApi = 'https://stub.invalid/rest/v1'; return true; }); })()`);
+        await chrome('leaderboard');
+        await sleep(1200);
+        const spliced = await evaluate(`JSON.stringify((() => { const texts = __flappy.scene.getScene('Leaderboard').children.list.filter((c) => c.type === 'Text'); const scores = texts.filter((c) => /^[0-9]+$/.test(c.text)).sort((a, b) => a.y - b.y); const named = texts.filter((c) => c.text === 'OwnRowTester'); return { order: scores.map((c) => c.text), colors: Object.fromEntries(scores.map((c) => [c.text, c.style.color])), names: named.map((c) => c.style.color) }; })())`).then(JSON.parse);
+        await closeTop('Leaderboard');
+        await sleep(300);
+        await evaluate(`(globalThis.fetch = globalThis.__fetch4, import('./src/config.js').then((m) => { m.LEADERBOARD.dataApi = globalThis.__api4; return import('./src/save.js'); }).then((m) => (${P}.setSaveState(m.saveLocal(${saved})), true)))`);
+        ok(spliced.order.join() === '261,243,240,199,197' && spliced.colors['261'] === '#f8a0c8' && spliced.colors['197'] === '#f8a0c8' && spliced.colors['243'] === '#ffffff' && spliced.names.length === 2 && spliced.names.every((c) => c === '#f8a0c8'), `a top list without your rows still shows them pink at their ranks (${spliced.order.join(' · ')}; your names ${spliced.names.join(', ')})`);
+      }
+
       // What's new always opens on the latest version, even after an older one was viewed and closed
       // (scene.launch without data used to reuse the last restart's { version }).
       {

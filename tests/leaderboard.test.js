@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { LEADERBOARD, TUNING } from '../src/config.js';
-import { createSubmitStore, createMergeStore, createRenameStore, createTournamentQueue, nameAction, submitPlan, submitPlans, submitScore, submitTournament, checkNameAvailable, mergePlayers, fetchPlayerName, fetchTop, fetchRank, fetchTournamentBoard, submitDailyScore, fetchDailyBoard, createCareerStore, submitCounters, claimAchievements, fetchPlayerStats, createEduShareStore, shareEducation, renameEducation, unshareEducation, submitEducationGrades, fetchEducationBoard, enrolResearch, submitResearchEvents, deleteResearch } from '../src/leaderboard.js';
+import { createSubmitStore, createMergeStore, createRenameStore, createTournamentQueue, nameAction, submitPlan, submitPlans, withOwnRows, submitScore, submitTournament, checkNameAvailable, mergePlayers, fetchPlayerName, fetchTop, fetchRank, fetchTournamentBoard, submitDailyScore, fetchDailyBoard, createCareerStore, submitCounters, claimAchievements, fetchPlayerStats, createEduShareStore, shareEducation, renameEducation, unshareEducation, submitEducationGrades, fetchEducationBoard, enrolResearch, submitResearchEvents, deleteResearch } from '../src/leaderboard.js';
 
 const config = { dataApi: 'https://x.example/rest/v1', publishableKey: 'sb_publishable_test', timeoutMs: 50, limit: 10, maxScore: 200 };
 
@@ -404,6 +404,33 @@ test('TUNING.levels.lastLevel matches the 🏆 level cap in db/schema.sql (every
   const guard = sql.match(/p_level < 1 or p_level > (\d+) then/);
   assert.ok(checks.length >= 2 && constraint && guard, 'the column CHECKs, the re-applied constraint and the guard found in schema.sql');
   for (const n of [...checks, Number(constraint[1]), Number(guard[1])]) assert.equal(n, TUNING.levels.lastLevel);
+});
+
+// ---------------------------------------------------------------------------
+// withOwnRows (plan 30): the player's own rows at their ranks, when the top list left them out
+
+const r = (name, score, toilet = false, level = 3) => ({ name, score, toilet, level });
+const at = (rank, score, toilet = false, level = 3) => ({ rank, total: 9, score, toilet, level });
+
+test('withOwnRows leaves the list as it is when each own rank already holds the own row (a visible player)', () => {
+  const rows = [r('Alice', 90), r('Bob', 80, true), r('Me', 70), r('Cy', 60)];
+  assert.deepEqual(withOwnRows(rows, [at(3, 70), null], 'Me', 10), rows);
+  assert.deepEqual(withOwnRows(rows, [at(3, 70), at(12, 5, true)], 'Me', 10), rows, 'a rank below the window is the footer\'s, as before');
+  assert.deepEqual(withOwnRows(rows, [at(3, 70)], 'Typed rename', 10), rows, 'matched on score and 🚽, never the name: a rename mid-sync splices nothing');
+  assert.equal(withOwnRows(null, [at(1, 70)], 'Me', 10), null, 'an unreachable board stays unreachable');
+});
+
+test('withOwnRows splices the own row in at its rank when the list holds another row there, and keeps the limit', () => {
+  const rows = [r('Alice', 90), r('Bob', 80), r('Cy', 60)];
+  assert.deepEqual(withOwnRows(rows, [at(1, 95, false, 6), null], 'Me', 10), [r('Me', 95, false, 6), ...rows], 'at rank 1');
+  assert.deepEqual(withOwnRows(rows, [at(2, 85)], 'Me', 10), [rows[0], r('Me', 85), rows[1], rows[2]], 'mid-list');
+  assert.deepEqual(withOwnRows(rows, [at(4, 50)], 'Me', 10), [...rows, r('Me', 50)], 'just after the last row');
+  assert.deepEqual(withOwnRows(rows, [at(2, 80, true)], 'Me', 10), [rows[0], r('Me', 80, true), rows[1], rows[2]], 'the same score on the toilet is another row');
+  assert.deepEqual(withOwnRows(rows, [at(1, 95), at(3, 70, true)], 'Me', 10), [r('Me', 95), rows[0], r('Me', 70, true), rows[1], rows[2]], 'both rows, in rank order');
+  assert.deepEqual(withOwnRows(rows, [at(3, 70, true), at(1, 95)], 'Me', 10), [r('Me', 95), rows[0], r('Me', 70, true), rows[1], rows[2]], 'whichever order the ranks come in');
+  assert.deepEqual(withOwnRows(rows, [at(1, 95)], 'Me', 3), [r('Me', 95), rows[0], rows[1]], 'the list stays at the limit');
+  assert.deepEqual(withOwnRows(rows, [at(6, 10)], 'Me', 10), rows, 'a rank past the end of a short list: nothing to splice');
+  assert.deepEqual(rows, [r('Alice', 90), r('Bob', 80), r('Cy', 60)], 'the input list is not changed');
 });
 
 // ---------------------------------------------------------------------------

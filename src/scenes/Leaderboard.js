@@ -5,7 +5,7 @@ import { isTopOverlay, openChangelog } from '../ui/overlayStack.js';
 import { createTabs, nearestTab } from '../ui/tabs.js';
 import { t, metaFontSize, rankText, levelLabel, medalYouText, dailyYouText, dailyDayText, eduYouText } from '../i18n.js';
 import { bestByToilet, TOILET_EMOJI } from '../save.js';
-import { fetchTop, fetchRank, fetchTournamentBoard, fetchDailyBoard } from '../leaderboard.js';
+import { fetchTop, fetchRank, fetchTournamentBoard, fetchDailyBoard, withOwnRows } from '../leaderboard.js';
 import { createScrollView } from '../ui/scrollView.js';
 
 const STYLE = { fontFamily: 'sans-serif', fontStyle: 'bold', color: '#ffffff', align: 'center' };
@@ -183,9 +183,11 @@ export class Leaderboard extends Phaser.Scene {
     return { sv: createScrollView(this, band, { fixed: this.fixed }), visible };
   }
 
-  showBoard(rows, rank, state, { nameTaken = false } = {}) {
+  showBoard(rawRows, rank, state, { nameTaken = false } = {}) {
     const { locale, L } = this;
     const limit = LEADERBOARD.limit;
+    // The player's own rows sit at their ranks even when the top list came back without them (plan 30).
+    const rows = withOwnRows(rawRows, [rank.off, rank.on], state.name, limit);
 
     if (rows === null) {
       this.status.setText(t(locale, 'leaderboardOffline'));
