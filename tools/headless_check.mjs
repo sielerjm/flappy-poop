@@ -4092,6 +4092,15 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await sleep(250);
         const nbAfter = await evaluate(`JSON.stringify({ open: ${play}.eduCard.open, state: ${play}.state, lb: ${play}.levelBreak })`).then(JSON.parse);
         ok(nbCard.open && nbCard.title === (await tx('quizCountsTitle')) && nbCard.body.split('\n').length === 3 && nbCard.state === 'paused' && nbCard.lb && nbCard.hint === (await tx('levelContinue')) && !nbAfter.open && nbAfter.state === 'paused' && nbAfter.lb, `a tap on the numbers opens "${nbCard.title}" (${nbCard.body.split('\n').join(' · ')}); a tap closes it and the break stays (hint "${nbCard.hint}")`);
+        // A real P (the pause key) closes it the same way, and does not continue the break (AUD-027).
+        await sleep(TT.retryLockoutMs + 100);
+        await tapAt(nb.x, nb.y);
+        await sleep(250);
+        const nbOpen = await evaluate(`${play}.eduCard.open`);
+        for (const type of ['keyDown', 'keyUp']) await cdp.send('Input.dispatchKeyEvent', { type, key: 'p', code: 'KeyP', windowsVirtualKeyCode: 80, ...(type === 'keyDown' ? { text: 'p' } : {}) });
+        await sleep(250);
+        const nbP = await evaluate(`JSON.stringify({ open: ${play}.eduCard.open, state: ${play}.state, lb: ${play}.levelBreak })`).then(JSON.parse);
+        ok(nbOpen && !nbP.open && nbP.state === 'paused' && nbP.lb, `P with the numbers card open closes it, and the break stays (AUD-027): ${JSON.stringify(nbP)}`);
         ok((await evaluate(`${play}.quizStatsButton === undefined && ${play}.quizStatsBox === undefined && ${play}.focus.indexOf('quizStats') < 0`)) === true, 'the break has no ❔ answers pill, on the screen or on the ring');
         const lineNow = () => evaluate(`(() => { const q = ${Q}; const l = q.counts; return JSON.stringify({ visible: l.visible, counts: l.counts, text: l.text, underlined: l.underlined, fill: l.underlineFill, tally: q.tally.visible ? q.tally.text : null, tallyZone: q.tallyZone.visible, runCard: q.runCard.open }); })()`).then(JSON.parse);
         await evaluate(`(() => { const p = ${play}; const b = p.quizButtonBox; p.flap({ x: b.x, y: b.y }); return true; })()`);

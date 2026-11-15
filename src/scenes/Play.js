@@ -2137,10 +2137,12 @@ export class Play extends Phaser.Scene {
   }
 
   handleChrome(input) {
-    // "Your cards" up on the ready screen: a chrome key takes it down first (Esc does only that).
+    // "Your cards" (the ready screen) or the break's numbers card up: a chrome key takes it down first.
+    // Esc, a tap and the pause key (P, ⏸, the pad's Menu) do only that, so none continues a break
+    // under the card (AUD-027); any other key then acts.
     if (this.eduCard?.open) {
       this.eduCard.hide();
-      if (input === 'esc' || input === 'tap') return;
+      if (input === 'esc' || input === 'tap' || input === 'pause') return;
     }
     // A match: the pause key / button / ⏸ toggles the shared pause, not this half's own state
     // (which may be its level break: 'paused' there must not read as "resume"). The rest is chromeIntent's.

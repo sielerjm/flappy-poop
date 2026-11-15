@@ -365,7 +365,9 @@ The 📚 glyph and that count are a box of their own inside the switch's (`ready
 `educationInfo`, which `readyHit` looks at first): a tap there, or A on its ring item, opens **"Your cards"**
 (`Play.toggleEduCard` on the `eduCard` info card; plan 21's card, back on the glyph in plan 26's A2 at Michael's
 word): the three count lines (`countLines`, his wording), the cards seen of all and what the gold number
-counts; any tap, key or pad press closes it and presses nothing under it, and no run starts. Turning the switch
+counts; any tap, key or pad press closes it and no run starts. A tap, Space, Esc, P (or ⏸, the pad's Menu)
+and the pad's A press nothing under it; another chrome key (S, I, L…) closes it and then does its own thing
+(`handleChrome`; P since AUD-027). Turning the switch
 on opens nothing since that step. **The 📚 popup** (plan 26: `ui/eduIntroPanel.js`, `Play.openEduIntro`) is a
 DOM panel with the beta note, how the mode works, the player's cards (the cards not
 seen yet, the missed ones due, the reviews due over every deck: `cardCounts`; how many have been seen:
@@ -468,7 +470,8 @@ wrong answer never costs corn or points. The shop's prices are `eduShopPrices(le
 `buryPrice` too), so going back to an easy level never makes them cheaper. **What is waiting**, as in Anki (`cardCounts`: new, missed (a miss of this break
 included) and review cards a quiz can still ask now; `Play.quizCounts`): three numbers in blue, red
 and green on the chip under Review (`ui/countLine.js`; none in a test run; a tap, or A on
-their ring item, opens "Waiting in this quiz": `toggleBreakCounts`, `countLines`), and on the card
+their ring item, opens "Waiting in this quiz": `toggleBreakCounts`, `countLines`, on the same card, closed the
+same way: a tap, Esc or P never continues the break under it, AUD-027), and on the card
 `5 + 2 + 8` on its bottom row, under its buttons, the card on show counted and its kind
 underlined (`refreshCounts`; no line in a test run); a tap on the card's numbers opens the same lines
 (`Quiz.toggleCountsCard`). **The gate** (`breakGated`): every level break of an education run

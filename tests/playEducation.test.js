@@ -808,6 +808,31 @@ test('"Your cards" on the 📚 glyph (plan 26, A2): the three counts in his word
   }
 });
 
+test("AUD-027: with the break's numbers card open, P (or ⏸, the pad's Menu) only closes it, as Esc and a tap do: the break does not continue", () => {
+  for (const input of ['pause', 'esc', 'tap']) {
+    let hidden = 0;
+    const applied = [];
+    const card = { open: true, hide() { hidden += 1; this.open = false; } };
+    const s = playScene({ eduCard: card, match: null, state: 'paused', levelBreak: true, runIsEducation: true, shopOpen: false, quizOpen: false, versusHost: () => null });
+    s.chromeArgs = (i) => ({ state: 'paused', overlay: null, input: i, resumeLocked: false, shop: false, breaking: true, education: true });
+    s.applyChrome = (r) => applied.push(r);
+    s.handleChrome(input);
+    assert.deepEqual([hidden, applied, s.state, s.levelBreak], [1, [], 'paused', true], `${input}: the card closed, nothing pressed under it`);
+  }
+});
+
+test('"Your cards" up on the ready screen: any other chrome key closes it, then acts (S opens Settings, I the info); Esc, a tap and P only close it (AUD-027)', () => {
+  for (const [input, acts] of [['settings', true], ['info', true], ['lang', true], ['pause', false], ['esc', false], ['tap', false]]) {
+    const applied = [];
+    const card = { open: true, hide() { this.open = false; } };
+    const s = playScene({ eduCard: card, match: null, state: 'ready', levelBreak: false, shopOpen: false, quizOpen: false, versusHost: () => null });
+    s.chromeArgs = (i) => ({ state: 'ready', overlay: null, input: i, resumeLocked: false, shop: false });
+    s.applyChrome = (r) => applied.push(r);
+    s.handleChrome(input);
+    assert.deepEqual([card.open, applied.length > 0], [false, acts], input);
+  }
+});
+
 test("your own profile's 📚 section (plan 26, A2): eduView carries the learning streak now, the longest, and the highest level unlocked from this device's store; another player's shared view carries none of them", async () => {
   const { Stats } = await import('../src/scenes/Stats.js');
   const view = Stats.prototype.eduView.call({}, { counters: {}, badges: {}, unlockedLevel: 3, study: { day: '2026-11-13', streak: 4, best: 9 } }, '2026-11-14');
