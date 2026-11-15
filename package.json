@@ -12,7 +12,7 @@
     "schema:check": "node tools/schema_check.mjs",
     "schema:stamp": "node tools/schema_check.mjs --stamp"
   },
-  "license": "MIT",
+  "license": "PolyForm-Noncommercial-1.0.0",
   "devDependencies": {
     "@electric-sql/pglite": "0.5.12"
   }

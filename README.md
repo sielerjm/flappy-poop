@@ -285,3 +285,12 @@ What leaves the phone: username, best scores with level, Daily Dump scores (day,
 - Translation notes: [`TRANSLATION_NOTES.md`](TRANSLATION_NOTES.md)
 - Phaser is pinned in `index.html` to `phaser@4.2.1` from jsDelivr
 - Rewritten from scratch, replacing the older joke version at [sielerjm/flappy-poop](https://github.com/sielerjm/flappy-poop)
+
+## 📄 Licenses
+
+- **Code:** [PolyForm Noncommercial 1.0.0](LICENSE). Use it, change it and share it for any noncommercial purpose, such as study, research, teaching, or use by a school, a charity or a public research organization.
+- **Quiz cards** (the questions, answers and explanations in [`src/questions.js`](src/questions.js)): [CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/). Credit "Flappy Poop by Michael Sieler" and share adaptations alike.
+- **Art, characters, the name and the logo:** all rights reserved.
+- **Third-party parts** keep their own terms: Phaser and the FSRS port (MIT), the sounds (Pixabay Content License). See [`CREDITS.md`](CREDITS.md).
+
+Details: [`LICENSE-CONTENT.md`](LICENSE-CONTENT.md). Contributions: [`CONTRIBUTING.md`](CONTRIBUTING.md).

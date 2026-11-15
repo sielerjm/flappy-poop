@@ -676,10 +676,20 @@ index.html                  Entry page. Viewport/touch CSS; the loading splash's
                             src/splash.js, then <script> for Phaser from jsDelivr,
                             then <script type=module src=src/main.js>.
 manifest.webmanifest        PWA "Add to Home Screen" metadata (fullscreen, portrait).
-package.json                `npm test`, `npm start`, `npm run push`; one devDependency,
+package.json                `npm test`, `npm start`, `npm run push`; "license" is the SPDX id
+                            PolyForm-Noncommercial-1.0.0 (MIT until plan 28); one devDependency,
                             @electric-sql/pglite (pinned; tests/schema.test.js), so
                             `npm install` once per checkout. The game loads none.
 CREDITS.md                  Phaser + every assets/sfx/ file with a URL.
+LICENSE                     The code's license: PolyForm Noncommercial 1.0.0, fetched from
+                            the PolyForm project (byte-identical to its 1.0.0 tag) under a
+                            Required Notice line and a pointer to LICENSE-CONTENT.md (plan 28,
+                            1.6). Never edit the license text itself.
+LICENSE-CONTENT.md          What else is under which terms: the quiz cards (src/questions.js)
+                            CC BY-NC-SA 4.0; art, characters, name, logo all rights reserved;
+                            third-party parts under their own (CREDITS.md).
+CONTRIBUTING.md             Reports welcome; outside code, art or card changes need a
+                            contributor agreement first (so the author can relicense).
 
 src/
   main.js                   new Phaser.Game(...): fieldWidth(window) x 1280 logical
