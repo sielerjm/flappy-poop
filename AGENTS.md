@@ -484,7 +484,9 @@ level Skip ▸): an open card in a break's quiz shows "Skip · n 🌽" in its ri
 "Skip" alone and free in a test run, which saves nothing); after an answer that slot is Next Card. Every
 Skip costs `buryPrice()` (`education.buryCoinsPerLevel` × the level just cleared) and moves on
 (`Play.skipCard`); a due card (missed in this break, or a stored record due now: `cardDue`) also goes to
-tomorrow (`eduStore.bury`, `buryMs`), leaves `breakMissed` and so the gate, and counts toward
+tomorrow (`eduStore.bury` until `skipUntil`: `buryMs`, 24 h, or the next local midnight when that is later,
+so a skip in the first hour of a 25-hour day is not due again that date; AUD-029), leaves `breakMissed` and so
+the gate, and counts toward
 `buryPerDay` (3) a local day; a practice card's schedule is left as it was, but it joins the day's
 skipped ids (`eduStore.skipPractice`, uncounted; AUD-028), and a new card just moves on; neither has a
 daily limit.
@@ -861,7 +863,8 @@ src/
                             (plan 26 A2: buried keeps the day's ids, buriedIdsOn,
                             pickCard's skipped; skipPractice adds a practice card's
                             uncounted, AUD-028),
-                            localDayKey; plan 26: NEW_ORDERS and pickCard's order,
+                            localDayKey, skipUntil (a due Skip's wait; AUD-029);
+                            plan 26: NEW_ORDERS and pickCard's order,
                             newAllowance and localDayStart (the daily new-card cap,
                             which cardCounts' new respects too);
                             createEduStore (LEADERBOARD.eduKey = flappyPoop.eduSrs:
@@ -2210,7 +2213,11 @@ tests/                      node --test (schema.test.js, pilot.test.js, eduBoard
                             unlockLevel, bury and the local day; plan 26 A2: the paid
                             record, the study record and the streak helpers (same
                             day, next day, a gap, an earlier day, month and year
-                            ends)
+                            ends); plan 27: skipPractice (AUD-028)
+  eduDays.test.js           Education's local days with TZ pinned to
+                            America/Los_Angeles in its own process (plan 27):
+                            skipUntil on the fall-back, spring and a normal day,
+                            and Play's Skip on the fall-back day (AUD-029)
   questions.test.js         src/questions.js: decks, ids, a question and three
                             different options per card, text limits, complete zh versions (skipped while no
                             card has one), references cited and existing, enough live

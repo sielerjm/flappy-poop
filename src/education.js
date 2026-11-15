@@ -152,6 +152,17 @@ export function localDayStart(now) {
 }
 
 /**
+ * Until when a skipped due card waits (AUD-029): the later of education.buryMs (24 h) and the next
+ * local midnight, so it is never due again on the local date it was skipped, even on a 25-hour day
+ * (a skip in the first hour of the day the clocks go back). Pure.
+ */
+export function skipUntil(now, t = TUNING) {
+  const midnight = new Date(now);
+  midnight.setHours(24, 0, 0, 0);
+  return Math.max(now + t.education.buryMs, midnight.getTime());
+}
+
+/**
  * New cards a quiz may still show today (plan 26): education.newPerDay, less the cards first seen
  * since local midnight (`dayStart`) and the new cards this quiz has shown without a record (ids in
  * `exclude` with no record: shown, not saved). Never below 0.

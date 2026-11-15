@@ -134,7 +134,7 @@ import { openEduIntroPanel, closeEduIntroPanel, isEduIntroPanelOpen, eduIntroPad
 import { answerEvent, createConsentStore, createResearchQueue } from '../research.js';
 import { bindPad } from '../input/pad.js';
 import { keyGroup, sameDevice, catchUpTier, catchUpDraws, versusAvailable, ghostPlacement, rivalMarker, respawnPose, respawnBlinkStart, courseDistance, VERSUS_EMOJI } from '../versus.js';
-import { createEduStore, countersAfterRun, dueCount, cardCounts, masteryByDeck, pickCard, shuffleOptions, gradeFor, schedule, eduShopPrices, reviveStart, reviveStep, reviveSettled, newTally, tallyAnswer, EDUCATION_EMOJI, localDayKey, paidOn, buriedIdsOn } from '../education.js';
+import { createEduStore, countersAfterRun, dueCount, cardCounts, masteryByDeck, pickCard, shuffleOptions, gradeFor, schedule, eduShopPrices, reviveStart, reviveStep, reviveSettled, newTally, tallyAnswer, EDUCATION_EMOJI, localDayKey, paidOn, buriedIdsOn, skipUntil } from '../education.js';
 
 const TEXT_STYLE = {
   fontFamily: 'sans-serif',
@@ -3625,7 +3625,7 @@ export class Play extends Phaser.Scene {
    * Skip a card (plan 26, A2; it replaced Bury and the level Skip ▸): in an education run's level
    * break, the card on show moves on for buryPrice() corn (3 × the level cleared). A due card (one
    * missed in this break, or a stored record due now: it holds the gate) also goes to tomorrow
-   * (eduStore.bury, education.buryMs), leaves breakMissed and counts toward education.buryPerDay; a
+   * (eduStore.bury until skipUntil: 24 h, or the next local midnight if later), leaves breakMissed and counts toward education.buryPerDay; a
    * practice card stays out of practice for the rest of the local day (eduStore.skipPractice: its
    * schedule untouched, not counted; AUD-028), and a new card just moves on, neither with a daily limit. A test run's Skip is free and saves
    * nothing. A skip is no answer: no tally, no pilot event. The quiz's right slot shows it (offerSkip).
@@ -3662,7 +3662,7 @@ export class Play extends Phaser.Scene {
     const due = this.cardDue(cardId);
     this.effects.spendCoins(this.buryPrice());
     if (due) {
-      this.eduStore.bury(cardId, Date.now() + T.education.buryMs, localDayKey());
+      this.eduStore.bury(cardId, skipUntil(Date.now()), localDayKey()); // tomorrow: 24 h, or the next midnight on a 25-hour day (AUD-029)
       this.breakMissed = (this.breakMissed ?? []).filter((id) => id !== cardId);
     } else {
       this.eduStore.skipPractice(cardId, localDayKey()); // out of practice for the day (AUD-028); a new card keeps nothing

@@ -385,7 +385,7 @@ export const TUNING = {
     breakCoins: 1, // coins a right answer in a level break's quiz pays
     buryCoinsPerLevel: 3, // a Skip (plan 26, A2; a gate's Bury in plan 25): coins × the level just cleared; a due card also goes to tomorrow
     buryPerDay: 3, // due cards a device may skip (bury) in one local day; new and practice cards have no limit (plan 26, A2)
-    buryMs: 86400000, // ms a skipped (buried) due card waits (24 h, so a bury just before midnight is not back at 00:00)
+    buryMs: 86400000, // ms a skipped (buried) due card waits at least (24 h, so a bury just before midnight is not back at 00:00; education.js skipUntil waits for the next local midnight when that is later, on a 25-hour day)
     revivePenaltyPerLevel: 2, // points a quiz revive costs per level number (level 3: −6), charged when the player is revived; the two-player crash's value to start
     reviveBlinkMs: 750, // ms the revived poop blinks at mid-height after Fly on, before play resumes (no glide; the field was refilled under the quiz)
     boardMinRuns: 3, // graded runs before a sharing player is listed on the 📚 board (education_board in db/schema.sql lists from the same number)
