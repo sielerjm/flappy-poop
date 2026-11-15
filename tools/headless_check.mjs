@@ -929,15 +929,17 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
           ok(safe.key === 'poop' && safe.ms === 0, `in the grace after a fart the poop is never scared (${safe.key})`);
         }
         const popupHit = async (kind) => {
-          // Both scores are read inside the hit: real pipes keep passing the pinned poop and would add +1 between two samples.
-          const { before, score } = await evaluate(`(() => { const p = ${play}; while (p.effects.hasProbiotic()) p.effects.consumeProbiotic(); const before = p.score; const it = p.items.create(p.poop.x, p.poop.y, '${kind}'); it.setData('kind', '${kind}'); p.collectItem(it); return JSON.stringify({ before, score: p.score }); })()`).then(JSON.parse);
-          const read = () => evaluate(`JSON.stringify({ text: ${play}.scorePopup.text, color: ${play}.scorePopup.style.color, alpha: ${play}.scorePopup.alpha, y: ${play}.scorePopup.y, score: ${play}.score })`).then(JSON.parse);
-          let r = await read();
-          let peak = r.alpha;
-          for (let i = 0; i < 60 && peak < 0.99; i += 1) { await sleep(50); r = await read(); peak = Math.max(peak, r.alpha); }
-          let gone = r;
-          for (let i = 0; i < 80 && gone.alpha > 0; i += 1) { await sleep(50); gone = await read(); }
-          return { before, ...r, score, peak, after: gone.alpha };
+          // Both scores, and the popup's text, colour and row, are read inside the hit: real pipes keep passing
+          // the pinned poop and would add +1 between two samples, and a real fiber in a gap can be picked up while
+          // the popup fades, replacing its text (plan 28, 1.5: once read "+3" for the bacteria's "−3"). Items
+          // already in the field are cleared first. Only the fade is sampled afterwards.
+          const hit = await evaluate(`(() => { const p = ${play}; p.items.clear(true, true); while (p.effects.hasProbiotic()) p.effects.consumeProbiotic(); const before = p.score; const it = p.items.create(p.poop.x, p.poop.y, '${kind}'); it.setData('kind', '${kind}'); p.collectItem(it); const t = p.scorePopup; return JSON.stringify({ before, score: p.score, text: t.text, color: t.style.color, y: t.y }); })()`).then(JSON.parse);
+          const alpha = () => evaluate(`${play}.scorePopup.alpha`);
+          let peak = await alpha();
+          for (let i = 0; i < 60 && peak < 0.99; i += 1) { await sleep(50); peak = Math.max(peak, await alpha()); }
+          let after = await alpha();
+          for (let i = 0; i < 80 && after > 0; i += 1) { await sleep(50); after = await alpha(); }
+          return { ...hit, peak, after };
         };
         const fib = await popupHit('fiber');
         ok(fib.text === '+3' && fib.color === TT.popup.fiberColor && fib.score === fib.before + 3 && fib.y === TT.popup.rowY[0] && fib.peak >= 0.99 && fib.after === 0, `fiber shows a ${fib.color} "${fib.text}" under the score that fades in (peak ${fib.peak.toFixed(2)}) and out (score ${fib.before} → ${fib.score})`);
