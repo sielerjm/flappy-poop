@@ -348,7 +348,7 @@ Short, playful, clear. Fit a 720×1280 logical field; How to play / About body w
 | eduShareNeedInvite | Sharing is by invitation: type the invite code you were given above. | 分享需要邀请：请在上方输入你收到的邀请码。 |
 | eduDataAdult | I am 18 or older | 我已年满 18 岁 |
 | eduShareTitle | Share my grades | 分享我的成绩 |
-| eduShareBody | Puts your username, your average grade, the number of graded runs and your education badges on the 📚 board, where players with education mode can see them. Your answers are not shared, and this is not research. Stopping deletes it from the board at once. | 把你的用户名、平均成绩、计分局数和教育徽章放到 📚 排行榜上，开启教育模式的玩家都能看到。不会分享你的具体答题，这也不是研究。停止分享会立即从榜上删除。 |
+| eduShareBody | Puts your username, your average grade, the number of graded runs and your education badges on the 📚 board, which every player can see. Your answers are not shared, and this is not research. Stopping deletes it from the board at once. | 把你的用户名、平均成绩、计分局数和教育徽章放到 📚 排行榜上，所有玩家都能看到。不会分享你的具体答题，这也不是研究。停止分享会立即从榜上删除。 |
 | eduShareOn | Sharing is on. | 正在分享。 |
 | eduShareOff | Sharing is off. | 未分享。 |
 | eduShareStop | Stop sharing | 停止分享 |

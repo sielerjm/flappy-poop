@@ -2,7 +2,7 @@
 
 Notice version: `pilot-2` (14 November 2026)
 
-Flappy Poop has a hidden learning mode (📚 education mode) with quiz cards about the gut and its microbes. This page is for invited testers of that mode. It says what the game sends when you join the **tester pilot**, and how to stop.
+Flappy Poop has a learning mode (📚 education mode, in beta for everyone) with quiz cards about the gut and its microbes. This page is for the testers invited to its tester pilot. It says what the game sends when you join the **tester pilot**, and how to stop.
 
 **No research is being done with this data.** The pilot only tests whether the tools work: whether answers arrive, whether they can be deleted, whether anything breaks. Your answers are not analysed, are not used in any paper, talk or grant text, and are deleted before any later test or study starts. The pilot is not a study and has not been reviewed as one.
 
