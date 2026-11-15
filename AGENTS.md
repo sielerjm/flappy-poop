@@ -629,7 +629,10 @@ closed to all but 🔧 devs until the owner runs `admin_set_education_open(true)
 record stays the education store's; `createEduShareStore` (`flappyPoop.eduShare`) remembers the
 round of sharing the server named (`shared_at`) and what the board already has, and
 `Play.drainEduShare` (after the career in `syncLeaderboard`) sends what is new, at most 50 runs a
-batch: `'restart'` (another round: sharing was stopped and started elsewhere) takes the server's
+batch, of the record as `boardRecord` gives it: the graded runs played on this device (`own`, set
+by a restore from a backup; plan 28, 3.1a), so restored runs never reach the board, while restored
+badges do (the server joins them and keeps the earlier day). The 📚 tab's "runs still needed" line
+reads the same count. `'restart'` (another round: sharing was stopped and started elsewhere) takes the server's
 round and sends the whole record again; `'not shared'` turns sharing off here; a rename goes through
 `rename_education`, which never adds a player. Stop sharing deletes the row and stays on until the
 server has done so. A batch resent after a lost reply is never counted twice: the server keeps each
@@ -875,7 +878,9 @@ src/
                             EDU_ACHIEVEMENTS (plan 22: the eight education badges,
                             their own list with edu_ ids, kept on the device and
                             never claimed), eduRunFacts (a run's tally → answered,
-                            right, graded, grade, perfect, gaveUp), nextPerfectStreak
+                            right, graded, grade, perfect, gaveUp; GRADE_MAX, 10000 =
+                            100 %, the one scale the stores and the share store use),
+                            nextPerfectStreak
                             (🤓), averageGrade (the mean of the graded runs);
                             v0.16.0: a run entry's `modes` (default single player),
                             IBS_WINS / WINDOW_DAYS / BREAK_DAYS / FOUR_OF_A_KIND,
@@ -928,7 +933,24 @@ src/
                             endRun(facts), unlock(ids, day); plan 26 A2: answer's
                             paidDay and the paid { day, ids } record, paidOn;
                             studyDay and the study { day, streak, best } record,
-                            nextStudyStreak / studyStreakNow), dueCount
+                            nextStudyStreak / studyStreakNow; plan 28, 3.1a: the own
+                            { runs, gradeSum } record, this device's graded runs, set
+                            by a restore and grown by endRun, and restore(backup,
+                            { today }): one merge and write, { added, updated, badges,
+                            changed, saved }); the backup (plan 28, 3.1a):
+                            educationBackup (a fixed list of fields: cards, counters,
+                            badges, unlockedLevel, study, and the eduNewOrder and
+                            eduStartLevel settings; never an id, code, sharing state,
+                            invitation, consent, own, recent, paid, buried or
+                            pending), readEducationBackup (the text around the
+                            outermost { … } ignored; cleaned as the store cleans;
+                            'unrecognised' / 'newer' / 'tooBig'), mergeEducation (a
+                            card's later answer wins, a card skipped here today keeping
+                            its wait; the grade pair from the longer
+                            history, badges at the earlier day, the higher level,
+                            learning streaks joined as spans; twice changes nothing),
+                            boardRecord (what the 📚 board is sent: own's runs, or the
+                            counters', and every badge: restored runs never go), dueCount
                             (the 📚 switch's count), cardText (zh-Hans when a card has
                             it) / optionText, cardSource (short citations: "Martinsen
                             et al. 2005"), EDUCATION_EMOJI. Fully unit-tested
@@ -1083,7 +1105,10 @@ src/
                             can be read is the truth (another tab's Clear shows at
                             once); a missing key or broken entry reads as empty;
                             memory serves only when storage throws or is full, for
-                            this page load. tests/jsonStore.test.js.
+                            this page load. saved() (plan 28, 3.1a): whether the value
+                            outlives this page load (false with no storage, after a
+                            failed write, while reads throw, or on pageStorage(),
+                            blocked storage's stand-in). tests/jsonStore.test.js.
   save.js                   Save codes, NO Phaser/DOM. checkNewName (the save
                             panel only): a new username is 4–16 code points (2+
                             with CJK), no whitespace, emoji or NAME_BLOCKED word;
@@ -2348,7 +2373,16 @@ tests/                      node --test (schema.test.js, pilot.test.js, eduBoard
                             a resend after another device's batch, a resend never
                             moving another player, the round probe, a merge of two
                             sharers, a wrong clock's badge day, sharing off then on,
-                            two syncs both told to restart, the share store's rounds
+                            two syncs both told to restart, the share store's rounds;
+                            plan 28, 3.1a: a restored backup's runs never reach the
+                            board (5 shared, a restore, 2 played: 7, not 12), and a
+                            fold where one id restored the other's backup
+  eduBackup.test.js         plan 28, 3.1a: the backup's fields (nothing that names the
+                            player or the device), reading one back, every merge rule,
+                            own (zeros, the cap, endRun, a restore), boardRecord, the
+                            share store after a restore (before and after Stop then
+                            Share), store.restore's summary and saved (blocked, full,
+                            no storage)
   quiz.test.js              Quiz's rules in Node: a card under another overlay is
                             interrupted, nothing answered once the quiz is finishing,
                             the 🚩 never navigates the game's tab, tapLocked, the

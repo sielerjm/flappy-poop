@@ -135,7 +135,7 @@ import { openEduIntroPanel, closeEduIntroPanel, isEduIntroPanelOpen, eduIntroPad
 import { answerEvent, createConsentStore, createResearchQueue } from '../research.js';
 import { bindPad } from '../input/pad.js';
 import { keyGroup, sameDevice, catchUpTier, catchUpDraws, versusAvailable, ghostPlacement, rivalMarker, respawnPose, respawnBlinkStart, courseDistance, VERSUS_EMOJI } from '../versus.js';
-import { createEduStore, countersAfterRun, dueCount, cardCounts, masteryByDeck, pickCard, shuffleOptions, gradeFor, schedule, eduShopPrices, reviveStart, reviveStep, reviveSettled, newTally, tallyAnswer, EDUCATION_EMOJI, localDayKey, paidOn, buriedIdsOn, skipUntil } from '../education.js';
+import { createEduStore, countersAfterRun, dueCount, cardCounts, masteryByDeck, pickCard, shuffleOptions, gradeFor, schedule, eduShopPrices, reviveStart, reviveStep, reviveSettled, newTally, tallyAnswer, EDUCATION_EMOJI, localDayKey, paidOn, buriedIdsOn, skipUntil, boardRecord } from '../education.js';
 
 const TEXT_STYLE = {
   fontFamily: 'sans-serif',
@@ -4205,7 +4205,8 @@ export class Play extends Phaser.Scene {
         if (renamed !== null) this.eduShare.setName(name);
       }
       for (let turn = 0; turn < 2; turn += 1) {
-        const batch = this.eduShare.beginBatch(this.eduStore.load(), newId);
+        // The board's view of the record (boardRecord): the runs played on this device, never restored ones (plan 28, 3.1a).
+        const batch = this.eduShare.beginBatch(boardRecord(this.eduStore.load()), newId);
         if (!batch) {
           // Nothing new to send. Once a page load, ask whether the row is still this device's round
           // (plan 24, AUD-009): a fold of two sharers, or Stop and Share on another device, starts a

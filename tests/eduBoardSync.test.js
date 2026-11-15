@@ -8,7 +8,7 @@ import { playScene, fakeStorage, registry } from './support/scenes.js';
 import { INVITE, freshDb, installPostgrest, asAnon, id } from './support/postgrest.js';
 import { LEADERBOARD } from '../src/config.js';
 import { createEduShareStore } from '../src/leaderboard.js';
-import { createEduStore } from '../src/education.js';
+import { createEduStore, educationBackup, readEducationBackup } from '../src/education.js';
 import { eduRunFacts } from '../src/achievements.js';
 
 const timeoutMs = LEADERBOARD.timeoutMs;
@@ -239,4 +239,70 @@ test('the share store: a round this device already sent into resumes; another ro
   assert.deepEqual(s.load().sentBadges, ['edu_grade_a']);
   assert.equal(s.restart(R2).sent.runs, 0, 'another round: from zero');
   assert.equal(s.turnOn(R1, 'Sam').sent.runs, 0, 'R2 was the last round sent into now; R1 is not resumed from it');
+});
+
+/** A's education record as a backup file, read back as a restore would (plan 28, 3.1a). */
+const backupOf = (p) => readEducationBackup(JSON.stringify(educationBackup(p.eduStore.load(), {}, Date.now()))).backup;
+
+test("a restored backup's runs never reach the 📚 board: A shares 5, B (the same player) restores A's backup and plays 2: the board shows 7, not 12 (plan 28, 3.1a)", async () => {
+  const db = await freshDb({ invite: INVITE });
+  const net = installPostgrest(db);
+  try {
+    const P = id('Restorer');
+    const a = device(P, 'Restorer');
+    assert.deepEqual(await a.startEduShare(true, INVITE), { status: 'ok' });
+    for (let i = 0; i < 5; i += 1) gradedRun(a, 5);
+    await a.drainEduShare(P);
+    assert.deepEqual([(await row(db, P)).runs, (await row(db, P)).grade_sum], [5, 50000]);
+    const b = device(P, 'Restorer');
+    b.noteEduShared(true); // B learns from the board that the player shares
+    const r = b.eduStore.restore(backupOf(a), { today: '2026-11-15' });
+    assert.equal(r.changed, true);
+    gradedRun(b, 4);
+    gradedRun(b, 4);
+    assert.equal(b.eduStore.load().counters.gradedRuns, 7, "B shows A's 5 and its own 2");
+    await ageEdu(db);
+    await b.drainEduShare(P);
+    await ageEdu(db);
+    await b.drainEduShare(P);
+    assert.deepEqual([(await row(db, P)).runs, (await row(db, P)).grade_sum], [7, 50000 + 2 * 8000], "the board: A's 5 and B's own 2, once each");
+    // A, a new page load: nothing new to send.
+    const a2 = device(P, 'Restorer');
+    Object.assign(a2, { eduShare: a.eduShare, eduStore: a.eduStore });
+    await ageEdu(db);
+    await a2.drainEduShare(P);
+    assert.equal((await row(db, P)).runs, 7);
+  } finally {
+    net.restore();
+  }
+});
+
+test("a fold of two sharers where one restored the other's backup: each device sends only its own runs into the new round (plan 28, 3.1a; plan 30's fold_player)", async () => {
+  const db = await freshDb({ invite: INVITE });
+  const net = installPostgrest(db);
+  try {
+    const [K, M] = [id('FoldKeep'), id('FoldMerge')];
+    const k = device(K, 'FoldKeep');
+    const m = device(M, 'FoldMerge');
+    await k.startEduShare(true, INVITE);
+    for (let i = 0; i < 4; i += 1) gradedRun(k, 5);
+    await k.drainEduShare(K);
+    m.eduStore.restore(backupOf(k), { today: '2026-11-15' }); // M restored K's cards before sharing
+    await db.query('update public.player_meta set edu_named_at = null'); // the share's 5 s pace (plan 25, A4)
+    await m.startEduShare(true, INVITE);
+    for (let i = 0; i < 3; i += 1) gradedRun(m, 4);
+    await m.drainEduShare(M);
+    assert.equal((await row(db, M)).runs, 3, "M's board row: its own 3 runs, not K's restored 4");
+    await asAnon(db, 'select public.merge_players($1, $2)', [K, M]);
+    const [k2, m2] = [device(K, 'FoldKeep'), device(M, 'FoldMerge')];
+    Object.assign(k2, { eduShare: k.eduShare, eduStore: k.eduStore });
+    Object.assign(m2, { eduShare: m.eduShare, eduStore: m.eduStore });
+    await ageEdu(db);
+    await k2.drainEduShare(K);
+    await ageEdu(db);
+    await m2.drainEduShare(M);
+    assert.deepEqual([(await row(db, K)).runs, (await row(db, K)).grade_sum], [7, 4 * 10000 + 3 * 8000], 'the folded row: 4 + 3, never 4 + 7');
+  } finally {
+    net.restore();
+  }
 });

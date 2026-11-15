@@ -7,6 +7,7 @@ import { t, metaFontSize, rankText, levelLabel, medalYouText, dailyYouText, dail
 import { bestByToilet, TOILET_EMOJI } from '../save.js';
 import { fetchTop, fetchRank, fetchTournamentBoard, fetchDailyBoard, withOwnRows } from '../leaderboard.js';
 import { createScrollView } from '../ui/scrollView.js';
+import { boardRecord } from '../education.js';
 
 const STYLE = { fontFamily: 'sans-serif', fontStyle: 'bold', color: '#ffffff', align: 'center' };
 const PINK = '#f8a0c8';
@@ -329,7 +330,8 @@ export class Leaderboard extends Phaser.Scene {
     if (mine) {
       this.footer.setText(eduYouText(locale, mine));
     } else if (play?.eduShareOn?.()) {
-      const need = T.education.boardMinRuns - (play.eduStore?.load().counters.gradedRuns ?? 0);
+      // The runs the board will get from this device (boardRecord: restored runs never go; plan 28, 3.1a).
+      const need = T.education.boardMinRuns - (play.eduStore ? boardRecord(play.eduStore.load()).counters.gradedRuns : 0);
       this.footer.setText(need > 0 ? t(locale, 'eduBoardMore').replace('{n}', String(need)) : t(locale, 'eduBoardQueued'));
     } else {
       this.footer.setText(t(locale, 'eduBoardShare'));

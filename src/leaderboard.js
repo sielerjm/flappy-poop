@@ -15,7 +15,7 @@
 
 import { LEADERBOARD, TUNING } from './config.js';
 import { recordScore, bestByToilet, validateName } from './save.js';
-import { addCounters, cleanCounters, isAchievementId } from './achievements.js';
+import { addCounters, cleanCounters, isAchievementId, GRADE_MAX } from './achievements.js';
 import { browserStorage, createJsonStore } from './store.js';
 
 // ---------------------------------------------------------------------------
@@ -952,7 +952,6 @@ const EDU_BADGE = /^edu_[a-z0-9_]{1,36}$/;
 /** submit_education_grades takes at most this many graded runs a batch: a longer record goes in several. */
 const EDU_BATCH_RUNS = 50;
 const EDU_BATCH_BADGES = 20;
-const GRADE_MAX = 10000; // a run's grade, in hundredths of a percent (eduRunFacts)
 
 /** Education badges as { id: 'YYYY-MM-DD' }: edu_ ids with a day; anything else is dropped. */
 function cleanEduBadges(raw) {

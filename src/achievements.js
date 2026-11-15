@@ -245,11 +245,14 @@ export function daysBetween(a, b) {
  * offered only before its first right answer and a lost run that was not quit has
  * education.strikes misses, so a perfect run is in practice a won one.
  */
+/** A graded run's best grade: 100 %, in hundredths of a percent (eduRunFacts' `grade`). */
+export const GRADE_MAX = 10000;
+
 export function eduRunFacts(tally, { gaveUp = false, full = false } = {}, t = TUNING) {
   const answered = count(tally?.answered);
   const right = Math.min(count(tally?.right), answered);
   const graded = answered >= t.education.badgeMinAnswers && !gaveUp;
-  return { mode: 'education', answered, right, wrong: answered - right, graded, grade: graded ? Math.round((10000 * right) / answered) : null, perfect: graded && right === answered, gaveUp: Boolean(gaveUp), full: Boolean(full) };
+  return { mode: 'education', answered, right, wrong: answered - right, graded, grade: graded ? Math.round((GRADE_MAX * right) / answered) : null, perfect: graded && right === answered, gaveUp: Boolean(gaveUp), full: Boolean(full) };
 }
 
 /**

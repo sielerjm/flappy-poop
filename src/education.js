@@ -13,7 +13,7 @@
 // Times are ms since the epoch (Date.now()), passed in, so everything here is pure.
 
 import { LEADERBOARD, TUNING } from './config.js';
-import { nextPerfectStreak } from './achievements.js';
+import { nextPerfectStreak, GRADE_MAX } from './achievements.js';
 import { GRADE_NUM, initDifficulty, initStability, nextDifficulty, nextIntervalDays, nextStability, retrievability, shortTermStability } from './fsrs.js';
 import { CARD_LINKS, CARDS, DECKS, REFERENCE_DOIS, REFERENCES } from './questions.js';
 import { createJsonStore } from './store.js';
@@ -565,7 +565,13 @@ function cleanEdu(raw, keep, t = TUNING) {
   // days in a row up to it, the most ever in a row; kept only while well formed.
   const st = raw?.study;
   const study = st && typeof st.day === 'string' && DAY_RE.test(st.day) && Number.isInteger(st.streak) && st.streak >= 1 ? { day: st.day, streak: st.streak, best: Math.max(st.streak, Number.isInteger(st.best) ? st.best : 0) } : null;
-  return { v: 2, cards, recent, counters, badges, unlockedLevel, ...(buried ? { buried } : {}), ...(pending ? { pending } : {}), ...(paid ? { paid } : {}), ...(study ? { study } : {}) };
+  // This device's own graded runs (plan 28, 3.1a): set by a restore, so the 📚 board is sent only the
+  // runs played here (boardRecord). Zeros are kept; never more runs than the counters (its sum may be
+  // above theirs: a restore can take a longer history with a lower sum). None: the counters are.
+  const o = raw?.own;
+  const ownRuns = o && isCount(o.runs) && isCount(o.gradeSum) ? Math.min(o.runs, counters.gradedRuns ?? 0) : null;
+  const own = ownRuns === null ? null : { runs: ownRuns, gradeSum: Math.min(o.gradeSum, ownRuns * GRADE_MAX) };
+  return { v: 2, cards, recent, counters, badges, unlockedLevel, ...(buried ? { buried } : {}), ...(pending ? { pending } : {}), ...(paid ? { paid } : {}), ...(study ? { study } : {}), ...(own ? { own } : {}) };
 }
 
 /** A local YYYY-MM-DD day key as a day count (UTC midnights: a clock change inside a day moves nothing). */
@@ -695,7 +701,10 @@ export function createEduStore(storage, { key = LEADERBOARD.eduKey, t = TUNING }
     /** An education run ended with `facts` (eduRunFacts): the 🤓 streak moves, and a graded run's grade joins the average (countersAfterRun). Returns the counters. */
     endRun(facts) {
       const state = read();
-      write({ ...state, counters: countersAfterRun(state.counters, facts) });
+      const next = { ...state, counters: countersAfterRun(state.counters, facts) };
+      // A restore left this device's own count (plan 28, 3.1a): a graded run played here joins it.
+      if (state.own && facts?.graded) next.own = { runs: state.own.runs + 1, gradeSum: state.own.gradeSum + facts.grade };
+      write(next);
       return read().counters;
     },
     /**
@@ -722,8 +731,183 @@ export function createEduStore(storage, { key = LEADERBOARD.eduKey, t = TUNING }
       write({ ...state, badges: { ...state.badges, ...Object.fromEntries(fresh.map((id) => [id, day])) } });
       return fresh;
     },
+    /**
+     * Merge a backup read by readEducationBackup (`backup.record`, or a record) into this device's
+     * (mergeEducation), in one read and one write. Returns { added, updated, badges, changed, saved }:
+     * saved false when the result lasts for this visit only (blocked or full storage).
+     */
+    restore(backup, { today = localDayKey() } = {}) {
+      const m = mergeEducation(read(), backup?.record ?? backup, { today, t });
+      if (m.changed) write(m.record);
+      return { added: m.added, updated: m.updated, badges: m.badges, changed: m.changed, saved: box.saved() };
+    },
     clear() {
       box.clear();
     },
   };
+}
+
+// --- Backup and restore (plan 28, 3.1a) ---
+
+const BACKUP_KIND = 'flappy-poop-education';
+const BACKUP_VERSION = 1;
+/** The longest text readEducationBackup reads (a backup of every card is about 20 kB). */
+const BACKUP_MAX_CHARS = 1_000_000;
+
+/** The two education settings a backup carries, cleaned (never the 📚 switch or the invitation). */
+function backupSettings(raw, t = TUNING) {
+  return {
+    eduNewOrder: NEW_ORDERS.includes(raw?.eduNewOrder) ? raw.eduNewOrder : 'after',
+    eduStartLevel: Number.isInteger(raw?.eduStartLevel) && raw.eduStartLevel >= 1 && raw.eduStartLevel <= t.levels.lastLevel ? raw.eduStartLevel : 1,
+  };
+}
+
+/**
+ * The backup file's content for this device's education `record` and `settings`, at `now` (ms):
+ * { kind, v, at, cards, counters, badges, unlockedLevel, study?, settings: { eduNewOrder, eduStartLevel } }.
+ * Built from a fixed list of fields, never by copying the record: no player id, user code, sharing
+ * state, invitation or consent; not the device's own count (own), the recent cards, the day's paid
+ * cards or skips, or a won run waiting to be recorded (pending would be graded twice). Pure.
+ */
+export function educationBackup(record, settings, now = Date.now(), t = TUNING) {
+  const r = cleanEdu(record, t.education.minGap, t);
+  return {
+    kind: BACKUP_KIND,
+    v: BACKUP_VERSION,
+    at: new Date(now).toISOString(),
+    cards: r.cards,
+    counters: r.counters,
+    badges: r.badges,
+    unlockedLevel: r.unlockedLevel,
+    ...(r.study ? { study: r.study } : {}),
+    settings: backupSettings(settings, t),
+  };
+}
+
+/**
+ * A backup's text (a file, or pasted: anything around the outermost { … } is ignored) read back:
+ * { ok: true, backup: { record, settings, skipped } }, the record cleaned as the store cleans its own
+ * (old SM-2 cards converted; `skipped` counts the cards that did not survive), or { ok: false, error }:
+ * 'unrecognised' (not a backup of this game), 'newer' (a format this version cannot read), 'tooBig'.
+ * Only the backup's own fields are read. Pure; never throws.
+ */
+export function readEducationBackup(text, t = TUNING) {
+  if (typeof text !== 'string') return { ok: false, error: 'unrecognised' };
+  if (text.length > BACKUP_MAX_CHARS) return { ok: false, error: 'tooBig' };
+  const parse = (s) => {
+    try {
+      return JSON.parse(s);
+    } catch {
+      return undefined;
+    }
+  };
+  let raw = parse(text);
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    const from = text.indexOf('{');
+    const to = text.lastIndexOf('}');
+    raw = from >= 0 && to > from ? parse(text.slice(from, to + 1)) : undefined;
+  }
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw) || raw.kind !== BACKUP_KIND || !Number.isInteger(raw.v) || raw.v < 1) return { ok: false, error: 'unrecognised' };
+  if (raw.v > BACKUP_VERSION) return { ok: false, error: 'newer' };
+  const record = cleanEdu({ cards: raw.cards, counters: raw.counters, badges: raw.badges, unlockedLevel: raw.unlockedLevel, study: raw.study }, t.education.minGap, t);
+  const given = raw.cards && typeof raw.cards === 'object' ? Object.keys(raw.cards).length : 0;
+  return { ok: true, backup: { record, settings: backupSettings(raw.settings, t), skipped: given - Object.keys(record.cards).length } };
+}
+
+/** A learning streak as a span of day numbers, or null. */
+const studySpan = (s) => (s ? { from: dayNumber(s.day) - s.streak + 1, to: dayNumber(s.day), best: s.best ?? s.streak } : null);
+const dayKeyOf = (n) => new Date(n * 86400000).toISOString().slice(0, 10);
+
+/**
+ * Two learning streaks as one (plan 28, 3.1a): each is a span of days; spans that overlap or touch
+ * join (30 days to yesterday and 1 today: 31); apart, the later one is the streak. The best is the
+ * largest of both bests and the result. A stored day more than a day ahead of `today` (a clock
+ * error, plan 27) gives only its best. Pure.
+ */
+function mergeStudy(a, b, today) {
+  const now = dayNumber(today);
+  const spans = [studySpan(a), studySpan(b)].filter(Boolean);
+  const best = Math.max(0, ...spans.map((s) => s.best));
+  const live = spans.filter((s) => s.to <= now + 1).sort((x, y) => x.to - y.to);
+  if (!live.length) {
+    const s = a ?? b;
+    return s ? { ...s, best: Math.max(best, s.streak) } : null;
+  }
+  let cur = live[live.length - 1];
+  if (live.length === 2 && live[0].to >= cur.from - 1) cur = { from: Math.min(live[0].from, cur.from), to: cur.to };
+  const streak = cur.to - cur.from + 1;
+  return { day: dayKeyOf(cur.to), streak, best: Math.max(best, streak) };
+}
+
+const sameJson = (x, y) => JSON.stringify(x) === JSON.stringify(y);
+
+/**
+ * This device's education record `local` with a backup's `backup` (both as cleanEdu gives them)
+ * merged in, and what it changed: { record, added, updated, badges, changed }. Merging the same
+ * backup twice changes nothing.
+ *   cards     the later answer wins (lastAt, then reviewedAt); a tie keeps this device's; a card
+ *             skipped here today keeps its wait. added and updated count the live cards only (an
+ *             unknown or retired id is kept, not counted).
+ *   counters  gradedRuns and gradeSum together from the record with more graded runs (a tie: this
+ *             device), so the average stays a true mean; revives and perfectStreak the larger.
+ *   badges    both, each at its earlier day (`badges`: how many are new here).
+ *   level     the higher unlockedLevel.   study   mergeStudy.
+ *   own       when the grade pair comes from the backup and there is no own yet: this device's pair
+ *             from before, so the 📚 board is sent only runs played here (boardRecord). Never raised.
+ *   kept      recent, paid, buried, pending: this device's.
+ */
+export function mergeEducation(local, backup, { today = localDayKey(), cards = CARDS, t = TUNING } = {}) {
+  const keep = t.education.minGap;
+  const L = cleanEdu(local, keep, t);
+  const B = cleanEdu(backup, keep, t);
+  const live = new Set(cards.filter((c) => !c.retired).map((c) => c.id));
+  const skippedToday = buriedIdsOn(L.buried, today);
+  const merged = { ...L.cards };
+  let added = 0;
+  let updated = 0;
+  for (const [id, rec] of Object.entries(B.cards)) {
+    const mine = L.cards[id];
+    const later = !mine || rec.lastAt > mine.lastAt || (rec.lastAt === mine.lastAt && rec.reviewedAt > mine.reviewedAt);
+    if (!later) continue;
+    // A card skipped here today keeps its wait (a Skip moves dueAt only).
+    merged[id] = mine && skippedToday.includes(id) ? { ...rec, dueAt: Math.max(rec.dueAt, mine.dueAt) } : rec;
+    if (live.has(id)) {
+      if (mine) updated += 1;
+      else added += 1;
+    }
+  }
+  const lc = L.counters;
+  const bc = B.counters;
+  const fromBackup = (bc.gradedRuns ?? 0) > (lc.gradedRuns ?? 0);
+  const counters = {};
+  for (const k of ['revives', 'perfectStreak']) {
+    const v = Math.max(lc[k] ?? 0, bc[k] ?? 0);
+    if (v > 0) counters[k] = v;
+  }
+  const pair = fromBackup ? bc : lc;
+  if (pair.gradedRuns) counters.gradedRuns = pair.gradedRuns;
+  if (pair.gradeSum) counters.gradeSum = pair.gradeSum;
+  const badges = { ...L.badges };
+  let newBadges = 0;
+  for (const [id, day] of Object.entries(B.badges)) {
+    if (!(id in badges)) newBadges += 1;
+    if (!(id in badges) || day < badges[id]) badges[id] = day;
+  }
+  const study = mergeStudy(L.study ?? null, B.study ?? null, today);
+  const own = L.own ?? (fromBackup ? { runs: lc.gradedRuns ?? 0, gradeSum: lc.gradeSum ?? 0 } : null);
+  const { study: _s, own: _o, ...rest } = L;
+  const record = cleanEdu({ ...rest, cards: merged, counters, badges, unlockedLevel: Math.max(L.unlockedLevel, B.unlockedLevel), ...(study ? { study } : {}), ...(own ? { own } : {}) }, keep, t);
+  return { record, added, updated, badges: newBadges, changed: !sameJson(record, L) };
+}
+
+/**
+ * The record as the 📚 board sees it (plan 28, 3.1a): this device's own graded runs (`own`; the
+ * counters when there is none) and every badge, for the share store's beginBatch and the 📚 tab's
+ * "runs still needed" line. Restored runs are never sent; restored badges are (the server joins
+ * them and keeps the earlier day).
+ */
+export function boardRecord(record) {
+  const c = record?.counters ?? {};
+  const own = record?.own ?? { runs: c.gradedRuns ?? 0, gradeSum: c.gradeSum ?? 0 };
+  return { counters: { gradedRuns: own.runs, gradeSum: own.gradeSum }, badges: record?.badges ?? {} };
 }

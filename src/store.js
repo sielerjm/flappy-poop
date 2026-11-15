@@ -9,17 +9,22 @@
  *    last write failed (a full storage): then the value lives for this page load only;
  *  - clear() removes the key and empties memory.
  * `clean(raw)` turns whatever is stored (or null) into the store's value; it must accept its own
- * output. Nothing here throws.
+ * output. saved() says whether the value outlives this page load: false with no storage, after a
+ * write that failed (a full storage), while reads throw, or on the page's stand-in for blocked storage (pageStorage)
+ * (plan 28, 3.1a: a restore says when it lasts for this visit only). Nothing here throws.
  */
 export function createJsonStore(storage, key, clean) {
   let memory = clean(null);
   let unsaved = false; // this load's last write did not reach storage: storage is behind memory
+  let unreadable = false; // the last read of storage threw: memory served it
   const read = () => {
     if (!storage || unsaved) return clean(memory);
     let raw;
     try {
       raw = storage.getItem(key);
+      unreadable = false;
     } catch {
+      unreadable = true;
       return clean(memory);
     }
     if (raw == null) {
@@ -52,7 +57,8 @@ export function createJsonStore(storage, key, clean) {
       unsaved = true; // the key is still there: this load reads the empty memory instead
     }
   };
-  return { read, write, clear };
+  const saved = () => Boolean(storage) && !unsaved && !unreadable && storage !== pageMemory;
+  return { read, write, clear, saved };
 }
 
 /** This page load's stand-in for a blocked localStorage (pageStorage), made on first use. */
