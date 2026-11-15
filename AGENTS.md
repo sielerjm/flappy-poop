@@ -621,7 +621,8 @@ restored runs never reach the 📚 board: a restore adds nothing to the counters
 read, and a longer history goes into `history`, for display only (`shownCounters`; under the share
 paragraph below). A
 restore into a browser that is not saving says it lasts for this visit only. Clear's warning adds that
-the cards go too (`saveClearNoteCards`), and the 📚 popup says the browser can erase them
+the cards go too (`saveClearNoteCards`, where 📚 Education data opens; its notes join without a space in
+zh-Hans: AUD-052), and the 📚 popup says the browser can erase them
 (`eduIntroKeep`). With the off switch set, the part is reachable only where the panel is (a device that
 joined or shares).
 **What leaves the device, and only by choice** (plan 21, Stage 3b): the **📚 Education data** panel

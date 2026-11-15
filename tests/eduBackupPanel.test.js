@@ -330,3 +330,24 @@ test('typing in the paste box reads no record: only Restore pasted text follows 
   await el('edu-restore-text').fire('input');
   assert.equal(el('edu-restore-paste').disabled, true);
 });
+
+// AUD-052 (the Checkpoint 3 audit): Clear's cards note points to 📚 Education data only where it opens
+// (the off switch hides it unless the device joined or shares), and zh-Hans joins its notes without a
+// space after full-width punctuation.
+test("AUD-052: Clear's cards note only where 📚 Education data opens; zh-Hans notes joined without a space", async () => {
+  const warn = async ({ locale = 'en', reachable = true, sharing = false } = {}) => {
+    globalThis.localStorage = fakeStorage();
+    const play = { getSaveState: () => ({ id: 'C'.repeat(22), name: 'Clearer', top: [] }), setSaveState() {}, educationAvailable: () => reachable, eduDataReachable: () => reachable, eduShareOn: () => sharing, researchConsent: () => null, eduHasCards: () => true };
+    openSavePanel({ game: {}, play, locale });
+    const root = body.find('save-panel') ?? body.children.find((c) => c.attrs?.role === 'dialog');
+    await root.find('save-clear-btn').click();
+    const status = root.find('save-status').textContent;
+    closeSavePanel();
+    return status;
+  };
+  assert.ok(!(await warn({ reachable: false })).includes(t('en', 'saveClearNoteCards')), 'the off switch hides the panel: no pointer to it');
+  const zh = await warn({ locale: 'zh-Hans', sharing: true });
+  assert.ok(zh.includes(t('zh-Hans', 'saveClearNoteCards')), zh);
+  assert.doesNotMatch(zh, /[。：，；！？] /, `no space after full-width punctuation: "${zh}"`);
+  assert.match(await warn({ sharing: true }), /\. Your 📚 cards/, 'English keeps its spaces');
+});

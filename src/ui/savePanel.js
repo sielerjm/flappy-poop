@@ -350,8 +350,11 @@ function onClear() {
   // A player who shares their education grades, or sent answers as a pilot tester, is told those
   // stay where they are: Clear only forgets the player here. Stop sharing and Withdraw, in
   // 📚 Education data, delete them.
-  // And one who has 📚 cards, that they go too: a backup first keeps them (plan 28, 3.1b).
-  const warning = [t(locale, 'saveClearConfirm'), ctx.play?.eduHasCards?.() ? t(locale, 'saveClearNoteCards') : '', ctx.play?.eduShareOn?.() ? t(locale, 'saveClearNoteShared') : '', ctx.play?.researchConsent?.() ? t(locale, 'saveClearNotePilot') : ''].filter(Boolean).join(' ');
+  // And one who has 📚 cards, that they go too: a backup first keeps them (plan 28, 3.1b), where 📚
+  // Education data opens (with the off switch set, only on a device that joined or shares: AUD-052).
+  // Chinese sets no space after its full-width punctuation.
+  const cardsNote = ctx.play?.eduHasCards?.() && (ctx.play?.eduDataReachable?.() ?? true);
+  const warning = [t(locale, 'saveClearConfirm'), cardsNote ? t(locale, 'saveClearNoteCards') : '', ctx.play?.eduShareOn?.() ? t(locale, 'saveClearNoteShared') : '', ctx.play?.researchConsent?.() ? t(locale, 'saveClearNotePilot') : ''].filter(Boolean).join(locale === 'zh-Hans' ? '' : ' ');
   setStatus(warning, 'error');
   clearTimeout(clearTimer);
   clearTimer = setTimeout(() => {
