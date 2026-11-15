@@ -67,7 +67,36 @@ test('the invite link (plan 28, 2.4): inviteFromSearch reads ?invite= (trimmed, 
   assert.equal(withoutInvite(`https://x.example/?invite=${'x'.repeat(201)}&r=1`), 'https://x.example/?r=1', 'a code too long to use still leaves the address');
   for (const bad of ['', '?invite=', '?invite=%20', '?other=1', `?invite=${'x'.repeat(201)}`, null, undefined]) assert.equal(inviteFromSearch(bad), null, String(bad).slice(0, 30));
   assert.equal(withoutInvite('https://x.example/flappy-poop/?invite=abc'), 'https://x.example/flappy-poop/');
-  assert.equal(withoutInvite('https://x.example/flappy-poop/?perf&invite=abc&r=5#top'), 'https://x.example/flappy-poop/?perf=&r=5#top');
+  assert.equal(withoutInvite('https://x.example/flappy-poop/?perf&invite=abc&r=5#top'), 'https://x.example/flappy-poop/?perf&r=5#top', 'the rest of the query keeps its form (AUD-038)');
   assert.equal(withoutInvite('https://x.example/flappy-poop/?r=5'), 'https://x.example/flappy-poop/?r=5', 'nothing to take: unchanged');
 });
 
+test('the invite link: both helpers read the address the same way, so a code read is always a code taken out of it (AUD-038)', () => {
+  // main.js: the code from location.search, the address cleaned whenever withoutInvite changes it.
+  const boot = (href) => {
+    const code = inviteFromSearch(new URL(href).search);
+    const clean = withoutInvite(href);
+    return { code, after: clean };
+  };
+  const base = 'https://x.example/flappy-poop/';
+  for (const tail of [
+    '?invite=SECRETCODE12345',
+    '?perf=1?invite=SECRETCODE12345', // a second "?" pasted onto a query
+    '?utm_source=chat?invite=SECRETCODE12345',
+    '?ref=?invite=SECRETCODE12345',
+    '?a=1&invite=SECRETCODE12345&b=2',
+    '?invite=SECRETCODE12345#top',
+    '?invite=&invite=SECRETCODE12345',
+    '?invite=%20&invite=SECRETCODE12345&r=1',
+  ]) {
+    const { code, after } = boot(base + tail);
+    assert.equal(code, 'SECRETCODE12345', `${tail}: the code is read`);
+    assert.ok(!after.includes('SECRETCODE12345') && !/[?&]invite=/.test(after), `${tail}: the address keeps no invite (${after})`);
+  }
+  assert.equal(withoutInvite(`${base}?perf=1?invite=X&r=2#h`), `${base}?perf=1&r=2#h`);
+  assert.equal(withoutInvite(`${base}?invite=&invite=X`), base);
+  assert.equal(withoutInvite(`${base}?reinvite=1`), `${base}?reinvite=1`, 'another parameter that ends in "invite" is left alone');
+  assert.equal(inviteFromSearch('?reinvite=SECRETCODE12345'), null);
+  assert.equal(withoutInvite(`${base}#invite=X`), `${base}#invite=X`, 'the hash is not the query: neither helper reads it');
+  assert.equal(inviteFromSearch(''), null);
+});

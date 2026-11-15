@@ -2487,28 +2487,44 @@ export function wrapCjk(text, maxWidth, measure) {
 // The invite link (plan 28, 2.4): ?invite=<code> opens the 📚 Education data panel with the code
 // filled in. main.js reads it once at boot and takes it out of the address bar at once.
 
+// An invite parameter as both helpers read it: "invite=" after a "?" or "&" anywhere in the query, a "?"
+// inside another parameter's value included (a link pasted onto an address that had a query), up to the
+// next "&" or the hash. One pattern for both, so a code read is always a code taken out (AUD-038).
+const INVITE_PARAM = /[?&]invite=([^&#]*)/g;
+
 /**
- * The code in a location.search's invite parameter (trimmed, 1 to 200 characters), else null. Decoded
- * literally (decodeURIComponent), so a "+" in a code stays a "+".
+ * The code in a location.search's invite parameter (trimmed, 1 to 200 characters), else null: the first
+ * such parameter that holds one. Decoded literally (decodeURIComponent), so a "+" in a code stays a "+".
  */
 export function inviteFromSearch(search) {
   if (typeof search !== 'string' || !search) return null;
-  const m = /[?&]invite=([^&#]*)/.exec(search);
-  if (!m) return null;
-  let code;
-  try {
-    code = decodeURIComponent(m[1]).trim();
-  } catch {
-    return null;
+  for (const m of search.matchAll(INVITE_PARAM)) {
+    let code;
+    try {
+      code = decodeURIComponent(m[1]).trim();
+    } catch {
+      continue;
+    }
+    if (code && code.length <= 200) return code;
   }
-  return code && code.length <= 200 ? code : null;
+  return null;
 }
 
-/** The address without its invite parameter (the rest of the query and the hash kept), for history.replaceState. */
+/**
+ * The address without any invite parameter, for history.replaceState: every one inviteFromSearch could
+ * read is taken out, the rest of the query kept as written (no re-encoding) and the hash kept.
+ */
 export function withoutInvite(href) {
-  const url = new URL(href);
-  if (!url.searchParams.has('invite')) return href;
-  url.searchParams.delete('invite');
-  return url.toString();
+  if (typeof href !== 'string') return href;
+  const hashAt = href.indexOf('#');
+  const head = hashAt < 0 ? href : href.slice(0, hashAt);
+  const hash = hashAt < 0 ? '' : href.slice(hashAt);
+  const q = head.indexOf('?');
+  if (q < 0) return href;
+  const search = head.slice(q);
+  const kept = search.replace(INVITE_PARAM, '');
+  if (kept === search) return href;
+  const rest = kept.replace(/^[?&]+/, '');
+  return `${head.slice(0, q)}${rest ? `?${rest}` : ''}${hash}`;
 }
 
