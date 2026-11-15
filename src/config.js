@@ -481,11 +481,11 @@ export const TEST_MODE = {
   defaultInvincible: true, // Invincible toggle state when test mode turns on
 };
 
-// Education mode (📚, plan 21) before its public release: typing one of these words as the username
-// and pressing Save unlocks it on this device (settings eduUnlocked), and typing it again locks it.
-// Like TEST_MODE's words it is never stored as a name; it is not a secret, it only shows a switch.
+// Education mode (📚, plan 21): for everyone since plan 28 (the 📚 switch on every device; enabled is the
+// off switch). Its old unlock word is still refused as a name, like TEST_MODE's words.
 export const EDUCATION = {
-  words: ['poopschool'], // matched like TEST_MODE.words (trimmed, any case; fits NAME_MAX 16)
+  enabled: true, // the off switch (plan 28, 2.3): false hides 📚 for everyone (the switch, the 📚 tab, the profile's section, Education data) with one change and a push
+  words: ['poopschool'], // the old unlock word (until plan 28): still refused as a name, with a line that 📚 is for everyone now (eduWordRetired); matched like TEST_MODE.words
   // The tester pilot (plan 21, Stage 3b; src/research.js, RESEARCH.md): answers sent by choice.
   consentVersion: 'pilot-2', // the version of RESEARCH.md a tester agrees to on joining; change it when the notice changes what is collected or why
   researchUrl: 'https://github.com/sielerjm/flappy-poop/blob/main/RESEARCH.md', // the notice, linked from the Education data panel

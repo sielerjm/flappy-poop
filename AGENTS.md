@@ -344,7 +344,7 @@ there is one (`art`: Boot's exact URL via `splashArtUrl`, all preloaded at start
 square `crop`; the emoji if it fails), else the emoji; a note about something the profile counts wears
 that badge's glyph via `achievementById`. Cards are dealt from a shuffled deck kept in `flappyPoop.splash`
 (`nextNote`: a feature this device never showed comes first; every card once per cycle; a reshuffle
-never repeats the last card; `splashPool` keeps the newest `splash.featureMax` features). The player
+never repeats the last card; `splashPool` keeps the newest `splash.featureMax` features; the newest is 📚 education, plan 28). The player
 browses at any time (swipe or mouse drag, ‹ ›, ← →, the d-pad by its own `getGamepads` poll, since
 Phaser's pad plugin is bound only in Play); the first browse stops the `hintMs` auto-advance. Boot
 drives the ring (`load.on('progress', setSplashProgress)`) and its `create()` hands
@@ -355,12 +355,15 @@ and the pad plugin reports a held button. Any error in the splash removes it and
 
 **Education mode** (📚, 2026-11-13, v0.16.1, plan `.claude/plans/21-education.plan.md`: the tester
 build, its playtest polish and Stage 3, "tester-complete"; the old plans 22 and 23 are merged into
-it). Hidden until a device is unlocked: typing one of `EDUCATION.words` (`poopschool`) as the username and pressing Save
-(`toggleEducationUnlock` in the save panel, like the test word; never stored as a name) sets the
-setting `eduUnlocked` (`Play.setEduUnlocked`); typing it again locks it. The ready screen then offers a
-📚 switch (settings `education`, remembered) under 🚽, in the 👥 slot on a phone; on a wide window the
+it). **For everyone since plan 28 (0.19.0):** no unlock word; every device has the 📚 switch while
+`EDUCATION.enabled` (the off switch: false hides 📚, its tab, its profile sections and Education data for
+everyone, one change and a push; `Play.educationAvailable()`, read each time, `eduAvailable` standing in
+for it in tests). The old word (`EDUCATION.words`, `poopschool`) typed as a username is still never stored
+as a name: the save panel says 📚 is on the home screen for everyone (`eduWordRetired`). Turning 📚 on asks
+the browser to keep the site's storage (`navigator.storage.persist`). The ready screen offers the
+📚 switch (settings `education`, remembered, off by default) under 🚽, in the 👥 slot on a phone; on a wide window the
 three switches pack into 64 px boxes (`readyLayout({ versus, education })`, y 808 / 874 / 940); 👥 and
-📚 switch each other off. `refreshReadySwitches` re-lays them in place when test mode or the word
+📚 switch each other off. `refreshReadySwitches` re-lays them in place when test mode
 changes (stable `switchBoxes` for the focus ring); a gold count on the 📚 is the cards due (`dueCount`).
 The 📚 glyph and that count are a box of their own inside the switch's (`readyLayout`'s
 `educationInfo`, which `readyHit` looks at first): a tap there, or A on its ring item, opens **"Your cards"**
@@ -371,7 +374,7 @@ and the pad's A press nothing under it; another chrome key (S, I, L…) closes i
 (`handleChrome`; P since AUD-027). It never opens under the 📚 popup: `openEduIntro` drops a press still down
 on the glyph (`eduCardPress`), and `toggleEduCard` refuses while the popup is open (AUD-034). Turning the switch
 on opens nothing since that step. **The 📚 popup** (plan 26: `ui/eduIntroPanel.js`, `Play.openEduIntro`) is a
-DOM panel with the beta note, how the mode works, the player's cards (the cards not
+DOM panel with the beta note, a line that the cards are not medical advice (`eduIntroNotMedical`, plan 28), how the mode works, the player's cards (the cards not
 seen yet, the missed ones due, the reviews due over every deck: `cardCounts`; how many have been seen:
 `masteryByDeck`; and that the gold number is missed plus to review: `Play.eduIntroInfo`), the start
 level (◀ LV n ▶ while a later level is unlocked; no start-level row at all in test mode, whose run starts at
@@ -588,7 +591,7 @@ level row, the grade), so `endRun` keeps it in the education store as `pending` 
 (`refreshOverEducation`). It is recorded once, from its final tally, when the panel is left (Home and
 Play again restart Play: `finishPendingEducation` in `create`, then a sync) or at the next page load;
 nothing reaches the 📚 board before. A lost run is recorded at once. Under test mode a bonus answer
-counts nowhere. Your own **profile**, with education unlocked, ends with a 📚 Education section: the
+counts nowhere. Your own **profile** (while education is available) ends with a 📚 Education section: the
 average grade, the graded runs, and (plan 26 A2, Michael's checklist; your own profile only, never shared)
 🔥 Learning streak, ❤️‍🔥 Longest streak and Highest level unlocked (`eduProfileRows`, `Stats.eduView`), then the
 eight badges. **Learning streaks**: a local day on which at least one card was answered and saved in an
@@ -623,10 +626,10 @@ never send a round's runs twice. A badge day the server finds out of range (a de
 clock) is stored as today. A 📚 name belongs to one player: `name_blocked` counts the 📚 board's
 rows, and sharing or a rename refuses a name another player holds on any board (since plan 25 a
 🌞-only or 🏅-only name is likewise one player's on every board). Share and rename wait 5 s per
-player (`'too soon'`, read as offline), and a fold takes both players' 📚 locks. The board is a fourth leaderboard tab on unlocked devices
+player (`'too soon'`, read as offline), and a fold takes both players' 📚 locks. The board is a fourth leaderboard tab while education is available
 (`leaderboardLayout({ tabs })`, `Leaderboard.showEducation`, `education_board`: from
 `education.boardMinRuns` graded runs, by average grade); a sharing player's profile carries
-`education` for anyone (`player_stats`), drawn only on unlocked devices. **🔬 Tester data** (the
+`education` for anyone (`player_stats`), drawn while education is available. **🔬 Tester data** (the
 pilot; the notice is `RESEARCH.md`, its version `EDUCATION.consentVersion`): an invited adult joins
 with the invite code (`Play.joinResearch`; `enrol_research` checks its SHA-256 and the code is kept
 nowhere), after which `quizAnswer` records each answer as an event (`src/research.js`:
@@ -739,8 +742,9 @@ src/
                             buryPerDay and buryMs (Skip's price, its daily cap for
                             due cards, its least wait: skipUntil), boardMinRuns
                             (graded runs before the 📚 board lists a player),
-                            revivePenaltyPerLevel. EDUCATION.words = the unlock word
-                            (poopschool), matched like TEST_MODE.words. TUNING.splash = the
+                            revivePenaltyPerLevel. EDUCATION.enabled = the off switch
+                            (plan 28); EDUCATION.words = the old unlock word (poopschool),
+                            still refused as a name. TUNING.splash = the
                             loading splash (hintMs, slideMs, fadeMs, swipePx,
                             featureMax, storageKey; the ring: ringEaseMs,
                             ringMaxPerSec, ringMinPerSec, ringFrameCapMs, waitCap,
@@ -1240,8 +1244,8 @@ src/
                             until Stop sharing / Withdraw). Load queues the merge
                             also when the device holds a pilot consent.
                             A 📚 Education data button beside Profile, shown only
-                            while education mode is unlocked (refreshClear; it
-                            appears as soon as the word is typed), closes this
+                            while education mode is available (refreshClear:
+                            Play.educationAvailable()), closes this
                             panel and opens ui/eduDataPanel.js.
                             Opened by the ready screen's user button, with
                             { focusName: true } while there is no username (caret
@@ -1750,7 +1754,7 @@ src/
                             Wrapped text uses useAdvancedWrap for CJK.
     HowTo.js                Overlay: flap rules plus pipe / fiber / probiotic /
                             postbiotic / bacteria / bean / mystery box (mystery-icon) /
-                            levels / controls / toilet / two players / tournament / Daily Dump rows,
+                            levels / controls / toilet / two players / tournament / Daily Dump / 📚 education (plan 28) rows,
                             then one row per tray button left to right (ⓘ 🌐 💬 🏆 🔊 ⚙;
                             the 🔊 Sound row also carries the iPhone Silent-mode note)
                             (howToItems; the pipe icon is a cropped cap slice, the rows
@@ -1807,7 +1811,7 @@ src/
                             over the board (sv.link: a tap, not a drag; only while
                             the board is on top); the – rows are not names.
                             A fourth tab, 📚 ('education'), only when
-                            Play.isEduUnlocked() (tabList; leaderboardLayout takes
+                            Play.educationAvailable() (tabList; leaderboardLayout takes
                             the tab count): showEducation draws rank, name, grade
                             and runs from Play.fetchEduBoard; the footer is the
                             player's rank (eduYouText), the graded runs still
@@ -1822,7 +1826,7 @@ src/
                             server when named; offline / unnamed notes). Sections in
                             a scroll view (statsLayout): Singleplayer, Daily Dump
                             podiums, Tournaments (medals, biggest rival), 📚 Education
-                            on an unlocked device (eduView; your own adds the learning
+                            while education is available (eduView; your own adds the learning
                             streaks and the highest level unlocked: plan 26 A2), Career (a
                             glyph grid of the 13 counters, CAREER, five to a row), Achievements
                             (earned, then the rest dimmed with lifetime progress; for
@@ -1837,14 +1841,14 @@ src/
                             the nearest cell (focusNearest over cells only), ✕ above
                             the first row (scrolls to the top). Tags (view.tags, TAGS: 🔧 🎖️ 🆕) lead the Achievements grid, each a card. No username: the gate
                             (buildGate) instead; refresh() restarts it either way.
-                            The 📚 Education section (education unlocked): your own
+                            The 📚 Education section (education available): your own
                             has an "On the 📚 board" row (Shared / Not shared) that
                             opens the Education data panel, follows the server's
                             answer both ways (Play.noteEduShared), and a Tester
                             pilot row while joined; another player's shows only
                             what they share (sharedEduView: grade, runs, earned
                             badges).
-                            Your own profile, with education unlocked, ends with a
+                            Your own profile, while education is available, ends with a
                             📚 Education section (plan 22; eduView, from this device's
                             education store): the average grade, the graded runs,
                             and the eight education badges (eduBadgeItems) with
@@ -2297,7 +2301,7 @@ tests/                      node --test (schema.test.js, pilot.test.js, eduBoard
                             before or after), two devices, a new participation, the
                             queue emptied on join, the kept phase, an older notice
                             (Withdraw offered, nothing recorded or sent), an offline
-                            Withdraw, Clear, the unlock word never saved as a name
+                            Withdraw, Clear, the old unlock word never saved as a name (eduWordRetired)
   eduBoardSync.test.js      the 📚 board's sync end to end through the same stand-in:
                             a resend after another device's batch, a resend never
                             moving another player, the round probe, a merge of two
@@ -2560,7 +2564,7 @@ tools/
                             pad paired to the machine is visible to headless Chrome
                             and its presses would otherwise reach the game.
                             The education sections (plan 21, last, each putting the
-                            device back): education-unlock (the word, the 📚 switch,
+                            device back): education-unlock (📚 for everyone, the old word refused, the off switch,
                             the three switches, nothing recorded), education-quiz (the
                             pill, answers by tap / key / pad, coins, every card's fit
                             both ways, the buttons and keys, the counts on the pill

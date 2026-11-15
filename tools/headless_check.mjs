@@ -384,7 +384,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
     // run it started is not an education run, or when 📚 was on and the start opened no popup (AUD-035:
     // a section with 📚 off, or a popup that failed to open, would otherwise pass as an education run).
     const startEducationRun = async () => {
-      const wantPopup = await evaluate(`(() => { const p = __flappy.scene.getScene('Play'); return Boolean(p.educationOn && p.isEduUnlocked()); })()`);
+      const wantPopup = await evaluate(`(() => { const p = __flappy.scene.getScene('Play'); return Boolean(p.educationOn && p.educationAvailable()); })()`);
       let sawPopup = false;
       for (let attempt = 0; attempt < 3 && (await playState()) !== 'playing'; attempt += 1) {
         // A settled ready screen: a home()'s restart lands on the next frame, and a start sent before
@@ -679,14 +679,16 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
       ok(tabD.title === (await ttx('dailyBoardTitle')) && tabD.tab === 'daily' && tabD.status === (await ttx('leaderboardOffline')), `a click on 🌞 shows "${tabD.title}" (offline: "${tabD.status}")`);
       await evaluate(`(__flappy.registry.set('padMode', true), ${LB}.focus.show(), true)`);
       const tabP1 = await padA();
+      const tabPE = await padA(); // 📚, a tab for everyone since plan 28
       const tabP2 = await padA();
       await closeTop('Leaderboard');
       await sleep(300);
       await evaluate(`(__flappy.registry.set('padMode', false), __flappy.registry.set('leaderboardTab', 'scores'), import('./src/config.js').then((m) => { m.LEADERBOARD.dataApi = globalThis.__api; return true; }))`);
-      ok(tabP1.tab === 'medals' && tabP2.tab === 'scores' && tabP2.title === (await ttx('leaderboardTitle')) && tabP1.ring === 'tab' && tabP2.ring === 'tab' && !(await active('Leaderboard')), `under the pad, A moves 🌞 → ${tabP1.tab} → ${tabP2.tab} with the ring still on the tabs`);
+      ok(tabP1.tab === 'medals' && tabPE.tab === 'education' && tabP2.tab === 'scores' && tabP2.title === (await ttx('leaderboardTitle')) && tabP1.ring === 'tab' && tabPE.ring === 'tab' && tabP2.ring === 'tab' && !(await active('Leaderboard')), `under the pad, A moves 🌞 → ${tabP1.tab} → ${tabPE.tab} → ${tabP2.tab} with the ring still on the tabs`);
 
       // Your rows on the 🏆 board are pink whatever this device has played: a save with only off-toilet
       // runs still asks for its 🚽 row's rank (a player merged across devices has rows from all of them).
+      // Which ranks were asked counts, not how often: a board left on 📚 above can answer late and draw again.
       {
         const P = `__flappy.scene.getScene('Play')`;
         const saved = await evaluate(`JSON.stringify(${P}.save)`);
@@ -698,7 +700,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await closeTop('Leaderboard');
         await sleep(300);
         await evaluate(`(globalThis.fetch = globalThis.__fetch3, import('./src/config.js').then((m) => { m.LEADERBOARD.dataApi = globalThis.__api3; return import('./src/save.js'); }).then((m) => (${P}.setSaveState(m.saveLocal(${saved})), true)))`);
-        ok(rowsPink.colors['261'] === '#f8a0c8' && rowsPink.colors['197'] === '#f8a0c8' && rowsPink.colors['243'] === '#ffffff' && rowsPink.asked.join() === 'false,true', `with only off-toilet runs on this device, both of your board rows are pink (🚽 261 ${rowsPink.colors['261']}, 197 ${rowsPink.colors['197']}; ranks asked for ${rowsPink.asked.join(' and ')})`);
+        ok(rowsPink.colors['261'] === '#f8a0c8' && rowsPink.colors['197'] === '#f8a0c8' && rowsPink.colors['243'] === '#ffffff' && [...new Set(rowsPink.asked)].join() === 'false,true', `with only off-toilet runs on this device, both of your board rows are pink (🚽 261 ${rowsPink.colors['261']}, 197 ${rowsPink.colors['197']}; ranks asked for ${rowsPink.asked.join(' and ')})`);
       }
 
       // What's new always opens on the latest version, even after an older one was viewed and closed
@@ -1701,6 +1703,8 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
           await padNav('up');
           const s2 = await ring();
           await padNav('up');
+          const sEdu = await ring(); // the 📚 row (plan 28: on every device)
+          await padNav('up');
           const s3 = await ring();
           const t0 = await evaluate(`${play}.toilet`);
           await padDown(G.select);
@@ -1722,7 +1726,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
           const s6 = await ring();
           await padDown(G.back);
           const idOf = async (i) => evaluate(`${play}.focus.items[${i}]?.id ?? null`);
-          ok(s1.index === (await slot('lang')) && s2.index === (await slot('pause')) && s3.index === (await slot('toilet')) && sSun.index === (await slot('daily')) && s4.index === (await slot('howto')), `ready screen: right from ⓘ is 🌐 (${await idOf(s1.index)}), up from ⚙ is ⏸ (${await idOf(s2.index)}), up again the toilet toggle (${await idOf(s3.index)}), up again the 🌞 (${await idOf(sSun.index)}), right from it the ? (${await idOf(s4.index)})`);
+          ok(s1.index === (await slot('lang')) && s2.index === (await slot('pause')) && [await slot('educationInfo'), await slot('education')].includes(sEdu.index) && s3.index === (await slot('toilet')) && sSun.index === (await slot('daily')) && s4.index === (await slot('howto')), `ready screen: right from ⓘ is 🌐 (${await idOf(s1.index)}), up from ⚙ is ⏸ (${await idOf(s2.index)}), up again the 📚 row (${await idOf(sEdu.index)}), then the toilet toggle (${await idOf(s3.index)}), up again the 🌞 (${await idOf(sSun.index)}), right from it the ? (${await idOf(s4.index)})`);
           ok(t1 === !t0 && t2 === t0 && (await playState()) === 'ready', `A on the toggle flips toilet mode (${t0} → ${t1} → ${t2}) without starting`);
           ok(howOpen && howClosed && s5.shown && s5.index === (await slot('howto')) && s6.index === (await slot('pause')) && (await playState()) === 'ready', `A on the ? opens How to play, B closes it with the ring still on the ? (${s5.shown}); down from the ? lands on ⏸ in its column (${await idOf(s6.index)})`);
         }
@@ -3657,10 +3661,11 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
     });
 
     await section('education-unlock', async () => {
-      // Education mode (📚, plan 21) before its public release: the word typed as the username unlocks it
-      // on this device (never stored as a name), the 📚 switch appears and is remembered, 👥 and 📚 are
-      // never on together, an education run records nothing, a Daily Dump is never one, and the word
-      // locks it again. The section leaves the switch off and the mode locked, as it found them.
+      // Education mode (📚, plan 21) for everyone (plan 28, 2.3): the 📚 switch on every device from the
+      // first boot, off and remembered; the old unlock word typed as the username is never stored and
+      // says 📚 is for everyone now; 👥 and 📚 are never on together, an education run records nothing, a
+      // Daily Dump is never one; EDUCATION.enabled false hides 📚 for everyone. The section leaves the
+      // switch off, as it found it.
       {
         const play = `__flappy.scene.getScene('Play')`;
         const tx = (key) => evaluate(`import('./src/i18n.js').then((m) => m.t('en', '${key}'))`);
@@ -3681,7 +3686,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
           for (let i = 0; i < 40 && (await playState()) !== 'ready'; i += 1) await sleep(250);
         };
         const switches = () =>
-          evaluate(`(() => { const p = ${play}; const b = p.readyBoxes; return JSON.stringify({ toilet: b.toilet.y, versus: b.versus?.y ?? null, edu: b.education?.y ?? null, eduToggle: Boolean(p.educationToggle), on: p.educationOn, vOn: p.versusOn, unlocked: p.isEduUnlocked(), stored: JSON.parse(localStorage.getItem('${TT.settingsKey}') ?? '{}') }); })()`).then(JSON.parse);
+          evaluate(`(() => { const p = ${play}; const b = p.readyBoxes; return JSON.stringify({ toilet: b.toilet.y, versus: b.versus?.y ?? null, edu: b.education?.y ?? null, eduToggle: Boolean(p.educationToggle), on: p.educationOn, vOn: p.versusOn, available: p.educationAvailable(), stored: JSON.parse(localStorage.getItem('${TT.settingsKey}') ?? '{}') }); })()`).then(JSON.parse);
         const tap = (id) => evaluate(`(() => { const p = ${play}; const b = p.readyBoxes['${id}']; p.flap({ x: b.x, y: b.y }); return true; })()`);
         const typeWord = async (typed) => {
           await evaluate(`${play}.openSavePanel(), true`);
@@ -3698,18 +3703,18 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
 
         await home();
         const s0 = await switches();
-        ok(s0.edu === null && !s0.eduToggle && !s0.unlocked, `no 📚 switch before the word (unlocked ${s0.unlocked}, box ${s0.edu})`);
+        ok(s0.available && s0.edu === 886 && s0.toilet === 812 && s0.eduToggle && !s0.on && !('eduUnlocked' in (s0.stored ?? {})), `every device has the 📚 switch, off, in the 👥 slot (y ${s0.edu}, 🚽 at ${s0.toilet}), with no unlock setting (plan 28, 2.3)`);
 
         const save0 = await evaluate(`localStorage.getItem('flappyPoop.save')`);
         const seen = await typeWord(word.toUpperCase());
         const s1 = await switches();
-        const wantOn = await tx('eduUnlocked');
-        ok(seen.save === save0 && seen.field === seen.name && seen.status === wantOn, `"${word.toUpperCase()}" + Save unlocks without renaming: the save record is unchanged, the field shows "${seen.field}", status "${seen.status}"`);
-        ok(s1.unlocked && s1.stored.eduUnlocked === true && s1.edu === 886 && s1.toilet === 812 && s1.eduToggle && !s1.on, `the 📚 switch appears in the 👥 slot (y ${s1.edu}, 🚽 at ${s1.toilet}), off, and the unlock is stored`);
+        const retired = await tx('eduWordRetired');
+        ok(seen.save === save0 && seen.field === seen.name && seen.status === retired, `the old word "${word.toUpperCase()}" + Save is never a name: the save record is unchanged, the field shows "${seen.field}", status "${seen.status}"`);
+        ok(s1.available && s1.edu === 886 && s1.eduToggle && !s1.on && !('eduUnlocked' in (s1.stored ?? {})), 'the word changes nothing: the 📚 switch stays, off, and no unlock is stored');
 
         await home();
         const s2 = await switches();
-        ok(s2.unlocked && s2.edu === 886 && s2.eduToggle, 'a restart (create() reading the settings) keeps the unlock and the switch');
+        ok(s2.available && s2.edu === 886 && s2.eduToggle, 'a restart (create() reading the settings) keeps the switch');
         await sleep(500); // home()'s restart lands on the next frame: a tap before it would open the popup on the scene going away
         await tap('education');
         const s3 = await switches();
@@ -4057,12 +4062,18 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         const quitOver = await evaluate(`JSON.stringify({ over: __flappy.scene.isActive('Over'), state: ${play}.state, gaveUp: ${play}.breakGaveUp })`).then(JSON.parse);
         ok(armed.state === 'paused' && armed.quitLabel === (await tx('breakQuitSure')) && quitOver.over && quitOver.state === 'dead' && quitOver.gaveUp, `Quit: the first tap arms it ("${armed.quitLabel}"), the second ends the run; caught up but nothing answered, so it counts as quitting, for 🏳️ (plan 26, A2)`);
 
-        // The word again locks it: the switch goes; the switch's own setting is left as it was.
+        // The off switch (plan 28, 2.3): EDUCATION.enabled false hides 📚 for everyone at the next start; true brings it back.
         await home();
         await tap('education');
-        const locked = await typeWord(word);
+        await evaluate(`import('./src/config.js').then((m) => (m.EDUCATION.enabled = false, true))`);
+        await home();
+        await sleep(600); // home()'s restart lands on the next frame (see above)
         const s4 = await switches();
-        ok(locked.status === (await tx('eduLocked')) && !s4.unlocked && s4.stored.eduUnlocked === false && s4.edu === null && !s4.eduToggle && !s4.on, `the word again locks it ("${locked.status}"): no 📚 switch, the switch left off`);
+        await evaluate(`import('./src/config.js').then((m) => (m.EDUCATION.enabled = true, true))`);
+        await home();
+        await sleep(600);
+        const s5 = await switches();
+        ok(!s4.available && s4.edu === null && !s4.eduToggle && s5.available && s5.edu === 886 && s5.eduToggle && !s5.on, `EDUCATION.enabled false hides the 📚 switch for everyone (box ${s4.edu}); true brings it back, off (box ${s5.edu})`);
       }
     });
 
@@ -4082,7 +4093,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
 
         // Level 2 unlocked, so this break is no gate and the quiz's own checks below run as they were; the
         // gate and Skip have their own checks further on, on stores of their own (plan 25; Skip since plan 26's A2).
-        await evaluate(`localStorage.removeItem('flappyPoop.eduSrs'), ${play}.eduStore.unlockLevel(2), ${play}.setEduUnlocked(true), ${play}.settings.set({ education: true }), true`);
+        await evaluate(`localStorage.removeItem('flappyPoop.eduSrs'), ${play}.eduStore.unlockLevel(2), ${play}.settings.set({ education: true }), true`);
         await home();
         await startEducationRun();
         // The poop starts high (y 400), so the break's glide has to bring it to mid-height (plan 28, 1.1).
@@ -4535,7 +4546,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
 
         await evaluate(`${play}.resumePlay(), true`);
         await home();
-        await evaluate(`localStorage.removeItem('flappyPoop.eduSrs'), ${play}.settings.set({ education: false }), ${play}.setEduUnlocked(false), true`);
+        await evaluate(`localStorage.removeItem('flappyPoop.eduSrs'), ${play}.settings.set({ education: false }), true`);
         await home();
         const base = await evaluate(`import('./src/config.js').then((c) => JSON.stringify(${play}.shopPrices()) === JSON.stringify(c.TUNING.shop.prices))`);
         ok(base, 'outside an education run the shop keeps its base prices');
@@ -4600,7 +4611,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         const stores = () => evaluate(`JSON.stringify(${storeKeys}.map((k) => localStorage.getItem(k)))`);
         const [wrong, over, back, choice, restored] = await Promise.all(['quizWrong', 'reviveOver', 'reviveBack', 'reviveChoice', 'reviveRestored'].map(tx));
         const [flyOn, goFor, endRun, giveUp, quitSure, quitWarn] = await Promise.all(['reviveContinue', 'reviveStreakGo', 'reviveEnd', 'reviveQuit', 'reviveQuitSure', 'reviveQuitWarn'].map(tx));
-        await evaluate(`localStorage.removeItem('flappyPoop.eduSrs'), ${play}.setEduUnlocked(true), ${play}.settings.set({ education: true }), true`);
+        await evaluate(`localStorage.removeItem('flappyPoop.eduSrs'), ${play}.settings.set({ education: true }), true`);
 
         // Three misses: game over, the field as it was, no penalty, nothing recorded.
         await startEdu(`p.score = 9`);
@@ -4964,7 +4975,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         ok(g.over && g.state === 'dead' && !g.quiz, 'Quit, warned, ends the run');
 
         await home();
-        await evaluate(`localStorage.removeItem('flappyPoop.eduSrs'), ${play}.settings.set({ education: false }), ${play}.setEduUnlocked(false), true`);
+        await evaluate(`localStorage.removeItem('flappyPoop.eduSrs'), ${play}.settings.set({ education: false }), true`);
         await home();
       }
     });
@@ -4994,7 +5005,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         const all = JSON.stringify(await evaluate(`JSON.stringify(Object.fromEntries(Object.keys(localStorage).map((k) => [k, localStorage.getItem(k)])))`));
         // A revive's Quit warns on every card (plan 26, A2; education-revive checks it): quitQuiz presses it,
         // waits out the hold, and presses again.
-        await evaluate(`localStorage.removeItem('flappyPoop.eduSrs'), ${play}.setEduUnlocked(true), ${play}.settings.set({ education: true }), true`);
+        await evaluate(`localStorage.removeItem('flappyPoop.eduSrs'), ${play}.settings.set({ education: true }), true`);
         const quitQuiz = async () => {
           await evaluate(`${Q}.leftBtn.press(), true`); // the warning
           await sleep(TT.education.explainMinMs + 200);
@@ -5246,11 +5257,11 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         ok(rival.edu && rival.texts.includes(gradeRow) && ![streakRow, bestRow, levelRow].some((x) => rival.texts.includes(x)), "another player's shared 📚 section has their grade but no learning streak or level rows (those stay on the device)");
         await shutProfile();
         await evaluate(`globalThis.__profile = null, true`);
-        await evaluate(`${play}.eduUnlocked = false, true`);
+        await evaluate(`${play}.eduAvailable = false, true`); // EDUCATION.enabled false, for this scene
         const lockedProfile = await openProfile();
-        ok(lockedProfile.edu === null && lockedProfile.cells.length === 0 && !lockedProfile.texts.some((x) => x.includes('\u{1F4DA}')), 'a device without education unlocked has no 📚 section on its profile');
+        ok(lockedProfile.edu === null && lockedProfile.cells.length === 0 && !lockedProfile.texts.some((x) => x.includes('\u{1F4DA}')), 'with education switched off for everyone (EDUCATION.enabled), the profile has no 📚 section');
         await shutProfile();
-        await evaluate(`(() => { const p = ${play}; p.eduUnlocked = true; if (${lentName}) p.save = { ...p.save, name: null }; return true; })()`);
+        await evaluate(`(() => { const p = ${play}; delete p.eduAvailable; if (${lentName}) p.save = { ...p.save, name: null }; return true; })()`);
         ok(JSON.stringify(rec0.counters) === '{}' && rec0.badges.length === 0, `the section began from an empty education record (the won run above still waiting: ${rec0.pending} answer)`);
 
         // The 📚 board's sending (plan 21, B2), the server stubbed (globalThis.__edu / __eduAnswer, set up
@@ -5357,15 +5368,15 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
 
         // Clear (the save panel's sign-out) wipes the cards' progress; the unlock, a setting, stays.
         await home();
-        const cleared = await evaluate(`(() => { const p = ${play}; const had = Boolean(localStorage.getItem('flappyPoop.eduSrs')); const before = p.eduStore.load(); const sharing = p.eduShare.load().on; p.signOut(); const r = p.eduStore.load(); return JSON.stringify({ had, hadBadges: Object.keys(before.badges).length, gone: Object.keys(r.cards).length === 0 && Object.keys(r.counters).length === 0 && Object.keys(r.badges).length === 0, unlocked: p.isEduUnlocked(), sharing, sharingAfter: p.eduShare.load().on, stored: localStorage.getItem('flappyPoop.eduShare') }); })()`).then(JSON.parse);
-        ok(cleared.had && cleared.hadBadges === 3 && cleared.gone && cleared.unlocked, 'Clear wipes the cards\' progress, the education badges and the average, and keeps the unlock');
+        const cleared = await evaluate(`(() => { const p = ${play}; const had = Boolean(localStorage.getItem('flappyPoop.eduSrs')); const before = p.eduStore.load(); const sharing = p.eduShare.load().on; p.signOut(); const r = p.eduStore.load(); return JSON.stringify({ had, hadBadges: Object.keys(before.badges).length, gone: Object.keys(r.cards).length === 0 && Object.keys(r.counters).length === 0 && Object.keys(r.badges).length === 0, available: p.educationAvailable(), sharing, sharingAfter: p.eduShare.load().on, stored: localStorage.getItem('flappyPoop.eduShare') }); })()`).then(JSON.parse);
+        ok(cleared.had && cleared.hadBadges === 3 && cleared.gone && cleared.available, 'Clear wipes the cards\' progress, the education badges and the average; 📚 stays available');
         ok(cleared.sharing && !cleared.sharingAfter && cleared.stored === null, 'Clear forgets the 📚 board sharing on this device');
 
         // The education panels at a wide field (plan 25, A10): 1600 × 900, after the field re-fits.
         // Play again's glow stays clear of Home, and the band clips no row.
         // 👥 off for these runs (an earlier section may have left it on, and wide it would start a match).
         const versusWas = await evaluate(`Boolean(__flappy.registry.get('versus'))`);
-        await evaluate(`__flappy.registry.set('versus', false), ${play}.setEduUnlocked(true), ${play}.settings.set({ education: true }), true`);
+        await evaluate(`__flappy.registry.set('versus', false), ${play}.settings.set({ education: true }), true`);
         await home();
         const until = async (expr) => {
           for (let i = 0; i < 60 && !(await evaluate(expr)); i += 1) await sleep(100);
@@ -5404,10 +5415,10 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
 
         // Put the device back as it was (the player Clear forgot, the settings), then home.
         await evaluate(`(() => { const want = JSON.parse(${all}); for (const k of Object.keys(localStorage)) if (!(k in want)) localStorage.removeItem(k); for (const [k, v] of Object.entries(want)) localStorage.setItem(k, v); return true; })()`);
-        await evaluate(`(() => { const p = ${play}; p.eduUnlocked = false; p.educationOn = false; return true; })()`);
+        await evaluate(`(() => { const p = ${play}; p.educationOn = false; return true; })()`);
         await home();
-        const back = await evaluate(`JSON.stringify({ unlocked: ${play}.isEduUnlocked(), name: ${play}.getSaveState().name ?? null })`).then(JSON.parse);
-        ok(!back.unlocked, `the device is put back (education locked, player "${back.name}")`);
+        const back = await evaluate(`JSON.stringify({ on: ${play}.educationOn, name: ${play}.getSaveState().name ?? null })`).then(JSON.parse);
+        ok(!back.on, `the device is put back (📚 off, player "${back.name}")`);
         // A normal run's game-over panel has no tally line (nor a stale one from the education panels above).
         for (let attempt = 0; attempt < 3 && (await playState()) !== 'playing'; attempt += 1) {
           for (let i = 0; i < 20 && (await playState()) !== 'ready'; i += 1) await sleep(100);
@@ -5473,9 +5484,11 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
           await sleep(300);
         };
 
-        // A device without education unlocked: no button, no tab, no panel.
-        await evaluate(`${play}.setEduUnlocked(false), ${play}.settings.set({ education: false }), ${play}.eduShare.clear(), true`);
+        // With education switched off for everyone (EDUCATION.enabled false): no button, no tab, no panel.
+        await evaluate(`import('./src/config.js').then((m) => (m.EDUCATION.enabled = false, true))`);
+        await evaluate(`${play}.settings.set({ education: false }), ${play}.eduShare.clear(), true`);
         await home();
+        await sleep(600); // the restart lands on the next frame
         await nameAs('ShareSmoke');
         await evaluate(`${play}.openSavePanel(), true`);
         await sleep(200);
@@ -5485,21 +5498,21 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await closeBoard();
         await evaluate(`${play}.openEduData(), true`);
         const lockedPanel = await dataPanel();
-        ok(lockedBtn === true && lockedBoard.tabs.join() === 'scores,daily,medals' && lockedBoard.tab === 'scores' && lockedBoard.xs.length === 3 && !lockedPanel.open, `a device without education unlocked has no 📚 Education data button, three tabs (${lockedBoard.tabs.join(' ')}; asked for 📚 it shows ${lockedBoard.tab}) and no panel`);
+        ok(lockedBtn === true && lockedBoard.tabs.join() === 'scores,daily,medals' && lockedBoard.tab === 'scores' && lockedBoard.xs.length === 3 && !lockedPanel.open, `with education switched off, no 📚 Education data button, three tabs (${lockedBoard.tabs.join(' ')}; asked for 📚 it shows ${lockedBoard.tab}) and no panel`);
 
-        // Typing the word shows the button at once; it closes the user panel and opens the data panel.
-        const [word] = await evaluate(`import('./src/config.js').then((m) => m.EDUCATION.words)`);
+        // Switched back on (as it is for everyone): the user panel shows the button; it closes that panel and opens the data panel.
+        await evaluate(`import('./src/config.js').then((m) => (m.EDUCATION.enabled = true, true))`);
+        await home();
+        await sleep(600);
         await evaluate(`${play}.openSavePanel(), true`);
         await sleep(200);
-        await evaluate(`(${el('save-name')}.value = '${word}', ${el('save-save-btn')}.click(), true)`);
-        await sleep(300);
-        const btnNow = await evaluate(`JSON.stringify({ hidden: ${el('save-edu-btn')}.hidden, text: ${el('save-edu-btn')}.textContent, unlocked: ${play}.isEduUnlocked() })`).then(JSON.parse);
+        const btnNow = await evaluate(`JSON.stringify({ hidden: ${el('save-edu-btn')}.hidden, text: ${el('save-edu-btn')}.textContent, unlocked: ${play}.educationAvailable() })`).then(JSON.parse);
         await evaluate(`${el('save-edu-btn')}.click(), true`);
         await sleep(300);
         const d0 = await dataPanel();
         const savePanelOpen = await evaluate(`import('./src/ui/savePanel.js').then((m) => m.isSavePanelOpen())`);
         const [offText, onText, shareBtn, stopBtn] = await Promise.all(['eduShareOff', 'eduShareOn', 'eduShareTitle', 'eduShareStop'].map(tx));
-        ok(btnNow.unlocked && btnNow.hidden === false && btnNow.text === (await tx('saveEduData')) && d0.open && !savePanelOpen, `typing the word shows "${btnNow.text}" in the user panel at once; it closes that panel and opens the data panel`);
+        ok(btnNow.unlocked && btnNow.hidden === false && btnNow.text === (await tx('saveEduData')) && d0.open && !savePanelOpen, `the user panel shows "${btnNow.text}" on every device; it closes that panel and opens the data panel`);
         ok(d0.state === offText && d0.btn === shareBtn && d0.disabled === true && d0.adult === false && !d0.keys, `the panel opens with sharing off, the 18+ box unticked and "${d0.btn}" waiting for it; the game's keyboard is off under it`);
         // The controller waits while a DOM panel is up.
         await evaluate(`${play}.onPadAction('nav:down'), true`);
@@ -5610,12 +5623,12 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await evaluate(`globalThis.__profile = ${JSON.stringify({ ...prof(null), name: 'Rival' })}, true`);
         const other2 = await openProfile({ name: 'Rival' });
         await shutProfile();
-        await evaluate(`(globalThis.__profile = ${JSON.stringify({ ...prof({ grade: 96.4, runs: 28, badges: { edu_grade_a: '2026-11-12' } }), name: 'Rival' })}, ${play}.eduUnlocked = false, true)`);
+        await evaluate(`(globalThis.__profile = ${JSON.stringify({ ...prof({ grade: 96.4, runs: 28, badges: { edu_grade_a: '2026-11-12' } }), name: 'Rival' })}, ${play}.eduAvailable = false, true)`);
         const other3 = await openProfile({ name: 'Rival' });
         await shutProfile();
-        await evaluate(`${play}.eduUnlocked = true, true`);
+        await evaluate(`delete ${play}.eduAvailable, true`);
         ok(other1.edu?.grade === 96.4 && other1.edu.runs === 28 && other1.edu.earned.join() === 'edu_grade_a,edu_perfect' && other1.row === null && other1.texts.includes('96.4 %') && !other1.texts.includes(sharedLabel), `another player's profile shows what they share: ${other1.edu?.grade} % over ${other1.edu?.runs} runs and their earned badges, with no sharing row`);
-        ok(other2.edu === null && other3.edu === null, 'no 📚 section for a player who does not share, nor on a device without education unlocked');
+        ok(other2.edu === null && other3.edu === null, 'no 📚 section for a player who does not share, nor with education switched off');
 
         // The tester pilot (plan 21, R2): 🔬 Tester data in the same panel. Nothing is recorded before joining.
         const Q = `__flappy.scene.getScene('Quiz')`;
@@ -5751,11 +5764,11 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
 
         // Put the device back as it was.
         await resetNet();
-        await evaluate(`(() => { const p = ${play}; p.fetchEduBoard = p.__fetchEduBoard; delete p.__fetchEduBoard; globalThis.__profile = null; __flappy.registry.set('leaderboardTab', 'scores'); const want = JSON.parse(${all}); for (const k of Object.keys(localStorage)) if (!(k in want)) localStorage.removeItem(k); for (const [k, v] of Object.entries(want)) localStorage.setItem(k, v); p.eduUnlocked = false; p.educationOn = false; return true; })()`);
+        await evaluate(`(() => { const p = ${play}; p.fetchEduBoard = p.__fetchEduBoard; delete p.__fetchEduBoard; globalThis.__profile = null; __flappy.registry.set('leaderboardTab', 'scores'); const want = JSON.parse(${all}); for (const k of Object.keys(localStorage)) if (!(k in want)) localStorage.removeItem(k); for (const [k, v] of Object.entries(want)) localStorage.setItem(k, v); p.educationOn = false; return true; })()`);
         await evaluate(`import('./src/save.js').then((m) => (${play}.setSaveState(m.loadLocal()), true))`);
         await home();
-        const back = await evaluate(`JSON.stringify({ unlocked: ${play}.isEduUnlocked(), sharing: ${play}.eduShareOn(), name: ${play}.getSaveState().name ?? '' })`).then(JSON.parse);
-        ok(!back.unlocked && !back.sharing, `the device is put back (education locked, not sharing, player "${back.name}")`);
+        const back = await evaluate(`JSON.stringify({ on: ${play}.educationOn, sharing: ${play}.eduShareOn(), name: ${play}.getSaveState().name ?? '' })`).then(JSON.parse);
+        ok(!back.on && !back.sharing, `the device is put back (📚 off, not sharing, player "${back.name}")`);
       }
     });
 

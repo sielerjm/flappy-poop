@@ -69,7 +69,7 @@ const BADGE_OF = {
   toilet: 'toilet_win',
   rectum: 'win_game',
 };
-const CHROME_GLYPH = { profile: '👤', daily: '🌞', tournament: '🏅', shop: '💰', leaderboard: '🏆', twoPlayer: '👥', userCode: '🔑', controller: '🎮' };
+const CHROME_GLYPH = { education: '📚', profile: '👤', daily: '🌞', tournament: '🏅', shop: '💰', leaderboard: '🏆', twoPlayer: '👥', userCode: '🔑', controller: '🎮' };
 // The one shared glyph, by name (Michael's call, 2026-11-11): the controller note and the games badge.
 const SHARED_OK = { controller: 'games_1000' };
 
@@ -310,3 +310,12 @@ test('ringStep: a long frame (Phaser compiling) moves the ring no more than ring
   assert.equal(ringStep(0.2, 1, Number.NaN), 0.2);
   assert.equal(ringStep(0.2, 1, -10), 0.2);
 });
+
+test('the 📚 card (plan 28, 2.3) is the newest feature, and leaves the pool when education is switched off (EDUCATION.enabled false)', async () => {
+  const { splashPool, SPLASH_NOTES } = await import('../src/splash.js');
+  const { TUNING } = await import('../src/config.js');
+  assert.equal(SPLASH_NOTES.find((n) => n.kind === 'feature').id, 'education');
+  assert.ok(splashPool(SPLASH_NOTES, TUNING, { enabled: true }).some((n) => n.id === 'education'));
+  assert.ok(!splashPool(SPLASH_NOTES, TUNING, { enabled: false }).some((n) => n.id === 'education'));
+});
+

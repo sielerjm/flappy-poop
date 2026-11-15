@@ -47,7 +47,7 @@ export class Leaderboard extends Phaser.Scene {
     const play = this.scene.get('Play');
     const locale = play?.getLocale?.() ?? 'en';
     this.locale = locale;
-    const TABS = play?.isEduUnlocked?.() ? [...BASE_TABS, 'education'] : BASE_TABS;
+    const TABS = play?.educationAvailable?.() ? [...BASE_TABS, 'education'] : BASE_TABS;
     this.tabList = TABS;
     this.tab = TABS.includes(this.registry.get(TAB_KEY)) ? this.registry.get(TAB_KEY) : 'scores';
     this.switching = false;

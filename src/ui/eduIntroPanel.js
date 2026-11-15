@@ -195,6 +195,7 @@ function render() {
     close,
     h('h2', {}, tr('eduIntroTitle')),
     h('p', { class: 'beta' }, tr('eduIntroBeta')),
+    h('p', { class: 'note', id: 'edu-intro-not-medical' }, tr('eduIntroNotMedical')),
     h('h3', {}, tr('eduIntroHowTitle')),
     how,
     h('h3', {}, tr('eduCardsTitle')),

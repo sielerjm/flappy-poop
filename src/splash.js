@@ -13,7 +13,7 @@
 // script in index.html passes them; Boot's calls use the globals) and fails open: any error removes
 // the splash and lets the game start, so the splash is never the reason the game does not load.
 
-import { TUNING } from './config.js';
+import { EDUCATION, TUNING } from './config.js';
 import { padAction, storedLocale, VERSION } from './logic.js';
 import { t, initialLocale } from './i18n.js';
 import { achievementById } from './achievements.js';
@@ -33,6 +33,7 @@ const badge = (id) => achievementById(id)?.glyph ?? '';
  * their own. A feature worth keeping for good gets reworded as a hint.
  */
 export const SPLASH_NOTES = [
+  { id: 'education', kind: 'feature', glyph: '📚', key: 'splashEducation' }, // plan 28: 📚 for everyone
   { id: 'profile', kind: 'feature', glyph: '👤', key: 'splashProfile' },
   { id: 'daily', kind: 'feature', glyph: '🌞', key: 'splashDaily' },
   { id: 'tournament', kind: 'feature', glyph: '🏅', key: 'splashTournament' },
@@ -57,7 +58,9 @@ export const SPLASH_NOTES = [
 ];
 
 /** The notes this build deals from: every hint, plus the newest t.splash.featureMax features. */
-export function splashPool(notes = SPLASH_NOTES, t = TUNING) {
+export function splashPool(notes = SPLASH_NOTES, t = TUNING, education = EDUCATION) {
+  // EDUCATION.enabled false (the off switch, plan 28) takes the 📚 card out too.
+  if (education?.enabled === false) notes = notes.filter((n) => n.id !== 'education');
   const features = notes.filter((n) => n.kind === 'feature').slice(0, t.splash.featureMax);
   return notes.filter((n) => n.kind !== 'feature' || features.includes(n));
 }

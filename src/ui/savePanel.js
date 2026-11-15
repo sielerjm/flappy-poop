@@ -179,12 +179,12 @@ function onEduData() {
 
 /**
  * Clear has something to clear, and Profile something to show, only while a username is stored.
- * 📚 Education data shows only while education mode is unlocked on this device.
+ * 📚 Education data shows while education mode is available (EDUCATION.enabled).
  */
 function refreshClear() {
   dom.clearBtn.disabled = !getState().name;
   dom.profileBtn.disabled = !getState().name;
-  dom.eduBtn.hidden = !ctx?.play?.isEduUnlocked?.();
+  dom.eduBtn.hidden = !ctx?.play?.educationAvailable?.();
 }
 
 function setStatus(text, kind = '') {
@@ -299,7 +299,11 @@ async function onSave() {
     return;
   }
   if (isTestWord(dom.name.value, EDUCATION.words)) {
-    toggleEducationUnlock();
+    // The old unlock word (until plan 28): never a name; 📚 is on the home screen for everyone now
+    // (said only while it is: EDUCATION.enabled).
+    dom.name.value = getState().name;
+    if (ctx.play?.educationAvailable?.() !== false) setStatus(t(ctx.locale, 'eduWordRetired'), 'ok');
+    dom.name.blur();
     return;
   }
   const { ok, reason } = checkNewName(dom.name.value, { current: getState().name });
@@ -364,20 +368,6 @@ function toggleTestMode() {
   play?.setTestMode?.(on);
   dom.name.value = getState().name;
   setStatus(t(ctx.locale, on ? 'testModeOn' : 'testModeOff'), 'ok');
-  dom.name.blur();
-}
-
-/**
- * Save with the education word (plan 21): unlock education mode on this device, or lock it again,
- * say which, and put the stored name back in the field. The word never becomes a name.
- */
-function toggleEducationUnlock() {
-  const play = ctx.play;
-  const on = !play?.isEduUnlocked?.();
-  play?.setEduUnlocked?.(on);
-  dom.name.value = getState().name;
-  setStatus(t(ctx.locale, on ? 'eduUnlocked' : 'eduLocked'), 'ok');
-  refreshClear(); // the 📚 Education data button comes and goes with the unlock
   dom.name.blur();
 }
 

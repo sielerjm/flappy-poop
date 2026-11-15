@@ -1,4 +1,4 @@
-import { GAME_HEIGHT, TUNING as T } from '../config.js';
+import { EDUCATION, GAME_HEIGHT, TUNING as T } from '../config.js';
 import { versionText, chromeIntent, overlayOutsideHit } from '../logic.js';
 import { createFocus, pressable } from '../ui/focus.js';
 import { isTopOverlay, openChangelog } from '../ui/overlayStack.js';
@@ -15,6 +15,7 @@ const EMOJI_ROWS = {
   twoPlayer: '👥',
   tournament: '🏅',
   daily: '🌞',
+  education: '📚',
   info: 'ℹ️',
   language: '🌐',
   feedback: '💬',
@@ -65,7 +66,7 @@ export class HowTo extends Phaser.Scene {
     const ROW_PITCH = 136;
     let nextY = cy - 190;
     let lastBottom = nextY;
-    howToItems(locale).forEach((item) => {
+    howToItems(locale).filter((item) => item.key !== 'education' || EDUCATION.enabled !== false).forEach((item) => { // the off switch (plan 28) hides the 📚 row
       const y = nextY;
       if (item.key === 'pipe') {
         // pipe.png is 128x1280 with the cap at the top: show a 64x80 cap slice.

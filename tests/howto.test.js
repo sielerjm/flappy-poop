@@ -52,7 +52,7 @@ test('HOW_TO_ITEMS names fiber, probiotic, and bacteria with their effects', () 
   const items = howToItems('en');
   assert.deepEqual(
     items.map((item) => item.key),
-    ['pipe', 'fiber', 'probiotic', 'postbiotic', 'bacteria', 'bean', 'coin', 'mystery-icon', 'levels', 'controls', 'toilet', 'twoPlayer', 'tournament', 'daily', 'info', 'language', 'feedback', 'leaderboard', 'sound', 'settings'],
+    ['pipe', 'fiber', 'probiotic', 'postbiotic', 'bacteria', 'bean', 'coin', 'mystery-icon', 'levels', 'controls', 'toilet', 'twoPlayer', 'tournament', 'daily', 'education', 'info', 'language', 'feedback', 'leaderboard', 'sound', 'settings'],
   );
   const blob = items.map((item) => `${item.name} ${item.detail}`).join('\n');
   assert.match(blob, /This is a pipe/);

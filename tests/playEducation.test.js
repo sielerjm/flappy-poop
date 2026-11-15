@@ -13,11 +13,11 @@ import { eduRunFacts } from '../src/achievements.js';
 import { createEduShareStore } from '../src/leaderboard.js';
 
 /** A Play with what start() and the switches read; heavy scene objects are sinks. */
-function half({ match = null, educationOn = false, eduUnlocked = false, versusOn = false, storage = fakeStorage(), reg = registry() } = {}) {
+function half({ match = null, educationOn = false, eduAvailable = true, versusOn = false, storage = fakeStorage(), reg = registry() } = {}) {
   const s = playScene({
     match, player: 1, tune: T, registry: reg, locale: 'en', toilet: false, dailyNext: null, save: {},
     settings: createSettingsStore(storage, T.settingsKey),
-    educationOn, eduUnlocked, versusOn,
+    educationOn, eduAvailable, versusOn,
     bob: absorb(), scoreText: absorb(), toiletHud: absorb(), poop: absorb(), levelBar: absorb(), dailyHud: absorb(), bgColor: absorb(), course: absorb(),
     effects: { coins: () => 0, spendCoins() {}, powerActive: () => false },
     testBadge: null, educationToggle: toggleStub(), versusToggle: toggleStub(), readyBoxes: null,
@@ -28,7 +28,7 @@ function half({ match = null, educationOn = false, eduUnlocked = false, versusOn
 
 test('a match half with 📚 on (unlocked, switch on) never latches an education run, and its shop keeps shop.prices (AUD-013)', () => {
   for (const player of [1, 2]) {
-    const s = half({ match: { seed: 1, slots: [{}, {}] }, educationOn: true, eduUnlocked: true });
+    const s = half({ match: { seed: 1, slots: [{}, {}] }, educationOn: true });
     s.player = player;
     s.start();
     assert.equal(s.runIsEducation, false, `P${player}: runIsEducation`);
@@ -39,13 +39,13 @@ test('a match half with 📚 on (unlocked, switch on) never latches an education
 });
 
 test('a one-player run with 📚 on does latch education (the control for the match test)', () => {
-  const s = half({ educationOn: true, eduUnlocked: true });
+  const s = half({ educationOn: true });
   s.start();
   assert.equal(s.runIsEducation, true);
 });
 
 test('an education run latched on the scene instance is reset by the next start() in a match (AUD-013)', () => {
-  const s = half({ educationOn: true, eduUnlocked: true });
+  const s = half({ educationOn: true });
   s.start();
   assert.equal(s.runIsEducation, true);
   s.respawnHold = 'quiz';
@@ -63,7 +63,7 @@ test('👥 and 📚 switch each other off (toggleVersus / toggleEducation), stor
   globalThis.innerWidth = 2400;
   globalThis.innerHeight = 1200;
   const reg = registry();
-  const s = half({ eduUnlocked: true, reg });
+  const s = half({ reg });
   s.toggleEducation();
   assert.equal(s.educationOn, true);
   s.toggleVersus();
@@ -72,23 +72,40 @@ test('👥 and 📚 switch each other off (toggleVersus / toggleEducation), stor
   assert.deepEqual([s.versusOn, s.educationOn, s.settings.load().education, reg.get('versus')], [false, true, true, false], '📚 on turns 👥 off');
 });
 
-test('on a locked device, turning 👥 on forgets the hidden, remembered 📚 switch (accepted: ACC-013)', () => {
-  const s = half({ eduUnlocked: true });
+test("with 📚 switched off for everyone (EDUCATION.enabled false), turning 👥 on keeps the hidden, remembered 📚 choice for when it comes back (plan 28's review; it was accepted as ACC-013 while a lock hid it)", () => {
+  const s = half();
   s.toggleEducation(); // 📚 on, remembered
-  s.eduUnlocked = false; // the word again locks it (setEduUnlocked(false) leaves education alone)
-  s.settings.set({ eduUnlocked: false });
-  assert.equal(s.settings.load().education, true, 'still remembered while locked');
+  s.eduAvailable = false; // the off switch
+  assert.equal(s.educationOffered(), false, 'no 📚 switch offered');
   s.toggleVersus(); // 👥 on
-  assert.equal(s.settings.load().education, false, 'the hidden 📚 was switched off and stored off');
+  assert.equal(s.settings.load().education, true, 'the stored 📚 choice is left alone');
+  s.eduAvailable = true;
+  assert.equal(s.educationOffered(), true);
+});
+
+test('turning 📚 on asks the browser to keep the site\'s storage once a visit (plan 28, 2.3: it used to be the unlock\'s job)', () => {
+  const asked = [];
+  const nav = Object.getOwnPropertyDescriptor(globalThis, 'navigator');
+  Object.defineProperty(globalThis, 'navigator', { value: { storage: { persist: () => (asked.push(1), Promise.resolve(true)) } }, configurable: true });
+  try {
+    const s = half();
+    s.toggleEducation(); // on
+    s.toggleEducation(); // off
+    s.toggleEducation(); // on again
+    assert.equal(asked.length, 1, 'asked when 📚 first went on, not again (the registry outlives the scene)');
+  } finally {
+    if (nav) Object.defineProperty(globalThis, 'navigator', nav);
+    else delete globalThis.navigator;
+  }
 });
 
 test("two tabs: 📚 stored on in one and 👥 on in the other's session: 👥 wins in that tab, as launch() would start a match, and the stored 📚 is left alone (AUD-020)", () => {
   globalThis.innerWidth = 2400;
   globalThis.innerHeight = 1200;
   const shared = new Map();
-  const a = half({ eduUnlocked: true, storage: fakeStorage(shared) });
+  const a = half({ storage: fakeStorage(shared) });
   const regB = registry();
-  const b = half({ eduUnlocked: true, storage: fakeStorage(shared), reg: regB });
+  const b = half({ storage: fakeStorage(shared), reg: regB });
   b.toggleVersus(); // tab B: 👥 on (session registry)
   a.toggleEducation(); // tab A: 📚 on (shared settings)
   // B's next create() reads both, as Play.create does, then reconciles them.
@@ -979,7 +996,7 @@ function launchScene({ educationOn = true, opens = true, ...over } = {}) {
   const tweens = [];
   const opened = [];
   const s = playScene({
-    state: 'ready', launching: false, versusOn: false, educationOn, eduUnlocked: true, match: null,
+    state: 'ready', launching: false, versusOn: false, educationOn, eduAvailable: true, match: null,
     focus: absorb(), eduCard: absorb(), bob: absorb(), poop: absorb(), poopX: 180,
     setReadyUiVisible() {}, setPoopTexture() {}, tweens: { add: (cfg) => (tweens.push(cfg), {}) },
     openEduIntro: () => (opened.push(1), opens),
@@ -1000,7 +1017,7 @@ test('the 📚 popup opens at every start from the ready screen with 📚 on (pl
   const off = launchScene({ educationOn: false });
   off.s.launch();
   assert.deepEqual([off.opened.length, off.s.launching], [0, true], '📚 off: no popup');
-  const locked = launchScene({ eduUnlocked: false });
+  const locked = launchScene({ eduAvailable: false });
   locked.s.launch();
   assert.deepEqual([locked.opened.length, locked.s.launching], [0, true], 'education not unlocked here: no popup');
   const stuck = launchScene({ opens: false });
@@ -1014,7 +1031,7 @@ test("the 📚 popup's facts (eduIntroInfo): the counts over every deck, cards s
   store.unlockLevel(3);
   const settings = createSettingsStore(fakeStorage(), T.settingsKey);
   settings.set({ eduStartLevel: 2, eduNewOrder: 'mixed' });
-  const s = playScene({ eduStore: store, settings, eduUnlocked: true, match: null, isTestMode: () => false, educationOffered: () => true });
+  const s = playScene({ eduStore: store, settings, eduAvailable: true, match: null, isTestMode: () => false, educationOffered: () => true });
   const info = s.eduIntroInfo();
   assert.deepEqual([info.counts.missed, info.seen, info.startOffered, info.startLevel, info.order, info.newPerDay], [1, 1, true, 2, 'mixed', T.education.newPerDay]);
   assert.equal(info.total, CARDS.filter((c) => !c.retired).length, 'every live card, the general deck included');

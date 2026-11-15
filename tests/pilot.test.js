@@ -48,7 +48,7 @@ function device(save, storage = globalThis.localStorage) {
     runId: null, runEvents: 0, boardNameTaken: false,
     refreshTestBadge() {}, takeCoins() {}, refreshLevelBanner() {}, refreshShopButton() {},
     refreshProfile() {}, refreshDailyPrompt() {}, scene: { get: () => null },
-    isEduUnlocked: () => true, getHand: () => null, setHand() {},
+    educationAvailable: () => true, getHand: () => null, setHand() {},
     syncLeaderboard() {
       const merges = this.mergeStore.load().reduce((chain, pair) => chain.then(() => mergePlayers(pair.keep, pair.merge).then((ok) => { if (ok) this.mergeStore.remove(pair); })), Promise.resolve());
       return (this.lastSync = merges.then(() => this.drainResearch()).catch(() => {}));
@@ -340,17 +340,17 @@ test('Clear forgets the consent and empties the queue on this device (AUD-014)',
   assert.deepEqual([phone.researchConsent(), phone.researchQueue.size()], [null, 0]);
 });
 
-test("the unlock word is never saved as a name: Save toggles education mode and the name stays the player's (AUD-014)", async () => {
-  let unlocked = false;
+test("the old unlock word is never saved as a name (AUD-014; plan 28, 2.3: it no longer unlocks anything): Save says 📚 is for everyone now and the name stays the player's", async () => {
   let saved = null;
-  const play = { getSaveState: () => ({ id: 'WORDAAAAAAAAAAAAAAAAAA', name: 'Keeper', top: [] }), isEduUnlocked: () => unlocked, setEduUnlocked: (on) => (unlocked = on), setSaveState: (st) => (saved = st), researchConsent: () => null };
+  const play = { getSaveState: () => ({ id: 'WORDAAAAAAAAAAAAAAAAAA', name: 'Keeper', top: [] }), educationAvailable: () => true, setSaveState: (st) => (saved = st), researchConsent: () => null };
   openSavePanel({ game: {}, play, locale: 'en' });
   const root = body.find('save-panel') ?? body.children.find((c) => c.attrs?.role === 'dialog');
   root.find('save-name').value = EDUCATION.words[0].toUpperCase();
   await root.find('save-save-btn').click();
   const name = root.find('save-name').value;
+  const status = root.find('save-status')?.textContent ?? null;
   closeSavePanel();
-  assert.equal(unlocked, true, 'the word unlocks education mode');
+  assert.equal(status, t('en', 'eduWordRetired'), 'it says 📚 is on the home screen for everyone');
   assert.equal(saved, null, 'nothing is saved');
   assert.equal(name, 'Keeper', 'the field shows the name again');
 });

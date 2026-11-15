@@ -213,11 +213,11 @@ export class Play extends Phaser.Scene {
     this.dailyStore = createDailyStore(); // this device's Daily Dump (🌞) attempt: claimed at the start, final at the crash
     this.dailyQueue = createDailyQueue(); // daily scores the board has not confirmed yet
     this.careerStore = createCareerStore(); // lifetime counters and achievements (plan 08): counted at endRun, sent by syncLeaderboard
-    // Education mode (📚, plan 21): unlocked on this device by its word in the save panel (setEduUnlocked),
-    // then the 📚 switch on the ready screen (toggleEducation); both live in the settings store. The cards'
-    // scheduler state lives in eduStore. runIsEducation latches per run like runIsTest.
+    // Education mode (📚, plan 21; for everyone since plan 28): the 📚 switch on the ready screen
+    // (toggleEducation), remembered in the settings store, offered while EDUCATION.enabled
+    // (educationAvailable). The cards' scheduler state lives in eduStore. runIsEducation latches per run
+    // like runIsTest.
     const eduSettings = this.settings.load();
-    this.eduUnlocked = eduSettings.eduUnlocked;
     this.educationOn = eduSettings.education;
     this.eduStore = createEduStore(browserStorage());
     this.eduShare = createEduShareStore(); // the 📚 board (plan 21): whether this player shares their grades, and what the board already has (drainEduShare)
@@ -1577,10 +1577,10 @@ export class Play extends Phaser.Scene {
   /**
    * The 📚 Education data panel (plan 21): where a player chooses to share their education grades
    * on the 📚 board. From the user panel's button, the 📚 board's footer and the profile's row;
-   * only on a device with education mode unlocked. `onClose(changed)` runs when it closes.
+   * only while education mode is available (EDUCATION.enabled). `onClose(changed)` runs when it closes.
    */
   openEduData(opts = {}) {
-    if (!this.eduUnlocked) return;
+    if (!this.educationAvailable()) return;
     openEduDataPanel({ game: this.game, play: this, locale: this.locale, ...opts });
   }
 
@@ -1599,7 +1599,7 @@ export class Play extends Phaser.Scene {
     this.versusOn = !this.versusOn;
     this.registry.set('versus', this.versusOn);
     this.versusToggle?.setOn(this.versusOn);
-    if (this.versusOn && this.educationOn) this.toggleEducation(); // 👥 and 📚 are never on together
+    if (this.versusOn && this.educationOn && this.educationAvailable()) this.toggleEducation(); // 👥 and 📚 are never on together; a 📚 hidden by the off switch keeps its stored choice (plan 28)
   }
 
   /**
@@ -1613,9 +1613,9 @@ export class Play extends Phaser.Scene {
     return true;
   }
 
-  /** The 📚 switch is offered once education mode is unlocked on this device, outside a match (plan 21). */
+  /** The 📚 switch is offered while education mode is available (EDUCATION.enabled; plan 28: no unlock word), outside a match. */
   educationOffered() {
-    return !this.match && this.eduUnlocked;
+    return !this.match && this.educationAvailable();
   }
 
   /** The 📚 switch: on or off, remembered in the settings store; switching it on switches 👥 off. It opens nothing (plan 26, A2: the 📚 popup opens at a start instead). */
@@ -1624,28 +1624,25 @@ export class Play extends Phaser.Scene {
     this.settings.set({ education: this.educationOn });
     this.educationToggle?.setOn(this.educationOn);
     if (this.educationOn && this.versusOn) this.toggleVersus();
-  }
-
-  /** Is education mode unlocked here? (the save panel asks before toggling it with the word) */
-  isEduUnlocked() {
-    return this.eduUnlocked;
-  }
-
-  /**
-   * Unlock or lock education mode on this device (the save panel's word). Unlocking asks the browser
-   * to keep this site's storage (the cards' schedule lives there); the ready screen follows at once.
-   */
-  setEduUnlocked(on) {
-    this.eduUnlocked = Boolean(on);
-    this.settings.set({ eduUnlocked: this.eduUnlocked });
-    if (this.eduUnlocked) {
+    // Switched on: ask the browser to keep this site's storage (the cards' schedule lives there), once a
+    // page load (the game's registry outlives the scene's restarts).
+    if (this.educationOn && !this.registry?.get('storagePersistAsked')) {
+      this.registry?.set('storagePersistAsked', true);
       try {
         globalThis.navigator?.storage?.persist?.()?.catch?.(() => {});
       } catch {
         /* no storage manager: nothing to ask */
       }
     }
-    this.refreshReadySwitches();
+  }
+
+  /**
+   * Is education mode available (EDUCATION.enabled, the off switch; plan 28, 2.3)? The ready screen, the
+   * save panel, the 📚 tab and the profile ask. Read each time (the ready screen lays out before create()
+   * reaches the settings); eduAvailable, when a test sets it, stands in for the config.
+   */
+  educationAvailable() {
+    return (this.eduAvailable ?? EDUCATION.enabled) !== false;
   }
 
   /**

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { createSettingsStore, vibrate } from '../src/logic.js';
 import { initialLocale } from '../src/i18n.js';
 
-const DEFAULTS = { sound: true, music: true, haptics: true, locale: 'en', howToSeenAt: '', hand: 'right', eduUnlocked: false, education: false, eduStartLevel: 1, eduNewOrder: 'after' };
+const DEFAULTS = { sound: true, music: true, haptics: true, locale: 'en', howToSeenAt: '', hand: 'right', education: false, eduStartLevel: 1, eduNewOrder: 'after' };
 
 function fakeStorage() {
   const m = new Map();
@@ -155,9 +155,17 @@ test('howToSeenAt keeps a string stamp, drops anything else, and persists', () =
 test('education mode (plan 21): the unlock and the 📚 switch are remembered booleans, false by default', () => {
   const st = fakeStorage();
   const s = createSettingsStore(st, 'k');
-  assert.deepEqual(s.set({ eduUnlocked: true, education: true }), { ...DEFAULTS, eduUnlocked: true, education: true });
-  assert.deepEqual(createSettingsStore(st, 'k').load(), { ...DEFAULTS, eduUnlocked: true, education: true }, 'read back after a reload');
-  assert.deepEqual(s.set({ eduUnlocked: 'yes', education: 1 }), DEFAULTS, 'a non-boolean reads as off, as for sound and music');
+  assert.deepEqual(s.set({ education: true }), { ...DEFAULTS, education: true });
+  assert.deepEqual(createSettingsStore(st, 'k').load(), { ...DEFAULTS, education: true }, 'read back after a reload');
+  assert.deepEqual(s.set({ education: 1 }), DEFAULTS, 'a non-boolean reads as off, as for sound and music');
+  assert.equal('eduUnlocked' in s.set({ eduUnlocked: true }), false, 'the old unlock setting is gone (plan 28, 2.3): a stored one is dropped');
+  // A tester who locked education again kept education: true behind the lock: it reads as off, once.
+  st.setItem('k', JSON.stringify({ eduUnlocked: false, education: true }));
+  assert.equal(createSettingsStore(st, 'k').load().education, false, 'a locked device\'s stale 📚 reads as off');
+  st.setItem('k', JSON.stringify({ eduUnlocked: true, education: true }));
+  assert.equal(createSettingsStore(st, 'k').load().education, true, 'an unlocked device keeps its 📚');
+  st.setItem('k', JSON.stringify({ education: true }));
+  assert.equal(createSettingsStore(st, 'k').load().education, true, 'settings written since plan 28 keep it');
   st.setItem('k', JSON.stringify({ eduUnlocked: 'yes', education: null }));
   assert.deepEqual(createSettingsStore(st, 'k').load(), DEFAULTS, 'junk in storage reads as off');
 });

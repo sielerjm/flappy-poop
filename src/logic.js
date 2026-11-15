@@ -433,12 +433,12 @@ export function createBestStore(storage, key = 'flappy-poop:best') {
 /** Which thumb the bean power button sits by on a wide field (Settings' 👈 👉 toggle; carried by the save code). */
 export const HANDS = ['left', 'right'];
 
-// eduUnlocked: education mode (📚, plan 21) unlocked on this device by its word; education: the 📚 switch;
+// education: the 📚 switch (for everyone since plan 28; the old eduUnlocked setting is dropped when read);
 // eduStartLevel: the level the ready screen's stepper starts an education run at (plan 25; Play clamps it
 // to the levels unlocked); eduNewOrder: where a quiz puts new cards, 'after' / 'mixed' / 'before' the due
 // ones (plan 26; education.js NEW_ORDERS). (reviveGiveUpWarned, plan 26's "warned once on this device",
 // is gone since plan 26's A2: a revive's Quit warns on every card. A stored value is ignored.)
-const SETTINGS_DEFAULTS = { sound: true, music: true, haptics: true, locale: DEFAULT_LOCALE, howToSeenAt: '', hand: 'right', eduUnlocked: false, education: false, eduStartLevel: 1, eduNewOrder: 'after' };
+const SETTINGS_DEFAULTS = { sound: true, music: true, haptics: true, locale: DEFAULT_LOCALE, howToSeenAt: '', hand: 'right', education: false, eduStartLevel: 1, eduNewOrder: 'after' };
 const EDU_NEW_ORDERS = ['after', 'mixed', 'before']; // education.js NEW_ORDERS (logic.js does not import education.js)
 
 /**
@@ -460,9 +460,12 @@ export function storedLocale(storage, key) {
 function normalizeSettings(raw) {
   const out = { ...SETTINGS_DEFAULTS };
   if (!raw || typeof raw !== 'object') return out;
-  for (const key of ['sound', 'music', 'haptics', 'eduUnlocked', 'education']) {
+  for (const key of ['sound', 'music', 'haptics', 'education']) {
     if (typeof raw[key] === 'boolean') out[key] = raw[key];
   }
+  // Settings from before plan 28 carry eduUnlocked: a device that was locked (or never unlocked) had no
+  // 📚 switch, so a stored education: true from before its lock reads as off. The next write drops the key.
+  if ('eduUnlocked' in raw && raw.eduUnlocked !== true) out.education = false;
   out.locale = isLocale(raw.locale) ? raw.locale : SETTINGS_DEFAULTS.locale;
   // The build (LAST_UPDATED) on which the player last opened How to play or finished a run.
   out.howToSeenAt = typeof raw.howToSeenAt === 'string' ? raw.howToSeenAt : '';

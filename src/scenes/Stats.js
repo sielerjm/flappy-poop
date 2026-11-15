@@ -174,7 +174,7 @@ export class Stats extends Phaser.Scene {
       own: true,
       // Whether this player shares on the 📚 board, as the server has it (loadProfile notes it once
       // the answer is known to be current).
-      eduShared: online && play.eduUnlocked ? Boolean(server.education) : undefined,
+      eduShared: online && play.educationAvailable?.() ? Boolean(server.education) : undefined,
       name: save.name || null,
       note: online ? null : 'statsOfflineOwn',
       single: {
@@ -191,7 +191,7 @@ export class Stats extends Phaser.Scene {
       earned,
       locked,
       tags: online ? (server.tags ?? []) : [],
-      education: play.eduUnlocked ? { ...this.eduView(play.eduStore.load()), shared: Boolean(play.eduShareOn?.()), pilot: Boolean(play.researchJoined?.()) } : null,
+      education: play.educationAvailable?.() ? { ...this.eduView(play.eduStore.load()), shared: Boolean(play.eduShareOn?.()), pilot: Boolean(play.researchJoined?.()) } : null,
     };
   }
 
@@ -245,7 +245,7 @@ export class Stats extends Phaser.Scene {
       locked: openQuests(utcDayKey()).filter((e) => !earnedIds.has(e.id)),
       tags: server.tags ?? [],
       // Only when they share it, and only on a device with education mode unlocked.
-      education: play.eduUnlocked && server.education ? this.sharedEduView(server.education) : null,
+      education: play.educationAvailable?.() && server.education ? this.sharedEduView(server.education) : null,
     };
   }
 
