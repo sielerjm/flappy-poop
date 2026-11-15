@@ -22,6 +22,10 @@ const ALLOWED_EXPORTS = {
   glowAlphaAt: "test reference: the glow's alpha profile that glowStops() draws (tests/fart.test.js)",
   topScores: 'test hook: tests/save.test.js reads top lists as plain numbers (its last game use, isNewTop, is gone)',
   // Daily Dump (plan .claude/plans/2026-11-10-daily-dump.md): helpers land before their callers.
+  RUN_DATA_KEYS: "test guard: tests/runStats.test.js keeps it equal to run_data_keys() in db/schema.sql",
+  // Plan 30, step 2.4: the run summary lands before Play feeds it (step 2.5 drops these two).
+  createRunStats: 'helper before its caller: Play feeds it from plan 30 step 2.5',
+  stubRow: 'helper before its caller: the sync sends it from plan 30 step 2.6',
 };
 
 /** UI string keys no source names literally: prefix → why (they are built at run time). */
