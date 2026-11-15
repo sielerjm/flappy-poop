@@ -8,7 +8,7 @@ A Flappy Bird–style game for phone browsers: flap a poop through the gut, dodg
 
 **Play now → [sielerjm.github.io/flappy-poop](https://sielerjm.github.io/flappy-poop/)**
 
-Works best on your phone — add it to your home screen for a full-screen, app-like launch. On a desktop or landscape window the gut widens to fill the screen. English and Simplified Chinese in-game. Version **0.15.0 beta**.
+Works best on your phone — add it to your home screen for a full-screen, app-like launch. On a desktop or landscape window the gut widens to fill the screen. English and Simplified Chinese in-game. Version **0.18.0 beta**.
 
 Tip: on iPhone, turn **Silent mode off** to hear sound.
 
@@ -240,6 +240,15 @@ A learning mode is being tested with invited players: quiz cards about the gut a
 - **The 📚 board is opt-in.** In the user panel, **📚 Education data → Share my grades** puts your username, your average grade, the number of graded runs and your education badges on a 📚 board that other testers can see. It is for adults, and **Stop sharing** deletes it from the board at once.
 - **🔬 Tester data is opt-in too**, for adults with an invite code: the game then sends each quiz answer under a random id, to test the tools. No research is being done with it. [RESEARCH.md](RESEARCH.md) says exactly what is sent and how to withdraw.
 - **A card looks wrong?** Tap the 🚩 beside its code on the quiz card to report it.
+
+#### How the cards come back
+
+- **New, Missed, Review.** A card you have never seen is **new**. Answer it right and it comes back in 2 days; answer it wrong and it is **missed** (red), and it comes back until you get it right. A card whose wait is over is due for **review**. The three numbers under 📚 Review count each.
+- **The wait grows as you remember.** Cards are scheduled by [FSRS-6](https://github.com/open-spaced-repetition), the free spaced-repetition scheduler Anki uses, with its default weights: a card comes back when the chance that you still remember it has fallen to 90 %, at most a year later. After each answer the card says when it comes back ("Next review: in 2 days").
+- **New cards: 20 a day.** The 📚 popup sets whether they come before, mixed with, or after the cards that are due.
+- **A level break waits for due cards.** While missed or due cards are left, the break holds until they are answered right. **Skip** a card for corn (a skipped due card waits until the next day at least), or **Quit** the run, which asks twice.
+- **Practice.** Caught up, **Keep practicing** asks cards that are not due yet. A right answer there leaves the card's schedule as it was; a wrong one makes it missed. A skipped practice card stays out until the next day.
+- **Corn.** Each card pays corn for its first right answer of the day, practice included. A wrong answer costs nothing.
 
 ![Finish line](docs/finish-divider.svg)
 

@@ -8,22 +8,40 @@ import { LOCALES } from './i18n.js';
 
 export const CHANGELOG = [
   {
+    version: '0.18.0',
+    date: '15 Nov 2026',
+    notes: {
+      en: [
+        'Learning mode, for testers: cards now come back on FSRS, the scheduler Anki uses. Each quiz shows what is new, missed (red) and due for review, and after an answer when that card comes back. New cards stop at 20 a day.',
+        'A learning level break has one row, Shop · Review · Quit, with the numbers under Review, and it holds until missed and due cards are answered. Caught up, ◀ LV ▶ beside the pause button picks the next level.',
+        'Every right answer pays corn once a day per card, practice included, and your corn glows; a miss costs nothing. Skip a card for corn; Quit asks twice. Why? explains each card, with links to read more.',
+        'The 📚 popup at each start explains the mode and sets your start level and the order of new cards. Your learning streak, longest streak and highest level are on your profile.',
+        'For everyone: every level break says "Shop" and "Tap to continue". The game now starts, and keeps your settings for the visit, when the browser blocks or fills its storage.',
+      ],
+      'zh-Hans': [
+        '学习模式（测试中）：卡片改用 FSRS 安排复习，和 Anki 用的是同一种算法。每次答题都会显示新卡、答错（红色）和待复习各有几张，答完还会告诉你这张卡什么时候再出现。每天最多 20 张新卡。',
+        '学习模式的关卡休息改成一排按钮：商店 · 复习 · 结束，数字显示在复习下方；答错卡和到期的卡答对之前不能继续。全部复习完后，暂停键旁的 ◀ 关卡 ▶ 可以选下一关。',
+        '每张卡每天第一次答对都给玉米粒（练习也算），玉米粒还会发光；答错不扣任何东西。可以花玉米粒跳过一张卡，结束要按两次。「为什么？」解释每张卡，并附有延伸阅读的链接。',
+        '每次开始都会弹出 📚 说明，可以设置从哪一关开始和新卡出现的顺序。个人资料里有连续学习天数、最长连续和已解锁的最高关卡。',
+        '所有模式：每次关卡休息都显示「商店」和「点击继续」。浏览器禁止或存满本地存储时，游戏现在也能启动，并在这次访问中记住你的设置。',
+      ],
+    },
+  },
+  {
     version: '0.17.0',
     date: '13 Nov 2026',
     notes: {
       en: [
-        'Learning mode: a level break offers 📚 Review, with what is waiting on a line underneath (new in blue, being learned in orange, due for review in green). Tap the numbers to see what they mean.',
-        'Before a level you have not reached yet, review the cards that are due. A card you miss comes back until you get it right, or bury it until tomorrow for coins (up to 3 a day).',
-        'Start a learning run at any level you have reached, skip ahead at a level break, or quit there: with your cards caught up, quitting costs nothing.',
-        'The quiz asks the cards that are due first and its numbers move with every answer; early reviews no longer pay coins. 💯 and 🤓 now count runs won from level 1.',
-        'Your cards reads more simply: new (not seen yet), learning (due now), to review (due now).',
+        'Learning mode: a level break offers 📚 Review, with what is waiting on a line underneath. Tap the numbers to see what they mean.',
+        'Due cards are reviewed before the run goes on. A card you miss comes back until you get it right.',
+        'Start a learning run at any level you have reached, or quit at a level break: with your cards caught up, quitting costs nothing.',
+        "The quiz's numbers move with every answer. 💯 and 🤓 now count runs won from level 1.",
       ],
       'zh-Hans': [
-        '学习模式：关卡间歇有 📚 复习按钮，下方一行显示还剩多少卡片（蓝色是新卡，橙色是学习中，绿色是待复习）。点数字可以看说明。',
-        '进入还没到过的关卡之前，要先复习到期的卡片。答错的卡片会再出现，直到答对；也可以花金币把它推到明天（每天最多 3 张）。',
-        '学习模式可以从到过的任何一关开始，也可以在关卡间歇跳过关卡或结束：卡片都复习完时，结束不会有任何损失。',
-        '答题先问到期的卡片，数字随每次作答变化；提前复习不再给金币。💯 和 🤓 现在只算从第 1 关打到通关的局。',
-        '「你的卡片」更简洁：新卡（还没见过）、学习中（已到期）、待复习（已到期）。',
+        '学习模式：关卡间歇有 📚 复习按钮，下方一行显示还剩多少卡片。点数字可以看说明。',
+        '到期的卡片要先复习，才能继续。答错的卡片会再出现，直到答对。',
+        '学习模式可以从到过的任何一关开始，也可以在关卡间歇结束：卡片都复习完时，结束不会有任何损失。',
+        '答题的数字随每次作答变化。💯 和 🤓 现在只算从第 1 关打到通关的局。',
       ],
     },
   },
