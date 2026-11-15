@@ -167,12 +167,12 @@ create table if not exists public.scores (
   name       text not null check (name ~ '^[^[:cntrl:]]{1,16}$'),        -- NAME_MAX in src/save.js
   score      int  not null check (score between 0 and 1000),              -- LEADERBOARD.maxScore in src/config.js
   toilet     boolean not null default false,                              -- the run that set `score` was on the toilet
-  level      int not null default 1 check (level between 1 and 50),       -- level the run that set `score` ended in
+  level      int not null default 1 check (level between 1 and 7),        -- level the run that set `score` ended in (TUNING.levels.lastLevel)
   updated_at timestamptz not null default now()
 );
 
 -- Added 2026-11-04 (levels): safe on a table created before the column existed.
-alter table public.scores add column if not exists level int not null default 1 check (level between 1 and 50);
+alter table public.scores add column if not exists level int not null default 1 check (level between 1 and 7);
 
 -- Added 2026-11-04 (two rows per player): the key becomes (player_id, toilet).
 -- Changes only the key: no row is deleted or rewritten, and every existing row
@@ -197,6 +197,12 @@ $$;
 -- created under an older cap (e.g. 200) picks up the value in this file.
 alter table public.scores drop constraint if exists scores_score_check;
 alter table public.scores add constraint scores_score_check check (score between 0 and 1000);
+
+-- Level cap (TUNING.levels.lastLevel, 7 since 5 Nov; plan 30): re-applied the same way, so a table
+-- made under the old 1–50 check takes it. A row stored above the last level is lowered to it first.
+update public.scores set level = 7 where level > 7;
+alter table public.scores drop constraint if exists scores_level_check;
+alter table public.scores add constraint scores_level_check check (level between 1 and 7);
 
 create index if not exists scores_board on public.scores (score desc, updated_at asc);
 
@@ -317,7 +323,7 @@ begin
   if p_score is null or p_score < 0 or p_score > 1000 then
     raise exception 'bad score';
   end if;
-  if p_level is null or p_level < 1 or p_level > 50 then
+  if p_level is null or p_level < 1 or p_level > 7 then
     raise exception 'bad level';
   end if;
 
@@ -2372,7 +2378,7 @@ returns text
 language sql
 immutable
 as $$
-  select 'c55c23b697a00323'::text; -- schema stamp
+  select '49802981f536a704'::text; -- schema stamp
 $$;
 revoke execute on function public.schema_version() from public, authenticated;
 grant  execute on function public.schema_version() to anon;

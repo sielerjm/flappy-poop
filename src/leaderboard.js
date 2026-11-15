@@ -13,7 +13,7 @@
 // plus the name_available, player_rank, player_name, tournament_board,
 // daily_board, player_stats and education_board functions.
 
-import { LEADERBOARD } from './config.js';
+import { LEADERBOARD, TUNING } from './config.js';
 import { recordScore, bestByToilet, validateName } from './save.js';
 import { addCounters, cleanCounters, isAchievementId } from './achievements.js';
 import { browserStorage, createJsonStore } from './store.js';
@@ -31,9 +31,12 @@ function baseUrl(config) {
   return url && key ? url : '';
 }
 
-/** Level (≥ 1) from any value; missing or junk reads as 1 (rows from before levels existed). */
+/**
+ * Level from any value: 1 to the last level (TUNING.levels.lastLevel, the board's cap). Missing or
+ * junk reads as 1 (rows from before levels existed); above the last (an old save) reads as the last.
+ */
 function levelOf(v) {
-  return Number.isInteger(v) && v >= 1 ? v : 1;
+  return Number.isInteger(v) && v >= 1 ? Math.min(v, TUNING.levels.lastLevel) : 1;
 }
 
 /** A normalised { playerId, name, score, toilet, level } record, or null. */

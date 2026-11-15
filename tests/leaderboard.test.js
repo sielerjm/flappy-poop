@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { LEADERBOARD } from '../src/config.js';
+import { LEADERBOARD, TUNING } from '../src/config.js';
 import { createSubmitStore, createMergeStore, createRenameStore, createTournamentQueue, nameAction, submitPlan, submitPlans, submitScore, submitTournament, checkNameAvailable, mergePlayers, fetchPlayerName, fetchTop, fetchRank, fetchTournamentBoard, submitDailyScore, fetchDailyBoard, createCareerStore, submitCounters, claimAchievements, fetchPlayerStats, createEduShareStore, shareEducation, renameEducation, unshareEducation, submitEducationGrades, fetchEducationBoard, enrolResearch, submitResearchEvents, deleteResearch } from '../src/leaderboard.js';
 
 const config = { dataApi: 'https://x.example/rest/v1', publishableKey: 'sb_publishable_test', timeoutMs: 50, limit: 10, maxScore: 200 };
@@ -287,6 +287,24 @@ test('submitPlan is null without a name, an id, or a positive best, or above max
   assert.equal(submitPlan(null, null), null);
 });
 
+test('submitPlan posts at most the last level: an old save holding a best above it posts the last level (plan 30)', () => {
+  const last = TUNING.levels.lastLevel;
+  const plan = submitPlan(named([{ score: 41, toilet: false, level: last + 2 }]), null);
+  assert.equal(plan.level, last);
+  assert.equal(submitPlan(named([{ score: 41, toilet: false, level: last + 2 }]), plan), null, 'a confirmed capped post is not sent again');
+  assert.equal(submitPlan(named([{ score: 41, toilet: false, level: last }]), null).level, last, 'the last level itself is kept');
+});
+
+test('submitScore sends at most the last level, and a stored record above it reads as the last level (plan 30)', async () => {
+  const last = TUNING.levels.lastLevel;
+  const fetch = fakeFetch({ status: 204 });
+  assert.deepEqual(await submitScore({ playerId: ID, name: 'Alice', score: 41, toilet: false, level: last + 3 }, { fetch, config }), { ok: true });
+  assert.equal(fetch.calls[0].body.p_level, last);
+  const store = createSubmitStore(fakeStorage());
+  assert.equal(store.save({ playerId: ID, name: 'Alice', score: 41, toilet: false, level: 50 }).level, last);
+  assert.equal(store.load().off.level, last);
+});
+
 test('submitPlan carries the best entry with its toilet flag, and skips when already confirmed', () => {
   const plan = submitPlan(named(), null);
   assert.deepEqual(plan, { playerId: ID, name: 'Alice', score: 41, toilet: true, level: 1 });
@@ -376,6 +394,16 @@ test('LEADERBOARD.maxScore matches the score cap in db/schema.sql (column CHECK 
   assert.ok(check && guard, 'both caps found in schema.sql');
   assert.equal(Number(check[1]), LEADERBOARD.maxScore);
   assert.equal(Number(guard[1]), LEADERBOARD.maxScore);
+});
+
+test('TUNING.levels.lastLevel matches the 🏆 level cap in db/schema.sql (every column CHECK and submit_score) (plan 30)', async () => {
+  const { readFileSync } = await import('node:fs');
+  const sql = readFileSync(new URL('../db/schema.sql', import.meta.url), 'utf8');
+  const checks = [...sql.matchAll(/level\s+int not null default 1 check \(level between 1 and (\d+)\)/g)].map((m) => Number(m[1]));
+  const constraint = sql.match(/add constraint scores_level_check check \(level between 1 and (\d+)\)/);
+  const guard = sql.match(/p_level < 1 or p_level > (\d+) then/);
+  assert.ok(checks.length >= 2 && constraint && guard, 'the column CHECKs, the re-applied constraint and the guard found in schema.sql');
+  for (const n of [...checks, Number(constraint[1]), Number(guard[1])]) assert.equal(n, TUNING.levels.lastLevel);
 });
 
 // ---------------------------------------------------------------------------

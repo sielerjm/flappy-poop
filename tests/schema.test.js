@@ -102,6 +102,29 @@ test('the schema pins the tournament limits and the score cap the game uses', ()
   assert.match(SQL, new RegExp(`best_score between 0 and ${LEADERBOARD.maxScore}`));
 });
 
+test('the 🏆 board takes levels 1 to TUNING.levels.lastLevel: a level above it is refused and changes nothing (plan 30)', async () => {
+  const db = await freshDb();
+  const last = T.levels.lastLevel;
+  const P = id('LvCap');
+  await asAnon(db, 'select public.submit_score($1, $2, 20, false, $3)', [P, 'LvCap', last]);
+  await db.exec("update public.scores set updated_at = updated_at - interval '1 minute'");
+  await assert.rejects(asAnon(db, 'select public.submit_score($1, $2, 30, false, $3)', [P, 'LvCap', last + 1]), /bad level/);
+  await assert.rejects(asAnon(db, 'select public.submit_score($1, $2, 30, true, 0)', [P, 'LvCap']), /bad level/);
+  assert.deepEqual((await db.query('select score, level from public.scores where player_id = $1', [P])).rows, [{ score: 20, level: last }]);
+  await assert.rejects(db.query('insert into public.scores (player_id, name, score, toilet, level) values ($1, $2, 1, true, $3)', [id('LvRaw'), 'LvRaw', last + 1]), /scores_level_check/, 'the column CHECK holds as well');
+});
+
+test('the paste lowers a 🏆 row stored above the last level to the last level, so the new CHECK applies (plan 30)', async () => {
+  const db = await freshDb();
+  const last = T.levels.lastLevel;
+  // A row written before the cap (the level column dates from 4 Nov; level 7 has been the last since 5 Nov).
+  await db.exec('alter table public.scores drop constraint scores_level_check');
+  await db.query('insert into public.scores (player_id, name, score, toilet, level) values ($1, $2, 90, false, $3), ($4, $5, 80, false, $6)', [id('LvOld'), 'LvOld', 12, id('LvOk'), 'LvOk', last]);
+  await db.exec(SQL);
+  assert.deepEqual((await db.query('select name, score, level from public.scores order by name')).rows, [{ name: 'LvOk', score: 80, level: last }, { name: 'LvOld', score: 90, level: last }]);
+  await assert.rejects(db.query('insert into public.scores (player_id, name, score, toilet, level) values ($1, $2, 1, true, $3)', [id('LvRaw'), 'LvRaw', last + 1]), /scores_level_check/);
+});
+
 test('anon reads none of the tournament tables; the board exposes names and counts, never ids', async () => {
   const db = await freshDb();
   for (const table of ['tournaments', 'tournament_stats', 'tournament_matchups', 'player_aliases']) {
@@ -1553,6 +1576,7 @@ async function seedLive(db) {
   await age();
   await asAnon(db, 'select public.submit_score($1, $2, $3, $4, $5)', [id('UpAlice'), 'UpAlice', 55, true, 4]);
   await asAnon(db, 'select public.submit_score($1, $2, $3, $4, $5)', [id('UpBob'), 'UpBob', 70, false, 5]);
+  await asAnon(db, 'select public.submit_score($1, $2, $3, $4, $5)', [id('UpEve'), 'UpEve', 90, false, 7]); // the last level: kept by the 🏆 cap (plan 30)
   await asAnon(db, 'select public.submit_score($1, $2, $3, $4, $5)', [id('UpCarol'), 'UpCarol', 12, true, 1]);
   await asAnon(db, 'select public.submit_score($1, $2, $3, $4, $5)', [id('UpCarolOld'), 'UpCarolOld', 33, false, 2]);
   await asAnon(db, 'select public.merge_players($1, $2)', [id('UpCarol'), id('UpCarolOld')]);
