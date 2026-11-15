@@ -7,13 +7,31 @@ const { test } = await import('node:test');
 const assert = (await import('node:assert/strict')).default;
 const { TUNING: T } = await import('../src/config.js');
 const { CARDS } = await import('../src/questions.js');
-const { createEduStore, schedule, cardCounts, localDayKey, skipUntil } = await import('../src/education.js');
+const { createEduStore, schedule, cardCounts, localDayKey, skipUntil, newTally } = await import('../src/education.js');
 const { playScene, fakeStorage, registry } = await import('./support/scenes.js');
 
 const HOUR = 3600000;
 const FALL_BACK = [2026, 10, 1]; // Sun 1 Nov 2026: 25 hours (01:00 to 02:00 PDT happens twice)
 const SPRING = [2026, 2, 8]; // Sun 8 Mar 2026: 23 hours (02:00 PST jumps to 03:00 PDT)
 const at = ([y, m, d], h, min = 0) => new Date(y, m, d, h, min).getTime();
+
+/** Run `fn` with the clock held at `now`, for Date.now() and new Date() (localDayKey's default) alike. */
+function withClock(now, fn) {
+  const RealDate = Date;
+  globalThis.Date = class extends RealDate {
+    constructor(...args) {
+      super(...(args.length ? args : [now]));
+    }
+    static now() {
+      return now;
+    }
+  };
+  try {
+    return fn();
+  } finally {
+    globalThis.Date = RealDate;
+  }
+}
 
 test('the zone is pinned: the fall-back day starts on PDT and ends on PST (else this file tests nothing)', () => {
   assert.deepEqual([new Date(at(FALL_BACK, 0, 30)).getTimezoneOffset(), new Date(at(FALL_BACK, 23, 45)).getTimezoneOffset()], [420, 480]);
@@ -56,17 +74,7 @@ test("AUD-029: Play's Skip of a due card waits with skipUntil and counts for the
   const store = createEduStore(fakeStorage());
   const card = CARDS.find((c) => c.deck === 'duodenum' && !c.retired);
   const now = at(FALL_BACK, 0, 30);
-  const RealDate = Date;
-  // The clock held at `now`, for Date.now() and for new Date() (localDayKey's default) alike.
-  globalThis.Date = class extends RealDate {
-    constructor(...args) {
-      super(...(args.length ? args : [now]));
-    }
-    static now() {
-      return now;
-    }
-  };
-  try {
+  withClock(now, () => {
     store.answer(card.id, schedule(null, 'again', now - 60000));
     const wallet = { coins: 30 };
     const s = playScene({
@@ -76,7 +84,20 @@ test("AUD-029: Play's Skip of a due card waits with skipUntil and counts for the
     assert.equal(s.skipCard(card.id), true);
     assert.equal(store.load().cards[card.id].dueAt, at([2026, 10, 2], 0), 'due at the next local midnight, not at 23:30 the same date');
     assert.deepEqual(store.load().buried, { day: '2026-11-01', n: 1, ids: [card.id] }, 'counted toward that date\'s cap');
-  } finally {
-    globalThis.Date = RealDate;
-  }
+  });
+});
+
+test('pay once a day across a local midnight inside one break (AUD-035): right at 23:59 pays, right again after midnight pays (a new local day), then not again that day', () => {
+  const store = createEduStore(fakeStorage());
+  const card = CARDS.find((c) => c.deck === 'stomach' && !c.retired);
+  const paid = [];
+  const s = playScene({
+    eduStore: store, level: 3, levelBreak: true, runIsTest: false, runQuiz: newTally(), registry: registry(), researchJoined: () => false, isTestMode: () => false, score: 40,
+    effects: { spendCoins() {}, coins: () => 0 }, takeCoins: (n) => paid.push(n), refreshLevelBanner() {}, refreshShopButton() {},
+  });
+  s.breakMissed = [];
+  const right = (t, reason) => withClock(t, () => s.quizAnswer({ card, reason, order: ['answer', 'w1', 'w2'], chosen: 'answer', rtMs: 4000, mode: 'break' }).coins);
+  const coins = [right(at([2026, 10, 14], 23, 59), 'new'), right(at([2026, 10, 15], 0, 1), 'practice'), right(at([2026, 10, 15], 0, 2), 'practice')];
+  assert.deepEqual(coins, [T.education.breakCoins, T.education.breakCoins, 0]);
+  assert.deepEqual([paid.length, store.load().paid], [2, { day: '2026-11-15', ids: [card.id] }], "the paid record is the new day's");
 });

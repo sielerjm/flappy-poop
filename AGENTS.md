@@ -780,7 +780,8 @@ src/
                             levelBarLayout, lerpColor),
                             best-score store, settings store (incl. locale,
                             howToSeenAt and hand: HANDS 'left' | 'right', the
-                            bean button's side; eduStartLevel 1–7, plan 25;
+                            bean button's side; eduStartLevel 1 … levels.lastLevel,
+                            plan 25;
                             eduNewOrder after / mixed / before, plan 26;
                             reviveGiveUpWarned is gone since plan 26's A2) +
                             howToPromptDue, vibrate helper, trayLayout, trayHit,
@@ -2113,7 +2114,8 @@ tests/                      node --test (schema.test.js, pilot.test.js, eduBoard
                             pill), shopButtonHit / shopHit, bracketButtonLayout (a row
                             under the 💰, above the bean button), eduBreakLayout
                             (plan 26 A2: one row, the chip under Review, clear of the
-                            poop, ⏸ and the tray)
+                            poop, ⏸ and the tray; plan 27: on every field width 720
+                            to 2560, with uiColumn and poopX as Play places them)
   gamepad.test.js           padAction (every knob, unmapped → null, a retuned layout),
                             stickNav deadzone / larger axis, focusStep wrapping,
                             focusRingLayout, padIntent matrix across top x state x
@@ -2229,7 +2231,8 @@ tests/                      node --test (schema.test.js, pilot.test.js, eduBoard
   eduDays.test.js           Education's local days with TZ pinned to
                             America/Los_Angeles in its own process (plan 27):
                             skipUntil on the fall-back, spring and a normal day,
-                            and Play's Skip on the fall-back day (AUD-029)
+                            and Play's Skip on the fall-back day (AUD-029); pay once
+                            a day across a local midnight inside one break (AUD-035)
   questions.test.js         src/questions.js: decks, ids, a question and three
                             different options per card, text limits, complete zh versions (skipped while no
                             card has one), references cited and existing, enough live
@@ -2401,7 +2404,8 @@ tools/
                             file:line / commit locations and a sha256 fingerprint, never
                             the id, name or lines. Read a secret from stdin (`-`). Exit 1
                             on a hit. tests/privacy.test.js uses its helpers
-                            (forbiddenPaths: the paths git must never track).
+                            (forbiddenPaths: the paths git must never track; its
+                            folders in any case at the root, AUD-035).
   audit_questions.mjs       The question bank's audits (plan 21): list (unaudited and
                             stale cards), report [--out=f] (a markdown review sheet:
                             the checklist, every card with its status and hash, the
@@ -2417,7 +2421,8 @@ tools/
                             outside every section, and so does startEducationRun (plan 26
                             A2): every education section starts its runs through it (a
                             settled ready screen, a start, the 📚 popup's Play once its
-                            click lockout is over). The boot wait goes through the loading
+                            click lockout is over; a check fails when the run is not an
+                            education run, or 📚 was on and no popup opened: AUD-035). The boot wait goes through the loading
                             splash: a card shows, Continue lights up and glows, Play waits,
                             → changes the card, Space down alone does nothing, its release
                             continues; then the splash is gone and the ready screen did

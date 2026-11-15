@@ -51,6 +51,12 @@ test('forbiddenPaths flags meta/, .claude/plans/, Claude outputs/ and row dumps,
   assert.deepEqual(forbiddenPaths(paths), ['meta/db-backups/x.sql', '.claude/plans/Archive/a.md', 'db/scores_rows.sql', 'Claude outputs/handoff.md', 'Claude outputs/pack/skills/x.md']);
 });
 
+test('forbiddenPaths matches its folders in any case at the root (AUD-035: git on macOS ignores case, so "claude outputs/" is the same folder), and only at the root', () => {
+  const flagged = ['claude outputs/a.md', 'Claude Outputs/a.md', 'CLAUDE OUTPUTS/x/y.md', 'Meta/x', 'META/db-backups/y.sql', '.claude/Plans/x.md', '.Claude/plans/x.md', 'db/Scores_Rows.SQL'];
+  const kept = ['Claude  outputs/a.md', 'sub/Claude outputs/a.md', 'sub/claude outputs/a.md', 'Claude outputs', 'src/Meta.js', '.claude/skills/x/SKILL.md', 'docs/meta/x.md'];
+  assert.deepEqual(forbiddenPaths([...flagged, ...kept]), flagged);
+});
+
 test('dumpIds reads each quoted 22-character token once; isIdLike and fingerprint', () => {
   const a = 'AAAAAAAAAAAAAAAAAAAAA1';
   const b = 'b-b_bbbbbbbbbbbbbbbbbb';

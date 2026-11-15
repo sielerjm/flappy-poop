@@ -64,10 +64,12 @@ export function lineHits(text, needle) {
 /**
  * Tracked paths that must never be in git: anything under meta/, .claude/plans/ or Claude outputs/
  * (Michael's private hand-over notes at the repo's root: plan 26, A2), and database row dumps
- * (*_rows.sql).
+ * (*_rows.sql). The folders match in any case at the root (AUD-035): git on macOS ignores case, so
+ * "claude outputs/" is the same folder.
  */
 export function forbiddenPaths(paths) {
-  return paths.filter((p) => p.startsWith('meta/') || p.startsWith('.claude/plans/') || p.startsWith('Claude outputs/') || /_rows\.sql$/.test(p));
+  const FOLDERS = ['meta/', '.claude/plans/', 'claude outputs/'];
+  return paths.filter((p) => FOLDERS.some((f) => p.toLowerCase().startsWith(f)) || /_rows\.sql$/i.test(p));
 }
 
 /** The ids in a SQL dump: every quoted 22-character base64url token, once each. */

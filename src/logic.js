@@ -4,6 +4,7 @@
 
 import { isLocale, DEFAULT_LOCALE, t } from './i18n.js';
 import { createJsonStore } from './store.js';
+import { TUNING } from './config.js';
 
 export const VERSION = '0.17.0'; // bumped when art under an existing name changes (Boot's ?v= cache-bust)
 /** The version line every overlay shows: `v{VERSION} beta` in the locale's words (i18n versionLine); What's new passes older versions. */
@@ -466,7 +467,7 @@ function normalizeSettings(raw) {
   // The build (LAST_UPDATED) on which the player last opened How to play or finished a run.
   out.howToSeenAt = typeof raw.howToSeenAt === 'string' ? raw.howToSeenAt : '';
   out.hand = HANDS.includes(raw.hand) ? raw.hand : SETTINGS_DEFAULTS.hand;
-  out.eduStartLevel = Number.isInteger(raw.eduStartLevel) && raw.eduStartLevel >= 1 && raw.eduStartLevel <= 7 ? raw.eduStartLevel : 1;
+  out.eduStartLevel = Number.isInteger(raw.eduStartLevel) && raw.eduStartLevel >= 1 && raw.eduStartLevel <= TUNING.levels.lastLevel ? raw.eduStartLevel : 1; // AUD-033: not a copy of the 7
   out.eduNewOrder = EDU_NEW_ORDERS.includes(raw.eduNewOrder) ? raw.eduNewOrder : SETTINGS_DEFAULTS.eduNewOrder;
   return out;
 }

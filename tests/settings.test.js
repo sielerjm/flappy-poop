@@ -171,6 +171,19 @@ test("eduStartLevel (plan 25): the stepper's start level is kept as a whole numb
   for (const bad of [0, 8, 2.5, '3', null]) assert.equal(s.set({ eduStartLevel: bad }).eduStartLevel, 1, `${bad} reads as 1`);
 });
 
+test('eduStartLevel follows levels.lastLevel, not a copy of it (AUD-033): with one more level, that level is kept', async () => {
+  const { TUNING } = await import('../src/config.js');
+  const last = TUNING.levels.lastLevel;
+  const s = createSettingsStore(fakeStorage(), 'k');
+  assert.deepEqual([s.set({ eduStartLevel: last }).eduStartLevel, s.set({ eduStartLevel: last + 1 }).eduStartLevel], [last, 1], 'the last level kept, one past it not');
+  TUNING.levels.lastLevel = last + 1;
+  try {
+    assert.equal(s.set({ eduStartLevel: last + 1 }).eduStartLevel, last + 1, 'a game with one more level');
+  } finally {
+    TUNING.levels.lastLevel = last;
+  }
+});
+
 test("eduNewOrder (plan 26): where a quiz puts new cards is kept as one of education.js's NEW_ORDERS; anything else reads as after", async () => {
   const { NEW_ORDERS } = await import('../src/education.js');
   const m = new Map();

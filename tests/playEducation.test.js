@@ -710,6 +710,13 @@ test('AUD-031: a language change mid-break redraws the break row in the new lang
   );
 });
 
+test('each break starts clean (AUD-035): startLevelBreak clears the Skip warning, the cards missed at the last break, the gate\'s line and a level chosen there', () => {
+  const s = playScene({ state: 'playing', levelBreak: false, match: null, poop: absorb(), tweens: absorb(), quizSkipWarned: true, breakMissed: ['ST-01'], gateTapped: true, breakLevelPick: 4, breakQuitArmedAt: 1 });
+  for (const m of ['refreshLevelBanner', 'pausePlay', 'breakHud', 'fadeBackground', 'refreshPoopLook']) s[m] = () => {};
+  s.startLevelBreak();
+  assert.deepEqual([s.levelBreak, s.quizSkipWarned, s.breakMissed, s.gateTapped, s.breakLevelPick, s.breakQuitArmedAt], [true, false, [], false, null, null]);
+});
+
 test("the break's Quit label (plan 26, A2): Quit; armed it asks for a second tap, and says the run ends ungraded while cards are due", () => {
   const label = (due, armed) => {
     const quit = { text: null, setText(v) { this.text = v; return this; }, setVisible() { return this; } };

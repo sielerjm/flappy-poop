@@ -1,8 +1,8 @@
 // The level-break shop's geometry: the 💰 button under the banner and the panel with its rows.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { GAME_WIDTH, GAME_HEIGHT, TUNING as T } from '../src/config.js';
-import { shopButtonLayout, bracketButtonLayout, eduBreakLayout, shopButtonHit, shopLayout, shopHit, SHOP_ITEMS, overlayOutsideHit, trayLayout, trayHit, beanButtonLayout, poopX } from '../src/logic.js';
+import { GAME_WIDTH, GAME_HEIGHT, FIELD, TUNING as T } from '../src/config.js';
+import { shopButtonLayout, bracketButtonLayout, eduBreakLayout, shopButtonHit, shopLayout, shopHit, SHOP_ITEMS, overlayOutsideHit, trayLayout, trayHit, beanButtonLayout, poopX, uiColumn } from '../src/logic.js';
 
 const W = GAME_WIDTH; // the chrome column (a phone field)
 const button = shopButtonLayout(W, GAME_HEIGHT, T);
@@ -91,6 +91,30 @@ test("an education break (eduBreakLayout; plan 26 A2, Michael's checklist): [�
     if (x0 === 0) assert.ok(edges(L.levelDown).left > px + T.poopRadius, 'right of the poop');
     assert.equal(T.levels.breakPoopY, 920, 'the poop keeps its place (plan 26, A2)');
     assert.ok(poop.top >= edges(L.chip).bottom, 'the poop bobs under the row and the chip');
+  }
+});
+
+test('an education break on every field width (AUD-035: zone A1\'s walk, 720 to 2560): with the column from uiColumn and the poop at poopX, as Play places them, every box is inside the column, clear of the bobbing poop, ⏸, the tray and each other', () => {
+  for (let fieldW = 720; fieldW <= 2560; fieldW += 2) {
+    const col = uiColumn(fieldW, FIELD);
+    const L = eduBreakLayout(col.width, GAME_HEIGHT, T, col.x);
+    const tray = trayLayout(col.width, GAME_HEIGHT, T, col.x);
+    const pause = { left: tray.pause.x - tray.pause.size / 2, right: tray.pause.x + tray.pause.size / 2, top: tray.pause.y - tray.pause.size / 2, bottom: tray.pause.y + tray.pause.size / 2 };
+    const px = poopX(fieldW, T);
+    const poop = { left: px - T.poopRadius, right: px + T.poopRadius, top: T.levels.breakPoopY - T.poopRadius, bottom: T.levels.breakPoopY + 24 + T.poopRadius };
+    const boxes = [L.shop, L.review, L.quit, L.chip, L.levelDown, L.levelLabel, L.levelUp];
+    for (const b of boxes) {
+      const e = edges(b);
+      const at = `field ${fieldW}: ${b.id}`;
+      assert.ok(e.left >= col.x + 16 && e.right <= col.x + col.width - 16, `${at} inside the column`);
+      assert.ok(!overlaps(e, poop), `${at} clear of the bobbing poop (x ${px})`);
+      assert.ok(!overlaps(e, pause), `${at} clear of ⏸`);
+      assert.equal(trayHit(b.x, b.y, tray), null, `${at} not on a tray button`);
+    }
+    for (let i = 0; i < boxes.length; i += 1) for (let j = i + 1; j < boxes.length; j += 1) {
+      if (boxes[i].id.startsWith('level') && boxes[j].id.startsWith('level')) continue; // ◀ LV n ▶ sit side by side in one strip
+      assert.ok(!overlaps(edges(boxes[i]), edges(boxes[j])), `field ${fieldW}: ${boxes[i].id} and ${boxes[j].id} do not overlap`);
+    }
   }
 });
 

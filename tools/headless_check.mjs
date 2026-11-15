@@ -379,8 +379,12 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
     const playState = () => evaluate(`__flappy.scene.getScene('Play').state`);
     // Start an education run from the ready screen (plan 26, A2): every education section starts its runs
     // here, so a change to how a run starts (the 📚 popup at each start, A2.8b) is handled in one place.
-    // Retried: under load a start tap can land in the frame a restart takes.
+    // Retried: under load a start tap can land in the frame a restart takes. It fails a check when the
+    // run it started is not an education run, or when 📚 was on and the start opened no popup (AUD-035:
+    // a section with 📚 off, or a popup that failed to open, would otherwise pass as an education run).
     const startEducationRun = async () => {
+      const wantPopup = await evaluate(`(() => { const p = __flappy.scene.getScene('Play'); return Boolean(p.educationOn && p.isEduUnlocked()); })()`);
+      let sawPopup = false;
       for (let attempt = 0; attempt < 3 && (await playState()) !== 'playing'; attempt += 1) {
         // A settled ready screen: a home()'s restart lands on the next frame, and a start sent before
         // it would open the 📚 popup on the scene being replaced (its shutdown closes the popup).
@@ -391,11 +395,14 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         // With 📚 on, the start opens the 📚 popup (plan 26, A2): its Play starts the run, once the
         // popup's click lockout is over.
         if (await introShown()) {
+          sawPopup = true;
           await sleep(TT.retryLockoutMs + 100);
           if (await introShown()) await evaluate(`document.getElementById('edu-intro-play').click(), true`);
         }
         for (let i = 0; i < 40 && (await playState()) !== 'playing'; i += 1) await sleep(100);
       }
+      const started = await evaluate(`(() => { const p = __flappy.scene.getScene('Play'); return JSON.stringify({ state: p.state, edu: Boolean(p.runIsEducation) }); })()`).then(JSON.parse);
+      if (started.state !== 'playing' || !started.edu || (wantPopup && !sawPopup)) ok(false, `startEducationRun started an education run through the 📚 popup (${JSON.stringify({ ...started, wantPopup, sawPopup })})`);
     };
     const introShown = () => evaluate(`(() => { const r = document.getElementById('edu-intro-panel'); return Boolean(r && !r.hidden); })()`);
     const active = (key) => evaluate(`__flappy.scene.isActive('${key}')`);
