@@ -2386,8 +2386,8 @@ export function perfLines(s, mode) {
 // The quiz card wraps its Chinese text with these first (Quiz.cjk); English is left to Phaser.
 
 const CJK_CHAR = /[\p{Script=Han}\u3000-\u303f\uff00-\uffef“”‘’…·—]/u;
-const NO_LINE_START = new Set([...'，。、；：？！）」』》”’…%,.;:?!)]}']);
-const NO_LINE_END = new Set([...'（「『《“‘([{']);
+const NO_LINE_START = new Set([...'，。、；：？！）」』》】〉〕”’…％～%,.;:?!)]}']); // the full-width ％ 】 〉 〕 ～ too (AUD-045)
+const NO_LINE_END = new Set([...'（「『《【〈〔“‘([{']); // 【 〈 〔 too (AUD-045)
 const GLUE = new Set([...'·—']); // never a break beside these: a name's dot (巴里·马歇尔), the dash ——
 
 /**

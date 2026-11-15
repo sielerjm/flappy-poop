@@ -40,6 +40,21 @@ test('wrapCjk: no line starts with closing punctuation or ends with opening punc
   }
 });
 
+test('wrapCjk: the full-width percent, the lenticular and angle brackets and the wave dash keep their places too (AUD-045)', () => {
+  // Not on today's cards; a later card edit may bring them.
+  const text = '约有 3.5％的人【见注】听过〈两种〉说法〔旧称〕，范围从 1～2 年不等。';
+  const starts = /^[％】〉〕～]/;
+  const ends = /[【〈〔]$/;
+  for (let width = 6; width <= 50; width += 1) {
+    const lines = wrapCjk(text, width, measure);
+    for (const l of lines) {
+      assert.ok(!starts.test(l), `width ${width}: "${l}" starts with a closing mark`);
+      assert.ok(!ends.test(l), `width ${width}: "${l}" ends with an opening mark`);
+    }
+    assert.equal(lines.join('').replace(/ /g, ''), text.replace(/ /g, ''), `width ${width}: every character kept, in order`);
+  }
+});
+
 test('wrapCjk: short text is one line; explicit line breaks are kept; a unit wider than the line stands alone', () => {
   assert.deepEqual(wrapCjk('胃液有多酸？', 40, measure), ['胃液有多酸？']);
   assert.deepEqual(wrapCjk('第一行\n第二行', 40, measure), ['第一行', '第二行']);
