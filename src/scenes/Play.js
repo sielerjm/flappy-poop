@@ -527,8 +527,8 @@ export class Play extends Phaser.Scene {
     // (Versus.bothInBreak) it opens the bracket read-only (Versus.openPeek); it never readies the half.
     this.bracketButtonBox = this.match?.tournament ? bracketButtonLayout(this.col.width, GAME_HEIGHT, T, this.col.x) : null;
     this.bracketButton = this.bracketButtonBox ? createButton(this, this.bracketButtonBox, t(this.locale, 'tournamentBracketPill'), { ...TEXT_STYLE, fontSize: '36px', color: '#ffd700' }, { depth: 27 }).setVisible(false) : null;
-    // An education run's 📚 Review pill (plan 21; plan 25 named it), in the 🏅's row under the 💰
-    // (single player only: the two never meet). It opens the quiz on the segment just cleared
+    // An education run's 📚 Review pill (plan 21; plan 25 named it), in the middle of the break's row
+    // (eduBreakLayout; single player only). It opens the quiz on the segment just cleared
     // (chromeIntent's 'quiz'). Under it, a line of its own says what is waiting there, as Anki does:
     // new cards in blue, missed cards in red, reviews due in green (quizCountLine;
     // refreshShopButton; none in a test run, whose quizzes ignore the schedule). A tap on the line
@@ -539,7 +539,7 @@ export class Play extends Phaser.Scene {
     this.quizButton = this.quizButtonBox ? createButton(this, this.quizButtonBox, `${EDUCATION_EMOJI} ${t(this.locale, 'reviewPill')}`, { ...TEXT_STYLE, fontSize: '36px', color: '#f8a0c8' }, { depth: 27 }).setVisible(false) : null;
     // Quit beside Review (plan 25, B8; plan 26, Michael's sketch: refreshQuizButton). Skip ▸ (levels) is gone since plan 26's A2.
     const sideStyle = { ...TEXT_STYLE, fontSize: '30px', color: '#f8a0c8' };
-    // The level choice, [◀] LV n [▶], right of the poop (plan 26, A2: refreshLevelPickUi).
+    // The level choice, [◀] LV n [▶], on ⏸'s row, centred (plan 26, A2; plan 28, 1.1: refreshLevelPickUi).
     const eb = this.eduBreakBoxes;
     this.levelPickDown = eb ? createButton(this, eb.levelDown, '◀', sideStyle, { depth: 27 }).setVisible(false) : null;
     this.levelPickUp = eb ? createButton(this, eb.levelUp, '▶', sideStyle, { depth: 27 }).setVisible(false) : null;
@@ -1069,8 +1069,9 @@ export class Play extends Phaser.Scene {
 
   /**
    * Between levels: a real pause with the level banner, the poop gliding down and bobbing: to
-   * levels.breakPoopY in one player (plan 26: under the banner and the break's buttons), to
-   * mid-height in a match half. The bean button hides while the break lasts, and the purse and the
+   * levels.breakPoopY in a normal one-player run (plan 26: under the banner and the break's buttons),
+   * to levels.eduBreakPoopY in an education run (plan 28, 1.1: mid-height, over its row of buttons),
+   * to mid-height in a match half. The bean button hides while the break lasts, and the purse and the
    * beans draw above the pause shade (breakHud).
    */
   startLevelBreak() {
@@ -1091,7 +1092,7 @@ export class Play extends Phaser.Scene {
     this.poop.body.setAllowGravity(false);
     this.breakGlide = this.tweens.add({
       targets: this.poop,
-      y: this.match ? GAME_HEIGHT / 2 : T.levels.breakPoopY,
+      y: this.match ? GAME_HEIGHT / 2 : this.runIsEducation ? T.levels.eduBreakPoopY : T.levels.breakPoopY,
       angle: 0,
       duration: T.beans.centreMs,
       ease: 'Sine.easeOut',

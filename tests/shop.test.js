@@ -49,59 +49,61 @@ test('the 🏅 Bracket pill sits one row under the 💰, above the bean button, 
   assert.equal(bracketButtonLayout(W, GAME_HEIGHT, T, 500).x, pill.x + 500, 'x follows the column');
 });
 
-test("an education break (eduBreakLayout; plan 26 A2, Michael's checklist): [🌽 Shop] [📚 Review] [Quit] on one row where the 💰 pill sits, 216 px each 12 apart; the numbers on a dark chip under Review, inside its width; the banner higher; nothing overlaps, all inside the column, clear of the bobbing poop, ⏸ and the tray", () => {
+test("an education break (eduBreakLayout; plan 26 A2, then plan 28 1.1: Michael's 15 Nov note): the level choice on ⏸'s row, centred; [🌽 Shop] [📚 Review] [Quit] with the numbers' chip right above it; the poop at mid-height under the banner; nothing overlaps, all inside the column, clear of ⏸ and the tray", () => {
   for (const x0 of [0, 500]) {
     const L = eduBreakLayout(W, GAME_HEIGHT, T, x0);
-    const shopBox = shopButtonLayout(W, GAME_HEIGHT, T, x0);
     const row = [L.shop, L.review, L.quit];
+    const pauseBox = trayLayout(W, GAME_HEIGHT, T, x0).pause;
+    const pauseEdges = { left: pauseBox.x - pauseBox.size / 2, right: pauseBox.x + pauseBox.size / 2, top: pauseBox.y - pauseBox.size / 2, bottom: pauseBox.y + pauseBox.size / 2 };
     assert.deepEqual(row.map((b) => b.id), ['shop', 'quiz', 'quit']);
-    assert.ok(row.every((b) => b.y === shopBox.y && b.width === 216 && b.height === T.trayHitMin), "one row, at the 💰 pill's height, 216 px wide and thumb-tall");
+    assert.ok(row.every((b) => b.y === L.review.y && b.width === 216 && b.height === T.trayHitMin), 'one row, 216 px wide and thumb-tall');
     assert.ok(edges(L.review).left - edges(L.shop).right === 12 && edges(L.quit).left - edges(L.review).right === 12, '12 px apart');
     assert.equal(L.review.x, x0 + W / 2, 'Review in the middle');
     assert.ok(L.chip.x === L.review.x && L.chip.width === L.review.width && edges(L.chip).top >= edges(L.review).bottom && edges(L.chip).top - edges(L.review).bottom <= 16, 'the chip right under Review, its width');
     assert.deepEqual([L.counts.x, L.counts.y, L.counts.width <= L.chip.width - 16], [L.chip.x, L.chip.y, true], 'the numbers inside the chip');
     assert.equal('skip' in L, false, 'no Skip ▸ (plan 26, A2)');
-    assert.ok(L.hintY === L.titleY + 72 && L.hintY + 50 + 26 + 8 <= edges(L.shop).top && L.titleY < GAME_HEIGHT * 0.4, `the banner and the gate's line sit above the row (title ${L.titleY})`);
-    const boxes = [L.shop, L.review, L.quit, L.chip];
-    const pauseBox = trayLayout(W, GAME_HEIGHT, T, x0).pause;
-    const pauseEdges = { left: pauseBox.x - pauseBox.size / 2, right: pauseBox.x + pauseBox.size / 2, top: pauseBox.y - pauseBox.size / 2, bottom: pauseBox.y + pauseBox.size / 2 };
-    // The poop bobs between breakPoopY and 24 px under it, at poopX (from the field's left edge).
-    const px = poopX(W, T);
-    const poop = { left: px - T.poopRadius, right: px + T.poopRadius, top: T.levels.breakPoopY - T.poopRadius, bottom: T.levels.breakPoopY + 24 + T.poopRadius };
+    // The level choice (plan 28, 1.1): [◀] LV n [▶] at ⏸'s height, centred on the column, clear of ⏸.
+    assert.ok([L.levelDown, L.levelLabel, L.levelUp, L.levelStrip].every((b) => b.y === pauseBox.y), `the level choice on ⏸'s row (y ${pauseBox.y})`);
+    assert.equal(L.levelLabel.x, x0 + W / 2, 'the label centred on the column');
+    assert.equal(L.levelStrip.x, x0 + W / 2, 'the strip centred on the column');
+    assert.equal(L.levelLabel.x - L.levelDown.x, L.levelUp.x - L.levelLabel.x, '◀ and ▶ the same distance from the label');
+    assert.ok(pauseEdges.left - edges(L.levelUp).right >= 16, `▶ ${pauseEdges.left - edges(L.levelUp).right} px from ⏸`);
+    assert.ok(L.levelDown.x < L.levelLabel.x && L.levelLabel.x < L.levelUp.x && L.levelDown.width >= T.trayHitMin && L.levelUp.height >= T.trayHitMin, '◀ LV n ▶, thumb-sized');
+    assert.ok(edges(L.levelStrip).left === edges(L.levelDown).left && edges(L.levelStrip).right === edges(L.levelUp).right, 'the strip covers all three (a tap on the label does nothing, but never continues)');
+    // The row and its chip sit right above the level choice (12 px).
+    assert.equal(edges(L.levelStrip).top - edges(L.chip).bottom, 12, 'the chip 12 px above the level choice');
+    // Top to bottom: the banner, the poop, the row, the chip, the level choice.
+    const poop = { top: T.levels.eduBreakPoopY - T.poopRadius, bottom: T.levels.eduBreakPoopY + 24 + T.poopRadius };
+    assert.equal(T.levels.eduBreakPoopY, GAME_HEIGHT / 2, 'the poop at mid-height (Michael, 15 Nov)');
+    assert.ok(L.hintY === L.titleY + 72 && L.titleY === Math.round(GAME_HEIGHT * 0.4) - 72, `the banner where it was (title ${L.titleY})`);
+    assert.ok(poop.top > L.hintY + 18 + 8, `the poop under "Tap to continue" (poop top ${poop.top})`);
+    // The gate's line (Play's levelSubHint, 26 px, at hintY + 50) above the poop while it holds one line;
+    // a longer line may cover the poop's top (Michael: UI may cover it).
+    assert.ok(poop.top > L.hintY + 50 + 26, `the poop under the gate's line (poop top ${poop.top}, line centre ${L.hintY + 50})`);
+    assert.ok(poop.bottom < edges(L.review).top, `the poop above the row (poop bottom ${poop.bottom}, row top ${edges(L.review).top})`);
+    const boxes = [L.shop, L.review, L.quit, L.chip, L.levelDown, L.levelLabel, L.levelUp];
     for (const b of boxes) {
       const e = edges(b);
       assert.ok(e.left >= x0 + 16 && e.right <= x0 + W - 16, `${b.id} inside the column (${e.left}–${e.right})`);
-      if (x0 === 0) assert.ok(!overlaps(e, poop), `${b.id} clear of the bobbing poop`);
       assert.ok(!overlaps(e, pauseEdges), `${b.id} clear of ⏸`);
       assert.equal(trayHit(b.x, b.y, trayLayout(W, GAME_HEIGHT, T, x0)), null, `${b.id} not on a tray button`);
+      assert.ok(e.bottom <= GAME_HEIGHT - T.trayHeight + 16, `${b.id} above the tray's row`);
     }
     for (let i = 0; i < boxes.length; i += 1) for (let j = i + 1; j < boxes.length; j += 1) {
       assert.ok(!overlaps(edges(boxes[i]), edges(boxes[j])), `${boxes[i].id} and ${boxes[j].id} do not overlap`);
     }
-    // The level choice (plan 26, A2: Michael's image 12): [◀] LV n [▶] under the row, right of the poop.
-    for (const b of [L.levelDown, L.levelLabel, L.levelUp]) {
-      const e = edges(b);
-      assert.ok(e.left >= x0 + 16 && e.right <= x0 + W - 16, `${b.id} inside the column`);
-      if (x0 === 0) assert.ok(!overlaps(e, poop), `${b.id} clear of the bobbing poop`);
-      assert.ok(!overlaps(e, pauseEdges) && e.top >= edges(L.chip).bottom, `${b.id} clear of ⏸, under the chip`);
-      assert.equal(trayHit(b.x, b.y, trayLayout(W, GAME_HEIGHT, T, x0)), null, `${b.id} not on a tray button`);
-    }
-    assert.ok(L.levelDown.x < L.levelLabel.x && L.levelLabel.x < L.levelUp.x && L.levelDown.y === L.levelUp.y && L.levelDown.width >= T.trayHitMin && L.levelUp.height >= T.trayHitMin, '◀ LV n ▶, thumb-sized');
-    assert.ok(edges(L.levelStrip).left === edges(L.levelDown).left && edges(L.levelStrip).right === edges(L.levelUp).right, 'the strip covers all three (a tap on the label does nothing, but never continues)');
-    if (x0 === 0) assert.ok(edges(L.levelDown).left > px + T.poopRadius, 'right of the poop');
-    assert.equal(T.levels.breakPoopY, 920, 'the poop keeps its place (plan 26, A2)');
-    assert.ok(poop.top >= edges(L.chip).bottom, 'the poop bobs under the row and the chip');
   }
 });
 
-test('an education break on every field width (AUD-035: zone A1\'s walk, 720 to 2560): with the column from uiColumn and the poop at poopX, as Play places them, every box is inside the column, clear of the bobbing poop, ⏸, the tray and each other', () => {
+test('an education break on every field width (AUD-035: zone A1\'s walk, 720 to 2560; plan 28 1.1): with the column from uiColumn and the poop at poopX and mid-height, as Play places them, every box is inside the column, clear of the bobbing poop, ⏸, the tray and each other', () => {
   for (let fieldW = 720; fieldW <= 2560; fieldW += 2) {
     const col = uiColumn(fieldW, FIELD);
     const L = eduBreakLayout(col.width, GAME_HEIGHT, T, col.x);
     const tray = trayLayout(col.width, GAME_HEIGHT, T, col.x);
     const pause = { left: tray.pause.x - tray.pause.size / 2, right: tray.pause.x + tray.pause.size / 2, top: tray.pause.y - tray.pause.size / 2, bottom: tray.pause.y + tray.pause.size / 2 };
     const px = poopX(fieldW, T);
-    const poop = { left: px - T.poopRadius, right: px + T.poopRadius, top: T.levels.breakPoopY - T.poopRadius, bottom: T.levels.breakPoopY + 24 + T.poopRadius };
+    const poop = { left: px - T.poopRadius, right: px + T.poopRadius, top: T.levels.eduBreakPoopY - T.poopRadius, bottom: T.levels.eduBreakPoopY + 24 + T.poopRadius };
+    assert.ok(L.levelStrip.y === tray.pause.y && L.levelStrip.x === col.x + col.width / 2, `field ${fieldW}: the level choice centred on ⏸'s row`);
     const boxes = [L.shop, L.review, L.quit, L.chip, L.levelDown, L.levelLabel, L.levelUp];
     for (const b of boxes) {
       const e = edges(b);

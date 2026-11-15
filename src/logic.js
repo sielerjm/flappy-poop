@@ -691,31 +691,36 @@ export function bracketButtonLayout(width, height, t, x0 = 0) {
 }
 
 /**
- * An education run's level break (plan 26, then its A2 to Michael's checklist): the banner higher
- * (titleY, hintY); [🌽 Shop] [📚 Review] [Quit] on one row where the 💰 pill sits (shopButtonLayout's
- * y), 216 px each, 12 apart, so the three fit a phone; under Review, inside its width, the three
- * numbers on a dark rounded chip (`chip`, with the count line's box `counts` inside it). The poop bobs
- * at the left under the row (levels.breakPoopY), clear of the tray; right of it, at its height, the
- * level choice [◀] LV n [▶] (`levelDown`, `levelLabel`, `levelUp`; `levelStrip` covers the three, so a
- * tap anywhere on it never continues). Play moves the shop pill into `shop` at an education run's
- * start (placeShopPill). `x0` = the column's left edge.
+ * An education run's level break (plan 26, its A2 to Michael's checklist, then plan 28 1.1 to his
+ * 15 Nov note): the banner higher (titleY, hintY); the level choice [◀] LV n [▶] on ⏸'s row
+ * (trayLayout's pause.y), centred on the column (`levelDown`, `levelLabel`, `levelUp`; `levelStrip`
+ * covers the three, so a tap anywhere on it never continues); right above it, [🌽 Shop] [📚 Review]
+ * [Quit] on one row, 216 px each, 12 apart, so the three fit a phone, and under Review, inside its
+ * width, the three numbers on a dark rounded chip (`chip`, with the count line's box `counts` inside
+ * it), the chip's bottom 12 px over the level choice. The poop bobs at mid-height between the banner
+ * and the row (levels.eduBreakPoopY). Play moves the shop pill into `shop` at an education run's start
+ * (placeShopPill). `x0` = the column's left edge.
  */
 export function eduBreakLayout(width, height, t, x0 = 0) {
-  const centre = shopButtonLayout(width, height, t, x0);
+  const cx = x0 + width / 2;
   const pill = { width: 216, height: t.trayHitMin };
   const gap = 12;
-  const at = (id, dx) => ({ id, x: centre.x + dx * (pill.width + gap), y: centre.y, ...pill });
-  const shop = at('shop', -1);
-  const review = at('quiz', 0);
-  const quit = at('quit', 1);
-  const chip = { id: 'quizCounts', x: review.x, y: review.y + pill.height / 2 + 8 + 26, width: pill.width, height: 52 };
-  const counts = { id: 'quizCounts', x: chip.x, y: chip.y, width: chip.width - 24, height: 44 };
-  const levelY = t.levels.breakPoopY + 12;
+  const chipH = 52;
+  // The level choice on ⏸'s row, centred.
+  const levelY = trayLayout(width, height, t, x0).pause.y;
   const step = { width: t.trayHitMin, height: t.trayHitMin };
-  const levelLabel = { id: 'levelLabel', x: centre.x + 100, y: levelY, width: 168, height: t.trayHitMin };
+  const levelLabel = { id: 'levelLabel', x: cx, y: levelY, width: 168, height: t.trayHitMin };
   const levelDown = { id: 'levelDown', x: levelLabel.x - levelLabel.width / 2 - 16 - step.width / 2, y: levelY, ...step };
   const levelUp = { id: 'levelUp', x: levelLabel.x + levelLabel.width / 2 + 16 + step.width / 2, y: levelY, ...step };
   const levelStrip = { id: 'levelStrip', x: levelLabel.x, y: levelY, width: levelUp.x + step.width / 2 - (levelDown.x - step.width / 2), height: t.trayHitMin };
+  // The row and the chip under Review, as one group right above the level choice.
+  const rowY = levelY - t.trayHitMin / 2 - gap - chipH - 8 - pill.height / 2;
+  const at = (id, dx) => ({ id, x: cx + dx * (pill.width + gap), y: rowY, ...pill });
+  const shop = at('shop', -1);
+  const review = at('quiz', 0);
+  const quit = at('quit', 1);
+  const chip = { id: 'quizCounts', x: review.x, y: review.y + pill.height / 2 + 8 + chipH / 2, width: pill.width, height: chipH };
+  const counts = { id: 'quizCounts', x: chip.x, y: chip.y, width: chip.width - 24, height: 44 };
   const titleY = Math.round(height * 0.4) - 72;
   return { shop, review, quit, chip, counts, levelDown, levelLabel, levelUp, levelStrip, titleY, hintY: titleY + 72 };
 }

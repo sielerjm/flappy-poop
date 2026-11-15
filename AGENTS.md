@@ -88,8 +88,9 @@ line (generated texture, plain Image) scrolls in and no pair follows it outside 
 fart; crossing it (any level but the last) bumps `level`, plays `NewLevel.mp3` (`sfx.levelUp` blip if the
 sample is missing), and pauses the run as the
 level break (`levelBreak`, the normal `'paused'` state with its own banner "LEVEL n
-· segment / Tap to continue", the poop gliding to `levels.breakPoopY` in one player (plan 26: under
-the banner and the break's buttons; a match half's still to mid-height) and bobbing; the bean
+· segment / Tap to continue", the poop gliding to `levels.breakPoopY` in a normal one-player run (plan 26: under
+the banner and the break's buttons), to `levels.eduBreakPoopY` (mid-height) in an education run (plan 28, 1.1), and to
+mid-height in a match half, and bobbing; the bean
 button hides while it lasts, and the purse, the beans and the 📚 / 🧪 badge draw above the pause
 shade at full brightness (`breakHud`); the
 background crossfading to `levelColor(n, LEVEL_COLORS)`, Set2 colours cycling). A fart never carries the poop past
@@ -448,13 +449,13 @@ quiz (`book-open`), a page turns for each next card (`book-flip`), the book shut
 (`book-close`); a wrong answer plays `sfx.hazard`; a right one that pays nothing (a revive, the bonus
 quiz, a card that paid today) plays `sfx.score`, and one that pays (a break's) makes the coin's sound alone (`takeCoins`); the
 answer that wins everything back plays `sparkle` in the ding's place. **Level break** (plan 25 laid it
-out, plan 26 to Michael's sketch, its A2 to his checklist: `eduBreakLayout` in logic.js): the banner higher
-(`titleY`); **[🌽 Shop] [📚 Review] [Quit] on one row** where the 💰 pill sits, 216 px each, 12 apart (the level
-Skip ▸ is gone); the three numbers under Review, inside its width, on a dark rounded chip (`chip`,
+out, plan 26 to Michael's sketch, its A2 to his checklist, plan 28 1.1 to his 15 Nov note: `eduBreakLayout` in
+logic.js): the banner higher (`titleY`); the level choice (below) on ⏸'s row, centred; right above it, **[🌽 Shop]
+[📚 Review] [Quit] on one row**, 216 px each, 12 apart (the level Skip ▸ is gone); the three numbers under Review, inside its width, on a dark rounded chip (`chip`,
 `Play.quizCountChip`: their tap box and ring item). The shop pill is drawn once at its box
 (`createButton`), so `Play.placeShopPill` moves that same box object in place at a run's start (into the
 row for an education run, centred otherwise: the ring and the tap test hold it) and draws the pill again.
-The poop keeps its place (`levels.breakPoopY`), under the row and the chip. A language change mid-break
+The poop bobs at mid-height (`levels.eduBreakPoopY`), between the banner and the row; UI may cover it. A language change mid-break
 (`applyLocale`) redraws the row and the level choice's label with the banner (AUD-031). The **📚 Review** pill
 (`quizButtonShown`; chromeIntent's `'quiz'` input, only in an education run's break) opens the break's
 quiz, which asks missed cards, then due reviews (the least remembered first), then the cards missed
@@ -509,7 +510,7 @@ quitting the run (`breakGaveUp`: ungraded, and 🏳️ with nothing answered; pl
 either way; armed it reads "Quit? Tap again", or "Quit ungraded? Tap again" while cards are due
 (`breakQuitDueSure`), and an armed Quit ends with its break (`startLevelBreak` and `endLevelBreak` clear
 `breakQuitArmedAt`; plan 27), so a level cleared within the confirm time never opens a break armed. **The level choice** (plan 26, A2: Michael's image 12): once nothing is missed or due
-(`breakGate`), never in a test run (or with test mode on) or a match, **[◀] LV n [▶]** shows right of the poop
+(`breakGate`), never in a test run (or with test mode on) or a match, **[◀] LV n [▶]** shows on ⏸'s row, centred
 (`eduBreakLayout`'s `levelDown` / `levelLabel` / `levelUp`, `levelStrip` swallowing the tap; ring items `levelDown`,
 `levelUp`). ◀ ▶ cycle 1 … the higher of the next level and `unlockedLevel`, wrapping (`stepBreakLevel` →
 `nextEduStartLevel`; `breakLevelPick`, null for the next level). During the break only the preview follows it
@@ -796,7 +797,7 @@ src/
                             eduBreakLayout (an education
                             break, plan 26 and its A2: the banner's titleY, Shop |
                             Review | Quit on one row, the numbers' chip under
-                            Review, the level choice's ◀ LV n ▶ right of the poop),
+                            Review, the level choice's ◀ LV n ▶ on ⏸'s row; plan 28),
                             LAST_UPDATED, issueUrl, openExternalUrl, chromeIntent
                             (inputs incl. 'changelog'; a Changelog over About closes
                             back to About without the lockout),

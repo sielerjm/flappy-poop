@@ -717,6 +717,26 @@ test('each break starts clean (AUD-035): startLevelBreak clears the Skip warning
   assert.deepEqual([s.levelBreak, s.quizSkipWarned, s.breakMissed, s.gateTapped, s.breakLevelPick, s.breakQuitArmedAt], [true, false, [], false, null, null]);
 });
 
+test("the break's poop (plan 28, 1.1: Michael's 15 Nov note): an education break glides it to mid-height (levels.eduBreakPoopY), a normal one-player break to levels.breakPoopY, a match half to mid-height", () => {
+  const glideTo = (extra) => {
+    const ys = [];
+    const s = playScene({ state: 'playing', levelBreak: false, match: null, runIsEducation: false, poop: absorb(), tweens: { add: (cfg) => (ys.push(cfg.y), {}) }, ...extra });
+    for (const m of ['refreshLevelBanner', 'pausePlay', 'breakHud', 'fadeBackground', 'refreshPoopLook']) s[m] = () => {};
+    s.startLevelBreak();
+    return ys[0];
+  };
+  assert.equal(T.levels.eduBreakPoopY, 640, 'mid-height of the 1280 px field');
+  assert.deepEqual([glideTo({ runIsEducation: true }), glideTo({}), glideTo({ match: {} })], [T.levels.eduBreakPoopY, T.levels.breakPoopY, 640]);
+  // The knob moves only the education break (mid-height is also a match half's, so tell them apart).
+  const knob = T.levels.eduBreakPoopY;
+  try {
+    T.levels.eduBreakPoopY = 600;
+    assert.deepEqual([glideTo({ runIsEducation: true }), glideTo({ match: {} }), glideTo({ match: {}, runIsEducation: true })], [600, 640, 640], 'a match half keeps mid-height');
+  } finally {
+    T.levels.eduBreakPoopY = knob;
+  }
+});
+
 test("the break's Quit label (plan 26, A2): Quit; armed it asks for a second tap, and says the run ends ungraded while cards are due", () => {
   const label = (due, armed) => {
     const quit = { text: null, setText(v) { this.text = v; return this; }, setVisible() { return this; } };

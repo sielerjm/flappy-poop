@@ -4004,7 +4004,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         const box = (id) => evaluate(`JSON.stringify(${play}.eduBreakBoxes.${id})`).then(JSON.parse);
         const sk0 = await sideNow();
         ok(sk0.lb && sk0.quit && sk0.noSkip, `level ${sk0.level}'s break offers Quit and no level skip (Skip ▸ is gone: plan 26, A2)`);
-        // The level choice (plan 26, A2: Michael's image 12): caught up, [◀] LV n [▶] right of the poop
+        // The level choice (plan 26, A2: Michael's image 12; plan 28 1.1: on ⏸'s row, centred): caught up, [◀] LV n [▶]
         // cycles the levels unlocked (4 by now, so 1 to 4), wrapping; the title, the bar's label and the
         // background follow, and the run's level does not move until it continues.
         const pickView = () => evaluate(`(() => { const p = ${play}; return JSON.stringify({ shown: p.levelPickShown(), label: p.levelPickLabel.visible ? p.levelPickLabel.text : null, level: p.level, pick: p.breakLevelPick, title: p.levelTitle.text, bar: p.levelBar.labelText(), fill: p.levelBar.value(), bg: p.bgColor.fillColor, pipes: p.pipesPassed, spawned: p.pipesSpawned, score: p.score, speed: p.diff.pipeSpeed, skipped: p.runSkipped, state: p.state, lb: p.levelBreak }); })()`).then(JSON.parse);
@@ -4082,7 +4082,8 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await evaluate(`localStorage.removeItem('flappyPoop.eduSrs'), ${play}.eduStore.unlockLevel(2), ${play}.setEduUnlocked(true), ${play}.settings.set({ education: true }), true`);
         await home();
         await startEducationRun();
-        await evaluate(`(() => { const p = ${play}; p.poop.body.setAllowGravity(false); p.poop.setVelocity(0, 0); p.poop.y = 640; p.graceLeftMs = 1e9; p.onFinishCrossed(); return true; })()`);
+        // The poop starts high (y 400), so the break's glide has to bring it to mid-height (plan 28, 1.1).
+        await evaluate(`(() => { const p = ${play}; p.poop.body.setAllowGravity(false); p.poop.setVelocity(0, 0); p.poop.y = 400; p.graceLeftMs = 1e9; p.onFinishCrossed(); return true; })()`);
         for (let i = 0; i < 40 && !(await evaluate(`Boolean(${play}.levelBreak) && ${play}.state === 'paused'`)); i += 1) await sleep(100); // polled, as the levels section does (plan 24: a fixed 400 ms lost the race under load)
         const brk = await evaluate(`JSON.stringify({ edu: ${play}.runIsEducation, state: ${play}.state, lb: ${play}.levelBreak, level: ${play}.level })`).then(JSON.parse);
         ok(brk.edu && brk.state === 'paused' && brk.lb && brk.level === 2, `an education run reaches the level-2 break (${JSON.stringify(brk)})`);
@@ -4092,6 +4093,11 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         const pill = await evaluate(`(() => { const p = ${play}; const b = (x) => ({ x: x.x, y: x.y, w: x.width }); const ring = (id) => p.focus.items.find((i) => i.id === id)?.box ?? null; return JSON.stringify({ shown: p.quizButtonShown(), visible: p.quizButton.visible, shopShown: p.shopButton.visible, quitShown: p.breakQuitButton.visible, shop: b(p.shopButtonBox), review: b(p.quizButtonBox), quit: b(p.eduBreakBoxes.quit), want: b(p.eduBreakBoxes.shop), sameBox: ring('shop') === p.shopButtonBox, ringRow: ['shop', 'quiz', 'breakQuit', 'quizCounts'].every((id) => ring(id)), hint: p.levelHint.text }); })()`).then(JSON.parse);
         const hintWant = await tx('levelContinue'); // "Tap to continue" in every break (plan 26, A2)
         ok(pill.shown && pill.visible && pill.shopShown && pill.quitShown && pill.shop.y === pill.review.y && pill.quit.y === pill.review.y && pill.shop.x < pill.review.x && pill.review.x < pill.quit.x && pill.shop.x === pill.want.x && pill.shop.w === 216 && pill.sameBox && pill.ringRow && pill.hint === hintWant, `the break shows Shop, Review and Quit on one row (x ${pill.shop.x}, ${pill.review.x}, ${pill.quit.x} at y ${pill.review.y}), all on the ring, and the hint "${pill.hint}"`);
+        // Plan 28, 1.1 (Michael's 15 Nov note): the poop bobs at mid-height; the level choice sits on ⏸'s
+        // row, centred on the column; the row and its chip right above it (the chip 12 px over the strip).
+        for (let i = 0; i < 30 && Math.abs((await evaluate(`${play}.poop.y`)) - TT.levels.eduBreakPoopY) > 26; i += 1) await sleep(100); // polled: the glide from y 400
+        const place = await evaluate(`Promise.all([import('./src/logic.js'), import('./src/config.js')]).then(([lg, c]) => { const p = ${play}; const L = p.eduBreakBoxes; const pause = lg.trayLayout(p.col.width, c.GAME_HEIGHT, c.TUNING, p.col.x).pause; return JSON.stringify({ poopY: Math.round(p.poop.y), stripY: L.levelStrip.y, stripX: L.levelStrip.x, pauseY: pause.y, mid: p.col.x + p.col.width / 2, gap: (L.levelStrip.y - L.levelStrip.height / 2) - (L.chip.y + L.chip.height / 2), rowY: p.quizButtonBox.y }); })`).then(JSON.parse);
+        ok(place.poopY >= TT.levels.eduBreakPoopY - 2 && place.poopY <= TT.levels.eduBreakPoopY + 26 && place.stripY === place.pauseY && place.stripX === place.mid && place.gap === 12 && place.rowY < place.stripY, `the education break: the poop bobs at mid-height (y ${place.poopY}), ◀ LV n ▶ on ⏸'s row (y ${place.stripY}) centred (x ${place.stripX}), the row (y ${place.rowY}) and its chip ${place.gap} px above it (plan 28, 1.1)`);
         // What is waiting, on the pill (plan 21, E2), as in Anki: "📚 new · missed · review", each count
         // in its own colour. A new device's first break has only new cards waiting: the stomach's and the
         // general ones. The ❔ answers pill is gone: the tally sits in the quiz card.
