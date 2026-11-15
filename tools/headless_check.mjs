@@ -255,8 +255,10 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
     const { evaluate, exceptions } = cdp;
     // Hermetic input: a controller paired to this machine is visible to headless Chrome too, and
     // its presses would reach the game mid-check. The page sees no pads; the pad checks below go
-    // through Play.padDown / padNav, the same route the plugin's events take.
-    await cdp.send('Page.addScriptToEvaluateOnNewDocument', { source: `Object.defineProperty(navigator, 'getGamepads', { value: () => [], configurable: true });` });
+    // through Play.padDown / padNav, the same route the plugin's events take. And the debug handle
+    // (globalThis.__flappy) exists only on local hosts unless a driver opts in before the page's
+    // scripts run (debugHandleAllowed): opt in, so --url=<any host> keeps working.
+    await cdp.send('Page.addScriptToEvaluateOnNewDocument', { source: `globalThis.__flappyDebug = true; Object.defineProperty(navigator, 'getGamepads', { value: () => [], configurable: true });` });
     // The field follows the viewport (fieldWidth): pin it to the portrait 720×1280 so every number
     // below is the phone layout (--window-size includes browser chrome, so the viewport is smaller).
     await cdp.send('Emulation.setDeviceMetricsOverride', { width: 720, height: 1280, deviceScaleFactor: 1, mobile: false });

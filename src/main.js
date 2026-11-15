@@ -1,5 +1,5 @@
 import { FIELD } from './config.js';
-import { fieldWidth, perfMode, inviteFromSearch, withoutInvite } from './logic.js';
+import { fieldWidth, perfMode, inviteFromSearch, withoutInvite, debugHandleAllowed } from './logic.js';
 import { attachPerfMeter } from './ui/perfMeter.js';
 import { Boot } from './scenes/Boot.js';
 import { Play } from './scenes/Play.js';
@@ -75,5 +75,6 @@ globalThis.addEventListener?.('resize', () => {
 if (perf) attachPerfMeter(game, perf);
 if (invite) game.registry.set('pendingInvite', invite);
 
-// Debug / automation handle (headless drivers reach scenes through it). No gameplay effect.
-globalThis.__flappy = game;
+// Debug / automation handle (headless drivers reach scenes through it), on this machine and the local
+// network only, or when a driver opts in before the page loads (debugHandleAllowed). No gameplay effect.
+if (debugHandleAllowed(globalThis.location?.hostname, globalThis.__flappyDebug === true)) globalThis.__flappy = game;

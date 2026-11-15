@@ -2292,6 +2292,25 @@ export function settingsLayout(width, height, t, { test = false } = {}) {
   return { panel, close, rows, hand: handRow(rows.hand), test: { divider: top + 680, levelDown: arrow(-230), levelUp: arrow(230), powers } };
 }
 
+// --- The debug / automation handle (globalThis.__flappy; src/main.js) ---
+
+/**
+ * Whether the page sets globalThis.__flappy (plan 30): on this machine (localhost, a *.localhost name,
+ * 127.x, ::1), a *.local name, or a private-network address (10/8, 172.16/12, 192.168/16: a phone on the
+ * same Wi-Fi as tools/serve.py), or when a driver set globalThis.__flappyDebug = true before the page's
+ * scripts ran (optIn; the smoke does, so it runs against any URL). Not on a public host.
+ */
+export function debugHandleAllowed(hostname, optIn = false) {
+  if (optIn === true) return true;
+  const h = String(hostname ?? '').toLowerCase().replace(/^\[|\]$/g, '');
+  if (h === 'localhost' || h.endsWith('.localhost') || h === '::1' || /^[a-z0-9-]+(\.[a-z0-9-]+)*\.local$/.test(h)) return true;
+  const m = h.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+  if (!m) return false;
+  const [a, b, c, d] = m.slice(1).map(Number);
+  if ([a, b, c, d].some((x) => x > 255)) return false;
+  return a === 127 || a === 10 || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168);
+}
+
 // --- Frame meter (?perf; src/ui/perfMeter.js) ---
 
 /** `?perf` → 'meter'; `?perf=var` → 'var' (the meter with a variable physics step, for an A/B); else null. */

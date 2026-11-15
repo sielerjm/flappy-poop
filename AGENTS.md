@@ -2490,7 +2490,8 @@ tools/
                             continues; then the splash is gone and the ready screen did
                             not start a run. It launches headless Chrome (CHROME env
                             overrides the path), drives the running game over the
-                            DevTools protocol through globalThis.__flappy, and fails
+                            DevTools protocol through globalThis.__flappy (opted in
+                            before load, so any --url works), and fails
                             on a page exception, a stalled __flappy.loop.frame, or an
                             overlay that does not open / close. Covers every overlay in
                             OVERLAYS (tests/tools.test.js keeps that list equal to
@@ -2726,6 +2727,10 @@ npm run schema:check   # which db/schema.sql the live database has (one read-onl
                        # -- --query prints a query to paste in Supabase's SQL editor instead
 # In a browser, globalThis.__flappy is the Phaser.Game (debug / automation only):
 #   __flappy.scene.getScene('Play').spawnPipePair()
+#   It exists on localhost, *.local and private-network addresses (the LAN URL below), not on
+#   the live site; a driver aimed elsewhere sets globalThis.__flappyDebug = true before the
+#   page's scripts run (Page.addScriptToEvaluateOnNewDocument), as the smoke does
+#   (debugHandleAllowed in src/logic.js).
 npm start         # tools/serve.py: http://localhost:8000 plus a printed
                   # http://<LAN-IP>:8000 for a phone on the same Wi-Fi
                   # (localhost on the phone is the phone, not the laptop; user
