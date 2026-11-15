@@ -756,14 +756,15 @@ test("pickCard's skipped (plan 26, A2): a card skipped today is never practice t
   assert.deepEqual([buriedIdsOn({ day: '2026-11-14', n: 1, ids: ['ST-01'] }, '2026-11-14'), buriedIdsOn({ day: '2026-11-13', n: 1, ids: ['ST-01'] }, '2026-11-14'), buriedIdsOn(undefined, '2026-11-14')], [['ST-01'], [], []], 'buriedIdsOn: that day only');
 });
 
-test("learning streaks (plan 26, A2: Michael's checklist): nextStudyStreak counts local days with an answer; the same or an earlier day changes nothing, the next day adds one, a gap starts over and keeps the best; studyStreakNow is 0 once a day is missed; days come from the date keys, so month and year ends and clock changes within a day cannot break one", async () => {
+test("learning streaks (plan 26, A2: Michael's checklist): nextStudyStreak counts local days with an answer; the same day or the day before changes nothing, the next day adds one, a gap starts over and keeps the best; a stored day more than a day ahead is a clock error (plan 27, Michael: start again at 1, the best kept); studyStreakNow is 0 once a day is missed; days come from the date keys, so month and year ends and clock changes within a day cannot break one", async () => {
   const { nextStudyStreak, studyStreakNow } = await import('../src/education.js');
   let st = nextStudyStreak(null, '2026-11-14');
   assert.deepEqual(st, { day: '2026-11-14', streak: 1, best: 1 }, 'the first day');
   assert.deepEqual(nextStudyStreak(st, '2026-11-14'), st, 'the same day: no change');
   st = nextStudyStreak(st, '2026-11-15');
   assert.deepEqual(st, { day: '2026-11-15', streak: 2, best: 2 }, 'the next day: one more');
-  assert.deepEqual(nextStudyStreak(st, '2026-11-13'), st, 'an earlier day (a clock set back, a trip west): nothing moves, and the stored day never goes back');
+  assert.deepEqual(nextStudyStreak(st, '2026-11-14'), st, 'the day before (a trip west across midnight): nothing moves, and the stored day stays');
+  assert.deepEqual(nextStudyStreak(st, '2026-11-13'), { day: '2026-11-13', streak: 1, best: 2 }, 'two days before (a clock that was set ahead, put right): a clock error, so 1 on the real day, the best kept');
   st = nextStudyStreak(nextStudyStreak(st, '2026-11-16'), '2026-11-20');
   assert.deepEqual(st, { day: '2026-11-20', streak: 1, best: 3 }, 'a gap: back to 1, the best kept');
   let ny = nextStudyStreak(null, '2026-12-31');
@@ -771,7 +772,20 @@ test("learning streaks (plan 26, A2: Michael's checklist): nextStudyStreak count
   assert.equal(ny.streak, 2, 'over a year end');
   assert.equal(nextStudyStreak({ day: '2027-02-28', streak: 4, best: 4 }, '2027-03-01').streak, 5, 'over the end of February');
   assert.equal(nextStudyStreak({ day: '2028-02-28', streak: 4, best: 4 }, '2028-03-01').streak, 1, 'a leap year has a 29th: a day was missed');
-  assert.deepEqual([studyStreakNow(null, '2026-11-20'), studyStreakNow(st, '2026-11-20'), studyStreakNow(st, '2026-11-21'), studyStreakNow(st, '2026-11-22'), studyStreakNow(st, '2026-11-19')], [0, 1, 1, 0, 1], 'now: today or yesterday keeps it; a missed day is 0; a clock behind the stored day shows it');
+  assert.deepEqual([studyStreakNow(null, '2026-11-20'), studyStreakNow(st, '2026-11-20'), studyStreakNow(st, '2026-11-21'), studyStreakNow(st, '2026-11-22'), studyStreakNow(st, '2026-11-19'), studyStreakNow(st, '2026-11-18')], [0, 1, 1, 0, 1, 0], 'now: today or yesterday keeps it; a missed day is 0; a clock a day behind the stored day shows it, more than a day behind is a clock error: 0');
+  // The freeze zone E found (audit 2026-11-15): one answer with the clock set years ahead no longer
+  // holds the streak still until that date; the next honest days count again.
+  let ahead = nextStudyStreak({ day: '2026-11-14', streak: 4, best: 6 }, '2030-01-01');
+  assert.deepEqual(ahead, { day: '2030-01-01', streak: 1, best: 6 }, 'the clock set years ahead: a gap');
+  assert.equal(studyStreakNow(ahead, '2026-11-15'), 0, 'back on the real date: no streak shown');
+  ahead = nextStudyStreak(ahead, '2026-11-15');
+  ahead = nextStudyStreak(nextStudyStreak(ahead, '2026-11-16'), '2026-11-17');
+  assert.deepEqual(ahead, { day: '2026-11-17', streak: 3, best: 6 }, 'three honest days after: 3');
+  // Toggling the clock still adds nothing: a day ahead and back, then the real next day, is one day more.
+  let toggled = nextStudyStreak({ day: '2026-11-14', streak: 3, best: 3 }, '2026-11-15'); // the clock a day ahead
+  toggled = nextStudyStreak(toggled, '2026-11-14'); // put back
+  toggled = nextStudyStreak(toggled, '2026-11-15'); // the real next day
+  assert.deepEqual(toggled, { day: '2026-11-15', streak: 4, best: 4 }, 'two real days, 3 + 1');
 });
 
 test("createEduStore's study record (plan 26, A2): written through answer(id, record, { studyDay }), kept when well formed, dropped when broken, wiped by Clear; an answer without a day leaves it alone", () => {

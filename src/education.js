@@ -576,22 +576,24 @@ function dayNumber(key) {
 
 /**
  * The learning streak after an answer on local `day` (plan 26, A2): a local day with at least one
- * answer saved in an education run is a study day. None yet: 1. The same day, or an earlier one (a
- * clock set back, a trip west): nothing moves, and the stored day never goes back, so toggling a clock
- * cannot add days. The next day: one more. A gap: 1 again, the best kept. Pure.
+ * answer saved in an education run is a study day. None yet: 1. The same day, or the day before (a
+ * trip west across midnight): nothing moves, and the stored day stays, so toggling a clock cannot add
+ * days. The next day: one more. A gap: 1 again, the best kept. A stored day more than one day ahead of
+ * `day` is a clock error (plan 27, Michael: a clock once set ahead no longer freezes the streak until
+ * that date): 1 again on `day`, the best kept. Pure.
  */
 export function nextStudyStreak(study, day) {
   if (!study) return { day, streak: 1, best: 1 };
   const gap = dayNumber(day) - dayNumber(study.day);
-  if (gap <= 0) return study;
+  if (gap === 0 || gap === -1) return study;
   const streak = gap === 1 ? study.streak + 1 : 1;
   return { day, streak, best: Math.max(study.best ?? 0, streak) };
 }
 
-/** The learning streak as of local `today`: the stored one while its last day is today or yesterday (or later: a clock behind), else 0. */
+/** The learning streak as of local `today`: the stored one while its last day is today, yesterday or tomorrow (a clock a day behind), else 0 (a day missed, or a clock error). */
 export function studyStreakNow(study, today) {
   if (!study) return 0;
-  return dayNumber(today) - dayNumber(study.day) <= 1 ? study.streak : 0;
+  return Math.abs(dayNumber(today) - dayNumber(study.day)) <= 1 ? study.streak : 0;
 }
 
 /** The ids of the cards whose right answer paid on local `day` (the store's `paid`; plan 26, A2), or none. */

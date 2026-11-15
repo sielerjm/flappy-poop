@@ -588,8 +588,11 @@ average grade, the graded runs, and (plan 26 A2, Michael's checklist; your own p
 eight badges. **Learning streaks**: a local day on which at least one card was answered and saved in an
 education run (any quiz; never a test run or under test mode) is a study day; `quizAnswer`'s one write
 (`eduStore.answer(id, record, { studyDay })`) moves the store's `study` { day, streak, best } by
-`nextStudyStreak` (the same or an earlier day changes nothing and the stored day never goes back, the next day
-adds one, a gap starts over and keeps the best), and `studyStreakNow` reads it (0 once a day is missed). Day
+`nextStudyStreak` (the same day or the day before changes nothing and the stored day stays, the next day
+adds one, a gap starts over and keeps the best; a stored day more than a day ahead is a clock error, so the
+streak starts again at 1 on the real day, the best kept: plan 27, Michael's call, so a clock once set ahead
+no longer freezes it until that date), and `studyStreakNow` reads it (0 once a day is missed, or while the
+stored day is more than a day ahead). Day
 gaps come from the date keys (`localDayKey`), never from milliseconds.
 **What leaves the device, and only by choice** (plan 21, Stage 3b): the **📚 Education data** panel
 (`src/ui/eduDataPanel.js`, a DOM panel like the user panel; from a button in the user panel shown
@@ -2218,8 +2221,9 @@ tests/                      node --test (schema.test.js, pilot.test.js, eduBoard
                             reviews, missed counts, the drain test with any recent gap,
                             unlockLevel, bury and the local day; plan 26 A2: the paid
                             record, the study record and the streak helpers (same
-                            day, next day, a gap, an earlier day, month and year
-                            ends); plan 27: skipPractice (AUD-028)
+                            day, next day, a gap, the day before, month and year
+                            ends; plan 27: a clock set ahead, the clock toggled);
+                            plan 27: skipPractice (AUD-028)
   eduDays.test.js           Education's local days with TZ pinned to
                             America/Los_Angeles in its own process (plan 27):
                             skipUntil on the fall-back, spring and a normal day,
