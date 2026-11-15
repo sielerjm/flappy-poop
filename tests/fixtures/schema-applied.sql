@@ -26,7 +26,7 @@
 --   * call claim_achievements(...) record achievements the game says the player earned (2026-11-11)
 --   * call player_stats(...)       any player's public profile, by id or board name (never ids)
 --   * call board_tags(...)         the 🔧 / 🎖️ / 🆕 tags of the names a board shows (2026-11-12)
---   * call share_education(...)    put the player on the 📚 education board, by their own choice (2026-11-13)
+--   * call share_education(...)    put the player on the 📚 education board, by their own choice (2026-11-13); by invitation (plan 28)
 --   * call submit_education_grades(...) add a batch of graded education runs to a sharing player's row
 --   * call rename_education(...)   a sharing player's name on the 📚 board follows a rename (never adds a player)
 --   * call unshare_education(...)  take the player off the 📚 board: the row is deleted
@@ -112,6 +112,9 @@
 --   delete every participant and answer of a phase (the pilot's, before the beta):
 --     select public.admin_purge_phase('pilot');
 --   undo the stamp: drop function public.schema_version();
+--   undo the invitation (plan 28): drop function public.share_education(text, text, boolean, text);
+--     alter table public.player_meta drop column edu_invited; then restore share_education,
+--     enrol_research and fold_player from git and run this file.
 --   undo the 🌞 / 🏅 name rule (plan 25): drop index public.daily_scores_name_key; then restore
 --     name_blocked and submit_daily_score from git and run this file.
 --   undo the receipt lists (plan 24): alter table public.player_counters drop column recent_batches;
@@ -125,7 +128,7 @@
 --     public.admin_set_invite(text), public.admin_purge_phase(text);
 --     drop table public.research_responses, public.research_participants; then restore
 --     fold_player from git and run this file.
---   undo the 📚 board: drop function public.share_education(text, text, boolean),
+--   undo the 📚 board: drop function public.share_education(text, text, boolean, text),
 --     public.submit_education_grades(text, text, timestamptz, int, bigint, jsonb),
 --     public.rename_education(text, text), public.unshare_education(text),
 --     public.education_board(text, int), public.admin_set_education_open(boolean),
@@ -560,6 +563,10 @@ create table if not exists public.player_meta (
 -- rename_education wait 5 s between two (education_paced). Here, not on the 📚 row, because Stop
 -- sharing deletes that row.
 alter table public.player_meta add column if not exists edu_named_at timestamptz;
+-- Invited to share on the 📚 board (plan 28, 2.4): set by every share share_education takes (the first
+-- with the invite code); an invited player shares and joins the pilot without it. Joining the pilot sets
+-- nothing here (AUD-040): the pilot keeps to its own tables.
+alter table public.player_meta add column if not exists edu_invited boolean not null default false;
 alter table public.player_meta enable row level security;
 revoke all on public.player_meta from public, anon, authenticated;
 
@@ -685,6 +692,14 @@ create table if not exists public.research_responses (
 );
 create index if not exists research_responses_participant on public.research_responses (research_id, client_at);
 create index if not exists research_responses_card on public.research_responses (card_id);
+
+-- The invitation's backfill (plan 28, 2.4): players already on the 📚 board were invited before the
+-- column existed; marked so Stop then Share still works. Re-running changes nothing. A pilot
+-- participant gets no mark: taking part lets them share and join without the code, and the pilot
+-- leaves nothing in player_meta, so Withdraw and the purge leave only what RESEARCH.md names (AUD-040).
+insert into public.player_meta (player_id, joined_at, exact, edu_invited)
+select player_id, now(), false, true from public.education_public
+on conflict (player_id) do update set edu_invited = true;
 alter table public.research_responses enable row level security;
 revoke all on public.research_responses from public, anon, authenticated;
 
@@ -842,13 +857,14 @@ begin
   on conflict (player_id, achievement_id) do update
     set earned_at = least(public.player_achievements.earned_at, excluded.earned_at);
   delete from public.player_achievements where player_id = v_merge;
-  insert into public.player_meta (player_id, joined_at, exact, dev, edu_named_at)
-  select v_keep, m.joined_at, m.exact, m.dev, m.edu_named_at from public.player_meta m where m.player_id = v_merge
+  insert into public.player_meta (player_id, joined_at, exact, dev, edu_named_at, edu_invited)
+  select v_keep, m.joined_at, m.exact, m.dev, m.edu_named_at, m.edu_invited from public.player_meta m where m.player_id = v_merge
   on conflict (player_id) do update
     set exact     = case when excluded.joined_at < public.player_meta.joined_at then excluded.exact else public.player_meta.exact end,
         joined_at = least(public.player_meta.joined_at, excluded.joined_at),
         dev       = public.player_meta.dev or excluded.dev,
-        edu_named_at = greatest(public.player_meta.edu_named_at, excluded.edu_named_at);
+        edu_named_at = greatest(public.player_meta.edu_named_at, excluded.edu_named_at),
+        edu_invited = public.player_meta.edu_invited or excluded.edu_invited;
   delete from public.player_meta where player_id = v_merge;
   if exists (select 1 from public.education_public where player_id = v_keep) then
     if exists (select 1 from public.education_public where player_id = v_merge) then
@@ -1586,7 +1602,14 @@ revoke execute on function public.education_paced(text) from public, anon, authe
 -- a 🔧 dev may share: 'closed'. The name follows the score board's claim rule ('name taken'): a
 -- player who only plays education has no score-board row, so the name travels with the share.
 -- Returns the row's shared_at, which names this round of sharing. Errors raise.
-create or replace function public.share_education(p_player_id text, p_name text, p_adult boolean)
+-- Sharing is by invitation (plan 28, 2.4): a 🔧 dev, a player the server knows as invited
+-- (player_meta.edu_invited), a pilot participant or a player already on the board shares as before;
+-- anyone else brings p_invite, the code whose SHA-256 is education_settings.invite_hash (the pilot's),
+-- which marks them invited (as every share the server takes does). 'needs invite' otherwise (also while
+-- no code is set). An old client's
+-- 3-argument call reaches this one through p_invite's default.
+drop function if exists public.share_education(text, text, boolean);
+create or replace function public.share_education(p_player_id text, p_name text, p_adult boolean, p_invite text default null)
 returns timestamptz
 language plpgsql
 security definer
@@ -1596,6 +1619,7 @@ declare
   v_id text;
   v_key text;
   v_at timestamptz;
+  v_hash text;
 begin
   if p_player_id is null or p_player_id !~ '^[A-Za-z0-9_-]{22}$' then
     raise exception 'bad player id';
@@ -1611,6 +1635,15 @@ begin
      and not coalesce((select m.dev from public.player_meta m where m.player_id = v_id), false) then
     raise exception 'closed';
   end if;
+  if not (coalesce((select m.dev or m.edu_invited from public.player_meta m where m.player_id = v_id), false)
+          or exists (select 1 from public.research_participants r where r.player_id = v_id)
+          or exists (select 1 from public.education_public e where e.player_id = v_id)) then
+    select es.invite_hash into v_hash from public.education_settings es;
+    if v_hash is null or p_invite is null or length(p_invite) > 200
+       or encode(sha256(convert_to(p_invite, 'UTF8')), 'hex') <> v_hash then
+      raise exception 'needs invite';
+    end if;
+  end if;
   v_key := public.name_key(p_name);
   perform pg_advisory_xact_lock(hashtext(v_key));
   if public.name_blocked(v_key, v_id) then
@@ -1625,6 +1658,7 @@ begin
   perform public.touch_player(v_id);
   v_id := public.education_lock(v_id);
   perform public.education_paced(v_id);
+  update public.player_meta set edu_invited = true where player_id = v_id; -- any share the server takes: invited from now on
   insert into public.education_public (player_id, name) values (v_id, p_name)
   on conflict (player_id) do update set name = excluded.name
   returning shared_at into v_at;
@@ -1842,7 +1876,8 @@ revoke execute on function public.admin_set_education_open(boolean) from public,
 -- game's Education data panel, for adults only, with the invite code the owner gave them.
 --
 -- enrol_research: join. p_invite must hash to education_settings.invite_hash ('bad invite' for a
--- wrong or missing code; 'closed' while no code is set). The code's length is the protection:
+-- wrong or missing code; 'closed' while no code is set), unless the player is invited (a share
+-- marked them: player_meta.edu_invited). It writes only to the pilot's tables (AUD-040). The code's length is the protection:
 -- player ids are free to make, so a limit on guesses per player would stop nobody, and
 -- admin_set_invite refuses a short code. p_adult must be true. p_consent_version names the
 -- notice the tester agreed to (RESEARCH.md's version, from the game). Joining again keeps the
@@ -1874,12 +1909,17 @@ begin
   if v_set.invite_hash is null then
     raise exception 'closed';
   end if;
-  if p_invite is null or length(p_invite) > 200
-     or encode(sha256(convert_to(p_invite, 'UTF8')), 'hex') <> v_set.invite_hash then
+  v_id := public.resolve_player(p_player_id);
+  -- An invited player (plan 28, 2.4: the 📚 board's invitation, marked by a share) joins without the code.
+  if not coalesce((select m.edu_invited from public.player_meta m where m.player_id = v_id), false)
+     and (p_invite is null or length(p_invite) > 200
+          or encode(sha256(convert_to(p_invite, 'UTF8')), 'hex') <> v_set.invite_hash) then
     raise exception 'bad invite';
   end if;
-  v_id := public.resolve_player(p_player_id);
   perform pg_advisory_xact_lock(hashtext('research:' || v_id));
+  -- Nothing outside the pilot's own tables (AUD-040): no player_meta row, no invitation mark, so
+  -- Withdraw and the purge leave nothing behind that RESEARCH.md does not name. While taking part,
+  -- share_education lets the participant in without the code.
   insert into public.research_participants (player_id, phase, adult, consent_version)
   values (v_id, v_set.phase, true, p_consent_version)
   on conflict (player_id) do update
@@ -2014,8 +2054,9 @@ end;
 $$;
 
 -- Maintenance only (no role may call these). admin_set_invite: set the pilot's invite code
--- (only its SHA-256 is stored), which stops the old one; null closes enrolment. A code under 16
--- characters is refused: the code's length is what keeps guessers out. Returns 'set' or 'closed'.
+-- (only its SHA-256 is stored), which stops the old one; null closes enrolment. The code is 16 to
+-- 200 of A-Z a-z 0-9 - . _ ~ +, so it works typed and in an invite link (AUD-041); its length is what
+-- keeps guessers out. Returns 'set' or 'closed'.
 --   select public.admin_set_invite('a-long-code-you-made-up');
 create or replace function public.admin_set_invite(p_code text)
 returns text
@@ -2028,8 +2069,10 @@ begin
     update public.education_settings set invite_hash = null;
     return 'closed';
   end if;
-  if length(p_code) < 16 or length(p_code) > 200 then
-    raise exception 'bad code: 16 to 200 characters';
+  -- Only a code the game can send, typed or in an invite link (AUD-041): no space at an end (the game
+  -- trims), nothing a link cannot carry raw (& # % or a space), ASCII only (the game counts UTF-16 units).
+  if p_code !~ '^[A-Za-z0-9._~+-]{16,200}$' then
+    raise exception 'bad code: 16 to 200 of A-Z a-z 0-9 - . _ ~ +';
   end if;
   update public.education_settings set invite_hash = encode(sha256(convert_to(p_code, 'UTF8')), 'hex');
   return 'set';
@@ -2302,8 +2345,8 @@ revoke execute on function public.claim_achievements(text, text[]) from public, 
 grant  execute on function public.claim_achievements(text, text[]) to anon;
 revoke execute on function public.board_tags(text[]) from public, authenticated;
 grant  execute on function public.board_tags(text[]) to anon;
-revoke execute on function public.share_education(text, text, boolean) from public, authenticated;
-grant  execute on function public.share_education(text, text, boolean) to anon;
+revoke execute on function public.share_education(text, text, boolean, text) from public, authenticated;
+grant  execute on function public.share_education(text, text, boolean, text) to anon;
 revoke execute on function public.submit_education_grades(text, text, timestamptz, int, bigint, jsonb) from public, authenticated;
 grant  execute on function public.submit_education_grades(text, text, timestamptz, int, bigint, jsonb) to anon;
 revoke execute on function public.rename_education(text, text) from public, authenticated;
@@ -2329,7 +2372,7 @@ returns text
 language sql
 immutable
 as $$
-  select '86a60e01e2949cf3'::text; -- schema stamp
+  select 'c55c23b697a00323'::text; -- schema stamp
 $$;
 revoke execute on function public.schema_version() from public, authenticated;
 grant  execute on function public.schema_version() to anon;
