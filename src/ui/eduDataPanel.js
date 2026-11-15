@@ -24,6 +24,7 @@
 
 import { EDUCATION } from '../config.js';
 import { t } from '../i18n.js';
+import { issueUrl } from '../logic.js';
 
 const PANEL_ID = 'edu-data-panel';
 
@@ -108,11 +109,14 @@ function build() {
   const joinRow = h('div', { class: 'row' }, joinBtn);
   const leaveBtn = h('button', { type: 'button', id: 'edu-pilot-leave', class: 'wide outline', hidden: true });
   const status = h('p', { class: 'status', id: 'edu-data-status' });
+  // The education feedback form (plan 28, 2.5): a wrong card, an unclear explanation, a broken link, an idea.
+  const reportLink = h('a', { id: 'edu-report-link', href: issueUrl('education'), target: '_blank', rel: 'noopener noreferrer' });
+  const report = h('p', { class: 'more' }, reportLink);
   const close = h('button', { type: 'button', class: 'close', 'aria-label': 'close' }, '✕');
 
   // The card takes focus when nothing in it has any, so Esc reaches the root's keydown (the game
   // keyboard is off while the panel is open), as tournamentPanel's does (plan 24, AUD-018).
-  const card = h('div', { class: 'card', tabindex: '-1' }, close, title, intro, inviteNote, inviteRow, adultRow, shareTitle, shareBody, shareState, shareBtn, pilotTitle, pilotBody, pilotMore, pilotState, joinRow, leaveBtn, status);
+  const card = h('div', { class: 'card', tabindex: '-1' }, close, title, intro, inviteNote, inviteRow, adultRow, shareTitle, shareBody, shareState, shareBtn, pilotTitle, pilotBody, pilotMore, pilotState, joinRow, leaveBtn, status, report);
   const root = h('div', { id: PANEL_ID, role: 'dialog', 'aria-modal': 'true', hidden: true }, card);
   document.body.append(root);
 
@@ -133,7 +137,7 @@ function build() {
   joinBtn.addEventListener('click', () => onJoin());
   leaveBtn.addEventListener('click', () => onLeave());
 
-  dom = { root, card, title, intro, inviteNote, inviteRow, adult, adultRow, adultText, shareTitle, shareBody, shareState, shareBtn, pilotTitle, pilotBody, pilotMore, pilotLink, pilotState, code, joinRow, joinBtn, leaveBtn, status };
+  dom = { root, card, title, intro, inviteNote, inviteRow, adult, adultRow, adultText, shareTitle, shareBody, shareState, shareBtn, pilotTitle, pilotBody, pilotMore, pilotLink, pilotState, code, joinRow, joinBtn, leaveBtn, status, reportLink };
 }
 
 function setStatus(text, kind = '') {
@@ -180,6 +184,7 @@ function refresh() {
   dom.pilotLink.textContent = t(locale, 'eduPilotMore');
   dom.pilotState.textContent = t(locale, joined ? 'eduPilotOn' : stale ? 'eduPilotStale' : 'eduPilotOff');
   dom.pilotState.className = joined ? 'state on' : 'state';
+  dom.reportLink.textContent = t(locale, 'eduDataReport');
   dom.joinBtn.textContent = t(locale, 'eduPilotJoin');
   dom.leaveBtn.textContent = t(locale, 'eduPilotLeave');
   dom.joinRow.hidden = joined || !open;

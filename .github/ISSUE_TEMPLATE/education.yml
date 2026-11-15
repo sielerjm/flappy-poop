@@ -1,0 +1,59 @@
+name: Education report
+description: A quiz card is wrong or unclear, a link is broken, or you have an idea for a card
+title: "[Education] "
+labels: ["education"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping check the cards. Please never post personal data here: no real names, player ids, user codes, or screenshots that show them. To delete tester data, use **Withdraw** in the game (user button → 📚 Education data).
+  - type: dropdown
+    id: kind
+    attributes:
+      label: What is it about?
+      options:
+        - A card is wrong
+        - An explanation is unclear
+        - A link is broken
+        - An idea for a card
+        - Something else
+      default: 0
+    validations:
+      required: true
+  - type: input
+    id: card-id
+    attributes:
+      label: Card
+      description: The code in the card's top-left corner (e.g. ST-03), if it is about a card. It is filled in when you come from the 🚩 on the card.
+      placeholder: ST-03
+    validations:
+      required: false
+  - type: textarea
+    id: details
+    attributes:
+      label: Details
+      description: What is wrong or unclear and what it should say instead, which link is broken, or your idea.
+    validations:
+      required: true
+  - type: textarea
+    id: source
+    attributes:
+      label: Source
+      description: Optional. A paper, textbook or link that supports it.
+    validations:
+      required: false
+  - type: input
+    id: language
+    attributes:
+      label: Language
+      description: Optional. English or Chinese, if it is about the card's text.
+    validations:
+      required: false
+  - type: input
+    id: version
+    attributes:
+      label: Game version
+      description: Shown on About / Settings (e.g. v0.19.0). It is filled in when you come from the 🚩 on the card.
+      placeholder: v0.19.0
+    validations:
+      required: false

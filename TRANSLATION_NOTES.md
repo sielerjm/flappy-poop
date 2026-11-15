@@ -343,6 +343,7 @@ Short, playful, clear. Fit a 720×1280 logical field; How to play / About body w
 | eduIntroClose | Close | 关闭 |
 | eduDataTitle | 📚 Education data | 📚 教育数据 |
 | eduDataIntro | Education mode keeps your answers, grades and badges on this device. Nothing leaves it unless you choose to share below. | 教育模式的答题记录、成绩和徽章都保存在这台设备上。除非你在下面选择分享，否则不会离开设备。 |
+| eduDataReport | Report a wrong card, a broken link, or an idea for a card | 报告卡片错误、链接失效，或提出新卡片的想法 |
 | eduDataInvite | Sharing your grades and joining the tester data are by invitation. Type the invite code you were given, or open your invite link. | 分享成绩和参加测试者数据都需要邀请。请输入你收到的邀请码，或打开你的邀请链接。 |
 | eduShareNeedInvite | Sharing is by invitation: type the invite code you were given above. | 分享需要邀请：请在上方输入你收到的邀请码。 |
 | eduDataAdult | I am 18 or older | 我已年满 18 岁 |

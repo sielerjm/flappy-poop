@@ -21,14 +21,16 @@ const ISSUE_BASE = 'https://github.com/sielerjm/flappy-poop/issues/new';
  * GitHub new-issue URL for a feedback kind: `bug` or `feature` (the Feedback overlay), or `card`
  * (the 🚩 on an education quiz card; plan 21, E4): the card report form with the card's code in the
  * issue's title ("[Card ST-03] ", always) and prefilled into the form's `card-id` field, and the
- * game version into its `version` field (the ids in .github/ISSUE_TEMPLATE/card.yml).
+ * game version into its `version` field (the ids in .github/ISSUE_TEMPLATE/education.yml, which replaced
+ * card.yml in plan 28). 'education': the same form with nothing filled in (the Education data panel's link).
  */
 export function issueUrl(kind, { cardId = '', version = VERSION } = {}) {
   if (kind === 'bug') return `${ISSUE_BASE}?template=bug.yml`;
   if (kind === 'feature') return `${ISSUE_BASE}?template=feature.yml`;
+  if (kind === 'education') return `${ISSUE_BASE}?template=education.yml`;
   if (kind === 'card') {
     const id = String(cardId).trim();
-    const query = new URLSearchParams({ template: 'card.yml', title: `[Card ${id}] `, 'card-id': id, version: `v${version}` });
+    const query = new URLSearchParams({ template: 'education.yml', title: `[Card ${id}] `, 'card-id': id, version: `v${version}` });
     return `${ISSUE_BASE}?${query}`;
   }
   throw new Error(`issueUrl: unknown kind ${kind}`);

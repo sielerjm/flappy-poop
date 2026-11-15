@@ -439,7 +439,7 @@ under it opens the card's first reference with a DOI (`REFERENCE_DOIS`, `cardLea
 in a new tab only (`openLink` → `openUrl`), are not ring items (as the 🚩), and are drafted for
 Michael's review. **The id ends in 🚩 and is a link** (`openReport`): on its release it opens
 GitHub's card report form in a new tab with the card's code in the title and the form's fields
-(`issueUrl('card')`, `.github/ISSUE_TEMPLATE/card.yml`); never a same-tab navigation, which would lose
+(`issueUrl('card')`, `.github/ISSUE_TEMPLATE/education.yml`: plan 28 replaced card.yml with one education form, its kinds a wrong card, an unclear explanation, a broken link, an idea, something else, label `education`; the Education data panel links it too, `issueUrl('education')`); never a same-tab navigation, which would lose
 the run, and not on the controller ring (a pad press cannot open a tab). **Its rows**, as Michael drew
 them (plan 26): a full-width Why on top, then two buttons whose right one is the way forward (Next
 Card, Fly on, Go for it, End run) and whose left one is the way out (End Review in a break; Quit or
@@ -2121,7 +2121,7 @@ tests/                      node --test (schema.test.js, pilot.test.js, eduBoard
                             (readyLayout().howto geometry, readyHit)
   feedback.test.js          issueUrl bug / feature templates and the card report
                             (the code in the title and the form's fields, which
-                            card.yml declares); openExternalUrl paths; feedback
+                            education.yml declares); openExternalUrl paths; feedback
                             i18n keys
   i18n.test.js              catalog key parity, zh≠en (allowlist), TRANSLATION_NOTES
                             key coverage, scene English denylist, initialLocale;
@@ -2392,7 +2392,7 @@ tests/                      node --test (schema.test.js, pilot.test.js, eduBoard
                             being true fails; self-tests prove each scanner can fail
 
 .github/ISSUE_TEMPLATE/     GitHub issue forms: bug.yml and feature.yml opened from
-                            Feedback; card.yml (a card report, label `card`) from the
+                            Feedback; education.yml (plan 28: a card report, a broken link, an idea; label `education`) from the
                             🚩 on an education quiz card, which fills in its card-id
                             and version fields; config.yml allows blank issues.
 

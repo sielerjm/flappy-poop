@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { issueUrl, openExternalUrl, reloadUrl, reloadGame, loadedScriptUrls, hardReloadGame, VERSION } from '../src/logic.js';
 import { t, LOCALES } from '../src/i18n.js';
 
@@ -14,20 +14,23 @@ test('issueUrl returns GitHub new-issue template URLs for bug and feature', () =
 });
 
 // E4 (plan 21): the 🚩 on an education quiz card opens the card report form with the card's code filled in.
-test("issueUrl('card'): the card report form, the card's code in the title and in the form's card-id field, the version in its version field", () => {
+test("issueUrl('card'): the education form (plan 28, 2.5: education.yml replaces card.yml), the card's code in the title and in the form's card-id field, the version in its version field", () => {
   const url = new URL(issueUrl('card', { cardId: 'ST-03', version: '9.8.7' }));
   assert.equal(`${url.origin}${url.pathname}`, 'https://github.com/sielerjm/flappy-poop/issues/new');
-  assert.deepEqual(Object.fromEntries(url.searchParams), { template: 'card.yml', title: '[Card ST-03] ', 'card-id': 'ST-03', version: 'v9.8.7' });
+  assert.deepEqual(Object.fromEntries(url.searchParams), { template: 'education.yml', title: '[Card ST-03] ', 'card-id': 'ST-03', version: 'v9.8.7' });
   assert.equal(new URL(issueUrl('card', { cardId: 'JE-06' })).searchParams.get('version'), `v${VERSION}`, 'this build by default');
   const odd = issueUrl('card', { cardId: ' A&B #1 ' });
   assert.ok(!/[ #]/.test(odd.slice(odd.indexOf('?'))), `the query is encoded (${odd})`);
   assert.equal(new URL(odd).searchParams.get('card-id'), 'A&B #1', 'and decodes to the trimmed code');
   assert.equal(new URL(issueUrl('card')).searchParams.get('title'), '[Card ] ', 'no code: still a card report');
-  // The fields the URL fills in are the form's: the template declares both ids, and the card label.
-  const form = readFileSync(new URL('../.github/ISSUE_TEMPLATE/card.yml', import.meta.url), 'utf8');
-  for (const id of ['card-id', 'version']) assert.match(form, new RegExp(`^\\s+id: ${id}$`, 'm'), `card.yml has the ${id} field`);
-  assert.match(form, /^labels: \["card"\]$/m);
-  assert.match(form, /^title: "\[Card\] "$/m);
+  // The fields the URL fills in are the form's: the template declares both ids, its kinds and the education label.
+  const form = readFileSync(new URL('../.github/ISSUE_TEMPLATE/education.yml', import.meta.url), 'utf8');
+  for (const id of ['kind', 'card-id', 'details', 'version']) assert.match(form, new RegExp(`^\\s+id: ${id}$`, 'm'), `education.yml has the ${id} field`);
+  assert.match(form, /^labels: \["education"\]$/m);
+  for (const kind of ['A card is wrong', 'An explanation is unclear', 'A link is broken', 'An idea for a card', 'Something else']) assert.ok(form.includes(`- ${kind}`), kind);
+  assert.match(form, /never post personal data/i, 'a privacy line');
+  assert.ok(!existsSync(new URL('../.github/ISSUE_TEMPLATE/card.yml', import.meta.url)), 'card.yml is gone');
+  assert.equal(issueUrl('education'), 'https://github.com/sielerjm/flappy-poop/issues/new?template=education.yml', 'the form with no card (the Education data panel links it)');
 });
 
 test('openExternalUrl uses window.open when it returns a window', () => {
