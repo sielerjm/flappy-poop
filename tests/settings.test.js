@@ -66,6 +66,55 @@ test('a storage that throws (private mode) never propagates', () => {
   const s = createSettingsStore(boom, 'k');
   assert.deepEqual(s.load(), DEFAULTS);
   assert.deepEqual(s.set({ sound: false }), { ...DEFAULTS, sound: false });
+  assert.deepEqual(s.load(), { ...DEFAULTS, sound: false }, 'kept for this page load (AUD-030)');
+});
+
+test('AUD-030: a set() that storage refuses (full) or cannot take (none) survives the next load(), for this page load', () => {
+  const full = { getItem: () => null, setItem() { throw new Error('QuotaExceededError'); } };
+  for (const [name, storage] of [['full', full], ['none', undefined]]) {
+    const s = createSettingsStore(storage, 'aud030');
+    assert.equal(s.set({ education: true, eduStartLevel: 3 }).education, true);
+    assert.deepEqual([s.load().education, s.load().eduStartLevel], [true, 3], `${name}: the 📚 switch and the start level kept`);
+  }
+});
+
+test('AUD-030: storage that is full but still holds the settings saved before: a refused set() stands in for them until a set() is saved again', () => {
+  const m = new Map([['held', JSON.stringify({ hand: 'right', sound: true })]]);
+  let full = true;
+  const st = { getItem: (k) => (m.has(k) ? m.get(k) : null), setItem: (k, v) => { if (full) throw new Error('QuotaExceededError'); m.set(k, String(v)); } };
+  const a = createSettingsStore(st, 'held');
+  const b = createSettingsStore(st, 'held');
+  assert.equal(a.load().hand, 'right', 'what storage holds');
+  a.set({ hand: 'left' });
+  assert.deepEqual([a.load().hand, b.load().hand, JSON.parse(m.get('held')).hand], ['left', 'left', 'right'], 'the refused choice is read, not the older one storage still holds');
+  full = false;
+  b.set({ sound: false });
+  assert.deepEqual(JSON.parse(m.get('held')), { ...DEFAULTS, hand: 'left', sound: false }, 'storage has room again: the next set() saves everything kept');
+  m.set('held', JSON.stringify({ ...DEFAULTS, hand: 'right' })); // another tab wrote
+  assert.equal(a.load().hand, 'right', 'saved again, so storage is read as before');
+});
+
+test('AUD-030: stores over one refusing storage (Play, Settings and Language each build one) see each other\'s set(); another storage, or another key, does not', () => {
+  const full = { getItem: () => null, setItem() { throw new Error('QuotaExceededError'); } };
+  const play = createSettingsStore(full, 'shared');
+  const settings = createSettingsStore(full, 'shared');
+  settings.set({ hand: 'left' });
+  assert.equal(play.load().hand, 'left', 'the Settings scene\'s choice reaches Play');
+  play.set({ sound: false });
+  assert.deepEqual([settings.load().hand, settings.load().sound], ['left', false]);
+  const other = { getItem: () => null, setItem() { throw new Error('QuotaExceededError'); } };
+  assert.deepEqual(createSettingsStore(other, 'shared').load(), DEFAULTS, 'another storage starts from the defaults');
+  assert.deepEqual(createSettingsStore(full, 'another').load(), DEFAULTS, 'another key too');
+});
+
+test('AUD-030: a working storage behaves as before: what it holds wins, a write lands there, and a fresh store reads it', () => {
+  const st = fakeStorage();
+  const a = createSettingsStore(st, 'works');
+  a.set({ music: false });
+  assert.equal(st.getItem('works'), JSON.stringify({ ...DEFAULTS, music: false }));
+  st.setItem('works', JSON.stringify({ ...DEFAULTS, music: true, haptics: false })); // another tab wrote
+  assert.deepEqual(a.load(), { ...DEFAULTS, haptics: false }, 'the stored value wins over this load\'s memory');
+  assert.deepEqual(createSettingsStore(st, 'works').load(), { ...DEFAULTS, haptics: false });
 });
 
 test('vibrate no-ops and returns false without a vibrate API', () => {

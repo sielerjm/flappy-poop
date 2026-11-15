@@ -3,6 +3,7 @@
 // Player-facing copy lives in i18n.js.
 
 import { isLocale, DEFAULT_LOCALE, t } from './i18n.js';
+import { createJsonStore } from './store.js';
 
 export const VERSION = '0.17.0'; // bumped when art under an existing name changes (Boot's ?v= cache-bust)
 /** The version line every overlay shows: `v{VERSION} beta` in the locale's words (i18n versionLine); What's new passes older versions. */
@@ -478,38 +479,30 @@ export function howToPromptDue(settings, stamp) {
   return (settings?.howToSeenAt ?? '') !== stamp;
 }
 
+// One settings store per storage object and key for the page load (AUD-030): Play, Settings and
+// Language each call createSettingsStore over the same localStorage, so they share one
+// createJsonStore, and a set() that storage refused (full, blocked) or could not take (none) reaches
+// the others' load() too. Missing storage shares one stand-in owner.
+const SETTINGS_BOXES = new WeakMap();
+const NO_STORAGE = {};
+
 /**
- * Settings store around a Storage-like object. Same throw-guard as
- * createBestStore: private browsing must not take the game down. Unknown keys
- * in storage are ignored; missing keys get defaults.
+ * Settings store around a Storage-like object, built on createJsonStore (src/store.js; AGENTS.md's
+ * "Storage can throw"): private browsing must not take the game down, storage that can be read is
+ * the truth, and a set() it cannot save is kept for this page load until one is saved again. Unknown
+ * keys in storage are ignored; missing keys get defaults.
  */
 export function createSettingsStore(storage, key = 'flappy-poop:settings') {
-  let memory = { ...SETTINGS_DEFAULTS };
+  const owner = Object(storage) === storage ? storage : NO_STORAGE;
+  if (!SETTINGS_BOXES.has(owner)) SETTINGS_BOXES.set(owner, new Map());
+  const boxes = SETTINGS_BOXES.get(owner);
+  if (!boxes.has(key)) boxes.set(key, createJsonStore(storage, key, normalizeSettings));
+  const box = boxes.get(key);
   return {
-    load() {
-      try {
-        const raw = storage?.getItem(key);
-        if (raw == null) {
-          memory = { ...SETTINGS_DEFAULTS };
-          return { ...memory };
-        }
-        memory = normalizeSettings(JSON.parse(raw));
-        return { ...memory };
-      } catch {
-        memory = { ...SETTINGS_DEFAULTS };
-        return { ...memory };
-      }
-    },
+    load: () => box.read(),
     /** Merge a patch of known keys, persist, and return the new settings. */
     set(patch) {
-      const current = this.load();
-      memory = normalizeSettings({ ...current, ...(patch && typeof patch === 'object' ? patch : {}) });
-      try {
-        storage?.setItem(key, JSON.stringify(memory));
-      } catch {
-        /* storage unavailable: still return the in-memory settings */
-      }
-      return { ...memory };
+      return box.write({ ...box.read(), ...(patch && typeof patch === 'object' ? patch : {}) });
     },
   };
 }

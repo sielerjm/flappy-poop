@@ -2024,7 +2024,9 @@ tests/                      node --test (schema.test.js, pilot.test.js, eduBoard
   perf.test.js              the frame meter's pure parts: perfMode, the median period,
                             long frames blamed on the previous frame's tags, perfLines
   store.test.js             best-score store incl. throwing/missing storage
-  settings.test.js          settings store (incl. hand) + vibrate helper
+  settings.test.js          settings store (incl. hand; a set() storage refused kept
+                            for the page load and shared by the stores over it,
+                            AUD-030) + vibrate helper
   sound.test.js             sfx keys, mute, Node import
   tray.test.js              trayHeight / trayLayout geometry including info + lang +
                             feedback; trayHit centre hits vs miss in the tray gap;
@@ -2603,7 +2605,9 @@ Claude outputs/             Michael's private hand-over notes (gitignored; never
    when you touch input, scaling, audio, or locale.
 7. **Storage can throw.** Private-mode Safari and blocked storage throw on
    `localStorage` access. Go through `createBestStore()`,
-   `createSettingsStore()`, `loadLocal()` / `saveLocal()` from `save.js`, or
+   `createSettingsStore()` (on `createJsonStore()` since AUD-030, one per storage object and key, so a
+   set() storage refuses is kept for this page load and every scene's store reads it), `loadLocal()` /
+   `saveLocal()` from `save.js`, or
    `createSubmitStore()` from `leaderboard.js`; a new store of one JSON value
    is built on `createJsonStore()` (`src/store.js`). Never touch `localStorage`
    directly in scenes.
