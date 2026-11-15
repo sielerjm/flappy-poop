@@ -2,6 +2,9 @@
 --
 -- How to apply: Supabase dashboard -> SQL editor -> paste this whole file -> Run.
 -- Expect "Success. No rows returned". Safe to re-run (idempotent).
+-- After an edit, `npm run schema:stamp` rewrites the stamp at the end of the file (schema_version()).
+-- `npm run schema:check` says which version the live database has; `npm run push` refuses to push
+-- until the live database has this one, then keeps tests/fixtures/schema-applied.sql equal to it.
 -- This file is run by hand only. It is the source of truth: a deleted project
 -- can be recreated by running it again. Nothing pushed to GitHub touches the
 -- database (the GitHub integration is disabled on purpose).
@@ -23,13 +26,24 @@
 --   * call claim_achievements(...) record achievements the game says the player earned (2026-11-11)
 --   * call player_stats(...)       any player's public profile, by id or board name (never ids)
 --   * call board_tags(...)         the 🔧 / 🎖️ / 🆕 tags of the names a board shows (2026-11-12)
+--   * call share_education(...)    put the player on the 📚 education board, by their own choice (2026-11-13)
+--   * call submit_education_grades(...) add a batch of graded education runs to a sharing player's row
+--   * call rename_education(...)   a sharing player's name on the 📚 board follows a rename (never adds a player)
+--   * call unshare_education(...)  take the player off the 📚 board: the row is deleted
+--   * call education_board(...)    the 📚 board: names, average grades and run counts, never ids
+--   * call enrol_research(...)     join the education tester pilot with the invite code (2026-11-13)
+--   * call submit_research_events(...) a pilot participant's answer events, under their research id
+--   * call delete_research(...)    withdraw from the pilot: the participant and their answers are deleted
+--   * call schema_version()        which version of this file the database last ran (a stamp of the file; 2026-11-13)
 -- A player has up to two rows: their best on the toilet and their best off it
 -- (primary key player_id + toilet, since 2026-11-04).
 -- and nothing else: no INSERT / UPDATE / DELETE on the table, and nothing at all
 -- on player_aliases, the tournament tables (tournaments, tournament_stats,
 -- tournament_matchups), daily_scores, player_counters, achievement_defs,
--- player_achievements or player_meta. Profiles are public (2026-11-11): player_stats returns
--- anyone's stats, counters, achievements and biggest rival, by the name a board shows.
+-- player_achievements, player_meta, education_settings, education_public, research_participants
+-- or research_responses (nor the research_* views). Profiles are public
+-- (2026-11-11): player_stats returns anyone's stats, counters, achievements and biggest rival, by
+-- the name a board shows; and, only for a player who shares them, their education grade (2026-11-13).
 --
 -- One player across devices (2026-11-08). Every browser mints its own secret id,
 -- so one person playing on a second phone used to become a second player. Now:
@@ -54,7 +68,10 @@
 -- Apply this file BEFORE pushing a client that calls name_available /
 -- merge_players / player_name / submit_tournament / tournament_board /
 -- submit_daily_score / daily_board / submit_counters / claim_achievements /
--- player_stats / board_tags; an old client keeps working (same submit_score signature).
+-- player_stats / board_tags / share_education / submit_education_grades / rename_education /
+-- unshare_education / education_board / enrol_research / submit_research_events / delete_research /
+-- schema_version;
+-- an old client keeps working (same submit_score signature).
 --
 -- Maintenance (SQL editor):
 --   remove a cheater or a ghost row:
@@ -80,6 +97,42 @@
 --     delete from public.player_achievements where achievement_id = 'some_id';
 --   tag a game dev 🔧 (or untag with false), by the name a board shows:
 --     select public.admin_set_dev('somebody', true);
+--   the 📚 education board (plan 21). Sharing is closed to everyone but 🔧 devs until you open it:
+--     select public.admin_set_education_open(true);     -- or false to close it again
+--   take one player off the 📚 board (their device stops sending when it next syncs):
+--     delete from public.education_public where name = 'somebody';
+--   wipe the 📚 board: truncate public.education_public;
+--   the education tester pilot (plan 21): answer events from testers who joined with the invite
+--   code. Set the code (16 characters or more; only its hash is stored; a new code stops the old
+--   one; null closes enrolment), then give it to the testers:
+--     select public.admin_set_invite('a-long-code-you-made-up');
+--   read the answers (owner only): select * from public.research_summary;
+--     select * from public.research_by_card; select * from public.research_by_participant;
+--     select * from public.research_retention; select * from public.research_responses;
+--   delete every participant and answer of a phase (the pilot's, before the beta):
+--     select public.admin_purge_phase('pilot');
+--   undo the stamp: drop function public.schema_version();
+--   undo the 🌞 / 🏅 name rule (plan 25): drop index public.daily_scores_name_key; then restore
+--     name_blocked and submit_daily_score from git and run this file.
+--   undo the receipt lists (plan 24): alter table public.player_counters drop column recent_batches;
+--     alter table public.education_public drop column recent_batches; then restore submit_counters,
+--     submit_education_grades and fold_player from git and run this file.
+--   undo the pilot (before the 📚 board's undo: the pilot reads education_settings):
+--     drop view public.research_summary, public.research_by_card,
+--     public.research_by_participant, public.research_retention;
+--     drop function public.enrol_research(text, text, boolean, text),
+--     public.submit_research_events(text, text, jsonb, timestamptz), public.delete_research(text),
+--     public.admin_set_invite(text), public.admin_purge_phase(text);
+--     drop table public.research_responses, public.research_participants; then restore
+--     fold_player from git and run this file.
+--   undo the 📚 board: drop function public.share_education(text, text, boolean),
+--     public.submit_education_grades(text, text, timestamptz, int, bigint, jsonb),
+--     public.rename_education(text, text), public.unshare_education(text),
+--     public.education_board(text, int), public.admin_set_education_open(boolean),
+--     public.education_lock(text), public.education_paced(text);
+--     alter table public.player_meta drop column edu_named_at;
+--     drop table public.education_public, public.education_settings; then restore
+--     player_by_name, fold_player and player_stats from git and run this file.
 --   undo the v0.16.0 tags: drop function public.board_tags(text[]), public.player_tags(text),
 --     public.admin_set_dev(text, boolean), public.touch_player(text), public.add_server_counter(text, text, int);
 --     drop table public.player_meta; then restore submit_score, submit_daily_score,
@@ -95,6 +148,16 @@
 --     select public.admin_merge_name('somebody');
 --   or every duplicated username at once (the 2026-11-08 one-off):
 --     select * from public.admin_merge_all_duplicates();
+
+-- Postgres 15 or later (the pilot's security_invoker views need it): the paste stops here, before
+-- anything is changed, on an older server (plan 25).
+do $$
+begin
+  if current_setting('server_version_num')::int < 150000 then
+    raise exception 'db/schema.sql needs Postgres 15 or later (this server is %)', current_setting('server_version');
+  end if;
+end;
+$$;
 
 create table if not exists public.scores (
   player_id  text not null check (player_id ~ '^[A-Za-z0-9_-]{22}$'), -- save-code id: 16 random bytes, base64url
@@ -172,16 +235,42 @@ revoke execute on function public.resolve_player(text) from public, anon, authen
 
 -- The claim rule: a name key is blocked for a (resolved) id when another id has
 -- rows under it and this id has none. Rows that already share a key stay as
--- they are (grandfathered).
+-- they are (grandfathered). A name another player shows under on the 📚 board
+-- (education_public, below) is held the same way, unless this player holds it
+-- there or on the score board (plan 24, AUD-022). plpgsql, so the 📚 table may be
+-- made further down this file.
 create or replace function public.name_blocked(p_key text, p_id text)
 returns boolean
-language sql
+language plpgsql
 stable
 security definer
 set search_path = public
 as $$
-  select exists (select 1 from public.scores s where public.name_key(s.name) = p_key and s.player_id <> p_id)
-     and not exists (select 1 from public.scores s where public.name_key(s.name) = p_key and s.player_id = p_id);
+begin
+  -- The score board's claim: another player's score row holds the name and this player has none
+  -- under it.
+  if exists (select 1 from public.scores s where public.name_key(s.name) = p_key and s.player_id <> p_id)
+     and not exists (select 1 from public.scores s where public.name_key(s.name) = p_key and s.player_id = p_id) then
+    return true;
+  end if;
+  -- A name this player already shows under, on any board, stays theirs (plan 25).
+  if exists (select 1 from public.scores s where public.name_key(s.name) = p_key and s.player_id = p_id)
+     or exists (select 1 from public.daily_scores d where public.name_key(d.name) = p_key and d.player_id = p_id)
+     or exists (select 1 from public.tournament_stats t where public.name_key(t.name) = p_key and t.player_id = p_id)
+     or exists (select 1 from public.education_public e where public.name_key(e.name) = p_key and e.player_id = p_id) then
+    return false;
+  end if;
+  -- Otherwise the name is another player's when they show under it on the 📚 board (plan 24,
+  -- AUD-022), or on the 🌞 or 🏅 board with no score row (the players a tapped name opens,
+  -- player_by_name; plan 25). The 🏅 placeholder 'Player' is no one's.
+  return exists (select 1 from public.education_public e where public.name_key(e.name) = p_key and e.player_id <> p_id)
+      or exists (select 1 from public.daily_scores d
+                  where public.name_key(d.name) = p_key and d.player_id <> p_id
+                    and not exists (select 1 from public.scores s where s.player_id = d.player_id))
+      or (p_key <> 'player' and exists (select 1 from public.tournament_stats t
+                  where public.name_key(t.name) = p_key and t.player_id <> p_id
+                    and not exists (select 1 from public.scores s where s.player_id = t.player_id)));
+end;
 $$;
 revoke execute on function public.name_blocked(text, text) from public, anon, authenticated;
 
@@ -370,6 +459,7 @@ create table if not exists public.daily_scores (
   primary key (player_id, day)
 );
 create index if not exists daily_scores_board on public.daily_scores (day, score desc, submitted_at asc);
+create index if not exists daily_scores_name_key on public.daily_scores (public.name_key(name)); -- name_blocked (plan 25)
 alter table public.daily_scores enable row level security;
 revoke all on public.daily_scores from public, anon, authenticated;
 
@@ -411,11 +501,18 @@ revoke execute on function public.daily_level(date) from public, anon, authentic
 -- (the claim rule only guards names in scores). Readable by no role: the profile
 -- is player_stats().
 create table if not exists public.player_counters (
-  player_id  text primary key check (player_id ~ '^[A-Za-z0-9_-]{22}$'),
-  counters   jsonb not null default '{}'::jsonb,
-  last_batch text,
-  updated_at timestamptz not null default now()
+  player_id      text primary key check (player_id ~ '^[A-Za-z0-9_-]{22}$'),
+  counters       jsonb not null default '{}'::jsonb,
+  last_batch     text,
+  updated_at     timestamptz not null default now(),
+  recent_batches text[] not null default '{}'
 );
+-- recent_batches (plan 24): the receipts of the latest 64 batches, newest first. A player's devices
+-- each resend their own batch until it is confirmed, so one receipt (last_batch) let a device's
+-- resend after another device's batch count twice. last_batch stays the latest, for older rows.
+alter table public.player_counters add column if not exists recent_batches text[] not null default '{}';
+-- A row from before the list keeps its one receipt in it (a re-run finds the list filled and leaves it).
+update public.player_counters set recent_batches = array[last_batch] where last_batch is not null and recent_batches = '{}';
 alter table public.player_counters enable row level security;
 revoke all on public.player_counters from public, anon, authenticated;
 
@@ -459,6 +556,10 @@ create table if not exists public.player_meta (
   exact     boolean not null default true,
   dev       boolean not null default false
 );
+-- When this player last shared or renamed on the 📚 board (plan 25): share_education and
+-- rename_education wait 5 s between two (education_paced). Here, not on the 📚 row, because Stop
+-- sharing deletes that row.
+alter table public.player_meta add column if not exists edu_named_at timestamptz;
 alter table public.player_meta enable row level security;
 revoke all on public.player_meta from public, anon, authenticated;
 
@@ -488,6 +589,104 @@ as $$
   on conflict (player_id) do nothing;
 $$;
 revoke execute on function public.touch_player(text) from public, anon, authenticated;
+
+-- Added 2026-11-13 (education mode's 📚 board, plan 21 Stage 3b). Education mode keeps its
+-- answers, grades and badges on the device. A player may choose to show a little of it: their
+-- name, the average of their graded runs, how many runs that is, and their education badges.
+-- That choice is one row here, made by share_education and deleted by unshare_education; nothing
+-- about a player who has not chosen is ever stored. Right and wrong counts never come here.
+--
+-- education_settings: one row. board_open: while false only 🔧 dev players may share (the owner
+-- opens it: admin_set_education_open). invite_hash and phase belong to the tester pilot's
+-- answer uploads (a later step of plan 21).
+create table if not exists public.education_settings (
+  id          boolean primary key default true check (id),
+  board_open  boolean not null default false,
+  invite_hash text,
+  phase       text not null default 'pilot' check (phase in ('pilot', 'beta', 'study'))
+);
+insert into public.education_settings (id) values (true) on conflict (id) do nothing;
+alter table public.education_settings enable row level security;
+revoke all on public.education_settings from public, anon, authenticated;
+
+-- education_public: one row per (resolved) player who shares. runs = graded runs; grade_sum =
+-- their grades added up, each a whole number of hundredths of a percent (0–10000), so the
+-- average is grade_sum / runs. badges = { id: 'YYYY-MM-DD' }, ids starting edu_ (EDU_ACHIEVEMENTS
+-- in src/achievements.js). name follows the score board's claim rule and is what the 📚 board
+-- shows for a player with no score-board row. last_batch is the receipt of the latest batch.
+-- shared_at names this round of sharing: a device sends it with every batch, and a device still
+-- holding an older round's (sharing was stopped and started again elsewhere) is told to start
+-- over, so no run is counted twice or left out. A new row's updated_at starts an hour back, so
+-- the first batch is not rate limited. Readable by no role: education_board and player_stats.
+create table if not exists public.education_public (
+  player_id  text primary key check (player_id ~ '^[A-Za-z0-9_-]{22}$'),
+  name       text not null check (name ~ '^[^[:cntrl:]]{1,16}$'),
+  runs       int not null default 0 check (runs >= 0),
+  grade_sum  bigint not null default 0 check (grade_sum >= 0),
+  badges     jsonb not null default '{}'::jsonb,
+  last_batch text,
+  shared_at  timestamptz not null default date_trunc('milliseconds', clock_timestamp()),
+  updated_at timestamptz not null default now() - interval '1 hour',
+  recent_batches text[] not null default '{}',
+  check (grade_sum <= runs::bigint * 10000)
+);
+-- recent_batches (plan 24): the receipts of the latest 64 batches in this round, newest first (as
+-- player_counters', above: several devices feed one row).
+alter table public.education_public add column if not exists recent_batches text[] not null default '{}';
+update public.education_public set recent_batches = array[last_batch] where last_batch is not null and recent_batches = '{}';
+create index if not exists education_public_name_key on public.education_public (public.name_key(name));
+alter table public.education_public enable row level security;
+revoke all on public.education_public from public, anon, authenticated;
+
+-- Added 2026-11-13 (the education tester pilot, plan 21 Stage 3b). A tester who chooses to, in
+-- the game's Education data panel, sends each quiz answer here: an adult, with the invite code.
+-- The pilot tests the tools. Its answers are never analysed or quoted, and are deleted before
+-- the next phase (admin_purge_phase).
+--
+-- research_participants: one row per (resolved) player who joined. research_id is a random id
+-- made here; it is the only id the answers carry. phase is education_settings.phase when they
+-- joined. last_batch is the receipt of their latest batch of events. This table is the one
+-- place a player id meets a research id: readable by no role, and withdrawing deletes the row.
+create table if not exists public.research_participants (
+  player_id       text primary key check (player_id ~ '^[A-Za-z0-9_-]{22}$'),
+  research_id     text not null unique default replace(gen_random_uuid()::text, '-', ''),
+  phase           text not null check (phase in ('pilot', 'beta', 'study')),
+  adult           boolean not null check (adult),
+  consent_version text not null check (consent_version ~ '^[a-z0-9._-]{1,24}$'),
+  consented_at    timestamptz not null default now(),
+  last_batch      text,
+  updated_at      timestamptz not null default now() - interval '1 hour',
+  joined_at       timestamptz not null default date_trunc('milliseconds', clock_timestamp())
+);
+-- joined_at (plan 24): this participation's token. Set when the row is made and never changed, so
+-- every device of one participation holds the same value (enrol_research hands it out); a withdrawal
+-- and a new join make a new one, and a device still holding the old one is refused ('not enrolled').
+alter table public.research_participants add column if not exists joined_at timestamptz not null default date_trunc('milliseconds', clock_timestamp());
+alter table public.research_participants enable row level security;
+revoke all on public.research_participants from public, anon, authenticated;
+
+-- research_responses: one row per quiz answer, under the research id, never a player id.
+-- event_id is made on the device, so a resent batch adds nothing. The columns are what the
+-- owner's views read; data is the whole event as the game recorded it (src/research.js
+-- answerEvent), its known fields only. client_at is the device's clock, received_at ours.
+create table if not exists public.research_responses (
+  event_id    text primary key check (event_id ~ '^[A-Za-z0-9_-]{22}$'),
+  research_id text not null,
+  phase       text not null check (phase in ('pilot', 'beta', 'study')),
+  card_id     text not null check (card_id ~ '^[A-Z]{2}-[0-9]{2}$'),
+  context     text not null check (context in ('break', 'revive', 'bonus')),
+  correct     boolean not null,
+  rt_ms       int check (rt_ms is null or rt_ms >= 0),
+  seen        int not null default 0 check (seen >= 0),
+  since_ms    bigint check (since_ms is null or since_ms >= 0),
+  client_at   timestamptz not null,
+  received_at timestamptz not null default now(),
+  data        jsonb not null default '{}'::jsonb
+);
+create index if not exists research_responses_participant on public.research_responses (research_id, client_at);
+create index if not exists research_responses_card on public.research_responses (card_id);
+alter table public.research_responses enable row level security;
+revoke all on public.research_responses from public, anon, authenticated;
 
 -- Profiles look players up by the name a board shows (player_by_name).
 create index if not exists tournament_stats_name_key on public.tournament_stats (public.name_key(name));
@@ -527,8 +726,9 @@ $$;
 revoke execute on function public.add_server_counter(text, text, int) from public, anon, authenticated;
 
 -- The player a board name belongs to, as the boards pick a display name: the
--- latest score-board name first; then a tournament or daily name, for a player
--- with no score-board rows. Null when nobody shows under that name. Internal.
+-- latest score-board name first; then a tournament, daily or 📚 education board
+-- name, for a player with no score-board rows. Null when nobody shows under that
+-- name. Internal.
 create or replace function public.player_by_name(p_name text)
 returns text
 language sql
@@ -547,7 +747,11 @@ as $$
     (select d.player_id from public.daily_scores d
       where public.name_key(d.name) = public.name_key(p_name)
         and not exists (select 1 from public.scores s where s.player_id = d.player_id)
-      order by d.submitted_at desc limit 1));
+      order by d.submitted_at desc limit 1),
+    (select e.player_id from public.education_public e
+      where public.name_key(e.name) = public.name_key(p_name)
+        and not exists (select 1 from public.scores s where s.player_id = e.player_id)
+      order by e.shared_at desc limit 1));
 $$;
 revoke execute on function public.player_by_name(text) from public, anon, authenticated;
 
@@ -560,7 +764,15 @@ revoke execute on function public.player_by_name(text) from public, anon, authen
 -- player's stats name), and matchups and receipts are re-pointed. Daily Dump
 -- rows move to the kept id; on a day both played, the kept player's row stays.
 -- Lifetime counters merge (merge_counters) and achievements join, each keeping
--- its earlier date; player_meta keeps the earlier join and either's dev flag. Internal.
+-- its earlier date; player_meta keeps the earlier join and either's dev flag.
+-- The 📚 education row: when only the merged player shares, the row moves to the
+-- kept id as it is. When both share, their devices each hold a different round
+-- (shared_at) and each has sent its own runs: adding the rows would count a
+-- device's runs twice once it is told to start over. So the kept row starts a
+-- new, empty round instead (the kept name stays) and every device sends its
+-- whole record again when it next syncs. A research participant moves to the kept
+-- id; when both joined, the merged one's answers move under the kept research id
+-- (one person, one participant). Internal.
 create or replace function public.fold_player(v_keep text, v_merge text)
 returns void
 language plpgsql
@@ -577,6 +789,10 @@ begin
   -- Both players' rows, locked in a fixed order so two folds cannot deadlock.
   perform pg_advisory_xact_lock(hashtext(least(v_keep, v_merge)));
   perform pg_advisory_xact_lock(hashtext(greatest(v_keep, v_merge)));
+  -- And their 📚 rows (plan 25, A2): a grade batch, share, rename or unshare waits for the fold
+  -- instead of writing a row the fold is moving, then follows the alias (education_lock).
+  perform pg_advisory_xact_lock(hashtext('education:' || least(v_keep, v_merge)));
+  perform pg_advisory_xact_lock(hashtext('education:' || greatest(v_keep, v_merge)));
   select name into v_name from public.scores where player_id = v_keep order by updated_at desc limit 1;
   if v_name is null then
     select name into v_name from public.scores where player_id = v_merge order by updated_at desc limit 1;
@@ -612,12 +828,13 @@ begin
   from public.daily_scores d where d.player_id = v_merge
   on conflict (player_id, day) do nothing;
   delete from public.daily_scores where player_id = v_merge;
-  insert into public.player_counters (player_id, counters, last_batch, updated_at)
-  select v_keep, m.counters, m.last_batch, m.updated_at
+  insert into public.player_counters (player_id, counters, last_batch, updated_at, recent_batches)
+  select v_keep, m.counters, m.last_batch, m.updated_at, m.recent_batches
   from public.player_counters m where m.player_id = v_merge
   on conflict (player_id) do update
     set counters   = public.merge_counters(public.player_counters.counters, excluded.counters),
-        updated_at = greatest(public.player_counters.updated_at, excluded.updated_at);
+        updated_at = greatest(public.player_counters.updated_at, excluded.updated_at),
+        recent_batches = (public.player_counters.recent_batches || array_remove(array[excluded.last_batch], null) || excluded.recent_batches)[1:64];
   delete from public.player_counters where player_id = v_merge;
   insert into public.player_achievements (player_id, achievement_id, earned_at)
   select v_keep, a.achievement_id, a.earned_at
@@ -625,13 +842,35 @@ begin
   on conflict (player_id, achievement_id) do update
     set earned_at = least(public.player_achievements.earned_at, excluded.earned_at);
   delete from public.player_achievements where player_id = v_merge;
-  insert into public.player_meta (player_id, joined_at, exact, dev)
-  select v_keep, m.joined_at, m.exact, m.dev from public.player_meta m where m.player_id = v_merge
+  insert into public.player_meta (player_id, joined_at, exact, dev, edu_named_at)
+  select v_keep, m.joined_at, m.exact, m.dev, m.edu_named_at from public.player_meta m where m.player_id = v_merge
   on conflict (player_id) do update
     set exact     = case when excluded.joined_at < public.player_meta.joined_at then excluded.exact else public.player_meta.exact end,
         joined_at = least(public.player_meta.joined_at, excluded.joined_at),
-        dev       = public.player_meta.dev or excluded.dev;
+        dev       = public.player_meta.dev or excluded.dev,
+        edu_named_at = greatest(public.player_meta.edu_named_at, excluded.edu_named_at);
   delete from public.player_meta where player_id = v_merge;
+  if exists (select 1 from public.education_public where player_id = v_keep) then
+    if exists (select 1 from public.education_public where player_id = v_merge) then
+      update public.education_public
+        set runs = 0, grade_sum = 0, badges = '{}'::jsonb, last_batch = null, recent_batches = '{}',
+            shared_at = date_trunc('milliseconds', clock_timestamp()), updated_at = now() - interval '1 hour'
+      where player_id = v_keep;
+      delete from public.education_public where player_id = v_merge;
+    end if;
+  else
+    update public.education_public set player_id = v_keep where player_id = v_merge;
+  end if;
+  if exists (select 1 from public.research_participants where player_id = v_keep) then
+    -- (The alias is not `r`: that is this function's loop record.)
+    update public.research_responses resp
+      set research_id = k.research_id
+    from public.research_participants k, public.research_participants m
+    where k.player_id = v_keep and m.player_id = v_merge and resp.research_id = m.research_id;
+    delete from public.research_participants where player_id = v_merge;
+  else
+    update public.research_participants set player_id = v_keep where player_id = v_merge;
+  end if;
   update public.player_aliases set canonical_id = v_keep, merged_at = now() where canonical_id = v_merge;
   insert into public.player_aliases (alias_id, canonical_id)
   values (v_merge, v_keep)
@@ -1118,6 +1357,9 @@ begin
   on conflict (player_id, day) do nothing;
   get diagnostics v_rows = row_count;
   if v_rows > 0 then
+    -- The player's earlier days follow the name posted now, as score rows do, so a rename frees the
+    -- old name (name_blocked counts 🌞 names; plan 25).
+    update public.daily_scores set name = p_name where player_id = v_id and name <> p_name;
     select ds.player_id into v_top_after from public.daily_scores ds where ds.day = p_day order by ds.score desc, ds.submitted_at asc limit 1;
     if v_top_after = v_id and v_top_before is not null and v_top_before <> v_id then
       perform public.add_server_counter(v_id, 'dethroned', 1);
@@ -1216,7 +1458,7 @@ begin
   perform public.touch_player(v_id);
   perform pg_advisory_xact_lock(hashtext('counters:' || v_id));
   select * into v_row from public.player_counters where player_id = v_id;
-  if found and v_row.last_batch = p_batch then
+  if found and (v_row.last_batch = p_batch or p_batch = any(v_row.recent_batches)) then
     return v_row.counters;
   end if;
   if found and v_row.updated_at > now() - interval '5 seconds' then
@@ -1226,10 +1468,11 @@ begin
   if (select count(*) from jsonb_object_keys(v_merged)) > 60 then
     raise exception 'bad counters: too many keys';
   end if;
-  insert into public.player_counters (player_id, counters, last_batch, updated_at)
-  values (v_id, v_merged, p_batch, now())
+  insert into public.player_counters (player_id, counters, last_batch, updated_at, recent_batches)
+  values (v_id, v_merged, p_batch, now(), array[p_batch])
   on conflict (player_id) do update
-    set counters = excluded.counters, last_batch = excluded.last_batch, updated_at = excluded.updated_at;
+    set counters = excluded.counters, last_batch = excluded.last_batch, updated_at = excluded.updated_at,
+        recent_batches = (array[excluded.last_batch] || public.player_counters.recent_batches)[1:64];
   return v_merged;
 end;
 $$;
@@ -1290,6 +1533,582 @@ end;
 $$;
 revoke execute on function public.admin_set_dev(text, boolean) from public, anon, authenticated;
 
+-- The 📚 education board (plan 21, Stage 3b). Sharing is the player's own choice, made in the
+-- game's Education data panel, for adults only.
+--
+-- education_lock (internal, plan 25): take this player's 📚 lock and return the id it holds. The
+-- caller resolved the id before the lock; a fold that held it meanwhile (fold_player takes both
+-- players' 📚 locks) may have made that id an alias, so the id is resolved again under the lock
+-- and the kept player's lock taken too, until they agree.
+create or replace function public.education_lock(p_id text)
+returns text
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_id text := p_id;
+  v_now text;
+begin
+  loop
+    perform pg_advisory_xact_lock(hashtext('education:' || v_id));
+    v_now := public.resolve_player(v_id);
+    exit when v_now = v_id;
+    v_id := v_now;
+  end loop;
+  return v_id;
+end;
+$$;
+revoke execute on function public.education_lock(text) from public, anon, authenticated;
+
+-- education_paced (internal, plan 25): a share or rename on the 📚 board, at most one per 5 s per
+-- player ('too soon'; the game reads it as offline and tries again later). Called under the
+-- player's 📚 lock. Stop sharing is never paced.
+create or replace function public.education_paced(v_id text)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  perform public.touch_player(v_id);
+  if exists (select 1 from public.player_meta where player_id = v_id and edu_named_at > now() - interval '5 seconds') then
+    raise exception 'too soon';
+  end if;
+  update public.player_meta set edu_named_at = now() where player_id = v_id;
+end;
+$$;
+revoke execute on function public.education_paced(text) from public, anon, authenticated;
+--
+-- share_education: put this player on the board under p_name, or rename a player already on it
+-- (the game calls it again after a rename; nothing else about the row changes). p_adult must be
+-- true: the game's "I am 18 or older" box. While the board is closed (education_settings) only
+-- a 🔧 dev may share: 'closed'. The name follows the score board's claim rule ('name taken'): a
+-- player who only plays education has no score-board row, so the name travels with the share.
+-- Returns the row's shared_at, which names this round of sharing. Errors raise.
+create or replace function public.share_education(p_player_id text, p_name text, p_adult boolean)
+returns timestamptz
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_id text;
+  v_key text;
+  v_at timestamptz;
+begin
+  if p_player_id is null or p_player_id !~ '^[A-Za-z0-9_-]{22}$' then
+    raise exception 'bad player id';
+  end if;
+  if p_name is null or p_name !~ '^[^[:cntrl:]]{1,16}$' then
+    raise exception 'bad name';
+  end if;
+  if p_adult is not true then
+    raise exception 'not adult';
+  end if;
+  v_id := public.resolve_player(p_player_id);
+  if not (select es.board_open from public.education_settings es)
+     and not coalesce((select m.dev from public.player_meta m where m.player_id = v_id), false) then
+    raise exception 'closed';
+  end if;
+  v_key := public.name_key(p_name);
+  perform pg_advisory_xact_lock(hashtext(v_key));
+  if public.name_blocked(v_key, v_id) then
+    raise exception 'name taken';
+  end if;
+  -- A name a 🌞 or 🏅 player shows under (player_by_name) is theirs on the 📚 board too, unless
+  -- this player holds it on the score board (plan 24, AUD-022).
+  if coalesce(public.player_by_name(p_name) <> v_id, false)
+     and not exists (select 1 from public.scores s where s.player_id = v_id and public.name_key(s.name) = v_key) then
+    raise exception 'name taken';
+  end if;
+  perform public.touch_player(v_id);
+  v_id := public.education_lock(v_id);
+  perform public.education_paced(v_id);
+  insert into public.education_public (player_id, name) values (v_id, p_name)
+  on conflict (player_id) do update set name = excluded.name
+  returning shared_at into v_at;
+  return v_at;
+end;
+$$;
+
+-- submit_education_grades: add one batch of this device's graded education runs to a sharing
+-- player's row. p_runs graded runs (0–50) whose grades add up to p_grade_sum (hundredths of a
+-- percent: at most p_runs × 10000), and p_badges = { edu_id: 'YYYY-MM-DD' } (a badge keeps its
+-- earlier day; a day after tomorrow or before 2000 is stored as today). p_shared_at is the round
+-- the device believes it is in. Answers
+--   { status: 'ok', shared_at, runs, grade_sum }   added (or p_batch, the receipt, was already in:
+--                                                  a resend changes nothing)
+--   { status: 'restart', shared_at }               the row is another round's: nothing changed; the
+--                                                  device takes this shared_at and sends its whole
+--                                                  record again, from zero
+-- and raises 'not shared' for a player with no row (the device then turns sharing off), 'rate
+-- limited' (one batch per player per 5 s: the device keeps it and retries), or 'bad ...' (the
+-- device drops the batch). A batch with no runs and no badges is a probe: it gets 'restart' or the
+-- totals and changes nothing, so a device with nothing new still learns of a new round (plan 24).
+create or replace function public.submit_education_grades(p_player_id text, p_batch text, p_shared_at timestamptz, p_runs int, p_grade_sum bigint, p_badges jsonb)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_id text;
+  v_row public.education_public%rowtype;
+  v_badges jsonb;
+  v_in jsonb := '{}'::jsonb;
+  v_today text := to_char((now() at time zone 'utc')::date, 'YYYY-MM-DD');
+  r record;
+begin
+  if p_player_id is null or p_player_id !~ '^[A-Za-z0-9_-]{22}$' then
+    raise exception 'bad player id';
+  end if;
+  if p_batch is null or p_batch !~ '^[A-Za-z0-9_-]{22}$' then
+    raise exception 'bad batch';
+  end if;
+  if p_runs is null or p_runs < 0 or p_runs > 50 then
+    raise exception 'bad runs';
+  end if;
+  if p_grade_sum is null or p_grade_sum < 0 or p_grade_sum > p_runs::bigint * 10000 then
+    raise exception 'bad grade sum';
+  end if;
+  if p_badges is null or jsonb_typeof(p_badges) <> 'object' or (select count(*) from jsonb_object_keys(p_badges)) > 20 then
+    raise exception 'bad badges';
+  end if;
+  -- A badge's day is the device's clock: one after tomorrow or before 2000 (a clock set wrong) is
+  -- stored as today, so the batch's runs still reach the board (plan 24, AUD-010).
+  for r in select e.key, e.value from jsonb_each(p_badges) e loop
+    if r.key !~ '^edu_[a-z0-9_]{1,36}$' or jsonb_typeof(r.value) <> 'string' or (r.value #>> '{}') !~ '^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$' then
+      raise exception 'bad badges: %', r.key;
+    end if;
+    v_in := v_in || jsonb_build_object(r.key, case
+      when (r.value #>> '{}') < '2000-01-01' or (r.value #>> '{}') > to_char((now() at time zone 'utc')::date + 1, 'YYYY-MM-DD') then v_today
+      else r.value #>> '{}' end);
+  end loop;
+  v_id := public.resolve_player(p_player_id);
+  v_id := public.education_lock(v_id);
+  select * into v_row from public.education_public where player_id = v_id;
+  if not found then
+    raise exception 'not shared';
+  end if;
+  if p_shared_at is distinct from v_row.shared_at then
+    return jsonb_build_object('status', 'restart', 'shared_at', v_row.shared_at);
+  end if;
+  -- An empty batch is a probe (plan 24, AUD-009): a device with nothing new asks whether its round
+  -- is still the row's. It writes nothing and takes no receipt and no rate-limit slot.
+  if p_runs = 0 and p_badges = '{}'::jsonb then
+    return jsonb_build_object('status', 'ok', 'shared_at', v_row.shared_at, 'runs', v_row.runs, 'grade_sum', v_row.grade_sum);
+  end if;
+  if v_row.last_batch = p_batch or p_batch = any(v_row.recent_batches) then
+    return jsonb_build_object('status', 'ok', 'shared_at', v_row.shared_at, 'runs', v_row.runs, 'grade_sum', v_row.grade_sum);
+  end if;
+  if v_row.updated_at > now() - interval '5 seconds' then
+    raise exception 'rate limited';
+  end if;
+  if v_row.runs + p_runs > 1000000 then
+    raise exception 'bad runs: too many';
+  end if;
+  -- Badges join; one held already keeps the earlier of its two days (ISO days compare as text).
+  select coalesce(jsonb_object_agg(k, least(v_row.badges ->> k, v_in ->> k)), '{}'::jsonb)
+  into v_badges
+  from (select jsonb_object_keys(v_row.badges) as k union select jsonb_object_keys(v_in)) keys;
+  if (select count(*) from jsonb_object_keys(v_badges)) > 40 then
+    raise exception 'bad badges: too many';
+  end if;
+  update public.education_public
+    set runs = runs + p_runs, grade_sum = grade_sum + p_grade_sum, badges = v_badges, last_batch = p_batch, updated_at = now(),
+        recent_batches = (array[p_batch] || recent_batches)[1:64]
+  where player_id = v_id;
+  return jsonb_build_object('status', 'ok', 'shared_at', v_row.shared_at, 'runs', v_row.runs + p_runs, 'grade_sum', v_row.grade_sum + p_grade_sum);
+end;
+$$;
+
+-- rename_education: a sharing player's name on the 📚 board follows a rename made on their
+-- device. It changes the name of an existing row and nothing else, and never puts a player on
+-- the board (a device that has not heard the player stopped sharing must not share for them
+-- again): true when renamed, false when the player does not share. The name follows the score
+-- board's claim rule ('name taken'). Errors raise.
+create or replace function public.rename_education(p_player_id text, p_name text)
+returns boolean
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_id text;
+  v_key text;
+  v_rows int;
+begin
+  if p_player_id is null or p_player_id !~ '^[A-Za-z0-9_-]{22}$' then
+    raise exception 'bad player id';
+  end if;
+  if p_name is null or p_name !~ '^[^[:cntrl:]]{1,16}$' then
+    raise exception 'bad name';
+  end if;
+  v_id := public.resolve_player(p_player_id);
+  v_key := public.name_key(p_name);
+  perform pg_advisory_xact_lock(hashtext(v_key));
+  if public.name_blocked(v_key, v_id) then
+    raise exception 'name taken';
+  end if;
+  -- A name a 🌞 or 🏅 player shows under (player_by_name) is theirs on the 📚 board too, unless
+  -- this player holds it on the score board (plan 24, AUD-022).
+  if coalesce(public.player_by_name(p_name) <> v_id, false)
+     and not exists (select 1 from public.scores s where s.player_id = v_id and public.name_key(s.name) = v_key) then
+    raise exception 'name taken';
+  end if;
+  v_id := public.education_lock(v_id);
+  if not exists (select 1 from public.education_public where player_id = v_id) then
+    return false; -- not sharing: nothing to rename, and no pace taken
+  end if;
+  perform public.education_paced(v_id);
+  update public.education_public set name = p_name where player_id = v_id;
+  get diagnostics v_rows = row_count;
+  return v_rows > 0;
+end;
+$$;
+
+-- unshare_education: take this player off the 📚 board. The row is deleted at once; true when
+-- there was one. Their other devices are told 'not shared' when they next send a batch.
+create or replace function public.unshare_education(p_player_id text)
+returns boolean
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_id text;
+  v_rows int;
+begin
+  if p_player_id is null or p_player_id !~ '^[A-Za-z0-9_-]{22}$' then
+    raise exception 'bad player id';
+  end if;
+  v_id := public.resolve_player(p_player_id);
+  v_id := public.education_lock(v_id);
+  delete from public.education_public where player_id = v_id;
+  get diagnostics v_rows = row_count;
+  return v_rows > 0;
+end;
+$$;
+
+-- The 📚 board: sharing players with at least 3 graded runs (TUNING.education.boardMinRuns in
+-- src/config.js), the top p_limit (1–100) by average grade, then more runs, then who shared
+-- first. grade is the average in percent to one decimal. Each row carries the name on the score
+-- board when the player has one, else the name they shared under. With p_player_id, that
+-- player's row is flagged `me` and appended with its true rank when it is below the top (a
+-- caller with fewer than 3 runs is not on the board). `total` is how many are on it. No ids
+-- leave the server.
+create or replace function public.education_board(p_player_id text default null, p_limit int default 25)
+returns table (rank int, name text, grade numeric, runs int, me boolean, total int)
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  with caller as (
+    select public.resolve_player(p_player_id) as cid where p_player_id ~ '^[A-Za-z0-9_-]{22}$'
+  ), ranked as (
+    select e.player_id as pid,
+           coalesce((select s.name from public.scores s where s.player_id = e.player_id order by s.updated_at desc limit 1), e.name) as pname,
+           round(e.grade_sum::numeric / e.runs / 100, 1) as pgrade,
+           e.runs as pruns,
+           row_number() over (order by e.grade_sum::numeric / e.runs desc, e.runs desc, e.shared_at asc)::int as prank,
+           (count(*) over ())::int as ptotal
+    from public.education_public e
+    where e.runs >= 3
+  )
+  select r.prank, r.pname, r.pgrade, r.pruns,
+         coalesce(r.pid = (select cid from caller), false), r.ptotal
+  from ranked r
+  where r.prank <= least(greatest(coalesce(p_limit, 25), 1), 100) or r.pid = (select cid from caller)
+  order by r.prank;
+$$;
+
+-- Maintenance only (no role may call it): open the 📚 board to every adult who chooses to share
+-- (true), or close it again so only 🔧 devs can (false). Returns the new setting. Rows already on
+-- the board stay either way.
+--   select public.admin_set_education_open(true);
+create or replace function public.admin_set_education_open(p_on boolean)
+returns boolean
+language sql
+security definer
+set search_path = public
+as $$
+  update public.education_settings set board_open = coalesce(p_on, false) returning board_open;
+$$;
+revoke execute on function public.admin_set_education_open(boolean) from public, anon, authenticated;
+
+-- The education tester pilot (plan 21, Stage 3b). Joining is the tester's own choice, made in the
+-- game's Education data panel, for adults only, with the invite code the owner gave them.
+--
+-- enrol_research: join. p_invite must hash to education_settings.invite_hash ('bad invite' for a
+-- wrong or missing code; 'closed' while no code is set). The code's length is the protection:
+-- player ids are free to make, so a limit on guesses per player would stop nobody, and
+-- admin_set_invite refuses a short code. p_adult must be true. p_consent_version names the
+-- notice the tester agreed to (RESEARCH.md's version, from the game). Joining again keeps the
+-- research id, the phase they joined in (so admin_purge_phase removes everyone who joined in it)
+-- and the participation's token, and records the newer consent. Returns { status: 'ok', phase,
+-- since }: since is joined_at, the token the device sends with its answers. Errors raise.
+create or replace function public.enrol_research(p_player_id text, p_invite text, p_adult boolean, p_consent_version text)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_id text;
+  v_set public.education_settings%rowtype;
+  v_phase text;
+  v_since timestamptz;
+begin
+  if p_player_id is null or p_player_id !~ '^[A-Za-z0-9_-]{22}$' then
+    raise exception 'bad player id';
+  end if;
+  if p_adult is not true then
+    raise exception 'not adult';
+  end if;
+  if p_consent_version is null or p_consent_version !~ '^[a-z0-9._-]{1,24}$' then
+    raise exception 'bad consent';
+  end if;
+  select * into v_set from public.education_settings;
+  if v_set.invite_hash is null then
+    raise exception 'closed';
+  end if;
+  if p_invite is null or length(p_invite) > 200
+     or encode(sha256(convert_to(p_invite, 'UTF8')), 'hex') <> v_set.invite_hash then
+    raise exception 'bad invite';
+  end if;
+  v_id := public.resolve_player(p_player_id);
+  perform pg_advisory_xact_lock(hashtext('research:' || v_id));
+  insert into public.research_participants (player_id, phase, adult, consent_version)
+  values (v_id, v_set.phase, true, p_consent_version)
+  on conflict (player_id) do update
+    set consent_version = excluded.consent_version, consented_at = now()
+  returning phase, joined_at into v_phase, v_since;
+  return jsonb_build_object('status', 'ok', 'phase', v_phase, 'since', v_since);
+end;
+$$;
+
+-- submit_research_events: a participant's answer events, 1–200 a batch, stored under their
+-- research id and the phase they joined in. Only a player who joined may send, from this
+-- participation: p_since must be the token enrol_research gave (joined_at), so a device that joined
+-- before a withdrawal and a new join cannot send its older answers under the new research id
+-- (plan 24, AUD-002). 'not enrolled' otherwise (the device then stops recording). p_batch is the receipt: the same batch again
+-- changes nothing; one batch per participant per 5 s ('rate limited': the device keeps it). An
+-- event already stored (its event_id) is skipped, so a resend never doubles an answer. Each
+-- event is checked: its ids, the card id, the context, a boolean `correct`, a device time no
+-- more than 90 days old or a day ahead; only the fields the game is known to record are kept
+-- (src/research.js answerEvent; since 2026-11-14 the schedule's FSRS stability, difficulty and
+-- retrievability in place of SM-2's ease and interval_ms), and an event may not exceed 2000 characters. Returns
+-- { status: 'ok', stored } (how many were new). Errors raise ('bad ...': the device drops the batch).
+drop function if exists public.submit_research_events(text, text, jsonb);
+create or replace function public.submit_research_events(p_player_id text, p_batch text, p_events jsonb, p_since timestamptz)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_id text;
+  v_part public.research_participants%rowtype;
+  v_keys text[] := array['event_id', 'session_id', 'run_id', 'card_id', 'card_hash', 'audited', 'deck', 'context', 'seq', 'step', 'level',
+                         'order', 'chosen', 'correct', 'rt_ms', 'interrupted', 'grade', 'reason',
+                         'stability', 'difficulty', 'retrievability', 'reps', 'lapses', 'seen', 'since_ms',
+                         'client_at', 'app', 'tuning', 'locale', 'field', 'input', 'consent', 'phase'];
+  e jsonb;
+  v_at timestamptz;
+  v_rows int;
+  v_stored int := 0;
+begin
+  if p_player_id is null or p_player_id !~ '^[A-Za-z0-9_-]{22}$' then
+    raise exception 'bad player id';
+  end if;
+  if p_batch is null or p_batch !~ '^[A-Za-z0-9_-]{22}$' then
+    raise exception 'bad batch';
+  end if;
+  if p_events is null or jsonb_typeof(p_events) <> 'array' or jsonb_array_length(p_events) not between 1 and 200 then
+    raise exception 'bad events';
+  end if;
+  for e in select value from jsonb_array_elements(p_events) loop
+    if jsonb_typeof(e) <> 'object' or length(e::text) > 2000 then
+      raise exception 'bad events: shape';
+    end if;
+    if coalesce(e ->> 'event_id', '') !~ '^[A-Za-z0-9_-]{22}$' then
+      raise exception 'bad events: event id';
+    end if;
+    if coalesce(e ->> 'card_id', '') !~ '^[A-Z]{2}-[0-9]{2}$' then
+      raise exception 'bad events: card';
+    end if;
+    if coalesce(e ->> 'context', '') not in ('break', 'revive', 'bonus') or jsonb_typeof(e -> 'correct') is distinct from 'boolean' then
+      raise exception 'bad events: answer';
+    end if;
+    if jsonb_typeof(e -> 'client_at') is distinct from 'number' or (e ->> 'client_at') !~ '^[0-9]{12,14}$' then
+      raise exception 'bad events: time';
+    end if;
+    v_at := to_timestamp((e ->> 'client_at')::bigint / 1000.0);
+    if v_at < now() - interval '90 days' or v_at > now() + interval '1 day' then
+      raise exception 'bad events: time';
+    end if;
+    if (e ? 'rt_ms' and jsonb_typeof(e -> 'rt_ms') not in ('number', 'null'))
+       or (e ? 'seen' and jsonb_typeof(e -> 'seen') <> 'number')
+       or (e ? 'since_ms' and jsonb_typeof(e -> 'since_ms') not in ('number', 'null')) then
+      raise exception 'bad events: numbers';
+    end if;
+  end loop;
+
+  v_id := public.resolve_player(p_player_id);
+  perform pg_advisory_xact_lock(hashtext('research:' || v_id));
+  select * into v_part from public.research_participants where player_id = v_id;
+  if not found or p_since is distinct from v_part.joined_at then
+    raise exception 'not enrolled';
+  end if;
+  if v_part.last_batch = p_batch then
+    return jsonb_build_object('status', 'ok', 'stored', 0);
+  end if;
+  if v_part.updated_at > now() - interval '5 seconds' then
+    raise exception 'rate limited';
+  end if;
+  for e in select value from jsonb_array_elements(p_events) loop
+    insert into public.research_responses (event_id, research_id, phase, card_id, context, correct, rt_ms, seen, since_ms, client_at, data)
+    values (
+      e ->> 'event_id', v_part.research_id, v_part.phase, e ->> 'card_id', e ->> 'context', (e ->> 'correct')::boolean,
+      case when jsonb_typeof(e -> 'rt_ms') = 'number' then least(greatest(round((e ->> 'rt_ms')::numeric), 0), 3600000)::int end,
+      case when jsonb_typeof(e -> 'seen') = 'number' then least(greatest(round((e ->> 'seen')::numeric), 0), 1000000)::int else 0 end,
+      case when jsonb_typeof(e -> 'since_ms') = 'number' then least(greatest(round((e ->> 'since_ms')::numeric), 0), 9007199254740991)::bigint end,
+      to_timestamp((e ->> 'client_at')::bigint / 1000.0),
+      (select coalesce(jsonb_object_agg(f.key, f.value), '{}'::jsonb) from jsonb_each(e) f where f.key = any(v_keys)))
+    on conflict (event_id) do nothing;
+    get diagnostics v_rows = row_count;
+    v_stored := v_stored + v_rows;
+  end loop;
+  update public.research_participants set last_batch = p_batch, updated_at = now() where player_id = v_id;
+  return jsonb_build_object('status', 'ok', 'stored', v_stored);
+end;
+$$;
+
+-- delete_research: withdraw. The participant and every answer under their research id are
+-- deleted at once; true when there was a participant. (Backups keep them until they roll off.)
+create or replace function public.delete_research(p_player_id text)
+returns boolean
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_id text;
+  v_rid text;
+begin
+  if p_player_id is null or p_player_id !~ '^[A-Za-z0-9_-]{22}$' then
+    raise exception 'bad player id';
+  end if;
+  v_id := public.resolve_player(p_player_id);
+  perform pg_advisory_xact_lock(hashtext('research:' || v_id));
+  select research_id into v_rid from public.research_participants where player_id = v_id;
+  if v_rid is null then
+    return false;
+  end if;
+  delete from public.research_responses where research_id = v_rid;
+  delete from public.research_participants where player_id = v_id;
+  return true;
+end;
+$$;
+
+-- Maintenance only (no role may call these). admin_set_invite: set the pilot's invite code
+-- (only its SHA-256 is stored), which stops the old one; null closes enrolment. A code under 16
+-- characters is refused: the code's length is what keeps guessers out. Returns 'set' or 'closed'.
+--   select public.admin_set_invite('a-long-code-you-made-up');
+create or replace function public.admin_set_invite(p_code text)
+returns text
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if p_code is null then
+    update public.education_settings set invite_hash = null;
+    return 'closed';
+  end if;
+  if length(p_code) < 16 or length(p_code) > 200 then
+    raise exception 'bad code: 16 to 200 characters';
+  end if;
+  update public.education_settings set invite_hash = encode(sha256(convert_to(p_code, 'UTF8')), 'hex');
+  return 'set';
+end;
+$$;
+revoke execute on function public.admin_set_invite(text) from public, anon, authenticated;
+
+-- admin_purge_phase: delete every participant and answer of a phase (the pilot's before the
+-- beta, the beta's before the study). Returns how many answers went.
+--   select public.admin_purge_phase('pilot');
+create or replace function public.admin_purge_phase(p_phase text)
+returns int
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_rows int;
+begin
+  delete from public.research_responses where phase = p_phase;
+  get diagnostics v_rows = row_count;
+  delete from public.research_participants where phase = p_phase;
+  return v_rows;
+end;
+$$;
+revoke execute on function public.admin_purge_phase(text) from public, anon, authenticated;
+
+-- The owner's views of the answers (readable by no other role; security_invoker, so even a
+-- stray grant would not open the tables behind them). A first sight is an answer to a card the
+-- device had never shown before (seen = 0): it measures what the player already knew.
+--   research_summary         per phase: participants, answers, the first and last received
+--   research_by_card         per phase and card: answers and right ones, at first sight and later
+--   research_by_participant  per research id: answers, right ones, cards, the first and last answer
+--   research_retention       per phase and time since the card was last seen: answers and right ones
+create or replace view public.research_summary with (security_invoker = true) as
+  select p.phase,
+         count(distinct p.research_id)::int as participants,
+         count(r.event_id)::int as answers,
+         min(r.received_at) as first_received,
+         max(r.received_at) as last_received
+  from public.research_participants p
+  left join public.research_responses r on r.research_id = p.research_id
+  group by p.phase;
+
+create or replace view public.research_by_card with (security_invoker = true) as
+  select phase, card_id,
+         count(*)::int as answers,
+         count(*) filter (where correct)::int as correct,
+         count(*) filter (where seen = 0)::int as first_answers,
+         count(*) filter (where seen = 0 and correct)::int as first_correct,
+         count(*) filter (where seen > 0)::int as later_answers,
+         count(*) filter (where seen > 0 and correct)::int as later_correct
+  from public.research_responses
+  group by phase, card_id;
+
+create or replace view public.research_by_participant with (security_invoker = true) as
+  select research_id, phase,
+         count(*)::int as answers,
+         count(*) filter (where correct)::int as correct,
+         count(distinct card_id)::int as cards,
+         min(client_at) as first_answer,
+         max(client_at) as last_answer
+  from public.research_responses
+  group by research_id, phase;
+
+create or replace view public.research_retention with (security_invoker = true) as
+  select phase,
+         case when since_ms is null then '0 first sight'
+              when since_ms < 600000 then '1 under 10 min'
+              when since_ms < 86400000 then '2 under 1 day'
+              when since_ms < 604800000 then '3 under 1 week'
+              else '4 1 week or more' end as since_last_seen,
+         count(*)::int as answers,
+         count(*) filter (where correct)::int as correct
+  from public.research_responses
+  group by 1, 2;
+
+revoke all on public.research_summary, public.research_by_card, public.research_by_participant, public.research_retention from public, anon, authenticated;
+
 -- A player's profile (plan 08), for anyone: by id (the player's own, resolved)
 -- or by a name as a board shows it (player_by_name); a valid id wins. Never an id
 -- in the answer. {found: false} for a name nobody shows under; otherwise
@@ -1305,6 +2124,9 @@ revoke execute on function public.admin_set_dev(text, boolean) from public, anon
 --   counters     their lifetime counters as stored
 --   achievements [{ id, at: 'YYYY-MM-DD' (UTC) }], oldest first
 --   tags         player_tags: 'dev' / 'og' / 'new'
+--   education    null unless the player shares it (education_public): { grade (their average
+--                in percent to one decimal; null before a graded run), runs, badges
+--                { id: 'YYYY-MM-DD' } }
 create or replace function public.player_stats(p_player_id text default null, p_name text default null)
 returns jsonb
 language plpgsql
@@ -1334,7 +2156,8 @@ begin
   v_name := coalesce(
     (select s.name from public.scores s where s.player_id = v_id order by s.updated_at desc limit 1),
     (select t.name from public.tournament_stats t where t.player_id = v_id),
-    (select d.name from public.daily_scores d where d.player_id = v_id order by d.submitted_at desc limit 1));
+    (select d.name from public.daily_scores d where d.player_id = v_id order by d.submitted_at desc limit 1),
+    (select e.name from public.education_public e where e.player_id = v_id));
   v_c := coalesce((select pc.counters from public.player_counters pc where pc.player_id = v_id), '{}'::jsonb);
   v_games := coalesce((v_c->>'games')::bigint, 0);
 
@@ -1394,7 +2217,12 @@ begin
                   || jsonb_build_object('rival', v_rival),
     'counters', v_c,
     'achievements', v_ach,
-    'tags', to_jsonb(public.player_tags(v_id)));
+    'tags', to_jsonb(public.player_tags(v_id)),
+    'education', (select jsonb_build_object(
+                    'grade', case when e.runs > 0 then round(e.grade_sum::numeric / e.runs / 100, 1) end,
+                    'runs', e.runs,
+                    'badges', e.badges)
+                  from public.education_public e where e.player_id = v_id));
 end;
 $$;
 
@@ -1474,6 +2302,37 @@ revoke execute on function public.claim_achievements(text, text[]) from public, 
 grant  execute on function public.claim_achievements(text, text[]) to anon;
 revoke execute on function public.board_tags(text[]) from public, authenticated;
 grant  execute on function public.board_tags(text[]) to anon;
+revoke execute on function public.share_education(text, text, boolean) from public, authenticated;
+grant  execute on function public.share_education(text, text, boolean) to anon;
+revoke execute on function public.submit_education_grades(text, text, timestamptz, int, bigint, jsonb) from public, authenticated;
+grant  execute on function public.submit_education_grades(text, text, timestamptz, int, bigint, jsonb) to anon;
+revoke execute on function public.rename_education(text, text) from public, authenticated;
+grant  execute on function public.rename_education(text, text) to anon;
+revoke execute on function public.unshare_education(text) from public, authenticated;
+grant  execute on function public.unshare_education(text) to anon;
+revoke execute on function public.education_board(text, int) from public, authenticated;
+grant  execute on function public.education_board(text, int) to anon;
+revoke execute on function public.enrol_research(text, text, boolean, text) from public, authenticated;
+grant  execute on function public.enrol_research(text, text, boolean, text) to anon;
+revoke execute on function public.submit_research_events(text, text, jsonb, timestamptz) from public, authenticated;
+grant  execute on function public.submit_research_events(text, text, jsonb, timestamptz) to anon;
+revoke execute on function public.delete_research(text) from public, authenticated;
+grant  execute on function public.delete_research(text) to anon;
+
+-- Which version of this file the database last ran: a short SHA-256 of the file with the value
+-- below blanked (tools/schema_check.mjs). `npm run schema:stamp` rewrites it after an edit, and
+-- tests/schema.test.js fails until it does. It is the last thing this file makes, so the live
+-- database answers the new value only once a whole paste has run. Anyone may ask: the file is
+-- public, so the value says nothing new. `npm run schema:check` and `npm run push` read it.
+create or replace function public.schema_version()
+returns text
+language sql
+immutable
+as $$
+  select '86a60e01e2949cf3'::text; -- schema stamp
+$$;
+revoke execute on function public.schema_version() from public, authenticated;
+grant  execute on function public.schema_version() to anon;
 
 -- Tell PostgREST about the new functions right away.
 notify pgrst, 'reload schema';
