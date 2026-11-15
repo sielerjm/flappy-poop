@@ -35,6 +35,7 @@
 --   * call enrol_research(...)     join the education tester pilot with the invite code (2026-11-13)
 --   * call submit_research_events(...) a pilot participant's answer events, under their research id
 --   * call delete_research(...)    withdraw from the pilot: the participant and their answers are deleted
+--   * call submit_runs(...)        a batch of run summaries, as numbers (plan 30); stored owner-only, 90 days
 --   * call schema_version()        which version of this file the database last ran (a stamp of the file; 2026-11-13)
 -- A player has up to two rows: their best on the toilet and their best off it
 -- (primary key player_id + toilet, since 2026-11-04).
@@ -42,7 +43,7 @@
 -- on player_aliases, the tournament tables (tournaments, tournament_stats,
 -- tournament_matchups), daily_scores, player_counters, achievement_defs,
 -- player_achievements, player_meta, education_settings, education_public, research_participants
--- or research_responses (nor the research_* views). Profiles are public
+-- or research_responses (nor the research_* views), run_log or run_rejects. Profiles are public
 -- (2026-11-11): player_stats returns anyone's stats, counters, achievements and biggest rival, by
 -- the name a board shows; and, only for a player who shares them, their education grade (2026-11-13).
 --
@@ -71,7 +72,7 @@
 -- submit_daily_score / daily_board / submit_counters / claim_achievements /
 -- player_stats / board_tags / share_education / submit_education_grades / rename_education /
 -- unshare_education / education_board / enrol_research / submit_research_events / delete_research /
--- schema_version;
+-- submit_runs / schema_version;
 -- an old client keeps working (same submit_score signature).
 --
 -- Maintenance (SQL editor):
@@ -932,6 +933,9 @@ begin
   else
     update public.research_participants set player_id = v_keep where player_id = v_merge;
   end if;
+  delete from public.run_log m where m.player_id = v_merge
+    and exists (select 1 from public.run_log k where k.player_id = v_keep and k.run_id = m.run_id);
+  update public.run_log set player_id = v_keep where player_id = v_merge; -- plan 30
   update public.player_aliases set canonical_id = v_keep, merged_at = now() where canonical_id = v_merge;
   insert into public.player_aliases (alias_id, canonical_id)
   values (v_merge, v_keep)
@@ -2471,6 +2475,268 @@ begin
 end;
 $$;
 
+-- Run summaries (plan 30): one row per finished single-player or Daily run, as numbers (src/runStats.js
+-- makes them; never a test run, an education run or a match half). The device sends them in
+-- submit_runs before its score posts. Owner-only: no role may read or write the tables, and no
+-- profile or board shows them. A row is kept 90 days (received_at), except a held row and a hidden
+-- player's rows. Times: started_at and ended_at are the device's clock; clock_offset_ms is the
+-- server's clock minus the device's, measured when the batch was sent; received_at is the server's.
+create table if not exists public.run_log (
+  player_id       text not null check (player_id ~ '^[A-Za-z0-9_-]{22}$'), -- resolved (resolve_player)
+  run_id          text not null check (run_id ~ '^[A-Za-z0-9_-]{22}$'),    -- made by the device
+  session         text not null check (session ~ '^[A-Za-z0-9_-]{8,22}$'), -- one page load
+  mode            text not null check (mode in ('single', 'daily')),
+  day             date,                                                    -- the Daily's day
+  stub            boolean not null default false,                          -- a Daily cut off by a reload
+  score           int  not null check (score between 0 and 10000),
+  level           int  not null check (level between 1 and 7),
+  toilet          boolean not null default false,
+  won             boolean not null default false,
+  started_at      timestamptz,
+  ended_at        timestamptz,
+  length_ms       int check (length_ms between 0 and 86400000),           -- start to end, monotonic clock
+  paused_ms       int check (paused_ms between 0 and 86400000),           -- paused or hidden, inside length_ms
+  clock_offset_ms bigint not null default 0,
+  version         text not null check (version ~ '^[0-9A-Za-z.+-]{1,24}$'),
+  data            jsonb not null default '{}'::jsonb,                      -- run_data_keys(): numbers only
+  received_at     timestamptz not null default now(),
+  held            boolean not null default false,                          -- hold_run (moderation)
+  held_at         timestamptz,
+  primary key (player_id, run_id),
+  check ((mode = 'daily') = (day is not null)),
+  check (not stub or mode = 'daily')
+);
+create index if not exists run_log_received on public.run_log (player_id, received_at);
+create index if not exists run_log_started on public.run_log (player_id, started_at);
+alter table public.run_log enable row level security;
+revoke all on public.run_log from public, anon, authenticated;
+
+-- What submit_runs could not store, counted by UTC day, reason and client version (no ids).
+create table if not exists public.run_rejects (
+  day     date not null default (now() at time zone 'utc')::date,
+  reason  text not null,
+  version text not null,
+  n       int  not null default 0,
+  primary key (day, reason, version)
+);
+alter table public.run_rejects enable row level security;
+revoke all on public.run_rejects from public, anon, authenticated;
+
+-- The keys a run row's `data` may hold (src/runStats.js RUN_DATA_KEYS, in its order; tests keep the
+-- two the same). Each value is a number, a boolean, or a list of at most 16 numbers. Internal.
+create or replace function public.run_data_keys()
+returns text[]
+language sql
+immutable
+as $$
+  select array[
+    'frame_ms', 'distance', 'pipes', 'falls', 'close_calls', 'deaths',
+    'lv_pipes', 'lv_falls', 'lv_close', 'lv_deaths', 'lv_ms',
+    'lip_n', 'lip_mean', 'lip_sd', 'lip_hist', 'gap_n', 'gap_med', 'gap_sd', 'gap_min', 'gap_hist',
+    'fart_pipes', 'skip_pipes',
+    'press_touch', 'press_mouse', 'press_key', 'press_pad', 'downs', 'ups', 'hold_mean', 'hold_sd', 'hold_min', 'taps',
+    'webdriver', 'touch',
+    'flaps', 'flaps_physics', 'flaps_internal', 'flaps_pressed', 'flaps_trusted', 'flaps_fresh',
+    'break_ms', 'shop_opens', 'shop_buys', 'fps_mean', 'fps_sd', 'long_frames', 'field_w', 'pauses', 'hidden_ms'
+  ]::text[];
+$$;
+revoke execute on function public.run_data_keys() from public, anon, authenticated;
+
+-- Why a run row cannot be stored, or null when it can. p_sent is the device's clock when the batch
+-- was sent (epoch ms). Internal.
+create or replace function public.run_row_problem(e jsonb, p_sent bigint)
+returns text
+language plpgsql
+immutable
+set search_path = public
+as $$
+declare
+  v_mode text;
+  v_start bigint;
+  v_end bigint;
+  f record;
+  x jsonb;
+  v_num text;
+begin
+  if jsonb_typeof(e) is distinct from 'object' then
+    return 'shape';
+  end if;
+  if length(e::text) > 4096 then
+    return 'size';
+  end if;
+  if exists (select 1 from jsonb_object_keys(e) k
+             where k <> all(array['run_id', 'session', 'mode', 'day', 'stub', 'score', 'level', 'toilet', 'won',
+                                  'started_at', 'ended_at', 'length_ms', 'paused_ms', 'version', 'data'])) then
+    return 'key';
+  end if;
+  if coalesce(e ->> 'run_id', '') !~ '^[A-Za-z0-9_-]{22}$' or coalesce(e ->> 'session', '') !~ '^[A-Za-z0-9_-]{8,22}$' then
+    return 'id';
+  end if;
+  if coalesce(e ->> 'version', '') !~ '^[0-9A-Za-z.+-]{1,24}$' then
+    return 'version';
+  end if;
+  v_mode := e ->> 'mode';
+  if v_mode is null or v_mode not in ('single', 'daily') then
+    return 'mode';
+  end if;
+  if (v_mode = 'daily') <> (coalesce(e ->> 'day', '') ~ '^\d{4}-\d{2}-\d{2}$') then
+    return 'day';
+  end if;
+  if v_mode = 'daily' then
+    perform (e ->> 'day')::date; -- a real date (the guard below answers 'invalid' otherwise)
+  end if;
+  if e ? 'stub' and jsonb_typeof(e -> 'stub') <> 'boolean' then
+    return 'stub';
+  end if;
+  if coalesce((e ->> 'stub')::boolean, false) and v_mode <> 'daily' then
+    return 'stub';
+  end if;
+  if jsonb_typeof(e -> 'score') is distinct from 'number' or (e ->> 'score') !~ '^\d{1,5}$' then
+    return 'score';
+  end if;
+  if (e ->> 'score')::int > (case when v_mode = 'daily' then 10000 else 1000 end) then
+    return 'score';
+  end if;
+  if jsonb_typeof(e -> 'level') is distinct from 'number' or (e ->> 'level') !~ '^[1-7]$' then
+    return 'level';
+  end if;
+  if (e ? 'toilet' and jsonb_typeof(e -> 'toilet') <> 'boolean') or (e ? 'won' and jsonb_typeof(e -> 'won') <> 'boolean') then
+    return 'flag';
+  end if;
+  -- Times: whole epoch ms, start <= end, from the 90 days before the batch was sent, never after it.
+  if e ? 'started_at' or e ? 'ended_at' then
+    if jsonb_typeof(e -> 'started_at') is distinct from 'number' or (e ->> 'started_at') !~ '^\d{12,14}$' then
+      return 'time';
+    end if;
+    if jsonb_typeof(e -> 'ended_at') is distinct from 'number' or (e ->> 'ended_at') !~ '^\d{12,14}$' then
+      return 'time';
+    end if;
+    v_start := (e ->> 'started_at')::bigint;
+    v_end := (e ->> 'ended_at')::bigint;
+    if v_start > v_end or v_end > p_sent + 60000 or v_start < p_sent - 90::bigint * 86400000 then
+      return 'time';
+    end if;
+  end if;
+  foreach v_num in array array['length_ms', 'paused_ms'] loop
+    if e ? v_num then
+      if jsonb_typeof(e -> v_num) <> 'number' or (e ->> v_num) !~ '^\d{1,8}$' then
+        return 'length';
+      end if;
+      if (e ->> v_num)::bigint > 86400000 then
+        return 'length';
+      end if;
+    end if;
+  end loop;
+  if not coalesce((e ->> 'stub')::boolean, false) and not (e ? 'started_at' and e ? 'length_ms') then
+    return 'time';
+  end if;
+  if e ? 'data' then
+    if jsonb_typeof(e -> 'data') <> 'object' then
+      return 'data';
+    end if;
+    for f in select key, value from jsonb_each(e -> 'data') loop
+      if f.key <> all(public.run_data_keys()) then
+        return 'data key';
+      end if;
+      if jsonb_typeof(f.value) = 'boolean' then
+        continue;
+      elsif jsonb_typeof(f.value) = 'number' then
+        if abs((f.value #>> '{}')::numeric) > 1000000000 then
+          return 'data number';
+        end if;
+      elsif jsonb_typeof(f.value) = 'array' then
+        if jsonb_array_length(f.value) > 16 then
+          return 'data list';
+        end if;
+        for x in select value from jsonb_array_elements(f.value) loop
+          if jsonb_typeof(x) <> 'number' or abs((x #>> '{}')::numeric) > 1000000000 then
+            return 'data list';
+          end if;
+        end loop;
+      else
+        return 'data value';
+      end if;
+    end loop;
+  end if;
+  return null;
+exception when others then
+  return 'invalid'; -- never let one odd row fail the batch
+end;
+$$;
+revoke execute on function public.run_row_problem(jsonb, bigint) from public, anon, authenticated;
+
+-- submit_runs: up to 20 run summaries (run_row_problem says what a row may hold). p_sent_at is the
+-- device's clock as it sends (epoch ms). A row that cannot be stored is left out and counted in
+-- run_rejects; a row already stored (player and run id) is skipped. One batch per player per 5 s
+-- ('rate limited': the device keeps them). Errors raise only for the batch itself ('bad ...').
+-- The answer never depends on the rows. Each call also deletes this player's rows older than 90
+-- days, except held rows and a hidden player's.
+create or replace function public.submit_runs(p_player_id text, p_sent_at bigint, p_rows jsonb)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_id text;
+  v_offset bigint;
+  v_problem text;
+  e jsonb;
+begin
+  if p_player_id is null or p_player_id !~ '^[A-Za-z0-9_-]{22}$' then
+    raise exception 'bad player id';
+  end if;
+  if p_sent_at is null or p_sent_at < 100000000000 or p_sent_at > 99999999999999 then
+    raise exception 'bad time';
+  end if;
+  if p_rows is null or jsonb_typeof(p_rows) <> 'array' or jsonb_array_length(p_rows) not between 1 and 20 then
+    raise exception 'bad rows';
+  end if;
+  v_id := public.resolve_player(p_player_id);
+  perform pg_advisory_xact_lock(hashtext('runs:' || v_id));
+  if exists (select 1 from public.run_log r where r.player_id = v_id and r.received_at > now() - interval '5 seconds') then
+    raise exception 'rate limited';
+  end if;
+  v_offset := round(extract(epoch from now()) * 1000)::bigint - p_sent_at;
+  for e in select value from jsonb_array_elements(p_rows) loop
+    v_problem := public.run_row_problem(e, p_sent_at);
+    if v_problem is not null then
+      insert into public.run_rejects (reason, version, n)
+      values (v_problem, coalesce(substring(e ->> 'version' from '^[0-9A-Za-z.+-]{1,24}$'), '?'), 1)
+      on conflict (day, reason, version) do update set n = public.run_rejects.n + 1;
+      continue;
+    end if;
+    insert into public.run_log (player_id, run_id, session, mode, day, stub, score, level, toilet, won,
+                                started_at, ended_at, length_ms, paused_ms, clock_offset_ms, version, data)
+    values (
+      v_id, e ->> 'run_id', e ->> 'session', e ->> 'mode', (e ->> 'day')::date, coalesce((e ->> 'stub')::boolean, false),
+      (e ->> 'score')::int, (e ->> 'level')::int, coalesce((e ->> 'toilet')::boolean, false), coalesce((e ->> 'won')::boolean, false),
+      case when e ? 'started_at' then to_timestamp((e ->> 'started_at')::bigint / 1000.0) end,
+      case when e ? 'ended_at' then to_timestamp((e ->> 'ended_at')::bigint / 1000.0) end,
+      (e ->> 'length_ms')::int, (e ->> 'paused_ms')::int, v_offset, e ->> 'version', coalesce(e -> 'data', '{}'::jsonb))
+    on conflict (player_id, run_id) do nothing;
+  end loop;
+  if not public.player_hidden(v_id) then
+    delete from public.run_log r where r.player_id = v_id and r.received_at < now() - interval '90 days' and not r.held;
+  end if;
+end;
+$$;
+
+-- admin_runs: the run rows of the player a board shows under this name, newest first (owner only,
+-- in the SQL editor).
+create or replace function public.admin_runs(p_name text)
+returns setof public.run_log
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select r.* from public.run_log r
+  where r.player_id = public.player_by_name(p_name)
+  order by r.received_at desc;
+$$;
+revoke execute on function public.admin_runs(text) from public, anon, authenticated;
+
 revoke execute on function public.submit_score(text, text, int, boolean, int) from public, authenticated;
 grant  execute on function public.submit_score(text, text, int, boolean, int) to anon;
 revoke execute on function public.player_rank(text, boolean) from public, authenticated;
@@ -2513,6 +2779,8 @@ revoke execute on function public.submit_research_events(text, text, jsonb, time
 grant  execute on function public.submit_research_events(text, text, jsonb, timestamptz) to anon;
 revoke execute on function public.delete_research(text) from public, authenticated;
 grant  execute on function public.delete_research(text) to anon;
+revoke execute on function public.submit_runs(text, bigint, jsonb) from public, authenticated;
+grant  execute on function public.submit_runs(text, bigint, jsonb) to anon;
 
 -- Which version of this file the database last ran: a short SHA-256 of the file with the value
 -- below blanked (tools/schema_check.mjs). `npm run schema:stamp` rewrites it after an edit, and
@@ -2524,7 +2792,7 @@ returns text
 language sql
 immutable
 as $$
-  select '6a480b8088f03c74'::text; -- schema stamp
+  select '8b029e0d00fef40f'::text; -- schema stamp
 $$;
 revoke execute on function public.schema_version() from public, authenticated;
 grant  execute on function public.schema_version() to anon;
