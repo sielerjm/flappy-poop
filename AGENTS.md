@@ -2004,8 +2004,9 @@ db/schema.sql               Supabase schema: scores table (player_id = save-code
                             a player id meets a research id; research_responses,
                             answers under the research id; enrol_research with the
                             invite's SHA-256, submit_research_events with the known
-                            fields only, delete_research; admin_set_invite (16
-                            characters or more), admin_purge_phase and four
+                            fields only, delete_research; admin_set_invite (16 to
+                            200 of A-Z a-z 0-9 - . _ ~ +, so it works typed and in
+                            a link: AUD-041), admin_purge_phase and four
                             security_invoker views, owner only). fold_player moves
                             a shared row or a participant; two shared rows start a
                             new, empty round. Plan 24: education_public keeps the

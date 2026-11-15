@@ -2054,8 +2054,9 @@ end;
 $$;
 
 -- Maintenance only (no role may call these). admin_set_invite: set the pilot's invite code
--- (only its SHA-256 is stored), which stops the old one; null closes enrolment. A code under 16
--- characters is refused: the code's length is what keeps guessers out. Returns 'set' or 'closed'.
+-- (only its SHA-256 is stored), which stops the old one; null closes enrolment. The code is 16 to
+-- 200 of A-Z a-z 0-9 - . _ ~ +, so it works typed and in an invite link (AUD-041); its length is what
+-- keeps guessers out. Returns 'set' or 'closed'.
 --   select public.admin_set_invite('a-long-code-you-made-up');
 create or replace function public.admin_set_invite(p_code text)
 returns text
@@ -2068,8 +2069,10 @@ begin
     update public.education_settings set invite_hash = null;
     return 'closed';
   end if;
-  if length(p_code) < 16 or length(p_code) > 200 then
-    raise exception 'bad code: 16 to 200 characters';
+  -- Only a code the game can send, typed or in an invite link (AUD-041): no space at an end (the game
+  -- trims), nothing a link cannot carry raw (& # % or a space), ASCII only (the game counts UTF-16 units).
+  if p_code !~ '^[A-Za-z0-9._~+-]{16,200}$' then
+    raise exception 'bad code: 16 to 200 of A-Z a-z 0-9 - . _ ~ +';
   end if;
   update public.education_settings set invite_hash = encode(sha256(convert_to(p_code, 'UTF8')), 'hex');
   return 'set';
@@ -2369,7 +2372,7 @@ returns text
 language sql
 immutable
 as $$
-  select 'c02eda7b5dadf8fa'::text; -- schema stamp
+  select 'c55c23b697a00323'::text; -- schema stamp
 $$;
 revoke execute on function public.schema_version() from public, authenticated;
 grant  execute on function public.schema_version() to anon;

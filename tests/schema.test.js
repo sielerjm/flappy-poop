@@ -1256,6 +1256,17 @@ const ev = (tag, extra = {}) => ({
   ...extra,
 });
 
+test('admin_set_invite takes only a code the game can send, from the field and in a link: 16 to 200 of letters, digits and - . _ ~ + (AUD-041)', async () => {
+  const db = await freshDb();
+  for (const bad of ['a-good-code-2026 ', ' a-good-code-2026', ' '.repeat(16), 'a good code 2026 x', 'pilot&code-2026-xyz', 'pilot#code-2026-xyz', '50%off-code-2026-x', '🌽'.repeat(16), 'pilotcode-2026-é-x']) {
+    await assert.rejects(setInvite(db, bad), /bad code/, JSON.stringify(bad));
+  }
+  for (const good of ['pilot-code-2026-xyz', 'A.b_c~d+e-0123456789', 'x'.repeat(200)]) assert.equal(await setInvite(db, good), 'set', good);
+  // Each one the owner can set works from the link and the field (the client trims and keeps "+").
+  const { inviteFromSearch } = await import('../src/logic.js');
+  for (const good of ['A.b_c~d+e-0123456789']) assert.equal(inviteFromSearch(`?invite=${good}`), good, 'read back from a link as set');
+});
+
 test('enrol_research: closed until a code is set; the code, adults only and a consent version; a new code stops the old one', async () => {
   const db = await freshDb();
   const P = id('RP1');
