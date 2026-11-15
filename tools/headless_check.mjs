@@ -80,6 +80,7 @@ export const SECTIONS = [
   { name: 'education-over', needs: [], about: "📚 the end of an education run (plan 21): the game-over panel's 📚 tally and note, no Share; a won run's bonus button opening the rectum's questions over the panel (no coins, the card saved, Esc back to the panel); Clear wiping the cards' progress" },
   { name: 'education-share', needs: [], about: "📚 sharing by choice (plan 21, Stage 3b), the server stubbed: the user panel's 📚 Education data button only on an unlocked device, the Education data panel (the 18+ box, Share and Stop sharing, each refusal's message), the 📚 tab on the leaderboard (four tabs, the stubbed board, the footer's link and the player's own row), the profiles' 📚 sections (your own Shared row, another player's only when they share), Clear's warning while sharing; and the tester pilot: 🔬 Tester data (the invite code, Join, Withdraw), answers recorded only while joined and never in a test run, 🔬 in the HUD, the events sent and the queue emptied" },
   { name: 'blocked-storage', needs: [], about: "blocked site data (plan 28, 1.3): the page reloaded with every read of localStorage throwing still boots past the splash, holds a settings choice for the visit and plays a run to the game-over panel, with no page exception; the live board blocked at the browser for the rest of the run; then storage restored and the page reloaded" },
+  { name: 'invite-link', needs: [], about: "the invite link (plan 28, 2.4): the page loaded with ?invite=<code> opens the 📚 Education data panel with the code filled in on the first ready screen; the address bar has lost the code; no storage keeps it; a load without it opens nothing (the live board blocked at the browser)" },
 ];
 
 /** What a section needs: its own list, or (omitted) every section before it. */
@@ -349,7 +350,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
     // runs and no badges is drainEduShare's round probe (plan 24): it goes to __edu.probes, so the
     // grade-call counts below stay counts of real batches.
     await evaluate(`(() => { const p = __flappy.scene.getScene('Play'); globalThis.__edu = { shares: [], renames: [], unshares: [], grades: [], probes: [] }; globalThis.__eduAnswer = { share: { status: 'offline' }, rename: null, unshare: null, grades: { status: 'keep' }, probe: { status: 'keep' } };
-      p.postEduShare = (id, name, adult) => (__edu.shares.push({ id, name, adult }), Promise.resolve(globalThis.__eduAnswer.share));
+      p.postEduShare = (id, name, adult, invite = null) => (__edu.shares.push({ id, name, adult, invite }), Promise.resolve(globalThis.__eduAnswer.share));
       p.postEduRename = (id, name) => (__edu.renames.push({ id, name }), Promise.resolve(globalThis.__eduAnswer.rename));
       p.postEduUnshare = (id) => (__edu.unshares.push(id), Promise.resolve(globalThis.__eduAnswer.unshare));
       p.postEduGrades = (id, batch, body) => {
@@ -5288,7 +5289,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await sleep(200);
         const n1 = await eduNet();
         const g1 = n1.calls.grades[0] ?? {};
-        ok(started.status === 'ok' && JSON.stringify(n1.calls.shares) === JSON.stringify([{ id: shareId, name: 'EduSmoke', adult: true }]) && n1.share.on && n1.share.sharedAt === R1 && n1.share.name === 'EduSmoke', `turning sharing on posts the name with the adult box (${JSON.stringify(n1.calls.shares[0])}) and keeps the round`);
+        ok(started.status === 'ok' && JSON.stringify(n1.calls.shares) === JSON.stringify([{ id: shareId, name: 'EduSmoke', adult: true, invite: null }]) && n1.share.on && n1.share.sharedAt === R1 && n1.share.name === 'EduSmoke', `turning sharing on posts the name with the adult box (${JSON.stringify(n1.calls.shares[0])}) and keeps the round`);
         ok(n1.calls.grades.length === 1 && g1.id === shareId && g1.sharedAt === R1 && g1.runs === 1 && g1.gradeSum === 10000 && Object.keys(g1.badges).sort().join() === 'edu_drop_out,edu_grade_a,edu_perfect' && n1.share.sent.runs === 1 && n1.share.sent.gradeSum === 10000 && n1.share.sentBadges.length === 3 && n1.share.inflight === null && n1.calls.renames.length === 0, `the next sync sends the whole record, once: ${g1.runs} run, sum ${g1.gradeSum}, badges ${Object.keys(g1.badges ?? {}).join(' ')}`);
         // A graded run later: only what is new. An ungraded one: nothing.
         await resetNet();
@@ -5459,7 +5460,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         const el = (id) => `document.getElementById('${id}')`;
         const dataPanel = () =>
           evaluate(
-            `JSON.stringify({ open: Boolean(${el('edu-data-panel')}) && !${el('edu-data-panel')}.hidden, state: ${el('edu-share-state')}?.textContent ?? null, btn: ${el('edu-share-btn')}?.textContent ?? null, disabled: ${el('edu-share-btn')}?.disabled ?? null, adult: ${el('edu-adult')}?.checked ?? null, status: ${el('edu-data-status')}?.textContent ?? null, sharing: ${play}.eduShareOn(), keys: __flappy.input.keyboard.enabled })`,
+            `JSON.stringify({ open: Boolean(${el('edu-data-panel')}) && !${el('edu-data-panel')}.hidden, inviteNote: ${el('edu-invite-note')} ? !${el('edu-invite-note')}.hidden : null, shareHidden: ${el('edu-share-btn')}?.hidden ?? null, code: ${el('edu-invite-code')}?.value ?? null, invited: ${play}.eduInvited(), state: ${el('edu-share-state')}?.textContent ?? null, btn: ${el('edu-share-btn')}?.textContent ?? null, disabled: ${el('edu-share-btn')}?.disabled ?? null, adult: ${el('edu-adult')}?.checked ?? null, status: ${el('edu-data-status')}?.textContent ?? null, sharing: ${play}.eduShareOn(), keys: __flappy.input.keyboard.enabled })`,
           ).then(JSON.parse);
         const closeData = () => evaluate(`import('./src/ui/eduDataPanel.js').then((m) => (m.closeEduDataPanel(), true))`);
         const closeSave = () => evaluate(`import('./src/ui/savePanel.js').then((m) => (m.closeSavePanel(), true))`);
@@ -5514,6 +5515,11 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         const [offText, onText, shareBtn, stopBtn] = await Promise.all(['eduShareOff', 'eduShareOn', 'eduShareTitle', 'eduShareStop'].map(tx));
         ok(btnNow.unlocked && btnNow.hidden === false && btnNow.text === (await tx('saveEduData')) && d0.open && !savePanelOpen, `the user panel shows "${btnNow.text}" on every device; it closes that panel and opens the data panel`);
         ok(d0.state === offText && d0.btn === shareBtn && d0.disabled === true && d0.adult === false && !d0.keys, `the panel opens with sharing off, the 18+ box unticked and "${d0.btn}" waiting for it; the game's keyboard is off under it`);
+        ok(d0.inviteNote === true && d0.shareHidden === true && d0.code === '' && !d0.invited, 'a player not yet invited sees the invitation note and the code field, and neither section (plan 28, 2.4)');
+        const SMOKE_CODE = 'the-smoke-invite-2026';
+        await evaluate(`(${el('edu-invite-code')}.value = '${SMOKE_CODE}', ${el('edu-invite-code')}.dispatchEvent(new Event('input', { bubbles: true })), true)`);
+        const dTyped = await dataPanel();
+        ok(dTyped.shareHidden === false && dTyped.inviteNote === true, 'a code typed shows Share my grades and 🔬 Tester data');
         // The controller waits while a DOM panel is up.
         await evaluate(`${play}.onPadAction('nav:down'), true`);
         ok((await evaluate(`Boolean(${play}.focus.shown)`)) === false, 'the controller does nothing under the panel');
@@ -5526,14 +5532,18 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
           return dataPanel();
         };
         const dClosed = await tryShare({ status: 'closed' });
+        const dNeed = await tryShare({ status: 'needsInvite' });
         const dTaken = await tryShare({ status: 'nameTaken' });
         const dOffline = await tryShare({ status: 'offline' });
-        const want = Object.fromEntries(await Promise.all(['eduShareClosed', 'eduShareNameTaken', 'eduShareOffline', 'eduShareStarted', 'eduShareStopped', 'eduShareStopOffline', 'eduShareNeedName'].map(async (k) => [k, await tx(k)])));
+        const want = Object.fromEntries(await Promise.all(['eduShareNeedInvite', 'eduShareClosed', 'eduShareNameTaken', 'eduShareOffline', 'eduShareStarted', 'eduShareStopped', 'eduShareStopOffline', 'eduShareNeedName'].map(async (k) => [k, await tx(k)])));
         ok(d1.adult === true && d1.disabled === false && dClosed.status === want.eduShareClosed && dTaken.status === want.eduShareNameTaken && dOffline.status === want.eduShareOffline && !dOffline.sharing && dOffline.state === offText, `with the box ticked Share works; a closed board ("${dClosed.status}"), a taken name and an unreachable board each say so, and sharing stays off`);
         // Shared: the name went with the adult box; the panel now offers Stop sharing.
         const dOn = await tryShare({ status: 'ok', sharedAt: '2026-11-13T10:00:00.000+00:00' });
         const shares = await evaluate(`JSON.stringify(__edu.shares)`).then(JSON.parse);
-        ok(dOn.sharing && dOn.state === onText && dOn.btn === stopBtn && dOn.status === want.eduShareStarted && shares.length === 4 && shares.every((x) => x.name === 'ShareSmoke' && x.adult === true), `Share turns sharing on ("${dOn.state}", "${dOn.status}"): the name went to the board with the adult box`);
+        ok(dNeed.status === want.eduShareNeedInvite && !dNeed.sharing, `no invitation says so: "${dNeed.status}" (plan 28, 2.4)`);
+        ok(dOn.sharing && dOn.state === onText && dOn.btn === stopBtn && dOn.status === want.eduShareStarted && shares.length === 5 && shares.every((x) => x.name === 'ShareSmoke' && x.adult === true && x.invite === SMOKE_CODE), `Share turns sharing on ("${dOn.state}", "${dOn.status}"): the name went to the board with the adult box and the invite code`);
+        const keptInvite = await evaluate(`Object.keys(localStorage).some((k) => (localStorage.getItem(k) ?? '').includes('${SMOKE_CODE}'))`);
+        ok(dOn.code === '' && dOn.invited && dOn.inviteNote === false && !keptInvite, 'once shared, the code field empties, the invitation note hides, the device remembers it was invited, and the code is kept nowhere');
         // Esc closes it: a real key, on a panel opened with no click inside it (the card takes the
         // focus: plan 24, AUD-018); reopened, the box is unticked again (never remembered) and Stop needs no box.
         await closeData();
@@ -5634,7 +5644,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         const Q = `__flappy.scene.getScene('Quiz')`;
         const pilot = () =>
           evaluate(
-            `JSON.stringify({ state: ${el('edu-pilot-state')}?.textContent ?? null, joinHidden: ${el('edu-pilot-join')}?.parentElement.hidden ?? null, joinDisabled: ${el('edu-pilot-join')}?.disabled ?? null, leaveHidden: ${el('edu-pilot-leave')}?.hidden ?? null, code: ${el('edu-pilot-code')}?.value ?? null, link: ${el('edu-pilot-link')}?.href ?? null, status: ${el('edu-data-status')}?.textContent ?? null, joined: ${play}.researchJoined(), consent: ${play}.consentStore.load(), queued: ${play}.researchQueue.size() })`,
+            `JSON.stringify({ state: ${el('edu-pilot-state')}?.textContent ?? null, joinHidden: ${el('edu-pilot-join')}?.parentElement.hidden ?? null, joinDisabled: ${el('edu-pilot-join')}?.disabled ?? null, leaveHidden: ${el('edu-pilot-leave')}?.hidden ?? null, code: ${el('edu-invite-code')}?.value ?? null, link: ${el('edu-pilot-link')}?.href ?? null, status: ${el('edu-data-status')}?.textContent ?? null, joined: ${play}.researchJoined(), consent: ${play}.consentStore.load(), queued: ${play}.researchQueue.size() })`,
           ).then(JSON.parse);
         const eduRunToQuiz = async () => {
           await home();
@@ -5651,7 +5661,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         };
         const pw = Object.fromEntries(await Promise.all(['eduPilotOff', 'eduPilotOn', 'eduPilotBadCode', 'eduPilotClosed', 'eduPilotJoined', 'eduPilotLeft', 'eduPilotLeaveOffline', 'eduPilotEnded', 'eduPilotNeedCode'].map(async (k) => [k, await tx(k)])));
         const consentVersion = await evaluate(`import('./src/config.js').then((m) => m.EDUCATION.consentVersion)`);
-        await evaluate(`(${play}.consentStore.clear(), ${play}.researchQueue.clear(), ${play}.eduShare.turnOff(), ${play}.settings.set({ education: true }), ${play}.educationOn = true, localStorage.removeItem('flappyPoop.eduSrs'), true)`);
+        await evaluate(`(${play}.consentStore.clear(), ${play}.researchQueue.clear(), ${play}.eduShare.turnOff(), ${play}.settings.set({ education: true, eduInvited: false }), ${play}.educationOn = true, localStorage.removeItem('flappyPoop.eduSrs'), true)`);
         await resetNet();
         // Not joined: an education run's answer is recorded nowhere, and the HUD shows 📚 alone.
         const hud0 = await eduRunToQuiz();
@@ -5664,10 +5674,10 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         const j0 = await pilot();
         await evaluate(`${el('edu-adult')}.click(), true`);
         const j1 = await pilot();
-        const typeCode = (code) => evaluate(`(${el('edu-pilot-code')}.value = '${code}', ${el('edu-pilot-code')}.dispatchEvent(new Event('input', { bubbles: true })), true)`);
+        const typeCode = (code) => evaluate(`(${el('edu-invite-code')}.value = '${code}', ${el('edu-invite-code')}.dispatchEvent(new Event('input', { bubbles: true })), true)`);
         await typeCode('wrong-code-entirely-2026');
         const j2 = await pilot();
-        ok(j0.state === pw.eduPilotOff && j0.joinHidden === false && j0.leaveHidden === true && j0.joinDisabled && j1.joinDisabled && !j2.joinDisabled && j0.link.endsWith('/RESEARCH.md'), `🔬 Tester data: "${j0.state}", a link to the notice, and Join waiting for the 18+ box and a code`);
+        ok(j0.state === pw.eduPilotOff && j0.joinHidden === true && j1.joinHidden === true && j0.leaveHidden === true && j2.joinHidden === false && !j2.joinDisabled && j0.link.endsWith('/RESEARCH.md'), `🔬 Tester data: "${j0.state}" and a link to the notice; not invited, Join shows once a code is typed (plan 28, 2.4), and goes with the 18+ box`);
         // A wrong code, a closed pilot: each says so, and nothing is joined or stored.
         const tryJoin = async (answer) => {
           await evaluate(`(globalThis.__eduAnswer.enrol = ${JSON.stringify(answer)}, ${el('edu-pilot-join')}.click(), true)`);
@@ -5848,6 +5858,36 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         const readable = await evaluate(`(() => { try { return typeof localStorage.getItem === 'function'; } catch { return false; } })()`);
         ok(readable && back.state === 'ready', `storage restored: the page reloads to the ready screen (${JSON.stringify(back)})`);
       }
+    });
+
+    await section('invite-link', async () => {
+      // The invite link (plan 28, 2.4): ?invite=<code> is read once at boot, taken out of the address bar
+      // at once, and opens the 📚 Education data panel with the code filled in on the first ready screen.
+      // A reload drops the page's board stubs, so the live board is blocked at the browser (as above).
+      await cdp.send('Network.enable');
+      await cdp.send('Network.setBlockedURLs', { urls: ['*supabase.co*'] });
+      const code = 'smoke-invite-link-2026';
+      const load = async (query) => {
+        await cdp.send('Page.navigate', { url: `${url}/?r=${Date.now()}${query}` });
+        let sp = null;
+        for (let i = 0; i < 120 && !sp?.enabled; i += 1) {
+          await sleep(500);
+          sp = await splashNow().catch(() => null);
+        }
+        if (sp?.enabled) {
+          await splashKey('keydown', ' ');
+          await splashKey('keyup', ' ');
+        }
+        for (let i = 0; i < 120 && (await playState().catch(() => null)) !== 'ready'; i += 1) await sleep(500);
+        const open = () => evaluate(`(() => { const r = document.getElementById('edu-data-panel'); return Boolean(r && !r.hidden); })()`);
+        for (let i = 0; i < 20 && !(await open()); i += 1) await sleep(100);
+        return evaluate(`JSON.stringify({ state: __flappy.scene.getScene('Play').state, search: location.search, open: (() => { const r = document.getElementById('edu-data-panel'); return Boolean(r && !r.hidden); })(), code: document.getElementById('edu-invite-code')?.value ?? null, stored: Object.keys(localStorage).some((k) => (localStorage.getItem(k) ?? '').includes('${code}')), pending: __flappy.registry.get('pendingInvite') ?? null })`).then(JSON.parse);
+      };
+      const linked = await load(`&invite=${code}`);
+      ok(linked.state === 'ready' && linked.open && linked.code === code && !linked.search.includes('invite') && linked.search.includes('r=') && !linked.stored && linked.pending === null, `an invite link opens the 📚 Education data panel with the code filled in; the address bar lost it ("${linked.search}"), nothing stores it (${JSON.stringify(linked)})`);
+      await evaluate(`import('./src/ui/eduDataPanel.js').then((m) => (m.closeEduDataPanel(), true))`);
+      const plain = await load('');
+      ok(plain.state === 'ready' && !plain.open, 'a load without the link opens nothing');
     });
 
     const f2 = await frame();

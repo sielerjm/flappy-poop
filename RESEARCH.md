@@ -8,7 +8,7 @@ Flappy Poop has a hidden learning mode (📚 education mode) with quiz cards abo
 
 ## Joining is your choice
 
-- Nothing is sent unless you join. You join in the game: user button → **📚 Education data** → **🔬 Tester data**, with the invite code you were given.
+- Nothing is sent unless you join. You join in the game: user button → **📚 Education data** → **🔬 Tester data**, with the invite code you were given (an invite link opens that panel with the code filled in; it is still you who joins).
 - The pilot is for adults. You tick "I am 18 or older" each time; the game does not remember it.
 - You can play education mode without joining. Everything then stays on your device.
 - You need no username to join.

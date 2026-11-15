@@ -343,6 +343,8 @@ Short, playful, clear. Fit a 720×1280 logical field; How to play / About body w
 | eduIntroClose | Close | 关闭 |
 | eduDataTitle | 📚 Education data | 📚 教育数据 |
 | eduDataIntro | Education mode keeps your answers, grades and badges on this device. Nothing leaves it unless you choose to share below. | 教育模式的答题记录、成绩和徽章都保存在这台设备上。除非你在下面选择分享，否则不会离开设备。 |
+| eduDataInvite | Sharing your grades and joining the tester data are by invitation. Type the invite code you were given, or open your invite link. | 分享成绩和参加测试者数据都需要邀请。请输入你收到的邀请码，或打开你的邀请链接。 |
+| eduShareNeedInvite | Sharing is by invitation: type the invite code you were given above. | 分享需要邀请：请在上方输入你收到的邀请码。 |
 | eduDataAdult | I am 18 or older | 我已年满 18 岁 |
 | eduShareTitle | Share my grades | 分享我的成绩 |
 | eduShareBody | Puts your username, your average grade, the number of graded runs and your education badges on the 📚 board, where players with education mode can see them. Your answers are not shared, and this is not research. Stopping deletes it from the board at once. | 把你的用户名、平均成绩、计分局数和教育徽章放到 📚 排行榜上，开启教育模式的玩家都能看到。不会分享你的具体答题，这也不是研究。停止分享会立即从榜上删除。 |

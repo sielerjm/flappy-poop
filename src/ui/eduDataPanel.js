@@ -13,6 +13,11 @@
 // random id (src/research.js; the notice is RESEARCH.md, linked here). The same 18+ box; the code
 // is sent once and never kept. Withdrawing deletes what was sent and needs no box.
 //
+// Both are by invitation (plan 28, 2.4): one "Invite code" field at the top serves both (an invite
+// link fills it: openEduDataPanel's invite). A player not yet invited sees only the note and the
+// field; the two sections show once a code is typed, or once the player is invited (the device's
+// eduInvited flag), shares, or has joined. A share or join with the code marks the player invited.
+//
 // While open, Phaser's keyboard manager is disabled and the controller is ignored (padIntent's
 // savePanelOpen), as for the user panel. Canvas pointer events never reach the game: the backdrop
 // sits above the canvas.
@@ -26,6 +31,7 @@ const CSS = `
 #${PANEL_ID} { position: fixed; inset: 0; z-index: 10; display: flex; align-items: center; justify-content: center;
   background: rgba(0, 0, 0, 0.55); font-family: sans-serif; color: #ffffff; }
 #${PANEL_ID}[hidden] { display: none; }
+#${PANEL_ID} .card [hidden] { display: none !important; }
 #${PANEL_ID} .card { position: relative; box-sizing: border-box; width: min(92vw, 420px); max-height: 90vh; overflow: auto;
   padding: 20px 20px 16px; border: 4px solid #e85e96; border-radius: 16px; background: #1a0b14; }
 #${PANEL_ID} h2 { margin: 0 36px 8px; font-size: 22px; color: #f8a0c8; text-align: center; }
@@ -81,6 +87,10 @@ function build() {
 
   const title = h('h2');
   const intro = h('p', { class: 'intro' });
+  // The invitation (plan 28, 2.4): a note for a player not yet invited, and the code both sections use.
+  const inviteNote = h('p', { class: 'state', id: 'edu-invite-note' });
+  const code = h('input', { id: 'edu-invite-code', type: 'text', maxlength: '200', autocomplete: 'off', autocapitalize: 'off', spellcheck: 'false' });
+  const inviteRow = h('div', { class: 'row' }, code);
   const adult = h('input', { id: 'edu-adult', type: 'checkbox' });
   const adultText = h('span');
   const adultRow = h('label', { class: 'adult', for: 'edu-adult' }, adult, adultText);
@@ -94,16 +104,15 @@ function build() {
   const pilotLink = h('a', { id: 'edu-pilot-link', href: EDUCATION.researchUrl, target: '_blank', rel: 'noopener noreferrer' });
   const pilotMore = h('p', { class: 'more' }, pilotLink);
   const pilotState = h('p', { class: 'state', id: 'edu-pilot-state' });
-  const code = h('input', { id: 'edu-pilot-code', type: 'text', maxlength: '200', autocomplete: 'off', autocapitalize: 'off', spellcheck: 'false' });
-  const joinBtn = h('button', { type: 'button', id: 'edu-pilot-join' });
-  const joinRow = h('div', { class: 'row' }, code, joinBtn);
+  const joinBtn = h('button', { type: 'button', id: 'edu-pilot-join', class: 'wide' });
+  const joinRow = h('div', { class: 'row' }, joinBtn);
   const leaveBtn = h('button', { type: 'button', id: 'edu-pilot-leave', class: 'wide outline', hidden: true });
   const status = h('p', { class: 'status', id: 'edu-data-status' });
   const close = h('button', { type: 'button', class: 'close', 'aria-label': 'close' }, '✕');
 
   // The card takes focus when nothing in it has any, so Esc reaches the root's keydown (the game
   // keyboard is off while the panel is open), as tournamentPanel's does (plan 24, AUD-018).
-  const card = h('div', { class: 'card', tabindex: '-1' }, close, title, intro, adultRow, shareTitle, shareBody, shareState, shareBtn, pilotTitle, pilotBody, pilotMore, pilotState, joinRow, leaveBtn, status);
+  const card = h('div', { class: 'card', tabindex: '-1' }, close, title, intro, inviteNote, inviteRow, adultRow, shareTitle, shareBody, shareState, shareBtn, pilotTitle, pilotBody, pilotMore, pilotState, joinRow, leaveBtn, status);
   const root = h('div', { id: PANEL_ID, role: 'dialog', 'aria-modal': 'true', hidden: true }, card);
   document.body.append(root);
 
@@ -124,7 +133,7 @@ function build() {
   joinBtn.addEventListener('click', () => onJoin());
   leaveBtn.addEventListener('click', () => onLeave());
 
-  dom = { root, card, title, intro, adult, adultText, shareTitle, shareBody, shareState, shareBtn, pilotTitle, pilotBody, pilotLink, pilotState, code, joinRow, joinBtn, leaveBtn, status };
+  dom = { root, card, title, intro, inviteNote, inviteRow, adult, adultRow, adultText, shareTitle, shareBody, shareState, shareBtn, pilotTitle, pilotBody, pilotMore, pilotLink, pilotState, code, joinRow, joinBtn, leaveBtn, status };
 }
 
 function setStatus(text, kind = '') {
@@ -139,6 +148,17 @@ function refresh() {
   const on = Boolean(play?.eduShareOn?.());
   dom.title.textContent = t(locale, 'eduDataTitle');
   dom.intro.textContent = t(locale, 'eduDataIntro');
+  // The invitation (plan 28, 2.4): known (the flag, sharing, joined, or a consent held) or a code typed.
+  const joinedNow = Boolean(play?.researchJoined?.());
+  const heldNow = Boolean(play?.researchConsent?.());
+  const known = Boolean(play?.eduInvited?.()) || on || joinedNow || heldNow;
+  const typed = Boolean(dom.code.value.trim());
+  const open = known || typed;
+  dom.inviteNote.textContent = t(locale, 'eduDataInvite');
+  dom.inviteNote.hidden = known;
+  // The field stays: the device's flag is a hint, and a share the server refuses ('needs invite') asks for it.
+  dom.code.placeholder = t(locale, 'eduPilotCode');
+  for (const el of [dom.adultRow, dom.shareTitle, dom.shareBody, dom.shareState, dom.shareBtn, dom.pilotTitle, dom.pilotBody, dom.pilotMore, dom.pilotState]) el.hidden = !open;
   dom.adultText.textContent = t(locale, 'eduDataAdult');
   dom.shareTitle.textContent = t(locale, 'eduShareTitle');
   dom.shareBody.textContent = t(locale, 'eduShareBody');
@@ -160,18 +180,18 @@ function refresh() {
   dom.pilotLink.textContent = t(locale, 'eduPilotMore');
   dom.pilotState.textContent = t(locale, joined ? 'eduPilotOn' : stale ? 'eduPilotStale' : 'eduPilotOff');
   dom.pilotState.className = joined ? 'state on' : 'state';
-  dom.code.placeholder = t(locale, 'eduPilotCode');
   dom.joinBtn.textContent = t(locale, 'eduPilotJoin');
   dom.leaveBtn.textContent = t(locale, 'eduPilotLeave');
-  dom.joinRow.hidden = joined;
+  dom.joinRow.hidden = joined || !open;
   dom.leaveBtn.hidden = !held;
-  dom.joinBtn.disabled = busy || !dom.adult.checked || !dom.code.value.trim();
+  dom.joinBtn.disabled = busy || !dom.adult.checked || !(known || typed);
   dom.leaveBtn.disabled = busy;
 }
 
 const SHARE_STATUS = {
   ok: ['eduShareStarted', 'ok'],
   noName: ['eduShareNeedName', 'error'],
+  needsInvite: ['eduShareNeedInvite', 'error'],
   notAdult: ['eduShareNeedAdult', 'error'],
   closed: ['eduShareClosed', 'error'],
   nameTaken: ['eduShareNameTaken', 'error'],
@@ -198,9 +218,10 @@ async function onShare() {
       line = gone ? ['eduShareStopped', 'ok'] : ['eduShareStopOffline', 'error'];
       changed = changed || gone;
     } else {
-      const res = await play.startEduShare(dom.adult.checked);
+      const res = await play.startEduShare(dom.adult.checked, dom.code.value.trim() || null);
       line = SHARE_STATUS[res?.status] ?? SHARE_STATUS.offline;
       changed = changed || res?.status === 'ok';
+      if (res?.status === 'ok' && dom) dom.code.value = ''; // the code is sent once and never kept
     }
   } catch {
     line = SHARE_STATUS.offline;
@@ -229,7 +250,7 @@ async function onJoin() {
     return;
   }
   const invite = dom.code.value.trim();
-  if (!invite) {
+  if (!invite && !play?.eduInvited?.() && !play?.eduShareOn?.()) {
     setStatus(t(locale, 'eduPilotNeedCode'), 'error');
     return;
   }
@@ -238,7 +259,7 @@ async function onJoin() {
   refresh();
   let line;
   try {
-    const res = await play.joinResearch(invite, dom.adult.checked);
+    const res = await play.joinResearch(invite || null, dom.adult.checked); // invited: no code needed (plan 28)
     line = JOIN_STATUS[res?.status] ?? JOIN_STATUS.offline;
     if (res?.status === 'ok' && dom) dom.code.value = '';
   } catch {
@@ -283,7 +304,8 @@ function setGameKeyboard(enabled) {
  * Open the panel. The 18+ box starts unticked every time. `onClose(changed)` runs when it closes;
  * `changed` says whether sharing was turned on or off meanwhile (the 📚 board and the profile
  * reload on it).
- * @param {{ game: object, play: object, locale: string, onClose?: (changed: boolean) => void }} options
+ * `invite`: an invite link's code, filled into the field (plan 28, 2.4).
+ * @param {{ game: object, play: object, locale: string, invite?: string, onClose?: (changed: boolean) => void }} options
  */
 export function openEduDataPanel(options) {
   if (typeof document === 'undefined') return;
@@ -292,7 +314,7 @@ export function openEduDataPanel(options) {
   busy = false;
   changed = false;
   dom.adult.checked = false;
-  dom.code.value = '';
+  dom.code.value = typeof options.invite === 'string' ? options.invite : ''; // an invite link's code (plan 28, 2.4)
   setGameKeyboard(false);
   // What the player should know first: the server ended their pilot (once), else that sharing needs a username.
   const ended = Boolean(ctx.play?.researchEnded);

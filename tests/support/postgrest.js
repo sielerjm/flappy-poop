@@ -20,13 +20,17 @@ export const SUPABASE_ROLES = `create role anon nologin; create role authenticat
 /** A valid 22-character id from a short tag ('_' padding keeps 'T1' and 'T10' apart). */
 export const id = (tag) => String(tag).padEnd(22, '_');
 
-/** A database with the schema applied twice (it must be re-runnable); the 📚 board opened unless `open` is false. */
-export async function freshDb({ sql = SCHEMA, open = true } = {}) {
+/** The invite code a test sets with freshDb({ invite: INVITE }): sharing is by invitation (plan 28, 2.4). */
+export const INVITE = 'test-invite-code-2026';
+
+/** A database with the schema applied twice (it must be re-runnable); the 📚 board opened unless `open` is false; `invite` sets the invite code. */
+export async function freshDb({ sql = SCHEMA, open = true, invite = null } = {}) {
   const db = new PGlite();
   await db.exec(SUPABASE_ROLES);
   await db.exec(sql);
   await db.exec(sql);
   if (open) await db.query('select public.admin_set_education_open(true)');
+  if (invite) await db.query('select public.admin_set_invite($1)', [invite]);
   return db;
 }
 

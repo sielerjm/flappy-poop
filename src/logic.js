@@ -434,11 +434,12 @@ export function createBestStore(storage, key = 'flappy-poop:best') {
 export const HANDS = ['left', 'right'];
 
 // education: the 📚 switch (for everyone since plan 28; the old eduUnlocked setting is dropped when read);
+// eduInvited: this device's player was invited to share (plan 28, 2.4: a flag for the panel, never the code);
 // eduStartLevel: the level the ready screen's stepper starts an education run at (plan 25; Play clamps it
 // to the levels unlocked); eduNewOrder: where a quiz puts new cards, 'after' / 'mixed' / 'before' the due
 // ones (plan 26; education.js NEW_ORDERS). (reviveGiveUpWarned, plan 26's "warned once on this device",
 // is gone since plan 26's A2: a revive's Quit warns on every card. A stored value is ignored.)
-const SETTINGS_DEFAULTS = { sound: true, music: true, haptics: true, locale: DEFAULT_LOCALE, howToSeenAt: '', hand: 'right', education: false, eduStartLevel: 1, eduNewOrder: 'after' };
+const SETTINGS_DEFAULTS = { sound: true, music: true, haptics: true, locale: DEFAULT_LOCALE, howToSeenAt: '', hand: 'right', education: false, eduInvited: false, eduStartLevel: 1, eduNewOrder: 'after' };
 const EDU_NEW_ORDERS = ['after', 'mixed', 'before']; // education.js NEW_ORDERS (logic.js does not import education.js)
 
 /**
@@ -460,7 +461,7 @@ export function storedLocale(storage, key) {
 function normalizeSettings(raw) {
   const out = { ...SETTINGS_DEFAULTS };
   if (!raw || typeof raw !== 'object') return out;
-  for (const key of ['sound', 'music', 'haptics', 'education']) {
+  for (const key of ['sound', 'music', 'haptics', 'education', 'eduInvited']) {
     if (typeof raw[key] === 'boolean') out[key] = raw[key];
   }
   // Settings from before plan 28 carry eduUnlocked: a device that was locked (or never unlocked) had no
@@ -2479,3 +2480,33 @@ export function wrapCjk(text, maxWidth, measure) {
   }
   return out;
 }
+
+// ---------------------------------------------------------------------------
+// The invite link (plan 28, 2.4): ?invite=<code> opens the 📚 Education data panel with the code
+// filled in. main.js reads it once at boot and takes it out of the address bar at once.
+
+/**
+ * The code in a location.search's invite parameter (trimmed, 1 to 200 characters), else null. Decoded
+ * literally (decodeURIComponent), so a "+" in a code stays a "+".
+ */
+export function inviteFromSearch(search) {
+  if (typeof search !== 'string' || !search) return null;
+  const m = /[?&]invite=([^&#]*)/.exec(search);
+  if (!m) return null;
+  let code;
+  try {
+    code = decodeURIComponent(m[1]).trim();
+  } catch {
+    return null;
+  }
+  return code && code.length <= 200 ? code : null;
+}
+
+/** The address without its invite parameter (the rest of the query and the hash kept), for history.replaceState. */
+export function withoutInvite(href) {
+  const url = new URL(href);
+  if (!url.searchParams.has('invite')) return href;
+  url.searchParams.delete('invite');
+  return url.toString();
+}
+

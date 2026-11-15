@@ -827,7 +827,9 @@ test('anon reads no player_meta and cannot call the new helpers', async () => {
 const BOARD_MIN_RUNS = T.education.boardMinRuns; // graded runs before a sharing player is listed: the 📚 tab's footer counts down to the same number
 /** Share and rename wait 5 s per player (plan 25, A4; its own test below): tests of other rules clear the pace first. */
 const unpace = (db) => db.query('update public.player_meta set edu_named_at = null');
-const eshare = async (db, pid, name, adult = true) => (await unpace(db), asAnon(db, 'select public.share_education($1, $2, $3)::text as r', [pid, name, adult]).then((r) => r.rows[0].r));
+/** Sharing is by invitation (plan 28, 2.4): the tests' shares bring the invite code, set here when none is (CODE, the pilot's). */
+const ensureInvite = (db) => db.query("update public.education_settings set invite_hash = encode(sha256(convert_to($1, 'UTF8')), 'hex') where invite_hash is null", [CODE]);
+const eshare = async (db, pid, name, adult = true, invite = CODE) => (await unpace(db), await ensureInvite(db), asAnon(db, 'select public.share_education($1, $2, $3, $4)::text as r', [pid, name, adult, invite]).then((r) => r.rows[0].r));
 const egrades = (db, pid, batch, at, runs, sum, badges = {}) =>
   asAnon(db, 'select public.submit_education_grades($1, $2, $3::timestamptz, $4, $5, $6::jsonb) as r', [pid, batch, at, runs, sum, JSON.stringify(badges)]).then((r) => r.rows[0].r);
 const eunshare = (db, pid) => asAnon(db, 'select public.unshare_education($1) as r', [pid]).then((r) => r.rows[0].r);
@@ -846,7 +848,7 @@ test('the 📚 board schema pins the minimum runs and the grade scale the game u
 test('share and rename wait 5 s per player, across Stop sharing; a new sharer and Stop are never paced; a fold keeps the later time (plan 25, A4)', async () => {
   const db = await freshDb();
   await db.query('select public.admin_set_education_open(true)');
-  const share = (pid, name) => asAnon(db, 'select public.share_education($1, $2, true)::text as r', [pid, name]).then((r) => r.rows[0].r);
+  const share = async (pid, name) => (await ensureInvite(db), asAnon(db, 'select public.share_education($1, $2, true, $3)::text as r', [pid, name, CODE]).then((r) => r.rows[0].r));
   const rename = (pid, name) => asAnon(db, 'select public.rename_education($1, $2) as r', [pid, name]).then((r) => r.rows[0].r);
   const age = (pid) => db.query("update public.player_meta set edu_named_at = now() - interval '6 seconds' where player_id = $1", [pid]);
   const [P, Q, R] = [id('PaceP'), id('PaceQ'), id('PaceR')];
@@ -885,7 +887,7 @@ test('share_education: closed to all but 🔧 devs until the owner opens it; adu
   // Open: any adult may.
   assert.equal(await openBoard(db, true), true);
   await assert.rejects(eshare(db, P, 'Pat', false), /not adult/);
-  await assert.rejects(asAnon(db, 'select public.share_education($1, $2, null)', [P, 'Pat']), /not adult/, 'no answer is not a yes');
+  await assert.rejects(asAnon(db, 'select public.share_education($1, $2, null, $3)', [P, 'Pat', CODE]), /not adult/, 'no answer is not a yes');
   await assert.rejects(eshare(db, 'short', 'Pat'), /bad player id/);
   await assert.rejects(eshare(db, P, ''), /bad name/);
   await assert.rejects(eshare(db, P, 'x'.repeat(17)), /bad name/);
@@ -896,6 +898,63 @@ test('share_education: closed to all but 🔧 devs until the owner opens it; adu
   assert.equal((await erows(db)).length, 2);
   await assert.rejects(eshare(db, id('EP2'), 'Quinn'), /closed/);
   await assert.rejects(asAnon(db, 'select public.admin_set_education_open(true)'), /permission denied/, 'only the owner opens it');
+});
+
+test('sharing is by invitation (plan 28, 2.4): a code that hashes to the invite marks the player invited, who then shares without one; a 🔧 dev, a pilot participant and a player already on the board need none; an old 3-argument call still answers', async () => {
+  const db = await freshDb();
+  await openBoard(db, true);
+  const [P, Q, PILOT, DEV] = ['InvP', 'InvQ', 'InvPilot', 'InvDev'].map(id);
+  const share = async (pid, name, invite) => (await unpace(db), asAnon(db, 'select public.share_education($1, $2, true, $3)::text as r', [pid, name, invite]).then((r) => r.rows[0].r));
+  const invited = async (pid) => (await db.query('select edu_invited from public.player_meta where player_id = $1', [pid])).rows[0]?.edu_invited ?? false;
+  await assert.rejects(share(P, 'Pia', null), /needs invite/, 'no invite code set: nobody uninvited shares');
+  await setInvite(db, CODE);
+  await assert.rejects(share(P, 'Pia', null), /needs invite/, 'no code');
+  await assert.rejects(share(P, 'Pia', 'a-wrong-code-of-length'), /needs invite/, 'a wrong code');
+  await assert.rejects(asAnon(db, 'select public.share_education($1, $2, true)', [P, 'Pia']), /needs invite/, 'an old client (3 arguments) answers needs invite');
+  assert.equal(await invited(P), false, 'a refused share marks nobody');
+  assert.ok(await share(P, 'Pia', CODE), 'the right code shares');
+  assert.equal(await invited(P), true, 'and marks the player invited');
+  assert.equal(await asAnon(db, 'select public.unshare_education($1) as r', [P]).then((r) => r.rows[0].r), true);
+  assert.ok(await share(P, 'Pia', null), 'invited: a later share needs no code (after Stop sharing too)');
+  // A new code stops the old one for anyone not yet invited, never for the invited.
+  await setInvite(db, 'a-brand-new-code-2027');
+  await assert.rejects(share(Q, 'Quin', CODE), /needs invite/, 'the old code no longer invites');
+  assert.ok(await share(P, 'Pia', null), 'the invited still share');
+  // A pilot participant (joined with the code) shares without one; joining marks them invited.
+  await enrol(db, PILOT, 'a-brand-new-code-2027');
+  assert.equal(await invited(PILOT), true, 'joining the pilot marks the player invited');
+  assert.ok(await share(PILOT, 'Pilo', null), 'a participant shares with no code');
+  // A 🔧 dev needs none.
+  await asAnon(db, 'select public.submit_score($1, $2, 5)', [DEV, 'Devin']);
+  await db.query("select public.admin_set_dev('Devin', true)");
+  assert.ok(await share(DEV, 'Devin', null), 'a dev shares with no code');
+  // A player already on the board (shared before invitations) renames through share with no code.
+  await db.query("insert into public.education_public (player_id, name) values ($1, 'Oldie')", [Q]);
+  assert.ok(await share(Q, 'Oldie2', null), 'a player already on the board re-shares (renames) with no code');
+  assert.equal(await invited(Q), true, 'and is marked invited by it (review: so Stop then Share still works)');
+  // The backfill: a player on the board or in the pilot from before the column is invited once the file runs.
+  await db.query("update public.player_meta set edu_invited = false where player_id in ($1, $2)", [Q, PILOT]);
+  await db.exec(SQL);
+  assert.deepEqual([await invited(Q), await invited(PILOT)], [true, true], 'the backfill marks board and pilot players invited');
+});
+
+test('enrol_research and the invitation (plan 28, 2.4): an invited player joins without a code, a wrong one included; enrolment stays closed while no code is set; a fold keeps either player\'s invitation', async () => {
+  const db = await freshDb();
+  await openBoard(db, true);
+  const [A, B, K, M] = ['EnA', 'EnB', 'EnKeep', 'EnMerge'].map(id);
+  await assert.rejects(enrol(db, A, CODE), /closed/, 'no code set: closed, invited or not');
+  await setInvite(db, CODE);
+  assert.ok(await eshare(db, A, 'Ann'), 'A shares with the code: invited');
+  assert.equal((await enrol(db, A, null)).status, 'ok', 'an invited player joins with no code');
+  assert.equal((await enrol(db, A, 'a-wrong-code-of-length')).status, 'ok', 'or a wrong one (the invitation stands)');
+  await assert.rejects(enrol(db, B, null), /bad invite/, 'an uninvited player still needs it');
+  await setInvite(db, null);
+  await assert.rejects(enrol(db, A, null), /closed/, 'enrolment closed: closed for the invited too');
+  // A fold keeps the invitation of either player.
+  await setInvite(db, CODE);
+  assert.ok(await eshare(db, M, 'Mia'), 'M invited');
+  await asAnon(db, 'select public.merge_players($1, $2)', [K, M]);
+  assert.equal((await db.query('select edu_invited from public.player_meta where player_id = $1', [K])).rows[0].edu_invited, true, 'the kept player is invited');
 });
 
 test('share_education follows the score board name claim; an education-only player needs no score row; a second share only renames', async () => {
@@ -1532,9 +1591,9 @@ test('the upgrade: the live schema (tests/fixtures/schema-applied.sql) holding r
   assert.equal((await asAnon(db, 'select public.schema_version() as v')).rows[0].v, stampOf(SQL), 'the upgraded database answers the new stamp');
   // The new parts work on the upgraded database, an aliased id included.
   await db.query('select public.admin_set_education_open(true)');
-  const round = (await asAnon(db, 'select public.share_education($1, $2, true)::text as r', [id('UpAlice'), 'UpAlice'])).rows[0].r;
+  const round = (await ensureInvite(db), await asAnon(db, 'select public.share_education($1, $2, true, $3)::text as r', [id('UpAlice'), 'UpAlice', CODE])).rows[0].r;
   assert.equal((await asAnon(db, "select public.submit_education_grades($1, $2, $3::timestamptz, 3, 27000, '{}'::jsonb) as r", [id('UpAlice'), id('UpEB1'), round])).rows[0].r.status, 'ok');
-  assert.ok((await asAnon(db, 'select public.share_education($1, $2, true)::text as r', [id('UpCarolOld'), 'UpCarol'])).rows[0].r, 'an old id shares as its canonical player');
+  assert.ok((await asAnon(db, 'select public.share_education($1, $2, true, $3)::text as r', [id('UpCarolOld'), 'UpCarol', CODE])).rows[0].r, 'an old id shares as its canonical player');
   assert.deepEqual((await db.query('select player_id from public.education_public order by 1')).rows.map((r) => r.player_id), [id('UpAlice'), id('UpCarol')].sort());
   // A counters batch sent before the upgrade is still a receipt after another batch (plan 24, AUD-003).
   await db.exec("update public.player_counters set updated_at = now() - interval '6 seconds'");
@@ -1557,7 +1616,7 @@ test('recent receipts (AUD-003): a resend after another device\'s batch adds not
   const db = await freshDb();
   await db.query('select public.admin_set_education_open(true)');
   const P = id('RXP');
-  const round = (await asAnon(db, "select public.share_education($1, 'Rx', true)::text as r", [P])).rows[0].r;
+  const round = (await ensureInvite(db), await asAnon(db, "select public.share_education($1, 'Rx', true, $2)::text as r", [P, CODE])).rows[0].r;
   const grades = (batch, runs, sum) => asAnon(db, "select public.submit_education_grades($1, $2, $3::timestamptz, $4, $5, '{}'::jsonb) as r", [P, batch, round, runs, sum]).then((r) => r.rows[0].r);
   const age = () => db.query("update public.education_public set updated_at = now() - interval '6 seconds'");
   await grades(id('RX'), 5, 50000); // device A: its reply is lost
@@ -1586,7 +1645,7 @@ test('an empty batch is a probe (AUD-009): from this round the totals, from anot
   const db = await freshDb();
   await db.query('select public.admin_set_education_open(true)');
   const P = id('PRB');
-  const round = (await asAnon(db, "select public.share_education($1, 'Prober', true)::text as r", [P])).rows[0].r;
+  const round = (await ensureInvite(db), await asAnon(db, "select public.share_education($1, 'Prober', true, $2)::text as r", [P, CODE])).rows[0].r;
   const probe = (batch, sharedAt) => asAnon(db, "select public.submit_education_grades($1, $2, $3::timestamptz, 0, 0, '{}'::jsonb) as r", [P, batch, sharedAt]).then((r) => r.rows[0].r);
   const send = (batch, runs, sum) => asAnon(db, "select public.submit_education_grades($1, $2, $3::timestamptz, $4, $5, '{}'::jsonb) as r", [P, batch, round, runs, sum]).then((r) => r.rows[0].r);
   assert.equal((await send(id('PB1'), 2, 18000)).status, 'ok');
@@ -1603,7 +1662,7 @@ test("a badge day after tomorrow or before 2000 (a device clock set wrong) is st
   const db = await freshDb();
   await db.query('select public.admin_set_education_open(true)');
   const P = id('CLK');
-  const round = (await asAnon(db, "select public.share_education($1, 'Clocky', true)::text as r", [P])).rows[0].r;
+  const round = (await ensureInvite(db), await asAnon(db, "select public.share_education($1, 'Clocky', true, $2)::text as r", [P, CODE])).rows[0].r;
   const today = (await db.query("select to_char((now() at time zone 'utc')::date, 'YYYY-MM-DD') as d")).rows[0].d;
   const send = (batch, badges) => asAnon(db, 'select public.submit_education_grades($1, $2, $3::timestamptz, 2, 18000, $4::jsonb) as r', [P, batch, round, JSON.stringify(badges)]).then((r) => r.rows[0].r);
   assert.equal((await send(id('CK1'), { edu_grade_a: '2099-01-01', edu_perfect: '1970-01-01' })).runs, 2, 'the runs reach the board');
@@ -1622,7 +1681,7 @@ test("a 🌞 or 🏅 name belongs to one player on every board; its holder keeps
   const daily = (pid, name, day = today) => dsubmit(db, pid, name, day, 10, dailyLevel(day, T));
   const score = (pid, name) => asAnon(db, 'select public.submit_score($1, $2, 40, false, 3)', [pid, name]);
   const available = (name, pid) => asAnon(db, 'select public.name_available($1, $2) as r', [name, pid]).then((r) => r.rows[0].r);
-  const share = async (pid, name) => (await unpace(db), asAnon(db, 'select public.share_education($1, $2, true)::text as r', [pid, name]).then((r) => r.rows[0].r));
+  const share = async (pid, name) => (await unpace(db), await ensureInvite(db), asAnon(db, 'select public.share_education($1, $2, true, $3)::text as r', [pid, name, CODE]).then((r) => r.rows[0].r));
   const medals = (pid, name) => db.query('insert into public.tournament_stats (player_id, name, best_score, gold, silver, bronze, events, updated_at) values ($1, $2, 30, 1, 0, 0, 1, now())', [pid, name]);
   const [D, T1, X, R, P1] = ['NDana', 'NTina', 'NOther', 'NRex', 'NPlaceholder'].map(id);
   // A 🌞-only player.
@@ -1652,7 +1711,7 @@ test("a 🌞 or 🏅 name belongs to one player on every board; its holder keeps
 test('a 📚 name belongs to one player (AUD-022): no second sharer, no 🌞-only name, no score-board claim of a 📚-only name; a player keeps a name they already hold', async () => {
   const db = await freshDb();
   await db.query('select public.admin_set_education_open(true)');
-  const share = async (pid, name) => (await unpace(db), asAnon(db, 'select public.share_education($1, $2, true)::text as r', [pid, name]).then((r) => r.rows[0].r));
+  const share = async (pid, name) => (await unpace(db), await ensureInvite(db), asAnon(db, 'select public.share_education($1, $2, true, $3)::text as r', [pid, name, CODE]).then((r) => r.rows[0].r));
   const rename = async (pid, name) => (await unpace(db), asAnon(db, 'select public.rename_education($1, $2) as r', [pid, name]).then((r) => r.rows[0].r));
   const [A, B, C, D, E] = ['NA', 'NB', 'NC', 'ND', 'NE'].map(id);
   assert.ok(await share(A, 'Sam'), 'A, an education-only player, shares as Sam');

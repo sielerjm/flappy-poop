@@ -806,6 +806,19 @@ test('shareEducation posts the name and the adult box; each refusal has its own 
   assert.deepEqual(await shareEducation(ID, 'Alice', true, { fetch: fakeFetch({ status: 200, body: JSON.stringify('soon') }), config }), { status: 'offline' }, 'an answer that is no round');
 });
 
+test('shareEducation and the invitation (plan 28, 2.4): a code goes as p_invite, trimmed, only when given; "needs invite" has its own status', async () => {
+  const ok = fakeFetch({ status: 200, body: JSON.stringify(ROUND) });
+  assert.deepEqual(await shareEducation(ID, 'Alice', true, { fetch: ok, config, invite: '  the-invite-code-2026 ' }), { status: 'ok', sharedAt: ROUND });
+  assert.deepEqual(ok.calls[0].body, { p_player_id: ID, p_name: 'Alice', p_adult: true, p_invite: 'the-invite-code-2026' });
+  const blank = fakeFetch({ status: 200, body: JSON.stringify(ROUND) });
+  await shareEducation(ID, 'Alice', true, { fetch: blank, config, invite: '   ' });
+  assert.deepEqual(blank.calls[0].body, { p_player_id: ID, p_name: 'Alice', p_adult: true }, 'a blank code is no code');
+  assert.deepEqual(await shareEducation(ID, 'Alice', true, { fetch: fakeFetch({ status: 400, body: { message: 'needs invite' } }), config }), { status: 'needsInvite' });
+  const long = fakeFetch({ status: 200, body: JSON.stringify(ROUND) });
+  assert.deepEqual(await shareEducation(ID, 'Alice', true, { fetch: long, config, invite: 'x'.repeat(201) }), { status: 'needsInvite' }, 'a code too long is no invitation');
+  assert.equal(long.calls.length, 0, 'and is not sent');
+});
+
 test('renameEducation and unshareEducation report what the server did', async () => {
   const yes = fakeFetch({ status: 200, body: 'true' });
   assert.equal(await renameEducation(ID, 'Alicia', { fetch: yes, config }), true);
@@ -892,10 +905,15 @@ test('enrolResearch sends the code once with the adult box and the consent versi
   assert.deepEqual(ok.calls[0].body, { p_player_id: ID, p_invite: 'the-invite-code-2026', p_adult: true, p_consent_version: 'pilot-1' });
   const none = fakeFetch({ status: 200, body: { status: 'ok', phase: 'pilot' } });
   assert.deepEqual(await enrolResearch(ID, 'the-invite-code-2026', false, 'pilot-1', { fetch: none, config }), { status: 'notAdult' });
-  assert.deepEqual(await enrolResearch(ID, '   ', true, 'pilot-1', { fetch: none, config }), { status: 'badInvite' }, 'no code');
+  assert.deepEqual(await enrolResearch(ID, 'x'.repeat(201), true, 'pilot-1', { fetch: none, config }), { status: 'badInvite' }, 'a code too long');
   assert.deepEqual(await enrolResearch('short', 'the-invite-code-2026', true, 'pilot-1', { fetch: none, config }), { status: 'rejected' });
   assert.deepEqual(await enrolResearch(ID, 'the-invite-code-2026', true, '', { fetch: none, config }), { status: 'rejected' });
   assert.equal(none.calls.length, 0, 'none of those is sent');
+  // No code (plan 28, 2.4): sent as null, for the server to judge (an invited player joins without one).
+  const noCode = fakeFetch({ status: 200, body: { status: 'ok', phase: 'pilot', since: '2026-11-13T10:00:00.123+00:00' } });
+  assert.equal((await enrolResearch(ID, '   ', true, 'pilot-1', { fetch: noCode, config })).status, 'ok');
+  assert.deepEqual(noCode.calls[0].body, { p_player_id: ID, p_invite: null, p_adult: true, p_consent_version: 'pilot-1' });
+  assert.equal((await enrolResearch(ID, null, true, 'pilot-1', { fetch: noCode, config })).status, 'ok', 'null is no code too');
   const refused = (message, status = 400) => enrolResearch(ID, 'the-invite-code-2026', true, 'pilot-1', { fetch: fakeFetch({ status, body: { message } }), config });
   assert.deepEqual(await refused('bad invite'), { status: 'badInvite' });
   assert.deepEqual(await refused('closed'), { status: 'closed' });

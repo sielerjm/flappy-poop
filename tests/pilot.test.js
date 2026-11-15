@@ -270,7 +270,9 @@ function pilotSection(play) {
 test('the Education data panel offers Withdraw whenever this device holds a consent, an older notice\'s included (AUD-005)', () => {
   const play = device({ id: 'PANELAAAAAAAAAAAAAAAAA', name: 'Tester', top: [], exportedAt: null }, fakeStorage());
   play.eduShare = { load: () => ({ on: false }) };
-  assert.deepEqual(pilotSection(play), { state: t('en', 'eduPilotOff'), withdraw: false, join: true }, 'not joined: Join');
+  assert.equal(pilotSection(play).join, false, 'not invited (plan 28, 2.4): no Join until a code is typed or the player is invited');
+  play.eduInvited = () => true;
+  assert.deepEqual(pilotSection(play), { state: t('en', 'eduPilotOff'), withdraw: false, join: true }, 'invited, not joined: Join');
   play.consentStore.join({ version: EDUCATION.consentVersion, phase: 'pilot', at: Date.now() });
   assert.deepEqual(pilotSection(play), { state: t('en', 'eduPilotOn'), withdraw: true, join: false }, 'joined: Withdraw');
   play.consentStore.join({ version: 'pilot-0', phase: 'pilot', at: Date.now() });

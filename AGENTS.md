@@ -605,7 +605,18 @@ stored day is more than a day ahead). Day
 gaps come from the date keys (`localDayKey`), never from milliseconds.
 **What leaves the device, and only by choice** (plan 21, Stage 3b): the **📚 Education data** panel
 (`src/ui/eduDataPanel.js`, a DOM panel like the user panel; from a button in the user panel shown
-while the mode is unlocked, the 📚 board's footer and the profile's row; `Play.openEduData`). An "I
+while the mode is available, the 📚 board's footer and the profile's row; `Play.openEduData`). **Both
+parts are by invitation** (plan 28, 2.4): one "Invite code" field at the top serves them; a player not
+yet invited sees a note and the field, and the parts show once a code is typed or the player is invited
+(the device's settings flag `eduInvited`, set by a share or a join that the server took; never the code),
+shares, or has joined. **An invite link** `…/?invite=<code>` is read once by `main.js`
+(`inviteFromSearch`), taken out of the address bar at once (`withoutInvite`, `history.replaceState`) and
+handed through the registry (`pendingInvite`) to the first ready screen, which opens the panel with the
+code filled in (`Play.openPendingInvite`). On the server, `share_education`'s fourth argument `p_invite`
+must hash to `education_settings.invite_hash` (the pilot's code) for a player who is not a 🔧 dev, not
+invited (`player_meta.edu_invited`), not a pilot participant and not already on the board ('needs
+invite', its own line); a share or a join with the code marks the player invited, and an invited player
+joins the pilot without it. An "I
 am 18 or older" box is asked every time and never remembered. **Share my grades** puts the player's
 name, average grade, graded-run count and education badges on the **📚 board**
 (`Play.startEduShare` / `stopEduShare`; `share_education` / `unshare_education` in `db/schema.sql`,
@@ -1278,12 +1289,16 @@ src/
                             savePanel.js, from the user panel's 📚 Education data
                             button, the 📚 board's footer or the profile's row: the
                             one place a player chooses what of their education
-                            record leaves the device. An "I am 18 or older" box
+                            record leaves the device. By invitation (plan 28): the
+                            invite note and one "Invite code" field (#edu-invite-code,
+                            filled by an invite link: openEduDataPanel's invite) above
+                            both parts, which show once invited or a code is typed.
+                            An "I am 18 or older" box
                             (unticked on every open, needed to share or join), Share
                             my grades (Play.startEduShare / stopEduShare; each
                             refusal its own line) and 🔬 Tester data: the notice's
-                            link, the invite code and Join (shown unless joined under
-                            the current notice), and Withdraw and delete my data,
+                            link and Join (shown unless joined under the current
+                            notice), and Withdraw and delete my data,
                             shown whenever the device holds a consent, an older
                             notice's included (the state line then reads
                             eduPilotStale): Play.joinResearch / leaveResearch /
@@ -1978,7 +1993,8 @@ db/schema.sql               Supabase schema: scores table (player_id = save-code
                             refused in a client batch. Plan 21 (2026-11-13): the 📚
                             board (education_settings: board_open, invite_hash,
                             phase; education_public: one row per sharing player;
-                            share_education, submit_education_grades with the
+                            share_education (by invitation since plan 28: p_invite,
+                            player_meta.edu_invited, 'needs invite'), submit_education_grades with the
                             shared_at round and 'restart', rename_education,
                             unshare_education, education_board; player_stats gains
                             `education`; admin_set_education_open, owner only) and

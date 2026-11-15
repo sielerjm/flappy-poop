@@ -237,8 +237,8 @@ Every player has a public profile: the save panel’s **👤 Profile** opens you
 A learning mode, in beta for everyone: turn on 📚 on the home screen, and quiz cards about the gut and its microbes come up between levels and after a crash, in English or Chinese, with a review schedule deciding which card comes back when. The cards are still being checked; they are not medical advice.
 
 - **Everything stays on your device** by default: your answers, your grades and the badges you earn there. These runs are not on the 🏆 boards.
-- **The 📚 board is opt-in.** In the user panel, **📚 Education data → Share my grades** puts your username, your average grade, the number of graded runs and your education badges on a 📚 board that other testers can see. It is for adults, and **Stop sharing** deletes it from the board at once.
-- **🔬 Tester data is opt-in too**, for adults with an invite code: the game then sends each quiz answer under a random id, to test the tools. No research is being done with it. [RESEARCH.md](RESEARCH.md) says exactly what is sent and how to withdraw.
+- **The 📚 board is by invitation and opt-in.** With an invite code or link, **📚 Education data → Share my grades** puts your username, your average grade, the number of graded runs and your education badges on a 📚 board that other testers can see. It is for adults, and **Stop sharing** deletes it from the board at once.
+- **🔬 Tester data is opt-in too**, for adults with an invitation (the same code or link): the game then sends each quiz answer under a random id, to test the tools. No research is being done with it. [RESEARCH.md](RESEARCH.md) says exactly what is sent and how to withdraw.
 - **A card looks wrong?** Tap the 🚩 beside its code on the quiz card to report it.
 
 #### How the cards come back

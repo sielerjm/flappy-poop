@@ -1,5 +1,5 @@
 import { FIELD } from './config.js';
-import { fieldWidth, perfMode } from './logic.js';
+import { fieldWidth, perfMode, inviteFromSearch, withoutInvite } from './logic.js';
 import { attachPerfMeter } from './ui/perfMeter.js';
 import { Boot } from './scenes/Boot.js';
 import { Play } from './scenes/Play.js';
@@ -19,6 +19,17 @@ import { Quiz } from './scenes/Quiz.js';
 // ?perf shows the frame meter (src/ui/perfMeter.js); ?perf=var also lets Arcade step by each
 // frame's delta instead of its fixed 60 Hz, to A/B the physics step on a phone. Debug only.
 const perf = perfMode(globalThis.location?.search);
+
+// ?invite=<code> (plan 28, 2.4): read once, taken out of the address bar at once (it would sit in the
+// history and be shared with the link), and handed to Play through the registry (Play.openPendingInvite).
+const invite = inviteFromSearch(globalThis.location?.search);
+try {
+  // Out of the address bar whenever the parameter is there, a code too long to use included.
+  const clean = globalThis.location ? withoutInvite(globalThis.location.href) : null;
+  if (clean && clean !== globalThis.location.href) globalThis.history?.replaceState?.(globalThis.history.state, '', clean);
+} catch {
+  /* no history API: the code stays in the address, and still works */
+}
 
 // Logical field: 1280 tall; as wide as the window's aspect asks, between a phone
 // portrait (720) and 2:1 (FIELD). Scale.FIT then letterboxes only what is left.
@@ -62,6 +73,7 @@ globalThis.addEventListener?.('resize', () => {
 });
 
 if (perf) attachPerfMeter(game, perf);
+if (invite) game.registry.set('pendingInvite', invite);
 
 // Debug / automation handle (headless drivers reach scenes through it). No gameplay effect.
 globalThis.__flappy = game;

@@ -666,6 +666,7 @@ export class Play extends Phaser.Scene {
       this.registry.set('playAgain', false);
       if (!this.match) this.launch({ solo: true });
     }
+    this.openPendingInvite(); // an invite link (plan 28, 2.4)
   }
 
   /**
@@ -1283,6 +1284,8 @@ export class Play extends Phaser.Scene {
 
   /** Called by the save panel after a name edit or a successful load (and by Clear). */
   setSaveState(state) {
+    // Another player's code loaded (a new id): the old player's invitation flag does not carry over (plan 28, 2.4).
+    if (this.save?.id && state?.id && state.id !== this.save.id) this.settings?.set?.({ eduInvited: false });
     this.save = state;
     this.refreshProfile();
     this.refreshDailyPrompt();
@@ -1375,6 +1378,7 @@ export class Play extends Phaser.Scene {
     this.eduStore.clear(); // and the education cards' progress (plan 21); the unlock is a setting and stays
     this.eduShare.clear(); // this device stops sending to the 📚 board; a row the old player shared stays there until they stop sharing
     this.consentStore.clear(); // and stops recording for the pilot: answers already sent stay on the server until the tester withdraws
+    this.settings?.set?.({ eduInvited: false }); // the invitation belonged to the player signed out (plan 28, 2.4)
     this.researchQueue.clear();
     this.refreshTestBadge();
     this.refreshEduDue();
@@ -4271,8 +4275,9 @@ export class Play extends Phaser.Scene {
   async joinResearch(invite, adult) {
     if (!this.save?.id) this.setSaveState(ensureId(this.save ?? {}));
     const id = this.save.id;
-    const res = await this.postResearchEnrol(id, invite, adult === true, EDUCATION.consentVersion);
+    const res = await this.postResearchEnrol(id, invite ?? null, adult === true, EDUCATION.consentVersion);
     if (res?.status === 'ok' && this.save?.id === id) {
+      this.settings?.set?.({ eduInvited: true }); // joining is an invitation to share too (plan 28, 2.4)
       this.consentStore.join({ version: EDUCATION.consentVersion, phase: res.phase, at: Date.now(), id, since: res.since });
       // Nothing recorded before this join is sent under it (RESEARCH.md: answers given before joining
       // are not sent): a queue left from an older notice's consent goes (plan 24, AUD-005).
@@ -4324,15 +4329,18 @@ export class Play extends Phaser.Scene {
   /**
    * Turn sharing on (the Education data panel): the player's name goes on the 📚 board
    * (share_education; `adult` is the panel's "I am 18 or older" box), and this device's record
-   * follows with the next syncs. Resolves to { status }: 'ok', 'noName' (save a username first),
-   * 'closed', 'notAdult', 'nameTaken', 'rejected' or 'offline'.
+   * follows with the next syncs. `invite`: the invite code, when the player has one (plan 28, 2.4).
+   * Resolves to { status }: 'ok', 'noName' (save a username first), 'closed', 'needsInvite',
+   * 'notAdult', 'nameTaken', 'rejected' or 'offline'.
    */
-  async startEduShare(adult) {
+  async startEduShare(adult, invite = null) {
     if (!this.save?.name) return { status: 'noName' };
     if (!this.save.id) this.save = ensureId(this.save);
     const { id, name } = this.save;
-    const res = await this.postEduShare(id, name, adult === true);
+    const res = await this.postEduShare(id, name, adult === true, invite);
+    if (res?.status === 'needsInvite') this.settings?.set?.({ eduInvited: false }); // the server does not know the invitation: ask for the code again
     if (res?.status === 'ok' && this.save?.id === id) {
+      this.settings?.set?.({ eduInvited: true }); // the server knows the player as invited now (plan 28, 2.4)
       this.eduShare.turnOn(res.sharedAt, name);
       this.syncLeaderboard();
     }
@@ -4370,9 +4378,25 @@ export class Play extends Phaser.Scene {
     return fetchEducationBoard(id);
   }
 
-  /** share_education for the 📚 board; a method so the smoke can stub it (never the live board). */
-  postEduShare(id, name, adult) {
-    return shareEducation(id, name, adult);
+  /** share_education for the 📚 board, with the invite code when the player has one; a method so the smoke can stub it (never the live board). */
+  postEduShare(id, name, adult, invite = null) {
+    return shareEducation(id, name, adult, { invite });
+  }
+
+  /** Was this device's player invited to share (plan 28, 2.4)? A flag the panel reads; the code is never kept. */
+  eduInvited() {
+    return Boolean(this.settings?.load?.().eduInvited);
+  }
+
+  /**
+   * An invite link's code (main.js keeps it in the registry, out of the address bar): the first ready
+   * screen opens the 📚 Education data panel with it filled in, once; nowhere else keeps it.
+   */
+  openPendingInvite() {
+    const code = this.registry?.get('pendingInvite');
+    if (!code || this.match || !this.educationAvailable()) return; // kept until a ready screen can open it
+    this.registry.remove('pendingInvite');
+    this.time?.delayedCall?.(0, () => this.openEduData({ invite: code }));
   }
 
   /** rename_education; a method so the smoke can stub it. */

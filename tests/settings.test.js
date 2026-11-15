@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { createSettingsStore, vibrate } from '../src/logic.js';
 import { initialLocale } from '../src/i18n.js';
 
-const DEFAULTS = { sound: true, music: true, haptics: true, locale: 'en', howToSeenAt: '', hand: 'right', education: false, eduStartLevel: 1, eduNewOrder: 'after' };
+const DEFAULTS = { sound: true, music: true, haptics: true, locale: 'en', howToSeenAt: '', hand: 'right', education: false, eduInvited: false, eduStartLevel: 1, eduNewOrder: 'after' };
 
 function fakeStorage() {
   const m = new Map();
@@ -159,6 +159,8 @@ test('education mode (plan 21): the unlock and the 📚 switch are remembered bo
   assert.deepEqual(createSettingsStore(st, 'k').load(), { ...DEFAULTS, education: true }, 'read back after a reload');
   assert.deepEqual(s.set({ education: 1 }), DEFAULTS, 'a non-boolean reads as off, as for sound and music');
   assert.equal('eduUnlocked' in s.set({ eduUnlocked: true }), false, 'the old unlock setting is gone (plan 28, 2.3): a stored one is dropped');
+  assert.deepEqual([s.set({ eduInvited: true }).eduInvited, s.set({ eduInvited: 'yes' }).eduInvited], [true, false], 'eduInvited (plan 28, 2.4) is a remembered boolean; a non-boolean reads as off, as for 📚');
+  s.set({ eduInvited: false });
   // A tester who locked education again kept education: true behind the lock: it reads as off, once.
   st.setItem('k', JSON.stringify({ eduUnlocked: false, education: true }));
   assert.equal(createSettingsStore(st, 'k').load().education, false, 'a locked device\'s stale 📚 reads as off');

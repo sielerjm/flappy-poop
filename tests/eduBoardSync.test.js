@@ -5,7 +5,7 @@
 import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { playScene, fakeStorage, registry } from './support/scenes.js';
-import { freshDb, installPostgrest, asAnon, id } from './support/postgrest.js';
+import { INVITE, freshDb, installPostgrest, asAnon, id } from './support/postgrest.js';
 import { LEADERBOARD } from '../src/config.js';
 import { createEduShareStore } from '../src/leaderboard.js';
 import { createEduStore } from '../src/education.js';
@@ -32,13 +32,13 @@ const row = (db, pid) => db.query('select runs, grade_sum::int as grade_sum, las
 const boardOf = (db) => asAnon(db, 'select name, runs, grade::int as grade, rank from public.education_board(null, 25)').then((r) => r.rows);
 
 test("two devices of one sharing player: a lost reply on A, B's batch, then A's resend counts once (AUD-003)", async () => {
-  const db = await freshDb();
+  const db = await freshDb({ invite: INVITE });
   const net = installPostgrest(db);
   try {
     const P = id('Twin');
     const a = device(P, 'Twin');
     const b = device(P, 'Twin');
-    assert.deepEqual(await a.startEduShare(true), { status: 'ok' });
+    assert.deepEqual(await a.startEduShare(true, INVITE), { status: 'ok' });
     b.noteEduShared(true);
     for (let i = 0; i < 5; i += 1) gradedRun(a, 5); // A: 5 × 100 %
     for (let i = 0; i < 3; i += 1) gradedRun(b, 2); // B: 3 × 40 %
@@ -69,7 +69,7 @@ test("two devices of one sharing player: a lost reply on A, B's batch, then A's 
 });
 
 test("a resend never moves another player's rank (AUD-003)", async () => {
-  const db = await freshDb();
+  const db = await freshDb({ invite: INVITE });
   const net = installPostgrest(db);
   try {
     const P = id('Twin');
@@ -77,8 +77,8 @@ test("a resend never moves another player's rank (AUD-003)", async () => {
     const a = device(P, 'Twin');
     const b = device(P, 'Twin');
     const o = device(Q, 'Other');
-    await a.startEduShare(true);
-    await o.startEduShare(true);
+    await a.startEduShare(true, INVITE);
+    await o.startEduShare(true, INVITE);
     b.noteEduShared(true);
     for (let i = 0; i < 5; i += 1) gradedRun(a, 5);
     for (let i = 0; i < 3; i += 1) gradedRun(b, 2);
@@ -100,12 +100,12 @@ test("a resend never moves another player's rank (AUD-003)", async () => {
 });
 
 test('a device with nothing new learns of a new round started on another device (Stop, then Share) and sends its whole record into it (AUD-009)', async () => {
-  const db = await freshDb();
+  const db = await freshDb({ invite: INVITE });
   const net = installPostgrest(db);
   try {
     const P = id('Roundy');
     const a = device(P, 'Roundy');
-    assert.deepEqual(await a.startEduShare(true), { status: 'ok' });
+    assert.deepEqual(await a.startEduShare(true, INVITE), { status: 'ok' });
     for (let i = 0; i < 6; i += 1) gradedRun(a, 5);
     await a.drainEduShare(P);
     assert.equal((await row(db, P)).runs, 6);
@@ -113,7 +113,7 @@ test('a device with nothing new learns of a new round started on another device 
     const b = device(P, 'Roundy');
     assert.equal(await b.stopEduShare(), true);
     await db.query('update public.player_meta set edu_named_at = null'); // share waits 5 s per player (plan 25, A4)
-    assert.deepEqual(await b.startEduShare(true), { status: 'ok' });
+    assert.deepEqual(await b.startEduShare(true, INVITE), { status: 'ok' });
     assert.equal((await row(db, P)).runs, 0, 'the new round starts empty');
     // A, a new page load with nothing new: one probe, the restart, then its whole record.
     const a2 = device(P, 'Roundy');
@@ -131,14 +131,14 @@ test('a device with nothing new learns of a new round started on another device 
 });
 
 test('after a merge of two sharers (a new, empty round), each device sends its record again with no new run (AUD-009)', async () => {
-  const db = await freshDb();
+  const db = await freshDb({ invite: INVITE });
   const net = installPostgrest(db);
   try {
     const [K, M] = [id('Keeper'), id('Merged')];
     const k = device(K, 'Keeper');
     const m = device(M, 'Merged');
-    await k.startEduShare(true);
-    await m.startEduShare(true);
+    await k.startEduShare(true, INVITE);
+    await m.startEduShare(true, INVITE);
     for (let i = 0; i < 3; i += 1) gradedRun(k, 5);
     for (let i = 0; i < 5; i += 1) gradedRun(m, 4);
     await k.drainEduShare(K);
@@ -159,13 +159,13 @@ test('after a merge of two sharers (a new, empty round), each device sends its r
 });
 
 test("a badge earned on a device whose clock is wrong no longer drops the batch's runs (AUD-010)", async () => {
-  const db = await freshDb();
+  const db = await freshDb({ invite: INVITE });
   const net = installPostgrest(db);
   try {
     for (const [tag, day] of [['Fast', '2099-03-01'], ['Reset', '1970-01-01']]) {
       const P = id(tag);
       const a = device(P, tag);
-      await a.startEduShare(true);
+      await a.startEduShare(true, INVITE);
       for (let i = 0; i < 11; i += 1) gradedRun(a, 5);
       a.eduStore.unlock(['edu_grade_a'], day);
       await a.drainEduShare(P);
@@ -177,12 +177,12 @@ test("a badge earned on a device whose clock is wrong no longer drops the batch'
 });
 
 test('turned off here while its runs stay in the round, then told it shares: nothing is counted twice (AUD-011)', async () => {
-  const db = await freshDb();
+  const db = await freshDb({ invite: INVITE });
   const net = installPostgrest(db);
   try {
     const P = id('Offon');
     const a = device(P, 'Offon');
-    await a.startEduShare(true);
+    await a.startEduShare(true, INVITE);
     for (let i = 0; i < 5; i += 1) gradedRun(a, 5);
     await a.drainEduShare(P);
     assert.equal((await row(db, P)).runs, 5);
@@ -203,12 +203,12 @@ test('turned off here while its runs stay in the round, then told it shares: not
 });
 
 test('two syncs at once, both told to restart: the record goes once (AUD-011)', async () => {
-  const db = await freshDb();
+  const db = await freshDb({ invite: INVITE });
   const net = installPostgrest(db);
   try {
     const P = id('Twosync');
     const owner = device(P, 'Twosync');
-    await owner.startEduShare(true); // the row, from another device
+    await owner.startEduShare(true, INVITE); // the row, from another device
     const a = device(P, 'Twosync');
     a.noteEduShared(true); // this device: on, no round yet
     for (let i = 0; i < 5; i += 1) gradedRun(a, 5);

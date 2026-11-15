@@ -1040,3 +1040,33 @@ test("the 📚 popup's facts (eduIntroInfo): the counts over every deck, cards s
   s.setEduNewOrder('before');
   assert.equal(settings.load().eduNewOrder, 'before');
 });
+
+test("the device's invitation flag (plan 28, 2.4): a share that is ok sets it, one that 'needs invite' clears it, another player's code clears it; an invite link waits for a ready screen that can open the panel", async () => {
+  const s = half();
+  s.save = { id: 'FLAGAAAAAAAAAAAAAAAAAA', name: 'Flag' };
+  s.eduShare = { turnOn() {}, load: () => ({ on: false }) };
+  s.syncLeaderboard = () => {};
+  s.refreshProfile = s.refreshDailyPrompt = () => {};
+  s.scene = { get: () => null };
+  s.postEduShare = async () => ({ status: 'ok', sharedAt: '2026-11-15T10:00:00.000+00:00' });
+  await s.startEduShare(true, 'a-code');
+  assert.equal(s.eduInvited(), true, 'ok: invited');
+  s.postEduShare = async () => ({ status: 'needsInvite' });
+  assert.deepEqual(await s.startEduShare(true), { status: 'needsInvite' });
+  assert.equal(s.eduInvited(), false, "'needs invite': the flag goes, so the panel asks for the code");
+  s.settings.set({ eduInvited: true });
+  s.setSaveState({ id: 'OTHERAAAAAAAAAAAAAAAAA', name: 'Other' });
+  assert.equal(s.eduInvited(), false, "another player's code: the flag does not carry over");
+  // The link's code waits in the registry while the panel cannot open.
+  const opened = [];
+  s.registry.set('pendingInvite', 'link-code');
+  s.openEduData = (o) => opened.push(o.invite);
+  s.time = { delayedCall: (ms, fn) => fn() };
+  s.eduAvailable = false;
+  s.openPendingInvite();
+  assert.deepEqual([opened, s.registry.get('pendingInvite')], [[], 'link-code'], 'education switched off: kept');
+  delete s.eduAvailable;
+  s.openPendingInvite();
+  assert.deepEqual([opened, s.registry.get('pendingInvite') ?? null], [['link-code'], null], 'then opened once, and gone');
+});
+

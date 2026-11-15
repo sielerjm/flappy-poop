@@ -1087,17 +1087,23 @@ export function createEduShareStore(storage = browserStorage(), key = LEADERBOAR
 /**
  * Put the player on the 📚 board under `name` (share_education); `adult` is the panel's "I am 18 or
  * older" box. { status: 'ok', sharedAt } when the server has them (now, or already), else
- * { status }: 'closed' (sharing is not open yet), 'notAdult', 'nameTaken', 'rejected' ('bad …'), or
- * 'offline' (unreachable, or not deployed).
+ * { status }: 'closed' (sharing is not open yet), 'needsInvite' (no invitation, plan 28), 'notAdult',
+ * 'nameTaken', 'rejected' ('bad …'), or 'offline' (unreachable, or not deployed). opts.invite: the invite code.
  */
-export async function shareEducation(playerId, name, adult, opts = {}) {
+export async function shareEducation(playerId, name, adult, { invite = null, ...opts } = {}) {
   if (typeof playerId !== 'string' || !ID_RE.test(playerId) || typeof name !== 'string' || !validateName(name).ok) return { status: 'rejected' };
   if (adult !== true) return { status: 'notAdult' };
-  const out = await request('/rpc/share_education', { method: 'POST', errors: true, body: { p_player_id: playerId, p_name: name, p_adult: true } }, opts);
+  // Sharing is by invitation (plan 28, 2.4): the code goes along when the player has one; an invited
+  // player's later shares need none.
+  const code = typeof invite === 'string' ? invite.trim() : '';
+  if (code.length > 200) return { status: 'needsInvite' }; // no code that long exists (admin_set_invite)
+  const body = { p_player_id: playerId, p_name: name, p_adult: true, ...(code ? { p_invite: code } : {}) };
+  const out = await request('/rpc/share_education', { method: 'POST', errors: true, body }, opts);
   if (out === null || out === undefined) return { status: 'offline' };
   if (out.error) {
     if (out.status !== 400) return { status: 'offline' };
     if (/closed/i.test(out.message)) return { status: 'closed' };
+    if (/needs invite/i.test(out.message)) return { status: 'needsInvite' };
     if (/not adult/i.test(out.message)) return { status: 'notAdult' };
     if (/name taken/i.test(out.message)) return { status: 'nameTaken' };
     return /bad (name|player id)/i.test(out.message) ? { status: 'rejected' } : { status: 'offline' };
@@ -1191,8 +1197,10 @@ export async function fetchEducationBoard(playerId = null, opts = {}) {
 export async function enrolResearch(playerId, invite, adult, consent, opts = {}) {
   if (typeof playerId !== 'string' || !ID_RE.test(playerId) || typeof consent !== 'string' || !consent) return { status: 'rejected' };
   if (adult !== true) return { status: 'notAdult' };
-  if (typeof invite !== 'string' || !invite.trim() || invite.length > 200) return { status: 'badInvite' };
-  const out = await request('/rpc/enrol_research', { method: 'POST', errors: true, body: { p_player_id: playerId, p_invite: invite.trim(), p_adult: true, p_consent_version: consent } }, opts);
+  // No code is sent as null (plan 28, 2.4): an invited player joins without one; the server judges.
+  const code = typeof invite === 'string' ? invite.trim() : '';
+  if (code.length > 200) return { status: 'badInvite' };
+  const out = await request('/rpc/enrol_research', { method: 'POST', errors: true, body: { p_player_id: playerId, p_invite: code || null, p_adult: true, p_consent_version: consent } }, opts);
   if (out === null || out === undefined) return { status: 'offline' };
   if (out.error) {
     if (out.status !== 400) return { status: 'offline' };

@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { perfMode, createFrameStats, perfLines, PERF_TAGS } from '../src/logic.js';
+import { perfMode, createFrameStats, perfLines, PERF_TAGS, inviteFromSearch, withoutInvite } from '../src/logic.js';
 import { TUNING as T } from '../src/config.js';
 
 test('perfMode: ?perf is the meter, ?perf=var adds the variable step, anything else is off', () => {
@@ -59,3 +59,15 @@ test('the meter knobs are sane', () => {
   assert.ok(T.perf.longFactor > 1);
   assert.ok(T.perf.refreshMs >= 250, 'redrawing faster would perturb what it measures');
 });
+
+test('the invite link (plan 28, 2.4): inviteFromSearch reads ?invite= (trimmed, at most 200 characters); withoutInvite takes it out of the address and keeps the rest', () => {
+  assert.equal(inviteFromSearch('?invite=the-invite-code-2026'), 'the-invite-code-2026');
+  assert.equal(inviteFromSearch('?perf&invite=%20code%20with%20spaces%20'), 'code with spaces');
+  assert.equal(inviteFromSearch('?invite=a+b%2Bc'), 'a+b+c', 'a "+" in a code stays a "+"');
+  assert.equal(withoutInvite(`https://x.example/?invite=${'x'.repeat(201)}&r=1`), 'https://x.example/?r=1', 'a code too long to use still leaves the address');
+  for (const bad of ['', '?invite=', '?invite=%20', '?other=1', `?invite=${'x'.repeat(201)}`, null, undefined]) assert.equal(inviteFromSearch(bad), null, String(bad).slice(0, 30));
+  assert.equal(withoutInvite('https://x.example/flappy-poop/?invite=abc'), 'https://x.example/flappy-poop/');
+  assert.equal(withoutInvite('https://x.example/flappy-poop/?perf&invite=abc&r=5#top'), 'https://x.example/flappy-poop/?perf=&r=5#top');
+  assert.equal(withoutInvite('https://x.example/flappy-poop/?r=5'), 'https://x.example/flappy-poop/?r=5', 'nothing to take: unchanged');
+});
+
