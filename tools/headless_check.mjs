@@ -5678,6 +5678,13 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await typeCode('wrong-code-entirely-2026');
         const j2 = await pilot();
         ok(j0.state === pw.eduPilotOff && j0.joinHidden === true && j1.joinHidden === true && j0.leaveHidden === true && j2.joinHidden === false && !j2.joinDisabled && j0.link.endsWith('/RESEARCH.md'), `🔬 Tester data: "${j0.state}" and a link to the notice; not invited, Join shows once a code is typed (plan 28, 2.4), and goes with the 18+ box`);
+        // Enter in the shared field, as a real key press: it joins nothing; only Join enrols (AUD-036).
+        const enrolsBefore = await evaluate(`__edu.enrols.length`);
+        await evaluate(`(${el('edu-invite-code')}.focus(), ${el('edu-invite-code')}.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true })), true)`);
+        await sleep(300);
+        const jEnter = await pilot();
+        const enrolsAfter = await evaluate(`__edu.enrols.length`);
+        ok(enrolsAfter === enrolsBefore && !jEnter.joined && jEnter.consent === null && jEnter.code === 'wrong-code-entirely-2026', `Enter in the invite field joins nothing (AUD-036): ${enrolsAfter - enrolsBefore} join requests, the code still in the field`);
         // A wrong code, a closed pilot: each says so, and nothing is joined or stored.
         const tryJoin = async (answer) => {
           await evaluate(`(globalThis.__eduAnswer.enrol = ${JSON.stringify(answer)}, ${el('edu-pilot-join')}.click(), true)`);

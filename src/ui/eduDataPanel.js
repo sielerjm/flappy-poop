@@ -131,8 +131,12 @@ function build() {
   adult.addEventListener('change', () => refresh());
   shareBtn.addEventListener('click', () => onShare());
   code.addEventListener('input', () => refresh());
+  // The field serves Share and Join alike (plan 28, 2.4), so Enter (Go on a phone keyboard) presses
+  // neither: it only puts the keyboard away. Only a press of Join enrols in the pilot (AUD-036).
   code.addEventListener('keydown', (e) => {
-    if (e.key === 'Enter') onJoin();
+    if (e.key !== 'Enter') return;
+    e.preventDefault?.();
+    code.blur?.();
   });
   joinBtn.addEventListener('click', () => onJoin());
   leaveBtn.addEventListener('click', () => onLeave());

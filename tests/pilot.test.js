@@ -280,6 +280,31 @@ test('the Education data panel offers Withdraw whenever this device holds a cons
   assert.deepEqual(pilotSection(play), { state: t('en', 'eduPilotStale'), withdraw: true, join: true }, 'an older notice: join again, or withdraw');
 });
 
+test('Enter in the shared invite field neither joins the pilot nor shares: only a press of Join enrols (AUD-036)', async () => {
+  // One "Invite code" field serves Share and Join since plan 28, 2.4; its Enter used to run Join.
+  const play = device({ id: 'ENTERAAAAAAAAAAAAAAAAA', name: 'Tester', top: [], exportedAt: null }, fakeStorage());
+  play.eduShare = { load: () => ({ on: false }) };
+  const calls = [];
+  play.joinResearch = async (code, adult) => (calls.push(['join', code, adult]), { status: 'ok' });
+  play.startEduShare = async (adult, code) => (calls.push(['share', adult, code]), { status: 'ok' });
+  const enter = async ({ invite = '', invited = false } = {}) => {
+    play.eduInvited = () => invited;
+    openEduDataPanel({ game: null, play, locale: 'en', invite });
+    body.find('edu-adult').checked = true;
+    await body.find('edu-adult').fire('change');
+    await body.find('edu-invite-code').fire('keydown', { key: 'Enter' });
+    await new Promise((r) => setTimeout(r, 5));
+    closeEduDataPanel();
+  };
+  await enter({ invite: 'a-code-from-a-link-2026' });
+  assert.deepEqual(calls, [], 'not invited, a code in the field');
+  await enter({ invited: true });
+  assert.deepEqual(calls, [], 'invited, the field empty');
+  play.consentStore.join({ version: EDUCATION.consentVersion, phase: 'pilot', at: Date.now() });
+  await enter({ invited: true, invite: 'a-code-from-a-link-2026' });
+  assert.deepEqual(calls, [], 'already joined (Join hidden): no second join, which would empty the unsent answers');
+});
+
 test("Clear's warning names the pilot whenever this device holds a consent, an older notice's included (AUD-005)", async () => {
   globalThis.localStorage = fakeStorage();
   const play = device({ id: 'CLEARAAAAAAAAAAAAAAAAA', name: 'Tester', top: [], exportedAt: null }, fakeStorage());
