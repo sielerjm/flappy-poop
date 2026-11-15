@@ -4,6 +4,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import * as schemaCheck from '../tools/schema_check.mjs';
 import { stampOf, computeStamp, restamp, fetchLiveStamp, classifySchema, liveSchemaState, describeSchema, pushDecision, expectedComparison, SCHEMA_PATH, FIXTURE_PATH } from '../tools/schema_check.mjs';
 
 const SQL = readFileSync(SCHEMA_PATH, 'utf8');
@@ -102,4 +103,30 @@ test('the comparison query, run on a database holding the fixture, gives the val
   const detail = await expectedComparison({ sql: FIXTURE, detail: true });
   assert.equal(detail.rows.length, fixture.rows[0].objects, 'one row per object');
   assert.ok(detail.rows.some((r) => r.object === 'table scores') && detail.rows.some((r) => r.object.startsWith('function submit_score(')));
+});
+
+// Plan 28, 3.0: the push tests the tree it commits. Before, npm test ran on the old fixture and the
+// fixture was copied after, so a test could pass in push.mjs and fail on the pushed main (fab645d).
+test('pushSteps: the fixture is copied before npm test; a dry run puts it back; no fixture step without a copy', () => {
+  const { pushSteps } = schemaCheck;
+  assert.equal(typeof pushSteps, 'function', 'tools/schema_check.mjs exports pushSteps');
+  assert.deepEqual(pushSteps({ copyFixture: true, dry: false }), ['stamp', 'fixture', 'test', 'commit', 'push']);
+  assert.deepEqual(pushSteps({ copyFixture: false, dry: false }), ['stamp', 'test', 'commit', 'push']);
+  assert.deepEqual(pushSteps({ copyFixture: true, dry: true }), ['stamp', 'fixture', 'test', 'restoreFixture']);
+  assert.deepEqual(pushSteps({ copyFixture: false, dry: true }), ['stamp', 'test']);
+});
+
+test('push.mjs runs its steps in pushSteps order, npm test once, and puts the stamp and the fixture back when the tests fail', () => {
+  const src = readFileSync(new URL('../tools/push.mjs', import.meta.url), 'utf8');
+  assert.match(src, /pushSteps\(\{ copyFixture, dry \}\)/, 'the order comes from pushSteps');
+  assert.equal(src.split("execSync('npm test'").length - 1, 1, 'npm test is run in one place');
+  const fixtureAt = src.indexOf('writeFileSync(FIXTURE_PATH, readFileSync(SCHEMA_PATH))');
+  const testAt = src.indexOf("execSync('npm test'");
+  assert.ok(fixtureAt > 0 && testAt > fixtureAt, 'the fixture is written before the tests run');
+  // A failed test run restores what the push changed: the stamp (src/logic.js) and the fixture.
+  const failBlock = src.slice(testAt, src.indexOf('process.exit(1)', testAt));
+  assert.match(failBlock, /catch/);
+  assert.match(failBlock, /restore\(\)/);
+  assert.match(src, /function restore\(\) \{\s*writeFileSync\(file, src\);\s*restoreFixture\(\);/);
+  assert.match(src, /function restoreFixture\(\) \{[\s\S]*?writeFileSync\(FIXTURE_PATH, fixtureBefore\)[\s\S]*?rmSync\(FIXTURE_PATH/);
 });

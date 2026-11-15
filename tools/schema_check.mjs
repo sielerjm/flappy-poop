@@ -131,6 +131,18 @@ export function pushDecision(s) {
   return { ok: true, copyFixture, message: `push.mjs: ${describeSchema(s)}${copyFixture ? ' tests/fixtures/schema-applied.sql becomes this file.' : ''}` };
 }
 
+/**
+ * The order npm run push works in (plan 28, 3.0): stamp LAST_UPDATED; copy db/schema.sql over the
+ * fixture (when pushDecision says so); run npm test on that tree, the tree it commits; then commit
+ * and push. A dry run stops after the tests and puts the fixture back (the stamp stays, as before).
+ * The tests once ran before the copy, so a test could pass in the push and fail on the pushed main.
+ */
+export function pushSteps({ copyFixture = false, dry = false } = {}) {
+  const fixture = copyFixture ? ['fixture'] : [];
+  if (dry) return ['stamp', ...fixture, 'test', ...(copyFixture ? ['restoreFixture'] : [])];
+  return ['stamp', ...fixture, 'test', 'commit', 'push'];
+}
+
 const sqlList = (items) => `array[${items.map((s) => `'${s.replace(/'/g, "''")}'`).join(', ')}]::text[]`;
 
 /**

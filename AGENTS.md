@@ -2274,8 +2274,9 @@ tests/                      node --test (schema.test.js, pilot.test.js, eduBoard
                             the one read-only live call (an injected fetch), each
                             state it reports (current, fixture, other, none,
                             unreachable), push going ahead only on current and then
-                            copying the fixture, and the pasted comparison query run
-                            in PGlite over the fixture
+                            copying the fixture, the push's order (pushSteps: the
+                            fixture before npm test, and push.mjs following it), and
+                            the pasted comparison query run in PGlite over the fixture
   fsrs.test.js              src/fsrs.js against py-fsrs's test_review_card and
                             test_memo_state (on a harness with py-fsrs's learning
                             steps), the default weights, and properties over random
@@ -2385,7 +2386,8 @@ tests/                      node --test (schema.test.js, pilot.test.js, eduBoard
   fixtures/schema-applied.sql  db/schema.sql as last applied to the live database
                             (main's b497a0c until the next apply); the upgrade test
                             starts from it. Never edited by hand: npm run push copies
-                            db/schema.sql over it once the live stamp matches
+                            db/schema.sql over it once the live stamp matches, before
+                            it runs the tests
   research.test.js          src/research.js: answerEvent's fields (exactly the
                             server's list in db/schema.sql), cleanEvent, the consent
                             store, the queue; RESEARCH.md names every field and the
@@ -2457,11 +2459,15 @@ tools/
                             (tools/schema_check.mjs, one read-only call) and stops
                             unless it is this db/schema.sql's stamp; stamps
                             LAST_UPDATED in src/logic.js with the current local time,
-                            runs npm test, then copies db/schema.sql over
-                            tests/fixtures/schema-applied.sql when they differ, commits
-                            both, pushes main. Refuses a dirty tree or a non-main
-                            branch; --dry skips commit + push; --no-schema-check skips
-                            the live check and leaves the fixture.
+                            copies db/schema.sql over tests/fixtures/schema-applied.sql
+                            when they differ, then runs npm test on that tree, the one
+                            it commits (plan 28, 3.0: the order is pushSteps in
+                            schema_check.mjs); a failed test run puts the stamp and the
+                            fixture back and exits. Then it commits both and pushes
+                            main. Refuses a dirty tree or a non-main branch; --dry
+                            skips commit + push and puts the fixture back;
+                            --no-schema-check skips the live check and leaves the
+                            fixture.
   schema_check.mjs          npm run schema:check: which db/schema.sql the live database
                             last ran (its schema_version(), one read-only call): this
                             file, the fixture's (this file has changes to apply),
@@ -2730,8 +2736,8 @@ Claude outputs/             Michael's private hand-over notes (gitignored; never
 ```bash
 npm test          # every unit + audit test (~30 s); must pass before committing
 node --test tests/items.test.js   # one file while iterating
-npm run push      # check the live schema is db/schema.sql, stamp LAST_UPDATED = now, run
-                  # tests, copy the schema to the test fixture, commit, push main
+npm run push      # check the live schema is db/schema.sql, stamp LAST_UPDATED = now, copy
+                  # the schema to the test fixture, run tests, commit, push main
                   # (always push this way so the About overlay's "Updated" is the push time)
 npm run schema:stamp   # after editing db/schema.sql (a test fails on a stale stamp)
 npm run schema:check   # which db/schema.sql the live database has (one read-only call);
