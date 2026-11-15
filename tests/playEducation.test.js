@@ -1041,6 +1041,25 @@ test("the 📚 popup's facts (eduIntroInfo): the counts over every deck, cards s
   assert.equal(settings.load().eduNewOrder, 'before');
 });
 
+test("the device's invitation flag survives a Load that merges this device's player into the loaded one, as the server's does (AUD-039)", () => {
+  const s = half();
+  s.save = { id: 'KEEPAAAAAAAAAAAAAAAAAA', name: 'Phone' };
+  s.mergeStore = { add: () => true };
+  s.syncLeaderboard = () => {};
+  s.refreshProfile = s.refreshDailyPrompt = () => {};
+  s.scene = { get: () => null };
+  s.settings.set({ eduInvited: true });
+  // The save panel's Load: the pasted code's id takes over, then the two ids are merged (fold_player keeps either's invitation).
+  s.setSaveState({ id: 'LOADAAAAAAAAAAAAAAAAAA', name: 'Laptop' });
+  assert.equal(s.queueMerge('LOADAAAAAAAAAAAAAAAAAA', 'KEEPAAAAAAAAAAAAAAAAAA'), true);
+  assert.equal(s.eduInvited(), true, 'merged into the loaded player: still invited, as the server keeps it');
+  // A Load that merges nothing (this device had no player of its own) leaves the loaded player's flag unknown.
+  s.setSaveState({ id: 'OTHERAAAAAAAAAAAAAAAAA', name: 'Other' });
+  assert.equal(s.eduInvited(), false, 'another player, no merge: not known as invited');
+  assert.equal(s.queueMerge('OTHERAAAAAAAAAAAAAAAAA', 'SOMEONEELSEAAAAAAAAAAA'), true);
+  assert.equal(s.eduInvited(), false, 'a merge of some other id brings no invitation from this device');
+});
+
 test("the device's invitation flag (plan 28, 2.4): a share that is ok sets it, one that 'needs invite' clears it, another player's code clears it; an invite link waits for a ready screen that can open the panel", async () => {
   const s = half();
   s.save = { id: 'FLAGAAAAAAAAAAAAAAAAAA', name: 'Flag' };

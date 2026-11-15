@@ -1284,8 +1284,12 @@ export class Play extends Phaser.Scene {
 
   /** Called by the save panel after a name edit or a successful load (and by Clear). */
   setSaveState(state) {
-    // Another player's code loaded (a new id): the old player's invitation flag does not carry over (plan 28, 2.4).
-    if (this.save?.id && state?.id && state.id !== this.save.id) this.settings?.set?.({ eduInvited: false });
+    // Another player's code loaded (a new id): the old player's invitation flag does not carry over (plan 28, 2.4),
+    // unless the Load then merges the old id into the new one (queueMerge), as the server's fold keeps it (AUD-039).
+    if (this.save?.id && state?.id && state.id !== this.save.id) {
+      this.eduInvitedFrom = this.eduInvited() ? this.save.id : null;
+      this.settings?.set?.({ eduInvited: false });
+    }
     this.save = state;
     this.refreshProfile();
     this.refreshDailyPrompt();
@@ -1547,6 +1551,9 @@ export class Play extends Phaser.Scene {
    */
   queueMerge(keepId, mergeId) {
     if (!this.mergeStore.add({ keep: keepId, merge: mergeId })) return false;
+    // The invited player merged into the one now on this device: invited still (fold_player keeps either's; AUD-039).
+    if (this.eduInvitedFrom && this.eduInvitedFrom === mergeId && this.save?.id === keepId) this.settings?.set?.({ eduInvited: true });
+    this.eduInvitedFrom = null;
     this.syncLeaderboard();
     return true;
   }
