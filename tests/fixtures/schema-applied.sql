@@ -12,7 +12,8 @@
 -- Access model. The game ships the project's publishable key, which runs every
 -- request as the `anon` role. anon can
 --   * SELECT name, score, toilet, level, updated_at  (never player_id: that is the
---     player's secret save-code id, and reading it would let anyone rename them)
+--     player's secret save-code id, and reading it would let anyone rename them; never
+--     a row the owner hid, admin_flag_player, plan 30)
 --   * call submit_score(...)   the only way to write; keeps the max score
 --   * call player_rank(...)    rank of one of a player's rows, looked up by their own id
 --   * call name_available(...) whether a username is free for this player's id
@@ -74,8 +75,12 @@
 -- an old client keeps working (same submit_score signature).
 --
 -- Maintenance (SQL editor):
---   remove a cheater or a ghost row:
---     delete from public.scores where name = 'somebody';
+--   hide a player from every board and from other players' lookups, by the name a board shows
+--   (plan 30; nothing is deleted, and the player's own device sees its rows as before):
+--     select public.admin_flag_player('somebody', 'why, for your own notes');
+--   show them again: select public.admin_unflag_player('somebody');
+--   who is hidden: select * from public.admin_flagged();
+--   remove a ghost row (a test name, say): delete from public.scores where name = 'somebody';
 --   raise the score cap: edit the CHECK below, the submit_score guard, and
 --   LEADERBOARD.maxScore in src/config.js to the same number, then paste this
 --   whole file again (the drop/add after the primary-key block updates a live
@@ -112,6 +117,12 @@
 --   delete every participant and answer of a phase (the pilot's, before the beta):
 --     select public.admin_purge_phase('pilot');
 --   undo the stamp: drop function public.schema_version();
+--   undo hiding (plan 30): drop function public.admin_flag_player(text, text),
+--     public.admin_unflag_player(text), public.admin_flagged(); then restore anon_read (using true),
+--     submit_score, submit_daily_score, player_rank, tournament_board, daily_board, education_board,
+--     player_stats, board_tags and fold_player from git and run this file; then
+--     drop function public.player_hidden(text); alter table public.scores drop column hidden;
+--     alter table public.player_meta drop column hidden_at, drop column hidden_note.
 --   undo the invitation (plan 28): drop function public.share_education(text, text, boolean, text);
 --     alter table public.player_meta drop column edu_invited; then restore share_education,
 --     enrol_research and fold_player from git and run this file.
@@ -167,12 +178,12 @@ create table if not exists public.scores (
   name       text not null check (name ~ '^[^[:cntrl:]]{1,16}$'),        -- NAME_MAX in src/save.js
   score      int  not null check (score between 0 and 1000),              -- LEADERBOARD.maxScore in src/config.js
   toilet     boolean not null default false,                              -- the run that set `score` was on the toilet
-  level      int not null default 1 check (level between 1 and 50),       -- level the run that set `score` ended in
+  level      int not null default 1 check (level between 1 and 7),        -- level the run that set `score` ended in (TUNING.levels.lastLevel)
   updated_at timestamptz not null default now()
 );
 
 -- Added 2026-11-04 (levels): safe on a table created before the column existed.
-alter table public.scores add column if not exists level int not null default 1 check (level between 1 and 50);
+alter table public.scores add column if not exists level int not null default 1 check (level between 1 and 7);
 
 -- Added 2026-11-04 (two rows per player): the key becomes (player_id, toilet).
 -- Changes only the key: no row is deleted or rewritten, and every existing row
@@ -197,6 +208,17 @@ $$;
 -- created under an older cap (e.g. 200) picks up the value in this file.
 alter table public.scores drop constraint if exists scores_score_check;
 alter table public.scores add constraint scores_score_check check (score between 0 and 1000);
+
+-- Level cap (TUNING.levels.lastLevel, 7 since 5 Nov; plan 30): re-applied the same way, so a table
+-- made under the old 1–50 check takes it. A row stored above the last level is lowered to it first.
+update public.scores set level = 7 where level > 7;
+alter table public.scores drop constraint if exists scores_level_check;
+alter table public.scores add constraint scores_level_check check (level between 1 and 7);
+
+-- Hidden rows (plan 30): admin_flag_player hides a player's rows instead of deleting them; anon_read
+-- leaves them out of the board, and anon has no grant on the column. submit_score keeps it in step
+-- with the player's state (player_meta.hidden_at).
+alter table public.scores add column if not exists hidden boolean not null default false;
 
 create index if not exists scores_board on public.scores (score desc, updated_at asc);
 
@@ -280,7 +302,7 @@ revoke execute on function public.name_blocked(text, text) from public, anon, au
 alter table public.scores enable row level security;
 
 drop policy if exists anon_read on public.scores;
-create policy anon_read on public.scores for select to anon using (true);
+create policy anon_read on public.scores for select to anon using (not hidden);
 
 grant usage on schema public to anon;
 revoke all on public.scores from anon, authenticated;
@@ -307,6 +329,7 @@ declare
   v_key text;
   v_top_before text;
   v_top_after text;
+  v_hidden boolean;
 begin
   if p_player_id is null or p_player_id !~ '^[A-Za-z0-9_-]{22}$' then
     raise exception 'bad player id';
@@ -317,7 +340,7 @@ begin
   if p_score is null or p_score < 0 or p_score > 1000 then
     raise exception 'bad score';
   end if;
-  if p_level is null or p_level < 1 or p_level > 50 then
+  if p_level is null or p_level < 1 or p_level > 7 then
     raise exception 'bad level';
   end if;
 
@@ -334,20 +357,23 @@ begin
     raise exception 'rate limited';
   end if;
   perform public.touch_player(v_id);
+  v_hidden := public.player_hidden(v_id);
 
-  -- 👑 Dethroned: the 🏆 #1 (score, then the earlier write) before and after this post.
+  -- 👑 Dethroned: the 🏆 #1 (score, then the earlier write) before and after this post, among the
+  -- rows the board shows (plan 30).
   perform pg_advisory_xact_lock(hashtext('board:scores'));
-  select s.player_id into v_top_before from public.scores s order by s.score desc, s.updated_at asc limit 1;
-  insert into public.scores (player_id, name, score, toilet, level, updated_at)
-  values (v_id, p_name, p_score, coalesce(p_toilet, false), p_level, now())
+  select s.player_id into v_top_before from public.scores s where not s.hidden order by s.score desc, s.updated_at asc limit 1;
+  insert into public.scores (player_id, name, score, toilet, level, updated_at, hidden)
+  values (v_id, p_name, p_score, coalesce(p_toilet, false), p_level, now(), v_hidden)
   on conflict (player_id, toilet) do update
     set name       = excluded.name,
         score      = greatest(public.scores.score, excluded.score),
         level      = case when excluded.score > public.scores.score then excluded.level else public.scores.level end,
-        updated_at = now();
+        updated_at = now(),
+        hidden     = excluded.hidden;
   -- The player's other row (the other toilet kind) follows the name too.
   update public.scores set name = p_name where player_id = v_id and name <> p_name;
-  select s.player_id into v_top_after from public.scores s order by s.score desc, s.updated_at asc limit 1;
+  select s.player_id into v_top_after from public.scores s where not s.hidden order by s.score desc, s.updated_at asc limit 1;
   if v_top_after = v_id and v_top_before is not null and v_top_before <> v_id then
     perform public.add_server_counter(v_id, 'dethroned', 1);
   end if;
@@ -567,6 +593,10 @@ alter table public.player_meta add column if not exists edu_named_at timestamptz
 -- with the invite code); an invited player shares and joins the pilot without it. Joining the pilot sets
 -- nothing here (AUD-040): the pilot keeps to its own tables.
 alter table public.player_meta add column if not exists edu_invited boolean not null default false;
+-- Hidden by the owner (plan 30, admin_flag_player): when, and the owner's note. Every board and every
+-- lookup by name leaves a hidden player out for everyone but the player.
+alter table public.player_meta add column if not exists hidden_at timestamptz;
+alter table public.player_meta add column if not exists hidden_note text check (hidden_note is null or length(hidden_note) <= 200);
 alter table public.player_meta enable row level security;
 revoke all on public.player_meta from public, anon, authenticated;
 
@@ -596,6 +626,18 @@ as $$
   on conflict (player_id) do nothing;
 $$;
 revoke execute on function public.touch_player(text) from public, anon, authenticated;
+
+-- Is this (resolved) player hidden by the owner (plan 30)? Internal.
+create or replace function public.player_hidden(v_id text)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select exists (select 1 from public.player_meta m where m.player_id = v_id and m.hidden_at is not null);
+$$;
+revoke execute on function public.player_hidden(text) from public, anon, authenticated;
 
 -- Added 2026-11-13 (education mode's 📚 board, plan 21 Stage 3b). Education mode keeps its
 -- answers, grades and badges on the device. A player may choose to show a little of it: their
@@ -857,15 +899,18 @@ begin
   on conflict (player_id, achievement_id) do update
     set earned_at = least(public.player_achievements.earned_at, excluded.earned_at);
   delete from public.player_achievements where player_id = v_merge;
-  insert into public.player_meta (player_id, joined_at, exact, dev, edu_named_at, edu_invited)
-  select v_keep, m.joined_at, m.exact, m.dev, m.edu_named_at, m.edu_invited from public.player_meta m where m.player_id = v_merge
+  insert into public.player_meta (player_id, joined_at, exact, dev, edu_named_at, edu_invited, hidden_at, hidden_note)
+  select v_keep, m.joined_at, m.exact, m.dev, m.edu_named_at, m.edu_invited, m.hidden_at, m.hidden_note from public.player_meta m where m.player_id = v_merge
   on conflict (player_id) do update
     set exact     = case when excluded.joined_at < public.player_meta.joined_at then excluded.exact else public.player_meta.exact end,
         joined_at = least(public.player_meta.joined_at, excluded.joined_at),
         dev       = public.player_meta.dev or excluded.dev,
         edu_named_at = greatest(public.player_meta.edu_named_at, excluded.edu_named_at),
-        edu_invited = public.player_meta.edu_invited or excluded.edu_invited;
+        edu_invited = public.player_meta.edu_invited or excluded.edu_invited,
+        hidden_at = least(public.player_meta.hidden_at, excluded.hidden_at), -- hidden when either was (plan 30)
+        hidden_note = coalesce(public.player_meta.hidden_note, excluded.hidden_note);
   delete from public.player_meta where player_id = v_merge;
+  update public.scores set hidden = public.player_hidden(v_keep) where player_id = v_keep;
   if exists (select 1 from public.education_public where player_id = v_keep) then
     if exists (select 1 from public.education_public where player_id = v_merge) then
       update public.education_public
@@ -973,8 +1018,9 @@ $$;
 revoke execute on function public.admin_merge_all_duplicates() from public, anon, authenticated;
 
 -- Standing of one of a player's rows (on or off the toilet) on the mixed board,
--- in the order the board uses (score desc, then earlier write first). Returns
--- null when the player has no row of that kind.
+-- in the order the board uses (score desc, then earlier write first), among the
+-- rows the board shows and the player's own rows (plan 30). Returns null when the
+-- player has no row of that kind.
 --   {"rank": 23, "total": 150, "score": 41, "toilet": true, "level": 3}
 drop function if exists public.player_rank(text);
 create or replace function public.player_rank(p_player_id text, p_toilet boolean default false)
@@ -986,8 +1032,9 @@ set search_path = public
 as $$
   select json_build_object(
     'rank',   1 + (select count(*) from public.scores o
-                   where o.score > s.score or (o.score = s.score and o.updated_at < s.updated_at)),
-    'total',  (select count(*) from public.scores),
+                   where (not o.hidden or o.player_id = s.player_id)
+                     and (o.score > s.score or (o.score = s.score and o.updated_at < s.updated_at))),
+    'total',  (select count(*) from public.scores o where not o.hidden or o.player_id = s.player_id),
     'score',  s.score,
     'toilet', s.toilet,
     'level',  s.level)
@@ -1310,6 +1357,7 @@ as $$
            st.best_score as pbest, st.gold as pgold, st.silver as psilver, st.bronze as pbronze, st.events as pevents,
            row_number() over (order by st.gold desc, st.silver desc, st.bronze desc, st.best_score desc, st.updated_at asc)::int as prank
     from public.tournament_stats st
+    where not public.player_hidden(st.player_id) or st.player_id = (select cid from caller) -- plan 30
   )
   select r.prank, r.pname, r.pbest, r.pgold, r.psilver, r.pbronze, r.pevents,
          coalesce(r.pid = (select cid from caller), false)
@@ -1367,7 +1415,7 @@ begin
 
   -- 👑 Dethroned: that day's #1 (score, then the earlier post) before and after this post.
   perform pg_advisory_xact_lock(hashtext('board:daily:' || p_day::text));
-  select ds.player_id into v_top_before from public.daily_scores ds where ds.day = p_day order by ds.score desc, ds.submitted_at asc limit 1;
+  select ds.player_id into v_top_before from public.daily_scores ds where ds.day = p_day and not public.player_hidden(ds.player_id) order by ds.score desc, ds.submitted_at asc limit 1;
   insert into public.daily_scores (player_id, day, name, score, level, pipes)
   values (v_id, p_day, p_name, p_score, p_level, p_pipes)
   on conflict (player_id, day) do nothing;
@@ -1376,7 +1424,7 @@ begin
     -- The player's earlier days follow the name posted now, as score rows do, so a rename frees the
     -- old name (name_blocked counts 🌞 names; plan 25).
     update public.daily_scores set name = p_name where player_id = v_id and name <> p_name;
-    select ds.player_id into v_top_after from public.daily_scores ds where ds.day = p_day order by ds.score desc, ds.submitted_at asc limit 1;
+    select ds.player_id into v_top_after from public.daily_scores ds where ds.day = p_day and not public.player_hidden(ds.player_id) order by ds.score desc, ds.submitted_at asc limit 1;
     if v_top_after = v_id and v_top_before is not null and v_top_before <> v_id then
       perform public.add_server_counter(v_id, 'dethroned', 1);
     end if;
@@ -1409,6 +1457,7 @@ as $$
            (count(*) over ())::int as ptotal
     from public.daily_scores ds
     where ds.day = (select d from today)
+      and (not public.player_hidden(ds.player_id) or ds.player_id = (select cid from caller)) -- plan 30
   )
   select r.prank, r.pname, r.pscore, r.plevel, r.ppipes,
          coalesce(r.pid = (select cid from caller), false), r.ptotal
@@ -1522,8 +1571,10 @@ stable
 security definer
 set search_path = public
 as $$
-  select coalesce(jsonb_agg(jsonb_build_object('name', x.n, 'tags', to_jsonb(public.player_tags(public.player_by_name(x.n))))), '[]'::jsonb)
-  from (select distinct n from unnest((coalesce(p_names, '{}'::text[]))[1:100]) n where n ~ '^[^[:cntrl:]]{1,16}$') x;
+  select coalesce(jsonb_agg(jsonb_build_object('name', x.n, 'tags',
+           to_jsonb(case when public.player_hidden(x.pid) then '{}'::text[] else public.player_tags(x.pid) end))), '[]'::jsonb)
+  from (select d.n, public.player_by_name(d.n) as pid
+        from (select distinct n from unnest((coalesce(p_names, '{}'::text[]))[1:100]) n where n ~ '^[^[:cntrl:]]{1,16}$') d) x;
 $$;
 
 -- Maintenance only (no role may call it): mark the player a board shows under
@@ -1548,6 +1599,78 @@ begin
 end;
 $$;
 revoke execute on function public.admin_set_dev(text, boolean) from public, anon, authenticated;
+
+-- Maintenance only (no role may call these; plan 30). admin_flag_player hides the player a board shows
+-- under p_name: their rows stay, every board and every lookup by name leaves them out for everyone
+-- else, and their own device sees what it saw before. p_note is the owner's own (200 characters at
+-- most). A merge keeps the player hidden. admin_unflag_player shows them again. Each returns 1, or 0
+-- when nobody has that name (unflag: or the player is not hidden). admin_flagged lists who is hidden.
+--   select public.admin_flag_player('somebody', 'a note');
+--   select public.admin_unflag_player('somebody');
+--   select * from public.admin_flagged();
+create or replace function public.admin_flag_player(p_name text, p_note text default null)
+returns int
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_id text;
+begin
+  v_id := public.player_by_name(p_name);
+  if v_id is null then
+    return 0;
+  end if;
+  insert into public.player_meta (player_id, joined_at, exact, hidden_at, hidden_note) values (v_id, now(), false, now(), left(p_note, 200))
+  on conflict (player_id) do update
+    set hidden_at = coalesce(public.player_meta.hidden_at, now()),
+        hidden_note = coalesce(left(p_note, 200), public.player_meta.hidden_note);
+  update public.scores set hidden = true where player_id = v_id;
+  return 1;
+end;
+$$;
+revoke execute on function public.admin_flag_player(text, text) from public, anon, authenticated;
+
+create or replace function public.admin_unflag_player(p_name text)
+returns int
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_id text;
+  v_rows int;
+begin
+  v_id := public.player_by_name(p_name);
+  if v_id is null then
+    return 0;
+  end if;
+  update public.player_meta set hidden_at = null, hidden_note = null where player_id = v_id and hidden_at is not null;
+  get diagnostics v_rows = row_count;
+  update public.scores set hidden = false where player_id = v_id;
+  return v_rows;
+end;
+$$;
+revoke execute on function public.admin_unflag_player(text) from public, anon, authenticated;
+
+create or replace function public.admin_flagged()
+returns table (name text, hidden_at timestamptz, note text)
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select coalesce(
+           (select s.name from public.scores s where s.player_id = m.player_id order by s.updated_at desc limit 1),
+           (select t.name from public.tournament_stats t where t.player_id = m.player_id),
+           (select d.name from public.daily_scores d where d.player_id = m.player_id order by d.submitted_at desc limit 1),
+           (select e.name from public.education_public e where e.player_id = m.player_id)),
+         m.hidden_at, m.hidden_note
+  from public.player_meta m
+  where m.hidden_at is not null
+  order by m.hidden_at;
+$$;
+revoke execute on function public.admin_flagged() from public, anon, authenticated;
 
 -- The 📚 education board (plan 21, Stage 3b). Sharing is the player's own choice, made in the
 -- game's Education data panel, for adults only.
@@ -1850,6 +1973,7 @@ as $$
            (count(*) over ())::int as ptotal
     from public.education_public e
     where e.runs >= 3
+      and (not public.player_hidden(e.player_id) or e.player_id = (select cid from caller)) -- plan 30
   )
   select r.prank, r.pname, r.pgrade, r.pruns,
          coalesce(r.pid = (select cid from caller), false), r.ptotal
@@ -2191,6 +2315,9 @@ begin
     v_id := public.resolve_player(p_player_id);
   elsif p_name ~ '^[^[:cntrl:]]{1,16}$' then
     v_id := public.player_by_name(p_name);
+    if public.player_hidden(v_id) then
+      v_id := null; -- hidden by the owner (plan 30): their own device asks by id
+    end if;
   end if;
   if v_id is null then
     return jsonb_build_object('found', false);
@@ -2212,7 +2339,8 @@ begin
   into v_daily
   from (
     select 1 + (select count(*) from public.daily_scores o
-                where o.day = d.day and (o.score > d.score or (o.score = d.score and o.submitted_at < d.submitted_at))) as rk
+                where o.day = d.day and (o.score > d.score or (o.score = d.score and o.submitted_at < d.submitted_at))
+                  and not public.player_hidden(o.player_id)) as rk
     from public.daily_scores d
     where d.player_id = v_id
   ) x;
@@ -2231,6 +2359,7 @@ begin
       where v_id in (m.player_a, m.player_b) and m.player_a <> m.player_b
       group by 1
     ) x
+    where not public.player_hidden(x.opp) -- a hidden player is nobody's rival (plan 30)
   ) y
   order by y.losses desc, y.meetings desc, y.oname asc nulls last
   limit 1;
@@ -2269,11 +2398,31 @@ begin
 end;
 $$;
 
+-- The ids of the game's badges: ACHIEVEMENTS in src/achievements.js, in its order
+-- (tests/achievements.test.js keeps the two the same; education badges are never claimed).
+-- A new badge adds its id here, and this file is applied before the client that awards it
+-- is pushed. Internal.
+create or replace function public.achievement_catalog()
+returns text[]
+language sql
+immutable
+as $$
+  select array[
+    'score_10', 'score_100', 'score_250', 'score_500', 'score_1000', 'level_2', 'level_3', 'level_4',
+    'level_5', 'level_6', 'level_7', 'win_game', 'toilet_win', 'games_1000', 'deaths_1000', 'fart_100',
+    'super_fart_25', 'fiber_1000', 'probiotic_1000', 'postbiotic_100', 'bacteria_1000', 'bean_100',
+    'mystery_100', 'coin_1000', 'sky_diver', 'close_shave', 'ibs', 'constipated', 'icarus',
+    'four_of_a_kind', 'lets_go_gambling'
+  ]::text[];
+$$;
+revoke execute on function public.achievement_catalog() from public, anon, authenticated;
+
 -- Claim achievements the game says this player earned (plan 08). Returns
 -- { stored: [...], closed: [...] }: stored = kept (or already held); closed = a
 -- time-boxed quest (achievement_defs) claimed outside its window plus two days'
--- grace, which the game then forgets. Any other well-formed id is an
--- always-available badge and is kept. 1–50 ids a call, 300 per player. Errors
+-- grace, which the game then forgets. Any other id in achievement_catalog() is an
+-- always-available badge and is kept. An id that is neither (plan 30) is left out
+-- of both lists and changes nothing. 1–50 ids a call, 300 per player. Errors
 -- raise ('bad ...': the client drops those claims).
 create or replace function public.claim_achievements(p_player_id text, p_ids text[])
 returns jsonb
@@ -2307,6 +2456,9 @@ begin
     if found and (v_today < d.starts or v_today > d.ends + 2) then
       v_closed := v_closed || x;
       continue;
+    end if;
+    if not found and not (x = any(public.achievement_catalog())) then
+      continue; -- not a badge the game has: neither stored nor closed (closed would delete it on the device)
     end if;
     insert into public.player_achievements (player_id, achievement_id) values (v_id, x)
     on conflict (player_id, achievement_id) do nothing;
@@ -2372,7 +2524,7 @@ returns text
 language sql
 immutable
 as $$
-  select 'c55c23b697a00323'::text; -- schema stamp
+  select '6a480b8088f03c74'::text; -- schema stamp
 $$;
 revoke execute on function public.schema_version() from public, authenticated;
 grant  execute on function public.schema_version() to anon;
