@@ -266,7 +266,7 @@ npm test       # Node 22 built-in test runner
 npm run smoke  # with npm start running: drive the real game in headless Chrome
 npm run smoke -- --list           # named smoke sections
 npm run smoke -- --only=wide,pad  # subset while iterating
-npm run push   # stamp About "Updated" time, test, commit the stamp, push main
+npm run push   # check the live schema is db/schema.sql, stamp About "Updated", copy the schema to the test fixture, test, commit, push main
 ```
 
 `npm start` prints `http://localhost:8000` for the laptop and `http://<LAN-IP>:8000` for a phone on the same Wi-Fi. Do not open localhost on the phone — that is the phone itself.

@@ -7,11 +7,12 @@
 // go out before the functions it calls. Then tests/fixtures/schema-applied.sql, the
 // schema the upgrade test starts from, becomes this file before the tests run, so they
 // test the tree that is committed (plan 28, 3.0), and goes in the same commit. If the
-// tests fail, the stamp and the fixture are put back and nothing is committed.
+// tests fail or the run is interrupted (Ctrl-C, a stop, a closed terminal), the stamp and
+// the fixture are put back and nothing is committed; a dry run puts them back too.
 // The order is pushSteps() in tools/schema_check.mjs.
 //
 // Usage: npm run push                       (refuses on a dirty tree or a non-main branch)
-//        npm run push -- --dry              (check + stamp + test only; no commit, no push)
+//        npm run push -- --dry              (check + stamp + test, then the tree put back; no commit, no push)
 //        npm run push -- --no-schema-check  (skip the live check; the fixture stays as it is)
 import { execSync } from 'node:child_process';
 import { readFileSync, writeFileSync, rmSync } from 'node:fs';
@@ -80,6 +81,7 @@ function restore() {
   restoreFixture();
 }
 
+const SIGNALS = ['SIGINT', 'SIGTERM', 'SIGHUP'];
 for (const step of pushSteps({ copyFixture, dry })) {
   if (step === 'stamp') {
     writeFileSync(file, next);
@@ -90,20 +92,30 @@ for (const step of pushSteps({ copyFixture, dry })) {
     writeFileSync(FIXTURE_PATH, readFileSync(SCHEMA_PATH));
     console.log('tests/fixtures/schema-applied.sql is db/schema.sql now');
   } else if (step === 'test') {
-    // Ctrl-C reaches npm test too: while it runs, this process outlives the signal so the catch
-    // below puts the stamp and the fixture back.
-    const holdSigint = () => {};
-    process.on('SIGINT', holdSigint);
+    // A signal while npm test runs (Ctrl-C reaches both; a stop button or `kill` may reach this
+    // process alone) is remembered, not obeyed at once: an interrupted run is a failed one, so the
+    // stamp and the fixture go back and nothing is committed or pushed (the Checkpoint 3 audit,
+    // AUD-050). The handler runs only once execSync returns and the event loop turns: hence the wait.
+    let interrupted = false;
+    const hold = () => {
+      interrupted = true;
+    };
+    for (const sig of SIGNALS) process.on(sig, hold);
+    let failed = false;
     try {
       execSync('npm test', { stdio: 'inherit' });
-      process.off('SIGINT', holdSigint);
     } catch {
-      restore();
-      console.error('push.mjs: the tests failed; the stamp and the fixture are put back, nothing committed or pushed');
-      process.exit(1);
+      failed = true;
     }
-  } else if (step === 'restoreFixture') {
-    restoreFixture();
+    await new Promise((r) => setTimeout(r, 50));
+    for (const sig of SIGNALS) process.off(sig, hold);
+    if (failed || interrupted) {
+      restore();
+      console.error(`push.mjs: ${interrupted ? 'interrupted' : 'the tests failed'}; the stamp and the fixture are put back, nothing committed or pushed`);
+      process.exit(interrupted ? 130 : 1);
+    }
+  } else if (step === 'restore') {
+    restore();
   } else if (step === 'commit') {
     if (copyFixture) sh('git add tests/fixtures/schema-applied.sql');
     sh('git add src/logic.js');
@@ -116,4 +128,4 @@ for (const step of pushSteps({ copyFixture, dry })) {
     console.log('pushed main');
   }
 }
-if (dry) console.log(`dry run: stamp written, tests passed${copyFixture ? ' (on the fixture the push would commit), fixture put back' : ''}, nothing committed or pushed`);
+if (dry) console.log(`dry run: tests passed on the stamped tree${copyFixture ? ' with the fixture the push would commit' : ''}; the tree is put back, nothing committed or pushed`);

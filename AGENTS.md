@@ -2361,8 +2361,15 @@ tests/                      node --test (schema.test.js, pilot.test.js, eduBoard
                             state it reports (current, fixture, other, none,
                             unreachable), push going ahead only on current and then
                             copying the fixture, the push's order (pushSteps: the
-                            fixture before npm test, and push.mjs following it), and
-                            the pasted comparison query run in PGlite over the fixture
+                            fixture before npm test), and the pasted comparison query
+                            run in PGlite over the fixture
+  push.test.js              tools/push.mjs run for real in a temp copy (stub git and
+                            npm on PATH, the live check against a local server, never
+                            Supabase): a push tests the committed tree then commits
+                            and pushes; failing tests, a first push with no fixture,
+                            an interrupt that reaches only the push, a dry run and
+                            --no-schema-check each leave the tree as they should
+                            (AUD-050)
   fsrs.test.js              src/fsrs.js against py-fsrs's test_review_card and
                             test_memo_state (on a harness with py-fsrs's learning
                             steps), the default weights, and properties over random
@@ -2560,12 +2567,15 @@ tools/
                             copies db/schema.sql over tests/fixtures/schema-applied.sql
                             when they differ, then runs npm test on that tree, the one
                             it commits (plan 28, 3.0: the order is pushSteps in
-                            schema_check.mjs); a failed test run puts the stamp and the
-                            fixture back and exits. Then it commits both and pushes
-                            main. Refuses a dirty tree or a non-main branch; --dry
-                            skips commit + push and puts the fixture back;
-                            --no-schema-check skips the live check and leaves the
-                            fixture.
+                            schema_check.mjs); a failed or interrupted test run (a
+                            signal while npm test runs is remembered, then the run
+                            fails: AUD-050) puts the stamp and the fixture back and
+                            exits. Then it commits both and pushes main. Refuses a
+                            dirty tree or a non-main branch; --dry skips commit +
+                            push and puts the stamp and the fixture back (the tree as
+                            it was); --no-schema-check skips the live check and leaves
+                            the fixture. tests/push.test.js runs it in a temp copy
+                            with stub git and npm and a local stamp server.
   schema_check.mjs          npm run schema:check: which db/schema.sql the live database
                             last ran (its schema_version(), one read-only call): this
                             file, the fixture's (this file has changes to apply),
