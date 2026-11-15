@@ -491,6 +491,7 @@ export const EDUCATION = {
   researchUrl: 'https://github.com/sielerjm/flappy-poop/blob/main/RESEARCH.md', // the notice, linked from the Education data panel
   researchBatch: 200, // answer events sent per batch at most (submit_research_events takes up to 200)
   researchQueueMax: 2000, // answer events kept on the device while they cannot be sent; the oldest go first when full
+  backupMaxBytes: 1_000_000, // the largest backup a restore reads, file or pasted text (plan 28, 3.1b; a backup of every card is about 20 kB)
 };
 
 // Share from the game-over panel (src/share.js): the image's file name, the share

@@ -79,6 +79,7 @@ export const SECTIONS = [
   { name: 'education-revive', needs: [], about: "📚 the revive after an education crash (plan 21): three misses end the run with the field and score untouched; wrong then right then Fly on revives without the power-ups at the penalty; a full streak gives coins and power-ups back; nothing lost skips the choice; Quit, warned on every card (plan 26, A2); Esc cannot close it; the field refills at the first right answer and Fly on goes straight on (plan 22)" },
   { name: 'education-over', needs: [], about: "📚 the end of an education run (plan 21): the game-over panel's 📚 tally and note, no Share; a won run's bonus button opening the rectum's questions over the panel (no coins, the card saved, Esc back to the panel); Clear wiping the cards' progress" },
   { name: 'education-share', needs: [], about: "📚 sharing by choice (plan 21, Stage 3b), the server stubbed: the user panel's 📚 Education data button only on an unlocked device, the Education data panel (the 18+ box, Share and Stop sharing, each refusal's message), the 📚 tab on the leaderboard (four tabs, the stubbed board, the footer's link and the player's own row), the profiles' 📚 sections (your own Shared row, another player's only when they share), Clear's warning while sharing; and the tester pilot: 🔬 Tester data (the invite code, Join, Withdraw), answers recorded only while joined and never in a test run, 🔬 in the HUD, the events sent and the queue emptied" },
+  { name: 'education-backup', needs: [], about: "💾 backup and restore of the 📚 cards (plan 28, 3.1b), the share sheet stubbed as on a phone: Back up reaches the sheet inside the tap with one JSON file (nothing that names the player), the same file restored again changes nothing, the cards deleted and restored from the file come back while the 📚 board would get none of their runs, the panel at 375 px (no sideways scroll, 44 px buttons), restore disabled over a paused run, Clear's note about the cards" },
   { name: 'blocked-storage', needs: [], about: "blocked site data (plan 28, 1.3): the page reloaded with every read of localStorage throwing still boots past the splash, holds a settings choice for the visit and plays a run to the game-over panel, with no page exception; the live board blocked at the browser for the rest of the run; then storage restored and the page reloaded" },
   { name: 'invite-link', needs: [], about: "the invite link (plan 28, 2.4): the page loaded with ?invite=<code> opens the 📚 Education data panel with the code filled in on the first ready screen; the address bar has lost the code; no storage keeps it; a load without it opens nothing (the live board blocked at the browser)" },
 ];
@@ -3903,9 +3904,9 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         // Under the buttons, one line says what the pressed one does (plan 26, A2); the data line names the servers.
         await introClick('edu-intro-order-before');
         const ord2 = await intro();
-        const [hintAfter, hintMixed, hintBefore, deviceLine] = await Promise.all(['eduOrderAfterHint', 'eduOrderMixedHint', 'eduOrderBeforeHint', 'eduIntroDevice'].map(tx));
+        const [hintAfter, hintMixed, hintBefore, deviceLine, keepLine] = await Promise.all(['eduOrderAfterHint', 'eduOrderMixedHint', 'eduOrderBeforeHint', 'eduIntroDevice', 'eduIntroKeep'].map(tx));
         const dataLink = await tx('eduDataTitle');
-        ok(ord0Full.orderHint === hintAfter && ord1.orderHint === hintMixed && ord2.orderHint === hintBefore && ord2.device === `${deviceLine} ${dataLink}`, `the line under the order buttons follows the pressed one ("${ord2.orderHint}"); the data line: "${ord2.device}"`);
+        ok(ord0Full.orderHint === hintAfter && ord1.orderHint === hintMixed && ord2.orderHint === hintBefore && ord2.device === `${deviceLine} ${keepLine} ${dataLink}`, `the line under the order buttons follows the pressed one ("${ord2.orderHint}"); the data line: "${ord2.device}"`);
         await introClick('edu-intro-order-after');
         await introClick('edu-intro-play');
         for (let i = 0; i < 40 && (await playState()) !== 'playing'; i += 1) await sleep(100);
@@ -5788,7 +5789,9 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
           await closeSave();
           return text;
         };
-        const [warnBase, noteShared, notePilot] = await Promise.all(['saveClearConfirm', 'saveClearNoteShared', 'saveClearNotePilot'].map(tx));
+        const [warnBase0, noteShared, notePilot, noteCards] = await Promise.all(['saveClearConfirm', 'saveClearNoteShared', 'saveClearNotePilot', 'saveClearNoteCards'].map(tx));
+        // A device with 📚 cards hears that they go too (plan 28, 3.1b; checked on its own in education-backup).
+        const warnBase = (await evaluate(`${play}.eduHasCards()`)) ? `${warnBase0} ${noteCards}` : warnBase0;
         const warnPlain = await clearWarning();
         await evaluate(`${play}.eduShare.turnOn('2026-11-13T10:00:00.000+00:00', 'ShareSmoke'), true`);
         const warnShared = await clearWarning();
@@ -5805,6 +5808,103 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await home();
         const back = await evaluate(`JSON.stringify({ on: ${play}.educationOn, sharing: ${play}.eduShareOn(), name: ${play}.getSaveState().name ?? '' })`).then(JSON.parse);
         ok(!back.on && !back.sharing, `the device is put back (📚 off, not sharing, player "${back.name}")`);
+      }
+    });
+
+    await section('education-backup', async () => {
+      // 💾 Back up your cards (plan 28, 3.1b), in 📚 Education data. The share sheet is stubbed as on a
+      // phone (a coarse pointer, canShare true); nothing leaves the page. Everything is put back.
+      {
+        const play = `__flappy.scene.getScene('Play')`;
+        const el = (id) => `document.getElementById('${id}')`;
+        const tx = (key) => evaluate(`import('./src/i18n.js').then((m) => m.t('en', '${key}'))`);
+        const KEY = 'flappyPoop.eduSrs';
+        const SHARE_KEY = 'flappyPoop.eduShare';
+        const home = async () => {
+          await evaluate(`(['Over', 'Leaderboard', 'Stats', 'Quiz'].forEach((k) => __flappy.scene.stop(k)), ${play}.scene.restart(), true)`);
+          await sleep(300);
+          for (let i = 0; i < 40 && (await playState()) !== 'ready'; i += 1) await sleep(250);
+        };
+        const closeData = () => evaluate(`import('./src/ui/eduDataPanel.js').then((m) => (m.closeEduDataPanel(), true))`);
+        const closeSave = () => evaluate(`import('./src/ui/savePanel.js').then((m) => (m.closeSavePanel(), true))`);
+        const kept = await evaluate(`JSON.stringify({ edu: localStorage.getItem('${KEY}'), share: localStorage.getItem('${SHARE_KEY}'), save: localStorage.getItem('flappyPoop.save') })`).then(JSON.parse);
+        await home();
+        // Clear needs a username (its button is off without one): this device has one for the section.
+        await evaluate(`import('./src/save.js').then((m) => { const p = ${play}; p.setSaveState(m.saveLocal({ ...p.save, name: 'BackupSmoke', id: p.save?.id ?? 'S'.repeat(22) })); return true; })`);
+        const DAY = 86400000;
+        const T0 = Date.UTC(2026, 10, 1, 12);
+        const card = (lastAt) => ({ state: 'review', stability: 3, difficulty: 5, dueAt: lastAt + 3 * DAY, reviewedAt: lastAt, lastAt, reps: 2, lapses: 0, seen: 2, right: 2, firstAt: T0 });
+        const rec = { v: 2, cards: { 'ST-01': card(T0), 'ST-02': card(T0 + DAY), 'DU-01': card(T0 + 2 * DAY) }, recent: [], counters: { gradedRuns: 5, gradeSum: 40000 }, badges: { edu_grade_a: '2026-11-02' }, unlockedLevel: 2 };
+        await evaluate(`localStorage.setItem('${KEY}', ${JSON.stringify(JSON.stringify(rec))}), true`);
+        await evaluate(`(() => { globalThis.__shared = []; const def = (k, v) => Object.defineProperty(navigator, k, { value: v, configurable: true, writable: true }); def('share', (d) => (__shared.push(d), Promise.resolve())); def('canShare', () => true); globalThis.__matchMedia = globalThis.matchMedia; globalThis.matchMedia = (q) => ({ matches: q === '(pointer: coarse)' }); return true; })()`);
+        const panel = () => evaluate(`JSON.stringify({ open: Boolean(${el('edu-data-panel')}) && !${el('edu-data-panel')}.hidden, state: ${el('edu-backup-state')}.textContent, status: ${el('edu-backup-status')}.textContent, save: ${el('edu-backup-save')}.disabled, file: ${el('edu-restore-file')}.disabled, paste: ${el('edu-restore-paste')}.disabled, note: !${el('edu-restore-note')}.hidden })`).then(JSON.parse);
+        await evaluate(`${play}.openEduData(), true`);
+        await sleep(200);
+        const p0 = await panel();
+        const countLine = (await tx('eduBackupCount')).replace('{n}', '3');
+        ok(p0.open && p0.state === countLine && !p0.save && !p0.file && !p0.note, `💾 in 📚 Education data on the home screen: "${p0.state}", Back up and Restore offered`);
+        // Back up: one JSON file and no text, handed to the sheet inside the click itself.
+        const inTap = await evaluate(`(() => { ${el('edu-backup-save')}.click(); return __shared.length; })()`);
+        await sleep(200);
+        const file = await evaluate(`(async () => { const d = __shared[0]; const f = d?.files?.[0]; return JSON.stringify({ keys: d ? Object.keys(d) : [], name: f?.name ?? null, type: f?.type ?? null, text: f ? await f.text() : null }); })()`).then(JSON.parse);
+        const backup = file.text ? JSON.parse(file.text) : null;
+        const p1 = await panel();
+        ok(inTap === 1 && file.keys.join() === 'files' && /^flappy-poop-cards-\d{4}-\d{2}-\d{2}\.json$/.test(file.name ?? '') && file.type === 'application/json' && backup?.kind === 'flappy-poop-education' && Object.keys(backup.cards).length === 3 && !/"own"|"recent"|eduInvited|consent|"id"/.test(file.text) && p1.status === (await tx('eduBackupShared')), `Back up reaches the share sheet inside the tap: ${file.name}, ${Object.keys(backup?.cards ?? {}).length} cards, nothing that names the player; "${p1.status}"`);
+        // The same file restored as pasted text: nothing new.
+        await evaluate(`(() => { const b = ${el('edu-restore-text')}; b.value = ${JSON.stringify(file.text ?? '')}; b.dispatchEvent(new Event('input')); ${el('edu-restore-paste')}.click(); return true; })()`);
+        const p2 = await panel();
+        ok(p2.status === (await tx('eduRestoreNothing')), `the same backup pasted back: "${p2.status}"`);
+        // The cards deleted, then restored from the file (the picker, through a DataTransfer).
+        await evaluate(`localStorage.removeItem('${KEY}'), true`);
+        await evaluate(`(() => { const i = ${el('edu-restore-input')}; const dt = new DataTransfer(); dt.items.add(new File([${JSON.stringify(file.text ?? '')}], 'b.json', { type: 'application/json' })); i.files = dt.files; i.dispatchEvent(new Event('change')); return true; })()`);
+        await sleep(300);
+        const p3 = await panel();
+        const after = await evaluate(`import('./src/education.js').then((m) => { const p = ${play}; const r = p.eduStore.load(); p.eduShare.turnOn('2026-11-15T10:00:00.000+00:00', 'BackupSmoke'); const batch = p.eduShare.beginBatch(m.boardRecord(r), () => 'X'.repeat(22)); return JSON.stringify({ cards: Object.keys(r.cards).length, runs: r.counters.gradedRuns ?? 0, own: r.own ?? null, batchRuns: batch?.runs ?? 0, batchBadges: Object.keys(batch?.badges ?? {}), input: ${el('edu-restore-input')}.value }); })`).then(JSON.parse);
+        await evaluate(`${play}.eduShare.turnOff(), true`);
+        const done = (await tx('eduRestoreDone')).replace('{added}', '3').replace('{updated}', '0').replace('{badges}', '1');
+        ok(p3.status === done && after.cards === 3 && after.runs === 5 && after.batchRuns === 0 && after.batchBadges.join() === 'edu_grade_a' && after.input === '', `the cards deleted, then restored from the file: "${p3.status}"; ${after.runs} graded runs on the device, ${after.batchRuns} sent to the 📚 board (its badge goes: ${after.batchBadges.join()})`);
+        // At 375 px wide (a small phone): no sideways scroll, and the 💾 buttons big enough to tap.
+        await cdp.send('Emulation.setDeviceMetricsOverride', { width: 375, height: 812, deviceScaleFactor: 1, mobile: false });
+        await sleep(500);
+        const fit = await evaluate(`JSON.stringify((() => { const c = document.querySelector('#edu-data-panel .card'); const btns = [...document.querySelectorAll('#edu-data-panel .backup button')].map((b) => Math.round(b.getBoundingClientRect().height)); return { page: document.documentElement.scrollWidth, width: innerWidth, card: c.scrollWidth - c.clientWidth, btns }; })())`).then(JSON.parse);
+        await cdp.send('Emulation.setDeviceMetricsOverride', { width: 720, height: 1280, deviceScaleFactor: 1, mobile: false });
+        await sleep(500);
+        ok(fit.page <= fit.width && fit.card <= 0 && fit.btns.length === 4 && fit.btns.every((x) => x >= 44), `at 375 px wide: no sideways scroll (page ${fit.page} of ${fit.width} px, card ${fit.card}), the 💾 buttons ${fit.btns.join(' / ')} px high`);
+        await closeData();
+        // Clear's warning says the cards go too, only with cards.
+        const clearWarning = async () => {
+          await evaluate(`${play}.openSavePanel(), true`);
+          await sleep(200);
+          await evaluate(`${el('save-clear-btn')}.click(), true`);
+          const text = await evaluate(`${el('save-status')}.textContent`);
+          await closeSave();
+          return text;
+        };
+        const noteCards = await tx('saveClearNoteCards');
+        const withCards = await clearWarning();
+        await evaluate(`localStorage.removeItem('${KEY}'), true`);
+        const without = await clearWarning();
+        ok(withCards.includes(noteCards) && !without.includes(noteCards), `Clear's warning names the 📚 cards only when there are some ("${withCards}")`);
+        // Over a paused run, restore is disabled with a line to go home; Back up stays.
+        await evaluate(`localStorage.setItem('${KEY}', ${JSON.stringify(JSON.stringify(rec))}), true`);
+        await home();
+        // A plain run: with 📚 or 👥 on, a start opens the 📚 popup or a match instead.
+        await evaluate(`(() => { const p = ${play}; if (p.educationOn) p.toggleEducation(); if (p.versusOn) p.toggleVersus(); p.flap(); return true; })()`);
+        for (let i = 0; i < 20 && (await playState()) !== 'playing'; i += 1) await sleep(100);
+        await evaluate(`${play}.pauseRun(), true`);
+        await sleep(200);
+        await evaluate(`${play}.openEduData(), true`);
+        await sleep(200);
+        const p4 = await panel();
+        const can = await evaluate(`${play}.canRestoreEducation()`);
+        ok((await playState()) === 'paused' && !can && p4.file && p4.paste && p4.note && !p4.save, `over a paused run restore is disabled with "${await tx('eduRestoreGoHome')}"; Back up still offered`);
+        await closeData();
+        // Put the device back as it was.
+        await evaluate(`(() => { delete navigator.share; delete navigator.canShare; globalThis.matchMedia = globalThis.__matchMedia; delete globalThis.__matchMedia; delete globalThis.__shared; const k = ${JSON.stringify(kept)}; for (const [key, v] of [['${KEY}', k.edu], ['${SHARE_KEY}', k.share], ['flappyPoop.save', k.save]]) { if (v === null) localStorage.removeItem(key); else localStorage.setItem(key, v); } return true; })()`);
+        await evaluate(`import('./src/save.js').then((m) => (${play}.setSaveState(m.loadLocal()), true))`);
+        await home();
+        const back = await evaluate(`JSON.stringify({ edu: localStorage.getItem('${KEY}'), share: localStorage.getItem('${SHARE_KEY}'), save: localStorage.getItem('flappyPoop.save'), state: ${play}.state })`).then(JSON.parse);
+        ok(back.edu === kept.edu && back.share === kept.share && back.save === kept.save && back.state === 'ready', 'the device is put back (its cards, its sharing and its save as before)');
       }
     });
 

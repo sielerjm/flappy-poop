@@ -135,7 +135,7 @@ import { openEduIntroPanel, closeEduIntroPanel, isEduIntroPanelOpen, eduIntroPad
 import { answerEvent, createConsentStore, createResearchQueue } from '../research.js';
 import { bindPad } from '../input/pad.js';
 import { keyGroup, sameDevice, catchUpTier, catchUpDraws, versusAvailable, ghostPlacement, rivalMarker, respawnPose, respawnBlinkStart, courseDistance, VERSUS_EMOJI } from '../versus.js';
-import { createEduStore, countersAfterRun, dueCount, cardCounts, masteryByDeck, pickCard, shuffleOptions, gradeFor, schedule, eduShopPrices, reviveStart, reviveStep, reviveSettled, newTally, tallyAnswer, EDUCATION_EMOJI, localDayKey, paidOn, buriedIdsOn, skipUntil, boardRecord } from '../education.js';
+import { createEduStore, countersAfterRun, dueCount, cardCounts, masteryByDeck, pickCard, shuffleOptions, gradeFor, schedule, eduShopPrices, reviveStart, reviveStep, reviveSettled, newTally, tallyAnswer, EDUCATION_EMOJI, localDayKey, paidOn, buriedIdsOn, skipUntil, boardRecord, educationBackup, readEducationBackup, restoredSettings } from '../education.js';
 
 const TEXT_STYLE = {
   fontFamily: 'sans-serif',
@@ -1603,6 +1603,50 @@ export class Play extends Phaser.Scene {
    */
   eduDataReachable() {
     return this.educationAvailable() || Boolean(this.researchConsent?.()) || Boolean(this.eduShare?.load?.().on);
+  }
+
+  /** How many cards this device has answered (the 💾 part's count; plan 28, 3.1b). */
+  eduCardCount() {
+    return Object.keys(this.eduStore?.load().cards ?? {}).length;
+  }
+
+  /** Has this device answered a card (is there anything to back up)? */
+  eduHasCards() {
+    return this.eduCardCount() > 0;
+  }
+
+  /** The backup file's text (educationBackup: the cards and two settings, nothing that names the player), or null with no cards. */
+  eduBackupText() {
+    const record = this.eduStore.load();
+    if (!Object.keys(record.cards).length) return null;
+    return JSON.stringify(educationBackup(record, this.settings.load(), Date.now()));
+  }
+
+  /**
+   * A restore changes the cards, so it runs only on the home screen (plan 28, 3.1b): not over a
+   * paused run, a revive, the game-over panel or a match, where a quiz may be using them.
+   */
+  canRestoreEducation() {
+    return this.state === 'ready' && !this.match;
+  }
+
+  /**
+   * Restore a backup's text into this device's cards (mergeEducation; restored runs never reach the
+   * 📚 board, boardRecord). When it changed something, the backup's new-card order and start level
+   * apply where this device still has the defaults (restoredSettings); the 📚 switch is not carried,
+   * and nothing is sent. Returns the store's
+   * summary with `skipped`, or { ok: false, error: 'notHome' | 'unrecognised' | 'newer' | 'tooBig' }.
+   */
+  restoreEducation(text) {
+    if (!this.canRestoreEducation()) return { ok: false, error: 'notHome' };
+    const read = readEducationBackup(text);
+    if (!read.ok) return read;
+    const r = this.eduStore.restore(read.backup, { today: localDayKey() });
+    // The backup's settings only with a restore that changed something ("Nothing new" changes nothing).
+    const patch = r.changed ? restoredSettings(this.settings.load(), read.backup.settings) : {};
+    if (Object.keys(patch).length) this.settings.set(patch);
+    this.refreshEduDue();
+    return { ok: true, ...r, skipped: read.backup.skipped };
   }
 
   toggleToilet() {

@@ -22,9 +22,6 @@ const ALLOWED_EXPORTS = {
   glowAlphaAt: "test reference: the glow's alpha profile that glowStops() draws (tests/fart.test.js)",
   topScores: 'test hook: tests/save.test.js reads top lists as plain numbers (its last game use, isNewTop, is gone)',
   // Daily Dump (plan .claude/plans/2026-11-10-daily-dump.md): helpers land before their callers.
-  // Plan 28, 3.1a: the backup's helpers land before their caller, the 💾 part of the Education data panel (3.1b).
-  educationBackup: 'plan 28 3.1a: used by the 💾 part of the Education data panel from 3.1b',
-  readEducationBackup: 'plan 28 3.1a: used by the 💾 part of the Education data panel from 3.1b',
 };
 
 /** UI string keys no source names literally: prefix → why (they are built at run time). */

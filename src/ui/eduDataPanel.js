@@ -13,6 +13,12 @@
 // random id (src/research.js; the notice is RESEARCH.md, linked here). The same 18+ box; the code
 // is sent once and never kept. Withdrawing deletes what was sent and needs no box.
 //
+// 💾 Back up your cards (plan 28, 3.1b), first, for everyone (no invitation): Back up my cards (the
+// share sheet on a touch screen, reached inside the tap; else a download), Copy as text, and Restore
+// from a file or pasted text (Play.restoreEducation; only on the home screen, Play.canRestoreEducation).
+// The file holds the cards and their counters, never the player's id or codes (education.js's
+// educationBackup); a restore never sends anything.
+//
 // Both are by invitation (plan 28, 2.4): one "Invite code" field at the top serves both (an invite
 // link fills it: openEduDataPanel's invite). A player not yet invited sees only the note and the
 // field; the two sections show once a code is typed, or once the player is invited (the device's
@@ -25,6 +31,8 @@
 import { EDUCATION } from '../config.js';
 import { t } from '../i18n.js';
 import { issueUrl } from '../logic.js';
+import { shareFile } from '../share.js';
+import { localDayKey } from '../education.js';
 
 const PANEL_ID = 'edu-data-panel';
 
@@ -63,6 +71,13 @@ const CSS = `
 #${PANEL_ID} .status { min-height: 1.4em; margin: 12px 0 0; font-size: 14px; line-height: 1.4; color: #c9b8dc; }
 #${PANEL_ID} .status.error { color: #ff8da8; }
 #${PANEL_ID} .status.ok { color: #9fe8b4; }
+#${PANEL_ID} .backup { margin: 4px 0 6px; padding: 10px 12px 12px; background: #24101c; border: 2px solid #5a2a44; border-radius: 12px; }
+#${PANEL_ID} .backup h3 { margin-top: 2px; }
+#${PANEL_ID} .backup button { min-height: 44px; margin: 0 0 8px; }
+#${PANEL_ID} textarea { display: block; width: 100%; box-sizing: border-box; min-height: 64px; margin: 0 0 8px; padding: 10px 12px; font-size: 14px;
+  font-family: ui-monospace, Menlo, monospace; color: #ffffff; background: #2a1522; border: 2px solid #5a2a44; border-radius: 10px; resize: vertical;
+  touch-action: auto; -webkit-user-select: text; user-select: text; }
+#${PANEL_ID} .backup .status { margin: 4px 0 0; }
 `;
 
 let dom = null;
@@ -70,6 +85,8 @@ let ctx = null; // { game, play, locale, onClose }
 let keyboardWasEnabled = true;
 let busy = false; // a share or stop request is on its way: the buttons wait
 let changed = false; // sharing was turned on or off while the panel was open (onClose hears it)
+let backupBusy = false; // a share sheet with the backup is open: Back up waits (plan 28, 3.1b)
+let session = 0; // one per opening: a share, copy or file read that ends after a close is dropped
 
 function h(tag, attrs = {}, ...children) {
   const el = document.createElement(tag);
@@ -88,6 +105,19 @@ function build() {
 
   const title = h('h2');
   const intro = h('p', { class: 'intro' });
+  // 💾 Back up your cards (plan 28, 3.1b): for everyone, first.
+  const backupTitle = h('h3', { id: 'edu-backup-title' });
+  const backupBody = h('p', { id: 'edu-backup-body' });
+  const backupState = h('p', { class: 'state', id: 'edu-backup-state' });
+  const backupBtn = h('button', { type: 'button', id: 'edu-backup-save', class: 'wide' });
+  const copyBtn = h('button', { type: 'button', id: 'edu-backup-copy', class: 'wide outline' });
+  const fileBtn = h('button', { type: 'button', id: 'edu-restore-file', class: 'wide outline' });
+  const fileInput = h('input', { type: 'file', id: 'edu-restore-input', accept: '.json,application/json,text/plain', hidden: true });
+  const paste = h('textarea', { id: 'edu-restore-text', rows: '3', autocomplete: 'off', autocapitalize: 'off', autocorrect: 'off', spellcheck: 'false' });
+  const pasteBtn = h('button', { type: 'button', id: 'edu-restore-paste', class: 'wide outline' });
+  const restoreNote = h('p', { id: 'edu-restore-note', hidden: true });
+  const backupStatus = h('p', { class: 'status', id: 'edu-backup-status' });
+  const backup = h('div', { class: 'backup' }, backupTitle, backupBody, backupState, backupBtn, copyBtn, fileBtn, fileInput, paste, pasteBtn, restoreNote, backupStatus);
   // The invitation (plan 28, 2.4): a note for a player not yet invited, and the code both sections use.
   const inviteNote = h('p', { class: 'state', id: 'edu-invite-note' });
   const code = h('input', { id: 'edu-invite-code', type: 'text', maxlength: '200', autocomplete: 'off', autocapitalize: 'off', autocorrect: 'off', spellcheck: 'false' }); // autocorrect: iOS would rewrite "--" (AUD-046)
@@ -116,7 +146,7 @@ function build() {
 
   // The card takes focus when nothing in it has any, so Esc reaches the root's keydown (the game
   // keyboard is off while the panel is open), as tournamentPanel's does (plan 24, AUD-018).
-  const card = h('div', { class: 'card', tabindex: '-1' }, close, title, intro, inviteNote, inviteRow, adultRow, shareTitle, shareBody, shareState, shareBtn, pilotTitle, pilotBody, pilotMore, pilotState, joinRow, leaveBtn, status, report);
+  const card = h('div', { class: 'card', tabindex: '-1' }, close, title, intro, backup, inviteNote, inviteRow, adultRow, shareTitle, shareBody, shareState, shareBtn, pilotTitle, pilotBody, pilotMore, pilotState, joinRow, leaveBtn, status, report);
   const root = h('div', { id: PANEL_ID, role: 'dialog', 'aria-modal': 'true', hidden: true }, card);
   document.body.append(root);
 
@@ -140,13 +170,28 @@ function build() {
   });
   joinBtn.addEventListener('click', () => onJoin());
   leaveBtn.addEventListener('click', () => onLeave());
+  backupBtn.addEventListener('click', () => onBackup());
+  copyBtn.addEventListener('click', () => onCopy());
+  fileBtn.addEventListener('click', () => fileInput.click());
+  fileInput.addEventListener('change', () => onFile());
+  // A keystroke in the box moves only its Restore button (no store read per key).
+  paste.addEventListener('input', () => {
+    pasteBtn.disabled = !ctx?.play?.canRestoreEducation?.() || !paste.value.trim();
+  });
+  pasteBtn.addEventListener('click', () => onRestore(paste.value));
 
-  dom = { root, card, title, intro, inviteNote, inviteRow, adult, adultRow, adultText, shareTitle, shareBody, shareState, shareBtn, pilotTitle, pilotBody, pilotMore, pilotLink, pilotState, code, joinRow, joinBtn, leaveBtn, status, reportLink };
+  dom = { root, card, title, intro, backupTitle, backupBody, backupState, backupBtn, copyBtn, fileBtn, fileInput, paste, pasteBtn, restoreNote, backupStatus, inviteNote, inviteRow, adult, adultRow, adultText, shareTitle, shareBody, shareState, shareBtn, pilotTitle, pilotBody, pilotMore, pilotLink, pilotState, code, joinRow, joinBtn, leaveBtn, status, reportLink };
 }
 
 function setStatus(text, kind = '') {
   dom.status.textContent = text;
   dom.status.className = kind ? `status ${kind}` : 'status';
+}
+
+/** The 💾 part's own status line. */
+function setBackupStatus(text, kind = '') {
+  dom.backupStatus.textContent = text;
+  dom.backupStatus.className = kind ? `status ${kind}` : 'status';
 }
 
 /** The labels and the buttons for what is true now: sharing on or off, the box ticked or not, a request in flight. */
@@ -156,6 +201,23 @@ function refresh() {
   const on = Boolean(play?.eduShareOn?.());
   dom.title.textContent = t(locale, 'eduDataTitle');
   dom.intro.textContent = t(locale, 'eduDataIntro');
+  // 💾 Back up your cards (plan 28, 3.1b).
+  const cards = Boolean(play?.eduHasCards?.());
+  const home = Boolean(play?.canRestoreEducation?.());
+  dom.backupTitle.textContent = t(locale, 'eduBackupTitle');
+  dom.backupBody.textContent = t(locale, 'eduBackupBody');
+  dom.backupState.textContent = cards ? t(locale, 'eduBackupCount').replace('{n}', String(play?.eduCardCount?.() ?? 0)) : t(locale, 'eduBackupNone');
+  dom.backupBtn.textContent = t(locale, 'eduBackupSave');
+  dom.copyBtn.textContent = t(locale, 'eduBackupCopy');
+  dom.fileBtn.textContent = t(locale, 'eduRestoreFile');
+  dom.paste.placeholder = t(locale, 'eduRestorePastePlaceholder');
+  dom.pasteBtn.textContent = t(locale, 'eduRestorePaste');
+  dom.restoreNote.textContent = t(locale, 'eduRestoreGoHome');
+  dom.restoreNote.hidden = home;
+  dom.backupBtn.disabled = backupBusy || !cards;
+  dom.copyBtn.disabled = !cards;
+  dom.fileBtn.disabled = !home;
+  dom.pasteBtn.disabled = !home || !dom.paste.value.trim();
   // The invitation (plan 28, 2.4): known (the flag, sharing, joined, or a consent held) or a code typed.
   const joinedNow = Boolean(play?.researchJoined?.());
   const heldNow = Boolean(play?.researchConsent?.());
@@ -299,6 +361,126 @@ async function onLeave() {
   refresh();
 }
 
+/** The backup file's name: flappy-poop-cards-YYYY-MM-DD.json (the local day). */
+function backupName() {
+  return `flappy-poop-cards-${localDayKey()}.json`;
+}
+
+const BACKUP_STATUS = {
+  shared: ['eduBackupShared', 'ok'],
+  downloaded: ['eduBackupDownloaded', 'ok'],
+  cancelled: ['eduBackupCancelled', ''],
+  failed: ['eduBackupFailed', 'error'],
+};
+
+/**
+ * Back up my cards: the file is made and handed to the share sheet inside the tap, nothing awaited
+ * first (iOS grants the share only there); a download on a mouse or where the sheet takes no files.
+ * Back up waits while a sheet is open, so a second tap does nothing.
+ */
+function onBackup() {
+  if (backupBusy || !ctx) return;
+  const { play, locale } = ctx;
+  const text = play?.eduBackupText?.();
+  if (!text) {
+    setBackupStatus(t(locale, 'eduBackupNone'), 'error');
+    return;
+  }
+  const file = new File([text], backupName(), { type: 'application/json' });
+  const coarse = Boolean(globalThis.matchMedia?.('(pointer: coarse)')?.matches);
+  backupBusy = true;
+  const mine = session;
+  const pending = shareFile({ file, useSheet: coarse, nav: globalThis.navigator, doc: document, urlApi: globalThis.URL });
+  refresh();
+  pending.then((result) => {
+    if (mine !== session) return; // the panel closed meanwhile (open resets backupBusy)
+    backupBusy = false;
+    if (!ctx || !dom) return;
+    const [key, kind] = BACKUP_STATUS[result] ?? BACKUP_STATUS.failed;
+    setBackupStatus(t(ctx.locale, key), kind);
+    refresh();
+  });
+}
+
+/** Copy as text: to the clipboard inside the tap; with none (or a refusal), into the box, selected. */
+function onCopy() {
+  if (!ctx) return;
+  const { play, locale } = ctx;
+  const text = play?.eduBackupText?.();
+  if (!text) return;
+  const mine = session;
+  const inBox = () => {
+    if (!dom || mine !== session) return;
+    dom.paste.value = text;
+    dom.paste.focus?.();
+    dom.paste.select?.();
+    if (ctx) setBackupStatus(t(ctx.locale, 'eduBackupCopyHere'));
+    refresh();
+  };
+  const clip = globalThis.navigator?.clipboard;
+  if (typeof clip?.writeText !== 'function') {
+    inBox();
+    return;
+  }
+  let pending;
+  try {
+    pending = Promise.resolve(clip.writeText(text));
+  } catch {
+    inBox();
+    return;
+  }
+  pending.then(
+    () => mine === session && ctx && dom && setBackupStatus(t(locale, 'eduBackupCopied'), 'ok'),
+    () => inBox(),
+  );
+}
+
+const RESTORE_ERRORS = { unrecognised: 'eduRestoreBad', newer: 'eduRestoreNewer', tooBig: 'eduRestoreTooBig', notHome: 'eduRestoreGoHome' };
+
+/** Restore `text` (a file's or the box's) through Play; the answer goes in the 💾 status line. */
+function onRestore(text) {
+  if (!ctx) return;
+  const { play, locale } = ctx;
+  if (!play?.canRestoreEducation?.()) {
+    setBackupStatus(t(locale, 'eduRestoreGoHome'), 'error');
+    refresh();
+    return;
+  }
+  const r = play.restoreEducation(String(text ?? ''));
+  if (!r?.ok) {
+    setBackupStatus(t(locale, RESTORE_ERRORS[r?.error] ?? 'eduRestoreBad'), 'error');
+    refresh();
+    return;
+  }
+  const counted = r.added + r.updated + r.badges > 0;
+  const first = !r.changed ? t(locale, 'eduRestoreNothing') : counted ? t(locale, 'eduRestoreDone').replace('{added}', String(r.added)).replace('{updated}', String(r.updated)).replace('{badges}', String(r.badges)) : t(locale, 'eduRestoreProgress');
+  const lines = [first];
+  if (r.skipped > 0) lines.push(t(locale, 'eduRestoreSkipped').replace('{n}', String(r.skipped)));
+  if (r.changed && !r.saved) lines.push(t(locale, 'eduRestoreVisitOnly'));
+  setBackupStatus(lines.join(' '), r.changed && !r.saved ? 'error' : 'ok');
+  dom.paste.value = '';
+  refresh();
+}
+
+/** Restore from a file: at most 1 MB is read; the picker resets, so the same file can be picked again. */
+function onFile() {
+  if (!ctx || !dom) return;
+  const file = dom.fileInput.files?.[0] ?? null;
+  dom.fileInput.value = '';
+  if (!file) return;
+  if (!(file.size <= EDUCATION.backupMaxBytes)) {
+    setBackupStatus(t(ctx.locale, 'eduRestoreTooBig'), 'error');
+    return;
+  }
+  const mine = session;
+  Promise.resolve()
+    .then(() => file.text())
+    .then(
+      (text) => mine === session && ctx && dom && onRestore(text),
+      () => mine === session && ctx && dom && setBackupStatus(t(ctx.locale, 'eduRestoreBad'), 'error'),
+    );
+}
+
 function setGameKeyboard(enabled) {
   const kb = ctx?.game?.input?.keyboard;
   if (!kb) return;
@@ -323,7 +505,11 @@ export function openEduDataPanel(options) {
   ctx = { game: options.game, play: options.play, locale: options.locale ?? 'en', onClose: options.onClose ?? null };
   busy = false;
   changed = false;
+  backupBusy = false;
+  session += 1;
   dom.adult.checked = false;
+  dom.paste.value = '';
+  setBackupStatus('');
   dom.code.value = typeof options.invite === 'string' ? options.invite : ''; // an invite link's code (plan 28, 2.4)
   if (!wasOpen) setGameKeyboard(false);
   // What the player should know first: the server ended their pilot (once), else that sharing needs a username.
@@ -339,7 +525,9 @@ export function openEduDataPanel(options) {
 export function closeEduDataPanel() {
   if (!dom || dom.root.hidden) return;
   dom.root.hidden = true;
+  session += 1;
   dom.code.value = ''; // the code is sent once and never kept, in the page either (AUD-046)
+  dom.paste.value = ''; // nor a pasted backup
   if (document.activeElement && dom.root.contains(document.activeElement)) document.activeElement.blur();
   setGameKeyboard(true);
   const done = ctx?.onClose;

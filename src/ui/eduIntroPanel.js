@@ -185,6 +185,7 @@ function render() {
   );
   // Under the buttons, what the pressed one does (plan 26, A2: Michael's image 6).
   const orderHint = h('p', { class: 'hint', id: 'edu-intro-order-hint' }, tr((ORDERS.find(([id]) => id === info.order) ?? ORDERS[2])[2]));
+  const gap = ctx.locale === 'zh-Hans' ? '' : ' ';
   const data = h('button', { class: 'link', id: 'edu-intro-data', type: 'button' }, tr('eduDataTitle'));
   data.addEventListener('click', () => openData());
   const play = h('button', { id: 'edu-intro-play', type: 'button', 'data-primary': true }, tr('eduIntroPlay'));
@@ -206,7 +207,8 @@ function render() {
     order,
     orderHint,
     h('p', {}, tr('eduIntroPerDay').replace('{n}', String(info.newPerDay))),
-    h('p', { id: 'edu-intro-device' }, tr('eduIntroDevice'), ' ', data),
+    // eduIntroKeep: plan 28, 3.1b. Chinese sets no space after its full-width 。 and ：.
+    h('p', { id: 'edu-intro-device' }, tr('eduIntroDevice'), gap, tr('eduIntroKeep'), gap, data),
     h('div', { class: 'actions' }, shut, play),
   );
   placePad();

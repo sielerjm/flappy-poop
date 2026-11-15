@@ -607,6 +607,21 @@ streak starts again at 1 on the real day, the best kept: plan 27, Michael's call
 no longer freezes it until that date), and `studyStreakNow` reads it (0 once a day is missed, or while the
 stored day is more than a day ahead). Day
 gaps come from the date keys (`localDayKey`), never from milliseconds.
+**Backup and restore** (plan 28, 3.1b): the cards live in this browser only, so the top of 📚 Education
+data, for everyone, is **💾 Back up your cards**. Back up my cards hands a file
+`flappy-poop-cards-YYYY-MM-DD.json` (`educationBackup`: the cards, counters, badges, the unlocked level,
+the learning streak, the new-card order and start level; never an id, code, sharing state, invitation or
+consent) to the share sheet inside the tap on a touch screen (`shareFile`; no text beside it, which can
+hide "Save to Files" on iOS), else downloads it; Copy as text puts the same JSON on the clipboard.
+Restore takes a file or pasted text (`EDUCATION.backupMaxBytes`, 1 MB, at most) and merges it
+(`readEducationBackup`, `mergeEducation`): only on the home screen (`Play.canRestoreEducation`); when it
+changed something, the backup's new-card order and start level where this device still has the defaults
+(`restoredSettings`); the 📚 switch never carried, nothing sent;
+restored runs never reach the 📚 board (`own`, `boardRecord`, under the share paragraph below). A
+restore into a browser that is not saving says it lasts for this visit only. Clear's warning adds that
+the cards go too (`saveClearNoteCards`), and the 📚 popup says the browser can erase them
+(`eduIntroKeep`). With the off switch set, the part is reachable only where the panel is (a device that
+joined or shares).
 **What leaves the device, and only by choice** (plan 21, Stage 3b): the **📚 Education data** panel
 (`src/ui/eduDataPanel.js`, a DOM panel like the user panel; from a button in the user panel shown
 while the mode is available, the 📚 board's footer and the profile's row; `Play.openEduData`). **Both
@@ -767,7 +782,8 @@ src/
                             (graded runs before the 📚 board lists a player),
                             revivePenaltyPerLevel. EDUCATION.enabled = the off switch
                             (plan 28); EDUCATION.words = the old unlock word (poopschool),
-                            still refused as a name. TUNING.splash = the
+                            still refused as a name; EDUCATION.backupMaxBytes = the
+                            largest backup a restore reads (plan 28, 3.1b). TUNING.splash = the
                             loading splash (hintMs, slideMs, fadeMs, swipePx,
                             featureMax, storageKey; the ring: ringEaseMs,
                             ringMaxPerSec, ringMinPerSec, ringFrameCapMs, waitCap,
@@ -950,7 +966,9 @@ src/
                             history, badges at the earlier day, the higher level,
                             learning streaks joined as spans; twice changes nothing),
                             boardRecord (what the 📚 board is sent: own's runs, or the
-                            counters', and every badge: restored runs never go), dueCount
+                            counters', and every badge: restored runs never go),
+                            restoredSettings (plan 28, 3.1b: the backup's order and
+                            start level where this device has the defaults), dueCount
                             (the 📚 switch's count), cardText (zh-Hans when a card has
                             it) / optionText, cardSource (short citations: "Martinsen
                             et al. 2005"), EDUCATION_EMOJI. Fully unit-tested
@@ -1077,12 +1095,15 @@ src/
                             submit_counters(), claim_achievements(), the 📚 board's
                             and the pilot's SQL functions.
                             Fully unit-tested with a fake fetch.
-  share.js                  Game-over share, NO Phaser; navigator / document / URL
+  share.js                  Sharing a file, NO Phaser; navigator / document / URL
                             injected: shareMode ('share' when
-                            canShare({ files }), else 'download'), shareScoreImage
-                            (navigator.share called synchronously inside the tap;
-                            AbortError = cancelled; other errors and no share sheet
-                            → <a download> PNG; never rejects).
+                            canShare({ files }), else 'download'), shareFile
+                            (navigator.share called synchronously inside the tap,
+                            with the file and only the title / text given; AbortError
+                            = cancelled, never a download; other errors and no share
+                            sheet → <a download>; useSheet false always downloads;
+                            never rejects; plan 28, 3.1b), shareScoreImage (the
+                            game-over PNG with its title and text: shareFile).
   splash.js                 The loading splash (plan 01). Pure, Node-safe:
                             SPLASH_NOTES (id, kind 'feature' | 'hint', glyph, i18n
                             key, art { file, frames | crop } on the sprite cards;
@@ -1314,8 +1335,11 @@ src/
                             note, how the mode works, the player's cards, the start
                             level (◀ LV n ▶; none in test mode) and the new-card
                             order with a line for the pressed one (ORDERS), the
-                            daily cap, the data line with a link to 📚 Education
-                            data, Close | Play. Clicks wait retryLockoutMs after it
+                            daily cap, the data line (eduIntroDevice, then
+                            eduIntroKeep: the browser can erase the cards, so add the
+                            game to the Home Screen and back up; plan 28, 3.1b; no
+                            space between them in zh-Hans) with a link to 📚
+                            Education data, Close | Play. Clicks wait retryLockoutMs after it
                             opens (canRestart); its keys (onKey on logic.js's
                             eduIntroKey: Enter presses Play from the card, repeats
                             and a key held from before swallowed); focus on the
@@ -1327,7 +1351,19 @@ src/
                             savePanel.js, from the user panel's 📚 Education data
                             button, the 📚 board's footer or the profile's row: the
                             one place a player chooses what of their education
-                            record leaves the device. By invitation (plan 28): the
+                            record leaves the device. First, for everyone (plan 28,
+                            3.1b): 💾 Back up your cards (#edu-backup-*: the card
+                            count; Back up my cards, shareFile inside the tap, the
+                            share sheet on a coarse pointer, else a download, waiting
+                            while a sheet is open; Copy as text, to the clipboard or
+                            into the box; Restore from a file (#edu-restore-input,
+                            1 MB at most, reset after each pick) or pasted text
+                            (#edu-restore-text, no autocorrect; a keystroke moves
+                            only its button), through Play.restoreEducation, only
+                            while Play.canRestoreEducation (the home screen, no
+                            match), else disabled with eduRestoreGoHome; its own
+                            status line; a share, copy or file read that ends after
+                            the panel closed is dropped (one session per opening)). By invitation (plan 28): the
                             invite note and one "Invite code" field (#edu-invite-code,
                             filled by an invite link: openEduDataPanel's invite) above
                             both parts, which show once invited or a code is typed.
@@ -2179,7 +2215,18 @@ tests/                      node --test (schema.test.js, pilot.test.js, eduBoard
                             words, eduProfileRows
   share.test.js             shareMode branches, shareScoreImage (share
                             called synchronously, cancel, error → download, download
-                            name + revoke, never rejects)
+                            name + revoke, never rejects); shareFile (the file alone,
+                            useSheet false, a cancel never a download; plan 28, 3.1b)
+  eduBackupPanel.test.js    plan 28, 3.1b, in the fake DOM: the 💾 part for a player
+                            not invited, Back up reaching navigator.share inside the
+                            tap with a JSON file and no text (a second tap waits), a
+                            cancel, a download (no file sheet, a mouse), Copy as text
+                            with and without a clipboard, restore from text and from
+                            a file (1 MB, the input reset), the errors, a restore that
+                            lasts for the visit only, restore disabled off the home
+                            screen; Play's eduBackupText / canRestoreEducation /
+                            restoreEducation (settings only at the defaults, the 📚
+                            switch not carried); Clear's cards note
   over.test.js              overButtonsLayout (Share | Home inside the panel, Home
                             alone on a test run), overHit, overBandLayout (the summary
                             band between the score and the buttons, every cell in it,
@@ -2416,7 +2463,8 @@ tests/                      node --test (schema.test.js, pilot.test.js, eduBoard
                             fakeStorage, registry), postgrest.js (a PostgREST stand-in
                             over PGlite that answers only LEADERBOARD.dataApi, with
                             Supabase's roles and default grants), dom.js (a fake DOM
-                            for the DOM panels)
+                            for the DOM panels; appendChild, remove, files, href and
+                            download since plan 28, 3.1b)
   fixtures/schema-applied.sql  db/schema.sql as last applied to the live database
                             (main's b497a0c until the next apply); the upgrade test
                             starts from it. Never edited by hand: npm run push copies
@@ -2660,7 +2708,11 @@ tools/
                             data panel, the 📚 tab, the profiles' sections, the
                             tester pilot: join, record, send, withdraw; the
                             invitation, and Enter in the invite field joining
-                            nothing), then blocked-storage (every read of
+                            nothing), education-backup (plan 28, 3.1b: Back up with
+                            the share sheet stubbed, the file restored twice, the
+                            cards deleted and restored with 0 runs for the 📚 board,
+                            375 px, restore off over a paused run, Clear's cards
+                            note), then blocked-storage (every read of
                             localStorage throwing: the game still starts and plays)
                             and invite-link (a page loaded with ?invite= opens the
                             panel with the code, the address cleaned). The 📚

@@ -16,6 +16,9 @@ export class El {
     this.placeholder = '';
     this.parent = null;
     this.style = {};
+    this.files = null; // a file input's picked files (plan 28, 3.1b)
+    this.href = '';
+    this.download = '';
   }
   setAttribute(k, v) {
     this.attrs[k] = v;
@@ -30,6 +33,15 @@ export class El {
       if (c instanceof El) c.parent = this;
       this.children.push(c);
     }
+  }
+  /** As append, returning the child (src/share.js's download link). */
+  appendChild(c) {
+    this.append(c);
+    return c;
+  }
+  remove() {
+    if (this.parent) this.parent.children = this.parent.children.filter((c) => c !== this);
+    this.parent = null;
   }
   addEventListener(type, fn) {
     (this.listeners[type] ??= []).push(fn);

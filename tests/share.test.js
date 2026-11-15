@@ -1,5 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import * as share from '../src/share.js';
 import { shareMode, shareScoreImage } from '../src/share.js';
 
 const FILE = { name: 'flappy-poop-score.png', type: 'image/png', size: 12 };
@@ -86,4 +87,24 @@ test('shareScoreImage never rejects: no file, no DOM, or a throwing document all
   assert.equal(await shareScoreImage({ file: FILE, nav: undefined, doc: undefined }), 'failed');
   const { doc, urlApi } = fakeDoc({ throws: true });
   assert.equal(await shareScoreImage({ file: FILE, nav: fakeNav({ can: false }), doc, urlApi }), 'failed');
+});
+
+// shareFile (plan 28, 3.1b): the share code generalised for the education backup.
+test('shareFile: inside the tap, the file alone when no title or text is given; useSheet false always downloads; a cancel is never a download', async () => {
+  const { shareFile } = share;
+  assert.equal(typeof shareFile, 'function');
+  const BACKUP = { name: 'flappy-poop-cards-2026-11-15.json', type: 'application/json', size: 900 };
+  const nav = fakeNav();
+  const { doc, urlApi, clicks } = fakeDoc();
+  const pending = shareFile({ file: BACKUP, nav, doc, urlApi });
+  assert.deepEqual(nav.calls, [{ files: [BACKUP] }], 'share() ran inside the tap, with the file alone');
+  assert.equal(await pending, 'shared');
+  const mouse = fakeNav();
+  assert.equal(await shareFile({ file: BACKUP, useSheet: false, nav: mouse, doc, urlApi }), 'downloaded');
+  assert.equal(mouse.calls.length, 0);
+  assert.equal(clicks.at(-1).download, BACKUP.name);
+  const before = clicks.length;
+  assert.equal(await shareFile({ file: BACKUP, nav: fakeNav({ error: abort() }), doc, urlApi }), 'cancelled');
+  assert.equal(clicks.length, before);
+  assert.equal(await shareFile({ file: null, nav, doc, urlApi }), 'failed');
 });

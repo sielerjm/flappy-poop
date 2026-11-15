@@ -12,7 +12,7 @@
 // state machine; eduShopPrices() the shop's price ladder.
 // Times are ms since the epoch (Date.now()), passed in, so everything here is pure.
 
-import { LEADERBOARD, TUNING } from './config.js';
+import { EDUCATION, LEADERBOARD, TUNING } from './config.js';
 import { nextPerfectStreak, GRADE_MAX } from './achievements.js';
 import { GRADE_NUM, initDifficulty, initStability, nextDifficulty, nextIntervalDays, nextStability, retrievability, shortTermStability } from './fsrs.js';
 import { CARD_LINKS, CARDS, DECKS, REFERENCE_DOIS, REFERENCES } from './questions.js';
@@ -751,8 +751,6 @@ export function createEduStore(storage, { key = LEADERBOARD.eduKey, t = TUNING }
 
 const BACKUP_KIND = 'flappy-poop-education';
 const BACKUP_VERSION = 1;
-/** The longest text readEducationBackup reads (a backup of every card is about 20 kB). */
-const BACKUP_MAX_CHARS = 1_000_000;
 
 /** The two education settings a backup carries, cleaned (never the 📚 switch or the invitation). */
 function backupSettings(raw, t = TUNING) {
@@ -793,7 +791,7 @@ export function educationBackup(record, settings, now = Date.now(), t = TUNING) 
  */
 export function readEducationBackup(text, t = TUNING) {
   if (typeof text !== 'string') return { ok: false, error: 'unrecognised' };
-  if (text.length > BACKUP_MAX_CHARS) return { ok: false, error: 'tooBig' };
+  if (text.length > EDUCATION.backupMaxBytes) return { ok: false, error: 'tooBig' };
   const parse = (s) => {
     try {
       return JSON.parse(s);
@@ -812,6 +810,18 @@ export function readEducationBackup(text, t = TUNING) {
   const record = cleanEdu({ cards: raw.cards, counters: raw.counters, badges: raw.badges, unlockedLevel: raw.unlockedLevel, study: raw.study }, t.education.minGap, t);
   const given = raw.cards && typeof raw.cards === 'object' ? Object.keys(raw.cards).length : 0;
   return { ok: true, backup: { record, settings: backupSettings(raw.settings, t), skipped: given - Object.keys(record.cards).length } };
+}
+
+/**
+ * The settings a restore changes (plan 28, 3.1b): the backup's new-card order and start level, each
+ * only where this device still has the default (a choice made here stays). The 📚 switch is never
+ * carried. Pure; `now` and `backup` are cleaned settings.
+ */
+export function restoredSettings(now, backup) {
+  const patch = {};
+  if (now?.eduNewOrder === 'after' && backup?.eduNewOrder && backup.eduNewOrder !== 'after') patch.eduNewOrder = backup.eduNewOrder;
+  if (now?.eduStartLevel === 1 && Number.isInteger(backup?.eduStartLevel) && backup.eduStartLevel !== 1) patch.eduStartLevel = backup.eduStartLevel;
+  return patch;
 }
 
 /** A learning streak as a span of day numbers, or null. */
