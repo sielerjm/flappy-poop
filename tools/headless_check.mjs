@@ -5177,16 +5177,17 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         const recWait = await eduRec();
         ok(aceLine?.includes('💯') && aceLine.includes('🅰️') && recWait.badges.join() === 'edu_drop_out' && !recWait.counters.gradedRuns && recWait.pending === 5, `a run answered 5 of 5 shows 💯 and 🅰️ on its panel ("${aceLine}") and waits, unrecorded (${JSON.stringify(recWait)}), until the panel is left`);
         // The summary band (plan 22, U7; plan 21, E5): a won run's band is the short one (the bonus button
-        // takes a row), so with a badge line its ❔ ✅ ❌ row and its note sit below the fold, whole, and the
-        // band scrolls to them; the buttons stay put.
+        // takes a row), so with a badge line the ❔ ✅ ❌ row stays in view (plan 28, 3.2: the badge once
+        // pushed it behind the bonus button), and the badge line and the note sit below the fold, whole,
+        // where the band scrolls to them; the buttons stay put.
         const bandNow = () =>
           evaluate(
-            `(() => { const o = ${O}; const b = o.bandBox; const n = o.eduNote.getBounds(); const f = o.cells.find((c) => c.id === 'eduAnswered'); return JSON.stringify({ offset: o.band.offset, top: b.top, bottom: b.bottom, left: b.left, noteTop: n.y, noteBottom: n.bottom, fallsTop: f.y - f.height / 2, lineBottom: o.badgeLine.getBounds().bottom, card: o.card.open, title: o.card.title.text, over: __flappy.scene.isActive('Over') }); })()`,
+            `(() => { const o = ${O}; const b = o.bandBox; const n = o.eduNote.getBounds(); const f = o.cells.find((c) => c.id === 'eduAnswered'); return JSON.stringify({ offset: o.band.offset, top: b.top, bottom: b.bottom, left: b.left, noteTop: n.y, noteBottom: n.bottom, fallsTop: f.y - f.height / 2, fallsBottom: f.y + f.height / 2, lineTop: o.badgeLine.getBounds().y, lineBottom: o.badgeLine.getBounds().bottom, card: o.card.open, title: o.card.title.text, over: __flappy.scene.isActive('Over') }); })()`,
           ).then(JSON.parse);
         const canvasPt = (x, y) => evaluate(`(() => { const r = __flappy.canvas.getBoundingClientRect(); const s = __flappy.scale; return JSON.stringify({ x: r.left + ${x} * r.width / s.width, y: r.top + ${y} * r.height / s.height, k: r.height / s.height }); })()`).then(JSON.parse);
         await evaluate(`${O}.openedAt = __flappy.loop.time - 5000, true`); // past the death-tap lockout
         const rest = await bandNow();
-        ok(rest.offset === 0 && rest.lineBottom <= rest.bottom - 16 && rest.fallsTop >= rest.bottom && rest.noteTop >= rest.bottom, `at rest the badge line is in view, clear of the bonus button, and the ❔ ✅ ❌ row and the note start below the fold (the band ends at ${rest.bottom}; they start at ${Math.round(rest.fallsTop)} and ${Math.round(rest.noteTop)})`);
+        ok(rest.offset === 0 && rest.fallsBottom <= rest.bottom - 16 && rest.lineTop >= rest.bottom && rest.noteTop >= rest.bottom && rest.lineTop >= rest.fallsBottom && rest.noteTop >= rest.lineBottom, `at rest the ❔ ✅ ❌ row is in view, clear of the bonus button (it ends at ${Math.round(rest.fallsBottom)}; the band at ${rest.bottom}), and the badge line and the note start below the fold (at ${Math.round(rest.lineTop)} and ${Math.round(rest.noteTop)})`);
         const mid = await canvasPt(rest.left + 20, (rest.top + rest.bottom) / 2);
         await cdp.send('Input.dispatchMouseEvent', { type: 'mouseWheel', x: mid.x, y: mid.y, deltaX: 0, deltaY: 400 });
         await sleep(200);

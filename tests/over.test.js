@@ -296,8 +296,9 @@ test('an education panel\'s cells (plan 26, image 9): ‼️ 😢 is the third r
     for (const c of cells) for (const b of [L.home, L.again]) assert.ok(!overlapping(box(c), box(b)), `${c.id} clear of ${b.id}`);
     assert.equal(overHit(tally[1].x, tally[1].y, { ...L, cells }), 'cell:eduRight');
   }
-  // A won run: the bonus button takes a row, so the band is the normal one. The first row under the
-  // coins stays in view; what does not fit starts below the band's bottom, whole: nothing is cut by it.
+  // A won run: the bonus button takes a row, so the band is the normal one. The ❔ ✅ ❌ row is the row
+  // in view, with a badge line too (plan 28, 3.2: the badge used to push it behind the bonus button);
+  // the badge line and the note start below the band's bottom, whole: nothing is cut by it.
   const fold = overBandLayout(cx, EDU_Y, T).bottom;
   for (const badge of [false, true]) {
     const lines = overEduLines(T, { badge, won: true });
@@ -305,20 +306,19 @@ test('an education panel\'s cells (plan 26, image 9): ‼️ 😢 is the third r
     const falls = box(cells.find((c) => c.id === 'eduAnswered'));
     assert.equal(falls.t, EDU_Y + lines.tally - T.over.cellH / 2);
     const rows = [
-      ...(badge ? [['the badge line', EDU_Y + lines.badge - halfLine(28), EDU_Y + lines.badge + halfLine(28)]] : []),
       ['the ❔ ✅ ❌ row', falls.t, falls.b],
+      ...(badge ? [['the badge line', EDU_Y + lines.badge - halfLine(28), EDU_Y + lines.badge + halfLine(28)]] : []),
       ['the note', EDU_Y + lines.note - halfLine(24), EDU_Y + lines.note + halfLine(24)],
     ];
+    for (const [name, top] of rows.slice(1)) assert.ok(top >= fold, `won${badge ? ', a badge' : ''}: ${name} (from ${top}) is below the fold (${fold})`);
     for (const [name, top, bottom] of rows) assert.ok(bottom <= fold || top >= fold, `won${badge ? ', a badge' : ''}: ${name} (${top}–${bottom}) is not cut by the band's bottom (${fold})`);
     assert.ok(rows[0][2] <= fold - 16, `won${badge ? ', a badge' : ''}: ${rows[0][0]} is in view, clear of the bonus button by ${fold - rows[0][2]} px`);
     assert.ok(rows.at(-1)[1] >= fold, `won${badge ? ', a badge' : ''}: the note is below the fold: the band scrolls to it`);
     for (let i = 1; i < rows.length; i += 1) assert.ok(rows[i][1] >= rows[i - 1][2], `won: ${rows[i][0]} under ${rows[i - 1][0]}`);
     for (const c of cells) for (const o of cells) if (o !== c) assert.ok(!overlapping(box(c), box(o)), `won: ${c.id} clear of ${o.id}`);
-    // With no badge line the tally is the row in view, and a tap on it is the cell's, not the bonus button's.
-    if (!badge) {
-      const right = cells.find((c) => c.id === 'eduRight');
-      assert.equal(overHit(right.x, right.y, { ...overButtonsLayout(cx, EDU_Y, T, { pair: true, bonus: true }), cells }), 'cell:eduRight');
-    }
+    // The tally is the row in view, badge or not, and a tap on it is the cell's, not the bonus button's.
+    const right = cells.find((c) => c.id === 'eduRight');
+    assert.equal(overHit(right.x, right.y, { ...overButtonsLayout(cx, EDU_Y, T, { pair: true, bonus: true }), cells }), 'cell:eduRight');
   }
   assert.notDeepEqual(overEduLines(T, { badge: true, won: true }), overEduLines(T, { badge: true, won: false }), 'a won run sets its rows for the shorter band');
 });

@@ -200,7 +200,8 @@ export class Over extends Phaser.Scene {
     if (education) {
       // Why the run is on no board, under the ❔ ✅ ❌ row (overEduLines). A lost run's taller band
       // holds all of it; a won run's shorter one (the bonus button takes a row) has this note, and
-      // under a badge line the ❔ ✅ ❌ row too, below its bottom: those panels scroll.
+      // the badge line when there is one, below its bottom (the ❔ ✅ ❌ row stays in view; plan 28,
+      // 3.2): those panels scroll.
       this.eduNote = line(this.add.text(cx, cy + eduLines.note, t(locale, testRun ? 'testRunNotSaved' : 'eduNotSaved'), { ...style, fontSize: '24px', color: '#c9b8dc', fontStyle: 'normal', wordWrap: { width: 480, useAdvancedWrap: true } }).setOrigin(0.5));
     } else if (testRun) {
       line(this.add.text(cx, cy + 150, t(locale, 'testRunNotSaved'), { ...style, fontSize: '30px', color: '#ffd700', wordWrap: { width: 460, useAdvancedWrap: true } }).setOrigin(0.5));

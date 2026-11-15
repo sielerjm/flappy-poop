@@ -1813,7 +1813,9 @@ src/
                             the card; ‼️ 😢 sit under the coins, the eduNote under
                             them, a badge line between the coins and that row
                             (overEduLines; its badges are looked up in
-                            EDU_ACHIEVEMENTS too). Buttons: Home | Play again side
+                            EDU_ACHIEVEMENTS too); on a won run the ❔ ✅ ❌ row stays
+                            in view and the badge line goes below it, under the fold
+                            (over.eduLinesY's wonBadge; plan 28, 3.2). Buttons: Home | Play again side
                             by side (overButtonsLayout { pair }; the glow's key is
                             over-pair-halo, over.pairGlowPx), no Share; a lost
                             run's band is the tall one (overBandLayout { tall }) and

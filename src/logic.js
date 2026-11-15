@@ -1723,12 +1723,13 @@ export function overCellsLayout(cx, cy, t, { daily = false, education = false, b
  * An education panel's rows under the coins row, as px from the panel centre (over.eduLinesY; plan
  * 21, E5): { badge (the "🏆 New: …" line; null without one), tally (the ❔ ✅ ❌ row, plan 26: in the
  * badge line's place, or a row under it), note (why the run is on no board: a row under that) }. A lost
- * run's tall band holds them all. A won run's band ends at the bonus button: the first row under
- * the coins stays in view and the rest starts below the band's bottom, whole, where it scrolls to.
+ * run's tall band holds them all. A won run's band ends at the bonus button: the ❔ ✅ ❌ row is the row
+ * in view, and the badge line (wonBadge; plan 28, 3.2: it used to push the row behind the button) and
+ * the note start below the band's bottom, whole, where it scrolls to.
  */
 export function overEduLines(t, { badge = false, won = false } = {}) {
   const y = t.over.eduLinesY;
-  if (won) return badge ? { badge: y.badge, tally: y.wonTallyUnderBadge, note: y.wonNoteUnderBadge } : { badge: null, tally: y.wonTally, note: y.wonNote };
+  if (won) return badge ? { badge: y.wonBadge, tally: y.wonTallyUnderBadge, note: y.wonNoteUnderBadge } : { badge: null, tally: y.wonTally, note: y.wonNote };
   return badge ? { badge: y.badge, tally: y.tallyUnderBadge, note: y.noteUnderBadge } : { badge: null, tally: y.tally, note: y.note };
 }
 
