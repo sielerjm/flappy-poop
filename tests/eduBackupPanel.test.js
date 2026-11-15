@@ -351,3 +351,28 @@ test("AUD-052: Clear's cards note only where 📚 Education data opens; zh-Hans 
   assert.doesNotMatch(zh, /[。：，；！？] /, `no space after full-width punctuation: "${zh}"`);
   assert.match(await warn({ sharing: true }), /\. Your 📚 cards/, 'English keeps its spaces');
 });
+
+// AUD-053 (the Checkpoint 3 audit): the panel opened again over itself (an invite link while the sheet is
+// up) is the same opening: a second Back up waits, and the first share's result still lands; a restore
+// that throws says so.
+test('AUD-053: opening the panel over itself keeps a share in progress; a throwing restore shows its error', async () => {
+  let finish;
+  const nav = sheet({ answer: () => new Promise((r) => (finish = r)) });
+  setNav(nav);
+  const play = device();
+  open(play);
+  el('edu-backup-save').listeners.click[0]({});
+  open(play); // again, while the sheet is up
+  await el('edu-backup-save').click();
+  assert.equal(nav.calls.length, 1, 'no second share while the first sheet is open');
+  finish();
+  await tick();
+  assert.equal(el('edu-backup-status').textContent, t('en', 'eduBackupShared'), "the first share's result lands");
+  closeEduDataPanel();
+  open(device({ restoreEducation: () => { throw new Error('boom'); } }));
+  const input = el('edu-restore-input');
+  input.files = [{ name: 'b.json', size: 10, text: async () => '{}' }];
+  await input.fire('change');
+  await tick();
+  assert.equal(el('edu-backup-status').textContent, t('en', 'eduRestoreBad'));
+});

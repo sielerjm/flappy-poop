@@ -473,12 +473,11 @@ function onFile() {
     return;
   }
   const mine = session;
+  // A file that cannot be read, or a restore that throws, says so (AUD-053).
   Promise.resolve()
     .then(() => file.text())
-    .then(
-      (text) => mine === session && ctx && dom && onRestore(text),
-      () => mine === session && ctx && dom && setBackupStatus(t(ctx.locale, 'eduRestoreBad'), 'error'),
-    );
+    .then((text) => mine === session && ctx && dom && onRestore(text))
+    .catch(() => mine === session && ctx && dom && setBackupStatus(t(ctx.locale, 'eduRestoreBad'), 'error'));
 }
 
 function setGameKeyboard(enabled) {
@@ -505,8 +504,12 @@ export function openEduDataPanel(options) {
   ctx = { game: options.game, play: options.play, locale: options.locale ?? 'en', onClose: options.onClose ?? null };
   busy = false;
   changed = false;
-  backupBusy = false;
-  session += 1;
+  // Opened again over itself (an invite link while a share sheet is up) is the same opening: a share
+  // in progress keeps Back up waiting, and its result still lands (AUD-053).
+  if (!wasOpen) {
+    backupBusy = false;
+    session += 1;
+  }
   dom.adult.checked = false;
   dom.paste.value = '';
   setBackupStatus('');
