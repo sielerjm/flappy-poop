@@ -254,6 +254,27 @@ test('fetchTop is null on a non-array body, a malformed row, bad JSON, or a fail
   assert.deepEqual(await fetchTop({ fetch: fakeFetch({ body: [] }), config }), []);
 });
 
+test('fetchTop with the player id asks score_board for the list as that player sees it, and falls back to the table read when it fails (plan 30)', async () => {
+  const body = [{ name: 'Ann', score: 40, toilet: false, level: 4 }, { name: 'Holdy', score: 30, toilet: false, level: 3 }];
+  const fetch = fakeFetch({ status: 200, body });
+  assert.deepEqual(await fetchTop({ playerId: ID, fetch, config: { ...config, limit: 7 } }), body);
+  assert.equal(fetch.calls.length, 1);
+  assert.equal(fetch.calls[0].url, 'https://x.example/rest/v1/rpc/score_board');
+  assert.equal(fetch.calls[0].method, 'POST');
+  assert.deepEqual(fetch.calls[0].body, { p_player_id: ID, p_limit: 7 });
+  const calls = [];
+  const flaky = async (url, init) => {
+    calls.push(String(url));
+    const rpc = String(url).includes('/rpc/');
+    return { ok: !rpc, status: rpc ? 404 : 200, text: async () => JSON.stringify(rpc ? { message: 'no such function' } : body) };
+  };
+  assert.deepEqual(await fetchTop({ playerId: ID, fetch: flaky, config }), body, 'the table read when score_board is missing');
+  assert.deepEqual(calls.map((u) => u.replace('https://x.example/rest/v1', '')), ['/rpc/score_board', '/scores?select=name,score,toilet,level&order=score.desc,updated_at.asc&limit=10']);
+  const plain = fakeFetch({ status: 200, body });
+  await fetchTop({ fetch: plain, config });
+  assert.match(plain.calls[0].url, /\/scores\?select=/, 'no player id: the table read, as before');
+});
+
 // ---------------------------------------------------------------------------
 // fetchRank
 

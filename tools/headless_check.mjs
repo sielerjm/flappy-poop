@@ -723,6 +723,22 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         ok(spliced.order.join() === '261,243,240,199,197' && spliced.colors['261'] === '#f8a0c8' && spliced.colors['197'] === '#f8a0c8' && spliced.colors['243'] === '#ffffff' && spliced.names.length === 2 && spliced.names.every((c) => c === '#f8a0c8'), `a top list without your rows still shows them pink at their ranks (${spliced.order.join(' · ')}; your names ${spliced.names.join(', ')})`);
       }
 
+      // A best of yours the board holds back from others (plan 30): your list comes from score_board,
+      // which has it at its rank, so it shows once, pink, and the stored row under it does not show.
+      {
+        const P = `__flappy.scene.getScene('Play')`;
+        const saved = await evaluate(`JSON.stringify(${P}.save)`);
+        await evaluate(`import('./src/save.js').then((m) => (${P}.setSaveState(m.ensureId(m.saveLocal({ ...${P}.save, name: 'HeldTester', top: [{ score: 200, toilet: false, level: 5 }] }))), true))`);
+        await evaluate(`(() => { globalThis.__fetch5 = globalThis.fetch; globalThis.__boardAsks = []; const others = [{ name: 'Ann', score: 243, toilet: false, level: 6 }, { name: 'D', score: 199, toilet: false, level: 5 }, { name: 'HeldTester', score: 150, toilet: false, level: 4 }]; const mine = [{ name: 'Ann', score: 243, toilet: false, level: 6 }, { name: 'HeldTester', score: 200, toilet: false, level: 5 }, { name: 'D', score: 199, toilet: false, level: 5 }]; globalThis.fetch = async (url, init) => { const u = String(url); if (u.includes('/scores?')) return new Response(JSON.stringify(others), { status: 200 }); if (u.endsWith('/rpc/score_board')) { globalThis.__boardAsks.push(JSON.parse(init.body)); return new Response(JSON.stringify(mine), { status: 200 }); } if (u.endsWith('/rpc/player_rank')) { const b = JSON.parse(init.body); return new Response(JSON.stringify(b.p_toilet ? null : { rank: 2, total: 3, score: 200, toilet: false, level: 5 }), { status: 200 }); } return new Response('{"message":"stub"}', { status: 503 }); }; return import('./src/config.js').then((m) => { globalThis.__api5 = m.LEADERBOARD.dataApi; m.LEADERBOARD.dataApi = 'https://stub.invalid/rest/v1'; return true; }); })()`);
+        await chrome('leaderboard');
+        await sleep(1200);
+        const heldView = await evaluate(`JSON.stringify((() => { const texts = __flappy.scene.getScene('Leaderboard').children.list.filter((c) => c.type === 'Text'); const scores = texts.filter((c) => /^[0-9]+$/.test(c.text)).sort((a, b) => a.y - b.y); const named = texts.filter((c) => c.text === 'HeldTester'); return { order: scores.map((c) => c.text), colors: Object.fromEntries(scores.map((c) => [c.text, c.style.color])), names: named.map((c) => c.style.color), asks: globalThis.__boardAsks, id: ${P}.save.id }; })())`).then(JSON.parse);
+        await closeTop('Leaderboard');
+        await sleep(300);
+        await evaluate(`(globalThis.fetch = globalThis.__fetch5, import('./src/config.js').then((m) => { m.LEADERBOARD.dataApi = globalThis.__api5; return import('./src/save.js'); }).then((m) => (${P}.setSaveState(m.saveLocal(${saved})), true)))`);
+        ok(heldView.order.join() === '243,200,199' && heldView.colors['200'] === '#f8a0c8' && heldView.colors['243'] === '#ffffff' && heldView.names.length === 1 && heldView.names[0] === '#f8a0c8' && heldView.asks.length >= 1 && heldView.asks[0].p_player_id === heldView.id, `a best the board holds back shows once, pink, at its rank, from score_board (${heldView.order.join(' · ')}; asked for ${heldView.asks.length === 0 ? 'nobody' : 'this player'})`);
+      }
+
       // What's new always opens on the latest version, even after an older one was viewed and closed
       // (scene.launch without data used to reuse the last restart's { version }).
       {

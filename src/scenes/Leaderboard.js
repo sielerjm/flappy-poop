@@ -169,7 +169,7 @@ export class Leaderboard extends Phaser.Scene {
     // A player can hold two rows (off and on the toilet). Ask for both whatever this device has
     // played: a player merged across devices has rows from all of them (player_rank answers null
     // for a kind with no row). The footer's "not on the board yet" stays keyed on the local best.
-    const [rows, off, on] = await Promise.all([fetchTop(), named ? fetchRank(state.id, false) : null, named ? fetchRank(state.id, true) : null]);
+    const [rows, off, on] = await Promise.all([fetchTop(named ? { playerId: state.id } : {}), named ? fetchRank(state.id, false) : null, named ? fetchRank(state.id, true) : null]);
     const rank = { off, on, best };
     // Closed, or closed and reopened, while the requests were in flight.
     if (gen !== this.gen || !this.scene.isActive()) return;

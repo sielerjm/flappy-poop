@@ -36,6 +36,7 @@
 --   * call submit_research_events(...) a pilot participant's answer events, under their research id
 --   * call delete_research(...)    withdraw from the pilot: the participant and their answers are deleted
 --   * call submit_runs(...)        a batch of run summaries, as numbers (plan 30); stored owner-only, 90 days
+--   * call score_board(...)        the 🏆 top list as one player sees it: their own rows at their own best (names, never ids)
 --   * call schema_version()        which version of this file the database last ran (a stamp of the file; 2026-11-13)
 -- A player has up to two rows: their best on the toilet and their best off it
 -- (primary key player_id + toilet, since 2026-11-04).
@@ -73,7 +74,7 @@
 -- submit_daily_score / daily_board / submit_counters / claim_achievements /
 -- player_stats / board_tags / share_education / submit_education_grades / rename_education /
 -- unshare_education / education_board / enrol_research / submit_research_events / delete_research /
--- submit_runs / schema_version;
+-- submit_runs / score_board / schema_version;
 -- an old client keeps working (same submit_score signature).
 --
 -- Maintenance (SQL editor):
@@ -313,6 +314,145 @@ create policy anon_read on public.scores for select to anon using (not hidden);
 grant usage on schema public to anon;
 revoke all on public.scores from anon, authenticated;
 grant select (name, score, toilet, level, updated_at) on public.scores to anon;
+
+-- The run log and holding (plan 30): the tables, and the two read helpers the 🏆 and rank functions
+-- below use. What they are for is said where submit_runs and hold_run are defined, further down.
+-- Run summaries (plan 30): one row per finished single-player or Daily run, as numbers (src/runStats.js
+-- makes them; never a test run, an education run or a match half). The device sends them in
+-- submit_runs before its score posts. Owner-only: no role may read or write the tables, and no
+-- profile or board shows them. A row is kept 90 days (received_at), except a held row and a hidden
+-- player's rows. Times: started_at and ended_at are the device's clock; clock_offset_ms is the
+-- server's clock minus the device's, measured when the batch was sent; received_at is the server's.
+create table if not exists public.run_log (
+  player_id       text not null check (player_id ~ '^[A-Za-z0-9_-]{22}$'), -- resolved (resolve_player)
+  run_id          text not null check (run_id ~ '^[A-Za-z0-9_-]{22}$'),    -- made by the device
+  session         text not null check (session ~ '^[A-Za-z0-9_-]{8,22}$'), -- one page load
+  mode            text not null check (mode in ('single', 'daily')),
+  day             date,                                                    -- the Daily's day
+  stub            boolean not null default false,                          -- a Daily cut off by a reload
+  score           int  not null check (score between 0 and 10000),
+  level           int  not null check (level between 1 and 7),
+  toilet          boolean not null default false,
+  won             boolean not null default false,
+  started_at      timestamptz,
+  ended_at        timestamptz,
+  length_ms       int check (length_ms between 0 and 86400000),           -- start to end, monotonic clock
+  paused_ms       int check (paused_ms between 0 and 86400000),           -- paused or hidden, inside length_ms
+  clock_offset_ms bigint not null default 0,
+  version         text not null check (version ~ '^[0-9A-Za-z.+-]{1,24}$'),
+  data            jsonb not null default '{}'::jsonb,                      -- run_data_keys(): numbers only
+  received_at     timestamptz not null default now(),
+  held            boolean not null default false,                          -- hold_run (moderation)
+  held_at         timestamptz,
+  primary key (player_id, run_id),
+  check ((mode = 'daily') = (day is not null)),
+  check (not stub or mode = 'daily')
+);
+create index if not exists run_log_received on public.run_log (player_id, received_at);
+create index if not exists run_log_started on public.run_log (player_id, started_at);
+alter table public.run_log enable row level security;
+revoke all on public.run_log from public, anon, authenticated;
+
+-- What submit_runs could not store, counted by UTC day, reason and client version (no ids).
+create table if not exists public.run_rejects (
+  day     date not null default (now() at time zone 'utc')::date,
+  reason  text not null,
+  version text not null,
+  n       int  not null default 0,
+  primary key (day, reason, version)
+);
+alter table public.run_rejects enable row level security;
+revoke all on public.run_rejects from public, anon, authenticated;
+
+create table if not exists public.held_scores (
+  id          bigserial primary key,
+  player_id   text not null,
+  board       text not null check (board in ('scores', 'daily')),
+  toilet      boolean not null default false,
+  day         date,
+  name        text not null,
+  score       int  not null,
+  level       int  not null,
+  pipes       int,
+  run_id      text,                                  -- the held run it matched, if any
+  posted_at   timestamptz not null default now(),
+  released_at timestamptz,
+  check ((board = 'daily') = (day is not null))
+);
+create index if not exists held_scores_player on public.held_scores (player_id, board);
+alter table public.held_scores enable row level security;
+revoke all on public.held_scores from public, anon, authenticated;
+revoke all on sequence public.held_scores_id_seq from public, anon, authenticated;
+
+-- Every raise of a 🏆 row: score, level and the run that backed it (null: none, or a row from
+-- before this table). hold_run reads it to put a row back to the best before a held run. Seeded
+-- once with the rows of the day it was made. Owner-only.
+create table if not exists public.score_steps (
+  player_id text not null,
+  toilet    boolean not null,
+  score     int  not null,
+  level     int  not null,
+  run_id    text,
+  at        timestamptz not null default now()
+);
+create index if not exists score_steps_player on public.score_steps (player_id, toilet, score);
+alter table public.score_steps enable row level security;
+revoke all on public.score_steps from public, anon, authenticated;
+insert into public.score_steps (player_id, toilet, score, level, run_id, at)
+select s.player_id, s.toilet, s.score, s.level, null, s.updated_at from public.scores s
+where not exists (select 1 from public.score_steps);
+
+-- Board switches (one row). require_run: a raise with no run behind it is held too.
+create table if not exists public.board_settings (
+  id          boolean primary key default true check (id),
+  require_run boolean not null default false
+);
+insert into public.board_settings (id) values (true) on conflict (id) do nothing;
+alter table public.board_settings enable row level security;
+revoke all on public.board_settings from public, anon, authenticated;
+-- own_best: a player's own 🏆 rows as their own device should see them: for each 🚽 kind, the
+-- higher of the stored row and a held best (held_scores), under the name they last posted. A
+-- player's own views read it; nobody else's do. Internal.
+create or replace function public.own_best(p_id text)
+returns table (pid text, name text, score int, toilet boolean, level int, at timestamptz)
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select p_id,
+         coalesce((select s.name from public.scores s where s.player_id = p_id order by s.updated_at desc limit 1),
+                  (select h.name from public.held_scores h where h.player_id = p_id order by h.posted_at desc limit 1)),
+         c.score, c.toilet, c.level, c.at
+  from (
+    select distinct on (x.toilet) x.toilet, x.score, x.level, x.at
+    from (
+      select s.toilet, s.score, s.level, s.updated_at as at, 0 as pri from public.scores s where s.player_id = p_id
+      union all
+      select h.toilet, h.score, h.level, h.posted_at, 1 from public.held_scores h
+      where h.player_id = p_id and h.board = 'scores' and h.released_at is null
+    ) x
+    order by x.toilet, x.score desc, x.pri asc
+  ) c
+  where p_id is not null;
+$$;
+revoke execute on function public.own_best(text) from public, anon, authenticated;
+
+-- board_rows: the 🏆 rows as p_caller sees them: everyone's visible rows, and the caller's own
+-- (own_best, hidden or not). p_caller null: the visible rows alone. Internal.
+create or replace function public.board_rows(p_caller text)
+returns table (pid text, name text, score int, toilet boolean, level int, at timestamptz)
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select s.player_id, s.name, s.score, s.toilet, s.level, s.updated_at from public.scores s
+  where not s.hidden and s.player_id is distinct from p_caller
+  union all
+  select * from public.own_best(p_caller);
+$$;
+revoke execute on function public.board_rows(text) from public, anon, authenticated;
 
 -- Upsert one player's best for one toilet state (p_toilet picks the row). Raises
 -- (HTTP 400 through PostgREST) on bad input, on a username another player holds
@@ -1072,16 +1212,19 @@ stable
 security definer
 set search_path = public
 as $$
+  -- Among the rows this player sees (board_rows: their own at their own best, held ones included, plan 30).
+  with b as (
+    select * from public.board_rows(public.resolve_player(p_player_id))
+  ), me as (
+    select * from b where b.pid = public.resolve_player(p_player_id) and b.toilet = coalesce(p_toilet, false)
+  )
   select json_build_object(
-    'rank',   1 + (select count(*) from public.scores o
-                   where (not o.hidden or o.player_id = s.player_id)
-                     and (o.score > s.score or (o.score = s.score and o.updated_at < s.updated_at))),
-    'total',  (select count(*) from public.scores o where not o.hidden or o.player_id = s.player_id),
-    'score',  s.score,
-    'toilet', s.toilet,
-    'level',  s.level)
-  from public.scores s
-  where s.player_id = public.resolve_player(p_player_id) and s.toilet = coalesce(p_toilet, false);
+    'rank',   1 + (select count(*) from b o where o.score > me.score or (o.score = me.score and o.at < me.at)),
+    'total',  (select count(*) from b),
+    'score',  me.score,
+    'toilet', me.toilet,
+    'level',  me.level)
+  from me;
 $$;
 
 -- A finished tournament (🏅) from the host device: one call per tournament.
@@ -1513,7 +1656,13 @@ as $$
            ds.score as pscore, ds.level as plevel, ds.pipes as ppipes,
            row_number() over (order by ds.score desc, ds.submitted_at asc)::int as prank,
            (count(*) over ())::int as ptotal
-    from public.daily_scores ds
+    from (
+      select x.player_id, x.day, x.name, x.score, x.level, x.pipes, x.submitted_at from public.daily_scores x
+      union all -- the caller's own held post of the day (plan 30)
+      select h.player_id, h.day, h.name, h.score, h.level, coalesce(h.pipes, 0), h.posted_at from public.held_scores h
+      where h.board = 'daily' and h.released_at is null and h.player_id = (select cid from caller)
+        and not exists (select 1 from public.daily_scores y where y.player_id = h.player_id and y.day = h.day)
+    ) ds
     where ds.day = (select d from today)
       and (not public.player_hidden(ds.player_id) or ds.player_id = (select cid from caller)) -- plan 30
   )
@@ -2436,10 +2585,14 @@ begin
     'name', v_name,
     'single', jsonb_build_object(
       'games', v_games,
-      'bestScore', coalesce((select max(s.score) from public.scores s where s.player_id = v_id), 0),
+      'bestScore', coalesce(case when p_player_id ~ '^[A-Za-z0-9_-]{22}$' -- their own device: their own best (plan 30)
+                                 then (select max(o.score) from public.own_best(v_id) o)
+                                 else (select max(s.score) from public.scores s where s.player_id = v_id) end, 0),
       'wins', coalesce((v_c->>'wins')::bigint, 0),
       'maxLevel', greatest(coalesce((v_c->>'maxLevel')::int, 0),
-                           coalesce((select max(s.level) from public.scores s where s.player_id = v_id), 0)),
+                           coalesce(case when p_player_id ~ '^[A-Za-z0-9_-]{22}$'
+                                         then (select max(o.level) from public.own_best(v_id) o)
+                                         else (select max(s.level) from public.scores s where s.player_id = v_id) end, 0)),
       'avgLevel', case when v_games > 0 then round(coalesce((v_c->>'sumLevel')::numeric, 0) / v_games, 1) end,
       'avgScore', case when v_games > 0 then round(coalesce((v_c->>'sumScore')::numeric, 0) / v_games, 1) end),
     'daily', v_daily,
@@ -2529,52 +2682,6 @@ begin
 end;
 $$;
 
--- Run summaries (plan 30): one row per finished single-player or Daily run, as numbers (src/runStats.js
--- makes them; never a test run, an education run or a match half). The device sends them in
--- submit_runs before its score posts. Owner-only: no role may read or write the tables, and no
--- profile or board shows them. A row is kept 90 days (received_at), except a held row and a hidden
--- player's rows. Times: started_at and ended_at are the device's clock; clock_offset_ms is the
--- server's clock minus the device's, measured when the batch was sent; received_at is the server's.
-create table if not exists public.run_log (
-  player_id       text not null check (player_id ~ '^[A-Za-z0-9_-]{22}$'), -- resolved (resolve_player)
-  run_id          text not null check (run_id ~ '^[A-Za-z0-9_-]{22}$'),    -- made by the device
-  session         text not null check (session ~ '^[A-Za-z0-9_-]{8,22}$'), -- one page load
-  mode            text not null check (mode in ('single', 'daily')),
-  day             date,                                                    -- the Daily's day
-  stub            boolean not null default false,                          -- a Daily cut off by a reload
-  score           int  not null check (score between 0 and 10000),
-  level           int  not null check (level between 1 and 7),
-  toilet          boolean not null default false,
-  won             boolean not null default false,
-  started_at      timestamptz,
-  ended_at        timestamptz,
-  length_ms       int check (length_ms between 0 and 86400000),           -- start to end, monotonic clock
-  paused_ms       int check (paused_ms between 0 and 86400000),           -- paused or hidden, inside length_ms
-  clock_offset_ms bigint not null default 0,
-  version         text not null check (version ~ '^[0-9A-Za-z.+-]{1,24}$'),
-  data            jsonb not null default '{}'::jsonb,                      -- run_data_keys(): numbers only
-  received_at     timestamptz not null default now(),
-  held            boolean not null default false,                          -- hold_run (moderation)
-  held_at         timestamptz,
-  primary key (player_id, run_id),
-  check ((mode = 'daily') = (day is not null)),
-  check (not stub or mode = 'daily')
-);
-create index if not exists run_log_received on public.run_log (player_id, received_at);
-create index if not exists run_log_started on public.run_log (player_id, started_at);
-alter table public.run_log enable row level security;
-revoke all on public.run_log from public, anon, authenticated;
-
--- What submit_runs could not store, counted by UTC day, reason and client version (no ids).
-create table if not exists public.run_rejects (
-  day     date not null default (now() at time zone 'utc')::date,
-  reason  text not null,
-  version text not null,
-  n       int  not null default 0,
-  primary key (day, reason, version)
-);
-alter table public.run_rejects enable row level security;
-revoke all on public.run_rejects from public, anon, authenticated;
 
 -- The keys a run row's `data` may hold (src/runStats.js RUN_DATA_KEYS, in its order; tests keep the
 -- two the same). Each value is a number, a boolean, or a list of at most 16 numbers. Internal.
@@ -2797,52 +2904,6 @@ revoke execute on function public.admin_runs(text) from public, anon, authentica
 -- post that raised nothing. The player's own views read held_scores too. A post is matched to its
 -- run by content: the same player, 🚽, score and level (a Daily: the same day and score). Only a
 -- post that would raise the player's row, or make their first, needs a run. Owner-only tables.
-create table if not exists public.held_scores (
-  id          bigserial primary key,
-  player_id   text not null,
-  board       text not null check (board in ('scores', 'daily')),
-  toilet      boolean not null default false,
-  day         date,
-  name        text not null,
-  score       int  not null,
-  level       int  not null,
-  pipes       int,
-  run_id      text,                                  -- the held run it matched, if any
-  posted_at   timestamptz not null default now(),
-  released_at timestamptz,
-  check ((board = 'daily') = (day is not null))
-);
-create index if not exists held_scores_player on public.held_scores (player_id, board);
-alter table public.held_scores enable row level security;
-revoke all on public.held_scores from public, anon, authenticated;
-revoke all on sequence public.held_scores_id_seq from public, anon, authenticated;
-
--- Every raise of a 🏆 row: score, level and the run that backed it (null: none, or a row from
--- before this table). hold_run reads it to put a row back to the best before a held run. Seeded
--- once with the rows of the day it was made. Owner-only.
-create table if not exists public.score_steps (
-  player_id text not null,
-  toilet    boolean not null,
-  score     int  not null,
-  level     int  not null,
-  run_id    text,
-  at        timestamptz not null default now()
-);
-create index if not exists score_steps_player on public.score_steps (player_id, toilet, score);
-alter table public.score_steps enable row level security;
-revoke all on public.score_steps from public, anon, authenticated;
-insert into public.score_steps (player_id, toilet, score, level, run_id, at)
-select s.player_id, s.toilet, s.score, s.level, null, s.updated_at from public.scores s
-where not exists (select 1 from public.score_steps);
-
--- Board switches (one row). require_run: a raise with no run behind it is held too.
-create table if not exists public.board_settings (
-  id          boolean primary key default true check (id),
-  require_run boolean not null default false
-);
-insert into public.board_settings (id) values (true) on conflict (id) do nothing;
-alter table public.board_settings enable row level security;
-revoke all on public.board_settings from public, anon, authenticated;
 
 -- Owner only (SQL editor): turn require_run on or off.
 create or replace function public.admin_set_require_run(p_on boolean)
@@ -2997,6 +3058,22 @@ end;
 $$;
 revoke execute on function public.release_run(text, text) from public, anon, authenticated;
 
+
+-- score_board: the 🏆 top list for the player with this id (their own rows at their own best,
+-- plan 30), or for nobody (null: the visible rows, as the table read gives them). Names, never ids.
+create or replace function public.score_board(p_player_id text default null, p_limit int default 25)
+returns table (name text, score int, toilet boolean, level int)
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select b.name, b.score, b.toilet, b.level
+  from public.board_rows(case when p_player_id ~ '^[A-Za-z0-9_-]{22}$' then public.resolve_player(p_player_id) end) b
+  order by b.score desc, b.at asc
+  limit least(greatest(coalesce(p_limit, 25), 1), 100);
+$$;
+
 revoke execute on function public.submit_score(text, text, int, boolean, int) from public, authenticated;
 grant  execute on function public.submit_score(text, text, int, boolean, int) to anon;
 revoke execute on function public.player_rank(text, boolean) from public, authenticated;
@@ -3041,6 +3118,8 @@ revoke execute on function public.delete_research(text) from public, authenticat
 grant  execute on function public.delete_research(text) to anon;
 revoke execute on function public.submit_runs(text, bigint, jsonb) from public, authenticated;
 grant  execute on function public.submit_runs(text, bigint, jsonb) to anon;
+revoke execute on function public.score_board(text, int) from public, authenticated;
+grant  execute on function public.score_board(text, int) to anon;
 
 -- Which version of this file the database last ran: a short SHA-256 of the file with the value
 -- below blanked (tools/schema_check.mjs). `npm run schema:stamp` rewrites it after an edit, and
@@ -3052,7 +3131,7 @@ returns text
 language sql
 immutable
 as $$
-  select '1b187650ec4453f4'::text; -- schema stamp
+  select '5d5121ac05696cff'::text; -- schema stamp
 $$;
 revoke execute on function public.schema_version() from public, authenticated;
 grant  execute on function public.schema_version() to anon;

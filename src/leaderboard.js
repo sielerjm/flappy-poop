@@ -643,14 +643,24 @@ function normalizeRow(raw) {
   return { name: raw.name, score: raw.score, toilet: Boolean(raw.toilet), level: levelOf(raw.level) };
 }
 
-/** The top rows, best first, or null when the board cannot be reached. */
+/**
+ * The top rows, best first, or null when the board cannot be reached. With `playerId`: the list as
+ * that player sees it (score_board: their own rows at their own best, plan 30), falling back to the
+ * table read when that call fails (a database that does not have it yet).
+ */
 export async function fetchTop(opts = {}) {
   const limit = opts.config?.limit ?? LEADERBOARD.limit;
-  const out = await request(`/scores?select=name,score,toilet,level&order=score.desc,updated_at.asc&limit=${limit}`, {}, opts);
-  if (!Array.isArray(out)) return null;
-  const rows = out.map(normalizeRow);
-  if (rows.some((r) => r === null)) return null;
-  return rows.sort((a, b) => b.score - a.score).slice(0, limit);
+  const tidy = (out) => {
+    if (!Array.isArray(out)) return null;
+    const rows = out.map(normalizeRow);
+    if (rows.some((r) => r === null)) return null;
+    return rows.sort((a, b) => b.score - a.score).slice(0, limit);
+  };
+  if (typeof opts.playerId === 'string' && opts.playerId) {
+    const own = tidy(await request('/rpc/score_board', { method: 'POST', body: { p_player_id: opts.playerId, p_limit: limit } }, opts));
+    if (own) return own;
+  }
+  return tidy(await request(`/scores?select=name,score,toilet,level&order=score.desc,updated_at.asc&limit=${limit}`, {}, opts));
 }
 
 /**
