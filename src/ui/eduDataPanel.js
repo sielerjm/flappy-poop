@@ -90,7 +90,7 @@ function build() {
   const intro = h('p', { class: 'intro' });
   // The invitation (plan 28, 2.4): a note for a player not yet invited, and the code both sections use.
   const inviteNote = h('p', { class: 'state', id: 'edu-invite-note' });
-  const code = h('input', { id: 'edu-invite-code', type: 'text', maxlength: '200', autocomplete: 'off', autocapitalize: 'off', spellcheck: 'false' });
+  const code = h('input', { id: 'edu-invite-code', type: 'text', maxlength: '200', autocomplete: 'off', autocapitalize: 'off', autocorrect: 'off', spellcheck: 'false' }); // autocorrect: iOS would rewrite "--" (AUD-046)
   const inviteRow = h('div', { class: 'row' }, code);
   const adult = h('input', { id: 'edu-adult', type: 'checkbox' });
   const adultText = h('span');
@@ -319,12 +319,13 @@ function setGameKeyboard(enabled) {
 export function openEduDataPanel(options) {
   if (typeof document === 'undefined') return;
   if (!dom) build();
+  const wasOpen = !dom.root.hidden; // opened again over itself: the keyboard to give back is the one saved first (AUD-046)
   ctx = { game: options.game, play: options.play, locale: options.locale ?? 'en', onClose: options.onClose ?? null };
   busy = false;
   changed = false;
   dom.adult.checked = false;
   dom.code.value = typeof options.invite === 'string' ? options.invite : ''; // an invite link's code (plan 28, 2.4)
-  setGameKeyboard(false);
+  if (!wasOpen) setGameKeyboard(false);
   // What the player should know first: the server ended their pilot (once), else that sharing needs a username.
   const ended = Boolean(ctx.play?.researchEnded);
   if (ended) ctx.play.researchEnded = false;
@@ -338,6 +339,7 @@ export function openEduDataPanel(options) {
 export function closeEduDataPanel() {
   if (!dom || dom.root.hidden) return;
   dom.root.hidden = true;
+  dom.code.value = ''; // the code is sent once and never kept, in the page either (AUD-046)
   if (document.activeElement && dom.root.contains(document.activeElement)) document.activeElement.blur();
   setGameKeyboard(true);
   const done = ctx?.onClose;

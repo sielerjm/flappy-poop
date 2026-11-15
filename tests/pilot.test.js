@@ -349,6 +349,24 @@ test('with education off for everyone (the off switch), a tester who joined or s
   assert.deepEqual([opens(), saveButton()], [true, true], 'sharing: Stop sharing stays reachable');
 });
 
+test('the invite field keeps no code once the panel closes, and asks iOS not to rewrite one; a second open while open still gives the game its keyboard back (AUD-046)', () => {
+  const play = device({ id: 'HYGIENEAAAAAAAAAAAAAAA', name: 'Tester', top: [], exportedAt: null }, fakeStorage());
+  play.eduShare = { load: () => ({ on: false }) };
+  const kb = { enabled: true };
+  const game = { input: { keyboard: kb } };
+  openEduDataPanel({ game, play, locale: 'en', invite: 'a-code-from-a-link-2026' });
+  const field = body.find('edu-invite-code');
+  assert.equal(field.value, 'a-code-from-a-link-2026');
+  assert.equal(field.getAttribute('autocorrect'), 'off', 'no autocorrect or smart punctuation on a code');
+  closeEduDataPanel();
+  assert.equal(field.value, '', 'closed without sharing or joining: the code is not kept in the page');
+  openEduDataPanel({ game, play, locale: 'en' });
+  openEduDataPanel({ game, play, locale: 'en', invite: 'a-code-from-a-link-2026' }); // say, a link's panel over one already open
+  assert.equal(kb.enabled, false, 'the game keyboard is off under the panel');
+  closeEduDataPanel();
+  assert.equal(kb.enabled, true, 'and back on once it closes');
+});
+
 test("Clear's warning names the pilot whenever this device holds a consent, an older notice's included (AUD-005)", async () => {
   globalThis.localStorage = fakeStorage();
   const play = device({ id: 'CLEARAAAAAAAAAAAAAAAAA', name: 'Tester', top: [], exportedAt: null }, fakeStorage());
