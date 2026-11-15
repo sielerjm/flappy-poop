@@ -4580,7 +4580,12 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
           return view();
         };
         const press = async (slot, wait = 0) => {
-          if (wait) await sleep(wait);
+          if (wait) {
+            await sleep(wait);
+            // A hold runs on the game's clock (holdFor: time.delayedCall), which falls behind the wall clock when
+            // frames drop under load: wait until it is over (plan 28's checkpoint 1 failed here twice under load).
+            for (let i = 0; i < 50 && (await evaluate(`Boolean(${Q}.${slot}.held)`)); i += 1) await sleep(100);
+          }
           await evaluate(`${Q}.${slot}.press(), true`);
           await sleep(250);
         };
