@@ -129,4 +129,7 @@ test('push.mjs runs its steps in pushSteps order, npm test once, and puts the st
   assert.match(failBlock, /restore\(\)/);
   assert.match(src, /function restore\(\) \{\s*writeFileSync\(file, src\);\s*restoreFixture\(\);/);
   assert.match(src, /function restoreFixture\(\) \{[\s\S]*?writeFileSync\(FIXTURE_PATH, fixtureBefore\)[\s\S]*?rmSync\(FIXTURE_PATH/);
+  // Ctrl-C during the tests: the push outlives the signal while npm test runs, so the catch restores.
+  const testStep = src.slice(src.indexOf("step === 'test'"), src.indexOf("step === 'restoreFixture'"));
+  assert.match(testStep, /process\.on\('SIGINT', holdSigint\)[\s\S]*execSync\('npm test'/, 'SIGINT is held before npm test starts');
 });

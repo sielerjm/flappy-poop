@@ -90,8 +90,13 @@ for (const step of pushSteps({ copyFixture, dry })) {
     writeFileSync(FIXTURE_PATH, readFileSync(SCHEMA_PATH));
     console.log('tests/fixtures/schema-applied.sql is db/schema.sql now');
   } else if (step === 'test') {
+    // Ctrl-C reaches npm test too: while it runs, this process outlives the signal so the catch
+    // below puts the stamp and the fixture back.
+    const holdSigint = () => {};
+    process.on('SIGINT', holdSigint);
     try {
       execSync('npm test', { stdio: 'inherit' });
+      process.off('SIGINT', holdSigint);
     } catch {
       restore();
       console.error('push.mjs: the tests failed; the stamp and the fixture are put back, nothing committed or pushed');
