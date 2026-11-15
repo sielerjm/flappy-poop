@@ -16,7 +16,7 @@
 // Both are by invitation (plan 28, 2.4): one "Invite code" field at the top serves both (an invite
 // link fills it: openEduDataPanel's invite). A player not yet invited sees only the note and the
 // field; the two sections show once a code is typed, or once the player is invited (the device's
-// eduInvited flag), shares, or has joined. A share or join with the code marks the player invited.
+// eduInvited flag), shares, or has joined. A share marks the player invited; a join marks nothing (AUD-040).
 //
 // While open, Phaser's keyboard manager is disabled and the controller is ignored (padIntent's
 // savePanelOpen), as for the user panel. Canvas pointer events never reach the game: the backdrop

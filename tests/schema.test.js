@@ -920,10 +920,11 @@ test('sharing is by invitation (plan 28, 2.4): a code that hashes to the invite 
   await setInvite(db, 'a-brand-new-code-2027');
   await assert.rejects(share(Q, 'Quin', CODE), /needs invite/, 'the old code no longer invites');
   assert.ok(await share(P, 'Pia', null), 'the invited still share');
-  // A pilot participant (joined with the code) shares without one; joining marks them invited.
+  // A pilot participant (joined with the code) shares without one; joining marks nothing (AUD-040), the share does.
   await enrol(db, PILOT, 'a-brand-new-code-2027');
-  assert.equal(await invited(PILOT), true, 'joining the pilot marks the player invited');
+  assert.equal(await invited(PILOT), false, 'joining the pilot marks nothing outside its tables (AUD-040)');
   assert.ok(await share(PILOT, 'Pilo', null), 'a participant shares with no code');
+  assert.equal(await invited(PILOT), true, 'and the share marks them invited');
   // A 🔧 dev needs none.
   await asAnon(db, 'select public.submit_score($1, $2, 5)', [DEV, 'Devin']);
   await db.query("select public.admin_set_dev('Devin', true)");
@@ -932,10 +933,10 @@ test('sharing is by invitation (plan 28, 2.4): a code that hashes to the invite 
   await db.query("insert into public.education_public (player_id, name) values ($1, 'Oldie')", [Q]);
   assert.ok(await share(Q, 'Oldie2', null), 'a player already on the board re-shares (renames) with no code');
   assert.equal(await invited(Q), true, 'and is marked invited by it (review: so Stop then Share still works)');
-  // The backfill: a player on the board or in the pilot from before the column is invited once the file runs.
+  // The backfill: a player on the board from before the column is invited once the file runs.
   await db.query("update public.player_meta set edu_invited = false where player_id in ($1, $2)", [Q, PILOT]);
   await db.exec(SQL);
-  assert.deepEqual([await invited(Q), await invited(PILOT)], [true, true], 'the backfill marks board and pilot players invited');
+  assert.deepEqual([await invited(Q), await invited(PILOT)], [true, true], 'the backfill marks the board\'s players invited (PILOT shares too)');
 });
 
 test('enrol_research and the invitation (plan 28, 2.4): an invited player joins without a code, a wrong one included; enrolment stays closed while no code is set; a fold keeps either player\'s invitation', async () => {
@@ -955,6 +956,30 @@ test('enrol_research and the invitation (plan 28, 2.4): an invited player joins 
   assert.ok(await eshare(db, M, 'Mia'), 'M invited');
   await asAnon(db, 'select public.merge_players($1, $2)', [K, M]);
   assert.equal((await db.query('select edu_invited from public.player_meta where player_id = $1', [K])).rows[0].edu_invited, true, 'the kept player is invited');
+});
+
+test("the pilot leaves nothing behind (AUD-040): a join writes no player_meta row and marks no invitation, so Withdraw and the purge leave nothing RESEARCH.md does not name", async () => {
+  const db = await freshDb();
+  await setInvite(db, CODE);
+  const meta = async (pid) => (await db.query('select edu_invited from public.player_meta where player_id = $1', [pid])).rows;
+  const T = id('PilotOnly');
+  assert.equal((await enrol(db, T, CODE)).status, 'ok', 'a tester with no username joins with the code');
+  assert.deepEqual(await meta(T), [], 'the join writes no player_meta row');
+  await asAnon(db, 'select public.delete_research($1)', [T]);
+  assert.deepEqual(await meta(T), [], 'withdrawn: nothing of the tester remains outside the pilot tables');
+  await assert.rejects(enrol(db, T, null), /bad invite/, 'a new join needs the code again');
+  // A player who already has a row (a score) is not marked invited by a join, and the purge leaves the row as it was.
+  const S = id('PilotScorer');
+  await asAnon(db, 'select public.submit_score($1, $2, 5)', [S, 'Scorer']);
+  assert.equal((await enrol(db, S, CODE)).status, 'ok');
+  assert.deepEqual(await meta(S), [{ edu_invited: false }], 'no invitation mark from a join');
+  await db.query("select public.admin_purge_phase('pilot')");
+  assert.deepEqual(await meta(S), [{ edu_invited: false }], 'the purge leaves no mark behind');
+  // The backfill marks the 📚 board's players only, never a pilot participant.
+  const U = id('PilotBefore');
+  assert.equal((await enrol(db, U, CODE)).status, 'ok');
+  await db.exec(SQL);
+  assert.deepEqual(await meta(U), [], "the backfill writes nothing for a participant");
 });
 
 test('share_education follows the score board name claim; an education-only player needs no score row; a second share only renames', async () => {

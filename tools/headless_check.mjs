@@ -5735,6 +5735,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await shutProfile();
         ok(ownPilot.texts.includes(await tx('statsEduPilot')) && ownPilot.texts.includes(await tx('statsEduPilotOn')), 'your own profile says you are in the tester pilot');
         // Withdraw: off only once the server has deleted everything; then the queue is empty and 🔬 is gone.
+        // A tester who never shared is not invited after it (a join marks nothing: AUD-040), so Join waits for a code.
         await evaluate(`${play}.researchQueue.add(${JSON.stringify(e1)}), ${play}.openEduData(), true`);
         await evaluate(`(globalThis.__eduAnswer.withdraw = null, ${el('edu-pilot-leave')}.click(), true)`);
         await sleep(400);
@@ -5744,7 +5745,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         const wGone = await pilot();
         await closeData();
         const withdrawals = await evaluate(`JSON.stringify(__edu.withdrawals)`).then(JSON.parse);
-        ok(wStuck.joined && wStuck.status === pw.eduPilotLeaveOffline && wStuck.queued === 1 && !wGone.joined && wGone.status === pw.eduPilotLeft && wGone.queued === 0 && wGone.consent === null && wGone.state === pw.eduPilotOff && wGone.joinHidden === false && withdrawals.length === 2 && withdrawals.every((x) => x === saveNow.id), `Withdraw stays joined while the server cannot be reached ("${wStuck.status}"), then deletes: "${wGone.status}", the queue emptied`);
+        ok(wStuck.joined && wStuck.status === pw.eduPilotLeaveOffline && wStuck.queued === 1 && !wGone.joined && wGone.status === pw.eduPilotLeft && wGone.queued === 0 && wGone.consent === null && wGone.state === pw.eduPilotOff && wGone.joinHidden === true && withdrawals.length === 2 && withdrawals.every((x) => x === saveNow.id), `Withdraw stays joined while the server cannot be reached ("${wStuck.status}"), then deletes: "${wGone.status}", the queue emptied`);
         const hud2 = await eduRunToQuiz();
         await answerOne(true, 'touch');
         ok(hud2.badge === '\u{1F4DA}' && (await evaluate(`${play}.researchQueue.size()`)) === 0, 'after withdrawing, the HUD shows 📚 alone and nothing is recorded');

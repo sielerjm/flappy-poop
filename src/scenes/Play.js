@@ -4277,7 +4277,8 @@ export class Play extends Phaser.Scene {
     const id = this.save.id;
     const res = await this.postResearchEnrol(id, invite ?? null, adult === true, EDUCATION.consentVersion);
     if (res?.status === 'ok' && this.save?.id === id) {
-      this.settings?.set?.({ eduInvited: true }); // joining is an invitation to share too (plan 28, 2.4)
+      // No invitation flag: a join is not the 📚 board's invitation, and the server marks none (AUD-040).
+      // While joined, the panel shows both parts and the server lets the participant share without a code.
       this.consentStore.join({ version: EDUCATION.consentVersion, phase: res.phase, at: Date.now(), id, since: res.since });
       // Nothing recorded before this join is sent under it (RESEARCH.md: answers given before joining
       // are not sent): a queue left from an older notice's consent goes (plan 24, AUD-005).

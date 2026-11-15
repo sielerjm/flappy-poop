@@ -563,8 +563,9 @@ create table if not exists public.player_meta (
 -- rename_education wait 5 s between two (education_paced). Here, not on the 📚 row, because Stop
 -- sharing deletes that row.
 alter table public.player_meta add column if not exists edu_named_at timestamptz;
--- Invited to share on the 📚 board (plan 28, 2.4): set by share_education when the player brings the invite
--- code, and by enrol_research when they join the pilot; an invited player shares and joins without it.
+-- Invited to share on the 📚 board (plan 28, 2.4): set by every share share_education takes (the first
+-- with the invite code); an invited player shares and joins the pilot without it. Joining the pilot sets
+-- nothing here (AUD-040): the pilot keeps to its own tables.
 alter table public.player_meta add column if not exists edu_invited boolean not null default false;
 alter table public.player_meta enable row level security;
 revoke all on public.player_meta from public, anon, authenticated;
@@ -692,12 +693,12 @@ create table if not exists public.research_responses (
 create index if not exists research_responses_participant on public.research_responses (research_id, client_at);
 create index if not exists research_responses_card on public.research_responses (card_id);
 
--- The invitation's backfill (plan 28, 2.4): players already on the 📚 board or in the pilot were invited
--- before the column existed; marked so Stop then Share, or a withdrawal then a new join, still works.
--- Re-running changes nothing.
+-- The invitation's backfill (plan 28, 2.4): players already on the 📚 board were invited before the
+-- column existed; marked so Stop then Share still works. Re-running changes nothing. A pilot
+-- participant gets no mark: taking part lets them share and join without the code, and the pilot
+-- leaves nothing in player_meta, so Withdraw and the purge leave only what RESEARCH.md names (AUD-040).
 insert into public.player_meta (player_id, joined_at, exact, edu_invited)
-select pid, now(), false, true
-from (select player_id as pid from public.education_public union select player_id from public.research_participants) x
+select player_id, now(), false, true from public.education_public
 on conflict (player_id) do update set edu_invited = true;
 alter table public.research_responses enable row level security;
 revoke all on public.research_responses from public, anon, authenticated;
@@ -1875,7 +1876,8 @@ revoke execute on function public.admin_set_education_open(boolean) from public,
 -- game's Education data panel, for adults only, with the invite code the owner gave them.
 --
 -- enrol_research: join. p_invite must hash to education_settings.invite_hash ('bad invite' for a
--- wrong or missing code; 'closed' while no code is set). The code's length is the protection:
+-- wrong or missing code; 'closed' while no code is set), unless the player is invited (a share
+-- marked them: player_meta.edu_invited). It writes only to the pilot's tables (AUD-040). The code's length is the protection:
 -- player ids are free to make, so a limit on guesses per player would stop nobody, and
 -- admin_set_invite refuses a short code. p_adult must be true. p_consent_version names the
 -- notice the tester agreed to (RESEARCH.md's version, from the game). Joining again keeps the
@@ -1908,15 +1910,16 @@ begin
     raise exception 'closed';
   end if;
   v_id := public.resolve_player(p_player_id);
-  -- An invited player (plan 28, 2.4: the 📚 board's invitation) joins without the code.
+  -- An invited player (plan 28, 2.4: the 📚 board's invitation, marked by a share) joins without the code.
   if not coalesce((select m.edu_invited from public.player_meta m where m.player_id = v_id), false)
      and (p_invite is null or length(p_invite) > 200
           or encode(sha256(convert_to(p_invite, 'UTF8')), 'hex') <> v_set.invite_hash) then
     raise exception 'bad invite';
   end if;
   perform pg_advisory_xact_lock(hashtext('research:' || v_id));
-  perform public.touch_player(v_id);
-  update public.player_meta set edu_invited = true where player_id = v_id; -- joining is an invitation to share too
+  -- Nothing outside the pilot's own tables (AUD-040): no player_meta row, no invitation mark, so
+  -- Withdraw and the purge leave nothing behind that RESEARCH.md does not name. While taking part,
+  -- share_education lets the participant in without the code.
   insert into public.research_participants (player_id, phase, adult, consent_version)
   values (v_id, v_set.phase, true, p_consent_version)
   on conflict (player_id) do update
@@ -2366,7 +2369,7 @@ returns text
 language sql
 immutable
 as $$
-  select 'ba1baa2564729167'::text; -- schema stamp
+  select 'c02eda7b5dadf8fa'::text; -- schema stamp
 $$;
 revoke execute on function public.schema_version() from public, authenticated;
 grant  execute on function public.schema_version() to anon;

@@ -102,6 +102,25 @@ test('a tester who joined with no username loads a user code, then withdraws: th
   }
 });
 
+test("a tester with no username joins, then withdraws: nothing of them stays on the server outside the pilot's tables, and the device does not take the join for the 📚 board's invitation (AUD-040)", async () => {
+  globalThis.localStorage = fakeStorage();
+  const db = await pilotDb();
+  const api = installPostgrest(db);
+  try {
+    const phone = device({ id: null, name: '', top: [], exportedAt: null });
+    phone.settings = { v: {}, load() { return { ...this.v }; }, set(patch) { Object.assign(this.v, patch); } };
+    assert.equal((await phone.joinResearch(CODE, true)).status, 'ok');
+    const pid = phone.save.id;
+    assert.equal(phone.eduInvited(), false, "a join is not the 📚 board's invitation: the device keeps no flag (the server keeps no mark)");
+    assert.deepEqual((await db.query('select 1 from public.player_meta where player_id = $1', [pid])).rows, [], 'the join writes no player_meta row');
+    assert.equal(await phone.leaveResearch(), true);
+    assert.deepEqual((await db.query('select 1 from public.player_meta where player_id = $1', [pid])).rows, [], 'Withdraw leaves no player_meta row');
+    assert.equal((await phone.joinResearch(null, true)).status, 'badInvite', 'a new join needs the code again');
+  } finally {
+    api.restore();
+  }
+});
+
 test('answers still queued when a user code is loaded keep going to the participant, and Withdraw still deletes them (AUD-001)', async () => {
   globalThis.localStorage = fakeStorage();
   const db = await pilotDb();

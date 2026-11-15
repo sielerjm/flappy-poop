@@ -608,15 +608,16 @@ gaps come from the date keys (`localDayKey`), never from milliseconds.
 while the mode is available, the 📚 board's footer and the profile's row; `Play.openEduData`). **Both
 parts are by invitation** (plan 28, 2.4): one "Invite code" field at the top serves them; a player not
 yet invited sees a note and the field, and the parts show once a code is typed or the player is invited
-(the device's settings flag `eduInvited`, set by a share or a join that the server took; never the code),
+(the device's settings flag `eduInvited`, set by a share the server took, never by a join; never the code),
 shares, or has joined. **An invite link** `…/?invite=<code>` is read once by `main.js`
 (`inviteFromSearch`), taken out of the address bar at once (`withoutInvite`, `history.replaceState`) and
 handed through the registry (`pendingInvite`) to the first ready screen, which opens the panel with the
 code filled in (`Play.openPendingInvite`). On the server, `share_education`'s fourth argument `p_invite`
 must hash to `education_settings.invite_hash` (the pilot's code) for a player who is not a 🔧 dev, not
 invited (`player_meta.edu_invited`), not a pilot participant and not already on the board ('needs
-invite', its own line); a share or a join with the code marks the player invited, and an invited player
-joins the pilot without it. An "I
+invite', its own line); every share the server takes marks the player invited, and an invited player
+joins the pilot without it. Joining writes nothing outside the pilot's own tables (no `player_meta` row,
+no mark: AUD-040), so Withdraw and the purge leave only what RESEARCH.md names. An "I
 am 18 or older" box is asked every time and never remembered. **Share my grades** puts the player's
 name, average grade, graded-run count and education badges on the **📚 board**
 (`Play.startEduShare` / `stopEduShare`; `share_education` / `unshare_education` in `db/schema.sql`,
