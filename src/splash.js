@@ -17,6 +17,7 @@ import { TUNING } from './config.js';
 import { padAction, storedLocale, VERSION } from './logic.js';
 import { t, initialLocale } from './i18n.js';
 import { achievementById } from './achievements.js';
+import { browserStorage } from './store.js';
 
 const S = TUNING.splash;
 
@@ -254,12 +255,7 @@ function mount(root, doc, win) {
   const cont = $('#splash-continue');
   if (!arc || !label || !artBox || !texts || !prev || !next || !cont) throw new Error('splash markup is incomplete');
 
-  let storage = null;
-  try {
-    storage = win.localStorage ?? null;
-  } catch {
-    storage = null; // a blocked storage throws on access
-  }
+  const storage = browserStorage(win); // this page load's memory when blocked (reading it throws)
   const locale = initialLocale(win.navigator?.language, storedLocale(storage, TUNING.settingsKey));
   const store = createSplashStore(storage);
   const pool = splashPool();

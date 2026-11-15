@@ -8,6 +8,7 @@
 // embedded in client JavaScript on purpose (tamper-evident, not tamper-proof).
 
 import { hmacSha256 } from './sha256.js';
+import { browserStorage } from './store.js';
 
 export const CURRENT_VERSION = 1;
 export const SAVE_KEY = 'flappyPoop.save'; // localStorage key
@@ -237,7 +238,7 @@ export function newId() {
 // Local storage. Every call is guarded: private browsing and blocked storage
 // throw, and iOS Safari can clear storage; the game must still start.
 
-export function loadLocal(storage = globalThis.localStorage) {
+export function loadLocal(storage = browserStorage()) {
   try {
     const raw = storage?.getItem(SAVE_KEY);
     if (raw == null) return emptyState();
@@ -251,7 +252,7 @@ export function loadLocal(storage = globalThis.localStorage) {
 }
 
 /** Persist a normalized copy of state; returns that copy. Never throws. */
-export function saveLocal(state, storage = globalThis.localStorage) {
+export function saveLocal(state, storage = browserStorage()) {
   const s = normalizeState(state);
   try {
     storage?.setItem(SAVE_KEY, JSON.stringify({ schema: SCHEMA, ...s }));
@@ -262,7 +263,7 @@ export function saveLocal(state, storage = globalThis.localStorage) {
 }
 
 /** Return state with an id, generating and persisting one on first call. */
-export function ensureId(state, storage = globalThis.localStorage) {
+export function ensureId(state, storage = browserStorage()) {
   const s = normalizeState(state);
   if (s.id) return s;
   s.id = newId();
@@ -348,7 +349,7 @@ export async function buildCode(version, payload) {
  * @param {object} state SaveState
  * @param {{ version?: number, now?: () => number, storage?: Storage, hand?: 'left' | 'right' | null }} [opts] hand = the bean button side to carry (only 'left' is written)
  */
-export async function exportCode(state, { version = CURRENT_VERSION, now = () => Math.floor(Date.now() / 1000), storage = globalThis.localStorage, hand = null } = {}) {
+export async function exportCode(state, { version = CURRENT_VERSION, now = () => Math.floor(Date.now() / 1000), storage = browserStorage(), hand = null } = {}) {
   const { ok, name } = validateName(state?.name);
   if (!ok) throw new Error('name');
   const next = ensureId({ ...normalizeState(state), name }, storage);
@@ -362,7 +363,7 @@ export async function exportCode(state, { version = CURRENT_VERSION, now = () =>
  * side ('left' | 'right') or null when the code carries none; the caller applies it to the settings.
  * @returns {Promise<{ ok: true, state: object, hand: 'left' | 'right' | null } | { ok: false, error: 'damaged' | 'unrecognised' }>}
  */
-export async function importCode(text, { storage = globalThis.localStorage, parsers = PARSERS, local } = {}) {
+export async function importCode(text, { storage = browserStorage(), parsers = PARSERS, local } = {}) {
   const code = extractCode(text);
   if (!code) return { ok: false, error: 'unrecognised' };
   const parts = code.split('.');

@@ -12,7 +12,7 @@ import { EDUCATION, LEADERBOARD, TUNING } from './config.js';
 import { retrievability } from './fsrs.js';
 import { fnv1a32, VERSION } from './logic.js';
 import { cardHash, auditState } from './questionAudits.js';
-import { createJsonStore } from './store.js';
+import { browserStorage, createJsonStore } from './store.js';
 
 const ID_RE = /^[A-Za-z0-9_-]{22}$/;
 const CARD_RE = /^[A-Z]{2}-\d{2}$/;
@@ -121,7 +121,7 @@ export function cleanEvent(raw) {
  * Every read normalises; storage follows src/store.js (another tab's change shows at once, a full
  * storage keeps the consent for this page load); it never throws.
  */
-export function createConsentStore(storage = globalThis.localStorage, key = LEADERBOARD.eduConsentKey) {
+export function createConsentStore(storage = browserStorage(), key = LEADERBOARD.eduConsentKey) {
   const clean = (raw) => {
     if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
     if (typeof raw.version !== 'string' || !CONSENT_RE.test(raw.version) || !PHASES.includes(raw.phase) || !Number.isFinite(raw.at) || raw.at <= 0) return null;
@@ -157,7 +157,7 @@ export function createConsentStore(storage = globalThis.localStorage, key = LEAD
  * `batchMax` events under a batch id, resent unchanged until the server answers; the id is the
  * receipt). Every read normalises, every write is guarded; it never throws.
  */
-export function createResearchQueue(storage = globalThis.localStorage, { key = LEADERBOARD.researchQueueKey, max = EDUCATION.researchQueueMax, batchMax = EDUCATION.researchBatch } = {}) {
+export function createResearchQueue(storage = browserStorage(), { key = LEADERBOARD.researchQueueKey, max = EDUCATION.researchQueueMax, batchMax = EDUCATION.researchBatch } = {}) {
   const list = (v) => (Array.isArray(v) ? v.map(cleanEvent).filter(Boolean) : []);
   const clean = (raw) => {
     const r = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : {};

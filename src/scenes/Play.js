@@ -111,6 +111,7 @@ import {
 } from '../logic.js';
 import { t, pauseBannerText, levelBannerText, levelLabel, initialLocale, isLocale, profileButtonText, countText, versusName, countLines } from '../i18n.js';
 import { loadLocal, saveLocal, ensureId, recordScore, mergeBoardBests, newId, TOILET_EMOJI } from '../save.js';
+import { browserStorage } from '../store.js';
 import { runDeltas, evaluate, bestFacts, levelCloseShave, winsInWindow, daysBetween, nextDrawStreak, FOUR_OF_A_KIND, EDU_ACHIEVEMENTS, eduRunFacts } from '../achievements.js';
 import { unlock, attachGame, setMuted, isMuted, sfx } from '../sound.js';
 import { createTray } from '../ui/tray.js';
@@ -199,8 +200,8 @@ export class Play extends Phaser.Scene {
     this.rngDraw = this.match ? createRng((Date.now() ^ (this.player * 0x9e3779b1)) & 0xffffffff) : null;
     this.distance = 0; // where this half is on the course, in px: advanced by the scroll, re-anchored at every re-fill (rebaseDistance); the other half's ghost is placed by the difference
     this.score = 0;
-    this.best = createBestStore(globalThis.localStorage, T.bestKey);
-    this.settings = createSettingsStore(globalThis.localStorage, T.settingsKey);
+    this.best = createBestStore(browserStorage(), T.bestKey);
+    this.settings = createSettingsStore(browserStorage(), T.settingsKey);
     // Save-code state (name + top 3). Seed from the legacy best once so an
     // existing player's record is not lost when top is still empty.
     this.save = loadLocal();
@@ -218,7 +219,7 @@ export class Play extends Phaser.Scene {
     const eduSettings = this.settings.load();
     this.eduUnlocked = eduSettings.eduUnlocked;
     this.educationOn = eduSettings.education;
-    this.eduStore = createEduStore(globalThis.localStorage);
+    this.eduStore = createEduStore(browserStorage());
     this.eduShare = createEduShareStore(); // the 📚 board (plan 21): whether this player shares their grades, and what the board already has (drainEduShare)
     // The tester pilot (plan 21): this device's consent (none unless the tester joined in the
     // Education data panel) and the answer events on their way to the server (drainResearch).
@@ -1266,7 +1267,7 @@ export class Play extends Phaser.Scene {
   }
 
   resolveLocale() {
-    const stored = storedLocale(globalThis.localStorage, T.settingsKey);
+    const stored = storedLocale(browserStorage(), T.settingsKey);
     const locale = initialLocale(globalThis.navigator?.language, stored);
     if (stored == null) this.settings.set({ locale });
     return locale;

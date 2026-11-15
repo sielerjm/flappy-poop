@@ -3,6 +3,7 @@ import { versionText, createSettingsStore, chromeIntent, overlayOutsideHit } fro
 import { createFocus, pressable } from '../ui/focus.js';
 import { isTopOverlay, openChangelog } from '../ui/overlayStack.js';
 import { t, metaFontSize } from '../i18n.js';
+import { browserStorage } from '../store.js';
 
 const STYLE = { fontFamily: 'sans-serif', fontStyle: 'bold', color: '#ffffff', align: 'center' };
 
@@ -15,7 +16,7 @@ export class Language extends Phaser.Scene {
     this.scene.bringToTop();
     const play = this.scene.get('Play');
     const locale = play?.getLocale?.() ?? 'en';
-    this.settings = createSettingsStore(globalThis.localStorage, T.settingsKey);
+    this.settings = createSettingsStore(browserStorage(), T.settingsKey);
 
     const W = this.scale.width; // the live field (wider than 720 on desktop); the panel stays centred
     const cx = W / 2;

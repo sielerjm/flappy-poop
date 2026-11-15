@@ -5,6 +5,7 @@ import { createFocus, pressable } from '../ui/focus.js';
 import { isTopOverlay, openChangelog } from '../ui/overlayStack.js';
 import { createToggle } from '../ui/toggle.js';
 import { setMuted } from '../sound.js';
+import { browserStorage } from '../store.js';
 
 const STYLE = { fontFamily: 'sans-serif', fontStyle: 'bold', color: '#ffffff', align: 'center' };
 
@@ -15,7 +16,7 @@ export class Settings extends Phaser.Scene {
 
   create() {
     this.scene.bringToTop();
-    this.settings = createSettingsStore(globalThis.localStorage, T.settingsKey);
+    this.settings = createSettingsStore(browserStorage(), T.settingsKey);
     const cur = this.settings.load();
     const play = this.scene.get('Play');
     const locale = play?.getLocale?.() ?? cur.locale ?? 'en';

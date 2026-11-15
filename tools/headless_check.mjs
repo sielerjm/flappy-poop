@@ -79,6 +79,7 @@ export const SECTIONS = [
   { name: 'education-revive', needs: [], about: "📚 the revive after an education crash (plan 21): three misses end the run with the field and score untouched; wrong then right then Fly on revives without the power-ups at the penalty; a full streak gives coins and power-ups back; nothing lost skips the choice; Quit, warned on every card (plan 26, A2); Esc cannot close it; the field refills at the first right answer and Fly on goes straight on (plan 22)" },
   { name: 'education-over', needs: [], about: "📚 the end of an education run (plan 21): the game-over panel's 📚 tally and note, no Share; a won run's bonus button opening the rectum's questions over the panel (no coins, the card saved, Esc back to the panel); Clear wiping the cards' progress" },
   { name: 'education-share', needs: [], about: "📚 sharing by choice (plan 21, Stage 3b), the server stubbed: the user panel's 📚 Education data button only on an unlocked device, the Education data panel (the 18+ box, Share and Stop sharing, each refusal's message), the 📚 tab on the leaderboard (four tabs, the stubbed board, the footer's link and the player's own row), the profiles' 📚 sections (your own Shared row, another player's only when they share), Clear's warning while sharing; and the tester pilot: 🔬 Tester data (the invite code, Join, Withdraw), answers recorded only while joined and never in a test run, 🔬 in the HUD, the events sent and the queue emptied" },
+  { name: 'blocked-storage', needs: [], about: "blocked site data (plan 28, 1.3): the page reloaded with every read of localStorage throwing still boots past the splash, holds a settings choice for the visit and plays a run to the game-over panel, with no page exception; the live board blocked at the browser for the rest of the run; then storage restored and the page reloaded" },
 ];
 
 /** What a section needs: its own list, or (omitted) every section before it. */
@@ -5746,6 +5747,84 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await home();
         const back = await evaluate(`JSON.stringify({ unlocked: ${play}.isEduUnlocked(), sharing: ${play}.eduShareOn(), name: ${play}.getSaveState().name ?? '' })`).then(JSON.parse);
         ok(!back.unlocked && !back.sharing, `the device is put back (education locked, not sharing, player "${back.name}")`);
+      }
+    });
+
+    await section('blocked-storage', async () => {
+      // Blocked site data (plan 28, 1.3; AGENTS.md rule 7): Safari's "Block All Cookies" and Chrome's "don't
+      // let sites save data" make every read of localStorage throw. The page is reloaded with that getter
+      // throwing from the first script on: the game must still boot, hold a setting for the visit, and play
+      // a run to its end. Then the getter is restored and the page reloaded for the checks after this one.
+      // A reload drops the page-side board stubs above, so the live board is blocked at the browser for the
+      // rest of the run (the audit drivers' way): nothing can reach it from the reloaded pages.
+      await cdp.send('Network.enable');
+      await cdp.send('Network.setBlockedURLs', { urls: ['*supabase.co*'] });
+      const reboot = async () => {
+        await cdp.send('Page.navigate', { url: `${url}/?r=${Date.now()}` });
+        let sp = null;
+        for (let i = 0; i < 120 && !sp?.enabled; i += 1) {
+          await sleep(500);
+          sp = await splashNow().catch(() => null);
+        }
+        if (sp?.enabled) {
+          await splashKey('keydown', ' ');
+          await splashKey('keyup', ' ');
+        }
+        let st = null;
+        for (let i = 0; i < 120 && st !== 'ready'; i += 1) {
+          await sleep(500);
+          st = await playState().catch(() => null);
+        }
+        return { splash: Boolean(sp?.enabled), state: st };
+      };
+      const ex0 = exceptions.length;
+      const { identifier } = await cdp.send('Page.addScriptToEvaluateOnNewDocument', {
+        source: `Object.defineProperty(window, 'localStorage', { get() { throw new DOMException('The operation is insecure.', 'SecurityError'); }, configurable: true });`,
+      });
+      try {
+        const blockedBoot = await reboot();
+        const throwsNow = await evaluate(`(() => { try { void localStorage; return false; } catch { return true; } })()`);
+        ok(throwsNow && blockedBoot.splash && blockedBoot.state === 'ready', `with storage blocked the game still boots: the splash continues and Play reaches the ready screen (${JSON.stringify({ ...blockedBoot, throwsNow })})`);
+        if (blockedBoot.state === 'ready') {
+          // A settings choice holds for the visit, and another scene's store reads it.
+          const held = await evaluate(`Promise.all([import('./src/logic.js'), import('./src/config.js'), import('./src/store.js')]).then(([l, c, s]) => { const p = ${play}; const was = p.settings.load().haptics; p.settings.set({ haptics: !was }); const other = l.createSettingsStore(s.browserStorage(), c.TUNING.settingsKey).load().haptics; p.settings.set({ haptics: was }); return JSON.stringify({ was, other, memory: s.browserStorage() === s.pageStorage() }); })`).then(JSON.parse);
+          ok(held.memory && held.other === !held.was, `a settings choice holds for the visit (the page's memory), and another scene's store reads it (${JSON.stringify(held)})`);
+          // Settings and Language, the other scenes that build a settings store, open and close.
+          const opened = [];
+          for (const [input, key] of [['settings', 'Settings'], ['lang', 'Language']]) {
+            await chrome(input);
+            for (let i = 0; i < 20 && !(await active(key)); i += 1) await sleep(100);
+            opened.push(await active(key));
+            await closeTop(key);
+            for (let i = 0; i < 20 && (await active(key)); i += 1) await sleep(100);
+            await sleep(TT.pauseResumeLockoutMs + 100);
+          }
+          ok(opened.every(Boolean), `Settings and Language open (and close) with storage blocked (${opened.join(', ')})`);
+          // A language picked, then a run that starts and ends at the game-over panel.
+          await evaluate(`${play}.settings.set({ locale: 'zh-Hans' }), ${play}.applyLocale('zh-Hans'), true`); // as the Language scene does
+          const idBefore = await evaluate(`import('./src/save.js').then((m) => { const p = ${play}; p.setSaveState(m.ensureId(p.getSaveState())); return p.getSaveState().id; })`); // an id, as the save panel makes one
+          await evaluate(`${play}.flap(), true`);
+          for (let i = 0; i < 30 && (await playState()) !== 'playing'; i += 1) await sleep(100);
+          const started = { state: await playState(), id: idBefore };
+          await evaluate(`(() => { const p = ${play}; p.graceLeftMs = 0; p.die(); return true; })()`);
+          for (let i = 0; i < 30 && !(await active('Over')); i += 1) await sleep(100);
+          const over = await evaluate(`JSON.stringify({ state: ${play}.state, over: __flappy.scene.isActive('Over') })`).then(JSON.parse);
+          ok(started.state === 'playing' && over.state === 'dead' && over.over, `a run starts (${started.state}) and ends at the game-over panel (${JSON.stringify(over)})`);
+          // Play restarts (Home): the language and the player's id held for the visit (plan 28, 1.3's review).
+          await evaluate(`__flappy.scene.stop('Over'), ${play}.scene.restart(), true`);
+          for (let i = 0; i < 40 && (await playState()) !== 'ready'; i += 1) await sleep(250);
+          const after = await evaluate(`JSON.stringify({ state: ${play}.state, locale: ${play}.locale, id: ${play}.getSaveState().id ?? null })`).then(JSON.parse);
+          ok(after.state === 'ready' && after.locale === 'zh-Hans' && after.id && after.id === started.id, `after the run Play restarts with the language and the player id it had (${JSON.stringify({ before: started.id, ...after })})`);
+          await evaluate(`${play}.settings.set({ locale: 'en' }), ${play}.applyLocale('en'), true`);
+        }
+        const added = exceptions.slice(ex0);
+        ok(added.length === 0, added.length ? `page exceptions with storage blocked:\n  ${added.join('\n  ')}` : 'no page exceptions with storage blocked');
+      } finally {
+        // Storage back, and the page reloaded on it, for the final checks (even when a check above threw).
+        await cdp.send('Page.removeScriptToEvaluateOnNewDocument', { identifier });
+        const back = await reboot();
+        const readable = await evaluate(`(() => { try { return typeof localStorage.getItem === 'function'; } catch { return false; } })()`);
+        ok(readable && back.state === 'ready', `storage restored: the page reloads to the ready screen (${JSON.stringify(back)})`);
       }
     });
 

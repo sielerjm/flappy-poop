@@ -54,3 +54,44 @@ export function createJsonStore(storage, key, clean) {
   };
   return { read, write, clear };
 }
+
+/** This page load's stand-in for a blocked localStorage (pageStorage), made on first use. */
+let pageMemory = null;
+
+/**
+ * A Storage-like object in memory (getItem, setItem, removeItem, clear, key, length), one per page load:
+ * what browserStorage() hands out when the browser blocks storage, so every store keeps what it was told
+ * until the page reloads (the save and its id, the settings, the Daily claim, the queues), across Play's
+ * restarts too.
+ */
+export function pageStorage() {
+  if (!pageMemory) {
+    const map = new Map();
+    pageMemory = {
+      getItem: (k) => (map.has(String(k)) ? map.get(String(k)) : null),
+      setItem: (k, v) => void map.set(String(k), String(v)),
+      removeItem: (k) => void map.delete(String(k)),
+      clear: () => map.clear(),
+      key: (i) => [...map.keys()][i] ?? null,
+      get length() {
+        return map.size;
+      },
+    };
+  }
+  return pageMemory;
+}
+
+/**
+ * The browser's localStorage (plan 28, 1.3; AGENTS.md rule 7). With site data blocked (Safari's "Block
+ * All Cookies", Chrome's "don't let sites save data") reading the property itself throws, before any
+ * store's own guard runs: then this page load's pageStorage(), so nothing is kept past a reload but
+ * everything is kept until one. Null where there is no localStorage at all (Node). Every read of
+ * localStorage in src/ goes through here (tests/blockedStorage.test.js). Never throws.
+ */
+export function browserStorage(scope = globalThis) {
+  try {
+    return scope?.localStorage ?? null;
+  } catch {
+    return pageStorage();
+  }
+}

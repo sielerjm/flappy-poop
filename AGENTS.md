@@ -2623,7 +2623,11 @@ Claude outputs/             Michael's private hand-over notes (gitignored; never
    can show Chinese must set `useAdvancedWrap: true`. Test on a real phone
    when you touch input, scaling, audio, or locale.
 7. **Storage can throw.** Private-mode Safari and blocked storage throw on
-   `localStorage` access. Go through `createBestStore()`,
+   `localStorage` access, reading the property itself included: get it only through `browserStorage()`
+   (`src/store.js`: when the read throws, this page load's in-memory `pageStorage()`, so every store keeps what
+   it was told until a reload, across Play's restarts too; null where there is none, as in Node;
+   `tests/blockedStorage.test.js` fails on any other mention in `src/`, and the smoke's `blocked-storage`
+   section boots, plays a run and restarts with the getter throwing; plan 28, 1.3). Go through `createBestStore()`,
    `createSettingsStore()` (on `createJsonStore()` since AUD-030, one per storage object and key, so a
    set() storage refuses is kept for this page load and every scene's store reads it), `loadLocal()` /
    `saveLocal()` from `save.js`, or

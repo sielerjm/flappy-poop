@@ -16,7 +16,7 @@
 import { LEADERBOARD } from './config.js';
 import { recordScore, bestByToilet, validateName } from './save.js';
 import { addCounters, cleanCounters, isAchievementId } from './achievements.js';
-import { createJsonStore } from './store.js';
+import { browserStorage, createJsonStore } from './store.js';
 
 // ---------------------------------------------------------------------------
 // Pure helpers
@@ -83,7 +83,7 @@ export function submitPlans(state, confirmed, opts = {}) {
 // Last confirmed submit, in its own localStorage key. normalizeState in save.js
 // drops unknown fields, so this cannot ride inside the SaveState.
 
-export function createSubmitStore(storage = globalThis.localStorage, key = LEADERBOARD.storageKey) {
+export function createSubmitStore(storage = browserStorage(), key = LEADERBOARD.storageKey) {
   const empty = () => ({ off: null, on: null });
   return {
     /** The last confirmed submit of each kind: { off, on }, each a record or null. */
@@ -139,7 +139,7 @@ function normalizePair(raw) {
   return { keep, merge };
 }
 
-export function createMergeStore(storage = globalThis.localStorage, key = LEADERBOARD.mergesKey) {
+export function createMergeStore(storage = browserStorage(), key = LEADERBOARD.mergesKey) {
   const write = (pairs) => {
     try {
       if (pairs.length) storage?.setItem(key, JSON.stringify(pairs));
@@ -194,7 +194,7 @@ function normalizeRename(raw) {
   return { id, name };
 }
 
-export function createRenameStore(storage = globalThis.localStorage, key = LEADERBOARD.renameKey) {
+export function createRenameStore(storage = browserStorage(), key = LEADERBOARD.renameKey) {
   return {
     /** The pending rename { id, name }, or null. */
     load() {
@@ -347,7 +347,7 @@ function createPostQueue(storage, { key, max, normalize, idOf }) {
   return queue;
 }
 
-export function createTournamentQueue(storage = globalThis.localStorage, { key = LEADERBOARD.tournamentsKey, max = LEADERBOARD.tournamentQueueMax } = {}) {
+export function createTournamentQueue(storage = browserStorage(), { key = LEADERBOARD.tournamentsKey, max = LEADERBOARD.tournamentQueueMax } = {}) {
   const q = createPostQueue(storage, { key, max, normalize: normalizeEntry, idOf: (e) => e.payload.id });
   return {
     load: q.load,
@@ -388,7 +388,7 @@ function normalizeDaily(raw) {
   return { day, playerId, level, score, pipes, collected: counts, final: Boolean(final) };
 }
 
-export function createDailyStore(storage = globalThis.localStorage, { key = LEADERBOARD.dailyKey } = {}) {
+export function createDailyStore(storage = browserStorage(), { key = LEADERBOARD.dailyKey } = {}) {
   const read = () => {
     try {
       const raw = storage?.getItem(key);
@@ -445,7 +445,7 @@ export function dailyEntryId(entry) {
   return `${entry.playerId}:${entry.day}`;
 }
 
-export function createDailyQueue(storage = globalThis.localStorage, { key = LEADERBOARD.dailyQueueKey, max = LEADERBOARD.dailyQueueMax } = {}) {
+export function createDailyQueue(storage = browserStorage(), { key = LEADERBOARD.dailyQueueKey, max = LEADERBOARD.dailyQueueMax } = {}) {
   return createPostQueue(storage, { key, max, normalize: normalizeDailyEntry, idOf: dailyEntryId });
 }
 
@@ -698,7 +698,7 @@ function normalizeCareer(raw) {
  * device's last run time and recent win times (`lastRunAt`, `winTimes`: 🧱 / 🏃).
  * Every read normalises, every write is guarded; it never throws.
  */
-export function createCareerStore(storage = globalThis.localStorage, key = LEADERBOARD.careerKey) {
+export function createCareerStore(storage = browserStorage(), key = LEADERBOARD.careerKey) {
   const read = () => {
     try {
       const raw = storage?.getItem(key);
@@ -986,7 +986,7 @@ function normalizeEduShare(raw) {
  * turning sharing on, or being told to restart, sends the whole record again.
  * Every read normalises; storage follows src/store.js; it never throws.
  */
-export function createEduShareStore(storage = globalThis.localStorage, key = LEADERBOARD.eduShareKey) {
+export function createEduShareStore(storage = browserStorage(), key = LEADERBOARD.eduShareKey) {
   // Storage full or blocked: the choice lives for this page load only (src/store.js).
   const box = createJsonStore(storage, key, normalizeEduShare);
   const read = box.read;
