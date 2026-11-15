@@ -1580,6 +1580,116 @@ test("the header lists exactly the functions anon may call, and an undo line for
   assert.match(SQL, /^--\s+undo the stamp: drop function public\.schema_version\(\);$/m);
 });
 
+// ---------------------------------------------------------------------------
+// Hiding a player (plan 30): admin_flag_player hides a player's rows from everyone else instead of
+// deleting them; the player's own views stay as they were; admin_unflag_player undoes it.
+
+/** Three players on every board: Hidey ahead of Alice ahead of Bob; Hidey beat Alice in a race. */
+async function hideWorld(db) {
+  const [H, A, B] = [id('HidH'), id('HidA'), id('HidB')];
+  const age = () => db.exec("update public.scores set updated_at = updated_at - interval '1 minute'");
+  await asAnon(db, 'select public.submit_score($1, $2, 90, false, 5)', [H, 'Hidey']);
+  await age();
+  await asAnon(db, 'select public.submit_score($1, $2, 80, true, 4)', [H, 'Hidey']);
+  await asAnon(db, 'select public.submit_score($1, $2, 50, false, 3)', [A, 'Alice']);
+  await asAnon(db, 'select public.submit_score($1, $2, 40, false, 2)', [B, 'Bob']);
+  const day = await utcToday(db);
+  const level = (await db.query('select public.daily_level($1::date) as l', [day])).rows[0].l;
+  for (const [pid, name, score] of [[H, 'Hidey', 100], [A, 'Alice', 60], [B, 'Bob', 30]]) {
+    await db.query('insert into public.daily_scores (player_id, day, name, score, level, pipes) values ($1, $2::date, $3, $4, $5, 10)', [pid, day, name, score, level]);
+  }
+  await db.query("insert into public.tournaments (id, host_id, players, level_pipes) values ($1, $2, 3, '{10}')", [id('HidT'), H]);
+  await db.query("insert into public.tournament_stats (player_id, name, best_score, gold, events) values ($1, 'Hidey', 30, 2, 2), ($2, 'Alice', 20, 1, 2), ($3, 'Bob', 10, 0, 1)", [H, A, B]);
+  await db.query("insert into public.tournament_matchups (tournament_id, match_id, round, player_a, player_b, winner_id, score_a, score_b, deaths_a, deaths_b, level_wins_a, level_wins_b, decided_by) values ($1, 'final', 'final', $2, $3, $2, 30, 20, 0, 0, 1, 0, 'score')", [id('HidT'), H, A]);
+  await db.query("insert into public.education_public (player_id, name, runs, grade_sum) values ($1, 'Hidey', 5, 50000), ($2, 'Alice', 4, 30000), ($3, 'Bob', 3, 15000)", [H, A, B]);
+  return { H, A, B, day };
+}
+
+const names = (rows) => rows.map((r) => r.name);
+const flag = (db, name, note = null) => db.query('select public.admin_flag_player($1, $2) as n', [name, note]).then((r) => r.rows[0].n);
+const unflag = (db, name) => db.query('select public.admin_unflag_player($1) as n', [name]).then((r) => r.rows[0].n);
+
+test("hiding a player (plan 30): gone from every board, count and lookup others see; the player's own rank, rows and profile unchanged", async () => {
+  const db = await freshDb();
+  const { H, A, day } = await hideWorld(db);
+  const rankBefore = (await asAnon(db, 'select public.player_rank($1, false) as r', [H])).rows[0].r;
+  const aliceBefore = await pstats(db, A);
+  assert.equal(aliceBefore.tournament.rival.name, 'Hidey', 'before: Hidey is Alice\'s rival');
+  assert.equal(aliceBefore.daily.silver, 1, 'before: Alice is second on the day');
+  assert.equal(await flag(db, 'Hidey', 'looked at it'), 1);
+  assert.equal(await flag(db, 'Nobody'), 0, 'a name nobody shows under: 0');
+
+  // Everyone else.
+  assert.deepEqual(names((await asAnon(db, 'select name from public.scores order by score desc')).rows), ['Alice', 'Bob'], 'the 🏆 top read (anon_read)');
+  await assert.rejects(asAnon(db, 'select hidden from public.scores'), /permission denied/, 'anon cannot read the column');
+  const aRank = (await asAnon(db, 'select public.player_rank($1, false) as r', [A])).rows[0].r;
+  assert.deepEqual([aRank.rank, aRank.total], [1, 2]);
+  assert.deepEqual(names((await asAnon(db, 'select * from public.daily_board($1, null, 25)', [A])).rows), ['Alice', 'Bob']);
+  assert.deepEqual((await asAnon(db, 'select rank, total from public.daily_board($1, null, 25) where me', [A])).rows, [{ rank: 1, total: 2 }]);
+  assert.deepEqual(names((await asAnon(db, 'select * from public.daily_board(null, null, 25)')).rows), ['Alice', 'Bob']);
+  assert.deepEqual(names((await asAnon(db, 'select * from public.tournament_board($1, 25)', [A])).rows), ['Alice', 'Bob']);
+  assert.deepEqual(names((await asAnon(db, 'select * from public.education_board($1, 25)', [A])).rows), ['Alice', 'Bob']);
+  assert.deepEqual(await pstats(db, null, 'Hidey'), { found: false }, 'a profile by the hidden name');
+  const alice = await pstats(db, A);
+  assert.equal(alice.tournament.rival, null, 'a hidden player is nobody\'s rival');
+  assert.deepEqual([alice.daily.gold, alice.daily.silver], [1, 0], 'daily podiums rank without the hidden player');
+  const tags = (await asAnon(db, 'select public.board_tags($1::text[]) as r', [['Hidey', 'Alice']])).rows[0].r;
+  assert.deepEqual(tags.find((t) => t.name === 'Hidey').tags, []);
+  assert.ok(tags.find((t) => t.name === 'Alice').tags.length > 0);
+
+  // The hidden player, by their own id: as before.
+  const rankAfter = (await asAnon(db, 'select public.player_rank($1, false) as r', [H])).rows[0].r;
+  assert.deepEqual(Object.keys(rankAfter).sort(), Object.keys(rankBefore).sort(), 'the same reply shape');
+  assert.deepEqual(rankAfter, rankBefore, 'their rank and total as before (among the visible rows and themselves)');
+  assert.deepEqual((await asAnon(db, 'select name, rank, total from public.daily_board($1, null, 25) where me', [H])).rows, [{ name: 'Hidey', rank: 1, total: 3 }]);
+  assert.deepEqual((await asAnon(db, 'select name, rank from public.tournament_board($1, 25) where me', [H])).rows, [{ name: 'Hidey', rank: 1 }]);
+  assert.deepEqual((await asAnon(db, 'select name, rank from public.education_board($1, 25) where me', [H])).rows, [{ name: 'Hidey', rank: 1 }]);
+  const own = await pstats(db, H);
+  assert.equal(own.found, true);
+  assert.equal(own.name, 'Hidey');
+  assert.equal(own.single.bestScore, 90);
+  assert.equal(own.daily.gold, 1);
+
+  // A later post keeps the player hidden; the 🏆 rows stay out of everyone else's read.
+  await db.exec("update public.scores set updated_at = updated_at - interval '1 minute'");
+  await asAnon(db, 'select public.submit_score($1, $2, 95, false, 6)', [H, 'Hidey']);
+  assert.deepEqual(names((await asAnon(db, 'select name from public.scores order by score desc')).rows), ['Alice', 'Bob']);
+  assert.deepEqual((await db.query('select bool_and(hidden) as h from public.scores where player_id = $1', [H])).rows[0].h, true);
+  assert.deepEqual((await db.query('select name, note from public.admin_flagged()')).rows, [{ name: 'Hidey', note: 'looked at it' }]);
+  assert.equal((await db.query("select count(*)::int as n from public.daily_scores where day = $1::date", [day])).rows[0].n, 3, 'nothing is deleted');
+
+  // Undo.
+  assert.equal(await unflag(db, 'Hidey'), 1);
+  assert.equal(await unflag(db, 'Hidey'), 0, 'already shown: 0');
+  assert.deepEqual(names((await asAnon(db, 'select name from public.scores order by score desc')).rows), ['Hidey', 'Hidey', 'Alice', 'Bob']);
+  assert.equal((await pstats(db, null, 'Hidey')).found, true);
+  assert.equal((await pstats(db, A)).tournament.rival.name, 'Hidey');
+  assert.deepEqual(names((await asAnon(db, 'select * from public.daily_board(null, null, 25)')).rows), ['Hidey', 'Alice', 'Bob']);
+  assert.deepEqual((await db.query('select * from public.admin_flagged()')).rows, []);
+});
+
+test('hiding a player (plan 30): only the owner can; a merge keeps a hidden player hidden, whichever id is kept', async () => {
+  const db = await freshDb();
+  await hideWorld(db);
+  for (const call of ["public.admin_flag_player('Hidey', null)", "public.admin_unflag_player('Hidey')", 'public.admin_flagged()', "public.player_hidden('AAAAAAAAAAAAAAAAAAAAAA')"]) {
+    await assert.rejects(asAnon(db, `select ${call}`), /permission denied/, call);
+  }
+  // The hidden player merges into a fresh id: the kept player is hidden.
+  const [M, K] = [id('HidM'), id('HidK')];
+  await asAnon(db, 'select public.submit_score($1, $2, 70, false, 3)', [M, 'Mergy']);
+  assert.equal(await flag(db, 'Mergy', 'n'), 1);
+  await asAnon(db, 'select public.merge_players($1, $2)', [K, M]);
+  assert.deepEqual((await db.query('select hidden_note, hidden_at is not null as h from public.player_meta where player_id = $1', [K])).rows, [{ hidden_note: 'n', h: true }]);
+  assert.deepEqual((await db.query('select hidden from public.scores where player_id = $1', [K])).rows, [{ hidden: true }]);
+  assert.ok(!names((await asAnon(db, 'select name from public.scores')).rows).includes('Mergy'));
+  // A visible player merged into a hidden one stays out of view too.
+  const V = id('HidV');
+  await asAnon(db, 'select public.submit_score($1, $2, 75, true, 3)', [V, 'Visi']);
+  await asAnon(db, 'select public.merge_players($1, $2)', [K, V]);
+  assert.deepEqual((await db.query('select toilet, hidden from public.scores where player_id = $1 order by toilet', [K])).rows, [{ toilet: false, hidden: true }, { toilet: true, hidden: true }]);
+  assert.ok(!names((await asAnon(db, 'select name from public.scores')).rows).some((n) => n === 'Mergy' || n === 'Visi'));
+});
+
 /** Rows a live database holds today, written through the fixture's own functions. */
 async function seedLive(db) {
   const age = () => db.exec("update public.scores set updated_at = updated_at - interval '1 minute'; update public.player_counters set updated_at = updated_at - interval '1 minute';");
@@ -1704,6 +1814,11 @@ test('the upgrade: the live schema (tests/fixtures/schema-applied.sql) holding r
   const named = (pid, name) => asAnon(db, 'select to_json(public.share_education(p_player_id => $1, p_name => $2, p_adult => $3)) as r', [pid, name, true]);
   assert.ok((await named(id('UpPilot'), 'UpPilot')).rows[0].r, "0.18.0's call: a participant shares");
   await assert.rejects(named(id('UpNewcomer'), 'UpNewcomer'), /needs invite/, "0.18.0's call: a newcomer needs the invite");
+  // Hiding (plan 30) on the upgraded database: nobody starts hidden; a hidden player leaves the anon read, an alias included.
+  assert.equal((await db.query('select count(*)::int as n from public.scores where hidden')).rows[0].n, 0);
+  assert.equal((await db.query("select public.admin_flag_player('UpCarol', null) as n")).rows[0].n, 1);
+  assert.ok(!(await asAnon(db, 'select name from public.scores')).rows.some((r) => r.name === 'UpCarol'));
+  assert.equal((await asAnon(db, 'select public.player_rank($1, true) as r', [id('UpCarolOld')])).rows[0].r.score, 12, "the alias's device still ranks its own 🚽 row");
 });
 
 test('recent receipts (AUD-003): a resend after another device\'s batch adds nothing to a 📚 row; the list keeps 64; a merge keeps both players\' counter receipts', async () => {
