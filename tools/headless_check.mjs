@@ -4383,11 +4383,11 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         // are answered right it does.
         await sleep(400);
         const crafted3 = await evaluate(
-          `Promise.all([import('./src/education.js'), import('./src/questions.js')]).then(([e, q]) => { const now = Date.now(); const near = q.CARDS.filter((c) => !c.retired && (c.deck === 'stomach' || c.deck === 'general')); const cards = {}; near.forEach((c, i) => { cards[c.id] = i === 0 ? e.schedule(null, 'again', now - 20 * 60000) : i === 1 ? e.schedule(null, 'easy', now - 30 * 86400000) : e.schedule(null, 'easy', now); }); localStorage.setItem('flappyPoop.eduSrs', JSON.stringify({ v: 2, cards, recent: [], counters: {}, badges: {}, unlockedLevel: 2 })); const p = ${play}; p.breakMissed = []; p.refreshShopButton(); const l = p.quizCountLine; return JSON.stringify({ missed: near[0].id, review: near[1].id, visible: l.visible, text: l.text, label: p.quizButton.getText() }); })`,
-        ).then(JSON.parse);
+          `Promise.all([import('./src/education.js'), import('./src/questions.js')]).then(([e, q]) => { const now = Date.now(); const near = q.CARDS.filter((c) => !c.retired && (c.deck === 'stomach' || c.deck === 'general')); const cards = {}; near.forEach((c, i) => { cards[c.id] = i === 0 ? e.schedule(null, 'again', now - 20 * 60000) : i === 1 ? e.schedule(null, 'easy', now - 30 * 86400000) : e.schedule(null, 'easy', now); }); localStorage.setItem('flappyPoop.eduSrs', JSON.stringify({ v: 2, cards, recent: [], counters: {}, badges: {}, unlockedLevel: 2, paid: { day: e.localDayKey(), ids: [near[1].id] } })); const p = ${play}; p.breakMissed = []; p.refreshShopButton(); const l = p.quizCountLine; return JSON.stringify({ missed: near[0].id, review: near[1].id, visible: l.visible, text: l.text, label: p.quizButton.getText() }); })`,
+        ).then(JSON.parse); // the review card paid today already: its right answer, the last one the gate needs, pays nothing (AUD-025)
         await evaluate(`${play}.refreshLevelBanner(), true`);
         await sleep(100);
-        const gateView = () => evaluate(`JSON.stringify({ pick: ${play}.levelPickShown(), gated: ${play}.breakGated(), hint: ${play}.levelHint.text, sub: ${play}.levelSubHint.visible ? ${play}.levelSubHint.text : null, still: ${play}.levelHint.scale === 1 && !${play}.levelHintGlow.visible, unlocked: ${play}.eduStore.load().unlockedLevel, state: ${play}.state, lb: ${play}.levelBreak })`).then(JSON.parse);
+        const gateView = () => evaluate(`JSON.stringify({ pick: ${play}.levelPickShown(), drawn: [${play}.levelPickDown, ${play}.levelPickUp, ${play}.levelPickLabel].map((o) => o.visible), gated: ${play}.breakGated(), hint: ${play}.levelHint.text, sub: ${play}.levelSubHint.visible ? ${play}.levelSubHint.text : null, still: ${play}.levelHint.scale === 1 && !${play}.levelHintGlow.visible, unlocked: ${play}.eduStore.load().unlockedLevel, state: ${play}.state, lb: ${play}.levelBreak })`).then(JSON.parse);
         const gate0 = await gateView();
         await sleep(TT.retryLockoutMs + 100);
         await chrome('tap');
@@ -4404,6 +4404,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await sleep(200);
         const gate2 = await gateView();
         ok(!gate2.gated && gate2.pick && gate2.hint === continueHint && gate2.sub === null && !gate2.still, `the due cards answered right, the gate opens: "${gate2.hint}" pulses again, the line is gone, and the level choice shows (none while it held)`);
+        ok(gate0.drawn.every((v) => !v) && gate2.drawn.every(Boolean), `◀ LV n ▶ is drawn once the gate opens, though the last answer paid nothing (AUD-025): at the gate ${JSON.stringify(gate0.drawn)}, after ${JSON.stringify(gate2.drawn)}`);
         // Skip (plan 26, A2; Bury before it): at the gate, the missed card on show is skipped for 3 × the
         // level cleared. The first Skip in a break warns and holds; the next press pays, sends the card to
         // tomorrow and moves on. A press right after the next card appears does nothing (the double tap on

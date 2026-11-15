@@ -474,8 +474,9 @@ number is above 0: `resumePlay` keeps the break. The hint still reads "Tap to co
 every break's, as Michael asked) but holds still while the gate holds, since a tap there only explains:
 a refused continue (a tap, Space, ↑, Esc, P, ⏸ or the pad) sets `gateTapped`, and the smaller line
 under it says "Tap 📚 to review all cards before continuing." until the gate opens or the break ends.
-`refreshLevelBanner` reads the gate once per break event into `breakGate` (`breakGated` reads the store,
-so never per frame); Review pulses. New cards stay optional. **Skip** (plan 26, A2; it replaced Bury and the
+`refreshGate` reads the gate into `breakGate` once per break event (`breakGated` reads the store, so
+never per frame); `refreshLevelBanner` and `refreshQuizButton` both call it, so the level choice never
+reads a gate from before the quiz closed (AUD-025). Review pulses. New cards stay optional. **Skip** (plan 26, A2; it replaced Bury and the
 level Skip ▸): an open card in a break's quiz shows "Skip · n 🌽" in its right slot (`Quiz.offerSkip`;
 "Skip" alone and free in a test run, which saves nothing); after an answer that slot is Next Card. Every
 Skip costs `buryPrice()` (`education.buryCoinsPerLevel` × the level just cleared) and moves on

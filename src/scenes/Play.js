@@ -974,10 +974,8 @@ export class Play extends Phaser.Scene {
 
   refreshLevelBanner() {
     // "Tap to continue" in every one-player break (plan 26, A2: the gate no longer changes it); an
-    // education run's sits higher, over its rows (eduBreakLayout's titleY). The gate is read here,
-    // once per break event, and kept for syncLevelHint (breakGated reads the store: never per frame).
-    this.breakGate = this.breakGated();
-    if (!this.breakGate) this.gateTapped = false; // the gate opened: its line goes
+    // education run's sits higher, over its rows (eduBreakLayout's titleY).
+    this.refreshGate();
     const [title, hint] = levelBannerText(this.locale, this.levelBreak ? this.breakShownLevel() : this.level, LEVELS).split('\n');
     const eduRows = Boolean(this.runIsEducation && !this.match && this.eduBreakBoxes);
     const titleY = eduRows ? this.eduBreakBoxes.titleY : GAME_HEIGHT * 0.4;
@@ -1008,7 +1006,7 @@ export class Play extends Phaser.Scene {
     if (!hint || !this.levelHintGlow) return;
     const ready = Boolean(this.match && this.levelBreak && this.versusHost()?.isReady?.(this));
     // At an education gate (plan 26, A2): the line after a refused tap, and no pulse, since a tap there
-    // only explains; Review pulses instead (refreshQuizButton). breakGate is kept by refreshLevelBanner.
+    // only explains; Review pulses instead (refreshQuizButton). breakGate is kept by refreshGate.
     const gate = Boolean(this.levelBreak && !this.match && this.breakGate);
     this.levelSubHint.setVisible(hint.visible && (ready || (gate && Boolean(this.gateTapped))));
     if (!hint.visible || !this.levelBreak || ready || gate) {
@@ -3464,8 +3462,11 @@ export class Play extends Phaser.Scene {
     if (!this.quizButton) return;
     const shown = this.quizButtonShown();
     const counts = shown ? this.quizCounts({ mode: 'break' }) : null;
+    // The gate read again here, so the level choice below never reads a cache from before the quiz
+    // (AUD-025: onQuizClosed and refreshPurse redraw the pills before the banner).
+    const gated = this.refreshGate(counts);
     this.quizButton.setText(`${EDUCATION_EMOJI} ${t(this.locale, 'reviewPill')}`).setVisible(shown);
-    this.quizButton.pulse(shown && this.breakGated());
+    this.quizButton.pulse(shown && gated);
     if (counts) this.quizCountLine.set(counts);
     this.quizCountLine.setVisible(shown && Boolean(counts));
     this.quizCountChip?.setVisible(shown && Boolean(counts));
@@ -3481,7 +3482,7 @@ export class Play extends Phaser.Scene {
 
   /**
    * The level choice at an education break (plan 26, A2: Michael's image 12): [◀] LV n [▶] once nothing
-   * is missed or due (breakGate, kept by refreshLevelBanner), never in a test run (or with test mode
+   * is missed or due (breakGate, kept by refreshGate), never in a test run (or with test mode
    * on) or a match. It cycles 1 … the higher of the next level and the levels unlocked, wrapping
    * (nextEduStartLevel). Only the preview follows it during the break (the banner's title, the bar's
    * label, the background): the quiz, the tally, the shop and Skip keep reading the run's level, so a
@@ -3594,10 +3595,22 @@ export class Play extends Phaser.Scene {
    * (the second and third numbers). New cards stay optional. Never in a test run or a match.
    * resumePlay holds the break while it is true; Skip (a due card goes to tomorrow) and Quit are the other ways out.
    */
-  breakGated() {
+  breakGated(counts) {
     if (!this.levelBreak || !this.runIsEducation || this.runIsTest || this.match) return false;
-    const counts = this.quizCounts({ mode: 'break' });
-    return Boolean(counts) && counts.missed + counts.review > 0;
+    const c = counts ?? this.quizCounts({ mode: 'break' }); // the counts the caller already read, else the store's
+    return Boolean(c) && c.missed + c.review > 0;
+  }
+
+  /**
+   * The gate's cache (breakGate), read again for this break event: breakGated reads the store, so it
+   * is never read per frame. levelPickOffered and syncLevelHint read the cache. Both writers go
+   * through here (refreshLevelBanner, refreshQuizButton; AUD-025), so the gate's line (gateTapped)
+   * goes whenever the gate is found open. counts: quizCounts({ mode: 'break' }) if the caller has it.
+   */
+  refreshGate(counts) {
+    this.breakGate = this.breakGated(counts);
+    if (!this.breakGate) this.gateTapped = false; // the gate opened: its line goes
+    return this.breakGate;
   }
 
   /**

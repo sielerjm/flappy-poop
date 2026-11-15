@@ -4,7 +4,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { playScene, absorb, fakeStorage, registry, toggleStub } from './support/scenes.js';
-import { LEADERBOARD, TUNING as T } from '../src/config.js';
+import { LEADERBOARD, LEVELS, TUNING as T } from '../src/config.js';
+import { levelBannerText } from '../src/i18n.js';
 import { createSettingsStore } from '../src/logic.js';
 import { CARDS } from '../src/questions.js';
 import { newTally, createEduStore, schedule, tallyAnswer, localDayKey } from '../src/education.js';
@@ -414,9 +415,123 @@ test('the level choice is dropped when it stops being offered (the gate comes ba
   const { s, calls } = levelPickScene({ quizButton: absorb(), quizCountLine: absorb(), quizCountChip: absorb(), breakQuitButton: absorb(), levelPickUi: null, locale: 'en', quizCounts: () => ({ new: 1, missed: 0, review: 0 }), breakQuitArmedAt: null, time: { now: 0 } });
   s.stepBreakLevel(1);
   calls.length = 0;
-  s.breakGate = true;
+  s.quizCounts = () => ({ new: 1, missed: 1, review: 0 }); // a card missed: the gate is back
   s.refreshQuizButton();
-  assert.deepEqual([s.breakLevelPick, calls], [null, ['banner', 'bar', 'fade:3']], 'dropped, and the preview back to the next level');
+  assert.deepEqual([s.breakGate, s.breakLevelPick, calls], [true, null, ['banner', 'bar', 'fade:3']], 'the gate read again, the choice dropped, and the preview back to the next level');
+});
+
+/**
+ * AUD-025 (audit 2026-11-15): an education break with the real banner, buttons and store, so the
+ * gate's cache (breakGate) is only what Play's own refreshes leave in it. Display objects record
+ * their text and visibility.
+ */
+function gateBreakScene() {
+  const text = () => ({ text: '', visible: false, setText(v) { this.text = v; return this; }, setVisible(v) { this.visible = Boolean(v); return this; }, setY() { return this; }, setScale() { return this; }, setPosition() { return this; }, setAlpha() { return this; } });
+  const store = createEduStore(fakeStorage());
+  store.unlockLevel(5);
+  const fades = [];
+  const bar = { label: null, setLabel(v) { this.label = v; }, setProgress() {} };
+  const s = playScene({
+    eduStore: store, level: 3, levelBreak: true, state: 'paused', runIsEducation: true, runIsTest: false, match: null, registry: registry(), tune: T, locale: 'en',
+    shopOpen: false, quizOpen: false, breakGate: false, breakLevelPick: null, runSkipped: false, runTopLevel: 3, runStartLevel: 1, pipesPassed: 35,
+    quizButton: { ...text(), pulse() { return this; } }, quizCountLine: { ...text(), set() { return this; } }, quizCountChip: text(), breakQuitButton: text(),
+    levelPickDown: text(), levelPickUp: text(), levelPickLabel: text(),
+    levelTitle: text(), levelHint: text(), levelSubHint: text(), eduBreakBoxes: null, quizButtonBox: {},
+    breakQuitArmedAt: null, time: { now: 0 }, levelBar: bar, eduDueText: null, shopButton: null, bracketButton: null,
+    runQuiz: newTally(), researchJoined: () => false, takeCoins() {},
+    fadeBackground: (n) => fades.push(n),
+  });
+  s.breakMissed = [];
+  /** What is drawn agrees with what is offered: the strip, and the ring's ◀ ▶ (their visible() is levelPickShown). */
+  const stripAgrees = (msg) => {
+    const shown = s.levelPickShown();
+    assert.deepEqual([s.levelPickLabel.visible, s.levelPickDown.visible, s.levelPickUp.visible], [shown, shown, shown], msg);
+  };
+  /** A card answered right at an earlier break today (it paid), then missed in a revive: due now, it holds the gate. */
+  const paidThenMissed = (card) => {
+    store.answer(card.id, schedule(null, 'good', Date.now() - 3600000), { paidDay: localDayKey() });
+    store.answer(card.id, schedule(store.load().cards[card.id], 'again', Date.now() - 60000));
+  };
+  return { s, store, fades, bar, stripAgrees, paidThenMissed };
+}
+
+test('AUD-025: a miss in the quiz brings the gate back: when the quiz closes, the level choice is dropped and its ◀ LV n ▶ hidden', () => {
+  const { s, bar, stripAgrees } = gateBreakScene();
+  s.refreshLevelBanner(); // startLevelBreak's
+  s.refreshShopButton();
+  assert.equal(s.breakGate, false, 'nothing due: the gate is open');
+  s.stepBreakLevel(1);
+  assert.deepEqual([s.breakLevelPick, s.levelPickLabel.visible, s.levelPickLabel.text], [4, true, 'LV 4'], 'level 4 chosen');
+  s.quizOpen = true; // Review opened (openQuiz: quizOpen, then refreshShopButton hides the row)
+  s.refreshShopButton();
+  assert.equal(s.levelPickLabel.visible, false, 'hidden under the quiz');
+  const card = CARDS.find((c) => c.deck === 'stomach');
+  s.quizAnswer({ card, reason: 'new', order: ['answer', 'w1', 'w2'], chosen: 'w1', rtMs: 4000, mode: 'break' });
+  assert.deepEqual(s.breakMissed, [card.id], 'missed in this break: the gate is back');
+  s.onQuizClosed('break'); // End Review
+  assert.equal(s.breakGate, true, 'after the close, the gate says gated');
+  assert.deepEqual([s.breakLevelPick, s.levelTitle.text, bar.label], [null, levelBannerText('en', 3, LEVELS).split('\n')[0], 'LV 3'], 'the choice dropped; the title and the bar back at the next level');
+  stripAgrees('nothing drawn');
+});
+
+test('AUD-025: a miss and then a right answer inside one quiz: the gate came back and went before anything showed it, so the choice is kept', () => {
+  const { s, stripAgrees } = gateBreakScene();
+  s.refreshLevelBanner();
+  s.refreshShopButton();
+  s.stepBreakLevel(1);
+  s.quizOpen = true;
+  s.refreshShopButton();
+  const card = CARDS.find((c) => c.deck === 'stomach');
+  s.quizAnswer({ card, reason: 'new', order: ['answer', 'w1', 'w2'], chosen: 'w1', rtMs: 4000, mode: 'break' });
+  s.quizAnswer({ card, reason: 'missed', order: ['answer', 'w1', 'w2'], chosen: 'answer', rtMs: 4000, mode: 'break' });
+  s.onQuizClosed('break');
+  assert.deepEqual([s.breakGate, s.breakLevelPick, s.levelPickLabel.text], [false, 4, 'LV 4']);
+  stripAgrees('◀ LV 4 ▶ drawn');
+});
+
+test('AUD-025: a right answer that pays nothing (the card paid today) clears the gate: when the quiz closes, ◀ LV n ▶ is drawn, and its taps do what they show', async () => {
+  const { eduBreakLayout } = await import('../src/logic.js');
+  const { s, paidThenMissed, stripAgrees } = gateBreakScene();
+  const boxes = eduBreakLayout(720, 1280, T, 0);
+  Object.assign(s, { eduBreakBoxes: boxes, quizButtonBox: boxes.review, shopButtonBox: boxes.shop, quizCountsBox: boxes.chip, tray: null, eduCard: null, bracketButtonBox: null });
+  const chrome = [];
+  s.handleChrome = (input) => chrome.push(input);
+  const card = CARDS.find((c) => c.deck === 'duodenum');
+  paidThenMissed(card);
+  s.refreshLevelBanner(); // startLevelBreak's
+  s.refreshShopButton();
+  assert.equal(s.breakGate, true, 'gated by the missed card');
+  stripAgrees('no level choice at a gate');
+  s.quizOpen = true;
+  s.refreshShopButton();
+  const res = s.quizAnswer({ card, reason: 'missed', order: ['answer', 'w1', 'w2'], chosen: 'answer', rtMs: 4000, mode: 'break' });
+  assert.deepEqual([res.coins, res.paidToday], [0, true], 'right, but it paid today: no corn, so the quiz refreshed nothing');
+  s.onQuizClosed('break');
+  assert.deepEqual([s.breakGate, s.levelPickShown(), s.levelPickLabel.visible, s.levelPickLabel.text], [false, true, true, 'LV 3'], 'the gate open, and [◀] LV 3 [▶] on screen');
+  stripAgrees('the strip, as offered');
+  s.flap({ x: boxes.levelLabel.x, y: boxes.levelLabel.y, id: 1 });
+  assert.deepEqual([chrome, s.breakLevelPick], [[], null], 'the label: nothing (never a continue tap)');
+  s.flap({ x: boxes.levelUp.x, y: boxes.levelUp.y, id: 1 });
+  assert.deepEqual([chrome, s.breakLevelPick, s.levelPickLabel.text], [[], 4, 'LV 4'], '▶: one step, drawn');
+  stripAgrees('still as offered');
+});
+
+test('AUD-025: at a gate the strip is not drawn and not a button: a tap where ▶ would be is a refused continue', async () => {
+  const { eduBreakLayout } = await import('../src/logic.js');
+  const { s, stripAgrees } = gateBreakScene();
+  const boxes = eduBreakLayout(720, 1280, T, 0);
+  Object.assign(s, { eduBreakBoxes: boxes, quizButtonBox: boxes.review, shopButtonBox: boxes.shop, quizCountsBox: boxes.chip, tray: null, eduCard: null, bracketButtonBox: null, respawnPaused: false, focus: null });
+  s.handleChrome = (input) => { if (input === 'tap') s.resumePlay(); };
+  s.refreshLevelBanner();
+  s.refreshShopButton();
+  s.stepBreakLevel(1);
+  s.quizOpen = true;
+  s.refreshShopButton();
+  s.quizAnswer({ card: CARDS.find((c) => c.deck === 'stomach'), reason: 'new', order: ['answer', 'w1', 'w2'], chosen: 'w1', rtMs: 4000, mode: 'break' });
+  s.onQuizClosed('break');
+  stripAgrees('the gate is back: nothing drawn');
+  s.flap({ x: boxes.levelUp.x, y: boxes.levelUp.y, id: 1 });
+  assert.deepEqual([s.breakLevelPick, s.state, s.levelBreak, Boolean(s.gateTapped)], [null, 'paused', true, true], 'a refused continue: the break stays, its line shows');
 });
 
 test('continuing into the chosen level (plan 26, A2): from that level\'s first pair, forward or back; both pipe counters reset (the finish line needs them equal); pipes on the field are counted as passed; the score left alone; the run no longer full', async () => {
