@@ -31,7 +31,7 @@ test('the stamp: 16 hex digits of the file with the stamp blanked; restamp is id
   assert.equal(stampOf('create table t (a int);'), null, 'a file from before the stamp has none');
   assert.throws(() => restamp('create table t (a int);'), /no schema stamp line/);
   assert.equal(stampOf(SQL), computeStamp(SQL), 'db/schema.sql is stamped');
-  assert.equal(stampOf(FIXTURE), null, 'the fixture is the live schema from before the stamp');
+  assert.ok(stampOf(FIXTURE) === null || stampOf(FIXTURE) === computeStamp(FIXTURE), 'the fixture is a schema the live database ran: from before the stamp, or stamped and current (npm run push copies it)');
 });
 
 test('fetchLiveStamp asks schema_version() once, read-only, with the key; every other answer is "not reached"', async () => {
@@ -61,8 +61,10 @@ test('classifySchema: current, fixture, other, none, unreachable', () => {
 
 test('push goes ahead only when the live database has this db/schema.sql, and then copies it over the fixture', async () => {
   const states = {};
+  // An older live schema than this file (as the fixture is between a schema change and its push).
+  const olderFixture = '-- an older live schema\ncreate table t (a int);\n';
   for (const [name, answer] of [['current', [200, stampOf(SQL)]], ['other', [200, '1234567890abcdef']], ['none', [404, {}]], ['unreachable', [503, {}]]]) {
-    const s = await liveSchemaState({ fetch: fakeFetch(...answer).fetch, config, schemaSql: SQL, fixtureSql: FIXTURE });
+    const s = await liveSchemaState({ fetch: fakeFetch(...answer).fetch, config, schemaSql: SQL, fixtureSql: olderFixture });
     assert.equal(s.state, name);
     states[name] = s;
   }
@@ -95,8 +97,8 @@ test('the comparison query, run on a database holding the fixture, gives the val
   assert.equal(fixture.rows[0].objects, fixture.functions + fixture.tables);
   const again = await expectedComparison({ sql: FIXTURE });
   assert.equal(again.rows[0].schema_check, fixture.rows[0].schema_check, 'the same schema, the same value');
-  const current = await expectedComparison({ sql: SQL });
-  assert.notEqual(current.rows[0].schema_check, fixture.rows[0].schema_check, "this branch's schema is not the fixture's");
+  const changed = await expectedComparison({ sql: `${FIXTURE}\ncreate table public.schema_check_probe (a int);\n` });
+  assert.notEqual(changed.rows[0].schema_check, fixture.rows[0].schema_check, 'one more table: another value');
   const detail = await expectedComparison({ sql: FIXTURE, detail: true });
   assert.equal(detail.rows.length, fixture.rows[0].objects, 'one row per object');
   assert.ok(detail.rows.some((r) => r.object === 'table scores') && detail.rows.some((r) => r.object.startsWith('function submit_score(')));

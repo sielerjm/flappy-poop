@@ -1465,9 +1465,10 @@ async function seedLive(db) {
   const level = (await db.query('select public.daily_level($1::date) as l', [day])).rows[0].l;
   await asAnon(db, 'select public.submit_daily_score($1, $2, $3::date, $4, $5, $6)', [id('UpAlice'), 'UpAlice', day, 20, level, 10]);
   await asAnon(db, 'select public.submit_daily_score($1, $2, $3::date, $4, $5, $6)', [id('UpDave'), 'UpDave', day, 25, level, 12]);
-  // Two 🌞-only players under one name: the live rule allowed it (plan 25 stops new ones).
+  // Two 🌞-only players under one name: rows from before plan 25's rule, which stops new ones. The second
+  // is written as the owner, since a fixture that already has the rule (any push after 0.18.0) refuses it.
   await asAnon(db, 'select public.submit_daily_score($1, $2, $3::date, $4, $5, $6)', [id('UpTwinA'), 'UpTwin', day, 5, level, 3]);
-  await asAnon(db, 'select public.submit_daily_score($1, $2, $3::date, $4, $5, $6)', [id('UpTwinB'), 'uptwin', day, 6, level, 4]);
+  await db.query('insert into public.daily_scores (player_id, day, name, score, level, pipes) values ($1, $2::date, $3, $4, $5, $6)', [id('UpTwinB'), day, 'uptwin', 6, level, 4]);
   await age();
   await asAnon(db, 'select public.submit_counters($1, $2, $3::jsonb)', [id('UpAlice'), id('UpCB1'), JSON.stringify({ games: 3, sumScore: 100, sumLevel: 8, maxLevel: 4, fiber: 5 })]);
   await asAnon(db, 'select public.submit_counters($1, $2, $3::jsonb)', [id('UpBob'), id('UpCB2'), JSON.stringify({ games: 1, sumScore: 70, sumLevel: 5, maxLevel: 5 })]);
