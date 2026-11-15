@@ -2142,6 +2142,32 @@ export function nextEduStartLevel(level, step, unlocked) {
   return ((((cur - 1 + step) % top) + top) % top) + 1;
 }
 
+/**
+ * The 📚 popup's keys (plan 26, A2; here since AUD-032, so Node can test them): what one keydown
+ * (`down`) or keyup does while ui/eduIntroPanel.js is open. Esc closes on its press. Enter and Space:
+ * a held key's repeats, and the release of a key not pressed since the popup opened (the Space that
+ * started a run), are swallowed, on a focused button too; otherwise a focused button keeps its own
+ * Enter / Space ('native': its choice), and with the card focused Enter presses Play once the click
+ * lockout is over (`locked`: !canRestart) while Space does nothing. Every other key passes. `held`:
+ * the Enter / Space keys (by code) pressed since the popup opened; a new set comes back. Pure.
+ * @returns {{ act: 'close' | 'pass' | 'swallow' | 'native' | 'play', held: Set<string> }}
+ */
+export function eduIntroKey({ key, code = '', repeat = false, down, held = new Set(), onButton = false, locked = false }) {
+  const keys = new Set(held);
+  if (key === 'Escape') return { act: down ? 'close' : 'pass', held: keys };
+  const enter = key === 'Enter';
+  if (!enter && key !== ' ' && code !== 'Space') return { act: 'pass', held: keys };
+  const id = code || key;
+  if (down) {
+    if (repeat) return { act: 'swallow', held: keys };
+    keys.add(id);
+  } else if (!keys.delete(id)) {
+    return { act: 'swallow', held: keys };
+  }
+  if (onButton) return { act: 'native', held: keys };
+  return { act: enter && down && !locked ? 'play' : 'swallow', held: keys };
+}
+
 /** The test start level one `step` (±1) from `level`, wrapping within 1..levels.lastLevel. */
 export function nextTestLevel(level, step, t) {
   const last = t.levels.lastLevel;

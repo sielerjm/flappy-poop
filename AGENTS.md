@@ -379,9 +379,12 @@ servers, unless the player chooses to share it, with a link to 📚 Education da
 popup again). **It opens at every start from the ready screen with 📚 on** (plan 26, A2: Michael asked): a tap,
 Space, ↑ and the pad's A all reach `launch()` with no options, and `launch` opens the popup instead of starting
 (`openEduIntro` says whether it opened; one that cannot open never blocks the run). Play again (`solo`), a Daily
-Dump and a match half go straight in. The game's keyboard is off under it; the popup's own keys (`onKey`): Esc
-closes, and with the card focused Enter presses Play and Space does nothing; a held key's repeats and the
-release of a key pressed before it opened (the Space that started it) are swallowed, so it never flashes past.
+Dump and a match half go straight in. The game's keyboard is off under it; the popup's own keys (`onKey`, acting
+on logic.js's pure `eduIntroKey`, tested in Node: AUD-032): Esc closes, and with the card focused Enter presses
+Play and Space does nothing; a held key's repeats and the release of a key pressed before it opened (the Space
+that started it) are swallowed, on a focused button too, so it never flashes past. A focused button keeps its own
+Enter / Space, and keeps the focus when its choice redraws the popup (`render`), so a second Enter on ▶ steps
+again instead of pressing Play (AUD-026).
 A click in its first `retryLockoutMs` is dropped (one capture listener on the panel: the second tap of a quick
 double tap must not land on Close or Play; the pad's A presses with `click()` too). Focus starts on the card; in
 pad mode the ring is drawn on Play but only a d-pad move focuses a button. A controller walks its buttons with a
@@ -769,7 +772,9 @@ src/
                             howToPromptDue, vibrate helper, trayLayout, trayHit,
                             readyLayout (plan 25's ◀ level ▶ stepper boxes went to
                             the 📚 popup in plan 26), readyHit, nextEduStartLevel (wraps within
-                            the levels unlocked), eduBreakLayout (an education
+                            the levels unlocked), eduIntroKey (the 📚 popup's
+                            keys; AUD-032),
+                            eduBreakLayout (an education
                             break, plan 26 and its A2: the banner's titleY, Shop |
                             Review | Quit on one row, the numbers' chip under
                             Review, the level choice's ◀ LV n ▶ right of the poop),
@@ -1219,9 +1224,11 @@ src/
                             order with a line for the pressed one (ORDERS), the
                             daily cap, the data line with a link to 📚 Education
                             data, Close | Play. Clicks wait retryLockoutMs after it
-                            opens; its keys (onKey: Enter presses Play from the card,
-                            repeats and a key held from before swallowed); focus on
-                            the card. A controller ring over its buttons
+                            opens (canRestart); its keys (onKey on logic.js's
+                            eduIntroKey: Enter presses Play from the card, repeats
+                            and a key held from before swallowed); focus on the
+                            card, and on a button kept across a redraw (AUD-026).
+                            A controller ring over its buttons
                             (eduIntroPadAction), Esc / B close; Play's shutdown
                             closes it.
     eduDataPanel.js         Plain DOM panel (plan 21, Stage 3b), built like

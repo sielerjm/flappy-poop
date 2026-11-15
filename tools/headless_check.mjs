@@ -3892,8 +3892,8 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
 
         // The 📚 popup at every start from the ready screen (plan 26, A2: Michael asked). A tap, Space,
         // ↑ and the pad's A each open it and start nothing. A click in its first moments does nothing
-        // (a double tap's second tap); a held Space's repeats and its release press nothing; Enter on the
-        // card, which has the focus, presses Play.
+        // (a double tap's second tap); a held key's repeats press nothing; Enter on ◀ ▶ steps (and keeps
+        // the focus there); Enter on the card, which has the focus, presses Play.
         const startBy = async (label, how) => {
           await home();
           await sleep(400);
@@ -3916,18 +3916,63 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await sleep(100);
         const tapped = await intro();
         ok(tapped.open && tapped.state === 'ready', 'a real tap on the ready screen opens it too');
-        await evaluate(`document.getElementById('edu-intro-play').click(), true`); // at once: inside the lockout
+        await introEsc();
+        // The click lockout (AUD-032: no timing window): the popup opened and Play clicked in one page task.
+        await sleep(300);
+        const early = await evaluate(`(() => { const p = ${play}; const opened = p.openEduIntro(); document.getElementById('edu-intro-play').click(); return JSON.stringify({ opened, open: !document.getElementById('edu-intro-panel').hidden, state: p.state, launching: Boolean(p.launching) }); })()`).then(JSON.parse);
+        ok(early.opened && early.open && early.state === 'ready' && !early.launching, 'a click on Play in the moment the popup opens does nothing (the second tap of a double tap)');
+        await introEsc();
+        // Real keys through CDP, as a player's reach the page, native button presses included (AUD-026,
+        // AUD-032). Which key does what is eduIntroKey's, tested in Node (tests/ready.test.js); a lone
+        // Space release never presses a button in Chrome, so that rule has no check here.
+        const ENTER = { key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13, text: '\r' };
+        const SPACE = { key: ' ', code: 'Space', windowsVirtualKeyCode: 32, text: ' ' };
+        const keyDown = (k, extra = {}) => cdp.send('Input.dispatchKeyEvent', { type: 'keyDown', ...k, ...extra });
+        const keyUp = ({ text, ...k }) => cdp.send('Input.dispatchKeyEvent', { type: 'keyUp', ...k });
+        const press = async (k) => {
+          await keyDown(k);
+          await keyUp(k);
+          await sleep(120);
+        };
+        const introFocus = (id) => evaluate(`(${id ? `document.getElementById('${id}')` : `document.querySelector('#edu-intro-panel .card')`}.focus(), true)`);
+        const keysView = () => evaluate(`JSON.stringify({ open: !document.getElementById('edu-intro-panel').hidden, focus: document.activeElement?.id || document.activeElement?.className || null, start: ${play}.eduStartLevel(), unlocked: ${play}.eduStore.load().unlockedLevel, state: ${play}.state, launching: Boolean(${play}.launching) })`).then(JSON.parse);
+        // Enter on the card inside the lockout, in the same page task as the open (no timing window; the
+        // card has no native press, so a dispatched key goes the way a real one does).
+        await sleep(300);
+        const k0 = await evaluate(`(() => { const p = ${play}; p.openEduIntro(); const c = document.querySelector('#edu-intro-panel .card'); const focus = document.activeElement === c; const kd = new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', bubbles: true, cancelable: true }); c.dispatchEvent(kd); c.dispatchEvent(new KeyboardEvent('keyup', { key: 'Enter', code: 'Enter', bubbles: true, cancelable: true })); return JSON.stringify({ focus, swallowed: kd.defaultPrevented, open: !document.getElementById('edu-intro-panel').hidden, state: p.state, launching: Boolean(p.launching) }); })()`).then(JSON.parse);
+        ok(k0.focus && k0.swallowed && k0.open && k0.state === 'ready' && !k0.launching, 'Enter on the card in the moment the popup opens does nothing (the lockout)');
+        await sleep(TT.retryLockoutMs + 100);
+        await introFocus('edu-intro-up');
+        const k1 = await keysView();
+        await keyDown(ENTER, { autoRepeat: true }); // a held Enter's repeat would press ▶ again
+        await keyUp(ENTER);
+        await sleep(120);
+        const k2 = await keysView();
+        await introFocus('edu-intro-play');
+        for (let i = 0; i < 2; i += 1) await keyDown(SPACE, { autoRepeat: true }); // a Space held from before the open, then let go
+        await keyUp(SPACE);
         await sleep(150);
-        const early = await intro();
-        await evaluate(`(() => { const c = document.querySelector('#edu-intro-panel .card'); for (const t of ['keydown', 'keydown']) c.dispatchEvent(new KeyboardEvent(t, { key: ' ', code: 'Space', repeat: true, bubbles: true, cancelable: true })); c.dispatchEvent(new KeyboardEvent('keyup', { key: ' ', code: 'Space', bubbles: true, cancelable: true })); return true; })()`);
-        await sleep(150);
-        const held = await intro();
-        ok(early.open && early.state === 'ready' && held.open && held.state === 'ready', 'a click on Play inside its first moments does nothing, nor do a held Space\'s repeats and release');
-        await sleep(TT.retryLockoutMs);
-        await evaluate(`document.querySelector('#edu-intro-panel .card').dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', code: 'Enter', bubbles: true, cancelable: true })), true`);
+        const k3 = await keysView();
+        ok(k2.open && k2.start === k1.start && k3.open && k3.state === 'ready' && !k3.launching, `a held key's repeats press nothing: an Enter on ▶ leaves LV ${k2.start}, a Space held over Play starts nothing`);
+        // A choice keeps the focus on its button, so Enter repeats the choice and never presses Play (AUD-026).
+        await introFocus('edu-intro-up');
+        const steps = [await keysView()];
+        for (let i = 0; i < 2; i += 1) {
+          await press(ENTER);
+          steps.push(await keysView());
+        }
+        const up = (n) => (n % steps[0].unlocked) + 1; // ▶ wraps within the levels unlocked
+        const wantSteps = [steps[0].start, up(steps[0].start), up(up(steps[0].start))];
+        ok(steps[0].unlocked >= 3 && steps.every((v) => v.open && v.state === 'ready' && v.focus === 'edu-intro-up') && steps.map((v) => v.start).join() === wantSteps.join(), `Enter on ▶ steps the start level and keeps the focus there, so the next Enter steps again (AUD-026): LV ${steps.map((v) => v.start).join(' → ')} of ${steps[0].unlocked} unlocked`);
+        await introFocus('edu-intro-down');
+        for (let i = 0; i < 2; i += 1) await press(ENTER);
+        const back = await keysView();
+        ok(back.open && back.focus === 'edu-intro-down' && back.start === steps[0].start, `◀ the same way, back to LV ${back.start}`);
+        await introFocus(null);
+        await press(ENTER);
         for (let i = 0; i < 40 && (await playState()) !== 'playing'; i += 1) await sleep(100);
-        const entered = await evaluate(`JSON.stringify({ state: ${play}.state, edu: ${play}.runIsEducation, popup: !document.getElementById('edu-intro-panel').hidden })`).then(JSON.parse);
-        ok(entered.state === 'playing' && entered.edu && !entered.popup, 'Enter on the card presses Play: the education run starts and the popup is gone');
+        const entered = await evaluate(`JSON.stringify({ state: ${play}.state, edu: ${play}.runIsEducation, level: ${play}.level, popup: !document.getElementById('edu-intro-panel').hidden })`).then(JSON.parse);
+        ok(entered.state === 'playing' && entered.edu && entered.level === back.start && !entered.popup, `a real Enter on the card presses Play: the education run starts at LV ${entered.level} and the popup is gone`);
         await home();
 
         // Quit at a break (plan 25, B8; the level Skip ▸ beside it is gone since plan 26's A2). Quit needs

@@ -13,7 +13,8 @@
 // The page's keyboard drives it while it is open (Phaser's keyboard manager is off): Enter presses Play
 // when the card has focus, Space does nothing there, Esc closes; a held key's repeats, and the release
 // of a key pressed before it opened (the Space that started a run), are swallowed, so the popup never
-// flashes past. Clicks in its first retryLockoutMs are dropped (the second tap of a double tap that
+// flashes past (logic.js eduIntroKey decides; AUD-032). A choice made with a button keeps the focus on
+// that button (AUD-026). Clicks in its first retryLockoutMs are dropped (the second tap of a double tap that
 // opened it must not land on Close or Play). Focus starts on the card (plan 26, A2). A controller
 // walks its buttons with a gold ring, as in the tournament panel (eduIntroPadAction, from
 // Play.onPadAction): the d-pad moves it, A presses, B closes. Canvas pointer events never reach the
@@ -21,7 +22,7 @@
 
 import { TUNING as T } from '../config.js';
 import { t, countLines, levelLabel } from '../i18n.js';
-import { focusNearest, focusStep } from '../logic.js';
+import { focusNearest, focusStep, eduIntroKey, canRestart } from '../logic.js';
 
 const PANEL_ID = 'edu-intro-panel';
 
@@ -66,7 +67,7 @@ let openedAt = 0; // when it opened: clicks wait retryLockoutMs from here (plan 
 let keysDown = new Set(); // Enter / Space keys pressed since it opened (a release of any other is swallowed)
 
 const clock = () => globalThis.performance?.now?.() ?? Date.now();
-const clickLocked = () => clock() - openedAt < T.retryLockoutMs;
+const clickLocked = () => !canRestart(openedAt, clock(), T.retryLockoutMs);
 let padId = null; // the id of the button under the controller's ring, or null (no ring)
 
 function h(tag, attrs = {}, ...children) {
@@ -104,36 +105,28 @@ function build() {
   dom = { root, card };
 }
 
+/** The popup's button that has the page's focus, or null. */
+function focusedButton() {
+  const el = document.activeElement;
+  return el && el.tagName === 'BUTTON' && dom.root.contains(el) ? el : null;
+}
+
 /**
- * The popup's keys (plan 26, A2). Esc closes. Enter and Space: a held key's repeats and the release
- * of a key pressed before the popup opened are swallowed (the Space that started a run must not press
- * Play as it lifts). A focused button keeps its own Enter / Space; with the card focused, Enter
- * presses Play once the click lockout is over, and Space does nothing (it would scroll the card).
+ * The popup's keys (plan 26, A2): which key does what is logic.js's eduIntroKey (AUD-032); this acts
+ * on it. Esc closes. A swallowed key goes nowhere (the Space that started a run must not press Play
+ * as it lifts; Space on the card would scroll it). A focused button keeps its own Enter / Space.
  */
 function onKey(e, down) {
-  if (e.key === 'Escape') {
-    if (!down) return;
-    e.preventDefault();
+  const { act, held } = eduIntroKey({ key: e.key, code: e.code, repeat: e.repeat, down, held: keysDown, onButton: Boolean(focusedButton()), locked: clickLocked() });
+  keysDown = held;
+  if (act === 'pass' || act === 'native') return;
+  e.preventDefault();
+  if (act === 'close') {
     closeEduIntroPanel();
     return;
   }
-  const enter = e.key === 'Enter';
-  const space = e.key === ' ' || e.code === 'Space';
-  if (!enter && !space) return;
-  const swallow = () => {
-    e.preventDefault();
-    e.stopImmediatePropagation();
-  };
-  if (down) {
-    if (e.repeat) return swallow();
-    keysDown.add(e.code || e.key);
-  } else if (!keysDown.delete(e.code || e.key)) {
-    return swallow();
-  }
-  const el = document.activeElement;
-  if (el && el.tagName === 'BUTTON' && dom.root.contains(el)) return;
-  swallow();
-  if (enter && down && !clickLocked()) onPlay();
+  e.stopImmediatePropagation();
+  if (act === 'play') onPlay();
 }
 
 function setGameKeyboard(enabled) {
@@ -156,9 +149,14 @@ const ORDERS = [
   ['after', 'eduOrderAfter', 'eduOrderAfterHint'],
 ];
 
-/** Draw the popup from Play's state now (Play.eduIntroInfo): called on open and after each choice. */
+/**
+ * Draw the popup from Play's state now (Play.eduIntroInfo): called on open and after each choice. The
+ * button that had the focus gets it back once redrawn (AUD-026: a choice by keyboard keeps its
+ * button, so a second Enter repeats the choice instead of pressing Play from the card).
+ */
 function render() {
   const info = ctx.play.eduIntroInfo();
+  const focusId = focusedButton()?.id || null;
   const close = h('button', { class: 'close', id: 'edu-intro-x', type: 'button', 'aria-label': tr('eduIntroClose') }, '✕');
   close.addEventListener('click', () => closeEduIntroPanel());
   const how = h('ul', {}, ...['eduIntroHowLevels', 'eduIntroHowRevive', 'eduIntroHowSkip', 'eduIntroHowCoins'].map((key) => h('li', {}, tr(key))));
@@ -211,6 +209,7 @@ function render() {
     h('div', { class: 'actions' }, shut, play),
   );
   placePad();
+  if (focusId) document.getElementById(focusId)?.focus({ preventScroll: true });
   // The card takes focus when nothing in it has any, so Esc reaches the root's keydown.
   if (!dom.root.contains(document.activeElement)) dom.card.focus({ preventScroll: true });
 }

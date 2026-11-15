@@ -204,3 +204,37 @@ test('the start level (plan 25; in the 📚 popup since plan 26): the ready scre
   assert.equal(Object.keys(L).some((k) => k.startsWith('eduStart')), false, 'no stepper boxes on the ready screen');
   assert.deepEqual([nextEduStartLevel(1, 1, 3), nextEduStartLevel(3, 1, 3), nextEduStartLevel(1, -1, 3), nextEduStartLevel(5, 1, 3), nextEduStartLevel(2, 1, 1)], [2, 1, 3, 1, 1]);
 });
+
+test("the 📚 popup's keys (plan 26, A2; AUD-032: eduIntroKey, the decision ui/eduIntroPanel.js's onKey acts on): Esc closes; a held key's repeats and the release of a key pressed before the popup opened are swallowed, on a button too; a focused button keeps its own Enter and Space; on the card, Enter presses Play once the lockout is over and Space does nothing", async () => {
+  const { eduIntroKey } = await import('../src/logic.js');
+  const ENTER = { key: 'Enter', code: 'Enter' };
+  const SPACE = { key: ' ', code: 'Space' };
+  const run = (k, { held = [], ...over } = {}) => {
+    const r = eduIntroKey({ ...k, held: new Set(held), ...over });
+    return [r.act, [...r.held].sort().join(',')];
+  };
+  const rows = [
+    ['Esc, pressed', { key: 'Escape', code: 'Escape' }, { down: true }, ['close', '']],
+    ['Esc, released', { key: 'Escape', code: 'Escape' }, { down: false }, ['pass', '']],
+    ['any other key', { key: 'a', code: 'KeyA' }, { down: true, onButton: true }, ['pass', '']],
+    ['Enter on the card, inside the lockout', ENTER, { down: true, locked: true }, ['swallow', 'Enter']],
+    ['Enter on the card, after it', ENTER, { down: true }, ['play', 'Enter']],
+    ['Enter on the card, released', ENTER, { down: false, held: ['Enter'] }, ['swallow', '']],
+    ["Enter on the card, a held key's repeat", ENTER, { down: true, repeat: true, held: ['Enter'] }, ['swallow', 'Enter']],
+    ['Space on the card', SPACE, { down: true }, ['swallow', 'Space']],
+    ['Space on the card, released', SPACE, { down: false, held: ['Space'] }, ['swallow', '']],
+    ['the release of a Space pressed before it opened (the one that started the run)', SPACE, { down: false }, ['swallow', '']],
+    ['the same, on a focused button (it would press it)', SPACE, { down: false, onButton: true }, ['swallow', '']],
+    ['an Enter released that was pressed before it opened, on a button', ENTER, { down: false, onButton: true }, ['swallow', '']],
+    ["Enter on a focused button: its own (the button's choice)", ENTER, { down: true, onButton: true }, ['native', 'Enter']],
+    ["Enter on a focused button inside the lockout: its own (the click lockout drops the click)", ENTER, { down: true, onButton: true, locked: true }, ['native', 'Enter']],
+    ["a held Enter's repeat on a focused button (it would press it again)", ENTER, { down: true, repeat: true, onButton: true, held: ['Enter'] }, ['swallow', 'Enter']],
+    ['Space on a focused button, pressed', SPACE, { down: true, onButton: true }, ['native', 'Space']],
+    ['Space on a focused button, released', SPACE, { down: false, onButton: true, held: ['Space'] }, ['native', '']],
+    ['the numpad Enter is its own key', { key: 'Enter', code: 'NumpadEnter' }, { down: false, held: ['Enter'] }, ['swallow', 'Enter']],
+  ];
+  for (const [name, k, over, want] of rows) assert.deepEqual(run(k, over), want, name);
+  const held = new Set(['Space']);
+  eduIntroKey({ ...SPACE, down: false, held });
+  assert.deepEqual([...held], ['Space'], 'the set passed in is left alone (pure)');
+});
