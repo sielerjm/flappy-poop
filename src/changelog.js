@@ -14,13 +14,13 @@ export const CHANGELOG = [
       en: [
         'Education mode is open to everyone, in beta: turn on 📚 on the home screen. No secret word any more. The cards are about how the gut and its microbes work; they are not medical advice.',
         'Every quiz card is in Chinese too: play in 中文 and the question, the answers and the explanation are all in Chinese.',
-        'The 📚 board and 🔬 Tester data are by invitation: type the invite code you were given in 📚 Education data, or open your invite link.',
+        'Sharing on the 📚 board and joining 🔬 Tester data are by invitation: type the invite code you were given in 📚 Education data, or open your invite link. Anyone can read the 📚 board.',
         'One form for education mode: report a wrong card, an unclear explanation or a broken link, or suggest a card, from the 🚩 on a card or from 📚 Education data.',
       ],
       'zh-Hans': [
         '教育模式现在对所有人开放（测试版）：在主页打开 📚 即可，不再需要暗号。卡片讲的是肠道和肠道微生物如何运作，不是医疗建议。',
         '所有问答卡都有中文了：切换到中文后，题目、选项和解释都显示中文。',
-        '📚 排行榜和 🔬 测试数据需要邀请：在 📚 教育数据里输入你收到的邀请码，或打开你的邀请链接。',
+        '在 📚 排行榜上分享成绩和参加 🔬 测试数据需要邀请：在 📚 教育数据里输入你收到的邀请码，或打开你的邀请链接。所有人都能查看 📚 排行榜。',
         '教育模式有了一个反馈表：可以报告卡片错误、解释不清或链接失效，也可以提出新卡片的想法。从卡片上的 🚩 或 📚 教育数据打开。',
       ],
     },

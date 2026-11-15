@@ -1371,7 +1371,8 @@ export class Play extends Phaser.Scene {
    * The save panel's Clear: this device forgets its player (name, id, top scores), the last
    * confirmed submits, any queued merge, the legacy best (create() would re-seed it) and the
    * education cards' progress, so the next username starts a brand-new player. Settings stay
-   * (the education unlock among them). The board keeps the old id's rows.
+   * (the 📚 switch among them), but for the invitation flag, which was the old player's. The board
+   * keeps the old id's rows.
    */
   signOut() {
     this.setSaveState(saveLocal({}));
@@ -1379,7 +1380,7 @@ export class Play extends Phaser.Scene {
     this.mergeStore.clear();
     this.renameStore.clear();
     this.careerStore.clear(); // counters and badges go with the player
-    this.eduStore.clear(); // and the education cards' progress (plan 21); the unlock is a setting and stays
+    this.eduStore.clear(); // and the education cards' progress (plan 21); the 📚 switch is a setting and stays
     this.eduShare.clear(); // this device stops sending to the 📚 board; a row the old player shared stays there until they stop sharing
     this.consentStore.clear(); // and stops recording for the pilot: answers already sent stay on the server until the tester withdraws
     this.settings?.set?.({ eduInvited: false }); // the invitation belonged to the player signed out (plan 28, 2.4)

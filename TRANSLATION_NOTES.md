@@ -527,6 +527,7 @@ New level: "Shine 11" by BenKirb (Pixabay)
 Coin: "Drop Coin" by freesound_gamestudio (Pixabay)
 Purchase: "Coin Drop" by Universfield (Pixabay)
 Shop: "Money Bag" by PhilSavlem (Pixabay)
+Card scheduling: FSRS by Open Spaced Repetition (MIT)
 Thanks to Tori Schummer and Niklas Werner for help with ideation and testing
 Inspired by Flappy Bird
 ```
@@ -542,6 +543,7 @@ Inspired by Flappy Bird
 金币音效："Drop Coin"，freesound_gamestudio（Pixabay）
 购买音效："Coin Drop"，Universfield（Pixabay）
 商店音效："Money Bag"，PhilSavlem（Pixabay）
+卡片复习安排：FSRS，Open Spaced Repetition（MIT）
 感谢 Tori Schummer 和 Niklas Werner 协助构思和测试
 灵感来自 Flappy Bird
 ```

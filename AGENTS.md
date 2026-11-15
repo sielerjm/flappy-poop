@@ -361,7 +361,10 @@ everyone, one change and a push, except that a device holding a pilot consent or
 Education data, so Withdraw and Stop sharing stay reachable: `Play.eduDataReachable`, AUD-037; `Play.educationAvailable()`, read each time, `eduAvailable` standing in
 for it in tests). The old word (`EDUCATION.words`, `poopschool`) typed as a username is still never stored
 as a name: the save panel says 📚 is on the home screen for everyone (`eduWordRetired`). Turning 📚 on asks
-the browser to keep the site's storage (`navigator.storage.persist`). The ready screen offers the
+the browser to keep the site's storage (`navigator.storage.persist`), once a page load (the registry's
+`storagePersistAsked`). The settings keep `eduInvited` (the device's invitation flag, above) and drop the
+old `eduUnlocked`: a stored `eduUnlocked` other than true turns a stored `education: true` off once, as a
+locked device's hidden 📚 was (`normalizeSettings`). The ready screen offers the
 📚 switch (settings `education`, remembered, off by default) under 🚽, in the 👥 slot on a phone; on a wide window the
 three switches pack into 64 px boxes (`readyLayout({ versus, education })`, y 808 / 874 / 940); 👥 and
 📚 switch each other off. `refreshReadySwitches` re-lays them in place when test mode
@@ -712,6 +715,10 @@ src/
                             field (720 on a phone, wider on desktop), Scale.FIT,
                             a debounced window resize (a phone rotation too) →
                             Play.onFieldResize() when the width would change,
+                            ?invite=<code> read once (inviteFromSearch), taken out
+                            of the address bar at once (withoutInvite,
+                            history.replaceState) and handed to Play through the
+                            registry's pendingInvite (plan 28, 2.4),
                             roundPixels,
                             arcade physics (fixed 60 Hz step; ?perf=var steps by
                             each frame's delta for a phone A/B), ?perf attaches
@@ -774,7 +781,9 @@ src/
                             blinkMs, blinkCycles, blinkAlpha).
                             Pure data, Node-safe.
   logic.js                  Pure functions, NO Phaser/DOM: Chinese line breaking
-                            (cjkUnits, wrapCjk; plan 28, 2.1), field (fieldWidth,
+                            (cjkUnits, wrapCjk; plan 28, 2.1), the invite link
+                            (inviteFromSearch, withoutInvite: one pattern for both,
+                            AUD-038), field (fieldWidth,
                             uiColumn, poopX, pipeLeadPx, pipeLead, prefillPairs,
                             sweepOffset;
                             trayLayout /
@@ -1029,8 +1038,10 @@ src/
                             over (restart into it does nothing);
                             beginBatch(record, makeId) works out what is new, 50 runs
                             a batch), shareEducation ({ status: 'ok', sharedAt } /
-                            'closed' / 'notAdult' / 'nameTaken' / 'rejected' /
-                            'offline'), renameEducation, unshareEducation (true /
+                            'closed' / 'needsInvite' (plan 28; a code over 200
+                            characters is refused here) / 'notAdult' / 'nameTaken' /
+                            'rejected' / 'offline'; 0.18.0's client reads 'needs
+                            invite' as offline), renameEducation, unshareEducation (true /
                             null), submitEducationGrades ('ok' / 'restart' with
                             sharedAt / 'notShared' / 'rejected' / 'keep'; an empty
                             batch is the round probe),
@@ -2595,7 +2606,12 @@ tools/
                             and the profile's section, the scroll band, the 📚
                             board's sending, Clear), education-share (the Education
                             data panel, the 📚 tab, the profiles' sections, the
-                            tester pilot: join, record, send, withdraw). The 📚
+                            tester pilot: join, record, send, withdraw; the
+                            invitation, and Enter in the invite field joining
+                            nothing), then blocked-storage (every read of
+                            localStorage throwing: the game still starts and plays)
+                            and invite-link (a page loaded with ?invite= opens the
+                            panel with the code, the address cleaned). The 📚
                             board's and the pilot's calls are stubbed at boot
                             (globalThis.__edu / __eduAnswer), like the career's.
                             OVERLAYS lists Quiz; NEEDS_RUN keeps the ready-screen

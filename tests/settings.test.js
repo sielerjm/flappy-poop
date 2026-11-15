@@ -152,7 +152,7 @@ test('howToSeenAt keeps a string stamp, drops anything else, and persists', () =
   assert.equal(createSettingsStore(st, 'k').load().howToSeenAt, '');
 });
 
-test('education mode (plan 21): the unlock and the 📚 switch are remembered booleans, false by default', () => {
+test('education mode (plan 21; plan 28): the 📚 switch and the invitation flag are remembered booleans, false by default; the old unlock setting is gone', () => {
   const st = fakeStorage();
   const s = createSettingsStore(st, 'k');
   assert.deepEqual(s.set({ education: true }), { ...DEFAULTS, education: true });
