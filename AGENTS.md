@@ -581,14 +581,15 @@ grade is the mean of the graded runs' grades (`averageGrade`). **Over**, on an e
 other panels are untouched): ‼️ 😢 are the grid's third row, as everywhere; the tally is the bottom
 row (plan 26, Michael's image 9), three cells (❔ answered, ✅ right, ❌ wrong; a tap on one opens "This
 run") under the coins with `eduNotSaved` under it, a row apart, and the run's education badges on a
-line between the coins and that row (`overCellsLayout({ education, badge, won })`, `overEduLines`); no
-Share. Its buttons are one row,
+line between the coins and that row on a lost run, or under the tally on a won one (plan 28, 3.2)
+(`overCellsLayout({ education, badge, won })`, `overEduLines`); no Share. Its buttons are one row,
 Home | Play again side by side where Play again sits on other panels (`overButtonsLayout({ pair })`;
 Play again glows `over.pairGlowPx`, clear of Home), so a lost run's band is the tall one
 (`overBandLayout({ tall })`) and nothing scrolls. A won run offers 📚 Quiz centred a row above the pair
 (`bonus`; `openBonus` → `Quiz('bonus')`, the rectum's questions, no coins); its band is the short one,
-so the first row under the coins stays in view and the rest starts below the band's bottom, whole,
-where it scrolls. **A won run waits** (plan 26): its bonus answers are part of it (the tally's last
+so the tally row stays in view (with a badge too: plan 28, 3.2) and the badge line and the note start
+below the band's bottom, whole, where it scrolls (by drag, wheel, or the controller's 'lines' stop:
+AUD-049). **A won run waits** (plan 26): its bonus answers are part of it (the tally's last
 level row, the grade), so `endRun` keeps it in the education store as `pending` ({ tally, full, at };
 `setPending`, updated by each bonus answer) and shows the badges it would earn so far
 (`eduPreviewBadges`, `countersAfterRun`); closing the bonus quiz draws the panel again
@@ -1818,11 +1819,12 @@ src/
                             space goes home; a drag or the wheel only scrolls. It
                             scrolls only when a line runs past its bottom: a won
                             education run (below). { education } (the run's tally):
-                            an education panel (plan 21, E5). Its third row of cells
-                            is the tally (eduAnswered / eduRight / eduWrong: ❔ ✅
-                            ❌), and a tap on one opens "This run" (tallyLines) in
-                            the card; ‼️ 😢 sit under the coins, the eduNote under
-                            them, a badge line between the coins and that row
+                            an education panel (plan 21, E5). Its bottom row of
+                            cells, under the coins, is the tally (eduAnswered /
+                            eduRight / eduWrong: ❔ ✅ ❌), and a tap on one opens
+                            "This run" (tallyLines) in the card; ‼️ 😢 are the third
+                            row, as on every panel; the eduNote under the tally, a
+                            badge line between the coins and that row
                             (overEduLines; its badges are looked up in
                             EDU_ACHIEVEMENTS too); on a won run the ❔ ✅ ❌ row stays
                             in view and the badge line goes below it, under the fold

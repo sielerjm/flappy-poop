@@ -1007,7 +1007,10 @@ function normalizeEduShare(raw) {
  * already has (`sent`: graded runs and their grade sum; `sentBadges`), and one batch on its way
  * (`inflight`, resent unchanged until the server answers: its id is the receipt).
  * The device's record itself is the education store's (createEduStore: counters.gradedRuns /
- * gradeSum and badges); beginBatch takes it and works out what is new. A round starts from zero:
+ * gradeSum and badges); beginBatch takes it (Play passes boardRecord(record), the same counters) and
+ * works out what is new. Its counters are the runs played on this device: a restore's longer history
+ * is kept apart, for display (education.js `history`, AUD-047), so restored runs are never sent and
+ * an older client sending the raw counters sends no more. A round starts from zero:
  * turning sharing on, or being told to restart, sends the whole record again.
  * Every read normalises; storage follows src/store.js; it never throws.
  */
