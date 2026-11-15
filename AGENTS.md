@@ -442,8 +442,8 @@ nothing counted left, a break's or the bonus quiz stops at the first practice ca
 caught up!" with End Review and **Keep practicing** (`Quiz.practicing`: practice cards from then on,
 leaving the schedule alone, and paying as any card does: once a day); with nothing at all, End Review alone. **The purse**
 (plan 26): in a break, "🌽 n" under the ✕ (`refreshPurse`), popping as right answers pay. Enter /
-Space press only the way forward (and End Review on "All caught up" when it is alone), never Give
-up: Space is the flap key. **Its sounds**: a book opens with the
+Space press only the way forward (and End Review on "All caught up" when it is alone), never Quit,
+and nothing on an open card (so never Skip): Space is the flap key. **Its sounds**: a book opens with the
 quiz (`book-open`), a page turns for each next card (`book-flip`), the book shuts when it is left
 (`book-close`); a wrong answer plays `sfx.hazard`; a right one that pays nothing (a revive, the bonus
 quiz, a card that paid today) plays `sfx.score`, and one that pays (a break's) makes the coin's sound alone (`takeCoins`); the
@@ -721,6 +721,10 @@ src/
                             reviveBlinkMs (the blink after Fly on), badgeMinAnswers
                             (answers a run needs to be graded),
                             priceScale, masteredDays, explainMinMs, breakCoins,
+                            newPerDay (new cards a local day), buryCoinsPerLevel,
+                            buryPerDay and buryMs (Skip's price, its daily cap for
+                            due cards, its least wait: skipUntil), boardMinRuns
+                            (graded runs before the 📚 board lists a player),
                             revivePenaltyPerLevel. EDUCATION.words = the unlock word
                             (poopschool), matched like TEST_MODE.words. TUNING.splash = the
                             loading splash (hintMs, slideMs, fadeMs, swipePx,
@@ -1468,8 +1472,10 @@ src/
                             poopRadius; gapBounds keeps gapMargin inside both);
                             levelBar above the score. Nothing here reads time.now;
                             readyHit() routes taps (toilet, versus, education, the
-                            📚 glyph → the 📚 popup, howto, profile → the save
-                            panel; anything else starts). getSaveState / setSaveState for the panel.
+                            📚 glyph → "Your cards" (toggleEduCard; plan 26 A2),
+                            howto, profile → the save panel; anything else
+                            starts, and a start with 📚 on opens the 📚 popup
+                            first: launch → openEduIntro). getSaveState / setSaveState for the panel.
                             Test mode: registry testMode / testStartLevel /
                             testInvincible (session, like toilet); isTestMode,
                             setTestMode, testSettings / setTestSettings,

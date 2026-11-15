@@ -255,7 +255,7 @@ Short, playful, clear. Fit a 720×1280 logical field; How to play / About body w
 | quizWhy | Why? | 为什么？ |
 | quizNext | Next Card (plan 26, Michael's word: the quiz card's way forward, bottom row right) | 下一张 |
 | quizReturn | End Review (plan 26, Michael's word: the quiz card's way out in a break or the bonus quiz, bottom row left; it closes the quiz) | 结束复习 |
-| quizKeepPracticing | Keep practicing (plan 26: on "You're all caught up!", asks cards that are not due yet; they pay nothing and leave the schedule alone) | 继续练习 |
+| quizKeepPracticing | Keep practicing (plan 26: on "You're all caught up!", asks cards that are not due yet; since plan 26's A2 a right answer in a level break pays once per card a local day, as every card does (nothing in the bonus quiz), and leaves the schedule alone; a wrong one moves it as usual) | 继续练习 |
 | quizStatsTitle | This run | 本局 |
 | eduCardsTitle | Your cards | 你的卡片 |
 | quizCountsTitle | Waiting in this quiz (the title of the card a tap on a quiz card's numbers opens: the 🔵 🔴 🟢 lines with this quiz's counts) | 本次答题还剩 |
