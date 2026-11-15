@@ -224,6 +224,18 @@ export class Over extends Phaser.Scene {
     if (this.shareButton) this.makeShareCard(this.cardData);
     if (linked) this.loadDailyRank(play);
 
+    // The lines a short band leaves below its bottom (a won education run's badge line and note): one
+    // ring stop over them, so a controller scrolls them into view too, as the wheel and a drag do (the
+    // Checkpoint 3 audit, AUD-049: since plan 28's 3.2 nothing focusable sits below the fold). A does
+    // nothing there; it is for reading.
+    const below = [this.badgeLine, this.eduNote].filter(Boolean).map((o) => o.getBounds()).filter((r) => r.bottom > B.bottom);
+    const linesBox = below.length
+      ? (() => {
+          const top = Math.min(...below.map((r) => r.y)) - 6;
+          const bottom = Math.max(...below.map((r) => r.bottom)) + 6;
+          return { x: cx, y: (top + bottom) / 2, width: Math.max(...below.map((r) => r.width)) + 24, height: bottom - top };
+        })()
+      : null;
     // Controller focus ring: Home, Share (once its card exists), then the tray (no ⏸ here).
     // A on Home is the panel tap; A on a tray button is that button's chrome. The cells and the
     // rank link are in the band: their ring is the band's own, and focusing one scrolls it into view.
@@ -239,13 +251,22 @@ export class Over extends Phaser.Scene {
         ...(this.bonusButton ? [{ id: 'bonus', box: this.buttons.bonus, activate: () => this.openBonus() }] : []),
         // The summary cells: A opens (or closes) a cell's card.
         ...this.cells.map((cell) => ({ id: `cell:${cell.id}`, box: cell, scrolled: true, activate: () => this.openCell(cell.id) })),
+        ...(linesBox ? [{ id: 'lines', box: linesBox, scrolled: true, activate: () => {} }] : []),
         ...['info', 'lang', 'feedback', 'leaderboard', 'mute', 'settings'].map((id) => ({ id, obj: this.tray.buttons[id], activate: () => play?.handleChrome(id) })),
       ],
     });
-    // A nav press with a card up closes it first, as on the profile.
+    // A nav press with a card up closes it first, as on the profile. With lines below the fold, down
+    // from the bottom row of cells goes to them and up from them comes back (AUD-049): the spatial
+    // search would jump over them to the buttons, whose centres line up better.
     const move = this.focus.move;
+    const bottomY = this.cells.length ? Math.max(...this.cells.map((c) => c.y)) : null;
+    const bottomRow = this.cells.filter((c) => c.y === bottomY).map((c) => `cell:${c.id}`);
     this.focus.move = (dir) => {
       this.closeCard();
+      const f = this.focus;
+      const at = f.items[f.index]?.id;
+      if (linesBox && dir === 'down' && bottomRow.includes(at)) return f.setIndex(f.indexOf('lines'));
+      if (linesBox && dir === 'up' && at === 'lines') return f.setIndex(f.indexOf(bottomRow[Math.floor(bottomRow.length / 2)]));
       move(dir);
     };
     // The explanation card, above everything (the ring and the band included): on a camera of its

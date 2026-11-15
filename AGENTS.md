@@ -1830,7 +1830,10 @@ src/
                             run's band is the tall one (overBandLayout { tall }) and
                             holds everything; a won run has the 📚 bonus button
                             centred above the pair (buttons.bonus, openBonus) and
-                            the short band, which scrolls to the rows below it.
+                            the short band, which scrolls to the rows below it: by
+                            drag, wheel, or the controller's ring, which has one stop
+                            ('lines') over the lines below the fold, reached by down
+                            from the bottom row of cells (AUD-049).
     Settings.js             Overlay (geometry from settingsLayout): sound, haptics (Android only), the
                             hand row (👈 pill 👉 from createToggle with glyphLeft, a
                             Zone over the row, a hint line; toggleHand →

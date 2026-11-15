@@ -5188,6 +5188,14 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await evaluate(`${O}.openedAt = __flappy.loop.time - 5000, true`); // past the death-tap lockout
         const rest = await bandNow();
         ok(rest.offset === 0 && rest.fallsBottom <= rest.bottom - 16 && rest.lineTop >= rest.bottom && rest.noteTop >= rest.bottom && rest.lineTop >= rest.fallsBottom && rest.noteTop >= rest.lineBottom, `at rest the ❔ ✅ ❌ row is in view, clear of the bonus button (it ends at ${Math.round(rest.fallsBottom)}; the band at ${rest.bottom}), and the badge line and the note start below the fold (at ${Math.round(rest.lineTop)} and ${Math.round(rest.noteTop)})`);
+        // A controller reaches the lines below the fold too (the Checkpoint 3 audit, AUD-049): down from the
+        // ❔ ✅ ❌ row lands on them and scrolls the band until the badge line is in view.
+        await evaluate(`(() => { __flappy.registry.set('padMode', true); const f = ${O}.focus; f.show(); f.setIndex(f.indexOf('cell:eduWrong')); f.move('down'); return true; })()`);
+        await sleep(500); // the band eases to the focused item
+        const padLines = await evaluate(`(() => { const o = ${O}; const f = o.focus; const b = o.badgeLine.getBounds(); const out = { id: f.items[f.index]?.id ?? null, offset: o.band.offset, lineTop: b.y, lineBottom: b.bottom, top: o.bandBox.top, bottom: o.bandBox.bottom }; f.move('up'); out.back = f.items[f.index]?.id ?? null; f.hide(); __flappy.registry.set('padMode', false); return JSON.stringify(out); })()`).then(JSON.parse);
+        await sleep(500);
+        padLines.after = await evaluate(`(${O}.band.scrollBy(9999), ${O}.band.offset)`);
+        ok(padLines.id === 'lines' && padLines.offset < 0 && padLines.lineBottom + padLines.offset <= padLines.bottom && padLines.lineTop + padLines.offset >= padLines.top && padLines.after === 0 && padLines.back === 'cell:eduRight', `the pad's ring goes down from the ❔ ✅ ❌ row to the lines below the fold and the band scrolls them into view, and up comes back to the row (ring on "${padLines.id}", then "${padLines.back}", ${Math.round(padLines.offset)} px; the badge line then ends at ${Math.round(padLines.lineBottom + padLines.offset)}, the band at ${padLines.bottom})`);
         const mid = await canvasPt(rest.left + 20, (rest.top + rest.bottom) / 2);
         await cdp.send('Input.dispatchMouseEvent', { type: 'mouseWheel', x: mid.x, y: mid.y, deltaX: 0, deltaY: 400 });
         await sleep(200);
