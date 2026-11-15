@@ -967,7 +967,8 @@ src/
                             counters are shownCounters), readEducationBackup (the text around the
                             outermost { … } ignored; cleaned as the store cleans;
                             'unrecognised' / 'newer' / 'tooBig'), mergeEducation (a
-                            card's later answer wins, a card skipped here today keeping
+                            card's later schedule wins, reviewedAt then lastAt, a record
+                            dated over a day ahead never (AUD-048), a card skipped here today keeping
                             its wait; the counters this device's, revives the larger,
                             the longer history's grade pair into history; badges at
                             the earlier day, the higher level,

@@ -856,9 +856,12 @@ const sameJson = (x, y) => JSON.stringify(x) === JSON.stringify(y);
  * This device's education record `local` with a backup's `backup` (both as cleanEdu gives them)
  * merged in, and what it changed: { record, added, updated, badges, changed }. Merging the same
  * backup twice changes nothing.
- *   cards     the later answer wins (lastAt, then reviewedAt); a tie keeps this device's; a card
- *             skipped here today keeps its wait. added and updated count the live cards only (an
- *             unknown or retired id is kept, not counted).
+ *   cards     the later schedule wins (reviewedAt: a right practice answer moves lastAt only, so a
+ *             practice elsewhere never erases a lapse here; AUD-048), then the later answer (lastAt);
+ *             a tie keeps this device's; a record dated more than a day past `now` (a clock set
+ *             ahead, plan 27's rule) never beats one here; a card skipped here today keeps its wait.
+ *             added and updated count the live cards only (an unknown or retired id is kept, not
+ *             counted).
  *   counters  this device's own, which the 📚 board is sent and the badges read (AUD-047): a restore
  *             adds no runs to them, and the 🤓 streak stays this device's; revives the larger.
  *   history   the backup's gradedRuns and gradeSum together (its file holds what that device showed)
@@ -868,7 +871,7 @@ const sameJson = (x, y) => JSON.stringify(x) === JSON.stringify(y);
  *   level     the higher unlockedLevel.   study   mergeStudy.
  *   kept      recent, paid, buried, pending: this device's.
  */
-export function mergeEducation(local, backup, { today = localDayKey(), cards = CARDS, t = TUNING } = {}) {
+export function mergeEducation(local, backup, { today = localDayKey(), now = Date.now(), cards = CARDS, t = TUNING } = {}) {
   const keep = t.education.minGap;
   const L = cleanEdu(local, keep, t);
   const B = cleanEdu(backup, keep, t);
@@ -879,7 +882,8 @@ export function mergeEducation(local, backup, { today = localDayKey(), cards = C
   let updated = 0;
   for (const [id, rec] of Object.entries(B.cards)) {
     const mine = L.cards[id];
-    const later = !mine || rec.lastAt > mine.lastAt || (rec.lastAt === mine.lastAt && rec.reviewedAt > mine.reviewedAt);
+    const ahead = Math.max(rec.reviewedAt, rec.lastAt) > now + DAY_MS;
+    const later = !mine || (!ahead && (rec.reviewedAt > mine.reviewedAt || (rec.reviewedAt === mine.reviewedAt && rec.lastAt > mine.lastAt)));
     if (!later) continue;
     // A card skipped here today keeps its wait (a Skip moves dueAt only).
     merged[id] = mine && skippedToday.includes(id) ? { ...rec, dueAt: Math.max(rec.dueAt, mine.dueAt) } : rec;

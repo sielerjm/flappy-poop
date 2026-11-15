@@ -9,6 +9,7 @@ import * as edu from '../src/education.js';
 import { createJsonStore, pageStorage } from '../src/store.js';
 import { createEduShareStore } from '../src/leaderboard.js';
 import { eduRunFacts } from '../src/achievements.js';
+import { TUNING } from '../src/config.js';
 
 const { createEduStore } = edu;
 const DAY = 86400000;
@@ -87,7 +88,7 @@ test('readEducationBackup: a backup reads back as it was; text around it is igno
   assert.equal(mixed.backup.record.cards['ST-03'].state, 'review', 'an SM-2 card converts as it does on load');
 });
 
-test('mergeEducation, the cards: the later answer wins (lastAt, then reviewedAt); a tie keeps this device; new and changed live cards are counted, unknown or retired ids kept but not counted', () => {
+test('mergeEducation, the cards: the later schedule wins (reviewedAt, then lastAt); a tie keeps this device; new and changed live cards are counted, unknown or retired ids kept but not counted', () => {
   const local = { v: 2, cards: { 'ST-01': card(T0 + DAY), 'ST-02': card(T0 + 3 * DAY), 'ST-03': card(T0, { reviewedAt: T0 + 5 }), 'ST-04': card(T0, { reps: 9 }) }, recent: [], counters: {}, badges: {}, unlockedLevel: 1 };
   const back = { v: 2, cards: { 'ST-01': card(T0 + 2 * DAY), 'ST-02': card(T0 + 2 * DAY), 'ST-03': card(T0, { reviewedAt: T0 + 9 }), 'ST-04': card(T0, { reps: 1 }), 'ST-05': card(T0), 'ZZ-99': card(T0), 'RT-01': card(T0) }, recent: [], counters: {}, badges: {}, unlockedLevel: 1 };
   const cards = [{ id: 'ST-01' }, { id: 'ST-02' }, { id: 'ST-03' }, { id: 'ST-04' }, { id: 'ST-05' }, { id: 'RT-01', retired: true }];
@@ -289,4 +290,32 @@ test("AUD-047: restoring this device's own older backup after a broken 🤓 stre
   const r = store.restore(older, { today: '2026-11-15' });
   assert.equal(store.load().counters.perfectStreak ?? 0, 0, 'the broken streak stays broken');
   assert.equal(r.changed, false, 'this device\'s own older backup: nothing new');
+});
+
+// AUD-048 (the Checkpoint 3 audit): the later schedule wins, not the later answer: a right practice answer
+// moves lastAt and leaves the schedule; and a record dated more than a day ahead never wins.
+const H = 3600000;
+const bare = () => ({ v: 2, cards: {}, recent: [], counters: {}, badges: {}, unlockedLevel: 1 });
+test('AUD-048: a practice answer elsewhere never erases a lapse made here (the later schedule wins, then the later answer)', () => {
+  const X = edu.schedule(null, 'good', T0, TUNING);
+  const aMiss = edu.schedule(X, 'again', T0 + H, TUNING, { practice: true }); // a lapse here
+  const aNow = edu.schedule(aMiss, 'good', T0 + H + 60000, TUNING);
+  const bNow = edu.schedule(X, 'good', T0 + 2 * H, TUNING, { practice: true }); // only practised there, later
+  assert.equal(bNow.reviewedAt, T0, "the other device's schedule is still T0's");
+  const m = edu.mergeEducation({ ...bare(), cards: { 'ST-01': aNow } }, { ...bare(), cards: { 'ST-01': bNow } }, { today: '2026-11-01', now: T0 + 3 * H });
+  assert.deepEqual([m.record.cards['ST-01'].reviewedAt, m.record.cards['ST-01'].lapses], [aNow.reviewedAt, 1]);
+  const missed = edu.mergeEducation({ ...bare(), cards: { 'ST-01': aMiss } }, { ...bare(), cards: { 'ST-01': bNow } }, { today: '2026-11-01', now: T0 + 3 * H });
+  assert.equal(missed.record.cards['ST-01'].state, 'missed', 'a card missed here stays missed (it holds the break gate)');
+  assert.equal(missed.changed, false);
+});
+
+test('AUD-048: a backup card dated more than a day ahead (a clock set ahead) never beats this device\'s', () => {
+  const now = T0 + 10 * DAY;
+  const ahead = edu.schedule(null, 'good', now + 365 * DAY, TUNING);
+  const mine = edu.schedule(edu.schedule(null, 'good', T0, TUNING), 'again', now, TUNING);
+  const m = edu.mergeEducation({ ...bare(), cards: { 'ST-01': mine } }, { ...bare(), cards: { 'ST-01': ahead, 'ST-02': ahead } }, { today: '2026-11-11', now });
+  assert.equal(m.record.cards['ST-01'].state, 'missed', 'missed here today: kept');
+  assert.ok(m.record.cards['ST-02'], 'a card this device has never answered is still added');
+  const soon = edu.schedule(null, 'good', now + 12 * H, TUNING); // half a day ahead: a time zone, not an error
+  assert.equal(edu.mergeEducation({ ...bare(), cards: { 'ST-01': mine } }, { ...bare(), cards: { 'ST-01': soon } }, { today: '2026-11-11', now }).record.cards['ST-01'].reviewedAt, soon.reviewedAt);
 });
