@@ -186,7 +186,8 @@ Inspired by Flappy Bird`,
     eduCardsReview: '🟢 {n} to review (due today)',
     eduCardsSeen: '👁️ Seen {n} of {total} cards',
     eduCardsDue: 'The number on 📚 = # of cards to review',
-    quizCaughtUp: "You're all caught up! New cards come with the next level, up to {n} a day, and old ones come back when they are due.",
+    quizCaughtUp: "You're all caught up! New cards come with the next level, and old ones come back when they are due.",
+    quizCaughtUpPerDay: "You're all caught up! New cards come with the next level, up to {n} a day, and old ones come back when they are due.",
     quizGeneral: 'Gut microbes',
     quizSource: 'Source: {source}',
     quizLearnMore: '📄 Learn more 🔗',
@@ -736,7 +737,8 @@ Inspired by Flappy Bird`,
     eduCardsReview: '🟢 {n} 张待复习（今天到期）',
     eduCardsSeen: '👁️ 已见过 {n} / {total} 张卡片',
     eduCardsDue: '📚 上的数字 = 待复习的卡片数',
-    quizCaughtUp: '全部完成！下一关会有新卡片（每天最多 {n} 张），旧卡片到期后会再出现。',
+    quizCaughtUp: '全部完成！下一关会有新卡片，旧卡片到期后会再出现。',
+    quizCaughtUpPerDay: '全部完成！下一关会有新卡片（每天最多 {n} 张），旧卡片到期后会再出现。',
     quizGeneral: '肠道微生物',
     quizSource: '来源：{source}',
     quizLearnMore: '📄 了解更多 🔗',
@@ -1202,6 +1204,14 @@ export function tallyLines(locale, tally, levels) {
     .filter(([level]) => Number.isInteger(level) && level >= 1)
     .sort((a, b) => a[0] - b[0])
     .map(([level, row]) => `${levelLabel(locale, level)} · ${t(locale, `level.${levels[level - 1]?.key}`)}${TALLY_GAP}✅ ${row?.right ?? 0}${TALLY_GAP}❌ ${row?.wrong ?? 0}`);
+}
+
+/**
+ * The quiz's caught-up line (plan 28, Stage 3b): with the daily new-card cap held off (`cap` null or not
+ * finite: TUNING.education.newPerDay) it names no number; a cap turned back on says how many a day.
+ */
+export function caughtUpText(locale, cap) {
+  return Number.isFinite(cap) ? t(locale, 'quizCaughtUpPerDay').replace('{n}', String(cap)) : t(locale, 'quizCaughtUp');
 }
 
 /**

@@ -298,7 +298,8 @@ Short, playful, clear. Fit a 720×1280 logical field; How to play / About body w
 | eduCardsReview | 🟢 {n} to review (due today) (plan 26 A2: Michael wrote "due soon" and chose "due today" when told the number counts only cards due now, which hold a break's gate) | 🟢 {n} 张待复习（今天到期） |
 | eduCardsSeen | 👁️ Seen {n} of {total} cards | 👁️ 已见过 {n} / {total} 张卡片 |
 | eduCardsDue | The number on 📚 = # of cards to review (Michael's wording, 13 Nov: the gold number counts missed + to review; # stands for that number) | 📚 上的数字 = 待复习的卡片数 |
-| quizCaughtUp | You're all caught up! New cards come with the next level, up to {n} a day, and old ones come back when they are due. ({n} is education.newPerDay, plan 26) | 全部完成！下一关会有新卡片（每天最多 {n} 张），旧卡片到期后会再出现。 |
+| quizCaughtUp | You're all caught up! New cards come with the next level, and old ones come back when they are due. (plan 28, Stage 3b: no daily cap, so no number) | 全部完成！下一关会有新卡片，旧卡片到期后会再出现。 |
+| quizCaughtUpPerDay | You're all caught up! New cards come with the next level, up to {n} a day, and old ones come back when they are due. (shown in quizCaughtUp's place only while education.newPerDay is a number; {n} is it) | 全部完成！下一关会有新卡片（每天最多 {n} 张），旧卡片到期后会再出现。 |
 | quizGeneral | Gut microbes | 肠道微生物 |
 | quizSource | Source: {source} | 来源：{source} |
 | quizLearnMore | 📄 Learn more 🔗 (plan 26: under a quiz card's explanation; opens the card's first reference, by its DOI, in a new tab) | 📄 了解更多 🔗 |
@@ -337,7 +338,7 @@ Short, playful, clear. Fit a 720×1280 logical field; How to play / About body w
 | eduOrderBeforeHint | New cards come first, before the missed and review cards a level break waits for. (plan 26 A2: the line under the three new-card buttons while "Before reviews" is pressed; a level break holds until its missed and review cards are answered) | 新卡片先出现，排在关卡休息要等你答完的答错卡和待复习卡之前。 |
 | eduOrderMixedHint | New cards are mixed in with the missed and review cards. (the same line while "Mixed in" is pressed) | 新卡片和答错卡、待复习卡穿插出现。 |
 | eduOrderAfterHint | New cards come once the missed and review cards are answered. (the same line while "After reviews" is pressed) | 答完答错卡和待复习卡之后，才会出现新卡片。 |
-| eduIntroPerDay | Up to {n} new cards a day. ({n} is education.newPerDay) | 每天最多 {n} 张新卡片。 |
+| eduIntroPerDay | Up to {n} new cards a day. ({n} is education.newPerDay; shown only while it is a number: it is held off since plan 28, Stage 3b) | 每天最多 {n} 张新卡片。 |
 | eduIntroDevice | Your data is stored locally on your device in the browser, not on our servers, unless you choose to share it. (plan 26 A2: Michael's wording plus "unless you choose to share it", his choice, since Share my grades and the tester pilot do send data; the 📚 Education data link follows) | 你的数据保存在这台设备的浏览器里，不在我们的服务器上，除非你选择分享。 |
 | eduIntroKeep | The browser can erase it (clearing site data, or Safari after weeks without a visit), so add the game to your Home Screen and back up your cards now and then: (plan 28, 3.1b: after eduIntroDevice in the 📚 popup; the 📚 Education data link follows the colon) | 浏览器可能会清除它（清除网站数据，或 Safari 在几周未访问后），所以请把游戏添加到主屏幕，并不时备份你的卡片： |
 | eduBackupTitle | 💾 Back up your cards | 💾 备份你的卡片 |

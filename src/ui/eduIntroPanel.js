@@ -206,7 +206,8 @@ function render() {
     h('div', { class: 'row' }, h('span', { class: 'label' }, tr('eduIntroOrder'))),
     order,
     orderHint,
-    h('p', {}, tr('eduIntroPerDay').replace('{n}', String(info.newPerDay))),
+    // The daily cap's line only while it is a number (held off since plan 28, Stage 3b).
+    ...(Number.isFinite(info.newPerDay) ? [h('p', { id: 'edu-intro-per-day' }, tr('eduIntroPerDay').replace('{n}', String(info.newPerDay)))] : []),
     // eduIntroKeep: plan 28, 3.1b. Chinese sets no space after its full-width 。 and ：.
     h('p', { id: 'edu-intro-device' }, tr('eduIntroDevice'), gap, tr('eduIntroKeep'), gap, data),
     h('div', { class: 'actions' }, shut, play),

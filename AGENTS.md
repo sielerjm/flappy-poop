@@ -436,10 +436,19 @@ record is **new**; a right answer puts it in **review**, due when its recall cha
 `fsrs.retention` (whole days, at least 1, at most `maxDays`; right on first sight is always good:
 2 days); a wrong one makes it **missed**, due at once until answered right. A **practice** card (a
 review not due yet, offered once nothing is counted) answered right leaves the schedule alone. An
-SM-2 record from before plan 26 is converted as it is read (`fromSm2`). **New cards stop at
-`education.newPerDay`** (20) a local day, breaks and revives together (`newAllowance`: the cards
-first seen since local midnight, plus the new ones a quiz showed unsaved); past it a revive asks a
-due card, else practice. Settings' **`eduNewOrder`** puts new cards after the due ones (the
+SM-2 record from before plan 26 is converted as it is read (`fromSm2`). **The daily cap is held off**
+(plan 28, Stage 3b): `education.newPerDay` is `null`, so `newAllowance` gives Infinity and the 📚
+popup leaves out its "Up to n new cards a day" line; a number turns it back on (new cards a local
+day, breaks and revives together: the cards first seen since local midnight, plus the new ones a quiz
+showed unsaved; past it a revive asks a due card, else practice). **A break's new cards** are its
+own (`breakDecks`, `breakDeckOf`): the cleared segment's deck and one general card, the live general
+cards going one to a break in gut order (the segment their id names, then id: ST-10 stomach, JE-06
+duodenum, JE-08 jejunum, JE-09 ileum, IL-10 caecum, CO-02 colon; the seventh, RE-09, to the rectum,
+which has no break, so the bonus quiz and revives ask it), derived from the cards so `questions.js`
+needs no field. A revive still offers every general card, at `generalShare`. The day's skipped ids
+(`skipped`: `quizNext` and `quizCounts` both pass `buriedIdsOn`) keep a new card among them out of the
+counts and the picks, as they keep a practice card out of practice. A break's tie-breaks (`near`) put
+its own cards first. With a cap turned back on, the caught-up line says it (`caughtUpText`). Settings' **`eduNewOrder`** puts new cards after the due ones (the
 default), mixed in by their share, or before them, in a break's own quiz and a revive (`pickCard`'s
 `order`; the bonus quiz keeps new first). A **test run** saves no answers, so what is due would never
 clear: its quizzes walk the level's deck in id order instead (`pickCard` context `'browse'`; the cards
@@ -486,7 +495,7 @@ The poop bobs at mid-height (`levels.eduBreakPoopY`), between the banner and the
 (`quizButtonShown`; chromeIntent's `'quiz'` input, only in an education run's break) opens the break's
 quiz, which asks missed cards, then due reviews (the least remembered first), then the cards missed
 in this break (`Play.breakMissed`, asked again as missed until answered right; the one just shown
-waits), then new cards of the segment just cleared (and general ones), then practice (`pickCard`'s
+waits), then new cards of the segment just cleared (and its general card), then practice (`pickCard`'s
 `dueFirst`; the bonus quiz keeps new first). A counted card always comes before practice, whatever the
 recent gap holds. A right answer in a break pays `education.breakCoins` (`takeCoins`), **once per card a
 local day**, practice included (plan 26, A2: the store's `paid` { day, ids }, written through
@@ -799,7 +808,8 @@ src/
                             reviveBlinkMs (the blink after Fly on), badgeMinAnswers
                             (answers a run needs to be graded),
                             priceScale, masteredDays, explainMinMs, breakCoins,
-                            newPerDay (new cards a local day), buryCoinsPerLevel,
+                            newPerDay (new cards a local day; null: held off, plan 28,
+                            Stage 3b), buryCoinsPerLevel,
                             buryPerDay and buryMs (Skip's price, its daily cap for
                             due cards, its least wait: skipUntil), boardMinRuns
                             (graded runs before the 📚 board lists a player),
@@ -938,8 +948,9 @@ src/
                             TUNING.education.grade), schedule (FSRS-6, no learning
                             steps: new → review or missed; a practice right answer
                             leaves the schedule alone), cardRetrievability, pickCard
-                            (break: the cleared segment's new cards, general at
-                            generalShare, then missed, then due reviews (least
+                            (break: the cleared segment's new cards and its one
+                            general card (breakDecks / breakDeckOf: gut order, plan
+                            28, Stage 3b), then missed, then due reviews (least
                             remembered first), then practice; revive: missed, due
                             reviews, new from the decks up to the level, practice;
                             a buried missed card is never picked; never a card of

@@ -3755,7 +3755,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await sleep(500); // home()'s restart lands on the next frame: a tap before it would open the popup on the scene going away
         await tap('education');
         const s3 = await switches();
-        const intro = () => evaluate(`(() => { const r = document.getElementById('edu-intro-panel'); const open = Boolean(r && !r.hidden); return JSON.stringify({ open, title: open ? r.querySelector('h2').textContent : null, beta: open ? r.querySelector('.beta').textContent : null, counts: open ? [...r.querySelectorAll('#edu-intro-counts p')].map((p) => p.textContent) : [], level: open ? r.querySelector('#edu-intro-level')?.textContent ?? null : null, up: Boolean(r?.querySelector('#edu-intro-up')), order: open ? [...r.querySelectorAll('.order button')].filter((b) => b.getAttribute('aria-pressed') === 'true').map((b) => b.id) : [], orderHint: open ? r.querySelector('#edu-intro-order-hint')?.textContent ?? null : null, device: open ? r.querySelector('#edu-intro-device')?.textContent ?? null : null, pad: open ? r.querySelector('button.pad')?.id ?? null : null, state: ${play}.state, launching: Boolean(${play}.launching), on: ${play}.educationOn, toilet: ${play}.toilet, kb: __flappy.input.keyboard.enabled }); })()`).then(JSON.parse);
+        const intro = () => evaluate(`(() => { const r = document.getElementById('edu-intro-panel'); const open = Boolean(r && !r.hidden); return JSON.stringify({ open, title: open ? r.querySelector('h2').textContent : null, beta: open ? r.querySelector('.beta').textContent : null, counts: open ? [...r.querySelectorAll('#edu-intro-counts p')].map((p) => p.textContent) : [], level: open ? r.querySelector('#edu-intro-level')?.textContent ?? null : null, up: Boolean(r?.querySelector('#edu-intro-up')), order: open ? [...r.querySelectorAll('.order button')].filter((b) => b.getAttribute('aria-pressed') === 'true').map((b) => b.id) : [], orderHint: open ? r.querySelector('#edu-intro-order-hint')?.textContent ?? null : null, perDay: Boolean(r?.querySelector('#edu-intro-per-day')), device: open ? r.querySelector('#edu-intro-device')?.textContent ?? null : null, pad: open ? r.querySelector('button.pad')?.id ?? null : null, state: ${play}.state, launching: Boolean(${play}.launching), on: ${play}.educationOn, toilet: ${play}.toilet, kb: __flappy.input.keyboard.enabled }); })()`).then(JSON.parse);
         const introClick = async (id) => {
           await sleep(TT.retryLockoutMs + 50); // past the popup's click lockout (plan 26, A2)
           return evaluate(`(document.getElementById('${id}')?.click(), true)`);
@@ -3783,7 +3783,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         const srsBefore = await evaluate(`localStorage.getItem('flappyPoop.eduSrs')`);
         // One missed card, two in review and due, one in review and not due yet.
         const made = await evaluate(
-          `Promise.all([import('./src/education.js'), import('./src/questions.js')]).then(([e, q]) => { const now = Date.now(); const live = q.CARDS.filter((c) => !c.retired); const cards = {}; cards[live[0].id] = e.schedule(null, 'again', now - 20 * 60000); cards[live[1].id] = e.schedule(null, 'easy', now - 30 * 86400000); cards[live[2].id] = e.schedule(null, 'easy', now - 30 * 86400000); cards[live[3].id] = e.schedule(null, 'easy', now); localStorage.setItem('flappyPoop.eduSrs', JSON.stringify({ v: 1, cards, recent: [], counters: {}, badges: {} })); ${play}.refreshEduDue(); return JSON.stringify({ total: live.length, allowance: e.newAllowance(cards, { now }) }); })`,
+          `Promise.all([import('./src/education.js'), import('./src/questions.js')]).then(([e, q]) => { const now = Date.now(); const live = q.CARDS.filter((c) => !c.retired); const cards = {}; cards[live[0].id] = e.schedule(null, 'again', now - 20 * 60000); cards[live[1].id] = e.schedule(null, 'easy', now - 30 * 86400000); cards[live[2].id] = e.schedule(null, 'easy', now - 30 * 86400000); cards[live[3].id] = e.schedule(null, 'easy', now); localStorage.setItem('flappyPoop.eduSrs', JSON.stringify({ v: 1, cards, recent: [], counters: {}, badges: {} })); ${play}.refreshEduDue(); const a = e.newAllowance(cards, { now }); return JSON.stringify({ total: live.length, allowance: Number.isFinite(a) ? a : null }); })`,
         ).then(JSON.parse);
         const dueNow = () => evaluate(`${play}.eduDueText.visible ? ${play}.eduDueText.text : ''`);
         const boxes = await evaluate(`JSON.stringify({ info: ${play}.readyBoxes.educationInfo, edu: ${play}.readyBoxes.education, toilet: ${play}.readyBoxes.toilet, title: ${play}.readyBoxes.title })`).then(JSON.parse);
@@ -3793,8 +3793,9 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await tapAt(boxes.info.x, boxes.info.y);
         const yc1 = await yourCards();
         const ycWant = await Promise.all(['eduCardsNew', 'eduCardsMissed', 'eduCardsReview', 'eduCardsSeen', 'eduCardsDue'].map(tx));
-        // New is what today still offers (plan 26: education.newPerDay a local day, less the cards first seen today).
-        const ycLines = [ycWant[0].replace('{n}', String(Math.min(made.total - 4, made.allowance))), ycWant[1].replace('{n}', '1'), ycWant[2].replace('{n}', '2'), ycWant[3].replace('{n}', '4').replace('{total}', String(made.total)), ycWant[4]];
+        // New is what today still offers: every unseen card while the daily cap is held off (plan 28, Stage 3b), else
+        // education.newPerDay a local day, less the cards first seen today (plan 26). null: no cap.
+        const ycLines = [ycWant[0].replace('{n}', String(Math.min(made.total - 4, made.allowance ?? Infinity))), ycWant[1].replace('{n}', '1'), ycWant[2].replace('{n}', '2'), ycWant[3].replace('{n}', '4').replace('{total}', String(made.total)), ycWant[4]];
         ok(due0 === '3' && !yc0.open && yc1.open && yc1.title === (await tx('eduCardsTitle')) && JSON.stringify(yc1.lines) === JSON.stringify(ycLines) && !yc1.popup && yc1.on === yc0.on && yc1.state === 'ready' && !yc1.launching, `a tap on the 📚 glyph (its gold number reads ${due0}) opens "${yc1.title}": ${yc1.lines.join(' · ')}; the switch untouched, no popup, no run`);
         await tapAt(boxes.toilet.x, boxes.toilet.y); // over a switch: the tap only closes the card
         const yc2 = await yourCards();
@@ -3915,6 +3916,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         ok(!st0.up && st0.level === 'LV 1' && st1.up && st1.level === 'LV 1' && st2.level === 'LV 2' && st3.level === 'LV 3' && st4.level === 'LV 1' && st5.level === 'LV 3' && st5.start === 3 && (await playState()) === 'ready', `the popup's ◀ ▶ show once a later level is unlocked; ▶ ${st1.level} → ${st2.level} → ${st3.level} → wraps to ${st4.level}, ◀ back to ${st5.level}; no run starts`);
         const ord0Full = await intro();
         const ord0 = ord0Full.order;
+        ok(ord0Full.open && !ord0Full.perDay, 'no "Up to n new cards a day" line: the daily cap is held off (plan 28, Stage 3b)');
         await introClick('edu-intro-order-mixed');
         const ord1 = await intro();
         ok(ord0.join() === 'edu-intro-order-after' && ord1.order.join() === 'edu-intro-order-mixed' && (await evaluate(`${play}.settings.load().eduNewOrder`)) === 'mixed', `new cards after the due ones by default; a tap chooses "mixed", pressed and stored`);
@@ -4150,9 +4152,9 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         const place = await evaluate(`Promise.all([import('./src/logic.js'), import('./src/config.js')]).then(([lg, c]) => { const p = ${play}; const L = p.eduBreakBoxes; const pause = lg.trayLayout(p.col.width, c.GAME_HEIGHT, c.TUNING, p.col.x).pause; return JSON.stringify({ poopY: Math.round(p.poop.y), stripY: L.levelStrip.y, stripX: L.levelStrip.x, pauseY: pause.y, mid: p.col.x + p.col.width / 2, gap: (L.levelStrip.y - L.levelStrip.height / 2) - (L.chip.y + L.chip.height / 2), rowY: p.quizButtonBox.y }); })`).then(JSON.parse);
         ok(place.poopY >= TT.levels.eduBreakPoopY - 2 && place.poopY <= TT.levels.eduBreakPoopY + 26 && place.stripY === place.pauseY && place.stripX === place.mid && place.gap === 12 && place.rowY < place.stripY, `the education break: the poop bobs at mid-height (y ${place.poopY}), ◀ LV n ▶ on ⏸'s row (y ${place.stripY}) centred (x ${place.stripX}), the row (y ${place.rowY}) and its chip ${place.gap} px above it (plan 28, 1.1)`);
         // What is waiting, on the pill (plan 21, E2), as in Anki: "📚 new · missed · review", each count
-        // in its own colour. A new device's first break has only new cards waiting: the stomach's and the
-        // general ones. The ❔ answers pill is gone: the tally sits in the quiz card.
-        const want0 = await evaluate(`Promise.all([import('./src/questions.js'), import('./src/ui/countLine.js')]).then(([q, c]) => JSON.stringify({ n: q.CARDS.filter((x) => !x.retired && (x.deck === 'stomach' || x.deck === 'general')).length, colors: Object.values(c.COUNT_COLORS), fill: Object.fromEntries(Object.entries(c.COUNT_COLORS).map(([k, v]) => [k, parseInt(v.slice(1), 16)])) }))`).then(JSON.parse);
+        // in its own colour. A new device's first break has only new cards waiting: the stomach's and its one
+        // general card (breakDecks, plan 28, Stage 3b). The ❔ answers pill is gone: the tally sits in the quiz card.
+        const want0 = await evaluate(`Promise.all([import('./src/questions.js'), import('./src/ui/countLine.js'), import('./src/education.js')]).then(([q, c, e]) => JSON.stringify({ n: q.CARDS.filter((x) => !x.retired && e.breakDeckOf(x) === 'stomach').length, general: q.CARDS.filter((x) => !x.retired && x.deck === 'general' && e.breakDeckOf(x) === 'stomach').map((x) => x.id), colors: Object.values(c.COUNT_COLORS), fill: Object.fromEntries(Object.entries(c.COUNT_COLORS).map(([k, v]) => [k, parseInt(v.slice(1), 16)])) }))`).then(JSON.parse);
         const pillLine = await evaluate(`(() => { const p = ${play}; const l = p.quizCountLine; return JSON.stringify({ visible: l.visible, counts: l.counts, text: l.text, colors: l.colors, width: l.width, room: p.quizButtonBox.width - 16, label: p.quizButton.getText(), chip: p.quizCountChip.visible, under: p.quizCountsBox.y - p.quizCountsBox.height / 2 >= p.quizButtonBox.y + p.quizButtonBox.height / 2 && p.quizCountsBox.x === p.quizButtonBox.x }); })()`).then(JSON.parse);
         ok(pillLine.visible && pillLine.chip && pillLine.text === `${want0.n}   0   0` && pillLine.label === `📚 ${await tx('reviewPill')}` && pillLine.under && JSON.stringify(pillLine.colors) === JSON.stringify(want0.colors) && new Set(pillLine.colors).size === 3 && pillLine.width <= pillLine.room + 0.5, `the break offers "${pillLine.label}" with what is waiting on a line under it, "${pillLine.text}" (new, missed, review in ${pillLine.colors.join(', ')}), ${Math.round(pillLine.width)} px wide inside its ${pillLine.room} px (plan 25)`);
         // A tap on the numbers says what they mean (plan 25, B4), and the break does not continue.
@@ -4179,7 +4181,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await sleep(500);
         const q0 = await quizNow();
         const hidden = await evaluate(`${play}.quizButton.visible`);
-        ok(q0.active && ['stomach', 'general'].includes(q0.deck) && !q0.answered && !hidden, `a tap on the pill opens the card on a ${q0.deck} card (${q0.id}): the segment just cleared, or a general one; the pill hides under it`);
+        ok(q0.active && (q0.deck === 'stomach' || want0.general.includes(q0.id)) && !q0.answered && !hidden, `a tap on the pill opens the card on a ${q0.deck} card (${q0.id}): the segment just cleared, or its general card (${want0.general.join(', ')}); the pill hides under it`);
         // The same counts on the card, in a row of their own above the bottom buttons; the card on show
         // is counted and its kind underlined in its colour. No tally before the run's first answer.
         const line0 = await lineNow();
@@ -4467,7 +4469,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         const k3 = await kindNow();
         ok(k1.id === crafted.missed && k1.reason === 'missed' && k1.text === '0  +  1  +  1' && k1.underlined === 'missed' && k1.fill === want0.fill.missed, `a missed card underlines the missed count in its colour: "${k1.text}" (${k1.id})`);
         ok(k2.id === crafted.review && k2.reason === 'review' && k2.text === '0  +  0  +  1' && k2.underlined === 'review' && k2.fill === want0.fill.review, `a review due underlines the review count in green: "${k2.text}" (${k2.id})`);
-        const [keepWant, caughtWant] = await Promise.all([tx('quizKeepPracticing'), evaluate(`import('./src/i18n.js').then((m) => m.t('en', 'quizCaughtUp').replace('{n}', String(${TT.education.newPerDay})))`)]);
+        const [keepWant, caughtWant] = await Promise.all([tx('quizKeepPracticing'), evaluate(`import('./src/i18n.js').then((m) => m.t('en', 'quizCaughtUp'))`)]);
         ok(caught.card === null && caught.left === returnWant && caught.right === keepWant && caught.question === caughtWant, `with nothing counted left the quiz stops asking (plan 26): "${caught.question}" with ${caught.left} and ${caught.right}`);
         ok(k3.reason === 'practice' && k3.text === '0  +  0  +  0' && k3.underlined === null && k3.fill === null && k3.visible, `Enter on ${keepWant} asks a practice card, which underlines nothing: "${k3.text}" (${k3.id})`);
         // Practice pays (plan 26, A2): once per card a local day. This card has not paid today: it pays.

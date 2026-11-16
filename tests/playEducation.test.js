@@ -210,6 +210,23 @@ test("the 📚 glyph opens \"Your cards\" (plan 26, A2: Michael asked; the popup
   assert.equal(handlers.pointerup.size + handlers.pointerupoutside.size, 0);
 });
 
+test("quizCounts and quizNext agree on today's skipped ids (plan 28, Stage 3b): a new card among them is neither counted nor asked, in a break or a revive", () => {
+  const storage = fakeStorage();
+  const own = CARDS.filter((c) => !c.retired && c.deck === 'stomach');
+  const skippedId = own[0].id;
+  storage.setItem(LEADERBOARD.eduKey, JSON.stringify({ v: 2, cards: {}, recent: [], counters: {}, badges: {}, buried: { day: localDayKey(), n: 0, ids: [skippedId] } }));
+  const store = createEduStore(storage);
+  assert.deepEqual(buriedIdsOn(store.load().buried, localDayKey()), [skippedId], 'the store keeps a day of skips that counted none');
+  const s = playScene({ eduStore: store, level: 2, levelBreak: true, runIsTest: false, runQuiz: newTally(), registry: registry(), researchJoined: () => false });
+  const fresh = (mode) => s.quizCounts({ mode }).new;
+  const clean = playScene({ eduStore: createEduStore(fakeStorage()), level: 2, levelBreak: true, runIsTest: false, runQuiz: newTally(), registry: registry(), researchJoined: () => false });
+  for (const mode of ['break', 'revive']) assert.equal(fresh(mode), clean.quizCounts({ mode }).new - 1, `${mode}: one fewer new card counted`);
+  const asked = [];
+  for (let pick = s.quizNext({ mode: 'break' }); pick && pick.reason === 'new'; pick = s.quizNext({ mode: 'break', exclude: asked })) asked.push(pick.card.id);
+  assert.ok(!asked.includes(skippedId), `never asked: ${asked.join(' ')}`);
+  assert.equal(asked.length, fresh('break'), 'the picks are the count');
+});
+
 test("a level break's quiz: a miss is asked again and counted as missed until answered right; a right answer pays, once per card a day (plan 25, B1; plan 26, A2)", () => {
   const storage = fakeStorage();
   const store = createEduStore(storage);

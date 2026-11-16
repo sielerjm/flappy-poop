@@ -21,6 +21,7 @@ import {
   profileButtonText,
   tallyLines,
   nextWaitText,
+  caughtUpText,
   countLines,
   eduProfileRows,
   TALLY_GAP,
@@ -206,6 +207,15 @@ test("tallyLines: an education run's answers, one line per level answered, in le
   assert.deepEqual(tallyLines('en', { byLevel: {} }, CONFIG_LEVELS), [], 'nothing answered: no lines');
   assert.deepEqual(tallyLines('en', null, CONFIG_LEVELS), [], 'no tally');
   assert.deepEqual(tallyLines('en', { byLevel: { 7: { right: 3 } } }, CONFIG_LEVELS), [`LV 7 · Rectum${G}✅ 3${G}❌ 0`], 'a row from before wrong was kept still reads');
+});
+
+test('caughtUpText (plan 28, Stage 3b): with the daily cap held off (null) the caught-up line names no number; a cap turned back on says it, in both languages', () => {
+  for (const locale of ['en', 'zh-Hans']) {
+    assert.equal(caughtUpText(locale, null), t(locale, 'quizCaughtUp'), locale);
+    assert.equal(caughtUpText(locale, Infinity), t(locale, 'quizCaughtUp'), `${locale}: Infinity is no cap either`);
+    assert.equal(caughtUpText(locale, 20), t(locale, 'quizCaughtUpPerDay').replace('{n}', '20'), locale);
+    assert.ok(!t(locale, 'quizCaughtUp').includes('{n}') && t(locale, 'quizCaughtUpPerDay').includes('{n}'), locale);
+  }
 });
 
 test('nextWaitText: again soon under a minute; then minutes, hours, days, months, years, rounded, a unit that rounds up moving to the next; both locales (plan 26; "Next review:" since its A2, as Michael asked)', () => {

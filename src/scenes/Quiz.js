@@ -5,7 +5,7 @@ import { createGlow, createRectGlow } from '../ui/glow.js';
 import { createCountLine } from '../ui/countLine.js';
 import { createInfoCard } from '../ui/infoCard.js';
 import { isTopOverlay } from '../ui/overlayStack.js';
-import { t, tallyLines, countLines, nextWaitText } from '../i18n.js';
+import { t, tallyLines, countLines, nextWaitText, caughtUpText } from '../i18n.js';
 import { cardText, optionText, cardSource, cardLinks, cardLearnMoreUrl, EDUCATION_EMOJI } from '../education.js';
 import { layoutRich, linkSpans } from '../richText.js';
 import { auditState } from '../questionAudits.js';
@@ -681,7 +681,7 @@ export class Quiz extends Phaser.Scene {
     this.header.setText(EDUCATION_EMOJI);
     this.setCardId('');
     this.refreshStatus();
-    this.question.setY(this.header.y + this.header.height + 22).setText(revive ? t(this.locale, 'reviveFree') : t(this.locale, 'quizCaughtUp').replace('{n}', String(T.education.newPerDay))).setVisible(true);
+    this.question.setY(this.header.y + this.header.height + 22).setText(revive ? t(this.locale, 'reviveFree') : caughtUpText(this.locale, T.education.newPerDay)).setVisible(true);
     for (const o of this.options) {
       o.g.setVisible(false);
       o.text.setVisible(false);

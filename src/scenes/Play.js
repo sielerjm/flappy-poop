@@ -1997,7 +1997,7 @@ export class Play extends Phaser.Scene {
     } else {
       // A level break's own quiz asks what is due first, then what it missed, with new cards where the
       // player's order puts them (plan 25; settings eduNewOrder, plan 26); the bonus quiz keeps the
-      // break context's new-first order. New cards stop at the day's cap (newPerDay).
+      // break context's new-first order. New cards stop at the day's cap while there is one (newPerDay: held off since plan 28, Stage 3b).
       const own = mode === 'break';
       pick = pickCard({ srs: store.cards, context: mode === 'revive' ? 'revive' : 'break', level, segment, now: Date.now(), exclude, recent: store.recent, rng: Math.random, dueFirst: own, missed: own ? (this.breakMissed ?? []) : [], order: this.settings?.load().eduNewOrder, skipped: buriedIdsOn(store.buried, localDayKey()) });
     }
@@ -2018,7 +2018,9 @@ export class Play extends Phaser.Scene {
    */
   quizCounts({ mode = 'break', exclude = [] } = {}) {
     if (this.runIsTest) return null;
-    return cardCounts(this.eduStore.load().cards, { context: mode === 'revive' ? 'revive' : 'break', ...this.quizScope(), now: Date.now(), exclude, missed: mode === 'break' ? (this.breakMissed ?? []) : [] });
+    const store = this.eduStore.load();
+    // The day's skipped ids, as quizNext passes them: a new card among them is not counted (plan 28, Stage 3b).
+    return cardCounts(store.cards, { context: mode === 'revive' ? 'revive' : 'break', ...this.quizScope(), now: Date.now(), exclude, missed: mode === 'break' ? (this.breakMissed ?? []) : [], skipped: buriedIdsOn(store.buried, localDayKey()) });
   }
 
   /**
