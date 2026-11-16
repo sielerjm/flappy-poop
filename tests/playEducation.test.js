@@ -275,6 +275,82 @@ function payScene({ store = createEduStore(fakeStorage()), runIsTest = false, le
   return { s, store, paid, spent, answer };
 }
 
+/** A break whose new cards are all asked (N used), over a real store and settings, for the tests of its due cards (AUD-056). */
+function dueBreak(store, over = {}) {
+  const wallet = { coins: 100 };
+  return playScene({
+    eduStore: store, settings: createSettingsStore(fakeStorage()), level: 2, levelBreak: true, runIsEducation: true, runIsTest: false, match: null, runQuiz: newTally(), registry: registry(), researchJoined: () => false,
+    takeCoins() {}, refreshLevelBanner() {}, refreshShopButton() {}, refreshCoinHud() {}, refreshEduDue() {}, breakMissed: [], breakNewAsked: 99, breakDueAsked: 0,
+    effects: { coins: () => wallet.coins, spendCoins: (n) => (wallet.coins -= n) }, ...over,
+  });
+}
+/** Answer every card the gate asks, right, until it asks no counted card; returns the ids asked. */
+function drainGate(s, exclude = []) {
+  const asked = [...exclude];
+  for (let guard = 0; guard < 60; guard += 1) {
+    const p = s.quizNext({ mode: 'break', exclude: asked });
+    if (!p || p.beyond || p.reason === 'practice') break;
+    asked.push(p.card.id);
+    s.quizAnswer({ card: p.card, reason: p.reason, order: ['answer', 'w1', 'w2'], chosen: 'answer', rtMs: 4000, mode: 'break' });
+  }
+  return asked.slice(exclude.length);
+}
+
+test('AUD-056: stored missed cards each take one of the gate\'s duePerBreak, as reviews do; the rest come as beyond', () => {
+  const now = Date.now();
+  const store = createEduStore(fakeStorage());
+  const dues = CARDS.filter((c) => !c.retired && c.deck !== 'general' && c.deck !== 'stomach').slice(0, T.education.duePerBreak + 3);
+  dues.forEach((c, i) => store.answer(c.id, schedule(null, 'again', now - (60 + i) * 60000))); // missed in earlier runs, all due
+  const s = dueBreak(store);
+  assert.deepEqual(s.quizCounts({ mode: 'break' }), { new: 0, missed: T.education.duePerBreak, review: 0 });
+  const asked = drainGate(s);
+  assert.deepEqual([asked.length, s.breakDueAsked, s.breakGated(), s.quizMoreDue({ exclude: asked })], [T.education.duePerBreak, T.education.duePerBreak, false, 3], 'only duePerBreak stored missed cards are asked; three wait past the gate');
+});
+
+test('AUD-056: a new card missed in this break and asked again takes one of N, not two; its retry takes none of the due cards either', () => {
+  const store = createEduStore(fakeStorage());
+  const s = dueBreak(store, { breakNewAsked: 0 });
+  const p = s.quizNext({ mode: 'break' });
+  assert.equal(p.reason, 'new');
+  s.quizAnswer({ card: p.card, reason: 'new', order: ['answer', 'w1', 'w2'], chosen: 'w1', rtMs: 4000, mode: 'break' });
+  assert.deepEqual([s.breakNewAsked, s.breakMissed], [1, [p.card.id]]);
+  s.quizAnswer({ card: p.card, reason: 'missed', order: ['answer', 'w1', 'w2'], chosen: 'answer', rtMs: 4000, mode: 'break' });
+  assert.deepEqual([s.breakNewAsked, s.breakDueAsked, s.breakMissed], [1, 0, []], 'the retry takes nothing more');
+});
+
+test("AUD-056: the break's counts carry across a quiz closed and opened again: a second quiz asks only what is left of duePerBreak", () => {
+  const now = Date.now();
+  const store = createEduStore(fakeStorage());
+  const dues = CARDS.filter((c) => !c.retired && (c.deck === 'duodenum' || c.deck === 'jejunum')).slice(0, T.education.duePerBreak + 2);
+  dues.forEach((c, i) => store.answer(c.id, schedule(null, 'easy', now - (30 + i) * 86400000)));
+  const s = dueBreak(store);
+  const first = [];
+  for (let i = 0; i < 5; i += 1) {
+    const p = s.quizNext({ mode: 'break', exclude: first });
+    first.push(p.card.id);
+    s.quizAnswer({ card: p.card, reason: p.reason, order: ['answer', 'w1', 'w2'], chosen: 'answer', rtMs: 4000, mode: 'break' });
+  }
+  s.onQuizClosed('break'); // Review closed; a new quiz starts with an empty session
+  assert.equal(s.breakDueAsked, 5, 'closing the quiz keeps what the break asked');
+  const second = drainGate(s);
+  assert.deepEqual([second.length, s.breakDueAsked, s.quizMoreDue(), s.breakGated()], [T.education.duePerBreak - 5, T.education.duePerBreak, 2, false], 'the second quiz asks the other 5, then the gate is open with 2 past it');
+});
+
+test('AUD-056: a beyond card answered right pays the due review rate, and a pilot tester\'s event records it with its reason', () => {
+  const now = Date.now();
+  const store = createEduStore(fakeStorage());
+  const card = CARDS.find((c) => c.deck === 'duodenum');
+  store.answer(card.id, schedule(null, 'easy', now - 30 * 86400000));
+  const events = [];
+  const paid = [];
+  const s = dueBreak(store, { breakDueAsked: T.education.duePerBreak, researchJoined: () => true, recordAnswerEvent: (e) => events.push(e), takeCoins: (n) => paid.push(n) });
+  const p = s.quizNext({ mode: 'break' });
+  assert.deepEqual([p.card.id, p.reason, p.beyond], [card.id, 'review', true]);
+  const res = s.quizAnswer({ card: p.card, reason: p.reason, beyond: true, order: ['answer', 'w1', 'w2'], chosen: 'answer', rtMs: 4000, mode: 'break' });
+  assert.deepEqual([res.coins, paid], [T.education.breakCoins.review, [T.education.breakCoins.review]]);
+  assert.deepEqual(events.map((e) => [e.card.id, e.reason, e.mode]), [[card.id, 'review', 'break']]);
+});
+
 test('corn by the kind of card (plan 28, Stage 3b: Michael, 16 Nov): a right answer in a break pays 3 for a new card, 2 for a due review, 1 for a card practiced early, 1 for a missed card answered right; once per card a local day, the first paying answer setting it; a test run pays every right answer by kind', () => {
   assert.deepEqual(T.education.breakCoins, { new: 3, review: 2, practice: 1, missed: 1 });
   const [n, r, p, m, m2] = CARDS.filter((c) => c.deck === 'stomach');

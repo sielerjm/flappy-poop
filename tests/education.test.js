@@ -368,6 +368,20 @@ test("a break's dueLeft (plan 28, Stage 3b): the most urgent due cards first (mi
   assert.deepEqual([bonus.reason, Boolean(bonus.beyond)], ['new', false], 'the bonus quiz (no dueFirst): new first, and no beyond');
 });
 
+test("AUD-056: with a due limit the gate asks the most urgent: among reviews the least remembered (not the longest overdue); among missed cards due as long, the break's own first", () => {
+  // A: stability 365 days, 35 days overdue (recall still high); B: stability 2 days, 8 days overdue (recall low).
+  const reviews = { 'ST-01': reviewRec(365, NOW - 35 * DAY), 'DU-01': reviewRec(2, NOW - 8 * DAY) };
+  assert.ok(cardRetrievability(reviews['DU-01'], NOW) < cardRetrievability(reviews['ST-01'], NOW));
+  const r = pickCard({ srs: reviews, context: 'break', level: 2, segment: 'stomach', now: NOW, dueFirst: true, dueLeft: 1, newLeft: 0, rng: always(0.5) });
+  assert.deepEqual([r.card.id, r.reason, Boolean(r.beyond)], ['DU-01', 'review', false], 'the least remembered review');
+  // Two missed cards due as long, at the duodenum's break: its own card first, though the stomach's comes first in the bank.
+  const missedTie = { 'ST-02': missedRec(NOW - HOUR), 'DU-02': missedRec(NOW - HOUR) };
+  const m = pickCard({ srs: missedTie, context: 'break', level: 3, segment: 'duodenum', now: NOW, dueFirst: true, dueLeft: 1, newLeft: 0, rng: always(0.5) });
+  assert.deepEqual([m.card.id, Boolean(m.beyond)], ['DU-02', false], "the break's own missed card");
+  const after = pickCard({ srs: missedTie, context: 'break', level: 3, segment: 'duodenum', now: NOW, dueFirst: true, dueLeft: 0, newLeft: 0, exclude: ['DU-02'], rng: always(0.5) });
+  assert.deepEqual([after.card.id, after.beyond], ['ST-02', true], 'the other comes past the gate');
+});
+
 test("pickCard, a level break's own quiz (dueFirst, plan 25): missed, due reviews, then cards missed in this break (oldest first, the one just shown waiting), then new, then practice", () => {
   const ask = (exclude, missed = []) => pickCard({ srs: countsSrs, context: 'break', level: 2, segment: 'stomach', now: NOW, exclude, missed, dueFirst: true, rng: createRng(5) });
   const first = ask([]);

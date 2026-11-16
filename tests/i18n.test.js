@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { LEVELS as CONFIG_LEVELS } from '../src/config.js';
+import { LEVELS as CONFIG_LEVELS, TUNING } from '../src/config.js';
 import {
   DEFAULT_LOCALE,
   LOCALES,
@@ -272,7 +272,10 @@ test("the 📚 popup's words (plan 26, A2): where the data is kept, what a right
   for (const locale of ['en', 'zh-Hans']) {
     for (const k of ['eduIntroPerLevel', 'eduPerLevelAll', 'eduPerLevelHint', 'eduPerLevelAllHint']) assert.ok(t(locale, k) && t(locale, k) !== k, `${locale}: ${k}`);
     assert.ok(t(locale, 'eduPerLevelHint').includes('{n}') && !t(locale, 'eduPerLevelAllHint').includes('{n}'), locale);
-    assert.match(t(locale, 'eduIntroHowCoins'), /3.*2.*1/, `${locale}: the three rates, in order`);
+    // AUD-060: the rates the line names are education.breakCoins (a retune must change the words too).
+    const b = TUNING.education.breakCoins;
+    assert.deepEqual(t(locale, 'eduIntroHowCoins').match(/\d+/g).map(Number), [b.new, b.review, b.practice], `${locale}: new, review, practice or missed, in that order`);
+    assert.equal(b.practice, b.missed, 'the line names practice and a missed card as one rate');
     assert.ok(t(locale, 'eduIntroHowLevels').includes('{n}') && !t(locale, 'eduIntroHowLevelsAll').includes('{n}'), `${locale}: the help line names duePerBreak, or says every due card while it is null`);
   }
 });
