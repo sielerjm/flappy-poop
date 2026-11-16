@@ -565,10 +565,11 @@ test("the shop pill's place (plan 26, A2): at a run's start it moves into the ed
   assert.deepEqual([s.shopButton === pill, destroyed], [true, 1], 'already there: left alone');
   s.placeShopPill(false);
   assert.deepEqual([s.shopButtonBox === box, at(box), s.shopButton !== pill], [true, at(shopButtonLayout(720, 1280, T, 0)), true], 'any other run: centred, where it always was, redrawn');
-  const match = playScene({ add: absorb(), locale: 'en', col: { width: 720, x: 0 }, shopButtonBox: shopButtonLayout(720, 1280, T, 0), eduBreakBoxes: null, shopButton: { destroy: () => (destroyed += 1) } });
+  const match = playScene({ add: absorb(), locale: 'en', col: { width: 720, x: 0 }, match: { status: 'join' }, shopButtonBox: shopButtonLayout(720, 1280, T, 0, { match: true }), eduBreakBoxes: null, shopButton: { destroy: () => (destroyed += 1) } });
   const matchPill = match.shopButton;
   match.placeShopPill(true);
-  assert.deepEqual([at(match.shopButtonBox), match.shopButton === matchPill], [at(shopButtonLayout(720, 1280, T, 0)), true], 'a match half has no education row: centred, left alone');
+  assert.deepEqual([at(match.shopButtonBox), match.shopButton === matchPill], [at(shopButtonLayout(720, 1280, T, 0, { match: true })), true], 'a match half has no education row: centred at its own height (y 720, plan 28 5.1), left alone');
+  assert.equal(match.shopButtonBox.y, 720);
 });
 
 /** An education run's level break into `level`, with the choice's preview calls recorded. */
@@ -973,6 +974,7 @@ test("the break's poop (plan 28, 1.1: Michael's 15 Nov note): an education break
     return ys[0];
   };
   assert.equal(T.levels.eduBreakPoopY, 640, 'mid-height of the 1280 px field');
+  assert.equal(T.levels.breakPoopY, 640, 'a normal one-player break at mid-height too (plan 28, 5.1)');
   assert.deepEqual([glideTo({ runIsEducation: true }), glideTo({}), glideTo({ match: {} })], [T.levels.eduBreakPoopY, T.levels.breakPoopY, 640]);
   // The knob moves only the education break (mid-height is also a match half's, so tell them apart).
   const knob = T.levels.eduBreakPoopY;
@@ -1337,4 +1339,20 @@ test("the 📚 popup's Show / Hide (plan 28, 4.2): eduIntroInfo passes both choi
   assert.deepEqual([settings.load().eduHideHow, settings.load().eduHideChoices], [false, true], 'How it works shown again; Your choices stays hidden');
   s.setEduIntroHidden('cards', false);
   assert.deepEqual([settings.load().eduHideHow, settings.load().eduHideChoices], [false, true], 'another name changes nothing');
+});
+
+test("plan 28, 5.1: every one-player break's banner sits at the education break's height (eduBreakLayout's titleY), over the poop at mid-height; a match half's where it was", () => {
+  const ys = (extra) => {
+    const at = {};
+    const text = (k) => ({ setY(y) { at[k] = y; return this; }, setText() { return this; }, setVisible() { return this; } });
+    const s = playScene({ levelTitle: text('title'), levelHint: text('hint'), levelSubHint: text('sub'), levelBreak: true, level: 2, locale: 'en', runIsEducation: false, match: null, eduBreakBoxes: { titleY: 440 }, ...extra });
+    s.refreshGate = () => {};
+    s.breakShownLevel = () => 2;
+    s.versusHost = () => ({ isReady: () => false });
+    s.refreshLevelBanner();
+    return [at.title, at.hint];
+  };
+  assert.deepEqual(ys({}), [440, 512], 'a normal one-player break');
+  assert.deepEqual(ys({ runIsEducation: true }), [440, 512], 'an education break (as before)');
+  assert.deepEqual(ys({ match: { status: 'playing' }, eduBreakBoxes: null }), [Math.round(1280 * 0.4), Math.round(1280 * 0.4) + 72], 'a match half');
 });

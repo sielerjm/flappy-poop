@@ -9,7 +9,7 @@ const button = shopButtonLayout(W, GAME_HEIGHT, T);
 const shop = shopLayout(W, GAME_HEIGHT, T);
 const tray = trayLayout(W, GAME_HEIGHT, T);
 const bean = beanButtonLayout(W, GAME_HEIGHT, T);
-const BANNER_HINT_Y = 584; // Play's levelHint (36 px text)
+const BANNER_HINT_Y = Math.round(GAME_HEIGHT * 0.4) + 72; // the lowest levelHint over the pill (36 px text): a match half's, y 584; a one-player break's sits higher (eduBreakLayout's hintY, plan 28 5.1)
 
 function edges(b) {
   return { left: b.x - b.width / 2, right: b.x + b.width / 2, top: b.y - b.height / 2, bottom: b.y + b.height / 2 };
@@ -26,7 +26,8 @@ test('the 💰 button sits under the banner hint, above the bean button, clear o
   assert.equal(button.id, 'shop');
   assert.ok(button.height >= T.trayHitMin, 'thumb-sized');
   assert.ok(e.left >= 0 && e.right <= W, 'inside the column');
-  assert.ok(e.top >= BANNER_HINT_Y + 18 + 8, `below the hint (top ${e.top})`);
+  assert.ok(e.top >= BANNER_HINT_Y + 18 + 8, `below a match half's hint (top ${e.top})`);
+  assert.ok(e.top >= eduBreakLayout(W, GAME_HEIGHT, T).hintY + 18 + 8, `below a one-player break's hint (top ${e.top})`);
   assert.ok(e.bottom <= bean.y - bean.size, `above the bean button's hit circle (bottom ${e.bottom}, circle top ${bean.y - bean.size})`);
   assert.equal(trayHit(button.x, button.y, tray), null, 'not on a tray button');
   assert.ok(e.left > poopX(W, T) + T.poopRadius, 'right of the bobbing poop');
@@ -35,17 +36,28 @@ test('the 💰 button sits under the banner hint, above the bean button, clear o
   assert.equal(shifted.y, button.y);
 });
 
-test('the 🏅 Bracket pill sits one row under the 💰, above the bean button, clear of the tray', () => {
+test("a match half's 💰 pill stays at y 720 and its 🏅 Bracket pill one row under it (plan 28, 5.1 moved only the one-player pill, to y 800 under the poop at mid-height; a match's poop was already there)", () => {
+  const match = shopButtonLayout(W, GAME_HEIGHT, T, 0, { match: true });
+  assert.deepEqual([match.x, match.y, match.width, match.height], [button.x, 720, button.width, button.height]);
+  assert.equal(shopButtonLayout(W, GAME_HEIGHT, T, 500, { match: true }).x, match.x + 500, 'x follows the column');
+  assert.equal(bracketButtonLayout(W, GAME_HEIGHT, T).y, 720 + T.trayHitMin + 16, 'the Bracket pill (tournaments are matches) where it was');
+  const e = edges(match);
+  assert.ok(e.top >= BANNER_HINT_Y + 18 + 8, `below the match half's hint (top ${e.top})`);
+  assert.ok(e.left > poopX(W, T) + T.poopRadius, 'right of the bobbing poop');
+});
+
+test("the 🏅 Bracket pill sits one row under a match half's 💰, above the bean button, clear of the tray", () => {
   const pill = bracketButtonLayout(W, GAME_HEIGHT, T);
+  const shopPill = shopButtonLayout(W, GAME_HEIGHT, T, 0, { match: true }); // tournaments are matches
   const e = edges(pill);
   assert.equal(pill.id, 'bracket');
   assert.ok(pill.height >= T.trayHitMin, 'thumb-sized');
   assert.ok(e.left >= 0 && e.right <= W, 'inside the column');
-  assert.equal(pill.x, button.x);
-  assert.ok(e.top >= edges(button).bottom + 8, `below the 💰 (top ${e.top})`);
+  assert.equal(pill.x, shopPill.x);
+  assert.ok(e.top >= edges(shopPill).bottom + 8, `below the 💰 (top ${e.top})`);
   assert.ok(e.bottom <= bean.y - bean.size, `above the bean button's hit circle (bottom ${e.bottom})`);
   assert.equal(trayHit(pill.x, pill.y, tray), null, 'not on a tray button');
-  assert.equal(shopButtonHit(pill.x, pill.y, button), null, 'not on the 💰');
+  assert.equal(shopButtonHit(pill.x, pill.y, shopPill), null, 'not on the 💰');
   assert.equal(bracketButtonLayout(W, GAME_HEIGHT, T, 500).x, pill.x + 500, 'x follows the column');
 });
 
@@ -120,12 +132,15 @@ test('an education break on every field width (AUD-035: zone A1\'s walk, 720 to 
   }
 });
 
-test("a one-player break's poop (levels.breakPoopY) bobs clear of the banner's hint and the 💰 pill", () => {
+test("a one-player break's poop sits at mid-height (plan 28, 5.1: Michael, 16 Nov) and bobs clear of the banner's hint (raised to the education break's) and of the 💰 pill (lowered to y 800)", () => {
   const px = poopX(W, T);
+  assert.equal(T.levels.breakPoopY, GAME_HEIGHT / 2, 'mid-height, as an education break and a match');
+  const hintY = eduBreakLayout(W, GAME_HEIGHT, T).hintY; // every one-player break's banner sits there now
   const top = T.levels.breakPoopY - T.poopRadius;
-  assert.ok(top > BANNER_HINT_Y + 18 + 8, 'under the hint');
+  assert.ok(top > hintY + 18 + 8, 'under the hint');
   const pill = edges(button);
-  assert.ok(top >= pill.bottom || px + T.poopRadius < pill.left, 'clear of the 💰 pill');
+  assert.equal(button.y, 800, 'the pill under the poop');
+  assert.ok(pill.top > T.levels.breakPoopY + 24 + T.poopRadius || px + T.poopRadius < pill.left, 'clear of the 💰 pill, even at the bob\'s low point');
   assert.ok(T.levels.breakPoopY + 24 + T.poopRadius < GAME_HEIGHT - T.groundHeight, 'above the ground');
 });
 

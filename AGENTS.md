@@ -34,7 +34,8 @@ last **one run**: `start()` empties the purse, nothing is saved, a single-player
 every power-up (`effects.clearPowerups`), and a two-player crash keeps `crashCoins` (90 %, rounded down) and
 clears the power-ups. Pickups with no motion data pulse (`pulseStill` / `pulseScale`, `stillPulseScale`,
 `items.stillPulse`), their circle body re-fitted each frame so the hitbox holds. The **shop** (`TUNING.shop`): in a level break a
-pill under the banner (`shopButtonLayout`; it reads "Shop" beside the corn kernel with no number since
+pill under the banner (`shopButtonLayout`: y 800 in a one-player break, under the poop at mid-height, plan 28 5.1; a
+match half's, `{ match }`, at y 720, with the 🏅 Bracket pill a row under it; it reads "Shop" beside the corn kernel with no number since
 plan 26's A2 (`shopPill`; the HUD shows the purse), `createButton`'s `icon`, and these notes and the
 code's comments still call it the 💰 pill; dimmed at 0 coins; the break's hint never names it) opens a
 panel of rows (`shopLayout`, `SHOP_ITEMS`) in the chrome column: fiber 1, one bean 6,
@@ -88,9 +89,10 @@ line (generated texture, plain Image) scrolls in and no pair follows it outside 
 fart; crossing it (any level but the last) bumps `level`, plays `NewLevel.mp3` (`sfx.levelUp` blip if the
 sample is missing), and pauses the run as the
 level break (`levelBreak`, the normal `'paused'` state with its own banner "LEVEL n
-· segment / Tap to continue", the poop gliding to `levels.breakPoopY` in a normal one-player run (plan 26: under
-the banner and the break's buttons), to `levels.eduBreakPoopY` (mid-height) in an education run (plan 28, 1.1), and to
-mid-height in a match half, and bobbing; the bean
+· segment / Tap to continue", the poop gliding to mid-height in every break: `levels.breakPoopY` in a normal
+one-player run (plan 28, 5.1: Michael, 16 Nov; the banner sits higher, at `eduBreakLayout`'s `titleY`, as an education
+run's, and the 💰 pill under the poop at y 800; a match half's stays at y 720), `levels.eduBreakPoopY` in an education run (plan 28, 1.1), and
+`GAME_HEIGHT / 2` in a match half (its banner at 40% of the height, as before), and bobbing; the bean
 button hides while it lasts, and the purse, the beans and the 📚 / 🧪 badge draw above the pause
 shade at full brightness (`breakHud`); the
 background crossfading to `levelColor(n, LEVEL_COLORS)`, Set2 colours cycling). A fart never carries the poop past
@@ -2409,11 +2411,13 @@ tests/                      node --test (schema.test.js, pilot.test.js, eduBoard
   chrome.test.js            chromeIntent matrix across state x overlay x input
                             (incl. the Changelog over About, 'respawn' pausing like
                             'playing' and ignoring taps, the shop's open / close rows)
-  shop.test.js              shopButtonLayout (under the banner hint, above the bean
-                            button, clear of the tray and the break's poop), the
+  shop.test.js              shopButtonLayout (under both banners' hints, above the bean
+                            button, clear of the tray and the break's poop; plan 28
+                            5.1: y 800 under the mid-height bob, a match half's at
+                            y 720), the
                             panel and its rows (inside the strips, apart, covering the
                             pill), shopButtonHit / shopHit, bracketButtonLayout (a row
-                            under the 💰, above the bean button), eduBreakLayout
+                            under a match half's 💰, above the bean button), eduBreakLayout
                             (plan 26 A2: one row, the chip under Review, clear of the
                             poop, ⏸ and the tray; plan 27: on every field width 720
                             to 2560, with uiColumn and poopX as Play places them)
@@ -2609,7 +2613,10 @@ tests/                      node --test (schema.test.js, pilot.test.js, eduBoard
                             each Skip, a quiz reopened), corn by kind, a beyond
                             card optional, Quit with new cards left, the level
                             choice reading the gate again (AUD-057), the 📚 count
-                            never redrawn on a destroyed text (AUD-063)
+                            never redrawn on a destroyed text (AUD-063); plan 28
+                            5.1: every one-player break's poop at mid-height and
+                            its banner at eduBreakLayout's titleY (a match's at
+                            40%), a match half's pill at y 720
   pilot.test.js             the tester pilot end to end: Play's pilot methods, the
                             real stores and leaderboard.js calls and the real save and
                             education data panels, against db/schema.sql through

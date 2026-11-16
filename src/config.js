@@ -87,7 +87,7 @@ export const TUNING = {
   levels: {
     pipes: [10, 25, 50], // pipe pairs in levels 1, 2, 3; every later level repeats the last entry (ends at 10, 35, 85, 135, …)
     lastLevel: 7, // the final level (rectum, = LEVELS.length): crossing its finish line wins the run
-    breakPoopY: 920, // px: a normal one-player level break's poop glides here and bobs 24 px down from it (plan 26: under the banner and the break's buttons, clear of the hint)
+    breakPoopY: GAME_HEIGHT / 2, // px: a normal one-player level break's poop glides here, mid-height, and bobs 24 px down from it (plan 28, 5.1: Michael, 16 Nov, as education runs and matches; the banner sits higher, eduBreakLayout's titleY)
     eduBreakPoopY: GAME_HEIGHT / 2, // px: an education run's level break glides it here instead, mid-height between the banner and the row of buttons (plan 28, 1.1: Michael's 15 Nov note; UI may cover it)
     spacingRefLevel: 3, // levels slower than this one space their pipes pipeSpacingPx × (its speed ÷ theirs): 487 px on level 1, 446 on level 2
     speedStep: 25, // px/s added to pipeSpeed per level after the first

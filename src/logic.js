@@ -686,20 +686,23 @@ export function canBuy(item, state, t) {
 }
 
 /**
- * The 💰 button in a level break, in the chrome column: a pill under the banner's hint
- * (y 584), above the bean button (top ≈ 962), clear of the break's bobbing poop
- * (x ≤ poopX + poopRadius ≈ 228 on a phone) and of the tray. `x0` = the column's left edge.
+ * The 💰 button in a level break, in the chrome column: a pill under the banner's hint, above
+ * the bean button (top ≈ 962, hidden in a break), clear of the poop (x ≤ poopX + poopRadius ≈ 228
+ * on a phone) and of the tray. A one-player break's pill sits at y 800, under the poop, which bobs
+ * at mid-height there since plan 28, 5.1 (y 640 to 664); a match half's (`match`) stays at y 720,
+ * where it always was, under its banner at 40% of the height. `x0` = the column's left edge.
  */
-export function shopButtonLayout(width, height, t, x0 = 0) {
-  return { id: 'shop', x: x0 + width / 2, y: 720, width: 240, height: t.trayHitMin };
+export function shopButtonLayout(width, height, t, x0 = 0, { match = false } = {}) {
+  return { id: 'shop', x: x0 + width / 2, y: match ? 720 : 800, width: 240, height: t.trayHitMin };
 }
 
 /**
- * The 🏅 Bracket pill of a tournament race's level break: one row under the 💰 pill (the same
- * width, trayHitMin + 16 lower), above the bean button. Shown once both halves are in the break.
+ * The 🏅 Bracket pill of a tournament race's level break: one row under a match half's 💰 pill
+ * (the same width, trayHitMin + 16 lower, y 824), above the bean button. Shown once both halves
+ * are in the break.
  */
 export function bracketButtonLayout(width, height, t, x0 = 0) {
-  const shop = shopButtonLayout(width, height, t, x0);
+  const shop = shopButtonLayout(width, height, t, x0, { match: true });
   return { id: 'bracket', x: shop.x, y: shop.y + t.trayHitMin + 16, width: shop.width, height: t.trayHitMin };
 }
 

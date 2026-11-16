@@ -572,7 +572,7 @@ export class Play extends Phaser.Scene {
     this.shopOpen = false;
     this.shop = null;
     this.reelSpin = null; // the reel a bought box spins over the shop (spinReel), until its draw is granted
-    this.shopButtonBox = shopButtonLayout(this.col.width, GAME_HEIGHT, T, this.col.x);
+    this.shopButtonBox = shopButtonLayout(this.col.width, GAME_HEIGHT, T, this.col.x, { match: Boolean(this.match) });
     this.shopBoxes = shopLayout(this.col.width, GAME_HEIGHT, T, this.col.x);
     this.shopButton = createButton(this, this.shopButtonBox, t(this.locale, 'shopPill'), { ...TEXT_STYLE, fontSize: '40px' }, { depth: 27, icon: { key: 'coin', px: 48 } }).setVisible(false);
     // A tournament race's 🏅 Bracket pill under the 💰: once both halves are in their level break
@@ -1175,12 +1175,11 @@ export class Play extends Phaser.Scene {
   }
 
   refreshLevelBanner() {
-    // "Tap to continue" in every one-player break (plan 26, A2: the gate no longer changes it); an
-    // education run's sits higher, over its rows (eduBreakLayout's titleY).
+    // "Tap to continue" in every one-player break (plan 26, A2: the gate no longer changes it).
     this.refreshGate();
     const [title, hint] = levelBannerText(this.locale, this.levelBreak ? this.breakShownLevel() : this.level, LEVELS).split('\n');
-    const eduRows = Boolean(this.runIsEducation && !this.match && this.eduBreakBoxes);
-    const titleY = eduRows ? this.eduBreakBoxes.titleY : GAME_HEIGHT * 0.4;
+    // Every one-player break (plan 28, 5.1): the banner higher, over the poop at mid-height (eduBreakLayout's titleY); a match's as before.
+    const titleY = !this.match && this.eduBreakBoxes ? this.eduBreakBoxes.titleY : GAME_HEIGHT * 0.4;
     this.levelTitle?.setY(titleY);
     this.levelHint?.setY(titleY + 72);
     this.levelSubHint?.setY(titleY + 72 + 50);
@@ -1271,9 +1270,9 @@ export class Play extends Phaser.Scene {
 
   /**
    * Between levels: a real pause with the level banner, the poop gliding down and bobbing: to
-   * levels.breakPoopY in a normal one-player run (plan 26: under the banner and the break's buttons),
-   * to levels.eduBreakPoopY in an education run (plan 28, 1.1: mid-height, over its row of buttons),
-   * to mid-height in a match half. The bean button hides while the break lasts, and the purse and the
+   * levels.breakPoopY in a normal one-player run and levels.eduBreakPoopY in an education run (both
+   * mid-height: plan 28, 1.1 and 5.1; the banner over it, the 💰 pill under it), to mid-height in a
+   * match half. The bean button hides while the break lasts, and the purse and the
    * beans draw above the pause shade (breakHud).
    */
   startLevelBreak() {
@@ -4129,13 +4128,13 @@ export class Play extends Phaser.Scene {
 
   /**
    * The shop pill's place for the run about to start (plan 26, A2): in an education run's row (left of
-   * Review: eduBreakLayout's shop), else centred under the banner, where it always was (normal runs,
-   * test runs, a match's half). The box object is kept, since the ring and the tap test hold it: it is
+   * Review: eduBreakLayout's shop), else centred under the banner (normal runs and test runs at y 800,
+   * under the poop at mid-height, plan 28 5.1; a match's half at y 720, where it always was). The box object is kept, since the ring and the tap test hold it: it is
    * moved in place, and the pill (drawn once, at its box: createButton) is drawn again on it.
    */
   placeShopPill(education) {
     if (!this.shopButtonBox || !this.col) return; // no pill on this scene (a test's bare scene)
-    const want = education && this.eduBreakBoxes ? this.eduBreakBoxes.shop : shopButtonLayout(this.col.width, GAME_HEIGHT, T, this.col.x);
+    const want = education && this.eduBreakBoxes ? this.eduBreakBoxes.shop : shopButtonLayout(this.col.width, GAME_HEIGHT, T, this.col.x, { match: Boolean(this.match) });
     const box = this.shopButtonBox;
     if (box.x === want.x && box.y === want.y && box.width === want.width && box.height === want.height) return;
     Object.assign(box, { x: want.x, y: want.y, width: want.width, height: want.height });
