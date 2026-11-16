@@ -8,6 +8,24 @@ import { LOCALES } from './i18n.js';
 
 export const CHANGELOG = [
   {
+    version: '0.22.0',
+    date: '16 Nov 2026',
+    notes: {
+      en: [
+        'The bottom buttons slide away while you fly and come back when you pause, at a level break and at game over. The "?" (How to play) now also shows in a pause and at a level break.',
+        'The progress bar wears each level\'s colour.',
+        'Mystery boxes no longer skip to the end of the level.',
+        'A new loading-screen tip: battery saver or low power mode can slow the game down.',
+      ],
+      'zh-Hans': [
+        '飞行时底部按钮会滑走，暂停、关卡休息和游戏结束时再回来。“?”（玩法）现在在暂停和关卡休息时也会显示。',
+        '进度条换上每一关的颜色。',
+        '神秘盒不再直接跳到关卡终点。',
+        '新的加载提示：省电模式或低电量模式可能会让游戏变慢。',
+      ],
+    },
+  },
+  {
     version: '0.21.1',
     date: '16 Nov 2026',
     notes: {
