@@ -8,6 +8,20 @@ import { LOCALES } from './i18n.js';
 
 export const CHANGELOG = [
   {
+    version: '0.21.1',
+    date: '16 Nov 2026',
+    notes: {
+      en: [
+        'In the iPhone Home Screen app, the game\'s windows (📚 Education mode, 📚 Education data, Save / Load user, Tournament) now stay below the clock, so ✕ is easy to press.',
+        'The 📚 popup has Show / Hide under "How it works" and "Your choices"; it remembers your choice on this device.',
+      ],
+      'zh-Hans': [
+        '在 iPhone 主屏幕应用里，游戏的窗口（📚 教育模式、📚 教育数据、存档 / 载入用户、锦标赛）现在都在时间栏下面，✕ 很容易点到。',
+        '📚 弹窗的“玩法”和“你的选择”下面可以显示 / 隐藏，并会在这台设备上记住你的选择。',
+      ],
+    },
+  },
+  {
     version: '0.21.0',
     date: '16 Nov 2026',
     notes: {
