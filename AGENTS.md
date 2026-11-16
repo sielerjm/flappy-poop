@@ -501,7 +501,9 @@ quiz, which asks missed cards, then due reviews (the least remembered first), th
 in this break (`Play.breakMissed`, asked again as missed until answered right; the one just shown
 waits), then new cards of the segment just cleared (and its general card), then practice (`pickCard`'s
 `dueFirst`; the bonus quiz keeps new first). A counted card always comes before practice, whatever the
-recent gap holds. A right answer in a break pays `education.breakCoins` (`takeCoins`), **once per card a
+recent gap holds. A right answer in a break pays `education.breakCoins` by why the card was asked
+(plan 28, Stage 3b: a new card 3, a due review 2, a card practiced early 1, a missed card answered
+right 1; `takeCoins`), **once per card a
 local day**, practice included (plan 26, A2: the store's `paid` { day, ids }, written through
 `eduStore.answer(id, record, { paidDay })`, read with `paidOn`; a test run keeps no record, so every right
 answer pays there). A card already paid today pays nothing more, even missed on purpose and then answered
@@ -821,7 +823,8 @@ src/
                             weights, retention, maxDays; plan 26), minGap, generalShare, strikes, restoreStreak,
                             reviveBlinkMs (the blink after Fly on), badgeMinAnswers
                             (answers a run needs to be graded),
-                            priceScale, masteredDays, explainMinMs, breakCoins,
+                            priceScale, masteredDays, explainMinMs, breakCoins
+                            (by kind: new, review, practice, missed; plan 28, Stage 3b),
                             newPerDay (new cards a local day; null: held off, plan 28,
                             Stage 3b), buryCoinsPerLevel,
                             buryPerDay and buryMs (Skip's price, its daily cap for

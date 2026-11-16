@@ -2056,9 +2056,11 @@ export class Play extends Phaser.Scene {
    * One answer from the quiz: graded (gradeFor: right on a card's first sight is good; an interrupted
    * answer's time is not used) and, outside a test run, scheduled and saved (schedule, eduStore). A
    * practice card answered right keeps its schedule. Counted in runQuiz (tallyAnswer). A right answer
-   * in a level break pays education.breakCoins (takeCoins: the purse, the coin sound), once per card a
-   * local day, practice included (plan 26, A2; the store's `paid`); a test run keeps no record, so
-   * every right answer pays there. Returns { correct, grade, coins, paidToday, dueAt }: paidToday, a
+   * in a level break pays education.breakCoins by why the card was asked (plan 28, Stage 3b: a new card
+   * 3, a due review 2, practice 1, a missed card 1; an unknown reason the least; takeCoins: the purse,
+   * the coin sound), once per card a local day, practice included (plan 26, A2): the store's `paid`
+   * keeps which cards paid today, so only the day's first right answer pays, at its own kind's rate; a
+   * test run keeps no record, so every right answer pays there. Returns { correct, grade, coins, paidToday, dueAt }: paidToday, a
    * right answer in a break that paid nothing because the card paid today; dueAt, when the card comes
    * back (its saved record's), null when nothing was saved (a test run, test mode).
    */
@@ -2074,7 +2076,8 @@ export class Play extends Phaser.Scene {
     // and a card missed on purpose and then answered right pays nothing more that day).
     const payable = correct && mode === 'break';
     const paidToday = payable && Boolean(store) && paidOn(store.paid, day).includes(card.id);
-    const coins = payable && !paidToday ? T.education.breakCoins : 0;
+    const rates = T.education.breakCoins;
+    const coins = payable && !paidToday ? (rates[reason] ?? Math.min(...Object.values(rates))) : 0;
     // Nothing is saved or recorded in a test run, nor while test mode is on: it can be turned on
     // after the run ended, from the game-over screen's profile (plan 25, A5), before the bonus quiz.
     if (!this.runIsTest && !this.isTestMode()) {

@@ -4142,7 +4142,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
           for (let i = 0; i < 40 && (await playState()) !== 'ready'; i += 1) await sleep(250);
         };
         const cardRec = (id) => evaluate(`JSON.stringify((JSON.parse(localStorage.getItem('flappyPoop.eduSrs') ?? '{}').cards ?? {})['${id}'] ?? null)`).then(JSON.parse);
-        const quizNow = () => evaluate(`(() => { const q = ${Q}; return JSON.stringify({ active: __flappy.scene.isActive('Quiz'), id: q.card?.id ?? null, deck: q.card?.deck ?? null, answered: q.answered, last: q.lastAnswer ?? null, next: q.rightBtn.shown, nextAlpha: q.rightBtn.g.alpha, top: q.topBtn.shown ? q.topBtn.text.text : null, left: q.leftBtn.shown ? q.leftBtn.text.text : null, right: q.rightBtn.shown ? q.rightBtn.text.text : null, halo: Boolean(q.halo?.visible), verdict: q.verdict.visible ? q.verdict.text : null, kernel: q.verdictCoin.visible, kernelAfter: q.verdictCoin.x > q.verdict.x + q.verdict.width / 2, explain: q.explain.visible }); })()`).then(JSON.parse);
+        const quizNow = () => evaluate(`(() => { const q = ${Q}; return JSON.stringify({ active: __flappy.scene.isActive('Quiz'), id: q.card?.id ?? null, reason: q.reason ?? null, deck: q.card?.deck ?? null, answered: q.answered, last: q.lastAnswer ?? null, next: q.rightBtn.shown, nextAlpha: q.rightBtn.g.alpha, top: q.topBtn.shown ? q.topBtn.text.text : null, left: q.leftBtn.shown ? q.leftBtn.text.text : null, right: q.rightBtn.shown ? q.rightBtn.text.text : null, halo: Boolean(q.halo?.visible), verdict: q.verdict.visible ? q.verdict.text : null, kernel: q.verdictCoin.visible, kernelAfter: q.verdictCoin.x > q.verdict.x + q.verdict.width / 2, explain: q.explain.visible }); })()`).then(JSON.parse);
 
         // Level 2 unlocked, so no due card holds this break, only its new cards (plan 28, Stage 3b), and the
         // quiz's own checks below run as they were; the gate and Skip have their own checks further on, on
@@ -4245,7 +4245,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         const q1 = await quizNow();
         ok(covered.fb && covered.interrupted && q1.last?.interrupted === true, 'Feedback opened over the waiting card marks its answer interrupted (its time is not used)');
         const r1 = await cardRec(q1.id);
-        const verdictWant = q1.last?.correct ? (await tx('quizRightCoins')).replace('{n}', String(TT.education.breakCoins)) : await tx('quizWrong');
+        const verdictWant = q1.last?.correct ? (await tx('quizRightCoins')).replace('{n}', String(TT.education.breakCoins[q1.reason])) : await tx('quizWrong'); // corn by the kind of card (plan 28, Stage 3b)
         ok(q1.answered && q1.last?.id === q0.id && r1?.seen === 1 && r1.right === (q1.last.correct ? 1 : 0) && q1.verdict === verdictWant && q1.next, `a tap answers ${q0.id} (${q1.last?.correct ? 'right' : 'wrong'}, ${Math.round(q1.last?.rtMs ?? -1)} ms): saved (seen ${r1?.seen}), "${q1.verdict}", Next shown`);
         ok(q1.last?.correct === false && q1.explain && q1.nextAlpha < 1, 'a wrong answer shows the explanation at once and holds Next');
         // When the card comes back (plan 26): under the verdict, above the explanation.
@@ -4314,7 +4314,8 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await evaluate(`${play}.registry.set('padMode', false), ${Q}.focus.hide(), true`);
         await sleep(TT.education.explainMinMs + 200);
 
-        // Coins: a right answer pays breakCoins (and says so); a wrong one pays nothing.
+        // Coins: a right answer pays breakCoins for its kind (plan 28, Stage 3b: new 3, review 2, practice 1,
+        // missed 1), and says so; a wrong one pays nothing.
         await evaluate(`${Q}.next(), true`);
         await sleep(200);
         const c0 = await evaluate(`${play}.effects.coins()`);
@@ -4323,8 +4324,9 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await sleep(200);
         const c1 = await evaluate(`${play}.effects.coins()`);
         const qr = await quizNow();
-        const rightWant = (await tx('quizRightCoins')).replace('{n}', String(TT.education.breakCoins));
-        ok(c1 - c0 === TT.education.breakCoins && qr.verdict === rightWant && qr.kernel && qr.kernelAfter, `a right answer pays ${c1 - c0} coin (${c0} → ${c1}) and says "${qr.verdict}" with the kernel after it`);
+        const paysWant = TT.education.breakCoins[qr.reason];
+        const rightWant = (await tx('quizRightCoins')).replace('{n}', String(paysWant));
+        ok(paysWant > 0 && c1 - c0 === paysWant && qr.verdict === rightWant && qr.kernel && qr.kernelAfter, `a right answer to a ${qr.reason} card pays ${c1 - c0} (${c0} → ${c1}) and says "${qr.verdict}" with the kernel after it`);
         // The glow behind the purse (plan 28, 1.2: Michael's 15 Nov note): lit by the payment, then faded out.
         ok(glowOn.alpha === TT.education.purseGlow.peakAlpha && glowOn.x >= glowOn.coinX - 15 && glowOn.x < glowOn.textX && glowOn.y === glowOn.coinY, `the payment lights the glow behind the purse (alpha ${glowOn.alpha} at x ${Math.round(glowOn.x)}, between the kernel's left edge and the number)`);
         let glowLeft = await evaluate(`${Q}.purseGlow.alpha`);
@@ -4496,7 +4498,8 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await sleep(150);
         const pc1 = await evaluate(`${play}.effects.coins()`);
         const practicePaid = await evaluate(`JSON.stringify({ verdict: ${Q}.verdict.text, note: ${Q}.paidNote.visible, kernel: ${Q}.verdictCoin.visible })`).then(JSON.parse);
-        ok(pc1 - pc0 === TT.education.breakCoins && practicePaid.verdict === rightWant && practicePaid.kernel && !practicePaid.note, `a practice card answered right pays ${pc1 - pc0} (practice pays, once a day): "${practicePaid.verdict}"`);
+        const practiceWant = (await tx('quizRightCoins')).replace('{n}', String(TT.education.breakCoins.practice));
+        ok(pc1 - pc0 === TT.education.breakCoins.practice && practicePaid.verdict === practiceWant && practicePaid.kernel && !practicePaid.note, `a practice card answered right pays ${pc1 - pc0} (practice pays ${TT.education.breakCoins.practice}, once a day): "${practicePaid.verdict}"`);
         await evaluate(`${Q}.rightBtn.press(), true`); // Next: another practice card
         await sleep(200);
         await evaluate(`import('./src/education.js').then((e) => { const p = ${play}; const id = ${Q}.card.id; p.eduStore.answer(id, p.eduStore.load().cards[id], { paidDay: e.localDayKey() }); return true; })`);

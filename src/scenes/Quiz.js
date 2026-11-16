@@ -966,7 +966,7 @@ export class Quiz extends Phaser.Scene {
     }
     this.answered = true;
     // As tall as it gets: the wait under the verdict ("Next review: in 2 days" after the usual first answer).
-    this.lastAnswer = right ? { coins: T.education.breakCoins, dueAt: Date.now() + 2 * 86400000 } : { dueAt: Date.now() };
+    this.lastAnswer = right ? { coins: Math.max(...Object.values(T.education.breakCoins)), dueAt: Date.now() + 2 * 86400000 } : { dueAt: Date.now() }; // the widest pay (plan 28, Stage 3b)
     this.reveal(right ? 0 : 1, right);
     if (!right) this.source.setText(t(this.locale, 'quizSource').replace('{source}', cardSource(card))).setVisible(true); // as tall as it will be once audited
     return this.fits();

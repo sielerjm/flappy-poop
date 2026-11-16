@@ -98,6 +98,6 @@ test('pay once a day across a local midnight inside one break (AUD-035): right a
   s.breakMissed = [];
   const right = (t, reason) => withClock(t, () => s.quizAnswer({ card, reason, order: ['answer', 'w1', 'w2'], chosen: 'answer', rtMs: 4000, mode: 'break' }).coins);
   const coins = [right(at([2026, 10, 14], 23, 59), 'new'), right(at([2026, 10, 15], 0, 1), 'practice'), right(at([2026, 10, 15], 0, 2), 'practice')];
-  assert.deepEqual(coins, [T.education.breakCoins, T.education.breakCoins, 0]);
+  assert.deepEqual(coins, [T.education.breakCoins.new, T.education.breakCoins.practice, 0], 'a new card 3, then after midnight practice 1, then nothing (plan 28, Stage 3b: corn by the kind of card)');
   assert.deepEqual([paid.length, store.load().paid], [2, { day: '2026-11-15', ids: [card.id] }], "the paid record is the new day's");
 });

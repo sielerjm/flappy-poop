@@ -252,9 +252,9 @@ test("a level break's quiz: a miss is asked again and counted as missed until an
   const rec = store.load().cards[card.id];
   assert.equal(back.dueAt, rec.dueAt, 'and a right one, when its saved record is due');
   assert.deepEqual([rec.state, rec.reps], ['review', 2], 'and the answer moved its schedule (not practice): in review again');
-  assert.deepEqual([coins, back.coins, back.paidToday], [[T.education.breakCoins], T.education.breakCoins, false], 'the right answer paid');
+  assert.deepEqual([coins, back.coins, back.paidToday], [[T.education.breakCoins.missed], T.education.breakCoins.missed, false], 'the right answer paid, as a missed card answered right (plan 28, Stage 3b)');
   const again = answer('practice', 'answer');
-  assert.deepEqual([coins, again.coins, again.paidToday], [[T.education.breakCoins], 0, true], 'the same card again today, as practice: paid already, and quizAnswer says so');
+  assert.deepEqual([coins, again.coins, again.paidToday], [[T.education.breakCoins.missed], 0, true], 'the same card again today, as practice: paid already, and quizAnswer says so');
   assert.deepEqual(store.load().cards[card.id].dueAt, rec.dueAt, 'and leaves the schedule alone');
   s.levelBreak = false;
   answer('missed', 'w1');
@@ -275,6 +275,25 @@ function payScene({ store = createEduStore(fakeStorage()), runIsTest = false, le
   return { s, store, paid, spent, answer };
 }
 
+test('corn by the kind of card (plan 28, Stage 3b: Michael, 16 Nov): a right answer in a break pays 3 for a new card, 2 for a due review, 1 for a card practiced early, 1 for a missed card answered right; once per card a local day, the first paying answer setting it; a test run pays every right answer by kind', () => {
+  assert.deepEqual(T.education.breakCoins, { new: 3, review: 2, practice: 1, missed: 1 });
+  const [n, r, p, m, m2] = CARDS.filter((c) => c.deck === 'stomach');
+  const { store, paid, answer } = payScene();
+  const old = Date.now() - 30 * 86400000;
+  store.answer(r.id, schedule(null, 'easy', old)); // a review, due
+  store.answer(p.id, schedule(null, 'good', Date.now() - 60000)); // in review, not due: practice
+  store.answer(m.id, schedule(null, 'again', Date.now() - 60000)); // missed, due
+  assert.deepEqual(['new', 'review', 'practice', 'missed'].map((reason, i) => answer([n, r, p, m][i], reason, 'answer').coins), [3, 2, 1, 1], 'new 3, review 2, practice 1, missed 1');
+  assert.deepEqual(paid, [3, 2, 1, 1]);
+  assert.deepEqual([answer(n, 'practice', 'answer').coins, answer(r, 'practice', 'answer').coins], [0, 0], 'once a day: the second right answer pays nothing, whatever its kind');
+  // A new card missed first pays nothing then; answered right as a retry it pays as missed.
+  answer(m2, 'new', 'w1');
+  assert.equal(answer(m2, 'missed', 'answer').coins, T.education.breakCoins.missed);
+  const test = payScene({ runIsTest: true });
+  assert.deepEqual(['new', 'review', 'practice', 'missed'].map((reason) => test.answer(n, reason, 'answer').coins), [3, 2, 1, 1], 'a test run keeps no record: every right answer pays, by kind');
+  assert.equal(test.answer(n, undefined, 'answer').coins, 1, 'a reason it does not know pays the least, never nothing');
+});
+
 test('a wrong answer costs nothing anywhere (plan 26, A2: Michael asked): no corn spent, no corn paid, the score as it was, in a break, a revive and the bonus quiz', () => {
   const card = CARDS.find((c) => c.deck === 'stomach');
   for (const mode of ['break', 'revive', 'bonus']) {
@@ -291,13 +310,13 @@ test('practice pays (plan 26, A2): every card pays once a local day, practice in
   store.answer(a.id, schedule(null, 'good', Date.now() - 30 * 86400000), { paidDay: yesterday }); // a review card that paid yesterday
   store.answer(b.id, schedule(null, 'good', Date.now() - 30 * 86400000));
   const first = answer(a, 'practice', 'answer');
-  assert.deepEqual([first.coins, first.paidToday, paid], [T.education.breakCoins, false, [T.education.breakCoins]], 'practice pays: the card paid yesterday, not today');
+  assert.deepEqual([first.coins, first.paidToday, paid], [T.education.breakCoins.practice, false, [T.education.breakCoins.practice]], 'practice pays: the card paid yesterday, not today');
   assert.deepEqual(store.load().paid, { day: localDayKey(), ids: [a.id] }, 'and is now marked for today');
   const second = answer(a, 'practice', 'answer');
   assert.deepEqual([second.coins, second.paidToday, paid.length], [0, true, 1], 'the same card again today pays nothing, and says why');
   answer(b, 'practice', 'w1');
   const missedThenRight = answer(b, 'missed', 'answer');
-  assert.deepEqual([missedThenRight.coins, paid.length], [T.education.breakCoins, 2], 'another card: missed, then right, pays once');
+  assert.deepEqual([missedThenRight.coins, paid.length], [T.education.breakCoins.missed, 2], 'another card: missed, then right, pays once');
   const missAgain = answer(a, 'missed', 'w1');
   const rightAgain = answer(a, 'missed', 'answer');
   assert.deepEqual([missAgain.coins, rightAgain.coins, rightAgain.paidToday, paid.length], [0, 0, true, 2], 'a card that paid today, missed and then answered right, pays nothing: no farming by missing on purpose');
@@ -309,7 +328,7 @@ test('practice pays (plan 26, A2): every card pays once a local day, practice in
   const test = payScene({ runIsTest: true });
   test.answer(a, 'practice', 'answer');
   test.answer(a, 'practice', 'answer');
-  assert.deepEqual([test.paid, 'paid' in test.store.load()], [[T.education.breakCoins, T.education.breakCoins], false], 'a test run keeps no record: every right answer pays');
+  assert.deepEqual([test.paid, 'paid' in test.store.load()], [[T.education.breakCoins.practice, T.education.breakCoins.practice], false], 'a test run keeps no record: every right answer pays');
 });
 
 test('the gate (plan 28, Stage 3b): a break holds for its new cards, up to the N the player chose (5 by default, counted per visit), for its due cards, up to education.duePerBreak, and for a card missed here; never in a test run or a match', () => {
