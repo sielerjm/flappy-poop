@@ -331,6 +331,22 @@ profile (no ids): single-player numbers (bestScore = the best score-board row), 
 biggest rival (self-races ignored), counters, achievements. The game claims, the server checks the
 id format and a quest's window (+2 days' grace): accepted risk ACC-001 like scores.
 
+**Run summaries** (plan 30): every single-player and Daily run (never a test run, an education run or
+a match half) keeps a summary, as numbers, in `src/runStats.js` (`createRunStats`: preallocated, no
+allocation per frame, flap or press). Play feeds it through `statCall` (the first error switches it
+off for the rest of the run): `start` (begin), `update` (frame), `doFlap` (each flap, with what stood
+behind it: the module-private press stamp set by the input listeners through `withInput`, read with
+`pressFacts`: a real browser event marked isTrusted, recent, once per press; the launch and GO flaps
+pass `internal`), the listeners (press, release), pipes, falls, close calls, the death, levels and a
+level picked at a break (skip), the break, the shop, pauses. `endRun` queues the row
+(`queueRunSummary` → `createRunQueue`, `flappyPoop.runQueue`, 50, never dropping the run behind a best
+not yet posted); `finishAbandonedDaily` queues a short stub row (`stubRow`). **Sync:** `drainRuns` runs
+before `drainDaily` in both of `syncLeaderboard`'s paths (`submitRuns`, up to 20 per player id); a 🏆
+or 🌞 post whose run is still queued after a paced send waits (`postWaits`, `waitsForRun`, at most
+`runWaitSyncs` syncs). The row's fields are `RUN_DATA_KEYS`, equal to `run_data_keys()` in
+`db/schema.sql` (tests/runStats.test.js). **Server:** `run_log` (owner-only, 90 days), `submit_runs`
+(void; a row it cannot store is counted in `run_rejects`), and the moderation calls below.
+
 **Loading splash** (2026-11-12, v0.15.0, plan `.claude/plans/01-loading-screen.plan.md`): the page's front
 door on every load, phone and desktop. `index.html`'s `#splash` (cream, the bobbing `poop.png` inside a
 brown ring's track) paints at once; an inline `import('./src/splash.js')` placed **before** the Phaser
@@ -985,6 +1001,13 @@ src/
                             it) / optionText, cardSource (short citations: "Martinsen
                             et al. 2005"), EDUCATION_EMOJI. Fully unit-tested
                             (tests/education.test.js).
+  runStats.js               One run's summary as numbers (plan 30), NO Phaser/DOM:
+                            createRunStats (begin, frame, level, pipe, skip, fall,
+                            closeCall, death, flap, press, release, breakStart /
+                            breakEnd, shopOpen / shopBuy, pause / resume, end → the
+                            row submit_runs takes), stubRow, RUN_DATA_KEYS (=
+                            run_data_keys() in db/schema.sql). Preallocated: nothing
+                            called while a run flies allocates (tests/runStats.test.js).
   research.js               The education tester pilot's client (plan 21), NO
                             Phaser/DOM: answerEvent (one quiz answer as a flat
                             record; EVENT_FIELDS is the server's list of known
@@ -1083,6 +1106,11 @@ src/
                             / 'rejected'), claimAchievements ({ stored, closed } /
                             'rejected' / null), fetchPlayerStats({ id } or { name }:
                             the profile, { found: false }, or null).
+                            Run summaries (plan 30): createRunQueue
+                            (flappyPoop.runQueue: { playerId, row }, add / remove /
+                            claim, pins), submitRuns ('ok' / 'rateLimited' /
+                            'rejected' / 'offline'), waitsForRun; fetchTop({ playerId })
+                            asks score_board, the table read as its fallback.
                             The 📚 board (plan 21): createEduShareStore
                             (flappyPoop.eduShare: on, the round sharedAt, the name
                             last sent, what was sent, one batch in flight, and the
@@ -2093,7 +2121,19 @@ db/schema.sql               Supabase schema: scores table (player_id = save-code
                             internal): every board, count and lookup by name leaves
                             them out for everyone else, their own views (by id,
                             and each board's caller row) stay as they were, a merge
-                            keeps them hidden, nothing is deleted. Plan 21 (2026-11-13): the 📚
+                            keeps them hidden, nothing is deleted. Plan 30, Stage 2:
+                            run_log / run_rejects / submit_runs (run summaries,
+                            owner-only, 90 days but held rows and a hidden player's);
+                            admin_runs(name); hold_run / release_run (owner-only):
+                            a held run's post is kept in held_scores and answered and
+                            paced as one that raised nothing, and a best it already set
+                            steps back (score_steps); board_settings.require_run holds
+                            a raise with no run too; post_must_hold / post_run match a
+                            post to its run by content; own_best / board_rows give the
+                            caller's own views their held bests (player_rank,
+                            player_stats by id, daily_board's me, score_board). The run
+                            tables sit before submit_score in the file (a SQL
+                            function's body is checked when it is made). Plan 21 (2026-11-13): the 📚
                             board (education_settings: board_open, invite_hash,
                             phase; education_public: one row per sharing player;
                             share_education (by invitation since plan 28: p_invite,
@@ -2969,6 +3009,12 @@ Commits follow `type(scope): summary` (`feat`, `fix`, `docs`, `chore`, `test`, `
   `add_server_counter` inside the SQL function that sees it happen, refuse the key in
   `submit_counters`, and add its glyph to CAREER; never put it in `runDeltas`.
 - A game dev's 🔧 → `select public.admin_set_dev('<username>', true);` in the SQL editor.
+- New field in the run summary → its key in `RUN_DATA_KEYS` (`src/runStats.js`) and in `run_data_keys()`
+  (`db/schema.sql`), same place in both; apply the schema before pushing the client (submit_runs
+  refuses a row with a key it does not know).
+- Hold one run (its best leaves the board for others; nothing is deleted) → `select public.hold_run('<player
+  id>', '<run id>');`, undo with `release_run`; `select * from public.admin_runs('<username>');` lists a
+  player's runs. `select public.admin_set_require_run(true);` holds a raise with no run behind it too.
 - Hide a player (in place of deleting their rows) → `select public.admin_flag_player('<username>', '<note>');`;
   undo with `admin_unflag_player('<username>')`; `select * from public.admin_flagged();` lists who is
   hidden. Their own device sees its rows as before; the 🏆 board splices their own rows in at

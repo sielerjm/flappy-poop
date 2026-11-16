@@ -8,6 +8,14 @@ import { LOCALES } from './i18n.js';
 
 export const CHANGELOG = [
   {
+    version: '0.20.1',
+    date: '16 Nov 2026',
+    notes: {
+      en: ['Small fixes.'],
+      'zh-Hans': ['一些小修复。'],
+    },
+  },
+  {
     version: '0.20.0',
     date: '16 Nov 2026',
     notes: {
