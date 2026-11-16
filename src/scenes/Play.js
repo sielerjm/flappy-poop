@@ -3806,7 +3806,7 @@ export class Play extends Phaser.Scene {
     this.quizCountLine.setVisible(shown && Boolean(counts));
     this.quizCountChip?.setVisible(shown && Boolean(counts));
     if (this.breakQuitButton) {
-      const due = this.gateHolds(counts);
+      const due = this.breakGated(counts); // the gate's own rule (none with test mode on)
       const armed = this.breakQuitArmed();
       // One word, Quit, cards due or not (plan 26, A2); armed, it says when the second tap ends the run ungraded.
       this.breakQuitButton.setText(t(this.locale, armed ? (due ? 'breakQuitDueSure' : 'breakQuitSure') : 'breakQuit')).setVisible(shown);
@@ -3913,7 +3913,7 @@ export class Play extends Phaser.Scene {
       return;
     }
     const counts = this.quizCounts({ mode: 'break' });
-    const due = this.gateHolds(counts); // the gate holds, new cards included (plan 28, Stage 3b: Michael's call 1)
+    const due = this.breakGated(counts); // the gate holds, new cards included (plan 28, Stage 3b: Michael's call 1); none with test mode on
     this.breakGaveUp = due || !((this.runQuiz?.answered ?? 0) > 0);
     this.breakQuitArmedAt = null;
     this.breakLevelPick = null;

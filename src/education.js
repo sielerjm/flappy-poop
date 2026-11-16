@@ -237,7 +237,7 @@ function pickNew(general, pools, rng, t) {
   return pickFrom(primary, rng);
 }
 
-function chooseCard({ cards, srs, context, level, segment, now, blocked, rng, t, practice = true, dueFirst = false, missed = [], last = null, newLeft = Infinity, dueLeft = Infinity, order = 'after', skipped = new Set() }) {
+function chooseCard({ cards, srs, context, level, segment, now, blocked, rng, t, practice = true, dueFirst = false, missed = [], last = null, newLeft = Infinity, dueLeft = Infinity, gateDue = null, order = 'after', skipped = new Set() }) {
   const live = cards.filter((c) => !c.retired && !blocked.has(c.id));
   const fresh = live.filter((c) => !srs[c.id] && !skipped.has(c.id)); // a new card skipped today waits until tomorrow (plan 28, Stage 3b)
   const due = live.filter((c) => srs[c.id] && srs[c.id].dueAt <= now);
@@ -283,16 +283,17 @@ function chooseCard({ cards, srs, context, level, segment, now, blocked, rng, t,
         const c = retry.find((x) => allowLast || x.id !== last);
         return c ? { card: c, reason: 'missed' } : null;
       };
-      // The gate counts at most dueLeft stored due cards (plan 28, Stage 3b), the most urgent first;
-      // this break's own misses always count.
-      const storedPick = () => missedPick(dueNow) ?? reviewPick(dueNow);
-      const duePick = () => (dueLeft > 0 ? storedPick() : null) ?? retryPick(false);
-      const dueCounted = Math.min(dueNow.length, Math.max(0, dueLeft)) + retry.length;
+      // The gate counts at most dueLeft stored due cards (plan 28, Stage 3b): `gateDue`, the most urgent,
+      // settled by pickCard before the recent gap orders them; this break's own misses always count.
+      const counted = gateDue ? dueNow.filter((c) => gateDue.has(c.id)) : dueNow;
+      const storedPick = (pool) => missedPick(pool) ?? reviewPick(pool);
+      const duePick = () => (dueLeft > 0 ? storedPick(counted) : null) ?? retryPick(false);
+      const dueCounted = Math.min(counted.length, Math.max(0, dueLeft)) + retry.length;
       pick = (newFirst(dueCounted) ? newPick() ?? duePick() : duePick() ?? newPick()) ?? retryPick(true);
       // Past dueLeft, the other due cards come once the gate's are asked, before practice: `beyond`
       // (still due, so scheduled as missed or review; the quiz stops before them until Keep practicing).
-      if (!pick && (practice === 'beyond' || practice === true) && dueLeft <= 0) {
-        const past = storedPick();
+      if (!pick && practice === 'beyond' && dueLeft <= 0) { // pickCard's beyond passes run before practice
+        const past = storedPick(dueNow);
         if (past) return { ...past, beyond: true };
       }
     } else {
@@ -316,6 +317,21 @@ function chooseCard({ cards, srs, context, level, segment, now, blocked, rng, t,
   };
   const pick = newFirst(due.length) ? newPick() ?? duePick() : duePick() ?? newPick();
   return pick ?? (practice === true ? practicePick() : null);
+}
+
+/**
+ * A break's stored due cards, the most urgent first (chooseCard's order): missed ones, the longest due
+ * first; then reviews, the least remembered first; the break's own cards first on a tie. Not the
+ * session's cards, nor the ones missed in this break (they always count). For pickCard's gateDue.
+ */
+function urgentDue({ cards, srs, segment, now, t, session, missed }) {
+  const isMissed = new Set(missed);
+  const due = cards.filter((c) => !c.retired && !session.has(c.id) && !isMissed.has(c.id) && srs[c.id] && srs[c.id].dueAt <= now);
+  const near = (c) => (breakDeckOf(c, cards) !== segment ? 1 : 0);
+  const recall = (c) => cardRetrievability(srs[c.id], now, t);
+  const missedOnes = due.filter((c) => srs[c.id].state === 'missed').sort((a, b) => srs[a.id].dueAt - srs[b.id].dueAt || near(a) - near(b));
+  const reviews = due.filter((c) => srs[c.id].state === 'review').sort((a, b) => recall(a) - recall(b) || near(a) - near(b) || srs[a.id].dueAt - srs[b.id].dueAt);
+  return [...missedOnes, ...reviews];
 }
 
 /**
@@ -375,6 +391,10 @@ export function pickCard({ cards = CARDS, srs = {}, context, level = 1, segment 
   const dueRoom = limitOf(dueLeft);
   const args = { cards, srs, context, level, segment, now, rng, t, dueFirst, missed, last: exclude.at(-1) ?? null, newLeft, dueLeft: dueRoom, order: NEW_ORDERS.includes(order) ? order : 'after', skipped: new Set(skipped) };
   const beyond = context === 'break' && dueFirst && dueRoom <= 0; // only then can a due card come past the gate
+  // With a due limit, which stored due cards the gate asks is settled here, before the recent gap orders
+  // them: the dueRoom most urgent (missed, the longest due first; then reviews, the least remembered
+  // first), so the picks are what cardCounts counts, kind by kind (plan 28, Stage 3b).
+  if (context === 'break' && dueFirst && Number.isFinite(dueRoom)) args.gateDue = new Set(urgentDue({ cards, srs, segment, now, t, session, missed }).slice(0, Math.max(0, dueRoom)).map((c) => c.id));
   // Counted cards first, then a break's due cards past its dueLeft (`beyond`), the recent gap only
   // ordering each group; practice only once none is left. `practice`: false (counted cards only),
   // 'beyond' (those too), true (practice too).

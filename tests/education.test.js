@@ -299,7 +299,9 @@ const manyDue = {
 };
 
 test("a break's two limits (plan 28, Stage 3b): newLeft and dueLeft; the counts are the picks while the gate counts them; past dueLeft the other due cards come after them as `beyond`, before practice; with neither passed nothing changes", () => {
-  const gaps = [[], ['DU-01', 'JE-02', 'ST-02', 'CA-04', 'ST-10']];
+  // The third gap holds every due card of countsSrs, its only missed one (CA-01) first: with a due limit the
+  // gate must still ask the cards it counts (review finding of 3b.5: the gap once let a review in first).
+  const gaps = [[], ['DU-01', 'JE-02', 'ST-02', 'CA-04', 'ST-10'], ['CA-01', 'DU-01', 'IL-01', 'CO-03', 'CA-02']];
   for (const srs of [countsSrs, manyDue, {}]) {
     const storedDue = Object.values(srs).filter((r) => r.dueAt <= NOW).length;
     for (const recent of gaps) for (const order of NEW_ORDERS) for (const newLeft of [0, 1, 3, Infinity]) for (const dueLeft of [0, 1, 3, Infinity]) {

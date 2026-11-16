@@ -752,7 +752,7 @@ test('Quit at a break (plan 25, B8; plan 26, A2): two taps; caught up with answe
     const calls = [];
     let now = 1000;
     const s = playScene({
-      levelBreak: true, state: 'paused', runIsEducation: true, runIsTest: false, match: null, shopOpen: false, quizOpen: false, quizButton: {}, breakQuitArmedAt: null,
+      levelBreak: true, state: 'paused', runIsEducation: true, runIsTest: false, match: null, shopOpen: false, quizOpen: false, quizButton: {}, breakQuitArmedAt: null, registry: registry(),
       runQuiz: { ...newTally(), answered, right: answered },
       time: { get now() { return now; }, delayedCall() {} },
       quizCounts: () => ({ new: due === 'new' ? 2 : 0, missed: due === true ? 1 : 0, review: 0 }),
@@ -769,6 +769,20 @@ test('Quit at a break (plan 25, B8; plan 26, A2): two taps; caught up with answe
   assert.deepEqual(runEnd('new', 3), { calls: ['endRun', 'showOver'], gaveUp: true, lb: false }, 'new cards still holding the gate: the run ends ungraded too (plan 28, Stage 3b, call 1)');
   assert.deepEqual(runEnd(false, 0), { calls: ['endRun', 'showOver'], gaveUp: true, lb: false }, 'nothing answered: quitting the run, for 🏳️');
   assert.equal(eduRunFacts(newTally(), { gaveUp: true }, T).graded, false, 'a run with no answers is never graded, so nothing else moves');
+  // Quit follows the gate's own rule (breakGated): with test mode on there is no gate, so new cards left do not make Quit a give-up.
+  const calls = [];
+  let now = 1000;
+  const tm = playScene({
+    levelBreak: true, state: 'paused', runIsEducation: true, runIsTest: false, match: null, shopOpen: false, quizOpen: false, quizButton: {}, breakQuitArmedAt: null, registry: registry(),
+    runQuiz: { ...newTally(), answered: 3, right: 3 }, isTestMode: () => true,
+    time: { get now() { return now; }, delayedCall() {} },
+    quizCounts: () => ({ new: 2, missed: 0, review: 0 }),
+    endRun: () => calls.push('endRun'), showOver: () => calls.push('showOver'), refreshShopButton() {},
+  });
+  tm.breakQuitTap();
+  now += 500;
+  tm.breakQuitTap();
+  assert.deepEqual([calls, tm.breakGaveUp], [['endRun', 'showOver'], false], 'test mode on: no gate, so a normal end');
 });
 
 test('an armed Quit does not carry into the next break (plan 27: a hunch of the 2026-11-15 audit): endLevelBreak and startLevelBreak disarm it, so one tap at the next break only arms it', () => {
