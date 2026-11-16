@@ -46,14 +46,17 @@ test('timing: frame deltas, distance, time per level, frame rate, long frames, a
   assert.deepEqual([row.score, row.level, row.won, row.mode, row.toilet], [7, 2, false, 'single', false]);
 });
 
-test('per level: pipes, falls, close calls and deaths land in the level they happened in; fart and skip pipes are counted', () => {
+test('per level: pipes, falls, close calls and deaths land in the level they happened in; fart pipes and skipped pairs are counted', () => {
   const s = begun();
   s.pipe();
   s.pipe(true);
   s.fall();
   s.closeCall();
+  s.skip(0); // nothing skipped
+  s.skip(-3); // junk
   s.level(3);
-  s.pipe(false, true);
+  s.skip(1);
+  s.pipe(false);
   s.closeCall();
   s.death();
   s.level(99); // past the last level: counted in the last
@@ -156,7 +159,8 @@ test('a row at its fullest stays under the 4 KB the server takes', () => {
     s.press(['touch', 'mouse', 'key', 'pad'][i % 4], T0 + i, i % 720, i % 1280, 720, 1280);
     s.release(T0 + i + 77.77);
     if (i % 700 === 0) s.level(1 + (i / 700));
-    s.pipe(i % 3 === 0, i % 5 === 0);
+    s.pipe(i % 3 === 0);
+    if (i % 500 === 0) s.skip(25);
   }
   for (let b = 0; b < 8; b += 1) {
     s.breakStart(T0 + b * 1e5);

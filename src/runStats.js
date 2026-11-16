@@ -120,13 +120,16 @@ export function createRunStats() {
       if (c.active && Number.isInteger(n)) c.level = n;
     },
 
-    /** A pipe pair was passed; whether inside a fart or a skip. */
-    pipe(inFart = false, inSkip = false) {
+    /** A pipe pair was passed; whether inside a fart. */
+    pipe(inFart = false) {
       if (!c.active) return;
       c.pipes += 1;
       lvPipes[lv()] += 1;
       if (inFart) c.fartPipes += 1;
-      if (inSkip) c.skipPipes += 1;
+    },
+    /** A level picked at a break moved the run past `n` pairs it never flew. */
+    skip(n) {
+      if (c.active && finite(n) && n > 0) c.skipPipes += n;
     },
     fall() {
       if (!c.active) return;

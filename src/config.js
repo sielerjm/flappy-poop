@@ -521,6 +521,8 @@ export const LEADERBOARD = {
   dailyKey: 'flappyPoop.daily', // localStorage key for this device's Daily Dump (🌞) attempt: claimed at the start, rewritten as the score grows
   dailyQueueKey: 'flappyPoop.dailyQueue', // localStorage key for Daily Dump scores the board has not confirmed yet (submit_daily_score)
   dailyQueueMax: 3, // daily scores kept for a later post (one per player and day); the oldest goes first when full
+  runQueueKey: 'flappyPoop.runQueue', // localStorage key for run summaries not yet sent (submit_runs; plan 30)
+  runQueueMax: 50, // run summaries kept for a later send; the oldest go first when full
   eduKey: 'flappyPoop.eduSrs', // localStorage key for this device's education cards (plan 21): each card's scheduler state and tallies, and the last cards shown
   eduConsentKey: 'flappyPoop.eduConsent', // localStorage key for this device's consent to the education tester pilot (plan 21): the notice's version, the phase and when; absent unless the tester joined
   researchQueueKey: 'flappyPoop.researchQueue', // localStorage key for a pilot tester's answer events the server has not confirmed yet (submit_research_events)

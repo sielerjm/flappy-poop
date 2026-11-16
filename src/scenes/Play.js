@@ -111,6 +111,8 @@ import {
 } from '../logic.js';
 import { t, pauseBannerText, levelBannerText, levelLabel, initialLocale, isLocale, profileButtonText, countText, versusName, countLines } from '../i18n.js';
 import { loadLocal, saveLocal, ensureId, recordScore, mergeBoardBests, newId, TOILET_EMOJI } from '../save.js';
+import { createRunStats } from '../runStats.js';
+import { VERSION as APP_VERSION } from '../logic.js';
 import { browserStorage } from '../store.js';
 import { runDeltas, evaluate, bestFacts, levelCloseShave, winsInWindow, daysBetween, nextDrawStreak, FOUR_OF_A_KIND, EDU_ACHIEVEMENTS, eduRunFacts } from '../achievements.js';
 import { unlock, attachGame, setMuted, isMuted, sfx } from '../sound.js';
@@ -122,7 +124,7 @@ import { perfMark, perfSteps, perfRunStart } from '../ui/perfMeter.js';
 import { createFinishTexture } from '../ui/finish.js';
 import { createLightTexture } from '../ui/pipeShade.js';
 import { createLevelBar } from '../ui/levelBar.js';
-import { enrolResearch, submitResearchEvents, deleteResearch, createEduShareStore, shareEducation, renameEducation, unshareEducation, submitEducationGrades, fetchEducationBoard, createSubmitStore, createMergeStore, createRenameStore, createTournamentQueue, createDailyStore, createDailyQueue, submitDailyScore, fetchDailyBoard, submitPlans, submitScore, submitTournament, checkNameAvailable, mergePlayers, fetchPlayerName, fetchRank, nameAction, createCareerStore, submitCounters, claimAchievements, fetchPlayerStats } from '../leaderboard.js';
+import { enrolResearch, submitResearchEvents, deleteResearch, createEduShareStore, shareEducation, renameEducation, unshareEducation, submitEducationGrades, fetchEducationBoard, createSubmitStore, createMergeStore, createRenameStore, createTournamentQueue, createDailyStore, createDailyQueue, createRunQueue, submitDailyScore, fetchDailyBoard, submitPlans, submitScore, submitTournament, checkNameAvailable, mergePlayers, fetchPlayerName, fetchRank, nameAction, createCareerStore, submitCounters, claimAchievements, fetchPlayerStats } from '../leaderboard.js';
 import { createButton } from '../ui/button.js';
 import { createToggle } from '../ui/toggle.js';
 import { createCoinText } from '../ui/coinText.js';
@@ -151,6 +153,49 @@ const TEXT_STYLE = {
 let bootSynced = false;
 /** The game registry's flag: this page load has asked the 📚 row for its round (drainEduShare's probe). */
 const EDU_ROUND_PROBED = 'eduRoundProbed';
+
+// The press behind the input being handled right now (plan 30): set around an input listener's
+// synchronous work and read by doFlap, so each flap of a run's summary is counted by what stood
+// behind it (pressFacts). One object, reused; never exported; both halves of a match share it.
+// Counts only: nothing here decides anything about a press.
+const STAMP = { active: false, trusted: false, recent: false, ts: -1 };
+const RECENT_MS = 1000; // Phaser hands a key over on its next step, which a long frame can hold back; a replayed old event is far older
+let lastFlapTs = -1;
+// The browser's own timeStamp getter, taken as this module loads: it answers only for a real event
+// (anything else throws), so a plain object or a copy dressed up as an event is no press.
+const EVENT_TS = globalThis.Event ? Object.getOwnPropertyDescriptor(globalThis.Event.prototype, 'timeStamp')?.get ?? null : null;
+
+/**
+ * What a press's event says: { trusted (a real browser event the browser marks as a person's: its
+ * isTrusted cannot be set on a real event), recent (made within RECENT_MS of `now`), ts (its
+ * timeStamp, or -1) }. A pad press (no event) counts as trusted and recent. Exported for its tests.
+ */
+export function pressFacts(event, kind, now) {
+  if (kind === 'pad') return { trusted: true, recent: true, ts: -1 };
+  let ts = -1;
+  try {
+    ts = EVENT_TS && event ? EVENT_TS.call(event) : -1;
+  } catch {
+    ts = -1;
+  }
+  if (typeof ts !== 'number' || !(ts >= 0)) return { trusted: false, recent: false, ts: -1 };
+  return { trusted: event.isTrusted === true, recent: now - ts >= -1 && now - ts < RECENT_MS, ts };
+}
+
+/** Run fn with STAMP describing `event` (null for a pad press). A nested press puts the outer one back. */
+function withInput(event, kind, fn) {
+  const was = [STAMP.active, STAMP.trusted, STAMP.recent, STAMP.ts];
+  const facts = pressFacts(event, kind, globalThis.performance?.now?.() ?? 0);
+  STAMP.active = true;
+  STAMP.trusted = facts.trusted;
+  STAMP.recent = facts.recent;
+  STAMP.ts = facts.ts;
+  try {
+    return fn();
+  } finally {
+    [STAMP.active, STAMP.trusted, STAMP.recent, STAMP.ts] = was;
+  }
+}
 
 export class Play extends Phaser.Scene {
   /** 'Play' is the single-player scene and the left half (P1) of a versus match; 'PlayB' is the right half. */
@@ -191,6 +236,10 @@ export class Play extends Phaser.Scene {
     this.poopX = poopX(W, T);
     this.fieldResizeWanted = false;
     this.sweep = null; // the pre-fill's sweep-in on a wide field (prefillPipes / endSweep)
+    this.runStats = createRunStats(); // this run's summary (plan 30), kept while runStatsOn
+    this.runStatsOn = false;
+    this.flapInfo = { now: 0, applied: false, internal: false, pressed: false, trusted: false, fresh: false, lip: null }; // reused per flap
+    this.runQueue = createRunQueue();
     // Every random draw of the run comes from the course (createCourse): one stream in single
     // player, a shared per-pair course in a match so both halves get the same pipes and pickups.
     // A match rolls its mystery draws from a stream of its own per player (rngDraw), so what a
@@ -620,12 +669,23 @@ export class Play extends Phaser.Scene {
     // the keyboard is read by the left half alone and routed to the half whose key group
     // pressed (onVersusKey), so one key never flaps twice.
     this.input.on('pointerdown', (pointer) => {
-      const p = this.localPointer(pointer);
-      if (p) this.flap(p);
+      const kind = pointer.wasTouch ? 'touch' : 'mouse';
+      this.statCall('press', kind, this.statNow(), pointer.x, pointer.y, this.fieldW, GAME_HEIGHT);
+      withInput(pointer.event, kind, () => {
+        const p = this.localPointer(pointer);
+        if (p) this.flap(p);
+      });
     });
+    this.input.on('pointerup', () => this.statCall('release', this.statNow()));
     const keys = !this.match || this.player === 1 ? this.input.keyboard : null;
-    keys?.on('keydown-SPACE', () => !this.match && this.flap());
-    keys?.on('keydown-UP', () => !this.match && this.flap());
+    const flapKey = (event) => {
+      this.statCall('press', 'key', this.statNow());
+      return withInput(event, 'key', () => !this.match && this.flap());
+    };
+    keys?.on('keydown-SPACE', flapKey);
+    keys?.on('keydown-UP', flapKey);
+    keys?.on('keyup-SPACE', () => this.statCall('release', this.statNow()));
+    keys?.on('keyup-UP', () => this.statCall('release', this.statNow()));
     keys?.on('keydown-M', () => this.handleChrome('mute'));
     keys?.on('keydown-P', () => this.handleChrome('pause'));
     keys?.on('keydown-ESC', () => this.handleChrome('esc'));
@@ -635,11 +695,16 @@ export class Play extends Phaser.Scene {
     keys?.on('keydown-F', () => this.handleChrome('feedback'));
     keys?.on('keydown-T', () => this.handleChrome('leaderboard'));
     keys?.on('keydown-B', () => !this.match && this.activatePower()); // no-op unless the bean power is charged
-    keys?.on('keydown', (event) => this.onVersusKey(event?.code)); // a match: each key group is one player's flap / power
+    keys?.on('keydown', (event) => withInput(event, 'key', () => this.onVersusKey(event?.code))); // a match: each key group is one player's flap / power
     // Gamepad: one binding for the whole game (overlays, Over and the other half of a match run
     // on top of or beside this scene, which is never paused); onPadAction routes each press to
     // whichever scene is on top, and in a match to the half that claimed the pad.
-    this.pad = !this.match || this.player === 1 ? bindPad(this, (action, padIndex) => this.onPadAction(action, padIndex), T) : null;
+    this.pad = !this.match || this.player === 1
+      ? bindPad(this, (action, padIndex) => {
+          if (action === 'select' || action === 'power') this.statCall('press', 'pad', this.statNow());
+          return withInput(null, 'pad', () => this.onPadAction(action, padIndex));
+        }, T)
+      : null;
 
     this.onHidden = () => {
       if (typeof document !== 'undefined' && document.hidden) this.autoPause();
@@ -738,7 +803,7 @@ export class Play extends Phaser.Scene {
         this.launching = false;
         if (this.state !== 'ready' || hold) return;
         this.start();
-        this.doFlap();
+        this.doFlap({ internal: true });
         // An overlay opened mid-slide must not leave the run playing under it.
         if (this.chromeArgs('tap').overlay) this.pauseRun();
       },
@@ -772,7 +837,7 @@ export class Play extends Phaser.Scene {
     this.setPoopTexture('poop');
     this.poop.setPosition(this.poopX, GAME_HEIGHT / 2).setScale(T.spriteDisplayScale);
     this.start();
-    this.doFlap();
+    this.doFlap({ internal: true });
     this.armStartBoost();
     if (this.chromeArgs('tap').overlay) this.pauseRun();
   }
@@ -886,6 +951,72 @@ export class Play extends Phaser.Scene {
       this.daily = { day: daily.day, level: daily.level, startPipes: begin.pipes, playerId: this.save.id, saved: null };
       this.saveDailyAttempt(false);
     }
+    // This run's summary (plan 30): single-player and Daily runs only; never a test run, an
+    // education run (its popup promises its data stays here) or a match half.
+    this.runStatsOn = !this.match && !this.runIsTest && !this.runIsEducation;
+    if (this.runStatsOn) this.statCall('begin', {
+      runId: newId(),
+      session: this.runSession(),
+      mode: daily ? 'daily' : 'single',
+      day: daily?.day ?? null,
+      toilet: this.toilet,
+      level: this.level,
+      version: APP_VERSION,
+      now: this.statNow(),
+      wall: Date.now(),
+      webdriver: globalThis.navigator?.webdriver === true,
+      touch: (globalThis.navigator?.maxTouchPoints ?? 0) > 0,
+      fieldW: this.fieldW,
+    });
+  }
+
+  /** A random value for this page load (never stored): which run summaries came from one page. */
+  runSession() {
+    if (!this.registry.get('runSession')) this.registry.set('runSession', newId());
+    return this.registry.get('runSession');
+  }
+
+  /** The monotonic clock the run summary uses. */
+  statNow() {
+    return globalThis.performance?.now?.() ?? 0;
+  }
+
+  /**
+   * Feed this run's summary (plan 30): runStats[method](...) while one is kept. The first error
+   * switches the summary off for the rest of the run; the run itself never notices.
+   */
+  statCall(method, a, b, c, d, e, f) {
+    if (!this.runStatsOn) return;
+    try {
+      this.runStats[method](a, b, c, d, e, f);
+    } catch {
+      this.runStatsOn = false;
+    }
+  }
+
+  /** The poop's height over the next gap's lower lip (px; negative below it), or null with no pair ahead. */
+  lipDistance() {
+    let lip = null;
+    let x = Infinity;
+    for (const p of this.pipes.getChildren()) {
+      // A bottom pipe stands up from its gap (origin at its top): its y is the gap's lower lip.
+      if (!p.active || p.originY !== 0 || p.x + T.pipeWidth / 2 < this.poop.x - T.poopRadius || p.x >= x) continue;
+      x = p.x;
+      lip = p.y;
+    }
+    return lip === null ? null : lip - this.poop.y;
+  }
+
+  /** The run's summary row, queued for the next sync (endRun); nothing when none was kept. */
+  queueRunSummary() {
+    if (!this.runStatsOn) return;
+    this.runStatsOn = false;
+    try {
+      const row = this.runStats.end({ now: this.statNow(), wall: Date.now(), score: this.score, level: this.level, won: Boolean(this.won) });
+      if (row) this.runQueue.add({ playerId: this.save?.id ?? null, row });
+    } catch {
+      /* the summary never stops a run */
+    }
   }
 
   /**
@@ -941,6 +1072,7 @@ export class Play extends Phaser.Scene {
     const final = isFinalLevel(this.level, T);
     if (!final) {
       this.level += 1;
+      this.statCall('level', this.level);
       this.runTopLevel = Math.max(this.runTopLevel ?? 0, this.level);
       this.refreshLevelBar(); // new level: label steps, fill back to 0
     }
@@ -1085,6 +1217,7 @@ export class Play extends Phaser.Scene {
     this.breakLevelPick = null; // no level chosen yet (plan 26, A2)
     this.breakQuitArmedAt = null; // a Quit armed at the last break never carries into this one (plan 27)
     this.refreshLevelBanner();
+    this.statCall('breakStart', this.statNow());
     this.pausePlay();
     this.breakHud(true);
     this.fadeBackground();
@@ -1126,6 +1259,7 @@ export class Play extends Phaser.Scene {
     // An education run continuing into this level unlocks it as a start level (plan 25); a test run never does.
     if (this.runIsEducation && !this.runIsTest) this.eduStore.unlockLevel(this.level);
     this.applyLevelPick(); // a level chosen at this break: the run goes on from its first pair (plan 26, A2)
+    this.statCall('breakEnd', this.statNow());
     this.levelBreak = false;
     this.gateTapped = false;
     this.breakQuitArmedAt = null; // an armed Quit ends with its break (plan 27)
@@ -2312,14 +2446,31 @@ export class Play extends Phaser.Scene {
     }
   }
 
-  /** A flap, when one is allowed (playing, no lockout, no fart); true when it flapped. */
-  doFlap() {
+  /**
+   * A flap, when one is allowed (playing, no lockout, no fart); true when it flapped. `internal`:
+   * the game's own flap (the launch, a race's GO), not a press. A run's summary counts each one.
+   */
+  doFlap({ internal = false } = {}) {
     if (this.state !== 'playing') return false;
-    if (this.time.now < this.flapLockedUntil) return false;
-    if (this.effects.powerActive()) return false; // the fart carries the poop through the middle
-    this.poop.setVelocityY(T.flapVelocity);
-    sfx.flap();
-    return true;
+    // No lockout, and no fart (it carries the poop through the middle).
+    const applied = !(this.time.now < this.flapLockedUntil) && !this.effects.powerActive();
+    if (applied) {
+      this.poop.setVelocityY(T.flapVelocity);
+      sfx.flap();
+    }
+    if (this.runStatsOn) {
+      const f = this.flapInfo;
+      f.now = this.statNow();
+      f.applied = applied;
+      f.internal = internal;
+      f.pressed = !internal && STAMP.active;
+      f.trusted = f.pressed && STAMP.trusted;
+      f.fresh = f.trusted && STAMP.recent && (STAMP.ts < 0 || STAMP.ts !== lastFlapTs);
+      if (f.pressed && STAMP.ts >= 0) lastFlapTs = STAMP.ts;
+      f.lip = this.lipDistance();
+      this.statCall('flap', f);
+    }
+    return applied;
   }
 
   /**
@@ -2524,6 +2675,7 @@ export class Play extends Phaser.Scene {
     if (this.state !== 'playing' && this.state !== 'respawn') return;
     this.respawnPaused = this.state === 'respawn'; // resumePlay returns to the respawn, not to play
     this.state = 'paused';
+    if (!this.levelBreak) this.statCall('pause', this.statNow(), globalThis.document?.hidden === true);
     this.physics.pause();
     this.pauseEffects();
     this.bob.pause();
@@ -2585,6 +2737,7 @@ export class Play extends Phaser.Scene {
       return;
     }
     if (this.levelBreak) this.endLevelBreak();
+    this.statCall('resume', this.statNow());
     this.state = 'playing';
     this.physics.resume();
     this.resumeEffects();
@@ -3027,6 +3180,7 @@ export class Play extends Phaser.Scene {
     const near = this.pipes.getChildren().some((pipe) => pipe.body && pipeClearance(this.poop.x, this.poop.y, T.poopRadius, pipe.body) <= T.scaredNearPx);
     if (near && this.scaredMs <= 0) {
       this.runCloseCalls = (this.runCloseCalls ?? 0) + 1; // 😢 a close call starts the clock
+      this.statCall('closeCall');
       if (this.closeCallsByLevel) this.closeCallsByLevel[this.level] = (this.closeCallsByLevel[this.level] ?? 0) + 1; // 💈 per level
     }
     this.scaredMs = near ? T.scaredHoldMs : Math.max(0, this.scaredMs - delta);
@@ -3479,6 +3633,7 @@ export class Play extends Phaser.Scene {
     }
     this.refreshCoinHud();
     this.playSample('coin-spend', T.coinSpendVolume, sfx.pickup);
+    this.statCall('shopBuy');
     return true;
   }
 
@@ -3616,7 +3771,9 @@ export class Play extends Phaser.Scene {
     this.breakLevelPick = null;
     if (pick != null && pick !== this.level) {
       const begin = testRunStart(pick, this.tune);
+      this.statCall('skip', begin.pipes - this.pipesPassed); // pairs passed over, never flown (a pick back skips none)
       this.level = begin.level;
+      this.statCall('level', this.level);
       this.pipesPassed = begin.pipes;
       this.pipesSpawned = begin.pipes;
       this.runSkipped = true;
@@ -3789,6 +3946,7 @@ export class Play extends Phaser.Scene {
   /** Open the shop panel (the 💰 in a level break): the rows, the purse, the open sound. */
   openShop() {
     if (this.shopOpen || !this.shopButtonShown()) return;
+    this.statCall('shopOpen');
     const L = this.shopBoxes;
     const nameStyle = { ...TEXT_STYLE, fontSize: '32px' };
     const panel = this.add.rectangle(L.panel.x, L.panel.y, L.panel.width, L.panel.height, 0x1a0b14, 0.95).setStrokeStyle(8, 0xe85e96).setDepth(27).setScale(0.8);
@@ -4083,6 +4241,7 @@ export class Play extends Phaser.Scene {
       this.syncLeaderboard();
       return;
     }
+    this.queueRunSummary(); // plan 30: the run's summary, sent with the next sync
     // A Daily Dump records only itself: the attempt is final and its score queued for the 🌞 board,
     // never the 🏆 top list or best (an endless score above maxScore would stop every 🏆 post).
     if (this.runIsDaily) {
@@ -4586,6 +4745,7 @@ export class Play extends Phaser.Scene {
     if (this.state !== 'playing') return;
     // Farting (or just finished and still clearing the pipe) cannot die; nor can an Invincible test run.
     if (this.effects.powerActive() || this.graceLeftMs > 0 || this.testInvincible()) return;
+    this.statCall('death');
     // A match: the crash costs points and a respawn, never the run. An education run (plan 21): the
     // revive quiz decides (startEduRevive). Single player: the run ends, and the coins and every
     // power-up go with it (Over still shows what the run collected).
@@ -4922,6 +5082,7 @@ export class Play extends Phaser.Scene {
       if (this.effects.endedPower()) this.endPower();
       if (this.graceLeftMs > 0) this.graceLeftMs = Math.max(0, this.graceLeftMs - delta);
       this.distance += this.scrollSpeed() * dt;
+      if (this.runStatsOn) this.statCall('frame', delta, this.scrollSpeed() * dt);
       const spacing = pipeSpacing(this.level, T);
       if (this.spawnHeldByFart()) {
         this.distanceSinceSpawn = 0;
@@ -4956,7 +5117,10 @@ export class Play extends Phaser.Scene {
         // ‼️ one long fall per drop past fallLookVy (never while the poop cannot be hurt).
         const fall = fallStarted(this.fallingNow, this.poop.body.velocity.y, T);
         this.fallingNow = fall.falling;
-        if (fall.started && this.graceLeftMs <= 0 && !this.testInvincible()) this.runFalls = (this.runFalls ?? 0) + 1;
+        if (fall.started && this.graceLeftMs <= 0 && !this.testInvincible()) {
+          this.runFalls = (this.runFalls ?? 0) + 1;
+          this.statCall('fall');
+        }
         this.tickScared(delta);
         this.refreshPoopLook(); // the near-miss face, else the falling face past fallLookVy, back to plain / stink on the next flap
       }
@@ -5013,6 +5177,7 @@ export class Play extends Phaser.Scene {
         const mult = this.effects.multiplier(); // read before the countdown: the last postbiotic pipe still counts double
         this.score += pipePoints(T, mult);
         this.pipesPassed += 1;
+        if (this.runStatsOn) this.statCall('pipe', this.effects.powerActive());
         this.levelBar.setProgress(levelProgress(this.pipesPassed, this.level, this.tune));
         this.scoreText.setText(String(this.score));
         this.showPipePopup(mult);

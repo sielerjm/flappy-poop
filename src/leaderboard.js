@@ -452,6 +452,46 @@ export function createDailyQueue(storage = browserStorage(), { key = LEADERBOARD
   return createPostQueue(storage, { key, max, normalize: normalizeDailyEntry, idOf: dailyEntryId });
 }
 
+/** A queued run summary: { playerId (the id it was flown under, or null before the device had one), row }. */
+function normalizeRunEntry(raw) {
+  if (!raw || typeof raw !== 'object') return null;
+  const row = raw.row;
+  if (!row || typeof row !== 'object' || typeof row.run_id !== 'string' || !row.run_id) return null;
+  const playerId = typeof raw.playerId === 'string' && raw.playerId ? raw.playerId : null;
+  return { playerId, row };
+}
+
+/**
+ * Run summaries waiting for submit_runs (plan 30), oldest first, at most `max` (the oldest go first).
+ * add() queues a row once (by its run id); remove() drops the rows sent; claim() gives the rows
+ * flown before the device had an id to that id. Storage errors never throw.
+ */
+export function createRunQueue(storage = browserStorage(), { key = LEADERBOARD.runQueueKey, max = LEADERBOARD.runQueueMax } = {}) {
+  const store = createJsonStore(storage, key, (raw) => (Array.isArray(raw) ? raw.map(normalizeRunEntry).filter(Boolean) : []));
+  return {
+    load: () => store.read(),
+    add(raw) {
+      const e = normalizeRunEntry(raw);
+      if (!e) return null;
+      const all = store.read();
+      if (all.some((q) => q.row.run_id === e.row.run_id)) return e;
+      store.write([...all, e].slice(-Math.max(1, max)));
+      return e;
+    },
+    remove(runIds) {
+      const gone = new Set(runIds);
+      const all = store.read();
+      const kept = all.filter((q) => !gone.has(q.row.run_id));
+      if (kept.length !== all.length) store.write(kept);
+    },
+    claim(playerId) {
+      if (typeof playerId !== 'string' || !playerId) return;
+      const all = store.read();
+      if (all.some((q) => q.playerId === null)) store.write(all.map((q) => (q.playerId === null ? { ...q, playerId } : q)));
+    },
+  };
+}
+
 /**
  * One request with the apikey header and a timeout. Resolves to the parsed
  * JSON body (undefined for an empty 2xx body) or to null on any failure. With

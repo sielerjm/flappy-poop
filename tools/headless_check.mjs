@@ -82,6 +82,7 @@ export const SECTIONS = [
   { name: 'education-backup', needs: [], about: "💾 backup and restore of the 📚 cards (plan 28, 3.1b), the share sheet stubbed as on a phone: Back up reaches the sheet inside the tap with one JSON file (nothing that names the player), the same file restored again changes nothing, the cards deleted and restored from the file come back while the 📚 board would get none of their runs, the panel at 375 px (no sideways scroll, 44 px buttons), restore disabled over a paused run, Clear's note about the cards" },
   { name: 'blocked-storage', needs: [], about: "blocked site data (plan 28, 1.3): the page reloaded with every read of localStorage throwing still boots past the splash, holds a settings choice for the visit and plays a run to the game-over panel, with no page exception; the live board blocked at the browser for the rest of the run; then storage restored and the page reloaded" },
   { name: 'invite-link', needs: [], about: "the invite link (plan 28, 2.4): the page loaded with ?invite=<code> opens the 📚 Education data panel with the code filled in on the first ready screen; the address bar has lost the code; no storage keeps it; a load without it opens nothing (the live board blocked at the browser)" },
+  { name: 'run-stats', needs: [], about: "the run summary (plan 30): a run flown through Chrome's own input (keys and a mouse click, with a pause) has every flap but the launch counted as a real, fresh press; a run flown by direct calls has none; a pointer event forged with a plain object counts as a press but never a real one; each summary is queued with the run's numbers" },
 ];
 
 /** What a section needs: its own list, or (omitted) every section before it. */
@@ -6039,6 +6040,106 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
       await evaluate(`import('./src/ui/eduDataPanel.js').then((m) => (m.closeEduDataPanel(), true))`);
       const plain = await load('');
       ok(plain.state === 'ready' && !plain.open, 'a load without the link opens nothing');
+    });
+
+    await section('run-stats', async () => {
+      // The run summary (plan 30). Each run on a fresh page, the live board blocked at the browser; the
+      // summaries wait in flappyPoop.runQueue (this step sends nothing).
+      await cdp.send('Network.enable');
+      await cdp.send('Network.setBlockedURLs', { urls: ['*supabase.co*'] });
+      const P = `__flappy.scene.getScene('Play')`;
+      const fresh = async () => {
+        await cdp.send('Page.navigate', { url: `${url}/?r=${Date.now()}` });
+        await cdp.send('Page.bringToFront'); // a page left hidden gets no frames and never leaves Boot
+        let sp = null;
+        for (let i = 0; i < 120 && !sp?.enabled; i += 1) {
+          await sleep(500);
+          sp = await splashNow().catch(() => null);
+        }
+        if (sp?.enabled) {
+          await splashKey('keydown', ' ');
+          await splashKey('keyup', ' ');
+        }
+        for (let i = 0; i < 120 && (await playState().catch(() => null)) !== 'ready'; i += 1) await sleep(500);
+        await evaluate(`(() => { const r = document.getElementById('edu-intro-panel'); if (r && !r.hidden) document.getElementById('edu-intro-close')?.click(); ${P}.educationOn = false; document.activeElement?.blur?.(); return true; })()`);
+        await cdp.send('Page.bringToFront');
+        await sleep(300);
+      };
+      // ↑ flaps as Space does, and presses no DOM button that happens to hold the focus (Space would).
+      const space = async () => {
+        for (const type of ['keyDown', 'keyUp']) await cdp.send('Input.dispatchKeyEvent', { type, key: 'ArrowUp', code: 'ArrowUp', windowsVirtualKeyCode: 38, nativeVirtualKeyCode: 38 });
+      };
+      const pKey = async () => {
+        for (const type of ['keyDown', 'keyUp']) await cdp.send('Input.dispatchKeyEvent', { type, key: 'p', code: 'KeyP', windowsVirtualKeyCode: 80, nativeVirtualKeyCode: 80 });
+      };
+      const waitPlaying = async () => {
+        for (let i = 0; i < 40 && (await playState()) !== 'playing'; i += 1) await sleep(100);
+        return (await playState()) === 'playing';
+      };
+      const finish = async () => {
+        // End the run if it is still flying: a crash, or the run's end when grace or a fart blocks the crash.
+        if ((await playState()) === 'paused') await evaluate(`${P}.resumePlay(), true`);
+        if ((await playState()) === 'playing') await evaluate(`${P}.die(), true`);
+        if ((await playState()) === 'playing') await evaluate(`${P}.endRun(), true`);
+        await sleep(600);
+      };
+      const lastRow = () => evaluate(`(() => { const q = JSON.parse(localStorage.getItem('flappyPoop.runQueue') || '[]'); const e = q[q.length - 1]; return JSON.stringify(e ? { n: q.length, playerId: e.playerId, row: e.row } : null); })()`).then(JSON.parse);
+      const flapsOf = (d) => `${d.flaps} flaps: ${d.flaps_internal} the game's own, ${d.flaps_pressed} with a press, ${d.flaps_trusted} real, ${d.flaps_fresh} real and fresh`;
+
+      // 1. Chrome's own input: Space starts the run (the launch flap is the game's own), Space flaps,
+      // P pauses and P resumes, a mouse click on the field flaps.
+      await fresh();
+      await evaluate(`localStorage.removeItem('flappyPoop.runQueue'), true`);
+      await space();
+      const flewA = await waitPlaying();
+      await evaluate(`${P}.graceLeftMs = 60000, true`); // nothing ends this run early: the pause and the clicks need it flying
+      for (let i = 0; i < 8 && (await playState()) === 'playing'; i += 1) {
+        await sleep(330);
+        await space();
+      }
+      if ((await playState()) === 'playing') {
+        await pKey();
+        await sleep(800);
+        await tapAt(360, 640); // the resume tap
+        await sleep(300);
+      }
+      for (let i = 0; i < 4 && (await playState()) === 'playing'; i += 1) {
+        await sleep(330);
+        await tapAt(200, 640);
+      }
+      await finish();
+      const a = await lastRow();
+      const da = a?.row?.data;
+      // Phaser now and then hands one key event over twice: the second flap of that press is real but
+      // never fresh (fresh is one flap per press), so fresh may fall one short.
+      ok(flewA && da && da.flaps_internal === 1 && da.flaps_pressed >= 8 && da.flaps - da.flaps_internal === da.flaps_pressed && da.flaps_trusted === da.flaps_pressed && da.flaps_fresh >= da.flaps_pressed - 1 && da.press_key >= 8 && da.press_mouse >= 1,
+        `a run flown through Chrome's input: every flap but the launch is a real press, and fresh once per press (${da ? flapsOf(da) : 'no summary'}; ${da?.press_key ?? 0} key and ${da?.press_mouse ?? 0} mouse presses)`);
+      ok(a && a.row.mode === 'single' && a.row.length_ms > 0 && typeof a.row.started_at === 'number' && da.frame_ms > 0 && da.pauses === 1 && a.row.paused_ms >= 500 && typeof da.webdriver === 'boolean',
+        `its summary is queued with the run's numbers (length ${a?.row?.length_ms} ms, ${da?.frame_ms} ms of frames, ${da?.pauses} pause of ${a?.row?.paused_ms} ms, webdriver ${da?.webdriver})`);
+
+      // 2. Direct calls, the way a script driving the game would: no press behind any flap.
+      await fresh();
+      await evaluate(`${P}.flap(), true`);
+      const flewB = await waitPlaying();
+      for (let i = 0; i < 8 && (await playState()) === 'playing'; i += 1) {
+        await sleep(330);
+        await evaluate(`${P}.doFlap(), true`);
+      }
+      await finish();
+      const db = (await lastRow())?.row?.data;
+      ok(flewB && db && db.flaps - db.flaps_internal >= 3 && db.flaps_pressed === 0 && db.flaps_trusted === 0 && db.flaps_fresh === 0, `a run flown by direct calls has no press behind its flaps (${db ? flapsOf(db) : 'no summary'})`);
+
+      // 3. A pointer event forged with a plain object: a press, never a real one.
+      await fresh();
+      await space();
+      const flewC = await waitPlaying();
+      for (let i = 0; i < 6 && (await playState()) === 'playing'; i += 1) {
+        await sleep(330);
+        await evaluate(`${P}.input.emit('pointerdown', { x: 200, y: 640, wasTouch: true, event: { isTrusted: true, timeStamp: performance.now() } }), true`);
+      }
+      await finish();
+      const dc = (await lastRow())?.row?.data;
+      ok(flewC && dc && dc.flaps_pressed >= 3 && dc.flaps_trusted === 0 && dc.flaps_fresh === 0 && dc.press_touch >= 3, `a forged pointer event counts as a press but never a real one (${dc ? flapsOf(dc) : 'no summary'})`);
     });
 
     const f2 = await frame();
