@@ -77,13 +77,28 @@ test('leaderboardLayout: the 🏆 · 🌞 · 🏅 tabs sit between the title and
   assert.ok(L.tab.xs.every((x) => Math.abs(x - L.tab.track.x) <= L.tab.width / 2), 'the tap row spans every glyph');
   assert.ok(L.headerY < L.firstY - L.pitch / 2, 'the header sits above the first row');
   const lastRow = L.firstY + (LEADERBOARD.visibleRows - 1) * L.pitch;
-  assert.ok(lastRow + L.pitch / 2 <= L.footerY - 30, 'the window\'s rows end above the footer (two lines)');
+  assert.ok(lastRow + L.pitch / 2 <= L.pager.y - L.pager.height / 2, 'the window\'s rows end above the pager row (plan 28, 5.2), which sits above the footer');
   assert.ok(top >= 0 && bottom <= GAME_HEIGHT && L.panel.width <= GAME_WIDTH - 80, 'the panel fits the phone field with 40 px each side');
   assert.ok(L.cols.rank > cx - L.panel.width / 2 + 16 && L.cols.right < cx + L.panel.width / 2 - 16, 'rank and score inside the frame');
   assert.ok(L.cols.toilet - 24 - L.cols.name >= 230, 'a 🏆 name gets at least 230 px (for its tags)');
   assert.ok(L.versionY + 12 <= bottom - 8 && L.title.y - 26 >= top + 8, 'title and version inside the frame');
   assert.ok(L.cols.medalsRight < L.cols.right - 60, 'the medals end before a three-digit best-race number');
   assert.ok(L.title.x + L.titleMaxW / 2 < L.close.x - 24, 'a title shrunk to titleMaxW clears the ✕');
+});
+
+test('leaderboardLayout (plan 28, 5.2): the pager row ‹ 26-50 › sits under the window\'s 14 rows, inside the panel; the footer starts under it, so a second line grows down, clear of the arrows and the version', async () => {
+  const { LEADERBOARD } = await import('../src/config.js');
+  const cx = 360;
+  const L = leaderboardLayout(cx, 640);
+  const p = L.pager;
+  assert.equal(LEADERBOARD.visibleRows, 14, 'the pager takes what was the window\'s 15th row');
+  const bandBottom = L.firstY - L.pitch / 2 + LEADERBOARD.visibleRows * L.pitch + 8; // Leaderboard's band: the rows plus 16 px
+  assert.ok(p.y - p.height / 2 >= bandBottom, `under the window (top ${p.y - p.height / 2}, window bottom ${bandBottom})`);
+  assert.ok(p.height >= 56 && p.width >= 96, 'arrows big enough to tap');
+  assert.ok(cx - p.gap - p.width / 2 >= cx - L.panel.width / 2 + 16 && cx + p.gap + p.width / 2 <= cx + L.panel.width / 2 - 16, 'both arrows inside the panel');
+  assert.ok(2 * (p.gap - p.width / 2) >= 120, 'room between them for the label ("976-1000" at 28 px)');
+  assert.ok(L.footerTop >= p.y + p.height / 2 + 6, 'the footer\'s first line under the arrows');
+  assert.ok(L.footerTop + 2 * 32 <= L.versionY - 14, 'two footer lines (26 px) end above the version line');
 });
 
 test('a tap on the tab row picks the nearest glyph; the 🌞 footer names your rank', () => {
@@ -117,7 +132,7 @@ test('leaderboardLayout with four tabs (🏆 · 🌞 · 🏅 · 📚): the same 
   assert.deepEqual(tab.xs.map((x) => nearestTab(x, tab.xs)), [0, 1, 2, 3], 'a tap on a glyph picks it');
   assert.equal(nearestTab(tab.track.x + tab.width / 2, tab.xs), 3, 'the right end is 📚');
   // Everything but the tab row is the same panel.
-  for (const key of ['panel', 'title', 'close', 'headerY', 'firstY', 'pitch', 'footerY', 'versionY', 'cols', 'titleMaxW']) assert.deepEqual(four[key], three[key], key);
+  for (const key of ['panel', 'title', 'close', 'headerY', 'firstY', 'pitch', 'pager', 'footerTop', 'versionY', 'cols', 'titleMaxW']) assert.deepEqual(four[key], three[key], key);
   // The 📚 board's columns: the grade ends left of the run count, and a name keeps its room.
   const c = four.cols;
   assert.ok(c.gradeRight < c.right - 56, 'the grade ends before a three-digit run count');

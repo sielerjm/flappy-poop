@@ -1944,3 +1944,68 @@ test('a 📚 name belongs to one player (AUD-022): no second sharer, no 🌞-onl
   assert.equal((await asAnon(db, "select public.player_stats(null, 'sam') as r")).rows[0].r.education !== null, true, "the name leads to the sharer's profile");
   assert.deepEqual((await asAnon(db, 'select name from public.education_board(null, 25)')).rows, [], 'nobody has 3 graded runs yet');
 });
+
+// Board pages (plan 28, 5.2): each of the four boards takes p_offset (default 0) as its last argument.
+test('board pages (plan 28, 5.2): score_board, daily_board, tournament_board and education_board take p_offset (default 0) last, one signature each, anon only; a page holds places offset + 1 to offset + limit, the caller flagged on its own page and appended with its true rank on every other; a hidden player is still left out', async () => {
+  const db = await freshDb();
+  const today = await utcToday(db);
+  const N = 60;
+  // Player i holds place i + 1 on every board.
+  for (let i = 0; i < N; i += 1) {
+    const [pid, name] = [id(`PG${i}`), `P${i}`];
+    await db.query('insert into public.scores (player_id, name, score, toilet, level, updated_at) values ($1, $2, $3, false, 1, now() - make_interval(mins => $4))', [pid, name, 900 - i, i]);
+    await db.query('insert into public.daily_scores (player_id, day, name, score, level, pipes) values ($1, $2::date, $3, $4, 3, 0)', [pid, today, name, 900 - i]);
+    await db.query('insert into public.tournament_stats (player_id, name, best_score, gold) values ($1, $2, 10, $3)', [pid, name, 100 - i]);
+    await db.query('insert into public.education_public (player_id, name, runs, grade_sum) values ($1, $2, 4, $3)', [pid, name, (9000 - i * 10) * 4]);
+  }
+  const ME = id('PG40'); // place 41
+  const P = (from, to) => Array.from({ length: to - from + 1 }, (_, k) => `P${from + k - 1}`); // places from..to
+  const ranked = {
+    daily: (me, offset) => asAnon(db, 'select * from public.daily_board($1, null, 25, $2)', [me, offset]),
+    medals: (me, offset) => asAnon(db, 'select * from public.tournament_board($1, 25, $2)', [me, offset]),
+    education: (me, offset) => asAnon(db, 'select * from public.education_board($1, 25, $2)', [me, offset]),
+  };
+  const view = (rows) => rows.map((r) => (r.me ? `${r.name}#${r.rank}*` : r.name));
+  for (const [board, page] of Object.entries(ranked)) {
+    assert.deepEqual(view((await page(ME, 0)).rows), [...P(1, 25), 'P40#41*'], `${board}: page 1, the caller appended`);
+    assert.deepEqual(view((await page(ME, 25)).rows), [...P(26, 40), 'P40#41*', ...P(42, 50)], `${board}: page 2, the caller at its place`);
+    assert.deepEqual(view((await page(ME, 50)).rows), ['P40#41*', ...P(51, 60)], `${board}: page 3, short, the caller appended (ordered by rank)`);
+    assert.deepEqual((await page(ME, 25)).rows.map((r) => r.rank), [...Array(25).keys()].map((k) => k + 26), `${board}: page 2's ranks are 26 to 50`);
+    assert.deepEqual(view((await page(null, 25)).rows), P(26, 50), `${board}: page 2 for nobody`);
+    assert.deepEqual(view((await page(ME, 1000)).rows), ['P40#41*'], `${board}: past the end, only the caller`);
+    for (const odd of [null, -5, 0]) assert.deepEqual(view((await page(ME, odd)).rows), [...P(1, 25), 'P40#41*'], `${board}: offset ${odd} is page 1`);
+  }
+  // Page 1 as the game asks for it (no p_offset: PostgREST's named call), as before pages.
+  assert.deepEqual(view((await asAnon(db, 'select * from public.daily_board(p_player_id => $1, p_day => null, p_limit => 25)', [ME])).rows), [...P(1, 25), 'P40#41*']);
+  assert.deepEqual(view((await asAnon(db, 'select * from public.tournament_board(p_player_id => $1, p_limit => 25)', [ME])).rows), [...P(1, 25), 'P40#41*']);
+  assert.deepEqual(view((await asAnon(db, 'select * from public.education_board(p_player_id => $1, p_limit => 25)', [ME])).rows), [...P(1, 25), 'P40#41*']);
+  assert.deepEqual(view((await asAnon(db, 'select * from public.daily_board(p_player_id => $1, p_day => null, p_limit => 25, p_offset => 25)', [ME])).rows), [...P(26, 40), 'P40#41*', ...P(42, 50)], 'the named call with p_offset');
+  // 🏆 (no ranks: the rows in board order).
+  const scores = (me, offset, named = false) => asAnon(db, named ? 'select name from public.score_board(p_player_id => $1, p_limit => 25)' : 'select name from public.score_board($1, 25, $2)', named ? [me] : [me, offset]).then((r) => r.rows.map((x) => x.name));
+  assert.deepEqual(await scores(ME, 0), P(1, 25));
+  assert.deepEqual(await scores(ME, 25), P(26, 50));
+  assert.deepEqual(await scores(ME, 50), P(51, 60));
+  assert.deepEqual(await scores(null, 25), P(26, 50));
+  assert.deepEqual(await scores(ME, 1000), []);
+  for (const odd of [null, -5]) assert.deepEqual(await scores(ME, odd), P(1, 25), `score_board: offset ${odd} is page 1`);
+  assert.deepEqual(await scores(ME, null, true), P(1, 25), 'the named call without p_offset');
+  // A hidden player (plan 30) is left out of every page but their own view; the places close up.
+  assert.equal(await flag(db, 'P30'), 1);
+  assert.deepEqual(view((await ranked.daily(null, 25)).rows), [...P(26, 30), ...P(32, 51)], 'daily: page 2 without P30');
+  assert.deepEqual(view((await ranked.medals(id('PG30'), 25)).rows), [...P(26, 30), 'P30#31*', ...P(32, 50)], 'medals: P30 still sees their own row at their place');
+  assert.deepEqual(await scores(null, 25), [...P(26, 30), ...P(32, 51)], 'score_board: page 2 without P30');
+  // One signature each (the old ones dropped, so a call never finds two), anon's alone.
+  const want = {
+    score_board: 'p_player_id text, p_limit integer, p_offset integer',
+    daily_board: 'p_player_id text, p_day date, p_limit integer, p_offset integer',
+    tournament_board: 'p_player_id text, p_limit integer, p_offset integer',
+    education_board: 'p_player_id text, p_limit integer, p_offset integer',
+  };
+  for (const [fn, args] of Object.entries(want)) {
+    const sigs = (await db.query("select pg_get_function_identity_arguments(p.oid) as a from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname = 'public' and p.proname = $1", [fn])).rows.map((r) => r.a);
+    assert.deepEqual(sigs, [args], `${fn}: one signature, p_offset last`);
+    const types = args.replace(/p_[a-z_]+ /g, '');
+    const g = (await db.query(`select has_function_privilege('anon', 'public.${fn}(${types})', 'execute') as anon, has_function_privilege('authenticated', 'public.${fn}(${types})', 'execute') as auth`)).rows[0];
+    assert.deepEqual(g, { anon: true, auth: false }, `${fn}: anon may call it, authenticated may not`);
+  }
+});

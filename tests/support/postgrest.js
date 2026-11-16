@@ -61,6 +61,7 @@ const CASTS = {
   p_runs: '::int',
   p_grade_sum: '::bigint',
   p_limit: '::int',
+  p_offset: '::int', // a board's page (plan 28, 5.2)
   p_adult: '::boolean',
   p_toilet: '::boolean',
   p_score: '::int',

@@ -5,8 +5,9 @@ import { isTopOverlay, openChangelog } from '../ui/overlayStack.js';
 import { createTabs, nearestTab } from '../ui/tabs.js';
 import { t, metaFontSize, rankText, levelLabel, medalYouText, dailyYouText, dailyDayText, eduYouText } from '../i18n.js';
 import { bestByToilet, TOILET_EMOJI } from '../save.js';
-import { fetchTop, fetchRank, fetchTournamentBoard, fetchDailyBoard, withOwnRows } from '../leaderboard.js';
+import { fetchTop, fetchRank, fetchTournamentBoard, fetchDailyBoard, withOwnRows, boardPage } from '../leaderboard.js';
 import { createScrollView } from '../ui/scrollView.js';
+import { createPager, pageRangeText } from '../ui/pager.js';
 import { boardRecord } from '../education.js';
 
 const STYLE = { fontFamily: 'sans-serif', fontStyle: 'bold', color: '#ffffff', align: 'center' };
@@ -39,8 +40,9 @@ export class Leaderboard extends Phaser.Scene {
   constructor() {
     super('Leaderboard');
     this.gen = 0;
-    this.skipSync = false; // set by a switch: the restart loads the other board without syncing again
-    this.ringOnTab = false; // set by a switch under the pad: the restart puts the ring back on the switch
+    this.skipSync = false; // set by a switch or a page turn: the restart loads the board without syncing again
+    this.ringOn = null; // set by a switch or a page turn under the pad: the restart puts the ring back on that item ('tab', 'prev', 'next')
+    this.nextPage = 0; // set by ‹ ›: the page (0 = places 1-25) the restart shows; a fresh open or a tab switch leaves it 0
   }
 
   create() {
@@ -54,6 +56,11 @@ export class Leaderboard extends Phaser.Scene {
     this.switching = false;
     const skipSync = this.skipSync;
     this.skipSync = false;
+    // Every open and every tab switch starts on page 1 (Michael, 16 Nov): only ‹ › set nextPage, and it is
+    // read once. (Not the restart's data: Phaser keeps a scene's last data for a launch without any.)
+    this.page = this.nextPage;
+    this.nextPage = 0;
+    this.offset = this.page * LEADERBOARD.limit;
 
     const W = this.scale.width; // the live field (wider than 720 on desktop); the panel stays centred
     const cx = W / 2;
@@ -90,9 +97,10 @@ export class Leaderboard extends Phaser.Scene {
     // on the ring, runs it. It takes taps only once it has its text (linkFooter: a Text's tap box is
     // measured when it is made interactive).
     this.footerAction = null;
+    // Its first line's top under the ‹ › row (plan 28, 5.2): a second line (both 🏆 places) grows down.
     this.footer = this.add
-      .text(cx, L.footerY, '', { ...STYLE, fontSize: '26px', color: PINK, fontStyle: 'normal', wordWrap: { width: 500, useAdvancedWrap: true } })
-      .setOrigin(0.5)
+      .text(cx, L.footerTop, '', { ...STYLE, fontSize: '26px', color: PINK, fontStyle: 'normal', wordWrap: { width: 500, useAdvancedWrap: true } })
+      .setOrigin(0.5, 0)
       .on('pointerdown', () => {
         if (isTopOverlay(this)) this.footerAction?.();
       });
@@ -104,18 +112,25 @@ export class Leaderboard extends Phaser.Scene {
 
     const close = this.add.text(L.close.x, L.close.y, '✕', { ...STYLE, fontSize: '48px' }).setOrigin(0.5).setInteractive({ useHandCursor: true });
     close.on('pointerdown', () => this.close());
+    // ‹ 26-50 › (plan 28, 5.2), pinned under the rows' window (on the main camera, never scrolled): ‹
+    // greyed on page 1; › greyed until the page is in, and on the last page (pageDone).
+    this.pager = createPager(this, { x: cx, ...L.pager, onTurn: (dir) => this.turnPage(dir) });
+    this.pager.set({ prev: this.page > 0, next: false, label: pageRangeText(this.offset, 0, LEADERBOARD.limit) });
     // Everything outside the rows band stays on the main camera when the band becomes a scroll view.
-    this.fixed = [dimmer, panelRect, title, ...this.tabs.objects(), tabZone, this.status, this.footer, version, close];
+    this.fixed = [dimmer, panelRect, title, ...this.tabs.objects(), tabZone, this.status, this.footer, version, close, ...this.pager.objects()];
     this.scroll = null; // the rows' scroll view, once the board has loaded
     this.input.keyboard?.on('keydown-ESC', () => this.close());
-    // Controller: the ring sits on ✕ (A on the tabs moves to the next board); up / down scroll the rows once they are in.
+    this.input.keyboard?.on('keydown-LEFT', () => this.turnPage(-1)); // ← → turn pages (plan 28, 5.2), as ‹ ›
+    this.input.keyboard?.on('keydown-RIGHT', () => this.turnPage(1));
+    // Controller: the ring sits on ✕ (A on the tabs moves to the next board); up / down scroll the rows once
+    // they are in; left from the tabs reaches ‹, right goes on to › (a greyed arrow takes the ring but not A).
     this.focus = createFocus(this, T, {
-      items: [pressable('close', close), pressable('tab', tabZone), { ...pressable('footer', this.footer), visible: () => Boolean(this.footerAction) }, pressable('changelog', version)],
+      items: [pressable('close', close), pressable('tab', tabZone), pressable('prev', this.pager.prev), pressable('next', this.pager.next), { ...pressable('footer', this.footer), visible: () => Boolean(this.footerAction) }, pressable('changelog', version)],
       onVertical: (dir) => this.scroll?.scrollBy(dir === 'up' ? T.focus.scrollStepPx : -T.focus.scrollStepPx),
     });
     this.focus.show(); // only under a controller (registry padMode)
-    if (this.ringOnTab) this.focus.setIndex(this.focus.indexOf('tab'));
-    this.ringOnTab = false;
+    if (this.ringOn) this.focus.setIndex(this.focus.indexOf(this.ringOn));
+    this.ringOn = null;
 
     const gen = ++this.gen;
     this.loadBoard(gen, play, { skipSync });
@@ -130,8 +145,40 @@ export class Leaderboard extends Phaser.Scene {
     this.tabs.setIndex(TABS.indexOf(next));
     this.gen += 1; // drop any in-flight load
     this.skipSync = true;
-    this.ringOnTab = this.focus?.shown && this.focus.items[this.focus.index]?.id === 'tab';
-    this.time.delayedCall(T.toiletKnobMs, () => this.scene.restart());
+    this.ringOn = this.ringItem() === 'tab' ? 'tab' : null;
+    this.time.delayedCall(T.toiletKnobMs, () => this.scene.restart()); // nextPage stays 0: the other board opens on page 1
+  }
+
+  /** ‹ (dir -1) or › (+1): restart on the page before or after, without a second sync; a greyed arrow does nothing. */
+  turnPage(dir) {
+    if (this.switching || !isTopOverlay(this) || !this.pager?.enabled(dir)) return;
+    this.switching = true;
+    this.gen += 1; // drop any in-flight load
+    this.skipSync = true;
+    this.nextPage = Math.max(0, this.page + (dir < 0 ? -1 : 1));
+    const ring = this.ringItem();
+    this.ringOn = ring === 'prev' || ring === 'next' ? ring : null;
+    this.scene.restart();
+  }
+
+  /** The id of the ring's item while the ring shows, else null. */
+  ringItem() {
+    return this.focus?.shown ? (this.focus.items[this.focus.index]?.id ?? null) : null;
+  }
+
+  /** The page is in: › presses unless it is the last page (or the board is offline); the label ends at its last row. */
+  pageDone(count, last) {
+    this.pager.set({ prev: this.page > 0, next: !last, label: pageRangeText(this.offset, count, LEADERBOARD.limit) });
+  }
+
+  /**
+   * The footer's text, shrunk to fit between the ‹ › row and the version line: the 🏆 places on
+   * every page (plan 28, 5.2), with the name note under them, can run to five lines.
+   */
+  setFooter(text) {
+    this.footer.setScale(1).setText(text);
+    this.footer.setScale(fitScale(this.footer.height, this.L.versionY - this.L.footerTop - 18, 0));
+    return this.footer;
   }
 
   // Not `load`: Phaser installs its LoaderPlugin on every scene as this.load.
@@ -145,21 +192,22 @@ export class Leaderboard extends Phaser.Scene {
       }
     }
     const state = play?.getSaveState?.() ?? { name: '', top: [] };
+    const { offset } = this; // the page's first place - 1 (0 on page 1: the requests are today's)
     if (this.tab === 'education') {
-      const rows = await play.fetchEduBoard(state.id ?? null);
+      const rows = await play.fetchEduBoard(state.id ?? null, offset);
       if (gen !== this.gen || !this.scene.isActive()) return;
       this.showEducation(rows, play);
       return;
     }
     if (this.tab === 'medals') {
-      const rows = await fetchTournamentBoard(state.id ?? null);
+      const rows = await fetchTournamentBoard(state.id ?? null, { offset });
       if (gen !== this.gen || !this.scene.isActive()) return;
       this.showMedals(rows);
       return;
     }
     if (this.tab === 'daily') {
       const day = utcDayKey();
-      const rows = await fetchDailyBoard(state.id ?? null, day);
+      const rows = await fetchDailyBoard(state.id ?? null, day, { offset });
       if (gen !== this.gen || !this.scene.isActive()) return;
       this.showDaily(rows, day, state, { nameTaken: Boolean(play?.boardNameTaken), played: Boolean(play?.dailyPlayedToday?.()) });
       return;
@@ -169,30 +217,39 @@ export class Leaderboard extends Phaser.Scene {
     // A player can hold two rows (off and on the toilet). Ask for both whatever this device has
     // played: a player merged across devices has rows from all of them (player_rank answers null
     // for a kind with no row). The footer's "not on the board yet" stays keyed on the local best.
-    const [rows, off, on] = await Promise.all([fetchTop(named ? { playerId: state.id } : {}), named ? fetchRank(state.id, false) : null, named ? fetchRank(state.id, true) : null]);
+    // The ranks come on every page: the footer always gives the player's place (Michael, 16 Nov).
+    const [rows, off, on] = await Promise.all([fetchTop(named ? { playerId: state.id, offset } : { offset }), named ? fetchRank(state.id, false) : null, named ? fetchRank(state.id, true) : null]);
     const rank = { off, on, best };
     // Closed, or closed and reopened, while the requests were in flight.
     if (gen !== this.gen || !this.scene.isActive()) return;
     this.showBoard(rows, rank, state, { nameTaken: Boolean(play?.boardNameTaken) });
   }
 
-  /** The rows band: visibleRows rows tall, scrolled by a second camera (finger drag, wheel, d-pad). */
-  rowsBand() {
+  /** The rows' window: visibleRows rows tall (14 since plan 28, 5.2: the ‹ › row sits under it). */
+  bandBox() {
     const { cx, L } = this;
     const visible = Math.min(LEADERBOARD.visibleRows, LEADERBOARD.limit);
-    const band = { x: cx, y: L.firstY - L.pitch / 2 + (visible * L.pitch) / 2, width: L.panel.width, height: visible * L.pitch + 16 };
+    return { x: cx, y: L.firstY - L.pitch / 2 + (visible * L.pitch) / 2, width: L.panel.width, height: visible * L.pitch + 16, visible };
+  }
+
+  /** The rows band, scrolled by a second camera (finger drag, wheel, d-pad). */
+  rowsBand() {
+    const { visible, ...band } = this.bandBox();
     return { sv: createScrollView(this, band, { fixed: this.fixed }), visible };
   }
 
   showBoard(rawRows, rank, state, { nameTaken = false } = {}) {
-    const { locale, L } = this;
+    const { locale, L, offset } = this;
     const limit = LEADERBOARD.limit;
-    // The player's own rows sit at their ranks even when the top list came back without them (plan 30).
-    const rows = withOwnRows(rawRows, [rank.off, rank.on], state.name, limit);
+    // The player's own rows sit at their ranks even when the top list came back without them (plan 30),
+    // on the page their rank falls on only.
+    const rows = withOwnRows(rawRows, [rank.off, rank.on], state.name, limit, offset);
+    // The last page: the server sent less than a page (🏆 gives no total; an exact multiple of 25 shows one empty page).
+    this.pageDone(rows?.length ?? 0, rows === null || rawRows.length < limit);
 
     if (rows === null) {
       this.status.setText(t(locale, 'leaderboardOffline'));
-    } else if (rows.length === 0) {
+    } else if (rows.length === 0 && offset === 0) {
       this.status.setText(t(locale, 'scoresEmpty'));
     } else {
       this.status.setVisible(false);
@@ -201,16 +258,16 @@ export class Leaderboard extends Phaser.Scene {
       this.fixed.push(this.add.text(toiletX, L.headerY, TOILET_EMOJI, { ...STYLE, fontSize: '20px' }).setOrigin(0.5).setAlpha(0.7));
       this.fixed.push(this.add.text(levelX, L.headerY, t(locale, 'leaderboardLevel'), { ...STYLE, fontSize: '20px', color: DIM }).setOrigin(0.5));
       const { sv, visible } = this.rowsBand();
-      // Highlight each of the player's rows that made the board (up to two).
-      const ownRows = new Set([rank.off, rank.on].filter((r) => r && r.rank <= rows.length).map((r) => r.rank - 1));
-      const count = Math.max(rows.length, visible); // a short board still fills the window with – rows
+      // Highlight each of the player's rows on this page (up to two): place = offset + index + 1.
+      const ownRows = new Set([rank.off, rank.on].filter((r) => r && r.rank > offset && r.rank <= offset + rows.length).map((r) => r.rank - offset - 1));
+      const count = offset === 0 ? Math.max(rows.length, visible) : rows.length; // a short page 1 still fills the window with – rows; a later page ends at its last place (plan 28, 5.2)
       let y = L.firstY;
       for (let i = 0; i < count; i += 1) {
         y = L.firstY + i * L.pitch;
         const row = rows[i];
         const own = ownRows.has(i);
         const color = own ? PINK : row ? '#ffffff' : DIM;
-        sv.add(this.add.text(L.cols.rank, y, `${i + 1}.`, { ...STYLE, fontSize: '34px', color: row ? PINK : DIM }).setOrigin(0, 0.5));
+        sv.add(this.add.text(L.cols.rank, y, `${offset + i + 1}.`, { ...STYLE, fontSize: '34px', color: row ? PINK : DIM }).setOrigin(0, 0.5));
         sv.add(this.add.text(L.cols.right, y, row ? String(row.score) : '–', { ...STYLE, fontSize: '34px', color }).setOrigin(1, 0.5));
         if (row?.toilet) sv.add(this.add.text(toiletX, y, TOILET_EMOJI, { ...STYLE, fontSize: '30px' }).setOrigin(0.5));
         if (row) sv.add(this.add.text(levelX, y, levelLabel(locale, row.level ?? 1), { ...STYLE, fontSize: '24px', color: own ? PINK : MUTED, fontStyle: 'normal' }).setOrigin(0.5));
@@ -224,17 +281,18 @@ export class Leaderboard extends Phaser.Scene {
     }
 
     if (!state.name) {
-      this.footer.setText(t(locale, 'leaderboardJoin'));
+      this.setFooter(t(locale, 'leaderboardJoin'));
       return;
     }
-    // One line per own row that is below the board (rankText shows the 🚽 on the toilet row);
-    // "not on the board yet" when a local best of some kind has no row at all, or, when the last
-    // sync was refused because another player holds the username, what to do about it.
-    const lines = [rank.off, rank.on].filter((r) => r && r.rank > limit).map((r) => rankText(locale, r));
+    // One line per own row, on every page (rankText shows the 🚽 on the toilet row; Michael, 16 Nov:
+    // the footer always gives the player's place); "not on the board yet" when a local best of some
+    // kind has no row at all, or, when the last sync was refused because another player holds the
+    // username, what to do about it.
+    const lines = [rank.off, rank.on].filter(Boolean).map((r) => rankText(locale, r));
     const missing = rows !== null && ((rank.best.off && !rank.off) || (rank.best.on && !rank.on));
     if (nameTaken) lines.push(t(locale, 'leaderboardNameTaken'));
     else if (missing) lines.push(t(locale, 'leaderboardNotYet'));
-    if (lines.length) this.footer.setText(lines.join('\n'));
+    if (lines.length) this.setFooter(lines.join('\n'));
   }
 
   /**
@@ -242,28 +300,30 @@ export class Leaderboard extends Phaser.Scene {
    * appended with its true rank when it is below the top); the footer gives their rank and
    * how many tournaments they finished, or how to get on the board.
    */
-  showMedals(rows) {
-    const { locale, L } = this;
+  showMedals(raw) {
+    const { locale, L, offset } = this;
+    // The page's rows (the own row only on its page); the footer's place from the own row wherever it is.
+    const { rows, mine, last } = boardPage(raw, { offset, limit: LEADERBOARD.limit });
+    this.pageDone(rows?.length ?? 0, last);
     if (rows === null) {
       this.status.setText(t(locale, 'leaderboardOffline'));
       return;
     }
-    const mine = rows.find((r) => r.me) ?? null;
-    this.footer.setText(mine ? medalYouText(locale, mine) : t(locale, 'medalBoardJoin'));
-    if (rows.length === 0) {
+    this.setFooter(mine ? medalYouText(locale, mine) : t(locale, 'medalBoardJoin'));
+    if (rows.length === 0 && offset === 0) {
       this.status.setText(t(locale, 'medalBoardEmpty'));
       return;
     }
     this.status.setVisible(false);
     this.fixed.push(this.add.text(L.cols.right, L.headerY, t(locale, 'medalBoardBest'), { ...STYLE, fontSize: '20px', color: DIM }).setOrigin(1, 0.5));
     const { sv, visible } = this.rowsBand();
-    const count = Math.max(rows.length, visible);
+    const count = offset === 0 ? Math.max(rows.length, visible) : rows.length; // – rows on page 1 only (plan 28, 5.2)
     let y = L.firstY;
     for (let i = 0; i < count; i += 1) {
       y = L.firstY + i * L.pitch;
       const row = rows[i];
       const color = row?.me ? PINK : row ? '#ffffff' : DIM;
-      sv.add(this.add.text(L.cols.rank, y, `${row ? row.rank : i + 1}.`, { ...STYLE, fontSize: '34px', color: row ? PINK : DIM }).setOrigin(0, 0.5));
+      sv.add(this.add.text(L.cols.rank, y, `${row ? row.rank : offset + i + 1}.`, { ...STYLE, fontSize: '34px', color: row ? PINK : DIM }).setOrigin(0, 0.5));
       sv.add(this.add.text(L.cols.right, y, row ? String(row.best) : '–', { ...STYLE, fontSize: '30px', color }).setOrigin(1, 0.5));
       const medals = row ? sv.add(this.add.text(L.cols.medalsRight, y, `🥇${row.gold} 🥈${row.silver} 🥉${row.bronze}`, { ...STYLE, fontSize: '20px', color: row.me ? PINK : MUTED }).setOrigin(1, 0.5)) : null;
       const name = sv.add(this.add.text(L.cols.name, y, row ? row.name : '–', { ...STYLE, fontSize: '34px', color, align: 'left' }).setOrigin(0, 0.5));
@@ -281,31 +341,32 @@ export class Leaderboard extends Phaser.Scene {
    * the player's own row in pink (appended below the top when it is lower). The footer gives
    * their rank, says their score has yet to post, or how to play.
    */
-  showDaily(rows, day, state, { nameTaken = false, played = false } = {}) {
-    const { locale, L } = this;
+  showDaily(raw, day, state, { nameTaken = false, played = false } = {}) {
+    const { locale, L, offset } = this;
     this.fixed.push(this.add.text(this.cx, L.headerY, `${dailyDayText(locale, day)} · \u{1F31E} ${levelLabel(locale, dailyLevel(day, T))}`, { ...STYLE, fontSize: '22px', color: MUTED, fontStyle: 'normal' }).setOrigin(0.5));
+    const { rows, mine, last } = boardPage(raw, { offset, limit: LEADERBOARD.limit });
+    this.pageDone(rows?.length ?? 0, last);
     if (rows === null) {
       this.status.setText(t(locale, 'leaderboardOffline'));
       return;
     }
-    const mine = rows.find((r) => r.me) ?? null;
-    if (mine) this.footer.setText(dailyYouText(locale, mine));
-    else if (nameTaken && state.name) this.footer.setText(t(locale, 'leaderboardNameTaken'));
-    else if (played) this.footer.setText(t(locale, 'dailyRankQueued'));
-    else this.footer.setText(t(locale, 'dailyBoardJoin'));
-    if (rows.length === 0) {
+    if (mine) this.setFooter(dailyYouText(locale, mine));
+    else if (nameTaken && state.name) this.setFooter(t(locale, 'leaderboardNameTaken'));
+    else if (played) this.setFooter(t(locale, 'dailyRankQueued'));
+    else this.setFooter(t(locale, 'dailyBoardJoin'));
+    if (rows.length === 0 && offset === 0) {
       this.status.setText(t(locale, 'dailyBoardEmpty'));
       return;
     }
     this.status.setVisible(false);
     const { sv, visible } = this.rowsBand();
-    const count = Math.max(rows.length, visible);
+    const count = offset === 0 ? Math.max(rows.length, visible) : rows.length; // – rows on page 1 only (plan 28, 5.2)
     let y = L.firstY;
     for (let i = 0; i < count; i += 1) {
       y = L.firstY + i * L.pitch;
       const row = rows[i];
       const color = row?.me ? PINK : row ? '#ffffff' : DIM;
-      sv.add(this.add.text(L.cols.rank, y, `${row ? row.rank : i + 1}.`, { ...STYLE, fontSize: '34px', color: row ? PINK : DIM }).setOrigin(0, 0.5));
+      sv.add(this.add.text(L.cols.rank, y, `${row ? row.rank : offset + i + 1}.`, { ...STYLE, fontSize: '34px', color: row ? PINK : DIM }).setOrigin(0, 0.5));
       sv.add(this.add.text(L.cols.right, y, row ? String(row.score) : '–', { ...STYLE, fontSize: '34px', color }).setOrigin(1, 0.5));
       const name = sv.add(this.add.text(L.cols.name, y, row ? row.name : '–', { ...STYLE, fontSize: '34px', color, align: 'left' }).setOrigin(0, 0.5));
       name.setScale(fitScale(name.width, L.cols.level - name.x, 8)); // no 🚽 or LV columns here: the name gets the room up to the score
@@ -323,18 +384,19 @@ export class Leaderboard extends Phaser.Scene {
    * a link to the Education data panel. A row of the player's own means the server has them as
    * sharing: a device that did not know turns sharing on (Play.noteEduShared).
    */
-  showEducation(rows, play) {
-    const { locale, L } = this;
-    const mine = rows?.find((r) => r.me) ?? null;
+  showEducation(raw, play) {
+    const { locale, L, offset } = this;
+    const { rows, mine, last } = boardPage(raw, { offset, limit: LEADERBOARD.limit });
+    this.pageDone(rows?.length ?? 0, last);
     if (mine) play?.noteEduShared?.(true);
     if (mine) {
-      this.footer.setText(eduYouText(locale, mine));
+      this.setFooter(eduYouText(locale, mine));
     } else if (play?.eduShareOn?.()) {
       // The runs the board will get from this device (boardRecord: restored runs never go; plan 28, 3.1a).
       const need = T.education.boardMinRuns - (play.eduStore ? boardRecord(play.eduStore.load()).counters.gradedRuns : 0);
-      this.footer.setText(need > 0 ? t(locale, 'eduBoardMore').replace('{n}', String(need)) : t(locale, 'eduBoardQueued'));
+      this.setFooter(need > 0 ? t(locale, 'eduBoardMore').replace('{n}', String(need)) : t(locale, 'eduBoardQueued'));
     } else {
-      this.footer.setText(t(locale, 'eduBoardShare'));
+      this.setFooter(t(locale, 'eduBoardShare'));
       this.footerAction = () => this.openEduData(play);
       this.footer.setInteractive({ useHandCursor: true }); // now that it has its text: the tap box is the line
     }
@@ -342,7 +404,7 @@ export class Leaderboard extends Phaser.Scene {
       this.status.setText(t(locale, 'leaderboardOffline'));
       return;
     }
-    if (rows.length === 0) {
+    if (rows.length === 0 && offset === 0) {
       this.status.setText(t(locale, 'eduBoardEmpty'));
       return;
     }
@@ -350,13 +412,13 @@ export class Leaderboard extends Phaser.Scene {
     this.fixed.push(this.add.text(L.cols.gradeRight, L.headerY, t(locale, 'eduBoardGrade'), { ...STYLE, fontSize: '20px', color: DIM }).setOrigin(1, 0.5));
     this.fixed.push(this.add.text(L.cols.right, L.headerY, t(locale, 'eduBoardRuns'), { ...STYLE, fontSize: '20px', color: DIM }).setOrigin(1, 0.5));
     const { sv, visible } = this.rowsBand();
-    const count = Math.max(rows.length, visible);
+    const count = offset === 0 ? Math.max(rows.length, visible) : rows.length; // – rows on page 1 only (plan 28, 5.2)
     let y = L.firstY;
     for (let i = 0; i < count; i += 1) {
       y = L.firstY + i * L.pitch;
       const row = rows[i];
       const color = row?.me ? PINK : row ? '#ffffff' : DIM;
-      sv.add(this.add.text(L.cols.rank, y, `${row ? row.rank : i + 1}.`, { ...STYLE, fontSize: '34px', color: row ? PINK : DIM }).setOrigin(0, 0.5));
+      sv.add(this.add.text(L.cols.rank, y, `${row ? row.rank : offset + i + 1}.`, { ...STYLE, fontSize: '34px', color: row ? PINK : DIM }).setOrigin(0, 0.5));
       sv.add(this.add.text(L.cols.right, y, row ? String(row.runs) : '–', { ...STYLE, fontSize: '26px', color: row?.me ? PINK : row ? MUTED : DIM, fontStyle: 'normal' }).setOrigin(1, 0.5));
       const grade = row ? sv.add(this.add.text(L.cols.gradeRight, y, `${row.grade.toFixed(1)} %`, { ...STYLE, fontSize: '34px', color }).setOrigin(1, 0.5)) : null;
       const name = sv.add(this.add.text(L.cols.name, y, row ? row.name : '–', { ...STYLE, fontSize: '34px', color, align: 'left' }).setOrigin(0, 0.5));

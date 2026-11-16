@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { LEADERBOARD, TUNING } from '../src/config.js';
-import { createSubmitStore, createMergeStore, createRenameStore, createTournamentQueue, nameAction, submitPlan, submitPlans, withOwnRows, submitScore, submitTournament, checkNameAvailable, mergePlayers, fetchPlayerName, fetchTop, fetchRank, fetchTournamentBoard, submitDailyScore, fetchDailyBoard, createCareerStore, submitCounters, claimAchievements, fetchPlayerStats, createEduShareStore, shareEducation, renameEducation, unshareEducation, submitEducationGrades, fetchEducationBoard, enrolResearch, submitResearchEvents, deleteResearch } from '../src/leaderboard.js';
+import { createSubmitStore, createMergeStore, createRenameStore, createTournamentQueue, nameAction, submitPlan, submitPlans, withOwnRows, boardPage, submitScore, submitTournament, checkNameAvailable, mergePlayers, fetchPlayerName, fetchTop, fetchRank, fetchTournamentBoard, submitDailyScore, fetchDailyBoard, createCareerStore, submitCounters, claimAchievements, fetchPlayerStats, createEduShareStore, shareEducation, renameEducation, unshareEducation, submitEducationGrades, fetchEducationBoard, enrolResearch, submitResearchEvents, deleteResearch } from '../src/leaderboard.js';
 
 const config = { dataApi: 'https://x.example/rest/v1', publishableKey: 'sb_publishable_test', timeoutMs: 50, limit: 10, maxScore: 200 };
 
@@ -40,8 +40,8 @@ test('LEADERBOARD config is complete and points at a Supabase Data API over http
   assert.match(LEADERBOARD.dataApi, /^https:\/\/[a-z]+\.supabase\.co\/rest\/v1$/);
   assert.match(LEADERBOARD.publishableKey, /^sb_publishable_/);
   assert.ok(LEADERBOARD.timeoutMs > 0 && LEADERBOARD.limit > 0 && LEADERBOARD.maxScore > 0);
-  assert.equal(LEADERBOARD.limit, 25, 'the board is a Top 25');
-  assert.equal(LEADERBOARD.visibleRows, 15, 'fifteen rows in the window');
+  assert.equal(LEADERBOARD.limit, 25, 'a page of the board is 25 places (pages since plan 28, 5.2)');
+  assert.equal(LEADERBOARD.visibleRows, 14, 'fourteen rows in the window, the ‹ › row under them (plan 28, 5.2: was fifteen)');
   assert.ok(LEADERBOARD.visibleRows >= 1 && LEADERBOARD.visibleRows <= LEADERBOARD.limit);
   assert.equal(typeof LEADERBOARD.storageKey, 'string');
   assert.equal(typeof LEADERBOARD.mergesKey, 'string');
@@ -1025,4 +1025,71 @@ test('submitResearchEvents and deleteResearch report what the server did', async
   assert.equal(await deleteResearch(ID, { fetch: fakeFetch({ status: 200, body: 'false' }), config }), true, 'nothing was there: the server has none of it either way');
   assert.equal(await deleteResearch(ID, { fetch: fakeFetch({ status: 500, body: { message: 'x' } }), config }), null, 'unreachable: the answers may still be there');
   assert.equal(await deleteResearch('short', { fetch: gone, config }), null);
+});
+
+// ---------------------------------------------------------------------------
+// Board pages (plan 28, 5.2): opts.offset on the four fetchers, withOwnRows per page, boardPage
+
+test('the four board fetchers send p_offset only past page 1 (page 1 sends exactly the request it did before pages); the 🏆 table read pages with offset=', async () => {
+  const ok = () => fakeFetch({ body: [] });
+  const bodies = async (offset) => {
+    const f = { top: ok(), plain: ok(), daily: ok(), medals: ok(), edu: ok() };
+    await fetchTop({ playerId: ID, fetch: f.top, config, ...(offset === undefined ? {} : { offset }) });
+    await fetchTop({ fetch: f.plain, config, ...(offset === undefined ? {} : { offset }) });
+    await fetchDailyBoard(DPID, '2026-11-10', { fetch: f.daily, config, ...(offset === undefined ? {} : { offset }) });
+    await fetchTournamentBoard(ID, { fetch: f.medals, config, ...(offset === undefined ? {} : { offset }) });
+    await fetchEducationBoard(ID, { fetch: f.edu, config, ...(offset === undefined ? {} : { offset }) });
+    return { top: f.top.calls[0].body, plain: f.plain.calls[0].url.replace(config.dataApi, ''), daily: f.daily.calls[0].body, medals: f.medals.calls[0].body, edu: f.edu.calls[0].body };
+  };
+  const page1 = {
+    top: { p_player_id: ID, p_limit: 10 },
+    plain: '/scores?select=name,score,toilet,level&order=score.desc,updated_at.asc&limit=10',
+    daily: { p_player_id: DPID, p_day: '2026-11-10', p_limit: 10 },
+    medals: { p_player_id: ID, p_limit: 10 },
+    edu: { p_player_id: ID, p_limit: 10 },
+  };
+  for (const offset of [undefined, 0, -10, 2.5, 'x', null]) assert.deepEqual(await bodies(offset), page1, `offset ${offset}: page 1, as before`);
+  assert.deepEqual(await bodies(10), {
+    top: { p_player_id: ID, p_limit: 10, p_offset: 10 },
+    plain: '/scores?select=name,score,toilet,level&order=score.desc,updated_at.asc&limit=10&offset=10',
+    daily: { p_player_id: DPID, p_day: '2026-11-10', p_limit: 10, p_offset: 10 },
+    medals: { p_player_id: ID, p_limit: 10, p_offset: 10 },
+    edu: { p_player_id: ID, p_limit: 10, p_offset: 10 },
+  });
+});
+
+test('withOwnRows with an offset: only an own rank on this page goes in, at its place on the page; a rank on another page is left to the footer', () => {
+  const rows = [r('Kay', 50), r('Lou', 45), r('Mo', 40)]; // places 11 to 13 (offset 10)
+  assert.deepEqual(withOwnRows(rows, [at(12, 47)], 'Me', 10, 10), [rows[0], r('Me', 47), rows[1], rows[2]], 'rank 12 is the page\'s second place');
+  assert.deepEqual(withOwnRows(rows, [at(11, 52)], 'Me', 10, 10), [r('Me', 52), ...rows], 'rank 11 spliced in at the page\'s top');
+  assert.deepEqual(withOwnRows(rows, [at(13, 40)], 'Me', 10, 10), rows, 'rank 13 already holds the own row (same score and 🚽)');
+  assert.deepEqual(withOwnRows(rows, [at(3, 95)], 'Me', 10, 10), rows, 'a rank on page 1: not on this page');
+  assert.deepEqual(withOwnRows(rows, [at(21, 5)], 'Me', 10, 10), rows, 'a rank on page 3: not on this page');
+  assert.deepEqual(withOwnRows(rows, [at(10, 60)], 'Me', 10, 10), rows, 'the place just before the page');
+  assert.deepEqual(withOwnRows(rows, [at(3, 95)], 'Me', 10, 0), withOwnRows(rows, [at(3, 95)], 'Me', 10), 'offset 0 is page 1, as before');
+  assert.deepEqual(withOwnRows(rows, [at(3, 95)], 'Me', 10, -4), withOwnRows(rows, [at(3, 95)], 'Me', 10), 'a bad offset is page 1');
+});
+
+test('boardPage: the page\'s rows (the caller\'s only on its own page), the caller\'s row wherever it is (the footer), and whether no page follows', () => {
+  const row = (rank, over = {}) => ({ rank, name: `N${rank}`, me: false, total: 60, ...over });
+  const page = (from, to) => Array.from({ length: to - from + 1 }, (_, k) => row(from + k));
+  const me41 = row(41, { me: true });
+  // Page 1 of 60, the caller (41) appended by the server: left off the page, kept for the footer.
+  let got = boardPage([...page(1, 25), me41], { offset: 0, limit: 25 });
+  assert.deepEqual([got.rows.length, got.rows.at(-1).rank, got.mine, got.last], [25, 25, me41, false]);
+  // Page 2: the caller's row is on it, at its place.
+  const p2 = [...page(26, 40), me41, ...page(42, 50)];
+  got = boardPage(p2, { offset: 25, limit: 25 });
+  assert.deepEqual([got.rows, got.mine, got.last], [p2, me41, false]);
+  // Page 3, short (51 to 60): the last; the appended caller off it.
+  got = boardPage([me41, ...page(51, 60)], { offset: 50, limit: 25 });
+  assert.deepEqual([got.rows.map((x) => x.rank), got.mine, got.last], [[...Array(10).keys()].map((k) => k + 51), me41, true]);
+  // A full last page: the total says so (🌞, 📚); 🏅 gives no total, so a full page looks like one more may follow.
+  assert.equal(boardPage(page(26, 50).map((x) => ({ ...x, total: 50 })), { offset: 25, limit: 25 }).last, true, 'the total reached');
+  assert.equal(boardPage(page(26, 50).map(({ total, ...x }) => x), { offset: 25, limit: 25 }).last, false, 'no total: a full page may have a next');
+  // Nothing on a page past the end; no caller; offline.
+  assert.deepEqual(boardPage([], { offset: 25, limit: 25 }), { rows: [], mine: null, last: true });
+  assert.deepEqual(boardPage(page(1, 3), { offset: 0, limit: 25 }), { rows: page(1, 3), mine: null, last: true });
+  assert.deepEqual(boardPage(null, { offset: 25, limit: 25 }), { rows: null, mine: null, last: true }, 'offline stays offline');
+  assert.deepEqual(boardPage([...page(1, 25), me41], { offset: -3, limit: 25 }).rows.length, 25, 'a bad offset is page 1');
 });

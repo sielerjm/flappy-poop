@@ -20,9 +20,9 @@
 --   * call merge_players(...)  fold one of the player's ids into another (needs both secrets)
 --   * call player_name(...)    the name on the board for this player's id (2026-11-09)
 --   * call submit_tournament(...) a finished 🏅 tournament, re-checked here (2026-11-09)
---   * call tournament_board(...)  the 🏅 medal board (names and counts, never ids)
+--   * call tournament_board(...)  the 🏅 medal board (names and counts, never ids); a page from p_offset (plan 28)
 --   * call submit_daily_score(...) a Daily Dump (🌞) score, once per player and UTC day (2026-11-10)
---   * call daily_board(...)        the 🌞 board for a day (names and scores, never ids)
+--   * call daily_board(...)        the 🌞 board for a day (names and scores, never ids); a page from p_offset (plan 28)
 --   * call submit_counters(...)    add a batch of runs to the player's lifetime counters (2026-11-11)
 --   * call claim_achievements(...) record achievements the game says the player earned (2026-11-11)
 --   * call player_stats(...)       any player's public profile, by id or board name (never ids)
@@ -31,12 +31,12 @@
 --   * call submit_education_grades(...) add a batch of graded education runs to a sharing player's row
 --   * call rename_education(...)   a sharing player's name on the 📚 board follows a rename (never adds a player)
 --   * call unshare_education(...)  take the player off the 📚 board: the row is deleted
---   * call education_board(...)    the 📚 board: names, average grades and run counts, never ids
+--   * call education_board(...)    the 📚 board: names, average grades and run counts, never ids; a page from p_offset (plan 28)
 --   * call enrol_research(...)     join the education tester pilot with the invite code (2026-11-13)
 --   * call submit_research_events(...) a pilot participant's answer events, under their research id
 --   * call delete_research(...)    withdraw from the pilot: the participant and their answers are deleted
 --   * call submit_runs(...)        a batch of run summaries, as numbers (plan 30); stored owner-only, 90 days
---   * call score_board(...)        the 🏆 top list as one player sees it: their own rows at their own best (names, never ids)
+--   * call score_board(...)        the 🏆 top list as one player sees it: their own rows at their own best (names, never ids); a page from p_offset (plan 28)
 --   * call schema_version()        which version of this file the database last ran (a stamp of the file; 2026-11-13)
 -- A player has up to two rows: their best on the toilet and their best off it
 -- (primary key player_id + toilet, since 2026-11-04).
@@ -124,6 +124,10 @@
 --   delete every participant and answer of a phase (the pilot's, before the beta):
 --     select public.admin_purge_phase('pilot');
 --   undo the stamp: drop function public.schema_version();
+--   undo the board pages (plan 28, 5.2): drop function public.score_board(text, int, int),
+--     public.daily_board(text, date, int, int), public.tournament_board(text, int, int),
+--     public.education_board(text, int, int); then restore the four from git (without p_offset)
+--     and their grants, and run this file.
 --   undo hiding (plan 30): drop function public.admin_flag_player(text, text),
 --     public.admin_unflag_player(text), public.admin_flagged(); then restore anon_read (using true),
 --     submit_score, submit_daily_score, player_rank, tournament_board, daily_board, education_board,
@@ -149,7 +153,7 @@
 --   undo the 📚 board: drop function public.share_education(text, text, boolean, text),
 --     public.submit_education_grades(text, text, timestamptz, int, bigint, jsonb),
 --     public.rename_education(text, text), public.unshare_education(text),
---     public.education_board(text, int), public.admin_set_education_open(boolean),
+--     public.education_board(text, int, int), public.admin_set_education_open(boolean),
 --     public.education_lock(text), public.education_paced(text);
 --     alter table public.player_meta drop column edu_named_at;
 --     drop table public.education_public, public.education_settings; then restore
@@ -1524,10 +1528,12 @@ $$;
 -- The 🏅 board: the top p_limit (1–100) linked players by gold, silver, bronze,
 -- best race score (earlier first on a full tie), each with the name on the
 -- score board when they have one. With p_player_id, that player's row is
--- flagged `me` and appended with its true rank when it is below the top. No
--- ids leave the server.
+-- flagged `me` and appended with its true rank when it is not on the page. No
+-- ids leave the server. p_offset (plan 28, 5.2; default 0, so page 1's call is
+-- unchanged): the page of places p_offset + 1 to p_offset + p_limit. The old
+-- two-argument signature is dropped first, so a call never finds two.
 drop function if exists public.tournament_board(text, int);
-create or replace function public.tournament_board(p_player_id text default null, p_limit int default 25)
+create or replace function public.tournament_board(p_player_id text default null, p_limit int default 25, p_offset int default 0)
 returns table (rank int, name text, best_score int, gold int, silver int, bronze int, events int, me boolean)
 language sql
 stable
@@ -1536,6 +1542,8 @@ set search_path = public
 as $$
   with caller as (
     select public.resolve_player(p_player_id) as cid where p_player_id ~ '^[A-Za-z0-9_-]{22}$'
+  ), page as ( -- places lo + 1 to hi (plan 28, 5.2)
+    select least(greatest(coalesce(p_offset, 0), 0), 1000000) as lo, least(greatest(coalesce(p_offset, 0), 0), 1000000) + least(greatest(coalesce(p_limit, 25), 1), 100) as hi
   ), ranked as (
     select st.player_id as pid,
            coalesce((select s.name from public.scores s where s.player_id = st.player_id order by s.updated_at desc limit 1), st.name) as pname,
@@ -1547,7 +1555,7 @@ as $$
   select r.prank, r.pname, r.pbest, r.pgold, r.psilver, r.pbronze, r.pevents,
          coalesce(r.pid = (select cid from caller), false)
   from ranked r
-  where r.prank <= least(greatest(coalesce(p_limit, 25), 1), 100) or r.pid = (select cid from caller)
+  where (r.prank > (select lo from page) and r.prank <= (select hi from page)) or r.pid = (select cid from caller)
   order by r.prank;
 $$;
 
@@ -1637,9 +1645,12 @@ $$;
 -- The 🌞 board for p_day (default: today, UTC): the top p_limit (1–100) by score,
 -- earlier post first on a tie, each with the name on the score board when the
 -- player has one. With p_player_id, that player's row is flagged `me` and
--- appended with its true rank when it is below the top. `total` is how many
--- played that day. No ids leave the server.
-create or replace function public.daily_board(p_player_id text default null, p_day date default null, p_limit int default 25)
+-- appended with its true rank when it is not on the page. `total` is how many
+-- played that day. No ids leave the server. p_offset (plan 28, 5.2; default 0,
+-- so page 1's call is unchanged): the page of places p_offset + 1 to p_offset +
+-- p_limit. The old three-argument signature is dropped first.
+drop function if exists public.daily_board(text, date, int);
+create or replace function public.daily_board(p_player_id text default null, p_day date default null, p_limit int default 25, p_offset int default 0)
 returns table (rank int, name text, score int, level int, pipes int, me boolean, total int)
 language sql
 stable
@@ -1648,6 +1659,8 @@ set search_path = public
 as $$
   with caller as (
     select public.resolve_player(p_player_id) as cid where p_player_id ~ '^[A-Za-z0-9_-]{22}$'
+  ), page as ( -- places lo + 1 to hi (plan 28, 5.2)
+    select least(greatest(coalesce(p_offset, 0), 0), 1000000) as lo, least(greatest(coalesce(p_offset, 0), 0), 1000000) + least(greatest(coalesce(p_limit, 25), 1), 100) as hi
   ), today as (
     select coalesce(p_day, (now() at time zone 'utc')::date) as d
   ), ranked as (
@@ -1669,7 +1682,7 @@ as $$
   select r.prank, r.pname, r.pscore, r.plevel, r.ppipes,
          coalesce(r.pid = (select cid from caller), false), r.ptotal
   from ranked r
-  where r.prank <= least(greatest(coalesce(p_limit, 25), 1), 100) or r.pid = (select cid from caller)
+  where (r.prank > (select lo from page) and r.prank <= (select hi from page)) or r.pid = (select cid from caller)
   order by r.prank;
 $$;
 
@@ -2159,10 +2172,12 @@ $$;
 -- src/config.js), the top p_limit (1–100) by average grade, then more runs, then who shared
 -- first. grade is the average in percent to one decimal. Each row carries the name on the score
 -- board when the player has one, else the name they shared under. With p_player_id, that
--- player's row is flagged `me` and appended with its true rank when it is below the top (a
+-- player's row is flagged `me` and appended with its true rank when it is not on the page (a
 -- caller with fewer than 3 runs is not on the board). `total` is how many are on it. No ids
--- leave the server.
-create or replace function public.education_board(p_player_id text default null, p_limit int default 25)
+-- leave the server. p_offset (plan 28, 5.2; default 0, so page 1's call is unchanged): the page
+-- of places p_offset + 1 to p_offset + p_limit. The old two-argument signature is dropped first.
+drop function if exists public.education_board(text, int);
+create or replace function public.education_board(p_player_id text default null, p_limit int default 25, p_offset int default 0)
 returns table (rank int, name text, grade numeric, runs int, me boolean, total int)
 language sql
 stable
@@ -2171,6 +2186,8 @@ set search_path = public
 as $$
   with caller as (
     select public.resolve_player(p_player_id) as cid where p_player_id ~ '^[A-Za-z0-9_-]{22}$'
+  ), page as ( -- places lo + 1 to hi (plan 28, 5.2)
+    select least(greatest(coalesce(p_offset, 0), 0), 1000000) as lo, least(greatest(coalesce(p_offset, 0), 0), 1000000) + least(greatest(coalesce(p_limit, 25), 1), 100) as hi
   ), ranked as (
     select e.player_id as pid,
            coalesce((select s.name from public.scores s where s.player_id = e.player_id order by s.updated_at desc limit 1), e.name) as pname,
@@ -2185,7 +2202,7 @@ as $$
   select r.prank, r.pname, r.pgrade, r.pruns,
          coalesce(r.pid = (select cid from caller), false), r.ptotal
   from ranked r
-  where r.prank <= least(greatest(coalesce(p_limit, 25), 1), 100) or r.pid = (select cid from caller)
+  where (r.prank > (select lo from page) and r.prank <= (select hi from page)) or r.pid = (select cid from caller)
   order by r.prank;
 $$;
 
@@ -3061,7 +3078,10 @@ revoke execute on function public.release_run(text, text) from public, anon, aut
 
 -- score_board: the 🏆 top list for the player with this id (their own rows at their own best,
 -- plan 30), or for nobody (null: the visible rows, as the table read gives them). Names, never ids.
-create or replace function public.score_board(p_player_id text default null, p_limit int default 25)
+-- p_offset (plan 28, 5.2; default 0, so page 1's call is unchanged): the rows after the first
+-- p_offset. The old two-argument signature is dropped first, so a call never finds two.
+drop function if exists public.score_board(text, int);
+create or replace function public.score_board(p_player_id text default null, p_limit int default 25, p_offset int default 0)
 returns table (name text, score int, toilet boolean, level int)
 language sql
 stable
@@ -3071,7 +3091,8 @@ as $$
   select b.name, b.score, b.toilet, b.level
   from public.board_rows(case when p_player_id ~ '^[A-Za-z0-9_-]{22}$' then public.resolve_player(p_player_id) end) b
   order by b.score desc, b.at asc
-  limit least(greatest(coalesce(p_limit, 25), 1), 100);
+  limit least(greatest(coalesce(p_limit, 25), 1), 100)
+  offset least(greatest(coalesce(p_offset, 0), 0), 1000000);
 $$;
 
 revoke execute on function public.submit_score(text, text, int, boolean, int) from public, authenticated;
@@ -3086,12 +3107,12 @@ revoke execute on function public.player_name(text) from public, authenticated;
 grant  execute on function public.player_name(text) to anon;
 revoke execute on function public.submit_tournament(text, jsonb) from public, authenticated;
 grant  execute on function public.submit_tournament(text, jsonb) to anon;
-revoke execute on function public.tournament_board(text, int) from public, authenticated;
-grant  execute on function public.tournament_board(text, int) to anon;
+revoke execute on function public.tournament_board(text, int, int) from public, authenticated;
+grant  execute on function public.tournament_board(text, int, int) to anon;
 revoke execute on function public.submit_daily_score(text, text, date, int, int, int) from public, authenticated;
 grant  execute on function public.submit_daily_score(text, text, date, int, int, int) to anon;
-revoke execute on function public.daily_board(text, date, int) from public, authenticated;
-grant  execute on function public.daily_board(text, date, int) to anon;
+revoke execute on function public.daily_board(text, date, int, int) from public, authenticated;
+grant  execute on function public.daily_board(text, date, int, int) to anon;
 revoke execute on function public.submit_counters(text, text, jsonb) from public, authenticated;
 grant  execute on function public.submit_counters(text, text, jsonb) to anon;
 revoke execute on function public.player_stats(text, text) from public, authenticated;
@@ -3108,8 +3129,8 @@ revoke execute on function public.rename_education(text, text) from public, auth
 grant  execute on function public.rename_education(text, text) to anon;
 revoke execute on function public.unshare_education(text) from public, authenticated;
 grant  execute on function public.unshare_education(text) to anon;
-revoke execute on function public.education_board(text, int) from public, authenticated;
-grant  execute on function public.education_board(text, int) to anon;
+revoke execute on function public.education_board(text, int, int) from public, authenticated;
+grant  execute on function public.education_board(text, int, int) to anon;
 revoke execute on function public.enrol_research(text, text, boolean, text) from public, authenticated;
 grant  execute on function public.enrol_research(text, text, boolean, text) to anon;
 revoke execute on function public.submit_research_events(text, text, jsonb, timestamptz) from public, authenticated;
@@ -3118,8 +3139,8 @@ revoke execute on function public.delete_research(text) from public, authenticat
 grant  execute on function public.delete_research(text) to anon;
 revoke execute on function public.submit_runs(text, bigint, jsonb) from public, authenticated;
 grant  execute on function public.submit_runs(text, bigint, jsonb) to anon;
-revoke execute on function public.score_board(text, int) from public, authenticated;
-grant  execute on function public.score_board(text, int) to anon;
+revoke execute on function public.score_board(text, int, int) from public, authenticated;
+grant  execute on function public.score_board(text, int, int) to anon;
 
 -- Which version of this file the database last ran: a short SHA-256 of the file with the value
 -- below blanked (tools/schema_check.mjs). `npm run schema:stamp` rewrites it after an edit, and
@@ -3131,7 +3152,7 @@ returns text
 language sql
 immutable
 as $$
-  select '5d5121ac05696cff'::text; -- schema stamp
+  select '05b18c08764f67ac'::text; -- schema stamp
 $$;
 revoke execute on function public.schema_version() from public, authenticated;
 grant  execute on function public.schema_version() to anon;

@@ -740,6 +740,155 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         ok(heldView.order.join() === '243,200,199' && heldView.colors['200'] === '#f8a0c8' && heldView.colors['243'] === '#ffffff' && heldView.names.length === 1 && heldView.names[0] === '#f8a0c8' && heldView.asks.length >= 1 && heldView.asks[0].p_player_id === heldView.id, `a best the board holds back shows once, pink, at its rank, from score_board (${heldView.order.join(' · ')}; asked for ${heldView.asks.length === 0 ? 'nobody' : 'this player'})`);
       }
 
+      // Board pages (plan 28, 5.2), over a stubbed board of 60 (the player #40, and #52 on the toilet on 🏆):
+      // pages of 25 on all four boards; ‹ 26-50 › pinned under the window (main camera, never the rows'
+      // scroll camera); ‹ greyed on page 1 and › on the last, a greyed arrow doing nothing; the last page
+      // ends at its last place (no dash rows after page 1); the footer gives the place on every page, and
+      // a second footer line clears the arrows; page 1 asks exactly as before pages (no p_offset); every
+      // open and every tab switch starts at page 1; keyboard ← → turn pages; the pad's ring walks to ‹ ›
+      // with left / right, A turns the page and the ring stays on the arrow.
+      {
+        const P = `__flappy.scene.getScene('Play')`;
+        const PL = `__flappy.scene.getScene('Leaderboard')`;
+        const saved = await evaluate(`JSON.stringify(${P}.save)`);
+        await evaluate(`import('./src/save.js').then((m) => (${P}.setSaveState(m.ensureId(m.saveLocal({ ...${P}.save, name: 'PageTester', top: [{ score: 500, toilet: false, level: 3 }, { score: 440, toilet: true, level: 3 }] }))), true))`);
+        await evaluate(`(() => {
+          globalThis.__fetchPg = globalThis.fetch;
+          globalThis.__pageAsks = [];
+          const N = 60;
+          const name = (p) => (p === 40 || p === 52 ? 'PageTester' : 'Pg' + p);
+          const pagePlaces = (b) => { const off = b.p_offset ?? 0; const lim = b.p_limit ?? 25; return Array.from({ length: Math.max(0, Math.min(lim, N - off)) }, (_, k) => off + k + 1); };
+          const withMe = (places, mk) => (places.includes(40) ? places.map(mk) : [...places.map(mk), mk(40)]).sort((a, b) => a.rank - b.rank);
+          globalThis.fetch = async (url, init) => {
+            const u = String(url);
+            const b = init?.body ? JSON.parse(init.body) : {};
+            const fn = (u.match(/[/]rpc[/]([a-z_]+)$/) || [])[1];
+            const json = (v) => new Response(JSON.stringify(v), { status: 200 });
+            if (['score_board', 'daily_board', 'tournament_board', 'education_board'].includes(fn)) globalThis.__pageAsks.push([fn, 'p_offset' in b ? b.p_offset : null]);
+            const places = pagePlaces(b);
+            if (fn === 'score_board') return json(places.map((p) => ({ name: name(p), score: 700 - 5 * p, toilet: p === 52, level: 3 })));
+            if (fn === 'player_rank') return json(b.p_toilet ? { rank: 52, total: N, score: 440, toilet: true, level: 3 } : { rank: 40, total: N, score: 500, toilet: false, level: 3 });
+            if (fn === 'daily_board') return json(withMe(places, (p) => ({ rank: p, name: name(p), score: 900 - p, level: 5, pipes: 10, me: p === 40, total: N })));
+            if (fn === 'tournament_board') return json(withMe(places, (p) => ({ rank: p, name: name(p), best_score: 10, gold: 100 - p, silver: 0, bronze: 0, events: 3, me: p === 40 })));
+            if (fn === 'education_board') return json(places.map((p) => ({ rank: p, name: 'Pg' + p, grade: 90 - p / 10, runs: 4, me: false, total: N })));
+            return new Response('{"message":"stub"}', { status: 503 });
+          };
+          return import('./src/config.js').then((m) => { globalThis.__apiPg = m.LEADERBOARD.dataApi; m.LEADERBOARD.dataApi = 'https://stub.invalid/rest/v1'; return true; });
+        })()`);
+        const pgView = () =>
+          evaluate(`JSON.stringify((() => {
+            const s = ${PL};
+            const texts = s.children.list.filter((c) => c.type === 'Text' && c.visible);
+            const ranks = texts.filter((c) => /^[0-9]+[.]$/.test(c.text)).sort((a, b) => a.y - b.y).map((c) => c.text);
+            const pg = s.pager;
+            const drawn = pg.objects().filter((o) => o.type !== 'Zone');
+            const scrollCam = s.cameras.cameras[1] ?? null;
+            const fb = s.footer.getBounds();
+            return {
+              active: __flappy.scene.isActive('Leaderboard'), tab: s.tab, page: s.page, label: pg.label.text, prev: pg.enabled(-1), next: pg.enabled(1),
+              first: ranks[0] ?? null, last: ranks.at(-1) ?? null, n: ranks.length, dashes: texts.filter((c) => c.text === '–').length,
+              pink: texts.filter((c) => c.text === 'PageTester' && c.style.color === '#f8a0c8').length,
+              footer: s.footer.text, footerTop: Math.round(fb.y), arrowBottom: Math.round(pg.prev.y + pg.prev.height / 2),
+              pinned: Boolean(scrollCam) && drawn.every((o) => o.willRender(s.cameras.main) && !o.willRender(scrollCam)),
+              ring: s.focus?.shown ? s.focus.items[s.focus.index]?.id : null,
+            };
+          })())`).then(JSON.parse);
+        const asks = () => evaluate(`JSON.stringify(globalThis.__pageAsks.splice(0))`).then(JSON.parse);
+        const pgTap = async (dir) => {
+          const at = await evaluate(`JSON.stringify((() => { const z = ${PL}.pager.${dir < 0 ? 'prev' : 'next'}; return { x: z.x, y: z.y }; })())`).then(JSON.parse);
+          await tapAt(at.x, at.y);
+          await sleep(900);
+        };
+        const pgKey = async (k) => {
+          const code = { ArrowLeft: 37, ArrowRight: 39 }[k];
+          await cdp.send('Input.dispatchKeyEvent', { type: 'keyDown', key: k, code: k, windowsVirtualKeyCode: code });
+          await cdp.send('Input.dispatchKeyEvent', { type: 'keyUp', key: k, code: k, windowsVirtualKeyCode: code });
+          await sleep(900);
+        };
+        const pgTab = async (i) => {
+          const at = await evaluate(`JSON.stringify({ x: ${PL}.L.tab.xs[${i}], y: ${PL}.L.tab.y })`).then(JSON.parse);
+          await tapAt(at.x, at.y);
+          await sleep(1200);
+        };
+        await evaluate(`(__flappy.registry.set('padMode', false), __flappy.registry.set('leaderboardTab', 'scores'), true)`);
+        await asks();
+        await chrome('leaderboard');
+        await sleep(1500);
+        const s1 = await pgView();
+        const a1 = await asks();
+        ok(s1.active && s1.tab === 'scores' && s1.label === '1-25' && !s1.prev && s1.next && s1.first === '1.' && s1.last === '25.' && s1.n === 25 && s1.pink === 0 && s1.pinned && a1.some(([fn, o]) => fn === 'score_board' && o === null) && !a1.some(([, o]) => o !== null), `🏆 opens on page 1 ("${s1.label}", ‹ greyed, › live), the ‹ › row pinned under the window; page 1 asks with no p_offset (${JSON.stringify(a1)})`);
+        ok(s1.footer.includes('#40') && s1.footer.includes('#52') && s1.footerTop >= s1.arrowBottom, `the 🏆 footer gives both places on page 1 ("${s1.footer.replace(/\n/g, ' / ')}"), its two lines clear of the arrows (top ${s1.footerTop}, arrows' bottom ${s1.arrowBottom})`);
+        // The longest 🏆 footer (both places and the name note, five lines) shrinks to fit above the version line.
+        const fit = await evaluate(`import('./src/i18n.js').then((m) => { const s = ${PL}; s.setFooter(s.footer.text + '\\n' + m.t('en', 'leaderboardNameTaken')); const fb = s.footer.getBounds(); const v = s.children.list.find((c) => c.type === 'Text' && c.y === s.L.versionY); return JSON.stringify({ lines: s.footer.text.split('\\n').length, scale: s.footer.scaleY, bottom: Math.round(fb.bottom), top: Math.round(fb.y), versionTop: Math.round(v.getBounds().y), arrowBottom: Math.round(s.pager.prev.y + s.pager.prev.height / 2) }); })`).then(JSON.parse);
+        ok(fit.scale < 1 && fit.top >= fit.arrowBottom && fit.bottom <= fit.versionTop, `a footer of both places and the name note (${fit.lines} lines before wrapping) shrinks (scale ${fit.scale.toFixed(2)}) to fit between the arrows (${fit.arrowBottom}) and the version line (${fit.versionTop}): ${fit.top} to ${fit.bottom}`);
+        await pgTap(1);
+        const s2 = await pgView();
+        const a2 = await asks();
+        ok(s2.label === '26-50' && s2.prev && s2.next && s2.first === '26.' && s2.last === '50.' && s2.n === 25 && s2.pink === 1 && s2.footer.includes('#40') && a2.some(([fn, o]) => fn === 'score_board' && o === 25), `› turns to page 2 ("${s2.label}", ranks ${s2.first} to ${s2.last}, the player's row pink), asking p_offset 25`);
+        await pgTap(1);
+        const s3 = await pgView();
+        await asks();
+        await pgTap(1);
+        const s4 = await pgView();
+        const a4 = await asks();
+        ok(s3.label === '51-60' && s3.prev && !s3.next && s3.first === '51.' && s3.last === '60.' && s3.n === 10 && s3.dashes === 0 && s3.pink === 1 && s4.label === '51-60' && s4.page === s3.page && a4.length === 0, `the last page "${s3.label}" ends at its last place (${s3.n} rows, no dash rows), › greyed, and a tap on it does nothing`);
+        await pgTap(-1);
+        const s5 = await pgView();
+        await pgKey('ArrowLeft');
+        const s6 = await pgView();
+        await pgKey('ArrowLeft');
+        const s6b = await pgView();
+        await pgKey('ArrowRight');
+        const s7 = await pgView();
+        await asks();
+        ok(s5.label === '26-50' && s6.label === '1-25' && s6b.label === '1-25' && s7.label === '26-50' && s7.active, `‹ turns back ("${s5.label}"); keyboard ← to "${s6.label}" (← again stays), → to "${s7.label}"`);
+        await pgTab(1);
+        const d1 = await pgView();
+        const ad = await asks();
+        await pgTap(1);
+        const d2 = await pgView();
+        await asks();
+        ok(d1.tab === 'daily' && d1.label === '1-25' && !d1.prev && d1.first === '1.' && d1.pink === 0 && d1.footer.includes('#40') && ad.some(([fn, o]) => fn === 'daily_board' && o === null) && d2.label === '26-50' && d2.first === '26.' && d2.pink === 1 && d2.footer.includes('#40'), `a tab switch from 🏆's page 2 opens 🌞 on page 1 ("${d1.label}", footer "${d1.footer}"); › shows #26 on, the player's row pink`);
+        // The pad (up / down scroll the rows): from ✕, left reaches the tabs, left again ‹, right ›, right again ✕;
+        // A on › turns the page and the ring stays on ›; down scrolls, never turns the page.
+        await evaluate(`(__flappy.registry.set('padMode', true), ${PL}.focus.show(), ${PL}.focus.setIndex(${PL}.focus.indexOf('close')), true)`);
+        const walk = [];
+        for (const dir of ['left', 'left', 'right', 'right']) walk.push(await evaluate(`(${PL}.focus.move('${dir}'), ${PL}.focus.items[${PL}.focus.index]?.id ?? null)`));
+        await evaluate(`(${PL}.focus.setIndex(${PL}.focus.indexOf('next')), ${PL}.focus.activate(), true)`);
+        await sleep(1200);
+        const r1 = await pgView();
+        await evaluate(`(${PL}.focus.move('down'), true)`);
+        await sleep(200);
+        const r2 = await pgView();
+        await evaluate(`(${PL}.focus.setIndex(${PL}.focus.indexOf('prev')), ${PL}.focus.activate(), true)`);
+        await sleep(1200);
+        const r3 = await pgView();
+        await evaluate(`(__flappy.registry.set('padMode', false), ${PL}.focus.hide(), true)`);
+        await asks();
+        ok(walk.join() === 'tab,prev,next,close' && r1.label === '51-60' && r1.ring === 'next' && r2.label === '51-60' && r2.ring === 'next' && r3.label === '26-50' && r3.ring === 'prev', `the ring from ✕ by left, left, right, right: ${walk.join(' → ')}; A on › turns to "${r1.label}" with the ring kept on ›; down scrolls the page's rows; A on ‹ back to "${r3.label}", the ring on ‹`);
+        await closeTop('Leaderboard');
+        await sleep(400);
+        await chrome('leaderboard');
+        await sleep(1200);
+        const o1 = await pgView();
+        await asks();
+        ok(o1.tab === 'daily' && o1.label === '1-25' && o1.first === '1.', `a reopen starts on page 1 ("${o1.label}", the last tab, ${o1.tab}, kept)`);
+        await pgTab(2);
+        const m1 = await pgView();
+        await pgTap(1);
+        const m2 = await pgView();
+        await pgTab(3);
+        const e1 = await pgView();
+        await pgTap(1);
+        const e2 = await pgView();
+        const am = await asks();
+        ok(m1.tab === 'medals' && m1.label === '1-25' && m1.footer.includes('#40') && m2.label === '26-50' && m2.first === '26.' && m2.pink === 1 && m2.footer.includes('#40'), `🏅 pages too: "${m1.label}" then "${m2.label}", the player's place in the footer on both ("${m2.footer}")`);
+        ok(e1.tab === 'education' && e1.label === '1-25' && e2.label === '26-50' && e2.first === '26.' && e2.last === '50.' && am.some(([fn, o]) => fn === 'tournament_board' && o === 25) && am.some(([fn, o]) => fn === 'education_board' && o === null) && am.some(([fn, o]) => fn === 'education_board' && o === 25), `📚 pages too: "${e1.label}" then "${e2.label}" (${JSON.stringify(am)})`);
+        await closeTop('Leaderboard');
+        await sleep(300);
+        await evaluate(`(globalThis.fetch = globalThis.__fetchPg, __flappy.registry.set('leaderboardTab', 'scores'), import('./src/config.js').then((m) => { m.LEADERBOARD.dataApi = globalThis.__apiPg; return import('./src/save.js'); }).then((m) => (${P}.setSaveState(m.saveLocal(${saved})), true)))`);
+      }
+
       // What's new always opens on the latest version, even after an older one was viewed and closed
       // (scene.launch without data used to reuse the last restart's { version }).
       {

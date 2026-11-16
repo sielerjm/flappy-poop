@@ -813,8 +813,9 @@ src/
                             sweepMs = the pre-fill's lead and sweep-in on a wide
                             field), and LEADERBOARD
                             (Supabase Data API URL + publishable key, both public
-                            by design; timeout, limit = the Top 25, visibleRows = the
-                            fifteen in the board's window, storage keys incl.
+                            by design; timeout, limit = a page of 25 places (pages
+                            since plan 28, 5.2), visibleRows = the fourteen in the
+                            board's window (the ‹ › row under them), storage keys incl.
                             careerKey = flappyPoop.career, score cap),
                             LEVELS (gut segment name keys, in order), LEVEL_COLORS
                             (Set2 backgrounds, cycling) and BACKGROUND (overlay
@@ -1171,6 +1172,15 @@ src/
                             claim, pins), submitRuns ('ok' / 'rateLimited' /
                             'rejected' / 'offline'), waitsForRun; fetchTop({ playerId })
                             asks score_board, the table read as its fallback.
+                            Pages (plan 28, 5.2): fetchTop, fetchDailyBoard,
+                            fetchTournamentBoard and fetchEducationBoard take
+                            opts.offset (p_offset only past page 1, so page 1 asks
+                            as before; the table read's offset=); withOwnRows(rows,
+                            ranks, name, limit, offset) splices only an own rank on
+                            the page; boardPage(rows, { offset, limit }) splits a
+                            ranked board's answer: the page's rows (the caller's only
+                            on its own page), mine (the caller's row, wherever it
+                            is: the footer), last (no page follows).
                             The 📚 board (plan 21): createEduShareStore
                             (flappyPoop.eduShare: on, the round sharedAt, the name
                             last sent, what was sent, one batch in flight, and the
@@ -1407,6 +1417,12 @@ src/
                             leaderboard's 🏆 · 🌞 · 🏅 row (a track, a pill that
                             slides behind the chosen glyph); nearestTab(x, xs) picks
                             the tab under a tap. Purely visual, like createToggle.
+    pager.js                createPager(scene, { x, y, gap, width, height, onTurn }):
+                            a board's ‹ 26-50 › row (plan 28, 5.2), two rounded
+                            arrows over zones (the tap boxes and the ring's 'prev' /
+                            'next'), set({ prev, next, label }) greys an arrow, which
+                            then ignores taps and A; pageRangeText(offset, count,
+                            limit) is the label ("26-50", a short last page "51-60").
     tournamentPanel.js      Plain DOM panel over Versus, every two-player session's
                             front door: lobby (count, Paste code / Guest / Use my
                             player rows, ?, Start), seeding (until the first race:
@@ -2016,13 +2032,13 @@ src/
     Leaderboard.js          Overlay (🏆 tray button or T): awaits
                             Play.syncLeaderboard() (posts a pending best), then
                             fetchTop + fetchRank in parallel behind a Loading line.
-                            Top 25 (LEADERBOARD.limit): rank · name · 🚽 · LV n ·
-                            score rows in a band that shows visibleRows (15) at once
+                            Pages of 25 places (LEADERBOARD.limit): rank · name · 🚽 · LV n ·
+                            score rows in a band that shows visibleRows (14) at once
                             on a 640 × 1120 panel (the profile's size)
                             and scrolls (createScrollView over the band; title,
                             header, footer, version fixed), own row highlighted
                             by rank, footer = join hint (no username) / rankText
-                            (off the board) / "not on the board yet". A generation
+                            (each own row, on every page) / "not on the board yet". A generation
                             counter drops loads from a closed instance. The 🏆 · 🌞 · 🏅
                             tabs under the title (createTabs, the row a pressable
                             zone: a tap picks the nearest glyph, the pad's A the next
@@ -2046,6 +2062,29 @@ src/
                             missing, or a link to the Education data panel
                             (footerAction; the scene restarts when sharing changed
                             there).
+                            Pages (plan 28, 5.2; Michael's answers, 16 Nov): every
+                            board in pages of 25. The ‹ 26-50 › row (ui/pager.js at
+                            leaderboardLayout's pager) is pinned under the band, on
+                            the main camera (fixed), never scrolled; ‹ greyed on
+                            page 1, › until the page is in and on the last page
+                            (pageDone: fewer rows than a page, or the board's total
+                            reached). ‹ ›, keyboard ← → and the ring (left from the
+                            tabs reaches ‹, right goes on to ›; A presses) call
+                            turnPage: a restart on the page before or after
+                            (nextPage, read once in create; no second sync; the ring
+                            kept on the arrow), so every open and every tab switch
+                            starts at page 1. Each board asks with the page's offset
+                            (this.offset); the own rows are pink on their own page
+                            only; the footer gives the player's place on every page
+                            (🏆 too, at any rank), its first line's top under the
+                            arrows (footerTop) so a second line grows down, and
+                            setFooter shrinks a longer one (both places and the
+                            name note) to fit above the version line; – rows fill
+                            page 1 only. Known edges: a board of exactly 25, 50, …
+                            on 🏆 or 🏅 (no total) offers one empty page; on 🏆's
+                            table-read fallback a hidden or held player's spliced
+                            row pushes one place off page 1 (score_board answers
+                            their own view, so this needs score_board to fail).
     Stats.js                Overlay (plan 08; chromeIntent 'stats': on its own, or
                             over the board or the 🌞 popup, closing back to it
                             without the lockout): a player's profile, launched by
@@ -2400,7 +2439,10 @@ tests/                      node --test (schema.test.js, pilot.test.js, eduBoard
                             before the poop, icons + pipe cap slice, win line, text
                             max widths), renderShareCard blob / null paths
   overlay.test.js           overlayOutsideHit inside vs 1px outside HowTo/Settings panels
-                            (plain and test-mode)
+                            (plain and test-mode); leaderboardLayout (the tabs, the
+                            window's rows; plan 28 5.2: 14 rows, the pager row under
+                            them inside the panel, the footer's top under it and two
+                            lines above the version)
   testmode.test.js          isTestWord, testRunStart (levels, par score, clamping),
                             nextTestLevel wrap, TEST_POWERS, settingsLayout geometry
                             (incl. the hand row)
@@ -2461,7 +2503,7 @@ tests/                      node --test (schema.test.js, pilot.test.js, eduBoard
                             the track, hit before the switch)
   serve.test.js             npm start points at tools/serve.py; bind + URL print;
                             the no-store handler
-  leaderboard.test.js       LEADERBOARD config shape (limit 25, visibleRows 10); submitScore headers / body /
+  leaderboard.test.js       LEADERBOARD config shape (limit 25, visibleRows 14); submitScore headers / body /
                             400 / throw / timeout; disabled config makes no request;
                             fetchTop parsing + order; fetchRank; submitPlan matrix
                             (name, id, cap, confirmed, rename, flag, id change);
@@ -2470,7 +2512,10 @@ tests/                      node --test (schema.test.js, pilot.test.js, eduBoard
                             tournament queue (cap, order, joined drains);
                             submitDailyScore's answer mapping, fetchDailyBoard;
                             the career store's batch / claim life cycle,
-                            submitCounters, claimAchievements, fetchPlayerStats
+                            submitCounters, claimAchievements, fetchPlayerStats;
+                            plan 28 5.2: the four fetchers' p_offset (page 1's
+                            requests unchanged, the table read's offset=),
+                            withOwnRows per page, boardPage (the page, mine, last)
   achievements.test.js      The catalog (ids, copy in every locale, every badge
                             earnable), evaluate (run badges from single player only),
                             runDeltas and its caps, addCounters = merge_counters,
@@ -2505,7 +2550,11 @@ tests/                      node --test (schema.test.js, pilot.test.js, eduBoard
                             the 📚 name rule; the participation token and the kept
                             phase. Plan 25: the Postgres guard, since_ms clamped,
                             the fold's 📚 locks (pg_locks), the 5 s share pace, the
-                            🌞 / 🏅 name rule (and old duplicates through the upgrade)
+                            🌞 / 🏅 name rule (and old duplicates through the upgrade).
+                            Plan 28 5.2: the four boards' pages (p_offset last,
+                            default 0; the caller flagged on its page and appended
+                            on others; a hidden player left out; one signature each,
+                            anon only; the named call without p_offset)
   schemaCheck.test.js       tools/schema_check.mjs: the stamp (blanked, idempotent),
                             the one read-only live call (an injected fetch), each
                             state it reports (current, fixture, other, none,
@@ -3133,7 +3182,9 @@ Commits follow `type(scope): summary` (`feat`, `fix`, `docs`, `chore`, `test`, `
   tests pass a fake `fetch`. Never `await` a request inside a Phaser update
   loop; fire and forget from gameplay, `await` only in an overlay's `create()`.
 - Backend change → edit `db/schema.sql`, `npm run schema:stamp`, list a new anon
-  function and its undo line in the file's header, run it by hand in the Supabase
+  function and its undo line in the file's header (a new argument on an existing function: add it
+  last with a default, `drop function if exists` the old signature just before `create`, and move its
+  grants, so a call never finds two; plan 28 5.2's board pages did this), run it by hand in the Supabase
   SQL editor before `npm run push` (which checks), keep `LEADERBOARD.maxScore` and
   the schema's score cap in step, and `TUNING.levels.lastLevel` and the 🏆 level cap
   (1 to 7) too (tests/leaderboard.test.js checks both).

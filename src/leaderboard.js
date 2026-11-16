@@ -671,15 +671,24 @@ function normalizeDailyRow(raw) {
 }
 
 /**
+ * The request field for a board page past the first (plan 28, 5.2): { p_offset } when `offset` (the
+ * places before the page) is above 0, else nothing, so page 1's request stays the one it was before pages.
+ */
+function offsetField(offset) {
+  return Number.isInteger(offset) && offset > 0 ? { p_offset: offset } : {};
+}
+
+/**
  * The 🌞 board for `day` ('YYYY-MM-DD'; today in UTC when omitted): the top rows by score, plus
  * this player's row (me, with its rank and the day's total) when it is below them; null when the
- * board cannot be reached or answers junk.
+ * board cannot be reached or answers junk. opts.offset (default 0): the page's rows from place
+ * offset + 1 (the caller's own row still comes with every page; boardPage splits it off).
  */
 export async function fetchDailyBoard(playerId, day = null, opts = {}) {
   const limit = opts.config?.limit ?? LEADERBOARD.limit;
   const id = typeof playerId === 'string' && ID_RE.test(playerId) ? playerId : null;
   const d = typeof day === 'string' && DAY_RE.test(day) ? day : null;
-  const out = await request('/rpc/daily_board', { method: 'POST', body: { p_player_id: id, p_day: d, p_limit: limit } }, opts);
+  const out = await request('/rpc/daily_board', { method: 'POST', body: { p_player_id: id, p_day: d, p_limit: limit, ...offsetField(opts.offset) } }, opts);
   if (!Array.isArray(out)) return null;
   const rows = out.map(normalizeDailyRow);
   if (rows.some((r) => r === null)) return null;
@@ -698,12 +707,12 @@ function normalizeMedalRow(raw) {
 /**
  * The 🏅 medal board (tournament_board): the top rows by gold, silver, bronze, best
  * race, plus this player's row (me) when it is below them; null when the board
- * cannot be reached.
+ * cannot be reached. opts.offset (default 0): the page from place offset + 1.
  */
 export async function fetchTournamentBoard(playerId, opts = {}) {
   const limit = opts.config?.limit ?? LEADERBOARD.limit;
   const id = typeof playerId === 'string' && ID_RE.test(playerId) ? playerId : null;
-  const out = await request('/rpc/tournament_board', { method: 'POST', body: { p_player_id: id, p_limit: limit } }, opts);
+  const out = await request('/rpc/tournament_board', { method: 'POST', body: { p_player_id: id, p_limit: limit, ...offsetField(opts.offset) } }, opts);
   if (!Array.isArray(out)) return null;
   const rows = out.map(normalizeMedalRow);
   if (rows.some((r) => r === null)) return null;
@@ -720,10 +729,12 @@ function normalizeRow(raw) {
 /**
  * The top rows, best first, or null when the board cannot be reached. With `playerId`: the list as
  * that player sees it (score_board: their own rows at their own best, plan 30), falling back to the
- * table read when that call fails (a database that does not have it yet).
+ * table read when that call fails (a database that does not have it yet). opts.offset (default 0):
+ * the page from place offset + 1 (score_board's p_offset, the table read's offset=).
  */
 export async function fetchTop(opts = {}) {
   const limit = opts.config?.limit ?? LEADERBOARD.limit;
+  const page = offsetField(opts.offset);
   const tidy = (out) => {
     if (!Array.isArray(out)) return null;
     const rows = out.map(normalizeRow);
@@ -731,10 +742,10 @@ export async function fetchTop(opts = {}) {
     return rows.sort((a, b) => b.score - a.score).slice(0, limit);
   };
   if (typeof opts.playerId === 'string' && opts.playerId) {
-    const own = tidy(await request('/rpc/score_board', { method: 'POST', body: { p_player_id: opts.playerId, p_limit: limit } }, opts));
+    const own = tidy(await request('/rpc/score_board', { method: 'POST', body: { p_player_id: opts.playerId, p_limit: limit, ...page } }, opts));
     if (own) return own;
   }
-  return tidy(await request(`/scores?select=name,score,toilet,level&order=score.desc,updated_at.asc&limit=${limit}`, {}, opts));
+  return tidy(await request(`/scores?select=name,score,toilet,level&order=score.desc,updated_at.asc&limit=${limit}${page.p_offset ? `&offset=${page.p_offset}` : ''}`, {}, opts));
 }
 
 /**
@@ -743,21 +754,42 @@ export async function fetchTop(opts = {}) {
  * is another one (another score or 🚽: never compared by name, since a rename may be on its way), the
  * own row goes in there under `name`; the list keeps `limit` rows. A rank past the end, or past the
  * limit, is left to the footer, as before. A visible player's list comes back as it was.
+ * `offset` (plan 28, 5.2): the list is the page of places offset + 1 to offset + limit, so only an
+ * own rank on that page goes in, at its place on the page (rank - offset - 1); one on another page is
+ * left to the footer.
  */
-export function withOwnRows(rows, ranks, name, limit = LEADERBOARD.limit) {
+export function withOwnRows(rows, ranks, name, limit = LEADERBOARD.limit, offset = 0) {
   if (!Array.isArray(rows)) return rows;
+  const from = Number.isInteger(offset) && offset > 0 ? offset : 0;
   const out = rows.slice();
   const own = (Array.isArray(ranks) ? ranks : [])
-    .filter((x) => x && Number.isInteger(x.rank) && x.rank >= 1 && x.rank <= limit && Number.isInteger(x.score))
+    .filter((x) => x && Number.isInteger(x.rank) && x.rank > from && x.rank <= from + limit && Number.isInteger(x.score))
     .sort((a, b) => a.rank - b.rank);
   for (const x of own) {
-    const i = x.rank - 1;
+    const i = x.rank - from - 1;
     const there = out[i];
     if (there && there.score === x.score && Boolean(there.toilet) === Boolean(x.toilet)) continue;
     if (i > out.length) continue;
     out.splice(i, 0, { name: String(name ?? ''), score: x.score, toilet: Boolean(x.toilet), level: levelOf(x.level) });
   }
   return out.slice(0, limit);
+}
+
+/**
+ * One page of a ranked board (🌞, 🏅, 📚: rows with rank and me; plan 28, 5.2) at `offset`: rows, the
+ * ones that belong on the page (the caller's own row, which the server sends with every page, only
+ * when its rank falls on this page); mine, the caller's row wherever it is (the footer's place); last,
+ * whether no page follows (fewer than `limit` rows on it, or the board's `total` reached where it
+ * gives one: 🏅 does not). rows null (offline) stays null.
+ */
+export function boardPage(rows, { offset = 0, limit = LEADERBOARD.limit } = {}) {
+  if (!Array.isArray(rows)) return { rows, mine: null, last: true };
+  const from = Number.isInteger(offset) && offset > 0 ? offset : 0;
+  const mine = rows.find((r) => r?.me) ?? null;
+  const page = rows.filter((r) => !r.me || (r.rank > from && r.rank <= from + limit));
+  const totals = rows.map((r) => r.total).filter(Number.isInteger);
+  const last = page.length < limit || (totals.length > 0 && from + limit >= Math.max(...totals));
+  return { rows: page, mine, last };
 }
 
 /** { rank, total, score, toilet, level } for one player, or null (no row, or unreachable). */
@@ -1286,12 +1318,12 @@ function normalizeEduRow(raw) {
 /**
  * The 📚 board (education_board): the top LEADERBOARD.limit sharing players by average grade, with
  * `playerId`'s own row flagged `me` (and appended when it is below the top). An array, or null
- * (offline, not deployed).
+ * (offline, not deployed). opts.offset (default 0): the page from place offset + 1.
  */
 export async function fetchEducationBoard(playerId = null, opts = {}) {
   const pid = typeof playerId === 'string' && ID_RE.test(playerId) ? playerId : null;
   const config = opts.config ?? LEADERBOARD;
-  const out = await request('/rpc/education_board', { method: 'POST', body: { p_player_id: pid, p_limit: config.limit ?? 25 } }, opts);
+  const out = await request('/rpc/education_board', { method: 'POST', body: { p_player_id: pid, p_limit: config.limit ?? 25, ...offsetField(opts.offset) } }, opts);
   if (!Array.isArray(out)) return null;
   return out.map(normalizeEduRow).filter(Boolean);
 }

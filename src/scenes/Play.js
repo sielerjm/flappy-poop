@@ -4794,9 +4794,9 @@ export class Play extends Phaser.Scene {
     this.eduShare.noteShared(shared);
   }
 
-  /** The 📚 board's rows (education_board) with this player's own row flagged; a method so the smoke can stub it. */
-  fetchEduBoard(id) {
-    return fetchEducationBoard(id);
+  /** The 📚 board's rows (education_board) with this player's own row flagged, from place offset + 1 (plan 28, 5.2: a page); a method so the smoke can stub it. */
+  fetchEduBoard(id, offset = 0) {
+    return fetchEducationBoard(id, { offset });
   }
 
   /** share_education for the 📚 board, with the invite code when the player has one; a method so the smoke can stub it (never the live board). */

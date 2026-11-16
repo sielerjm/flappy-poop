@@ -2240,7 +2240,11 @@ export function leaderboardLayout(cx, cy, { tabs = 3 } = {}) {
     headerY: cy - 380,
     firstY: cy - 344,
     pitch: 52,
-    footerY: cy + 456,
+    // The page switch ‹ 26-50 › (plan 28, 5.2): pinned under the window's 14 rows (LEADERBOARD.visibleRows),
+    // the arrows gap px either side of the label; the footer's first line starts under it (its top, so a
+    // second line grows down, clear of the arrows and the version line).
+    pager: { y: cy + 398, gap: 116, width: 104, height: 56 },
+    footerTop: cy + 434,
     versionY: cy + 522,
     cols: { rank: cx - 264, name: cx - 196, toilet: cx + 64, level: cx + 152, right: cx + 264, medalsRight: cx + 192, gradeRight: cx + 184 }, // gradeRight: the 📚 board's "92.5 %", left of its run count at `right`
     titleMaxW: 480, // a longer title (MEDAL BOARD) shrinks to stay clear of the ✕
