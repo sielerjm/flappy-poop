@@ -35,6 +35,8 @@
 --   * call enrol_research(...)     join the education tester pilot with the invite code (2026-11-13)
 --   * call submit_research_events(...) a pilot participant's answer events, under their research id
 --   * call delete_research(...)    withdraw from the pilot: the participant and their answers are deleted
+--   * call submit_runs(...)        a batch of run summaries, as numbers (plan 30); stored owner-only, 90 days
+--   * call score_board(...)        the 🏆 top list as one player sees it: their own rows at their own best (names, never ids)
 --   * call schema_version()        which version of this file the database last ran (a stamp of the file; 2026-11-13)
 -- A player has up to two rows: their best on the toilet and their best off it
 -- (primary key player_id + toilet, since 2026-11-04).
@@ -42,7 +44,8 @@
 -- on player_aliases, the tournament tables (tournaments, tournament_stats,
 -- tournament_matchups), daily_scores, player_counters, achievement_defs,
 -- player_achievements, player_meta, education_settings, education_public, research_participants
--- or research_responses (nor the research_* views). Profiles are public
+-- or research_responses (nor the research_* views), run_log, run_rejects, held_scores,
+-- score_steps or board_settings. Profiles are public
 -- (2026-11-11): player_stats returns anyone's stats, counters, achievements and biggest rival, by
 -- the name a board shows; and, only for a player who shares them, their education grade (2026-11-13).
 --
@@ -71,7 +74,7 @@
 -- submit_daily_score / daily_board / submit_counters / claim_achievements /
 -- player_stats / board_tags / share_education / submit_education_grades / rename_education /
 -- unshare_education / education_board / enrol_research / submit_research_events / delete_research /
--- schema_version;
+-- submit_runs / score_board / schema_version;
 -- an old client keeps working (same submit_score signature).
 --
 -- Maintenance (SQL editor):
@@ -79,6 +82,10 @@
 --   (plan 30; nothing is deleted, and the player's own device sees its rows as before):
 --     select public.admin_flag_player('somebody', 'why, for your own notes');
 --   show them again: select public.admin_unflag_player('somebody');
+--   a player's run summaries, newest first (plan 30): select * from public.admin_runs('somebody');
+--   hold one run (its best leaves the board for others; nothing is deleted), and release it:
+--     select public.hold_run('<player id>', '<run id>'); select public.release_run('<player id>', '<run id>');
+--   hold a best with no run behind it as well: select public.admin_set_require_run(true);
 --   who is hidden: select * from public.admin_flagged();
 --   remove a ghost row (a test name, say): delete from public.scores where name = 'somebody';
 --   raise the score cap: edit the CHECK below, the submit_score guard, and
@@ -308,6 +315,145 @@ grant usage on schema public to anon;
 revoke all on public.scores from anon, authenticated;
 grant select (name, score, toilet, level, updated_at) on public.scores to anon;
 
+-- The run log and holding (plan 30): the tables, and the two read helpers the 🏆 and rank functions
+-- below use. What they are for is said where submit_runs and hold_run are defined, further down.
+-- Run summaries (plan 30): one row per finished single-player or Daily run, as numbers (src/runStats.js
+-- makes them; never a test run, an education run or a match half). The device sends them in
+-- submit_runs before its score posts. Owner-only: no role may read or write the tables, and no
+-- profile or board shows them. A row is kept 90 days (received_at), except a held row and a hidden
+-- player's rows. Times: started_at and ended_at are the device's clock; clock_offset_ms is the
+-- server's clock minus the device's, measured when the batch was sent; received_at is the server's.
+create table if not exists public.run_log (
+  player_id       text not null check (player_id ~ '^[A-Za-z0-9_-]{22}$'), -- resolved (resolve_player)
+  run_id          text not null check (run_id ~ '^[A-Za-z0-9_-]{22}$'),    -- made by the device
+  session         text not null check (session ~ '^[A-Za-z0-9_-]{8,22}$'), -- one page load
+  mode            text not null check (mode in ('single', 'daily')),
+  day             date,                                                    -- the Daily's day
+  stub            boolean not null default false,                          -- a Daily cut off by a reload
+  score           int  not null check (score between 0 and 10000),
+  level           int  not null check (level between 1 and 7),
+  toilet          boolean not null default false,
+  won             boolean not null default false,
+  started_at      timestamptz,
+  ended_at        timestamptz,
+  length_ms       int check (length_ms between 0 and 86400000),           -- start to end, monotonic clock
+  paused_ms       int check (paused_ms between 0 and 86400000),           -- paused or hidden, inside length_ms
+  clock_offset_ms bigint not null default 0,
+  version         text not null check (version ~ '^[0-9A-Za-z.+-]{1,24}$'),
+  data            jsonb not null default '{}'::jsonb,                      -- run_data_keys(): numbers only
+  received_at     timestamptz not null default now(),
+  held            boolean not null default false,                          -- hold_run (moderation)
+  held_at         timestamptz,
+  primary key (player_id, run_id),
+  check ((mode = 'daily') = (day is not null)),
+  check (not stub or mode = 'daily')
+);
+create index if not exists run_log_received on public.run_log (player_id, received_at);
+create index if not exists run_log_started on public.run_log (player_id, started_at);
+alter table public.run_log enable row level security;
+revoke all on public.run_log from public, anon, authenticated;
+
+-- What submit_runs could not store, counted by UTC day, reason and client version (no ids).
+create table if not exists public.run_rejects (
+  day     date not null default (now() at time zone 'utc')::date,
+  reason  text not null,
+  version text not null,
+  n       int  not null default 0,
+  primary key (day, reason, version)
+);
+alter table public.run_rejects enable row level security;
+revoke all on public.run_rejects from public, anon, authenticated;
+
+create table if not exists public.held_scores (
+  id          bigserial primary key,
+  player_id   text not null,
+  board       text not null check (board in ('scores', 'daily')),
+  toilet      boolean not null default false,
+  day         date,
+  name        text not null,
+  score       int  not null,
+  level       int  not null,
+  pipes       int,
+  run_id      text,                                  -- the held run it matched, if any
+  posted_at   timestamptz not null default now(),
+  released_at timestamptz,
+  check ((board = 'daily') = (day is not null))
+);
+create index if not exists held_scores_player on public.held_scores (player_id, board);
+alter table public.held_scores enable row level security;
+revoke all on public.held_scores from public, anon, authenticated;
+revoke all on sequence public.held_scores_id_seq from public, anon, authenticated;
+
+-- Every raise of a 🏆 row: score, level and the run that backed it (null: none, or a row from
+-- before this table). hold_run reads it to put a row back to the best before a held run. Seeded
+-- once with the rows of the day it was made. Owner-only.
+create table if not exists public.score_steps (
+  player_id text not null,
+  toilet    boolean not null,
+  score     int  not null,
+  level     int  not null,
+  run_id    text,
+  at        timestamptz not null default now()
+);
+create index if not exists score_steps_player on public.score_steps (player_id, toilet, score);
+alter table public.score_steps enable row level security;
+revoke all on public.score_steps from public, anon, authenticated;
+insert into public.score_steps (player_id, toilet, score, level, run_id, at)
+select s.player_id, s.toilet, s.score, s.level, null, s.updated_at from public.scores s
+where not exists (select 1 from public.score_steps);
+
+-- Board switches (one row). require_run: a raise with no run behind it is held too.
+create table if not exists public.board_settings (
+  id          boolean primary key default true check (id),
+  require_run boolean not null default false
+);
+insert into public.board_settings (id) values (true) on conflict (id) do nothing;
+alter table public.board_settings enable row level security;
+revoke all on public.board_settings from public, anon, authenticated;
+-- own_best: a player's own 🏆 rows as their own device should see them: for each 🚽 kind, the
+-- higher of the stored row and a held best (held_scores), under the name they last posted. A
+-- player's own views read it; nobody else's do. Internal.
+create or replace function public.own_best(p_id text)
+returns table (pid text, name text, score int, toilet boolean, level int, at timestamptz)
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select p_id,
+         coalesce((select s.name from public.scores s where s.player_id = p_id order by s.updated_at desc limit 1),
+                  (select h.name from public.held_scores h where h.player_id = p_id order by h.posted_at desc limit 1)),
+         c.score, c.toilet, c.level, c.at
+  from (
+    select distinct on (x.toilet) x.toilet, x.score, x.level, x.at
+    from (
+      select s.toilet, s.score, s.level, s.updated_at as at, 0 as pri from public.scores s where s.player_id = p_id
+      union all
+      select h.toilet, h.score, h.level, h.posted_at, 1 from public.held_scores h
+      where h.player_id = p_id and h.board = 'scores' and h.released_at is null
+    ) x
+    order by x.toilet, x.score desc, x.pri asc
+  ) c
+  where p_id is not null;
+$$;
+revoke execute on function public.own_best(text) from public, anon, authenticated;
+
+-- board_rows: the 🏆 rows as p_caller sees them: everyone's visible rows, and the caller's own
+-- (own_best, hidden or not). p_caller null: the visible rows alone. Internal.
+create or replace function public.board_rows(p_caller text)
+returns table (pid text, name text, score int, toilet boolean, level int, at timestamptz)
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select s.player_id, s.name, s.score, s.toilet, s.level, s.updated_at from public.scores s
+  where not s.hidden and s.player_id is distinct from p_caller
+  union all
+  select * from public.own_best(p_caller);
+$$;
+revoke execute on function public.board_rows(text) from public, anon, authenticated;
+
 -- Upsert one player's best for one toilet state (p_toilet picks the row). Raises
 -- (HTTP 400 through PostgREST) on bad input, on a username another player holds
 -- ('name taken'), or when that row was written less than 5 s ago, so the client
@@ -330,6 +476,10 @@ declare
   v_top_before text;
   v_top_after text;
   v_hidden boolean;
+  v_current public.scores%rowtype;
+  v_score int := p_score;
+  v_level int := p_level;
+  v_raise boolean;
 begin
   if p_player_id is null or p_player_id !~ '^[A-Za-z0-9_-]{22}$' then
     raise exception 'bad player id';
@@ -353,24 +503,51 @@ begin
   end if;
 
   select updated_at into last_write from public.scores where player_id = v_id and toilet = coalesce(p_toilet, false);
+  if last_write is null then -- a held first post paces like a stored one (plan 30)
+    select max(h.posted_at) into last_write from public.held_scores h
+    where h.player_id = v_id and h.board = 'scores' and h.toilet = coalesce(p_toilet, false);
+  end if;
   if last_write is not null and last_write > now() - interval '5 seconds' then
     raise exception 'rate limited';
   end if;
   perform public.touch_player(v_id);
   v_hidden := public.player_hidden(v_id);
 
+  -- A post that raises the row (or makes the first) is matched to its run (plan 30): held, it is
+  -- kept in held_scores and the post goes on as one that raised nothing.
+  select * into v_current from public.scores where player_id = v_id and toilet = coalesce(p_toilet, false);
+  v_raise := v_current.player_id is null or p_score > v_current.score;
+  if v_raise and public.post_must_hold(v_id, coalesce(p_toilet, false), p_score, p_level, null) then
+    insert into public.held_scores (player_id, board, toilet, name, score, level, run_id)
+    values (v_id, 'scores', coalesce(p_toilet, false), p_name, p_score, p_level,
+            (select r.run_id from public.run_log r where r.player_id = v_id and r.mode = 'single' and r.held
+               and r.toilet = coalesce(p_toilet, false) and r.score = p_score and r.level = p_level
+             order by r.received_at desc limit 1));
+    v_raise := false;
+    if v_current.player_id is null then
+      update public.scores set name = p_name where player_id = v_id and name <> p_name;
+      return;
+    end if;
+    v_score := v_current.score;
+    v_level := v_current.level;
+  end if;
+
   -- 👑 Dethroned: the 🏆 #1 (score, then the earlier write) before and after this post, among the
   -- rows the board shows (plan 30).
   perform pg_advisory_xact_lock(hashtext('board:scores'));
   select s.player_id into v_top_before from public.scores s where not s.hidden order by s.score desc, s.updated_at asc limit 1;
   insert into public.scores (player_id, name, score, toilet, level, updated_at, hidden)
-  values (v_id, p_name, p_score, coalesce(p_toilet, false), p_level, now(), v_hidden)
+  values (v_id, p_name, v_score, coalesce(p_toilet, false), v_level, now(), v_hidden)
   on conflict (player_id, toilet) do update
     set name       = excluded.name,
         score      = greatest(public.scores.score, excluded.score),
         level      = case when excluded.score > public.scores.score then excluded.level else public.scores.level end,
         updated_at = now(),
         hidden     = excluded.hidden;
+  if v_raise then
+    insert into public.score_steps (player_id, toilet, score, level, run_id)
+    values (v_id, coalesce(p_toilet, false), p_score, p_level, public.post_run(v_id, coalesce(p_toilet, false), p_score, p_level, null));
+  end if;
   -- The player's other row (the other toilet kind) follows the name too.
   update public.scores set name = p_name where player_id = v_id and name <> p_name;
   select s.player_id into v_top_after from public.scores s where not s.hidden order by s.score desc, s.updated_at asc limit 1;
@@ -932,6 +1109,11 @@ begin
   else
     update public.research_participants set player_id = v_keep where player_id = v_merge;
   end if;
+  delete from public.run_log m where m.player_id = v_merge
+    and exists (select 1 from public.run_log k where k.player_id = v_keep and k.run_id = m.run_id);
+  update public.run_log set player_id = v_keep where player_id = v_merge; -- plan 30
+  update public.held_scores set player_id = v_keep where player_id = v_merge;
+  update public.score_steps set player_id = v_keep where player_id = v_merge;
   update public.player_aliases set canonical_id = v_keep, merged_at = now() where canonical_id = v_merge;
   insert into public.player_aliases (alias_id, canonical_id)
   values (v_merge, v_keep)
@@ -1030,16 +1212,19 @@ stable
 security definer
 set search_path = public
 as $$
+  -- Among the rows this player sees (board_rows: their own at their own best, held ones included, plan 30).
+  with b as (
+    select * from public.board_rows(public.resolve_player(p_player_id))
+  ), me as (
+    select * from b where b.pid = public.resolve_player(p_player_id) and b.toilet = coalesce(p_toilet, false)
+  )
   select json_build_object(
-    'rank',   1 + (select count(*) from public.scores o
-                   where (not o.hidden or o.player_id = s.player_id)
-                     and (o.score > s.score or (o.score = s.score and o.updated_at < s.updated_at))),
-    'total',  (select count(*) from public.scores o where not o.hidden or o.player_id = s.player_id),
-    'score',  s.score,
-    'toilet', s.toilet,
-    'level',  s.level)
-  from public.scores s
-  where s.player_id = public.resolve_player(p_player_id) and s.toilet = coalesce(p_toilet, false);
+    'rank',   1 + (select count(*) from b o where o.score > me.score or (o.score = me.score and o.at < me.at)),
+    'total',  (select count(*) from b),
+    'score',  me.score,
+    'toilet', me.toilet,
+    'level',  me.level)
+  from me;
 $$;
 
 -- A finished tournament (🏅) from the host device: one call per tournament.
@@ -1413,6 +1598,22 @@ begin
 
   perform public.touch_player(v_id);
 
+  -- The day's first post is matched to its run (plan 30): held, it is kept in held_scores and
+  -- answered as stored ('ok', then 'duplicate'); the player's earlier days follow the name as usual.
+  if not exists (select 1 from public.daily_scores ds where ds.player_id = v_id and ds.day = p_day) then
+    if exists (select 1 from public.held_scores h where h.player_id = v_id and h.board = 'daily' and h.day = p_day and h.released_at is null) then
+      return 'duplicate';
+    end if;
+    if public.post_must_hold(v_id, false, p_score, p_level, p_day) then
+      insert into public.held_scores (player_id, board, day, name, score, level, pipes, run_id)
+      values (v_id, 'daily', p_day, p_name, p_score, p_level, p_pipes,
+              (select r.run_id from public.run_log r where r.player_id = v_id and r.mode = 'daily' and r.held
+                 and r.day = p_day and r.score = p_score order by r.received_at desc limit 1));
+      update public.daily_scores set name = p_name where player_id = v_id and name <> p_name;
+      return 'ok';
+    end if;
+  end if;
+
   -- 👑 Dethroned: that day's #1 (score, then the earlier post) before and after this post.
   perform pg_advisory_xact_lock(hashtext('board:daily:' || p_day::text));
   select ds.player_id into v_top_before from public.daily_scores ds where ds.day = p_day and not public.player_hidden(ds.player_id) order by ds.score desc, ds.submitted_at asc limit 1;
@@ -1455,7 +1656,13 @@ as $$
            ds.score as pscore, ds.level as plevel, ds.pipes as ppipes,
            row_number() over (order by ds.score desc, ds.submitted_at asc)::int as prank,
            (count(*) over ())::int as ptotal
-    from public.daily_scores ds
+    from (
+      select x.player_id, x.day, x.name, x.score, x.level, x.pipes, x.submitted_at from public.daily_scores x
+      union all -- the caller's own held post of the day (plan 30)
+      select h.player_id, h.day, h.name, h.score, h.level, coalesce(h.pipes, 0), h.posted_at from public.held_scores h
+      where h.board = 'daily' and h.released_at is null and h.player_id = (select cid from caller)
+        and not exists (select 1 from public.daily_scores y where y.player_id = h.player_id and y.day = h.day)
+    ) ds
     where ds.day = (select d from today)
       and (not public.player_hidden(ds.player_id) or ds.player_id = (select cid from caller)) -- plan 30
   )
@@ -2378,10 +2585,14 @@ begin
     'name', v_name,
     'single', jsonb_build_object(
       'games', v_games,
-      'bestScore', coalesce((select max(s.score) from public.scores s where s.player_id = v_id), 0),
+      'bestScore', coalesce(case when p_player_id ~ '^[A-Za-z0-9_-]{22}$' -- their own device: their own best (plan 30)
+                                 then (select max(o.score) from public.own_best(v_id) o)
+                                 else (select max(s.score) from public.scores s where s.player_id = v_id) end, 0),
       'wins', coalesce((v_c->>'wins')::bigint, 0),
       'maxLevel', greatest(coalesce((v_c->>'maxLevel')::int, 0),
-                           coalesce((select max(s.level) from public.scores s where s.player_id = v_id), 0)),
+                           coalesce(case when p_player_id ~ '^[A-Za-z0-9_-]{22}$'
+                                         then (select max(o.level) from public.own_best(v_id) o)
+                                         else (select max(s.level) from public.scores s where s.player_id = v_id) end, 0)),
       'avgLevel', case when v_games > 0 then round(coalesce((v_c->>'sumLevel')::numeric, 0) / v_games, 1) end,
       'avgScore', case when v_games > 0 then round(coalesce((v_c->>'sumScore')::numeric, 0) / v_games, 1) end),
     'daily', v_daily,
@@ -2471,6 +2682,398 @@ begin
 end;
 $$;
 
+
+-- The keys a run row's `data` may hold (src/runStats.js RUN_DATA_KEYS, in its order; tests keep the
+-- two the same). Each value is a number, a boolean, or a list of at most 16 numbers. Internal.
+create or replace function public.run_data_keys()
+returns text[]
+language sql
+immutable
+as $$
+  select array[
+    'frame_ms', 'distance', 'pipes', 'falls', 'close_calls', 'deaths',
+    'lv_pipes', 'lv_falls', 'lv_close', 'lv_deaths', 'lv_ms',
+    'lip_n', 'lip_mean', 'lip_sd', 'lip_hist', 'gap_n', 'gap_med', 'gap_sd', 'gap_min', 'gap_hist',
+    'fart_pipes', 'skip_pipes',
+    'press_touch', 'press_mouse', 'press_key', 'press_pad', 'downs', 'ups', 'hold_mean', 'hold_sd', 'hold_min', 'taps',
+    'webdriver', 'touch',
+    'flaps', 'flaps_physics', 'flaps_internal', 'flaps_pressed', 'flaps_trusted', 'flaps_fresh',
+    'break_ms', 'shop_opens', 'shop_buys', 'fps_mean', 'fps_sd', 'long_frames', 'field_w', 'pauses', 'hidden_ms'
+  ]::text[];
+$$;
+revoke execute on function public.run_data_keys() from public, anon, authenticated;
+
+-- Why a run row cannot be stored, or null when it can. p_sent is the device's clock when the batch
+-- was sent (epoch ms). Internal.
+create or replace function public.run_row_problem(e jsonb, p_sent bigint)
+returns text
+language plpgsql
+immutable
+set search_path = public
+as $$
+declare
+  v_mode text;
+  v_start bigint;
+  v_end bigint;
+  f record;
+  x jsonb;
+  v_num text;
+begin
+  if jsonb_typeof(e) is distinct from 'object' then
+    return 'shape';
+  end if;
+  if length(e::text) > 4096 then
+    return 'size';
+  end if;
+  if exists (select 1 from jsonb_object_keys(e) k
+             where k <> all(array['run_id', 'session', 'mode', 'day', 'stub', 'score', 'level', 'toilet', 'won',
+                                  'started_at', 'ended_at', 'length_ms', 'paused_ms', 'version', 'data'])) then
+    return 'key';
+  end if;
+  if coalesce(e ->> 'run_id', '') !~ '^[A-Za-z0-9_-]{22}$' or coalesce(e ->> 'session', '') !~ '^[A-Za-z0-9_-]{8,22}$' then
+    return 'id';
+  end if;
+  if coalesce(e ->> 'version', '') !~ '^[0-9A-Za-z.+-]{1,24}$' then
+    return 'version';
+  end if;
+  v_mode := e ->> 'mode';
+  if v_mode is null or v_mode not in ('single', 'daily') then
+    return 'mode';
+  end if;
+  if (v_mode = 'daily') <> (coalesce(e ->> 'day', '') ~ '^\d{4}-\d{2}-\d{2}$') then
+    return 'day';
+  end if;
+  if v_mode = 'daily' then
+    perform (e ->> 'day')::date; -- a real date (the guard below answers 'invalid' otherwise)
+  end if;
+  if e ? 'stub' and jsonb_typeof(e -> 'stub') <> 'boolean' then
+    return 'stub';
+  end if;
+  if coalesce((e ->> 'stub')::boolean, false) and v_mode <> 'daily' then
+    return 'stub';
+  end if;
+  if jsonb_typeof(e -> 'score') is distinct from 'number' or (e ->> 'score') !~ '^\d{1,5}$' then
+    return 'score';
+  end if;
+  if (e ->> 'score')::int > (case when v_mode = 'daily' then 10000 else 1000 end) then
+    return 'score';
+  end if;
+  if jsonb_typeof(e -> 'level') is distinct from 'number' or (e ->> 'level') !~ '^[1-7]$' then
+    return 'level';
+  end if;
+  if (e ? 'toilet' and jsonb_typeof(e -> 'toilet') <> 'boolean') or (e ? 'won' and jsonb_typeof(e -> 'won') <> 'boolean') then
+    return 'flag';
+  end if;
+  -- Times: whole epoch ms, start <= end, from the 90 days before the batch was sent, never after it.
+  if e ? 'started_at' or e ? 'ended_at' then
+    if jsonb_typeof(e -> 'started_at') is distinct from 'number' or (e ->> 'started_at') !~ '^\d{12,14}$' then
+      return 'time';
+    end if;
+    if jsonb_typeof(e -> 'ended_at') is distinct from 'number' or (e ->> 'ended_at') !~ '^\d{12,14}$' then
+      return 'time';
+    end if;
+    v_start := (e ->> 'started_at')::bigint;
+    v_end := (e ->> 'ended_at')::bigint;
+    if v_start > v_end or v_end > p_sent + 60000 or v_start < p_sent - 90::bigint * 86400000 then
+      return 'time';
+    end if;
+  end if;
+  foreach v_num in array array['length_ms', 'paused_ms'] loop
+    if e ? v_num then
+      if jsonb_typeof(e -> v_num) <> 'number' or (e ->> v_num) !~ '^\d{1,8}$' then
+        return 'length';
+      end if;
+      if (e ->> v_num)::bigint > 86400000 then
+        return 'length';
+      end if;
+    end if;
+  end loop;
+  if not coalesce((e ->> 'stub')::boolean, false) and not (e ? 'started_at' and e ? 'length_ms') then
+    return 'time';
+  end if;
+  if e ? 'data' then
+    if jsonb_typeof(e -> 'data') <> 'object' then
+      return 'data';
+    end if;
+    for f in select key, value from jsonb_each(e -> 'data') loop
+      if f.key <> all(public.run_data_keys()) then
+        return 'data key';
+      end if;
+      if jsonb_typeof(f.value) = 'boolean' then
+        continue;
+      elsif jsonb_typeof(f.value) = 'number' then
+        if abs((f.value #>> '{}')::numeric) > 1000000000 then
+          return 'data number';
+        end if;
+      elsif jsonb_typeof(f.value) = 'array' then
+        if jsonb_array_length(f.value) > 16 then
+          return 'data list';
+        end if;
+        for x in select value from jsonb_array_elements(f.value) loop
+          if jsonb_typeof(x) <> 'number' or abs((x #>> '{}')::numeric) > 1000000000 then
+            return 'data list';
+          end if;
+        end loop;
+      else
+        return 'data value';
+      end if;
+    end loop;
+  end if;
+  return null;
+exception when others then
+  return 'invalid'; -- never let one odd row fail the batch
+end;
+$$;
+revoke execute on function public.run_row_problem(jsonb, bigint) from public, anon, authenticated;
+
+-- submit_runs: up to 20 run summaries (run_row_problem says what a row may hold). p_sent_at is the
+-- device's clock as it sends (epoch ms). A row that cannot be stored is left out and counted in
+-- run_rejects; a row already stored (player and run id) is skipped. One batch per player per 5 s
+-- ('rate limited': the device keeps them). Errors raise only for the batch itself ('bad ...').
+-- The answer never depends on the rows. Each call also deletes this player's rows older than 90
+-- days, except held rows and a hidden player's.
+create or replace function public.submit_runs(p_player_id text, p_sent_at bigint, p_rows jsonb)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_id text;
+  v_offset bigint;
+  v_problem text;
+  e jsonb;
+begin
+  if p_player_id is null or p_player_id !~ '^[A-Za-z0-9_-]{22}$' then
+    raise exception 'bad player id';
+  end if;
+  if p_sent_at is null or p_sent_at < 100000000000 or p_sent_at > 99999999999999 then
+    raise exception 'bad time';
+  end if;
+  if p_rows is null or jsonb_typeof(p_rows) <> 'array' or jsonb_array_length(p_rows) not between 1 and 20 then
+    raise exception 'bad rows';
+  end if;
+  v_id := public.resolve_player(p_player_id);
+  perform pg_advisory_xact_lock(hashtext('runs:' || v_id));
+  if exists (select 1 from public.run_log r where r.player_id = v_id and r.received_at > now() - interval '5 seconds') then
+    raise exception 'rate limited';
+  end if;
+  v_offset := round(extract(epoch from now()) * 1000)::bigint - p_sent_at;
+  for e in select value from jsonb_array_elements(p_rows) loop
+    v_problem := public.run_row_problem(e, p_sent_at);
+    if v_problem is not null then
+      insert into public.run_rejects (reason, version, n)
+      values (v_problem, coalesce(substring(e ->> 'version' from '^[0-9A-Za-z.+-]{1,24}$'), '?'), 1)
+      on conflict (day, reason, version) do update set n = public.run_rejects.n + 1;
+      continue;
+    end if;
+    insert into public.run_log (player_id, run_id, session, mode, day, stub, score, level, toilet, won,
+                                started_at, ended_at, length_ms, paused_ms, clock_offset_ms, version, data)
+    values (
+      v_id, e ->> 'run_id', e ->> 'session', e ->> 'mode', (e ->> 'day')::date, coalesce((e ->> 'stub')::boolean, false),
+      (e ->> 'score')::int, (e ->> 'level')::int, coalesce((e ->> 'toilet')::boolean, false), coalesce((e ->> 'won')::boolean, false),
+      case when e ? 'started_at' then to_timestamp((e ->> 'started_at')::bigint / 1000.0) end,
+      case when e ? 'ended_at' then to_timestamp((e ->> 'ended_at')::bigint / 1000.0) end,
+      (e ->> 'length_ms')::int, (e ->> 'paused_ms')::int, v_offset, e ->> 'version', coalesce(e -> 'data', '{}'::jsonb))
+    on conflict (player_id, run_id) do nothing;
+  end loop;
+  if not public.player_hidden(v_id) then
+    delete from public.run_log r where r.player_id = v_id and r.received_at < now() - interval '90 days' and not r.held;
+  end if;
+end;
+$$;
+
+-- admin_runs: the run rows of the player a board shows under this name, newest first (owner only,
+-- in the SQL editor).
+create or replace function public.admin_runs(p_name text)
+returns setof public.run_log
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select r.* from public.run_log r
+  where r.player_id = public.player_by_name(p_name)
+  order by r.received_at desc;
+$$;
+revoke execute on function public.admin_runs(text) from public, anon, authenticated;
+
+-- Holding a run (plan 30): a moderator can hold a stored run (hold_run). A score post whose only
+-- matching runs are held (or, with board_settings.require_run on, that has no run at all) does not
+-- reach the board for others: it is kept in held_scores, and the post is answered and paced as a
+-- post that raised nothing. The player's own views read held_scores too. A post is matched to its
+-- run by content: the same player, 🚽, score and level (a Daily: the same day and score). Only a
+-- post that would raise the player's row, or make their first, needs a run. Owner-only tables.
+
+-- Owner only (SQL editor): turn require_run on or off.
+create or replace function public.admin_set_require_run(p_on boolean)
+returns boolean
+language sql
+security definer
+set search_path = public
+as $$
+  update public.board_settings set require_run = coalesce(p_on, false) where id returning require_run;
+$$;
+revoke execute on function public.admin_set_require_run(boolean) from public, anon, authenticated;
+
+-- Whether a post of this content must be held: its only matching runs are held, or it has none
+-- and require_run is on. p_day null: a 🏆 post; else a Daily post (score and day only). Internal.
+create or replace function public.post_must_hold(p_id text, p_toilet boolean, p_score int, p_level int, p_day date)
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  with m as (
+    select r.held from public.run_log r
+    where r.player_id = p_id and r.score = p_score
+      and case when p_day is null then r.mode = 'single' and r.toilet = coalesce(p_toilet, false) and r.level = p_level
+               else r.mode = 'daily' and r.day = p_day end
+  )
+  select case
+    when exists (select 1 from m where not m.held) then false
+    when exists (select 1 from m) then true
+    else coalesce((select b.require_run from public.board_settings b where b.id), false)
+  end;
+$$;
+revoke execute on function public.post_must_hold(text, boolean, int, int, date) from public, anon, authenticated;
+
+-- The latest unheld run behind a post of this content, or null. Internal.
+create or replace function public.post_run(p_id text, p_toilet boolean, p_score int, p_level int, p_day date)
+returns text
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select r.run_id from public.run_log r
+  where r.player_id = p_id and r.score = p_score and not r.held
+    and case when p_day is null then r.mode = 'single' and r.toilet = coalesce(p_toilet, false) and r.level = p_level
+             else r.mode = 'daily' and r.day = p_day end
+  order by r.received_at desc limit 1;
+$$;
+revoke execute on function public.post_run(text, boolean, int, int, date) from public, anon, authenticated;
+
+-- hold_run (owner only): hold one of a player's stored runs. If the board already shows the best that
+-- run set (and no other unheld run of the same content backs it), that best moves to held_scores and
+-- the row goes back to the best before it (score_steps), or leaves the board when there was none; a
+-- Daily row moves to held_scores. Nothing is deleted. True when the run was found and not yet held.
+create or replace function public.hold_run(p_player_id text, p_run_id text)
+returns boolean
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_id text := public.resolve_player(p_player_id);
+  r public.run_log%rowtype;
+  cur public.scores%rowtype;
+  prev record;
+  d public.daily_scores%rowtype;
+begin
+  perform pg_advisory_xact_lock(hashtext('runs:' || v_id));
+  update public.run_log x set held = true, held_at = now()
+  where x.player_id = v_id and x.run_id = p_run_id and not x.held
+  returning * into r;
+  if not found then
+    return false;
+  end if;
+  if r.mode = 'single' then
+    perform pg_advisory_xact_lock(hashtext('board:scores'));
+    select * into cur from public.scores s where s.player_id = v_id and s.toilet = r.toilet;
+    if found and cur.score = r.score and cur.level = r.level
+       and public.post_run(v_id, r.toilet, r.score, r.level, null) is null then
+      insert into public.held_scores (player_id, board, toilet, name, score, level, run_id, posted_at)
+      values (v_id, 'scores', r.toilet, cur.name, cur.score, cur.level, r.run_id, cur.updated_at);
+      select st.score, st.level, st.at into prev from public.score_steps st
+      where st.player_id = v_id and st.toilet = r.toilet and st.score < cur.score
+        and (st.run_id is null or not exists (select 1 from public.run_log y where y.player_id = v_id and y.run_id = st.run_id and y.held))
+      order by st.score desc, st.at desc limit 1;
+      if found then
+        update public.scores set score = prev.score, level = prev.level, updated_at = prev.at
+        where player_id = v_id and toilet = r.toilet;
+      else
+        delete from public.scores where player_id = v_id and toilet = r.toilet;
+      end if;
+    end if;
+  else
+    perform pg_advisory_xact_lock(hashtext('board:daily:' || r.day::text));
+    select * into d from public.daily_scores ds where ds.player_id = v_id and ds.day = r.day;
+    if found and d.score = r.score and public.post_run(v_id, false, r.score, r.level, r.day) is null then
+      insert into public.held_scores (player_id, board, day, name, score, level, pipes, run_id, posted_at)
+      values (v_id, 'daily', d.day, d.name, d.score, d.level, d.pipes, r.run_id, d.submitted_at);
+      delete from public.daily_scores where player_id = v_id and day = r.day;
+    end if;
+  end if;
+  return true;
+end;
+$$;
+revoke execute on function public.hold_run(text, text) from public, anon, authenticated;
+
+-- release_run (owner only): undo hold_run. The run counts again, and every held best of that
+-- player with the run's content goes onto the board through the normal rules (the higher score
+-- wins; a Daily day keeps the first). True when the run was found and held.
+create or replace function public.release_run(p_player_id text, p_run_id text)
+returns boolean
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_id text := public.resolve_player(p_player_id);
+  r public.run_log%rowtype;
+  h public.held_scores%rowtype;
+begin
+  perform pg_advisory_xact_lock(hashtext('runs:' || v_id));
+  update public.run_log x set held = false, held_at = null
+  where x.player_id = v_id and x.run_id = p_run_id and x.held
+  returning * into r;
+  if not found then
+    return false;
+  end if;
+  for h in select * from public.held_scores hs
+           where hs.player_id = v_id and hs.released_at is null and hs.score = r.score
+             and case when r.mode = 'single' then hs.board = 'scores' and hs.toilet = r.toilet and hs.level = r.level
+                      else hs.board = 'daily' and hs.day = r.day end loop
+    if h.board = 'scores' then
+      perform pg_advisory_xact_lock(hashtext('board:scores'));
+      insert into public.scores (player_id, name, score, toilet, level, updated_at, hidden)
+      values (v_id, coalesce((select s.name from public.scores s where s.player_id = v_id order by s.updated_at desc limit 1), h.name),
+              h.score, h.toilet, h.level, h.posted_at, public.player_hidden(v_id))
+      on conflict (player_id, toilet) do update
+        set score      = greatest(public.scores.score, excluded.score),
+            level      = case when excluded.score > public.scores.score then excluded.level else public.scores.level end,
+            updated_at = case when excluded.score > public.scores.score then excluded.updated_at else public.scores.updated_at end;
+      insert into public.score_steps (player_id, toilet, score, level, run_id, at) values (v_id, h.toilet, h.score, h.level, r.run_id, h.posted_at);
+    else
+      insert into public.daily_scores (player_id, day, name, score, level, pipes, submitted_at)
+      values (v_id, h.day, h.name, h.score, h.level, coalesce(h.pipes, 0), h.posted_at)
+      on conflict (player_id, day) do nothing;
+    end if;
+    update public.held_scores set released_at = now() where id = h.id;
+  end loop;
+  return true;
+end;
+$$;
+revoke execute on function public.release_run(text, text) from public, anon, authenticated;
+
+
+-- score_board: the 🏆 top list for the player with this id (their own rows at their own best,
+-- plan 30), or for nobody (null: the visible rows, as the table read gives them). Names, never ids.
+create or replace function public.score_board(p_player_id text default null, p_limit int default 25)
+returns table (name text, score int, toilet boolean, level int)
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select b.name, b.score, b.toilet, b.level
+  from public.board_rows(case when p_player_id ~ '^[A-Za-z0-9_-]{22}$' then public.resolve_player(p_player_id) end) b
+  order by b.score desc, b.at asc
+  limit least(greatest(coalesce(p_limit, 25), 1), 100);
+$$;
+
 revoke execute on function public.submit_score(text, text, int, boolean, int) from public, authenticated;
 grant  execute on function public.submit_score(text, text, int, boolean, int) to anon;
 revoke execute on function public.player_rank(text, boolean) from public, authenticated;
@@ -2513,6 +3116,10 @@ revoke execute on function public.submit_research_events(text, text, jsonb, time
 grant  execute on function public.submit_research_events(text, text, jsonb, timestamptz) to anon;
 revoke execute on function public.delete_research(text) from public, authenticated;
 grant  execute on function public.delete_research(text) to anon;
+revoke execute on function public.submit_runs(text, bigint, jsonb) from public, authenticated;
+grant  execute on function public.submit_runs(text, bigint, jsonb) to anon;
+revoke execute on function public.score_board(text, int) from public, authenticated;
+grant  execute on function public.score_board(text, int) to anon;
 
 -- Which version of this file the database last ran: a short SHA-256 of the file with the value
 -- below blanked (tools/schema_check.mjs). `npm run schema:stamp` rewrites it after an edit, and
@@ -2524,7 +3131,7 @@ returns text
 language sql
 immutable
 as $$
-  select '6a480b8088f03c74'::text; -- schema stamp
+  select '5d5121ac05696cff'::text; -- schema stamp
 $$;
 revoke execute on function public.schema_version() from public, authenticated;
 grant  execute on function public.schema_version() to anon;
