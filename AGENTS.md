@@ -13,10 +13,10 @@ is +3 (it sits between pipe pairs like a bean), bad bacteria is −3 (floor 0; n
 **postbiotic** (`effects.applyFiber`): pipes and fiber score × `items.postbioticMultiplier` (2) until
 the probiotic countdown ends, fart pipes included; another probiotic extends it, a hit ends it. A
 **mystery box** (`TUNING.mystery`, spinning spritesheet) opens into one reward: probiotic 20 %, one bean 20 %,
-a 5-pipe postbiotic 5 % (×2 already on), three beans 5 %, a skip to the end of the level 1 %, 5 coins 10 %,
-10 coins 5 %, 15 coins 1 % (the coin draws come after skip in `MYSTERY_DRAWS`, so the older bands hold), else
-fiber (33 %, `rollMystery`); a draw that cannot do anything (bean with a full bag, skip with the finish line out) becomes
-fiber (`resolveMystery`). A skip scores every pair left in the level at the current multiplier (countdown
+a 5-pipe postbiotic 5 % (×2 already on), three beans 5 %, 5 coins 10 %, 10 coins 5 %, 15 coins 1 %, else
+fiber (34 %, `rollMystery`; no box holds the 🏁 skip since plan 28, 4.6, its 1 % went to fiber); a draw that cannot
+do anything (bean with a full bag) becomes fiber (`resolveMystery`). Test mode keeps the 🏁 (Settings' power-up
+row, `grantTest('skip')`; greyed in a level break): it scores every pair left in the level at the current multiplier (countdown
 paused, like a fart), clears what is ahead and brings the finish line in from the right edge. The first
 box is guaranteed after one of level 3's first four pairs (`scriptedMysteryPair`, so before pipe 5); on every
 later pair boxes roll at half fiber's weight (`mysteryRolls`). On level 3 they hold still midway between two

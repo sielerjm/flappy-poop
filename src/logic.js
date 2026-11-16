@@ -578,10 +578,11 @@ export function scriptedMysteryPair(rng, t) {
 }
 
 /**
- * What a mystery box can hold besides fiber, in roll order; mystery.draws gives each a 0–1 chance.
- * The coin draws come after skip so the older draws keep their bands (0.2 / 0.4 / 0.45 / 0.5 / 0.51).
+ * What a mystery box can hold besides fiber, in roll order; mystery.draws gives each a 0–1 chance
+ * (bands 0.2 / 0.4 / 0.45 / 0.5, then the coins). No 'skip' since plan 28, 4.6: a box never skips the
+ * level; test mode still does ('skip' in TEST_POWERS, resolveMystery and mysteryFace keep it).
  */
-export const MYSTERY_DRAWS = ['probiotic', 'bean1', 'postbiotic', 'bean3', 'skip', 'coin5', 'coin10', 'coin15'];
+export const MYSTERY_DRAWS = ['probiotic', 'bean1', 'postbiotic', 'bean3', 'coin5', 'coin10', 'coin15'];
 
 /** Beans each bean draw adds (as many as fit under beans.maxBeans). */
 export const MYSTERY_BEANS = { bean1: 1, bean3: 3 };
@@ -625,7 +626,7 @@ export function mysteryFace(draw) {
   return { key, count };
 }
 
-/** What the shop's reel shows: every reward a box bought in a level break can give (a skip becomes fiber there). */
+/** What the shop's reel shows: every reward a box bought in a level break can give (no box holds a skip since plan 28, 4.6). */
 export const REEL_FACES = ['fiber', 'probiotic', 'postbiotic', 'bean1', 'bean3', 'coin5', 'coin10', 'coin15'];
 
 /**

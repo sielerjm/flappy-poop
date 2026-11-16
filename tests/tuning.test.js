@@ -154,9 +154,9 @@ test('mystery box: a first box early in level 3, then half fiber\'s rate; still 
   assert.ok(m.firstBefore >= 2 && m.firstBefore <= T.levels.pipes[m.firstLevel - 1], `mystery.firstBefore ${m.firstBefore}`);
   assert.equal(m.weight, T.items.weights.fiber / 2, 'half as common as fiber');
   assert.equal(m.periodMs, 2 * T.items.fiberPeriodMs, 'half fiber\'s bob speed');
-  assert.deepEqual(m.draws, { probiotic: 0.2, bean1: 0.2, postbiotic: 0.05, bean3: 0.05, skip: 0.01, coin5: 0.1, coin10: 0.05, coin15: 0.01 });
+  assert.deepEqual(m.draws, { probiotic: 0.2, bean1: 0.2, postbiotic: 0.05, bean3: 0.05, coin5: 0.1, coin10: 0.05, coin15: 0.01 }); // no skip since plan 28, 4.6
   const drawn = Object.values(m.draws).reduce((a, b) => a + b, 0);
-  assert.ok(Math.abs(drawn - 0.67) < 1e-9, `draws sum ${drawn}`);
+  assert.ok(Math.abs(drawn - 0.66) < 1e-9, `draws sum ${drawn} (fiber takes 0.34)`);
   assert.ok(1 - drawn > Math.max(...Object.values(m.draws)), 'fiber (the rest) is the most common draw');
   assert.ok(m.draws.coin15 < m.draws.coin10 && m.draws.coin10 < m.draws.coin5, 'the bigger the coin draw, the rarer');
   assert.equal(m.postbioticPipes, T.items.probioticPipes);

@@ -3690,7 +3690,8 @@ export class Play extends Phaser.Scene {
     item.destroy();
     if (kind === 'mystery') {
       this.collected.mystery += 1;
-      // A draw that cannot do anything (full bag, finish line already out) becomes fiber. A match
+      // A draw that cannot do anything (a bean with a full bag) becomes fiber; pairsLeft matters only to test mode's
+      // skip now (no box holds one since plan 28, 4.6). A match
       // rolls from this player's own draw stream, on the catch-up table for how far behind the other
       // player they are (catchUpTier: double bean odds from 10 pipes, a guaranteed bean3 from 25).
       const pairsLeft = this.finishSpawned ? 0 : skipPairs(this.pipesPassed, this.level, this.tune);

@@ -626,10 +626,13 @@ test('rollMystery walks the draw bands in order and falls back to fiber', () => 
   }
   assert.equal(rollMystery(() => edge + 1e-9, T), 'fiber');
   assert.equal(rollMystery(() => 0.999999, T), 'fiber');
-  // The coin draws come after skip, so the older bands (and the smoke's pinned 0.25 bean1 / 0.505 skip) hold.
-  assert.deepEqual(MYSTERY_DRAWS.slice(-4), ['skip', 'coin5', 'coin10', 'coin15']);
+  // Plan 28, 4.6: a box never holds the 🏁 skip (its 1 % went to fiber); the coin draws follow bean3.
+  assert.deepEqual(MYSTERY_DRAWS.slice(-4), ['bean3', 'coin5', 'coin10', 'coin15']);
+  assert.ok(!MYSTERY_DRAWS.includes('skip') && !('skip' in T.mystery.draws), 'no skip in the box');
   assert.equal(rollMystery(() => 0.25, T), 'bean1');
-  assert.equal(rollMystery(() => 0.505, T), 'skip');
+  assert.equal(rollMystery(() => 0.505, T), 'coin5', 'where the skip was, the coins start');
+  const sum = Object.values(T.mystery.draws).reduce((a, b) => a + b, 0);
+  assert.ok(Math.abs(1 - sum - 0.34) < 1e-9, `fiber takes the rest: ${(1 - sum).toFixed(2)}`);
 });
 
 test('rollMystery lands near each draw chance; fiber takes the rest', () => {

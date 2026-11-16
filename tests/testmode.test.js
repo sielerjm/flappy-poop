@@ -72,9 +72,10 @@ test('nextTestLevel steps by one and wraps at both ends', () => {
   assert.equal(nextTestLevel(Number.NaN, 1, T), 2);
 });
 
-test('TEST_POWERS are mystery draws plus fiber, each once', () => {
+test('TEST_POWERS are mystery draws plus fiber and the 🏁 skip, each once (plan 28, 4.6: boxes no longer hold the skip; test mode keeps it)', () => {
   assert.equal(new Set(TEST_POWERS).size, TEST_POWERS.length);
-  for (const p of TEST_POWERS) assert.ok(p === 'fiber' || MYSTERY_DRAWS.includes(p), `${p} is a draw openMystery knows`);
+  assert.ok(TEST_POWERS.includes('skip'), 'test mode keeps its 🏁');
+  for (const p of TEST_POWERS) assert.ok(p === 'fiber' || p === 'skip' || MYSTERY_DRAWS.includes(p), `${p} is a draw openMystery knows`);
 });
 
 test('settingsLayout without test mode is the 600x860 panel', () => {

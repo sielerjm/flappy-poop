@@ -61,7 +61,7 @@ A probiotic does **not** save you from a pipe.
 
 A spinning brown box with a question mark. The first is guaranteed early in **level 3**; after that they show up about half as often as fiber.
 
-Open one for a random reward — usually fiber, or a probiotic, beans, coins, a ready-made postbiotic, or (rarely) a skip to the end of the level. Details below under [Odds & details](#odds--details).
+Open one for a random reward — usually fiber, or a probiotic, beans, coins or a ready-made postbiotic. Details below under [Odds & details](#odds--details).
 
 ### <img src="assets/coin.png" width="28" height="28" alt=""> Coins (golden corn kernels)
 
@@ -103,7 +103,7 @@ A bought mystery box spins a little slot machine before the reward lands. Close 
 
 ### Odds & details
 
-Mystery-box draws (fiber takes the leftover ~33%):
+Mystery-box draws (fiber takes the leftover ~34%):
 
 | Reward | Chance |
 | --- | ---: |
@@ -113,10 +113,9 @@ Mystery-box draws (fiber takes the leftover ~33%):
 | <img src="assets/postbiotic.png" width="28" height="28" alt=""> Postbiotic (5 pipes, ×2 on) | 5% |
 | <img src="assets/bean.png" width="28" height="28" alt=""> Three beans | 5% |
 | <img src="assets/coin.png" width="28" height="28" alt=""> 10 coins | 5% |
-| 🏁 Skip to finish | 1% |
 | <img src="assets/coin.png" width="28" height="28" alt=""> 15 coins | 1% |
 
-A bean draw with a full bag, or a skip once the finish line is already out, becomes fiber instead.
+A bean draw with a full bag becomes fiber instead.
 
 ![Finish line](docs/finish-divider.svg)
 

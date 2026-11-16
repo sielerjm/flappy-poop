@@ -255,7 +255,8 @@ export class Over extends Phaser.Scene {
         // The summary cells: A opens (or closes) a cell's card.
         ...this.cells.map((cell) => ({ id: `cell:${cell.id}`, box: cell, scrolled: true, activate: () => this.openCell(cell.id) })),
         ...(linesBox ? [{ id: 'lines', box: linesBox, scrolled: true, activate: () => {} }] : []),
-        ...['info', 'lang', 'feedback', 'leaderboard', 'mute', 'settings'].map((id) => ({ id, obj: this.tray.buttons[id], activate: () => play?.handleChrome(id) })),
+        // The resting rect, as Play's: the tray slides in at game over (plan 28, 4.3), and a pad press mid-slide must ring where it lands.
+        ...['info', 'lang', 'feedback', 'leaderboard', 'mute', 'settings'].map((id) => ({ id, obj: this.tray.buttons[id], rect: () => this.tray.restBounds(id), activate: () => play?.handleChrome(id) })),
       ],
     });
     // A nav press with a card up closes it first, as on the profile. With lines below the fold, down

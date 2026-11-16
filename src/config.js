@@ -234,10 +234,10 @@ export const TUNING = {
     periodMs: 6000, // ms per full up-and-down bob = 2 × items.fiberPeriodMs (half fiber's speed)
     frameMs: 70, // ms per spin frame (the source GIF's timing)
     postbioticPipes: 5, // pipes the postbiotic draw adds, ×2 already on (= items.probioticPipes)
-    // 0–1 chance of each draw when a box opens; fiber (the default) takes the rest (0.33).
-    // bean1 / bean3 add one / three beans; skip clears the rest of the level (skipped pairs score);
-    // coin5 / coin10 / coin15 pay that many coins into the purse.
-    draws: { probiotic: 0.2, bean1: 0.2, postbiotic: 0.05, bean3: 0.05, skip: 0.01, coin5: 0.1, coin10: 0.05, coin15: 0.01 },
+    // 0–1 chance of each draw when a box opens; fiber (the default) takes the rest (0.34).
+    // bean1 / bean3 add one / three beans; coin5 / coin10 / coin15 pay that many coins into the purse.
+    // No 🏁 skip since plan 28, 4.6 (its 1 % went to fiber); test mode keeps it (Settings' 🏁, grantTest).
+    draws: { probiotic: 0.2, bean1: 0.2, postbiotic: 0.05, bean3: 0.05, coin5: 0.1, coin10: 0.05, coin15: 0.01 },
     revealMs: 700, // ms the drawn reward's icon rises out of the box and fades
     revealRisePx: 70, // px it rises
     color: '#ffd700', // gold "+N" for the skipped pairs

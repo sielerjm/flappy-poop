@@ -336,13 +336,14 @@ test('catchUpDraws: the plain table, bean odds doubled, or bean3 alone; rollMyst
   assert.equal(beans.bean3, T.mystery.draws.bean3 * 2);
   assert.equal(beans.bean1, 0.4);
   assert.equal(beans.bean3, 0.1);
-  for (const k of ['probiotic', 'postbiotic', 'skip', 'coin5', 'coin10', 'coin15']) assert.equal(beans[k], T.mystery.draws[k], k);
-  // 0.55 is coin5 on the plain table (0.51–0.61, after skip) and bean1 on the doubled one (0.2–0.6).
+  for (const k of ['probiotic', 'postbiotic', 'coin5', 'coin10', 'coin15']) assert.equal(beans[k], T.mystery.draws[k], k);
+  assert.ok(!('skip' in beans), 'no skip in a catch-up table either (plan 28, 4.6)');
+  // 0.55 is coin5 on the plain table (0.50–0.60) and bean1 on the doubled one (0.2–0.6).
   assert.equal(rollMystery(() => 0.55, T), 'coin5');
-  assert.equal(rollMystery(() => 0.95, T), 'fiber', 'fiber takes the rest (from 0.67)');
+  assert.equal(rollMystery(() => 0.95, T), 'fiber', 'fiber takes the rest (from 0.66)');
   assert.equal(rollMystery(() => 0.55, T, beans), 'bean1');
   assert.equal(rollMystery(() => 0.7, T, beans), 'bean3', '0.65–0.75 is the doubled bean3 band');
-  assert.equal(rollMystery(() => 0.8, T, beans), 'coin5', 'the coin draws follow, unchanged (0.76–0.86)');
+  assert.equal(rollMystery(() => 0.8, T, beans), 'coin5', 'the coin draws follow, unchanged (0.75–0.85)');
   assert.equal(rollMystery(() => 0.95, T, beans), 'fiber', 'fiber still takes the rest');
   const beanSum = MYSTERY_DRAWS.reduce((a, k) => a + beans[k], 0);
   assert.ok(beanSum <= 1, `the doubled table sums to ${beanSum}`);

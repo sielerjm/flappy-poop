@@ -160,8 +160,11 @@ export class Settings extends Phaser.Scene {
         parts.push(this.add.image(0, 0, b.id === 'bean1' || b.id === 'bean3' ? 'bean' : b.id).setDisplaySize(b.icon, b.icon));
         if (b.id === 'bean3') parts.push(this.add.text(24, 24, '×3', { ...STYLE, fontSize: '28px', stroke: '#1a0b14', strokeThickness: 6 }).setOrigin(0.5));
       }
-      const button = this.add.container(b.x, b.y, parts).setAlpha(live ? 1 : 0.35);
-      if (live) {
+      // The 🏁 (skip to the level's finish) greys out when there is nothing to skip: a level break, the finish line
+      // already out, a Daily run (grantTest's own rule: its press would only give fiber; plan 28, 4.6).
+      const on = live && !(b.id === 'skip' && (play.levelBreak || play.finishSpawned || play.runIsDaily));
+      const button = this.add.container(b.x, b.y, parts).setAlpha(on ? 1 : 0.35);
+      if (on) {
         const zone = this.add
           .zone(b.x, b.y, b.width, b.height)
           .setInteractive({ useHandCursor: true })
