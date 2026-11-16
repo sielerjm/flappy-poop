@@ -402,7 +402,11 @@ its own level: `eduIntroInfo().testMode`, plan 26 A2), where new cards go
 (`setEduNewOrder`; under the three buttons a line says what the pressed one does, `ORDERS` in the
 panel, plan 26 A2), **new cards per level** (plan 28, Stage 3b: 3 / 5 / All, 5 pressed by default, how
 many new cards a level break asks a visit: `setEduNewPerLevel`, settings `eduNewPerLevel`, `PER_LEVEL`
-in the panel, with a line under the buttons: "Each level break asks up to n new cards."), the daily cap
+in the panel, with a line under the buttons: "Each level break asks up to n new cards."), **Show / Hide**
+(plan 28, 4.2, Michael's ask: one button under "How it works" and one under "Your choices", its word with an
+arrow and a line beside it saying what a press does, "Hide ▴ Press to hide information" / "Show ▾ Press to show
+more information"; the section's body hidden, the choice remembered on this device: `setEduIntroHidden`,
+settings `eduHideHow` / `eduHideChoices`, not in the backup; the device line and its link always show), the daily cap
 while it is a number (held off since Stage 3b), a line that the data stays in this browser, not on the game's
 servers, unless the player chooses to share it, with a link to 📚 Education data, and Close | Play
 (`startFromEduIntro`: 📚 on, the audio unlocked, then `launch({ intro: false })`; not a tap, which would open the
@@ -905,7 +909,8 @@ src/
                             plan 25;
                             eduNewOrder after / mixed / before, plan 26;
                             eduNewPerLevel 3 / 5 / 'all', EDU_NEW_PER_LEVEL, plan 28
-                            Stage 3b;
+                            Stage 3b; eduHideHow / eduHideChoices, only true
+                            hides (the 📚 popup's Show / Hide, plan 28, 4.2);
                             reviveGiveUpWarned is gone since plan 26's A2) +
                             howToPromptDue, vibrate helper, trayLayout, trayHit,
                             readyLayout (plan 25's ◀ level ▶ stepper boxes went to
@@ -2285,7 +2290,9 @@ tests/                      node --test (schema.test.js, pilot.test.js, eduBoard
   settings.test.js          settings store (incl. hand; a set() storage refused kept
                             for the page load and shared by the stores over it,
                             AUD-030) + vibrate helper; plan 28 Stage 3b:
-                            eduNewPerLevel (3, 5, 'all'; 5 by default)
+                            eduNewPerLevel (3, 5, 'all'; 5 by default); plan 28, 4.2:
+                            eduHideHow / eduHideChoices (false by default, only true
+                            hides, remembered)
   sound.test.js             sfx keys, mute, Node import
   tray.test.js              trayHeight / trayLayout geometry including info + lang +
                             feedback; trayHit centre hits vs miss in the tray gap;
@@ -2527,7 +2534,10 @@ tests/                      node --test (schema.test.js, pilot.test.js, eduBoard
                             lockout, the help line's duePerBreak, the per-day line
                             only with a cap, a close at a restart that does not call
                             back into the scene; its style takes the shared frame
-                            (plan 28, 4.1)
+                            (plan 28, 4.1); Show / Hide (4.2: each toggle's word and
+                            its line in one button, a press stored once with the focus
+                            kept, a reopen keeping it, the ring skipping a hidden
+                            section, both languages)
   panelFrame.test.js        the DOM windows' shared frame (plan 28, 4.1): the safe-area
                             padding on four sides, the card never past the padded box
                             and never in vh, the width cap; a source check that the

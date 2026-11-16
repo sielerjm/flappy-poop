@@ -1324,3 +1324,17 @@ test("the device's invitation flag (plan 28, 2.4): a share that is ok sets it, o
   assert.deepEqual([opened, s.registry.get('pendingInvite') ?? null], [['link-code'], null], 'then opened once, and gone');
 });
 
+
+test("the 📚 popup's Show / Hide (plan 28, 4.2): eduIntroInfo passes both choices; setEduIntroHidden stores one section's at a time, on this device", () => {
+  const settings = createSettingsStore(fakeStorage(), T.settingsKey);
+  const s = playScene({ eduStore: createEduStore(fakeStorage()), settings, eduAvailable: true, match: null, isTestMode: () => false, educationOffered: () => true });
+  assert.deepEqual([s.eduIntroInfo().hideHow, s.eduIntroInfo().hideChoices], [false, false], 'both shown by default');
+  s.setEduIntroHidden('how', true);
+  assert.deepEqual([settings.load().eduHideHow, settings.load().eduHideChoices, s.eduIntroInfo().hideHow], [true, false, true], 'How it works only');
+  s.setEduIntroHidden('choices', true);
+  assert.deepEqual([settings.load().eduHideChoices, s.eduIntroInfo().hideChoices], [true, true], 'Your choices too');
+  s.setEduIntroHidden('how', false);
+  assert.deepEqual([settings.load().eduHideHow, settings.load().eduHideChoices], [false, true], 'How it works shown again; Your choices stays hidden');
+  s.setEduIntroHidden('cards', false);
+  assert.deepEqual([settings.load().eduHideHow, settings.load().eduHideChoices], [false, true], 'another name changes nothing');
+});

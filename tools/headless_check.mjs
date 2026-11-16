@@ -74,7 +74,7 @@ export const SECTIONS = [
   { name: 'tournament', needs: [], about: '🏅 tournament (every two-player session): the lobby (guest, pasted code, host, help), the pad in the panel, seeding (↑ ↓, 🎲, drag), the 🏅 pill in a level break, Bracket / Continue after a race, the podium, abandon to the lobby, two players' },
   { name: 'daily', needs: [], about: "🌞 Daily Dump: the day's level and shared course, endless (no finish line), no coins or skips, the attempt claimed at the start and final at the crash, nothing on the 🏆 lists, an abandoned run finalised" },
   { name: 'profile', about: "player profiles (plan 08): the own profile (local counters, a locked badge's progress), another player's from a stubbed player_stats, the explanation card (a badge, a career cell, by mouse and controller), the wheel and a drag, the controller walking the grid, not found, offline, a board name opening a profile (not on a drag), the sign-in gate (no username), the save panel's Profile button" },
-  { name: 'education-unlock', needs: [], about: "📚 for everyone (plan 28, 2.3; the section keeps its old name): the 📚 switch from the first boot and remembered across a restart, the old word refused as a name with its line, the off switch hiding 📚, 👥 and 📚 never on together on a wide window, an education run recording nothing, a Daily Dump never an education run, each DOM window inside an iPhone's faked safe area (plan 28, 4.1)" },
+  { name: 'education-unlock', needs: [], about: "📚 for everyone (plan 28, 2.3; the section keeps its old name): the 📚 switch from the first boot and remembered across a restart, the old word refused as a name with its line, the off switch hiding 📚, 👥 and 📚 never on together on a wide window, an education run recording nothing, a Daily Dump never an education run, each DOM window inside an iPhone's faked safe area (plan 28, 4.1), the 📚 popup's Show / Hide remembered (4.2)" },
   { name: 'education-quiz', needs: [], about: "📚 the quiz card (plan 21) in an education run's level break: the 📚 pill and its hint, the card answered by tap, key and controller (each answer saved to its card), corn for a right answer by the card's kind (3 / 2 / 1) and none for a wrong one, Next held after a wrong answer, taps under it ignored, every bank card fitting the card, Esc closing it with the resume lockout, the shop at the level's prices" },
   { name: 'education-revive', needs: [], about: "📚 the revive after an education crash (plan 21): three misses end the run with the field and score untouched; wrong then right then Fly on revives without the power-ups at the penalty; a full streak gives coins and power-ups back; nothing lost skips the choice; Quit, warned on every card (plan 26, A2); Esc cannot close it; the field refills at the first right answer and Fly on goes straight on (plan 22)" },
   { name: 'education-over', needs: [], about: "📚 the end of an education run (plan 21): the game-over panel's 📚 tally and note, no Share; a won run's bonus button opening the rectum's questions over the panel (no coins, the card saved, Esc back to the panel); Clear wiping the cards' progress" },
@@ -4196,6 +4196,52 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
           }
           const inside = (f) => Boolean(f) && f.pad[0] === TOP && f.pad[1] === BOTTOM && f.x >= TOP && f.card[0] >= TOP && f.card[1] <= f.vh - BOTTOM;
           ok(inside(intro) && inside(data) && inside(save), `at an iPhone's size (430×932) with its safe area faked (${TOP} px top, ${BOTTOM} px bottom), each window's ✕ and card stay inside it: 📚 popup ${JSON.stringify(intro)}, Education data ${JSON.stringify(data)}, save panel ${JSON.stringify(save)}`);
+        }
+        // Plan 28, 4.2: Show / Hide under "How it works" and "Your choices". A press hides a section (its word and the
+        // line beside it say what the next press does), the choice is remembered on this device (a reopen keeps it),
+        // and a press shows it again. The section leaves both shown.
+        {
+          const lockout = await evaluate(`import('./src/config.js').then((m) => m.TUNING.retryLockoutMs)`);
+          const openIntro = async () => {
+            await evaluate(`${play}.openEduIntro(), true`);
+            await sleep(lockout + 150); // the popup drops clicks in its first moments (plan 26, A2)
+          };
+          const closeIntro = () => evaluate(`import('./src/ui/eduIntroPanel.js').then((m) => (m.closeEduIntroPanel(), true))`);
+          const press = async (id) => {
+            await evaluate(`document.getElementById('${id}').click(), true`);
+            await sleep(150);
+          };
+          const sections = () =>
+            evaluate(`(() => { const g = (id) => document.getElementById(id); return JSON.stringify({ how: g('edu-intro-how')?.hidden ?? null, choices: g('edu-intro-choices')?.hidden ?? null, howWords: g('edu-intro-how-toggle')?.textContent ?? null, device: Boolean(g('edu-intro-device')) && !g('edu-intro-device').closest('[hidden]') }); })()`).then(JSON.parse);
+          const [showW, hideW, showHint, hideHint] = await Promise.all(['eduIntroShow', 'eduIntroHide', 'eduIntroShowHint', 'eduIntroHideHint'].map(tx));
+          let shown = null;
+          let hidden = null;
+          let reopened = null;
+          let stored = null;
+          let again = null;
+          try {
+            await openIntro();
+            shown = await sections();
+            await press('edu-intro-how-toggle');
+            await press('edu-intro-choices-toggle');
+            hidden = await sections();
+            await closeIntro();
+            await openIntro();
+            reopened = await sections();
+            stored = await evaluate(`JSON.stringify([${play}.settings.load().eduHideHow, ${play}.settings.load().eduHideChoices])`).then(JSON.parse);
+            await press('edu-intro-how-toggle');
+            await press('edu-intro-choices-toggle');
+            again = await sections();
+            await closeIntro();
+          } finally {
+            // Whatever happened above, the sections after this one find the popup's sections shown.
+            await evaluate(`import('./src/ui/eduIntroPanel.js').then((m) => (m.closeEduIntroPanel(), ${play}.settings.set({ eduHideHow: false, eduHideChoices: false }), true))`);
+          }
+          const words = (hide) => (hide ? `${hideW} ▴ ${hideHint}` : `${showW} ▾ ${showHint}`);
+          ok(
+            !shown.how && !shown.choices && shown.howWords === words(true) && hidden.how && hidden.choices && hidden.howWords === words(false) && hidden.device && reopened.how && reopened.choices && stored[0] === true && stored[1] === true && !again.how && !again.choices,
+            `Show / Hide: a press hides "How it works" and "Your choices" ("${hidden.howWords}"), the device line stays; a reopen keeps both hidden (stored ${JSON.stringify(stored)}); a press shows each again ("${shown.howWords}")`,
+          );
         }
         await tap('education');
         await home();

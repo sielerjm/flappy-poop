@@ -287,3 +287,10 @@ test("eduProfileRows (plan 26, A2: Michael's checklist): your own profile's 🔥
   assert.deepEqual(eduProfileRows('zh-Hans', { streak: 3, best: 7, level: 4 }).map((r) => r[1]), ['3 天', '7 天', '第4关']);
   assert.deepEqual([t('en', 'statsEduStreak'), t('en', 'statsEduBest'), t('en', 'statsEduLevel')], ['🔥 Learning streak', '❤️‍🔥 Longest streak', 'Highest level unlocked']);
 });
+
+test('the 📚 popup\'s Show / Hide (plan 28, 4.2): the link words and the line beside them, in both languages; the English as Michael wrote it', () => {
+  for (const locale of ['en', 'zh-Hans']) {
+    for (const k of ['eduIntroShow', 'eduIntroHide', 'eduIntroShowHint', 'eduIntroHideHint']) assert.ok(t(locale, k) && t(locale, k) !== k, `${locale}: ${k}`);
+  }
+  assert.deepEqual(['eduIntroShow', 'eduIntroHide', 'eduIntroShowHint', 'eduIntroHideHint'].map((k) => t('en', k)), ['Show', 'Hide', 'Press to show more information', 'Press to hide information']);
+});

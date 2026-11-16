@@ -442,7 +442,7 @@ export const HANDS = ['left', 'right'];
 // ones (plan 26; education.js NEW_ORDERS); eduNewPerLevel: the new cards a level break asks a visit, 3, 5
 // or 'all' (plan 28, Stage 3b; EDU_NEW_PER_LEVEL). (reviveGiveUpWarned, plan 26's "warned once on this device",
 // is gone since plan 26's A2: a revive's Quit warns on every card. A stored value is ignored.)
-const SETTINGS_DEFAULTS = { sound: true, music: true, haptics: true, locale: DEFAULT_LOCALE, howToSeenAt: '', hand: 'right', education: false, eduInvited: false, eduStartLevel: 1, eduNewOrder: 'after', eduNewPerLevel: TUNING.education.newPerLevelDefault };
+const SETTINGS_DEFAULTS = { sound: true, music: true, haptics: true, locale: DEFAULT_LOCALE, howToSeenAt: '', hand: 'right', education: false, eduInvited: false, eduStartLevel: 1, eduNewOrder: 'after', eduNewPerLevel: TUNING.education.newPerLevelDefault, eduHideHow: false, eduHideChoices: false };
 const EDU_NEW_ORDERS = ['after', 'mixed', 'before']; // education.js NEW_ORDERS (logic.js does not import education.js)
 /** The 📚 popup's choices for new cards a level break asks a visit (plan 28, Stage 3b): a number, or 'all'. */
 export const EDU_NEW_PER_LEVEL = TUNING.education.newPerLevelChoices;
@@ -479,6 +479,8 @@ function normalizeSettings(raw) {
   out.eduStartLevel = Number.isInteger(raw.eduStartLevel) && raw.eduStartLevel >= 1 && raw.eduStartLevel <= TUNING.levels.lastLevel ? raw.eduStartLevel : 1; // AUD-033: not a copy of the 7
   out.eduNewOrder = EDU_NEW_ORDERS.includes(raw.eduNewOrder) ? raw.eduNewOrder : SETTINGS_DEFAULTS.eduNewOrder;
   out.eduNewPerLevel = EDU_NEW_PER_LEVEL.includes(raw.eduNewPerLevel) ? raw.eduNewPerLevel : SETTINGS_DEFAULTS.eduNewPerLevel;
+  out.eduHideHow = raw.eduHideHow === true; // the 📚 popup's "How it works" hidden (plan 28, 4.2)
+  out.eduHideChoices = raw.eduHideChoices === true; // its "Your choices" hidden
   return out;
 }
 

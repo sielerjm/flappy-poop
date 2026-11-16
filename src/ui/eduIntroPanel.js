@@ -56,6 +56,12 @@ ${panelFrameCss(PANEL_ID, { width: 440 })}
 #${PANEL_ID} .close { position: absolute; top: 8px; right: 8px; width: 40px; height: 40px; padding: 0; font-size: 22px;
   background: transparent; color: #ffffff; }
 #${PANEL_ID} .link { padding: 0; font-size: 14px; color: #f8a0c8; background: transparent; text-decoration: underline; }
+#${PANEL_ID} .card [hidden] { display: none !important; }
+#${PANEL_ID} button.toggle { display: flex; align-items: baseline; gap: 10px; min-height: 44px; margin: -8px 0 2px; padding: 6px 0; font-size: 14px;
+  color: #f8a0c8; background: transparent; text-align: left; }
+#${PANEL_ID} button.toggle:active { background: transparent; }
+#${PANEL_ID} button.toggle .word { text-decoration: underline; white-space: nowrap; }
+#${PANEL_ID} button.toggle .hint { font-size: 13px; font-weight: normal; color: #c9b8dc; }
 #${PANEL_ID} button.pad { outline: 4px solid #ffd700; outline-offset: 2px; }
 `;
 
@@ -163,7 +169,7 @@ function render() {
   close.addEventListener('click', () => closeEduIntroPanel());
   const due = T.education.duePerBreak; // plan 28, Stage 3b: the due cards a break asks, or all while null
   const levels = Number.isFinite(due) ? tr('eduIntroHowLevels').replace('{n}', String(due)) : tr('eduIntroHowLevelsAll');
-  const how = h('ul', {}, h('li', {}, levels), ...['eduIntroHowRevive', 'eduIntroHowSkip', 'eduIntroHowCoins'].map((key) => h('li', {}, tr(key))));
+  const how = h('ul', { id: 'edu-intro-how', hidden: Boolean(info.hideHow) }, h('li', {}, levels), ...['eduIntroHowRevive', 'eduIntroHowSkip', 'eduIntroHowCoins'].map((key) => h('li', {}, tr(key))));
   const counts = h('div', { class: 'counts', id: 'edu-intro-counts' }, ...[...countLines(ctx.locale, info.counts), t(ctx.locale, 'eduCardsSeen').replace('{n}', String(info.seen)).replace('{total}', String(info.total)), tr('eduCardsDue')].map((line) => h('p', {}, line)));
   // The start level (plan 25's stepper, moved here): ◀ LV n ▶ while a later level is unlocked.
   const start = h('div', { class: 'row', id: 'edu-intro-start' }, h('span', { class: 'label' }, tr('eduIntroStart')));
@@ -202,6 +208,23 @@ function render() {
   const pressedPer = PER_LEVEL.find(([n]) => n === info.perLevel) ?? PER_LEVEL.find(([n]) => n === T.education.newPerLevelDefault);
   const perHint = h('p', { class: 'hint', id: 'edu-intro-per-hint' }, tr(pressedPer[2]).replace('{n}', String(pressedPer[0])));
   const gap = ctx.locale === 'zh-Hans' ? '' : ' ';
+  // Show / Hide under a heading (plan 28, 4.2): the section's body hidden, the choice remembered on this device.
+  // One button: the word with its arrow, then a line saying what a press does (Michael, 16 Nov), so a press on
+  // the line works too.
+  const toggle = (section, controls, hidden) => {
+    const b = h(
+      'button',
+      { class: 'toggle', id: `edu-intro-${section}-toggle`, type: 'button', 'aria-expanded': String(!hidden), 'aria-controls': controls },
+      h('span', { class: 'word' }, `${tr(hidden ? 'eduIntroShow' : 'eduIntroHide')} ${hidden ? '▾' : '▴'}`),
+      ' ',
+      h('span', { class: 'hint' }, tr(hidden ? 'eduIntroShowHint' : 'eduIntroHideHint')),
+    );
+    b.addEventListener('click', () => {
+      ctx.play.setEduIntroHidden(section, !hidden);
+      render();
+    });
+    return b;
+  };
   const data = h('button', { class: 'link', id: 'edu-intro-data', type: 'button' }, tr('eduDataTitle'));
   data.addEventListener('click', () => openData());
   const play = h('button', { id: 'edu-intro-play', type: 'button', 'data-primary': true }, tr('eduIntroPlay'));
@@ -214,19 +237,25 @@ function render() {
     h('p', { class: 'beta' }, tr('eduIntroBeta')),
     h('p', { class: 'note', id: 'edu-intro-not-medical' }, tr('eduIntroNotMedical')),
     h('h3', {}, tr('eduIntroHowTitle')),
+    toggle('how', 'edu-intro-how', Boolean(info.hideHow)),
     how,
     h('h3', {}, tr('eduCardsTitle')),
     counts,
     h('h3', {}, tr('eduIntroChoices')),
-    ...(info.testMode ? [] : [start, ...(startNote ? [startNote] : [])]), // a test run starts at its own level (plan 26, A2)
-    h('div', { class: 'row' }, h('span', { class: 'label' }, tr('eduIntroOrder'))),
-    order,
-    orderHint,
-    h('div', { class: 'row' }, h('span', { class: 'label' }, tr('eduIntroPerLevel'))),
-    perLevel,
-    perHint,
-    // The daily cap's line only while it is a number (held off since plan 28, Stage 3b).
-    ...(Number.isFinite(info.newPerDay) ? [h('p', { id: 'edu-intro-per-day' }, tr('eduIntroPerDay').replace('{n}', String(info.newPerDay)))] : []),
+    toggle('choices', 'edu-intro-choices', Boolean(info.hideChoices)),
+    h(
+      'div',
+      { id: 'edu-intro-choices', hidden: Boolean(info.hideChoices) },
+      ...(info.testMode ? [] : [start, ...(startNote ? [startNote] : [])]), // a test run starts at its own level (plan 26, A2)
+      h('div', { class: 'row' }, h('span', { class: 'label' }, tr('eduIntroOrder'))),
+      order,
+      orderHint,
+      h('div', { class: 'row' }, h('span', { class: 'label' }, tr('eduIntroPerLevel'))),
+      perLevel,
+      perHint,
+      // The daily cap's line only while it is a number (held off since plan 28, Stage 3b).
+      ...(Number.isFinite(info.newPerDay) ? [h('p', { id: 'edu-intro-per-day' }, tr('eduIntroPerDay').replace('{n}', String(info.newPerDay)))] : []),
+    ),
     // eduIntroKeep: plan 28, 3.1b. Chinese sets no space after its full-width 。 and ：.
     h('p', { id: 'edu-intro-device' }, tr('eduIntroDevice'), gap, tr('eduIntroKeep'), gap, data),
     h('div', { class: 'actions' }, shut, play),

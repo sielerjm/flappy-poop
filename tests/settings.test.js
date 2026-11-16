@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { createSettingsStore, vibrate } from '../src/logic.js';
 import { initialLocale } from '../src/i18n.js';
 
-const DEFAULTS = { sound: true, music: true, haptics: true, locale: 'en', howToSeenAt: '', hand: 'right', education: false, eduInvited: false, eduStartLevel: 1, eduNewOrder: 'after', eduNewPerLevel: 5 };
+const DEFAULTS = { sound: true, music: true, haptics: true, locale: 'en', howToSeenAt: '', hand: 'right', education: false, eduInvited: false, eduStartLevel: 1, eduNewOrder: 'after', eduNewPerLevel: 5, eduHideHow: false, eduHideChoices: false };
 
 function fakeStorage() {
   const m = new Map();
@@ -231,4 +231,15 @@ test("reviveGiveUpWarned is gone (plan 26, A2: a revive's Quit warns on every ca
   assert.equal(s.load().sound, false, 'the rest of the record is');
   assert.equal('reviveGiveUpWarned' in s.set({ reviveGiveUpWarned: true, music: false }), false, 'not settable');
   assert.equal('reviveGiveUpWarned' in JSON.parse(m.get('k')), false, 'and dropped from storage with the next write');
+});
+
+test('eduHideHow / eduHideChoices (plan 28, 4.2): the 📚 popup\'s Show / Hide, both false (shown) by default; only true hides a section; remembered on this device', () => {
+  const m = new Map();
+  const st = { getItem: (k) => m.get(k) ?? null, setItem: (k, v) => m.set(k, v), removeItem: (k) => m.delete(k) };
+  const s = createSettingsStore(st, 'k');
+  assert.deepEqual([s.load().eduHideHow, s.load().eduHideChoices], [false, false], 'shown on a new device');
+  assert.deepEqual([s.set({ eduHideHow: true }).eduHideHow, createSettingsStore(st, 'k').load().eduHideHow], [true, true], 'How it works hidden, read back after a reload');
+  assert.deepEqual([s.set({ eduHideChoices: true }).eduHideChoices, createSettingsStore(st, 'k').load().eduHideChoices], [true, true], 'Your choices hidden, read back after a reload');
+  assert.equal(s.set({ eduHideHow: false }).eduHideHow, false, 'shown again');
+  for (const bad of ['true', 1, null, {}]) assert.equal(s.set({ eduHideChoices: bad }).eduHideChoices, false, `${JSON.stringify(bad)} reads as shown`);
 });

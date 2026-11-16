@@ -332,6 +332,10 @@ Short, playful, clear. Fit a 720×1280 logical field; How to play / About body w
 | eduIntroHowSkip | Stuck on a card at a break? Skip it for a few 🌽 (it waits until tomorrow), or quit the run. (plan 26, A2: Skip replaced Bury; plan 28, Stage 3b: every skipped card waits until tomorrow, new ones too) | 在休息时卡在一张卡片上？花几个 🌽 跳过它（它会等到明天），或者结束这一局。 |
 | eduIntroHowCoins | Right answers in a level break earn you corn kernels, once per card a day: 3 for a new card, 2 for a card due for review, 1 for practice or a card you missed. Cards are automatically ordered to be shown right before you're likely to forget them. (plan 26 A2: Michael's wording, as written; plan 28, Stage 3b added the rates, his 16 Nov decision: education.breakCoins) | 在关卡休息时答对会得到玉米粒，每张卡片每天一次：新卡片 3 粒，到期复习的卡片 2 粒，练习或答错过的卡片 1 粒。卡片会自动排序，在你快要忘记之前出现。 |
 | eduIntroChoices | Your choices (the heading over the start level and the new-card order) | 你的选择 |
+| eduIntroShow | Show (plan 28, 4.2: the link under "How it works" and "Your choices" while that section is hidden; an arrow ▾ follows it) | 显示 |
+| eduIntroHide | Hide (plan 28, 4.2: the same link while the section shows; an arrow ▴ follows it) | 隐藏 |
+| eduIntroShowHint | Press to show more information (plan 28, 4.2: the line beside "Show", in the same button, saying what a press does; "Press" fits a tap, a click and a controller's A) | 点击显示更多信息 |
+| eduIntroHideHint | Press to hide information (plan 28, 4.2: the line beside "Hide", in the same button) | 点击隐藏信息 |
 | eduIntroStart | Start at (◀ LV n ▶ follows: the level the next education run starts at) | 从这一关开始 |
 | eduIntroStartLocked | Reach a level in an education run to start there next time. | 在教育模式中到达某一关后，下次就能从那里开始。 |
 | eduIntroOrder | New cards (a heading over three choices: before, mixed in with, or after the cards due) | 新卡片 |

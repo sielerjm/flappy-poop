@@ -15,7 +15,8 @@ proto.replaceChildren = function (...cs) {
   this.append(...cs);
 };
 Object.defineProperty(proto, 'tagName', { get() { return this.tag.toUpperCase(); }, configurable: true });
-Object.defineProperty(proto, 'offsetParent', { get() { return {}; }, configurable: true });
+// As a browser: an element inside a hidden one has no offsetParent (the controller's ring skips it: padButtons).
+Object.defineProperty(proto, 'offsetParent', { get() { for (let e = this; e; e = e.parent) if (e.hidden) return null; return {}; }, configurable: true });
 Object.defineProperty(proto, 'classList', {
   configurable: true,
   get() {
@@ -57,18 +58,26 @@ document.getElementById = (id) => body.find(id);
 let now = 1000;
 Object.defineProperty(globalThis.performance, 'now', { value: () => now, configurable: true });
 
-const { openEduIntroPanel, closeEduIntroPanel } = await import('../src/ui/eduIntroPanel.js');
+const { openEduIntroPanel, closeEduIntroPanel, eduIntroPadAction } = await import('../src/ui/eduIntroPanel.js');
 
 /** An element's text: its string children, and its elements' text, in order. */
 const text = (el) => el.children.map((c) => (typeof c === 'string' ? c : text(c))).join('');
 const el = (id) => body.find(id);
 
-function open({ locale = 'en', perLevel = T.education.newPerLevelDefault, newPerDay = null } = {}) {
+function open({ locale = 'en', perLevel = T.education.newPerLevelDefault, newPerDay = null, hideHow = false, hideChoices = false } = {}) {
   const play = {
     perLevel,
+    hideHow,
+    hideChoices,
+    hidden: [],
     calls: 0,
     eduIntroInfo() {
-      return { counts: { new: 1, missed: 0, review: 0 }, seen: 0, total: 10, startOffered: true, startLevel: 1, order: 'after', perLevel: this.perLevel, newPerDay, testMode: false };
+      return { counts: { new: 1, missed: 0, review: 0 }, seen: 0, total: 10, startOffered: true, startLevel: 1, order: 'after', perLevel: this.perLevel, newPerDay, testMode: false, hideHow: this.hideHow, hideChoices: this.hideChoices };
+    },
+    setEduIntroHidden(section, hidden) {
+      this.hidden.push([section, hidden]);
+      if (section === 'how') this.hideHow = hidden;
+      else this.hideChoices = hidden;
     },
     stepEduStart() {},
     setEduNewOrder() {},
@@ -159,5 +168,55 @@ test('plan 28, 4.1: the popup\'s style takes the shared frame (padded by the saf
   assert.ok(style.textContent.includes('max(16px, env(safe-area-inset-top))'), 'the backdrop is padded by the safe area');
   assert.ok(style.textContent.includes('max-height: 100%;'), 'the card never grows past the padded backdrop');
   assert.doesNotMatch(style.textContent, /max-height:\s*\d+vh/, 'no card sized in vh');
+  closeEduIntroPanel();
+});
+
+const inside = (outer, inner) => all(outer).includes(inner);
+const toggleText = (locale, hidden) => `${t(locale, hidden ? 'eduIntroShow' : 'eduIntroHide')} ${hidden ? '▾' : '▴'} ${t(locale, hidden ? 'eduIntroShowHint' : 'eduIntroHideHint')}`;
+
+test('Show / Hide (plan 28, 4.2): under each heading one button, its word and the line beside it saying what a press does; a press hides or shows the section, is stored once and keeps the focus; both languages', async () => {
+  for (const locale of ['en', 'zh-Hans']) {
+    const play = open({ locale });
+    const how = el('edu-intro-how-toggle');
+    const choices = el('edu-intro-choices-toggle');
+    assert.ok(how && choices, `${locale}: both toggles`);
+    assert.deepEqual([text(how), text(choices)], [toggleText(locale, false), toggleText(locale, false)], `${locale}: "Hide" and its line while shown`);
+    assert.ok(how.children.some((c) => c instanceof El && c.className.includes('hint')), `${locale}: the line is inside the button, so a press on it works`);
+    assert.deepEqual([how.getAttribute('aria-expanded'), how.getAttribute('aria-controls'), choices.getAttribute('aria-controls')], ['true', 'edu-intro-how', 'edu-intro-choices']);
+    assert.deepEqual([el('edu-intro-how').hidden, el('edu-intro-choices').hidden], [false, false], `${locale}: both sections shown by default`);
+    how.focus();
+    await how.click();
+    assert.deepEqual(play.hidden, [['how', true]], `${locale}: one call, How it works hidden`);
+    assert.equal(el('edu-intro-how').hidden, true, `${locale}: its list hidden`);
+    assert.equal(text(el('edu-intro-how-toggle')), toggleText(locale, true), `${locale}: "Show" and its line while hidden`);
+    assert.equal(el('edu-intro-how-toggle').getAttribute('aria-expanded'), 'false');
+    assert.equal(document.activeElement?.id, 'edu-intro-how-toggle', `${locale}: the focus stays on the toggle (AUD-026)`);
+    await el('edu-intro-choices-toggle').click();
+    assert.equal(el('edu-intro-choices').hidden, true, `${locale}: Your choices hidden`);
+    assert.ok(inside(el('edu-intro-choices'), el('edu-intro-start')) && inside(el('edu-intro-choices'), el('edu-intro-per')), `${locale}: the start level and both button rows are in the hidden section`);
+    assert.ok(!inside(el('edu-intro-choices'), el('edu-intro-device')) && !el('edu-intro-device').hidden && el('edu-intro-data'), `${locale}: the line about where the cards live, with its 📚 Education data link, still shows`);
+    closeEduIntroPanel();
+  }
+});
+
+test('Show / Hide (plan 28, 4.2): a reopen keeps each section as it was left; the controller\'s ring skips a hidden section\'s buttons', async () => {
+  const ringPath = () => {
+    const seen = [];
+    eduIntroPadAction('nav:down'); // the first press shows the ring (on Play)
+    for (let i = 0; i < 16; i += 1) {
+      eduIntroPadAction('nav:up');
+      seen.push(el('edu-intro-panel').querySelectorAll('button.pad')[0]?.id ?? null);
+    }
+    return seen;
+  };
+  open({ hideChoices: true });
+  assert.equal(el('edu-intro-choices').hidden, true, 'Your choices opens hidden, as left');
+  assert.equal(el('edu-intro-how').hidden, false, 'How it works opens shown, as left');
+  const hiddenPath = ringPath();
+  assert.ok(hiddenPath.includes('edu-intro-choices-toggle') && hiddenPath.includes('edu-intro-how-toggle'), 'the toggles are on the ring');
+  assert.ok(!hiddenPath.some((id) => /^edu-intro-(order|per|up|down)/.test(id ?? '')), `no button of the hidden section: ${hiddenPath.join(' ')}`);
+  closeEduIntroPanel();
+  open();
+  assert.ok(ringPath().some((id) => /^edu-intro-(order|per)-/.test(id ?? '')), 'shown, its buttons are on the ring again');
   closeEduIntroPanel();
 });
