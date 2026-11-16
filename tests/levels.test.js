@@ -159,7 +159,7 @@ test('levelBarLayout sits above the score, inside the field, with the flag just 
   assert.ok(Math.abs(bar.labelX - (bar.x + bar.width / 2)) < 1e-9, 'label centred on the track');
   assert.ok(bar.radius === bar.height / 2);
   assert.ok(T.levels.barTweenMs >= 50 && T.levels.barTweenMs <= 1000 && T.levels.barAlpha > 0 && T.levels.barAlpha <= 1);
-  assert.equal(T.levels.barFillColor, 0xe85e96, 'fill is the pipe pink');
+  assert.equal(T.levels.barFillColor, 0xe85e96, 'the placeholder fill (pipe pink) until refreshLevelBar sets the level\'s colour (plan 28, 4.4)');
 });
 
 test('levelLabel is short and localised', () => {
@@ -245,4 +245,43 @@ test('levelGap is 10 % wider on level 1, 5 % on level 2, and the base gap from l
   }
   const b = gapBounds({ gameHeight: GAME_HEIGHT, ceilingHeight: T.ceilingHeight, groundHeight: T.groundHeight, gapHeight: levelGap(1, T), gapMargin: T.gapMargin });
   assert.ok(b.maxY > b.minY, 'the widest gap still has room to move');
+});
+
+// Plan 28, 4.4 (Michael, 16 Nov at 4.R): the bar's fill takes the level's own colour, raw, on a dark track.
+// WCAG contrast: a UI part needs 3:1 against what is next to it, and so does large bold text (the 26 px
+// bold "LV n" label in the level's colour on the track).
+const luminance = (c) => {
+  const lin = (v) => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4);
+  const [r, g, b] = [(c >> 16) & 0xff, (c >> 8) & 0xff, c & 0xff].map((v) => lin(v / 255));
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b;
+};
+const contrast = (a, b) => {
+  const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x);
+  return (hi + 0.05) / (lo + 0.05);
+};
+
+test('plan 28, 4.4: every level colour stands out on the bar\'s track by at least 3:1 (WCAG, a UI part and large bold text): the fill and the "LV n" label on the track as drawn (the track at barAlpha over that level\'s softened background)', () => {
+  for (const [i, c] of LEVEL_COLORS.entries()) {
+    const bg = levelColor(i + 1, LEVEL_COLORS, T.levels.whiteBlend);
+    const track = lerpColor(bg, T.levels.barTrackColor, T.levels.barAlpha);
+    const r = contrast(c, track);
+    assert.ok(r >= 3, `level ${i + 1} (#${c.toString(16)}) on its drawn track (#${track.toString(16)}): ${r.toFixed(2)}:1`);
+  }
+  assert.ok(T.levels.barOutlinePx >= 1 && T.levels.barOutlinePx <= 4, 'a thin outline');
+});
+
+test('plan 28, 4.4: Play.refreshLevelBar gives the bar the level\'s raw colour (levelColor, no white blended in), in a level break the colour of the level it shows', async () => {
+  const { LEVEL_COLORS } = await import('../src/config.js');
+  const { playScene } = await import('./support/scenes.js');
+  const bar = { color: null, setColor(c) { this.color = c; return this; }, setLabel() { return this; }, setProgress() { return this; } };
+  const s = playScene({ levelBar: bar, level: 3, levelBreak: false, locale: 'en', pipesPassed: 0, tune: T });
+  s.refreshLevelBar();
+  assert.equal(bar.color, LEVEL_COLORS[2], 'level 3');
+  s.level = 7;
+  s.refreshLevelBar();
+  assert.equal(bar.color, LEVEL_COLORS[0], 'level 7 wears level 1\'s colour again');
+  s.levelBreak = true;
+  s.breakShownLevel = () => 5;
+  s.refreshLevelBar();
+  assert.equal(bar.color, LEVEL_COLORS[4], 'a break showing level 5');
 });

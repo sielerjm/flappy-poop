@@ -107,9 +107,11 @@ export const TUNING = {
     barLabelPx: 26, // px font size of the LV n label (digits ≈ 19 px tall, so ~6 px of air inside the track)
     barFlagPx: 34, // px font size of the 🏁
     barInset: 48, // px from the field edges to the bar track (right side also leaves room for the 🏁)
-    barAlpha: 0.6, // 0–1 alpha of the bar track
-    barTrackColor: 0xd9d9d9, // light grey track
-    barFillColor: 0xe85e96, // pipe pink fill (make_placeholders.py PINK)
+    barAlpha: 0.9, // 0–1 alpha of the bar track
+    barTrackColor: 0x3b2314, // dark brown track: every level colour stands out on it (plan 28, 4.4)
+    barFillColor: 0xe85e96, // pipe pink: the fill until a level colour is set (setColor)
+    barOutlineColor: 0x2a1608, // the thin dark-brown outline around the bar (plan 28, 4.4)
+    barOutlinePx: 3, // its width
     barTweenMs: 200, // ms the fill animates to its new width after each pipe
   },
   popup: {

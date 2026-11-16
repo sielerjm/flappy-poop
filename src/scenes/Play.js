@@ -1116,6 +1116,7 @@ export class Play extends Phaser.Scene {
   /** Bar label and fill for the current level and pipes passed; in a break, the level chosen there (plan 26, A2), empty. */
   refreshLevelBar() {
     const level = this.levelBreak ? this.breakShownLevel() : this.level;
+    this.levelBar?.setColor(levelColor(level, LEVEL_COLORS)); // the level's own colour, raw (plan 28, 4.4)
     this.levelBar?.setLabel(levelLabel(this.locale, level));
     this.levelBar?.setProgress(level === this.level ? levelProgress(this.pipesPassed, this.level, this.tune) : 0);
   }

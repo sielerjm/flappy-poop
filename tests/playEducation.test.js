@@ -629,7 +629,7 @@ function gateBreakScene() {
   const store = createEduStore(fakeStorage());
   store.unlockLevel(5);
   const fades = [];
-  const bar = { label: null, setLabel(v) { this.label = v; }, setProgress() {} };
+  const bar = { label: null, setLabel(v) { this.label = v; }, setProgress() {}, setColor() {} };
   const s = playScene({
     eduStore: store, level: 3, levelBreak: true, state: 'paused', runIsEducation: true, runIsTest: false, match: null, registry: registry(), tune: T, locale: 'en',
     shopOpen: false, quizOpen: false, breakGate: false, breakLevelPick: null, runSkipped: false, runTopLevel: 3, runStartLevel: 1, pipesPassed: 35,
@@ -669,7 +669,7 @@ test('AUD-057: a card that comes due while the level choice shows: a press on â—
       shopOpen: false, quizOpen: false, breakGate: false, breakLevelPick: null, runTopLevel: 3,
       quizButton: { ...text(), pulsed: null, pulse(v) { this.pulsed = v; return this; } }, quizCountLine: { ...text(), counts: null, set(c) { this.counts = c; return this; } }, quizCountChip: text(), breakQuitButton: text(),
       levelPickDown: text(), levelPickUp: text(), levelPickLabel: text(), levelTitle: text(), levelHint: text(), levelSubHint: text(), eduBreakBoxes: null, quizButtonBox: {},
-      breakQuitArmedAt: null, time: { now: 0 }, levelBar: { setLabel() {}, setProgress() {} }, eduDueText: null, shopButton: null, bracketButton: null,
+      breakQuitArmedAt: null, time: { now: 0 }, levelBar: { setLabel() {}, setProgress() {}, setColor() {} }, eduDueText: null, shopButton: null, bracketButton: null,
       fadeBackground() {}, ...NO_NEW_LEFT, breakMissed: [],
     });
     s.refreshLevelBanner();
@@ -941,7 +941,7 @@ test('AUD-031: a language change mid-break redraws the break row in the new lang
     quizButton: text(), quizCountLine: { ...text(), set() { return this; } }, quizCountChip: text(), breakQuitButton: text(),
     levelPickDown: text(), levelPickUp: text(), levelPickLabel: text(), quizButtonBox: {},
     levelTitle: text(), levelHint: text(), levelSubHint: text(), eduBreakBoxes: null, pauseText: text(), pauseHint: text(), readyTitle: text(), ...NO_NEW_LEFT,
-    breakQuitArmedAt: null, time: { now: 0 }, levelBar: { setLabel() {}, setProgress() {} }, eduDueText: null, bracketButton: null,
+    breakQuitArmedAt: null, time: { now: 0 }, levelBar: { setLabel() {}, setProgress() {}, setColor() {} }, eduDueText: null, bracketButton: null,
     shopButton: text(), effects: { coins: () => 3 },
     fadeBackground() {}, refreshProfile() {}, refreshTestBadge() {}, runIsDaily: false,
   });

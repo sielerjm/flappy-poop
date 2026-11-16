@@ -1378,8 +1378,9 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
       await evaluate(`${play}.gapProbe.destroy(), true`);
       const bar = await evaluate(`JSON.stringify({ label: ${play}.levelBar.labelText(), value: ${play}.levelBar.value(), passed: ${play}.pipesPassed, color: ${play}.levelBar.labelColor() })`).then(JSON.parse);
       const expect = Math.min(1, Math.max(0, (bar.passed - end2) / len3));
-      const pinkHex = '#' + TT.levels.barFillColor.toString(16).padStart(6, '0');
-      ok(bar.label === 'LV 3' && Math.abs(bar.value - expect) < 1e-9 && bar.color === pinkHex, `progress bar reads "${bar.label}" at ${(bar.value * 100).toFixed(0)} % in ${bar.color} (${bar.passed - end2} of ${len3} pipes into level 3)`);
+      // Plan 28, 4.4: the bar wears the level's own colour; on the track the label shows it (white once the fill reaches it).
+      const l3Hex = await evaluate(`import('./src/config.js').then((m) => '#' + m.LEVEL_COLORS[2].toString(16).padStart(6, '0'))`);
+      ok(bar.label === 'LV 3' && Math.abs(bar.value - expect) < 1e-9 && bar.color === l3Hex, `progress bar reads "${bar.label}" at ${(bar.value * 100).toFixed(0)} % in ${bar.color}, level 3's own colour ${l3Hex} (${bar.passed - end2} of ${len3} pipes into level 3)`);
     });
     await section('death', async () => {
       const career0 = await careerNow();

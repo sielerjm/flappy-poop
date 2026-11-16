@@ -1303,8 +1303,12 @@ src/
     pipeShade.js            createLightTexture(): a lighter copy of a texture
                             (white laid over its own pixels): 'pipe-moving', the
                             moving pairs' pink.
-    levelBar.js             createLevelBar(): grey track, pipe-pink fill tweened
-                            one step per pipe (levelProgress), LV n label, 🏁;
+    levelBar.js             createLevelBar(): a dark-brown track with a thin dark
+                            outline (barTrackColor, barOutlineColor / Px), the fill in
+                            the level's own colour (setColor; Play.refreshLevelBar
+                            passes levelColor raw, no white blended in: plan 28, 4.4)
+                            tweened one step per pipe (levelProgress), LV n label (the
+                            level's colour on the track, white on the fill), 🏁;
                             geometry from levelBarLayout(). setRival(marker) /
                             rival(): the other player's marker in a match (a small
                             faded poop at rivalMarker's share; gold at the 🏁 a level
@@ -2299,7 +2303,9 @@ tests/                      node --test (schema.test.js, pilot.test.js, eduBoard
   levels.test.js            level lengths / ends / levelFor table, final level,
                             per-level pipe spacing, levelSpeed cap (the level-3 cruise),
                             names + colours, levelProgress, lerpColor, gap + grace
-                            sanity, levelBannerText, levelBarLayout, levelLabel
+                            sanity, levelBannerText, levelBarLayout, levelLabel; plan
+                            28, 4.4: every level colour on the bar's track at 3:1 or more
+                            (WCAG), refreshLevelBar giving the raw level colour
   state.test.js             retry lockout
   perf.test.js              the frame meter's pure parts: perfMode, the median period,
                             long frames blamed on the previous frame's tags, perfLines

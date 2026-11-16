@@ -2,15 +2,16 @@ import { TUNING as T } from '../config.js';
 import { levelBarLabelOnFill } from '../logic.js';
 
 /**
- * Level progress bar: a light-grey track, a pipe-pink fill that animates to
- * each new share (one step per pipe pair passed), the level label centred on
- * it (pink on the grey track, white once the fill has reached it), and a 🏁 at
- * the right end. Geometry comes from levelBarLayout(); Play
+ * Level progress bar: a dark-brown track with a thin dark outline, a fill in the
+ * level's own colour (setColor; plan 28, 4.4) that animates to each new share (one
+ * step per pipe pair passed), the level label centred on it (the level's colour on
+ * the track, white once the fill has reached it), and a 🏁 at the right end. Geometry comes from levelBarLayout(); Play
  * decides the share with levelProgress() and the label text with levelLabel().
  */
 export function createLevelBar(scene, layout, { depth = 20 } = {}) {
   const l = T.levels;
-  const fillHex = `#${l.barFillColor.toString(16).padStart(6, '0')}`;
+  let fill = l.barFillColor; // the level's colour once setColor is called
+  const hex = (c) => `#${c.toString(16).padStart(6, '0')}`;
   const g = scene.add.graphics().setDepth(depth);
   const label = scene.add
     .text(layout.labelX, layout.y, '', { fontFamily: 'sans-serif', fontStyle: 'bold', fontSize: `${l.barLabelPx}px`, color: '#ffffff', stroke: '#1a0b14', strokeThickness: 3 })
@@ -34,10 +35,12 @@ export function createLevelBar(scene, layout, { depth = 20 } = {}) {
     g.fillRoundedRect(x, y - height / 2, width, height, radius);
     const w = Math.round(width * shown);
     if (w > 0) {
-      g.fillStyle(l.barFillColor, 1);
+      g.fillStyle(fill, 1);
       g.fillRoundedRect(x, y - height / 2, w, height, Math.min(radius, w / 2));
     }
-    label.setColor(levelBarLabelOnFill(shown) ? '#ffffff' : fillHex);
+    g.lineStyle(l.barOutlinePx, l.barOutlineColor, 1);
+    g.strokeRoundedRect(x, y - height / 2, width, height, radius);
+    label.setColor(levelBarLabelOnFill(shown) ? '#ffffff' : hex(fill));
   };
   draw();
 
@@ -60,6 +63,14 @@ export function createLevelBar(scene, layout, { depth = 20 } = {}) {
           draw();
         },
       });
+      return this;
+    },
+    /** The fill's colour (the level's: levelColor, raw, so it stands out against the softened background). */
+    setColor(color) {
+      if (Number.isFinite(color) && color !== fill) {
+        fill = color;
+        draw();
+      }
       return this;
     },
     setLabel(text) {
