@@ -2006,7 +2006,7 @@ export class Play extends Phaser.Scene {
       // break context's new-first order. New cards stop at the day's cap while there is one (newPerDay: held off since plan 28, Stage 3b);
       // a break's own quiz keeps to its two limits (breakLimits), and past its due limit the other due cards come as `beyond`.
       const own = mode === 'break';
-      pick = pickCard({ srs: store.cards, context: mode === 'revive' ? 'revive' : 'break', level, segment, now: Date.now(), exclude, recent: store.recent, rng: Math.random, dueFirst: own, missed: own ? (this.breakMissed ?? []) : [], order: this.settings?.load().eduNewOrder, skipped: buriedIdsOn(store.buried, localDayKey()), ...(own ? this.breakLimits() : {}) });
+      pick = pickCard({ srs: store.cards, context: mode === 'revive' ? 'revive' : 'break', level, segment, now: Date.now(), exclude, recent: store.recent, rng: Math.random, order: this.settings?.load().eduNewOrder, skipped: buriedIdsOn(store.buried, localDayKey()), ...(own ? this.breakQuizOptions() : {}) });
     }
     return pick ? { ...pick, order: shuffleOptions(Math.random) } : null;
   }
@@ -2028,7 +2028,16 @@ export class Play extends Phaser.Scene {
     const store = this.eduStore.load();
     // The day's skipped ids, as quizNext passes them: a new card among them is not counted; a break's own
     // quiz counts within its two limits (plan 28, Stage 3b), unless `limits` is false (quizMoreDue).
-    return cardCounts(store.cards, { context: mode === 'revive' ? 'revive' : 'break', ...this.quizScope(), now: Date.now(), exclude, missed: mode === 'break' ? (this.breakMissed ?? []) : [], skipped: buriedIdsOn(store.buried, localDayKey()), ...(mode === 'break' && limits ? this.breakLimits() : {}) });
+    return cardCounts(store.cards, { context: mode === 'revive' ? 'revive' : 'break', ...this.quizScope(), now: Date.now(), exclude, skipped: buriedIdsOn(store.buried, localDayKey()), ...(mode === 'break' ? this.breakQuizOptions({ limits }) : {}) });
+  }
+
+  /**
+   * A level break's own quiz, as pickCard and cardCounts both take it (AUD-058: one set, so the counts
+   * stay the picks): dueFirst, the cards missed in this break, and the break's two limits (breakLimits;
+   * left out with `limits` false, quizMoreDue's count of every due card).
+   */
+  breakQuizOptions({ limits = true } = {}) {
+    return { dueFirst: true, missed: this.breakMissed ?? [], ...(limits ? this.breakLimits() : {}) };
   }
 
   /**

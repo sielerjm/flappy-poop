@@ -306,7 +306,7 @@ test("a break's two limits (plan 28, Stage 3b): newLeft and dueLeft; the counts 
     const storedDue = Object.values(srs).filter((r) => r.dueAt <= NOW).length;
     for (const recent of gaps) for (const order of NEW_ORDERS) for (const newLeft of [0, 1, 3, Infinity]) for (const dueLeft of [0, 1, 3, Infinity]) {
       const label = `${Object.keys(srs).length} records, newLeft ${newLeft}, dueLeft ${dueLeft}, ${order}, gap ${recent.length}`;
-      const counts = cardCounts(srs, { context: 'break', segment: 'stomach', level: 2, now: NOW, newLeft, dueLeft });
+      const counts = cardCounts(srs, { context: 'break', segment: 'stomach', level: 2, now: NOW, newLeft, dueLeft, dueFirst: true });
       assert.ok(counts.new <= newLeft && counts.missed + counts.review <= dueLeft, `${label}: the counts keep to the limits ${JSON.stringify(counts)}`);
       const got = { new: 0, missed: 0, review: 0 };
       let [nl, dl, beyond, practiced] = [newLeft, dueLeft, 0, 0];
@@ -325,7 +325,7 @@ test("a break's two limits (plan 28, Stage 3b): newLeft and dueLeft; the counts 
         } else if (p.reason === 'practice') practiced += 1;
         else {
           assert.equal(beyond + practiced, 0, `${label}: a counted card (${p.card.id}, ${p.reason}) after beyond or practice`);
-          const left = cardCounts(srs, { context: 'break', segment: 'stomach', level: 2, now: NOW, exclude, newLeft: nl, dueLeft: dl });
+          const left = cardCounts(srs, { context: 'break', segment: 'stomach', level: 2, now: NOW, exclude, newLeft: nl, dueLeft: dl, dueFirst: true });
           assert.ok(left[p.reason] >= 1, `${label}: ${p.card.id} is asked as ${p.reason}, so that count holds it`);
           got[p.reason] += 1;
           if (p.reason === 'new') nl -= 1;
@@ -344,7 +344,7 @@ test("a break's two limits (plan 28, Stage 3b): newLeft and dueLeft; the counts 
 });
 
 test("a break's dueLeft (plan 28, Stage 3b): the most urgent due cards first (missed, the longest due first; then reviews, the least remembered first); this break's own misses still count past it; a revive and the bonus quiz ignore it", () => {
-  const counts = (dueLeft, missed = []) => cardCounts(manyDue, { context: 'break', segment: 'stomach', level: 2, now: NOW, dueLeft, missed, exclude: missed });
+  const counts = (dueLeft, missed = []) => cardCounts(manyDue, { context: 'break', segment: 'stomach', level: 2, now: NOW, dueLeft, missed, exclude: missed, dueFirst: true });
   // The stomach break's new cards: its 9 and ST-10, less ST-01 and ST-04, which have records.
   assert.deepEqual(counts(Infinity), { new: 8, missed: 4, review: 5 });
   assert.deepEqual(counts(3), { new: 8, missed: 3, review: 0 }, 'missed first');
@@ -382,6 +382,43 @@ test("AUD-056: with a due limit the gate asks the most urgent: among reviews the
   assert.deepEqual([after.card.id, after.beyond], ['ST-02', true], 'the other comes past the gate');
 });
 
+test("AUD-058: a break's limit is a whole number of cards (a negative one or -Infinity is 0, a fraction is floored) in cardCounts and pickCard alike; cardCounts applies dueLeft only to a break's own quiz (dueFirst), as pickCard does", () => {
+  const srs = { 'DU-01': missedRec(NOW - HOUR), 'CA-01': missedRec(NOW - HOUR), 'IL-01': reviewRec(4, NOW - DAY) };
+  for (const [newLeft, dueLeft] of [[-1, 0], [0, -Infinity], [0, 0.5], [1.7, 1.2], [-3, -3], [2, 2]]) {
+    const counts = cardCounts(srs, { context: 'break', segment: 'stomach', level: 2, now: NOW, newLeft, dueLeft, dueFirst: true });
+    assert.ok(Object.values(counts).every((v) => Number.isInteger(v) && v >= 0), `${newLeft}, ${dueLeft}: whole, never negative ${JSON.stringify(counts)}`);
+    let [nl, dl] = [newLeft, dueLeft];
+    const exclude = [];
+    const got = { new: 0, missed: 0, review: 0 };
+    for (let guard = 0; guard < 40; guard += 1) {
+      const p = pickCard({ srs, context: 'break', segment: 'stomach', level: 2, now: NOW, exclude, dueFirst: true, newLeft: nl, dueLeft: dl, rng: always(0.3) });
+      if (!p || p.beyond || p.reason === 'practice') break;
+      got[p.reason] += 1;
+      exclude.push(p.card.id);
+      if (p.reason === 'new') nl -= 1;
+      else dl -= 1;
+    }
+    assert.deepEqual(counts, got, `${newLeft}, ${dueLeft}: the counts are the picks`);
+  }
+  // A card missed in this break holds the gate whatever newLeft says.
+  const withMiss = cardCounts({}, { context: 'break', segment: 'stomach', level: 2, now: NOW, newLeft: -1, dueLeft: 0, dueFirst: true, missed: ['ST-01'], exclude: ['ST-01'] });
+  assert.deepEqual(withMiss, { new: 0, missed: 1, review: 0 });
+  // The bonus quiz (a break context, no dueFirst): dueLeft and `missed` touch neither its counts nor its picks.
+  const bonusOpts = { context: 'break', segment: 'rectum', level: 7, now: NOW, dueLeft: 0, missed: ['DU-01'], exclude: ['DU-01'] };
+  const bonusCounts = cardCounts(manyDue, bonusOpts);
+  assert.deepEqual(bonusCounts, cardCounts(manyDue, { context: 'break', segment: 'rectum', level: 7, now: NOW, exclude: ['DU-01'] }));
+  const bonusGot = { new: 0, missed: 0, review: 0 };
+  const bonusEx = ['DU-01'];
+  for (let guard = 0; guard < 60; guard += 1) {
+    const p = pickCard({ srs: manyDue, ...bonusOpts, exclude: bonusEx, rng: always(0.3) });
+    if (!p || p.reason === 'practice') break;
+    assert.ok(!p.beyond, 'the bonus quiz has no beyond');
+    bonusGot[p.reason] += 1;
+    bonusEx.push(p.card.id);
+  }
+  assert.deepEqual(bonusCounts, bonusGot, 'its counts are its picks');
+});
+
 test("pickCard, a level break's own quiz (dueFirst, plan 25): missed, due reviews, then cards missed in this break (oldest first, the one just shown waiting), then new, then practice", () => {
   const ask = (exclude, missed = []) => pickCard({ srs: countsSrs, context: 'break', level: 2, segment: 'stomach', now: NOW, exclude, missed, dueFirst: true, rng: createRng(5) });
   const first = ask([]);
@@ -417,9 +454,9 @@ test('a counted card always comes before practice, whatever the recent gap holds
 
 test('cardCounts: a card missed in this break counts once, as missed, though it is in exclude or due again (plan 25)', () => {
   const base = cardCounts(countsSrs, { context: 'break', segment: 'stomach', level: 2, now: NOW });
-  const missedOne = cardCounts(countsSrs, { context: 'break', segment: 'stomach', level: 2, now: NOW, exclude: ['DU-01'], missed: ['DU-01'] });
+  const missedOne = cardCounts(countsSrs, { context: 'break', segment: 'stomach', level: 2, now: NOW, exclude: ['DU-01'], missed: ['DU-01'], dueFirst: true });
   assert.deepEqual(missedOne, { ...base, missed: base.missed + 1, review: base.review - 1 }, 'DU-01 missed: out of review, into missed');
-  const dueAgain = cardCounts(countsSrs, { context: 'break', segment: 'stomach', level: 2, now: NOW, missed: ['CA-01'] });
+  const dueAgain = cardCounts(countsSrs, { context: 'break', segment: 'stomach', level: 2, now: NOW, missed: ['CA-01'], dueFirst: true });
   assert.deepEqual(dueAgain, base, 'a missed card that is also due counts once');
 });
 

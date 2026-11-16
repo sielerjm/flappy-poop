@@ -995,7 +995,11 @@ src/
                             run's answers in all and per level),
                             cardCounts (what a quiz can still ask now: new, missed
                             and review, by pickCard's filters; context 'break',
-                            'revive' or 'all'; the pill's and the card's numbers),
+                            'revive' or 'all'; the pill's and the card's numbers;
+                            a break's own quiz passes dueFirst with its misses and
+                            limits, Play.breakQuizOptions, the same set pickCard
+                            gets: without dueFirst neither `missed` nor dueLeft
+                            applies; a limit is floored, never below 0; AUD-058),
                             eduShopPrices (base × priceScale per level), masteryByDeck
                             (per deck: seen, mastered, total; "Your cards" sums it),
                             plan 25: pickCard's dueFirst and missed (a level break's

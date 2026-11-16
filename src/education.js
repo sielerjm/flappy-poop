@@ -226,9 +226,12 @@ function inScope(c, { context, level, segment, cards = CARDS }) {
   return c.deck === 'general' || levelOfDeck(c.deck) <= level;
 }
 
-/** A break's limit (newLeft, dueLeft): a number as it is; anything else (null, undefined, NaN) is no limit. */
+/**
+ * A break's limit (newLeft, dueLeft) as a whole number of cards: a number floored and never below 0
+ * (-Infinity is 0); anything else (null, undefined, NaN) is no limit (AUD-058).
+ */
 function limitOf(x) {
-  return typeof x === 'number' && !Number.isNaN(x) ? x : Infinity;
+  return typeof x === 'number' && !Number.isNaN(x) ? Math.max(0, Math.floor(x)) : Infinity;
 }
 
 function pickFrom(pool, rng) {
@@ -293,7 +296,7 @@ function chooseCard({ cards, srs, context, level, segment, now, blocked, rng, t,
       const counted = gateDue ? dueNow.filter((c) => gateDue.has(c.id)) : dueNow;
       const storedPick = (pool) => missedPick(pool) ?? reviewPick(pool);
       const duePick = () => (dueLeft > 0 ? storedPick(counted) : null) ?? retryPick(false);
-      const dueCounted = Math.min(counted.length, Math.max(0, dueLeft)) + retry.length;
+      const dueCounted = Math.min(counted.length, dueLeft) + retry.length;
       pick = (newFirst(dueCounted) ? newPick() ?? duePick() : duePick() ?? newPick()) ?? retryPick(true);
       // Past dueLeft, the other due cards come once the gate's are asked, before practice: `beyond`
       // (still due, so scheduled as missed or review; the quiz stops before them until Keep practicing).
@@ -399,7 +402,7 @@ export function pickCard({ cards = CARDS, srs = {}, context, level = 1, segment 
   // With a due limit, which stored due cards the gate asks is settled here, before the recent gap orders
   // them: the dueRoom most urgent (missed, the longest due first; then reviews, the least remembered
   // first), so the picks are what cardCounts counts, kind by kind (plan 28, Stage 3b).
-  if (context === 'break' && dueFirst && Number.isFinite(dueRoom)) args.gateDue = new Set(urgentDue({ cards, srs, segment, now, t, session, missed }).slice(0, Math.max(0, dueRoom)).map((c) => c.id));
+  if (context === 'break' && dueFirst && Number.isFinite(dueRoom)) args.gateDue = new Set(urgentDue({ cards, srs, segment, now, t, session, missed }).slice(0, dueRoom).map((c) => c.id));
   // Counted cards first, then a break's due cards past its dueLeft (`beyond`), the recent gap only
   // ordering each group; practice only once none is left. `practice`: false (counted cards only),
   // 'beyond' (those too), true (practice too).
@@ -422,19 +425,20 @@ export function pickCard({ cards = CARDS, srs = {}, context, level = 1, segment 
  *   missed  cards answered wrong and not yet right since, due now (a buried one waits).
  *   review  cards in review that are due now.
  * A break's two limits (plan 28, Stage 3b), as pickCard takes them: `newLeft` caps new; `dueLeft` caps
- * the stored due cards, missed ones first, with the cards missed in this break counted on top (context
- * 'break' only; pass it only for a break's own quiz). A limit that is not a number is no limit.
+ * the stored due cards, missed ones first, with the cards missed in this break counted on top (a
+ * break's own quiz only: `dueFirst`, as pickCard takes it). A limit is floored and never below 0; one
+ * that is not a number is no limit.
  * Due cards count whatever their deck, as pickCard asks them. Practice (review cards not due yet)
  * is not counted: it is offered once these run out. `exclude` (the quiz's cards already asked) and
- * retired cards never count; `missed` (a level break's cards missed and not yet answered right,
+ * retired cards never count; `missed` (with `dueFirst`, a break's own quiz: its cards missed and not yet answered right,
  * plan 25) count as missed, once each, though they are in `exclude`. The filters are chooseCard's:
  * whatever the recent gap holds, picking until nothing is left hands out exactly these cards before
  * the first practice card (tests/education.test.js). New is at most today's allowance (newAllowance,
  * plan 26).
  */
-export function cardCounts(srs = {}, { cards = CARDS, context = 'all', level = 1, segment = null, now = Date.now(), exclude = [], missed = [], t = TUNING, dayStart = localDayStart(now), skipped = [], newLeft = Infinity, dueLeft = Infinity } = {}) {
+export function cardCounts(srs = {}, { cards = CARDS, context = 'all', level = 1, segment = null, now = Date.now(), exclude = [], missed = [], t = TUNING, dayStart = localDayStart(now), skipped = [], newLeft = Infinity, dueLeft = Infinity, dueFirst = false } = {}) {
   const blocked = new Set(exclude);
-  const isMissed = new Set(missed);
+  const isMissed = new Set(dueFirst ? missed : []); // a break's own misses are asked again only in its own quiz, as pickCard does (AUD-058)
   const isSkipped = new Set(skipped);
   const counts = { new: 0, missed: 0, review: 0 };
   let here = 0; // cards missed in this break, counted in `missed`
@@ -453,11 +457,11 @@ export function cardCounts(srs = {}, { cards = CARDS, context = 'all', level = 1
   }
   counts.new = Math.min(counts.new, newAllowance(srs, { now, exclude, t, dayStart }), limitOf(newLeft));
   // A break's gate counts at most dueLeft stored due cards, missed ones first (pickCard's order); this
-  // break's own misses (`missed`) always count, on top (plan 28, Stage 3b). Only in a break: pickCard
-  // honours dueLeft only in a break's own quiz (dueFirst), so pass it only for that quiz.
+  // break's own misses (`missed`) always count, on top (plan 28, Stage 3b). Only in a break's own quiz
+  // (`dueFirst`), as pickCard honours it (AUD-058: the bonus quiz is a break context too).
   const dueRoom = limitOf(dueLeft);
-  if (context === 'break' && Number.isFinite(dueRoom)) {
-    const room = Math.max(0, dueRoom);
+  if (context === 'break' && dueFirst && Number.isFinite(dueRoom)) {
+    const room = dueRoom; // limitOf: a whole number, never below 0
     const storedMissed = Math.min(counts.missed - here, room);
     counts.review = Math.min(counts.review, room - storedMissed);
     counts.missed = here + storedMissed;

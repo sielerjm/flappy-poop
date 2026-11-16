@@ -59,7 +59,7 @@ test('fuzz: the gate holds exactly while pickCard has a counted card, through an
     for (let step = 0; step < 120; step += 1) {
       const skipped = buried.day === E.localDayKey(new Date(now)) ? buried.ids : [];
       const L = limits();
-      const counts = cardCounts(srs, { cards, context: 'break', level, segment, now, exclude: session, missed: breakMissed, skipped, ...L });
+      const counts = cardCounts(srs, { cards, context: 'break', level, segment, now, exclude: session, missed: breakMissed, skipped, ...L, dueFirst: true });
       const pick = pickCard({ cards, srs, context: 'break', level, segment, now, exclude: session, recent, rng: qrng, dueFirst: true, missed: breakMissed, order, skipped, ...L });
       const holds = counts.new + counts.missed + counts.review > 0;
       const ctx = () => `${label} step ${step}: counts ${JSON.stringify(counts)} limits ${JSON.stringify(L)} pick ${pick ? `${pick.card.id} ${pick.reason}${pick.beyond ? ' beyond' : ''}` : null} missed ${breakMissed.join(',')}`;
@@ -67,7 +67,7 @@ test('fuzz: the gate holds exactly while pickCard has a counted card, through an
       if (counted(pick) && !(counts[pick.reason] >= 1)) { failures.push(`kind not counted: ${ctx()}`); break; }
       if (Object.values(counts).some((v) => v < 0)) { failures.push(`negative: ${ctx()}`); break; }
       if (pick && (pick.reason === 'practice' || pick.beyond)) {
-        const all = cardCounts(srs, { cards, context: 'break', level, segment, now, exclude: session, missed: breakMissed, skipped });
+        const all = cardCounts(srs, { cards, context: 'break', level, segment, now, exclude: session, missed: breakMissed, skipped, dueFirst: true });
         const more = all.missed + all.review - (counts.missed + counts.review);
         if (pick.reason === 'practice' && more !== 0) { failures.push(`practice while ${more} beyond cards wait: ${ctx()}`); break; }
         if (pick.beyond && more < 1) { failures.push(`beyond but quizMoreDue ${more}: ${ctx()}`); break; }
@@ -135,7 +135,7 @@ test('fuzz: a static drain with the break\'s own misses, limits and skips: count
     // missed in this break: cards with a missed record due now, in exclude
     const missed = Object.keys(srs).filter((id) => srs[id].state === 'missed' && srs[id].dueAt <= now && rng() < 0.4);
     const exclude = [...missed];
-    const counts = cardCounts(srs, { cards, context: 'break', level, segment, now, exclude, missed, skipped, newLeft, dueLeft });
+    const counts = cardCounts(srs, { cards, context: 'break', level, segment, now, exclude, missed, skipped, newLeft, dueLeft, dueFirst: true });
     const got = { new: 0, missed: 0, review: 0 };
     let nl = newLeft, dl = dueLeft;
     const ex = [...exclude];
