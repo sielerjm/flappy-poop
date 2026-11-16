@@ -470,12 +470,18 @@ export function createRunQueue(storage = browserStorage(), { key = LEADERBOARD.r
   const store = createJsonStore(storage, key, (raw) => (Array.isArray(raw) ? raw.map(normalizeRunEntry).filter(Boolean) : []));
   return {
     load: () => store.read(),
-    add(raw) {
+    /** Queue a row once; when more than `max` wait, the oldest go first, except those `pinned` keeps. */
+    add(raw, { pinned = () => false } = {}) {
       const e = normalizeRunEntry(raw);
       if (!e) return null;
       const all = store.read();
       if (all.some((q) => q.row.run_id === e.row.run_id)) return e;
-      store.write([...all, e].slice(-Math.max(1, max)));
+      const next = [...all, e];
+      for (let i = 0; next.length > Math.max(1, max) && i < next.length - 1; ) {
+        if (pinned(next[i])) i += 1;
+        else next.splice(i, 1);
+      }
+      store.write(next);
       return e;
     },
     remove(runIds) {
@@ -490,6 +496,34 @@ export function createRunQueue(storage = browserStorage(), { key = LEADERBOARD.r
       if (all.some((q) => q.playerId === null)) store.write(all.map((q) => (q.playerId === null ? { ...q, playerId } : q)));
     },
   };
+}
+
+/**
+ * Is the run behind this post still waiting in the run queue (plan 30)? want: { playerId, mode:
+ * 'single', toilet, score, level } for a 🏆 post, { playerId, mode: 'daily', day, score } for a 🌞 one.
+ */
+export function waitsForRun(entries, want) {
+  return (Array.isArray(entries) ? entries : []).some((q) => {
+    const r = q?.row;
+    if (!r || q.playerId !== want.playerId || r.mode !== want.mode || r.score !== want.score) return false;
+    return want.mode === 'daily' ? r.day === want.day : Boolean(r.toilet) === Boolean(want.toilet) && r.level === want.level;
+  });
+}
+
+/**
+ * Send run summaries (submit_runs, plan 30): 'ok' once stored (the server's answer never says more),
+ * 'rateLimited' (keep them for the next sync), 'rejected' (the batch itself was refused: drop it),
+ * 'offline' (no answer, or a database without submit_runs yet: keep them).
+ */
+export async function submitRuns(playerId, rows, opts = {}) {
+  if (typeof playerId !== 'string' || !playerId || !Array.isArray(rows) || rows.length === 0) return 'rejected';
+  const out = await request('/rpc/submit_runs', { method: 'POST', errors: true, body: { p_player_id: playerId, p_sent_at: Date.now(), p_rows: rows } }, opts);
+  if (out === null) return 'offline';
+  if (out && out.error) {
+    if (/rate limited/.test(out.message)) return 'rateLimited';
+    return /^bad /.test(out.message) ? 'rejected' : 'offline';
+  }
+  return 'ok';
 }
 
 /**

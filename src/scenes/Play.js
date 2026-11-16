@@ -1,4 +1,4 @@
-import { GAME_HEIGHT, FIELD, TUNING as T, LEVELS, LEVEL_COLORS, BACKGROUND, TEST_MODE, EDUCATION } from '../config.js';
+import { GAME_HEIGHT, FIELD, TUNING as T, LEVELS, LEVEL_COLORS, BACKGROUND, TEST_MODE, EDUCATION, LEADERBOARD } from '../config.js';
 import {
   createRng,
   createCourse,
@@ -111,7 +111,7 @@ import {
 } from '../logic.js';
 import { t, pauseBannerText, levelBannerText, levelLabel, initialLocale, isLocale, profileButtonText, countText, versusName, countLines } from '../i18n.js';
 import { loadLocal, saveLocal, ensureId, recordScore, mergeBoardBests, newId, TOILET_EMOJI } from '../save.js';
-import { createRunStats } from '../runStats.js';
+import { createRunStats, stubRow } from '../runStats.js';
 import { VERSION as APP_VERSION } from '../logic.js';
 import { browserStorage } from '../store.js';
 import { runDeltas, evaluate, bestFacts, levelCloseShave, winsInWindow, daysBetween, nextDrawStreak, FOUR_OF_A_KIND, EDU_ACHIEVEMENTS, eduRunFacts } from '../achievements.js';
@@ -124,7 +124,7 @@ import { perfMark, perfSteps, perfRunStart } from '../ui/perfMeter.js';
 import { createFinishTexture } from '../ui/finish.js';
 import { createLightTexture } from '../ui/pipeShade.js';
 import { createLevelBar } from '../ui/levelBar.js';
-import { enrolResearch, submitResearchEvents, deleteResearch, createEduShareStore, shareEducation, renameEducation, unshareEducation, submitEducationGrades, fetchEducationBoard, createSubmitStore, createMergeStore, createRenameStore, createTournamentQueue, createDailyStore, createDailyQueue, createRunQueue, submitDailyScore, fetchDailyBoard, submitPlans, submitScore, submitTournament, checkNameAvailable, mergePlayers, fetchPlayerName, fetchRank, nameAction, createCareerStore, submitCounters, claimAchievements, fetchPlayerStats } from '../leaderboard.js';
+import { enrolResearch, submitResearchEvents, deleteResearch, createEduShareStore, shareEducation, renameEducation, unshareEducation, submitEducationGrades, fetchEducationBoard, createSubmitStore, createMergeStore, createRenameStore, createTournamentQueue, createDailyStore, createDailyQueue, createRunQueue, submitRuns, waitsForRun, submitDailyScore, fetchDailyBoard, submitPlans, submitScore, submitTournament, checkNameAvailable, mergePlayers, fetchPlayerName, fetchRank, nameAction, createCareerStore, submitCounters, claimAchievements, fetchPlayerStats } from '../leaderboard.js';
 import { createButton } from '../ui/button.js';
 import { createToggle } from '../ui/toggle.js';
 import { createCoinText } from '../ui/coinText.js';
@@ -1007,13 +1007,71 @@ export class Play extends Phaser.Scene {
     return lip === null ? null : lip - this.poop.y;
   }
 
+  /** Is a queued run the one behind a best this device has not posted yet (a 🏆 plan, or a queued 🌞 score)? The queue keeps it. */
+  runBehindUnposted(q) {
+    const r = q?.row;
+    if (!r) return false;
+    if (r.mode === 'daily') return (this.dailyQueue?.load?.() ?? []).some((e) => e.playerId === q.playerId && e.day === r.day && e.score === r.score);
+    const id = this.save?.id ?? null;
+    return q.playerId === id && submitPlans(this.save, this.submitStore?.load?.() ?? {}).some((p) => Boolean(p.toilet) === Boolean(r.toilet) && p.score === r.score && p.level === r.level);
+  }
+
+  /**
+   * Send the queued run summaries before any score post (plan 30), so the run behind a post is
+   * stored first: up to LEADERBOARD.runBatchMax per player id, one call each. A row flown before the
+   * device had an id takes it now. Stored or refused rows leave the queue; a 'rate limited' or
+   * offline answer keeps them for the next sync (runsUnsent: the ids whose send had no usable
+   * answer, whose posts then go without waiting). Never rejects.
+   */
+  drainRuns() {
+    this.runsUnsent ??= new Set();
+    if (!this.runQueue) return Promise.resolve();
+    if (this.save?.id) this.runQueue.claim(this.save.id);
+    const byId = new Map();
+    for (const e of this.runQueue.load()) {
+      if (!e.playerId) continue;
+      if (!byId.has(e.playerId)) byId.set(e.playerId, []);
+      const rows = byId.get(e.playerId);
+      if (rows.length < LEADERBOARD.runBatchMax) rows.push(e.row);
+    }
+    return [...byId]
+      .reduce(
+        (chain, [pid, rows]) =>
+          chain.then(() =>
+            submitRuns(pid, rows).then((res) => {
+              if (res === 'ok' || res === 'rejected') this.runQueue.remove(rows.map((r) => r.run_id));
+              // No usable answer: holding this player's posts back for their runs would gain nothing.
+              if (res === 'offline') this.runsUnsent.add(pid);
+              else this.runsUnsent.delete(pid);
+            }),
+          ),
+        Promise.resolve(),
+      )
+      .catch(() => {});
+  }
+
+  /**
+   * A post whose run is still in the queue waits (plan 30): true for up to LEADERBOARD.runWaitSyncs
+   * syncs of this page, then it goes anyway (a run that cannot be sent never holds a best back).
+   */
+  postWaits(key, queued) {
+    this.postTries ??= new Map();
+    if (!queued) {
+      this.postTries.delete(key);
+      return false;
+    }
+    const n = (this.postTries.get(key) ?? 0) + 1;
+    this.postTries.set(key, n);
+    return n <= LEADERBOARD.runWaitSyncs;
+  }
+
   /** The run's summary row, queued for the next sync (endRun); nothing when none was kept. */
   queueRunSummary() {
     if (!this.runStatsOn) return;
     this.runStatsOn = false;
     try {
       const row = this.runStats.end({ now: this.statNow(), wall: Date.now(), score: this.score, level: this.level, won: Boolean(this.won) });
-      if (row) this.runQueue.add({ playerId: this.save?.id ?? null, row });
+      if (row) this.runQueue.add({ playerId: this.save?.id ?? null, row }, { pinned: (q) => this.runBehindUnposted(q) });
     } catch {
       /* the summary never stops a run */
     }
@@ -1558,7 +1616,7 @@ export class Play extends Phaser.Scene {
     const research = tournaments.then(() => this.drainResearch());
     // Daily Dump scores carry their own id too; a device with no username sends them under the
     // name they were queued with (a named device sends after the name check below).
-    if (!this.save?.name) return research.then(() => this.drainDaily()).catch(() => {});
+    if (!this.save?.name) return research.then(() => this.drainRuns()).then(() => this.drainDaily()).catch(() => {});
     if (!this.save.id) this.save = ensureId(this.save);
     const id = this.save.id;
     const renamedHere = () => {
@@ -1572,6 +1630,7 @@ export class Play extends Phaser.Scene {
       })
       .then(() => this.pullBoardBests(id))
       .then(() => this.creditCareer()) // bests from other devices earn their score and level badges here
+      .then(() => this.drainRuns()) // run summaries first, so the run behind each post below is stored (plan 30)
       .then(() => this.drainDaily())
       .then(() => this.drainCareer(id))
       .then(() => this.drainEduShare(id))
@@ -1579,8 +1638,11 @@ export class Play extends Phaser.Scene {
         // Up to two rows per player: best off the toilet and best on it, posted one after the other.
         submitPlans(this.save, this.submitStore.load()).reduce(
           (chain, plan) =>
-            chain.then(() =>
-              submitScore(plan).then((res) => {
+            chain.then(() => {
+              // Its run is still queued (the send above was refused or lost): it waits a sync or three (plan 30).
+              const queued = !this.runsUnsent?.has(plan.playerId) && waitsForRun(this.runQueue?.load?.() ?? [], { playerId: plan.playerId, mode: 'single', toilet: plan.toilet, score: plan.score, level: plan.level });
+              if (this.postWaits(`s:${plan.toilet ? 1 : 0}:${plan.score}:${plan.level}`, queued)) return null;
+              return submitScore(plan).then((res) => {
                 if (res.ok) {
                   this.submitStore.save(plan);
                   this.boardNameTaken = false;
@@ -1589,8 +1651,8 @@ export class Play extends Phaser.Scene {
                 } else if (res.reason === 'nameTaken') {
                   this.boardNameTaken = true; // another player holds the name: the panel and the board say so
                 }
-              }),
-            ),
+              });
+            }),
           Promise.resolve(),
         ),
       )
@@ -1607,6 +1669,8 @@ export class Play extends Phaser.Scene {
       const name = (e.playerId === this.save?.id && this.save?.name) || e.name;
       // No name yet: this player's waits until they pick one; a signed-out player's leftover can never post.
       if (!name) return e.playerId === this.save?.id ? 'keep' : 'rejected';
+      const queued = !this.runsUnsent?.has(e.playerId) && waitsForRun(this.runQueue?.load?.() ?? [], { playerId: e.playerId, mode: 'daily', day: e.day, score: e.score });
+      if (this.postWaits(`d:${e.playerId}:${e.day}:${e.score}`, queued)) return 'keep'; // its run goes first (plan 30)
       return submitDailyScore({ ...e, name }).then((res) => {
         if (res === 'nameTaken' && e.playerId === this.save?.id) this.boardNameTaken = true;
         return res;
@@ -4703,6 +4767,14 @@ export class Play extends Phaser.Scene {
     if (!rec || rec.final) return;
     const done = this.dailyStore.save({ ...rec, final: true });
     if (done) this.dailyQueue.add({ ...done, name: done.playerId === this.save?.id ? (this.save?.name ?? null) : null });
+    // Its summary was lost with the page: a short row stands behind the score (plan 30).
+    if (done && done.playerId) {
+      try {
+        this.runQueue?.add({ playerId: done.playerId, row: stubRow({ runId: newId(), session: this.runSession(), day: done.day, score: done.score, level: done.level, pipes: done.pipes, version: APP_VERSION }) });
+      } catch {
+        /* the summary never stops a sync */
+      }
+    }
   }
 
   /** The game-over panel after deathToOverMs; `won` swaps its headline, `test` hides Share. A match has no Over: the Versus scene shows the result. */

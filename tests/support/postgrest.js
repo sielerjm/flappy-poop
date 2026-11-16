@@ -45,15 +45,17 @@ export async function asAnon(db, sql, params = []) {
 }
 
 /** Functions that return a table (PostgREST answers an array of rows). */
-const TABLE_FNS = new Set(['education_board', 'tournament_board', 'daily_board']);
+const TABLE_FNS = new Set(['education_board', 'tournament_board', 'daily_board', 'score_board']);
 /** Functions that return nothing (PostgREST answers 204 with no body). */
-const VOID_FNS = new Set(['merge_players', 'submit_score']);
+const VOID_FNS = new Set(['merge_players', 'submit_score', 'submit_runs']);
 /** Argument types PostgREST would take from the function's signature (the rest are text). */
 const CASTS = {
   p_shared_at: '::timestamptz',
   p_since: '::timestamptz',
   p_badges: '::jsonb',
   p_events: '::jsonb',
+  p_rows: '::jsonb',
+  p_sent_at: '::bigint',
   p_counters: '::jsonb',
   p_tournament: '::jsonb',
   p_runs: '::int',
