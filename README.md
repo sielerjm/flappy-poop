@@ -8,7 +8,7 @@ A Flappy Bird–style game for phone browsers: flap a poop through the gut, dodg
 
 **Play now → [sielerjm.github.io/flappy-poop](https://sielerjm.github.io/flappy-poop/)**
 
-Works best on your phone — add it to your home screen for a full-screen, app-like launch. On a desktop or landscape window the gut widens to fill the screen. English and Simplified Chinese in-game. Version **0.22.0 beta**.
+Works best on your phone — add it to your home screen for a full-screen, app-like launch. On a desktop or landscape window the gut widens to fill the screen. English and Simplified Chinese in-game. Version **0.23.0 beta**.
 
 Tip: on iPhone, turn **Silent mode off** to hear sound.
 
@@ -138,6 +138,7 @@ Along the top: the **🌞** (the [Daily Dump](#daily-dump)) and the **?** (How t
 | **L** | Language |
 | **F** | Feedback |
 | **T** | Leaderboard |
+| **←** / **→** | Leaderboard: the page before / after |
 
 ### Tray
 
@@ -205,7 +206,7 @@ One try a day, the same course for everyone, Wordle style. Tap the **🌞** at t
 - The course comes from the date (UTC), so everyone flies the same pipes and pickups; a box gives everyone the same thing too. It runs at one level all day (3–7, shown in the popup) and **never ends**: no finish lines, no breaks, no kernels or shop. Go as far as you can.
 - One crash and the day is done. Quitting or reloading mid-run counts as your try (the score so far is kept). It is one try per player, not per device: before offering **Play**, the game checks the 🌞 board for your user code, so a second phone or browser shows your result instead. (Offline it cannot check, but only your first score of the day ever counts.)
 - The result shows your rank for the day (tap your score for the **🌞 board**), a countdown to the next course and **Share**. A new course starts every day at **00:00 UTC** (01:00 in Geneva, late afternoon in the US).
-- Daily scores have their own board and never touch the 🏆 Top 25. Offline, the score posts the next time the board can be reached.
+- Daily scores have their own board and never touch the 🏆 board. Offline, the score posts the next time the board can be reached.
 
 The 🌞 board, like the others, is for friends, not prizes: the course comes from your device's clock (someone could set it ahead and practise tomorrow's), scores are reported by the game, and the server keeps only the first score it gets from you each day. If you ran a fart, the pair right after it opens mid-height for you, so two players' courses can differ by a pipe or two.
 
@@ -225,7 +226,7 @@ A username belongs to one player on the board: if a name is taken, paste your co
 
 ### Leaderboard
 
-The 🏆 tray button (or **T**) shows a shared **Top 25**. You need a username to appear. Toilet runs keep their 🚽. Offline, the board says it can’t be reached and posts your best next time it can. The tabs under the title switch to the **🌞 Daily Dump** board for today and the **🏅 medal board** from tournaments. Tap any name to open that player’s profile.
+The 🏆 tray button (or **T**) shows the shared board in **pages of 25**: **‹** and **›** under the list (or **←** and **→**) turn the page, and the line at the bottom gives your place on every page. You need a username to appear. Toilet runs keep their 🚽. Offline, the board says it can’t be reached and posts your best next time it can. The tabs under the title switch to the **🌞 Daily Dump** board for today and the **🏅 medal board** from tournaments. Tap any name to open that player’s profile.
 
 ### 👤 Profile & achievements
 

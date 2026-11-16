@@ -8,6 +8,20 @@ import { LOCALES } from './i18n.js';
 
 export const CHANGELOG = [
   {
+    version: '0.23.0',
+    date: '17 Nov 2026',
+    notes: {
+      en: [
+        'In every level break the poop now waits in the middle of the screen, with the level\'s name above it and the Shop button below.',
+        'Every leaderboard now comes in pages of 25: the ‹ and › under the list turn the page (← and → on a keyboard). The line at the bottom shows your place on every page.',
+      ],
+      'zh-Hans': [
+        '每次关卡休息时，便便都会停在屏幕中间，上方是关卡名，下方是商店按钮。',
+        '所有排行榜现在每页显示25名：用列表下方的‹和›翻页（键盘用←和→）。底部一行在每一页都会显示你的名次。',
+      ],
+    },
+  },
+  {
     version: '0.22.0',
     date: '16 Nov 2026',
     notes: {
