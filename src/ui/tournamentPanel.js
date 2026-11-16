@@ -26,6 +26,7 @@ import { createMatch } from '../versus.js';
 import { createTournament, nextMatch, recordResult, matchPlayers, placings, claimFromCode, claimHost, tournamentPayload, postable, seedSlots, canReseed, reseed, reshuffle } from '../tournament.js';
 import { ensureId, newId } from '../save.js';
 import { rollGuestName } from '../tournamentNames.js';
+import { panelFrameCss } from './panelFrame.js';
 
 const PANEL_ID = 'tournament-panel';
 const REGISTRY_KEY = 'tournament';
@@ -34,12 +35,9 @@ const REGISTRY_KEY = 'tournament';
 export const ROUND_KEYS = { quarter: 'tournamentQuarter', semi: 'tournamentSemi', bronze: 'tournamentBronze', final: 'tournamentFinal' };
 
 const CSS = `
-#${PANEL_ID} { position: fixed; inset: 0; z-index: 10; display: flex; align-items: center; justify-content: center;
-  background: rgba(0, 0, 0, 0.55); font-family: sans-serif; color: #ffffff; }
-#${PANEL_ID}[hidden] { display: none; }
+${panelFrameCss(PANEL_ID, { width: 560 })}
 #${PANEL_ID} .card:focus { outline: none; }
-#${PANEL_ID} .card { position: relative; box-sizing: border-box; width: min(92vw, 560px); max-height: 92vh; overflow: auto;
-  padding: 20px 20px 16px; border: 4px solid #e85e96; border-radius: 16px; background: #1a0b14; }
+#${PANEL_ID} .card { padding: 20px 20px 16px; border: 4px solid #e85e96; border-radius: 16px; background: #1a0b14; }
 #${PANEL_ID} h2 { margin: 0 0 12px; font-size: 24px; color: #f8a0c8; text-align: center; }
 #${PANEL_ID} .count { display: flex; align-items: center; justify-content: center; gap: 12px; margin: 0 0 12px; font-size: 16px; }
 #${PANEL_ID} .count b { min-width: 2ch; text-align: center; font-size: 22px; }

@@ -74,7 +74,7 @@ export const SECTIONS = [
   { name: 'tournament', needs: [], about: '🏅 tournament (every two-player session): the lobby (guest, pasted code, host, help), the pad in the panel, seeding (↑ ↓, 🎲, drag), the 🏅 pill in a level break, Bracket / Continue after a race, the podium, abandon to the lobby, two players' },
   { name: 'daily', needs: [], about: "🌞 Daily Dump: the day's level and shared course, endless (no finish line), no coins or skips, the attempt claimed at the start and final at the crash, nothing on the 🏆 lists, an abandoned run finalised" },
   { name: 'profile', about: "player profiles (plan 08): the own profile (local counters, a locked badge's progress), another player's from a stubbed player_stats, the explanation card (a badge, a career cell, by mouse and controller), the wheel and a drag, the controller walking the grid, not found, offline, a board name opening a profile (not on a drag), the sign-in gate (no username), the save panel's Profile button" },
-  { name: 'education-unlock', needs: [], about: "📚 for everyone (plan 28, 2.3; the section keeps its old name): the 📚 switch from the first boot and remembered across a restart, the old word refused as a name with its line, the off switch hiding 📚, 👥 and 📚 never on together on a wide window, an education run recording nothing, a Daily Dump never an education run" },
+  { name: 'education-unlock', needs: [], about: "📚 for everyone (plan 28, 2.3; the section keeps its old name): the 📚 switch from the first boot and remembered across a restart, the old word refused as a name with its line, the off switch hiding 📚, 👥 and 📚 never on together on a wide window, an education run recording nothing, a Daily Dump never an education run, each DOM window inside an iPhone's faked safe area (plan 28, 4.1)" },
   { name: 'education-quiz', needs: [], about: "📚 the quiz card (plan 21) in an education run's level break: the 📚 pill and its hint, the card answered by tap, key and controller (each answer saved to its card), corn for a right answer by the card's kind (3 / 2 / 1) and none for a wrong one, Next held after a wrong answer, taps under it ignored, every bank card fitting the card, Esc closing it with the resume lockout, the shop at the level's prices" },
   { name: 'education-revive', needs: [], about: "📚 the revive after an education crash (plan 21): three misses end the run with the field and score untouched; wrong then right then Fly on revives without the power-ups at the penalty; a full streak gives coins and power-ups back; nothing lost skips the choice; Quit, warned on every card (plan 26, A2); Esc cannot close it; the field refills at the first right answer and Fly on goes straight on (plan 22)" },
   { name: 'education-over', needs: [], about: "📚 the end of an education run (plan 21): the game-over panel's 📚 tally and note, no Share; a won run's bonus button opening the rectum's questions over the panel (no coins, the card saved, Esc back to the panel); Clear wiping the cards' progress" },
@@ -4159,6 +4159,44 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await sleep(600);
         const after = await evaluate(`(() => { const p = ${play}; return JSON.stringify({ state: p.state, body: Boolean(p.poop?.body), due: Boolean(p.eduDueText?.active), popup: !(document.getElementById('edu-intro-panel')?.hidden ?? true) }); })()`).then(JSON.parse);
         ok(openBefore && after.state === 'ready' && after.body && after.due && !after.popup, `Play restarted with the 📚 popup open: the popup closes and the new ready screen is whole (${JSON.stringify(after)})`);
+        // Plan 28, 4.1 (Michael's image 3, 16 Nov): at an iPhone's size with its safe area faked (a 59 px status bar,
+        // a 34 px home bar), each DOM window keeps its ✕ and its card inside: the backdrop is padded by the insets and
+        // the card sized against it (src/ui/panelFrame.js), never in vh. The tournament panel never opens on a phone.
+        {
+          const TOP = 59;
+          const BOTTOM = 34;
+          // The backdrop's own padding is read too: a short card would sit inside the insets even unpadded.
+          const frame = (root, x) =>
+            evaluate(`(() => { const r = document.querySelector('${root}'); const card = r?.querySelector('.card'); const close = r?.querySelector('${x}'); if (!r || r.hidden || !card || !close) return 'null'; const c = card.getBoundingClientRect(); const k = close.getBoundingClientRect(); const cs = getComputedStyle(r); return JSON.stringify({ pad: [parseFloat(cs.paddingTop), parseFloat(cs.paddingBottom)], x: Math.round(k.top), card: [Math.round(c.top), Math.round(c.bottom)], vh: innerHeight }); })()`).then(JSON.parse);
+          let intro = null;
+          let data = null;
+          let save = null;
+          try {
+            await metrics(430, 932);
+            await settle(720); // a phone's field stays 720 wide (FIELD.minWidth)
+            await cdp.send('Emulation.setSafeAreaInsetsOverride', { insets: { top: TOP, bottom: BOTTOM, left: 0, right: 0 } });
+            await sleep(200);
+            await evaluate(`${play}.openEduIntro(), true`);
+            await sleep(300);
+            intro = await frame('#edu-intro-panel', '#edu-intro-x');
+            await evaluate(`import('./src/ui/eduIntroPanel.js').then((m) => (m.closeEduIntroPanel(), true))`);
+            await evaluate(`${play}.openEduData(), true`);
+            await sleep(300);
+            data = await frame('#edu-data-panel', '.close');
+            await evaluate(`import('./src/ui/eduDataPanel.js').then((m) => (m.closeEduDataPanel(), true))`);
+            await evaluate(`${play}.openSavePanel({}), true`);
+            await sleep(300);
+            save = await frame('#save-panel', '.close');
+            await evaluate(`import('./src/ui/savePanel.js').then((m) => (m.closeSavePanel(), true))`);
+          } finally {
+            // Whatever happened above, the sections after this one run at the size and insets they expect.
+            await cdp.send('Emulation.setSafeAreaInsetsOverride', { insets: { top: 0, bottom: 0, left: 0, right: 0 } });
+            await metrics(720, 1280);
+            await settle(720);
+          }
+          const inside = (f) => Boolean(f) && f.pad[0] === TOP && f.pad[1] === BOTTOM && f.x >= TOP && f.card[0] >= TOP && f.card[1] <= f.vh - BOTTOM;
+          ok(inside(intro) && inside(data) && inside(save), `at an iPhone's size (430×932) with its safe area faked (${TOP} px top, ${BOTTOM} px bottom), each window's ✕ and card stay inside it: 📚 popup ${JSON.stringify(intro)}, Education data ${JSON.stringify(data)}, save panel ${JSON.stringify(save)}`);
+        }
         await tap('education');
         await home();
       }

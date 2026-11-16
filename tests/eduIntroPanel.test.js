@@ -151,3 +151,13 @@ test('AUD-063: a restart closes the popup without calling back into the scene it
   closeEduIntroPanel();
   assert.equal(told, 1, 'a close by the player redraws the ready screen\'s 📚 count');
 });
+
+test('plan 28, 4.1: the popup\'s style takes the shared frame (padded by the safe area, the card sized against it, never in vh), so its ✕ stays below an iPhone\'s status bar', () => {
+  open();
+  const style = document.head.children.find((c) => c.tag === 'style' && c.textContent.includes('#edu-intro-panel'));
+  assert.ok(style, 'the popup injects its style');
+  assert.ok(style.textContent.includes('max(16px, env(safe-area-inset-top))'), 'the backdrop is padded by the safe area');
+  assert.ok(style.textContent.includes('max-height: 100%;'), 'the card never grows past the padded backdrop');
+  assert.doesNotMatch(style.textContent, /max-height:\s*\d+vh/, 'no card sized in vh');
+  closeEduIntroPanel();
+});

@@ -1389,6 +1389,16 @@ src/
                             results arrive on 'tournament-race' ({ then }: 'next'
                             races on, else the panel). tournamentPadAction walks its
                             buttons for a controller. ROUND_KEYS names the rounds.
+    panelFrame.js           The frame every DOM window shares (plan 28, 4.1):
+                            panelFrameCss(id, { width }) gives the backdrop (fixed
+                            over the page, padded by the screen's safe area,
+                            max(16px, env(safe-area-inset-*)), as the splash) and
+                            the card's size (min(92vw, width), never past the
+                            padded box: it scrolls inside; never in vh, which an
+                            iPhone Home Screen app counts over the whole screen, so
+                            a 90vh card ran its ✕ under the clock). eduIntroPanel,
+                            eduDataPanel, savePanel and tournamentPanel put it first
+                            in their CSS.
     savePanel.js            Plain DOM panel over the canvas (a three-step intro,
                             Username field, read-only user code + Copy, Load
                             field, an outlined Clear beside the Save button that
@@ -2516,7 +2526,13 @@ tests/                      node --test (schema.test.js, pilot.test.js, eduBoard
                             click stored, the focus kept, both languages), the click
                             lockout, the help line's duePerBreak, the per-day line
                             only with a cap, a close at a restart that does not call
-                            back into the scene
+                            back into the scene; its style takes the shared frame
+                            (plan 28, 4.1)
+  panelFrame.test.js        the DOM windows' shared frame (plan 28, 4.1): the safe-area
+                            padding on four sides, the card never past the padded box
+                            and never in vh, the width cap; a source check that the
+                            four panels take it and no src/ui file keeps a vh card or
+                            its own full-page backdrop
   cjkWrap.test.js           cjkUnits / wrapCjk (plan 28, 2.1): Chinese breaks between characters, a
                             number or Latin word whole, no line starting with "，" or ending with "“", a
                             name's dot and a dash never split, the text kept whole; Quiz's cjkWrap callback.
@@ -3120,7 +3136,8 @@ Commits follow `type(scope): summary` (`feat`, `fix`, `docs`, `chore`, `test`, `
   `col.width` as the width and `col.x` as the helper's `x0`, or add `col.x`
   to a fixed x). New world objects (things that scroll, full-screen shades)
   use `this.scale.width`. Text input belongs in a DOM panel like `src/ui/savePanel.js`,
-  not Phaser UI.
+  not Phaser UI. A DOM panel takes its backdrop and card size from `panelFrameCss`
+  (`src/ui/panelFrame.js`): padded by the screen's safe area, never sized in `vh`.
 - Save-code wire format change → bump `CURRENT_VERSION` in `src/save.js`, add
   `parseVN` to `PARSERS`, never delete an old parser, never change `SECRET`. An
   optional key with a default (`p`, `l`, `h`) joins the current version without a

@@ -10,16 +10,14 @@ import { TUNING as T, TEST_MODE, EDUCATION } from '../config.js';
 import { t, welcomeText } from '../i18n.js';
 import { isTestWord } from '../logic.js';
 import { loadLocal, saveLocal, ensureId, validateName, checkNewName, exportCode, importCode } from '../save.js';
+import { panelFrameCss } from './panelFrame.js';
 
 const PANEL_ID = 'save-panel';
 const COPIED_MS = 2000;
 
 const CSS = `
-#${PANEL_ID} { position: fixed; inset: 0; z-index: 10; display: flex; align-items: center; justify-content: center;
-  background: rgba(0, 0, 0, 0.55); font-family: sans-serif; color: #ffffff; }
-#${PANEL_ID}[hidden] { display: none; }
-#${PANEL_ID} .card { position: relative; box-sizing: border-box; width: min(92vw, 420px); max-height: 90vh; overflow: auto;
-  padding: 20px 20px 16px; border: 4px solid #e85e96; border-radius: 16px; background: #1a0b14; }
+${panelFrameCss(PANEL_ID, { width: 420 })}
+#${PANEL_ID} .card { padding: 20px 20px 16px; border: 4px solid #e85e96; border-radius: 16px; background: #1a0b14; }
 #${PANEL_ID} h2 { margin: 0 0 8px; font-size: 22px; color: #f8a0c8; text-align: center; }
 #${PANEL_ID} .intro { margin: 0 0 14px; font-size: 14px; line-height: 1.4; color: #c9b8dc; white-space: pre-line; }
 #${PANEL_ID} label { display: block; margin: 10px 0 4px; font-size: 14px; font-weight: bold; color: #f8a0c8; }

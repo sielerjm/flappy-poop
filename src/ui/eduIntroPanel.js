@@ -24,15 +24,13 @@
 import { TUNING as T } from '../config.js';
 import { t, countLines, levelLabel } from '../i18n.js';
 import { focusNearest, focusStep, eduIntroKey, canRestart } from '../logic.js';
+import { panelFrameCss } from './panelFrame.js';
 
 const PANEL_ID = 'edu-intro-panel';
 
 const CSS = `
-#${PANEL_ID} { position: fixed; inset: 0; z-index: 10; display: flex; align-items: center; justify-content: center;
-  background: rgba(0, 0, 0, 0.55); font-family: sans-serif; color: #ffffff; }
-#${PANEL_ID}[hidden] { display: none; }
-#${PANEL_ID} .card { position: relative; box-sizing: border-box; width: min(92vw, 440px); max-height: 90vh; overflow: auto;
-  padding: 20px 20px 0; border: 4px solid #e85e96; border-radius: 16px; background: #1a0b14; }
+${panelFrameCss(PANEL_ID, { width: 440 })}
+#${PANEL_ID} .card { padding: 20px 20px 0; border: 4px solid #e85e96; border-radius: 16px; background: #1a0b14; }
 #${PANEL_ID} .card:focus { outline: none; }
 #${PANEL_ID} h2 { margin: 0 36px 8px; font-size: 22px; color: #f8a0c8; text-align: center; }
 #${PANEL_ID} h3 { margin: 14px 0 6px; font-size: 17px; color: #f8a0c8; }

@@ -33,16 +33,14 @@ import { t } from '../i18n.js';
 import { issueUrl } from '../logic.js';
 import { shareFile } from '../share.js';
 import { localDayKey } from '../education.js';
+import { panelFrameCss } from './panelFrame.js';
 
 const PANEL_ID = 'edu-data-panel';
 
 const CSS = `
-#${PANEL_ID} { position: fixed; inset: 0; z-index: 10; display: flex; align-items: center; justify-content: center;
-  background: rgba(0, 0, 0, 0.55); font-family: sans-serif; color: #ffffff; }
-#${PANEL_ID}[hidden] { display: none; }
+${panelFrameCss(PANEL_ID, { width: 420 })}
 #${PANEL_ID} .card [hidden] { display: none !important; }
-#${PANEL_ID} .card { position: relative; box-sizing: border-box; width: min(92vw, 420px); max-height: 90vh; overflow: auto;
-  padding: 20px 20px 16px; border: 4px solid #e85e96; border-radius: 16px; background: #1a0b14; }
+#${PANEL_ID} .card { padding: 20px 20px 16px; border: 4px solid #e85e96; border-radius: 16px; background: #1a0b14; }
 #${PANEL_ID} h2 { margin: 0 36px 8px; font-size: 22px; color: #f8a0c8; text-align: center; }
 #${PANEL_ID} h3 { margin: 16px 0 6px; font-size: 17px; color: #f8a0c8; }
 #${PANEL_ID} p { margin: 0 0 10px; font-size: 14px; line-height: 1.45; color: #c9b8dc; }
