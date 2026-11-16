@@ -721,7 +721,7 @@ export function paidOn(paid, day) {
   return paid && paid.day === day && Array.isArray(paid.ids) ? paid.ids : [];
 }
 
-/** The ids of the cards skipped on local `day` (the store's `buried`: a due card's Skip, plan 26 A2, and a practice card's, AUD-028), or none: pickCard's `skipped`. */
+/** The ids of the cards skipped on local `day` (the store's `buried`: a due card's Skip, plan 26 A2, a practice card's, AUD-028, and a new card's, plan 28 Stage 3b), or none: pickCard's `skipped`. */
 export function buriedIdsOn(buried, day) {
   return buried && buried.day === day && Array.isArray(buried.ids) ? buried.ids : [];
 }
@@ -948,7 +948,7 @@ export function readEducationBackup(text, t = TUNING) {
 }
 
 /**
- * The settings a restore changes (plan 28, 3.1b): the backup's new-card order and start level, each
+ * The settings a restore changes (plan 28, 3.1b): the backup's new-card order, start level and (Stage 3b) new cards per level, each
  * only where this device still has the default (a choice made here stays). The 📚 switch is never
  * carried. Pure; `now` and `backup` are cleaned settings.
  */

@@ -793,7 +793,7 @@ test("prices follow the highest level the run has reached (plan 26, A2, Michael'
   assert.deepEqual(picked.shopPrices(), eduShopPrices(3), 'a choice made in the break moves no price before the run continues');
 });
 
-test("Skip a card (plan 26, A2, in place of Bury): every kind of card costs 3 × the level cleared; a due card (stored, or missed in this break) also goes to tomorrow, leaves the gate and counts toward the day's 3; a new card just moves on; a practice card is kept out of practice for the day, uncounted (AUD-028); a skip is no answer", () => {
+test("Skip a card (plan 26, A2, in place of Bury): every kind of card costs 3 × the level cleared; a due card (stored, or missed in this break) also goes to tomorrow, leaves the gate and counts toward the day's 3; a new card waits until tomorrow and takes one of the break's N (plan 28, Stage 3b); a practice card is kept out of practice for the day, uncounted (AUD-028); a skip is no answer", () => {
   const now = Date.now();
   const store = createEduStore(fakeStorage());
   const [missedStored, reviewDue, practice, fresh, missedHere, reviewDue2] = CARDS.filter((c) => c.deck === 'duodenum' || c.deck === 'general');

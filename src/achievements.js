@@ -239,7 +239,8 @@ export function daysBetween(a, b) {
  * education.badgeMinAnswers answers, and the run did not end on a Quit that counts), grade (a graded run's
  * share right in hundredths of a percent, a whole number: 4 of 6 is 6667; else null), perfect
  * (graded, nothing wrong), gaveUp (the run ended on a Quit that counts as quitting: a revive's, or a
- * level break's with cards due or nothing answered; "Give up" until plan 26's A2) }.
+ * level break's while its gate holds, new cards included since plan 28's Stage 3b, or with nothing
+ * answered; "Give up" until plan 26's A2) }.
  * A quit run is never graded: quitting after a flawless stretch must not earn 💯 or an A, nor
  * move the average, and (like a run too short to grade) it leaves the 🤓 streak alone. A revive's Quit is
  * offered only before its first right answer and a lost run that was not quit has

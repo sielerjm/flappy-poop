@@ -378,7 +378,7 @@ export const TUNING = {
     },
     newPerDay: null, // held off (plan 28, Stage 3b: each level break asks its own new cards): null is no daily cap; a number turns it back on as new cards a device may first see per local day (plan 26, Anki's daily limit), breaks and revives together; past it, quizzes ask due cards, then practice
     minGap: 5, // the last minGap cards shown are skipped by the next pick, across quiz sessions, while anything else can be picked
-    generalShare: 0.25, // 0–1 chance a new-card pick takes a general card (when there is one) instead of the level's deck
+    generalShare: 0.25, // 0–1 chance a revive's new-card pick takes a general card (when there is one) instead of the level's deck; a level break offers its own general card (breakDecks, plan 28, Stage 3b)
     strikes: 3, // wrong answers without a right one before a revive quiz ends the run
     restoreStreak: 3, // right answers in a row (the revive's first included) that restore what the crash took
     priceScale: [1, 1.25, 1.5, 2, 2.5, 3, 3.5], // shop prices × this per level in an education run (ceil; the last row past level 7)

@@ -278,8 +278,8 @@ Short, playful, clear. Fit a 720×1280 logical field; How to play / About body w
 | reviewPill | Review (an education level break's 📚 button, plan 25: the numbers sit under it) | 复习 |
 | breakQuit | Quit (ends the run at a level break; plan 26, A2: the one word for it, cards due or not. "Give up" is gone everywhere: Michael found it too negative) | 结束 |
 | breakQuitSure | Quit? Tap again (the first tap arms it for a few seconds; shown when nothing is due, so the run ends as a normal one) | 结束？再点一次 |
-| breakQuitDueSure | Quit ungraded? Tap again (the armed label while missed or review cards are still due: quitting then ends the run with no grade. "Ungraded" is 不计成绩, as in the profile's 计分 rows) | 不计成绩结束？再点一次 |
-| quizSkip | Skip · {n} 🌽 (plan 26, A2: the right button of an open card in a level break's quiz; it replaced Bury and the level skip. Every Skip costs {n} corn kernels; a missed or review card also waits until tomorrow) | 跳过 · {n} 🌽 |
+| breakQuitDueSure | Quit ungraded? Tap again (the armed label while the break's gate holds, new cards included since plan 28's Stage 3b: quitting then ends the run with no grade. "Ungraded" is 不计成绩, as in the profile's 计分 rows) | 不计成绩结束？再点一次 |
+| quizSkip | Skip · {n} 🌽 (plan 26, A2: the right button of an open card in a level break's quiz; it replaced Bury and the level skip. Every Skip costs {n} corn kernels, and the card waits until tomorrow, whatever its kind) | 跳过 · {n} 🌽 |
 | quizSkipFree | Skip (the same button in a test run, where it is free) | 跳过 |
 | quizSkipWarn | Skipping costs {n} 🌽, and this card waits until tomorrow. Tap Skip again. (the first Skip in a level break shows this in the verdict's place; later ones in that break skip at once; a new or practice card waits until tomorrow too since plan 28, Stage 3b (a due card has quizSkipWarnDue)) | 跳过要花 {n} 🌽，这张卡片会等到明天。再点一次“跳过”。 |
 | quizSkipWarnDue | Skipping costs {n} 🌽 and sends this card to tomorrow. Tap Skip again. (the same, for a missed or review card) | 跳过要花 {n} 🌽，这张卡片会推到明天。再点一次“跳过”。 |

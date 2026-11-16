@@ -534,7 +534,7 @@ the gate whatever the limits, and its retry takes neither. `startLevelBreak` zer
 revive and the bonus quiz keep no limit. The hint still reads "Tap to continue" (plan 26, A2:
 every break's, as Michael asked) but holds still while the gate holds, since a tap there only explains:
 a refused continue (a tap, Space, ↑, Esc, P, ⏸ or the pad) sets `gateTapped`, and the smaller line
-under it says "Tap 📚 to review all cards before continuing." until the gate opens or the break ends.
+under it says "Tap 📚 to answer this break's cards before continuing." until the gate opens or the break ends.
 `refreshGate` reads the gate into `breakGate` once per break event (`breakGated` reads the store, so
 never per frame); `refreshLevelBanner` and `refreshQuizButton` both call it, so the level choice never
 reads a gate from before the quiz closed (AUD-025). Review pulses. **Skip** (plan 26, A2; it replaced Bury and the
@@ -554,7 +554,7 @@ Skip shows dimmed (`button.dim`) and a press says why in the verdict's place. Th
 break warns there and holds Skip for `explainMinMs` (`Play.quizSkipWarned`, cleared when a break
 starts); later ones skip at once. Skip ignores every press for `retryLockoutMs` after its card appears
 (`Quiz.cardShownAt`), since it sits where Next Card was, and Enter / Space never press it (`primary`
-does nothing on an open card). The day's skipped cards, due and practice, are kept by id (`buried.ids`;
+does nothing on an open card). The day's skipped cards, due, practice and new, are kept by id (`buried.ids`;
 `buriedIdsOn`; `buried.n` counts only the due ones), and `pickCard`'s `skipped` leaves them out of
 practice that day, and out of the new cards (`cardCounts` takes the same ids). A skip is no answer: no tally, no pilot
 event. A revive and the bonus quiz have none. **Quit**: Quit takes two taps and ends the run, graded as a normal end
@@ -2274,7 +2274,8 @@ tests/                      node --test (schema.test.js, pilot.test.js, eduBoard
   store.test.js             best-score store incl. throwing/missing storage
   settings.test.js          settings store (incl. hand; a set() storage refused kept
                             for the page load and shared by the stores over it,
-                            AUD-030) + vibrate helper
+                            AUD-030) + vibrate helper; plan 28 Stage 3b:
+                            eduNewPerLevel (3, 5, 'all'; 5 by default)
   sound.test.js             sfx keys, mute, Node import
   tray.test.js              trayHeight / trayLayout geometry including info + lang +
                             feedback; trayHit centre hits vs miss in the tray gap;
@@ -2324,7 +2325,10 @@ tests/                      node --test (schema.test.js, pilot.test.js, eduBoard
   i18n.test.js              catalog key parity, zh≠en (allowlist), TRANSLATION_NOTES
                             key coverage, scene English denylist, initialLocale;
                             plan 26 A2: the wait line, the count lines, the popup's
-                            words, eduProfileRows
+                            words, eduProfileRows; plan 28 Stage 3b: caughtUpText
+                            (the cap held off, a cap back on, the due cards past
+                            the gate), the corn line's numbers from breakCoins
+                            (AUD-060), the help line's duePerBreak
   share.test.js             shareMode branches, shareScoreImage (share
                             called synchronously, cancel, error → download, download
                             name + revoke, never rejects); shareFile (the file alone,
@@ -2488,12 +2492,31 @@ tests/                      node --test (schema.test.js, pilot.test.js, eduBoard
                             record, the study record and the streak helpers (same
                             day, next day, a gap, the day before, month and year
                             ends; plan 27: a clock set ahead, the clock toggled);
-                            plan 27: skipPractice (AUD-028); plan 28 Stage 3b: skipNew
+                            plan 27: skipPractice (AUD-028); plan 28 Stage 3b:
+                            skipNew, breakDecks (gut order, wrap, a retired card),
+                            a break's scope, newAllowance held off, skipped new
+                            cards, a break's two limits (the drain under newLeft /
+                            dueLeft, beyond before practice, the most urgent first,
+                            whole limits, counts and picks with the same options;
+                            AUD-056, AUD-058)
   eduDays.test.js           Education's local days with TZ pinned to
                             America/Los_Angeles in its own process (plan 27):
                             skipUntil on the fall-back, spring and a normal day,
                             and Play's Skip on the fall-back day (AUD-029); pay once
                             a day across a local midnight inside one break (AUD-035)
+  eduGateFuzz.test.js       plan 28 Stage 3b (audit 2026-11-16, AUD-056): a level
+                            break's gate driven as Play and the quiz do, seeded
+                            (answers, misses, the three Skips with the day's cap,
+                            quizzes reopened, the clock, retired cards, N 3 / 5 /
+                            all, duePerBreak 0 / 1 / 3 / 10 / none): the gate holds
+                            exactly while a counted card is left; the counts are the
+                            picks, kind by kind
+  eduIntroPanel.test.js     the 📚 popup in a fake DOM (audit 2026-11-16, AUD-061,
+                            AUD-063): New cards per level (pressed, its line, a
+                            click stored, the focus kept, both languages), the click
+                            lockout, the help line's duePerBreak, the per-day line
+                            only with a cap, a close at a restart that does not call
+                            back into the scene
   cjkWrap.test.js           cjkUnits / wrapCjk (plan 28, 2.1): Chinese breaks between characters, a
                             number or Latin word whole, no line starting with "，" or ending with "“", a
                             name's dot and a dash never split, the text kept whole; Quiz's cjkWrap callback.
@@ -2526,7 +2549,14 @@ tests/                      node --test (schema.test.js, pilot.test.js, eduBoard
                             the gate's line; the shop pill's place; the level
                             choice (steps, wrap, dropped, applied forward and back,
                             not full) and the top-level prices; the popup at each
-                            start (launch: popup or run, by start)
+                            start (launch: popup or run, by start); plan 28 Stage
+                            3b: the gate (N new cards a visit, duePerBreak due
+                            cards, a miss here on top; none in a test run, a match
+                            or test mode), what a break counts (answers, retries,
+                            each Skip, a quiz reopened), corn by kind, a beyond
+                            card optional, Quit with new cards left, the level
+                            choice reading the gate again (AUD-057), the 📚 count
+                            never redrawn on a destroyed text (AUD-063)
   pilot.test.js             the tester pilot end to end: Play's pilot methods, the
                             real stores and leaderboard.js calls and the real save and
                             education data panels, against db/schema.sql through
@@ -2558,7 +2588,9 @@ tests/                      node --test (schema.test.js, pilot.test.js, eduBoard
                             caught up with Keep practicing, the purse; plan 26 A2:
                             Quit's warning on every card, holdFor's timer, the
                             ⭐ choice's own line, the already-earned note, Skip
-                            (price, warning, lockout, keys, why it is dimmed)
+                            (price, warning, lockout, keys, why it is dimmed); plan
+                            28 Stage 3b: the stop before a due card past the gate
+                            (more, Keep practicing, no count underlined)
   richText.test.js          src/richText.js: linkSpans (whole words, overlaps,
                             missing terms) and layoutRich (greedy wrap, centred
                             lines, parts that add up, links across a break)

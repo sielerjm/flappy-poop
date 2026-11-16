@@ -903,7 +903,7 @@ export class Play extends Phaser.Scene {
     this.runTopLevel = begin.level; // the highest level this run has been on: the shop's and Skip's prices (plan 26, A2)
     this.breakLevelPick = null; // a level chosen at a break (plan 26, A2), applied when the break ends
     this.runSkipped = false;
-    this.breakGaveUp = false; // Quit at a break with cards due, or with nothing answered (plan 25; plan 26, A2)
+    this.breakGaveUp = false; // Quit at a break while its gate holds (new cards included since plan 28, Stage 3b), or with nothing answered (plan 25; plan 26, A2)
     this.breakQuitArmedAt = null;
     this.level = begin.level;
     this.pipesPassed = begin.pipes;
@@ -1819,7 +1819,7 @@ export class Play extends Phaser.Scene {
     return this.eduCardCount() > 0;
   }
 
-  /** The backup file's text (educationBackup: the cards and two settings, nothing that names the player), or null with no cards. */
+  /** The backup file's text (educationBackup: the cards and three settings, nothing that names the player), or null with no cards. */
   eduBackupText() {
     const record = this.eduStore.load();
     if (!Object.keys(record.cards).length) return null;
@@ -1836,7 +1836,7 @@ export class Play extends Phaser.Scene {
 
   /**
    * Restore a backup's text into this device's cards (mergeEducation; restored runs never reach the
-   * 📚 board, boardRecord). When it changed something, the backup's new-card order and start level
+   * 📚 board, boardRecord). When it changed something, the backup's new-card order, start level and new cards per level
    * apply where this device still has the defaults (restoredSettings); the 📚 switch is not carried,
    * and nothing is sent. Returns the store's
    * summary with `skipped`, or { ok: false, error: 'notHome' | 'unrecognised' | 'newer' | 'tooBig' }.
@@ -3917,8 +3917,9 @@ export class Play extends Phaser.Scene {
 
   /**
    * Quit at an education break (plan 25, B8): the first tap arms it, a second inside the confirm time
-   * ends the run. Caught up (nothing due), it ends as a normal run, graded on its answers; with cards
-   * due it counts as quitting the run (breakGaveUp: no grade, the 🤓 streak untouched), and so does a
+   * ends the run. With the gate open, it ends as a normal run, graded on its answers; while the gate
+   * holds (new cards included since plan 28, Stage 3b) it counts as quitting the run (breakGaveUp: no
+   * grade, the 🤓 streak untouched), and so does a
    * Quit with nothing answered (plan 26, A2), so 🏳️'s "Quit a run without answering a single question"
    * holds for this Quit as for a revive's. A run with no answers is never graded, so nothing else moves.
    */
@@ -4419,7 +4420,7 @@ export class Play extends Phaser.Scene {
     this.runBadges = this.eduStore.unlock(earned, day);
   }
 
-  /** This run's education facts (eduRunFacts): its tally, whether it ended on a Quit that counts as quitting (a revive's, or the break's with cards due or nothing answered: gaveUp), whether it was full (from level 1, nothing skipped, won). */
+  /** This run's education facts (eduRunFacts): its tally, whether it ended on a Quit that counts as quitting (a revive's, or the break's while its gate holds or with nothing answered: gaveUp), whether it was full (from level 1, nothing skipped, won). */
   eduFactsNow() {
     return eduRunFacts(this.runQuiz, { gaveUp: Boolean(this.revive?.gaveUp || this.breakGaveUp), full: this.runStartLevel === 1 && !this.runSkipped && this.won }, T);
   }
