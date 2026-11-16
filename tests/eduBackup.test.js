@@ -243,12 +243,42 @@ test('a card skipped today keeps its wait when a later answer comes from the bac
   const now = T0 + 10 * DAY;
   const local = { v: 2, cards: { 'ST-01': card(T0 + DAY, { dueAt: now + DAY }), 'ST-02': card(T0 + DAY, { dueAt: T0 + 2 * DAY }) }, recent: [], counters: {}, badges: {}, unlockedLevel: 1, buried: { day: '2026-11-15', n: 1, ids: ['ST-01'] } };
   const back = { v: 2, cards: { 'ST-01': card(T0 + 5 * DAY, { dueAt: T0 + 6 * DAY }), 'ST-02': card(T0 + 5 * DAY, { dueAt: T0 + 6 * DAY }) }, recent: [], counters: {}, badges: {}, unlockedLevel: 1 };
-  const m = edu.mergeEducation(local, back, { today: '2026-11-15' });
+  const m = edu.mergeEducation(local, back, { today: '2026-11-15', now });
   assert.equal(m.record.cards['ST-01'].lastAt, T0 + 5 * DAY, 'the later answer is taken');
   assert.equal(m.record.cards['ST-01'].dueAt, now + DAY, 'but the Skip of today still holds');
   assert.equal(m.record.cards['ST-02'].dueAt, T0 + 6 * DAY, "a card not skipped today takes the backup's");
-  const yesterday = edu.mergeEducation({ ...local, buried: { day: '2026-11-14', n: 1, ids: ['ST-01'] } }, back, { today: '2026-11-15' });
+  const yesterday = edu.mergeEducation({ ...local, buried: { day: '2026-11-14', n: 1, ids: ['ST-01'] } }, back, { today: '2026-11-15', now });
   assert.equal(yesterday.record.cards['ST-01'].dueAt, T0 + 6 * DAY, "yesterday's Skip is over");
+});
+
+test("AUD-055: a practice Skip or a new card's Skip today holds a later record back only until the next local midnight (not again today); a due Skip keeps its own wait; the later schedule wins after that", () => {
+  const HOUR = 3600000;
+  const now = T0 + 10 * DAY;
+  const today = edu.localDayKey(new Date(now));
+  const tomorrow = edu.skipUntil(now); // a due Skip's wait: 24 h, or the next midnight if later
+  const midnight = new Date(now);
+  midnight.setHours(24, 0, 0, 0); // the end of the day the card was skipped
+  const base = { v: 2, recent: [], counters: {}, badges: {}, unlockedLevel: 1 };
+  // ST-01: in review here, due in 20 days, skipped today as practice (its dueAt untouched). ST-02: skipped today as new (no record here).
+  const local = { ...base, cards: { 'ST-01': card(now - 5 * DAY, { dueAt: now + 20 * DAY }) }, buried: { day: today, n: 0, ids: ['ST-01', 'ST-02'] } };
+  const lapse = (at) => card(at, { state: 'missed', dueAt: at, lapses: 1 });
+  // Another device missed both an hour ago.
+  const first = edu.mergeEducation(local, { ...base, cards: { 'ST-01': lapse(now - HOUR), 'ST-02': card(now - 2 * HOUR, { dueAt: now + 30 * DAY }) } }, { today, now });
+  assert.equal(first.record.cards['ST-01'].state, 'missed', 'the later answer is taken');
+  assert.equal(first.record.cards['ST-01'].dueAt, midnight.getTime(), 'skipped here today as practice: it waits for the next midnight, not 20 days (the old review date), nor 24 h from the restore');
+  assert.equal(first.record.cards['ST-02'].dueAt, now + 30 * DAY, 'a card skipped here as new had no record: the backup\'s is taken as it is');
+  // A second file the same day with a later lapse of ST-02: the record from the first file must not hold it back for 30 days.
+  const second = edu.mergeEducation({ ...first.record, buried: { day: today, n: 0, ids: ['ST-01', 'ST-02'] } }, { ...base, cards: { 'ST-02': lapse(now - HOUR / 2) } }, { today, now });
+  assert.equal(second.record.cards['ST-02'].state, 'missed');
+  assert.equal(second.record.cards['ST-02'].dueAt, midnight.getTime(), 'the lapse comes back at the next midnight, not in 30 days');
+  // Late in the day the hold is still the next midnight, not 24 h from the restore.
+  const late = new Date(now);
+  late.setHours(23, 30, 0, 0);
+  const lateMerge = edu.mergeEducation({ ...local, buried: { day: edu.localDayKey(late), n: 0, ids: ['ST-01'] } }, { ...base, cards: { 'ST-01': lapse(late.getTime() - HOUR) } }, { today: edu.localDayKey(late), now: late.getTime() });
+  assert.equal(lateMerge.record.cards['ST-01'].dueAt, midnight.getTime(), 'a restore at 23:30: back at midnight');
+  // A due Skip (bury) is unchanged: its own wait is tomorrow already.
+  const buried = edu.mergeEducation({ ...base, cards: { 'ST-03': card(now - DAY, { dueAt: tomorrow }) }, buried: { day: today, n: 1, ids: ['ST-03'] } }, { ...base, cards: { 'ST-03': lapse(now - HOUR) } }, { today, now });
+  assert.equal(buried.record.cards['ST-03'].dueAt, tomorrow, 'a buried card keeps its wait until tomorrow');
 });
 
 test('two learning streaks both dated far ahead: the best of both is kept', () => {

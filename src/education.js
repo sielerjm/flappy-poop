@@ -160,9 +160,14 @@ export function localDayStart(now) {
  * (a skip in the first hour of the day the clocks go back). Pure.
  */
 export function skipUntil(now, t = TUNING) {
+  return Math.max(now + t.education.buryMs, nextLocalMidnight(now));
+}
+
+/** The local midnight after `now` (ms): the end of its local day. */
+function nextLocalMidnight(now) {
   const midnight = new Date(now);
   midnight.setHours(24, 0, 0, 0);
-  return Math.max(now + t.education.buryMs, midnight.getTime());
+  return midnight.getTime();
 }
 
 /**
@@ -986,7 +991,8 @@ const sameJson = (x, y) => JSON.stringify(x) === JSON.stringify(y);
  *   cards     the later schedule wins (reviewedAt: a right practice answer moves lastAt only, so a
  *             practice elsewhere never erases a lapse here; AUD-048), then the later answer (lastAt);
  *             a tie keeps this device's; a record dated more than a day past `now` (a clock set
- *             ahead, plan 27's rule) never beats one here; a card skipped here today keeps its wait.
+ *             ahead, plan 27's rule) never beats one here; a card skipped here today keeps its wait:
+ *             a due Skip's own, a practice or new card's only until the next midnight (AUD-055).
  *             added and updated count the live cards only (an unknown or retired id is kept, not
  *             counted).
  *   counters  this device's own, which the 📚 board is sent and the badges read (AUD-047): a restore
@@ -1003,7 +1009,12 @@ export function mergeEducation(local, backup, { today = localDayKey(), now = Dat
   const L = cleanEdu(local, keep, t);
   const B = cleanEdu(backup, keep, t);
   const live = new Set(cards.filter((c) => !c.retired).map((c) => c.id));
-  const skippedToday = buriedIdsOn(L.buried, today);
+  const skippedToday = new Set(buriedIdsOn(L.buried, today));
+  // A card skipped here today keeps its wait (AUD-055): a due Skip's (bury: never past skipUntil(now)) as it
+  // is; any longer wait is a practice or new card's Skip, which moved nothing, so it holds a later record
+  // back only until the next local midnight (not again today), never to its old due date.
+  const longestSkip = skipUntil(now, t);
+  const endOfToday = nextLocalMidnight(now);
   const merged = { ...L.cards };
   let added = 0;
   let updated = 0;
@@ -1012,8 +1023,7 @@ export function mergeEducation(local, backup, { today = localDayKey(), now = Dat
     const ahead = Math.max(rec.reviewedAt, rec.lastAt) > now + DAY_MS;
     const later = !mine || (!ahead && (rec.reviewedAt > mine.reviewedAt || (rec.reviewedAt === mine.reviewedAt && rec.lastAt > mine.lastAt)));
     if (!later) continue;
-    // A card skipped here today keeps its wait (a Skip moves dueAt only).
-    merged[id] = mine && skippedToday.includes(id) ? { ...rec, dueAt: Math.max(rec.dueAt, mine.dueAt) } : rec;
+    merged[id] = mine && skippedToday.has(id) ? { ...rec, dueAt: Math.max(rec.dueAt, mine.dueAt <= longestSkip ? mine.dueAt : endOfToday) } : rec;
     if (live.has(id)) {
       if (mine) updated += 1;
       else added += 1;
