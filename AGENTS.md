@@ -358,7 +358,8 @@ stacked in one grid cell, so the card is as tall as the tallest and never jumps)
 feature (`SPLASH_NOTES`: TIP or NEW, a picture, one line). The picture is the game's own sprite where
 there is one (`art`: Boot's exact URL via `splashArtUrl`, all preloaded at start; a strip's frame 0 or a
 square `crop`; the emoji if it fails), else the emoji; a note about something the profile counts wears
-that badge's glyph via `achievementById`. Cards are dealt from a shuffled deck kept in `flappyPoop.splash`
+that badge's glyph via `achievementById` (the hints include 🔋 battery saver / low power mode, for every
+device: plan 28, 4.7). Cards are dealt from a shuffled deck kept in `flappyPoop.splash`
 (`nextNote`: a feature this device never showed comes first; every card once per cycle; a reshuffle
 never repeats the last card; `splashPool` keeps the newest `splash.featureMax` features; the newest is 📚 education, plan 28). The player
 browses at any time (swipe or mouse drag, ‹ ›, ← →, the d-pad by its own `getGamepads` poll, since

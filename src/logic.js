@@ -1824,7 +1824,8 @@ export function overlayOutsideHit(x, y, panel) {
 
 /**
  * Which chrome shows (plan 28, 4.3; Michael, 16 Nov at 4.R). The bottom tray row (🏆 🔊 ⚙ ⓘ 🌐 💬) shows on the
- * home screen, in a pause, in a level break and at game over, and slides off while flying (the launch, a respawn,
+ * home screen, in a pause, in a level break and at game over (one player: Over's own tray, so Play's stays down;
+ * a match's end: Play's), and slides off while flying (the launch, a respawn,
  * a match's countdown and its race included); ⏸ and the bean button are not part of it and stay. The "?" (How to
  * play) keeps its home-screen place and shows on the home screen, in a pause and in a level break, never under a
  * quiz or the level break's open shop and never at game over; in a two-player match it stays off, as today. In a match the chrome follows the
@@ -1836,7 +1837,7 @@ export function overlayOutsideHit(x, y, panel) {
 export function chromeShown({ state, launching = false, quizOpen = false, shopOpen = false, match = null }) {
   if (match === 'countdown') return { tray: false, help: false };
   const home = state === 'ready' && !launching;
-  return { tray: home || state === 'paused' || state === 'dead', help: !match && !quizOpen && !shopOpen && (home || state === 'paused') };
+  return { tray: home || state === 'paused' || (state === 'dead' && Boolean(match)), help: !match && !quizOpen && !shopOpen && (home || state === 'paused') };
 }
 
 /**

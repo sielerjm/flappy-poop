@@ -69,7 +69,7 @@ const BADGE_OF = {
   toilet: 'toilet_win',
   rectum: 'win_game',
 };
-const CHROME_GLYPH = { education: '📚', profile: '👤', daily: '🌞', tournament: '🏅', shop: '💰', leaderboard: '🏆', twoPlayer: '👥', userCode: '🔑', controller: '🎮' };
+const CHROME_GLYPH = { education: '📚', profile: '👤', daily: '🌞', tournament: '🏅', shop: '💰', leaderboard: '🏆', twoPlayer: '👥', userCode: '🔑', controller: '🎮', lowPower: '🔋' };
 // The one shared glyph, by name (Michael's call, 2026-11-11): the controller note and the games badge.
 const SHARED_OK = { controller: 'games_1000' };
 
@@ -319,3 +319,11 @@ test('the 📚 card (plan 28, 2.3) is the newest feature, and leaves the pool wh
   assert.ok(!splashPool(SPLASH_NOTES, TUNING, { enabled: false }).some((n) => n.id === 'education'));
 });
 
+test('the battery tip (plan 28, 4.7): a hint for every device, 🔋, in Michael\'s words; Chinese too', async () => {
+  const { t } = await import('../src/i18n.js');
+  const n = SPLASH_NOTES.find((x) => x.id === 'lowPower');
+  assert.ok(n, 'the tip is in the deck');
+  assert.deepEqual([n.kind, n.glyph, n.key], ['hint', '🔋', 'splashLowPower']);
+  assert.equal(t('en', 'splashLowPower'), 'Battery saver mode or low power mode can impact game performance.');
+  assert.ok(t('zh-Hans', 'splashLowPower') && t('zh-Hans', 'splashLowPower') !== t('en', 'splashLowPower'), 'its own Chinese (not the English fallback)');
+});

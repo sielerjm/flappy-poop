@@ -1422,7 +1422,8 @@ export class Play extends Phaser.Scene {
     // The "?" in a pause or a level break (plan 28, 4.3): How to play, not a continue tap.
     if (pointer && this.helpShown && this.state === 'paused' && !this.shopOpen) {
       const b = this.readyBoxes?.howto;
-      if (b && Math.abs(pointer.x - b.x) <= b.width / 2 && Math.abs(pointer.y - b.y) <= b.height / 2) {
+      // An overlay over the pause (About, Settings) owns the tap, as for the shop below.
+      if (b && Math.abs(pointer.x - b.x) <= b.width / 2 && Math.abs(pointer.y - b.y) <= b.height / 2 && !this.chromeArgs('tap').overlay) {
         this.handleChrome('howto');
         return;
       }

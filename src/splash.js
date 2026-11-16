@@ -55,6 +55,7 @@ export const SPLASH_NOTES = [
   { id: 'twoPlayer', kind: 'hint', glyph: '👥', key: 'splashTwoPlayer' },
   { id: 'userCode', kind: 'hint', glyph: '🔑', key: 'splashUserCode' },
   { id: 'controller', kind: 'hint', glyph: '🎮', key: 'splashController' },
+  { id: 'lowPower', kind: 'hint', glyph: '🔋', key: 'splashLowPower' }, // plan 28, 4.7: every device, in general words (Michael)
 ];
 
 /** The notes this build deals from: every hint, plus the newest t.splash.featureMax features. */

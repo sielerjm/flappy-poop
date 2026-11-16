@@ -11,7 +11,7 @@ const both = { tray: true, help: true };
 const trayOnly = { tray: true, help: false };
 const none = { tray: false, help: false };
 
-test('chromeShown, one player: the tray on the home screen, in a pause, in a level break and at game over; hidden while flying (the launch and a respawn too); the "?" on the home screen and in a pause or break, never under a quiz or at game over', () => {
+test('chromeShown, one player: the tray on the home screen, in a pause and in a level break (at game over Over\'s own); hidden while flying (the launch and a respawn too); the "?" on the home screen and in a pause or break, never under a quiz or at game over', () => {
   assert.deepEqual(chromeShown({ state: 'ready' }), both, 'the home screen');
   assert.deepEqual(chromeShown({ state: 'ready', launching: true }), none, 'the launch slide');
   assert.deepEqual(chromeShown({ state: 'playing' }), none, 'flying');
@@ -19,7 +19,7 @@ test('chromeShown, one player: the tray on the home screen, in a pause, in a lev
   assert.deepEqual(chromeShown({ state: 'paused' }), both, 'a pause or a level break');
   assert.deepEqual(chromeShown({ state: 'paused', quizOpen: true }), trayOnly, "a break's Review quiz open");
   assert.deepEqual(chromeShown({ state: 'paused', shopOpen: true }), trayOnly, "the break's shop open (the ? would be dead there)");
-  assert.deepEqual(chromeShown({ state: 'dead' }), trayOnly, 'game over');
+  assert.deepEqual(chromeShown({ state: 'dead' }), none, "game over: Over's own tray slides in, so Play's stays down (no doubled row)");
 });
 
 test('chromeShown in a two-player match: the tray on the join screen, in the shared pause and at the end; hidden from the countdown on and while either half flies (chromeState); never the "?"', () => {
