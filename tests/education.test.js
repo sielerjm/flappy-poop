@@ -289,6 +289,83 @@ test('cardCounts matches what pickCard hands out: whatever the recent gap holds,
   }
 });
 
+// Many due cards for a break's limits (plan 28, Stage 3b): four missed, five reviews due (lower recall
+// the longer overdue), two reviews not due (practice), one buried.
+const manyDue = {
+  'DU-01': missedRec(NOW - 3 * HOUR), 'IL-01': missedRec(NOW - HOUR), 'CA-02': missedRec(NOW - 2 * HOUR), 'CO-03': missedRec(NOW - MIN),
+  'DU-04': reviewRec(4, NOW - DAY), 'JE-02': reviewRec(4, NOW - 3 * DAY), 'IL-03': reviewRec(4, NOW - 2 * DAY), 'CA-04': reviewRec(10, NOW - MIN), 'CO-05': reviewRec(2, NOW - 5 * DAY),
+  'CO-01': reviewRec(10, NOW + DAY, { lastAt: NOW - 9 * DAY }), 'ST-04': reviewRec(10, NOW + 2 * DAY, { lastAt: NOW - 8 * DAY }),
+  'ST-01': missedRec(NOW + DAY),
+};
+
+test("a break's two limits (plan 28, Stage 3b): newLeft and dueLeft; the counts are the picks while the gate counts them; past dueLeft the other due cards come after them as `beyond`, before practice; with neither passed nothing changes", () => {
+  const gaps = [[], ['DU-01', 'JE-02', 'ST-02', 'CA-04', 'ST-10']];
+  for (const srs of [countsSrs, manyDue, {}]) {
+    const storedDue = Object.values(srs).filter((r) => r.dueAt <= NOW).length;
+    for (const recent of gaps) for (const order of NEW_ORDERS) for (const newLeft of [0, 1, 3, Infinity]) for (const dueLeft of [0, 1, 3, Infinity]) {
+      const label = `${Object.keys(srs).length} records, newLeft ${newLeft}, dueLeft ${dueLeft}, ${order}, gap ${recent.length}`;
+      const counts = cardCounts(srs, { context: 'break', segment: 'stomach', level: 2, now: NOW, newLeft, dueLeft });
+      assert.ok(counts.new <= newLeft && counts.missed + counts.review <= dueLeft, `${label}: the counts keep to the limits ${JSON.stringify(counts)}`);
+      const got = { new: 0, missed: 0, review: 0 };
+      let [nl, dl, beyond, practiced] = [newLeft, dueLeft, 0, 0];
+      const exclude = [];
+      const rng = createRng(17);
+      for (let guard = 0; ; guard += 1) {
+        assert.ok(guard <= CARDS.length, `${label}: a loop`);
+        // As Play will: each new card asked takes one of newLeft, each stored due card one of dueLeft.
+        const p = pickCard({ srs, context: 'break', level: 2, segment: 'stomach', now: NOW, exclude, recent, rng, dueFirst: true, order, newLeft: nl, dueLeft: dl });
+        if (!p) break;
+        if (p.beyond) {
+          assert.ok(['missed', 'review'].includes(p.reason) && srs[p.card.id]?.dueAt <= NOW, `${label}: beyond is a due card (${p.card.id})`);
+          assert.equal(practiced, 0, `${label}: beyond comes before practice`);
+          assert.ok(dl <= 0, `${label}: beyond only once dueLeft is used up`);
+          beyond += 1;
+        } else if (p.reason === 'practice') practiced += 1;
+        else {
+          assert.equal(beyond + practiced, 0, `${label}: a counted card (${p.card.id}, ${p.reason}) after beyond or practice`);
+          const left = cardCounts(srs, { context: 'break', segment: 'stomach', level: 2, now: NOW, exclude, newLeft: nl, dueLeft: dl });
+          assert.ok(left[p.reason] >= 1, `${label}: ${p.card.id} is asked as ${p.reason}, so that count holds it`);
+          got[p.reason] += 1;
+          if (p.reason === 'new') nl -= 1;
+          else dl -= 1;
+        }
+        exclude.push(p.card.id);
+      }
+      assert.deepEqual(counts, got, `${label}: the counts are the picks`);
+      assert.equal(beyond, storedDue - got.missed - got.review, `${label}: every due card past the gate comes as beyond`);
+    }
+  }
+  // With neither limit passed, everything is as before.
+  for (const srs of [countsSrs, manyDue]) {
+    assert.deepEqual(cardCounts(srs, { context: 'break', segment: 'stomach', level: 2, now: NOW }), cardCounts(srs, { context: 'break', segment: 'stomach', level: 2, now: NOW, newLeft: Infinity, dueLeft: Infinity }));
+  }
+});
+
+test("a break's dueLeft (plan 28, Stage 3b): the most urgent due cards first (missed, the longest due first; then reviews, the least remembered first); this break's own misses still count past it; a revive and the bonus quiz ignore it", () => {
+  const counts = (dueLeft, missed = []) => cardCounts(manyDue, { context: 'break', segment: 'stomach', level: 2, now: NOW, dueLeft, missed, exclude: missed });
+  // The stomach break's new cards: its 9 and ST-10, less ST-01 and ST-04, which have records.
+  assert.deepEqual(counts(Infinity), { new: 8, missed: 4, review: 5 });
+  assert.deepEqual(counts(3), { new: 8, missed: 3, review: 0 }, 'missed first');
+  assert.deepEqual(counts(6), { new: 8, missed: 4, review: 2 }, 'then reviews');
+  assert.deepEqual(counts(0, ['ST-02']), { new: 7, missed: 1, review: 0 }, "a card missed in this break holds the gate past dueLeft");
+  const ask = (exclude, dueLeft, missed = []) => pickCard({ srs: manyDue, context: 'break', level: 2, segment: 'stomach', now: NOW, exclude, missed, dueFirst: true, dueLeft, newLeft: 0, rng: createRng(3) });
+  assert.deepEqual([ask([], 2).card.id, ask([], 2).reason], ['DU-01', 'missed'], 'the missed card due longest');
+  assert.deepEqual([ask(['DU-01', 'CA-02', 'IL-01', 'CO-03'], 1).card.id, ask(['DU-01', 'CA-02', 'IL-01', 'CO-03'], 1).reason], ['CO-05', 'review'], 'then the least remembered review');
+  const retry = ask(['ST-02', 'JE-02'], 0, ['ST-02']);
+  assert.deepEqual([retry.card.id, retry.reason, Boolean(retry.beyond)], ['ST-02', 'missed', false], "this break's miss is asked again, not as beyond");
+  const past = ask(['ST-02'], 0);
+  assert.deepEqual([past.reason, past.beyond], ['missed', true], 'with dueLeft used up, the stored due cards come as beyond');
+  const r = pickCard({ srs: manyDue, context: 'revive', level: 2, now: NOW, dueLeft: 0, newLeft: 0, rng: createRng(3) });
+  assert.deepEqual([r.reason, Boolean(r.beyond)], ['missed', false], 'a revive: dueLeft does not apply to the picks');
+  assert.deepEqual(cardCounts(manyDue, { context: 'revive', level: 2, now: NOW, dueLeft: 0 }), cardCounts(manyDue, { context: 'revive', level: 2, now: NOW }), 'nor to the counts');
+  for (const junk of [null, undefined, NaN, 'x']) {
+    assert.deepEqual(counts(junk), counts(Infinity), `a dueLeft of ${String(junk)} is no limit`);
+    assert.equal(Boolean(ask(['DU-01', 'CA-02', 'IL-01', 'CO-03'], junk).beyond), false, `nor in the picks (${String(junk)})`);
+  }
+  const bonus = pickCard({ srs: manyDue, context: 'break', level: 7, segment: 'stomach', now: NOW, dueLeft: 0, rng: createRng(3) });
+  assert.deepEqual([bonus.reason, Boolean(bonus.beyond)], ['new', false], 'the bonus quiz (no dueFirst): new first, and no beyond');
+});
+
 test("pickCard, a level break's own quiz (dueFirst, plan 25): missed, due reviews, then cards missed in this break (oldest first, the one just shown waiting), then new, then practice", () => {
   const ask = (exclude, missed = []) => pickCard({ srs: countsSrs, context: 'break', level: 2, segment: 'stomach', now: NOW, exclude, missed, dueFirst: true, rng: createRng(5) });
   const first = ask([]);

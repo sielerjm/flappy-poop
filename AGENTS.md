@@ -954,7 +954,12 @@ src/
                             remembered first), then practice; revive: missed, due
                             reviews, new from the decks up to the level, practice;
                             a buried missed card is never picked; never a card of
-                            the session or a retired one; the last minGap wait),
+                            the session or a retired one; the last minGap wait;
+                            a break's two limits, plan 28 Stage 3b: newLeft caps
+                            its new cards, dueLeft the stored due cards its gate
+                            asks, the most urgent first, this break's misses on
+                            top; past dueLeft the other due cards come marked
+                            beyond, before practice; cardCounts counts the same),
                             a test run's 'browse' pick walks the level's deck in id
                             order, then general, then the other decks, cards not yet
                             shown first),

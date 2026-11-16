@@ -4469,7 +4469,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         const k3 = await kindNow();
         ok(k1.id === crafted.missed && k1.reason === 'missed' && k1.text === '0  +  1  +  1' && k1.underlined === 'missed' && k1.fill === want0.fill.missed, `a missed card underlines the missed count in its colour: "${k1.text}" (${k1.id})`);
         ok(k2.id === crafted.review && k2.reason === 'review' && k2.text === '0  +  0  +  1' && k2.underlined === 'review' && k2.fill === want0.fill.review, `a review due underlines the review count in green: "${k2.text}" (${k2.id})`);
-        const [keepWant, caughtWant] = await Promise.all([tx('quizKeepPracticing'), evaluate(`import('./src/i18n.js').then((m) => m.t('en', 'quizCaughtUp'))`)]);
+        const [keepWant, caughtWant] = await Promise.all([tx('quizKeepPracticing'), evaluate(`import('./src/i18n.js').then((m) => m.caughtUpText('en', ${JSON.stringify(TT.education.newPerDay)}))`)]);
         ok(caught.card === null && caught.left === returnWant && caught.right === keepWant && caught.question === caughtWant, `with nothing counted left the quiz stops asking (plan 26): "${caught.question}" with ${caught.left} and ${caught.right}`);
         ok(k3.reason === 'practice' && k3.text === '0  +  0  +  0' && k3.underlined === null && k3.fill === null && k3.visible, `Enter on ${keepWant} asks a practice card, which underlines nothing: "${k3.text}" (${k3.id})`);
         // Practice pays (plan 26, A2): once per card a local day. This card has not paid today: it pays.

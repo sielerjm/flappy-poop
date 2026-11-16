@@ -218,6 +218,11 @@ function inScope(c, { context, level, segment, cards = CARDS }) {
   return c.deck === 'general' || levelOfDeck(c.deck) <= level;
 }
 
+/** A break's limit (newLeft, dueLeft): a number as it is; anything else (null, undefined, NaN) is no limit. */
+function limitOf(x) {
+  return typeof x === 'number' && !Number.isNaN(x) ? x : Infinity;
+}
+
 function pickFrom(pool, rng) {
   return pool.length ? pool[Math.floor(rng() * pool.length) % pool.length] : null;
 }
@@ -229,7 +234,7 @@ function pickNew(general, pools, rng, t) {
   return pickFrom(primary, rng);
 }
 
-function chooseCard({ cards, srs, context, level, segment, now, blocked, rng, t, practice = true, dueFirst = false, missed = [], last = null, newLeft = Infinity, order = 'after', skipped = new Set() }) {
+function chooseCard({ cards, srs, context, level, segment, now, blocked, rng, t, practice = true, dueFirst = false, missed = [], last = null, newLeft = Infinity, dueLeft = Infinity, order = 'after', skipped = new Set() }) {
   const live = cards.filter((c) => !c.retired && !blocked.has(c.id));
   const fresh = live.filter((c) => !srs[c.id] && !skipped.has(c.id)); // a new card skipped today waits until tomorrow (plan 28, Stage 3b)
   const due = live.filter((c) => srs[c.id] && srs[c.id].dueAt <= now);
@@ -254,7 +259,7 @@ function chooseCard({ cards, srs, context, level, segment, now, blocked, rng, t,
   };
   // New cards first? 'before' always; 'mixed' at the share new cards have of what is counted; 'after' never.
   const newOffered = Math.min(newLeft, fresh.filter((c) => inScope(c, { context, level, segment, cards })).length);
-  const newFirst = (dueLeft) => order === 'before' || (order === 'mixed' && newOffered > 0 && (dueLeft === 0 || rng() < newOffered / (newOffered + dueLeft)));
+  const newFirst = (dueCount) => order === 'before' || (order === 'mixed' && newOffered > 0 && (dueCount === 0 || rng() < newOffered / (newOffered + dueCount)));
   if (context === 'break') {
     const newPick = () => {
       if (newLeft <= 0) return null; // today's new cards are used up (plan 26)
@@ -275,12 +280,22 @@ function chooseCard({ cards, srs, context, level, segment, now, blocked, rng, t,
         const c = retry.find((x) => allowLast || x.id !== last);
         return c ? { card: c, reason: 'missed' } : null;
       };
-      const duePick = () => missedPick(dueNow) ?? reviewPick(dueNow) ?? retryPick(false);
-      pick = (newFirst(dueNow.length + retry.length) ? newPick() ?? duePick() : duePick() ?? newPick()) ?? retryPick(true);
+      // The gate counts at most dueLeft stored due cards (plan 28, Stage 3b), the most urgent first;
+      // this break's own misses always count.
+      const storedPick = () => missedPick(dueNow) ?? reviewPick(dueNow);
+      const duePick = () => (dueLeft > 0 ? storedPick() : null) ?? retryPick(false);
+      const dueCounted = Math.min(dueNow.length, Math.max(0, dueLeft)) + retry.length;
+      pick = (newFirst(dueCounted) ? newPick() ?? duePick() : duePick() ?? newPick()) ?? retryPick(true);
+      // Past dueLeft, the other due cards come once the gate's are asked, before practice: `beyond`
+      // (still due, so scheduled as missed or review; the quiz stops before them until Keep practicing).
+      if (!pick && (practice === 'beyond' || practice === true) && dueLeft <= 0) {
+        const past = storedPick();
+        if (past) return { ...past, beyond: true };
+      }
     } else {
       pick = newPick() ?? missedPick(due) ?? reviewPick(due); // the bonus quiz: new first, whatever the order
     }
-    return pick ?? (practice ? practicePick() : null);
+    return pick ?? (practice === true ? practicePick() : null);
   }
   // A revive: missed cards and due reviews, and a new card (the level's deck first), in `order`; then practice.
   const duePick = () => missedPick(due) ?? reviewPick(due);
@@ -297,7 +312,7 @@ function chooseCard({ cards, srs, context, level, segment, now, blocked, rng, t,
     return card ? { card, reason: 'new' } : null;
   };
   const pick = newFirst(due.length) ? newPick() ?? duePick() : duePick() ?? newPick();
-  return pick ?? (practice ? practicePick() : null);
+  return pick ?? (practice === true ? practicePick() : null);
 }
 
 /**
@@ -343,17 +358,27 @@ function browseCard({ cards, srs, segment, blocked, shown }) {
  * (browseCard); `shown` is the cards test quizzes have shown so far.
  * `skipped` (plan 26, A2): the cards skipped today (buriedIdsOn), never offered as practice, nor as
  * new cards (plan 28, Stage 3b), in any context.
+ * A break's two limits (plan 28, Stage 3b): `newLeft`, the new cards it may still ask (with the day's
+ * allowance, the smaller); `dueLeft`, in a break's own quiz (`dueFirst`), the stored due cards its gate
+ * may still ask, the most urgent first (cards missed in this break always count). Past dueLeft the
+ * other due cards come after the counted ones, before practice, marked `beyond: true`. Both default
+ * to no limit; the bonus quiz and a revive pass neither.
  */
-export function pickCard({ cards = CARDS, srs = {}, context, level = 1, segment = null, now, exclude = [], recent = [], shown = [], rng = Math.random, t = TUNING, dueFirst = false, missed = [], order = 'after', dayStart = localDayStart(now), skipped = [] }) {
+export function pickCard({ cards = CARDS, srs = {}, context, level = 1, segment = null, now, exclude = [], recent = [], shown = [], rng = Math.random, t = TUNING, dueFirst = false, missed = [], order = 'after', dayStart = localDayStart(now), skipped = [], newLeft: breakNew = Infinity, dueLeft = Infinity }) {
   const session = new Set(exclude);
   if (context === 'browse') return browseCard({ cards, srs, segment, blocked: session, shown });
   const gap = new Set([...session, ...recent.slice(-t.education.minGap)]);
-  const newLeft = newAllowance(srs, { now, exclude, t, dayStart });
-  const args = { cards, srs, context, level, segment, now, rng, t, dueFirst, missed, last: exclude.at(-1) ?? null, newLeft, order: NEW_ORDERS.includes(order) ? order : 'after', skipped: new Set(skipped) };
-  // Counted cards first, the recent gap only ordering them; practice only once none is left.
+  const newLeft = Math.min(newAllowance(srs, { now, exclude, t, dayStart }), limitOf(breakNew));
+  const dueRoom = limitOf(dueLeft);
+  const args = { cards, srs, context, level, segment, now, rng, t, dueFirst, missed, last: exclude.at(-1) ?? null, newLeft, dueLeft: dueRoom, order: NEW_ORDERS.includes(order) ? order : 'after', skipped: new Set(skipped) };
+  const beyond = context === 'break' && dueFirst && dueRoom <= 0; // only then can a due card come past the gate
+  // Counted cards first, then a break's due cards past its dueLeft (`beyond`), the recent gap only
+  // ordering each group; practice only once none is left. `practice`: false (counted cards only),
+  // 'beyond' (those too), true (practice too).
   return (
     chooseCard({ ...args, blocked: gap, practice: false }) ??
     chooseCard({ ...args, blocked: session, practice: false }) ??
+    (beyond ? chooseCard({ ...args, blocked: gap, practice: 'beyond' }) ?? chooseCard({ ...args, blocked: session, practice: 'beyond' }) : null) ??
     chooseCard({ ...args, blocked: gap }) ??
     (gap.size > session.size ? chooseCard({ ...args, blocked: session }) : null)
   );
@@ -368,6 +393,9 @@ export function pickCard({ cards = CARDS, srs = {}, context, level = 1, segment 
  *           today) is not counted, as pickCard does not offer it.
  *   missed  cards answered wrong and not yet right since, due now (a buried one waits).
  *   review  cards in review that are due now.
+ * A break's two limits (plan 28, Stage 3b), as pickCard takes them: `newLeft` caps new; `dueLeft` caps
+ * the stored due cards, missed ones first, with the cards missed in this break counted on top (context
+ * 'break' only; pass it only for a break's own quiz). A limit that is not a number is no limit.
  * Due cards count whatever their deck, as pickCard asks them. Practice (review cards not due yet)
  * is not counted: it is offered once these run out. `exclude` (the quiz's cards already asked) and
  * retired cards never count; `missed` (a level break's cards missed and not yet answered right,
@@ -376,15 +404,17 @@ export function pickCard({ cards = CARDS, srs = {}, context, level = 1, segment 
  * the first practice card (tests/education.test.js). New is at most today's allowance (newAllowance,
  * plan 26).
  */
-export function cardCounts(srs = {}, { cards = CARDS, context = 'all', level = 1, segment = null, now = Date.now(), exclude = [], missed = [], t = TUNING, dayStart = localDayStart(now), skipped = [] } = {}) {
+export function cardCounts(srs = {}, { cards = CARDS, context = 'all', level = 1, segment = null, now = Date.now(), exclude = [], missed = [], t = TUNING, dayStart = localDayStart(now), skipped = [], newLeft = Infinity, dueLeft = Infinity } = {}) {
   const blocked = new Set(exclude);
   const isMissed = new Set(missed);
   const isSkipped = new Set(skipped);
   const counts = { new: 0, missed: 0, review: 0 };
+  let here = 0; // cards missed in this break, counted in `missed`
   for (const c of cards) {
     if (c.retired) continue;
     if (isMissed.has(c.id)) {
       counts.missed += 1; // missed in this break and not yet answered right: it is asked again (plan 25)
+      here += 1;
       continue;
     }
     if (blocked.has(c.id)) continue;
@@ -393,7 +423,17 @@ export function cardCounts(srs = {}, { cards = CARDS, context = 'all', level = 1
       if (rec.dueAt <= now) counts[rec.state === 'missed' ? 'missed' : 'review'] += 1;
     } else if (!isSkipped.has(c.id) && inScope(c, { context, level, segment, cards })) counts.new += 1;
   }
-  counts.new = Math.min(counts.new, newAllowance(srs, { now, exclude, t, dayStart }));
+  counts.new = Math.min(counts.new, newAllowance(srs, { now, exclude, t, dayStart }), limitOf(newLeft));
+  // A break's gate counts at most dueLeft stored due cards, missed ones first (pickCard's order); this
+  // break's own misses (`missed`) always count, on top (plan 28, Stage 3b). Only in a break: pickCard
+  // honours dueLeft only in a break's own quiz (dueFirst), so pass it only for that quiz.
+  const dueRoom = limitOf(dueLeft);
+  if (context === 'break' && Number.isFinite(dueRoom)) {
+    const room = Math.max(0, dueRoom);
+    const storedMissed = Math.min(counts.missed - here, room);
+    counts.review = Math.min(counts.review, room - storedMissed);
+    counts.missed = here + storedMissed;
+  }
   return counts;
 }
 
