@@ -3843,6 +3843,12 @@ export class Play extends Phaser.Scene {
   /** ◀ (-1) or ▶ (+1): the next choice, wrapping; the preview follows. */
   stepBreakLevel(step) {
     if (!this.levelPickShown()) return;
+    // The gate is cached per break event (refreshGate): a card may have come due since it was read, so a
+    // press reads it again first; a gate back drops the choice and hides it (AUD-057).
+    if (this.refreshGate()) {
+      this.refreshShopButton(); // as a refused continue: Review pulses, the counts and Quit's words follow, the choice is dropped and hidden
+      return;
+    }
     const top = Math.min(Math.max(this.level, this.eduStore.load().unlockedLevel), LEVELS.length);
     const next = nextEduStartLevel(this.breakShownLevel(), step, top);
     this.breakLevelPick = next === this.level ? null : next;
