@@ -412,7 +412,7 @@ test("what a break counts (plan 28, Stage 3b): a new card answered or skipped ta
   assert.ok(![0, 1, 2, 3, 4].some(() => t.quizNext({ mode: 'break' }).card.id === fresh.id), 'and not asked again today');
 });
 
-test("the gate's line (plan 26, A2): a continue refused at a gate shows \"Tap 📚 to review all cards before continuing.\" under \"Tap to continue\"; it goes when the gate opens or the break ends; the hint stops pulsing while the gate holds", () => {
+test("the gate's line (plan 26, A2): a continue refused at a gate shows \"Tap 📚 to answer this break's cards before continuing.\" under \"Tap to continue\"; it goes when the gate opens or the break ends; the hint stops pulsing while the gate holds", () => {
   let due = 1;
   const text = () => ({ text: '', visible: false, scale: 1, x: 0, y: 0, setText(v) { this.text = v; return this; }, setVisible(v) { this.visible = v; return this; }, setY(v) { this.y = v; return this; }, setScale(v) { this.scale = v; return this; }, setPosition() { return this; }, setAlpha() { return this; } });
   const s = playScene({
@@ -425,7 +425,7 @@ test("the gate's line (plan 26, A2): a continue refused at a gate shows \"Tap �
   assert.deepEqual([s.levelHint.text, s.levelSubHint.visible, s.levelHint.scale, s.levelHintGlow.visible], ['Tap to continue', false, 1, false], 'gated: "Tap to continue", no line yet, and no pulse (a tap only explains here)');
   s.resumePlay();
   s.syncLevelHint(16);
-  assert.deepEqual([s.state, s.levelSubHint.visible, s.levelSubHint.text], ['paused', true, 'Tap 📚 to review all cards before continuing.'], 'a refused continue shows the line');
+  assert.deepEqual([s.state, s.levelSubHint.visible, s.levelSubHint.text], ['paused', true, "Tap 📚 to answer this break's cards before continuing."], 'a refused continue shows the line');
   due = 0;
   s.refreshLevelBanner(); // what a closed quiz does (onQuizClosed)
   s.syncLevelHint(16);
@@ -1130,7 +1130,11 @@ test("the 📚 popup's facts (eduIntroInfo): the counts over every deck, cards s
   settings.set({ eduStartLevel: 2, eduNewOrder: 'mixed' });
   const s = playScene({ eduStore: store, settings, eduAvailable: true, match: null, isTestMode: () => false, educationOffered: () => true });
   const info = s.eduIntroInfo();
-  assert.deepEqual([info.counts.missed, info.seen, info.startOffered, info.startLevel, info.order, info.newPerDay], [1, 1, true, 2, 'mixed', T.education.newPerDay]);
+  assert.deepEqual([info.counts.missed, info.seen, info.startOffered, info.startLevel, info.order, info.newPerDay, info.perLevel], [1, 1, true, 2, 'mixed', T.education.newPerDay, 5]);
+  s.setEduNewPerLevel('all');
+  assert.deepEqual([settings.load().eduNewPerLevel, s.eduIntroInfo().perLevel], ['all', 'all'], 'the popup\'s new cards per level (plan 28, Stage 3b)');
+  s.setEduNewPerLevel(3);
+  assert.equal(settings.load().eduNewPerLevel, 3);
   assert.equal(info.total, CARDS.filter((c) => !c.retired).length, 'every live card, the general deck included');
   s.stepEduStart(1);
   assert.equal(s.eduIntroInfo().startLevel, 3);

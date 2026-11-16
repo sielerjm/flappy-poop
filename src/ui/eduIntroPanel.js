@@ -3,10 +3,11 @@
 // Education data panel (ui/eduDataPanel.js): it holds more text than a canvas card fits.
 //
 // It says what the mode is (a beta: the cards are still being checked), how it works (the levels and
-// the review gate, revives, the three numbers, Skip, coins, the daily cap), the player's cards (the
-// three counts, how many seen, what the gold number counts), and holds the mode's two choices: the
-// level a run starts at (◀ LV n ▶, moved here from the ready screen; while a later level is unlocked)
-// and where new cards go (before, mixed with or after the cards due: settings eduNewOrder). A line
+// the review gate, revives, the three numbers, Skip, coins; the daily cap while it is on), the player's cards (the
+// three counts, how many seen, what the gold number counts), and holds the mode's choices: the
+// level a run starts at (◀ LV n ▶, moved here from the ready screen; while a later level is unlocked),
+// where new cards go (before, mixed with or after the cards due: settings eduNewOrder), and how many
+// new cards a level break asks a visit (3, 5 or All: settings eduNewPerLevel; plan 28, Stage 3b). A line
 // says the cards live in this browser, with a link to 📚 Education data. Play starts a run; ✕, Close
 // and Esc close it (a tap on the backdrop does nothing: its release would reach the canvas).
 //
@@ -149,6 +150,9 @@ const ORDERS = [
   ['after', 'eduOrderAfter', 'eduOrderAfterHint'],
 ];
 
+/** New cards per level (plan 28, Stage 3b), as pressed buttons: the settings value, its label (a number shows itself), and the line under the buttons while pressed. */
+const PER_LEVEL = T.education.newPerLevelChoices.map((n) => (n === 'all' ? [n, 'eduPerLevelAll', 'eduPerLevelAllHint'] : [n, null, 'eduPerLevelHint']));
+
 /**
  * Draw the popup from Play's state now (Play.eduIntroInfo): called on open and after each choice. The
  * button that had the focus gets it back once redrawn (AUD-026: a choice by keyboard keeps its
@@ -159,7 +163,9 @@ function render() {
   const focusId = focusedButton()?.id || null;
   const close = h('button', { class: 'close', id: 'edu-intro-x', type: 'button', 'aria-label': tr('eduIntroClose') }, '✕');
   close.addEventListener('click', () => closeEduIntroPanel());
-  const how = h('ul', {}, ...['eduIntroHowLevels', 'eduIntroHowRevive', 'eduIntroHowSkip', 'eduIntroHowCoins'].map((key) => h('li', {}, tr(key))));
+  const due = T.education.duePerBreak; // plan 28, Stage 3b: the due cards a break asks, or all while null
+  const levels = Number.isFinite(due) ? tr('eduIntroHowLevels').replace('{n}', String(due)) : tr('eduIntroHowLevelsAll');
+  const how = h('ul', {}, h('li', {}, levels), ...['eduIntroHowRevive', 'eduIntroHowSkip', 'eduIntroHowCoins'].map((key) => h('li', {}, tr(key))));
   const counts = h('div', { class: 'counts', id: 'edu-intro-counts' }, ...[...countLines(ctx.locale, info.counts), t(ctx.locale, 'eduCardsSeen').replace('{n}', String(info.seen)).replace('{total}', String(info.total)), tr('eduCardsDue')].map((line) => h('p', {}, line)));
   // The start level (plan 25's stepper, moved here): ◀ LV n ▶ while a later level is unlocked.
   const start = h('div', { class: 'row', id: 'edu-intro-start' }, h('span', { class: 'label' }, tr('eduIntroStart')));
@@ -185,6 +191,18 @@ function render() {
   );
   // Under the buttons, what the pressed one does (plan 26, A2: Michael's image 6).
   const orderHint = h('p', { class: 'hint', id: 'edu-intro-order-hint' }, tr((ORDERS.find(([id]) => id === info.order) ?? ORDERS[2])[2]));
+  // How many new cards a level break asks a visit (plan 28, Stage 3b): one of three, pressed, and a line under them.
+  const perLevel = h(
+    'div',
+    { class: 'order', id: 'edu-intro-per', role: 'group', 'aria-label': tr('eduIntroPerLevel') },
+    ...PER_LEVEL.map(([n, key]) => {
+      const b = h('button', { type: 'button', id: `edu-intro-per-${n}`, 'aria-pressed': String(info.perLevel === n) }, key ? tr(key) : String(n));
+      b.addEventListener('click', () => setPerLevel(n));
+      return b;
+    }),
+  );
+  const pressedPer = PER_LEVEL.find(([n]) => n === info.perLevel) ?? PER_LEVEL.find(([n]) => n === T.education.newPerLevelDefault);
+  const perHint = h('p', { class: 'hint', id: 'edu-intro-per-hint' }, tr(pressedPer[2]).replace('{n}', String(pressedPer[0])));
   const gap = ctx.locale === 'zh-Hans' ? '' : ' ';
   const data = h('button', { class: 'link', id: 'edu-intro-data', type: 'button' }, tr('eduDataTitle'));
   data.addEventListener('click', () => openData());
@@ -206,6 +224,9 @@ function render() {
     h('div', { class: 'row' }, h('span', { class: 'label' }, tr('eduIntroOrder'))),
     order,
     orderHint,
+    h('div', { class: 'row' }, h('span', { class: 'label' }, tr('eduIntroPerLevel'))),
+    perLevel,
+    perHint,
     // The daily cap's line only while it is a number (held off since plan 28, Stage 3b).
     ...(Number.isFinite(info.newPerDay) ? [h('p', { id: 'edu-intro-per-day' }, tr('eduIntroPerDay').replace('{n}', String(info.newPerDay)))] : []),
     // eduIntroKeep: plan 28, 3.1b. Chinese sets no space after its full-width 。 and ：.
@@ -225,6 +246,11 @@ function step(dir) {
 
 function setOrder(order) {
   ctx.play.setEduNewOrder(order);
+  render();
+}
+
+function setPerLevel(n) {
+  ctx.play.setEduNewPerLevel(n);
   render();
 }
 
@@ -308,7 +334,7 @@ export function eduIntroPadAction(action) {
 
 /**
  * Open the popup over the ready screen. `play` (the Play scene) gives its state (eduIntroInfo) and
- * takes its choices (stepEduStart, setEduNewOrder, startFromEduIntro, openEduData).
+ * takes its choices (stepEduStart, setEduNewOrder, setEduNewPerLevel, startFromEduIntro, openEduData).
  * @param {{ game: object, play: object, locale: string }} options
  */
 export function openEduIntroPanel(options) {

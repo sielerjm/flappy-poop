@@ -394,7 +394,7 @@ test("Skip on a break's open card (plan 26, A2): the right slot reads its price;
   q.offerSkip();
   assert.deepEqual([right.label, right.dimmed], ['Skip · 6 🌽', false]);
   right.press();
-  assert.deepEqual([skipped, q.verdict.text, right.heldMs, play.quizSkipWarned], [[], 'Skipping costs 6 🌽. Tap Skip again.', TUNING.education.explainMinMs, true], 'the first press warns and holds Skip');
+  assert.deepEqual([skipped, q.verdict.text, right.heldMs, play.quizSkipWarned], [[], 'Skipping costs 6 🌽, and this card waits until tomorrow. Tap Skip again.', TUNING.education.explainMinMs, true], 'the first press warns and holds Skip');
   right.press();
   assert.deepEqual([skipped, calls], [['DU-01'], ['next']], 'the next press skips and moves on');
   const due = skipQuiz({ due: true });

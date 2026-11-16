@@ -42,12 +42,12 @@ test('the API exists: educationBackup, readEducationBackup, mergeEducation, boar
 });
 
 test('educationBackup: a fixed list of fields; nothing of the device or the player (no id, invitation, consent, own, recent, paid, buried, pending)', () => {
-  const b = edu.educationBackup({ ...localRecord(), id: ID22, eduInvited: true, consent: 'pilot-2' }, { eduNewOrder: 'mixed', eduStartLevel: 2, education: true, eduInvited: true, name: 'Sam' }, T0);
+  const b = edu.educationBackup({ ...localRecord(), id: ID22, eduInvited: true, consent: 'pilot-2' }, { eduNewOrder: 'mixed', eduStartLevel: 2, eduNewPerLevel: 3, education: true, eduInvited: true, name: 'Sam' }, T0);
   assert.deepEqual(Object.keys(b).sort(), ['at', 'badges', 'cards', 'counters', 'kind', 'settings', 'study', 'unlockedLevel', 'v']);
   assert.equal(b.kind, 'flappy-poop-education');
   assert.equal(b.v, 1);
   assert.equal(b.at, new Date(T0).toISOString());
-  assert.deepEqual(b.settings, { eduNewOrder: 'mixed', eduStartLevel: 2 }, 'only the two education settings: never the 📚 switch, the invitation or a name');
+  assert.deepEqual(b.settings, { eduNewOrder: 'mixed', eduStartLevel: 2, eduNewPerLevel: 3 }, 'only the three education settings (new cards per level since plan 28, Stage 3b): never the 📚 switch, the invitation or a name');
   assert.deepEqual(Object.keys(b.cards), ['ST-01', 'ST-02']);
   assert.deepEqual(b.counters, { revives: 3, perfectStreak: 1, gradedRuns: 5, gradeSum: 40000 });
   assert.deepEqual(b.study, { day: '2026-11-15', streak: 4, best: 9 });
@@ -56,12 +56,12 @@ test('educationBackup: a fixed list of fields; nothing of the device or the play
   assert.doesNotMatch(json, /invit|consent|"own"|"recent"|"paid"|"buried"|"pending"|Sam/i);
   const bare = edu.educationBackup({ v: 2, cards: {}, recent: [], counters: {}, badges: {}, unlockedLevel: 1 }, {}, T0);
   assert.equal('study' in bare, false, 'no study record: none in the file');
-  assert.deepEqual(bare.settings, { eduNewOrder: 'after', eduStartLevel: 1 }, 'missing settings read as the defaults');
-  assert.deepEqual(edu.educationBackup(localRecord(), { eduNewOrder: 'sideways', eduStartLevel: 99 }, T0).settings, { eduNewOrder: 'after', eduStartLevel: 1 }, 'junk settings are cleaned');
+  assert.deepEqual(bare.settings, { eduNewOrder: 'after', eduStartLevel: 1, eduNewPerLevel: 5 }, 'missing settings read as the defaults');
+  assert.deepEqual(edu.educationBackup(localRecord(), { eduNewOrder: 'sideways', eduStartLevel: 99, eduNewPerLevel: 7 }, T0).settings, { eduNewOrder: 'after', eduStartLevel: 1, eduNewPerLevel: 5 }, 'junk settings are cleaned');
 });
 
 test('readEducationBackup: a backup reads back as it was; text around it is ignored; another file, a newer format, junk and a huge text are refused; bad cards are counted, old SM-2 cards converted', () => {
-  const b = edu.educationBackup(localRecord(), { eduNewOrder: 'before', eduStartLevel: 3 }, T0);
+  const b = edu.educationBackup(localRecord(), { eduNewOrder: 'before', eduStartLevel: 3, eduNewPerLevel: 'all' }, T0);
   const text = JSON.stringify(b);
   const r = edu.readEducationBackup(text);
   assert.equal(r.ok, true);
@@ -70,7 +70,9 @@ test('readEducationBackup: a backup reads back as it was; text around it is igno
   assert.deepEqual(r.backup.record.badges, b.badges);
   assert.equal(r.backup.record.unlockedLevel, 3);
   assert.deepEqual(r.backup.record.study, b.study);
-  assert.deepEqual(r.backup.settings, { eduNewOrder: 'before', eduStartLevel: 3 });
+  assert.deepEqual(r.backup.settings, { eduNewOrder: 'before', eduStartLevel: 3, eduNewPerLevel: 'all' });
+  const old = { ...b, settings: { eduNewOrder: 'before', eduStartLevel: 3 } };
+  assert.deepEqual(edu.readEducationBackup(JSON.stringify(old)).backup.settings, { eduNewOrder: 'before', eduStartLevel: 3, eduNewPerLevel: 5 }, 'a 0.20 backup (no new cards per level) reads as the default 5');
   assert.equal(r.backup.skipped, 0);
   for (const k of ['own', 'paid', 'buried', 'pending']) assert.equal(k in r.backup.record, false, `${k} never comes from a file`);
   assert.deepEqual(r.backup.record.recent, []);

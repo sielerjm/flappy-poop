@@ -261,13 +261,20 @@ test("countLines: the three lines Michael worded (plan 26, A2): new (not seen ye
 
 test("the 📚 popup's words (plan 26, A2): where the data is kept, what a right answer earns, and a line for each new-card order; both locales", () => {
   assert.equal(t('en', 'eduIntroDevice'), 'Your data is stored locally on your device in the browser, not on our servers, unless you choose to share it.');
-  assert.equal(t('en', 'eduIntroHowCoins'), "Right answers in a level break earn you corn kernels. Cards are automatically ordered to be shown right before you're likely to forget them.");
+  assert.equal(t('en', 'eduIntroHowCoins'), "Right answers in a level break earn you corn kernels, once per card a day: 3 for a new card, 2 for a card due for review, 1 for practice or a card you missed. Cards are automatically ordered to be shown right before you're likely to forget them.", "Michael's two sentences, with the rates of plan 28, Stage 3b");
   for (const locale of ['en', 'zh-Hans']) {
     const hints = ['eduOrderBeforeHint', 'eduOrderMixedHint', 'eduOrderAfterHint'].map((k) => t(locale, k));
     assert.equal(new Set(hints).size, 3, `${locale}: three different lines`);
     for (const h of hints) assert.ok(h.length > 10 && !h.startsWith('eduOrder'), `${locale}: ${h}`);
   }
-  assert.match(t('en', 'eduOrderBeforeHint'), /before.*missed and review cards/i, 'before: says the new cards come ahead of the cards a break waits for');
+  assert.match(t('en', 'eduOrderBeforeHint'), /first.*missed and review cards/i, 'before: says the new cards come ahead of the missed and review cards');
+  // New cards per level (plan 28, Stage 3b): the heading, All, and a line for each choice.
+  for (const locale of ['en', 'zh-Hans']) {
+    for (const k of ['eduIntroPerLevel', 'eduPerLevelAll', 'eduPerLevelHint', 'eduPerLevelAllHint']) assert.ok(t(locale, k) && t(locale, k) !== k, `${locale}: ${k}`);
+    assert.ok(t(locale, 'eduPerLevelHint').includes('{n}') && !t(locale, 'eduPerLevelAllHint').includes('{n}'), locale);
+    assert.match(t(locale, 'eduIntroHowCoins'), /3.*2.*1/, `${locale}: the three rates, in order`);
+    assert.ok(t(locale, 'eduIntroHowLevels').includes('{n}') && !t(locale, 'eduIntroHowLevelsAll').includes('{n}'), `${locale}: the help line names duePerBreak, or says every due card while it is null`);
+  }
 });
 
 test("eduProfileRows (plan 26, A2: Michael's checklist): your own profile's 🔥 learning streak, ❤️‍🔥 longest streak and highest level unlocked, in days and as LV n; both locales", () => {

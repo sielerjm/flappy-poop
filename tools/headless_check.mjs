@@ -3755,7 +3755,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await sleep(500); // home()'s restart lands on the next frame: a tap before it would open the popup on the scene going away
         await tap('education');
         const s3 = await switches();
-        const intro = () => evaluate(`(() => { const r = document.getElementById('edu-intro-panel'); const open = Boolean(r && !r.hidden); return JSON.stringify({ open, title: open ? r.querySelector('h2').textContent : null, beta: open ? r.querySelector('.beta').textContent : null, counts: open ? [...r.querySelectorAll('#edu-intro-counts p')].map((p) => p.textContent) : [], level: open ? r.querySelector('#edu-intro-level')?.textContent ?? null : null, up: Boolean(r?.querySelector('#edu-intro-up')), order: open ? [...r.querySelectorAll('.order button')].filter((b) => b.getAttribute('aria-pressed') === 'true').map((b) => b.id) : [], orderHint: open ? r.querySelector('#edu-intro-order-hint')?.textContent ?? null : null, perDay: Boolean(r?.querySelector('#edu-intro-per-day')), device: open ? r.querySelector('#edu-intro-device')?.textContent ?? null : null, pad: open ? r.querySelector('button.pad')?.id ?? null : null, state: ${play}.state, launching: Boolean(${play}.launching), on: ${play}.educationOn, toilet: ${play}.toilet, kb: __flappy.input.keyboard.enabled }); })()`).then(JSON.parse);
+        const intro = () => evaluate(`(() => { const r = document.getElementById('edu-intro-panel'); const open = Boolean(r && !r.hidden); return JSON.stringify({ open, title: open ? r.querySelector('h2').textContent : null, beta: open ? r.querySelector('.beta').textContent : null, counts: open ? [...r.querySelectorAll('#edu-intro-counts p')].map((p) => p.textContent) : [], level: open ? r.querySelector('#edu-intro-level')?.textContent ?? null : null, up: Boolean(r?.querySelector('#edu-intro-up')), order: open ? [...r.querySelectorAll('button[id^="edu-intro-order-"]')].filter((b) => b.getAttribute('aria-pressed') === 'true').map((b) => b.id) : [], orderHint: open ? r.querySelector('#edu-intro-order-hint')?.textContent ?? null : null, perDay: Boolean(r?.querySelector('#edu-intro-per-day')), per: open ? [...r.querySelectorAll('#edu-intro-per button')].map((b) => b.id + (b.getAttribute('aria-pressed') === 'true' ? '*' : '') + ':' + b.textContent) : [], perHint: open ? r.querySelector('#edu-intro-per-hint')?.textContent ?? null : null, device: open ? r.querySelector('#edu-intro-device')?.textContent ?? null : null, pad: open ? r.querySelector('button.pad')?.id ?? null : null, state: ${play}.state, launching: Boolean(${play}.launching), on: ${play}.educationOn, toilet: ${play}.toilet, kb: __flappy.input.keyboard.enabled }); })()`).then(JSON.parse);
         const introClick = async (id) => {
           await sleep(TT.retryLockoutMs + 50); // past the popup's click lockout (plan 26, A2)
           return evaluate(`(document.getElementById('${id}')?.click(), true)`);
@@ -3927,6 +3927,21 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         const dataLink = await tx('eduDataTitle');
         ok(ord0Full.orderHint === hintAfter && ord1.orderHint === hintMixed && ord2.orderHint === hintBefore && ord2.device === `${deviceLine} ${keepLine} ${dataLink}`, `the line under the order buttons follows the pressed one ("${ord2.orderHint}"); the data line: "${ord2.device}"`);
         await introClick('edu-intro-order-after');
+        // New cards per level (plan 28, Stage 3b): 3 / 5 / All, 5 pressed by default, a line under them; a
+        // tap presses and stores another, and its line follows.
+        const [perAllLabel, perHintWant, perAllHintWant, perHead] = await Promise.all(['eduPerLevelAll', 'eduPerLevelHint', 'eduPerLevelAllHint', 'eduIntroPerLevel'].map(tx));
+        const pl0 = await intro();
+        await introClick('edu-intro-per-3');
+        const pl1 = await intro();
+        const stored3 = await evaluate(`${play}.settings.load().eduNewPerLevel`);
+        await introClick('edu-intro-per-all');
+        const pl2 = await intro();
+        const storedAll = await evaluate(`${play}.settings.load().eduNewPerLevel`);
+        await introClick('edu-intro-per-5');
+        const pl3 = await intro();
+        const headShown = await evaluate(`[...document.querySelectorAll('#edu-intro-panel .row .label')].some((l) => l.textContent === ${JSON.stringify(perHead)})`);
+        ok(headShown && pl0.per.join() === `edu-intro-per-3:3,edu-intro-per-5*:5,edu-intro-per-all:${perAllLabel}` && pl0.perHint === perHintWant.replace('{n}', '5'), `"${perHead}": 3 / 5 / ${perAllLabel}, 5 pressed by default, and "${pl0.perHint}" under them (plan 28, Stage 3b)`);
+        ok(pl1.per[0].includes('*') && stored3 === 3 && pl1.perHint === perHintWant.replace('{n}', '3') && pl2.per[2].includes('*') && storedAll === 'all' && pl2.perHint === perAllHintWant && pl3.per[1].includes('*') && pl3.perHint === pl0.perHint, `a tap on 3, then ${perAllLabel}, presses and stores it ("${pl1.perHint}", "${pl2.perHint}"); back on 5`);
         await introClick('edu-intro-play');
         for (let i = 0; i < 40 && (await playState()) !== 'playing'; i += 1) await sleep(100);
         const atStart = await evaluate(`JSON.stringify({ level: ${play}.level, edu: ${play}.runIsEducation, start: ${play}.runStartLevel, popup: !document.getElementById('edu-intro-panel').hidden })`).then(JSON.parse);

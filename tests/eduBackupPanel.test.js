@@ -286,6 +286,10 @@ test("restoredSettings: the backup's order and start level only where this devic
   assert.deepEqual(restoredSettings({ eduNewOrder: 'after', eduStartLevel: 1 }, { eduNewOrder: 'before', eduStartLevel: 3 }), { eduNewOrder: 'before', eduStartLevel: 3 });
   assert.deepEqual(restoredSettings({ eduNewOrder: 'mixed', eduStartLevel: 1 }, { eduNewOrder: 'before', eduStartLevel: 3 }), { eduStartLevel: 3 });
   assert.deepEqual(restoredSettings({ eduNewOrder: 'after', eduStartLevel: 2 }, { eduNewOrder: 'after', eduStartLevel: 3 }), {});
+  // New cards per level (plan 28, Stage 3b): the same rule, 5 being the default.
+  assert.deepEqual(restoredSettings({ eduNewOrder: 'mixed', eduStartLevel: 2, eduNewPerLevel: 5 }, { eduNewOrder: 'after', eduStartLevel: 1, eduNewPerLevel: 'all' }), { eduNewPerLevel: 'all' });
+  assert.deepEqual(restoredSettings({ eduNewOrder: 'mixed', eduStartLevel: 2, eduNewPerLevel: 3 }, { eduNewOrder: 'after', eduStartLevel: 1, eduNewPerLevel: 'all' }), {}, 'a choice made here stays');
+  assert.deepEqual(restoredSettings({ eduNewOrder: 'mixed', eduStartLevel: 2, eduNewPerLevel: 5 }, { eduNewOrder: 'after', eduStartLevel: 1, eduNewPerLevel: 9 }), {}, 'junk in the file changes nothing');
   const { p } = playDevice();
   p.restoreEducation(BACKUP_TEXT);
   p.settings.set({ eduNewOrder: 'after', eduStartLevel: 1 });

@@ -138,7 +138,7 @@ Short, playful, clear. Fit a 720×1280 logical field; How to play / About body w
 | pauseHint | tap anywhere to resume game | 点击任意处继续游戏 |
 | levelBanner | LEVEL {n} | 第 {n} 关 |
 | levelContinue | Tap to continue | 点击继续 |
-| levelGateTap | Tap 📚 to review all cards before continuing. (plan 26, A2: a smaller line under "Tap to continue" once a tap at a level break was refused because missed or review cards are due; it goes when they are answered) | 先点 📚 复习完所有卡片，才能继续。 |
+| levelGateTap | Tap 📚 to answer this break's cards before continuing. (plan 26, A2: a smaller line under "Tap to continue" once a tap at a level break was refused because the gate holds; plan 28, Stage 3b: the gate holds for the break's new cards too, up to the player's number, and at most 10 due cards, so "this break's cards", not "all cards"; it goes when they are answered) | 先点 📚 答完这次休息的卡片，才能继续。 |
 | shopPill | Shop (plan 26, A2: the level break's shop button, beside the corn kernel, with no number: the HUD shows the purse. The panel's own title is shopTitle, SHOP) | 商店 |
 | shopTitle | SHOP | 商店 |
 | shopCoins | Your coins | 你的金币 |
@@ -281,7 +281,7 @@ Short, playful, clear. Fit a 720×1280 logical field; How to play / About body w
 | breakQuitDueSure | Quit ungraded? Tap again (the armed label while missed or review cards are still due: quitting then ends the run with no grade. "Ungraded" is 不计成绩, as in the profile's 计分 rows) | 不计成绩结束？再点一次 |
 | quizSkip | Skip · {n} 🌽 (plan 26, A2: the right button of an open card in a level break's quiz; it replaced Bury and the level skip. Every Skip costs {n} corn kernels; a missed or review card also waits until tomorrow) | 跳过 · {n} 🌽 |
 | quizSkipFree | Skip (the same button in a test run, where it is free) | 跳过 |
-| quizSkipWarn | Skipping costs {n} 🌽. Tap Skip again. (the first Skip in a level break shows this in the verdict's place; later ones in that break skip at once) | 跳过要花 {n} 🌽。再点一次“跳过”。 |
+| quizSkipWarn | Skipping costs {n} 🌽, and this card waits until tomorrow. Tap Skip again. (the first Skip in a level break shows this in the verdict's place; later ones in that break skip at once; a new or practice card waits until tomorrow too since plan 28, Stage 3b (a due card has quizSkipWarnDue)) | 跳过要花 {n} 🌽，这张卡片会等到明天。再点一次“跳过”。 |
 | quizSkipWarnDue | Skipping costs {n} 🌽 and sends this card to tomorrow. Tap Skip again. (the same, for a missed or review card) | 跳过要花 {n} 🌽，这张卡片会推到明天。再点一次“跳过”。 |
 | quizSkipNoCoins | Skipping costs {n} 🌽: not enough corn yet. (a press on a dimmed Skip when the purse is short) | 跳过要花 {n} 🌽：玉米粒还不够。 |
 | quizSkipCap | You have skipped {n} due cards today: answer this one, or come back tomorrow. ({n} is education.buryPerDay, 3; a press on a dimmed Skip on a missed or review card once the day's are used) | 今天已经跳过 {n} 张到期的卡片：答这一张，或者明天再来。 |
@@ -326,10 +326,11 @@ Short, playful, clear. Fit a 720×1280 logical field; How to play / About body w
 | eduIntroNotMedical | The cards are about how the gut and its microbes work. They are not medical advice. | 这些卡片讲的是肠道和肠道微生物如何运作，不是医疗建议。 |
 | eduWordRetired | 📚 Education mode is on the home screen for everyone now. | 📚 教育模式现在对所有人开放，就在主屏幕上。 |
 | eduIntroHowTitle | How it works | 玩法 |
-| eduIntroHowLevels | Each level break asks cards about the part of the gut you just flew through. Cards you missed, and cards due for review, must be answered right before you fly on. | 每次关卡休息时，会问你刚飞过的那段肠道的卡片。答错的卡片和到期要复习的卡片，答对之后才能继续飞。 |
+| eduIntroHowLevels | Each level break asks new cards about the part of the gut you just flew through (as many as you choose below) and up to {n} cards due for review. Answer them before you fly on; a card you miss comes back until you get it right. (plan 28, Stage 3b: every break asks its cards; "below" is the New cards per level row; {n} is education.duePerBreak, 10) | 每次关卡休息时，会问你刚飞过的那段肠道的新卡片（数量在下面选），以及最多 {n} 张到期要复习的卡片。答完才能继续飞；答错的卡片会再出现，直到答对。 |
+| eduIntroHowLevelsAll | Each level break asks new cards about the part of the gut you just flew through (as many as you choose below) and every card due for review. Answer them before you fly on; a card you miss comes back until you get it right. (eduIntroHowLevels' place while education.duePerBreak is null: no limit) | 每次关卡休息时，会问你刚飞过的那段肠道的新卡片（数量在下面选），以及所有到期要复习的卡片。答完才能继续飞；答错的卡片会再出现，直到答对。 |
 | eduIntroHowRevive | Crash, and a card is your way back: ❤️ three tries to get one right, then ⭐ three in a row to win back your coins and power-ups. | 撞到了？答对卡片就能继续：❤️ 有三次机会答对一张，然后连续答对 ⭐ 三张，就能赢回金币和道具。 |
-| eduIntroHowSkip | Stuck on a card at a break? Skip it for a few 🌽 (a missed or review card waits until tomorrow), or quit the run. (plan 26, A2: Skip replaced Bury) | 在休息时卡在一张卡片上？花几个 🌽 跳过它（答错卡和待复习卡会推到明天），或者结束这一局。 |
-| eduIntroHowCoins | Right answers in a level break earn you corn kernels. Cards are automatically ordered to be shown right before you're likely to forget them. (plan 26 A2: Michael's wording, as written) | 在关卡休息时答对会得到玉米粒。卡片会自动排序，在你快要忘记之前出现。 |
+| eduIntroHowSkip | Stuck on a card at a break? Skip it for a few 🌽 (it waits until tomorrow), or quit the run. (plan 26, A2: Skip replaced Bury; plan 28, Stage 3b: every skipped card waits until tomorrow, new ones too) | 在休息时卡在一张卡片上？花几个 🌽 跳过它（它会等到明天），或者结束这一局。 |
+| eduIntroHowCoins | Right answers in a level break earn you corn kernels, once per card a day: 3 for a new card, 2 for a card due for review, 1 for practice or a card you missed. Cards are automatically ordered to be shown right before you're likely to forget them. (plan 26 A2: Michael's wording, as written; plan 28, Stage 3b added the rates, his 16 Nov decision: education.breakCoins) | 在关卡休息时答对会得到玉米粒，每张卡片每天一次：新卡片 3 粒，到期复习的卡片 2 粒，练习或答错过的卡片 1 粒。卡片会自动排序，在你快要忘记之前出现。 |
 | eduIntroChoices | Your choices (the heading over the start level and the new-card order) | 你的选择 |
 | eduIntroStart | Start at (◀ LV n ▶ follows: the level the next education run starts at) | 从这一关开始 |
 | eduIntroStartLocked | Reach a level in an education run to start there next time. | 在教育模式中到达某一关后，下次就能从那里开始。 |
@@ -337,10 +338,14 @@ Short, playful, clear. Fit a 720×1280 logical field; How to play / About body w
 | eduOrderBefore | Before reviews | 先学新卡 |
 | eduOrderMixed | Mixed in | 穿插 |
 | eduOrderAfter | After reviews (the default) | 先复习 |
-| eduOrderBeforeHint | New cards come first, before the missed and review cards a level break waits for. (plan 26 A2: the line under the three new-card buttons while "Before reviews" is pressed; a level break holds until its missed and review cards are answered) | 新卡片先出现，排在关卡休息要等你答完的答错卡和待复习卡之前。 |
+| eduOrderBeforeHint | New cards come first, then the missed and review cards. (plan 26 A2: the line under the three new-card buttons while "Before reviews" is pressed; plan 28, Stage 3b dropped "a level break waits for", since it waits for new cards too) | 新卡片先出现，然后是答错卡和待复习卡。 |
 | eduOrderMixedHint | New cards are mixed in with the missed and review cards. (the same line while "Mixed in" is pressed) | 新卡片和答错卡、待复习卡穿插出现。 |
 | eduOrderAfterHint | New cards come once the missed and review cards are answered. (the same line while "After reviews" is pressed) | 答完答错卡和待复习卡之后，才会出现新卡片。 |
 | eduIntroPerDay | Up to {n} new cards a day. ({n} is education.newPerDay; shown only while it is a number: it is held off since plan 28, Stage 3b) | 每天最多 {n} 张新卡片。 |
+| eduIntroPerLevel | New cards per level (plan 28, Stage 3b: the 📚 popup's heading over three choices, 3, 5 and All: how many new cards each level break asks a visit) | 每关新卡片 |
+| eduPerLevelAll | All (the third choice under eduIntroPerLevel: every new card of the level; the other two are the numbers 3 and 5) | 全部 |
+| eduPerLevelHint | Each level break asks up to {n} new cards. (the line under the choices while 3 or 5 is pressed; {n} is that number) | 每次关卡休息最多问 {n} 张新卡片。 |
+| eduPerLevelAllHint | Each level break asks all its new cards. (the line under the choices while All is pressed) | 每次关卡休息会问这一关的所有新卡片。 |
 | eduIntroDevice | Your data is stored locally on your device in the browser, not on our servers, unless you choose to share it. (plan 26 A2: Michael's wording plus "unless you choose to share it", his choice, since Share my grades and the tester pilot do send data; the 📚 Education data link follows) | 你的数据保存在这台设备的浏览器里，不在我们的服务器上，除非你选择分享。 |
 | eduIntroKeep | The browser can erase it (clearing site data, or Safari after weeks without a visit), so add the game to your Home Screen and back up your cards now and then: (plan 28, 3.1b: after eduIntroDevice in the 📚 popup; the 📚 Education data link follows the colon) | 浏览器可能会清除它（清除网站数据，或 Safari 在几周未访问后），所以请把游戏添加到主屏幕，并不时备份你的卡片： |
 | eduBackupTitle | 💾 Back up your cards | 💾 备份你的卡片 |

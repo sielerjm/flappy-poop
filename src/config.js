@@ -388,6 +388,8 @@ export const TUNING = {
     purseGlow: { radiusPx: 44, fadeFrac: 0.7, peakAlpha: 0.6, fadeMs: 700, color: 0xffe58a }, // the soft glow behind the quiz card's purse when a right answer pays (plan 28, 1.2): px radius, 0–1 outer share that fades, alpha at its peak, ms to fade out, tint
     buryCoinsPerLevel: 3, // a Skip (plan 26, A2; a gate's Bury in plan 25): coins × the level just cleared; a due card also goes to tomorrow
     buryPerDay: 3, // due cards a device may skip (bury) in one local day; new and practice cards have no limit (plan 26, A2)
+    newPerLevelChoices: [3, 5, 'all'], // the 📚 popup's choices for new cards a level break asks a visit (settings eduNewPerLevel; plan 28, Stage 3b)
+    newPerLevelDefault: 5, // the one pressed until the player chooses
     duePerBreak: 10, // stored due cards one level break's gate asks, the most urgent first; the rest come under Keep practicing (plan 28, Stage 3b); null: no limit. Cards missed in the break count on top
     buryMs: 86400000, // ms a skipped (buried) due card waits at least (24 h, so a bury just before midnight is not back at 00:00; education.js skipUntil waits for the next local midnight when that is later, on a 25-hour day)
     revivePenaltyPerLevel: 2, // points a quiz revive costs per level number (level 3: −6), charged when the player is revived; the two-player crash's value to start

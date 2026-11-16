@@ -144,6 +144,9 @@ const levelOfDeck = (deck) => (deck === 'general' ? 0 : DECKS.indexOf(deck) + 1)
 /** Where new cards go in a quiz (plan 26, Anki's new / review order; settings eduNewOrder): after the due cards (the default), mixed with them, or before them. */
 export const NEW_ORDERS = ['after', 'mixed', 'before'];
 
+/** New cards a level break asks a visit, the 📚 popup's choices (plan 28, Stage 3b; settings eduNewPerLevel): TUNING.education.newPerLevelChoices, newPerLevelDefault pressed. */
+export const NEW_PER_LEVEL = TUNING.education.newPerLevelChoices;
+
 /** Local midnight before `now` (ms): the daily new-card cap counts local days, as Skip (a due card's bury) does. */
 export function localDayStart(now) {
   const d = new Date(now);
@@ -854,12 +857,13 @@ function backupSettings(raw, t = TUNING) {
   return {
     eduNewOrder: NEW_ORDERS.includes(raw?.eduNewOrder) ? raw.eduNewOrder : 'after',
     eduStartLevel: Number.isInteger(raw?.eduStartLevel) && raw.eduStartLevel >= 1 && raw.eduStartLevel <= t.levels.lastLevel ? raw.eduStartLevel : 1,
+    eduNewPerLevel: t.education.newPerLevelChoices.includes(raw?.eduNewPerLevel) ? raw.eduNewPerLevel : t.education.newPerLevelDefault, // plan 28, Stage 3b (a 0.20 file has none: the default)
   };
 }
 
 /**
  * The backup file's content for this device's education `record` and `settings`, at `now` (ms):
- * { kind, v, at, cards, counters, badges, unlockedLevel, study?, settings: { eduNewOrder, eduStartLevel } }.
+ * { kind, v, at, cards, counters, badges, unlockedLevel, study?, settings: { eduNewOrder, eduStartLevel, eduNewPerLevel } }.
  * Built from a fixed list of fields, never by copying the record: no player id, user code, sharing
  * state, invitation or consent; not the recent cards, the day's paid cards or skips, or a won run
  * waiting to be recorded (pending would be graded twice). Its counters are what the player sees
@@ -923,6 +927,8 @@ export function restoredSettings(now, backup) {
   const patch = {};
   if (now?.eduNewOrder === 'after' && backup?.eduNewOrder && backup.eduNewOrder !== 'after') patch.eduNewOrder = backup.eduNewOrder;
   if (now?.eduStartLevel === 1 && Number.isInteger(backup?.eduStartLevel) && backup.eduStartLevel !== 1) patch.eduStartLevel = backup.eduStartLevel;
+  const perDefault = TUNING.education.newPerLevelDefault;
+  if (now?.eduNewPerLevel === perDefault && NEW_PER_LEVEL.includes(backup?.eduNewPerLevel) && backup.eduNewPerLevel !== perDefault) patch.eduNewPerLevel = backup.eduNewPerLevel;
   return patch;
 }
 

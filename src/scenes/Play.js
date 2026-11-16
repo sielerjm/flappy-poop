@@ -2257,6 +2257,7 @@ export class Play extends Phaser.Scene {
       startOffered: this.eduStartOffered(),
       startLevel: this.eduStartLevel(),
       order: this.settings.load().eduNewOrder,
+      perLevel: this.settings.load().eduNewPerLevel, // new cards a level break asks a visit (plan 28, Stage 3b)
       newPerDay: T.education.newPerDay,
       testMode: this.isTestMode(), // the start-level row is hidden: a test run starts at its own level (plan 26, A2)
     };
@@ -2265,6 +2266,11 @@ export class Play extends Phaser.Scene {
   /** The 📚 popup's new-card order: 'before', 'mixed' or 'after' the cards due (settings eduNewOrder; pickCard's order). */
   setEduNewOrder(order) {
     this.settings.set({ eduNewOrder: order });
+  }
+
+  /** The 📚 popup's new cards per level: how many new cards a level break asks a visit, 3, 5 or 'all' (settings eduNewPerLevel; breakLimits; plan 28, Stage 3b). */
+  setEduNewPerLevel(n) {
+    this.settings.set({ eduNewPerLevel: n });
   }
 
   /**

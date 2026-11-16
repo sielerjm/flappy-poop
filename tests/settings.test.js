@@ -209,7 +209,9 @@ test("eduNewOrder (plan 26): where a quiz puts new cards is kept as one of educa
 
 test("eduNewPerLevel (plan 28, Stage 3b): the new cards a level break asks a visit, 3, 5 or 'all'; 5 by default; anything else reads as 5", async () => {
   const { EDU_NEW_PER_LEVEL } = await import('../src/logic.js');
+  const { NEW_PER_LEVEL } = await import('../src/education.js');
   assert.deepEqual(EDU_NEW_PER_LEVEL, [3, 5, 'all']);
+  assert.deepEqual(NEW_PER_LEVEL, EDU_NEW_PER_LEVEL, "education.js's copy (it does not import logic.js) agrees");
   const m = new Map();
   const st = { getItem: (k) => m.get(k) ?? null, setItem: (k, v) => m.set(k, v), removeItem: (k) => m.delete(k) };
   const s = createSettingsStore(st, 'k');

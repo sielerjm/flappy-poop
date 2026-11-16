@@ -400,7 +400,10 @@ seen yet, the missed ones due, the reviews due over every deck: `cardCounts`; ho
 level (◀ LV n ▶ while a later level is unlocked; no start-level row at all in test mode, whose run starts at
 its own level: `eduIntroInfo().testMode`, plan 26 A2), where new cards go
 (`setEduNewOrder`; under the three buttons a line says what the pressed one does, `ORDERS` in the
-panel, plan 26 A2), the daily cap, a line that the data stays in this browser, not on the game's
+panel, plan 26 A2), **new cards per level** (plan 28, Stage 3b: 3 / 5 / All, 5 pressed by default, how
+many new cards a level break asks a visit: `setEduNewPerLevel`, settings `eduNewPerLevel`, `PER_LEVEL`
+in the panel, with a line under the buttons: "Each level break asks up to n new cards."), the daily cap
+while it is a number (held off since Stage 3b), a line that the data stays in this browser, not on the game's
 servers, unless the player chooses to share it, with a link to 📚 Education data, and Close | Play
 (`startFromEduIntro`: 📚 on, the audio unlocked, then `launch({ intro: false })`; not a tap, which would open the
 popup again). **It opens at every start from the ready screen with 📚 on** (plan 26, A2: Michael asked): a tap,
@@ -652,13 +655,13 @@ gaps come from the date keys (`localDayKey`), never from milliseconds.
 **Backup and restore** (plan 28, 3.1b): the cards live in this browser only, so the top of 📚 Education
 data, for everyone, is **💾 Back up your cards**. Back up my cards hands a file
 `flappy-poop-cards-YYYY-MM-DD.json` (`educationBackup`: the cards, counters, badges, the unlocked level,
-the learning streak, the new-card order and start level; never an id, code, sharing state, invitation or
+the learning streak, the new-card order, start level and new cards per level; never an id, code, sharing state, invitation or
 consent) to the share sheet inside the tap on a touch screen (`shareFile`; no text beside it, which can
 hide "Save to Files" on iOS), else downloads it; Copy as text puts the same JSON on the clipboard.
 Restore takes a file or pasted text (`EDUCATION.backupMaxBytes`, 1 MB, at most) and merges it
 (`readEducationBackup`, `mergeEducation`): only on the home screen (`Play.canRestoreEducation`); when it
-changed something, the backup's new-card order and start level where this device still has the defaults
-(`restoredSettings`); the 📚 switch never carried, nothing sent;
+changed something, the backup's new-card order, start level and new cards per level (plan 28, Stage 3b)
+where this device still has the defaults (`restoredSettings`); the 📚 switch never carried, nothing sent;
 restored runs never reach the 📚 board: a restore adds nothing to the counters the board and the badges
 read, and a longer history goes into `history`, for display only (`shownCounters`; under the share
 paragraph below). A
@@ -830,7 +833,9 @@ src/
                             buryPerDay and buryMs (Skip's price, its daily cap for
                             due cards, its least wait: skipUntil), duePerBreak (the
                             stored due cards one break's gate asks; plan 28, Stage
-                            3b), boardMinRuns
+                            3b), newPerLevelChoices and newPerLevelDefault (the 📚
+                            popup's 3 / 5 / All and the one pressed until the
+                            player chooses; settings eduNewPerLevel), boardMinRuns
                             (graded runs before the 📚 board lists a player),
                             revivePenaltyPerLevel. EDUCATION.enabled = the off switch
                             (plan 28); EDUCATION.words = the old unlock word (poopschool),
@@ -1016,8 +1021,9 @@ src/
                             { today }): one merge and write, { added, updated, badges,
                             changed, saved }); the backup (plan 28, 3.1a):
                             educationBackup (a fixed list of fields: cards, counters,
-                            badges, unlockedLevel, study, and the eduNewOrder and
-                            eduStartLevel settings; never an id, code, sharing state,
+                            badges, unlockedLevel, study, and the eduNewOrder,
+                            eduStartLevel and eduNewPerLevel settings (the last since
+                            plan 28, Stage 3b; a 0.20 file reads as 5); never an id, code, sharing state,
                             invitation, consent, recent, paid, buried or pending; its
                             counters are shownCounters), readEducationBackup (the text around the
                             outermost { … } ignored; cleaned as the store cleans; only
@@ -1032,8 +1038,11 @@ src/
                             boardRecord (what the 📚 board is sent: the counters'
                             runs, never a history, and every badge), shownCounters
                             (what the player sees: a longer history's runs and grades),
-                            restoredSettings (plan 28, 3.1b: the backup's order and
-                            start level where this device has the defaults), dueCount
+                            restoredSettings (plan 28, 3.1b: the backup's order,
+                            start level and, since Stage 3b, new cards per level
+                            where this device has the defaults), NEW_PER_LEVEL
+                            (TUNING.education.newPerLevelChoices, as logic.js's
+                            EDU_NEW_PER_LEVEL), dueCount
                             (the 📚 switch's count), cardText (zh-Hans when a card has
                             it) / optionText, cardSource (short citations: "Martinsen
                             et al. 2005"), EDUCATION_EMOJI. Fully unit-tested
@@ -1410,9 +1419,11 @@ src/
                             eduDataPanel.js; opened at every start from the ready
                             screen with 📚 on (plan 26 A2: Play.launch). The beta
                             note, how the mode works, the player's cards, the start
-                            level (◀ LV n ▶; none in test mode) and the new-card
-                            order with a line for the pressed one (ORDERS), the
-                            daily cap, the data line (eduIntroDevice, then
+                            level (◀ LV n ▶; none in test mode), the new-card
+                            order with a line for the pressed one (ORDERS), new
+                            cards per level (3 / 5 / All, PER_LEVEL, with its line;
+                            plan 28, Stage 3b), the daily cap while it is a number,
+                            the data line (eduIntroDevice, then
                             eduIntroKeep: the browser can erase the cards, so add the
                             game to the Home Screen and back up; plan 28, 3.1b; no
                             space between them in zh-Hans) with a link to 📚

@@ -442,10 +442,10 @@ export const HANDS = ['left', 'right'];
 // ones (plan 26; education.js NEW_ORDERS); eduNewPerLevel: the new cards a level break asks a visit, 3, 5
 // or 'all' (plan 28, Stage 3b; EDU_NEW_PER_LEVEL). (reviveGiveUpWarned, plan 26's "warned once on this device",
 // is gone since plan 26's A2: a revive's Quit warns on every card. A stored value is ignored.)
-const SETTINGS_DEFAULTS = { sound: true, music: true, haptics: true, locale: DEFAULT_LOCALE, howToSeenAt: '', hand: 'right', education: false, eduInvited: false, eduStartLevel: 1, eduNewOrder: 'after', eduNewPerLevel: 5 };
+const SETTINGS_DEFAULTS = { sound: true, music: true, haptics: true, locale: DEFAULT_LOCALE, howToSeenAt: '', hand: 'right', education: false, eduInvited: false, eduStartLevel: 1, eduNewOrder: 'after', eduNewPerLevel: TUNING.education.newPerLevelDefault };
 const EDU_NEW_ORDERS = ['after', 'mixed', 'before']; // education.js NEW_ORDERS (logic.js does not import education.js)
 /** The 📚 popup's choices for new cards a level break asks a visit (plan 28, Stage 3b): a number, or 'all'. */
-export const EDU_NEW_PER_LEVEL = [3, 5, 'all'];
+export const EDU_NEW_PER_LEVEL = TUNING.education.newPerLevelChoices;
 
 /**
  * The locale the player chose, or null when the settings hold none (a first visit, broken JSON, a

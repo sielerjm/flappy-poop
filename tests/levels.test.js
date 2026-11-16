@@ -135,7 +135,7 @@ test('levelBannerText names the segment while there is one and drops it past the
   assert.equal(levelBannerText('zh-Hans', 3, LEVELS), '第 3 关 · 空肠\n点击继续');
   assert.equal(levelBannerText('en', 8, LEVELS), 'LEVEL 8\nTap to continue');
   assert.equal(levelBannerText('en', 2, LEVELS, { education: true, gate: true }), 'LEVEL 2 · Duodenum\nTap to continue', 'every break says "Tap to continue" (plan 26, A2: Michael asked); a gate says why only after a tap, on the line under it');
-  assert.equal(t('en', 'levelGateTap'), 'Tap 📚 to review all cards before continuing.');
+  assert.equal(t('en', 'levelGateTap'), "Tap 📚 to answer this break's cards before continuing.", "the break's cards, not all (plan 28, Stage 3b)");
   assert.equal(t('en', 'levelQuizHint'), 'levelQuizHint', '"Tap to continue · 📚 review" is gone');
   assert.equal(t('en', 'levelGateHint'), 'levelGateHint', '"📚 Review to continue" is gone');
   assert.deepEqual([t('en', 'shopPill'), t('zh-Hans', 'shopPill')], ['Shop', '商店'], 'the pill reads Shop, beside its kernel, with no number');
