@@ -887,6 +887,8 @@ export class Play extends Phaser.Scene {
     this.placeShopPill(this.runIsEducation); // in the education row, or centred (plan 26, A2)
     this.runQuiz = newTally();
     this.breakMissed = []; // a level break's cards missed and not yet answered right (plan 25): asked again, counted as missed
+    this.breakNewAsked = 0; // a level break's new cards asked or skipped, and its stored due cards (plan 28, Stage 3b: breakLimits)
+    this.breakDueAsked = 0;
     this.runId = null; // a pilot tester's answer events name their run (made with the run's first event)
     this.runEvents = 0;
     this.respawnHold = null;
@@ -1270,6 +1272,8 @@ export class Play extends Phaser.Scene {
     if (this.state !== 'playing') return;
     this.levelBreak = true;
     this.breakMissed = []; // each break starts with nothing missed (plan 25)
+    this.breakNewAsked = 0; // nor any of its new or due cards asked (plan 28, Stage 3b)
+    this.breakDueAsked = 0;
     this.quizSkipWarned = false; // the first Skip in each break warns (plan 26, A2)
     this.gateTapped = false; // the gate's line shows only after a refused tap in this break (plan 26, A2)
     this.breakLevelPick = null; // no level chosen yet (plan 26, A2)
@@ -1997,9 +2001,10 @@ export class Play extends Phaser.Scene {
     } else {
       // A level break's own quiz asks what is due first, then what it missed, with new cards where the
       // player's order puts them (plan 25; settings eduNewOrder, plan 26); the bonus quiz keeps the
-      // break context's new-first order. New cards stop at the day's cap while there is one (newPerDay: held off since plan 28, Stage 3b).
+      // break context's new-first order. New cards stop at the day's cap while there is one (newPerDay: held off since plan 28, Stage 3b);
+      // a break's own quiz keeps to its two limits (breakLimits), and past its due limit the other due cards come as `beyond`.
       const own = mode === 'break';
-      pick = pickCard({ srs: store.cards, context: mode === 'revive' ? 'revive' : 'break', level, segment, now: Date.now(), exclude, recent: store.recent, rng: Math.random, dueFirst: own, missed: own ? (this.breakMissed ?? []) : [], order: this.settings?.load().eduNewOrder, skipped: buriedIdsOn(store.buried, localDayKey()) });
+      pick = pickCard({ srs: store.cards, context: mode === 'revive' ? 'revive' : 'break', level, segment, now: Date.now(), exclude, recent: store.recent, rng: Math.random, dueFirst: own, missed: own ? (this.breakMissed ?? []) : [], order: this.settings?.load().eduNewOrder, skipped: buriedIdsOn(store.buried, localDayKey()), ...(own ? this.breakLimits() : {}) });
     }
     return pick ? { ...pick, order: shuffleOptions(Math.random) } : null;
   }
@@ -2016,11 +2021,35 @@ export class Play extends Phaser.Scene {
    * run, whose quizzes walk the deck and ignore the schedule. The level break's pill and the quiz
    * card's count line show it.
    */
-  quizCounts({ mode = 'break', exclude = [] } = {}) {
+  quizCounts({ mode = 'break', exclude = [], limits = true } = {}) {
     if (this.runIsTest) return null;
     const store = this.eduStore.load();
-    // The day's skipped ids, as quizNext passes them: a new card among them is not counted (plan 28, Stage 3b).
-    return cardCounts(store.cards, { context: mode === 'revive' ? 'revive' : 'break', ...this.quizScope(), now: Date.now(), exclude, missed: mode === 'break' ? (this.breakMissed ?? []) : [], skipped: buriedIdsOn(store.buried, localDayKey()) });
+    // The day's skipped ids, as quizNext passes them: a new card among them is not counted; a break's own
+    // quiz counts within its two limits (plan 28, Stage 3b), unless `limits` is false (quizMoreDue).
+    return cardCounts(store.cards, { context: mode === 'revive' ? 'revive' : 'break', ...this.quizScope(), now: Date.now(), exclude, missed: mode === 'break' ? (this.breakMissed ?? []) : [], skipped: buriedIdsOn(store.buried, localDayKey()), ...(mode === 'break' && limits ? this.breakLimits() : {}) });
+  }
+
+  /**
+   * A level break's two limits (plan 28, Stage 3b): { newLeft, dueLeft } for pickCard and cardCounts.
+   * newLeft: the new cards the player lets a break ask a visit (settings eduNewPerLevel: 3, 5 or 'all')
+   * less those this break asked or skipped; dueLeft: education.duePerBreak less the stored due cards it
+   * asked or skipped (null: no limit). Cards missed in this break are never limited.
+   */
+  breakLimits() {
+    const per = this.settings?.load().eduNewPerLevel;
+    const cap = T.education.duePerBreak;
+    return {
+      newLeft: typeof per === 'number' ? Math.max(0, per - (this.breakNewAsked ?? 0)) : Infinity,
+      dueLeft: Number.isFinite(cap) ? Math.max(0, cap - (this.breakDueAsked ?? 0)) : Infinity,
+    };
+  }
+
+  /** The due cards past a level break's gate (plan 28, Stage 3b), which Keep practicing asks before practice: 0 outside a break. */
+  quizMoreDue({ exclude = [] } = {}) {
+    if (this.runIsTest || !this.levelBreak) return 0;
+    const all = this.quizCounts({ mode: 'break', exclude, limits: false });
+    const gate = this.quizCounts({ mode: 'break', exclude });
+    return all && gate ? Math.max(0, all.missed + all.review - (gate.missed + gate.review)) : 0;
   }
 
   /**
@@ -2033,7 +2062,7 @@ export class Play extends Phaser.Scene {
    * right answer in a break that paid nothing because the card paid today; dueAt, when the card comes
    * back (its saved record's), null when nothing was saved (a test run, test mode).
    */
-  quizAnswer({ card, reason, order = [], chosen, rtMs, interrupted, mode = 'break', input = 'key' }) {
+  quizAnswer({ card, reason, beyond = false, order = [], chosen, rtMs, interrupted, mode = 'break', input = 'key' }) {
     const correct = chosen === 'answer';
     const store = this.runIsTest ? null : this.eduStore.load();
     const known = store?.cards[card.id] ?? null;
@@ -2057,8 +2086,14 @@ export class Play extends Phaser.Scene {
       // A pilot tester's answer is recorded as an event (plan 21; never in a test run, and only
       // while joined): what was asked and picked, and what the device knew of the card before.
       if (this.researchJoined()) this.recordAnswerEvent({ card, reason, order, chosen, correct, rtMs, interrupted, grade, mode, input, before: rec, now });
-      // A break's miss is asked again in this break until it is answered right (plan 25).
-      if (mode === 'break' && this.levelBreak) {
+      // A break's miss is asked again in this break until it is answered right (plan 25). A new card takes
+      // one of the break's new cards, a stored due card one of its due ones; a retry of this break's miss
+      // takes neither (plan 28, Stage 3b: breakLimits). A due card past the gate (`beyond`, asked under Keep
+      // practicing) is optional: it takes nothing and a miss of it does not hold the gate (it stays due).
+      if (mode === 'break' && this.levelBreak && !beyond) {
+        const retry = (this.breakMissed ?? []).includes(card.id);
+        if (reason === 'new') this.breakNewAsked = (this.breakNewAsked ?? 0) + 1;
+        else if (!retry && (reason === 'missed' || reason === 'review')) this.breakDueAsked = (this.breakDueAsked ?? 0) + 1;
         const missed = (this.breakMissed ?? []).filter((id) => id !== card.id);
         this.breakMissed = correct ? missed : [...missed, card.id];
       }
@@ -3762,7 +3797,7 @@ export class Play extends Phaser.Scene {
     this.quizCountLine.setVisible(shown && Boolean(counts));
     this.quizCountChip?.setVisible(shown && Boolean(counts));
     if (this.breakQuitButton) {
-      const due = Boolean(counts) && counts.missed + counts.review > 0;
+      const due = this.gateHolds(counts);
       const armed = this.breakQuitArmed();
       // One word, Quit, cards due or not (plan 26, A2); armed, it says when the second tap ends the run ungraded.
       this.breakQuitButton.setText(t(this.locale, armed ? (due ? 'breakQuitDueSure' : 'breakQuitSure') : 'breakQuit')).setVisible(shown);
@@ -3869,7 +3904,7 @@ export class Play extends Phaser.Scene {
       return;
     }
     const counts = this.quizCounts({ mode: 'break' });
-    const due = Boolean(counts) && counts.missed + counts.review > 0;
+    const due = this.gateHolds(counts); // the gate holds, new cards included (plan 28, Stage 3b: Michael's call 1)
     this.breakGaveUp = due || !((this.runQuiz?.answered ?? 0) > 0);
     this.breakQuitArmedAt = null;
     this.breakLevelPick = null;
@@ -3883,15 +3918,25 @@ export class Play extends Phaser.Scene {
   }
 
   /**
-   * The gate (plan 25, B6; every break since plan 26): an education run's level break with a card
-   * due: a missed card or a review due now, or one missed in this break and not yet answered right
-   * (the second and third numbers). New cards stay optional. Never in a test run or a match.
-   * resumePlay holds the break while it is true; Skip (a due card goes to tomorrow) and Quit are the other ways out.
+   * Does a break's gate hold on these counts (plan 28, Stage 3b)? A new, missed or review card is left
+   * that the gate asks: quizCounts({ mode: 'break' }) is already within the break's two limits.
+   */
+  gateHolds(counts) {
+    return Boolean(counts) && counts.new + counts.missed + counts.review > 0;
+  }
+
+  /**
+   * The gate (plan 25, B6; every break since plan 26): an education run's level break holds until it
+   * has asked its new cards (up to the player's N a visit) and its due cards (missed or reviews due now,
+   * up to education.duePerBreak, the most urgent first), and every card missed in this break is
+   * answered right (plan 28, Stage 3b: every break asks its cards). Never in a test run or a match.
+   * resumePlay holds the break while it is true; Skip (a due card goes to tomorrow, a new one until
+   * tomorrow) and Quit are the other ways out.
    */
   breakGated(counts) {
-    if (!this.levelBreak || !this.runIsEducation || this.runIsTest || this.match) return false;
-    const c = counts ?? this.quizCounts({ mode: 'break' }); // the counts the caller already read, else the store's
-    return Boolean(c) && c.missed + c.review > 0;
+    // Nor with test mode on (it can be turned on mid-run): nothing is saved, so nothing it asks could clear.
+    if (!this.levelBreak || !this.runIsEducation || this.runIsTest || this.isTestMode?.() || this.match) return false;
+    return this.gateHolds(counts ?? this.quizCounts({ mode: 'break' })); // the counts the caller already read, else the store's
   }
 
   /**
@@ -3920,7 +3965,8 @@ export class Play extends Phaser.Scene {
    * missed in this break, or a stored record due now: it holds the gate) also goes to tomorrow
    * (eduStore.bury until skipUntil: 24 h, or the next local midnight if later), leaves breakMissed and counts toward education.buryPerDay; a
    * practice card stays out of practice for the rest of the local day (eduStore.skipPractice: its
-   * schedule untouched, not counted; AUD-028), and a new card just moves on, neither with a daily limit. A test run's Skip is free and saves
+   * schedule untouched, not counted; AUD-028), and a new card is not offered again that day
+   * (eduStore.skipNew) and takes one of the break's new cards (plan 28, Stage 3b); neither has a daily limit. A test run's Skip is free and saves
    * nothing. A skip is no answer: no tally, no pilot event. The quiz's right slot shows it (offerSkip).
    */
   skipFree() {
@@ -3953,12 +3999,17 @@ export class Play extends Phaser.Scene {
     if (this.skipBlocker(cardId)) return false;
     if (this.skipFree()) return true;
     const due = this.cardDue(cardId);
+    const retry = (this.breakMissed ?? []).includes(cardId);
     this.effects.spendCoins(this.buryPrice());
     if (due) {
       this.eduStore.bury(cardId, skipUntil(Date.now()), localDayKey()); // tomorrow: 24 h, or the next midnight on a 25-hour day (AUD-029)
       this.breakMissed = (this.breakMissed ?? []).filter((id) => id !== cardId);
+      if (!retry) this.breakDueAsked = (this.breakDueAsked ?? 0) + 1; // one of the gate's due cards (plan 28, Stage 3b)
+    } else if (this.eduStore.load().cards[cardId]) {
+      this.eduStore.skipPractice(cardId, localDayKey()); // out of practice for the day (AUD-028)
     } else {
-      this.eduStore.skipPractice(cardId, localDayKey()); // out of practice for the day (AUD-028); a new card keeps nothing
+      this.eduStore.skipNew(cardId, localDayKey()); // not offered again today, and one of the break's new cards (plan 28, Stage 3b)
+      this.breakNewAsked = (this.breakNewAsked ?? 0) + 1;
     }
     this.refreshCoinHud?.();
     this.refreshLevelBanner();

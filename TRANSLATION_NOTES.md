@@ -300,6 +300,8 @@ Short, playful, clear. Fit a 720×1280 logical field; How to play / About body w
 | eduCardsDue | The number on 📚 = # of cards to review (Michael's wording, 13 Nov: the gold number counts missed + to review; # stands for that number) | 📚 上的数字 = 待复习的卡片数 |
 | quizCaughtUp | You're all caught up! New cards come with the next level, and old ones come back when they are due. (plan 28, Stage 3b: no daily cap, so no number) | 全部完成！下一关会有新卡片，旧卡片到期后会再出现。 |
 | quizCaughtUpPerDay | You're all caught up! New cards come with the next level, up to {n} a day, and old ones come back when they are due. (shown in quizCaughtUp's place only while education.newPerDay is a number; {n} is it) | 全部完成！下一关会有新卡片（每天最多 {n} 张），旧卡片到期后会再出现。 |
+| quizCaughtUpMoreOne | That's all this break asks! {n} more card is due: Keep practicing asks it now, or it waits for the next break. ({n} is 1: a due card past the gate's education.duePerBreak, plan 28, Stage 3b; "Keep practicing" names the button, quizKeepPracticing) | 这次休息的卡片答完了！还有 {n} 张到期的卡片：点“继续练习”现在回答，或者留到下次休息。 |
+| quizCaughtUpMore | That's all this break asks! {n} more cards are due: Keep practicing asks them now, or they wait for the next break. ({n} is 2 or more; Chinese has one form for both) | 这次休息的卡片答完了！还有 {n} 张到期的卡片：点“继续练习”现在回答，或者留到下次休息。 |
 | quizGeneral | Gut microbes | 肠道微生物 |
 | quizSource | Source: {source} | 来源：{source} |
 | quizLearnMore | 📄 Learn more 🔗 (plan 26: under a quiz card's explanation; opens the card's first reference, by its DOI, in a new tab) | 📄 了解更多 🔗 |

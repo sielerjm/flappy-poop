@@ -3933,7 +3933,9 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await evaluate(`(() => { const p = ${play}; p.poop.body.setAllowGravity(false); p.poop.setVelocity(0, 0); p.poop.y = 640; p.graceLeftMs = 1e9; p.onFinishCrossed(); return true; })()`);
         for (let i = 0; i < 40 && !(await evaluate(`Boolean(${play}.levelBreak) && ${play}.state === 'paused'`)); i += 1) await sleep(100);
         await sleep(TT.retryLockoutMs + 200);
-        await evaluate(`${play}.resumePlay(), true`);
+        // Every break asks its new cards (plan 28, Stage 3b): counted as asked here, so the break continues
+        // (education-quiz answers real ones at its gate).
+        await evaluate(`(${play}.breakNewAsked = 99, ${play}.resumePlay(), true)`);
         await sleep(300);
         const afterBreak = await evaluate(`${play}.eduStore.load().unlockedLevel`);
         ok(atStart.edu && !atStart.popup && atStart.level === 3 && atStart.start === 3 && afterBreak === 4, `the popup's Play starts the education run on level ${atStart.level}; continuing past its break unlocks level ${afterBreak}`);
@@ -4041,12 +4043,24 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         // two taps and ends the run.
         await home();
         await startRun();
-        const toBreak = async () => {
+        // A break's new cards counted as asked (plan 28, Stage 3b): its gate opens on this empty store, for the
+        // checks about what comes after it (the gate's own checks answer real cards further on).
+        const openGate = () => evaluate(`(() => { const p = ${play}; p.breakNewAsked = 99; p.refreshLevelBanner(); p.refreshShopButton(); return true; })()`);
+        const toBreak = async ({ open = true } = {}) => {
           await evaluate(`(() => { const p = ${play}; p.poop.body.setAllowGravity(false); p.poop.setVelocity(0, 0); p.poop.y = 640; p.graceLeftMs = 1e9; p.onFinishCrossed(); return true; })()`);
           for (let i = 0; i < 40 && !(await evaluate(`Boolean(${play}.levelBreak) && ${play}.state === 'paused'`)); i += 1) await sleep(100);
           await sleep(TT.retryLockoutMs + 200);
+          if (open) await openGate();
         };
-        await toBreak();
+        await toBreak({ open: false });
+        // Every break asks its cards (plan 28, Stage 3b): on this empty store the break holds for its new
+        // cards, as many as the player lets a break ask (eduNewPerLevel, 5 by default), and offers no level choice.
+        const fresh0 = await evaluate(`(() => { const p = ${play}; return JSON.stringify({ gated: p.breakGated(), counts: p.quizCounts({ mode: 'break' }), pick: p.levelPickShown(), per: p.settings.load().eduNewPerLevel }); })()`).then(JSON.parse);
+        await chrome('tap');
+        await sleep(200);
+        const fresh1 = await evaluate(`JSON.stringify({ state: ${play}.state, lb: ${play}.levelBreak })`).then(JSON.parse);
+        ok(fresh0.gated && fresh0.per === 5 && fresh0.counts.new === fresh0.per && fresh0.counts.missed + fresh0.counts.review === 0 && !fresh0.pick && fresh1.state === 'paused' && fresh1.lb, `a break with only new cards left holds for them (plan 28, Stage 3b): ${fresh0.counts.new} new (the default ${fresh0.per} a visit), a tap does not continue, no level choice`);
+        await openGate();
         const sideNow = () => evaluate(`(() => { const p = ${play}; return JSON.stringify({ level: p.level, quit: p.breakQuitButton.visible, quitLabel: p.breakQuitButton.getText(), state: p.state, lb: p.levelBreak, noSkip: !('breakSkipButton' in p) && !('skip' in p.eduBreakBoxes) }); })()`).then(JSON.parse);
         const box = (id) => evaluate(`JSON.stringify(${play}.eduBreakBoxes.${id})`).then(JSON.parse);
         const sk0 = await sideNow();
@@ -4130,8 +4144,9 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         const cardRec = (id) => evaluate(`JSON.stringify((JSON.parse(localStorage.getItem('flappyPoop.eduSrs') ?? '{}').cards ?? {})['${id}'] ?? null)`).then(JSON.parse);
         const quizNow = () => evaluate(`(() => { const q = ${Q}; return JSON.stringify({ active: __flappy.scene.isActive('Quiz'), id: q.card?.id ?? null, deck: q.card?.deck ?? null, answered: q.answered, last: q.lastAnswer ?? null, next: q.rightBtn.shown, nextAlpha: q.rightBtn.g.alpha, top: q.topBtn.shown ? q.topBtn.text.text : null, left: q.leftBtn.shown ? q.leftBtn.text.text : null, right: q.rightBtn.shown ? q.rightBtn.text.text : null, halo: Boolean(q.halo?.visible), verdict: q.verdict.visible ? q.verdict.text : null, kernel: q.verdictCoin.visible, kernelAfter: q.verdictCoin.x > q.verdict.x + q.verdict.width / 2, explain: q.explain.visible }); })()`).then(JSON.parse);
 
-        // Level 2 unlocked, so this break is no gate and the quiz's own checks below run as they were; the
-        // gate and Skip have their own checks further on, on stores of their own (plan 25; Skip since plan 26's A2).
+        // Level 2 unlocked, so no due card holds this break, only its new cards (plan 28, Stage 3b), and the
+        // quiz's own checks below run as they were; the gate and Skip have their own checks further on, on
+        // stores of their own (plan 25; Skip since plan 26's A2).
         await evaluate(`localStorage.removeItem('flappyPoop.eduSrs'), ${play}.eduStore.unlockLevel(2), ${play}.settings.set({ education: true }), true`);
         await home();
         await startEducationRun();
@@ -4153,8 +4168,9 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         ok(place.poopY >= TT.levels.eduBreakPoopY - 2 && place.poopY <= TT.levels.eduBreakPoopY + 26 && place.stripY === place.pauseY && place.stripX === place.mid && place.gap === 12 && place.rowY < place.stripY, `the education break: the poop bobs at mid-height (y ${place.poopY}), ◀ LV n ▶ on ⏸'s row (y ${place.stripY}) centred (x ${place.stripX}), the row (y ${place.rowY}) and its chip ${place.gap} px above it (plan 28, 1.1)`);
         // What is waiting, on the pill (plan 21, E2), as in Anki: "📚 new · missed · review", each count
         // in its own colour. A new device's first break has only new cards waiting: the stomach's and its one
-        // general card (breakDecks, plan 28, Stage 3b). The ❔ answers pill is gone: the tally sits in the quiz card.
-        const want0 = await evaluate(`Promise.all([import('./src/questions.js'), import('./src/ui/countLine.js'), import('./src/education.js')]).then(([q, c, e]) => JSON.stringify({ n: q.CARDS.filter((x) => !x.retired && e.breakDeckOf(x) === 'stomach').length, general: q.CARDS.filter((x) => !x.retired && x.deck === 'general' && e.breakDeckOf(x) === 'stomach').map((x) => x.id), colors: Object.values(c.COUNT_COLORS), fill: Object.fromEntries(Object.entries(c.COUNT_COLORS).map(([k, v]) => [k, parseInt(v.slice(1), 16)])) }))`).then(JSON.parse);
+        // general card (breakDecks, plan 28, Stage 3b), as many as the player lets a break ask (eduNewPerLevel).
+        // The ❔ answers pill is gone: the tally sits in the quiz card.
+        const want0 = await evaluate(`Promise.all([import('./src/questions.js'), import('./src/ui/countLine.js'), import('./src/education.js')]).then(([q, c, e]) => { const per = ${play}.settings.load().eduNewPerLevel; return JSON.stringify({ n: Math.min(typeof per === 'number' ? per : Infinity, q.CARDS.filter((x) => !x.retired && e.breakDeckOf(x) === 'stomach').length), general: q.CARDS.filter((x) => !x.retired && x.deck === 'general' && e.breakDeckOf(x) === 'stomach').map((x) => x.id), colors: Object.values(c.COUNT_COLORS), fill: Object.fromEntries(Object.entries(c.COUNT_COLORS).map(([k, v]) => [k, parseInt(v.slice(1), 16)])) }); })`).then(JSON.parse);
         const pillLine = await evaluate(`(() => { const p = ${play}; const l = p.quizCountLine; return JSON.stringify({ visible: l.visible, counts: l.counts, text: l.text, colors: l.colors, width: l.width, room: p.quizButtonBox.width - 16, label: p.quizButton.getText(), chip: p.quizCountChip.visible, under: p.quizCountsBox.y - p.quizCountsBox.height / 2 >= p.quizButtonBox.y + p.quizButtonBox.height / 2 && p.quizCountsBox.x === p.quizButtonBox.x }); })()`).then(JSON.parse);
         ok(pillLine.visible && pillLine.chip && pillLine.text === `${want0.n}   0   0` && pillLine.label === `📚 ${await tx('reviewPill')}` && pillLine.under && JSON.stringify(pillLine.colors) === JSON.stringify(want0.colors) && new Set(pillLine.colors).size === 3 && pillLine.width <= pillLine.room + 0.5, `the break offers "${pillLine.label}" with what is waiting on a line under it, "${pillLine.text}" (new, missed, review in ${pillLine.colors.join(', ')}), ${Math.round(pillLine.width)} px wide inside its ${pillLine.room} px (plan 25)`);
         // A tap on the numbers says what they mean (plan 25, B4), and the break does not continue.
@@ -4998,7 +5014,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         // on a revive's card (its 💀 header). Then Quit, warned, ends the run.
         await startEdu('');
         await crash();
-        const reviveFit = (state) => evaluate(`import('./src/questions.js').then(({ CARDS }) => { const q = ${Q}; const keep = { locale: q.locale, st: q.reviveState, ans: q.answered, last: q.lastAnswer }; const bad = []; let tight = Infinity; for (const locale of ['en', 'zh-Hans']) { q.locale = locale; for (const c of CARDS) { const f = q.preview(c, false, { state: '${state}' }); tight = Math.min(tight, f.buttonsTop - 8 - f.below); if (!f.ok) bad.push(locale + ' ' + c.id + ':' + Math.round(f.below) + '>' + Math.round(f.buttonsTop)); } } q.locale = keep.locale; q.reviveState = keep.st; q.showCard(q.card, q.order, q.reason); return JSON.stringify({ n: CARDS.length, bad, tight: Math.round(tight) }); })`).then(JSON.parse);
+        const reviveFit = (state) => evaluate(`import('./src/questions.js').then(({ CARDS }) => { const q = ${Q}; const keep = { locale: q.locale, st: q.reviveState, ans: q.answered, last: q.lastAnswer }; const bad = []; let tight = Infinity; for (const locale of ['en', 'zh-Hans']) { q.locale = locale; for (const c of CARDS) { const f = q.preview(c, false, { state: '${state}' }); tight = Math.min(tight, f.buttonsTop - 8 - f.below); if (!f.ok) bad.push(locale + ' ' + c.id + ':' + Math.round(f.below) + '>' + Math.round(f.buttonsTop)); } } q.locale = keep.locale; q.reviveState = keep.st; q.showCard(q.card, q.order, q.reason, q.beyond); return JSON.stringify({ n: CARDS.length, bad, tight: Math.round(tight) }); })`).then(JSON.parse);
         const quitFit = await reviveFit('quit');
         ok(quitFit.bad.length === 0, `all ${quitFit.n} cards fit a revive's card with Quit's warning showing, en and zh-Hans (${quitFit.bad.join(', ') || `none over; ${quitFit.tight} px to spare at the tightest`})`);
         // The ⭐ choice (plan 26, A2): the verdict, the wait and the choice line above Why; then with

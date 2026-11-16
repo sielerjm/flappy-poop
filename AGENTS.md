@@ -475,7 +475,11 @@ Card, Fly on, Go for it, End run) and whose left one is the way out (End Review 
 the choice's Fly on in a revive), then the numbers on the card's bottom row. **Caught up**: with
 nothing counted left, a break's or the bonus quiz stops at the first practice card: "You're all
 caught up!" with End Review and **Keep practicing** (`Quiz.practicing`: practice cards from then on,
-leaving the schedule alone, and paying as any card does: once a day); with nothing at all, End Review alone. **The purse**
+leaving the schedule alone, and paying as any card does: once a day); with nothing at all, End Review alone.
+A break's quiz stops the same way at the first due card past its gate (`pickCard`'s `beyond`; plan 28,
+Stage 3b): the line then says how many more are due (`Play.quizMoreDue`, `caughtUpText`'s `more`:
+"That's all this break asks! n more cards are due…"), and Keep practicing asks them, as due cards
+(scheduled, and underlined as none of the three counts), before any practice card. **The purse**
 (plan 26): in a break, "🌽 n" under the ✕ (`refreshPurse`), popping as right answers pay, with a soft glow behind it that lights at
 each payment and fades out (`glowPurse`, `TUNING.education.purseGlow`; plan 28, 1.2: never for a purse that stays or shrinks). Enter /
 Space press only the way forward (and End Review on "All caught up" when it is alone), never Quit,
@@ -512,15 +516,23 @@ their ring item, opens "Waiting in this quiz": `toggleBreakCounts`, `countLines`
 same way: a tap, Esc or P never continues the break under it, AUD-027), and on the card
 `5 + 2 + 8` on its bottom row, under its buttons, the card on show counted and its kind
 underlined (`refreshCounts`; no line in a test run); a tap on the card's numbers opens the same lines
-(`Quiz.toggleCountsCard`). **The gate** (`breakGated`): every level break of an education run
-(plan 26; before it, only a break into a level not yet unlocked) holds while the missed or review
-number is above 0: `resumePlay` keeps the break. The hint still reads "Tap to continue" (plan 26, A2:
+(`Quiz.toggleCountsCard`). **The gate** (`breakGated`, `gateHolds`): every level break of an education run
+(plan 26; before it, only a break into a level not yet unlocked) holds while any of its three numbers
+is above 0: `resumePlay` keeps the break. Since plan 28's Stage 3b **every break asks its cards**, within
+two limits (`Play.breakLimits`, passed to `pickCard` and `cardCounts` by `quizNext` and `quizCounts`
+for a break's own quiz): **new cards**, up to the N the player chose for a visit (settings
+`eduNewPerLevel`: 3, 5 or 'all', 5 by default; `breakNewAsked` counts the new cards asked or skipped),
+the level's other new cards waiting for the next visit; and **due cards** from any level, up to
+`education.duePerBreak` (10; `breakDueAsked` counts the stored ones asked or skipped), the most
+urgent first, the rest asked under Keep practicing. A card missed in the break (`breakMissed`) holds
+the gate whatever the limits, and its retry takes neither. `startLevelBreak` zeroes both counts. A
+revive and the bonus quiz keep no limit. The hint still reads "Tap to continue" (plan 26, A2:
 every break's, as Michael asked) but holds still while the gate holds, since a tap there only explains:
 a refused continue (a tap, Space, ↑, Esc, P, ⏸ or the pad) sets `gateTapped`, and the smaller line
 under it says "Tap 📚 to review all cards before continuing." until the gate opens or the break ends.
 `refreshGate` reads the gate into `breakGate` once per break event (`breakGated` reads the store, so
 never per frame); `refreshLevelBanner` and `refreshQuizButton` both call it, so the level choice never
-reads a gate from before the quiz closed (AUD-025). Review pulses. New cards stay optional. **Skip** (plan 26, A2; it replaced Bury and the
+reads a gate from before the quiz closed (AUD-025). Review pulses. **Skip** (plan 26, A2; it replaced Bury and the
 level Skip ▸): an open card in a break's quiz shows "Skip · n 🌽" in its right slot (`Quiz.offerSkip`;
 "Skip" alone and free in a test run, which saves nothing); after an answer that slot is Next Card. Every
 Skip costs `buryPrice()` (`education.buryCoinsPerLevel` × the level just cleared) and moves on
@@ -529,8 +541,9 @@ tomorrow (`eduStore.bury` until `skipUntil`: `buryMs`, 24 h, or the next local m
 so a skip in the first hour of a 25-hour day is not due again that date; AUD-029), leaves `breakMissed` and so
 the gate, and counts toward
 `buryPerDay` (3) a local day; a practice card's schedule is left as it was, but it joins the day's
-skipped ids (`eduStore.skipPractice`, uncounted; AUD-028), and a new card just moves on; neither has a
-daily limit.
+skipped ids (`eduStore.skipPractice`, uncounted; AUD-028), and a new card joins them too
+(`eduStore.skipNew`, uncounted; plan 28, Stage 3b), so no quiz offers it that day, and takes one of the
+break's N; neither has a daily limit. A stored due card's Skip takes one of the gate's `duePerBreak`.
 `skipBlocker` says what stops it ('none': not an education break, a match; 'cap'; 'coins'): a blocked
 Skip shows dimmed (`button.dim`) and a press says why in the verdict's place. The first paid Skip in a
 break warns there and holds Skip for `explainMinMs` (`Play.quizSkipWarned`, cleared when a break
@@ -538,14 +551,15 @@ starts); later ones skip at once. Skip ignores every press for `retryLockoutMs` 
 (`Quiz.cardShownAt`), since it sits where Next Card was, and Enter / Space never press it (`primary`
 does nothing on an open card). The day's skipped cards, due and practice, are kept by id (`buried.ids`;
 `buriedIdsOn`; `buried.n` counts only the due ones), and `pickCard`'s `skipped` leaves them out of
-practice that day. A skip is no answer: no tally, no pilot
+practice that day, and out of the new cards (`cardCounts` takes the same ids). A skip is no answer: no tally, no pilot
 event. A revive and the bonus quiz have none. **Quit**: Quit takes two taps and ends the run, graded as a normal end
-when nothing is due and something was answered; with cards due, or with nothing answered, it counts as
+when the gate is open and something was answered; while the gate holds (new cards included since plan
+28's Stage 3b, Michael's call), or with nothing answered, it counts as
 quitting the run (`breakGaveUp`: ungraded, and 🏳️ with nothing answered; plan 26, A2). It reads Quit
-either way; armed it reads "Quit? Tap again", or "Quit ungraded? Tap again" while cards are due
+either way; armed it reads "Quit? Tap again", or "Quit ungraded? Tap again" while the gate holds
 (`breakQuitDueSure`), and an armed Quit ends with its break (`startLevelBreak` and `endLevelBreak` clear
-`breakQuitArmedAt`; plan 27), so a level cleared within the confirm time never opens a break armed. **The level choice** (plan 26, A2: Michael's image 12): once nothing is missed or due
-(`breakGate`), never in a test run (or with test mode on) or a match, **[◀] LV n [▶]** shows on ⏸'s row, centred
+`breakQuitArmedAt`; plan 27), so a level cleared within the confirm time never opens a break armed. **The level choice** (plan 26, A2: Michael's image 12): once the gate is open
+(`breakGate`: nothing left that the break asks), never in a test run (or with test mode on) or a match, **[◀] LV n [▶]** shows on ⏸'s row, centred
 (`eduBreakLayout`'s `levelDown` / `levelLabel` / `levelUp`, `levelStrip` swallowing the tap; ring items `levelDown`,
 `levelUp`). ◀ ▶ cycle 1 … the higher of the next level and `unlockedLevel`, wrapping (`stepBreakLevel` →
 `nextEduStartLevel`; `breakLevelPick`, null for the next level). During the break only the preview follows it
@@ -811,7 +825,9 @@ src/
                             newPerDay (new cards a local day; null: held off, plan 28,
                             Stage 3b), buryCoinsPerLevel,
                             buryPerDay and buryMs (Skip's price, its daily cap for
-                            due cards, its least wait: skipUntil), boardMinRuns
+                            due cards, its least wait: skipUntil), duePerBreak (the
+                            stored due cards one break's gate asks; plan 28, Stage
+                            3b), boardMinRuns
                             (graded runs before the 📚 board lists a player),
                             revivePenaltyPerLevel. EDUCATION.enabled = the off switch
                             (plan 28); EDUCATION.words = the old unlock word (poopschool),
@@ -880,6 +896,8 @@ src/
                             bean button's side; eduStartLevel 1 … levels.lastLevel,
                             plan 25;
                             eduNewOrder after / mixed / before, plan 26;
+                            eduNewPerLevel 3 / 5 / 'all', EDU_NEW_PER_LEVEL, plan 28
+                            Stage 3b;
                             reviveGiveUpWarned is gone since plan 26's A2) +
                             howToPromptDue, vibrate helper, trayLayout, trayHit,
                             readyLayout (plan 25's ◀ level ▶ stepper boxes went to
@@ -2450,7 +2468,7 @@ tests/                      node --test (schema.test.js, pilot.test.js, eduBoard
                             record, the study record and the streak helpers (same
                             day, next day, a gap, the day before, month and year
                             ends; plan 27: a clock set ahead, the clock toggled);
-                            plan 27: skipPractice (AUD-028)
+                            plan 27: skipPractice (AUD-028); plan 28 Stage 3b: skipNew
   eduDays.test.js           Education's local days with TZ pinned to
                             America/Los_Angeles in its own process (plan 27):
                             skipUntil on the fall-back, spring and a normal day,

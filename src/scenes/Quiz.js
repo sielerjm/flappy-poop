@@ -351,7 +351,7 @@ export class Quiz extends Phaser.Scene {
       this.countsZone?.setVisible(false);
       return;
     }
-    const kind = this.card && ['new', 'missed', 'review'].includes(this.reason) ? this.reason : null;
+    const kind = this.card && !this.beyond && ['new', 'missed', 'review'].includes(this.reason) ? this.reason : null;
     this.counts.set(counts, kind).setVisible(true);
     this.countsZone?.setSize(Math.max(160, this.counts.width + 40), 48).setVisible(true);
   }
@@ -592,8 +592,9 @@ export class Quiz extends Phaser.Scene {
 
   /**
    * The next card from Play, or "All caught up" (a break) / a granted revive (no card left) when there
-   * is none. A break's or the bonus quiz stops at the first practice card too (plan 26): caught up,
-   * with Keep practicing, which asks practice cards from then on (this.practicing).
+   * is none. A break's or the bonus quiz stops at the first practice card too (plan 26), and a break's
+   * at the first due card past its gate (plan 28, Stage 3b: `beyond`): caught up, with Keep practicing,
+   * which asks those cards from then on (this.practicing).
    */
   nextCard() {
     const pick = this.play?.quizNext?.({ mode: this.mode, exclude: this.session }) ?? null;
@@ -601,13 +602,14 @@ export class Quiz extends Phaser.Scene {
       this.showCaughtUp();
       return;
     }
-    if (pick.reason === 'practice' && this.closable() && !this.practicing) {
-      this.showCaughtUp({ practice: true });
+    // A practice card, or a due card past a break's gate (plan 28, Stage 3b: beyond), waits for Keep practicing.
+    if ((pick.reason === 'practice' || pick.beyond) && this.closable() && !this.practicing) {
+      this.showCaughtUp({ practice: true, more: pick.beyond ? (this.play?.quizMoreDue?.({ exclude: this.session }) ?? 0) : 0 });
       return;
     }
     this.session.push(pick.card.id);
     if (this.session.length > 1) this.sample('book-flip', T.bookFlipVolume); // a page turned: every card after the first
-    this.showCard(pick.card, pick.order, pick.reason);
+    this.showCard(pick.card, pick.order, pick.reason, Boolean(pick.beyond));
   }
 
   /**
@@ -619,10 +621,11 @@ export class Quiz extends Phaser.Scene {
   }
 
   /** Lay a card out: header, question, the three options in `order`, everything below hidden until the answer. */
-  showCard(card, order, reason = 'new') {
+  showCard(card, order, reason = 'new', beyond = false) {
     this.card = card;
     this.order = order;
     this.reason = reason;
+    this.beyond = beyond; // a due card past a break's gate (plan 28, Stage 3b): none of the three counts
     this.answered = false;
     this.interrupted = Boolean(globalThis.document?.hidden);
     this.text = cardText(card, this.locale);
@@ -671,9 +674,10 @@ export class Quiz extends Phaser.Scene {
 
   /**
    * Nothing counted left to ask: a break or the bonus quiz says "All caught up" with End Review, and
-   * Keep practicing when practice cards are on offer (`practice`); a revive is granted (Fly on).
+   * Keep practicing when practice cards are on offer (`practice`); `more` due cards past a break's gate
+   * (plan 28, Stage 3b) are named instead (caughtUpText); a revive is granted (Fly on).
    */
-  showCaughtUp({ practice = false } = {}) {
+  showCaughtUp({ practice = false, more = 0 } = {}) {
     this.card = null;
     this.answered = true;
     const revive = this.mode === 'revive';
@@ -681,7 +685,7 @@ export class Quiz extends Phaser.Scene {
     this.header.setText(EDUCATION_EMOJI);
     this.setCardId('');
     this.refreshStatus();
-    this.question.setY(this.header.y + this.header.height + 22).setText(revive ? t(this.locale, 'reviveFree') : caughtUpText(this.locale, T.education.newPerDay)).setVisible(true);
+    this.question.setY(this.header.y + this.header.height + 22).setText(revive ? t(this.locale, 'reviveFree') : caughtUpText(this.locale, T.education.newPerDay, more)).setVisible(true);
     for (const o of this.options) {
       o.g.setVisible(false);
       o.text.setVisible(false);
@@ -765,7 +769,7 @@ export class Quiz extends Phaser.Scene {
     this.answered = true;
     const key = this.order[i];
     const rtMs = (globalThis.performance?.now?.() ?? Date.now()) - this.shownAt;
-    const res = this.play?.quizAnswer?.({ card: this.card, reason: this.reason, order: this.order, chosen: key, rtMs, interrupted: this.interrupted, mode: this.mode, input }) ?? { correct: key === 'answer' };
+    const res = this.play?.quizAnswer?.({ card: this.card, reason: this.reason, beyond: Boolean(this.beyond), order: this.order, chosen: key, rtMs, interrupted: this.interrupted, mode: this.mode, input }) ?? { correct: key === 'answer' };
     this.lastAnswer = { id: this.card.id, chosen: key, correct: res.correct, coins: res.coins ?? 0, paidToday: Boolean(res.paidToday), dueAt: res.dueAt ?? null, rtMs, interrupted: this.interrupted }; // the smoke reads it
     this.refreshTally();
     this.refreshPurse();

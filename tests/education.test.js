@@ -818,6 +818,22 @@ test('createEduStore.bury (plan 25): the card waits until the time given, nothin
   assert.equal(localDayKey(new Date(2026, 0, 5, 23, 59)), '2026-01-05', 'the local day, not UTC');
 });
 
+test("createEduStore.skipNew (plan 28, Stage 3b): a new card's Skip keeps its id among the day's skipped ids, counted nowhere, so no quiz offers it that day; a seen card is not its business", () => {
+  const m = new Map();
+  const st = { getItem: (k) => m.get(k) ?? null, setItem: (k, v) => m.set(k, v), removeItem: (k) => m.delete(k) };
+  const store = createEduStore(st);
+  store.answer('ST-02', { ...missedRec(NOW), state: 'review' });
+  assert.equal(store.skipNew('ST-01', '2026-11-14'), true);
+  assert.deepEqual([store.load().buried, store.buriedOn('2026-11-14'), store.load().cards['ST-01']], [{ day: '2026-11-14', n: 0, ids: ['ST-01'] }, 0, undefined], 'kept by id, counted nowhere, still no record');
+  assert.equal(store.skipNew('ST-01', '2026-11-14'), true, 'twice: kept once');
+  assert.deepEqual(createEduStore(st).load().buried.ids, ['ST-01']);
+  assert.equal(store.skipNew('ST-02', '2026-11-14'), false, 'a seen card goes through skipPractice or bury, not here');
+  store.bury('ST-02', NOW + DAY, '2026-11-14');
+  assert.deepEqual(store.load().buried, { day: '2026-11-14', n: 1, ids: ['ST-01', 'ST-02'] }, 'a due Skip after it counts from 0');
+  store.skipNew('ST-03', '2026-11-15');
+  assert.deepEqual(store.load().buried, { day: '2026-11-15', n: 0, ids: ['ST-03'] }, 'a new day starts the record over');
+});
+
 test("createEduStore.skipPractice (AUD-028): a practice card's Skip keeps it among the day's skipped ids, out of practice that day; it never counts toward the day's cap or moves the card's schedule; an unseen card is not kept", async () => {
   const { buriedIdsOn } = await import('../src/education.js');
   const m = new Map();

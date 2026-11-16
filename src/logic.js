@@ -439,10 +439,13 @@ export const HANDS = ['left', 'right'];
 // eduInvited: this device's player was invited to share (plan 28, 2.4: a flag for the panel, never the code);
 // eduStartLevel: the level the ready screen's stepper starts an education run at (plan 25; Play clamps it
 // to the levels unlocked); eduNewOrder: where a quiz puts new cards, 'after' / 'mixed' / 'before' the due
-// ones (plan 26; education.js NEW_ORDERS). (reviveGiveUpWarned, plan 26's "warned once on this device",
+// ones (plan 26; education.js NEW_ORDERS); eduNewPerLevel: the new cards a level break asks a visit, 3, 5
+// or 'all' (plan 28, Stage 3b; EDU_NEW_PER_LEVEL). (reviveGiveUpWarned, plan 26's "warned once on this device",
 // is gone since plan 26's A2: a revive's Quit warns on every card. A stored value is ignored.)
-const SETTINGS_DEFAULTS = { sound: true, music: true, haptics: true, locale: DEFAULT_LOCALE, howToSeenAt: '', hand: 'right', education: false, eduInvited: false, eduStartLevel: 1, eduNewOrder: 'after' };
+const SETTINGS_DEFAULTS = { sound: true, music: true, haptics: true, locale: DEFAULT_LOCALE, howToSeenAt: '', hand: 'right', education: false, eduInvited: false, eduStartLevel: 1, eduNewOrder: 'after', eduNewPerLevel: 5 };
 const EDU_NEW_ORDERS = ['after', 'mixed', 'before']; // education.js NEW_ORDERS (logic.js does not import education.js)
+/** The 📚 popup's choices for new cards a level break asks a visit (plan 28, Stage 3b): a number, or 'all'. */
+export const EDU_NEW_PER_LEVEL = [3, 5, 'all'];
 
 /**
  * The locale the player chose, or null when the settings hold none (a first visit, broken JSON, a
@@ -475,6 +478,7 @@ function normalizeSettings(raw) {
   out.hand = HANDS.includes(raw.hand) ? raw.hand : SETTINGS_DEFAULTS.hand;
   out.eduStartLevel = Number.isInteger(raw.eduStartLevel) && raw.eduStartLevel >= 1 && raw.eduStartLevel <= TUNING.levels.lastLevel ? raw.eduStartLevel : 1; // AUD-033: not a copy of the 7
   out.eduNewOrder = EDU_NEW_ORDERS.includes(raw.eduNewOrder) ? raw.eduNewOrder : SETTINGS_DEFAULTS.eduNewOrder;
+  out.eduNewPerLevel = EDU_NEW_PER_LEVEL.includes(raw.eduNewPerLevel) ? raw.eduNewPerLevel : SETTINGS_DEFAULTS.eduNewPerLevel;
   return out;
 }
 

@@ -727,6 +727,16 @@ export function createEduStore(storage, { key = LEADERBOARD.eduKey, t = TUNING }
   const box = createJsonStore(storage, key, (raw) => cleanEdu(raw, keep, t));
   const read = box.read;
   const write = box.write;
+  /**
+   * Card `id` joins local `day`'s skipped ids, counted nowhere (a practice card's Skip, AUD-028; a new
+   * card's, plan 28, Stage 3b): only when its record is there (`seen`) or not, as the caller expects; else false.
+   */
+  const skipForDay = (id, day, seen) => {
+    const state = read();
+    if (Boolean(state.cards[id]) !== seen) return false;
+    if (!buriedIdsOn(state.buried, day).includes(id)) write({ ...state, buried: withSkip(state.buried, id, day, false) });
+    return true;
+  };
   return {
     load: read,
     /**
@@ -770,10 +780,15 @@ export function createEduStore(storage, { key = LEADERBOARD.eduKey, t = TUNING }
      * schedule is left alone. An unseen (new) card has nothing to keep: false.
      */
     skipPractice(id, day) {
-      const state = read();
-      if (!state.cards[id]) return false;
-      if (!buriedIdsOn(state.buried, day).includes(id)) write({ ...state, buried: withSkip(state.buried, id, day, false) });
-      return true;
+      return skipForDay(id, day, true);
+    },
+    /**
+     * A new card's Skip (plan 28, Stage 3b): unseen card `id` joins local `day`'s skipped ids, so no
+     * quiz offers it that day (pickCard's and cardCounts' `skipped`); counted nowhere. A seen card is
+     * skipPractice's or bury's: false.
+     */
+    skipNew(id, day) {
+      return skipForDay(id, day, false);
     },
     /** A revive just happened (👼 / 🐦‍🔥): counted at once, so a closed tab loses none. */
     addRevive() {

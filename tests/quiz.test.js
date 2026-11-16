@@ -154,6 +154,30 @@ test('a break or the bonus quiz stops at the first practice card: caught up, wit
   assert.deepEqual(none.calls, ['caught'], 'nothing at all: caught up, End Review alone');
 });
 
+test("a break's quiz stops before a due card past the gate (plan 28, Stage 3b: beyond), as before practice: caught up, saying how many more are due, with Keep practicing, which then asks them as due cards; the count line underlines nothing for them", () => {
+  const calls = [];
+  const q = quizScene({
+    mode: 'break', session: [], practicing: false, card: null, finishing: false, scene: scenes(['Play', 'Quiz']), runCard: { open: false },
+    play: { quizNext: () => ({ card: { id: 'DU-01' }, reason: 'review', beyond: true, order: ['answer', 'w1', 'w2'] }), quizMoreDue: () => 3 },
+    showCaughtUp: (o) => calls.push(`caught${o?.practice ? '+practice' : ''}:${o?.more ?? 0}`),
+    showCard: (c, order, reason, beyond) => calls.push(`${c.id}:${reason}${beyond ? ':beyond' : ''}`),
+    sample() {},
+  });
+  q.nextCard();
+  assert.deepEqual(calls, ['caught+practice:3'], 'caught up: three more due, Keep practicing on offer');
+  q.keepPracticing();
+  assert.deepEqual(calls, ['caught+practice:3', 'DU-01:review:beyond'], 'then the due card, as a review (scheduled as one)');
+  const answered = [];
+  const chosen = quizScene({ card: { id: 'DU-01' }, order: ['answer', 'w1', 'w2'], reason: 'review', beyond: true, answered: false, finishing: false, mode: 'break', scene: scenes(['Play', 'Quiz']), runCard: { open: false }, shownAt: 0, interrupted: false,
+    play: { quizAnswer: (a) => (answered.push(a), { correct: false }) }, refreshTally() {}, refreshPurse() {}, reveal() {} });
+  chosen.choose(1, 'tap');
+  assert.equal(answered[0]?.beyond, true, 'its answer tells Play it was past the gate (optional: a miss does not hold the gate)');
+  const line = { counts: null, kind: 'x', set(c, k) { this.counts = c; this.kind = k; return this; }, setVisible() { return this; }, width: 100 };
+  const shown = quizScene({ card: { id: 'DU-01' }, reason: 'review', beyond: true, session: ['DU-01'], mode: 'break', counts: line, countsZone: null, play: { quizCounts: () => ({ new: 0, missed: 0, review: 0 }) } });
+  shown.refreshCounts();
+  assert.equal(line.kind, null, 'past the gate it is none of the three counts');
+});
+
 test('the purse under the ✕ (plan 26): a break shows the coins held and pops when they grow; a revive or the bonus quiz shows none', () => {
   const text = { x: 600, width: 20, text: '', visible: false, scale: 1, setText(v) { this.text = v; return this; }, setVisible(v) { this.visible = v; return this; }, setScale(v) { this.scale = v; return this; }, setX(v) { this.x = v; return this; } };
   const coin = { x: 0, visible: false, setX(v) { this.x = v; return this; }, setVisible(v) { this.visible = v; return this; } };

@@ -215,7 +215,12 @@ test('caughtUpText (plan 28, Stage 3b): with the daily cap held off (null) the c
     assert.equal(caughtUpText(locale, Infinity), t(locale, 'quizCaughtUp'), `${locale}: Infinity is no cap either`);
     assert.equal(caughtUpText(locale, 20), t(locale, 'quizCaughtUpPerDay').replace('{n}', '20'), locale);
     assert.ok(!t(locale, 'quizCaughtUp').includes('{n}') && t(locale, 'quizCaughtUpPerDay').includes('{n}'), locale);
+    // Due cards past the gate's limit (plan 28, Stage 3b): the line says how many wait for Keep practicing.
+    assert.equal(caughtUpText(locale, null, 1), t(locale, 'quizCaughtUpMoreOne').replace('{n}', '1'), `${locale}: one more`);
+    assert.equal(caughtUpText(locale, 20, 4), t(locale, 'quizCaughtUpMore').replace('{n}', '4'), `${locale}: four more, whatever the cap`);
+    assert.equal(caughtUpText(locale, null, 0), t(locale, 'quizCaughtUp'), `${locale}: none more`);
   }
+  assert.match(t('en', 'quizCaughtUpMore'), /Keep practicing/);
 });
 
 test('nextWaitText: again soon under a minute; then minutes, hours, days, months, years, rounded, a unit that rounds up moving to the next; both locales (plan 26; "Next review:" since its A2, as Michael asked)', () => {

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { createSettingsStore, vibrate } from '../src/logic.js';
 import { initialLocale } from '../src/i18n.js';
 
-const DEFAULTS = { sound: true, music: true, haptics: true, locale: 'en', howToSeenAt: '', hand: 'right', education: false, eduInvited: false, eduStartLevel: 1, eduNewOrder: 'after' };
+const DEFAULTS = { sound: true, music: true, haptics: true, locale: 'en', howToSeenAt: '', hand: 'right', education: false, eduInvited: false, eduStartLevel: 1, eduNewOrder: 'after', eduNewPerLevel: 5 };
 
 function fakeStorage() {
   const m = new Map();
@@ -205,6 +205,20 @@ test("eduNewOrder (plan 26): where a quiz puts new cards is kept as one of educa
     assert.equal(createSettingsStore(st, 'k').load().eduNewOrder, order, `${order} read back after a reload`);
   }
   for (const bad of ['random', '', null, 3, 'AFTER']) assert.equal(s.set({ eduNewOrder: bad }).eduNewOrder, 'after', `${bad} reads as after`);
+});
+
+test("eduNewPerLevel (plan 28, Stage 3b): the new cards a level break asks a visit, 3, 5 or 'all'; 5 by default; anything else reads as 5", async () => {
+  const { EDU_NEW_PER_LEVEL } = await import('../src/logic.js');
+  assert.deepEqual(EDU_NEW_PER_LEVEL, [3, 5, 'all']);
+  const m = new Map();
+  const st = { getItem: (k) => m.get(k) ?? null, setItem: (k, v) => m.set(k, v), removeItem: (k) => m.delete(k) };
+  const s = createSettingsStore(st, 'k');
+  assert.equal(s.load().eduNewPerLevel, 5, '5 by default');
+  for (const n of EDU_NEW_PER_LEVEL) {
+    assert.equal(s.set({ eduNewPerLevel: n }).eduNewPerLevel, n);
+    assert.equal(createSettingsStore(st, 'k').load().eduNewPerLevel, n, `${n} read back after a reload`);
+  }
+  for (const bad of [0, 4, '5', 'ALL', null, -3, Infinity]) assert.equal(s.set({ eduNewPerLevel: bad }).eduNewPerLevel, 5, `${String(bad)} reads as 5`);
 });
 
 test("reviveGiveUpWarned is gone (plan 26, A2: a revive's Quit warns on every card): a stored value is ignored and never written back", () => {

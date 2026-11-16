@@ -188,6 +188,8 @@ Inspired by Flappy Bird`,
     eduCardsDue: 'The number on 📚 = # of cards to review',
     quizCaughtUp: "You're all caught up! New cards come with the next level, and old ones come back when they are due.",
     quizCaughtUpPerDay: "You're all caught up! New cards come with the next level, up to {n} a day, and old ones come back when they are due.",
+    quizCaughtUpMoreOne: "That's all this break asks! {n} more card is due: Keep practicing asks it now, or it waits for the next break.",
+    quizCaughtUpMore: "That's all this break asks! {n} more cards are due: Keep practicing asks them now, or they wait for the next break.",
     quizGeneral: 'Gut microbes',
     quizSource: 'Source: {source}',
     quizLearnMore: '📄 Learn more 🔗',
@@ -739,6 +741,8 @@ Inspired by Flappy Bird`,
     eduCardsDue: '📚 上的数字 = 待复习的卡片数',
     quizCaughtUp: '全部完成！下一关会有新卡片，旧卡片到期后会再出现。',
     quizCaughtUpPerDay: '全部完成！下一关会有新卡片（每天最多 {n} 张），旧卡片到期后会再出现。',
+    quizCaughtUpMoreOne: '这次休息的卡片答完了！还有 {n} 张到期的卡片：点“继续练习”现在回答，或者留到下次休息。',
+    quizCaughtUpMore: '这次休息的卡片答完了！还有 {n} 张到期的卡片：点“继续练习”现在回答，或者留到下次休息。',
     quizGeneral: '肠道微生物',
     quizSource: '来源：{source}',
     quizLearnMore: '📄 了解更多 🔗',
@@ -1209,8 +1213,11 @@ export function tallyLines(locale, tally, levels) {
 /**
  * The quiz's caught-up line (plan 28, Stage 3b): with the daily new-card cap held off (`cap` null or not
  * finite: TUNING.education.newPerDay) it names no number; a cap turned back on says how many a day.
+ * `more`: due cards past a break's gate (education.duePerBreak), which Keep practicing asks: the line
+ * says how many instead.
  */
-export function caughtUpText(locale, cap) {
+export function caughtUpText(locale, cap, more = 0) {
+  if (more > 0) return t(locale, more === 1 ? 'quizCaughtUpMoreOne' : 'quizCaughtUpMore').replace('{n}', String(more));
   return Number.isFinite(cap) ? t(locale, 'quizCaughtUpPerDay').replace('{n}', String(cap)) : t(locale, 'quizCaughtUp');
 }
 
