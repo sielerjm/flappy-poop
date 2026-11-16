@@ -350,7 +350,11 @@ export function openEduIntroPanel(options) {
   render();
 }
 
-export function closeEduIntroPanel() {
+/**
+ * Close the popup. `notify` false (Play's shutdown, a restart: AUD-063): Play is not told, since the scene
+ * being shut down has destroyed its texts already and a redraw of its 📚 count would throw.
+ */
+export function closeEduIntroPanel({ notify = true } = {}) {
   if (!dom || dom.root.hidden) return;
   dom.root.hidden = true;
   if (document.activeElement && dom.root.contains(document.activeElement)) document.activeElement.blur();
@@ -358,7 +362,7 @@ export function closeEduIntroPanel() {
   const play = ctx?.play;
   ctx = null;
   padId = null;
-  play?.onEduIntroClosed?.();
+  if (notify) play?.onEduIntroClosed?.();
 }
 
 export function isEduIntroPanelOpen() {

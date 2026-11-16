@@ -138,3 +138,16 @@ test('the help line names education.duePerBreak, or every due card while it is n
     T.education.duePerBreak = due;
   }
 });
+
+test('AUD-063: a restart closes the popup without calling back into the scene it belongs to (closeEduIntroPanel({ notify: false })); a close by the player still tells Play', () => {
+  const play = open();
+  let told = 0;
+  play.onEduIntroClosed = () => (told += 1);
+  closeEduIntroPanel({ notify: false });
+  assert.equal(told, 0, 'the shutting-down scene is not called: its texts are already destroyed');
+  assert.equal(el('edu-intro-panel').hidden, true, 'the popup is closed all the same');
+  const again = open();
+  again.onEduIntroClosed = () => (told += 1);
+  closeEduIntroPanel();
+  assert.equal(told, 1, 'a close by the player redraws the ready screen\'s 📚 count');
+});

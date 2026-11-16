@@ -715,7 +715,9 @@ export class Play extends Phaser.Scene {
     this.events.once('shutdown', () => {
       if (typeof document !== 'undefined') document.removeEventListener('visibilitychange', this.onHidden);
       this.game.events.off('blur', this.onBlur);
-      if (!this.match) closeEduIntroPanel(); // the 📚 popup belongs to this scene's ready screen (a restart takes it down)
+      // The 📚 popup belongs to this scene's ready screen (a restart takes it down), closed without a call back
+      // into this scene: its texts are destroyed by now, and redrawing a changed 📚 count would throw (AUD-063).
+      if (!this.match) closeEduIntroPanel({ notify: false });
       this.pad?.destroy();
       this.pad = null;
       this.focus?.destroy();
@@ -2292,7 +2294,8 @@ export class Play extends Phaser.Scene {
 
   /** The 📚 switch's due count: shown with the switch, and only when a card is due. */
   refreshEduDue() {
-    if (!this.eduDueText) return;
+    // A text its scene destroyed (a late call after a restart: AUD-063) has no scene; redrawing it would throw.
+    if (!this.eduDueText?.scene) return;
     const n = dueCount(this.eduStore.load().cards);
     this.eduDueText.setText(n > 0 ? String(n) : '');
     this.eduDueText.setVisible(this.readyUiShown && n > 0);

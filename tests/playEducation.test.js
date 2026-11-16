@@ -210,6 +210,18 @@ test("the 📚 glyph opens \"Your cards\" (plan 26, A2: Michael asked; the popup
   assert.equal(handlers.pointerup.size + handlers.pointerupoutside.size, 0);
 });
 
+test('AUD-063: the ready screen\'s 📚 count is not redrawn on a text its scene has destroyed (a late call after a restart)', () => {
+  const store = createEduStore(fakeStorage());
+  store.answer(CARDS[0].id, schedule(null, 'again', Date.now() - 60000));
+  const dead = { scene: undefined, setText() { throw new TypeError("Cannot read properties of null (reading 'drawImage')"); }, setVisible() { throw new Error('destroyed'); } };
+  const s = playScene({ eduStore: store, eduDueText: dead, readyUiShown: true });
+  assert.doesNotThrow(() => s.refreshEduDue());
+  const live = { scene: {}, text: '', visible: false, setText(v) { this.text = v; return this; }, setVisible(v) { this.visible = v; return this; } };
+  s.eduDueText = live;
+  s.refreshEduDue();
+  assert.deepEqual([live.text, live.visible], ['1', true], 'a live text still shows the count');
+});
+
 test("quizCounts and quizNext agree on today's skipped ids (plan 28, Stage 3b): a new card among them is neither counted nor asked, in a break or a revive", () => {
   const storage = fakeStorage();
   const own = CARDS.filter((c) => !c.retired && c.deck === 'stomach');

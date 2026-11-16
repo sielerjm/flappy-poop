@@ -4142,6 +4142,25 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await sleep(600);
         const s5 = await switches();
         ok(!s4.available && s4.edu === null && !s4.eduToggle && s5.available && s5.edu === 886 && s5.eduToggle && !s5.on, `EDUCATION.enabled false hides the 📚 switch for everyone (box ${s4.edu}); true brings it back, off (box ${s5.edu})`);
+        // AUD-063 (audit 2026-11-16): a restart of Play with the 📚 popup open closes it without calling back into
+        // the scene being shut down (whose texts are already destroyed): the new ready screen comes up whole (its
+        // state, the poop's body, the 📚 count).
+        await tap('education');
+        await home();
+        await sleep(600);
+        // A card due, so the ready screen's 📚 count reads 1; the popup open; then the cards change (cleared) and
+        // Play restarts: closing the popup must not redraw the old count (Phaser redraws only a changed text).
+        await evaluate(`Promise.all([import('./src/education.js'), import('./src/questions.js')]).then(([e, q]) => { localStorage.setItem('flappyPoop.eduSrs', JSON.stringify({ v: 2, cards: { [q.CARDS[0].id]: e.schedule(null, 'again', Date.now() - 60000) }, recent: [], counters: {}, badges: {} })); ${play}.refreshEduDue(); return true; })`);
+        const dueBefore = await evaluate(`${play}.eduDueText.text`);
+        await evaluate(`${play}.openEduIntro(), true`);
+        const openBefore = await introShown() && dueBefore === '1';
+        await evaluate(`localStorage.removeItem('flappyPoop.eduSrs'), ${play}.scene.restart(), true`);
+        for (let i = 0; i < 40 && (await playState()) !== 'ready'; i += 1) await sleep(250);
+        await sleep(600);
+        const after = await evaluate(`(() => { const p = ${play}; return JSON.stringify({ state: p.state, body: Boolean(p.poop?.body), due: Boolean(p.eduDueText?.active), popup: !(document.getElementById('edu-intro-panel')?.hidden ?? true) }); })()`).then(JSON.parse);
+        ok(openBefore && after.state === 'ready' && after.body && after.due && !after.popup, `Play restarted with the 📚 popup open: the popup closes and the new ready screen is whole (${JSON.stringify(after)})`);
+        await tap('education');
+        await home();
       }
     });
 
@@ -4610,6 +4629,30 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await evaluate(`${Q}.leftBtn.press(), true`); // Return
         await sleep(300);
         ok(!(await evaluate(`${play}.breakGated()`)), 'with the missed card skipped and the review answered, the gate opens');
+        // Past the gate (plan 28, Stage 3b; audit 2026-11-16, AUD-061): with more due cards than a break asks,
+        // the real quiz stops after duePerBreak of them ("That's all this break asks! 1 more card is due…"), the
+        // gate open; Keep practicing asks the last one as a due card past the gate (no count underlined), and a
+        // miss of it does not close the gate again.
+        await sleep(400);
+        const pastSet = await evaluate(
+          `Promise.all([import('./src/education.js'), import('./src/questions.js')]).then(([e, q]) => { const now = Date.now(); const cards = {}; q.CARDS.filter((c) => !c.retired && e.breakDeckOf(c) === 'stomach').forEach((c) => { cards[c.id] = e.schedule(null, 'easy', now - 86400000); }); const due = q.CARDS.filter((c) => !c.retired && (c.deck === 'duodenum' || c.deck === 'jejunum')).slice(0, ${TT.education.duePerBreak} + 1); due.forEach((c, i) => { cards[c.id] = e.schedule(null, 'easy', now - (30 + i) * 86400000); }); localStorage.setItem('flappyPoop.eduSrs', JSON.stringify({ v: 2, cards, recent: [], counters: {}, badges: {}, unlockedLevel: 2 })); const p = ${play}; p.breakNewAsked = 0; p.breakDueAsked = 0; p.breakMissed = []; p.refreshLevelBanner(); p.refreshShopButton(); return JSON.stringify({ due: due.length, counts: p.quizCounts({ mode: 'break' }), more: p.quizMoreDue(), gated: p.breakGated() }); })`,
+        ).then(JSON.parse);
+        ok(pastSet.gated && pastSet.counts.new === 0 && pastSet.counts.review === TT.education.duePerBreak && pastSet.more === 1, `${pastSet.due} reviews due and nothing new: the gate holds for ${pastSet.counts.review} of them, one waits past it`);
+        await reopen();
+        for (let i = 0; i < TT.education.duePerBreak; i += 1) await answerRight();
+        const past0 = await evaluate(`JSON.stringify({ card: ${Q}.card?.id ?? null, question: ${Q}.question.text, right: ${Q}.rightBtn.shown ? ${Q}.rightBtn.text.text : null, gated: ${play}.breakGated(), asked: ${play}.breakDueAsked })`).then(JSON.parse);
+        const [moreWant, keepLabel] = await Promise.all([evaluate(`import('./src/i18n.js').then((m) => m.caughtUpText('en', null, 1))`), tx('quizKeepPracticing')]);
+        ok(past0.card === null && past0.question === moreWant && past0.right === keepLabel && !past0.gated && past0.asked === TT.education.duePerBreak, `after ${past0.asked} due cards the real quiz stops: "${past0.question}" with ${past0.right}, the gate open`);
+        await evaluate(`${Q}.rightBtn.press(), true`); // Keep practicing
+        await sleep(300);
+        const past1 = await evaluate(`JSON.stringify({ card: ${Q}.card?.id ?? null, reason: ${Q}.reason, beyond: Boolean(${Q}.beyond), underlined: ${Q}.counts.underlined ?? null })`).then(JSON.parse);
+        await evaluate(`(() => { const q = ${Q}; q.choose(q.order.findIndex((k) => k !== 'answer')); return true; })()`); // a miss
+        await sleep(200);
+        const past2 = await evaluate(`JSON.stringify({ missed: ${play}.breakMissed.length, gated: ${play}.breakGated(), state: ${play}.eduStore.load().cards[${JSON.stringify(past1.card)}]?.state ?? null })`).then(JSON.parse);
+        ok(past1.card && past1.reason === 'review' && past1.beyond && past1.underlined === null && past2.state === 'missed' && past2.missed === 0 && !past2.gated, `Keep practicing asks the one past the gate (${past1.card}, a review, no count underlined); missed, it is scheduled as missed but the gate stays open`);
+        await sleep(TT.education.explainMinMs + 200);
+        await evaluate(`${Q}.leftBtn.press(), true`); // End Review
+        await sleep(300);
         // The pill is back, and the shop sells at level 2's prices (eduShopPrices), not the base ones.
         await sleep(400);
         const shop = await evaluate(`Promise.all([import('./src/education.js'), import('./src/i18n.js')]).then(([e, i]) => { const p = ${play}; const pillBack = p.quizButton.visible; p.handleChrome('shop'); const want = e.eduShopPrices(2); const shown = Object.fromEntries(Object.entries(p.shop.rows).map(([id, r]) => [id, r.price.text])); const label = Object.fromEntries(Object.keys(want).map((id) => [id, i.countText(want[id])])); p.closeShop(); return JSON.stringify({ pillBack, shown, label, want, base: p.shopPrices === undefined ? null : JSON.stringify(p.shopPrices()) === JSON.stringify(want) }); })`).then(JSON.parse);
