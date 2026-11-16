@@ -8,7 +8,7 @@ A Flappy Bird–style game for phone browsers: flap a poop through the gut, dodg
 
 **Play now → [sielerjm.github.io/flappy-poop](https://sielerjm.github.io/flappy-poop/)**
 
-Works best on your phone — add it to your home screen for a full-screen, app-like launch. On a desktop or landscape window the gut widens to fill the screen. English and Simplified Chinese in-game. Version **0.20.1 beta**.
+Works best on your phone — add it to your home screen for a full-screen, app-like launch. On a desktop or landscape window the gut widens to fill the screen. English and Simplified Chinese in-game. Version **0.21.0 beta**.
 
 Tip: on iPhone, turn **Silent mode off** to hear sound.
 
@@ -246,10 +246,10 @@ A learning mode for everyone, in beta: turn on 📚 on the home screen, and quiz
 
 - **New, Missed, Review.** A card you have never seen is **new**. Answer it right and it comes back in 2 days; answer it wrong and it is **missed** (red), and it comes back until you get it right. A card whose wait is over is due for **review**. The three numbers under 📚 Review count each.
 - **The wait grows as you remember.** Cards are scheduled by [FSRS-6](https://github.com/open-spaced-repetition), the free spaced-repetition scheduler Anki uses, with its default weights: a card comes back when the chance that you still remember it has fallen to 90 %, at most a year later. After each answer the card says when it comes back ("Next review: in 2 days").
-- **New cards: 20 a day.** The 📚 popup sets whether they come before, mixed with, or after the cards that are due.
-- **A level break waits for due cards.** While missed or due cards are left, the break holds until they are answered right. **Skip** a card for corn (a skipped due card waits until the next day at least), or **Quit** the run, which asks twice.
-- **Practice.** Caught up, **Keep practicing** asks cards that are not due yet. A right answer there leaves the card's schedule as it was; a wrong one makes it missed. A skipped practice card stays out until the next day.
-- **Corn.** Each card pays corn for its first right answer of the day, practice included. A wrong answer costs nothing.
+- **Every level break asks its cards.** A break asks new cards about the part of the gut you just flew through, 5 by default (3, 5 or All: the 📚 popup's **New cards per level**), and up to 10 cards due for review, from any level, the most urgent first. It holds until they are answered; a card you miss comes back until you get it right. The rest of a level's new cards come at its next break. The 📚 popup also sets whether new cards come before, mixed with, or after the cards that are due.
+- **Skip or Quit.** **Skip** a card for corn: it waits until the next day (due cards at most 3 a day). **Quit** asks twice, and while the break still has cards to ask, the run ends ungraded.
+- **Practice.** Caught up, **Keep practicing** asks the cards that are due past the break's 10, then cards that are not due yet. A right answer to a card not due yet leaves its schedule as it was; a wrong one makes it missed. A skipped practice card stays out until the next day.
+- **Corn.** Each card pays corn for its first right answer of the day: 3 for a new card, 2 for a card due for review, 1 for practice or a card you missed. A wrong answer costs nothing.
 
 ![Finish line](docs/finish-divider.svg)
 

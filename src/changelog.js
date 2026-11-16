@@ -8,6 +8,22 @@ import { LOCALES } from './i18n.js';
 
 export const CHANGELOG = [
   {
+    version: '0.21.0',
+    date: '16 Nov 2026',
+    notes: {
+      en: [
+        'Every level break now asks its 📚 cards: new cards about the part of the gut you just flew through (5 by default: choose 3, 5 or All in the 📚 popup) and up to 10 cards due for review, the most urgent first. The 20-new-cards-a-day limit is gone.',
+        'Corn by the kind of card, once per card a day: 3 for a new card, 2 for a card due for review, 1 for practice or a card you missed.',
+        'Skip a new card and it waits until tomorrow. More cards due than a break asks? Keep practicing asks them.',
+      ],
+      'zh-Hans': [
+        '现在每次关卡休息都会问这一关的 📚 卡片：你刚飞过的那段肠道的新卡片（默认 5 张；在 📚 弹窗里可选 3、5 或全部），以及最多 10 张到期要复习的卡片，最紧急的先问。每天 20 张新卡片的上限取消了。',
+        '按卡片类型给玉米粒，每张卡片每天一次：新卡片 3 粒，到期复习的卡片 2 粒，练习或答错过的卡片 1 粒。',
+        '跳过的新卡片会等到明天。到期的卡片比这次休息问的多？点“继续练习”就会问它们。',
+      ],
+    },
+  },
+  {
     version: '0.20.1',
     date: '16 Nov 2026',
     notes: {

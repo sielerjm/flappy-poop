@@ -1003,11 +1003,13 @@ src/
                             missed, unlockLevel / unlockedLevel, bury / buriedOn
                             (plan 26 A2: buried keeps the day's ids, buriedIdsOn,
                             pickCard's skipped; skipPractice adds a practice card's
-                            uncounted, AUD-028),
+                            uncounted, AUD-028; skipNew a new card's, plan 28
+                            Stage 3b),
                             localDayKey, skipUntil (a due Skip's wait; AUD-029);
                             plan 26: NEW_ORDERS and pickCard's order,
                             newAllowance and localDayStart (the daily new-card cap,
-                            which cardCounts' new respects too);
+                            which cardCounts' new respects too; held off since plan
+                            28, Stage 3b: Infinity while newPerDay is null);
                             createEduStore (LEADERBOARD.eduKey = flappyPoop.eduSrs:
                             each card's record and the last cards shown, and (plan
                             22) the education counters and badges: addRevive,
