@@ -28,6 +28,7 @@ import {
   levelBarLayout,
   tutorialSpawn,
   levelColor,
+  chromeShown,
   lerpColor,
   hudRightLayout,
   fieldWidth,
@@ -480,7 +481,8 @@ export class Play extends Phaser.Scene {
         .setVisible(this.isHowToPromptDue());
       this.howToHaloTween = this.tweens.add({ targets: this.howToHalo, alpha: T.readyPromptMaxAlpha, yoyo: true, repeat: -1, duration: T.readyPromptPulseMs });
     }
-    this.howToBtn = createButton(this, this.readyBoxes.howto, '?', { ...TEXT_STYLE, fontSize: '52px', color: '#f8a0c8' });
+    // Depth 30, as the tray: it also shows in a pause and a level break (plan 28, 4.3), above their shade (25).
+    this.howToBtn = createButton(this, this.readyBoxes.howto, '?', { ...TEXT_STYLE, fontSize: '52px', color: '#f8a0c8' }, { depth: 30 });
     this.howToBtn.pulse(this.isHowToPromptDue()); // breathes with its halo until this build's How to play is seen
     // 🌞 at the top centre opens the Daily Dump popup. Until this player has used today's attempt
     // it breathes (dailyPulseScale) under the same soft white halo as the ?.
@@ -612,6 +614,8 @@ export class Play extends Phaser.Scene {
 
     // The tray and the controller ring belong to the chrome owner: single player, or P1 in a match (P2 has neither).
     this.tray = !this.match || this.player === 1 ? createTray(this, { muted: isMuted(), col: this.col }) : null;
+    this.chromeSeen = null; // a new tray: the next syncChrome places it (plan 28, 4.3)
+    this.helpShown = false;
     // Controller focus ring over the tray, in screen order; A on a ringed button runs the
     // same handleChrome(id) its tap runs. Shown by a d-pad press (onPadAction), never by touch.
     // Ready-screen extras after the tray (so the first ring lands on ⓘ): the toilet toggle and the
@@ -621,7 +625,8 @@ export class Play extends Phaser.Scene {
     this.focus = this.tray
       ? createFocus(this, T, {
           items: [
-            ...['info', 'lang', 'feedback', 'leaderboard', 'mute', 'settings', 'pause'].map((id) => ({ id, obj: this.tray.buttons[id], activate: () => this.handleChrome(id) })),
+            // The bottom row only while it is in (plan 28, 4.3: chromeShown); ⏸ always.
+            ...['info', 'lang', 'feedback', 'leaderboard', 'mute', 'settings', 'pause'].map((id) => ({ id, obj: this.tray.buttons[id], ...(id === 'pause' ? {} : { visible: () => this.tray.rowShown(), rect: () => this.tray.restBounds(id) }), activate: () => this.handleChrome(id) })),
             { id: 'toilet', box: this.switchBoxes.toilet, visible: onReady, activate: () => this.toggleToilet() },
             // 👥 and 📚 always have an item; it shows only while its switch is offered (refreshReadySwitches).
             { id: 'versus', box: this.switchBoxes.versus, visible: () => onReady() && Boolean(this.readyBoxes.versus), activate: () => this.toggleVersus() },
@@ -629,7 +634,7 @@ export class Play extends Phaser.Scene {
             // The 📚 glyph (and its gold count): "Your cards" (toggleEduCard; plan 26, A2).
             { id: 'educationInfo', box: this.switchBoxes.educationInfo, visible: () => onReady() && Boolean(this.readyBoxes.educationInfo), activate: () => this.toggleEduCard() },
             { id: 'daily', box: this.readyBoxes.daily, visible: onReady, activate: () => this.handleChrome('daily') },
-            { id: 'howto', box: this.readyBoxes.howto, visible: onReady, activate: () => this.handleChrome('howto') },
+            { id: 'howto', box: this.readyBoxes.howto, visible: () => onReady() || (this.helpShown && this.state === 'paused'), activate: () => this.handleChrome('howto') },
             // The level break: the 💰 pill, then (the shop open) its ✕ and rows down the column.
             { id: 'shop', box: this.shopButtonBox, depth: 27, visible: () => this.shopButtonShown(), activate: () => this.handleChrome('shop') },
             ...(this.bracketButtonBox ? [{ id: 'bracket', box: this.bracketButtonBox, depth: 27, visible: () => this.bracketButtonShown(), activate: () => this.openBracketPeek() }] : []),
@@ -1347,6 +1352,9 @@ export class Play extends Phaser.Scene {
 
   flap(pointer) {
     unlock();
+    // The chrome as of now, not as of the last frame: a tap right after a resume must not find the tray's
+    // row still up (plan 28, 4.3; the row is down once the run flies again).
+    this.syncChrome();
     // "Your cards" is up (the ready screen's 📚): a tap only closes it, on its release (the card's
     // dim), and a key or the pad's A closes it here. Nothing under it is pressed and no run starts.
     if (this.eduCard?.open) {
@@ -1369,7 +1377,9 @@ export class Play extends Phaser.Scene {
     }
     if (this.state === 'dead' && !this.match) return; // a finished match half keeps its tray and lifts a shared pause (chromeState)
     if (pointer) {
-      const id = this.tray ? trayHit(pointer.x, pointer.y, trayLayout(this.col.width, GAME_HEIGHT, T, this.col.x)) : null;
+      // While the bottom row is down (plan 28, 4.3), a tap where it was flaps; ⏸ still pauses.
+      const hit = this.tray ? trayHit(pointer.x, pointer.y, trayLayout(this.col.width, GAME_HEIGHT, T, this.col.x)) : null;
+      const id = hit === 'pause' || this.tray?.rowShown() ? hit : null;
       if (id) {
         this.handleChrome(id);
         return;
@@ -1406,6 +1416,14 @@ export class Play extends Phaser.Scene {
           return;
         }
         // 'start' or empty space both start the run below.
+      }
+    }
+    // The "?" in a pause or a level break (plan 28, 4.3): How to play, not a continue tap.
+    if (pointer && this.helpShown && this.state === 'paused' && !this.shopOpen) {
+      const b = this.readyBoxes?.howto;
+      if (b && Math.abs(pointer.x - b.x) <= b.width / 2 && Math.abs(pointer.y - b.y) <= b.height / 2) {
+        this.handleChrome('howto');
+        return;
       }
     }
     // The level-break shop. Open: the ✕ closes it, a row buys (a greyed row refuses, the tap is
@@ -2427,6 +2445,25 @@ export class Play extends Phaser.Scene {
   }
 
   /**
+   * The chrome by state (plan 28, 4.3: chromeShown), every frame, acting only on a change: the tray's bottom
+   * row slides in or out (the first call places it), and the "?" shows in a pause or a level break, with no
+   * glow there (on the home screen setReadyUiVisible keeps it, with its glow while this build's How to play is unseen).
+   */
+  syncChrome() {
+    const shown = chromeShown({ state: this.chromeState(), launching: Boolean(this.launching), quizOpen: Boolean(this.quizOpen), shopOpen: Boolean(this.shopOpen), match: this.match?.status ?? null });
+    const key = `${shown.tray}|${shown.help}|${this.state}`;
+    if (key === this.chromeSeen) return;
+    const first = this.chromeSeen == null;
+    this.chromeSeen = key;
+    this.tray?.setRowShown(shown.tray, { animate: !first });
+    this.helpShown = shown.help;
+    if (this.state === 'ready' && !this.launching) return; // the home screen's own "?" (setReadyUiVisible)
+    this.howToHalo?.setVisible(false);
+    this.howToBtn?.pulse(false);
+    this.howToBtn?.setVisible(shown.help);
+  }
+
+  /**
    * The state chrome decisions (chromeIntent, padIntent) read. In a match it is the match's,
    * not this half's: a finished half (waiting for the other) or a respawning one still pauses
    * and resumes the match from its tray, keys and pad; its own level break reads 'paused', where
@@ -2624,6 +2661,8 @@ export class Play extends Phaser.Scene {
    * run and lands the ring on ⏸, otherwise walks the top scene's ring.
    */
   onPadAction(action, padIndex = 0) {
+    // The chrome as of now (plan 28, 4.3), as in flap: a pad press right after a pause must find the tray's row up.
+    this.syncChrome();
     const { top, scene } = this.padTop();
     // "Your cards" up on the ready screen: any press takes it down and does nothing else.
     if (top === 'play' && this.eduCard?.open) {
@@ -2714,6 +2753,7 @@ export class Play extends Phaser.Scene {
   }
 
   padNav(dir, padIndex = 0) {
+    this.syncChrome(); // the ring walks the chrome as of now (plan 28, 4.3)
     this.pad?.padNav(dir, padIndex);
   }
 
@@ -2811,6 +2851,7 @@ export class Play extends Phaser.Scene {
     this.pauseEffects();
     this.bob.pause();
     this.setPauseBanner(true);
+    this.syncChrome(); // the tray's row and the "?" at once, not at the next frame (plan 28, 4.3)
   }
 
   /** Freeze the run's timers, tweens, clip and box spin (pausePlay; grantTest while paused). Safe to repeat. */
@@ -2865,6 +2906,7 @@ export class Play extends Phaser.Scene {
       this.resumeEffects();
       this.bob.resume();
       this.setPauseBanner(false);
+      this.syncChrome(); // plan 28, 4.3: the row down at once
       return;
     }
     if (this.levelBreak) this.endLevelBreak();
@@ -2874,6 +2916,7 @@ export class Play extends Phaser.Scene {
     this.resumeEffects();
     this.bob.resume();
     this.setPauseBanner(false);
+    this.syncChrome(); // plan 28, 4.3: the row down at once
     // Recovery bounce on the resume tap: half a flap (resumeFlapScale), so the poop neither drops
     // into the pipe below nor flies into the one above. Not during a fart (fartFloat owns y).
     // Do not set flapLockedUntil: chrome already maps that tap to resume, not flap; a lockout
@@ -5196,6 +5239,7 @@ export class Play extends Phaser.Scene {
   }
 
   update(_time, delta) {
+    this.syncChrome();
     // A resize that arrived while a run / overlay was up: re-fit as soon as the ready screen is clear.
     if (this.fieldResizeWanted && !this.match && this.canRefitField()) {
       this.fieldResizeWanted = false;

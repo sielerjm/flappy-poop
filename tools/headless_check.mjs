@@ -837,6 +837,25 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
       await evaluate(`__flappy.scene.getScene('Play').flap(), true`);
       await sleep(1000);
       ok((await playState()) === 'playing' && (await evaluate(`__flappy.scene.getScene('Play').scoreText.visible && !__flappy.scene.getScene('Play').howToHalo.visible`)) === true, 'tap on the ready screen starts a run; the score appears and the ? is gone');
+      // Plan 28, 4.3 (chromeShown): while flying the tray's bottom row is down (⏸ stays) and the "?" is hidden; a
+      // pause brings both back, and the "?" (its home-screen box) opens How to play from the pause, not a resume.
+      {
+        const chromeNow = () => evaluate(`(() => { const p = __flappy.scene.getScene('Play'); return JSON.stringify({ state: p.state, row: p.tray.rowShown(), help: Boolean(p.helpShown) }); })()`).then(JSON.parse);
+        const flying = await chromeNow();
+        await chrome('pause');
+        await sleep(400);
+        const paused = await chromeNow();
+        await evaluate(`(() => { const p = __flappy.scene.getScene('Play'); const b = p.readyBoxes.howto; p.flap({ x: b.x, y: b.y }); return true; })()`);
+        await sleep(600);
+        const howTo = await active('HowTo');
+        if (howTo) await closeTop('HowTo');
+        await sleep(400);
+        const after = await chromeNow();
+        await evaluate(`__flappy.scene.getScene('Play').resumePlay(), true`);
+        await sleep(300);
+        ok(flying.state === 'playing' && !flying.row && !flying.help && paused.state === 'paused' && paused.row && paused.help && howTo && after.state === 'paused' && (await playState()) === 'playing',
+          `the tray's row and the "?" by state: flying both hidden (${JSON.stringify(flying)}), a pause shows both (${JSON.stringify(paused)}), a tap on the "?" opens How to play and the run stays paused; resumed it flies again`);
+      }
       await chrome('leaderboard');
       await sleep(3000);
       ok((await playState()) === 'paused' && (await active('Leaderboard')), 'leaderboard mid-run pauses the run');
@@ -1692,14 +1711,16 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         const r1 = await ring();
         ok(r0.state === 'playing' && !r0.shown && r1.state === 'paused' && r1.shown && r1.visible && r1.index === (await slot('pause')), `a d-pad press mid-run pauses and rings ⏸ (slot ${r1.index})`);
         ok(r1.fillUnder === true, 'the ring\'s white fill sits under the ringed button (same depth, earlier in the display list), so the button draws over it');
-        await padNav('right');
-        const r2 = await ring();
-        await padNav('left');
-        const r3 = await ring();
+        // Plan 28, 4.3: in a pause the "?" shows, so it is on the ring too. Up from ⏸ reaches it, down from it
+        // comes back to ⏸, and right from ⏸ (nothing to its right) walks on in the ring's order to the "?".
         await padNav('up');
-        const r4 = await ring();
-        ok(r2.index === 0 && r3.index === (await slot('pause')) && r4.index === (await slot('settings')) && r4.state === 'paused', `right from ⏸ wraps to the first slot (${r2.index}), left from ⓘ wraps back to ⏸ (${r3.index}), up from ⏸ with nothing above (the ready items are hidden mid-run) falls back to the list (${r4.index}), still paused`);
+        const r2 = await ring();
         await padNav('down');
+        const r3 = await ring();
+        await padNav('right');
+        const r4 = await ring();
+        await evaluate(`${play}.focus.setIndex(${play}.focus.indexOf('pause')), true`); // back on ⏸ for the A below
+        ok(r2.index === (await slot('howto')) && r3.index === (await slot('pause')) && r4.index === (await slot('howto')) && r4.state === 'paused', `in a pause the ring reaches the "?": up from ⏸ (${r2.index}), down back to ⏸ (${r3.index}), right from ⏸ on to the "?" (${r4.index}); still paused`);
         await padDown(G.select);
         await sleep(100);
         const r5 = await ring();
@@ -6270,6 +6291,19 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await sleep(330);
         await tapAt(200, 640);
       }
+      // Plan 28, 4.3: while flying the tray's bottom row is down, so a tap where 🏆 and ⚙ sit flaps (a real press,
+      // counted below) and opens nothing.
+      const rowSpots = await evaluate(`Promise.all([import('./src/logic.js'), import('./src/config.js')]).then(([l, c]) => { const p = ${P}; const L = l.trayLayout(p.col.width, c.GAME_HEIGHT, c.TUNING, p.col.x); return JSON.stringify(L.buttons.filter((b) => b.id === 'leaderboard' || b.id === 'settings').map((b) => [b.x, b.y])); })`).then(JSON.parse);
+      const rowDown = await evaluate(`${P}.tray?.rowShown() === false`);
+      let rowTaps = 0;
+      for (const [x, y] of rowSpots) {
+        if ((await playState()) !== 'playing') break;
+        await sleep(330);
+        await tapAt(x, y);
+        rowTaps += 1;
+      }
+      const rowOpened = await evaluate(`['Leaderboard', 'Settings'].filter((k) => __flappy.scene.isActive(k))`);
+      ok(rowDown && rowTaps === 2 && rowOpened.length === 0 && (await playState()) === 'playing', `while flying the tray's row is down: a tap where 🏆 and ⚙ sit flaps and opens nothing (${rowTaps} taps; opened: ${JSON.stringify(rowOpened)})`);
       await finish();
       const a = await lastRow();
       const da = a?.row?.data;

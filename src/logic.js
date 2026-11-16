@@ -1617,9 +1617,12 @@ export function readyLayout(width, height, t, x0 = 0, { versus = false, educatio
   if (switches.education) switches.educationInfo = { id: 'educationInfo', x: cx + 84, y: switches.education.y, width: 112, height: switches.education.height };
   // (Plan 25's start stepper, once in this row, is in the 📚 popup since plan 26: ui/eduIntroPanel.js.)
   // "?" button: a boxH circle in the top-right corner, inset so its pulsing halo
-  // (readyPromptGlowPx past the rim) stays inside the field.
+  // (readyPromptGlowPx past the rim) stays inside the field, and low enough to clear the progress
+  // bar by readyTopRowGapPx: it also shows in a pause and a level break (plan 28, 4.3; Michael, 16 Nov).
   const haloR = boxH / 2 + (t.readyPromptGlowPx ?? 0);
-  const howto = { id: 'howto', x: x0 + width - 16 - haloR, y: 16 + haloR, width: boxH, height: boxH, round: true };
+  const bar = levelBarLayout(t, width, x0);
+  const belowBar = bar.y + bar.height / 2 + (t.readyTopRowGapPx ?? 0) + boxH / 2;
+  const howto = { id: 'howto', x: x0 + width - 16 - haloR, y: Math.max(16 + haloR, belowBar), width: boxH, height: boxH, round: true };
   // 🌞 Daily Dump: the same round button at the top centre, on the ? row (its halo clears the ?'s).
   const daily = { id: 'daily', x: cx, y: howto.y, width: boxH, height: boxH, round: true };
   // The user button, its bottom at 1111: above the ground strip (1152) and the tray band (1168).
@@ -1816,6 +1819,23 @@ export function overlayOutsideHit(x, y, panel) {
   const hw = panel.width / 2;
   const hh = panel.height / 2;
   return Math.abs(x - panel.x) > hw || Math.abs(y - panel.y) > hh;
+}
+
+/**
+ * Which chrome shows (plan 28, 4.3; Michael, 16 Nov at 4.R). The bottom tray row (🏆 🔊 ⚙ ⓘ 🌐 💬) shows on the
+ * home screen, in a pause, in a level break and at game over, and slides off while flying (the launch, a respawn,
+ * a match's countdown and its race included); ⏸ and the bean button are not part of it and stay. The "?" (How to
+ * play) keeps its home-screen place and shows on the home screen, in a pause and in a level break, never under a
+ * quiz or the level break's open shop and never at game over; in a two-player match it stays off, as today. In a match the chrome follows the
+ * match (Play.chromeState): a finished half waits with it hidden while the other still flies.
+ * @param {{ state: string, launching?: boolean, quizOpen?: boolean, shopOpen?: boolean, match?: string | null }} s state:
+ *   the chrome state (Play.chromeState); match: the match's status, or null for one player.
+ * @returns {{ tray: boolean, help: boolean }}
+ */
+export function chromeShown({ state, launching = false, quizOpen = false, shopOpen = false, match = null }) {
+  if (match === 'countdown') return { tray: false, help: false };
+  const home = state === 'ready' && !launching;
+  return { tray: home || state === 'paused' || state === 'dead', help: !match && !quizOpen && !shopOpen && (home || state === 'paused') };
 }
 
 /**

@@ -12,7 +12,9 @@ const DEPTH = 1000; // above everything else in the owning scene
  * with getBounds() (a tray circle, a Text link, a zone; a Zone has no art of its
  * own, so it gets the outline only), box a centred layout rect { x, y, width,
  * height } for chrome drawn by createButton (the fill then sits just under
- * createButton's depth, item.depth, default 20), visible() an
+ * createButton's depth, item.depth, default 20), rect() an optional resting
+ * place that wins over obj's live bounds for walking and drawing (a tray button
+ * mid-slide: plan 28, 4.3), visible() an
  * optional gate (Over's Share before its card exists), and activate() the
  * exact function that button's tap already runs. Nothing on the buttons
  * themselves changes.
@@ -83,7 +85,7 @@ export function createFocus(scene, t, { items = [], scrolled = null, onVertical 
     if (item.scrolled && scrolled?.scrollTo) scrolled.scrollTo(b.y, b.y + b.height);
   }
 
-  const bounds = (item) => (item.obj ? item.obj.getBounds() : { x: item.box.x - item.box.width / 2, y: item.box.y - item.box.height / 2, width: item.box.width, height: item.box.height });
+  const bounds = (item) => (item.rect ? item.rect() : item.obj ? item.obj.getBounds() : { x: item.box.x - item.box.width / 2, y: item.box.y - item.box.height / 2, width: item.box.width, height: item.box.height });
   const visible = (item) => {
     if (!item || !(item.obj || item.box)) return false;
     if (item.visible && !item.visible()) return false;

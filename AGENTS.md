@@ -1278,6 +1278,9 @@ src/
                             Play binds (P1 in a match; P2 never).
   ui/
     focus.js                createFocus(scene, t, { items, scrolled, onVertical }):
+                            (an item's optional rect() is its resting place, walked
+                            and drawn in place of obj's live bounds: a tray button
+                            mid-slide, plan 28, 4.3)
                             the controller focus ring, a pulsing pink rounded
                             outline (Graphics, depth 1000) around one item of a
                             scene over a faint white fill (focus.fillAlpha) that
@@ -1327,7 +1330,21 @@ src/
                             cog, plus bottom-left info, language (🌐), feedback (💬).
                             Chrome taps use trayHit() in Play/Over, not GameObject
                             pointer handlers. Returns buttons (id → circle) for the
-                            focus ring.
+                            focus ring, and setRowShown / rowShown (plan 28, 4.3): the
+                            bottom row slides down off the field (trayRowSlideMs) and
+                            back; ⏸ stays; restBounds(id) gives a button's resting
+                            rect (the ring's rect()). Play.syncChrome drives it every
+                            frame, on pausePlay / resumePlay and before each tap, pad
+                            action and ring move (frames may lag), by logic.js's
+                            chromeShown: the
+                            row on the home screen, in a pause, in a level break and
+                            at game over, down while flying (the launch, a respawn, a
+                            match's countdown and race); a tap where it was flaps.
+                            The ready screen's ? keeps its box (readyLayout.howto,
+                            with the 🌞 on its row, below the progress bar by
+                            readyTopRowGapPx) and also shows in a pause and a level
+                            break (depth 30, above the shade), never under a quiz or
+                            at game over, never in a match. Over's tray slides in.
     shareCard.js            The share image, NO Phaser: drawShareCard(ctx, layout,
                             data, images) paints the 1080x1350 card with Canvas 2D
                             (dark fill, pink frame, GAME OVER or the gold win line,
@@ -2379,6 +2396,9 @@ tests/                      node --test (schema.test.js, pilot.test.js, eduBoard
                             nextTestLevel wrap, TEST_POWERS, settingsLayout geometry
                             (incl. the hand row)
   hitbox.test.js            scaledCircleBody source radius/offset for 2x and 4x
+  chromeShown.test.js       which chrome shows (plan 28, 4.3): chromeShown for one
+                            player and a match, the ? / 🌞 row clear of the progress
+                            bar, Play.syncChrome acting once per change
   chrome.test.js            chromeIntent matrix across state x overlay x input
                             (incl. the Changelog over About, 'respawn' pausing like
                             'playing' and ignoring taps, the shop's open / close rows)

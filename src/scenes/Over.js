@@ -132,6 +132,9 @@ export class Over extends Phaser.Scene {
     this.tweens.add({ targets: this.homeHalo, alpha: { from: T.readyPromptMinAlpha, to: T.readyPromptMaxAlpha }, delay: T.retryLockoutMs, yoyo: true, repeat: -1, duration: T.readyPromptPulseMs });
     this.tweens.add({ targets: panel, scale: { from: 0.8, to: 1 }, duration: T.over.panelInMs, ease: 'Back.easeOut' });
     this.tray = createTray(this, { muted: isMuted(), col: this.col });
+    // Game over brings the tray back: it slides in, as Play's does (plan 28, 4.3).
+    this.tray.setRowShown(false, { animate: false });
+    this.tray.setRowShown(true);
 
     // The summary band (plan 22; overBandLayout): the cells and the lines under them, between the
     // score line and the buttons, on a scroll view (a second camera clipped to the band, as the

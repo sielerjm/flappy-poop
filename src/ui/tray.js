@@ -23,6 +23,8 @@ export function createTray(scene, { muted, col }) {
   const { buttons, pause, info, lang, feedback } = trayLayout(col.width, GAME_HEIGHT, T, col.x);
   const nodes = [];
   const byId = {}; // id → circle, for the controller focus ring (ui/focus.js)
+  const row = []; // the bottom row's circles and labels with their resting y (every button but ⏸): plan 28, 4.3
+  let rowShown = true;
   let muteLabel;
 
   for (const b of [...buttons, pause, info, lang, feedback]) {
@@ -53,10 +55,32 @@ export function createTray(scene, { muted, col }) {
       label.setAlpha(T.trayAlpha);
     });
     nodes.push(circle, label);
+    if (b.id !== 'pause') row.push({ circle, label, y: b.y, drop: GAME_HEIGHT - b.y + b.size });
   }
 
   return {
     buttons: byId,
+    /** Slide the bottom row in (shown) or down off the field; ⏸ stays (plan 28, 4.3: chromeShown). */
+    setRowShown(shown, { animate = true } = {}) {
+      if (Boolean(shown) === rowShown) return; // already there: no tween restarted
+      rowShown = Boolean(shown);
+      for (const r of row) {
+        const y = rowShown ? r.y : r.y + r.drop;
+        const alpha = rowShown ? T.trayAlpha : 0;
+        scene.tweens.killTweensOf([r.circle, r.label]);
+        if (animate) scene.tweens.add({ targets: [r.circle, r.label], y, alpha, duration: T.trayRowSlideMs, ease: 'Sine.easeOut' });
+        else for (const o of [r.circle, r.label]) o.setY(y).setAlpha(alpha);
+      }
+    },
+    /** A button's resting rect, where it sits once in (the controller ring walks and draws there, even mid-slide). */
+    restBounds(id) {
+      const b = [...buttons, pause, info, lang, feedback].find((x) => x.id === id);
+      return b ? { x: b.x - b.size / 2, y: b.y - b.size / 2, width: b.size, height: b.size } : null;
+    },
+    /** Whether the bottom row is in (its buttons take taps and the ring). */
+    rowShown() {
+      return rowShown;
+    },
     setMuted(isMuted) {
       if (muteLabel) muteLabel.setText(isMuted ? LABELS.muteOn : LABELS.muteOff);
     },

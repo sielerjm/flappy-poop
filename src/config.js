@@ -56,6 +56,8 @@ export const TUNING = {
   pauseResumeLockoutMs: 300, // ms after resume during which a tap must not flap
   readyButtonRadius: 24, // px corner radius of ready-screen buttons
   readyButtonAlpha: 0.55, // 0–1 fill alpha of ready-screen buttons
+  readyTopRowGapPx: 16, // px between the progress bar's bottom and the ready screen's ? / 🌞 row: the ? shows in a pause too (plan 28, 4.3; Michael, 16 Nov)
+  trayRowSlideMs: 180, // ms the tray's bottom row takes to slide in or out (plan 28, 4.3: chromeShown)
   readyPromptGlowPx: 40, // px the "Load user" halo reaches past the button edge (fades to 0 there)
   readyPromptPulseMs: 900, // ms per halo pulse (one way)
   readyPromptMinAlpha: 0.45, // 0–1 halo pulse floor
