@@ -220,3 +220,21 @@ test('Show / Hide (plan 28, 4.2): a reopen keeps each section as it was left; th
   assert.ok(ringPath().some((id) => /^edu-intro-(order|per)-/.test(id ?? '')), 'shown, its buttons are on the ring again');
   closeEduIntroPanel();
 });
+
+test('the summary lines (plan 34, Michael): under "How it works" and "Your choices" one line always shows, outside the part Show / Hide folds; both languages', async () => {
+  for (const locale of ['en', 'zh-Hans']) {
+    for (const [hideHow, hideChoices] of [[true, true], [false, false]]) {
+      open({ locale, hideHow, hideChoices });
+      const how = el('edu-intro-how-summary');
+      const choices = el('edu-intro-choices-summary');
+      assert.ok(how && choices, `${locale}: both summaries`);
+      assert.deepEqual([text(how), text(choices)], [t(locale, 'eduIntroHowSummary'), t(locale, 'eduIntroChoicesSummary')]);
+      assert.deepEqual([how.hidden, choices.hidden], [false, false], `${locale}, hidden ${hideHow}: the summaries show`);
+      assert.ok(!inside(el('edu-intro-how'), how) && !inside(el('edu-intro-choices'), choices), `${locale}: outside the folded parts`);
+      assert.deepEqual([el('edu-intro-how').hidden, el('edu-intro-choices').hidden], [hideHow, hideChoices]);
+      closeEduIntroPanel();
+    }
+  }
+  assert.equal(t('en', 'eduIntroHowSummary'), 'Answer cards at each level break and to come back from a crash. Right answers at a break earn 🌽 corn kernels.');
+  assert.equal(t('en', 'eduIntroChoicesSummary'), 'Choose where you start and how new cards come up.');
+});

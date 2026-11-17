@@ -3889,6 +3889,11 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         const play = `__flappy.scene.getScene('Play')`;
         const tx = (key) => evaluate(`import('./src/i18n.js').then((m) => m.t('en', '${key}'))`);
         const [word] = await evaluate(`import('./src/config.js').then((m) => m.EDUCATION.words)`);
+        // The 📚 popup's sections start folded on a new device (plan 34: eduShowHow / eduShowChoices false; the
+        // Show / Hide check below starts from that). This section presses buttons inside "Your choices" and
+        // walks the controller's ring through them, so it opens both first.
+        const freshShow = await evaluate(`JSON.stringify([${play}.settings.load().eduShowHow, ${play}.settings.load().eduShowChoices])`).then(JSON.parse);
+        await evaluate(`${play}.settings.set({ eduShowHow: true, eduShowChoices: true }), true`);
         const metrics = (width, height) => cdp.send('Emulation.setDeviceMetricsOverride', { width, height, deviceScaleFactor: 1, mobile: false });
         const FIELD_DEBOUNCE = await evaluate(`import('./src/config.js').then((m) => m.FIELD.resizeDebounceMs)`);
         const settle = async (w) => {
@@ -4401,29 +4406,33 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
           let reopened = null;
           let stored = null;
           let again = null;
+          let summaries = null;
           try {
+            await evaluate(`${play}.settings.set({ eduShowHow: true, eduShowChoices: true }), true`);
             await openIntro();
             shown = await sections();
             await press('edu-intro-how-toggle');
             await press('edu-intro-choices-toggle');
             hidden = await sections();
+            summaries = await evaluate(`(() => { const g = (id) => document.getElementById(id); const seen = (e) => Boolean(e) && !e.closest('[hidden]'); return JSON.stringify([seen(g('edu-intro-how-summary')), seen(g('edu-intro-choices-summary'))]); })()`).then(JSON.parse);
             await closeIntro();
             await openIntro();
             reopened = await sections();
-            stored = await evaluate(`JSON.stringify([${play}.settings.load().eduHideHow, ${play}.settings.load().eduHideChoices])`).then(JSON.parse);
+            stored = await evaluate(`JSON.stringify([${play}.settings.load().eduShowHow, ${play}.settings.load().eduShowChoices])`).then(JSON.parse);
             await press('edu-intro-how-toggle');
             await press('edu-intro-choices-toggle');
             again = await sections();
             await closeIntro();
           } finally {
             // Whatever happened above, the sections after this one find the popup's sections shown.
-            await evaluate(`import('./src/ui/eduIntroPanel.js').then((m) => (m.closeEduIntroPanel(), ${play}.settings.set({ eduHideHow: false, eduHideChoices: false }), true))`);
+            await evaluate(`import('./src/ui/eduIntroPanel.js').then((m) => (m.closeEduIntroPanel(), ${play}.settings.set({ eduShowHow: true, eduShowChoices: true }), true))`);
           }
           const words = (hide) => (hide ? `${hideW} ▴ ${hideHint}` : `${showW} ▾ ${showHint}`);
           ok(
-            !shown.how && !shown.choices && shown.howWords === words(true) && hidden.how && hidden.choices && hidden.howWords === words(false) && hidden.device && reopened.how && reopened.choices && stored[0] === true && stored[1] === true && !again.how && !again.choices,
-            `Show / Hide: a press hides "How it works" and "Your choices" ("${hidden.howWords}"), the device line stays; a reopen keeps both hidden (stored ${JSON.stringify(stored)}); a press shows each again ("${shown.howWords}")`,
+            !shown.how && !shown.choices && shown.howWords === words(true) && hidden.how && hidden.choices && hidden.howWords === words(false) && hidden.device && reopened.how && reopened.choices && stored[0] === false && stored[1] === false && !again.how && !again.choices,
+            `Show / Hide: a press hides "How it works" and "Your choices" ("${hidden.howWords}"), the device line stays; a reopen keeps both hidden (eduShowHow / eduShowChoices ${JSON.stringify(stored)}); a press shows each again ("${shown.howWords}")`,
           );
+          ok(freshShow[0] === false && freshShow[1] === false && summaries?.every(Boolean), `plan 34: a new device starts with both sections folded (eduShowHow / eduShowChoices ${JSON.stringify(freshShow)}), and each section's summary line shows while it is folded (${JSON.stringify(summaries)})`);
         }
         await tap('education');
         await home();

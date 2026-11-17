@@ -1327,18 +1327,18 @@ test("the device's invitation flag (plan 28, 2.4): a share that is ok sets it, o
 });
 
 
-test("the 📚 popup's Show / Hide (plan 28, 4.2): eduIntroInfo passes both choices; setEduIntroHidden stores one section's at a time, on this device", () => {
+test("the 📚 popup's Show / Hide (plan 28, 4.2; plan 34: hidden by default): eduIntroInfo passes both choices; setEduIntroHidden stores one section's at a time, on this device (settings eduShowHow / eduShowChoices)", () => {
   const settings = createSettingsStore(fakeStorage(), T.settingsKey);
   const s = playScene({ eduStore: createEduStore(fakeStorage()), settings, eduAvailable: true, match: null, isTestMode: () => false, educationOffered: () => true });
-  assert.deepEqual([s.eduIntroInfo().hideHow, s.eduIntroInfo().hideChoices], [false, false], 'both shown by default');
-  s.setEduIntroHidden('how', true);
-  assert.deepEqual([settings.load().eduHideHow, settings.load().eduHideChoices, s.eduIntroInfo().hideHow], [true, false, true], 'How it works only');
-  s.setEduIntroHidden('choices', true);
-  assert.deepEqual([settings.load().eduHideChoices, s.eduIntroInfo().hideChoices], [true, true], 'Your choices too');
+  assert.deepEqual([s.eduIntroInfo().hideHow, s.eduIntroInfo().hideChoices], [true, true], 'both hidden by default (each has its summary line)');
   s.setEduIntroHidden('how', false);
-  assert.deepEqual([settings.load().eduHideHow, settings.load().eduHideChoices], [false, true], 'How it works shown again; Your choices stays hidden');
-  s.setEduIntroHidden('cards', false);
-  assert.deepEqual([settings.load().eduHideHow, settings.load().eduHideChoices], [false, true], 'another name changes nothing');
+  assert.deepEqual([settings.load().eduShowHow, settings.load().eduShowChoices, s.eduIntroInfo().hideHow], [true, false, false], 'How it works shown only');
+  s.setEduIntroHidden('choices', false);
+  assert.deepEqual([settings.load().eduShowChoices, s.eduIntroInfo().hideChoices], [true, false], 'Your choices too');
+  s.setEduIntroHidden('how', true);
+  assert.deepEqual([settings.load().eduShowHow, settings.load().eduShowChoices], [false, true], 'How it works hidden again; Your choices stays shown');
+  s.setEduIntroHidden('cards', true);
+  assert.deepEqual([settings.load().eduShowHow, settings.load().eduShowChoices], [false, true], 'another name changes nothing');
 });
 
 test("plan 28, 5.1: every one-player break's banner sits at the education break's height (eduBreakLayout's titleY), over the poop at mid-height; a match half's where it was", () => {

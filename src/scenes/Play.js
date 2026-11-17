@@ -2305,8 +2305,8 @@ export class Play extends Phaser.Scene {
       startLevel: this.eduStartLevel(),
       order: settings.eduNewOrder,
       perLevel: settings.eduNewPerLevel, // new cards a level break asks a visit (plan 28, Stage 3b)
-      hideHow: settings.eduHideHow, // "How it works" hidden (plan 28, 4.2)
-      hideChoices: settings.eduHideChoices, // "Your choices" hidden
+      hideHow: !settings.eduShowHow, // "How it works" folded (plan 28, 4.2; folded unless shown since plan 34)
+      hideChoices: !settings.eduShowChoices, // "Your choices" folded
       newPerDay: T.education.newPerDay,
       testMode: this.isTestMode(), // the start-level row is hidden: a test run starts at its own level (plan 26, A2)
     };
@@ -2322,10 +2322,10 @@ export class Play extends Phaser.Scene {
     this.settings.set({ eduNewPerLevel: n });
   }
 
-  /** The 📚 popup's Show / Hide (plan 28, 4.2): `section` 'how' or 'choices', remembered on this device (settings eduHideHow, eduHideChoices; not in the backup). */
+  /** The 📚 popup's Show / Hide (plan 28, 4.2): `section` 'how' or 'choices', remembered on this device (settings eduShowHow, eduShowChoices since plan 34, folded by default; not in the backup). */
   setEduIntroHidden(section, hidden) {
-    const key = { how: 'eduHideHow', choices: 'eduHideChoices' }[section];
-    if (key) this.settings.set({ [key]: Boolean(hidden) }); // another name is ignored
+    const key = { how: 'eduShowHow', choices: 'eduShowChoices' }[section];
+    if (key) this.settings.set({ [key]: !hidden }); // another name is ignored
   }
 
   /**

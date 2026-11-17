@@ -51,6 +51,7 @@ ${panelFrameCss(PANEL_ID, { width: 440 })}
 #${PANEL_ID} .order button { flex: 1; padding: 10px 6px; font-size: 14px; color: #f8a0c8; background: transparent; border: 2px solid #5a2a44; }
 #${PANEL_ID} .order button[aria-pressed='true'] { color: #1a0b14; background: #f8a0c8; border-color: #f8a0c8; }
 #${PANEL_ID} p.hint { color: #ffffff; }
+#${PANEL_ID} p.summary { margin: 0 0 8px; color: #ffffff; }
 #${PANEL_ID} .actions { position: sticky; bottom: 0; display: flex; gap: 10px; margin: 14px 0 0; padding: 10px 0 16px; background: #1a0b14; }
 #${PANEL_ID} .actions button { flex: 1; padding: 12px 14px; font-size: 17px; }
 #${PANEL_ID} .close { position: absolute; top: 8px; right: 8px; width: 40px; height: 40px; padding: 0; font-size: 22px;
@@ -237,11 +238,14 @@ function render() {
     h('p', { class: 'beta' }, tr('eduIntroBeta')),
     h('p', { class: 'note', id: 'edu-intro-not-medical' }, tr('eduIntroNotMedical')),
     h('h3', {}, tr('eduIntroHowTitle')),
+    // One line that always shows, the section's gist; Show reveals the rest (plan 34, Michael).
+    h('p', { class: 'summary', id: 'edu-intro-how-summary' }, tr('eduIntroHowSummary')),
     toggle('how', 'edu-intro-how', Boolean(info.hideHow)),
     how,
     h('h3', {}, tr('eduCardsTitle')),
     counts,
     h('h3', {}, tr('eduIntroChoices')),
+    h('p', { class: 'summary', id: 'edu-intro-choices-summary' }, tr('eduIntroChoicesSummary')),
     toggle('choices', 'edu-intro-choices', Boolean(info.hideChoices)),
     h(
       'div',
