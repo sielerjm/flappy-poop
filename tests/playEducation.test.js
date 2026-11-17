@@ -915,7 +915,7 @@ test('an armed Quit does not carry into the next break (plan 27: a hunch of the 
     quizCounts: () => ({ new: 4, missed: 0, review: 0 }), eduStore: { unlockLevel() {} }, poop: absorb(), tweens: absorb(),
     endRun: () => calls.push('endRun'), showOver: () => calls.push('showOver'), refreshShopButton() {},
   });
-  for (const m of ['refreshLevelBanner', 'pausePlay', 'breakHud', 'fadeBackground', 'refreshPoopLook', 'closeShop', 'applyLevel', 'armKernel', 'prefillPipes', 'refreshLevelBar']) s[m] = () => {};
+  for (const m of ['refreshLevelBanner', 'pausePlay', 'breakHud', 'fadeBackground', 'refreshPoopLook', 'closeShop', 'applyLevel', 'armKernel', 'armSuperQ', 'prefillPipes', 'refreshLevelBar']) s[m] = () => {};
   s.breakQuitTap();
   assert.equal(s.breakQuitArmed(), true, 'the first tap arms Quit');
   now += 500;

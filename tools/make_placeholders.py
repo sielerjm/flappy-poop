@@ -181,12 +181,51 @@ def ground(path, w=720, h=128):
     img.save(path)
 
 
+def question(path, size=384):
+    """Plan 34's challenge question bubble: a black "?" in a see-through soap bubble (Michael at Preview G:
+    "a little transparent like a bubble"): a faint white fill, denser towards the rim, a thin dark outline,
+    a white shine top left and a small one bottom right; 384x384 like the items (drawn at about 115 px).
+    A placeholder for Michael's drawing (assets/src/), so the main block only writes it when the file is missing."""
+    s = 4  # draw at 4x, then shrink: smooth edges
+    big = Image.new("RGBA", (size * s, size * s), (0, 0, 0, 0))
+    c, r = size * s / 2, size * s * 0.44
+    # The film: clear in the middle, whiter towards the rim (rings of rising alpha).
+    film = Image.new("RGBA", big.size, (0, 0, 0, 0))
+    fd = ImageDraw.Draw(film)
+    steps = 40
+    for i in range(steps):
+        k = i / (steps - 1)  # 0 at the rim, 1 at the centre
+        rr = r * (1 - 0.6 * k)
+        alpha = round(120 - 85 * k)  # 120 at the rim down to 35 in the middle
+        fd.ellipse((c - rr, c - rr, c + rr, c + rr), fill=(235, 245, 255, alpha))
+    big = Image.alpha_composite(big, film)
+    d = ImageDraw.Draw(big)
+    d.ellipse((c - r, c - r, c + r, c + r), outline=(42, 26, 16, 210), width=7 * s)
+    # The shine: a white arc top left and a dot bottom right.
+    hr = r * 0.74
+    d.arc((c - hr, c - hr, c + hr, c + hr), start=195, end=255, fill=(255, 255, 255, 235), width=13 * s)
+    dr = r * 0.07
+    dx, dy = c + r * 0.52, c + r * 0.52
+    d.ellipse((dx - dr, dy - dr, dx + dr, dy + dr), fill=(255, 255, 255, 220))
+    font = None
+    for fp in ["/System/Library/Fonts/Supplemental/Arial Black.ttf", "/System/Library/Fonts/Supplemental/Arial Bold.ttf", "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"]:
+        try:
+            font = ImageFont.truetype(fp, int(r * 1.35))
+            break
+        except OSError:
+            continue
+    d.text((c, c + r * 0.04), "?", font=font, fill=(20, 12, 8, 255), anchor="mm")
+    big.resize((size, size), Image.LANCZOS).save(path)
+
 if __name__ == "__main__":
     # poop.png and the icons are Michael's drawings (tools/process_art.py). Do not overwrite them.
     pipe(OUT / "pipe.png")
     villi(OUT / "villi.png")
     ceiling(OUT / "ceiling.png")
     ground(OUT / "ground.png")
-    for f in ["pipe.png", "villi.png", "ceiling.png", "ground.png"]:
+    # The challenge bubble (plan 34): only while it is missing, so Michael's drawing is never overwritten.
+    if not (OUT / "question.png").exists():
+        question(OUT / "question.png")
+    for f in ["pipe.png", "villi.png", "ceiling.png", "ground.png", "question.png"]:
         im = Image.open(OUT / f)
         print(f"{f}: {im.width}x{im.height}")

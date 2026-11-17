@@ -79,6 +79,9 @@ import {
   bobY,
   bandItemsMove,
   bandMidY,
+  floatY,
+  superQReward,
+  superQPenalty,
   gapBobAmplitude,
   gapBobY,
   gapBounds,
@@ -138,7 +141,7 @@ import { openEduIntroPanel, closeEduIntroPanel, isEduIntroPanelOpen, eduIntroPad
 import { answerEvent, createConsentStore, createResearchQueue } from '../research.js';
 import { bindPad } from '../input/pad.js';
 import { keyGroup, sameDevice, catchUpTier, catchUpDraws, versusAvailable, ghostPlacement, rivalMarker, respawnPose, respawnBlinkStart, courseDistance, VERSUS_EMOJI } from '../versus.js';
-import { createEduStore, countersAfterRun, dueCount, cardCounts, masteryByDeck, pickCard, shuffleOptions, gradeFor, schedule, eduShopPrices, reviveStart, reviveStep, reviveSettled, newTally, tallyAnswer, EDUCATION_EMOJI, localDayKey, studyStreakNow, paidOn, buriedIdsOn, skipUntil, boardRecord, educationBackup, readEducationBackup, restoredSettings } from '../education.js';
+import { createEduStore, countersAfterRun, dueCount, cardCounts, masteryByDeck, pickCard, shuffleOptions, gradeFor, schedule, eduShopPrices, reviveStart, reviveStep, reviveSettled, newTally, tallyAnswer, EDUCATION_EMOJI, localDayKey, studyStreakNow, pickSuperCard, paidOn, buriedIdsOn, skipUntil, boardRecord, educationBackup, readEducationBackup, restoredSettings } from '../education.js';
 
 const TEXT_STYLE = {
   fontFamily: 'sans-serif',
@@ -940,6 +943,10 @@ export class Play extends Phaser.Scene {
     this.refreshCoinHud();
     if (daily) this.kernel = null; // no kernels, coins or shop in a Daily Dump
     else this.armKernel();
+    this.superQHold = false; // a challenge question's offer or card is up (plan 34): the run is held under it
+    this.superQMissed = []; // challenge cards missed this run: they cost corn only, so they never block 🤓 (eduCaughtUp)
+    this.superQStill = null; // the pair after a challenge bubble: it holds still, so the bubble stays on the flight line
+    this.armSuperQ();
     this.crashesThisLevel = 0; // a two-player crash forfeits the level's +3 (levelClearCoins)
     this.distance = 0;
     this.popupOrder = [];
@@ -1356,6 +1363,7 @@ export class Play extends Phaser.Scene {
     this.nextGapY = null;
     this.applyLevel();
     this.armKernel(); // the new level's guaranteed kernel
+    this.armSuperQ(); // and its challenge question bubble (plan 34)
     this.crashesThisLevel = 0;
     this.prefillPipes();
     this.refreshLevelBar();
@@ -2058,7 +2066,7 @@ export class Play extends Phaser.Scene {
    * card's count line show it.
    */
   quizCounts({ mode = 'break', exclude = [], limits = true } = {}) {
-    if (this.runIsTest) return null;
+    if (this.runIsTest || mode === 'super') return null; // a challenge question has no count line (plan 34)
     const store = this.eduStore.load();
     // The day's skipped ids, as quizNext passes them: a new card among them is not counted; a break's own
     // quiz counts within its two limits (plan 28, Stage 3b), unless `limits` is false (quizMoreDue).
@@ -2110,6 +2118,7 @@ export class Play extends Phaser.Scene {
    * back (its saved record's), null when nothing was saved (a test run, test mode).
    */
   quizAnswer({ card, reason, beyond = false, order = [], chosen, rtMs, interrupted, mode = 'break', input = 'key' }) {
+    if (mode === 'super') return this.superQAnswer({ card, chosen, rtMs, interrupted });
     const correct = chosen === 'answer';
     const store = this.runIsTest ? null : this.eduStore.load();
     const known = store?.cards[card.id] ?? null;
@@ -2204,6 +2213,88 @@ export class Play extends Phaser.Scene {
     );
   }
 
+  /**
+   * The challenge bubble touched (plan 34): the run holds (physics and effects paused, as a pause, but no
+   * PAUSED banner, tray or "?": chromeState) and the Quiz scene offers the card ('super'). No unmet card left
+   * (another tab answered the last): nothing happens and the bubble is gone.
+   */
+  offerSuperQ() {
+    const sq = this.superQ;
+    if (!sq || this.quizOpen || this.state !== 'playing') return;
+    sq.done = true;
+    const card = pickSuperCard(this.eduStore.load().cards);
+    if (!card) return;
+    sq.card = card;
+    sq.reward = superQReward(this.level, T);
+    this.superQHold = true;
+    this.state = 'paused';
+    this.respawnPaused = false;
+    this.physics.pause();
+    this.pauseEffects();
+    this.bob.pause();
+    this.syncChrome();
+    this.openQuiz('super');
+  }
+
+  /** The challenge card and its options' order, for the Quiz scene's Try (plan 34). */
+  superQPick() {
+    const card = this.superQ?.card;
+    return card ? { card, reason: 'super', order: shuffleOptions(Math.random) } : null;
+  }
+
+  /** What a wrong challenge answer would cost now (plan 34): the offer shows it. */
+  superQPenaltyNow() {
+    return superQPenalty(this.effects?.coins() ?? 0, T);
+  }
+
+  /**
+   * A challenge answer (plan 34): saved to the card's schedule like any first sight (right: review later;
+   * wrong: missed, due now), and a study day; right pays superQReward (the coin sound, the purse's glow),
+   * wrong takes superQPenalty. Outside the run's tally, the grade, 💯 and 🤓, and never a pilot event (the
+   * server takes break, revive and bonus answers only). A test run saves nothing. Returns { correct, grade,
+   * coins, lost, dueAt }.
+   */
+  superQAnswer({ card, chosen, rtMs, interrupted }) {
+    const correct = chosen === 'answer';
+    const saving = !this.runIsTest && !this.isTestMode();
+    const known = saving ? (this.eduStore.load().cards[card.id] ?? null) : null;
+    const grade = gradeFor(correct, interrupted ? null : rtMs, T, { first: !known });
+    let dueAt = null;
+    if (saving) {
+      const now = Date.now();
+      const next = schedule(known, grade, now, T);
+      this.eduStore.answer(card.id, next, { studyDay: localDayKey(new Date(now)) });
+      dueAt = next.dueAt;
+    }
+    let coins = 0;
+    let lost = 0;
+    if (correct) {
+      coins = this.superQ?.reward || superQReward(this.level, T);
+      this.takeCoins(coins);
+    } else {
+      lost = superQPenalty(this.effects.coins(), T);
+      if (lost) this.effects.spendCoins(lost);
+      this.refreshCoinHud();
+      (this.superQMissed ??= []).push(card.id);
+    }
+    return { correct, grade, coins, lost, dueAt };
+  }
+
+  /** The challenge card closed (declined or answered: plan 34): the run goes on as from a pause, with half a flap and the post-revive grace. */
+  endSuperQ() {
+    if (!this.superQHold) return;
+    this.superQHold = false;
+    if (this.state !== 'paused') return;
+    this.state = 'playing';
+    this.physics.resume();
+    this.resumeEffects();
+    this.bob.resume();
+    this.syncChrome();
+    if (!this.effects.powerActive()) this.poop.setVelocityY(resumeFlapVelocity(T));
+    this.graceLeftMs = Math.max(this.graceLeftMs ?? 0, T.beans.graceMs);
+    this.refreshEduDue?.();
+  }
+
   /** The quiz closed: the 📚 and 💰 pills come back (the closing tap is locked out by the caller). */
   onQuizClosed(mode) {
     this.quizOpen = false;
@@ -2212,6 +2303,7 @@ export class Play extends Phaser.Scene {
     if (this.levelBreak) this.refreshLevelBanner(); // the gate's hint follows what the quiz cleared (plan 25)
     if (mode === 'revive') this.reviveDone();
     if (mode === 'bonus') this.refreshOverEducation();
+    if (mode === 'super') this.endSuperQ();
   }
 
   /** Re-lay and redraw the switches when what is offered changes (test mode hides 👥; the word shows 📚). */
@@ -2511,6 +2603,7 @@ export class Play extends Phaser.Scene {
    * start the shared count, then beginLevel ends both breaks).
    */
   chromeState() {
+    if (this.superQHold) return 'playing'; // a challenge question (plan 34): no tray, no "?", no PAUSED under its card
     if (!this.match || this.match.status !== 'playing') return this.state;
     const host = this.versusHost();
     if (this.levelBreak || host?.isPaused?.()) return 'paused';
@@ -2812,7 +2905,7 @@ export class Play extends Phaser.Scene {
    * asks for. A pause there would leave the quiz's result with nothing to settle (reviveDone).
    */
   autoPause() {
-    if (this.respawnHold === 'quiz') return;
+    if (this.respawnHold === 'quiz' || this.superQHold) return; // the card is the pause (a revive's; a challenge question's, plan 34)
     if (this.state === 'playing' || this.state === 'respawn') this.pauseRun();
   }
 
@@ -2927,7 +3020,7 @@ export class Play extends Phaser.Scene {
   }
 
   resumePlay() {
-    if (this.state !== 'paused') return;
+    if (this.state !== 'paused' || this.superQHold) return; // a challenge question resumes only when its card closes (endSuperQ)
     // The gate (plan 25; every education break since plan 26): the break stays while cards are due;
     // the hint says so and Review pulses (refreshQuizButton).
     if (this.levelBreak && !this.respawnPaused && this.breakGated()) {
@@ -3090,10 +3183,22 @@ export class Play extends Phaser.Scene {
       gapMargin: T.gapMargin,
     };
     const n = this.pipesSpawned; // this pair's number in the run: the course rolls everything about it by n
+    // The level's challenge bubble (plan 34): on its pair, or the next one after a revive cleared it, while a
+    // pair follows in the level. Gone once its item is (taken, flown past, farted through).
+    const sq = this.superQ;
+    if (sq?.item && !(sq.item.active && sq.item.scene)) sq.done = true;
+    const superHere = Boolean(sq && !sq.done && !sq.item && sq.level === this.level && n >= sq.pair && n < levelEnd(this.level, this.tune));
+    const stillNext = this.superQStill === n;
     const centred = this.nextGapY == null && this.centreNextGap; // the pair after a fart: opens at the float height and never moves
     const gapY = this.nextGapY ?? (this.centreNextGap ? centredGapY(gapCfg) : this.course.gapY(n, gapCfg));
     this.nextGapY = null;
     this.centreNextGap = false;
+    if (superHere) {
+      // The next pair opens at this one's height, so the bubble between them sits on the flight line. Its own
+      // gap is still rolled (and dropped), so the draws after it keep their order.
+      this.course.gapY(n + 1, gapCfg);
+      this.nextGapY = gapY;
+    }
     const gapH = this.diff.gapHeight;
     const x = this.fieldW + T.pipeWidth - shift; // the field's right edge, wherever the window put it
 
@@ -3132,11 +3237,16 @@ export class Play extends Phaser.Scene {
           ? null
           : scripted;
     // The first box owns this pair's open spot: no bean (or rolled fiber) takes it.
-    const beanHere = !boxHere && (scripted === undefined ? this.course.bean(n, { score: this.score, spawnedThisRun: this.beanSpawned, holding: this.effects.holdingBean() }) : scripted === 'bean');
+    const beanRolled = !boxHere && (scripted === undefined ? this.course.bean(n, { score: this.score, spawnedThisRun: this.beanSpawned, holding: this.effects.holdingBean() }) : scripted === 'bean');
+    const beanHere = beanRolled && !superHere; // the challenge bubble owns its slot (plan 34); the roll still happens
     // From pipeMove.fromLevel some pairs bob their gap: the top pipe carries the motion and its mate
     // follows in update() (the 1280 px texture covers any gap position, so only y changes). Rolled
     // after the item and bean draws so levels below fromLevel and the draws before it keep their sequence.
-    const move = this.course.pipeMove(n, this.level, gapY, gapBounds(gapCfg), { centred });
+    // The challenge bubble's pair and the next hold still (plan 34): the roll is made, and dropped.
+    const moveRolled = this.course.pipeMove(n, this.level, gapY, gapBounds(gapCfg), { centred });
+    const move = superHere || stillNext ? null : moveRolled;
+    if (superHere) this.superQStill = n + 1;
+    else if (stillNext) this.superQStill = null;
     if (move) {
       top.setData({ move, mate: bottom, gapH });
       top.clockMs = 0; // its sine's clock (update(); a plain field: setData every frame emits events)
@@ -3160,16 +3270,17 @@ export class Play extends Phaser.Scene {
     const k = this.kernel;
     if (k?.item && !(k.item.active && k.item.scene)) k.done = true;
     const kernelDue = Boolean(k && !k.done && !k.item && k.level === this.level && n >= k.pair);
-    const slotFree = !boxHere && !beanHere && kind !== 'mystery';
+    const slotFree = !boxHere && !beanHere && kind !== 'mystery' && !superHere;
     const kernelBand = kernelDue && this.level > 1 && slotFree;
     const kernelPast = kernelDue && !kernelBand && (this.level === 1 || n >= levelEnd(this.level, this.tune));
-    if (boxHere) this.spawnBandItem('mystery', boxStill ? stillY() : null, shift);
+    if (superHere) this.spawnSuperQ(gapY, shift);
+    else if (boxHere) this.spawnBandItem('mystery', boxStill ? stillY() : null, shift);
     else if (kernelBand) this.markKernel(this.spawnBandItem('coin', still ? stillY() : null, shift));
     else if (band && !beanHere) this.spawnBandItem(kind, (kind === 'mystery' ? boxStill : still) ? stillY() : null, shift);
     if (kernelPast) this.markKernel(this.spawnStillCoin(x + T.coin.firstAfterPipePx, gapY));
     // An extra coin from level 2 (course.coin) only fills a band slot nothing else took, so it never
     // costs a fiber, a box, a bean or the guaranteed kernel its place.
-    const slotTaken = boxHere || beanHere || band || kernelBand || kernelPast;
+    const slotTaken = boxHere || beanHere || band || kernelBand || kernelPast || superHere;
     if (!slotTaken && scripted === undefined && this.level >= 2 && !this.runIsDaily && this.course.coin(n)) this.spawnBandItem('coin', still ? stillY() : null, shift);
     if (kind && !band) this.spawnGapItem(kind, x, gapY, gapH, move ? top : null);
 
@@ -3265,6 +3376,30 @@ export class Play extends Phaser.Scene {
     this.kernel = { level: this.level, pair: this.course.kernelPair(this.level), item: null, done: false };
   }
 
+  /**
+   * The level's challenge question bubble (plan 34): in a 📚 run while an unmet challenge card is left
+   * (pickSuperCard), on the pair course.superQPair picks (never the guaranteed first box's). Taken,
+   * declined, flown past or farted through, it is gone for the level; a revive that clears it brings it
+   * back (clearFieldAhead).
+   */
+  armSuperQ() {
+    const on = this.runIsEducation && !this.match && T.education.superQ.enabled && Boolean(pickSuperCard(this.eduStore?.load?.()?.cards ?? {}));
+    const pair = on ? this.course.superQPair(this.level, { avoid: [this.mysteryPair] }) : null;
+    this.superQ = pair ? { level: this.level, pair, item: null, done: false, card: null, reward: 0 } : null;
+  }
+
+  /** The challenge bubble on its pair's band slot, at `y` (the shared height of the gaps either side), floating gently (update: 'float'). */
+  spawnSuperQ(y, shift = 0) {
+    const item = this.items.create(beanSpawnX(this.fieldW, T.pipeWidth, pipeSpacing(this.level, T)) - shift, y, 'question');
+    item.setDepth(8);
+    this.finishItem(item, 'question');
+    // Its phase from the pair number, not the course: no roll moves for it.
+    item.setData({ bob: 'float', baseY: y, phase: (this.pipesSpawned * 1.7) % (Math.PI * 2) });
+    item.clockMs = 0;
+    if (this.superQ) this.superQ.item = item;
+    return item;
+  }
+
   /** Pause or resume the boxes' and kernels' spin with the run (the scene keeps updating while paused). */
   setBoxSpin(on) {
     for (const item of this.items.getChildren()) {
@@ -3299,8 +3434,9 @@ export class Play extends Phaser.Scene {
 
   finishItem(item, kind) {
     const coin = kind === 'coin'; // a kernel is drawn at coin.displayPx (from its 106 px frames), its hitbox the whole drawing
-    const scale = coin ? T.coin.displayPx / item.frame.width : T.spriteDisplayScale;
-    const radius = coin ? T.coin.radius : T.items.itemRadius;
+    const question = kind === 'question'; // the challenge bubble (plan 34): bigger than the box, a wider hitbox
+    const scale = coin ? T.coin.displayPx / item.frame.width : question ? T.education.superQ.displayPx / item.frame.width : T.spriteDisplayScale;
+    const radius = coin ? T.coin.radius : question ? T.education.superQ.radiusPx : T.items.itemRadius;
     item.setScale(scale);
     item.setData({ baseScale: scale, radius }); // the still pulse's base (pulseStill)
     item.clockMs = 0; // its pulse / bob clock (update()); a bobbing item resets it with its bob
@@ -3739,6 +3875,8 @@ export class Play extends Phaser.Scene {
       const pair = itemPair ?? this.pipesSpawned;
       const draw = rollMystery(this.match ? this.rngDraw : this.course.reward(pair), T, draws);
       this.openMystery(this.dailyDraw(resolveMystery(draw, { beans: this.effects.beans(), pairsLeft: this.runIsDaily ? 0 : pairsLeft }, T)), x, y);
+    } else if (kind === 'question') {
+      this.offerSuperQ();
     } else if (kind === 'fiber') {
       this.eatFiber();
     } else if (kind === 'probiotic') {
@@ -4525,7 +4663,8 @@ export class Play extends Phaser.Scene {
    * past today (skipUntil), so it is not due.
    */
   eduCaughtUp(now = Date.now()) {
-    const c = cardCounts(this.eduStore.load().cards, { context: 'all', now });
+    // A card missed in this run's challenge question costs corn only (plan 34): it never blocks 🤓.
+    const c = cardCounts(this.eduStore.load().cards, { context: 'all', now, exclude: this.superQMissed ?? [] });
     return c.missed + c.review === 0;
   }
 
@@ -5234,6 +5373,8 @@ export class Play extends Phaser.Scene {
   clearFieldAhead() {
     const k = this.kernel;
     const kernelCleared = Boolean(k && !k.done && k.item?.active && !hasPassed(k.item.x, k.item.displayWidth, this.poop.x));
+    const sq = this.superQ;
+    const bubbleCleared = Boolean(sq && !sq.done && sq.item?.active && !hasPassed(sq.item.x, sq.item.displayWidth, this.poop.x));
     for (const group of [this.pipes, this.items, this.beans]) {
       for (const obj of [...group.getChildren()]) if (!hasPassed(obj.x, obj.displayWidth, this.poop.x)) obj.destroy();
     }
@@ -5246,6 +5387,8 @@ export class Play extends Phaser.Scene {
     this.pipesSpawned = this.pipesPassed;
     this.nextGapY = null;
     if (kernelCleared) k.item = null; // the guaranteed kernel comes back with the re-filled stretch (endRespawn)
+    if (bubbleCleared) sq.item = null; // so does the challenge bubble (plan 34), on the next pair that can carry it
+    this.superQStill = null;
   }
 
   /**
@@ -5453,6 +5596,7 @@ export class Play extends Phaser.Scene {
         const elapsed = item.clockMs + delta;
         item.clockMs = elapsed;
         if (bob === 'band') item.y = bobY(elapsed, item.getData('phase'), this.beanBounds, item.getData('period') ?? T.items.fiberPeriodMs);
+        else if (bob === 'float') item.y = floatY(elapsed, item.getData('baseY'), T.education.superQ.bobPx, T.education.superQ.bobPeriodMs, item.getData('phase'));
         else if (bob === 'pair') {
           const pair = item.getData('pair'); // the moving pair's top pipe (updated above in this frame)
           if (pair?.active) item.y = pair.y + pair.getData('gapH') / 2;
@@ -5460,6 +5604,10 @@ export class Play extends Phaser.Scene {
       }
       if (item.x < -T.pipeWidth) item.destroy();
     }
+    // The challenge bubble is never missed by a hair (plan 34): reaching the poop's x untouched opens it as a
+    // touch would, unless a fart is flying through (it is then gone for the level).
+    const bubble = this.superQ?.item;
+    if (bubble?.active && this.state === 'playing' && !this.effects.powerActive() && bubble.x <= this.poop.x) this.collectItem(bubble);
     for (const bean of this.beans.getChildren()) {
       if (this.state === 'playing') {
         const elapsed = bean.clockMs + delta;

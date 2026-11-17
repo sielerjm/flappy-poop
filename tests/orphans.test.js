@@ -15,7 +15,6 @@ const ROOT = fileURLToPath(new URL('..', import.meta.url));
 
 /** Exports nothing in src/ or tools/ uses, kept on purpose: name → why. Tests never count as a use. */
 const ALLOWED_EXPORTS = {
-  pickSuperCard: 'plan 34: the challenge question bubble picks its card with it from step 34.7 (Play.armSuperQ); remove this line then',
   catalogKeys: 'test hook: tests/i18n.test.js checks every locale against the English keys',
   catalogFor: 'test hook: tests/i18n.test.js and this audit read a whole locale',
   _resetKeeperForTests: 'test hook: tests/sound.test.js resets the silent-audio keeper between tests',

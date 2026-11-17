@@ -886,6 +886,22 @@ export function purseSpinRate(frameCount, g) {
   return (frameCount * g.spinTurns * 1000) / g.fadeMs;
 }
 
+/** The challenge question's reward at `level` (plan 34, Michael): education.superQ.rewardBase + rewardPerLevel × level, so 10 on level 1 to 22 on level 7. */
+export function superQReward(level, t = TUNING) {
+  const q = t.education.superQ;
+  return q.rewardBase + q.rewardPerLevel * Math.max(1, Math.floor(level) || 1);
+}
+
+/** What a wrong challenge answer costs (plan 34): education.superQ.penalty, or the whole purse when it holds less; never below 0. */
+export function superQPenalty(coins, t = TUNING) {
+  return Math.max(0, Math.min(t.education.superQ.penalty, Math.floor(coins) || 0));
+}
+
+/** The challenge bubble's float (plan 34, Michael: "float up and down like a bubble"): `amp` px either side of baseY, one sine period every `periodMs`. */
+export function floatY(elapsed, baseY, amp, periodMs, phase = 0) {
+  return baseY + amp * Math.sin((elapsed / periodMs) * Math.PI * 2 + phase);
+}
+
 export function stillPulseScale(elapsed, t) {
   const p = t.items.stillPulse;
   return 1 + p.amount * Math.sin((2 * Math.PI * Math.max(0, elapsed || 0)) / p.periodMs);
@@ -1045,7 +1061,7 @@ export function mixSeed(seed, n, salt = 0) {
   return (h ^ (h >>> 16)) >>> 0;
 }
 
-const COURSE_SALT = { mystery: 1, gap: 2, item: 3, bean: 4, move: 5, itemY: 6, spin: 7, band: 10, beanPhase: 11, gapPhase: 12, kernel: 13, coin: 14, reward: 15 };
+const COURSE_SALT = { mystery: 1, gap: 2, item: 3, bean: 4, move: 5, itemY: 6, spin: 7, band: 10, beanPhase: 11, gapPhase: 12, kernel: 13, coin: 14, reward: 15, superQ: 16 };
 
 /**
  * The run's course: the pair the first mystery box rides after, and per pair
@@ -1121,6 +1137,22 @@ export function createCourse(seed, t, { shared = false } = {}) {
       const first = levelEnd(lv - 1, t) + 1;
       const span = Math.max(1, end - first); // first .. end − 1
       return first + Math.floor(createRng(mixSeed(seed, lv, COURSE_SALT.kernel))() * span);
+    },
+    /**
+     * The pair the level's challenge question bubble rides after (plan 34), from its own stream in both
+     * modes, so no other roll moves: never one of the level's first or last education.superQ.edgePairs
+     * pairs, never a pair in `avoid` (the guaranteed first mystery box's), and on level 1 never a scripted
+     * pair (levels.tutorial). Null when no pair is left.
+     */
+    superQPair(level, { avoid = [] } = {}) {
+      const lv = Math.max(1, Math.floor(level) || 1);
+      const edge = t.education.superQ.edgePairs;
+      const first = levelEnd(lv - 1, t) + 1 + edge;
+      const last = levelEnd(lv, t) - edge;
+      const pairs = [];
+      for (let n = first; n <= last; n += 1) if (!avoid.includes(n) && !(lv === 1 && t.levels.tutorial?.[n])) pairs.push(n);
+      if (!pairs.length) return null;
+      return pairs[Math.floor(createRng(mixSeed(seed, lv, COURSE_SALT.superQ))() * pairs.length) % pairs.length];
     },
   };
   return course;

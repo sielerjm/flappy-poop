@@ -20,6 +20,7 @@ const MUTED = { ...STYLE, fontStyle: 'normal', color: '#c9b8dc' };
  * buttons, as Michael drew it.)
  */
 const PANEL = { width: 640, height: 1160 };
+const OFFER_ART_PX = 200; // the challenge offer's bubble (plan 34)
 const TEXT_W = 560;
 /**
  * Every wrapped Text on the card wraps through this (wordWrap.callback; plan 28, 2.1): text with Chinese in
@@ -112,6 +113,7 @@ export class Quiz extends Phaser.Scene {
     this.finishing = false;
     this.quitArmed = false; // a revive's Quit: armed by its first press on a card (giveUp), unarmed again with each card (showWayOut)
     this.reviveState = this.mode === 'revive' ? (this.play?.revive ?? null) : null;
+    this.offering = this.mode === 'super'; // a challenge question (plan 34): the offer shows first, Try or Decline
     this.openedAt = this.game.loop.time; // a revive's card ignores taps for a moment after this (tapLocked)
     this.sample('book-open', T.bookOpenVolume);
     const W = this.scale.width; // the live field; the card stays centred
@@ -273,7 +275,8 @@ export class Quiz extends Phaser.Scene {
         pressable('close', this.closeBtn),
       ].map((item) => this.padItem(item)),
     });
-    this.nextCard();
+    if (this.mode === 'super') this.showOffer();
+    else this.nextCard();
     this.focus.show(); // only under a controller (registry padMode)
     if (this.focus.shown) this.ringMovedAt = this.game.loop.time; // the ring appears on the first card: a double A on Review cannot answer it (ringLocked)
   }
@@ -487,7 +490,68 @@ export class Quiz extends Phaser.Scene {
    * never is. The controller ring has its own wait after every jump of the ring (ringLocked).
    */
   tapLocked(pointer) {
-    return Boolean(pointer) && this.mode === 'revive' && !canRestart(this.openedAt, this.game.loop.time, T.retryLockoutMs);
+    return Boolean(pointer) && (this.mode === 'revive' || this.offerLocked()) && !canRestart(this.openedAt, this.game.loop.time, T.retryLockoutMs);
+  }
+
+  /**
+   * A challenge question's offer (plan 34) takes no input for retryLockoutMs after it opens, keys too: it
+   * comes up mid-flight, under a flapping thumb, and Space is also the flap key.
+   */
+  offerLocked() {
+    return this.mode === 'super' && Boolean(this.offering) && !canRestart(this.openedAt, this.game.loop.time, T.retryLockoutMs);
+  }
+
+  /**
+   * The challenge question's offer (plan 34): what it is, what a right answer pays and what a wrong one
+   * costs (Play.superQ's reward; superQPenaltyNow, the whole purse when it holds less than the penalty),
+   * then Decline | Try. ✕ and Esc decline. No card is shown before Try, and none can be left after it.
+   */
+  showOffer() {
+    const reward = this.play?.superQ?.reward ?? 0;
+    const lose = this.play?.superQPenaltyNow?.() ?? 0;
+    this.card = null;
+    this.answered = false;
+    this.header.setText(`\u2753 ${t(this.locale, 'level.super')}`);
+    this.setCardId('');
+    this.refreshStatus();
+    const lines = [t(this.locale, 'superQOffer'), '', t(this.locale, 'superQWin').replace('{n}', String(reward)), lose ? t(this.locale, 'superQLose').replace('{n}', String(lose)) : t(this.locale, 'superQLoseNone')];
+    this.question.setY(this.header.y + this.header.height + 22).setText(lines.join('\n')).setVisible(true);
+    // The bubble itself under the lines, as the poop met it in the field: it is see-through (Michael at
+    // Preview G), so it sits on a disc of the level's own background colour, never on the dark card.
+    if (!this.offerArt && this.textures?.exists?.('question')) {
+      this.offerDisc = this.add.circle(this.cx, 0, OFFER_ART_PX * 0.43, 0xeed9b9, 1); // just inside the bubble's outline (its radius is 0.44 of the art)
+      this.offerArt = this.add.image(this.cx, 0, 'question').setDisplaySize(OFFER_ART_PX, OFFER_ART_PX);
+    }
+    const artY = this.question.y + this.question.height + 40 + OFFER_ART_PX / 2;
+    this.offerDisc?.setPosition(this.cx, artY).setFillStyle(this.play?.bgColor?.fillColor ?? 0xeed9b9, 1).setVisible(true);
+    this.offerArt?.setPosition(this.cx, artY).setVisible(true);
+    for (const o of this.options) {
+      o.g.setVisible(false);
+      o.text.setVisible(false);
+      o.mark.setVisible(false);
+      o.zone.setVisible(false);
+    }
+    this.clearRich();
+    for (const x of [this.verdict, this.verdictCoin, this.paidNote, this.nextWait, this.choiceLine, this.explain, this.source]) x.setVisible(false);
+    this.clearButtons();
+    this.leftBtn.set(t(this.locale, 'superQDecline'), () => this.close());
+    this.rightBtn.set(t(this.locale, 'superQTry'), () => this.trySuperQ());
+    this.closeBtn.setVisible(true);
+    this.refreshTally();
+    this.refreshCounts();
+    this.refreshPurse();
+    this.ring('right');
+  }
+
+  /** Try (plan 34): the challenge card, which can only be answered from here (no Skip, no way out until the answer). */
+  trySuperQ() {
+    if (!this.offering || this.finishing || !isTopOverlay(this) || this.runCard?.open || this.offerLocked()) return;
+    const pick = this.play?.superQPick?.() ?? null;
+    if (!pick) return this.close();
+    this.offering = false;
+    this.session.push(pick.card.id);
+    this.sample('book-flip', T.bookFlipVolume);
+    this.showCard(pick.card, pick.order, pick.reason);
   }
 
   /**
@@ -496,7 +560,7 @@ export class Quiz extends Phaser.Scene {
    * flap pressed just after a crash must not end the run or leave the quiz.
    */
   primary() {
-    if (!isTopOverlay(this) || this.runCard?.open) return;
+    if (!isTopOverlay(this) || this.runCard?.open || this.offerLocked()) return;
     if (this.card && !this.answered) return; // an open card: never Skip (plan 26, A2), nor anything else
     if (this.rightBtn.shown) this.rightBtn.press();
     else if (!this.card && this.closable()) this.leftBtn.press();
@@ -623,6 +687,8 @@ export class Quiz extends Phaser.Scene {
 
   /** Lay a card out: header, question, the three options in `order`, everything below hidden until the answer. */
   showCard(card, order, reason = 'new', beyond = false) {
+    this.offerArt?.setVisible(false); // the challenge offer's bubble (plan 34)
+    this.offerDisc?.setVisible(false);
     this.card = card;
     this.order = order;
     this.reason = reason;
@@ -631,7 +697,10 @@ export class Quiz extends Phaser.Scene {
     this.interrupted = Boolean(globalThis.document?.hidden);
     this.text = cardText(card, this.locale);
     const deck = card.deck === 'general' ? t(this.locale, 'quizGeneral') : t(this.locale, `level.${card.deck}`);
-    if (this.mode === 'revive') {
+    if (this.mode === 'super') {
+      this.header.setText(`\u2753 ${deck}`); // the challenge question (plan 34): its ❓, not the 📚
+      this.setCardId(card.id);
+    } else if (this.mode === 'revive') {
       const streak = this.reviveState?.phase === 'streak';
       this.header.setText(streak ? `⭐ ${t(this.locale, 'reviveStreakHeader')}` : `\u{1F480} ${t(this.locale, 'reviveHeader')}`);
       this.setCardId(`${card.id} · ${deck}`);
@@ -720,7 +789,7 @@ export class Quiz extends Phaser.Scene {
    * the card covers the HUD. It pops when it grows. Nowhere else (a revive's corner holds ❤️ / ⭐).
    */
   refreshPurse() {
-    const shown = this.mode === 'break' && Boolean(this.play?.effects);
+    const shown = (this.mode === 'break' || this.mode === 'super') && Boolean(this.play?.effects); // a challenge question shows it too (plan 34)
     const n = shown ? this.play.effects.coins() : null;
     this.purseText.setText(shown ? String(n) : '').setVisible(shown);
     this.purseCoin.setX(this.purseText.x - this.purseText.width - 6 - PURSE_PX / 2).setVisible(shown);
@@ -782,7 +851,7 @@ export class Quiz extends Phaser.Scene {
     const key = this.order[i];
     const rtMs = (globalThis.performance?.now?.() ?? Date.now()) - this.shownAt;
     const res = this.play?.quizAnswer?.({ card: this.card, reason: this.reason, beyond: Boolean(this.beyond), order: this.order, chosen: key, rtMs, interrupted: this.interrupted, mode: this.mode, input }) ?? { correct: key === 'answer' };
-    this.lastAnswer = { id: this.card.id, chosen: key, correct: res.correct, coins: res.coins ?? 0, paidToday: Boolean(res.paidToday), dueAt: res.dueAt ?? null, rtMs, interrupted: this.interrupted }; // the smoke reads it
+    this.lastAnswer = { id: this.card.id, chosen: key, correct: res.correct, coins: res.coins ?? 0, lost: res.lost ?? 0, paidToday: Boolean(res.paidToday), dueAt: res.dueAt ?? null, rtMs, interrupted: this.interrupted }; // the smoke reads it
     this.refreshTally();
     this.refreshPurse();
     if (this.mode === 'revive') this.reviveState = this.play?.reviveEvent?.(res.correct ? 'correct' : 'wrong') ?? this.reviveState;
@@ -811,6 +880,7 @@ export class Quiz extends Phaser.Scene {
     this.clearButtons();
     this.refreshStatus();
     if (this.mode === 'revive') this.reviveStep(correct);
+    else if (this.mode === 'super') this.superStep(correct);
     else this.breakStep(correct);
   }
 
@@ -866,6 +936,23 @@ export class Quiz extends Phaser.Scene {
     if (correct) this.topBtn.set(t(this.locale, 'quizWhy'), () => this.showWhy());
     else this.showWhy();
     this.holdAfterWrong(this.rightBtn.set(t(this.locale, 'quizNext'), () => this.nextCard()), correct);
+    this.ring('right');
+  }
+
+  /**
+   * A challenge question answered (plan 34): right, "Right! +n" and the kernel (it paid, and the purse
+   * glows); wrong, what it cost ("Wrong. −n 🌽", or plain Wrong with an empty purse) and the explanation.
+   * Why on top after a right answer; Fly on (held a moment after a miss) closes the card and the run goes on.
+   */
+  superStep(correct) {
+    const coins = this.lastAnswer?.coins ?? 0;
+    const lost = this.lastAnswer?.lost ?? 0;
+    if (correct) this.say(t(this.locale, 'quizRightCoins').replace('{n}', String(coins)), true, coins > 0);
+    else this.say(lost ? t(this.locale, 'superQLost').replace('{n}', String(lost)) : t(this.locale, 'quizWrong'), false);
+    if (correct) this.topBtn.set(t(this.locale, 'quizWhy'), () => this.showWhy());
+    else this.showWhy();
+    this.holdAfterWrong(this.rightBtn.set(t(this.locale, 'reviveContinue'), () => this.close()), correct);
+    this.closeBtn.setVisible(this.closable());
     this.ring('right');
   }
 
@@ -1073,6 +1160,9 @@ export class Quiz extends Phaser.Scene {
 
   /** Whether the player may leave the quiz here (a level break's quiz and a won run's bonus quiz always; a revive never). */
   closable() {
+    // A challenge question (plan 34): its offer can be declined and its answered card closed, but a card
+    // waiting for its answer cannot be left (no peeking and backing out for free).
+    if (this.mode === 'super') return Boolean(this.offering) || (Boolean(this.card) && this.answered);
     return this.mode !== 'revive';
   }
 

@@ -19,7 +19,8 @@ export class Boot extends Phaser.Scene {
     this.load.image('postbiotic', 'assets/postbiotic.png' + V);
     // Mystery box: 8 spin frames side by side (assets/README.md); the anim is made in create().
     this.load.spritesheet('mystery', 'assets/mystery.png' + V, { frameWidth: 384, frameHeight: 384 });
-    this.load.image('mystery-icon', 'assets/mystery-icon.png' + V); // static view for the game-over summary and How to play
+    this.load.image('mystery-icon', 'assets/mystery-icon.png' + V);
+    this.load.image('question', 'assets/question.png' + V); // the challenge question bubble (plan 34) // static view for the game-over summary and How to play
     this.load.image('bacteria', 'assets/bacteria.png' + V);
     this.load.image('bean', 'assets/bean.png' + V);
     // Golden corn kernel: the purse's coin. 12 spin frames side by side; a field kernel plays 'coin-spin'

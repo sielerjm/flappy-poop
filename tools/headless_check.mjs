@@ -84,6 +84,7 @@ export const SECTIONS = [
   { name: 'invite-link', needs: [], about: "the invite link (plan 28, 2.4): the page loaded with ?invite=<code> opens the 📚 Education data panel with the code filled in on the first ready screen; the address bar has lost the code; no storage keeps it; a load without it opens nothing (the live board blocked at the browser)" },
   { name: 'run-stats', needs: [], about: "the run summary (plan 30): a run flown through Chrome's own input (keys and a mouse click, with a pause) has every flap but the launch counted as a real, fresh press; a run flown by direct calls has none; a pointer event forged with a plain object counts as a press but never a real one; each summary is queued with the run's numbers" },
   { name: 'streaks', needs: [], about: "🔥 day streaks (plan 34): a one-player run counts the local day and a Daily Dump its course day on this device; the 🌞 and 📚 subscripts on the ready screen (the Daily Dump and learning streaks, none at 0); your own profile's 🔥 Current streak and ❤️‍🔥 Longest streak rows under Singleplayer and Daily Dump; Clear empties them" },
+  { name: 'education-superq', needs: [], about: "❓ the challenge question (plan 34): the bubble on its pair in a 📚 run, the pairs either side opening at the same height and holding still, its size and float; flown past it opens anyway; the run held under the offer (no banner, tray or \"?\"; P and a hidden page do nothing); taps and Space locked for a moment; Decline flies on with a grace and saves nothing; Try's card cannot be left until answered; right pays 8 + 2 × level and saves the card as reviewed; wrong takes 5 and saves it as missed, holding Fly on; neither counts in the run's tally" },
 ];
 
 /** What a section needs: its own list, or (omitted) every section before it. */
@@ -6601,6 +6602,116 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
       await evaluate(`${P}.signOut(), true`);
       ok((await evaluate(`localStorage.getItem('flappyPoop.streaks') === null && Object.keys(${P}.streakStore.load()).length === 0`)), 'Clear empties the day streaks');
       await home();
+    });
+
+    await section('education-superq', async () => {
+      // The challenge question (plan 34). One 📚 run on level 4 (unlocked for it), the poop held in mid-air
+      // and untouchable, each bubble forced onto the next pair.
+      await cdp.send('Network.enable');
+      await cdp.send('Network.setBlockedURLs', { urls: ['*supabase.co*'] });
+      const P = `__flappy.scene.getScene('Play')`;
+      const QZ = `__flappy.scene.getScene('Quiz')`;
+      const waitFor = async (expr, tries = 80) => {
+        for (let i = 0; i < tries; i += 1) {
+          if (await evaluate(`Boolean(${expr})`)) return true;
+          await sleep(50);
+        }
+        return false;
+      };
+      await evaluate(`(__flappy.scene.stop('Over'), __flappy.scene.stop('Quiz'), localStorage.removeItem('flappyPoop.eduSrs'), ${P}.settings.set({ education: true, eduStartLevel: 4 }), ${P}.scene.restart(), true)`);
+      await waitFor(`${P}.state === 'ready' && !${P}.launching`);
+      await evaluate(`(${P}.eduStore.unlockLevel(4), true)`);
+      await startEducationRun();
+      const level = await evaluate(`${P}.level`);
+      await evaluate(`(() => { const p = ${P}; p.effects.addCoins(12); p.refreshCoinHud(); globalThis.__sqKeep = setInterval(() => { if (p.state === 'playing') { p.graceLeftMs = 1e9; p.poop.body?.setAllowGravity(false); p.poop.setVelocityY(0); } }, 30); return true; })()`);
+      const force = () => evaluate(`(() => { const p = ${P}; p.superQ = { level: p.level, pair: p.pipesSpawned + 1, item: null, done: false, card: null, reward: 0 }; return p.superQ.pair; })()`);
+      const coins = () => evaluate(`${P}.effects.coins()`);
+
+      // 1. The bubble: on its pair's band slot between two still pairs that open at the same height.
+      const pair = await force();
+      ok(await waitFor(`${P}.superQ.item?.active`, 200), `a bubble rides after pair ${pair} on level ${level}`);
+      await waitFor(`${P}.pipesSpawned >= ${pair} + 1`, 200);
+      const field = await evaluate(`(() => {
+        const p = ${P}; const it = p.superQ.item;
+        const tops = p.pipes.getChildren().filter((s) => s.getData('scoring')).sort((a, b) => a.x - b.x);
+        const around = tops.filter((s) => Math.abs(s.x - it.x) < 400);
+        const gap = (s) => s.y + (s.getData('gapH') ?? p.diff.gapHeight) / 2;
+        return JSON.stringify({ x: it.x, baseY: it.getData('baseY'), w: it.displayWidth, around: around.map((s) => ({ x: Math.round(s.x), gapY: Math.round(s.y + p.diff.gapHeight / 2), moving: Boolean(s.getData('move')) })) });
+      })()`).then(JSON.parse);
+      const [before, after] = [field.around.filter((s) => s.x < field.x).at(-1), field.around.find((s) => s.x > field.x)];
+      ok(before && after && Math.abs(before.gapY - after.gapY) <= 1 && !before.moving && !after.moving && Math.abs(field.baseY - before.gapY) <= 1,
+        `the pairs either side open at the same height and hold still, the bubble on that line (${JSON.stringify({ before, after, baseY: Math.round(field.baseY) })})`);
+      ok(Math.abs(field.w - TT.education.superQ.displayPx) <= 2, `drawn ${Math.round(field.w)} px wide (the box is 96)`);
+      const ys = [];
+      for (let i = 0; i < 12; i += 1) {
+        ys.push(await evaluate(`${P}.superQ.item?.y ?? null`));
+        await sleep(90);
+      }
+      const span = Math.max(...ys) - Math.min(...ys);
+      ok(span > 3 && ys.every((y) => Math.abs(y - field.baseY) <= TT.education.superQ.bobPx + 0.5), `it floats, at most ${TT.education.superQ.bobPx} px either way (${span.toFixed(1)} px over a second)`);
+
+      // 2. Flown past without touching it: it opens anyway; the run is held, with no banner, tray or "?".
+      await evaluate(`(${P}.poop.y = Math.max(200, ${P}.superQ.item.getData('baseY') - 360), true)`);
+      ok(await waitFor(`__flappy.scene.isActive('Quiz') && ${QZ}.mode === 'super'`, 200), 'flown past untouched, the bubble opens its offer');
+      const held = await evaluate(`JSON.stringify({ state: ${P}.state, hold: ${P}.superQHold, banner: ${P}.pauseText.visible, shade: ${P}.pauseShade.visible, row: ${P}.tray?.rowShown?.() ?? null, help: Boolean(${P}.helpShown), offering: ${QZ}.offering, header: ${QZ}.header.text, lines: ${QZ}.question.text })`).then(JSON.parse);
+      ok(held.state === 'paused' && held.hold && !held.banner && !held.shade && held.row === false && !held.help && held.offering,
+        `the run is held under the offer with no PAUSED banner, tray row or "?" (${JSON.stringify({ ...held, lines: undefined, header: undefined })})`);
+      const reward = 8 + 2 * level;
+      ok(held.header.includes('Challenge question') && held.lines.includes(`+${reward}`) && held.lines.includes('−5'), `the offer says what it pays (+${reward}) and costs (−5): ${held.lines.replace(/\n/g, ' · ')}`);
+      // Taps and Space do nothing for a moment; P and a hidden page do nothing at all.
+      const tryBtn = await evaluate(`JSON.stringify({ x: ${QZ}.rightBtn.zone.x, y: ${QZ}.rightBtn.zone.y })`).then(JSON.parse);
+      await tapAt(tryBtn.x, tryBtn.y);
+      for (const type of ['keyDown', 'keyUp']) await cdp.send('Input.dispatchKeyEvent', { type, key: ' ', code: 'Space', windowsVirtualKeyCode: 32 });
+      await sleep(80);
+      ok(await evaluate(`${QZ}.offering === true && !${QZ}.card`), 'a tap on Try and a Space inside the lockout press nothing');
+      for (const type of ['keyDown', 'keyUp']) await cdp.send('Input.dispatchKeyEvent', { type, key: 'p', code: 'KeyP', windowsVirtualKeyCode: 80 });
+      await evaluate(`(${P}.autoPause(), true)`);
+      await sleep(100);
+      ok(await evaluate(`${P}.state === 'paused' && ${P}.superQHold && __flappy.scene.isActive('Quiz') && !${P}.pauseText.visible`), 'P and a hidden page change nothing under the offer');
+
+      // 3. Decline: the run flies on with a grace; nothing saved, nothing paid.
+      await sleep(TT.retryLockoutMs);
+      const c0 = await coins();
+      await evaluate(`${QZ}.leftBtn.press(), true`);
+      ok(await waitFor(`!__flappy.scene.isActive('Quiz') && ${P}.state === 'playing'`), 'Decline closes the offer and the run flies on');
+      ok(await evaluate(`!${P}.superQHold && ${P}.superQ.done && Object.keys(${P}.eduStore.load().cards).length === 0`) && (await coins()) === c0, 'declined: the bubble is gone for the level, no card saved, the purse untouched');
+
+      // 4. Try, then right: the card cannot be left; right pays and saves it as reviewed.
+      const answer = async (right) => {
+        await force();
+        await waitFor(`${P}.superQ.item?.active`, 200);
+        await evaluate(`(() => { const p = ${P}; p.collectItem(p.superQ.item); return true; })()`);
+        await waitFor(`__flappy.scene.isActive('Quiz') && ${QZ}.offering`);
+        await sleep(TT.retryLockoutMs + 50);
+        await evaluate(`${QZ}.rightBtn.press(), true`);
+        await waitFor(`${QZ}.card`);
+        const open = await evaluate(`JSON.stringify({ id: ${QZ}.card.id, deck: ${QZ}.card.deck, x: ${QZ}.closeBtn.visible, left: ${QZ}.leftBtn.shown, right: ${QZ}.rightBtn.shown })`).then(JSON.parse);
+        await evaluate(`${QZ}.input.keyboard.emit('keydown-ESC'), true`);
+        await sleep(100);
+        const stayed = await evaluate(`__flappy.scene.isActive('Quiz') && Boolean(${QZ}.card) && !${QZ}.answered`);
+        const before = await coins();
+        const tally = await evaluate(`${P}.runQuiz.answered`);
+        await evaluate(`(() => { const q = ${QZ}; q.choose(${right ? `q.order.indexOf('answer')` : `q.order.findIndex((k) => k !== 'answer')`}); return true; })()`);
+        await sleep(100);
+        const res = await evaluate(`JSON.stringify({ last: ${QZ}.lastAnswer, rec: ${P}.eduStore.load().cards[${QZ}.card.id] ?? null, tally: ${P}.runQuiz.answered, held: ${QZ}.rightBtn.held, missed: ${P}.superQMissed })`).then(JSON.parse);
+        return { open, stayed, before, tally, res, after: await coins() };
+      };
+      const r = await answer(true);
+      ok(r.open.deck === 'super' && !r.open.x && !r.open.left && !r.open.right && r.stayed, `after Try the card can only be answered: no ✕, no buttons, Esc does nothing (${r.open.id})`);
+      ok(r.res.last.correct && r.res.last.coins === reward && r.after === r.before + reward && r.res.rec?.state === 'review' && r.res.rec.dueAt > Date.now() + 864e5 && r.res.tally === r.tally,
+        `right: +${reward} 🌽 (${r.before} → ${r.after}), the card saved as reviewed, not in the run's tally (${r.res.tally})`);
+      await evaluate(`${QZ}.rightBtn.press(), true`);
+      ok(await waitFor(`!__flappy.scene.isActive('Quiz') && ${P}.state === 'playing' && ${P}.graceLeftMs > 0`), 'Fly on: the run goes on');
+
+      // 5. Wrong: 5 taken, the card saved as missed (due now), Fly on held a moment.
+      const w = await answer(false);
+      ok(!w.res.last.correct && w.res.last.lost === 5 && w.after === w.before - 5 && w.res.rec?.state === 'missed' && w.res.rec.dueAt <= Date.now() && w.res.held && w.res.missed.includes(w.open.id) && w.res.tally === w.tally,
+        `wrong: −5 🌽 (${w.before} → ${w.after}), saved as missed, Fly on held, not in the run's tally`);
+      await sleep(TT.education.explainMinMs + 100);
+      await evaluate(`${QZ}.rightBtn.press(), true`);
+      ok(await waitFor(`!__flappy.scene.isActive('Quiz') && ${P}.state === 'playing'`), 'Fly on after the wait: the run goes on');
+      await evaluate(`(clearInterval(globalThis.__sqKeep), ${P}.settings.set({ education: false, eduStartLevel: 1 }), __flappy.scene.stop('Quiz'), ${P}.scene.restart(), true)`);
+      await waitFor(`${P}.state === 'ready'`);
     });
 
     const f2 = await frame();
