@@ -200,3 +200,44 @@ test('an education run and a test run count no Singleplayer day: endRun returns 
     assert.deepEqual(streakStore.load(), {}, `${name}: no streak day`);
   }
 });
+
+test('Play.streakNow (plan 34, round 2): the Daily Dump streak on the UTC day and the learning streak on the local day, the numbers the subscripts show; 0 once lapsed or with nothing stored', async () => {
+  const { utcDayKey } = await import('../src/logic.js');
+  const { localDayKey } = await import('../src/education.js');
+  const streakStore = createStreakStore(fakeStorage());
+  streakStore.played('daily', utcDayKey());
+  let study = { day: localDayKey(), streak: 6, best: 9 };
+  const p = playScene({ streakStore, eduStore: { load: () => ({ study }) }, dailySun: { visible: true }, dailyStreakText: textStub(), eduStreakText: textStub(), readyUiShown: true });
+  assert.deepEqual([p.streakNow('daily'), p.streakNow('study')], [1, 6]);
+  p.refreshStreakMarks();
+  assert.deepEqual([p.dailyStreakText.text, p.eduStreakText.text], ['1', '6'], 'the subscripts read the same');
+  study = { day: '2020-01-01', streak: 6, best: 9 };
+  assert.equal(p.streakNow('study'), 0, 'lapsed');
+  assert.deepEqual([playScene({}).streakNow('daily'), playScene({}).streakNow('study')], [0, 0], 'no stores: 0');
+});
+
+/** The 🌞 card (Daily.draw) with `mode` and a Play whose Daily Dump streak is `streak`. */
+async function dailyCard(mode, streak, locale = 'en') {
+  const { Daily } = await import('../src/scenes/Daily.js');
+  const set = (o) => Object.assign(o, { text: '', visible: true, setText(v) { this.text = v; return this; }, setVisible(v) { this.visible = v; return this; } });
+  const d = Object.assign(Object.create(Daily.prototype), {
+    locale, button: set({}), note: set({}), streakLine: set({}), countdown: null,
+    mode: () => mode,
+    scene: { get: () => ({ streakNow: (kind) => (kind === 'daily' ? streak : -1) }) },
+  });
+  d.draw();
+  return d;
+}
+
+test('the 🌞 card (plan 34, round 2: Michael): "🔥 Current streak = n" under the four pictures while the button reads Play, Checking… or See today\'s result, 0 included; with no username or in test mode the note keeps that spot', async () => {
+  for (const mode of ['play', 'checking', 'result']) {
+    const d = await dailyCard(mode, 5);
+    assert.deepEqual([d.streakLine.text, d.streakLine.visible, d.note.text], ['🔥 Current streak = 5', true, ''], mode);
+  }
+  assert.equal((await dailyCard('play', 0)).streakLine.text, '🔥 Current streak = 0');
+  assert.equal((await dailyCard('result', 3, 'zh-Hans')).streakLine.text, '🔥 当前连续 = 3');
+  for (const mode of ['create', 'practice']) {
+    const d = await dailyCard(mode, 5);
+    assert.deepEqual([d.streakLine.visible, Boolean(d.note.text)], [false, true], mode);
+  }
+});

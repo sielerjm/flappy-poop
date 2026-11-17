@@ -171,7 +171,7 @@ function render() {
   const due = T.education.duePerBreak; // plan 28, Stage 3b: the due cards a break asks, or all while null
   const levels = Number.isFinite(due) ? tr('eduIntroHowLevels').replace('{n}', String(due)) : tr('eduIntroHowLevelsAll');
   const how = h('ul', { id: 'edu-intro-how', hidden: Boolean(info.hideHow) }, h('li', {}, levels), ...['eduIntroHowRevive', 'eduIntroHowSkip', 'eduIntroHowCoins'].map((key) => h('li', {}, tr(key))));
-  const counts = h('div', { class: 'counts', id: 'edu-intro-counts' }, ...[...countLines(ctx.locale, info.counts), t(ctx.locale, 'eduCardsSeen').replace('{n}', String(info.seen)).replace('{total}', String(info.total)), tr('eduCardsDue')].map((line) => h('p', {}, line)));
+  const counts = h('div', { class: 'counts', id: 'edu-intro-counts' }, ...[...countLines(ctx.locale, info.counts), t(ctx.locale, 'eduCardsSeen').replace('{n}', String(info.seen)).replace('{total}', String(info.total)), tr('streakNowLine').replace('{n}', String(info.streak ?? 0))].map((line) => h('p', {}, line)));
   // The start level (plan 25's stepper, moved here): ◀ LV n ▶ while a later level is unlocked.
   const start = h('div', { class: 'row', id: 'edu-intro-start' }, h('span', { class: 'label' }, tr('eduIntroStart')));
   if (info.startOffered) {

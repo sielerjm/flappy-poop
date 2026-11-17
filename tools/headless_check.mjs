@@ -83,7 +83,7 @@ export const SECTIONS = [
   { name: 'blocked-storage', needs: [], about: "blocked site data (plan 28, 1.3): the page reloaded with every read of localStorage throwing still boots past the splash, holds a settings choice for the visit and plays a run to the game-over panel, with no page exception; the live board blocked at the browser for the rest of the run; then storage restored and the page reloaded" },
   { name: 'invite-link', needs: [], about: "the invite link (plan 28, 2.4): the page loaded with ?invite=<code> opens the 📚 Education data panel with the code filled in on the first ready screen; the address bar has lost the code; no storage keeps it; a load without it opens nothing (the live board blocked at the browser)" },
   { name: 'run-stats', needs: [], about: "the run summary (plan 30): a run flown through Chrome's own input (keys and a mouse click, with a pause) has every flap but the launch counted as a real, fresh press; a run flown by direct calls has none; a pointer event forged with a plain object counts as a press but never a real one; each summary is queued with the run's numbers" },
-  { name: 'streaks', needs: [], about: "🔥 day streaks (plan 34): a one-player run counts the local day and a Daily Dump its course day on this device; the 🌞 and 📚 subscripts on the ready screen (the Daily Dump and learning streaks, none at 0); your own profile's 🔥 Current streak and ❤️‍🔥 Longest streak rows under Singleplayer and Daily Dump; Clear empties them" },
+  { name: 'streaks', needs: [], about: "🔥 day streaks (plan 34): a one-player run counts the local day and a Daily Dump its course day on this device; the 🌞 and 📚 subscripts on the ready screen (the Daily Dump and learning streaks, none at 0); your own profile's 🔥 Current streak and ❤️‍🔥 Longest streak rows under Singleplayer and Daily Dump; Clear empties them; the 🌞 card's and \"Your cards\"' \"🔥 Current streak = n\" lines (round 2)" },
   { name: 'education-superq', needs: [], about: "❓ the challenge question (plan 34): the bubble on its pair in a 📚 run, the pairs either side opening at the same height and holding still, its size and float; flown past it opens anyway; the run held under the offer (no banner, tray or \"?\"; P and a hidden page do nothing); taps and Space locked for a moment; Decline flies on with a grace and saves nothing; Try's card cannot be left until answered; right pays 8 + 2 × level and saves the card as reviewed; wrong takes 5 and saves it as missed, holding Fly on; neither counts in the run's tally" },
 ];
 
@@ -3980,10 +3980,11 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         const due0 = await dueNow();
         await tapAt(boxes.info.x, boxes.info.y);
         const yc1 = await yourCards();
-        const ycWant = await Promise.all(['eduCardsNew', 'eduCardsMissed', 'eduCardsReview', 'eduCardsSeen', 'eduCardsDue'].map(tx));
+        const ycWant = await Promise.all(['eduCardsNew', 'eduCardsMissed', 'eduCardsReview', 'eduCardsSeen', 'streakNowLine'].map(tx));
+        const ycStreak = await evaluate(`${play}.streakNow('study')`); // the learning streak's line, last (plan 34, round 2)
         // New is what today still offers: every unseen card while the daily cap is held off (plan 28, Stage 3b), else
         // education.newPerDay a local day, less the cards first seen today (plan 26). null: no cap.
-        const ycLines = [ycWant[0].replace('{n}', String(Math.min(made.total - 4, made.allowance ?? Infinity))), ycWant[1].replace('{n}', '1'), ycWant[2].replace('{n}', '2'), ycWant[3].replace('{n}', '4').replace('{total}', String(made.total)), ycWant[4]];
+        const ycLines = [ycWant[0].replace('{n}', String(Math.min(made.total - 4, made.allowance ?? Infinity))), ycWant[1].replace('{n}', '1'), ycWant[2].replace('{n}', '2'), ycWant[3].replace('{n}', '4').replace('{total}', String(made.total)), ycWant[4].replace('{n}', String(ycStreak))];
         ok(due0 === '3' && !yc0.open && yc1.open && yc1.title === (await tx('eduCardsTitle')) && JSON.stringify(yc1.lines) === JSON.stringify(ycLines) && !yc1.popup && yc1.on === yc0.on && yc1.state === 'ready' && !yc1.launching, `a tap on the 📚 glyph (its gold number reads ${due0}) opens "${yc1.title}": ${yc1.lines.join(' · ')}; the switch untouched, no popup, no run`);
         await tapAt(boxes.toilet.x, boxes.toilet.y); // over a switch: the tap only closes the card
         const yc2 = await yourCards();
@@ -6573,6 +6574,11 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
       const inside = (x, y, b) => b && Math.abs(x - b.x) <= b.width / 2 && Math.abs(y - b.y) <= b.height / 2;
       ok(marks.d[0] === '4' && marks.d[1] === true && inside(marks.sx, marks.sy, marks.sun), `the 🌞 shows the Daily Dump streak inside its button (${JSON.stringify(marks.d)})`);
       ok(marks.e[0] === '3' && marks.e[1] === true && inside(marks.ex, marks.ey, marks.info), `the 📚 shows the learning streak inside the glyph's box (${JSON.stringify(marks.e)})`);
+      // "Your cards" ends with the same learning streak (plan 34, round 2); no line on what the gold number counts.
+      await evaluate(`(${P}.toggleEduCard(), true)`);
+      const ycLast = await evaluate(`JSON.stringify(${P}.eduCard.open ? ${P}.eduCard.body.text.split('\\n') : [])`).then(JSON.parse);
+      await evaluate(`(${P}.eduCard.open && ${P}.toggleEduCard(), true)`);
+      ok(ycLast.at(-1) === '🔥 Current streak = 3' && !ycLast.some((l) => l.includes('number on')), `"Your cards" ends "🔥 Current streak = 3" (${ycLast.slice(-2).join(' · ')})`);
       await evaluate(`${P}.flap(), true`); // with 📚 on, Play opens the popup first: the ready screen (and its numbers) stays under it
       await sleep(400);
       const under = await evaluate(`[${P}.dailyStreakText.visible, ${P}.eduStreakText?.visible]`);
@@ -6597,6 +6603,14 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         `🔥 Current streak and ❤️‍🔥 Longest streak under Singleplayer (2 / 9 days) and Daily Dump (4 / 6 days): ${n(now)} and ${n(best)} rows (${eduRows} of them the 📚 section's)`);
       await evaluate(`${ST}.close(), true`);
       await waitFor(`!__flappy.scene.isActive('Stats')`, 20);
+
+      // The 🌞 card (plan 34, round 2): with a username, "🔥 Current streak = 4" under the four pictures.
+      await evaluate(`(${P}.scene.launch('Daily'), true)`);
+      await waitFor(`__flappy.scene.isActive('Daily')`, 30);
+      await sleep(300);
+      const dl = await evaluate(`(() => { const d = __flappy.scene.getScene('Daily'); return JSON.stringify({ mode: d.mode(), text: d.streakLine.text, shown: d.streakLine.visible, note: d.note.text }); })()`).then(JSON.parse);
+      await evaluate(`(__flappy.scene.stop('Daily'), true)`);
+      ok(dl.text === '🔥 Current streak = 4' && dl.shown && !dl.note, `the 🌞 card shows the Daily Dump streak in the note's place (${JSON.stringify(dl)})`);
 
       // Clear (sign out) takes the streaks with the player.
       await evaluate(`${P}.signOut(), true`);

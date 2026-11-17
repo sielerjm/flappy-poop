@@ -1118,7 +1118,7 @@ test('a lost education run is recorded at once, as before; a bonus answer under 
   assert.equal(s.runQuiz.answered, 5, 'test mode: the bonus answer is not counted');
 });
 
-test('"Your cards" on the 📚 glyph (plan 26, A2): the three counts in his wording, the cards seen of all, what the gold number counts; a second press closes it; only on the ready screen', () => {
+test('"Your cards" on the 📚 glyph (plan 26, A2): the three counts in his wording, the cards seen of all, the learning streak (plan 34, round 2: no line on what the gold number counts since Preview H); a second press closes it; only on the ready screen', () => {
   const store = createEduStore(fakeStorage());
   store.answer(CARDS[0].id, schedule(null, 'again', Date.now() - 60000));
   const shown = [];
@@ -1127,7 +1127,7 @@ test('"Your cards" on the 📚 glyph (plan 26, A2): the three counts in his word
   s.toggleEduCard();
   const total = CARDS.filter((c) => !c.retired && c.deck !== 'super').length; // challenge cards count once met (plan 34)
   assert.equal(shown[0].title, 'Your cards');
-  assert.deepEqual(shown[0].lines.slice(1), ['🔴 1 missed (due now)', '🟢 0 to review (due today)', `👁️ Seen 1 of ${total} cards`, 'The number on 📚 = # of cards to review']);
+  assert.deepEqual(shown[0].lines.slice(1), ['🔴 1 missed (due now)', '🟢 0 to review (due today)', `👁️ Seen 1 of ${total} cards`, '🔥 Current streak = 0']);
   assert.match(shown[0].lines[0], /^🔵 \d+ new \(not seen yet\)$/, 'new cards: the ones a quiz may still offer today');
   s.toggleEduCard();
   assert.equal(card.open, false, 'a second press closes it');
@@ -1355,4 +1355,15 @@ test("plan 28, 5.1: every one-player break's banner sits at the education break'
   assert.deepEqual(ys({}), [440, 512], 'a normal one-player break');
   assert.deepEqual(ys({ runIsEducation: true }), [440, 512], 'an education break (as before)');
   assert.deepEqual(ys({ match: { status: 'playing' }, eduBreakBoxes: null }), [Math.round(1280 * 0.4), Math.round(1280 * 0.4) + 72], 'a match half');
+});
+
+test('"Your cards" (plan 34, round 2): its last line is the learning streak as it stands, the number the 📚 subscript shows', () => {
+  const store = createEduStore(fakeStorage());
+  store.answer(CARDS[0].id, schedule(null, 'good', Date.now() - 60000), { studyDay: localDayKey() });
+  const shown = [];
+  const card = { open: false, show(o) { shown.push(o); this.open = true; }, hide() { this.open = false; } };
+  const s = playScene({ eduStore: store, eduCard: card, locale: 'zh-Hans', state: 'ready', launching: false, match: null, readyBoxes: { educationInfo: {} } });
+  s.toggleEduCard();
+  assert.equal(shown[0].lines.at(-1), '🔥 当前连续 = 1');
+  assert.equal(s.streakNow('study'), 1);
 });

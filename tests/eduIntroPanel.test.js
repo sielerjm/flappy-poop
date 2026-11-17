@@ -64,7 +64,7 @@ const { openEduIntroPanel, closeEduIntroPanel, eduIntroPadAction } = await impor
 const text = (el) => el.children.map((c) => (typeof c === 'string' ? c : text(c))).join('');
 const el = (id) => body.find(id);
 
-function open({ locale = 'en', perLevel = T.education.newPerLevelDefault, newPerDay = null, hideHow = false, hideChoices = false } = {}) {
+function open({ locale = 'en', perLevel = T.education.newPerLevelDefault, newPerDay = null, hideHow = false, hideChoices = false, streak = 0 } = {}) {
   const play = {
     perLevel,
     hideHow,
@@ -72,7 +72,7 @@ function open({ locale = 'en', perLevel = T.education.newPerLevelDefault, newPer
     hidden: [],
     calls: 0,
     eduIntroInfo() {
-      return { counts: { new: 1, missed: 0, review: 0 }, seen: 0, total: 10, startOffered: true, startLevel: 1, order: 'after', perLevel: this.perLevel, newPerDay, testMode: false, hideHow: this.hideHow, hideChoices: this.hideChoices };
+      return { counts: { new: 1, missed: 0, review: 0 }, seen: 0, total: 10, startOffered: true, startLevel: 1, order: 'after', perLevel: this.perLevel, newPerDay, testMode: false, hideHow: this.hideHow, hideChoices: this.hideChoices, streak };
     },
     setEduIntroHidden(section, hidden) {
       this.hidden.push([section, hidden]);
@@ -237,4 +237,13 @@ test('the summary lines (plan 34, Michael): under "How it works" and "Your choic
   }
   assert.equal(t('en', 'eduIntroHowSummary'), 'Answer cards at each level break and to come back from a crash. Right answers at a break earn 🌽 corn kernels.');
   assert.equal(t('en', 'eduIntroChoicesSummary'), 'Choose where you start and how new cards come up.');
+});
+
+test('"Your cards" in the 📚 popup (plan 34, round 2): the counts, the cards seen, then the learning streak; no line on what the gold number counts (Michael at Preview H)', () => {
+  open({ streak: 4 });
+  const lines = all(el('edu-intro-counts')).filter((n) => n.tag === 'p').map(text);
+  assert.deepEqual(lines.slice(-2), [t('en', 'eduCardsSeen').replace('{n}', '0').replace('{total}', '10'), '🔥 Current streak = 4']);
+  assert.equal(lines.length, 5, 'new, missed, review, seen, streak');
+  open({ locale: 'zh-Hans' });
+  assert.equal(all(el('edu-intro-counts')).filter((n) => n.tag === 'p').map(text).at(-1), '🔥 当前连续 = 0');
 });

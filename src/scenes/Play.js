@@ -2350,8 +2350,8 @@ export class Play extends Phaser.Scene {
    * "Your cards" (plan 21, E3; back on the 📚 glyph in plan 26's A2): what the 📚 on the ready screen
    * stands for, opened by a tap on the glyph (or A on its ring item) and closed by any tap, key or pad
    * press. Over every deck: the cards not seen yet, the missed ones due, the reviews due (cardCounts
-   * 'all', the count lines in Michael's wording), how many have been seen at all, and what the gold
-   * number on the 📚 counts. While it is up nothing under it is pressed and no run starts (flap,
+   * 'all', the count lines in Michael's wording), how many have been seen at all, and the learning
+   * streak (plan 34, round 2; the line on what the gold number counts went at Preview H). While it is up nothing under it is pressed and no run starts (flap,
    * onPadAction, handleChrome, launch).
    */
   toggleEduCard() {
@@ -2369,7 +2369,8 @@ export class Play extends Phaser.Scene {
     this.eduCard.show({
       glyph: EDUCATION_EMOJI,
       title: t(this.locale, 'eduCardsTitle'),
-      lines: [...countLines(this.locale, counts), t(this.locale, 'eduCardsSeen').replace('{n}', String(seen)).replace('{total}', String(total)), t(this.locale, 'eduCardsDue')],
+      // The learning streak's line last (plan 34, round 2: Michael). The legend line ("The number on 📚 = …") went at Preview H.
+      lines: [...countLines(this.locale, counts), t(this.locale, 'eduCardsSeen').replace('{n}', String(seen)).replace('{total}', String(total)), t(this.locale, 'streakNowLine').replace('{n}', String(this.streakNow('study')))],
     });
   }
 
@@ -2393,6 +2394,7 @@ export class Play extends Phaser.Scene {
       counts: cardCounts(srs, { context: 'all' }),
       seen: decks.reduce((sum, d) => sum + d.seen, 0),
       total: decks.reduce((sum, d) => sum + d.total, 0),
+      streak: this.streakNow('study'), // the learning streak's line in "Your cards" (plan 34, round 2)
       startOffered: this.eduStartOffered(),
       startLevel: this.eduStartLevel(),
       order: settings.eduNewOrder,
@@ -2465,8 +2467,18 @@ export class Play extends Phaser.Scene {
       const n = streak();
       text.setText(n > 0 ? String(n) : '').setVisible(Boolean(this.readyUiShown) && extra && n > 0);
     };
-    show(this.dailyStreakText, () => this.streakStore.now('daily', utcDayKey()), Boolean(this.dailySun?.visible));
-    show(this.eduStreakText, () => studyStreakNow(this.eduStore.load().study ?? null, localDayKey()));
+    show(this.dailyStreakText, () => this.streakNow('daily'), Boolean(this.dailySun?.visible));
+    show(this.eduStreakText, () => this.streakNow('study'));
+  }
+
+  /**
+   * A day streak as it stands now (plan 34): 'daily', the Daily Dump's (UTC days, this device's); 'study',
+   * the learning streak (local days). The subscripts, the 🌞 card's line and the "Your cards" lines all read
+   * it here, so they never disagree. 0 once the streak has lapsed.
+   */
+  streakNow(kind) {
+    if (kind === 'daily') return this.streakStore?.now?.('daily', utcDayKey()) ?? 0;
+    return studyStreakNow(this.eduStore?.load?.()?.study ?? null, localDayKey());
   }
 
   /** Test mode is on for this session (the registry survives scene.restart, not a reload). */

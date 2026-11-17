@@ -13,7 +13,8 @@ const MUTED = { ...STYLE, fontStyle: 'normal', color: '#c9b8dc' };
  * button whose job follows the player (refresh): Create user (no username: the save panel opens
  * over this popup, and after Save the button reads Play), Play (today's run), See today's result
  * (today is played: Over shows the stored result, with the countdown to the next day here), or
- * Practice in test mode (a run that is never saved). ✕ / Esc / a tap outside / B: the home screen.
+ * Practice in test mode (a run that is never saved). Under the four pictures: why a name is needed, that
+ * practice is not saved, or else "🔥 Current streak = n" (plan 34, round 2). ✕ / Esc / a tap outside / B: the home screen.
  */
 export class Daily extends Phaser.Scene {
   constructor() {
@@ -46,6 +47,8 @@ export class Daily extends Phaser.Scene {
     this.add.text(cx, cy + 30, '\u{1F31E} \u{1F4A9} \u{1F6CC} \u{1F501}', { fontFamily: 'sans-serif', fontSize: '40px' }).setOrigin(0.5);
     // Under the button's row: why a name is needed, or that practice is not saved.
     this.note = this.add.text(cx, cy + 105, '', { ...MUTED, fontSize: '24px', wordWrap: wrap, lineSpacing: 4 }).setOrigin(0.5);
+    // Or, when there is no note, the Daily Dump streak (plan 34, round 2: Michael), in the 🌞 subscript's orange.
+    this.streakLine = this.add.text(cx, cy + 105, '', { ...STYLE, fontSize: '26px', color: T.streakMarkPx.color }).setOrigin(0.5).setVisible(false);
 
     const box = { x: cx, y: cy + 200, width: 380, height: 96 };
     this.button = createButton(this, box, '', { ...STYLE, fontSize: '40px', color: '#f8a0c8' }, { depth: 2, fillAlpha: 1 });
@@ -112,6 +115,9 @@ export class Daily extends Phaser.Scene {
     const label = { practice: 'dailyPractice', create: 'dailyCreateUser', result: 'dailySeeResult', checking: 'dailyChecking', play: 'dailyPlay' }[mode];
     this.button.setText(t(this.locale, label));
     this.note.setText(mode === 'create' ? t(this.locale, 'dailyNeedName') : mode === 'practice' ? t(this.locale, 'dailyPracticeNote') : '');
+    // The streak's line takes the note's slot when there is no note: no username has no streak, and practice counts none.
+    const streak = mode === 'create' || mode === 'practice' ? null : (this.scene.get('Play')?.streakNow?.('daily') ?? 0);
+    this.streakLine?.setText(streak === null ? '' : t(this.locale, 'streakNowLine').replace('{n}', String(streak))).setVisible(streak !== null);
     this.tick();
   }
 
