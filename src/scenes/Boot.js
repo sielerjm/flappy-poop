@@ -1,5 +1,5 @@
 import { TUNING as T } from '../config.js';
-import { VERSION } from '../logic.js';
+import { VERSION, purseSpinRate } from '../logic.js';
 import { setSplashProgress, splashReady } from '../splash.js';
 
 // Cache-bust so browsers pick up new PNGs after art/contract bumps.
@@ -61,6 +61,12 @@ export class Boot extends Phaser.Scene {
     }
     if (!this.anims.exists('coin-spin')) {
       this.anims.create({ key: 'coin-spin', frames: this.anims.generateFrameNumbers('coin'), frameRate: 1000 / T.coin.frameMs, repeat: -1 });
+    }
+    // The quiz purse's kernel (plan 34): spinTurns quick turns inside the glow's fade when a right answer pays.
+    if (!this.anims.exists('coin-spin-quick')) {
+      const frames = this.anims.generateFrameNumbers('coin');
+      const G = T.education.purseGlow;
+      this.anims.create({ key: 'coin-spin-quick', frames, frameRate: purseSpinRate(frames.length, G), repeat: G.spinTurns - 1 });
     }
     // The splash's Continue starts Play (on its release, so the press cannot flap or start a run).
     splashReady(() => this.scene.start('Play'));

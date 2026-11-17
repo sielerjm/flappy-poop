@@ -390,7 +390,7 @@ export const TUNING = {
     masteredDays: 21, // days: a card in review with a stability this long or more counts as mastered (Anki's "mature" is a 21-day interval)
     explainMinMs: 1500, // ms the quiz's Next waits after a wrong answer, so the explanation gets read
     breakCoins: { new: 3, review: 2, practice: 1, missed: 1 }, // coins a right answer in a level break's quiz pays, by why the card was asked (plan 28, Stage 3b: Michael, 16 Nov): a new card, a due review, a card practiced early, a missed card answered right; once per card a local day
-    purseGlow: { radiusPx: 44, fadeFrac: 0.7, peakAlpha: 0.6, fadeMs: 700, color: 0xffe58a }, // the soft glow behind the quiz card's purse when a right answer pays (plan 28, 1.2): px radius, 0–1 outer share that fades, alpha at its peak, ms to fade out, tint
+    purseGlow: { radiusPx: 44, fadeFrac: 0.7, peakAlpha: 0.6, fadeMs: 700, color: 0xffe58a, spinTurns: 2 }, // the soft glow behind the quiz card's purse when a right answer pays (plan 28, 1.2): px radius, 0–1 outer share that fades, alpha at its peak, ms to fade out, tint
     buryCoinsPerLevel: 3, // a Skip (plan 26, A2; a gate's Bury in plan 25): coins × the level just cleared; a due card also goes to tomorrow
     buryPerDay: 3, // due cards a device may skip (bury) in one local day; new and practice cards have no limit (plan 26, A2)
     newPerLevelChoices: [3, 5, 'all'], // the 📚 popup's choices for new cards a level break asks a visit (settings eduNewPerLevel; plan 28, Stage 3b)

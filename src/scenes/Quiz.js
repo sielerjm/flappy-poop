@@ -231,7 +231,8 @@ export class Quiz extends Phaser.Scene {
     const purseX = cx + PANEL.width / 2 - 24;
     const purseY = this.top + 84;
     this.purseText = this.add.text(purseX, purseY, '', { ...STYLE, fontSize: '26px', color: '#ffe58a' }).setOrigin(1, 0.5).setVisible(false);
-    this.purseCoin = this.add.image(purseX, purseY, 'coin', 0).setDisplaySize(PURSE_PX, PURSE_PX).setVisible(false);
+    // A sprite, not an image: it spins with the glow when a right answer pays (plan 34: glowPurse).
+    this.purseCoin = this.add.sprite(purseX, purseY, 'coin', 0).setDisplaySize(PURSE_PX, PURSE_PX).setVisible(false);
     this.purseShown = null;
 
     const kb = this.input.keyboard;
@@ -726,6 +727,8 @@ export class Quiz extends Phaser.Scene {
     if (!shown) {
       this.tweens.killTweensOf(this.purseGlow);
       this.purseGlow.setAlpha(0);
+      this.purseCoin.anims?.stop(); // no spin left over in a revive or the bonus quiz
+      this.purseCoin.setFrame?.(0);
     }
     if (shown && this.purseShown !== null && n > this.purseShown) {
       this.tweens.killTweensOf([this.purseText, this.purseCoin]);
@@ -747,6 +750,15 @@ export class Quiz extends Phaser.Scene {
     this.tweens.killTweensOf(glow);
     glow.setPosition((this.purseCoin.x - PURSE_PX / 2 + this.purseText.x) / 2, this.purseCoin.y).setAlpha(G.peakAlpha);
     this.tweens.add({ targets: glow, alpha: 0, duration: G.fadeMs, ease: 'Sine.easeIn' });
+    // The kernel spins while the glow is lit (plan 34, Michael): spinTurns quick turns over the fade
+    // ('coin-spin-quick', from Boot), back on its face (frame 0) when they end. A second payment restarts
+    // the turns, with one rest-on-its-face waiting.
+    const coin = this.purseCoin;
+    if (coin.play && this.anims?.exists?.('coin-spin-quick')) {
+      coin.off?.('animationcomplete');
+      coin.play('coin-spin-quick');
+      coin.once?.('animationcomplete', () => coin.setFrame(0));
+    }
   }
 
   /** A revive's ❤️ (tries left, then used) or ⭐ (the streak so far); nothing in a break. */
