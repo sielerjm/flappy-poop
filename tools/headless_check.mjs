@@ -83,6 +83,7 @@ export const SECTIONS = [
   { name: 'blocked-storage', needs: [], about: "blocked site data (plan 28, 1.3): the page reloaded with every read of localStorage throwing still boots past the splash, holds a settings choice for the visit and plays a run to the game-over panel, with no page exception; the live board blocked at the browser for the rest of the run; then storage restored and the page reloaded" },
   { name: 'invite-link', needs: [], about: "the invite link (plan 28, 2.4): the page loaded with ?invite=<code> opens the 📚 Education data panel with the code filled in on the first ready screen; the address bar has lost the code; no storage keeps it; a load without it opens nothing (the live board blocked at the browser)" },
   { name: 'run-stats', needs: [], about: "the run summary (plan 30): a run flown through Chrome's own input (keys and a mouse click, with a pause) has every flap but the launch counted as a real, fresh press; a run flown by direct calls has none; a pointer event forged with a plain object counts as a press but never a real one; each summary is queued with the run's numbers" },
+  { name: 'streaks', needs: [], about: "🔥 day streaks (plan 34): a one-player run counts the local day and a Daily Dump its course day on this device; the 🌞 and 📚 subscripts on the ready screen (the Daily Dump and learning streaks, none at 0); your own profile's 🔥 Current streak and ❤️‍🔥 Longest streak rows under Singleplayer and Daily Dump; Clear empties them" },
 ];
 
 /** What a section needs: its own list, or (omitted) every section before it. */
@@ -6497,6 +6498,97 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
       await finish();
       const dc = (await lastRow())?.row?.data;
       ok(flewC && dc && dc.flaps_pressed >= 3 && dc.flaps_trusted === 0 && dc.flaps_fresh === 0 && dc.press_touch >= 3, `a forged pointer event counts as a press but never a real one (${dc ? flapsOf(dc) : 'no summary'})`);
+    });
+
+    await section('streaks', async () => {
+      // Day streaks (plan 34): this device's Singleplayer and Daily Dump streaks, the subscripts, the profile rows.
+      await cdp.send('Network.enable');
+      await cdp.send('Network.setBlockedURLs', { urls: ['*supabase.co*'] });
+      const P = `__flappy.scene.getScene('Play')`;
+      const ST = `__flappy.scene.getScene('Stats')`;
+      const waitFor = async (expr, tries = 60) => {
+        for (let i = 0; i < tries; i += 1) {
+          if (await evaluate(`Boolean(${expr})`)) return true;
+          await sleep(100);
+        }
+        return false;
+      };
+      const home = async () => {
+        await evaluate(`(__flappy.scene.stop('Over'), __flappy.scene.isActive('Stats') && __flappy.scene.stop('Stats'), ${P}.scene.restart(), true)`);
+        await waitFor(`${P}.state === 'ready' && !${P}.launching && ${P}.readyUiShown`);
+        await evaluate(`(() => { const r = document.getElementById('edu-intro-panel'); if (r && !r.hidden) document.getElementById('edu-intro-close')?.click(); return true; })()`);
+        await sleep(300);
+      };
+      const today = await evaluate(`import('./src/education.js').then((m) => m.localDayKey())`);
+      const utc = await evaluate(`import('./src/logic.js').then((m) => m.utcDayKey())`);
+      await evaluate(`(localStorage.removeItem('flappyPoop.streaks'), true)`);
+      await evaluate(`${P}.settings.set({ education: false }), true`);
+      await home();
+      ok((await evaluate(`${P}.dailyStreakText?.visible === false && ${P}.dailyStreakText.text === ''`)), 'no Daily Dump streak yet: no number on the 🌞');
+
+      // A one-player run (not education, not a test run) counts today's local day.
+      await evaluate(`${P}.flap(), true`);
+      await waitFor(`${P}.state === 'playing'`);
+      await sleep(400);
+      await evaluate(`(${P}.graceLeftMs = 0, ${P}.die(), true)`);
+      await waitFor(`${P}.state === 'dead'`, 80);
+      await sleep(800);
+      const single = await evaluate(`JSON.stringify(${P}.streakStore.load().single ?? null)`).then(JSON.parse);
+      ok(single && single.day === today && single.streak >= 1, `a one-player run counts the local day for the Singleplayer streak (${JSON.stringify(single)}; today ${today})`);
+
+      // A Daily Dump counts its course day once claimed.
+      await home();
+      await evaluate(`${P}.startDaily({ day: '${utc}' })`);
+      await waitFor(`${P}.state === 'playing' && ${P}.runIsDaily`, 80);
+      const daily = await evaluate(`JSON.stringify(${P}.streakStore.load().daily ?? null)`).then(JSON.parse);
+      ok(daily && daily.day === utc && daily.streak >= 1, `a Daily Dump counts its course day at the start (${JSON.stringify(daily)}; course day ${utc})`);
+      await evaluate(`(${P}.graceLeftMs = 0, ${P}.die(), true)`);
+      await waitFor(`${P}.state === 'dead'`, 80);
+      await sleep(600);
+
+      // The subscripts: a 4-day Daily Dump streak on the 🌞, a 3-day learning streak on the 📚.
+      await evaluate(`(() => {
+        const prev = (d) => { const x = new Date(d + 'T12:00:00Z'); x.setUTCDate(x.getUTCDate() - 1); return x.toISOString().slice(0, 10); };
+        localStorage.setItem('flappyPoop.streaks', JSON.stringify({ daily: { day: '${utc}', streak: 4, best: 6 }, single: { day: '${today}', streak: 2, best: 9 } }));
+        const edu = JSON.parse(localStorage.getItem('flappyPoop.eduSrs') || '{}');
+        localStorage.setItem('flappyPoop.eduSrs', JSON.stringify({ ...edu, v: 2, cards: edu.cards ?? {}, study: { day: '${today}', streak: 3, best: 3 } }));
+        return true;
+      })()`);
+      await evaluate(`${P}.settings.set({ education: true }), true`);
+      await home();
+      const marks = await evaluate(`JSON.stringify({ d: [${P}.dailyStreakText.text, ${P}.dailyStreakText.visible], e: [${P}.eduStreakText?.text, ${P}.eduStreakText?.visible], ex: ${P}.eduStreakText?.x, ey: ${P}.eduStreakText?.y, sx: ${P}.dailyStreakText.x, sy: ${P}.dailyStreakText.y, info: ${P}.readyBoxes.educationInfo, sun: ${P}.readyBoxes.daily })`).then(JSON.parse);
+      const inside = (x, y, b) => b && Math.abs(x - b.x) <= b.width / 2 && Math.abs(y - b.y) <= b.height / 2;
+      ok(marks.d[0] === '4' && marks.d[1] === true && inside(marks.sx, marks.sy, marks.sun), `the 🌞 shows the Daily Dump streak inside its button (${JSON.stringify(marks.d)})`);
+      ok(marks.e[0] === '3' && marks.e[1] === true && inside(marks.ex, marks.ey, marks.info), `the 📚 shows the learning streak inside the glyph's box (${JSON.stringify(marks.e)})`);
+      await evaluate(`${P}.flap(), true`); // with 📚 on, Play opens the popup first: the ready screen (and its numbers) stays under it
+      await sleep(400);
+      const under = await evaluate(`[${P}.dailyStreakText.visible, ${P}.eduStreakText?.visible]`);
+      await evaluate(`(document.getElementById('edu-intro-play')?.click(), true)`);
+      await waitFor(`${P}.state === 'playing'`, 60);
+      const hidden = await evaluate(`[${P}.dailyStreakText.visible, ${P}.eduStreakText?.visible]`);
+      ok(under.every((v) => v === true) && hidden.every((v) => v === false), `both numbers stay under the 📚 popup and leave with the ready UI once the run starts (${JSON.stringify(under)} → ${JSON.stringify(hidden)})`);
+      await evaluate(`${P}.settings.set({ education: false }), true`); // the run is left flying: home() restarts the scene
+      await home();
+
+      // Your own profile: the rows under Singleplayer and Daily Dump.
+      await evaluate(`import('./src/save.js').then((m) => { const p = ${P}; p.setSaveState(m.saveLocal(m.ensureId({ ...(p.save ?? {}), name: p.save?.name || 'Streaky' }))); return true; })`);
+      await evaluate(`(globalThis.__profile = null, ${P}.openStats(), true)`);
+      ok(await waitFor(`__flappy.scene.isActive('Stats') && ${ST}.view`), 'the own profile opens');
+      const texts = await evaluate(`JSON.stringify(${ST}.children.list.filter((c) => c.type === 'Text').map((c) => c.text))`).then(JSON.parse);
+      const t = (key) => evaluate(`import('./src/i18n.js').then((m) => m.t('en', '${key}'))`);
+      const [now, best] = [await t('statsStreakNow'), await t('statsStreakBest')];
+      const n = (x) => texts.filter((s) => s === x).length;
+      // ❤️‍🔥 Longest streak is also the 📚 section's own row (statsEduBest, the same words) when education is offered.
+      const eduRows = (await evaluate(`Boolean(${ST}.view.education)`)) ? 1 : 0;
+      ok(n(now) === 2 && n(best) === 2 + eduRows && texts.includes('2 days') && texts.includes('9 days') && texts.includes('4 days') && texts.includes('6 days'),
+        `🔥 Current streak and ❤️‍🔥 Longest streak under Singleplayer (2 / 9 days) and Daily Dump (4 / 6 days): ${n(now)} and ${n(best)} rows (${eduRows} of them the 📚 section's)`);
+      await evaluate(`${ST}.close(), true`);
+      await waitFor(`!__flappy.scene.isActive('Stats')`, 20);
+
+      // Clear (sign out) takes the streaks with the player.
+      await evaluate(`${P}.signOut(), true`);
+      ok((await evaluate(`localStorage.getItem('flappyPoop.streaks') === null && Object.keys(${P}.streakStore.load()).length === 0`)), 'Clear empties the day streaks');
+      await home();
     });
 
     const f2 = await frame();

@@ -561,6 +561,8 @@ Inspired by Flappy Bird`,
     statsEduGrade: 'Average grade',
     statsEduRuns: 'Graded runs',
     statsEduStreak: '🔥 Learning streak',
+    statsStreakNow: '🔥 Current streak',
+    statsStreakBest: '❤️‍🔥 Longest streak',
     statsEduBest: '❤️‍🔥 Longest streak',
     statsEduLevel: 'Highest level unlocked',
     careerDethroned: 'Dethroned: took 1st place from someone',
@@ -1123,6 +1125,8 @@ Inspired by Flappy Bird`,
     statsEduGrade: '平均成绩',
     statsEduRuns: '计分局数',
     statsEduStreak: '🔥 连续学习',
+    statsStreakNow: '🔥 当前连续',
+    statsStreakBest: '❤️‍🔥 最长连续',
     statsEduBest: '❤️‍🔥 最长连续',
     statsEduLevel: '已解锁的最高关卡',
     careerDethroned: '夺冠：从别人手里抢下第一名',
@@ -1249,6 +1253,18 @@ export function caughtUpText(locale, cap, more = 0) {
 export function countLines(locale, counts) {
   const line = (key, n) => t(locale, key).replace('{n}', String(n ?? 0));
   return [line('eduCardsNew', counts?.new), line('eduCardsMissed', counts?.missed), line('eduCardsReview', counts?.review)];
+}
+
+/**
+ * A day streak's two profile rows (plan 34: Singleplayer and the Daily Dump, your own profile), as
+ * [label key, value]: 🔥 the streak now, ❤️‍🔥 the longest, in days (the wait line's day words).
+ */
+export function streakProfileRows(locale, { now = 0, best = 0 } = {}) {
+  const days = (n) => (n === 1 ? t(locale, 'waitDay') : t(locale, 'waitDays').replace('{n}', String(n)));
+  return [
+    ['statsStreakNow', days(now)],
+    ['statsStreakBest', days(best)],
+  ];
 }
 
 /**

@@ -113,3 +113,70 @@ test('Play.signOut clears the day streaks with the rest of the player (plan 34)'
   p.signOut();
   assert.deepEqual(streakStore.load(), {});
 });
+
+// Step 34.2: the profile rows and the two subscripts.
+
+test('streakProfileRows (plan 34): 🔥 the streak now and ❤️‍🔥 the longest, in days, both locales', async () => {
+  const { streakProfileRows, t } = await import('../src/i18n.js');
+  assert.deepEqual(streakProfileRows('en', { now: 12, best: 30 }), [['statsStreakNow', '12 days'], ['statsStreakBest', '30 days']]);
+  assert.deepEqual(streakProfileRows('en', { now: 1, best: 1 }).map((r) => r[1]), ['1 day', '1 day']);
+  assert.deepEqual(streakProfileRows('en').map((r) => r[1]), ['0 days', '0 days'], 'nothing yet: 0');
+  assert.deepEqual(streakProfileRows('zh-Hans', { now: 3, best: 7 }).map((r) => r[1]), ['3 天', '7 天']);
+  assert.deepEqual([t('en', 'statsStreakNow'), t('en', 'statsStreakBest')], ['🔥 Current streak', '❤️‍🔥 Longest streak']);
+  assert.deepEqual([t('zh-Hans', 'statsStreakNow'), t('zh-Hans', 'statsStreakBest')], ['🔥 当前连续', '❤️‍🔥 最长连续']);
+});
+
+test("Stats.streakView (plan 34): this device's two streaks as { now, best }, Singleplayer on the local day and the Daily Dump on the UTC day; null without a store", async () => {
+  const { Stats } = await import('../src/scenes/Stats.js');
+  const store = createStreakStore(fakeStorage());
+  store.played('single', '2026-11-16');
+  store.played('single', '2026-11-17');
+  store.played('daily', '2026-11-15');
+  const view = Stats.prototype.streakView.call({}, store, { local: '2026-11-18', utc: '2026-11-18' });
+  assert.deepEqual(view, { single: { now: 2, best: 2 }, daily: { now: 0, best: 1 } }, 'Singleplayer alive (yesterday); the Daily missed a day');
+  assert.equal(Stats.prototype.streakView.call({}, null), null);
+});
+
+/** A text stand-in: what refreshStreakMarks sets. */
+function textStub() {
+  return { scene: {}, text: '', visible: false, setText(v) { this.text = v; return this; }, setVisible(v) { this.visible = v; return this; } };
+}
+
+test('Play.refreshStreakMarks (plan 34): the 🌞 shows the Daily Dump streak and the 📚 the learning streak while the ready UI shows; 0 shows nothing, a missed day is 0', async () => {
+  const { utcDayKey } = await import('../src/logic.js');
+  const { localDayKey } = await import('../src/education.js');
+  const streakStore = createStreakStore(fakeStorage());
+  streakStore.played('daily', utcDayKey());
+  let study = { day: localDayKey(), streak: 5, best: 5 };
+  const p = playScene({ streakStore, eduStore: { load: () => ({ study }) }, dailySun: { visible: true }, dailyStreakText: textStub(), eduStreakText: textStub(), readyUiShown: true });
+  p.refreshStreakMarks();
+  assert.deepEqual([p.dailyStreakText.text, p.dailyStreakText.visible, p.eduStreakText.text, p.eduStreakText.visible], ['1', true, '5', true]);
+  study = { day: '2020-01-01', streak: 5, best: 5 };
+  p.readyUiShown = false;
+  p.refreshStreakMarks();
+  assert.deepEqual([p.dailyStreakText.visible, p.eduStreakText.text, p.eduStreakText.visible], [false, '', false], 'hidden with the ready UI; a lapsed streak shows nothing');
+  p.readyUiShown = true;
+  p.dailySun.visible = false;
+  p.refreshStreakMarks();
+  assert.equal(p.dailyStreakText.visible, false, 'never without its 🌞');
+  const gone = playScene({ streakStore, eduStore: { load: () => ({}) }, dailyStreakText: { scene: null }, eduStreakText: null, readyUiShown: true });
+  gone.refreshStreakMarks(); // a text destroyed with its scene, and no 📚 switch: nothing to do, nothing thrown
+});
+
+test("the streak subscripts' spots (plan 34): the 🌞's inside its button, the 📚's inside the glyph's own hit box (a tap on it opens the card), with one, two and three switches", async () => {
+  const { GAME_WIDTH, GAME_HEIGHT, TUNING: T } = await import('../src/config.js');
+  const { readyLayout, readyHit } = await import('../src/logic.js');
+  const M = T.streakMarkPx;
+  assert.ok(M && Number.isFinite(M.dx) && Number.isFinite(M.dy) && Number.isFinite(M.eduDy) && M.fontPx >= 20, 'a size readable on a phone');
+  for (const opts of [{ education: true }, { versus: true, education: true }]) {
+    const L = readyLayout(GAME_WIDTH, GAME_HEIGHT, T, 0, opts);
+    const d = L.daily;
+    assert.ok(Math.abs(M.dx) <= d.width / 2 && Math.abs(M.dy) <= d.height / 2, 'the 🌞 number inside its button');
+    assert.equal(readyHit(d.x + M.dx, d.y + M.dy, L), 'daily', 'a tap on it opens the Daily Dump');
+    const sw = L.education;
+    const x = sw.emojiX + M.dx;
+    const y = sw.y + M.eduDy;
+    assert.equal(readyHit(x, y, L), 'educationInfo', `${Object.keys(opts).join('+')}: a tap on the 📚 number opens the card`);
+    assert.ok(Math.abs(y - sw.y) + M.fontPx / 2 <= sw.height / 2 + 8, 'the number keeps to the switch row');
+  }
+});

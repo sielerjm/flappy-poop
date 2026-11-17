@@ -138,7 +138,7 @@ import { openEduIntroPanel, closeEduIntroPanel, isEduIntroPanelOpen, eduIntroPad
 import { answerEvent, createConsentStore, createResearchQueue } from '../research.js';
 import { bindPad } from '../input/pad.js';
 import { keyGroup, sameDevice, catchUpTier, catchUpDraws, versusAvailable, ghostPlacement, rivalMarker, respawnPose, respawnBlinkStart, courseDistance, VERSUS_EMOJI } from '../versus.js';
-import { createEduStore, countersAfterRun, dueCount, cardCounts, masteryByDeck, pickCard, shuffleOptions, gradeFor, schedule, eduShopPrices, reviveStart, reviveStep, reviveSettled, newTally, tallyAnswer, EDUCATION_EMOJI, localDayKey, paidOn, buriedIdsOn, skipUntil, boardRecord, educationBackup, readEducationBackup, restoredSettings } from '../education.js';
+import { createEduStore, countersAfterRun, dueCount, cardCounts, masteryByDeck, pickCard, shuffleOptions, gradeFor, schedule, eduShopPrices, reviveStart, reviveStep, reviveSettled, newTally, tallyAnswer, EDUCATION_EMOJI, localDayKey, studyStreakNow, paidOn, buriedIdsOn, skipUntil, boardRecord, educationBackup, readEducationBackup, restoredSettings } from '../education.js';
 
 const TEXT_STYLE = {
   fontFamily: 'sans-serif',
@@ -469,7 +469,7 @@ export class Play extends Phaser.Scene {
       .setOrigin(0.5)
       .setDepth(20);
     this.readyUiShown = true; // setReadyUiVisible's last word: the switches rebuilt by refreshReadySwitches follow it
-    this.toiletToggle = this.versusToggle = this.educationToggle = this.eduDueText = null; // a restart destroyed the last ones
+    this.toiletToggle = this.versusToggle = this.educationToggle = this.eduDueText = this.eduStreakText = null; // a restart destroyed the last ones
     this.buildReadySwitches();
     // "?" in the top-right corner opens How to play. It pulses under a soft white
     // halo until the player acknowledges this build (opens it, or finishes a run).
@@ -497,8 +497,11 @@ export class Play extends Phaser.Scene {
       this.dailyBtn = createButton(this, b, '', { ...TEXT_STYLE, fontSize: '52px' });
       this.dailySun = this.add.text(b.x, b.y, '\u{1F31E}', { fontFamily: 'sans-serif', fontSize: '52px' }).setOrigin(0.5).setDepth(21);
       this.dailySunTween = this.tweens.add({ targets: this.dailySun, scale: T.dailyPulseScale, yoyo: true, repeat: -1, duration: T.readyPromptPulseMs, ease: 'Sine.easeInOut' });
+      // The Daily Dump streak, a small number at the circle's bottom right (plan 34: refreshStreakMarks).
+      this.dailyStreakText = this.streakMark(b.x + T.streakMarkPx.dx, b.y + T.streakMarkPx.dy);
     }
     this.refreshDailyPrompt();
+    this.refreshStreakMarks();
     // Once per page load and day: a user code that already played today on another device stops the glow here too.
     if (!this.match && this.registry.get('dailyCheckedDay') !== utcDayKey()) {
       this.registry.set('dailyCheckedDay', utcDayKey());
@@ -862,6 +865,7 @@ export class Play extends Phaser.Scene {
     this.dailyBtn.setVisible(visible);
     this.dailySun.setVisible(visible);
     this.refreshDailyPrompt();
+    this.refreshStreakMarks();
     this.profileBtn.setVisible(visible);
     this.profileHalo.setVisible(visible && !this.save?.name);
     this.refreshTestBadge();
@@ -1976,6 +1980,9 @@ export class Play extends Phaser.Scene {
           .setOrigin(0.5)
           .setDepth(22)
       : null;
+    // The learning streak, a small number at the 📚's bottom right (plan 34), under the due count.
+    this.eduStreakText?.destroy();
+    this.eduStreakText = b.education ? this.streakMark(b.education.emojiX + T.streakMarkPx.dx, b.education.y + T.streakMarkPx.eduDy) : null;
     for (const toggle of [this.toiletToggle, this.versusToggle, this.educationToggle]) toggle?.setVisible(this.readyUiShown);
     this.refreshEduDue();
   }
@@ -2339,11 +2346,34 @@ export class Play extends Phaser.Scene {
 
   /** The 📚 switch's due count: shown with the switch, and only when a card is due. */
   refreshEduDue() {
+    this.refreshStreakMarks(); // the 📚's learning streak (plan 34), the switch's or not
     // A text its scene destroyed (a late call after a restart: AUD-063) has no scene; redrawing it would throw.
     if (!this.eduDueText?.scene) return;
     const n = dueCount(this.eduStore.load().cards);
     this.eduDueText.setText(n > 0 ? String(n) : '');
     this.eduDueText.setVisible(this.readyUiShown && n > 0);
+  }
+
+  /** One streak subscript (plan 34): a small orange number with a dark outline, centred on (x, y), over the ready UI. */
+  streakMark(x, y) {
+    return this.add.text(x, y, '', { ...TEXT_STYLE, fontSize: T.streakMarkPx.fontPx + 'px', color: T.streakMarkPx.color, strokeThickness: 6 }).setOrigin(0.5).setDepth(22).setVisible(false);
+  }
+
+  /**
+   * The streak subscripts on the ready screen (plan 34): the Daily Dump streak on the 🌞, the learning
+   * streak on the 📚, each while the ready UI shows and the streak is alive (played today or yesterday);
+   * nothing at 0. The 📚's only while its switch is there; the 🌞's only while the 🌞 shows.
+   */
+  refreshStreakMarks() {
+    // Each streak is read only for a number that is there: none destroyed with its scene (a late call
+    // after a restart, as AUD-063's count), none without its 📚 switch.
+    const show = (text, streak, extra = true) => {
+      if (!text?.scene) return;
+      const n = streak();
+      text.setText(n > 0 ? String(n) : '').setVisible(Boolean(this.readyUiShown) && extra && n > 0);
+    };
+    show(this.dailyStreakText, () => this.streakStore.now('daily', utcDayKey()), Boolean(this.dailySun?.visible));
+    show(this.eduStreakText, () => studyStreakNow(this.eduStore.load().study ?? null, localDayKey()));
   }
 
   /** Test mode is on for this session (the registry survives scene.restart, not a reload). */

@@ -6,7 +6,7 @@ import { createScrollView } from '../ui/scrollView.js';
 import { createButton } from '../ui/button.js';
 import { createInfoCard } from '../ui/infoCard.js';
 import { TAG_GLYPHS } from '../leaderboard.js';
-import { t, metaFontSize, levelLabel, badgeTitle, badgeDesc, dailyDayText, eduProfileRows } from '../i18n.js';
+import { t, metaFontSize, levelLabel, badgeTitle, badgeDesc, dailyDayText, eduProfileRows, streakProfileRows } from '../i18n.js';
 import { ACHIEVEMENTS, EDU_ACHIEVEMENTS, achievementById, averageGrade, openQuests, progressOf } from '../achievements.js';
 import { validateName } from '../save.js';
 import { localDayKey, studyStreakNow, shownCounters } from '../education.js';
@@ -186,6 +186,8 @@ export class Stats extends Phaser.Scene {
         avgScore: games ? round1((totals.sumScore ?? 0) / games) : null,
       },
       daily: online ? server.daily : { dumps: totals.dailyGames ?? 0, gold: null, silver: null, bronze: null },
+      // This device's day streaks (plan 34): Singleplayer on local days, the Daily Dump on its UTC days; your own profile only.
+      streaks: this.streakView(play.streakStore),
       tournament: online ? server.tournament : null,
       counters: totals,
       earned,
@@ -193,6 +195,12 @@ export class Stats extends Phaser.Scene {
       tags: online ? (server.tags ?? []) : [],
       education: play.educationAvailable?.() ? { ...this.eduView(play.eduStore.load()), shared: Boolean(play.eduShareOn?.()), pilot: Boolean(play.researchJoined?.()) } : null,
     };
+  }
+
+  /** This device's day streaks for the profile (plan 34): { single, daily }, each { now, best }; null without a store. */
+  streakView(store, { local = localDayKey(), utc = utcDayKey() } = {}) {
+    if (!store) return null;
+    return { single: { now: store.now('single', local), best: store.best('single') }, daily: { now: store.now('daily', utc), best: store.best('daily') } };
   }
 
   /**
@@ -294,10 +302,12 @@ export class Stats extends Phaser.Scene {
     row('statsMaxLevel', s.maxLevel ? levelLabel(locale, s.maxLevel) : DASH);
     row('statsAvgLevel', num(s.avgLevel));
     row('statsAvgScore', num(s.avgScore));
+    if (view.own && view.streaks) for (const [key, value] of streakProfileRows(locale, view.streaks.single)) row(key, value);
     y += 16;
     header('statsDaily');
     row('statsDumps', num(view.daily?.dumps));
     row('statsPodiums', medals(view.daily));
+    if (view.own && view.streaks) for (const [key, value] of streakProfileRows(locale, view.streaks.daily)) row(key, value);
     y += 16;
     header('statsTournament');
     const tour = view.tournament;
