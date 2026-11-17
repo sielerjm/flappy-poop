@@ -680,11 +680,15 @@ the days in (`streakStore.merge`, `mergeDayStreak`: the run of days in a row end
 never lowered, a day more than one ahead of today left out). The server reads Daily Dump course days from
 `daily_scores` (since 10 Nov 2026) and the run log's Daily rows, and Singleplayer local days from the run log's
 `ended_at` (since 0.19.1, 15 Nov 2026; 90 days kept); so the streaks of players from before 0.24.0 come back too.
-Offline, nothing changes and the next sync asks again. A one-player run that is neither education nor test counts the local day it
+Offline, nothing changes and the next sync asks again. Every profile shows them (34.14, Michael: "Users should be
+able to see everyone's streaks", "Store time zone"): your own from the device store (`Stats.streakView`), another
+player's from `player_stats`' `streaks` (`cleanStreaks`; `day_streak` over `streak_days`, Singleplayer in the time
+zone `play_days` keeps in `player_meta.tz`, its best never below `player_meta.single_best`, which `play_days` keeps past
+the run log's 90 days). A one-player run that is neither education nor test counts the local day it
 ends on (`recordCareer('single')`, at the game over); a Daily Dump
-counts its course's UTC day once claimed (`countDailyStreak` in `start`; a practice Daily counts nothing). Your
-own profile shows 🔥 Current streak and ❤️‍🔥 Longest streak under Singleplayer and under Daily Dump
-(`streakProfileRows`, `Stats.streakView`); the ready screen shows a small orange number at the 🌞's bottom right
+counts its course's UTC day once claimed (`countDailyStreak` in `start`; a practice Daily counts nothing). Every
+profile shows 🔥 Current streak and ❤️‍🔥 Longest streak under Singleplayer and under Daily Dump
+(`streakProfileRows`; yours from `Stats.streakView`, another player's from the server, above); the ready screen shows a small orange number at the 🌞's bottom right
 (the Daily Dump streak) and at the 📚's (the learning streak, under the gold due count), while the streak is alive
 and nothing at 0 (`refreshStreakMarks`, `TUNING.streakMarkPx`; both inside their buttons' hit boxes). The 🌞 card
 says "🔥 Current streak = n" (0 included) in its note's place, under the four pictures, while its button reads Play,
@@ -2402,7 +2406,11 @@ db/schema.sql               Supabase schema: scores table (player_id = save-code
                             renames the player's earlier days. play_days (anon,
                             plan 34, 34.13): a player's Daily Dump course days and
                             Singleplayer local days (in the time zone sent), from
-                            daily_scores and run_log, by their own id, days only.
+                            daily_scores and run_log, by their own id, days only;
+                            34.14: it keeps a known zone in player_meta.tz and the
+                            longest Singleplayer streak in player_meta.single_best,
+                            and player_stats returns everyone's streaks (day_streak,
+                            streak_days, known_tz: internal).
                             schema_version()
                             (anon) is the file's stamp: `npm run schema:stamp`
                             after an edit (a test fails on a stale one), `npm run

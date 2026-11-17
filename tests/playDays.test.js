@@ -12,17 +12,25 @@ import { localDayKey } from '../src/education.js';
 
 const days = (db, pid, tz = null) => asAnon(db, 'select public.play_days($1, $2) as r', [pid, tz]).then((r) => r.rows[0].r);
 const daily = (db, pid, day) => db.query("insert into public.daily_scores (player_id, day, name, score, level, pipes) values ($1, $2::date, 'Tester', 10, 4, 5)", [pid, day]);
-/** A run-log row as submit_runs stores it; `ended` is a timestamptz text. */
-const run = (db, pid, tag, mode, ended, day = null) =>
-  db.query("insert into public.run_log (player_id, run_id, session, mode, day, score, level, ended_at, version) values ($1, $2, 'sessionAB12', $3, $4::date, 5, 4, $5::timestamptz, '0.24.0')", [pid, id(`R${tag}`), mode, day, ended]);
+/**
+ * A run-log row as submit_runs stores it; `ended` is a timestamptz text (the device's clock). It arrived
+ * a minute after it ended unless `received` says when, and the device's clock was right unless
+ * `offsetMs` (the server's clock minus the device's) says otherwise.
+ */
+const run = (db, pid, tag, mode, ended, day = null, { received = null, offsetMs = 0 } = {}) =>
+  db.query(
+    "insert into public.run_log (player_id, run_id, session, mode, day, score, level, ended_at, version, clock_offset_ms, received_at) values ($1, $2, 'sessionAB12', $3, $4::date, 5, 4, $5::timestamptz, '0.24.0', $6::bigint, coalesce($7::timestamptz, $5::timestamptz + interval '1 minute'))",
+    [pid, id(`R${tag}`), mode, day, ended, offsetMs, received],
+  );
 
-test('play_days: the Daily Dump course days from daily_scores and the run log (a stub too), each once, oldest first; Singleplayer days in the time zone sent', async () => {
+test('play_days: the Daily Dump course days from daily_scores alone (a run-log row names no day), oldest first; Singleplayer days in the time zone sent', async () => {
   const db = await freshDb();
   const P = id('PD');
   await daily(db, P, '2026-11-12');
   await daily(db, P, '2026-11-11');
-  await run(db, P, 1, 'daily', '2026-11-12 10:00+00', '2026-11-12'); // the same day as its score: once
-  await run(db, P, 2, 'daily', '2026-11-13 10:00+00', '2026-11-13'); // a Daily cut off by a reload posts no score, but was claimed
+  await daily(db, P, '2026-11-13');
+  await run(db, P, 1, 'daily', '2026-11-12 10:00+00', '2026-11-12');
+  await run(db, P, 2, 'daily', '2026-11-20 10:00+00', '2026-11-20'); // a Daily row in the run log alone is no Daily day (34.14)
   await run(db, P, 3, 'single', '2026-11-15 12:00+00');
   await run(db, P, 4, 'single', '2026-11-16 23:30+00'); // 00:30 on the 17th in Zurich
   await run(db, P, 5, 'single', '2026-11-16 08:00+00');
@@ -46,6 +54,24 @@ test('play_days: by the player\'s own resolved id only (an old merged id reads t
   assert.equal(await days(db, 'not-an-id'), null);
   assert.equal(await days(db, null), null);
   assert.deepEqual(await days(db, id('PN')), { daily: [], single: [] });
+});
+
+test('a Singleplayer day counts by the server\'s clock (34.14: every profile shows the streak): the end time set right by the measured clock offset when the row came within 48 hours, else the day it came', async () => {
+  const db = await freshDb();
+  const P = id('PC');
+  const single = async () => (await days(db, P, 'UTC')).single;
+  await run(db, P, 1, 'single', '2026-11-10 12:00+00'); // came a minute later
+  await run(db, P, 2, 'single', '2026-11-11 12:00+00', null, { received: '2026-11-13 11:00+00' }); // 47 h late: back from offline
+  assert.deepEqual(await single(), ['2026-11-10', '2026-11-11']);
+  // A row that names an end long before it came counts on the day it came.
+  for (const [tag, ended] of [[3, '2026-10-01 12:00+00'], [4, '2026-10-02 12:00+00'], [5, '2026-10-03 12:00+00']]) await run(db, P, tag, 'single', ended, null, { received: '2026-11-13 12:00+00' });
+  assert.deepEqual(await single(), ['2026-11-10', '2026-11-11', '2026-11-13'], 'three named October days: one day, the one they came on');
+  // A device whose clock runs 30 days behind: its end times read 30 days early; the offset puts them right.
+  await run(db, P, 6, 'single', '2026-10-16 12:00+00', null, { received: '2026-11-15 12:01+00', offsetMs: 30 * 86400000 });
+  assert.deepEqual((await single()).at(-1), '2026-11-15');
+  // A row with no end time: the day it came.
+  await db.query("insert into public.run_log (player_id, run_id, session, mode, score, level, version, received_at) values ($1, $2, 'sessionAB12', 'single', 1, 1, '0.24.0', '2026-11-16 09:00+00')", [P, id('R7')]);
+  assert.deepEqual((await single()).at(-1), '2026-11-16');
 });
 
 test('play_days answers the newest 400 days of each kind', async () => {
@@ -142,5 +168,69 @@ test('Play.pullPlayDays (34.13): once per page load and player, the server\'s da
     assert.equal(api.log.length, n, 'no username: no request');
   } finally {
     api.restore();
+  }
+});
+
+// Everyone's streaks on every profile (plan 34, 34.14, Michael: "Users should be able to see everyone's
+// streaks"; "Store time zone").
+const streak = (db, days, today) => db.query('select public.day_streak($1::date[], $2::date) as r', [days, today]).then((r) => r.rows[0].r);
+const meta = (db, pid) => db.query('insert into public.player_meta (player_id) values ($1) on conflict do nothing', [pid]);
+const stats = (db, name) => asAnon(db, 'select public.player_stats(null, $1) as r', [name]).then((r) => r.rows[0].r);
+const ago = (n) => new Date(Date.now() - n * 86400000).toISOString();
+
+test('day_streak counts as src/streak.js does: now is the run ending on the latest day while that is today, yesterday or tomorrow; best the longest run; a day further ahead left out', async () => {
+  const db = await freshDb();
+  const T = '2026-11-17';
+  assert.deepEqual(await streak(db, [], T), { now: 0, best: 0 });
+  assert.deepEqual(await streak(db, ['2026-11-11', '2026-11-12', '2026-11-13', '2026-11-14', '2026-11-15', '2026-11-16', '2026-11-17'], T), { now: 7, best: 7 });
+  assert.deepEqual(await streak(db, ['2026-11-14', '2026-11-15', '2026-11-16'], T), { now: 3, best: 3 }, 'ending yesterday: alive');
+  assert.deepEqual(await streak(db, ['2026-11-13', '2026-11-14', '2026-11-15'], T), { now: 0, best: 3 }, 'a day missed: 0 now, the best kept');
+  assert.deepEqual(await streak(db, ['2026-11-01', '2026-11-02', '2026-11-03', '2026-11-04', '2026-11-16', '2026-11-17', '2026-11-17'], T), { now: 2, best: 4 });
+  assert.deepEqual(await streak(db, ['2026-11-17', '2026-11-18', '2026-11-25'], T), { now: 2, best: 2 }, 'tomorrow counts; a week ahead does not');
+  for (const days of [[], ['2026-11-16', '2026-11-17'], ['2026-11-10'], ['2026-11-17', '2026-11-18', '2026-11-30']]) {
+    const want = mergeDayStreak(null, days, T);
+    const now = want && Math.abs(dayNumber(want.day) - dayNumber(T)) <= 1 ? want.streak : 0;
+    assert.deepEqual(await streak(db, days, T), { now, best: want?.best ?? 0 }, `the same as the device: ${days.join(' ')}`);
+  }
+});
+
+test('player_stats shows anyone\'s streaks by board name: the Daily Dump on UTC days, Singleplayer in the time zone their device sent (kept by play_days), the longest Singleplayer streak kept past the run log', async () => {
+  const db = await freshDb();
+  const P = id('PS');
+  await meta(db, P);
+  const utc = (n) => dayKeyOf(dayNumber(utcDayKey()) - n);
+  for (const n of [3, 2, 1, 0]) await daily(db, P, utc(n));
+  for (const n of [4, 3, 2]) await run(db, P, n, 'single', ago(n));
+  let s = (await stats(db, 'Tester')).streaks;
+  assert.deepEqual(s.daily, { now: 4, best: 4 }, 'four Daily Dumps in a row to today');
+  assert.deepEqual(s.single, { now: 0, best: 3 }, 'three Singleplayer days ending two days ago: lapsed, best 3');
+  assert.equal((await db.query('select tz from public.player_meta where player_id = $1', [P])).rows[0].tz, null, 'no time zone before the device sends one');
+
+  await days(db, P, 'Mars/Olympus');
+  assert.equal((await db.query('select tz from public.player_meta where player_id = $1', [P])).rows[0].tz, null, 'an unknown zone is not kept');
+  await days(db, P, 'Pacific/Auckland');
+  const m = (await db.query('select tz, single_best from public.player_meta where player_id = $1', [P])).rows[0];
+  assert.deepEqual([m.tz, m.single_best], ['Pacific/Auckland', 3], 'the zone and the longest Singleplayer streak kept');
+
+  await db.query("delete from public.run_log where player_id = $1 and mode = 'single'", [P]); // 90 days later
+  s = (await stats(db, 'Tester')).streaks;
+  assert.deepEqual(s.single, { now: 0, best: 3 }, 'the best outlives the run log');
+  assert.equal(JSON.stringify(await stats(db, 'Tester')).includes('Auckland'), false, 'the time zone is never in the answer');
+
+  const N = id('PN');
+  await days(db, N, 'Europe/Zurich');
+  assert.equal((await db.query('select count(*)::int as n from public.player_meta where player_id = $1', [N])).rows[0].n, 0, 'play_days makes no player_meta row for an id the server never saw');
+});
+
+test('a merge keeps a time zone and the longer Singleplayer best; anon cannot call the streak helpers', async () => {
+  const db = await freshDb();
+  const keep = id('MK');
+  const old = id('MO');
+  await db.query("insert into public.player_meta (player_id, tz, single_best) values ($1, null, 2), ($2, 'Asia/Tokyo', 5)", [keep, old]);
+  await asAnon(db, 'select public.merge_players($1, $2)', [keep, old]);
+  const m = (await db.query('select tz, single_best from public.player_meta where player_id = $1', [keep])).rows[0];
+  assert.deepEqual([m.tz, m.single_best], ['Asia/Tokyo', 5]);
+  for (const sql of ["select public.day_streak('{}'::date[], current_date)", "select public.streak_days('x', 'daily', 'UTC')", "select public.known_tz('UTC')"]) {
+    await assert.rejects(asAnon(db, sql), /permission denied/, sql);
   }
 });

@@ -1627,6 +1627,7 @@ export class Play extends Phaser.Scene {
     this.best.clear();
     this.boardNameTaken = false;
     this.boardBestsFor = null;
+    this.registry?.remove?.('playDaysFor'); // the same code loaded again on this page asks for its days again (34.14)
   }
 
   /**

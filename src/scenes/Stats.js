@@ -186,7 +186,8 @@ export class Stats extends Phaser.Scene {
         avgScore: games ? round1((totals.sumScore ?? 0) / games) : null,
       },
       daily: online ? server.daily : { dumps: totals.dailyGames ?? 0, gold: null, silver: null, bronze: null },
-      // This device's day streaks (plan 34): Singleplayer on local days, the Daily Dump on its UTC days; your own profile only.
+      // This device's day streaks (plan 34): Singleplayer on local days, the Daily Dump on its UTC days, with the
+      // days from your other devices folded in (34.13). Other players' profiles show the server's count (34.14).
       streaks: this.streakView(play.streakStore),
       tournament: online ? server.tournament : null,
       counters: totals,
@@ -253,6 +254,8 @@ export class Stats extends Phaser.Scene {
       earned: server.achievements.map((a) => ({ entry: achievementById(a.id), at: a.at })).filter((b) => b.entry),
       locked: openQuests(utcDayKey()).filter((e) => !earnedIds.has(e.id)),
       tags: server.tags ?? [],
+      // Their day streaks, as the server counts them (plan 34, 34.14); none from a server before 34.14.
+      streaks: server.streaks ?? null,
       // Only when they share it, and only on a device with education mode unlocked.
       education: play.educationAvailable?.() && server.education ? this.sharedEduView(server.education) : null,
     };
@@ -302,12 +305,12 @@ export class Stats extends Phaser.Scene {
     row('statsMaxLevel', s.maxLevel ? levelLabel(locale, s.maxLevel) : DASH);
     row('statsAvgLevel', num(s.avgLevel));
     row('statsAvgScore', num(s.avgScore));
-    if (view.own && view.streaks) for (const [key, value] of streakProfileRows(locale, view.streaks.single)) row(key, value);
+    if (view.streaks) for (const [key, value] of streakProfileRows(locale, view.streaks.single)) row(key, value);
     y += 16;
     header('statsDaily');
     row('statsDumps', num(view.daily?.dumps));
     row('statsPodiums', medals(view.daily));
-    if (view.own && view.streaks) for (const [key, value] of streakProfileRows(locale, view.streaks.daily)) row(key, value);
+    if (view.streaks) for (const [key, value] of streakProfileRows(locale, view.streaks.daily)) row(key, value);
     y += 16;
     header('statsTournament');
     const tour = view.tournament;

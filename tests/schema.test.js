@@ -620,6 +620,7 @@ test('player_stats: single-player averages and the board level, daily podiums ra
     achievements: [],
     tags: [],
     education: null,
+    streaks: { single: { now: 0, best: 0 }, daily: { now: 0, best: 0 } },
   });
 });
 
@@ -1744,6 +1745,7 @@ async function liveView(db) {
   const profile = async (pid, name) => {
     const p = (await call('select public.player_stats($1, $2) as r', [pid, name]))[0].r;
     delete p.education;
+    delete p.streaks; // plan 34, 34.14's new answer (tests/playDays.test.js); everything else answers as before
     return p;
   };
   return {

@@ -1091,7 +1091,18 @@ function normalizeProfile(raw) {
     achievements: (Array.isArray(raw.achievements) ? raw.achievements : []).filter((a) => a && isAchievementId(a.id) && typeof a.at === 'string' && DAY.test(a.at)).map((a) => ({ id: a.id, at: a.at })),
     tags: cleanTags(raw.tags),
     education: cleanEducation(raw.education),
+    streaks: cleanStreaks(raw.streaks),
   };
+}
+
+/** A profile's day streaks (player_stats, plan 34, 34.14): { single, daily }, each { now, best } in whole days (now never above best); null when the server sends none (a schema from before 34.14). */
+function cleanStreaks(raw) {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null;
+  const one = (v) => {
+    const best = whole(v?.best);
+    return { now: Math.min(whole(v?.now), best), best };
+  };
+  return { single: one(raw.single), daily: one(raw.daily) };
 }
 
 /**

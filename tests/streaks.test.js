@@ -137,6 +137,19 @@ test("Stats.streakView (plan 34): this device's two streaks as { now, best }, Si
   assert.equal(Stats.prototype.streakView.call({}, null), null);
 });
 
+test("another player's profile carries their streaks as the server counts them (34.14, Michael: \"Users should be able to see everyone's streaks\"); none from a server that sends none", async () => {
+  const { Stats } = await import('../src/scenes/Stats.js');
+  const base = { found: true, name: 'Rival', single: {}, daily: {}, tournament: {}, counters: {}, achievements: [], tags: [], education: null };
+  const other = (streaks) => Stats.prototype.otherView.call(Object.assign(Object.create(Stats.prototype), { askedName: 'Rival' }), { fetchProfile: async () => ({ ...base, streaks }) });
+  const streaks = { single: { now: 2, best: 9 }, daily: { now: 7, best: 7 } };
+  const view = await other(streaks);
+  assert.deepEqual([view.own, view.streaks], [false, streaks]);
+  assert.equal((await other(null)).streaks, null, 'a server from before 34.14: no rows');
+  const src = (await import('node:fs')).readFileSync(new URL('../src/scenes/Stats.js', import.meta.url), 'utf8');
+  assert.equal(src.includes('view.own && view.streaks'), false, 'the rows are drawn for any profile that has streaks');
+  assert.equal(src.split('if (view.streaks) for (const [key, value] of streakProfileRows(').length - 1, 2, 'under Singleplayer and under Daily Dump');
+});
+
 /** A text stand-in: what refreshStreakMarks sets. */
 function textStub() {
   return { scene: {}, text: '', visible: false, setText(v) { this.text = v; return this; }, setVisible(v) { this.visible = v; return this; } };

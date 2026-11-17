@@ -1280,7 +1280,7 @@ export function countLines(locale, counts) {
 }
 
 /**
- * A day streak's two profile rows (plan 34: Singleplayer and the Daily Dump, your own profile), as
+ * A day streak's two profile rows (plan 34: Singleplayer and the Daily Dump, on every profile since 34.14), as
  * [label key, value]: 🔥 the streak now, ❤️‍🔥 the longest, in days (the wait line's day words).
  */
 export function streakProfileRows(locale, { now = 0, best = 0 } = {}) {

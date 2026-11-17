@@ -720,7 +720,13 @@ test('fetchPlayerStats asks by id or by name, and cleans the answer', async () =
     achievements: [{ id: 'win_game', at: '2026-11-09' }],
     tags: ['dev', 'new'],
     education: { grade: 92.5, runs: 4, badges: { edu_grade_a: '2026-11-12' } },
+    streaks: null,
   });
+  // streaks (plan 34, 34.14): whole days, now never above best; null from a server before 34.14.
+  const streaksOf = async (streaks) => (await fetchPlayerStats({ name: 'Alice' }, { fetch: fakeFetch({ status: 200, body: { ...body, streaks } }), config })).streaks;
+  assert.deepEqual(await streaksOf({ single: { now: 2, best: 9 }, daily: { now: 7, best: 7 } }), { single: { now: 2, best: 9 }, daily: { now: 7, best: 7 } });
+  assert.deepEqual(await streaksOf({ single: { now: 5, best: 3 }, daily: { now: -1, best: 'x' } }), { single: { now: 3, best: 3 }, daily: { now: 0, best: 0 } });
+  assert.equal(await streaksOf('x'), null);
   // education: null for a player who does not share (or junk); a grade out of range reads as none.
   const eduOf = async (education) => (await fetchPlayerStats({ name: 'Alice' }, { fetch: fakeFetch({ status: 200, body: { ...body, education } }), config })).education;
   assert.equal(await eduOf(null), null);
