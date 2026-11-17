@@ -391,15 +391,17 @@ changes (stable `switchBoxes` for the focus ring); a gold count on the 📚 is t
 The 📚 glyph and that count are a box of their own inside the switch's (`readyLayout`'s
 `educationInfo`, which `readyHit` looks at first): a tap there, or A on its ring item, opens **"Your cards"**
 (`Play.toggleEduCard` on the `eduCard` info card; plan 21's card, back on the glyph in plan 26's A2 at Michael's
-word): the three count lines (`countLines`, his wording), the cards seen of all and what the gold number
-counts; any tap, key or pad press closes it and no run starts. A tap, Space, Esc, P (or ⏸, the pad's Menu)
+word): the three count lines (`countLines`, his wording), the cards seen of all and "🔥 Current streak = n" (the
+learning streak, `Play.streakNow('study')`; plan 34, round 2: the line on what the gold number counts went at
+Michael's word, Preview H); the 📚 popup's own "Your cards" list ends the same way; any tap, key or pad press closes it and no run starts. A tap, Space, Esc, P (or ⏸, the pad's Menu)
 and the pad's A press nothing under it; another chrome key (S, I, L…) closes it and then does its own thing
 (`handleChrome`; P since AUD-027). It never opens under the 📚 popup: `openEduIntro` drops a press still down
 on the glyph (`eduCardPress`), and `toggleEduCard` refuses while the popup is open (AUD-034). Turning the switch
 on opens nothing since that step. **The 📚 popup** (plan 26: `ui/eduIntroPanel.js`, `Play.openEduIntro`) is a
 DOM panel with the beta note, a line that the cards are not medical advice (`eduIntroNotMedical`, plan 28), how the mode works, the player's cards (the cards not
 seen yet, the missed ones due, the reviews due over every deck: `cardCounts`; how many have been seen:
-`masteryByDeck`; and that the gold number is missed plus to review: `Play.eduIntroInfo`), the start
+`masteryByDeck`; then "🔥 Current streak = n", the learning streak, since plan 34's round 2, which also took out
+the line on what the gold number counts: `Play.eduIntroInfo`), the start
 level (◀ LV n ▶ while a later level is unlocked; no start-level row at all in test mode, whose run starts at
 its own level: `eduIntroInfo().testMode`, plan 26 A2), where new cards go
 (`setEduNewOrder`; under the three buttons a line says what the pressed one does, `ORDERS` in the
@@ -677,7 +679,10 @@ counts its course's UTC day once claimed (`countDailyStreak` in `start`; a pract
 own profile shows 🔥 Current streak and ❤️‍🔥 Longest streak under Singleplayer and under Daily Dump
 (`streakProfileRows`, `Stats.streakView`); the ready screen shows a small orange number at the 🌞's bottom right
 (the Daily Dump streak) and at the 📚's (the learning streak, under the gold due count), while the streak is alive
-and nothing at 0 (`refreshStreakMarks`, `TUNING.streakMarkPx`; both inside their buttons' hit boxes).
+and nothing at 0 (`refreshStreakMarks`, `TUNING.streakMarkPx`; both inside their buttons' hit boxes). The 🌞 card
+says "🔥 Current streak = n" (0 included) in its note's place, under the four pictures, while its button reads Play,
+Checking… or See today's result; with no username or in test mode the note keeps that place (plan 34, round 2).
+Every reader goes through `Play.streakNow(kind)`, so the numbers never disagree.
 **Challenge questions** (plan 34, Michael; code names `superQ` / deck `super` / item `question`, since plan 33's
 💪 Challenge mode holds `challenge`): once a level in a 📚 run, while an unmet challenge card is left
 (`pickSuperCard`), a ❓ bubble (`assets/question.png`, a see-through placeholder, drawn at
@@ -693,10 +698,17 @@ when it reaches the poop's x, unless a fart flies through) or farted through, it
 revive that clears it brings it back on the next pair that can carry it (`clearFieldAhead`). Touched,
 `offerSuperQ` holds the run (state paused, physics and effects paused; `superQHold`: `chromeState` reports
 playing, so no PAUSED banner, tray row or "?"; `resumePlay` and `autoPause` do nothing) and opens the Quiz in mode
-'super': the offer (❓ Challenge question, what a right answer pays, `superQReward` = rewardBase + rewardPerLevel ×
-level, 10 to 22, and what a wrong one costs, `superQPenalty` = penalty or the whole purse if less; the bubble
-large on a disc of the level's colour; Decline | Try it, ✕ and Esc decline; no tap or key for retryLockoutMs,
-`offerLocked`). After Try the card can only be answered (`closable` false: no ✕, Skip or End Review).
+'super', and the bubble pops (`Bubble_Pop.mp3`, Michael's sound; the offer plays no book opening over it,
+`Quiz.openingSound`). The offer (plan 34, round 2, Michael) is a 640 × 640 card of its own (`offerRect`, its
+`offerTitle` and `offerText`; the full card's header, question and run tally wait for the card, and `placeCorner`
+moves the ✕ and the purse): the bubble on a disc of the level's colour, "Challenge question", his sentence ("You
+popped a challenge question. Answering the challenge question earns you {reward} corn kernels, but answering it
+incorrectly costs up to {penalty} corn kernels. Do you wish to try?", with `superQReward` = rewardBase +
+rewardPerLevel × level, 10 to 22, and `education.superQ.penalty`; what a wrong answer takes is `superQPenalty`,
+the whole purse if less), then a red Decline | a green Try it (`declineBtn` / `tryBtn`, the answers' own fills).
+✕ and Esc decline; no tap or key for retryLockoutMs (`offerLocked`); after it Enter / Space press Try it, but a
+held key's repeats do not, and the controller's ring starts on Try it (AUD-068: `try` and `decline` lead the
+ring's list). Try puts the full card back (`hideOffer`). After Try the card can only be answered (`closable` false: no ✕, Skip or End Review).
 `superQAnswer` saves it as a first sight (right: review later; wrong: missed, due now, so it holds the next
 gate) with a study day, pays or charges the purse, and stays out of `runQuiz`, the grade, 💯, 🤓 and the pilot's
 events (the server takes break, revive and bonus contexts only; RESEARCH.md says so: once a challenge card is in the bank,
@@ -2086,7 +2098,9 @@ src/
                             the ready screen only): what the Daily Dump is, today's
                             level, one button by mode() (Create user / Play / See
                             today's result / Practice), the countdown once played,
-                            the version line. refresh() redraws it after a save.
+                            the version line; streakLine ("🔥 Current streak = n",
+                            Play.streakNow('daily'); plan 34, round 2) in the note's
+                            place unless a note shows. refresh() redraws it after a save.
     (every overlay builds this.focus from pressable() items, ✕ first then its
                             rows, and calls focus.show(), which only shows under a
                             controller; About / HowTo / Changelog pass scrolled: sv and
@@ -2187,9 +2201,13 @@ src/
     Quiz.js                 Overlay (plan 21; chromeIntent 'quiz' in an education
                             run's level break, Play.openQuiz otherwise): the 📚 quiz
                             card, 640 × 1160. Mode 'super' (plan 34): the challenge
-                            question's offer (showOffer: what it pays and costs, the
-                            bubble on the level's colour, Decline | Try it, nothing
-                            for retryLockoutMs: offerLocked, close() included), then
+                            question's offer (showOffer, round 2: a 640 × 640 card,
+                            offerRect / offerTitle / offerText, Michael's sentence,
+                            the bubble on the level's colour, a red Decline and a
+                            green Try it (makeButton's look), the ring and Enter /
+                            Space on Try it (AUD-068), nothing for retryLockoutMs:
+                            offerLocked, close() included; hideOffer on Try; no
+                            book opening, openingSound), then
                             one card that can only be answered (closable), the
                             verdict and Fly on (superStep); the purse shows.
                             Modes 'break' (coins), 'revive' (after a

@@ -123,7 +123,7 @@ A bean draw with a full bag becomes fiber instead.
 
 ### Ready screen
 
-Along the top: the **🌞** (the [Daily Dump](#daily-dump)) and the **?** (How to play). A small orange number on the 🌞 is your Daily Dump streak, the days in a row you have played it (on the 📚 switch, your learning streak). Then, top to bottom: title, bobbing poop (“TAP TO FLAP!”), **toilet toggle**, and your **user button**: `Load user` until you set a name, then `name · best`; it opens Save / Load.
+Along the top: the **🌞** (the [Daily Dump](#daily-dump)) and the **?** (How to play). A small orange number on the 🌞 is your Daily Dump streak, the days in a row you have played it (on the 📚 switch, your learning streak); the 🌞 card and the 📚's “Your cards” say it too: “🔥 Current streak = 3”. Then, top to bottom: title, bobbing poop (“TAP TO FLAP!”), **toilet toggle**, and your **user button**: `Load user` until you set a name, then `name · best`; it opens Save / Load.
 
 ### During a run
 
@@ -250,7 +250,7 @@ A learning mode for everyone, in beta: turn on 📚 on the home screen, and quiz
 - **Skip or Quit.** **Skip** a card for corn: it waits until the next day (due cards at most 3 a day). **Quit** asks twice, and while the break still has cards to ask, the run ends ungraded.
 - **Practice.** Caught up, **Keep practicing** asks the cards that are due past the break's 10, then cards that are not due yet. A right answer to a card not due yet leaves its schedule as it was; a wrong one makes it missed. A skipped practice card stays out until the next day.
 - **Corn.** Each card pays corn for its first right answer of the day: 3 for a new card, 2 for a card due for review, 1 for practice or a card you missed. A wrong answer costs nothing.
-- **❓ Challenge questions.** Once a level a **❓ bubble** floats between two pipe pairs that open at the same height, right on your line (fly past it and it opens anyway). It offers a harder question on any topic: **Try it** or **Decline**. Right pays 10 🌽 on level 1, 2 more each level, up to 22 on level 7; wrong costs 5 🌽 (or what your purse holds). Once you try a card it can only be answered. Either way it joins your cards, so it comes back for review like any other (a miss is due at once). Challenge answers never count in the run's ✅ ❌, its grade or the badges, and the bubble stops once you have met all 21 challenge cards.
+- **❓ Challenge questions.** Once a level a **❓ bubble** floats between two pipe pairs that open at the same height, right on your line (fly past it and it opens anyway). It pops and offers a harder question on any topic: a red **Decline** or a green **Try it** (Enter or Space also try it). Right pays 10 🌽 on level 1, 2 more each level, up to 22 on level 7; wrong costs 5 🌽 (or what your purse holds). Once you try a card it can only be answered. Either way it joins your cards, so it comes back for review like any other (a miss is due at once). Challenge answers never count in the run's ✅ ❌, its grade or the badges, and the bubble stops once you have met all 21 challenge cards.
 - **🤓 Nerd Alert** goes to a run you win with every answer right and nothing left to review (no missed card, no review due).
 
 ![Finish line](docs/finish-divider.svg)

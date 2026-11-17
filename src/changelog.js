@@ -12,14 +12,14 @@ export const CHANGELOG = [
     date: '17 Nov 2026',
     notes: {
       en: [
-        'Streaks: play on days in a row and a small orange number on the 🌞 (Daily Dump) and the 📚 (learning) shows your streak. Your profile shows your current 🔥 and longest ❤️‍🔥 streaks for Singleplayer and the Daily Dump, counted on this device from today.',
-        '📚 Challenge questions: once a level a ❓ bubble floats right on your path. Touch it for a harder question on any topic: right pays 10 to 22 🌽 (more each level), wrong costs 5. Try it or decline; once you try it, right or wrong, the card joins your cards.',
+        'Streaks: play on days in a row and a small orange number on the 🌞 (Daily Dump) and the 📚 (learning) shows your streak; the 🌞 card and “Your cards” say it too. Your profile shows your current 🔥 and longest ❤️‍🔥 streaks for Singleplayer and the Daily Dump, counted on this device from today.',
+        '📚 Challenge questions: once a level a ❓ bubble floats right on your path. Pop it for a harder question on any topic: right pays 10 to 22 🌽 (more each level), wrong costs up to 5. Try it or decline; once you try it, right or wrong, the card joins your cards.',
         '🤓 Nerd Alert now goes to a run you win with every answer right and nothing left to review.',
         'The corn by the quiz purse spins when a right answer pays, and each part of the 📚 popup now opens with a one-line summary (tap Show for the rest).',
       ],
       'zh-Hans': [
-        '连续天数：连续几天玩，🌞（每日一拉）和 📚（学习）上会出现一个橙色小数字，显示你的连续天数。你的个人资料会显示单人模式和每日一拉的 🔥 当前连续和 ❤️‍🔥 最长连续，从今天起在这台设备上计算。',
-        '📚 挑战题：每一关都会有一个 ❓ 泡泡飘在你的路线上。碰到它就会出一道更难的题，什么主题都可能：答对得 10 到 22 🌽（关卡越高越多），答错扣 5。可以挑战，也可以放弃；无论对错，这张卡片都会加入你的卡片。',
+        '连续天数：连续几天玩，🌞（每日一拉）和 📚（学习）上会出现一个橙色小数字，显示你的连续天数；🌞 卡片和“你的卡片”里也会写出来。你的个人资料会显示单人模式和每日一拉的 🔥 当前连续和 ❤️‍🔥 最长连续，从今天起在这台设备上计算。',
+        '📚 挑战题：每一关都会有一个 ❓ 泡泡飘在你的路线上。戳破它就会出一道更难的题，什么主题都可能：答对得 10 到 22 🌽（关卡越高越多），答错最多扣 5。可以挑战，也可以放弃；无论对错，这张卡片都会加入你的卡片。',
         '🤓 学霸警报现在颁给全部答对、并且没有待复习卡片的通关局。',
         '答对得到玉米粒时，钱袋旁的玉米粒会转起来；📚 弹窗的每个部分现在都先显示一句简介（点“显示”看全部）。',
       ],
