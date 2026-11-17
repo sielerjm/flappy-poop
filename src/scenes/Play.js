@@ -128,7 +128,7 @@ import { perfMark, perfSteps, perfRunStart } from '../ui/perfMeter.js';
 import { createFinishTexture } from '../ui/finish.js';
 import { createLightTexture } from '../ui/pipeShade.js';
 import { createLevelBar } from '../ui/levelBar.js';
-import { enrolResearch, submitResearchEvents, deleteResearch, createEduShareStore, shareEducation, renameEducation, unshareEducation, submitEducationGrades, fetchEducationBoard, createSubmitStore, createMergeStore, createRenameStore, createTournamentQueue, createDailyStore, createDailyQueue, createRunQueue, submitRuns, waitsForRun, submitDailyScore, fetchDailyBoard, submitPlans, submitScore, submitTournament, checkNameAvailable, mergePlayers, fetchPlayerName, fetchRank, nameAction, createCareerStore, createStreakStore, submitCounters, claimAchievements, fetchPlayerStats } from '../leaderboard.js';
+import { enrolResearch, submitResearchEvents, deleteResearch, createEduShareStore, shareEducation, renameEducation, unshareEducation, submitEducationGrades, fetchEducationBoard, createSubmitStore, createMergeStore, createRenameStore, createTournamentQueue, createDailyStore, createDailyQueue, createRunQueue, submitRuns, waitsForRun, submitDailyScore, fetchDailyBoard, submitPlans, submitScore, submitTournament, checkNameAvailable, mergePlayers, fetchPlayerName, fetchRank, nameAction, createCareerStore, createStreakStore, fetchPlayDays, submitCounters, claimAchievements, fetchPlayerStats } from '../leaderboard.js';
 import { createButton } from '../ui/button.js';
 import { createToggle } from '../ui/toggle.js';
 import { createCoinText } from '../ui/coinText.js';
@@ -1677,6 +1677,7 @@ export class Play extends Phaser.Scene {
       .then(() => this.creditCareer()) // bests from other devices earn their score and level badges here
       .then(() => this.drainRuns()) // run summaries first, so the run behind each post below is stored (plan 30)
       .then(() => this.drainDaily())
+      .then(() => this.pullPlayDays(id)) // the day streaks, with the days played on other devices (34.13)
       .then(() => this.drainCareer(id))
       .then(() => this.drainEduShare(id))
       .then(() =>
@@ -1735,6 +1736,31 @@ export class Play extends Phaser.Scene {
    * code follow. A pulled row that is now this device's best of its kind is filed as its last
    * confirmed submit, so submitPlans does not post the board's own score back. Never rejects.
    */
+  /**
+   * The day streaks from any device (plan 34, 34.13, Michael): once per page load and player, the server's
+   * play_days (Daily Dump course days; Singleplayer days in this device's time zone) are folded into this
+   * device's streak store (mergeDayStreak), then the 🌞's number is redrawn. Offline, or another player by
+   * the time it answers: nothing changes and the next sync asks again. Never rejects.
+   */
+  pullPlayDays(id) {
+    if (!this.save?.name || this.registry.get('playDaysFor') === id || !this.streakStore?.merge) return Promise.resolve();
+    let tz = null;
+    try {
+      tz = Intl.DateTimeFormat().resolvedOptions().timeZone ?? null;
+    } catch {
+      tz = null;
+    }
+    return fetchPlayDays(id, tz)
+      .then((days) => {
+        if (!days || this.save?.id !== id) return;
+        this.registry.set('playDaysFor', id); // the registry outlives scene.restart: once per page load
+        this.streakStore.merge('daily', days.daily, utcDayKey());
+        this.streakStore.merge('single', days.single, localDayKey());
+        this.refreshStreakMarks();
+      })
+      .catch(() => {});
+  }
+
   pullBoardBests(id) {
     if (!this.save?.name || this.boardBestsFor === id) return Promise.resolve();
     return this.fetchBoardBests(id)

@@ -83,7 +83,7 @@ export const SECTIONS = [
   { name: 'blocked-storage', needs: [], about: "blocked site data (plan 28, 1.3): the page reloaded with every read of localStorage throwing still boots past the splash, holds a settings choice for the visit and plays a run to the game-over panel, with no page exception; the live board blocked at the browser for the rest of the run; then storage restored and the page reloaded" },
   { name: 'invite-link', needs: [], about: "the invite link (plan 28, 2.4): the page loaded with ?invite=<code> opens the 📚 Education data panel with the code filled in on the first ready screen; the address bar has lost the code; no storage keeps it; a load without it opens nothing (the live board blocked at the browser)" },
   { name: 'run-stats', needs: [], about: "the run summary (plan 30): a run flown through Chrome's own input (keys and a mouse click, with a pause) has every flap but the launch counted as a real, fresh press; a run flown by direct calls has none; a pointer event forged with a plain object counts as a press but never a real one; each summary is queued with the run's numbers" },
-  { name: 'streaks', needs: [], about: "🔥 day streaks (plan 34): a one-player run counts the local day and a Daily Dump its course day on this device; the 🌞 and 📚 subscripts on the ready screen (the Daily Dump and learning streaks, none at 0); your own profile's 🔥 Current streak and ❤️‍🔥 Longest streak rows under Singleplayer and Daily Dump; Clear empties them; the 🌞 card's and \"Your cards\"' \"🔥 Current streak = n\" lines (round 2)" },
+  { name: 'streaks', needs: [], about: "🔥 day streaks (plan 34): a one-player run counts the local day and a Daily Dump its course day on this device; the 🌞 and 📚 subscripts on the ready screen (the Daily Dump and learning streaks, none at 0); your own profile's 🔥 Current streak and ❤️‍🔥 Longest streak rows under Singleplayer and Daily Dump; Clear empties them; the 🌞 card's and \"Your cards\"' \"🔥 Current streak = n\" lines (round 2); the days from other devices (34.13: a stubbed play_days, asked once, folded in)" },
   { name: 'education-superq', needs: [], about: "❓ the challenge question (plan 34): the bubble on its pair in a 📚 run, the pairs either side opening at the same height and holding still, its size and float; flown past it opens anyway; the run held under the offer (no banner, tray or \"?\"; P and a hidden page do nothing); taps and Space locked for a moment; Decline flies on with a grace and saves nothing; Try's card cannot be left until answered; right pays 8 + 2 × level and saves the card as reviewed; wrong takes 5 and saves it as missed, holding Fly on; neither counts in the run's tally; round 2: the offer its own square card (sentence above the buttons, no tally), the ring and a fresh Space on Try it, a held Space nothing (AUD-068); the bubble's pop and no book sound on the offer" },
 ];
 
@@ -6611,6 +6611,24 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
       const dl = await evaluate(`(() => { const d = __flappy.scene.getScene('Daily'); return JSON.stringify({ mode: d.mode(), text: d.streakLine.text, shown: d.streakLine.visible, note: d.note.text }); })()`).then(JSON.parse);
       await evaluate(`(__flappy.scene.stop('Daily'), true)`);
       ok(dl.text === '🔥 Current streak = 4' && dl.shown && !dl.note, `the 🌞 card shows the Daily Dump streak in the note's place (${JSON.stringify(dl)})`);
+
+      // The days from other devices (34.13): a stubbed play_days with seven Daily days in a row to today and
+      // three Singleplayer days before today; the sync folds them in once and the 🌞 shows 7.
+      const pd = await evaluate(`(() => {
+        const back = (d, n) => { const x = new Date(d + 'T12:00:00Z'); x.setUTCDate(x.getUTCDate() - n); return x.toISOString().slice(0, 10); };
+        const answer = { daily: [6, 5, 4, 3, 2, 1, 0].map((n) => back('${utc}', n)), single: [3, 2, 1].map((n) => back('${today}', n)) };
+        globalThis.__pdFetch = globalThis.fetch; globalThis.__pdAsks = [];
+        globalThis.fetch = async (url, init) => { if (String(url).endsWith('/rpc/play_days')) { globalThis.__pdAsks.push(JSON.parse(init.body)); return new Response(JSON.stringify(answer), { status: 200 }); } return new Response('{"message":"stub"}', { status: 503 }); };
+        return import('./src/config.js').then(async (m) => {
+          const api = m.LEADERBOARD.dataApi; m.LEADERBOARD.dataApi = 'https://stub.invalid/rest/v1';
+          const p = ${P}; p.registry.remove('playDaysFor');
+          try { await p.pullPlayDays(p.save.id); await p.pullPlayDays(p.save.id); } finally { m.LEADERBOARD.dataApi = api; globalThis.fetch = globalThis.__pdFetch; }
+          return JSON.stringify({ asks: globalThis.__pdAsks.length, tz: globalThis.__pdAsks[0]?.p_tz ?? null, rec: p.streakStore.load(), sun: [p.dailyStreakText.text, p.dailyStreakText.visible] });
+        });
+      })()`).then(JSON.parse);
+      ok(pd.asks === 1 && pd.tz === (await evaluate(`Intl.DateTimeFormat().resolvedOptions().timeZone`)), `play_days asked once, with this device's time zone (${pd.asks}, ${pd.tz})`);
+      ok(pd.rec.daily?.streak === 7 && pd.rec.daily.best === 7 && pd.sun[0] === '7' && pd.sun[1] === true, `the server's Daily days make a 7-day streak and the 🌞 shows it (${JSON.stringify(pd.rec.daily)}, ${JSON.stringify(pd.sun)})`);
+      ok(pd.rec.single?.streak === 4 && pd.rec.single.best === 9 && pd.rec.single.day === today, `three Singleplayer days before this device's two make 4, the best of 9 kept (${JSON.stringify(pd.rec.single)})`);
 
       // Clear (sign out) takes the streaks with the player.
       await evaluate(`${P}.signOut(), true`);

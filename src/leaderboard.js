@@ -17,7 +17,7 @@ import { LEADERBOARD, TUNING } from './config.js';
 import { recordScore, bestByToilet, validateName } from './save.js';
 import { addCounters, cleanCounters, isAchievementId, GRADE_MAX } from './achievements.js';
 import { browserStorage, createJsonStore } from './store.js';
-import { cleanDayStreak, dayStreakNow, nextDayStreak } from './streak.js';
+import { cleanDayStreak, dayStreakNow, nextDayStreak, mergeDayStreak } from './streak.js';
 
 // ---------------------------------------------------------------------------
 // Pure helpers
@@ -527,6 +527,23 @@ export async function submitRuns(playerId, rows, opts = {}) {
   return 'ok';
 }
 
+/** play_days answers at most this many days of each kind (db/schema.sql). */
+const PLAY_DAYS_MAX = 400;
+
+/**
+ * The days this player played (plan 34, 34.13: db/schema.sql play_days), for the day streaks:
+ * { daily, single }, each a list of 'YYYY-MM-DD' (Daily Dump course days; Singleplayer days in the
+ * time zone `tz`, an IANA name, UTC when unknown). Anything else in the answer is dropped. null when
+ * offline, or for no id.
+ */
+export async function fetchPlayDays(playerId, tz = null, opts = {}) {
+  if (typeof playerId !== 'string' || !ID_RE.test(playerId)) return null;
+  const out = await request('/rpc/play_days', { method: 'POST', body: { p_player_id: playerId, p_tz: typeof tz === 'string' && tz.length <= 64 ? tz : null } }, opts);
+  if (!out || typeof out !== 'object') return null;
+  const days = (v) => (Array.isArray(v) ? v.filter((d) => typeof d === 'string' && DAY.test(d)).slice(-PLAY_DAYS_MAX) : []);
+  return { daily: days(out.daily), single: days(out.single) };
+}
+
 /**
  * One request with the apikey header and a timeout. Resolves to the parsed
  * JSON body (undefined for an empty 2xx body) or to null on any failure. With
@@ -838,10 +855,12 @@ export const STREAK_KINDS = ['single', 'daily'];
 
 /**
  * This device's day streaks (plan 34, LEADERBOARD.streaksKey): { single, daily }, each a streak record
- * { day, streak, best } (src/streak.js) or absent. Local only: never sent to the server and not in the
- * 📚 backup, so another device starts its own. played(kind, day) counts a day played (nextDayStreak);
- * now(kind, today) is the streak still alive as of `today` (0 after a missed day), best(kind) the most
- * ever in a row. Storage follows src/store.js (a full or blocked storage keeps it for this load only).
+ * { day, streak, best } (src/streak.js) or absent. Never sent and not in the 📚 backup; the days a
+ * player played on any device come back from the server's play_days (fetchPlayDays, 34.13) and are
+ * folded in by merge(kind, days, today) (mergeDayStreak). played(kind, day) counts a day played
+ * (nextDayStreak); now(kind, today) is the streak still alive as of `today` (0 after a missed day),
+ * best(kind) the most ever in a row. Storage follows src/store.js (a full or blocked storage keeps it
+ * for this load only).
  */
 export function createStreakStore(storage = browserStorage(), key = LEADERBOARD.streaksKey) {
   const clean = (raw) => {
@@ -859,6 +878,12 @@ export function createStreakStore(storage = browserStorage(), key = LEADERBOARD.
       if (!STREAK_KINDS.includes(kind) || !DAY_RE.test(day ?? '')) return box.read();
       const all = box.read();
       return box.write({ ...all, [kind]: nextDayStreak(all[kind] ?? null, day) });
+    },
+    merge(kind, days, today) {
+      if (!STREAK_KINDS.includes(kind) || !DAY_RE.test(today ?? '')) return box.read();
+      const all = box.read();
+      const rec = mergeDayStreak(all[kind] ?? null, days, today);
+      return rec ? box.write({ ...all, [kind]: rec }) : all;
     },
     now(kind, today) {
       return dayStreakNow(box.read()[kind] ?? null, today);

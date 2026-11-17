@@ -38,6 +38,7 @@
 --   * call submit_runs(...)        a batch of run summaries, as numbers (plan 30); stored owner-only, 90 days
 --   * call score_board(...)        the 🏆 top list as one player sees it: their own rows at their own best (names, never ids); a page from p_offset (plan 28)
 --   * call schema_version()        which version of this file the database last ran (a stamp of the file; 2026-11-13)
+--   * call play_days(...)          the days the player played, for their day streaks (plan 34): their own id only, days only
 -- A player has up to two rows: their best on the toilet and their best off it
 -- (primary key player_id + toilet, since 2026-11-04).
 -- and nothing else: no INSERT / UPDATE / DELETE on the table, and nothing at all
@@ -74,7 +75,7 @@
 -- submit_daily_score / daily_board / submit_counters / claim_achievements /
 -- player_stats / board_tags / share_education / submit_education_grades / rename_education /
 -- unshare_education / education_board / enrol_research / submit_research_events / delete_research /
--- submit_runs / score_board / schema_version;
+-- submit_runs / score_board / schema_version / play_days;
 -- an old client keeps working (same submit_score signature).
 --
 -- Maintenance (SQL editor):
@@ -123,6 +124,7 @@
 --     select * from public.research_retention; select * from public.research_responses;
 --   delete every participant and answer of a phase (the pilot's, before the beta):
 --     select public.admin_purge_phase('pilot');
+--   undo the streak backfill (plan 34, 34.13): drop function public.play_days(text, text);
 --   undo the stamp: drop function public.schema_version();
 --   undo the board pages (plan 28, 5.2): drop function public.score_board(text, int, int),
 --     public.daily_board(text, date, int, int), public.tournament_board(text, int, int),
@@ -2900,6 +2902,54 @@ begin
 end;
 $$;
 
+-- play_days (plan 34, 34.13): the days a player played, so a device can fill in their day streaks
+-- (src/streak.js mergeDayStreak), from any device with their save code. Daily Dump days are course
+-- days (UTC), from daily_scores (since 2026-11-10, kept) and the run log's Daily rows (stubs too: the
+-- device counts a Daily once claimed). Singleplayer days are the local days, in the time zone p_tz
+-- (an IANA name the device sends; anything unknown reads as UTC), on which a one-player run ended
+-- by the device's clock (run_log.ended_at, kept 90 days; the log starts with 0.19.1, 2026-11-15).
+-- The newest 400 of each, oldest first, as 'YYYY-MM-DD'. Days only: no score, time or name. By the
+-- player's own secret id (resolved), never by name; null for a malformed id. Reads, never writes.
+create or replace function public.play_days(p_player_id text, p_tz text default null)
+returns jsonb
+language plpgsql
+stable
+security definer
+set search_path = public
+as $$
+declare
+  v_id text;
+  v_tz text := 'UTC';
+begin
+  if p_player_id is null or p_player_id !~ '^[A-Za-z0-9_-]{22}$' then
+    return null;
+  end if;
+  v_id := public.resolve_player(p_player_id);
+  if p_tz is not null and length(p_tz) <= 64 and exists (select 1 from pg_timezone_names z where z.name = p_tz) then
+    v_tz := p_tz;
+  end if;
+  return jsonb_build_object(
+    'daily', coalesce((
+      select jsonb_agg(to_char(x.day, 'YYYY-MM-DD') order by x.day)
+      from (
+        select d.day from public.daily_scores d where d.player_id = v_id
+        union
+        select r.day from public.run_log r where r.player_id = v_id and r.mode = 'daily' and r.day is not null
+        order by 1 desc
+        limit 400
+      ) x), '[]'::jsonb),
+    'single', coalesce((
+      select jsonb_agg(to_char(y.day, 'YYYY-MM-DD') order by y.day)
+      from (
+        select distinct (r.ended_at at time zone v_tz)::date as day
+        from public.run_log r
+        where r.player_id = v_id and r.mode = 'single' and r.ended_at is not null
+        order by 1 desc
+        limit 400
+      ) y), '[]'::jsonb));
+end;
+$$;
+
 -- admin_runs: the run rows of the player a board shows under this name, newest first (owner only,
 -- in the SQL editor).
 create or replace function public.admin_runs(p_name text)
@@ -3139,6 +3189,8 @@ revoke execute on function public.delete_research(text) from public, authenticat
 grant  execute on function public.delete_research(text) to anon;
 revoke execute on function public.submit_runs(text, bigint, jsonb) from public, authenticated;
 grant  execute on function public.submit_runs(text, bigint, jsonb) to anon;
+revoke execute on function public.play_days(text, text) from public, authenticated;
+grant  execute on function public.play_days(text, text) to anon;
 revoke execute on function public.score_board(text, int, int) from public, authenticated;
 grant  execute on function public.score_board(text, int, int) to anon;
 
@@ -3152,7 +3204,7 @@ returns text
 language sql
 immutable
 as $$
-  select '05b18c08764f67ac'::text; -- schema stamp
+  select '9c5aa98fe90774c9'::text; -- schema stamp
 $$;
 revoke execute on function public.schema_version() from public, authenticated;
 grant  execute on function public.schema_version() to anon;

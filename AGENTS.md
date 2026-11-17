@@ -672,8 +672,15 @@ gaps come from the date keys (`localDayKey`), never from milliseconds. Since pla
 `src/streak.js` (`nextDayStreak`, `dayStreakNow`, `cleanDayStreak`; `nextStudyStreak` / `studyStreakNow` are
 education's names for them), shared with the day streaks below.
 **Day streaks** (plan 34, Michael): `createStreakStore` (`flappyPoop.streaks`, src/leaderboard.js) keeps a
-Singleplayer and a Daily Dump streak on this device only: never sent, not in the backup, cleared by Clear (a Load
-keeps them, as it keeps the 📚 cards). A one-player run that is neither education nor test counts the local day it
+Singleplayer and a Daily Dump streak on the device: never sent, not in the backup, cleared by Clear (a Load
+keeps them, as it keeps the 📚 cards). They count the days played on any device with the save code (34.13, Michael:
+"Daily and Singleplayer", "any device"): once per page load, a named device's sync (`pullPlayDays`, after
+`drainDaily`; the registry's `playDaysFor`) asks the server's `play_days` with this device's IANA time zone and folds
+the days in (`streakStore.merge`, `mergeDayStreak`: the run of days in a row ending on the latest day, the best
+never lowered, a day more than one ahead of today left out). The server reads Daily Dump course days from
+`daily_scores` (since 10 Nov 2026) and the run log's Daily rows, and Singleplayer local days from the run log's
+`ended_at` (since 0.19.1, 15 Nov 2026; 90 days kept); so the streaks of players from before 0.24.0 come back too.
+Offline, nothing changes and the next sync asks again. A one-player run that is neither education nor test counts the local day it
 ends on (`recordCareer('single')`, at the game over); a Daily Dump
 counts its course's UTC day once claimed (`countDailyStreak` in `start`; a practice Daily counts nothing). Your
 own profile shows 🔥 Current streak and ❤️‍🔥 Longest streak under Singleplayer and under Daily Dump
@@ -1201,8 +1208,9 @@ src/
                             (tests/versus.test.js).
   leaderboard.js            Shared leaderboard, NO Phaser/DOM (plan 34 adds
                             createStreakStore and STREAK_KINDS: flappyPoop.streaks,
-                            this device's Singleplayer and Daily Dump day streaks,
-                            never sent): submitPlan / submitPlans
+                            the Singleplayer and Daily Dump day streaks, never
+                            sent; merge folds in fetchPlayDays' days, 34.13):
+                            submitPlan / submitPlans
                             (pure: what to post; up to two rows per player, best
                             off and best on the toilet, via save.js bestByToilet),
                             createSubmitStore (flappyPoop.leaderboard: last
@@ -1302,7 +1310,9 @@ src/
                             nextDayStreak (the same day or the day before changes
                             nothing, the next day adds one, a gap or a clock error
                             starts at 1 with the best kept), dayStreakNow (0 after
-                            a missed day), cleanDayStreak. The learning streak
+                            a missed day), cleanDayStreak, mergeDayStreak and
+                            dayKeyOf (34.13: days played on any device folded into
+                            a record; never lowers the best). The learning streak
                             (education.js) and the Singleplayer and Daily Dump
                             streaks (leaderboard.js's createStreakStore) use it.
   store.js                  createJsonStore(storage, key, clean) (plan 24), NO
@@ -2389,7 +2399,11 @@ db/schema.sql               Supabase schema: scores table (player_id = save-code
                             (education_paced, player_meta.edu_named_at); name_blocked
                             also counts other players' 🌞 / 🏅 names when they have
                             no score row (never 'Player'), and submit_daily_score
-                            renames the player's earlier days. schema_version()
+                            renames the player's earlier days. play_days (anon,
+                            plan 34, 34.13): a player's Daily Dump course days and
+                            Singleplayer local days (in the time zone sent), from
+                            daily_scores and run_log, by their own id, days only.
+                            schema_version()
                             (anon) is the file's stamp: `npm run schema:stamp`
                             after an edit (a test fails on a stale one), `npm run
                             schema:check` reads the live one. Run by

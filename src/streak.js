@@ -39,3 +39,37 @@ export function cleanDayStreak(raw) {
   if (!raw || typeof raw !== 'object' || typeof raw.day !== 'string' || !DAY_RE.test(raw.day) || !Number.isInteger(raw.streak) || raw.streak < 1) return null;
   return { day: raw.day, streak: raw.streak, best: Math.max(raw.streak, Number.isInteger(raw.best) ? raw.best : 0) };
 }
+
+/** A day count back to its YYYY-MM-DD key (the inverse of dayNumber). */
+export function dayKeyOf(n) {
+  return new Date(n * 86400000).toISOString().slice(0, 10);
+}
+
+/**
+ * The streak record after folding in `days` played elsewhere (plan 34, 34.13: the server's play_days,
+ * from any device with the player's save code). The record's own run (its day and the streak - 1
+ * days before it) counts as played; a day more than one day after `today` is a clock error and is
+ * left out, as nextDayStreak would. The result is the run of days in a row that ends on the latest
+ * day, with the best the longest run seen or the record's own best, whichever is more. No days and
+ * no record: null. Pure; never lowers the best, nor the streak of a record whose day is sane.
+ */
+export function mergeDayStreak(rec, days, today) {
+  const limit = dayNumber(today) + 1;
+  const played = new Set();
+  for (const d of Array.isArray(days) ? days : []) {
+    if (typeof d !== 'string' || !DAY_RE.test(d)) continue;
+    const n = dayNumber(d);
+    if (Number.isFinite(n) && n <= limit) played.add(n);
+  }
+  const end = rec ? dayNumber(rec.day) : null;
+  if (rec && end <= limit) for (let k = 0; k < rec.streak; k += 1) played.add(end - k);
+  if (played.size === 0) return rec ?? null;
+  const sorted = [...played].sort((a, b) => a - b);
+  let run = 0;
+  let longest = 0;
+  for (let i = 0; i < sorted.length; i += 1) {
+    run = i > 0 && sorted[i] === sorted[i - 1] + 1 ? run + 1 : 1;
+    longest = Math.max(longest, run);
+  }
+  return { day: dayKeyOf(sorted[sorted.length - 1]), streak: run, best: Math.max(longest, rec?.best ?? 0) };
+}
