@@ -222,6 +222,10 @@ Inspired by Flappy Bird`,
     eduWordRetired: "📚 Education mode is on the home screen for everyone now.",
     eduIntroNotMedical: "The cards are about how the gut and its microbes work. They are not medical advice.",
     splashEducation: "Education mode: quiz cards about the gut and its microbes between levels. Turn on 📚 at home.",
+    splashSuperQ: "Challenge questions: a ❓ bubble in every 📚 level. Right pays up to 22 🌽, wrong costs 5.",
+    splashStreaks: "Streaks: play days in a row to grow the number on 🌞 and 📚, and on your profile.",
+    itemSuperQName: "Challenge question",
+    itemSuperQDetail: "In 📚 mode, once a level: touch the ❓ bubble for a harder question. Right pays 10 to 22 🌽, wrong costs 5. Try it or decline.",
     itemEducationName: "Education mode",
     itemEducationDetail: "Turn on 📚 on the home screen: level breaks ask quiz cards about the gut and its microbes, and after a crash, right answers let you fly on. Cards you miss come back until you know them; right answers pay corn. Tap 📚 for how it works.",
     eduIntroHowTitle: 'How it works',
@@ -797,6 +801,10 @@ Inspired by Flappy Bird`,
     eduWordRetired: "📚 教育模式现在对所有人开放，就在主屏幕上。",
     eduIntroNotMedical: "这些卡片讲的是肠道和肠道微生物如何运作，不是医疗建议。",
     splashEducation: "教育模式：关卡之间回答关于肠道和肠道微生物的问题。在主页打开 📚。",
+    splashSuperQ: "挑战题：📚 模式的每一关都有一个 ❓ 泡泡。答对最多得 22 🌽，答错扣 5。",
+    splashStreaks: "连续天数：连续几天玩，🌞、📚 和个人资料上的数字会越来越大。",
+    itemSuperQName: "挑战题",
+    itemSuperQDetail: "在 📚 模式下，每关一次：碰到 ❓ 泡泡会出一道更难的题。答对得 10 到 22 🌽，答错扣 5。可以挑战，也可以放弃。",
     itemEducationName: "教育模式",
     itemEducationDetail: "在主屏幕打开 📚：关卡休息时会问关于肠道和肠道微生物的问题；撞到之后，答对就能继续飞。答错的卡片会再出现，直到你记住；答对能得玉米粒。点 📚 看玩法说明。",
     eduIntroHowTitle: '玩法',
@@ -1203,6 +1211,7 @@ export function howToItems(locale, { education = true } = {}) {
     { key: 'tournament', name: t(locale, 'itemTournamentName'), detail: t(locale, 'itemTournamentDetail') },
     { key: 'daily', name: t(locale, 'itemDailyName'), detail: t(locale, 'itemDailyDetail') },
     { key: 'education', name: t(locale, 'itemEducationName'), detail: t(locale, 'itemEducationDetail') },
+    { key: 'superQ', name: t(locale, 'itemSuperQName'), detail: t(locale, 'itemSuperQDetail') }, // plan 34: an education row, left out with it
     { key: 'info', name: t(locale, 'itemInfoName'), detail: t(locale, 'itemInfoDetail') },
     { key: 'language', name: t(locale, 'itemLanguageName'), detail: t(locale, 'itemLanguageDetail') },
     { key: 'feedback', name: t(locale, 'itemFeedbackName'), detail: t(locale, 'itemFeedbackDetail') },
@@ -1210,7 +1219,7 @@ export function howToItems(locale, { education = true } = {}) {
     { key: 'sound', name: t(locale, 'itemSoundName'), detail: t(locale, 'itemSoundDetail') },
     { key: 'settings', name: t(locale, 'itemSettingsName'), detail: t(locale, 'itemSettingsDetail') },
   ];
-  return education ? rows : rows.filter((item) => item.key !== 'education');
+  return education ? rows : rows.filter((item) => item.key !== 'education' && item.key !== 'superQ');
 }
 
 /**

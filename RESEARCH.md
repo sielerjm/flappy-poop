@@ -15,7 +15,7 @@ Flappy Poop has a learning mode (📚 education mode, in beta for everyone) with
 
 ## What is sent
 
-One record for each quiz answer you give after joining, in a level break, after a crash, or in the bonus quiz. Answers you gave before joining are not sent. Test-mode runs send nothing.
+One record for each quiz answer you give after joining, in a level break, after a crash, or in the bonus quiz. Answers you gave before joining are not sent. Test-mode runs send nothing. Answers to a ❓ challenge question (the bubble in a level, from v0.24.0) are not sent either; once such a card is among your cards, your later answers to it in a level break or after a crash are sent like any other card's.
 
 Each record is stored under a **random id** made by the server. It does not hold your username or your player id.
 

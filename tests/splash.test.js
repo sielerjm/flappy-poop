@@ -69,7 +69,7 @@ const BADGE_OF = {
   toilet: 'toilet_win',
   rectum: 'win_game',
 };
-const CHROME_GLYPH = { education: '📚', profile: '👤', daily: '🌞', tournament: '🏅', shop: '💰', leaderboard: '🏆', twoPlayer: '👥', userCode: '🔑', controller: '🎮', lowPower: '🔋' };
+const CHROME_GLYPH = { superQ: '\u2753', streaks: '📅', education: '📚', profile: '👤', daily: '🌞', tournament: '🏅', shop: '💰', leaderboard: '🏆', twoPlayer: '👥', userCode: '🔑', controller: '🎮', lowPower: '🔋' };
 // The one shared glyph, by name (Michael's call, 2026-11-11): the controller note and the games badge.
 const SHARED_OK = { controller: 'games_1000' };
 
@@ -224,7 +224,7 @@ const pngWidth = (file) => readFileSync(new URL(`assets/${file}`, ROOT)).readUIn
 
 test('sprites: every card art is a file Boot loads by that exact path, so the art contract and ?v= cover it', () => {
   const withArt = SPLASH_NOTES.filter((n) => n.art);
-  assert.deepEqual(ids(withArt).sort(), ['bacteria', 'bean', 'coin', 'fart', 'fiber', 'mystery', 'postbiotic', 'probiotic', 'shop']);
+  assert.deepEqual(ids(withArt).sort(), ['bacteria', 'bean', 'coin', 'fart', 'fiber', 'mystery', 'postbiotic', 'probiotic', 'shop', 'superQ']);
   for (const n of withArt) {
     assert.ok(existsSync(new URL(`assets/${n.art.file}`, ROOT)), `${n.id}: assets/${n.art.file} exists`);
     assert.ok(BOOT.includes(`'assets/${n.art.file}' + V`), `${n.id}: Boot loads 'assets/${n.art.file}' + V`);
@@ -311,12 +311,14 @@ test('ringStep: a long frame (Phaser compiling) moves the ring no more than ring
   assert.equal(ringStep(0.2, 1, -10), 0.2);
 });
 
-test('the 📚 card (plan 28, 2.3) is the newest feature, and leaves the pool when education is switched off (EDUCATION.enabled false)', async () => {
+test('the 📚 card (plan 28, 2.3) and the ❓ challenge card (plan 34, the newest feature) leave the pool when education is switched off (EDUCATION.enabled false); the 📅 streak card stays', async () => {
   const { splashPool, SPLASH_NOTES } = await import('../src/splash.js');
   const { TUNING } = await import('../src/config.js');
-  assert.equal(SPLASH_NOTES.find((n) => n.kind === 'feature').id, 'education');
-  assert.ok(splashPool(SPLASH_NOTES, TUNING, { enabled: true }).some((n) => n.id === 'education'));
-  assert.ok(!splashPool(SPLASH_NOTES, TUNING, { enabled: false }).some((n) => n.id === 'education'));
+  assert.deepEqual(SPLASH_NOTES.filter((n) => n.kind === 'feature').slice(0, 3).map((n) => n.id), ['superQ', 'streaks', 'education']);
+  const on = splashPool(SPLASH_NOTES, TUNING, { enabled: true }).map((n) => n.id);
+  const off = splashPool(SPLASH_NOTES, TUNING, { enabled: false }).map((n) => n.id);
+  assert.ok(on.includes('education') && on.includes('superQ') && on.includes('streaks'));
+  assert.ok(!off.includes('education') && !off.includes('superQ') && off.includes('streaks'));
 });
 
 test('the battery tip (plan 28, 4.7): a hint for every device, 🔋, in Michael\'s words; Chinese too', async () => {

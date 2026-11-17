@@ -8,7 +8,7 @@ A Flappy Bird–style game for phone browsers: flap a poop through the gut, dodg
 
 **Play now → [sielerjm.github.io/flappy-poop](https://sielerjm.github.io/flappy-poop/)**
 
-Works best on your phone — add it to your home screen for a full-screen, app-like launch. On a desktop or landscape window the gut widens to fill the screen. English and Simplified Chinese in-game. Version **0.23.0 beta**.
+Works best on your phone — add it to your home screen for a full-screen, app-like launch. On a desktop or landscape window the gut widens to fill the screen. English and Simplified Chinese in-game. Version **0.24.0 beta**.
 
 Tip: on iPhone, turn **Silent mode off** to hear sound.
 
@@ -123,7 +123,7 @@ A bean draw with a full bag becomes fiber instead.
 
 ### Ready screen
 
-Along the top: the **🌞** (the [Daily Dump](#daily-dump)) and the **?** (How to play). Then, top to bottom: title, bobbing poop (“TAP TO FLAP!”), **toilet toggle**, and your **user button**: `Load user` until you set a name, then `name · best`; it opens Save / Load.
+Along the top: the **🌞** (the [Daily Dump](#daily-dump)) and the **?** (How to play). A small orange number on the 🌞 is your Daily Dump streak, the days in a row you have played it (on the 📚 switch, your learning streak). Then, top to bottom: title, bobbing poop (“TAP TO FLAP!”), **toilet toggle**, and your **user button**: `Load user` until you set a name, then `name · best`; it opens Save / Load.
 
 ### During a run
 
@@ -230,7 +230,7 @@ The 🏆 tray button (or **T**) shows the shared board in **pages of 25**: **‹
 
 ### 👤 Profile & achievements
 
-Every player has a public profile: the save panel’s **👤 Profile** opens yours, and a name on any board opens theirs. You need a username to see profiles; without one, a popup offers **Create user**. A profile shows single-player stats (games, highest score, times you made it out, highest and average level, average score), your Daily Dump podiums, tournament medals and biggest rival, career totals (👑 times you took 1st place from someone, #️⃣ pipes passed, farts, 🥦 fiber, 🟡 coins, ‼️ long falls, 😢 close calls, …), player tags (🔧 game dev, 🎖️ played in the first month, 🆕 new this week) and **achievements**: badges for a score or level in one run, for making it out, and for lifetime milestones such as 100 farts, plus oddities like 🃏 four mystery boxes in a row with the same reward or 🧱 coming back after a week away. A badge earned in a run shows on the game-over panel, and every icon there (pickups, ‼️ long falls, 😢 close calls with a pipe, pipes, coins) explains itself when tapped. Tap any emoji or badge in a profile (or walk to it with a controller and press A) to see what it is; the pipes total counts from v0.14.1, long falls and close calls from v0.15.1. Some badges are time-limited quests that come and go. Counting started with v0.14.0, so lifetime totals begin there; score and level badges were credited from your saved bests. Test runs and two-player matches count nothing.
+Every player has a public profile: the save panel’s **👤 Profile** opens yours, and a name on any board opens theirs. You need a username to see profiles; without one, a popup offers **Create user**. A profile shows single-player stats (games, highest score, times you made it out, highest and average level, average score), your Daily Dump podiums, and on your own profile 🔥 your current and ❤️‍🔥 longest streaks of days in a row for each (counted on this device from v0.24.0; a Singleplayer day is a one-player run, a Daily Dump day is the day's course), tournament medals and biggest rival, career totals (👑 times you took 1st place from someone, #️⃣ pipes passed, farts, 🥦 fiber, 🟡 coins, ‼️ long falls, 😢 close calls, …), player tags (🔧 game dev, 🎖️ played in the first month, 🆕 new this week) and **achievements**: badges for a score or level in one run, for making it out, and for lifetime milestones such as 100 farts, plus oddities like 🃏 four mystery boxes in a row with the same reward or 🧱 coming back after a week away. A badge earned in a run shows on the game-over panel, and every icon there (pickups, ‼️ long falls, 😢 close calls with a pipe, pipes, coins) explains itself when tapped. Tap any emoji or badge in a profile (or walk to it with a controller and press A) to see what it is; the pipes total counts from v0.14.1, long falls and close calls from v0.15.1. Some badges are time-limited quests that come and go. Counting started with v0.14.0, so lifetime totals begin there; score and level badges were credited from your saved bests. Test runs and two-player matches count nothing.
 
 ### 📚 Education mode (beta)
 
@@ -250,6 +250,8 @@ A learning mode for everyone, in beta: turn on 📚 on the home screen, and quiz
 - **Skip or Quit.** **Skip** a card for corn: it waits until the next day (due cards at most 3 a day). **Quit** asks twice, and while the break still has cards to ask, the run ends ungraded.
 - **Practice.** Caught up, **Keep practicing** asks the cards that are due past the break's 10, then cards that are not due yet. A right answer to a card not due yet leaves its schedule as it was; a wrong one makes it missed. A skipped practice card stays out until the next day.
 - **Corn.** Each card pays corn for its first right answer of the day: 3 for a new card, 2 for a card due for review, 1 for practice or a card you missed. A wrong answer costs nothing.
+- **❓ Challenge questions.** Once a level a **❓ bubble** floats between two pipe pairs that open at the same height, right on your line (fly past it and it opens anyway). It offers a harder question on any topic: **Try it** or **Decline**. Right pays 10 🌽 on level 1, 2 more each level, up to 22 on level 7; wrong costs 5 🌽 (or what your purse holds). Once you try a card it can only be answered. Either way it joins your cards, so it comes back for review like any other (a miss is due at once). Challenge answers never count in the run's ✅ ❌, its grade or the badges, and the bubble stops once you have met all 21 challenge cards.
+- **🤓 Nerd Alert** goes to a run you win with every answer right and nothing left to review (no missed card, no review due).
 
 ![Finish line](docs/finish-divider.svg)
 

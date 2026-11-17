@@ -52,7 +52,7 @@ test("How to play's 📚 row goes with education mode: howToItems' education opt
   const on = howToItems('en').map((item) => item.key);
   const off = howToItems('en', { education: false }).map((item) => item.key);
   assert.ok(on.includes('education'), 'available: the row is there');
-  assert.deepEqual(off, on.filter((k) => k !== 'education'), 'off: only the 📚 row goes, the rest in order');
+  assert.deepEqual(off, on.filter((k) => k !== 'education' && k !== 'superQ'), 'off: only the 📚 rows go (Education mode and, since plan 34, Challenge question), the rest in order');
   const { readFileSync } = await import('node:fs');
   const src = readFileSync(new URL('../src/scenes/HowTo.js', import.meta.url), 'utf8');
   assert.match(src, /howToItems\(locale, \{ education: [^}]*educationAvailable/, 'HowTo asks Play, not the config, as the 📚 tab, Stats and the save panel do');
@@ -62,7 +62,7 @@ test('HOW_TO_ITEMS names fiber, probiotic, and bacteria with their effects', () 
   const items = howToItems('en');
   assert.deepEqual(
     items.map((item) => item.key),
-    ['pipe', 'fiber', 'probiotic', 'postbiotic', 'bacteria', 'bean', 'coin', 'mystery-icon', 'levels', 'controls', 'toilet', 'twoPlayer', 'tournament', 'daily', 'education', 'info', 'language', 'feedback', 'leaderboard', 'sound', 'settings'],
+    ['pipe', 'fiber', 'probiotic', 'postbiotic', 'bacteria', 'bean', 'coin', 'mystery-icon', 'levels', 'controls', 'toilet', 'twoPlayer', 'tournament', 'daily', 'education', 'superQ', 'info', 'language', 'feedback', 'leaderboard', 'sound', 'settings'],
   );
   const blob = items.map((item) => `${item.name} ${item.detail}`).join('\n');
   assert.match(blob, /This is a pipe/);

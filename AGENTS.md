@@ -409,7 +409,10 @@ in the panel, with a line under the buttons: "Each level break asks up to n new 
 (plan 28, 4.2, Michael's ask: one button under "How it works" and one under "Your choices", its word with an
 arrow and a line beside it saying what a press does, "Hide ▴ Press to hide information" / "Show ▾ Press to show
 more information"; the section's body hidden, the choice remembered on this device: `setEduIntroHidden`,
-settings `eduHideHow` / `eduHideChoices`, not in the backup; the device line and its link always show), the daily cap
+settings `eduShowHow` / `eduShowChoices` since plan 34 (false = folded, the default: each section has a summary line that
+always shows, `eduIntroHowSummary` / `eduIntroChoicesSummary`, Michael at Preview F; the keys were `eduHideHow` /
+`eduHideChoices`, held false in every stored record, so a new default could not reach those players), not in the backup;
+the device line and its link always show), the daily cap
 while it is a number (held off since Stage 3b), a line that the data stays in this browser, not on the game's
 servers, unless the player chooses to share it, with a link to 📚 Education data, and Close | Play
 (`startFromEduIntro`: 📚 on, the audio unlocked, then `launch({ intro: false })`; not a tap, which would open the
@@ -491,7 +494,9 @@ Stage 3b): the line then says how many more are due (`Play.quizMoreDue`, `caught
 "That's all this break asks! n more cards are due…"), and Keep practicing asks them, as due cards
 (scheduled, and underlined as none of the three counts), before any practice card. **The purse**
 (plan 26): in a break, "🌽 n" under the ✕ (`refreshPurse`), popping as right answers pay, with a soft glow behind it that lights at
-each payment and fades out (`glowPurse`, `TUNING.education.purseGlow`; plan 28, 1.2: never for a purse that stays or shrinks). Enter /
+each payment and fades out (`glowPurse`, `TUNING.education.purseGlow`; plan 28, 1.2: never for a purse that stays or shrinks),
+its kernel (a sprite since plan 34) spinning `purseGlow.spinTurns` quick turns inside the fade ('coin-spin-quick' from Boot,
+`purseSpinRate`), then resting on frame 0. Enter /
 Space press only the way forward (and End Review on "All caught up" when it is alone), never Quit,
 and nothing on an open card (so never Skip): Space is the flap key. **Its sounds**: a book opens with the
 quiz (`book-open`), a page turns for each next card (`book-flip`), the book shuts when it is left
@@ -622,7 +627,10 @@ line no farther than the first-pair lead stays, else it is placed at that lead (
 blinks for `education.reviveBlinkMs` (`standRevived`, `respawnBlinkStart`), with no glide and no "Tap
 when ready". A revive's way forward glows. **Badges and the average grade** (`EDU_ACHIEVEMENTS` in
 `src/achievements.js`, their own list: never in `ACHIEVEMENTS`, never claimed on the server): 🤓 Nerd
-Alert (10 perfect graded runs in a row), 💯 Full Marks, 🅰️ / 🅱️ / 📜 (90 %, 80 to under 90, 70 to
+Alert (plan 34, Michael: one won, graded run with no wrong answer that ends caught up, nothing due: `eduRunFacts`'
+`won` and `caughtUp`, `Play.eduCaughtUp`, judged at the win and after each bonus answer, kept in `pending`; a card
+missed in this run's challenge question never blocks it; until plan 34 it was 10 perfect full runs in a row, and
+`perfectStreak` is still counted but no badge reads it), 💯 Full Marks, 🅰️ / 🅱️ / 📜 (90 %, 80 to under 90, 70 to
 under 80), 🏳️ Drop Out (a Quit with nothing answered: a revive's, or the break's), 👼 / 🐦‍🔥 (100 / 1000 revives). A run is
 graded from `education.badgeMinAnswers` answers and only when it did not end on a Quit that counts
 (`gaveUp`; `eduRunFacts`: a quit run earns no grade badge, adds nothing to the average and leaves the 🤓
@@ -658,7 +666,41 @@ adds one, a gap starts over and keeps the best; a stored day more than a day ahe
 streak starts again at 1 on the real day, the best kept: plan 27, Michael's call, so a clock once set ahead
 no longer freezes it until that date), and `studyStreakNow` reads it (0 once a day is missed, or while the
 stored day is more than a day ahead). Day
-gaps come from the date keys (`localDayKey`), never from milliseconds.
+gaps come from the date keys (`localDayKey`), never from milliseconds. Since plan 34 the rules live in
+`src/streak.js` (`nextDayStreak`, `dayStreakNow`, `cleanDayStreak`; `nextStudyStreak` / `studyStreakNow` are
+education's names for them), shared with the day streaks below.
+**Day streaks** (plan 34, Michael): `createStreakStore` (`flappyPoop.streaks`, src/leaderboard.js) keeps a
+Singleplayer and a Daily Dump streak on this device only: never sent, not in the backup, cleared by Clear. A
+one-player run that is neither education nor test counts its local day (`recordCareer('single')`); a Daily Dump
+counts its course's UTC day once claimed (`countDailyStreak` in `start`; a practice Daily counts nothing). Your
+own profile shows 🔥 Current streak and ❤️‍🔥 Longest streak under Singleplayer and under Daily Dump
+(`streakProfileRows`, `Stats.streakView`); the ready screen shows a small orange number at the 🌞's bottom right
+(the Daily Dump streak) and at the 📚's (the learning streak, under the gold due count), while the streak is alive
+and nothing at 0 (`refreshStreakMarks`, `TUNING.streakMarkPx`; both inside their buttons' hit boxes).
+**Challenge questions** (plan 34, Michael; code names `superQ` / deck `super` / item `question`, since plan 33's
+💪 Challenge mode holds `challenge`): once a level in a 📚 run, while an unmet challenge card is left
+(`pickSuperCard`), a ❓ bubble (`assets/question.png`, a see-through placeholder, drawn at
+`education.superQ.displayPx` with a `radiusPx` hitbox) rides the band slot after the pair `course.superQPair`
+picks (its own stream, `COURSE_SALT.superQ`; never a level's first or last `edgePairs`, level 1's scripted pairs
+or the guaranteed box's pair: `armSuperQ` at the start and each level). Its pair and the next open at the same
+height and hold still (the next pair's gap and both pairs' moves are still rolled, then dropped, so the course
+keeps its order; `superQStill`), and it floats `bobPx` on a sine (`floatY`, bob 'float'). It takes the slot
+before a box, bean, rolled item or kernel (the kernel moves on). Taken, flown past (`update`'s backstop opens it
+when it reaches the poop's x, unless a fart flies through) or farted through, it is gone for the level; a
+revive that clears it brings it back on the next pair that can carry it (`clearFieldAhead`). Touched,
+`offerSuperQ` holds the run (state paused, physics and effects paused; `superQHold`: `chromeState` reports
+playing, so no PAUSED banner, tray row or "?"; `resumePlay` and `autoPause` do nothing) and opens the Quiz in mode
+'super': the offer (❓ Challenge question, what a right answer pays, `superQReward` = rewardBase + rewardPerLevel ×
+level, 10 to 22, and what a wrong one costs, `superQPenalty` = penalty or the whole purse if less; the bubble
+large on a disc of the level's colour; Decline | Try it, ✕ and Esc decline; no tap or key for retryLockoutMs,
+`offerLocked`). After Try the card can only be answered (`closable` false: no ✕, Skip or End Review).
+`superQAnswer` saves it as a first sight (right: review later; wrong: missed, due now, so it holds the next
+gate) with a study day, pays or charges the purse, and stays out of `runQuiz`, the grade, 💯, 🤓 and the pilot's
+events (the server takes break, revive and bonus contexts only; RESEARCH.md says so); a test run saves nothing.
+Fly on (held after a miss) closes it and `endSuperQ` resumes with half a flap and at least `beans.graceMs`. The 21
+challenge cards (`SQ-01`…, deck `super`; Michael reviews them, `.claude/plans/34-super-cards-review.md`) are never
+a quiz's new card (`inScope`, `chooseCard`'s fresh pool, `browseCard`, `breakDecks`), count in `masteryByDeck`
+once met, and come back at any level once in the bank.
 **Backup and restore** (plan 28, 3.1b): the cards live in this browser only, so the top of 📚 Education
 data, for everyone, is **💾 Back up your cards**. Back up my cards hands a file
 `flappy-poop-cards-YYYY-MM-DD.json` (`educationBackup`: the cards, counters, badges, the unlocked level,
@@ -816,7 +858,8 @@ src/
                             by design; timeout, limit = a page of 25 places (pages
                             since plan 28, 5.2), visibleRows = the fourteen in the
                             board's window (the ‹ › row under them), storage keys incl.
-                            careerKey = flappyPoop.career, score cap),
+                            careerKey = flappyPoop.career, streaksKey =
+                            flappyPoop.streaks (plan 34), score cap),
                             LEVELS (gut segment name keys, in order), LEVEL_COLORS
                             (Set2 backgrounds, cycling) and BACKGROUND (overlay
                             layers: key + parallax), TEST_MODE (trigger words,
@@ -913,8 +956,9 @@ src/
                             plan 25;
                             eduNewOrder after / mixed / before, plan 26;
                             eduNewPerLevel 3 / 5 / 'all', EDU_NEW_PER_LEVEL, plan 28
-                            Stage 3b; eduHideHow / eduHideChoices, only true
-                            hides (the 📚 popup's Show / Hide, plan 28, 4.2);
+                            Stage 3b; eduShowHow / eduShowChoices, only true
+                            shows (the 📚 popup's Show / Hide, plan 28, 4.2; folded
+                            by default since plan 34);
                             reviveGiveUpWarned is gone since plan 26's A2) +
                             howToPromptDue, vibrate helper, trayLayout, trayHit,
                             readyLayout (plan 25's ◀ level ▶ stepper boxes went to
@@ -1080,7 +1124,9 @@ src/
                             (flappyPoop.researchQueue: pending events and one batch
                             in flight). Nothing here runs unless a tester joined.
   questions.js              Education mode's question bank (plan 21), NO
-                            Phaser/DOM: DECKS (the LEVELS keys, then 'general'),
+                            Phaser/DOM: LEVEL_DECKS (the LEVELS keys) and DECKS
+                            (those, then 'general', then 'super': plan 34's 21
+                            challenge questions, SQ-01…),
                             CARDS ({ id, deck, q, answer, wrong: [w1, w2], explain,
                             refs, retired?, zh }; every live card has its zh
                             { q, answer, wrong, explain } since plan 28 (2.1; terms in
@@ -1229,6 +1275,13 @@ src/
                             first), setSplashProgress, splashReady(onContinue).
                             Fails open: an error removes the splash and starts the
                             game. tests/splash.test.js.
+  streak.js                 Day streaks (plan 34), NO Phaser, no imports: dayNumber,
+                            nextDayStreak (the same day or the day before changes
+                            nothing, the next day adds one, a gap or a clock error
+                            starts at 1 with the best kept), dayStreakNow (0 after
+                            a missed day), cleanDayStreak. The learning streak
+                            (education.js) and the Singleplayer and Daily Dump
+                            streaks (leaderboard.js's createStreakStore) use it.
   store.js                  createJsonStore(storage, key, clean) (plan 24), NO
                             Phaser, no imports: one JSON value in browser storage,
                             the pattern the education stores share (education.js,
@@ -2351,13 +2404,18 @@ tests/                      node --test (schema.test.js, pilot.test.js, eduBoard
   state.test.js             retry lockout
   perf.test.js              the frame meter's pure parts: perfMode, the median period,
                             long frames blamed on the previous frame's tags, perfLines
+  streaks.test.js           Day streaks (plan 34): the shared rules, the streak store
+                            (its key, junk, a refused write), recordCareer and
+                            countDailyStreak counting days, signOut clearing it,
+                            the profile rows, refreshStreakMarks, the subscripts'
+                            spots inside the 🌞 and 📚 hit boxes
   store.test.js             best-score store incl. throwing/missing storage
   settings.test.js          settings store (incl. hand; a set() storage refused kept
                             for the page load and shared by the stores over it,
                             AUD-030) + vibrate helper; plan 28 Stage 3b:
                             eduNewPerLevel (3, 5, 'all'; 5 by default); plan 28, 4.2:
-                            eduHideHow / eduHideChoices (false by default, only true
-                            hides, remembered)
+                            eduShowHow / eduShowChoices (plan 34: false by default,
+                            only true shows, the old eduHide* keys dropped)
   sound.test.js             sfx keys, mute, Node import
   tray.test.js              trayHeight / trayLayout geometry including info + lang +
                             feedback; trayHit centre hits vs miss in the tray gap;
@@ -2516,6 +2574,9 @@ tests/                      node --test (schema.test.js, pilot.test.js, eduBoard
                             plan 28 5.2: the four fetchers' p_offset (page 1's
                             requests unchanged, the table read's offset=),
                             withOwnRows per page, boardPage (the page, mine, last)
+  nerdAlert.test.js         🤓 Nerd Alert's rule since plan 34: won, perfect, caught
+                            up (eduCaughtUp), graded, any start level; the pending
+                            run's caughtUp, moved by bonus answers
   achievements.test.js      The catalog (ids, copy in every locale, every badge
                             earnable), evaluate (run badges from single player only),
                             runDeltas and its caps, addCounters = merge_counters,
@@ -2626,6 +2687,15 @@ tests/                      node --test (schema.test.js, pilot.test.js, eduBoard
   cjkWrap.test.js           cjkUnits / wrapCjk (plan 28, 2.1): Chinese breaks between characters, a
                             number or Latin word whole, no line starting with "，" or ending with "“", a
                             name's dot and a dash never split, the text kept whole; Quiz's cjkWrap callback.
+  superCards.test.js        The challenge cards (plan 34, deck super): 21 on their own
+                            sources, never a quiz's new card, back like any due card
+                            once met, masteryByDeck, pickSuperCard
+  superQuestion.test.js     The challenge question (plan 34): tuning, reward and
+                            penalty, floatY, course.superQPair (inside the level, its
+                            own stream), armSuperQ, offerSuperQ and the hold, the
+                            answer (saved, paid or charged, outside the tally and the
+                            pilot), endSuperQ, a revive's re-arm, the Quiz offer
+                            (lockout, Try, no way out) and the answer's verdicts
   questions.test.js         src/questions.js: decks, ids, a question and three
                             different options per card, text limits, a complete zh version on every live
                             card (trimmed, three different options, the Chinese limits, the small numbers
@@ -2690,6 +2760,9 @@ tests/                      node --test (schema.test.js, pilot.test.js, eduBoard
                             share store after a restore (before and after Stop then
                             Share), store.restore's summary and saved (blocked, full,
                             no storage)
+  cornSpin.test.js          The quiz purse's corn spin (plan 34): purseSpinRate within
+                            the glow's fade, coin-spin-quick, a sprite purse, the
+                            spin on a payment, none on a Skip, stopped in a revive
   quiz.test.js              Quiz's rules in Node: a card under another overlay is
                             interrupted, nothing answered once the quiz is finishing,
                             the 🚩 never navigates the game's tab, tapLocked, the

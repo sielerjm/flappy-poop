@@ -33,6 +33,8 @@ const badge = (id) => achievementById(id)?.glyph ?? '';
  * their own. A feature worth keeping for good gets reworded as a hint.
  */
 export const SPLASH_NOTES = [
+  { id: 'superQ', kind: 'feature', glyph: '❓', key: 'splashSuperQ', art: { file: 'question.png' } }, // plan 34: the challenge question bubble
+  { id: 'streaks', kind: 'feature', glyph: '📅', key: 'splashStreaks' }, // plan 34: day streaks (🔥 is a score badge's)
   { id: 'education', kind: 'feature', glyph: '📚', key: 'splashEducation' }, // plan 28: 📚 for everyone
   { id: 'profile', kind: 'feature', glyph: '👤', key: 'splashProfile' },
   { id: 'daily', kind: 'feature', glyph: '🌞', key: 'splashDaily' },
@@ -61,7 +63,7 @@ export const SPLASH_NOTES = [
 /** The notes this build deals from: every hint, plus the newest t.splash.featureMax features. */
 export function splashPool(notes = SPLASH_NOTES, t = TUNING, education = EDUCATION) {
   // EDUCATION.enabled false (the off switch, plan 28) takes the 📚 card out too.
-  if (education?.enabled === false) notes = notes.filter((n) => n.id !== 'education');
+  if (education?.enabled === false) notes = notes.filter((n) => n.id !== 'education' && n.id !== 'superQ'); // the challenge question is education's (plan 34)
   const features = notes.filter((n) => n.kind === 'feature').slice(0, t.splash.featureMax);
   return notes.filter((n) => n.kind !== 'feature' || features.includes(n));
 }

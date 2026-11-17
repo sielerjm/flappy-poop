@@ -16,6 +16,7 @@ const EMOJI_ROWS = {
   tournament: '🏅',
   daily: '🌞',
   education: '📚',
+  superQ: '\u2753', // plan 34: the challenge question (the see-through bubble art would lose its black ? on the dark panel)
   info: 'ℹ️',
   language: '🌐',
   feedback: '💬',
