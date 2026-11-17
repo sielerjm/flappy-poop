@@ -266,12 +266,9 @@ Short, playful, clear. Fit a 720×1280 logical field; How to play / About body w
 | testModeOff | Test mode off | 测试模式已关闭 |
 | quizRight | Right! | 答对了！ |
 | quizRightCoins | Right! +{n} | 答对了！+{n} |
-| superQOffer | A harder question, on any topic. Try it, or decline and fly on. (plan 34: the challenge question's offer, shown when the poop touches the ❓ bubble in an education run; the card comes only after Try) | 一道更难的题，什么主题都可能。挑战一下，或者放弃，继续飞。 |
-| superQWin | Right: +{n} 🌽 (what a right answer pays, 10 to 22 corn by level) | 答对：+{n} 🌽 |
-| superQLose | Wrong: −{n} 🌽 (what a wrong answer costs: 5, or the whole purse if it holds less) | 答错：−{n} 🌽 |
-| superQLoseNone | Wrong: nothing to lose (your purse is empty) | 答错：没什么可失去的（钱袋是空的） |
-| superQTry | Try it (the offer's button that shows the card) | 挑战 |
-| superQDecline | Decline (the offer's button that closes it; the run flies on) | 放弃 |
+| superQOffer | You popped a challenge question. Answering the challenge question earns you {reward} corn kernels, but answering it incorrectly costs up to {penalty} corn kernels. Do you wish to try? (plan 34, round 2, Michael's sentence: the challenge question's offer, shown when the poop touches the ❓ bubble in an education run; {reward} is what a right answer pays, 10 to 22 by level; {penalty} the most a wrong one takes, 5, less when the purse holds less; the card comes only after Try) | 你戳破了一个挑战题泡泡！答对可以得到 {reward} 粒玉米粒，答错最多扣 {penalty} 粒玉米粒。要挑战吗？ |
+| superQTry | Try it (the offer's green button that shows the card; Enter and Space press it too) | 挑战 |
+| superQDecline | Decline (the offer's red button that closes it; the run flies on) | 放弃 |
 | superQLost | Wrong. −{n} 🌽 (the verdict after a wrong challenge answer that cost corn) | 答错了。−{n} 🌽 |
 | quizPaidToday | 🌽 already earned today (plan 26, A2: small and muted beside "Right!" when a right answer pays nothing because this card already paid today; each card pays once a local day) | 🌽 今天已经得过了 |
 | quizNextSoon | Next review: again soon (plan 26: under the verdict after a wrong answer: the card is due again at once; "review" added in its A2, Michael's wording) | 下次复习：很快 |

@@ -6,7 +6,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { playScene, quizScene, absorb, fakeStorage } from './support/scenes.js';
-import { TUNING as T } from '../src/config.js';
+import { GAME_HEIGHT, TUNING as T } from '../src/config.js';
 import { createCourse, superQReward, superQPenalty, floatY, levelEnd } from '../src/logic.js';
 import { CARDS } from '../src/questions.js';
 import { createEduStore, newTally, schedule } from '../src/education.js';
@@ -200,9 +200,12 @@ function superQuiz({ time = 5000, opened = 0, reward = 16, lose = 5 } = {}) {
     mode: 'super', offering: true, locale: 'en', cx: 360, card: null, answered: false, finishing: false, session: [], runCard: { open: false },
     openedAt: opened, game: { loop: { time } }, scene: { key: 'Quiz', isActive: (k) => ['Play', 'Quiz'].includes(k), getIndex: (k) => ['Play', 'Quiz'].indexOf(k), stop: () => closed.push('stop') }, textures: { exists: () => false },
     header: text(), question: text(), verdict: text(), verdictCoin: text(), paidNote: text(), nextWait: text(), choiceLine: text(), explain: text(), source: text(),
+    offerTitle: text(), offerText: text(), tally: text(), tallyZone: text(), purseText: text(), purseCoin: text(),
+    panelRect: { visible: true, setVisible(v) { this.visible = v; return this; } }, offerRect: { visible: false, setVisible(v) { this.visible = v; return this; } },
+    top: GAME_HEIGHT / 2 - 580,
     options: [0, 1, 2].map(() => ({ g: absorb(), text: absorb(), mark: absorb(), zone: absorb() })),
-    leftBtn: button(), rightBtn: button(), topBtn: button(), closeBtn: { visible: null, setVisible(v) { this.visible = v; return this; } },
-    play: { superQ: { reward, card: SUPER[0] }, superQPenaltyNow: () => lose, superQPick: () => ({ card: SUPER[0], reason: 'super', order: ['w1', 'answer', 'w2'] }) },
+    leftBtn: button(), rightBtn: button(), topBtn: button(), declineBtn: button(), tryBtn: button(), closeBtn: { visible: null, y: 0, setVisible(v) { this.visible = v; return this; }, setY(v) { this.y = v; return this; } },
+    play: { superQ: { reward, card: SUPER[0] }, effects: { coins: () => lose }, superQPick: () => ({ card: SUPER[0], reason: 'super', order: ['w1', 'answer', 'w2'] }) },
     setCardId() {}, refreshStatus() {}, refreshTally() {}, refreshCounts() {}, refreshPurse() {}, clearRich() {}, ring() {}, sample() {},
     showCard: (card, order, reason) => shown.push({ card: card.id, order, reason }),
     close() { closed.push('close'); },
@@ -210,17 +213,24 @@ function superQuiz({ time = 5000, opened = 0, reward = 16, lose = 5 } = {}) {
   return { q, shown, closed };
 }
 
-test('the offer (plan 34): the header, what it pays and costs (nothing to lose with an empty purse), Decline | Try it, ✕ shown; Decline closes it', () => {
+test('the offer (plan 34; round 2, Michael: "more square", his sentence, red Decline and green Try it): its own square card with the title and the sentence for this level\'s reward, up to the penalty even with an empty purse; the full card\'s header, question and tally hidden; ✕ and purse in its corner; Decline closes it', () => {
   const { q, closed } = superQuiz();
   q.showOffer();
-  assert.equal(q.header.text, `❓ ${t('en', 'level.super')}`);
-  assert.equal(q.question.text, [t('en', 'superQOffer'), '', 'Right: +16 🌽', 'Wrong: −5 🌽'].join('\n'));
-  assert.deepEqual([q.leftBtn.label, q.rightBtn.label, q.closeBtn.visible, q.closable()], ['Decline', 'Try it', true, true]);
-  q.leftBtn.press();
+  const sentence = (n) => `You popped a challenge question. Answering the challenge question earns you ${n} corn kernels, but answering it incorrectly costs up to ${T.education.superQ.penalty} corn kernels. Do you wish to try?`;
+  assert.deepEqual([q.offerTitle.text, q.offerTitle.visible, q.offerText.text, q.offerText.visible], [t('en', 'level.super'), true, sentence(16), true]);
+  assert.deepEqual([q.offerRect.visible, q.panelRect.visible, q.header.visible, q.question.visible, q.tally.visible, q.tallyZone.visible], [true, false, false, false, false, false], 'the square instead of the full card; the run tally waits for the card');
+  const top = GAME_HEIGHT / 2 - 320;
+  assert.deepEqual([q.closeBtn.y, q.purseText.y, q.purseCoin.y], [top + 36, top + 84, top + 84], "the ✕ and the purse at the square's top");
+  assert.deepEqual([q.declineBtn.label, q.tryBtn.label, q.leftBtn.shown, q.rightBtn.shown, q.closeBtn.visible, q.closable()], ['Decline', 'Try it', false, false, true, true]);
+  q.declineBtn.press();
   assert.deepEqual(closed, ['close']);
-  const broke = superQuiz({ lose: 0 });
+  const broke = superQuiz({ lose: 0, reward: 22 });
   broke.q.showOffer();
-  assert.ok(broke.q.question.text.endsWith(t('en', 'superQLoseNone')));
+  assert.equal(broke.q.offerText.text, sentence(22), 'an empty purse: still "up to 5", and level 7 pays 22');
+  const zh = superQuiz({ reward: 10 });
+  zh.q.locale = 'zh-Hans';
+  zh.q.showOffer();
+  assert.ok(zh.q.offerText.text.includes('10') && zh.q.offerText.text.includes(String(T.education.superQ.penalty)) && zh.q.offerText.text.endsWith('要挑战吗？'), zh.q.offerText.text);
 });
 
 test("the offer takes no tap or key for retryLockoutMs (plan 34: it opens under a flapping thumb, and Space is the flap key); then Try shows the card, which can't be left until it is answered", () => {
@@ -233,8 +243,11 @@ test("the offer takes no tap or key for retryLockoutMs (plan 34: it opens under 
   const { q, shown } = superQuiz({ time: T.retryLockoutMs + 10, opened: 0 });
   q.showOffer();
   assert.equal(q.tapLocked({ x: 1 }), false);
-  q.trySuperQ();
+  q.primary({ repeat: true });
+  assert.deepEqual([shown, q.offering], [[], true], 'a held Space (a key repeat) after the lockout: nothing');
+  q.primary({ repeat: false }); // AUD-068 (Michael: Space / Enter press Try it): a fresh press tries it
   assert.deepEqual([shown, q.offering, q.session], [[{ card: SUPER[0].id, order: ['w1', 'answer', 'w2'], reason: 'super' }], false, [SUPER[0].id]]);
+  assert.deepEqual([q.offerRect.visible, q.panelRect.visible, q.header.visible, q.offerTitle.visible, q.offerText.visible, q.tryBtn.shown, q.declineBtn.shown, q.closeBtn.y, q.purseText.y], [false, true, true, false, false, false, false, q.top + 36, q.top + 84], 'Try: the full card back, the ✕ and purse in its corner');
   q.card = SUPER[0];
   assert.equal(q.closable(), false, 'a card waiting for its answer: no way out');
   q.answered = true;
@@ -302,9 +315,10 @@ test('AUD-066: the second offer in a page load still draws the bubble on its dis
   const ph = phaserLike();
   const q = quizScene({
     mode: 'super', locale: 'en', cx: 360, add: ph.add, textures: { exists: (k) => k === 'question' },
-    play: { superQ: { reward: 16 }, superQPenaltyNow: () => 5, bgColor: { fillColor: 0x123456 } },
+    play: { superQ: { reward: 16 }, bgColor: { fillColor: 0x123456 } },
     header: absorb(), question: absorb(), verdict: absorb(), verdictCoin: absorb(), paidNote: absorb(), nextWait: absorb(),
     choiceLine: absorb(), explain: absorb(), source: absorb(), options: [], leftBtn: absorb(), rightBtn: absorb(), closeBtn: absorb(),
+    declineBtn: absorb(), tryBtn: absorb(), offerTitle: absorb(), offerText: absorb(),
     setCardId() {}, refreshStatus() {}, clearRich() {}, clearButtons() {}, refreshTally() {}, refreshCounts() {}, refreshPurse() {}, ring() {},
   });
   q.showOffer();
@@ -346,4 +360,12 @@ test('AUD-067: inside the lockout, the offer\'s ✕, Esc and the pad\'s B (all c
   const late = offerAt(T.retryLockoutMs + 10);
   late.q.close();
   assert.deepEqual(late.stopped, ['stop'], 'after the lockout, ✕ / Esc / B decline');
+});
+
+test("AUD-068 (Michael: Space / Enter press Try it): Try it is the ring's first item, so however the ring appears on an offer (at once under a controller, or on the pad's first press: focus.show takes the first visible item) it is on Try it, as Enter / Space", async () => {
+  const src = (await import('node:fs')).readFileSync(new URL('../src/scenes/Quiz.js', import.meta.url), 'utf8');
+  const items = src.slice(src.indexOf('items: ['), src.indexOf('].map((item) => this.padItem(item))'));
+  const ids = [...items.matchAll(/pressable\('([a-z]+)'/g)].map((m) => m[1]);
+  assert.deepEqual(ids.slice(0, 2), ['try', 'decline'], `the ring's list starts ${ids.join(', ')}`);
+  assert.ok(ids.indexOf('close') > 1 && ids.indexOf('left') > 1, 'the ✕ and the card buttons come after');
 });

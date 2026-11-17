@@ -20,7 +20,14 @@ const MUTED = { ...STYLE, fontStyle: 'normal', color: '#c9b8dc' };
  * buttons, as Michael drew it.)
  */
 const PANEL = { width: 640, height: 1160 };
-const OFFER_ART_PX = 200; // the challenge offer's bubble (plan 34)
+/**
+ * The challenge question's offer (plan 34, round 2: Michael asked for it "more square"): a 640 × 640 card
+ * of its own, centred where the full card is, with the bubble (OFFER_ART_PX) on top, its title, the
+ * sentence, and Decline | Try it in the answers' own red and green (OFFER_NO, OFFER_YES).
+ */
+const OFFER = { width: 640, height: 640 };
+const OFFER_ART_PX = 120;
+const OFFER_PAD = 28; // px from the offer's top edge to the bubble, and (+12) from its bottom edge to the buttons
 const TEXT_W = 560;
 /**
  * Every wrapped Text on the card wraps through this (wordWrap.callback; plan 28, 2.1): text with Chinese in
@@ -48,6 +55,10 @@ const COIN_PX = 36; // the corn kernel after a paid verdict
 const CHOICE_PX = 26; // a revive's ⭐ choice line (plan 26, A2), under the verdict and the wait
 /** Option fills: waiting, the right answer, the wrong one picked, the other wrong one. */
 const FILL = { idle: 0x2a1522, right: 0x2f7d4f, wrong: 0x9c2f4a, dim: 0x1a0b14 };
+/** A button's look: the card's pink by default; the offer's Decline and Try it take the wrong and right answers' fills. */
+const BUTTON_PINK = { fill: 0x2a1522, stroke: 0xe85e96, color: '#f8a0c8' };
+const OFFER_NO = { fill: FILL.wrong, stroke: 0xff8da8, color: '#ffffff' };
+const OFFER_YES = { fill: FILL.right, stroke: 0x9fe8b4, color: '#ffffff' };
 const GOOD = '#9fe8b4';
 const BAD = '#ff8da8';
 const LINK = '#8fc9ff'; // a link in the explanation, underlined (plan 26; 10.9 : 1 on the card)
@@ -124,7 +135,9 @@ export class Quiz extends Phaser.Scene {
     this.bottom = cy + PANEL.height / 2;
     // The dimmer swallows taps; a tap outside the card does nothing (a stray tap must not lose the card).
     this.add.rectangle(cx, cy, W, GAME_HEIGHT, 0x000000, 0.6).setInteractive();
-    this.add.rectangle(cx, cy, PANEL.width, PANEL.height, 0x1a0b14, 0.97).setStrokeStyle(8, 0xe85e96);
+    this.panelRect = this.add.rectangle(cx, cy, PANEL.width, PANEL.height, 0x1a0b14, 0.97).setStrokeStyle(8, 0xe85e96);
+    // The challenge offer's square card (plan 34, round 2), under everything else; it shows instead of the full one while offering.
+    this.offerRect = this.add.rectangle(cx, cy, OFFER.width, OFFER.height, 0x1a0b14, 0.97).setStrokeStyle(8, 0xe85e96).setVisible(false);
     // The glow behind the purse (under the ✕, placed below): drawn first, so the header, the ✕ and the purse
     // sit on it. Off at alpha 0; it lights when a right answer pays and fades out (plan 28, 1.2: glowPurse).
     const glowSpec = T.education.purseGlow;
@@ -227,6 +240,12 @@ export class Quiz extends Phaser.Scene {
     this.topBtn = this.makeButton(cx, topY, WIDE_BUTTON);
     this.leftBtn = this.makeButton(cx - 145, rowY);
     this.rightBtn = this.makeButton(cx + 145, rowY);
+    // The challenge offer's own title, sentence and buttons (plan 34, round 2), on its square card.
+    const offerRowY = cy + OFFER.height / 2 - OFFER_PAD - 12 - BUTTON.height / 2;
+    this.offerTitle = this.add.text(cx, 0, '', { ...STYLE, fontSize: '34px', color: '#f8a0c8', wordWrap: { width: TEXT_W - 40, useAdvancedWrap: true, callback: cjkWrap } }).setOrigin(0.5, 0).setVisible(false);
+    this.offerText = this.add.text(cx, 0, '', { ...STYLE, fontSize: '30px', lineSpacing: 6, wordWrap: { width: TEXT_W, useAdvancedWrap: true, callback: cjkWrap } }).setOrigin(0.5, 0).setVisible(false);
+    this.declineBtn = this.makeButton(cx - 145, offerRowY, BUTTON.width, OFFER_NO);
+    this.tryBtn = this.makeButton(cx + 145, offerRowY, BUTTON.width, OFFER_YES);
     this.rowTop = rowY - BUTTON.height / 2; // the explanation ends above the button row
     this.whyTop = topY - BUTTON.height / 2; // and the verdict above the top button while it shows
     // The purse in a break (plan 26): the kernel and the coins held, under the ✕ (refreshPurse).
@@ -242,8 +261,8 @@ export class Quiz extends Phaser.Scene {
       kb?.on(`keydown-${k}`, () => this.choose(i, 'key'));
       kb?.on(`keydown-NUMPAD_${k}`, () => this.choose(i, 'key'));
     });
-    kb?.on('keydown-ENTER', () => this.primary());
-    kb?.on('keydown-SPACE', () => this.primary());
+    kb?.on('keydown-ENTER', (event) => this.primary(event));
+    kb?.on('keydown-SPACE', (event) => this.primary(event));
     kb?.on('keydown-ESC', () => this.close());
     // A hidden page, or a window that lost focus, while a card waits for its answer makes the
     // response time meaningless (the blur: plan 24, AUD-006).
@@ -265,7 +284,12 @@ export class Quiz extends Phaser.Scene {
     // The "This run" card (the tally's): an info card over everything here, the ring included.
     this.runCard = createInfoCard(this, { x: cx, y: cy, width: 520 });
     this.focus = createFocus(this, T, {
+      // The offer's Try it first, then Decline (AUD-068): however the ring appears on an offer (at once
+      // under a controller, or on the pad's first press), it lands on the first visible item: Try it, the
+      // same as Enter / Space.
       items: [
+        pressable('try', this.tryBtn.zone),
+        pressable('decline', this.declineBtn.zone),
         ...this.options.map((o, i) => pressable(`option${i}`, o.zone)),
         pressable('top', this.topBtn.zone),
         pressable('left', this.leftBtn.zone),
@@ -404,15 +428,15 @@ export class Quiz extends Phaser.Scene {
   }
 
   /** A button slot `width` wide: a rounded box, a label and a zone; set(label, onPress) says what it is now. */
-  makeButton(x, y, width = BUTTON.width) {
+  makeButton(x, y, width = BUTTON.width, look = BUTTON_PINK) {
     const refreshHalo = () => this.refreshHalo(); // the methods below are the button's own: `this` is not the scene there
     const time = this.time;
     const g = this.add.graphics();
-    g.fillStyle(0x2a1522, 1);
+    g.fillStyle(look.fill, 1);
     g.fillRoundedRect(x - width / 2, y - BUTTON.height / 2, width, BUTTON.height, 18);
-    g.lineStyle(4, 0xe85e96, 1);
+    g.lineStyle(4, look.stroke, 1);
     g.strokeRoundedRect(x - width / 2, y - BUTTON.height / 2, width, BUTTON.height, 18);
-    const text = this.add.text(x, y, '', { ...STYLE, fontSize: '30px', color: '#f8a0c8', wordWrap: { width: width - 16, useAdvancedWrap: true, callback: cjkWrap } }).setOrigin(0.5);
+    const text = this.add.text(x, y, '', { ...STYLE, fontSize: '30px', color: look.color, wordWrap: { width: width - 16, useAdvancedWrap: true, callback: cjkWrap } }).setOrigin(0.5);
     const button = {
       g,
       text,
@@ -502,31 +526,39 @@ export class Quiz extends Phaser.Scene {
   }
 
   /**
-   * The challenge question's offer (plan 34): what it is, what a right answer pays and what a wrong one
-   * costs (Play.superQ's reward; superQPenaltyNow, the whole purse when it holds less than the penalty),
-   * then Decline | Try. ✕ and Esc decline. No card is shown before Try, and none can be left after it.
+   * The challenge question's offer (plan 34; round 2, Michael: "more square", his sentence, a reddish
+   * Decline and a greenish Try it). Its own 640 × 640 card shows instead of the full one: the bubble, the
+   * title, the sentence (what a right answer pays, Play.superQ's reward, and that a wrong one costs up to
+   * education.superQ.penalty), then Decline | Try it. The card's ✕ and purse move to its corner; its
+   * header, question and run tally wait for the card (hideOffer). ✕ and Esc decline. No card is shown
+   * before Try, and none can be left after it.
    */
   showOffer() {
     const reward = this.play?.superQ?.reward ?? 0;
-    const lose = this.play?.superQPenaltyNow?.() ?? 0;
+    const top = GAME_HEIGHT / 2 - OFFER.height / 2;
     this.card = null;
     this.answered = false;
-    this.header.setText(`\u2753 ${t(this.locale, 'level.super')}`);
     this.setCardId('');
     this.refreshStatus();
-    const lines = [t(this.locale, 'superQOffer'), '', t(this.locale, 'superQWin').replace('{n}', String(reward)), lose ? t(this.locale, 'superQLose').replace('{n}', String(lose)) : t(this.locale, 'superQLoseNone')];
-    this.question.setY(this.header.y + this.header.height + 22).setText(lines.join('\n')).setVisible(true);
-    // The bubble itself under the lines, as the poop met it in the field: it is see-through (Michael at
-    // Preview G), so it sits on a disc of the level's own background colour, never on the dark card.
+    this.panelRect?.setVisible(false);
+    this.offerRect?.setVisible(true);
+    this.header.setVisible(false);
+    this.question.setVisible(false);
+    this.placeCorner(top);
+    // The bubble itself on top, as the poop met it in the field: it is see-through (Michael at Preview G),
+    // so it sits on a disc of the level's own background colour, never on the dark card.
     // Made again on every offer whose art is gone: Phaser destroys the display list when the Quiz stops, while
     // the scene instance (and these fields) live on, so a kept object would be a dead one (AUD-066).
     if (!this.offerArt?.scene && this.textures?.exists?.('question')) {
       this.offerDisc = this.add.circle(this.cx, 0, OFFER_ART_PX * 0.43, 0xeed9b9, 1); // just inside the bubble's outline (its radius is 0.44 of the art)
       this.offerArt = this.add.image(this.cx, 0, 'question').setDisplaySize(OFFER_ART_PX, OFFER_ART_PX);
     }
-    const artY = this.question.y + this.question.height + 40 + OFFER_ART_PX / 2;
+    const artY = top + OFFER_PAD + OFFER_ART_PX / 2;
     this.offerDisc?.setPosition(this.cx, artY).setFillStyle(this.play?.bgColor?.fillColor ?? 0xeed9b9, 1).setVisible(true);
     this.offerArt?.setPosition(this.cx, artY).setVisible(true);
+    this.offerTitle?.setY(artY + OFFER_ART_PX / 2 + 12).setText(t(this.locale, 'level.super')).setVisible(true);
+    const sentence = t(this.locale, 'superQOffer').replace('{reward}', String(reward)).replace('{penalty}', String(T.education.superQ.penalty));
+    this.offerText?.setY((this.offerTitle?.y ?? artY) + (this.offerTitle?.height ?? 0) + 18).setText(sentence).setVisible(true);
     for (const o of this.options) {
       o.g.setVisible(false);
       o.text.setVisible(false);
@@ -536,13 +568,45 @@ export class Quiz extends Phaser.Scene {
     this.clearRich();
     for (const x of [this.verdict, this.verdictCoin, this.paidNote, this.nextWait, this.choiceLine, this.explain, this.source]) x.setVisible(false);
     this.clearButtons();
-    this.leftBtn.set(t(this.locale, 'superQDecline'), () => this.close());
-    this.rightBtn.set(t(this.locale, 'superQTry'), () => this.trySuperQ());
+    this.declineBtn.set(t(this.locale, 'superQDecline'), () => this.close());
+    this.tryBtn.set(t(this.locale, 'superQTry'), () => this.trySuperQ());
     this.closeBtn.setVisible(true);
-    this.refreshTally();
+    this.tally?.setVisible(false); // the run's tally sits on the full card's top row: it comes back with the card
+    this.tallyZone?.setVisible(false);
     this.refreshCounts();
     this.refreshPurse();
-    this.ring('right');
+    this.ring('try');
+  }
+
+  /** The offer gives way to the card (Try): the full card again, its header, ✕ and purse back in place. */
+  hideOffer() {
+    this.offerRect?.setVisible(false);
+    this.panelRect?.setVisible(true);
+    this.offerTitle?.setVisible(false);
+    this.offerText?.setVisible(false);
+    this.declineBtn?.setShown(false);
+    this.tryBtn?.setShown(false);
+    this.header.setVisible(true);
+    this.placeCorner(this.top);
+  }
+
+  /** The ✕ and the purse under it, at the top of a card whose top edge is `top` (the full card, or the offer's square). */
+  placeCorner(top) {
+    this.closeBtn?.setY?.(top + 36);
+    this.purseText?.setY?.(top + 84);
+    this.purseCoin?.setY?.(top + 84);
+  }
+
+  /**
+   * The offer's layout, for the smoke: the sentence ends above Decline | Try it, and the bubble starts
+   * inside the square.
+   */
+  offerFits() {
+    const top = GAME_HEIGHT / 2 - OFFER.height / 2;
+    const textBottom = this.offerText.y + this.offerText.height;
+    const buttonsTop = this.tryBtn.zone.y - BUTTON.height / 2;
+    const artTop = this.offerArt?.visible ? this.offerArt.y - OFFER_ART_PX / 2 : top + OFFER_PAD;
+    return { top, textBottom, buttonsTop, artTop, ok: textBottom <= buttonsTop - 16 && artTop >= top };
   }
 
   /** Try (plan 34): the challenge card, which can only be answered from here (no Skip, no way out until the answer). */
@@ -551,18 +615,25 @@ export class Quiz extends Phaser.Scene {
     const pick = this.play?.superQPick?.() ?? null;
     if (!pick) return this.close();
     this.offering = false;
+    this.hideOffer();
     this.session.push(pick.card.id);
     this.sample('book-flip', T.bookFlipVolume);
     this.showCard(pick.card, pick.order, pick.reason);
   }
 
   /**
-   * Enter / Space: the way forward (the right-hand button). With "All caught up" on show they press
+   * Enter / Space: the way forward (the right-hand button; on a challenge offer, Try it). With "All caught up" on show they press
    * Keep practicing when it shows, else End Review. Never Quit, and never Return while a card is up: Space is also the flap key, and a
    * flap pressed just after a crash must not end the run or leave the quiz.
    */
-  primary() {
+  primary(event) {
     if (!isTopOverlay(this) || this.runCard?.open || this.offerLocked()) return;
+    // The offer (AUD-068, Michael: Space/Enter press Try it): a fresh press tries it; a held key's repeats,
+    // which a browser starts after about 500 ms (past the lockout), do nothing.
+    if (this.offering) {
+      if (!event?.repeat) this.tryBtn?.press();
+      return;
+    }
     if (this.card && !this.answered) return; // an open card: never Skip (plan 26, A2), nor anything else
     if (this.rightBtn.shown) this.rightBtn.press();
     else if (!this.card && this.closable()) this.leftBtn.press();

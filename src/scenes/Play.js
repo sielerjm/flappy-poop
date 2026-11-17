@@ -2242,11 +2242,6 @@ export class Play extends Phaser.Scene {
     return card ? { card, reason: 'super', order: shuffleOptions(Math.random) } : null;
   }
 
-  /** What a wrong challenge answer would cost now (plan 34): the offer shows it. */
-  superQPenaltyNow() {
-    return superQPenalty(this.effects?.coins() ?? 0, T);
-  }
-
   /**
    * A challenge answer (plan 34): saved to the card's schedule like any first sight (right: review later;
    * wrong: missed, due now), and a study day; right pays superQReward (the coin sound, the purse's glow),

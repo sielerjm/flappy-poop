@@ -84,7 +84,7 @@ export const SECTIONS = [
   { name: 'invite-link', needs: [], about: "the invite link (plan 28, 2.4): the page loaded with ?invite=<code> opens the 📚 Education data panel with the code filled in on the first ready screen; the address bar has lost the code; no storage keeps it; a load without it opens nothing (the live board blocked at the browser)" },
   { name: 'run-stats', needs: [], about: "the run summary (plan 30): a run flown through Chrome's own input (keys and a mouse click, with a pause) has every flap but the launch counted as a real, fresh press; a run flown by direct calls has none; a pointer event forged with a plain object counts as a press but never a real one; each summary is queued with the run's numbers" },
   { name: 'streaks', needs: [], about: "🔥 day streaks (plan 34): a one-player run counts the local day and a Daily Dump its course day on this device; the 🌞 and 📚 subscripts on the ready screen (the Daily Dump and learning streaks, none at 0); your own profile's 🔥 Current streak and ❤️‍🔥 Longest streak rows under Singleplayer and Daily Dump; Clear empties them; the 🌞 card's and \"Your cards\"' \"🔥 Current streak = n\" lines (round 2)" },
-  { name: 'education-superq', needs: [], about: "❓ the challenge question (plan 34): the bubble on its pair in a 📚 run, the pairs either side opening at the same height and holding still, its size and float; flown past it opens anyway; the run held under the offer (no banner, tray or \"?\"; P and a hidden page do nothing); taps and Space locked for a moment; Decline flies on with a grace and saves nothing; Try's card cannot be left until answered; right pays 8 + 2 × level and saves the card as reviewed; wrong takes 5 and saves it as missed, holding Fly on; neither counts in the run's tally" },
+  { name: 'education-superq', needs: [], about: "❓ the challenge question (plan 34): the bubble on its pair in a 📚 run, the pairs either side opening at the same height and holding still, its size and float; flown past it opens anyway; the run held under the offer (no banner, tray or \"?\"; P and a hidden page do nothing); taps and Space locked for a moment; Decline flies on with a grace and saves nothing; Try's card cannot be left until answered; right pays 8 + 2 × level and saves the card as reviewed; wrong takes 5 and saves it as missed, holding Fly on; neither counts in the run's tally; round 2: the offer its own square card (sentence above the buttons, no tally), the ring and a fresh Space on Try it, a held Space nothing (AUD-068)" },
 ];
 
 /** What a section needs: its own list, or (omitted) every section before it. */
@@ -6667,13 +6667,15 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
       // 2. Flown past without touching it: it opens anyway; the run is held, with no banner, tray or "?".
       await evaluate(`(${P}.poop.y = Math.max(200, ${P}.superQ.item.getData('baseY') - 360), true)`);
       ok(await waitFor(`__flappy.scene.isActive('Quiz') && ${QZ}.mode === 'super'`, 200), 'flown past untouched, the bubble opens its offer');
-      const held = await evaluate(`JSON.stringify({ state: ${P}.state, hold: ${P}.superQHold, banner: ${P}.pauseText.visible, shade: ${P}.pauseShade.visible, row: ${P}.tray?.rowShown?.() ?? null, help: Boolean(${P}.helpShown), offering: ${QZ}.offering, header: ${QZ}.header.text, lines: ${QZ}.question.text })`).then(JSON.parse);
+      const held = await evaluate(`JSON.stringify({ state: ${P}.state, hold: ${P}.superQHold, banner: ${P}.pauseText.visible, shade: ${P}.pauseShade.visible, row: ${P}.tray?.rowShown?.() ?? null, help: Boolean(${P}.helpShown), offering: ${QZ}.offering, header: ${QZ}.offerTitle.text, lines: ${QZ}.offerText.text, square: ${QZ}.offerRect.visible && !${QZ}.panelRect.visible && !${QZ}.header.visible, fits: ${QZ}.offerFits() })`).then(JSON.parse);
       ok(held.state === 'paused' && held.hold && !held.banner && !held.shade && held.row === false && !held.help && held.offering,
-        `the run is held under the offer with no PAUSED banner, tray row or "?" (${JSON.stringify({ ...held, lines: undefined, header: undefined })})`);
+        `the run is held under the offer with no PAUSED banner, tray row or "?" (${JSON.stringify({ ...held, lines: undefined, header: undefined, fits: undefined })})`);
       const reward = 8 + 2 * level;
-      ok(held.header.includes('Challenge question') && held.lines.includes(`+${reward}`) && held.lines.includes('−5'), `the offer says what it pays (+${reward}) and costs (−5): ${held.lines.replace(/\n/g, ' · ')}`);
+      ok(held.header === 'Challenge question' && held.lines.includes(`earns you ${reward} corn kernels`) && held.lines.includes('costs up to 5 corn kernels') && held.lines.endsWith('Do you wish to try?'), `the offer says what it pays (${reward}) and costs (up to 5): ${held.lines}`);
+      ok(held.square && held.fits.ok, `the offer is its own square card, the sentence ending ${Math.round(held.fits.buttonsTop - held.fits.textBottom)} px above Decline | Try it (plan 34, round 2: ${JSON.stringify(held.fits)})`);
       // Taps and Space do nothing for a moment; P and a hidden page do nothing at all.
-      const tryBtn = await evaluate(`JSON.stringify({ x: ${QZ}.rightBtn.zone.x, y: ${QZ}.rightBtn.zone.y })`).then(JSON.parse);
+      // The lockout is restarted here, so the presses below land inside it however slow the round trips so far were.
+      const tryBtn = await evaluate(`(() => { const q = ${QZ}; q.openedAt = q.game.loop.time; return JSON.stringify({ x: q.tryBtn.zone.x, y: q.tryBtn.zone.y }); })()`).then(JSON.parse);
       await tapAt(tryBtn.x, tryBtn.y);
       for (const type of ['keyDown', 'keyUp']) await cdp.send('Input.dispatchKeyEvent', { type, key: ' ', code: 'Space', windowsVirtualKeyCode: 32 });
       await evaluate(`${QZ}.input.keyboard.emit('keydown-ESC'), true`); // Esc, ✕ and the pad's B decline only after it too (AUD-067)
@@ -6687,8 +6689,11 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
 
       // 3. Decline: the run flies on with a grace; nothing saved, nothing paid.
       await sleep(TT.retryLockoutMs);
+      // AUD-068: a controller's ring, shown on the pad's first press (Play calls focus.show), lands on Try it.
+      const ringOffer = await evaluate(`(() => { const q = ${QZ}; q.registry.set('padMode', true); q.focus.show(); const id = q.focus.items[q.focus.index]?.id ?? null; q.focus.hide(); q.registry.set('padMode', false); return id; })()`);
+      ok(ringOffer === 'try', `on the offer the controller's ring starts on Try it, as Enter / Space (AUD-068: ${ringOffer})`);
       const c0 = await coins();
-      await evaluate(`${QZ}.leftBtn.press(), true`);
+      await evaluate(`${QZ}.declineBtn.press(), true`);
       ok(await waitFor(`!__flappy.scene.isActive('Quiz') && ${P}.state === 'playing'`), 'Decline closes the offer and the run flies on');
       ok(await evaluate(`!${P}.superQHold && ${P}.superQ.done && Object.keys(${P}.eduStore.load().cards).length === 0`) && (await coins()) === c0, 'declined: the bubble is gone for the level, no card saved, the purse untouched');
 
@@ -6699,10 +6704,19 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await evaluate(`(() => { const p = ${P}; p.collectItem(p.superQ.item); return true; })()`);
         await waitFor(`__flappy.scene.isActive('Quiz') && ${QZ}.offering`);
         const art = await evaluate(`Boolean(${QZ}.offerArt?.scene && ${QZ}.offerArt.visible)`);
+        const tallyOnOffer = await evaluate(`${QZ}.tally.visible || ${QZ}.tallyZone.visible`);
         await sleep(TT.retryLockoutMs + 50);
-        await evaluate(`${QZ}.rightBtn.press(), true`);
+        if (right) {
+          // A held Space (key repeats) presses nothing; a fresh Space tries it (AUD-068, Michael).
+          await cdp.send('Input.dispatchKeyEvent', { type: 'keyDown', key: ' ', code: 'Space', windowsVirtualKeyCode: 32, autoRepeat: true });
+          await cdp.send('Input.dispatchKeyEvent', { type: 'keyUp', key: ' ', code: 'Space', windowsVirtualKeyCode: 32 });
+          await sleep(80);
+          const repeatTried = await evaluate(`!${QZ}.offering`);
+          for (const type of ['keyDown', 'keyUp']) await cdp.send('Input.dispatchKeyEvent', { type, key: ' ', code: 'Space', windowsVirtualKeyCode: 32 });
+          ok(!repeatTried && (await waitFor(`${QZ}.card`, 20)), `on the offer a repeated Space presses nothing and a fresh Space presses Try it (${repeatTried})`);
+        } else await evaluate(`${QZ}.tryBtn.press(), true`);
         await waitFor(`${QZ}.card`);
-        const open = await evaluate(`JSON.stringify({ id: ${QZ}.card.id, deck: ${QZ}.card.deck, x: ${QZ}.closeBtn.visible, left: ${QZ}.leftBtn.shown, right: ${QZ}.rightBtn.shown })`).then(JSON.parse);
+        const open = await evaluate(`JSON.stringify({ id: ${QZ}.card.id, deck: ${QZ}.card.deck, x: ${QZ}.closeBtn.visible, left: ${QZ}.leftBtn.shown, right: ${QZ}.rightBtn.shown || ${QZ}.tryBtn.shown || ${QZ}.declineBtn.shown, full: ${QZ}.panelRect.visible && !${QZ}.offerRect.visible && ${QZ}.header.visible })`).then(JSON.parse);
         await evaluate(`${QZ}.input.keyboard.emit('keydown-ESC'), true`);
         await sleep(100);
         const stayed = await evaluate(`__flappy.scene.isActive('Quiz') && Boolean(${QZ}.card) && !${QZ}.answered`);
@@ -6711,18 +6725,21 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await evaluate(`(() => { const q = ${QZ}; q.choose(${right ? `q.order.indexOf('answer')` : `q.order.findIndex((k) => k !== 'answer')`}); return true; })()`);
         await sleep(100);
         const res = await evaluate(`JSON.stringify({ last: ${QZ}.lastAnswer, rec: ${P}.eduStore.load().cards[${QZ}.card.id] ?? null, tally: ${P}.runQuiz.answered, held: ${QZ}.rightBtn.held, missed: ${P}.superQMissed })`).then(JSON.parse);
-        return { open, stayed, before, tally, res, art, after: await coins() };
+        return { open, stayed, before, tally, res, art, tallyOnOffer, after: await coins() };
       };
       const r = await answer(true);
       ok(art1 && r.art, `every offer in the page load shows the bubble art, the second too (AUD-066: ${art1}, ${r.art})`);
-      ok(r.open.deck === 'super' && !r.open.x && !r.open.left && !r.open.right && r.stayed, `after Try the card can only be answered: no ✕, no buttons, Esc does nothing (${r.open.id})`);
+      ok(r.open.deck === 'super' && r.open.full && !r.open.x && !r.open.left && !r.open.right && r.stayed, `after Try the full card is back and can only be answered: no ✕, no buttons, Esc does nothing (${r.open.id})`);
       ok(r.res.last.correct && r.res.last.coins === reward && r.after === r.before + reward && r.res.rec?.state === 'review' && r.res.rec.dueAt > Date.now() + 864e5 && r.res.tally === r.tally,
         `right: +${reward} 🌽 (${r.before} → ${r.after}), the card saved as reviewed, not in the run's tally (${r.res.tally})`);
       await evaluate(`${QZ}.rightBtn.press(), true`);
       ok(await waitFor(`!__flappy.scene.isActive('Quiz') && ${P}.state === 'playing' && ${P}.graceLeftMs > 0`), 'Fly on: the run goes on');
 
-      // 5. Wrong: 5 taken, the card saved as missed (due now), Fly on held a moment.
+      // 5. Wrong: 5 taken, the card saved as missed (due now), Fly on held a moment. The run has answers by now
+      // (set here), and the offer still shows no tally: it belongs to the full card's top row (plan 34, round 2).
+      await evaluate(`(Object.assign(${P}.runQuiz, { answered: 2, right: 2, wrong: 0 }), true)`);
       const w = await answer(false);
+      ok(!w.tallyOnOffer, 'the offer shows no run tally, even once the run has answers');
       ok(!w.res.last.correct && w.res.last.lost === 5 && w.after === w.before - 5 && w.res.rec?.state === 'missed' && w.res.rec.dueAt <= Date.now() && w.res.held && w.res.missed.includes(w.open.id) && w.res.tally === w.tally,
         `wrong: −5 🌽 (${w.before} → ${w.after}), saved as missed, Fly on held, not in the run's tally`);
       await sleep(TT.education.explainMinMs + 100);
