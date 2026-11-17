@@ -5,7 +5,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { LEVELS, TUNING as T } from '../src/config.js';
 import { CARDS, DECKS, LEVEL_DECKS, CARD_LINKS, REFERENCES } from '../src/questions.js';
-import { pickCard, cardCounts, masteryByDeck, breakDecks, pickSuperCard, schedule } from '../src/education.js';
+import { pickCard, cardCounts, masteryByDeck, breakDecks, pickSuperCard, schedule, newAllowance } from '../src/education.js';
 import { t } from '../src/i18n.js';
 
 const NOW = Date.UTC(2026, 10, 17, 12);
@@ -91,4 +91,14 @@ test('pickSuperCard (plan 34): a random live challenge card not met yet; null on
 test('the quiz names the challenge deck (level.super), in both languages', () => {
   assert.equal(t('en', 'level.super'), 'Challenge question');
   assert.ok(t('zh-Hans', 'level.super') && t('zh-Hans', 'level.super') !== 'level.super');
+});
+
+test('AUD-071 (the 2026-11-17 audit): with the daily new-card cap back on, a challenge card met today uses none of the day\'s new cards; a level card does', () => {
+  const t = { ...T, education: { ...T.education, newPerDay: 3 } };
+  const sq = SUPER[0];
+  const level = CARDS.find((c) => c.deck === 'stomach');
+  assert.equal(newAllowance({}, { now: NOW, t }), 3);
+  assert.equal(newAllowance({ [sq.id]: schedule(null, 'again', NOW, t) }, { now: NOW, t }), 3, 'the challenge card is not a new card');
+  assert.equal(newAllowance({ [level.id]: schedule(null, 'good', NOW, t) }, { now: NOW, t }), 2, 'a level card first seen today is');
+  assert.equal(newAllowance({}, { now: NOW, t, exclude: [sq.id] }), 3, 'nor a challenge card shown but not saved');
 });

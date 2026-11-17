@@ -144,6 +144,8 @@ const levelOfDeck = (deck) => LEVEL_DECKS.indexOf(deck) + 1; // 0 for the genera
 
 /** A challenge question (plan 34, deck 'super'): offered only by the challenge question bubble, never as a new card in a quiz. */
 const isSuper = (c) => c.deck === 'super';
+/** The challenge cards' ids, for counts kept by id (newAllowance). */
+const SUPER_IDS = new Set(CARDS.filter(isSuper).map((c) => c.id));
 
 /** Where new cards go in a quiz (plan 26, Anki's new / review order; settings eduNewOrder): after the due cards (the default), mixed with them, or before them. */
 export const NEW_ORDERS = ['after', 'mixed', 'before'];
@@ -182,9 +184,10 @@ function nextLocalMidnight(now) {
 export function newAllowance(srs = {}, { now = Date.now(), exclude = [], t = TUNING, dayStart = localDayStart(now) } = {}) {
   const cap = t.education.newPerDay;
   if (!Number.isFinite(cap)) return Infinity;
+  // A challenge card (plan 34) is never a quiz's new card, so its first sight uses none of the day's (AUD-071).
   let used = 0;
-  for (const rec of Object.values(srs)) if (rec && rec.firstAt >= dayStart) used += 1;
-  for (const id of new Set(exclude)) if (!srs[id]) used += 1;
+  for (const [id, rec] of Object.entries(srs)) if (rec && rec.firstAt >= dayStart && !SUPER_IDS.has(id)) used += 1;
+  for (const id of new Set(exclude)) if (!srs[id] && !SUPER_IDS.has(id)) used += 1;
   return Math.max(0, cap - used);
 }
 
