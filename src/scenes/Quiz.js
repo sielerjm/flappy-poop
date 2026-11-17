@@ -284,9 +284,9 @@ export class Quiz extends Phaser.Scene {
     // The "This run" card (the tally's): an info card over everything here, the ring included.
     this.runCard = createInfoCard(this, { x: cx, y: cy, width: 520 });
     this.focus = createFocus(this, T, {
-      // The offer's Try it first, then Decline (AUD-068): however the ring appears on an offer (at once
-      // under a controller, or on the pad's first press), it lands on the first visible item: Try it, the
-      // same as Enter / Space.
+      // The offer's Try it first, then Decline (AUD-068): when the ring appears at once under a controller,
+      // it lands on the first visible item, Try it, the same as Enter / Space; on the pad's first press
+      // guardOfferRing puts it there too.
       items: [
         pressable('try', this.tryBtn.zone),
         pressable('decline', this.declineBtn.zone),
@@ -299,6 +299,7 @@ export class Quiz extends Phaser.Scene {
         pressable('close', this.closeBtn),
       ].map((item) => this.padItem(item)),
     });
+    this.guardOfferRing();
     if (this.mode === 'super') this.showOffer();
     else this.nextCard();
     this.focus.show(); // only under a controller (registry padMode)
@@ -607,6 +608,19 @@ export class Quiz extends Phaser.Scene {
     const buttonsTop = this.tryBtn.zone.y - BUTTON.height / 2;
     const artTop = this.offerArt?.visible ? this.offerArt.y - OFFER_ART_PX / 2 : top + OFFER_PAD;
     return { top, textBottom, buttonsTop, artTop, ok: textBottom <= buttonsTop - 16 && artTop >= top };
+  }
+
+  /**
+   * AUD-068 (the checkpoint 34b audit): on the offer, the pad's first press only shows the ring, on Try it.
+   * Play's pad route moves the ring and then shows it, and from no ring an up or left step landed on the
+   * list's last visible item, the ✕, which declines. Once the ring shows, or off the offer, moves are the
+   * focus's own.
+   */
+  guardOfferRing() {
+    const focus = this.focus;
+    if (!focus) return;
+    const move = focus.move;
+    focus.move = (dir) => (this.offering && !focus.shown ? focus.setIndex(focus.indexOf('try')) : move.call(focus, dir));
   }
 
   /** Try (plan 34): the challenge card, which can only be answered from here (no Skip, no way out until the answer). */

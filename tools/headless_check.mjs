@@ -3964,7 +3964,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         ok((await switches()).on, 'the 📚 switch stays on across a restart');
 
         // "Your cards" on the 📚 glyph (plan 26, A2: Michael asked, his image 4; the popup had taken its
-        // place): the three numbers, how many seen, what the gold number counts. It does not toggle the
+        // place): the three numbers, how many seen, the learning streak (plan 34, round 2). It does not toggle the
         // switch; any tap, key or pad press closes it and presses nothing under it; no run starts. The
         // track still toggles, and turning it on opens nothing.
         await sleep(500); // home()'s restart lands on the next frame: a real tap straddling it would lose its release
@@ -6642,6 +6642,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
       const coins = () => evaluate(`${P}.effects.coins()`);
 
       // 1. The bubble: on its pair's band slot between two still pairs that open at the same height.
+      await quizSounds.listen(); // from here, before the bubble exists: the pop (plan 34, round 2) is heard however soon it opens
       const pair = await force();
       ok(await waitFor(`${P}.superQ.item?.active`, 200), `a bubble rides after pair ${pair} on level ${level}`);
       await waitFor(`${P}.pipesSpawned >= ${pair} + 1`, 200);
@@ -6665,13 +6666,12 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
       ok(span > 3 && ys.every((y) => Math.abs(y - field.baseY) <= TT.education.superQ.bobPx + 0.5), `it floats, at most ${TT.education.superQ.bobPx} px either way (${span.toFixed(1)} px over a second)`);
 
       // 2. Flown past without touching it: it opens anyway; the run is held, with no banner, tray or "?".
-      await quizSounds.listen(); // the bubble's pop (plan 34, round 2: Michael's sound)
       await evaluate(`(${P}.poop.y = Math.max(200, ${P}.superQ.item.getData('baseY') - 360), true)`);
       ok(await waitFor(`__flappy.scene.isActive('Quiz') && ${QZ}.mode === 'super'`, 200), 'flown past untouched, the bubble opens its offer');
       const sPop = await quizSounds.heard();
       await quizSounds.unlisten();
       const popLoaded = await evaluate(`__flappy.cache.audio.exists('bubble-pop')`);
-      ok(popLoaded && sPop.join() === 'sample:bubble-pop', `the offer opens on the bubble's pop, with no book opening over it (${sPop.join(', ')}; loaded ${popLoaded})`);
+      ok(popLoaded && sPop.filter((k) => k === 'sample:bubble-pop').length === 1 && !sPop.includes('sample:book-open'), `the offer opens on the bubble's pop, once, with no book opening over it (${sPop.join(', ')}; loaded ${popLoaded})`);
       const held = await evaluate(`JSON.stringify({ state: ${P}.state, hold: ${P}.superQHold, banner: ${P}.pauseText.visible, shade: ${P}.pauseShade.visible, row: ${P}.tray?.rowShown?.() ?? null, help: Boolean(${P}.helpShown), offering: ${QZ}.offering, header: ${QZ}.offerTitle.text, lines: ${QZ}.offerText.text, square: ${QZ}.offerRect.visible && !${QZ}.panelRect.visible && !${QZ}.header.visible, fits: ${QZ}.offerFits() })`).then(JSON.parse);
       ok(held.state === 'paused' && held.hold && !held.banner && !held.shade && held.row === false && !held.help && held.offering,
         `the run is held under the offer with no PAUSED banner, tray row or "?" (${JSON.stringify({ ...held, lines: undefined, header: undefined, fits: undefined })})`);
@@ -6697,6 +6697,19 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
       // AUD-068: a controller's ring, shown on the pad's first press (Play calls focus.show), lands on Try it.
       const ringOffer = await evaluate(`(() => { const q = ${QZ}; q.registry.set('padMode', true); q.focus.show(); const id = q.focus.items[q.focus.index]?.id ?? null; q.focus.hide(); q.registry.set('padMode', false); return id; })()`);
       ok(ringOffer === 'try', `on the offer the controller's ring starts on Try it, as Enter / Space (AUD-068: ${ringOffer})`);
+      // The pad's real route (checkpoint 34b audit): from no ring, a first d-pad press moves, then shows. Up and
+      // left used to step to the list's last item, the ✕ (which declines); guardOfferRing puts it on Try it.
+      const ringMoves = [];
+      for (const dir of ['up', 'left', 'down', 'right']) {
+        await evaluate(`(() => { const q = ${QZ}; q.focus.hide(); q.focus.setIndex(-1); q.registry.set('padMode', false); return true; })()`);
+        await evaluate(`${P}.onPadAction('nav:${dir}'), true`);
+        ringMoves.push(await evaluate(`${QZ}.focus.shown ? ${QZ}.focus.items[${QZ}.focus.index]?.id ?? null : null`));
+      }
+      await evaluate(`(() => { const q = ${QZ}; q.focus.hide(); q.registry.set('padMode', false); return true; })()`);
+      ok(ringMoves.every((id) => id === 'try'), `a first d-pad press, any direction, shows the ring on Try it, never the ✕ (up, left, down, right: ${ringMoves.join(', ')})`);
+      // The square's fit in Chinese too (the audit: only English was checked), at this level's reward.
+      const zhFit = await evaluate(`(() => { const q = ${QZ}; q.locale = 'zh-Hans'; q.showOffer(); const f = q.offerFits(); q.locale = 'en'; q.showOffer(); return JSON.stringify(f); })()`).then(JSON.parse);
+      ok(zhFit.ok, `the offer fits in Chinese as well (${Math.round(zhFit.buttonsTop - zhFit.textBottom)} px spare)`);
       const c0 = await coins();
       await evaluate(`${QZ}.declineBtn.press(), true`);
       ok(await waitFor(`!__flappy.scene.isActive('Quiz') && ${P}.state === 'playing'`), 'Decline closes the offer and the run flies on');

@@ -395,3 +395,37 @@ test("the quiz's opening sound (plan 34, round 2): a book opens for a break, the
     assert.deepEqual(played, want, mode);
   }
 });
+
+// The checkpoint 34b audit (zone D): the ring on the offer through the pad's real route. Play.onPadAction's
+// 'move' calls focus.move(dir) then focus.show(); from no ring, up or left stepped to the list's last visible
+// item, the ✕ (which declines). The offer now guards move (guardOfferRing): the first press only shows the ring
+// on Try it.
+/** A real createFocus over the offer's ring items, in Quiz's order, with only the offer's three visible. */
+async function offerFocus(padMode = true) {
+  const { createFocus } = await import('../src/ui/focus.js');
+  const gfx = () => { const o = { setDepth: () => o, setVisible: () => o, clear: () => o, setPosition: () => o, lineStyle() {}, strokeRoundedRect() {}, fillStyle() {}, fillRoundedRect() {} }; return o; };
+  const scene = { add: { graphics: gfx }, tweens: { add: () => ({ resume() {}, pause() {}, remove() {} }) }, registry: new Map([['padMode', padMode]]), input: { on() {}, off() {} }, events: { once() {} }, children: { moveBelow() {} } };
+  const spots = { try: [465, 800, true], decline: [175, 800, true], option0: [320, 500], option1: [320, 560], option2: [320, 620], top: [320, 700], left: [175, 900], right: [465, 900], tally: [320, 300], counts: [320, 1000], close: [590, 300, true] };
+  const items = Object.entries(spots).map(([id, [x, y, vis = false]]) => ({ id, obj: { type: 'Zone', visible: vis, active: true, getBounds: () => ({ x: x - 100, y: y - 40, width: 200, height: 80 }), emit() {} }, activate() {} }));
+  return createFocus(scene, T, { items });
+}
+
+test("AUD-068, round 2's audit: on the offer a controller's first press, any direction, shows the ring on Try it (Play moves, then shows); later presses move it as usual; off the offer, moves are untouched", async () => {
+  for (const dir of ['up', 'left', 'down', 'right']) {
+    const q = quizScene({ offering: true, focus: await offerFocus() });
+    q.guardOfferRing();
+    q.focus.move(dir);
+    q.focus.show();
+    assert.equal(q.focus.items[q.focus.index].id, 'try', `first press ${dir}`);
+  }
+  const q = quizScene({ offering: true, focus: await offerFocus() });
+  q.guardOfferRing();
+  q.focus.move('up');
+  q.focus.show();
+  q.focus.move('left');
+  assert.equal(q.focus.items[q.focus.index].id, 'decline', 'once shown, left goes to Decline');
+  const card = quizScene({ offering: false, focus: await offerFocus() });
+  card.guardOfferRing();
+  card.focus.move('up');
+  assert.equal(card.focus.items[card.focus.index].id, 'close', 'not offering: the plain move (the control: without the guard, up from no ring lands on the ✕)');
+});
