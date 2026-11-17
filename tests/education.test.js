@@ -1024,11 +1024,11 @@ test('createEduStore pending (plan 26): a won run waits with its tally; setPendi
   assert.equal(store.load().pending, undefined);
   const tally = tallyAnswer(tallyAnswer(newTally(), 1, true), 7, false);
   store.setPending({ tally, full: true, at: NOW });
-  assert.deepEqual(createEduStore(st).load().pending, { tally, full: true, at: NOW }, 'kept across a reload');
+  assert.deepEqual(createEduStore(st).load().pending, { tally, full: true, caughtUp: false, at: NOW }, 'kept across a reload (caughtUp, plan 34: false when not given)');
   const more = tallyAnswer(tally, 7, true);
   store.setPending({ ...store.load().pending, tally: more });
   assert.deepEqual(store.load().pending.tally, more);
-  assert.deepEqual(store.takePending(), { tally: more, full: true, at: NOW });
+  assert.deepEqual(store.takePending(), { tally: more, full: true, caughtUp: false, at: NOW });
   assert.equal(store.takePending(), null, 'once');
   assert.equal(createEduStore(st).load().pending, undefined);
   for (const junk of [{ tally: { answered: 'x' }, full: true, at: NOW }, { tally, full: 'yes', at: NOW }, { tally, full: true }, { tally: { ...tally, byLevel: { 9: { answered: 1, right: 1, wrong: 0 } } }, full: true, at: NOW }]) {

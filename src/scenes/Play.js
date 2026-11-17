@@ -2154,7 +2154,8 @@ export class Play extends Phaser.Scene {
     if (!bonus || (!this.runIsTest && !this.isTestMode())) this.runQuiz = tallyAnswer(this.runQuiz, this.levelBreak ? this.level - 1 : this.level, correct);
     if (bonus && !this.runIsTest && !this.isTestMode()) {
       const pending = this.eduStore.load().pending;
-      if (pending) this.eduStore.setPending({ ...pending, tally: { ...this.runQuiz } });
+      // Caught up is judged again after each bonus answer (plan 34, 🤓): a right one can clear what was due, a miss leaves a card due.
+      if (pending) this.eduStore.setPending({ ...pending, tally: { ...this.runQuiz }, caughtUp: this.eduCaughtUp() });
     }
     if (coins) {
       this.takeCoins(coins);
@@ -4472,7 +4473,7 @@ export class Play extends Phaser.Scene {
     if (this.runIsEducation) {
       if (this.won) {
         const facts = this.eduFactsNow();
-        this.eduStore.setPending({ tally: { ...this.runQuiz }, full: facts.full, at: Date.now() });
+        this.eduStore.setPending({ tally: { ...this.runQuiz }, full: facts.full, caughtUp: facts.caughtUp, at: Date.now() });
         this.runBadges = this.eduPreviewBadges(facts);
       } else this.recordEducation();
       this.syncLeaderboard();
@@ -4512,9 +4513,20 @@ export class Play extends Phaser.Scene {
     this.runBadges = this.eduStore.unlock(earned, day);
   }
 
-  /** This run's education facts (eduRunFacts): its tally, whether it ended on a Quit that counts as quitting (a revive's, or the break's while its gate holds or with nothing answered: gaveUp), whether it was full (from level 1, nothing skipped, won). */
+  /** This run's education facts (eduRunFacts): its tally, whether it ended on a Quit that counts as quitting (a revive's, or the break's while its gate holds or with nothing answered: gaveUp), whether it was full (from level 1, nothing skipped, won), won, and for a won run whether nothing is due now (caughtUp, 🤓: plan 34). */
   eduFactsNow() {
-    return eduRunFacts(this.runQuiz, { gaveUp: Boolean(this.revive?.gaveUp || this.breakGaveUp), full: this.runStartLevel === 1 && !this.runSkipped && this.won }, T);
+    const won = Boolean(this.won);
+    return eduRunFacts(this.runQuiz, { gaveUp: Boolean(this.revive?.gaveUp || this.breakGaveUp), full: this.runStartLevel === 1 && !this.runSkipped && won, won, caughtUp: won && this.eduCaughtUp() }, T);
+  }
+
+  /**
+   * All caught up on cards (plan 34, 🤓 Nerd Alert; Michael: nothing due): no missed card and no review
+   * due now on this device. Unseen cards and reviews due later do not count; a card skipped today waits
+   * past today (skipUntil), so it is not due.
+   */
+  eduCaughtUp(now = Date.now()) {
+    const c = cardCounts(this.eduStore.load().cards, { context: 'all', now });
+    return c.missed + c.review === 0;
   }
 
   /** The education badges a run with `facts` would earn if recorded now (plan 26: a won run's panel, before it is recorded). Nothing is stored. */
@@ -4531,7 +4543,7 @@ export class Play extends Phaser.Scene {
   finishPendingEducation() {
     const p = this.eduStore?.takePending();
     if (!p) return false;
-    this.recordEducation(eduRunFacts(p.tally, { gaveUp: false, full: p.full }, T));
+    this.recordEducation(eduRunFacts(p.tally, { gaveUp: false, full: p.full, won: true, caughtUp: p.caughtUp }, T));
     this.runBadges = null; // this scene's next run starts with none
     return true;
   }
@@ -4546,7 +4558,7 @@ export class Play extends Phaser.Scene {
     if (!this.overData?.education || !over?.scene.isActive()) return;
     if (this.overData.education.answered === this.runQuiz.answered) return;
     const pending = !this.runIsTest && this.eduStore.load().pending;
-    this.overData = { ...this.overData, education: { ...this.runQuiz }, badges: pending ? this.eduPreviewBadges(eduRunFacts(pending.tally, { gaveUp: false, full: pending.full }, T)) : this.overData.badges };
+    this.overData = { ...this.overData, education: { ...this.runQuiz }, badges: pending ? this.eduPreviewBadges(eduRunFacts(pending.tally, { gaveUp: false, full: pending.full, won: true, caughtUp: pending.caughtUp }, T)) : this.overData.badges };
     over.scene.restart(this.overData);
   }
 

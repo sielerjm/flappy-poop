@@ -75,15 +75,18 @@ export const ACHIEVEMENTS = [
  *             graded run: at least education.badgeMinAnswers answers (`min`, quoted in the
  *             description) and not ended on a Quit that counts (gaveUp). Percentages are compared in whole numbers,
  *             so 89.5 % is a B.
- *   lifetime  the education store's counters: `revives`, and `perfectStreak` (🤓: graded runs with
- *             no wrong answer in a row; nextPerfectStreak).
+ *   lifetime  the education store's counters: `revives` (👼, 🐦‍🔥). `perfectStreak` (graded runs with no
+ *             wrong answer in a row; nextPerfectStreak) is still counted, but since plan 34 no badge reads it.
+ * 🤓 Nerd Alert (plan 34, Michael: "if you make it out without answering a question incorrectly and
+ * you're all caught up on cards"): one graded run, won, with no wrong answer and nothing due at its end
+ * (caughtUp: no missed card and no review due). It was 10 perfect full runs in a row; whoever holds it keeps it.
  */
 const eduMin = TUNING.education.badgeMinAnswers;
 const eduRun = (id, glyph, title, desc, check) => ({ id, kind: 'run', modes: ['education'], glyph, title, desc, min: eduMin, check: (f) => Boolean(f.graded) && check(f) });
 const eduTotal = (id, glyph, title, desc, counter, n) => ({ id, kind: 'lifetime', glyph, title, desc, counters: [counter], n, min: eduMin });
 
 export const EDU_ACHIEVEMENTS = [
-  eduTotal('edu_nerd_alert', '🤓', 'achEduNerd', 'achDescEduNerd', 'perfectStreak', 10),
+  eduRun('edu_nerd_alert', '🤓', 'achEduNerd', 'achDescEduNerd', (f) => f.won && f.perfect && f.caughtUp),
   eduRun('edu_perfect', '💯', 'achEduPerfect', 'achDescEduPerfect', (f) => f.perfect && f.full),
   eduRun('edu_grade_a', '🅰️', 'achEduA', 'achDescEduA', (f) => 10 * f.right >= 9 * f.answered),
   eduRun('edu_grade_b', '🅱️', 'achEduB', 'achDescEduB', (f) => 10 * f.right >= 8 * f.answered && 10 * f.right < 9 * f.answered),
@@ -240,7 +243,8 @@ export function daysBetween(a, b) {
  * share right in hundredths of a percent, a whole number: 4 of 6 is 6667; else null), perfect
  * (graded, nothing wrong), gaveUp (the run ended on a Quit that counts as quitting: a revive's, or a
  * level break's while its gate holds, new cards included since plan 28's Stage 3b, or with nothing
- * answered; "Give up" until plan 26's A2) }.
+ * answered; "Give up" until plan 26's A2), full (from level 1, nothing skipped, won), won, and caughtUp
+ * (plan 34: nothing due when the run ended, judged by Play for a won run) }.
  * A quit run is never graded: quitting after a flawless stretch must not earn 💯 or an A, nor
  * move the average, and (like a run too short to grade) it leaves the 🤓 streak alone. A revive's Quit is
  * offered only before its first right answer and a lost run that was not quit has
@@ -249,11 +253,11 @@ export function daysBetween(a, b) {
 /** A graded run's best grade: 100 %, in hundredths of a percent (eduRunFacts' `grade`). */
 export const GRADE_MAX = 10000;
 
-export function eduRunFacts(tally, { gaveUp = false, full = false } = {}, t = TUNING) {
+export function eduRunFacts(tally, { gaveUp = false, full = false, won = false, caughtUp = false } = {}, t = TUNING) {
   const answered = count(tally?.answered);
   const right = Math.min(count(tally?.right), answered);
   const graded = answered >= t.education.badgeMinAnswers && !gaveUp;
-  return { mode: 'education', answered, right, wrong: answered - right, graded, grade: graded ? Math.round((GRADE_MAX * right) / answered) : null, perfect: graded && right === answered, gaveUp: Boolean(gaveUp), full: Boolean(full) };
+  return { mode: 'education', answered, right, wrong: answered - right, graded, grade: graded ? Math.round((GRADE_MAX * right) / answered) : null, perfect: graded && right === answered, gaveUp: Boolean(gaveUp), full: Boolean(full), won: Boolean(won), caughtUp: Boolean(caughtUp) };
 }
 
 /**

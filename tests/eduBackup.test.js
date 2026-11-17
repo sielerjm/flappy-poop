@@ -115,7 +115,8 @@ test('mergeEducation, the rest: the counters stay this device\'s (revives the la
   assert.deepEqual(m.record.badges, { edu_grade_a: '2026-11-02', edu_perfect: '2026-11-07', edu_streak_7: '2026-11-09' });
   assert.equal(m.badges, 1, 'one badge new to this device');
   assert.equal(m.record.unlockedLevel, 6);
-  for (const k of ['recent', 'paid', 'buried', 'pending']) assert.deepEqual(m.record[k], local[k], `${k}: this device's`);
+  for (const k of ['recent', 'paid', 'buried']) assert.deepEqual(m.record[k], local[k], `${k}: this device's`);
+  assert.deepEqual(m.record.pending, { ...local.pending, caughtUp: false }, "pending: this device's (caughtUp, plan 34, false when the record had none)");
   const tie = edu.mergeEducation({ ...local, counters: { gradedRuns: 10, gradeSum: 90000 } }, back, { today: '2026-11-15' });
   assert.deepEqual([tie.record.counters.gradedRuns, tie.record.counters.gradeSum, 'history' in tie.record], [10, 90000, false], 'the same number of runs: this device, no history');
 });

@@ -5538,6 +5538,9 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         const aceLine = await badgeLine();
         const recWait = await eduRec();
         ok(aceLine?.includes('💯') && aceLine.includes('🅰️') && recWait.badges.join() === 'edu_drop_out' && !recWait.counters.gradedRuns && recWait.pending === 5, `a run answered 5 of 5 shows 💯 and 🅰️ on its panel ("${aceLine}") and waits, unrecorded (${JSON.stringify(recWait)}), until the panel is left`);
+        // 🤓 Nerd Alert (plan 34) also needs nothing due: the first run's miss is still a missed card, so no 🤓.
+        const waitCaught = await evaluate(`JSON.stringify({ caughtUp: ${play}.eduStore.load().pending?.caughtUp ?? null, missed: Object.values(${play}.eduStore.load().cards).filter((r) => r.state === 'missed').length })`).then(JSON.parse);
+        ok(!aceLine?.includes('🤓') && waitCaught.caughtUp === false && waitCaught.missed >= 1, `no 🤓: the waiting run is stored as not caught up while the first run's missed card is due (${JSON.stringify(waitCaught)})`);
         // The summary band (plan 22, U7; plan 21, E5): a won run's band is the short one (the bonus button
         // takes a row), so with a badge line the ❔ ✅ ❌ row stays in view (plan 28, 3.2: the badge once
         // pushed it behind the bonus button), and the badge line and the note sit below the fold, whole,
@@ -5592,7 +5595,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await sleep(400);
         ok(bonusUp === 'bonus' && !(await evaluate(`__flappy.scene.isActive('Over')`)) && (await playState()) === 'ready', 'with the band scrolled the buttons have not moved: a tap on the bonus button opens its quiz, and a tap on Home goes home');
         const rec2 = await eduRec();
-        ok(rec2.badges.join() === 'edu_drop_out,edu_perfect,edu_grade_a' && rec2.counters.perfectStreak === 1 && rec2.counters.gradedRuns === 1 && rec2.counters.gradeSum === 10000 && rec2.pending === null, `Home records the waiting run, once: 💯 and 🅰️ held, the 🤓 streak ${rec2.counters.perfectStreak}, the record ${JSON.stringify(rec2.counters)}`);
+        ok(rec2.badges.join() === 'edu_drop_out,edu_perfect,edu_grade_a' && rec2.counters.perfectStreak === 1 && rec2.counters.gradedRuns === 1 && rec2.counters.gradeSum === 10000 && rec2.pending === null, `Home records the waiting run, once: 💯 and 🅰️ held, the perfect-run streak ${rec2.counters.perfectStreak} (still counted), the record ${JSON.stringify(rec2.counters)}`);
         // A test run counts nothing: a revive in it, then the same tally, leave the record as it was.
         await evaluate(`(() => { const p = ${play}; p.setTestMode(true); p.setTestSettings({ startLevel: 1, invincible: false }); return true; })()`);
         await startEdu();
@@ -5629,10 +5632,10 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         const [eduHead, gradeRow, runsRow] = await Promise.all(['statsEducation', 'statsEduGrade', 'statsEduRuns'].map(tx));
         const careerTotal = await evaluate(`import('./src/achievements.js').then((m) => m.ACHIEVEMENTS.length)`);
         ok(!mine.gated && mine.edu?.grade === 100 && mine.edu.runs === 1 && mine.edu.earned.join() === 'edu_drop_out,edu_perfect,edu_grade_a' && mine.texts.includes(eduHead.replace('{n}', '3').replace('{total}', '8')) && mine.texts.includes(gradeRow) && mine.texts.includes('100.0 %') && mine.texts.includes(runsRow), `your own profile ends with "${eduHead.replace('{n}', '3').replace('{total}', '8')}": ${gradeRow} 100.0 %, ${runsRow} 1`);
-        ok(mine.cells.length === 8 && mine.cells.filter((c) => c[1]).length === 3 && mine.career === careerTotal && mine.texts.includes('1 / 10') && mine.texts.includes('0 / 100') && mine.texts.includes('0 / 1000'), `its grid holds the eight education badges, three earned, with progress for 🤓 (1 / 10), 👼 (0 / 100) and 🐦‍🔥 (0 / 1000); the Achievements grid still holds its ${mine.career}`);
+        ok(mine.cells.length === 8 && mine.cells.filter((c) => c[1]).length === 3 && mine.career === careerTotal && !mine.texts.includes('1 / 10') && mine.texts.includes('0 / 100') && mine.texts.includes('0 / 1000'), `its grid holds the eight education badges, three earned (🤓 is one run since plan 34, with no progress count), with progress for 👼 (0 / 100) and 🐦‍🔥 (0 / 1000); the Achievements grid still holds its ${mine.career}`);
         await evaluate(`(() => { const c = ${ST}.eduBadgeItems.find((b) => b.id === 'edu_nerd_alert'); c.zone.emit('pointerup'); return true; })()`);
         const nerd = await evaluate(`JSON.stringify({ open: ${ST}.cardOpen, title: ${ST}.card.title.text, body: ${ST}.card.body.text })`).then(JSON.parse);
-        ok(nerd.open && nerd.title === (await tx('achEduNerd')) && nerd.body.includes(String(TT.education.badgeMinAnswers)) && nerd.body.includes('1 / 10'), `a tap explains a badge: "${nerd.title}": ${nerd.body.replace(/\n/g, ' · ')}`);
+        ok(nerd.open && nerd.title === (await tx('achEduNerd')) && nerd.body.includes(String(TT.education.badgeMinAnswers)) && !nerd.body.includes('/ 10'), `a tap explains a badge (plan 34: 🤓's new rule, no count of runs): "${nerd.title}": ${nerd.body.replace(/\n/g, ' · ')}`);
         await evaluate(`${ST}.hideCard(), true`);
         await shutProfile();
         // Your own learning streaks and the highest level unlocked (plan 26, A2: Michael's checklist), from

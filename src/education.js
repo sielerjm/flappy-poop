@@ -667,10 +667,11 @@ function cleanEdu(raw, keep, t = TUNING) {
   const b = raw?.buried;
   const buriedIds = b && Array.isArray(b.ids) ? [...new Set(b.ids.filter((id) => typeof id === 'string' && ID_RE.test(id)))] : [];
   const buried = b && typeof b.day === 'string' && DAY_RE.test(b.day) && Number.isInteger(b.n) && (b.n > 0 || (b.n === 0 && buriedIds.length > 0)) ? { day: b.day, n: b.n, ids: buriedIds } : null;
-  // A won run not recorded yet (plan 26): its tally (bonus answers included), whether it was full, when it was won.
+  // A won run not recorded yet (plan 26): its tally (bonus answers included), whether it was full, whether
+  // nothing was due (plan 34, 🤓: false in a record from before it), when it was won.
   const p = raw?.pending;
   const tally = cleanTally(p?.tally, lastLevel);
-  const pending = tally && typeof p.full === 'boolean' && Number.isFinite(p.at) && p.at > 0 ? { tally, full: p.full, at: p.at } : null;
+  const pending = tally && typeof p.full === 'boolean' && Number.isFinite(p.at) && p.at > 0 ? { tally, full: p.full, caughtUp: p.caughtUp === true, at: p.at } : null;
   // The cards whose right answer paid on a local day (plan 26, A2): { day, ids }; kept only while
   // well formed and not empty, so a record with nothing paid has no key (as buried).
   const q = raw?.paid;
@@ -823,9 +824,9 @@ export function createEduStore(storage, { key = LEADERBOARD.eduKey, t = TUNING }
      * A won run waits here until its game-over panel is left (plan 26): { tally, full, at }. Its bonus
      * answers update the tally (setPending again); takePending hands it over once, for recording.
      */
-    setPending({ tally, full, at }) {
+    setPending({ tally, full, caughtUp = false, at }) {
       const state = read();
-      write({ ...state, pending: { tally, full: Boolean(full), at } });
+      write({ ...state, pending: { tally, full: Boolean(full), caughtUp: Boolean(caughtUp), at } });
     },
     /** The won run waiting to be recorded, taken off the store (null when there is none): it is recorded once. */
     takePending() {
