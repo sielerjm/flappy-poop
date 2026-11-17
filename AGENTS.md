@@ -672,8 +672,9 @@ gaps come from the date keys (`localDayKey`), never from milliseconds. Since pla
 `src/streak.js` (`nextDayStreak`, `dayStreakNow`, `cleanDayStreak`; `nextStudyStreak` / `studyStreakNow` are
 education's names for them), shared with the day streaks below.
 **Day streaks** (plan 34, Michael): `createStreakStore` (`flappyPoop.streaks`, src/leaderboard.js) keeps a
-Singleplayer and a Daily Dump streak on the device: never sent, not in the backup, cleared by Clear (a Load
-keeps them, as it keeps the 📚 cards). They count the days played on any device with the save code (34.13, Michael:
+Singleplayer and a Daily Dump streak on the device: never sent, not in the backup, cleared by Clear and by a Load
+(`forgetRename`, finish plan F2: the device may now be another player; the sync the Load starts refills them for
+the loaded code). They count the days played on any device with the save code (34.13, Michael:
 "Daily and Singleplayer", "any device"): once per page load, a named device's sync (`pullPlayDays`, after
 `drainDaily`; the registry's `playDaysFor`) asks the server's `play_days` with this device's IANA time zone and folds
 the days in (`streakStore.merge`, `mergeDayStreak`: the run of days in a row ending on the latest day, the best

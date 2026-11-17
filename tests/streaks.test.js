@@ -150,6 +150,25 @@ test("another player's profile carries their streaks as the server counts them (
   assert.equal(src.split('if (view.streaks) for (const [key, value] of streakProfileRows(').length - 1, 2, 'under Singleplayer and under Daily Dump');
 });
 
+test('a Load clears the day streaks and asks the server again (plan 34, finish plan F2): the sync it starts refills them for the loaded code', async () => {
+  const streakStore = createStreakStore(fakeStorage());
+  streakStore.played('single', '2026-11-17');
+  streakStore.played('daily', '2026-11-17');
+  const reg = new Map([['playDaysFor', 'old']]);
+  let redraws = 0;
+  const p = playScene({
+    streakStore,
+    registry: { get: (k) => reg.get(k), set: (k, v) => reg.set(k, v), remove: (k) => reg.delete(k) },
+    renameStore: { clear() {} },
+    careerStore: { clearBase() {} },
+    refreshStreakMarks: () => (redraws += 1),
+  });
+  p.forgetRename();
+  assert.deepEqual(streakStore.load(), {}, 'both streaks gone');
+  assert.equal(reg.has('playDaysFor'), false, 'the next sync asks play_days again');
+  assert.equal(redraws, 1, 'the 🌞 number is redrawn (now none)');
+});
+
 /** A text stand-in: what refreshStreakMarks sets. */
 function textStub() {
   return { scene: {}, text: '', visible: false, setText(v) { this.text = v; return this; }, setVisible(v) { this.visible = v; return this; } };

@@ -1804,11 +1804,18 @@ export class Play extends Phaser.Scene {
     if (this.save?.id) this.renameStore.set({ id: this.save.id, name });
   }
 
-  /** A Load: the code's name is not a rename, so the next sync takes the board's latest (and pulls its scores again). */
+  /**
+   * A Load: the code's name is not a rename, so the next sync takes the board's latest (and pulls its scores again).
+   * The day streaks go too (plan 34, finish plan F2, Michael's go): the device may now be another player, and the
+   * sync the Load starts refills them from the server's days for the loaded code (pullPlayDays, after any merge).
+   */
   forgetRename() {
     this.renameStore.clear();
     this.boardBestsFor = null;
     this.careerStore.clearBase(); // the device may now be another player: their totals come with the next sync
+    this.streakStore?.clear?.();
+    this.registry?.remove?.('playDaysFor');
+    this.refreshStreakMarks?.();
   }
 
   /** Is `name` free on the board for this player's id? true / false / null (the board cannot say). The save panel asks before storing a name. */
