@@ -272,3 +272,78 @@ test('the answer (plan 34): right, "Right! +n" with the kernel and Why; wrong, w
   none.q.superStep(false);
   assert.deepEqual(said3[0], [t('en', 'quizWrong'), false], 'nothing lost: the plain verdict');
 });
+
+// The 2026-11-17 audit's AUD-066 and AUD-067.
+// stopped once. Phaser 4.2.1's DisplayList.shutdown destroys every display-list object on a scene stop
+// (phaser.js line ~37807: `list[i].destroy(true)`), and GameObject.destroy removes it from the display
+// list; the scene instance and its fields survive to the next launch. This models just that.
+
+/** Phaser's lifecycle for the offer art (AUD-066): a scene stop destroys every display-list object (it loses its scene), while the Quiz instance and its fields survive. */
+function phaserLike() {
+  const list = [];
+  const make = (kind) => {
+    const o = {
+      kind, visible: true, destroyed: false, scene: {},
+      setPosition() { return o; }, setFillStyle() { return o; }, setDisplaySize() { return o; },
+      setVisible(v) { o.visible = v; return o; },
+      destroy() { o.destroyed = true; o.scene = undefined; list.splice(list.indexOf(o), 1); },
+    };
+    list.push(o);
+    return o;
+  };
+  return {
+    list,
+    add: { circle: () => make('circle'), image: () => make('image') },
+    shutdown() { for (let i = list.length - 1; i >= 0; i -= 1) list[i].destroy(); },
+  };
+}
+
+test('AUD-066: the second offer in a page load still draws the bubble on its disc (the art is made again once Phaser destroyed it)', () => {
+  const ph = phaserLike();
+  const q = quizScene({
+    mode: 'super', locale: 'en', cx: 360, add: ph.add, textures: { exists: (k) => k === 'question' },
+    play: { superQ: { reward: 16 }, superQPenaltyNow: () => 5, bgColor: { fillColor: 0x123456 } },
+    header: absorb(), question: absorb(), verdict: absorb(), verdictCoin: absorb(), paidNote: absorb(), nextWait: absorb(),
+    choiceLine: absorb(), explain: absorb(), source: absorb(), options: [], leftBtn: absorb(), rightBtn: absorb(), closeBtn: absorb(),
+    setCardId() {}, refreshStatus() {}, clearRich() {}, clearButtons() {}, refreshTally() {}, refreshCounts() {}, refreshPurse() {}, ring() {},
+  });
+  q.showOffer();
+  const drawn = () => ph.list.filter((o) => o.visible).map((o) => o.kind).sort();
+  assert.deepEqual(drawn(), ['circle', 'image'], 'control: the first offer draws its disc and bubble');
+  ph.shutdown(); // the card closes (scene.stop): Phaser destroys the display list; this.offerArt keeps the dead object
+  q.showOffer(); // the next level's bubble: the same Quiz instance, create() again, then showOffer
+  assert.deepEqual(drawn(), ['circle', 'image'], 'the second offer has no bubble art: offerArt is a destroyed object, so it is never made again');
+});
+
+// Spec (AGENTS.md, challenge questions): "Decline | Try it, ✕ and Esc decline; no tap or key for
+// retryLockoutMs, offerLocked". offerLocked's own comment: "takes no input for retryLockoutMs ... keys too".
+
+/** A challenge offer opened at time 0, seen `time` ms later (AUD-067). */
+function offerAt(time) {
+  const stopped = [];
+  const q = quizScene({
+    mode: 'super', offering: true, card: null, answered: false, finishing: false, openedAt: 0,
+    game: { loop: { time } },
+    scene: { key: 'Quiz', isActive: (k) => ['Play', 'Quiz'].includes(k), getIndex: (k) => ['Play', 'Quiz'].indexOf(k), stop: () => stopped.push('stop') },
+    runCard: { open: false },
+    play: { state: 'paused', armResumeLockout() {} },
+    sample() {},
+  });
+  return { q, stopped };
+}
+
+test('AUD-067 control: inside the lockout offerLocked and tapLocked are on', () => {
+  const { q } = offerAt(100);
+  assert.equal(q.offerLocked(), true);
+  assert.equal(q.tapLocked({ x: 1 }), true);
+});
+
+test('AUD-067: inside the lockout, the offer\'s ✕, Esc and the pad\'s B (all call close) do not decline it; after it they do', () => {
+  const { q, stopped } = offerAt(100); // 100 ms after it opened, retryLockoutMs is 400
+  assert.ok(100 < T.retryLockoutMs);
+  q.close(); // exactly what closeBtn's pointerdown, keydown-ESC and the pad's closeTop call
+  assert.deepEqual(stopped, [], `declined ${100} ms after the offer opened, inside retryLockoutMs (${T.retryLockoutMs} ms)`);
+  const late = offerAt(T.retryLockoutMs + 10);
+  late.q.close();
+  assert.deepEqual(late.stopped, ['stop'], 'after the lockout, ✕ / Esc / B decline');
+});

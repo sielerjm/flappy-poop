@@ -518,7 +518,9 @@ export class Quiz extends Phaser.Scene {
     this.question.setY(this.header.y + this.header.height + 22).setText(lines.join('\n')).setVisible(true);
     // The bubble itself under the lines, as the poop met it in the field: it is see-through (Michael at
     // Preview G), so it sits on a disc of the level's own background colour, never on the dark card.
-    if (!this.offerArt && this.textures?.exists?.('question')) {
+    // Made again on every offer whose art is gone: Phaser destroys the display list when the Quiz stops, while
+    // the scene instance (and these fields) live on, so a kept object would be a dead one (AUD-066).
+    if (!this.offerArt?.scene && this.textures?.exists?.('question')) {
       this.offerDisc = this.add.circle(this.cx, 0, OFFER_ART_PX * 0.43, 0xeed9b9, 1); // just inside the bubble's outline (its radius is 0.44 of the art)
       this.offerArt = this.add.image(this.cx, 0, 'question').setDisplaySize(OFFER_ART_PX, OFFER_ART_PX);
     }
@@ -1207,7 +1209,8 @@ export class Quiz extends Phaser.Scene {
   }
 
   close() {
-    if (!isTopOverlay(this)) return;
+    // A challenge offer takes no ✕, Esc or pad B for its first moment either (AUD-067), as it takes no tap or key.
+    if (!isTopOverlay(this) || this.offerLocked()) return;
     if (this.runCard?.open) {
       this.runCard.hide(); // Esc / B / ✕ take the "This run" card down first (in a revive too)
       return;

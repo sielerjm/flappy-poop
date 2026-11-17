@@ -6662,8 +6662,10 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
       const tryBtn = await evaluate(`JSON.stringify({ x: ${QZ}.rightBtn.zone.x, y: ${QZ}.rightBtn.zone.y })`).then(JSON.parse);
       await tapAt(tryBtn.x, tryBtn.y);
       for (const type of ['keyDown', 'keyUp']) await cdp.send('Input.dispatchKeyEvent', { type, key: ' ', code: 'Space', windowsVirtualKeyCode: 32 });
+      await evaluate(`${QZ}.input.keyboard.emit('keydown-ESC'), true`); // Esc, ✕ and the pad's B decline only after it too (AUD-067)
       await sleep(80);
-      ok(await evaluate(`${QZ}.offering === true && !${QZ}.card`), 'a tap on Try and a Space inside the lockout press nothing');
+      ok(await evaluate(`${QZ}.offering === true && !${QZ}.card && __flappy.scene.isActive('Quiz')`), 'a tap on Try, a Space and an Esc inside the lockout press nothing');
+      const art1 = await evaluate(`Boolean(${QZ}.offerArt?.scene && ${QZ}.offerArt.visible)`);
       for (const type of ['keyDown', 'keyUp']) await cdp.send('Input.dispatchKeyEvent', { type, key: 'p', code: 'KeyP', windowsVirtualKeyCode: 80 });
       await evaluate(`(${P}.autoPause(), true)`);
       await sleep(100);
@@ -6682,6 +6684,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await waitFor(`${P}.superQ.item?.active`, 200);
         await evaluate(`(() => { const p = ${P}; p.collectItem(p.superQ.item); return true; })()`);
         await waitFor(`__flappy.scene.isActive('Quiz') && ${QZ}.offering`);
+        const art = await evaluate(`Boolean(${QZ}.offerArt?.scene && ${QZ}.offerArt.visible)`);
         await sleep(TT.retryLockoutMs + 50);
         await evaluate(`${QZ}.rightBtn.press(), true`);
         await waitFor(`${QZ}.card`);
@@ -6694,9 +6697,10 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await evaluate(`(() => { const q = ${QZ}; q.choose(${right ? `q.order.indexOf('answer')` : `q.order.findIndex((k) => k !== 'answer')`}); return true; })()`);
         await sleep(100);
         const res = await evaluate(`JSON.stringify({ last: ${QZ}.lastAnswer, rec: ${P}.eduStore.load().cards[${QZ}.card.id] ?? null, tally: ${P}.runQuiz.answered, held: ${QZ}.rightBtn.held, missed: ${P}.superQMissed })`).then(JSON.parse);
-        return { open, stayed, before, tally, res, after: await coins() };
+        return { open, stayed, before, tally, res, art, after: await coins() };
       };
       const r = await answer(true);
+      ok(art1 && r.art, `every offer in the page load shows the bubble art, the second too (AUD-066: ${art1}, ${r.art})`);
       ok(r.open.deck === 'super' && !r.open.x && !r.open.left && !r.open.right && r.stayed, `after Try the card can only be answered: no ✕, no buttons, Esc does nothing (${r.open.id})`);
       ok(r.res.last.correct && r.res.last.coins === reward && r.after === r.before + reward && r.res.rec?.state === 'review' && r.res.rec.dueAt > Date.now() + 864e5 && r.res.tally === r.tally,
         `right: +${reward} 🌽 (${r.before} → ${r.after}), the card saved as reviewed, not in the run's tally (${r.res.tally})`);
