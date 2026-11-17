@@ -17,6 +17,7 @@ import { LEADERBOARD, TUNING } from './config.js';
 import { recordScore, bestByToilet, validateName } from './save.js';
 import { addCounters, cleanCounters, isAchievementId, GRADE_MAX } from './achievements.js';
 import { browserStorage, createJsonStore } from './store.js';
+import { cleanDayStreak, dayStreakNow, nextDayStreak } from './streak.js';
 
 // ---------------------------------------------------------------------------
 // Pure helpers
@@ -840,6 +841,43 @@ function normalizeCareer(raw) {
  * device's last run time and recent win times (`lastRunAt`, `winTimes`: 🧱 / 🏃).
  * Every read normalises, every write is guarded; it never throws.
  */
+/** The day-streak kinds this device keeps (plan 34): Singleplayer on local days, the Daily Dump on its UTC days. */
+export const STREAK_KINDS = ['single', 'daily'];
+
+/**
+ * This device's day streaks (plan 34, LEADERBOARD.streaksKey): { single, daily }, each a streak record
+ * { day, streak, best } (src/streak.js) or absent. Local only: never sent to the server and not in the
+ * 📚 backup, so another device starts its own. played(kind, day) counts a day played (nextDayStreak);
+ * now(kind, today) is the streak still alive as of `today` (0 after a missed day), best(kind) the most
+ * ever in a row. Storage follows src/store.js (a full or blocked storage keeps it for this load only).
+ */
+export function createStreakStore(storage = browserStorage(), key = LEADERBOARD.streaksKey) {
+  const clean = (raw) => {
+    const out = {};
+    for (const kind of STREAK_KINDS) {
+      const rec = cleanDayStreak(raw?.[kind]);
+      if (rec) out[kind] = rec;
+    }
+    return out;
+  };
+  const box = createJsonStore(storage, key, clean);
+  return {
+    load: box.read,
+    played(kind, day) {
+      if (!STREAK_KINDS.includes(kind) || !DAY_RE.test(day ?? '')) return box.read();
+      const all = box.read();
+      return box.write({ ...all, [kind]: nextDayStreak(all[kind] ?? null, day) });
+    },
+    now(kind, today) {
+      return dayStreakNow(box.read()[kind] ?? null, today);
+    },
+    best(kind) {
+      return box.read()[kind]?.best ?? 0;
+    },
+    clear: box.clear,
+  };
+}
+
 export function createCareerStore(storage = browserStorage(), key = LEADERBOARD.careerKey) {
   const read = () => {
     try {

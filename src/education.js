@@ -17,6 +17,7 @@ import { nextPerfectStreak, GRADE_MAX, EDU_ACHIEVEMENTS } from './achievements.j
 import { GRADE_NUM, initDifficulty, initStability, nextDifficulty, nextIntervalDays, nextStability, retrievability, shortTermStability } from './fsrs.js';
 import { CARD_LINKS, CARDS, DECKS, REFERENCE_DOIS, REFERENCES } from './questions.js';
 import { createJsonStore } from './store.js';
+import { cleanDayStreak, dayNumber, dayStreakNow, nextDayStreak } from './streak.js';
 
 const DAY_MS = 86400000;
 /** Whole days from `from` to `to` (FSRS counts the time since a review in whole days). */
@@ -677,8 +678,7 @@ function cleanEdu(raw, keep, t = TUNING) {
   const paid = paidIds.length ? { day: q.day, ids: paidIds } : null;
   // The learning streak (plan 26, A2): { day, streak, best }, the last local day with an answer, the
   // days in a row up to it, the most ever in a row; kept only while well formed.
-  const st = raw?.study;
-  const study = st && typeof st.day === 'string' && DAY_RE.test(st.day) && Number.isInteger(st.streak) && st.streak >= 1 ? { day: st.day, streak: st.streak, best: Math.max(st.streak, Number.isInteger(st.best) ? st.best : 0) } : null;
+  const study = cleanDayStreak(raw?.study);
   // A longer history from a restore (plan 28, 3.1a; the Checkpoint 3 audit, AUD-047): graded runs
   // and their grade sum from another device, for what the player sees (shownCounters). `counters` stay
   // this device's own: the 📚 board is sent those, and an older client that drops this field keeps and
@@ -688,33 +688,16 @@ function cleanEdu(raw, keep, t = TUNING) {
   return { v: 2, cards, recent, counters, badges, unlockedLevel, ...(buried ? { buried } : {}), ...(pending ? { pending } : {}), ...(paid ? { paid } : {}), ...(study ? { study } : {}), ...(history ? { history } : {}) };
 }
 
-/** A local YYYY-MM-DD day key as a day count (UTC midnights: a clock change inside a day moves nothing). */
-function dayNumber(key) {
-  const [y, m, d] = key.split('-').map(Number);
-  return Math.round(Date.UTC(y, m - 1, d) / 86400000);
-}
-
 /**
  * The learning streak after an answer on local `day` (plan 26, A2): a local day with at least one
- * answer saved in an education run is a study day. None yet: 1. The same day, or the day before (a
- * trip west across midnight): nothing moves, and the stored day stays, so toggling a clock cannot add
- * days. The next day: one more. A gap: 1 again, the best kept. A stored day more than one day ahead of
- * `day` is a clock error (plan 27, Michael: a clock once set ahead no longer freezes the streak until
- * that date): 1 again on `day`, the best kept. Pure.
+ * answer saved in an education run is a study day. The day-streak rules (src/streak.js since plan 34,
+ * shared with the Singleplayer and Daily Dump streaks): the same day or the day before moves nothing,
+ * the next day adds one, a gap or a clock error starts again at 1 with the best kept. Pure.
  */
-export function nextStudyStreak(study, day) {
-  if (!study) return { day, streak: 1, best: 1 };
-  const gap = dayNumber(day) - dayNumber(study.day);
-  if (gap === 0 || gap === -1) return study;
-  const streak = gap === 1 ? study.streak + 1 : 1;
-  return { day, streak, best: Math.max(study.best ?? 0, streak) };
-}
+export const nextStudyStreak = nextDayStreak;
 
-/** The learning streak as of local `today`: the stored one while its last day is today, yesterday or tomorrow (a clock a day behind), else 0 (a day missed, or a clock error). */
-export function studyStreakNow(study, today) {
-  if (!study) return 0;
-  return Math.abs(dayNumber(today) - dayNumber(study.day)) <= 1 ? study.streak : 0;
-}
+/** The learning streak as of local `today` (dayStreakNow): the stored one while its day is today, yesterday or tomorrow, else 0. */
+export const studyStreakNow = dayStreakNow;
 
 /** The ids of the cards whose right answer paid on local `day` (the store's `paid`; plan 26, A2), or none. */
 export function paidOn(paid, day) {

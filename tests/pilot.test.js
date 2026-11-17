@@ -424,7 +424,7 @@ test('Clear forgets the consent and empties the queue on this device (AUD-014)',
   phone.consentStore.join({ version: EDUCATION.consentVersion, phase: 'pilot', at: Date.now(), id: phone.save.id });
   answer(phone);
   const none = { clear() {} };
-  Object.assign(phone, { setSaveState() {}, submitStore: none, renameStore: none, careerStore: none, eduStore: none, eduShare: none, best: none, refreshEduDue() {} });
+  Object.assign(phone, { setSaveState() {}, submitStore: none, renameStore: none, careerStore: none, streakStore: none, eduStore: none, eduShare: none, best: none, refreshEduDue() {} });
   phone.signOut();
   assert.deepEqual([phone.researchConsent(), phone.researchQueue.size()], [null, 0]);
 });

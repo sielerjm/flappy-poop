@@ -125,7 +125,7 @@ import { perfMark, perfSteps, perfRunStart } from '../ui/perfMeter.js';
 import { createFinishTexture } from '../ui/finish.js';
 import { createLightTexture } from '../ui/pipeShade.js';
 import { createLevelBar } from '../ui/levelBar.js';
-import { enrolResearch, submitResearchEvents, deleteResearch, createEduShareStore, shareEducation, renameEducation, unshareEducation, submitEducationGrades, fetchEducationBoard, createSubmitStore, createMergeStore, createRenameStore, createTournamentQueue, createDailyStore, createDailyQueue, createRunQueue, submitRuns, waitsForRun, submitDailyScore, fetchDailyBoard, submitPlans, submitScore, submitTournament, checkNameAvailable, mergePlayers, fetchPlayerName, fetchRank, nameAction, createCareerStore, submitCounters, claimAchievements, fetchPlayerStats } from '../leaderboard.js';
+import { enrolResearch, submitResearchEvents, deleteResearch, createEduShareStore, shareEducation, renameEducation, unshareEducation, submitEducationGrades, fetchEducationBoard, createSubmitStore, createMergeStore, createRenameStore, createTournamentQueue, createDailyStore, createDailyQueue, createRunQueue, submitRuns, waitsForRun, submitDailyScore, fetchDailyBoard, submitPlans, submitScore, submitTournament, checkNameAvailable, mergePlayers, fetchPlayerName, fetchRank, nameAction, createCareerStore, createStreakStore, submitCounters, claimAchievements, fetchPlayerStats } from '../leaderboard.js';
 import { createButton } from '../ui/button.js';
 import { createToggle } from '../ui/toggle.js';
 import { createCoinText } from '../ui/coinText.js';
@@ -263,6 +263,7 @@ export class Play extends Phaser.Scene {
     this.dailyStore = createDailyStore(); // this device's Daily Dump (🌞) attempt: claimed at the start, final at the crash
     this.dailyQueue = createDailyQueue(); // daily scores the board has not confirmed yet
     this.careerStore = createCareerStore(); // lifetime counters and achievements (plan 08): counted at endRun, sent by syncLeaderboard
+    this.streakStore = createStreakStore(); // the Singleplayer and Daily Dump day streaks (plan 34): this device's only, never sent
     // Education mode (📚, plan 21; for everyone since plan 28): the 📚 switch on the ready screen
     // (toggleEducation), remembered in the settings store, offered while EDUCATION.enabled
     // (educationAvailable). The cards' scheduler state lives in eduStore. runIsEducation latches per run
@@ -959,6 +960,7 @@ export class Play extends Phaser.Scene {
       if (!this.save.id) this.save = ensureId(this.save);
       this.daily = { day: daily.day, level: daily.level, startPipes: begin.pipes, playerId: this.save.id, saved: null };
       this.saveDailyAttempt(false);
+      this.countDailyStreak(daily.day);
     }
     // This run's summary (plan 30): single-player and Daily runs only; never a test run, an
     // education run (its popup promises its data stays here) or a match half.
@@ -1090,6 +1092,11 @@ export class Play extends Phaser.Scene {
    * This device's Daily Dump attempt (dailyStore): the day, the level, the score and pipes so far and
    * what was picked up; `final` once the run is over. Practice writes nothing. Returns the record.
    */
+  /** The Daily Dump streak (plan 34) counts course `day` once its attempt is claimed (start), on its UTC day; a practice Daily (a test run) counts nothing. */
+  countDailyStreak(day) {
+    if (!this.runIsTest) this.streakStore.played('daily', day);
+  }
+
   saveDailyAttempt(final = false) {
     if (!this.runIsDaily || this.runIsTest || !this.daily) return null;
     perfMark(PERF_TAGS.daily);
@@ -1597,6 +1604,7 @@ export class Play extends Phaser.Scene {
     this.mergeStore.clear();
     this.renameStore.clear();
     this.careerStore.clear(); // counters and badges go with the player
+    this.streakStore.clear(); // and the day streaks (plan 34)
     this.eduStore.clear(); // and the education cards' progress (plan 21); the 📚 switch is a setting and stays
     this.eduShare.clear(); // this device stops sending to the 📚 board; a row the old player shared stays there until they stop sharing
     this.consentStore.clear(); // and stops recording for the pilot: answers already sent stay on the server until the tester withdraws
@@ -4532,6 +4540,7 @@ export class Play extends Phaser.Scene {
     facts.daysSinceLastRun = daysBetween(prevRunAt, now); // 🧱 null on this device's first run
     facts.winsLast7Days = winsInWindow(winTimes, now); // 🏃
     this.careerStore.addRun(runDeltas(facts));
+    if (mode === 'single') this.streakStore.played('single', localDayKey(new Date(now))); // the Singleplayer streak, on local days (plan 34)
     const earned = evaluate({ totals: this.careerStore.totals(this.save?.id ?? null), facts, unlocked: this.careerStore.unlocked(), day });
     this.runBadges = this.careerStore.unlock(earned, day);
   }

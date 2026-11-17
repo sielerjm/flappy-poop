@@ -537,6 +537,7 @@ export const LEADERBOARD = {
   researchQueueKey: 'flappyPoop.researchQueue', // localStorage key for a pilot tester's answer events the server has not confirmed yet (submit_research_events)
   eduShareKey: 'flappyPoop.eduShare', // localStorage key for this device's 📚 board sharing (plan 21): whether the player shares their education grades, the round of sharing, and what of this device's record the board already has
   careerKey: 'flappyPoop.career', // localStorage key for this device's lifetime counters and achievements (plan 08): what waits to be sent, the batch in flight, the server's last totals, unlocks and claims
+  streaksKey: 'flappyPoop.streaks', // localStorage key for this device's Singleplayer and Daily Dump day streaks (plan 34): { single, daily }, each { day, streak, best }; never sent, not in the backup
   dailyMaxScore: 10000, // the Daily Dump cap (endless runs); matches daily_scores' CHECK and submit_daily_score() in db/schema.sql
   maxScore: 1000, // scores above this are not submitted (matches the CHECK and submit_score() in db/schema.sql); a full 285-pair run with ×2 fits
 };
