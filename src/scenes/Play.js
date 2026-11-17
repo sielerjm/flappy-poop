@@ -2220,7 +2220,7 @@ export class Play extends Phaser.Scene {
    */
   offerSuperQ() {
     const sq = this.superQ;
-    if (!sq || this.quizOpen || this.state !== 'playing') return;
+    if (!sq || sq.done || this.quizOpen || this.state !== 'playing') return; // done: taken, or farted through (AUD-064)
     sq.done = true;
     const card = pickSuperCard(this.eduStore.load().cards);
     if (!card) return;
@@ -3183,11 +3183,14 @@ export class Play extends Phaser.Scene {
       gapMargin: T.gapMargin,
     };
     const n = this.pipesSpawned; // this pair's number in the run: the course rolls everything about it by n
-    // The level's challenge bubble (plan 34): on its pair, or the next one after a revive cleared it, while a
-    // pair follows in the level. Gone once its item is (taken, flown past, farted through).
+    // The level's challenge bubble (plan 34): on its pair, or the next free one after a revive cleared it, while
+    // a pair follows in the level, never on level 1's scripted pairs or the guaranteed first box's pair (the
+    // re-armed bubble skips them as course.superQPair does: AUD-065). Gone once its item is (taken, flown
+    // past, farted through).
     const sq = this.superQ;
     if (sq?.item && !(sq.item.active && sq.item.scene)) sq.done = true;
-    const superHere = Boolean(sq && !sq.done && !sq.item && sq.level === this.level && n >= sq.pair && n < levelEnd(this.level, this.tune));
+    const reserved = Boolean(tutorialSpawn(this.level, n, T)) || n === this.mysteryPair;
+    const superHere = Boolean(sq && !sq.done && !sq.item && sq.level === this.level && n >= sq.pair && n < levelEnd(this.level, this.tune) && !reserved);
     const stillNext = this.superQStill === n;
     const centred = this.nextGapY == null && this.centreNextGap; // the pair after a fart: opens at the float height and never moves
     const gapY = this.nextGapY ?? (this.centreNextGap ? centredGapY(gapCfg) : this.course.gapY(n, gapCfg));
@@ -5606,8 +5609,13 @@ export class Play extends Phaser.Scene {
     }
     // The challenge bubble is never missed by a hair (plan 34): reaching the poop's x untouched opens it as a
     // touch would, unless a fart is flying through (it is then gone for the level).
+    // A bubble that reaches the poop's x while a fart flies through it is gone for the level (AUD-064): it does
+    // not open later, when the fart ends with it still on screen.
     const bubble = this.superQ?.item;
-    if (bubble?.active && this.state === 'playing' && !this.effects.powerActive() && bubble.x <= this.poop.x) this.collectItem(bubble);
+    if (bubble?.active && this.state === 'playing' && !this.superQ.done && bubble.x <= this.poop.x) {
+      if (this.effects.powerActive()) this.superQ.done = true;
+      else this.collectItem(bubble);
+    }
     for (const bean of this.beans.getChildren()) {
       if (this.state === 'playing') {
         const elapsed = bean.clockMs + delta;
