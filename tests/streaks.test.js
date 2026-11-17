@@ -180,3 +180,23 @@ test("the streak subscripts' spots (plan 34): the 🌞's inside its button, the 
     assert.ok(Math.abs(y - sw.y) + M.fontPx / 2 <= sw.height / 2 + 8, 'the number keeps to the switch row');
   }
 });
+
+test('an education run and a test run count no Singleplayer day: endRun returns before recordCareer (the 2026-11-17 audit, AUD-073)', async () => {
+  const { registry } = await import('./support/scenes.js');
+  const { createEduStore, newTally } = await import('../src/education.js');
+  for (const [name, fields] of [['education, lost', { runIsEducation: true, won: false }], ['education, won', { runIsEducation: true, won: true }], ['test run', { runIsTest: true, runIsEducation: false, won: false }]]) {
+    const streakStore = createStreakStore(fakeStorage());
+    const s = playScene({
+      match: null, runIsTest: false, runStartLevel: 1, runSkipped: false, revive: null, breakGaveUp: false,
+      runQuiz: newTally(), eduStore: createEduStore(fakeStorage()), level: 3, levelBreak: false, state: 'dead', registry: registry(),
+      isTestMode: () => false, researchJoined: () => false, streakStore, superQMissed: [],
+      pipes: { getChildren: () => [] }, items: { getChildren: () => [] }, beans: { getChildren: () => [] },
+      syncLeaderboard() {}, best: { save() {}, load: () => 0 },
+      careerStore: { markRun: () => ({ prevRunAt: null, winTimes: [] }), addRun() {}, totals: () => ({}), unlocked: () => ({}), unlock: () => [] },
+      ...fields,
+    });
+    for (const m of ['closeShop', 'endBoost', 'endSweep', 'markHowToSeen', 'setCharged', 'setMultiplierBadge', 'setProbioticPulse', 'setPauseBanner']) s[m] = () => {};
+    s.endRun();
+    assert.deepEqual(streakStore.load(), {}, `${name}: no streak day`);
+  }
+});
