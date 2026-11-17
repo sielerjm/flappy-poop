@@ -52,6 +52,7 @@ export class Boot extends Phaser.Scene {
     this.load.audio('book-flip', 'assets/sfx/Book_PageTurn.mp3' + V);
     this.load.audio('book-close', 'assets/sfx/Book_Close.mp3' + V);
     this.load.audio('sparkle', 'assets/sfx/Sparkle_Restore.mp3' + V); // a revive's streak wins everything back
+    this.load.audio('bubble-pop', 'assets/sfx/Bubble_Pop.mp3' + V); // the challenge question's bubble touched (plan 34, round 2: Michael's sound)
   }
 
   create() {

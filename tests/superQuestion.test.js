@@ -73,6 +73,7 @@ function eduPlay(fields = {}) {
     openQuiz: (mode) => calls.push(['openQuiz', mode]), takeCoins: (n) => ((coins += n), calls.push(['takeCoins', n])), refreshCoinHud() {}, refreshEduDue() {},
     isTestMode: () => false, researchJoined: () => true, recordAnswerEvent: () => calls.push('research'),
     graceLeftMs: 0,
+    playSample() {}, // the bubble's pop (plan 34, round 2)
     ...fields,
   });
   return { s, calls, coins: () => coins };
@@ -368,4 +369,29 @@ test("AUD-068 (Michael: Space / Enter press Try it): Try it is the ring's first 
   const ids = [...items.matchAll(/pressable\('([a-z]+)'/g)].map((m) => m[1]);
   assert.deepEqual(ids.slice(0, 2), ['try', 'decline'], `the ring's list starts ${ids.join(', ')}`);
   assert.ok(ids.indexOf('close') > 1 && ids.indexOf('left') > 1, 'the ✕ and the card buttons come after');
+});
+
+// The bubble's pop (plan 34, round 2: Michael's sound, "Bubble Pop 06" by Universfield, assets/sfx/Bubble_Pop.mp3).
+test('the bubble pops (plan 34, round 2: Michael): a touched bubble that opens the offer plays bubble-pop once, at bubblePopVolume; a bubble already done, or with no card left, stays silent', () => {
+  const samples = [];
+  const playSample = (key, volume) => samples.push([key, volume]);
+  const { s } = eduPlay({ playSample });
+  s.armSuperQ();
+  s.offerSuperQ();
+  assert.deepEqual(samples, [['bubble-pop', T.bubblePopVolume]]);
+  s.offerSuperQ(); // done: the backstop or a second touch in the same frame
+  assert.equal(samples.length, 1, 'once per bubble');
+  const none = eduPlay({ playSample }).s;
+  none.armSuperQ();
+  for (const c of SUPER) none.eduStore.answer(c.id, schedule(null, 'good', Date.now(), T));
+  none.offerSuperQ();
+  assert.equal(samples.length, 1, 'no card left: no offer, no pop');
+});
+
+test("the quiz's opening sound (plan 34, round 2): a book opens for a break, the bonus quiz and a revive; the challenge offer opens on the bubble's pop alone (no book over it)", () => {
+  for (const [mode, want] of [['break', ['book-open']], ['bonus', ['book-open']], ['revive', ['book-open']], ['super', []]]) {
+    const played = [];
+    quizScene({ mode, sample: (key) => played.push(key) }).openingSound();
+    assert.deepEqual(played, want, mode);
+  }
 });

@@ -82,6 +82,7 @@ export const TUNING = {
   bookFlipVolume: 0.6, // 0–1 Phaser volume for the page turned at each next question (Book_PageTurn.mp3)
   bookCloseVolume: 0.6, // 0–1 Phaser volume for the book shut as the quiz is left (Book_Close.mp3)
   sparkleVolume: 0.6, // 0–1 Phaser volume for the sparkle when a revive's streak wins everything back (Sparkle_Restore.mp3)
+  bubblePopVolume: 0.6, // 0–1 Phaser volume for the pop when the poop touches a challenge question's bubble (Bubble_Pop.mp3; plan 34)
   // The level break's tap prompt ("Tap to continue", "Tap when ready") breathes: its scale swells by
   // `amount` and back each periodMs, while a white copy behind it swells by glowSpread and fades from glowAlpha.
   hintPulse: { periodMs: 1400, amount: 0.05, glowAlpha: 0.5, glowSpread: 0.16 },

@@ -2263,6 +2263,7 @@ assets/                     Contract PNGs + README.md (the art contract).
   sfx/Book_PageTurn.mp3     Each next question of an education quiz.
   sfx/Book_Close.mp3        An education quiz being left.
   sfx/Sparkle_Restore.mp3   A revive's full streak winning everything back.
+  sfx/Bubble_Pop.mp3        The poop touching a challenge question's ❓ bubble (the offer opens on it, with no book sound).
 
 db/schema.sql               Supabase schema: scores table (player_id = save-code id,
                             name, score, toilet, updated_at), RLS + a column grant

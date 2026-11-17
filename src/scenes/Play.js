@@ -2226,6 +2226,7 @@ export class Play extends Phaser.Scene {
     if (!card) return;
     sq.card = card;
     sq.reward = superQReward(this.level, T);
+    this.playSample('bubble-pop', T.bubblePopVolume, sfx.pickup); // the bubble pops (plan 34, round 2: Michael's sound); the offer opens on it
     this.superQHold = true;
     this.state = 'paused';
     this.respawnPaused = false;

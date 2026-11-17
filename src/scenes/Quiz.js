@@ -126,7 +126,7 @@ export class Quiz extends Phaser.Scene {
     this.reviveState = this.mode === 'revive' ? (this.play?.revive ?? null) : null;
     this.offering = this.mode === 'super'; // a challenge question (plan 34): the offer shows first, Try or Decline
     this.openedAt = this.game.loop.time; // a revive's card ignores taps for a moment after this (tapLocked)
-    this.sample('book-open', T.bookOpenVolume);
+    this.openingSound();
     const W = this.scale.width; // the live field; the card stays centred
     const cx = W / 2;
     const cy = GAME_HEIGHT / 2;
@@ -748,6 +748,14 @@ export class Quiz extends Phaser.Scene {
     this.session.push(pick.card.id);
     if (this.session.length > 1) this.sample('book-flip', T.bookFlipVolume); // a page turned: every card after the first
     this.showCard(pick.card, pick.order, pick.reason, Boolean(pick.beyond));
+  }
+
+  /**
+   * The quiz opens with a book opening; the challenge offer opens on the bubble's pop alone (Play.offerSuperQ
+   * plays it: plan 34, round 2), with no book over it. Try's page turn and the closing book still play.
+   */
+  openingSound() {
+    if (this.mode !== 'super') this.sample('book-open', T.bookOpenVolume);
   }
 
   /**
