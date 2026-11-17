@@ -349,7 +349,7 @@ or 🌞 post whose run is still queued after a paced send waits (`postWaits`, `w
 `db/schema.sql` (tests/runStats.test.js). **Server:** `run_log` (owner-only, 90 days), `submit_runs`
 (void; a row it cannot store is counted in `run_rejects`), and the moderation calls below.
 
-**Loading splash** (2026-11-12, v0.15.0, plan `.claude/plans/01-loading-screen.plan.md`): the page's front
+**Loading splash** (2026-11-12, v0.15.0, plan `.claude/plans/Archive/01-loading-screen.plan.md`): the page's front
 door on every load, phone and desktop. `index.html`'s `#splash` (cream, the bobbing `poop.png` inside a
 brown ring's track) paints at once; an inline `import('./src/splash.js')` placed **before** the Phaser
 tag starts `startSplash` while Phaser is still downloading, so the note cards show during that wait
@@ -2996,6 +2996,8 @@ docs/                       Living specs kept with the code: save-code-spec.md (
                             quote players; tests/privacy.test.js keeps it so. A new
                             plan takes the next free number and a ROADMAP row; when
                             Status is complete, move it into Archive/ and mark its row.
+                            Each plan opens with a Progress (resume here) roadmap,
+                            updated and timestamped at every sub-task.
 .claude/plans/Archive/      Completed build plans (historical record + decision
                             log). Don't edit archived plans.
 .claude/skills/audit-repo/   The repo audit procedure as a Claude skill (/audit-repo):
@@ -3251,6 +3253,11 @@ Commits follow `type(scope): summary` (`feat`, `fix`, `docs`, `chore`, `test`, `
 - Multi-step work worth planning → a numbered markdown plan in `.claude/plans/`
   (next free `NN-`, `Created:` date inside) plus a row in `.claude/plans/ROADMAP.md`;
   when Status is complete, move it into `.claude/plans/Archive/` and mark the row.
+  Every plan opens with `## Progress (resume here)`: Now / Next / Left / Updated lines
+  and a step table with an estimate, start, finish and time taken per sub-task. Update
+  it when each sub-task starts and ends and before every stop (checkpoint, hand-off,
+  failure, session end), with times from the clock (`date`), never guessed. Full
+  format: the Conventions in `.claude/plans/ROADMAP.md`.
 - An audit of the repo, a zone or a feature → the `audit-repo` skill
   (`.claude/skills/audit-repo/SKILL.md`, local and untracked; example prompts in its
   `examples.md`). It is read-only: reports go to `.claude/audits/<date>/`, fixes only on Michael's word.
