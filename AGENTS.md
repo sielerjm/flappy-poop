@@ -363,7 +363,7 @@ square `crop`; the emoji if it fails), else the emoji; a note about something th
 that badge's glyph via `achievementById` (the hints include 🔋 battery saver / low power mode, for every
 device: plan 28, 4.7). Cards are dealt from a shuffled deck kept in `flappyPoop.splash`
 (`nextNote`: a feature this device never showed comes first; every card once per cycle; a reshuffle
-never repeats the last card; `splashPool` keeps the newest `splash.featureMax` features; the newest is 📚 education, plan 28). The player
+never repeats the last card; `splashPool` keeps the newest `splash.featureMax` features; the newest are ❓ challenge questions and 📅 day streaks, plan 34, then 📚 education, plan 28; the ❓ card leaves the pool with education). The player
 browses at any time (swipe or mouse drag, ‹ ›, ← →, the d-pad by its own `getGamepads` poll, since
 Phaser's pad plugin is bound only in Play); the first browse stops the `hintMs` auto-advance. Boot
 drives the ring (`load.on('progress', setSplashProgress)`) and its `create()` hands
@@ -441,7 +441,7 @@ badges; the sync that follows sends only what was already queued, such as a test
 With test mode on as well it is a test run too: no card progress, badge or revive is saved, and
 nothing is saved while test mode is on even when it was turned on after the run started (the
 game-over screen's profile, then the save panel; `setTestMode` also latches a one-player revive).
-**Cards** (`src/questions.js`, 70 placeholder cards, audits in `src/questionAudits.js`, the audit tool
+**Cards** (`src/questions.js`, 70 placeholder cards in the level and general decks plus 21 challenge cards (plan 34, deck `super`), audits in `src/questionAudits.js`, the audit tool
 `tools/audit_questions.mjs`) are scheduled per device by **FSRS-6** (plan 26: `src/fsrs.js`, the
 formulas ported from py-fsrs (MIT) with its default weights, `TUNING.education.fsrs`; `src/education.js`;
 store `flappyPoop.eduSrs`, wiped by Clear), as in Anki but with no learning steps: a card with no
@@ -649,7 +649,7 @@ Play again glows `over.pairGlowPx`, clear of Home), so a lost run's band is the 
 so the tally row stays in view (with a badge too: plan 28, 3.2) and the badge line and the note start
 below the band's bottom, whole, where it scrolls (by drag, wheel, or the controller's 'lines' stop:
 AUD-049). **A won run waits** (plan 26): its bonus answers are part of it (the tally's last
-level row, the grade), so `endRun` keeps it in the education store as `pending` ({ tally, full, at };
+level row, the grade), so `endRun` keeps it in the education store as `pending` ({ tally, full, caughtUp, at }: caughtUp since plan 34;
 `setPending`, updated by each bonus answer) and shows the badges it would earn so far
 (`eduPreviewBadges`, `countersAfterRun`); closing the bonus quiz draws the panel again
 (`refreshOverEducation`). It is recorded once, from its final tally, when the panel is left (Home and
@@ -670,8 +670,9 @@ gaps come from the date keys (`localDayKey`), never from milliseconds. Since pla
 `src/streak.js` (`nextDayStreak`, `dayStreakNow`, `cleanDayStreak`; `nextStudyStreak` / `studyStreakNow` are
 education's names for them), shared with the day streaks below.
 **Day streaks** (plan 34, Michael): `createStreakStore` (`flappyPoop.streaks`, src/leaderboard.js) keeps a
-Singleplayer and a Daily Dump streak on this device only: never sent, not in the backup, cleared by Clear. A
-one-player run that is neither education nor test counts its local day (`recordCareer('single')`); a Daily Dump
+Singleplayer and a Daily Dump streak on this device only: never sent, not in the backup, cleared by Clear (a Load
+keeps them, as it keeps the 📚 cards). A one-player run that is neither education nor test counts the local day it
+ends on (`recordCareer('single')`, at the game over); a Daily Dump
 counts its course's UTC day once claimed (`countDailyStreak` in `start`; a practice Daily counts nothing). Your
 own profile shows 🔥 Current streak and ❤️‍🔥 Longest streak under Singleplayer and under Daily Dump
 (`streakProfileRows`, `Stats.streakView`); the ready screen shows a small orange number at the 🌞's bottom right
@@ -684,7 +685,9 @@ and nothing at 0 (`refreshStreakMarks`, `TUNING.streakMarkPx`; both inside their
 picks (its own stream, `COURSE_SALT.superQ`; never a level's first or last `edgePairs`, level 1's scripted pairs
 or the guaranteed box's pair: `armSuperQ` at the start and each level). Its pair and the next open at the same
 height and hold still (the next pair's gap and both pairs' moves are still rolled, then dropped, so the course
-keeps its order; `superQStill`), and it floats `bobPx` on a sine (`floatY`, bob 'float'). It takes the slot
+dropped; `superQStill`: the bubble's pair re-orders its own draws, `gapY(n + 1)` first, which nobody can see, since a
+one-player course is random per run and the Daily and matches never arm a bubble; with no bubble armed every pair draws
+as before plan 34, tests/superQuestionSpawn.test.js), and it floats `bobPx` on a sine (`floatY`, bob 'float'). It takes the slot
 before a box, bean, rolled item or kernel (the kernel moves on). Taken, flown past (`update`'s backstop opens it
 when it reaches the poop's x, unless a fart flies through) or farted through, it is gone for the level; a
 revive that clears it brings it back on the next pair that can carry it (`clearFieldAhead`). Touched,
@@ -696,7 +699,8 @@ large on a disc of the level's colour; Decline | Try it, ✕ and Esc decline; no
 `offerLocked`). After Try the card can only be answered (`closable` false: no ✕, Skip or End Review).
 `superQAnswer` saves it as a first sight (right: review later; wrong: missed, due now, so it holds the next
 gate) with a study day, pays or charges the purse, and stays out of `runQuiz`, the grade, 💯, 🤓 and the pilot's
-events (the server takes break, revive and bonus contexts only; RESEARCH.md says so); a test run saves nothing.
+events (the server takes break, revive and bonus contexts only; RESEARCH.md says so: once a challenge card is in the bank,
+its answers in a level break, after a crash or in the bonus quiz are sent like any card's); a test run saves nothing.
 Fly on (held after a miss) closes it and `endSuperQ` resumes with half a flap and at least `beans.graceMs`. The 21
 challenge cards (`SQ-01`…, deck `super`; Michael reviews them, `.claude/plans/34-super-cards-review.md`) are never
 a quiz's new card (`inScope`, `chooseCard`'s fresh pool, `browseCard`, `breakDecks`), count in `masteryByDeck`
@@ -1006,10 +1010,12 @@ src/
                             EDU_ACHIEVEMENTS (plan 22: the eight education badges,
                             their own list with edu_ ids, kept on the device and
                             never claimed), eduRunFacts (a run's tally → answered,
-                            right, graded, grade, perfect, gaveUp; GRADE_MAX, 10000 =
-                            100 %, the one scale the stores and the share store use),
-                            nextPerfectStreak
-                            (🤓), averageGrade (the mean of the graded runs);
+                            right, graded, grade, perfect, gaveUp, full, and since
+                            plan 34 won and caughtUp; GRADE_MAX, 10000 = 100 %, the
+                            one scale the stores and the share store use),
+                            nextPerfectStreak (the perfect-run streak, still counted,
+                            no longer 🤓's: 🤓 is one won, caught-up perfect run since
+                            plan 34), averageGrade (the mean of the graded runs);
                             v0.16.0: a run entry's `modes` (default single player),
                             IBS_WINS / WINDOW_DAYS / BREAK_DAYS / FOUR_OF_A_KIND,
                             levelCloseShave, winsInWindow, daysBetween,
@@ -1137,7 +1143,8 @@ src/
                             explanation's Wikipedia words) and REFERENCE_DOIS (number
                             → DOI, Crossref-matched), outside a card's audit hash.
                             The source of truth for the cards since 12 Nov; 70
-                            placeholder cards, all unaudited. tests/questions.test.js.
+                            placeholder cards and 21 challenge cards (plan 34), all
+                            unaudited. tests/questions.test.js.
   richText.js               Text with links in it (plan 26), NO Phaser/DOM: linkSpans
                             (the first whole-word occurrence of each term) and
                             layoutRich (greedy word wrap into centred lines of parts,
@@ -1179,7 +1186,10 @@ src/
                             lead ahead), VERSUS_EMOJI; createMatch's options
                             (levelPipes, names, tournament) ride a rematch. Fully unit-tested
                             (tests/versus.test.js).
-  leaderboard.js            Shared leaderboard, NO Phaser/DOM: submitPlan / submitPlans
+  leaderboard.js            Shared leaderboard, NO Phaser/DOM (plan 34 adds
+                            createStreakStore and STREAK_KINDS: flappyPoop.streaks,
+                            this device's Singleplayer and Daily Dump day streaks,
+                            never sent): submitPlan / submitPlans
                             (pure: what to post; up to two rows per player, best
                             off and best on the toilet, via save.js bestByToilet),
                             createSubmitStore (flappyPoop.leaderboard: last
@@ -2176,7 +2186,13 @@ src/
                             function (badgeGrid) used for both lists.
     Quiz.js                 Overlay (plan 21; chromeIntent 'quiz' in an education
                             run's level break, Play.openQuiz otherwise): the 📚 quiz
-                            card, 640 × 1160. Modes 'break' (coins), 'revive' (after a
+                            card, 640 × 1160. Mode 'super' (plan 34): the challenge
+                            question's offer (showOffer: what it pays and costs, the
+                            bubble on the level's colour, Decline | Try it, nothing
+                            for retryLockoutMs: offerLocked, close() included), then
+                            one card that can only be answered (closable), the
+                            verdict and Fly on (superStep); the purse shows.
+                            Modes 'break' (coins), 'revive' (after a
                             crash: ❤️ strikes, the ⭐ choice and streak, Quit (warned on
                             every card: giveUp, quitArmed); it
                             cannot be closed and ends itself, finish; its card
@@ -2841,7 +2857,9 @@ tests/                      node --test (schema.test.js, pilot.test.js, eduBoard
                             and version fields; config.yml allows blank issues.
 
 tools/
-  make_placeholders.py      Regenerates pipe / villi / ceiling / ground only (icons
+  make_placeholders.py      Regenerates pipe / villi / ceiling / ground, and plan 34's
+                            question.png (the challenge bubble, a see-through
+                            placeholder) only while it is missing (icons
                             moved to process_art.py); ceiling.png is the ground's
                             mirror (ceiling_strip), drawn by the game as its own
                             strip over the pipes; a cream backdrop from each
@@ -3053,7 +3071,13 @@ tools/
                             note), then blocked-storage (every read of
                             localStorage throwing: the game still starts and plays)
                             and invite-link (a page loaded with ?invite= opens the
-                            panel with the code, the address cleaned). The 📚
+                            panel with the code, the address cleaned), run-stats
+                            (plan 30), streaks (plan 34: a day counted by a run and
+                            by a Daily, the 🌞 / 📚 numbers, the profile rows, Clear)
+                            and education-superq (plan 34: the bubble between two
+                            equal still pairs, its float, flown past, the hold, the
+                            lockout incl. Esc, Decline, Try, a right and a wrong
+                            answer, the art on a second offer). The 📚
                             board's and the pilot's calls are stubbed at boot
                             (globalThis.__edu / __eduAnswer), like the career's.
                             OVERLAYS lists Quiz; NEEDS_RUN keeps the ready-screen
@@ -3190,7 +3214,7 @@ npm run smoke     # with npm start running: headless Chrome drives the real game
 npm run smoke -- --list            # the sections and what each needs
 npm run smoke -- --only=wide,pad   # just those (plus what they need)
 uv run --with pillow python3 tools/process_art.py   # rebuild poop set / items / bean from assets/src/
-uv run --with pillow python3 tools/make_placeholders.py   # pipe / villi / ceiling / ground only
+uv run --with pillow python3 tools/make_placeholders.py   # pipe / villi / ceiling / ground; question.png only if missing
 ```
 
 When to run what:

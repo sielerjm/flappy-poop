@@ -13,7 +13,7 @@ export const CHANGELOG = [
     notes: {
       en: [
         'Streaks: play on days in a row and a small orange number on the 🌞 (Daily Dump) and the 📚 (learning) shows your streak. Your profile shows your current 🔥 and longest ❤️‍🔥 streaks for Singleplayer and the Daily Dump, counted on this device from today.',
-        '📚 Challenge questions: once a level a ❓ bubble floats right on your path. Touch it for a harder question on any topic: right pays 10 to 22 🌽 (more each level), wrong costs 5. Try it or decline; either way the card joins your cards.',
+        '📚 Challenge questions: once a level a ❓ bubble floats right on your path. Touch it for a harder question on any topic: right pays 10 to 22 🌽 (more each level), wrong costs 5. Try it or decline; once you try it, right or wrong, the card joins your cards.',
         '🤓 Nerd Alert now goes to a run you win with every answer right and nothing left to review.',
         'The corn by the quiz purse spins when a right answer pays, and each part of the 📚 popup now opens with a one-line summary (tap Show for the rest).',
       ],

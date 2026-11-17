@@ -1099,15 +1099,15 @@ export class Play extends Phaser.Scene {
     }
   }
 
-  /**
-   * This device's Daily Dump attempt (dailyStore): the day, the level, the score and pipes so far and
-   * what was picked up; `final` once the run is over. Practice writes nothing. Returns the record.
-   */
   /** The Daily Dump streak (plan 34) counts course `day` once its attempt is claimed (start), on its UTC day; a practice Daily (a test run) counts nothing. */
   countDailyStreak(day) {
     if (!this.runIsTest) this.streakStore.played('daily', day);
   }
 
+  /**
+   * This device's Daily Dump attempt (dailyStore): the day, the level, the score and pipes so far and
+   * what was picked up; `final` once the run is over. Practice writes nothing. Returns the record.
+   */
   saveDailyAttempt(final = false) {
     if (!this.runIsDaily || this.runIsTest || !this.daily) return null;
     perfMark(PERF_TAGS.daily);
@@ -3198,7 +3198,8 @@ export class Play extends Phaser.Scene {
     this.centreNextGap = false;
     if (superHere) {
       // The next pair opens at this one's height, so the bubble between them sits on the flight line. Its own
-      // gap is still rolled (and dropped), so the draws after it keep their order.
+      // gap is rolled now and dropped (this pair's draws come in a new order: unseen, since a one-player course
+      // is random per run and the Daily and matches never arm a bubble; AUD-072).
       this.course.gapY(n + 1, gapCfg);
       this.nextGapY = gapY;
     }
@@ -3241,7 +3242,7 @@ export class Play extends Phaser.Scene {
           : scripted;
     // The first box owns this pair's open spot: no bean (or rolled fiber) takes it.
     const beanRolled = !boxHere && (scripted === undefined ? this.course.bean(n, { score: this.score, spawnedThisRun: this.beanSpawned, holding: this.effects.holdingBean() }) : scripted === 'bean');
-    const beanHere = beanRolled && !superHere; // the challenge bubble owns its slot (plan 34); the roll still happens
+    const beanHere = beanRolled && !superHere; // the challenge bubble owns its slot (plan 34); the roll is still made
     // From pipeMove.fromLevel some pairs bob their gap: the top pipe carries the motion and its mate
     // follows in update() (the 1280 px texture covers any gap position, so only y changes). Rolled
     // after the item and bean draws so levels below fromLevel and the draws before it keep their sequence.

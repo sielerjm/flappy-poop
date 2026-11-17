@@ -877,7 +877,6 @@ export function inventoryRows({ coins = 0, beans = 0 } = {}, t) {
   return out;
 }
 
-/** A still pickup's pulse: the factor on its display scale `elapsed` ms after it spawned (1 ± items.stillPulse.amount). */
 /**
  * The quiz purse's quick spin (plan 34, Michael: the corn turns while its glow is lit): the frame rate at
  * which `frameCount` frames turn spinTurns times in the glow's fadeMs. `g` is TUNING.education.purseGlow.
@@ -902,6 +901,7 @@ export function floatY(elapsed, baseY, amp, periodMs, phase = 0) {
   return baseY + amp * Math.sin((elapsed / periodMs) * Math.PI * 2 + phase);
 }
 
+/** A still pickup's pulse: the factor on its display scale `elapsed` ms after it spawned (1 ± items.stillPulse.amount). */
 export function stillPulseScale(elapsed, t) {
   const p = t.items.stillPulse;
   return 1 + p.amount * Math.sin((2 * Math.PI * Math.max(0, elapsed || 0)) / p.periodMs);

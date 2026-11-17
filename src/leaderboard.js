@@ -833,14 +833,6 @@ function normalizeCareer(raw) {
   return { v: 1, base, pending: cleanCounters(r.pending), inflight, unlocked, claims, lastRunAt, winTimes };
 }
 
-/**
- * This device's career (flappyPoop.career): the server's last totals for a player (`base`, with
- * that player's id), counters not sent yet (`pending`), one batch on its way (`inflight`, resent
- * unchanged until the server confirms it: its id is the receipt), the achievements unlocked here or
- * learned from the server (`unlocked`: id → UTC day), the claims not confirmed yet (`claims`), and this
- * device's last run time and recent win times (`lastRunAt`, `winTimes`: 🧱 / 🏃).
- * Every read normalises, every write is guarded; it never throws.
- */
 /** The day-streak kinds this device keeps (plan 34): Singleplayer on local days, the Daily Dump on its UTC days. */
 export const STREAK_KINDS = ['single', 'daily'];
 
@@ -878,6 +870,14 @@ export function createStreakStore(storage = browserStorage(), key = LEADERBOARD.
   };
 }
 
+/**
+ * This device's career (flappyPoop.career): the server's last totals for a player (`base`, with
+ * that player's id), counters not sent yet (`pending`), one batch on its way (`inflight`, resent
+ * unchanged until the server confirms it: its id is the receipt), the achievements unlocked here or
+ * learned from the server (`unlocked`: id → UTC day), the claims not confirmed yet (`claims`), and this
+ * device's last run time and recent win times (`lastRunAt`, `winTimes`: 🧱 / 🏃).
+ * Every read normalises, every write is guarded; it never throws.
+ */
 export function createCareerStore(storage = browserStorage(), key = LEADERBOARD.careerKey) {
   const read = () => {
     try {

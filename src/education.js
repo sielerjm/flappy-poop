@@ -750,7 +750,7 @@ export function localDayKey(date = new Date()) {
 /**
  * This device's education record (LEADERBOARD.eduKey): { v: 2, cards: { id: record }, recent: [ids],
  * counters: { revives, perfectStreak, gradedRuns, gradeSum }, badges: { id: 'YYYY-MM-DD' }, and when
- * set unlockedLevel, buried { day, n, ids } (n due skips, ids every card skipped that day), pending { tally, full, at }, paid { day, ids } and study
+ * set unlockedLevel, buried { day, n, ids } (n due skips, ids every card skipped that day), pending { tally, full, caughtUp, at }, paid { day, ids } and study
  * { day, streak, best } (plan 26, A2) }.
  * answer(id, record) stores a card's record after an answer and appends it to `recent` (the last
  * education.minGap cards shown). The counters and badges (plan 22) are the education badges' and the
@@ -843,7 +843,8 @@ export function createEduStore(storage, { key = LEADERBOARD.eduKey, t = TUNING }
       return read().counters;
     },
     /**
-     * A won run waits here until its game-over panel is left (plan 26): { tally, full, at }. Its bonus
+     * A won run waits here until its game-over panel is left (plan 26): { tally, full, caughtUp, at } (caughtUp:
+     * nothing due, for 🤓, plan 34). Its bonus
      * answers update the tally (setPending again); takePending hands it over once, for recording.
      */
     setPending({ tally, full, caughtUp = false, at }) {
