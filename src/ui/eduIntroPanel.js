@@ -4,7 +4,7 @@
 //
 // It says what the mode is (a beta: the cards are still being checked), how it works (the levels and
 // the review gate, revives, the three numbers, Skip, coins; the daily cap while it is on), the player's cards (the
-// three counts, how many seen, what the gold number counts), and holds the mode's choices: the
+// three counts, how many seen, the learning streak: plan 34's round 2), and holds the mode's choices: the
 // level a run starts at (◀ LV n ▶, moved here from the ready screen; while a later level is unlocked),
 // where new cards go (before, mixed with or after the cards due: settings eduNewOrder), and how many
 // new cards a level break asks a visit (3, 5 or All: settings eduNewPerLevel; plan 28, Stage 3b). A line

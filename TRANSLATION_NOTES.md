@@ -212,7 +212,7 @@ Short, playful, clear. Fit a 720×1280 logical field; How to play / About body w
 | itemEducationName | Education mode | 教育模式 |
 | itemEducationDetail | Turn on 📚 on the home screen: level breaks ask quiz cards about the gut and its microbes, and after a crash, right answers let you fly on. Cards you miss come back until you know them; right answers pay corn. Tap 📚 for how it works. | 在主屏幕打开 📚：关卡休息时会问关于肠道和肠道微生物的问题；撞到之后，答对就能继续飞。答错的卡片会再出现，直到你记住；答对能得玉米粒。点 📚 看玩法说明。 |
 | itemSuperQName | Challenge question (plan 34: How to play's row after Education mode, shown with it) | 挑战题 |
-| itemSuperQDetail | In 📚 mode, once a level: touch the ❓ bubble for a harder question. Right pays 10 to 22 🌽, wrong costs 5. Try it or decline. | 在 📚 模式下，每关一次：碰到 ❓ 泡泡会出一道更难的题。答对得 10 到 22 🌽，答错扣 5。可以挑战，也可以放弃。 |
+| itemSuperQDetail | In 📚 mode, once a level: pop the ❓ bubble for a harder question. Right pays 10 to 22 🌽, wrong costs up to 5. Try it or decline. | 在 📚 模式下，每关一次：戳破 ❓ 泡泡会出一道更难的题。答对得 10 到 22 🌽，答错最多扣 5。可以挑战，也可以放弃。 |
 | itemInfoName | About | 关于 |
 | itemInfoDetail | The i button opens About: the credits, this guide and What's new (the update notes). Key: I. | i按钮打开“关于”：制作名单、本玩法说明和更新说明。按键：I。 |
 | itemLanguageName | Language | 语言 |
@@ -673,7 +673,7 @@ Inspired by Flappy Bird
 | splashNext | Next card | 下一张 |
 | splashProfile | Your profile shows your stats and achievements. Tap a name on the leaderboard to see theirs. | 你的个人资料会显示数据和成就。在排行榜上点名字，就能看别人的。 |
 | splashEducation | Education mode: quiz cards about the gut and its microbes between levels. Turn on 📚 at home. | 教育模式：关卡之间回答关于肠道和肠道微生物的问题。在主页打开 📚。 |
-| splashSuperQ | Challenge questions: a ❓ bubble in every 📚 level. Right pays up to 22 🌽, wrong costs 5. (plan 34: a NEW card on the loading splash, at most 100 characters) | 挑战题：📚 模式的每一关都有一个 ❓ 泡泡。答对最多得 22 🌽，答错扣 5。 |
+| splashSuperQ | Challenge questions: a ❓ bubble in every 📚 level. Right pays up to 22 🌽, wrong costs up to 5. (plan 34: a NEW card on the loading splash, at most 100 characters) | 挑战题：📚 模式的每一关都有一个 ❓ 泡泡。答对最多得 22 🌽，答错最多扣 5。 |
 | splashStreaks | Streaks: play days in a row to grow the number on 🌞 and 📚, and on your profile. (plan 34: a NEW card, 📅) | 连续天数：连续几天玩，🌞、📚 和个人资料上的数字会越来越大。 |
 | splashDaily | Daily Dump: one try a day on the same course as everyone. | 每日一拉：每天一次机会，和所有人飞同一条赛道。 |
 | splashTournament | Tournaments: up to 8 players, one bracket, one device. | 锦标赛：最多 8 名玩家，一张对阵表，一台设备。 |

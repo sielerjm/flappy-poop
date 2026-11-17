@@ -682,7 +682,8 @@ own profile shows 🔥 Current streak and ❤️‍🔥 Longest streak under Sin
 and nothing at 0 (`refreshStreakMarks`, `TUNING.streakMarkPx`; both inside their buttons' hit boxes). The 🌞 card
 says "🔥 Current streak = n" (0 included) in its note's place, under the four pictures, while its button reads Play,
 Checking… or See today's result; with no username or in test mode the note keeps that place (plan 34, round 2).
-Every reader goes through `Play.streakNow(kind)`, so the numbers never disagree.
+The subscripts, the 🌞 card's line and both "Your cards" lists read `Play.streakNow(kind)`; the profile's rows
+(`Stats.streakView`, `Stats.eduView`) read the same stores with the same day keys and `studyStreakNow`.
 **Challenge questions** (plan 34, Michael; code names `superQ` / deck `super` / item `question`, since plan 33's
 💪 Challenge mode holds `challenge`): once a level in a 📚 run, while an unmet challenge card is left
 (`pickSuperCard`), a ❓ bubble (`assets/question.png`, a see-through placeholder, drawn at
@@ -2102,7 +2103,8 @@ src/
                             Play.streakNow('daily'); plan 34, round 2) in the note's
                             place unless a note shows. refresh() redraws it after a save.
     (every overlay builds this.focus from pressable() items, ✕ first then its
-                            rows, and calls focus.show(), which only shows under a
+                            rows (the Quiz is the exception: the challenge offer's Try it and
+                            Decline lead, the ✕ last; AUD-068), and calls focus.show(), which only shows under a
                             controller; About / HowTo / Changelog pass scrolled: sv and
                             onVertical so up / down scroll the text; Leaderboard
                             passes onVertical only, scrolling its rows band)
