@@ -1125,7 +1125,7 @@ test('"Your cards" on the 📚 glyph (plan 26, A2): the three counts in his word
   const card = { open: false, show(o) { shown.push(o); this.open = true; }, hide() { this.open = false; } };
   const s = playScene({ eduStore: store, eduCard: card, locale: 'en', state: 'ready', launching: false, match: null, readyBoxes: { educationInfo: {} } });
   s.toggleEduCard();
-  const total = CARDS.filter((c) => !c.retired).length;
+  const total = CARDS.filter((c) => !c.retired && c.deck !== 'super').length; // challenge cards count once met (plan 34)
   assert.equal(shown[0].title, 'Your cards');
   assert.deepEqual(shown[0].lines.slice(1), ['🔴 1 missed (due now)', '🟢 0 to review (due today)', `👁️ Seen 1 of ${total} cards`, 'The number on 📚 = # of cards to review']);
   assert.match(shown[0].lines[0], /^🔵 \d+ new \(not seen yet\)$/, 'new cards: the ones a quiz may still offer today');
@@ -1271,7 +1271,7 @@ test("the 📚 popup's facts (eduIntroInfo): the counts over every deck, cards s
   assert.deepEqual([settings.load().eduNewPerLevel, s.eduIntroInfo().perLevel], ['all', 'all'], 'the popup\'s new cards per level (plan 28, Stage 3b)');
   s.setEduNewPerLevel(3);
   assert.equal(settings.load().eduNewPerLevel, 3);
-  assert.equal(info.total, CARDS.filter((c) => !c.retired).length, 'every live card, the general deck included');
+  assert.equal(info.total, CARDS.filter((c) => !c.retired && c.deck !== 'super').length, 'every live card, the general deck included; a challenge card once met (plan 34)');
   s.stepEduStart(1);
   assert.equal(s.eduIntroInfo().startLevel, 3);
   s.setEduNewOrder('before');

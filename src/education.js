@@ -15,7 +15,7 @@
 import { EDUCATION, LEADERBOARD, TUNING } from './config.js';
 import { nextPerfectStreak, GRADE_MAX, EDU_ACHIEVEMENTS } from './achievements.js';
 import { GRADE_NUM, initDifficulty, initStability, nextDifficulty, nextIntervalDays, nextStability, retrievability, shortTermStability } from './fsrs.js';
-import { CARD_LINKS, CARDS, DECKS, REFERENCE_DOIS, REFERENCES } from './questions.js';
+import { CARD_LINKS, CARDS, DECKS, LEVEL_DECKS, REFERENCE_DOIS, REFERENCES } from './questions.js';
 import { createJsonStore } from './store.js';
 import { cleanDayStreak, dayNumber, dayStreakNow, nextDayStreak } from './streak.js';
 
@@ -140,7 +140,10 @@ export function schedule(rec, grade, now, t = TUNING, { practice = false } = {})
   return r;
 }
 
-const levelOfDeck = (deck) => (deck === 'general' ? 0 : DECKS.indexOf(deck) + 1);
+const levelOfDeck = (deck) => LEVEL_DECKS.indexOf(deck) + 1; // 0 for the general and challenge decks
+
+/** A challenge question (plan 34, deck 'super'): offered only by the challenge question bubble, never as a new card in a quiz. */
+const isSuper = (c) => c.deck === 'super';
 
 /** Where new cards go in a quiz (plan 26, Anki's new / review order; settings eduNewOrder): after the due cards (the default), mixed with them, or before them. */
 export const NEW_ORDERS = ['after', 'mixed', 'before'];
@@ -200,12 +203,13 @@ const NO_SEGMENT = 99; // a general card whose id names no segment sorts after t
 export function breakDecks(cards = CARDS) {
   let m = BREAK_DECKS.get(cards);
   if (m) return m;
+  const level = (c) => LEVEL_DECKS.includes(c.deck); // a challenge card (plan 34) belongs to no break
   const prefixes = new Map();
-  for (const c of cards) if (c.deck !== 'general' && !prefixes.has(c.id.slice(0, 2))) prefixes.set(c.id.slice(0, 2), c.deck);
+  for (const c of cards) if (level(c) && !prefixes.has(c.id.slice(0, 2))) prefixes.set(c.id.slice(0, 2), c.deck);
   const gut = (c) => (prefixes.has(c.id.slice(0, 2)) ? levelOfDeck(prefixes.get(c.id.slice(0, 2))) : NO_SEGMENT);
   const general = cards.filter((c) => c.deck === 'general' && !c.retired).sort((a, b) => gut(a) - gut(b) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
-  const segments = DECKS.filter((d) => d !== 'general');
-  m = new Map(cards.filter((c) => c.deck !== 'general').map((c) => [c.id, c.deck]));
+  const segments = LEVEL_DECKS;
+  m = new Map(cards.filter(level).map((c) => [c.id, c.deck]));
   general.forEach((c, i) => m.set(c.id, segments[i % segments.length]));
   BREAK_DECKS.set(cards, m);
   return m;
@@ -222,6 +226,7 @@ export function breakDeckOf(card, cards = CARDS) {
  * card; 'all': every deck.
  */
 function inScope(c, { context, level, segment, cards = CARDS }) {
+  if (isSuper(c)) return false; // a challenge card is never a quiz's new card (plan 34): the bubble offers it
   if (context === 'all') return true;
   if (context === 'break') return breakDeckOf(c, cards) === segment;
   return c.deck === 'general' || levelOfDeck(c.deck) <= level;
@@ -248,7 +253,8 @@ function pickNew(general, pools, rng, t) {
 
 function chooseCard({ cards, srs, context, level, segment, now, blocked, rng, t, practice = true, dueFirst = false, missed = [], last = null, newLeft = Infinity, dueLeft = Infinity, gateDue = null, order = 'after', skipped = new Set() }) {
   const live = cards.filter((c) => !c.retired && !blocked.has(c.id));
-  const fresh = live.filter((c) => !srs[c.id] && !skipped.has(c.id)); // a new card skipped today waits until tomorrow (plan 28, Stage 3b)
+  // A new card skipped today waits until tomorrow (plan 28, Stage 3b); a challenge card is new only to its bubble (plan 34).
+  const fresh = live.filter((c) => !srs[c.id] && !skipped.has(c.id) && !isSuper(c));
   const due = live.filter((c) => srs[c.id] && srs[c.id].dueAt <= now);
   // Practice: review cards not due yet. A missed card that is not due was buried: it stays buried; a
   // review card skipped today waits until tomorrow too (plan 26, A2: `skipped`).
@@ -314,7 +320,7 @@ function chooseCard({ cards, srs, context, level, segment, now, blocked, rng, t,
   const duePick = () => missedPick(due) ?? reviewPick(due);
   const newPick = () => {
     if (newLeft <= 0) return null;
-    const here = DECKS[Math.max(1, level) - 1];
+    const here = LEVEL_DECKS[Math.max(1, level) - 1];
     const unlocked = fresh.filter((c) => c.deck !== 'general' && levelOfDeck(c.deck) <= level);
     const card = pickNew(
       fresh.filter((c) => c.deck === 'general'),
@@ -354,7 +360,7 @@ function browseCard({ cards, srs, segment, blocked, shown }) {
   const group = (c) => (c.deck === segment ? 0 : c.deck === 'general' ? 1 : 1 + levelOfDeck(c.deck));
   const shownAt = (c) => shown.lastIndexOf(c.id); // −1: not shown yet
   const card = cards
-    .filter((c) => !c.retired && !blocked.has(c.id))
+    .filter((c) => !c.retired && !blocked.has(c.id) && !isSuper(c)) // a test run's walk leaves the challenge cards to their bubble (plan 34)
     .sort((a, b) => group(a) - group(b) || shownAt(a) - shownAt(b) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))[0];
   return card ? { card, reason: srs[card.id] ? 'practice' : 'new' } : null;
 }
@@ -561,6 +567,14 @@ export function countersAfterRun(counters = {}, facts = null) {
   return out;
 }
 
+/**
+ * The challenge question bubble's card (plan 34): a live challenge card this device has not met, at random
+ * (`rng` returns [0, 1)), or null once every one is met (right or wrong, each joins the question bank).
+ */
+export function pickSuperCard(srs = {}, rng = Math.random, cards = CARDS) {
+  return pickFrom(cards.filter((c) => isSuper(c) && !c.retired && !srs[c.id]), rng);
+}
+
 /** The shop's prices in an education run at `level`: each base price × education.priceScale[level − 1], rounded up (past the table, its last row). */
 export function eduShopPrices(level, t = TUNING) {
   const scale = t.education.priceScale;
@@ -568,13 +582,18 @@ export function eduShopPrices(level, t = TUNING) {
   return Object.fromEntries(Object.entries(t.shop.prices).map(([item, price]) => [item, Math.ceil(price * k)]));
 }
 
-/** Per deck: { seen, mastered (in review with a stability of education.masteredDays or more), total } over the live cards. */
+/**
+ * Per deck: { seen, mastered (in review with a stability of education.masteredDays or more), total } over the
+ * live cards. A challenge card (plan 34) counts only once met: it is not a card a player can work through,
+ * so "Seen n of total" does not grow by the 21 the bubble has not offered yet.
+ */
 export function masteryByDeck(srs = {}, { cards = CARDS, t = TUNING } = {}) {
   const out = Object.fromEntries(DECKS.map((d) => [d, { seen: 0, mastered: 0, total: 0 }]));
   for (const c of cards) {
     if (c.retired || !out[c.deck]) continue;
     const row = out[c.deck];
     const r = srs[c.id];
+    if (isSuper(c) && !r) continue;
     row.total += 1;
     if (r) row.seen += 1;
     if (r?.state === 'review' && r.stability >= t.education.masteredDays) row.mastered += 1;

@@ -155,6 +155,7 @@ Short, playful, clear. Fit a 720×1280 logical field; How to play / About body w
 | level.caecum | Caecum | 盲肠 |
 | level.colon | Colon | 结肠 |
 | level.rectum | Rectum | 直肠 |
+| level.super | Challenge question (plan 34: the quiz card's header for a challenge question, the harder card offered by the bubble in an education run; also its name on the offer) | 挑战题 |
 | gameOver | GAME OVER | 游戏结束 |
 | runWon | YOU MADE IT OUT! | 顺利排出！ |
 | scoreLabel | SCORE | 得分 |

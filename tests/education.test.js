@@ -140,7 +140,7 @@ test('breakDecks (plan 28, Stage 3b): a level card belongs to its own deck; the 
   const live = breakDecks();
   const general = Object.fromEntries(CARDS.filter((c) => c.deck === 'general' && !c.retired).map((c) => [c.id, live.get(c.id)]));
   assert.deepEqual(general, { 'ST-10': 'stomach', 'JE-06': 'duodenum', 'JE-08': 'jejunum', 'JE-09': 'ileum', 'IL-10': 'caecum', 'CO-02': 'colon', 'RE-09': 'rectum' });
-  for (const c of CARDS.filter((x) => x.deck !== 'general')) assert.equal(breakDeckOf(c), c.deck, c.id);
+  for (const c of CARDS.filter((x) => x.deck !== 'general')) assert.equal(breakDeckOf(c), c.deck === 'super' ? null : c.deck, c.id); // a challenge card (plan 34) belongs to no break
   const deck = (id, d, extra = {}) => ({ id, deck: d, ...extra });
   const levelCards = [deck('ST-01', 'stomach'), deck('DU-01', 'duodenum'), deck('JE-01', 'jejunum'), deck('IL-01', 'ileum'), deck('CA-01', 'caecum'), deck('CO-01', 'colon'), deck('RE-01', 'rectum')];
   const retired = breakDecks([...levelCards, deck('ST-20', 'general', { retired: true }), deck('DU-20', 'general'), deck('ST-21', 'general')]);
@@ -232,7 +232,7 @@ const countsSrs = {
 
 test('cardCounts (uncapped): new cards the context offers, missed cards due, reviews due; nothing else', () => {
   const live = CARDS.filter((c) => !c.retired);
-  const fresh = live.filter((c) => !countsSrs[c.id]);
+  const fresh = live.filter((c) => !countsSrs[c.id] && c.deck !== 'super'); // a challenge card is never a quiz's new card (plan 34)
   const inDecks = (decks) => fresh.filter((c) => decks.includes(c.deck)).length;
   const atBreak = (segment) => fresh.filter((c) => breakDeckOf(c) === segment).length;
   assert.equal(atBreak('stomach'), inDecks(['stomach']) + 1, 'the stomach deck and ST-10');
@@ -244,7 +244,7 @@ test('cardCounts (uncapped): new cards the context offers, missed cards due, rev
   assert.deepEqual(cardCounts(countsSrs, { t: UNCAPPED, now: NOW }), cardCounts(countsSrs, { t: UNCAPPED, context: 'all', now: NOW }), 'all is the default');
   const all = cardCounts(countsSrs, { t: UNCAPPED, context: 'all', now: NOW });
   assert.equal(all.missed + all.review, dueCount(countsSrs, { now: NOW }), "missed + review is the 📚 switch's due count");
-  assert.equal(all.new + Object.keys(countsSrs).length, live.length, 'every live card is new or seen');
+  assert.equal(all.new + Object.keys(countsSrs).length, live.filter((c) => c.deck !== 'super').length, 'every live card is new or seen, bar the challenge cards no bubble has offered (plan 34)');
   assert.deepEqual(cardCounts(countsSrs, { t: UNCAPPED, context: 'all', now: NOW + DAY }), { new: fresh.length, missed: 2, review: 3 }, 'tomorrow: the buried card is back, and the practice card is due');
   assert.deepEqual(cardCounts({}, { t: UNCAPPED, context: 'break', segment: 'stomach', now: NOW }), { new: live.filter((c) => c.deck === 'stomach').length + 1, missed: 0, review: 0 }, 'a new device');
   // The quiz's earlier cards are left out, each from its own count.
@@ -556,8 +556,8 @@ test("pickCard, browse (a test run): the segment's deck in id order, whatever is
   // One quiz walks the deck in order, then the general cards, then the other decks by level.
   const walk = [];
   for (let pick = first; pick; pick = pickCard({ context: 'browse', segment: 'caecum', srs, now: NOW, exclude: walk })) walk.push(pick.card.id);
-  assert.deepEqual(walk, [...caecum, ...deck('general'), ...DECKS.filter((d) => d !== 'caecum' && d !== 'general').flatMap(deck)]);
-  assert.equal(walk.length, live.length, 'null only once every live card was shown in the quiz');
+  assert.deepEqual(walk, [...caecum, ...deck('general'), ...DECKS.filter((d) => d !== 'caecum' && d !== 'general' && d !== 'super').flatMap(deck)]);
+  assert.equal(walk.length, live.filter((c) => c.deck !== 'super').length, 'null only once every live card was shown in the quiz, bar the challenge cards (plan 34: their bubble offers them)');
   assert.equal(pickCard({ context: 'browse', segment: 'stomach', srs, now: NOW }).reason, 'practice', 'a card with a record is practice (nothing is saved anyway)');
 });
 

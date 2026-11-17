@@ -6,7 +6,9 @@
 //   id       permanent ('ST-01'): scheduler state, audits and logged answers key
 //            on it, so a card is never renumbered or reused; a wrong card is
 //            retired, not deleted
-//   deck     a LEVELS key (the gut segment whose level introduces it) or 'general'
+//   deck     a LEVELS key (the gut segment whose level introduces it), 'general', or 'super' (plan 34:
+//            the challenge questions, harder than level 7 and any topic, offered only by the challenge
+//            question bubble; once met they come back like any due card)
 //   q        the question; answer the right option; wrong the two wrong ones
 //            (common misconceptions where possible; shuffled at display time)
 //   explain  shown after the answer: one or two sentences, at most 30 words
@@ -28,8 +30,11 @@
 
 import { LEVELS } from './config.js';
 
-/** The decks, in level order, then the general deck. */
-export const DECKS = [...LEVELS.map((l) => l.key), 'general'];
+/** The level decks, in level order: the gut segments (a level break offers its own deck's new cards). */
+export const LEVEL_DECKS = LEVELS.map((l) => l.key);
+
+/** The decks: the level decks, then the general deck, then the challenge questions (plan 34). */
+export const DECKS = [...LEVEL_DECKS, 'general', 'super'];
 
 /** Every card, live and retired, in bank order (deck by deck). */
 export const CARDS = [
@@ -110,6 +115,29 @@ export const CARDS = [
   { id: 'RE-08', deck: 'rectum', q: "Around what age does a child's gut microbiome become adult-like?", answer: 'About 3 years', wrong: ['About 3 months', 'About 30 years'], explain: 'Gut communities change fast in infancy and settle into an adult-like state by about age three.', refs: [51], zh: { q: '孩子的肠道微生物组大约几岁变得像成人？', answer: '约 3 岁', wrong: ['约 3 个月', '约 30 岁'], explain: '肠道菌群在婴儿期变化很快，大约三岁时稳定成接近成人的状态。' } },
   { id: 'RE-09', deck: 'general', q: "How similar are two healthy people's gut microbiomes?", answer: "Quite different; each person's is unique", wrong: ['Identical', 'Identical within the same country'], explain: 'Healthy people differ widely in which species they carry, even when their microbes do similar jobs.', refs: [9], zh: { q: '两个健康人的肠道微生物组有多相似？', answer: '差别很大，每个人都独一无二', wrong: ['完全一样', '同一个国家的人完全一样'], explain: '健康的人携带的物种差别很大，即使他们的微生物做着相似的工作。' } },
   { id: 'RE-10', deck: 'rectum', q: "How long do most bacterial strains stay in an adult's gut?", answer: 'Years, often decades', wrong: ['A few days', 'A few weeks'], explain: 'A 2013 study found most strains stayed over five years and projected many would last decades.', refs: [52], zh: { q: '大多数细菌菌株在成年人肠道里能待多久？', answer: '好几年，常常几十年', wrong: ['几天', '几周'], explain: '2013 年的一项研究发现，大多数菌株在五年间一直都在，并推测许多会持续几十年。' } },
+  // SQ: the challenge questions (plan 34), harder than level 7, any topic; drafted 17 Nov 2026 for Michael's
+  // review (.claude/plans/34-super-cards-review.md), each on a reference the bank already cites.
+  { id: 'SQ-01', deck: 'super', q: 'How does the colon keep its lining almost oxygen-free?', answer: 'Its cells burn butyrate, using up the oxygen', wrong: ['Bacteria pump the oxygen out', 'The mucus blocks every gas'], explain: 'Colon cells break down butyrate with oxygen, so little oxygen reaches the gut contents, which favours bacteria that cannot tolerate it.', refs: [38], zh: { q: '结肠是怎样让肠壁附近几乎没有氧气的？', answer: '肠壁细胞燃烧丁酸，把氧气用掉', wrong: ['细菌把氧气抽出去', '黏液挡住所有气体'], explain: '结肠细胞用氧气分解丁酸，所以很少有氧气进入肠道内容物，这有利于不耐氧的细菌。' } },
+  { id: 'SQ-02', deck: 'super', q: "Who turns the liver's bile acids into secondary bile acids?", answer: 'A small group of colon bacteria', wrong: ['The liver itself', 'The gallbladder'], explain: 'Only a few colon bacteria, such as Clostridium scindens, can remove the chemical group that turns a primary bile acid into a secondary one.', refs: [23], zh: { q: '谁把肝脏分泌的胆汁酸变成次级胆汁酸？', answer: '少数几种结肠细菌', wrong: ['肝脏自己', '胆囊'], explain: '只有少数结肠细菌（例如 Clostridium scindens）能去掉那个化学基团，把初级胆汁酸变成次级胆汁酸。' } },
+  { id: 'SQ-03', deck: 'super', q: 'What is a prophage?', answer: "A virus's DNA resting inside a bacterium's genome", wrong: ['A bacterium that eats viruses', 'An immune cell that hunts viruses'], explain: 'Temperate phages can insert their DNA into a bacterium and be copied with it at every division, until something triggers them to burst out.', refs: [20], zh: { q: '什么是原噬菌体？', answer: '潜伏在细菌基因组里的病毒 DNA', wrong: ['吃病毒的细菌', '追杀病毒的免疫细胞'], explain: '温和噬菌体能把自己的 DNA 插入细菌，跟着细菌每次分裂一起被复制，直到某个信号让它们破菌而出。' } },
+  { id: 'SQ-04', deck: 'super', q: 'How do methane-making archaea help gut bacteria ferment?', answer: 'They use up the hydrogen bacteria make', wrong: ['They supply oxygen', 'They break down mucus'], explain: 'Hydrogen slows fermentation as it builds up. Methanobrevibacter smithii turns it into methane, so the bacteria keep fermenting.', refs: [19], zh: { q: '产甲烷的古菌怎样帮助肠道细菌发酵？', answer: '它们把细菌产生的氢气用掉', wrong: ['它们提供氧气', '它们分解黏液'], explain: '氢气积累会让发酵变慢。史氏甲烷短杆菌把氢气变成甲烷，细菌就能继续发酵。' } },
+  { id: 'SQ-05', deck: 'super', q: "About how much IgA antibody does an adult's gut release each day?", answer: 'A few grams', wrong: ['A few micrograms', 'A few kilograms'], explain: 'The gut lining makes more IgA than all other antibodies combined, about three grams a day, coating microbes in the gut.', refs: [26], zh: { q: '成年人的肠道每天大约分泌多少 IgA 抗体？', answer: '几克', wrong: ['几微克', '几千克'], explain: '肠壁产生的 IgA 比其他所有抗体加起来还多，每天约三克，用来包裹肠道里的微生物。' } },
+  { id: 'SQ-06', deck: 'super', q: 'Where does most of the propionate made by gut bacteria go?', answer: 'To the liver', wrong: ['To the brain', 'To the lungs'], explain: 'Colon cells use most butyrate, the liver takes up most propionate, and acetate travels on in the blood to the rest of the body.', refs: [30], zh: { q: '肠道细菌产生的丙酸大多去了哪里？', answer: '肝脏', wrong: ['大脑', '肺'], explain: '丁酸大多被结肠细胞用掉，丙酸大多被肝脏吸收，乙酸则随血液流到全身。' } },
+  { id: 'SQ-07', deck: 'super', q: "Which molecule builds the colon's two mucus layers?", answer: 'MUC2 mucin', wrong: ['Keratin', 'Collagen'], explain: 'Goblet cells release MUC2, which forms a dense inner layer that bacteria cannot enter and a loose outer layer where they live.', refs: [17], zh: { q: '结肠的两层黏液是由哪种分子构成的？', answer: 'MUC2 黏蛋白', wrong: ['角蛋白', '胶原蛋白'], explain: '杯状细胞分泌 MUC2，形成细菌进不去的致密内层，以及细菌居住的疏松外层。' } },
+  { id: 'SQ-08', deck: 'super', q: 'Most gut bacteria that use vitamin B12 get it how?', answer: 'From the few species that can make it', wrong: ['They all make their own', 'From stomach acid'], explain: 'Many gut bacteria have enzymes that need B12, but only a minority can make it, so it is shared, and competed for, across the community.', refs: [28], zh: { q: '大多数需要维生素 B12 的肠道细菌是怎样得到它的？', answer: '从少数能制造它的菌种那里', wrong: ['它们都自己制造', '从胃酸里'], explain: '许多肠道细菌的酶需要 B12，但只有少数能制造它，所以整个群落都在分享和争夺它。' } },
+  { id: 'SQ-09', deck: 'super', q: 'In a 2014 study, an all-animal diet boosted which gut bacteria?', answer: 'Bile-tolerant ones such as Bilophila', wrong: ['Fibre fermenters such as Roseburia', 'Soil bacteria that need oxygen'], explain: 'Within days, a meat-and-cheese diet raised bile-tolerant microbes such as Bilophila and lowered bacteria that ferment plant fibre.', refs: [44], zh: { q: '2014 年的一项研究中，全动物性饮食让哪类肠道细菌增多？', answer: '耐胆汁的细菌，如 Bilophila', wrong: ['发酵膳食纤维的细菌，如 Roseburia', '需要氧气的土壤细菌'], explain: '几天之内，以肉和奶酪为主的饮食就让 Bilophila 等耐胆汁微生物增多，让发酵植物纤维的细菌减少。' } },
+  { id: 'SQ-10', deck: 'super', q: 'Compared with US adults, adults in rural Malawi and Venezuela had gut microbiomes that were what?', answer: 'More diverse', wrong: ['Less diverse', 'Identical'], explain: 'A 2012 study of three countries found that US adults had the least diverse gut communities.', refs: [51], zh: { q: '与美国成年人相比，马拉维农村和委内瑞拉的成年人的肠道微生物组怎样？', answer: '更多样', wrong: ['更单一', '完全一样'], explain: '2012 年一项比较三个国家的研究发现，美国成年人的肠道菌群多样性最低。' } },
+  { id: 'SQ-11', deck: 'super', q: "Which cells over Peyer's patches grab gut microbes for the immune system?", answer: 'M cells', wrong: ['Red blood cells', 'Goblet cells'], explain: "M cells carry microbes and particles across the gut lining to immune cells waiting underneath in the Peyer's patch.", refs: [25], zh: { q: '派尔集合淋巴结上方的哪种细胞会从肠道抓取微生物，交给免疫系统？', answer: 'M 细胞', wrong: ['红细胞', '杯状细胞'], explain: 'M 细胞把微生物和颗粒运过肠壁，交给在派尔集合淋巴结里等着的免疫细胞。' } },
+  { id: 'SQ-12', deck: 'super', q: 'In the Human Microbiome Project, what varied less between healthy people?', answer: "The microbes' metabolic pathways", wrong: ['The species present', 'Neither varied'], explain: 'People carried very different species, but the jobs those microbes could do, their metabolic pathways, stayed much the same.', refs: [9], zh: { q: '在人类微生物组计划中，健康人之间哪一方面差异较小？', answer: '微生物的代谢途径', wrong: ['存在的物种', '两者都没有差异'], explain: '每个人携带的物种差别很大，但这些微生物能做的工作，也就是代谢途径，却大致相同。' } },
+  { id: 'SQ-13', deck: 'super', q: 'Unlike rabbits, where do cows ferment plants?', answer: 'In the rumen, before the true stomach', wrong: ['In the caecum, after the small intestine', 'In the mouth, while chewing'], explain: 'Cows are foregut fermenters: microbes in the rumen break down plants before food reaches the acid stomach and small intestine.', refs: [32], zh: { q: '和兔子不同，牛在哪里发酵植物？', answer: '在瘤胃里，位于真胃之前', wrong: ['在盲肠里，位于小肠之后', '在嘴里，一边嚼一边发酵'], explain: '牛是前肠发酵动物：食物到达酸性的胃和小肠之前，瘤胃里的微生物就先把植物分解了。' } },
+  { id: 'SQ-14', deck: 'super', q: 'Mice raised with no microbes at all have what kind of gut immune system?', answer: 'Underdeveloped', wrong: ['Overactive and larger', 'Exactly normal'], explain: 'Germ-free mice grow up with an underdeveloped gut immune system; gut microbes help it mature.', refs: [27], zh: { q: '在完全没有微生物的环境里长大的小鼠，肠道免疫系统是什么样的？', answer: '发育不全', wrong: ['过度活跃而且更大', '完全正常'], explain: '无菌小鼠的肠道免疫系统发育不全；肠道微生物帮助免疫系统成熟。' } },
+  { id: 'SQ-15', deck: 'super', q: 'How does H. pylori reach the safer zone by the stomach wall?', answer: 'It swims through the mucus with its flagella', wrong: ['It rides in on stomach acid', 'Red blood cells carry it there'], explain: 'Its spiral shape and whip-like flagella let H. pylori drill through thick mucus to the less acidic layer by the stomach lining.', refs: [4], zh: { q: '幽门螺杆菌怎样到达胃壁旁比较安全的地方？', answer: '用鞭毛在黏液里游过去', wrong: ['搭着胃酸进去', '由红细胞带过去'], explain: '幽门螺杆菌的螺旋形身体和鞭子一样的鞭毛，让它能钻过厚厚的黏液，到达胃壁旁酸性较弱的一层。' } },
+  { id: 'SQ-16', deck: 'super', q: 'People took two courses of the same antibiotic. How did their gut communities respond?', answer: 'Differently in each person, and not fully back', wrong: ['The same in everyone, then fully back', 'Not at all'], explain: 'After each course of ciprofloxacin, communities shifted within days; how they shifted varied by person, and after the second course they did not fully return.', refs: [43], zh: { q: '人们服用了两个疗程的同一种抗生素，他们的肠道菌群有什么反应？', answer: '每个人都不一样，而且没有完全恢复', wrong: ['每个人都一样，之后完全恢复', '完全没有变化'], explain: '每个疗程的环丙沙星都让菌群在几天内改变；变化因人而异，第二个疗程后也没有完全恢复。' } },
+  { id: 'SQ-17', deck: 'super', q: "Why were DNA surveys needed to map the gut's microbes?", answer: 'Many gut microbes are hard to grow in a lab', wrong: ['Microscopes cannot see bacteria', 'Gut microbes die in daylight'], explain: 'Many gut microbes refuse to grow on lab dishes, so reading their DNA, such as their 16S rRNA genes, revealed species no one had grown.', refs: [7], zh: { q: '为什么需要用 DNA 调查来摸清肠道里的微生物？', answer: '许多肠道微生物很难在实验室里培养', wrong: ['显微镜看不到细菌', '肠道微生物见光就死'], explain: '许多肠道微生物在培养皿上长不出来，所以要读取它们的 DNA（例如 16S rRNA 基因），才能发现从没被培养过的物种。' } },
+  { id: 'SQ-18', deck: 'super', q: 'A 2019 study tracked strains along the gut. What did it find about mouth bacteria?', answer: 'Many travel down and settle in the gut', wrong: ['None survive past the stomach', "Only babies' reach the gut"], explain: 'Matching strains in saliva and stool showed that oral bacteria often pass the stomach and settle in the gut of healthy adults.', refs: [6], zh: { q: '2019 年一项研究追踪了消化道里的菌株，关于口腔细菌发现了什么？', answer: '许多会往下走，并在肠道里定居', wrong: ['没有一种能活过胃', '只有婴儿的能到达肠道'], explain: '比对唾液和粪便里的菌株发现，健康成年人的口腔细菌常常穿过胃，在肠道里住下来。' } },
+  { id: 'SQ-19', deck: 'super', q: 'Compared with when they were babies, most adults worldwide make how much lactase?', answer: 'Much less', wrong: ['Much more', 'The same'], explain: 'About two in three adults worldwide lose most of their lactase after weaning; groups with a long history of dairy farming more often keep it.', refs: [16], zh: { q: '和婴儿时期相比，世界上大多数成年人产生的乳糖酶有多少？', answer: '少得多', wrong: ['多得多', '一样多'], explain: '全世界约三分之二的成年人在断奶后失去大部分乳糖酶；有长期养奶牛历史的人群更常保留它。' } },
+  { id: 'SQ-20', deck: 'super', q: "About how many bacterial species does one person's gut hold, by a 2010 estimate?", answer: 'At least 160', wrong: ['About 16', 'About 16,000'], explain: 'Sequencing stool from 124 Europeans found each person carried at least 160 bacterial species, out of about 1,000 common across everyone.', refs: [18], zh: { q: '根据 2010 年的估计，一个人的肠道里大约有多少种细菌？', answer: '至少 160 种', wrong: ['大约 16 种', '大约 1.6 万种'], explain: '对 124 名欧洲人的粪便测序发现，每人至少有 160 种细菌，而所有人共有的常见细菌约有 1000 种。' } },
+  { id: 'SQ-21', deck: 'super', q: 'Which of these is a classic prebiotic?', answer: 'Inulin, a fibre in chicory root', wrong: ['Vitamin C', 'Table salt'], explain: 'Inulin-type fibres and galacto-oligosaccharides are well-established prebiotics: we cannot digest them, but some gut bacteria use them selectively.', refs: [34], zh: { q: '下面哪一种是经典的益生元？', answer: '菊粉，一种存在于菊苣根里的膳食纤维', wrong: ['维生素 C', '食盐'], explain: '菊粉类纤维和低聚半乳糖是公认的益生元：我们无法消化它们，但某些肠道细菌会有选择地利用它们。' } },
 ];
 
 /** The bank's sources, by number (a card's refs). Cited from memory on 2026-11-11 and not yet re-read: an audit checks the citation along with the claim. */
@@ -246,6 +274,27 @@ export const CARD_LINKS = {
   'RE-08': [{ term: 'Gut communities', title: 'Gut microbiota' }, { term: 'infancy', title: 'Infant' }],
   'RE-09': [{ term: 'differ widely', title: 'Beta diversity' }, { term: 'similar jobs', title: 'Functional equivalence (ecology)' }],
   'RE-10': [{ term: 'strains', title: 'Strain (biology)' }],
+  'SQ-01': [{ term: 'Colon cells', title: 'Intestinal epithelium' }, { term: 'butyrate', title: 'Butyric acid' }],
+  'SQ-02': [{ term: 'Clostridium scindens', title: 'Clostridium scindens' }, { term: 'primary bile acid', title: 'Bile acid' }],
+  'SQ-03': [{ term: 'Temperate phages', title: 'Lysogenic cycle' }],
+  'SQ-04': [{ term: 'fermentation', title: 'Fermentation' }, { term: 'Methanobrevibacter smithii', title: 'Methanobrevibacter smithii' }],
+  'SQ-05': [{ term: 'IgA', title: 'Immunoglobulin A' }],
+  'SQ-06': [{ term: 'propionate', title: 'Propionic acid' }, { term: 'acetate', title: 'Acetate' }],
+  'SQ-07': [{ term: 'Goblet cells', title: 'Goblet cell' }, { term: 'MUC2', title: 'Mucin 2' }],
+  'SQ-08': [{ term: 'B12', title: 'Vitamin B12' }],
+  'SQ-09': [{ term: 'Bilophila', title: 'Bilophila wadsworthia' }, { term: 'plant fibre', title: 'Dietary fiber' }],
+  'SQ-10': [{ term: 'least diverse', title: 'Biodiversity' }, { term: 'gut communities', title: 'Gut microbiota' }],
+  'SQ-11': [{ term: 'M cells', title: 'Microfold cell' }, { term: "Peyer's patch", title: "Peyer's patch" }],
+  'SQ-12': [{ term: 'metabolic pathways', title: 'Metabolic pathway' }],
+  'SQ-13': [{ term: 'foregut fermenters', title: 'Foregut fermentation' }, { term: 'rumen', title: 'Rumen' }],
+  'SQ-14': [{ term: 'Germ-free mice', title: 'Germ-free animal' }],
+  'SQ-15': [{ term: 'flagella', title: 'Flagellum' }, { term: 'H. pylori', title: 'Helicobacter pylori' }],
+  'SQ-16': [{ term: 'ciprofloxacin', title: 'Ciprofloxacin' }],
+  'SQ-17': [{ term: '16S rRNA genes', title: '16S ribosomal RNA' }],
+  'SQ-18': [{ term: 'saliva', title: 'Saliva' }, { term: 'oral bacteria', title: 'Oral microbiology' }],
+  'SQ-19': [{ term: 'lactase', title: 'Lactase' }, { term: 'weaning', title: 'Weaning' }],
+  'SQ-20': [{ term: 'Sequencing stool', title: 'Metagenomics' }],
+  'SQ-21': [{ term: 'Inulin-type fibres', title: 'Inulin' }, { term: 'galacto-oligosaccharides', title: 'Galactooligosaccharide' }],
 };
 
 /**

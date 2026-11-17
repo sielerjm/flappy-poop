@@ -17,8 +17,8 @@ const MIN_LIVE_PER_LEVEL_DECK = 5;
 const live = CARDS.filter((c) => !c.retired);
 const words = (s) => s.trim().split(/\s+/).length;
 
-test('decks: one per level, in level order, then general', () => {
-  assert.deepEqual(DECKS, [...LEVELS.map((l) => l.key), 'general']);
+test('decks: one per level, in level order, then general, then the challenge questions (plan 34)', () => {
+  assert.deepEqual(DECKS, [...LEVELS.map((l) => l.key), 'general', 'super']);
 });
 
 test('every card has a permanent-looking id, unique, and a known deck', () => {
@@ -104,7 +104,7 @@ test('every card cites a reference that exists, and every reference is cited', (
 test('every level deck keeps enough live cards for a level break; the general deck is not empty', () => {
   for (const deck of DECKS) {
     const n = live.filter((c) => c.deck === deck).length;
-    if (deck === 'general') assert.ok(n > 0, 'the general deck is empty');
+    if (deck === 'general' || deck === 'super') assert.ok(n > 0, `the ${deck} deck is empty`);
     else assert.ok(n >= MIN_LIVE_PER_LEVEL_DECK, `${deck}: ${n} live cards < ${MIN_LIVE_PER_LEVEL_DECK}`);
   }
 });
