@@ -11,6 +11,12 @@
 - [Phaser](https://phaser.io) 4.2.1 — © Phaser Studio Inc. MIT License.
   https://github.com/phaserjs/phaser
 
+## Online play
+
+- [supabase-js](https://github.com/supabase/supabase-js) 2.119.0 — Copyright (c) 2020
+  Supabase. MIT License (its full text is in `assets/vendor/supabase.LICENSE.txt`).
+  Vendored as `assets/vendor/supabase.js` and loaded only for online play.
+
 ## Review scheduler
 
 - Education mode schedules its cards with **FSRS-6**, the Free Spaced Repetition

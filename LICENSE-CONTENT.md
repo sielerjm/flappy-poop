@@ -32,6 +32,8 @@ above. Ask before using them.
 These keep their own terms, listed in [`CREDITS.md`](CREDITS.md):
 
 - [Phaser](https://phaser.io), loaded from a CDN: MIT License.
+- [supabase-js](https://github.com/supabase/supabase-js) in `assets/vendor/supabase.js`, for online
+  play only: MIT License (`assets/vendor/supabase.LICENSE.txt`).
 - The FSRS scheduler in [`src/fsrs.js`](src/fsrs.js), ported from py-fsrs: MIT License (its
   full text is in that file's header).
 - The sound effects in `assets/sfx/`: the Pixabay Content License.

@@ -339,8 +339,10 @@
       w.addEventListener('error', function (e) {
         var el = e.target;
         if (el && el !== w) {
-          // One of ours: before the game, the failed splash; after it, the card.
-          if (el !== local && el.tagName === 'SCRIPT' && el.src && el.src.indexOf(origin) === 0) {
+          // One of ours: before the game, the failed splash; after it, the card. A script marked
+          // data-own-error (the online client, src/supabaseLoader.js) reports its own failure.
+          var own = el.hasAttribute && el.hasAttribute('data-own-error');
+          if (el !== local && !own && el.tagName === 'SCRIPT' && el.src && el.src.indexOf(origin) === 0) {
             if (B.card) B.report('could not load ' + el.src, false);
             else B.fail('could not load ' + el.src);
           }

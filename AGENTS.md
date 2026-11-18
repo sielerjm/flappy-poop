@@ -823,7 +823,7 @@ Still to come (plan 21): the privacy foundation (delete account, export, the age
 privacy notice), the public release (audited cards only), the research beta and the study.
 
 It is deliberately small: plain ES modules, no bundler, no runtime npm
-dependencies (one devDependency for the schema tests), Phaser 4 loaded from a CDN (with a vendored fallback), deployed to GitHub Pages straight from
+dependencies (one devDependency for the schema tests), Phaser 4 loaded from a CDN (with a vendored fallback), the Supabase client vendored and loaded only for online play (plan 39), deployed to GitHub Pages straight from
 `main`. Keep it that way unless the game clearly outgrows it.
 
 - Repo: `github.com/sielerjm/flappy-poop` (the pre-2026 "joke version" that used
@@ -846,7 +846,9 @@ index.html                  Entry page. Viewport/touch CSS; the loading splash's
                             measured against the ring by tests/html.test.js); first of all an
                             inline trap (window.__flappyBoot: the last uncaught error, the
                             Phaser loader, an inline import() of src/splash.js; plan 35,
-                            1.1 and 1.2; run in Node by tests/support/bootTrap.js), then an
+                            1.1 and 1.2; run in Node by tests/support/bootTrap.js; a script
+                            marked data-own-error, the online client's, reports its own load
+                            failure, so the trap shows no card for it), then an
                             async <script> for Phaser from jsDelivr (after 6 s or on error
                             the trap loads assets/vendor/phaser.min.js instead; neither:
                             the splash says it could not load), then
@@ -870,12 +872,25 @@ CONTRIBUTING.md             Reports welcome; outside code, art or card changes n
 assets/vendor/
   phaser.min.js             The vendored copy of Phaser 4.2.1, the same build as the CDN tag;
                             loaded only when the CDN fails or stalls. Bump it with the tag.
+  supabase.js               @supabase/supabase-js 2.119.0's official UMD browser bundle
+                            (dist/umd/supabase.js, byte for byte; 219,856 bytes, 56 KB
+                            gzipped; sets the global `supabase`). Loaded only by
+                            src/supabaseLoader.js, on entering online play (🌐); never at
+                            boot, no CDN copy. Plan 39, 0.2.
+  supabase.LICENSE.txt      Its MIT notice, from the same package.
 
 src/
   phaserReady.js            `await globalThis.__flappyBoot?.phaser`: main.js and every scene
                             import it first, so no `extends Phaser.Scene` or `new Phaser.Game`
                             runs before Phaser exists (a module waits on its imports' top-level
                             await). In Node it resolves at once. tests/phaserFallback.test.js.
+  supabaseLoader.js         loadSupabase(): appends one <script data-own-error> for
+                            assets/vendor/supabase.js?v=<SUPABASE_JS_VERSION> on the first
+                            call and resolves with window.supabase; an error, a stall (15 s)
+                            or a file with no createClient rejects with messageKey
+                            onlineLoadFailed, removes the tag and lets the next call retry.
+                            Only src/onlineNet.js (plan 39, 1.4) may call it.
+                            tests/supabaseLoader.test.js pins the version and the file's hash.
   main.js                   new Phaser.Game(...): fieldWidth(window) x 1280 logical
                             field (720 on a phone, wider on desktop), Scale.FIT,
                             a debounced window resize (a phone rotation too) →
@@ -3186,6 +3201,10 @@ tools/
                             in a frame shows the card, mid-run pausing the run first; Keep
                             playing restarts a stopped loop; the bug form carries the error
                             with no links; a rejection while the loop runs is only kept).
+                            Plan 39's online-client: nothing of assets/vendor/supabase.js
+                            asked for since the boot; blocked, loadSupabase() rejects with
+                            onlineLoadFailed and no card; unblocked, one same-origin request
+                            at the pin gives supabase.createClient.
                             Zero dependencies (fetch + WebSocket).
 
 docs/                       Living specs kept with the code: save-code-spec.md (the
@@ -3237,7 +3256,10 @@ Claude outputs/             Michael's private hand-over notes (gitignored; never
    fails or stalls. Bump both together (the tag, the file, the `?v=` on its URL);
    `tests/phaserFallback.test.js` checks both are the same exact version and that
    `tests/html.test.js`'s one-tag pin holds. Phaser is a global (`Phaser.Scene`, `Phaser.Game`), not an
-   import.
+   import. The online client (plan 39) is pinned too and lazy: `assets/vendor/supabase.js` is the
+   official UMD bundle of `@supabase/supabase-js` at `SUPABASE_JS_VERSION` (`src/supabaseLoader.js`),
+   byte for byte; bump the constant, the file and the hash in `tests/supabaseLoader.test.js`
+   together. Nothing at boot names it, it has no CDN copy, and only `src/onlineNet.js` loads it.
 5. **No build step, no runtime dependencies.** The site is served as-is from the repo
    root by GitHub Pages. Don't add a bundler, TypeScript, or npm packages without
    a strong reason; if you do, the deploy story has to change too. The one

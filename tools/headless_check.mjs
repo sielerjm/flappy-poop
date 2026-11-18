@@ -87,6 +87,7 @@ export const SECTIONS = [
   { name: 'education-superq', needs: [], about: "❓ the challenge question (plan 34): the bubble on its pair in a 📚 run, the pairs either side opening at the same height and holding still, its size and float; flown past it opens anyway; the run held under the offer (no banner, tray or \"?\"; P and a hidden page do nothing); taps and Space locked for a moment; Decline flies on with a grace and saves nothing; Try's card cannot be left until answered; right pays 8 + 2 × level and saves the card as reviewed; wrong takes 5 and saves it as missed, holding Fly on; neither counts in the run's tally; round 2: the offer its own square card (sentence above the buttons, no tally), the ring and a fresh Space on Try it, a held Space nothing (AUD-068); the bubble's pop and no book sound on the offer" },
   { name: 'phaser-fallback', needs: [], about: "Phaser's fallback (plan 35, 1.2): the page reloaded with the CDN blocked, then stalled, boots from assets/vendor/ (the stall after the 6 s wait); with both copies blocked the splash reads Couldn't load. Tap to retry, and the tap reloads; without src/splash.js too, the bare ↻; then back on the CDN" },
   { name: 'error-card', needs: [], about: "the error card (plan 35, 1.1): an error thrown inside a frame on the ready screen shows the card at once, mid-run pauses the run first; the loop stopped under it, Keep playing tapped at once brings it back with the run still paused; the bug form carries the error with no links; a rejection while the loop runs is only kept" },
+  { name: 'online-client', needs: [], about: "the online client (plan 39, 0.2): the boot and the sections since ask for nothing of assets/vendor/supabase.js; blocked, loadSupabase() rejects with onlineLoadFailed and no error card shows; unblocked, one same-origin request at the pin gives supabase.createClient, and a second call asks for nothing more" },
 ];
 
 /** What a section needs: its own list, or (omitted) every section before it. */
@@ -6965,6 +6966,46 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         exceptions.splice(ex0);
         await evaluate(`(() => { const r = document.getElementById('error-card'); if (r && !r.hidden) document.getElementById('error-card-keep').click(); ${P}.scene.restart(); return true; })()`).catch(() => {});
         await waitFor(`${P}.state === 'ready'`, 60);
+      }
+    });
+
+    await section('online-client', async () => {
+      // The online client (plan 39, 0.2): assets/vendor/supabase.js loads only when src/supabaseLoader.js
+      // asks (on entering 🌐, from 1.4); the page's boot (it last loaded in phaser-fallback, or at the start
+      // under --only) and every section since asked for nothing of it. Blocked,
+      // the load rejects with onlineLoadFailed and the boot trap shows no error card; unblocked, one request
+      // to this origin at the pin gives supabase.createClient. No client is created (no network).
+      await cdp.send('Network.enable');
+      const block = (extra = []) => cdp.send('Network.setBlockedURLs', { urls: ['*supabase.co*', ...extra] });
+      const asked = () => evaluate(`performance.getEntriesByType('resource').map((e) => e.name).filter((n) => n.includes('vendor/supabase'))`);
+      const before = await asked();
+      const seen = await evaluate(`performance.getEntriesByType('resource').length`);
+      ok(before.length === 0 && seen < 250 && (await evaluate(`typeof supabase === 'undefined'`)),
+        `the boot and the sections since asked for nothing of the client (${JSON.stringify({ before, seen })}; under the 250-entry timing buffer)`);
+      const loadIt = `import('./src/supabaseLoader.js').then((m) => m.loadSupabase()).then((lib) => ({ ok: typeof lib.createClient === 'function' }), (e) => ({ key: e.messageKey, why: e.message }))`;
+      const ex0 = exceptions.length;
+      const count0 = await evaluate(`__flappyBoot.count`);
+      try {
+        await block(['*assets/vendor/supabase.js*']);
+        const blocked = await evaluate(loadIt);
+        const card = await evaluate(`document.getElementById('error-card')?.hidden === false`);
+        const count1 = await evaluate(`__flappyBoot.count`);
+        ok(blocked.key === 'onlineLoadFailed' && /could not load/.test(blocked.why) && !card && count1 === count0,
+          `blocked: the load rejects with onlineLoadFailed, no error card, nothing reported (${JSON.stringify({ ...blocked, card, reported: count1 - count0 })})`);
+        await block();
+        const loaded = await evaluate(loadIt);
+        const pin = await evaluate(`import('./src/supabaseLoader.js').then((m) => m.SUPABASE_JS_VERSION)`);
+        const names = (await asked()).filter((n) => !before.includes(n));
+        const fromHere = names.every((n) => n.startsWith(`${url}/assets/vendor/supabase.js?v=${pin}`));
+        ok(loaded.ok && names.length >= 1 && fromHere && (await evaluate(`typeof supabase.createClient === 'function'`)),
+          `unblocked: supabase-js ${pin} from this origin's assets/vendor/, createClient there (${JSON.stringify({ ...loaded, names })})`);
+        const again = await evaluate(loadIt);
+        const names2 = (await asked()).filter((n) => !before.includes(n));
+        ok(again.ok && names2.length === names.length, `a second call loads nothing more (${names2.length} requests)`);
+        const added = exceptions.slice(ex0);
+        ok(added.length === 0, added.length ? `page exceptions:\n  ${added.join('\n  ')}` : 'no page exceptions');
+      } finally {
+        await block();
       }
     });
 
