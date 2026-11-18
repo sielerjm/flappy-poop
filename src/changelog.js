@@ -9,7 +9,7 @@ import { LOCALES } from './i18n.js';
 export const CHANGELOG = [
   {
     version: '0.24.0',
-    date: '17 Nov 2026',
+    date: '18 Nov 2026',
     notes: {
       en: [
         'Streaks: play on days in a row and a small orange number on the 🌞 (Daily Dump) and the 📚 (learning) shows your streak; the 🌞 card and “Your cards” say it too. Every profile shows the player’s current 🔥 and longest ❤️‍🔥 streaks for Singleplayer and the Daily Dump, counted on every device with their user code and going back to Daily Dumps since 10 Nov and runs since 15 Nov.',
