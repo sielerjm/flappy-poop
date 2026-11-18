@@ -295,16 +295,25 @@
       </div>
     </div>
   </div>
-  <!-- First of all (plan 35, 1.2): Phaser's loader, in window.__flappyBoot. Phaser comes from the CDN tag
-       below; if it errors, or Phaser is still missing after phaserWaitMs (a stalled request never fires
-       onerror), the vendored copy in assets/vendor/ loads instead. The first copy to arrive is kept.
-       src/phaserReady.js holds main.js and every scene until then. If neither copy loads, or one of the
-       game's own scripts cannot load, the splash shows its failed state. -->
+  <!-- First of all (plan 35, 1.1 and 1.2): the error trap and Phaser's loader, in window.__flappyBoot.
+       Errors from the game's own code are kept (the last one in memory only, for a bug report) and shown:
+       on the error card once the game exists (src/ui/errorCard.js), else on the splash's failed state.
+       Phaser comes from the CDN tag below; if it errors, or Phaser is still missing after phaserWaitMs
+       (a stalled request never fires onerror), the vendored copy in assets/vendor/ loads instead. The
+       first copy to arrive is kept. src/phaserReady.js holds main.js and every scene until then. -->
   <script>
     (function (w, d) {
-      var B = (w.__flappyBoot = { last: '', failed: false });
+      var B = (w.__flappyBoot = { last: '', count: 0, failed: false, card: null });
       var origin = w.location.origin;
       var phaserWaitMs = 6000;
+      // The stack alone when it holds the error's own message (Chrome's message reads "Uncaught Error: x"
+      // over a stack that starts "Error: x"); else the message, then any stack.
+      var text = function (msg, err) {
+        var stack = err && err.stack ? String(err.stack) : '';
+        var own = err && err.message ? String(err.message) : '';
+        var m = String(msg || own || err || 'error');
+        return (stack && stack.indexOf(own || m) >= 0 ? stack : m + (stack ? '\n' + stack : '')).slice(0, 2000);
+      };
       // The splash's failed state: src/splash.js's words, or with no module the bare ↻ (index.html's CSS).
       B.fail = function (why) {
         if (B.failed) return;
@@ -319,13 +328,31 @@
         };
         import('./src/splash.js').then(function (m) { if (!m.splashFailed(d, w)) bare(); }, bare);
       };
-      // Capture: a script that fails to load fires on its element, not the window. One of ours fails the
-      // splash; the CDN's Phaser is B.cdn's, the vendored copy's its own onerror's (it runs after this), and
-      // an image or sound is Boot's loader's.
+      // soft: an unhandled rejection, shown only when the game loop has stopped (errorCard decides).
+      B.report = function (t, soft) {
+        B.last = t;
+        B.count += 1;
+        if (B.card) B.card(t, soft);
+        else if (!soft) B.fail(t);
+      };
+      // Capture: a script that fails to load fires on its element, not the window.
       w.addEventListener('error', function (e) {
         var el = e.target;
-        if (el && el !== w && el !== local && el.tagName === 'SCRIPT' && el.src && el.src.indexOf(origin) === 0) B.fail('could not load ' + el.src);
+        if (el && el !== w) {
+          // One of ours: before the game, the failed splash; after it, the card.
+          if (el !== local && el.tagName === 'SCRIPT' && el.src && el.src.indexOf(origin) === 0) {
+            if (B.card) B.report('could not load ' + el.src, false);
+            else B.fail('could not load ' + el.src);
+          }
+          return; // the CDN's Phaser (B.cdn), the vendored copy (its onerror, after this), or an image or sound (Boot's loader)
+        }
+        if (e.filename && e.filename.indexOf(origin) !== 0) return; // an extension, the CDN
+        if (!e.filename && e.message === 'Script error.') return; // cross-origin: no detail to show
+        B.report(text(e.message, e.error), false);
       }, true);
+      w.addEventListener('unhandledrejection', function (e) {
+        B.report(text('', e.reason), true);
+      });
 
       var resolve;
       var kept = null;

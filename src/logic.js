@@ -24,8 +24,14 @@ const ISSUE_BASE = 'https://github.com/sielerjm/flappy-poop/issues/new';
  * game version into its `version` field (the ids in .github/ISSUE_TEMPLATE/education.yml, which replaced
  * card.yml in plan 28). 'education': the same form with nothing filled in (the Education data panel's link).
  */
-export function issueUrl(kind, { cardId = '', version = VERSION } = {}) {
-  if (kind === 'bug') return `${ISSUE_BASE}?template=bug.yml`;
+export function issueUrl(kind, { cardId = '', version = VERSION, error = '' } = {}) {
+  if (kind === 'bug') {
+    // The last error the game caught (plan 35, 1.1), links removed, into the form's `extras` field.
+    const caught = errorReportText(error);
+    if (!caught) return `${ISSUE_BASE}?template=bug.yml`;
+    const extras = `The game's last error (links removed):\n\n\`\`\`\n${caught}\n\`\`\``;
+    return `${ISSUE_BASE}?${new URLSearchParams({ template: 'bug.yml', version: `v${version}`, extras })}`;
+  }
   if (kind === 'feature') return `${ISSUE_BASE}?template=feature.yml`;
   if (kind === 'education') return `${ISSUE_BASE}?template=education.yml`;
   if (kind === 'card') {
@@ -34,6 +40,60 @@ export function issueUrl(kind, { cardId = '', version = VERSION } = {}) {
     return `${ISSUE_BASE}?${query}`;
   }
   throw new Error(`issueUrl: unknown kind ${kind}`);
+}
+
+const LINK_RE = /\b(?:[a-z][a-z0-9+.-]*:\/\/|www\.|blob:|data:)[^\s()'"<>]+/gi;
+const SCRIPT_TAIL_RE = /\/([\w.-]+\.m?js)(?:[?#][^:\s]*)?((?::\d+){0,2})$/;
+
+/**
+ * An error's text for a bug report (plan 35, 1.1; Michael's call: every URL removed, since an invite
+ * link can sit in one). A script's URL in a stack keeps only its file name and line (`Play.js:5613:12`),
+ * so the report still says where; every other link becomes `[link]`, and any `invite=` left over goes
+ * too. Blank lines dropped, trimmed to `max` characters (the issue URL's length).
+ * @param {unknown} text
+ * @param {number} [max]
+ * @returns {string}
+ */
+export function errorReportText(text, max = 600) {
+  const s = String(text ?? '')
+    .replace(LINK_RE, (url) => {
+      const m = SCRIPT_TAIL_RE.exec(url);
+      return m ? m[1] + m[2] : '[link]';
+    })
+    .replace(/[?&#]?invite=[^\s&#]*/gi, '')
+    .split('\n')
+    .map((line) => line.trimEnd())
+    .filter((line) => line.trim() !== '')
+    .join('\n')
+    .trim();
+  return s.length > max ? `${s.slice(0, max - 1)}…` : s;
+}
+
+/**
+ * What the error card says and does (plan 35, 1.1), from the Play scenes that are running
+ * (`{ state, daily }` each: Play's state and whether it holds a Daily Dump attempt). A run is on while
+ * one is playing, respawning or paused; the card then pauses it, and Reload would end it ('run'), or
+ * end today's Daily Dump attempt ('daily', Play.js's reload rule). Otherwise 'menu': the card at once.
+ * @param {{ state?: string, daily?: boolean }[]} plays
+ * @returns {'daily' | 'run' | 'menu'}
+ */
+export function errorCardContext(plays = []) {
+  const live = plays.filter((p) => p && ['playing', 'respawn', 'paused'].includes(p.state));
+  if (live.some((p) => p.daily)) return 'daily';
+  return live.length ? 'run' : 'menu';
+}
+
+/**
+ * Has the game's frame loop stopped? An uncaught error inside a frame ends Phaser's
+ * requestAnimationFrame chain (the next frame is asked for after the step), so the game freezes. A
+ * hidden page has no frames either, so it never counts as stopped. lastStepAt null: no frame yet.
+ * @param {number | null} lastStepAt performance.now() of the last frame
+ * @param {number} now
+ * @param {{ hidden?: boolean, ms?: number }} [options]
+ */
+export function loopStalled(lastStepAt, now, { hidden = false, ms = 1000 } = {}) {
+  if (hidden || lastStepAt == null) return false;
+  return now - lastStepAt > ms;
 }
 
 /**

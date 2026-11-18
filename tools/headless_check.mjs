@@ -86,6 +86,7 @@ export const SECTIONS = [
   { name: 'streaks', needs: [], about: "🔥 day streaks (plan 34): a one-player run counts the local day and a Daily Dump its course day on this device; the 🌞 and 📚 subscripts on the ready screen (the Daily Dump and learning streaks, none at 0); your own profile's 🔥 Current streak and ❤️‍🔥 Longest streak rows under Singleplayer and Daily Dump; Clear empties them; the 🌞 card's and \"Your cards\"' \"🔥 Current streak = n\" lines (round 2); the days from other devices (34.13: a stubbed play_days, asked once, folded in)" },
   { name: 'education-superq', needs: [], about: "❓ the challenge question (plan 34): the bubble on its pair in a 📚 run, the pairs either side opening at the same height and holding still, its size and float; flown past it opens anyway; the run held under the offer (no banner, tray or \"?\"; P and a hidden page do nothing); taps and Space locked for a moment; Decline flies on with a grace and saves nothing; Try's card cannot be left until answered; right pays 8 + 2 × level and saves the card as reviewed; wrong takes 5 and saves it as missed, holding Fly on; neither counts in the run's tally; round 2: the offer its own square card (sentence above the buttons, no tally), the ring and a fresh Space on Try it, a held Space nothing (AUD-068); the bubble's pop and no book sound on the offer" },
   { name: 'phaser-fallback', needs: [], about: "Phaser's fallback (plan 35, 1.2): the page reloaded with the CDN blocked, then stalled, boots from assets/vendor/ (the stall after the 6 s wait); with both copies blocked the splash reads Couldn't load. Tap to retry, and the tap reloads; without src/splash.js too, the bare ↻; then back on the CDN" },
+  { name: 'error-card', needs: [], about: "the error card (plan 35, 1.1): an error thrown inside a frame on the ready screen shows the card at once, mid-run pauses the run first; the loop stopped under it, Keep playing tapped at once brings it back with the run still paused; the bug form carries the error with no links; a rejection while the loop runs is only kept" },
 ];
 
 /** What a section needs: its own list, or (omitted) every section before it. */
@@ -6861,6 +6862,100 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
           st = await playState().catch(() => null);
         }
         ok(back.game && back.version === pin && st === 'ready', `the CDN back: the page boots to Play's ready screen (${JSON.stringify({ ...back, state: st })})`);
+      }
+    });
+
+    await section('error-card', async () => {
+      // The error card (plan 35, 1.1): an error thrown inside a real frame ends Phaser's frame chain; the card
+      // shows at once (the ready screen) or pauses the run first, and Keep playing, tapped well inside a
+      // second, brings the loop back. The bug form carries the error, links removed; a rejection while the
+      // loop runs is only kept. The thrown errors are this section's own page exceptions, taken off the list.
+      const P = `__flappy.scene.getScene('Play')`;
+      const waitFor = async (expr, tries = 40) => {
+        for (let i = 0; i < tries; i += 1) {
+          if ((await evaluate(expr)) === true) return true;
+          await sleep(100);
+        }
+        return false;
+      };
+      const words = await evaluate(`import('./src/i18n.js').then((m) => JSON.stringify(Object.fromEntries(['errorTitle', 'errorBody', 'errorBodyRun', 'errorKeep', 'reloadGame'].map((k) => [k, m.t('en', k)]))))`).then(JSON.parse);
+      const cardNow = () =>
+        evaluate(`JSON.stringify((() => {
+          const r = document.getElementById('error-card');
+          return { up: Boolean(r && !r.hidden), title: r?.querySelector('h2')?.textContent ?? '', body: r?.querySelector('.body')?.textContent ?? '',
+            keep: document.getElementById('error-card-keep')?.textContent ?? '', reload: document.getElementById('error-card-reload')?.textContent ?? '',
+            kb: __flappy.input.keyboard.enabled, state: ${P}.state, last: (globalThis.__flappyBoot?.last ?? '').split('\\n')[0] };
+        })())`).then(JSON.parse);
+      const cardUp = () => waitFor(`document.getElementById('error-card')?.hidden === false`, 20);
+      const throwInFrame = (msg) => evaluate(`(__flappy.events.once('poststep', () => { throw new Error('${msg}'); }), true)`);
+      const frozen = async () => {
+        const a = await frame();
+        await sleep(400);
+        return (await frame()) === a;
+      };
+      // Keep playing about 300 ms after the throw: inside the second a stalled loop needs to count as stopped.
+      const keepQuickly = async () => {
+        await evaluate(`document.getElementById('error-card-keep').click(), true`);
+        await sleep(150);
+        const a = await frame();
+        await sleep(400);
+        return (await frame()) > a;
+      };
+      const ex0 = exceptions.length;
+      try {
+        // 1. The ready screen: the card at once, the menu's words, the loop stopped under it.
+        ok(await waitFor(`${P}.state === 'ready'`), 'on the ready screen');
+        await throwInFrame('smoke: thrown on the ready screen');
+        const up1 = await cardUp();
+        const menu = await cardNow();
+        ok(up1 && menu.title === words.errorTitle && menu.body === words.errorBody && menu.keep === words.errorKeep && menu.reload === words.reloadGame && !menu.kb && menu.last.includes('smoke: thrown on the ready screen'),
+          `an error in a frame on the ready screen: the card with the menu's words, keys off under it (${JSON.stringify(menu)})`);
+        const moving1 = await keepQuickly();
+        const after1 = await cardNow();
+        ok(moving1 && !after1.up && after1.kb && after1.state === 'ready', `Keep playing, tapped at once: the card goes, the loop runs again, keys back (${JSON.stringify({ moving1, ...after1 })})`);
+
+        // 2. A run: paused first, the run's words; the loop stopped, the run still paused after Keep playing.
+        await evaluate(`${P}.flap(), true`);
+        for (let i = 0; i < 20 && (await playState()) !== 'playing'; i += 1) {
+          await evaluate(`${P}.flap(), true`);
+          await sleep(150);
+        }
+        ok((await playState()) === 'playing', 'a run starts');
+        await throwInFrame('smoke: thrown in a run');
+        const up2 = await cardUp();
+        const run = await cardNow();
+        const stopped = await frozen();
+        ok(up2 && run.body === words.errorBodyRun && run.state === 'paused' && !run.kb && stopped, `an error in a frame mid-run: the run paused, the run's words, the loop stopped under the card (${JSON.stringify({ ...run, stopped })})`);
+
+        // The bug form takes it along, links removed (Feedback's bug button, window.open stubbed).
+        const report = await evaluate(`(() => {
+          const was = window.open; let opened = null;
+          window.open = (u) => { opened = u; return {}; };
+          try { __flappy.scene.getScene('Feedback').openIssue('bug'); } finally { window.open = was; }
+          const q = new URL(opened).searchParams;
+          return JSON.stringify({ template: q.get('template'), version: q.get('version'), extras: q.get('extras') });
+        })()`).then(JSON.parse);
+        ok(report.template === 'bug.yml' && /^v\d/.test(report.version) && report.extras?.includes('smoke: thrown in a run') && /phaser\.min\.js:\d+:\d+/.test(report.extras) && !/https?:|localhost|jsdelivr/.test(report.extras),
+          `the bug form carries the error with its script names and no links (${JSON.stringify(report.extras?.split('\n').slice(0, 3))})`);
+
+        const moving2 = await keepQuickly();
+        const after2 = await cardNow();
+        ok(moving2 && !after2.up && after2.kb && after2.state === 'paused', `Keep playing mid-run: the loop runs, the run waits paused under its banner (${JSON.stringify({ moving2, ...after2 })})`);
+        await evaluate(`${P}.resumePlay(), true`);
+        ok(await waitFor(`${P}.state === 'playing'`, 30), 'one tap resumes the run');
+
+        // 3. A rejection while the loop runs: kept for a bug report, no card.
+        await evaluate(`(Promise.reject(new Error('smoke: a rejection')), true)`);
+        await sleep(600);
+        const soft = await cardNow();
+        ok(!soft.up && soft.last.includes('smoke: a rejection') && soft.state === 'playing', `an unhandled rejection with the loop running is only kept (${JSON.stringify(soft)})`);
+
+        const ours = exceptions.slice(ex0);
+        ok(ours.every((e) => e.includes('smoke: ')), `the only page exceptions are the section's own (${ours.length}):\n  ${ours.join('\n  ')}`);
+      } finally {
+        exceptions.splice(ex0);
+        await evaluate(`(() => { const r = document.getElementById('error-card'); if (r && !r.hidden) document.getElementById('error-card-keep').click(); ${P}.scene.restart(); return true; })()`).catch(() => {});
+        await waitFor(`${P}.state === 'ready'`, 60);
       }
     });
 

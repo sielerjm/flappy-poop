@@ -672,6 +672,12 @@ Inspired by Flappy Bird
 | splashPrev | Previous card | 上一张 |
 | splashNext | Next card | 下一张 |
 | splashFailed | Couldn't load. Tap to retry (plan 35: the splash when Phaser or the game's code could not load; the button reloads) | 加载失败，点按重试 |
+| errorTitle | Something broke (plan 35: the error card's title) | 出错了 |
+| errorBody | The game hit an error. Reload it, or keep playing and see if it holds. (outside a run) | 游戏遇到了一个错误。可以刷新游戏，也可以继续玩，看看还行不行。 |
+| errorBodyRun | The game hit an error and paused your run. Reloading ends the run. | 游戏遇到了一个错误，已暂停本局。刷新游戏会结束本局。 |
+| errorBodyDaily | The game hit an error and paused your run. Reloading ends today's Daily Dump attempt. | 游戏遇到了一个错误，已暂停本局。刷新游戏会结束今天的每日一拉。 |
+| errorReport | A bug report (Feedback, key F) takes the error along, links removed. | 提交问题反馈（反馈，按键 F）时会附上这个错误，链接会被去掉。 |
+| errorKeep | Keep playing (the card's second button; the first is reloadGame) | 继续玩 |
 | splashProfile | Your profile shows your stats and achievements. Tap a name on the leaderboard to see theirs. | 你的个人资料会显示数据和成就。在排行榜上点名字，就能看别人的。 |
 | splashEducation | Education mode: gut and microbe quiz cards at level breaks and after a crash. Turn on 📚 at home. (plan 36: quizzes at level breaks and after a crash; 撞到 = crash, the game’s word) | 教育模式：关卡之间和撞到之后回答肠道和微生物问题。在主页打开 📚。 |
 | splashSuperQ | Challenge questions: a ❓ bubble once a level in 📚 runs. Right pays 10 to 22 🌽, wrong costs up to 5. (plan 34: a NEW card on the loading splash, at most 100 characters; plan 36: once a level, 10 to 22) | 挑战题：📚 模式每关一个 ❓ 泡泡。答对得 10 到 22 🌽，答错最多扣 5。 |

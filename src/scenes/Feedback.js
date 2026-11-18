@@ -68,7 +68,9 @@ export class Feedback extends Phaser.Scene {
   }
 
   openIssue(kind) {
-    openExternalUrl(issueUrl(kind));
+    // A bug report takes the last error index.html's trap caught, links removed (plan 35, 1.1).
+    const error = kind === 'bug' ? (globalThis.__flappyBoot?.last ?? '') : '';
+    openExternalUrl(issueUrl(kind, { error }));
   }
 
   close() {

@@ -2,6 +2,7 @@ import './phaserReady.js'; // first: Phaser exists before this module runs (plan
 import { FIELD } from './config.js';
 import { fieldWidth, perfMode, inviteFromSearch, withoutInvite, debugHandleAllowed } from './logic.js';
 import { attachPerfMeter } from './ui/perfMeter.js';
+import { installErrorCard } from './ui/errorCard.js';
 import { Boot } from './scenes/Boot.js';
 import { Play } from './scenes/Play.js';
 import { Over } from './scenes/Over.js';
@@ -73,6 +74,7 @@ globalThis.addEventListener?.('resize', () => {
   }, FIELD.resizeDebounceMs);
 });
 
+installErrorCard(game); // index.html's error trap shows the card from here on (plan 35, 1.1)
 if (perf) attachPerfMeter(game, perf);
 if (invite) game.registry.set('pendingInvite', invite);
 
