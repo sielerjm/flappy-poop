@@ -678,14 +678,19 @@ the loaded code). They count the days played on any device with the save code (3
 "Daily and Singleplayer", "any device"): once per page load, a named device's sync (`pullPlayDays`, after
 `drainDaily`; the registry's `playDaysFor`) asks the server's `play_days` with this device's IANA time zone and folds
 the days in (`streakStore.merge`, `mergeDayStreak`: the run of days in a row ending on the latest day, the best
-never lowered, a day more than one ahead of today left out). The server reads Daily Dump course days from
-`daily_scores` (since 10 Nov 2026) and the run log's Daily rows, and Singleplayer local days from the run log's
-`ended_at` (since 0.19.1, 15 Nov 2026; 90 days kept); so the streaks of players from before 0.24.0 come back too.
-Offline, nothing changes and the next sync asks again. Every profile shows them (34.14, Michael: "Users should be
+never lowered, a day more than one ahead of today left out; the server's `singleBest` is the floor of the
+Singleplayer best, so a Load or a new device shows the Longest everyone sees). The server counts by its own clock
+(`streak_days`, 34.14 and Checkpoint 34c): Daily Dump course days from `daily_scores` alone (since 10 Nov 2026,
+kept; it takes a day only on that day or the next), and a Singleplayer day as the local day of the run's
+`ended_at + clock_offset_ms`, for a row that arrived within 48 hours of it (a row that came later, one with no end
+time and a held run count for no day; the log starts with 0.19.1, 15 Nov 2026, and keeps 90 days). So the streaks
+of players from before 0.24.0 come back too. Offline, nothing changes and the next sync asks again; a merge that
+lands on a later sync forgets `playDaysFor`, so the next sync asks again too. Every profile shows them (34.14, Michael: "Users should be
 able to see everyone's streaks", "Store time zone"): your own from the device store (`Stats.streakView`), another
 player's from `player_stats`' `streaks` (`cleanStreaks`; `day_streak` over `streak_days`, Singleplayer in the time
 zone `play_days` keeps in `player_meta.tz`, its best never below `player_meta.single_best`, which `play_days` keeps past
-the run log's 90 days). A one-player run that is neither education nor test counts the local day it
+the run log's 90 days and raises only in a zone that has stood for a week, `player_meta.tz_at`; `known_tz` takes
+IANA Area/Location names and UTC only; `play_days` writes the row only when something changed). A one-player run that is neither education nor test counts the local day it
 ends on (`recordCareer('single')`, at the game over); a Daily Dump
 counts its course's UTC day once claimed (`countDailyStreak` in `start`; a practice Daily counts nothing). Every
 profile shows 🔥 Current streak and ❤️‍🔥 Longest streak under Singleplayer and under Daily Dump
@@ -2408,10 +2413,13 @@ db/schema.sql               Supabase schema: scores table (player_id = save-code
                             plan 34, 34.13): a player's Daily Dump course days and
                             Singleplayer local days (in the time zone sent), from
                             daily_scores and run_log, by their own id, days only;
-                            34.14: it keeps a known zone in player_meta.tz and the
-                            longest Singleplayer streak in player_meta.single_best,
-                            and player_stats returns everyone's streaks (day_streak,
-                            streak_days, known_tz: internal).
+                            34.14: it keeps a known zone in player_meta.tz (tz_at:
+                            when it changed) and the longest Singleplayer streak in
+                            player_meta.single_best (raised once the zone has stood
+                            a week; sent back as singleBest), and player_stats
+                            returns everyone's streaks (day_streak, streak_days,
+                            known_tz: internal); fold_player keeps either player's
+                            zone and the larger single_best.
                             schema_version()
                             (anon) is the file's stamp: `npm run schema:stamp`
                             after an edit (a test fails on a stale one), `npm run
@@ -2468,7 +2476,15 @@ tests/                      node --test (schema.test.js, pilot.test.js, eduBoard
                             (its key, junk, a refused write), recordCareer and
                             countDailyStreak counting days, signOut clearing it,
                             the profile rows, refreshStreakMarks, the subscripts'
-                            spots inside the 🌞 and 📚 hit boxes
+                            spots inside the 🌞 and 📚 hit boxes; another player's
+                            profile carrying their streaks; a Load clearing them
+  playDays.test.js          The day streaks from the server (plan 34, 34.13, 34.14,
+                            Checkpoint 34c): play_days and player_stats' streaks in
+                            PGlite (the sources, the server's clock and its 48 hours,
+                            time zones, aliases, the 400 cap, tz and single_best, a
+                            zone taken back, no rewrite), fetchPlayDays,
+                            mergeDayStreak, the store's merge with its floor,
+                            Play.pullPlayDays, a late merge asking again
   store.test.js             best-score store incl. throwing/missing storage
   settings.test.js          settings store (incl. hand; a set() storage refused kept
                             for the page load and shared by the stores over it,
