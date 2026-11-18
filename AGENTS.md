@@ -3415,8 +3415,10 @@ Commits follow `type(scope): summary` (`feat`, `fix`, `docs`, `chore`, `test`, `
   Every plan opens with `## Progress (resume here)`: Now / Next / Left / Updated lines
   and a step table with an estimate, start, finish and time taken per sub-task. Update
   it when each sub-task starts and ends and before every stop (checkpoint, hand-off,
-  failure, session end), with times from the clock (`date`), never guessed. Full
-  format: the Conventions in `.claude/plans/ROADMAP.md`.
+  failure, session end), with times from the clock (`date`), never guessed. Each
+  step also gets a tier and a `Route` (model, effort, and whether it runs in the main
+  session or a named agent in `.claude/agents/`). Full format, the tier table and the
+  session rules: the Conventions in `.claude/plans/ROADMAP.md`.
 - An audit of the repo, a zone or a feature → the `audit-repo` skill
   (`.claude/skills/audit-repo/SKILL.md`, local and untracked; example prompts in its
   `examples.md`). It is read-only: reports go to `.claude/audits/<date>/`, fixes only on Michael's word.
