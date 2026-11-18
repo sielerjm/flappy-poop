@@ -25,7 +25,7 @@
 --   * call daily_board(...)        the 🌞 board for a day (names and scores, never ids); a page from p_offset (plan 28)
 --   * call submit_counters(...)    add a batch of runs to the player's lifetime counters (2026-11-11)
 --   * call claim_achievements(...) record achievements the game says the player earned (2026-11-11)
---   * call player_stats(...)       any player's public profile, by id or board name (never ids)
+--   * call player_stats(...)       any player's public profile, by id or board name (never ids); day streaks too (plan 34)
 --   * call board_tags(...)         the 🔧 / 🎖️ / 🆕 tags of the names a board shows (2026-11-12)
 --   * call share_education(...)    put the player on the 📚 education board, by their own choice (2026-11-13); by invitation (plan 28)
 --   * call submit_education_grades(...) add a batch of graded education runs to a sharing player's row
@@ -38,6 +38,8 @@
 --   * call submit_runs(...)        a batch of run summaries, as numbers (plan 30); stored owner-only, 90 days
 --   * call score_board(...)        the 🏆 top list as one player sees it: their own rows at their own best (names, never ids); a page from p_offset (plan 28)
 --   * call schema_version()        which version of this file the database last ran (a stamp of the file; 2026-11-13)
+--   * call play_days(...)          the days the player played, for their day streaks (plan 34): their own id only, days only;
+--                                  keeps the time zone it is sent (never shown) and the longest Singleplayer streak
 -- A player has up to two rows: their best on the toilet and their best off it
 -- (primary key player_id + toilet, since 2026-11-04).
 -- and nothing else: no INSERT / UPDATE / DELETE on the table, and nothing at all
@@ -74,7 +76,7 @@
 -- submit_daily_score / daily_board / submit_counters / claim_achievements /
 -- player_stats / board_tags / share_education / submit_education_grades / rename_education /
 -- unshare_education / education_board / enrol_research / submit_research_events / delete_research /
--- submit_runs / score_board / schema_version;
+-- submit_runs / score_board / schema_version / play_days;
 -- an old client keeps working (same submit_score signature).
 --
 -- Maintenance (SQL editor):
@@ -123,6 +125,11 @@
 --     select * from public.research_retention; select * from public.research_responses;
 --   delete every participant and answer of a phase (the pilot's, before the beta):
 --     select public.admin_purge_phase('pilot');
+--   undo everyone's streaks (plan 34, 34.14): restore player_stats, play_days and fold_player from git
+--     (34.13's) and run this file; then drop function public.day_streak(date[], date),
+--     public.streak_days(text, text, text), public.known_tz(text);
+--     alter table public.player_meta drop column tz, drop column single_best, drop column tz_at.
+--   undo the streak backfill (plan 34, 34.13): drop function public.play_days(text, text);
 --   undo the stamp: drop function public.schema_version();
 --   undo the board pages (plan 28, 5.2): drop function public.score_board(text, int, int),
 --     public.daily_board(text, date, int, int), public.tournament_board(text, int, int),
@@ -778,6 +785,14 @@ alter table public.player_meta add column if not exists edu_invited boolean not 
 -- lookup by name leaves a hidden player out for everyone but the player.
 alter table public.player_meta add column if not exists hidden_at timestamptz;
 alter table public.player_meta add column if not exists hidden_note text check (hidden_note is null or length(hidden_note) <= 200);
+-- Day streaks for every profile (plan 34, 34.14, Michael: "Store time zone"): the IANA time zone the
+-- player's device last sent with play_days (never shown; player_stats counts their Singleplayer days in
+-- it), and the longest Singleplayer streak play_days has seen, kept past the run log's 90 days.
+alter table public.player_meta add column if not exists tz text check (tz is null or length(tz) <= 64);
+alter table public.player_meta add column if not exists single_best int not null default 0 check (single_best >= 0);
+-- When tz last changed (Checkpoint 34c): play_days raises single_best only once the zone has stood for a
+-- week, so a zone sent once and taken back leaves nothing behind.
+alter table public.player_meta add column if not exists tz_at timestamptz;
 alter table public.player_meta enable row level security;
 revoke all on public.player_meta from public, anon, authenticated;
 
@@ -1080,8 +1095,8 @@ begin
   on conflict (player_id, achievement_id) do update
     set earned_at = least(public.player_achievements.earned_at, excluded.earned_at);
   delete from public.player_achievements where player_id = v_merge;
-  insert into public.player_meta (player_id, joined_at, exact, dev, edu_named_at, edu_invited, hidden_at, hidden_note)
-  select v_keep, m.joined_at, m.exact, m.dev, m.edu_named_at, m.edu_invited, m.hidden_at, m.hidden_note from public.player_meta m where m.player_id = v_merge
+  insert into public.player_meta (player_id, joined_at, exact, dev, edu_named_at, edu_invited, hidden_at, hidden_note, tz, single_best, tz_at)
+  select v_keep, m.joined_at, m.exact, m.dev, m.edu_named_at, m.edu_invited, m.hidden_at, m.hidden_note, m.tz, m.single_best, m.tz_at from public.player_meta m where m.player_id = v_merge
   on conflict (player_id) do update
     set exact     = case when excluded.joined_at < public.player_meta.joined_at then excluded.exact else public.player_meta.exact end,
         joined_at = least(public.player_meta.joined_at, excluded.joined_at),
@@ -1089,7 +1104,10 @@ begin
         edu_named_at = greatest(public.player_meta.edu_named_at, excluded.edu_named_at),
         edu_invited = public.player_meta.edu_invited or excluded.edu_invited,
         hidden_at = least(public.player_meta.hidden_at, excluded.hidden_at), -- hidden when either was (plan 30)
-        hidden_note = coalesce(public.player_meta.hidden_note, excluded.hidden_note);
+        hidden_note = coalesce(public.player_meta.hidden_note, excluded.hidden_note),
+        tz = coalesce(public.player_meta.tz, excluded.tz), -- plan 34, 34.14
+        tz_at = case when public.player_meta.tz is not null then public.player_meta.tz_at else excluded.tz_at end,
+        single_best = greatest(public.player_meta.single_best, excluded.single_best);
   delete from public.player_meta where player_id = v_merge;
   update public.scores set hidden = public.player_hidden(v_keep) where player_id = v_keep;
   if exists (select 1 from public.education_public where player_id = v_keep) then
@@ -2518,6 +2536,10 @@ revoke all on public.research_summary, public.research_by_card, public.research_
 --   education    null unless the player shares it (education_public): { grade (their average
 --                in percent to one decimal; null before a graded run), runs, badges
 --                { id: 'YYYY-MM-DD' } }
+--   streaks      plan 34, 34.14 (Michael: "Users should be able to see everyone's streaks"):
+--                { single, daily }, each { now, best } in days (day_streak). Daily: UTC course days.
+--                Single: local days in the player's time zone (player_meta.tz, from play_days; UTC
+--                before their device has sent one), best never below player_meta.single_best.
 create or replace function public.player_stats(p_player_id text default null, p_name text default null)
 returns jsonb
 language plpgsql
@@ -2534,6 +2556,9 @@ declare
   v_tour jsonb;
   v_rival jsonb;
   v_ach jsonb;
+  v_tz text;
+  v_single jsonb;
+  v_streak_daily jsonb;
 begin
   if p_player_id ~ '^[A-Za-z0-9_-]{22}$' then
     v_id := public.resolve_player(p_player_id);
@@ -2597,6 +2622,13 @@ begin
   into v_ach
   from public.player_achievements a where a.player_id = v_id;
 
+  -- Day streaks (plan 34, 34.14).
+  v_tz := coalesce(public.known_tz((select m.tz from public.player_meta m where m.player_id = v_id)), 'UTC');
+  v_single := public.day_streak(public.streak_days(v_id, 'single', v_tz), (now() at time zone v_tz)::date);
+  v_single := jsonb_set(v_single, '{best}', to_jsonb(greatest((v_single ->> 'best')::int,
+                coalesce((select m.single_best from public.player_meta m where m.player_id = v_id), 0))));
+  v_streak_daily := public.day_streak(public.streak_days(v_id, 'daily', 'UTC'), (now() at time zone 'utc')::date);
+
   return jsonb_build_object(
     'found', true,
     'name', v_name,
@@ -2622,7 +2654,8 @@ begin
                     'grade', case when e.runs > 0 then round(e.grade_sum::numeric / e.runs / 100, 1) end,
                     'runs', e.runs,
                     'badges', e.badges)
-                  from public.education_public e where e.player_id = v_id));
+                  from public.education_public e where e.player_id = v_id),
+    'streaks', jsonb_build_object('single', v_single, 'daily', v_streak_daily));
 end;
 $$;
 
@@ -2900,6 +2933,130 @@ begin
 end;
 $$;
 
+-- day_streak (plan 34, 34.14; internal): a day streak from the days played, as src/streak.js counts it
+-- (mergeDayStreak, dayStreakNow): { now, best }. best is the longest run of days in a row; now is the
+-- run ending on the latest day while that day is p_today, the day before or the day after (a clock a
+-- day off), else 0. A day more than one after p_today is a clock error and is left out.
+create or replace function public.day_streak(p_days date[], p_today date)
+returns jsonb
+language sql
+immutable
+as $$
+  with d as (
+    select distinct x as day from unnest(coalesce(p_days, '{}'::date[])) x where x is not null and x <= p_today + 1
+  ), g as (
+    select day, day - (row_number() over (order by day))::int as grp from d
+  ), runs as (
+    select count(*)::int as len, max(day) as last from g group by grp
+  )
+  select jsonb_build_object(
+    'now', coalesce((select r.len from runs r where r.last = (select max(day) from d) and abs(r.last - p_today) <= 1), 0),
+    'best', coalesce((select max(r.len) from runs r), 0));
+$$;
+revoke execute on function public.day_streak(date[], date) from public, anon, authenticated;
+
+-- streak_days (plan 34, 34.14; internal): a (resolved) player's days played, newest 400, oldest first.
+-- Both kinds count by the server's clock, since every profile shows the streaks they make:
+-- 'daily': Daily Dump course days (UTC) from daily_scores, which takes a day's score only on that day
+-- or the next (since 2026-11-10, kept; a Daily cut off by a reload posts its score as it stood).
+-- 'single': the local day, in time zone p_tz, on which a one-player run ended: the device's end time
+-- set right by the clock offset measured when its batch arrived (run_log.ended_at + clock_offset_ms),
+-- for a row that arrived within 48 hours of it (a device back from offline). A row that arrived later,
+-- one with no end time and a held run (hold_run) count for no day (Checkpoint 34c): the day it arrived
+-- was not a day played. run_log keeps 90 days and starts with 0.19.1 (2026-11-15).
+create or replace function public.streak_days(v_id text, p_kind text, p_tz text)
+returns date[]
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select coalesce(array_agg(x.day order by x.day), '{}'::date[])
+  from (
+    select d.day from public.daily_scores d where p_kind = 'daily' and d.player_id = v_id
+    union
+    select ((r.ended_at + r.clock_offset_ms * interval '1 millisecond') at time zone p_tz)::date
+    from public.run_log r
+    where p_kind = 'single' and r.player_id = v_id and r.mode = 'single' and not r.held and r.ended_at is not null
+      and r.received_at - (r.ended_at + r.clock_offset_ms * interval '1 millisecond')
+          between interval '-5 minutes' and interval '48 hours'
+    order by 1 desc
+    limit 400
+  ) x;
+$$;
+revoke execute on function public.streak_days(text, text, text) from public, anon, authenticated;
+
+-- A time zone name as given when it is an IANA Area/Location name (or UTC) Postgres can use, else null
+-- (internal, plan 34): no POSIX rules or abbreviations (Checkpoint 34c). The shape, then tried; not a
+-- lookup in pg_timezone_names, a view that reads every zone file.
+create or replace function public.known_tz(p_tz text)
+returns text
+language plpgsql
+stable
+as $$
+begin
+  if p_tz is null or p_tz !~ '^(UTC|(Africa|America|Antarctica|Arctic|Asia|Atlantic|Australia|Europe|Indian|Pacific|Etc)/[A-Za-z0-9_+-]{1,31}(/[A-Za-z0-9_+-]{1,31})?)$' then
+    return null;
+  end if;
+  perform now() at time zone p_tz;
+  return p_tz;
+exception when others then
+  return null;
+end;
+$$;
+revoke execute on function public.known_tz(text) from public, anon, authenticated;
+
+-- play_days (plan 34, 34.13): the days a player played, so a device can fill in their day streaks
+-- (src/streak.js mergeDayStreak), from any device with their save code: { daily, single }, each the
+-- newest 400 days, oldest first, as 'YYYY-MM-DD' (streak_days, which says how a day counts).
+-- Singleplayer days are local days in p_tz, an IANA name the device sends (anything unknown reads as
+-- UTC). By the player's own secret id
+-- (resolved), never by name; null for a malformed id. Days only: no score, time or name.
+-- 34.14 (Michael: "Store time zone"): for a player the server already knows (player_meta), a known
+-- p_tz is kept as their time zone, so other players' views of their profile count the same days
+-- (player_stats), and the longest Singleplayer streak seen is kept (single_best), past the 90 days.
+-- Checkpoint 34c: the row is written only when something changed; single_best rises only in a zone
+-- that has stood for a week (tz_at); singleBest in the answer lets a device that lost its record (a
+-- Load, a new device) show the same Longest streak as everyone else.
+create or replace function public.play_days(p_player_id text, p_tz text default null)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_id text;
+  v_tz text;
+  v_meta public.player_meta%rowtype;
+  v_single date[];
+  v_best int;
+begin
+  if p_player_id is null or p_player_id !~ '^[A-Za-z0-9_-]{22}$' then
+    return null;
+  end if;
+  v_id := public.resolve_player(p_player_id);
+  v_tz := public.known_tz(p_tz);
+  select * into v_meta from public.player_meta m where m.player_id = v_id;
+  if found then
+    if v_tz is not null and v_tz is distinct from v_meta.tz then
+      -- A new zone: kept, and its clock starts (Checkpoint 34c); the best waits a week.
+      update public.player_meta set tz = v_tz, tz_at = now() where player_id = v_id;
+    elsif v_meta.tz is not null and (v_meta.tz_at is null or v_meta.tz_at <= now() - interval '7 days') then
+      v_best := (public.day_streak(public.streak_days(v_id, 'single', v_meta.tz), (now() at time zone v_meta.tz)::date) ->> 'best')::int;
+      if v_best > v_meta.single_best then
+        update public.player_meta set single_best = v_best where player_id = v_id;
+        v_meta.single_best := v_best;
+      end if;
+    end if;
+  end if;
+  v_single := public.streak_days(v_id, 'single', coalesce(v_tz, v_meta.tz, 'UTC'));
+  return jsonb_build_object(
+    'daily', (select coalesce(jsonb_agg(to_char(x, 'YYYY-MM-DD') order by x), '[]'::jsonb) from unnest(public.streak_days(v_id, 'daily', 'UTC')) x),
+    'single', (select coalesce(jsonb_agg(to_char(x, 'YYYY-MM-DD') order by x), '[]'::jsonb) from unnest(v_single) x),
+    'singleBest', coalesce(v_meta.single_best, 0));
+end;
+$$;
+
 -- admin_runs: the run rows of the player a board shows under this name, newest first (owner only,
 -- in the SQL editor).
 create or replace function public.admin_runs(p_name text)
@@ -3139,6 +3296,8 @@ revoke execute on function public.delete_research(text) from public, authenticat
 grant  execute on function public.delete_research(text) to anon;
 revoke execute on function public.submit_runs(text, bigint, jsonb) from public, authenticated;
 grant  execute on function public.submit_runs(text, bigint, jsonb) to anon;
+revoke execute on function public.play_days(text, text) from public, authenticated;
+grant  execute on function public.play_days(text, text) to anon;
 revoke execute on function public.score_board(text, int, int) from public, authenticated;
 grant  execute on function public.score_board(text, int, int) to anon;
 
@@ -3152,7 +3311,7 @@ returns text
 language sql
 immutable
 as $$
-  select '05b18c08764f67ac'::text; -- schema stamp
+  select 'e3f9ed6e901b19a0'::text; -- schema stamp
 $$;
 revoke execute on function public.schema_version() from public, authenticated;
 grant  execute on function public.schema_version() to anon;
