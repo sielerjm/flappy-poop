@@ -151,6 +151,8 @@
       font-size: 34px;
       line-height: 1;
     }
+    /* An emoji card may pair glyphs (the streak card's 📅🔥, plan 36): the box widens, never taller. */
+    #splash-note .art[data-kind="glyph"] { width: auto; min-width: 48px; }
     #splash-note .art img, #splash-note .art .sheet {
       display: block;
       width: 100%;

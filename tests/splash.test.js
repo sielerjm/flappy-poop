@@ -69,8 +69,10 @@ const BADGE_OF = {
   toilet: 'toilet_win',
   rectum: 'win_game',
 };
-const CHROME_GLYPH = { superQ: '\u2753', streaks: '📅', education: '📚', profile: '👤', daily: '🌞', tournament: '🏅', shop: '💰', leaderboard: '🏆', twoPlayer: '👥', userCode: '🔑', controller: '🎮', lowPower: '🔋' };
+const CHROME_GLYPH = { superQ: '\u2753', streaksAll: '📅🔥', education: '📚', profile: '👤', daily: '🌞', tournament: '🏅', shop: '💰', leaderboard: '🏆', twoPlayer: '👥', userCode: '🔑', controller: '🎮', lowPower: '🔋' };
 // The one shared glyph, by name (Michael's call, 2026-11-11): the controller note and the games badge.
+// The streak card pairs 📅 with 🔥, the game's streak sign (Michael at plan 36's Preview A, 2026-11-18): the pair is
+// its own glyph, so the rule below (whole glyphs) lets it pass while 🔥 alone stays the score_250 badge's.
 const SHARED_OK = { controller: 'games_1000' };
 
 test('emoji: a note about a counted thing wears its badge glyph; chrome notes their chrome glyph', () => {
@@ -311,14 +313,24 @@ test('ringStep: a long frame (Phaser compiling) moves the ring no more than ring
   assert.equal(ringStep(0.2, 1, -10), 0.2);
 });
 
-test('the 📚 card (plan 28, 2.3) and the ❓ challenge card (plan 34, the newest feature) leave the pool when education is switched off (EDUCATION.enabled false); the 📅 streak card stays', async () => {
+test('the 📚 card (plan 28, 2.3) and the ❓ challenge card (plan 34) leave the pool when education is switched off (EDUCATION.enabled false); the 📅🔥 streak card (plan 36, the newest feature) stays', async () => {
   const { splashPool, SPLASH_NOTES } = await import('../src/splash.js');
   const { TUNING } = await import('../src/config.js');
-  assert.deepEqual(SPLASH_NOTES.filter((n) => n.kind === 'feature').slice(0, 3).map((n) => n.id), ['superQ', 'streaks', 'education']);
+  assert.deepEqual(SPLASH_NOTES.filter((n) => n.kind === 'feature').slice(0, 3).map((n) => n.id), ['streaksAll', 'superQ', 'education']);
   const on = splashPool(SPLASH_NOTES, TUNING, { enabled: true }).map((n) => n.id);
   const off = splashPool(SPLASH_NOTES, TUNING, { enabled: false }).map((n) => n.id);
-  assert.ok(on.includes('education') && on.includes('superQ') && on.includes('streaks'));
-  assert.ok(!off.includes('education') && !off.includes('superQ') && off.includes('streaks'));
+  assert.ok(on.includes('education') && on.includes('superQ') && on.includes('streaksAll'));
+  assert.ok(!off.includes('education') && !off.includes('superQ') && off.includes('streaksAll'));
+});
+
+test('the streak card is NEW again (plan 36, Michael: "show as NEW again"): a device that saw the old card (id streaks) gets streaksAll first, as NEW; the old id leaves its deck', async () => {
+  const { splashPool, nextNote } = await import('../src/splash.js');
+  const pool = splashPool();
+  const old = { deck: ['streaks', 'fiber', 'bean'], known: ['streaks', 'superQ', 'education', 'profile', 'fiber', 'bean'], seen: ['streaks', 'superQ', 'education', 'profile'], last: 'fiber' };
+  const { note, state } = nextNote(old, pool, () => 0.5);
+  assert.deepEqual([note.id, note.isNew, note.glyph], ['streaksAll', true, '📅🔥']);
+  assert.ok(state.seen.includes('streaksAll') && !state.deck.includes('streaks'), 'seen now; the old id is gone from the deck');
+  assert.equal(nextNote(state, pool, () => 0.5).note.isNew, false, 'NEW once only');
 });
 
 test('the battery tip (plan 28, 4.7): a hint for every device, 🔋, in Michael\'s words; Chinese too', async () => {

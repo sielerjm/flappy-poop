@@ -672,27 +672,27 @@ Inspired by Flappy Bird
 | splashPrev | Previous card | 上一张 |
 | splashNext | Next card | 下一张 |
 | splashProfile | Your profile shows your stats and achievements. Tap a name on the leaderboard to see theirs. | 你的个人资料会显示数据和成就。在排行榜上点名字，就能看别人的。 |
-| splashEducation | Education mode: quiz cards about the gut and its microbes between levels. Turn on 📚 at home. | 教育模式：关卡之间回答关于肠道和肠道微生物的问题。在主页打开 📚。 |
-| splashSuperQ | Challenge questions: a ❓ bubble in every 📚 level. Right pays up to 22 🌽, wrong costs up to 5. (plan 34: a NEW card on the loading splash, at most 100 characters) | 挑战题：📚 模式的每一关都有一个 ❓ 泡泡。答对最多得 22 🌽，答错最多扣 5。 |
-| splashStreaks | Streaks: play days in a row to grow the number on 🌞 and 📚, and on your profile. (plan 34: a NEW card, 📅) | 连续天数：连续几天玩，🌞、📚 和个人资料上的数字会越来越大。 |
+| splashEducation | Education mode: gut and microbe quiz cards at level breaks and after a crash. Turn on 📚 at home. (plan 36: quizzes at level breaks and after a crash; 撞到 = crash, the game’s word) | 教育模式：关卡之间和撞到之后回答肠道和微生物问题。在主页打开 📚。 |
+| splashSuperQ | Challenge questions: a ❓ bubble once a level in 📚 runs. Right pays 10 to 22 🌽, wrong costs up to 5. (plan 34: a NEW card on the loading splash, at most 100 characters; plan 36: once a level, 10 to 22) | 挑战题：📚 模式每关一个 ❓ 泡泡。答对得 10 到 22 🌽，答错最多扣 5。 |
+| splashStreaks | Streaks: play days in a row. Your streaks show on 🌞 and 📚, and on every player's profile. (plan 36: a NEW card again, id streaksAll, glyph 📅🔥; streaks show on every profile since 34.14) | 连续天数：连续几天玩。你的连续天数显示在 🌞 和 📚 上，也显示在每位玩家的个人资料里。 |
 | splashDaily | Daily Dump: one try a day on the same course as everyone. | 每日一拉：每天一次机会，和所有人飞同一条赛道。 |
 | splashTournament | Tournaments: up to 8 players, one bracket, one device. | 锦标赛：最多 8 名玩家，一张对阵表，一台设备。 |
 | splashShop | Spend corn kernels in the shop between levels. | 关卡之间可以在商店花掉玉米粒。 |
 | splashFiber | Fiber is worth +3. Grab it between pipes. | 纤维 +3 分，在管道之间吃到它。 |
 | splashBacteria | Bad bacteria cost 3 points. | 碰到有害细菌扣 3 分。 |
 | splashProbiotic | A probiotic blocks one bad bacteria hit for 5 pipes. | 益生菌能挡住一次有害细菌，持续 5 道管道。 |
-| splashPostbiotic | Eat fiber while a probiotic is up: pipes and fiber score ×2. | 益生菌生效时吃到纤维：管道和纤维得分 ×2。 |
+| splashPostbiotic | Eat fiber while a probiotic is up: pipes, fiber and kernels count ×2. | 益生菌生效时吃到纤维：管道、纤维和玉米粒都 ×2。 |
 | splashBean | A bean charges a fart. You can carry three. | 一颗豆子可以充能一次放屁，最多带 3 颗。 |
-| splashFart | Tap the poop or the bean button to fart past 5 pipes. | 点便便或豆子按钮放屁，冲过 5 道管道。 |
-| splashSuperFart | Three beans make a super fart: 20 pipes, and you cannot die. | 集齐 3 颗豆子放超级屁：冲过 20 道管道，而且不会死。 |
+| splashFart | Tap the poop or the bean button to fart past 5 pipes. Nothing can hurt you while you fart. | 点便便或豆子按钮放屁，冲过 5 道管道。放屁时什么都伤不了你。 |
+| splashSuperFart | Three beans make a super fart: it rockets you past 20 pipes. | 集齐 3 颗豆子放超级屁：一口气冲过 20 道管道。 |
 | splashMystery | Mystery boxes contain random objects with different probabilities. | 神秘盒子里装着随机道具，每种的概率不同。 |
 | splashCoin | Corn kernels are coins. They last one run, so spend them. | 玉米粒就是金币，只在本局有效，记得花掉。 |
 | splashToilet | Playing on the toilet? Turn on Toilet mode. The leaderboard keeps your best on and off the toilet. | 在马桶上玩？打开“如厕模式”。排行榜会分别记录你如厕和不如厕时的最高分。 |
 | splashRectum | Level 7 is the rectum. Cross the finish line to 'make it out'. | 第 7 关是直肠。冲过终点线，就能“成功脱出”。 |
-| splashLeaderboard | The leaderboard shows the Top 25, with tabs for the Daily Dump 🌞 and tournaments 🏅. | 排行榜显示前 25 名，还有每日一拉 🌞 和锦标赛 🏅 两个分页。 |
-| splashTwoPlayer | Toggle 👥 on to play multiplayer mode up to 8 players. | 打开 👥 开关，就能玩多人模式，最多 8 名玩家。 |
-| splashUserCode | Your user code moves your name and scores to another phone. | 用户码能把你的名字和分数带到另一部手机上。 |
-| splashController | On desktop, you can play with a game controller. | 在电脑上，可以用游戏手柄来玩。 |
+| splashLeaderboard | The leaderboard pages through all players, 25 a page. Tabs: 🌞 Daily Dump, 🏅 medals and 📚. (plan 36: pages of 25 and a fourth 📚 tab; “分页” = tabs here, as on the board) | 排行榜分页显示所有玩家，每页 25 名。分页：🌞 每日一拉、🏅 奖牌和 📚。 |
+| splashTwoPlayer | On a wide screen, toggle 👥 to race friends two at a time, up to 8 players. | 在宽屏上打开 👥，和朋友两人一组比赛，最多 8 名玩家。 |
+| splashUserCode | Your user code moves your name, scores, profile and streaks to another device. | 用户码能把你的名字、分数、个人资料和连续天数带到另一台设备。 |
+| splashController | You can play with a game controller: A flaps, RT farts, Menu pauses. (plan 36: A / RT / Menu as in How to play; 起飞 = flap, the game’s word) | 可以用游戏手柄来玩：A 起飞，RT 放屁，Menu 暂停。 |
 | splashLowPower | Battery saver mode or low power mode can impact game performance. (plan 28, 4.7: a loading-screen tip for every device; Michael's words, general on purpose: Apple's name and Android's both) | 省电模式或低电量模式可能会影响游戏性能。 |
 | careerFalls | Long falls | 长距离下坠 |
 | careerCloseCalls | Close calls | 擦身而过 |

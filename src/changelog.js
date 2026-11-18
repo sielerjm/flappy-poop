@@ -8,6 +8,14 @@ import { LOCALES } from './i18n.js';
 
 export const CHANGELOG = [
   {
+    version: '0.24.1',
+    date: '18 Nov 2026',
+    notes: {
+      en: ['The loading screen’s tips are up to date, and its 📅🔥 streak card says streaks now show on every profile.'],
+      'zh-Hans': ['加载画面的小提示已更新；📅🔥 连续天数卡片说明：连续天数现在会显示在每个人的个人资料上。'],
+    },
+  },
+  {
     version: '0.24.0',
     date: '18 Nov 2026',
     notes: {

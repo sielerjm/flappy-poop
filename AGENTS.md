@@ -363,7 +363,7 @@ square `crop`; the emoji if it fails), else the emoji; a note about something th
 that badge's glyph via `achievementById` (the hints include 🔋 battery saver / low power mode, for every
 device: plan 28, 4.7). Cards are dealt from a shuffled deck kept in `flappyPoop.splash`
 (`nextNote`: a feature this device never showed comes first; every card once per cycle; a reshuffle
-never repeats the last card; `splashPool` keeps the newest `splash.featureMax` features; the newest are ❓ challenge questions and 📅 day streaks, plan 34, then 📚 education, plan 28; the ❓ card leaves the pool with education). The player
+never repeats the last card; `splashPool` keeps the newest `splash.featureMax` features; the newest are 📅🔥 day streaks (plan 36: reworded for streaks on every profile and dealt as NEW again under the id `streaksAll`, it was `streaks`), ❓ challenge questions, plan 34, then 📚 education, plan 28; the ❓ card leaves the pool with education). The player
 browses at any time (swipe or mouse drag, ‹ ›, ← →, the d-pad by its own `getGamepads` poll, since
 Phaser's pad plugin is bound only in Play); the first browse stops the `hintMs` auto-advance. Boot
 drives the ring (`load.on('progress', setSplashProgress)`) and its `create()` hands
@@ -3382,7 +3382,9 @@ Commits follow `type(scope): summary` (`feat`, `fix`, `docs`, `chore`, `test`, `
   in Chinese (‹ › beside the card leave ~22 a line on a 360 px phone). Its emoji is
   the badge's glyph when the profile counts the thing (`badge('<achievement id>')`),
   else the game's chrome glyph; `tests/splash.test.js` holds the table and refuses
-  a glyph another badge means. A thing the game draws as a sprite also gets
+  a glyph another badge means (whole glyphs: the streak card pairs 📅🔥, Michael's call,
+  plan 36; an emoji box widens for a pair, `.art[data-kind="glyph"]` in index.html). To
+  show a reworded feature as NEW again, give it a new id (plan 36's `streaksAll`). A thing the game draws as a sprite also gets
   `art: { file }` (a file Boot loads; `frames` for a strip, `crop` when the art
   fills only part of its frame).
 - New UI chrome → `src/ui/` (Phaser wrapper) with any pure layout helper in
