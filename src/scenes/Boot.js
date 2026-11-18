@@ -1,3 +1,4 @@
+import '../phaserReady.js'; // first: Phaser exists before this module runs (plan 35, 1.2)
 import { TUNING as T } from '../config.js';
 import { VERSION, purseSpinRate } from '../logic.js';
 import { setSplashProgress, splashReady } from '../splash.js';

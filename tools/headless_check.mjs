@@ -85,6 +85,7 @@ export const SECTIONS = [
   { name: 'run-stats', needs: [], about: "the run summary (plan 30): a run flown through Chrome's own input (keys and a mouse click, with a pause) has every flap but the launch counted as a real, fresh press; a run flown by direct calls has none; a pointer event forged with a plain object counts as a press but never a real one; each summary is queued with the run's numbers" },
   { name: 'streaks', needs: [], about: "🔥 day streaks (plan 34): a one-player run counts the local day and a Daily Dump its course day on this device; the 🌞 and 📚 subscripts on the ready screen (the Daily Dump and learning streaks, none at 0); your own profile's 🔥 Current streak and ❤️‍🔥 Longest streak rows under Singleplayer and Daily Dump; Clear empties them; the 🌞 card's and \"Your cards\"' \"🔥 Current streak = n\" lines (round 2); the days from other devices (34.13: a stubbed play_days, asked once, folded in)" },
   { name: 'education-superq', needs: [], about: "❓ the challenge question (plan 34): the bubble on its pair in a 📚 run, the pairs either side opening at the same height and holding still, its size and float; flown past it opens anyway; the run held under the offer (no banner, tray or \"?\"; P and a hidden page do nothing); taps and Space locked for a moment; Decline flies on with a grace and saves nothing; Try's card cannot be left until answered; right pays 8 + 2 × level and saves the card as reviewed; wrong takes 5 and saves it as missed, holding Fly on; neither counts in the run's tally; round 2: the offer its own square card (sentence above the buttons, no tally), the ring and a fresh Space on Try it, a held Space nothing (AUD-068); the bubble's pop and no book sound on the offer" },
+  { name: 'phaser-fallback', needs: [], about: "Phaser's fallback (plan 35, 1.2): the page reloaded with the CDN blocked, then stalled, boots from assets/vendor/ (the stall after the 6 s wait); with both copies blocked the splash reads Couldn't load. Tap to retry, and the tap reloads; without src/splash.js too, the bare ↻; then back on the CDN" },
 ];
 
 /** What a section needs: its own list, or (omitted) every section before it. */
@@ -6784,6 +6785,83 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
       ok(await waitFor(`!__flappy.scene.isActive('Quiz') && ${P}.state === 'playing'`), 'Fly on after the wait: the run goes on');
       await evaluate(`(clearInterval(globalThis.__sqKeep), ${P}.settings.set({ education: false, eduStartLevel: 1 }), __flappy.scene.stop('Quiz'), ${P}.scene.restart(), true)`);
       await waitFor(`${P}.state === 'ready'`);
+    });
+
+    await section('phaser-fallback', async () => {
+      // Phaser's fallback (plan 35, 1.2): the page reloaded with the CDN blocked, then stalled (no answer at
+      // all, so no onerror), boots from assets/vendor/; with the vendored copy blocked too, the splash shows
+      // "Couldn't load. Tap to retry" (or, without src/splash.js, the bare ↻), and the tap reloads. The last
+      // reload goes back to the CDN, the live board still blocked, for the checks after this one.
+      await cdp.send('Network.enable');
+      const block = (extra = []) => cdp.send('Network.setBlockedURLs', { urls: ['*supabase.co*', ...extra] });
+      const pageNow = () =>
+        evaluate(`JSON.stringify({ game: typeof __flappy !== 'undefined', failed: Boolean(document.querySelector('#splash.failed')), live: Boolean(document.querySelector('#splash.live')),
+          lit: Boolean(document.getElementById('splash-continue') && !document.getElementById('splash-continue').disabled), cont: document.getElementById('splash-continue')?.textContent ?? '',
+          version: typeof Phaser === 'undefined' ? null : Phaser.VERSION, vendor: performance.getEntriesByType('resource').some((e) => e.name.includes('assets/vendor/phaser.min.js')),
+          boot: globalThis.__flappyBoot ? { failed: __flappyBoot.failed, last: __flappyBoot.last.split('\\n')[0] } : null })`).then(JSON.parse);
+      const load = async (until, maxMs = 30000) => {
+        const t0 = Date.now();
+        await cdp.send('Page.navigate', { url: `${url}/?r=${Date.now()}` });
+        let st = null;
+        while (Date.now() - t0 < maxMs) {
+          await sleep(250);
+          st = await pageNow().catch(() => null);
+          if (st && until(st)) break;
+        }
+        return { ...st, ms: Date.now() - t0 };
+      };
+      const booted = (st) => st.game && st.lit;
+      const pin = await evaluate(`Phaser.VERSION`);
+      const failedText = await evaluate(`import('./src/i18n.js').then((m) => m.t('en', 'splashFailed'))`);
+      const ex0 = exceptions.length;
+      try {
+        await block(['*cdn.jsdelivr.net*']);
+        const noCdn = await load(booted);
+        ok(booted(noCdn) && noCdn.vendor && noCdn.version === pin && !noCdn.failed, `the CDN blocked: Phaser ${noCdn.version} comes from assets/vendor/ and the splash lights Continue (${JSON.stringify(noCdn)})`);
+
+        await block();
+        await cdp.send('Network.setCacheDisabled', { cacheDisabled: true }); // no copy from the disk cache past the pause
+        await cdp.send('Fetch.enable', { patterns: [{ urlPattern: '*cdn.jsdelivr.net*' }] }); // paused, never answered
+        const stalled = await load(booted, 40000);
+        await cdp.send('Fetch.disable');
+        await cdp.send('Network.setCacheDisabled', { cacheDisabled: false });
+        ok(booted(stalled) && stalled.vendor && stalled.version === pin && stalled.ms >= 6000, `the CDN stalled: the vendored copy after the 6 s wait (${stalled.ms} ms; ${JSON.stringify(stalled)})`);
+
+        await block(['*cdn.jsdelivr.net*', '*assets/vendor/phaser.min.js*']);
+        const both = await load((st) => st.failed);
+        ok(both.failed && both.live && both.lit && both.cont === failedText && !both.game && both.boot?.failed && /could not load Phaser/.test(both.boot.last),
+          `both copies blocked: the splash reads "${both.cont}" with the retry lit, no game (${JSON.stringify(both)})`);
+        await evaluate(`(globalThis.__smokeMarker = 1, document.getElementById('splash-continue').click(), true)`);
+        let reloaded = false;
+        for (let i = 0; i < 40 && !reloaded; i += 1) {
+          await sleep(250);
+          reloaded = await evaluate(`globalThis.__smokeMarker === undefined && Boolean(document.querySelector('#splash.failed'))`).catch(() => false);
+        }
+        ok(reloaded, 'Tap to retry reloads the page (still blocked, so it fails again)');
+
+        await block(['*cdn.jsdelivr.net*', '*assets/vendor/phaser.min.js*', '*src/splash.js*']);
+        const bare = await load((st) => st.failed);
+        ok(bare.failed && !bare.live && !bare.game, `without src/splash.js too: the bare ↻, no words (${JSON.stringify(bare)})`);
+
+        const added = exceptions.slice(ex0);
+        ok(added.length === 0, added.length ? `page exceptions in the fallback cases:\n  ${added.join('\n  ')}` : 'no page exceptions in the fallback cases');
+      } finally {
+        // The CDN back, and the page reloaded on it to the ready screen (even when a check above threw).
+        await cdp.send('Fetch.disable').catch(() => {});
+        await cdp.send('Network.setCacheDisabled', { cacheDisabled: false }).catch(() => {});
+        await block();
+        const back = await load(booted);
+        if (back.lit) {
+          await splashKey('keydown', ' ');
+          await splashKey('keyup', ' ');
+        }
+        let st = null;
+        for (let i = 0; i < 120 && st !== 'ready'; i += 1) {
+          await sleep(250);
+          st = await playState().catch(() => null);
+        }
+        ok(back.game && back.version === pin && st === 'ready', `the CDN back: the page boots to Play's ready screen (${JSON.stringify({ ...back, state: st })})`);
+      }
     });
 
     const f2 = await frame();

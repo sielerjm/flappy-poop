@@ -671,6 +671,7 @@ Inspired by Flappy Bird
 | splashContinue | Continue | 继续 |
 | splashPrev | Previous card | 上一张 |
 | splashNext | Next card | 下一张 |
+| splashFailed | Couldn't load. Tap to retry (plan 35: the splash when Phaser or the game's code could not load; the button reloads) | 加载失败，点按重试 |
 | splashProfile | Your profile shows your stats and achievements. Tap a name on the leaderboard to see theirs. | 你的个人资料会显示数据和成就。在排行榜上点名字，就能看别人的。 |
 | splashEducation | Education mode: gut and microbe quiz cards at level breaks and after a crash. Turn on 📚 at home. (plan 36: quizzes at level breaks and after a crash; 撞到 = crash, the game’s word) | 教育模式：关卡之间和撞到之后回答肠道和微生物问题。在主页打开 📚。 |
 | splashSuperQ | Challenge questions: a ❓ bubble once a level in 📚 runs. Right pays 10 to 22 🌽, wrong costs up to 5. (plan 34: a NEW card on the loading splash, at most 100 characters; plan 36: once a level, 10 to 22) | 挑战题：📚 模式每关一个 ❓ 泡泡。答对得 10 到 22 🌽，答错最多扣 5。 |

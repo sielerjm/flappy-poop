@@ -1,3 +1,4 @@
+import '../phaserReady.js'; // first: Phaser exists before this module runs (plan 35, 1.2)
 import { GAME_HEIGHT, FIELD, TUNING as T } from '../config.js';
 import { fieldWidth, overButtonsLayout, overHit, canRestart, isFinalLevel } from '../logic.js';
 import { versusLayout, joinButtonsLayout, createMatch, resetMatch, claimDevice, allClaimed, deviceLabel } from '../versus.js';

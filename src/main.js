@@ -1,3 +1,4 @@
+import './phaserReady.js'; // first: Phaser exists before this module runs (plan 35, 1.2)
 import { FIELD } from './config.js';
 import { fieldWidth, perfMode, inviteFromSearch, withoutInvite, debugHandleAllowed } from './logic.js';
 import { attachPerfMeter } from './ui/perfMeter.js';
@@ -33,7 +34,7 @@ try {
 
 // Logical field: 1280 tall; as wide as the window's aspect asks, between a phone
 // portrait (720) and 2:1 (FIELD). Scale.FIT then letterboxes only what is left.
-// Phaser is loaded as a global from the <script> tag in index.html.
+// Phaser is a global: index.html's CDN tag, or its vendored fallback (src/phaserReady.js waits for it).
 const game = new Phaser.Game({
   type: Phaser.AUTO,
   parent: 'game',

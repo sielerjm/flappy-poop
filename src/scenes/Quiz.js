@@ -1,3 +1,4 @@
+import '../phaserReady.js'; // first: Phaser exists before this module runs (plan 35, 1.2)
 import { GAME_HEIGHT, LEVELS, TUNING as T } from '../config.js';
 import { canRestart, chromeIntent, fitScale, issueUrl, openExternalUrl, wrapCjk } from '../logic.js';
 import { createFocus, pressable } from '../ui/focus.js';

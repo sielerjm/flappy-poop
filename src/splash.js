@@ -14,7 +14,7 @@
 // the splash and lets the game start, so the splash is never the reason the game does not load.
 
 import { EDUCATION, TUNING } from './config.js';
-import { padAction, storedLocale, VERSION } from './logic.js';
+import { padAction, storedLocale, VERSION, hardReloadGame } from './logic.js';
 import { t, initialLocale } from './i18n.js';
 import { achievementById } from './achievements.js';
 import { browserStorage } from './store.js';
@@ -349,6 +349,7 @@ function mount(root, doc, win) {
 
   let index = -1;
   let isReady = false;
+  let failedState = false; // couldn't load (plan 35, 1.2): Continue is the retry
   let removed = false;
   let timer = null;
   let frame = 0;
@@ -403,7 +404,7 @@ function mount(root, doc, win) {
   };
 
   const light = () => {
-    if (removed || isReady) return;
+    if (removed || isReady || failedState) return;
     isReady = true;
     if (backstop != null) win.clearTimeout(backstop);
     shown = 1;
@@ -429,8 +430,23 @@ function mount(root, doc, win) {
     }
   };
 
+  // Couldn't load (plan 35, 1.2; index.html's trap calls it through splashFailed): the ring stops where it
+  // is, Continue reads "Couldn't load. Tap to retry" and reloads the page with fresh scripts.
+  const failed = () => {
+    if (removed) return false;
+    if (failedState) return true;
+    failedState = true;
+    if (backstop != null) win.clearTimeout(backstop);
+    root.classList.remove('ready');
+    root.classList.add('failed');
+    root.removeAttribute('aria-busy');
+    cont.disabled = false;
+    cont.textContent = t(locale, 'splashFailed');
+    return true;
+  };
+
   const ready = () => {
-    if (removed || wantReady) return;
+    if (removed || wantReady || failedState) return;
     wantReady = true;
     if (!animated) {
       light();
@@ -443,6 +459,11 @@ function mount(root, doc, win) {
   // Continue: Boot's callback queues Play's start, then the splash fades over the ready screen. The
   // fading node still takes pointer events, so a second tap cannot reach the canvas under it.
   const press = () => {
+    if (failedState && !removed) {
+      cont.disabled = true; // one retry
+      hardReloadGame(win);
+      return;
+    }
     if (!isReady || removed) return;
     remove(true);
     ui = null;
@@ -523,7 +544,7 @@ function mount(root, doc, win) {
   // One frame loop for the ring and the pad.
   const tick = safe((ts) => {
     frame = 0;
-    if (removed) return;
+    if (removed || failedState) return; // a failed splash's ring stops
     const dt = lastFrame == null ? 0 : ts - lastFrame;
     lastFrame = ts;
     aim();
@@ -561,7 +582,7 @@ function mount(root, doc, win) {
     throw err;
   }
 
-  return { progress, ready, remove: () => remove(false) };
+  return { progress, ready, failed, remove: () => remove(false) };
 }
 
 /**
@@ -579,6 +600,21 @@ export function startSplash(doc = globalThis.document, win = globalThis) {
     fail(err);
   }
   return ui;
+}
+
+/**
+ * Couldn't load (plan 35, 1.2): Phaser from neither copy, or the game's own code failed before it could
+ * start (index.html's trap). Returns false when there is no splash to show it on (it already went, or the
+ * module could not mount it); the trap then falls back to index.html's bare ↻.
+ */
+export function splashFailed(doc = globalThis.document, win = globalThis) {
+  const s = startSplash(doc, win);
+  if (!s) return false;
+  try {
+    return s.failed();
+  } catch {
+    return false;
+  }
 }
 
 /** Boot's load progress (0–1): the ring fills the share after the download's creep (ringTarget). */

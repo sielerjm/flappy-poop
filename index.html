@@ -8,6 +8,8 @@
   <meta name="theme-color" content="#1a0b14">
   <title>Flappy Poop</title>
   <link rel="manifest" href="manifest.webmanifest">
+  <!-- Phaser's CDN: the connection opens while the page parses (plan 35, 1.2). -->
+  <link rel="preconnect" href="https://cdn.jsdelivr.net">
   <!-- ?v= on the icons: browsers cache favicons and manifest icons by URL for a long time; bump it when the icon art changes. -->
   <link rel="icon" type="image/png" sizes="192x192" href="assets/icon-192.png?v=2">
   <link rel="apple-touch-icon" sizes="180x180" href="assets/apple-touch-icon.png?v=2">
@@ -222,6 +224,27 @@
       cursor: pointer;
       animation: splash-glow-in 400ms ease-out both, splash-glow 0.8s ease-in-out 400ms infinite alternate;
     }
+    /* Couldn't load (plan 35, 1.2): Phaser came from neither the CDN nor assets/vendor/, or the game's own
+       code failed before it could start. The ring and the poop stop and Continue becomes the retry
+       (src/splash.js, splashFailed). */
+    #splash.failed .splash-arc { stroke: var(--splash-new); }
+    #splash.failed .splash-poop { animation: none; filter: grayscale(0.7); opacity: 0.6; }
+    #splash.failed #splash-continue { background: var(--splash-new); color: #ffffff; cursor: pointer; }
+    /* Without src/splash.js (that module failed too): no words, a full red ring around a ↻, and a tap
+       anywhere reloads (the inline trap below). */
+    #splash.failed:not(.live) { cursor: pointer; }
+    #splash.failed:not(.live) .splash-arc { stroke-dashoffset: 0; }
+    #splash.failed:not(.live) .splash-poop { opacity: 0.2; }
+    #splash.failed:not(.live) .splash-hero::after {
+      content: '\21BB';
+      position: absolute;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      font-size: clamp(48px, 14vw, 88px);
+      font-weight: 700;
+      color: var(--splash-new);
+    }
     @keyframes splash-bob { from { transform: translateY(-5%); } to { transform: translateY(5%); } }
     @keyframes splash-in-next { from { opacity: 0; transform: translateX(24px); } to { opacity: 1; transform: none; } }
     @keyframes splash-in-prev { from { opacity: 0; transform: translateX(-24px); } to { opacity: 1; transform: none; } }
@@ -272,12 +295,78 @@
       </div>
     </div>
   </div>
-  <!-- Before Phaser: a dynamic import runs while the parser waits on the Phaser download, so the
-       cards show during that wait. Boot imports the same module and finds the splash started. -->
+  <!-- First of all (plan 35, 1.2): Phaser's loader, in window.__flappyBoot. Phaser comes from the CDN tag
+       below; if it errors, or Phaser is still missing after phaserWaitMs (a stalled request never fires
+       onerror), the vendored copy in assets/vendor/ loads instead. The first copy to arrive is kept.
+       src/phaserReady.js holds main.js and every scene until then. If neither copy loads, or one of the
+       game's own scripts cannot load, the splash shows its failed state. -->
+  <script>
+    (function (w, d) {
+      var B = (w.__flappyBoot = { last: '', failed: false });
+      var origin = w.location.origin;
+      var phaserWaitMs = 6000;
+      // The splash's failed state: src/splash.js's words, or with no module the bare ↻ (index.html's CSS).
+      B.fail = function (why) {
+        if (B.failed) return;
+        B.failed = true;
+        if (!B.last) B.last = String(why);
+        var bare = function () {
+          var s = d.getElementById('splash');
+          if (!s) return;
+          s.classList.add('failed');
+          s.removeAttribute('aria-busy');
+          s.addEventListener('click', function () { w.location.reload(); });
+        };
+        import('./src/splash.js').then(function (m) { if (!m.splashFailed(d, w)) bare(); }, bare);
+      };
+      // Capture: a script that fails to load fires on its element, not the window. One of ours fails the
+      // splash; the CDN's Phaser is B.cdn's, the vendored copy's its own onerror's (it runs after this), and
+      // an image or sound is Boot's loader's.
+      w.addEventListener('error', function (e) {
+        var el = e.target;
+        if (el && el !== w && el !== local && el.tagName === 'SCRIPT' && el.src && el.src.indexOf(origin) === 0) B.fail('could not load ' + el.src);
+      }, true);
+
+      var resolve;
+      var kept = null;
+      var local = null; // the vendored copy's script, once asked for: its own onerror reports it
+      B.phaser = new Promise(function (r) { resolve = r; });
+      // The first copy is kept, read-only: a copy that arrives later runs but cannot replace it
+      // (Phaser's UMD wrapper is sloppy code, so its assignment fails silently).
+      var have = function () {
+        if (!kept && w.Phaser) {
+          kept = w.Phaser;
+          try {
+            Object.defineProperty(w, 'Phaser', { value: kept, writable: false, configurable: true });
+          } catch (err) {
+            /* the copy stays writable; the race is rare */
+          }
+          resolve(kept);
+        }
+        return Boolean(kept);
+      };
+      var fallback = function () {
+        if (have() || local) return;
+        var s = (local = d.createElement('script'));
+        s.src = 'assets/vendor/phaser.min.js?v=4.2.1';
+        s.onload = function () { if (!have()) B.fail('no Phaser in assets/vendor/'); };
+        s.onerror = function () { if (!have()) B.fail('could not load Phaser'); };
+        d.head.appendChild(s);
+      };
+      // The CDN tag's load or error.
+      B.cdn = function (loaded) {
+        if (!loaded || !have()) fallback();
+      };
+      w.setTimeout(fallback, phaserWaitMs);
+    })(window, document);
+  </script>
+  <!-- Before Phaser: a dynamic import runs during the Phaser download, so the cards show during that
+       wait. Boot imports the same module and finds the splash started. -->
   <script>
     import('./src/splash.js').then((m) => m.startSplash(document, window)).catch(() => {});
   </script>
-  <script src="https://cdn.jsdelivr.net/npm/phaser@4.2.1/dist/phaser.min.js"></script>
+  <!-- async: a stalled CDN must not hold the page; src/phaserReady.js orders the modules instead. -->
+  <script src="https://cdn.jsdelivr.net/npm/phaser@4.2.1/dist/phaser.min.js" async onload="__flappyBoot.cdn(true)" onerror="__flappyBoot.cdn(false)"></script>
   <script type="module" src="src/main.js"></script>
 </body>
 </html>

@@ -1,3 +1,4 @@
+import '../phaserReady.js'; // first: Phaser exists before this module runs (plan 35, 1.2)
 import { GAME_HEIGHT, FIELD, TUNING as T, LEVELS, LEVEL_COLORS, BACKGROUND, TEST_MODE, EDUCATION, LEADERBOARD } from '../config.js';
 import {
   createRng,

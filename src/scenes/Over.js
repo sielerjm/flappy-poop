@@ -1,3 +1,4 @@
+import '../phaserReady.js'; // first: Phaser exists before this module runs (plan 35, 1.2)
 import { GAME_HEIGHT, FIELD, TUNING as T, SHARE, LEVEL_COLORS, LEVELS } from '../config.js';
 import { canRestart, chromeIntent, trayLayout, trayHit, overButtonsLayout, overCellsLayout, overBandLayout, overEduLines, overHit, shareCardLayout, levelColor, uiColumn, msUntilUtcMidnight, countdownText, fitScale } from '../logic.js';
 import { t, levelLabel, shareCardFooter, dailyDayText, dailyRankText, badgeTitle, tallyLines } from '../i18n.js';
