@@ -823,12 +823,12 @@ Still to come (plan 21): the privacy foundation (delete account, export, the age
 privacy notice), the public release (audited cards only), the research beta and the study.
 
 It is deliberately small: plain ES modules, no bundler, no runtime npm
-dependencies (one devDependency for the schema tests), Phaser 4 loaded from a CDN, deployed to GitHub Pages straight from
+dependencies (one devDependency for the schema tests), Phaser 4 loaded from a CDN (with a vendored fallback), deployed to GitHub Pages straight from
 `main`. Keep it that way unless the game clearly outgrows it.
 
 - Repo: `github.com/sielerjm/flappy-poop` (the pre-2026 "joke version" that used
   to live there was replaced wholesale; nothing from it survives).
-- Engine: Phaser **4.2.1**, pinned by exact version in `index.html`.
+- Engine: Phaser **4.2.1**, pinned by exact version in `index.html` and in `assets/vendor/phaser.min.js`.
 - Runtime: any modern mobile/desktop browser. Tests need Node 22+ (built-in
   `node --test`). `tools/` needs Python 3 + Pillow for art scripts
   (`uv run --with pillow python3 tools/process_art.py` works without installing it).
@@ -843,9 +843,14 @@ index.html                  Entry page. Viewport/touch CSS; the loading splash's
                             skin, the ‹ card › row, the .texts grid stack, the
                             48 px .art box, bob / slide / Continue's glow, a
                             landscape row, reduced motion; the poop's box is
-                            measured against the ring by tests/html.test.js); an inline import() of
-                            src/splash.js, then <script> for Phaser from jsDelivr,
-                            then <script type=module src=src/main.js>.
+                            measured against the ring by tests/html.test.js); first of all an
+                            inline trap (window.__flappyBoot: the last uncaught error, the
+                            Phaser loader, an inline import() of src/splash.js; plan 35,
+                            1.1 and 1.2; run in Node by tests/support/bootTrap.js), then an
+                            async <script> for Phaser from jsDelivr (after 6 s or on error
+                            the trap loads assets/vendor/phaser.min.js instead; neither:
+                            the splash says it could not load), then
+                            <script type=module src=src/main.js>.
 manifest.webmanifest        PWA "Add to Home Screen" metadata (fullscreen, portrait).
 package.json                `npm test`, `npm start`, `npm run push`; "license" is the SPDX id
                             PolyForm-Noncommercial-1.0.0 (MIT until plan 28); one devDependency,
@@ -862,7 +867,15 @@ LICENSE-CONTENT.md          What else is under which terms: the quiz cards (src/
 CONTRIBUTING.md             Reports welcome; outside code, art or card changes need a
                             contributor agreement first (so the author can relicense).
 
+assets/vendor/
+  phaser.min.js             The vendored copy of Phaser 4.2.1, the same build as the CDN tag;
+                            loaded only when the CDN fails or stalls. Bump it with the tag.
+
 src/
+  phaserReady.js            `await globalThis.__flappyBoot?.phaser`: main.js and every scene
+                            import it first, so no `extends Phaser.Scene` or `new Phaser.Game`
+                            runs before Phaser exists (a module waits on its imports' top-level
+                            await). In Node it resolves at once. tests/phaserFallback.test.js.
   main.js                   new Phaser.Game(...): fieldWidth(window) x 1280 logical
                             field (720 on a phone, wider on desktop), Scale.FIT,
                             a debounced window resize (a phone rotation too) →
@@ -941,7 +954,11 @@ src/
                             respawn (crashMs, glideMs,
                             blinkMs, blinkCycles, blinkAlpha).
                             Pure data, Node-safe.
-  logic.js                  Pure functions, NO Phaser/DOM: Chinese line breaking
+  logic.js                  Pure functions, NO Phaser/DOM: eachChild (plan 35, 1.3: walk a
+                            Phaser group's children on a copy, since destroy() splices the live
+                            array and a plain for-of skips the next child; Play walks its
+                            pipes, items and beans through it; tests/eachChild.test.js),
+                            errorReportText, errorCardContext, loopStalled (the error card), Chinese line breaking
                             (cjkUnits, wrapCjk; plan 28, 2.1), the invite link
                             (inviteFromSearch, withoutInvite: one pattern for both,
                             AUD-038), field (fieldWidth,
@@ -1386,6 +1403,12 @@ src/
                             padNav(dir, padIndex) shims for the smoke driver. Only
                             Play binds (P1 in a match; P2 never).
   ui/
+    errorCard.js            The error card (plan 35, 1.1), a DOM panel (panelFrameCss): main.js
+                            installs it as __flappyBoot's handler. Mid-run it pauses the run and
+                            offers Reload or Keep playing (errorCardContext: 'run', 'daily' where
+                            Reload would end today's attempt, 'menu' shows at once). An unhandled
+                            rejection shows it only when the frame loop has stopped (loopStalled).
+                            tests/errorCard.test.js.
     focus.js                createFocus(scene, t, { items, scrolled, onVertical }):
                             (an item's optional rect() is its resting place, walked
                             and drawn in place of obj's live bounds: a tray button
@@ -2443,6 +2466,15 @@ tests/                      node --test (schema.test.js, pilot.test.js, eduBoard
                             filled from its lead to its edge), sweepOffset
                             (ends, midpoint, monotonic, fastest off the edge,
                             peak extra speed bound)
+  errorCard.test.js         The error card (plan 35, 1.1): context by run state, the pause,
+                            Reload / Keep playing, one card at a time, rejections only on a
+                            stalled loop, errorReportText (links stripped), the bug form
+  phaserFallback.test.js    Phaser's loader (plan 35, 1.2), the trap run on a fake window: CDN
+                            ok, failed or stalled → vendored copy, neither → the splash's
+                            failed state and a retry; the pin: one CDN tag and the vendored
+                            copy, both 4.2.1 and the same build
+  eachChild.test.js         eachChild (plan 35, 1.3): walks a copy, skips a child an earlier
+                            turn destroyed; guards that Play walks its groups through it
   html.test.js              index.html invariants (viewport, no scroll, pinned Phaser;
                             the splash's parts, ‹ card › then Continue, no spinner,
                             no words in its markup, the inline import before
@@ -2534,7 +2566,8 @@ tests/                      node --test (schema.test.js, pilot.test.js, eduBoard
                             in every locale and translated; changelogEntry / Notes
   howto.test.js             HOW_TO copy, pause banner, the ready screen's ? box
                             (readyLayout().howto geometry, readyHit)
-  feedback.test.js          issueUrl bug / feature templates and the card report
+  feedback.test.js          issueUrl bug / feature templates (a bug form takes the last
+                            caught error, URLs stripped: errorReportText) and the card report
                             (the code in the title and the form's fields, which
                             education.yml declares); openExternalUrl paths; feedback
                             i18n keys
@@ -2852,6 +2885,9 @@ tests/                      node --test (schema.test.js, pilot.test.js, eduBoard
   richText.test.js          src/richText.js: linkSpans (whole words, overlaps,
                             missing terms) and layoutRich (greedy wrap, centred
                             lines, parts that add up, links across a break)
+  blockedStorage.test.js    Every read of localStorage throwing: src/ never touches it
+                            outside the store; plan 35, 1.5 adds that the 📚 switch holds
+                            across Play's restarts (a new store reads it back)
   jsonStore.test.js         src/store.js and the stores on it: storage is the truth,
                             a broken entry reads as empty, memory when storage throws
                             or is full, another tab's Clear holds
@@ -2869,7 +2905,9 @@ tests/                      node --test (schema.test.js, pilot.test.js, eduBoard
                             claim, the race's own level table, tournamentPayload
   tournamentNames.test.js   guest names: the word lists, every name fits a username,
                             rollGuestName (seeded, rerolled in the lobby)
-  support/                  not test files (the glob is tests/**/*.test.js): scenes.js
+  support/                  not test files (the glob is tests/**/*.test.js): bootTrap.js
+                            (index.html's inline trap on a fake window and document, its one
+                            import() a call to `importSplash`), scenes.js
                             (a scene in Node: Object.create(Scene.prototype), sinks,
                             fakeStorage, registry), postgrest.js (a PostgREST stand-in
                             over PGlite that answers only LEADERBOARD.dataApi, with
@@ -3141,7 +3179,13 @@ tools/
                             board's and the pilot's calls are stubbed at boot
                             (globalThis.__edu / __eduAnswer), like the career's.
                             OVERLAYS lists Quiz; NEEDS_RUN keeps the ready-screen
-                            overlay loops off it.
+                            overlay loops off it. Two sections of plan 35: phaser-fallback
+                            (the page reloaded with the CDN blocked, then stalled, boots from
+                            assets/vendor/; both blocked, the splash reads Couldn't load and a
+                            tap reloads; then back on the CDN) and error-card (an error thrown
+                            in a frame shows the card, mid-run pausing the run first; Keep
+                            playing restarts a stopped loop; the bug form carries the error
+                            with no links; a rejection while the loop runs is only kept).
                             Zero dependencies (fetch + WebSocket).
 
 docs/                       Living specs kept with the code: save-code-spec.md (the
@@ -3188,9 +3232,11 @@ Claude outputs/             Michael's private hand-over notes (gitignored; never
    its cap at the top and is flipped vertically for the top pipe; `villi.png`,
    `ceiling.png` and `ground.png` must tile horizontally. Player/item redraws go through
    `assets/src/` + `tools/process_art.py`.
-4. **Phaser stays pinned.** `index.html` loads `phaser@4.2.1` from jsDelivr.
-   Bump it by changing that one tag; `tests/html.test.js` only checks the pin is
-   an exact version. Phaser is a global (`Phaser.Scene`, `Phaser.Game`), not an
+4. **Phaser stays pinned.** `index.html` loads `phaser@4.2.1` from jsDelivr in one
+   async tag, and `assets/vendor/phaser.min.js` is the same build, loaded when the CDN
+   fails or stalls. Bump both together (the tag, the file, the `?v=` on its URL);
+   `tests/phaserFallback.test.js` checks both are the same exact version and that
+   `tests/html.test.js`'s one-tag pin holds. Phaser is a global (`Phaser.Scene`, `Phaser.Game`), not an
    import.
 5. **No build step, no runtime dependencies.** The site is served as-is from the repo
    root by GitHub Pages. Don't add a bundler, TypeScript, or npm packages without

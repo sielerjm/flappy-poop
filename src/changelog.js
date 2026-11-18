@@ -8,6 +8,22 @@ import { LOCALES } from './i18n.js';
 
 export const CHANGELOG = [
   {
+    version: '0.24.2',
+    date: '18 Nov 2026',
+    notes: {
+      en: [
+        'If the game hits an error, a card says so instead of freezing. In a run it pauses the game, and you can reload or keep playing; a bug report takes the error along, with any links removed.',
+        'If the game library can’t load from the internet, the game falls back to a copy it carries itself, and says so (with a tap to retry) if that fails too.',
+        'Pipes, items and beans that leave the screen on the same frame no longer make a neighbor skip a move.',
+      ],
+      'zh-Hans': [
+        '游戏出错时会弹出一张提示卡，而不是直接卡住。在一局中它会暂停游戏，你可以刷新或继续玩；提交问题反馈时会附上这个错误，链接会被去掉。',
+        '如果游戏库无法从网上加载，游戏会改用自带的副本；若也失败，会提示并可点按重试。',
+        '管子、道具和豆子在同一帧离开屏幕时，不会再让相邻的一个漏掉一次移动。',
+      ],
+    },
+  },
+  {
     version: '0.24.1',
     date: '18 Nov 2026',
     notes: {
