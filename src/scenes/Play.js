@@ -1651,7 +1651,9 @@ export class Play extends Phaser.Scene {
       (chain, pair) =>
         chain.then(() =>
           mergePlayers(pair.keep, pair.merge).then((ok) => {
-            if (ok) this.mergeStore.remove(pair);
+            if (!ok) return;
+            this.mergeStore.remove(pair);
+            this.registry?.remove?.('playDaysFor'); // the merged id's days come with the next play_days (Checkpoint 34c)
           }),
         ),
       Promise.resolve(),
@@ -1731,17 +1733,12 @@ export class Play extends Phaser.Scene {
   }
 
   /**
-   * Scores flow down too: the board's best off and on the toilet (played on another device, or
-   * under an id merged into this one) join this device's top list, once per page load and id
-   * (a Load asks again: forgetRename). The home button, an open save panel's welcome line and
-   * code follow. A pulled row that is now this device's best of its kind is filed as its last
-   * confirmed submit, so submitPlans does not post the board's own score back. Never rejects.
-   */
-  /**
    * The day streaks from any device (plan 34, 34.13, Michael): once per page load and player, the server's
    * play_days (Daily Dump course days; Singleplayer days in this device's time zone) are folded into this
-   * device's streak store (mergeDayStreak), then the 🌞's number is redrawn. Offline, or another player by
-   * the time it answers: nothing changes and the next sync asks again. Never rejects.
+   * device's streak store (mergeDayStreak), with the server's longest Singleplayer streak as the floor of
+   * the device's (Checkpoint 34c: a Load or a new device shows the Longest everyone sees), then the 🌞's
+   * number is redrawn. Offline, or another player by the time it answers: nothing changes and the next sync
+   * asks again. A merge that lands on a later sync asks again too (syncLeaderboard). Never rejects.
    */
   pullPlayDays(id) {
     if (!this.save?.name || this.registry.get('playDaysFor') === id || !this.streakStore?.merge) return Promise.resolve();
@@ -1756,12 +1753,19 @@ export class Play extends Phaser.Scene {
         if (!days || this.save?.id !== id) return;
         this.registry.set('playDaysFor', id); // the registry outlives scene.restart: once per page load
         this.streakStore.merge('daily', days.daily, utcDayKey());
-        this.streakStore.merge('single', days.single, localDayKey());
+        this.streakStore.merge('single', days.single, localDayKey(), days.singleBest);
         this.refreshStreakMarks();
       })
       .catch(() => {});
   }
 
+  /**
+   * Scores flow down too: the board's best off and on the toilet (played on another device, or
+   * under an id merged into this one) join this device's top list, once per page load and id
+   * (a Load asks again: forgetRename). The home button, an open save panel's welcome line and
+   * code follow. A pulled row that is now this device's best of its kind is filed as its last
+   * confirmed submit, so submitPlans does not post the board's own score back. Never rejects.
+   */
   pullBoardBests(id) {
     if (!this.save?.name || this.boardBestsFor === id) return Promise.resolve();
     return this.fetchBoardBests(id)

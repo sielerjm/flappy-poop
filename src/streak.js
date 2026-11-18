@@ -62,7 +62,8 @@ export function mergeDayStreak(rec, days, today) {
     if (Number.isFinite(n) && n <= limit) played.add(n);
   }
   const end = rec ? dayNumber(rec.day) : null;
-  if (rec && end <= limit) for (let k = 0; k < rec.streak; k += 1) played.add(end - k);
+  // At most 100000 days of the record's run (Checkpoint 34c: a damaged record must not hang the page).
+  if (rec && end <= limit) for (let k = 0; k < Math.min(rec.streak, 100000); k += 1) played.add(end - k);
   if (played.size === 0) return rec ?? null;
   const sorted = [...played].sort((a, b) => a - b);
   let run = 0;

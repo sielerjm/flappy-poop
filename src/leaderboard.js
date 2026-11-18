@@ -532,16 +532,17 @@ const PLAY_DAYS_MAX = 400;
 
 /**
  * The days this player played (plan 34, 34.13: db/schema.sql play_days), for the day streaks:
- * { daily, single }, each a list of 'YYYY-MM-DD' (Daily Dump course days; Singleplayer days in the
- * time zone `tz`, an IANA name, UTC when unknown). Anything else in the answer is dropped. null when
- * offline, or for no id.
+ * { daily, single, singleBest }: two lists of 'YYYY-MM-DD' (Daily Dump course days; Singleplayer days in
+ * the time zone `tz`, an IANA name, UTC when unknown) and the server's longest Singleplayer streak
+ * (Checkpoint 34c; 0 from a 34.14 server). Anything else in the answer is dropped. null when offline, or
+ * for no id.
  */
 export async function fetchPlayDays(playerId, tz = null, opts = {}) {
   if (typeof playerId !== 'string' || !ID_RE.test(playerId)) return null;
   const out = await request('/rpc/play_days', { method: 'POST', body: { p_player_id: playerId, p_tz: typeof tz === 'string' && tz.length <= 64 ? tz : null } }, opts);
   if (!out || typeof out !== 'object') return null;
   const days = (v) => (Array.isArray(v) ? v.filter((d) => typeof d === 'string' && DAY.test(d)).slice(-PLAY_DAYS_MAX) : []);
-  return { daily: days(out.daily), single: days(out.single) };
+  return { daily: days(out.daily), single: days(out.single), singleBest: whole(out.singleBest) };
 }
 
 /**
@@ -879,11 +880,15 @@ export function createStreakStore(storage = browserStorage(), key = LEADERBOARD.
       const all = box.read();
       return box.write({ ...all, [kind]: nextDayStreak(all[kind] ?? null, day) });
     },
-    merge(kind, days, today) {
+    merge(kind, days, today, floorBest = 0) {
       if (!STREAK_KINDS.includes(kind) || !DAY_RE.test(today ?? '')) return box.read();
       const all = box.read();
+      const floor = Number.isInteger(floorBest) && floorBest > 0 ? floorBest : 0;
       const rec = mergeDayStreak(all[kind] ?? null, days, today);
-      return rec ? box.write({ ...all, [kind]: rec }) : all;
+      // The server's longest streak (play_days' singleBest, Checkpoint 34c) is the floor of the best; with no
+      // day on record it stands on a lapsed day, so the streak now reads 0.
+      const out = rec ? { ...rec, best: Math.max(rec.best, floor) } : floor ? { day: '1970-01-01', streak: 1, best: floor } : null;
+      return out ? box.write({ ...all, [kind]: out }) : all;
     },
     now(kind, today) {
       return dayStreakNow(box.read()[kind] ?? null, today);
