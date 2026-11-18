@@ -248,6 +248,20 @@ export function poopX(fieldW, t) {
   return Math.round(fieldW * t.poopXFrac);
 }
 
+/**
+ * Walk a Phaser group's children when the walk may destroy some (plan 35, 1.3): getChildren() is the
+ * group's live array and destroy() splices a child out of it, so a plain for-of skips the child after
+ * one it destroys (a pair's mate leaves on the same frame and missed its move). This walks a copy, as
+ * skipToFinish does, in order, and passes over a child an earlier turn of the same walk destroyed.
+ * @template T
+ * @param {readonly T[] | null | undefined} children
+ * @param {(child: T) => void} fn
+ */
+export function eachChild(children, fn) {
+  if (!children?.length) return;
+  for (const child of [...children]) if (child?.active !== false) fn(child);
+}
+
 /** True once the pipe's right edge has moved left of the player's x. */
 export function hasPassed(pipeCentreX, pipeWidth, playerX) {
   return pipeCentreX + pipeWidth / 2 < playerX;

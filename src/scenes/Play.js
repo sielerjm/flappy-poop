@@ -5,6 +5,7 @@ import {
   createCourse,
   centredGapY,
   hasPassed,
+  eachChild,
   scoreAfterDeath,
   crashCoins,
   levelClearCoins,
@@ -5611,7 +5612,9 @@ export class Play extends Phaser.Scene {
       }
     }
 
-    for (const pipe of this.pipes.getChildren()) {
+    // Each walk is over a copy (eachChild, plan 35, 1.3): destroy() takes a child out of the group's live
+    // array, and the one after it (a pair's mate leaves on the same frame) would miss this frame.
+    eachChild(this.pipes.getChildren(), (pipe) => {
       // A moving pair: the gap centre follows its sine (frozen while paused, like the items); the
       // mate stays gapH below. Arcade reads the sprites' positions each step, so the bodies follow.
       const move = pipe.getData('move');
@@ -5639,8 +5642,8 @@ export class Play extends Phaser.Scene {
         sfx.score();
       }
       if (pipe.x < -T.pipeWidth) pipe.destroy();
-    }
-    for (const item of this.items.getChildren()) {
+    });
+    eachChild(this.items.getChildren(), (item) => {
       const bob = item.getData('bob');
       if (!bob && this.state === 'playing') this.pulseStill(item, delta);
       if (bob && this.state === 'playing') {
@@ -5654,7 +5657,7 @@ export class Play extends Phaser.Scene {
         } else item.y = gapBobY(elapsed, item.getData('baseY'), item.getData('amp'), T.items.movePeriodMs, item.getData('phase'));
       }
       if (item.x < -T.pipeWidth) item.destroy();
-    }
+    });
     // The challenge bubble is never missed by a hair (plan 34): reaching the poop's x untouched opens it as a
     // touch would, unless a fart is flying through (it is then gone for the level).
     // A bubble that reaches the poop's x while a fart flies through it is gone for the level (AUD-064): it does
@@ -5664,7 +5667,7 @@ export class Play extends Phaser.Scene {
       if (this.effects.powerActive()) this.superQ.done = true;
       else this.collectItem(bubble);
     }
-    for (const bean of this.beans.getChildren()) {
+    eachChild(this.beans.getChildren(), (bean) => {
       if (this.state === 'playing') {
         const elapsed = bean.clockMs + delta;
         bean.clockMs = elapsed;
@@ -5673,6 +5676,6 @@ export class Play extends Phaser.Scene {
         bean.setAngle(beanAngle(elapsed, T));
       }
       if (bean.x < -T.pipeWidth) bean.destroy();
-    }
+    });
   }
 }
