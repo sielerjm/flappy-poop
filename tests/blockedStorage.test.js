@@ -76,6 +76,15 @@ test('with storage blocked, every store the game builds on its default storage w
   settings.set({ locale: 'zh-Hans' });
   assert.equal(storedLocale(browserStorage(), TUNING.settingsKey), 'zh-Hans', "Play's restart finds the language picked (resolveLocale)");
   assert.equal(createSettingsStore(browserStorage(), TUNING.settingsKey).load().locale, 'zh-Hans');
+  // The 📚 switch (plan 35, 1.5; the 2026-11-13 audit's "forgotten on every restart"): Play.toggleEducation
+  // sets it on the store its create() built, and the next create() builds a new one that reads it back,
+  // with later sets of other keys (Settings, Language) keeping it.
+  const before = createSettingsStore(browserStorage(), TUNING.settingsKey).load().education;
+  createSettingsStore(browserStorage(), TUNING.settingsKey).set({ education: !before });
+  createSettingsStore(browserStorage(), TUNING.settingsKey).set({ haptics: false });
+  assert.equal(createSettingsStore(browserStorage(), TUNING.settingsKey).load().education, !before, "the 📚 switch holds across Play's restarts");
+  createSettingsStore(browserStorage(), TUNING.settingsKey).set({ education: before });
+  assert.equal(createSettingsStore(browserStorage(), TUNING.settingsKey).load().education, before, 'and back');
   const day = '2026-11-15';
   lb.createDailyStore().save({ day, playerId: withId.id, level: 1, score: 0, pipes: 0 });
   assert.equal(lb.createDailyStore().load(day, withId.id)?.day, day, "the Daily attempt claimed at a run's start reads back (one attempt a day holds for the visit)");
