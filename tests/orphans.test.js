@@ -24,7 +24,12 @@ const ALLOWED_EXPORTS = {
   // Daily Dump (plan .claude/plans/2026-11-10-daily-dump.md): helpers land before their callers.
   RUN_DATA_KEYS: "test guard: tests/runStats.test.js keeps it equal to run_data_keys() in db/schema.sql",
   // Online race (plan 39, 1.3 and 1.4): src/online.js's pure parts and src/onlineNet.js land before their callers; drop each entry when its caller lands.
-  createOnlineNet: 'plan 39 1.4: the transport, tested in tests/onlineNet.test.js; first caller the sign-in screen (1.6a), then the lobby (1.6c)',
+  accountCss: 'plan 39 1.6a: the sign-in screens, tested in tests/onlineAccountViews.test.js; first caller the 🌐 lobby (1.6c)',
+  createAccountState: 'plan 39 1.6a: the sign-in screens, tested in tests/onlineAccountViews.test.js; first caller the 🌐 lobby (1.6c)',
+  enterOnline: 'plan 39 1.6a: the sign-in screens, tested in tests/onlineAccountViews.test.js; first caller the 🌐 lobby (1.6c)',
+  accountNotes: 'plan 39 1.6a: the sign-in screens, tested in tests/onlineAccountViews.test.js; first caller the 🌐 lobby (1.6c)',
+  devicesButton: 'plan 39 1.6a: the sign-in screens, tested in tests/onlineAccountViews.test.js; first caller the 🌐 lobby (1.6c)',
+  accountBody: 'plan 39 1.6a: the sign-in screens, tested in tests/onlineAccountViews.test.js; first caller the 🌐 lobby (1.6c)',
   compareVersions: 'plan 39 1.3: pure, tested in tests/online.test.js; first caller the lobby (1.6c)',
   agreedWidth: 'plan 39 1.3: pure, tested in tests/online.test.js; first caller OnlineRace (1.7a)',
   formatCode: 'plan 39 1.3: pure, tested in tests/online.test.js; first caller the lobby (1.6c)',

@@ -562,6 +562,49 @@ The winners take the podium 🥇 🥈 (and 🥉 from 3 players). With 3 or more 
 | tournamentBracketPill | 🏅 Bracket | 🏅 赛程 |
 | tournamentSaveTwo | Two-player tournaments aren't saved to the 🏅 board | 双人锦标赛不会记到 🏅 榜上 |
 | onlineLoadFailed | Couldn't load online play. Check your connection and try again. (plan 39, 0.2: shown in the tournament window when the 🌐 switch cannot load the online client, assets/vendor/supabase.js; play on this device still works) | 无法加载在线比赛。请检查网络后重试。 |
+| onlineBack | Back (plan 39: back to the 🌐 window's first screen) | 返回 |
+| onlineErrOffline | You're offline. Check your connection and try again. (plan 39: online play's status line, in the 🌐 window of the tournament window) | 你已离线，请检查网络后再试。 |
+| onlineNeedName | Online races need a username. Pick one: it's the name your friend sees. (plan 39, 1.5b: the online sign-in side. A device links to the player's username; the first device is "paired" (trusted), later ones wait until a 6-digit pairing code from a paired device is typed on them. {n} is a number, {when} is today / {n} days ago, {time} a m:ss countdown) | 在线比赛需要用户名。选一个吧：朋友会看到这个名字。 |
+| onlineNameNote | The same rules as the leaderboard: 4 to 16 characters, no spaces. It becomes your username everywhere. | 规则和排行榜一样：4到16个字符，不能有空格。它会成为你在所有地方的用户名。 |
+| onlineNameSave | Save | 保存 |
+| onlineNameTaken | That username belongs to another player. Pick another, or if it's yours, load your user code in the save panel first. | 这个用户名属于另一位玩家。请换一个；如果是你的，请先在存档面板里载入你的用户码。 |
+| onlineConnecting | Connecting | 正在连接 |
+| onlineSignInLimited | Too many new online players on this network right now (schools and phone networks share one). Try again in an hour. | 这个网络上的新在线玩家太多了（学校和手机网络常常共用一个）。请一小时后再试。 |
+| onlineDisabled | Online races are switched off right now. Try again later. | 在线比赛暂时关闭，请稍后再试。 |
+| onlineTooManyWaiting | Your player already has 3 devices waiting to be paired. Remove one from a paired device, then try again. | 你的玩家已有3台设备在等待配对。请在已配对的设备上移除一台，然后再试。 |
+| onlineStorageBlocked | This browser blocks storage, so online play only lasts until you close this page. | 这个浏览器禁止存储，所以在线游戏只能持续到你关闭本页面。 |
+| onlinePendingHome | This device isn't paired with your other devices yet. You can race by code; pair it in Devices. | 这台设备还没有和你的其他设备配对。你仍可以用房间码比赛；请在“设备”里配对。 |
+| onlineDevices | 📱 Devices | 📱 设备 |
+| onlineDevicesLead | Devices that use your player online | 在线使用你玩家的设备 |
+| onlineThisDevice | This device | 这台设备 |
+| onlineOtherDevice | Device {n} | 设备 {n} |
+| onlinePaired | paired | 已配对 |
+| onlineWaitingPair | waiting to pair | 等待配对 |
+| onlineSeen | last online {when} | 最近在线：{when} |
+| onlineLinked | added {when} | 添加于：{when} |
+| onlineToday | today | 今天 |
+| onlineDaysAgo | {n} days ago | {n}天前 |
+| onlineRemove | Remove | 移除 |
+| onlineRemoveConfirm | Tap Remove again: that device leaves online play and has to be paired again. | 再点一次“移除”：那台设备会退出在线游戏，需要重新配对。 |
+| onlineRemoved | Device removed | 设备已移除 |
+| onlineRemoveThis | Remove this device | 移除这台设备 |
+| onlineRemoveThisConfirm | Tap again: this device leaves online play. Your username and scores stay. | 再点一次：这台设备会退出在线游戏。你的用户名和成绩都会保留。 |
+| onlineRemovedThis | This device left online play | 这台设备已退出在线游戏 |
+| onlinePairNew | Pair a new device | 配对新设备 |
+| onlinePairCodeLead | Type this code on your new device, under 🌐 Online > 📱 Devices | 在新设备的“🌐 在线 > 📱 设备”里输入这个配对码 |
+| onlinePairCodeExpires | Code works for {time} | 配对码有效时间：{time} |
+| onlinePairCodeNote | Only type it on your own device. Never share it with anyone. | 只在你自己的设备上输入。不要告诉任何人。 |
+| onlinePendingLead | This device is waiting to be paired | 这台设备正在等待配对 |
+| onlineDemoted | Your player was used online on another device while this one was away. If that wasn't you, ask for a reset (Feedback). | 你不在这台设备上时，你的玩家在另一台设备上在线使用过。如果不是你，请（通过“反馈”）申请重置。 |
+| onlinePairHow | On a device that's already paired, open 🌐 Online > 📱 Devices > Pair a new device, then type its code here. | 在已配对的设备上打开“🌐 在线 > 📱 设备 > 配对新设备”，然后在这里输入配对码。 |
+| onlinePairGo | Pair | 配对 |
+| onlinePairWrong | Wrong code. {n} tries left. | 配对码错误，还剩{n}次机会。 |
+| onlinePairBurned | Too many wrong tries: that code stopped working. Make a new one on your paired device. | 错误次数太多，这个配对码已失效。请在已配对的设备上重新生成。 |
+| onlinePairedOk | Paired ✓ | 已配对 ✓ |
+| onlinePairNoCode | No pairing code is waiting. Make a new one on your paired device. | 没有等待中的配对码。请在已配对的设备上重新生成。 |
+| onlineErrGeneric | Something went wrong online. Try again in a moment. (plan 39, 1.6a: any online error without its own message) | 在线功能出了点问题，请稍后再试。 |
+| saveClearNoteOnline | It also signs this device out of online races. | 这也会让这台设备退出在线比赛。 |
+| saveLoadedNoteOnline | This device left online races: turn 🌐 on again to race as this player. | 这台设备已退出在线比赛：再打开🌐即可用这个玩家比赛。 |
 | versusUnreadyHint | Tap again to un-ready | 再点一次可取消准备 |
 
 ### aboutCredits (English)

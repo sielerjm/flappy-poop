@@ -334,6 +334,8 @@ function onClear() {
   if (clearArmedAt && now - clearArmedAt <= T.saveClearConfirmMs) {
     clearTimeout(clearTimer);
     clearArmedAt = 0;
+    // Online play goes with the player (plan 39, 1.6a): unlink this device, then forget its session; a device never online loads nothing.
+    if (ctx.play?.onlineSessionHeld?.()) Promise.resolve(ctx.play.onlineLeave?.()).catch(() => {});
     if (ctx.play?.signOut) ctx.play.signOut();
     else setState(saveLocal({}));
     claim = null;
@@ -352,7 +354,7 @@ function onClear() {
   // Education data opens (with the off switch set, only on a device that joined or shares: AUD-052).
   // Chinese sets no space after its full-width punctuation.
   const cardsNote = ctx.play?.eduHasCards?.() && (ctx.play?.eduDataReachable?.() ?? true);
-  const warning = [t(locale, 'saveClearConfirm'), cardsNote ? t(locale, 'saveClearNoteCards') : '', ctx.play?.eduShareOn?.() ? t(locale, 'saveClearNoteShared') : '', ctx.play?.researchConsent?.() ? t(locale, 'saveClearNotePilot') : ''].filter(Boolean).join(locale === 'zh-Hans' ? '' : ' ');
+  const warning = [t(locale, 'saveClearConfirm'), cardsNote ? t(locale, 'saveClearNoteCards') : '', ctx.play?.eduShareOn?.() ? t(locale, 'saveClearNoteShared') : '', ctx.play?.researchConsent?.() ? t(locale, 'saveClearNotePilot') : '', ctx.play?.onlineSessionHeld?.() ? t(locale, 'saveClearNoteOnline') : ''].filter(Boolean).join(locale === 'zh-Hans' ? '' : ' ');
   setStatus(warning, 'error');
   clearTimeout(clearTimer);
   clearTimer = setTimeout(() => {
@@ -432,7 +434,11 @@ async function onLoad() {
     dom.name.value = res.state.name;
     dom.load.value = '';
     // The scores are read when the line is drawn, so the board's (pullBoardBests) show once they arrive.
-    const statusFor = (name) => (merged ? t(locale, 'saveMerged').replace('{name}', name) : welcomeText(locale, { ...getState(), name }));
+    // Another player's code: this device leaves online play (plan 39, 1.6a), and turning 🌐 on again links it to the loaded player.
+    const leftOnline = before.id !== res.state.id && Boolean(ctx.play?.onlineSessionHeld?.());
+    if (leftOnline) Promise.resolve(ctx.play.onlineLeave?.()).catch(() => {});
+    const onlineNote = leftOnline ? `${locale === 'zh-Hans' ? '' : ' '}${t(locale, 'saveLoadedNoteOnline')}` : '';
+    const statusFor = (name) => (merged ? t(locale, 'saveMerged').replace('{name}', name) : welcomeText(locale, { ...getState(), name })) + onlineNote;
     loaded = { name: res.state.name, text: statusFor, shown: statusFor(res.state.name) };
     setStatus(loaded.shown, 'ok');
     refreshClear();

@@ -119,7 +119,9 @@ import { t, pauseBannerText, levelBannerText, levelLabel, initialLocale, isLocal
 import { loadLocal, saveLocal, ensureId, recordScore, mergeBoardBests, newId, TOILET_EMOJI } from '../save.js';
 import { createRunStats, stubRow } from '../runStats.js';
 import { VERSION as APP_VERSION } from '../logic.js';
-import { browserStorage } from '../store.js';
+import { browserStorage, pageStorage, createJsonStore } from '../store.js';
+import { createOnlineNet } from '../onlineNet.js';
+import { createOnlineAccount } from '../onlineAccount.js';
 import { runDeltas, evaluate, bestFacts, levelCloseShave, winsInWindow, daysBetween, nextDrawStreak, FOUR_OF_A_KIND, EDU_ACHIEVEMENTS, eduRunFacts } from '../achievements.js';
 import { unlock, attachGame, setMuted, isMuted, sfx } from '../sound.js';
 import { createTray } from '../ui/tray.js';
@@ -1827,6 +1829,57 @@ export class Play extends Phaser.Scene {
   /** Is `name` free on the board for this player's id? true / false / null (the board cannot say). The save panel asks before storing a name. */
   checkNameAvailable(name, id) {
     return checkNameAvailable(name, id);
+  }
+
+  /**
+   * This device holds an online session (plan 39, 1.6a): its key in storage, or in this page load's
+   * memory when storage is blocked (onlineNet keeps it there). Clear and Load ask before leaving online
+   * play, so a device that was never online loads no client.
+   */
+  onlineSessionHeld() {
+    const key = LEADERBOARD.onlineSessionKey;
+    const has = (s) => {
+      try {
+        return Boolean(s?.getItem(key));
+      } catch {
+        return false;
+      }
+    };
+    return has(browserStorage()) || has(pageStorage());
+  }
+
+  /**
+   * The online sign-in side (src/onlineAccount.js), made once per page on this scene's save: the
+   * transport (onlineNet, created lazily, loading nothing until a sign-in), the save panel's own path
+   * for a newly claimed name (save, noteRename, a sync), and this device's last known trust (M1).
+   */
+  onlineAccount() {
+    if (this.onlineAccountRef) return this.onlineAccountRef;
+    this.onlineNet ??= createOnlineNet();
+    const trustStore = createJsonStore(browserStorage(), LEADERBOARD.onlineTrustKey, (v) => (typeof v === 'boolean' ? v : null));
+    this.onlineAccountRef = createOnlineAccount({
+      net: this.onlineNet,
+      getSave: () => this.save,
+      saveWithId: () => {
+        if (!this.save?.id) this.setSaveState(ensureId(this.save ?? {}));
+        return this.save;
+      },
+      storeName: (name) => {
+        this.setSaveState(saveLocal({ ...this.save, name }));
+        this.noteRename?.(name);
+        this.syncLeaderboard?.();
+      },
+      checkName: (name, id) => this.checkNameAvailable(name, id),
+      hasSession: () => this.onlineSessionHeld(),
+      trust: { get: () => trustStore.read(), set: (v) => (v === null ? trustStore.clear() : trustStore.write(v)) },
+      storageBlocked: () => browserStorage() === pageStorage(),
+    });
+    return this.onlineAccountRef;
+  }
+
+  /** Clear / a Load of another player (the save panel): unlink this device online, then forget its session. */
+  onlineLeave() {
+    return this.onlineAccount().leave();
   }
 
   /**

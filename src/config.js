@@ -569,6 +569,7 @@ export const LEADERBOARD = {
   eduShareKey: 'flappyPoop.eduShare', // localStorage key for this device's 📚 board sharing (plan 21): whether the player shares their education grades, the round of sharing, and what of this device's record the board already has
   careerKey: 'flappyPoop.career', // localStorage key for this device's lifetime counters and achievements (plan 08): what waits to be sent, the batch in flight, the server's last totals, unlocks and claims
   onlineSessionKey: 'flappyPoop.onlineSession', // localStorage key for this device's anonymous Supabase Auth session (plan 39, 🌐 only): supabase-js keeps it there; a bearer secret, never sent anywhere else nor exported
+  onlineTrustKey: 'flappyPoop.onlineTrust', // localStorage key for whether this device was last seen trusted online (plan 39, 1.6a, M1): true / false, so a demotion while it was away can be told; cleared by Clear, a Load of another player and Remove this device
   streaksKey: 'flappyPoop.streaks', // localStorage key for this device's Singleplayer and Daily Dump day streaks (plan 34): { single, daily }, each { day, streak, best }; never sent, not in the backup
   dailyMaxScore: 10000, // the Daily Dump cap (endless runs); matches daily_scores' CHECK and submit_daily_score() in db/schema.sql
   maxScore: 1000, // scores above this are not submitted (matches the CHECK and submit_score() in db/schema.sql); a full 285-pair run with ×2 fits
