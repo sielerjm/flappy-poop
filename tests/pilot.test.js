@@ -5,7 +5,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { installDom } from './support/dom.js';
-import { playScene, fakeStorage } from './support/scenes.js';
+import { playScene, fakeStorage, registry } from './support/scenes.js';
 import { freshDb, installPostgrest } from './support/postgrest.js';
 
 const body = installDom();
@@ -365,6 +365,53 @@ test('the invite field keeps no code once the panel closes, and asks iOS not to 
   assert.equal(kb.enabled, false, 'the game keyboard is off under the panel');
   closeEduDataPanel();
   assert.equal(kb.enabled, true, 'and back on once it closes');
+});
+
+test("an invite link's code waits in memory until a share or a join: the nameless invitee who closes the panel to save a name finds it filled again; a code typed over it is not kept (AUD-090)", async () => {
+  const play = device({ id: null, name: '', top: [], exportedAt: null }, fakeStorage());
+  play.eduShare = { load: () => ({ on: false }), turnOn() {} };
+  play.time = { delayedCall: (ms, fn) => fn() };
+  play.match = null;
+  play.registry = registry();
+  play.registry.set('pendingInvite', 'link-code-2026'); // what main.js keeps of ?invite=<code>
+  play.openPendingInvite();
+  const field = body.find('edu-invite-code');
+  assert.equal(field.value, 'link-code-2026', 'the link opens the panel with its code');
+  assert.equal(body.find('edu-data-status').textContent, t('en', 'eduShareNeedName'), 'and asks for a username first');
+  closeEduDataPanel();
+  assert.equal(field.value, '', 'closed: the field itself holds nothing (AUD-046)');
+  assert.equal(play.registry.get('pendingInvite'), undefined, 'and the link opens the panel only once');
+  play.save = { ...play.save, name: 'Newbie' }; // saved in the user panel, as the panel asked
+  play.openEduData(); // the user panel's 📚 button (and the board's footer, the profile's row)
+  assert.equal(field.value, 'link-code-2026', 'reopened in this page load: the link\'s code is back');
+  field.value = 'typed-over';
+  closeEduDataPanel();
+  play.openEduData();
+  assert.equal(field.value, 'link-code-2026', 'a code typed over it went with the close; the link\'s stays');
+  play.postEduShare = async () => ({ status: 'needsInvite' });
+  assert.equal((await play.startEduShare(true, 'link-code-2026')).status, 'needsInvite');
+  closeEduDataPanel();
+  play.openEduData();
+  assert.equal(field.value, 'link-code-2026', 'a share that failed keeps it');
+  play.postEduShare = async () => ({ status: 'ok', sharedAt: '2026-11-19T10:00:00.000Z' });
+  assert.equal((await play.startEduShare(true, 'link-code-2026')).status, 'ok');
+  closeEduDataPanel();
+  play.openEduData();
+  assert.equal(field.value, '', 'a share that succeeded used it up');
+  closeEduDataPanel();
+  const joiner = device({ id: 'JOINLINKAAAAAAAAAAAAAA', name: '', top: [], exportedAt: null }, fakeStorage());
+  joiner.eduShare = { load: () => ({ on: false }) };
+  joiner.time = { delayedCall: (ms, fn) => fn() };
+  joiner.match = null;
+  joiner.registry = registry();
+  joiner.registry.set('pendingInvite', 'link-code-2026');
+  joiner.openPendingInvite();
+  closeEduDataPanel();
+  joiner.postResearchEnrol = async () => ({ status: 'ok', phase: 'pilot', since: Date.now() });
+  assert.equal((await joiner.joinResearch('link-code-2026', true)).status, 'ok');
+  joiner.openEduData();
+  assert.equal(body.find('edu-invite-code').value, '', 'a join that succeeded used it up too');
+  closeEduDataPanel();
 });
 
 test("Clear's warning names the pilot whenever this device holds a consent, an older notice's included (AUD-005)", async () => {

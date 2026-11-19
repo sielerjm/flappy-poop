@@ -529,7 +529,7 @@ export function closeEduDataPanel() {
   if (!dom || dom.root.hidden) return;
   dom.root.hidden = true;
   session += 1;
-  dom.code.value = ''; // the code is sent once and never kept, in the page either (AUD-046)
+  dom.code.value = ''; // a typed code is sent once and never kept, in the page either (AUD-046); an invite link's waits with Play (AUD-090)
   dom.paste.value = ''; // nor a pasted backup
   if (document.activeElement && dom.root.contains(document.activeElement)) document.activeElement.blur();
   setGameKeyboard(true);

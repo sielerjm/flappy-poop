@@ -6410,6 +6410,11 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
       const linked = await load(`&invite=${code}`);
       ok(linked.state === 'ready' && linked.open && linked.code === code && !linked.search.includes('invite') && linked.search.includes('r=') && !linked.stored && linked.pending === null, `an invite link opens the 📚 Education data panel with the code filled in; the address bar lost it ("${linked.search}"), nothing stores it (${JSON.stringify(linked)})`);
       await evaluate(`import('./src/ui/eduDataPanel.js').then((m) => (m.closeEduDataPanel(), true))`);
+      // Closed to save the username the panel asks for, then opened again from the user panel's 📚 button
+      // in the same page load: the link's code is filled again, still in memory only (AUD-090).
+      const again = await evaluate(`(() => { __flappy.scene.getScene('Play').openEduData(); const r = document.getElementById('edu-data-panel'); return JSON.stringify({ open: Boolean(r && !r.hidden), code: document.getElementById('edu-invite-code')?.value ?? null, stored: Object.keys(localStorage).some((k) => (localStorage.getItem(k) ?? '').includes('${code}')) }); })()`).then(JSON.parse);
+      ok(again.open && again.code === code && !again.stored, `reopened after a close, the panel has the link's code again; nothing stores it (${JSON.stringify(again)})`);
+      await evaluate(`import('./src/ui/eduDataPanel.js').then((m) => (m.closeEduDataPanel(), true))`);
       const plain = await load('');
       ok(plain.state === 'ready' && !plain.open, 'a load without the link opens nothing');
     });

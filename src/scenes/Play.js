@@ -1875,10 +1875,13 @@ export class Play extends Phaser.Scene {
    * The 📚 Education data panel (plan 21): where a player chooses to share their education grades
    * on the 📚 board. From the user panel's button, the 📚 board's footer and the profile's row;
    * only while education mode is available (EDUCATION.enabled). `onClose(changed)` runs when it closes.
+   * An invite link's code (openPendingInvite) fills the field every time it opens, until a share or
+   * a join takes it (AUD-090).
    */
   openEduData(opts = {}) {
     if (!this.eduDataReachable()) return;
-    openEduDataPanel({ game: this.game, play: this, locale: this.locale, ...opts });
+    const link = this.registry?.get?.('inviteLink');
+    openEduDataPanel({ game: this.game, play: this, locale: this.locale, ...(link ? { invite: link } : {}), ...opts });
   }
 
   /**
@@ -4947,6 +4950,7 @@ export class Play extends Phaser.Scene {
     if (!this.save?.id) this.setSaveState(ensureId(this.save ?? {}));
     const id = this.save.id;
     const res = await this.postResearchEnrol(id, invite ?? null, adult === true, EDUCATION.consentVersion);
+    if (res?.status === 'ok') this.registry?.remove?.('inviteLink'); // an invite link's code is used up (AUD-090)
     if (res?.status === 'ok' && this.save?.id === id) {
       // No invitation flag: a join is not the 📚 board's invitation, and the server marks none (AUD-040).
       // While joined, the panel shows both parts and the server lets the participant share without a code.
@@ -5010,6 +5014,7 @@ export class Play extends Phaser.Scene {
     if (!this.save.id) this.save = ensureId(this.save);
     const { id, name } = this.save;
     const res = await this.postEduShare(id, name, adult === true, invite);
+    if (res?.status === 'ok') this.registry?.remove?.('inviteLink'); // an invite link's code is used up (AUD-090)
     if (res?.status === 'needsInvite') this.settings?.set?.({ eduInvited: false }); // the server does not know the invitation: ask for the code again
     if (res?.status === 'ok' && this.save?.id === id) {
       this.settings?.set?.({ eduInvited: true }); // the server knows the player as invited now (plan 28, 2.4)
@@ -5055,19 +5060,23 @@ export class Play extends Phaser.Scene {
     return shareEducation(id, name, adult, { invite });
   }
 
-  /** Was this device's player invited to share (plan 28, 2.4)? A flag the panel reads; the code is never kept. */
+  /** Was this device's player invited to share (plan 28, 2.4)? A flag the panel reads; the code is never stored (an invite link's waits in memory: openPendingInvite). */
   eduInvited() {
     return Boolean(this.settings?.load?.().eduInvited);
   }
 
   /**
    * An invite link's code (main.js keeps it in the registry, out of the address bar): the first ready
-   * screen opens the 📚 Education data panel with it filled in, once; nowhere else keeps it.
+   * screen opens the 📚 Education data panel with it filled in, once. The code then waits in the
+   * registry (`inviteLink`, this page load's memory, never storage) and fills the field again each
+   * time the panel opens, until a share or a join succeeds: a nameless invitee closes the panel to
+   * save the username it asks for (AUD-090).
    */
   openPendingInvite() {
     const code = this.registry?.get('pendingInvite');
     if (!code || this.match || !this.educationAvailable()) return; // kept until a ready screen can open it
     this.registry.remove('pendingInvite');
+    this.registry.set('inviteLink', code);
     this.time?.delayedCall?.(0, () => this.openEduData({ invite: code }));
   }
 
