@@ -359,7 +359,7 @@ export const TUNING = {
   // server time, so the receiver extrapolates latency away; a flap carries its full state, so
   // the ghost replays it exactly between keyframes.
   online: {
-    keyframeMs: 200, // ms between `pos` keyframes mid-run (5 Hz, the 0.3 spike's rate; flaps go on top). 500 (2 Hz) is plan 39 item 25's cheaper option, Michael's call
+    keyframeMs: 500, // ms between `pos` keyframes mid-run (2 Hz; flaps go on top and carry the poop's full state). Michael, 19 Nov: the same ghost as 5 Hz for 43% fewer messages (plan 39 item 34)
     codeTtlMs: 15 * 60 * 1000, // ms a room code lives from its room's last change: mirrors create_room / join_room in db/schema.sql
     clock: {
       samples: 6, // server_now() round trips per sync round (item 15: 5 to 8); the lowest round trip sets the offset
