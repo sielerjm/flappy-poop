@@ -21,18 +21,15 @@ try {
 const SQL = readFileSync(fileURLToPath(new URL('../db/schema.sql', import.meta.url)), 'utf8');
 
 /**
- * The roles as Supabase makes them: anon and authenticated, and the default privileges that hand
- * them every new table, sequence and function in `public`. So a table or function the schema
- * forgets to revoke is readable or callable here too, as it would be on the live database.
+ * What a Supabase project has before the file runs (tools/supabase_stubs.mjs): anon and authenticated
+ * with Supabase's default privileges, so a table or function the schema forgets to revoke is readable
+ * or callable here too, and the auth / realtime parts the online tables refer to (plan 39).
  */
-const SUPABASE_ROLES = `create role anon nologin; create role authenticated nologin;
-  alter default privileges in schema public grant all on tables to anon, authenticated;
-  alter default privileges in schema public grant all on sequences to anon, authenticated;
-  alter default privileges in schema public grant all on functions to anon, authenticated;`;
+const { SUPABASE_PREAMBLE } = await import('../tools/supabase_stubs.mjs');
 
 async function freshDb() {
   const db = new PGlite();
-  await db.exec(SUPABASE_ROLES);
+  await db.exec(SUPABASE_PREAMBLE);
   await db.exec(SQL);
   await db.exec(SQL);
   return db;
@@ -1575,9 +1572,16 @@ test('db/schema.sql carries a current stamp, and anon can read it through schema
 });
 
 test("the header lists exactly the functions anon may call, and an undo line for the stamp", () => {
-  const granted = [...SQL.matchAll(/^grant\s+execute on function public\.([a-z_]+)\(/gm)].map((m) => m[1]).sort();
+  const grants = [...SQL.matchAll(/^grant\s+execute on function public\.([a-z_]+)\(.*\) to ([a-z]+);$/gm)];
+  assert.equal(grants.length, [...SQL.matchAll(/^grant\s+execute on function/gm)].length, 'every function grant is one line, to one role');
+  const granted = grants.filter((m) => m[2] === 'anon').map((m) => m[1]).sort();
   const listed = [...SQL.matchAll(/^--\s+\* call ([a-z_]+)\(/gm)].map((m) => m[1]).sort();
   assert.deepEqual(listed, granted, 'every anon grant is in the header list, and the list names nothing anon cannot call');
+  // Online play (plan 39): what a signed-in device (authenticated) may call is the header's online list.
+  const online = grants.filter((m) => m[2] === 'authenticated').map((m) => m[1]).sort();
+  const onlineListed = [...SQL.matchAll(/^--\s+\* online ([a-z_]+)\(/gm)].map((m) => m[1]).sort();
+  assert.deepEqual(onlineListed, online, 'every authenticated grant is in the header\'s online list, and the list names nothing else');
+  assert.deepEqual(grants.filter((m) => !['anon', 'authenticated'].includes(m[2])), [], 'no function is granted to any other role');
   assert.match(SQL, /^--\s+undo the stamp: drop function public\.schema_version\(\);$/m);
 });
 
@@ -1772,7 +1776,7 @@ test('the upgrade: the live schema (tests/fixtures/schema-applied.sql) holding r
   // the file runs over itself; it says so rather than passing as if it had upgraded something (AUD-042).
   if (stampOf(FIXTURE) === stampOf(SQL)) t.diagnostic('the fixture is db/schema.sql itself: this run checks idempotency, not an upgrade');
   const db = new PGlite();
-  await db.exec(SUPABASE_ROLES);
+  await db.exec(SUPABASE_PREAMBLE);
   await db.exec(FIXTURE);
   await seedLive(db);
   await db.exec(FIXTURE); // the live schema re-run on itself first: its own backfills settle, as they did live

@@ -11,11 +11,9 @@ import { LEADERBOARD } from '../../src/config.js';
 
 export const SCHEMA = readFileSync(new URL('../../db/schema.sql', import.meta.url), 'utf8');
 
-/** The roles as Supabase makes them, default privileges included (see tests/schema.test.js). */
-export const SUPABASE_ROLES = `create role anon nologin; create role authenticated nologin;
-  alter default privileges in schema public grant all on tables to anon, authenticated;
-  alter default privileges in schema public grant all on sequences to anon, authenticated;
-  alter default privileges in schema public grant all on functions to anon, authenticated;`;
+/** What a Supabase project has before the file runs: roles, default privileges, auth and realtime (tools/supabase_stubs.mjs). */
+export { SUPABASE_PREAMBLE } from '../../tools/supabase_stubs.mjs';
+import { SUPABASE_PREAMBLE } from '../../tools/supabase_stubs.mjs';
 
 /** A valid 22-character id from a short tag ('_' padding keeps 'T1' and 'T10' apart). */
 export const id = (tag) => String(tag).padEnd(22, '_');
@@ -26,7 +24,7 @@ export const INVITE = 'test-invite-code-2026';
 /** A database with the schema applied twice (it must be re-runnable); the 📚 board opened unless `open` is false; `invite` sets the invite code. */
 export async function freshDb({ sql = SCHEMA, open = true, invite = null } = {}) {
   const db = new PGlite();
-  await db.exec(SUPABASE_ROLES);
+  await db.exec(SUPABASE_PREAMBLE);
   await db.exec(sql);
   await db.exec(sql);
   if (open) await db.query('select public.admin_set_education_open(true)');

@@ -40,6 +40,18 @@
 --   * call schema_version()        which version of this file the database last ran (a stamp of the file; 2026-11-13)
 --   * call play_days(...)          the days the player played, for their day streaks (plan 34): their own id only, days only;
 --                                  keeps the time zone it is sent (never shown) and the longest Singleplayer streak
+-- Online play (plan 39). A device entering online play signs in anonymously (Supabase Auth: no email,
+-- nothing sent at sign-in), so its requests run as `authenticated`, which may call these and nothing
+-- else (anon may call none of them; a session token sent to an anon function is refused):
+--   * online link_online_player(...)   link this device to the save-code player id it holds, with the
+--                                      player's online name; the first device is trusted, a later one
+--                                      waits as pending until a trusted device pairs it (M1, below)
+--   * online unlink_online_player()    leave online play on this device: its link and its anonymous user go
+--   * online online_devices()          the player's devices, for a trusted device
+--   * online remove_online_device(...) remove one (any, from a trusted device; itself, from a pending one)
+--   * online online_pair_code()        a trusted device's 6-digit code (10 minutes) for a pending device
+--   * online online_pair(...)          a pending device pairs with that code and is trusted
+--   Apply this file before pushing a client that calls them.
 -- A player has up to two rows: their best on the toilet and their best off it
 -- (primary key player_id + toilet, since 2026-11-04).
 -- and nothing else: no INSERT / UPDATE / DELETE on the table, and nothing at all
@@ -47,7 +59,8 @@
 -- tournament_matchups), daily_scores, player_counters, achievement_defs,
 -- player_achievements, player_meta, education_settings, education_public, research_participants
 -- or research_responses (nor the research_* views), run_log, run_rejects, held_scores,
--- score_steps or board_settings. Profiles are public
+-- score_steps, board_settings, online_profiles, online_players or online_pairings (authenticated
+-- has nothing on any table either). Profiles are public
 -- (2026-11-11): player_stats returns anyone's stats, counters, achievements and biggest rival, by
 -- the name a board shows; and, only for a player who shares them, their education grade (2026-11-13).
 --
@@ -130,6 +143,15 @@
 --     public.streak_days(text, text, text), public.known_tz(text);
 --     alter table public.player_meta drop column tz, drop column single_best, drop column tz_at.
 --   undo the streak backfill (plan 34, 34.13): drop function public.play_days(text, text);
+--   online play (plan 39): remove every device of a player, by the name a board or online play shows
+--   (each links again; the next one is trusted at once; the online name stays):
+--     select public.admin_reset_online('somebody');
+--   undo online play's players (plan 39, 1.1): drop function public.link_online_player(text, text),
+--     public.unlink_online_player(), public.online_devices(), public.remove_online_device(uuid),
+--     public.online_pair_code(), public.online_pair(text), public.admin_reset_online(text),
+--     public.online_me(), public.online_forget(text), public.online_code_hash(text, text),
+--     public.online_random(bigint); restore name_blocked and fold_player from git and run this file;
+--     then drop table public.online_pairings, public.online_players, public.online_profiles.
 --   undo the stamp: drop function public.schema_version();
 --   undo the board pages (plan 28, 5.2): drop function public.score_board(text, int, int),
 --     public.daily_board(text, date, int, int), public.tournament_board(text, int, int),
@@ -281,7 +303,8 @@ revoke execute on function public.resolve_player(text) from public, anon, authen
 -- they are (grandfathered). A name another player shows under on the 📚 board
 -- (education_public, below) is held the same way, unless this player holds it
 -- there or on the score board (plan 24, AUD-022). plpgsql, so the 📚 table may be
--- made further down this file.
+-- made further down this file. A player's online name (online_profiles, plan 39) counts as a board
+-- name both ways: theirs to keep, and held for everyone else.
 create or replace function public.name_blocked(p_key text, p_id text)
 returns boolean
 language plpgsql
@@ -300,7 +323,8 @@ begin
   if exists (select 1 from public.scores s where public.name_key(s.name) = p_key and s.player_id = p_id)
      or exists (select 1 from public.daily_scores d where public.name_key(d.name) = p_key and d.player_id = p_id)
      or exists (select 1 from public.tournament_stats t where public.name_key(t.name) = p_key and t.player_id = p_id)
-     or exists (select 1 from public.education_public e where public.name_key(e.name) = p_key and e.player_id = p_id) then
+     or exists (select 1 from public.education_public e where public.name_key(e.name) = p_key and e.player_id = p_id)
+     or exists (select 1 from public.online_profiles o where public.name_key(o.name) = p_key and o.player_id = p_id) then
     return false;
   end if;
   -- Otherwise the name is another player's when they show under it on the 📚 board (plan 24,
@@ -312,7 +336,9 @@ begin
                     and not exists (select 1 from public.scores s where s.player_id = d.player_id))
       or (p_key <> 'player' and exists (select 1 from public.tournament_stats t
                   where public.name_key(t.name) = p_key and t.player_id <> p_id
-                    and not exists (select 1 from public.scores s where s.player_id = t.player_id)));
+                    and not exists (select 1 from public.scores s where s.player_id = t.player_id)))
+      -- or as their online name (plan 39): the claim holds both ways between the boards and online play.
+      or exists (select 1 from public.online_profiles o where public.name_key(o.name) = p_key and o.player_id <> p_id);
 end;
 $$;
 revoke execute on function public.name_blocked(text, text) from public, anon, authenticated;
@@ -323,6 +349,9 @@ drop policy if exists anon_read on public.scores;
 create policy anon_read on public.scores for select to anon using (not hidden);
 
 grant usage on schema public to anon;
+-- And to authenticated, the role of a device signed in for online play (plan 39), which may call only the
+-- online functions (granted one by one below) and reads no table.
+grant usage on schema public to authenticated;
 revoke all on public.scores from anon, authenticated;
 grant select (name, score, toilet, level, updated_at) on public.scores to anon;
 
@@ -1025,7 +1054,7 @@ revoke execute on function public.player_by_name(text) from public, anon, authen
 -- new, empty round instead (the kept name stays) and every device sends its
 -- whole record again when it next syncs. A research participant moves to the kept
 -- id; when both joined, the merged one's answers move under the kept research id
--- (one person, one participant). Internal.
+-- (one person, one participant). Online devices follow to the kept id (plan 39). Internal.
 create or replace function public.fold_player(v_keep text, v_merge text)
 returns void
 language plpgsql
@@ -1136,6 +1165,15 @@ begin
   update public.run_log set player_id = v_keep where player_id = v_merge; -- plan 30
   update public.held_scores set player_id = v_keep where player_id = v_merge;
   update public.score_steps set player_id = v_keep where player_id = v_merge;
+  -- Online play (plan 39): the merged player's devices follow, each as trusted as it was; the kept
+  -- player's online name stays (the merged one's when the kept player has none); the merged
+  -- player's pairing code goes.
+  update public.online_players set player_id = v_keep where player_id = v_merge;
+  insert into public.online_profiles (player_id, name, updated_at)
+  select v_keep, o.name, o.updated_at from public.online_profiles o where o.player_id = v_merge
+  on conflict (player_id) do nothing;
+  delete from public.online_profiles where player_id = v_merge;
+  delete from public.online_pairings where player_id = v_merge;
   update public.player_aliases set canonical_id = v_keep, merged_at = now() where canonical_id = v_merge;
   insert into public.player_aliases (alias_id, canonical_id)
   values (v_merge, v_keep)
@@ -3301,6 +3339,406 @@ grant  execute on function public.play_days(text, text) to anon;
 revoke execute on function public.score_board(text, int, int) from public, authenticated;
 grant  execute on function public.score_board(text, int, int) to anon;
 
+-- ===========================================================================
+-- Online play (plan 39): a race by code between two devices, over Supabase Realtime.
+-- A device enters online play by signing in anonymously (Supabase Auth; the client sends nothing at
+-- sign-in, and no function reads user_metadata, which the client could write), which makes it a user
+-- in auth.users whose requests run as `authenticated`. It then links that user to the save-code
+-- player id it holds (link_online_player). Many devices may link to one player: their rows follow the
+-- player through merges (fold_player), and the player can remove a device.
+-- Every online function: security definer, set search_path = '' with every name qualified, the
+-- caller's auth.uid() checked first; granted to authenticated and revoked from public and anon (a
+-- function is granted to anon by default on Supabase, so the revoke is load-bearing). A call a good
+-- client never makes raises, as the board functions do; an outcome a player can cause that the server
+-- counts (a wrong code) is answered as { ok: false, error }, because a raise would undo the count.
+
+-- A player's online name, one per (resolved) player. Checked against the boards' claim when set, and a
+-- claim itself (name_blocked): a name shown online is held on the boards for everyone else, and the
+-- reverse. The last device unlinking deletes it. Readable by no role.
+create table if not exists public.online_profiles (
+  player_id  text primary key check (player_id ~ '^[A-Za-z0-9_-]{22}$'),
+  name       text not null check (name ~ '^[^[:cntrl:]]{1,16}$'),
+  updated_at timestamptz not null default now()
+);
+alter table public.online_profiles enable row level security;
+revoke all on public.online_profiles from public, anon, authenticated;
+create index if not exists online_profiles_name_key on public.online_profiles (public.name_key(name));
+
+-- One row per signed-in device (auth user), linked to one (resolved) player. M1, the id-theft
+-- mitigation (plan 39, D1): the save code's secret ships in the client, so holding a player id proves
+-- nothing. The first device of a player is trusted; a later one links as pending until a trusted
+-- device pairs it (online_pair_code / online_pair). A pending device may race by code; what is
+-- private (the device list here; friends, invites, rivals and match history later) needs a trusted
+-- one. When none of the player's trusted devices has been seen for 7 days, the next device is trusted
+-- at once and the stale ones drop to pending (a phone whose storage the browser wiped relinks without
+-- help). seen_at: this device's last link. Deleting the auth user deletes the row.
+create table if not exists public.online_players (
+  uid       uuid primary key references auth.users (id) on delete cascade,
+  player_id text not null check (player_id ~ '^[A-Za-z0-9_-]{22}$'),
+  trusted   boolean not null,
+  linked_at timestamptz not null default now(),
+  seen_at   timestamptz not null default now()
+);
+alter table public.online_players enable row level security;
+revoke all on public.online_players from public, anon, authenticated;
+create index if not exists online_players_player on public.online_players (player_id);
+
+-- The one pairing code a trusted device showed for its player: hashed, 10 minutes, five tries.
+create table if not exists public.online_pairings (
+  player_id  text primary key check (player_id ~ '^[A-Za-z0-9_-]{22}$'),
+  code_hash  text not null,
+  expires_at timestamptz not null,
+  tries      int not null default 0
+);
+alter table public.online_pairings enable row level security;
+revoke all on public.online_pairings from public, anon, authenticated;
+
+-- The caller's link: the row of this device, or null. Internal.
+create or replace function public.online_me()
+returns public.online_players
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select o.* from public.online_players o where o.uid = auth.uid();
+$$;
+
+-- A random whole number in [0, p_n), from gen_random_uuid()'s strong randomness (32 bits). Internal.
+create or replace function public.online_random(p_n bigint)
+returns bigint
+language sql
+volatile
+set search_path = ''
+as $$
+  select ('x' || substr(replace(gen_random_uuid()::text, '-', ''), 1, 8))::bit(32)::bigint % p_n;
+$$;
+
+-- How a pairing code is stored: never as itself. Internal.
+create or replace function public.online_code_hash(p_player text, p_code text)
+returns text
+language sql
+immutable
+set search_path = ''
+as $$
+  select encode(sha256(convert_to(p_player || ':' || p_code, 'UTF8')), 'hex');
+$$;
+
+-- After a device leaves a player: the online name goes with the last device, a pairing code with the
+-- last trusted one. Internal.
+create or replace function public.online_forget(p_player text)
+returns void
+language sql
+volatile
+security definer
+set search_path = ''
+as $$
+  delete from public.online_profiles p where p.player_id = p_player
+    and not exists (select 1 from public.online_players o where o.player_id = p_player);
+  delete from public.online_pairings c where c.player_id = p_player
+    and not exists (select 1 from public.online_players o where o.player_id = p_player and o.trusted);
+$$;
+
+-- Link this device to the player whose id it holds (an old id links as the player it was merged
+-- into), with the player's online name: the board name when they have one, else the name they chose,
+-- checked against the claim. Called on every entry into online play, so it also refreshes seen_at
+-- and, from a trusted device, the name; a pending device gets the stored name back. A device already
+-- linked to another player (Load user code) moves, and is judged as a new device. Returns
+-- { trusted, name }. Raises 'not signed in', 'bad player id', 'bad name', 'name taken', and 'too many
+-- devices waiting' past three pending devices.
+create or replace function public.link_online_player(p_player_id text, p_name text)
+returns jsonb
+language plpgsql
+volatile
+security definer
+set search_path = ''
+as $$
+declare
+  v_uid uuid := auth.uid();
+  v_name text := btrim(p_name);
+  v_id text;
+  v_again text;
+  v_me public.online_players;
+  v_trusted boolean;
+begin
+  if v_uid is null then
+    raise exception 'not signed in';
+  end if;
+  if p_player_id is null or p_player_id !~ '^[A-Za-z0-9_-]{22}$' then
+    raise exception 'bad player id';
+  end if;
+  if v_name is null or v_name !~ '^[^[:cntrl:]]{1,16}$' then
+    raise exception 'bad name';
+  end if;
+  -- The name's lock first (submit_score takes it), then the player's (fold_player takes it), and the id
+  -- resolved again under it, so a merge running alongside is followed rather than undone.
+  perform pg_advisory_xact_lock(hashtext(public.name_key(v_name)));
+  v_id := public.resolve_player(p_player_id);
+  perform pg_advisory_xact_lock(hashtext(v_id));
+  v_again := public.resolve_player(p_player_id);
+  if v_again <> v_id then
+    v_id := v_again;
+    perform pg_advisory_xact_lock(hashtext(v_id));
+  end if;
+  if public.name_blocked(public.name_key(v_name), v_id) then
+    raise exception 'name taken';
+  end if;
+
+  select * into v_me from public.online_players o where o.uid = v_uid for update;
+  if v_me.uid is not null and v_me.player_id = v_id then
+    update public.online_players o set seen_at = now() where o.uid = v_uid;
+    v_trusted := v_me.trusted;
+  else
+    if v_me.uid is not null then
+      delete from public.online_players o where o.uid = v_uid;
+      perform public.online_forget(v_me.player_id);
+    end if;
+    v_trusted := not exists (select 1 from public.online_players o
+                              where o.player_id = v_id and o.trusted and o.seen_at > now() - interval '7 days');
+    if v_trusted then
+      update public.online_players o set trusted = false where o.player_id = v_id and o.trusted;
+    elsif (select count(*) from public.online_players o where o.player_id = v_id and not o.trusted) >= 3 then
+      raise exception 'too many devices waiting';
+    end if;
+    insert into public.online_players (uid, player_id, trusted) values (v_uid, v_id, v_trusted);
+  end if;
+
+  if v_trusted or not exists (select 1 from public.online_profiles p where p.player_id = v_id) then
+    insert into public.online_profiles (player_id, name) values (v_id, v_name)
+    on conflict (player_id) do update set name = excluded.name, updated_at = now()
+      where public.online_profiles.name is distinct from excluded.name;
+  end if;
+  return jsonb_build_object('trusted', v_trusted,
+                            'name', (select p.name from public.online_profiles p where p.player_id = v_id));
+end;
+$$;
+
+-- Leave online play on this device (the game calls it on Clear, and before a sign-out): its link and
+-- its anonymous user are deleted, which ends its session (an access token already issued lasts until
+-- it expires, at most an hour, but links nothing).
+create or replace function public.unlink_online_player()
+returns void
+language plpgsql
+volatile
+security definer
+set search_path = ''
+as $$
+declare
+  v_uid uuid := auth.uid();
+  v_me public.online_players;
+begin
+  if v_uid is null then
+    raise exception 'not signed in';
+  end if;
+  v_me := public.online_me();
+  if v_me.uid is not null then
+    perform pg_advisory_xact_lock(hashtext(v_me.player_id));
+    delete from public.online_players o where o.uid = v_uid;
+    perform public.online_forget(v_me.player_id);
+  end if;
+  delete from auth.users u where u.id = v_uid and u.is_anonymous;
+end;
+$$;
+
+-- The player's devices, for a trusted device: when each linked, when it was last seen, trusted or
+-- pending, and which one is asking. Raises 'not signed in', 'not linked', 'not trusted'.
+create or replace function public.online_devices()
+returns table (device uuid, linked_at timestamptz, seen_at timestamptz, trusted boolean, this_device boolean)
+language plpgsql
+stable
+security definer
+set search_path = ''
+as $$
+declare
+  v_me public.online_players;
+begin
+  if auth.uid() is null then
+    raise exception 'not signed in';
+  end if;
+  v_me := public.online_me();
+  if v_me.uid is null then
+    raise exception 'not linked';
+  end if;
+  if not v_me.trusted then
+    raise exception 'not trusted';
+  end if;
+  return query
+    select o.uid, o.linked_at, o.seen_at, o.trusted, o.uid = v_me.uid
+    from public.online_players o
+    where o.player_id = v_me.player_id
+    order by o.linked_at, o.uid;
+end;
+$$;
+
+-- Remove one of the player's devices: any, from a trusted device; only itself, from a pending one. An
+-- anonymous user is deleted with it, so the removed device's session ends and, linking again, it
+-- comes back pending. Raises 'not signed in', 'not linked', 'no device' (not this player's),
+-- 'not trusted'.
+create or replace function public.remove_online_device(p_uid uuid)
+returns void
+language plpgsql
+volatile
+security definer
+set search_path = ''
+as $$
+declare
+  v_me public.online_players;
+  v_target public.online_players;
+begin
+  if auth.uid() is null then
+    raise exception 'not signed in';
+  end if;
+  v_me := public.online_me();
+  if v_me.uid is null then
+    raise exception 'not linked';
+  end if;
+  perform pg_advisory_xact_lock(hashtext(v_me.player_id));
+  select * into v_target from public.online_players o where o.uid = p_uid;
+  if v_target.uid is null or v_target.player_id <> v_me.player_id then
+    raise exception 'no device';
+  end if;
+  if p_uid <> v_me.uid and not v_me.trusted then
+    raise exception 'not trusted';
+  end if;
+  delete from public.online_players o where o.uid = p_uid;
+  delete from auth.users u where u.id = p_uid and u.is_anonymous;
+  perform public.online_forget(v_me.player_id);
+end;
+$$;
+
+-- A trusted device's pairing code for a pending device of the same player: 6 digits, valid 10
+-- minutes, one per player (a new one replaces the old and its tries). Raises 'not signed in',
+-- 'not linked', 'not trusted'.
+create or replace function public.online_pair_code()
+returns text
+language plpgsql
+volatile
+security definer
+set search_path = ''
+as $$
+declare
+  v_me public.online_players;
+  v_code text;
+begin
+  if auth.uid() is null then
+    raise exception 'not signed in';
+  end if;
+  v_me := public.online_me();
+  if v_me.uid is null then
+    raise exception 'not linked';
+  end if;
+  if not v_me.trusted then
+    raise exception 'not trusted';
+  end if;
+  v_code := lpad(public.online_random(1000000)::text, 6, '0');
+  insert into public.online_pairings (player_id, code_hash, expires_at, tries)
+  values (v_me.player_id, public.online_code_hash(v_me.player_id, v_code), now() + interval '10 minutes', 0)
+  on conflict (player_id) do update
+    set code_hash = excluded.code_hash, expires_at = excluded.expires_at, tries = 0;
+  return v_code;
+end;
+$$;
+
+-- A pending device pairs with its player's code (spaces ignored) and is trusted:
+-- { ok: true, trusted: true } (also for a device already trusted). { ok: false, error: 'no code' }
+-- when the player has no live code; { ok: false, error: 'wrong code', left } otherwise, left being the
+-- tries the code has left (0: it is burnt; null: not six digits, which costs no try).
+create or replace function public.online_pair(p_code text)
+returns jsonb
+language plpgsql
+volatile
+security definer
+set search_path = ''
+as $$
+declare
+  v_me public.online_players;
+  v_code text := replace(coalesce(p_code, ''), ' ', '');
+  v_pair public.online_pairings;
+  v_left int;
+begin
+  if auth.uid() is null then
+    raise exception 'not signed in';
+  end if;
+  v_me := public.online_me();
+  if v_me.uid is null then
+    raise exception 'not linked';
+  end if;
+  if v_me.trusted then
+    return jsonb_build_object('ok', true, 'trusted', true);
+  end if;
+  if v_code !~ '^[0-9]{6}$' then
+    return jsonb_build_object('ok', false, 'error', 'wrong code', 'left', null);
+  end if;
+  perform pg_advisory_xact_lock(hashtext(v_me.player_id));
+  select * into v_pair from public.online_pairings c where c.player_id = v_me.player_id for update;
+  if v_pair.player_id is null or v_pair.expires_at <= now() then
+    delete from public.online_pairings c where c.player_id = v_me.player_id;
+    return jsonb_build_object('ok', false, 'error', 'no code');
+  end if;
+  if v_pair.code_hash = public.online_code_hash(v_me.player_id, v_code) then
+    update public.online_players o set trusted = true where o.uid = v_me.uid;
+    delete from public.online_pairings c where c.player_id = v_me.player_id;
+    return jsonb_build_object('ok', true, 'trusted', true);
+  end if;
+  v_left := greatest(4 - v_pair.tries, 0);
+  if v_left = 0 then
+    delete from public.online_pairings c where c.player_id = v_me.player_id;
+  else
+    update public.online_pairings c set tries = c.tries + 1 where c.player_id = v_me.player_id;
+  end if;
+  return jsonb_build_object('ok', false, 'error', 'wrong code', 'left', v_left);
+end;
+$$;
+
+-- The owner's reset (SQL editor only): every device of a player, found by the name a board or online
+-- play shows, is removed (anonymous users deleted), so the next device to link is trusted at once. The
+-- online name stays. Returns how many devices went.
+create or replace function public.admin_reset_online(p_name text)
+returns int
+language plpgsql
+volatile
+security definer
+set search_path = ''
+as $$
+declare
+  v_id text;
+  v_n int;
+begin
+  v_id := coalesce(public.player_by_name(p_name),
+                   (select p.player_id from public.online_profiles p
+                     where public.name_key(p.name) = public.name_key(p_name)
+                     order by p.updated_at desc limit 1));
+  if v_id is null then
+    return 0;
+  end if;
+  perform pg_advisory_xact_lock(hashtext(v_id));
+  select count(*) into v_n from public.online_players o where o.player_id = v_id;
+  delete from auth.users u
+   where u.is_anonymous and u.id in (select o.uid from public.online_players o where o.player_id = v_id);
+  delete from public.online_players o where o.player_id = v_id;
+  delete from public.online_pairings c where c.player_id = v_id;
+  return v_n;
+end;
+$$;
+
+revoke execute on function public.online_me() from public, anon, authenticated;
+revoke execute on function public.online_random(bigint) from public, anon, authenticated;
+revoke execute on function public.online_code_hash(text, text) from public, anon, authenticated;
+revoke execute on function public.online_forget(text) from public, anon, authenticated;
+revoke execute on function public.admin_reset_online(text) from public, anon, authenticated;
+revoke execute on function public.link_online_player(text, text) from public, anon;
+grant  execute on function public.link_online_player(text, text) to authenticated;
+revoke execute on function public.unlink_online_player() from public, anon;
+grant  execute on function public.unlink_online_player() to authenticated;
+revoke execute on function public.online_devices() from public, anon;
+grant  execute on function public.online_devices() to authenticated;
+revoke execute on function public.remove_online_device(uuid) from public, anon;
+grant  execute on function public.remove_online_device(uuid) to authenticated;
+revoke execute on function public.online_pair_code() from public, anon;
+grant  execute on function public.online_pair_code() to authenticated;
+revoke execute on function public.online_pair(text) from public, anon;
+grant  execute on function public.online_pair(text) to authenticated;
+
 -- Which version of this file the database last ran: a short SHA-256 of the file with the value
 -- below blanked (tools/schema_check.mjs). `npm run schema:stamp` rewrites it after an edit, and
 -- tests/schema.test.js fails until it does. It is the last thing this file makes, so the live
@@ -3311,7 +3749,7 @@ returns text
 language sql
 immutable
 as $$
-  select 'e3f9ed6e901b19a0'::text; -- schema stamp
+  select '32d83e0208795f7d'::text; -- schema stamp
 $$;
 revoke execute on function public.schema_version() from public, authenticated;
 grant  execute on function public.schema_version() to anon;

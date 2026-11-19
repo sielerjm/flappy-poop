@@ -11,6 +11,7 @@ const { CARDS } = await import(`${R}/src/questions.js`);
 const edu = await import(`${R}/src/education.js`);
 const { answerEvent, cleanEvent } = await import(`${R}/src/research.js`);
 const { PGlite } = await import(`${R}/node_modules/@electric-sql/pglite/dist/index.js`);
+const { SUPABASE_PREAMBLE } = await import(`${R}/tools/supabase_stubs.mjs`);
 
 const SUPER = CARDS.filter((c) => c.deck === 'super');
 const fakeStorage = () => {
@@ -28,10 +29,7 @@ test('an SQ card answered later in a break: answerEvent is clean and the server 
   assert.ok(cleanEvent(ev), 'the client keeps it');
   const SQL = readFileSync(`${R}/db/schema.sql`, 'utf8');
   const db = new PGlite();
-  await db.exec(`create role anon nologin; create role authenticated nologin;
-    alter default privileges in schema public grant all on tables to anon, authenticated;
-    alter default privileges in schema public grant all on sequences to anon, authenticated;
-    alter default privileges in schema public grant all on functions to anon, authenticated;`);
+  await db.exec(SUPABASE_PREAMBLE);
   await db.exec(SQL);
   await db.query('select public.admin_set_invite($1)', ['pilot-code-2026-xyz']);
   const P = id('RSQ');

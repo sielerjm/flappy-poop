@@ -178,6 +178,8 @@ export async function expectedComparison({ sql, detail = false } = {}) {
   const { PGlite } = await import('@electric-sql/pglite');
   const db = new PGlite();
   await db.exec('create role anon nologin; create role authenticated nologin;');
+  const { SUPABASE_PLATFORM } = await import('./supabase_stubs.mjs'); // here, so push.mjs needs no more files
+  await db.exec(SUPABASE_PLATFORM); // auth and realtime, which the online tables refer to (plan 39)
   await db.exec(sql ?? readFileSync(FIXTURE_PATH, 'utf8'));
   const functions = (await db.query("select p.proname || '(' || pg_get_function_identity_arguments(p.oid) || ')' as s from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname = 'public' order by 1")).rows.map((r) => r.s);
   const tables = (await db.query("select table_name as t from information_schema.tables where table_schema = 'public' order by 1")).rows.map((r) => r.t);
