@@ -105,10 +105,10 @@ export function devProjectFrom(raw) {
  * stores one, `?onlinetest=off` forgets it; `param` says the caller should strip it from the address.
  * A test project gets its own session and trust keys, so a test session never meets a live one. Never
  * throws (blocked storage reads as no test project).
- * → { config, test, param }
+ * → { config, test, param, dev } (`dev`: a dev host, where a test project is possible at all)
  */
 export function onlineProjectConfig({ search = '', hostname = '', optIn = false, storage = null, base = LEADERBOARD } = {}) {
-  if (!debugHandleAllowed(hostname, optIn)) return { config: base, test: false, param: false };
+  if (!debugHandleAllowed(hostname, optIn)) return { config: base, test: false, param: false, dev: false };
   let value = null;
   try {
     value = new URLSearchParams(search ?? '').get(DEV_PROJECT_PARAM);
@@ -128,9 +128,9 @@ export function onlineProjectConfig({ search = '', hostname = '', optIn = false,
     held = null;
   }
   const param = value !== null;
-  if (!held) return { config: base, test: false, param };
+  if (!held) return { config: base, test: false, param, dev: true };
   const config = { ...base, dataApi: `${held.url}/rest/v1`, publishableKey: held.key, onlineSessionKey: `${base.onlineSessionKey}.test`, onlineTrustKey: `${base.onlineTrustKey}.test` };
-  return { config, test: true, param };
+  return { config, test: true, param, dev: true };
 }
 
 /** 'https://<ref>.supabase.co/rest/v1' → 'https://<ref>.supabase.co'; '' when the feature is off. */

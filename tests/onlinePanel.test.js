@@ -40,7 +40,7 @@ function fakeNet(answers = {}) {
   };
 }
 
-function setup({ versus = null, active = false, enter = { ok: true, view: 'home', name: 'PlopMaster', trusted: true, demoted: false, blocked: false }, answers = {} } = {}) {
+function setup({ versus = null, active = false, project = undefined, enter = { ok: true, view: 'home', name: 'PlopMaster', trusted: true, demoted: false, blocked: false }, answers = {} } = {}) {
   const net = fakeNet({ create_room: { ok: true, data: { ok: true, code: '482913', status: 'open' } }, join_room: { ok: true, data: { ok: true, code: '482913', status: 'asked', host_name: 'SirFlushALot' } }, ...answers });
   const entered = [];
   const account = {
@@ -48,7 +48,7 @@ function setup({ versus = null, active = false, enter = { ok: true, view: 'home'
     devices: async () => ({ ok: true, rows: [] }),
     status: () => ({ linked: true, trusted: true, name: 'PlopMaster' }),
   };
-  const play = { getSaveState: () => ({ name: 'PlopMaster', id: 'p1' }), onlineAccount: () => account, onlineNet: net, onlineTestProject: () => false };
+  const play = { getSaveState: () => ({ name: 'PlopMaster', id: 'p1' }), onlineAccount: () => account, onlineNet: net, onlineTestProject: () => project === 'test', ...(project === undefined ? {} : { onlineProjectName: () => project }) };
   const game = fakeGame({ versus, active, play });
   const ticks = [];
   const timers = { setInterval: (fn) => (ticks.push(fn), ticks.length), clearInterval: () => {} };
@@ -199,4 +199,21 @@ test('a play with no online side (the 1.6b tests\' stand-in) shows the refusal, 
   assert.equal(el('tour-status').textContent, t('en', 'onlineErrGeneric'));
   await el('tour-close').click();
   assert.equal(isTournamentPanelOpen(), false);
+});
+
+test('a wrong code on a dev host: "No room has that code" names this device\'s project (live or 🧪 test); on the real site the plain line', async () => {
+  const noRoom = { join_room: { ok: true, data: { ok: false, error: 'no room' } } };
+  for (const [project, extra] of [[null, ''], ['live', ` ${t('en', 'onlineDevOnLive')}`], ['test', ` ${t('en', 'onlineDevOnTest')}`]]) {
+    const k = setup({ project, answers: noRoom });
+    k.open();
+    await flush();
+    await el('tour-join').click();
+    const root = el('tournament-panel');
+    for (const key of ['4', '8', '2', '9', '1', '3', 'Enter']) await root.fire('keydown', { key });
+    await flush();
+    await flush();
+    assert.equal(el('tour-status').textContent, `${t('en', 'onlineErrNoRoom')}${extra}`, String(project));
+    assert.equal(el('tour-status').className, 'status error');
+    closeTournamentPanel();
+  }
 });

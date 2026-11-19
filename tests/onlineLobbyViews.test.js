@@ -18,6 +18,7 @@ function fakeLobby(state = {}, extra = {}) {
     opponent: () => extra.opponent ?? '',
     codeLeftMs: () => extra.left ?? null,
     bothReady: () => Boolean(extra.both),
+    onBothReady: extra.onBothReady ?? null,
   };
   for (const fn of ['create', 'join', 'answer', 'setReady', 'leave', 'openJoin', 'back']) lobby[fn] = async (...a) => calls.push([fn, ...a]);
   return lobby;
@@ -175,8 +176,35 @@ test('messages: the key with its name; an error reads as one, a notice does not;
   const ui = { tr: (k) => t('en', k) };
   assert.deepEqual(lobbyMessage(ui, fakeLobby({ message: { key: 'onlineDeclinedGuest', kind: 'error', name: 'SirFlushALot' } })), { text: t('en', 'onlineDeclinedGuest').replace('{name}', 'SirFlushALot'), kind: 'error' });
   assert.deepEqual(lobbyMessage(ui, fakeLobby({ message: { key: 'onlineCodeExpired', kind: 'notice', name: '' } })), { text: t('en', 'onlineCodeExpired'), kind: '' });
-  assert.deepEqual(lobbyMessage(ui, fakeLobby({ screen: 'ready', room: { phase: 'ready' } }, { both: true })), { text: t('en', 'onlineStarting'), kind: 'ok' });
+  assert.deepEqual(lobbyMessage(ui, fakeLobby({ screen: 'ready', room: { phase: 'ready' } }, { both: true, onBothReady: () => {} })), { text: t('en', 'onlineStarting'), kind: 'ok' });
   assert.equal(lobbyMessage(ui, fakeLobby()), null);
+});
+
+test('both ready with nothing to start the race yet (before 1.7a): "racing comes in the next build", not a 3… that never moves', () => {
+  for (const locale of ['en', 'zh-Hans']) {
+    const ui = { tr: (k) => t(locale, k) };
+    const ready = { screen: 'ready', room: { phase: 'ready' } };
+    assert.deepEqual(lobbyMessage(ui, fakeLobby(ready, { both: true })), { text: t(locale, 'onlineRaceNextBuild'), kind: 'ok' }, locale);
+    assert.notEqual(t(locale, 'onlineRaceNextBuild'), t(locale, 'onlineStarting'));
+    // Once 1.7a hangs the race on onBothReady, the countdown line is back by itself.
+    assert.deepEqual(lobbyMessage(ui, fakeLobby(ready, { both: true, onBothReady: () => {} })), { text: t(locale, 'onlineStarting'), kind: 'ok' }, locale);
+  }
+});
+
+test('no room on a dev host says which project this device is on, so a live / 🧪 test mix-up shows; on the real site the plain line', () => {
+  const noRoom = { message: { key: 'onlineErrNoRoom', kind: 'error', name: '' } };
+  for (const locale of ['en', 'zh-Hans']) {
+    const tr = (k) => t(locale, k);
+    const plain = t(locale, 'onlineErrNoRoom');
+    assert.deepEqual(lobbyMessage({ tr }, fakeLobby(noRoom)), { text: plain, kind: 'error' }, 'no project given: the real site');
+    assert.deepEqual(lobbyMessage({ tr, project: null }, fakeLobby(noRoom)), { text: plain, kind: 'error' });
+    assert.deepEqual(lobbyMessage({ tr, project: 'live' }, fakeLobby(noRoom)), { text: `${plain} ${t(locale, 'onlineDevOnLive')}`, kind: 'error' }, locale);
+    assert.deepEqual(lobbyMessage({ tr, project: 'test' }, fakeLobby(noRoom)), { text: `${plain} ${t(locale, 'onlineDevOnTest')}`, kind: 'error' }, locale);
+    assert.notEqual(t(locale, 'onlineDevOnLive'), t(locale, 'onlineDevOnTest'));
+  }
+  // Only the no-room line carries it: the other errors do not depend on the project.
+  const busy = lobbyMessage({ tr: (k) => t('en', k), project: 'live' }, fakeLobby({ message: { key: 'onlineErrBusy', kind: 'error', name: '' } }));
+  assert.equal(busy.text, t('en', 'onlineErrBusy'));
 });
 
 test('the share text carries the grouped code and the game\'s link; zh-Hans reads its own', () => {

@@ -28,6 +28,7 @@ test('on a dev host the param is stored, then used: the test project, its own se
   const storage = memory();
   const r = onlineProjectConfig({ search: `?onlinetest=${encodeDevProject(TEST)}`, hostname: '192.168.1.20', storage });
   assert.equal(r.test, true);
+  assert.equal(r.dev, true, 'a dev host: the lobby names the project on a no-room error');
   assert.equal(r.param, true, 'the caller strips it from the address');
   assert.equal(r.config.dataApi, `${TEST.url}/rest/v1`);
   assert.equal(r.config.publishableKey, TEST.key);
@@ -42,6 +43,7 @@ test('on a dev host the param is stored, then used: the test project, its own se
   // off forgets it.
   const off = onlineProjectConfig({ search: '?onlinetest=off', hostname: 'localhost', storage });
   assert.equal(off.test, false);
+  assert.equal(off.dev, true, 'still a dev host, on the live project');
   assert.equal(off.config, LEADERBOARD);
   assert.equal(storage.getItem(DEV_PROJECT_KEY), null);
 });
@@ -51,6 +53,7 @@ test('anywhere but a dev host the live project, whatever the address or storage 
   for (const hostname of ['sielerjm.github.io', 'example.com', '']) {
     const r = onlineProjectConfig({ search: `?onlinetest=${encodeDevProject(TEST)}`, hostname, storage });
     assert.equal(r.test, false, hostname);
+    assert.equal(r.dev, false, hostname);
     assert.equal(r.config, LEADERBOARD, hostname);
   }
   assert.equal(storage.getItem(DEV_PROJECT_KEY), JSON.stringify(TEST));

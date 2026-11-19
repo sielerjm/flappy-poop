@@ -421,6 +421,25 @@ export class Play extends Phaser.Scene {
 
     // HUD
     this.scoreText = this.add.text(W / 2, T.hudScoreY, '0', { ...TEXT_STYLE, fontSize: '80px' }).setOrigin(0.5).setDepth(20).setVisible(false); // shown from start()
+    // A split-screen half's player name at the bottom of its half, above the tray row, on a pill so it
+    // reads over the pipes and the cave, for the whole match: countdown, run, level breaks (plan 39,
+    // 1.6e, Michael's ask with Preview A, item 36; the pill from Preview C, items 41 and 42). Split-screen
+    // only (a match with no host key): the online race names the opponent in its own HUD.
+    this.nameLabel = this.match && !this.match.hostKey ? this.add.text(W / 2, GAME_HEIGHT - T.trayHeight - 40, versusName(this.locale, this.match, (this.player ?? 1) - 1), { ...TEXT_STYLE, fontSize: '40px', color: '#f8a0c8', strokeThickness: 8 }).setOrigin(0.5).setDepth(20) : null;
+    this.nameBox = null;
+    if (this.nameLabel) {
+      // A very wide name shrinks to fit, so the pill stays clear of P1's pause button (col.width / 2 - 104 px from the middle).
+      const NAME_MAX_W = 380;
+      if (this.nameLabel.width > NAME_MAX_W) this.nameLabel.setFontSize(Math.floor((40 * NAME_MAX_W) / this.nameLabel.width));
+      // A pill (Michael, Preview C): ends rounded by half its height.
+      const w = this.nameLabel.width + 48;
+      const h = this.nameLabel.height + 12;
+      const box = { x: W / 2 - w / 2, y: this.nameLabel.y - h / 2, width: w, height: h };
+      const g = this.add.graphics().setDepth(19.9);
+      g.fillStyle(0x1a0b14, 0.7).fillRoundedRect(box.x, box.y, w, h, h / 2);
+      g.lineStyle(3, 0xe85e96, 0.9).strokeRoundedRect(box.x, box.y, w, h, h / 2);
+      this.nameBox = Object.assign(g, { box });
+    }
     // Popups under the score, two reused texts: the quick white "+1" ("+2" under a postbiotic) on every pipe
     // pair, and "+3" / "−3" when fiber or unshielded bacteria moves the score. The ones showing stack oldest
     // first on popup.rowY (popupOrder, popupSlots); a new one enters underneath, the rest slide up when one goes.
@@ -1935,6 +1954,16 @@ export class Play extends Phaser.Scene {
   onlineTestProject() {
     this.onlineConfig();
     return this.onlineConfigRef.test;
+  }
+
+  /**
+   * The project's name for the lobby's no-room hint (item 43): null on the real site (it can only be
+   * live), else 'live' or 'test', so a dev host shows a live / test mix-up between two devices.
+   */
+  onlineProjectName() {
+    this.onlineConfig();
+    const r = this.onlineConfigRef;
+    return r.dev ? (r.test ? 'test' : 'live') : null;
   }
 
   /** Clear / a Load of another player (the save panel): unlink this device online, then forget its session. */

@@ -748,6 +748,7 @@ function lobbyUi() {
   return {
     ...aui,
     me: online?.st.name ?? '',
+    project: ctx.play?.onlineProjectName?.() ?? null, // a dev host's 'live' / 'test' for the no-room hint (item 43)
     homeExtras: () => ({ notes: accountNotes(aui, online.st), devices: devicesButton(aui, online.st, online.account) }),
     share: (text, code) => shareCode(text, code),
   };
@@ -991,6 +992,13 @@ export function openTournamentPanel(options) {
   }
   if (!tournamentState(ctx.game) && players.length < T.tournament.minPlayers) {
     players = [];
+    // A player with a username starts as row 1, as if Use my player was tapped (its id made now, as that
+    // button does); without one, two guests as before (plan 39, 1.6e, item 36; Preview C).
+    const mine = claimHost(ctx.play?.getSaveState?.(), []);
+    if (mine.ok) {
+      if (!mine.player.playerId) mine.player.playerId = hostSave(ctx.play)?.id ?? null;
+      players.push(mine.player);
+    }
     while (players.length < T.tournament.minPlayers) players.push(newGuest());
   }
   dom.root.hidden = false;

@@ -77,8 +77,16 @@ const ttlText = (ui, left) => ui.tr('onlineCodeExpires').replace('{time}', mmss(
  */
 export function lobbyMessage(ui, lobby) {
   const m = lobby.state.message;
-  if (m) return { text: ui.tr(m.key).replace('{name}', m.name ?? ''), kind: m.kind === 'error' ? 'error' : '' };
-  if (lobby.state.screen === 'ready' && lobby.bothReady()) return { text: ui.tr('onlineStarting'), kind: 'ok' };
+  if (m) {
+    let text = ui.tr(m.key).replace('{name}', m.name ?? '');
+    // A dev host (ui.project 'live' / 'test') names this device's project on a wrong code: two devices
+    // on different projects never see each other's rooms (item 43).
+    if (m.key === 'onlineErrNoRoom' && (ui.project === 'live' || ui.project === 'test')) text += ` ${ui.tr(ui.project === 'test' ? 'onlineDevOnTest' : 'onlineDevOnLive')}`;
+    return { text, kind: m.kind === 'error' ? 'error' : '' };
+  }
+  // Until 1.7a hangs the race on onBothReady, both ready says racing comes next build, not a 3… that
+  // never moves (item 43; 1.7a deletes onlineRaceNextBuild).
+  if (lobby.state.screen === 'ready' && lobby.bothReady()) return { text: ui.tr(lobby.onBothReady ? 'onlineStarting' : 'onlineRaceNextBuild'), kind: 'ok' };
   return null;
 }
 

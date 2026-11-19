@@ -640,8 +640,11 @@ The winners take the podium 🥇 🥈 (and 🥉 from 3 players). With 3 or more 
 | onlineNotReady | not ready | 未准备 |
 | onlineLeave | Leave | 离开 |
 | onlineStarting | Both ready: the race starts in 3… | 双方都准备好了：比赛3秒后开始… |
+| onlineRaceNextBuild | Both ready! Racing comes in the next build. (plan 39, item 43: shown in place of onlineStarting until the race itself is built, then removed) | 双方都准备好了！比赛功能将在下一个版本推出。 |
 | onlineErrBadCode | That's not a room code: codes are 6 digits and never start with 0 (plan 39: the 🌐 lobby's status line; {name} is the other player's username) | 这不是房间码：房间码是6位数字，第一位不是0 |
 | onlineErrNoRoom | No room has that code. Check it with your friend. (plan 39: the 🌐 lobby's status line; {name} is the other player's username) | 没有这个房间码的房间，请和朋友核对一下。 |
+| onlineDevOnLive | (Dev: this device is on the live project. A 🧪 test device cannot see its rooms.) (plan 39, item 43: added after onlineErrNoRoom on a developer's own machine only; players never see it) | （开发：本设备连接的是正式项目，🧪 测试设备看不到这里的房间。） |
+| onlineDevOnTest | (Dev: this device is on the 🧪 test project. The other device must be on it too.) (plan 39, item 43: as onlineDevOnLive) | （开发：本设备连接的是 🧪 测试项目，另一台设备也必须连接测试项目。） |
 | onlineErrRateLimited | Too many wrong codes. Wait a few minutes, then try again. (plan 39: the 🌐 lobby's status line; {name} is the other player's username) | 输错的房间码太多了，请等几分钟再试。 |
 | onlineErrBusy | Online races are busy right now. Try again in a minute. (plan 39: the 🌐 lobby's status line; {name} is the other player's username) | 在线比赛现在太忙，请一分钟后再试。 |
 | onlineUpdateYou | {name} has a newer version of the game. Reload this page to update, then join again. (plan 39: the 🌐 lobby's status line; {name} is the other player's username) | {name} 的游戏版本更新。请刷新本页面更新，然后重新加入。 |
