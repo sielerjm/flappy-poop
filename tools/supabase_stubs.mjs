@@ -46,7 +46,8 @@ create table if not exists realtime.messages (
   event       text,
   payload     jsonb,
   private     boolean default false,
-  inserted_at timestamp not null default now()
+  inserted_at timestamp not null default now(),
+  seq         bigserial -- the stand-in's own: insertion order for tests (PGlite's clock ticks in ms)
 );
 alter table realtime.messages enable row level security;
 create or replace function realtime.topic() returns text language sql stable as $$
@@ -59,6 +60,7 @@ returns void language sql security definer as $$
 $$;
 grant usage on schema realtime to anon, authenticated;
 grant select, insert on realtime.messages to anon, authenticated;
+grant usage on sequence realtime.messages_seq_seq to anon, authenticated;
 grant execute on function realtime.topic() to anon, authenticated;
 revoke execute on function realtime.send(jsonb, text, text, boolean) from public;
 `;

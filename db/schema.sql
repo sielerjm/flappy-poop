@@ -51,6 +51,16 @@
 --   * online remove_online_device(...) remove one (any, from a trusted device; itself, from a pending one)
 --   * online online_pair_code()        a trusted device's 6-digit code (10 minutes) for a pending device
 --   * online online_pair(...)          a pending device pairs with that code and is trusted
+--   * online server_now()              the server clock, for the race countdown (1.2)
+--   * online create_room()             host a room under a fresh 6-digit code
+--   * online join_room(...)            take a room's guest seat by its code; failed joins are capped per
+--                                      device, per IP and in all
+--   * online answer_guest(...)         the host accepts its waiting guest, or declines (the room moves code)
+--   * online leave_room(...)           leave a room (the host's closes; mid-race the race is abandoned)
+--   * online set_room_status(...)      start a race (the host; the server mints its seed and GO time) or end it
+--   * online room_state(...)           the room as one of its two seated devices sees it
+--   * online online_can(...)           the Realtime channel policies' check, which they run as the device
+--                                      asking; it answers only about the caller
 --   Apply this file before pushing a client that calls them.
 -- A player has up to two rows: their best on the toilet and their best off it
 -- (primary key player_id + toilet, since 2026-11-04).
@@ -59,8 +69,8 @@
 -- tournament_matchups), daily_scores, player_counters, achievement_defs,
 -- player_achievements, player_meta, education_settings, education_public, research_participants
 -- or research_responses (nor the research_* views), run_log, run_rejects, held_scores,
--- score_steps, board_settings, online_profiles, online_players or online_pairings (authenticated
--- has nothing on any table either). Profiles are public
+-- score_steps, board_settings, online_profiles, online_players, online_pairings, rooms,
+-- join_attempts or online_secret (authenticated has nothing on any table either). Profiles are public
 -- (2026-11-11): player_stats returns anyone's stats, counters, achievements and biggest rival, by
 -- the name a board shows; and, only for a player who shares them, their education grade (2026-11-13).
 --
@@ -146,6 +156,14 @@
 --   online play (plan 39): remove every device of a player, by the name a board or online play shows
 --   (each links again; the next one is trusted at once; the online name stays):
 --     select public.admin_reset_online('somebody');
+--   undo online play's rooms (plan 39, 1.2), before its players: drop policy "online read" on
+--     realtime.messages; drop policy "online write" on realtime.messages; drop function
+--     public.server_now(), public.create_room(), public.join_room(text), public.answer_guest(text, boolean),
+--     public.leave_room(text), public.set_room_status(text, text), public.room_state(text),
+--     public.online_can(text, boolean), public.online_room_json(public.rooms, uuid), public.online_cleanup(),
+--     public.online_unseat(uuid), public.online_ip_hash(), public.online_ip_bucket(); restore
+--     link_online_player, unlink_online_player, remove_online_device and admin_reset_online from git
+--     (plan 39, 1.1) and run this file; then drop table public.join_attempts, public.rooms, public.online_secret.
 --   undo online play's players (plan 39, 1.1): drop function public.link_online_player(text, text),
 --     public.unlink_online_player(), public.online_devices(), public.remove_online_device(uuid),
 --     public.online_pair_code(), public.online_pair(text), public.admin_reset_online(text),
@@ -3483,6 +3501,7 @@ begin
   if public.name_blocked(public.name_key(v_name), v_id) then
     raise exception 'name taken';
   end if;
+  perform public.online_cleanup();
 
   select * into v_me from public.online_players o where o.uid = v_uid for update;
   if v_me.uid is not null and v_me.player_id = v_id then
@@ -3490,6 +3509,7 @@ begin
     v_trusted := v_me.trusted;
   else
     if v_me.uid is not null then
+      perform public.online_unseat(v_uid); -- its seats were the other player's
       delete from public.online_players o where o.uid = v_uid;
       perform public.online_forget(v_me.player_id);
     end if;
@@ -3513,8 +3533,8 @@ begin
 end;
 $$;
 
--- Leave online play on this device (the game calls it on Clear, and before a sign-out): its link and
--- its anonymous user are deleted, which ends its session (an access token already issued lasts until
+-- Leave online play on this device (the game calls it on Clear, and before a sign-out): it leaves its
+-- rooms (online_unseat), and its link and its anonymous user are deleted, which ends its session (an access token already issued lasts until
 -- it expires, at most an hour, but links nothing).
 create or replace function public.unlink_online_player()
 returns void
@@ -3531,6 +3551,7 @@ begin
     raise exception 'not signed in';
   end if;
   v_me := public.online_me();
+  perform public.online_unseat(v_uid);
   if v_me.uid is not null then
     perform pg_advisory_xact_lock(hashtext(v_me.player_id));
     delete from public.online_players o where o.uid = v_uid;
@@ -3600,6 +3621,7 @@ begin
   if p_uid <> v_me.uid and not v_me.trusted then
     raise exception 'not trusted';
   end if;
+  perform public.online_unseat(p_uid);
   delete from public.online_players o where o.uid = p_uid;
   delete from auth.users u where u.id = p_uid and u.is_anonymous;
   perform public.online_forget(v_me.player_id);
@@ -3713,6 +3735,7 @@ begin
   end if;
   perform pg_advisory_xact_lock(hashtext(v_id));
   select count(*) into v_n from public.online_players o where o.player_id = v_id;
+  perform public.online_unseat(o.uid) from public.online_players o where o.player_id = v_id;
   delete from auth.users u
    where u.is_anonymous and u.id in (select o.uid from public.online_players o where o.player_id = v_id);
   delete from public.online_players o where o.player_id = v_id;
@@ -3739,6 +3762,523 @@ grant  execute on function public.online_pair_code() to authenticated;
 revoke execute on function public.online_pair(text) from public, anon;
 grant  execute on function public.online_pair(text) to authenticated;
 
+-- Rooms (plan 39, 1.2): a race by code. The host creates a room and shares its 6-digit code; a guest
+-- who types it takes the seat and waits ('asked') while the host sees their name and accepts ('ready')
+-- or declines. A decline moves the host to a new code: a guest's channel policy is re-checked only at
+-- join and at token refresh (up to an hour), so a removed seat on the same topic would keep reading
+-- and writing (finding 19). The host starts each race ('playing'): the server mints its seed and GO
+-- time, and either player ends it ('finished', 'abandoned'); a finished room can race again (a
+-- rematch, a new seed). The two devices talk over the private Realtime channel room:<code>, which only
+-- the room's two seated devices may join (the policies below). The server tells them what changed with
+-- realtime.send: 'guest' (a guest sat down), 'answer' (accepted or declined), 'left' and 'status'.
+-- source: how the room was reached; 'code' only until invites and share links (Tier 4).
+-- Rooms expire when anything is created (online_cleanup; no pg_cron). Readable by no role.
+create table if not exists public.rooms (
+  code         text primary key check (code ~ '^[1-9][0-9]{5}$'),
+  host_uid     uuid not null references auth.users (id) on delete cascade,
+  host_player  text not null check (host_player ~ '^[A-Za-z0-9_-]{22}$'),
+  guest_uid    uuid references auth.users (id) on delete set null,
+  guest_player text check (guest_player ~ '^[A-Za-z0-9_-]{22}$'),
+  status       text not null default 'open'
+               check (status in ('open', 'asked', 'ready', 'playing', 'finished', 'abandoned')),
+  source       text not null default 'code' check (source in ('code')),
+  seed         bigint check (seed between 0 and 4294967295),
+  started_at   timestamptz,                    -- the current race's GO time, minted by set_room_status
+  round        int not null default 0,         -- races started in this room
+  created_at   timestamptz not null default now(),
+  updated_at   timestamptz not null default now()
+);
+alter table public.rooms enable row level security;
+revoke all on public.rooms from public, anon, authenticated;
+create unique index if not exists rooms_host on public.rooms (host_uid);   -- one room per host device
+create index if not exists rooms_guest on public.rooms (guest_uid);
+
+-- Every join_room call, for its caps (failed joins per device, per IP and in all), kept an hour. The
+-- IP is never stored: only a hash of its bucket (online_ip_bucket) with this database's own random
+-- pepper (online_secret), so a stored value cannot be turned back into an address.
+create table if not exists public.join_attempts (
+  id      bigserial primary key,
+  uid     uuid,
+  ip_hash text,
+  ok      boolean not null,
+  at      timestamptz not null default now()
+);
+alter table public.join_attempts enable row level security;
+revoke all on public.join_attempts from public, anon, authenticated;
+revoke all on sequence public.join_attempts_id_seq from public, anon, authenticated;
+create index if not exists join_attempts_at on public.join_attempts (at);
+create index if not exists join_attempts_uid on public.join_attempts (uid, at);
+create index if not exists join_attempts_ip on public.join_attempts (ip_hash, at);
+
+-- The pepper join_attempts hashes IPs with: made once, at the first paste, and never shown.
+create table if not exists public.online_secret (
+  id     int primary key check (id = 1),
+  pepper text not null
+);
+alter table public.online_secret enable row level security;
+revoke all on public.online_secret from public, anon, authenticated;
+insert into public.online_secret (id, pepper)
+values (1, replace(gen_random_uuid()::text || gen_random_uuid()::text, '-', ''))
+on conflict (id) do nothing;
+
+-- The caller's IP as the per-IP caps count it (finding 18): cf-connecting-ip, which Cloudflare sets
+-- and refuses from a client; failing that the last x-forwarded-for entry (the first is the client's
+-- own to write; true-client-ip and forwarded pass through as sent). IPv6 counts by its /64, one
+-- household or phone. Null when the request carries neither (the SQL editor, a test). Internal.
+create or replace function public.online_ip_bucket()
+returns text
+language plpgsql
+stable
+set search_path = ''
+as $$
+declare
+  v_h jsonb;
+  v_ip text;
+  v_inet inet;
+begin
+  begin
+    v_h := nullif(current_setting('request.headers', true), '')::jsonb;
+  exception when others then
+    return null;
+  end;
+  v_ip := nullif(btrim(v_h ->> 'cf-connecting-ip'), '');
+  if v_ip is null then
+    v_ip := nullif(btrim(reverse(split_part(reverse(coalesce(v_h ->> 'x-forwarded-for', '')), ',', 1))), '');
+  end if;
+  if v_ip is null then
+    return null;
+  end if;
+  begin
+    v_inet := v_ip::inet;
+  exception when others then
+    return null;
+  end;
+  if family(v_inet) = 6 then
+    return host(network(set_masklen(v_inet, 64))) || '/64';
+  end if;
+  return host(v_inet);
+end;
+$$;
+
+-- The stored form of the caller's IP bucket (see join_attempts). Internal.
+create or replace function public.online_ip_hash()
+returns text
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select case when b.bucket is null then null
+              else encode(sha256(convert_to(s.pepper || '|' || b.bucket, 'UTF8')), 'hex') end
+  from (select public.online_ip_bucket() as bucket) b
+  left join public.online_secret s on s.id = 1;
+$$;
+
+-- Take a device out of every room (it unlinked, was removed, or moved to another player): a room it
+-- hosts goes, a race it is in is abandoned, a seat it holds is freed. Internal.
+create or replace function public.online_unseat(p_uid uuid)
+returns void
+language sql
+volatile
+security definer
+set search_path = ''
+as $$
+  update public.rooms r set status = 'abandoned', updated_at = now()
+   where r.status = 'playing' and p_uid in (r.host_uid, r.guest_uid);
+  delete from public.rooms r where r.host_uid = p_uid and r.status <> 'abandoned';
+  update public.rooms r set guest_uid = null, guest_player = null, status = 'open', updated_at = now()
+   where r.guest_uid = p_uid and r.status in ('asked', 'ready');
+$$;
+
+-- Housekeeping, run whenever something is created (link_online_player, create_room); bounded, so a
+-- call stays cheap. A playing room is never cleaned: each player's hourly token refresh re-runs the
+-- channel policy, and a room gone mid-race would close both channels (finding 19). The one exception
+-- is a race started 6 hours ago: none lasts that long, and a pair that crashed would hold the room
+-- for ever. Anonymous users go when stale: never linked a day after signing in, or not seen for 90
+-- days; never one seated in a room, nor the device asking. Their link goes with them; the player
+-- loses nothing else.
+create or replace function public.online_cleanup()
+returns void
+language plpgsql
+volatile
+security definer
+set search_path = ''
+as $$
+begin
+  delete from public.rooms r where r.code in (
+    select x.code from public.rooms x
+     where (x.status <> 'playing' and x.updated_at < now() - interval '15 minutes')
+        or (x.status = 'playing' and x.started_at < now() - interval '6 hours')
+     limit 100);
+  delete from public.join_attempts a where a.id in (
+    select x.id from public.join_attempts x where x.at < now() - interval '1 hour' order by x.at limit 500);
+  delete from public.online_pairings c where c.expires_at < now();
+  delete from auth.users u where u.id in (
+    select x.id from auth.users x
+      left join public.online_players o on o.uid = x.id
+     where x.is_anonymous
+       and ((o.uid is null and x.created_at < now() - interval '24 hours')
+            or o.seen_at < now() - interval '90 days')
+       and not exists (select 1 from public.rooms r where x.id in (r.host_uid, r.guest_uid))
+       and x.id is distinct from auth.uid() -- never the device asking: it is about to link or host
+     limit 20);
+  delete from public.online_profiles p
+   where p.updated_at < now() - interval '90 days'
+     and not exists (select 1 from public.online_players o where o.player_id = p.player_id);
+end;
+$$;
+
+-- The server's clock in ms since the epoch, for the countdown's clock offset (best of a few round
+-- trips; the spike measured ±25 ms).
+create or replace function public.server_now()
+returns bigint
+language sql
+stable
+set search_path = ''
+as $$
+  select floor(extract(epoch from clock_timestamp()) * 1000)::bigint;
+$$;
+
+-- A room's state for one of its two seated devices. Internal: room_state and the 'status' event.
+create or replace function public.online_room_json(p_room public.rooms, p_uid uuid)
+returns jsonb
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select jsonb_build_object(
+    'ok', true,
+    'code', p_room.code,
+    'status', p_room.status,
+    'source', p_room.source,
+    'seat', case when p_uid = p_room.host_uid then 'host' when p_uid = p_room.guest_uid then 'guest' end,
+    'host_name', (select p.name from public.online_profiles p where p.player_id = p_room.host_player),
+    'guest_name', (select p.name from public.online_profiles p where p.player_id = p_room.guest_player),
+    'seed', p_room.seed,
+    'start_ms', floor(extract(epoch from p_room.started_at) * 1000)::bigint,
+    'round', p_room.round,
+    'server_ms', floor(extract(epoch from clock_timestamp()) * 1000)::bigint);
+$$;
+
+-- Host a room: a fresh 6-digit code (100000-999999), open. One room per device: its last one goes,
+-- unless it is mid-race ('in a race': leave it first). Returns { ok, code, status }. Raises 'not
+-- signed in', 'not linked', 'rate limited' (one room per 2 seconds), 'in a race'.
+create or replace function public.create_room()
+returns jsonb
+language plpgsql
+volatile
+security definer
+set search_path = ''
+as $$
+declare
+  v_me public.online_players;
+  v_code text;
+begin
+  if auth.uid() is null then
+    raise exception 'not signed in';
+  end if;
+  v_me := public.online_me();
+  if v_me.uid is null then
+    raise exception 'not linked';
+  end if;
+  if exists (select 1 from public.rooms r where r.host_uid = v_me.uid and r.created_at > now() - interval '2 seconds') then
+    raise exception 'rate limited';
+  end if;
+  if exists (select 1 from public.rooms r where v_me.uid in (r.host_uid, r.guest_uid) and r.status = 'playing') then
+    raise exception 'in a race';
+  end if;
+  perform public.online_cleanup();
+  perform public.online_unseat(v_me.uid);
+  delete from public.rooms r where r.host_uid = v_me.uid; -- its abandoned or finished room too
+  for i in 1 .. 20 loop
+    v_code := (100000 + public.online_random(900000))::text;
+    begin
+      insert into public.rooms (code, host_uid, host_player) values (v_code, v_me.uid, v_me.player_id);
+      return jsonb_build_object('ok', true, 'code', v_code, 'status', 'open');
+    exception when unique_violation then
+      null; -- that code is taken: draw another
+    end;
+  end loop;
+  raise exception 'busy';
+end;
+$$;
+
+-- Take the guest's seat of an open room by its code: { ok: true, code, status: 'asked', host_name };
+-- the host is told ('guest', with the guest's online name) and accepts or declines. Every refusal is
+-- the same { ok: false, error: 'no room' } (no such code, a seat taken, the player's own room), so a
+-- guess learns nothing. Failed joins are capped before the code is even looked at (an IP and the
+-- whole game are capped as well as a device, since a new anonymous device costs nothing):
+-- { ok: false, error: 'rate limited' } past 5 failures from this device or 20 from its IP in 10
+-- minutes, 'busy' past 200 in all in a minute. Raises 'not signed in', 'not linked'.
+create or replace function public.join_room(p_code text)
+returns jsonb
+language plpgsql
+volatile
+security definer
+set search_path = ''
+as $$
+declare
+  c_device_fails constant int := 5;      -- failed joins per device in 10 minutes
+  c_ip_fails     constant int := 20;     -- per IP bucket in 10 minutes (a school's wifi is one IP)
+  c_all_fails    constant int := 200;    -- in all, per minute
+  v_uid uuid := auth.uid();
+  v_me public.online_players;
+  v_ip text;
+  v_code text := replace(coalesce(p_code, ''), ' ', '');
+  v_room public.rooms;
+begin
+  if v_uid is null then
+    raise exception 'not signed in';
+  end if;
+  v_me := public.online_me();
+  if v_me.uid is null then
+    raise exception 'not linked';
+  end if;
+  v_ip := public.online_ip_hash();
+  delete from public.join_attempts a where a.id in (
+    select x.id from public.join_attempts x where x.at < now() - interval '1 hour' order by x.at limit 200);
+  if (select count(*) from public.join_attempts a where not a.ok and a.at > now() - interval '1 minute') >= c_all_fails then
+    return jsonb_build_object('ok', false, 'error', 'busy');
+  end if;
+  if (select count(*) from public.join_attempts a
+       where not a.ok and a.uid = v_uid and a.at > now() - interval '10 minutes') >= c_device_fails
+     or (v_ip is not null and (select count(*) from public.join_attempts a
+       where not a.ok and a.ip_hash = v_ip and a.at > now() - interval '10 minutes') >= c_ip_fails) then
+    return jsonb_build_object('ok', false, 'error', 'rate limited');
+  end if;
+  select * into v_room from public.rooms r
+   where r.code = v_code and r.status = 'open' and r.host_uid <> v_uid and r.host_player <> v_me.player_id
+   for update;
+  if v_room.code is null then
+    insert into public.join_attempts (uid, ip_hash, ok) values (v_uid, v_ip, false);
+    return jsonb_build_object('ok', false, 'error', 'no room');
+  end if;
+  insert into public.join_attempts (uid, ip_hash, ok) values (v_uid, v_ip, true);
+  if exists (select 1 from public.rooms r where v_uid in (r.host_uid, r.guest_uid) and r.status = 'playing') then
+    raise exception 'in a race';
+  end if;
+  perform public.online_unseat(v_uid);
+  update public.rooms r
+     set guest_uid = v_uid, guest_player = v_me.player_id, status = 'asked', updated_at = now()
+   where r.code = v_code;
+  perform realtime.send(
+    jsonb_build_object('name', (select p.name from public.online_profiles p where p.player_id = v_me.player_id)),
+    'guest', 'room:' || v_code, true);
+  return jsonb_build_object('ok', true, 'code', v_code, 'status', 'asked',
+    'host_name', (select p.name from public.online_profiles p where p.player_id = v_room.host_player));
+end;
+$$;
+
+-- The host answers its waiting guest. Accept: { ok, code, status: 'ready' }. Decline: the guest is
+-- told ('answer', accept false) on the old topic, and the room moves to a new code, open and empty:
+-- { ok, code: <new>, status: 'open' }, so the declined device, which may stay on the old topic
+-- until its token refreshes, reaches nobody (finding 19). Raises 'not signed in', 'no room' (not
+-- this device's room), 'no guest' (nobody waiting).
+create or replace function public.answer_guest(p_code text, p_accept boolean)
+returns jsonb
+language plpgsql
+volatile
+security definer
+set search_path = ''
+as $$
+declare
+  v_uid uuid := auth.uid();
+  v_room public.rooms;
+  v_code text;
+begin
+  if v_uid is null then
+    raise exception 'not signed in';
+  end if;
+  select * into v_room from public.rooms r where r.code = p_code and r.host_uid = v_uid for update;
+  if v_room.code is null then
+    raise exception 'no room';
+  end if;
+  if v_room.status <> 'asked' then
+    raise exception 'no guest';
+  end if;
+  perform realtime.send(jsonb_build_object('accept', coalesce(p_accept, false)), 'answer', 'room:' || p_code, true);
+  if coalesce(p_accept, false) then
+    update public.rooms r set status = 'ready', updated_at = now() where r.code = p_code;
+    return jsonb_build_object('ok', true, 'code', p_code, 'status', 'ready');
+  end if;
+  delete from public.rooms r where r.code = p_code;
+  for i in 1 .. 20 loop
+    v_code := (100000 + public.online_random(900000))::text;
+    continue when v_code = p_code;
+    begin
+      insert into public.rooms (code, host_uid, host_player, source)
+      values (v_code, v_room.host_uid, v_room.host_player, v_room.source);
+      return jsonb_build_object('ok', true, 'code', v_code, 'status', 'open');
+    exception when unique_violation then
+      null; -- that code is taken: draw another
+    end;
+  end loop;
+  raise exception 'busy';
+end;
+$$;
+
+-- Leave a room (every exit path of the game calls it; leaving twice is fine). The host's room goes;
+-- the guest's seat is freed and the room is open again; mid-race either way the race is abandoned
+-- (no winner) and the room stays until housekeeping, so the other device can read why. The other
+-- device is told ('left', with the seat). Raises 'not signed in'.
+create or replace function public.leave_room(p_code text)
+returns void
+language plpgsql
+volatile
+security definer
+set search_path = ''
+as $$
+declare
+  v_uid uuid := auth.uid();
+  v_room public.rooms;
+begin
+  if v_uid is null then
+    raise exception 'not signed in';
+  end if;
+  select * into v_room from public.rooms r where r.code = p_code and v_uid in (r.host_uid, r.guest_uid) for update;
+  if v_room.code is null then
+    return;
+  end if;
+  perform realtime.send(jsonb_build_object('seat', case when v_uid = v_room.host_uid then 'host' else 'guest' end),
+                        'left', 'room:' || p_code, true);
+  perform public.online_unseat(v_uid);
+end;
+$$;
+
+-- Move the room on. 'playing' (the host only, from 'ready' or after a race, 'finished'): the server
+-- mints the race's seed and its GO time, 4 seconds from now (the countdown runs on server time), and
+-- counts the round. 'finished' or 'abandoned' (either seated device, from 'playing'). Both devices
+-- are told ('status', the room as room_state shows it). Returns the room as room_state does. Raises
+-- 'not signed in', 'no room', 'not host', 'bad status'.
+create or replace function public.set_room_status(p_code text, p_status text)
+returns jsonb
+language plpgsql
+volatile
+security definer
+set search_path = ''
+as $$
+declare
+  c_lead constant interval := interval '4 seconds';   -- from 'playing' to GO
+  v_uid uuid := auth.uid();
+  v_room public.rooms;
+begin
+  if v_uid is null then
+    raise exception 'not signed in';
+  end if;
+  select * into v_room from public.rooms r where r.code = p_code and v_uid in (r.host_uid, r.guest_uid) for update;
+  if v_room.code is null then
+    raise exception 'no room';
+  end if;
+  if p_status = 'playing' then
+    if v_uid <> v_room.host_uid then
+      raise exception 'not host';
+    end if;
+    if v_room.status not in ('ready', 'finished') or v_room.guest_uid is null then
+      raise exception 'bad status';
+    end if;
+    update public.rooms r
+       set status = 'playing', seed = public.online_random(4294967296), started_at = now() + c_lead,
+           round = r.round + 1, updated_at = now()
+     where r.code = p_code
+    returning * into v_room;
+  elsif p_status in ('finished', 'abandoned') then
+    if v_room.status <> 'playing' then
+      raise exception 'bad status';
+    end if;
+    update public.rooms r set status = p_status, updated_at = now() where r.code = p_code
+    returning * into v_room;
+  else
+    raise exception 'bad status';
+  end if;
+  perform realtime.send(public.online_room_json(v_room, null) - 'seat' - 'server_ms' - 'ok', 'status', 'room:' || p_code, true);
+  return public.online_room_json(v_room, v_uid);
+end;
+$$;
+
+-- The room as one of its two seated devices sees it: { ok, code, status, source, seat ('host' or
+-- 'guest'), host_name, guest_name, seed, start_ms, round, server_ms }; a reload rejoins from it.
+-- Raises 'not signed in', 'no room' (not seated there).
+create or replace function public.room_state(p_code text)
+returns jsonb
+language plpgsql
+stable
+security definer
+set search_path = ''
+as $$
+declare
+  v_uid uuid := auth.uid();
+  v_room public.rooms;
+begin
+  if v_uid is null then
+    raise exception 'not signed in';
+  end if;
+  select * into v_room from public.rooms r where r.code = p_code and v_uid in (r.host_uid, r.guest_uid);
+  if v_room.code is null then
+    raise exception 'no room';
+  end if;
+  return public.online_room_json(v_room, v_uid);
+end;
+$$;
+
+-- The Realtime policies' check (granted to authenticated, because a policy runs it as the device
+-- asking): may this device read (p_write false) or write a channel topic? room:<code>: its two seated
+-- devices, each still linked as the player it sat down as. Every other topic: nobody (user:<player id>
+-- comes with invites, Tier 4). Answers only about the caller.
+create or replace function public.online_can(p_topic text, p_write boolean)
+returns boolean
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select case
+    when p_topic ~ '^room:[1-9][0-9]{5}$' then exists (
+      select 1 from public.rooms r
+        join public.online_players o on o.uid = auth.uid()
+       where r.code = substr(p_topic, 6)
+         and ((r.host_uid = o.uid and r.host_player = o.player_id)
+              or (r.guest_uid = o.uid and r.guest_player = o.player_id)))
+    else false
+  end;
+$$;
+
+-- Who may use a private Realtime channel: broadcast and presence only, on a topic online_can allows
+-- (the 0.3 spike's policies, as proven there). Realtime checks them when a device joins and when its
+-- token refreshes; public channels are off in the project's Realtime settings.
+drop policy if exists "online read" on realtime.messages;
+create policy "online read" on realtime.messages
+  for select to authenticated
+  using (realtime.messages.extension in ('broadcast', 'presence')
+         and (select public.online_can((select realtime.topic()), false)));
+drop policy if exists "online write" on realtime.messages;
+create policy "online write" on realtime.messages
+  for insert to authenticated
+  with check (realtime.messages.extension in ('broadcast', 'presence')
+              and (select public.online_can((select realtime.topic()), true)));
+
+revoke execute on function public.online_ip_bucket() from public, anon, authenticated;
+revoke execute on function public.online_ip_hash() from public, anon, authenticated;
+revoke execute on function public.online_unseat(uuid) from public, anon, authenticated;
+revoke execute on function public.online_cleanup() from public, anon, authenticated;
+revoke execute on function public.online_room_json(public.rooms, uuid) from public, anon, authenticated;
+revoke execute on function public.server_now() from public, anon;
+grant  execute on function public.server_now() to authenticated;
+revoke execute on function public.create_room() from public, anon;
+grant  execute on function public.create_room() to authenticated;
+revoke execute on function public.join_room(text) from public, anon;
+grant  execute on function public.join_room(text) to authenticated;
+revoke execute on function public.answer_guest(text, boolean) from public, anon;
+grant  execute on function public.answer_guest(text, boolean) to authenticated;
+revoke execute on function public.leave_room(text) from public, anon;
+grant  execute on function public.leave_room(text) to authenticated;
+revoke execute on function public.set_room_status(text, text) from public, anon;
+grant  execute on function public.set_room_status(text, text) to authenticated;
+revoke execute on function public.room_state(text) from public, anon;
+grant  execute on function public.room_state(text) to authenticated;
+revoke execute on function public.online_can(text, boolean) from public, anon;
+grant  execute on function public.online_can(text, boolean) to authenticated;
+
 -- Which version of this file the database last ran: a short SHA-256 of the file with the value
 -- below blanked (tools/schema_check.mjs). `npm run schema:stamp` rewrites it after an edit, and
 -- tests/schema.test.js fails until it does. It is the last thing this file makes, so the live
@@ -3749,7 +4289,7 @@ returns text
 language sql
 immutable
 as $$
-  select '32d83e0208795f7d'::text; -- schema stamp
+  select 'b8dca39688f4b414'::text; -- schema stamp
 $$;
 revoke execute on function public.schema_version() from public, authenticated;
 grant  execute on function public.schema_version() to anon;
