@@ -2468,11 +2468,18 @@ db/schema.sql               Supabase schema: scores table (player_id = save-code
                             push refuses until the live stamp is this file's).
                             tests/schema.test.js runs it in PGlite (Postgres in
                             WebAssembly), on an empty database and over
-                            tests/fixtures/schema-applied.sql. PL/pgSQL gotcha: a bare CASE inside
+                            tests/fixtures/schema-applied.sql (refreshed only by `npm run push`).
+                            Online play (plan 39): online_profiles / online_players /
+                            online_pairings (devices linked to a resolved player; M1 device
+                            trust, proposed and awaiting Michael's accept), rooms /
+                            join_attempts / online_secret, and two policies on
+                            realtime.messages for `room:<code>`; PGlite boots with
+                            tools/supabase_stubs.mjs's auth and realtime stand-ins.
+                            PL/pgSQL gotcha: a bare CASE inside
                             `IF … THEN` ends the condition at its THEN; parenthesise.
 
-tests/                      node --test (schema.test.js, pilot.test.js, eduBoardSync.test.js and
-                            schemaCheck.test.js need `npm install`: PGlite). Each file is self-describing:
+tests/                      node --test (schema.test.js, schemaOnline.test.js, pilot.test.js,
+                            eduBoardSync.test.js and schemaCheck.test.js need `npm install`: PGlite). Each file is self-describing:
   field.test.js             fieldWidth (phone, desktop, 2:1 cap, bad input, even),
                             uiColumn, poopX, the x0 shift of trayLayout /
                             levelBarLayout / readyLayout, hits on a shifted column,
@@ -2740,6 +2747,12 @@ tests/                      node --test (schema.test.js, pilot.test.js, eduBoard
                             default 0; the caller flagged on its page and appended
                             on others; a hidden player left out; one signature each,
                             anon only; the named call without p_offset)
+  schemaOnline.test.js      The online part of db/schema.sql in PGlite, a device acting through
+                            request.jwt.claims and the authenticated role: linking, trust and
+                            pairing, the name claim both ways, rooms, caps, the channel
+                            policies, housekeeping
+  onlineLiveCheck.test.js   tools/online_live_check.mjs: the target guard, the arguments and
+                            how a channel answer is read
   schemaCheck.test.js       tools/schema_check.mjs: the stamp (blanked, idempotent),
                             the one read-only live call (an injected fetch), each
                             state it reports (current, fixture, other, none,
@@ -3042,6 +3055,13 @@ tools/
                             references and who cites them), mark <ids> --by="Name"
                             [--note=…] [--on=YYYY-MM-DD], unmark <ids>. mark / unmark
                             rewrite only src/questionAudits.js's block and read it back.
+  supabase_stubs.mjs        The one PGlite preamble: roles with Supabase's default privileges,
+                            and the auth / realtime stand-ins. Every PGlite boot uses it;
+                            schema_check.mjs imports it lazily so push.mjs needs no more files.
+  online_live_check.mjs     The live check of the online schema (plan 39): --env <file> for a test
+                            project, --live for the live project after the paste. Four anonymous
+                            sessions, twelve PASS/FAIL lines; each session unlinks itself; never a
+                            secret key. tests/onlineLiveCheck.test.js covers it.
   headless_check.mjs        npm run smoke [url] [--list] [--only=a,b]: the checks run in
                             named sections (SECTIONS, in run order, each printing its check
                             count); --list shows them; --only runs those plus what they
@@ -3414,7 +3434,14 @@ Commits follow `type(scope): summary` (`feat`, `fix`, `docs`, `chore`, `test`, `
   grants, so a call never finds two; plan 28 5.2's board pages did this), run it by hand in the Supabase
   SQL editor before `npm run push` (which checks), keep `LEADERBOARD.maxScore` and
   the schema's score cap in step, and `TUNING.levels.lastLevel` and the 🏆 level cap
-  (1 to 7) too (tests/leaderboard.test.js checks both).
+  (1 to 7) too (tests/leaderboard.test.js checks both). An **online** function (plan 39) is
+  granted to `authenticated` and revoked from `public, anon` (one `revoke … from public, anon;` plus
+  `grant  execute … to authenticated;` pair), is `security definer` with `set search_path = ''` and
+  qualified names, checks `auth.uid()` first, and is listed in the header's `--   * online name(...)`
+  list (tests/schema.test.js checks the anon and online lists against the grant lines;
+  tests/schemaOnline.test.js checks the privileges). A failure the server counts is returned as
+  `{ ok: false, error }`, because a raise would roll the count back. The game's anon functions stay
+  revoked from authenticated (a session token sent to one is refused).
 - New achievement → one `ACHIEVEMENTS` entry in `src/achievements.js` (a new,
   permanent id) and its title (and, if no template fits, description) in both
   locales + `TRANSLATION_NOTES.md`, plus its id in `achievement_catalog()` in
