@@ -202,6 +202,13 @@ test('a restore that did not reach storage says it lasts for this visit only; sk
   await el('edu-restore-text').fire('input');
   await el('edu-restore-paste').click();
   assert.equal(el('edu-backup-status').textContent, t('en', 'eduRestoreNothing'));
+  closeEduDataPanel();
+  // Nothing new, into a browser that is not saving: the cards it has last for this visit only too (AUD-091).
+  open(device({ restoreEducation: () => ({ ok: true, added: 0, updated: 0, badges: 0, changed: false, saved: false, skipped: 0 }) }));
+  el('edu-restore-text').value = BACKUP_TEXT;
+  await el('edu-restore-text').fire('input');
+  await el('edu-restore-paste').click();
+  assert.equal(el('edu-backup-status').textContent, `${t('en', 'eduRestoreNothing')} ${t('en', 'eduRestoreVisitOnly')}`);
 });
 
 test('off the home screen (a paused run, the game-over panel) restore is disabled with a line saying to go home; Back up still works', async () => {
