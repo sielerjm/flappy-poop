@@ -923,7 +923,8 @@ src/
                             careerKey = flappyPoop.career, streaksKey =
                             flappyPoop.streaks (plan 34), onlineSessionKey =
                             flappyPoop.onlineSession (plan 39; a bearer secret, never
-                            exported or sent elsewhere), score cap),
+                            exported or sent elsewhere), onlineTrustKey =
+                            flappyPoop.onlineTrust (plan 39, 1.6a), score cap),
                             LEVELS (gut segment name keys, in order), LEVEL_COLORS
                             (Set2 backgrounds, cycling) and BACKGROUND (overlay
                             layers: key + parallax), TEST_MODE (trigger words,
@@ -1288,9 +1289,16 @@ src/
                             presence, channel); error, cap and rejoin rules follow the
                             0.3 spike. close() keeps the session, signOut() is local.
                             ?netsim delays and drops received messages. Per-frame calls
-                            are synchronous. Knobs in TUNING.online.net. No caller yet
-                            (first: the sign-in screen 1.6a, the lobby 1.6c).
+                            are synchronous. Knobs in TUNING.online.net. Caller: the
+                            sign-in side, src/onlineAccount.js (the lobby, 1.6c, next).
                             tests/onlineNet.test.js.
+  onlineAccount.js          Online race (🌐, plan 39, 1.6a) the sign-in side on top of
+                            createOnlineNet, NO Phaser/DOM: enter (sign in, link the
+                            device), claim (a new name under the board's rules), devices,
+                            remove, pairCode, pair and leave (unlink, then signOut()),
+                            each as { ok, … } or { ok: false, errorKey } (an i18n key
+                            the screens show; item 35's sign-in errors incl. rate
+                            limited). tests/onlineAccount.test.js.
   leaderboard.js            Shared leaderboard, NO Phaser/DOM (plan 34 adds
                             createStreakStore and STREAK_KINDS: flappyPoop.streaks,
                             the Singleplayer and Daily Dump day streaks, never
@@ -1621,6 +1629,10 @@ src/
                             a 90vh card ran its ✕ under the clock). eduIntroPanel,
                             eduDataPanel, savePanel and tournamentPanel put it first
                             in their CSS.
+    onlineAccountViews.js   Online race (🌐, plan 39, 1.6a) the sign-in side's screens
+                            (Preview B): name claim, linking, devices, pairing code,
+                            pair, errors. Plain DOM over onlineAccount.js's results; the
+                            🌐 lobby mounts them (1.6c). tests/onlineAccountViews.test.js.
     savePanel.js            Plain DOM panel over the canvas (a three-step intro,
                             Username field, read-only user code + Copy, Load
                             field, an outlined Clear beside the Save button that
@@ -2806,6 +2818,13 @@ tests/                      node --test (schema.test.js, schemaOnline.test.js, p
                             rejoin, presence limits, verified room events), and the real
                             vendored bundle on a fake fetch (online RPCs carry the Bearer
                             token; leaderboard, daily and tournament calls never do)
+  onlineAccount.test.js     src/onlineAccount.js: enter / claim / devices / remove /
+                            pairCode / pair / leave on a fake net, every error key
+  onlineAccountViews.test.js src/ui/onlineAccountViews.js: each screen, its errors and
+                            strings
+  onlineSignOut.test.js     Clear and a Load of another player leave online play only on
+                            a device holding a session (Play.onlineSessionHeld /
+                            onlineLeave); otherwise no client load
   schemaCheck.test.js       tools/schema_check.mjs: the stamp (blanked, idempotent),
                             the one read-only live call (an injected fetch), each
                             state it reports (current, fixture, other, none,
@@ -3492,6 +3511,12 @@ Commits follow `type(scope): summary` (`feat`, `fix`, `docs`, `chore`, `test`, `
   (`tests/onlineNet.test.js` keeps them equal). The server's event names on
   `room:<code>` are hints: the transport confirms them with `room_state`, since a
   seated peer can broadcast those names too.
+  The sign-in side (enter, claim, devices, pairing, leave) lives in
+  `src/onlineAccount.js` (`tests/onlineAccount.test.js`); `Play.onlineAccount`
+  builds it once, and `Play.onlineSessionHeld` / `Play.onlineLeave` ask and end it.
+  Clear and a Load of another player leave online play only on a device that holds
+  a session (no client load otherwise: `tests/onlineSignOut.test.js`). A newly
+  claimed online name is stored the save panel's way only after the link succeeds.
 - Backend change → edit `db/schema.sql`, `npm run schema:stamp`, list a new anon
   function and its undo line in the file's header (a new argument on an existing function: add it
   last with a default, `drop function if exists` the old signature just before `create`, and move its
