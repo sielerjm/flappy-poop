@@ -2471,7 +2471,7 @@ db/schema.sql               Supabase schema: scores table (player_id = save-code
                             tests/fixtures/schema-applied.sql (refreshed only by `npm run push`).
                             Online play (plan 39): online_profiles / online_players /
                             online_pairings (devices linked to a resolved player; M1 device
-                            trust, proposed and awaiting Michael's accept), rooms /
+                            trust, Michael's call of 19 Nov), rooms /
                             join_attempts / online_secret, and two policies on
                             realtime.messages for `room:<code>`; PGlite boots with
                             tools/supabase_stubs.mjs's auth and realtime stand-ins.
