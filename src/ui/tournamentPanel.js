@@ -1,6 +1,7 @@
 // Tournament (🏅) panels: plain DOM over the Versus scene, like the save panel (text input for
-// pasted codes, lists of up to eight rows). Every two-player session is a tournament for
-// minPlayers–maxPlayers (2–8): the 👥 start opens the lobby here. Views:
+// pasted codes, lists of up to eight rows), or over Play with no Versus behind it (plan 39, 1.6b:
+// Play.openVersusWindow, where two halves do not fit; ✕ then closes back to Play). Every two-player
+// session is a tournament for minPlayers–maxPlayers (2–8): the 👥 start opens the lobby here. Views:
 //   lobby   — the player count and one row per player (a new row starts as a Guest): Paste code,
 //             Guest, Use my player, ✕. ? opens the help card, ✕ / Esc leaves for single player.
 //   seeding — the bracket until its first race (canReseed): each first-round pair, every player
@@ -144,8 +145,13 @@ function setGameKeyboard(enabled) {
   }
 }
 
+/**
+ * The Versus scene the panel sits over, or null when it is not running (plan 39, 1.6b): the panel can
+ * open over Play (Play.openVersusWindow), and Phaser keeps a stopped scene's object, so getScene alone
+ * would hand back a Versus whose leave() stops the Play under the panel (or throws, never run).
+ */
 function versus(game = ctx?.game) {
-  return game?.scene?.getScene('Versus') ?? null;
+  return game?.scene?.isActive?.('Versus') ? (game.scene.getScene('Versus') ?? null) : null;
 }
 
 /** The running tournament ({ tour, matchId }) or null. */
@@ -738,7 +744,8 @@ function render() {
 }
 
 /**
- * Open the panel over the Versus scene: the lobby when no tournament is running, else the
+ * Open the panel over the Versus scene (or over Play, with no Versus running: Play.openVersusWindow,
+ * plan 39, 1.6b): the lobby when no tournament is running, else the
  * bracket (seeding until its first race), or the podium once the Final is decided. `view`
  * 'help' shows the help card, 'peek' the bracket read-only over a race (its level break).
  * @param {{ game: object, locale: string, play: object, view?: 'help' | 'peek' | null }} options

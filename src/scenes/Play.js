@@ -139,12 +139,12 @@ import { createCoinText } from '../ui/coinText.js';
 import { createCountLine } from '../ui/countLine.js';
 import { createInfoCard } from '../ui/infoCard.js';
 import { openSavePanel, isSavePanelOpen, showAdoptedName, showBoardScores } from '../ui/savePanel.js';
-import { isTournamentPanelOpen, tournamentPadAction } from '../ui/tournamentPanel.js';
+import { isTournamentPanelOpen, tournamentPadAction, openTournamentPanel } from '../ui/tournamentPanel.js';
 import { openEduDataPanel, isEduDataPanelOpen } from '../ui/eduDataPanel.js';
 import { openEduIntroPanel, closeEduIntroPanel, isEduIntroPanelOpen, eduIntroPadAction } from '../ui/eduIntroPanel.js';
 import { answerEvent, createConsentStore, createResearchQueue } from '../research.js';
 import { bindPad } from '../input/pad.js';
-import { keyGroup, sameDevice, catchUpTier, catchUpDraws, versusAvailable, ghostPlacement, rivalMarker, respawnPose, respawnBlinkStart, courseDistance, VERSUS_EMOJI } from '../versus.js';
+import { keyGroup, sameDevice, catchUpTier, catchUpDraws, versusAvailable, matchHostKey, ghostPlacement, rivalMarker, respawnPose, respawnBlinkStart, courseDistance, VERSUS_EMOJI } from '../versus.js';
 import { createEduStore, countersAfterRun, dueCount, cardCounts, masteryByDeck, pickCard, shuffleOptions, gradeFor, schedule, eduShopPrices, reviveStart, reviveStep, reviveSettled, newTally, tallyAnswer, EDUCATION_EMOJI, localDayKey, studyStreakNow, pickSuperCard, paidOn, buriedIdsOn, skipUntil, boardRecord, educationBackup, readEducationBackup, restoredSettings } from '../education.js';
 
 const TEXT_STYLE = {
@@ -794,9 +794,11 @@ export class Play extends Phaser.Scene {
     if (this.launching || this.state !== 'ready') return;
     // Play again (solo) and a Daily Dump are one-player runs whatever the 👥 toggle says.
     if (!daily && !solo && this.versusOn && this.versusOffered()) {
-      // Two-player mode: the Versus scene takes over (it stops this scene and launches the halves).
+      // Two-player mode: where two halves fit, the Versus scene takes over (it stops this scene and
+      // launches the halves); elsewhere the tournament window opens over this scene (plan 39, 1.6b).
       this.focus?.hide();
-      this.scene.start('Versus', { match: null });
+      if (this.splitFits()) this.scene.start('Versus', { match: null });
+      else this.openVersusWindow();
       return;
     }
     if (intro && !hold && !daily && !solo && this.educationOn && this.educationOffered()) {
@@ -1991,9 +1993,26 @@ export class Play extends Phaser.Scene {
     this.toiletToggle.setOn(this.toilet);
   }
 
-  /** The 👥 toggle is offered only where two halves fit the window (versusAvailable), outside a match and test mode. */
+  /**
+   * The 👥 toggle is offered outside a match and test mode, for now only where two halves fit the
+   * window (splitFits; plan 39, 1.6c offers it on phones too, where launch opens the window instead).
+   */
   versusOffered() {
-    return !this.match && !this.isTestMode() && versusAvailable(globalThis.innerWidth, globalThis.innerHeight, T, FIELD);
+    return !this.match && !this.isTestMode() && this.splitFits();
+  }
+
+  /** Two halves fit the window (versusAvailable): a 👥 start can run the split-screen Versus scene here. */
+  splitFits() {
+    return versusAvailable(globalThis.innerWidth, globalThis.innerHeight, T, FIELD);
+  }
+
+  /**
+   * The tournament window over this scene, no Versus behind it (plan 39, 1.6b): a 👥 start where two
+   * halves do not fit. Its ✕ closes back to this ready screen. Not reachable until 1.6c offers 👥 there
+   * (versusOffered), with 🌐 locked on, since a local race needs the split screen.
+   */
+  openVersusWindow() {
+    openTournamentPanel({ game: this.game, locale: this.locale, play: this });
   }
 
   toggleVersus() {
@@ -3010,9 +3029,14 @@ export class Play extends Phaser.Scene {
     if (this.state === 'playing' || this.state === 'respawn') this.pauseRun();
   }
 
-  /** The Versus scene while this half is in a match; null in single player. */
+  /**
+   * The host scene while this half is in a match (plan 39, 1.6b): the one its match names
+   * (matchHostKey), the split-screen Versus scene for every local match; null in single player.
+   * Everything Play asks of a match goes through it (tests/matchHost.test.js lists the interface).
+   */
   versusHost() {
-    return this.match ? this.scene.get('Versus') : null;
+    const key = matchHostKey(this.match);
+    return key ? this.scene.get(key) : null;
   }
 
   /** Pause the run: a match's shared pause (both halves under one banner), else this scene's own. */

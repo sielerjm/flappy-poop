@@ -65,6 +65,16 @@ export function createMatch(seed, { levelPipes = null, names = null, tournament 
   return { seed: seed >>> 0, status: 'join', slots: [slotTemplate(), slotTemplate()], levelPipes, names, tournament };
 }
 
+/**
+ * The scene key of the host that runs a match (plan 39, 1.6b): what a match half's Play talks to
+ * (Play.versusHost) for first-over-the-line, the ready check, the shared pause and the end. A match
+ * may name its host (`hostKey`, the online race's in 1.7a); without one it is the split-screen
+ * Versus scene, so every createMatch / resetMatch match is Versus's and stores no key. null with no match.
+ */
+export function matchHostKey(match) {
+  return match ? (match.hostKey ?? 'Versus') : null;
+}
+
 /** A rematch: the same devices on the same sides and the same options, a fresh seed, everything else reset. */
 export function resetMatch(match, seed) {
   const next = createMatch(seed, { levelPipes: match?.levelPipes ?? null, names: match?.names ?? null, tournament: match?.tournament ?? false });
