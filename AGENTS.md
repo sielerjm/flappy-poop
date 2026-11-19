@@ -273,7 +273,13 @@ is queued once (`queueFinished`: `tournamentPayload(tour, newId())` with the hos
 `Play.tournamentQueue`, registry `posted` / `tournamentId`) and synced; a 2-player one is `posted: 'two'`
 (the podium says it is not saved), an all-guest one `'none'`. The podium's line (`#tour-saved`,
 `savedText`) follows the queue's outcome. Guests travel as `{ id: null, name: null }`.
-`Play.syncLeaderboard` drains the queue after the merges and before the no-username return. The server
+`Play.syncLeaderboard` drains the queue after the merges and before the no-username return. Every queue
+(runs, Daily, career, 📚 board, pilot answers, tournaments) also goes again when the browser fires `online`
+and when the page is shown after a hide of `LEADERBOARD.resyncHiddenMs` (30 s) or longer, not only at boot
+and game over (plan 35, 1.4): `createResync` (`src/logic.js`) lets one `syncLeaderboard` run at a time,
+a trigger during a send joins it, and it never rejects. `Play.resyncOnline` and `resyncVisibility` wire it
+(`this.resync ??=`, one guard per scene object so a restart keeps a send in flight; the `online`
+listener leaves with the scene); a half of a match neither times a hide nor sends. The server
 (`submit_tournament`) re-checks the bracket round by round, derives the medals, keeps a receipt per
 tournament id (a resend is 'duplicate') and paces one per host per 60 s; stats feed `tournament_board`,
 the 🏅 tab of the Leaderboard overlay; races between two linked players become `tournament_matchups`
@@ -562,7 +568,10 @@ the gate, and counts toward
 `buryPerDay` (3) a local day; a practice card's schedule is left as it was, but it joins the day's
 skipped ids (`eduStore.skipPractice`, uncounted; AUD-028), and a new card joins them too
 (`eduStore.skipNew`, uncounted; plan 28, Stage 3b), so no quiz offers it that day, and takes one of the
-break's N; neither has a daily limit. A stored due card's Skip takes one of the gate's `duePerBreak`.
+break's N, only when the store took the Skip (AUD-089); `Play.breakSkipped` (reset with `breakNewAsked`)
+keeps the break's skipped new cards, and `breakQuizOptions({ limits, skipped })` adds them to `skipped`, so
+a local midnight inside the break cannot free one to take a second of the N and a second Skip (AUD-088,
+on AUD-058's one set); neither has a daily limit. A stored due card's Skip takes one of the gate's `duePerBreak`.
 `skipBlocker` says what stops it ('none': not an education break, a match; 'cap'; 'coins'): a blocked
 Skip shows dimmed (`button.dim`) and a press says why in the verdict's place. The first paid Skip in a
 break warns there and holds Skip for `explainMinMs` (`Play.quizSkipWarned`, cleared when a break
@@ -762,7 +771,10 @@ yet invited sees a note and the field, and the parts show once a code is typed o
 shares, or has joined. **An invite link** `…/?invite=<code>` is read once by `main.js`
 (`inviteFromSearch`), taken out of the address bar at once (`withoutInvite`, `history.replaceState`) and
 handed through the registry (`pendingInvite`) to the first ready screen, which opens the panel with the
-code filled in (`Play.openPendingInvite`). On the server, `share_education`'s fourth argument `p_invite`
+code filled in (`Play.openPendingInvite`). The code then waits in the registry (`inviteLink`: this page
+load's memory, never storage) and `Play.openEduData` fills it into every opening of the panel until
+`startEduShare` or `joinResearch` succeeds (AUD-090: a nameless invitee closes the panel to save a name);
+a code typed by hand still goes with the close (AUD-046). On the server, `share_education`'s fourth argument `p_invite`
 must hash to `education_settings.invite_hash` (the pilot's code) for a player who is not a 🔧 dev, not
 invited (`player_meta.edu_invited`), not a pilot participant and not already on the board ('needs
 invite', its own line); every share the server takes marks the player invited, and an invited player
@@ -818,7 +830,9 @@ and are purged before any later phase (`admin_purge_phase`). Clear forgets the s
 consent on the device and warns that what was sent stays until Stop sharing / Withdraw. The
 education, consent, queue and share stores are each one JSON value through `createJsonStore`
 (`src/store.js`): another tab's Clear holds at once, and storage that is full or throws keeps this
-page load's answers in memory.
+page load's answers in memory; while its last write is behind, a store still reads storage, and
+storage that moved on since the failure (another tab wrote, or Cleared) is taken, this load's unsaved
+value dropped, never written over it (AUD-087).
 Still to come (plan 21): the privacy foundation (delete account, export, the age question, a
 privacy notice), the public release (audited cards only), the research beta and the study.
 
@@ -898,7 +912,8 @@ src/
                             ?invite=<code> read once (inviteFromSearch), taken out
                             of the address bar at once (withoutInvite,
                             history.replaceState) and handed to Play through the
-                            registry's pendingInvite (plan 28, 2.4),
+                            registry's pendingInvite (plan 28, 2.4; Play then
+                            keeps it as inviteLink until a share or join, AUD-090),
                             roundPixels,
                             arcade physics (fixed 60 Hz step; ?perf=var steps by
                             each frame's delta for a phone A/B), ?perf attaches
@@ -909,7 +924,7 @@ src/
                             About, HowTo, Changelog, Language, Feedback,
                             Leaderboard, Daily, Stats, Quiz] ('PlayB' is the right half of a match,
                             launched only by Versus).
-  config.js                 GAME_WIDTH / GAME_HEIGHT (the portrait field = the
+  config.js                 LEADERBOARD.resyncHiddenMs (30000; plan 35, 1.4), GAME_WIDTH / GAME_HEIGHT (the portrait field = the
                             chrome column), FIELD (height, minWidth, maxWidth,
                             resizeDebounceMs), the TUNING object (every
                             feel-related number lives here; poopXFrac = the
@@ -969,7 +984,10 @@ src/
                             respawn (crashMs, glideMs,
                             blinkMs, blinkCycles, blinkAlpha).
                             Pure data, Node-safe.
-  logic.js                  Pure functions, NO Phaser/DOM: eachChild (plan 35, 1.3: walk a
+  logic.js                  Pure functions, NO Phaser/DOM: createResync (plan 35, 1.4: send(),
+                            one at a time; online() sends, hidden() / shown() send after a hide
+                            of LEADERBOARD.resyncHiddenMs; never rejects; tests/resync.test.js),
+                            eachChild (plan 35, 1.3: walk a
                             Phaser group's children on a copy, since destroy() splices the live
                             array and a plain for-of skips the next child; Play walks its
                             pipes, items and beans through it; tests/eachChild.test.js),
@@ -1367,7 +1385,9 @@ src/
                             this page load. saved() (plan 28, 3.1a): whether the value
                             outlives this page load (false with no storage, after a
                             failed write, while reads throw, or on pageStorage(),
-                            blocked storage's stand-in). tests/jsonStore.test.js.
+                            blocked storage's stand-in). While unsaved it still reads
+                            storage; a value other than the one held at the failure is
+                            another writer's and wins (AUD-087). tests/jsonStore.test.js.
   save.js                   Save codes, NO Phaser/DOM. checkNewName (the save
                             panel only): a new username is 4–16 code points (2+
                             with CJK), no whitespace, emoji or NAME_BLOCKED word;
@@ -2918,7 +2938,11 @@ tests/                      node --test (schema.test.js, schemaOnline.test.js, p
                             across Play's restarts (a new store reads it back)
   jsonStore.test.js         src/store.js and the stores on it: storage is the truth,
                             a broken entry reads as empty, memory when storage throws
-                            or is full, another tab's Clear holds
+                            or is full, another tab's Clear holds, and a tab behind on a
+                            failed write takes the other tab's newer one (AUD-087)
+  resync.test.js            createResync (two triggers send once, a failed send is retried,
+                            the 30 s gap, online and a show together) and Play's resyncOnline /
+                            resyncVisibility in and out of a match, the wiring
   privacy.test.js           no local-only path tracked (meta/, .claude/plans/,
                             Claude outputs/, row dumps) and no player id from
                             meta/db-backups in a tracked
@@ -3204,7 +3228,8 @@ tools/
                             note), then blocked-storage (every read of
                             localStorage throwing: the game still starts and plays)
                             and invite-link (a page loaded with ?invite= opens the
-                            panel with the code, the address cleaned), run-stats
+                            panel with the code, the address cleaned, the code filled again
+                            when the panel reopens after a close), run-stats
                             (plan 30), streaks (plan 34: a day counted by a run and
                             by a Daily, the 🌞 / 📚 numbers, the profile rows, Clear)
                             and education-superq (plan 34: the bubble between two
@@ -3224,7 +3249,11 @@ tools/
                             Plan 39's online-client: nothing of assets/vendor/supabase.js
                             asked for since the boot; blocked, loadSupabase() rejects with
                             onlineLoadFailed and no card; unblocked, one same-origin request
-                            at the pin gives supabase.createClient.
+                            at the pin gives supabase.createClient. Plan 35's resync
+                            (after online-client), the live board blocked: two online
+                            events in a row sync once, the next after it settles syncs
+                            again; a show syncs after a 31 s hide, not a 1 s one; a
+                            restart keeps the one guard and leaves one online listener.
                             Zero dependencies (fetch + WebSocket).
 
 docs/                       Living specs kept with the code: save-code-spec.md (the
@@ -3304,7 +3333,8 @@ Claude outputs/             Michael's private hand-over notes (gitignored; never
    `tests/blockedStorage.test.js` fails on any other mention in `src/`, and the smoke's `blocked-storage`
    section boots, plays a run and restarts with the getter throwing; plan 28, 1.3). Go through `createBestStore()`,
    `createSettingsStore()` (on `createJsonStore()` since AUD-030, one per storage object and key, so a
-   set() storage refuses is kept for this page load and every scene's store reads it), `loadLocal()` /
+   set() storage refuses is kept for this page load and every scene's store reads it; two tabs: a store
+   behind on a failed write takes storage once another tab changed it, AUD-087), `loadLocal()` /
    `saveLocal()` from `save.js`, or
    `createSubmitStore()` from `leaderboard.js`; a new store of one JSON value
    is built on `createJsonStore()` (`src/store.js`). Never touch `localStorage`
