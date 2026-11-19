@@ -8,6 +8,24 @@ import { LOCALES } from './i18n.js';
 
 export const CHANGELOG = [
   {
+    version: '0.24.3',
+    date: '19 Nov 2026',
+    notes: {
+      en: [
+        'Scores and progress waiting to be sent go out as soon as your connection is back, or when you come back to the game after half a minute or more away, instead of at your next run.',
+        'With the game open in two tabs, a tab that could not save (full storage) no longer overwrites what the other tab saved since.',
+        '📚 A new card you skip just before midnight no longer comes back in the same level break.',
+        '📚 An invite link’s code stays filled in after you close Education data to save a username, until you share or join. A restore that brings nothing new also says when the browser is not saving.',
+      ],
+      'zh-Hans': [
+        '等待发送的分数和进度会在网络恢复时，或你离开半分钟以上再回到游戏时立即发送，不再等到下一局。',
+        '在两个标签页中打开游戏时，因存储已满而没能保存的标签页，不会再覆盖另一个标签页之后保存的内容。',
+        '📚 午夜前跳过的新卡片，不会在同一次关卡休息中再次出现。',
+        '📚 为保存用户名而关闭“📚 教育数据”后，邀请链接里的邀请码仍会填好，直到你分享或加入。恢复一份没有新内容的备份时，如果浏览器没有在保存数据，也会提示。',
+      ],
+    },
+  },
+  {
     version: '0.24.2',
     date: '18 Nov 2026',
     notes: {

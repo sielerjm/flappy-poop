@@ -549,6 +549,7 @@ export const LEADERBOARD = {
   dataApi: 'https://soaakwxspmpcprgyywul.supabase.co/rest/v1', // Data API base URL
   publishableKey: 'sb_publishable_yPcLgM5m3UwiywHuSH2nVA_46Eq1Cle', // sent as the apikey header
   timeoutMs: 4000, // ms before a request is abandoned (the game never waits on it)
+  resyncHiddenMs: 30000, // a page shown again after a hide this long (or longer) sends its queues again (plan 35, 1.4: createResync)
   limit: 25, // rows fetched and shown on the board (Top 25)
   visibleRows: 14, // rows inside the board's window at once; the rest of the page scrolls (finger, wheel, d-pad); the ‹ 26-50 › row sits under them (plan 28, 5.2: was 15)
   storageKey: 'flappyPoop.leaderboard', // localStorage key for the last confirmed submit

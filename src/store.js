@@ -7,6 +7,9 @@
  *  - a missing key, or an entry that cannot be parsed, reads as empty (`clean(null)`);
  *  - memory serves when there is no storage, when reading it throws, or when this page load's
  *    last write failed (a full storage): then the value lives for this page load only;
+ *  - while that last write is behind, storage is still read: if it no longer holds what it held at
+ *    the failure, something else (another tab, its Clear) wrote since, and storage is the truth again;
+ *    this load's unsaved value is dropped, never written over the newer one (AUD-087);
  *  - clear() removes the key and empties memory.
  * `clean(raw)` turns whatever is stored (or null) into the store's value; it must accept its own
  * output. saved() says whether the value outlives this page load: false with no storage, after a
@@ -17,8 +20,21 @@ export function createJsonStore(storage, key, clean) {
   let memory = clean(null);
   let unsaved = false; // this load's last write did not reach storage: storage is behind memory
   let unreadable = false; // the last read of storage threw: memory served it
+  let behind; // while unsaved: the raw storage held when the write failed (undefined: unknown)
+  // What storage holds now, without throwing (undefined when the read throws).
+  const peek = () => {
+    try {
+      return storage.getItem(key);
+    } catch {
+      return undefined;
+    }
+  };
+  const fell = () => {
+    unsaved = true;
+    behind = peek();
+  };
   const read = () => {
-    if (!storage || unsaved) return clean(memory);
+    if (!storage) return clean(memory);
     let raw;
     try {
       raw = storage.getItem(key);
@@ -26,6 +42,10 @@ export function createJsonStore(storage, key, clean) {
     } catch {
       unreadable = true;
       return clean(memory);
+    }
+    if (unsaved) {
+      if (behind === undefined || raw === behind) return clean(memory);
+      unsaved = false; // another writer moved storage on since the failure: take it (AUD-087)
     }
     if (raw == null) {
       memory = clean(null);
@@ -44,7 +64,7 @@ export function createJsonStore(storage, key, clean) {
       storage?.setItem(key, JSON.stringify(memory));
       unsaved = false;
     } catch {
-      unsaved = true;
+      fell();
     }
     return clean(memory);
   };
@@ -54,7 +74,7 @@ export function createJsonStore(storage, key, clean) {
     try {
       storage?.removeItem(key);
     } catch {
-      unsaved = true; // the key is still there: this load reads the empty memory instead
+      fell(); // the key is still there: this load reads the empty memory instead
     }
   };
   const saved = () => Boolean(storage) && !unsaved && !unreadable && storage !== pageMemory;

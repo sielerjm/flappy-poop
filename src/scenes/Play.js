@@ -114,6 +114,7 @@ import {
   levelPipes,
   storedLocale,
   PERF_TAGS,
+  createResync,
 } from '../logic.js';
 import { t, pauseBannerText, levelBannerText, levelLabel, initialLocale, isLocale, profileButtonText, countText, versusName, countLines } from '../i18n.js';
 import { loadLocal, saveLocal, ensureId, recordScore, mergeBoardBests, newId, TOILET_EMOJI } from '../save.js';
@@ -722,14 +723,22 @@ export class Play extends Phaser.Scene {
         }, T)
       : null;
 
+    // The resync (plan 35, 1.4): one guard per scene object, so a send in flight and a hide's time
+    // outlast a restart; the browser's online and a show after a long hide send the queues again.
+    this.resync ??= createResync(() => this.syncLeaderboard());
     this.onHidden = () => {
-      if (typeof document !== 'undefined' && document.hidden) this.autoPause();
+      const hidden = typeof document !== 'undefined' && document.hidden;
+      if (hidden) this.autoPause();
+      this.resyncVisibility(hidden);
     };
     this.onBlur = () => this.autoPause();
+    this.onOnline = () => this.resyncOnline();
     if (typeof document !== 'undefined') document.addEventListener('visibilitychange', this.onHidden);
+    if (typeof window !== 'undefined') window.addEventListener('online', this.onOnline);
     this.game.events.on('blur', this.onBlur);
     this.events.once('shutdown', () => {
       if (typeof document !== 'undefined') document.removeEventListener('visibilitychange', this.onHidden);
+      if (typeof window !== 'undefined') window.removeEventListener('online', this.onOnline);
       this.game.events.off('blur', this.onBlur);
       // The 📚 popup belongs to this scene's ready screen (a restart takes it down), closed without a call back
       // into this scene: its texts are destroyed by now, and redrawing a changed 📚 count would throw (AUD-063).
@@ -910,6 +919,7 @@ export class Play extends Phaser.Scene {
     this.breakMissed = []; // a level break's cards missed and not yet answered right (plan 25): asked again, counted as missed
     this.breakNewAsked = 0; // a level break's new cards asked or skipped, and its stored due cards (plan 28, Stage 3b: breakLimits)
     this.breakDueAsked = 0;
+    this.breakSkipped = []; // a level break's new cards skipped: kept out of it past a local midnight too (AUD-088)
     this.runId = null; // a pilot tester's answer events name their run (made with the run's first event)
     this.runEvents = 0;
     this.respawnHold = null;
@@ -1305,6 +1315,7 @@ export class Play extends Phaser.Scene {
     this.breakMissed = []; // each break starts with nothing missed (plan 25)
     this.breakNewAsked = 0; // nor any of its new or due cards asked (plan 28, Stage 3b)
     this.breakDueAsked = 0;
+    this.breakSkipped = []; // nor any of its new cards skipped (AUD-088)
     this.quizSkipWarned = false; // the first Skip in each break warns (plan 26, A2)
     this.gateTapped = false; // the gate's line shows only after a refused tap in this break (plan 26, A2)
     this.breakLevelPick = null; // no level chosen yet (plan 26, A2)
@@ -1715,6 +1726,25 @@ export class Play extends Phaser.Scene {
   }
 
   /**
+   * The browser is back online (plan 35, 1.4): send the queues again (syncLeaderboard, through the
+   * resync's one-at-a-time guard). Not in a half of a match, which create's boot sync skips too.
+   */
+  resyncOnline() {
+    if (!this.match) this.resync?.online();
+  }
+
+  /**
+   * The page went hidden (`hidden` true) or was shown again (plan 35, 1.4): a show after a hide of
+   * LEADERBOARD.resyncHiddenMs or longer sends the queues again, as resyncOnline. A half of a match
+   * neither times a hide nor sends.
+   */
+  resyncVisibility(hidden) {
+    if (this.match) return;
+    if (hidden) this.resync?.hidden();
+    else this.resync?.shown();
+  }
+
+  /**
    * Post the queued Daily Dump scores (dailyQueue): this player's under their current name (a
    * rename adopted from the board included), another player's left on this device under the name
    * it was queued with. 'nameTaken' for this player lights the board's name-taken note.
@@ -1956,10 +1986,13 @@ export class Play extends Phaser.Scene {
    * The 📚 Education data panel (plan 21): where a player chooses to share their education grades
    * on the 📚 board. From the user panel's button, the 📚 board's footer and the profile's row;
    * only while education mode is available (EDUCATION.enabled). `onClose(changed)` runs when it closes.
+   * An invite link's code (openPendingInvite) fills the field every time it opens, until a share or
+   * a join takes it (AUD-090).
    */
   openEduData(opts = {}) {
     if (!this.eduDataReachable()) return;
-    openEduDataPanel({ game: this.game, play: this, locale: this.locale, ...opts });
+    const link = this.registry?.get?.('inviteLink');
+    openEduDataPanel({ game: this.game, play: this, locale: this.locale, ...(link ? { invite: link } : {}), ...opts });
   }
 
   /**
@@ -2188,7 +2221,8 @@ export class Play extends Phaser.Scene {
       // break context's new-first order. New cards stop at the day's cap while there is one (newPerDay: held off since plan 28, Stage 3b);
       // a break's own quiz keeps to its two limits (breakLimits), and past its due limit the other due cards come as `beyond`.
       const own = mode === 'break';
-      pick = pickCard({ srs: store.cards, context: mode === 'revive' ? 'revive' : 'break', level, segment, now: Date.now(), exclude, recent: store.recent, rng: Math.random, order: this.settings?.load().eduNewOrder, skipped: buriedIdsOn(store.buried, localDayKey()), ...(own ? this.breakQuizOptions() : {}) });
+      const skipped = buriedIdsOn(store.buried, localDayKey());
+      pick = pickCard({ srs: store.cards, context: mode === 'revive' ? 'revive' : 'break', level, segment, now: Date.now(), exclude, recent: store.recent, rng: Math.random, order: this.settings?.load().eduNewOrder, skipped, ...(own ? this.breakQuizOptions({ skipped }) : {}) });
     }
     return pick ? { ...pick, order: shuffleOptions(Math.random) } : null;
   }
@@ -2210,16 +2244,20 @@ export class Play extends Phaser.Scene {
     const store = this.eduStore.load();
     // The day's skipped ids, as quizNext passes them: a new card among them is not counted; a break's own
     // quiz counts within its two limits (plan 28, Stage 3b), unless `limits` is false (quizMoreDue).
-    return cardCounts(store.cards, { context: mode === 'revive' ? 'revive' : 'break', ...this.quizScope(), now: Date.now(), exclude, skipped: buriedIdsOn(store.buried, localDayKey()), ...(mode === 'break' ? this.breakQuizOptions({ limits }) : {}) });
+    const skipped = buriedIdsOn(store.buried, localDayKey());
+    return cardCounts(store.cards, { context: mode === 'revive' ? 'revive' : 'break', ...this.quizScope(), now: Date.now(), exclude, skipped, ...(mode === 'break' ? this.breakQuizOptions({ limits, skipped }) : {}) });
   }
 
   /**
    * A level break's own quiz, as pickCard and cardCounts both take it (AUD-058: one set, so the counts
-   * stay the picks): dueFirst, the cards missed in this break, and the break's two limits (breakLimits;
-   * left out with `limits` false, quizMoreDue's count of every due card).
+   * stay the picks): dueFirst, the cards missed in this break, the break's two limits (breakLimits;
+   * left out with `limits` false, quizMoreDue's count of every due card), and `skipped`: the day's
+   * skipped ids plus the new cards this break skipped, which a local midnight inside the break would
+   * otherwise free (AUD-088).
    */
-  breakQuizOptions({ limits = true } = {}) {
-    return { dueFirst: true, missed: this.breakMissed ?? [], ...(limits ? this.breakLimits() : {}) };
+  breakQuizOptions({ limits = true, skipped = [] } = {}) {
+    const own = (this.breakSkipped ?? []).filter((id) => !skipped.includes(id));
+    return { dueFirst: true, missed: this.breakMissed ?? [], skipped: [...skipped, ...own], ...(limits ? this.breakLimits() : {}) };
   }
 
   /**
@@ -4423,9 +4461,11 @@ export class Play extends Phaser.Scene {
       if (!retry) this.breakDueAsked = (this.breakDueAsked ?? 0) + 1; // one of the gate's due cards (plan 28, Stage 3b)
     } else if (this.eduStore.load().cards[cardId]) {
       this.eduStore.skipPractice(cardId, localDayKey()); // out of practice for the day (AUD-028)
-    } else {
-      this.eduStore.skipNew(cardId, localDayKey()); // not offered again today, and one of the break's new cards (plan 28, Stage 3b)
+    } else if (this.eduStore.skipNew(cardId, localDayKey())) {
+      // Not offered again today, and one of the break's new cards (plan 28, Stage 3b), only when the store
+      // took it (AUD-089); kept out of this break past midnight too (breakSkipped, AUD-088).
       this.breakNewAsked = (this.breakNewAsked ?? 0) + 1;
+      this.breakSkipped = [...(this.breakSkipped ?? []), cardId];
     }
     this.refreshCoinHud?.();
     this.refreshLevelBanner();
@@ -5043,6 +5083,7 @@ export class Play extends Phaser.Scene {
     if (!this.save?.id) this.setSaveState(ensureId(this.save ?? {}));
     const id = this.save.id;
     const res = await this.postResearchEnrol(id, invite ?? null, adult === true, EDUCATION.consentVersion);
+    if (res?.status === 'ok') this.registry?.remove?.('inviteLink'); // an invite link's code is used up (AUD-090)
     if (res?.status === 'ok' && this.save?.id === id) {
       // No invitation flag: a join is not the 📚 board's invitation, and the server marks none (AUD-040).
       // While joined, the panel shows both parts and the server lets the participant share without a code.
@@ -5106,6 +5147,7 @@ export class Play extends Phaser.Scene {
     if (!this.save.id) this.save = ensureId(this.save);
     const { id, name } = this.save;
     const res = await this.postEduShare(id, name, adult === true, invite);
+    if (res?.status === 'ok') this.registry?.remove?.('inviteLink'); // an invite link's code is used up (AUD-090)
     if (res?.status === 'needsInvite') this.settings?.set?.({ eduInvited: false }); // the server does not know the invitation: ask for the code again
     if (res?.status === 'ok' && this.save?.id === id) {
       this.settings?.set?.({ eduInvited: true }); // the server knows the player as invited now (plan 28, 2.4)
@@ -5151,19 +5193,23 @@ export class Play extends Phaser.Scene {
     return shareEducation(id, name, adult, { invite });
   }
 
-  /** Was this device's player invited to share (plan 28, 2.4)? A flag the panel reads; the code is never kept. */
+  /** Was this device's player invited to share (plan 28, 2.4)? A flag the panel reads; the code is never stored (an invite link's waits in memory: openPendingInvite). */
   eduInvited() {
     return Boolean(this.settings?.load?.().eduInvited);
   }
 
   /**
    * An invite link's code (main.js keeps it in the registry, out of the address bar): the first ready
-   * screen opens the 📚 Education data panel with it filled in, once; nowhere else keeps it.
+   * screen opens the 📚 Education data panel with it filled in, once. The code then waits in the
+   * registry (`inviteLink`, this page load's memory, never storage) and fills the field again each
+   * time the panel opens, until a share or a join succeeds: a nameless invitee closes the panel to
+   * save the username it asks for (AUD-090).
    */
   openPendingInvite() {
     const code = this.registry?.get('pendingInvite');
     if (!code || this.match || !this.educationAvailable()) return; // kept until a ready screen can open it
     this.registry.remove('pendingInvite');
+    this.registry.set('inviteLink', code);
     this.time?.delayedCall?.(0, () => this.openEduData({ invite: code }));
   }
 

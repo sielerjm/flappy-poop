@@ -454,8 +454,10 @@ function onRestore(text) {
   const first = !r.changed ? t(locale, 'eduRestoreNothing') : counted ? t(locale, 'eduRestoreDone').replace('{added}', String(r.added)).replace('{updated}', String(r.updated)).replace('{badges}', String(r.badges)) : t(locale, 'eduRestoreProgress');
   const lines = [first];
   if (r.skipped > 0) lines.push(t(locale, 'eduRestoreSkipped').replace('{n}', String(r.skipped)));
-  if (r.changed && !r.saved) lines.push(t(locale, 'eduRestoreVisitOnly'));
-  setBackupStatus(lines.join(' '), r.changed && !r.saved ? 'error' : 'ok');
+  // A browser that is not saving: what this device has lasts for this visit only, Nothing new or not (AUD-091).
+  const visitOnly = r.saved === false;
+  if (visitOnly) lines.push(t(locale, 'eduRestoreVisitOnly'));
+  setBackupStatus(lines.join(' '), visitOnly ? 'error' : 'ok');
   dom.paste.value = '';
   refresh();
 }
@@ -527,7 +529,7 @@ export function closeEduDataPanel() {
   if (!dom || dom.root.hidden) return;
   dom.root.hidden = true;
   session += 1;
-  dom.code.value = ''; // the code is sent once and never kept, in the page either (AUD-046)
+  dom.code.value = ''; // a typed code is sent once and never kept, in the page either (AUD-046); an invite link's waits with Play (AUD-090)
   dom.paste.value = ''; // nor a pasted backup
   if (document.activeElement && dom.root.contains(document.activeElement)) document.activeElement.blur();
   setGameKeyboard(true);

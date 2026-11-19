@@ -4,7 +4,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createJsonStore } from '../src/store.js';
-import { createEduStore, schedule } from '../src/education.js';
+import { createEduStore, schedule, paidOn, localDayKey } from '../src/education.js';
 import { createConsentStore, createResearchQueue, answerEvent } from '../src/research.js';
 import { createEduShareStore } from '../src/leaderboard.js';
 import { eduRunFacts } from '../src/achievements.js';
@@ -60,6 +60,56 @@ test('createJsonStore: memory serves this load when storage throws, is full, or 
   };
   u.clear();
   assert.deepEqual(u.read(), { n: 0 }, 'a removal that failed still reads as cleared on this load');
+});
+
+test('createJsonStore: a tab behind on a failed write takes the newer storage another tab wrote (AUD-087)', () => {
+  const ls = fakeStorage();
+  const a = createJsonStore(ls, 'k', clean);
+  const b = createJsonStore(ls, 'k', clean);
+  a.write({ n: 1 });
+  assert.deepEqual(b.read(), { n: 1 });
+  ls.setThrows = true;
+  b.write({ n: 2 });
+  assert.deepEqual(b.read(), { n: 2 }, 'storage still holds what it held at the failure: this load keeps its value');
+  assert.equal(b.saved(), false);
+  ls.setThrows = false;
+  assert.deepEqual(b.read(), { n: 2 }, 'room again, nothing else wrote: still this load\'s value');
+  a.write({ n: 3 });
+  assert.deepEqual(b.read(), { n: 3 }, "another tab's write after the failure is the truth");
+  assert.equal(b.saved(), true, 'what this tab reads is what storage holds');
+  b.write({ n: b.read().n + 1 });
+  assert.equal(ls.map.get('k'), '{"n":4}', "this tab's next write builds on the other tab's");
+  ls.setThrows = true;
+  b.write({ n: 9 });
+  ls.setThrows = false;
+  a.clear();
+  assert.deepEqual(b.read(), { n: 0 }, "another tab's Clear after the failure holds");
+  const one = fakeStorage();
+  const solo = createJsonStore(one, 'k', clean);
+  one.setThrows = true;
+  solo.write({ n: 6 });
+  one.setThrows = false;
+  assert.deepEqual(solo.read(), { n: 6 }, 'a key nobody ever wrote: still this load\'s value');
+  solo.write({ n: 7 });
+  assert.equal(one.map.get('k'), '{"n":7}');
+});
+
+test('createEduStore: a tab behind on a failed write sees the other tab\'s paid card and keeps its answers (AUD-087)', () => {
+  const shared = new Map();
+  const a = createEduStore(fakeStorage(shared));
+  const bs = fakeStorage(shared);
+  const b = createEduStore(bs);
+  const day = localDayKey();
+  const now = Date.now();
+  bs.setThrows = true;
+  b.addRevive(); // fails: tab B is behind storage
+  bs.setThrows = false; // room again (another key freed, a queue drained)
+  a.answer('ST-01', schedule(null, 'good', now), { paidDay: day });
+  a.answer('ST-02', schedule(null, 'good', now), { paidDay: day });
+  assert.ok(paidOn(b.load().paid, day).includes('ST-01'), 'tab B sees that ST-01 paid today, so it does not pay it again');
+  b.answer('ST-01', schedule(null, 'good', now), { paidDay: day });
+  const stored = JSON.parse(shared.get(LEADERBOARD.eduKey));
+  assert.deepEqual(Object.keys(stored.cards).sort(), ['ST-01', 'ST-02'], "tab A's ST-02 survives tab B's write");
 });
 
 test('createEduStore: Clear in another tab holds, and this tab does not write the wiped record back (AUD-012)', () => {
