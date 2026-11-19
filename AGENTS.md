@@ -152,13 +152,12 @@ the pre-filled stretch does not pop in: it sweeps in from the right edge over
 to the level's scroll speed by about the field's middle, fading from transparent),
 settling exactly where the pre-fill put it.
 **Two players** (`src/versus.js`, `scenes/Versus.js`): a 👥 toggle under the toilet toggle, offered
-only where two phone-width halves fit the window (`versusAvailable`: landscape, at least
-`versus.minViewportH` css px tall; never in test mode), turns the start tap into a tournament (every
+on phones too (plan 39 D2; never in test mode, never inside a match), turns the start tap into a tournament (every
 two-player session is one: the **Tournament** paragraph below; its races are the matches here). The toggle
-shows through `Play.versusOffered()` (outside a match, not test mode, `Play.splitFits()` = `versusAvailable`);
-`launch()` with 👥 starts Versus where `splitFits()`, else opens the tournament window over Play
-(`Play.openVersusWindow`, no Versus behind it), a branch unreachable until plan 39's 1.6c widens
-`versusOffered` to phones. A match half reaches its host only through `Play.versusHost()`, which looks up
+shows through `Play.versusOffered()` (outside a match, not test mode; no longer gated on `splitFits`);
+`launch()` with 👥 starts Versus where `Play.splitFits()` (= `versusAvailable`: landscape, at least
+`versus.minViewportH` css px tall), else opens the 🌐 window over Play (`Play.openVersusWindow`, no
+Versus behind it, 🌐 locked on). Over a running Versus the local lobby gets a 🌐 row, off. A match half reaches its host only through `Play.versusHost()`, which looks up
 `matchHostKey(match)` (`match.hostKey`, else `'Versus'`); `createMatch` stores no key, so every split-screen
 match and tournament race is Versus's. The Versus
 scene sets the canvas to two half-window fields (`versusLayout`, capped at `FIELD.maxWidth / 2` each),
@@ -1297,9 +1296,15 @@ src/
                             presence, channel); error, cap and rejoin rules follow the
                             0.3 spike. close() keeps the session, signOut() is local.
                             ?netsim delays and drops received messages. Per-frame calls
-                            are synchronous. Knobs in TUNING.online.net. Caller: the
-                            sign-in side, src/onlineAccount.js (the lobby, 1.6c, next).
-                            tests/onlineNet.test.js.
+                            are synchronous. Knobs in TUNING.online.net. Callers: the
+                            sign-in side, src/onlineAccount.js, and the lobby,
+                            src/onlineLobby.js. onlineProjectConfig({ search, hostname,
+                            optIn, storage }) picks the project: the live one, or on a
+                            dev host (debugHandleAllowed) the test project `?onlinetest=
+                            <code>` stored in this browser (encodeDevProject /
+                            devProjectFrom; `=off` forgets it) under its own session and
+                            trust keys (DEV_PROJECT_KEY). tests/onlineNet.test.js,
+                            tests/onlineDevProject.test.js.
   onlineAccount.js          Online race (🌐, plan 39, 1.6a) the sign-in side on top of
                             createOnlineNet, NO Phaser/DOM: enter (sign in, link the
                             device), claim (a new name under the board's rules), devices,
@@ -1307,6 +1312,15 @@ src/
                             each as { ok, … } or { ok: false, errorKey } (an i18n key
                             the screens show; item 35's sign-in errors incl. rate
                             limited). tests/onlineAccount.test.js.
+  onlineLobby.js            Online race (🌐, plan 39, 1.6c) the lobby controller, NO
+                            Phaser/DOM: createOnlineLobby({ net, name, width, onBothReady })
+                            runs one room from Create / Join to both Ready over roomStep,
+                            fed only RPC results and { kind: 'room' } items. A guest
+                            leaving or the code running out makes a new code; Decline
+                            moves the channel to the answer's new code; `ready` at
+                            LOBBY_LEVEL 1, newest wins; the peer's presence is version
+                            checked (who must reload). Messages are i18n keys; the panel
+                            polls poll(). tests/onlineLobby.test.js.
   leaderboard.js            Shared leaderboard, NO Phaser/DOM (plan 34 adds
                             createStreakStore and STREAK_KINDS: flappyPoop.streaks,
                             the Singleplayer and Daily Dump day streaks, never
@@ -1619,7 +1633,8 @@ src/
     tournamentPanel.js      Plain DOM panel over Versus (or over Play: its versus()
                             lookup returns the Versus scene only while it runs,
                             game.scene.isActive('Versus'), as Phaser keeps a stopped
-                            scene's object; over Play, ✕ / Esc only close it),
+                            scene's object; over Play, ✕ / Esc only close it; there the 🌐 view is forced
+                            on, over Play's 👥 start where two halves do not fit),
                             every two-player session's front door: lobby (count, Paste code / Guest / Use my
                             player rows, ?, Start), seeding (until the first race:
                             pairs, ⠿ drag, ↑ / ↓, 🎲, Play, Abandon), bracket
@@ -1630,6 +1645,12 @@ src/
                             results arrive on 'tournament-race' ({ then }: 'next'
                             races on, else the panel). tournamentPadAction walks its
                             buttons for a controller. ROUND_KEYS names the rounds.
+                            The 🌐 view (plan 39, 1.6c): mounts onlineAccountViews and
+                            onlineLobbyViews, pre-warms the transport on entering,
+                            polls the lobby, leaves the room and closes online play on
+                            every exit; ✕ in an online view goes back to the online home;
+                            the keypad takes typed digits and a paste.
+                            tests/onlinePanel.test.js.
     panelFrame.js           The frame every DOM window shares (plan 28, 4.1):
                             panelFrameCss(id, { width }) gives the backdrop (fixed
                             over the page, padded by the screen's safe area,
@@ -1642,8 +1663,13 @@ src/
                             in their CSS.
     onlineAccountViews.js   Online race (🌐, plan 39, 1.6a) the sign-in side's screens
                             (Preview B): name claim, linking, devices, pairing code,
-                            pair, errors. Plain DOM over onlineAccount.js's results; the
-                            🌐 lobby mounts them (1.6c). tests/onlineAccountViews.test.js.
+                            pair, errors. Plain DOM over onlineAccount.js's results;
+                            tournamentPanel's 🌐 view mounts them (1.6c).
+                            tests/onlineAccountViews.test.js.
+    onlineLobbyViews.js     Online race (🌐, plan 39, 1.6c) the lobby's screens (Preview A):
+                            home, Connecting, host code with countdown and Share / Copy,
+                            asked, keypad, knock, ready. Plain DOM over onlineLobby's
+                            state. tests/onlineLobbyViews.test.js.
     savePanel.js            Plain DOM panel over the canvas (a three-step intro,
                             Username field, read-only user code + Copy, Load
                             field, an outlined Clear beside the Save button that
@@ -2041,9 +2067,9 @@ src/
                             keeps the shade off there, and setLevelHintVisible hides
                             the hint through the beat and the count. The
                             ready screen's 👥 toggle
-                            (versusOffered(): outside a match, not test mode,
-                            splitFits() = versusAvailable; openVersusWindow opens the
-                            tournament window over Play when it does not fit;
+                            (versusOffered(): outside a match, not test mode, phones
+                            included; splitFits() = versusAvailable; a 👥 start where
+                            it is false opens the 🌐 window over Play via openVersusWindow;
                             versusHost() reaches the match through matchHostKey;
                             toggleVersus → registry 'versus',
                             session-only) makes launch() scene.start('Versus')
@@ -2840,6 +2866,13 @@ tests/                      node --test (schema.test.js, schemaOnline.test.js, p
                             pairCode / pair / leave on a fake net, every error key
   onlineAccountViews.test.js src/ui/onlineAccountViews.js: each screen, its errors and
                             strings
+  onlineLobby.test.js       src/onlineLobby.js: create / join / ask / answer / ready on a
+                            fake net, auto new codes, Decline's new code, the version check
+  onlineLobbyViews.test.js  src/ui/onlineLobbyViews.js: each screen and its strings
+  onlinePanel.test.js       tournamentPanel's 🌐 view on tests/support/panelDom.js: mounts,
+                            forced over Play, exits leave the room, keypad
+  onlineDevProject.test.js  onlineProjectConfig and ?onlinetest: dev hosts only, own keys,
+                            off, blocked storage
   onlineSignOut.test.js     Clear and a Load of another player leave online play only on
                             a device holding a session (Play.onlineSessionHeld /
                             onlineLeave); otherwise no client load
@@ -3031,7 +3064,8 @@ tests/                      node --test (schema.test.js, schemaOnline.test.js, p
                             over PGlite that answers only LEADERBOARD.dataApi, with
                             Supabase's roles and default grants), dom.js (a fake DOM
                             for the DOM panels; appendChild, remove, files, href and
-                            download since plan 28, 3.1b)
+                            download since plan 28, 3.1b), panelDom.js (the DOM the 🌐 view
+                            tests need on top of it, plan 39, 1.6c)
   fixtures/schema-applied.sql  db/schema.sql as last applied to the live database
                             (main's b497a0c until the next apply); the upgrade test
                             starts from it. Never edited by hand: npm run push copies
@@ -3148,6 +3182,8 @@ tools/
   supabase_stubs.mjs        The one PGlite preamble: roles with Supabase's default privileges,
                             and the auth / realtime stand-ins. Every PGlite boot uses it;
                             schema_check.mjs imports it lazily so push.mjs needs no more files.
+  online_test_link.mjs      Prints the ?onlinetest phone link for a test project from an env
+                            file (plan 39, 1.6c); the repo never holds a project's URL or key.
   online_live_check.mjs     The live check of the online schema (plan 39): --env <file> for a test
                             project, --live for the live project after the paste. Four anonymous
                             sessions, twelve PASS/FAIL lines; each session unlinks itself; never a
@@ -3218,7 +3254,8 @@ tools/
                             rotation: portrait 720 → landscape cap → back, a
                             mid-run rotation pauses in the old field and re-fits
                             at Home), and two players (A: the 👥 toggle on a
-                            1800×1000 window and not in portrait, the lobby it opens
+                            1800×1000 window, and in portrait the 🌐 window over
+                            Play (locked on, no run; plan 39, 1.6c), the lobby it opens
                             (two guests, Start ready), a race's join screen with its
                             two halves and cameras, claims and refusals, the
                             countdown, five identical pairs on both halves, inputs
@@ -3538,6 +3575,13 @@ Commits follow `type(scope): summary` (`feat`, `fix`, `docs`, `chore`, `test`, `
   Clear and a Load of another player leave online play only on a device that holds
   a session (no client load otherwise: `tests/onlineSignOut.test.js`). A newly
   claimed online name is stored the save panel's way only after the link succeeds.
+  The lobby (`src/onlineLobby.js`, mounted by the 🌐 view of `ui/tournamentPanel.js`) feeds
+  `roomStep` only RPC results and `{ kind: 'room' }` items, never a peer's own events. Lobby
+  ready is the `ready` event with level 1 (`LOBBY_LEVEL`), newest wins by t / seq.
+  `onBothReady` is the hook 1.7a fills; nothing calls `set_room_status('playing')` yet.
+  `?onlinetest=<code>` (`onlineProjectConfig`) works on dev hosts only, keeps its own session
+  and trust keys, and the repo never holds a test project's URL or key
+  (`tools/online_test_link.mjs` builds the link from an env file).
 - Backend change → edit `db/schema.sql`, `npm run schema:stamp`, list a new anon
   function and its undo line in the file's header (a new argument on an existing function: add it
   last with a default, `drop function if exists` the old signature just before `create`, and move its
