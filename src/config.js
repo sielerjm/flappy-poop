@@ -355,6 +355,23 @@ export const TUNING = {
       blinkAlpha: 0.2, // 0–1 alpha at the bottom of a blink
     },
   },
+  // Online race (🌐, plan 39): the wire protocol's pure parts in src/online.js. Messages carry
+  // server time, so the receiver extrapolates latency away; a flap carries its full state, so
+  // the ghost replays it exactly between keyframes.
+  online: {
+    keyframeMs: 200, // ms between `pos` keyframes mid-run (5 Hz, the 0.3 spike's rate; flaps go on top). 500 (2 Hz) is plan 39 item 25's cheaper option, Michael's call
+    codeTtlMs: 15 * 60 * 1000, // ms a room code lives from its room's last change: mirrors create_room / join_room in db/schema.sql
+    clock: {
+      samples: 6, // server_now() round trips per sync round (item 15: 5 to 8); the lowest round trip sets the offset
+      resyncMs: 60000, // ms after a finished round before the next one starts
+      maxRttMs: 2000, // ms; a slower round trip is not used for the offset
+    },
+    ghost: {
+      maxExtrapolateMs: 1000, // ms past the last message the ghost keeps moving; then it holds until the next one
+      smoothMs: 120, // ms a correction (a fart surge, a late flap) is blended out over instead of jumping
+      snapPx: 400, // px; a correction larger than this (a respawn, a re-anchor) snaps at once
+    },
+  },
   // Tournament (🏅, every two-player session): a World Cup bracket for minPlayers–maxPlayers
   // on one device, two at a time (src/tournament.js); byes fill the bracket to 2, 4 or 8. Every
   // two-player session is a tournament: two players race the Final alone.

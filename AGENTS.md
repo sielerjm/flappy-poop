@@ -1248,6 +1248,28 @@ src/
                             lead ahead), VERSUS_EMOJI; createMatch's options
                             (levelPipes, names, tournament) ride a rematch. Fully unit-tested
                             (tests/versus.test.js).
+  online.js                 Online race (🌐, plan 39) pure parts, NO Phaser/DOM/network:
+                            ONLINE_EVENTS (the client events on room:<code>, never the
+                            server's guest / answer / left / status) with createSender
+                            (seq, server time t, session sid), parseMessage (every field
+                            typed and bounded, extras dropped) and createInbox (state
+                            only newer, other events once in any order, a reload's new
+                            sid retires the old); protocolVersion (fnv1a32 of the
+                            events, the race tuning and a shared-course probe; derived)
+                            and compareVersions (the older app updates);
+                            presencePayload / parsePresence (join-time only);
+                            agreedWidth (the smaller field, item 14); formatCode /
+                            parseCode ('482 913', full-width digits, no leading zero);
+                            createClock (lowest round trip of TUNING.online.clock.samples,
+                            re-sync each resyncMs); createGhostTrack (a slot for
+                            ghostPlacement / rivalMarker / raceOutcome, extrapolated
+                            under gravity, a flap replayed exactly, corrections
+                            smoothed or snapped) and shouldSendPos (keyframes mid-run);
+                            roomInit / roomStep / codeExpiresAt / racePhase (the lobby's
+                            room over RPC results and server events); createNetSim and
+                            NETSIM_PROFILES (latency, jitter, loss, reorder; the fake
+                            transport and ?netsim). Knobs in TUNING.online.
+                            tests/online.test.js.
   leaderboard.js            Shared leaderboard, NO Phaser/DOM (plan 34 adds
                             createStreakStore and STREAK_KINDS: flappyPoop.streaks,
                             the Singleplayer and Daily Dump day streaks, never
@@ -2753,6 +2775,11 @@ tests/                      node --test (schema.test.js, schemaOnline.test.js, p
                             policies, housekeeping
   onlineLiveCheck.test.js   tools/online_live_check.mjs: the target guard, the arguments and
                             how a channel answer is read
+  online.test.js            src/online.js: the protocol and its validation, stale and
+                            reordered messages, the derived version, codes, the clock,
+                            the ghost against a 60 Hz sender over every netsim profile
+                            (and 2 Hz vs 5 Hz keyframes, item 25), the field width pairs,
+                            the room state machine
   schemaCheck.test.js       tools/schema_check.mjs: the stamp (blanked, idempotent),
                             the one read-only live call (an injected fetch), each
                             state it reports (current, fixture, other, none,
@@ -3428,6 +3455,13 @@ Commits follow `type(scope): summary` (`feat`, `fix`, `docs`, `chore`, `test`, `
 - Network call → `src/leaderboard.js` only, with `fetch` injected and a timeout;
   tests pass a fake `fetch`. Never `await` a request inside a Phaser update
   loop; fire and forget from gameplay, `await` only in an overlay's `create()`.
+- Online race (🌐, plan 39) → decisions in `src/online.js` (pure: time comes in as
+  arguments, + `tests/online.test.js`), knobs in `TUNING.online`. The transport
+  (the Supabase client, channels, presence, the online RPCs with the Bearer token)
+  lives only in `src/onlineNet.js` (1.4), injected into its callers and never
+  awaited in `update`: a frame sends and reads what has arrived, nothing more.
+  A new client event goes in `ONLINE_EVENTS` (which moves `protocolVersion`, so
+  older clients are told to update) and never reuses a server event name.
 - Backend change → edit `db/schema.sql`, `npm run schema:stamp`, list a new anon
   function and its undo line in the file's header (a new argument on an existing function: add it
   last with a default, `drop function if exists` the old signature just before `create`, and move its
