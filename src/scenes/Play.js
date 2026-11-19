@@ -906,6 +906,7 @@ export class Play extends Phaser.Scene {
     this.breakMissed = []; // a level break's cards missed and not yet answered right (plan 25): asked again, counted as missed
     this.breakNewAsked = 0; // a level break's new cards asked or skipped, and its stored due cards (plan 28, Stage 3b: breakLimits)
     this.breakDueAsked = 0;
+    this.breakSkipped = []; // a level break's new cards skipped: kept out of it past a local midnight too (AUD-088)
     this.runId = null; // a pilot tester's answer events name their run (made with the run's first event)
     this.runEvents = 0;
     this.respawnHold = null;
@@ -1301,6 +1302,7 @@ export class Play extends Phaser.Scene {
     this.breakMissed = []; // each break starts with nothing missed (plan 25)
     this.breakNewAsked = 0; // nor any of its new or due cards asked (plan 28, Stage 3b)
     this.breakDueAsked = 0;
+    this.breakSkipped = []; // nor any of its new cards skipped (AUD-088)
     this.quizSkipWarned = false; // the first Skip in each break warns (plan 26, A2)
     this.gateTapped = false; // the gate's line shows only after a refused tap in this break (plan 26, A2)
     this.breakLevelPick = null; // no level chosen yet (plan 26, A2)
@@ -2088,7 +2090,8 @@ export class Play extends Phaser.Scene {
       // break context's new-first order. New cards stop at the day's cap while there is one (newPerDay: held off since plan 28, Stage 3b);
       // a break's own quiz keeps to its two limits (breakLimits), and past its due limit the other due cards come as `beyond`.
       const own = mode === 'break';
-      pick = pickCard({ srs: store.cards, context: mode === 'revive' ? 'revive' : 'break', level, segment, now: Date.now(), exclude, recent: store.recent, rng: Math.random, order: this.settings?.load().eduNewOrder, skipped: buriedIdsOn(store.buried, localDayKey()), ...(own ? this.breakQuizOptions() : {}) });
+      const skipped = buriedIdsOn(store.buried, localDayKey());
+      pick = pickCard({ srs: store.cards, context: mode === 'revive' ? 'revive' : 'break', level, segment, now: Date.now(), exclude, recent: store.recent, rng: Math.random, order: this.settings?.load().eduNewOrder, skipped, ...(own ? this.breakQuizOptions({ skipped }) : {}) });
     }
     return pick ? { ...pick, order: shuffleOptions(Math.random) } : null;
   }
@@ -2110,16 +2113,20 @@ export class Play extends Phaser.Scene {
     const store = this.eduStore.load();
     // The day's skipped ids, as quizNext passes them: a new card among them is not counted; a break's own
     // quiz counts within its two limits (plan 28, Stage 3b), unless `limits` is false (quizMoreDue).
-    return cardCounts(store.cards, { context: mode === 'revive' ? 'revive' : 'break', ...this.quizScope(), now: Date.now(), exclude, skipped: buriedIdsOn(store.buried, localDayKey()), ...(mode === 'break' ? this.breakQuizOptions({ limits }) : {}) });
+    const skipped = buriedIdsOn(store.buried, localDayKey());
+    return cardCounts(store.cards, { context: mode === 'revive' ? 'revive' : 'break', ...this.quizScope(), now: Date.now(), exclude, skipped, ...(mode === 'break' ? this.breakQuizOptions({ limits, skipped }) : {}) });
   }
 
   /**
    * A level break's own quiz, as pickCard and cardCounts both take it (AUD-058: one set, so the counts
-   * stay the picks): dueFirst, the cards missed in this break, and the break's two limits (breakLimits;
-   * left out with `limits` false, quizMoreDue's count of every due card).
+   * stay the picks): dueFirst, the cards missed in this break, the break's two limits (breakLimits;
+   * left out with `limits` false, quizMoreDue's count of every due card), and `skipped`: the day's
+   * skipped ids plus the new cards this break skipped, which a local midnight inside the break would
+   * otherwise free (AUD-088).
    */
-  breakQuizOptions({ limits = true } = {}) {
-    return { dueFirst: true, missed: this.breakMissed ?? [], ...(limits ? this.breakLimits() : {}) };
+  breakQuizOptions({ limits = true, skipped = [] } = {}) {
+    const own = (this.breakSkipped ?? []).filter((id) => !skipped.includes(id));
+    return { dueFirst: true, missed: this.breakMissed ?? [], skipped: [...skipped, ...own], ...(limits ? this.breakLimits() : {}) };
   }
 
   /**
@@ -4318,9 +4325,11 @@ export class Play extends Phaser.Scene {
       if (!retry) this.breakDueAsked = (this.breakDueAsked ?? 0) + 1; // one of the gate's due cards (plan 28, Stage 3b)
     } else if (this.eduStore.load().cards[cardId]) {
       this.eduStore.skipPractice(cardId, localDayKey()); // out of practice for the day (AUD-028)
-    } else {
-      this.eduStore.skipNew(cardId, localDayKey()); // not offered again today, and one of the break's new cards (plan 28, Stage 3b)
+    } else if (this.eduStore.skipNew(cardId, localDayKey())) {
+      // Not offered again today, and one of the break's new cards (plan 28, Stage 3b), only when the store
+      // took it (AUD-089); kept out of this break past midnight too (breakSkipped, AUD-088).
       this.breakNewAsked = (this.breakNewAsked ?? 0) + 1;
+      this.breakSkipped = [...(this.breakSkipped ?? []), cardId];
     }
     this.refreshCoinHud?.();
     this.refreshLevelBanner();

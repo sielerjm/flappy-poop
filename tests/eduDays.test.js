@@ -8,6 +8,7 @@ const assert = (await import('node:assert/strict')).default;
 const { TUNING: T } = await import('../src/config.js');
 const { CARDS } = await import('../src/questions.js');
 const { createEduStore, schedule, cardCounts, localDayKey, skipUntil, newTally } = await import('../src/education.js');
+const { createSettingsStore } = await import('../src/logic.js');
 const { playScene, fakeStorage, registry } = await import('./support/scenes.js');
 
 const HOUR = 3600000;
@@ -100,4 +101,49 @@ test('pay once a day across a local midnight inside one break (AUD-035): right a
   const coins = [right(at([2026, 10, 14], 23, 59), 'new'), right(at([2026, 10, 15], 0, 1), 'practice'), right(at([2026, 10, 15], 0, 2), 'practice')];
   assert.deepEqual(coins, [T.education.breakCoins.new, T.education.breakCoins.practice, 0], 'a new card 3, then after midnight practice 1, then nothing (plan 28, Stage 3b: corn by the kind of card)');
   assert.deepEqual([paid.length, store.load().paid], [2, { day: '2026-11-15', ids: [card.id] }], "the paid record is the new day's");
+});
+
+/** An education run's level break at level 2 on a fresh device, as Play holds it (the AUD-088 repro's scene). */
+function freshBreak(over = {}) {
+  const storage = fakeStorage();
+  const wallet = { coins: 100 };
+  const s = playScene({
+    eduStore: createEduStore(storage), settings: createSettingsStore(storage, T.settingsKey),
+    level: 2, levelBreak: true, runIsEducation: true, runIsTest: false, match: null, runQuiz: newTally(), registry: registry(), researchJoined: () => false, isTestMode: () => false,
+    takeCoins: (n) => (wallet.coins += n), refreshLevelBanner() {}, refreshShopButton() {}, refreshCoinHud() {},
+    breakMissed: [], breakNewAsked: 0, breakDueAsked: 0, breakSkipped: [], effects: { coins: () => wallet.coins, spendCoins: (n) => (wallet.coins -= n) },
+    ...over,
+  });
+  return { s, wallet };
+}
+
+test('AUD-088: a new card skipped at 23:59 stays out of its level break after midnight, in the picks and the counts alike', () => {
+  const realRandom = Math.random;
+  Math.random = () => 0; // the break's first fresh card, in CARDS order, every time
+  try {
+    const { s, wallet } = freshBreak();
+    const before = withClock(at([2026, 10, 18], 23, 59), () => {
+      const x = s.quizNext({ mode: 'break' }).card.id;
+      assert.equal(s.skipCard(x), true);
+      return { x, counts: s.quizCounts({ mode: 'break' }), coins: wallet.coins };
+    });
+    withClock(at([2026, 10, 19], 0, 1), () => {
+      // End Review, then 📚 Review again after midnight: a new quiz session, so only Play keeps the Skip.
+      const pick = s.quizNext({ mode: 'break' });
+      assert.ok(pick, 'the break still has new cards to ask');
+      assert.notEqual(pick.card.id, before.x, 'the card skipped in this break is not offered as new again in it');
+      assert.deepEqual(s.quizCounts({ mode: 'break' }), before.counts, 'and the counts stay the picks (AUD-058)');
+    });
+    assert.deepEqual([s.breakNewAsked, s.breakSkipped, wallet.coins], [1, [before.x], before.coins], "one Skip: one of the break's new cards, paid once");
+  } finally {
+    Math.random = realRandom;
+  }
+});
+
+test("AUD-089: a new card's Skip takes one of the break's new cards only when the store took it", () => {
+  const { s } = freshBreak();
+  const fresh = CARDS.find((c) => c.deck === 'stomach' && !c.retired);
+  s.eduStore = { ...s.eduStore, skipNew: () => false }; // as if another tab answered it first: no longer new
+  assert.equal(s.skipCard(fresh.id), true);
+  assert.deepEqual([s.breakNewAsked, s.breakSkipped], [0, []], 'refused by the store: counted nowhere');
 });

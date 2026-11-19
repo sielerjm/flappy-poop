@@ -959,10 +959,11 @@ test('AUD-031: a language change mid-break redraws the break row in the new lang
 });
 
 test('each break starts clean (AUD-035): startLevelBreak clears the Skip warning, the cards missed at the last break, the gate\'s line and a level chosen there', () => {
-  const s = playScene({ state: 'playing', levelBreak: false, match: null, poop: absorb(), tweens: absorb(), quizSkipWarned: true, breakMissed: ['ST-01'], gateTapped: true, breakLevelPick: 4, breakQuitArmedAt: 1, breakNewAsked: 5, breakDueAsked: 10 });
+  const s = playScene({ state: 'playing', levelBreak: false, match: null, poop: absorb(), tweens: absorb(), quizSkipWarned: true, breakMissed: ['ST-01'], gateTapped: true, breakLevelPick: 4, breakQuitArmedAt: 1, breakNewAsked: 5, breakDueAsked: 10, breakSkipped: ['ST-02'] });
   for (const m of ['refreshLevelBanner', 'pausePlay', 'breakHud', 'fadeBackground', 'refreshPoopLook']) s[m] = () => {};
   s.startLevelBreak();
   assert.deepEqual([s.levelBreak, s.quizSkipWarned, s.breakMissed, s.gateTapped, s.breakLevelPick, s.breakQuitArmedAt, s.breakNewAsked, s.breakDueAsked], [true, false, [], false, null, null, 0, 0], "and its two counts (plan 28, Stage 3b)");
+  assert.deepEqual(s.breakSkipped, [], 'and the new cards skipped at the last break (AUD-088)');
 });
 
 test("the break's poop (plan 28, 1.1: Michael's 15 Nov note): an education break glides it to mid-height (levels.eduBreakPoopY), a normal one-player break to levels.breakPoopY, a match half to mid-height", () => {
