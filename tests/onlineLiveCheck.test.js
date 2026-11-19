@@ -5,7 +5,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { LEADERBOARD } from '../src/config.js';
-import { parseArgs, resolveTarget, classifyJoin, reportLine, STEPS, LIVE_REF, TEARDOWN_SQL } from '../tools/online_live_check.mjs';
+import { parseArgs, resolveTarget, classifyJoin, isRefusal, reportLine, STEPS, LIVE_REF, TEARDOWN_SQL } from '../tools/online_live_check.mjs';
 
 const SOURCE = readFileSync(new URL('../tools/online_live_check.mjs', import.meta.url), 'utf8');
 const TEST_URL = 'https://abcdefghijklmnopqrst.supabase.co';
@@ -43,6 +43,23 @@ test('classifyJoin: joined, a MissingPartition retried, a refusal (the channel i
   assert.equal(classifyJoin('CLOSED'), 'refused');
   assert.equal(classifyJoin('TIMED_OUT'), 'timeout');
   assert.equal(classifyJoin('NO_ANSWER'), 'timeout');
+});
+
+test('isRefusal: an auth answer in the 4xx counts as refused; a network failure does not (it proves nothing)', () => {
+  assert.equal(isRefusal({ status: 400, code: 'refresh_token_not_found' }), true);
+  assert.equal(isRefusal({ status: 403, code: 'user_not_found' }), true);
+  assert.equal(isRefusal({ status: 0, name: 'AuthRetryableFetchError' }), false);
+  assert.equal(isRefusal({ name: 'TypeError', message: 'fetch failed' }), false);
+  assert.equal(isRefusal({ status: 500 }), false);
+  assert.equal(isRefusal(null), false);
+});
+
+test('the run proves finding 20 (a session refused by the game\'s anon functions), tries the cap from a device not in a race, and prints the teardown SQL on a crash or Ctrl-C', () => {
+  assert.match(STEPS[1][1], /anon functions/);
+  assert.match(SOURCE, /rpc\(S\.A, 'schema_version'\)/);
+  assert.match(SOURCE, /must\(S\.C, 'join_room'/, 'B is mid-race by step 10, and a racing device is told so before any code');
+  assert.match(SOURCE, /process\.on\('SIGINT'/);
+  assert.ok((SOURCE.match(/TEARDOWN_SQL/g) ?? []).length >= 4, 'printed on leftovers, a crash and Ctrl-C');
 });
 
 test('the report: twelve numbered steps, one PASS or FAIL line each; the teardown SQL deletes only the check\'s own users', () => {

@@ -196,7 +196,7 @@ test('a lost device: with no trusted device seen for 7 days the next link is tru
   assert.equal((await link(db, old, P, 'Lou')).trusted, false, 'and relinking does not restore it');
 });
 
-test('an old id links as the player it was merged into, and a merge re-points the devices (trust as it was, the kept name, no stale code)', async () => {
+test('an old id links as the player it was merged into, and a merge re-points the devices (the senior side keeps trust, the kept name, no stale code)', async () => {
   const db = await freshDb();
   const [K, M] = [id('Keep'), id('Merge')];
   const [k, m1, m2] = [await addUser(db), await addUser(db), await addUser(db)];
@@ -207,12 +207,42 @@ test('an old id links as the player it was merged into, and a merge re-points th
   await one(db, m1, 'select public.online_pair_code() as r');
   await anonCall(db, 'select public.merge_players($1, $2)', [K, M]);
   assert.deepEqual((await db.query('select uid, player_id, trusted from public.online_players order by uid')).rows,
-    [{ uid: k, player_id: K, trusted: true }, { uid: m1, player_id: K, trusted: true }, { uid: m2, player_id: K, trusted: false }].sort((x, y) => x.uid.localeCompare(y.uid)));
+    [{ uid: k, player_id: K, trusted: true }, { uid: m1, player_id: K, trusted: false }, { uid: m2, player_id: K, trusted: false }].sort((x, y) => x.uid.localeCompare(y.uid)),
+    'both had a trusted device: k linked first, so the merged side waits to be paired');
   assert.deepEqual((await db.query('select player_id, name from public.online_profiles')).rows, [{ player_id: K, name: 'Kay' }]);
   assert.equal((await db.query('select count(*)::int as n from public.online_pairings')).rows[0].n, 0);
   const late = await addUser(db);
   assert.equal((await link(db, late, M, 'Kay')).trusted, false, 'the old id now means the kept player, who has a trusted device');
   assert.equal((await rowOf(db, late)).player_id, K);
+});
+
+test('a merge hands no trust to a newcomer: a made-up player merged with a stolen id, either way round, leaves the owner trusted and the thief pending', async () => {
+  for (const thiefKeeps of [false, true]) {
+    const db = await freshDb();
+    const [V, X] = [id(`Victim${thiefKeeps}`), id(`Made${thiefKeeps}`)];
+    const owner = await addUser(db);
+    const thief = await addUser(db);
+    await link(db, owner, V, 'Vicky');
+    await db.query("update public.online_players set linked_at = now() - interval '30 days' where uid = $1", [owner]);
+    assert.equal((await link(db, thief, X, 'Xan')).trusted, true, 'the thief is trusted on the player it made up');
+    await anonCall(db, 'select public.merge_players($1, $2)', thiefKeeps ? [X, V] : [V, X]);
+    assert.equal((await rowOf(db, owner)).trusted, true, `owner still trusted (thief keeps its id: ${thiefKeeps})`);
+    assert.equal((await rowOf(db, thief)).trusted, false, 'the thief waits for a code only the owner can show');
+    await assert.rejects(as(db, thief, 'select * from public.online_devices()'), /not trusted/);
+    await assert.rejects(one(db, thief, 'select public.remove_online_device($1)::text as r', [owner]), /not trusted/);
+    assert.equal(await userExists(db, owner), true);
+  }
+});
+
+test('a merge where only one side has a recently trusted device keeps every device\'s trust (the 7-day rule decides later links)', async () => {
+  const db = await freshDb();
+  const [K, M] = [id('KeepStale'), id('MergeNew')];
+  const [k, m] = [await addUser(db), await addUser(db)];
+  await link(db, k, K, 'Kos');
+  await ago(db, k, '8 days');
+  await link(db, m, M, 'Mon');
+  await anonCall(db, 'select public.merge_players($1, $2)', [K, M]);
+  assert.deepEqual([(await rowOf(db, k)).trusted, (await rowOf(db, m)).trusted], [true, true]);
 });
 
 test('a merge into a player with no online name brings the merged one\'s across', async () => {
@@ -588,14 +618,23 @@ test('room_state: the room as each seated device sees it; nobody else', async ()
   await assert.rejects(call(db, await device(db, 'Nosy'), 'room_state', [code]), /no room/);
 });
 
-test('leave_room: a guest leaving frees the seat; the host leaving closes the room; mid-race the race is abandoned and kept', async () => {
+test('leave_room: a guest leaving closes the room (its code is never offered again, finding 19); so does the host; mid-race the race is abandoned and kept', async () => {
   const db = await freshDb();
   let { host, guest, code } = await readyRoom(db, 'Lh', 'Lg');
   await call(db, guest, 'leave_room', [code]);
-  assert.deepEqual(await room(db, code).then((r) => [r.guest_uid, r.status]), [null, 'open']);
+  assert.equal(await room(db, code), null, 'the ex-guest may stay on the old topic until its token refreshes, so nobody else sits there');
+  assert.deepEqual((await roomMsgs(db, code)).filter((m) => m.event === 'left').map((m) => m.payload), [{ seat: 'guest' }], 'the host is told, and makes a new room');
   await call(db, guest, 'leave_room', [code]); // twice is fine
+  ({ host, guest, code } = await readyRoom(db, 'Nh', 'Ng'));
+  await call(db, host, 'set_room_status', [code, 'playing']);
+  await call(db, guest, 'set_room_status', [code, 'finished']);
+  await call(db, guest, 'leave_room', [code]);
+  assert.equal(await room(db, code), null, 'after a race too: the host cannot start the next one with the ex-guest still on the channel');
+  assert.equal((await call(db, guest, 'join_room', ['111111'])).error, 'no room', 'the ex-guest is in no race');
+  ({ host, guest, code } = await readyRoom(db, 'Oh', 'Og'));
   await call(db, host, 'leave_room', [code]);
   assert.equal(await room(db, code), null);
+  assert.deepEqual((await roomMsgs(db, code)).filter((m) => m.event === 'left').map((m) => m.payload), [{ seat: 'host' }]);
   ({ host, guest, code } = await readyRoom(db, 'Mh', 'Mg'));
   await call(db, host, 'set_room_status', [code, 'playing']);
   await call(db, host, 'leave_room', [code]);
@@ -604,16 +643,53 @@ test('leave_room: a guest leaving frees the seat; the host leaving closes the ro
   assert.deepEqual((await roomMsgs(db, code)).filter((m) => m.event === 'left').map((m) => m.payload), [{ seat: 'host' }]);
 });
 
-test('unlinking or removing a device takes it out of its rooms; so does moving to another player', async () => {
+test('a guest unlinking, moving to another player or hosting elsewhere closes the room it sat in; the host unlinking closes its own', async () => {
   const db = await freshDb();
   let { host, guest, code } = await readyRoom(db, 'Uh', 'Ug');
   await call(db, guest, 'unlink_online_player');
-  assert.deepEqual(await room(db, code).then((r) => [r.guest_uid, r.status]), [null, 'open']);
+  assert.equal(await room(db, code), null);
+  assert.deepEqual((await roomMsgs(db, code)).filter((m) => m.event === 'left').map((m) => m.payload), [{ seat: 'guest' }]);
+  ({ host, guest, code } = await readyRoom(db, 'Wh', 'Wg'));
   await call(db, host, 'unlink_online_player');
   assert.equal(await room(db, code), null);
   ({ host, guest, code } = await readyRoom(db, 'Vh', 'Vg'));
   await link(db, guest.uid, id('VgOther'), 'Vgo');
-  assert.deepEqual(await room(db, code).then((r) => [r.guest_uid, r.status]), [null, 'open'], 'a device that loads another code leaves');
+  assert.equal(await room(db, code), null, 'a device that loads another code leaves');
+  ({ host, guest, code } = await readyRoom(db, 'Yh', 'Yg'));
+  const own = await call(db, guest, 'create_room');
+  assert.equal(await room(db, code), null, 'a guest that hosts a room of its own leaves the one it sat in');
+  assert.equal((await room(db, own.code)).host_uid, guest.uid);
+});
+
+test('a merge mid-race keeps both racers seated: the rooms follow the kept id', async () => {
+  const db = await freshDb();
+  const { host, guest, code } = await readyRoom(db, 'Rh', 'Rg');
+  await call(db, host, 'set_room_status', [code, 'playing']);
+  const [H2, G2] = [id('RhNew'), id('RgNew')];
+  await anonCall(db, 'select public.merge_players($1, $2)', [H2, host.player]);
+  await anonCall(db, 'select public.merge_players($1, $2)', [G2, guest.player]);
+  const r = await room(db, code);
+  assert.deepEqual([r.host_player, r.guest_player], [H2, G2]);
+  assert.equal(await canRead(db, host.uid, `room:${code}`), true, 'its next token refresh still passes the policy');
+  assert.equal(await canRead(db, guest.uid, `room:${code}`), true);
+});
+
+test('join_room finds no room idle 15 minutes, even when nothing has run the housekeeping', async () => {
+  const db = await freshDb();
+  const host = await device(db, 'Idh');
+  const guest = await device(db, 'Idg'); // linked first: its link's housekeeping has run already
+  const { code } = await call(db, host, 'create_room');
+  await db.query("update public.rooms set updated_at = now() - interval '16 minutes'");
+  assert.deepEqual(await call(db, guest, 'join_room', [code]), { ok: false, error: 'no room' });
+});
+
+test('a device in a race is told so before any code is looked at, so it learns nothing about codes and spends no try', async () => {
+  const db = await freshDb();
+  const { guest, host, code } = await readyRoom(db, 'Ih', 'Ig');
+  await call(db, host, 'set_room_status', [code, 'playing']);
+  const open = await call(db, await device(db, 'Iother'), 'create_room');
+  for (const c of [open.code, '111111']) await assert.rejects(call(db, guest, 'join_room', [c]), /in a race/);
+  assert.equal((await db.query('select count(*)::int as n from public.join_attempts where uid = $1 and not ok', [guest.uid])).rows[0].n, 0);
 });
 
 // The Realtime policies: may this device read (select) or write (insert) on a channel topic?

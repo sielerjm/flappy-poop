@@ -3,8 +3,9 @@
 // A2, B and C) link to throwaway players, race-by-code through a room, and prove that the channel
 // policies admit the two seated devices and refuse everyone else, that public channels are off, that
 // a decline moves the room, that the join cap bites, and that removing a device ends its session.
-// Each session unlinks itself at the end, which deletes its anonymous user, so nothing is left behind;
-// when that cannot happen, the check prints the SQL that removes exactly its users (tagged
+// Each session unlinks itself at the end, which deletes its anonymous user, so nothing is left behind
+// but its join attempts (an IP hash, gone within the hour); when that cannot happen (a failed step, a
+// crash, Ctrl-C), the check prints the SQL that removes exactly its users (tagged
 // user_metadata.online_check = '39'; nothing in the schema ever reads user_metadata).
 //
 //   node tools/online_live_check.mjs --env <file>   a test project: <file> is {"url": "https://<ref>.supabase.co",
@@ -14,7 +15,7 @@
 //
 // Needs: Anonymous sign-ins on (Authentication > Sign In / Providers), "Allow public access" off
 // (Realtime > Settings), and this file's db/schema.sql pasted. Uses 4 of the 30 anonymous sign-ins an
-// IP gets per hour, and 5 of its 20 failed joins per 10 minutes: run it at most 3 times in 10 minutes.
+// IP gets per hour, and 5 of its 20 failed joins per 10 minutes: run it at most 4 times in 10 minutes.
 // Exit code 0 when every step passes, 1 when one fails, 2 on a usage error. The expected output is in
 // the plan's log (.claude/plans/39-logs/1.2-live-check.md).
 
@@ -34,7 +35,7 @@ export const LIVE_REF = new URL(LEADERBOARD.dataApi).host.split('.')[0];
 /** The steps, in the order they run; each prints one PASS / FAIL line. */
 export const STEPS = [
   ['01', 'anon cannot call online functions'],
-  ['02', 'four anonymous sign-ins, and the server clock'],
+  ['02', 'four anonymous sign-ins, the server clock, and a session refused by the game\'s anon functions'],
   ['03', 'public channels are refused'],
   ['04', 'link: the first device of a player is trusted, a second one pending'],
   ['05', 'pairing: a trusted device\'s code makes the pending one trusted'],
@@ -120,6 +121,15 @@ export function classifyJoin(status, err = '') {
   return 'refused';
 }
 
+/**
+ * Did the auth server refuse (a 4xx answer: the refresh token or the user is gone)? A network failure
+ * is not a refusal: it proves nothing about the session.
+ */
+export function isRefusal(error) {
+  const status = Number(error?.status);
+  return Number.isFinite(status) && status >= 400 && status < 500;
+}
+
 /** One report line. */
 export function reportLine([idStr, title], { ok, note = '' }) {
   return `${ok ? 'PASS' : 'FAIL'} ${idStr} ${title}${note ? `: ${note}` : ''}`;
@@ -194,7 +204,7 @@ async function waitFor(u, pred, ms = 6000) {
 
 async function refreshRefused(u) {
   const { error } = await u.c.auth.refreshSession({ refresh_token: u.session.refresh_token });
-  return Boolean(error);
+  return isRefusal(error);
 }
 
 const playerId = () => randomBytes(16).toString('base64url');
@@ -236,7 +246,12 @@ async function run(t, print) {
       const t1 = Date.now();
       if (!best || t1 - t0 < best.rtt) best = { rtt: t1 - t0, offset: server - (t0 + t1) / 2 };
     }
-    return { ok: Math.abs(best.offset) < 1000, note: `clock offset ${Math.round(best.offset)} ms (best of 8, round trip ${best.rtt} ms)` };
+    // Finding 20: a session token sent to one of the game's anon functions is refused, so the game must
+    // never send it there.
+    const anonFn = await rpc(S.A, 'schema_version');
+    const refused = Boolean(anonFn.error) && (anonFn.status === 403 || anonFn.error.code === '42501');
+    return { ok: Math.abs(best.offset) < 1000 && refused,
+             note: `clock offset ${Math.round(best.offset)} ms (best of 8, round trip ${best.rtt} ms); schema_version with a session: ${anonFn.error ? `${anonFn.status} ${anonFn.error.code}` : 'answered'}` };
   });
 
   await step(3, async () => {
@@ -321,7 +336,8 @@ async function run(t, print) {
 
   await step(10, async () => {
     const answers = [];
-    for (let i = 0; i < 6; i += 1) answers.push((await must(S.B, 'join_room', { p_code: '1' + String(i).repeat(5) })).error);
+    // C, not B: B is mid-race, and a racing device is told so before any code is looked at.
+    for (let i = 0; i < 6; i += 1) answers.push((await must(S.C, 'join_room', { p_code: '1' + String(i).repeat(5) })).error);
     const ok = answers.slice(0, 5).every((e) => e === 'no room') && answers[5] === 'rate limited';
     return { ok, note: answers.join(', ') };
   });
@@ -370,7 +386,18 @@ async function main(argv) {
     return 2;
   }
   console.log(`online_live_check: ${target.live ? 'the live project' : 'test project <ref>'}, ${new Date().toISOString()}`);
-  const results = await run(target, (line) => console.log(line));
+  process.on('SIGINT', () => {
+    console.error(`\nStopped. Its users may be left on the project. In its SQL editor, run:\n  ${TEARDOWN_SQL}`);
+    process.exit(130);
+  });
+  let results;
+  try {
+    results = await run(target, (line) => console.log(line));
+  } catch (e) {
+    console.error(`online_live_check: ${String(e?.message ?? e).split(target.ref).join('<ref>')}`);
+    console.error(`Its users may be left on the project. In its SQL editor, run:\n  ${TEARDOWN_SQL}`);
+    return 1;
+  }
   const passed = results.filter(Boolean).length;
   console.log(`${passed} of ${STEPS.length} passed.`);
   return passed === STEPS.length ? 0 : 1;
