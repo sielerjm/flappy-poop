@@ -154,7 +154,13 @@ settling exactly where the pre-fill put it.
 **Two players** (`src/versus.js`, `scenes/Versus.js`): a 👥 toggle under the toilet toggle, offered
 only where two phone-width halves fit the window (`versusAvailable`: landscape, at least
 `versus.minViewportH` css px tall; never in test mode), turns the start tap into a tournament (every
-two-player session is one: the **Tournament** paragraph below; its races are the matches here). The Versus
+two-player session is one: the **Tournament** paragraph below; its races are the matches here). The toggle
+shows through `Play.versusOffered()` (outside a match, not test mode, `Play.splitFits()` = `versusAvailable`);
+`launch()` with 👥 starts Versus where `splitFits()`, else opens the tournament window over Play
+(`Play.openVersusWindow`, no Versus behind it), a branch unreachable until plan 39's 1.6c widens
+`versusOffered` to phones. A match half reaches its host only through `Play.versusHost()`, which looks up
+`matchHostKey(match)` (`match.hostKey`, else `'Versus'`); `createMatch` stores no key, so every split-screen
+match and tournament race is Versus's. The Versus
 scene sets the canvas to two half-window fields (`versusLayout`, capped at `FIELD.maxWidth / 2` each),
 launches `Play` as P1 on the left strip and `PlayB` (a second Play instance) as P2 on the right (each
 `Play.init` gets `{ player, match, fieldW, fieldX }` and a camera viewport), and sits above both. The
@@ -1248,8 +1254,10 @@ src/
                             left: an education revive skips the glide),
                             coursePairStart / courseDistance (a pair's place on the
                             course; what a half's distance reads with a pair a given
-                            lead ahead), VERSUS_EMOJI; createMatch's options
-                            (levelPipes, names, tournament) ride a rematch. Fully unit-tested
+                            lead ahead), matchHostKey (the scene key that hosts a
+                            match: match.hostKey, else 'Versus'), VERSUS_EMOJI;
+                            createMatch's options (levelPipes, names, tournament)
+                            ride a rematch. Fully unit-tested
                             (tests/versus.test.js).
   online.js                 Online race (🌐, plan 39) pure parts, NO Phaser/DOM/network:
                             ONLINE_EVENTS (the client events on room:<code>, never the
@@ -1608,8 +1616,11 @@ src/
                             'next'), set({ prev, next, label }) greys an arrow, which
                             then ignores taps and A; pageRangeText(offset, count,
                             limit) is the label ("26-50", a short last page "51-60").
-    tournamentPanel.js      Plain DOM panel over Versus, every two-player session's
-                            front door: lobby (count, Paste code / Guest / Use my
+    tournamentPanel.js      Plain DOM panel over Versus (or over Play: its versus()
+                            lookup returns the Versus scene only while it runs,
+                            game.scene.isActive('Versus'), as Phaser keeps a stopped
+                            scene's object; over Play, ✕ / Esc only close it),
+                            every two-player session's front door: lobby (count, Paste code / Guest / Use my
                             player rows, ?, Start), seeding (until the first race:
                             pairs, ⠿ drag, ↑ / ↓, 🎲, Play, Abandon), bracket
                             (results, next match, Play, Abandon on two taps), peek
@@ -2031,7 +2042,10 @@ src/
                             the hint through the beat and the count. The
                             ready screen's 👥 toggle
                             (versusOffered(): outside a match, not test mode,
-                            versusAvailable; toggleVersus → registry 'versus',
+                            splitFits() = versusAvailable; openVersusWindow opens the
+                            tournament window over Play when it does not fit;
+                            versusHost() reaches the match through matchHostKey;
+                            toggleVersus → registry 'versus',
                             session-only) makes launch() scene.start('Versus')
                             instead of sliding the poop; a match half hides the
                             ready UI and starts with the plain face.
@@ -2712,6 +2726,10 @@ tests/                      node --test (schema.test.js, schemaOnline.test.js, p
                             focusRingLayout, padIntent matrix across top x state x
                             ring x action (+ the save-panel short-circuit, the
                             tournament panel's nav / A / B)
+  matchHost.test.js         The match host interface: matchHostKey (match.hostKey, else
+                            'Versus'), Play.versusHost, the host member list checked
+                            against Play's source and Versus, the tournament panel over
+                            Play, launch's two routes, splitFits vs versusOffered.
   versus.test.js            TUNING.versus sanity (gate, ghost, disjoint key groups,
                             catch-up tiers), versusAvailable, versusLayout (= the wide
                             field's width, the maxWidth / 2 cap), createMatch /
@@ -3497,6 +3515,9 @@ Commits follow `type(scope): summary` (`feat`, `fix`, `docs`, `chore`, `test`, `
   a knob in `TUNING.versus`, wiring in `scenes/Versus.js` (the match) or `Play.js`
   (a half); anything random a run spawns goes through the course (`createCourse`),
   never a fresh `Math.random` / `createRng` in Play, or the halves drift apart.
+- A new call from Play to its match → through `versusHost()`; add the member to
+  `tests/matchHost.test.js`'s host list and implement it on every host (Versus; plan 39's
+  online race from 1.7a).
 - Network call → `src/leaderboard.js` only, with `fetch` injected and a timeout;
   tests pass a fake `fetch`. Never `await` a request inside a Phaser update
   loop; fire and forget from gameplay, `await` only in an overlay's `create()`.
