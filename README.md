@@ -170,7 +170,7 @@ The ring only appears after a pad press; a tap or click hides it again.
 
 On a window wide and tall enough for two phone-width halves (desktop or tablet landscape — not a phone in portrait), a **👥** toggle appears under the toilet switch.
 
-1. Turn it on and tap to start → the **tournament lobby** (every two-player session is a [tournament](#-tournament); two guests are filled in, so **Start**, then **Play**, is all a quick race needs).
+1. Turn it on and tap to start → the **tournament lobby** (every two-player session is a [tournament](#-tournament); two players are filled in, you first if you have a username, so **Start**, then **Play**, is all a quick race needs).
 2. On the race's **join screen** (left player left, right player right), claim a half: tap your side, use a keyboard group, or a controller. Keyboard groups: **W / Space + E / Left Shift** vs **↑ / Enter + Right Shift / Numpad 0**.
 3. After both claim, a **3-2-1-GO** starts the race (toilet flush on GO). A flap right on GO can give a short head start.
 

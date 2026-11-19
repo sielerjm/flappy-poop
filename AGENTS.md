@@ -159,7 +159,9 @@ shows through `Play.versusOffered()` (outside a match, not test mode; no longer 
 `versus.minViewportH` css px tall), else opens the 🌐 window over Play (`Play.openVersusWindow`, no
 Versus behind it, 🌐 locked on). Over a running Versus the local lobby gets a 🌐 row, off. A match half reaches its host only through `Play.versusHost()`, which looks up
 `matchHostKey(match)` (`match.hostKey`, else `'Versus'`); `createMatch` stores no key, so every split-screen
-match and tournament race is Versus's. The Versus
+match and tournament race is Versus's. Each split-screen half shows its player's name on a pink-edged pill at the
+bottom of the half, above the tray, for the whole match (`Play.nameLabel` on `Play.nameBox`, shrunk to clear P1's
+pause button; only when the match has no `hostKey`, as the online race names its opponent in its own HUD). The Versus
 scene sets the canvas to two half-window fields (`versusLayout`, capped at `FIELD.maxWidth / 2` each),
 launches `Play` as P1 on the left strip and `PlayB` (a second Play instance) as P2 on the right (each
 `Play.init` gets `{ player, match, fieldW, fieldX }` and a camera viewport), and sits above both. The
@@ -223,7 +225,8 @@ tick, no claims); the panel is plain DOM over Versus, and the race's join screen
 count (− / +, new rows rolled as Guests, so Start is one tap) and a row per player: a pasted user code
 (`claimFromCode`: `importCode` with a storage that keeps nothing and an empty local player, so the host's
 save is never read or written; one row per player id), a **Guest** (`rollGuestName`: AdjectiveNoun###,
-≤ 16 code points, clean words) or **Use my player** (`claimHost`, once, needs a username); the card's **?**
+≤ 16 code points, clean words) or **Use my player** (`claimHost`, once, needs a username); a player with a username opens the lobby already
+as row 1 (`tournamentPanel.js` makes it as that button does), else two Guests; the card's **?**
 opens the help card (`view: 'help'`, Got it back to the lobby), its ✕ / Esc / the pad's B leaves for
 single player (a paste field closes first). The lobby rows outlive the panel (module state), so the next
 👥 session starts with the last players. **Start** draws a seeded World Cup bracket (`createTournament`
@@ -1317,7 +1320,8 @@ src/
                             are synchronous. Knobs in TUNING.online.net. Callers: the
                             sign-in side, src/onlineAccount.js, and the lobby,
                             src/onlineLobby.js. onlineProjectConfig({ search, hostname,
-                            optIn, storage }) picks the project: the live one, or on a
+                            optIn, storage }) picks the project (returns { config, test,
+                            param, dev }): the live one, or on a
                             dev host (debugHandleAllowed) the test project `?onlinetest=
                             <code>` stored in this browser (encodeDevProject /
                             devProjectFrom; `=off` forgets it) under its own session and
@@ -1689,7 +1693,13 @@ src/
     onlineLobbyViews.js     Online race (🌐, plan 39, 1.6c) the lobby's screens (Preview A):
                             home, Connecting, host code with countdown and Share / Copy,
                             asked, keypad, knock, ready. Plain DOM over onlineLobby's
-                            state. tests/onlineLobbyViews.test.js.
+                            state. On a dev host ui.project ('live' / 'test', from
+                            Play.onlineProjectName(), null on the real site) adds
+                            onlineDevOnLive / onlineDevOnTest to the no-room error.
+                            lobbyMessage shows onlineRaceNextBuild while lobby.onBothReady
+                            is unset; 1.7a must delete that string (en, zh-Hans,
+                            TRANSLATION_NOTES row, test) when it sets the hook.
+                            tests/onlineLobbyViews.test.js.
     savePanel.js            Plain DOM panel over the canvas (a three-step intro,
                             Username field, read-only user code + Copy, Load
                             field, an outlined Clear beside the Save button that
@@ -3074,6 +3084,8 @@ tests/                      node --test (schema.test.js, schemaOnline.test.js, p
   sha256.test.js            sha256 / hmacSha256 against FIPS and RFC 4231 vectors and
                             Node's crypto; user codes sign and load without
                             crypto.subtle (plain http)
+  tournamentLobby.test.js   the tournament lobby's opening rows: a player with a username
+                            is row 1, none gives two guests
   tournament.test.js        src/tournament.js: brackets for 2–8 players, races and
                             byes, the bronze match, recordResult's refusals, seeding
                             (reseed, reshuffle, the lock), raceOutcome, the code
