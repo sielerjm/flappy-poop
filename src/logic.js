@@ -4,7 +4,7 @@
 
 import { isLocale, DEFAULT_LOCALE, t } from './i18n.js';
 import { createJsonStore } from './store.js';
-import { TUNING } from './config.js';
+import { TUNING, LEADERBOARD } from './config.js';
 
 export const VERSION = '0.24.2'; // bumped when art under an existing name changes (Boot's ?v= cache-bust)
 /** The version line every overlay shows: `v{VERSION} beta` in the locale's words (i18n versionLine); What's new passes older versions. */
@@ -94,6 +94,51 @@ export function errorCardContext(plays = []) {
 export function loopStalled(lastStepAt, now, { hidden = false, ms = 1000 } = {}) {
   if (hidden || lastStepAt == null) return false;
   return now - lastStepAt > ms;
+}
+
+/**
+ * The resync (plan 35, 1.4). Queued posts used to wait for the next boot or run; now the browser's
+ * `online`, and the page shown again after a hide of `gapMs` or longer (a phone that slept, an app
+ * switch), send them again. `send` (Play.syncLeaderboard) runs one at a time: a trigger while a send
+ * is out joins it, and once that send settles, sent or failed, the next trigger sends again.
+ * online() sends; hidden() notes when the page went hidden (a second hide keeps the first time);
+ * shown() sends when the hide behind it was long enough, else returns null. A send's promise never
+ * rejects: true when `send` settled, false when it threw or rejected. `now` is the clock, for tests.
+ * @param {() => Promise<unknown> | unknown} send
+ * @param {{ gapMs?: number, now?: () => number }} [options]
+ */
+export function createResync(send, { gapMs = LEADERBOARD.resyncHiddenMs, now = () => Date.now() } = {}) {
+  let inflight = null;
+  let hiddenAt = null;
+  const run = () => {
+    if (inflight) return inflight;
+    let started;
+    try {
+      started = Promise.resolve(send());
+    } catch (err) {
+      started = Promise.reject(err);
+    }
+    const settled = started.then(
+      () => true,
+      () => false,
+    );
+    inflight = settled;
+    settled.then(() => {
+      if (inflight === settled) inflight = null;
+    });
+    return settled;
+  };
+  return {
+    online: run,
+    hidden() {
+      if (hiddenAt == null) hiddenAt = now();
+    },
+    shown() {
+      const away = hiddenAt == null ? -1 : now() - hiddenAt;
+      hiddenAt = null;
+      return away >= gapMs ? run() : null;
+    },
+  };
 }
 
 /**

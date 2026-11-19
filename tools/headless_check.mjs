@@ -88,6 +88,7 @@ export const SECTIONS = [
   { name: 'phaser-fallback', needs: [], about: "Phaser's fallback (plan 35, 1.2): the page reloaded with the CDN blocked, then stalled, boots from assets/vendor/ (the stall after the 6 s wait); with both copies blocked the splash reads Couldn't load. Tap to retry, and the tap reloads; without src/splash.js too, the bare ↻; then back on the CDN" },
   { name: 'error-card', needs: [], about: "the error card (plan 35, 1.1): an error thrown inside a frame on the ready screen shows the card at once, mid-run pauses the run first; the loop stopped under it, Keep playing tapped at once brings it back with the run still paused; the bug form carries the error with no links; a rejection while the loop runs is only kept" },
   { name: 'online-client', needs: [], about: "the online client (plan 39, 0.2): the boot and the sections since ask for nothing of assets/vendor/supabase.js; blocked, loadSupabase() rejects with onlineLoadFailed and no error card shows; unblocked, one same-origin request at the pin gives supabase.createClient, and a second call asks for nothing more" },
+  { name: 'resync', needs: [], about: "the resync (plan 35, 1.4), the live board blocked: two online events in a row sync once and the next one after it settles syncs again; a show after a 1 s hide syncs nothing, after a 31 s one it syncs; a restart keeps the one guard and leaves one online listener" },
 ];
 
 /** What a section needs: its own list, or (omitted) every section before it. */
@@ -7011,6 +7012,64 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         ok(added.length === 0, added.length ? `page exceptions:\n  ${added.join('\n  ')}` : 'no page exceptions');
       } finally {
         await block();
+      }
+    });
+
+    await section('resync', async () => {
+      // The resync (plan 35, 1.4): the browser's online event and a show after a long hide send the
+      // queues again (syncLeaderboard), one at a time. A fresh page, the live board blocked at the
+      // browser, so every sync fails fast and nothing leaves; syncLeaderboard is counted, not stubbed.
+      await cdp.send('Network.enable');
+      await cdp.send('Network.setBlockedURLs', { urls: ['*supabase.co*'] });
+      await cdp.send('Page.navigate', { url: `${url}/?r=${Date.now()}` });
+      await cdp.send('Page.bringToFront');
+      let sp = null;
+      for (let i = 0; i < 120 && !sp?.enabled; i += 1) {
+        await sleep(500);
+        sp = await splashNow().catch(() => null);
+      }
+      if (sp?.enabled) {
+        await splashKey('keydown', ' ');
+        await splashKey('keyup', ' ');
+      }
+      for (let i = 0; i < 120 && (await playState().catch(() => null)) !== 'ready'; i += 1) await sleep(500);
+      const P = `__flappy.scene.getScene('Play')`;
+      const ex0 = exceptions.length;
+      await evaluate(`${P}.resync.online().then(() => true)`); // the boot's own sync and this one settle first
+      await evaluate(`(() => { const p = ${P}; const real = Object.getPrototypeOf(p).syncLeaderboard; window.__syncs = 0; p.syncLeaderboard = function () { window.__syncs += 1; return (window.__lastSync = real.call(this)); }; return true; })()`);
+      const settle = async () => {
+        await evaluate(`Promise.resolve(window.__lastSync).then(() => true)`);
+        await sleep(50);
+      };
+      const onlineListeners = async () => {
+        const { result } = await cdp.send('Runtime.evaluate', { expression: 'window' });
+        const { listeners } = await cdp.send('DOMDebugger.getEventListeners', { objectId: result.objectId });
+        return listeners.filter((l) => l.type === 'online').length;
+      };
+      // A hide, then a show `ms` later: the clock moved for the show alone, document.hidden faked for both.
+      const hideShow = (ms) =>
+        evaluate(`(() => { const fire = (hidden, shift) => { Object.defineProperty(document, 'hidden', { configurable: true, get: () => hidden }); const real = Date.now; Date.now = () => real() + shift; try { document.dispatchEvent(new Event('visibilitychange')); } finally { Date.now = real; delete document.hidden; } }; fire(true, 0); fire(false, ${ms}); return window.__syncs; })()`);
+      try {
+        const twice = await evaluate(`(window.dispatchEvent(new Event('online')), window.dispatchEvent(new Event('online')), window.__syncs)`);
+        ok(twice === 1, `two online events in a row: one sync (${twice})`);
+        await settle();
+        const third = await evaluate(`(window.dispatchEvent(new Event('online')), window.__syncs)`);
+        ok(third === 2, `once it settled, the next online syncs again (${third})`);
+        await settle();
+        const short = await hideShow(1000);
+        ok(short === 2, `shown after a 1 s hide: no sync (${short})`);
+        const long = await hideShow(31000);
+        ok(long === 3, `shown after a 31 s hide: one sync (${long})`);
+        await settle();
+        await evaluate(`(window.__guard = ${P}.resync, ${P}.scene.restart(), true)`);
+        for (let i = 0; i < 40 && (await playState().catch(() => null)) !== 'ready'; i += 1) await sleep(250);
+        const kept = await evaluate(`${P}.resync === window.__guard`);
+        const count = await onlineListeners();
+        ok(kept && count === 1, `a restart keeps the one guard and leaves one online listener (${JSON.stringify({ kept, count })})`);
+        const added = exceptions.slice(ex0);
+        ok(added.length === 0, added.length ? `page exceptions:\n  ${added.join('\n  ')}` : 'no page exceptions');
+      } finally {
+        await evaluate(`(delete ${P}.syncLeaderboard, true)`).catch(() => null);
       }
     });
 

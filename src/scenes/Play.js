@@ -114,6 +114,7 @@ import {
   levelPipes,
   storedLocale,
   PERF_TAGS,
+  createResync,
 } from '../logic.js';
 import { t, pauseBannerText, levelBannerText, levelLabel, initialLocale, isLocale, profileButtonText, countText, versusName, countLines } from '../i18n.js';
 import { loadLocal, saveLocal, ensureId, recordScore, mergeBoardBests, newId, TOILET_EMOJI } from '../save.js';
@@ -720,14 +721,22 @@ export class Play extends Phaser.Scene {
         }, T)
       : null;
 
+    // The resync (plan 35, 1.4): one guard per scene object, so a send in flight and a hide's time
+    // outlast a restart; the browser's online and a show after a long hide send the queues again.
+    this.resync ??= createResync(() => this.syncLeaderboard());
     this.onHidden = () => {
-      if (typeof document !== 'undefined' && document.hidden) this.autoPause();
+      const hidden = typeof document !== 'undefined' && document.hidden;
+      if (hidden) this.autoPause();
+      this.resyncVisibility(hidden);
     };
     this.onBlur = () => this.autoPause();
+    this.onOnline = () => this.resyncOnline();
     if (typeof document !== 'undefined') document.addEventListener('visibilitychange', this.onHidden);
+    if (typeof window !== 'undefined') window.addEventListener('online', this.onOnline);
     this.game.events.on('blur', this.onBlur);
     this.events.once('shutdown', () => {
       if (typeof document !== 'undefined') document.removeEventListener('visibilitychange', this.onHidden);
+      if (typeof window !== 'undefined') window.removeEventListener('online', this.onOnline);
       this.game.events.off('blur', this.onBlur);
       // The 📚 popup belongs to this scene's ready screen (a restart takes it down), closed without a call back
       // into this scene: its texts are destroyed by now, and redrawing a changed 📚 count would throw (AUD-063).
@@ -1710,6 +1719,25 @@ export class Play extends Phaser.Scene {
         ),
       )
       .catch(() => {});
+  }
+
+  /**
+   * The browser is back online (plan 35, 1.4): send the queues again (syncLeaderboard, through the
+   * resync's one-at-a-time guard). Not in a half of a match, which create's boot sync skips too.
+   */
+  resyncOnline() {
+    if (!this.match) this.resync?.online();
+  }
+
+  /**
+   * The page went hidden (`hidden` true) or was shown again (plan 35, 1.4): a show after a hide of
+   * LEADERBOARD.resyncHiddenMs or longer sends the queues again, as resyncOnline. A half of a match
+   * neither times a hide nor sends.
+   */
+  resyncVisibility(hidden) {
+    if (this.match) return;
+    if (hidden) this.resync?.hidden();
+    else this.resync?.shown();
   }
 
   /**
