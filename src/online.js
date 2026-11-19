@@ -16,11 +16,14 @@
 //   extrapolated between messages (a flap carries its full state, so it replays exactly) and
 //   smoothed over corrections. shouldSendPos is the sender's keyframe rule.
 // - roomInit / roomStep: the lobby's room state machine over RPC results and server events.
-// - createNetSim: latency, jitter, loss and reorder for the fake transport and ?netsim (item 17).
+//   SERVER_EVENTS are only hints (a seated peer can broadcast the same names), so the transport
+//   confirms each with room_state and verifiedRoomAction turns the answer into a roomStep action.
+// - createNetSim: latency, jitter, loss and reorder for the fake transport and ?netsim (item 17);
+//   netsimProfile reads ?netsim=<profile> on a dev host.
 // tests/online.test.js covers all of it.
 
 import { FIELD, GAME_HEIGHT, TUNING } from './config.js';
-import { VERSION, angleForVelocity, createCourse, fnv1a32 } from './logic.js';
+import { VERSION, angleForVelocity, createCourse, debugHandleAllowed, fnv1a32 } from './logic.js';
 
 // --- protocol ---------------------------------------------------------------------------------
 
@@ -520,6 +523,30 @@ export function roomStep(room, action) {
   }
 }
 
+/**
+ * The server's own events on room:<code> (realtime.send in db/schema.sql). The channel policy lets
+ * either seated device broadcast any event name, so a peer can send these too: they are hints, and
+ * the transport (src/onlineNet.js) confirms each with room_state before the lobby sees it.
+ */
+export const SERVER_EVENTS = Object.freeze(['guest', 'answer', 'left', 'status']);
+
+/**
+ * The roomStep action for a server event once room_state has answered: the room it returned → a
+ * 'status' action (whatever the hint claimed; at = the server's own clock when it says); the room
+ * gone for this device ('no room') → a Decline after an `answer` hint, else `left` (the hint's seat
+ * when it names one, else the other seat: only the reason's wording rides on the hint); anything
+ * else (offline, signed out, a junk answer) → null, so nothing a peer sends moves the room alone.
+ */
+export function verifiedRoomAction({ hint, payload, room, error, seat, at } = {}) {
+  if (!SERVER_EVENTS.includes(hint)) return null;
+  if (room && typeof room === 'object' && room.ok === true) return { type: 'status', room, at: Number.isFinite(room.server_ms) ? room.server_ms : at };
+  if (error !== 'no room') return null;
+  if (hint === 'answer') return { type: 'answer', accept: false, at };
+  const other = seat === 'host' ? 'guest' : 'host';
+  const named = hint === 'left' && payload && SEATS.includes(payload.seat) ? payload.seat : null;
+  return { type: 'left', seat: named ?? other, at };
+}
+
 /** When the room's code runs out (server ms): codeTtlMs after its last change; null while racing or closed. */
 export function codeExpiresAt(room, cfg = TUNING.online) {
   if (!room || !EXPIRING.has(room.phase) || !Number.isFinite(room.changedAt)) return null;
@@ -545,6 +572,21 @@ export const NETSIM_PROFILES = Object.freeze({
   cellular: Object.freeze({ latencyMs: 80, jitterMs: 50, loss: 0.01, reorder: 0.02 }),
   bad: Object.freeze({ latencyMs: 250, jitterMs: 100, loss: 0.05, reorder: 0.05 }),
 });
+
+/**
+ * `?netsim=<profile>` (item 17): a NETSIM_PROFILES name, honoured only where the debug handle is
+ * (debugHandleAllowed: this machine, the LAN, or a driver's opt-in); null anywhere else.
+ */
+export function netsimProfile(search, hostname, optIn = false) {
+  if (!debugHandleAllowed(hostname, optIn)) return null;
+  let v = null;
+  try {
+    v = new URLSearchParams(search ?? '').get('netsim');
+  } catch {
+    return null;
+  }
+  return v && Object.hasOwn(NETSIM_PROFILES, v) ? v : null;
+}
 
 /**
  * A simulated link (item 17): delay() → this message's one-way delay in ms, or null when it is

@@ -28,6 +28,9 @@ import {
   codeExpiresAt,
   createNetSim,
   NETSIM_PROFILES,
+  SERVER_EVENTS,
+  verifiedRoomAction,
+  netsimProfile,
 } from '../src/online.js';
 
 const O = T.online;
@@ -691,4 +694,61 @@ test('a status for another code is ignored (a stale topic after a Decline)', () 
 test('roomStep never mutates its input', () => {
   const r = Object.freeze(roomInit());
   assert.doesNotThrow(() => roomStep(r, { type: 'create', at: AT }));
+});
+
+// --- 1.4: the server's events are hints; ?netsim on dev hosts ---------------------------------------
+
+test("SERVER_EVENTS are db/schema.sql's four realtime.send names, and none is a client event", () => {
+  assert.deepEqual([...SERVER_EVENTS].sort(), ['answer', 'guest', 'left', 'status']);
+  for (const e of SERVER_EVENTS) assert.ok(!Object.hasOwn(ONLINE_EVENTS, e), e);
+  assert.ok(Object.isFrozen(SERVER_EVENTS));
+});
+
+test('verifiedRoomAction: the room as room_state returned it becomes a status action, whatever the hint said', () => {
+  const room = { ok: true, code: '482913', status: 'ready', seat: 'guest', host_name: 'Ana', guest_name: 'Bo', seed: null, start_ms: null, round: 0, server_ms: AT + 5 };
+  for (const hint of SERVER_EVENTS) {
+    assert.deepEqual(verifiedRoomAction({ hint, room, seat: 'guest', at: AT }), { type: 'status', room, at: AT + 5 }, hint);
+  }
+  const noClock = { ...room, server_ms: undefined };
+  assert.equal(verifiedRoomAction({ hint: 'status', room: noClock, seat: 'host', at: AT }).at, AT, 'no server_ms: the caller\'s server time');
+});
+
+test('verifiedRoomAction: a room gone for this device closes it; the hint only picks the reason', () => {
+  assert.deepEqual(verifiedRoomAction({ hint: 'answer', error: 'no room', seat: 'guest', at: AT }), { type: 'answer', accept: false, at: AT }, 'a Decline: the room moved code');
+  assert.deepEqual(verifiedRoomAction({ hint: 'left', payload: { seat: 'host' }, error: 'no room', seat: 'guest', at: AT }), { type: 'left', seat: 'host', at: AT });
+  assert.deepEqual(verifiedRoomAction({ hint: 'left', payload: { seat: 'guest' }, error: 'no room', seat: 'guest', at: AT }), { type: 'left', seat: 'guest', at: AT }, 'this device was unseated (moved, unlinked)');
+  assert.deepEqual(verifiedRoomAction({ hint: 'left', payload: { seat: 'boss' }, error: 'no room', seat: 'guest', at: AT }), { type: 'left', seat: 'host', at: AT }, 'a junk seat: the other one');
+  assert.deepEqual(verifiedRoomAction({ hint: 'status', error: 'no room', seat: 'host', at: AT }), { type: 'left', seat: 'guest', at: AT }, 'a missed left');
+  assert.deepEqual(verifiedRoomAction({ hint: 'guest', error: 'no room', seat: 'host', at: AT }), { type: 'left', seat: 'guest', at: AT });
+});
+
+test('verifiedRoomAction: nothing changes when the check failed, the room is junk or the name is not a server event', () => {
+  assert.equal(verifiedRoomAction({ hint: 'status', error: 'offline', seat: 'host', at: AT }), null, 'offline proves nothing');
+  assert.equal(verifiedRoomAction({ hint: 'left', error: 'signed out', seat: 'host', at: AT }), null);
+  assert.equal(verifiedRoomAction({ hint: 'status', room: { ok: false, error: 'x' }, seat: 'host', at: AT }), null);
+  assert.equal(verifiedRoomAction({ hint: 'pos', error: 'no room', seat: 'host', at: AT }), null);
+  assert.equal(verifiedRoomAction(), null);
+});
+
+test('a peer that forges a status cannot move the room: the confirmed room is what roomStep sees', () => {
+  let guest = roomStep(roomInit(), { type: 'join', code: '482913', at: AT });
+  guest = roomStep(guest, { type: 'rpc', result: { ok: true, code: '482913', status: 'asked', host_name: 'Ana' }, at: AT });
+  guest = roomStep(guest, { type: 'status', room: { code: '482913', status: 'playing', seed: 7, start_ms: AT + 4000, round: 1 }, at: AT });
+  // The host broadcasts a fake status with a later GO; room_state still says the real one.
+  const real = { ok: true, code: '482913', status: 'playing', seat: 'guest', host_name: 'Ana', guest_name: 'Bo', seed: 7, start_ms: AT + 4000, round: 1, server_ms: AT + 100 };
+  const after = roomStep(guest, verifiedRoomAction({ hint: 'status', payload: { status: 'playing', start_ms: AT + 60000 }, room: real, seat: 'guest', at: AT + 100 }));
+  assert.equal(after.startMs, AT + 4000);
+  assert.equal(after.phase, 'playing');
+});
+
+test('netsimProfile: ?netsim=<profile> only on a dev host (or the smoke\'s opt-in), only a known profile', () => {
+  assert.equal(netsimProfile('?netsim=cellular', 'localhost'), 'cellular');
+  assert.equal(netsimProfile('?perf&netsim=bad', '192.168.1.20'), 'bad');
+  assert.equal(netsimProfile('?netsim=wifi', 'sielerjm.github.io'), null, 'never on the live site');
+  assert.equal(netsimProfile('?netsim=wifi', 'sielerjm.github.io', true), 'wifi', 'a driver that opted in');
+  assert.equal(netsimProfile('?netsim=moon', 'localhost'), null);
+  assert.equal(netsimProfile('?netsim=toString', 'localhost'), null, 'own names only');
+  assert.equal(netsimProfile('', 'localhost'), null);
+  assert.equal(netsimProfile(undefined, undefined), null);
+  for (const name of Object.keys(NETSIM_PROFILES)) assert.equal(netsimProfile(`?netsim=${name}`, 'localhost'), name);
 });

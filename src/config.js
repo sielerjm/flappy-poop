@@ -371,6 +371,17 @@ export const TUNING = {
       smoothMs: 120, // ms a correction (a fart surge, a late flap) is blended out over instead of jumping
       snapPx: 400, // px; a correction larger than this (a respawn, a re-anchor) snaps at once
     },
+    // The transport (src/onlineNet.js, plan 39 1.4), from the 0.3 spike's measurements on Frankfurt.
+    net: {
+      joinTimeoutMs: 15000, // ms a room channel's first join may take (the spike's joins took 46-298 ms; a refusal ~2 s)
+      rpcTimeoutMs: 6000, // ms before an online RPC counts as offline (p90 166 ms on cellular)
+      refreshMarginMs: 10 * 60 * 1000, // ms; a session token ending sooner is refreshed before a channel join (the JWT lives 1 h)
+      rejoinMs: [5000, 15000, 30000, 60000], // ms before each rejoin by hand after the events cap closed the channel (a ~60 s moving average); then it gives up
+      presenceTracks: 4, // presence tracks per presenceWindowMs at most: Realtime allows 5 calls per client per 30 s and the 6th closed the channel (item 23)
+      presenceWindowMs: 30000, // ms
+      verifyGapMs: 500, // ms between room_state checks of the server's events (a peer can broadcast their names too)
+      sampleRetryMs: 2000, // ms after a failed server_now sample before the next one
+    },
   },
   // Tournament (🏅, every two-player session): a World Cup bracket for minPlayers–maxPlayers
   // on one device, two at a time (src/tournament.js); byes fill the bracket to 2, 4 or 8. Every
@@ -557,6 +568,7 @@ export const LEADERBOARD = {
   researchQueueKey: 'flappyPoop.researchQueue', // localStorage key for a pilot tester's answer events the server has not confirmed yet (submit_research_events)
   eduShareKey: 'flappyPoop.eduShare', // localStorage key for this device's 📚 board sharing (plan 21): whether the player shares their education grades, the round of sharing, and what of this device's record the board already has
   careerKey: 'flappyPoop.career', // localStorage key for this device's lifetime counters and achievements (plan 08): what waits to be sent, the batch in flight, the server's last totals, unlocks and claims
+  onlineSessionKey: 'flappyPoop.onlineSession', // localStorage key for this device's anonymous Supabase Auth session (plan 39, 🌐 only): supabase-js keeps it there; a bearer secret, never sent anywhere else nor exported
   streaksKey: 'flappyPoop.streaks', // localStorage key for this device's Singleplayer and Daily Dump day streaks (plan 34): { single, daily }, each { day, streak, best }; never sent, not in the backup
   dailyMaxScore: 10000, // the Daily Dump cap (endless runs); matches daily_scores' CHECK and submit_daily_score() in db/schema.sql
   maxScore: 1000, // scores above this are not submitted (matches the CHECK and submit_score() in db/schema.sql); a full 285-pair run with ×2 fits

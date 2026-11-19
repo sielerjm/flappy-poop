@@ -23,20 +23,15 @@ const ALLOWED_EXPORTS = {
   topScores: 'test hook: tests/save.test.js reads top lists as plain numbers (its last game use, isNewTop, is gone)',
   // Daily Dump (plan .claude/plans/2026-11-10-daily-dump.md): helpers land before their callers.
   RUN_DATA_KEYS: "test guard: tests/runStats.test.js keeps it equal to run_data_keys() in db/schema.sql",
-  // Online race (plan 39, 1.3): src/online.js's pure parts land before their callers; drop each entry when its caller lands.
-  createSender: 'plan 39 1.3: pure, tested in tests/online.test.js; first caller OnlineRace (1.7a)',
-  createInbox: 'plan 39 1.3: pure, tested in tests/online.test.js; first caller OnlineRace (1.7a)',
+  // Online race (plan 39, 1.3 and 1.4): src/online.js's pure parts and src/onlineNet.js land before their callers; drop each entry when its caller lands.
+  createOnlineNet: 'plan 39 1.4: the transport, tested in tests/onlineNet.test.js; first caller the sign-in screen (1.6a), then the lobby (1.6c)',
   compareVersions: 'plan 39 1.3: pure, tested in tests/online.test.js; first caller the lobby (1.6c)',
-  presencePayload: 'plan 39 1.3: pure, tested in tests/online.test.js; first caller onlineNet.js (1.4)',
-  parsePresence: 'plan 39 1.3: pure, tested in tests/online.test.js; first caller onlineNet.js (1.4)',
   agreedWidth: 'plan 39 1.3: pure, tested in tests/online.test.js; first caller OnlineRace (1.7a)',
   formatCode: 'plan 39 1.3: pure, tested in tests/online.test.js; first caller the lobby (1.6c)',
-  createClock: 'plan 39 1.3: pure, tested in tests/online.test.js; first caller onlineNet.js (1.4)',
   shouldSendPos: 'plan 39 1.3: pure, tested in tests/online.test.js; first caller OnlineRace (1.7a)',
   createGhostTrack: 'plan 39 1.3: pure, tested in tests/online.test.js; first caller OnlineRace (1.7a)',
   roomStep: 'plan 39 1.3: pure, tested in tests/online.test.js; first caller the lobby (1.6c)',
   racePhase: 'plan 39 1.3: pure, tested in tests/online.test.js; first caller OnlineRace (1.7a)',
-  createNetSim: 'plan 39 1.3: pure, tested in tests/online.test.js; first caller onlineNet.js ?netsim (1.4)',
 };
 
 /** UI string keys no source names literally: prefix → why (they are built at run time). */

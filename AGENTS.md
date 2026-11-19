@@ -921,7 +921,9 @@ src/
                             since plan 28, 5.2), visibleRows = the fourteen in the
                             board's window (the ‹ › row under them), storage keys incl.
                             careerKey = flappyPoop.career, streaksKey =
-                            flappyPoop.streaks (plan 34), score cap),
+                            flappyPoop.streaks (plan 34), onlineSessionKey =
+                            flappyPoop.onlineSession (plan 39; a bearer secret, never
+                            exported or sent elsewhere), score cap),
                             LEVELS (gut segment name keys, in order), LEVEL_COLORS
                             (Set2 backgrounds, cycling) and BACKGROUND (overlay
                             layers: key + parallax), TEST_MODE (trigger words,
@@ -1268,8 +1270,27 @@ src/
                             roomInit / roomStep / codeExpiresAt / racePhase (the lobby's
                             room over RPC results and server events); createNetSim and
                             NETSIM_PROFILES (latency, jitter, loss, reorder; the fake
-                            transport and ?netsim). Knobs in TUNING.online.
-                            tests/online.test.js.
+                            transport and ?netsim); SERVER_EVENTS, verifiedRoomAction
+                            (a server event name is a hint, confirmed with room_state)
+                            and netsimProfile (?netsim, dev hosts only). Knobs in
+                            TUNING.online (clock, net, ...). tests/online.test.js.
+  onlineNet.js              Online race (🌐, plan 39) transport for one page:
+                            createOnlineNet(deps) and ONLINE_RPCS. Nothing loads until
+                            signIn() / warm(); the only caller of loadSupabase(). Anonymous
+                            sign-in (no user data), a stored session reused under
+                            LEADERBOARD.onlineSessionKey (pageStorage() when storage
+                            throws), autoRefreshToken off and its own token ticker.
+                            rpc(fn, args) for ONLINE_RPCS only, with a timeout, as
+                            { ok, data } or { ok: false, error }. syncClock / pump /
+                            serverNow feed createClock. openRoom(code, ...) joins one
+                            private channel room:<code> after a refresh; send() only
+                            while joined; take() returns what arrived (peer, room,
+                            presence, channel); error, cap and rejoin rules follow the
+                            0.3 spike. close() keeps the session, signOut() is local.
+                            ?netsim delays and drops received messages. Per-frame calls
+                            are synchronous. Knobs in TUNING.online.net. No caller yet
+                            (first: the sign-in screen 1.6a, the lobby 1.6c).
+                            tests/onlineNet.test.js.
   leaderboard.js            Shared leaderboard, NO Phaser/DOM (plan 34 adds
                             createStreakStore and STREAK_KINDS: flappyPoop.streaks,
                             the Singleplayer and Daily Dump day streaks, never
@@ -2780,6 +2801,11 @@ tests/                      node --test (schema.test.js, schemaOnline.test.js, p
                             the ghost against a 60 Hz sender over every netsim profile
                             (and 2 Hz vs 5 Hz keyframes, item 25), the field width pairs,
                             the room state machine
+  onlineNet.test.js         src/onlineNet.js: a fake client on a virtual clock (sign-in,
+                            stored and dead sessions, RPC errors, the clock, join, caps,
+                            rejoin, presence limits, verified room events), and the real
+                            vendored bundle on a fake fetch (online RPCs carry the Bearer
+                            token; leaderboard, daily and tournament calls never do)
   schemaCheck.test.js       tools/schema_check.mjs: the stamp (blanked, idempotent),
                             the one read-only live call (an injected fetch), each
                             state it reports (current, fixture, other, none,
@@ -3462,6 +3488,10 @@ Commits follow `type(scope): summary` (`feat`, `fix`, `docs`, `chore`, `test`, `
   awaited in `update`: a frame sends and reads what has arrived, nothing more.
   A new client event goes in `ONLINE_EVENTS` (which moves `protocolVersion`, so
   older clients are told to update) and never reuses a server event name.
+  A new online function goes in `ONLINE_RPCS` as well as the schema header
+  (`tests/onlineNet.test.js` keeps them equal). The server's event names on
+  `room:<code>` are hints: the transport confirms them with `room_state`, since a
+  seated peer can broadcast those names too.
 - Backend change → edit `db/schema.sql`, `npm run schema:stamp`, list a new anon
   function and its undo line in the file's header (a new argument on an existing function: add it
   last with a default, `drop function if exists` the old signature just before `create`, and move its
