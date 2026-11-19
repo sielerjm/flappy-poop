@@ -2538,8 +2538,9 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
       // Versus (two players): the 👥 toggle under the toilet toggle on a landscape window, the lobby
       // (every two-player session is a tournament), a race's join screen with its device claims, the
       // countdown, two Play halves on one shared course, the inputs routed to the half that owns the
-      // device, and the ways back. Portrait never offers it.
+      // device, and the ways back. Portrait offers it too, as the 🌐 window over Play (plan 39, 1.6c).
       {
+        const tx = (key) => evaluate(`import('./src/i18n.js').then((m) => m.t('en', '${key}'))`);
         const P1 = `__flappy.scene.getScene('Play')`;
         const P2 = `__flappy.scene.getScene('PlayB')`;
         const VS = `__flappy.scene.getScene('Versus')`;
@@ -2621,17 +2622,21 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         ok(await until(`__flappy.scene.isActive('Versus') && ${VS}.match.status === 'lobby' && Boolean(document.getElementById('tour-start'))`), 'the toggle stays on: the next start tap opens the lobby again');
         await evaluate(`${P1}.padDown(${want.back}), true`);
         ok(await until(`!__flappy.scene.isActive('Versus') && __flappy.scene.isActive('Play') && ${P1}.state === 'ready' && ${P1}.match === null`) && !(await evaluate(`import('./src/ui/tournamentPanel.js').then((m) => m.isTournamentPanelOpen())`)), 'B (or Esc) in the lobby returns to single player');
-        // A window that cannot fit two halves hides the toggle; the flag left on is ignored by the start tap.
+        // A window that cannot fit two halves (a phone) offers the toggle too (plan 39, 1.6c, D2): with it on,
+        // the start tap opens the 🌐 window over Play, 🌐 locked on, no Versus and no run; ✕ closes it back
+        // to the ready screen with 👥 still on. The online side is stood in for here (no network, no client
+        // load: the online-client section checks that nothing asked for it), refusing as if offline.
         await metrics(720, 1280);
         await settle(720);
         const narrow = await evaluate(`JSON.stringify({ box: ${P1}.readyBoxes.versus ?? null, toggle: Boolean(${P1}.versusToggle), offered: ${P1}.versusOffered(), flag: __flappy.registry.get('versus') })`).then(JSON.parse);
-        await evaluate(`${P1}.launch(), true`);
-        const single = await until(`${P1}.state === 'playing' && ${P1}.match === null && !__flappy.scene.isActive('Versus')`);
-        ok(narrow.box === null && !narrow.toggle && !narrow.offered && narrow.flag === true && single, 'a portrait window has no 👥 toggle; with the flag still on the start tap launches a single-player run');
-        await evaluate(`(() => { const p = ${P1}; p.graceLeftMs = 0; p.poop.body.setAllowGravity(true); p.die(); return true; })()`);
-        for (let i = 0; i < 30 && !(await active('Over')); i += 1) await sleep(100);
-        await evaluate(`(() => { const o = __flappy.scene.getScene('Over'); o.openedAt = 0; o.retry(); return true; })()`);
-        await settle(720);
+        await evaluate(`(() => { const p = ${P1}; p.onlineNet = { warm: async () => ({ ok: false, error: 'offline' }), close() {} }; p.onlineAccountRef = { enter: async () => ({ ok: false, errorKey: 'onlineErrOffline' }) }; p.launch(); return true; })()`);
+        const win = await until(`document.getElementById('tour-online')?.disabled === true && /ONLINE/.test(document.getElementById('tour-title')?.textContent ?? '') && document.getElementById('tour-status')?.textContent === ${JSON.stringify(await tx('onlineErrOffline'))}`);
+        const under = await evaluate(`JSON.stringify({ state: ${P1}.state, launching: Boolean(${P1}.launching), versus: __flappy.scene.isActive('Versus'), lobby: Boolean(document.getElementById('tour-start')) })`).then(JSON.parse);
+        await evaluate(`document.getElementById('tour-close').click(), true`);
+        const back = await until(`${P1}.state === 'ready' && !document.getElementById('tournament-panel')?.offsetParent && __flappy.registry.get('versus') === true`);
+        await evaluate(`(() => { const p = ${P1}; delete p.onlineNet; delete p.onlineAccountRef; return true; })()`);
+        ok(narrow.box !== null && narrow.toggle && narrow.offered && narrow.flag === true && win && under.state === 'ready' && !under.launching && !under.versus && !under.lobby && back,
+          `a portrait window offers the 👥 toggle; with it on the start tap opens the 🌐 window over Play (locked on, no local lobby, no Versus, no run: ${JSON.stringify(under)}); ✕ closes it back with 👥 on`);
         await evaluate(`__flappy.registry.set('versus', false), true`);
         await cdp.send('Emulation.clearDeviceMetricsOverride');
       }

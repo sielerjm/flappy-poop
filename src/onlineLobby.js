@@ -1,0 +1,345 @@
+// The online lobby (plan 39, 1.6c, as accepted in Preview A, item 36): one room at a time, from
+// Create room or Join with code to both players tapping Ready. The room itself is roomStep's
+// (src/online.js); this module calls the room RPCs and the channel through the injected transport
+// (src/onlineNet.js) and feeds roomStep only what it may trust: RPC results, and the transport's
+// { kind: 'room' } items (a server event confirmed with room_state, item 35), never a peer's own
+// events. On top of the room it keeps the screen, the ready marks and the status line's message.
+//
+// - The host's code: a guest leaving, or the code running out (15 minutes with no change), makes a
+//   new room by itself and says so (choice 3); a Decline's new code comes from answer_guest.
+// - The guest: declined goes back to the code keypad; the host leaving or the room closing, home.
+// - Ready (choice 6): each tap sends `ready` for level 1 (the lobby; a level break readies the next
+//   level, 1.7b), newest wins; a peer that (re)joins hears this side's mark again. Both ready calls
+//   onBothReady once per both-ready (1.7a starts the race there; the host calls
+//   set_room_status('playing')). Until then the lobby only says both are ready.
+// - The version check (choice 8): the peer's presence against this app's protocol (compareVersions);
+//   a mismatch closes the room for both (each side checks) with who must reload.
+// Every message is an i18n key with the name it carries; src/ui/onlineLobbyViews.js draws it.
+// Nothing here awaits in a frame: the panel calls poll() on a timer and the rest from taps.
+
+import { VERSION } from './logic.js';
+import { codeExpiresAt, compareVersions, parseCode, protocolVersion, roomInit, roomStep } from './online.js';
+
+/** The `ready` event's level in the lobby (a level break's ready names the level it starts). */
+export const LOBBY_LEVEL = 1;
+
+/** Why a room RPC or the channel said no → the status line's key. */
+const ERROR_KEYS = Object.freeze({
+  'no room': 'onlineErrNoRoom',
+  'rate limited': 'onlineErrRateLimited',
+  busy: 'onlineErrBusy',
+  offline: 'onlineErrOffline',
+  timeout: 'onlineErrOffline',
+});
+const UPDATE_KEYS = Object.freeze({ me: 'onlineUpdateYou', them: 'onlineUpdateThem', both: 'onlineUpdateBoth' });
+/** A join refusal that leaves the typed code to fix (a typo, the network); the caps clear it. */
+const KEEP_TYPED = new Set(['no room', 'offline']);
+/** Channel states that end the room: the policy said no, the caps closed it, or it never joined. */
+const CHANNEL_ENDS = new Set(['refused', 'closed', 'busy', 'timeout']);
+
+const errorKey = (e) => ERROR_KEYS[e] ?? 'onlineErrGeneric';
+const msg = (key, kind, name = '') => ({ key, kind, name: name ?? '' });
+
+/** The screen for a live room's phase (a room that is idle or closed shows home or the keypad). */
+function screenOf(room) {
+  switch (room.phase) {
+    case 'creating':
+    case 'joining':
+      return 'busy';
+    case 'open':
+      return 'host';
+    case 'asked':
+      return room.role === 'host' ? 'asked' : 'knock';
+    case 'ready':
+    case 'playing':
+    case 'finished':
+      return 'ready';
+    default:
+      return null;
+  }
+}
+
+/**
+ * @param {object} deps
+ * @param {object} deps.net createOnlineNet's { rpc, openRoom, closeRoom, send, take, pump, peer, serverNow }
+ * @param {string} deps.name this player's online name (presence)
+ * @param {number} deps.width this device's field width (presence, item 14)
+ * @param {{ protocol: string, app: string }} [deps.mine] this app's versions (protocolVersion, VERSION)
+ * @param {() => number} [deps.now] server ms (the transport's clock)
+ * @param {(lobby: object) => void} [deps.onBothReady] both players ready (1.7a: start the race)
+ */
+export function createOnlineLobby({ net, name, width, mine = { protocol: protocolVersion(), app: VERSION }, now = () => net.serverNow(), onBothReady = null }) {
+  const state = { screen: 'home', room: roomInit(), typed: '', meReady: false, themReady: false, message: null };
+  const pending = new Set();
+  let themT = -Infinity; // the newest peer ready's time (server ms) and sequence
+  let themSeq = -Infinity;
+  let both = false;
+  let generation = 0; // bumped by every leave, so a reply that lands after one is dropped
+
+  const lobby = { state, onBothReady };
+
+  /** Run a call without awaiting it here; settled() waits for every one (tests, close). */
+  const track = (p) => {
+    const q = Promise.resolve(p).catch(() => {});
+    pending.add(q);
+    q.finally(() => pending.delete(q));
+    return q;
+  };
+
+  const opponent = () => {
+    const r = state.room;
+    return (r.role === 'host' ? r.guestName : r.hostName) ?? net.peer?.()?.name ?? '';
+  };
+
+  function signature() {
+    const r = state.room;
+    return JSON.stringify([state.screen, r.phase, r.code, r.hostName, r.guestName, state.meReady, state.themReady, state.message]);
+  }
+
+  /** The room moved: the screen follows, a new ready round starts clean, both-ready fires once. */
+  function settle(prev) {
+    const r = state.room;
+    if (r.phase === 'ready' && prev.phase !== 'ready') {
+      state.meReady = false;
+      state.themReady = false;
+      themT = -Infinity;
+      themSeq = -Infinity;
+      both = false;
+    }
+    if (r.phase === 'closed' && prev.phase !== 'closed') {
+      closed(prev, r);
+      return;
+    }
+    const screen = screenOf(r);
+    if (screen) state.screen = screen;
+    const now2 = r.phase === 'ready' && state.meReady && state.themReady;
+    if (now2 && !both) {
+      both = true;
+      lobby.onBothReady?.(lobby);
+    } else if (!now2) both = false;
+  }
+
+  function step(action) {
+    const prev = state.room;
+    state.room = roomStep(prev, action);
+    if (state.room !== prev) settle(prev);
+  }
+
+  /** A room that closed: leave it on the server too (twice is fine), then the screen and its message. */
+  function closed(prev, r) {
+    const { reason, role, code } = r;
+    const other = (role === 'host' ? prev.guestName : prev.hostName) ?? net.peer?.()?.name ?? '';
+    net.closeRoom();
+    if (code && reason !== 'you left') track(net.rpc('leave_room', { p_code: code }));
+    state.room = roomInit();
+    state.meReady = false;
+    state.themReady = false;
+    both = false;
+    if (reason === 'update') {
+      state.screen = 'home';
+      state.message = msg(UPDATE_KEYS[r.update] ?? UPDATE_KEYS.both, 'error', other);
+      return;
+    }
+    if (role === 'host' && (reason === 'left' || reason === 'expired')) {
+      // Choice 3: a new code by itself, and the reason on the status line.
+      const notice = reason === 'left' ? msg('onlineLeftHost', 'notice', other) : msg('onlineCodeExpired', 'notice');
+      track(create(notice));
+      return;
+    }
+    if (role === 'guest' && reason === 'declined') {
+      state.screen = 'join';
+      state.typed = '';
+      state.message = msg('onlineDeclinedGuest', 'error', other);
+      return;
+    }
+    if (reason === 'you left') {
+      state.screen = 'home';
+      return;
+    }
+    state.screen = 'home';
+    if (role === 'guest' && reason === 'left') state.message = msg('onlineLeftGuest', 'error', other);
+    else if (role === 'guest' && (reason === 'expired' || reason === 'abandoned' || reason === 'error')) state.message = msg('onlineRoomClosed', 'error');
+    else state.message = msg(errorKey(reason), 'error');
+  }
+
+  /** The peer's presence: the version check (both sides make it), then this side's Ready again. */
+  function checkPeer(peer) {
+    if (!peer || state.room.phase === 'idle' || state.room.phase === 'closed') return;
+    const v = compareVersions(mine, peer);
+    if (!v.ok) {
+      step({ type: 'mismatch', update: v.update, at: now() });
+      return;
+    }
+    if (state.room.phase === 'ready' && state.meReady) net.send('ready', { level: LOBBY_LEVEL, ready: true });
+  }
+
+  /** Join the room's channel for this seat; a refusal leaves the room and says why. */
+  async function openChannel(seat) {
+    const code = state.room.code;
+    const gen = generation;
+    const res = await net.openRoom(code, { seat, name, width });
+    if (gen !== generation || state.room.code !== code) return;
+    if (!res?.ok) {
+      failChannel(res?.error);
+      return;
+    }
+    checkPeer(net.peer?.());
+  }
+
+  function failChannel(error) {
+    const code = state.room.code;
+    net.closeRoom();
+    if (code) track(net.rpc('leave_room', { p_code: code }));
+    generation += 1;
+    state.room = roomInit();
+    state.screen = 'home';
+    state.meReady = false;
+    state.themReady = false;
+    both = false;
+    state.message = msg(errorKey(error), 'error');
+  }
+
+  /** An RPC answer as roomStep's `rpc` result. */
+  const asResult = (res) => (res?.ok ? res.data : { ok: false, error: res?.error ?? 'error' });
+
+  /** Create room (or a new code by itself, with `notice` on the status line). */
+  async function create(notice = null) {
+    if (state.room.phase !== 'idle' && state.room.phase !== 'closed') return;
+    state.message = notice;
+    step({ type: 'create', at: now() });
+    const gen = generation;
+    const res = await net.rpc('create_room');
+    if (gen !== generation) {
+      const code = parseCode(res?.data?.code);
+      if (res?.ok && code) track(net.rpc('leave_room', { p_code: code })); // cancelled while it ran
+      return;
+    }
+    step({ type: 'rpc', result: asResult(res), at: now() });
+    if (state.room.phase === 'open') await openChannel('host');
+  }
+
+  /** Join with code: the typed digits, checked here first (a typo spends none of the counted tries). */
+  async function join() {
+    const code = parseCode(state.typed);
+    if (!code) {
+      state.message = msg('onlineErrBadCode', 'error');
+      return;
+    }
+    if (state.room.phase !== 'idle' && state.room.phase !== 'closed') return;
+    state.message = null;
+    step({ type: 'join', code, at: now() });
+    const gen = generation;
+    const res = await net.rpc('join_room', { p_code: code });
+    if (gen !== generation) return;
+    const result = asResult(res);
+    if (result?.ok !== true) {
+      const error = result?.error ?? 'error';
+      state.room = roomInit();
+      state.screen = 'join';
+      if (!KEEP_TYPED.has(error)) state.typed = '';
+      state.message = msg(errorKey(error), 'error');
+      return;
+    }
+    step({ type: 'rpc', result, at: now() });
+    if (state.room.phase === 'asked') await openChannel('guest');
+  }
+
+  /** The host's Let in / Decline (a Decline's new code moves the channel to it). */
+  async function answer(accept) {
+    const r = state.room;
+    if (r.role !== 'host' || r.phase !== 'asked') return;
+    const guest = r.guestName ?? '';
+    const gen = generation;
+    const res = await net.rpc('answer_guest', { p_code: r.code, p_accept: Boolean(accept) });
+    if (gen !== generation) return;
+    step({ type: 'answered', accept: Boolean(accept), result: asResult(res), at: now() });
+    if (!accept && state.room.phase === 'open') {
+      state.message = msg('onlineDeclinedHost', 'notice', guest);
+      await openChannel('host');
+    }
+  }
+
+  /** Ready / Not ready, on the ready screen. */
+  function setReady(on) {
+    if (state.room.phase !== 'ready') return;
+    state.meReady = Boolean(on);
+    net.send('ready', { level: LOBBY_LEVEL, ready: state.meReady });
+    settle(state.room);
+  }
+
+  /** Cancel / Leave: the room left on the server, the channel closed, home. */
+  async function leave() {
+    generation += 1;
+    const r = state.room;
+    const live = r.phase !== 'idle' && r.phase !== 'closed';
+    state.room = roomInit();
+    state.screen = 'home';
+    state.meReady = false;
+    state.themReady = false;
+    state.message = null;
+    both = false;
+    if (!live) return;
+    net.closeRoom();
+    if (r.code) await track(net.rpc('leave_room', { p_code: r.code }));
+  }
+
+  /** What arrived since the last poll, and the code's clock; true when the screen should redraw. */
+  function poll() {
+    const before = signature();
+    net.pump?.();
+    for (const item of net.take?.() ?? []) {
+      if (!item || typeof item !== 'object') continue;
+      if (item.kind === 'room' && item.action) step(item.action);
+      else if (item.kind === 'presence') {
+        if (item.event === 'leave') {
+          state.themReady = false;
+          settle(state.room);
+        } else checkPeer(item.peer);
+      } else if (item.kind === 'channel' && CHANNEL_ENDS.has(item.state)) {
+        if (state.room.phase !== 'idle') failChannel(item.state === 'closed' ? item.reason : item.state);
+      } else if (item.kind === 'peer' && item.event === 'ready' && item.msg?.level === LOBBY_LEVEL && state.room.phase === 'ready') {
+        const { t, seq } = item.msg;
+        if (t > themT || (t === themT && seq > themSeq)) {
+          themT = t;
+          themSeq = seq;
+          state.themReady = item.msg.ready === true;
+          settle(state.room);
+        }
+      }
+    }
+    step({ type: 'tick', at: now() });
+    return signature() !== before;
+  }
+
+  return Object.assign(lobby, {
+    create: () => create(),
+    join,
+    answer,
+    setReady,
+    leave,
+    poll,
+    openJoin() {
+      if (state.room.phase !== 'idle' && state.room.phase !== 'closed') return;
+      state.screen = 'join';
+      state.typed = '';
+      state.message = null;
+    },
+    back() {
+      if (state.screen === 'join') {
+        state.screen = 'home';
+        state.message = null;
+      }
+    },
+    opponent,
+    bothReady: () => state.room.phase === 'ready' && state.meReady && state.themReady,
+    /** Ms until the host's code runs out, or null (no code shown). */
+    codeLeftMs() {
+      const end = codeExpiresAt(state.room);
+      return end === null || state.room.role !== 'host' ? null : Math.max(0, end - now());
+    },
+    live: () => state.room.phase !== 'idle' && state.room.phase !== 'closed',
+    settled: async () => {
+      while (pending.size) await Promise.all([...pending]);
+    },
+  });
+}

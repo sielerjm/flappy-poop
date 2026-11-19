@@ -157,7 +157,7 @@ test("a match half calls the host its match names, never the Versus scene: the p
   assert.deepEqual(calls, [['setPaused', true], ['halfScene', 1]]);
 });
 
-test('"👥 offered" is apart from "two halves fit": splitFits is versusAvailable; offered (outside a match and test mode) exactly where they fit, as before (1.6c widens it)', () => {
+test('"👥 offered" is apart from "two halves fit": splitFits is versusAvailable; offered outside a match and test mode at every size, phones too (1.6c, D2)', () => {
   const sizes = [[375, 667], [667, 375], [844, 390], [390, 844], [1024, 768], [1280, 720], [1366, 768], [1920, 1080], [2560, 1080], [3440, 1440], [800, 300], [0, 0]];
   try {
     for (const [w, h] of sizes) {
@@ -166,7 +166,7 @@ test('"👥 offered" is apart from "two halves fit": splitFits is versusAvailabl
       const fits = versusAvailable(w, h, T, FIELD);
       const s = playScene({ match: null, isTestMode: () => false });
       assert.equal(s.splitFits(), fits, `${w}×${h} splitFits`);
-      assert.equal(s.versusOffered(), fits, `${w}×${h} offered`);
+      assert.equal(s.versusOffered(), true, `${w}×${h} offered`);
       assert.equal(playScene({ match: createMatch(1), isTestMode: () => false }).versusOffered(), false, `${w}×${h} in a match`);
       assert.equal(playScene({ match: null, isTestMode: () => true }).versusOffered(), false, `${w}×${h} in test mode`);
     }
@@ -177,7 +177,7 @@ test('"👥 offered" is apart from "two halves fit": splitFits is versusAvailabl
   }
 });
 
-test('the tournament window opens without the Versus scene: ✕ closes it back to the Play under it, and a stopped or never-run Versus is never asked to leave', async () => {
+test('the tournament window opens without the Versus scene, on the 🌐 views locked on (1.6c): ✕ closes it back to the Play under it, and a stopped or never-run Versus is never asked to leave', async () => {
   // Stopped after a match (Phaser keeps its object and its last match), and never run (no match: its leave() would throw).
   for (const stale of [{ match: { status: 'left' } }, {}]) {
     const calls = [];
@@ -185,7 +185,8 @@ test('the tournament window opens without the Versus scene: ✕ closes it back t
     const game = fakeGame({ versus: stale, active: false });
     openTournamentPanel({ game, locale: 'en', play: { getSaveState: () => ({ name: '' }) } });
     assert.equal(isTournamentPanelOpen(), true);
-    assert.ok(el('tour-start'), 'the lobby shows');
+    assert.equal(el('tour-start'), null, 'no local lobby over Play');
+    assert.equal(el('tour-online')?.disabled, true, '🌐 locked on');
     assert.equal(game.input.keyboard.enabled, false, 'the game keyboard is off under it');
     await el('tour-close').click();
     assert.equal(isTournamentPanelOpen(), false);

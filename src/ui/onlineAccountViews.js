@@ -35,7 +35,7 @@ export function accountCss(id) {
 export function h(tag, attrs = {}, ...children) {
   const el = document.createElement(tag);
   for (const [k, v] of Object.entries(attrs)) {
-    if (k === 'class') el.className = v;
+    if (k === 'class') el.className = v || '';
     else if (v !== false && v != null) el.setAttribute(k, v === true ? '' : v);
   }
   for (const c of children) if (c !== null && c !== undefined && c !== '') el.append(c);

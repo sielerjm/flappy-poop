@@ -114,9 +114,14 @@ test("two tabs: 📚 stored on in one and 👥 on in the other's session: 👥 w
   assert.equal(b.reconcileSwitches(), true);
   assert.deepEqual([b.educationOn, b.versusOn], [false, true], 'never both on');
   assert.equal(b.settings.load().education, true, "tab A's stored 📚 stays");
-  // Where 👥 is not offered (a phone), launch() ignores it, so 📚 stays on there.
+  // A phone offers 👥 too (plan 39, 1.6c: launch() opens the 🌐 window), so 👥 wins there as well.
   globalThis.innerWidth = 400;
   globalThis.innerHeight = 800;
+  b.educationOn = true;
+  assert.equal(b.reconcileSwitches(), true);
+  assert.equal(b.educationOn, false);
+  // Where 👥 is not offered (test mode), launch() ignores it, so 📚 stays on.
+  b.isTestMode = () => true;
   b.educationOn = true;
   assert.equal(b.reconcileSwitches(), false);
   assert.equal(b.educationOn, true);

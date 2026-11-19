@@ -605,6 +605,53 @@ The winners take the podium 🥇 🥈 (and 🥉 from 3 players). With 3 or more 
 | onlineErrGeneric | Something went wrong online. Try again in a moment. (plan 39, 1.6a: any online error without its own message) | 在线功能出了点问题，请稍后再试。 |
 | saveClearNoteOnline | It also signs this device out of online races. | 这也会让这台设备退出在线比赛。 |
 | saveLoadedNoteOnline | This device left online races: turn 🌐 on again to race as this player. | 这台设备已退出在线比赛：再打开🌐即可用这个玩家比赛。 |
+| onlineTitle | 🌐 ONLINE RACE (plan 39: the 🌐 online lobby in the tournament window: a two-player race between two devices joined by a 6-digit room code; {name} is the other player's username, {time} a m:ss countdown) | 🌐 在线比赛 |
+| onlineSwitch | 🌐 Online | 🌐 在线 |
+| onlineSwitchOffSub | Off: everyone plays on this screen | 关：大家在这块屏幕上一起玩 |
+| onlineSwitchOnSub | On: race a friend on their own phone | 开：和朋友各用自己的手机比赛 |
+| onlineForced | This screen is too narrow to split, so races here are online | 屏幕太窄无法分屏，只能在线比赛 |
+| onlineLead | Race one friend on their own phone or computer | 和一位朋友比赛，对方用自己的手机或电脑 |
+| onlineOpponentNone | Opponent | 对手 |
+| onlineCreate | Create room | 创建房间 |
+| onlineJoin | Join with code | 输入房间码加入 |
+| onlineNote | Only your username is shared. No chat, no strangers: only someone with your code can join. | 只会显示你的用户名。没有聊天，也不会匹配陌生人：只有拿到你房间码的人才能加入。 |
+| onlineCodeLead | Give your friend this code | 把这个房间码告诉朋友 |
+| onlineCodeExpires | Code works for {time} | 房间码有效时间：{time} |
+| onlineCodeExpired | That code expired. Here is a new one. (plan 39: the 🌐 lobby's status line; {name} is the other player's username) | 这个房间码过期了，这是新的房间码。 |
+| onlineShare | Share | 分享 |
+| onlineCopy | Copy | 复制 |
+| onlineCopied | Code copied | 房间码已复制 |
+| onlineHostTag | (host) | （房主） |
+| onlineWaitingOpponent | Waiting for opponent | 等待对手 |
+| onlineCancel | Cancel | 取消 |
+| onlineAsked | {name} wants to race | {name} 想和你比赛 |
+| onlineLetIn | Let in | 让对方进来 |
+| onlineDecline | Decline | 拒绝 |
+| onlineDeclineNote | Decline gives you a new code, so the old one stops working | 拒绝后会换一个新房间码，旧的就不能用了 |
+| onlineDeclinedHost | You declined {name}. Here is a new code. (plan 39: the 🌐 lobby's status line; {name} is the other player's username) | 你拒绝了 {name}，这是新的房间码。 |
+| onlineLeftHost | {name} left. Here is a new code. (plan 39: the 🌐 lobby's status line; {name} is the other player's username) | {name} 离开了，这是新的房间码。 |
+| onlineJoinLead | Type your friend's room code | 输入朋友的房间码 |
+| onlineJoinGo | Join | 加入 |
+| onlineKnocking | Waiting for {name} to let you in | 等待 {name} 让你进来 |
+| onlineReadyLead | You vs {name}. Tap Ready when you are set. | 你对 {name}。准备好了就点“准备”。 |
+| onlineReady | Ready | 准备 |
+| onlineUnready | Not ready | 取消准备 |
+| onlineIsReady | Ready ✓ | 已准备 ✓ |
+| onlineNotReady | not ready | 未准备 |
+| onlineLeave | Leave | 离开 |
+| onlineStarting | Both ready: the race starts in 3… | 双方都准备好了：比赛3秒后开始… |
+| onlineErrBadCode | That's not a room code: codes are 6 digits and never start with 0 (plan 39: the 🌐 lobby's status line; {name} is the other player's username) | 这不是房间码：房间码是6位数字，第一位不是0 |
+| onlineErrNoRoom | No room has that code. Check it with your friend. (plan 39: the 🌐 lobby's status line; {name} is the other player's username) | 没有这个房间码的房间，请和朋友核对一下。 |
+| onlineErrRateLimited | Too many wrong codes. Wait a few minutes, then try again. (plan 39: the 🌐 lobby's status line; {name} is the other player's username) | 输错的房间码太多了，请等几分钟再试。 |
+| onlineErrBusy | Online races are busy right now. Try again in a minute. (plan 39: the 🌐 lobby's status line; {name} is the other player's username) | 在线比赛现在太忙，请一分钟后再试。 |
+| onlineUpdateYou | {name} has a newer version of the game. Reload this page to update, then join again. (plan 39: the 🌐 lobby's status line; {name} is the other player's username) | {name} 的游戏版本更新。请刷新本页面更新，然后重新加入。 |
+| onlineUpdateThem | {name} needs to update: ask them to reload the page, then join again. (plan 39: the 🌐 lobby's status line; {name} is the other player's username) | {name} 需要更新：请对方刷新页面，然后重新加入。 |
+| onlineDeclinedGuest | {name} didn't let you in. (plan 39: the 🌐 lobby's status line; {name} is the other player's username) | {name} 没有让你进来。 |
+| onlineShareText | Race me in Flappy Poop: code {code} (plan 39, 1.6c: the share sheet's text from the host's Share button, followed by the game's link; {code} is the room code grouped, 482 913) | 来 Flappy Poop 和我比赛：房间码 {code} |
+| onlineLeftGuest | {name} left the room. (plan 39, 1.6c: the guest's status line when the host left; {name} is the host's username) | {name} 离开了房间。 |
+| onlineRoomClosed | The room closed. Ask your friend for a new code. (plan 39, 1.6c: the guest's status line when the room ran out or closed) | 房间已关闭。请向朋友要一个新的房间码。 |
+| onlineUpdateBoth | Your games don't match. Both of you reload the page, then join again. (plan 39, 1.6c: the same app version with different race rules, so both reload) | 你们的游戏版本不一致。请双方都刷新页面，然后重新加入。 |
+| onlineRetry | Try again (plan 39, 1.6c: the button under a refused online sign-in) | 重试 |
 | versusUnreadyHint | Tap again to un-ready | 再点一次可取消准备 |
 
 ### aboutCredits (English)

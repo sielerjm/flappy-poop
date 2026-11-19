@@ -120,7 +120,7 @@ import { loadLocal, saveLocal, ensureId, recordScore, mergeBoardBests, newId, TO
 import { createRunStats, stubRow } from '../runStats.js';
 import { VERSION as APP_VERSION } from '../logic.js';
 import { browserStorage, pageStorage, createJsonStore } from '../store.js';
-import { createOnlineNet } from '../onlineNet.js';
+import { createOnlineNet, onlineProjectConfig } from '../onlineNet.js';
 import { createOnlineAccount } from '../onlineAccount.js';
 import { runDeltas, evaluate, bestFacts, levelCloseShave, winsInWindow, daysBetween, nextDrawStreak, FOUR_OF_A_KIND, EDU_ACHIEVEMENTS, eduRunFacts } from '../achievements.js';
 import { unlock, attachGame, setMuted, isMuted, sfx } from '../sound.js';
@@ -1839,7 +1839,7 @@ export class Play extends Phaser.Scene {
    * play, so a device that was never online loads no client.
    */
   onlineSessionHeld() {
-    const key = LEADERBOARD.onlineSessionKey;
+    const key = this.onlineConfig().onlineSessionKey;
     const has = (s) => {
       try {
         return Boolean(s?.getItem(key));
@@ -1857,8 +1857,8 @@ export class Play extends Phaser.Scene {
    */
   onlineAccount() {
     if (this.onlineAccountRef) return this.onlineAccountRef;
-    this.onlineNet ??= createOnlineNet();
-    const trustStore = createJsonStore(browserStorage(), LEADERBOARD.onlineTrustKey, (v) => (typeof v === 'boolean' ? v : null));
+    this.onlineNet ??= createOnlineNet({ config: this.onlineConfig() });
+    const trustStore = createJsonStore(browserStorage(), this.onlineConfig().onlineTrustKey, (v) => (typeof v === 'boolean' ? v : null));
     this.onlineAccountRef = createOnlineAccount({
       net: this.onlineNet,
       getSave: () => this.save,
@@ -1877,6 +1877,34 @@ export class Play extends Phaser.Scene {
       storageBlocked: () => browserStorage() === pageStorage(),
     });
     return this.onlineAccountRef;
+  }
+
+  /**
+   * The project online play talks to, once per page (plan 39, item 38): the live one, or on a dev host
+   * the test project this browser holds (`?onlinetest=<code>`, from tools/online_test_link.mjs; `off`
+   * forgets it). The parameter is taken out of the address once read.
+   */
+  onlineConfig() {
+    if (this.onlineConfigRef) return this.onlineConfigRef.config;
+    const loc = globalThis.location;
+    const r = onlineProjectConfig({ search: loc?.search, hostname: loc?.hostname, optIn: globalThis.__flappyDebug === true, storage: browserStorage() });
+    if (r.param) {
+      try {
+        const url = new URL(loc.href);
+        url.searchParams.delete('onlinetest');
+        globalThis.history?.replaceState?.(globalThis.history.state, '', url.href);
+      } catch {
+        /* the address keeps it: harmless, it is read the same way next time */
+      }
+    }
+    this.onlineConfigRef = r;
+    return r.config;
+  }
+
+  /** Online play is on the test project (a dev host, item 38): the 🌐 title carries 🧪. */
+  onlineTestProject() {
+    this.onlineConfig();
+    return this.onlineConfigRef.test;
   }
 
   /** Clear / a Load of another player (the save panel): unlink this device online, then forget its session. */
@@ -1994,11 +2022,11 @@ export class Play extends Phaser.Scene {
   }
 
   /**
-   * The 👥 toggle is offered outside a match and test mode, for now only where two halves fit the
-   * window (splitFits; plan 39, 1.6c offers it on phones too, where launch opens the window instead).
+   * The 👥 toggle is offered outside a match and test mode, phones included (plan 39, 1.6c, D2): where
+   * two halves fit (splitFits) a 👥 start runs the split screen, elsewhere it opens the 🌐 window.
    */
   versusOffered() {
-    return !this.match && !this.isTestMode() && this.splitFits();
+    return !this.match && !this.isTestMode();
   }
 
   /** Two halves fit the window (versusAvailable): a 👥 start can run the split-screen Versus scene here. */
@@ -2008,8 +2036,8 @@ export class Play extends Phaser.Scene {
 
   /**
    * The tournament window over this scene, no Versus behind it (plan 39, 1.6b): a 👥 start where two
-   * halves do not fit. Its ✕ closes back to this ready screen. Not reachable until 1.6c offers 👥 there
-   * (versusOffered), with 🌐 locked on, since a local race needs the split screen.
+   * halves do not fit (a phone). It opens on the 🌐 views with 🌐 locked on (1.6c), since a local race
+   * needs the split screen; its ✕ closes back to this ready screen.
    */
   openVersusWindow() {
     openTournamentPanel({ game: this.game, locale: this.locale, play: this });

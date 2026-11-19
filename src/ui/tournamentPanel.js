@@ -19,15 +19,25 @@
 // tournaments stay on this device. Abandon saves nothing and goes back to the lobby.
 // A controller walks the panel's buttons (tournamentPadAction, from Play.onPadAction): the d-pad
 // moves a gold ring (focusNearest on the buttons' rects, else list order), A presses, B is Esc.
+// 🌐 online (plan 39, 1.6c; Previews A and B, items 36 and 37): over a running Versus the lobby has
+// a 🌐 row, off, that swaps the panel to the online views; over Play (no Versus: two halves do not
+// fit, a phone) the panel opens on them with 🌐 locked on, since a local race needs the split screen.
+// Entering 🌐 pre-warms the transport, then signs in and links (src/onlineAccount.js, its screens in
+// onlineAccountViews.js); the online home and the room are src/onlineLobby.js, drawn by
+// onlineLobbyViews.js and polled on a timer while 🌐 is on. ✕ inside an online view goes back to the
+// online home, a second ✕ leaves; leaving 🌐 (off, ✕, any close) leaves the room and ends online play.
 
-import { TUNING as T } from '../config.js';
+import { FIELD, TUNING as T } from '../config.js';
 import { t } from '../i18n.js';
-import { createRng, focusNearest, focusStep } from '../logic.js';
+import { createRng, fieldWidth, focusNearest, focusStep } from '../logic.js';
+import { createOnlineLobby } from '../onlineLobby.js';
 import { createMatch } from '../versus.js';
 import { createTournament, nextMatch, recordResult, matchPlayers, placings, claimFromCode, claimHost, tournamentPayload, postable, seedSlots, canReseed, reseed, reshuffle } from '../tournament.js';
 import { ensureId, newId } from '../save.js';
 import { rollGuestName } from '../tournamentNames.js';
 import { panelFrameCss } from './panelFrame.js';
+import { accountBody, accountCss, accountNotes, createAccountState, devicesButton, enterOnline, h as viewH, pairCodeLeft } from './onlineAccountViews.js';
+import { lobbyBody, lobbyCss, lobbyMessage, lobbyTick, netSwitch } from './onlineLobbyViews.js';
 
 const PANEL_ID = 'tournament-panel';
 const REGISTRY_KEY = 'tournament';
@@ -79,7 +89,10 @@ ${panelFrameCss(PANEL_ID, { width: 560 })}
 #${PANEL_ID} .help p { margin: 0 0 10px; font-size: 16px; line-height: 1.4; }
 #${PANEL_ID} .status { min-height: 1.4em; margin: 10px 0 0; font-size: 14px; color: #c9b8dc; }
 #${PANEL_ID} .status.error { color: #ff8da8; }
-`;
+${accountCss(PANEL_ID)}${lobbyCss(PANEL_ID)}`;
+
+/** How often the 🌐 lobby reads what the transport received (a DOM panel, not a frame). */
+const ONLINE_POLL_MS = 200;
 
 let dom = null;
 let ctx = null; // { game, locale, play } while open
@@ -92,6 +105,9 @@ let view = null; // 'help' | 'peek' while one of those shows, else null (lobby /
 let saving = false; // the finished tournament's first sync is running
 let padId = null; // the id of the button under the controller's ring, or null (no ring)
 let drag = null; // a seed being dragged: { from, row, pointerId, over, move, up }
+// 🌐 while the panel is open outside a tournament: { on, forced, st (the sign-in side's view state),
+// account, net, lobby (once linked), poll, ticks (the poll's count, for the 1 s countdown) }
+let online = null;
 
 function h(tag, attrs = {}, ...children) {
   const el = document.createElement(tag);
@@ -120,8 +136,10 @@ function build() {
   help.addEventListener('click', () => showHelp());
   root.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') onClose();
+    else keypadKey(e);
     e.stopPropagation();
   });
+  root.addEventListener('paste', (e) => keypadPaste(e));
   // A touch or a mouse press hides the controller's ring (it comes back with the next d-pad press).
   root.addEventListener('pointerdown', () => setPad(null));
   dom = { root, card, close, help, title, body, status };
@@ -209,6 +227,10 @@ function holdFocus() {
 
 function renderLobby() {
   view = null;
+  if (online?.on) {
+    renderOnline();
+    return;
+  }
   const { minPlayers, maxPlayers } = T.tournament;
   const minus = h('button', { type: 'button', class: 'outline', id: 'tour-minus', 'aria-label': '−' }, '−');
   const plus = h('button', { type: 'button', class: 'outline', id: 'tour-plus', 'aria-label': '+' }, '+');
@@ -223,6 +245,7 @@ function renderLobby() {
   show(
     tr('tournamentTitle'),
     { close: true, help: true },
+    ...(online ? [netSwitch({ tr }, online, toggleOnline)] : []),
     h('div', { class: 'count' }, tr('tournamentPlayers'), minus, h('b', { id: 'tour-count' }, String(players.length)), plus),
     ...rows,
     h('div', { class: 'actions' }, start),
@@ -705,6 +728,198 @@ export function tournamentPadAction(action) {
 }
 
 // ---------------------------------------------------------------------------
+// 🌐 online (plan 39, 1.6c)
+
+/** What the sign-in screens need from the panel (onlineAccountViews.js's `ui`). */
+function accountUi() {
+  return {
+    tr,
+    rerender: () => renderLobby(),
+    setStatus,
+    now: () => Date.now(),
+    confirmMs: T.saveClearConfirmMs,
+    onLinked: (r) => startLobby(r),
+  };
+}
+
+/** What the lobby screens need from the panel (onlineLobbyViews.js's `ui`). */
+function lobbyUi() {
+  const aui = accountUi();
+  return {
+    ...aui,
+    me: online?.st.name ?? '',
+    homeExtras: () => ({ notes: accountNotes(aui, online.st), devices: devicesButton(aui, online.st, online.account) }),
+    share: (text, code) => shareCode(text, code),
+  };
+}
+
+/**
+ * Share (with the share sheet's text) or Copy (null): both inside the tap, as iOS needs. A share
+ * that cannot open copies instead; a refusal says nothing (the code is on screen either way).
+ */
+function shareCode(text, code) {
+  const nav = globalThis.navigator;
+  if (text && typeof nav?.share === 'function') {
+    Promise.resolve()
+      .then(() => nav.share({ text }))
+      .catch(() => {});
+    return;
+  }
+  const clip = nav?.clipboard;
+  if (clip && typeof clip.writeText === 'function') {
+    clip.writeText(code).then(
+      () => online && setStatus(tr('onlineCopied'), 'ok'),
+      () => {},
+    );
+  }
+}
+
+function renderOnline() {
+  const { st } = online;
+  const title = `${tr('onlineTitle')}${ctx.play?.onlineTestProject?.() ? ' 🧪' : ''}`; // 🧪: a dev host on the test project (item 38)
+  const sw = netSwitch({ tr }, online, toggleOnline);
+  if (st.view === 'home' && online.lobby) {
+    show(title, { close: true }, sw, ...lobbyBody(lobbyUi(), online.lobby));
+    return;
+  }
+  if (st.view === 'failed' || st.view === 'left' || (st.view === 'home' && !online.lobby)) {
+    const retry = h('button', { type: 'button', id: 'tour-retry', 'data-primary': '' }, tr('onlineRetry'));
+    retry.addEventListener('click', () => startOnline());
+    show(title, { close: true }, sw, h('div', { class: 'actions' }, retry));
+    return;
+  }
+  show(title, { close: true }, sw, ...accountBody(accountUi(), st, online.account, () => {
+    st.view = 'home';
+    setStatus('');
+    renderLobby();
+  }));
+}
+
+/** Entering 🌐: pre-warm the transport (item 16), then sign in and link, or ask for a name first. */
+function startOnline() {
+  const o = online;
+  if (!o) return;
+  o.account = ctx.play?.onlineAccount?.() ?? null;
+  o.net = ctx.play?.onlineNet ?? null;
+  if (!o.account || !o.net) {
+    o.st.view = 'failed';
+    renderLobby();
+    setStatus(tr('onlineErrGeneric'), 'error');
+    return;
+  }
+  o.net.warm?.().catch?.(() => {});
+  enterOnline(accountUi(), o.st, o.account).catch(() => {
+    if (online !== o) return;
+    o.st.view = 'failed';
+    renderLobby();
+    setStatus(tr('onlineErrGeneric'), 'error');
+  });
+}
+
+/** Linked: the lobby for this player, polled while 🌐 is on. */
+function startLobby(r) {
+  const o = online;
+  if (!o || !o.net) return;
+  o.lobby ??= createOnlineLobby({ net: o.net, name: r.name, width: fieldWidth(globalThis.innerWidth ?? 720, globalThis.innerHeight ?? 1280, FIELD) });
+  if (o.poll === null) o.poll = ctx.timers.setInterval(() => pollOnline(o), ONLINE_POLL_MS);
+  renderLobby();
+}
+
+function pollOnline(o) {
+  if (online !== o || !o.lobby || !ctx) return;
+  o.ticks += 1;
+  const changed = o.lobby.poll();
+  if (!o.on || view) return;
+  if (changed && o.st.view === 'home') {
+    renderLobby();
+    const m = lobbyMessage(lobbyUi(), o.lobby);
+    setStatus(m?.text ?? '', m?.kind ?? '');
+  } else if (o.ticks % Math.round(1000 / ONLINE_POLL_MS) === 0) {
+    if (o.st.view === 'home') lobbyTick({ tr }, o.lobby);
+    else if (o.st.view === 'paircode') {
+      const el = globalThis.document?.getElementById?.('tour-pair-ttl');
+      if (el) el.textContent = pairCodeLeft(accountUi(), o.st);
+    }
+  }
+}
+
+/** Leaving 🌐 (the switch off, any close): the room left, the poll stopped, the transport closed. */
+function stopOnline() {
+  const o = online;
+  if (!o) return;
+  if (o.poll !== null) ctx?.timers?.clearInterval(o.poll);
+  o.poll = null;
+  const lobby = o.lobby;
+  o.lobby = null;
+  Promise.resolve(lobby?.leave())
+    .catch(() => {})
+    .finally(() => o.net?.close?.());
+  o.st = createAccountState();
+}
+
+function toggleOnline(on) {
+  if (!online || online.forced) return;
+  setStatus('');
+  if (on) {
+    online.on = true;
+    startOnline();
+    return;
+  }
+  stopOnline();
+  online.on = false;
+  renderLobby();
+}
+
+/**
+ * ✕ inside 🌐 (choice 10): a sub-view goes back to the online home (a room is left), and true; on the
+ * online home itself false, so the caller leaves as from the local lobby.
+ */
+function onlineBack() {
+  const { st, lobby } = online;
+  if (st.view === 'devices' || st.view === 'paircode') {
+    st.view = 'home';
+    setStatus('');
+    renderLobby();
+    return true;
+  }
+  if (st.view !== 'home' || !lobby || lobby.state.screen === 'home') return false;
+  const done = lobby.state.screen === 'join' ? lobby.back() : lobby.leave();
+  Promise.resolve(done).then(() => {
+    if (online?.lobby !== lobby) return;
+    setStatus('');
+    renderLobby();
+  });
+  return true;
+}
+
+/** The game's own keypad from a keyboard (choice 5): digits, Backspace and Enter press its keys. */
+function keypadKey(e) {
+  if (!online?.on || !globalThis.document?.getElementById?.('tour-keys')) return;
+  if (e.target?.tagName === 'INPUT') return;
+  const id = /^[0-9]$/.test(e.key) ? `tour-key-${e.key}` : e.key === 'Backspace' ? 'tour-key-back' : e.key === 'Enter' ? 'tour-key-go' : null;
+  const key = id && globalThis.document.getElementById(id);
+  if (!key || key.disabled) return;
+  e.preventDefault?.();
+  return key.click();
+}
+
+/** A pasted code into the keypad shown (the room code or the pairing code): its digits, up to six. */
+function keypadPaste(e) {
+  if (!online?.on || !globalThis.document?.getElementById?.('tour-keys')) return;
+  const raw = e.clipboardData?.getData?.('text') ?? '';
+  const digits = String(raw)
+    .replace(/[０-９]/g, (d) => String.fromCharCode(d.charCodeAt(0) - 0xfee0))
+    .replace(/\D/g, '')
+    .slice(0, 6);
+  if (!digits) return;
+  e.preventDefault?.();
+  const target = online.st.view === 'home' && online.lobby ? online.lobby.state : online.st;
+  target.typed = digits;
+  setStatus('');
+  renderLobby();
+}
+
+// ---------------------------------------------------------------------------
 
 /**
  * Esc / ✕ / the pad's B: the help card and the peek close back; a paste field closes; the lobby
@@ -728,6 +943,11 @@ function onClose() {
     return;
   }
   if (tournamentState(ctx?.game)) return;
+  if (online?.on && onlineBack()) return;
+  if (online?.forced) {
+    closeTournamentPanel(); // over Play (a phone): back to its ready screen, 👥 still on
+    return;
+  }
   const vs = versus();
   closeTournamentPanel();
   vs?.leave();
@@ -763,6 +983,12 @@ export function openTournamentPanel(options) {
   setStatus('');
   pasting = -1;
   view = options.view === 'help' || options.view === 'peek' ? options.view : null;
+  ctx.timers = options.timers ?? globalThis;
+  if (!online && !tournamentState(ctx.game) && !view) {
+    const forced = !versus(ctx.game); // over Play: no split screen to race on here
+    online = { on: forced, forced, st: createAccountState(), account: null, net: null, lobby: null, poll: null, ticks: 0 };
+    if (forced) startOnline();
+  }
   if (!tournamentState(ctx.game) && players.length < T.tournament.minPlayers) {
     players = [];
     while (players.length < T.tournament.minPlayers) players.push(newGuest());
@@ -776,6 +1002,8 @@ export function openTournamentPanel(options) {
 export function closeTournamentPanel() {
   if (!dom || dom.root.hidden) return;
   endDrag();
+  stopOnline();
+  online = null;
   dom.root.hidden = true;
   if (document.activeElement && dom.root.contains(document.activeElement)) document.activeElement.blur();
   setGameKeyboard(true);

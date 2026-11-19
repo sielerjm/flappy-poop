@@ -26,6 +26,7 @@
 
 import { LEADERBOARD, TUNING } from './config.js';
 import { browserStorage, pageStorage } from './store.js';
+import { debugHandleAllowed } from './logic.js';
 import { loadSupabase } from './supabaseLoader.js';
 import {
   SERVER_EVENTS,
@@ -68,6 +69,69 @@ const SERVER_ERRORS = new Set(['not signed in', 'not linked', 'not trusted', 'ba
 
 const REFUSED = /unauthorized|permission/i; // a policy said no: at join ('Unauthorized: …') or at a token refresh
 const CAPPED = /too many|rate limit/i; // 'Too many messages per second', 'Client presence rate limit exceeded'
+
+// --- the test project on a dev host (item 38) ---------------------------------------------------
+
+/** The address parameter that sets (a code) or forgets ('off') this browser's test project. */
+export const DEV_PROJECT_PARAM = 'onlinetest';
+/** Where this browser keeps it: { url, key }, set by Michael for the two-phone checks, never in the repo. */
+export const DEV_PROJECT_KEY = 'flappyPoop.onlineTestProject';
+
+const PROJECT = /^https:\/\/[a-z0-9-]+\.supabase\.co$/;
+
+/** { url, key } → the URL-safe code `?onlinetest=` carries (tools/online_test_link.mjs prints the link). */
+export function encodeDevProject({ url, key } = {}) {
+  return globalThis.btoa(JSON.stringify({ url, key })).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+/** A code (or the stored JSON's object) → { url, key } of an https *.supabase.co project, else null. */
+export function devProjectFrom(raw) {
+  let v = raw;
+  if (typeof v === 'string') {
+    try {
+      v = JSON.parse(globalThis.atob(v.replace(/-/g, '+').replace(/_/g, '/')));
+    } catch {
+      return null;
+    }
+  }
+  const url = typeof v?.url === 'string' ? v.url.replace(/\/+$/, '') : '';
+  const key = typeof v?.key === 'string' ? v.key.trim() : '';
+  return PROJECT.test(url) && key ? { url, key } : null;
+}
+
+/**
+ * The project the online client talks to: the live one (`base`), or on a dev host (debugHandleAllowed:
+ * this machine, the LAN, a driver's opt-in) the test project this browser holds. `?onlinetest=<code>`
+ * stores one, `?onlinetest=off` forgets it; `param` says the caller should strip it from the address.
+ * A test project gets its own session and trust keys, so a test session never meets a live one. Never
+ * throws (blocked storage reads as no test project).
+ * → { config, test, param }
+ */
+export function onlineProjectConfig({ search = '', hostname = '', optIn = false, storage = null, base = LEADERBOARD } = {}) {
+  if (!debugHandleAllowed(hostname, optIn)) return { config: base, test: false, param: false };
+  let value = null;
+  try {
+    value = new URLSearchParams(search ?? '').get(DEV_PROJECT_PARAM);
+  } catch {
+    value = null;
+  }
+  let held = null;
+  try {
+    if (value === 'off') storage?.removeItem(DEV_PROJECT_KEY);
+    else if (value) {
+      const p = devProjectFrom(value);
+      if (p) storage?.setItem(DEV_PROJECT_KEY, JSON.stringify(p));
+    }
+    const raw = storage?.getItem(DEV_PROJECT_KEY);
+    held = raw ? devProjectFrom(JSON.parse(raw)) : null;
+  } catch {
+    held = null;
+  }
+  const param = value !== null;
+  if (!held) return { config: base, test: false, param };
+  const config = { ...base, dataApi: `${held.url}/rest/v1`, publishableKey: held.key, onlineSessionKey: `${base.onlineSessionKey}.test`, onlineTrustKey: `${base.onlineTrustKey}.test` };
+  return { config, test: true, param };
+}
 
 /** 'https://<ref>.supabase.co/rest/v1' → 'https://<ref>.supabase.co'; '' when the feature is off. */
 function projectUrl(config) {
