@@ -377,7 +377,9 @@ export const TUNING = {
       countLeadMs: 250, // ms from the host's GO decision to the first count step, so the guest hears the go before its 3 shows
       cancelMarginMs: 600, // ms before GO from which a tap no longer takes a ready back: the take-back has to reach the other side before GO
       readyResendMs: 2000, // ms between repeats of this side's ready mark while it waits in a break (a lost mark must not hold both players)
+      waitOfferMs: 45000, // ms this side waits (ready in a break, or out at the finish) before the race offers Leave or Keep waiting (item 15); Keep waiting starts it over
     },
+    inventoryY0: 268, // px: the purse and bean rows' first centre in an online race, below the opponent's pill (its top 82, bottom 228 with the slow / lost word), not over it
     ghost: {
       maxExtrapolateMs: 1000, // ms past the last message the ghost keeps moving; then it holds until the next one
       smoothMs: 120, // ms a correction (a fart surge, a late flap) is blended out over instead of jumping
@@ -582,6 +584,7 @@ export const LEADERBOARD = {
   eduShareKey: 'flappyPoop.eduShare', // localStorage key for this device's 📚 board sharing (plan 21): whether the player shares their education grades, the round of sharing, and what of this device's record the board already has
   careerKey: 'flappyPoop.career', // localStorage key for this device's lifetime counters and achievements (plan 08): what waits to be sent, the batch in flight, the server's last totals, unlocks and claims
   onlineSessionKey: 'flappyPoop.onlineSession', // localStorage key for this device's anonymous Supabase Auth session (plan 39, 🌐 only): supabase-js keeps it there; a bearer secret, never sent anywhere else nor exported
+  onlineRaceKey: 'flappyPoop.onlineRace', // localStorage key for the room code of the online race this device is in (plan 39, 1.8, item 46): set at the race's hand-off, cleared by Leave; a code still there on the next entry to 🌐 is a race left by a reload, so its room is left first (else the server refuses this device a new room for up to 6 h). '.test' suffix on the test project
   onlineTrustKey: 'flappyPoop.onlineTrust', // localStorage key for whether this device was last seen trusted online (plan 39, 1.6a, M1): true / false, so a demotion while it was away can be told; cleared by Clear, a Load of another player and Remove this device
   streaksKey: 'flappyPoop.streaks', // localStorage key for this device's Singleplayer and Daily Dump day streaks (plan 34): { single, daily }, each { day, streak, best }; never sent, not in the backup
   dailyMaxScore: 10000, // the Daily Dump cap (endless runs); matches daily_scores' CHECK and submit_daily_score() in db/schema.sql

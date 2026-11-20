@@ -983,10 +983,10 @@ export function crashCoins(coins, t) {
  * Where the inventory rows sit (hudInventory): the rows shown stack down from y0 one pitch
  * apart in the order coins, beans, so there is never an empty slot. { coin, bean }: y or null.
  */
-export function inventoryRows({ coins = 0, beans = 0 } = {}, t) {
+export function inventoryRows({ coins = 0, beans = 0 } = {}, t, y0 = null) {
   const h = t.hudInventory;
   const out = { coin: null, bean: null };
-  let y = h.y0;
+  let y = y0 ?? h.y0;
   for (const [key, n] of [['coin', coins], ['bean', beans]]) {
     if (n > 0) {
       out[key] = y;

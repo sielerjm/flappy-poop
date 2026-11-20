@@ -344,3 +344,228 @@ test('Play: awardLevelFirst (the host\'s verdict, later than the line) gives the
   assert.equal(p.match.slots[0].finalFirst, true);
   assert.equal(p.match.slots[0].levelWins, 3);
 });
+
+test('keys and pads in the online race (1.8 playtest): the one local half takes every device (no join screen claims one), so Space, ArrowUp and a pad flap it and a power key fires; split screen still needs the claimed device', () => {
+  const groups = Object.values(T.versus.keys);
+  const flapCodes = groups.map((g) => g.flap[0]);
+  const powerCode = groups.find((g) => g.power?.length).power[0];
+  const run = (otherHalf) => {
+    const did = [];
+    const p = playScene({ player: 1, match: { status: 'playing', slots: [{ device: null }, { device: null }] }, flap: () => did.push('flap'), activatePower: () => did.push('power') });
+    const host = { halfScene: (i) => (i === 0 ? p : otherHalf) };
+    p.versusHost = () => host;
+    for (const code of ['Space', 'ArrowUp', ...flapCodes, powerCode]) p.onVersusKey(code);
+    p.versusInput({ kind: 'pad', index: 2 }, 'flap');
+    return did;
+  };
+  const online = run(null);
+  assert.equal(online.filter((d) => d === 'flap').length, 3 + flapCodes.length, 'Space, ArrowUp, each group\'s flap key and the pad');
+  assert.equal(online.filter((d) => d === 'power').length, 1);
+  assert.deepEqual(run({}), [], 'split screen: nothing claimed, nothing flaps');
+});
+
+// --- 1.8: the wait offer (item 15), the results panel (C4), Rematch | Leave, the pad -------------------
+
+/** A text as the scene draws it, keeping what the tests read. */
+function fakeText() {
+  const o = { text: '', visible: false, color: null, y: 0 };
+  return Object.assign(o, {
+    setText: (v) => ((o.text = v), o),
+    setVisible: (v) => ((o.visible = Boolean(v)), o),
+    setColor: (c) => ((o.color = c), o),
+    setY: (y) => ((o.y = y), o),
+  });
+}
+function fakeButton() {
+  const b = { label: '', visible: false, alpha: 1, pulsing: false };
+  return Object.assign(b, {
+    setText: (v) => ((b.label = v), b),
+    setVisible: (v) => ((b.visible = Boolean(v)), b),
+    setAlpha: (a) => ((b.alpha = a), b),
+    pulse: (on) => ((b.pulsing = Boolean(on)), b),
+  });
+}
+
+/** raceScene plus what create() draws for the wait and the panel, a frame counter and a game clock. */
+function drawnRace(opts) {
+  const k = raceScene(opts);
+  const { s } = k;
+  const loop = { frame: 1, time: 0 };
+  const started = [];
+  Object.assign(s, {
+    game: { loop },
+    add: absorb(),
+    scale: { width: 720, setGameSize: () => {} },
+    cx: 360,
+    plan: { ...s.plan, names: s.plan.names },
+    waitText: fakeText(),
+    offerText: fakeText(),
+    keepButton: fakeButton(),
+    leaveButton: fakeButton(),
+    offerBoxes: { keep: { id: 'keep', x: 230, y: 852, width: 240, height: 88 }, leave: { id: 'leave', x: 490, y: 852, width: 240, height: 88 } },
+  });
+  s.scene.start = (key, data) => started.push([key, data]);
+  return { ...k, loop, started };
+}
+const tap = (box) => ({ x: box.x, y: box.y });
+
+test('the wait (item 15): ready in a break with the other not, a timer counts under the ready lines; after waitOfferMs, "<name> is taking a while" with Keep waiting | Leave', () => {
+  const k = drawnRace();
+  const { s, net, half } = k;
+  inBreak(k);
+  net.clock.now = GO + 20_000;
+  s.onLevelTap(half);
+  s.refreshWait(net.clock.now);
+  assert.equal(s.waitText.visible, true);
+  assert.equal(s.waitText.text, '⏱ 0:00');
+  net.clock.now += 12_400;
+  s.refreshWait(net.clock.now);
+  assert.equal(s.waitText.text, '⏱ 0:12');
+  assert.equal(s.keepButton.visible, false);
+  net.clock.now = GO + 20_000 + R.waitOfferMs;
+  s.refreshWait(net.clock.now);
+  assert.equal(s.offerText.visible && s.keepButton.visible && s.leaveButton.visible, true);
+});
+
+test('Keep waiting hides the offer for another waitOfferMs, and that tap is not a ready tap; Leave leaves the room and starts plain Play', () => {
+  const k = drawnRace();
+  const { s, net, half, lobby, started } = k;
+  inBreak(k);
+  net.clock.now = GO + 20_000;
+  s.onLevelTap(half);
+  s.refreshWait(net.clock.now); // the frame after the tap: the wait starts
+  net.clock.now += R.waitOfferMs;
+  s.refreshWait(net.clock.now);
+  assert.equal(s.keepButton.visible, true);
+  s.onPointer(tap(s.offerBoxes.keep));
+  s.onLevelTap(half); // the same tap, as Play hands it on in the same frame
+  assert.equal(s.isReady(half), true, 'still ready');
+  s.refreshWait(net.clock.now);
+  assert.equal(s.keepButton.visible, false);
+  net.clock.now += R.waitOfferMs - 1;
+  s.refreshWait(net.clock.now);
+  assert.equal(s.keepButton.visible, false);
+  net.clock.now += 1;
+  s.refreshWait(net.clock.now);
+  assert.equal(s.keepButton.visible, true, 'back after another waitOfferMs');
+  k.loop.frame += 1;
+  s.onPointer(tap(s.offerBoxes.leave));
+  assert.ok(lobby.calls.some((c) => c[0] === 'leave'));
+  assert.deepEqual(started.map((x) => x[0]), ['Play']);
+});
+
+test('out at the finish with the other still racing is a wait too; the shop over a break hides the timer and the offer, and its time runs on', () => {
+  const k = drawnRace();
+  const { s, net, half } = k;
+  s.match.slots[0].ended = true;
+  net.clock.now = GO + 30_000;
+  s.refreshWait(net.clock.now);
+  assert.equal(s.waitText.visible, true);
+  net.clock.now += R.waitOfferMs;
+  s.refreshWait(net.clock.now);
+  assert.equal(s.keepButton.visible, true);
+  s.match.slots[0].ended = false;
+  inBreak(k);
+  s.onLevelTap(half);
+  s.refreshWait(net.clock.now);
+  half.shopOpen = true;
+  net.clock.now += R.waitOfferMs;
+  s.refreshWait(net.clock.now);
+  assert.equal(s.waitText.visible || s.keepButton.visible, false, 'nothing over the shop');
+  half.shopOpen = false;
+  s.refreshWait(net.clock.now);
+  assert.equal(s.keepButton.visible, true, 'the wait kept its time');
+});
+
+test('the race over: the results panel a deathToOverMs beat later, from the numbers the outcome came from (copied then, not the live slots)', () => {
+  const k = drawnRace();
+  const { s, timers } = k;
+  Object.assign(s.match.slots[0], { ended: true, score: 31, deaths: 1, levelWins: 2, finalFirst: true });
+  Object.assign(s.match.slots[1], { ended: true, score: 24, deaths: 3, levelWins: 1, finalFirst: false });
+  s.feed.doneSent = () => true;
+  s.checkOver();
+  assert.equal(s.match.status, 'over');
+  assert.equal(s.outcome.winner, 0);
+  s.match.slots[0].score = 0; // Play keeps writing its slot
+  assert.equal(s.finalSlots[0].score, 31);
+  const beat = timers.find((x) => x.ms === T.deathToOverMs);
+  assert.ok(beat, 'scheduled after deathToOverMs');
+  assert.equal(s.result, null);
+  beat.fn();
+  assert.ok(s.result, 'the panel');
+});
+
+/** A scene past the race with its panel parts as stand-ins, opened at game time 0. */
+function overRace(opts) {
+  const k = drawnRace(opts);
+  const { s } = k;
+  s.match.status = 'over';
+  s.result = { boxes: { share: { id: 'share', x: 220, y: 890, width: 240, height: 88 }, home: { id: 'home', x: 500, y: 890, width: 240, height: 88 } }, rematch: fakeButton(), status: fakeText(), openedAt: 0, shown: null };
+  return k;
+}
+
+test('the panel\'s Rematch: after the tap lockout it asks (Rematch ✓, "Waiting for <name>…"), again takes it back; the other asking first is gold and breathes', () => {
+  const k = overRace();
+  const { s, net, loop } = k;
+  s.refreshResult();
+  assert.equal(s.result.rematch.label, 'Rematch');
+  assert.equal(s.result.status.text, '');
+  loop.time = T.retryLockoutMs - 1;
+  s.onPointer(tap(s.result.boxes.share));
+  assert.equal(sentOf(net, 'rematch').length, 0, 'inside the lockout: nothing');
+  loop.time = T.retryLockoutMs;
+  s.onPointer(tap(s.result.boxes.share));
+  assert.deepEqual(sentOf(net, 'rematch').map((m) => m.want), [true]);
+  s.refreshResult();
+  assert.equal(s.result.rematch.label, 'Rematch ✓');
+  assert.equal(s.result.status.text, 'Waiting for Jolly…');
+  s.onPointer(tap(s.result.boxes.share));
+  s.refreshResult();
+  assert.deepEqual(sentOf(net, 'rematch').map((m) => m.want), [true, false]);
+  assert.equal(s.result.rematch.label, 'Rematch');
+  s.receive(peer('rematch', { want: true }, net.clock.now));
+  s.refreshResult();
+  assert.equal(s.result.status.text, 'Jolly wants a rematch');
+  assert.equal(s.result.status.color, '#ffd700');
+  assert.equal(s.result.rematch.pulsing, true);
+});
+
+test('the other player gone after the race (a confirmed room item: the room closed): "<name> left", Rematch greyed and inert; Leave goes home', () => {
+  const k = overRace();
+  const { s, net, loop, lobby, started } = k;
+  s.receive({ kind: 'room', hint: 'left', action: { type: 'left', at: net.clock.now } });
+  s.refreshResult();
+  assert.equal(s.result.status.text, 'Jolly left');
+  assert.equal(s.result.rematch.alpha, 0.4);
+  loop.time = 10_000;
+  s.onPointer(tap(s.result.boxes.share));
+  assert.equal(sentOf(net, 'rematch').length, 0);
+  s.onPointer(tap(s.result.boxes.home));
+  assert.ok(lobby.calls.some((c) => c[0] === 'leave'));
+  assert.deepEqual(started.map((x) => x[0]), ['Play']);
+});
+
+test('a room item mid-race is not "left" (Tier 2 takes a peer leaving mid-race); a playing / finished status still goes to the lobby', () => {
+  const k = drawnRace();
+  const { s, net, lobby } = k;
+  s.receive({ kind: 'room', hint: 'left', action: { type: 'left', at: net.clock.now } });
+  assert.equal(s.peerLeft, false);
+  s.receive({ kind: 'room', hint: 'status', action: { type: 'status', room: { status: 'finished' }, at: net.clock.now } });
+  assert.deepEqual(lobby.calls.at(-1), ['roomItem', 'finished']);
+});
+
+test('the pad on the panel (after the lockout): A is Rematch, B is Leave; nothing before the panel shows', () => {
+  const k = overRace();
+  const { s, net, loop, started } = k;
+  const panel = s.result;
+  s.result = null;
+  s.onPadSelect();
+  s.onPadBack();
+  assert.equal(sentOf(net, 'rematch').length + started.length, 0);
+  s.result = panel;
+  loop.time = T.retryLockoutMs;
+  s.onPadSelect();
+  assert.deepEqual(sentOf(net, 'rematch').map((m) => m.want), [true]);
+  s.onPadBack();
+  assert.deepEqual(started.map((x) => x[0]), ['Play']);
+});

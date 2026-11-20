@@ -220,7 +220,7 @@ export class Play extends Phaser.Scene {
   init(data) {
     this.player = data?.player ?? 1;
     this.match = data?.match ?? null;
-    this.half = this.match ? { fieldW: data.fieldW, fieldX: data.fieldX ?? 0 } : null;
+    this.half = this.match ? { fieldW: data.fieldW, fieldX: data.fieldX ?? 0, inventoryY0: data.inventoryY0 ?? null } : null;
     // The level lengths this half runs on: a tournament race's own table, else the normal one.
     // Every level-boundary helper gets this.tune, never bare T (tests/scenes.test.js checks).
     this.tune = withLevelPipes(T, this.match?.levelPipes);
@@ -3190,7 +3190,9 @@ export class Play extends Phaser.Scene {
       host.onJoinInput?.(device, role);
       return;
     }
-    const i = this.match.slots.findIndex((s) => sameDevice(s.device, device));
+    // A host with one local half (the online race: no join screen claims a device) gives it every
+    // device; split screen routes by the device each half claimed.
+    const i = host.halfScene?.(1) ? this.match.slots.findIndex((s) => sameDevice(s.device, device)) : this.player - 1;
     if (i < 0) return;
     const half = i === this.player - 1 ? this : host.halfScene?.(i);
     if (!half) return;
@@ -3750,7 +3752,7 @@ export class Play extends Phaser.Scene {
   refreshInventory() {
     const coins = this.purseCoins();
     const beans = this.effects.beans();
-    const rows = inventoryRows({ coins, beans }, T);
+    const rows = inventoryRows({ coins, beans }, T, this.half?.inventoryY0);
     for (const [icon, text, y, n] of [[this.coinIcon, this.coinText, rows.coin, coins], [this.beanIcon, this.beanText, rows.bean, beans]]) {
       const show = y != null;
       icon.setVisible(show);

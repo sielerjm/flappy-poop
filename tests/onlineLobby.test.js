@@ -84,7 +84,7 @@ test('create: Connecting while create_room runs, then the code on the host scree
 });
 
 test('create refused: back home with the message (rate limited, busy, offline, anything else generic)', async () => {
-  for (const [error, key] of [['rate limited', 'onlineErrRateLimited'], ['busy', 'onlineErrBusy'], ['offline', 'onlineErrOffline'], ['in a race', 'onlineErrGeneric'], ['not linked', 'onlineErrGeneric']]) {
+  for (const [error, key] of [['rate limited', 'onlineErrRateLimited'], ['busy', 'onlineErrBusy'], ['offline', 'onlineErrOffline'], ['in a race', 'onlineErrInRace'], ['not linked', 'onlineErrGeneric']]) {
     const net = fakeNet({ create_room: { ok: false, error } });
     const lobby = lobbyOn(net);
     await lobby.create();
@@ -180,7 +180,7 @@ test('join: knocking on the host (asked), the channel joined as the guest, the h
 });
 
 test('join refused: the message on the join screen; a wrong code stays to fix, a cap clears it', async () => {
-  for (const [error, key, kept] of [['no room', 'onlineErrNoRoom', true], ['rate limited', 'onlineErrRateLimited', false], ['busy', 'onlineErrBusy', false], ['offline', 'onlineErrOffline', true], ['in a race', 'onlineErrGeneric', false]]) {
+  for (const [error, key, kept] of [['no room', 'onlineErrNoRoom', true], ['rate limited', 'onlineErrRateLimited', false], ['busy', 'onlineErrBusy', false], ['offline', 'onlineErrOffline', true], ['in a race', 'onlineErrInRace', false]]) {
     const net = fakeNet({ join_room: error === 'offline' || error === 'in a race' ? { ok: false, error } : { ok: true, data: { ok: false, error } } });
     const lobby = lobbyOn(net);
     lobby.openJoin();
@@ -502,4 +502,49 @@ test('roomItem (1.7b): the race hands the lobby a confirmed room item; its statu
   g.lobby.roomItem({ kind: 'peer', event: 'go', msg: { level: 2, startAt: 1 } });
   g.lobby.roomItem(null);
   assert.equal(g.lobby.state.room.round, 2);
+});
+
+/** A remembered-race store as the panel builds it (item 46), on a plain object. */
+function memoryOf(code = null) {
+  const m = { code, cleared: 0 };
+  return Object.assign(m, { get: () => m.code, set: (c) => (m.code = c), clear: () => ((m.code = null), (m.cleared += 1)) });
+}
+
+test('a race left behind by a reload (item 46): the new lobby leaves its room first, and Create waits for that leave; the memory is then forgotten', async () => {
+  const net = fakeNet({ create_room: { ok: true, data: room() } });
+  const memory = memoryOf('615204');
+  const lobby = lobbyOn(net, { memory });
+  await lobby.create();
+  assert.deepEqual(rpcs(net).map((c) => [c[1], c[2]]).slice(0, 2), [['leave_room', { p_code: '615204' }], ['create_room', undefined]]);
+  assert.equal(memory.code, null);
+  assert.equal(lobby.state.room.phase, 'open');
+});
+
+test('the remembered leave also comes before a Join, and a refused leave (the room long gone) still forgets it', async () => {
+  const net = fakeNet({ leave_room: { ok: false, error: 'no room' }, join_room: { ok: true, data: { ok: true, code: '730155', status: 'asked', host_name: 'SirFlushALot' } } });
+  const memory = memoryOf('615204');
+  const lobby = lobbyOn(net, { memory });
+  lobby.state.typed = '730155';
+  await lobby.join();
+  assert.deepEqual(rpcs(net).map((c) => c[1]).slice(0, 2), ['leave_room', 'join_room']);
+  assert.equal(memory.code, null);
+});
+
+test('remember() keeps the race\'s room code (the panel calls it at the hand-off); leave() forgets it; nothing remembered, nothing left on entry', async () => {
+  const net = fakeNet({ create_room: { ok: true, data: room() } });
+  const memory = memoryOf();
+  const lobby = lobbyOn(net, { memory });
+  await lobby.create();
+  assert.equal(rpcs(net, 'leave_room').length, 0);
+  lobby.remember();
+  assert.equal(memory.code, '482913');
+  await lobby.leave();
+  assert.equal(memory.code, null);
+});
+
+test("'in a race' (this device still seated in a playing room) has its own message, not the catch-all", async () => {
+  const net = fakeNet({ create_room: { ok: false, error: 'in a race' } });
+  const lobby = lobbyOn(net);
+  await lobby.create();
+  assert.equal(lobby.state.message?.key, 'onlineErrInRace');
 });

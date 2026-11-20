@@ -32,6 +32,7 @@ const ERROR_KEYS = Object.freeze({
   busy: 'onlineErrBusy',
   offline: 'onlineErrOffline',
   timeout: 'onlineErrOffline',
+  'in a race': 'onlineErrInRace',
 });
 const UPDATE_KEYS = Object.freeze({ me: 'onlineUpdateYou', them: 'onlineUpdateThem', both: 'onlineUpdateBoth' });
 /** A join refusal that leaves the typed code to fix (a typo, the network); the caps clear it. */
@@ -70,13 +71,27 @@ function screenOf(room) {
  * @param {() => number} [deps.now] server ms (the transport's clock)
  * @param {(lobby: object) => void} [deps.onBothReady] both players ready (1.7a: start the race)
  */
-export function createOnlineLobby({ net, name, width, mine = { protocol: protocolVersion(), app: VERSION }, now = () => net.serverNow(), onBothReady = null }) {
+export function createOnlineLobby({ net, name, width, mine = { protocol: protocolVersion(), app: VERSION }, now = () => net.serverNow(), onBothReady = null, memory = null }) {
   const state = { screen: 'home', room: roomInit(), typed: '', meReady: false, themReady: false, message: null };
   const pending = new Set();
   let themT = -Infinity; // the newest peer ready's time (server ms) and sequence
   let themSeq = -Infinity;
   let both = false;
   let starting = false; // set_room_status('playing') in flight
+  // Item 46: a race this device left without ending (a reload, a crash) keeps its room 'playing', and
+  // the server refuses a seated device a new room ('in a race', up to 6 h). Its code, remembered at the
+  // hand-off (remember), is left first, and Create / Join wait for that; 2.3's resume replaces this.
+  const stale = memory?.get?.() ?? null;
+  let staleLeave = stale
+    ? Promise.resolve(net.rpc('leave_room', { p_code: stale }))
+        .catch(() => {})
+        .then(() => memory.clear())
+    : null;
+  const staleLeft = async () => {
+    if (!staleLeave) return;
+    await staleLeave;
+    staleLeave = null;
+  };
   let finishing = null; // set_room_status('finished') in flight
   let generation = 0; // bumped by every leave, so a reply that lands after one is dropped
 
@@ -208,6 +223,7 @@ export function createOnlineLobby({ net, name, width, mine = { protocol: protoco
 
   /** Create room (or a new code by itself, with `notice` on the status line). */
   async function create(notice = null) {
+    if (staleLeave) await staleLeft(); // only then: with nothing remembered, Connecting shows at once as before
     if (state.room.phase !== 'idle' && state.room.phase !== 'closed') return;
     state.message = notice;
     step({ type: 'create', at: now() });
@@ -224,6 +240,7 @@ export function createOnlineLobby({ net, name, width, mine = { protocol: protoco
 
   /** Join with code: the typed digits, checked here first (a typo spends none of the counted tries). */
   async function join() {
+    if (staleLeave) await staleLeft(); // only then: with nothing remembered, Connecting shows at once as before
     const code = parseCode(state.typed);
     if (!code) {
       state.message = msg('onlineErrBadCode', 'error');
@@ -324,6 +341,7 @@ export function createOnlineLobby({ net, name, width, mine = { protocol: protoco
 
   /** Cancel / Leave: the room left on the server, the channel closed, home. */
   async function leave() {
+    memory?.clear?.();
     generation += 1;
     const r = state.room;
     const live = r.phase !== 'idle' && r.phase !== 'closed';
@@ -376,6 +394,10 @@ export function createOnlineLobby({ net, name, width, mine = { protocol: protoco
     rematch,
     leave,
     poll,
+    /** The race has this room (the panel's hand-off, item 46): its code kept until a Leave, or left on the next entry. */
+    remember() {
+      if (state.room.code) memory?.set?.(state.room.code);
+    },
     /** A transport item the race hands on (1.7b): a confirmed room item moves the room, anything else nothing. */
     roomItem(item) {
       if (item && item.kind === 'room' && item.action) step(item.action);

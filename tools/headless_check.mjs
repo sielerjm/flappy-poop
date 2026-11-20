@@ -89,6 +89,7 @@ export const SECTIONS = [
   { name: 'error-card', needs: [], about: "the error card (plan 35, 1.1): an error thrown inside a frame on the ready screen shows the card at once, mid-run pauses the run first; the loop stopped under it, Keep playing tapped at once brings it back with the run still paused; the bug form carries the error with no links; a rejection while the loop runs is only kept" },
   { name: 'online-client', needs: [], about: "the online client (plan 39, 0.2): the boot and the sections since ask for nothing of assets/vendor/supabase.js; blocked, loadSupabase() rejects with onlineLoadFailed and no error card shows; unblocked, one same-origin request at the pin gives supabase.createClient, and a second call asks for nothing more" },
   { name: 'resync', needs: [], about: "the resync (plan 35, 1.4), the live board blocked: two online events in a row sync once and the next one after it settles syncs again; a show after a 1 s hide syncs nothing, after a 31 s one it syncs; a restart keeps the one guard and leaves one online listener" },
+  { name: 'online-race', needs: [], about: "the online race (plan 39, 1.7a-1.8) against a scripted guest in the page (its own referee and feed, a 40 ms link; no network): the scene and its Play, Space flapping the one half, the purse under the opponent's pill and a long name fitted to it, the host taking level 1's line, the wait timer and Keep waiting, the shared count and GO, the final line to the guest, one outcome on both, the results panel, Rematch's states and round 2, then Leave from the wait offer back to single player" },
 ];
 
 /** What a section needs: its own list, or (omitted) every section before it. */
@@ -7079,6 +7080,152 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         ok(added.length === 0, added.length ? `page exceptions:\n  ${added.join('\n  ')}` : 'no page exceptions');
       } finally {
         await evaluate(`(delete ${P}.syncLeaderboard, true)`).catch(() => null);
+      }
+    });
+
+    await section('online-race', async () => {
+      // The online race (plan 39, 1.7a-1.8): the real OnlineRace scene and its Play on this page, the other
+      // seat a scripted guest in the page (its own createRaceReferee and createRaceFeed over a 40 ms link
+      // each way, no network), so the referee, the breaks, the end, the results panel and the rematch run
+      // as they would against a phone. A fresh page, the live board blocked.
+      await cdp.send('Network.enable');
+      await cdp.send('Network.setBlockedURLs', { urls: ['*supabase.co*'] });
+      await cdp.send('Emulation.setDeviceMetricsOverride', { width: 720, height: 1280, deviceScaleFactor: 1, mobile: false });
+      await cdp.send('Page.navigate', { url: `${url}/?r=${Date.now()}` });
+      await cdp.send('Page.bringToFront');
+      let sp = null;
+      for (let i = 0; i < 120 && !sp?.enabled; i += 1) {
+        await sleep(500);
+        sp = await splashNow().catch(() => null);
+      }
+      if (sp?.enabled) {
+        await splashKey('keydown', ' ');
+        await splashKey('keyup', ' ');
+      }
+      for (let i = 0; i < 120 && (await playState().catch(() => null)) !== 'ready'; i += 1) await sleep(500);
+      const P = `__flappy.scene.getScene('Play')`;
+      const OR = `__flappy.scene.getScene('OnlineRace')`;
+      const ex0 = exceptions.length;
+      const until = async (expr, ms = 8000) => {
+        const end = Date.now() + ms;
+        while (Date.now() < end) {
+          if (await evaluate(expr)) return true;
+          await sleep(50);
+        }
+        return false;
+      };
+      const setup = await evaluate(`(async () => {
+        const [R, O, C, L] = await Promise.all([import('./src/onlineRace.js'), import('./src/online.js'), import('./src/config.js'), import('./src/logic.js')]);
+        const T = C.TUNING; const LAT = 40; const now = () => Date.now();
+        const q = []; const log = [];
+        const sendA = O.createSender({ sid: 'host1', now }); const sendB = O.createSender({ sid: 'bot1', now });
+        const inboxA = O.createInbox(); const inboxB = O.createInbox();
+        const bot = { feed: null, ref: null, h: null, since: 0, beginAt: null, finalAt: null, hold: false };
+        const toBot = (event, payload) => setTimeout(() => { if (!inboxB.take(event, payload)) return; const item = { kind: 'peer', event, msg: payload, at: payload.t }; bot.feed?.receive(item); bot.ref?.receive(item); }, LAT);
+        const toHost = (event, payload) => setTimeout(() => { if (inboxA.take(event, payload)) q.push({ kind: 'peer', event, msg: payload, at: payload.t }); }, LAT);
+        const sendBot = (event, fields) => { const m = sendB(event, fields); if (!m) return false; if (event !== 'pos' && event !== 'flap') log.push('B> ' + event + ' ' + JSON.stringify(fields)); toHost(event, m.payload); return true; };
+        const net = { serverNow: now, pump() {}, take: () => q.splice(0), peer: () => ({ name: 'JollyPlunger042', width: 720 }), close() { log.push('close'); },
+          send(event, fields) { const m = sendA(event, fields); if (!m) return false; if (event !== 'pos' && event !== 'flap') log.push('A> ' + event + ' ' + JSON.stringify(fields)); toBot(event, m.payload); return true; } };
+        const room = { phase: 'playing', role: 'host', code: '482913', hostName: 'Smoke', guestName: 'JollyPlunger042', seed: 4242, startMs: now() + 3500, round: 1 };
+        bot.reset = (since) => {
+          bot.since = since; bot.beginAt = null; bot.finalAt = null;
+          bot.feed = R.createRaceFeed({ now, send: sendBot, since });
+          bot.ref = R.createRaceReferee({ seat: 'guest', now, send: sendBot, since });
+          bot.h = { state: 'waiting', levelBreak: false, ended: false, won: false, flaps: 0, distance: 0, speed: 0, y: 640, vy: 0, angle: 0, frame: 'poop', alpha: 1, level: 1, pipesPassed: 0, score: 0, deaths: 0, levelWins: 0, finalFirst: false, tapped: false, arrivedAt: 0, t0: 0 };
+        };
+        const lobby = { state: { room }, calls: [], roomItem() {}, remember() {}, finish() { lobby.calls.push('finish'); room.phase = 'finished'; },
+          rematch() { lobby.calls.push('rematch'); setTimeout(() => { Object.assign(room, { phase: 'playing', seed: 777, startMs: now() + 4000, round: room.round + 1 }); bot.reset(room.startMs); }, 60); },
+          leave: async () => { lobby.calls.push('leave'); } };
+        bot.reset(room.startMs);
+        bot.timer = setInterval(() => {
+          const h = bot.h; const ref = bot.ref; const at = now();
+          if (h.state === 'waiting' && at >= bot.since) { h.state = 'playing'; h.t0 = at; h.speed = 300; }
+          if (h.state === 'playing') {
+            h.distance += h.speed * 0.016; h.pipesPassed = Math.floor(h.distance / 300); h.score = h.pipesPassed + h.levelWins * 25;
+            if (h.level === 1 && at - h.t0 >= 2500) { ref.crossed({ level: 1, final: false, distance: h.distance }); h.level = 2; h.state = 'paused'; h.levelBreak = true; h.arrivedAt = at; }
+            else if (h.level === T.levels.lastLevel && at - bot.beginAt >= 1000) { ref.crossed({ level: h.level, final: true, distance: h.distance }); h.state = 'dead'; h.ended = true; h.won = true; bot.finalAt = at; }
+          }
+          if (!bot.hold && h.levelBreak && !h.tapped && at - h.arrivedAt >= T.versus.levelSyncDelayMs + 1000) h.tapped = ref.setReady(h.level, true);
+          ref.tick({ level: h.level, inBreak: h.levelBreak && h.state === 'paused', shopOpen: false });
+          for (const e of ref.drain()) {
+            if (e.type === 'first' && e.mine && !bot.feed.doneSent()) { h.levelWins += 1; h.score += 25; if (e.final) h.finalFirst = true; }
+            if (e.type === 'begin' && h.levelBreak) { h.levelBreak = false; h.state = 'playing'; h.level = T.levels.lastLevel; bot.beginAt = now(); }
+          }
+          bot.feed.tick({ ...h, ended: h.ended && ref.settled(h.level) });
+        }, 16);
+        const plan = R.raceStartPlan(room, { mine: 720, theirs: 720 });
+        globalThis.__race = { net, lobby, bot, log, room, plan, L, T };
+        ${P}.scene.start('OnlineRace', { net, lobby, plan });
+        return true;
+      })()`);
+      try {
+        ok(setup === true && (await until(`${OR}?.match?.status === 'countdown' && __flappy.scene.isActive('Play') && ${P}.match === ${OR}.match`)), `OnlineRace up, Play launched on its match (hostKey ${await evaluate(`${OR}?.match?.hostKey`)})`);
+        ok(await until(`${OR}.match.status === 'playing' && ${P}.state === 'playing'`), 'GO on the server clock: the race runs');
+        // Keys (the 1.8 playtest): no join screen claims the keyboard, so Space is the one half's flap.
+        const flaps0 = await evaluate(`${P}.flapCount`);
+        await cdp.send('Input.dispatchKeyEvent', { type: 'keyDown', code: 'Space', key: ' ', windowsVirtualKeyCode: 32 });
+        await cdp.send('Input.dispatchKeyEvent', { type: 'keyUp', code: 'Space', key: ' ', windowsVirtualKeyCode: 32 });
+        ok(await until(`${P}.flapCount > ${flaps0}`, 1500), `Space flaps the race's half (flapCount ${flaps0} → ${await evaluate(`${P}.flapCount`)})`);
+        const pin = () => evaluate(`(() => { const p = ${P}; p.poop.body.setAllowGravity(false); p.poop.setVelocity(0, 0); p.poop.y = 640; p.graceLeftMs = 1e9; return true; })()`);
+        await pin();
+        // The purse under the pill (Preview D1) and the pill's name fitted to it.
+        const hud = await evaluate(`(() => { const p = ${P}; p.takeCoins(3); p.giveBeans(1); const r = ${OR}; return JSON.stringify({ coin: p.coinIcon.y, bean: p.beanIcon.y, cardBottom: r.hud.card.y + 146, nameRight: r.hud.name.x + r.hud.name.displayWidth, cardRight: r.hud.card.x + r.hud.card.width }); })()`).then(JSON.parse);
+        ok(hud.coin === TT.online.inventoryY0 && hud.bean === TT.online.inventoryY0 + TT.hudInventory.pitch && hud.coin - TT.hudInventory.iconPx / 2 > hud.cardBottom, `the purse starts below the opponent's pill, even at its tallest (${JSON.stringify(hud)})`);
+        ok(hud.nameRight <= hud.cardRight, `"JollyPlunger042" fits inside the pill (its right edge ${Math.round(hud.nameRight)} ≤ ${hud.cardRight})`);
+        await sleep(600);
+        // The host first over level 1's line (the guest crosses 2.5 s after GO); the guest holds its ready.
+        await evaluate(`(__race.bot.hold = true, true)`);
+        const toLine = (last) => evaluate(`(() => { const p = ${P}; const { L, T } = __race; ${last ? 'p.level = T.levels.lastLevel; p.applyLevel();' : ''} const end = L.levelEnd(p.level, T); p.pipes.clear(true, true); p.items.clear(true, true); p.beans.clear(true, true); p.nextGapY = null; p.pipesSpawned = end; p.pipesPassed = end; p.finishSpawned = false; p.spawnFinishLine(); p.finishLine.x = p.poop.x + 60; return true; })()`);
+        await toLine(false);
+        ok(await until(`${P}.levelBreak && ${P}.state === 'paused' && ${P}.level === 2`, 4000), "the host reached level 1's line: its break");
+        ok(await until(`${OR}.match.slots[0].levelWins === 1`, 2000), `the host took level 1 after the grace (${await evaluate(`__race.log.filter((l) => l.includes('first')).join(' | ')`)})`);
+        ok(await until(`${P}.levelHint.visible`, 1500), `after the beat: "${await evaluate(`${P}.levelHint.text`)}"`);
+        await evaluate(`(${P}.handleChrome('tap'), true)`);
+        ok(await until(`${OR}.isReady(${P}) && ${OR}.waitText.visible && /^⏱ 0:0\\d$/.test(${OR}.waitText.text)`, 1500), `ready, the other not: the wait timer shows ("${await evaluate(`${OR}.waitText.text`)}"); no fit line on the break card: ${!(await evaluate(`${OR}.fitText.visible`))}`);
+        await evaluate(`(${OR}.offerAt = Date.now() - 1, true)`);
+        ok(await until(`${OR}.keepButton.visible && ${OR}.leaveButton.visible && ${OR}.offerText.visible`, 1000), `past waitOfferMs: "${await evaluate(`${OR}.offerText.text`)}" with Keep waiting | Leave`);
+        await evaluate(`(() => { const r = ${OR}; const b = r.offerBoxes.keep; r.onPointer({ x: b.x, y: b.y }); r.onLevelTap(${P}); return true; })()`);
+        ok(await until(`!${OR}.keepButton.visible && ${OR}.isReady(${P})`, 1000), 'Keep waiting: the offer goes for another while, and that tap did not take the ready back');
+        await evaluate(`(__race.bot.hold = false, true)`);
+        ok(await until(`${OR}.levelStage === 'count'`, 6000), 'the guest readied: the shared count runs, the wait line gone: ' + !(await evaluate(`${OR}.waitText.visible`)));
+        const go = await evaluate(`${OR}.referee.count()?.startAt`);
+        ok(await until(`!${P}.levelBreak && ${P}.state === 'playing'`, 5000), 'GO: the host left its break');
+        ok(await until(`__race.bot.beginAt !== null`, 1000) && Math.abs((await evaluate('__race.bot.beginAt')) - go) < 50, `the guest began within a frame of the server GO (${(await evaluate('__race.bot.beginAt')) - go} ms)`);
+        await pin();
+        ok(await until(`__race.bot.finalAt !== null`, 3000) && (await until(`__race.log.some((l) => l.startsWith('A> first') && l.includes('"seat":"guest"'))`, 1500)), 'the guest crossed the final line first and the host gave it the line');
+        await sleep(600);
+        await toLine(true);
+        ok(await until(`${OR}.match.status === 'over'`, 5000), 'both out: the race is over');
+        const end = await evaluate(`(async () => { const r = ${OR}; const t = await import('./src/tournament.js'); const bot = t.raceOutcome([{ ...__race.bot.h }, __race.bot.feed.slot()]); return JSON.stringify({ outcome: r.outcome, bot, finalFirst: [r.finalSlots[0].finalFirst, r.finalSlots[1].finalFirst], finish: __race.lobby.calls }); })()`).then(JSON.parse);
+        ok(end.bot.winner === 1 - end.outcome.winner && end.bot.by === end.outcome.by && end.finalFirst[1] === true && end.finish.includes('finish'), `one outcome on both, finalFirst the guest's, the room finished (${JSON.stringify(end)})`);
+        // The results panel (Preview D4), Rematch's states, the rematch into round 2.
+        ok(await until(`Boolean(${OR}.result)`, 2500), 'the results panel, a beat after the end');
+        await sleep(TT.retryLockoutMs + 50);
+        const panelTap = (which) => evaluate(`(() => { const r = ${OR}; const b = r.result.boxes.${which}; r.onPointer({ x: b.x, y: b.y }); return true; })()`);
+        await panelTap('share');
+        ok(await until(`${OR}.result.status.text === 'Waiting for JollyPlunger042…' && ${OR}.result.rematch.getText() === 'Rematch ✓'`, 1000), `Rematch: "${await evaluate(`${OR}.result.rematch.getText()`)}", "${await evaluate(`${OR}.result.status.text`)}"`);
+        await panelTap('share');
+        ok(await until(`${OR}.result.status.text === '' && ${OR}.result.rematch.getText() === 'Rematch'`, 1000), 'a second tap takes it back');
+        await evaluate(`(__race.bot.ref.wantRematch(true), true)`);
+        ok(await until(`${OR}.result.status.text === 'JollyPlunger042 wants a rematch'`, 1500), 'the guest asked: "JollyPlunger042 wants a rematch"');
+        await panelTap('share');
+        ok(await until(`__race.lobby.calls.includes('rematch')`, 2000), "both asked: the host's app asked for the next round");
+        ok(await until(`${OR}.match.seed === 777 && ${OR}.match.hostKey === 'OnlineRace' && ${P}.match === ${OR}.match && !${OR}.result`, 4000), 'round 2 on the new seed: hostKey again, no panel');
+        ok(await until(`${OR}.match.status === 'playing' && ${P}.state === 'playing'`, 6000), 'round 2 GO: the race runs');
+        // Leave from the wait offer: back to single player, the room left.
+        await pin();
+        await evaluate(`(__race.bot.hold = true, true)`);
+        await toLine(false);
+        await until(`${P}.levelBreak && ${P}.levelHint.visible`, 4000);
+        await evaluate(`(${P}.handleChrome('tap'), true)`);
+        await until(`${OR}.waitText.visible`, 1500);
+        await evaluate(`(${OR}.offerAt = Date.now() - 1, true)`);
+        await until(`${OR}.leaveButton.visible`, 1000);
+        await evaluate(`(() => { const r = ${OR}; const b = r.offerBoxes.leave; r.onPointer({ x: b.x, y: b.y }); return true; })()`);
+        ok(await until(`!__flappy.scene.isActive('OnlineRace') && __flappy.scene.isActive('Play') && ${P}.match === null && __race.lobby.calls.includes('leave')`, 3000), `Leave: back to single player, the room left (${JSON.stringify(await evaluate(`__race.lobby.calls`))})`);
+        ok(exceptions.length === ex0, exceptions.length > ex0 ? `page exceptions: ${exceptions.slice(ex0).join(' | ')}` : 'no page exceptions');
+      } finally {
+        await evaluate(`(clearInterval(globalThis.__race?.bot?.timer), true)`).catch(() => null);
       }
     });
 

@@ -27,7 +27,8 @@
 // onlineLobbyViews.js and polled on a timer while 🌐 is on. ✕ inside an online view goes back to the
 // online home, a second ✕ leaves; leaving 🌐 (off, ✕, any close) leaves the room and ends online play.
 
-import { FIELD, TUNING as T } from '../config.js';
+import { FIELD, LEADERBOARD, TUNING as T } from '../config.js';
+import { browserStorage } from '../store.js';
 import { t } from '../i18n.js';
 import { createRng, fieldWidth, focusNearest, focusStep } from '../logic.js';
 import { createOnlineLobby } from '../onlineLobby.js';
@@ -823,7 +824,7 @@ function startLobby(r) {
   const o = online;
   if (!o || !o.net) return;
   // Both ready: the host starts the race (set_room_status), and a room in 'playing' hands off (1.7a).
-  o.lobby ??= createOnlineLobby({ net: o.net, name: r.name, width: myWidth(), onBothReady: (lobby) => lobby.start() });
+  o.lobby ??= createOnlineLobby({ net: o.net, name: r.name, width: myWidth(), onBothReady: (lobby) => lobby.start(), memory: raceMemory() });
   if (o.poll === null) o.poll = ctx.timers.setInterval(() => pollOnline(o), ONLINE_POLL_MS);
   renderLobby();
 }
@@ -847,6 +848,35 @@ function pollOnline(o) {
   }
 }
 
+/**
+ * Item 46: the room code of the race this device is in, in localStorage (per project: the test
+ * project's key has '.test'), so a reload mid-race can leave that room on the next entry to 🌐.
+ * Blocked storage remembers nothing (the server's 6 h limit then stands).
+ */
+function raceMemory() {
+  const key = LEADERBOARD.onlineRaceKey + (ctx?.play?.onlineTestProject?.() ? '.test' : '');
+  const store = () => browserStorage();
+  return {
+    get() {
+      try {
+        return store()?.getItem(key) ?? null;
+      } catch {
+        return null;
+      }
+    },
+    set(code) {
+      try {
+        store()?.setItem(key, String(code));
+      } catch {}
+    },
+    clear() {
+      try {
+        store()?.removeItem(key);
+      } catch {}
+    },
+  };
+}
+
 /** This device's field width (presence, item 14). */
 function myWidth() {
   return fieldWidth(globalThis.innerWidth ?? 720, globalThis.innerHeight ?? 1280, FIELD);
@@ -863,11 +893,22 @@ function handOffRace(o) {
   const play = ctx?.play;
   if (!plan || !play?.scene) return false;
   const { lobby, net } = o;
+  lobby.remember?.(); // item 46: a reload from here on leaves this room on the next entry
   if (o.poll !== null) ctx.timers.clearInterval(o.poll);
   o.poll = null;
   o.lobby = null; // closing must not leave the room or close the transport: the race has them
   o.net = null;
+  // Over a running Versus (wide screens: 👥 starts split screen, 🌐 is switched on in its lobby):
+  // its match left and both its scenes stopped, so only the race draws. Not Versus.leave(): that
+  // starts a plain Play, which the race is about to launch itself. Read before the close clears ctx.
+  const game = ctx.game;
+  const split = versus(game);
   closeTournamentPanel();
+  if (split) {
+    if (split.match) split.match.status = 'left';
+    game.scene.stop('PlayB');
+    game.scene.stop('Versus');
+  }
   play.scene.start(ONLINE_HOST_KEY, { net, lobby, plan });
   return true;
 }

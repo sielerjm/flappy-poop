@@ -643,8 +643,15 @@ The winners take the podium 🥇 🥈 (and 🥉 from 3 players). With 3 or more 
 | onlineHudSlow | slow connection (plan 39, 1.7a: under the opponent's name in the online race's HUD when their messages arrive late; lower case, a small label) | 网络较慢 |
 | onlineHudLost | reconnecting… (plan 39, 1.7a: under the opponent's name when their messages stopped arriving) | 正在重新连接… |
 | onlineFitting | Fitting the screen to {name}'s (plan 39, 1.7a, item 14: under the online race's countdown when the field narrows to the other player's smaller screen; {name} is their username) | 正在按{name}的屏幕调整画面 |
+| onlineWaitLong | {name} is taking a while (plan 39, 1.8, item 15: after 45 s of waiting on the other player, ready in a level break or out at the finish, above Keep waiting \| Leave; {name} is their username) | {name} 让你久等了 |
+| onlineKeepWaiting | Keep waiting (plan 39, 1.8: the button that hides the Leave offer for another 45 s) | 继续等 |
+| onlineRematchAsked | {name} wants a rematch (plan 39, 1.8: the online results panel's line when the other player tapped Rematch first) | {name} 想再来一局 |
+| onlinePeerLeft | {name} left (plan 39, 1.8: the online results panel's line once the other player left; Rematch is greyed) | {name} 已离开 |
+| onlineYouWin | YOU WIN! (plan 39, 1.6d / 1.8: the online results panel's headline on the winner's phone; capitals like versusWins) | 你赢了！ |
+| onlineRematch | Rematch (plan 39, 1.6d / 1.8: the online results panel's button to race the same friend again; "Rematch ✓" once tapped) | 再来一局 |
 | onlineErrBadCode | That's not a room code: codes are 6 digits and never start with 0 (plan 39: the 🌐 lobby's status line; {name} is the other player's username) | 这不是房间码：房间码是6位数字，第一位不是0 |
 | onlineErrNoRoom | No room has that code. Check it with your friend. (plan 39: the 🌐 lobby's status line; {name} is the other player's username) | 没有这个房间码的房间，请和朋友核对一下。 |
+| onlineErrInRace | This device is still in another race. Leave it there first, then try again. (plan 39, 1.8, item 46: Create or Join refused because this device is still seated in a race that never ended, for example in another tab) | 这台设备还在另一场比赛中，请先在那里离开，再试一次。 |
 | onlineDevOnLive | (Dev: this device is on the live project. A 🧪 test device cannot see its rooms.) (plan 39, item 43: added after onlineErrNoRoom on a developer's own machine only; players never see it) | （开发：本设备连接的是正式项目，🧪 测试设备看不到这里的房间。） |
 | onlineDevOnTest | (Dev: this device is on the 🧪 test project. The other device must be on it too.) (plan 39, item 43: as onlineDevOnLive) | （开发：本设备连接的是 🧪 测试项目，另一台设备也必须连接测试项目。） |
 | onlineErrRateLimited | Too many wrong codes. Wait a few minutes, then try again. (plan 39: the 🌐 lobby's status line; {name} is the other player's username) | 输错的房间码太多了，请等几分钟再试。 |

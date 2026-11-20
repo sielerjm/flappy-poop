@@ -404,6 +404,12 @@ test('crashCoins: a two-player crash keeps 90 % of the coins, rounded down', () 
   assert.equal(crashCoins(-3, T), 0);
 });
 
+test('inventoryRows with a first row of its own (plan 39, 1.8: the online race starts the purse below the opponent\'s pill)', () => {
+  assert.deepEqual(inventoryRows({ coins: 3, beans: 2 }, T, T.online.inventoryY0), { coin: T.online.inventoryY0, bean: T.online.inventoryY0 + T.hudInventory.pitch });
+  assert.deepEqual(inventoryRows({ coins: 0, beans: 2 }, T, T.online.inventoryY0), { coin: null, bean: T.online.inventoryY0 });
+  assert.ok(T.online.inventoryY0 - T.hudInventory.iconPx / 2 > T.hudScoreY - 34 + 146, 'the icons start below the pill at its tallest (the slow / lost word)');
+});
+
 test('inventoryRows: coins on top, beans under them, only the rows shown, no empty slot', () => {
   const h = T.hudInventory;
   assert.deepEqual(inventoryRows({ coins: 3, beans: 2 }, T), { coin: h.y0, bean: h.y0 + h.pitch });

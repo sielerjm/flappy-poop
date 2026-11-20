@@ -7,6 +7,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { fakeGame, installPanelDom, textOf } from './support/panelDom.js';
+import { fakeStorage } from './support/scenes.js';
+import { LEADERBOARD } from '../src/config.js';
 import { t } from '../src/i18n.js';
 
 const body = installPanelDom();
@@ -218,6 +220,31 @@ test('a wrong code on a dev host: "No room has that code" names this device\'s p
   }
 });
 
+test('the race over a running Versus (wide screens, 1.8 playtest): the hand-off stops Versus and its right half, so only the online race draws; Versus never restarts Play', async () => {
+  const playing = { ok: true, code: '482913', status: 'playing', seat: 'host', host_name: 'PlopMaster', guest_name: 'JollyPlunger042', seed: 4242, start_ms: 1_004_000, round: 1 };
+  const left = [];
+  const versus = { match: { status: 'join' }, leave: () => left.push(1) };
+  const k = setup({ versus, active: true, answers: { set_room_status: { ok: true, data: playing } } });
+  const order = [];
+  k.game.scene.stop = (key) => order.push(['stop', key]);
+  k.play.scene = { start: (key) => order.push(['start', key]) };
+  k.open();
+  await el('tour-online').click();
+  await flush();
+  await el('tour-create').click();
+  await flush();
+  k.net.push({ kind: 'room', hint: 'answer', action: { type: 'status', room: { ...playing, status: 'ready', seed: null, start_ms: null, round: 0 }, at: 1_000_000 } });
+  k.poll();
+  el('tour-ready').click();
+  k.net.push({ kind: 'peer', event: 'ready', msg: { seq: 1, t: 1_000_000, sid: 'peer1', level: 1, ready: true }, at: 1_000_000 });
+  k.poll();
+  await flush();
+  k.poll();
+  assert.deepEqual(order, [['stop', 'PlayB'], ['stop', 'Versus'], ['start', 'OnlineRace']]);
+  assert.equal(versus.match.status, 'left', 'the split match is left, so nothing of it answers');
+  assert.equal(left.length, 0, 'not Versus.leave: that would start a plain Play under the race');
+});
+
 test('both ready (1.7a): the host starts the race (set_room_status), and the room in playing hands the lobby and transport to OnlineRace: the room is not left', async () => {
   const playing = { ok: true, code: '482913', status: 'playing', seat: 'host', host_name: 'PlopMaster', guest_name: 'JollyPlunger042', seed: 4242, start_ms: 1_004_000, round: 1 };
   const k = setup({ answers: { set_room_status: { ok: true, data: playing } } });
@@ -245,4 +272,42 @@ test('both ready (1.7a): the host starts the race (set_room_status), and the roo
   assert.equal(isTournamentPanelOpen(), false, 'the window closes');
   await flush();
   assert.equal(k.net.calls.filter((c) => c[1] === 'leave_room' || c[0] === 'close' || c[0] === 'closeRoom').length, 0, 'the race keeps the room and the channel');
+});
+
+test('a race left by a reload (item 46): the hand-off remembers the room code (per project), and the next entry to 🌐 leaves that room before Create', async () => {
+  const store = new Map();
+  globalThis.localStorage = fakeStorage(store);
+  try {
+    for (const project of ['live', 'test']) {
+      store.clear();
+      const key = LEADERBOARD.onlineRaceKey + (project === 'test' ? '.test' : '');
+      const playing = { ok: true, code: '482913', status: 'playing', seat: 'host', host_name: 'PlopMaster', guest_name: 'JollyPlunger042', seed: 4242, start_ms: 1_004_000, round: 1 };
+      const k = setup({ project, answers: { set_room_status: { ok: true, data: playing } } });
+      k.play.scene = { start: () => {} };
+      k.open();
+      await flush();
+      await el('tour-create').click();
+      await flush();
+      k.net.push({ kind: 'room', hint: 'answer', action: { type: 'status', room: { ...playing, status: 'ready', seed: null, start_ms: null, round: 0 }, at: 1_000_000 } });
+      k.poll();
+      el('tour-ready').click();
+      k.net.push({ kind: 'peer', event: 'ready', msg: { seq: 1, t: 1_000_000, sid: 'peer1', level: 1, ready: true }, at: 1_000_000 });
+      k.poll();
+      await flush();
+      k.poll();
+      assert.equal(store.get(key), '482913', `${project}: remembered under ${key}`);
+      // The page reloads mid-race: a new window, a new lobby.
+      const k2 = setup({ project, answers: { create_room: { ok: true, data: { ok: true, code: '730155', status: 'open' } } } });
+      k2.open();
+      await flush();
+      await el('tour-create').click();
+      await flush();
+      const order = k2.net.calls.filter((c) => c[0] === 'rpc' && (c[1] === 'leave_room' || c[1] === 'create_room')).map((c) => [c[1], c[2]?.p_code ?? null]);
+      assert.deepEqual(order, [['leave_room', '482913'], ['create_room', null]], project);
+      assert.equal(store.has(key), false, `${project}: forgotten`);
+      closeTournamentPanel();
+    }
+  } finally {
+    delete globalThis.localStorage;
+  }
 });
