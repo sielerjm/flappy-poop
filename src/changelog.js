@@ -8,6 +8,26 @@ import { LOCALES } from './i18n.js';
 
 export const CHANGELOG = [
   {
+    version: '0.25.0',
+    date: '20 Nov 2026',
+    notes: {
+      en: [
+        '🌐 Race a friend online: turn on 👥, start, and pick 🌐 Online. Then create a room and share its 6-digit code, or join with a friend’s code. Only your username is shared: no chat, no strangers.',
+        'Online races follow the split-screen rules: shared level breaks with a ready check, a bonus for the first over each line, and a results panel with Rematch or Leave. Your friend flies beside you as a ghost, with their live score and connection at the top left.',
+        '👥 now works on phones too, where it opens the online race. 📱 Devices pairs your other phones and computers with a 6-digit code.',
+        'Split screen: each player’s name shows at the bottom of their half, and a player with a username starts as the first row of the tournament lobby.',
+        'Split screen: the “first over the final line” tiebreak now goes only to whoever is first out of the final level.',
+      ],
+      'zh-Hans': [
+        '🌐 和朋友在线比赛：打开 👥 后开始，选择 🌐 在线。然后创建房间并分享6位房间码，或输入朋友的房间码加入。只会分享你的用户名：没有聊天，也不会遇到陌生人。',
+        '在线比赛沿用分屏规则：共享的关卡休息和准备确认，每关第一个冲线的人得奖励分，结束后有“再来一局”或“离开”。朋友会以幽灵的样子在你身边飞，左上角显示对方的实时分数和网络状态。',
+        '👥 现在在手机上也能用，会打开在线比赛。📱 设备可以用6位码配对你的其他手机和电脑。',
+        '分屏：每位玩家的名字显示在自己那半屏的底部；有用户名的玩家会自动成为锦标赛大厅的第一行。',
+        '分屏：“第一个冲过终点线”的平局判定，现在只给第一个跑完最后一关的人。',
+      ],
+    },
+  },
+  {
     version: '0.24.3',
     date: '19 Nov 2026',
     notes: {

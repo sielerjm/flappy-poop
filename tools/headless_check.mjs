@@ -1921,6 +1921,8 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
           await padNav('up');
           const sEdu = await ring(); // the 📚 row (plan 28: on every device)
           await padNav('up');
+          const sVs = await ring(); // the 👥 switch (plan 39, 1.6c: offered on every screen)
+          await padNav('up');
           const s3 = await ring();
           const t0 = await evaluate(`${play}.toilet`);
           await padDown(G.select);
@@ -1942,7 +1944,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
           const s6 = await ring();
           await padDown(G.back);
           const idOf = async (i) => evaluate(`${play}.focus.items[${i}]?.id ?? null`);
-          ok(s1.index === (await slot('lang')) && s2.index === (await slot('pause')) && [await slot('educationInfo'), await slot('education')].includes(sEdu.index) && s3.index === (await slot('toilet')) && sSun.index === (await slot('daily')) && s4.index === (await slot('howto')), `ready screen: right from ⓘ is 🌐 (${await idOf(s1.index)}), up from ⚙ is ⏸ (${await idOf(s2.index)}), up again the 📚 row (${await idOf(sEdu.index)}), then the toilet toggle (${await idOf(s3.index)}), up again the 🌞 (${await idOf(sSun.index)}), right from it the ? (${await idOf(s4.index)})`);
+          ok(s1.index === (await slot('lang')) && s2.index === (await slot('pause')) && [await slot('educationInfo'), await slot('education')].includes(sEdu.index) && sVs.index === (await slot('versus')) && s3.index === (await slot('toilet')) && sSun.index === (await slot('daily')) && s4.index === (await slot('howto')), `ready screen: right from ⓘ is 🌐 (${await idOf(s1.index)}), up from ⚙ is ⏸ (${await idOf(s2.index)}), up again the 📚 row (${await idOf(sEdu.index)}), then the 👥 switch (${await idOf(sVs.index)}), then the toilet toggle (${await idOf(s3.index)}), up again the 🌞 (${await idOf(sSun.index)}), right from it the ? (${await idOf(s4.index)})`);
           ok(t1 === !t0 && t2 === t0 && (await playState()) === 'ready', `A on the toggle flips toilet mode (${t0} → ${t1} → ${t2}) without starting`);
           ok(howOpen && howClosed && s5.shown && s5.index === (await slot('howto')) && s6.index === (await slot('pause')) && (await playState()) === 'ready', `A on the ? opens How to play, B closes it with the ring still on the ? (${s5.shown}); down from the ? lands on ⏸ in its column (${await idOf(s6.index)})`);
         }
@@ -3173,7 +3175,10 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await evaluate(`${P1}.toggleVersus(), ${P1}.launch(), true`);
         const lobbyUp = await until(`__flappy.scene.isActive('Versus') && ${VS}.match.status === 'lobby' && Boolean(document.getElementById('tour-start'))`);
         const lobby0 = await evaluate(`JSON.stringify({ count: document.getElementById('tour-count')?.textContent, title: document.getElementById('tour-title')?.textContent, guests: [...document.querySelectorAll('[id^="tour-slot-"] .who')].map((w) => w.firstChild?.textContent), start: !document.getElementById('tour-start').disabled, joinButtons: [Boolean(${VS}.tournamentButton), Boolean(${VS}.tournamentHelpButton)] })`).then(JSON.parse);
-        ok(lobbyUp && lobby0.count === '2' && lobby0.title === (await tx('tournamentTitle')) && lobby0.guests.length === 2 && lobby0.guests.every((g) => /^[A-Z][a-z]+[A-Z][a-z]+\d{3}$/.test(g)) && lobby0.guests[0] !== lobby0.guests[1] && lobby0.start && !lobby0.joinButtons[0] && !lobby0.joinButtons[1], `the 👥 start opens the lobby: 2 players (${lobby0.guests.join(', ')}), Start ready; the join screen has no 🏅 or (?) any more`);
+        // Plan 39's 1.6e: a player with a username starts as row 1 (the full run has saved one by now; --only has not).
+        const savedName = (await evaluate(`${P1}.getSaveState()?.name ?? ''`)) || null;
+        const guestName = (g) => /^[A-Z][a-z]+[A-Z][a-z]+\d{3}$/.test(g);
+        ok(lobbyUp && lobby0.count === '2' && lobby0.title === (await tx('tournamentTitle')) && lobby0.guests.length === 2 && (savedName ? lobby0.guests[0] === savedName : guestName(lobby0.guests[0])) && guestName(lobby0.guests[1]) && lobby0.guests[0] !== lobby0.guests[1] && lobby0.start && !lobby0.joinButtons[0] && !lobby0.joinButtons[1], `the 👥 start opens the lobby: 2 players (${lobby0.guests.join(', ')}; row 1 ${savedName ? 'your player' : 'a guest'}), Start ready; the join screen has no 🏅 or (?) any more`);
         // ? in the card: the help card (its paragraphs); Got it goes back to the lobby, still open.
         await click('tour-help-btn');
         const help = { title: await text('tour-title'), paras: await evaluate(`document.querySelectorAll('#tour-help p').length`), ok: await text('tour-help-ok') };
@@ -3928,6 +3933,9 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         const switches = () =>
           evaluate(`(() => { const p = ${play}; const b = p.readyBoxes; return JSON.stringify({ toilet: b.toilet.y, versus: b.versus?.y ?? null, edu: b.education?.y ?? null, eduToggle: Boolean(p.educationToggle), on: p.educationOn, vOn: p.versusOn, available: p.educationAvailable(), stored: JSON.parse(localStorage.getItem('${TT.settingsKey}') ?? '{}') }); })()`).then(JSON.parse);
         const tap = (id) => evaluate(`(() => { const p = ${play}; const b = p.readyBoxes['${id}']; p.flap({ x: b.x, y: b.y }); return true; })()`);
+        // Since plan 39's 1.6c 👥 is offered on every screen, so the 📚 switch has its own row under it
+        // (🚽, 👥, 📚, one pitch apart), no longer the 👥 slot.
+        const underVersus = (sw) => sw.versus !== null && sw.edu !== null && sw.versus > sw.toilet && sw.edu - sw.versus === sw.versus - sw.toilet;
         const typeWord = async (typed) => {
           await evaluate(`${play}.openSavePanel(), true`);
           await sleep(200);
@@ -3943,18 +3951,18 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
 
         await home();
         const s0 = await switches();
-        ok(s0.available && s0.edu === 886 && s0.toilet === 812 && s0.eduToggle && !s0.on && !('eduUnlocked' in (s0.stored ?? {})), `every device has the 📚 switch, off, in the 👥 slot (y ${s0.edu}, 🚽 at ${s0.toilet}), with no unlock setting (plan 28, 2.3)`);
+        ok(s0.available && underVersus(s0) && s0.eduToggle && !s0.on && !('eduUnlocked' in (s0.stored ?? {})), `every device has the 📚 switch, off, in its row under 👥 (y ${s0.edu}; 👥 ${s0.versus}, 🚽 ${s0.toilet}), with no unlock setting (plan 28, 2.3)`);
 
         const save0 = await evaluate(`localStorage.getItem('flappyPoop.save')`);
         const seen = await typeWord(word.toUpperCase());
         const s1 = await switches();
         const retired = await tx('eduWordRetired');
         ok(seen.save === save0 && seen.field === seen.name && seen.status === retired, `the old word "${word.toUpperCase()}" + Save is never a name: the save record is unchanged, the field shows "${seen.field}", status "${seen.status}"`);
-        ok(s1.available && s1.edu === 886 && s1.eduToggle && !s1.on && !('eduUnlocked' in (s1.stored ?? {})), 'the word changes nothing: the 📚 switch stays, off, and no unlock is stored');
+        ok(s1.available && underVersus(s1) && s1.eduToggle && !s1.on && !('eduUnlocked' in (s1.stored ?? {})), 'the word changes nothing: the 📚 switch stays, off, and no unlock is stored');
 
         await home();
         const s2 = await switches();
-        ok(s2.available && s2.edu === 886 && s2.eduToggle, 'a restart (create() reading the settings) keeps the switch');
+        ok(s2.available && underVersus(s2) && s2.eduToggle, 'a restart (create() reading the settings) keeps the switch');
         await sleep(500); // home()'s restart lands on the next frame: a tap before it would open the popup on the scene going away
         await tap('education');
         const s3 = await switches();
@@ -4345,7 +4353,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await home();
         await sleep(600);
         const s5 = await switches();
-        ok(!s4.available && s4.edu === null && !s4.eduToggle && s5.available && s5.edu === 886 && s5.eduToggle && !s5.on, `EDUCATION.enabled false hides the 📚 switch for everyone (box ${s4.edu}); true brings it back, off (box ${s5.edu})`);
+        ok(!s4.available && s4.edu === null && !s4.eduToggle && s5.available && underVersus(s5) && s5.eduToggle && !s5.on, `EDUCATION.enabled false hides the 📚 switch for everyone (box ${s4.edu}); true brings it back, off (box ${s5.edu})`);
         // AUD-063 (audit 2026-11-16): a restart of Play with the 📚 popup open closes it without calling back into
         // the scene being shut down (whose texts are already destroyed): the new ready screen comes up whole (its
         // state, the poop's body, the 📚 count).
