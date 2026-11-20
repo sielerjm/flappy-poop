@@ -235,3 +235,31 @@ test('launch with 👥 on: the split screen where two halves fit (the Versus sce
   assert.equal(started.length, 1, '✕ leaves this Play as it is');
   closeTournamentPanel();
 });
+
+// Plan 39, 1.7c (item 45's finding): Play steps the level on before it asks its host who was first, so
+// Versus took finalFirst from the stepped-on level and gave it to the first over the line before the
+// final one too. Play now names the line it crossed; Versus reads finalFirst from it.
+test('split screen (1.7c): finalFirst goes to the first out of the final level, not to the first over the line before it', () => {
+  const versus = Object.create(Versus.prototype);
+  const match = { ...createMatch(9), status: 'playing' };
+  const half = (player) => {
+    const p = playScene({ player, match, crashesThisLevel: 0, score: 0, effects: { cancelPower: () => false }, scoreText: { setText() {} } });
+    for (const m of ['statCall', 'refreshLevelBar', 'playSample', 'takeCoins', 'startLevelBreak', 'win', 'showScorePopup', 'refreshProbioticHud']) p[m] = () => {};
+    p.versusHost = () => versus;
+    return p;
+  };
+  const halves = [half(1), half(2)];
+  Object.assign(versus, { match, levelFirst: null, halves: () => halves, onLevelReached() {} });
+  const last = T.levels.lastLevel;
+  halves[1].level = last - 1;
+  halves[1].onFinishCrossed(); // P2 first over the line before the final level
+  assert.equal(match.slots[1].levelWins, 1);
+  assert.equal(Boolean(match.slots[1].finalFirst), false, 'that line is not the final one');
+  versus.levelFirst = null; // GO into the final level (beginLevel)
+  halves[0].level = last;
+  halves[0].onFinishCrossed(); // P1 first out of the rectum
+  assert.equal(match.slots[0].finalFirst, true);
+  halves[1].level = last;
+  halves[1].onFinishCrossed();
+  assert.deepEqual(match.slots.map((s) => [s.levelWins, Boolean(s.finalFirst)]), [[1, true], [1, false]], 'one finalFirst, the first out\'s');
+});

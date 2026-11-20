@@ -1,6 +1,6 @@
 import '../phaserReady.js'; // first: Phaser exists before this module runs (plan 35, 1.2)
 import { GAME_HEIGHT, FIELD, TUNING as T } from '../config.js';
-import { fieldWidth, overButtonsLayout, overHit, canRestart, isFinalLevel } from '../logic.js';
+import { fieldWidth, overButtonsLayout, overHit, canRestart } from '../logic.js';
 import { versusLayout, joinButtonsLayout, createMatch, resetMatch, claimDevice, allClaimed, deviceLabel } from '../versus.js';
 import { t, levelLabel, pauseBannerText, versusName } from '../i18n.js';
 import { raceOutcome } from '../tournament.js';
@@ -239,16 +239,18 @@ export class Versus extends Phaser.Scene {
    * A half crossed this level's finish line (Play.onFinishCrossed, the rectum's too): true for the
    * first of the two since the level began, who wins the level (slot.levelWins, 🏁) and takes
    * versus.scoring.levelClearBonus; false for the second. Levels start together (beginLevel clears
-   * levelFirst), so "this level" is the same for both halves.
+   * levelFirst), so "this level" is the same for both halves. `line` is the line Play crossed
+   * ({ level, final }): Play has already stepped half.level on to the next level when it asks, so
+   * finalFirst comes from the line, not from half.level (plan 39, 1.7c).
    */
-  claimLevelFinish(half) {
+  claimLevelFinish(half, line = {}) {
     if (this.match.status !== 'playing') return false;
     const i = this.halves().indexOf(half);
     if (i < 0 || this.levelFirst != null) return false;
     this.levelFirst = i;
     const slot = this.match.slots[i];
     slot.levelWins = (slot.levelWins ?? 0) + 1;
-    if (isFinalLevel(half.level, T)) slot.finalFirst = true; // first out of the rectum: a tournament race's last tiebreak
+    if (line.final) slot.finalFirst = true; // first out of the rectum: a tournament race's last tiebreak
     return true;
   }
 
