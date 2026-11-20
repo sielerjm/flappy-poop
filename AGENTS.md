@@ -1342,7 +1342,33 @@ src/
                             moves the channel to the answer's new code; `ready` at
                             LOBBY_LEVEL 1, newest wins; the peer's presence is version
                             checked (who must reload). Messages are i18n keys; the panel
-                            polls poll(). tests/onlineLobby.test.js.
+                            polls poll(). roomItem(item) feeds a room item in; finish() and
+                            rematch() are host only (set_room_status 'finished', then
+                            'playing' again with a new seed, round + 1); start() shares
+                            its code with rematch. tests/onlineLobby.test.js.
+  onlineRace.js             Online race (🌐, plan 39, 1.7a, 1.7b) per-frame rules, NO
+                            Phaser/DOM/timers: raceStartPlan (room → seed, names, seat,
+                            agreed width, round), countdownStep, localPhase, linkQuality,
+                            createRaceFeed({ now, send, since }) (what goes on the wire from
+                            the local half and the other seat rebuilt from what arrives;
+                            `since` drops messages stamped before this round's GO; doneSent();
+                            its link dot reads good while the peer's newest message says it
+                            waits in a break or has finished, silence counts only mid-run),
+                            createRaceReferee({ seat, now, send, since }): first over each
+                            line on server time (a guest's `finish` claim still on the wire
+                            wins a near tie; the host takes its own line after
+                            TUNING.online.race.firstGraceMs with no earlier claim), one
+                            `first` per line; `ready` marks keyed by the level they start,
+                            resent every readyResendMs; both ready and the host in its break
+                            with the shop shut → the host's `go` with startAt = now +
+                            countLeadMs + 3 × versus.countdownMs; a ready taken back more
+                            than cancelMarginMs before GO calls the count off (`go` with
+                            cancel: true; later taps do nothing); a side still in its break
+                            that sees the other's pos running that level begins at once;
+                            both `rematch` asks → the host's app calls the lobby's rematch.
+                            raceRoomItem (only the confirmed status 'playing' / 'finished'
+                            reaches the lobby; a leave or abandoned room is Tier 2's).
+                            Knobs in TUNING.online.race. tests/onlineRace.test.js.
   leaderboard.js            Shared leaderboard, NO Phaser/DOM (plan 34 adds
                             createStreakStore and STREAK_KINDS: flappyPoop.streaks,
                             the Singleplayer and Daily Dump day streaks, never
@@ -1696,9 +1722,8 @@ src/
                             state. On a dev host ui.project ('live' / 'test', from
                             Play.onlineProjectName(), null on the real site) adds
                             onlineDevOnLive / onlineDevOnTest to the no-room error.
-                            lobbyMessage shows onlineRaceNextBuild while lobby.onBothReady
-                            is unset; 1.7a must delete that string (en, zh-Hans,
-                            TRANSLATION_NOTES row, test) when it sets the hook.
+                            Both ready shows onlineStarting (the panel's onBothReady starts
+                            the race, 1.7a).
                             tests/onlineLobbyViews.test.js.
     savePanel.js            Plain DOM panel over the canvas (a three-step intro,
                             Username field, read-only user code + Copy, Load
@@ -2046,7 +2071,12 @@ src/
                             resumePlay returns to it without the bounce; autoPause
                             too. onFinishCrossed adds levelClearBonus when
                             Versus.claimLevelFinish says it is first (the popup
-                            after the break starts); win() → showEscapedBanner
+                            after the break starts); it passes the host's
+                            claimLevelFinish { level: the level just cleared, final }
+                            (Versus ignores it). takeLevelClearBonus() is the shared
+                            bonus; awardLevelFirst({ final }) is the online race's late
+                            verdict (levelWins + 1, the bonus, the popup, finalFirst on
+                            the final line, publishSlot). win() → showEscapedBanner
                             (levelTitle / levelHint, no shade; applyLocale keeps it).
                             chromeState() / overlayPause(): chromeArgs and
                             onPadAction read the match's state ('paused' in this
@@ -2160,6 +2190,25 @@ src/
                             join screen the bracket; bothInBreak / openPeek for
                             the 🏅 pill; restartWith(match) starts the next race or
                             the lobby after Abandon.
+    OnlineRace.js           Online race (🌐, plan 39, 1.7a, 1.7b) the match host for one
+                            local Play as player 1 (matchHostKey 'OnlineRace'); the other
+                            seat is a remote feed in match.slots[1]. initRace(data) holds
+                            the race's state apart from drawing (tests start there) and
+                            sets match.hostKey. 3-2-1-GO on the server clock. Host
+                            interface: claimLevelFinish(half, { level, final }) records the
+                            crossing with the referee and returns false (the verdict comes
+                            back as Play.awardLevelFirst); onLevelReached hides the hint for
+                            versus.levelSyncDelayMs (the arrival beat), then "Tap when
+                            ready"; onLevelTap toggles ready over the wire; isReady;
+                            levelStage 'count' during the shared count; GO calls
+                            Play.beginLevel (an overlay or hidden tab pauses the local half
+                            only; Tier 2 pauses both). The run's done is held until the final
+                            line is settled (the referee's settled()), so both devices
+                            compute raceOutcome from the same numbers; checkOver needs this
+                            side's done sent and the other's heard, then the host's app calls
+                            lobby.finish(). wantRematch(on) (1.8's button) and checkRematch:
+                            the room playing a later round restarts the scene on
+                            raceStartPlan (which carries `round`).
     Over.js                 Game-over panel (score, run summary of fiber / probiotic / postbiotic over bacteria / bean / mystery box (mystery-icon.png) over ‼️ long falls / 😢 close calls (data.falls / closeCalls; ×– for a stored Daily result), pipes crossed, then Share | Home on one row from overButtonsLayout and, on a normal or test run, a glowing Play again under them, the panel lifted over.againLiftPx so it clears the ⏸) with a
                             tap lockout (openedAt = game.loop.time: a relaunched
                             scene's this.time.now is stale) and its own tray (mute
@@ -2897,8 +2946,17 @@ tests/                      node --test (schema.test.js, schemaOnline.test.js, p
   onlineAccountViews.test.js src/ui/onlineAccountViews.js: each screen, its errors and
                             strings
   onlineLobby.test.js       src/onlineLobby.js: create / join / ask / answer / ready on a
-                            fake net, auto new codes, Decline's new code, the version check
+                            fake net, auto new codes, Decline's new code, the version check,
+                            finish / rematch / roomItem
   onlineLobbyViews.test.js  src/ui/onlineLobbyViews.js: each screen and its strings
+  onlineRace.test.js        src/onlineRace.js: start plan, countdown, the feed, the referee
+                            (first on server time, the ready count, a ready taken back,
+                            the rematch ask), raceRoomItem; two simulated peers racing
+                            through a level break to the end
+  onlineRaceScene.test.js   scenes/OnlineRace.js's wiring on a stand-in Play and a fake
+                            transport (initRace, the host interface, the final line's
+                            hold, the rematch restart); Play's onFinishCrossed line and
+                            awardLevelFirst
   onlinePanel.test.js       tournamentPanel's 🌐 view on tests/support/panelDom.js: mounts,
                             forced over Play, exits leave the room, keypad
   onlineDevProject.test.js  onlineProjectConfig and ?onlinetest: dev hosts only, own keys,
@@ -3620,7 +3678,15 @@ Commits follow `type(scope): summary` (`feat`, `fix`, `docs`, `chore`, `test`, `
   The lobby (`src/onlineLobby.js`, mounted by the 🌐 view of `ui/tournamentPanel.js`) feeds
   `roomStep` only RPC results and `{ kind: 'room' }` items, never a peer's own events. Lobby
   ready is the `ready` event with level 1 (`LOBBY_LEVEL`), newest wins by t / seq.
-  `onBothReady` is the hook 1.7a fills; nothing calls `set_room_status('playing')` yet.
+  `onBothReady` starts the race: the host's `start()` calls `set_room_status('playing')`; `finish()` (host only,
+  once) sets 'finished'; `rematch()` (host only: finish first if still playing, then 'playing' again, a new
+  seed, round + 1).
+  The online race (1.7a, 1.7b): decisions in `src/onlineRace.js` (no Phaser, no timers: time and `send` come in;
+  tests/onlineRace.test.js races two simulated peers through a level break to the end), wiring in
+  `scenes/OnlineRace.js` (tests/onlineRaceScene.test.js). The host is the one arbiter
+  (`createRaceReferee`): `first` (one per line) and `go` are its word, judged on server time. Knobs in
+  `TUNING.online.race` (not part of `protocolVersion`). The `go` event's `cancel` flag is in `ONLINE_EVENTS`,
+  so it moved `protocolVersion`.
   `?onlinetest=<code>` (`onlineProjectConfig`) works on dev hosts only, keeps its own session
   and trust keys, and the repo never holds a test project's URL or key
   (`tools/online_test_link.mjs` builds the link from an env file).
