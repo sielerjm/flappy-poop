@@ -366,6 +366,10 @@ export const TUNING = {
       resyncMs: 60000, // ms after a finished round before the next one starts
       maxRttMs: 2000, // ms; a slower round trip is not used for the offset
     },
+    link: {
+      slowMs: 1200, // ms since the peer's last message before the HUD's dot reads "slow connection" (keyframes come every keyframeMs)
+      lostMs: 3000, // ms before it reads "reconnecting…" (plan 39, 1.6d's C3; Tier 2 pauses the race there)
+    },
     ghost: {
       maxExtrapolateMs: 1000, // ms past the last message the ghost keeps moving; then it holds until the next one
       smoothMs: 120, // ms a correction (a fart surge, a late flap) is blended out over instead of jumping

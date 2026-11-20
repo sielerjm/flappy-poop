@@ -640,7 +640,9 @@ The winners take the podium 🥇 🥈 (and 🥉 from 3 players). With 3 or more 
 | onlineNotReady | not ready | 未准备 |
 | onlineLeave | Leave | 离开 |
 | onlineStarting | Both ready: the race starts in 3… | 双方都准备好了：比赛3秒后开始… |
-| onlineRaceNextBuild | Both ready! Racing comes in the next build. (plan 39, item 43: shown in place of onlineStarting until the race itself is built, then removed) | 双方都准备好了！比赛功能将在下一个版本推出。 |
+| onlineHudSlow | slow connection (plan 39, 1.7a: under the opponent's name in the online race's HUD when their messages arrive late; lower case, a small label) | 网络较慢 |
+| onlineHudLost | reconnecting… (plan 39, 1.7a: under the opponent's name when their messages stopped arriving) | 正在重新连接… |
+| onlineFitting | Fitting the screen to {name}'s (plan 39, 1.7a, item 14: under the online race's countdown when the field narrows to the other player's smaller screen; {name} is their username) | 正在按{name}的屏幕调整画面 |
 | onlineErrBadCode | That's not a room code: codes are 6 digits and never start with 0 (plan 39: the 🌐 lobby's status line; {name} is the other player's username) | 这不是房间码：房间码是6位数字，第一位不是0 |
 | onlineErrNoRoom | No room has that code. Check it with your friend. (plan 39: the 🌐 lobby's status line; {name} is the other player's username) | 没有这个房间码的房间，请和朋友核对一下。 |
 | onlineDevOnLive | (Dev: this device is on the live project. A 🧪 test device cannot see its rooms.) (plan 39, item 43: added after onlineErrNoRoom on a developer's own machine only; players never see it) | （开发：本设备连接的是正式项目，🧪 测试设备看不到这里的房间。） |

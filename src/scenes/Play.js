@@ -2973,6 +2973,7 @@ export class Play extends Phaser.Scene {
     if (applied) {
       this.poop.setVelocityY(T.flapVelocity);
       sfx.flap();
+      if (this.match) this.flapCount = (this.flapCount ?? 0) + 1; // the online race sends each one (raceSnapshot)
     }
     if (this.runStatsOn) {
       const f = this.flapInfo;
@@ -5302,6 +5303,21 @@ export class Play extends Phaser.Scene {
     if (key === this.rivalKey) return;
     this.rivalKey = key;
     this.levelBar.setRival(this.state === 'ready' ? null : rivalMarker({ level: this.level }, other, this.tune));
+  }
+
+  /**
+   * This half as the online race sends it (plan 39, 1.7a; src/onlineRace.js's createRaceFeed): the
+   * run's state, the flap count, and every field a `pos` carries, the slot's match numbers included.
+   */
+  raceSnapshot() {
+    const slot = this.match?.slots[this.player - 1] ?? {};
+    const vy = this.poop?.body?.velocity?.y ?? 0;
+    return {
+      state: this.state, levelBreak: Boolean(this.levelBreak), ended: Boolean(slot.ended), won: Boolean(this.won), flaps: this.flapCount ?? 0,
+      distance: this.distance, speed: this.state === 'playing' ? this.scrollSpeed() : 0, y: this.poop.y, vy, angle: this.poop.angle,
+      frame: this.poop.texture.key, alpha: this.poop.alpha, level: this.level, pipesPassed: this.pipesPassed, score: this.score,
+      deaths: slot.deaths ?? 0, levelWins: slot.levelWins ?? 0, finalFirst: Boolean(slot.finalFirst),
+    };
   }
 
   /** This half's live state for the other half (the ghost, the rival marker) and the result panel. */

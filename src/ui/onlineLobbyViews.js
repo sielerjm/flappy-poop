@@ -84,9 +84,7 @@ export function lobbyMessage(ui, lobby) {
     if (m.key === 'onlineErrNoRoom' && (ui.project === 'live' || ui.project === 'test')) text += ` ${ui.tr(ui.project === 'test' ? 'onlineDevOnTest' : 'onlineDevOnLive')}`;
     return { text, kind: m.kind === 'error' ? 'error' : '' };
   }
-  // Until 1.7a hangs the race on onBothReady, both ready says racing comes next build, not a 3… that
-  // never moves (item 43; 1.7a deletes onlineRaceNextBuild).
-  if (lobby.state.screen === 'ready' && lobby.bothReady()) return { text: ui.tr(lobby.onBothReady ? 'onlineStarting' : 'onlineRaceNextBuild'), kind: 'ok' };
+  if (lobby.state.screen === 'ready' && lobby.bothReady()) return { text: ui.tr('onlineStarting'), kind: 'ok' };
   return null;
 }
 

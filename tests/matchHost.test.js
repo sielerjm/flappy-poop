@@ -51,11 +51,13 @@ proto.querySelectorAll = function (sel) {
 };
 
 const { Versus } = await import('../src/scenes/Versus.js');
+const { OnlineRace } = await import('../src/scenes/OnlineRace.js');
 const { createMatch, resetMatch, matchHostKey, versusAvailable } = await import('../src/versus.js');
 const { openTournamentPanel, isTournamentPanelOpen, closeTournamentPanel } = await import('../src/ui/tournamentPanel.js');
 
 const PLAY_SRC = readFileSync(new URL('../src/scenes/Play.js', import.meta.url), 'utf8');
 const VERSUS_SRC = readFileSync(new URL('../src/scenes/Versus.js', import.meta.url), 'utf8');
+const ONLINE_SRC = readFileSync(new URL('../src/scenes/OnlineRace.js', import.meta.url), 'utf8');
 const el = (id) => body.find(id);
 
 /**
@@ -128,10 +130,14 @@ test("Play no longer hard-wires the Versus scene: no scene.get('Versus') / getSc
   assert.match(PLAY_SRC, /this\.scene\.start\('Versus', \{ match: null \}\)/);
 });
 
-test('the host interface: Play reads exactly these members on its host, and the Versus scene implements every one', () => {
+test('the host interface: Play reads exactly these members on its host, and both hosts (Versus, OnlineRace) implement every one', () => {
   assert.deepEqual(hostReads(PLAY_SRC), [...HOST_METHODS, ...HOST_FIELDS].sort(), 'a new host call goes into this list, and into every host (1.7a: the online race)');
   for (const name of [...HOST_METHODS, ...HOST_PAD]) assert.equal(typeof Versus.prototype[name], 'function', `Versus.${name}`);
   for (const name of HOST_FIELDS) assert.match(VERSUS_SRC, new RegExp(`this\\.${name} = `), `Versus sets ${name}`);
+  // The online race (1.7a) is the second host: every member, and its match names it.
+  for (const name of [...HOST_METHODS, ...HOST_PAD]) assert.equal(typeof OnlineRace.prototype[name], 'function', `OnlineRace.${name}`);
+  for (const name of HOST_FIELDS) assert.match(ONLINE_SRC, new RegExp(`this\\.${name} = `), `OnlineRace sets ${name}`);
+  assert.match(ONLINE_SRC, /this\.match\.hostKey = ONLINE_HOST_KEY/);
   assert.match(PLAY_SRC, /top: 'versus', scene: this\.versusHost\(\)/, "the pad's join screen and result panel are the host's (padTop)");
 });
 

@@ -24,10 +24,6 @@ const ALLOWED_EXPORTS = {
   // Daily Dump (plan .claude/plans/2026-11-10-daily-dump.md): helpers land before their callers.
   RUN_DATA_KEYS: "test guard: tests/runStats.test.js keeps it equal to run_data_keys() in db/schema.sql",
   // Online race (plan 39, 1.3 and 1.4): src/online.js's pure parts and src/onlineNet.js land before their callers; drop each entry when its caller lands.
-  agreedWidth: 'plan 39 1.3: pure, tested in tests/online.test.js; first caller OnlineRace (1.7a)',
-  shouldSendPos: 'plan 39 1.3: pure, tested in tests/online.test.js; first caller OnlineRace (1.7a)',
-  createGhostTrack: 'plan 39 1.3: pure, tested in tests/online.test.js; first caller OnlineRace (1.7a)',
-  racePhase: 'plan 39 1.3: pure, tested in tests/online.test.js; first caller OnlineRace (1.7a)',
 };
 
 /** UI string keys no source names literally: prefix → why (they are built at run time). */
@@ -218,7 +214,8 @@ test("every overlay scene in main.js is wired into Play's chrome: the overlay st
   const main = SRC['src/main.js'];
   const play = SRC['src/scenes/Play.js'];
   const registered = /scene:\s*\[([^\]]+)\]/.exec(main)[1].split(',').map((s) => s.trim());
-  const overlays = registered.filter((s) => !['Boot', 'Play', "new Play('PlayB')", 'Over', 'Versus'].includes(s));
+  // The match hosts (Versus, plan 39's OnlineRace) run the game, they are not overlays over it.
+  const overlays = registered.filter((s) => !['Boot', 'Play', "new Play('PlayB')", 'Over', 'Versus', 'OnlineRace'].includes(s));
   assert.ok(overlays.length >= 7, `expected the overlays (seven since the High scores page went), got ${overlays.join(', ')}`);
   const chromeArgs = methodBody(play, 'chromeArgs');
   const padTop = methodBody(play, 'padTop');

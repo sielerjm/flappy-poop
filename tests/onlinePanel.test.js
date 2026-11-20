@@ -217,3 +217,32 @@ test('a wrong code on a dev host: "No room has that code" names this device\'s p
     closeTournamentPanel();
   }
 });
+
+test('both ready (1.7a): the host starts the race (set_room_status), and the room in playing hands the lobby and transport to OnlineRace: the room is not left', async () => {
+  const playing = { ok: true, code: '482913', status: 'playing', seat: 'host', host_name: 'PlopMaster', guest_name: 'JollyPlunger042', seed: 4242, start_ms: 1_004_000, round: 1 };
+  const k = setup({ answers: { set_room_status: { ok: true, data: playing } } });
+  const started = [];
+  k.play.scene = { start: (key, data) => started.push([key, data]) };
+  k.open();
+  await flush();
+  await el('tour-create').click();
+  await flush();
+  k.net.push({ kind: 'room', hint: 'answer', action: { type: 'status', room: { ...playing, status: 'ready', seed: null, start_ms: null, round: 0 }, at: 1_000_000 } });
+  k.poll();
+  el('tour-ready').click();
+  k.net.push({ kind: 'peer', event: 'ready', msg: { seq: 1, t: 1_000_000, sid: 'peer1', level: 1, ready: true }, at: 1_000_000 });
+  k.poll();
+  await flush();
+  assert.deepEqual(k.net.calls.filter((c) => c[1] === 'set_room_status').map((c) => c[2]), [{ p_code: '482913', p_status: 'playing' }]);
+  k.poll();
+  assert.equal(started.length, 1);
+  const [key, data] = started[0];
+  assert.equal(key, 'OnlineRace');
+  assert.equal(data.net, k.net);
+  assert.equal(data.plan.seed, 4242);
+  assert.equal(data.plan.startAt, 1_004_000);
+  assert.deepEqual(data.plan.names, ['PlopMaster', 'JollyPlunger042']);
+  assert.equal(isTournamentPanelOpen(), false, 'the window closes');
+  await flush();
+  assert.equal(k.net.calls.filter((c) => c[1] === 'leave_room' || c[0] === 'close' || c[0] === 'closeRoom').length, 0, 'the race keeps the room and the channel');
+});

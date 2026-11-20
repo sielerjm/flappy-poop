@@ -7,6 +7,7 @@ import { Boot } from './scenes/Boot.js';
 import { Play } from './scenes/Play.js';
 import { Over } from './scenes/Over.js';
 import { Versus } from './scenes/Versus.js';
+import { OnlineRace } from './scenes/OnlineRace.js';
 import { Settings } from './scenes/Settings.js';
 import { About } from './scenes/About.js';
 import { HowTo } from './scenes/HowTo.js';
@@ -59,7 +60,7 @@ const game = new Phaser.Game({
   },
   // Play twice: 'Play' is single player and the left half of a versus match, 'PlayB' the right half
   // (only Versus launches it). Versus owns the match and sits above both halves, below the overlays.
-  scene: [Boot, Play, new Play('PlayB'), Over, Versus, Settings, About, HowTo, Changelog, Language, Feedback, Leaderboard, Daily, Stats, Quiz],
+  scene: [Boot, Play, new Play('PlayB'), Over, Versus, OnlineRace, Settings, About, HowTo, Changelog, Language, Feedback, Leaderboard, Daily, Stats, Quiz],
 });
 
 // A window resize (or a phone rotating) asks Play for a new field width. Play

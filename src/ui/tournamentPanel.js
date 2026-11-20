@@ -31,6 +31,7 @@ import { FIELD, TUNING as T } from '../config.js';
 import { t } from '../i18n.js';
 import { createRng, fieldWidth, focusNearest, focusStep } from '../logic.js';
 import { createOnlineLobby } from '../onlineLobby.js';
+import { ONLINE_HOST_KEY, raceStartPlan } from '../onlineRace.js';
 import { createMatch } from '../versus.js';
 import { createTournament, nextMatch, recordResult, matchPlayers, placings, claimFromCode, claimHost, tournamentPayload, postable, seedSlots, canReseed, reseed, reshuffle } from '../tournament.js';
 import { ensureId, newId } from '../save.js';
@@ -821,7 +822,8 @@ function startOnline() {
 function startLobby(r) {
   const o = online;
   if (!o || !o.net) return;
-  o.lobby ??= createOnlineLobby({ net: o.net, name: r.name, width: fieldWidth(globalThis.innerWidth ?? 720, globalThis.innerHeight ?? 1280, FIELD) });
+  // Both ready: the host starts the race (set_room_status), and a room in 'playing' hands off (1.7a).
+  o.lobby ??= createOnlineLobby({ net: o.net, name: r.name, width: myWidth(), onBothReady: (lobby) => lobby.start() });
   if (o.poll === null) o.poll = ctx.timers.setInterval(() => pollOnline(o), ONLINE_POLL_MS);
   renderLobby();
 }
@@ -830,6 +832,7 @@ function pollOnline(o) {
   if (online !== o || !o.lobby || !ctx) return;
   o.ticks += 1;
   const changed = o.lobby.poll();
+  if (o.lobby.state.room.phase === 'playing' && handOffRace(o)) return;
   if (!o.on || view) return;
   if (changed && o.st.view === 'home') {
     renderLobby();
@@ -842,6 +845,31 @@ function pollOnline(o) {
       if (el) el.textContent = pairCodeLeft(accountUi(), o.st);
     }
   }
+}
+
+/** This device's field width (presence, item 14). */
+function myWidth() {
+  return fieldWidth(globalThis.innerWidth ?? 720, globalThis.innerHeight ?? 1280, FIELD);
+}
+
+/**
+ * The room is 'playing' (the host's set_room_status, or the guest's confirmed status): the race takes
+ * the lobby and the transport (the room is not left, the channel stays open), the panel closes, and
+ * the Play under it starts the OnlineRace scene (plan 39, 1.7a). False while the room has no seed or
+ * GO time yet.
+ */
+function handOffRace(o) {
+  const plan = raceStartPlan(o.lobby.state.room, { mine: myWidth(), theirs: o.net.peer?.()?.width ?? null });
+  const play = ctx?.play;
+  if (!plan || !play?.scene) return false;
+  const { lobby, net } = o;
+  if (o.poll !== null) ctx.timers.clearInterval(o.poll);
+  o.poll = null;
+  o.lobby = null; // closing must not leave the room or close the transport: the race has them
+  o.net = null;
+  closeTournamentPanel();
+  play.scene.start(ONLINE_HOST_KEY, { net, lobby, plan });
+  return true;
 }
 
 /** Leaving 🌐 (the switch off, any close): the room left, the poll stopped, the transport closed. */

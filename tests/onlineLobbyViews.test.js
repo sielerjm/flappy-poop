@@ -180,17 +180,6 @@ test('messages: the key with its name; an error reads as one, a notice does not;
   assert.equal(lobbyMessage(ui, fakeLobby()), null);
 });
 
-test('both ready with nothing to start the race yet (before 1.7a): "racing comes in the next build", not a 3… that never moves', () => {
-  for (const locale of ['en', 'zh-Hans']) {
-    const ui = { tr: (k) => t(locale, k) };
-    const ready = { screen: 'ready', room: { phase: 'ready' } };
-    assert.deepEqual(lobbyMessage(ui, fakeLobby(ready, { both: true })), { text: t(locale, 'onlineRaceNextBuild'), kind: 'ok' }, locale);
-    assert.notEqual(t(locale, 'onlineRaceNextBuild'), t(locale, 'onlineStarting'));
-    // Once 1.7a hangs the race on onBothReady, the countdown line is back by itself.
-    assert.deepEqual(lobbyMessage(ui, fakeLobby(ready, { both: true, onBothReady: () => {} })), { text: t(locale, 'onlineStarting'), kind: 'ok' }, locale);
-  }
-});
-
 test('no room on a dev host says which project this device is on, so a live / 🧪 test mix-up shows; on the real site the plain line', () => {
   const noRoom = { message: { key: 'onlineErrNoRoom', kind: 'error', name: '' } };
   for (const locale of ['en', 'zh-Hans']) {

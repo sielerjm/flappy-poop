@@ -10,8 +10,8 @@
 // - The guest: declined goes back to the code keypad; the host leaving or the room closing, home.
 // - Ready (choice 6): each tap sends `ready` for level 1 (the lobby; a level break readies the next
 //   level, 1.7b), newest wins; a peer that (re)joins hears this side's mark again. Both ready calls
-//   onBothReady once per both-ready (1.7a starts the race there; the host calls
-//   set_room_status('playing')). Until then the lobby only says both are ready.
+//   onBothReady once per both-ready; the panel then calls start(), which on the host asks
+//   set_room_status('playing') (1.7a). The room in 'playing' carries the seed and GO time.
 // - The version check (choice 8): the peer's presence against this app's protocol (compareVersions);
 //   a mismatch closes the room for both (each side checks) with who must reload.
 // Every message is an i18n key with the name it carries; src/ui/onlineLobbyViews.js draws it.
@@ -74,6 +74,7 @@ export function createOnlineLobby({ net, name, width, mine = { protocol: protoco
   let themT = -Infinity; // the newest peer ready's time (server ms) and sequence
   let themSeq = -Infinity;
   let both = false;
+  let starting = false; // set_room_status('playing') in flight
   let generation = 0; // bumped by every leave, so a reply that lands after one is dropped
 
   const lobby = { state, onBothReady };
@@ -267,6 +268,23 @@ export function createOnlineLobby({ net, name, width, mine = { protocol: protoco
     settle(state.room);
   }
 
+  /**
+   * The host starts the race (1.7a, from onBothReady): set_room_status('playing') mints the seed and
+   * GO time; its answer is the room (as room_state shows it), so it moves this side at once. The guest
+   * moves on the server's 'status', confirmed by the transport. A refusal keeps the ready screen.
+   */
+  async function start() {
+    const r = state.room;
+    if (r.role !== 'host' || r.phase !== 'ready' || starting) return;
+    starting = true;
+    const gen = generation;
+    const res = await net.rpc('set_room_status', { p_code: r.code, p_status: 'playing' });
+    starting = false;
+    if (gen !== generation || state.room.code !== r.code) return;
+    if (res?.ok && res.data?.ok === true) step({ type: 'status', room: res.data, at: Number.isFinite(res.data.server_ms) ? res.data.server_ms : now() });
+    else state.message = msg(errorKey(res?.error), 'error');
+  }
+
   /** Cancel / Leave: the room left on the server, the channel closed, home. */
   async function leave() {
     generation += 1;
@@ -316,6 +334,7 @@ export function createOnlineLobby({ net, name, width, mine = { protocol: protoco
     join,
     answer,
     setReady,
+    start,
     leave,
     poll,
     openJoin() {

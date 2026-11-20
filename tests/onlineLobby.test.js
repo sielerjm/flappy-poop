@@ -398,3 +398,43 @@ test('poll pumps the transport (the clock\'s samples) and says whether anything 
   assert.equal(lobby.poll(), false, 'nothing new');
   assert.equal(net.calls.filter((c) => c[0] === 'pump').length, pumps + 1);
 });
+
+/** The host's lobby with the guest let in, on the ready screen (plan 39, 1.7a). */
+async function hostReady(extra = {}) {
+  const net = hostNet(extra);
+  const lobby = lobbyOn(net);
+  await lobby.create();
+  const code = lobby.state.room.code;
+  net.push({ kind: 'room', hint: 'answer', action: { type: 'status', room: room({ code, status: 'ready', guest_name: 'SirFlushALot' }), at: net.serverNow() } });
+  lobby.poll();
+  return { net, lobby, code };
+}
+
+test('start (1.7a): the host asks set_room_status(playing) once both are ready; its answer moves the room to playing with the seed and GO', async () => {
+  const { net, lobby, code } = await hostReady({
+    set_room_status: (args) => ({ ok: true, data: room({ code: args.p_code, status: 'playing', guest_name: 'SirFlushALot', seed: 99, start_ms: 1_004_000, round: 1 }) }),
+  });
+  assert.equal(lobby.state.room.phase, 'ready');
+  await lobby.start();
+  assert.deepEqual(rpcs(net, 'set_room_status').map((c) => c[2]), [{ p_code: code, p_status: 'playing' }]);
+  assert.equal(lobby.state.room.phase, 'playing');
+  assert.equal(lobby.state.room.seed, 99);
+  assert.equal(lobby.state.room.startMs, 1_004_000);
+  await lobby.start();
+  assert.equal(rpcs(net, 'set_room_status').length, 1, 'not again once playing');
+});
+
+test('start (1.7a): a guest never asks; a refusal leaves the room ready and says why; the guest moves on the verified status', async () => {
+  const g = await bothIn();
+  await g.lobby.start();
+  assert.equal(rpcs(g.net, 'set_room_status').length, 0, 'only the host starts a race');
+  g.net.push({ kind: 'room', hint: 'status', action: { type: 'status', room: room({ status: 'playing', seat: 'guest', guest_name: 'PlopMaster', seed: 7, start_ms: 1_004_000, round: 1 }), at: g.net.serverNow() } });
+  g.lobby.poll();
+  assert.equal(g.lobby.state.room.phase, 'playing');
+  assert.equal(g.lobby.state.room.seed, 7);
+
+  const h = await hostReady({ set_room_status: () => ({ ok: false, error: 'offline' }) });
+  await h.lobby.start();
+  assert.equal(h.lobby.state.room.phase, 'ready');
+  assert.equal(h.lobby.state.message?.key, 'onlineErrOffline');
+});
