@@ -1204,17 +1204,37 @@ export class Play extends Phaser.Scene {
     // A match: the first over this line (Versus.claimLevelFinish, the rectum's too) earns
     // versus.scoring.levelClearBonus and the level win; the second gets neither. The score moves
     // now (win() reports it); the popup starts after the break has paused the run (a tween made
-    // while paused is not paused with it), or at once on the final level.
-    const first = Boolean(this.match && this.versusHost()?.claimLevelFinish?.(this));
-    if (first) {
-      this.score += T.versus.scoring.levelClearBonus;
-      this.scoreText.setText(String(this.score));
-      this.refreshProbioticHud();
-    }
+    // while paused is not paused with it), or at once on the final level. The host is told which
+    // line this was (the online race's host judges it over the wire and answers later: awardLevelFirst).
+    const first = Boolean(this.match && this.versusHost()?.claimLevelFinish?.(this, { level: done, final }));
+    if (first) this.takeLevelClearBonus();
     if (final) this.win();
     else this.startLevelBreak();
     if (first) this.showScorePopup('levelClear');
     if (this.match && !final) this.versusHost()?.onLevelReached?.(this); // the ready check: both players tap ready, then the shared count
+  }
+
+  /** The first over a line's points (versus.scoring.levelClearBonus) on the score and its HUD. */
+  takeLevelClearBonus() {
+    this.score += T.versus.scoring.levelClearBonus;
+    this.scoreText.setText(String(this.score));
+    this.refreshProbioticHud();
+  }
+
+  /**
+   * The online race's verdict on a line, later than the line itself (plan 39, 1.7b: the host judges
+   * who crossed first over the wire, src/onlineRace.js): this half was first, so it takes the level
+   * win (🏁), the bonus and its popup now, wherever the run is; the final line's is also finalFirst.
+   * The slot carries them to the feed (the run's done waits for the final line's verdict).
+   */
+  awardLevelFirst({ final = false } = {}) {
+    const slot = this.match?.slots[this.player - 1];
+    if (!slot) return;
+    slot.levelWins = (slot.levelWins ?? 0) + 1;
+    if (final) slot.finalFirst = true;
+    this.takeLevelClearBonus();
+    this.publishSlot();
+    this.showScorePopup('levelClear');
   }
 
   /**

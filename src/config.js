@@ -370,6 +370,14 @@ export const TUNING = {
       slowMs: 1200, // ms since the peer's last message before the HUD's dot reads "slow connection" (keyframes come every keyframeMs)
       lostMs: 3000, // ms before it reads "reconnecting…" (plan 39, 1.6d's C3; Tier 2 pauses the race there)
     },
+    // The level break's referee (plan 39, 1.7b, src/onlineRace.js): the host judges each line and starts each level.
+    race: {
+      firstGraceMs: 600, // ms the host waits after crossing a line before it takes it: a guest claim stamped earlier may still be on the wire (one-way p99 ~145 ms, item 25)
+      verdictWaitMs: 3000, // ms a guest at the final line waits for the host's verdict before its run ends without the final win (a lost message must not hold the race's end)
+      countLeadMs: 250, // ms from the host's GO decision to the first count step, so the guest hears the go before its 3 shows
+      cancelMarginMs: 600, // ms before GO from which a tap no longer takes a ready back: the take-back has to reach the other side before GO
+      readyResendMs: 2000, // ms between repeats of this side's ready mark while it waits in a break (a lost mark must not hold both players)
+    },
     ghost: {
       maxExtrapolateMs: 1000, // ms past the last message the ghost keeps moving; then it holds until the next one
       smoothMs: 120, // ms a correction (a fart surge, a late flap) is blended out over instead of jumping

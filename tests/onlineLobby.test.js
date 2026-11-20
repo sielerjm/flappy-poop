@@ -438,3 +438,68 @@ test('start (1.7a): a guest never asks; a refusal leaves the room ready and says
   assert.equal(h.lobby.state.room.phase, 'ready');
   assert.equal(h.lobby.state.message?.key, 'onlineErrOffline');
 });
+
+// --- 1.7b: the room during and after a race (the race scene holds the lobby) -----------------------
+
+/** A host whose set_room_status answers with the room it asked for; every 'playing' is the next round. */
+async function hostRacing(fail = null) {
+  let round = 0;
+  const h = await hostReady({
+    set_room_status: (args) => {
+      if (fail?.(args)) return { ok: false, error: 'offline' };
+      if (args.p_status === 'playing') round += 1;
+      return { ok: true, data: room({ code: args.p_code, status: args.p_status, guest_name: 'SirFlushALot', seed: 50 + round, start_ms: 1_004_000 + round, round }) };
+    },
+  });
+  await h.lobby.start();
+  return h;
+}
+
+const statuses = (net) => rpcs(net, 'set_room_status').map((c) => c[2].p_status);
+
+test('finish and rematch (1.7b): the host marks the race finished once; a rematch asks for the next round (a new seed), finishing first when still playing', async () => {
+  const { net, lobby, code } = await hostRacing();
+  assert.deepEqual([lobby.state.room.phase, lobby.state.room.round], ['playing', 1]);
+  await lobby.rematch();
+  assert.deepEqual(statuses(net), ['playing', 'finished', 'playing']);
+  assert.ok(rpcs(net, 'set_room_status').every((c) => c[2].p_code === code));
+  assert.deepEqual([lobby.state.room.phase, lobby.state.room.round, lobby.state.room.seed], ['playing', 2, 52]);
+  await Promise.all([lobby.finish(), lobby.finish()]);
+  assert.equal(lobby.state.room.phase, 'finished');
+  await lobby.finish();
+  assert.deepEqual(statuses(net), ['playing', 'finished', 'playing', 'finished'], 'finished once');
+  await lobby.rematch();
+  assert.deepEqual([lobby.state.room.phase, lobby.state.room.round, lobby.state.room.seed], ['playing', 3, 53]);
+});
+
+test('finish and rematch (1.7b): a refused finish leaves the room playing and asks for no round; the guest never moves the room itself', async () => {
+  const h = await hostRacing((args) => args.p_status === 'finished');
+  await h.lobby.rematch();
+  assert.deepEqual(statuses(h.net), ['playing', 'finished']);
+  assert.equal(h.lobby.state.room.phase, 'playing');
+  assert.equal(h.lobby.state.room.round, 1);
+
+  const g = await bothIn();
+  g.net.push({ kind: 'room', hint: 'status', action: { type: 'status', room: room({ status: 'playing', seat: 'guest', guest_name: 'PlopMaster', seed: 7, start_ms: 1_004_000, round: 1 }), at: g.net.serverNow() } });
+  g.lobby.poll();
+  await g.lobby.finish();
+  await g.lobby.rematch();
+  g.lobby.roomItem({ kind: 'room', hint: 'status', action: { type: 'status', room: room({ status: 'finished', seat: 'guest', guest_name: 'PlopMaster', seed: 7, start_ms: 1_004_000, round: 1 }), at: g.net.serverNow() } });
+  assert.equal(g.lobby.state.room.phase, 'finished');
+  await g.lobby.rematch();
+  assert.equal(rpcs(g.net, 'set_room_status').length, 0, 'only the host moves the room');
+});
+
+test('roomItem (1.7b): the race hands the lobby a confirmed room item; its status moves the room (finished, then the next round), anything else nothing', async () => {
+  const g = await bothIn();
+  const status = (fields) => ({ kind: 'room', hint: 'status', action: { type: 'status', room: room({ seat: 'guest', guest_name: 'PlopMaster', ...fields }), at: g.net.serverNow() } });
+  g.lobby.roomItem(status({ status: 'playing', seed: 7, start_ms: 1_004_000, round: 1 }));
+  assert.equal(g.lobby.state.room.phase, 'playing');
+  g.lobby.roomItem(status({ status: 'finished', seed: 7, start_ms: 1_004_000, round: 1 }));
+  assert.equal(g.lobby.state.room.phase, 'finished');
+  g.lobby.roomItem(status({ status: 'playing', seed: 8, start_ms: 1_020_000, round: 2 }));
+  assert.deepEqual([g.lobby.state.room.phase, g.lobby.state.room.seed, g.lobby.state.room.round, g.lobby.state.room.startMs], ['playing', 8, 2, 1_020_000]);
+  g.lobby.roomItem({ kind: 'peer', event: 'go', msg: { level: 2, startAt: 1 } });
+  g.lobby.roomItem(null);
+  assert.equal(g.lobby.state.room.round, 2);
+});

@@ -12,6 +12,8 @@
 //   level, 1.7b), newest wins; a peer that (re)joins hears this side's mark again. Both ready calls
 //   onBothReady once per both-ready; the panel then calls start(), which on the host asks
 //   set_room_status('playing') (1.7a). The room in 'playing' carries the seed and GO time.
+// - The race (1.7b) holds the lobby: it hands it the room's confirmed status (roomItem); the host
+//   marks the race finished (finish) and asks for the next round on a rematch (rematch: a new seed).
 // - The version check (choice 8): the peer's presence against this app's protocol (compareVersions);
 //   a mismatch closes the room for both (each side checks) with who must reload.
 // Every message is an i18n key with the name it carries; src/ui/onlineLobbyViews.js draws it.
@@ -75,6 +77,7 @@ export function createOnlineLobby({ net, name, width, mine = { protocol: protoco
   let themSeq = -Infinity;
   let both = false;
   let starting = false; // set_room_status('playing') in flight
+  let finishing = null; // set_room_status('finished') in flight
   let generation = 0; // bumped by every leave, so a reply that lands after one is dropped
 
   const lobby = { state, onBothReady };
@@ -274,15 +277,49 @@ export function createOnlineLobby({ net, name, width, mine = { protocol: protoco
    * moves on the server's 'status', confirmed by the transport. A refusal keeps the ready screen.
    */
   async function start() {
+    if (state.room.role !== 'host' || state.room.phase !== 'ready') return;
+    await play();
+  }
+
+  /** set_room_status(p_status) for this room; its answer (the room as room_state shows it) moves this side. */
+  async function setStatus(status) {
     const r = state.room;
-    if (r.role !== 'host' || r.phase !== 'ready' || starting) return;
-    starting = true;
     const gen = generation;
-    const res = await net.rpc('set_room_status', { p_code: r.code, p_status: 'playing' });
-    starting = false;
-    if (gen !== generation || state.room.code !== r.code) return;
-    if (res?.ok && res.data?.ok === true) step({ type: 'status', room: res.data, at: Number.isFinite(res.data.server_ms) ? res.data.server_ms : now() });
-    else state.message = msg(errorKey(res?.error), 'error');
+    const res = await net.rpc('set_room_status', { p_code: r.code, p_status: status });
+    if (gen !== generation || state.room.code !== r.code) return false;
+    if (res?.ok && res.data?.ok === true) {
+      step({ type: 'status', room: res.data, at: Number.isFinite(res.data.server_ms) ? res.data.server_ms : now() });
+      return true;
+    }
+    state.message = msg(errorKey(res?.error), 'error');
+    return false;
+  }
+
+  /** The host's 'playing': from ready (the first race) or finished (a rematch); the server mints the seed and GO. */
+  async function play() {
+    if (starting) return;
+    starting = true;
+    try {
+      await setStatus('playing');
+    } finally {
+      starting = false;
+    }
+  }
+
+  /** The race is over (1.7b, the host's app): the room to 'finished', once, so a rematch can follow. */
+  function finish() {
+    if (state.room.role !== 'host' || state.room.phase !== 'playing') return Promise.resolve();
+    finishing ??= track(setStatus('finished')).finally(() => {
+      finishing = null;
+    });
+    return finishing;
+  }
+
+  /** Rematch (1.7b, the host's app once both ask): the next round, finishing the last one first if needed. */
+  async function rematch() {
+    if (state.room.role !== 'host') return;
+    if (state.room.phase === 'playing') await finish();
+    if (state.room.phase === 'finished') await play();
   }
 
   /** Cancel / Leave: the room left on the server, the channel closed, home. */
@@ -335,8 +372,14 @@ export function createOnlineLobby({ net, name, width, mine = { protocol: protoco
     answer,
     setReady,
     start,
+    finish,
+    rematch,
     leave,
     poll,
+    /** A transport item the race hands on (1.7b): a confirmed room item moves the room, anything else nothing. */
+    roomItem(item) {
+      if (item && item.kind === 'room' && item.action) step(item.action);
+    },
     openJoin() {
       if (state.room.phase !== 'idle' && state.room.phase !== 'closed') return;
       state.screen = 'join';

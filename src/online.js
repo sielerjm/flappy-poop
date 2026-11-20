@@ -45,7 +45,8 @@ const level = ['int', 1, 99];
  * `pos` is a keyframe of everything the other side's ghost, level-bar marker and race outcome
  * read; `flap` the poop's state at a flap (replayed exactly); `crash` a respawn (D3: no one-life
  * mode); `finish` a claim to have crossed a level's line, `first` the host's verdict on it;
- * `ready` / `go` the level-break ready check and the host's GO; `width` a field width change at a
+ * `ready` / `go` the level-break ready check and the host's GO (`cancel` takes back the count that
+ * ends at that `startAt`: a ready withdrawn during it); `width` a field width change at a
  * break (presence holds the join-time one); `done` a run's final numbers; `rematch` the ask.
  */
 export const ONLINE_EVENTS = Object.freeze({
@@ -59,7 +60,7 @@ export const ONLINE_EVENTS = Object.freeze({
   finish: Object.freeze({ level, distance }),
   first: Object.freeze({ level, seat: ['enum', SEATS] }),
   ready: Object.freeze({ level, ready: ['bool'] }),
-  go: Object.freeze({ level, startAt: ['num', 0, 1e14] }),
+  go: Object.freeze({ level, startAt: ['num', 0, 1e14], cancel: ['bool'] }),
   width: Object.freeze({ width: ['width'] }),
   done: Object.freeze({ score: count, deaths: count, levelWins: ['int', 0, 99], finalFirst: ['bool'], won: ['bool'] }),
   rematch: Object.freeze({ want: ['bool'] }),

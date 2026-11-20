@@ -154,7 +154,7 @@ test('every event has a valid example and every field is checked', () => {
     finish: { level: 1, distance: 4000 },
     first: { level: 1, seat: 'guest' },
     ready: { level: 1, ready: true },
-    go: { level: 2, startAt: 1_800_000_000_000 },
+    go: { level: 2, startAt: 1_800_000_000_000, cancel: false },
     width: { width: 1280 },
     done: { score: 90, deaths: 2, levelWins: 3, finalFirst: true, won: true },
     rematch: { want: true },
