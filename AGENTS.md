@@ -29,7 +29,7 @@ stream in both modes), and every level carries **one guaranteed kernel**
 at that pair's gap, still; from level 2 it takes its pair's band slot, or the next pair's without a box or
 bean, or past the last pipe; `clearFieldAhead` re-arms it when a respawn clears it untaken). A coin or a
 box's coin draw goes into the purse (`effects.addCoins`, `Coin_Pickup.mp3`), shown in the top-left
-inventory over the beans (`inventoryRows`, `TUNING.hudInventory`: the rows shown stack from the top). Coins
+inventory over the beans (`inventoryRows`, `TUNING.hudInventory`: the rows shown stack from the top; in an online race they start at `TUNING.online.inventoryY0`, below the opponent's pill). Coins
 last **one run**: `start()` empties the purse, nothing is saved, a single-player death empties it and clears
 every power-up (`effects.clearPowerups`), and a two-player crash keeps `crashCoins` (90 %, rounded down) and
 clears the power-ups. Pickups with no motion data pulse (`pulseStill` / `pulseScale`, `stillPulseScale`,
@@ -947,7 +947,10 @@ src/
                             flappyPoop.streaks (plan 34), onlineSessionKey =
                             flappyPoop.onlineSession (plan 39; a bearer secret, never
                             exported or sent elsewhere), onlineTrustKey =
-                            flappyPoop.onlineTrust (plan 39, 1.6a), score cap),
+                            flappyPoop.onlineTrust (plan 39, 1.6a), onlineRaceKey =
+                            flappyPoop.onlineRace (plan 39, 1.8: the room code of the
+                            race this device is in, '.test' added on the test project),
+                            score cap),
                             LEVELS (gut segment name keys, in order), LEVEL_COLORS
                             (Set2 backgrounds, cycling) and BACKGROUND (overlay
                             layers: key + parallax), TEST_MODE (trigger words,
@@ -1345,7 +1348,14 @@ src/
                             polls poll(). roomItem(item) feeds a room item in; finish() and
                             rematch() are host only (set_room_status 'finished', then
                             'playing' again with a new seed, round + 1); start() shares
-                            its code with rematch. tests/onlineLobby.test.js.
+                            its code with rematch. Item 46: createOnlineLobby({ memory })
+                            (get / set / clear of the race's room code, the panel's
+                            raceMemory over LEADERBOARD.onlineRaceKey): remember() at the
+                            hand-off, leave() clears it, and a code still there at
+                            creation is left first (leave_room; Create / Join wait for it),
+                            since a reload mid-race leaves the room 'playing' and the
+                            server refuses a seated device a new room ('in a race', up to
+                            6 h; message onlineErrInRace). tests/onlineLobby.test.js.
   onlineRace.js             Online race (🌐, plan 39, 1.7a, 1.7b) per-frame rules, NO
                             Phaser/DOM/timers: raceStartPlan (room → seed, names, seat,
                             agreed width, round), countdownStep, localPhase, linkQuality,
@@ -2089,7 +2099,9 @@ src/
                             (onVersusKey → keyGroup) and routed with pads by
                             versusInput() to the half whose device it is (a
                             join-screen input claims a slot through
-                            Versus.onJoinInput); P2 draws no tray, no ring, binds no
+                            Versus.onJoinInput; a host with no second local half,
+                            halfScene(1) null as in the online race, gets every device
+                            sent to its one half); P2 draws no tray, no ring, binds no
                             keys and no pad. handleChrome('pause' / 'esc') toggles
                             the shared pause (Versus.togglePause); pauseRun() /
                             autoPause forward to it; a 'resume' tap (and a pad's B)
@@ -2209,6 +2221,18 @@ src/
                             lobby.finish(). wantRematch(on) (1.8's button) and checkRematch:
                             the room playing a later round restarts the scene on
                             raceStartPlan (which carries `round`).
+                            1.8: the results panel when the race ends (Rematch | Leave,
+                            A and B on a pad; the rematch line: waiting for the other, the
+                            other asking, the other gone; the numbers are copied at the
+                            end); the wait timer while ready in a break or out at the
+                            finish, and after TUNING.online.race.waitOfferMs "<name> is
+                            taking a while" with Keep waiting (starts it over) | Leave
+                            (item 15; hidden under the shop); the opponent's pill fits a
+                            long name, and the break card has no fit line. The purse and
+                            beans sit below the opponent's pill: the scene passes
+                            TUNING.online.inventoryY0 to Play as launch data
+                            `inventoryY0` (Play.half.inventoryY0, third argument of
+                            inventoryRows). tests/onlineRaceScene.test.js.
     Over.js                 Game-over panel (score, run summary of fiber / probiotic / postbiotic over bacteria / bean / mystery box (mystery-icon.png) over ‼️ long falls / 😢 close calls (data.falls / closeCalls; ×– for a stored Daily result), pipes crossed, then Share | Home on one row from overButtonsLayout and, on a normal or test run, a glowing Play again under them, the panel lifted over.againLiftPx so it clears the ⏸) with a
                             tap lockout (openedAt = game.loop.time: a relaunched
                             scene's this.time.now is stale) and its own tray (mute
@@ -3451,6 +3475,12 @@ tools/
                             events in a row sync once, the next after it settles syncs
                             again; a show syncs after a 31 s hide, not a 1 s one; a
                             restart keeps the one guard and leaves one online listener.
+                            Plan 39's online-race (last; no network): the real OnlineRace
+                            scene against a scripted guest with its own referee and a 40 ms
+                            link: the purse under the opponent's pill, the wait timer and
+                            Keep waiting, the shared count and GO, one outcome on both, the
+                            results panel, Rematch's states and round 2, Leave back to
+                            single player.
                             Zero dependencies (fetch + WebSocket).
 
 docs/                       Living specs kept with the code: save-code-spec.md (the
@@ -3685,8 +3715,14 @@ Commits follow `type(scope): summary` (`feat`, `fix`, `docs`, `chore`, `test`, `
   tests/onlineRace.test.js races two simulated peers through a level break to the end), wiring in
   `scenes/OnlineRace.js` (tests/onlineRaceScene.test.js). The host is the one arbiter
   (`createRaceReferee`): `first` (one per line) and `go` are its word, judged on server time. Knobs in
-  `TUNING.online.race` (not part of `protocolVersion`). The `go` event's `cancel` flag is in `ONLINE_EVENTS`,
+  `TUNING.online.race` (not part of `protocolVersion`; `waitOfferMs` is item 15's offer, `TUNING.online.inventoryY0`
+  the purse rows' start below the opponent's pill). The `go` event's `cancel` flag is in `ONLINE_EVENTS`,
   so it moved `protocolVersion`.
+  The tournament panel's hand-off (`handOffRace`, 1.8) remembers the room (`lobby.remember()`), and over a
+  running Versus (🌐 switched on in its lobby) marks the match `left` and stops Versus and PlayB so only the
+  race draws (not `Versus.leave()`, which starts a plain Play). The race's end is not stored anywhere in Tier 1:
+  the only server row is the room's. The smoke's `online-race` section drives the real scene against a
+  scripted guest in the page (a break, the end, a rematch, a Leave; no network).
   `?onlinetest=<code>` (`onlineProjectConfig`) works on dev hosts only, keeps its own session
   and trust keys, and the repo never holds a test project's URL or key
   (`tools/online_test_link.mjs` builds the link from an env file).
