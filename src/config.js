@@ -397,8 +397,10 @@ export const TUNING = {
     // until the other's report is in, so it asks again.
     report: {
       retryMs: [2000, 4000, 8000, 16000, 30000], // ms before each resend after a lost answer (offline, a deadlock, a first 'no match'); then it gives up
-      pollMs: 3000, // ms between asks while the other device has not reported yet
-      polls: 10, // asks before "not saved yet" (a waiting, unpaired device never reports: M1 rule 2)
+      pollMs: 3000, // ms between the first asks while the other device has not reported yet
+      polls: 10, // quick asks (every pollMs) before they slow to slowPollMs
+      slowPollMs: 15000, // ms between the later asks
+      waitMs: 100000, // ms asking before "not saved yet": the other device's whole resend window (retryMs, a timed-out try before each, a poll of skew; a test ties them) (2.7, AUD-109). A waiting, unpaired device never reports (M1 rule 2)
     },
     inventoryY0: 268, // px: the purse and bean rows' first centre in an online race, below the opponent's pill (its top 82, bottom 228 with the slow / lost word), not over it
     ghost: {

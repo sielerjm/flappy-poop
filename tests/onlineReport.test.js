@@ -88,14 +88,67 @@ test('the reporter: one call at a time (a slow answer is not sent twice)', async
   assert.equal(r.state().status, 'agreed');
 });
 
-test("the reporter: the other device never reports (a waiting, unpaired device's report is refused): 'late' after polls asks", async () => {
+test("the reporter: the other device never reports (a waiting, unpaired device's report is refused): 'late' once waitMs has passed (2.7: polls quick asks, then one every slowPollMs), never before", async () => {
+  const P = T.online.report;
   const { r, calls, step } = rig([{ ok: true, data: { status: 'playing', counted: false } }]);
   await step();
-  for (let i = 0; i < T.online.report.polls; i += 1) await step(T.online.report.pollMs);
-  assert.equal(calls.length, T.online.report.polls + 1);
+  let waited = 0;
+  while (waited < P.waitMs - 1000) {
+    await step(1000);
+    waited += 1000;
+    assert.equal(r.state().phase, 'waiting', `still asking ${waited} ms in`);
+  }
+  await step(1000);
   assert.equal(r.state().phase, 'late');
+  const quick = calls.slice(1, P.polls + 1).map((c, i) => c.at - calls[i].at);
+  assert.ok(quick.every((d) => d === P.pollMs), `the first ${P.polls} asks every pollMs: ${quick}`);
+  const slow = calls.slice(P.polls + 1, -1).map((c, i) => c.at - calls[P.polls + i].at);
+  assert.ok(slow.length > 0 && slow.every((d) => d === P.slowPollMs), `then every slowPollMs: ${slow}`);
+  assert.equal(calls.at(-1).at - calls[0].at, P.waitMs, 'the last ask lands at waitMs');
+  assert.ok(calls.length <= 1 + P.polls + Math.ceil((P.waitMs - P.polls * P.pollMs) / P.slowPollMs) + 1, `${calls.length} asks in all`);
+  const n = calls.length;
   await step(60000);
-  assert.equal(calls.length, T.online.report.polls + 1, 'it stops asking');
+  assert.equal(calls.length, n, 'it stops asking');
+});
+
+test("2.7, AUD-109: waitMs covers the other device's whole resend window: every retryMs, a timed-out try before each, and a poll of start skew", () => {
+  const P = T.online.report;
+  const window = P.retryMs.reduce((a, b) => a + b, 0) + (P.retryMs.length + 1) * T.online.net.rpcTimeoutMs + P.pollMs;
+  assert.ok(P.waitMs >= window, `waitMs ${P.waitMs} < ${window}`);
+  assert.ok(P.slowPollMs >= P.pollMs && P.polls * P.pollMs < P.waitMs);
+});
+
+test("2.7, AUD-109: a race the other device reports only on its last resend (every try before it timed out) reads saved on both devices", async () => {
+  let clock = 0;
+  const now = () => clock;
+  const reported = { host: false, guest: false };
+  const answer = () => ({ ok: true, data: reported.host && reported.guest ? { status: 'agreed', counted: true } : { status: 'playing', counted: false } });
+  const host = createRaceReporter({ rpc: async () => ((reported.host = true), answer()), code: '482913', round: 1, result: {}, now });
+  let guestTries = 0;
+  const until = (at) => new Promise((res) => pending.push({ at, res }));
+  const pending = [];
+  const guestRpc = async () => {
+    guestTries += 1;
+    if (guestTries <= T.online.report.retryMs.length) {
+      await until(clock + T.online.net.rpcTimeoutMs); // a lift, a tunnel: each try times out
+      return { ok: false, error: 'offline' };
+    }
+    reported.guest = true;
+    return answer();
+  };
+  const guest = createRaceReporter({ rpc: guestRpc, code: '482913', round: 1, result: {}, now });
+  for (; clock <= T.online.report.waitMs + 5000; clock += 100) {
+    for (const p of pending.filter((x) => x.at <= clock)) {
+      pending.splice(pending.indexOf(p), 1);
+      p.res();
+    }
+    host.tick();
+    guest.tick();
+    await new Promise((res) => setImmediate(res));
+  }
+  assert.equal(guestTries, T.online.report.retryMs.length + 1, 'the guest got through on its last try');
+  assert.deepEqual([guest.state().status, guest.state().counted], ['agreed', true]);
+  assert.deepEqual([host.state().phase, host.state().status, host.state().counted], ['done', 'agreed', true], 'the host says saved too');
 });
 
 test("the reporter: a waiting device ('not trusted') is pending at once, never resent", async () => {

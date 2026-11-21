@@ -1141,7 +1141,8 @@ const RESEND = new Set(['offline', 'error', 'timeout']);
  * One device's report of a finished race, ticked each frame (no timers; `rpc` returns a promise of
  * onlineNet's { ok, data } | { ok: false, error }). state() → { phase, status, counted, error }:
  * phase 'saving' (sent or about to be), 'waiting' (this side's report is in, the other's is not:
- * asked again every pollMs, `polls` times), 'done' (status agreed / disputed / refused /
+ * asked again every pollMs `polls` times, then every slowPollMs, until waitMs has passed: the
+ * other device's whole resend window, 2.7, AUD-109), 'done' (status agreed / disputed / refused /
  * abandoned, counted), 'late' (the other never reported in time), 'pending' (a waiting device:
  * 'not trusted'), 'failed' (anything else, or every resend lost).
  * Resends: a lost answer (offline, a 5xx, a deadlock) after each retryMs; 'no match' once (a merge
@@ -1154,6 +1155,7 @@ export function createRaceReporter({ rpc, code, round, result, now, t = TUNING }
   let flying = false;
   let tries = 0;
   let asks = 0;
+  let waitFrom = null; // when the first answer said the other device had not reported (2.7, AUD-109)
   let noMatch = 0;
   const lost = (error) => {
     if (tries >= k.retryMs.length) return Object.assign(st, { phase: 'failed', error });
@@ -1164,10 +1166,12 @@ export function createRaceReporter({ rpc, code, round, result, now, t = TUNING }
     if (res?.ok) {
       const status = res.data?.status ?? null;
       if (status === 'playing') {
-        if (asks >= k.polls) return Object.assign(st, { phase: 'late', status });
+        waitFrom ??= now();
+        const waited = now() - waitFrom;
+        if (waited >= k.waitMs) return Object.assign(st, { phase: 'late', status });
         asks += 1;
         st.phase = 'waiting';
-        nextAt = now() + k.pollMs;
+        nextAt = now() + Math.min(asks <= k.polls ? k.pollMs : k.slowPollMs, k.waitMs - waited);
         return;
       }
       return Object.assign(st, { phase: 'done', status, counted: res.data?.counted === true });
