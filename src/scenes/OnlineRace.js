@@ -4,7 +4,7 @@ import { fieldWidth, uiColumn, overButtonsLayout, overHit, canRestart, fitScale 
 import { createMatch } from '../versus.js';
 import { t, levelLabel } from '../i18n.js';
 import { raceOutcome } from '../tournament.js';
-import { ONLINE_HOST_KEY, RESUME_VERSION, countdownStep, createFieldFit, createRaceFeed, createRacePause, createRaceReferee, createWakeLock, levelSnap, localPhase, pauseOverlay, raceRoomItem, raceStartPlan, rewindOnHeard, startSnap } from '../onlineRace.js';
+import { ONLINE_HOST_KEY, RESUME_VERSION, countdownStep, createFieldFit, createRaceFeed, createRacePause, createRaceReferee, createRaceReporter, createWakeLock, levelSnap, localPhase, pauseOverlay, raceReport, raceRoomItem, raceStartPlan, reportLine, rewindOnHeard, startSnap } from '../onlineRace.js';
 import { racePhase } from '../online.js';
 import { sfx, unlock } from '../sound.js';
 import { createButton } from '../ui/button.js';
@@ -47,6 +47,9 @@ const GREY = '#c9b8dc';
  * rejoins once the beat is stale; a page whose race another page took over (it was frozen past
  * staleMs) steps aside when it wakes: the transport closed without leaving the room, back to the
  * ready screen, whose 🌐 window says the race runs in another window.
+ * 2.5: once the race is over both devices report it (finish_match through createRaceReporter, from
+ * the numbers the outcome came from, in seat order); the results panel's line says whether it was
+ * saved to the 🏅 and 🏆 boards, and if not, why. A race left mid-way is never reported.
  * Started by the tournament panel once the room is 'playing' with { net, lobby, plan, store }. 1.8
  * adds the results panel (Rematch | Leave); Tier 2 a peer leaving and the shared pause.
  */
@@ -220,6 +223,7 @@ export class OnlineRace extends Phaser.Scene {
     this.offerAt = null; // server ms the Leave offer shows (Keep waiting moves it on)
     this.tapFrame = -1; // the frame a tap pressed one of this scene's buttons: the break does not take it as a ready tap
     this.result = null; // the results panel's parts, once it shows
+    this.reporter = null; // 2.5: this side's finish_match report, from the race's end
     this.peerLeft = false; // the other player left the room after the race
     const now = () => this.net.serverNow();
     const send = (event, fields) => this.net.send(event, fields);
@@ -426,6 +430,7 @@ export class OnlineRace extends Phaser.Scene {
     this.refreshHud();
     this.refreshWait(now);
     this.checkOver();
+    this.reporter?.tick();
     this.refreshResult();
     this.checkRematch();
   }
@@ -532,12 +537,12 @@ export class OnlineRace extends Phaser.Scene {
       this.add.text(x - 70, cy + 90, `🏁 ×${slot.levelWins ?? 0}`, { ...STYLE, fontSize: '32px', color: GREY, strokeThickness: 8 }).setOrigin(0.5).setDepth(71);
       this.add.text(x + 70, cy + 90, `💀 ×${slot.deaths ?? 0}`, { ...STYLE, fontSize: '32px', color: GREY, strokeThickness: 8 }).setOrigin(0.5).setDepth(71);
     });
-    this.add.text(cx, cy + 160, t(this.locale, 'versusNotSaved'), { ...STYLE, fontSize: '24px', color: GOLD, strokeThickness: 6, wordWrap: { width: pw - 80, useAdvancedWrap: true } }).setOrigin(0.5).setDepth(71);
+    const saved = this.add.text(cx, cy + 160, '', { ...STYLE, fontSize: '24px', color: GOLD, strokeThickness: 6, wordWrap: { width: pw - 80, useAdvancedWrap: true } }).setOrigin(0.5).setDepth(71);
     const boxes = overButtonsLayout(cx, cy, T, { share: !this.abandoned }); // abandoned: Leave alone, no rematch
     const rematch = this.abandoned ? null : createButton(this, boxes.share, t(this.locale, 'onlineRematch'), { ...STYLE, fontSize: '40px' }, { depth: 71 });
     createButton(this, boxes.home, t(this.locale, 'onlineLeave'), { ...STYLE, fontSize: '40px' }, { depth: 71 });
     const status = this.add.text(cx, cy + 345, '', { ...STYLE, fontSize: '30px', color: GREY, strokeThickness: 6, wordWrap: { width: pw - 60, useAdvancedWrap: true } }).setOrigin(0.5).setDepth(71);
-    this.result = { boxes, rematch, status, openedAt: this.game.loop.time, shown: null };
+    this.result = { boxes, rematch, status, saved, openedAt: this.game.loop.time, shown: null, savedShown: null };
     this.tweens.add({ targets: panel, scale: { from: 0.8, to: 1 }, duration: T.over.panelInMs, ease: 'Back.easeOut' });
     this.refreshResult();
   }
@@ -546,6 +551,13 @@ export class OnlineRace extends Phaser.Scene {
   refreshResult() {
     const r = this.result;
     if (!r) return;
+    // 2.5: the report's line (saving, saved to the boards, not saved and why).
+    const save = reportLine(this.reporter?.state() ?? null, { abandoned: Boolean(this.abandoned) });
+    const savedKey = save ? `${save.key}:${save.kind}` : '';
+    if (r.saved && r.savedShown !== savedKey) {
+      r.savedShown = savedKey;
+      r.saved.setText(save ? t(this.locale, save.key).replace('{name}', this.plan.names[1]) : '').setColor(save?.kind === 'ok' ? GREEN : save?.kind === 'no' ? '#ff8da8' : GOLD);
+    }
     const want = this.referee?.rematch() ?? { mine: false, theirs: false };
     const key = this.peerLeft || this.abandoned ? 'left' : want.mine ? 'mine' : want.theirs ? 'theirs' : 'none';
     if (r.shown === key) return;
@@ -997,8 +1009,21 @@ export class OnlineRace extends Phaser.Scene {
     this.outcome = raceOutcome(this.finalSlots);
     this.wake?.want(false);
     if (this.plan.seat === 'host') this.lobby?.finish?.();
+    this.startReport();
     this.refreshWait(this.net.serverNow());
     this.time?.delayedCall?.(T.deathToOverMs, () => this.showResult());
+  }
+
+  /**
+   * 2.5: report the race (finish_match) from the numbers the outcome came from, in seat order, with
+   * this side's numbers-only telemetry; both devices report, and the panel's line follows the answer.
+   */
+  startReport() {
+    const code = this.lobby?.state?.room?.code ?? null;
+    if (this.reporter || !code || typeof this.net.rpc !== 'function') return;
+    const stats = { ...(this.net.stats?.() ?? {}), ...(this.pause?.stats?.() ?? {}) };
+    const result = raceReport({ seat: this.plan.seat, finalSlots: this.finalSlots, stats });
+    this.reporter = createRaceReporter({ rpc: (fn, args) => this.net.rpc(fn, args), code, round: this.plan.round ?? 0, result, now: () => Date.now() });
   }
 
   /** Rematch (1.8's button, the smoke): this side's ask, after the race; the host's app starts the next round once both ask. */

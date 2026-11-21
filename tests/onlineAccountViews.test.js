@@ -175,3 +175,51 @@ test('the keypad: ⌫ takes the last digit, a seventh is ignored', async () => {
   await root.find('tour-key-back').click();
   assert.equal(st.typed, '12345');
 });
+
+test('🏁 Recent races (2.5, Preview F3): beside 📱 Devices on the home; the rival row, one row per race, a private note, Back', async () => {
+  const history = {
+    ok: true,
+    rival: { name: 'JollyPlunger042', meetings: 7, losses: 4 },
+    recent: [
+      { name: 'JollyPlunger042', result: 'won', mine: 412, theirs: 377, days: 0 },
+      { name: 'SirFlushALot', result: 'draw', mine: 260, theirs: 260, days: 1 },
+      { name: 'BeanCounter', result: 'lost', mine: 120, theirs: 351, days: 9 },
+    ],
+  };
+  const k = harness({ races: history }, { ...createAccountState(), view: 'home', trusted: true });
+  const row = devicesButton(k.ui, k.st, k.account);
+  assert.ok(row.find('tour-devices'), '📱 Devices stays');
+  await row.find('tour-races').click();
+  assert.deepEqual(k.calls.map((c) => c[0]), ['races']);
+  assert.equal(k.st.view, 'races');
+  assert.match(text(k.find('tour-rival')), /Biggest online rival.*JollyPlunger042 · lost 4 of 7/);
+  assert.match(text(k.find('tour-race-0')), /JollyPlunger042.*today.*Won 412–377/);
+  assert.match(text(k.find('tour-race-1')), /SirFlushALot.*yesterday.*Draw 260–260/);
+  assert.match(text(k.find('tour-race-2')), /BeanCounter.*9 days ago.*Lost 120–351/);
+  assert.match(text(k.root), /Only you can see this list/);
+  await k.find('tour-races-back').click();
+  assert.equal(k.st.view, 'home');
+});
+
+test('🏁 Recent races: none yet says so; a waiting device is asked to pair; an error stays on the home with its line', async () => {
+  const none = harness({ races: { ok: true, rival: null, recent: [] } }, { ...createAccountState(), view: 'home', trusted: true });
+  await devicesButton(none.ui, none.st, none.account).find('tour-races').click();
+  assert.ok(none.find('tour-races-none'));
+  assert.match(text(none.find('tour-rival')), /—/);
+  const waiting = harness({ races: { ok: false, pending: true } }, { ...createAccountState(), view: 'home', trusted: true });
+  await devicesButton(waiting.ui, waiting.st, waiting.account).find('tour-races').click();
+  assert.equal(waiting.st.view, 'races');
+  assert.equal(waiting.st.trusted, false);
+  assert.match(text(waiting.find('tour-races-pending')), /Pair this device to see your races/);
+  const off = harness({ races: { ok: false, errorKey: 'onlineErrOffline' } }, { ...createAccountState(), view: 'home', trusted: true });
+  await devicesButton(off.ui, off.st, off.account).find('tour-races').click();
+  assert.equal(off.st.view, 'home');
+  assert.deepEqual(off.ui.status, { text: t('en', 'onlineErrOffline'), kind: 'error' });
+});
+
+test('📱 Devices: one day ago reads "yesterday", not "1 days ago" (2.5)', async () => {
+  const rows = [{ uid: 'u-me', me: true, trusted: true, days: 0 }, { uid: 'u-2', me: false, trusted: true, days: 1 }];
+  const k = harness({ devices: { ok: true, rows } }, { ...createAccountState(), view: 'home', trusted: true });
+  await devicesButton(k.ui, k.st, k.account).find('tour-devices').click();
+  assert.match(text(k.find('tour-dev-1')), /last online yesterday/);
+});

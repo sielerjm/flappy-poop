@@ -574,6 +574,18 @@ test("'in a race' (this device still seated in a playing room) has its own messa
   assert.equal(lobby.state.message?.key, 'onlineErrInRace');
 });
 
+test("'online closed' (the server's off switch, 2.4a) has its own line on Create and Join (2.5, Preview F3)", async () => {
+  const created = lobbyOn(fakeNet({ create_room: { ok: false, error: 'online closed' } }));
+  await created.create();
+  assert.equal(created.state.message?.key, 'onlineClosed');
+  const net = fakeNet({ join_room: { ok: false, error: 'online closed' } });
+  const joined = lobbyOn(net);
+  joined.openJoin();
+  joined.state.typed = '482913';
+  await joined.join();
+  assert.equal(joined.state.message?.key, 'onlineClosed');
+});
+
 // --- 2.3: a reload's rejoin (D4) ------------------------------------------------------------------
 
 function rejoinMemory(code = null) {

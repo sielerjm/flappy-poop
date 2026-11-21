@@ -3360,13 +3360,19 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         const lobbyNames = await evaluate(`JSON.stringify([...document.querySelectorAll('[id^="tour-slot-"] .who')].map((w) => w.firstChild?.textContent).sort())`).then(JSON.parse);
         ok(again.join() === [guest, 'Linked', 'Smoke'].sort().join() && againSeeding && straight && !straightPanel && bracketAtJoin, `New tournament keeps the players (${again.join(', ')}) and seeds again; Continue after its semi goes straight to the Final's join screen; Bracket there shows the Final next`);
         ok(armed === (await tx('tournamentAbandonConfirm')) && stillOpen && toLobby && lobbyNames.join() === again.join(), `Abandon asks once ("${armed.slice(0, 30)}…"), then the lobby with the same players (${lobbyNames.join(', ')})`);
-        // Two players: − to 2 (the guest and Linked) → one Final; Continue → a podium without 🥉 and nothing queued, though Linked is linked.
+        // Plan 39, 2.5 (item 42(c)): each race queued its linked racers' scores for 🏆 (Linked, Smoke), never the guest's.
+        const rposts = await evaluate(`JSON.stringify(${P1}.racePostQueue.load())`).then(JSON.parse);
+        ok(rposts.length > 0 && rposts.every((r) => (r.name === 'Linked' || r.name === 'Smoke') && /^[A-Za-z0-9_-]{22}$/.test(r.playerId) && r.score > 0 && r.level >= 1) && !rposts.some((r) => r.name === guest), `the races queued ${rposts.length} 🏆 posts, linked racers only (${[...new Set(rposts.map((r) => r.name))].join(', ')})`);
+        await evaluate(`(localStorage.removeItem('flappyPoop.racePosts'), localStorage.removeItem('flappyPoop.tournaments'), true)`);
+        // Two players: − to 2 (the guest and Linked) → one Final; Continue → a podium without 🥉, and (2.5) the tournament queued for 🏅: Linked is linked.
         await click('tour-minus');
         await click('tour-start');
         const twoSeed = await evaluate(`JSON.stringify({ pairs: document.querySelectorAll('#tour-body .pair').length, round: document.querySelector('#tour-body .pair .round')?.textContent, byes: document.querySelectorAll('#tour-body .seed.bye').length })`).then(JSON.parse);
         const two = await raceOnce(9, 3, true);
+        await until(`document.getElementById('tour-saved')?.textContent === ${JSON.stringify(later)}`, 60);
         const twoPodium = await evaluate(`JSON.stringify({ lines: [...document.querySelectorAll('#tour-podium p')].map((p) => p.textContent), saved: document.getElementById('tour-saved')?.textContent, q: ${P1}.tournamentQueue.load().length, posted: __flappy.registry.get('tournament')?.posted })`).then(JSON.parse);
-        ok(twoSeed.pairs === 1 && twoSeed.round === (await tx('tournamentFinal')) && twoSeed.byes === 0 && two.seen.title === (await tx('tournamentFinal')) && twoPodium.lines.length === 2 && twoPodium.lines[0].startsWith('🥇') && twoPodium.lines[1].startsWith('🥈') && twoPodium.saved === (await tx('tournamentSaveTwo')) && twoPodium.q === 0 && twoPodium.posted === 'two', `2 players: one "${twoSeed.round}", a podium of ${twoPodium.lines.length} (${twoPodium.lines.join(' · ')}), "${twoPodium.saved}", nothing queued`);
+        ok(twoSeed.pairs === 1 && twoSeed.round === (await tx('tournamentFinal')) && twoSeed.byes === 0 && two.seen.title === (await tx('tournamentFinal')) && twoPodium.lines.length === 2 && twoPodium.lines[0].startsWith('🥇') && twoPodium.lines[1].startsWith('🥈') && twoPodium.saved === later && twoPodium.q === 1 && twoPodium.posted === 'queued', `2 players: one "${twoSeed.round}", a podium of ${twoPodium.lines.length} (${twoPodium.lines.join(' · ')}), queued for 🏅 once: "${twoPodium.saved}"`);
+        await evaluate(`(localStorage.removeItem('flappyPoop.racePosts'), localStorage.removeItem('flappyPoop.tournaments'), true)`);
         // An all-guest tournament: its Final queues nothing, and the podium says so.
         await evaluate(`Promise.all([import('./src/tournament.js'), import('./src/logic.js')]).then(([t, l]) => { const tour = t.createTournament([0, 1, 2].map((i) => ({ name: 'G' + i, playerId: null, guest: true })), l.createRng(3)); const semi = t.nextMatch(tour); t.recordResult(tour, semi.id, 0, { by: 'score', slots: [{ score: 5, deaths: 0, levelWins: 0, finalFirst: false }, { score: 1, deaths: 0, levelWins: 0, finalFirst: true }] }); __flappy.registry.set('tournament', { tour, matchId: 'final' }); __flappy.events.emit('tournament-race', { outcome: { winner: 0, by: 'score' }, slots: [{ score: 9, deaths: 0, levelWins: 1, finalFirst: true }, { score: 2, deaths: 1, levelWins: 0, finalFirst: false }] }); return true; })`);
         await sleep(200);
@@ -7133,7 +7139,10 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         const toBot = (event, payload) => setTimeout(() => { if (!inboxB.take(event, payload)) return; const item = { kind: 'peer', event, msg: payload, at: payload.t }; bot.feed?.receive(item); bot.ref?.receive(item); }, LAT);
         const toHost = (event, payload) => setTimeout(() => { if (inboxA.take(event, payload)) q.push({ kind: 'peer', event, msg: payload, at: payload.t }); }, LAT);
         const sendBot = (event, fields) => { const m = sendB(event, fields); if (!m) return false; if (event !== 'pos' && event !== 'flap') log.push('B> ' + event + ' ' + JSON.stringify(fields)); toHost(event, m.payload); return true; };
+        const reports = [];
         const net = { serverNow: now, pump() {}, take: () => q.splice(0), peer: () => ({ name: 'JollyPlunger042', width: 720 }), close() { log.push('close'); },
+          stats: () => ({ sent: 10, received: 9, rttMs: 40.4 }),
+          async rpc(fn, args) { reports.push([fn, args]); return { ok: true, data: { ok: true, status: reports.length === 1 ? 'playing' : 'agreed', counted: reports.length > 1 } }; },
           send(event, fields) { const m = sendA(event, fields); if (!m) return false; if (event !== 'pos' && event !== 'flap') log.push('A> ' + event + ' ' + JSON.stringify(fields)); toBot(event, m.payload); return true; } };
         const room = { phase: 'playing', role: 'host', code: '482913', hostName: 'Smoke', guestName: 'JollyPlunger042', seed: 4242, startMs: now() + 3500, round: 1 };
         bot.reset = (since) => {
@@ -7163,7 +7172,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
           bot.feed.tick({ ...h, ended: h.ended && ref.settled(h.level) });
         }, 16);
         const plan = R.raceStartPlan(room, { mine: 720, theirs: 720 });
-        globalThis.__race = { net, lobby, bot, log, room, plan, L, T };
+        globalThis.__race = { net, lobby, bot, log, room, plan, L, T, reports };
         ${P}.scene.start('OnlineRace', { net, lobby, plan });
         return true;
       })()`);
@@ -7209,6 +7218,11 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         ok(end.bot.winner === 1 - end.outcome.winner && end.bot.by === end.outcome.by && end.finalFirst[1] === true && end.finish.includes('finish'), `one outcome on both, finalFirst the guest's, the room finished (${JSON.stringify(end)})`);
         // The results panel (Preview D4), Rematch's states, the rematch into round 2.
         ok(await until(`Boolean(${OR}.result)`, 2500), 'the results panel, a beat after the end');
+        // 2.5: the race reported once over (finish_match, seat order, this side's telemetry); the first answer
+        // waits for the other game, the next ask is saved, and the panel's line follows.
+        ok(await until(`${OR}.result.saved.text === ${JSON.stringify('Saved to the 🏅 and 🏆 boards')}`, 6000), `the report: ${await evaluate(`JSON.stringify(__race.reports.map((r) => r[0]))`)}, the line "${await evaluate(`${OR}.result.saved.text`)}"`);
+        const rep = await evaluate(`JSON.stringify({ r: __race.reports[0], slots: ${OR}.finalSlots.map((s) => [s.score, s.deaths, s.levelWins, s.finalFirst]) })`).then(JSON.parse);
+        ok(rep.r[0] === 'finish_match' && rep.r[1].p_code === '482913' && rep.r[1].p_round === 1 && JSON.stringify(rep.r[1].p_result.slots.map((s) => [s.score, s.deaths, s.levelWins, s.finalFirst])) === JSON.stringify(rep.slots) && rep.r[1].p_result.stats.rttMs === 40 && rep.r[1].p_result.stats.sent === 10, `finish_match as the host: ${JSON.stringify(rep.r[1])}`);
         await sleep(TT.retryLockoutMs + 50);
         const panelTap = (which) => evaluate(`(() => { const r = ${OR}; const b = r.result.boxes.${which}; r.onPointer({ x: b.x, y: b.y }); return true; })()`);
         await panelTap('share');

@@ -1262,3 +1262,89 @@ test('2.3b openPendingRace: a record another page beats is not offered (the wind
     assert.equal(q.registry.get('raceSteppedAside'), false, 'once');
   });
 });
+
+// --- 2.5: the race's report (finish_match) -------------------------------------------------------
+
+/** A finished race on both sides, with an rpc and stats on the transport. */
+function reportScene({ seat = 'host', answer = { ok: true, data: { status: 'agreed', counted: true } } } = {}) {
+  const k = raceScene({ seat });
+  const rpcs = [];
+  k.net.rpc = async (fn, args) => {
+    rpcs.push([fn, args]);
+    return answer;
+  };
+  k.net.stats = () => ({ sent: 300, received: 290, rttMs: 41.6, junk: 1 });
+  Object.assign(k.s.match.slots[0], { ended: true, score: 412, deaths: 2, levelWins: 4, finalFirst: true });
+  Object.assign(k.s.match.slots[1], { ended: true, score: 377, deaths: 3, levelWins: 3, finalFirst: false });
+  k.s.feed.doneSent = () => true;
+  return { ...k, rpcs };
+}
+const flush = () => new Promise((res) => setImmediate(res));
+const textSink = () => {
+  const o = { text: '', color: null };
+  o.setText = (v) => ((o.text = v), o);
+  o.setColor = (c) => ((o.color = c), o);
+  o.setAlpha = () => o;
+  o.pulse = () => o;
+  return o;
+};
+
+test('2.5 the race over: both seats report it once, in seat order (host, guest), with the room code, round and this side\'s telemetry', async () => {
+  for (const seat of ['host', 'guest']) {
+    const { s, rpcs } = reportScene({ seat });
+    s.checkOver();
+    assert.equal(s.match.status, 'over');
+    s.reporter.tick();
+    await flush();
+    s.reporter.tick();
+    await flush();
+    assert.equal(rpcs.length, 1, `${seat}: one report`);
+    const [fn, args] = rpcs[0];
+    assert.equal(fn, 'finish_match');
+    assert.equal(args.p_code, '482913');
+    assert.equal(args.p_round, 1);
+    const me = { score: 412, deaths: 2, levelWins: 4, finalFirst: true };
+    const them = { score: 377, deaths: 3, levelWins: 3, finalFirst: false };
+    assert.deepEqual(args.p_result.slots, seat === 'host' ? [me, them] : [them, me], `${seat}: seat order`);
+    assert.deepEqual(args.p_result.stats, { sent: 300, received: 290, rttMs: 42, pauses: 0, pausedMs: 0 }, 'the transport\'s and the pause\'s numbers, rounded, nothing else');
+    assert.deepEqual(s.reporter.state(), { phase: 'done', status: 'agreed', counted: true, error: null });
+  }
+});
+
+test('2.5 a race abandoned mid-way reports nothing (the server ends it), and a transport without rpc reports nothing', async () => {
+  const { s, rpcs } = reportScene();
+  s.onAbandoned('guest');
+  s.checkOver();
+  assert.equal(s.reporter, null);
+  assert.equal(rpcs.length, 0);
+  const bare = raceScene();
+  Object.assign(bare.s.match.slots[0], { ended: true });
+  Object.assign(bare.s.match.slots[1], { ended: true });
+  bare.s.feed.doneSent = () => true;
+  bare.s.checkOver();
+  assert.equal(bare.s.match.status, 'over');
+  assert.equal(bare.s.reporter, null);
+});
+
+test("2.5 the results panel's saved line follows the report: saving, then saved (green); the waiting line names the other player; left mid-race says so", async () => {
+  const { s } = reportScene({ answer: { ok: true, data: { status: 'playing', counted: false } } });
+  s.checkOver();
+  const saved = textSink();
+  s.result = { saved, status: textSink(), rematch: textSink(), shown: null, savedShown: null };
+  s.refreshResult();
+  assert.equal(saved.text, 'Saving the race…');
+  s.reporter.tick();
+  await flush();
+  s.refreshResult();
+  assert.equal(saved.text, "Saving: waiting for Jolly's game…");
+  s.reporter = { state: () => ({ phase: 'done', status: 'agreed', counted: true }) };
+  s.refreshResult();
+  assert.equal(saved.text, 'Saved to the 🏅 and 🏆 boards');
+  assert.equal(saved.color, '#7ee08a');
+  const left = reportScene();
+  left.s.onAbandoned('guest');
+  const line = textSink();
+  left.s.result = { saved: line, status: textSink(), rematch: textSink(), shown: null, savedShown: null };
+  left.s.refreshResult();
+  assert.equal(line.text, 'Not saved: the race was left before the end');
+});

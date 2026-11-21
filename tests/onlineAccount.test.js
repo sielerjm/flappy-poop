@@ -5,7 +5,7 @@
 // on a device that was never online.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createOnlineAccount, deviceRows, signInKey, linkKey, PAIR_CODE_TTL_MS } from '../src/onlineAccount.js';
+import { createOnlineAccount, deviceRows, historyRows, signInKey, linkKey, PAIR_CODE_TTL_MS } from '../src/onlineAccount.js';
 import { catalogFor } from '../src/i18n.js';
 
 const ID = 'a'.repeat(22);
@@ -273,4 +273,50 @@ test('leave (Clear / Load): a device with a session unlinks, then forgets it, ev
   off.net.signInResult = { ok: false, error: 'offline' };
   assert.deepEqual(await off.account.leave(), { left: true });
   assert.deepEqual(off.net.calls.map((c) => c[1] ?? c[0]), ['signIn', 'signOut']); // no session to unlink with: forgotten locally all the same
+});
+
+test('historyRows (2.5): the online rival line and the last races, won / lost / draw (the server\'s won null), days since', () => {
+  const data = {
+    rival: { name: 'JollyPlunger042', meetings: 7, losses: 4 },
+    recent: [
+      { name: 'JollyPlunger042', won: true, mine: 412, theirs: 377, at: NOW - 3600e3 },
+      { name: 'SirFlushALot', won: null, mine: 260, theirs: 260, at: NOW - 26 * 3600e3 },
+      { name: 'BeanCounter', won: false, mine: 120, theirs: 351, at: NOW - 9 * DAY },
+      { name: 7, won: true, mine: 1, theirs: 0, at: NOW },
+      null,
+    ],
+  };
+  assert.deepEqual(historyRows(data, NOW), {
+    rival: { name: 'JollyPlunger042', meetings: 7, losses: 4 },
+    recent: [
+      { name: 'JollyPlunger042', result: 'won', mine: 412, theirs: 377, days: 0 },
+      { name: 'SirFlushALot', result: 'draw', mine: 260, theirs: 260, days: 1 },
+      { name: 'BeanCounter', result: 'lost', mine: 120, theirs: 351, days: 9 },
+    ],
+  });
+  assert.deepEqual(historyRows({ rival: null, recent: [] }, NOW), { rival: null, recent: [] });
+  assert.deepEqual(historyRows(null, NOW), { rival: null, recent: [] });
+  assert.equal(historyRows({ rival: { name: 'X', meetings: '2', losses: 1 } }, NOW).rival, null, 'a malformed rival is dropped');
+});
+
+test('races (2.5): a waiting device is told so without asking the server; a paired one gets its history', async () => {
+  const waiting = setup({ answers: linked(false) });
+  await waiting.account.enter();
+  assert.deepEqual(await waiting.account.races(), { ok: false, pending: true });
+  assert.ok(!waiting.net.calls.some((c) => c[1] === 'online_history'));
+
+  const data = { rival: null, recent: [{ name: 'B', won: true, mine: 3, theirs: 1, at: NOW }] };
+  const paired = setup({ answers: { ...linked(true), online_history: { ok: true, data } } });
+  await paired.account.enter();
+  assert.deepEqual(await paired.account.races(), { ok: true, rival: null, recent: [{ name: 'B', result: 'won', mine: 3, theirs: 1, days: 0 }] });
+});
+
+test('races: "not trusted" (demoted elsewhere) turns this device to waiting; another error says why', async () => {
+  const demoted = setup({ answers: { ...linked(true), online_history: { ok: false, error: 'not trusted' } } });
+  await demoted.account.enter();
+  assert.deepEqual(await demoted.account.races(), { ok: false, pending: true });
+  assert.equal(demoted.account.status().trusted, false);
+  const off = setup({ answers: { ...linked(true), online_history: { ok: false, error: 'offline' } } });
+  await off.account.enter();
+  assert.deepEqual(await off.account.races(), { ok: false, errorKey: 'onlineErrOffline' });
 });

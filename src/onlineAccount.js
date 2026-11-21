@@ -62,6 +62,20 @@ export function deviceRows(rows, now) {
   return [...out.filter((r) => r.me), ...out.filter((r) => !r.me)];
 }
 
+/**
+ * online_history() → { rival: { name, meetings, losses } | null, recent: [{ name, result, mine,
+ * theirs, days }] } (2.5): the owner's online rival line and last agreed races, newest first;
+ * result 'won' | 'lost' | 'draw' (the server's won null is a draw); days since the race.
+ */
+export function historyRows(data, now) {
+  const r = data?.rival;
+  const rival = r && typeof r.name === 'string' && Number.isInteger(r.meetings) && Number.isInteger(r.losses) ? { name: r.name, meetings: r.meetings, losses: r.losses } : null;
+  const recent = (Array.isArray(data?.recent) ? data.recent : [])
+    .filter((x) => x && typeof x.name === 'string' && Number.isFinite(x.mine) && Number.isFinite(x.theirs))
+    .map((x) => ({ name: x.name, result: x.won === true ? 'won' : x.won === false ? 'lost' : 'draw', mine: x.mine, theirs: x.theirs, days: Number.isFinite(x.at) ? Math.max(0, Math.floor((now - x.at) / 86400000)) : 0 }));
+  return { rival, recent };
+}
+
 const SIX = /^\d{6}$/;
 const digitsOf = (raw) =>
   String(raw ?? '')
@@ -136,6 +150,19 @@ export function createOnlineAccount({ net, getSave, saveWithId, storeName, check
     return { ok: false, errorKey: linkKey(res.error) };
   }
 
+  /** 🏁 Recent races (2.5): the owner's online history on a paired device; a waiting one is told so without a request. */
+  async function races() {
+    if (linked && !linked.trusted) return { ok: false, pending: true };
+    const res = await net.rpc('online_history');
+    if (res.ok) return { ok: true, ...historyRows(res.data, now()) };
+    if (res.error === 'not trusted') {
+      if (linked) linked.trusted = false;
+      trust.set(false);
+      return { ok: false, pending: true };
+    }
+    return { ok: false, errorKey: linkKey(res.error) };
+  }
+
   /** Remove a device; removing this one deletes its anonymous user, so it also forgets the session. */
   async function remove(uid, { me = false } = {}) {
     // A pending device cannot list devices, so its "Remove this device" has no uid: the session's own (AUD-095).
@@ -194,6 +221,7 @@ export function createOnlineAccount({ net, getSave, saveWithId, storeName, check
     enter,
     claim,
     devices,
+    races,
     remove,
     pairCode,
     pair,

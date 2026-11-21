@@ -1104,3 +1104,105 @@ export function rewindOnHeard({ msg, round, rewound, top, since, ended }) {
   if (rewound !== null && rewound !== undefined) return msg.level < rewound ? msg.level : null;
   return Math.max(1, Math.min(msg.level, top));
 }
+
+// ---------------------------------------------------------------------------
+// The race's report (2.5): finish_match from both devices once the race is over (db/schema.sql,
+// 2.4a). Equal reports agree and a counted race goes on the 🏅 and 🏆 boards on the server; the
+// device posts nothing else for an online race (a match half records no run, D7 as amended).
+
+const STAT_MAX = 999999999; // finish_match keeps a stat of 1-9 digits
+
+/**
+ * finish_match's p_result from this side's final numbers: both slots in seat order (host, guest;
+ * finalSlots[0] is this side's own, so a guest swaps them), each { score, deaths, levelWins,
+ * finalFirst } as whole numbers, and the numbers-only telemetry (net.stats() and the pause's
+ * stats()) under finish_match's 13 keys, rounded, non-negative and capped.
+ */
+export function raceReport({ seat, finalSlots, stats = {} }) {
+  const slot = (s) => ({ score: Math.max(0, Math.floor(s?.score ?? 0)), deaths: Math.max(0, Math.floor(s?.deaths ?? 0)), levelWins: Math.max(0, Math.floor(s?.levelWins ?? 0)), finalFirst: Boolean(s?.finalFirst) });
+  const [mine, theirs] = finalSlots ?? [];
+  const slots = seat === 'guest' ? [slot(theirs), slot(mine)] : [slot(mine), slot(theirs)];
+  const out = {};
+  for (const k of REPORT_STATS) {
+    const v = Number(stats?.[k]);
+    if (Number.isFinite(v)) out[k] = Math.min(STAT_MAX, Math.max(0, Math.round(v)));
+  }
+  return { slots, stats: out };
+}
+
+/** finish_match's telemetry keys (db/schema.sql c_stat_keys). */
+export const REPORT_STATS = Object.freeze(['sent', 'received', 'lost', 'bad', 'stale', 'verifies', 'rejoins', 'retries', 'tracks', 'rttMs', 'rttMinMs', 'pauses', 'pausedMs']);
+
+const RESEND = new Set(['offline', 'error', 'timeout']);
+
+/**
+ * One device's report of a finished race, ticked each frame (no timers; `rpc` returns a promise of
+ * onlineNet's { ok, data } | { ok: false, error }). state() → { phase, status, counted, error }:
+ * phase 'saving' (sent or about to be), 'waiting' (this side's report is in, the other's is not:
+ * asked again every pollMs, `polls` times), 'done' (status agreed / disputed / refused /
+ * abandoned, counted), 'late' (the other never reported in time), 'pending' (a waiting device:
+ * 'not trusted'), 'failed' (anything else, or every resend lost).
+ * Resends: a lost answer (offline, a 5xx, a deadlock) after each retryMs; 'no match' once (a merge
+ * running at that moment, 2.4r).
+ */
+export function createRaceReporter({ rpc, code, round, result, now, t = TUNING }) {
+  const k = t.online.report;
+  const st = { phase: 'saving', status: null, counted: false, error: null };
+  let nextAt = now();
+  let flying = false;
+  let tries = 0;
+  let asks = 0;
+  let noMatch = 0;
+  const lost = (error) => {
+    if (tries >= k.retryMs.length) return Object.assign(st, { phase: 'failed', error });
+    nextAt = now() + k.retryMs[tries++];
+  };
+  const answer = (res) => {
+    flying = false;
+    if (res?.ok) {
+      const status = res.data?.status ?? null;
+      if (status === 'playing') {
+        if (asks >= k.polls) return Object.assign(st, { phase: 'late', status });
+        asks += 1;
+        st.phase = 'waiting';
+        nextAt = now() + k.pollMs;
+        return;
+      }
+      return Object.assign(st, { phase: 'done', status, counted: res.data?.counted === true });
+    }
+    const error = res?.error ?? 'error';
+    if (error === 'not trusted') return Object.assign(st, { phase: 'pending', error });
+    if (error === 'no match' && noMatch++ === 0) return lost(error);
+    if (RESEND.has(error) || /deadlock/i.test(error)) return lost(error);
+    Object.assign(st, { phase: 'failed', error });
+  };
+  return {
+    tick() {
+      if (flying || (st.phase !== 'saving' && st.phase !== 'waiting') || now() < nextAt) return;
+      flying = true;
+      Promise.resolve()
+        .then(() => rpc('finish_match', { p_code: code, p_round: round, p_result: result }))
+        .then(answer, () => answer({ ok: false, error: 'error' }));
+    },
+    state: () => ({ ...st }),
+  };
+}
+
+/**
+ * The results panel's line for a report's state: an i18n key and a colour hint ('ok', 'wait',
+ * 'no'), or null (no line). A race left mid-way (abandoned on this side) is never reported.
+ */
+export function reportLine(state, { abandoned = false } = {}) {
+  if (abandoned) return { key: 'onlineSaveLeft', kind: 'no' };
+  if (!state) return null;
+  if (state.phase === 'saving') return { key: 'onlineSaving', kind: 'wait' };
+  if (state.phase === 'waiting') return { key: 'onlineSaveWaiting', kind: 'wait' };
+  if (state.phase === 'late') return { key: 'onlineSaveLate', kind: 'no' };
+  if (state.phase === 'pending') return { key: 'onlineSavePending', kind: 'no' };
+  if (state.phase === 'failed') return { key: 'onlineSaveFailed', kind: 'no' };
+  if (state.status === 'agreed') return state.counted ? { key: 'onlineSaved', kind: 'ok' } : { key: 'onlineSavedNotCounted', kind: 'wait' };
+  if (state.status === 'disputed') return { key: 'onlineSaveDisputed', kind: 'no' };
+  if (state.status === 'refused') return { key: 'onlineSaveRefused', kind: 'no' };
+  if (state.status === 'abandoned') return { key: 'onlineSaveLeft', kind: 'no' };
+  return { key: 'onlineSaveFailed', kind: 'no' };
+}

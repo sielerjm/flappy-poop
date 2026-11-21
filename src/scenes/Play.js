@@ -134,7 +134,7 @@ import { perfMark, perfSteps, perfRunStart } from '../ui/perfMeter.js';
 import { createFinishTexture } from '../ui/finish.js';
 import { createLightTexture } from '../ui/pipeShade.js';
 import { createLevelBar } from '../ui/levelBar.js';
-import { enrolResearch, submitResearchEvents, deleteResearch, createEduShareStore, shareEducation, renameEducation, unshareEducation, submitEducationGrades, fetchEducationBoard, createSubmitStore, createMergeStore, createRenameStore, createTournamentQueue, createDailyStore, createDailyQueue, createRunQueue, submitRuns, waitsForRun, submitDailyScore, fetchDailyBoard, submitPlans, submitScore, submitTournament, checkNameAvailable, mergePlayers, fetchPlayerName, fetchRank, nameAction, createCareerStore, createStreakStore, fetchPlayDays, submitCounters, claimAchievements, fetchPlayerStats } from '../leaderboard.js';
+import { enrolResearch, submitResearchEvents, deleteResearch, createEduShareStore, shareEducation, renameEducation, unshareEducation, submitEducationGrades, fetchEducationBoard, createSubmitStore, createMergeStore, createRenameStore, createTournamentQueue, createRacePostQueue, createDailyStore, createDailyQueue, createRunQueue, submitRuns, waitsForRun, submitDailyScore, fetchDailyBoard, submitPlans, submitScore, submitTournament, checkNameAvailable, mergePlayers, fetchPlayerName, fetchRank, nameAction, createCareerStore, createStreakStore, fetchPlayDays, submitCounters, claimAchievements, fetchPlayerStats } from '../leaderboard.js';
 import { createButton } from '../ui/button.js';
 import { createToggle } from '../ui/toggle.js';
 import { createCoinText } from '../ui/coinText.js';
@@ -271,6 +271,7 @@ export class Play extends Phaser.Scene {
     this.submitStore = createSubmitStore(); // last confirmed leaderboard submit
     this.mergeStore = createMergeStore(); // account merges (a pasted user code) the board has not confirmed yet
     this.tournamentQueue = createTournamentQueue(); // finished tournaments (🏅) the board has not confirmed yet
+    this.racePostQueue = createRacePostQueue(); // split-screen race scores (🏆, plan 39 2.5) the board has not confirmed yet
     this.dailyStore = createDailyStore(); // this device's Daily Dump (🌞) attempt: claimed at the start, final at the crash
     this.dailyQueue = createDailyQueue(); // daily scores the board has not confirmed yet
     this.careerStore = createCareerStore(); // lifetime counters and achievements (plan 08): counted at endRun, sent by syncLeaderboard
@@ -1728,7 +1729,10 @@ export class Play extends Phaser.Scene {
       Promise.resolve(),
     );
     // Finished tournaments next: they carry their own host id, so they post even without a username here.
-    const tournaments = merges.then(() => this.tournamentQueue.drain((payload, hostId) => submitTournament(payload, hostId)));
+    const tournaments = merges
+      .then(() => this.tournamentQueue.drain((payload, hostId) => submitTournament(payload, hostId)))
+      // Split-screen race scores (plan 39, 2.5) carry their own ids too: the board's rules; a name another player holds drops the post.
+      .then(() => this.racePostQueue?.drain((e) => submitScore({ playerId: e.playerId, name: e.name, score: e.score, toilet: false, level: e.level }).then((res) => (res.ok ? 'ok' : res.reason === 'nameTaken' ? 'rejected' : 'keep'))));
     // A pilot tester's answer events (plan 21) need no username either: joining made the id.
     const research = tournaments.then(() => this.drainResearch());
     // Daily Dump scores carry their own id too; a device with no username sends them under the

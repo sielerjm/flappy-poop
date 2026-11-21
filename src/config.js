@@ -393,6 +393,13 @@ export const TUNING = {
       beatMs: 1000, // ms between the racing page's beats on its resume record (2.3b, a window timer: Phaser's loop stops in a hidden tab, a 1 s timer still runs)
       staleMs: 5000, // ms without a beat after which another page may take the race over (2.3b: the page that had it is gone or frozen; a relaunch takes longer); a page that lost it steps aside when it wakes
     },
+    // The race's report (finish_match, 2.5): both devices report; the first to report hears 'playing'
+    // until the other's report is in, so it asks again.
+    report: {
+      retryMs: [2000, 4000, 8000, 16000, 30000], // ms before each resend after a lost answer (offline, a deadlock, a first 'no match'); then it gives up
+      pollMs: 3000, // ms between asks while the other device has not reported yet
+      polls: 10, // asks before "not saved yet" (a waiting, unpaired device never reports: M1 rule 2)
+    },
     inventoryY0: 268, // px: the purse and bean rows' first centre in an online race, below the opponent's pill (its top 82, bottom 228 with the slow / lost word), not over it
     ghost: {
       maxExtrapolateMs: 1000, // ms past the last message the ghost keeps moving; then it holds until the next one
@@ -416,7 +423,7 @@ export const TUNING = {
   // two-player session is a tournament: two players race the Final alone.
   tournament: {
     minPlayers: 2,
-    minPostPlayers: 3, // the 🏅 board's floor (submit_tournament): two players race the Final alone, no bronze, so they stay on the device
+    minPostPlayers: 2, // the 🏅 board's floor (submit_tournament): two players race the Final alone, gold and silver (plan 39, 2.4b and 2.5)
     maxPlayers: 8,
     levelPipes: [10, 25, 35, 35, 35, 35, 50], // pipe pairs per level in a tournament race (225 in all; a normal run's levels.pipes makes 285)
   },
@@ -585,6 +592,8 @@ export const LEADERBOARD = {
   renameKey: 'flappyPoop.rename', // localStorage key for a rename typed on this device, until a post carries it to the board (else the device adopts the board's name)
   tournamentsKey: 'flappyPoop.tournaments', // localStorage key for finished tournaments (🏅) the board has not confirmed yet (submit_tournament)
   tournamentQueueMax: 20, // finished tournaments kept for a later post; the oldest goes first when full
+  racePostsKey: 'flappyPoop.racePosts', // localStorage key for split-screen race scores (🏆, plan 39 2.5) the board has not confirmed yet (submit_score)
+  racePostQueueMax: 20, // race scores kept for a later post; the oldest goes first when full
   dailyKey: 'flappyPoop.daily', // localStorage key for this device's Daily Dump (🌞) attempt: claimed at the start, rewritten as the score grows
   dailyQueueKey: 'flappyPoop.dailyQueue', // localStorage key for Daily Dump scores the board has not confirmed yet (submit_daily_score)
   dailyQueueMax: 3, // daily scores kept for a later post (one per player and day); the oldest goes first when full

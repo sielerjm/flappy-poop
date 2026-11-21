@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { LEADERBOARD, TUNING } from '../src/config.js';
-import { createSubmitStore, createMergeStore, createRenameStore, createTournamentQueue, nameAction, submitPlan, submitPlans, withOwnRows, boardPage, submitScore, submitTournament, checkNameAvailable, mergePlayers, fetchPlayerName, fetchTop, fetchRank, fetchTournamentBoard, submitDailyScore, fetchDailyBoard, createCareerStore, submitCounters, claimAchievements, fetchPlayerStats, createEduShareStore, shareEducation, renameEducation, unshareEducation, submitEducationGrades, fetchEducationBoard, enrolResearch, submitResearchEvents, deleteResearch } from '../src/leaderboard.js';
+import { createSubmitStore, createMergeStore, createRenameStore, createTournamentQueue, createRacePostQueue, nameAction, submitPlan, submitPlans, withOwnRows, boardPage, submitScore, submitTournament, checkNameAvailable, mergePlayers, fetchPlayerName, fetchTop, fetchRank, fetchTournamentBoard, submitDailyScore, fetchDailyBoard, createCareerStore, submitCounters, claimAchievements, fetchPlayerStats, createEduShareStore, shareEducation, renameEducation, unshareEducation, submitEducationGrades, fetchEducationBoard, enrolResearch, submitResearchEvents, deleteResearch } from '../src/leaderboard.js';
 
 const config = { dataApi: 'https://x.example/rest/v1', publishableKey: 'sb_publishable_test', timeoutMs: 50, limit: 10, maxScore: 200 };
 
@@ -1098,4 +1098,22 @@ test('boardPage: the page\'s rows (the caller\'s only on its own page), the call
   assert.deepEqual(boardPage(page(1, 3), { offset: 0, limit: 25 }), { rows: page(1, 3), mine: null, last: true });
   assert.deepEqual(boardPage(null, { offset: 25, limit: 25 }), { rows: null, mine: null, last: true }, 'offline stays offline');
   assert.deepEqual(boardPage([...page(1, 25), me41], { offset: -3, limit: 25 }).rows.length, 25, 'a bad offset is page 1');
+});
+
+test('race post queue (2.5): split-screen 🏆 posts wait here once each, oldest first, capped; junk dropped; drained in order', async () => {
+  const storage = fakeStorage();
+  const q = createRacePostQueue(storage, { key: 'rp', max: 3 });
+  const post = (c, score = 10) => ({ id: `r${c}`, playerId: c.repeat(22), name: `N${c}`, score, level: 7 });
+  assert.equal(q.add({ ...post('a'), playerId: 'short' }), null, 'a bad id is not queued');
+  assert.equal(q.add({ ...post('a'), score: -1 }), null);
+  assert.equal(q.add({ ...post('a'), name: '' }), null);
+  for (const c of 'abcd') q.add(post(c));
+  q.add(post('b'));
+  assert.deepEqual(q.load().map((e) => e.name), ['Nb', 'Nc', 'Nd']);
+  const seen = [];
+  const left = await q.drain((e) => (seen.push(e.name), e.name === 'Nc' ? 'keep' : 'ok'));
+  assert.deepEqual(seen, ['Nb', 'Nc'], 'stops at the first keep');
+  assert.equal(left, 1);
+  assert.deepEqual(q.load().map((e) => e.name), ['Nc', 'Nd']);
+  assert.deepEqual(q.load()[0], { id: 'rc', playerId: 'c'.repeat(22), name: 'Nc', score: 10, level: 7 });
 });

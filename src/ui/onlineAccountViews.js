@@ -44,7 +44,7 @@ export function h(tag, attrs = {}, ...children) {
 
 /** The sign-in side's view state. */
 export function createAccountState() {
-  return { view: 'linking', nameDraft: '', typed: '', rows: [], name: '', trusted: false, demoted: false, blocked: false, code: '', expiresAt: 0, removeArmed: null, removeArmedAt: 0, busy: false };
+  return { view: 'linking', nameDraft: '', typed: '', rows: [], history: null, name: '', trusted: false, demoted: false, blocked: false, code: '', expiresAt: 0, removeArmed: null, removeArmedAt: 0, busy: false };
 }
 
 const mmss = (ms) => {
@@ -152,6 +152,23 @@ async function openDevices(ui, st, account) {
   ui.rerender();
 }
 
+async function openRaces(ui, st, account) {
+  const r = await account.races();
+  if (r.ok) {
+    st.history = { rival: r.rival, recent: r.recent };
+    st.trusted = true;
+  } else if (r.pending) {
+    st.trusted = false;
+    st.history = null;
+  } else {
+    ui.setStatus(ui.tr(r.errorKey), 'error');
+    return;
+  }
+  st.view = 'races';
+  ui.setStatus('');
+  ui.rerender();
+}
+
 /** Remove asks twice (like Clear): the first tap warns, a second inside ui.confirmMs removes. */
 async function onRemove(ui, st, account, which) {
   const now = ui.now();
@@ -218,13 +235,13 @@ export function accountNotes(ui, st) {
   return out;
 }
 
-/** The online home's 📱 Devices button. */
+/** The online home's 🏁 Recent races and 📱 Devices buttons. */
 export function devicesButton(ui, st, account) {
-  return h('div', { class: 'share' }, button('tour-devices', ui.tr('onlineDevices'), 'outline small', () => openDevices(ui, st, account)));
+  return h('div', { class: 'share' }, button('tour-races', ui.tr('onlineRaces'), 'outline small', () => openRaces(ui, st, account)), button('tour-devices', ui.tr('onlineDevices'), 'outline small', () => openDevices(ui, st, account)));
 }
 
 /**
- * The sign-in side's own views: 'noname', 'linking', 'devices', 'paircode' ('home', 'failed' and
+ * The sign-in side's own views: 'noname', 'linking', 'devices', 'races' (2.5), 'paircode' ('home', 'failed' and
  * 'left' belong to the panel). `back()` returns to the online home.
  */
 export function accountBody(ui, st, account, back) {
@@ -251,7 +268,7 @@ export function accountBody(ui, st, account, back) {
   if (st.view === 'devices') {
     const rows = st.rows.map((d, i) => {
       const what = d.me ? tr('onlineThisDevice') : tr('onlineOtherDevice').replace('{n}', String(i + 1));
-      const when = tr(d.trusted ? 'onlineSeen' : 'onlineLinked').replace('{when}', d.days === 0 ? tr('onlineToday') : tr('onlineDaysAgo').replace('{n}', String(d.days)));
+      const when = tr(d.trusted ? 'onlineSeen' : 'onlineLinked').replace('{when}', d.days === 0 ? tr('onlineToday') : d.days === 1 ? tr('onlineYesterday') : tr('onlineDaysAgo').replace('{n}', String(d.days)));
       const row = h('div', { class: 'slot', id: `tour-dev-${i}` }, h('span', { class: 'who' }, what, h('span', { class: 'tag' }, ` · ${tr(d.trusted ? 'onlinePaired' : 'onlineWaitingPair')}`), h('span', { class: 'sub' }, when)));
       if (!d.me) row.append(button(`tour-dev-rm-${i}`, tr('onlineRemove'), 'outline', () => onRemove(ui, st, account, i)));
       return row;
@@ -260,6 +277,27 @@ export function accountBody(ui, st, account, back) {
       h('p', { class: 'lead' }, tr('onlineDevicesLead')),
       ...rows,
       h('div', { class: 'actions' }, button('tour-dev-back', tr('onlineBack'), 'outline', back), button('tour-pair-new', tr('onlinePairNew'), '', () => onPairCode(ui, st, account), true)),
+    ];
+  }
+  if (st.view === 'races') {
+    const home = button('tour-races-back', tr('onlineBack'), '', back, true);
+    if (!st.trusted || !st.history) return [h('p', { class: 'lead' }, tr('onlineRacesLead')), h('p', { class: 'hint warn', id: 'tour-races-pending' }, tr('onlineRacesPending')), h('div', { class: 'actions' }, home)];
+    const { rival, recent } = st.history;
+    const when = (d) => (d === 0 ? tr('onlineToday') : d === 1 ? tr('onlineYesterday') : tr('onlineDaysAgo').replace('{n}', String(d)));
+    const rows = recent.map((x, i) =>
+      h(
+        'div',
+        { class: 'slot', id: `tour-race-${i}` },
+        h('span', { class: 'who' }, x.name, h('span', { class: 'sub' }, when(x.days))),
+        h('span', { class: `mark ${x.result === 'won' ? 'ok' : ''}`.trim() }, `${tr({ won: 'onlineRaceWon', lost: 'onlineRaceLost', draw: 'onlineRaceDraw' }[x.result])} ${x.mine}–${x.theirs}`),
+      ),
+    );
+    return [
+      h('p', { class: 'lead' }, tr('onlineRacesLead')),
+      h('div', { class: 'slot', id: 'tour-rival' }, h('span', { class: 'who' }, tr('onlineRival'), h('span', { class: 'sub' }, rival ? tr('statsRivalLine').replace('{name}', rival.name).replace('{losses}', String(rival.losses)).replace('{meetings}', String(rival.meetings)) : '—'))),
+      ...(rows.length ? rows : [h('p', { class: 'hint', id: 'tour-races-none' }, tr('onlineRacesNone'))]),
+      h('p', { class: 'note' }, tr('onlineRacesNote')),
+      h('div', { class: 'actions' }, home),
     ];
   }
   if (st.view === 'paircode') {

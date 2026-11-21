@@ -13,10 +13,10 @@
 // The tournament itself lives in the game registry ('tournament': { tour, matchId, posted,
 // tournamentId }) so it survives the Versus restarts between races; each race's result comes
 // back on game.events ('tournament-race', from Versus.continueTournament: then 'next' starts the
-// next race at once, 'bracket' shows the bracket). When the Final is recorded, a tournament of 3+
-// players with any linked one (postable) is queued once for the 🏅 board (Play.tournamentQueue →
-// submit_tournament) and the podium says how that went; guests are never sent, two-player
-// tournaments stay on this device. Abandon saves nothing and goes back to the lobby.
+// next race at once, 'bracket' shows the bracket). When the Final is recorded, a tournament with any
+// linked player (postable; two players since plan 39's 2.5: gold and silver) is queued once for the
+// 🏅 board (Play.tournamentQueue → submit_tournament) and the podium says how that went; guests are
+// never sent. Abandon saves nothing and goes back to the lobby.
 // A controller walks the panel's buttons (tournamentPadAction, from Play.onPadAction): the d-pad
 // moves a gold ring (focusNearest on the buttons' rects, else list order), A presses, B is Esc.
 // 🌐 online (plan 39, 1.6c; Previews A and B, items 36 and 37): over a running Versus the lobby has
@@ -34,7 +34,7 @@ import { createRng, fieldWidth, focusNearest, focusStep } from '../logic.js';
 import { createOnlineLobby } from '../onlineLobby.js';
 import { ONLINE_HOST_KEY, raceStartPlan, resumePlan } from '../onlineRace.js';
 import { createMatch } from '../versus.js';
-import { createTournament, nextMatch, recordResult, matchPlayers, placings, claimFromCode, claimHost, tournamentPayload, postable, seedSlots, canReseed, reseed, reshuffle } from '../tournament.js';
+import { createTournament, nextMatch, recordResult, matchPlayers, placings, claimFromCode, claimHost, tournamentPayload, postable, racePosts, seedSlots, canReseed, reseed, reshuffle } from '../tournament.js';
 import { ensureId, newId } from '../save.js';
 import { rollGuestName } from '../tournamentNames.js';
 import { panelFrameCss } from './panelFrame.js';
@@ -572,6 +572,7 @@ function onRace(detail) {
   const play = game.scene.getScene('Play');
   let next = state;
   if (state.matchId) {
+    queueRacePosts(state, detail.slots, play);
     recordResult(state.tour, state.matchId, detail.outcome.winner, { by: detail.outcome.by, slots: detail.slots });
     next = { ...state, matchId: null };
     if (placings(state.tour) && !state.posted) next = { ...next, ...queueFinished(state.tour, play) };
@@ -585,11 +586,22 @@ function onRace(detail) {
 }
 
 /**
- * The Final is in: queue the tournament for the 🏅 board once (postable: 3+ players, someone
- * linked) and start a sync; the podium's line follows it. { posted: 'queued' | 'none' | 'two', tournamentId }.
+ * Plan 39, 2.5 (item 42(c)): each racer of this race with a player id posts their race score to 🏆
+ * (Play.racePostQueue → submit_score at the next sync, the board's own rules); guests post nothing.
+ */
+function queueRacePosts(state, slots, play) {
+  const q = play?.racePostQueue;
+  if (!q) return;
+  let added = false;
+  for (const p of racePosts(state.tour, state.matchId, slots)) added = Boolean(q.add({ ...p, id: newId() })) || added;
+  if (added) Promise.resolve(play.syncLeaderboard?.()).catch(() => {});
+}
+
+/**
+ * The Final is in: queue the tournament for the 🏅 board once (postable: 2+ players, someone
+ * linked) and start a sync; the podium's line follows it. { posted: 'queued' | 'none', tournamentId }.
  */
 function queueFinished(tour, play) {
-  if (tour.players.length < T.tournament.minPostPlayers) return { posted: 'two' };
   const host = postable(tour) ? hostSave(play) : null;
   if (!host?.id || !play?.tournamentQueue) return { posted: 'none' };
   const tournamentId = newId();
@@ -605,11 +617,10 @@ function queueFinished(tour, play) {
   return { posted: 'queued', tournamentId };
 }
 
-/** The podium's line about the 🏅 board: saving, saved, saved for later, refused, nothing to save, or a two-player tournament. */
+/** The podium's line about the 🏅 board: saving, saved, saved for later, refused, or nothing to save. */
 function savedText(game) {
   const state = tournamentState(game);
   if (!state?.posted) return '';
-  if (state.posted === 'two') return tr('tournamentSaveTwo');
   if (state.posted === 'none') return tr('tournamentSaveNone');
   const out = game.scene.getScene('Play')?.tournamentQueue?.outcome(state.tournamentId);
   if (out === 'sent') return tr('tournamentSaveSent');

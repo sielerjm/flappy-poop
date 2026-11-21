@@ -447,7 +447,7 @@ export class Versus extends Phaser.Scene {
       this.add.text(x - 80, cy + 90, `🏁 ×${slot.levelWins ?? 0}`, { ...STYLE, fontSize: '36px', color: '#c9b8dc', strokeThickness: 8 }).setOrigin(0.5).setDepth(71);
       this.add.text(x + 80, cy + 90, `💀 ×${slot.deaths ?? 0}`, { ...STYLE, fontSize: '36px', color: '#c9b8dc', strokeThickness: 8 }).setOrigin(0.5).setDepth(71);
     });
-    this.add.text(cx, cy + 160, t(this.locale, 'versusNotSaved'), { ...STYLE, fontSize: '26px', color: GOLD, strokeThickness: 6, wordWrap: { width: 560, useAdvancedWrap: true } }).setOrigin(0.5).setDepth(71);
+    this.add.text(cx, cy + 160, t(this.locale, 'versusBoardLine'), { ...STYLE, fontSize: '26px', color: GOLD, strokeThickness: 6, wordWrap: { width: 560, useAdvancedWrap: true } }).setOrigin(0.5).setDepth(71);
     // Continue on the left | Bracket on the right, on the game-over panel's row.
     this.buttons = overButtonsLayout(cx, cy, T, { share: true });
     this.rematchButton = createButton(this, this.buttons.share, t(this.locale, 'tournamentContinue'), { ...STYLE, fontSize: '40px' }, { depth: 71 });

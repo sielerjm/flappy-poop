@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { TUNING as T } from '../src/config.js';
 import { createRng, withLevelPipes, levelEnd, levelPipes, levelFor } from '../src/logic.js';
-import { createTournament, nextMatch, recordResult, matchPlayers, isDone, placings, raceOutcome, claimFromCode, claimHost, tournamentPayload, linkedCount, seedSlots, canReseed, reseed, reshuffle, postable } from '../src/tournament.js';
+import { createTournament, nextMatch, recordResult, matchPlayers, isDone, placings, raceOutcome, claimFromCode, claimHost, tournamentPayload, linkedCount, seedSlots, canReseed, reseed, reshuffle, postable, racePosts } from '../src/tournament.js';
 import { exportCode } from '../src/save.js';
 
 const roster = (n) => Array.from({ length: n }, (_, i) => ({ name: `P${i}`, playerId: null, guest: true }));
@@ -315,8 +315,35 @@ test('tournamentPayload: guests travel as { id: null, name: null }; linkedCount 
   assert.equal(linkedCount(createTournament(roster(3), createRng(1))), 0);
   assert.ok(postable(tour), '4 players, two linked: it goes to the board');
   assert.equal(postable(createTournament(roster(3), createRng(1))), false, 'all guests: nothing to post');
-  assert.equal(postable(createTournament([players[1], players[2]], createRng(1))), false, 'two players stay local, linked or not');
+  assert.equal(postable(createTournament([players[1], players[2]], createRng(1))), true, 'two players post too, once one is linked (2.5: gold and silver)');
   assert.equal(JSON.stringify(pl).includes('Guesty'), false, 'no guest name leaves the device');
   assert.deepEqual(pl.levelPipes, [10, 20]);
   assert.equal(pl.id, 'TTTTTTTTTTTTTTTTTTTTTT');
+});
+
+test('postable (2.5): two players post too (gold and silver), still only with someone linked', () => {
+  assert.equal(T.tournament.minPostPlayers, 2);
+  const two = createTournament([{ name: 'A', playerId: 'a'.repeat(22), guest: false }, { name: 'B', playerId: null, guest: true }], createRng(1));
+  assert.equal(postable(two), true);
+  const guests = createTournament([{ name: 'A', playerId: null, guest: true }, { name: 'B', playerId: null, guest: true }], createRng(1));
+  assert.equal(postable(guests), false);
+});
+
+test("racePosts (2.5, item 42(c)): a split-screen race's 🏆 posts, one per linked racer (side a's slot first), guests none", () => {
+  const A = 'a'.repeat(22);
+  const C = 'c'.repeat(22);
+  const tour = createTournament([{ name: 'Ann', playerId: A, guest: false, host: true }, { name: 'Guest', playerId: null, guest: true }, { name: 'Cat', playerId: C, guest: false }], createRng(3));
+  const m = nextMatch(tour);
+  const [a, b] = matchPlayers(tour, m);
+  const slots = [{ score: 41.9, level: 7 }, { score: 12, level: 3 }];
+  const posts = racePosts(tour, m.id, slots);
+  const want = [[a, slots[0]], [b, slots[1]]]
+    .filter(([i]) => tour.players[i].playerId)
+    .map(([i, sl]) => ({ playerId: tour.players[i].playerId, name: tour.players[i].name, score: Math.floor(sl.score), level: sl.level }));
+  assert.deepEqual(posts, want);
+  assert.ok(posts.every((p) => p.playerId !== null));
+  assert.deepEqual(racePosts(tour, 'nope', slots), [], 'an unknown race posts nothing');
+  assert.deepEqual(racePosts(null, m.id, slots), []);
+  const zero = racePosts(tour, m.id, [{ score: 0, level: 1 }, { score: 0, level: 1 }]);
+  assert.deepEqual(zero, [], 'a zero score posts nothing (the board keeps a best above 0)');
 });

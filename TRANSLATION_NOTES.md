@@ -481,7 +481,7 @@ Short, playful, clear. Fit a 720×1280 logical field; How to play / About body w
 | versusGo | GO! | 出发！ |
 | versusWins | {name} WINS! | {name} 获胜！ |
 | versusDraw | DRAW | 平局 |
-| versusNotSaved | Races are not saved to the 🏆 board | 比赛分数不会记到 🏆 榜上 |
+| versusBoardLine | Named players' scores go to the 🏆 board (plan 39, 2.5: the split-screen results panel; a racer with a username, their own or a pasted save code, posts their race score to the 🏆 board, guests do not) | 有用户名的玩家，分数记到 🏆 榜上 |
 | versusEscaped | Made it out! | 顺利排出！ |
 | versusWaiting | Waiting for {name}… | 等待{name}… |
 | versusTapReady | Tap when ready | 准备好了就点一下 |
@@ -560,7 +560,6 @@ The winners take the podium 🥇 🥈 (and 🥉 from 3 players). With 3 or more 
 | tournamentBye | bye: goes straight through | 轮空：直接晋级 |
 | tournamentBack | Back to the race | 回到比赛 |
 | tournamentBracketPill | 🏅 Bracket | 🏅 赛程 |
-| tournamentSaveTwo | Two-player tournaments aren't saved to the 🏅 board | 双人锦标赛不会记到 🏅 榜上 |
 | onlineLoadFailed | Couldn't load online play. Check your connection and try again. (plan 39, 0.2: shown in the tournament window when the 🌐 switch cannot load the online client, assets/vendor/supabase.js; play on this device still works) | 无法加载在线比赛。请检查网络后重试。 |
 | onlineBack | Back (plan 39: back to the 🌐 window's first screen) | 返回 |
 | onlineErrOffline | You're offline. Check your connection and try again. (plan 39: online play's status line, in the 🌐 window of the tournament window) | 你已离线，请检查网络后再试。 |
@@ -571,10 +570,19 @@ The winners take the podium 🥇 🥈 (and 🥉 from 3 players). With 3 or more 
 | onlineConnecting | Connecting | 正在连接 |
 | onlineSignInLimited | Too many new online players on this network right now (schools and phone networks share one). Try again in an hour. | 这个网络上的新在线玩家太多了（学校和手机网络常常共用一个）。请一小时后再试。 |
 | onlineDisabled | Online races are switched off right now. Try again later. | 在线比赛暂时关闭，请稍后再试。 |
-| onlineTooManyWaiting | Your player already has 3 devices waiting to be paired. Remove one from a paired device, then try again. | 你的玩家已有3台设备在等待配对。请在已配对的设备上移除一台，然后再试。 |
+| onlineTooManyWaiting | Your player already has 3 devices waiting to be paired, and all 3 are in a race. Try again once a race ends. (plan 39, 2.5: since 2.4e a fourth waiting device replaces the oldest, so this only comes when all three are racing) | 你的玩家已有3台设备在等待配对，而且都在比赛中。请等一场比赛结束后再试。 |
 | onlineStorageBlocked | This browser blocks storage, so online play only lasts until you close this page. | 这个浏览器禁止存储，所以在线游戏只能持续到你关闭本页面。 |
 | onlinePendingHome | This device isn't paired with your other devices yet. You can race by code; pair it in Devices. | 这台设备还没有和你的其他设备配对。你仍可以用房间码比赛；请在“设备”里配对。 |
 | onlineDevices | 📱 Devices | 📱 设备 |
+| onlineRaces | 🏁 Recent races (plan 39, 2.5: the 🌐 window's button beside 📱 Devices; your own saved online races) | 🏁 最近比赛 |
+| onlineRacesLead | Your last online races (the Recent races view's heading) | 你最近的在线比赛 |
+| onlineRacesNone | No saved races yet. Race a friend to start your list. | 还没有保存的比赛。和朋友比一场吧。 |
+| onlineRacesPending | Pair this device to see your races. (a device waiting to be paired cannot read its player's race history) | 配对这台设备后，才能看到你的比赛。 |
+| onlineRacesNote | Only you can see this list. (online pairings are private: they never show on the public profile) | 只有你能看到这个列表。 |
+| onlineRival | Biggest online rival (the player you lost to most in online races; the line under it reuses statsRivalLine) | 在线最大对手 |
+| onlineRaceWon | Won (a Recent races row: "Won 412–377", your score first) | 赢 |
+| onlineRaceLost | Lost (a Recent races row) | 输 |
+| onlineRaceDraw | Draw (a Recent races row: both scored the same, and every tiebreak too) | 平 |
 | onlineDevicesLead | Devices that use your player online | 在线使用你玩家的设备 |
 | onlineThisDevice | This device | 这台设备 |
 | onlineOtherDevice | Device {n} | 设备 {n} |
@@ -584,6 +592,7 @@ The winners take the podium 🥇 🥈 (and 🥉 from 3 players). With 3 or more 
 | onlineLinked | added {when} | 添加于：{when} |
 | onlineToday | today | 今天 |
 | onlineDaysAgo | {n} days ago | {n}天前 |
+| onlineYesterday | yesterday (plan 39, 2.5: one day ago, in 📱 Devices and 🏁 Recent races, instead of "1 days ago") | 昨天 |
 | onlineRemove | Remove | 移除 |
 | onlineRemoveConfirm | Tap Remove again: that device leaves online play and has to be paired again. | 再点一次“移除”：那台设备会退出在线游戏，需要重新配对。 |
 | onlineRemoved | Device removed | 设备已移除 |
@@ -669,6 +678,17 @@ The winners take the podium 🥇 🥈 (and 🥉 from 3 players). With 3 or more 
 | onlineErrBadCode | That's not a room code: codes are 6 digits and never start with 0 (plan 39: the 🌐 lobby's status line; {name} is the other player's username) | 这不是房间码：房间码是6位数字，第一位不是0 |
 | onlineErrNoRoom | No room has that code. Check it with your friend. (plan 39: the 🌐 lobby's status line; {name} is the other player's username) | 没有这个房间码的房间，请和朋友核对一下。 |
 | onlineErrInRace | This device is still in another race. Leave it there first, then try again. (plan 39, 1.8, item 46: Create or Join refused because this device is still seated in a race that never ended, for example in another tab) | 这台设备还在另一场比赛中，请先在那里离开，再试一次。 |
+| onlineClosed | Online races are switched off for now. Try again later. (plan 39, 2.5: the server's off switch is on; Create, Join and a rematch say this) | 在线比赛暂时关闭了，请稍后再试。 |
+| onlineSaving | Saving the race… (plan 39, 2.5: the online results panel, while this game reports the race to the server) | 正在保存比赛… |
+| onlineSaveWaiting | Saving: waiting for {name}'s game… ({name}: the other player; both games report, and the first waits for the second) | 正在保存：等待{name}的游戏… |
+| onlineSaved | Saved to the 🏅 and 🏆 boards (both games agreed: gold or silver on 🏅, each score on 🏆) | 已记到 🏅 和 🏆 榜上 |
+| onlineSavedNotCounted | Saved to Recent races. Not on the boards: today's race limit is reached. (10 counted races a day per pair, 20 per player) | 已记入最近比赛。今天的上榜次数已满，不上榜。 |
+| onlineSaveDisputed | Not saved: your two games saw different results | 未保存：两边的游戏看到的结果不一样 |
+| onlineSaveRefused | Not saved: this race could not be checked (too short, or a score too high for its time) | 未保存：这场比赛无法核对 |
+| onlineSaveLate | Not saved: {name}'s game did not report the race (after 30 s of waiting; a device that is not paired never reports) | 未保存：{name}的游戏没有提交这场比赛 |
+| onlineSavePending | Not saved: pair this device in 📱 Devices to save races | 未保存：在 📱 设备里配对这台设备后，比赛才会保存 |
+| onlineSaveFailed | Couldn't save the race. Check your connection. (every resend lost, about a minute) | 比赛没能保存，请检查网络。 |
+| onlineSaveLeft | Not saved: the race was left before the end (someone left mid-race: no winner, nothing saved) | 未保存：比赛没打完就有人离开了 |
 | onlineDevOnLive | (Dev: this device is on the live project. A 🧪 test device cannot see its rooms.) (plan 39, item 43: added after onlineErrNoRoom on a developer's own machine only; players never see it) | （开发：本设备连接的是正式项目，🧪 测试设备看不到这里的房间。） |
 | onlineDevOnTest | (Dev: this device is on the 🧪 test project. The other device must be on it too.) (plan 39, item 43: as onlineDevOnLive) | （开发：本设备连接的是 🧪 测试项目，另一台设备也必须连接测试项目。） |
 | onlineErrRateLimited | Too many wrong codes. Wait a few minutes, then try again. (plan 39: the 🌐 lobby's status line; {name} is the other player's username) | 输错的房间码太多了，请等几分钟再试。 |

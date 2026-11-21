@@ -372,6 +372,24 @@ export function createTournamentQueue(storage = browserStorage(), { key = LEADER
   };
 }
 
+/** A split-screen race's 🏆 post, or null: { id, playerId, name, score, level }. */
+function normalizeRacePost(raw) {
+  if (!raw || typeof raw !== 'object' || typeof raw.id !== 'string' || !raw.id || raw.id.length > 64) return null;
+  const r = normalizeRecord(raw);
+  if (!r || !ID_RE.test(r.playerId)) return null;
+  return { id: raw.id, playerId: r.playerId, name: r.name, score: r.score, level: r.level };
+}
+
+/**
+ * Split-screen race scores (plan 39, 2.5, item 42(c)) waiting for the 🏆 board: each racer with a
+ * player id posts their race score through submit_score's own rules (the higher score stays, the name
+ * claim, 👑). Queued once per id; drained like the tournament queue.
+ */
+export function createRacePostQueue(storage = browserStorage(), { key = LEADERBOARD.racePostsKey, max = LEADERBOARD.racePostQueueMax } = {}) {
+  const q = createPostQueue(storage, { key, max, normalize: normalizeRacePost, idOf: (e) => e.id });
+  return { load: q.load, add: q.add, outcome: q.outcome, drain: q.drain };
+}
+
 // ---------------------------------------------------------------------------
 // Daily Dump (🌞). The attempt record lives on this device under dailyKey: claimed when the run
 // starts (final: false), rewritten as the score grows, final at the crash. A record left unfinished

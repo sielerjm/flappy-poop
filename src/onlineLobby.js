@@ -33,6 +33,7 @@ const ERROR_KEYS = Object.freeze({
   offline: 'onlineErrOffline',
   timeout: 'onlineErrOffline',
   'in a race': 'onlineErrInRace',
+  'online closed': 'onlineClosed', // the server's off switch (admin_set_online_open, 2.4a)
 });
 const UPDATE_KEYS = Object.freeze({ me: 'onlineUpdateYou', them: 'onlineUpdateThem', both: 'onlineUpdateBoth' });
 /** A join refusal that leaves the typed code to fix (a typo, the network); the caps clear it. */
