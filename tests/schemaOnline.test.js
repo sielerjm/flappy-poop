@@ -652,6 +652,7 @@ test('set_room_status: the host starts a race (a minted seed, GO 4 s ahead); eit
   assert.deepEqual(Object.keys(msg[0].payload).sort(), ['code', 'guest_name', 'host_name', 'round', 'seed', 'source', 'start_ms', 'status']);
   await assert.rejects(call(db, host, 'set_room_status', [code, 'playing']), /bad status/, 'not twice');
   assert.equal((await call(db, guest, 'set_room_status', [code, 'finished'])).status, 'finished');
+  await db.query("update public.rooms set started_at = now() - interval '61 seconds'"); // a rematch waits a minute (2.4r)
   const again = await call(db, host, 'set_room_status', [code, 'playing']);
   assert.equal(again.round, 2);
   assert.notEqual(String(again.seed), '', 'a rematch races on a new seed');
@@ -864,8 +865,11 @@ function constant(name) {
 const matchesOf = (db, code) => db.query(`select m.*, floor(extract(epoch from m.started_at) * 1000)::bigint as started_ms
   from public.matches m where m.room_code = $1 order by m.id`, [code]).then((r) => r.rows);
 /** Move the room's current race's GO back, so it has been on for `secs` seconds. */
-const goAgo = (db, code, secs) => db.query(`update public.matches set started_at = now() - make_interval(secs => $2)
-  where id = (select r.match_id from public.rooms r where r.code = $1)`, [code, secs]);
+const goAgo = async (db, code, secs) => {
+  await db.query(`update public.matches set started_at = now() - make_interval(secs => $2)
+    where id = (select r.match_id from public.rooms r where r.code = $1)`, [code, secs]);
+  await db.query('update public.rooms set started_at = now() - make_interval(secs => $2) where code = $1', [code, secs]);
+};
 /** A ready room's first race, on for `secs` seconds. */
 async function racing(db, h, g, secs = 400) {
   const r = await readyRoom(db, h, g);
@@ -910,6 +914,7 @@ test('set_room_status mints one match per race (its seed, GO, round and both sea
   assert.deepEqual(Object.keys(s).sort(), ['code', 'guest_name', 'host_name', 'ok', 'round', 'seat', 'seed', 'server_ms', 'source', 'start_ms', 'status'], 'the room as Tier 1 reads it');
   await call(db, guest, 'set_room_status', [code, 'finished']);
   assert.equal((await matchesOf(db, code))[0].status, 'playing', 'a finished room leaves its race to the reports');
+  await db.query("update public.rooms set started_at = now() - interval '61 seconds'"); // a rematch waits a minute (2.4r)
   const again = await call(db, host, 'set_room_status', [code, 'playing']);
   ms = await matchesOf(db, code);
   assert.equal(ms.length, 2);
@@ -972,7 +977,7 @@ test('finish_match refuses a race reported sooner after GO than any race lasts, 
   assert.deepEqual(await finish(db, soon.guest, soon.code, 1, [slot(0), slot(0)]), { ok: true, status: 'refused', counted: false }, 'refused stays refused');
   const early = await racing(db, 'Eh', 'Eg', minS - 5);
   assert.equal((await finish(db, early.host, early.code, 1, [slot(10), slot(10)])).status, 'refused', `under ${minS} s`);
-  const secs = minS + 30;
+  const secs = minS + 5; // a bound under the 1000 cap
   const high = await racing(db, 'Hh', 'Hg', secs);
   assert.equal((await finish(db, high.guest, high.code, 1, [slot(10), slot(bound(secs) + 5)])).status, 'refused', 'a score the time cannot hold');
   assert.equal((await matchesOf(db, high.code))[0].counted, false);
@@ -1257,4 +1262,123 @@ test('a hidden racer\'s race posts as their own rows do: hidden from everyone el
   await both(db, r, 1, [slot(90), slot(30)]);
   assert.deepEqual((await boardRows(db, r.host.player)).map((x) => [x.score, x.hidden]), [[90, true]]);
   assert.deepEqual((await anonCall(db, 'select * from public.tournament_board()')).rows.map((x) => x.name), ['Seen']);
+});
+
+// ---------------------------------------------------------------------------
+// 2.4r: the cold review's fixes (item 50).
+
+test('the shortest race is Michael\'s 180 s (21 Nov), still under half the fastest course', () => {
+  assert.equal(constant('c_min_race_s'), 180);
+});
+
+test('a merge: races follow trust, so a stranger holding your id cannot put a made-up player\'s races into your history, either way round', async () => {
+  for (const order of ['victim first', 'sock first']) {
+    const db = await freshDb();
+    const victim = await device(db, 'Vic');
+    const friend = await device(db, 'Pal');
+    // The victim's own race, against a friend.
+    const { code } = await call(db, victim, 'create_room');
+    await call(db, friend, 'join_room', [code]);
+    await call(db, victim, 'answer_guest', [code, true]);
+    await call(db, victim, 'set_room_status', [code, 'playing']);
+    await goAgo(db, code, 400);
+    await both(db, { host: victim, guest: friend, code }, 1, [slot(50), slot(40)]);
+    await call(db, victim, 'leave_room', [code]);
+    // Two made-up players race each other (their devices linked after the victim's).
+    const sock = await racing(db, 'Sock', 'xXRudeNameXx');
+    await both(db, sock, 1, [slot(10), slot(90)]);
+    const args = order === 'victim first' ? [victim.player, sock.host.player] : [sock.host.player, victim.player];
+    await anonCall(db, 'select public.merge_players($1, $2)', args);
+    assert.equal((await rowOf(db, victim.uid)).trusted, true, `${order}: the victim keeps trust`);
+    assert.equal((await rowOf(db, sock.host.uid)).trusted, false, `${order}: the sock drops to pending`);
+    const h = await history(db, victim);
+    assert.deepEqual(h.rival, { name: 'Pal', meetings: 1, losses: 0 }, `${order}: only the victim's own race`);
+    assert.deepEqual(h.recent.map((x) => x.name), ['Pal'], order);
+  }
+});
+
+test('a merge where nobody loses trust brings every race; a race between the two merged ids is one player\'s and never shows', async () => {
+  const db = await freshDb();
+  const r = await racing(db, 'Ma', 'Mb');
+  await both(db, r, 1, [slot(9), slot(3)]);
+  await db.query("update public.online_players set seen_at = now() - interval '8 days'"); // neither side recent
+  const other = await racing(db, 'Mc', 'Md');
+  await both(db, other, 1, [slot(1), slot(2)]);
+  await db.query("update public.online_players set seen_at = now() - interval '8 days'");
+  await anonCall(db, 'select public.merge_players($1, $2)', [r.host.player, other.host.player]);
+  const pair = await addUser(db);
+  await link(db, pair, r.host.player, 'Ma'); // a device of the kept player, trusted (none seen in 7 days)
+  assert.deepEqual((await history(db, pair)).recent.map((x) => x.name).sort(), ['Mb', 'Md'], 'both sides\' races');
+  await anonCall(db, 'select public.merge_players($1, $2)', [r.host.player, r.guest.player]);
+  assert.deepEqual((await history(db, pair)).recent.map((x) => x.name), ['Md'], 'the race between the two ids is gone from the history');
+});
+
+test('a race left under an old id still counts as one player\'s: never counted, and its device still reports', async () => {
+  const db = await freshDb();
+  const r = await racing(db, 'Oa', 'Ob');
+  await anonCall(db, 'select public.merge_players($1, $2)', [r.host.player, r.guest.player]); // the guest side drops to pending
+  await call(db, r.guest, 'online_pair', [await call(db, r.host, 'online_pair_code')]);
+  const [m] = await matchesOf(db, r.code);
+  assert.equal(m.guest_player, r.guest.player, 'the demoted side\'s race stays under its old id');
+  assert.deepEqual(await both(db, r, 1, [slot(5), slot(6)]), { ok: true, status: 'agreed', counted: false });
+});
+
+test('a rematch waits a minute after the last GO; each race is one row, and an abandoned race nobody reported goes after a day', async () => {
+  const db = await freshDb();
+  const r = await readyRoom(db, 'Ph1', 'Pg1');
+  await call(db, r.host, 'set_room_status', [r.code, 'playing']);
+  await call(db, r.guest, 'set_room_status', [r.code, 'finished']);
+  await assert.rejects(call(db, r.host, 'set_room_status', [r.code, 'playing']), /rate limited/);
+  await db.query("update public.rooms set started_at = now() - interval '61 seconds' where code = $1", [r.code]);
+  assert.equal((await call(db, r.host, 'set_room_status', [r.code, 'playing'])).round, 2);
+  assert.equal((await matchesOf(db, r.code)).length, 2);
+  // Housekeeping: an abandoned race with no report goes after a day; one with a report stays.
+  const kept = await racing(db, 'Ph2', 'Pg2');
+  await finish(db, kept.host, kept.code, 1, [slot(1), slot(2)]);
+  await call(db, r.host, 'leave_room', [r.code]);
+  await db.query("update public.matches set started_at = now() - interval '2 days', created_at = now() - interval '2 days'");
+  await call(db, await device(db, 'Ph3'), 'create_room');
+  const left = (await db.query('select room_code, round, status from public.matches order by id')).rows;
+  assert.deepEqual(left.map((x) => [x.room_code, x.round, x.status]), [[kept.code, 1, 'abandoned']], 'only the race with a report is kept');
+});
+
+test('a leave after one seat has reported keeps the race for the other seat\'s report', async () => {
+  const db = await freshDb();
+  const r = await racing(db, 'Lh', 'Lg');
+  await finish(db, r.host, r.code, 1, [slot(30), slot(20)]);
+  await call(db, r.host, 'leave_room', [r.code]);
+  assert.equal((await room(db, r.code)).status, 'abandoned', 'the room is abandoned');
+  assert.deepEqual(await finish(db, r.guest, r.code, 1, [slot(30), slot(20)]), { ok: true, status: 'agreed', counted: true }, 'its race is not');
+  const s = await racing(db, 'Lh2', 'Lg2');
+  await finish(db, s.guest, s.code, 1, [slot(3), slot(2)]);
+  await call(db, s.host, 'set_room_status', [s.code, 'abandoned']);
+  assert.equal((await both(db, s, 1, [slot(3), slot(2)])).status, 'agreed', 'set_room_status abandoned too');
+});
+
+test('a racer with no board name and no online name gets the 🏅 row as Player but posts nothing to 🏆', async () => {
+  const db = await freshDb();
+  const r = await racing(db, 'Nn', 'Nm');
+  await db.query('delete from public.online_profiles where player_id = $1', [r.host.player]); // the header's "free an online name"
+  await both(db, r, 1, [slot(70), slot(20)]);
+  assert.deepEqual(await boardRows(db, r.host.player), []);
+  assert.equal((await tstats(db, r.host.player)).name, 'Player');
+  assert.deepEqual((await boardRows(db, r.guest.player)).map((x) => x.score), [20], 'the other racer posts');
+});
+
+test('a device cannot write a race\'s run first to hold its post: the server\'s run replaces it', async () => {
+  const db = await freshDb();
+  await db.query('select public.admin_set_require_run(true)');
+  const r = await racing(db, 'Gu', 'Gv');
+  const mid = (await matchesOf(db, r.code))[0].id;
+  const runId = `match${String(mid).padStart(16, '0')}g`;
+  const now = Date.now();
+  await anonCall(db, 'select public.submit_runs($1, $2::bigint, $3::jsonb)', [r.guest.player, now, JSON.stringify([{
+    run_id: runId, session: 'sessionAB12', mode: 'race', score: 1, level: 1, toilet: false, won: false,
+    started_at: now - 60000, ended_at: now - 1000, length_ms: 59000, paused_ms: 0, version: '0.25.0', data: {},
+  }])]);
+  await both(db, r, 1, [slot(70), slot(20)]);
+  const run = (await db.query('select score, level, version from public.run_log where run_id = $1', [runId])).rows[0];
+  assert.deepEqual(run, { score: 20, level: constant('c_race_level'), version: 'server' });
+  assert.deepEqual((await boardRows(db, r.guest.player)).map((x) => x.score), [20], 'posted, not held');
+  assert.equal((await db.query('select count(*)::int as n from public.held_scores')).rows[0].n, 0);
 });

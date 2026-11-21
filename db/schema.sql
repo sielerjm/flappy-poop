@@ -1132,6 +1132,7 @@ declare
   r record;
   v_keep_first timestamptz;
   v_merge_first timestamptz;
+  v_lost text; -- the side whose devices lose trust in this fold, if one does
 begin
   if v_keep = v_merge then
     return;
@@ -1248,9 +1249,11 @@ begin
    where o.player_id = v_merge and o.trusted and o.seen_at > now() - interval '7 days';
   if v_keep_first is not null and (v_merge_first is null or v_keep_first <= v_merge_first) then
     update public.online_players set trusted = false where player_id = v_merge;
+    v_lost := v_merge;
   elsif v_merge_first is not null then
     update public.online_players set trusted = false where player_id = v_keep;
     delete from public.online_pairings where player_id = v_keep;
+    v_lost := v_keep;
   end if;
   update public.online_players set player_id = v_keep where player_id = v_merge;
   insert into public.online_profiles (player_id, name, updated_at)
@@ -1260,8 +1263,21 @@ begin
   delete from public.online_pairings where player_id = v_merge;
   update public.rooms set host_player = v_keep where host_player = v_merge;
   update public.rooms set guest_player = v_keep where guest_player = v_merge;
-  update public.matches set host_player = v_keep where host_player = v_merge;   -- 2.4a: the online history follows
-  update public.matches set guest_player = v_keep where guest_player = v_merge;
+  -- Online races follow trust (plan 39, 2.4r; Michael, 21 Nov), as the devices do: they are the player's
+  -- private history, and a merge needs only the two ids. A side that lost trust above leaves its races
+  -- under the id that is folded away (the merged side's stay; the kept side's move there, as the trusted
+  -- side's come to the kept id), so a made-up player merged with a stolen id adds nothing to the owner's
+  -- history, either way round. When nobody lost trust, every race moves. A race between the two ids is
+  -- one player's now and shows nowhere (online_races).
+  if v_lost = v_keep then
+    update public.matches set host_player = case when host_player = v_keep then v_merge else v_keep end
+     where host_player in (v_keep, v_merge);
+    update public.matches set guest_player = case when guest_player = v_keep then v_merge else v_keep end
+     where guest_player in (v_keep, v_merge);
+  elsif v_lost is null then
+    update public.matches set host_player = v_keep where host_player = v_merge;
+    update public.matches set guest_player = v_keep where guest_player = v_merge;
+  end if;
   update public.player_aliases set canonical_id = v_keep, merged_at = now() where canonical_id = v_merge;
   insert into public.player_aliases (alias_id, canonical_id)
   values (v_merge, v_keep)
@@ -4024,7 +4040,8 @@ begin
                           'left', 'room:' || r.code, true);
     if r.status = 'playing' then
       update public.rooms x set status = 'abandoned', updated_at = now() where x.code = r.code;
-      update public.matches m set status = 'abandoned', finished_at = now() where m.id = r.match_id and m.status = 'playing';
+      update public.matches m set status = 'abandoned', finished_at = now() -- a race one seat reported waits for the other
+       where m.id = r.match_id and m.status = 'playing' and m.host_report is null and m.guest_report is null;
     else
       delete from public.rooms x where x.code = r.code;
     end if;
@@ -4054,6 +4071,11 @@ begin
      limit 100);
   update public.matches m set status = 'abandoned', finished_at = now() where m.id in (
     select x.id from public.matches x where x.status = 'playing' and x.started_at < now() - interval '6 hours' limit 100);
+  delete from public.matches m where m.id in ( -- an abandoned race nobody reported is nobody's history
+    select x.id from public.matches x
+     where x.status = 'abandoned' and x.host_report is null and x.guest_report is null
+       and x.created_at < now() - interval '1 day'
+     limit 100);
   delete from public.join_attempts a where a.id in (
     select x.id from public.join_attempts x where x.at < now() - interval '1 hour' order by x.at limit 500);
   delete from public.online_pairings c where c.expires_at < now();
@@ -4305,9 +4327,11 @@ $$;
 -- mints the race's seed and its GO time, 4 seconds from now (the countdown runs on server time),
 -- counts the round and mints the race's row in matches (2.4a), which finish_match checks reports
 -- against. 'finished' or 'abandoned' (either seated device, from 'playing'): a finished room leaves
--- its race to the reports; an abandoned one abandons it. Both devices are told ('status', the room as
+-- its race to the reports; an abandoned one abandons it unless a seat has reported (that race waits for
+-- the other report; housekeeping ends it 6 hours after GO). Both devices are told ('status', the room as
 -- room_state shows it). Returns the room as room_state does. Raises 'not signed in', 'no room', 'not
--- host', 'bad status', 'online closed' (the switch: no new race, a rematch included).
+-- host', 'bad status', 'online closed' (the switch: no new race, a rematch included), 'rate limited' (a
+-- rematch within a minute of the last race's GO).
 create or replace function public.set_room_status(p_code text, p_status text)
 returns jsonb
 language plpgsql
@@ -4317,6 +4341,7 @@ set search_path = ''
 as $$
 declare
   c_lead constant interval := interval '4 seconds';   -- from 'playing' to GO
+  c_rematch constant interval := interval '60 seconds'; -- from one race's GO to the next one's start
   v_uid uuid := auth.uid();
   v_room public.rooms;
   v_match bigint;
@@ -4336,6 +4361,9 @@ begin
       raise exception 'bad status';
     end if;
     perform public.online_require_open();
+    if v_room.started_at > now() - c_rematch then
+      raise exception 'rate limited'; -- no race ends that soon: a loop of starts would only mint rows
+    end if;
     update public.rooms r
        set status = 'playing', seed = public.online_random(4294967296), started_at = now() + c_lead,
            round = r.round + 1, updated_at = now()
@@ -4354,7 +4382,8 @@ begin
     update public.rooms r set status = p_status, updated_at = now() where r.code = p_code
     returning * into v_room;
     if p_status = 'abandoned' then
-      update public.matches m set status = 'abandoned', finished_at = now() where m.id = v_room.match_id and m.status = 'playing';
+      update public.matches m set status = 'abandoned', finished_at = now()
+       where m.id = v_room.match_id and m.status = 'playing' and m.host_report is null and m.guest_report is null;
     end if;
   else
     raise exception 'bad status';
@@ -4438,7 +4467,7 @@ security definer
 set search_path = ''
 as $$
 declare
-  c_min_race_s constant int := 90;     -- no race is shorter: the fastest course a race flies is about 360 s
+  c_min_race_s constant int := 180;    -- no race is shorter: the fastest course is about 360 s (Michael, 21 Nov: half of it)
   c_score_base constant int := 200;    -- a score may be at most c_score_base + c_score_rate per second since GO
   c_score_rate constant int := 4;
   c_pair_day   constant int := 10;     -- counted races per pair of players in 24 hours
@@ -4472,13 +4501,15 @@ begin
   if v_m.id is null then
     raise exception 'no match';
   end if;
-  -- The two players' locks, as fold_player takes them, before the race's row: a merge and a report
-  -- never deadlock, and the caps' counts below run one at a time per player.
+  -- The two players' locks, as fold_player takes them, before the race's row, so a merge and a report
+  -- wait for each other in one order, and the caps' counts below run one at a time per player. The
+  -- boards' part (online_count_race) then takes only 'board:scores', as submit_score does last.
   perform pg_advisory_xact_lock(hashtext(least(v_m.host_player, v_m.guest_player)));
   perform pg_advisory_xact_lock(hashtext(greatest(v_m.host_player, v_m.guest_player)));
   select * into v_m from public.matches m where m.id = v_m.id for update;
+  v_me := public.online_me(); -- again: a merge that ran while this call waited for the locks moved it
   v_host := v_m.host_uid = v_uid;
-  if v_me.player_id <> (case when v_host then v_m.host_player else v_m.guest_player end) then
+  if v_me.player_id is distinct from public.resolve_player(case when v_host then v_m.host_player else v_m.guest_player end) then
     raise exception 'no match';
   end if;
 
@@ -4535,7 +4566,7 @@ begin
           when 'levelWins' then case when (a ->> 'levelWins')::int > (b ->> 'levelWins')::int then 'host' else 'guest' end
           when 'finalFirst' then case when (a ->> 'finalFirst')::boolean then 'host' else 'guest' end
         end;
-        v_m.counted := v_m.host_player <> v_m.guest_player
+        v_m.counted := public.resolve_player(v_m.host_player) <> public.resolve_player(v_m.guest_player)
           and (select count(*) from public.matches x
                 where x.counted and x.finished_at > now() - interval '24 hours'
                   and least(x.host_player, x.guest_player) = least(v_m.host_player, v_m.guest_player)
@@ -4571,10 +4602,12 @@ $$;
 -- call of 21 Nov; neither on a draw; an event and the best race score) and the 🏆 post of their race
 -- score at the race's last level through the board's own rules (board_post: the higher score stays,
 -- the 👑 counter, plan 30's holds), backed by a race run the server writes from the agreed numbers, so
--- hold_run and require_run treat it as a single run. No tournament receipt and no matchup: online
--- pairings stay off the public rival line. The name: the board's, else the one shown online (which
--- is a claim, so free on the board; a name held there by another player all the same skips the 🏆
--- post, never the race). Internal: finish_match.
+-- hold_run and require_run treat it as a single run (a row a device wrote first under that run id is
+-- replaced). No tournament receipt and no matchup: online pairings stay off the public rival line.
+-- The name: the board's, else the one shown online (a claim, so free on the board); with neither the
+-- 🏅 row says 'Player' and nothing is posted to 🏆, and a name another player holds there all the same
+-- skips the post, never the race. Rows first, posts last: the posts take 'board:scores', and no name
+-- lock is taken while the players' are held (2.4r). Internal: finish_match.
 create or replace function public.online_count_race(p_id bigint)
 returns void
 language plpgsql
@@ -4586,52 +4619,62 @@ declare
   c_race_level constant int := 7;      -- a race ends on the last level (TUNING.levels.lastLevel)
   m public.matches;
   r record;
-  v_name text;
-  v_key text;
+  v_pass int;
 begin
   select * into m from public.matches x where x.id = p_id and x.counted;
   if m.id is null then
     return;
   end if;
-  for r in
-    select x.seat, x.pid, (m.host_report -> x.i ->> 'score')::int as score, coalesce(m.winner_seat = x.seat, false) as won
-      from (values ('host', m.host_player, 0), ('guest', m.guest_player, 1)) x(seat, pid, i)
-     order by x.pid
-  loop
-    v_name := coalesce((select sc.name from public.scores sc where sc.player_id = r.pid order by sc.updated_at desc limit 1),
-                       (select p.name from public.online_profiles p where p.player_id = r.pid),
-                       'Player');
-    perform public.touch_player(r.pid);
-    insert into public.tournament_stats (player_id, name, best_score, gold, silver, bronze, events, updated_at)
-    values (r.pid, v_name, r.score,
-            case when r.won then 1 else 0 end,
-            case when m.winner_seat is not null and not r.won then 1 else 0 end,
-            0, 1, now())
-    on conflict (player_id) do update
-      set name       = excluded.name,
-          best_score = greatest(public.tournament_stats.best_score, excluded.best_score),
-          gold       = public.tournament_stats.gold + excluded.gold,
-          silver     = public.tournament_stats.silver + excluded.silver,
-          events     = public.tournament_stats.events + 1,
-          updated_at = now();
-    insert into public.run_log (player_id, run_id, session, mode, score, level, toilet, won, started_at, ended_at,
-                                length_ms, clock_offset_ms, version)
-    values (r.pid, 'match' || lpad(m.id::text, 16, '0') || left(r.seat, 1), 'online-race', 'race', r.score, c_race_level,
-            false, r.won, m.started_at, m.finished_at,
-            least(greatest(floor(extract(epoch from (m.finished_at - m.started_at)) * 1000), 0), 86400000)::int, 0, 'server')
-    on conflict (player_id, run_id) do nothing;
-    v_key := public.name_key(v_name);
-    perform pg_advisory_xact_lock(hashtext(v_key)); -- the name's lock first, as submit_score takes it
-    if not public.name_blocked(v_key, r.pid) then
-      perform public.board_post(r.pid, v_name, r.score, false, c_race_level);
-    end if;
+  -- Two passes over the racers, in player id order (as submit_tournament locks its rows): the rows
+  -- first (🏅 and the race's run), then the posts ('board:scores').
+  for v_pass in 1 .. 2 loop
+    for r in
+      select x.seat, x.pid, (m.host_report -> x.i ->> 'score')::int as score, coalesce(m.winner_seat = x.seat, false) as won,
+             coalesce((select sc.name from public.scores sc where sc.player_id = x.pid order by sc.updated_at desc limit 1),
+                      (select p.name from public.online_profiles p where p.player_id = x.pid)) as name,
+             'match' || lpad(m.id::text, 16, '0') || left(x.seat, 1) as run_id
+        from (values ('host', public.resolve_player(m.host_player), 0),
+                     ('guest', public.resolve_player(m.guest_player), 1)) x(seat, pid, i)
+       order by x.pid
+    loop
+      if v_pass = 1 then
+        perform public.touch_player(r.pid);
+        insert into public.tournament_stats (player_id, name, best_score, gold, silver, bronze, events, updated_at)
+        values (r.pid, coalesce(r.name, 'Player'), r.score,
+                case when r.won then 1 else 0 end,
+                case when m.winner_seat is not null and not r.won then 1 else 0 end,
+                0, 1, now())
+        on conflict (player_id) do update
+          set name       = excluded.name,
+              best_score = greatest(public.tournament_stats.best_score, excluded.best_score),
+              gold       = public.tournament_stats.gold + excluded.gold,
+              silver     = public.tournament_stats.silver + excluded.silver,
+              events     = public.tournament_stats.events + 1,
+              updated_at = now();
+        insert into public.run_log (player_id, run_id, session, mode, day, stub, score, level, toilet, won, started_at,
+                                    ended_at, length_ms, paused_ms, clock_offset_ms, version, data)
+        values (r.pid, r.run_id, 'online-race', 'race', null, false, r.score, c_race_level, false, r.won, m.started_at,
+                m.finished_at, least(greatest(floor(extract(epoch from (m.finished_at - m.started_at)) * 1000), 0), 86400000)::int,
+                null, 0, 'server', '{}'::jsonb)
+        on conflict (player_id, run_id) do update -- a row a device wrote first under this id is replaced
+          set session = excluded.session, mode = excluded.mode, day = null, stub = false, score = excluded.score,
+              level = excluded.level, toilet = false, won = excluded.won, started_at = excluded.started_at,
+              ended_at = excluded.ended_at, length_ms = excluded.length_ms, paused_ms = null, clock_offset_ms = 0,
+              version = excluded.version, data = excluded.data, received_at = now(), held = false, held_at = null
+          where public.run_log.version <> 'server';
+      elsif r.name is not null and not public.name_blocked(public.name_key(r.name), r.pid) then
+        perform public.board_post(r.pid, r.name, r.score, false, c_race_level);
+      end if;
+    end loop;
   end loop;
 end;
 $$;
 
--- A player's agreed online races against another player, as they saw them: the opponent's id and
--- shown name (online, else the board's), won (null: a draw), both scores, when. A hidden opponent
--- (plan 30) is left out. Internal: online_history.
+-- A player's agreed online races against another player, as they saw them: the opponent's (resolved)
+-- id and shown name (online, else the board's), won (null: a draw), both scores, when. A race whose two
+-- ids are now one player (a merge), and a hidden opponent (plan 30), are left out. Only races stored
+-- under the player's own id: a merge leaves a side that lost trust behind (fold_player). Internal:
+-- online_history.
 create or replace function public.online_races(p_player text)
 returns table (opp text, oname text, won boolean, mine int, theirs int, at timestamptz, mid bigint)
 language sql
@@ -4649,11 +4692,11 @@ as $$
          x.finished_at, x.id
     from (
       select m.*, case when m.host_player = p_player then 'host' else 'guest' end as my_seat,
-             case when m.host_player = p_player then m.guest_player else m.host_player end as opp
+             public.resolve_player(case when m.host_player = p_player then m.guest_player else m.host_player end) as opp
         from public.matches m
-       where m.status = 'agreed' and p_player in (m.host_player, m.guest_player) and m.host_player <> m.guest_player
+       where m.status = 'agreed' and p_player in (m.host_player, m.guest_player)
     ) x
-   where not public.player_hidden(x.opp);
+   where x.opp <> p_player and not public.player_hidden(x.opp);
 $$;
 
 -- The owner's online races (plan 39, 2.4a), for a trusted device of the player: { rival, recent }.
@@ -4777,7 +4820,7 @@ returns text
 language sql
 immutable
 as $$
-  select '2235a341bcd448fe'::text; -- schema stamp
+  select '5020e142986b68f7'::text; -- schema stamp
 $$;
 revoke execute on function public.schema_version() from public, authenticated;
 grant  execute on function public.schema_version() to anon;
