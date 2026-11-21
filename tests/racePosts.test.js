@@ -63,3 +63,22 @@ test('a name another player holds drops that post; a refusal of any other kind k
   await withFetch(slow.fetch, () => slow.p.syncLeaderboard());
   assert.deepEqual(slow.q.load().map((e) => e.name), ['Ann', 'Bob'], 'kept, in order');
 });
+
+test('T2-review: a finished split-screen race posts its 🏆 scores at the level each racer reached (Versus hands the slots\' level on)', async () => {
+  globalThis.Phaser ??= { Scene: class { constructor(k) { this.sysKey = k; } } };
+  const { Versus } = await import('../src/scenes/Versus.js');
+  const { createTournament, nextMatch, racePosts } = await import('../src/tournament.js');
+  const { createRng } = await import('../src/logic.js');
+  const { TUNING } = await import('../src/config.js');
+  const tour = createTournament([{ name: 'Ann', playerId: A, guest: false, host: true }, { name: 'Bob', playerId: B, guest: false }], createRng(1));
+  const m = nextMatch(tour);
+  let detail = null;
+  const last = TUNING.levels.lastLevel;
+  const vs = Object.assign(Object.create(Versus.prototype), {
+    handedOff: false, buttons: {}, openedAt: -1e9, outcome: { winner: 0, by: 'score' },
+    match: { status: 'over', slots: [{ score: 300, deaths: 1, levelWins: 4, finalFirst: true, level: last, ended: true }, { score: 250, deaths: 2, levelWins: 3, finalFirst: false, level: 5, ended: true }] },
+    game: { loop: { time: 1e9 }, events: { listenerCount: () => 1, emit: (_e, d) => { detail = d; } } },
+  });
+  vs.continueTournament('next');
+  assert.deepEqual(racePosts(tour, m.id, detail.slots).map((p) => p.level), [last, 5]);
+});

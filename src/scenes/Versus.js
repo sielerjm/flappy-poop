@@ -532,7 +532,7 @@ export class Versus extends Phaser.Scene {
     // flap mashed into it) must not hand the race on unseen.
     if (this.handedOff || this.match.status !== 'over' || !this.buttons || !canRestart(this.openedAt, this.game.loop.time, T.retryLockoutMs)) return;
     this.handedOff = true;
-    const detail = { then, outcome: this.outcome, slots: this.match.slots.map((s) => ({ score: s.score, deaths: s.deaths, levelWins: s.levelWins, finalFirst: s.finalFirst })) };
+    const detail = { then, outcome: this.outcome, slots: this.match.slots.map((s) => ({ score: s.score, deaths: s.deaths, levelWins: s.levelWins, finalFirst: s.finalFirst, level: s.level })) }; // level: each racer's 🏆 post (racePosts; T2-review)
     if (this.game.events.listenerCount('tournament-race') > 0) this.game.events.emit('tournament-race', detail);
     else this.leave();
   }
