@@ -81,13 +81,21 @@ export function createOnlineLobby({ net, name, width, mine = { protocol: protoco
   // Item 46: a race this device left without ending (a reload, a crash) keeps its room 'playing', and
   // the server refuses a seated device a new room ('in a race', up to 6 h). Its code, remembered at the
   // hand-off (remember), is left first, and Create / Join wait for that; 2.3's resume replaces this.
-  const stale = memory?.get?.() ?? null;
-  let staleLeave = stale
-    ? Promise.resolve(net.rpc('leave_room', { p_code: stale }))
-        .catch(() => {})
-        .then(() => memory.clear())
-    : null;
+  // The code is forgotten only once leave_room went through (AUD-096): a leave lost offline keeps
+  // it, and the next Create / Join tries again, so a weak link never strands the device 'in a race'.
+  const forgetIfLeft = (res) => {
+    if (res?.ok || res?.error === 'no room') memory?.clear?.();
+  };
+  const leaveRemembered = () => {
+    const code = memory?.get?.() ?? null;
+    if (!code) return null;
+    return Promise.resolve(net.rpc('leave_room', { p_code: code }))
+      .catch(() => null)
+      .then((res) => forgetIfLeft(res));
+  };
+  let staleLeave = leaveRemembered();
   const staleLeft = async () => {
+    staleLeave ??= leaveRemembered();
     if (!staleLeave) return;
     await staleLeave;
     staleLeave = null;
@@ -223,7 +231,7 @@ export function createOnlineLobby({ net, name, width, mine = { protocol: protoco
 
   /** Create room (or a new code by itself, with `notice` on the status line). */
   async function create(notice = null) {
-    if (staleLeave) await staleLeft(); // only then: with nothing remembered, Connecting shows at once as before
+    if (staleLeave || memory?.get?.()) await staleLeft(); // only then: with nothing remembered, Connecting shows at once as before
     if (state.room.phase !== 'idle' && state.room.phase !== 'closed') return;
     state.message = notice;
     step({ type: 'create', at: now() });
@@ -240,7 +248,7 @@ export function createOnlineLobby({ net, name, width, mine = { protocol: protoco
 
   /** Join with code: the typed digits, checked here first (a typo spends none of the counted tries). */
   async function join() {
-    if (staleLeave) await staleLeft(); // only then: with nothing remembered, Connecting shows at once as before
+    if (staleLeave || memory?.get?.()) await staleLeft(); // only then: with nothing remembered, Connecting shows at once as before
     const code = parseCode(state.typed);
     if (!code) {
       state.message = msg('onlineErrBadCode', 'error');
@@ -341,7 +349,6 @@ export function createOnlineLobby({ net, name, width, mine = { protocol: protoco
 
   /** Cancel / Leave: the room left on the server, the channel closed, home. */
   async function leave() {
-    memory?.clear?.();
     generation += 1;
     const r = state.room;
     const live = r.phase !== 'idle' && r.phase !== 'closed';
@@ -353,7 +360,7 @@ export function createOnlineLobby({ net, name, width, mine = { protocol: protoco
     both = false;
     if (!live) return;
     net.closeRoom();
-    if (r.code) await track(net.rpc('leave_room', { p_code: r.code }));
+    if (r.code) await track(Promise.resolve(net.rpc('leave_room', { p_code: r.code })).then((res) => r.code === memory?.get?.() && forgetIfLeft(res)));
   }
 
   /** What arrived since the last poll, and the code's clock; true when the screen should redraw. */

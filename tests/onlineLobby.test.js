@@ -542,6 +542,31 @@ test('remember() keeps the race\'s room code (the panel calls it at the hand-off
   assert.equal(memory.code, null);
 });
 
+test('a remembered leave that does not reach the server keeps the code, and the next Create tries it again (AUD-096: a weak link must not lock the device out)', async () => {
+  let leaveAnswer = { ok: false, error: 'offline' };
+  const net = fakeNet({ leave_room: () => leaveAnswer, create_room: { ok: false, error: 'in a race' } });
+  const memory = memoryOf('615204');
+  const lobby = lobbyOn(net, { memory });
+  await lobby.create();
+  assert.equal(memory.code, '615204', 'an offline leave keeps the code');
+  leaveAnswer = { ok: true, data: null };
+  await lobby.create();
+  assert.deepEqual(rpcs(net).map((c) => c[1]), ['leave_room', 'create_room', 'leave_room', 'create_room'], 'the leave is tried again before the second Create');
+  assert.equal(memory.code, null, 'forgotten once the leave went through');
+});
+
+test("leave() forgets the race's code only once leave_room went through (AUD-096)", async () => {
+  for (const [answer, kept] of [[{ ok: false, error: 'offline' }, '482913'], [{ ok: false, error: 'error' }, '482913'], [{ ok: false, error: 'no room' }, null], [{ ok: true, data: null }, null]]) {
+    const net = fakeNet({ create_room: { ok: true, data: room() }, leave_room: answer });
+    const memory = memoryOf();
+    const lobby = lobbyOn(net, { memory });
+    await lobby.create();
+    lobby.remember();
+    await lobby.leave();
+    assert.equal(memory.code, kept, JSON.stringify(answer));
+  }
+});
+
 test("'in a race' (this device still seated in a playing room) has its own message, not the catch-all", async () => {
   const net = fakeNet({ create_room: { ok: false, error: 'in a race' } });
   const lobby = lobbyOn(net);
