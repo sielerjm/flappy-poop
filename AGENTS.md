@@ -964,6 +964,8 @@ src/
                             flappyPoop.onlineTrust (plan 39, 1.6a), onlineRaceKey =
                             flappyPoop.onlineRace (plan 39, 1.8: the room code of the
                             race this device is in, '.test' added on the test project),
+                            onlineResumeKey = flappyPoop.onlineResume (2.3: this
+                            tab's resume record, sessionStorage, '.test' likewise),
                             score cap),
                             LEVELS (gut segment name keys, in order), LEVEL_COLORS
                             (Set2 backgrounds, cycling) and BACKGROUND (overlay
@@ -1095,7 +1097,10 @@ src/
                             the tournament panel open: 'panel');
                             rollMystery(rng, t, draws) takes an optional draw table
                             (the versus catch-up); coins and the shop: BAND_ITEMS,
-                            MYSTERY_COINS, createEffects addCoins / spendCoins /
+                            MYSTERY_COINS, createEffects restoreLevel (2.3: back to a
+                            level's start as snapshot() kept it, the purse set where a
+                            revive's restore() adds; bag capped, no postbiotic without a
+                            probiotic, a running fart gone), addCoins / spendCoins /
                             coins, SHOP_ITEMS, buyBlocker / canBuy, shopButtonLayout
                             / shopButtonHit, bracketButtonLayout (the 🏅 pill under
                             the 💰 in a race's shared level break), shopLayout / shopHit, chromeIntent's
@@ -1319,7 +1324,11 @@ src/
                             transport and ?netsim); SERVER_EVENTS, verifiedRoomAction
                             (a server event name is a hint, confirmed with room_state)
                             and netsimProfile (?netsim, dev hosts only). Knobs in
-                            TUNING.online (clock, net, ...). tests/online.test.js.
+                            TUNING.online (clock, net, ...). 2.3: the `rewind` event
+                            { round, level, at } and the pause reason `rewind`; roomStep's
+                            `rejoin` action (room_state's answer for the race this device
+                            still sits in: only a playing race, this device's seat).
+                            tests/online.test.js.
   onlineNet.js              Online race (🌐, plan 39) transport for one page:
                             createOnlineNet(deps) and ONLINE_RPCS. Nothing loads until
                             signIn() / warm(); the only caller of loadSupabase(). Anonymous
@@ -1373,7 +1382,15 @@ src/
                             'no room', so an offline leave keeps it (AUD-096),
                             since a reload mid-race leaves the room 'playing' and the
                             server refuses a seated device a new room ('in a race', up to
-                            6 h; message onlineErrInRace). tests/onlineLobby.test.js.
+                            6 h; message onlineErrInRace). 2.3: createOnlineLobby({
+                            resume }) skips that leave on entry (the tab's resume record
+                            is the race to rejoin) and rejoin(record) asks room_state:
+                            playing → roomStep's `rejoin`, the channel opened as this seat
+                            (net.openRoom(code, { seat })), then handOffRace's hand-off
+                            with a resume plan; no room, finished or abandoned → { over }
+                            (code and record forgotten, "That race is over."); offline or
+                            a refused channel keeps both and never leaves the room.
+                            tests/onlineLobby.test.js.
   onlineRace.js             Online race (🌐, plan 39, 1.7a, 1.7b) per-frame rules, NO
                             Phaser/DOM/timers: raceStartPlan (room → seed, names, seat,
                             agreed width, round), countdownStep, localPhase, linkQuality,
@@ -1435,7 +1452,16 @@ src/
                             refused quietly where unsupported; held().
                             Knobs in TUNING.online.race and TUNING.online.pause (silenceMs,
                             heartbeatMs, leaveConfirmMs 4000: Leave's second tap).
-                            tests/onlineRace.test.js, tests/onlinePause.test.js.
+                            2.3 (reload resume): createResumeStore (the tab's record in
+                            sessionStorage; blocked storage keeps nothing, never throws),
+                            parseResume (whole or null, version RESUME_VERSION, no older than
+                            TUNING.online.resume.maxAgeMs), resumePlan(record, room), levelSnap
+                            / startSnap (a level's start, sanitized / level 1's), rewindOnHeard
+                            (the lower of the two level starts); the feed's and the referee's
+                            floor(at) drops what the other side sent before its restart; the
+                            pause machine's own reason `rewind`, cleared by its Ready.
+                            tests/onlineRace.test.js, tests/onlinePause.test.js,
+                            tests/onlineResume.test.js.
   leaderboard.js            Shared leaderboard, NO Phaser/DOM (plan 34 adds
                             createStreakStore and STREAK_KINDS: flappyPoop.streaks,
                             the Singleplayer and Daily Dump day streaks, never
@@ -1766,7 +1792,11 @@ src/
                             onlineLobbyViews, pre-warms the transport on entering,
                             polls the lobby, leaves the room and closes online play on
                             every exit; ✕ in an online view goes back to the online home;
-                            the keypad takes typed digits and a paste.
+                            the keypad takes typed digits and a paste. 2.3: startLobby
+                            reads the tab's resume record, makes the lobby with `resume`
+                            and calls lobby.rejoin(record) (status "Rejoining your
+                            race…"); the record waits through the sign-in and link
+                            screens; the panel hands every race the store.
                             tests/onlinePanel.test.js.
     panelFrame.js           The frame every DOM window shares (plan 28, 4.1):
                             panelFrameCss(id, { width }) gives the backdrop (fixed
@@ -2143,7 +2173,15 @@ src/
                             (Versus ignores it). takeLevelClearBonus() is the shared
                             bonus; awardLevelFirst({ final }) is the online race's late
                             verdict (levelWins + 1, the bonus, the popup, finalFirst on
-                            the final line, publishSlot). win() → showEscapedBanner
+                            the final line, publishSlot; OnlineRace does not call it for
+                            the final line once the other side's slot holds finalFirst,
+                            2.3). Reload resume (2.3):
+                            init takes `resume`, start() begins at that level's first pair
+                            with the kept numbers (effects.restoreLevel), resumeSnapshot()
+                            gives a level's start, raceResumeStore() builds the tab's
+                            record, openPendingRace() (in create, once per page load:
+                            registry raceRejoinOffered) opens the 🌐 window when the tab
+                            has one. win() → showEscapedBanner
                             (levelTitle / levelHint, no shade; applyLocale keeps it).
                             chromeState() / overlayPause(): chromeArgs and
                             onPadAction read the match's state ('paused' in this
@@ -2312,7 +2350,22 @@ src/
                             confirmed left / abandoned): results panel "No winner" with
                             Leave only, no finish, no rematch. The opponent's pill gains
                             a `paused` state (amber dot, "paused"). A wake lock is held
-                            while the race plays. tests/onlineRaceScene.test.js.
+                            while the race plays.
+                            2.3: a reload mid-race rejoins and both race the current level
+                            again from its start. keepLevel stores level N's start (the
+                            Play.resumeSnapshot()) in each level break once line N-1 is
+                            settled and again as the shop spends, into the tab's resume
+                            record. A rewound scene (data.resume) launches Play at that
+                            level (launchData), holds under the pause overlay until this
+                            side's Ready (own reason `rewind`), sends `rewind` every
+                            online.pause.heartbeatMs until its GO and agrees its field
+                            width until then (fitUntil). The other side, on `rewind`,
+                            raises its feed's and referee's floor to the sender's restart
+                            and restarts at the lower of the two levels (rewindOnHeard;
+                            nothing for another room round, a stale rewind, or once its
+                            run has ended). The shared pause's count gives one GO. The
+                            record is gone at the race's end, abandoned, Leave, this
+                            side's own finish. tests/onlineRaceScene.test.js.
     Over.js                 Game-over panel (score, run summary of fiber / probiotic / postbiotic over bacteria / bean / mystery box (mystery-icon.png) over ‼️ long falls / 😢 close calls (data.falls / closeCalls; ×– for a stored Daily result), pipes crossed, then Share | Home on one row from overButtonsLayout and, on a normal or test run, a glowing Play again under them, the panel lifted over.againLiftPx so it clears the ⏸) with a
                             tap lockout (openedAt = game.loop.time: a relaunched
                             scene's this.time.now is stale) and its own tray (mute
@@ -3097,7 +3150,8 @@ tests/                      node --test (schema.test.js, schemaOnline.test.js, p
                             strings
   onlineLobby.test.js       src/onlineLobby.js: create / join / ask / answer / ready on a
                             fake net, auto new codes, Decline's new code, the version check,
-                            finish / rematch / roomItem
+                            finish / rematch / roomItem; rejoin (resume skips the leave on
+                            entry; over, offline and a refused channel keep the room)
   onlineLobbyViews.test.js  src/ui/onlineLobbyViews.js: each screen and its strings
   onlineRace.test.js        src/onlineRace.js: start plan, countdown, the feed, the referee
                             (first on server time, the ready count, a ready taken back,
@@ -3107,15 +3161,22 @@ tests/                      node --test (schema.test.js, schemaOnline.test.js, p
   onlinePause.test.js       src/onlineRace.js's createRacePause: two devices with the real
                             sender, inbox and feed on a simulated link (airplane mode, a
                             hidden tab, silence, presence, a one-way break, a lost resume
-                            or cancel, solo after the other's end, stats; the feed's ghost hold)
+                            or cancel, solo after the other's end, stats; the feed's ghost hold;
+                            a guest reloading on a new session at its saved round, both held
+                            until Ready, one GO)
+  onlineResume.test.js      2.3: the rewind event and reason, rejoin, effects.restoreLevel,
+                            levelSnap, rewindOnHeard, the record and its store, resumePlan,
+                            the floors, the rewind hold, the overlay
   onlineRaceScene.test.js   scenes/OnlineRace.js's wiring on a stand-in Play and a fake
                             transport (initRace, the host interface, the final line's
                             hold, the rematch restart, the pause host methods, the overlay
                             and Leave's double tap, the abandoned panel, the pill's paused
-                            state, a pause before GO); Play's onFinishCrossed line and
+                            state, a pause before GO; a rewound scene, keepLevel, the other
+                            side's restart, the final-line guard); Play's onFinishCrossed line and
                             awardLevelFirst
   onlinePanel.test.js       tournamentPanel's 🌐 view on tests/support/panelDom.js: mounts,
-                            forced over Play, exits leave the room, keypad
+                            forced over Play, exits leave the room, keypad; the rejoin
+                            (record read, lobby made with resume, the store handed on)
   onlineDevProject.test.js  onlineProjectConfig and ?onlinetest: dev hosts only, own keys,
                             off, blocked storage
   onlineSignOut.test.js     Clear and a Load of another player leave online play only on
@@ -3614,6 +3675,11 @@ tools/
                             Keep waiting, the shared count and GO, one outcome on both, the
                             results panel, Rematch's states and round 2, Leave back to
                             single player.
+                            Plan 39's online-reload: the guest's reload restarts the race at
+                            level 2's start; then a real page reload with a stand-in
+                            transport: the 🌐 window rejoins, the race is back rewound, both
+                            Ready, one GO, level 2 from its first pair with the kept numbers,
+                            the end, the record gone.
                             Zero dependencies (fetch + WebSocket).
 
 docs/                       Living specs kept with the code: save-code-spec.md (the
@@ -3856,6 +3922,19 @@ Commits follow `type(scope): summary` (`feat`, `fix`, `docs`, `chore`, `test`, `
   `resume` are in `ONLINE_EVENTS`, so they moved `protocolVersion`. It calls no `set_room_status` (a playing
   room is never expired). 2.2 wires it into `scenes/OnlineRace.js` (the overlay, Ready, Leave, the abandoned
   panel; `online.pause.leaveConfirmMs` is Leave's second-tap window); its orphans allowlist entry is gone.
+  Reload resume (2.3, D4; `tests/onlineResume.test.js`): no schema change, `room_state` finds the seat by auth
+  uid and the stored session keeps it. Each level break keeps this side's level start (`Play.resumeSnapshot()`,
+  `OnlineRace.keepLevel`) in the tab's resume record, sessionStorage under `LEADERBOARD.onlineResumeKey`
+  (`createResumeStore`, `parseResume`: version, 6 h). After a reload `Play.openPendingRace()` opens the 🌐
+  window once per page load; its lobby rejoins through `room_state` (`roomStep`'s `rejoin`, the channel opened
+  as that seat, never a leave) and hands the race to `OnlineRace` rewound. The `rewind` event and pause reason
+  (both moved `protocolVersion`): the rewound side holds under the pause overlay until its Ready; the other
+  side raises its feed's and referee's floor to the sender's restart and restarts at the lower of the two level
+  starts; the shared pause's count gives one GO. A host replaying the last level takes no final-line award the
+  other side already holds. A race that is over is forgotten ("That race is over."). Not covered: an app
+  restart (sessionStorage is empty, so item 46's leave applies) and a reload after this side's own finish
+  (no record, so item 46's leave applies and the other side sees "left: no winner" if still racing). A reload
+  just before a line's verdict rewinds both one level further.
   The tournament panel's hand-off (`handOffRace`, 1.8) remembers the room (`lobby.remember()`), and over a
   running Versus (🌐 switched on in its lobby) marks the match `left` and stops Versus and PlayB so only the
   race draws (not `Versus.leave()`, which starts a plain Play). The race's end is not stored anywhere in Tier 1:
