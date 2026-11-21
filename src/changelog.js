@@ -8,6 +8,24 @@ import { LOCALES } from './i18n.js';
 
 export const CHANGELOG = [
   {
+    version: '0.26.0',
+    date: '21 Nov 2026',
+    notes: {
+      en: [
+        '🌐 A dropped connection, a call or a switch to another app no longer ends an online race: both games pause, say who is away, and fly on together after a 3-2-1 once you both tap Ready. Leave asks twice, because it ends the race for both of you. The screen stays on while you race.',
+        '🌐 Reload the page or reopen the app in the middle of a race and you rejoin it: you both restart the current level from its first pipe, with the score and coins you had there. A second window of the game never takes your race over.',
+        '🌐 Online races are saved: the winner gets gold and the other player silver on the 🏅 board, and both scores go to the 🏆 board. Both games must agree on the result, and the device must be paired. 🏁 Recent races in the 🌐 window shows your last races and your biggest online rival, for your eyes only.',
+        'Split screen: two-player tournaments now go to the 🏅 board too (gold and silver), and every racer with a username posts their race score to the 🏆 board.',
+      ],
+      'zh-Hans': [
+        '🌐 网络断开、来电或切到别的应用，不会再让在线比赛结束：两边的游戏一起暂停，显示谁离开了，等你们都点“准备”后，倒数3-2-1一起继续飞。“离开”要点两次，因为它会让双方的比赛都结束。比赛时屏幕会保持常亮。',
+        '🌐 比赛中途刷新页面或重新打开应用，会回到这场比赛：你们俩都从当前关卡的第一根管子重新开始，分数和金币和当时一样。游戏的第二个窗口不会抢走你的比赛。',
+        '🌐 在线比赛会保存：赢家在 🏅 榜上得金牌，另一位得银牌，双方的分数都会记到 🏆 榜上。两边的游戏必须对结果一致，而且这台设备要已配对。🌐 窗口里的 🏁 最近比赛会显示你最近的比赛和在线最大对手，只有你能看到。',
+        '分屏：双人锦标赛现在也会记到 🏅 榜上（金牌和银牌），每位有用户名的玩家，比赛分数都会记到 🏆 榜上。',
+      ],
+    },
+  },
+  {
     version: '0.25.0',
     date: '20 Nov 2026',
     notes: {
