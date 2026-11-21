@@ -234,15 +234,63 @@ test('a merge hands no trust to a newcomer: a made-up player merged with a stole
   }
 });
 
-test('a merge where only one side has a recently trusted device keeps every device\'s trust (the 7-day rule decides later links)', async () => {
+test('a merge where only one side has a recently trusted device: the other side\'s devices drop to pending, either way round, and its code goes (AUD-094)', async () => {
+  for (const staleKeeps of [true, false]) {
+    const db = await freshDb();
+    const [S, R] = [id(`Stale${staleKeeps}`), id(`Recent${staleKeeps}`)];
+    const [s, s2, r] = [await addUser(db), await addUser(db), await addUser(db)];
+    await link(db, s, S, 'Sid');
+    await link(db, s2, S, 'Sid');
+    await one(db, s, 'select public.online_pair_code() as r');
+    await ago(db, s, '8 days');
+    await ago(db, s2, '8 days');
+    await link(db, r, R, 'Rae');
+    await anonCall(db, 'select public.merge_players($1, $2)', staleKeeps ? [S, R] : [R, S]);
+    const kept = staleKeeps ? S : R;
+    assert.deepEqual((await db.query('select uid, player_id, trusted from public.online_players order by uid')).rows,
+      [{ uid: s, player_id: kept, trusted: false }, { uid: s2, player_id: kept, trusted: false }, { uid: r, player_id: kept, trusted: true }].sort((x, y) => x.uid.localeCompare(y.uid)),
+      `the recent side keeps trust (stale side keeps its id: ${staleKeeps})`);
+    assert.equal((await db.query('select count(*)::int as n from public.online_pairings')).rows[0].n, 0, 'the stale side\'s code goes');
+    await assert.rejects(as(db, s, 'select * from public.online_devices()'), /not trusted/);
+    assert.equal((await link(db, s, S, 'Sid')).trusted, false, 'relinking does not restore it: it pairs with a code from the recent side');
+  }
+});
+
+test('a merge where neither side has a recently trusted device keeps every device\'s trust (the accepted 7-day residual decides the next link)', async () => {
   const db = await freshDb();
-  const [K, M] = [id('KeepStale'), id('MergeNew')];
-  const [k, m] = [await addUser(db), await addUser(db)];
+  const [K, M] = [id('KeepOld'), id('MergeOld')];
+  const [k, m, fresh] = [await addUser(db), await addUser(db), await addUser(db)];
   await link(db, k, K, 'Kos');
-  await ago(db, k, '8 days');
   await link(db, m, M, 'Mon');
+  await ago(db, k, '8 days');
+  await ago(db, m, '9 days');
   await anonCall(db, 'select public.merge_players($1, $2)', [K, M]);
   assert.deepEqual([(await rowOf(db, k)).trusted, (await rowOf(db, m)).trusted], [true, true]);
+  assert.equal((await link(db, fresh, K, 'Kos')).trusted, true, 'no trusted device seen in 7 days: the next new device is trusted');
+  assert.deepEqual([(await rowOf(db, k)).trusted, (await rowOf(db, m)).trusted], [false, false], 'and the stale ones drop to pending');
+});
+
+test('AUD-094: a made-up player whose trusted device sat idle 8 days, merged with an active owner\'s id either way round, gains nothing', async () => {
+  for (const thiefKeeps of [false, true]) {
+    const db = await freshDb();
+    const [V, X] = [id(`Vic${thiefKeeps}`), id(`Mad${thiefKeeps}`)];
+    const owner = await addUser(db);
+    const thief = await addUser(db);
+    await link(db, owner, V, 'Vicky');
+    await db.query("update public.online_players set linked_at = now() - interval '30 days' where uid = $1", [owner]);
+    assert.equal((await link(db, thief, X, 'Xan')).trusted, true, 'the thief is trusted on the player it made up');
+    await db.query("update public.online_players set linked_at = now() - interval '8 days', seen_at = now() - interval '8 days' where uid = $1", [thief]);
+    assert.equal((await link(db, owner, V, 'Vicky')).trusted, true, 'the owner enters online play today');
+    await anonCall(db, 'select public.merge_players($1, $2)', thiefKeeps ? [X, V] : [V, X]);
+    assert.equal((await rowOf(db, owner)).trusted, true, `owner still trusted (thief keeps its id: ${thiefKeeps})`);
+    assert.equal((await rowOf(db, thief)).trusted, false, 'the thief waits for a code only the owner can show');
+    await assert.rejects(as(db, thief, 'select * from public.online_devices()'), /not trusted/);
+    await assert.rejects(one(db, thief, 'select public.remove_online_device($1)::text as r', [owner]), /not trusted/);
+    await assert.rejects(one(db, thief, 'select public.online_pair_code() as r'), /not trusted/);
+    assert.equal((await link(db, thief, V, 'Hijack')).trusted, false, 'relinking by the stolen id keeps the thief pending');
+    assert.equal((await link(db, owner, V, 'Vicky')).name, 'Vicky', 'the owner keeps the online name');
+    assert.equal(await userExists(db, owner), true);
+  }
 });
 
 test('a merge into a player with no online name brings the merged one\'s across', async () => {

@@ -1188,23 +1188,23 @@ begin
   update public.held_scores set player_id = v_keep where player_id = v_merge;
   update public.score_steps set player_id = v_keep where player_id = v_merge;
   -- Online play (plan 39): the merged player's devices follow. Trust (M1): a merge needs only the two
-  -- ids, so when both players have a device trusted and seen in the last 7 days, the side whose
-  -- trusted device linked first keeps it and the other side's devices drop to pending (they pair with
-  -- a code); a made-up player merged with a stolen id, either way round, gains nothing. Otherwise
-  -- every device keeps its trust. The kept player's online name stays (the merged one's when the kept
-  -- player has none); the pairing codes of the merged player, and of a side that lost trust, go. Rooms
-  -- follow, so a merge mid-race keeps both racers seated.
+  -- ids, so trust goes to a side with a device trusted and seen in the last 7 days. When only one side
+  -- has one, the other side's devices drop to pending (they pair with a code), as a link does for
+  -- stale devices; when both have one, the side whose trusted device linked first keeps it. So a
+  -- made-up player merged with a stolen id, either way round, gains nothing, however long its device
+  -- sat idle (AUD-094). When neither has one, every device keeps its trust and the 7-day rule decides
+  -- the next link (M1's accepted residual). The kept player's online name stays (the merged one's when
+  -- the kept player has none); the pairing codes of the merged player, and of a side that lost trust,
+  -- go. Rooms follow, so a merge mid-race keeps both racers seated.
   select min(o.linked_at) into v_keep_first from public.online_players o
    where o.player_id = v_keep and o.trusted and o.seen_at > now() - interval '7 days';
   select min(o.linked_at) into v_merge_first from public.online_players o
    where o.player_id = v_merge and o.trusted and o.seen_at > now() - interval '7 days';
-  if v_keep_first is not null and v_merge_first is not null then
-    if v_keep_first <= v_merge_first then
-      update public.online_players set trusted = false where player_id = v_merge;
-    else
-      update public.online_players set trusted = false where player_id = v_keep;
-      delete from public.online_pairings where player_id = v_keep;
-    end if;
+  if v_keep_first is not null and (v_merge_first is null or v_keep_first <= v_merge_first) then
+    update public.online_players set trusted = false where player_id = v_merge;
+  elsif v_merge_first is not null then
+    update public.online_players set trusted = false where player_id = v_keep;
+    delete from public.online_pairings where player_id = v_keep;
   end if;
   update public.online_players set player_id = v_keep where player_id = v_merge;
   insert into public.online_profiles (player_id, name, updated_at)
@@ -4337,7 +4337,7 @@ returns text
 language sql
 immutable
 as $$
-  select '46db891008ce9b5b'::text; -- schema stamp
+  select 'b231e0250408a57e'::text; -- schema stamp
 $$;
 revoke execute on function public.schema_version() from public, authenticated;
 grant  execute on function public.schema_version() to anon;
