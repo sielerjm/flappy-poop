@@ -665,3 +665,111 @@ test('on a bad link (loss, jitter and reorder) a pause and its resume still end 
     assert.deepEqual([p.st(0).phase, p.st(1).phase], ['live', 'live'], `seed ${seed}: and they stay live`);
   }
 });
+
+// --- 2.2: what the scene builds on the machine (the ghost's hold, the run's end again, the overlay's words, the wake lock) ---
+
+const ghostMsg = (event, fields, t, seq) => ({ kind: 'peer', event, msg: { seq, t, sid: 'g', ...fields }, at: t });
+
+test('2.2 the ghost holds while paused: it stands at the hold time, moves to the other side\'s own pause time, and goes on at its first message stamped after the release', () => {
+  let clock = 1000;
+  const feed = createRaceFeed({ now: () => clock, send: () => true, since: 0 });
+  feed.receive(ghostMsg('pos', { phase: 'run', distance: 1000, speed: SPEED, y: 640, vy: 0, level: 1 }, 1000, 1));
+  clock = 1500;
+  assert.equal(Math.round(feed.slot().distance), 1150, 'live: extrapolated at its speed');
+  feed.hold(1200);
+  assert.equal(Math.round(feed.slot().distance), 1060, 'held: where it was at the hold time');
+  clock = 1900;
+  assert.equal(Math.round(feed.slot().distance), 1060, 'and stays there');
+  feed.receive(ghostMsg('pause', { reason: 'peer', ready: false, round: 0, count: 0 }, 1240, 2));
+  assert.equal(Math.round(feed.slot().distance), 1072, 'the other side\'s first pause message: the time it stopped');
+  feed.receive(ghostMsg('pause', { reason: 'peer', ready: true, round: 0, count: 0 }, 1800, 3));
+  assert.equal(Math.round(feed.slot().distance), 1072, 'later heartbeats do not move it');
+  clock = 5000;
+  feed.release(4800);
+  assert.equal(Math.round(feed.slot().distance), 1072, 'released: still standing until the other side moves');
+  feed.receive(ghostMsg('pos', { phase: 'run', distance: 1072, speed: SPEED, y: 640, vy: 0, level: 1 }, 4700, 4));
+  assert.equal(Math.round(feed.slot().distance), 1072, 'a message stamped before the release (still on the wire) keeps the hold');
+  feed.receive(ghostMsg('pos', { phase: 'run', distance: 1072, speed: SPEED, y: 640, vy: 0, level: 1 }, 4800, 5));
+  clock = 5100;
+  assert.equal(Math.round(feed.slot().distance), 1162, 'its first message from the resume on: the ghost flies again from where it stood');
+});
+
+test('2.2 back: the feed sends its fixed run end again (again()), once more until the transport takes it; nothing before the end is fixed', () => {
+  const sent = [];
+  let up = true;
+  const feed = createRaceFeed({ now: () => 2000, send: (e) => (sent.push(e), up), since: 0 });
+  feed.again();
+  const half = { state: 'over', levelBreak: false, ended: true, won: true, flaps: 0, distance: 900, speed: 0, y: 640, vy: 0, angle: 0, frame: 'poop', alpha: 1, level: 7, pipesPassed: 30, score: 30, deaths: 0, levelWins: 1, finalFirst: true };
+  assert.deepEqual(sent, [], 'no end yet: nothing to send again');
+  feed.tick(half);
+  assert.deepEqual(sent, ['pos', 'done']);
+  assert.equal(feed.doneSent(), true);
+  feed.tick(half);
+  assert.equal(sent.length, 2, 'sent once');
+  up = false;
+  feed.again();
+  assert.equal(feed.doneSent(), false);
+  feed.tick(half);
+  assert.deepEqual(sent.slice(2), ['pos', 'done'], 'again, refused');
+  up = true;
+  feed.tick(half);
+  assert.deepEqual(sent.slice(4), ['pos', 'done'], 'and again until taken');
+  assert.equal(feed.doneSent(), true);
+});
+
+test('2.2 pauseOverlay: the title (this side\'s connection, the other side\'s, why it paused, else PAUSED), the line, both rows and the Ready button', async () => {
+  const { pauseOverlay } = await import('../src/onlineRace.js');
+  const st = (o) => ({ phase: 'paused', round: 0, mine: null, theirs: null, solo: false, since: 0, ready: { mine: false, theirs: false }, count: null, ...o });
+  assert.equal(pauseOverlay(null), null);
+  assert.equal(pauseOverlay(st({ phase: 'live' })), null);
+  assert.equal(pauseOverlay(st({ phase: 'over' })), null);
+  assert.deepEqual(pauseOverlay(st({ phase: 'count', count: 5 })), { count: true });
+  assert.deepEqual(pauseOverlay(st({ mine: 'menu', theirs: 'peer', ready: { mine: false, theirs: true } })), { count: false, title: 'pauseTitle', sub: 'onlinePauseTap', mine: 'onlineNotReady', theirs: 'onlineIsReady', ready: 'onlineReady' });
+  assert.deepEqual(pauseOverlay(st({ theirs: 'menu', ready: { mine: true, theirs: false } })), { count: false, title: 'onlinePausedBy', sub: 'versusWaiting', mine: 'onlineIsReady', theirs: 'onlineHudPaused', ready: 'onlineIsReady' });
+  assert.equal(pauseOverlay(st({ theirs: 'away' })).title, 'onlinePausedAway');
+  for (const r of ['lost', 'offline', 'link']) {
+    const v = pauseOverlay(st({ theirs: r }));
+    assert.deepEqual([v.title, v.sub, v.theirs], ['onlinePausedLost', 'versusWaiting', 'onlineHudLost'], r);
+  }
+  const off = pauseOverlay(st({ mine: 'offline', theirs: 'lost' }));
+  assert.deepEqual([off.title, off.sub, off.mine, off.ready], ['onlinePausedOffline', 'onlinePauseWaitNet', 'onlineHudLost', null], 'this side\'s own link first; no Ready while it is down');
+  assert.equal(pauseOverlay(st({ mine: 'link' })).title, 'onlinePausedLink');
+  assert.equal(pauseOverlay(st({ mine: 'busy' })).title, 'onlinePausedBusy');
+  assert.equal(pauseOverlay(st({ theirs: 'busy' })).title, 'onlinePausedBusy');
+  assert.equal(pauseOverlay(st({ mine: 'menu', theirs: 'away' })).title, 'onlinePausedAway', 'the other side\'s reason tells more than this side\'s menu');
+  const brk = pauseOverlay(st({ theirs: 'lost', ready: { mine: true, theirs: false } }), { midRun: false });
+  assert.equal(brk.ready, null, 'in a break (or before GO) this side is ready by itself: no Ready button');
+  assert.equal(pauseOverlay(st({ solo: true, mine: 'menu' })).theirs, null, 'solo: no row for the other side');
+});
+
+test('2.2 the wake lock (item 16): one request while wanted, released when not; a lock arriving after want(false) is let go; refused or unsupported, nothing happens', async () => {
+  const { createWakeLock } = await import('../src/onlineRace.js');
+  const log = [];
+  const sentinel = () => ({ released: false, release() { this.released = true; log.push('release'); return Promise.resolve(); } });
+  const nav = { wakeLock: { request: (type) => (log.push(type), Promise.resolve(sentinel())) } };
+  const flush = () => new Promise((r) => setTimeout(r, 0));
+  const w = createWakeLock(nav);
+  w.want(true);
+  w.want(true);
+  await flush();
+  assert.deepEqual(log, ['screen'], 'one request');
+  assert.equal(w.held(), true);
+  w.want(true);
+  await flush();
+  assert.deepEqual(log, ['screen'], 'held: no second request');
+  w.want(false);
+  await flush();
+  assert.deepEqual(log, ['screen', 'release']);
+  assert.equal(w.held(), false);
+  w.want(true);
+  w.want(false);
+  await flush();
+  assert.deepEqual(log, ['screen', 'release', 'screen', 'release'], 'arrived after want(false): released at once');
+  const refused = createWakeLock({ wakeLock: { request: () => Promise.reject(new Error('NotAllowedError')) } });
+  refused.want(true);
+  await flush();
+  assert.equal(refused.held(), false);
+  const none = createWakeLock({});
+  assert.doesNotThrow(() => none.want(true));
+  assert.equal(none.held(), false);
+});

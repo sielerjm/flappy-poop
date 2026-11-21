@@ -385,6 +385,7 @@ export const TUNING = {
     pause: {
       silenceMs: 2000, // ms without a word from the other side, while it is mid-run or paused, before this side counts it lost and pauses (item 17's 2 s; keyframes come every keyframeMs)
       heartbeatMs: 1000, // ms between repeats of this side's pause message while it is paused: the one message a second that keeps a paused side from reading as silent (at most half of silenceMs)
+      leaveConfirmMs: 4000, // ms the pause overlay's Leave waits for its second tap (it ends the race for both, with no winner), then it asks again
     },
     inventoryY0: 268, // px: the purse and bean rows' first centre in an online race, below the opponent's pill (its top 82, bottom 228 with the slow / lost word), not over it
     ghost: {

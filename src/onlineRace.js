@@ -95,7 +95,13 @@ export function createRaceFeed({ now, send, since = -Infinity, t = TUNING }) {
   let final = null; // the run's end, fixed at its first frame: { pos, done }
   let doneSent = false;
   let heardAt = null;
+  let heardT = null; // the sender's server time on the newest ghost message
   let peerPhase = null; // the other side's phase in its newest message (run, respawn, break, ended)
+  // The shared pause (2.2): the ghost stands at holdAt (server ms) instead of flying on from its last
+  // keyframe; the other side's first pause message moves it to the time that side stopped; once a
+  // release time is set, the first ghost message stamped at or after it lets the hold go.
+  const hold = { at: null, peer: false, until: null };
+  let peerPauseT = null; // the other side's first pause message since its newest ghost message (it stopped then)
 
   const emit = (event, fields) => send(event, fields) !== false;
 
@@ -138,13 +144,41 @@ export function createRaceFeed({ now, send, since = -Infinity, t = TUNING }) {
       if (shouldSendPos(lastPos, at, phase, t.online) && emit('pos', { ...f, phase })) lastPos = { at, phase };
     },
     receive(item) {
-      if (!fromRound(item, since) || !GHOST_EVENTS.has(item.event)) return false;
+      if (!fromRound(item, since)) return false;
+      if (item.event === 'pause') {
+        peerPauseT ??= item.msg.t;
+        if (hold.at !== null && hold.until === null && !hold.peer) {
+          hold.at = item.msg.t;
+          hold.peer = true;
+        }
+        return false;
+      }
+      if (!GHOST_EVENTS.has(item.event)) return false;
       heardAt = now();
+      heardT = item.msg.t;
+      if (peerPauseT !== null && item.msg.t > peerPauseT) peerPauseT = null;
       peerPhase = { pos: item.msg.phase, flap: 'run', crash: 'respawn', done: 'ended' }[item.event];
-      return track.push(item.event, item.msg, now());
+      const moved = track.push(item.event, item.msg, now());
+      if (hold.until !== null && item.msg.t >= hold.until) Object.assign(hold, { at: null, peer: false, until: null });
+      return moved;
     },
     slot() {
-      return track.sample(now());
+      return track.sample(hold.at === null ? now() : Math.min(now(), hold.at));
+    },
+    /** The shared pause: the ghost stands at `at` (server ms; default now), or where the other side already stopped, until released. */
+    hold(at = now()) {
+      const peer = peerPauseT !== null;
+      Object.assign(hold, { at: peer ? Math.min(at, peerPauseT) : at, peer, until: null });
+    },
+    /** The pause is over: the hold lasts until the other side's first ghost message stamped at or after `after`. */
+    release(after = now()) {
+      if (hold.at !== null) hold.until = after;
+    },
+    /** The sender's server time on the newest ghost message heard, or null. */
+    heardT: () => heardT,
+    /** Send the run's end again (the other side came back: a done it missed while its link was down). */
+    again() {
+      if (final) doneSent = false;
     },
     link() {
       // A peer waiting in its break or finished sends nothing until it moves on: that silence is not a bad link (Tier 2 adds presence).
@@ -732,6 +766,75 @@ export function createRacePause({ seat, now, send, present = true, since, round:
     },
     drain: () => out.splice(0),
     stats: () => ({ pauses: stats.pauses, pausedMs: stats.pausedMs + (pausedAt !== null ? now() - pausedAt : 0) }),
+  };
+}
+
+const NET_TROUBLE = new Set(['offline', 'link', 'busy']);
+const PEER_LOST = new Set(['lost', 'offline', 'link']);
+
+/**
+ * What the shared pause's overlay says (2.2), as i18n keys, from the pause machine's state():
+ * null while live or over; { count: true } during the resume's 3-2-1; else the title (this side's
+ * connection first, then the other side's, then why the other paused, else PAUSED), the line under
+ * it, each player's row, and the Ready button (hidden while this side's own link is down, and when
+ * it needs no tap: in a level break or before GO a side is ready by itself). `midRun` says the
+ * local half was flying when it paused.
+ */
+export function pauseOverlay(s, { midRun = true } = {}) {
+  if (!s || s.phase === 'live' || s.phase === 'over') return null;
+  if (s.phase === 'count') return { count: true };
+  const mineNet = NET_TROUBLE.has(s.mine);
+  const theirsLost = PEER_LOST.has(s.theirs);
+  let title = 'pauseTitle';
+  if (s.mine === 'offline') title = 'onlinePausedOffline';
+  else if (s.mine === 'link') title = 'onlinePausedLink';
+  else if (s.mine === 'busy' || s.theirs === 'busy') title = 'onlinePausedBusy';
+  else if (theirsLost) title = 'onlinePausedLost';
+  else if (s.theirs === 'away') title = 'onlinePausedAway';
+  else if (s.theirs === 'menu') title = 'onlinePausedBy';
+  let sub = 'onlinePauseTap';
+  if (mineNet) sub = 'onlinePauseWaitNet';
+  else if (theirsLost || s.theirs === 'busy' || s.ready.mine || !midRun) sub = 'versusWaiting';
+  const mine = mineNet ? 'onlineHudLost' : s.ready.mine ? 'onlineIsReady' : 'onlineNotReady';
+  const theirs = s.solo ? null : theirsLost || s.theirs === 'busy' ? 'onlineHudLost' : s.ready.theirs ? 'onlineIsReady' : s.theirs === 'menu' || s.theirs === 'away' ? 'onlineHudPaused' : 'onlineNotReady';
+  const ready = mineNet || !midRun ? null : s.ready.mine ? 'onlineIsReady' : 'onlineReady';
+  return { count: false, title, sub, mine, theirs, ready };
+}
+
+/**
+ * Item 16's wake lock for a race: want(true) asks the browser to keep the screen on (one lock at a
+ * time), want(false) lets it go; refused quietly where unsupported or denied. The browser drops the
+ * lock when the page hides, so a want(true) after a resume asks again.
+ */
+export function createWakeLock(nav = globalThis.navigator) {
+  let sentinel = null;
+  let wanted = false;
+  let asking = false;
+  const quiet = (s) => Promise.resolve(s?.release?.()).catch(() => {});
+  return {
+    want(on) {
+      wanted = Boolean(on);
+      if (!wanted) {
+        if (sentinel) quiet(sentinel);
+        sentinel = null;
+        return;
+      }
+      if ((sentinel && !sentinel.released) || asking || typeof nav?.wakeLock?.request !== 'function') return;
+      asking = true;
+      Promise.resolve()
+        .then(() => nav.wakeLock.request('screen'))
+        .then(
+          (s) => {
+            asking = false;
+            if (wanted) sentinel = s;
+            else quiet(s);
+          },
+          () => {
+            asking = false;
+          },
+        );
+    },
+    held: () => Boolean(sentinel && !sentinel.released),
   };
 }
 

@@ -4,13 +4,15 @@ import { fieldWidth, uiColumn, overButtonsLayout, overHit, canRestart, fitScale 
 import { createMatch } from '../versus.js';
 import { t, levelLabel } from '../i18n.js';
 import { raceOutcome } from '../tournament.js';
-import { ONLINE_HOST_KEY, countdownStep, createFieldFit, createRaceFeed, createRaceReferee, raceRoomItem, raceStartPlan } from '../onlineRace.js';
+import { ONLINE_HOST_KEY, countdownStep, createFieldFit, createRaceFeed, createRacePause, createRaceReferee, createWakeLock, localPhase, pauseOverlay, raceRoomItem, raceStartPlan } from '../onlineRace.js';
 import { racePhase } from '../online.js';
 import { sfx, unlock } from '../sound.js';
 import { createButton } from '../ui/button.js';
 
 const STYLE = { fontFamily: 'sans-serif', fontStyle: 'bold', color: '#ffffff', align: 'center', stroke: '#5a2a44', strokeThickness: 12 };
-const DOT = { good: 0x5ad15a, slow: 0xffd27a, lost: 0xff5a6a };
+const DOT = { good: 0x5ad15a, slow: 0xffd27a, paused: 0xffd27a, lost: 0xff5a6a };
+const GREEN = '#7ee08a';
+const NET_DOWN = new Set(['lost', 'offline', 'link', 'busy']);
 const PILL_W = 280; // px, the opponent's card
 const PINK = '#f8a0c8';
 const GOLD = '#ffd700';
@@ -93,11 +95,60 @@ export class OnlineRace extends Phaser.Scene {
     };
     this.keepButton = createButton(this, this.offerBoxes.keep, t(this.locale, 'onlineKeepWaiting'), { ...STYLE, fontSize: '34px', strokeThickness: 8 }, { depth: 30, fillAlpha: 0.85 }).setVisible(false);
     this.leaveButton = createButton(this, this.offerBoxes.leave, t(this.locale, 'onlineLeave'), { ...STYLE, fontSize: '34px', strokeThickness: 8 }, { depth: 30, fillAlpha: 0.85 }).setVisible(false);
+    this.buildPauseOverlay(cx, fieldW);
     this.input.on('pointerdown', (pointer) => this.onPointer(pointer));
+    // 2.1 / 2.2: a hidden page gets no frames, so its pause goes from the handler (the other side pauses one latency later).
+    this.onVisibility = () => this.tickPause();
+    globalThis.document?.addEventListener?.('visibilitychange', this.onVisibility);
     this.events.once('shutdown', () => {
+      globalThis.document?.removeEventListener?.('visibilitychange', this.onVisibility);
+      this.wake?.want(false);
       this.feed = null;
       this.referee = null;
+      this.pause = null;
     });
+  }
+
+  /**
+   * The shared pause's overlay (2.2): a panel over the field with why the race stopped, each
+   * player's ready mark, the time paused and Ready | Leave (Leave asks twice: it ends the race for
+   * both, with no winner). The resume's 3-2-1 runs on countText with the panel down.
+   */
+  buildPauseOverlay(cx, fieldW) {
+    const pw = Math.min(T.versus.resultPanelW, fieldW - 48);
+    const py = GAME_HEIGHT * 0.45; // below the opponent's pill, which grows to y 228 with its word
+    const top = py - 280;
+    const left = cx - pw / 2 + 36;
+    const right = cx + pw / 2 - 36;
+    const bw = Math.min(T.over.buttonWidth, (pw - 72) / 2);
+    const gap = 24;
+    const [me, them] = this.plan.names;
+    const row = (y, name) => ({
+      name: this.add.text(left, y, name, { ...STYLE, fontSize: '34px', color: PINK, strokeThickness: 7, align: 'left' }).setOrigin(0, 0.5).setDepth(61),
+      mark: this.add.text(right, y, '', { ...STYLE, fontSize: '32px', color: GREY, strokeThickness: 7, align: 'right' }).setOrigin(1, 0.5).setDepth(61),
+    });
+    const ui = {
+      panel: this.add.rectangle(cx, py, pw, 560, 0x1a0b14, 0.97).setStrokeStyle(6, 0xe85e96).setDepth(60),
+      title: this.add.text(cx, top + 70, '', { ...STYLE, fontSize: '52px' }).setOrigin(0.5).setDepth(61), // one line, shrunk to the panel (a long name)
+      sub: this.add.text(cx, top + 136, '', { ...STYLE, fontSize: '28px', color: GREY, strokeThickness: 6, wordWrap: { width: pw - 60, useAdvancedWrap: true } }).setOrigin(0.5).setDepth(61),
+      me: row(top + 214, `${me} ${t(this.locale, 'tournamentHostTag')}`),
+      them: row(top + 274, them),
+      clock: this.add.text(cx, top + 342, '', { ...STYLE, fontSize: '28px', color: GREY, strokeThickness: 6 }).setOrigin(0.5).setDepth(61),
+      warn: this.add.text(cx, top + 512, '', { ...STYLE, fontSize: '26px', color: GOLD, strokeThickness: 6, wordWrap: { width: pw - 60, useAdvancedWrap: true } }).setOrigin(0.5).setDepth(61),
+      boxes: {
+        ready: { id: 'ready', x: cx - (bw + gap) / 2, y: top + 432, width: bw, height: T.over.buttonHeight },
+        leave: { id: 'leave', x: cx + (bw + gap) / 2, y: top + 432, width: bw, height: T.over.buttonHeight },
+        alone: { id: 'leave', x: cx, y: top + 432, width: bw, height: T.over.buttonHeight },
+      },
+      shown: null,
+      titleW: pw - 60,
+    };
+    for (const r of [ui.me, ui.them]) r.name.setScale(fitScale(r.name.width, pw / 2 + 20, 0));
+    ui.ready = createButton(this, ui.boxes.ready, t(this.locale, 'onlineReady'), { ...STYLE, fontSize: '36px', strokeThickness: 8 }, { depth: 61, fillAlpha: 0.9 });
+    ui.leave = createButton(this, ui.boxes.leave, t(this.locale, 'onlineLeave'), { ...STYLE, fontSize: '36px', strokeThickness: 8 }, { depth: 61, fillAlpha: 0.9 });
+    ui.leaveAlone = createButton(this, ui.boxes.alone, t(this.locale, 'onlineLeave'), { ...STYLE, fontSize: '36px', strokeThickness: 8 }, { depth: 61, fillAlpha: 0.9 });
+    this.pauseUi = ui;
+    this.showPauseOverlay(null);
   }
 
   /**
@@ -118,7 +169,6 @@ export class OnlineRace extends Phaser.Scene {
     this.levelBeat = false; // the local half's arrival beat has passed: its taps count, its hint shows
     this.levelShown = null; // the level count's step on countText
     this.goToken = 0; // bumped by each GO: only the latest GO's beat hides countText
-    this.paused = false;
     this.outcome = null;
     this.finalSlots = null;
     this.countShown = null;
@@ -132,6 +182,16 @@ export class OnlineRace extends Phaser.Scene {
     const send = (event, fields) => this.net.send(event, fields);
     this.feed = createRaceFeed({ now, send, since: this.plan.startAt });
     this.referee = createRaceReferee({ seat: this.plan.seat, now, send, since: this.plan.startAt });
+    // 2.2: the shared pause (2.1's machine). menuHeld is this side's pause key or an overlay's pause
+    // until a tap says Ready; halfHeld says the machine paused the local half mid-run.
+    this.pause = createRacePause({ seat: this.plan.seat, now, send, present: this.net.peer?.() != null, round: data.pauseRound ?? 0 });
+    this.menuHeld = false;
+    this.halfHeld = false;
+    this.pauseCount = null; // the resume's GO while its 3-2-1 runs
+    this.pauseShown = null; // the resume count's step on countText
+    this.abandoned = null; // { seat } once the room says the race was abandoned (no winner)
+    this.leaveArmedAt = null; // the overlay's Leave was tapped once (game ms)
+    this.wake ??= createWakeLock();
     this.W = fieldWidth(globalThis.innerWidth ?? 720, globalThis.innerHeight ?? 1280, FIELD);
     this.fit = createFieldFit({ mine: this.W, theirs: this.net.peer?.()?.width ?? null, heard: data.peer ?? null, now, send, until: this.plan.startAt });
     this.fieldW = this.fit.fieldW();
@@ -153,19 +213,22 @@ export class OnlineRace extends Phaser.Scene {
     for (const item of this.net.take?.() ?? []) this.receive(item);
     if (this.refit) return this.refitField();
     const now = this.net.serverNow();
+    this.tickPause();
     if (this.match.status === 'countdown') {
       this.fit.tick();
       this.runCountdown(now);
     }
     const half = this.half();
     if (half && (this.match.status === 'playing' || this.match.status === 'over')) {
-      this.referee.tick({ level: half.level, inBreak: Boolean(half.levelBreak) && half.state === 'paused', shopOpen: Boolean(half.shopOpen) });
+      this.referee.tick({ level: half.level, inBreak: Boolean(half.levelBreak) && half.state === 'paused', shopOpen: Boolean(half.shopOpen), held: this.pause.frozen() });
       this.applyEffects();
       if (this.levelStage === 'count') this.showLevelCount(now);
       this.feed.tick(this.snapshot(half));
     }
     const remote = this.feed.slot();
     if (remote) Object.assign(this.match.slots[1], remote);
+    if (this.pauseCount !== null) this.showPauseCount(now);
+    this.refreshPause(now);
     this.refreshHud();
     this.refreshWait(now);
     this.checkOver();
@@ -196,7 +259,7 @@ export class OnlineRace extends Phaser.Scene {
     const secs = waiting ? Math.floor((now - this.waitSince) / 1000) : 0;
     const label = waiting ? `⏱ ${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}` : '';
     if (this.waitText.text !== label) this.waitText.setText(label);
-    const shown = waiting && !half?.shopOpen; // the shop's panel over the break: nothing of this on top of it
+    const shown = waiting && !half?.shopOpen && !this.pause?.frozen(); // the shop's panel or the pause overlay over the break: nothing of this on top of it
     this.waitText.setVisible(shown);
     const offer = shown && now >= this.offerAt;
     this.offerText.setVisible(offer);
@@ -207,6 +270,16 @@ export class OnlineRace extends Phaser.Scene {
   /** A tap on this scene: the wait's Keep waiting | Leave, or the results panel's Rematch | Leave (after the lockout). */
   onPointer(pointer) {
     unlock();
+    if (this.pauseUi?.panel.visible) {
+      const ui = this.pauseUi;
+      const boxes = ui.ready.visible ? { share: ui.boxes.ready, home: ui.boxes.leave } : { share: null, home: ui.boxes.alone };
+      const hit = overHit(pointer.x - (this.shiftX ?? 0), pointer.y, boxes);
+      if (!hit) return; // a tap elsewhere: Play's chrome takes it (Ready, setPaused(false))
+      this.tapFrame = this.game.loop.frame;
+      if (hit === 'ready') this.toggleReady();
+      else this.tapLeave();
+      return;
+    }
     if (this.keepButton.visible) {
       const hit = overHit(pointer.x - (this.shiftX ?? 0), pointer.y, { share: this.offerBoxes.keep, home: this.offerBoxes.leave });
       if (hit) this.tapFrame = this.game.loop.frame;
@@ -232,7 +305,7 @@ export class OnlineRace extends Phaser.Scene {
 
   /** Rematch on the panel: ask, or take the ask back; nothing once the other player left. */
   toggleRematch() {
-    if (this.peerLeft) return;
+    if (this.peerLeft || this.abandoned) return;
     this.wantRematch(!this.referee.rematch().mine);
   }
 
@@ -251,9 +324,9 @@ export class OnlineRace extends Phaser.Scene {
     const res = this.outcome ?? raceOutcome(slots);
     const [me, them] = this.plan.names;
     const panel = this.add.rectangle(cx, cy + 30, pw, 820, 0x1a0b14, 0.9).setStrokeStyle(8, 0xe85e96).setDepth(70);
-    const head = res.winner == null ? t(this.locale, 'versusDraw') : res.winner === 0 ? t(this.locale, 'onlineYouWin') : t(this.locale, 'versusWins').replace('{name}', them);
+    const head = this.abandoned ? t(this.locale, 'onlineNoWinner') : res.winner == null ? t(this.locale, 'versusDraw') : res.winner === 0 ? t(this.locale, 'onlineYouWin') : t(this.locale, 'versusWins').replace('{name}', them);
     this.add.text(cx, cy - 290, head, { ...STYLE, fontSize: '56px', color: GOLD, wordWrap: { width: pw - 60, useAdvancedWrap: true } }).setOrigin(0.5).setDepth(71);
-    const tiebreak = { deaths: 'tournamentByDeaths', levelWins: 'tournamentByLevelWins', finalFirst: 'tournamentByFinalFirst' }[res.by];
+    const tiebreak = this.abandoned ? null : { deaths: 'tournamentByDeaths', levelWins: 'tournamentByLevelWins', finalFirst: 'tournamentByFinalFirst' }[res.by];
     if (tiebreak) this.add.text(cx, cy - 238, t(this.locale, tiebreak), { ...STYLE, fontSize: '26px', color: GREY, strokeThickness: 6 }).setOrigin(0.5).setDepth(71);
     slots.forEach((slot, i) => {
       const x = cx + (i === 0 ? -1 : 1) * (pw / 4);
@@ -266,8 +339,8 @@ export class OnlineRace extends Phaser.Scene {
       this.add.text(x + 70, cy + 90, `💀 ×${slot.deaths ?? 0}`, { ...STYLE, fontSize: '32px', color: GREY, strokeThickness: 8 }).setOrigin(0.5).setDepth(71);
     });
     this.add.text(cx, cy + 160, t(this.locale, 'versusNotSaved'), { ...STYLE, fontSize: '24px', color: GOLD, strokeThickness: 6, wordWrap: { width: pw - 80, useAdvancedWrap: true } }).setOrigin(0.5).setDepth(71);
-    const boxes = overButtonsLayout(cx, cy, T, { share: true });
-    const rematch = createButton(this, boxes.share, t(this.locale, 'onlineRematch'), { ...STYLE, fontSize: '40px' }, { depth: 71 });
+    const boxes = overButtonsLayout(cx, cy, T, { share: !this.abandoned }); // abandoned: Leave alone, no rematch
+    const rematch = this.abandoned ? null : createButton(this, boxes.share, t(this.locale, 'onlineRematch'), { ...STYLE, fontSize: '40px' }, { depth: 71 });
     createButton(this, boxes.home, t(this.locale, 'onlineLeave'), { ...STYLE, fontSize: '40px' }, { depth: 71 });
     const status = this.add.text(cx, cy + 345, '', { ...STYLE, fontSize: '30px', color: GREY, strokeThickness: 6, wordWrap: { width: pw - 60, useAdvancedWrap: true } }).setOrigin(0.5).setDepth(71);
     this.result = { boxes, rematch, status, openedAt: this.game.loop.time, shown: null };
@@ -280,13 +353,13 @@ export class OnlineRace extends Phaser.Scene {
     const r = this.result;
     if (!r) return;
     const want = this.referee?.rematch() ?? { mine: false, theirs: false };
-    const key = this.peerLeft ? 'left' : want.mine ? 'mine' : want.theirs ? 'theirs' : 'none';
+    const key = this.peerLeft || this.abandoned ? 'left' : want.mine ? 'mine' : want.theirs ? 'theirs' : 'none';
     if (r.shown === key) return;
     r.shown = key;
     const them = this.plan.names[1];
     const line = { left: 'onlinePeerLeft', mine: 'versusWaiting', theirs: 'onlineRematchAsked', none: null }[key];
     r.status.setText(line ? t(this.locale, line).replace('{name}', them) : '').setColor(key === 'theirs' ? GOLD : key === 'left' ? '#ff8da8' : GREY);
-    r.rematch.setText(key === 'mine' ? `${t(this.locale, 'onlineRematch')} ✓` : t(this.locale, 'onlineRematch')).setAlpha(key === 'left' ? 0.4 : 1).pulse(key === 'theirs');
+    r.rematch?.setText(key === 'mine' ? `${t(this.locale, 'onlineRematch')} ✓` : t(this.locale, 'onlineRematch')).setAlpha(key === 'left' ? 0.4 : 1).pulse(key === 'theirs');
   }
 
   /** One transport item: the ghost, the referee, and the room's confirmed race status for the lobby. */
@@ -295,6 +368,7 @@ export class OnlineRace extends Phaser.Scene {
     if (item?.kind === 'peer' && item.event === 'width' && this.match.status === 'countdown' && this.net.serverNow() < this.plan.startAt && this.fit.fieldW() !== this.fieldW) this.refit = true;
     this.feed.receive(item);
     this.referee.receive(item);
+    if (this.match.status === 'countdown' || this.match.status === 'playing') this.pause.receive(item);
     if (raceRoomItem(item)) this.lobby?.roomItem?.(item);
     else if (this.match.status === 'over' && item?.kind === 'room' && (item.action?.type === 'left' || item.action?.type === 'status')) this.peerLeft = true; // after the race: the room closed under the other player's Leave
   }
@@ -333,6 +407,7 @@ export class OnlineRace extends Phaser.Scene {
 
   /** 3, 2, 1, GO on the server clock (countdownStep): the slide-in with the 3, the run at GO. */
   runCountdown(now) {
+    if (this.pause.frozen()) return; // a pause before GO holds the opening GO: the resume's GO starts the race
     const step = countdownStep(now, this.plan.startAt);
     if (step === null || step === this.countShown) return;
     const half = this.half();
@@ -343,6 +418,7 @@ export class OnlineRace extends Phaser.Scene {
     this.match.status = 'playing';
     this.fitText.setVisible(false);
     half?.startRace();
+    this.wake.want(true);
   }
 
   /** A level break's 3-2-1 to the host's GO (the GO itself is beginLevel's). */
@@ -404,12 +480,12 @@ export class OnlineRace extends Phaser.Scene {
     const slot = this.match.slots[1];
     const score = String(slot.score ?? 0);
     if (this.hud.score.text !== score) this.hud.score.setText(score);
-    const link = this.feed.link();
+    const link = this.pillLink();
     if (link === this.hud.link) return;
     this.hud.link = link;
     this.hud.dot.setFillStyle(DOT[link]);
-    const word = link === 'good' ? '' : t(this.locale, link === 'slow' ? 'onlineHudSlow' : 'onlineHudLost');
-    this.hud.word.setText(word).setColor(link === 'slow' ? '#ffd27a' : '#ff8da8').setVisible(Boolean(word));
+    const word = link === 'good' ? '' : t(this.locale, { slow: 'onlineHudSlow', paused: 'onlineHudPaused', lost: 'onlineHudLost' }[link]);
+    this.hud.word.setText(word).setColor(link === 'lost' ? '#ff8da8' : '#ffd27a').setVisible(Boolean(word));
     this.hud.card.setSize(PILL_W, word ? 146 : 112);
   }
 
@@ -504,26 +580,189 @@ export class OnlineRace extends Phaser.Scene {
     this.half()?.refreshLevelBanner?.();
   }
 
-  /** This device's own pause (Tier 2 pauses both over the wire): only the local half. */
+  /**
+   * The pause key, ⏸, the pad's Menu or an overlay opening (Play.pauseRun): this side's `menu`
+   * reason, which pauses both (2.2). Off is Play's tap while the race is paused (applyChrome
+   * 'resume'): that tap says Ready, unless it pressed one of the overlay's buttons.
+   */
   setPaused(on) {
-    if (this.match.status !== 'playing') return;
-    const half = this.half();
-    if (!half) return;
-    if (on && (half.state === 'playing' || half.state === 'respawn')) {
-      half.pausePlay();
-      this.paused = true;
-    } else if (!on && this.paused) {
-      if (half.state === 'paused' && !half.levelBreak) half.resumePlay();
-      this.paused = false;
+    if (!this.pause || (this.match.status !== 'playing' && this.match.status !== 'countdown')) return;
+    if (on) {
+      this.menuHeld = true;
+      this.tickPause();
+    } else if (this.tapFrame !== this.game?.loop?.frame) {
+      this.toggleReady();
     }
   }
 
+  /** The race is held by the shared pause (paused or counting to its resume). */
   isPaused() {
-    return this.paused;
+    return Boolean(this.pause?.frozen());
   }
 
   togglePause() {
-    this.setPaused(!this.paused);
+    if (this.isPaused()) this.toggleReady();
+    else this.setPaused(true);
+  }
+
+  /** This side's local state for the pause machine (2.1's `local`), every frame and on visibilitychange. */
+  pauseLocal() {
+    const half = this.half();
+    const live = this.match.status === 'playing';
+    return {
+      phase: live && half?.raceSnapshot ? localPhase(half.raceSnapshot()) : null,
+      hidden: globalThis.document?.hidden === true,
+      offline: globalThis.navigator?.onLine === false,
+      channel: this.net.channelState?.() ?? 'joined',
+      menu: this.menuHeld || this.overlayOpen(),
+    };
+  }
+
+  /** Tick the shared pause and act on what it says (before the referee, which it holds). */
+  tickPause() {
+    if (!this.pause || (this.match.status !== 'playing' && this.match.status !== 'countdown')) return;
+    this.pause.tick(this.pauseLocal());
+    this.applyPause();
+  }
+
+  /**
+   * The pause machine's effects: pause freezes the local half mid-run and stands the ghost where
+   * the other side stopped; count runs the resume's 3-2-1; cancel takes it down; resume lets the
+   * half go (a pause before GO lets runCountdown start the race) and the ghost go at the other
+   * side's first message after it; back sends the run's end again; abandoned ends the race with
+   * no winner.
+   */
+  applyPause() {
+    const half = this.half();
+    for (const e of this.pause.drain()) {
+      if (e.type === 'pause') {
+        this.leaveArmedAt = null;
+        if (this.match.status === 'playing' && (half?.state === 'playing' || half?.state === 'respawn')) {
+          half.pausePlay();
+          this.halfHeld = true;
+        }
+        const s = this.pause.state();
+        if (!s.solo) this.feed.hold(s.theirs === 'lost' ? (this.feed.heardT() ?? this.net.serverNow()) : this.net.serverNow());
+        this.countText.setVisible(false);
+        this.wake.want(false);
+      } else if (e.type === 'count') {
+        this.pauseCount = e.startAt;
+        this.pauseShown = null;
+      } else if (e.type === 'cancel') {
+        this.pauseCount = null;
+        this.pauseShown = null;
+        this.goToken += 1;
+        this.countText?.setVisible(false);
+      } else if (e.type === 'resume') {
+        const counted = this.pauseCount !== null;
+        this.pauseCount = null;
+        this.pauseShown = null;
+        this.menuHeld = false;
+        this.leaveArmedAt = null;
+        this.feed.release(this.net.serverNow());
+        if (this.halfHeld && half?.state === 'paused' && !half.levelBreak) half.resumePlay();
+        this.halfHeld = false;
+        if (counted && this.match.status === 'playing') this.showStep(3);
+        if (this.match.status === 'playing') this.wake.want(true);
+      } else if (e.type === 'back') {
+        this.feed.again();
+      } else if (e.type === 'abandoned') {
+        this.onAbandoned(e.seat);
+      }
+    }
+  }
+
+  /** The room says the race was abandoned (the other side left mid-race): over, no winner, Leave only. */
+  onAbandoned(seat) {
+    if (this.match.status !== 'playing' && this.match.status !== 'countdown') return;
+    const half = this.half();
+    if (half?.state === 'playing' || half?.state === 'respawn') half.pausePlay();
+    this.abandoned = { seat: seat ?? null };
+    this.match.status = 'over';
+    this.pauseCount = null;
+    this.countText?.setVisible(false);
+    this.finalSlots = this.match.slots.map((slot) => ({ ...slot }));
+    this.outcome = { winner: null, by: null };
+    this.wake.want(false);
+    this.refreshWait(this.net.serverNow());
+    this.time?.delayedCall?.(T.deathToOverMs, () => this.showResult());
+  }
+
+  /** Ready on the pause overlay (its button, a tap anywhere, the pause key): say it, or take it back. */
+  toggleReady() {
+    const s = this.pause?.state();
+    if (!s || s.phase === 'live' || s.phase === 'over') return;
+    if (s.ready.mine) {
+      this.pause.setReady(false);
+    } else {
+      this.menuHeld = false;
+      this.pause.tick(this.pauseLocal());
+      this.pause.setReady(true);
+    }
+    this.applyPause();
+  }
+
+  /** Leave on the pause overlay: the first tap asks (it ends the race for both), the second leaves. */
+  tapLeave() {
+    const at = this.game.loop.time;
+    if (this.leaveArmedAt !== null && at - this.leaveArmedAt < T.online.pause.leaveConfirmMs) return this.leave();
+    this.leaveArmedAt = at;
+  }
+
+  /** The resume's 3-2-1 on countText (its GO is the resume effect's). */
+  showPauseCount(now) {
+    const step = countdownStep(now, this.pauseCount);
+    if (step === null || step >= 3 || step === this.pauseShown) return;
+    this.pauseShown = step;
+    this.showStep(step);
+  }
+
+  /** The overlay from the machine's state, redrawn only when what it says changes (the clock each second). */
+  refreshPause(now) {
+    if (!this.pauseUi) return;
+    const s = this.pause && (this.match.status === 'playing' || this.match.status === 'countdown') ? this.pause.state() : null;
+    const midRun = this.halfHeld;
+    const view = pauseOverlay(s, { midRun });
+    const armed = this.leaveArmedAt !== null && this.game.loop.time - this.leaveArmedAt < T.online.pause.leaveConfirmMs;
+    if (!armed) this.leaveArmedAt = null;
+    const secs = view && !view.count && s.since !== null ? Math.max(0, Math.floor((now - s.since) / 1000)) : 0;
+    const key = view ? JSON.stringify([view, secs, armed, this.half()?.shopOpen]) : null;
+    if (key === this.pauseUi.shown) return;
+    this.pauseUi.shown = key;
+    this.showPauseOverlay(view, { secs, armed });
+  }
+
+  showPauseOverlay(view, { secs = 0, armed = false } = {}) {
+    const ui = this.pauseUi;
+    const on = Boolean(view && !view.count);
+    for (const o of [ui.panel, ui.title, ui.sub, ui.me.name, ui.me.mark, ui.clock]) o.setVisible(on);
+    ui.them.name.setVisible(on && view.theirs !== null);
+    ui.them.mark.setVisible(on && view.theirs !== null);
+    ui.ready.setVisible(on && view.ready !== null);
+    ui.leave.setVisible(on && view.ready !== null);
+    ui.leaveAlone.setVisible(on && view.ready === null);
+    ui.warn.setVisible(on && armed);
+    if (!on) return;
+    const them = this.plan.names[1];
+    const say = (k) => t(this.locale, k).replace('{name}', them);
+    ui.title.setText(say(view.title)).setScale(1);
+    ui.title.setScale(fitScale(ui.title.width, ui.titleW, 0));
+    ui.sub.setText(say(view.sub));
+    const mark = (r, k) => r.mark.setText(say(k)).setColor(k === 'onlineIsReady' ? GREEN : k === 'onlineHudLost' ? '#ff8da8' : GREY);
+    mark(ui.me, view.mine);
+    if (view.theirs) mark(ui.them, view.theirs);
+    ui.clock.setText(`⏱ ${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`);
+    if (view.ready) ui.ready.setText(say(view.ready));
+    for (const b of [ui.leave, ui.leaveAlone]) b.setText(t(this.locale, armed ? 'onlineLeaveSure' : 'onlineLeave'));
+    ui.warn.setText(t(this.locale, 'onlineLeaveWarn'));
+  }
+
+  /** The pill's dot: the feed's link, or while the race is paused, what the pause machine knows of the other side. */
+  pillLink() {
+    const s = this.pause && this.match.status === 'playing' ? this.pause.state() : null;
+    if (!s || s.phase === 'live' || s.phase === 'over' || s.solo) return this.feed.link();
+    if (NET_DOWN.has(s.theirs) || NET_DOWN.has(s.mine)) return 'lost';
+    return s.theirs === 'menu' || s.theirs === 'away' ? 'paused' : 'good';
   }
 
   anyLive() {
@@ -548,6 +787,7 @@ export class OnlineRace extends Phaser.Scene {
     this.match.status = 'over';
     this.finalSlots = this.match.slots.map((slot) => ({ ...slot })); // the numbers the outcome came from, for the panel
     this.outcome = raceOutcome(this.finalSlots);
+    this.wake?.want(false);
     if (this.plan.seat === 'host') this.lobby?.finish?.();
     this.refreshWait(this.net.serverNow());
     this.time?.delayedCall?.(T.deathToOverMs, () => this.showResult());
@@ -598,6 +838,7 @@ export class OnlineRace extends Phaser.Scene {
   /** Back to single player: the room left, the transport closed, the canvas re-fitted, Play plain. */
   leave() {
     this.match.status = 'left';
+    this.wake?.want(false);
     const { lobby, net } = this;
     Promise.resolve(lobby?.leave())
       .catch(() => {})

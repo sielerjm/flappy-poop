@@ -73,8 +73,14 @@ function fakeHalf() {
     launch: (o) => calls.push(['launch', o]),
     startRace: () => calls.push(['startRace']),
     chromeArgs: () => ({ overlay: null }),
-    pausePlay: () => calls.push(['pausePlay']),
-    resumePlay: () => calls.push(['resumePlay']),
+    pausePlay() {
+      calls.push(['pausePlay']);
+      if (h.state === 'playing' || h.state === 'respawn') h.state = 'paused';
+    },
+    resumePlay() {
+      calls.push(['resumePlay']);
+      if (h.state === 'paused' && !h.levelBreak) h.state = 'playing';
+    },
     raceSnapshot: () => ({
       state: h.state, levelBreak: h.levelBreak, ended: h.ended, won: h.ended, flaps: 0, distance: h.distance, speed: 0, y: 640, vy: 0, angle: 0,
       frame: 'poop', alpha: 1, level: h.level, pipesPassed: 0, score: h.score, deaths: 0, levelWins: 0, finalFirst: false,
@@ -697,4 +703,182 @@ test('taps on the race\'s buttons follow the field after a turn (the offer and t
   ctx.s.keepWaiting = () => kept.push('keep');
   ctx.s.onPointer({ x: 1280 - 920, y: 900 });
   assert.deepEqual(kept, ['keep'], 'the button drawn 920 px to the left answers there');
+});
+
+// --- 2.2: the shared pause in the scene (2.1's machine wired: the half, the ghost, the overlay's taps, the end) ---
+
+const P2 = T.online.pause;
+const RESUME_MS = R.countLeadMs + COUNT_MS;
+const pausesOf = (net) => sentOf(net, 'pause');
+const called = (half, name) => half.calls.filter((c) => c[0] === name).length;
+/** A paused race's scene with a game loop (taps compare frames, Leave compares times). */
+function pauseRig(opts) {
+  const ctx = raceScene(opts);
+  ctx.s.game = { loop: { frame: 1, time: 0 } };
+  ctx.net.clock.now = GO + 5000;
+  ctx.s.update();
+  return ctx;
+}
+
+test('2.2 the pause key mid-run pauses both: the half freezes, this side says why over the wire (menu), and the referee is held', () => {
+  const { s, net, half } = pauseRig();
+  const held = [];
+  const tick = s.referee.tick.bind(s.referee);
+  s.referee.tick = (l) => (held.push(l.held), tick(l));
+  s.setPaused(true);
+  assert.equal(s.isPaused(), true);
+  assert.equal(called(half, 'pausePlay'), 1);
+  assert.deepEqual(pausesOf(net).at(-1), { event: 'pause', reason: 'menu', ready: false, round: 0, count: 0 });
+  net.clock.now += 16;
+  s.update();
+  assert.deepEqual(held, [true], 'the referee ticks held (no level count starts under a pause)');
+  s.togglePause();
+  assert.equal(pausesOf(net).at(-1).ready, true, 'the pause key again says Ready (the race goes on only when both say it)');
+  assert.equal(s.isPaused(), true);
+});
+
+test('2.2 the other side\'s pause pauses this side and stands the ghost where it stopped; a tap says Ready; both ready, the host\'s 3-2-1 resumes the half at its GO', () => {
+  const { s, net, half } = pauseRig({ seat: 'host' });
+  net.push(peer('pos', { phase: 'run', distance: 2000, speed: 300, y: 640, vy: 0, level: 1, score: 3 }, GO + 4900));
+  s.update();
+  const stop = GO + 5010;
+  net.push(peer('pause', { reason: 'menu', ready: false, round: 0, count: 0 }, stop));
+  net.clock.now = GO + 5060;
+  s.update();
+  assert.equal(called(half, 'pausePlay'), 1, 'paused one latency after the other side');
+  assert.equal(s.pillLink(), 'paused', 'the pill says the other side paused, not a bad link');
+  net.clock.now = GO + 9000;
+  s.update();
+  assert.equal(Math.round(s.match.slots[1].distance), 2000 + Math.round(300 * 0.11), 'the ghost stands at the other side\'s pause time');
+  assert.equal(pausesOf(net).at(-1).ready, false, 'mid-run, this side waits for a tap');
+  s.game.loop.frame = 2;
+  s.setPaused(false); // Play's tap while paused (applyChrome 'resume')
+  assert.equal(pausesOf(net).at(-1).ready, true);
+  assert.equal(sentOf(net, 'resume').length, 0, 'the guest is not ready yet');
+  net.push(peer('pause', { reason: 'peer', ready: true, round: 0, count: 0 }, GO + 9050));
+  net.clock.now = GO + 9100;
+  s.update();
+  assert.deepEqual(sentOf(net, 'resume'), [{ event: 'resume', round: 0, startAt: GO + 9100 + RESUME_MS, cancel: false }]);
+  assert.equal(called(half, 'resumePlay'), 0, 'counting');
+  net.push(peer('pause', { reason: 'peer', ready: true, round: 0, count: GO + 9100 + RESUME_MS }, GO + 9150)); // the guest counts with it
+  net.clock.now = GO + 9100 + RESUME_MS - 900;
+  s.update();
+  net.push(peer('pause', { reason: 'peer', ready: true, round: 0, count: GO + 9100 + RESUME_MS }, net.clock.now)); // its heartbeat
+  net.clock.now = GO + 9100 + RESUME_MS;
+  s.update();
+  assert.equal(called(half, 'resumePlay'), 1, 'at the GO');
+  assert.equal(s.isPaused(), false);
+  assert.equal(s.menuHeld, false);
+});
+
+test('2.2 a pause before GO holds the opening GO: no race starts while frozen; the resume\'s GO starts it', () => {
+  const { s, net, half } = raceScene({ seat: 'host', countdown: true });
+  net.clock.now = GO - 2000;
+  s.update();
+  net.push({ kind: 'presence', event: 'leave', peer: { name: 'Jolly' } });
+  s.update();
+  assert.equal(s.isPaused(), true, 'the other side gone from presence: lost');
+  net.clock.now = GO + 3000;
+  s.update();
+  assert.equal(called(half, 'startRace'), 0, 'GO passed under the pause: nothing starts');
+  assert.equal(s.match.status, 'countdown');
+  net.push({ kind: 'presence', event: 'join', peer: { name: 'Jolly' } });
+  net.push(peer('pause', { reason: 'peer', ready: true, round: 0, count: 0 }, GO + 3050));
+  net.clock.now = GO + 3100;
+  s.update();
+  const go = sentOf(net, 'resume').at(-1);
+  assert.equal(go?.startAt, GO + 3100 + RESUME_MS, 'before GO both are ready by themselves: the host counts at once');
+  net.clock.now = go.startAt - 900;
+  net.push(peer('pause', { reason: 'peer', ready: true, round: 0, count: go.startAt }, net.clock.now)); // the guest's heartbeat, counting
+  s.update();
+  net.clock.now = go.startAt;
+  s.update();
+  assert.equal(called(half, 'startRace'), 1, 'the resume\'s GO starts the race');
+  assert.equal(s.match.status, 'playing');
+});
+
+test('2.2 a hidden page pauses from the visibilitychange handler (no frames run there): this side sends away', () => {
+  const { s, net, half } = pauseRig();
+  const had = Object.getOwnPropertyDescriptor(globalThis, 'document');
+  globalThis.document = { hidden: true };
+  try {
+    s.tickPause(); // what create()'s onVisibility runs
+  } finally {
+    if (had) Object.defineProperty(globalThis, 'document', had);
+    else delete globalThis.document;
+  }
+  assert.equal(called(half, 'pausePlay'), 1);
+  assert.equal(pausesOf(net).at(-1).reason, 'away');
+});
+
+test('2.2 the other side left mid-race (the room\'s confirmed leave): over with no winner, the half frozen, no finish, no rematch; after the race a leave is only "left"', () => {
+  const { s, net, half, timers, lobby } = pauseRig({ seat: 'host' });
+  net.push({ kind: 'room', hint: 'left', action: { type: 'left', seat: 'guest' } });
+  s.update();
+  assert.equal(s.match.status, 'over');
+  assert.deepEqual(s.abandoned, { seat: 'guest' });
+  assert.equal(s.outcome.winner, null);
+  assert.equal(called(half, 'pausePlay'), 1);
+  assert.deepEqual(lobby.calls.filter((c) => c[0] === 'finish'), [], 'the room is abandoned, not finished');
+  assert.deepEqual(timers.map((x) => x.ms), [T.deathToOverMs], 'the results panel a beat later');
+  s.match.status = 'over';
+  s.toggleRematch();
+  assert.equal(sentOf(net, 'rematch').length, 0, 'no rematch with nobody to race');
+
+  const after = pauseRig({ seat: 'host' });
+  after.s.match.status = 'over';
+  after.net.push({ kind: 'room', hint: 'left', action: { type: 'left', seat: 'guest' } });
+  after.s.update();
+  assert.equal(after.s.abandoned, null, 'a race already over is not abandoned');
+  assert.equal(after.s.peerLeft, true);
+});
+
+test('2.2 back (this side\'s link or the other side returned) sends the run\'s end again', () => {
+  const { s } = pauseRig();
+  const again = [];
+  s.feed.again = () => again.push(1);
+  const drain = s.pause.drain;
+  s.pause.drain = () => [{ type: 'back' }, ...drain()];
+  s.tickPause();
+  assert.equal(again.length, 1);
+});
+
+test('2.2 Leave on the pause overlay asks twice: one tap arms it for leaveConfirmMs, a second inside it leaves, a late one arms it again', () => {
+  const { s } = pauseRig();
+  const left = [];
+  s.leave = () => left.push(s.game.loop.time);
+  s.setPaused(true);
+  s.tapLeave();
+  assert.deepEqual(left, []);
+  s.game.loop.time = P2.leaveConfirmMs + 1;
+  s.tapLeave();
+  assert.deepEqual(left, [], 'too late: armed again');
+  s.game.loop.time += P2.leaveConfirmMs - 1;
+  s.tapLeave();
+  assert.deepEqual(left, [2 * P2.leaveConfirmMs], 'the second tap in time');
+});
+
+test('2.2 a tap on the overlay\'s Ready button says Ready once: Play\'s chrome sees the same tap and does nothing more', () => {
+  const { s, net } = pauseRig();
+  s.setPaused(true);
+  const box = { id: 'ready', x: 200, y: 700, width: 200, height: 88 };
+  s.pauseUi = { panel: { visible: true }, ready: { visible: true }, boxes: { ready: box, leave: { id: 'leave', x: 500, y: 700, width: 200, height: 88 }, alone: { id: 'leave', x: 360, y: 700, width: 200, height: 88 } } };
+  s.game.loop.frame = 9;
+  s.onPointer({ x: 200, y: 700 });
+  assert.equal(pausesOf(net).at(-1).ready, true);
+  s.setPaused(false); // the same tap reaching Play (applyChrome 'resume')
+  assert.equal(pausesOf(net).at(-1).ready, true, 'not taken back by its own twin');
+  s.game.loop.frame = 10;
+  s.setPaused(false);
+  assert.equal(pausesOf(net).at(-1).ready, false, 'a later tap takes it back');
+});
+
+test('2.2 the pill while paused reads the pause machine: lost when the other side is silent mid-run, never "slow" for a paused peer', () => {
+  const { s, net } = pauseRig({ seat: 'guest' });
+  net.push(peer('pos', { phase: 'run', distance: 2000, speed: 300, y: 640, vy: 0, level: 1 }, GO + 5000));
+  s.update();
+  net.clock.now = GO + 5000 + P2.silenceMs + 10;
+  s.update();
+  assert.equal(s.isPaused(), true);
+  assert.equal(s.pillLink(), 'lost');
 });

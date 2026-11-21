@@ -649,6 +649,18 @@ The winners take the podium 🥇 🥈 (and 🥉 from 3 players). With 3 or more 
 | onlinePeerLeft | {name} left (plan 39, 1.8: the online results panel's line once the other player left; Rematch is greyed) | {name} 已离开 |
 | onlineYouWin | YOU WIN! (plan 39, 1.6d / 1.8: the online results panel's headline on the winner's phone; capitals like versusWins) | 你赢了！ |
 | onlineRematch | Rematch (plan 39, 1.6d / 1.8: the online results panel's button to race the same friend again; "Rematch ✓" once tapped) | 再来一局 |
+| onlinePausedBy | {name} paused (plan 39, 2.2: the online pause overlay's title when the other player pressed pause or opened a menu; {name} is their username) | {name} 暂停了 |
+| onlinePausedAway | {name} switched away (plan 39, 2.2: the pause overlay's title when the other player's app went to the background) | {name} 切出了游戏 |
+| onlinePausedLost | {name} lost connection (plan 39, 2.2: the pause overlay's title when nothing arrives from the other player, or they are offline) | {name} 断线了 |
+| onlinePausedOffline | You're offline (plan 39, 2.2: the pause overlay's title when this phone has no network) | 你的网络断开了 |
+| onlinePausedLink | Reconnecting… (plan 39, 2.2: the pause overlay's title while this phone's link to the race drops and comes back) | 正在重新连接… |
+| onlinePausedBusy | Server busy (plan 39, 2.2: the pause overlay's title when the online server refuses messages for a moment) | 服务器繁忙 |
+| onlinePauseTap | Tap Ready when you are set (plan 39, 2.2: the line under the pause overlay's title; the race goes on after both tap Ready and a 3-2-1) | 准备好了就点“准备” |
+| onlinePauseWaitNet | Waiting for your connection… (plan 39, 2.2: the line under the title while this phone is offline or reconnecting) | 等待网络恢复… |
+| onlineLeaveSure | Leave? (plan 39, 2.2: the pause overlay's Leave button after one tap; a second tap leaves) | 确定离开？ |
+| onlineLeaveWarn | Tap again to leave. The race ends for both of you, with no winner. (plan 39, 2.2: under the pause overlay's buttons after the first tap on Leave) | 再点一次就离开：比赛结束，双方都没有胜者。 |
+| onlineNoWinner | No winner (plan 39, 2.2: the online results panel's headline when the other player left mid-race; the line under it is onlinePeerLeft) | 没有胜者 |
+| onlineHudPaused | paused (plan 39, 2.2: under the opponent's name in the race's pill while they paused; lower case, like onlineHudSlow) | 已暂停 |
 | onlineErrBadCode | That's not a room code: codes are 6 digits and never start with 0 (plan 39: the 🌐 lobby's status line; {name} is the other player's username) | 这不是房间码：房间码是6位数字，第一位不是0 |
 | onlineErrNoRoom | No room has that code. Check it with your friend. (plan 39: the 🌐 lobby's status line; {name} is the other player's username) | 没有这个房间码的房间，请和朋友核对一下。 |
 | onlineErrInRace | This device is still in another race. Leave it there first, then try again. (plan 39, 1.8, item 46: Create or Join refused because this device is still seated in a race that never ended, for example in another tab) | 这台设备还在另一场比赛中，请先在那里离开，再试一次。 |
