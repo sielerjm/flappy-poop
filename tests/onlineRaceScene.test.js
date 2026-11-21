@@ -17,7 +17,7 @@ const R = T.online.race;
 const COUNT_MS = 3 * T.versus.countdownMs;
 const GO = 10_000; // the race's own GO (server ms)
 
-function fakeNet() {
+function fakeNet({ peerWidth = 720 } = {}) {
   const sent = [];
   const q = [];
   const clock = { now: GO };
@@ -32,7 +32,7 @@ function fakeNet() {
     },
     take: () => q.splice(0),
     pump() {},
-    peer: () => ({ name: 'Jolly', width: 720 }),
+    peer: () => ({ name: 'Jolly', width: peerWidth }),
     close() {},
   };
 }
@@ -70,6 +70,8 @@ function fakeHalf() {
       h.state = 'playing';
     },
     awardLevelFirst: (o) => calls.push(['award', o]),
+    launch: (o) => calls.push(['launch', o]),
+    startRace: () => calls.push(['startRace']),
     chromeArgs: () => ({ overlay: null }),
     pausePlay: () => calls.push(['pausePlay']),
     resumePlay: () => calls.push(['resumePlay']),
@@ -81,9 +83,12 @@ function fakeHalf() {
   return h;
 }
 
-/** A race scene past its start GO, as create() leaves it, with sinks for what it draws. */
-function raceScene({ seat = 'host', round = 1 } = {}) {
-  const net = fakeNet();
+/**
+ * A race scene past its start GO, as create() leaves it, with sinks for what it draws (`countdown`:
+ * before its GO instead; `peerWidth`: the other side's presence width).
+ */
+function raceScene({ seat = 'host', round = 1, countdown = false, peerWidth = 720 } = {}) {
+  const net = fakeNet({ peerWidth });
   const half = fakeHalf();
   const room = { phase: 'playing', role: seat, code: '482913', hostName: 'Plop', guestName: 'Jolly', seed: 5, startMs: GO, round };
   const lobby = fakeLobby(room);
@@ -103,7 +108,7 @@ function raceScene({ seat = 'host', round = 1 } = {}) {
     locale: 'en',
   });
   s.initRace({ net, lobby, plan: { seed: 5, startAt: GO, seat, names: seat === 'host' ? ['Plop', 'Jolly'] : ['Jolly', 'Plop'], fieldW: 720, round } });
-  s.match.status = 'playing';
+  if (!countdown) s.match.status = 'playing';
   return { s, net, half, timers, ops, lobby, room };
 }
 
@@ -125,7 +130,7 @@ test('claimLevelFinish: the crossed line goes to the referee (the guest claims i
   net.clock.now = GO + 12_000;
   half.distance = 4000;
   assert.equal(s.claimLevelFinish(half, { level: 1, final: false }), false);
-  assert.deepEqual(sentOf(net, 'finish'), [{ event: 'finish', level: 1, distance: 4000 }]);
+  assert.deepEqual(sentOf(net, 'finish'), [{ event: 'finish', level: 1, distance: 4000, at: GO + 12_000 }], 'with the time it crossed (AUD-098)');
   assert.equal(s.claimLevelFinish(half), false, 'no line named: nothing');
   assert.equal(s.claimLevelFinish({}, { level: 1, final: false }), false, 'not this race\'s half');
   assert.equal(sentOf(net, 'finish').length, 1);
@@ -568,4 +573,77 @@ test('the pad on the panel (after the lockout): A is Rematch, B is Leave; nothin
   assert.deepEqual(sentOf(net, 'rematch').map((m) => m.want), [true]);
   s.onPadBack();
   assert.deepEqual(started.map((x) => x[0]), ['Play']);
+});
+
+/** The viewport for one test (the scene reads its field width from it), put back after. */
+function withViewport(w, h, fn) {
+  const saved = [globalThis.innerWidth, globalThis.innerHeight];
+  globalThis.innerWidth = w;
+  globalThis.innerHeight = h;
+  try {
+    return fn();
+  } finally {
+    [globalThis.innerWidth, globalThis.innerHeight] = saved;
+  }
+}
+
+test('one field width (item 14, AUD-097): before GO the race sends this side\'s width; a newer one from the other side that moves the agreed width restarts the race on it; after GO nothing moves it', () => {
+  withViewport(1200, 1280, () => {
+    // The host announced 1600 in landscape at join, then turned its phone to portrait (720).
+    const { s, net, ops } = raceScene({ seat: 'guest', countdown: true, peerWidth: 1600 });
+    assert.equal(s.W, 1200);
+    assert.equal(s.fieldW, 1200, 'the join-time width says the host is wider');
+    net.clock.now = GO - 3500; // before the count's 3
+    s.update();
+    assert.deepEqual(sentOf(net, 'width').map((m) => m.width), [1200], 'this side\'s width, at once');
+    net.clock.now += R.widthResendMs;
+    s.update();
+    assert.equal(sentOf(net, 'width').length, 2, 'again every online.race.widthResendMs');
+    net.push(peer('width', { width: 1200 }, net.clock.now - 20));
+    net.clock.now += 16;
+    s.update();
+    assert.deepEqual(ops.filter((o) => o[0] === 'restart'), [], 'a width that leaves the agreed one as it is changes nothing');
+    net.push(peer('width', { width: 720 }, net.clock.now - 10));
+    net.clock.now += 16;
+    s.update();
+    const restarts = ops.filter((o) => o[0] === 'restart');
+    assert.equal(restarts.length, 1, 'the race again, on the smaller field');
+    assert.deepEqual(ops.filter((o) => o[0] === 'stop'), [['stop', 'Play']]);
+    const data = restarts[0][1];
+    assert.equal(data.plan, s.plan, 'the same race: its seed and GO');
+    assert.equal(data.peer.width, 720);
+    s.update();
+    assert.equal(ops.filter((o) => o[0] === 'restart').length, 1, 'once');
+    const again = raceScene({ seat: 'guest', countdown: true, peerWidth: 1600 }).s;
+    again.initRace(data);
+    assert.equal(again.fieldW, 720, 'the restarted race plays the agreed width');
+  });
+  withViewport(1200, 1280, () => {
+    const { s, net, ops } = raceScene({ seat: 'host', peerWidth: 1600 }); // past GO
+    net.clock.now = GO + 500;
+    s.update();
+    net.push(peer('width', { width: 720 }, GO + 400));
+    s.update();
+    assert.deepEqual(ops, [], 'after GO a width moves nothing (Tier 2 re-fits at a break)');
+    assert.equal(sentOf(net, 'width').length, 0, 'and none is sent');
+  });
+});
+
+test('a rematch starts from the newest width heard, not the join-time one', () => {
+  withViewport(1200, 1280, () => {
+    const { s, net, ops, room } = raceScene({ seat: 'host', countdown: true, peerWidth: 1600 });
+    net.clock.now = GO - 3500;
+    net.push(peer('width', { width: 900 }, net.clock.now - 10));
+    s.update();
+    const first = ops.find((o) => o[0] === 'restart')[1];
+    const s2 = raceScene({ seat: 'host', peerWidth: 1600 });
+    s2.s.initRace(first);
+    s2.s.match.status = 'over';
+    Object.assign(room, { round: 2, seed: 9, startMs: GO + 90_000 });
+    s2.s.lobby.state.room = room;
+    s2.s.checkRematch();
+    const next = s2.ops.find((o) => o[0] === 'restart')[1];
+    assert.equal(next.plan.fieldW, 900, 'the next round\'s plan');
+    assert.equal(next.peer.width, 900, 'and the newest width rides along');
+  });
 });

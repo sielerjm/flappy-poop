@@ -83,14 +83,16 @@ const fromRound = (item, since) => Boolean(item && item.kind === 'peer' && item.
  * @param {number} [deps.since] this race's GO (server ms): a message stamped before it is dropped
  * tick(half) each frame with the local half's numbers ({ state, levelBreak, ended, flaps, and the
  * pos fields }); receive(item) for each transport item (true when it moved the ghost); slot() the
- * other seat now, or null before its first message; link() the dot; doneSent() once the run's
- * final numbers went out (nothing about this side changes after that).
+ * other seat now, or null before its first message; link() the dot; doneFixed() once the run's
+ * final numbers are fixed (nothing about this side changes after that), doneSent() once the
+ * transport took them: a refused pos and done go again each frame until it does (AUD-098).
  */
 export function createRaceFeed({ now, send, since = -Infinity, t = TUNING }) {
   const track = createGhostTrack(t);
   let lastPos = null;
   let flaps = null;
   let deaths = null;
+  let final = null; // the run's end, fixed at its first frame: { pos, done }
   let doneSent = false;
   let heardAt = null;
   let peerPhase = null; // the other side's phase in its newest message (run, respawn, break, ended)
@@ -119,10 +121,10 @@ export function createRaceFeed({ now, send, since = -Infinity, t = TUNING }) {
         emit('crash', { distance: f.distance, level: f.level, deaths: f.deaths, score: f.score });
       }
       if (phase === 'ended') {
+        final ??= { pos: { ...f, phase }, done: { score: f.score, deaths: f.deaths, levelWins: f.levelWins, finalFirst: f.finalFirst, won: Boolean(half.won) } };
         if (!doneSent) {
-          doneSent = true;
-          emit('pos', { ...f, phase });
-          emit('done', { score: f.score, deaths: f.deaths, levelWins: f.levelWins, finalFirst: f.finalFirst, won: Boolean(half.won) });
+          emit('pos', final.pos);
+          doneSent = emit('done', final.done);
         }
         return;
       }
@@ -149,6 +151,7 @@ export function createRaceFeed({ now, send, since = -Infinity, t = TUNING }) {
       if (peerPhase === 'break' || peerPhase === 'ended') return 'good';
       return linkQuality(heardAt, now(), t.online.link);
     },
+    doneFixed: () => final !== null,
     doneSent: () => doneSent,
   };
 }
@@ -169,7 +172,11 @@ const newer = (msg, last) => !last || msg.t > last.t || (msg.t === last.t && msg
  *   the guest's line at once; the host's own crossing waits online.race.firstGraceMs for an earlier
  *   claim, then it is the host's. One `first` per line; its effect says whose it is (mine) and
  *   whether it was the final line. settled(level) says the verdict is in (or, for a guest at the
- *   final line, that verdictWaitMs passed without it), so the run's done can carry it.
+ *   final line, that verdictWaitMs passed without it), so the run's done can carry it. A claim
+ *   carries the time it crossed (`at`), so a repeat keeps it: it goes again at once after a
+ *   refused send and every claimResendMs while no verdict has come, until the line settles; the
+ *   host answers a repeat with the verdict it gave (a lost claim or verdict, AUD-098). A guest
+ *   that heard the verdict before it crossed claims nothing.
  * - The ready count: setReady(level, on) marks this side (sent as `ready`, again every readyResendMs
  *   while waiting in the break). Both ready, the host in its break with the shop shut: the host
  *   sends `go` with startAt = now + countLeadMs + 3 × versus.countdownMs and both count to it on the
@@ -177,8 +184,9 @@ const newer = (msg, last) => !last || msg.t > last.t || (msg.t === last.t && msg
  *   before GO calls it off: the host's at once, the guest's when the host hears it (the host sends
  *   `go` with cancel); a tap later than that does nothing. A side still in its break that sees the
  *   other running that level (its go or cancel lost, or late) begins at once (begin, late).
- * - Rematch: wantRematch(on) sends `rematch`; both asking gives the host one rematch effect (its
- *   app asks the server for the next round, onlineLobby's rematch).
+ * - Rematch: wantRematch(on) sends `rematch` (a standing ask again every readyResendMs, a refused
+ *   one at once); both asking gives the host one rematch effect (its app asks the server for the
+ *   next round, onlineLobby's rematch).
  * tick(local) each frame with { level, inBreak, shopOpen } of the local half (null after the race);
  * receive(item) for each transport item; drain() → the effects since the last call.
  * @param {object} deps
@@ -191,7 +199,7 @@ export function createRaceReferee({ seat, now, send, since = -Infinity, t = TUNI
   const cfg = t.online.race;
   const host = seat === 'host';
   const other = host ? 'guest' : 'host';
-  const claims = new Map(); // level → { mine, theirs (server ms), verdict (seat), final }
+  const claims = new Map(); // level → { mine, theirs (server ms), verdict (seat), final, distance, sentAt, out }
   let me = null; // this side's newest ready mark { level, ready }
   let sentAt = -Infinity; // when that mark last went out
   let them = null; // the other side's newest { level, ready, t, seq }
@@ -199,13 +207,25 @@ export function createRaceReferee({ seat, now, send, since = -Infinity, t = TUNI
   const cancelled = new Set(); // counts called off (countKey): a go for one that lands late is ignored
   let begun = 1; // the highest level this side has started (1: the race's own GO)
   let peerRun = null; // the other side's newest pos { phase, level }
-  const rematch = { mine: false, theirs: null, fired: false };
+  const rematch = { mine: false, theirs: null, fired: false, sentAt: null, out: true };
   const out = [];
 
   const claim = (level) => {
-    if (!claims.has(level)) claims.set(level, { mine: null, theirs: null, verdict: null, final: false });
+    if (!claims.has(level)) claims.set(level, { mine: null, theirs: null, verdict: null, final: false, distance: 0, sentAt: -Infinity, out: true });
     return claims.get(level);
   };
+
+  /** A guest's claim to a line, with the time it crossed; `out` false while the transport refuses it. */
+  function sendClaim(level) {
+    const c = claims.get(level);
+    c.sentAt = now();
+    c.out = send('finish', { level, distance: c.distance, at: c.mine }) !== false;
+  }
+
+  function askRematch() {
+    rematch.sentAt = now();
+    rematch.out = send('rematch', { want: rematch.mine }) !== false;
+  }
 
   function decide(level, who) {
     const c = claim(level);
@@ -246,9 +266,13 @@ export function createRaceReferee({ seat, now, send, since = -Infinity, t = TUNI
   function onFinish(m) {
     if (!host) return;
     const c = claim(m.level);
-    if (c.verdict || c.theirs !== null) return;
-    c.theirs = m.t;
-    decide(m.level, c.mine === null || m.t < c.mine ? other : seat);
+    if (c.verdict) {
+      send('first', { level: m.level, seat: c.verdict }); // a repeat: the verdict was lost, or is still on the wire
+      return;
+    }
+    // When it crossed: its own `at`, never later than it was sent (a repeat keeps the crossing's time).
+    c.theirs = Number.isFinite(m.at) ? Math.min(m.at, m.t) : m.t;
+    decide(m.level, c.mine === null || c.theirs < c.mine ? other : seat);
   }
 
   function onFirst(m) {
@@ -288,8 +312,9 @@ export function createRaceReferee({ seat, now, send, since = -Infinity, t = TUNI
       c.final = c.final || Boolean(final);
       if (c.mine !== null) return;
       c.mine = now();
+      c.distance = distance;
       if (!host) {
-        send('finish', { level, distance });
+        if (!c.verdict) sendClaim(level);
         return;
       }
       if (!c.verdict && c.theirs !== null) decide(level, c.theirs < c.mine ? other : seat);
@@ -316,7 +341,7 @@ export function createRaceReferee({ seat, now, send, since = -Infinity, t = TUNI
     wantRematch(on = true) {
       rematch.mine = Boolean(on);
       if (!rematch.mine) rematch.fired = false;
-      send('rematch', { want: rematch.mine });
+      askRematch();
     },
     rematch: () => ({ mine: rematch.mine, theirs: Boolean(rematch.theirs?.want) }),
     receive(item) {
@@ -356,8 +381,60 @@ export function createRaceReferee({ seat, now, send, since = -Infinity, t = TUNI
         rematch.fired = true;
         out.push({ type: 'rematch' });
       }
+      // AUD-098: what must reach the other side goes again (a refused send at once).
+      if (!host) {
+        for (const [level, c] of claims) {
+          if (c.mine === null || c.verdict || at - c.mine >= cfg.verdictWaitMs) continue;
+          if (!c.out || at - c.sentAt >= cfg.claimResendMs) sendClaim(level);
+        }
+      }
+      if (rematch.sentAt !== null && (!rematch.out || (rematch.mine && at - rematch.sentAt >= cfg.readyResendMs))) askRematch();
     },
     drain: () => out.splice(0),
+  };
+}
+
+/**
+ * One field width for both devices (item 14, AUD-097). Presence holds each side's width at join, so
+ * a phone turned after the lobby opened would race on another field than the other side. From the
+ * race's start to its GO each side sends its own field width (`width`) every
+ * online.race.widthResendMs (at once again after a refused send); the newest heard from the other
+ * side (by its server time, then sequence) replaces the join-time one. fieldW() is agreedWidth of
+ * the two, this side's own before it knows the other's: the same on both devices once each heard
+ * the other, never wider than this one. receive(item) is true when the agreed width moved; peer()
+ * the newest width heard ({ width, t, seq }) or null, for a restart or the next round to keep.
+ * @param {object} deps
+ * @param {number} deps.mine this device's field width now (fieldWidth)
+ * @param {number | null} [deps.theirs] the other side's width as last known (presence)
+ * @param {{ width: number, t: number, seq: number } | null} [deps.heard] the newest width message already heard
+ * @param {() => number} deps.now server ms
+ * @param {(event: string, fields: object) => boolean} deps.send the transport's send
+ * @param {number} deps.until the race's GO: nothing goes from then on (Tier 2 re-fits at a break)
+ */
+export function createFieldFit({ mine, theirs = null, heard = null, now, send, until, t = TUNING }) {
+  let last = heard;
+  let peerW = last?.width ?? (Number.isFinite(theirs) ? theirs : null);
+  let sentAt = null;
+  let out = true;
+  const fieldW = () => (Number.isFinite(peerW) ? agreedWidth(mine, peerW) : mine);
+  return {
+    tick() {
+      const at = now();
+      if (!(at < until)) return;
+      if (sentAt === null || !out || at - sentAt >= t.online.race.widthResendMs) {
+        sentAt = at;
+        out = send('width', { width: mine }) !== false;
+      }
+    },
+    receive(item) {
+      if (item?.kind !== 'peer' || item.event !== 'width' || !item.msg || !newer(item.msg, last)) return false;
+      const before = fieldW();
+      last = { width: item.msg.width, t: item.msg.t, seq: item.msg.seq };
+      peerW = last.width;
+      return fieldW() !== before;
+    },
+    fieldW,
+    peer: () => (last ? { ...last } : null),
   };
 }
 

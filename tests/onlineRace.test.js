@@ -6,7 +6,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { FIELD, TUNING as T } from '../src/config.js';
 import { NETSIM_PROFILES, createInbox, createNetSim, createSender, parseMessage } from '../src/online.js';
-import { raceStartPlan, countdownStep, localPhase, linkQuality, createRaceFeed, createRaceReferee, raceRoomItem, ONLINE_HOST_KEY } from '../src/onlineRace.js';
+import { raceStartPlan, countdownStep, localPhase, linkQuality, createRaceFeed, createRaceReferee, createFieldFit, raceRoomItem, ONLINE_HOST_KEY } from '../src/onlineRace.js';
 import { createMatch, matchHostKey, ghostPlacement } from '../src/versus.js';
 import { raceOutcome } from '../src/tournament.js';
 
@@ -228,10 +228,12 @@ const COUNT_MS = 3 * T.versus.countdownMs;
 /**
  * Two devices as the scene wires them: per device one sender (onlineNet stamps seq, t and sid on
  * every event, so feed and referee share it) and one inbox for what arrives, a feed and a referee
- * (device 0 the host, 1 the guest). `drop(i, event, payload)` loses a message on the way. Time moves
- * in small steps so each message lands when it is due.
+ * (device 0 the host, 1 the guest). `drop(i, event, payload)` loses a message on the way;
+ * `refuse(i, event, fields)` makes the transport refuse it (onlineNet's send while the channel is
+ * not joined: false, no sequence number spent). Time moves in small steps so each message lands
+ * when it is due.
  */
-function duo({ profile = LAN, since = 0, drop = null, seed = 7 } = {}) {
+function duo({ profile = LAN, since = 0, drop = null, refuse = null, seed = 7 } = {}) {
   let clock = since;
   const now = () => clock;
   let r = seed;
@@ -256,6 +258,7 @@ function duo({ profile = LAN, since = 0, drop = null, seed = 7 } = {}) {
   const inboxes = [createInbox(), createInbox()];
   const sent = [[], []];
   const send = (i) => (event, fields) => {
+    if (refuse?.(i, event, fields)) return false;
     const m = senders[i](event, fields);
     assert.ok(m && parseMessage(event, m.payload), `${event} ${JSON.stringify(fields)} is a valid message`);
     sent[i].push({ event, ...m.payload });
@@ -334,6 +337,7 @@ test('the host first: decided when the later claim lands, or after online.race.f
   e.refs[0].tick(brk(4));
   e.refs[1].tick(brk(4));
   assert.deepEqual([...e.refs[0].drain(), ...e.refs[1].drain()], [], 'a claim on a decided line changes nothing');
+  assert.equal(e.events(1, 'finish').length, 0, 'a guest that heard the verdict claims nothing');
 });
 
 test('the guest first while the host still flies: decided the moment its claim lands', () => {
@@ -716,4 +720,203 @@ test('the race to the end on a jittery, reordering link (cellular without loss) 
     assert.equal(outcomes[0].winner, 1 - outcomes[1].winner, `seed ${seed}`);
     assert.deepEqual(halves[0].h.begins.map((b) => b.at), halves[1].h.begins.map((b) => b.at), `seed ${seed}: one GO`);
   }
+});
+
+// --- 1.10: one-off events that must reach the other side (AUD-098), one field width (AUD-097) ----
+
+test('the run\'s end goes out (AUD-098): a pos and done the transport refused go again each frame until taken, with the numbers fixed at the first try', () => {
+  let clock = 1000;
+  let up = true;
+  const sent = [];
+  const feed = createRaceFeed({ now: () => clock, send: (event, fields) => (up ? (sent.push({ event, ...fields }), true) : false) });
+  feed.tick(half({ distance: 100 }));
+  up = false; // the channel is rejoining for a moment
+  clock += 100;
+  feed.tick(half({ state: 'over', ended: true, distance: 1000, score: 70, levelWins: 2, finalFirst: true }));
+  assert.equal(feed.doneSent(), false, 'refused: not out');
+  assert.equal(feed.doneFixed(), true, 'but its numbers are fixed');
+  clock += 16;
+  feed.tick(half({ state: 'over', ended: true, distance: 1000, score: 95, levelWins: 3, finalFirst: true }));
+  up = true;
+  clock += 16;
+  feed.tick(half({ state: 'over', ended: true, distance: 1000, score: 95, levelWins: 3, finalFirst: true }));
+  assert.equal(feed.doneSent(), true);
+  assert.deepEqual(sent.filter((m) => m.event === 'done').map((m) => [m.score, m.levelWins]), [[70, 2]], 'once, with the first try\'s numbers');
+  assert.equal(sent.filter((m) => m.event === 'pos').at(-1).phase, 'ended');
+  assert.equal(sent.filter((m) => m.event === 'pos').at(-1).score, 70);
+  clock += 1000;
+  feed.tick(half({ state: 'over', ended: true, distance: 1000, score: 95 }));
+  assert.equal(sent.filter((m) => m.event === 'done').length, 1, 'and never again once out');
+});
+
+test('a guest\'s claim carries the time it crossed and goes again at once after a refused send: it still wins the line it crossed first (AUD-098)', () => {
+  let refused = true;
+  const d = duo({ refuse: (i, event) => i === 1 && event === 'finish' && refused });
+  d.refs[1].crossed({ level: 2, final: false, distance: 7000 }); // the guest at 0, refused: the channel is rejoining
+  assert.equal(d.events(1, 'finish').length, 0);
+  d.advance(300);
+  d.refs[0].crossed({ level: 2, final: false, distance: 7000 }); // the host, 300 ms later
+  refused = false;
+  d.refs[1].tick(brk(3));
+  assert.deepEqual(d.events(1, 'finish').map((m) => [m.level, m.at]), [[2, 0]], 'the claim goes on the next frame, with its crossing time');
+  d.advance(45);
+  d.refs[0].tick(brk(3));
+  assert.deepEqual(firsts(d.refs[0].drain()), [{ type: 'first', level: 2, mine: false, final: false }], 'the guest crossed first');
+  assert.deepEqual(d.events(0, 'first').map((m) => [m.level, m.seat]), [[2, 'guest']]);
+});
+
+test('a lost verdict: the guest\'s claim goes again every online.race.claimResendMs and the host answers a repeat with the verdict it gave (AUD-098)', () => {
+  let lost = 1;
+  const d = duo({ drop: (i, event) => i === 0 && event === 'first' && lost-- > 0 });
+  d.refs[1].crossed({ level: 2, final: false, distance: 7000 });
+  d.advance(45);
+  d.refs[0].tick({ level: 2, inBreak: false, shopOpen: false });
+  assert.deepEqual(firsts(d.refs[0].drain()), [{ type: 'first', level: 2, mine: false, final: false }]);
+  d.advance(100);
+  d.refs[1].tick(brk(3));
+  assert.deepEqual(firsts(d.refs[1].drain()), [], 'its verdict was lost');
+  assert.equal(d.events(1, 'finish').length, 1, 'no repeat inside claimResendMs');
+  d.advance(R.claimResendMs);
+  d.refs[1].tick(brk(3));
+  const claims = d.events(1, 'finish');
+  assert.equal(claims.length, 2, 'the claim again');
+  assert.equal(claims[1].at, claims[0].at, 'with the same crossing time');
+  d.advance(45);
+  d.refs[0].tick(brk(3));
+  assert.deepEqual(d.refs[0].drain(), [], 'no second effect on the host');
+  assert.deepEqual(d.events(0, 'first').map((m) => [m.level, m.seat]), [[2, 'guest'], [2, 'guest']], 'the same verdict, answered again');
+  d.advance(45);
+  d.refs[1].tick(brk(3));
+  assert.deepEqual(firsts(d.refs[1].drain()), [{ type: 'first', level: 2, mine: true, final: false }]);
+  d.advance(R.claimResendMs * 3);
+  d.refs[1].tick(brk(3));
+  assert.equal(d.events(1, 'finish').length, 2, 'nothing more once the verdict is in');
+});
+
+test('a claim with no answer goes again until its line settles without one (online.race.verdictWaitMs), then stops', () => {
+  const d = duo({ drop: (i, event) => i === 0 && event === 'first' });
+  d.refs[1].crossed({ level: 7, final: true, distance: 1 });
+  for (let at = 0; at < R.verdictWaitMs * 3; at += 100) {
+    d.advance(100);
+    d.refs[0].tick(brk(7, { inBreak: false }));
+    d.refs[1].tick(brk(7, { inBreak: false }));
+  }
+  const n = d.events(1, 'finish').length;
+  assert.ok(n >= 2 && n <= 1 + Math.ceil(R.verdictWaitMs / R.claimResendMs), `${n} claims, all inside verdictWaitMs`);
+  assert.ok(d.events(1, 'finish').every((m) => m.t < R.verdictWaitMs), 'none after the line settled');
+  assert.equal(d.refs[1].settled(7), true);
+});
+
+test('a rematch ask goes again every online.race.readyResendMs while it stands, and at once after a refused send (a lost ask holds nobody, AUD-098)', () => {
+  let lost = 1;
+  const d = duo({ drop: (i, event) => i === 1 && event === 'rematch' && lost-- > 0 });
+  d.refs[0].wantRematch(true);
+  d.refs[1].wantRematch(true); // lost on the way
+  d.advance(50);
+  d.refs[0].tick(null);
+  d.refs[1].tick(null);
+  assert.deepEqual(d.refs[0].drain(), [], 'the guest\'s ask was lost');
+  d.advance(R.readyResendMs);
+  d.refs[1].tick(null);
+  d.advance(50);
+  d.refs[0].tick(null);
+  assert.deepEqual(d.refs[0].drain(), [{ type: 'rematch' }], 'the repeat reached the host');
+  d.advance(R.readyResendMs);
+  d.refs[0].tick(null);
+  d.refs[1].tick(null);
+  d.advance(50);
+  d.refs[0].tick(null);
+  assert.deepEqual(d.refs[0].drain(), [], 'a repeat never fires it twice');
+
+  let refused = true;
+  const e = duo({ refuse: (i, event) => i === 1 && event === 'rematch' && refused });
+  e.refs[0].wantRematch(true);
+  e.refs[1].wantRematch(true);
+  assert.equal(e.events(1, 'rematch').length, 0, 'refused');
+  refused = false;
+  e.refs[1].tick(null);
+  e.advance(50);
+  e.refs[0].tick(null);
+  assert.deepEqual(e.refs[0].drain(), [{ type: 'rematch' }], 'it went on the next frame');
+  e.refs[1].wantRematch(false);
+  const n = e.events(1, 'rematch').length;
+  e.advance(R.readyResendMs * 3);
+  e.refs[1].tick(null);
+  assert.equal(e.events(1, 'rematch').length, n, 'a withdrawn ask is not repeated');
+});
+
+/** Two field fits on one server clock and a 40 ms link each way, as the race scene wires them. */
+function fitPair({ widths, presence, until, drop = null, refuse = null }) {
+  let clock = 0;
+  const now = () => clock;
+  const senders = [0, 1].map((i) => createSender({ sid: `w${i}`, now }));
+  const inboxes = [createInbox(), createInbox()];
+  let wire = [];
+  const sent = [[], []];
+  const fits = [0, 1].map((i) =>
+    createFieldFit({
+      mine: widths[i],
+      theirs: presence[i],
+      now,
+      until,
+      send: (event, fields) => {
+        if (refuse?.(i, event)) return false;
+        const m = senders[i](event, fields);
+        assert.ok(m && parseMessage(event, m.payload), `${event} ${JSON.stringify(fields)} is a valid message`);
+        sent[i].push(m.payload);
+        if (!drop?.(i, event)) wire.push({ to: 1 - i, due: clock + 40, item: { kind: 'peer', event, msg: m.payload, at: m.payload.t } });
+        return true;
+      },
+    }),
+  );
+  const advance = (ms) => {
+    for (let k = 0; k < ms; k += 10) {
+      clock += 10;
+      for (const f of fits) f.tick();
+      const due = wire.filter((x) => x.due <= clock);
+      wire = wire.filter((x) => x.due > clock);
+      for (const x of due) if (inboxes[x.to].take(x.item.event, x.item.msg)) fits[x.to].receive(x.item);
+    }
+  };
+  return { fits, sent, advance, now: () => clock };
+}
+
+test('one field width (item 14, AUD-097): each side sends its width now until GO and takes the newest it hears over the join-time one, so both race on the smaller', () => {
+  // The audit\'s case: the host phone announced 1600 in landscape, then turned to portrait (720);
+  // the guest\'s desktop is 1200 at join and now. Each side\'s first width is lost on the way.
+  const lostFirst = [1, 1];
+  const p = fitPair({ widths: [720, 1200], presence: [1200, 1600], until: 4000, drop: (i, event) => event === 'width' && lostFirst[i]-- > 0 });
+  assert.deepEqual(p.fits.map((f) => f.fieldW()), [720, 1200], 'from presence alone the two differ');
+  p.advance(3000);
+  assert.deepEqual(p.fits.map((f) => f.fieldW()), [720, 720], 'both on the smaller once each heard the other');
+  assert.deepEqual(p.fits.map((f) => f.peer()?.width), [1200, 720]);
+  const before = p.sent.map((s) => s.length);
+  assert.ok(before.every((n) => n >= 2), 'again every online.race.widthResendMs');
+  p.advance(2000);
+  assert.ok(p.sent.every((s) => s.every((m) => m.t < 4000)), 'nothing at or after GO');
+  for (const [w, pres] of [[[720, 1600], [null, null]], [[1600, 1600], [720, 720]], [[1200, 900], [1600, 1600]]]) {
+    const q = fitPair({ widths: w, presence: pres, until: 4000 });
+    q.advance(500);
+    assert.deepEqual(q.fits.map((f) => f.fieldW()), [Math.min(...w), Math.min(...w)], `widths ${w}, presence ${pres}`);
+  }
+});
+
+test('the field fit: never wider than this side; its own width before it hears anything; a refused send goes again at once; an older width never replaces a newer one', () => {
+  let refused = true;
+  const p = fitPair({ widths: [900, 1400], presence: [null, null], until: 4000, refuse: (i) => i === 0 && refused });
+  assert.deepEqual(p.fits.map((f) => f.fieldW()), [900, 1400], 'no word yet: each its own');
+  p.advance(20);
+  assert.equal(p.sent[0].length, 0, 'refused');
+  refused = false;
+  p.advance(20);
+  assert.equal(p.sent[0].length, 1, 'it went on the next tick');
+  p.advance(100);
+  assert.deepEqual(p.fits.map((f) => f.fieldW()), [900, 900]);
+  const fit = createFieldFit({ mine: 1200, theirs: 1600, now: () => 0, until: 100, send: () => true });
+  assert.equal(fit.fieldW(), 1200, 'never wider than this side');
+  const w = (width, t, seq) => ({ kind: 'peer', event: 'width', msg: { seq, t, sid: 'x', width }, at: t });
+  assert.equal(fit.receive(w(800, 50, 2)), true, 'the agreed width moved');
+  assert.equal(fit.receive(w(1000, 40, 1)), false, 'older: ignored');
+  assert.equal(fit.fieldW(), 800);
+  assert.equal(fit.receive({ kind: 'peer', event: 'pos', msg: { seq: 3, t: 60, sid: 'x' } }), false, 'not a width');
 });

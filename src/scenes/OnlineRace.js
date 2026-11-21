@@ -4,7 +4,7 @@ import { fieldWidth, uiColumn, overButtonsLayout, overHit, canRestart, fitScale 
 import { createMatch } from '../versus.js';
 import { t, levelLabel } from '../i18n.js';
 import { raceOutcome } from '../tournament.js';
-import { ONLINE_HOST_KEY, countdownStep, createRaceFeed, createRaceReferee, raceRoomItem, raceStartPlan } from '../onlineRace.js';
+import { ONLINE_HOST_KEY, countdownStep, createFieldFit, createRaceFeed, createRaceReferee, raceRoomItem, raceStartPlan } from '../onlineRace.js';
 import { racePhase } from '../online.js';
 import { sfx, unlock } from '../sound.js';
 import { createButton } from '../ui/button.js';
@@ -31,6 +31,9 @@ const GREY = '#c9b8dc';
  * end waits for the final line's verdict, so both devices reach one raceOutcome from the same
  * numbers; the host then marks the room finished. A rematch (wantRematch, both asking) is the
  * room's next round: a new seed, and this scene restarted on it.
+ * One field width (item 14, AUD-097): until GO both sides send their field width (createFieldFit),
+ * and a width from the other side that moves the agreed one restarts this scene on it, so a phone
+ * turned after the lobby opened still races on the same field as the other device.
  * Started by the tournament panel once the room is 'playing' with { net, lobby, plan }. 1.8 adds
  * the results panel (Rematch | Leave); Tier 2 a peer leaving and the shared pause.
  */
@@ -41,9 +44,9 @@ export class OnlineRace extends Phaser.Scene {
 
   create(data) {
     this.initRace(data);
-    const W = fieldWidth(globalThis.innerWidth, globalThis.innerHeight, FIELD);
+    const W = this.W;
     if (this.scale.width !== W || this.scale.height !== GAME_HEIGHT) this.scale.setGameSize(W, GAME_HEIGHT);
-    const fieldW = Math.min(this.plan.fieldW, W);
+    const fieldW = this.fieldW;
     const fieldX = Math.floor((W - fieldW) / 4) * 2; // centred, on an even pixel
     this.locale = this.scene.get('Play')?.locale ?? 'en';
 
@@ -52,7 +55,6 @@ export class OnlineRace extends Phaser.Scene {
 
     const cx = fieldX + fieldW / 2;
     this.cx = cx;
-    this.fieldW = fieldW;
     this.countText = this.add.text(cx, GAME_HEIGHT * 0.45, '', { ...STYLE, fontSize: '160px', strokeThickness: 16 }).setOrigin(0.5).setDepth(55).setVisible(false);
     // Item 14: a field narrowed to the other player's smaller screen says so under the count.
     const them = this.plan.names[1];
@@ -60,7 +62,7 @@ export class OnlineRace extends Phaser.Scene {
       .text(cx, GAME_HEIGHT * 0.45 + 140, t(this.locale, 'onlineFitting').replace('{name}', them), { ...STYLE, fontSize: '30px', strokeThickness: 6, wordWrap: { width: fieldW - 60, useAdvancedWrap: true } })
       .setOrigin(0.5)
       .setDepth(55)
-      .setVisible(this.plan.fieldW < W);
+      .setVisible(fieldW < W);
 
     // The opponent's pill (Preview C3): top left of the field, under the level bar.
     const x = fieldX + uiColumn(fieldW, FIELD).x + 28;
@@ -98,8 +100,10 @@ export class OnlineRace extends Phaser.Scene {
 
   /**
    * The race's state apart from what it draws (tests/onlineRaceScene.test.js starts here): this
-   * round's match, named for this host every round (item 39: resetMatch would drop the key), and
-   * the feed and referee, which drop anything stamped before this round's GO.
+   * round's match, named for this host every round (item 39: resetMatch would drop the key), the
+   * feed and referee, which drop anything stamped before this round's GO, and the field: this
+   * device's width now (W) and the one both race on (fieldW, from the field fit; `data.peer` is
+   * the newest width heard, kept over a re-fit or a rematch).
    */
   initRace(data) {
     this.net = data.net;
@@ -126,6 +130,10 @@ export class OnlineRace extends Phaser.Scene {
     const send = (event, fields) => this.net.send(event, fields);
     this.feed = createRaceFeed({ now, send, since: this.plan.startAt });
     this.referee = createRaceReferee({ seat: this.plan.seat, now, send, since: this.plan.startAt });
+    this.W = fieldWidth(globalThis.innerWidth ?? 720, globalThis.innerHeight ?? 1280, FIELD);
+    this.fit = createFieldFit({ mine: this.W, theirs: this.net.peer?.()?.width ?? null, heard: data.peer ?? null, now, send, until: this.plan.startAt });
+    this.fieldW = this.fit.fieldW();
+    this.refit = false; // the agreed width moved before GO: the race again on it (refitField)
   }
 
   /** The local half (slot 0); the remote seat has no scene (item 39: versusInput and otherHalf read null). */
@@ -141,8 +149,12 @@ export class OnlineRace extends Phaser.Scene {
     if (!this.feed) return;
     this.net.pump?.();
     for (const item of this.net.take?.() ?? []) this.receive(item);
+    if (this.refit) return this.refitField();
     const now = this.net.serverNow();
-    if (this.match.status === 'countdown') this.runCountdown(now);
+    if (this.match.status === 'countdown') {
+      this.fit.tick();
+      this.runCountdown(now);
+    }
     const half = this.half();
     if (half && (this.match.status === 'playing' || this.match.status === 'over')) {
       this.referee.tick({ level: half.level, inBreak: Boolean(half.levelBreak) && half.state === 'paused', shopOpen: Boolean(half.shopOpen) });
@@ -277,6 +289,8 @@ export class OnlineRace extends Phaser.Scene {
 
   /** One transport item: the ghost, the referee, and the room's confirmed race status for the lobby. */
   receive(item) {
+    this.fit.receive(item);
+    if (item?.kind === 'peer' && item.event === 'width' && this.match.status === 'countdown' && this.net.serverNow() < this.plan.startAt && this.fit.fieldW() !== this.fieldW) this.refit = true;
     this.feed.receive(item);
     this.referee.receive(item);
     if (raceRoomItem(item)) this.lobby?.roomItem?.(item);
@@ -296,7 +310,7 @@ export class OnlineRace extends Phaser.Scene {
   applyEffects() {
     for (const e of this.referee.drain()) {
       if (e.type === 'first') {
-        if (e.mine && !this.feed.doneSent()) this.half()?.awardLevelFirst?.({ final: e.final });
+        if (e.mine && !this.feed.doneFixed()) this.half()?.awardLevelFirst?.({ final: e.final });
       } else if (e.type === 'count') {
         this.levelStage = 'count';
         this.levelShown = null;
@@ -523,12 +537,26 @@ export class OnlineRace extends Phaser.Scene {
   checkRematch() {
     const room = this.lobby?.state?.room;
     if (this.restarting || room?.phase !== 'playing' || !(room.round > (this.plan.round ?? 0))) return;
-    const plan = raceStartPlan(room, { mine: fieldWidth(globalThis.innerWidth ?? 720, globalThis.innerHeight ?? 1280, FIELD), theirs: this.net.peer?.()?.width ?? null });
+    const peer = this.fit.peer();
+    const plan = raceStartPlan(room, { mine: fieldWidth(globalThis.innerWidth ?? 720, globalThis.innerHeight ?? 1280, FIELD), theirs: peer?.width ?? this.net.peer?.()?.width ?? null });
     if (!plan) return;
     this.restarting = true;
     this.match.status = 'left';
     this.scene.stop('Play');
-    this.scene.restart({ net: this.net, lobby: this.lobby, plan });
+    this.scene.restart({ net: this.net, lobby: this.lobby, plan, peer });
+  }
+
+  /**
+   * AUD-097: before GO the other side's width moved the agreed one (its phone turned after the
+   * lobby opened, or its join-time width was stale): the race again on the same plan, its seed and
+   * GO, at the agreed width; the newest width heard rides along.
+   */
+  refitField() {
+    if (this.restarting) return;
+    this.restarting = true;
+    this.match.status = 'left';
+    this.scene.stop('Play');
+    this.scene.restart({ net: this.net, lobby: this.lobby, plan: this.plan, peer: this.fit.peer() });
   }
 
   /** The pad's A on the results panel: Rematch (ask, or take it back). */

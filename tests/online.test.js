@@ -151,7 +151,7 @@ test('every event has a valid example and every field is checked', () => {
     pos: runState(),
     flap: { distance: 1, speed: 275, y: 600, vy: -760 },
     crash: { distance: 1, level: 2, deaths: 1, score: 10 },
-    finish: { level: 1, distance: 4000 },
+    finish: { level: 1, distance: 4000, at: 1_800_000_000_000 },
     first: { level: 1, seat: 'guest' },
     ready: { level: 1, ready: true },
     go: { level: 2, startAt: 1_800_000_000_000, cancel: false },

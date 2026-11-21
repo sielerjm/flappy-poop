@@ -376,7 +376,9 @@ export const TUNING = {
       verdictWaitMs: 3000, // ms a guest at the final line waits for the host's verdict before its run ends without the final win (a lost message must not hold the race's end)
       countLeadMs: 250, // ms from the host's GO decision to the first count step, so the guest hears the go before its 3 shows
       cancelMarginMs: 600, // ms before GO from which a tap no longer takes a ready back: the take-back has to reach the other side before GO
-      readyResendMs: 2000, // ms between repeats of this side's ready mark while it waits in a break (a lost mark must not hold both players)
+      readyResendMs: 2000, // ms between repeats of this side's ready mark while it waits in a break (a lost mark must not hold both players), and of a standing rematch ask
+      claimResendMs: 1000, // ms between repeats of a guest's claim to a line while no verdict has come (a lost claim or verdict; the host answers a repeat with the verdict it gave), up to verdictWaitMs (AUD-098)
+      widthResendMs: 500, // ms between repeats of this side's field width from the race's start to its GO, so both reach one width before the count ends (item 14, AUD-097)
       waitOfferMs: 45000, // ms this side waits (ready in a break, or out at the finish) before the race offers Leave or Keep waiting (item 15); Keep waiting starts it over
     },
     inventoryY0: 268, // px: the purse and bean rows' first centre in an online race, below the opponent's pill (its top 82, bottom 228 with the slow / lost word), not over it
