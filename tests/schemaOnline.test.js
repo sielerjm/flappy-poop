@@ -151,7 +151,7 @@ test('link_online_player refuses a request with no session, a bad id and a bad n
   assert.equal(await rowOf(db, uid), null);
 });
 
-test('the first device of a player is trusted, a later one waits as pending, and at most three wait at once', async () => {
+test('the first device of a player is trusted, a later one waits as pending, and at most three wait at once (a fourth replaces one, 2.4e)', async () => {
   const db = await freshDb();
   const P = id('Trust');
   const [a, b, c, d, e] = [await addUser(db), await addUser(db), await addUser(db), await addUser(db), await addUser(db)];
@@ -159,8 +159,9 @@ test('the first device of a player is trusted, a later one waits as pending, and
   assert.deepEqual(await link(db, b, P, 'Tina'), { trusted: false, name: 'Tina' });
   assert.equal((await link(db, c, P, 'Tina')).trusted, false);
   assert.equal((await link(db, d, P, 'Tina')).trusted, false);
-  await assert.rejects(link(db, e, P, 'Tina'), /too many devices waiting/);
-  assert.equal(await rowOf(db, e), null);
+  assert.equal((await link(db, e, P, 'Tina')).trusted, false, 'a fourth links, waiting (2.4e)');
+  assert.equal(await rowOf(db, b), null, 'in place of the one seen longest ago');
+  assert.equal((await db.query('select count(*)::int as n from public.online_players where player_id = $1 and not trusted', [P])).rows[0].n, 3);
 });
 
 test('a pending device cannot rename the player online; a trusted one can; a name is stored trimmed', async () => {
@@ -1381,4 +1382,40 @@ test('a device cannot write a race\'s run first to hold its post: the server\'s 
   assert.deepEqual(run, { score: 20, level: constant('c_race_level'), version: 'server' });
   assert.deepEqual((await boardRows(db, r.guest.player)).map((x) => x.score), [20], 'posted, not held');
   assert.equal((await db.query('select count(*)::int as n from public.held_scores')).rows[0].n, 0);
+});
+
+test('a fourth waiting device takes the place of the waiting device seen longest ago, so closed private windows never lock a player out (2.4e)', async () => {
+  const db = await freshDb();
+  const owner = await device(db, 'Wt');
+  const waiting = [];
+  for (let i = 0; i < 3; i += 1) {
+    const u = await addUser(db);
+    assert.equal((await link(db, u, owner.player, 'Wt')).trusted, false);
+    waiting.push(u);
+  }
+  await ago(db, waiting[0], '1 hour');
+  await ago(db, waiting[1], '2 hours'); // seen longest ago
+  const late = await addUser(db);
+  assert.equal((await link(db, late, owner.player, 'Wt')).trusted, false, 'it links, waiting, instead of being refused');
+  assert.equal(await userExists(db, waiting[1]), false, 'the stalest waiting device goes, its anonymous user with it');
+  assert.deepEqual(await Promise.all([waiting[0], waiting[2], late].map((u) => userExists(db, u))), [true, true, true]);
+  assert.equal((await rowOf(db, owner.uid)).trusted, true, 'a paired device is never the one replaced');
+  assert.equal((await db.query('select count(*)::int as n from public.online_players where player_id = $1 and not trusted', [owner.player])).rows[0].n, 3);
+  // A waiting device seated in a race is never replaced; when all three are, the refusal stands.
+  const race = async (u, tag) => {
+    const host = await device(db, tag);
+    const { code } = await call(db, host, 'create_room');
+    await call(db, u, 'join_room', [code]);
+    await call(db, host, 'answer_guest', [code, true]);
+    await call(db, host, 'set_room_status', [code, 'playing']);
+  };
+  await race(waiting[0], 'WtH0');
+  await ago(db, waiting[0], '5 hours');
+  const next = await addUser(db);
+  await link(db, next, owner.player, 'Wt');
+  assert.equal(await userExists(db, waiting[0]), true, 'the racing one stays, though it is the stalest');
+  assert.equal(await userExists(db, waiting[2]), false, 'the stalest of the others goes');
+  await race(late, 'WtH1');
+  await race(next, 'WtH2');
+  await assert.rejects(link(db, await addUser(db), owner.player, 'Wt'), /too many devices waiting/, 'all three waiting devices are racing');
 });

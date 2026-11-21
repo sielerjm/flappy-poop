@@ -3548,8 +3548,9 @@ $$;
 -- checked against the claim. Called on every entry into online play, so it also refreshes seen_at
 -- and, from a trusted device, the name; a pending device gets the stored name back. A device already
 -- linked to another player (Load user code) moves, and is judged as a new device. Returns
--- { trusted, name }. Raises 'not signed in', 'bad player id', 'bad name', 'name taken', and 'too many
--- devices waiting' past three pending devices.
+-- { trusted, name }. Past three pending devices the new one replaces the pending device seen longest ago
+-- (2.4e). Raises 'not signed in', 'bad player id', 'bad name', 'name taken', and 'too many devices
+-- waiting' only when all three pending devices are seated in a race.
 create or replace function public.link_online_player(p_player_id text, p_name text)
 returns jsonb
 language plpgsql
@@ -3564,6 +3565,7 @@ declare
   v_again text;
   v_me public.online_players;
   v_trusted boolean;
+  v_old uuid;
 begin
   if v_uid is null then
     raise exception 'not signed in';
@@ -3604,7 +3606,22 @@ begin
     if v_trusted then
       update public.online_players o set trusted = false where o.player_id = v_id and o.trusted;
     elsif (select count(*) from public.online_players o where o.player_id = v_id and not o.trusted) >= 3 then
-      raise exception 'too many devices waiting';
+      -- At most three wait (M1 rule 6). Past that the new device takes the place of the waiting device
+      -- seen longest ago (most often a closed private window's, which never comes back), removed as
+      -- remove_online_device removes one; never a paired device, nor one seated in a race (plan 39,
+      -- 2.4e; Michael, 21 Nov: a refusal locked owners out for good). A waiting device holds nothing
+      -- private, so whoever links gains nothing but the slot.
+      select o.uid into v_old from public.online_players o
+       where o.player_id = v_id and not o.trusted
+         and not exists (select 1 from public.rooms r where o.uid in (r.host_uid, r.guest_uid) and r.status = 'playing')
+       order by o.seen_at, o.linked_at, o.uid
+       limit 1;
+      if v_old is null then
+        raise exception 'too many devices waiting';
+      end if;
+      perform public.online_unseat(v_old);
+      delete from public.online_players o where o.uid = v_old;
+      delete from auth.users u where u.id = v_old and u.is_anonymous;
     end if;
     insert into public.online_players (uid, player_id, trusted) values (v_uid, v_id, v_trusted);
   end if;
@@ -4820,7 +4837,7 @@ returns text
 language sql
 immutable
 as $$
-  select '5020e142986b68f7'::text; -- schema stamp
+  select 'd3591e797a3428a9'::text; -- schema stamp
 $$;
 revoke execute on function public.schema_version() from public, authenticated;
 grant  execute on function public.schema_version() to anon;
