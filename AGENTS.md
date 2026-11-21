@@ -214,8 +214,9 @@ the other player; a respawning half's clock stops with it). Chrome decisions in 
 resumes the match. The match ends once **both** have cleared the rectum (the first one out waits under
 "Made it out!" / "Waiting for P2…", `showEscapedBanner`); the result panel names the higher score
 (`raceOutcome`, below) on a `versus.resultPanelW` (820 px) panel with each player's 🏁 level wins and 💀
-count, and offers Continue | Bracket (the Tournament paragraph). A race records nothing: no best, no
-save-code score, no 🏆 leaderboard. `Versus.rematch()` (same devices, new seed) has no button any more:
+count, and offers Continue | Bracket (the Tournament paragraph). A race adds nothing to a best, the
+save-code score or the career, but it posts (plan 39, 2.5): a two-player tournament to 🏅 (the Tournament
+paragraph) and every split-screen race its linked racers' scores to 🏆 (`racePosts`, below). `Versus.rematch()` (same devices, new seed) has no button any more:
 the smoke restarts a match through it.
 
 **Tournament** (🏅, `src/tournament.js`, `src/tournamentNames.js`, `ui/tournamentPanel.js`; 2026-11-09,
@@ -278,19 +279,34 @@ Esc reaches the panel after a mouse open. With every session a tournament, `vers
 `versusDraw` and the `versusPlayer` fallback are reachable only in principle (a race always has a round,
 names and a `finalFirst` half); they stay as safe fallbacks. **The 🏅 medal board** (Release B, 2026-11-09): "Use my player"
 gives the host's player its id (`hostSave` → `ensureId`). When `onRace` records the Final, a tournament
-of `tournament.minPostPlayers` (3, submit_tournament's floor) or more with any linked player (`postable`)
+of `tournament.minPostPlayers` (2 since plan 39, 2.5; submit_tournament's floor) or more with any linked player (`postable`)
 is queued once (`queueFinished`: `tournamentPayload(tour, newId())` with the host device's id into
-`Play.tournamentQueue`, registry `posted` / `tournamentId`) and synced; a 2-player one is `posted: 'two'`
-(the podium says it is not saved), an all-guest one `'none'`. **Two players** (plan 39, 2.4b): the server
-now takes them too: `submit_tournament` accepts 2 players, who race a lone final, gold and silver (a
-draw earns none). The client's `minPostPlayers` stays 3 until 2.5, so the game does not send them yet.
+`Play.tournamentQueue`, registry `posted` / `tournamentId`) and synced; an all-guest one is `posted: 'none'`.
+**Two players** (plan 39, 2.4b, 2.5): `submit_tournament` accepts 2 players, who race a lone final, gold and
+silver (a draw earns none); the client's `minPostPlayers` is 2, so they post like any other tournament
+(`posted: 'two'` and `tournamentSaveTwo` are gone). **Race scores to 🏆** (2.5, Michael's call 8): every
+split-screen race queues each linked racer's score, with no run summary behind it (`racePosts` in
+src/tournament.js; `tournamentPanel.queueRacePosts` from `onRace`; `createRacePostQueue` in
+src/leaderboard.js over `LEADERBOARD.racePostsKey` 'flappyPoop.racePosts'; `Play.racePostQueue` is
+drained in `syncLeaderboard` right after the tournament queue through `submitScore`: ok leaves, nameTaken
+drops, anything else waits). The versus result panel names it in `versusBoardLine`.
+**Online reports** (2.5): at `checkOver` both devices send the race to `finish_match`
+(`raceReport` in src/onlineRace.js: seat order host, guest, whole numbers, telemetry = `net.stats()` +
+`pause.stats()` under finish_match's 13 keys; `createRaceReporter`: one call at a time, asks again every
+`TUNING.online.report.pollMs` while the answer is 'playing', `polls` times, then 'late'; a lost answer is
+resent after each `retryMs`; 'no match' once; 'not trusted' is pending; `reportLine` maps the state to the
+results panel's line). `OnlineRace.startReport` / `refreshResult` drive it; a race left mid-way
+(abandoned) is never reported. The 🌐 window's **🏁 Recent races** (beside 📱 Devices; paired devices only,
+not on the Profile) comes from `onlineAccount.races()` (`online_history`, `historyRows`; the
+`onlineAccountViews` 'races' view; "yesterday" for one day ago). 'online closed' is `onlineClosed` in the
+lobby's `ERROR_KEYS`. tests/onlineReport.test.js, tests/racePosts.test.js.
 **A counted online race** (`finish_match`, see the online schema) adds 🏅 gold / silver / event / best and
 a 🏆 post at the last level through `board_post` (`submit_score`'s post, now shared), backed by a
 server-made `run_log` row of mode `race`; no tournament receipt and no matchup, so online pairings stay
 off the public rival line. The podium's line (`#tour-saved`,
 `savedText`) follows the queue's outcome. Guests travel as `{ id: null, name: null }`.
 `Play.syncLeaderboard` drains the queue after the merges and before the no-username return. Every queue
-(runs, Daily, career, 📚 board, pilot answers, tournaments) also goes again when the browser fires `online`
+(runs, Daily, career, 📚 board, pilot answers, tournaments, split-screen race scores) also goes again when the browser fires `online`
 and when the page is shown after a hide of `LEADERBOARD.resyncHiddenMs` (30 s) or longer, not only at boot
 and game over (plan 35, 1.4): `createResync` (`src/logic.js`) lets one `syncLeaderboard` run at a time,
 a trigger during a send joins it, and it never rejects. `Play.resyncOnline` and `resyncVisibility` wire it
@@ -1363,7 +1379,8 @@ src/
                             remove, pairCode, pair and leave (unlink, then signOut()),
                             each as { ok, … } or { ok: false, errorKey } (an i18n key
                             the screens show; item 35's sign-in errors incl. rate
-                            limited). tests/onlineAccount.test.js.
+                            limited); races() (2.5: online_history → historyRows, the
+                            🏁 Recent races). tests/onlineAccount.test.js.
   onlineLobby.js            Online race (🌐, plan 39, 1.6c) the lobby controller, NO
                             Phaser/DOM: createOnlineLobby({ net, name, width, onBothReady })
                             runs one room from Create / Join to both Ready over roomStep,
@@ -1452,6 +1469,9 @@ src/
                             link first, then the other's, then PAUSED), sub, each player's
                             row and the Ready button (null while this side's link is down,
                             and when no tap is needed: in a break or before GO).
+                            raceReport / createRaceReporter / reportLine (2.5): the
+                            finish_match report and its results-panel line (the Tournament
+                            paragraph, "Online reports").
                             createWakeLock(nav) (item 16): want(true) keeps the screen on
                             (one lock, asked again after a resume), want(false) lets go,
                             refused quietly where unsupported; held().
@@ -1477,7 +1497,8 @@ src/
                             online.resume.beatMs 1000 and staleMs 5000.
                             tests/onlineRace.test.js, tests/onlinePause.test.js,
                             tests/onlineResume.test.js.
-  leaderboard.js            Shared leaderboard, NO Phaser/DOM (plan 34 adds
+  leaderboard.js            Shared leaderboard, NO Phaser/DOM (plan 39, 2.5 adds
+                            createRacePostQueue over LEADERBOARD.racePostsKey; plan 34 adds
                             createStreakStore and STREAK_KINDS: flappyPoop.streaks,
                             the Singleplayer and Daily Dump day streaks, never
                             sent; merge folds in fetchPlayDays' days, 34.13):
@@ -3187,6 +3208,10 @@ tests/                      node --test (schema.test.js, schemaOnline.test.js, p
                             entry; over, offline and a refused channel keep the room;
                             notice)
   onlineLobbyViews.test.js  src/ui/onlineLobbyViews.js: each screen and its strings
+  onlineReport.test.js      src/onlineRace.js's raceReport, createRaceReporter, reportLine
+                            (2.5); the onlineAccount races() / historyRows view
+  racePosts.test.js         tournament.js racePosts, leaderboard.js createRacePostQueue and
+                            the drain order after the tournament queue (2.5)
   onlineRace.test.js        src/onlineRace.js: start plan, countdown, the feed, the referee
                             (first on server time, the ready count, a ready taken back,
                             the rematch ask, the held referee), raceRoomItem; two simulated peers racing
@@ -3989,9 +4014,9 @@ Commits follow `type(scope): summary` (`feat`, `fix`, `docs`, `chore`, `test`, `
   resumes nothing).
   The tournament panel's hand-off (`handOffRace`, 1.8) remembers the room (`lobby.remember()`), and over a
   running Versus (🌐 switched on in its lobby) marks the match `left` and stops Versus and PlayB so only the
-  race draws (not `Versus.leave()`, which starts a plain Play). The race's end is not stored anywhere in Tier 1:
-  the only server row is the room's. The smoke's `online-race` section drives the real scene against a
-  scripted guest in the page (a break, the end, a rematch, a Leave; no network).
+  race draws (not `Versus.leave()`, which starts a plain Play). From 2.5 both devices report the race's end
+  to `finish_match` (`createRaceReporter`, see the Tournament paragraph's online reports). The smoke's `online-race` section drives the real scene against a
+  scripted guest in the page (a break, the end and its report, a rematch, a Leave; no network).
   `?onlinetest=<code>` (`onlineProjectConfig`) works on dev hosts only, keeps its own session
   and trust keys, and the repo never holds a test project's URL or key
   (`tools/online_test_link.mjs` builds the link from an env file).
