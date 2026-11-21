@@ -1351,8 +1351,10 @@ src/
                             its code with rematch. Item 46: createOnlineLobby({ memory })
                             (get / set / clear of the race's room code, the panel's
                             raceMemory over LEADERBOARD.onlineRaceKey): remember() at the
-                            hand-off, leave() clears it, and a code still there at
-                            creation is left first (leave_room; Create / Join wait for it),
+                            hand-off, and a code still there at creation, or before a
+                            Create / Join, is left first (leave_room; they wait for it);
+                            the code is cleared only once a leave_room returns ok or
+                            'no room', so an offline leave keeps it (AUD-096),
                             since a reload mid-race leaves the room 'playing' and the
                             server refuses a seated device a new room ('in a race', up to
                             6 h; message onlineErrInRace). tests/onlineLobby.test.js.
