@@ -12,6 +12,7 @@ import { fileURLToPath } from 'node:url';
 import vm from 'node:vm';
 import { LEADERBOARD, TUNING as T } from '../src/config.js';
 import { createOnlineNet, ONLINE_RPCS } from '../src/onlineNet.js';
+import { createRaceReporter } from '../src/onlineRace.js';
 import { presencePayload } from '../src/online.js';
 import { submitScore, fetchTop, fetchRank, mergePlayers, checkNameAvailable, fetchPlayerName, submitTournament, fetchTournamentBoard, submitDailyScore, fetchDailyBoard } from '../src/leaderboard.js';
 
@@ -415,6 +416,26 @@ test("rpc results: the data; the server's plain message; signed out, refused, of
   const slow = s.net.rpc('server_now');
   await s.clock.advance(N.rpcTimeoutMs);
   assert.deepEqual(await slow, { ok: false, error: 'offline' });
+});
+
+test('2.7, AUD-111: a deadlock in finish_match (SQLSTATE 40P01; PostgREST answers 40* with HTTP 500) reaches the race reporter as offline, so it sends the report again', async () => {
+  let tries = 0;
+  const s = setup({ script: { rpc: (fn) => (fn === 'finish_match' && ++tries === 1 ? { data: null, error: { code: '40P01', message: 'deadlock detected' }, status: 500 } : { data: { status: 'agreed', counted: true }, error: null, status: 200 }) } });
+  await s.net.signIn();
+  assert.deepEqual(await s.net.rpc('finish_match', { p_code: CODE, p_round: 1, p_result: {} }), { ok: false, error: 'offline', status: 500 });
+  let at = 0;
+  const r = createRaceReporter({ rpc: (fn, args) => s.net.rpc(fn, args), code: CODE, round: 1, result: {}, now: () => at });
+  const step = async (ms) => {
+    at += ms;
+    r.tick();
+    for (let i = 0; i < 5; i += 1) await new Promise((res) => setImmediate(res));
+  };
+  tries = 0;
+  await step(0);
+  assert.equal(r.state().phase, 'saving', 'the deadlock is a lost answer');
+  await step(T.online.report.retryMs[0]);
+  assert.deepEqual(r.state(), { phase: 'done', status: 'agreed', counted: true, error: null });
+  assert.equal(tries, 2);
 });
 
 test("the server's plain messages pass through as they are (the lobby and the sign-in screen say them)", async () => {

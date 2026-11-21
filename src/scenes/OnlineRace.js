@@ -37,7 +37,7 @@ const GREY = '#c9b8dc';
  * and a width from the other side that moves the agreed one restarts this scene on it, so a phone
  * turned after the lobby opened still races on the same field as the other device.
  * Reload resume (2.3, D4): each level break keeps this side's level start (score, purse, beans,
- * probiotic, crashes, level wins) in the tab's resume record (sessionStorage). After a reload the
+ * probiotic, crashes, level wins) in the resume record (localStorage since 2.3b). After a reload the
  * panel rejoins the room and starts this scene rewound ({ resume }): Play at that level's start,
  * held under the pause overlay ('rewind') until this side's Ready, and a `rewind` on the wire until
  * its GO. The other side restarts at the lower of the two level starts, so both race that level
