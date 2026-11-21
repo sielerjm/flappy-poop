@@ -65,13 +65,17 @@ const game = new Phaser.Game({
 
 // A window resize (or a phone rotating) asks Play for a new field width. Play
 // re-fits at once on the ready screen and otherwise at its next restart (Home),
-// so a run is never re-laid-out mid-flight; FIT letterboxes until then.
+// so a run is never re-laid-out mid-flight; FIT letterboxes until then. An online
+// race asks OnlineRace instead: the canvas follows the screen around the same field.
 let resizeTimer = null;
 globalThis.addEventListener?.('resize', () => {
   clearTimeout(resizeTimer);
   resizeTimer = setTimeout(() => {
     const want = fieldWidth(globalThis.innerWidth, globalThis.innerHeight, FIELD);
-    if (want !== game.scale.width) game.scene.getScene('Play')?.onFieldResize?.(want);
+    if (want === game.scale.width) return;
+    // An online race keeps its field and re-fits the canvas around it (OnlineRace.onFieldResize); never Play's, which pauses.
+    const race = game.scene.isActive('OnlineRace') ? game.scene.getScene('OnlineRace') : null;
+    (race ?? game.scene.getScene('Play'))?.onFieldResize?.(want);
   }, FIELD.resizeDebounceMs);
 });
 

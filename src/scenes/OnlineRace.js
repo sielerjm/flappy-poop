@@ -55,6 +55,8 @@ export class OnlineRace extends Phaser.Scene {
 
     const cx = fieldX + fieldW / 2;
     this.cx = cx;
+    this.fieldX0 = fieldX; // where this scene's own HUD was laid out; a turn mid-race shifts it (onFieldResize)
+    this.shiftX = 0;
     this.countText = this.add.text(cx, GAME_HEIGHT * 0.45, '', { ...STYLE, fontSize: '160px', strokeThickness: 16 }).setOrigin(0.5).setDepth(55).setVisible(false);
     // Item 14: a field narrowed to the other player's smaller screen says so under the count.
     const them = this.plan.names[1];
@@ -206,14 +208,14 @@ export class OnlineRace extends Phaser.Scene {
   onPointer(pointer) {
     unlock();
     if (this.keepButton.visible) {
-      const hit = overHit(pointer.x, pointer.y, { share: this.offerBoxes.keep, home: this.offerBoxes.leave });
+      const hit = overHit(pointer.x - (this.shiftX ?? 0), pointer.y, { share: this.offerBoxes.keep, home: this.offerBoxes.leave });
       if (hit) this.tapFrame = this.game.loop.frame;
       if (hit === 'keep') this.keepWaiting();
       else if (hit === 'leave') this.leave();
       return;
     }
     if (!this.panelLive()) return;
-    const hit = overHit(pointer.x, pointer.y, this.result.boxes);
+    const hit = overHit(pointer.x - (this.shiftX ?? 0), pointer.y, this.result.boxes);
     if (hit === 'share') this.toggleRematch();
     else if (hit === 'home') this.leave();
   }
@@ -242,7 +244,7 @@ export class OnlineRace extends Phaser.Scene {
   showResult() {
     if (this.result || !this.sys.isActive() || this.match.status !== 'over') return;
     const W = this.scale.width;
-    const cx = W / 2;
+    const cx = this.cx ?? W / 2; // the field's centre as laid out (a turn mid-race shifts the camera, not the coordinates)
     const cy = GAME_HEIGHT / 2;
     const pw = Math.min(T.versus.resultPanelW, W - 24);
     const slots = this.finalSlots ?? this.match.slots;
@@ -409,6 +411,30 @@ export class OnlineRace extends Phaser.Scene {
     const word = link === 'good' ? '' : t(this.locale, link === 'slow' ? 'onlineHudSlow' : 'onlineHudLost');
     this.hud.word.setText(word).setColor(link === 'slow' ? '#ffd27a' : '#ff8da8').setVisible(Boolean(word));
     this.hud.card.setSize(PILL_W, word ? 146 : 112);
+  }
+
+  /**
+   * main.js, after a window resize or a phone turn settled on a new field width (Michael's phone
+   * check, 21 Nov: turned back to portrait mid-race, the canvas stayed landscape-sized and Safari
+   * shrank it). The field keeps its width for the whole race (both devices race one course; Tier 2
+   * re-fits at a break), but the canvas follows the screen, never narrower than the field (then the
+   * browser letterboxes it), with the field centred again: the half's camera and tap offset move to
+   * it, and this scene's own HUD moves by scrolling its camera (taps on its buttons follow,
+   * shiftX). Nothing pauses: pausing one side would cost it ground while the other races on.
+   */
+  onFieldResize(want = fieldWidth(globalThis.innerWidth, globalThis.innerHeight, FIELD)) {
+    const W = Math.max(want, this.fieldW);
+    if (W !== this.scale.width) this.scale.setGameSize(W, GAME_HEIGHT);
+    const fieldX = Math.floor((W - this.fieldW) / 4) * 2;
+    this.shiftX = fieldX - this.fieldX0;
+    this.cameras.main.setSize(W, GAME_HEIGHT);
+    this.cameras.main.setScroll(-this.shiftX, 0);
+    const half = this.half();
+    if (half?.half) {
+      half.half.fieldX = fieldX;
+      half.fieldX = fieldX;
+      half.cameras.main.setViewport(fieldX, 0, this.fieldW, GAME_HEIGHT);
+    }
   }
 
   /** The room's race phase on the server clock ('countdown' / 'racing'), for the smoke and Tier 2. */

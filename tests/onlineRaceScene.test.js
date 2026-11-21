@@ -647,3 +647,54 @@ test('a rematch starts from the newest width heard, not the join-time one', () =
     assert.equal(next.peer.width, 900, 'and the newest width rides along');
   });
 });
+
+/** The canvas, cameras and the half's camera as a turn mid-race touches them, for onFieldResize. */
+function fitRig(ctx, { W, fieldW }) {
+  const { s, half } = ctx;
+  const ops = [];
+  const cam = (name) => ({
+    setSize: (w, h) => (ops.push([name, 'size', w, h]), cam(name)),
+    setScroll: (x, y) => (ops.push([name, 'scroll', x, y]), cam(name)),
+    setViewport: (x, y, w, h) => (ops.push([name, 'viewport', x, y, w, h]), cam(name)),
+  });
+  s.scale = { width: W, height: 1280, setGameSize(w, h) { ops.push(['game', w, h]); this.width = w; } };
+  s.cameras = { main: cam('race') };
+  half.half = { fieldW, fieldX: Math.floor((W - fieldW) / 4) * 2 };
+  half.fieldX = half.half.fieldX;
+  half.cameras = { main: cam('half') };
+  s.fieldW = fieldW;
+  s.fieldX0 = half.fieldX;
+  s.shiftX = 0;
+  return ops;
+}
+
+test('a turn mid-race (Michael\'s phone check, 21 Nov): the canvas re-fits the screen around the same field, the half moves with it, taps follow, and nothing pauses', () => {
+  const ctx = raceScene({ seat: 'host' });
+  const ops = fitRig(ctx, { W: 2560, fieldW: 720 }); // raced in landscape on a 720 field
+  ctx.s.onFieldResize(720); // turned to portrait
+  assert.deepEqual(ops.filter((o) => o[0] === 'game'), [['game', 720, 1280]], 'the canvas is the portrait screen\'s width again');
+  assert.deepEqual(ops.find((o) => o[0] === 'half'), ['half', 'viewport', 0, 0, 720, 1280], 'the half\'s field at the new centre, the same width');
+  assert.equal(ctx.half.fieldX, 0, 'the half reads its taps from the new place');
+  assert.equal(ctx.s.shiftX, -920, 'the race\'s own HUD moves with the field');
+  assert.ok(ops.some((o) => o[0] === 'race' && o[1] === 'scroll' && o[2] === 920));
+  assert.deepEqual(ctx.half.calls.filter((c) => c[0] === 'pausePlay'), [], 'no pause: the other side races on');
+
+  const wide = raceScene({ seat: 'guest' });
+  const wops = fitRig(wide, { W: 1200, fieldW: 1200 }); // a 1200 field, turned to portrait (720)
+  wide.s.onFieldResize(720);
+  assert.deepEqual(wops.filter((o) => o[0] === 'game'), [], 'never narrower than the field: the browser letterboxes it until the race ends');
+  assert.equal(wide.s.shiftX, 0);
+});
+
+test('taps on the race\'s buttons follow the field after a turn (the offer and the results panel)', () => {
+  const ctx = raceScene({ seat: 'host' });
+  fitRig(ctx, { W: 2560, fieldW: 720 });
+  ctx.s.onFieldResize(720);
+  const kept = [];
+  ctx.s.keepButton = { visible: true };
+  ctx.s.offerBoxes = { keep: { id: 'keep', x: 1280, y: 900, width: 200, height: 100 }, leave: { id: 'leave', x: 1600, y: 900, width: 200, height: 100 } };
+  ctx.s.game = { loop: { frame: 7 } };
+  ctx.s.keepWaiting = () => kept.push('keep');
+  ctx.s.onPointer({ x: 1280 - 920, y: 900 });
+  assert.deepEqual(kept, ['keep'], 'the button drawn 920 px to the left answers there');
+});
