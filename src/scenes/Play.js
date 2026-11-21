@@ -134,7 +134,7 @@ import { perfMark, perfSteps, perfRunStart } from '../ui/perfMeter.js';
 import { createFinishTexture } from '../ui/finish.js';
 import { createLightTexture } from '../ui/pipeShade.js';
 import { createLevelBar } from '../ui/levelBar.js';
-import { enrolResearch, submitResearchEvents, deleteResearch, createEduShareStore, shareEducation, renameEducation, unshareEducation, submitEducationGrades, fetchEducationBoard, createSubmitStore, createMergeStore, createRenameStore, createTournamentQueue, createRacePostQueue, createDailyStore, createDailyQueue, createRunQueue, submitRuns, waitsForRun, submitDailyScore, fetchDailyBoard, submitPlans, submitScore, submitTournament, checkNameAvailable, mergePlayers, fetchPlayerName, fetchRank, nameAction, createCareerStore, createStreakStore, fetchPlayDays, submitCounters, claimAchievements, fetchPlayerStats } from '../leaderboard.js';
+import { enrolResearch, submitResearchEvents, deleteResearch, createEduShareStore, shareEducation, renameEducation, unshareEducation, submitEducationGrades, fetchEducationBoard, createSubmitStore, createMergeStore, createRenameStore, createTournamentQueue, createRacePostQueue, createDailyStore, createDailyQueue, createRunQueue, submitRuns, waitsForRun, submitDailyScore, fetchDailyBoard, submitPlans, submitScore, submitTournament, checkNameAvailable, mergePlayers, fetchPlayerName, fetchBoardName, fetchRank, nameAction, createCareerStore, createStreakStore, fetchPlayDays, submitCounters, claimAchievements, fetchPlayerStats } from '../leaderboard.js';
 import { createButton } from '../ui/button.js';
 import { createToggle } from '../ui/toggle.js';
 import { createCoinText } from '../ui/coinText.js';
@@ -1731,8 +1731,8 @@ export class Play extends Phaser.Scene {
     // Finished tournaments next: they carry their own host id, so they post even without a username here.
     const tournaments = merges
       .then(() => this.tournamentQueue.drain((payload, hostId) => submitTournament(payload, hostId)))
-      // Split-screen race scores (plan 39, 2.5) carry their own ids too: the board's rules; a name another player holds drops the post.
-      .then(() => this.racePostQueue?.drain((e) => submitScore({ playerId: e.playerId, name: e.name, score: e.score, toilet: false, level: e.level }).then((res) => (res.ok ? 'ok' : res.reason === 'nameTaken' ? 'rejected' : 'keep'))));
+      // Split-screen race scores (plan 39, 2.5) carry their own ids too, and post under the board's current name (postRace).
+      .then(() => this.racePostQueue?.drain((e) => this.postRace(e)));
     // A pilot tester's answer events (plan 21) need no username either: joining made the id.
     const research = tournaments.then(() => this.drainResearch());
     // Daily Dump scores carry their own id too; a device with no username sends them under the
@@ -1779,6 +1779,26 @@ export class Play extends Phaser.Scene {
         ),
       )
       .catch(() => {});
+  }
+
+  /**
+   * One split-screen race's 🏆 post (plan 39, 2.5) → 'ok' | 'rejected' | 'keep' for the race post
+   * queue. It goes under the board's current name for that player (2.7, AUD-106): submit_score renames
+   * every row of the player to the name it is given, so the lobby row's name (a pasted code's, or the
+   * save's when the roster was made) would revert a rename, and the player's own device would then
+   * adopt the old name. The entry's name, or this device's for its own player, only for a player with
+   * no rows yet; nothing posts while the board cannot say ('keep'). A post the server will never take
+   * (a name another player holds, a bad entry) is dropped, so it never holds up the ones behind it;
+   * offline or rate limited waits for the next sync. Residual: a rename landing between the read and
+   * the post.
+   */
+  async postRace(e) {
+    const board = await fetchBoardName(e.playerId);
+    if (board === null) return 'keep';
+    const name = board || (e.playerId === this.save?.id && this.save?.name) || e.name;
+    const res = await submitScore({ playerId: e.playerId, name, score: e.score, toilet: false, level: e.level });
+    if (res.ok) return 'ok';
+    return res.reason === 'nameTaken' || res.reason === 'refused' ? 'rejected' : 'keep';
   }
 
   /**

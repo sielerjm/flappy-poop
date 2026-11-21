@@ -70,9 +70,10 @@ test('submitScore posts the plan to submit_score with the apikey header and the 
   assert.deepEqual(c.body, { p_player_id: ID, p_name: 'Alice', p_score: 41, p_toilet: true, p_level: 1 });
 });
 
-test('submitScore says why it failed: nameTaken for the server\'s "name taken", other for the rest', async () => {
+test('submitScore says why it failed: nameTaken for the server\'s "name taken", refused for its "bad …" (never accepted), other for the rest', async () => {
   const plan = { playerId: ID, name: 'Alice', score: 41 };
   assert.deepEqual(await submitScore(plan, { fetch: fakeFetch({ status: 400, body: { message: 'rate limited' } }), config }), { ok: false, reason: 'other' });
+  assert.deepEqual(await submitScore(plan, { fetch: fakeFetch({ status: 400, body: { message: 'bad score' } }), config }), { ok: false, reason: 'refused' }, '2.7: a post the server will never take');
   assert.deepEqual(await submitScore(plan, { fetch: fakeFetch({ status: 400, body: { code: 'P0001', message: 'name taken' } }), config }), { ok: false, reason: 'nameTaken' });
   assert.deepEqual(await submitScore(plan, { fetch: fakeFetch({ status: 400, body: 'not json' }), config }), { ok: false, reason: 'other' });
   assert.deepEqual(await submitScore(plan, { fetch: fakeFetch({ status: 500, body: '' }), config }), { ok: false, reason: 'other' });
