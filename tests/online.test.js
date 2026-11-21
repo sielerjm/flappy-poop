@@ -173,6 +173,7 @@ test('every event has a valid example and every field is checked', () => {
     rematch: { want: true },
     pause: { reason: 'away', ready: false, round: 0, count: 0 },
     resume: { round: 2, startAt: 1_800_000_000_000, cancel: false },
+    rewind: { round: 1, level: 3, at: 1_800_000_000_000 },
   };
   assert.deepEqual(Object.keys(examples).sort(), Object.keys(ONLINE_EVENTS).sort());
   const send = createSender({ sid: 's', now: () => 42 });

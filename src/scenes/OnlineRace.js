@@ -4,7 +4,7 @@ import { fieldWidth, uiColumn, overButtonsLayout, overHit, canRestart, fitScale 
 import { createMatch } from '../versus.js';
 import { t, levelLabel } from '../i18n.js';
 import { raceOutcome } from '../tournament.js';
-import { ONLINE_HOST_KEY, countdownStep, createFieldFit, createRaceFeed, createRacePause, createRaceReferee, createWakeLock, localPhase, pauseOverlay, raceRoomItem, raceStartPlan } from '../onlineRace.js';
+import { ONLINE_HOST_KEY, RESUME_VERSION, countdownStep, createFieldFit, createRaceFeed, createRacePause, createRaceReferee, createWakeLock, levelSnap, localPhase, pauseOverlay, raceRoomItem, raceStartPlan, rewindOnHeard, startSnap } from '../onlineRace.js';
 import { racePhase } from '../online.js';
 import { sfx, unlock } from '../sound.js';
 import { createButton } from '../ui/button.js';
@@ -36,8 +36,14 @@ const GREY = '#c9b8dc';
  * One field width (item 14, AUD-097): until GO both sides send their field width (createFieldFit),
  * and a width from the other side that moves the agreed one restarts this scene on it, so a phone
  * turned after the lobby opened still races on the same field as the other device.
- * Started by the tournament panel once the room is 'playing' with { net, lobby, plan }. 1.8 adds
- * the results panel (Rematch | Leave); Tier 2 a peer leaving and the shared pause.
+ * Reload resume (2.3, D4): each level break keeps this side's level start (score, purse, beans,
+ * probiotic, crashes, level wins) in the tab's resume record (sessionStorage). After a reload the
+ * panel rejoins the room and starts this scene rewound ({ resume }): Play at that level's start,
+ * held under the pause overlay ('rewind') until this side's Ready, and a `rewind` on the wire until
+ * its GO. The other side restarts at the lower of the two level starts, so both race that level
+ * again from its first pair; the shared pause's count gives one GO.
+ * Started by the tournament panel once the room is 'playing' with { net, lobby, plan, store }. 1.8
+ * adds the results panel (Rematch | Leave); Tier 2 a peer leaving and the shared pause.
  */
 export class OnlineRace extends Phaser.Scene {
   constructor() {
@@ -50,9 +56,10 @@ export class OnlineRace extends Phaser.Scene {
     if (this.scale.width !== W || this.scale.height !== GAME_HEIGHT) this.scale.setGameSize(W, GAME_HEIGHT);
     const fieldW = this.fieldW;
     const fieldX = Math.floor((W - fieldW) / 4) * 2; // centred, on an even pixel
+    this.fieldX = fieldX;
     this.locale = this.scene.get('Play')?.locale ?? 'en';
 
-    this.scene.launch('Play', { player: 1, match: this.match, fieldW, fieldX, inventoryY0: T.online.inventoryY0 });
+    this.scene.launch('Play', this.launchData());
     this.scene.bringToTop();
 
     const cx = fieldX + fieldW / 2;
@@ -162,7 +169,31 @@ export class OnlineRace extends Phaser.Scene {
     this.net = data.net;
     this.lobby = data.lobby ?? null;
     this.plan = data.plan;
+    this.store = data.store ?? null; // the tab's resume record (2.3)
+    // 2.3, D4: { level, levels, pauseRound, by, floor } restarts this race rewound at that level's
+    // start (a reload, the other side's rewind, a re-fit while rewound); levels are the level starts
+    // kept so far (only those up to it).
+    const resume = data.resume ?? null;
+    this.levels = { 1: startSnap() };
+    for (const [k, v] of Object.entries(resume?.levels ?? {})) {
+      const snap = levelSnap(v);
+      if (snap && String(snap.level) === k && snap.level <= resume.level) this.levels[k] = snap;
+    }
+    this.rewound = resume && this.levels[resume.level] ? { level: resume.level, by: resume.by === 'them' ? 'them' : 'me' } : null;
+    this.rewindHeld = Boolean(this.rewound); // the pause's 'rewind' until this side's Ready
+    this.restartAt = this.net.serverNow();
+    this.rewindSentAt = null;
+    this.rewindOut = true;
+    this.rewindSince = -Infinity; // this side's GO out of its last rewind: a rewind stamped before it is stale
+    this.floorAt = this.rewound ? Math.max(this.restartAt, Number.isFinite(resume.floor) ? resume.floor : -Infinity) : this.plan.startAt;
+    this.fitUntil = this.rewound ? Infinity : this.plan.startAt; // a rewound race agrees its width until its own GO
+    this.savedKey = null;
+    this.ownEnd = false;
     this.match = createMatch(this.plan.seed, { names: this.plan.names });
+    if (this.rewound) {
+      const snap = this.levels[this.rewound.level];
+      Object.assign(this.match.slots[0], { level: snap.level, score: snap.score, deaths: snap.deaths, levelWins: snap.levelWins });
+    }
     this.match.hostKey = ONLINE_HOST_KEY;
     this.match.status = 'countdown';
     this.levelStage = null; // 'count' during a level break's shared 3-2-1 (the host's go)
@@ -180,11 +211,11 @@ export class OnlineRace extends Phaser.Scene {
     this.peerLeft = false; // the other player left the room after the race
     const now = () => this.net.serverNow();
     const send = (event, fields) => this.net.send(event, fields);
-    this.feed = createRaceFeed({ now, send, since: this.plan.startAt });
-    this.referee = createRaceReferee({ seat: this.plan.seat, now, send, since: this.plan.startAt });
+    this.feed = createRaceFeed({ now, send, since: this.floorAt });
+    this.referee = createRaceReferee({ seat: this.plan.seat, now, send, since: this.floorAt });
     // 2.2: the shared pause (2.1's machine). menuHeld is this side's pause key or an overlay's pause
     // until a tap says Ready; halfHeld says the machine paused the local half mid-run.
-    this.pause = createRacePause({ seat: this.plan.seat, now, send, present: this.net.peer?.() != null, round: data.pauseRound ?? 0 });
+    this.pause = createRacePause({ seat: this.plan.seat, now, send, present: this.net.peer?.() != null, round: resume?.pauseRound ?? data.pauseRound ?? 0 });
     this.menuHeld = false;
     this.halfHeld = false;
     this.pauseCount = null; // the resume's GO while its 3-2-1 runs
@@ -193,9 +224,94 @@ export class OnlineRace extends Phaser.Scene {
     this.leaveArmedAt = null; // the overlay's Leave was tapped once (game ms)
     this.wake ??= createWakeLock();
     this.W = fieldWidth(globalThis.innerWidth ?? 720, globalThis.innerHeight ?? 1280, FIELD);
-    this.fit = createFieldFit({ mine: this.W, theirs: this.net.peer?.()?.width ?? null, heard: data.peer ?? null, now, send, until: this.plan.startAt });
+    this.fit = createFieldFit({ mine: this.W, theirs: this.net.peer?.()?.width ?? null, heard: data.peer ?? null, now, send, until: this.fitUntil });
     this.fieldW = this.fit.fieldW();
     this.refit = false; // the agreed width moved before GO: the race again on it (refitField)
+    this.persist();
+  }
+
+  /** The tab's resume record (2.3): this race's room, round and seat, the pause round and each level start kept; written when it changes. */
+  persist() {
+    if (!this.store || this.ownEnd || this.match.status === 'over' || this.match.status === 'left') return;
+    const code = this.lobby?.state?.room?.code ?? null;
+    const record = { v: RESUME_VERSION, code, round: this.plan.round ?? 0, seat: this.plan.seat, pauseRound: this.pause?.state().round ?? 0, levels: this.levels, wall: Date.now() };
+    const key = JSON.stringify([record.code, record.round, record.seat, record.pauseRound, record.levels]);
+    if (key === this.savedKey) return;
+    this.savedKey = key;
+    this.store.set(record);
+  }
+
+  /** The highest level start kept. */
+  topLevel() {
+    return Math.max(...Object.keys(this.levels).map(Number));
+  }
+
+  /**
+   * 2.3: this side's level start for a rewind, in each level break once the line before it is
+   * settled (its +25 and level win in), again as the shop spends, into the tab's record. Once this
+   * side's run has ended the record goes: a reload after the finish does not resume (item 46's
+   * leave on the next entry applies).
+   */
+  keepLevel(half) {
+    if (this.feed.doneFixed()) {
+      if (!this.ownEnd) {
+        this.ownEnd = true;
+        this.store?.clear();
+      }
+      return;
+    }
+    if (!half.levelBreak || half.state !== 'paused' || !(half.level > 1) || !this.referee.settled(half.level - 1)) return;
+    const snap = levelSnap(half.resumeSnapshot?.());
+    if (!snap || snap.level !== half.level) return;
+    this.levels[snap.level] = snap;
+    this.persist();
+  }
+
+  /** 2.3: a rewound race says so (its level, its restart time) until its GO: every heartbeat, at once again after a refused send. */
+  sendRewind(now) {
+    if (!this.rewound) return;
+    if (this.rewindSentAt !== null && this.rewindOut && now - this.rewindSentAt < T.online.pause.heartbeatMs) return;
+    this.rewindSentAt = now;
+    this.rewindOut = this.net.send('rewind', { round: this.plan.round ?? 0, level: this.rewound.level, at: this.restartAt }) !== false;
+  }
+
+  /**
+   * 2.3: the other side's race restarted at a level's start (its reload, or its answer to this
+   * side's rewind). What it sent before that restart is dropped from now on, and this side restarts
+   * at the lower of the two level starts (rewindOnHeard), unless it waits there already or its own
+   * run is over.
+   */
+  onRewind(msg) {
+    if (this.restarting || (this.match.status !== 'countdown' && this.match.status !== 'playing')) return;
+    if (Number.isFinite(msg?.at)) {
+      this.feed.floor(msg.at);
+      this.referee.floor(msg.at);
+      this.floorAt = Math.max(this.floorAt, msg.at);
+    }
+    const level = rewindOnHeard({ msg, round: this.plan.round ?? 0, rewound: this.rewound?.level ?? null, top: this.topLevel(), since: this.rewindSince, ended: this.feed.doneFixed() });
+    if (level !== null) this.rewindTo(level, 'them');
+  }
+
+  /** What a restart carries to stay rewound (2.3): the level, the level starts up to it, the pause round, who started it, the floor. */
+  rewindData(level, by) {
+    const levels = {};
+    for (const [k, v] of Object.entries(this.levels)) if (Number(k) <= level) levels[k] = v;
+    return { level, levels, pauseRound: this.pause.state().round, by, floor: this.floorAt };
+  }
+
+  /** 2.3: this race again from `level`'s start, rewound (the same room, round and seed). */
+  rewindTo(level, by) {
+    if (this.restarting) return;
+    this.restarting = true;
+    this.match.status = 'left';
+    this.scene.stop('Play');
+    this.scene.restart({ net: this.net, lobby: this.lobby, plan: this.plan, peer: this.fit.peer(), store: this.store, resume: this.rewindData(level, by) });
+  }
+
+  /** Play's launch data: player 1 on this match at the agreed field, the purse below the pill; a rewound race's level start (2.3). */
+  launchData() {
+    const fieldX = this.fieldX ?? Math.floor((this.W - this.fieldW) / 4) * 2;
+    return { player: 1, match: this.match, fieldW: this.fieldW, fieldX, inventoryY0: T.online.inventoryY0, resume: this.rewound ? this.levels[this.rewound.level] : null };
   }
 
   /** The local half (slot 0); the remote seat has no scene (item 39: versusInput and otherHalf read null). */
@@ -210,12 +326,16 @@ export class OnlineRace extends Phaser.Scene {
   update() {
     if (!this.feed) return;
     this.net.pump?.();
-    for (const item of this.net.take?.() ?? []) this.receive(item);
+    for (const item of this.net.take?.() ?? []) {
+      this.receive(item);
+      if (this.restarting) return; // a rewind restarts the race (2.3)
+    }
     if (this.refit) return this.refitField();
     const now = this.net.serverNow();
     this.tickPause();
     if (this.match.status === 'countdown') {
       this.fit.tick();
+      this.sendRewind(now);
       this.runCountdown(now);
     }
     const half = this.half();
@@ -224,6 +344,7 @@ export class OnlineRace extends Phaser.Scene {
       this.applyEffects();
       if (this.levelStage === 'count') this.showLevelCount(now);
       this.feed.tick(this.snapshot(half));
+      this.keepLevel(half);
     }
     const remote = this.feed.slot();
     if (remote) Object.assign(this.match.slots[1], remote);
@@ -365,10 +486,11 @@ export class OnlineRace extends Phaser.Scene {
   /** One transport item: the ghost, the referee, and the room's confirmed race status for the lobby. */
   receive(item) {
     this.fit.receive(item);
-    if (item?.kind === 'peer' && item.event === 'width' && this.match.status === 'countdown' && this.net.serverNow() < this.plan.startAt && this.fit.fieldW() !== this.fieldW) this.refit = true;
+    if (item?.kind === 'peer' && item.event === 'width' && this.match.status === 'countdown' && this.net.serverNow() < this.fitUntil && this.fit.fieldW() !== this.fieldW) this.refit = true;
     this.feed.receive(item);
     this.referee.receive(item);
     if (this.match.status === 'countdown' || this.match.status === 'playing') this.pause.receive(item);
+    if (item?.kind === 'peer' && item.event === 'rewind') this.onRewind(item.msg);
     if (raceRoomItem(item)) this.lobby?.roomItem?.(item);
     else if (this.match.status === 'over' && item?.kind === 'room' && (item.action?.type === 'left' || item.action?.type === 'status')) this.peerLeft = true; // after the race: the room closed under the other player's Leave
   }
@@ -386,7 +508,9 @@ export class OnlineRace extends Phaser.Scene {
   applyEffects() {
     for (const e of this.referee.drain()) {
       if (e.type === 'first') {
-        if (e.mine && !this.feed.doneFixed()) this.half()?.awardLevelFirst?.({ final: e.final });
+        // One final line (2.3): a host that replays the last level after a reload has a fresh referee,
+        // so it never takes the final line once the other side's run holds it.
+        if (e.mine && !this.feed.doneFixed() && !(e.final && this.match.slots[1]?.finalFirst)) this.half()?.awardLevelFirst?.({ final: e.final });
       } else if (e.type === 'count') {
         this.levelStage = 'count';
         this.levelShown = null;
@@ -416,6 +540,11 @@ export class OnlineRace extends Phaser.Scene {
     this.showStep(step);
     if (step < 3) return;
     this.match.status = 'playing';
+    if (this.rewound) {
+      this.rewound = null; // flying again from the level's start (2.3)
+      this.rewindHeld = false;
+      this.rewindSince = now;
+    }
     this.fitText.setVisible(false);
     half?.startRace();
     this.wake.want(true);
@@ -615,6 +744,7 @@ export class OnlineRace extends Phaser.Scene {
       offline: globalThis.navigator?.onLine === false,
       channel: this.net.channelState?.() ?? 'joined',
       menu: this.menuHeld || this.overlayOpen(),
+      rewind: this.rewindHeld && this.match.status === 'countdown',
     };
   }
 
@@ -664,6 +794,7 @@ export class OnlineRace extends Phaser.Scene {
         this.halfHeld = false;
         if (counted && this.match.status === 'playing') this.showStep(3);
         if (this.match.status === 'playing') this.wake.want(true);
+        this.persist(); // the pause round moved
       } else if (e.type === 'back') {
         this.feed.again();
       } else if (e.type === 'abandoned') {
@@ -679,6 +810,7 @@ export class OnlineRace extends Phaser.Scene {
     if (half?.state === 'playing' || half?.state === 'respawn') half.pausePlay();
     this.abandoned = { seat: seat ?? null };
     this.match.status = 'over';
+    this.store?.clear();
     this.pauseCount = null;
     this.countText?.setVisible(false);
     this.finalSlots = this.match.slots.map((slot) => ({ ...slot }));
@@ -696,6 +828,7 @@ export class OnlineRace extends Phaser.Scene {
       this.pause.setReady(false);
     } else {
       this.menuHeld = false;
+      this.rewindHeld = false;
       this.pause.tick(this.pauseLocal());
       this.pause.setReady(true);
     }
@@ -722,7 +855,7 @@ export class OnlineRace extends Phaser.Scene {
     if (!this.pauseUi) return;
     const s = this.pause && (this.match.status === 'playing' || this.match.status === 'countdown') ? this.pause.state() : null;
     const midRun = this.halfHeld;
-    const view = pauseOverlay(s, { midRun });
+    const view = pauseOverlay(s, { midRun, rewind: this.rewound });
     const armed = this.leaveArmedAt !== null && this.game.loop.time - this.leaveArmedAt < T.online.pause.leaveConfirmMs;
     if (!armed) this.leaveArmedAt = null;
     const secs = view && !view.count && s.since !== null ? Math.max(0, Math.floor((now - s.since) / 1000)) : 0;
@@ -744,7 +877,8 @@ export class OnlineRace extends Phaser.Scene {
     ui.warn.setVisible(on && armed);
     if (!on) return;
     const them = this.plan.names[1];
-    const say = (k) => t(this.locale, k).replace('{name}', them);
+    const level = this.rewound ? levelLabel(this.locale, this.rewound.level) : '';
+    const say = (k) => t(this.locale, k).replace('{name}', them).replace('{level}', level);
     ui.title.setText(say(view.title)).setScale(1);
     ui.title.setScale(fitScale(ui.title.width, ui.titleW, 0));
     ui.sub.setText(say(view.sub));
@@ -785,6 +919,7 @@ export class OnlineRace extends Phaser.Scene {
     const [mine, theirs] = this.match.slots;
     if (!mine.ended || !this.feed?.doneSent() || !theirs.ended) return;
     this.match.status = 'over';
+    this.store?.clear();
     this.finalSlots = this.match.slots.map((slot) => ({ ...slot })); // the numbers the outcome came from, for the panel
     this.outcome = raceOutcome(this.finalSlots);
     this.wake?.want(false);
@@ -809,7 +944,7 @@ export class OnlineRace extends Phaser.Scene {
     this.restarting = true;
     this.match.status = 'left';
     this.scene.stop('Play');
-    this.scene.restart({ net: this.net, lobby: this.lobby, plan, peer });
+    this.scene.restart({ net: this.net, lobby: this.lobby, plan, peer, store: this.store });
   }
 
   /**
@@ -822,7 +957,7 @@ export class OnlineRace extends Phaser.Scene {
     this.restarting = true;
     this.match.status = 'left';
     this.scene.stop('Play');
-    this.scene.restart({ net: this.net, lobby: this.lobby, plan: this.plan, peer: this.fit.peer() });
+    this.scene.restart({ net: this.net, lobby: this.lobby, plan: this.plan, peer: this.fit.peer(), store: this.store, resume: this.rewound ? this.rewindData(this.rewound.level, this.rewound.by) : undefined });
   }
 
   /** The pad's A on the results panel: Rematch (ask, or take it back). */
@@ -839,6 +974,7 @@ export class OnlineRace extends Phaser.Scene {
   leave() {
     this.match.status = 'left';
     this.wake?.want(false);
+    this.store?.clear();
     const { lobby, net } = this;
     Promise.resolve(lobby?.leave())
       .catch(() => {})

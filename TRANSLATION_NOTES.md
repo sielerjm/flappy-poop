@@ -661,6 +661,10 @@ The winners take the podium 🥇 🥈 (and 🥉 from 3 players). With 3 or more 
 | onlineLeaveWarn | Tap again to leave. The race ends for both of you, with no winner. (plan 39, 2.2: under the pause overlay's buttons after the first tap on Leave) | 再点一次就离开：比赛结束，双方都没有胜者。 |
 | onlineNoWinner | No winner (plan 39, 2.2: the online results panel's headline when the other player left mid-race; the line under it is onlinePeerLeft) | 没有胜者 |
 | onlineHudPaused | paused (plan 39, 2.2: under the opponent's name in the race's pill while they paused; lower case, like onlineHudSlow) | 已暂停 |
+| onlineRewindTitle | Back to {level} (plan 39, 2.3: the pause overlay's title after a reload mid-race put both players back at the start of the level they were on; {level} is levelShort, "Level 3") | 回到{level} |
+| onlineRewindTap | A reload put you both back at the start of this level. Tap Ready when you are set. (plan 39, 2.3: the line under onlineRewindTitle until this player taps Ready; then "Waiting for {name}…") | 页面重新载入，你们俩都回到本关开头。准备好了就点“准备”。 |
+| onlineRejoining | Rejoining your race… (plan 39, 2.3: the 🌐 window's status line while a reloaded page asks the server for the race it was in) | 正在重新加入比赛… |
+| onlineRaceOver | That race is over. (plan 39, 2.3: the 🌐 window's status line when a reloaded page's race has ended, or the server no longer seats this device in it) | 那场比赛已经结束了。 |
 | onlineErrBadCode | That's not a room code: codes are 6 digits and never start with 0 (plan 39: the 🌐 lobby's status line; {name} is the other player's username) | 这不是房间码：房间码是6位数字，第一位不是0 |
 | onlineErrNoRoom | No room has that code. Check it with your friend. (plan 39: the 🌐 lobby's status line; {name} is the other player's username) | 没有这个房间码的房间，请和朋友核对一下。 |
 | onlineErrInRace | This device is still in another race. Leave it there first, then try again. (plan 39, 1.8, item 46: Create or Join refused because this device is still seated in a race that never ended, for example in another tab) | 这台设备还在另一场比赛中，请先在那里离开，再试一次。 |

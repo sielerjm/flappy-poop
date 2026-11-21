@@ -311,3 +311,78 @@ test('a race left by a reload (item 46): the hand-off remembers the room code (p
     delete globalThis.localStorage;
   }
 });
+
+// --- 2.3: a reload's race (D4) --------------------------------------------------------------------
+
+const START_SNAP = { level: 1, score: 0, coins: 0, beans: 0, probiotic: 0, postbiotic: false, deaths: 0, levelWins: 0 };
+const LV2_SNAP = { level: 2, score: 31, coins: 3, beans: 1, probiotic: 0, postbiotic: false, deaths: 1, levelWins: 1 };
+function resumeStoreOf(rec) {
+  const store = { rec, get: () => store.rec, set: (r) => (store.rec = r), clear: () => (store.rec = null) };
+  return store;
+}
+
+test("2.3 a reload's race: entering 🌐 rejoins it (room_state, its channel as its seat, nothing left) and hands it to OnlineRace rewound at the record's level", async () => {
+  const rec = { v: 1, code: '482913', round: 1, seat: 'guest', pauseRound: 1, levels: { 1: START_SNAP, 2: LV2_SNAP }, wall: Date.now() };
+  const k = setup({ answers: { room_state: { ok: true, data: { ok: true, code: '482913', status: 'playing', seat: 'guest', host_name: 'SirFlushALot', guest_name: 'PlopMaster', seed: 4242, start_ms: 990_000, round: 1 } } } });
+  const store = resumeStoreOf(rec);
+  k.play.raceResumeStore = () => store;
+  const started = [];
+  k.play.scene = { start: (key, data) => started.push([key, data]) };
+  k.open();
+  await flush();
+  await flush();
+  k.poll();
+  const rpcNames = k.net.calls.filter((c) => c[0] === 'rpc').map((c) => c[1]);
+  assert.ok(rpcNames.includes('room_state'), rpcNames.join());
+  assert.ok(!rpcNames.includes('leave_room') && !rpcNames.includes('create_room'), rpcNames.join());
+  assert.deepEqual(k.net.calls.filter((c) => c[0] === 'openRoom').map((c) => [c[1], c[2].seat]), [['482913', 'guest']]);
+  assert.equal(started.length, 1);
+  const [key, data] = started[0];
+  assert.equal(key, 'OnlineRace');
+  assert.deepEqual([data.plan.seat, data.plan.round, data.plan.seed], ['guest', 1, 4242]);
+  assert.deepEqual(data.resume, { level: 2, levels: { 1: START_SNAP, 2: LV2_SNAP }, pauseRound: 1, by: 'me' });
+  assert.equal(data.store, store);
+  closeTournamentPanel();
+});
+
+test("2.3 a reload's race that is over: the window says so, forgets it, and stays on the online home", async () => {
+  const rec = { v: 1, code: '482913', round: 1, seat: 'guest', pauseRound: 0, levels: { 1: START_SNAP }, wall: Date.now() };
+  const k = setup({ answers: { room_state: { ok: false, error: 'no room' } } });
+  const store = resumeStoreOf(rec);
+  k.play.raceResumeStore = () => store;
+  const started = [];
+  k.play.scene = { start: (key, data) => started.push([key, data]) };
+  k.open();
+  await flush();
+  await flush();
+  k.poll();
+  assert.equal(store.rec, null, 'forgotten');
+  assert.equal(started.length, 0);
+  assert.equal(el('tour-status').textContent, t('en', 'onlineRaceOver'));
+  assert.ok(el('tour-create'), 'the online home');
+  closeTournamentPanel();
+});
+
+test('2.3 a fresh race hands OnlineRace the tab\'s resume store too (it writes the record)', async () => {
+  const playing = { ok: true, code: '482913', status: 'playing', seat: 'host', host_name: 'PlopMaster', guest_name: 'JollyPlunger042', seed: 4242, start_ms: 1_004_000, round: 1 };
+  const k = setup({ answers: { set_room_status: { ok: true, data: playing } } });
+  const store = resumeStoreOf(null);
+  k.play.raceResumeStore = () => store;
+  const started = [];
+  k.play.scene = { start: (key, data) => started.push([key, data]) };
+  k.open();
+  await flush();
+  await el('tour-create').click();
+  await flush();
+  k.net.push({ kind: 'room', hint: 'answer', action: { type: 'status', room: { ...playing, status: 'ready', seed: null, start_ms: null, round: 0 }, at: 1_000_000 } });
+  k.poll();
+  el('tour-ready').click();
+  k.net.push({ kind: 'peer', event: 'ready', msg: { seq: 1, t: 1_000_000, sid: 'peer1', level: 1, ready: true }, at: 1_000_000 });
+  k.poll();
+  await flush();
+  k.poll();
+  assert.equal(started.length, 1);
+  assert.equal(started[0][1].store, store);
+  assert.equal(started[0][1].resume, undefined, 'nothing to resume');
+  closeTournamentPanel();
+});

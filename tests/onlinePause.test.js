@@ -119,7 +119,21 @@ function pausePair({ profile = LAN, start = 100000, seed = 7, drop = null, phase
   const of = (i, type) => effects[i].filter((e) => e.type === type);
   const out = (i, event) => sent[i].filter((m) => m.event === event);
   const st = (i) => pauses[i].state();
-  return { pauses, feeds, local, cut, asleep, sent, effects, dist, advance, step, until, hide, show, presence, of, out, st, now, setClock: (v) => (clock = v), tick };
+  /**
+   * 2.3: device i's race starts over at a level's start, held by the rewind before its GO: `reload`
+   * is its page reloaded (a new session id, nothing it had in flight), `restart` its scene restarted
+   * on the other side's rewind (the same session). Either way a fresh feed and pause machine at `round`.
+   */
+  const restart = (i, { round = 0, reload = false } = {}) => {
+    if (reload) {
+      senders[i] = createSender({ sid: i === 0 ? 'h2' : 'g2', now });
+      q[i] = [];
+    }
+    pauses[i] = createRacePause({ seat: i === 0 ? 'host' : 'guest', now, send: send(i), round, t });
+    feeds[i] = createRaceFeed({ now, send: send(i) });
+    local[i] = { phase: null, hidden: false, offline: false, channel: 'joined', menu: false, rewind: true };
+  };
+  return { pauses, feeds, local, cut, asleep, sent, effects, dist, advance, step, until, hide, show, presence, of, out, st, now, setClock: (v) => (clock = v), tick, restart };
 }
 
 const fields = ({ reason, ready, round, count }) => ({ reason, ready, round, count });
@@ -772,4 +786,44 @@ test('2.2 the wake lock (item 16): one request while wanted, released when not; 
   const none = createWakeLock({});
   assert.doesNotThrow(() => none.want(true));
   assert.equal(none.held(), false);
+});
+
+test('2.3 a reload: the guest comes back on a new session at its saved round, the host restarts on its rewind; both held by the rewind until Ready, then one GO on both', () => {
+  for (const hostRound of [0, 1]) {
+    const p = pausePair();
+    p.advance(1000);
+    // The guest's page goes: nothing more from it, out of presence; the host pauses (lost).
+    p.cut[1] = true;
+    p.presence(0, 'leave');
+    p.advance(2500);
+    assert.equal(p.st(0).phase, 'paused', `host round ${hostRound}`);
+    assert.equal(p.st(0).theirs, 'lost');
+    // Back: the guest at its record's round 0; the host's scene restarted on its rewind (at its own
+    // round, which may be ahead of the guest's record).
+    p.restart(1, { round: 0, reload: true });
+    p.cut[1] = false;
+    p.presence(0, 'join');
+    p.restart(0, { round: hostRound });
+    p.advance(3000);
+    for (const i of [0, 1]) {
+      assert.equal(p.st(i).phase, 'paused', `device ${i} held`);
+      assert.equal(p.st(i).mine, 'rewind', `device ${i}: its own reason`);
+      assert.equal(p.st(i).theirs, 'rewind', `device ${i} hears the other's`);
+      assert.deepEqual(p.of(i, 'resume'), [], `device ${i}: no resume while either holds`);
+    }
+    assert.equal(p.st(1).round, hostRound, "the guest took the host's round from its pause");
+    // Ready on the guest only: still held. Then on the host: the host's count, one GO on both.
+    p.local[1].rewind = false;
+    p.advance(2000);
+    assert.equal(p.st(0).phase, 'paused');
+    assert.equal(p.st(0).ready.theirs, true, 'the host hears the guest ready');
+    p.local[0].rewind = false;
+    const readyAt = p.now();
+    assert.ok(p.until(() => p.st(0).phase === 'live' && p.st(1).phase === 'live', 10000) !== null, `both resume (host round ${hostRound})`);
+    const go = p.out(0, 'resume').at(-1);
+    assert.equal(go.cancel, false);
+    assert.ok(go.startAt >= readyAt + COUNT - 20 && go.startAt <= readyAt + COUNT + 50, `the GO a count ahead (${go.startAt - readyAt} ms)`);
+    assert.ok(p.now() - go.startAt <= LAN.latencyMs + 20, 'both live within a latency of that GO');
+    assert.deepEqual([p.st(0).round, p.st(1).round], [hostRound + 1, hostRound + 1], 'one round on both');
+  }
 });

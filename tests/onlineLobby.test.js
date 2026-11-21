@@ -573,3 +573,72 @@ test("'in a race' (this device still seated in a playing room) has its own messa
   await lobby.create();
   assert.equal(lobby.state.message?.key, 'onlineErrInRace');
 });
+
+// --- 2.3: a reload's rejoin (D4) ------------------------------------------------------------------
+
+function rejoinMemory(code = null) {
+  let v = code;
+  const log = [];
+  return { log, get: () => v, set: (c) => (log.push(['set', c]), (v = c)), clear: () => (log.push(['clear']), (v = null)) };
+}
+const REC = { v: 1, code: '482913', round: 1, seat: 'guest', pauseRound: 0, levels: { 1: { level: 1, score: 0, coins: 0, beans: 0, probiotic: 0, postbiotic: false, deaths: 0, levelWins: 0 } }, wall: 1 };
+const racing = () => room({ status: 'playing', seat: 'guest', host_name: 'SirFlushALot', guest_name: 'PlopMaster', seed: 4242, start_ms: 990_000, round: 1 });
+
+test("2.3 rejoin: room_state says the race still plays: the room is this seat's, its channel opened as that seat; nothing is left", async () => {
+  const net = fakeNet({ room_state: { ok: true, data: racing() } });
+  const memory = rejoinMemory('482913');
+  const lobby = lobbyOn(net, { memory, resume: REC });
+  const p = lobby.rejoin(REC);
+  assert.equal(lobby.state.screen, 'busy');
+  assert.equal(lobby.state.message?.key, 'onlineRejoining');
+  assert.deepEqual(await p, { ok: true });
+  assert.deepEqual(rpcs(net).map((c) => [c[1], c[2]]), [['room_state', { p_code: '482913' }]], 'no leave_room');
+  assert.deepEqual(opens(net), [['openRoom', '482913', { seat: 'guest', name: 'PlopMaster', width: 720 }]]);
+  const r = lobby.state.room;
+  assert.deepEqual({ phase: r.phase, role: r.role, code: r.code, seed: r.seed, startMs: r.startMs, round: r.round, hostName: r.hostName }, { phase: 'playing', role: 'guest', code: '482913', seed: 4242, startMs: 990_000, round: 1, hostName: 'SirFlushALot' });
+  assert.deepEqual(memory.log, [], 'the code stays remembered');
+});
+
+test('2.3 rejoin: no seat for this device ("no room"), or the race finished or abandoned: over, forgotten, nothing left or opened', async () => {
+  for (const answer of [{ ok: false, error: 'no room' }, { ok: true, data: room({ status: 'finished', round: 1 }) }, { ok: true, data: room({ status: 'abandoned', round: 1 }) }]) {
+    const net = fakeNet({ room_state: answer });
+    const memory = rejoinMemory('482913');
+    const lobby = lobbyOn(net, { memory, resume: REC });
+    assert.deepEqual(await lobby.rejoin(REC), { ok: false, over: true }, JSON.stringify(answer));
+    assert.equal(lobby.state.screen, 'home');
+    assert.equal(lobby.state.message?.key, 'onlineRaceOver');
+    assert.deepEqual(memory.log, [['clear']]);
+    assert.deepEqual(rpcs(net, 'leave_room'), []);
+    assert.deepEqual(opens(net), []);
+    assert.equal(lobby.state.room.phase, 'idle');
+  }
+});
+
+test('2.3 rejoin: the server out of reach, or the channel refused: kept for the next try, the room never left', async () => {
+  const off = fakeNet({ room_state: { ok: false, error: 'offline' } });
+  const m1 = rejoinMemory('482913');
+  const l1 = lobbyOn(off, { memory: m1, resume: REC });
+  assert.deepEqual(await l1.rejoin(REC), { ok: false, error: 'offline' });
+  assert.equal(l1.state.screen, 'home');
+  assert.equal(l1.state.message?.kind, 'error');
+  assert.deepEqual(m1.log, []);
+  const refused = fakeNet({ room_state: { ok: true, data: racing() }, openRoom: { ok: false, error: 'timeout' } });
+  const m2 = rejoinMemory('482913');
+  const l2 = lobbyOn(refused, { memory: m2, resume: REC });
+  assert.deepEqual(await l2.rejoin(REC), { ok: false, error: 'timeout' });
+  assert.deepEqual(rpcs(refused, 'leave_room'), [], 'a refused channel never leaves the race');
+  assert.equal(l2.state.room.phase, 'idle');
+  assert.equal(l2.state.message?.kind, 'error');
+  assert.deepEqual(m2.log, []);
+});
+
+test("2.3 a lobby made for a rejoin does not leave the remembered room on entry (item 46's leave is for a race with nothing to resume)", async () => {
+  const net = fakeNet();
+  lobbyOn(net, { memory: rejoinMemory('482913'), resume: REC });
+  await new Promise((r) => setTimeout(r, 0));
+  assert.deepEqual(rpcs(net, 'leave_room'), []);
+  const net2 = fakeNet();
+  lobbyOn(net2, { memory: rejoinMemory('482913') });
+  await new Promise((r) => setTimeout(r, 0));
+  assert.deepEqual(rpcs(net2, 'leave_room').map((c) => c[2]), [{ p_code: '482913' }], 'without one: as before');
+});

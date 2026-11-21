@@ -1573,6 +1573,22 @@ export function createEffects(t) {
     coins() {
       return coinCount;
     },
+    /**
+     * Back to a level's start as snapshot() kept it (plan 39, 2.3: a rewound online race), unlike
+     * restore(), which gives a revive's back on top: the purse set (never negative), the bag (at
+     * most beans.maxBeans), a probiotic with its postbiotic (none without one); a running fart is gone.
+     */
+    restoreLevel({ coins = 0, beans = 0, probiotic = 0, postbiotic: post = false } = {}) {
+      const whole = (n) => (Number.isFinite(n) ? Math.max(0, Math.floor(n)) : 0);
+      coinCount = whole(coins);
+      beanCount = Math.min(whole(beans), t.beans.maxBeans);
+      probioticPipesLeft = whole(probiotic);
+      postbiotic = Boolean(post) && probioticPipesLeft > 0;
+      powerOn = false;
+      powerJustEnded = false;
+      powerClock = 0;
+      powerSuper = false;
+    },
     /** Enough beans and no fart running. */
     powerReady() {
       return !powerOn && beanCount >= t.beans.toCharge;

@@ -32,7 +32,7 @@ import { browserStorage } from '../store.js';
 import { t } from '../i18n.js';
 import { createRng, fieldWidth, focusNearest, focusStep } from '../logic.js';
 import { createOnlineLobby } from '../onlineLobby.js';
-import { ONLINE_HOST_KEY, raceStartPlan } from '../onlineRace.js';
+import { ONLINE_HOST_KEY, raceStartPlan, resumePlan } from '../onlineRace.js';
 import { createMatch } from '../versus.js';
 import { createTournament, nextMatch, recordResult, matchPlayers, placings, claimFromCode, claimHost, tournamentPayload, postable, seedSlots, canReseed, reseed, reshuffle } from '../tournament.js';
 import { ensureId, newId } from '../save.js';
@@ -824,9 +824,34 @@ function startLobby(r) {
   const o = online;
   if (!o || !o.net) return;
   // Both ready: the host starts the race (set_room_status), and a room in 'playing' hands off (1.7a).
-  o.lobby ??= createOnlineLobby({ net: o.net, name: r.name, width: myWidth(), onBothReady: (lobby) => lobby.start(), memory: raceMemory() });
+  // 2.3, D4: a race this tab left by a reload (its resume record) is rejoined first.
+  const record = o.lobby ? null : (raceResume()?.get?.() ?? null);
+  o.lobby ??= createOnlineLobby({ net: o.net, name: r.name, width: myWidth(), onBothReady: (lobby) => lobby.start(), memory: raceMemory(), resume: record });
   if (o.poll === null) o.poll = ctx.timers.setInterval(() => pollOnline(o), ONLINE_POLL_MS);
+  if (record) rejoinRace(o, record);
   renderLobby();
+}
+
+/**
+ * 2.3, D4: the race a reload left. The lobby asks room_state and opens the channel as this seat;
+ * the poll then hands it to the race, rewound (handOffRace). A race that is over is forgotten and
+ * said so on the online home; a failure to reach the server keeps the record for the next entry.
+ */
+function rejoinRace(o, record) {
+  o.resume = record;
+  o.lobby.rejoin(record).then((res) => {
+    if (online !== o || res?.ok) return;
+    o.resume = null; // over: the lobby's memory clear also cleared the record (raceMemory)
+    if (o.st.view !== 'home') return;
+    renderLobby();
+    const m = lobbyMessage(lobbyUi(), o.lobby);
+    setStatus(m?.text ?? '', m?.kind ?? '');
+  });
+}
+
+/** This tab's resume record (2.3; Play.raceResumeStore: sessionStorage, per project), or null. */
+function raceResume() {
+  return ctx?.play?.raceResumeStore?.() ?? null;
 }
 
 function pollOnline(o) {
@@ -873,6 +898,7 @@ function raceMemory() {
       try {
         store()?.removeItem(key);
       } catch {}
+      raceResume()?.clear?.(); // a race left (or over) has nothing to resume either (2.3)
     },
   };
 }
@@ -893,6 +919,10 @@ function handOffRace(o) {
   const play = ctx?.play;
   if (!plan || !play?.scene) return false;
   const { lobby, net } = o;
+  // 2.3: a rejoined race starts rewound at its record's level start (resumePlan); every race gets the tab's store to keep its own.
+  const resume = o.resume ? (resumePlan(o.resume, lobby.state.room) ?? undefined) : undefined;
+  const store = raceResume() ?? undefined;
+  o.resume = null;
   lobby.remember?.(); // item 46: a reload from here on leaves this room on the next entry
   if (o.poll !== null) ctx.timers.clearInterval(o.poll);
   o.poll = null;
@@ -909,7 +939,7 @@ function handOffRace(o) {
     game.scene.stop('PlayB');
     game.scene.stop('Versus');
   }
-  play.scene.start(ONLINE_HOST_KEY, { net, lobby, plan });
+  play.scene.start(ONLINE_HOST_KEY, { net, lobby, plan, store, resume });
   return true;
 }
 
@@ -1056,7 +1086,7 @@ export function openTournamentPanel(options) {
   ctx.timers = options.timers ?? globalThis;
   if (!online && !tournamentState(ctx.game) && !view) {
     const forced = !versus(ctx.game); // over Play: no split screen to race on here
-    online = { on: forced, forced, st: createAccountState(), account: null, net: null, lobby: null, poll: null, ticks: 0 };
+    online = { on: forced, forced, st: createAccountState(), account: null, net: null, lobby: null, poll: null, ticks: 0, resume: null };
     if (forced) startOnline();
   }
   if (!tournamentState(ctx.game) && players.length < T.tournament.minPlayers) {

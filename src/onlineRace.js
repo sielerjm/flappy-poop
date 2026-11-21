@@ -15,9 +15,13 @@
 //   judges who crossed each line first on server time, starts each level at a server GO once both are
 //   ready, takes a ready back during the count, and agrees the rematch; the guest follows its word.
 // - raceRoomItem: the room items the race hands the lobby (the confirmed playing / finished status).
-// No I/O and no timers: time and the transport's send come in as arguments.
+// - Reload resume (2.3, D4): a level's start as a snapshot (levelSnap), the tab's resume record
+//   (parseResume, createResumeStore, resumePlan) and which level a peer's rewind asks for
+//   (rewindOnHeard: the lower of the two sides' level starts).
+// No I/O and no timers: time and the transport's send come in as arguments (the resume store takes
+// its storage as a function).
 
-import { TUNING } from './config.js';
+import { LEADERBOARD, TUNING } from './config.js';
 import { agreedWidth, createGhostTrack, shouldSendPos } from './online.js';
 
 /** The scene key an online match names as its host (matchHostKey). */
@@ -88,6 +92,7 @@ const fromRound = (item, since) => Boolean(item && item.kind === 'peer' && item.
  * transport took them: a refused pos and done go again each frame until it does (AUD-098).
  */
 export function createRaceFeed({ now, send, since = -Infinity, t = TUNING }) {
+  let floorT = since; // raised by floor(): a rewound race drops what the other side sent before its own restart (2.3)
   const track = createGhostTrack(t);
   let lastPos = null;
   let flaps = null;
@@ -144,7 +149,7 @@ export function createRaceFeed({ now, send, since = -Infinity, t = TUNING }) {
       if (shouldSendPos(lastPos, at, phase, t.online) && emit('pos', { ...f, phase })) lastPos = { at, phase };
     },
     receive(item) {
-      if (!fromRound(item, since)) return false;
+      if (!fromRound(item, floorT)) return false;
       if (item.event === 'pause') {
         peerPauseT ??= item.msg.t;
         if (hold.at !== null && hold.until === null && !hold.peer) {
@@ -187,6 +192,10 @@ export function createRaceFeed({ now, send, since = -Infinity, t = TUNING }) {
     },
     doneFixed: () => final !== null,
     doneSent: () => doneSent,
+    /** 2.3: drop anything stamped before `at` from now on (the other side's restart time); it never goes down. */
+    floor(at) {
+      if (at > floorT) floorT = at;
+    },
   };
 }
 
@@ -235,6 +244,7 @@ const newer = (msg, last) => !last || msg.t > last.t || (msg.t === last.t && msg
  * @param {number} [deps.since] this race's GO: a message stamped before it is dropped
  */
 export function createRaceReferee({ seat, now, send, since = -Infinity, t = TUNING }) {
+  let floorT = since; // raised by floor() (2.3), as the feed's
   const cfg = t.online.race;
   const host = seat === 'host';
   const other = host ? 'guest' : 'host';
@@ -386,7 +396,7 @@ export function createRaceReferee({ seat, now, send, since = -Infinity, t = TUNI
     },
     rematch: () => ({ mine: rematch.mine, theirs: Boolean(rematch.theirs?.want) }),
     receive(item) {
-      if (!fromRound(item, since)) return;
+      if (!fromRound(item, floorT)) return;
       const m = item.msg;
       switch (item.event) {
         case 'finish':
@@ -437,6 +447,10 @@ export function createRaceReferee({ seat, now, send, since = -Infinity, t = TUNI
       if (rematch.sentAt !== null && (!rematch.out || (rematch.mine && at - rematch.sentAt >= cfg.readyResendMs))) askRematch();
     },
     drain: () => out.splice(0),
+    /** 2.3: drop anything stamped before `at` from now on (the other side's restart time); it never goes down. */
+    floor(at) {
+      if (at > floorT) floorT = at;
+    },
   };
 }
 
@@ -513,7 +527,7 @@ const later = (m, last) => !last || (m.sid === last.sid ? m.seq > last.seq : m.t
  *   never pauses.
  * tick(local) each frame and from the visibilitychange handler (a hidden page gets no frames) with
  * { phase (localPhase: run, respawn, break, ended, or null before the run), hidden, offline, channel
- * (onlineNet's channelState), menu }; receive(item) for each transport item (peer messages,
+ * (onlineNet's channelState), menu, rewind (2.3: a rewound race before this side's Ready) }; receive(item) for each transport item (peer messages,
  * presence, the room's confirmed actions); frozen() while the local half must not move (paused or
  * counting; the referee's tick takes it as `held`); drain() → effects since the last call: pause,
  * count { startAt }, cancel, resume { late }, back (this side's link or the other side returned: what
@@ -534,7 +548,7 @@ export function createRacePause({ seat, now, send, present = true, since, round:
   const lead = t.online.race.countLeadMs + 3 * t.versus.countdownMs;
   let phase = 'live'; // live, paused, count, over
   let round = startRound; // resumes so far
-  let local = { phase: null, hidden: false, offline: false, channel: 'joined', menu: false };
+  let local = { phase: null, hidden: false, offline: false, channel: 'joined', menu: false, rewind: false };
   let own = []; // this side's own reasons now, most telling first
   let intent = false; // Ready said in this pause (taken back by a new reason of this side's own)
   let count = null; // { startAt, late }
@@ -558,6 +572,7 @@ export function createRacePause({ seat, now, send, present = true, since, round:
       else if (local.channel !== 'joined') r.push('link');
     }
     if (local.menu) r.push('menu');
+    if (local.rewind) r.push('rewind'); // 2.3: a rewound race waits for this side's own Ready
     return r;
   }
 
@@ -778,9 +793,10 @@ const PEER_LOST = new Set(['lost', 'offline', 'link']);
  * connection first, then the other side's, then why the other paused, else PAUSED), the line under
  * it, each player's row, and the Ready button (hidden while this side's own link is down, and when
  * it needs no tap: in a level break or before GO a side is ready by itself). `midRun` says the
- * local half was flying when it paused.
+ * local half was flying when it paused. `rewind` (2.3: { level }) says this race restarted at that
+ * level's start after a reload: "Back to <level>" under the connection lines, with Ready.
  */
-export function pauseOverlay(s, { midRun = true } = {}) {
+export function pauseOverlay(s, { midRun = true, rewind = null } = {}) {
   if (!s || s.phase === 'live' || s.phase === 'over') return null;
   if (s.phase === 'count') return { count: true };
   const mineNet = NET_TROUBLE.has(s.mine);
@@ -790,14 +806,16 @@ export function pauseOverlay(s, { midRun = true } = {}) {
   else if (s.mine === 'link') title = 'onlinePausedLink';
   else if (s.mine === 'busy' || s.theirs === 'busy') title = 'onlinePausedBusy';
   else if (theirsLost) title = 'onlinePausedLost';
+  else if (rewind) title = 'onlineRewindTitle';
   else if (s.theirs === 'away') title = 'onlinePausedAway';
   else if (s.theirs === 'menu') title = 'onlinePausedBy';
   let sub = 'onlinePauseTap';
   if (mineNet) sub = 'onlinePauseWaitNet';
-  else if (theirsLost || s.theirs === 'busy' || s.ready.mine || !midRun) sub = 'versusWaiting';
+  else if (theirsLost || s.theirs === 'busy' || s.ready.mine || (!midRun && !rewind)) sub = 'versusWaiting';
+  else if (rewind) sub = 'onlineRewindTap';
   const mine = mineNet ? 'onlineHudLost' : s.ready.mine ? 'onlineIsReady' : 'onlineNotReady';
   const theirs = s.solo ? null : theirsLost || s.theirs === 'busy' ? 'onlineHudLost' : s.ready.theirs ? 'onlineIsReady' : s.theirs === 'menu' || s.theirs === 'away' ? 'onlineHudPaused' : 'onlineNotReady';
-  const ready = mineNet || !midRun ? null : s.ready.mine ? 'onlineIsReady' : 'onlineReady';
+  const ready = mineNet || (!midRun && !rewind) ? null : s.ready.mine ? 'onlineIsReady' : 'onlineReady';
   return { count: false, title, sub, mine, theirs, ready };
 }
 
@@ -843,4 +861,137 @@ export function raceRoomItem(item) {
   if (!item || item.kind !== 'room' || item.action?.type !== 'status') return false;
   const status = item.action.room?.status;
   return status === 'playing' || status === 'finished';
+}
+
+// --- reload resume (2.3, D4) --------------------------------------------------------------------
+
+/** The resume record's format; a record of another version is not read. */
+export const RESUME_VERSION = 1;
+
+const SNAP_INTS = ['score', 'coins', 'beans', 'probiotic', 'deaths', 'levelWins'];
+
+/** Level 1's start: the race's own, nothing held. */
+export function startSnap() {
+  return { level: 1, score: 0, coins: 0, beans: 0, probiotic: 0, postbiotic: false, deaths: 0, levelWins: 0 };
+}
+
+/**
+ * A level's start as Play holds it (Play.resumeSnapshot: the level, the score, the effects' snapshot()
+ * and the slot's crashes and level wins), only its own fields, or null when any is out of bounds.
+ * A rewind restores it (Play.start with `resume`).
+ */
+export function levelSnap(s, t = TUNING) {
+  if (!s || typeof s !== 'object') return null;
+  if (!Number.isInteger(s.level) || s.level < 1 || s.level > t.levels.lastLevel) return null;
+  const out = { level: s.level };
+  for (const k of SNAP_INTS) {
+    if (!Number.isInteger(s[k]) || s[k] < 0 || s[k] > 1e6) return null;
+    out[k] = s[k];
+  }
+  out.postbiotic = Boolean(s.postbiotic);
+  return { level: out.level, score: out.score, coins: out.coins, beans: out.beans, probiotic: out.probiotic, postbiotic: out.postbiotic, deaths: out.deaths, levelWins: out.levelWins };
+}
+
+/** Each level's snapshot by its number, only the valid ones whose key is their level; null without level 1's. */
+function snapsOf(levels, t) {
+  if (!levels || typeof levels !== 'object') return null;
+  const out = {};
+  for (const [k, v] of Object.entries(levels)) {
+    const snap = levelSnap(v, t);
+    if (!snap || String(snap.level) !== k) return null;
+    out[k] = snap;
+  }
+  return out[1] ? out : null;
+}
+
+const topLevel = (levels) => Math.max(1, ...Object.keys(levels).map(Number));
+
+/**
+ * The tab's resume record from its stored text, whole or null: this version, a room code, a round,
+ * a seat, the pause round, level 1's start and any later level's, written no longer than
+ * online.resume.maxAgeMs ago by the wall clock (`wall`).
+ * @param {string | null} raw
+ * @param {{ wall?: number }} [opts] the wall clock now (Date.now())
+ */
+export function parseResume(raw, { wall = Date.now() } = {}, t = TUNING) {
+  if (typeof raw !== 'string') return null;
+  let r;
+  try {
+    r = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+  if (!r || typeof r !== 'object' || r.v !== RESUME_VERSION) return null;
+  if (typeof r.code !== 'string' || !/^\d{6}$/.test(r.code) || !SEATS.includes(r.seat)) return null;
+  if (!Number.isInteger(r.round) || r.round < 0 || !Number.isInteger(r.pauseRound) || r.pauseRound < 0) return null;
+  if (!Number.isFinite(r.wall) || wall - r.wall > t.online.resume.maxAgeMs) return null;
+  const levels = snapsOf(r.levels, t);
+  if (!levels) return null;
+  return { v: r.v, code: r.code, round: r.round, seat: r.seat, pauseRound: r.pauseRound, levels, wall: r.wall };
+}
+
+/** The resume record's storage key: per project, as item 46's room code ('.test' on the test project). */
+export function resumeKey(test = false) {
+  return LEADERBOARD.onlineResumeKey + (test ? '.test' : '');
+}
+
+/**
+ * This tab's resume record (sessionStorage in the game: a reload keeps it, another tab never sees
+ * it): get() → parseResume's record or null, set(record), clear(). Blocked or missing storage keeps
+ * nothing and never throws.
+ * @param {() => Storage | null} storage
+ * @param {string} key resumeKey()
+ * @param {{ wall?: () => number }} [opts]
+ */
+export function createResumeStore(storage, key, { wall = () => Date.now() } = {}) {
+  const store = () => {
+    try {
+      return storage() ?? null;
+    } catch {
+      return null;
+    }
+  };
+  return {
+    get() {
+      try {
+        return parseResume(store()?.getItem(key) ?? null, { wall: wall() });
+      } catch {
+        return null;
+      }
+    },
+    set(record) {
+      try {
+        store()?.setItem(key, JSON.stringify(record));
+      } catch {}
+    },
+    clear() {
+      try {
+        store()?.removeItem(key);
+      } catch {}
+    },
+  };
+}
+
+/**
+ * What a reload's race resumes at, from its record and the room room_state returned: the record's
+ * highest level start, its snapshots and its pause round in the same round; the room playing a later
+ * round (a rematch that began) starts at level 1 of it. `by: 'me'`: this side's reload.
+ */
+export function resumePlan(record, room) {
+  if (!record || !room) return null;
+  if ((room.round ?? 0) !== record.round) return { level: 1, levels: { 1: startSnap() }, pauseRound: 0, by: 'me' };
+  return { level: topLevel(record.levels), levels: record.levels, pauseRound: record.pauseRound, by: 'me' };
+}
+
+/**
+ * The level a peer's `rewind` asks this side to restart at, or null for none: the lower of its level
+ * and this side's own (its highest level start, `top`; or, rewound already, the level it waits at,
+ * which only a lower one moves). Nothing for another room round, a rewind stamped at or before this
+ * side last left a rewind (`since`: its GO), or once this side's run has ended.
+ * @param {{ msg: object | null, round: number, rewound: number | null, top: number, since: number, ended: boolean }} o
+ */
+export function rewindOnHeard({ msg, round, rewound, top, since, ended }) {
+  if (!msg || ended || msg.round !== round || !Number.isInteger(msg.level) || !(msg.t > since)) return null;
+  if (rewound !== null && rewound !== undefined) return msg.level < rewound ? msg.level : null;
+  return Math.max(1, Math.min(msg.level, top));
 }

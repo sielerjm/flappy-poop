@@ -85,6 +85,7 @@ function fakeHalf() {
       state: h.state, levelBreak: h.levelBreak, ended: h.ended, won: h.ended, flaps: 0, distance: h.distance, speed: 0, y: 640, vy: 0, angle: 0,
       frame: 'poop', alpha: 1, level: h.level, pipesPassed: 0, score: h.score, deaths: 0, levelWins: 0, finalFirst: false,
     }),
+    resumeSnapshot: () => ({ level: h.level, score: h.score, coins: h.coins ?? 0, beans: 0, probiotic: 0, postbiotic: false, deaths: 0, levelWins: h.levelWins ?? 0 }),
   };
   return h;
 }
@@ -93,7 +94,7 @@ function fakeHalf() {
  * A race scene past its start GO, as create() leaves it, with sinks for what it draws (`countdown`:
  * before its GO instead; `peerWidth`: the other side's presence width).
  */
-function raceScene({ seat = 'host', round = 1, countdown = false, peerWidth = 720 } = {}) {
+function raceScene({ seat = 'host', round = 1, countdown = false, peerWidth = 720, resume = undefined, store = undefined } = {}) {
   const net = fakeNet({ peerWidth });
   const half = fakeHalf();
   const room = { phase: 'playing', role: seat, code: '482913', hostName: 'Plop', guestName: 'Jolly', seed: 5, startMs: GO, round };
@@ -113,8 +114,8 @@ function raceScene({ seat = 'host', round = 1, countdown = false, peerWidth = 72
     hud: { card: absorb(), dot: absorb(), name: absorb(), score: absorb(), word: absorb(), link: null },
     locale: 'en',
   });
-  s.initRace({ net, lobby, plan: { seed: 5, startAt: GO, seat, names: seat === 'host' ? ['Plop', 'Jolly'] : ['Jolly', 'Plop'], fieldW: 720, round } });
-  if (!countdown) s.match.status = 'playing';
+  s.initRace({ net, lobby, plan: { seed: 5, startAt: GO, seat, names: seat === 'host' ? ['Plop', 'Jolly'] : ['Jolly', 'Plop'], fieldW: 720, round }, resume, store });
+  if (!countdown && !resume) s.match.status = 'playing';
   return { s, net, half, timers, ops, lobby, room };
 }
 
@@ -881,4 +882,214 @@ test('2.2 the pill while paused reads the pause machine: lost when the other sid
   s.update();
   assert.equal(s.isPaused(), true);
   assert.equal(s.pillLink(), 'lost');
+});
+
+// --- 2.3: reload resume (D4) --------------------------------------------------------------------
+
+/** The tab's resume record as the scene writes it (src/onlineRace.js's createResumeStore). */
+function fakeStore() {
+  const recs = [];
+  return { recs, set: (r) => recs.push(JSON.parse(JSON.stringify(r))), clear: () => recs.push(null), get: () => recs.at(-1) ?? null, last: () => recs.at(-1) };
+}
+const START = { level: 1, score: 0, coins: 0, beans: 0, probiotic: 0, postbiotic: false, deaths: 0, levelWins: 0 };
+const LV2 = { level: 2, score: 31, coins: 3, beans: 1, probiotic: 0, postbiotic: false, deaths: 1, levelWins: 1 };
+const LV3 = { level: 3, score: 64, coins: 5, beans: 2, probiotic: 4, postbiotic: true, deaths: 1, levelWins: 2 };
+const restarts = (ops) => ops.filter((o) => o[0] === 'restart').map((o) => o[1]);
+
+test('2.3 a fresh race writes the tab\'s resume record at its start: the room, the round, the seat, level 1\'s empty start', () => {
+  const store = fakeStore();
+  raceScene({ seat: 'guest', round: 2, store });
+  const rec = store.last();
+  assert.deepEqual({ code: rec.code, round: rec.round, seat: rec.seat, pauseRound: rec.pauseRound, levels: rec.levels }, { code: '482913', round: 2, seat: 'guest', pauseRound: 0, levels: { 1: START } });
+});
+
+test('2.3 a rewound race: Play launches at the level\'s start with its snapshot, the slot carries its numbers, the pause holds the GO (rewind) and the rewind goes every heartbeat', () => {
+  const store = fakeStore();
+  const { s, net, half } = raceScene({ resume: { level: 2, levels: { 1: START, 2: LV2 }, pauseRound: 0, by: 'me' }, store });
+  assert.equal(s.match.status, 'countdown');
+  assert.deepEqual(s.launchData().resume, LV2, 'what create() hands Play');
+  assert.deepEqual([s.match.slots[0].score, s.match.slots[0].deaths, s.match.slots[0].levelWins, s.match.slots[0].level], [31, 1, 1, 2]);
+  net.clock.now = GO + 60_000;
+  s.update();
+  assert.equal(s.isPaused(), true);
+  assert.equal(s.pause.state().mine, 'rewind');
+  assert.equal(called(half, 'startRace'), 0, 'the room\'s GO is long past: nothing starts while held');
+  assert.deepEqual(sentOf(net, 'rewind'), [{ event: 'rewind', round: 1, level: 2, at: GO }], 'its level and its restart time');
+  net.clock.now += 500;
+  s.update();
+  assert.equal(sentOf(net, 'rewind').length, 1);
+  net.clock.now += T.online.pause.heartbeatMs;
+  s.update();
+  assert.equal(sentOf(net, 'rewind').length, 2, 'again a heartbeat later');
+  assert.deepEqual(store.last().levels, { 1: START, 2: LV2 });
+});
+
+test('2.3 Ready clears the rewind hold; both ready, the host\'s resume GO starts the race at the level\'s start, and the rewind stops', () => {
+  const { s, net, half } = raceScene({ resume: { level: 2, levels: { 1: START, 2: LV2 }, pauseRound: 0, by: 'them' } });
+  net.clock.now = GO + 60_000;
+  s.update();
+  s.toggleReady();
+  assert.equal(s.pause.state().mine, null, 'the tap cleared it');
+  assert.equal(s.pause.state().ready.mine, true, 'before GO: ready by itself');
+  net.push(peer('pause', { reason: 'rewind', ready: true, round: 0, count: 0 }, net.clock.now - 20));
+  s.update();
+  const go = sentOf(net, 'resume').at(-1);
+  assert.equal(go?.startAt, net.clock.now + RESUME_MS, 'the host counts');
+  net.clock.now = go.startAt - 900;
+  net.push(peer('pause', { reason: 'peer', ready: true, round: 0, count: go.startAt }, net.clock.now));
+  s.update();
+  const rewinds = sentOf(net, 'rewind').length;
+  net.clock.now = go.startAt;
+  s.update();
+  assert.equal(called(half, 'startRace'), 1, 'GO: the level runs');
+  assert.equal(s.match.status, 'playing');
+  assert.equal(s.rewound, null);
+  net.clock.now += 5000;
+  s.update();
+  assert.equal(sentOf(net, 'rewind').length, rewinds, 'no rewind once flying');
+});
+
+test('2.3 the other side\'s rewind restarts a live race at the lower level\'s start: its snapshots up to that level, by them, the floor at the sender\'s restart', () => {
+  const store = fakeStore();
+  const { s, net, half, ops } = raceScene({ seat: 'guest', store });
+  s.levels[2] = LV2;
+  s.levels[3] = LV3;
+  half.level = 3;
+  net.clock.now = GO + 90_000;
+  net.push(peer('rewind', { round: 1, level: 2, at: GO + 89_000 }, GO + 89_000));
+  s.update();
+  assert.deepEqual(ops.filter((o) => o[0] === 'stop'), [['stop', 'Play']]);
+  const [data] = restarts(ops);
+  assert.equal(restarts(ops).length, 1);
+  assert.deepEqual(data.resume, { level: 2, levels: { 1: START, 2: LV2 }, pauseRound: 0, by: 'them', floor: GO + 89_000 });
+  assert.equal(data.plan, s.plan);
+  assert.equal(data.net, net);
+  assert.equal(data.store, store);
+  net.push(peer('rewind', { round: 1, level: 2, at: GO + 89_000 }, GO + 89_500));
+  s.update();
+  assert.equal(restarts(ops).length, 1, 'once');
+});
+
+test('2.3 a rewind past this side\'s level brings it to its own start; rewound already, a lower one takes it back further, the same or a higher one only raises the floor', () => {
+  const live = raceScene({ seat: 'host' });
+  live.s.levels[2] = LV2;
+  live.half.level = 2;
+  live.net.clock.now = GO + 50_000;
+  live.net.push(peer('rewind', { round: 1, level: 3, at: GO + 49_000 }, GO + 49_000));
+  live.s.update();
+  assert.equal(restarts(live.ops)[0]?.resume.level, 2, 'its own level start (its rewind takes the other back)');
+
+  const r = raceScene({ seat: 'host', resume: { level: 3, levels: { 1: START, 2: LV2, 3: LV3 }, pauseRound: 0, by: 'me' } });
+  r.net.clock.now = GO + 50_000;
+  r.net.push(peer('rewind', { round: 1, level: 3, at: GO + 49_000 }, GO + 49_000));
+  r.s.update();
+  assert.deepEqual(restarts(r.ops), [], 'the same level: no restart');
+  const pos = (t) => peer('pos', { phase: 'run', distance: 100, speed: 300, y: 640, vy: 0, angle: 0, frame: 'poop', alpha: 1, level: 3, pipesPassed: 4, score: 4, deaths: 0, levelWins: 0, finalFirst: false }, t);
+  assert.equal(r.s.feed.receive(pos(GO + 48_000)), false, 'the floor is the other side\'s restart now');
+  r.net.push(peer('rewind', { round: 1, level: 2, at: GO + 49_000 }, GO + 49_600));
+  r.s.update();
+  assert.deepEqual(restarts(r.ops)[0]?.resume, { level: 2, levels: { 1: START, 2: LV2 }, pauseRound: 0, by: 'them', floor: GO + 49_000 }, 'a lower one: further back');
+});
+
+test('2.3 stale and out of bounds: a rewind stamped before this side last left a rewind, one for another round, or any once this side\'s run has ended changes nothing', () => {
+  const { s, net, ops } = raceScene({ resume: { level: 2, levels: { 1: START, 2: LV2 }, pauseRound: 0, by: 'me' } });
+  net.clock.now = GO + 60_000;
+  s.update();
+  s.toggleReady();
+  net.push(peer('pause', { reason: 'rewind', ready: true, round: 0, count: 0 }, net.clock.now - 20));
+  s.update();
+  const go = sentOf(net, 'resume').at(-1).startAt;
+  net.clock.now = go;
+  net.push(peer('pause', { reason: 'peer', ready: true, round: 0, count: go }, go - 10));
+  s.update();
+  assert.equal(s.match.status, 'playing');
+  net.push(peer('rewind', { round: 1, level: 2, at: GO + 59_000 }, go - 1));
+  net.push(peer('rewind', { round: 2, level: 1, at: go + 100 }, go + 100));
+  net.clock.now = go + 200;
+  s.update();
+  assert.deepEqual(restarts(ops), [], 'from before its GO, or another round');
+  s.feed.doneFixed = () => true;
+  net.push(peer('rewind', { round: 1, level: 2, at: go + 300 }, go + 300));
+  s.update();
+  assert.deepEqual(restarts(ops), [], 'its run has ended: it never rewinds');
+});
+
+test('2.3 each level break writes its snapshot once its line is settled, and the record with it; a purchase in the break updates it', () => {
+  const store = fakeStore();
+  const k = raceScene({ seat: 'host', store });
+  const { s, net, half } = k;
+  net.clock.now = GO + 20_000;
+  half.distance = 5000;
+  s.claimLevelFinish(half, { level: 1, final: false });
+  half.score = 26;
+  half.coins = 4;
+  half.levelWins = 1;
+  inBreak(k, 2);
+  s.update();
+  assert.equal(s.levels[2], undefined, 'not before the line\'s verdict (the host\'s grace)');
+  net.clock.now += R.firstGraceMs + 10;
+  s.update();
+  assert.deepEqual(s.levels[2], { level: 2, score: 26, coins: 4, beans: 0, probiotic: 0, postbiotic: false, deaths: 0, levelWins: 1 });
+  assert.deepEqual(store.last().levels[2], s.levels[2]);
+  const writes = store.recs.length;
+  s.update();
+  assert.equal(store.recs.length, writes, 'unchanged: not written again');
+  half.coins = 1;
+  s.update();
+  assert.equal(store.last().levels[2].coins, 1, 'the shop spent 3');
+});
+
+test('2.3 the record goes once this side\'s run has ended (a reload after its finish does not resume) and when the race is abandoned', () => {
+  const a = fakeStore();
+  const { s } = raceScene({ store: a });
+  s.feed.doneFixed = () => true;
+  s.update();
+  assert.equal(a.last(), null);
+  const b = fakeStore();
+  const k = raceScene({ store: b });
+  k.net.push({ kind: 'room', action: { type: 'left', seat: 'guest' } });
+  k.s.update();
+  assert.equal(b.last(), null);
+});
+
+test('2.3 a re-fit while rewound (a width before its GO) restarts on the same rewind', () => {
+  withViewport(1200, 1280, () => {
+    const { s, net, ops } = raceScene({ resume: { level: 2, levels: { 1: START, 2: LV2 }, pauseRound: 0, by: 'me' }, peerWidth: 1600 });
+    assert.equal(s.fieldW, 1200);
+    net.clock.now = GO + 60_000; // the room's GO long past: the rewind's GO is still to come
+    s.update();
+    assert.ok(sentOf(net, 'width').length >= 1, 'its width goes until the rewind\'s GO');
+    net.push(peer('width', { width: 720 }, net.clock.now - 10));
+    net.clock.now += 16;
+    s.update();
+    const [data] = restarts(ops);
+    assert.equal(data?.peer.width, 720);
+    assert.equal(data.resume.level, 2, 'the same rewind');
+    assert.deepEqual(data.resume.levels, { 1: START, 2: LV2 });
+  });
+});
+
+test('2.3 one final line: a host whose fresh referee decides the final line for itself takes nothing once the other side\'s run already holds it (a reload after the guest finished)', () => {
+  for (const held of [false, true]) {
+    const { s, net, half } = raceScene({ seat: 'host' });
+    if (held) Object.assign(s.match.slots[1], { ended: true, finalFirst: true });
+    s.feed.slot = () => null; // the remote slot as set here (no ghost messages in this test)
+    net.clock.now = GO + 400_000;
+    half.level = T.levels.lastLevel;
+    s.claimLevelFinish(half, { level: T.levels.lastLevel, final: true });
+    net.clock.now += R.firstGraceMs + 10;
+    s.update();
+    assert.equal(half.calls.filter((c) => c[0] === 'award').length, held ? 0 : 1, held ? 'the other side holds the final line: no award' : 'control: the host takes its line');
+  }
+});
+
+test("2.3 the record goes at the race's end (checkOver itself, not only the run's own end)", () => {
+  const store = fakeStore();
+  const { s } = raceScene({ store });
+  s.match.slots[0].ended = true;
+  s.match.slots[1].ended = true;
+  s.feed.doneSent = () => true;
+  s.checkOver();
+  assert.equal(s.match.status, 'over');
+  assert.equal(store.last(), null);
 });

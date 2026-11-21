@@ -122,6 +122,7 @@ import { createRunStats, stubRow } from '../runStats.js';
 import { VERSION as APP_VERSION } from '../logic.js';
 import { browserStorage, pageStorage, createJsonStore } from '../store.js';
 import { createOnlineNet, onlineProjectConfig } from '../onlineNet.js';
+import { createResumeStore, resumeKey } from '../onlineRace.js';
 import { createOnlineAccount } from '../onlineAccount.js';
 import { runDeltas, evaluate, bestFacts, levelCloseShave, winsInWindow, daysBetween, nextDrawStreak, FOUR_OF_A_KIND, EDU_ACHIEVEMENTS, eduRunFacts } from '../achievements.js';
 import { unlock, attachGame, setMuted, isMuted, sfx } from '../sound.js';
@@ -221,6 +222,8 @@ export class Play extends Phaser.Scene {
     this.player = data?.player ?? 1;
     this.match = data?.match ?? null;
     this.half = this.match ? { fieldW: data.fieldW, fieldX: data.fieldX ?? 0, inventoryY0: data.inventoryY0 ?? null } : null;
+    // An online race rewound after a reload (plan 39, 2.3): the run starts at this level's start (start()).
+    this.raceResume = this.match ? (data?.resume ?? null) : null;
     // The level lengths this half runs on: a tournament race's own table, else the normal one.
     // Every level-boundary helper gets this.tune, never bare T (tests/scenes.test.js checks).
     this.tune = withLevelPipes(T, this.match?.levelPipes);
@@ -778,6 +781,7 @@ export class Play extends Phaser.Scene {
       if (!this.match) this.launch({ solo: true });
     }
     this.openPendingInvite(); // an invite link (plan 28, 2.4)
+    this.openPendingRace(); // a race this tab left by a reload (plan 39, 2.3)
   }
 
   /**
@@ -946,7 +950,9 @@ export class Play extends Phaser.Scene {
     this.reviveLost = null;
     // An education run may start at a level it unlocked before (plan 25: the ready screen's stepper).
     const startLevel = this.runIsTest ? this.testSettings().startLevel : this.runIsEducation ? this.eduStartLevel() : 1;
-    const begin = daily ? dailyRunStart(daily.level, this.tune) : testRunStart(startLevel, this.tune);
+    // An online race rewound to a level's start (plan 39, 2.3, D4): that level's first pair, its score kept.
+    const resume = this.match ? this.raceResume : null;
+    const begin = daily ? dailyRunStart(daily.level, this.tune) : resume ? { ...testRunStart(resume.level, this.tune), score: resume.score } : testRunStart(startLevel, this.tune);
     this.runStartLevel = begin.level; // a full run (💯, 🤓) starts at level 1 and skips nothing (plan 25)
     this.runTopLevel = begin.level; // the highest level this run has been on: the shop's and Skip's prices (plan 26, A2)
     this.breakLevelPick = null; // a level chosen at a break (plan 26, A2), applied when the break ends
@@ -975,6 +981,13 @@ export class Play extends Phaser.Scene {
     this.mysteryPair = this.course.mysteryPair(); // the pair the guaranteed first box (early level 3) rides after
     // The purse: every run starts empty (coins last across the levels of one run only).
     this.effects.spendCoins(this.effects.coins());
+    // A rewound online race (2.3): the purse, the beans and a probiotic as that level's start had them.
+    if (resume) {
+      this.effects.restoreLevel(resume);
+      this.refreshBeanHud();
+      this.refreshProbioticHud();
+      this.setCharged(this.effects.powerReady());
+    }
     this.refreshCoinHud();
     if (daily) this.kernel = null; // no kernels, coins or shop in a Daily Dump
     else this.armKernel();
@@ -5340,6 +5353,36 @@ export class Play extends Phaser.Scene {
       frame: this.poop.texture.key, alpha: this.poop.alpha, level: this.level, pipesPassed: this.pipesPassed, score: this.score,
       deaths: slot.deaths ?? 0, levelWins: slot.levelWins ?? 0, finalFirst: Boolean(slot.finalFirst),
     };
+  }
+
+  /**
+   * This half at a level's start for the online race's rewind (plan 39, 2.3; src/onlineRace.js's
+   * levelSnap): the level, the score, the purse, the beans and a probiotic (the effects' snapshot),
+   * and the slot's crashes and level wins. start() takes it back as `resume`.
+   */
+  resumeSnapshot() {
+    const slot = this.match?.slots[this.player - 1] ?? {};
+    const held = this.effects.snapshot();
+    return { level: this.level, score: this.score, coins: held.coins, beans: held.beans, probiotic: held.probiotic, postbiotic: held.postbiotic, deaths: slot.deaths ?? 0, levelWins: slot.levelWins ?? 0 };
+  }
+
+  /** This tab's online-race resume record (plan 39, 2.3, D4): sessionStorage, per project (the test project's has '.test'). */
+  raceResumeStore() {
+    return createResumeStore(() => globalThis.sessionStorage ?? null, resumeKey(Boolean(this.onlineTestProject?.())));
+  }
+
+  /**
+   * A race this tab was in when it reloaded (plan 39, 2.3, D4): the ready screen opens the 🌐 window,
+   * which rejoins it (the panel's lobby asks room_state); once per page load, so a ✕ there keeps the
+   * ready screen (a later 🌐 entry still rejoins while the record lasts).
+   */
+  openPendingRace() {
+    if (this.match || this.registry?.get('raceRejoinOffered')) return;
+    if (!this.raceResumeStore().get()) return;
+    this.registry?.set('raceRejoinOffered', true);
+    this.time?.delayedCall?.(0, () => {
+      if (this.sys?.isActive?.() && !this.match && this.state === 'ready' && !isTournamentPanelOpen()) this.openVersusWindow();
+    });
   }
 
   /** This half's live state for the other half (the ghost, the rival marker) and the result panel. */

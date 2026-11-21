@@ -387,6 +387,10 @@ export const TUNING = {
       heartbeatMs: 1000, // ms between repeats of this side's pause message while it is paused: the one message a second that keeps a paused side from reading as silent (at most half of silenceMs)
       leaveConfirmMs: 4000, // ms the pause overlay's Leave waits for its second tap (it ends the race for both, with no winner), then it asks again
     },
+    // Reload resume (plan 39, 2.3, D4): a reload mid-race rejoins the room and both players rewind to the current level's start.
+    resume: {
+      maxAgeMs: 6 * 60 * 60 * 1000, // ms a tab's resume record is good for (wall clock): the server ends a playing room 6 h after its race started
+    },
     inventoryY0: 268, // px: the purse and bean rows' first centre in an online race, below the opponent's pill (its top 82, bottom 228 with the slow / lost word), not over it
     ghost: {
       maxExtrapolateMs: 1000, // ms past the last message the ghost keeps moving; then it holds until the next one
@@ -593,6 +597,7 @@ export const LEADERBOARD = {
   careerKey: 'flappyPoop.career', // localStorage key for this device's lifetime counters and achievements (plan 08): what waits to be sent, the batch in flight, the server's last totals, unlocks and claims
   onlineSessionKey: 'flappyPoop.onlineSession', // localStorage key for this device's anonymous Supabase Auth session (plan 39, 🌐 only): supabase-js keeps it there; a bearer secret, never sent anywhere else nor exported
   onlineRaceKey: 'flappyPoop.onlineRace', // localStorage key for the room code of the online race this device is in (plan 39, 1.8, item 46): set at the race's hand-off, cleared by Leave; a code still there on the next entry to 🌐 is a race left by a reload, so its room is left first (else the server refuses this device a new room for up to 6 h). '.test' suffix on the test project
+  onlineResumeKey: 'flappyPoop.onlineResume', // sessionStorage key for this tab's resume record (plan 39, 2.3, D4): the race's room, round and seat, and each level's start (score, purse, beans, probiotic, crashes, level wins), written at the race's start and at each level break; read after a reload to rejoin and rewind to the current level's start; gone at the race's end, on Leave, once this side's run has ended, or when the server says the race is over. '.test' suffix on the test project
   onlineTrustKey: 'flappyPoop.onlineTrust', // localStorage key for whether this device was last seen trusted online (plan 39, 1.6a, M1): true / false, so a demotion while it was away can be told; cleared by Clear, a Load of another player and Remove this device
   streaksKey: 'flappyPoop.streaks', // localStorage key for this device's Singleplayer and Daily Dump day streaks (plan 34): { single, daily }, each { day, streak, best }; never sent, not in the backup
   dailyMaxScore: 10000, // the Daily Dump cap (endless runs); matches daily_scores' CHECK and submit_daily_score() in db/schema.sql

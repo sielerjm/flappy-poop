@@ -90,6 +90,7 @@ export const SECTIONS = [
   { name: 'online-client', needs: [], about: "the online client (plan 39, 0.2): the boot and the sections since ask for nothing of assets/vendor/supabase.js; blocked, loadSupabase() rejects with onlineLoadFailed and no error card shows; unblocked, one same-origin request at the pin gives supabase.createClient, and a second call asks for nothing more" },
   { name: 'resync', needs: [], about: "the resync (plan 35, 1.4), the live board blocked: two online events in a row sync once and the next one after it settles syncs again; a show after a 1 s hide syncs nothing, after a 31 s one it syncs; a restart keeps the one guard and leaves one online listener" },
   { name: 'online-race', needs: [], about: "the online race (plan 39, 1.7a-1.8) against a scripted guest in the page (its own referee and feed, a 40 ms link; no network): the scene and its Play, Space flapping the one half, the purse under the opponent's pill and a long name fitted to it, the host taking level 1's line, the wait timer and Keep waiting, the shared count and GO, the final line to the guest, one outcome on both, the results panel, Rematch's states and round 2, then Leave from the wait offer back to single player" },
+  { name: 'online-reload', needs: [], about: "reload resume (plan 39, 2.3, D4) against a scripted guest in the page (a 40 ms link; no network): the race into level 2 with its level start kept in the tab's record; the guest's reload restarts this race at level 2's start under the overlay; then a real page reload: a stand-in transport under Play, the 🌐 window rejoins (room_state, the channel as the host, nothing left), the race back rewound, both Ready, one GO, level 2 from its first pair with the kept score, purse, beans and level wins, the race to its end and the record gone" },
 ];
 
 /** What a section needs: its own list, or (omitted) every section before it. */
@@ -7234,6 +7235,198 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         ok(exceptions.length === ex0, exceptions.length > ex0 ? `page exceptions: ${exceptions.slice(ex0).join(' | ')}` : 'no page exceptions');
       } finally {
         await evaluate(`(clearInterval(globalThis.__race?.bot?.timer), true)`).catch(() => null);
+      }
+    });
+
+    await section('online-reload', async () => {
+      // Reload resume (plan 39, 2.3, D4), in the real game against a scripted guest in the page (a 40 ms
+      // link, no network). Part 1: the race into level 2 (its level start kept in this tab's record),
+      // then the guest "reloads" (a new session and its rewind): this page restarts at level 2's start,
+      // held under the pause overlay. Part 2: this page really reloads; a stand-in transport installed
+      // before the boot (Play's onlineNet and onlineAccount) answers room_state, so the 🌐 window
+      // rejoins through its own lobby and hands the race back rewound; both say Ready, one GO, the
+      // level runs from its first pair with the kept numbers, and the race ends with the record gone.
+      const KEY = 'flappyPoop.onlineResume';
+      await evaluate(`(sessionStorage.removeItem('${KEY}'), true)`).catch(() => null);
+      await cdp.send('Network.enable');
+      await cdp.send('Network.setBlockedURLs', { urls: ['*supabase.co*'] });
+      await cdp.send('Emulation.setDeviceMetricsOverride', { width: 720, height: 1280, deviceScaleFactor: 1, mobile: false });
+      const boot = async () => {
+        let sp = null;
+        for (let i = 0; i < 120 && !sp?.enabled; i += 1) {
+          await sleep(500);
+          sp = await splashNow().catch(() => null);
+        }
+        if (sp?.enabled) {
+          await splashKey('keydown', ' ');
+          await splashKey('keyup', ' ');
+        }
+        for (let i = 0; i < 120 && (await playState().catch(() => null)) !== 'ready'; i += 1) await sleep(500);
+      };
+      await cdp.send('Page.navigate', { url: `${url}/?r=${Date.now()}` });
+      await cdp.send('Page.bringToFront');
+      await boot();
+      const P = `__flappy.scene.getScene('Play')`;
+      const OR = `__flappy.scene.getScene('OnlineRace')`;
+      const ex0 = exceptions.length;
+      const until = async (expr, ms = 8000) => {
+        const end = Date.now() + ms;
+        while (Date.now() < end) {
+          if (await evaluate(expr)) return true;
+          await sleep(50);
+        }
+        return false;
+      };
+      const record = () => evaluate(`sessionStorage.getItem('${KEY}')`).then((s) => (s ? JSON.parse(s) : null));
+      const pin = () => evaluate(`(() => { const p = ${P}; p.poop.body.setAllowGravity(false); p.poop.setVelocity(0, 0); p.poop.y = 640; p.graceLeftMs = 1e9; return true; })()`);
+      const toLine = (last) => evaluate(`(() => { const p = ${P}; const L = __rl.L; const T = __rl.T; ${last ? 'p.level = T.levels.lastLevel; p.applyLevel();' : ''} const end = L.levelEnd(p.level, T); p.pipes.clear(true, true); p.items.clear(true, true); p.beans.clear(true, true); p.nextGapY = null; p.pipesSpawned = end; p.pipesPassed = end; p.finishSpawned = false; p.spawnFinishLine(); p.finishLine.x = p.poop.x + 60; return true; })()`);
+      // The scripted guest and the transport between them: built in the page, again after the reload.
+      // `rewound` starts it held at level 2's start (after this page's rewind, or its own reload).
+      const guest = (rewound) => `(async () => {
+        const [R, O, C, L] = await Promise.all([import('./src/onlineRace.js'), import('./src/online.js'), import('./src/config.js'), import('./src/logic.js')]);
+        const T = C.TUNING; const LAT = 40; const now = () => Date.now();
+        const q = []; const log = [];
+        const sendA = O.createSender({ sid: 'host1', now }); const inboxA = O.createInbox(); const inboxB = O.createInbox();
+        const bot = { sid: 1, rewound: ${rewound}, ready: false, restartAt: now(), sentAt: -Infinity, beginAt: null, finalAt: null, crossedAt: null, hold: false };
+        const sendBot = (event, fields) => { const m = bot.send(event, fields); if (!m) return false; if (event !== 'pos' && event !== 'flap') log.push('B> ' + event + ' ' + JSON.stringify(fields)); setTimeout(() => { if (inboxA.take(event, m.payload)) q.push({ kind: 'peer', event, msg: m.payload, at: m.payload.t }); }, LAT); return true; };
+        bot.start = (rw) => {
+          bot.send = O.createSender({ sid: 'bot' + bot.sid, now });
+          bot.rewound = rw; bot.ready = false; bot.restartAt = now(); bot.sentAt = -Infinity; bot.beginAt = null;
+          const since = rw ? bot.restartAt : __rl.room.startMs;
+          bot.pause = R.createRacePause({ seat: 'guest', now, send: sendBot, present: true });
+          bot.feed = R.createRaceFeed({ now, send: sendBot, since });
+          bot.ref = R.createRaceReferee({ seat: 'guest', now, send: sendBot, since });
+          bot.h = { state: rw ? 'waiting' : 'waiting', levelBreak: false, ended: false, won: false, flaps: 0, distance: 0, speed: 0, y: 640, vy: 0, angle: 0, frame: 'poop', alpha: 1, level: rw ? 2 : 1, pipesPassed: 0, score: rw ? 20 : 0, deaths: 0, levelWins: 0, finalFirst: false, tapped: false, arrivedAt: 0, t0: 0 };
+        };
+        const net = { serverNow: now, pump() {}, take: () => q.splice(0), peer: () => ({ name: 'JollyPlunger042', width: 720 }), channelState: () => 'joined', close() { log.push('close'); },
+          send(event, fields) { const m = sendA(event, fields); if (!m) return false; if (event !== 'pos' && event !== 'flap') log.push('A> ' + event + ' ' + JSON.stringify(fields)); setTimeout(() => { if (!inboxB.take(event, m.payload)) return; const item = { kind: 'peer', event, msg: m.payload, at: m.payload.t }; bot.feed?.receive(item); bot.ref?.receive(item); bot.pause?.receive(item); }, LAT); return true; } };
+        globalThis.__rl = { ...(globalThis.__rl ?? {}), net, bot, log, q, L, T, R };
+        __rl.room ??= { phase: 'playing', role: 'host', code: '482913', hostName: 'Smoke', guestName: 'JollyPlunger042', seed: 4242, startMs: now() + 3500, round: 1 };
+        if (globalThis.__reloadHooks) { __reloadHooks.send = (e, f) => net.send(e, f); __reloadHooks.take = () => net.take(); }
+        bot.start(${rewound});
+        bot.timer = setInterval(() => {
+          const h = bot.h; const ref = bot.ref; const at = now();
+          if (bot.rewound) {
+            if (!bot.ready && at - bot.restartAt >= 1000) bot.ready = true;
+            if (at - bot.sentAt >= T.online.pause.heartbeatMs) { bot.sentAt = at; sendBot('rewind', { round: 1, level: 2, at: bot.restartAt }); }
+          } else if (h.state === 'waiting' && at >= __rl.room.startMs) { h.state = 'playing'; h.t0 = at; h.speed = 300; }
+          bot.pause.tick({ phase: bot.rewound ? null : R.localPhase(h), hidden: false, offline: false, channel: 'joined', menu: false, rewind: bot.rewound && !bot.ready });
+          for (const e of bot.pause.drain()) if (e.type === 'resume' && bot.rewound) { bot.rewound = false; h.state = 'playing'; h.speed = 300; h.level = T.levels.lastLevel; bot.beginAt = at; }
+          if (h.state === 'playing' && !bot.pause.frozen()) {
+            h.distance += h.speed * 0.016; h.pipesPassed = Math.floor(h.distance / 300); h.score = h.pipesPassed + h.levelWins * 25;
+            if (h.level === 1 && at - h.t0 >= 2500) { ref.crossed({ level: 1, final: false, distance: h.distance }); h.level = 2; h.state = 'paused'; h.levelBreak = true; h.arrivedAt = at; }
+            else if (h.level === T.levels.lastLevel && bot.beginAt !== null && at - bot.beginAt >= 1500) { ref.crossed({ level: h.level, final: true, distance: h.distance }); h.state = 'dead'; h.ended = true; h.won = true; bot.finalAt = at; }
+          }
+          if (!bot.hold && h.levelBreak && !h.tapped && at - h.arrivedAt >= T.versus.levelSyncDelayMs + 1000) h.tapped = ref.setReady(h.level, true);
+          ref.tick({ level: h.level, inBreak: h.levelBreak && h.state === 'paused', shopOpen: false, held: bot.pause.frozen() });
+          for (const e of ref.drain()) {
+            if (e.type === 'first' && e.mine && !bot.feed.doneSent()) { h.levelWins += 1; h.score += 25; if (e.final) h.finalFirst = true; }
+            if (e.type === 'begin' && h.levelBreak) { h.levelBreak = false; h.state = 'playing'; bot.beginAt = null; }
+          }
+          if (!bot.rewound) bot.feed.tick({ ...h, ended: h.ended && ref.settled(h.level) });
+        }, 16);
+        return true;
+      })()`;
+      let scriptId = null;
+      try {
+        // --- Part 1: into level 2, then the guest's reload -------------------------------------------
+        ok((await evaluate(guest(false))) === true, 'the scripted guest and the link are up');
+        await evaluate(`(() => { const lobby = { state: { room: __rl.room }, calls: [], roomItem() {}, remember() {}, finish() { lobby.calls.push('finish'); }, rematch() {}, leave: async () => { lobby.calls.push('leave'); } }; __rl.lobby = lobby; const plan = __rl.R.raceStartPlan(__rl.room, { mine: 720, theirs: 720 }); ${P}.scene.start('OnlineRace', { net: __rl.net, lobby, plan, store: ${P}.raceResumeStore() }); return true; })()`);
+        ok(await until(`${OR}?.match?.status === 'playing' && ${P}.state === 'playing'`, 9000), 'the race runs (GO on the server clock)');
+        const r0 = await record();
+        ok(r0?.code === '482913' && r0?.round === 1 && r0?.seat === 'host' && Object.keys(r0?.levels ?? {}).join() === '1', `the tab's resume record from the race's start: ${JSON.stringify(r0 && { code: r0.code, round: r0.round, seat: r0.seat, levels: Object.keys(r0.levels) })}`);
+        await pin();
+        await evaluate(`(() => { const p = ${P}; p.takeCoins(4); p.giveBeans(1); __rl.bot.hold = true; return true; })()`);
+        await sleep(600);
+        await toLine(false);
+        ok(await until(`${P}.levelBreak && ${P}.level === 2 && ${OR}.match.slots[0].levelWins === 1`, 4000), "the host first over level 1's line: its break at level 2");
+        ok(await until(`Boolean(${OR}.levels[2])`, 3000), 'the line settled: level 2\'s start kept');
+        const kept = await evaluate(`JSON.stringify(${OR}.levels[2])`).then(JSON.parse);
+        const r1 = await record();
+        ok(kept.level === 2 && kept.levelWins === 1 && kept.coins === (await evaluate(`${P}.effects.coins()`)) && kept.beans >= 1 && JSON.stringify(r1?.levels?.[2]) === JSON.stringify(kept), `…and written to the record: ${JSON.stringify(kept)}`);
+        await until(`${P}.levelHint.visible`, 2000);
+        await evaluate(`(${P}.handleChrome('tap'), __rl.bot.hold = false, true)`);
+        ok(await until(`!${P}.levelBreak && ${P}.state === 'playing' && ${P}.level === 2`, 8000), 'both ready, GO: level 2 runs');
+        await pin();
+        await sleep(800);
+        // The guest reloads: a new session, held at level 2's start, its rewind on the wire.
+        await evaluate(`(__rl.bot.sid = 2, __rl.bot.start(true), true)`);
+        ok(await until(`${OR}.rewound?.level === 2 && ${OR}.rewound.by === 'them' && ${P}.raceResume?.level === 2`, 4000), `the guest's rewind restarted this race at level 2's start (${await evaluate(`JSON.stringify(${OR}.rewound)`)})`);
+        ok(await until(`${OR}.isPaused() && ${OR}.pause.state().mine === 'rewind' && ${OR}.pauseUi.panel.visible`, 3000), `held under the overlay: "${await evaluate(`${OR}.pauseUi.title.text`)}" / "${await evaluate(`${OR}.pauseUi.sub.text`)}"`);
+        ok((await evaluate(`${P}.state`)) === 'ready' && (await evaluate(`${OR}.match.status`)) === 'countdown', 'Play waits at the level start (no run yet)');
+        await evaluate(`(clearInterval(__rl.bot.timer), true)`);
+
+        // --- Part 2: this page reloads --------------------------------------------------------------
+        const r2 = await record();
+        ok(r2?.levels?.[2]?.level === 2, `the record before the reload: levels ${Object.keys(r2?.levels ?? {}).join(', ')}, pause round ${r2?.pauseRound}`);
+        const room = await evaluate(`JSON.stringify(__rl.room)`).then(JSON.parse);
+        const stand = (cfg) => {
+          const hooks = (globalThis.__reloadHooks = { calls: [], send: null, take: null });
+          const net = {
+            warm: async () => ({ ok: true }),
+            serverNow: () => Date.now(),
+            pump() {},
+            take: () => (hooks.take ? hooks.take() : []),
+            send: (event, fields) => (hooks.send ? hooks.send(event, fields) : false),
+            peer: () => ({ name: cfg.guestName, width: 720, seat: 'guest' }),
+            channelState: () => 'joined',
+            async rpc(fn) {
+              hooks.calls.push(fn);
+              if (fn === 'room_state') return { ok: true, data: { ok: true, code: cfg.code, status: 'playing', source: 'code', seat: 'host', host_name: cfg.hostName, guest_name: cfg.guestName, seed: cfg.seed, start_ms: cfg.startMs, round: cfg.round, server_ms: Date.now() } };
+              return { ok: true, data: null };
+            },
+            async openRoom(code, opts) {
+              hooks.calls.push(`openRoom ${code} ${opts?.seat}`);
+              return { ok: true };
+            },
+            closeRoom() {
+              hooks.calls.push('closeRoom');
+            },
+            close() {
+              hooks.calls.push('close');
+            },
+          };
+          const account = { enter: async () => ({ ok: true, view: 'home', name: cfg.hostName, trusted: true, demoted: false, blocked: false }), devices: async () => ({ ok: true, rows: [] }), status: () => ({ linked: true, trusted: true, name: cfg.hostName }) };
+          const iv = setInterval(() => {
+            const p = globalThis.__flappy?.scene?.getScene?.('Play');
+            if (!p) return;
+            clearInterval(iv);
+            p.onlineNet = net;
+            p.onlineAccount = () => account;
+            hooks.patched = true;
+          }, 1);
+        };
+        ({ identifier: scriptId } = await cdp.send('Page.addScriptToEvaluateOnNewDocument', { source: `(${stand.toString()})(${JSON.stringify(room)});` }));
+        await cdp.send('Page.reload', { ignoreCache: false });
+        await boot();
+        ok(await evaluate(`globalThis.__reloadHooks?.patched === true`), 'reloaded: the stand-in transport sits under Play');
+        await evaluate(`(globalThis.__rl = { room: ${JSON.stringify(room)} }, true)`);
+        ok((await evaluate(guest(true))) === true, 'the guest is back on the link, still held at level 2\'s start');
+        ok(await until(`__flappy.scene.isActive('OnlineRace') && ${OR}.rewound?.level === 2 && ${OR}.rewound.by === 'me'`, 9000), `the 🌐 window rejoined (${await evaluate(`JSON.stringify(__reloadHooks.calls)`)}) and handed the race back, rewound at level 2`);
+        const calls = await evaluate(`JSON.stringify(__reloadHooks.calls)`).then(JSON.parse);
+        ok(calls.includes('room_state') && calls.includes('openRoom 482913 host') && !calls.includes('leave_room') && !calls.includes('create_room'), `room_state, the channel as the host, nothing left or created: ${calls.join(', ')}`);
+        const resumed = await evaluate(`JSON.stringify(${P}.raceResume)`).then(JSON.parse);
+        ok(JSON.stringify(resumed) === JSON.stringify(kept), `Play waits with level 2's kept start: ${JSON.stringify(resumed)}`);
+        ok(await until(`${OR}.pauseUi.panel.visible && ${OR}.pauseUi.ready.visible`, 3000), `the overlay: "${await evaluate(`${OR}.pauseUi.title.text`)}", Ready shown`);
+        ok(await until(`__rl.log.some((l) => l.startsWith('A> rewind') && l.includes('"level":2'))`, 3000), 'this page says rewind, level 2');
+        ok(await until(`${OR}.pause.state().ready.theirs === true`, 4000), 'the guest said Ready');
+        await evaluate(`(() => { const r = ${OR}; const b = r.pauseUi.boxes.ready; r.onPointer({ x: b.x, y: b.y }); return true; })()`);
+        ok(await until(`__rl.log.some((l) => l.startsWith('A> resume'))`, 3000), `both ready: the host's resume (${await evaluate(`__rl.log.filter((l) => l.startsWith('A> resume')).join(' | ')`)})`);
+        ok(await until(`${OR}.match.status === 'playing' && ${P}.state === 'playing'`, 6000), 'one GO: the level runs');
+        const start = await evaluate(`JSON.stringify({ level: ${P}.level, pipesPassed: ${P}.pipesPassed, end1: __rl.L.levelEnd(1, __rl.T), score: ${P}.score, coins: ${P}.effects.coins(), beans: ${P}.effects.beans(), levelWins: ${OR}.match.slots[0].levelWins, beganAt: __rl.bot.beginAt, rewound: ${OR}.rewound })`).then(JSON.parse);
+        ok(start.level === 2 && start.pipesPassed >= start.end1 && start.pipesPassed <= start.end1 + 1 && start.score >= kept.score && start.score <= kept.score + 2 && start.coins === kept.coins && start.beans === kept.beans && start.levelWins === kept.levelWins && start.rewound === null, `from level 2's first pair with the kept numbers: ${JSON.stringify(start)}`);
+        ok(start.beganAt !== null, 'the guest began on the same GO');
+        await pin();
+        const crossed = await until(`__rl.bot.finalAt !== null`, 4000);
+        ok(crossed, `the guest crossed the final line${crossed ? '' : ` (${await evaluate(`JSON.stringify({ h: __rl.bot.h, beginAt: __rl.bot.beginAt, now: Date.now(), frozen: __rl.bot.pause.frozen(), pause: __rl.bot.pause.state(), host: ${OR}.pause.state(), log: __rl.log.slice(-10) })`)})`}`);
+        await sleep(600);
+        await toLine(true);
+        ok(await until(`${OR}.match.status === 'over'`, 6000), 'both out: the race is over');
+        ok((await record()) === null, "the tab's resume record is gone with the race");
+        ok(exceptions.length === ex0, exceptions.length > ex0 ? `page exceptions: ${exceptions.slice(ex0).join(' | ')}` : 'no page exceptions');
+      } finally {
+        if (scriptId) await cdp.send('Page.removeScriptToEvaluateOnNewDocument', { identifier: scriptId }).catch(() => null);
+        await evaluate(`(clearInterval(globalThis.__rl?.bot?.timer), sessionStorage.removeItem('${KEY}'), true)`).catch(() => null);
       }
     });
 

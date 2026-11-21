@@ -71,7 +71,7 @@ function screenOf(room) {
  * @param {() => number} [deps.now] server ms (the transport's clock)
  * @param {(lobby: object) => void} [deps.onBothReady] both players ready (1.7a: start the race)
  */
-export function createOnlineLobby({ net, name, width, mine = { protocol: protocolVersion(), app: VERSION }, now = () => net.serverNow(), onBothReady = null, memory = null }) {
+export function createOnlineLobby({ net, name, width, mine = { protocol: protocolVersion(), app: VERSION }, now = () => net.serverNow(), onBothReady = null, memory = null, resume = null }) {
   const state = { screen: 'home', room: roomInit(), typed: '', meReady: false, themReady: false, message: null };
   const pending = new Set();
   let themT = -Infinity; // the newest peer ready's time (server ms) and sequence
@@ -80,7 +80,9 @@ export function createOnlineLobby({ net, name, width, mine = { protocol: protoco
   let starting = false; // set_room_status('playing') in flight
   // Item 46: a race this device left without ending (a reload, a crash) keeps its room 'playing', and
   // the server refuses a seated device a new room ('in a race', up to 6 h). Its code, remembered at the
-  // hand-off (remember), is left first, and Create / Join wait for that; 2.3's resume replaces this.
+  // hand-off (remember), is left first, and Create / Join wait for that. 2.3: with a resume record
+  // (`resume`: the tab reloaded mid-race) the panel rejoins that race instead (rejoin), so nothing is
+  // left on entry; a Create or Join after a failed rejoin still leaves it first.
   // The code is forgotten only once leave_room went through (AUD-096): a leave lost offline keeps
   // it, and the next Create / Join tries again, so a weak link never strands the device 'in a race'.
   const forgetIfLeft = (res) => {
@@ -93,7 +95,7 @@ export function createOnlineLobby({ net, name, width, mine = { protocol: protoco
       .catch(() => null)
       .then((res) => forgetIfLeft(res));
   };
-  let staleLeave = leaveRemembered();
+  let staleLeave = resume ? null : leaveRemembered();
   const staleLeft = async () => {
     staleLeave ??= leaveRemembered();
     if (!staleLeave) return;
@@ -391,8 +393,51 @@ export function createOnlineLobby({ net, name, width, mine = { protocol: protoco
     return signature() !== before;
   }
 
+  /**
+   * 2.3, D4: the race a reload left (the tab's resume record: its code). room_state says whether this
+   * device still sits in it: still playing, the room becomes this seat's ('rejoin') and its channel
+   * opens as that seat, so the panel's poll hands it to the race; no seat ('no room'), or the race
+   * finished or abandoned: over, and the remembered code is forgotten; the server out of reach or the
+   * channel refused: kept for the next try, and the room is never left (a leave would end the race
+   * for both). → { ok: true } | { ok: false, over: true } | { ok: false, error }.
+   */
+  async function rejoin(record) {
+    const code = parseCode(record?.code);
+    if (!code || (state.room.phase !== 'idle' && state.room.phase !== 'closed')) return { ok: false, error: 'bad room' };
+    state.screen = 'busy';
+    state.message = msg('onlineRejoining', 'notice');
+    const gen = generation;
+    const res = await net.rpc('room_state', { p_code: code });
+    if (gen !== generation) return { ok: false, error: 'you left' };
+    const failed = (error) => {
+      state.room = roomInit();
+      state.screen = 'home';
+      state.message = msg(errorKey(error), 'error');
+      return { ok: false, error: error ?? 'error' };
+    };
+    if (!res?.ok && res?.error !== 'no room') return failed(res?.error);
+    const room = res?.ok ? res.data : null;
+    if (!room || room.status !== 'playing') {
+      memory?.clear?.();
+      state.room = roomInit();
+      state.screen = 'home';
+      state.message = msg('onlineRaceOver', 'notice');
+      return { ok: false, over: true };
+    }
+    step({ type: 'rejoin', room, at: now() });
+    if (state.room.phase !== 'playing') return failed('error');
+    const opened = await net.openRoom(code, { seat: state.room.role, name, width });
+    if (gen !== generation) return { ok: false, error: 'you left' };
+    if (!opened?.ok) {
+      net.closeRoom();
+      return failed(opened?.error);
+    }
+    return { ok: true };
+  }
+
   return Object.assign(lobby, {
     create: () => create(),
+    rejoin,
     join,
     answer,
     setReady,
