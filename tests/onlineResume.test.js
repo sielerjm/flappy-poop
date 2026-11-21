@@ -80,6 +80,8 @@ test('rewindOnHeard: the level a peer\'s rewind asks this side to restart at (th
   assert.equal(rewindOnHeard({ ...base, rewound: 3, msg: msg(4) }), null, 'the other comes down when it hears this side\'s');
   assert.equal(rewindOnHeard({ ...base, msg: msg(2, { round: 2 }) }), null, 'another round');
   assert.equal(rewindOnHeard({ ...base, since: 9000, msg: msg(2) }), null, 'stamped before this side last flew: stale');
+  assert.equal(rewindOnHeard({ ...base, since: 9000, msg: msg(2, { at: 8000, t: 9040 }) }), null, 'T2-review: sent after this side flew, but for a restart from before it (a late heartbeat of the restart its GO answered): stale');
+  assert.equal(rewindOnHeard({ ...base, since: 9000, msg: msg(2, { at: 12000, t: 12000 }) }), 2, 'a restart after this side flew: a new reload');
   assert.equal(rewindOnHeard({ ...base, ended: true, msg: msg(2) }), null, 'a side whose run has ended never rewinds');
   assert.equal(rewindOnHeard({ ...base, msg: null }), null);
 });

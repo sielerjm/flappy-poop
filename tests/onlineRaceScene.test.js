@@ -1015,6 +1015,30 @@ test('2.3 stale and out of bounds: a rewind stamped before this side last left a
   assert.deepEqual(restarts(ops), [], 'its run has ended: it never rewinds');
 });
 
+test('T2-review: a rewound side sends no rewind in its own GO frame, and a late resend of a restart its GO answered restarts nothing (the online-reload flake)', () => {
+  const { s, net, ops } = raceScene({ resume: { level: 2, levels: { 1: START, 2: LV2 }, pauseRound: 0, by: 'me' } });
+  net.clock.now = GO + 60_000;
+  s.update();
+  s.toggleReady();
+  net.push(peer('pause', { reason: 'rewind', ready: true, round: 0, count: 0 }, net.clock.now - 20));
+  s.update();
+  const go = sentOf(net, 'resume').at(-1).startAt;
+  const before = sentOf(net, 'rewind').length;
+  net.clock.now = go; // its heartbeat is long due: no frame ran during the count
+  net.push(peer('pause', { reason: 'peer', ready: true, round: 0, count: go }, go - 10));
+  s.update();
+  assert.equal(s.match.status, 'playing');
+  assert.equal(sentOf(net, 'rewind').length, before, 'no rewind leaves in the GO frame');
+  net.push(peer('rewind', { round: 1, level: 2, at: GO + 59_000 }, go + 1)); // the other side's last heartbeat, sent in its GO frame
+  net.clock.now = go + 40;
+  s.update();
+  assert.deepEqual(restarts(ops), [], 'the restart this GO answered, heard late, restarts nothing');
+  net.push(peer('rewind', { round: 1, level: 2, at: go + 5_000 }, go + 5_000)); // a new reload after the GO
+  net.clock.now = go + 5_040;
+  s.update();
+  assert.equal(restarts(ops)[0]?.resume?.level, 2, 'a new restart after the GO still rewinds');
+});
+
 test('2.3 each level break writes its snapshot once its line is settled, and the record with it; a purchase in the break updates it', () => {
   const store = fakeStore();
   const k = raceScene({ seat: 'host', store });

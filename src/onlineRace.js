@@ -1096,11 +1096,13 @@ export function resumePlan(record, room) {
  * The level a peer's `rewind` asks this side to restart at, or null for none: the lower of its level
  * and this side's own (its highest level start, `top`; or, rewound already, the level it waits at,
  * which only a lower one moves). Nothing for another room round, a rewind stamped at or before this
- * side last left a rewind (`since`: its GO), or once this side's run has ended.
+ * side last left a rewind (`since`: its GO), one for a restart from before then (`at`: the sender's
+ * last heartbeat of the restart that GO answered, sent in its own GO frame or heard late; T2-review),
+ * or once this side's run has ended.
  * @param {{ msg: object | null, round: number, rewound: number | null, top: number, since: number, ended: boolean }} o
  */
 export function rewindOnHeard({ msg, round, rewound, top, since, ended }) {
-  if (!msg || ended || msg.round !== round || !Number.isInteger(msg.level) || !(msg.t > since)) return null;
+  if (!msg || ended || msg.round !== round || !Number.isInteger(msg.level) || !(msg.t > since) || !(msg.at > since)) return null;
   if (rewound !== null && rewound !== undefined) return msg.level < rewound ? msg.level : null;
   return Math.max(1, Math.min(msg.level, top));
 }

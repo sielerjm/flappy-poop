@@ -412,8 +412,8 @@ export class OnlineRace extends Phaser.Scene {
     this.tickPause();
     if (this.match.status === 'countdown') {
       this.fit.tick();
+      this.runCountdown(now); // first: a GO this frame clears `rewound`, so no rewind leaves after it (T2-review)
       this.sendRewind(now);
-      this.runCountdown(now);
     }
     const half = this.half();
     if (half && (this.match.status === 'playing' || this.match.status === 'over')) {
