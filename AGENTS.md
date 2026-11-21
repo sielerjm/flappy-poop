@@ -1363,12 +1363,19 @@ src/
                             agreed width, round), countdownStep, localPhase, linkQuality,
                             createRaceFeed({ now, send, since }) (what goes on the wire from
                             the local half and the other seat rebuilt from what arrives;
-                            `since` drops messages stamped before this round's GO; doneSent();
+                            `since` drops messages stamped before this round's GO; the
+                            run's end is fixed once (doneFixed()), its pos and done go
+                            each frame until the transport takes done (doneSent(),
+                            AUD-098), and no award is taken once it is fixed;
                             its link dot reads good while the peer's newest message says it
                             waits in a break or has finished, silence counts only mid-run),
                             createRaceReferee({ seat, now, send, since }): first over each
-                            line on server time (a guest's `finish` claim still on the wire
-                            wins a near tie; the host takes its own line after
+                            line on server time (a guest's `finish` claim, which carries
+                            the time it crossed as `at`, still on the wire wins a near
+                            tie; it goes again at once after a refused send and every
+                            TUNING.online.race.claimResendMs until the line settles
+                            (verdictWaitMs); the host answers a repeat with its verdict,
+                            and a guest that knows the verdict claims nothing; the host takes its own line after
                             TUNING.online.race.firstGraceMs with no earlier claim), one
                             `first` per line; `ready` marks keyed by the level they start,
                             resent every readyResendMs; both ready and the host in its break
@@ -1377,7 +1384,14 @@ src/
                             than cancelMarginMs before GO calls the count off (`go` with
                             cancel: true; later taps do nothing); a side still in its break
                             that sees the other's pos running that level begins at once;
-                            both `rematch` asks → the host's app calls the lobby's rematch.
+                            both `rematch` asks → the host's app calls the lobby's rematch
+                            (a standing ask repeats every readyResendMs).
+                            createFieldFit({ mine, theirs, heard, now, send, until })
+                            (item 14, AUD-097): from the race's start to its GO each
+                            side sends `width` every widthResendMs; the newest heard
+                            replaces the presence width; agreedWidth of the two is
+                            fieldW(); receive() is true when it moved; peer() the
+                            newest heard; nothing is sent from GO on.
                             raceRoomItem (only the confirmed status 'playing' / 'finished'
                             reaches the lobby; a leave or abandoned room is Tier 2's).
                             Knobs in TUNING.online.race. tests/onlineRace.test.js.
@@ -2208,7 +2222,11 @@ src/
                             local Play as player 1 (matchHostKey 'OnlineRace'); the other
                             seat is a remote feed in match.slots[1]. initRace(data) holds
                             the race's state apart from drawing (tests start there) and
-                            sets match.hostKey. 3-2-1-GO on the server clock. Host
+                            sets match.hostKey and the field: W (this device's width) and
+                            fieldW from createFieldFit. Until GO a width that moves the
+                            agreed one restarts the scene on the same plan (refitField;
+                            the newest width rides along as data.peer, also into a
+                            rematch); nothing after GO (AUD-097). 3-2-1-GO on the server clock. Host
                             interface: claimLevelFinish(half, { level, final }) records the
                             crossing with the referee and returns false (the verdict comes
                             back as Play.awardLevelFirst); onLevelReached hides the hint for
@@ -2671,7 +2689,12 @@ db/schema.sql               Supabase schema: scores table (player_id = save-code
                             tests/fixtures/schema-applied.sql (refreshed only by `npm run push`).
                             Online play (plan 39): online_profiles / online_players /
                             online_pairings (devices linked to a resolved player; M1 device
-                            trust, Michael's call of 19 Nov), rooms /
+                            trust, Michael's call of 19 Nov; fold_player's merge gives
+                            trust to a side with a device trusted and seen in 7 days:
+                            exactly one such side keeps it and the other side's devices
+                            drop to pending and its pairing code goes (AUD-094); both,
+                            the side whose trusted device linked first; neither, every
+                            device keeps its trust, M1's 7-day residual), rooms /
                             join_attempts / online_secret, and two policies on
                             realtime.messages for `room:<code>`; PGlite boots with
                             tools/supabase_stubs.mjs's auth and realtime stand-ins.
@@ -3718,8 +3741,9 @@ Commits follow `type(scope): summary` (`feat`, `fix`, `docs`, `chore`, `test`, `
   `scenes/OnlineRace.js` (tests/onlineRaceScene.test.js). The host is the one arbiter
   (`createRaceReferee`): `first` (one per line) and `go` are its word, judged on server time. Knobs in
   `TUNING.online.race` (not part of `protocolVersion`; `waitOfferMs` is item 15's offer, `TUNING.online.inventoryY0`
-  the purse rows' start below the opponent's pill). The `go` event's `cancel` flag is in `ONLINE_EVENTS`,
-  so it moved `protocolVersion`.
+  the purse rows' start below the opponent's pill; `claimResendMs` and `widthResendMs` are the
+  resends of a guest's claim and of the field width). The `go` event's `cancel` flag, `finish`'s `at` and
+  `width` (sent from the race's start to GO) are in `ONLINE_EVENTS`, so they moved `protocolVersion`.
   The tournament panel's hand-off (`handOffRace`, 1.8) remembers the room (`lobby.remember()`), and over a
   running Versus (🌐 switched on in its lobby) marks the match `left` and stops Versus and PlayB so only the
   race draws (not `Versus.leave()`, which starts a plain Play). The race's end is not stored anywhere in Tier 1:
