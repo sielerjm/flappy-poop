@@ -187,8 +187,13 @@ const newer = (msg, last) => !last || msg.t > last.t || (msg.t === last.t && msg
  * - Rematch: wantRematch(on) sends `rematch` (a standing ask again every readyResendMs, a refused
  *   one at once); both asking gives the host one rematch effect (its app asks the server for the
  *   next round, onlineLobby's rematch).
- * tick(local) each frame with { level, inBreak, shopOpen } of the local half (null after the race);
- * receive(item) for each transport item; drain() → the effects since the last call.
+ * - A held race (2.1: the shared pause, createRacePause, is on): no count starts, and the host calls
+ *   off a running one before its GO (from GO on the level begins and the scene keeps the half
+ *   frozen); the host's grace for its own crossing and a guest's verdict wait stand still, each
+ *   starting over when the hold ends, and a guest's unsettled claim goes again as the hold ends, so
+ *   a claim the pause kept off the wire still lands inside the host's grace.
+ * tick(local) each frame with { level, inBreak, shopOpen, held } of the local half (null after the
+ * race); receive(item) for each transport item; drain() → the effects since the last call.
  * @param {object} deps
  * @param {'host' | 'guest'} deps.seat
  * @param {() => number} deps.now server ms
@@ -199,7 +204,7 @@ export function createRaceReferee({ seat, now, send, since = -Infinity, t = TUNI
   const cfg = t.online.race;
   const host = seat === 'host';
   const other = host ? 'guest' : 'host';
-  const claims = new Map(); // level → { mine, theirs (server ms), verdict (seat), final, distance, sentAt, out }
+  const claims = new Map(); // level → { mine, theirs (server ms), verdict (seat), final, distance, sentAt, out, from (the grace and the verdict wait count from here: the crossing, or the end of a hold) }
   let me = null; // this side's newest ready mark { level, ready }
   let sentAt = -Infinity; // when that mark last went out
   let them = null; // the other side's newest { level, ready, t, seq }
@@ -208,10 +213,11 @@ export function createRaceReferee({ seat, now, send, since = -Infinity, t = TUNI
   let begun = 1; // the highest level this side has started (1: the race's own GO)
   let peerRun = null; // the other side's newest pos { phase, level }
   const rematch = { mine: false, theirs: null, fired: false, sentAt: null, out: true };
+  let held = false; // the shared pause holds the race (the last tick's local.held)
   const out = [];
 
   const claim = (level) => {
-    if (!claims.has(level)) claims.set(level, { mine: null, theirs: null, verdict: null, final: false, distance: 0, sentAt: -Infinity, out: true });
+    if (!claims.has(level)) claims.set(level, { mine: null, theirs: null, verdict: null, final: false, distance: 0, sentAt: -Infinity, out: true, from: null });
     return claims.get(level);
   };
 
@@ -312,6 +318,7 @@ export function createRaceReferee({ seat, now, send, since = -Infinity, t = TUNI
       c.final = c.final || Boolean(final);
       if (c.mine !== null) return;
       c.mine = now();
+      c.from = c.mine;
       c.distance = distance;
       if (!host) {
         if (!c.verdict) sendClaim(level);
@@ -323,7 +330,7 @@ export function createRaceReferee({ seat, now, send, since = -Infinity, t = TUNI
       const c = claims.get(level);
       if (!c) return false;
       if (c.verdict) return true;
-      return !host && c.mine !== null && now() - c.mine >= cfg.verdictWaitMs;
+      return !host && c.mine !== null && !held && now() - c.from >= cfg.verdictWaitMs;
     },
     setReady(level, on) {
       const want = Boolean(on);
@@ -369,11 +376,16 @@ export function createRaceReferee({ seat, now, send, since = -Infinity, t = TUNI
     },
     tick(local) {
       const at = now();
-      if (host) {
-        for (const [level, c] of claims) if (!c.verdict && c.mine !== null && c.theirs === null && at - c.mine >= cfg.firstGraceMs) decide(level, seat);
+      const released = held && !local?.held;
+      held = Boolean(local?.held);
+      if (held) for (const c of claims.values()) if (!c.verdict && c.mine !== null) c.from = at; // the grace and the wait stand still
+      if (released && !host) for (const c of claims.values()) if (!c.verdict && c.mine !== null) c.sentAt = -Infinity; // a claim the hold kept off the wire goes at once, inside the host's grace
+      if (host && !held) {
+        for (const [level, c] of claims) if (!c.verdict && c.mine !== null && c.theirs === null && at - c.from >= cfg.firstGraceMs) decide(level, seat);
       }
       const waiting = Boolean(local?.inBreak) && local.level > begun;
-      if (host && waiting && !count && !local.shopOpen && isReady(local.level) && them?.level === local.level && them.ready) startCount(local.level);
+      if (host && count && held && at < count.startAt) cancelCount();
+      if (host && waiting && !count && !held && !local.shopOpen && isReady(local.level) && them?.level === local.level && them.ready) startCount(local.level);
       if (count && at >= count.startAt) begin(count.level, false);
       else if (waiting && peerRun && (peerRun.phase === 'run' || peerRun.phase === 'respawn') && peerRun.level >= local.level) begin(local.level, true);
       if (waiting && me && me.level === local.level && at - sentAt >= cfg.readyResendMs) mark(me.level, me.ready);
@@ -384,7 +396,7 @@ export function createRaceReferee({ seat, now, send, since = -Infinity, t = TUNI
       // AUD-098: what must reach the other side goes again (a refused send at once).
       if (!host) {
         for (const [level, c] of claims) {
-          if (c.mine === null || c.verdict || at - c.mine >= cfg.verdictWaitMs) continue;
+          if (c.mine === null || c.verdict || at - c.from >= cfg.verdictWaitMs) continue;
           if (!c.out || at - c.sentAt >= cfg.claimResendMs) sendClaim(level);
         }
       }
@@ -435,6 +447,291 @@ export function createFieldFit({ mine, theirs = null, heard = null, now, send, u
     },
     fieldW,
     peer: () => (last ? { ...last } : null),
+  };
+}
+
+const MID_RUN = new Set(['run', 'respawn']);
+const MOVE_PHASE = { flap: 'run', crash: 'respawn', done: 'ended' }; // a pos names its own phase
+/** One sender's order: its sequence within a session, server time across a reload's new session. */
+const later = (m, last) => !last || (m.sid === last.sid ? m.seq > last.seq : m.t > last.t);
+
+/**
+ * The shared pause (plan 39, 2.1; the outline's rule: a disconnect never ends a match). Either
+ * device pauses both: on its own reasons (the tab hidden, offline, its channel down or closed by the
+ * server's events cap, a menu or the pause key) or on the other side's (its `pause` message, its
+ * presence gone, or online.pause.silenceMs without a word while it is mid-run or paused: a paused side
+ * sends its pause every online.pause.heartbeatMs, so only a lost one goes quiet). Nothing but the
+ * room's confirmed leave or abandon ends the race (abandoned, no winner); set_room_status is not
+ * called, because a playing room is never expired.
+ * - Ready: a side paused mid-run says Ready (setReady); one in its level break, before GO, or with
+ *   nothing to fly is ready by itself. A new reason of its own takes Ready back. Once both are ready
+ *   and each hears the other, the host sends `resume` with GO = now + online.race.countLeadMs + 3 ×
+ *   versus.countdownMs (at once when both wait in a break) and both count to it on the server clock;
+ *   any new reason, a Ready taken back or the other side lost calls the count off on both.
+ * - Rounds: `round` counts the resumes; every pause message names its round and the GO its sender
+ *   counts to, so a message from a round this side has resumed from never pauses it again, and a
+ *   side that missed a resume catches up: a live host answers a guest still ready a round behind
+ *   with the same resume (it resumes late, at once), and a guest still paused follows a host that
+ *   paused and then moved; a side that resumed while the other did not (a lost cancel) pauses again,
+ *   and the other takes its newer round.
+ * - Solo: once the other side's run has ended, a pause is this side's alone (its tab hidden or a
+ *   menu), resumed on its own Ready with a local count and no messages; a side whose run has ended
+ *   never pauses.
+ * tick(local) each frame and from the visibilitychange handler (a hidden page gets no frames) with
+ * { phase (localPhase: run, respawn, break, ended, or null before the run), hidden, offline, channel
+ * (onlineNet's channelState), menu }; receive(item) for each transport item (peer messages,
+ * presence, the room's confirmed actions); frozen() while the local half must not move (paused or
+ * counting; the referee's tick takes it as `held`); drain() → effects since the last call: pause,
+ * count { startAt }, cancel, resume { late }, back (this side's link or the other side returned: what
+ * must reach the other side, such as the run's end, goes again), abandoned { seat }. stats() → {
+ * pauses, pausedMs } for finish_match's telemetry (2.4a).
+ * @param {object} deps
+ * @param {'host' | 'guest'} deps.seat
+ * @param {() => number} deps.now server ms
+ * @param {(event: string, fields: object) => boolean} deps.send the transport's send
+ * @param {boolean} [deps.present] the other side is in presence as the race starts
+ * @param {number} [deps.since] messages stamped before it are the last round's (default: a heartbeat before now)
+ * @param {number} [deps.round] the pause round to start at (a reload's resume, 2.3)
+ */
+export function createRacePause({ seat, now, send, present = true, since, round: startRound = 0, t = TUNING }) {
+  const cfg = t.online.pause;
+  const host = seat === 'host';
+  const floor = Number.isFinite(since) ? since : now() - cfg.heartbeatMs;
+  const lead = t.online.race.countLeadMs + 3 * t.versus.countdownMs;
+  let phase = 'live'; // live, paused, count, over
+  let round = startRound; // resumes so far
+  let local = { phase: null, hidden: false, offline: false, channel: 'joined', menu: false };
+  let own = []; // this side's own reasons now, most telling first
+  let intent = false; // Ready said in this pause (taken back by a new reason of this side's own)
+  let count = null; // { startAt, late }
+  let pausedAt = null;
+  let last = null; // the resume this side came out of: { round, startAt }
+  let answered = null; // the guest's pause message the host last answered with that resume
+  let trouble = false; // this side's link or the other side was out at the last look
+  const beat = { key: null, at: -Infinity, out: true };
+  // The other side: its newest word (a move, its pause, or the host's resume), its last move's phase.
+  const peer = { present, heardAt: null, word: null, msg: null, phase: null, resumedFrom: null, ended: false };
+  const stats = { pauses: 0, pausedMs: 0 };
+  const out = [];
+
+  function reasons() {
+    if (local.phase === 'ended') return [];
+    const r = [];
+    if (local.hidden) r.push('away');
+    if (!peer.ended) {
+      if (local.offline) r.push('offline');
+      else if (local.channel === 'busy') r.push('busy');
+      else if (local.channel !== 'joined') r.push('link');
+    }
+    if (local.menu) r.push('menu');
+    return r;
+  }
+
+  /** The other side's pause or resume word, or null for a move. */
+  const pauseWord = () => (peer.word && peer.word.kind !== 'move' ? peer.word : null);
+
+  /**
+   * Lost: out of presence, or quiet for silenceMs while its word says it should be talking (mid-run
+   * keyframes, or the heartbeat of a pause in a round this side is still in).
+   */
+  function lostAt(at) {
+    if (!peer.present) return true;
+    const w = peer.word;
+    if (!w || peer.heardAt === null || at - peer.heardAt < cfg.silenceMs) return false;
+    return w.kind === 'move' ? MID_RUN.has(w.phase) : w.round >= round;
+  }
+
+  const myReady = () => own.length === 0 && (intent || !MID_RUN.has(local.phase));
+  const peerResumed = () => peer.word?.kind === 'move' && peer.resumedFrom === round;
+
+  /** Host: the guest is paused in this round, ready, and hears the host. */
+  function guestReady() {
+    const w = pauseWord();
+    return Boolean(w && w.round === round && w.ready && w.reason !== 'lost');
+  }
+
+  /** A count only when someone was flying (or before GO): two sides waiting in a break go on at once. */
+  const counted = () => !(local.phase === 'break' && (peer.ended || peer.phase === 'break'));
+
+  function pause(at) {
+    phase = 'paused';
+    pausedAt = at;
+    stats.pauses += 1;
+    intent = false;
+    count = null;
+    out.push({ type: 'pause' });
+  }
+
+  function stop(callOff) {
+    if (callOff && host && !peer.ended) send('resume', { round, startAt: count.startAt, cancel: true });
+    count = null;
+    phase = 'paused';
+    out.push({ type: 'cancel' });
+  }
+
+  function startCount(at, startAt, late) {
+    count = { startAt, late };
+    phase = 'count';
+    if (startAt > at) out.push({ type: 'count', startAt });
+  }
+
+  function resume(at) {
+    stats.pausedMs += at - (pausedAt ?? at);
+    pausedAt = null;
+    last = { round, startAt: count?.startAt ?? at };
+    const late = Boolean(count?.late);
+    round += 1;
+    count = null;
+    intent = false;
+    phase = 'live';
+    beat.key = null;
+    out.push({ type: 'resume', late });
+  }
+
+  /** Paused: the host decides a count once both are ready; a guest follows the host's word. */
+  function tryResume(at, lost) {
+    if (!myReady() || (!peer.ended && lost)) return;
+    if (peer.ended) return startCount(at, counted() ? Math.round(at + lead) : at, false);
+    if (host) {
+      if (!guestReady()) return;
+      const startAt = counted() ? Math.round(at + lead) : at;
+      if (send('resume', { round, startAt, cancel: false }) === false) return; // again next frame
+      return startCount(at, startAt, false);
+    }
+    if (peerResumed()) return startCount(at, at, true); // the host paused in this round and moved since: it resumed
+    const w = pauseWord();
+    if (w && w.round === round && w.count > 0) startCount(at, w.count, w.count <= at);
+  }
+
+  /** Counting: on while both stay ready and hear each other; a guest follows a host's new GO. */
+  function keepCount(lost) {
+    if (!myReady() || (!peer.ended && lost)) return false;
+    if (peer.ended) return true;
+    if (peerResumed()) return true;
+    const w = pauseWord();
+    if (host) return guestReady();
+    if (!w || w.round !== round || !(w.count > 0)) return false;
+    count.startAt = w.count;
+    return true;
+  }
+
+  /** Live after a resume: the other side is still paused a round behind, not counting to that GO. */
+  function behind(at) {
+    const w = pauseWord();
+    if (!last || !w || w.round !== round - 1 || w.count === last.startAt) return false;
+    if (host && w.ready) {
+      if (answered !== peer.msg) {
+        answered = peer.msg; // once per word: a guest live and quiet in its break asks nothing more
+        send('resume', { round: last.round, startAt: last.startAt, cancel: false });
+      }
+      return false;
+    }
+    return true;
+  }
+
+  function heartbeat(at, lost) {
+    const reason = own[0] ?? (lost ? 'lost' : 'peer');
+    const fields = { reason, ready: myReady(), round, count: phase === 'count' ? count.startAt : 0 };
+    const key = `${reason}|${fields.ready}|${round}|${fields.count}`;
+    if (key === beat.key && beat.out && at - beat.at < cfg.heartbeatMs) return;
+    beat.key = key;
+    beat.at = at;
+    beat.out = send('pause', fields) !== false;
+  }
+
+  function evaluate() {
+    if (phase === 'over') return;
+    const at = now();
+    const next = reasons();
+    if (next.some((r) => !own.includes(r))) intent = false;
+    own = next;
+    const lost = lostAt(at);
+    const troubled = Boolean(local.hidden || local.offline || local.channel !== 'joined') || lost;
+    if (trouble && !troubled) out.push({ type: 'back' });
+    trouble = troubled;
+    if (local.phase === 'ended') {
+      if (phase !== 'live') resume(at);
+      return;
+    }
+    const shared = !peer.ended;
+    const w = shared ? pauseWord() : null;
+    if (w && w.round > round) {
+      // The other side came out of a resume this side missed and paused again: this side follows.
+      round = w.round;
+      intent = false;
+      if (phase === 'count') stop(false);
+    }
+    if (phase === 'live' && (own.length > 0 || (shared && (lost || (w && w.round === round) || behind(at))))) pause(at);
+    if (phase === 'paused') tryResume(at, lost);
+    else if (phase === 'count' && !keepCount(lost)) stop(true);
+    if (phase === 'count' && at >= count.startAt) resume(at);
+    if (shared && phase !== 'live') heartbeat(at, lost);
+  }
+
+  function hear(item) {
+    const m = item.msg;
+    if (!m || !(m.t >= floor)) return;
+    peer.heardAt = now();
+    let word = null;
+    if (item.event === 'pause') word = { kind: 'pause', round: m.round, ready: m.ready, reason: m.reason, count: m.count };
+    else if (item.event === 'resume' && !host) word = { kind: 'resume', round: m.round, ready: !m.cancel, reason: 'peer', count: m.cancel ? 0 : m.startAt };
+    else if (item.event === 'pos') word = { kind: 'move', phase: m.phase };
+    else if (Object.hasOwn(MOVE_PHASE, item.event)) word = { kind: 'move', phase: MOVE_PHASE[item.event] };
+    if (!word) return;
+    if (word.kind === 'move' && word.phase === 'ended') peer.ended = true;
+    if (!later(m, peer.msg)) return;
+    if (word.kind === 'move' && peer.word && peer.word.kind !== 'move') peer.resumedFrom = peer.word.round;
+    peer.word = word;
+    peer.msg = { sid: m.sid, seq: m.seq, t: m.t };
+    if (word.kind === 'move') peer.phase = word.phase;
+  }
+
+  return {
+    tick(l) {
+      local = { ...local, ...(l ?? {}) };
+      evaluate();
+    },
+    receive(item) {
+      if (phase === 'over' || !item) return;
+      if (item.kind === 'presence') {
+        peer.present = item.event === 'join';
+      } else if (item.kind === 'room') {
+        const a = item.action;
+        if (a?.type === 'left' || (a?.type === 'status' && a.room?.status === 'abandoned')) {
+          if (pausedAt !== null) stats.pausedMs += now() - pausedAt;
+          pausedAt = null;
+          phase = 'over';
+          count = null;
+          out.push({ type: 'abandoned', seat: a.type === 'left' && SEATS.includes(a.seat) ? a.seat : null });
+        }
+        return;
+      } else if (item.kind === 'peer') {
+        hear(item);
+      } else {
+        return;
+      }
+      evaluate();
+    },
+    setReady(on) {
+      if (phase !== 'paused' && phase !== 'count') return false;
+      if (on && own.length > 0) return false;
+      intent = Boolean(on);
+      evaluate();
+      return true;
+    },
+    frozen: () => phase === 'paused' || phase === 'count',
+    state() {
+      const lost = !peer.ended && lostAt(now());
+      const w = peer.ended ? null : pauseWord();
+      const theirs = peer.ended ? null : lost ? 'lost' : w && w.round >= round ? w.reason : null;
+      return {
+        phase, round, mine: own[0] ?? null, theirs, solo: peer.ended, since: pausedAt,
+        ready: { mine: phase === 'live' ? false : myReady(), theirs: Boolean(w && w.round >= round && w.ready) },
+        count: count ? count.startAt : null,
+      };
+    },
+    drain: () => out.splice(0),
+    stats: () => ({ pauses: stats.pauses, pausedMs: stats.pausedMs + (pausedAt !== null ? now() - pausedAt : 0) }),
   };
 }
 

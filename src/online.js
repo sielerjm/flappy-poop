@@ -31,6 +31,12 @@ const SID = /^[A-Za-z0-9_-]{1,32}$/;
 const FRAME = /^[A-Za-z0-9_-]{1,32}$/;
 const PHASES = ['run', 'respawn', 'break', 'ended'];
 const SEATS = ['host', 'guest'];
+/**
+ * Why a side is paused (plan 39, 2.1), most telling first: its own tab hidden (away), offline, the
+ * server's events cap closed its channel (busy), its channel down otherwise (link), a menu or the
+ * pause key (menu); or nothing of its own: it lost the other side (lost) or the other side paused (peer).
+ */
+const PAUSE_REASONS = ['away', 'offline', 'busy', 'link', 'menu', 'lost', 'peer'];
 
 /** Every message's envelope: a per-session sequence number, server time (ms) and the session id. */
 const ENVELOPE = Object.freeze({ seq: ['int', 0, 2 ** 31], t: ['num', 0, 1e14], sid: ['str', SID] });
@@ -49,7 +55,10 @@ const level = ['int', 1, 99];
  * level-break ready check and the host's GO (`cancel` takes back the count that ends at that
  * `startAt`: a ready withdrawn during it); `width` this side's field width, from the race's start
  * to its GO (presence holds the join-time one, item 14); `done` a run's final numbers; `rematch`
- * the ask.
+ * the ask. The shared pause (2.1): `pause` is this side's pause while it lasts (why, whether this
+ * side is ready to go on, the pause round it belongs to: the number of resumes so far, and the GO it
+ * counts to, 0 for none), sent on every change and every online.pause.heartbeatMs; `resume` the
+ * host's GO for that round (`cancel` calls off the count that ends at that `startAt`).
  */
 export const ONLINE_EVENTS = Object.freeze({
   pos: Object.freeze({
@@ -66,6 +75,8 @@ export const ONLINE_EVENTS = Object.freeze({
   width: Object.freeze({ width: ['width'] }),
   done: Object.freeze({ score: count, deaths: count, levelWins: ['int', 0, 99], finalFirst: ['bool'], won: ['bool'] }),
   rematch: Object.freeze({ want: ['bool'] }),
+  pause: Object.freeze({ reason: ['enum', PAUSE_REASONS], ready: ['bool'], round: count, count: ['num', 0, 1e14] }),
+  resume: Object.freeze({ round: count, startAt: ['num', 0, 1e14], cancel: ['bool'] }),
 });
 
 /** The continuous state events: only the newest counts. Every other event counts once, in any order. */

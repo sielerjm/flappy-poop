@@ -845,6 +845,65 @@ test('a rematch ask goes again every online.race.readyResendMs while it stands, 
   assert.equal(e.events(1, 'rematch').length, n, 'a withdrawn ask is not repeated');
 });
 
+// --- a held race (plan 39, 2.1: the shared pause holds the referee) --------------------------------
+
+test('a held race starts no level count; the host calls off a running one before its GO; a hold after GO changes nothing', () => {
+  const d = duo();
+  d.refs[1].setReady(2, true);
+  d.advance(50);
+  d.refs[0].setReady(2, true);
+  d.refs[0].tick(brk(2, { held: true }));
+  assert.deepEqual(d.refs[0].drain().filter((e) => e.type === 'count'), [], 'held: no count');
+  assert.equal(d.events(0, 'go').length, 0);
+  d.refs[0].tick(brk(2));
+  const c = d.refs[0].count();
+  assert.ok(c, 'not held: the count starts');
+  d.refs[0].drain();
+  d.advance(100);
+  d.refs[0].tick(brk(2, { held: true }));
+  assert.deepEqual(d.refs[0].drain(), [{ type: 'cancel', level: 2 }], 'a hold before GO calls it off');
+  assert.deepEqual([d.events(0, 'go').at(-1).cancel, d.events(0, 'go').at(-1).startAt], [true, c.startAt]);
+  assert.equal(d.refs[0].isReady(2), true, 'both stay ready, so the count comes back once the hold ends');
+  d.advance(100);
+  d.refs[0].tick(brk(2));
+  const again = d.refs[0].count();
+  assert.ok(again && again.startAt > c.startAt, 'a fresh count after the hold');
+  d.refs[0].drain();
+  d.setClock(again.startAt);
+  d.refs[0].tick(brk(2, { held: true }));
+  assert.deepEqual(d.refs[0].drain(), [{ type: 'begin', level: 2, late: false }], 'held from GO on: the level begins (the scene keeps the half frozen)');
+});
+
+test('a held race stops the host\'s grace and a guest\'s verdict wait: a claim from a guest that crossed first still wins once the hold ends', () => {
+  let holding = true;
+  const d = duo({ drop: (i, event) => i === 1 && event === 'finish' && holding });
+  d.refs[1].crossed({ level: 1, final: true, distance: 9000 }); // the guest at 0; its claims are lost while the link is down
+  d.advance(100);
+  d.refs[0].crossed({ level: 1, final: true, distance: 9000 }); // the host at 100
+  for (let at = 0; at < 4000; at += 100) {
+    d.advance(100);
+    d.refs[0].tick(brk(1, { inBreak: false, held: true }));
+    d.refs[1].tick(brk(1, { inBreak: false, held: true }));
+  }
+  assert.deepEqual(firsts(d.refs[0].drain()), [], 'held: the host takes nothing on its grace');
+  assert.equal(d.refs[1].settled(1), false, 'held: the guest\'s verdict wait does not run');
+  assert.ok(d.now() > R.verdictWaitMs + R.claimResendMs, 'longer than the wait and a resend');
+  const lost = d.events(1, 'finish').length;
+  assert.ok(lost >= 3, `the guest kept claiming while held (${lost} claims, all lost)`);
+  holding = false;
+  d.refs[1].tick(brk(1, { inBreak: false }));
+  assert.equal(d.events(1, 'finish').length, lost + 1, 'the hold over: the claim goes at once');
+  d.refs[0].tick(brk(1, { inBreak: false }));
+  for (let at = 0; at < 1500; at += 50) {
+    d.advance(50);
+    d.refs[0].tick(brk(1, { inBreak: false }));
+    d.refs[1].tick(brk(1, { inBreak: false }));
+  }
+  assert.deepEqual(firsts(d.refs[0].drain()), [{ type: 'first', level: 1, mine: false, final: true }], 'the guest crossed first: its line');
+  assert.equal(d.refs[1].settled(1), true);
+  assert.deepEqual(firsts(d.refs[1].drain()), [{ type: 'first', level: 1, mine: true, final: true }]);
+});
+
 /** Two field fits on one server clock and a 40 ms link each way, as the race scene wires them. */
 function fitPair({ widths, presence, until, drop = null, refuse = null }) {
   let clock = 0;

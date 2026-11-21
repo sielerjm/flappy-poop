@@ -53,6 +53,19 @@ test('no client event reuses a server event name', () => {
   assert.ok(Object.keys(ONLINE_EVENTS).length >= 8);
 });
 
+test('pause (plan 39, 2.1): one of seven reasons, why this side is paused; round and count bounded; resume is the host\'s GO or its cancel', () => {
+  const send = createSender({ sid: 's', now: () => 5000 });
+  for (const reason of ['away', 'offline', 'busy', 'link', 'menu', 'lost', 'peer']) {
+    assert.ok(send('pause', { reason, ready: false, round: 0, count: 0 }), reason);
+  }
+  for (const bad of [{ reason: 'bored' }, { reason: 'Away' }, { round: -1 }, { round: 1.5 }, { count: -1 }, { ready: 'yes' }]) {
+    assert.equal(send('pause', { reason: 'away', ready: false, round: 0, count: 0, ...bad }), null, JSON.stringify(bad));
+  }
+  assert.ok(send('resume', { round: 0, startAt: 9000, cancel: true }));
+  assert.equal(send('resume', { round: 0, startAt: -1, cancel: false }), null);
+  assert.ok(T.online.pause.heartbeatMs * 2 <= T.online.pause.silenceMs, 'a paused peer\'s heartbeat never reads as silence');
+});
+
 test('pos carries everything ghostPlacement, rivalMarker and raceOutcome read', () => {
   const fields = Object.keys(ONLINE_EVENTS.pos);
   for (const f of ['distance', 'level', 'pipesPassed', 'y', 'vy', 'angle', 'frame', 'alpha', 'score', 'deaths', 'levelWins', 'finalFirst', 'speed', 'phase']) {
@@ -158,6 +171,8 @@ test('every event has a valid example and every field is checked', () => {
     width: { width: 1280 },
     done: { score: 90, deaths: 2, levelWins: 3, finalFirst: true, won: true },
     rematch: { want: true },
+    pause: { reason: 'away', ready: false, round: 0, count: 0 },
+    resume: { round: 2, startAt: 1_800_000_000_000, cancel: false },
   };
   assert.deepEqual(Object.keys(examples).sort(), Object.keys(ONLINE_EVENTS).sort());
   const send = createSender({ sid: 's', now: () => 42 });

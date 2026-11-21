@@ -381,6 +381,11 @@ export const TUNING = {
       widthResendMs: 500, // ms between repeats of this side's field width from the race's start to its GO, so both reach one width before the count ends (item 14, AUD-097)
       waitOfferMs: 45000, // ms this side waits (ready in a break, or out at the finish) before the race offers Leave or Keep waiting (item 15); Keep waiting starts it over
     },
+    // The shared pause (plan 39, 2.1, src/onlineRace.js's createRacePause): a disconnect never ends a race; it pauses both until both say Ready.
+    pause: {
+      silenceMs: 2000, // ms without a word from the other side, while it is mid-run or paused, before this side counts it lost and pauses (item 17's 2 s; keyframes come every keyframeMs)
+      heartbeatMs: 1000, // ms between repeats of this side's pause message while it is paused: the one message a second that keeps a paused side from reading as silent (at most half of silenceMs)
+    },
     inventoryY0: 268, // px: the purse and bean rows' first centre in an online race, below the opponent's pill (its top 82, bottom 228 with the slow / lost word), not over it
     ghost: {
       maxExtrapolateMs: 1000, // ms past the last message the ghost keeps moving; then it holds until the next one
