@@ -356,7 +356,12 @@ export class OnlineRace extends Phaser.Scene {
    * 2.3: the other side's race restarted at a level's start (its reload, or its answer to this
    * side's rewind). What it sent before that restart is dropped from now on, and this side restarts
    * at the lower of the two level starts (rewindOnHeard), unless it waits there already or its own
-   * run is over.
+   * run is over. A side whose run is over answers instead (2.7, AUD-107): its fixed pos and done go
+   * again on the next tick, so after the rewound side's restart and inside its floor. That side
+   * missed them (its page died, and a rejoin inside the dead socket's presence linger is no `back`
+   * here), and without them it would wait under its rewind for ever and its Leave would abandon a
+   * race this side finished. Once per rewind heard: the rewind goes every heartbeat until its GO, so
+   * a lost answer goes again.
    */
   onRewind(msg) {
     if (this.restarting || (this.match.status !== 'countdown' && this.match.status !== 'playing')) return;
@@ -365,7 +370,11 @@ export class OnlineRace extends Phaser.Scene {
       this.referee.floor(msg.at);
       this.floorAt = Math.max(this.floorAt, msg.at);
     }
-    const level = rewindOnHeard({ msg, round: this.plan.round ?? 0, rewound: this.rewound?.level ?? null, top: this.topLevel(), since: this.rewindSince, ended: this.feed.doneFixed() });
+    if (this.feed.doneFixed()) {
+      if (msg?.round === (this.plan.round ?? 0)) this.feed.again();
+      return;
+    }
+    const level = rewindOnHeard({ msg, round: this.plan.round ?? 0, rewound: this.rewound?.level ?? null, top: this.topLevel(), since: this.rewindSince, ended: false });
     if (level !== null) this.rewindTo(level, 'them');
   }
 

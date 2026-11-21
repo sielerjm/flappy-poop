@@ -1015,6 +1015,33 @@ test('2.3 stale and out of bounds: a rewind stamped before this side last left a
   assert.deepEqual(restarts(ops), [], 'its run has ended: it never rewinds');
 });
 
+test("2.7, AUD-107: a side whose run has ended answers each rewind of this round with its fixed end again (after the rewind's restart, so the rewound side's floor keeps it), never one of another round; a live side does not", () => {
+  const { s, net, ops } = raceScene();
+  const again = [];
+  s.feed.again = () => again.push(net.clock.now);
+  net.clock.now = GO + 30_000;
+  net.push(peer('rewind', { round: 1, level: 2, at: GO + 29_000 }, GO + 29_000));
+  s.update();
+  assert.deepEqual(again, [], 'live: the rewind restarts this side instead');
+  assert.equal(restarts(ops).length, 1);
+  const ended = raceScene();
+  const back = [];
+  ended.s.feed.again = () => back.push(ended.net.clock.now);
+  ended.s.feed.doneFixed = () => true;
+  ended.net.clock.now = GO + 90_000;
+  ended.net.push(peer('rewind', { round: 2, level: 6, at: GO + 89_000 }, GO + 89_000));
+  ended.s.update();
+  assert.deepEqual(back, [], 'another round: nothing');
+  ended.net.push(peer('rewind', { round: 1, level: 6, at: GO + 89_500 }, GO + 89_600));
+  ended.s.update();
+  assert.deepEqual(back, [GO + 90_000], 'its end goes again on the next frame, stamped after the restart');
+  ended.net.clock.now += 1000;
+  ended.net.push(peer('rewind', { round: 1, level: 6, at: GO + 89_500 }, GO + 90_900));
+  ended.s.update();
+  assert.equal(back.length, 2, 'and again on each heartbeat of the rewind (a lost answer is sent again)');
+  assert.deepEqual(restarts(ended.ops), [], 'never a restart');
+});
+
 test('T2-review: a rewound side sends no rewind in its own GO frame, and a late resend of a restart its GO answered restarts nothing (the online-reload flake)', () => {
   const { s, net, ops } = raceScene({ resume: { level: 2, levels: { 1: START, 2: LV2 }, pauseRound: 0, by: 'me' } });
   net.clock.now = GO + 60_000;
