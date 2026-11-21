@@ -288,12 +288,18 @@ silver (a draw earns none); the client's `minPostPlayers` is 2, so they post lik
 split-screen race queues each linked racer's score, with no run summary behind it (`racePosts` in
 src/tournament.js; `tournamentPanel.queueRacePosts` from `onRace`; `createRacePostQueue` in
 src/leaderboard.js over `LEADERBOARD.racePostsKey` 'flappyPoop.racePosts'; `Play.racePostQueue` is
-drained in `syncLeaderboard` right after the tournament queue through `submitScore`: ok leaves, nameTaken
-drops, anything else waits). The versus result panel names it in `versusBoardLine`.
+drained in `syncLeaderboard` right after the tournament queue through `Play.postRace` (2.7, AUD-106): under
+the board's current name for that player, read just before the post (`fetchBoardName` in src/leaderboard.js:
+the name, '' for no rows, null when the board cannot say, and then the post waits); the entry's name, or this
+device's for its own player, only for a player with no rows. `submitScore`'s reason 'refused' (the server's
+"bad …") and 'nameTaken' drop the entry; offline or rate limited keep it. tests/racePostName.test.js). The versus result panel names it in `versusBoardLine`.
 **Online reports** (2.5): at `checkOver` both devices send the race to `finish_match`
-(`raceReport` in src/onlineRace.js: seat order host, guest, whole numbers, telemetry = `net.stats()` +
-`pause.stats()` under finish_match's 13 keys; `createRaceReporter`: one call at a time, asks again every
-`TUNING.online.report.pollMs` while the answer is 'playing', `polls` times, then 'late'; a lost answer is
+(`raceReport` in src/onlineRace.js: seat order host, guest, whole numbers, telemetry =
+`raceNetStats(net.stats(), netBase)` + `pause.stats()` under finish_match's 13 keys (2.7, AUD-110: each
+transport counter less its value at the round's start, kept through a re-fit or rewind restart, taken again
+in a rematch's round; the RTT keys as measured, an unmeasured key left out); `createRaceReporter`: one call
+at a time, asks again every `TUNING.online.report.pollMs` while the answer is 'playing', `polls` times, then
+every `slowPollMs`, until `waitMs` (the other device's whole resend window, tied by a test, AUD-109), then 'late'; a lost answer is
 resent after each `retryMs`; 'no match' once; 'not trusted' is pending; `reportLine` maps the state to the
 results panel's line). `OnlineRace.startReport` / `refreshResult` drive it; a race left mid-way
 (abandoned) is never reported. The 🌐 window's **🏁 Recent races** (beside 📱 Devices; paired devices only,
@@ -1407,9 +1413,13 @@ src/
                             code while another page's record is live) and
                             notice(key) puts one status line on the lobby (2.3b:
                             `onlineRaceElsewhere`); rejoin(record) asks room_state:
-                            playing → roomStep's `rejoin`, the channel opened as this seat
-                            (net.openRoom(code, { seat })), then handOffRace's hand-off
-                            with a resume plan; no room, finished or abandoned → { over }
+                            playing → the channel opens as this seat first
+                            (net.openRoom(code, { seat })) and only then roomStep's
+                            `rejoin` makes the room this seat's (the panel's poll never
+                            hands off a race whose join can still fail), then handOffRace's
+                            hand-off with a resume plan; a failed open leaves the lobby
+                            idle, removes the channel, keeps the record, leaves nothing
+                            (2.7, AUD-108); no room, finished or abandoned → { over }
                             (code and record forgotten, "That race is over."); offline or
                             a refused channel keeps both and never leaves the room.
                             tests/onlineLobby.test.js.
@@ -1469,7 +1479,7 @@ src/
                             link first, then the other's, then PAUSED), sub, each player's
                             row and the Ready button (null while this side's link is down,
                             and when no tap is needed: in a break or before GO).
-                            raceReport / createRaceReporter / reportLine (2.5): the
+                            raceReport / raceNetStats / createRaceReporter / reportLine (2.5): the
                             finish_match report and its results-panel line (the Tournament
                             paragraph, "Online reports").
                             createWakeLock(nav) (item 16): want(true) keeps the screen on
@@ -1511,12 +1521,13 @@ src/
                             REST API with an injected fetch, apikey header only,
                             4 s abort, false / null on any failure, never throws
                             (submitScore: { ok } or { ok: false, reason: 'nameTaken'
-                            | 'other' }, request's errors flag reading the
+                            | 'refused' | 'other' }, request's errors flag reading the
                             PostgREST message). checkNameAvailable (true / false /
                             null), mergePlayers, createMergeStore
                             (flappyPoop.merges: queued { keep, merge } pairs until
                             the server confirms), fetchPlayerName (the board's name
-                            or null), createRenameStore (flappyPoop.rename: a rename
+                            or null), fetchBoardName (the name, '' for no rows, null when
+                            it cannot say: Play.postRace's read), createRenameStore (flappyPoop.rename: a rename
                             typed here), nameAction ('adopt' / 'keep'). Tournaments:
                             submitTournament ('ok' / 'keep' / 'rejected': only the
                             server's own bracket refusal drops one), fetchTournamentBoard,
@@ -2416,8 +2427,9 @@ src/
                             width until then (fitUntil). The other side, on `rewind`,
                             raises its feed's and referee's floor to the sender's restart
                             and restarts at the lower of the two levels (rewindOnHeard;
-                            nothing for another room round, a stale rewind, or once its
-                            run has ended). The shared pause's count gives one GO. The
+                            nothing for another room round or a stale rewind; a side whose
+                            run has ended sends its fixed pos and done again, feed.again(),
+                            so after the rewound side's restart, 2.7, AUD-107). The shared pause's count gives one GO. The
                             record is gone at the race's end, abandoned, Leave, this
                             side's own finish. tests/onlineRaceScene.test.js.
     Over.js                 Game-over panel (score, run summary of fiber / probiotic / postbiotic over bacteria / bean / mystery box (mystery-icon.png) over ‼️ long falls / 😢 close calls (data.falls / closeCalls; ×– for a stored Daily result), pipes crossed, then Share | Home on one row from overButtonsLayout and, on a normal or test run, a glowing Play again under them, the panel lifted over.againLiftPx so it clears the ⏸) with a
@@ -3212,6 +3224,12 @@ tests/                      node --test (schema.test.js, schemaOnline.test.js, p
                             (2.5); the onlineAccount races() / historyRows view
   racePosts.test.js         tournament.js racePosts, leaderboard.js createRacePostQueue and
                             the drain order after the tournament queue (2.5)
+  racePostName.test.js      Play.postRace end to end on PGlite: a race post never changes a
+                            player's board name (an old pasted code, a kept roster after a
+                            rename, require_run's held post) (2.7, AUD-106)
+  onlineEndedRejoin.test.js two real OnlineRace scenes on a 40 ms link: an ended side answers
+                            a rewound peer that rejoined inside its dead socket's presence
+                            linger; both seats, two sequences, plus two controls (2.7, AUD-107)
   onlineRace.test.js        src/onlineRace.js: start plan, countdown, the feed, the referee
                             (first on server time, the ready count, a ready taken back,
                             the rematch ask, the held referee), raceRoomItem; two simulated peers racing
@@ -3995,11 +4013,12 @@ Commits follow `type(scope): summary` (`feat`, `fix`, `docs`, `chore`, `test`, `
   uid and the stored session keeps it. Each level break keeps this side's level start (`Play.resumeSnapshot()`,
   `OnlineRace.keepLevel`) in the resume record, localStorage under `LEADERBOARD.onlineResumeKey`
   (`createResumeStore`, `parseResume`: version 2, 6 h; 2.3b). After a reload `Play.openPendingRace()` opens the 🌐
-  window once per page load; its lobby rejoins through `room_state` (`roomStep`'s `rejoin`, the channel opened
-  as that seat, never a leave) and hands the race to `OnlineRace` rewound. The `rewind` event and pause reason
+  window once per page load; its lobby rejoins through `room_state` (the channel opened as that seat first, then `roomStep`'s `rejoin`,
+  never a leave; a failed open leaves nothing, AUD-108) and hands the race to `OnlineRace` rewound. The `rewind` event and pause reason
   (both moved `protocolVersion`): the rewound side holds under the pause overlay until its Ready; the other
   side raises its feed's and referee's floor to the sender's restart and restarts at the lower of the two level
-  starts; the shared pause's count gives one GO. A host replaying the last level takes no final-line award the
+  starts (a side whose run has ended answers each rewind of this round with its fixed pos and done again,
+  `feed.again()`, AUD-107); the shared pause's count gives one GO. A host replaying the last level takes no final-line award the
   other side already holds. A race that is over is forgotten ("That race is over."). Not covered: a reload
   after this side's own finish (no record, so item 46's leave applies and the other side sees "left: no
   winner" if still racing). A reload just before a line's verdict rewinds both one level further.

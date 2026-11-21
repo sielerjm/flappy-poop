@@ -184,14 +184,18 @@ A **👥** toggle sits under the toilet switch on every screen. On a window wide
 
 ### 🌐 Online race
 
-Two players on two devices, by code (0.25.0). With 👥 on, Play opens the tournament window; its **🌐** switch picks online (on a phone it is always on). You need a username: pick one there if you have none.
+Two players on two devices, by code (0.25.0; pause and rejoin 0.26.0). With 👥 on, Play opens the tournament window; its **🌐** switch picks online (on a phone it is always on). You need a username: pick one there if you have none.
 
 1. One player taps **Create room** and reads out the six-digit code (it lasts 15 minutes; a fresh one comes by itself). The other taps **Join with code** and types it on the game's keypad.
 2. The host sees "<name> wants to race" and taps **Let in** (or **Decline**, which makes a new code). Both tap **Ready**, and the 3-2-1 starts on both screens at once.
 3. The race uses the two-player rules above. The other player is the ghost, with their name and live score in a pill at the top. Both play on the narrower of the two screens.
 4. At each finish line both tap ready again. If the other player takes a while (45 s), you can **Keep waiting** or **Leave**. At the end, **Rematch** (when both ask) races a new course; **Leave** goes back to single player.
 
-**📱 Devices.** Your first device online is trusted. Another device of the same player (after Load user code) waits until you type the 6-digit pairing code that a trusted device shows. It can still race by code while it waits. **🏁 Recent races** lists your last online races, private to you and shown only on a paired device. A race both players finish is saved: the winner earns gold and the loser silver on the 🏅 board, and both scores reach the 🏆 board. A race left half-way is not saved.
+**⏸ Pauses are shared.** If either connection drops, either player hides the app or goes offline, or either presses pause or opens a menu, both games pause. Both tap **Ready** and a 3-2-1 resumes them. **Leave** on the pause screen (tap twice) ends the race with no winner. The screen stays on during a race.
+
+**Reload or relaunch.** Reloading, or reopening the home-screen app or the tab mid-race, rejoins it. Both players go back to the start of the level they were on, with the score, coins and powers they had there, and tap **Ready**. A second window of the game does not take the race over ("Your race is running in another window."). A reload after your own finish does not rejoin.
+
+**📱 Devices.** Your first device online is trusted. Another device of the same player (after Load user code) waits until you type the 6-digit pairing code that a trusted device shows. It can still race by code while it waits. **🏁 Recent races** lists your last online races, private to you and shown only on a paired device. A race is saved when both devices are paired and report the same result: the winner earns gold and the loser silver on the 🏅 board, and both scores reach the 🏆 board, up to a daily limit (10 counted races a day per pair of players, 20 per player). A race shorter than 3 minutes is not saved, and neither is one left half-way.
 
 ### 🏅 Tournament
 
