@@ -1409,7 +1409,8 @@ src/
                             fieldW(); receive() is true when it moved; peer() the
                             newest heard; nothing is sent from GO on.
                             raceRoomItem (only the confirmed status 'playing' / 'finished'
-                            reaches the lobby; a leave or abandoned room is Tier 2's).
+                            reaches the lobby; a leave or abandoned room goes to the shared
+                            pause instead, which ends the race with no winner, 2.2).
                             createRacePause({ seat, now, send, present, since, round })
                             (plan 39, 2.1): the shared pause. Either device's trigger
                             pauses both; both Ready and the host's resume count restart
@@ -1417,7 +1418,23 @@ src/
                             the room's confirmed leave or abandon. createRaceReferee's
                             tick takes `held`: no count starts, a running one is called
                             off before GO, the grace and the verdict wait stand still.
-                            Knobs in TUNING.online.race and TUNING.online.pause.
+                            The feed holds the ghost for it (2.2): hold(at) stands it at
+                            `at` (or where the other side's first `pause` message says it
+                            stopped), release(after) lets go at the first ghost message
+                            stamped at or after `after`, heardT() is the newest ghost
+                            message's server time, again() sends the run's end once more
+                            (the other side came back and may have missed it).
+                            pauseOverlay(state, { midRun }) (pure): the overlay's i18n keys
+                            from the machine's state(): null while live or over,
+                            { count: true } in the resume's 3-2-1, else title (this side's
+                            link first, then the other's, then PAUSED), sub, each player's
+                            row and the Ready button (null while this side's link is down,
+                            and when no tap is needed: in a break or before GO).
+                            createWakeLock(nav) (item 16): want(true) keeps the screen on
+                            (one lock, asked again after a resume), want(false) lets go,
+                            refused quietly where unsupported; held().
+                            Knobs in TUNING.online.race and TUNING.online.pause (silenceMs,
+                            heartbeatMs, leaveConfirmMs 4000: Leave's second tap).
                             tests/onlineRace.test.js, tests/onlinePause.test.js.
   leaderboard.js            Shared leaderboard, NO Phaser/DOM (plan 34 adds
                             createStreakStore and STREAK_KINDS: flappyPoop.streaks,
@@ -2258,7 +2275,7 @@ src/
                             ready"; onLevelTap toggles ready over the wire; isReady;
                             levelStage 'count' during the shared count; GO calls
                             Play.beginLevel (an overlay or hidden tab pauses the local half
-                            only; Tier 2 pauses both). The run's done is held until the final
+                            only; the shared pause below pauses both). The run's done is held until the final
                             line is settled (the referee's settled()), so both devices
                             compute raceOutcome from the same numbers; checkOver needs this
                             side's done sent and the other's heard, then the host's app calls
@@ -2276,7 +2293,26 @@ src/
                             beans sit below the opponent's pill: the scene passes
                             TUNING.online.inventoryY0 to Play as launch data
                             `inventoryY0` (Play.half.inventoryY0, third argument of
-                            inventoryRows). tests/onlineRaceScene.test.js.
+                            inventoryRows).
+                            2.2: the shared pause (createRacePause, wired). Host methods:
+                            setPaused(on) is this side's `menu` reason (the pause key, ⏸,
+                            a pad's Menu, an overlay opening; off only when Play's tap
+                            lands while paused); a tap while paused is Ready
+                            (toggleReady); isPaused() is the machine frozen (paused or
+                            counting to the resume). pauseLocal() feeds the machine each
+                            frame and on visibilitychange; the machine's effects: pause
+                            freezes the local half mid-run and holds the ghost, resume
+                            starts the 3-2-1 on server time, back resends the run's end
+                            (feed.again()), abandoned ends the race. The referee is held
+                            while it lasts, and a pause before GO holds the opening GO
+                            (the resume's GO starts the race). The overlay: why it
+                            stopped, each player's mark, the time paused, Ready | Leave;
+                            Leave asks twice within online.pause.leaveConfirmMs, then
+                            ends the race for both. The abandoned race (the room's
+                            confirmed left / abandoned): results panel "No winner" with
+                            Leave only, no finish, no rematch. The opponent's pill gains
+                            a `paused` state (amber dot, "paused"). A wake lock is held
+                            while the race plays. tests/onlineRaceScene.test.js.
     Over.js                 Game-over panel (score, run summary of fiber / probiotic / postbiotic over bacteria / bean / mystery box (mystery-icon.png) over ‼️ long falls / 😢 close calls (data.falls / closeCalls; ×– for a stored Daily result), pipes crossed, then Share | Home on one row from overButtonsLayout and, on a normal or test run, a glowing Play again under them, the panel lifted over.againLiftPx so it clears the ⏸) with a
                             tap lockout (openedAt = game.loop.time: a relaunched
                             scene's this.time.now is stale) and its own tray (mute
@@ -3066,14 +3102,17 @@ tests/                      node --test (schema.test.js, schemaOnline.test.js, p
   onlineRace.test.js        src/onlineRace.js: start plan, countdown, the feed, the referee
                             (first on server time, the ready count, a ready taken back,
                             the rematch ask, the held referee), raceRoomItem; two simulated peers racing
-                            through a level break to the end
+                            through a level break to the end; pauseOverlay, createWakeLock, the
+                            feed's hold / release / again
   onlinePause.test.js       src/onlineRace.js's createRacePause: two devices with the real
                             sender, inbox and feed on a simulated link (airplane mode, a
                             hidden tab, silence, presence, a one-way break, a lost resume
-                            or cancel, solo after the other's end, stats)
+                            or cancel, solo after the other's end, stats; the feed's ghost hold)
   onlineRaceScene.test.js   scenes/OnlineRace.js's wiring on a stand-in Play and a fake
                             transport (initRace, the host interface, the final line's
-                            hold, the rematch restart); Play's onFinishCrossed line and
+                            hold, the rematch restart, the pause host methods, the overlay
+                            and Leave's double tap, the abandoned panel, the pill's paused
+                            state, a pause before GO); Play's onFinishCrossed line and
                             awardLevelFirst
   onlinePanel.test.js       tournamentPanel's 🌐 view on tests/support/panelDom.js: mounts,
                             forced over Play, exits leave the room, keypad
@@ -3815,8 +3854,8 @@ Commits follow `type(scope): summary` (`feat`, `fix`, `docs`, `chore`, `test`, `
   `width` (sent from the race's start to GO) are in `ONLINE_EVENTS`, so they moved `protocolVersion`.
   The shared pause (2.1) lives in `createRacePause` (knobs `TUNING.online.pause`); its events `pause` and
   `resume` are in `ONLINE_EVENTS`, so they moved `protocolVersion`. It calls no `set_room_status` (a playing
-  room is never expired). Nothing calls it until 2.2 wires it into `scenes/OnlineRace.js` (an orphans
-  allowlist entry until then).
+  room is never expired). 2.2 wires it into `scenes/OnlineRace.js` (the overlay, Ready, Leave, the abandoned
+  panel; `online.pause.leaveConfirmMs` is Leave's second-tap window); its orphans allowlist entry is gone.
   The tournament panel's hand-off (`handOffRace`, 1.8) remembers the room (`lobby.remember()`), and over a
   running Versus (🌐 switched on in its lobby) marks the match `left` and stops Versus and PlayB so only the
   race draws (not `Versus.leave()`, which starts a plain Play). The race's end is not stored anywhere in Tier 1:
