@@ -644,6 +644,33 @@ test('2.3 rejoin: the server out of reach, or the channel refused: kept for the 
   assert.deepEqual(m2.log, []);
 });
 
+test("2.7, AUD-108: the rejoined room is 'playing' only once its channel is open, so nothing hands it off before; a join that then fails leaves the lobby idle, the record kept, nothing left", async () => {
+  for (const answer of [{ ok: true }, { ok: false, error: 'timeout' }]) {
+    let resolveOpen;
+    const net = fakeNet({ room_state: { ok: true, data: racing() }, openRoom: () => new Promise((r) => (resolveOpen = r)) });
+    const memory = rejoinMemory('482913');
+    const lobby = lobbyOn(net, { memory, resume: REC });
+    const p = lobby.rejoin(REC);
+    await new Promise((r) => setTimeout(r, 0));
+    assert.equal(opens(net).length, 1, 'the channel is opening, as the guest');
+    assert.notEqual(lobby.state.room.phase, 'playing', 'not playing yet: the panel\'s poll must not hand the race off');
+    assert.equal(lobby.state.screen, 'busy');
+    resolveOpen(answer);
+    const res = await p;
+    if (answer.ok) {
+      assert.deepEqual(res, { ok: true });
+      assert.equal(lobby.state.room.phase, 'playing');
+      assert.equal(lobby.state.room.role, 'guest');
+    } else {
+      assert.deepEqual(res, { ok: false, error: 'timeout' });
+      assert.equal(lobby.state.room.phase, 'idle');
+      assert.ok(net.calls.some((c) => c[0] === 'closeRoom'), 'the half-open channel is removed');
+      assert.deepEqual(rpcs(net, 'leave_room'), []);
+      assert.deepEqual(memory.log, [], 'kept for the next entry');
+    }
+  }
+});
+
 test("2.3 a lobby made for a rejoin does not leave the remembered room on entry (item 46's leave is for a race with nothing to resume)", async () => {
   const net = fakeNet();
   lobbyOn(net, { memory: rejoinMemory('482913'), resume: REC });

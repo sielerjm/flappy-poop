@@ -347,6 +347,34 @@ test("2.3 a reload's race: entering 🌐 rejoins it (room_state, its channel as 
   closeTournamentPanel();
 });
 
+test("2.7, AUD-108: a reload's race is handed to OnlineRace only once its channel is open; a channel that never opens hands nothing off, leaves nothing and keeps the record", async () => {
+  for (const answer of [{ ok: true }, { ok: false, error: 'timeout' }]) {
+    const rec = { v: 1, code: '482913', round: 1, seat: 'guest', pauseRound: 1, levels: { 1: START_SNAP, 2: LV2_SNAP }, wall: Date.now() };
+    const k = setup({ answers: { room_state: { ok: true, data: { ok: true, code: '482913', status: 'playing', seat: 'guest', host_name: 'SirFlushALot', guest_name: 'PlopMaster', seed: 4242, start_ms: 990_000, round: 1 } } } });
+    let resolveOpen;
+    k.net.openRoom = (code, opts) => (k.net.calls.push(['openRoom', code, opts]), new Promise((r) => (resolveOpen = r)));
+    const store = resumeStoreOf(rec);
+    k.play.raceResumeStore = () => store;
+    const started = [];
+    k.play.scene = { start: (key, data) => started.push([key, data]) };
+    k.open();
+    await flush();
+    await flush();
+    assert.equal(k.net.calls.filter((c) => c[0] === 'openRoom').length, 1, 'the channel is opening');
+    k.poll();
+    k.poll();
+    assert.equal(started.length, 0, 'no hand-off while the channel opens');
+    resolveOpen(answer);
+    await flush();
+    await flush();
+    k.poll();
+    assert.equal(started.length, answer.ok ? 1 : 0, JSON.stringify(answer));
+    assert.ok(!k.net.calls.some((c) => c[0] === 'rpc' && c[1] === 'leave_room'), 'the race is never left');
+    if (!answer.ok) assert.equal(store.rec, rec, 'the record waits for the next entry');
+    closeTournamentPanel();
+  }
+});
+
 test("2.3 a reload's race that is over: the window says so, forgets it, and stays on the online home", async () => {
   const rec = { v: 1, code: '482913', round: 1, seat: 'guest', pauseRound: 0, levels: { 1: START_SNAP }, wall: Date.now() };
   const k = setup({ answers: { room_state: { ok: false, error: 'no room' } } });

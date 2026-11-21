@@ -396,8 +396,8 @@ export function createOnlineLobby({ net, name, width, mine = { protocol: protoco
 
   /**
    * 2.3, D4: the race a reload left (the tab's resume record: its code). room_state says whether this
-   * device still sits in it: still playing, the room becomes this seat's ('rejoin') and its channel
-   * opens as that seat, so the panel's poll hands it to the race; no seat ('no room'), or the race
+   * device still sits in it: still playing, its channel opens as that seat, and only then the room
+   * becomes this seat's ('rejoin', 2.7), so the panel's poll hands it to the race; no seat ('no room'), or the race
    * finished or abandoned: over, and the remembered code is forgotten; the server out of reach or the
    * channel refused: kept for the next try, and the room is never left (a leave would end the race
    * for both). → { ok: true } | { ok: false, over: true } | { ok: false, error }.
@@ -425,13 +425,21 @@ export function createOnlineLobby({ net, name, width, mine = { protocol: protoco
       state.message = msg('onlineRaceOver', 'notice');
       return { ok: false, over: true };
     }
-    step({ type: 'rejoin', room, at: now() });
-    if (state.room.phase !== 'playing') return failed('error');
-    const opened = await net.openRoom(code, { seat: state.room.role, name, width });
+    // 2.7, AUD-108: the room becomes this seat's only once its channel is open. A 'playing' room is
+    // the panel's word to hand the race off (its 200 ms poll), so stepping it first handed a race
+    // whose join could still fail, and the race was left with no channel ("Reconnecting…" for good).
+    const rejoined = roomStep(state.room, { type: 'rejoin', room, at: now() });
+    if (rejoined.phase !== 'playing') return failed('error');
+    const opened = await net.openRoom(code, { seat: rejoined.role, name, width });
     if (gen !== generation) return { ok: false, error: 'you left' };
     if (!opened?.ok) {
       net.closeRoom();
       return failed(opened?.error);
+    }
+    step({ type: 'rejoin', room, at: now() });
+    if (state.room.phase !== 'playing') {
+      net.closeRoom();
+      return failed('error');
     }
     return { ok: true };
   }
