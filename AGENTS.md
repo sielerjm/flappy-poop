@@ -139,7 +139,9 @@ layout in a centred 720 px column (`uiColumn()`), and the poop sits at
 `poopXFrac` (25 %) of the width (`poopX()`). The width is fitted on every Play
 (re)start (`applyFieldSize`); a window resize or a phone rotation re-fits at once on
 the ready screen and otherwise after Home (`onFieldResize` → `update()`), never
-mid-run: a running run auto-pauses at that moment. Android home-screen installs are
+mid-run: a running run auto-pauses at that moment. While an online race runs, a resize
+goes to `OnlineRace.onFieldResize` instead, which re-fits the canvas around the same field with no
+pause (a guest turning to landscape keeps its field by design; commit 11321ac). Android home-screen installs are
 portrait-locked by the manifest (iOS ignores that), by choice. A run start,
 the end of a level break and the end of a fart pre-fill the field (`prefillPipes`,
 `prefillPairs`): the first pair `pipeLead` ahead (the phone's `pipeLeadPx`, 668 px, plus
@@ -279,7 +281,13 @@ gives the host's player its id (`hostSave` → `ensureId`). When `onRace` record
 of `tournament.minPostPlayers` (3, submit_tournament's floor) or more with any linked player (`postable`)
 is queued once (`queueFinished`: `tournamentPayload(tour, newId())` with the host device's id into
 `Play.tournamentQueue`, registry `posted` / `tournamentId`) and synced; a 2-player one is `posted: 'two'`
-(the podium says it is not saved), an all-guest one `'none'`. The podium's line (`#tour-saved`,
+(the podium says it is not saved), an all-guest one `'none'`. **Two players** (plan 39, 2.4b): the server
+now takes them too: `submit_tournament` accepts 2 players, who race a lone final, gold and silver (a
+draw earns none). The client's `minPostPlayers` stays 3 until 2.5, so the game does not send them yet.
+**A counted online race** (`finish_match`, see the online schema) adds 🏅 gold / silver / event / best and
+a 🏆 post at the last level through `board_post` (`submit_score`'s post, now shared), backed by a
+server-made `run_log` row of mode `race`; no tournament receipt and no matchup, so online pairings stay
+off the public rival line. The podium's line (`#tour-saved`,
 `savedText`) follows the queue's outcome. Guests travel as `{ id: null, name: null }`.
 `Play.syncLeaderboard` drains the queue after the merges and before the no-username return. Every queue
 (runs, Daily, career, 📚 board, pilot answers, tournaments) also goes again when the browser fires `online`
@@ -348,7 +356,7 @@ biggest rival (self-races ignored), counters, achievements. The game claims, the
 id format and a quest's window (+2 days' grace): accepted risk ACC-001 like scores.
 
 **Run summaries** (plan 30): every single-player and Daily run (never a test run, an education run or
-a match half) keeps a summary, as numbers, in `src/runStats.js` (`createRunStats`: preallocated, no
+a split-screen match half) keeps a summary, as numbers, in `src/runStats.js` (`createRunStats`: preallocated, no
 allocation per frame, flap or press). Play feeds it through `statCall` (the first error switches it
 off for the rest of the run): `start` (begin), `update` (frame), `doFlap` (each flap, with what stood
 behind it: the module-private press stamp set by the input listeners through `withInput`, read with
@@ -361,7 +369,11 @@ before `drainDaily` in both of `syncLeaderboard`'s paths (`submitRuns`, up to 20
 or 🌞 post whose run is still queued after a paced send waits (`postWaits`, `waitsForRun`, at most
 `runWaitSyncs` syncs). The row's fields are `RUN_DATA_KEYS`, equal to `run_data_keys()` in
 `db/schema.sql` (tests/runStats.test.js). **Server:** `run_log` (owner-only, 90 days), `submit_runs`
-(void; a row it cannot store is counted in `run_rejects`), and the moderation calls below.
+(void; a row it cannot store is counted in `run_rejects`), and the moderation calls below. **Mode
+`race`** (plan 39, 2.4b) joins `single` and `daily`: a device may send one, and the server writes one
+per racer of a counted online race (`online_count_race`, from the agreed numbers; it replaces a row a
+device wrote first under that run id). `post_must_hold`, `post_run`, `hold_run` and `release_run`
+treat `race` like `single`; `streak_days` still counts `single` only.
 
 **Loading splash** (2026-11-12, v0.15.0, plan `.claude/plans/Archive/01-loading-screen.plan.md`): the page's front
 door on every load, phone and desktop. `index.html`'s `#splash` (cream, the bobbing `poop.png` inside a
@@ -916,7 +928,9 @@ src/
   main.js                   new Phaser.Game(...): fieldWidth(window) x 1280 logical
                             field (720 on a phone, wider on desktop), Scale.FIT,
                             a debounced window resize (a phone rotation too) →
-                            Play.onFieldResize() when the width would change,
+                            Play.onFieldResize() when the width would change (while a
+                            race runs, OnlineRace.onFieldResize: it re-fits the canvas
+                            around the same field, no pause),
                             ?invite=<code> read once (inviteFromSearch), taken out
                             of the address bar at once (withoutInvite,
                             history.replaceState) and handed to Play through the
@@ -1328,8 +1342,10 @@ src/
                             dev host (debugHandleAllowed) the test project `?onlinetest=
                             <code>` stored in this browser (encodeDevProject /
                             devProjectFrom; `=off` forgets it) under its own session and
-                            trust keys (DEV_PROJECT_KEY). tests/onlineNet.test.js,
-                            tests/onlineDevProject.test.js.
+                            trust keys (DEV_PROJECT_KEY). ONLINE_RPCS includes finish_match
+                            and online_history; the server's plain messages include
+                            'online closed', 'no match' and 'bad result'.
+                            tests/onlineNet.test.js, tests/onlineDevProject.test.js.
   onlineAccount.js          Online race (🌐, plan 39, 1.6a) the sign-in side on top of
                             createOnlineNet, NO Phaser/DOM: enter (sign in, link the
                             device), claim (a new name under the board's rules), devices,
@@ -2629,7 +2645,9 @@ db/schema.sql               Supabase schema: scores table (player_id = save-code
                             a raise with no run too; post_must_hold / post_run match a
                             post to its run by content; own_best / board_rows give the
                             caller's own views their held bests (player_rank,
-                            player_stats by id, daily_board's me, score_board). The run
+                            player_stats by id, daily_board's me, score_board). Mode
+                            'race' (2.4b) is a run_log mode beside single / daily, treated
+                            as single by those. The run
                             tables sit before submit_score in the file (a SQL
                             function's body is checked when it is made). Plan 21 (2026-11-13): the 📚
                             board (education_settings: board_open, invite_hash,
@@ -2698,6 +2716,37 @@ db/schema.sql               Supabase schema: scores table (player_id = save-code
                             join_attempts / online_secret, and two policies on
                             realtime.messages for `room:<code>`; PGlite boots with
                             tools/supabase_stubs.mjs's auth and realtime stand-ins.
+                            Online races (plan 39, 2.4a-2.4e; the schema reaches main ahead
+                            of Tier 2's client): `matches` (one row per race, minted by
+                            set_room_status('playing'); rooms.match_id points at the race
+                            running; readable by no role, kept as the players' history).
+                            finish_match(code, round, result): trusted devices only (a
+                            pending one: 'not trusted'); each seated device reports both
+                            seats' numbers; the race ends agreed (equal reports), disputed
+                            (different), refused (shorter than 180 s from GO, c_min_race_s,
+                            or a score above 200 + 4 a second) or abandoned (a leave or
+                            an abandon before any seat reported, or still playing 6 h
+                            after GO; an abandoned race with no report is deleted after
+                            a day). counted = agreed, two
+                            different players, at most 10 counted races per pair and 20 per
+                            player in 24 h; a counted race feeds the 🏅 / 🏆 boards
+                            (online_count_race, board_post) and run_log mode 'race'. Each
+                            seat's numbers-only telemetry is kept (host_stats / guest_stats,
+                            a key list, owner's eyes). online_history(): the owner's online
+                            rival line and last races, trusted devices only, no ids
+                            (online_races is its internal helper; the public profile's rival
+                            counts split-screen races only). Off switch: online_settings
+                            (one row), admin_set_online_open(bool), owner only; closed means
+                            'online closed' on the room functions, a race running keeps going.
+                            Rematch pacing: set_room_status('playing') waits 60 s from the
+                            last GO ('rate limited'). Races follow trust in a merge: a side
+                            that loses trust in fold_player leaves its races under the id
+                            folded away; when nobody loses trust every race moves; seat, self-
+                            race and history checks compare resolved ids. M1 rule 6 (2.4e): a
+                            fourth waiting device replaces the waiting device seen longest ago
+                            (removed as Remove removes one), never a paired device or one
+                            seated in a race; 'too many devices waiting' now means all three
+                            are racing. tests/schemaOnline.test.js.
                             PL/pgSQL gotcha: a bare CASE inside
                             `IF … THEN` ends the condition at its THEN; parenthesise.
 
@@ -2944,7 +2993,8 @@ tests/                      node --test (schema.test.js, schemaOnline.test.js, p
                             dailyRunStart, the per-pair reward stream, the daily
                             store and queue, the result's date / rank / share words
   schema.test.js            db/schema.sql in PGlite, applied twice: anon reads no
-                            tournament table; medals = placings() for 3–8 players
+                            tournament table; medals = placings() for 2–8 players (2: a lone
+                            final, gold and silver)
                             (the floor pinned to minPostPlayers);
                             300 legal brackets accepted, 16 forgeries rejected (no
                             receipt left); duplicate / 60 s pacing; guests; board
@@ -2977,7 +3027,14 @@ tests/                      node --test (schema.test.js, schemaOnline.test.js, p
   schemaOnline.test.js      The online part of db/schema.sql in PGlite, a device acting through
                             request.jwt.claims and the authenticated role: linking, trust and
                             pairing, the name claim both ways, rooms, caps, the channel
-                            policies, housekeeping
+                            policies, housekeeping; plan 39, 2.4: matches, finish_match
+                            (agreed / disputed / refused / abandoned, the bounds and caps,
+                            telemetry), online_history, the off switch, rematch pacing,
+                            races following trust in a merge, the fourth waiting device
+                            (2.4e), the boards' posts and race runs
+  runLog.test.js            submit_runs and run_log in PGlite as anon: owner-only, rejects
+                            counted, a resend stored once, 5 s pacing, 90-day purge, the
+                            merge; plan 39: mode 'race' accepted and treated like single
   onlineLiveCheck.test.js   tools/online_live_check.mjs: the target guard, the arguments and
                             how a channel answer is read
   online.test.js            src/online.js: the protocol and its validation, stale and
@@ -3763,7 +3820,7 @@ Commits follow `type(scope): summary` (`feat`, `fix`, `docs`, `chore`, `test`, `
   `grant  execute … to authenticated;` pair), is `security definer` with `set search_path = ''` and
   qualified names, checks `auth.uid()` first, and is listed in the header's `--   * online name(...)`
   list (tests/schema.test.js checks the anon and online lists against the grant lines;
-  tests/schemaOnline.test.js checks the privileges). A failure the server counts is returned as
+  tests/schemaOnline.test.js checks the privileges; `finish_match` and `online_history` follow this rule). A failure the server counts is returned as
   `{ ok: false, error }`, because a raise would roll the count back. The game's anon functions stay
   revoked from authenticated (a session token sent to one is refused).
 - New achievement → one `ACHIEVEMENTS` entry in `src/achievements.js` (a new,
