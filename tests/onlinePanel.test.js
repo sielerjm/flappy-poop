@@ -8,8 +8,9 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { fakeGame, installPanelDom, textOf } from './support/panelDom.js';
 import { fakeStorage } from './support/scenes.js';
-import { LEADERBOARD } from '../src/config.js';
+import { LEADERBOARD, TUNING } from '../src/config.js';
 import { t } from '../src/i18n.js';
+import { createResumeStore, resumeKey } from '../src/onlineRace.js';
 
 const body = installPanelDom();
 const { openTournamentPanel, isTournamentPanelOpen, closeTournamentPanel } = await import('../src/ui/tournamentPanel.js');
@@ -53,9 +54,10 @@ function setup({ versus = null, active = false, project = undefined, enter = { o
   const play = { getSaveState: () => ({ name: 'PlopMaster', id: 'p1' }), onlineAccount: () => account, onlineNet: net, onlineTestProject: () => project === 'test', ...(project === undefined ? {} : { onlineProjectName: () => project }) };
   const game = fakeGame({ versus, active, play });
   const ticks = [];
-  const timers = { setInterval: (fn) => (ticks.push(fn), ticks.length), clearInterval: () => {} };
+  const later = [];
+  const timers = { setInterval: (fn) => (ticks.push(fn), ticks.length), clearInterval: () => {}, setTimeout: (fn, ms) => (later.push({ fn, ms }), later.length), clearTimeout: () => {} };
   const poll = () => ticks.forEach((fn) => fn());
-  return { net, account, entered, play, game, timers, poll, open: () => openTournamentPanel({ game, locale: 'en', play, timers }) };
+  return { net, account, entered, play, game, timers, poll, later, open: () => openTournamentPanel({ game, locale: 'en', play, timers }) };
 }
 
 test('over Play (no Versus): the 🌐 views at once, the switch locked on with its reason, the transport warmed, signed in and linked, the online home', async () => {
@@ -385,4 +387,125 @@ test('2.3 a fresh race hands OnlineRace the tab\'s resume store too (it writes t
   assert.equal(started[0][1].store, store);
   assert.equal(started[0][1].resume, undefined, 'nothing to resume');
   closeTournamentPanel();
+});
+
+// --- 2.3b: app restart and a second tab (item 54) -----------------------------------------------
+
+const STALE = TUNING.online.resume.staleMs;
+const PLAYING = { ok: true, code: '482913', status: 'playing', seat: 'guest', host_name: 'SirFlushALot', guest_name: 'PlopMaster', seed: 4242, start_ms: 990_000, round: 1 };
+const rec2 = (fields = {}) => ({ v: 2, code: '482913', round: 1, seat: 'guest', pauseRound: 1, levels: { 1: START_SNAP, 2: LV2_SNAP }, wall: 5_000_000, ...fields });
+/** Another page's record (tabA) and this page's store (tabB) on one localStorage; item 46's remembered code beside them. */
+function otherPage(beatAgo) {
+  const map = new Map([[LEADERBOARD.onlineRaceKey, '482913']]);
+  const clock = { wall: 5_000_000 };
+  const page = (tab) => createResumeStore(() => fakeStorage(map), resumeKey(false), { wall: () => clock.wall, tab });
+  const other = page('tabA');
+  clock.wall -= beatAgo;
+  other.set(rec2());
+  clock.wall += beatAgo;
+  globalThis.localStorage = fakeStorage(map);
+  return { map, clock, other, mine: () => page('tabB') };
+}
+const rpcs = (k) => k.net.calls.filter((c) => c[0] === 'rpc').map((c) => c[1]);
+
+test('2.3b a race another page is running (it beat a second ago): entering 🌐 neither rejoins it nor leaves it (item 46\'s leave included), says so, and looks again once', async () => {
+  const w = otherPage(1000);
+  try {
+    const k = setup({ answers: { room_state: { ok: true, data: PLAYING } } });
+    k.play.raceResumeStore = w.mine;
+    const started = [];
+    k.play.scene = { start: (key, data) => started.push([key, data]) };
+    k.open();
+    await flush();
+    await flush();
+    k.poll();
+    assert.deepEqual(rpcs(k).filter((f) => f === 'room_state' || f === 'leave_room'), [], rpcs(k).join());
+    assert.equal(k.net.calls.filter((c) => c[0] === 'openRoom').length, 0);
+    assert.equal(el('tour-status').textContent, t('en', 'onlineRaceElsewhere'));
+    assert.ok(el('tour-create'), 'the online home');
+    assert.equal(k.later.length, 1, 'one look again');
+    assert.ok(k.later[0].ms >= STALE, `after staleMs (${k.later[0].ms})`);
+    for (let ms = 0; ms < k.later[0].ms; ms += TUNING.online.resume.beatMs) {
+      w.clock.wall += TUNING.online.resume.beatMs;
+      assert.equal(w.other.beat(), 'mine'); // the other page still races, beating every second
+    }
+    k.later.shift().fn();
+    await flush();
+    await flush();
+    k.poll();
+    assert.deepEqual(rpcs(k).filter((f) => f === 'room_state' || f === 'leave_room'), [], 'still live: nothing');
+    assert.equal(k.later.length, 0, 'and no further look');
+    assert.equal(w.other.get().owner, 'tabA');
+    assert.equal(started.length, 0);
+    closeTournamentPanel();
+  } finally {
+    delete globalThis.localStorage;
+  }
+});
+
+test('2.3b the look again finds the other page gone (its beat stale): this page claims the race and rejoins it', async () => {
+  const w = otherPage(1000);
+  try {
+    const k = setup({ answers: { room_state: { ok: true, data: PLAYING } } });
+    k.play.raceResumeStore = w.mine;
+    const started = [];
+    k.play.scene = { start: (key, data) => started.push([key, data]) };
+    k.open();
+    await flush();
+    await flush();
+    w.clock.wall += k.later[0].ms; // no beat since: it died
+    k.later.shift().fn();
+    await flush();
+    await flush();
+    k.poll();
+    assert.ok(rpcs(k).includes('room_state') && !rpcs(k).includes('leave_room'), rpcs(k).join());
+    assert.deepEqual(k.net.calls.filter((c) => c[0] === 'openRoom').map((c) => [c[1], c[2].seat]), [['482913', 'guest']]);
+    assert.equal(w.other.get().owner, 'tabB', 'claimed for this page');
+    assert.equal(started.length, 1);
+    assert.equal(started[0][1].resume.level, 2, 'rewound at the record\'s level, as 2.3');
+    closeTournamentPanel();
+  } finally {
+    delete globalThis.localStorage;
+  }
+});
+
+test("2.3b a relaunch's race (the record another page's, its beat stale): claimed at once and rejoined, nothing left", async () => {
+  const w = otherPage(STALE + 1);
+  try {
+    const k = setup({ answers: { room_state: { ok: true, data: PLAYING } } });
+    k.play.raceResumeStore = w.mine;
+    const started = [];
+    k.play.scene = { start: (key, data) => started.push([key, data]) };
+    k.open();
+    await flush();
+    await flush();
+    k.poll();
+    assert.equal(k.later.length, 0, 'no look again needed');
+    assert.ok(rpcs(k).includes('room_state') && !rpcs(k).includes('leave_room') && !rpcs(k).includes('create_room'), rpcs(k).join());
+    assert.equal(w.other.get().owner, 'tabB');
+    assert.deepEqual(w.map.get(LEADERBOARD.onlineRaceKey), '482913', 'item 46\'s code kept (the race goes on)');
+    assert.equal(started.length, 1);
+    closeTournamentPanel();
+  } finally {
+    delete globalThis.localStorage;
+  }
+});
+
+test("2.3b Create while another page races: item 46's leave is skipped (it would end that race for both), so the server's 'in a race' answers", async () => {
+  const w = otherPage(1000);
+  try {
+    const k = setup({ answers: { create_room: { ok: false, error: 'in a race' } } });
+    k.play.raceResumeStore = w.mine;
+    k.open();
+    await flush();
+    await flush();
+    await el('tour-create').click();
+    await flush();
+    assert.deepEqual(rpcs(k).filter((f) => f === 'leave_room' || f === 'create_room'), ['create_room']);
+    assert.equal(w.other.get().owner, 'tabA', 'the record untouched');
+    assert.equal(w.map.get(LEADERBOARD.onlineRaceKey), '482913');
+    closeTournamentPanel();
+  } finally {
+    delete globalThis.localStorage;
+  }
 });

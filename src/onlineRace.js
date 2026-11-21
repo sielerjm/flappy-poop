@@ -15,9 +15,11 @@
 //   judges who crossed each line first on server time, starts each level at a server GO once both are
 //   ready, takes a ready back during the count, and agrees the rematch; the guest follows its word.
 // - raceRoomItem: the room items the race hands the lobby (the confirmed playing / finished status).
-// - Reload resume (2.3, D4): a level's start as a snapshot (levelSnap), the tab's resume record
+// - Reload resume (2.3, D4): a level's start as a snapshot (levelSnap), the resume record
 //   (parseResume, createResumeStore, resumePlan) and which level a peer's rewind asks for
-//   (rewindOnHeard: the lower of the two sides' level starts).
+//   (rewindOnHeard: the lower of the two sides' level starts). 2.3b: the record lives in
+//   localStorage with its owner (this page's tab id, pageTab) and the racing page's beat, so a
+//   relaunched app rejoins and a second live page never takes the seat (resumeOwner).
 // No I/O and no timers: time and the transport's send come in as arguments (the resume store takes
 // its storage as a function).
 
@@ -865,8 +867,10 @@ export function raceRoomItem(item) {
 
 // --- reload resume (2.3, D4) --------------------------------------------------------------------
 
-/** The resume record's format; a record of another version is not read. */
-export const RESUME_VERSION = 1;
+/** The resume record's format; a record of another version is not read (2: 2.3b's owner and beat). */
+export const RESUME_VERSION = 2;
+
+const TAB_ID = /^[A-Za-z0-9_-]{1,64}$/;
 
 const SNAP_INTS = ['score', 'coins', 'beans', 'probiotic', 'deaths', 'levelWins'];
 
@@ -907,9 +911,10 @@ function snapsOf(levels, t) {
 const topLevel = (levels) => Math.max(1, ...Object.keys(levels).map(Number));
 
 /**
- * The tab's resume record from its stored text, whole or null: this version, a room code, a round,
- * a seat, the pause round, level 1's start and any later level's, written no longer than
- * online.resume.maxAgeMs ago by the wall clock (`wall`).
+ * The resume record from its stored text, whole or null: this version, a room code, a round, a
+ * seat, the pause round, level 1's start and any later level's, written no longer than
+ * online.resume.maxAgeMs ago by the wall clock (`wall`), its owner (a page's tab id) and that
+ * page's last beat (wall ms).
  * @param {string | null} raw
  * @param {{ wall?: number }} [opts] the wall clock now (Date.now())
  */
@@ -925,9 +930,65 @@ export function parseResume(raw, { wall = Date.now() } = {}, t = TUNING) {
   if (typeof r.code !== 'string' || !/^\d{6}$/.test(r.code) || !SEATS.includes(r.seat)) return null;
   if (!Number.isInteger(r.round) || r.round < 0 || !Number.isInteger(r.pauseRound) || r.pauseRound < 0) return null;
   if (!Number.isFinite(r.wall) || wall - r.wall > t.online.resume.maxAgeMs) return null;
+  if (typeof r.owner !== 'string' || !TAB_ID.test(r.owner) || !Number.isFinite(r.beat)) return null;
   const levels = snapsOf(r.levels, t);
   if (!levels) return null;
-  return { v: r.v, code: r.code, round: r.round, seat: r.seat, pauseRound: r.pauseRound, levels, wall: r.wall };
+  return { v: r.v, code: r.code, round: r.round, seat: r.seat, pauseRound: r.pauseRound, levels, wall: r.wall, owner: r.owner, beat: r.beat };
+}
+
+/**
+ * Who may rejoin the race a record names (2.3b, item 54): 'mine' when this page owns it (a reload of
+ * the same tab: rejoin as 2.3); 'live' while another page beat within online.resume.staleMs (it is
+ * racing: neither rejoin nor leave the room); 'free' once it has not (the page that had it is gone or
+ * frozen, as a relaunched home-screen app finds it: rejoin and take it over). A beat that far ahead of
+ * the clock (the clock was set back) counts as stale. null without a record.
+ * @param {{ record: object | null, tab: string | null | undefined, wall: number }} o
+ */
+export function resumeOwner({ record, tab, wall }, t = TUNING) {
+  if (!record) return null;
+  if (typeof tab === 'string' && tab !== '' && record.owner === tab) return 'mine';
+  if (!Number.isFinite(record.beat) || Math.abs(wall - record.beat) >= t.online.resume.staleMs) return 'free';
+  return 'live';
+}
+
+/** A tab id: 16 url-safe characters (crypto where it exists, which an insecure LAN page has too). */
+function randomTabId() {
+  const bytes = new Uint8Array(16);
+  try {
+    globalThis.crypto.getRandomValues(bytes);
+  } catch {
+    for (let i = 0; i < bytes.length; i += 1) bytes[i] = Math.floor(Math.random() * 256);
+  }
+  const abc = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
+  return Array.from(bytes, (b) => abc[b & 63]).join('');
+}
+
+/**
+ * This page's tab id (2.3b), the resume record's owner, kept in sessionStorage as { id, open }: a
+ * reload of the same tab keeps it, because the page it replaces marked it closed (hide(), from
+ * pagehide); a page that finds it still open is a copy of a live page (a duplicated tab copies
+ * sessionStorage) and takes a new one, as a new tab or a relaunch (sessionStorage empty) does.
+ * show() (pageshow, back from the back-forward cache) marks it open again. Blocked storage: an id for
+ * this page load. Never throws.
+ * @param {() => Storage | null} storage
+ * @param {string} key LEADERBOARD.onlineTabKey
+ * @param {{ random?: () => string }} [opts]
+ */
+export function pageTab(storage, key, { random = randomTabId } = {}) {
+  let was = null;
+  try {
+    was = JSON.parse(storage()?.getItem(key) ?? 'null');
+  } catch {
+    was = null;
+  }
+  const id = was && was.open === false && typeof was.id === 'string' && TAB_ID.test(was.id) ? was.id : random();
+  const mark = (open) => {
+    try {
+      storage()?.setItem(key, JSON.stringify({ id, open }));
+    } catch {}
+  };
+  mark(true);
+  return { id, hide: () => mark(false), show: () => mark(true) };
 }
 
 /** The resume record's storage key: per project, as item 46's room code ('.test' on the test project). */
@@ -936,14 +997,20 @@ export function resumeKey(test = false) {
 }
 
 /**
- * This tab's resume record (sessionStorage in the game: a reload keeps it, another tab never sees
- * it): get() → parseResume's record or null, set(record), clear(). Blocked or missing storage keeps
- * nothing and never throws.
+ * The resume record in the game's storage (2.3b: localStorage, shared by every page of the game on
+ * this device), as seen from one page (`tab`, its pageTab id): get() → parseResume's record or null,
+ * whoever owns it; owner() → resumeOwner's word on it; set(record) writes it as this page's, with a
+ * beat, unless another page's record is live there (→ false); claim() takes a record that is mine or
+ * free over as this page's (the rejoin) → the record or null; beat() renews this page's beat →
+ * 'mine', 'taken' (another page owns it: nothing written) or 'none'; holder() reads the same without
+ * writing, cheaply while nothing changed since this page's own write (each frame); clear() removes
+ * the record unless another page's is live there. Blocked or missing storage keeps nothing and never
+ * throws.
  * @param {() => Storage | null} storage
  * @param {string} key resumeKey()
- * @param {{ wall?: () => number }} [opts]
+ * @param {{ wall?: () => number, tab?: string | null }} [opts]
  */
-export function createResumeStore(storage, key, { wall = () => Date.now() } = {}) {
+export function createResumeStore(storage, key, { wall = () => Date.now(), tab = null } = {}) {
   const store = () => {
     try {
       return storage() ?? null;
@@ -951,23 +1018,65 @@ export function createResumeStore(storage, key, { wall = () => Date.now() } = {}
       return null;
     }
   };
+  let last = null; // the text this page last wrote: unchanged since, the record is still its own
+  const read = () => {
+    try {
+      return store()?.getItem(key) ?? null;
+    } catch {
+      return null;
+    }
+  };
+  const write = (record) => {
+    const raw = JSON.stringify(record);
+    try {
+      const st = store();
+      if (!st) return false;
+      st.setItem(key, raw);
+      last = raw;
+      return true;
+    } catch {
+      return false;
+    }
+  };
+  const get = () => parseResume(read(), { wall: wall() });
+  const owner = (record = get()) => resumeOwner({ record, tab, wall: wall() });
+  const holder = (raw) => {
+    if (raw === null) return 'none';
+    if (raw === last) return 'mine';
+    const record = parseResume(raw, { wall: wall() });
+    if (!record) return 'none';
+    return record.owner === tab ? 'mine' : 'taken';
+  };
   return {
-    get() {
-      try {
-        return parseResume(store()?.getItem(key) ?? null, { wall: wall() });
-      } catch {
-        return null;
-      }
-    },
+    tab,
+    get,
+    owner: () => owner(),
     set(record) {
-      try {
-        store()?.setItem(key, JSON.stringify(record));
-      } catch {}
+      if (owner() === 'live') return false;
+      return write({ ...record, v: RESUME_VERSION, owner: tab, beat: wall() });
     },
+    claim() {
+      const record = get();
+      if (!record || owner(record) === 'live') return null;
+      const mine = { ...record, owner: tab, beat: wall() };
+      return write(mine) ? mine : null;
+    },
+    beat() {
+      const raw = read();
+      const who = holder(raw);
+      if (who !== 'mine') return who;
+      const record = parseResume(raw, { wall: wall() });
+      if (!record) return 'none';
+      write({ ...record, beat: wall() });
+      return 'mine';
+    },
+    holder: () => holder(read()),
     clear() {
+      if (owner() === 'live') return;
       try {
         store()?.removeItem(key);
       } catch {}
+      last = null;
     },
   };
 }

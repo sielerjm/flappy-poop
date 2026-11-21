@@ -824,12 +824,44 @@ function startLobby(r) {
   const o = online;
   if (!o || !o.net) return;
   // Both ready: the host starts the race (set_room_status), and a room in 'playing' hands off (1.7a).
-  // 2.3, D4: a race this tab left by a reload (its resume record) is rejoined first.
-  const record = o.lobby ? null : (raceResume()?.get?.() ?? null);
+  // 2.3, D4: a race this page left by a reload (its resume record) is rejoined first. 2.3b: a relaunch's
+  // too (the record is in localStorage): one that is this page's or free is claimed and rejoined; one
+  // another page is beating is that page's race, neither rejoined nor left (item 46's leave on entry
+  // included: the lobby gets it as `resume`, and raceMemory hides its code), and looked at once more.
+  const store = o.lobby ? null : raceResume();
+  let record = store?.get?.() ?? null;
+  const live = Boolean(record) && store.owner?.() === 'live';
+  if (record && !live) record = store.claim?.() ?? record;
   o.lobby ??= createOnlineLobby({ net: o.net, name: r.name, width: myWidth(), onBothReady: (lobby) => lobby.start(), memory: raceMemory(), resume: record });
   if (o.poll === null) o.poll = ctx.timers.setInterval(() => pollOnline(o), ONLINE_POLL_MS);
-  if (record) rejoinRace(o, record);
+  if (live) {
+    o.lobby.notice?.('onlineRaceElsewhere');
+    o.look = ctx.timers.setTimeout?.(() => lookAgain(o), T.online.resume.staleMs) ?? null;
+  } else if (record) rejoinRace(o, record);
   renderLobby();
+  if (live) {
+    const m = lobbyMessage(lobbyUi(), o.lobby);
+    setStatus(m?.text ?? '', m?.kind ?? '');
+  }
+}
+
+/**
+ * 2.3b: once, online.resume.staleMs after the window found another page racing: that page may just
+ * have died (its beat stopped), so the race is free to claim and rejoin from here, unless this window
+ * has moved on to a room of its own.
+ */
+function lookAgain(o) {
+  o.look = null;
+  if (online !== o || !o.lobby) return;
+  const phase = o.lobby.state.room.phase;
+  if (phase !== 'idle' && phase !== 'closed') return;
+  const record = raceResume()?.claim?.() ?? null; // null while the other page still beats, or with no record
+  if (!record) return;
+  rejoinRace(o, record);
+  if (o.st.view !== 'home' || view) return;
+  renderLobby();
+  const m = lobbyMessage(lobbyUi(), o.lobby);
+  setStatus(m?.text ?? '', m?.kind ?? '');
 }
 
 /**
@@ -849,7 +881,7 @@ function rejoinRace(o, record) {
   });
 }
 
-/** This tab's resume record (2.3; Play.raceResumeStore: sessionStorage, per project), or null. */
+/** The resume record's store (2.3; 2.3b: Play.raceResumeStore, localStorage seen from this page's tab id, per project), or null. */
 function raceResume() {
   return ctx?.play?.raceResumeStore?.() ?? null;
 }
@@ -883,6 +915,7 @@ function raceMemory() {
   const store = () => browserStorage();
   return {
     get() {
+      if (raceResume()?.owner?.() === 'live') return null; // 2.3b: another page races in that room: never leave it from here
       try {
         return store()?.getItem(key) ?? null;
       } catch {
@@ -949,6 +982,8 @@ function stopOnline() {
   if (!o) return;
   if (o.poll !== null) ctx?.timers?.clearInterval(o.poll);
   o.poll = null;
+  if (o.look) ctx?.timers?.clearTimeout?.(o.look);
+  o.look = null;
   const lobby = o.lobby;
   o.lobby = null;
   Promise.resolve(lobby?.leave())
@@ -1086,7 +1121,7 @@ export function openTournamentPanel(options) {
   ctx.timers = options.timers ?? globalThis;
   if (!online && !tournamentState(ctx.game) && !view) {
     const forced = !versus(ctx.game); // over Play: no split screen to race on here
-    online = { on: forced, forced, st: createAccountState(), account: null, net: null, lobby: null, poll: null, ticks: 0, resume: null };
+    online = { on: forced, forced, st: createAccountState(), account: null, net: null, lobby: null, poll: null, ticks: 0, resume: null, look: null };
     if (forced) startOnline();
   }
   if (!tournamentState(ctx.game) && players.length < T.tournament.minPlayers) {

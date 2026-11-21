@@ -90,7 +90,7 @@ export const SECTIONS = [
   { name: 'online-client', needs: [], about: "the online client (plan 39, 0.2): the boot and the sections since ask for nothing of assets/vendor/supabase.js; blocked, loadSupabase() rejects with onlineLoadFailed and no error card shows; unblocked, one same-origin request at the pin gives supabase.createClient, and a second call asks for nothing more" },
   { name: 'resync', needs: [], about: "the resync (plan 35, 1.4), the live board blocked: two online events in a row sync once and the next one after it settles syncs again; a show after a 1 s hide syncs nothing, after a 31 s one it syncs; a restart keeps the one guard and leaves one online listener" },
   { name: 'online-race', needs: [], about: "the online race (plan 39, 1.7a-1.8) against a scripted guest in the page (its own referee and feed, a 40 ms link; no network): the scene and its Play, Space flapping the one half, the purse under the opponent's pill and a long name fitted to it, the host taking level 1's line, the wait timer and Keep waiting, the shared count and GO, the final line to the guest, one outcome on both, the results panel, Rematch's states and round 2, then Leave from the wait offer back to single player" },
-  { name: 'online-reload', needs: [], about: "reload resume (plan 39, 2.3, D4) against a scripted guest in the page (a 40 ms link; no network): the race into level 2 with its level start kept in the tab's record; the guest's reload restarts this race at level 2's start under the overlay; then a real page reload: a stand-in transport under Play, the 🌐 window rejoins (room_state, the channel as the host, nothing left), the race back rewound, both Ready, one GO, level 2 from its first pair with the kept score, purse, beans and level wins, the race to its end and the record gone" },
+  { name: 'online-reload', needs: [], about: "reload resume (plan 39, 2.3, D4) against a scripted guest in the page (a 40 ms link; no network): the race into level 2 with its level start kept in the tab's record; the guest's reload restarts this race at level 2's start under the overlay; then a real page reload: a stand-in transport under Play, the 🌐 window rejoins (room_state, the channel as the host, nothing left), the race back rewound, both Ready, one GO, level 2 from its first pair with the kept score, purse, beans and level wins, the race to its end and the record gone; 2.3b: a relaunch (a new tab id, the record's beat stale) rejoins and takes the record over; the racing page whose record another page takes steps aside (the transport closed, no leave_room, Play plain, the 🌐 window's line) and, once that page stops beating, looks again and rejoins; a fresh page beside a live beat offers nothing, rejoins nothing, leaves nothing, and its 🌐 window says the race runs in another window" },
 ];
 
 /** What a section needs: its own list, or (omitted) every section before it. */
@@ -7246,8 +7246,13 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
       // before the boot (Play's onlineNet and onlineAccount) answers room_state, so the 🌐 window
       // rejoins through its own lobby and hands the race back rewound; both say Ready, one GO, the
       // level runs from its first pair with the kept numbers, and the race ends with the record gone.
+      // 2.3b (the record in localStorage with its owner and beat): Part 3, a relaunch: sessionStorage
+      // gone (a new tab id) and the record another page left, its beat stale: the 🌐 window claims it
+      // and rejoins. Part 4: another page takes the record over: this one steps aside, says so, and
+      // rejoins once that page stops beating. Part 5: a fresh page beside a live beat: nothing.
       const KEY = 'flappyPoop.onlineResume';
-      await evaluate(`(sessionStorage.removeItem('${KEY}'), true)`).catch(() => null);
+      const TAB = 'flappyPoop.onlineTab';
+      await evaluate(`(localStorage.removeItem('${KEY}'), true)`).catch(() => null);
       await cdp.send('Network.enable');
       await cdp.send('Network.setBlockedURLs', { urls: ['*supabase.co*'] });
       await cdp.send('Emulation.setDeviceMetricsOverride', { width: 720, height: 1280, deviceScaleFactor: 1, mobile: false });
@@ -7277,7 +7282,10 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         }
         return false;
       };
-      const record = () => evaluate(`sessionStorage.getItem('${KEY}')`).then((s) => (s ? JSON.parse(s) : null));
+      const record = () => evaluate(`localStorage.getItem('${KEY}')`).then((s) => (s ? JSON.parse(s) : null));
+      const tabId = () => evaluate(`JSON.parse(sessionStorage.getItem('${TAB}') || 'null')?.id ?? null`);
+      const status = () => evaluate(`document.getElementById('tour-status')?.textContent ?? null`);
+      const ELSEWHERE = 'Your race is running in another window.';
       const pin = () => evaluate(`(() => { const p = ${P}; p.poop.body.setAllowGravity(false); p.poop.setVelocity(0, 0); p.poop.y = 640; p.graceLeftMs = 1e9; return true; })()`);
       const toLine = (last) => evaluate(`(() => { const p = ${P}; const L = __rl.L; const T = __rl.T; ${last ? 'p.level = T.levels.lastLevel; p.applyLevel();' : ''} const end = L.levelEnd(p.level, T); p.pipes.clear(true, true); p.items.clear(true, true); p.beans.clear(true, true); p.nextGapY = null; p.pipesSpawned = end; p.pipesPassed = end; p.finishSpawned = false; p.spawnFinishLine(); p.finishLine.x = p.poop.x + 60; return true; })()`);
       // The scripted guest and the transport between them: built in the page, again after the reload.
@@ -7328,6 +7336,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         return true;
       })()`;
       let scriptId = null;
+      let beatScriptId = null;
       try {
         // --- Part 1: into level 2, then the guest's reload -------------------------------------------
         ok((await evaluate(guest(false))) === true, 'the scripted guest and the link are up');
@@ -7422,11 +7431,82 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await sleep(600);
         await toLine(true);
         ok(await until(`${OR}.match.status === 'over'`, 6000), 'both out: the race is over');
-        ok((await record()) === null, "the tab's resume record is gone with the race");
+        ok((await record()) === null, "the resume record is gone with the race");
+        ok(Boolean(await tabId()), `this page's tab id in sessionStorage (${await tabId()})`);
+
+        // --- Part 3 (2.3b): a relaunch ---------------------------------------------------------------
+        // iOS killed the app mid-race: the relaunch is a new session (sessionStorage gone: a new tab
+        // id), and the record the old page left in localStorage has not been beaten for a minute.
+        await evaluate(`(clearInterval(__rl.bot.timer), true)`);
+        const START = { level: 1, score: 0, coins: 0, beans: 0, probiotic: 0, postbiotic: false, deaths: 0, levelWins: 0 };
+        const left = { v: 2, code: room.code, round: room.round, seat: 'host', pauseRound: 0, levels: { 1: START, 2: kept }, wall: Date.now(), owner: 'oldPage00000000x', beat: Date.now() - 60_000 };
+        const oldTab = await tabId();
+        await evaluate(`(localStorage.setItem('${KEY}', ${JSON.stringify(JSON.stringify(left))}), true)`);
+        // A relaunch's session starts empty: the tab id goes at the new document's start, after this
+        // page's pagehide has marked it closed (removed before the reload, pagehide would write it back
+        // and the reload keep it, as a reload should).
+        const { identifier: relaunchId } = await cdp.send('Page.addScriptToEvaluateOnNewDocument', { source: `sessionStorage.removeItem('${TAB}');` });
+        await cdp.send('Page.reload', { ignoreCache: false });
+        await boot();
+        await cdp.send('Page.removeScriptToEvaluateOnNewDocument', { identifier: relaunchId }).catch(() => null);
+        await evaluate(`(globalThis.__rl = { room: ${JSON.stringify(room)} }, true)`);
+        ok((await evaluate(guest(true))) === true, 'relaunched: the guest still held at level 2\'s start');
+        ok(await until(`__flappy.scene.isActive('OnlineRace') && ${OR}.rewound?.level === 2 && ${OR}.rewound.by === 'me'`, 9000), `the 🌐 window rejoined the old page's race (${await evaluate(`JSON.stringify(__reloadHooks.calls)`)}), rewound at level 2`);
+        const calls3 = await evaluate(`JSON.stringify(__reloadHooks.calls)`).then(JSON.parse);
+        ok(calls3.includes('room_state') && calls3.includes('openRoom 482913 host') && !calls3.includes('leave_room') && !calls3.includes('create_room'), `room_state, the channel as the host, nothing left: ${calls3.join(', ')}`);
+        const newTab = await tabId();
+        const r3 = await record();
+        ok(newTab && newTab !== oldTab && r3?.owner === newTab && Date.now() - r3.beat < 2500, `the record is this page's now (owner ${r3?.owner}, a new tab id ${newTab} ≠ ${oldTab}, beat ${Date.now() - (r3?.beat ?? 0)} ms ago)`);
+        const beat0 = r3?.beat ?? 0;
+        await sleep(2200);
+        ok(((await record())?.beat ?? 0) > beat0, `…and beaten every second (${((await record())?.beat ?? 0) - beat0} ms later)`);
+
+        // --- Part 4 (2.3b): another page takes it over -------------------------------------------------
+        // This page was frozen past staleMs (a background tab) and another page claimed the race: on its
+        // next frame this one steps aside. A page script plays the other page's beat.
+        const mark4 = (await evaluate(`__reloadHooks.calls.length`)) ?? 0;
+        const took = { ...(await record()), owner: 'otherPage0000000', beat: Date.now() };
+        await evaluate(`(localStorage.setItem('${KEY}', ${JSON.stringify(JSON.stringify(took))}), globalThis.__other = setInterval(() => { const r = JSON.parse(localStorage.getItem('${KEY}') || 'null'); if (r?.owner === 'otherPage0000000') { r.beat = Date.now(); localStorage.setItem('${KEY}', JSON.stringify(r)); } }, 500), true)`);
+        ok(await until(`!__flappy.scene.isActive('OnlineRace') && __flappy.scene.isActive('Play') && ${P}.match === null`, 3000), 'taken over: this page stepped aside, back to Play');
+        const calls4 = await evaluate(`JSON.stringify(__reloadHooks.calls.slice(${mark4}))`).then(JSON.parse);
+        ok(calls4.includes('close') && !calls4.includes('leave_room'), `the transport closed, the room not left (${calls4.join(', ')})`);
+        ok((await record())?.owner === 'otherPage0000000', 'the record left to the other page');
+        ok(await until(`document.getElementById('tour-status')?.textContent === ${JSON.stringify(ELSEWHERE)}`, 5000), `its 🌐 window says so: "${await status()}"`);
+        const calls4b = await evaluate(`JSON.stringify(__reloadHooks.calls.slice(${mark4}))`).then(JSON.parse);
+        ok(!calls4b.includes('room_state') && !calls4b.includes('leave_room'), `nothing rejoined or left while the other page beats (${calls4b.join(', ')})`);
+        // The other page dies: no more beats. The window looks again once, staleMs on: claims it and rejoins.
+        await evaluate(`(clearInterval(globalThis.__other), true)`);
+        ok(await until(`__flappy.scene.isActive('OnlineRace') && ${OR}.rewound?.level === 2`, TT.online.resume.staleMs + 5000), 'the other page stopped beating: the window looked again and rejoined');
+        const calls4c = await evaluate(`JSON.stringify(__reloadHooks.calls.slice(${mark4}))`).then(JSON.parse);
+        ok(calls4c.includes('room_state') && !calls4c.includes('leave_room') && (await record())?.owner === newTab, `claimed back for this page (${calls4c.join(', ')})`);
+        await evaluate(`(${OR}.leave(), true)`);
+        ok(await until(`!__flappy.scene.isActive('OnlineRace') && ${P}.match === null`, 3000) && (await record()) === null, 'Leave: back to Play, the record gone');
+        await evaluate(`(clearInterval(__rl.bot.timer), true)`);
+
+        // --- Part 5 (2.3b): a fresh page beside a live race ------------------------------------------
+        // The game open twice (a second tab, Safari and the home-screen app): the other page races and
+        // beats from before this page boots. This page offers nothing, rejoins nothing, leaves nothing.
+        const live = { ...left, owner: 'otherPage0000000', beat: Date.now() };
+        await evaluate(`(localStorage.setItem('${KEY}', ${JSON.stringify(JSON.stringify(live))}), localStorage.setItem('flappyPoop.onlineRace', '482913'), true)`);
+        ({ identifier: beatScriptId } = await cdp.send('Page.addScriptToEvaluateOnNewDocument', { source: `setInterval(() => { try { const r = JSON.parse(localStorage.getItem('${KEY}') || 'null'); if (r && r.owner === 'otherPage0000000') { r.beat = Date.now(); localStorage.setItem('${KEY}', JSON.stringify(r)); } } catch (e) {} }, 500);` }));
+        await cdp.send('Page.reload', { ignoreCache: false });
+        await boot();
+        await sleep(1500);
+        const calls5 = await evaluate(`JSON.stringify(__reloadHooks.calls)`).then(JSON.parse);
+        const panelOpen = () => evaluate(`import('./src/ui/tournamentPanel.js').then((m) => m.isTournamentPanelOpen())`);
+        ok(!(await evaluate(`__flappy.scene.isActive('OnlineRace')`)) && !(await panelOpen()), 'booted beside it: no race, no 🌐 window offered');
+        ok(!calls5.includes('room_state') && !calls5.includes('leave_room'), `nothing rejoined or left (${calls5.join(', ') || 'no calls'})`);
+        await evaluate(`(${P}.openVersusWindow(), true)`);
+        ok(await until(`document.getElementById('tour-status')?.textContent === ${JSON.stringify(ELSEWHERE)}`, 5000), `the 🌐 window, opened by hand: "${await status()}"`);
+        const calls5b = await evaluate(`JSON.stringify(__reloadHooks.calls)`).then(JSON.parse);
+        ok(!calls5b.includes('room_state') && !calls5b.includes('leave_room') && !calls5b.some((c) => c.startsWith('openRoom')), `still nothing rejoined or left, item 46's code kept (${calls5b.join(', ')})`);
+        ok((await evaluate(`localStorage.getItem('flappyPoop.onlineRace')`)) === '482913' && (await record())?.owner === 'otherPage0000000', "item 46's remembered code and the other page's record untouched");
+        await evaluate(`(document.getElementById('tour-close')?.click(), true)`);
         ok(exceptions.length === ex0, exceptions.length > ex0 ? `page exceptions: ${exceptions.slice(ex0).join(' | ')}` : 'no page exceptions');
       } finally {
         if (scriptId) await cdp.send('Page.removeScriptToEvaluateOnNewDocument', { identifier: scriptId }).catch(() => null);
-        await evaluate(`(clearInterval(globalThis.__rl?.bot?.timer), sessionStorage.removeItem('${KEY}'), true)`).catch(() => null);
+        if (beatScriptId) await cdp.send('Page.removeScriptToEvaluateOnNewDocument', { identifier: beatScriptId }).catch(() => null);
+        await evaluate(`(clearInterval(globalThis.__rl?.bot?.timer), clearInterval(globalThis.__other), localStorage.removeItem('${KEY}'), localStorage.removeItem('flappyPoop.onlineRace'), true)`).catch(() => null);
       }
     });
 

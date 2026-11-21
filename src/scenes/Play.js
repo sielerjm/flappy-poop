@@ -122,7 +122,7 @@ import { createRunStats, stubRow } from '../runStats.js';
 import { VERSION as APP_VERSION } from '../logic.js';
 import { browserStorage, pageStorage, createJsonStore } from '../store.js';
 import { createOnlineNet, onlineProjectConfig } from '../onlineNet.js';
-import { createResumeStore, resumeKey } from '../onlineRace.js';
+import { createResumeStore, pageTab, resumeKey } from '../onlineRace.js';
 import { createOnlineAccount } from '../onlineAccount.js';
 import { runDeltas, evaluate, bestFacts, levelCloseShave, winsInWindow, daysBetween, nextDrawStreak, FOUR_OF_A_KIND, EDU_ACHIEVEMENTS, eduRunFacts } from '../achievements.js';
 import { unlock, attachGame, setMuted, isMuted, sfx } from '../sound.js';
@@ -781,7 +781,7 @@ export class Play extends Phaser.Scene {
       if (!this.match) this.launch({ solo: true });
     }
     this.openPendingInvite(); // an invite link (plan 28, 2.4)
-    this.openPendingRace(); // a race this tab left by a reload (plan 39, 2.3)
+    this.openPendingRace(); // a race this page left by a reload or a relaunch (plan 39, 2.3, 2.3b)
   }
 
   /**
@@ -5366,19 +5366,54 @@ export class Play extends Phaser.Scene {
     return { level: this.level, score: this.score, coins: held.coins, beans: held.beans, probiotic: held.probiotic, postbiotic: held.postbiotic, deaths: slot.deaths ?? 0, levelWins: slot.levelWins ?? 0 };
   }
 
-  /** This tab's online-race resume record (plan 39, 2.3, D4): sessionStorage, per project (the test project's has '.test'). */
-  raceResumeStore() {
-    return createResumeStore(() => globalThis.sessionStorage ?? null, resumeKey(Boolean(this.onlineTestProject?.())));
+  /**
+   * This page's tab id (plan 39, 2.3b), the online-race resume record's owner: pageTab's, made once
+   * per page load (the registry), kept in sessionStorage and marked closed on pagehide, so a reload
+   * keeps it and a new tab, a relaunch or a duplicated tab gets a new one.
+   */
+  raceTab() {
+    let tab = this.registry?.get?.('raceTab');
+    if (!tab) {
+      tab = pageTab(() => globalThis.sessionStorage ?? null, LEADERBOARD.onlineTabKey);
+      this.registry?.set?.('raceTab', tab);
+      globalThis.addEventListener?.('pagehide', () => tab.hide());
+      globalThis.addEventListener?.('pageshow', () => tab.show());
+    }
+    return tab.id;
   }
 
   /**
-   * A race this tab was in when it reloaded (plan 39, 2.3, D4): the ready screen opens the 🌐 window,
-   * which rejoins it (the panel's lobby asks room_state); once per page load, so a ✕ there keeps the
-   * ready screen (a later 🌐 entry still rejoins while the record lasts).
+   * The online-race resume record (plan 39, 2.3, D4; 2.3b: localStorage, so a relaunched home-screen
+   * app rejoins too, seen from this page's tab id), per project (the test project's has '.test').
    */
-  openPendingRace() {
-    if (this.match || this.registry?.get('raceRejoinOffered')) return;
-    if (!this.raceResumeStore().get()) return;
+  raceResumeStore() {
+    return createResumeStore(() => browserStorage(), resumeKey(Boolean(this.onlineTestProject?.())), { tab: this.raceTab() });
+  }
+
+  /**
+   * A race this page was in when it reloaded, or this app when it was relaunched (plan 39, 2.3, D4;
+   * 2.3b): the ready screen opens the 🌐 window, which rejoins it (the panel's lobby asks room_state);
+   * once per page load, so a ✕ there keeps the ready screen (a later 🌐 entry still rejoins while the
+   * record lasts). 2.3b: a record another page is beating is that page's race: the window stays shut
+   * and the record is looked at once more after online.resume.staleMs (that page may just have died).
+   * A page that stepped aside (OnlineRace.stepAside) opens the window anyway, to say so.
+   */
+  openPendingRace(again = false) {
+    if (this.match) return;
+    const aside = this.registry?.get('raceSteppedAside') === true;
+    if (!aside && this.registry?.get('raceRejoinOffered')) return;
+    const store = this.raceResumeStore();
+    if (!store.get()) {
+      if (aside) this.registry?.set('raceSteppedAside', false);
+      return;
+    }
+    if (!aside && store.owner() === 'live') {
+      if (again || this.registry?.get('raceRejoinLooked')) return;
+      this.registry?.set('raceRejoinLooked', true);
+      this.time?.delayedCall?.(T.online.resume.staleMs, () => this.openPendingRace(true));
+      return;
+    }
+    this.registry?.set('raceSteppedAside', false);
     this.registry?.set('raceRejoinOffered', true);
     this.time?.delayedCall?.(0, () => {
       if (this.sys?.isActive?.() && !this.match && this.state === 'ready' && !isTournamentPanelOpen()) this.openVersusWindow();

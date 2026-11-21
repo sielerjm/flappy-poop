@@ -7,8 +7,9 @@
 // side (which line it crossed, the late award) is checked at the end.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { absorb, playScene } from './support/scenes.js';
-import { TUNING as T } from '../src/config.js';
+import { absorb, fakeStorage, playScene, registry } from './support/scenes.js';
+import { LEADERBOARD, TUNING as T } from '../src/config.js';
+import { createResumeStore, resumeKey } from '../src/onlineRace.js';
 import { raceOutcome } from '../src/tournament.js';
 
 const { OnlineRace } = await import('../src/scenes/OnlineRace.js');
@@ -1092,4 +1093,172 @@ test("2.3 the record goes at the race's end (checkOver itself, not only the run'
   s.checkOver();
   assert.equal(s.match.status, 'over');
   assert.equal(store.last(), null);
+});
+
+// --- 2.3b: app restart and a second tab (item 54) -----------------------------------------------
+
+const STALE = T.online.resume.staleMs;
+/** Two pages' resume stores on one localStorage, on one wall clock. */
+function twoPages(wall = 2_000_000) {
+  const map = new Map();
+  const clock = { wall };
+  const page = (tab) => createResumeStore(() => fakeStorage(map), resumeKey(false), { wall: () => clock.wall, tab });
+  return { map, clock, a: page('tabA'), b: page('tabB') };
+}
+/** What stepping aside needs of the scene (create() has them in the game). */
+function asideKit(k) {
+  const pumps = { n: 0 };
+  const closes = { n: 0 };
+  k.net.pump = () => (pumps.n += 1);
+  k.net.close = () => (closes.n += 1);
+  k.s.scene.start = (key, data) => k.ops.push(['start', key, data]);
+  k.s.scale = { setGameSize: (w, h) => k.ops.push(['size', w, h]) };
+  k.s.registry = registry();
+  return { pumps, closes };
+}
+
+test('2.3b the racing page beats its record every beatMs, rewound or not, and stops once its own end cleared it', () => {
+  const { clock, a } = twoPages();
+  const { s } = raceScene({ store: a });
+  assert.deepEqual([a.get().owner, a.get().beat], ['tabA', 2_000_000], 'written at the start, as this page\'s');
+  clock.wall += T.online.resume.beatMs;
+  s.beatRecord();
+  assert.equal(a.get().beat, 2_001_000);
+  const two = twoPages();
+  const k = raceScene({ resume: { level: 2, levels: { 1: START, 2: LV2 }, pauseRound: 0, by: 'me' }, store: two.a });
+  two.clock.wall += 3000;
+  k.s.beatRecord();
+  assert.equal(two.a.get().beat, 2_003_000, 'rewound and held: still beating');
+  s.feed.doneFixed = () => true;
+  s.update();
+  assert.equal(a.get(), null, 'its run ended: the record gone');
+  clock.wall += T.online.resume.beatMs;
+  s.beatRecord();
+  assert.equal(a.get(), null, 'and no beat brings it back');
+});
+
+test('2.3b a page frozen past staleMs whose race another page took over steps aside on its next frame, before it pumps or sends: the transport closed, no leave_room, the record left to the new owner, Play plain, the 🌐 window to say so', () => {
+  const { clock, a, b } = twoPages();
+  const k = raceScene({ store: a });
+  const { pumps, closes } = asideKit(k);
+  k.net.clock.now = GO + 30_000;
+  k.s.update();
+  const pumped = pumps.n;
+  assert.ok(pumped >= 1, 'control: a frame pumps');
+  clock.wall += STALE; // iOS froze it in the background: no beat
+  assert.ok(b.claim(), 'a relaunched page claims the free record (2.3b panel)');
+  const sent = k.net.sent.length;
+  k.net.push(peer('pos', { phase: 'run', distance: 100, level: 1 }, k.net.clock.now));
+  k.net.clock.now += 16;
+  k.s.update();
+  assert.equal(pumps.n, pumped, 'nothing pumped');
+  assert.equal(k.net.sent.length, sent, 'nothing sent');
+  assert.equal(closes.n, 1, 'the transport closed');
+  assert.deepEqual(k.lobby.calls.filter((c) => c[0] === 'leave'), [], 'the room is not left: the race goes on in the other page');
+  assert.equal(b.get()?.owner, 'tabB', 'the record is the new owner\'s, untouched');
+  assert.equal(k.s.match.status, 'left');
+  assert.deepEqual(k.ops.filter((o) => o[0] === 'stop' || o[0] === 'start'), [['stop', 'Play'], ['start', 'Play', { player: 1, match: null }]], 'back to the ready screen');
+  assert.equal(k.s.registry.get('raceSteppedAside'), true, 'its 🌐 window opens with the line (Play.openPendingRace)');
+  k.s.update();
+  k.s.beatRecord();
+  assert.equal(closes.n, 1, 'once');
+  assert.equal(b.get()?.owner, 'tabB');
+});
+
+test('2.3b stepping aside also runs from the wake (visibilitychange) and from the beat, before the pause machine sends anything', () => {
+  for (const how of ['wake', 'beat']) {
+    const { clock, a, b } = twoPages();
+    const k = raceScene({ store: a });
+    const { closes } = asideKit(k);
+    clock.wall += STALE;
+    b.claim();
+    const sent = k.net.sent.length;
+    if (how === 'wake') k.s.onWake();
+    else k.s.beatRecord();
+    assert.equal(closes.n, 1, how);
+    assert.equal(k.net.sent.length, sent, `${how}: no pause message went out`);
+    assert.equal(b.get()?.owner, 'tabB', how);
+  }
+  const { clock, a } = twoPages();
+  const k = raceScene({ store: a });
+  const { closes } = asideKit(k);
+  clock.wall += STALE;
+  k.s.onWake();
+  k.s.beatRecord();
+  assert.equal(closes.n, 0, 'control: frozen past staleMs but nobody took it: the race goes on');
+  assert.equal(a.get()?.beat, clock.wall, 'the beat again');
+});
+
+test('2.3b a reload keeps the owner (the same tab id): its record is still its own', () => {
+  const { clock, a, map } = twoPages();
+  raceScene({ store: a });
+  clock.wall += 1500;
+  const reloaded = createResumeStore(() => fakeStorage(map), resumeKey(false), { wall: () => clock.wall, tab: 'tabA' });
+  assert.equal(reloaded.owner(), 'mine');
+  assert.equal(createResumeStore(() => fakeStorage(map), resumeKey(false), { wall: () => clock.wall, tab: 'tabB' }).owner(), 'live', 'another page sees a live race');
+});
+
+/** Play with its storage on Maps, its window events caught. */
+function withPage(fn) {
+  const saved = { local: globalThis.localStorage, session: globalThis.sessionStorage, add: globalThis.addEventListener };
+  const local = new Map();
+  const session = new Map();
+  const on = {};
+  globalThis.localStorage = fakeStorage(local);
+  globalThis.sessionStorage = fakeStorage(session);
+  globalThis.addEventListener = (type, f) => ((on[type] ??= []).push(f));
+  try {
+    return fn({ local, session, on });
+  } finally {
+    globalThis.localStorage = saved.local;
+    globalThis.sessionStorage = saved.session;
+    if (saved.add === undefined) delete globalThis.addEventListener;
+    else globalThis.addEventListener = saved.add;
+  }
+}
+const rec2 = (fields) => ({ v: 2, code: '482913', round: 1, seat: 'host', pauseRound: 0, levels: { 1: START }, wall: Date.now(), owner: 'tabOther', beat: Date.now(), ...fields });
+
+test("2.3b Play's resume store: localStorage under the project's key, with this page's tab id from sessionStorage (one per page load), marked closed on pagehide and open again on pageshow", () => {
+  withPage(({ local, session, on }) => {
+    const p = playScene({ registry: registry(), onlineTestProject: () => false });
+    const st = p.raceResumeStore();
+    const tab = st.tab;
+    assert.match(tab, /^[A-Za-z0-9_-]{16}$/);
+    assert.equal(p.raceResumeStore().tab, tab, 'the same id for the page load');
+    st.set(rec2());
+    assert.equal(JSON.parse(local.get(LEADERBOARD.onlineResumeKey)).owner, tab, 'in localStorage, as this page\'s');
+    assert.deepEqual(JSON.parse(session.get(LEADERBOARD.onlineTabKey)), { id: tab, open: true });
+    on.pagehide.forEach((f) => f());
+    assert.equal(JSON.parse(session.get(LEADERBOARD.onlineTabKey)).open, false, 'pagehide: a reload keeps the id');
+    on.pageshow.forEach((f) => f());
+    assert.equal(JSON.parse(session.get(LEADERBOARD.onlineTabKey)).open, true);
+    const t = playScene({ registry: registry(), onlineTestProject: () => true });
+    t.raceResumeStore().set(rec2());
+    assert.ok(local.has(`${LEADERBOARD.onlineResumeKey}.test`), 'the test project\'s key');
+  });
+});
+
+test('2.3b openPendingRace: a record another page beats is not offered (the window stays shut) and is looked at once more after staleMs; a free one opens the window; a stepped-aside page opens it to say so', () => {
+  withPage(({ local }) => {
+    const timers = [];
+    const opened = [];
+    const p = playScene({ registry: registry(), onlineTestProject: () => false, match: null, state: 'ready', sys: { isActive: () => true }, time: { delayedCall: (ms, f) => timers.push({ ms, f }) } });
+    p.openVersusWindow = () => opened.push(1);
+    local.set(LEADERBOARD.onlineResumeKey, JSON.stringify(rec2()));
+    p.openPendingRace();
+    assert.deepEqual(timers.map((x) => x.ms), [STALE], 'live: one look again, staleMs on');
+    p.openPendingRace(); // Play restarts (a run ends): no second look
+    assert.equal(timers.length, 1);
+    local.set(LEADERBOARD.onlineResumeKey, JSON.stringify(rec2({ beat: Date.now() - STALE - 1 }))); // the other page died
+    timers.shift().f();
+    timers.splice(0).forEach((x) => x.f()); // the window opens on the next frame
+    assert.equal(opened.length, 1, 'free now: the window opens (and rejoins)');
+    const q = playScene({ registry: registry({ raceRejoinOffered: true, raceSteppedAside: true }), onlineTestProject: () => false, match: null, state: 'ready', sys: { isActive: () => true }, time: { delayedCall: (ms, f) => timers.push({ ms, f }) } });
+    q.openVersusWindow = () => opened.push(2);
+    local.set(LEADERBOARD.onlineResumeKey, JSON.stringify(rec2()));
+    q.openPendingRace();
+    timers.splice(0).forEach((x) => x.f());
+    assert.deepEqual(opened, [1, 2], 'stepped aside: the window opens on the live record, to say the race runs elsewhere');
+    assert.equal(q.registry.get('raceSteppedAside'), false, 'once');
+  });
 });

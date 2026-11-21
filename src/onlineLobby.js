@@ -446,6 +446,10 @@ export function createOnlineLobby({ net, name, width, mine = { protocol: protoco
     rematch,
     leave,
     poll,
+    /** A line for the status (2.3b: 'onlineRaceElsewhere', the race another page of the game is running). */
+    notice(key) {
+      state.message = msg(key, 'notice');
+    },
     /** The race has this room (the panel's hand-off, item 46): its code kept until a Leave, or left on the next entry. */
     remember() {
       if (state.room.code) memory?.set?.(state.room.code);

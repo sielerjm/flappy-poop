@@ -42,6 +42,11 @@ const GREY = '#c9b8dc';
  * held under the pause overlay ('rewind') until this side's Ready, and a `rewind` on the wire until
  * its GO. The other side restarts at the lower of the two level starts, so both race that level
  * again from its first pair; the shared pause's count gives one GO.
+ * 2.3b: the record is in localStorage with this page as its owner, beaten every
+ * online.resume.beatMs from a window timer (Phaser's loop stops in a hidden tab), so a relaunched app
+ * rejoins once the beat is stale; a page whose race another page took over (it was frozen past
+ * staleMs) steps aside when it wakes: the transport closed without leaving the room, back to the
+ * ready screen, whose 🌐 window says the race runs in another window.
  * Started by the tournament panel once the room is 'playing' with { net, lobby, plan, store }. 1.8
  * adds the results panel (Rematch | Leave); Tier 2 a peer leaving and the shared pause.
  */
@@ -105,10 +110,15 @@ export class OnlineRace extends Phaser.Scene {
     this.buildPauseOverlay(cx, fieldW);
     this.input.on('pointerdown', (pointer) => this.onPointer(pointer));
     // 2.1 / 2.2: a hidden page gets no frames, so its pause goes from the handler (the other side pauses one latency later).
-    this.onVisibility = () => this.tickPause();
+    // 2.3b: a page that wakes first reads whether another page took its race over (onWake).
+    this.onVisibility = () => this.onWake();
     globalThis.document?.addEventListener?.('visibilitychange', this.onVisibility);
+    // 2.3b: the record's beat, on a window timer (Phaser's loop stops in a hidden tab; a 1 s timer still runs there).
+    this.beatTimer = globalThis.setInterval?.(() => this.beatRecord(), T.online.resume.beatMs) ?? null;
     this.events.once('shutdown', () => {
       globalThis.document?.removeEventListener?.('visibilitychange', this.onVisibility);
+      if (this.beatTimer !== null) globalThis.clearInterval?.(this.beatTimer);
+      this.beatTimer = null;
       this.wake?.want(false);
       this.feed = null;
       this.referee = null;
@@ -188,6 +198,8 @@ export class OnlineRace extends Phaser.Scene {
     this.floorAt = this.rewound ? Math.max(this.restartAt, Number.isFinite(resume.floor) ? resume.floor : -Infinity) : this.plan.startAt;
     this.fitUntil = this.rewound ? Infinity : this.plan.startAt; // a rewound race agrees its width until its own GO
     this.savedKey = null;
+    this.holds = false; // 2.3b: the record is this page's (written by it, not cleared since)
+    this.aside = false; // 2.3b: another page took the race over; this one stepped aside
     this.ownEnd = false;
     this.match = createMatch(this.plan.seed, { names: this.plan.names });
     if (this.rewound) {
@@ -230,15 +242,76 @@ export class OnlineRace extends Phaser.Scene {
     this.persist();
   }
 
-  /** The tab's resume record (2.3): this race's room, round and seat, the pause round and each level start kept; written when it changes. */
+  /**
+   * The resume record (2.3): this race's room, round and seat, the pause round and each level start
+   * kept; written when it changes, as this page's (2.3b: the store stamps the owner and the beat, and
+   * writes nothing over another page's live record).
+   */
   persist() {
-    if (!this.store || this.ownEnd || this.match.status === 'over' || this.match.status === 'left') return;
+    if (!this.store || this.aside || this.ownEnd || this.match.status === 'over' || this.match.status === 'left') return;
     const code = this.lobby?.state?.room?.code ?? null;
     const record = { v: RESUME_VERSION, code, round: this.plan.round ?? 0, seat: this.plan.seat, pauseRound: this.pause?.state().round ?? 0, levels: this.levels, wall: Date.now() };
     const key = JSON.stringify([record.code, record.round, record.seat, record.pauseRound, record.levels]);
     if (key === this.savedKey) return;
+    if (this.store.set(record) === false) return;
     this.savedKey = key;
-    this.store.set(record);
+    this.holds = true;
+  }
+
+  /** The record goes (the race over, abandoned or left, or this side's run ended): this page holds nothing from here. */
+  forgetRecord() {
+    this.store?.clear();
+    this.holds = false;
+  }
+
+  /**
+   * 2.3b: the beat (every online.resume.beatMs, from a window timer) while this page holds the
+   * record; another page's record there means it took the race over: step aside. A record gone
+   * from under it (cleared elsewhere) is written again.
+   */
+  beatRecord() {
+    if (!this.store || !this.holds || this.aside) return;
+    const who = this.store.beat?.() ?? 'mine';
+    if (who === 'taken') this.stepAside();
+    else if (who === 'none') {
+      this.savedKey = null;
+      this.persist();
+    }
+  }
+
+  /** 2.3b: before this page pumps or sends (each frame, a wake): true once another page holds its race (it steps aside). */
+  lostSeat() {
+    if (this.aside) return true;
+    if (!this.holds || this.store?.holder?.() !== 'taken') return false;
+    this.stepAside();
+    return true;
+  }
+
+  /** 2.3b: visibilitychange (a hidden page gets no frames): the seat first, then the shared pause. */
+  onWake() {
+    if (this.lostSeat()) return;
+    this.tickPause();
+  }
+
+  /**
+   * 2.3b: another page took this race over while this one was frozen (a relaunch found its beat
+   * stale). Not a Leave: the room is not left (that would end the race for both) and the record is
+   * the new owner's; the transport closes (the other device already follows the newer session, item
+   * 34), and the ready screen's 🌐 window says the race runs in another window (Play.openPendingRace).
+   */
+  stepAside() {
+    if (this.aside) return;
+    this.aside = true;
+    this.holds = false;
+    this.match.status = 'left';
+    this.wake?.want(false);
+    try {
+      this.net?.close?.();
+    } catch {}
+    this.scene.stop('Play');
+    this.scale.setGameSize(fieldWidth(globalThis.innerWidth ?? 720, globalThis.innerHeight ?? 1280, FIELD), GAME_HEIGHT);
+    this.registry?.set?.('raceSteppedAside', true);
+    this.scene.start('Play', { player: 1, match: null });
   }
 
   /** The highest level start kept. */
@@ -256,7 +329,7 @@ export class OnlineRace extends Phaser.Scene {
     if (this.feed.doneFixed()) {
       if (!this.ownEnd) {
         this.ownEnd = true;
-        this.store?.clear();
+        this.forgetRecord();
       }
       return;
     }
@@ -324,7 +397,7 @@ export class OnlineRace extends Phaser.Scene {
   }
 
   update() {
-    if (!this.feed) return;
+    if (!this.feed || this.lostSeat()) return; // 2.3b: a page that lost its race to another page sends nothing
     this.net.pump?.();
     for (const item of this.net.take?.() ?? []) {
       this.receive(item);
@@ -810,7 +883,7 @@ export class OnlineRace extends Phaser.Scene {
     if (half?.state === 'playing' || half?.state === 'respawn') half.pausePlay();
     this.abandoned = { seat: seat ?? null };
     this.match.status = 'over';
-    this.store?.clear();
+    this.forgetRecord();
     this.pauseCount = null;
     this.countText?.setVisible(false);
     this.finalSlots = this.match.slots.map((slot) => ({ ...slot }));
@@ -919,7 +992,7 @@ export class OnlineRace extends Phaser.Scene {
     const [mine, theirs] = this.match.slots;
     if (!mine.ended || !this.feed?.doneSent() || !theirs.ended) return;
     this.match.status = 'over';
-    this.store?.clear();
+    this.forgetRecord();
     this.finalSlots = this.match.slots.map((slot) => ({ ...slot })); // the numbers the outcome came from, for the panel
     this.outcome = raceOutcome(this.finalSlots);
     this.wake?.want(false);
@@ -974,7 +1047,7 @@ export class OnlineRace extends Phaser.Scene {
   leave() {
     this.match.status = 'left';
     this.wake?.want(false);
-    this.store?.clear();
+    this.forgetRecord();
     const { lobby, net } = this;
     Promise.resolve(lobby?.leave())
       .catch(() => {})

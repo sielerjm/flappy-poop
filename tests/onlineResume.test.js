@@ -9,7 +9,7 @@ import assert from 'node:assert/strict';
 import { TUNING as T, LEADERBOARD } from '../src/config.js';
 import { createEffects } from '../src/logic.js';
 import { ONLINE_EVENTS, parseMessage, roomInit, roomStep } from '../src/online.js';
-import { createRaceFeed, createRaceReferee, createRacePause, createResumeStore, levelSnap, parseResume, pauseOverlay, RESUME_VERSION, resumeKey, resumePlan, rewindOnHeard, startSnap } from '../src/onlineRace.js';
+import { createRaceFeed, createRaceReferee, createRacePause, createResumeStore, levelSnap, pageTab, parseResume, pauseOverlay, RESUME_VERSION, resumeKey, resumeOwner, resumePlan, rewindOnHeard, startSnap } from '../src/onlineRace.js';
 import { fakeStorage } from './support/scenes.js';
 
 const env = (fields) => ({ seq: 1, t: 5000, sid: 'abcdef12', ...fields });
@@ -84,13 +84,14 @@ test('rewindOnHeard: the level a peer\'s rewind asks this side to restart at (th
   assert.equal(rewindOnHeard({ ...base, msg: null }), null);
 });
 
-const record = (fields = {}) => ({ v: RESUME_VERSION, code: '482913', round: 1, seat: 'host', pauseRound: 2, levels: { 1: startSnap(), 2: { level: 2, score: 30, coins: 3, beans: 1, probiotic: 0, postbiotic: false, deaths: 1, levelWins: 1 } }, wall: 1_000_000, ...fields });
+const record = (fields = {}) => ({ v: RESUME_VERSION, code: '482913', round: 1, seat: 'host', pauseRound: 2, levels: { 1: startSnap(), 2: { level: 2, score: 30, coins: 3, beans: 1, probiotic: 0, postbiotic: false, deaths: 1, levelWins: 1 } }, wall: 1_000_000, owner: 'tabA', beat: 1_000_000, ...fields });
 
 test('the resume record: parsed whole or not at all, and only while fresh (online.resume.maxAgeMs)', () => {
   const rec = record();
   assert.deepEqual(parseResume(JSON.stringify(rec), { wall: rec.wall + 1000 }), rec);
   assert.equal(parseResume(JSON.stringify(rec), { wall: rec.wall + T.online.resume.maxAgeMs + 1 }), null, 'too old');
-  for (const bad of ['{', 'null', JSON.stringify(record({ v: 99 })), JSON.stringify(record({ code: '12' })), JSON.stringify(record({ seat: 'x' })), JSON.stringify(record({ levels: { 2: { level: 3 } } })), JSON.stringify(record({ levels: {} }))]) {
+  assert.equal(RESUME_VERSION, 2, '2.3b: the record moved to localStorage with an owner and a beat');
+  for (const bad of ['{', 'null', JSON.stringify(record({ v: 1 })), JSON.stringify(record({ v: 99 })), JSON.stringify(record({ code: '12' })), JSON.stringify(record({ seat: 'x' })), JSON.stringify(record({ levels: { 2: { level: 3 } } })), JSON.stringify(record({ levels: {} })), JSON.stringify(record({ owner: '' })), JSON.stringify(record({ owner: 7 })), JSON.stringify(record({ owner: 'x'.repeat(65) })), JSON.stringify(record({ beat: 'soon' }))]) {
     assert.equal(parseResume(bad, { wall: rec.wall }), null, bad);
   }
 });
@@ -99,10 +100,10 @@ test('the resume store: this tab\'s record under its key (".test" on the test pr
   assert.equal(resumeKey(false), LEADERBOARD.onlineResumeKey);
   assert.equal(resumeKey(true), `${LEADERBOARD.onlineResumeKey}.test`);
   const map = new Map();
-  const store = createResumeStore(() => fakeStorage(map), resumeKey(false), { wall: () => 1_000_500 });
+  const store = createResumeStore(() => fakeStorage(map), resumeKey(false), { wall: () => 1_000_500, tab: 'tabA' });
   assert.equal(store.get(), null);
   store.set(record());
-  assert.deepEqual(store.get(), record());
+  assert.deepEqual(store.get(), record({ beat: 1_000_500 }), 'set stamps this page as the owner, and the beat');
   store.clear();
   assert.equal(store.get(), null);
   const blocked = createResumeStore(() => fakeStorage(new Map(), { setThrows: true, getThrows: true }), resumeKey(false));
@@ -166,4 +167,95 @@ test('pauseOverlay with a rewind: "Back to <level>" with its tap line and Ready 
   assert.equal(pauseOverlay({ ...base, mine: null, theirs: 'lost' }, { midRun: false, rewind }).title, 'onlinePausedLost');
   assert.equal(pauseOverlay({ ...base, mine: 'link' }, { midRun: false, rewind }).title, 'onlinePausedLink');
   assert.equal(pauseOverlay({ ...base, mine: null, theirs: 'rewind' }, { midRun: false }).title, 'pauseTitle', 'without a rewind of its own: as 2.2');
+});
+
+// --- 2.3b: app restart and a second tab (item 54) -----------------------------------------------
+
+const STALE = T.online.resume.staleMs;
+
+test('2.3b the beat knobs: a racing page beats every second; a record unbeaten for 5 s is free', () => {
+  assert.equal(T.online.resume.beatMs, 1000);
+  assert.equal(T.online.resume.staleMs, 5000);
+  assert.ok(STALE >= 4 * T.online.resume.beatMs, "above the 1 s beat a hidden tab still keeps under Chrome's throttling");
+  assert.equal(LEADERBOARD.onlineResumeKey, 'flappyPoop.onlineResume');
+  assert.equal(LEADERBOARD.onlineTabKey, 'flappyPoop.onlineTab');
+});
+
+test("2.3b resumeOwner: 'mine' for this page's own record (a reload), 'live' while another page beats, 'free' once it stops (a relaunch)", () => {
+  const rec = record({ owner: 'tabA', beat: 50_000 });
+  assert.equal(resumeOwner({ record: rec, tab: 'tabA', wall: 50_000 + 10 * STALE }), 'mine', 'a reload: its own, however old the beat');
+  assert.equal(resumeOwner({ record: rec, tab: 'tabB', wall: 50_000 + 1000 }), 'live', 'another page beat a second ago');
+  assert.equal(resumeOwner({ record: rec, tab: 'tabB', wall: 50_000 + STALE - 1 }), 'live', 'just inside staleMs');
+  assert.equal(resumeOwner({ record: rec, tab: 'tabB', wall: 50_000 + STALE }), 'free', 'the stale edge: staleMs without a beat');
+  assert.equal(resumeOwner({ record: rec, tab: 'tabB', wall: 50_000 + 60 * 60 * 1000 }), 'free', 'a relaunch an hour later');
+  assert.equal(resumeOwner({ record: { ...rec, beat: undefined }, tab: 'tabB', wall: 50_000 }), 'free', 'a missing beat');
+  assert.equal(resumeOwner({ record: rec, tab: 'tabB', wall: 50_000 - STALE }), 'free', 'a beat far ahead of the clock (the clock was set back)');
+  assert.notEqual(resumeOwner({ record: { ...rec, owner: undefined }, tab: undefined, wall: 50_000 }), 'mine', 'no owner and no tab id is never mine');
+  assert.equal(resumeOwner({ record: null, tab: 'tabA', wall: 50_000 }), null, 'no record');
+});
+
+test('2.3b the store across two pages (one localStorage): owner(), set refused while the other beats, claim once it is free, beat and holder, clear never takes a live record', () => {
+  const map = new Map();
+  const clock = { wall: 1_000_000 };
+  const a = createResumeStore(() => fakeStorage(map), resumeKey(false), { wall: () => clock.wall, tab: 'tabA' });
+  const b = createResumeStore(() => fakeStorage(map), resumeKey(false), { wall: () => clock.wall, tab: 'tabB' });
+  assert.equal(a.tab, 'tabA');
+  assert.equal(a.owner(), null);
+  assert.equal(a.holder(), 'none');
+  assert.equal(a.set(record({ owner: 'ignored', beat: 0 })), true);
+  assert.deepEqual([a.get().owner, a.get().beat], ['tabA', 1_000_000], 'the store stamps its own tab and the wall clock');
+  assert.deepEqual([a.owner(), b.owner(), a.holder(), b.holder()], ['mine', 'live', 'mine', 'taken']);
+  clock.wall += 1000;
+  assert.equal(a.beat(), 'mine');
+  assert.equal(a.get().beat, 1_001_000, 'the beat renewed');
+  assert.equal(a.get().wall, 1_000_000, 'the content time unchanged');
+  assert.equal(b.set(record()), false, 'a page never writes over a live page\'s record');
+  assert.equal(b.claim(), null);
+  b.clear();
+  assert.equal(a.get()?.owner, 'tabA', 'nor clears it');
+  clock.wall += STALE;
+  assert.equal(b.owner(), 'free', 'tabA stopped beating (frozen, or gone)');
+  const mine = b.claim();
+  assert.deepEqual([mine?.owner, mine?.beat, mine?.code, mine?.round], ['tabB', clock.wall, '482913', 1], 'claimed: the same race, now this page\'s');
+  assert.deepEqual([b.owner(), b.holder(), a.owner(), a.holder()], ['mine', 'mine', 'live', 'taken'], 'tabA, woken, reads that it lost the seat');
+  assert.equal(a.beat(), 'taken', 'and its beat writes nothing');
+  assert.equal(a.get().owner, 'tabB');
+  a.clear();
+  assert.equal(b.get()?.owner, 'tabB', 'a stepped-aside page never clears the new owner\'s record');
+  b.clear();
+  assert.deepEqual([b.get(), b.beat(), b.holder()], [null, 'none', 'none']);
+  assert.equal(a.set(record()), true, 'nothing live there: a page may write');
+  clock.wall += STALE;
+  b.clear();
+  assert.equal(a.get(), null, 'a stale record from another page may be cleared');
+  const blocked = createResumeStore(() => fakeStorage(new Map(), { setThrows: true, getThrows: true }), resumeKey(false), { tab: 'tabA' });
+  assert.doesNotThrow(() => [blocked.owner(), blocked.claim(), blocked.beat(), blocked.holder()]);
+  assert.equal(blocked.set(record()), false);
+});
+
+test('2.3b pageTab: a reload keeps the tab id (pagehide marks it closed); a new tab, a relaunch or a duplicated tab (its copy still open) gets a new one', () => {
+  const session = new Map();
+  let n = 0;
+  const random = () => `id${++n}`;
+  const st = () => fakeStorage(session);
+  const first = pageTab(st, LEADERBOARD.onlineTabKey, { random });
+  assert.equal(first.id, 'id1', 'nothing stored: a new id');
+  assert.deepEqual(JSON.parse(session.get(LEADERBOARD.onlineTabKey)), { id: 'id1', open: true });
+  first.hide(); // pagehide: the reload unloads this page
+  const reloaded = pageTab(st, LEADERBOARD.onlineTabKey, { random });
+  assert.equal(reloaded.id, 'id1', 'a reload of the same tab: the same id');
+  const copy = pageTab(() => fakeStorage(new Map(session)), LEADERBOARD.onlineTabKey, { random });
+  assert.equal(copy.id, 'id2', 'a duplicated tab copies sessionStorage while this page is open: a new id');
+  reloaded.hide();
+  reloaded.show(); // pageshow from the back-forward cache: this page is open again
+  assert.equal(pageTab(() => fakeStorage(new Map(session)), LEADERBOARD.onlineTabKey, { random }).id, 'id3', 'a copy made after the page came back');
+  assert.equal(pageTab(() => fakeStorage(new Map()), LEADERBOARD.onlineTabKey, { random }).id, 'id4', 'a relaunch: sessionStorage empty');
+  session.set(LEADERBOARD.onlineTabKey, '{not json');
+  assert.equal(pageTab(st, LEADERBOARD.onlineTabKey, { random }).id, 'id5', 'unreadable: a new id');
+  session.set(LEADERBOARD.onlineTabKey, JSON.stringify({ id: 'bad id!', open: false }));
+  assert.equal(pageTab(st, LEADERBOARD.onlineTabKey, { random }).id, 'id6', 'a malformed id is not kept');
+  const blocked = pageTab(() => fakeStorage(new Map(), { setThrows: true, getThrows: true }), LEADERBOARD.onlineTabKey, { random });
+  assert.equal(blocked.id, 'id7', 'blocked storage: an id for this page load');
+  assert.doesNotThrow(() => (blocked.hide(), blocked.show()));
+  assert.match(pageTab(st, LEADERBOARD.onlineTabKey).id, /^[A-Za-z0-9_-]{16}$/, 'the default id: 16 url-safe characters');
 });
