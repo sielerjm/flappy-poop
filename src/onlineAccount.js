@@ -138,6 +138,13 @@ export function createOnlineAccount({ net, getSave, saveWithId, storeName, check
 
   /** Remove a device; removing this one deletes its anonymous user, so it also forgets the session. */
   async function remove(uid, { me = false } = {}) {
+    // A pending device cannot list devices, so its "Remove this device" has no uid: the session's own (AUD-095).
+    if (!uid && me) {
+      const signed = await net.signIn();
+      if (!signed?.ok) return { ok: false, errorKey: signInKey(signed?.error) };
+      uid = signed.uid;
+    }
+    if (!uid) return { ok: false, errorKey: GENERIC };
     const res = await net.rpc('remove_online_device', { p_uid: uid });
     if (!res.ok) return { ok: false, errorKey: linkKey(res.error) };
     if (!me) return { ok: true, left: false };

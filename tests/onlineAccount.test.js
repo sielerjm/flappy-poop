@@ -208,6 +208,14 @@ test('devices: the server saying "not trusted" (demoted elsewhere) turns this de
   assert.equal(account.status().trusted, false);
 });
 
+test("remove this device without its uid (the pending view's button, AUD-095): the session's own uid goes to the server", async () => {
+  const { net, account } = setup({ answers: { ...linked(false), remove_online_device: (args) => (args?.p_uid === 'u-me' ? { ok: true, data: null } : { ok: false, error: 'error' }) } });
+  await account.enter();
+  assert.deepEqual(await account.remove(null, { me: true }), { ok: true, left: true });
+  assert.deepEqual(net.calls.find((c) => c[1] === 'remove_online_device')[2], { p_uid: 'u-me' });
+  assert.ok(net.calls.some((c) => c[0] === 'signOut'));
+});
+
 test('remove: another device by uid; this device also signs out and leaves online play', async () => {
   const { net, account, state } = setup({ answers: { ...linked(true), remove_online_device: { ok: true, data: null } } });
   await account.enter();
