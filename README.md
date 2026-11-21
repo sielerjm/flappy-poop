@@ -168,7 +168,7 @@ The ring only appears after a pad press; a tap or click hides it again.
 
 ## 👥 Two players
 
-On a window wide and tall enough for two phone-width halves (desktop or tablet landscape — not a phone in portrait), a **👥** toggle appears under the toilet switch.
+A **👥** toggle sits under the toilet switch on every screen. On a window wide and tall enough for two phone-width halves (desktop or tablet landscape), it starts a race on this screen; on a smaller one, such as a phone, tapping Play opens the **🌐 online** window instead (see 🌐 Online race below).
 
 1. Turn it on and tap to start → the **tournament lobby** (every two-player session is a [tournament](#-tournament); two players are filled in, you first if you have a username, so **Start**, then **Play**, is all a quick race needs).
 2. On the race's **join screen** (left player left, right player right), claim a half: tap your side, use a keyboard group, or a controller. Keyboard groups: **W / Space + E / Left Shift** vs **↑ / Enter + Right Shift / Numpad 0**.
@@ -181,6 +181,17 @@ On a window wide and tall enough for two phone-width halves (desktop or tablet l
 **Crashes don’t end the match.** You tumble, lose **2 × level** points and **10%** of your coins (keep 90%, rounded down), clear power-ups, then respawn with a clear screen.
 
 **Scoring.** First over each finish line gets **+25** (second gets none). Both still get the level’s coins. When both clear the rectum, higher score wins; ties go to fewer crashes, then more finish lines crossed first, then whoever crossed the last line first. Trailing players get friendlier mystery draws. Races are never saved to the 🏆 leaderboard.
+
+### 🌐 Online race
+
+Two players on two devices, by code (0.25.0). With 👥 on, Play opens the tournament window; its **🌐** switch picks online (on a phone it is always on). You need a username: pick one there if you have none.
+
+1. One player taps **Create room** and reads out the six-digit code (it lasts 15 minutes; a fresh one comes by itself). The other taps **Join with code** and types it on the game's keypad.
+2. The host sees "<name> wants to race" and taps **Let in** (or **Decline**, which makes a new code). Both tap **Ready**, and the 3-2-1 starts on both screens at once.
+3. The race uses the two-player rules above. The other player is the ghost, with their name and live score in a pill at the top. Both play on the narrower of the two screens.
+4. At each finish line both tap ready again. If the other player takes a while (45 s), you can **Keep waiting** or **Leave**. At the end, **Rematch** (when both ask) races a new course; **Leave** goes back to single player.
+
+**📱 Devices.** Your first device online is trusted. Another device of the same player (after Load user code) waits until you type the 6-digit pairing code that a trusted device shows. It can still race by code while it waits. Online races are not saved anywhere in this version.
 
 ### 🏅 Tournament
 
