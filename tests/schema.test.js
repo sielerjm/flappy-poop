@@ -91,10 +91,10 @@ function bests(tour) {
 }
 
 test('the schema pins the tournament limits and the score cap the game uses', () => {
-  // The board takes 3–8 (minPostPlayers): a 2-player tournament (minPlayers) is never sent.
-  assert.match(SQL, new RegExp(`v_n < ${T.tournament.minPostPlayers} or v_n > ${T.tournament.maxPlayers}`), 'submit_tournament: TUNING.tournament min post / max players');
-  assert.match(SQL, new RegExp(`players between ${T.tournament.minPostPlayers} and ${T.tournament.maxPlayers}`), 'tournaments.players check');
-  assert.ok(T.tournament.minPlayers < T.tournament.minPostPlayers, 'smaller tournaments exist, and stay local');
+  // The board takes every size the game plays, 2–8 (plan 39, 2.4b: two players race a lone final).
+  assert.match(SQL, new RegExp(`v_n < ${T.tournament.minPlayers} or v_n > ${T.tournament.maxPlayers}`), 'submit_tournament: TUNING.tournament min / max players');
+  assert.match(SQL, new RegExp(`players between ${T.tournament.minPlayers} and ${T.tournament.maxPlayers}`), 'tournaments.players check');
+  assert.ok(T.tournament.minPostPlayers >= T.tournament.minPlayers, 'the game posts nothing the board refuses');
   assert.match(SQL, new RegExp(`sc0 > ${LEADERBOARD.maxScore} or sc1 > ${LEADERBOARD.maxScore}`), 'race scores capped like the board');
   assert.match(SQL, new RegExp(`best_score between 0 and ${LEADERBOARD.maxScore}`));
 });
@@ -136,9 +136,9 @@ test('anon reads none of the tournament tables; the board exposes names and coun
   assert.equal(JSON.stringify(rows).includes(id('P0')), false, 'no id in the board');
 });
 
-test('every size 3–8: the server\'s medals are placings(), every linked player +1 event, best = their best race', async () => {
+test('every size 2–8: the server\'s medals are placings(), every linked player +1 event, best = their best race', async () => {
   const db = await freshDb();
-  for (let n = 3; n <= 8; n += 1) {
+  for (let n = 2; n <= 8; n += 1) {
     const tour = finished(n, 40 + n, { tag: `N${n}p` });
     assert.equal(await submit(db, id(`Host${n}`), tournamentPayload(tour, id(`T${n}`))), 'ok', `${n} players`);
     const p = placings(tour);
@@ -155,7 +155,7 @@ test('every size 3–8: the server\'s medals are placings(), every linked player
       assert.equal(r.name, pl.name);
     });
   }
-  assert.equal((await matchups(db)).length, [3, 4, 5, 6, 7, 8].reduce((sum, n) => sum + n - 1 + (n >= 4 ? 1 : 0), 0), 'every race between two linked players');
+  assert.equal((await matchups(db)).length, [2, 3, 4, 5, 6, 7, 8].reduce((sum, n) => sum + n - 1 + (n >= 4 ? 1 : 0), 0), 'every race between two linked players');
   // A second tournament for the same players adds up.
   const again = finished(3, 99, { tag: 'N3p' });
   assert.equal(await submit(db, id('Host3'), tournamentPayload(again, id('T3b'))).catch((e) => e.message), 'rate limited', 'the same host within 60 s');
@@ -165,6 +165,67 @@ test('every size 3–8: the server\'s medals are placings(), every linked player
   assert.equal(rows.get(id('N3p0')).events, 2);
   const medals = [0, 1, 2].reduce((sum, i) => sum + rows.get(id(`N3p${i}`)).gold + rows.get(id(`N3p${i}`)).silver + rows.get(id(`N3p${i}`)).bronze, 0);
   assert.equal(medals, 6, 'two tournaments of three: six medals among the three');
+});
+
+test('two players race a lone final (plan 39, 2.4b): gold to the winner, silver to the loser, a public matchup; nothing else passes for one', async () => {
+  const db = await freshDb();
+  const tour = finished(2, 5, { tag: 'Duo' });
+  const base = tournamentPayload(tour, id('TDuo'));
+  assert.deepEqual(base.matches.map((m) => m.round), ['final'], 'the game\'s 2-player bracket is the final alone');
+  const copy = () => JSON.parse(JSON.stringify(base));
+  const forged = {
+    'a semi as well': (pl) => {
+      pl.matches.unshift({ ...pl.matches[0], id: 'semi0', round: 'semi' });
+    },
+    'a semi instead of the final': (pl) => {
+      Object.assign(pl.matches[0], { id: 'semi0', round: 'semi' });
+    },
+    'a bronze match': (pl) => {
+      pl.matches.push({ ...pl.matches[0], id: 'bronze', round: 'bronze' });
+    },
+    'a drawn final': (pl) => {
+      pl.matches[0].slots = [{ score: 10, deaths: 0, levelWins: 1, finalFirst: false }, { score: 10, deaths: 0, levelWins: 1, finalFirst: false }];
+    },
+    'one player twice': (pl) => {
+      pl.matches[0].b = pl.matches[0].a;
+    },
+    'one player': (pl) => {
+      pl.players = pl.players.slice(0, 1);
+    },
+  };
+  for (const [why, mutate] of Object.entries(forged)) {
+    const pl = copy();
+    mutate(pl);
+    await assert.rejects(submit(db, id('HDuo'), pl), /bad tournament|invalid input/, why);
+  }
+  assert.deepEqual(await stats(db), [], 'nothing counted');
+  assert.equal(await submit(db, id('HDuo'), base), 'ok');
+  const p = placings(tour);
+  const rows = new Map((await stats(db)).map((r) => [r.player_id, r]));
+  const winner = tour.players[p.gold].playerId;
+  const loser = tour.players[p.silver].playerId;
+  assert.deepEqual([rows.get(winner).gold, rows.get(winner).silver, rows.get(winner).bronze, rows.get(winner).events], [1, 0, 0, 1]);
+  assert.deepEqual([rows.get(loser).gold, rows.get(loser).silver, rows.get(loser).bronze, rows.get(loser).events], [0, 1, 0, 1]);
+  const [mu] = await matchups(db);
+  assert.deepEqual([mu.round, mu.winner_id], ['final', winner]);
+  assert.deepEqual((await asAnon(db, 'select public.player_stats($1) as r', [loser])).rows[0].r.tournament.rival, { name: tour.players[p.gold].name, meetings: 1, losses: 1 }, 'the public rival line counts it, as split-screen');
+  // A guest's side: nothing is stored about the guest; the linked player still gets the event.
+  await db.query("update public.tournaments set submitted_at = now() - interval '61 seconds'");
+  const g = finished(2, 6, { tag: 'Solo', guest: (i) => i === 1 });
+  assert.equal(await submit(db, id('HSolo'), tournamentPayload(g, id('TSolo'))), 'ok');
+  assert.equal((await stats(db)).filter((r) => r.player_id === id('Solo0')).length, 1);
+  assert.equal((await matchups(db)).length, 1, 'no matchup with a guest');
+});
+
+test('the live tournaments table moves its size check from 3–8 to 2–8 when this file runs over it', async () => {
+  const db = await freshDb();
+  await db.exec(`alter table public.tournaments drop constraint tournaments_players_check;
+    alter table public.tournaments add constraint tournaments_players_check check (players between 3 and 8);`);
+  await assert.rejects(db.query(`insert into public.tournaments (id, host_id, players, level_pipes) values ($1, $2, 2, '{1}')`, [id('Old2'), id('OldH')]), /check constraint/);
+  await db.exec(SQL);
+  await db.query(`insert into public.tournaments (id, host_id, players, level_pipes) values ($1, $2, 2, '{1}')`, [id('New2'), id('NewH')]);
+  await assert.rejects(db.query(`insert into public.tournaments (id, host_id, players, level_pipes) values ($1, $2, 1, '{1}')`, [id('New1'), id('NewH')]), /check constraint/);
+  await assert.rejects(db.query(`insert into public.tournaments (id, host_id, players, level_pipes) values ($1, $2, 9, '{1}')`, [id('New9'), id('NewH')]), /check constraint/);
 });
 
 test('a resend is a duplicate (even inside the 60 s); nothing is counted twice', async () => {
@@ -1825,6 +1886,9 @@ test('the upgrade: the live schema (tests/fixtures/schema-applied.sql) holding r
   assert.equal((await db.query("select public.admin_flag_player('UpCarol', null) as n")).rows[0].n, 1);
   assert.ok(!(await asAnon(db, 'select name from public.scores')).rows.some((r) => r.name === 'UpCarol'));
   assert.equal((await asAnon(db, 'select public.player_rank($1, true) as r', [id('UpCarolOld')])).rows[0].r.score, 12, "the alias's device still ranks its own 🚽 row");
+  // Plan 39, 2.4b, on the upgraded database: a 2-player tournament posts; a race run is stored.
+  assert.equal(await submit(db, id('UpDuoHost'), tournamentPayload(finished(2, 3, { tag: 'UpDuo' }), id('UpDuoT'))), 'ok');
+  await db.query(`insert into public.run_log (player_id, run_id, session, mode, score, level, version) values ($1, $2, 'upgrade1', 'race', 5, 7, 'server')`, [id('UpDuo0'), id('UpRaceRun')]);
 });
 
 test('recent receipts (AUD-003): a resend after another device\'s batch adds nothing to a 📚 row; the list keeps 64; a merge keeps both players\' counter receipts', async () => {

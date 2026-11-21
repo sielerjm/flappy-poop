@@ -62,7 +62,8 @@
 --   * online online_can(...)           the Realtime channel policies' check, which they run as the device
 --                                      asking; it answers only about the caller
 --   * online finish_match(...)         report a race's end: both seats' numbers, checked against the race
---                                      the server minted (2.4a); agreed when both devices report the same
+--                                      the server minted (2.4a); agreed when both devices report the same;
+--                                      a counted race goes on the 🏅 and 🏆 boards (2.4b)
 --   * online online_history()          the player's online rival and recent races, for a trusted device
 --   Apply this file before pushing a client that calls them.
 -- A player has up to two rows: their best on the toilet and their best off it
@@ -166,6 +167,14 @@
 --   online races, e.g. how they ended, and the devices' telemetry (owner only; plan 39, 2.4a):
 --     select status, count(*) from public.matches group by 1;
 --     select id, status, host_stats, guest_stats from public.matches order by id desc limit 20;
+--   undo the boards' races (plan 39, 2.4b), before online races' undo: restore finish_match, submit_score,
+--     submit_tournament, run_row_problem, post_must_hold, post_run, hold_run and release_run from git
+--     (2.4a) and run this file; then drop function public.online_count_race(bigint),
+--     public.board_post(text, text, int, boolean, int); delete from public.run_log where mode = 'race';
+--     alter table public.run_log drop constraint run_log_mode_check, add constraint run_log_mode_check
+--     check (mode in ('single', 'daily')); delete from public.tournaments where players = 2 (their
+--     matchups go with them; their medals stay counted); alter table public.tournaments drop constraint
+--     tournaments_players_check, add constraint tournaments_players_check check (players between 3 and 8).
 --   undo online races (plan 39, 2.4a), before the rooms' undo: drop function public.finish_match(text, int, jsonb),
 --     public.online_history(), public.online_races(text), public.admin_set_online_open(boolean),
 --     public.online_require_open(); restore set_room_status, create_room, join_room, online_unseat,
@@ -391,8 +400,10 @@ grant select (name, score, toilet, level, updated_at) on public.scores to anon;
 -- The run log and holding (plan 30): the tables, and the two read helpers the 🏆 and rank functions
 -- below use. What they are for is said where submit_runs and hold_run are defined, further down.
 -- Run summaries (plan 30): one row per finished single-player or Daily run, as numbers (src/runStats.js
--- makes them; never a test run, an education run or a match half). The device sends them in
--- submit_runs before its score posts. Owner-only: no role may read or write the tables, and no
+-- makes them; never a test run or an education run). The device sends them in submit_runs before its
+-- score posts. A race (plan 39, 2.4b; mode 'race') is a 🏆 run like a single one: a split-screen half
+-- the device sends, or an online race's run the server writes from the agreed numbers
+-- (online_count_race; session 'online-race', version 'server'). Owner-only: no role may read or write the tables, and no
 -- profile or board shows them. A row is kept 90 days (received_at), except a held row and a hidden
 -- player's rows. Times: started_at and ended_at are the device's clock; clock_offset_ms is the
 -- server's clock minus the device's, measured when the batch was sent; received_at is the server's.
@@ -400,7 +411,7 @@ create table if not exists public.run_log (
   player_id       text not null check (player_id ~ '^[A-Za-z0-9_-]{22}$'), -- resolved (resolve_player)
   run_id          text not null check (run_id ~ '^[A-Za-z0-9_-]{22}$'),    -- made by the device
   session         text not null check (session ~ '^[A-Za-z0-9_-]{8,22}$'), -- one page load
-  mode            text not null check (mode in ('single', 'daily')),
+  mode            text not null check (mode in ('single', 'daily', 'race')),
   day             date,                                                    -- the Daily's day
   stub            boolean not null default false,                          -- a Daily cut off by a reload
   score           int  not null check (score between 0 and 10000),
@@ -422,6 +433,9 @@ create table if not exists public.run_log (
   check (not stub or mode = 'daily')
 );
 create index if not exists run_log_received on public.run_log (player_id, received_at);
+-- A table from before plan 39 (2.4b) takes single and daily only.
+alter table public.run_log drop constraint if exists run_log_mode_check;
+alter table public.run_log add constraint run_log_mode_check check (mode in ('single', 'daily', 'race'));
 create index if not exists run_log_started on public.run_log (player_id, started_at);
 alter table public.run_log enable row level security;
 revoke all on public.run_log from public, anon, authenticated;
@@ -527,25 +541,16 @@ as $$
 $$;
 revoke execute on function public.board_rows(text) from public, anon, authenticated;
 
--- Upsert one player's best for one toilet state (p_toilet picks the row). Raises
--- (HTTP 400 through PostgREST) on bad input, on a username another player holds
--- ('name taken'), or when that row was written less than 5 s ago, so the client
--- never records a skipped write as confirmed. The id is resolved through
--- player_aliases first. Name always overwrites, on every row of the player, so a
--- rename frees the old name; score keeps the max; the level follows the score
--- only when the new score is higher. p_toilet / p_level default so older
--- clients still post.
-drop function if exists public.submit_score(text, text, int, boolean);
-create or replace function public.submit_score(p_player_id text, p_name text, p_score int, p_toilet boolean default false, p_level int default 1)
+-- One 🏆 post once its input is checked, its name free and its pace kept: the board's rules for a
+-- raise (plan 30's holds and steps, the 👑 counter) and the name on every row of the player.
+-- submit_score's own post, and a counted online race's (online_count_race, plan 39, 2.4b). Internal.
+create or replace function public.board_post(v_id text, p_name text, p_score int, p_toilet boolean, p_level int)
 returns void
 language plpgsql
 security definer
 set search_path = public
 as $$
 declare
-  last_write timestamptz;
-  v_id text;
-  v_key text;
   v_top_before text;
   v_top_after text;
   v_hidden boolean;
@@ -554,35 +559,6 @@ declare
   v_level int := p_level;
   v_raise boolean;
 begin
-  if p_player_id is null or p_player_id !~ '^[A-Za-z0-9_-]{22}$' then
-    raise exception 'bad player id';
-  end if;
-  if p_name is null or p_name !~ '^[^[:cntrl:]]{1,16}$' then
-    raise exception 'bad name';
-  end if;
-  if p_score is null or p_score < 0 or p_score > 1000 then
-    raise exception 'bad score';
-  end if;
-  if p_level is null or p_level < 1 or p_level > 7 then
-    raise exception 'bad level';
-  end if;
-
-  v_id := public.resolve_player(p_player_id);
-  v_key := public.name_key(p_name);
-  -- One claimant at a time per name: two first-time posts of the same name cannot both insert.
-  perform pg_advisory_xact_lock(hashtext(v_key));
-  if public.name_blocked(v_key, v_id) then
-    raise exception 'name taken';
-  end if;
-
-  select updated_at into last_write from public.scores where player_id = v_id and toilet = coalesce(p_toilet, false);
-  if last_write is null then -- a held first post paces like a stored one (plan 30)
-    select max(h.posted_at) into last_write from public.held_scores h
-    where h.player_id = v_id and h.board = 'scores' and h.toilet = coalesce(p_toilet, false);
-  end if;
-  if last_write is not null and last_write > now() - interval '5 seconds' then
-    raise exception 'rate limited';
-  end if;
   perform public.touch_player(v_id);
   v_hidden := public.player_hidden(v_id);
 
@@ -593,7 +569,7 @@ begin
   if v_raise and public.post_must_hold(v_id, coalesce(p_toilet, false), p_score, p_level, null) then
     insert into public.held_scores (player_id, board, toilet, name, score, level, run_id)
     values (v_id, 'scores', coalesce(p_toilet, false), p_name, p_score, p_level,
-            (select r.run_id from public.run_log r where r.player_id = v_id and r.mode = 'single' and r.held
+            (select r.run_id from public.run_log r where r.player_id = v_id and r.mode in ('single', 'race') and r.held
                and r.toilet = coalesce(p_toilet, false) and r.score = p_score and r.level = p_level
              order by r.received_at desc limit 1));
     v_raise := false;
@@ -627,6 +603,60 @@ begin
   if v_top_after = v_id and v_top_before is not null and v_top_before <> v_id then
     perform public.add_server_counter(v_id, 'dethroned', 1);
   end if;
+end;
+$$;
+revoke execute on function public.board_post(text, text, int, boolean, int) from public, anon, authenticated;
+
+-- Upsert one player's best for one toilet state (p_toilet picks the row). Raises
+-- (HTTP 400 through PostgREST) on bad input, on a username another player holds
+-- ('name taken'), or when that row was written less than 5 s ago, so the client
+-- never records a skipped write as confirmed. The id is resolved through
+-- player_aliases first. Name always overwrites, on every row of the player, so a
+-- rename frees the old name; score keeps the max; the level follows the score
+-- only when the new score is higher. p_toilet / p_level default so older
+-- clients still post.
+drop function if exists public.submit_score(text, text, int, boolean);
+create or replace function public.submit_score(p_player_id text, p_name text, p_score int, p_toilet boolean default false, p_level int default 1)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  last_write timestamptz;
+  v_id text;
+  v_key text;
+begin
+  if p_player_id is null or p_player_id !~ '^[A-Za-z0-9_-]{22}$' then
+    raise exception 'bad player id';
+  end if;
+  if p_name is null or p_name !~ '^[^[:cntrl:]]{1,16}$' then
+    raise exception 'bad name';
+  end if;
+  if p_score is null or p_score < 0 or p_score > 1000 then
+    raise exception 'bad score';
+  end if;
+  if p_level is null or p_level < 1 or p_level > 7 then
+    raise exception 'bad level';
+  end if;
+
+  v_id := public.resolve_player(p_player_id);
+  v_key := public.name_key(p_name);
+  -- One claimant at a time per name: two first-time posts of the same name cannot both insert.
+  perform pg_advisory_xact_lock(hashtext(v_key));
+  if public.name_blocked(v_key, v_id) then
+    raise exception 'name taken';
+  end if;
+
+  select updated_at into last_write from public.scores where player_id = v_id and toilet = coalesce(p_toilet, false);
+  if last_write is null then -- a held first post paces like a stored one (plan 30)
+    select max(h.posted_at) into last_write from public.held_scores h
+    where h.player_id = v_id and h.board = 'scores' and h.toilet = coalesce(p_toilet, false);
+  end if;
+  if last_write is not null and last_write > now() - interval '5 seconds' then
+    raise exception 'rate limited';
+  end if;
+  perform public.board_post(v_id, p_name, p_score, coalesce(p_toilet, false), p_level);
 end;
 $$;
 
@@ -676,11 +706,14 @@ $$;
 create table if not exists public.tournaments (
   id           text primary key check (id ~ '^[A-Za-z0-9_-]{22}$'),
   host_id      text not null check (host_id ~ '^[A-Za-z0-9_-]{22}$'),
-  players      int  not null check (players between 3 and 8),   -- TUNING.tournament minPlayers / maxPlayers
+  players      int  not null check (players between 2 and 8),   -- TUNING.tournament minPlayers / maxPlayers
   level_pipes  int[] not null,                                  -- the level table the races ran on
   submitted_at timestamptz not null default now()
 );
 create index if not exists tournaments_host on public.tournaments (host_id, submitted_at desc);
+-- A table from before plan 39 (2.4b) checks 3-8: two players now race a lone final (gold and silver).
+alter table public.tournaments drop constraint if exists tournaments_players_check;
+alter table public.tournaments add constraint tournaments_players_check check (players between 2 and 8);
 
 create table if not exists public.tournament_stats (
   player_id  text primary key check (player_id ~ '^[A-Za-z0-9_-]{22}$'),
@@ -1355,7 +1388,7 @@ $$;
 -- 'bad tournament: <why>' when the bracket is not one createTournament can
 -- produce: per-round counts from the player count, each player at most once per
 -- round, every semi side the winner of its quarter or a bye, the final the two
--- semi winners (3 players: the semi winner and the bye), the bronze match the
+-- semi winners (3 players: the semi winner and the bye; 2 players: the final alone, plan 39), the bronze match the
 -- two semi losers, and each winner the one its slots give (score, then fewer
 -- crashes, then more level wins, then first across the final line: raceOutcome).
 -- The medals are derived here: the client only reports races. Then each linked
@@ -1427,7 +1460,7 @@ begin
   v_host := public.resolve_player(p_host_id);
   perform pg_advisory_xact_lock(hashtext('tournament:' || v_host));
   v_n := jsonb_array_length(t->'players');
-  if v_n < 3 or v_n > 8 then
+  if v_n < 2 or v_n > 8 then
     raise exception 'bad tournament: % players', v_n;
   end if;
   insert into public.tournaments (id, host_id, players, level_pipes) values (v_tid, v_host, v_n, v_pipes)
@@ -1468,7 +1501,7 @@ begin
   -- Matches: the right number per round for v_n players, each id once.
   v_size := case when v_n <= 4 then 4 else 8 end;
   if (select count(*) from jsonb_array_elements(t->'matches') e where e->>'round' = 'quarter') <> greatest(0, v_n - 4)
-     or (select count(*) from jsonb_array_elements(t->'matches') e where e->>'round' = 'semi') <> (case when v_n >= 4 then 2 else 1 end)
+     or (select count(*) from jsonb_array_elements(t->'matches') e where e->>'round' = 'semi') <> (case when v_n >= 4 then 2 when v_n = 3 then 1 else 0 end)
      or (select count(*) from jsonb_array_elements(t->'matches') e where e->>'round' = 'bronze') <> (case when v_n >= 4 then 1 else 0 end)
      or (select count(*) from jsonb_array_elements(t->'matches') e where e->>'round' = 'final') <> 1
      or jsonb_array_length(t->'matches') <> v_n - 1 + (case when v_n >= 4 then 1 else 0 end) then
@@ -1553,7 +1586,7 @@ begin
     end loop;
   end if;
 
-  -- The final: side s is the winner of semi s, or (3 players) a player in no semi.
+  -- The final: side s is the winner of semi s, or (3 players, or 2) a player in no semi.
   for i in 0 .. 1 loop
     side_player := (sides->'final'->>i)::int;
     if sides ? ('semi' || i) then
@@ -2880,7 +2913,7 @@ begin
     return 'version';
   end if;
   v_mode := e ->> 'mode';
-  if v_mode is null or v_mode not in ('single', 'daily') then
+  if v_mode is null or v_mode not in ('single', 'daily', 'race') then
     return 'mode';
   end if;
   if (v_mode = 'daily') <> (coalesce(e ->> 'day', '') ~ '^\d{4}-\d{2}-\d{2}$') then
@@ -3195,7 +3228,7 @@ as $$
   with m as (
     select r.held from public.run_log r
     where r.player_id = p_id and r.score = p_score
-      and case when p_day is null then r.mode = 'single' and r.toilet = coalesce(p_toilet, false) and r.level = p_level
+      and case when p_day is null then r.mode in ('single', 'race') and r.toilet = coalesce(p_toilet, false) and r.level = p_level
                else r.mode = 'daily' and r.day = p_day end
   )
   select case
@@ -3216,7 +3249,7 @@ set search_path = public
 as $$
   select r.run_id from public.run_log r
   where r.player_id = p_id and r.score = p_score and not r.held
-    and case when p_day is null then r.mode = 'single' and r.toilet = coalesce(p_toilet, false) and r.level = p_level
+    and case when p_day is null then r.mode in ('single', 'race') and r.toilet = coalesce(p_toilet, false) and r.level = p_level
              else r.mode = 'daily' and r.day = p_day end
   order by r.received_at desc limit 1;
 $$;
@@ -3246,7 +3279,7 @@ begin
   if not found then
     return false;
   end if;
-  if r.mode = 'single' then
+  if r.mode in ('single', 'race') then
     perform pg_advisory_xact_lock(hashtext('board:scores'));
     select * into cur from public.scores s where s.player_id = v_id and s.toilet = r.toilet;
     if found and cur.score = r.score and cur.level = r.level
@@ -3301,7 +3334,7 @@ begin
   end if;
   for h in select * from public.held_scores hs
            where hs.player_id = v_id and hs.released_at is null and hs.score = r.score
-             and case when r.mode = 'single' then hs.board = 'scores' and hs.toilet = r.toilet and hs.level = r.level
+             and case when r.mode in ('single', 'race') then hs.board = 'scores' and hs.toilet = r.toilet and hs.level = r.level
                       else hs.board = 'daily' and hs.day = r.day end loop
     if h.board = 'scores' then
       perform pg_advisory_xact_lock(hashtext('board:scores'));
@@ -4392,7 +4425,8 @@ $$;
 -- invent one). Once both seats have reported, equal reports agree (the winner in raceOutcome's
 -- order: score, deaths, level wins, the final line, else a draw) and different ones dispute. An
 -- agreed race counts unless one player sat on both seats, the pair has c_pair_day counted races in
--- 24 hours, or either player has c_player_day. Returns { ok: true, status, counted }. Raises 'not
+-- 24 hours, or either player has c_player_day; a counted race goes on the 🏅 and 🏆 boards
+-- (online_count_race, 2.4b). Returns { ok: true, status, counted }. Raises 'not
 -- signed in', 'not linked', 'not trusted' (a pending device: match history is private, M1), 'no
 -- match' (this device sat in no race of that code and round, or has moved to another player since),
 -- 'bad result'.
@@ -4524,8 +4558,74 @@ begin
            host_stats = v_m.host_stats, guest_stats = v_m.guest_stats, winner_seat = v_m.winner_seat,
            decided_by = v_m.decided_by, counted = v_m.counted, finished_at = v_m.finished_at
      where m.id = v_m.id;
+    if v_m.counted then
+      perform public.online_count_race(v_m.id);
+    end if;
   end if;
   return jsonb_build_object('ok', true, 'status', v_m.status, 'counted', v_m.counted);
+end;
+$$;
+
+-- A counted online race on the boards (plan 39, 2.4b), once: for each racer, in player id order (as
+-- submit_tournament locks its rows), the 🏅 row (gold to the winner and silver to the loser, Michael's
+-- call of 21 Nov; neither on a draw; an event and the best race score) and the 🏆 post of their race
+-- score at the race's last level through the board's own rules (board_post: the higher score stays,
+-- the 👑 counter, plan 30's holds), backed by a race run the server writes from the agreed numbers, so
+-- hold_run and require_run treat it as a single run. No tournament receipt and no matchup: online
+-- pairings stay off the public rival line. The name: the board's, else the one shown online (which
+-- is a claim, so free on the board; a name held there by another player all the same skips the 🏆
+-- post, never the race). Internal: finish_match.
+create or replace function public.online_count_race(p_id bigint)
+returns void
+language plpgsql
+volatile
+security definer
+set search_path = ''
+as $$
+declare
+  c_race_level constant int := 7;      -- a race ends on the last level (TUNING.levels.lastLevel)
+  m public.matches;
+  r record;
+  v_name text;
+  v_key text;
+begin
+  select * into m from public.matches x where x.id = p_id and x.counted;
+  if m.id is null then
+    return;
+  end if;
+  for r in
+    select x.seat, x.pid, (m.host_report -> x.i ->> 'score')::int as score, coalesce(m.winner_seat = x.seat, false) as won
+      from (values ('host', m.host_player, 0), ('guest', m.guest_player, 1)) x(seat, pid, i)
+     order by x.pid
+  loop
+    v_name := coalesce((select sc.name from public.scores sc where sc.player_id = r.pid order by sc.updated_at desc limit 1),
+                       (select p.name from public.online_profiles p where p.player_id = r.pid),
+                       'Player');
+    perform public.touch_player(r.pid);
+    insert into public.tournament_stats (player_id, name, best_score, gold, silver, bronze, events, updated_at)
+    values (r.pid, v_name, r.score,
+            case when r.won then 1 else 0 end,
+            case when m.winner_seat is not null and not r.won then 1 else 0 end,
+            0, 1, now())
+    on conflict (player_id) do update
+      set name       = excluded.name,
+          best_score = greatest(public.tournament_stats.best_score, excluded.best_score),
+          gold       = public.tournament_stats.gold + excluded.gold,
+          silver     = public.tournament_stats.silver + excluded.silver,
+          events     = public.tournament_stats.events + 1,
+          updated_at = now();
+    insert into public.run_log (player_id, run_id, session, mode, score, level, toilet, won, started_at, ended_at,
+                                length_ms, clock_offset_ms, version)
+    values (r.pid, 'match' || lpad(m.id::text, 16, '0') || left(r.seat, 1), 'online-race', 'race', r.score, c_race_level,
+            false, r.won, m.started_at, m.finished_at,
+            least(greatest(floor(extract(epoch from (m.finished_at - m.started_at)) * 1000), 0), 86400000)::int, 0, 'server')
+    on conflict (player_id, run_id) do nothing;
+    v_key := public.name_key(v_name);
+    perform pg_advisory_xact_lock(hashtext(v_key)); -- the name's lock first, as submit_score takes it
+    if not public.name_blocked(v_key, r.pid) then
+      perform public.board_post(r.pid, v_name, r.score, false, c_race_level);
+    end if;
+  end loop;
 end;
 $$;
 
@@ -4661,6 +4761,7 @@ grant  execute on function public.online_can(text, boolean) to authenticated;
 revoke execute on function public.online_require_open() from public, anon, authenticated;
 revoke execute on function public.admin_set_online_open(boolean) from public, anon, authenticated;
 revoke execute on function public.online_races(text) from public, anon, authenticated;
+revoke execute on function public.online_count_race(bigint) from public, anon, authenticated;
 revoke execute on function public.finish_match(text, int, jsonb) from public, anon;
 grant  execute on function public.finish_match(text, int, jsonb) to authenticated;
 revoke execute on function public.online_history() from public, anon;
@@ -4676,7 +4777,7 @@ returns text
 language sql
 immutable
 as $$
-  select '79f1053c2da26f3c'::text; -- schema stamp
+  select '2235a341bcd448fe'::text; -- schema stamp
 $$;
 revoke execute on function public.schema_version() from public, authenticated;
 grant  execute on function public.schema_version() to anon;

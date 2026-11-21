@@ -158,3 +158,16 @@ test('rows older than 90 days go when the player next sends, except held rows an
   assert.deepEqual((await runs(db, P)).map((r) => r.run_id), [id('R2'), id('R4')], 'the old unheld rows went; the held one stayed');
   assert.deepEqual((await runs(db, H)).map((r) => r.run_id), [id('R1'), id('R2')], "a hidden player's rows stay");
 });
+
+test('a race half\'s summary (plan 39, 2.4b: mode race) is stored like a single run; it takes no day and is never a stub', async () => {
+  const db = await freshDb();
+  const P = id('RRace');
+  assert.equal(await send(db, P, [
+    row('race', { mode: 'race', level: 7, score: 140, won: true }),
+    row('rday', { mode: 'race', day: '2026-11-16' }),
+    row('rstub', { mode: 'race', stub: true }),
+    row('rnew', { mode: 'online' }),
+  ]), VOID);
+  assert.deepEqual((await runs(db, P)).map((r) => [r.run_id, r.mode, r.level, r.score, r.won, r.day]), [[id('Rrace'), 'race', 7, 140, true, null]]);
+  assert.deepEqual((await rejects(db)).map((r) => r.reason).sort(), ['day', 'mode', 'stub']);
+});

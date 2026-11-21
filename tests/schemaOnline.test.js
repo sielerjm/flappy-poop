@@ -1103,6 +1103,7 @@ test('online_history: the owner\'s online rival and recent races, for a trusted 
   await finish(db, d.guest, d.code, 1, [slot(1), slot(3)]);
   assert.deepEqual(await history(db, d.host), { rival: null, recent: [] });
   // A hidden opponent is nobody's rival (plan 30).
+  await db.query("update public.scores set updated_at = now() - interval '6 seconds'"); // past the 5 s pacing (2.4b's race posts)
   await anonCall(db, 'select public.submit_score($1, $2, $3)', [bea.player, 'Bea', 5]);
   assert.equal((await db.query("select public.admin_flag_player('Bea') as r")).rows[0].r, 1, 'one player hidden');
   const after = await history(db, me);
@@ -1157,4 +1158,103 @@ test('housekeeping: a race nobody reported is abandoned 6 hours after its GO; an
   await call(db, await device(db, 'Kx'), 'create_room');
   assert.equal((await matchesOf(db, r.code))[0].status, 'abandoned');
   assert.equal((await matchesOf(db, done.code))[0].status, 'agreed');
+});
+
+// ---------------------------------------------------------------------------
+// 2.4b: a counted online race on the 🏅 and 🏆 boards.
+
+const tstats = (db, player) => db.query('select * from public.tournament_stats where player_id = $1', [player]).then((r) => r.rows[0] ?? null);
+const boardRows = (db, player) => db.query('select name, score, toilet, level, hidden from public.scores where player_id = $1 order by toilet', [player]).then((r) => r.rows);
+const raceRuns = (db) => db.query("select player_id, run_id, session, mode, score, level, toilet, won, length_ms, version from public.run_log where mode = 'race' order by run_id").then((r) => r.rows);
+
+test('a race\'s 🏆 row is at the last level a race flies', () => {
+  assert.equal(constant('c_race_level'), T.levels.lastLevel);
+});
+
+test('a counted online race on 🏅: gold to the winner, silver to the loser, an event and the best score each; a draw, events only; no public matchup', async () => {
+  const db = await freshDb();
+  const r = await racing(db, 'Wh', 'Wg');
+  await both(db, r, 1, [slot(140), slot(90)]);
+  let h = await tstats(db, r.host.player);
+  let g = await tstats(db, r.guest.player);
+  assert.deepEqual([h.gold, h.silver, h.bronze, h.events, h.best_score, h.name], [1, 0, 0, 1, 140, 'Wh']);
+  assert.deepEqual([g.gold, g.silver, g.bronze, g.events, g.best_score, g.name], [0, 1, 0, 1, 90, 'Wg']);
+  const round = await rematch(db, r);
+  await both(db, r, round, [slot(60), slot(60)]);
+  h = await tstats(db, r.host.player);
+  g = await tstats(db, r.guest.player);
+  assert.deepEqual([h.gold, h.silver, h.events, h.best_score], [1, 0, 2, 140], 'a draw: an event, no medal');
+  assert.deepEqual([g.gold, g.silver, g.events, g.best_score], [0, 1, 2, 90]);
+  assert.equal((await db.query('select count(*)::int as n from public.tournament_matchups')).rows[0].n, 0, 'online pairings stay off the public rival line');
+  assert.equal((await db.query('select count(*)::int as n from public.tournaments')).rows[0].n, 0);
+  assert.equal((await anonCall(db, 'select public.player_stats($1) as r', [r.host.player])).rows[0].r.tournament.rival, null);
+  const board = (await anonCall(db, 'select * from public.tournament_board()')).rows;
+  assert.deepEqual(board.map((x) => [x.name, x.gold, x.silver, x.events]), [['Wh', 1, 0, 2], ['Wg', 0, 1, 2]]);
+});
+
+test('a counted online race posts each racer\'s score to 🏆 as a normal run: the board\'s rules, the last level, backed by a race run that plan 30 can hold', async () => {
+  const db = await freshDb();
+  const r = await racing(db, 'Bh', 'Bg');
+  await anonCall(db, 'select public.submit_score($1, $2, $3, false, 4)', [r.guest.player, 'Bg', 300]);
+  await db.query("update public.scores set updated_at = now() - interval '6 seconds'");
+  await both(db, r, 1, [slot(150), slot(120)]);
+  const level = constant('c_race_level');
+  assert.deepEqual(await boardRows(db, r.host.player), [{ name: 'Bh', score: 150, toilet: false, level, hidden: false }]);
+  assert.deepEqual(await boardRows(db, r.guest.player), [{ name: 'Bg', score: 300, toilet: false, level: 4, hidden: false }], 'a lower race score leaves the best');
+  const runs = await raceRuns(db);
+  assert.deepEqual(runs.map((x) => [x.player_id, x.session, x.score, x.level, x.toilet, x.won, x.version]).sort(),
+    [[r.host.player, 'online-race', 150, level, false, true, 'server'], [r.guest.player, 'online-race', 120, level, false, false, 'server']].sort());
+  assert.ok(runs.every((x) => /^match\d{16}[hg]$/.test(x.run_id) && Math.abs(x.length_ms - 400000) < 5000), 'one run a racer, its length from GO');
+  await assert.rejects(anonCall(db, 'select public.submit_score($1, $2, $3)', [r.host.player, 'Bh', 160]), /rate limited/, 'the device\'s next post paces as after any post');
+  // Plan 30: holding the race's run takes the best it set off the board; releasing it puts it back.
+  const hostRun = runs.find((x) => x.player_id === r.host.player).run_id;
+  assert.equal((await db.query('select public.hold_run($1, $2) as r', [r.host.player, hostRun])).rows[0].r, true);
+  assert.deepEqual(await boardRows(db, r.host.player), [], 'the race set the only best');
+  assert.equal((await db.query('select public.release_run($1, $2) as r', [r.host.player, hostRun])).rows[0].r, true);
+  assert.deepEqual((await boardRows(db, r.host.player)).map((x) => x.score), [150]);
+  // A resend of a report posts nothing again.
+  await finish(db, r.guest, r.code, 1, [slot(150), slot(120)]);
+  assert.equal((await raceRuns(db)).length, 2);
+  assert.equal((await tstats(db, r.host.player)).events, 1);
+});
+
+test('with require_run on, a race\'s score is not held: the server wrote its run', async () => {
+  const db = await freshDb();
+  await db.query('select public.admin_set_require_run(true)');
+  const r = await racing(db, 'Rqh', 'Rqg');
+  await both(db, r, 1, [slot(80), slot(70)]);
+  assert.deepEqual((await boardRows(db, r.host.player)).map((x) => x.score), [80]);
+  assert.equal((await db.query('select count(*)::int as n from public.held_scores')).rows[0].n, 0);
+});
+
+test('a race that does not count posts nothing: disputed, refused, past a cap, or one player on both seats', async () => {
+  const db = await freshDb();
+  const d = await racing(db, 'Xh', 'Xg');
+  await finish(db, d.host, d.code, 1, [slot(10), slot(20)]);
+  await finish(db, d.guest, d.code, 1, [slot(10), slot(21)]);
+  const f = await racing(db, 'Yh', 'Yg', constant('c_min_race_s') - 1);
+  await both(db, f, 1, [slot(10), slot(20)]);
+  const c = await racing(db, 'Zh', 'Zg');
+  await db.query(`insert into public.matches (room_code, round, seed, started_at, host_player, guest_player, status, counted, finished_at)
+    select '100002', g, 1, now() - interval '2 hours', $1, $2, 'agreed', true, now() - interval '1 hour' from generate_series(1, $3) g`,
+  [c.host.player, c.guest.player, constant('c_pair_day')]);
+  assert.equal((await both(db, c, 1, [slot(10), slot(20)])).counted, false);
+  const self = await racing(db, 'Sfh', 'Sfg');
+  await anonCall(db, 'select public.merge_players($1, $2)', [self.host.player, self.guest.player]);
+  await call(db, self.guest, 'online_pair', [await call(db, self.host, 'online_pair_code')]);
+  assert.equal((await both(db, self, 1, [slot(10), slot(20)])).counted, false);
+  assert.deepEqual(await raceRuns(db), []);
+  assert.equal((await db.query('select count(*)::int as n from public.scores')).rows[0].n, 0);
+  assert.equal((await db.query('select count(*)::int as n from public.tournament_stats')).rows[0].n, 0);
+});
+
+test('a hidden racer\'s race posts as their own rows do: hidden from everyone else\'s boards', async () => {
+  const db = await freshDb();
+  const r = await racing(db, 'Hid', 'Seen');
+  await anonCall(db, 'select public.submit_score($1, $2, $3)', [r.host.player, 'Hid', 5]);
+  await db.query("select public.admin_flag_player('Hid')");
+  await db.query("update public.scores set updated_at = now() - interval '6 seconds'");
+  await both(db, r, 1, [slot(90), slot(30)]);
+  assert.deepEqual((await boardRows(db, r.host.player)).map((x) => [x.score, x.hidden]), [[90, true]]);
+  assert.deepEqual((await anonCall(db, 'select * from public.tournament_board()')).rows.map((x) => x.name), ['Seen']);
 });
