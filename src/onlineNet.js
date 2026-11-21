@@ -60,12 +60,14 @@ export const ONLINE_RPCS = Object.freeze([
   'leave_room',
   'set_room_status',
   'room_state',
+  'finish_match',
+  'online_history',
 ]);
 
 const SEATS = ['host', 'guest'];
 
 /** The online functions' plain messages (their `raise exception`s), passed on as they are. */
-const SERVER_ERRORS = new Set(['not signed in', 'not linked', 'not trusted', 'bad name', 'name taken', 'too many devices waiting', 'rate limited', 'in a race', 'no room', 'no guest', 'not host', 'bad status']);
+const SERVER_ERRORS = new Set(['not signed in', 'not linked', 'not trusted', 'bad name', 'name taken', 'too many devices waiting', 'rate limited', 'in a race', 'no room', 'no guest', 'not host', 'bad status', 'online closed', 'no match', 'bad result']);
 
 const REFUSED = /unauthorized|permission/i; // a policy said no: at join ('Unauthorized: …') or at a token refresh
 const CAPPED = /too many|rate limit/i; // 'Too many messages per second', 'Client presence rate limit exceeded'

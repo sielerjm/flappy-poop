@@ -61,6 +61,9 @@
 --   * online room_state(...)           the room as one of its two seated devices sees it
 --   * online online_can(...)           the Realtime channel policies' check, which they run as the device
 --                                      asking; it answers only about the caller
+--   * online finish_match(...)         report a race's end: both seats' numbers, checked against the race
+--                                      the server minted (2.4a); agreed when both devices report the same
+--   * online online_history()          the player's online rival and recent races, for a trusted device
 --   Apply this file before pushing a client that calls them.
 -- A player has up to two rows: their best on the toilet and their best off it
 -- (primary key player_id + toilet, since 2026-11-04).
@@ -70,7 +73,7 @@
 -- player_achievements, player_meta, education_settings, education_public, research_participants
 -- or research_responses (nor the research_* views), run_log, run_rejects, held_scores,
 -- score_steps, board_settings, online_profiles, online_players, online_pairings, rooms,
--- join_attempts or online_secret (authenticated has nothing on any table either). Profiles are public
+-- join_attempts, online_secret, matches or online_settings (authenticated has nothing on any table either). Profiles are public
 -- (2026-11-11): player_stats returns anyone's stats, counters, achievements and biggest rival, by
 -- the name a board shows; and, only for a player who shares them, their education grade (2026-11-13).
 --
@@ -158,6 +161,16 @@
 --     select public.admin_reset_online('somebody');
 --   free an online name (a name held online by a made-up id, say; a trusted device's next link sets one again):
 --     delete from public.online_profiles where public.name_key(name) = public.name_key('somebody');
+--   close online play (plan 39, 2.4a: no room is made, joined or started; races running finish), and open it:
+--     select public.admin_set_online_open(false); select public.admin_set_online_open(true);
+--   online races, e.g. how they ended, and the devices' telemetry (owner only; plan 39, 2.4a):
+--     select status, count(*) from public.matches group by 1;
+--     select id, status, host_stats, guest_stats from public.matches order by id desc limit 20;
+--   undo online races (plan 39, 2.4a), before the rooms' undo: drop function public.finish_match(text, int, jsonb),
+--     public.online_history(), public.online_races(text), public.admin_set_online_open(boolean),
+--     public.online_require_open(); restore set_room_status, create_room, join_room, online_unseat,
+--     online_cleanup and fold_player from git (plan 39, 1.10) and run this file; then
+--     alter table public.rooms drop column match_id; drop table public.matches, public.online_settings.
 --   undo online play's rooms (plan 39, 1.2), before its players: drop policy "online read" on
 --     realtime.messages; drop policy "online write" on realtime.messages; drop function
 --     public.server_now(), public.create_room(), public.join_room(text), public.answer_guest(text, boolean),
@@ -1214,6 +1227,8 @@ begin
   delete from public.online_pairings where player_id = v_merge;
   update public.rooms set host_player = v_keep where host_player = v_merge;
   update public.rooms set guest_player = v_keep where guest_player = v_merge;
+  update public.matches set host_player = v_keep where host_player = v_merge;   -- 2.4a: the online history follows
+  update public.matches set guest_player = v_keep where guest_player = v_merge;
   update public.player_aliases set canonical_id = v_keep, merged_at = now() where canonical_id = v_merge;
   insert into public.player_aliases (alias_id, canonical_id)
   values (v_merge, v_keep)
@@ -3833,6 +3848,58 @@ create index if not exists join_attempts_at on public.join_attempts (at);
 create index if not exists join_attempts_uid on public.join_attempts (uid, at);
 create index if not exists join_attempts_ip on public.join_attempts (ip_hash, at);
 
+-- One row per race (plan 39, 2.4a), minted when the host starts it (set_room_status 'playing'): the
+-- room's code and round, the seed and GO the server minted, both seats' devices and (resolved)
+-- players. A rematch overwrites the room's seed and GO, so each race is checked against its own row
+-- (rooms.match_id points at the race running). Each seated, trusted device reports the race's final
+-- numbers for both seats (finish_match): agreed, disputed or refused, or abandoned on a leave
+-- mid-race. counted: an agreed race between two players, within the caps, which the boards and the
+-- owner's online rival line read. host_stats / guest_stats: each device's numbers-only telemetry
+-- (round trips, messages, reconnects, pauses), for the owner's eyes in the SQL editor. Kept: it is the
+-- players' online history. A device's row going (auth.users) leaves the race with its players.
+-- Readable by no role.
+create table if not exists public.matches (
+  id           bigserial primary key,
+  room_code    text not null check (room_code ~ '^[1-9][0-9]{5}$'),
+  round        int  not null check (round >= 1),
+  seed         bigint not null check (seed between 0 and 4294967295),
+  started_at   timestamptz not null,                       -- GO, as minted
+  host_uid     uuid references auth.users (id) on delete set null,
+  guest_uid    uuid references auth.users (id) on delete set null,
+  host_player  text not null check (host_player ~ '^[A-Za-z0-9_-]{22}$'),
+  guest_player text not null check (guest_player ~ '^[A-Za-z0-9_-]{22}$'),
+  status       text not null default 'playing'
+               check (status in ('playing', 'agreed', 'disputed', 'refused', 'abandoned')),
+  host_report  jsonb,                                      -- [host, guest] slots, as the host saw them
+  guest_report jsonb,                                      -- the same, as the guest saw them
+  host_stats   jsonb,
+  guest_stats  jsonb,
+  winner_seat  text check (winner_seat in ('host', 'guest')),     -- null: a draw, or not agreed
+  decided_by   text check (decided_by in ('score', 'deaths', 'levelWins', 'finalFirst', 'draw')),
+  counted      boolean not null default false,
+  created_at   timestamptz not null default now(),
+  finished_at  timestamptz
+);
+alter table public.matches enable row level security;
+revoke all on public.matches from public, anon, authenticated;
+revoke all on sequence public.matches_id_seq from public, anon, authenticated;
+create index if not exists matches_room on public.matches (room_code, round);
+create index if not exists matches_host on public.matches (host_player, finished_at);
+create index if not exists matches_guest on public.matches (guest_player, finished_at);
+create index if not exists matches_playing on public.matches (started_at) where status = 'playing';
+alter table public.rooms add column if not exists match_id bigint;  -- the race running (no FK: races outlive rooms)
+
+-- Online play's switch (one row; plan 39, 2.4a). open false: no room is made, joined or started
+-- (create_room, join_room and set_room_status 'playing' raise 'online closed'); a race already
+-- running finishes and reports. For the Realtime quota the live boards' project shares. Readable by no role.
+create table if not exists public.online_settings (
+  id   boolean primary key default true check (id),
+  open boolean not null default true
+);
+insert into public.online_settings (id) values (true) on conflict (id) do nothing;
+alter table public.online_settings enable row level security;
+revoke all on public.online_settings from public, anon, authenticated;
+
 -- The pepper join_attempts hashes IPs with: made once, at the first paste, and never shown.
 create table if not exists public.online_secret (
   id     int primary key check (id = 1),
@@ -3914,7 +3981,7 @@ declare
   r record;
 begin
   for r in
-    select x.code, x.status, x.host_uid = p_uid as hosting
+    select x.code, x.status, x.host_uid = p_uid as hosting, x.match_id
       from public.rooms x
      where p_uid in (x.host_uid, x.guest_uid) and x.status <> 'abandoned'
      order by x.code
@@ -3924,6 +3991,7 @@ begin
                           'left', 'room:' || r.code, true);
     if r.status = 'playing' then
       update public.rooms x set status = 'abandoned', updated_at = now() where x.code = r.code;
+      update public.matches m set status = 'abandoned', finished_at = now() where m.id = r.match_id and m.status = 'playing';
     else
       delete from public.rooms x where x.code = r.code;
     end if;
@@ -3935,7 +4003,7 @@ $$;
 -- call stays cheap. A playing room is never cleaned: each player's hourly token refresh re-runs the
 -- channel policy, and a room gone mid-race would close both channels (finding 19). The one exception
 -- is a race started 6 hours ago: none lasts that long, and a pair that crashed would hold the room
--- for ever. Anonymous users go when stale: never linked a day after signing in, or not seen for 90
+-- for ever (its race, unreported, is abandoned with it). Anonymous users go when stale: never linked a day after signing in, or not seen for 90
 -- days; never one seated in a room, nor the device asking. Their link goes with them; the player
 -- loses nothing else.
 create or replace function public.online_cleanup()
@@ -3951,6 +4019,8 @@ begin
      where (x.status <> 'playing' and x.updated_at < now() - interval '15 minutes')
         or (x.status = 'playing' and x.started_at < now() - interval '6 hours')
      limit 100);
+  update public.matches m set status = 'abandoned', finished_at = now() where m.id in (
+    select x.id from public.matches x where x.status = 'playing' and x.started_at < now() - interval '6 hours' limit 100);
   delete from public.join_attempts a where a.id in (
     select x.id from public.join_attempts x where x.at < now() - interval '1 hour' order by x.at limit 500);
   delete from public.online_pairings c where c.expires_at < now();
@@ -4004,7 +4074,8 @@ $$;
 
 -- Host a room: a fresh 6-digit code (100000-999999), open. One room per device: its last one goes,
 -- unless it is mid-race ('in a race': leave it first). Returns { ok, code, status }. Raises 'not
--- signed in', 'not linked', 'rate limited' (one room per 2 seconds), 'in a race'.
+-- signed in', 'not linked', 'online closed' (the switch, online_settings), 'rate limited' (one room
+-- per 2 seconds), 'in a race'.
 create or replace function public.create_room()
 returns jsonb
 language plpgsql
@@ -4023,6 +4094,7 @@ begin
   if v_me.uid is null then
     raise exception 'not linked';
   end if;
+  perform public.online_require_open();
   if exists (select 1 from public.rooms r where r.host_uid = v_me.uid and r.created_at > now() - interval '2 seconds') then
     raise exception 'rate limited';
   end if;
@@ -4052,7 +4124,8 @@ $$;
 -- whole game are capped as well as a device, since a new anonymous device costs nothing):
 -- { ok: false, error: 'rate limited' } past 5 failures from this device or 20 from its IP in 10
 -- minutes, 'busy' past 200 in all in a minute. A room idle 15 minutes is no room, housekeeping or not.
--- Raises 'not signed in', 'not linked', 'in a race' (checked first, so a racing device learns nothing).
+-- Raises 'not signed in', 'not linked', 'in a race' (checked first, so a racing device learns nothing),
+-- 'online closed' (the switch; no try is spent).
 create or replace function public.join_room(p_code text)
 returns jsonb
 language plpgsql
@@ -4081,6 +4154,7 @@ begin
   if exists (select 1 from public.rooms r where v_uid in (r.host_uid, r.guest_uid) and r.status = 'playing') then
     raise exception 'in a race';
   end if;
+  perform public.online_require_open(); -- before anything is counted
   v_ip := public.online_ip_hash();
   -- One join at a time per device and per IP, so parallel calls cannot all count under the cap.
   perform pg_advisory_xact_lock(hashtext('join:' || v_uid::text));
@@ -4195,10 +4269,12 @@ end;
 $$;
 
 -- Move the room on. 'playing' (the host only, from 'ready' or after a race, 'finished'): the server
--- mints the race's seed and its GO time, 4 seconds from now (the countdown runs on server time), and
--- counts the round. 'finished' or 'abandoned' (either seated device, from 'playing'). Both devices
--- are told ('status', the room as room_state shows it). Returns the room as room_state does. Raises
--- 'not signed in', 'no room', 'not host', 'bad status'.
+-- mints the race's seed and its GO time, 4 seconds from now (the countdown runs on server time),
+-- counts the round and mints the race's row in matches (2.4a), which finish_match checks reports
+-- against. 'finished' or 'abandoned' (either seated device, from 'playing'): a finished room leaves
+-- its race to the reports; an abandoned one abandons it. Both devices are told ('status', the room as
+-- room_state shows it). Returns the room as room_state does. Raises 'not signed in', 'no room', 'not
+-- host', 'bad status', 'online closed' (the switch: no new race, a rematch included).
 create or replace function public.set_room_status(p_code text, p_status text)
 returns jsonb
 language plpgsql
@@ -4210,6 +4286,7 @@ declare
   c_lead constant interval := interval '4 seconds';   -- from 'playing' to GO
   v_uid uuid := auth.uid();
   v_room public.rooms;
+  v_match bigint;
 begin
   if v_uid is null then
     raise exception 'not signed in';
@@ -4225,10 +4302,17 @@ begin
     if v_room.status not in ('ready', 'finished') or v_room.guest_uid is null then
       raise exception 'bad status';
     end if;
+    perform public.online_require_open();
     update public.rooms r
        set status = 'playing', seed = public.online_random(4294967296), started_at = now() + c_lead,
            round = r.round + 1, updated_at = now()
      where r.code = p_code
+    returning * into v_room;
+    insert into public.matches (room_code, round, seed, started_at, host_uid, guest_uid, host_player, guest_player)
+    values (v_room.code, v_room.round, v_room.seed, v_room.started_at, v_room.host_uid, v_room.guest_uid,
+            v_room.host_player, v_room.guest_player)
+    returning id into v_match;
+    update public.rooms r set match_id = v_match where r.code = p_code
     returning * into v_room;
   elsif p_status in ('finished', 'abandoned') then
     if v_room.status <> 'playing' then
@@ -4236,6 +4320,9 @@ begin
     end if;
     update public.rooms r set status = p_status, updated_at = now() where r.code = p_code
     returning * into v_room;
+    if p_status = 'abandoned' then
+      update public.matches m set status = 'abandoned', finished_at = now() where m.id = v_room.match_id and m.status = 'playing';
+    end if;
   else
     raise exception 'bad status';
   end if;
@@ -4266,6 +4353,251 @@ begin
     raise exception 'no room';
   end if;
   return public.online_room_json(v_room, v_uid);
+end;
+$$;
+
+-- Raises 'online closed' while online play's switch is off (online_settings). Internal.
+create or replace function public.online_require_open()
+returns void
+language plpgsql
+stable
+security definer
+set search_path = ''
+as $$
+begin
+  if not coalesce((select s.open from public.online_settings s where s.id), true) then
+    raise exception 'online closed';
+  end if;
+end;
+$$;
+
+-- Owner only (SQL editor): open (true) or close (false) online play. Returns the switch as set.
+create or replace function public.admin_set_online_open(p_on boolean)
+returns boolean
+language sql
+volatile
+security definer
+set search_path = ''
+as $$
+  update public.online_settings s set open = coalesce(p_on, true) where s.id returning s.open;
+$$;
+
+-- A seated, trusted device reports its race's end (plan 39, 2.4a). p_result is { slots, stats }:
+-- slots are both seats' final numbers in seat order (host, guest) as this device saw them, each
+-- { score, deaths, levelWins, finalFirst } (what raceOutcome reads); stats are its own numbers-only
+-- telemetry (a key not in c_stat_keys, a non-number or a number out of range is dropped, never the
+-- race). The race is the one this device sat in under that room code and round. The first report per
+-- seat stands, and a resend answers the same. A report sooner than c_min_race_s after GO, or a score
+-- over c_score_base + c_score_rate a second since GO, refuses the race (two devices could otherwise
+-- invent one). Once both seats have reported, equal reports agree (the winner in raceOutcome's
+-- order: score, deaths, level wins, the final line, else a draw) and different ones dispute. An
+-- agreed race counts unless one player sat on both seats, the pair has c_pair_day counted races in
+-- 24 hours, or either player has c_player_day. Returns { ok: true, status, counted }. Raises 'not
+-- signed in', 'not linked', 'not trusted' (a pending device: match history is private, M1), 'no
+-- match' (this device sat in no race of that code and round, or has moved to another player since),
+-- 'bad result'.
+create or replace function public.finish_match(p_code text, p_round int, p_result jsonb)
+returns jsonb
+language plpgsql
+volatile
+security definer
+set search_path = ''
+as $$
+declare
+  c_min_race_s constant int := 90;     -- no race is shorter: the fastest course a race flies is about 360 s
+  c_score_base constant int := 200;    -- a score may be at most c_score_base + c_score_rate per second since GO
+  c_score_rate constant int := 4;
+  c_pair_day   constant int := 10;     -- counted races per pair of players in 24 hours
+  c_player_day constant int := 20;     -- counted races per player in 24 hours
+  c_stat_keys  constant text[] := array['sent', 'received', 'lost', 'bad', 'stale', 'verifies', 'rejoins',
+                                        'retries', 'tracks', 'rttMs', 'rttMinMs', 'pauses', 'pausedMs'];
+  v_uid uuid := auth.uid();
+  v_me public.online_players;
+  v_m public.matches;
+  v_host boolean;
+  v_slots jsonb := '[]'::jsonb;
+  v_stats jsonb;
+  v_secs numeric;
+  s jsonb;
+  a jsonb;
+  b jsonb;
+begin
+  if v_uid is null then
+    raise exception 'not signed in';
+  end if;
+  v_me := public.online_me();
+  if v_me.uid is null then
+    raise exception 'not linked';
+  end if;
+  if not v_me.trusted then
+    raise exception 'not trusted';
+  end if;
+  select * into v_m from public.matches m
+   where m.room_code = p_code and m.round = p_round and v_uid in (m.host_uid, m.guest_uid)
+   order by m.id desc limit 1;
+  if v_m.id is null then
+    raise exception 'no match';
+  end if;
+  -- The two players' locks, as fold_player takes them, before the race's row: a merge and a report
+  -- never deadlock, and the caps' counts below run one at a time per player.
+  perform pg_advisory_xact_lock(hashtext(least(v_m.host_player, v_m.guest_player)));
+  perform pg_advisory_xact_lock(hashtext(greatest(v_m.host_player, v_m.guest_player)));
+  select * into v_m from public.matches m where m.id = v_m.id for update;
+  v_host := v_m.host_uid = v_uid;
+  if v_me.player_id <> (case when v_host then v_m.host_player else v_m.guest_player end) then
+    raise exception 'no match';
+  end if;
+
+  if p_result is null or jsonb_typeof(p_result) <> 'object'
+     or exists (select 1 from jsonb_object_keys(p_result) x where x not in ('slots', 'stats'))
+     or jsonb_typeof(p_result -> 'slots') is distinct from 'array' or jsonb_array_length(p_result -> 'slots') <> 2 then
+    raise exception 'bad result';
+  end if;
+  for s in select e.value from jsonb_array_elements(p_result -> 'slots') with ordinality e(value, o) order by e.o loop
+    if jsonb_typeof(s) is distinct from 'object' or (select count(*) from jsonb_object_keys(s)) <> 4
+       or jsonb_typeof(s -> 'score') is distinct from 'number' or (s ->> 'score') !~ '^[0-9]{1,4}$' or (s ->> 'score')::int > 1000
+       or jsonb_typeof(s -> 'deaths') is distinct from 'number' or (s ->> 'deaths') !~ '^[0-9]{1,4}$'
+       or jsonb_typeof(s -> 'levelWins') is distinct from 'number' or (s ->> 'levelWins') !~ '^[0-9]{1,2}$'
+       or jsonb_typeof(s -> 'finalFirst') is distinct from 'boolean' then
+      raise exception 'bad result';
+    end if;
+    v_slots := v_slots || jsonb_build_array(jsonb_build_object(
+      'score', (s ->> 'score')::int, 'deaths', (s ->> 'deaths')::int,
+      'levelWins', (s ->> 'levelWins')::int, 'finalFirst', (s ->> 'finalFirst')::boolean));
+  end loop;
+  if jsonb_typeof(p_result -> 'stats') = 'object' and length((p_result -> 'stats')::text) <= 1024 then
+    select jsonb_object_agg(e.key, (e.value #>> '{}')::bigint) into v_stats
+      from jsonb_each(p_result -> 'stats') e
+     where e.key = any(c_stat_keys) and jsonb_typeof(e.value) = 'number' and (e.value #>> '{}') ~ '^[0-9]{1,9}$';
+  end if;
+
+  if v_m.status = 'playing' and (case when v_host then v_m.host_report else v_m.guest_report end) is null then
+    v_secs := extract(epoch from (now() - v_m.started_at));
+    if v_secs < c_min_race_s
+       or (v_slots -> 0 ->> 'score')::int > c_score_base + c_score_rate * v_secs
+       or (v_slots -> 1 ->> 'score')::int > c_score_base + c_score_rate * v_secs then
+      v_m.status := 'refused';
+    end if;
+    if v_host then
+      v_m.host_report := v_slots;
+      v_m.host_stats := v_stats;
+    else
+      v_m.guest_report := v_slots;
+      v_m.guest_stats := v_stats;
+    end if;
+    if v_m.status = 'playing' and v_m.host_report is not null and v_m.guest_report is not null then
+      if v_m.host_report = v_m.guest_report then
+        a := v_m.host_report -> 0;
+        b := v_m.host_report -> 1;
+        v_m.status := 'agreed';
+        v_m.decided_by := case when (a ->> 'score')::int <> (b ->> 'score')::int then 'score'
+                               when (a ->> 'deaths')::int <> (b ->> 'deaths')::int then 'deaths'
+                               when (a ->> 'levelWins')::int <> (b ->> 'levelWins')::int then 'levelWins'
+                               when (a ->> 'finalFirst')::boolean <> (b ->> 'finalFirst')::boolean then 'finalFirst'
+                               else 'draw' end;
+        v_m.winner_seat := case v_m.decided_by
+          when 'score' then case when (a ->> 'score')::int > (b ->> 'score')::int then 'host' else 'guest' end
+          when 'deaths' then case when (a ->> 'deaths')::int < (b ->> 'deaths')::int then 'host' else 'guest' end
+          when 'levelWins' then case when (a ->> 'levelWins')::int > (b ->> 'levelWins')::int then 'host' else 'guest' end
+          when 'finalFirst' then case when (a ->> 'finalFirst')::boolean then 'host' else 'guest' end
+        end;
+        v_m.counted := v_m.host_player <> v_m.guest_player
+          and (select count(*) from public.matches x
+                where x.counted and x.finished_at > now() - interval '24 hours'
+                  and least(x.host_player, x.guest_player) = least(v_m.host_player, v_m.guest_player)
+                  and greatest(x.host_player, x.guest_player) = greatest(v_m.host_player, v_m.guest_player)) < c_pair_day
+          and (select count(*) from public.matches x
+                where x.counted and x.finished_at > now() - interval '24 hours'
+                  and v_m.host_player in (x.host_player, x.guest_player)) < c_player_day
+          and (select count(*) from public.matches x
+                where x.counted and x.finished_at > now() - interval '24 hours'
+                  and v_m.guest_player in (x.host_player, x.guest_player)) < c_player_day;
+      else
+        v_m.status := 'disputed';
+      end if;
+    end if;
+    if v_m.status <> 'playing' then
+      v_m.finished_at := now();
+    end if;
+    update public.matches m
+       set status = v_m.status, host_report = v_m.host_report, guest_report = v_m.guest_report,
+           host_stats = v_m.host_stats, guest_stats = v_m.guest_stats, winner_seat = v_m.winner_seat,
+           decided_by = v_m.decided_by, counted = v_m.counted, finished_at = v_m.finished_at
+     where m.id = v_m.id;
+  end if;
+  return jsonb_build_object('ok', true, 'status', v_m.status, 'counted', v_m.counted);
+end;
+$$;
+
+-- A player's agreed online races against another player, as they saw them: the opponent's id and
+-- shown name (online, else the board's), won (null: a draw), both scores, when. A hidden opponent
+-- (plan 30) is left out. Internal: online_history.
+create or replace function public.online_races(p_player text)
+returns table (opp text, oname text, won boolean, mine int, theirs int, at timestamptz, mid bigint)
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select x.opp,
+         coalesce((select p.name from public.online_profiles p where p.player_id = x.opp),
+                  (select s.name from public.scores s where s.player_id = x.opp order by s.updated_at desc limit 1),
+                  'Player'),
+         case when x.winner_seat is null then null else x.winner_seat = x.my_seat end,
+         (x.host_report -> (case when x.my_seat = 'host' then 0 else 1 end) ->> 'score')::int,
+         (x.host_report -> (case when x.my_seat = 'host' then 1 else 0 end) ->> 'score')::int,
+         x.finished_at, x.id
+    from (
+      select m.*, case when m.host_player = p_player then 'host' else 'guest' end as my_seat,
+             case when m.host_player = p_player then m.guest_player else m.host_player end as opp
+        from public.matches m
+       where m.status = 'agreed' and p_player in (m.host_player, m.guest_player) and m.host_player <> m.guest_player
+    ) x
+   where not public.player_hidden(x.opp);
+$$;
+
+-- The owner's online races (plan 39, 2.4a), for a trusted device of the player: { rival, recent }.
+-- rival: the player they lost to most online (then met most), { name, meetings, losses }, or null;
+-- recent: their last c_recent agreed races, newest first, { name, won, mine, theirs, at } (won null:
+-- a draw; at in ms). Online pairings are private (Design rules): the public profile's rival line
+-- (player_stats) counts split-screen races only. No ids. Raises 'not signed in', 'not linked', 'not
+-- trusted' (a pending device, M1).
+create or replace function public.online_history()
+returns jsonb
+language plpgsql
+stable
+security definer
+set search_path = ''
+as $$
+declare
+  c_recent constant int := 10;
+  v_me public.online_players;
+  v_rival jsonb;
+  v_recent jsonb;
+begin
+  if auth.uid() is null then
+    raise exception 'not signed in';
+  end if;
+  v_me := public.online_me();
+  if v_me.uid is null then
+    raise exception 'not linked';
+  end if;
+  if not v_me.trusted then
+    raise exception 'not trusted';
+  end if;
+  select jsonb_build_object('name', y.oname, 'meetings', y.meetings, 'losses', y.losses) into v_rival
+    from (
+      select min(r.oname) as oname, count(*)::int as meetings, count(*) filter (where r.won = false)::int as losses
+        from public.online_races(v_me.player_id) r
+       group by r.opp
+    ) y
+   order by y.losses desc, y.meetings desc, y.oname asc
+   limit 1;
+  select coalesce(jsonb_agg(jsonb_build_object('name', z.oname, 'won', z.won, 'mine', z.mine, 'theirs', z.theirs,
+                                               'at', floor(extract(epoch from z.at) * 1000)::bigint)
+                            order by z.at desc, z.mid desc), '[]'::jsonb) into v_recent
+    from (select r.* from public.online_races(v_me.player_id) r order by r.at desc, r.mid desc limit c_recent) z;
+  return jsonb_build_object('rival', v_rival, 'recent', v_recent);
 end;
 $$;
 
@@ -4326,6 +4658,13 @@ revoke execute on function public.room_state(text) from public, anon;
 grant  execute on function public.room_state(text) to authenticated;
 revoke execute on function public.online_can(text, boolean) from public, anon;
 grant  execute on function public.online_can(text, boolean) to authenticated;
+revoke execute on function public.online_require_open() from public, anon, authenticated;
+revoke execute on function public.admin_set_online_open(boolean) from public, anon, authenticated;
+revoke execute on function public.online_races(text) from public, anon, authenticated;
+revoke execute on function public.finish_match(text, int, jsonb) from public, anon;
+grant  execute on function public.finish_match(text, int, jsonb) to authenticated;
+revoke execute on function public.online_history() from public, anon;
+grant  execute on function public.online_history() to authenticated;
 
 -- Which version of this file the database last ran: a short SHA-256 of the file with the value
 -- below blanked (tools/schema_check.mjs). `npm run schema:stamp` rewrites it after an edit, and
@@ -4337,7 +4676,7 @@ returns text
 language sql
 immutable
 as $$
-  select 'b231e0250408a57e'::text; -- schema stamp
+  select '79f1053c2da26f3c'::text; -- schema stamp
 $$;
 revoke execute on function public.schema_version() from public, authenticated;
 grant  execute on function public.schema_version() to anon;
