@@ -9,7 +9,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { TUNING as T } from '../src/config.js';
 import { catalogFor } from '../src/i18n.js';
-import { createRaceReporter, raceReport, reportLine, REPORT_STATS } from '../src/onlineRace.js';
+import { createRaceReporter, raceNetStats, raceReport, reportLine, REPORT_STATS } from '../src/onlineRace.js';
 
 const mine = { score: 412.6, deaths: 2, levelWins: 4, finalFirst: true, level: 7, pipesPassed: 131 };
 const theirs = { score: 377, deaths: 3, levelWins: 3, finalFirst: false, level: 7 };
@@ -31,6 +31,20 @@ test("the report's telemetry: finish_match's 13 keys only, whole, non-negative, 
   assert.deepEqual([...REPORT_STATS], keys, 'the same keys as the server keeps');
   const { stats } = raceReport({ seat: 'host', finalSlots: [mine, theirs], stats: { sent: 120, rttMs: 41.7, rttMinMs: -2, pausedMs: 5e12, junk: 4, lost: 'x', pauses: 1 } });
   assert.deepEqual(stats, { sent: 120, rttMs: 42, rttMinMs: 0, pausedMs: 999999999, pauses: 1 });
+});
+
+test("2.7, AUD-110: an unmeasured number (the RTT before its first sample: null) is left out, never sent as 0; only numbers count", () => {
+  const { stats } = raceReport({ seat: 'host', finalSlots: [mine, theirs], stats: { sent: 5, rttMs: null, rttMinMs: undefined, received: '7', lost: true, pauses: 0 } });
+  assert.deepEqual(stats, { sent: 5, pauses: 0 });
+});
+
+test("2.7, AUD-110: raceNetStats is this race's share of the transport's numbers: each counter less the race's start, never below 0; the RTT as measured; no start, as they are", () => {
+  const now = { sent: 400, received: 380, lost: 3, bad: 0, stale: 2, verifies: 5, rejoins: 1, retries: 2, tracks: 3, rttMs: 41, rttMinMs: 30 };
+  const base = { round: 2, sent: 100, received: 90, lost: 3, bad: 0, stale: 0, verifies: 2, rejoins: 0, retries: 0, tracks: 1, rttMs: 55, rttMinMs: 30 };
+  assert.deepEqual(raceNetStats(now, base), { sent: 300, received: 290, lost: 0, bad: 0, stale: 2, verifies: 3, rejoins: 1, retries: 2, tracks: 2, rttMs: 41, rttMinMs: 30 });
+  assert.deepEqual(raceNetStats({ sent: 4, rttMs: null }, { sent: 9 }), { sent: 0, rttMs: null }, 'a counter that went back (another transport) reads 0');
+  assert.deepEqual(raceNetStats({ sent: 4, received: 2 }, null), { sent: 4, received: 2 });
+  assert.deepEqual(raceNetStats(undefined, base), {});
 });
 
 function rig(answers) {

@@ -1126,10 +1126,29 @@ export function raceReport({ seat, finalSlots, stats = {} }) {
   const slots = seat === 'guest' ? [slot(theirs), slot(mine)] : [slot(mine), slot(theirs)];
   const out = {};
   for (const k of REPORT_STATS) {
-    const v = Number(stats?.[k]);
-    if (Number.isFinite(v)) out[k] = Math.min(STAT_MAX, Math.max(0, Math.round(v)));
+    const v = stats?.[k];
+    // Only numbers: an unmeasured one (the RTT before its first sample is null) is left out, never 0 (2.7, AUD-110).
+    if (typeof v === 'number' && Number.isFinite(v)) out[k] = Math.min(STAT_MAX, Math.max(0, Math.round(v)));
   }
   return { slots, stats: out };
+}
+
+/** The transport's measurements (onlineNet stats()): reported as they stand, not as a race's share. */
+const NET_GAUGES = new Set(['rttMs', 'rttMinMs']);
+
+/**
+ * This race's share of the transport's numbers (2.7, AUD-110): the transport outlives the scene's
+ * restarts and rematches and its counters never reset, so each counter is reported less its value
+ * at the race's start (`base`, OnlineRace.netBase), never below 0; the RTT keys as measured. With
+ * no base, the numbers as they are.
+ */
+export function raceNetStats(now, base) {
+  const out = {};
+  for (const [k, v] of Object.entries(now ?? {})) {
+    const b = base?.[k];
+    out[k] = NET_GAUGES.has(k) || typeof v !== 'number' || typeof b !== 'number' ? v : Math.max(0, v - b);
+  }
+  return out;
 }
 
 /** finish_match's telemetry keys (db/schema.sql c_stat_keys). */

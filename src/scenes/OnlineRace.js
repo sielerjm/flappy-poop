@@ -4,7 +4,7 @@ import { fieldWidth, uiColumn, overButtonsLayout, overHit, canRestart, fitScale 
 import { createMatch } from '../versus.js';
 import { t, levelLabel } from '../i18n.js';
 import { raceOutcome } from '../tournament.js';
-import { ONLINE_HOST_KEY, RESUME_VERSION, countdownStep, createFieldFit, createRaceFeed, createRacePause, createRaceReferee, createRaceReporter, createWakeLock, levelSnap, localPhase, pauseOverlay, raceReport, raceRoomItem, raceStartPlan, reportLine, rewindOnHeard, startSnap } from '../onlineRace.js';
+import { ONLINE_HOST_KEY, RESUME_VERSION, countdownStep, createFieldFit, createRaceFeed, createRacePause, createRaceReferee, createRaceReporter, createWakeLock, levelSnap, localPhase, pauseOverlay, raceNetStats, raceReport, raceRoomItem, raceStartPlan, reportLine, rewindOnHeard, startSnap } from '../onlineRace.js';
 import { racePhase } from '../online.js';
 import { sfx, unlock } from '../sound.js';
 import { createButton } from '../ui/button.js';
@@ -225,6 +225,10 @@ export class OnlineRace extends Phaser.Scene {
     this.result = null; // the results panel's parts, once it shows
     this.reporter = null; // 2.5: this side's finish_match report, from the race's end
     this.peerLeft = false; // the other player left the room after the race
+    // 2.7, AUD-110: the transport's numbers at this round's start, kept through a restart inside the
+    // round (a re-fit, a rewind) and taken again by a rematch's round, so the report is this race's own.
+    const round = this.plan.round ?? 0;
+    this.netBase = data.netBase?.round === round ? data.netBase : { ...(this.net.stats?.() ?? {}), round };
     const now = () => this.net.serverNow();
     const send = (event, fields) => this.net.send(event, fields);
     this.feed = createRaceFeed({ now, send, since: this.floorAt });
@@ -391,7 +395,7 @@ export class OnlineRace extends Phaser.Scene {
     this.restarting = true;
     this.match.status = 'left';
     this.scene.stop('Play');
-    this.scene.restart({ net: this.net, lobby: this.lobby, plan: this.plan, peer: this.fit.peer(), store: this.store, resume: this.rewindData(level, by) });
+    this.scene.restart({ net: this.net, lobby: this.lobby, plan: this.plan, peer: this.fit.peer(), store: this.store, resume: this.rewindData(level, by), netBase: this.netBase });
   }
 
   /** Play's launch data: player 1 on this match at the agreed field, the purse below the pill; a rewound race's level start (2.3). */
@@ -1030,7 +1034,7 @@ export class OnlineRace extends Phaser.Scene {
   startReport() {
     const code = this.lobby?.state?.room?.code ?? null;
     if (this.reporter || !code || typeof this.net.rpc !== 'function') return;
-    const stats = { ...(this.net.stats?.() ?? {}), ...(this.pause?.stats?.() ?? {}) };
+    const stats = { ...raceNetStats(this.net.stats?.(), this.netBase), ...(this.pause?.stats?.() ?? {}) };
     const result = raceReport({ seat: this.plan.seat, finalSlots: this.finalSlots, stats });
     this.reporter = createRaceReporter({ rpc: (fn, args) => this.net.rpc(fn, args), code, round: this.plan.round ?? 0, result, now: () => Date.now() });
   }
@@ -1051,7 +1055,7 @@ export class OnlineRace extends Phaser.Scene {
     this.restarting = true;
     this.match.status = 'left';
     this.scene.stop('Play');
-    this.scene.restart({ net: this.net, lobby: this.lobby, plan, peer, store: this.store });
+    this.scene.restart({ net: this.net, lobby: this.lobby, plan, peer, store: this.store, netBase: this.netBase }); // a new round: initRace takes a new base
   }
 
   /**
@@ -1064,7 +1068,7 @@ export class OnlineRace extends Phaser.Scene {
     this.restarting = true;
     this.match.status = 'left';
     this.scene.stop('Play');
-    this.scene.restart({ net: this.net, lobby: this.lobby, plan: this.plan, peer: this.fit.peer(), store: this.store, resume: this.rewound ? this.rewindData(this.rewound.level, this.rewound.by) : undefined });
+    this.scene.restart({ net: this.net, lobby: this.lobby, plan: this.plan, peer: this.fit.peer(), store: this.store, resume: this.rewound ? this.rewindData(this.rewound.level, this.rewound.by) : undefined, netBase: this.netBase });
   }
 
   /** The pad's A on the results panel: Rematch (ask, or take it back). */

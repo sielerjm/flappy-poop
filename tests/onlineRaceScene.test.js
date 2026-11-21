@@ -1362,6 +1362,48 @@ test('2.5 the race over: both seats report it once, in seat order (host, guest),
   }
 });
 
+test("2.7, AUD-110: the report's transport numbers are this race's own: counted from its start, kept through a restart inside the round (a re-fit, a rewind), started again by a rematch's round", async () => {
+  const k = reportScene();
+  let counts = { sent: 100, received: 90, retries: 1, rttMs: null };
+  k.net.stats = () => ({ ...counts });
+  const start = (data) => {
+    k.s.initRace(data);
+    k.s.match.status = 'playing';
+  };
+  start({ net: k.net, lobby: k.lobby, plan: k.s.plan }); // the race's start: the lobby already used the transport
+  counts = { ...counts, sent: 160, received: 150 };
+  k.s.fit.peer = () => null;
+  k.s.refitField();
+  start(restarts(k.ops).at(-1));
+  counts = { ...counts, sent: 220, received: 200 };
+  k.s.rewindTo(1, 'them');
+  start(restarts(k.ops).at(-1));
+  counts = { ...counts, sent: 400, received: 380, retries: 2, rttMs: 41.6 };
+  Object.assign(k.s.match.slots[0], { ended: true, score: 412 });
+  Object.assign(k.s.match.slots[1], { ended: true, score: 377 });
+  k.s.feed.doneSent = () => true;
+  k.s.checkOver();
+  k.s.reporter.tick();
+  await flush();
+  assert.deepEqual(k.rpcs.at(-1)[1].p_result.stats, { sent: 300, received: 290, retries: 1, rttMs: 42, pauses: 0, pausedMs: 0 }, 'round 1: from its start, through both restarts; the RTT as measured');
+  // The rematch: round 2 on the same transport.
+  k.lobby.state.room = { ...k.lobby.state.room, phase: 'playing', round: 2, seed: 6, startMs: GO + 200_000 };
+  k.s.restarting = false;
+  k.s.checkRematch();
+  const next = restarts(k.ops).at(-1);
+  assert.equal(next.plan.round, 2);
+  start(next);
+  counts = { ...counts, sent: 450, received: 420, retries: 2 };
+  Object.assign(k.s.match.slots[0], { ended: true, score: 50 });
+  Object.assign(k.s.match.slots[1], { ended: true, score: 40 });
+  k.s.feed.doneSent = () => true;
+  k.s.checkOver();
+  k.s.reporter.tick();
+  await flush();
+  assert.equal(k.rpcs.at(-1)[1].p_round, 2);
+  assert.deepEqual(k.rpcs.at(-1)[1].p_result.stats, { sent: 50, received: 40, retries: 0, rttMs: 42, pauses: 0, pausedMs: 0 }, 'round 2: only its own');
+});
+
 test('2.5 a race abandoned mid-way reports nothing (the server ends it), and a transport without rpc reports nothing', async () => {
   const { s, rpcs } = reportScene();
   s.onAbandoned('guest');
