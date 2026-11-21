@@ -1410,7 +1410,15 @@ src/
                             newest heard; nothing is sent from GO on.
                             raceRoomItem (only the confirmed status 'playing' / 'finished'
                             reaches the lobby; a leave or abandoned room is Tier 2's).
-                            Knobs in TUNING.online.race. tests/onlineRace.test.js.
+                            createRacePause({ seat, now, send, present, since, round })
+                            (plan 39, 2.1): the shared pause. Either device's trigger
+                            pauses both; both Ready and the host's resume count restart
+                            both at one server ms; a disconnect never ends a race, only
+                            the room's confirmed leave or abandon. createRaceReferee's
+                            tick takes `held`: no count starts, a running one is called
+                            off before GO, the grace and the verdict wait stand still.
+                            Knobs in TUNING.online.race and TUNING.online.pause.
+                            tests/onlineRace.test.js, tests/onlinePause.test.js.
   leaderboard.js            Shared leaderboard, NO Phaser/DOM (plan 34 adds
                             createStreakStore and STREAK_KINDS: flappyPoop.streaks,
                             the Singleplayer and Daily Dump day streaks, never
@@ -3057,8 +3065,12 @@ tests/                      node --test (schema.test.js, schemaOnline.test.js, p
   onlineLobbyViews.test.js  src/ui/onlineLobbyViews.js: each screen and its strings
   onlineRace.test.js        src/onlineRace.js: start plan, countdown, the feed, the referee
                             (first on server time, the ready count, a ready taken back,
-                            the rematch ask), raceRoomItem; two simulated peers racing
+                            the rematch ask, the held referee), raceRoomItem; two simulated peers racing
                             through a level break to the end
+  onlinePause.test.js       src/onlineRace.js's createRacePause: two devices with the real
+                            sender, inbox and feed on a simulated link (airplane mode, a
+                            hidden tab, silence, presence, a one-way break, a lost resume
+                            or cancel, solo after the other's end, stats)
   onlineRaceScene.test.js   scenes/OnlineRace.js's wiring on a stand-in Play and a fake
                             transport (initRace, the host interface, the final line's
                             hold, the rematch restart); Play's onFinishCrossed line and
@@ -3801,6 +3813,10 @@ Commits follow `type(scope): summary` (`feat`, `fix`, `docs`, `chore`, `test`, `
   the purse rows' start below the opponent's pill; `claimResendMs` and `widthResendMs` are the
   resends of a guest's claim and of the field width). The `go` event's `cancel` flag, `finish`'s `at` and
   `width` (sent from the race's start to GO) are in `ONLINE_EVENTS`, so they moved `protocolVersion`.
+  The shared pause (2.1) lives in `createRacePause` (knobs `TUNING.online.pause`); its events `pause` and
+  `resume` are in `ONLINE_EVENTS`, so they moved `protocolVersion`. It calls no `set_room_status` (a playing
+  room is never expired). Nothing calls it until 2.2 wires it into `scenes/OnlineRace.js` (an orphans
+  allowlist entry until then).
   The tournament panel's hand-off (`handOffRace`, 1.8) remembers the room (`lobby.remember()`), and over a
   running Versus (🌐 switched on in its lobby) marks the match `left` and stops Versus and PlayB so only the
   race draws (not `Versus.leave()`, which starts a plain Play). The race's end is not stored anywhere in Tier 1:
