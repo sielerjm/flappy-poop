@@ -7140,10 +7140,11 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         const toHost = (event, payload) => setTimeout(() => { if (inboxA.take(event, payload)) q.push({ kind: 'peer', event, msg: payload, at: payload.t }); }, LAT);
         const sendBot = (event, fields) => { const m = sendB(event, fields); if (!m) return false; if (event !== 'pos' && event !== 'flap') log.push('B> ' + event + ' ' + JSON.stringify(fields)); toHost(event, m.payload); return true; };
         const reports = [];
+        const counts = { sent: 3 }; // the lobby's sends before the race (2.7, AUD-110: the report counts only the race's own)
         const net = { serverNow: now, pump() {}, take: () => q.splice(0), peer: () => ({ name: 'JollyPlunger042', width: 720 }), close() { log.push('close'); },
-          stats: () => ({ sent: 10, received: 9, rttMs: 40.4 }),
+          stats: () => ({ sent: counts.sent, received: 9, rttMs: 40.4, rttMinMs: null }),
           async rpc(fn, args) { reports.push([fn, args]); return { ok: true, data: { ok: true, status: reports.length === 1 ? 'playing' : 'agreed', counted: reports.length > 1 } }; },
-          send(event, fields) { const m = sendA(event, fields); if (!m) return false; if (event !== 'pos' && event !== 'flap') log.push('A> ' + event + ' ' + JSON.stringify(fields)); toBot(event, m.payload); return true; } };
+          send(event, fields) { const m = sendA(event, fields); if (!m) return false; counts.sent += 1; if (event !== 'pos' && event !== 'flap') log.push('A> ' + event + ' ' + JSON.stringify(fields)); toBot(event, m.payload); return true; } };
         const room = { phase: 'playing', role: 'host', code: '482913', hostName: 'Smoke', guestName: 'JollyPlunger042', seed: 4242, startMs: now() + 3500, round: 1 };
         bot.reset = (since) => {
           bot.since = since; bot.beginAt = null; bot.finalAt = null;
@@ -7172,7 +7173,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
           bot.feed.tick({ ...h, ended: h.ended && ref.settled(h.level) });
         }, 16);
         const plan = R.raceStartPlan(room, { mine: 720, theirs: 720 });
-        globalThis.__race = { net, lobby, bot, log, room, plan, L, T, reports };
+        globalThis.__race = { net, lobby, bot, log, room, plan, L, T, reports, counts };
         ${P}.scene.start('OnlineRace', { net, lobby, plan });
         return true;
       })()`);
@@ -7221,8 +7222,8 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         // 2.5: the race reported once over (finish_match, seat order, this side's telemetry); the first answer
         // waits for the other game, the next ask is saved, and the panel's line follows.
         ok(await until(`${OR}.result.saved.text === ${JSON.stringify('Saved to the 🏅 and 🏆 boards')}`, 6000), `the report: ${await evaluate(`JSON.stringify(__race.reports.map((r) => r[0]))`)}, the line "${await evaluate(`${OR}.result.saved.text`)}"`);
-        const rep = await evaluate(`JSON.stringify({ r: __race.reports[0], slots: ${OR}.finalSlots.map((s) => [s.score, s.deaths, s.levelWins, s.finalFirst]) })`).then(JSON.parse);
-        ok(rep.r[0] === 'finish_match' && rep.r[1].p_code === '482913' && rep.r[1].p_round === 1 && JSON.stringify(rep.r[1].p_result.slots.map((s) => [s.score, s.deaths, s.levelWins, s.finalFirst])) === JSON.stringify(rep.slots) && rep.r[1].p_result.stats.rttMs === 40 && rep.r[1].p_result.stats.sent === 10, `finish_match as the host: ${JSON.stringify(rep.r[1])}`);
+        const rep = await evaluate(`JSON.stringify({ r: __race.reports[0], slots: ${OR}.finalSlots.map((s) => [s.score, s.deaths, s.levelWins, s.finalFirst]), sentInAll: __race.counts.sent })`).then(JSON.parse);
+        ok(rep.r[0] === 'finish_match' && rep.r[1].p_code === '482913' && rep.r[1].p_round === 1 && JSON.stringify(rep.r[1].p_result.slots.map((s) => [s.score, s.deaths, s.levelWins, s.finalFirst])) === JSON.stringify(rep.slots) && rep.r[1].p_result.stats.rttMs === 40 && rep.r[1].p_result.stats.sent >= 1 && rep.r[1].p_result.stats.sent <= rep.sentInAll - 3 && !('rttMinMs' in rep.r[1].p_result.stats), `finish_match as the host (its telemetry this race's own, an unmeasured RTT left out): ${JSON.stringify(rep.r[1])}`);
         await sleep(TT.retryLockoutMs + 50);
         const panelTap = (which) => evaluate(`(() => { const r = ${OR}; const b = r.result.boxes.${which}; r.onPointer({ x: b.x, y: b.y }); return true; })()`);
         await panelTap('share');
