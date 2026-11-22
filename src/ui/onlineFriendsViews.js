@@ -2,7 +2,7 @@
 // home's 🤝 Friends button with its badge (asks waiting for this player's answer: online mode only,
 // never anywhere else), and the screen itself: asks to answer (Accept | Decline), friends with a dot and
 // a word for their state (online → in a game → offline, then by name), asks this player sent (Take back),
-// recent opponents to add, and the blocked list (Unblock). A friend's ⋯ shows Remove and Block, an
+// recent opponents (their ⋯ adds), and the blocked list (Unblock). A friend's ⋯ shows Remove and Block, an
 // opponent's Add friend and Block (Michael, 22 Nov); Remove and Block ask twice, like Remove on 📱 Devices. The decisions and the data are
 // src/onlineFriends.js's; this file only draws them and turns taps into its calls.
 //
@@ -228,12 +228,7 @@ export function friendsBody(ui, st, friends, back) {
           'div',
           { class: 'slot', id: `tour-fr-op-${i}` },
           h('span', { class: 'who' }, x.name, h('span', { class: 'sub' }, tr('friendRacedWhen').replace('{when}', when(tr, x.days)))),
-          h(
-            'span',
-            { class: 'acts' },
-            button(`tour-fr-add-${i}`, tr('friendAdd'), 'small', () => onAdd(ui, st, friends, x)),
-            moreButton(ui, st, `tour-fr-op-more-${i}`, x),
-          ),
+          h('span', { class: 'acts' }, moreButton(ui, st, `tour-fr-op-more-${i}`, x)), // Add friend lives in the ⋯ (Michael, 22 Nov)
         ),
       );
       const more = moreLine(ui, st, friends, `op-${i}`, x, { add: true }); // Michael, 22 Nov: Add friend in the ⋯ too

@@ -7593,8 +7593,10 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
       ok((await text('tour-fr-bl-0')) === null && (await text('tour-fr-blocked'))?.includes('Blocked (1)'), 'Blocked (1), closed');
       await click('tour-fr-yes-0');
       ok(await until(`document.getElementById('tour-status')?.textContent === 'You and AskedMe are friends now'`), 'Accept: friends now');
-      await click('tour-fr-add-0');
-      ok(await until(`document.getElementById('tour-status')?.textContent === 'Friend request sent to Opp7'`), 'Add friend: the request went');
+      ok((await text('tour-fr-add-0')) === null, "an opponent's row shows only its ⋯");
+      await click('tour-fr-op-more-0');
+      await click('tour-fr-add-op-0');
+      ok(await until(`document.getElementById('tour-status')?.textContent === 'Friend request sent to Opp7'`), '⋯ Add friend: the request went');
       await click('tour-fr-more-btn-0');
       ok(await until(`Boolean(document.getElementById('tour-fr-block-0'))`), '⋯ shows Remove and Block');
       await click('tour-fr-block-0');

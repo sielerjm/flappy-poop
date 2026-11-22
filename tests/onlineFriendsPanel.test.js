@@ -143,7 +143,8 @@ test('Accept makes a friend (the list read again, the badge with it); Add friend
   assert.equal(el('tour-status').textContent, t('en', 'friendNowFriends').replace('{name}', 'AskedMe'));
   assert.equal(el('tour-fr-in-0'), null);
   assert.ok(textOf(body).includes('AskedMe'));
-  await el('tour-fr-add-0').click();
+  await el('tour-fr-op-more-0').click();
+  await el('tour-fr-add-op-0').click();
   await flush();
   assert.deepEqual(k.calls.filter((c) => c[1] === 'send_friend_request').map((c) => c[2]), [{ p_peer: P(7) }]);
   assert.equal(el('tour-status').textContent, t('en', 'friendAddedSent').replace('{name}', 'Opp7'));
@@ -248,16 +249,17 @@ test('the beat keeps going through the race\'s hand-off (the window closes, the 
   assert.equal(k.play.onlineStatusBeat().running(), true);
 });
 
-test("a recent opponent's ⋯ offers Add friend beside Block (Michael, 22 Nov), as well as the row's own button", async () => {
+test("a recent opponent's row shows only its ⋯; the ⋯ opens Add friend and Block under it (Michael, 22 Nov)", async () => {
   const k = setup();
   k.open();
   await flush();
   await el('tour-friends').click();
   await flush();
+  assert.equal(el('tour-fr-add-0'), null, 'no Add friend on the row itself');
+  assert.equal(el('tour-fr-add-op-0'), null, 'nor before the ⋯ is pressed');
   await el('tour-fr-op-more-0').click();
   assert.ok(el('tour-fr-block-op-0'), 'Block');
   assert.ok(textOf(el('tour-fr-add-op-0')).includes(t('en', 'friendAdd')), 'Add friend in the ⋯');
-  assert.ok(el('tour-fr-add-0'), "the row's own button stays");
   await el('tour-fr-add-op-0').click();
   await flush();
   assert.deepEqual(k.calls.filter((c) => c[1] === 'send_friend_request').map((c) => c[2]), [{ p_peer: P(7) }]);

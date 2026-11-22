@@ -1904,7 +1904,7 @@ src/
                             with its badge (requests waiting; online mode only) and the
                             Friends screen: requests (Accept | Decline), friends with a
                             dot and a word, requests sent (Take back), Recent opponents
-                            (Add friend), Blocked (Unblock); a row's ⋯ holds Remove, Block
+                            (only a ⋯), Blocked (Unblock); a row's ⋯ holds Remove, Block
                             and, on an opponent, Add friend; Remove and Block ask twice.
                             pollFriends and refreshBadge are the panel's timers' reads.
                             Plain DOM over onlineFriends. tests/onlineFriendsPanel.test.js.
@@ -3301,8 +3301,8 @@ tests/                      node --test (schema.test.js, schemaOnline.test.js, s
                             trusted', one timer), beatMs under half of the schema's c_fresh
   onlineFriendsPanel.test.js src/ui/onlineFriendsViews.js and tournamentPanel's Friends
                             screen on tests/support/panelDom.js: the button and badge, each
-                            section, ⋯ with Remove / Block asking twice, Add friend, polls,
-                            an opponent's ⋯ Add friend, the not-paired screen, the beat (on at
+                            section, ⋯ with Remove / Block asking twice, polls, an
+                            opponent's row with only its ⋯ (Add friend inside), the not-paired screen, the beat (on at
                             link; off on ✕; a waiting device's stops itself; kept through the
                             race hand-off)
   onlineAccount.test.js     src/onlineAccount.js: enter / claim / devices / remove /
