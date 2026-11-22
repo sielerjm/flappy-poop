@@ -9,8 +9,7 @@
 // `ui` = { tr, me, setStatus(text, kind), rerender, homeExtras() → { notes, devices, friends } (3.3: the 🤝 Friends button), share(text, code) }:
 // share with a text opens the share sheet (falling back to a copy), with null it copies the code.
 
-import { SHARE } from '../config.js';
-import { formatCode } from '../online.js';
+import { formatCode, joinLink } from '../online.js';
 import { h, keypad } from './onlineAccountViews.js';
 
 /** The CSS the lobby adds to the panel whose root is `#id` (the shared bits come from accountCss). */
@@ -64,9 +63,9 @@ export function netSwitch(ui, { on, forced }, onToggle) {
   return h('div', { class: 'net', id: 'tour-net' }, h('span', { class: 'lbl' }, ui.tr('onlineSwitch'), h('span', { class: 'sub' }, sub)), sw);
 }
 
-/** "Race me in Flappy Poop: code 482 913" and the game's link (the share sheet's text). */
+/** "Race me in Flappy Poop: code 482 913" and the link that joins the room (4.3: ?join=<code>; the share sheet's text). */
 export function shareText(ui, code) {
-  return `${ui.tr('onlineShareText').replace('{code}', formatCode(code))} ${SHARE.url}`;
+  return `${ui.tr('onlineShareText').replace('{code}', formatCode(code))} ${joinLink(code)}`;
 }
 
 const ttlText = (ui, left) => ui.tr('onlineCodeExpires').replace('{time}', mmss(left));

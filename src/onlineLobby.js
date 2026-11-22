@@ -255,8 +255,8 @@ export function createOnlineLobby({ net, name, width, mine = { protocol: protoco
     if (state.room.phase === 'open') await openChannel('host');
   }
 
-  /** Join with code: the typed digits, checked here first (a typo spends none of the counted tries). */
-  async function join() {
+  /** Join with code: the typed digits, checked here first (a typo spends none of the counted tries). 4.3: `link`, a share link's code: a room gone reads as an ended link. */
+  async function join({ link = false } = {}) {
     if (staleLeave || memory?.get?.()) await staleLeft(); // only then: with nothing remembered, Connecting shows at once as before
     const code = parseCode(state.typed);
     if (!code) {
@@ -275,7 +275,7 @@ export function createOnlineLobby({ net, name, width, mine = { protocol: protoco
       state.room = roomInit();
       state.screen = 'join';
       if (!KEEP_TYPED.has(error)) state.typed = '';
-      state.message = msg(errorKey(error), 'error');
+      state.message = msg(link && error === 'no room' ? 'onlineLinkExpired' : errorKey(error), 'error');
       return;
     }
     step({ type: 'rpc', result, at: now() });
@@ -563,7 +563,13 @@ export function createOnlineLobby({ net, name, width, mine = { protocol: protoco
     /** 4.2: Invite and Resend are offered only with no room or an open one (item 65). */
     canInvite: () => ['idle', 'closed'].includes(state.room.phase) || (state.room.role === 'host' && state.room.phase === 'open'),
     rejoin,
-    join,
+    join: () => join(),
+    /** 4.3: a share link's code, joined at once (the panel calls it once this device is linked). */
+    joinCode(code, { link = false } = {}) {
+      if (state.room.phase !== 'idle' && state.room.phase !== 'closed') return Promise.resolve();
+      state.typed = String(code ?? '');
+      return join({ link });
+    },
     answer,
     setReady,
     start,

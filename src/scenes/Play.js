@@ -769,6 +769,7 @@ export class Play extends Phaser.Scene {
       if (!this.match) this.launch({ solo: true });
     }
     this.openPendingInvite(); // an invite link (plan 28, 2.4)
+    this.openPendingJoin(); // a race's share link (plan 39, 4.3)
     this.openPendingRace(); // a race this page left by a reload or a relaunch (plan 39, 2.3, 2.3b)
   }
 
@@ -2223,8 +2224,8 @@ export class Play extends Phaser.Scene {
    * halves do not fit (a phone). It opens on the 🌐 views with 🌐 locked on (1.6c), since a local race
    * needs the split screen; its ✕ closes back to this ready screen.
    */
-  openVersusWindow() {
-    openTournamentPanel({ game: this.game, locale: this.locale, play: this });
+  openVersusWindow(opts = {}) {
+    openTournamentPanel({ game: this.game, locale: this.locale, play: this, ...opts });
   }
 
   toggleVersus() {
@@ -5426,6 +5427,18 @@ export class Play extends Phaser.Scene {
     this.registry.remove('pendingInvite');
     this.registry.set('inviteLink', code);
     this.time?.delayedCall?.(0, () => this.openEduData({ invite: code }));
+  }
+
+  /**
+   * A race's share link (plan 39, 4.3: ?join=<code>; main.js keeps the code in the registry, out of the
+   * address bar): the first ready screen with no match opens the 🌐 window with it, once; the window
+   * joins it once signed in and linked.
+   */
+  openPendingJoin() {
+    const code = this.registry?.get('pendingJoin');
+    if (!code || this.match) return; // kept until a ready screen can open it
+    this.registry.remove('pendingJoin');
+    this.time?.delayedCall?.(0, () => this.openVersusWindow({ join: code }));
   }
 
   /** rename_education; a method so the smoke can stub it. */

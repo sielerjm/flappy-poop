@@ -24,6 +24,9 @@ import {
   agreedWidth,
   roomInit,
   roomStep,
+  joinCodeFromSearch,
+  withoutJoin,
+  joinLink,
   racePhase,
   codeExpiresAt,
   createNetSim,
@@ -732,6 +735,25 @@ test("4.2 'renew': a Resend kept the host's open room, so its 15 minutes start a
   assert.equal(roomStep(asked, { type: 'renew', code: '551204', at: AT + 2 }), asked, 'a guest asking: not open');
   const guest = roomStep(roomInit(), { type: 'invited', result: { ok: true, code: '551204', status: 'ready', host_name: 'X' }, at: AT });
   assert.equal(roomStep(guest, { type: 'renew', code: '551204', at: AT + 2 }), guest);
+});
+
+test('4.3 the share link: joinLink is the game\'s address with ?join=<code>; joinCodeFromSearch reads the first 6-digit code (a space allowed, as typed); anything else is none', () => {
+  assert.equal(joinLink('482913'), 'https://sielerjm.github.io/flappy-poop/?join=482913');
+  assert.equal(joinCodeFromSearch('?join=482913'), '482913');
+  assert.equal(joinCodeFromSearch('?r=1&join=482%20913'), '482913');
+  assert.equal(joinCodeFromSearch('?join=12345&join=730155'), '730155', 'the first that holds a code');
+  assert.equal(joinCodeFromSearch('?onlinetest=abc&join=482913#x'), '482913');
+  for (const bad of ['', '?join=', '?join=48291', '?join=4829130', '?join=abcdef', '?joined=482913', '?invite=482913', null, '?join=%E0%A4%A']) assert.equal(joinCodeFromSearch(bad), null, String(bad));
+});
+
+test('4.3 withoutJoin takes every join parameter out of the address (it would sit in the history), keeping the rest and the hash as written', () => {
+  const base = 'https://sielerjm.github.io/flappy-poop/';
+  assert.equal(withoutJoin(`${base}?join=482913`), base);
+  assert.equal(withoutJoin(`${base}?onlinetest=abc&join=482913&perf`), `${base}?onlinetest=abc&perf`);
+  assert.equal(withoutJoin(`${base}?join=482913&join=1#top`), `${base}#top`);
+  assert.equal(withoutJoin(`${base}?invite=x`), `${base}?invite=x`, "plan 28's invite parameter is not this one");
+  assert.equal(withoutJoin(base), base);
+  assert.equal(withoutJoin(null), null);
 });
 
 test('roomStep never mutates its input', () => {

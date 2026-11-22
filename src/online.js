@@ -22,7 +22,7 @@
 //   netsimProfile reads ?netsim=<profile> on a dev host.
 // tests/online.test.js covers all of it.
 
-import { FIELD, GAME_HEIGHT, TUNING } from './config.js';
+import { FIELD, GAME_HEIGHT, SHARE, TUNING } from './config.js';
 import { VERSION, angleForVelocity, createCourse, debugHandleAllowed, fnv1a32 } from './logic.js';
 
 // --- protocol ---------------------------------------------------------------------------------
@@ -296,6 +296,48 @@ export function parseCode(input) {
     .replace(/[０-９]/g, (d) => String.fromCharCode(d.charCodeAt(0) - 0xfee0))
     .replace(/[\s 　.\-‐-―]/g, '');
   return CODE.test(s) ? s : null;
+}
+
+// --- the share link (4.3) -------------------------------------------------------------------------
+
+// A join parameter: "join=" after a "?" or "&" anywhere in the query, up to the next "&" or the hash
+// (plan 28's invite parameter's pattern, AUD-038: one pattern, so a code read is a code taken out).
+const JOIN_PARAM = /[?&]join=([^&#]*)/g;
+
+/** The game's address that joins `code`'s room (the share sheet's link). */
+export function joinLink(code) {
+  return `${SHARE.url}?join=${code}`;
+}
+
+/** The first join parameter in a location.search that holds a room code (parseCode), else null. */
+export function joinCodeFromSearch(search) {
+  if (typeof search !== 'string' || !search) return null;
+  for (const m of search.matchAll(JOIN_PARAM)) {
+    let raw;
+    try {
+      raw = decodeURIComponent(m[1]);
+    } catch {
+      continue;
+    }
+    const code = parseCode(raw);
+    if (code) return code;
+  }
+  return null;
+}
+
+/** The address without any join parameter (history.replaceState): the rest of the query kept as written, the hash too. */
+export function withoutJoin(href) {
+  if (typeof href !== 'string') return href;
+  const hashAt = href.indexOf('#');
+  const head = hashAt < 0 ? href : href.slice(0, hashAt);
+  const hash = hashAt < 0 ? '' : href.slice(hashAt);
+  const q = head.indexOf('?');
+  if (q < 0) return href;
+  const search = head.slice(q);
+  const kept = search.replace(JOIN_PARAM, '');
+  if (kept === search) return href;
+  const rest = kept.replace(/^[?&]+/, '');
+  return `${head.slice(0, q)}${rest ? `?${rest}` : ''}${hash}`;
 }
 
 // --- clock --------------------------------------------------------------------------------------

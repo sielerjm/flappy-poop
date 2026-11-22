@@ -93,6 +93,7 @@ export const SECTIONS = [
   { name: 'online-reload', needs: [], about: "reload resume (plan 39, 2.3, D4) against a scripted guest in the page (a 40 ms link; no network): the race into level 2 with its level start kept in the tab's record; the guest's reload restarts this race at level 2's start under the overlay; then a real page reload: a stand-in transport under Play, the 🌐 window rejoins (room_state, the channel as the host, nothing left), the race back rewound, both Ready, one GO, level 2 from its first pair with the kept score, purse, beans and level wins, the race to its end and the record gone; 2.3b: a relaunch (a new tab id, the record's beat stale) rejoins and takes the record over; the racing page whose record another page takes steps aside (the transport closed, no leave_room, Play plain, the 🌐 window's line) and, once that page stops beating, looks again and rejoins; a fresh page beside a live beat offers nothing, rejoins nothing, leaves nothing, and its 🌐 window says the race runs in another window" },
   { name: 'online-friends', needs: [], about: "friends and online status (plan 39, 3.3, Preview G), on a stand-in transport under Play (no network): the 🌐 window beats once linked; the online home's 🤝 Friends with its badge; the Friends screen's order (a request, friends online → in a game → offline with dot and word, a request sent, a recent opponent, Blocked closed); Accept, Add friend, ⋯ Block asked twice, Back with the badge read again; ✕ out of 🌐 says offline once" },
   { name: 'online-invites', needs: [], about: "invites, the ✉️ (plan 39, 4.2, Preview I), on a stand-in transport under Play (no network) on a 320 phone: invite_list once linked and the topic it names; ✉️ 1 on 🤝 Friends; the inviting 🟢 friend first with the ✉️ and its time, the buttons inside the row under a 16-character name (Michael's ask); a topic invite adds one; the ✉️ tapped: the ready screen as the guest; Invite on a 🟢 friend: the room screen waiting, their no with Resend, Resend in the same room" },
+  { name: 'online-join-link', needs: [], about: "a race's share link (plan 39, 4.3): the page opened at ?join=482913 takes the code out of the address bar, opens the 🌐 window by itself, keeps the code through a sign-in that fails (no network here), and joins it on Retry once a stand-in transport links; a code that no longer opens a room says the link has expired" },
 ];
 
 /** What a section needs: its own list, or (omitted) every section before it. */
@@ -7790,6 +7791,70 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
       ok(await until(`__iv.calls.includes('leave_room') && Boolean(document.getElementById('tour-create')) && !document.getElementById('tour-inv')`), '✕ on the room screen: leave_room (which cancels the invite), the online home');
       await click('tour-close');
       ok(await until(`__iv.calls.includes('close')`), '✕ again, out of 🌐: the transport closed (the topic with it)');
+      ok(exceptions.length === ex0, exceptions.length > ex0 ? `page exceptions: ${exceptions.slice(ex0).join(' | ')}` : 'no page exceptions');
+    });
+
+    await section('online-join-link', async () => {
+      // The share link (plan 39, 4.3) in the real page: main.js reads ?join=, Play opens the 🌐 window,
+      // the real transport cannot sign in (supabase.co is blocked here), and the code waits for Retry,
+      // which links through a stand-in transport and joins it.
+      await cdp.send('Network.enable');
+      await cdp.send('Network.setBlockedURLs', { urls: ['*supabase.co*'] });
+      await cdp.send('Emulation.setDeviceMetricsOverride', { width: 720, height: 1280, deviceScaleFactor: 1, mobile: false });
+      await cdp.send('Page.navigate', { url: `${url}/?r=${Date.now()}&join=482913` });
+      let sp = null;
+      for (let i = 0; i < 120 && !sp?.enabled; i += 1) {
+        await sleep(500);
+        sp = await splashNow().catch(() => null);
+      }
+      ok(!(await evaluate('location.search')).includes('join='), `the code is out of the address bar (${await evaluate('location.search')})`);
+      if (sp?.enabled) {
+        await splashKey('keydown', ' ');
+        await splashKey('keyup', ' ');
+      }
+      for (let i = 0; i < 120 && (await playState().catch(() => null)) !== 'ready'; i += 1) await sleep(500);
+      const ex0 = exceptions.length;
+      const until = async (expr, ms = 5000) => {
+        const end = Date.now() + ms;
+        while (Date.now() < end) {
+          if (await evaluate(expr)) return true;
+          await sleep(50);
+        }
+        return false;
+      };
+      ok(await until(`Boolean(document.getElementById('tour-net')) && document.getElementById('tour-online')?.getAttribute('aria-pressed') === 'true'`, 8000), 'the 🌐 window opened by itself, online on');
+      ok(await until(`Boolean(document.getElementById('tour-retry'))`, 20000), 'no network: the sign-in failed, Retry offered');
+      await evaluate(`(() => {
+        const calls = [];
+        const net = { warm: async () => ({ ok: true }), serverNow: () => Date.now(), pump() {}, take: () => [], send: () => true, peer: () => null, channelState: () => 'joined', close() {}, closeRoom() {}, beacon: () => true,
+          async openRoom(code, o) { calls.push('openRoom:' + code + ':' + o.seat); return { ok: true }; }, async openTopic() { return { ok: true }; }, closeTopic() {},
+          async rpc(fn, args) {
+            calls.push(fn === 'join_room' ? 'join_room:' + args.p_code : fn);
+            if (fn === 'join_room') return { ok: true, data: globalThis.__jl.gone ? { ok: false, error: 'no room' } : { ok: true, code: args.p_code, status: 'asked', host_name: 'LinkHost' } };
+            if (fn === 'friend_list') return { ok: true, data: { friends: [], incoming: [], outgoing: [], blocked: [] } };
+            if (fn === 'invite_list') return { ok: true, data: { incoming: [], outgoing: [], topic: null } };
+            return { ok: true, data: { ok: true } };
+          } };
+        const account = { enter: async () => ({ ok: true, view: 'home', name: 'Smoke', trusted: true, demoted: false, blocked: false }), devices: async () => ({ ok: true, rows: [] }), status: () => ({ linked: true, trusted: true, name: 'Smoke' }) };
+        const p = __flappy.scene.getScene('Play');
+        p.onlineNet = net;
+        p.onlineAccount = () => account;
+        p.onlineStatusBeatRef = null;
+        globalThis.__jl = { calls, gone: false };
+        return true;
+      })()`);
+      await evaluate(`(document.getElementById('tour-retry')?.click(), true)`);
+      ok(await until(`__jl.calls.includes('join_room:482913')`), "Retry: linked, then the link's code joined");
+      ok(await until(`(document.getElementById('tour-knock')?.textContent ?? '').includes('LinkHost')`), 'knocking on the host');
+      ok((await evaluate('JSON.stringify(__jl.calls)')).includes('openRoom:482913:guest'), 'the channel as the guest');
+      await evaluate(`(document.getElementById('tour-close')?.click(), true)`); // leaves the room: the online home
+      await until(`Boolean(document.getElementById('tour-create'))`);
+      await evaluate(`(document.getElementById('tour-close')?.click(), true)`); // out of 🌐
+      ok(await until(`!document.getElementById('tour-net') || document.getElementById('tournament-panel')?.hidden !== false`), 'closed');
+      // A link whose room is gone: the join screen with the code and the link's words.
+      await evaluate(`(globalThis.__jl.gone = true, __flappy.scene.getScene('Play').openVersusWindow({ join: '730155' }), true)`);
+      ok(await until(`(document.getElementById('tour-status')?.textContent ?? '') === 'This invite has expired. Ask your friend for a new one.' && Boolean(document.getElementById('tour-keys'))`), 'a gone room: "This invite has expired", on the join screen');
+      await evaluate(`(document.getElementById('tour-close')?.click(), document.getElementById('tour-close')?.click(), true)`);
       ok(exceptions.length === ex0, exceptions.length > ex0 ? `page exceptions: ${exceptions.slice(ex0).join(' | ')}` : 'no page exceptions');
     });
 

@@ -199,6 +199,7 @@ test('no room on a dev host says which project this device is on, so a live / ðŸ
 test('the share text carries the grouped code and the game\'s link; zh-Hans reads its own', () => {
   const en = shareText({ tr: (k) => t('en', k) }, '482913');
   assert.ok(en.includes('482 913') && en.startsWith('Race me'));
+  assert.ok(en.endsWith(' https://sielerjm.github.io/flappy-poop/?join=482913'), `4.3: the link joins the room (${en})`);
   const zh = shareText({ tr: (k) => t('zh-Hans', k) }, '482913');
   assert.ok(zh.includes('482 913') && zh !== en);
 });

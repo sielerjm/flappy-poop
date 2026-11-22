@@ -886,3 +886,36 @@ test('4.2 acceptInvite refused: home again with the answer handed back (the pane
   assert.equal(asked, false);
   assert.equal(busy.state.room.code, '482913');
 });
+
+// --- 4.3: the share link (?join=<code>) -----------------------------------------------------------
+
+test('4.3 joinCode from a link: the code is joined at once (knocking on the host); a typed code is left as it was', async () => {
+  const net = fakeNet({ join_room: { ok: true, data: { ok: true, code: '482913', status: 'asked', host_name: 'Ana' } } });
+  const lobby = lobbyOn(net);
+  await lobby.joinCode('482913', { link: true });
+  assert.deepEqual(rpcs(net, 'join_room').map((c) => c[2]), [{ p_code: '482913' }]);
+  assert.equal(lobby.state.screen, 'knock');
+  assert.equal(lobby.opponent(), 'Ana');
+});
+
+test("4.3 a link's code that no longer opens a room: the join screen with the code kept and the link's own words; a typed one keeps the old words", async () => {
+  const net = fakeNet({ join_room: { ok: true, data: { ok: false, error: 'no room' } } });
+  const lobby = lobbyOn(net);
+  await lobby.joinCode('482913', { link: true });
+  assert.equal(lobby.state.screen, 'join');
+  assert.equal(lobby.state.typed, '482913');
+  assert.deepEqual(lobby.state.message, { key: 'onlineLinkExpired', kind: 'error', name: '' });
+  lobby.state.typed = '482913';
+  await lobby.join();
+  assert.equal(lobby.state.message.key, 'onlineErrNoRoom', 'typed by hand: the usual words');
+  const capped = lobbyOn(fakeNet({ join_room: { ok: true, data: { ok: false, error: 'rate limited' } } }));
+  await capped.joinCode('482913', { link: true });
+  assert.equal(capped.state.message.key, 'onlineErrRateLimited', 'only no room reads as an ended link');
+});
+
+test('4.3 joinCode with a bad code joins nothing', async () => {
+  const net = fakeNet();
+  const lobby = lobbyOn(net);
+  await lobby.joinCode('12', { link: true });
+  assert.equal(rpcs(net, 'join_room').length, 0);
+});

@@ -35,6 +35,7 @@ import { browserStorage } from '../store.js';
 import { t } from '../i18n.js';
 import { createRng, fieldWidth, focusNearest, focusStep } from '../logic.js';
 import { createOnlineLobby } from '../onlineLobby.js';
+import { parseCode } from '../online.js';
 import { ONLINE_HOST_KEY, raceStartPlan, resumePlan } from '../onlineRace.js';
 import { createMatch } from '../versus.js';
 import { createTournament, nextMatch, recordResult, matchPlayers, placings, claimFromCode, claimHost, tournamentPayload, postable, racePosts, seedSlots, canReseed, reseed, reshuffle } from '../tournament.js';
@@ -806,10 +807,11 @@ function shareCode(text, code) {
       .catch(() => {});
     return;
   }
+  // 4.3: Share with no share sheet copies the share text, whose link joins the room; Copy the code alone.
   const clip = nav?.clipboard;
   if (clip && typeof clip.writeText === 'function') {
-    clip.writeText(code).then(
-      () => online && setStatus(tr('onlineCopied'), 'ok'),
+    clip.writeText(text || code).then(
+      () => online && setStatus(tr(text ? 'onlineLinkCopied' : 'onlineCopied'), 'ok'),
       () => {},
     );
   }
@@ -890,11 +892,27 @@ function startLobby(r) {
     o.lobby.notice?.('onlineRaceElsewhere');
     o.look = ctx.timers.setTimeout?.(() => lookAgain(o), T.online.resume.staleMs) ?? null;
   } else if (record) rejoinRace(o, record);
+  else if (o.join) joinFromLink(o);
   renderLobby();
   if (live) {
     const m = lobbyMessage(lobbyUi(), o.lobby);
     setStatus(m?.text ?? '', m?.kind ?? '');
   }
+}
+
+/**
+ * 4.3: the share link's code (openTournamentPanel's `join`), kept through the sign-in, the name and a
+ * Retry, joined once this device is linked; a room gone reads "This invite has expired".
+ */
+function joinFromLink(o) {
+  const code = o.join;
+  o.join = null;
+  o.lobby.joinCode(code, { link: true }).then(() => {
+    if (online !== o || !o.lobby || o.st.view !== 'home' || view) return;
+    renderLobby();
+    const m = lobbyMessage(lobbyUi(), o.lobby);
+    setStatus(m?.text ?? '', m?.kind ?? '');
+  });
 }
 
 /**
@@ -1267,7 +1285,8 @@ function render() {
  * plan 39, 1.6b): the lobby when no tournament is running, else the
  * bracket (seeding until its first race), or the podium once the Final is decided. `view`
  * 'help' shows the help card, 'peek' the bracket read-only over a race (its level break).
- * @param {{ game: object, locale: string, play: object, view?: 'help' | 'peek' | null }} options
+ * @param {{ game: object, locale: string, play: object, view?: 'help' | 'peek' | null, join?: string }} options
+ * `join` (4.3): a share link's room code, joined once the 🌐 window has signed in and linked.
  */
 export function openTournamentPanel(options) {
   if (typeof document === 'undefined') return;
@@ -1285,7 +1304,7 @@ export function openTournamentPanel(options) {
   ctx.timers = options.timers ?? globalThis;
   if (!online && !tournamentState(ctx.game) && !view) {
     const forced = !versus(ctx.game); // over Play: no split screen to race on here
-    online = { on: forced, forced, st: createAccountState(), account: null, net: null, friends: null, lobby: null, poll: null, ticks: 0, resume: null, look: null, handed: false };
+    online = { on: forced, forced, st: createAccountState(), account: null, net: null, friends: null, lobby: null, poll: null, ticks: 0, resume: null, look: null, handed: false, join: parseCode(options.join) };
     if (forced) startOnline();
   }
   if (!tournamentState(ctx.game) && players.length < T.tournament.minPlayers) {

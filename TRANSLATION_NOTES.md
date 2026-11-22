@@ -680,6 +680,8 @@ The winners take the podium 🥇 🥈 (and 🥉 from 3 players). With 3 or more 
 | onlineShare | Share | 分享 |
 | onlineCopy | Copy | 复制 |
 | onlineCopied | Code copied | 房间码已复制 |
+| onlineLinkExpired | This invite has expired. Ask your friend for a new one. (the join screen's status line when a race's share link (?join=) names a room that no longer takes a guest (the room was closed, ran out or is full)) | 这个邀请已过期，请朋友再发一个。 |
+| onlineLinkCopied | Link copied (status line after Share on a device with no share sheet: the share text with the link that joins the room was copied) | 链接已复制 |
 | onlineHostTag | (host) | （房主） |
 | onlineWaitingOpponent | Waiting for opponent | 等待对手 |
 | onlineCancel | Cancel | 取消 |
