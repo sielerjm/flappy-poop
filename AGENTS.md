@@ -1917,7 +1917,11 @@ src/
                             4.3: openTournamentPanel's `join` option (a share link's code) is kept
                             through the sign-in, a name chosen first and a Retry, and joined once
                             linked (joinFromLink); Share without a share sheet copies its text
-                            ('onlineLinkCopied').
+                            ('onlineLinkCopied'). shareCode calls share() and writeText inside the
+                            tap; with neither (a page that is not a secure context, such as a phone
+                            on the Mac's LAN address) copyInTap copies through a hidden textarea and
+                            execCommand('copy'), and with no way to copy the text itself shows on the
+                            status line (Michael's phone check, 22 Nov: the buttons did nothing there).
                             The 🌐 view (plan 39, 1.6c): mounts onlineAccountViews and
                             onlineLobbyViews, pre-warms the transport on entering,
                             polls the lobby, leaves the room and closes online play on

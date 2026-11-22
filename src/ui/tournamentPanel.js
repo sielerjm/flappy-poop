@@ -801,20 +801,65 @@ function lobbyUi() {
  */
 function shareCode(text, code) {
   const nav = globalThis.navigator;
+  const value = text || code;
+  const done = () => online && setStatus(tr(text ? 'onlineLinkCopied' : 'onlineCopied'), 'ok');
+  // Michael, 22 Nov: with no share sheet and no clipboard API (a page that is not a secure context,
+  // such as a phone on the Mac's LAN address), copy the old way, inside the tap; with no way to copy
+  // at all, show the text itself so it can be copied by hand. Never a silent button.
+  const fallback = () => {
+    if (copyInTap(value)) done();
+    else if (online) setStatus(value, '');
+  };
   if (text && typeof nav?.share === 'function') {
-    Promise.resolve()
-      .then(() => nav.share({ text }))
-      .catch(() => {});
+    let shared;
+    try {
+      shared = nav.share({ text }); // inside the tap (rule 9): nothing awaited before it
+    } catch {
+      fallback();
+      return;
+    }
+    Promise.resolve(shared).catch((e) => {
+      if (e?.name !== 'AbortError') fallback(); // the player closing the sheet is not a failure
+    });
     return;
   }
   // 4.3: Share with no share sheet copies the share text, whose link joins the room; Copy the code alone.
   const clip = nav?.clipboard;
   if (clip && typeof clip.writeText === 'function') {
-    clip.writeText(text || code).then(
-      () => online && setStatus(tr(text ? 'onlineLinkCopied' : 'onlineCopied'), 'ok'),
-      () => {},
-    );
+    let wrote;
+    try {
+      wrote = clip.writeText(value); // inside the tap too: Safari refuses a later write
+    } catch {
+      fallback();
+      return;
+    }
+    Promise.resolve(wrote).then(done, fallback);
+    return;
   }
+  fallback();
+}
+
+/** The pre-clipboard-API copy: a hidden textarea selected and execCommand('copy'), inside the tap. True when it copied. */
+function copyInTap(value) {
+  const doc = globalThis.document;
+  if (typeof doc?.execCommand !== 'function' || typeof doc.createElement !== 'function' || !doc.body) return false;
+  const box = doc.createElement('textarea');
+  box.value = value;
+  box.setAttribute('readonly', '');
+  box.setAttribute('aria-hidden', 'true');
+  box.setAttribute('style', 'position:fixed;top:0;left:0;width:1px;height:1px;opacity:0;');
+  doc.body.appendChild(box);
+  let ok = false;
+  try {
+    box.focus?.();
+    box.select?.();
+    box.setSelectionRange?.(0, value.length); // iOS Safari selects only through this
+    ok = doc.execCommand('copy') === true;
+  } catch {
+    ok = false;
+  }
+  box.remove?.();
+  return ok;
 }
 
 function renderOnline() {

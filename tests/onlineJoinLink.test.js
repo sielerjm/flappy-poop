@@ -135,6 +135,40 @@ test('Share with no share sheet copies the link (the share text), Copy the code 
   }
 });
 
+test('Michael, 22 Nov: on a page that is not a secure context (a phone on the Mac\'s LAN address: no share sheet, no clipboard API), Share and Copy still copy, inside the tap; with no way to copy, the text shows on the status line', async () => {
+  const nav = globalThis.navigator;
+  const doc = globalThis.document;
+  const copied = [];
+  Object.defineProperty(globalThis, 'navigator', { value: {}, configurable: true });
+  doc.execCommand = (cmd) => {
+    const box = doc.body.children?.find?.((c) => c.tag === 'textarea' || c.tagName === 'TEXTAREA');
+    copied.push([cmd, box?.value ?? null]);
+    return true;
+  };
+  try {
+    const k = setup({ answers: { create_room: { ok: true, data: { ok: true, code: '615204', status: 'open' } } } });
+    k.open();
+    await flush();
+    await el('tour-create').click();
+    await flush();
+    el('tour-share').click(); // nothing awaited: the copy runs inside the tap
+    assert.equal(copied.length, 1, 'copied inside the tap');
+    assert.equal(copied[0][0], 'copy');
+    assert.ok(copied[0][1]?.endsWith('?join=615204'), String(copied[0][1]));
+    assert.equal(el('tour-status').textContent, t('en', 'onlineLinkCopied'));
+    el('tour-copy').click();
+    assert.deepEqual(copied[1], ['copy', '615204']);
+    assert.equal(el('tour-status').textContent, t('en', 'onlineCopied'));
+    doc.execCommand = () => false; // no way to copy at all
+    el('tour-share').click();
+    assert.ok(el('tour-status').textContent.endsWith('?join=615204'), 'the link shown, to copy by hand');
+    closeTournamentPanel();
+  } finally {
+    delete doc.execCommand;
+    Object.defineProperty(globalThis, 'navigator', { value: nav, configurable: true });
+  }
+});
+
 test("Play.openPendingJoin: main.js's code opens the 🌐 window with it, once, and only on a ready screen with no match", () => {
   const opened = [];
   const s = playScene({ match: { status: 'playing' }, registry: registry() });
