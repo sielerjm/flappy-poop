@@ -91,6 +91,12 @@ const ONLINE_FNS = {
   online_can: 'text, boolean',
   finish_match: 'text, integer, jsonb',
   online_history: '',
+  friend_list: '',
+  send_friend_request: 'text',
+  respond_friend_request: 'text, boolean',
+  remove_friend: 'text',
+  block_user: 'text',
+  unblock_user: 'text',
 };
 
 // ---------------------------------------------------------------------------
@@ -892,7 +898,11 @@ async function both(db, r, round, slots) {
   await finish(db, r.host, r.code, round, slots);
   return finish(db, r.guest, r.code, round, slots);
 }
-const history = (db, d) => call(db, d, 'online_history');
+/** online_history less 3.1's peer handles (tests/schemaFriends.test.js tests those). */
+const history = (db, d) => call(db, d, 'online_history').then((h) => {
+  const drop = ({ peer: _p, ...rest }) => rest;
+  return { rival: h.rival && drop(h.rival), recent: h.recent.map(drop) };
+});
 
 test('the race limits follow the game: the fastest course a race can fly holds a capped score, and is well past the shortest race', () => {
   const pipes = levelEnd(T.levels.lastLevel, T);
