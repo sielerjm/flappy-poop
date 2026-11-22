@@ -8,6 +8,22 @@ import { LOCALES } from './i18n.js';
 
 export const CHANGELOG = [
   {
+    version: '0.28.0',
+    date: '22 Nov 2026',
+    notes: {
+      en: [
+        '🌐 Invite a friend: in 🤝 Friends, tap Invite next to a friend who is online. They see ✉️ by your name, with a ring that empties over 2 minutes; one tap puts them in your room, ready to race. ✕ turns it down.',
+        'While you wait, your room shows the time left. If the invite runs out or your friend can\'t play, tap Resend. A ✉️ count on 🤝 Friends shows invites waiting for you, and only while you are in 🌐 online.',
+        '🌐 Share now sends a link with your room\'s code: a friend who opens it lands in the online window and joins your room once signed in. A link to a room that has closed says so.',
+      ],
+      'zh-Hans': [
+        '🌐 邀请好友：在 🤝 好友里，点在线好友旁边的“邀请”。对方会在你的名字旁看到 ✉️，外圈在2分钟里慢慢变空；点一下就进入你的房间，准备比赛。点 ✕ 可以拒绝。',
+        '等待时，你的房间会显示剩下的时间。如果邀请过期或好友现在不能玩，点“再次邀请”。🤝 好友上的 ✉️ 数字是等你回应的邀请，而且只在你打开 🌐 在线时显示。',
+        '🌐 “分享”现在会发送带房间码的链接：朋友打开后会进入在线窗口，登录后就加入你的房间。如果房间已经关闭，链接会提示过期。',
+      ],
+    },
+  },
+  {
     version: '0.27.0',
     date: '22 Nov 2026',
     notes: {
