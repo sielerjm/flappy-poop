@@ -306,6 +306,19 @@ test('a press counts in the half it belongs to: a key group\'s flap key in its o
   assert.deepEqual([db.press_key, db.downs, db.ups, b.flaps.length, b.powers], [2, 2, 1, 2, 1], 'player 2: ↑ and Enter, one release, the power key no press');
 });
 
+test('5.2b AUD-149 / AUD-144: a held key\'s auto-repeat is dropped in an online race only; split screen and single player keep it (AGENTS.md: held-key flaps)', () => {
+  const online = playScene({ match: { ...createMatch(1), hostKey: 'OnlineRace' }, player: 1 });
+  const split = playScene({ match: createMatch(2), player: 1 });
+  const single = playScene({ match: null });
+  const repeat = { code: 'Space', repeat: true };
+  const press = { code: 'Space', repeat: false };
+  assert.equal(online.onlineRepeat(repeat), true, 'online: a repeat is not another flap, Ready or pause');
+  assert.equal(online.onlineRepeat(press), false, 'online: the press itself goes through');
+  assert.equal(online.onlineRepeat(undefined), false);
+  assert.equal(split.onlineRepeat(repeat), false, 'split screen keeps a held key\'s flaps');
+  assert.equal(single.onlineRepeat(repeat), false, 'single player too');
+});
+
 test('a pad\'s A and RT count in the half that claimed the pad; player 1\'s pad listener counts nothing in a match, everything in single player', () => {
   const { a, b } = halves({ right: { kind: 'pad', index: 0 } });
   a.onPadPress('select', 0);

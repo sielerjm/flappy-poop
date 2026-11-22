@@ -6,10 +6,13 @@
 // the friend and status functions answer a paired device and refuse anon (plan 39, 3.5), and that the
 // invite functions do too and a player's own topic (the handle invite_list gives) admits its paired
 // device and refuses another player's (plan 39, 4.1).
-// Each session unlinks itself at the end, which deletes its anonymous user, so nothing is left behind
-// but its join attempts (an IP hash, gone within the hour); when that cannot happen (a failed step, a
-// crash, Ctrl-C), the check prints the SQL that removes exactly its users (tagged
-// user_metadata.online_check = '39'; nothing in the schema ever reads user_metadata).
+// Each session unlinks itself at the end, which deletes its anonymous user. Its throwaway players'
+// rows stay, since no function a client may call deletes them: a first trust each (online_trust, 90
+// days), the race (matches) and, after a crash, the online names (online_profiles). So every end of
+// the check (a pass, a failed step, a crash, Ctrl-C) prints the SQL that removes exactly those rows
+// (player ids starting 'chk39') and its users (tagged user_metadata.online_check = '39'; nothing in the
+// schema ever reads user_metadata). What stays after that: its join attempts, an IP hash gone within
+// the hour (plan 39, 5.2b, AUD-140).
 //
 //   node tools/online_live_check.mjs --env <file>   a test project: <file> is {"url": "https://<ref>.supabase.co",
 //                                                   "key": "sb_publishable_..."}, kept outside the repo
@@ -140,8 +143,19 @@ export function reportLine([idStr, title], { ok, note = '' }) {
   return `${ok ? 'PASS' : 'FAIL'} ${idStr} ${title}${note ? `: ${note}` : ''}`;
 }
 
-/** The SQL that removes exactly this check's users, when a session could not unlink itself. */
-export const TEARDOWN_SQL = "delete from auth.users where raw_user_meta_data ->> 'online_check' = '39';";
+/** Every throwaway player id starts with this (22 characters in all, as a save code's), so TEARDOWN_SQL can find its rows. */
+export const CHECK_ID_PREFIX = 'chk39';
+
+/**
+ * The SQL that removes exactly this check's users and its throwaway players' rows (AUD-140): the
+ * users first (their devices go with them), then the races, the first trusts and the online names.
+ */
+export const TEARDOWN_SQL = [
+  "delete from auth.users where raw_user_meta_data ->> 'online_check' = '39';",
+  `delete from public.matches where host_player like '${CHECK_ID_PREFIX}%' or guest_player like '${CHECK_ID_PREFIX}%';`,
+  `delete from public.online_trust where player_id like '${CHECK_ID_PREFIX}%';`,
+  `delete from public.online_profiles where player_id like '${CHECK_ID_PREFIX}%';`,
+].join('\n  ');
 
 // ---------------------------------------------------------------------------
 // The run (talks to the project; not unit tested).
@@ -212,7 +226,7 @@ async function refreshRefused(u) {
   return isRefusal(error);
 }
 
-const playerId = () => randomBytes(16).toString('base64url');
+const playerId = () => `${CHECK_ID_PREFIX}${randomBytes(13).toString('base64url')}`.slice(0, 22);
 const checkName = () => `zzchk${randomBytes(4).toString('hex').slice(0, 6)}`;
 
 async function run(t, print) {
@@ -410,7 +424,11 @@ async function run(t, print) {
     }
     return { ok: !leftBehind, note: leftBehind ? notes.join('; ') : 'left behind: none' };
   });
-  if (leftBehind) print(`Some users could not be removed. In the SQL editor of this project, run:\n  ${TEARDOWN_SQL}`);
+  print(
+    leftBehind
+      ? `Some users could not be removed. In the SQL editor of this project, run:\n  ${TEARDOWN_SQL}`
+      : `Its throwaway players' trust, race and name rows stay until removed. In the SQL editor of this project, run:\n  ${TEARDOWN_SQL}`,
+  );
   return results;
 }
 

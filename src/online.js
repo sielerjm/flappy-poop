@@ -55,7 +55,7 @@ const level = ['int', 1, 99];
  * repeat keeps the crossing's time), `first` the host's verdict on it; `ready` / `go` the
  * level-break ready check and the host's GO (`cancel` takes back the count that ends at that
  * `startAt`: a ready withdrawn during it); `width` this side's field width, from the race's start
- * to its GO (presence holds the join-time one, item 14); `done` a run's final numbers; `rematch`
+ * to its GO (presence holds the join-time one, item 14), and whether it has heard the other's (5.2b); `done` a run's final numbers; `rematch`
  * the ask. The shared pause (2.1): `pause` is this side's pause while it lasts (why, whether this
  * side is ready to go on, the pause round it belongs to: the number of resumes so far, and the GO it
  * counts to, 0 for none), sent on every change and every online.pause.heartbeatMs; `resume` the
@@ -76,7 +76,7 @@ export const ONLINE_EVENTS = Object.freeze({
   first: Object.freeze({ level, seat: ['enum', SEATS] }),
   ready: Object.freeze({ level, ready: ['bool'] }),
   go: Object.freeze({ level, startAt: ['num', 0, 1e14], cancel: ['bool'] }),
-  width: Object.freeze({ width: ['width'] }),
+  width: Object.freeze({ width: ['width'], heard: ['bool'] }),
   done: Object.freeze({ score: count, deaths: count, levelWins: ['int', 0, 99], finalFirst: ['bool'], won: ['bool'] }),
   rematch: Object.freeze({ want: ['bool'] }),
   pause: Object.freeze({ reason: ['enum', PAUSE_REASONS], ready: ['bool'], round: count, count: ['num', 0, 1e14] }),

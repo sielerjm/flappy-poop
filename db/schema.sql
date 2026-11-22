@@ -240,6 +240,9 @@
 --     check (mode in ('single', 'daily')); delete from public.tournaments where players = 2 (their
 --     matchups go with them; their medals stay counted); alter table public.tournaments drop constraint
 --     tournaments_players_check, add constraint tournaments_players_check check (players between 3 and 8).
+--   undo 5.2b's pacing (plan 39, AUD-136 to AUD-138), before the races' undo: drop table
+--     public.online_links; drop index public.matches_host_uid; restore join_room, answer_guest,
+--     set_room_status, link_online_player, online_cleanup and server_now from git and run this file.
 --   undo online races (plan 39, 2.4a), before the rooms' undo: drop function public.finish_match(text, int, jsonb),
 --     public.online_history(), public.online_races(text), public.admin_set_online_open(boolean),
 --     public.online_require_open(); restore set_room_status, create_room, join_room, online_unseat,
@@ -3636,8 +3639,10 @@ $$;
 -- and, from a trusted device, the name; a pending device gets the stored name back. A device already
 -- linked to another player (Load user code) moves, and is judged as a new device. Returns
 -- { trusted, name }. Past three pending devices the new one replaces the pending device seen longest ago
--- (2.4e). Raises 'not signed in', 'bad player id', 'bad name', 'name taken', and 'too many devices
--- waiting' only when all three pending devices are seated in a race.
+-- (2.4e). Raises 'not signed in', 'bad player id', 'bad name', 'name taken', 'too many devices
+-- waiting' only when all three pending devices are seated in a race, and 'rate limited' when this
+-- device has linked 10 players it was not linked to within the hour (online_links; plan 39, 5.2b,
+-- AUD-138: each could leave an online_trust row for 90 days); a refresh of its own player is never paced.
 create or replace function public.link_online_player(p_player_id text, p_name text)
 returns jsonb
 language plpgsql
@@ -3653,6 +3658,7 @@ declare
   v_me public.online_players;
   v_trusted boolean;
   v_old uuid;
+  c_links constant int := 10; -- links of a player this device was not linked to, an hour (5.2b, AUD-138)
 begin
   if v_uid is null then
     raise exception 'not signed in';
@@ -3662,6 +3668,11 @@ begin
   end if;
   if v_name is null or v_name !~ '^[^[:cntrl:]]{1,16}$' then
     raise exception 'bad name';
+  end if;
+  -- Paced before any lock or housekeeping runs; the same player again (every 🌐 entry) never is.
+  if not exists (select 1 from public.online_players o where o.uid = v_uid and o.player_id = public.resolve_player(p_player_id))
+     and (select count(*) from public.online_links l where l.uid = v_uid and l.at > now() - interval '1 hour') >= c_links then
+    raise exception 'rate limited';
   end if;
   -- The name's lock first (submit_score takes it), then the player's (fold_player takes it), and the id
   -- resolved again under it, so a merge running alongside is followed rather than undone.
@@ -3683,6 +3694,7 @@ begin
     update public.online_players o set seen_at = now() where o.uid = v_uid;
     v_trusted := v_me.trusted;
   else
+    insert into public.online_links (uid) values (v_uid);
     if v_me.uid is not null then
       perform public.online_unseat(v_uid); -- its seats were the other player's
       delete from public.online_players o where o.uid = v_uid;
@@ -3994,7 +4006,8 @@ create index if not exists rooms_guest on public.rooms (guest_uid);
 alter table public.rooms drop constraint if exists rooms_source_check;
 alter table public.rooms add constraint rooms_source_check check (source in ('code', 'invite'));
 
--- Every join_room call, for its caps (failed joins per device, per IP and in all), kept an hour. The
+-- Every join_room call, for its caps (failed joins per device, per IP and in all; seated ones per
+-- device and per IP, 5.2b), kept an hour. The
 -- IP is never stored: only a hash of its bucket (online_ip_bucket) with this database's own random
 -- pepper (online_secret), so a stored value cannot be turned back into an address.
 create table if not exists public.join_attempts (
@@ -4010,6 +4023,19 @@ revoke all on sequence public.join_attempts_id_seq from public, anon, authentica
 create index if not exists join_attempts_at on public.join_attempts (at);
 create index if not exists join_attempts_uid on public.join_attempts (uid, at);
 create index if not exists join_attempts_ip on public.join_attempts (ip_hash, at);
+
+-- Each time a device links a player it was not linked to (its first link, or a move: Load user code),
+-- for link_online_player's pacing (plan 39, 5.2b, AUD-138: every such link can leave an online_trust
+-- row for 90 days), kept an hour. Only the device's uid and the time.
+create table if not exists public.online_links (
+  id  bigserial primary key,
+  uid uuid not null,
+  at  timestamptz not null default now()
+);
+alter table public.online_links enable row level security;
+revoke all on public.online_links from public, anon, authenticated;
+revoke all on sequence public.online_links_id_seq from public, anon, authenticated;
+create index if not exists online_links_uid on public.online_links (uid, at);
 
 -- One row per race (plan 39, 2.4a), minted when the host starts it (set_room_status 'playing'): the
 -- room's code and round, the seed and GO the server minted, both seats' devices and (resolved)
@@ -4050,6 +4076,7 @@ create index if not exists matches_room on public.matches (room_code, round);
 create index if not exists matches_host on public.matches (host_player, finished_at);
 create index if not exists matches_guest on public.matches (guest_player, finished_at);
 create index if not exists matches_playing on public.matches (started_at) where status = 'playing';
+create index if not exists matches_host_uid on public.matches (host_uid, started_at); -- set_room_status's pacing (5.2b)
 alter table public.rooms add column if not exists match_id bigint;  -- the race running (no FK: races outlive rooms)
 -- Each seat's trust as its report landed (plan 39, 3.7, item 61): true from a paired device, false from
 -- a waiting one, null until that seat reports. Only a race with both seats true makes two players
@@ -4439,6 +4466,16 @@ begin
      where x.status = 'abandoned' and x.host_report is null and x.guest_report is null
        and x.created_at < now() - interval '1 day'
      limit 100);
+  -- A race nobody sees (refused, disputed, or abandoned with a report: only agreed ones are anyone's
+  -- history, rival line or friend eligibility) keeps its numbers 30 days for debugging, then goes
+  -- (plan 39, 5.2b, AUD-137: re-minted races were never deleted).
+  delete from public.matches m where m.id in (
+    select x.id from public.matches x
+     where x.status in ('refused', 'disputed', 'abandoned') and x.created_at < now() - interval '30 days'
+     order by x.created_at
+     limit 200);
+  delete from public.online_links l where l.id in ( -- link_online_player's pacing counts an hour (5.2b)
+    select x.id from public.online_links x where x.at < now() - interval '1 hour' order by x.at limit 500);
   delete from public.join_attempts a where a.id in (
     select x.id from public.join_attempts x where x.at < now() - interval '1 hour' order by x.at limit 500);
   delete from public.online_pairings c where c.expires_at < now();
@@ -4474,14 +4511,21 @@ end;
 $$;
 
 -- The server's clock in ms since the epoch, for the countdown's clock offset (best of a few round
--- trips; the spike measured ±25 ms).
+-- trips; the spike measured ±25 ms). Definer with the signed-in check like every online function
+-- (plan 39, 5.2b, AUD-102 / AUD-141), though it reads only the clock.
 create or replace function public.server_now()
 returns bigint
-language sql
+language plpgsql
 stable
+security definer
 set search_path = ''
 as $$
-  select floor(extract(epoch from clock_timestamp()) * 1000)::bigint;
+begin
+  if auth.uid() is null then
+    raise exception 'not signed in';
+  end if;
+  return floor(extract(epoch from clock_timestamp()) * 1000)::bigint;
+end;
 $$;
 
 -- A room's state for one of its two seated devices. Internal: room_state and the 'status' event.
@@ -4557,7 +4601,10 @@ $$;
 -- guess learns nothing. Failed joins are capped before the code is even looked at (an IP and the
 -- whole game are capped as well as a device, since a new anonymous device costs nothing):
 -- { ok: false, error: 'rate limited' } past 5 failures from this device or 20 from its IP in 10
--- minutes, 'busy' past 200 in all in a minute. A room idle 15 minutes is no room, housekeeping or not.
+-- minutes, 'busy' past 200 in all in a minute. Seated joins are paced too (plan 39, 5.2b, AUD-136: each
+-- one makes the server send to the room, so a colluding pair looping join and decline would send at
+-- the speed of its calls): 'rate limited' past 10 from this device or 50 from its IP in 10 minutes. A
+-- room idle 15 minutes is no room, housekeeping or not.
 -- Raises 'not signed in', 'not linked', 'in a race' (checked first, so a racing device learns nothing),
 -- 'online closed' (the switch; no try is spent). The seat taken, the host's live invite ends (4.1: its
 -- friend is told).
@@ -4572,6 +4619,8 @@ declare
   c_device_fails constant int := 5;      -- failed joins per device in 10 minutes
   c_ip_fails     constant int := 20;     -- per IP bucket in 10 minutes (a school's wifi is one IP)
   c_all_fails    constant int := 200;    -- in all, per minute
+  c_device_oks   constant int := 10;     -- seated joins per device in 10 minutes (5.2b, AUD-136)
+  c_ip_oks       constant int := 50;     -- per IP bucket in 10 minutes
   v_uid uuid := auth.uid();
   v_me public.online_players;
   v_ip text;
@@ -4604,7 +4653,11 @@ begin
   if (select count(*) from public.join_attempts a
        where not a.ok and a.uid = v_uid and a.at > now() - interval '10 minutes') >= c_device_fails
      or (v_ip is not null and (select count(*) from public.join_attempts a
-       where not a.ok and a.ip_hash = v_ip and a.at > now() - interval '10 minutes') >= c_ip_fails) then
+       where not a.ok and a.ip_hash = v_ip and a.at > now() - interval '10 minutes') >= c_ip_fails)
+     or (select count(*) from public.join_attempts a
+       where a.ok and a.uid = v_uid and a.at > now() - interval '10 minutes') >= c_device_oks
+     or (v_ip is not null and (select count(*) from public.join_attempts a
+       where a.ok and a.ip_hash = v_ip and a.at > now() - interval '10 minutes') >= c_ip_oks) then
     return jsonb_build_object('ok', false, 'error', 'rate limited');
   end if;
   select * into v_room from public.rooms r
@@ -4633,7 +4686,9 @@ $$;
 -- told ('answer', accept false) on the old topic, and the room moves to a new code, open and empty:
 -- { ok, code: <new>, status: 'open' }, so the declined device, which may stay on the old topic
 -- until its token refreshes, reaches nobody (finding 19). Raises 'not signed in', 'no room' (not
--- this device's room), 'no guest' (nobody waiting).
+-- this device's room), 'no guest' (nobody waiting), 'rate limited' (a decline within 2 seconds of the
+-- code's minting, as create_room's: nobody can learn a new code and knock that fast, so only a loop
+-- does; 5.2b, AUD-136).
 create or replace function public.answer_guest(p_code text, p_accept boolean)
 returns jsonb
 language plpgsql
@@ -4655,6 +4710,9 @@ begin
   end if;
   if v_room.status <> 'asked' then
     raise exception 'no guest';
+  end if;
+  if not coalesce(p_accept, false) and v_room.created_at > now() - interval '2 seconds' then
+    raise exception 'rate limited';
   end if;
   perform realtime.send(jsonb_build_object('accept', coalesce(p_accept, false)), 'answer', 'room:' || p_code, true);
   if coalesce(p_accept, false) then
@@ -4712,7 +4770,8 @@ $$;
 -- the other report; housekeeping ends it 6 hours after GO). Both devices are told ('status', the room as
 -- room_state shows it). Returns the room as room_state does. Raises 'not signed in', 'no room', 'not
 -- host', 'bad status', 'online closed' (the switch: no new race, a rematch included), 'rate limited' (a
--- rematch within a minute of the last race's GO).
+-- rematch within a minute of the last race's GO, or a race from this host device in any room within a
+-- minute of its last race's GO: 5.2b, AUD-137, since leaving and creating a room again re-minted at will).
 create or replace function public.set_room_status(p_code text, p_status text)
 returns jsonb
 language plpgsql
@@ -4742,7 +4801,9 @@ begin
       raise exception 'bad status';
     end if;
     perform public.online_require_open();
-    if v_room.started_at > now() - c_rematch then
+    if v_room.started_at > now() - c_rematch
+       or exists (select 1 from public.matches m -- another room's: this room's own is the line above
+                   where m.host_uid = v_uid and m.room_code <> v_room.code and m.started_at > now() - c_rematch) then
       raise exception 'rate limited'; -- no race ends that soon: a loop of starts would only mint rows
     end if;
     update public.rooms r
@@ -5974,7 +6035,7 @@ returns text
 language sql
 immutable
 as $$
-  select '58b15ec3afc7a73b'::text; -- schema stamp
+  select '9dddfc220813a5f3'::text; -- schema stamp
 $$;
 revoke execute on function public.schema_version() from public, authenticated;
 grant  execute on function public.schema_version() to anon;

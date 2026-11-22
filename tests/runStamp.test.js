@@ -126,7 +126,10 @@ test('every input listener that can flap carries the press stamp', () => {
   assert.match(create, /keys\?\.on\('keydown-SPACE', \(event\) => this\.onFlapKey\(event\)\);/);
   assert.match(create, /keys\?\.on\('keydown-UP', \(event\) => this\.onFlapKey\(event\)\);/);
   assert.match(method('onFlapKey'), /withInput\(event, 'key',/);
-  assert.match(create, /keys\?\.on\('keydown', \(event\) => withInput\(event, 'key', \(\) => this\.onVersusKey\(event\?\.code\)\)\)/);
+  // 5.2b (AUD-149, AUD-144): an online race drops a held key's auto-repeat before the stamp (onlineRepeat, raceRun.test.js).
+  assert.match(create, /keys\?\.on\('keydown', \(event\) => this\.onlineRepeat\(event\) \|\| withInput\(event, 'key', \(\) => this\.onVersusKey\(event\?\.code\)\)\)/);
+  assert.match(create, /keys\?\.on\('keydown-P', \(event\) => this\.onlineRepeat\(event\) \|\| this\.handleChrome\('pause'\)\);/);
+  assert.match(create, /keys\?\.on\('keydown-ESC', \(event\) => this\.onlineRepeat\(event\) \|\| this\.handleChrome\('esc'\)\);/);
   assert.match(create, /bindPad\(this, \(action, padIndex\) => this\.onPadPress\(action, padIndex\), T\)/);
   assert.match(method('onPadPress'), /withInput\(null, 'pad', \(\) => this\.onPadAction\(action, padIndex\)\)/);
   assert.doesNotMatch(PLAY, /export\s+(const|let)\s+STAMP|export\s+function\s+withInput/, 'the stamp and its setter stay inside Play.js');

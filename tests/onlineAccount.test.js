@@ -17,8 +17,10 @@ function fakeNet(answers = {}) {
   const net = {
     calls,
     signInResult: { ok: true, uid: 'u-me' },
-    async signIn() {
+    signInOpts: [],
+    async signIn(opts) {
       calls.push(['signIn']);
+      net.signInOpts.push(opts ?? null);
       return net.signInResult;
     },
     async rpc(fn, args = {}) {
@@ -267,6 +269,7 @@ test('leave (Clear / Load): a device with a session unlinks, then forgets it, ev
   assert.deepEqual(await account.leave(), { left: true });
   const names = net.calls.map((c) => c[1] ?? c[0]);
   assert.deepEqual(names, ['signIn', 'unlink_online_player', 'signOut']);
+  assert.deepEqual(net.signInOpts, [{ create: false }], '5.2b AUD-146: a stored session only, never a new anonymous user to sign out');
   assert.equal(state.trust, null);
 
   const off = setup({ answers: { unlink_online_player: { ok: false, error: 'offline' } } });

@@ -122,7 +122,7 @@ import { createRunStats, stubRow } from '../runStats.js';
 import { VERSION as APP_VERSION } from '../logic.js';
 import { browserStorage, pageStorage, createJsonStore } from '../store.js';
 import { createOnlineNet, onlineProjectConfig } from '../onlineNet.js';
-import { createResumeStore, pageTab, resumeKey } from '../onlineRace.js';
+import { createResumeStore, pageTab, resumeKey, ONLINE_HOST_KEY } from '../onlineRace.js';
 import { createOnlineAccount } from '../onlineAccount.js';
 import { createStatusBeat } from '../onlineFriends.js';
 import { runDeltas, evaluate, bestFacts, levelCloseShave, winsInWindow, daysBetween, nextDrawStreak, FOUR_OF_A_KIND, EDU_ACHIEVEMENTS, eduRunFacts } from '../achievements.js';
@@ -719,15 +719,15 @@ export class Play extends Phaser.Scene {
     keys?.on('keyup-UP', () => this.onFlapKeyUp());
     keys?.on('keyup', (event) => this.onVersusKeyUp(event?.code)); // a match: a key group's flap key came up
     keys?.on('keydown-M', () => this.handleChrome('mute'));
-    keys?.on('keydown-P', () => this.handleChrome('pause'));
-    keys?.on('keydown-ESC', () => this.handleChrome('esc'));
+    keys?.on('keydown-P', (event) => this.onlineRepeat(event) || this.handleChrome('pause'));
+    keys?.on('keydown-ESC', (event) => this.onlineRepeat(event) || this.handleChrome('esc'));
     keys?.on('keydown-S', () => this.handleChrome('settings'));
     keys?.on('keydown-I', () => this.handleChrome('info'));
     keys?.on('keydown-L', () => this.handleChrome('lang'));
     keys?.on('keydown-F', () => this.handleChrome('feedback'));
     keys?.on('keydown-T', () => this.handleChrome('leaderboard'));
     keys?.on('keydown-B', () => !this.match && this.activatePower()); // no-op unless the bean power is charged
-    keys?.on('keydown', (event) => withInput(event, 'key', () => this.onVersusKey(event?.code))); // a match: each key group is one player's flap / power
+    keys?.on('keydown', (event) => this.onlineRepeat(event) || withInput(event, 'key', () => this.onVersusKey(event?.code))); // a match: each key group is one player's flap / power
     // Gamepad: one binding for the whole game (overlays, Over and the other half of a match run
     // on top of or beside this scene, which is never paused); onPadAction routes each press to
     // whichever scene is on top, and in a match to the half that claimed the pad.
@@ -3312,6 +3312,15 @@ export class Play extends Phaser.Scene {
     const i = host.halfScene?.(1) ? this.match.slots.findIndex((s) => sameDevice(s.device, device)) : this.player - 1;
     if (i < 0) return null;
     return i === this.player - 1 ? this : (host.halfScene?.(i) ?? null);
+  }
+
+  /**
+   * A held key's auto-repeat in an online race (plan 39, 5.2b; AUD-149, AUD-144): one physical press is
+   * one flap, one Ready, one pause, since each one goes over the wire. Split screen and single player keep
+   * a held key's flaps (Michael, 22 Nov: online only). Phaser emits every repeat: src/ registers no Key.
+   */
+  onlineRepeat(event) {
+    return Boolean(event?.repeat) && matchHostKey(this.match) === ONLINE_HOST_KEY;
   }
 
   /** A match: a key inside a group is that player's flap or power (keyGroup); every other key is the chrome's. */

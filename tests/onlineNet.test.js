@@ -196,7 +196,7 @@ function fakeClient(clock, script = {}) {
 }
 
 /** A net over a fake client on a virtual clock. */
-function setup({ script = {}, ...opts } = {}) {
+function setup({ script = {}, loadGate = null, ...opts } = {}) {
   const clock = fakeTimers();
   const created = [];
   let loads = 0;
@@ -212,6 +212,7 @@ function setup({ script = {}, ...opts } = {}) {
   const net = createOnlineNet({
     load: async () => {
       loads += 1;
+      if (loadGate) await loadGate; // 5.2b: a slow first load, still out when 🌐 closes
       return lib;
     },
     config: CONFIG,
@@ -367,6 +368,40 @@ test('a stored session the server refuses (a removed device) is dropped on this 
   const names = s.client().names();
   assert.ok(names.indexOf('signOut') > names.indexOf('getUser') && names.indexOf('signInAnonymously') > names.indexOf('signOut'));
   assert.deepEqual(s.client().calls.find((c) => c[0] === 'signOut'), ['signOut', { scope: 'local' }], 'local only: nothing else is signed out');
+});
+
+test('5.2b AUD-146: signIn({ create: false }) reuses a stored session only: a dead one is dropped and no new anonymous user is made', async () => {
+  const s = setup({ script: { stored: {}, getUser: () => ({ data: { user: null }, error: { status: 403, code: 'user_not_found', message: 'User not found' } }) } });
+  assert.deepEqual(await s.net.signIn({ create: false }), { ok: false, error: 'signed out' });
+  assert.ok(s.client().names().includes('signOut'), 'the dead session is dropped on this device');
+  assert.ok(!s.client().names().includes('signInAnonymously'), 'no new anonymous user only to sign it out');
+  assert.ok(!s.client().names().includes('startAutoRefresh'));
+  const t = setup({ script: { stored: {} } });
+  assert.deepEqual(await t.net.signIn({ create: false }), { ok: true, uid: UID }, 'a live stored session is used');
+  const u = setup();
+  assert.deepEqual(await u.net.signIn({ create: false }), { ok: false, error: 'signed out' }, 'none stored: none made');
+  assert.ok(!u.client().names().includes('signInAnonymously'));
+});
+
+test('5.2b AUD-145: 🌐 closed while the first load and sign-in are out: their late answers start no token ticker, socket or clock; the next entry starts them', async () => {
+  let open;
+  const s = setup({ loadGate: new Promise((r) => (open = r)) });
+  const release = s.net.lease(); // startOnline: the window's lease, warm() and enterOnline's signIn
+  const warming = s.net.warm();
+  const signing = s.net.signIn();
+  release(); // ✕ or 🌐 off during Connecting: stopOnline closes the transport
+  open();
+  assert.equal((await signing).ok, true, 'the sign-in itself lands');
+  await warming;
+  await flush();
+  s.net.pump();
+  await flush();
+  const names = s.client().names();
+  assert.deepEqual(names.filter((n) => n === 'startAutoRefresh' || n === 'connect'), [], `nothing on after close (${names.join(' ')})`);
+  assert.ok(!s.client().calls.some((c) => c[0] === 'rpc' && c[1] === 'server_now'), 'no clock round trip outside online mode');
+  await s.net.warm();
+  assert.ok(s.client().names().includes('startAutoRefresh') && s.client().names().includes('connect'), 'the next 🌐 entry starts both');
+  assert.equal(s.client().names().filter((n) => n === 'signInAnonymously').length, 1, 'one anonymous user: the next entry reuses its session');
 });
 
 test('offline while checking a stored session: the session is kept, nothing is replaced', async () => {

@@ -29,7 +29,7 @@ const LINK_KEYS = Object.freeze({
   'name taken': 'onlineNameTaken',
   'bad name': 'saveNameBlocked',
   'too many devices waiting': 'onlineTooManyWaiting',
-  'rate limited': 'onlineSignInLimited',
+  'rate limited': 'onlineLinkLimited', // link_online_player's pacing: 10 new players a device an hour (5.2b, AUD-138)
   offline: 'onlineErrOffline',
 });
 
@@ -209,7 +209,7 @@ export function createOnlineAccount({ net, getSave, saveWithId, storeName, check
   /** Clear / a Load of another player: unlink (when the session still signs in), then forget it. */
   async function leave() {
     if (!hasSession()) return { left: false };
-    const signed = await net.signIn();
+    const signed = await net.signIn({ create: false }); // a dead stored session is not replaced only to sign out (AUD-146)
     if (signed?.ok) await net.rpc('unlink_online_player');
     await net.signOut();
     linked = null;

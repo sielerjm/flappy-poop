@@ -1061,6 +1061,15 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
     await evaluate(`import('./src/config.js').then((m) => { m.LEADERBOARD.dataApi = ''; return true; })`);
     // Run the farts from the start of level 3 (50 pipes of room) so neither crosses a finish line here.
     const TT = await evaluate(`import('./src/config.js').then((m) => JSON.stringify(m.TUNING))`).then(JSON.parse);
+    // After a death or a win the Over panel opens from time.delayedCall(deathToOverMs), on the game clock,
+    // which falls behind the wall clock when frames drop under load: wait the delay, then until Over is up
+    // (5 s at most), then settleMs for it to draw (plan 39, 5.2b, AUD-148: 5.1's :8000 failure). press()
+    // in the education sections waits out a hold the same way.
+    const waitOver = async (settleMs = 300) => {
+      await sleep(TT.deathToOverMs);
+      for (let i = 0; i < 50 && !(await evaluate(`__flappy.scene.isActive('Over')`)); i += 1) await sleep(100);
+      await sleep(settleMs);
+    };
     const [len1, len2, len3] = TT.levels.pipes;
     // Pipe spacing per level (wider on the slow levels 1–2), from the game's own logic.
     const SPACING = await evaluate(`Promise.all([import('./src/logic.js'), import('./src/config.js')]).then(([l, c]) => JSON.stringify([0, 1, 2, 3].map((n) => l.pipeSpacing(Math.max(1, n), c.TUNING))))`).then(JSON.parse);
@@ -1589,7 +1598,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
       // Let the poop fall and die: the game-over panel carries the run summary.
       await evaluate(`${play}.poop.body.setAllowGravity(true), true`);
       for (let i = 0; i < 60 && (await playState()) !== 'dead'; i += 1) await sleep(100);
-      await sleep(TT.deathToOverMs + 300);
+      await waitOver(300);
       const over = await evaluate(`JSON.stringify({ dead: ${play}.state === 'dead', active: __flappy.scene.isActive('Over'), counts: __flappy.scene.getScene('Over').children.list.filter((c) => c.type === 'Text' && /^×\\d+$/.test(c.text)).map((c) => c.text), collected: ${play}.collected, pipes: ${play}.pipesPassed })`).then(JSON.parse);
       const runFC = await evaluate(`JSON.stringify([${play}.runFalls, ${play}.runCloseCalls])`).then(JSON.parse);
       const expected = [...['fiber', 'probiotic', 'postbiotic', 'bacteria', 'bean', 'mystery'].map((k) => `×${over.collected[k]}`), `×${runFC[0]}`, `×${runFC[1]}`, `×${over.pipes}`, `×${over.collected.coin}`];
@@ -2129,7 +2138,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await evaluate(`${play}.poop.body.setAllowGravity(false), ${play}.poop.setVelocity(0, 0), ${play}.poop.y = 640, ${play}.graceLeftMs = 1e9, ${play}.pipes.clear(true, true), true`);
         await evaluate(`${play}.level = ${last}, ${play}.pipesSpawned = ${end}, ${play}.pipesPassed = ${end}, ${play}.finishSpawned = false, ${play}.applyLevel(), ${play}.distanceSinceSpawn = ${SPACING[3]}, true`);
         for (let i = 0; i < 120 && (await playState()) !== 'dead'; i += 1) await sleep(100);
-        await sleep(TT.deathToOverMs + 300);
+        await waitOver(300);
         const won = await evaluate(`JSON.stringify({ won: ${play}.won, level: ${play}.level, breakOn: ${play}.levelBreak, over: __flappy.scene.isActive('Over'), tex: ${play}.poop.texture.key, head: __flappy.scene.getScene('Over').children.list.filter((c) => c.type === 'Text').map((c) => ({ t: c.text, w: c.width }))[0] })`).then(JSON.parse);
         const want = await evaluate(`import('./src/i18n.js').then((m) => m.t('en', 'runWon'))`);
         ok(won.won && won.level === last && !won.breakOn && won.over && won.tex !== 'poop-dead' && won.head?.t === want && won.head.w <= 520, `crossing level ${last}'s finish line wins: Over opens with "${won.head?.t}" (${won.head?.w?.toFixed(0)} px wide), level stays ${won.level}, no break, poop ${won.tex}`);
@@ -2158,7 +2167,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         };
         const dieNow = async () => {
           await evaluate(`${play}.resumePlay(), ${play}.graceLeftMs = 0, ${play}.die(), true`);
-          await sleep(TT.deathToOverMs + 300);
+          await waitOver(300);
         };
         const overTexts = () => evaluate(`__flappy.scene.getScene('Over').children.list.filter((c) => c.type === 'Text').map((c) => c.text)`);
 
@@ -4116,7 +4125,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         const daily = await evaluate(`JSON.stringify({ daily: ${play}.runIsDaily, edu: ${play}.runIsEducation })`).then(JSON.parse);
         ok(daily.daily && !daily.edu, 'a Daily Dump run is not an education run');
         await evaluate(`${play}.poop.body.setAllowGravity(false), ${play}.graceLeftMs = 0, ${play}.die(), true`);
-        await sleep(TT.deathToOverMs + 300);
+        await waitOver(300);
 
         // The start level and unlocked levels (plan 25, B5; in the 📚 popup since plan 26): no ◀ ▶ until a
         // later level is unlocked; ◀ / ▶ step and wrap within the levels unlocked; the popup's Play starts
@@ -5067,7 +5076,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         const w3 = await answer(false);
         ok(w1.phase === 'strikes' && w1.verdict === wrong && w2.phase === 'strikes' && w3.phase === 'over' && w3.verdict === over && w3.right === endRun, `three misses: ${w1.status} → ${w2.status} → ${w3.status}, "${w3.verdict}", ${w3.right}`);
         await press('rightBtn', held);
-        await sleep(TT.deathToOverMs + 400);
+        await waitOver(400);
         const gone = await playNow();
         ok(gone.over && gone.state === 'dead' && gone.pipes === before.pipes && !gone.filled && gone.face === 'poop-dead' && gone.score === 9, `End run: game over (Over up, state ${gone.state}), the field never cleared or refilled (${gone.pipes} pipe parts, the dead poop), no penalty (score ${gone.score})`);
         ok((await stores()) === stores0, 'an education game over records nothing');
@@ -5224,7 +5233,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await press('leftBtn'); // the warning again
         ok((await quitView()).verdict === quitWarn, 'and its first press warns again');
         await press('leftBtn', held); // past the hold: quit
-        await sleep(TT.deathToOverMs + 400);
+        await waitOver(400);
         const pg = await playNow();
         ok(pg.over && pg.state === 'dead' && !pg.quiz, `the second press, after the hold, quits; under a paused run it still ends it (state ${pg.state})`);
 
@@ -5401,7 +5410,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         ok(choiceWhyFit.bad.length === 0, `and with Why open (${choiceWhyFit.bad.join(', ') || `none over; ${choiceWhyFit.tight} px to spare at the tightest`})`);
         await press('leftBtn'); // the warning
         await press('leftBtn', held); // Quit
-        await sleep(TT.deathToOverMs + 400);
+        await waitOver(400);
         const g = await playNow();
         ok(g.over && g.state === 'dead' && !g.quiz, 'Quit, warned, ends the run');
 
@@ -5452,7 +5461,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await evaluate(`${Q}.rightBtn.press(), true`);
         await sleep(300);
         await quitQuiz();
-        await sleep(TT.deathToOverMs + 500);
+        await waitOver(500);
         const p1 = await panel();
         const note = await tx('eduNotSaved');
         ok(p1.active && p1.tally === '❔ 1  ·  ✅ 0  ·  ❌ 1' && !p1.texts.some((s) => /[\u{1F4DA}\u{1F480}⭐]/u.test(s)) && p1.texts.includes(note) && !p1.share && !p1.bonus, `an education game over: "${p1.tally}" (no 📚 / 💀 / ⭐ line), "${note}", no Share`);
@@ -5485,7 +5494,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         // A won run: the bonus button opens the rectum's questions over the panel; no coins; Esc back.
         await startEdu();
         await evaluate(`(() => { const p = ${play}; p.level = 7; p.applyLevel(); p.win(); return true; })()`);
-        await sleep(TT.deathToOverMs + TT.retryLockoutMs + 500);
+        await waitOver(TT.retryLockoutMs + 500);
         const p2 = await panel();
         ok(p2.active && p2.bonus && !p2.share, 'a won education run offers the 📚 bonus quiz where Share would be');
         const e2 = await eduPanel();
@@ -5551,7 +5560,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await evaluate(`(() => { const p = ${play}; p.graceLeftMs = 0; p.die(); return true; })()`);
         for (let i = 0; i < 40 && !(await evaluate(`__flappy.scene.isActive('Quiz') && Boolean(${Q}.card)`)); i += 1) await sleep(100);
         await quitQuiz();
-        await sleep(TT.deathToOverMs + 500);
+        await waitOver(500);
         const dropPanel = await panel();
         const dropLine = await badgeLine();
         const rec1 = await eduRec();
@@ -5572,7 +5581,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         await evaluate(`(() => { const p = ${play}; p.applyLocale('zh-Hans'); p.runQuiz = { ...p.runQuiz, answered: 5, right: 5, wrong: 0 }; p.graceLeftMs = 0; p.die(); return true; })()`); // zh-Hans for this panel: its buttons' labels must fit too (the restart after it reads the stored language again)
         for (let i = 0; i < 40 && !(await evaluate(`__flappy.scene.isActive('Quiz') && Boolean(${Q}.card)`)); i += 1) await sleep(100);
         await quitQuiz();
-        await sleep(TT.deathToOverMs + 500);
+        await waitOver(500);
         const quitPanel = await panel();
         const quitLine = await badgeLine();
         const recQuit = await eduRec();
@@ -5583,7 +5592,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         // left (plan 26: bonus answers count), then the streak is 1 and the average 100 %.
         await startEdu();
         await winWith(5, 5);
-        await sleep(TT.deathToOverMs + 500);
+        await waitOver(500);
         const aceLine = await badgeLine();
         const recWait = await eduRec();
         ok(aceLine?.includes('💯') && aceLine.includes('🅰️') && recWait.badges.join() === 'edu_drop_out' && !recWait.counters.gradedRuns && recWait.pending === 5, `a run answered 5 of 5 shows 💯 and 🅰️ on its panel ("${aceLine}") and waits, unrecorded (${JSON.stringify(recWait)}), until the panel is left`);
@@ -5657,7 +5666,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         const testRevives = await evaluate(`${play}.runQuiz.revives`);
         await evaluate(`(() => { const p = ${play}; p.poop.body.setAllowGravity(false); p.poop.setVelocity(0, 0); p.poop.y = 640; return true; })()`);
         await winWith(9, 10);
-        await sleep(TT.deathToOverMs + 500);
+        await waitOver(500);
         const rec3 = await eduRec();
         const testLine = await badgeLine();
         ok(testRevives === 1 && JSON.stringify(rec3) === JSON.stringify(rec2) && testLine === null, `a test run counts nothing: its revive (${testRevives}) and its 9 of 10 leave the record as it was, and its panel names no badge`);
@@ -5869,7 +5878,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
           for (let i = 0; i < 40 && (await playState()) !== 'playing'; i += 1) await sleep(100);
         }
         await evaluate(`(() => { const p = ${play}; p.graceLeftMs = 0; p.die(); return true; })()`);
-        await sleep(TT.deathToOverMs + 500);
+        await waitOver(500);
         const plainOver = await panel();
         const plainButtons = await evaluate(`(() => { const o = ${O}; const b = o.buttons; return JSON.stringify({ halo: o.homeHalo.texture.key, homeY: b.home.y, againY: b.again.y, againX: b.again.x, cx: (b.share.x + b.home.x) / 2, bonus: b.bonus ?? null, ids: o.cells.map((c) => c.id).join() }); })()`).then(JSON.parse);
         ok(plainButtons.halo === 'over-home-halo' && plainButtons.againY > plainButtons.homeY && plainButtons.againX === plainButtons.cx && plainButtons.bonus === null && plainButtons.ids === 'fiber,probiotic,postbiotic,bacteria,bean,mystery,falls,closeCalls,pipes,coin', 'a normal panel keeps its layout: Share | Home over Play again, the full glow, the ‼️ 😢 row in the grid');

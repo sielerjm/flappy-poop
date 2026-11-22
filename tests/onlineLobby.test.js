@@ -437,6 +437,11 @@ test('start (1.7a): a guest never asks; a refusal leaves the room ready and says
   await h.lobby.start();
   assert.equal(h.lobby.state.room.phase, 'ready');
   assert.equal(h.lobby.state.message?.key, 'onlineErrOffline');
+  // 5.2b AUD-137: the server's pacing of race starts (one a minute from a host device, in any room) reads as that, not as wrong codes.
+  const soon = await hostReady({ set_room_status: () => ({ ok: false, error: 'rate limited' }) });
+  await soon.lobby.start();
+  assert.equal(soon.lobby.state.room.phase, 'ready', 'the ready screen stays, for Start again');
+  assert.equal(soon.lobby.state.message?.key, 'onlineErrTooSoon');
 });
 
 // --- 1.7b: the room during and after a race (the race scene holds the lobby) -----------------------

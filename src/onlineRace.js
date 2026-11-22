@@ -98,6 +98,8 @@ export function createRaceFeed({ now, send, since = -Infinity, t = TUNING }) {
   const track = createGhostTrack(t);
   let lastPos = null;
   let flaps = null;
+  let flapAt = -Infinity; // when the last flap message went (the ceiling, AUD-144)
+  let flapOwed = false; // a flap inside the ceiling's window: it goes, with the poop's state then, once the window ends
   let deaths = null;
   let final = null; // the run's end, fixed at its first frame: { pos, done }
   let doneSent = false;
@@ -143,7 +145,14 @@ export function createRaceFeed({ now, send, since = -Infinity, t = TUNING }) {
       }
       if ((half.flaps ?? 0) > flaps) {
         flaps = half.flaps;
-        if (phase === 'run') emit('flap', { distance: f.distance, speed: f.speed, y: f.y, vy: f.vy });
+        if (phase === 'run') flapOwed = true;
+      }
+      // At most one flap message per flapMinMs (plan 39, 5.2b, AUD-144): taps faster than that fold into
+      // one flap sent at the window's end, carrying the poop's state then, so the ghost still replays it.
+      if (phase !== 'run') flapOwed = false;
+      else if (flapOwed && at - flapAt >= t.online.flapMinMs && emit('flap', { distance: f.distance, speed: f.speed, y: f.y, vy: f.vy })) {
+        flapOwed = false;
+        flapAt = at;
       }
       // A paused run sends no keyframes: the ghost would otherwise drift on at its speed.
       const keyPhase = half.state === 'paused' && phase === 'run' ? 'paused' : phase;
@@ -283,6 +292,7 @@ export function createRaceReferee({ seat, now, send, since = -Infinity, t = TUNI
     const c = claim(level);
     if (c.verdict) return;
     c.verdict = who;
+    c.answeredAt = now();
     send('first', { level, seat: who });
     out.push({ type: 'first', level, mine: who === seat, final: c.final });
   }
@@ -319,7 +329,11 @@ export function createRaceReferee({ seat, now, send, since = -Infinity, t = TUNI
     if (!host) return;
     const c = claim(m.level);
     if (c.verdict) {
-      send('first', { level: m.level, seat: c.verdict }); // a repeat: the verdict was lost, or is still on the wire
+      // A repeat: the verdict was lost, or is still on the wire. Answered at most once per half a
+      // claimResendMs (AUD-147), so a guest's honest repeats each get one and a flood gets few.
+      if (now() - (c.answeredAt ?? -Infinity) < cfg.claimResendMs / 2) return;
+      c.answeredAt = now();
+      send('first', { level: m.level, seat: c.verdict });
       return;
     }
     // When it crossed: its own `at`, never later than it was sent (a repeat keeps the crossing's time).
@@ -459,8 +473,12 @@ export function createRaceReferee({ seat, now, send, since = -Infinity, t = TUNI
 /**
  * One field width for both devices (item 14, AUD-097). Presence holds each side's width at join, so
  * a phone turned after the lobby opened would race on another field than the other side. From the
- * race's start to its GO each side sends its own field width (`width`) every
- * online.race.widthResendMs (at once again after a refused send); the newest heard from the other
+ * race's start to its GO each side sends its own field width (`width`, with `heard`: whether it has
+ * the other side's) every online.race.widthResendMs (at once again after a refused send) until it
+ * hears the other's; from then on it sends only to answer a width whose `heard` is false (a page
+ * that reloaded again, or lost the answer), so a rewound race waiting for Ready sends none (plan 39,
+ * 5.2b, AUD-143). A width carried over a restart (`heard`) sets the field but is not counted as heard:
+ * this side's own may have changed (a phone turned), so each new fit says it again. The newest heard from the other
  * side (by its server time, then sequence) replaces the join-time one. fieldW() is agreedWidth of
  * the two, this side's own before it knows the other's: the same on both devices once each heard
  * the other, never wider than this one. receive(item) is true when the agreed width moved; peer()
@@ -478,14 +496,18 @@ export function createFieldFit({ mine, theirs = null, heard = null, now, send, u
   let peerW = last?.width ?? (Number.isFinite(theirs) ? theirs : null);
   let sentAt = null;
   let out = true;
+  let gotPeer = false; // this fit has heard the other's width (one carried over a restart sets the field, not this: this side's own may have changed)
+  let owed = false; // the other side's newest width said it has not heard this side's: answer it once
   const fieldW = () => (Number.isFinite(peerW) ? agreedWidth(mine, peerW) : mine);
   return {
     tick() {
       const at = now();
       if (!(at < until)) return;
-      if (sentAt === null || !out || at - sentAt >= t.online.race.widthResendMs) {
+      if (gotPeer && !owed && out) return;
+      if (sentAt === null || !out || at - sentAt >= t.online.race.widthResendMs) { // an answer too: at most one per widthResendMs
         sentAt = at;
-        out = send('width', { width: mine }) !== false;
+        out = send('width', { width: mine, heard: gotPeer }) !== false;
+        if (out) owed = false;
       }
     },
     receive(item) {
@@ -493,6 +515,8 @@ export function createFieldFit({ mine, theirs = null, heard = null, now, send, u
       const before = fieldW();
       last = { width: item.msg.width, t: item.msg.t, seq: item.msg.seq };
       peerW = last.width;
+      gotPeer = true;
+      owed = item.msg.heard === false;
       return fieldW() !== before;
     },
     fieldW,
@@ -557,6 +581,7 @@ export function createRacePause({ seat, now, send, present = true, since, round:
   let pausedAt = null;
   let last = null; // the resume this side came out of: { round, startAt }
   let answered = null; // the guest's pause message the host last answered with that resume
+  let answeredAt = -Infinity; // when: at most one such answer per half a heartbeatMs (AUD-147)
   let trouble = false; // this side's link or the other side was out at the last look
   const beat = { key: null, at: -Infinity, out: true };
   // The other side: its newest word (a move, its pause, or the host's resume), its last move's phase.
@@ -671,8 +696,9 @@ export function createRacePause({ seat, now, send, present = true, since, round:
     const w = pauseWord();
     if (!last || !w || w.round !== round - 1 || w.count === last.startAt) return false;
     if (host && w.ready) {
-      if (answered !== peer.msg) {
+      if (answered !== peer.msg && at - answeredAt >= cfg.heartbeatMs / 2) {
         answered = peer.msg; // once per word: a guest live and quiet in its break asks nothing more
+        answeredAt = at;
         send('resume', { round: last.round, startAt: last.startAt, cancel: false });
       }
       return false;

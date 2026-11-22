@@ -171,7 +171,7 @@ test('every event has a valid example and every field is checked', () => {
     first: { level: 1, seat: 'guest' },
     ready: { level: 1, ready: true },
     go: { level: 2, startAt: 1_800_000_000_000, cancel: false },
-    width: { width: 1280 },
+    width: { width: 1280, heard: false },
     done: { score: 90, deaths: 2, levelWins: 3, finalFirst: true, won: true },
     rematch: { want: true },
     pause: { reason: 'away', ready: false, round: 0, count: 0 },

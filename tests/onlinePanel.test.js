@@ -169,6 +169,30 @@ test('the room code types from the keyboard (digits, Backspace, Enter) and from 
   closeTournamentPanel();
 });
 
+test('5.2b AUD-142: a held Enter on a refused code is one join: its auto-repeats send nothing, a fresh press tries again', async () => {
+  const k = setup({ answers: { join_room: { ok: false, error: 'no room' } } });
+  k.open();
+  await flush();
+  await el('tour-join').click();
+  const root = el('tournament-panel');
+  for (const key of ['4', '8', '2', '9', '1', '3']) await root.fire('keydown', { key });
+  const joins = () => k.net.calls.filter((c) => c[1] === 'join_room').length;
+  await root.fire('keydown', { key: 'Enter' });
+  await flush();
+  assert.equal(joins(), 1, 'the press');
+  assert.equal(textOf(el('tour-boxes')), '482913', 'the code is kept after "no room"');
+  assert.equal(el('tour-key-go').disabled, false, 'and Go is lit again');
+  for (let i = 0; i < 10; i += 1) {
+    await root.fire('keydown', { key: 'Enter', repeat: true });
+    await flush();
+  }
+  assert.equal(joins(), 1, 'the held key\'s repeats spend no counted try');
+  await root.fire('keydown', { key: 'Enter' });
+  await flush();
+  assert.equal(joins(), 2, 'a fresh press is a deliberate retry');
+  closeTournamentPanel();
+});
+
 test('the poll timer feeds the lobby: a confirmed guest shows "<name> wants to race" with Let in', async () => {
   const k = setup();
   k.open();

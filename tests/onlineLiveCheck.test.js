@@ -5,7 +5,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { LEADERBOARD } from '../src/config.js';
-import { parseArgs, resolveTarget, classifyJoin, isRefusal, reportLine, STEPS, LIVE_REF, TEARDOWN_SQL } from '../tools/online_live_check.mjs';
+import { parseArgs, resolveTarget, classifyJoin, isRefusal, reportLine, STEPS, LIVE_REF, TEARDOWN_SQL, CHECK_ID_PREFIX } from '../tools/online_live_check.mjs';
 
 const SOURCE = readFileSync(new URL('../tools/online_live_check.mjs', import.meta.url), 'utf8');
 const TEST_URL = 'https://abcdefghijklmnopqrst.supabase.co';
@@ -59,7 +59,7 @@ test('the run proves finding 20 (a session refused by the game\'s anon functions
   assert.match(SOURCE, /rpc\(S\.A, 'schema_version'\)/);
   assert.match(SOURCE, /must\(S\.C, 'join_room'/, 'B is mid-race by step 10, and a racing device is told so before any code');
   assert.match(SOURCE, /process\.on\('SIGINT'/);
-  assert.ok((SOURCE.match(/TEARDOWN_SQL/g) ?? []).length >= 4, 'printed on leftovers, a crash and Ctrl-C');
+  assert.ok((SOURCE.match(/TEARDOWN_SQL/g) ?? []).length >= 5, 'printed on leftovers, a pass, a crash and Ctrl-C');
 });
 
 test('the report: fourteen numbered steps, one PASS or FAIL line each; the teardown SQL deletes only the check\'s own users', () => {
@@ -67,7 +67,19 @@ test('the report: fourteen numbered steps, one PASS or FAIL line each; the teard
   assert.equal(reportLine(STEPS[0], { ok: true, note: '401 42501' }), 'PASS 01 anon cannot call online functions: 401 42501');
   assert.equal(reportLine(STEPS[13], { ok: false }), `FAIL 14 ${STEPS[13][1]}`);
   assert.match(STEPS[13][1], /^teardown/, 'the teardown stays last: it unlinks every session');
-  assert.equal(TEARDOWN_SQL, "delete from auth.users where raw_user_meta_data ->> 'online_check' = '39';");
+  // 5.2b AUD-140: the users, then their throwaway players' races, first trusts and names (run on PGlite in schemaOnline.test.js).
+  assert.equal(
+    TEARDOWN_SQL,
+    [
+      "delete from auth.users where raw_user_meta_data ->> 'online_check' = '39';",
+      "delete from public.matches where host_player like 'chk39%' or guest_player like 'chk39%';",
+      "delete from public.online_trust where player_id like 'chk39%';",
+      "delete from public.online_profiles where player_id like 'chk39%';",
+    ].join('\n  '),
+  );
+  assert.equal(CHECK_ID_PREFIX, 'chk39');
+  assert.match(SOURCE, /const playerId = \(\) => `\$\{CHECK_ID_PREFIX\}\$\{randomBytes\(13\)\.toString\('base64url'\)\}`\.slice\(0, 22\);/, 'every throwaway id carries the prefix the teardown matches');
+  assert.doesNotMatch(SOURCE.split('\n').slice(0, 25).join('\n'), /nothing is left behind/, 'the header names what stays');
   assert.match(SOURCE, /signInAnonymously\(\{ options: \{ data: \{ online_check: '39' \} \} \}\)/, 'every user it makes carries the tag the teardown matches');
 });
 

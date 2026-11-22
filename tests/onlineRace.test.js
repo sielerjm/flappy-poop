@@ -134,6 +134,49 @@ test('the feed: a pos at once, then keyframes every online.keyframeMs mid-run; f
   assert.equal(sent[0].length, 3, 'one flap, one message');
 });
 
+test('5.2b AUD-144: at most one flap message per online.flapMinMs; faster taps fold into one sent at the window\'s end with the poop\'s state then', () => {
+  let clock = 0;
+  const out = [];
+  const feed = createRaceFeed({ now: () => clock, send: (event, fields) => (out.push({ event, t: clock, ...fields }), true), since: 0 });
+  const flapsOf = () => out.filter((m) => m.event === 'flap');
+  const h = half();
+  feed.tick(h);
+  clock = 1000;
+  feed.tick({ ...h, flaps: 1, y: 600, vy: T.flapVelocity });
+  assert.equal(flapsOf().length, 1, 'a lone tap goes at once');
+  clock = 1050;
+  feed.tick({ ...h, flaps: 2, y: 590, vy: T.flapVelocity });
+  clock = 1100;
+  feed.tick({ ...h, flaps: 2, y: 580, vy: T.flapVelocity + 50 });
+  assert.equal(flapsOf().length, 1, 'a second tap inside the window waits');
+  clock = 1000 + T.online.flapMinMs;
+  feed.tick({ ...h, flaps: 2, y: 560, vy: T.flapVelocity + 100 });
+  assert.equal(flapsOf().length, 2, 'it goes at the window\'s end');
+  assert.deepEqual([flapsOf()[1].y, flapsOf()[1].vy], [560, T.flapVelocity + 100], 'with the poop\'s state then, so the ghost replays it');
+  // A minute of taps at 30 Hz (a held key's repeat rate, or many touches) at 60 fps: bounded at the ceiling.
+  const start = flapsOf().length;
+  let flaps = 2;
+  for (let f = 0; f < 3600; f += 1) {
+    clock = 2000 + f * (1000 / 60);
+    if (f % 2 === 0) flaps += 1;
+    feed.tick({ ...h, flaps, distance: f });
+  }
+  const minute = flapsOf().length - start;
+  assert.ok(minute <= 60_000 / T.online.flapMinMs + 1, `${minute} flap messages for 1,800 taps in a minute`);
+  assert.ok(minute >= 60_000 / T.online.flapMinMs - 5, `the taps still go, at the ceiling (${minute})`);
+  // A tap held in the window is dropped once the run is not flying (a break, a respawn, its end).
+  clock = 70_000;
+  feed.tick({ ...h, flaps: flaps + 1 });
+  clock += 10;
+  feed.tick({ ...h, flaps: flaps + 2 });
+  const held = flapsOf().length;
+  clock += T.online.flapMinMs;
+  feed.tick({ ...h, flaps: flaps + 2, state: 'paused', levelBreak: true });
+  clock += T.online.flapMinMs;
+  feed.tick({ ...h, flaps: flaps + 2, state: 'paused', levelBreak: true });
+  assert.equal(flapsOf().length, held, 'nothing flaps out of a break');
+});
+
 test('the remote slot: the ghost of the other peer at the right distance, its score and level, extrapolated between keyframes', () => {
   const { feeds, advance } = pair();
   assert.equal(feeds[1].slot(), null, 'nothing heard yet');
@@ -306,6 +349,30 @@ test('first over the line (the host\'s word): server time decides, so a guest cl
   d.refs[1].tick(brk(2));
   assert.deepEqual(firsts(d.refs[1].drain()), [{ type: 'first', level: 1, mine: true, final: false }]);
   assert.equal(d.events(1, 'first').length, 0, 'a guest never sends a verdict');
+});
+
+test('5.2b AUD-147: the host answers repeated claims to a line it decided at most once per half a claimResendMs: a guest\'s honest repeats each get one, a flood few', () => {
+  let now = 20_000;
+  const sent = [];
+  const ref = createRaceReferee({ seat: 'host', now: () => now, send: (e, f) => (sent.push({ e, ...f }), true), since: 0 });
+  ref.crossed({ level: 1 });
+  now += T.online.race.firstGraceMs + 100;
+  ref.tick({ level: 2, inBreak: true, shopOpen: false, held: false });
+  const firsts = () => sent.filter((m) => m.e === 'first').length;
+  assert.equal(firsts(), 1, 'the verdict');
+  let seq = 0;
+  const claim = () => ref.receive({ kind: 'peer', event: 'finish', msg: { seq: (seq += 1), t: now, sid: 'g', level: 1, distance: 0, at: now } });
+  for (let i = 0; i < 100; i += 1) {
+    claim();
+    now += 10;
+  }
+  assert.ok(firsts() - 1 <= 2, `100 claims in a second: ${firsts() - 1} answers`);
+  const before = firsts();
+  for (let i = 0; i < 3; i += 1) {
+    now += T.online.race.claimResendMs;
+    claim();
+  }
+  assert.equal(firsts() - before, 3, 'a repeat every claimResendMs (the verdict lost) is answered each time');
 });
 
 test('the host first: decided when the later claim lands, or after online.race.firstGraceMs with none; never twice', () => {
@@ -945,7 +1012,7 @@ function fitPair({ widths, presence, until, drop = null, refuse = null }) {
   return { fits, sent, advance, now: () => clock };
 }
 
-test('one field width (item 14, AUD-097): each side sends its width now until GO and takes the newest it hears over the join-time one, so both race on the smaller', () => {
+test('one field width (item 14, AUD-097): each side sends its width until it hears the other\'s (and answers an unheard one), never at or after GO, and takes the newest it hears over the join-time one, so both race on the smaller', () => {
   // The audit\'s case: the host phone announced 1600 in landscape, then turned to portrait (720);
   // the guest\'s desktop is 1200 at join and now. Each side\'s first width is lost on the way.
   const lostFirst = [1, 1];
@@ -955,7 +1022,7 @@ test('one field width (item 14, AUD-097): each side sends its width now until GO
   assert.deepEqual(p.fits.map((f) => f.fieldW()), [720, 720], 'both on the smaller once each heard the other');
   assert.deepEqual(p.fits.map((f) => f.peer()?.width), [1200, 720]);
   const before = p.sent.map((s) => s.length);
-  assert.ok(before.every((n) => n >= 2), 'again every online.race.widthResendMs');
+  assert.ok(before.every((n) => n >= 2), 'again every online.race.widthResendMs while the first was lost');
   p.advance(2000);
   assert.ok(p.sent.every((s) => s.every((m) => m.t < 4000)), 'nothing at or after GO');
   for (const [w, pres] of [[[720, 1600], [null, null]], [[1600, 1600], [720, 720]], [[1200, 900], [1600, 1600]]]) {
@@ -963,6 +1030,42 @@ test('one field width (item 14, AUD-097): each side sends its width now until GO
     q.advance(500);
     assert.deepEqual(q.fits.map((f) => f.fieldW()), [Math.min(...w), Math.min(...w)], `widths ${w}, presence ${pres}`);
   }
+});
+
+test('5.2b AUD-143: once each side heard the other\'s width the fit goes quiet (a rewound race waiting for Ready sends none); a restart or a reloaded page says it again and is answered, at most once per widthResendMs', () => {
+  const p = fitPair({ widths: [720, 1200], presence: [null, null], until: Infinity });
+  p.advance(2000);
+  assert.deepEqual(p.fits.map((f) => f.fieldW()), [720, 720]);
+  const settled = p.sent.map((s) => s.length);
+  assert.ok(settled.every((n) => n <= 3), `a few each to agree (${settled})`);
+  assert.deepEqual(p.sent.map((s) => s.at(-1).heard), [true, true], 'each last said it heard the other');
+  p.advance(60_000);
+  assert.deepEqual(p.sent.map((s) => s.length), settled, 'a minute of waiting: no width');
+  // This side's fit after a restart (a rewind or a refit): the carried width sets the field at once,
+  // and it says its own again, since a phone may have turned meanwhile.
+  let now = 0;
+  const out = [];
+  const a = createFieldFit({ mine: 720, heard: { width: 1200, t: 0, seq: 1 }, now: () => now, until: Infinity, send: (e, f) => (out.push(f), true) });
+  assert.equal(a.fieldW(), 720);
+  now = 100;
+  a.tick();
+  assert.deepEqual(out, [{ width: 720, heard: false }], 'a new fit says its width');
+  const w = (fields, t, seq) => ({ kind: 'peer', event: 'width', msg: { seq, t, sid: 'b2', ...fields }, at: t });
+  a.receive(w({ width: 1000, heard: true }, 200, 1));
+  now = 700;
+  a.tick();
+  assert.equal(out.length, 1, 'heard, and the other heard it: quiet');
+  // The other page reloads again: its new fit has heard nothing and says so; a flood of those gets paced answers.
+  for (let i = 0; i < 50; i += 1) {
+    a.receive(w({ width: 1000, heard: false }, 800 + i * 10, 2 + i));
+    now = 800 + i * 10;
+    a.tick();
+  }
+  assert.deepEqual(out.slice(1), [{ width: 720, heard: true }], 'one answer in half a second of asks');
+  a.receive(w({ width: 1000, heard: true }, 1400, 60));
+  now = 5000;
+  a.tick();
+  assert.equal(out.length, 2, 'answered: quiet again');
 });
 
 test('the field fit: never wider than this side; its own width before it hears anything; a refused send goes again at once; an older width never replaces a newer one', () => {

@@ -634,6 +634,7 @@ test('answer_guest: the host accepts (ready), or declines and the room moves to 
   await assert.rejects(call(db, host, 'answer_guest', [code, true]), /no guest/);
   await call(db, guest, 'join_room', [code]);
   await assert.rejects(call(db, guest, 'answer_guest', [code, true]), /no room/, 'only the host answers');
+  await db.query("update public.rooms set created_at = now() - interval '3 seconds'"); // a human learns the code and knocks (5.2b: a decline at once is a loop)
   const declined = await call(db, host, 'answer_guest', [code, false]);
   assert.equal(declined.ok, true);
   assert.equal(declined.status, 'open');
@@ -814,6 +815,7 @@ test('the channel admits nobody once the seat is gone: a declined guest, a secon
   const guest = await device(db, 'Qg');
   const { code } = await call(db, host, 'create_room');
   await call(db, guest, 'join_room', [code]);
+  await db.query("update public.rooms set created_at = now() - interval '3 seconds'"); // a human learns the code and knocks (5.2b: a decline at once is a loop)
   const moved = await call(db, host, 'answer_guest', [code, false]);
   assert.equal(await canRead(db, guest.uid, `room:${code}`), false, 'the old topic');
   assert.equal(await canRead(db, guest.uid, `room:${moved.code}`), false, 'the new topic');
@@ -1527,4 +1529,123 @@ test('a waiting device\'s report keeps every other check: too soon or over the s
       values ('123456', 1, 1, now() - interval '1 hour', $1, $2, 'agreed', true, now() - interval '1 minute', true, true)`, [r.host.player, r.owner.player]);
   }
   assert.deepEqual(await both(db, r, 1, [slot(3), slot(4)]), { ok: true, status: 'agreed', counted: false }, `past ${cap} a pair in a day`);
+});
+
+// ---------------------------------------------------------------------------
+// 5.2b: item 68's server pacing (AUD-136 to AUD-138) and the definer rule (AUD-141).
+
+test('5.2b AUD-136: a pair looping join and decline is paced: a decline within 2 s of its code\'s minting is refused, and seated joins stop at c_device_oks a device and c_ip_oks an IP in 10 minutes', async () => {
+  const db = await freshDb();
+  const host = await device(db, 'LoopH');
+  const guest = await device(db, 'LoopG');
+  let { code } = await call(db, host, 'create_room');
+  assert.equal((await call(db, guest, 'join_room', [code])).ok, true);
+  await assert.rejects(call(db, host, 'answer_guest', [code, false]), /rate limited/, 'a decline at once: nobody could have learnt the code and knocked');
+  assert.equal((await room(db, code)).status, 'asked', 'nothing changed');
+  const sentBefore = (await roomMsgs(db, code)).length;
+  const oks = constant('c_device_oks');
+  let joined = 1;
+  for (let i = 0; i < 2 * oks; i += 1) {
+    await db.query("update public.rooms set created_at = now() - interval '3 seconds'");
+    ({ code } = await call(db, host, 'answer_guest', [code, false]));
+    const j = await call(db, guest, 'join_room', [code]);
+    if (!j.ok) {
+      assert.equal(j.error, 'rate limited');
+      break;
+    }
+    joined += 1;
+  }
+  assert.equal(joined, oks, `${oks} seated joins from one device, then 'rate limited'`);
+  assert.equal(sentBefore, 1, 'the guest message of the first join');
+  assert.equal(await db.query('select count(*)::int n from public.join_attempts where not ok').then((r) => r.rows[0].n), 0, 'the refused join spent no failed try');
+  // An IP: other devices behind it share its count (a school's wifi has room for c_ip_oks).
+  const ip = IP('198.51.100.7');
+  const g2 = await device(db, 'IpG');
+  await call(db, g2, 'join_room', ['999999'], { headers: ip }); // a miss: its row carries the IP's hash
+  const { ip_hash: hash } = (await db.query('select ip_hash from public.join_attempts where uid = $1', [g2.uid])).rows[0];
+  await db.query('insert into public.join_attempts (uid, ip_hash, ok) select gen_random_uuid(), $1, true from generate_series(1, $2)', [hash, constant('c_ip_oks')]);
+  const h3 = await device(db, 'IpH');
+  const { code: c3 } = await call(db, h3, 'create_room');
+  assert.deepEqual(await call(db, g2, 'join_room', [c3], { headers: ip }), { ok: false, error: 'rate limited' });
+  assert.equal((await call(db, g2, 'join_room', [c3], { headers: IP('203.0.113.9') })).ok, true, 'another IP joins');
+});
+
+test('5.2b AUD-137: a host device mints at most one race a minute across rooms; races nobody sees go after 30 days, agreed ones stay', async () => {
+  const db = await freshDb();
+  const r = await readyRoom(db, 'MintH', 'MintG');
+  await call(db, r.host, 'set_room_status', [r.code, 'playing']);
+  await call(db, r.host, 'leave_room', [r.code]);
+  await db.query("update public.rooms set created_at = now() - interval '3 seconds'");
+  const { code } = await call(db, r.host, 'create_room');
+  await call(db, r.guest, 'join_room', [code]);
+  await call(db, r.host, 'answer_guest', [code, true]);
+  await assert.rejects(call(db, r.host, 'set_room_status', [code, 'playing']), /rate limited/, 'a new room is no way round the minute');
+  await db.query("update public.matches set started_at = now() - interval '61 seconds'");
+  assert.equal((await call(db, r.host, 'set_room_status', [code, 'playing'])).status, 'playing', 'a minute after the last GO');
+  // One race of each kind, then 31 days on: only the agreed one is anyone's history.
+  const kinds = [];
+  for (const [i, status] of ['agreed', 'refused', 'disputed', 'abandoned'].entries()) {
+    const q = await racing(db, `KindH${i}`, `KindG${i}`);
+    if (status === 'agreed') await both(db, q, 1, [slot(3), slot(4)]);
+    else await finish(db, q.host, q.code, 1, [slot(0), slot(0)]);
+    kinds.push(q.code);
+  }
+  await db.query("update public.matches m set status = x.s from (values ($1, 'refused'), ($2, 'disputed'), ($3, 'abandoned')) as x(code, s) where m.room_code = x.code", kinds.slice(1));
+  assert.deepEqual((await db.query("select status from public.matches where room_code = any($1) order by status", [kinds])).rows.map((x) => x.status), ['abandoned', 'agreed', 'disputed', 'refused']);
+  await db.query("update public.matches set created_at = now() - interval '31 days', started_at = now() - interval '31 days', finished_at = now() - interval '31 days' where room_code = any($1)", [kinds]);
+  const fresh = await racing(db, 'FreshH', 'FreshG');
+  await finish(db, fresh.host, fresh.code, 1, [slot(0), slot(0)]);
+  await db.query("update public.matches set status = 'refused', created_at = now() - interval '29 days' where room_code = $1", [fresh.code]);
+  await call(db, await device(db, 'Later'), 'create_room'); // housekeeping runs
+  assert.deepEqual((await db.query("select status from public.matches where room_code = any($1)", [kinds])).rows.map((x) => x.status), ['agreed'], 'the agreed race stays');
+  assert.equal((await matchesOf(db, fresh.code)).length, 1, 'a hidden race 29 days old stays');
+});
+
+test('5.2b AUD-138: a device links at most c_links players it was not linked to an hour ("rate limited", no trust row left); its own player again any time; an hour on it may again', async () => {
+  const db = await freshDb();
+  const uid = await addUser(db);
+  const max = constant('c_links');
+  for (let i = 0; i < max; i += 1) assert.equal((await link(db, uid, id(`Fake${i}`), `F${i}`)).trusted, true);
+  await assert.rejects(link(db, uid, id('FakeX'), 'FakeX'), /rate limited/);
+  const trustRows = () => db.query('select count(*)::int n from public.online_trust').then((r) => r.rows[0].n);
+  assert.equal(await trustRows(), max, 'the refused link left no trust row');
+  assert.equal((await link(db, uid, id(`Fake${max - 1}`), `F${max - 1}`)).trusted, true, 'its own player again (every 🌐 entry) is never paced');
+  const other = await addUser(db);
+  assert.equal((await link(db, other, id('FakeX'), 'FakeX')).trusted, true, 'another device is not this one\'s count');
+  await db.query("update public.online_links set at = now() - interval '61 minutes' where uid = $1", [uid]);
+  assert.equal((await link(db, uid, id('FakeY'), 'FakeY')).trusted, true, 'an hour on');
+});
+
+test('5.2b AUD-141: every online function is security definer with an empty search_path (the header\'s rule; server_now too, AUD-102)', async () => {
+  const db = await freshDb();
+  const names = Object.keys(ONLINE_FNS);
+  const rows = (await db.query(`select p.proname, p.prosecdef, p.proconfig from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+    where n.nspname = 'public' and p.proname = any($1)`, [names])).rows;
+  assert.deepEqual([...new Set(rows.map((x) => x.proname))].sort(), [...names].sort(), 'every one is there');
+  for (const x of rows) {
+    assert.equal(x.prosecdef, true, `${x.proname} is security definer`);
+    assert.ok((x.proconfig ?? []).includes('search_path=""'), `${x.proname}: ${JSON.stringify(x.proconfig)}`);
+  }
+  await assert.rejects(call(db, null, 'server_now'), /not signed in/, 'server_now checks the caller first, as the rest do');
+});
+
+test('5.2b AUD-140: the live check\'s teardown SQL removes its tagged users and its throwaway players\' races, first trusts and names, and nothing of anyone else\'s', async () => {
+  const { TEARDOWN_SQL } = await import('../tools/online_live_check.mjs');
+  const db = await freshDb();
+  const check = await racing(db, 'chk39H', 'chk39G'); // ids 'chk39H…', as the check's playerId() makes them
+  await finish(db, check.host, check.code, 1, [slot(0), slot(0)]);
+  const real = await racing(db, 'RealH', 'RealG');
+  await both(db, real, 1, [slot(3), slot(4)]);
+  await db.query(`update auth.users set raw_user_meta_data = '{"online_check":"39"}' where id = any($1)`, [[check.host.uid, check.guest.uid]]);
+  const count = (table, col, like) => db.query(`select count(*)::int n from public.${table} where ${col} like $1`, [like]).then((r) => r.rows[0].n);
+  assert.ok((await count('online_trust', 'player_id', 'chk39%')) === 2 && (await count('online_profiles', 'player_id', 'chk39%')) === 2 && (await count('matches', 'host_player', 'chk39%')) === 1, 'the check\'s rows are there');
+  await db.exec(TEARDOWN_SQL);
+  for (const [table, col] of [['online_trust', 'player_id'], ['online_profiles', 'player_id'], ['matches', 'host_player'], ['matches', 'guest_player']]) {
+    assert.equal(await count(table, col, 'chk39%'), 0, `no ${table} row of the check's players`);
+  }
+  assert.equal(await db.query("select count(*)::int n from auth.users where raw_user_meta_data ->> 'online_check' = '39'").then((r) => r.rows[0].n), 0);
+  assert.equal(await count('online_trust', 'player_id', 'Real%'), 2, 'everyone else\'s trust stays');
+  assert.equal(await count('online_profiles', 'player_id', 'Real%'), 2);
+  assert.equal((await matchesOf(db, real.code)).length, 1, 'and their race');
+  assert.ok(await userExists(db, real.host.uid));
 });

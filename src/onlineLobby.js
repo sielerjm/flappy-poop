@@ -325,7 +325,9 @@ export function createOnlineLobby({ net, name, width, mine = { protocol: protoco
       step({ type: 'status', room: res.data, at: Number.isFinite(res.data.server_ms) ? res.data.server_ms : now() });
       return true;
     }
-    state.message = msg(errorKey(res?.error), 'error');
+    // A race starts at most once a minute from one host device, in any room (5.2b, AUD-137): here
+    // 'rate limited' is that, not the join cap's "too many wrong codes".
+    state.message = msg(status === 'playing' && res?.error === 'rate limited' ? 'onlineErrTooSoon' : errorKey(res?.error), 'error');
     return false;
   }
 

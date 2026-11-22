@@ -360,6 +360,7 @@ export const TUNING = {
   // the ghost replays it exactly between keyframes.
   online: {
     keyframeMs: 500, // ms between `pos` keyframes mid-run (2 Hz; flaps go on top and carry the poop's full state). Michael, 19 Nov: the same ghost as 5 Hz for 43% fewer messages (plan 39 item 34)
+    flapMinMs: 200, // ms between `flap` messages at most (5 a second, AUD-144): faster taps fold into one flap sent at the window's end with the poop's state then
     codeTtlMs: 15 * 60 * 1000, // ms a room code lives from its room's last change: mirrors create_room / join_room in db/schema.sql
     clock: {
       samples: 6, // server_now() round trips per sync round (item 15: 5 to 8); the lowest round trip sets the offset

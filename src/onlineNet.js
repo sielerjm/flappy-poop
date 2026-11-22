@@ -237,7 +237,9 @@ function randomSid() {
  *
  * - signIn() / warm(): the client, a reused or new anonymous session ({ ok, uid } or { ok: false,
  *   error: 'disabled' | 'load failed' | 'rate limited' | 'offline' | 'error' }); warm also opens the
- *   socket and starts the clock (the pre-warm when 🌐 is switched on, item 16).
+ *   socket and starts the clock (the pre-warm when 🌐 is switched on, item 16). signIn({ create: false })
+ *   reuses a stored session only ('signed out' without one). A close() while either is out wins: the
+ *   late answer starts no ticker, socket or clock (5.2b).
  * - rpc(fn, args): an online function → { ok: true, data } or { ok: false, error } (the server's
  *   plain message, or 'not online', 'signed out', 'refused', 'offline', 'error').
  * - syncClock() / pump() / serverNow() / clockSynced: server_now() round trips into createClock.
@@ -290,6 +292,7 @@ export function createOnlineNet({
   let session = null; // the last session seen; null when signed out
   let signing = null; // the sign-in in flight
   let active = false; // inside online play: between signIn / warm and close
+  let closes = 0; // close() calls so far: a sign-in or warm that outlives a close starts nothing (plan 39, 5.2b, AUD-145)
   let ticking = false; // the token ticker (startAutoRefresh) is on
   let sampling = null; // the server_now sample in flight
   let nextSampleAt = -Infinity;
@@ -331,7 +334,7 @@ export function createOnlineNet({
     quietly(() => client.auth.startAutoRefresh?.());
   }
 
-  async function doSignIn() {
+  async function doSignIn(create) {
     if (!url) return { ok: false, error: 'disabled' };
     const got = await getClient();
     if (!got.ok) return got;
@@ -345,24 +348,34 @@ export function createOnlineNet({
       }
     }
     if (!s) {
+      if (!create) return { ok: false, error: 'signed out' }; // AUD-146: a stored session only, never a new user
       const r = await auth.signInAnonymously().catch((error) => ({ error }));
       if (r?.error || !r?.data?.session) return { ok: false, error: signInError(r?.error) };
       s = r.data.session;
     }
     session = s;
-    startTicker();
     return { ok: true, uid: s.user?.id ?? null };
   }
 
-  function signIn() {
+  /**
+   * The session, reused or new ({ create: false }: reused only, as Clear and a Load of another player
+   * need, AUD-146). The token ticker starts only if close() was not called while it was out (AUD-145).
+   */
+  function signIn({ create = true } = {}) {
     if (client && session) {
       startTicker();
       return Promise.resolve({ ok: true, uid: session.user?.id ?? null });
     }
-    signing ??= doSignIn().finally(() => {
-      signing = null;
+    const gen = closes;
+    const pending = create
+      ? (signing ??= doSignIn(true).finally(() => {
+          signing = null;
+        }))
+      : (signing ?? doSignIn(false));
+    return pending.then((r) => {
+      if (r.ok && gen === closes) startTicker();
+      return r;
     });
-    return signing;
   }
 
   /** Refresh before a join: a token ending within refreshMarginMs is refreshed, then Realtime gets it. */
@@ -788,8 +801,9 @@ export function createOnlineNet({
   // --- entering and leaving online play ---
 
   async function warm() {
+    const gen = closes;
     const r = await signIn();
-    if (!r.ok) return r;
+    if (!r.ok || gen !== closes) return r; // closed while it loaded or signed in (AUD-145): no socket, no clock
     quietly(() => client.realtime?.connect?.()); // the first join connects anyway
     pump();
     return r;
@@ -810,6 +824,7 @@ export function createOnlineNet({
   }
 
   function close() {
+    closes += 1;
     closeRoom();
     closeTopic();
     active = false;

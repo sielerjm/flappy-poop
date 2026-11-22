@@ -1292,6 +1292,9 @@ function keypadKey(e) {
   const key = id && globalThis.document.getElementById(id);
   if (!key || key.disabled) return;
   e.preventDefault?.();
+  // A held Enter's auto-repeat is not another Go (plan 39, 5.2b, AUD-142): each would send the code
+  // again and a refused one spends a counted try. Held digits and Backspace repeat as typing does.
+  if (e.repeat && id === 'tour-key-go') return;
   return key.click();
 }
 
