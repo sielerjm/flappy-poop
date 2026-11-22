@@ -583,6 +583,44 @@ The winners take the podium 🥇 🥈 (and 🥉 from 3 players). With 3 or more 
 | onlineRaceWon | Won (a Recent races row: "Won 412–377", your score first) | 赢 |
 | onlineRaceLost | Lost (a Recent races row) | 输 |
 | onlineRaceDraw | Draw (a Recent races row: both scored the same, and every tiebreak too) | 平 |
+| friendsButton | 🤝 Friends (the 🤝 Friends button on the 🌐 online home (a yellow badge beside it counts friend requests waiting for an answer, online mode only)) | 🤝 好友 |
+| friendsLead | Players you raced and added (the Friends screen's lead line) | 和你比过赛、加了好友的玩家 |
+| friendsList | Friends ({n}) (the Friends section heading; {n} is how many friends) | 好友（{n}） |
+| friendsNone | No friends yet. Finish a saved race with someone, then add them below or on the results screen. (no friends yet (a friend can only come from a saved online race together: no search, by design)) | 还没有好友。和别人完成一场已保存的比赛，然后在下面或结果画面加对方为好友。 |
+| friendsAskedYou | Asked to be your friend (section heading: players who asked to be your friend (Accept / Decline)) | 想加你为好友 |
+| friendsYouAsked | Waiting for an answer (section heading: friend requests you sent that are not answered yet) | 等待对方回复 |
+| friendsOpponents | Recent opponents (section heading: recent online opponents you could add) | 最近的对手 |
+| friendsBlocked | Blocked ({n}) (the blocked list's toggle; {n} is how many players you blocked) | 已屏蔽（{n}） |
+| friendsPending | Pair this device to see your friends. (a device that is not paired yet (📱 Devices) cannot see friends) | 配对这台设备后才能看到好友。 |
+| friendsNote | Only your friends see whether you're online, and only while you're in 🌐 online. (the privacy line at the bottom of the Friends screen) | 只有你的好友能看到你是否在线，而且只在你打开 🌐 在线时。 |
+| friendOnline | Online (a friend's state beside 🟢: in online mode, available) | 在线 |
+| friendInGame | In a game (a friend's state beside 🟡: in an online race) | 比赛中 |
+| friendOffline | Offline (a friend's state beside ⚪: anything else) | 离线 |
+| friendAskedWhen | asked {when} (under a request's name; {when} is today / yesterday / N days ago) | {when}发来 |
+| friendSentWhen | sent {when} (under a sent request; {when} as above) | {when}发出 |
+| friendRacedWhen | raced {when} (under a recent opponent; {when} as above) | {when}比过 |
+| friendAccept | Accept (button: accept a friend request) | 接受 |
+| friendDecline | Decline (button: turn a friend request down) | 拒绝 |
+| friendTakeBack | Take back (button: withdraw a friend request you sent) | 撤回 |
+| friendAdd | Add friend (button: send a friend request to a recent opponent) | 加好友 |
+| friendRemove | Remove (button: end a friendship (asks twice)) | 删除 |
+| friendBlock | Block (button: block a player (asks twice)) | 屏蔽 |
+| friendUnblock | Unblock (button: lift your own block) | 取消屏蔽 |
+| friendRemoveConfirm | Tap Remove again to remove {name} from your friends (the first tap on Remove; {name} is the friend) | 再点一次“删除”，把 {name} 从好友中删除 |
+| friendBlockConfirm | Tap Block again: {name} can't add you, and your races leave each other's lists (the first tap on Block; {name} is the player) | 再点一次“屏蔽”：{name} 不能再加你，你们的比赛也会从彼此的列表中消失 |
+| friendAddedSent | Friend request sent to {name} (after Add friend; {name} is the player) | 已向 {name} 发送好友请求 |
+| friendNowFriends | You and {name} are friends now (after Accept, or an Add that met their own request; {name} is the player) | 你和 {name} 成为好友了 |
+| friendDeclined | You turned down {name}'s request (after Decline; {name} is the player) | 你拒绝了 {name} 的请求 |
+| friendTookBack | Request to {name} taken back (after Take back; {name} is the player) | 已撤回给 {name} 的请求 |
+| friendRemoved | {name} is no longer your friend (after Remove; {name} is the former friend) | {name} 已不再是你的好友 |
+| friendBlocked | {name} is blocked (after Block; {name} is the player) | 已屏蔽 {name} |
+| friendUnblocked | {name} is unblocked (after Unblock; {name} is the player) | 已取消屏蔽 {name} |
+| friendNotEligible | You can only add players you've finished a saved race with. (the server refused a request (no saved race together, or a block: deliberately the same words)) | 只能加和你完成过已保存比赛的玩家。 |
+| friendRateLimited | That's a lot of friend requests. Try again tomorrow. (too many requests in a day, or to one player in a week) | 好友请求太多了，明天再试吧。 |
+| friendNoRequest | That request is no longer there. (the request was taken back or answered elsewhere) | 这个请求已经不在了。 |
+| friendNoPeer | That player can't be found any more. (the player is gone (their device was removed, or two of their players were merged)) | 找不到这位玩家了。 |
+| friendResultAdd | Add {name} as a friend (button on the online results panel after a saved race; {name} is the opponent) | 加 {name} 为好友 |
+| friendResultIsFriend | {name} is your friend (the results panel when the opponent is already a friend; {name} is the opponent) | {name} 是你的好友 |
 | onlineDevicesLead | Devices that use your player online | 在线使用你玩家的设备 |
 | onlineThisDevice | This device | 这台设备 |
 | onlineOtherDevice | Device {n} | 设备 {n} |

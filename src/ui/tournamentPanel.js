@@ -26,6 +26,9 @@
 // onlineAccountViews.js); the online home and the room are src/onlineLobby.js, drawn by
 // onlineLobbyViews.js and polled on a timer while 🌐 is on. ✕ inside an online view goes back to the
 // online home, a second ✕ leaves; leaving 🌐 (off, ✕, any close) leaves the room and ends online play.
+// 3.3: once linked, this device's status beat runs (Play.onlineStatusBeat) until online play ends,
+// kept only through the race's hand-off; the online home's 🤝 Friends opens the Friends screen
+// (onlineFriendsViews.js), its badge and dots read on the poll timer.
 
 import { FIELD, LEADERBOARD, TUNING as T } from '../config.js';
 import { browserStorage } from '../store.js';
@@ -40,6 +43,8 @@ import { rollGuestName } from '../tournamentNames.js';
 import { panelFrameCss } from './panelFrame.js';
 import { accountBody, accountCss, accountNotes, createAccountState, devicesButton, enterOnline, h as viewH, pairCodeLeft } from './onlineAccountViews.js';
 import { lobbyBody, lobbyCss, lobbyMessage, lobbyTick, netSwitch } from './onlineLobbyViews.js';
+import { friendsBody, friendsButton, friendsCss, pollFriends, refreshBadge } from './onlineFriendsViews.js';
+import { createOnlineFriends } from '../onlineFriends.js';
 
 const PANEL_ID = 'tournament-panel';
 const REGISTRY_KEY = 'tournament';
@@ -91,7 +96,7 @@ ${panelFrameCss(PANEL_ID, { width: 560 })}
 #${PANEL_ID} .help p { margin: 0 0 10px; font-size: 16px; line-height: 1.4; }
 #${PANEL_ID} .status { min-height: 1.4em; margin: 10px 0 0; font-size: 14px; color: #c9b8dc; }
 #${PANEL_ID} .status.error { color: #ff8da8; }
-${accountCss(PANEL_ID)}${lobbyCss(PANEL_ID)}`;
+${accountCss(PANEL_ID)}${lobbyCss(PANEL_ID)}${friendsCss(PANEL_ID)}`;
 
 /** How often the 🌐 lobby reads what the transport received (a DOM panel, not a frame). */
 const ONLINE_POLL_MS = 200;
@@ -752,6 +757,7 @@ function accountUi() {
     now: () => Date.now(),
     confirmMs: T.saveClearConfirmMs,
     onLinked: (r) => startLobby(r),
+    onPaired: () => statusBeat()?.start(), // 3.3: a device just paired starts beating (a waiting one's beat stops itself)
   };
 }
 
@@ -762,7 +768,7 @@ function lobbyUi() {
     ...aui,
     me: online?.st.name ?? '',
     project: ctx.play?.onlineProjectName?.() ?? null, // a dev host's 'live' / 'test' for the no-room hint (item 43)
-    homeExtras: () => ({ notes: accountNotes(aui, online.st), devices: devicesButton(aui, online.st, online.account) }),
+    homeExtras: () => ({ notes: accountNotes(aui, online.st), devices: devicesButton(aui, online.st, online.account), friends: online.friends ? friendsButton(aui, online.st, online.friends) : null }),
     share: (text, code) => shareCode(text, code),
   };
 }
@@ -796,6 +802,10 @@ function renderOnline() {
     show(title, { close: true }, sw, ...lobbyBody(lobbyUi(), online.lobby));
     return;
   }
+  if (st.view === 'friends' && online.friends) {
+    show(title, { close: true }, sw, ...friendsBody(accountUi(), st, online.friends, () => backHome(online)));
+    return;
+  }
   if (st.view === 'failed' || st.view === 'left' || (st.view === 'home' && !online.lobby)) {
     const retry = h('button', { type: 'button', id: 'tour-retry', 'data-primary': '' }, tr('onlineRetry'));
     retry.addEventListener('click', () => startOnline());
@@ -821,6 +831,8 @@ function startOnline() {
     setStatus(tr('onlineErrGeneric'), 'error');
     return;
   }
+  const net = o.net;
+  o.friends = createOnlineFriends({ rpc: (fn, args) => net.rpc(fn, args), max: T.online.status.opponents });
   o.net.warm?.().catch?.(() => {});
   enterOnline(accountUi(), o.st, o.account).catch(() => {
     if (online !== o) return;
@@ -845,6 +857,9 @@ function startLobby(r) {
   if (record && !live) record = store.claim?.() ?? record;
   o.lobby ??= createOnlineLobby({ net: o.net, name: r.name, width: myWidth(), onBothReady: (lobby) => lobby.start(), memory: raceMemory(), resume: record });
   if (o.poll === null) o.poll = ctx.timers.setInterval(() => pollOnline(o), ONLINE_POLL_MS);
+  // 3.3: in online mode from here: this device's status beat (item 58), and the Friends button's badge.
+  statusBeat()?.start();
+  updateBadge(o);
   if (live) {
     o.lobby.notice?.('onlineRaceElsewhere');
     o.look = ctx.timers.setTimeout?.(() => lookAgain(o), T.online.resume.staleMs) ?? null;
@@ -897,9 +912,34 @@ function raceResume() {
   return ctx?.play?.raceResumeStore?.() ?? null;
 }
 
+/** 3.3: the Play scene's status beat (src/onlineFriends.js), or null. */
+function statusBeat() {
+  return ctx?.play?.onlineStatusBeat?.() ?? null;
+}
+
+/** 3.3: the Friends button's badge read again, the home redrawn when it changed (and still shows). */
+function updateBadge(o) {
+  refreshBadge(o.st, o.friends)
+    .then((changed) => {
+      if (changed && online === o && o.on && o.st.view === 'home' && o.lobby?.state.screen === 'home' && !view) renderLobby();
+    })
+    .catch(() => {});
+}
+
+/** Back to the online home from the Friends screen (its Back, or ✕), the badge read again. */
+function backHome(o) {
+  o.st.view = 'home';
+  setStatus('');
+  renderLobby();
+  updateBadge(o);
+}
+
 function pollOnline(o) {
   if (online !== o || !o.lobby || !ctx) return;
   o.ticks += 1;
+  // 3.3: the Friends screen's dots every status.pollMs; the home's badge every status.badgeMs.
+  if (o.on && !view && o.st.view === 'friends' && o.ticks % Math.round(T.online.status.pollMs / ONLINE_POLL_MS) === 0) pollFriends(accountUi(), o.st, o.friends).catch(() => {});
+  if (o.on && !view && o.st.view === 'home' && o.ticks % Math.round(T.online.status.badgeMs / ONLINE_POLL_MS) === 0) updateBadge(o);
   const changed = o.lobby.poll();
   if (o.lobby.state.room.phase === 'playing' && handOffRace(o)) return;
   if (!o.on || view) return;
@@ -972,6 +1012,7 @@ function handOffRace(o) {
   o.poll = null;
   o.lobby = null; // closing must not leave the room or close the transport: the race has them
   o.net = null;
+  o.handed = true; // 3.3: the race keeps this device's status beat (it reads in a game now)
   // Over a running Versus (wide screens: 👥 starts split screen, 🌐 is switched on in its lobby):
   // its match left and both its scenes stopped, so only the race draws. Not Versus.leave(): that
   // starts a plain Play, which the race is about to launch itself. Read before the close clears ctx.
@@ -995,6 +1036,7 @@ function stopOnline() {
   o.poll = null;
   if (o.look) ctx?.timers?.clearTimeout?.(o.look);
   o.look = null;
+  if (!o.handed) statusBeat()?.stop(); // 3.3: out of online mode: friends see offline at once
   const lobby = o.lobby;
   o.lobby = null;
   Promise.resolve(lobby?.leave())
@@ -1026,6 +1068,10 @@ function onlineBack() {
     st.view = 'home';
     setStatus('');
     renderLobby();
+    return true;
+  }
+  if (st.view === 'friends') {
+    backHome(online);
     return true;
   }
   if (st.view !== 'home' || !lobby || lobby.state.screen === 'home') return false;
@@ -1132,7 +1178,7 @@ export function openTournamentPanel(options) {
   ctx.timers = options.timers ?? globalThis;
   if (!online && !tournamentState(ctx.game) && !view) {
     const forced = !versus(ctx.game); // over Play: no split screen to race on here
-    online = { on: forced, forced, st: createAccountState(), account: null, net: null, lobby: null, poll: null, ticks: 0, resume: null, look: null };
+    online = { on: forced, forced, st: createAccountState(), account: null, net: null, friends: null, lobby: null, poll: null, ticks: 0, resume: null, look: null, handed: false };
     if (forced) startOnline();
   }
   if (!tournamentState(ctx.game) && players.length < T.tournament.minPlayers) {

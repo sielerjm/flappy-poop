@@ -728,6 +728,31 @@ export function createOnlineNet({
     quietly(() => client.realtime?.disconnect?.());
   }
 
+  /**
+   * An online function as a keepalive POST that outlives the page (plan 39, 3.3: pagehide's
+   * online_beat(false)): the Data API's own route with the session's token, never awaited. False when
+   * there is nothing to send it with (signed out, the feature off, no fetch); a lost one costs nothing
+   * the server's freshness window (c_fresh) does not already cover.
+   */
+  function beacon(fn, args = {}) {
+    if (typeof fn !== 'string' || !ONLINE_RPCS.includes(fn) || !url || !session?.access_token) return false;
+    const go = fetch ?? globalThis.fetch;
+    if (typeof go !== 'function') return false;
+    try {
+      Promise.resolve(
+        go(`${url}/rest/v1/rpc/${fn}`, {
+          method: 'POST',
+          keepalive: true,
+          headers: { apikey: config.publishableKey, Authorization: `Bearer ${session.access_token}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify(args),
+        }),
+      ).catch(() => {});
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
   async function signOut() {
     close();
     session = null;
@@ -738,6 +763,7 @@ export function createOnlineNet({
     signIn,
     warm,
     rpc,
+    beacon,
     syncClock,
     pump,
     serverNow,

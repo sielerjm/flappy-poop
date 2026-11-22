@@ -124,6 +124,7 @@ import { browserStorage, pageStorage, createJsonStore } from '../store.js';
 import { createOnlineNet, onlineProjectConfig } from '../onlineNet.js';
 import { createResumeStore, pageTab, resumeKey } from '../onlineRace.js';
 import { createOnlineAccount } from '../onlineAccount.js';
+import { createStatusBeat } from '../onlineFriends.js';
 import { runDeltas, evaluate, bestFacts, levelCloseShave, winsInWindow, daysBetween, nextDrawStreak, FOUR_OF_A_KIND, EDU_ACHIEVEMENTS, eduRunFacts } from '../achievements.js';
 import { unlock, attachGame, setMuted, isMuted, sfx } from '../sound.js';
 import { createTray } from '../ui/tray.js';
@@ -2025,7 +2026,26 @@ export class Play extends Phaser.Scene {
 
   /** Clear / a Load of another player (the save panel): unlink this device online, then forget its session. */
   onlineLeave() {
+    this.onlineStatusBeatRef?.stop({ quiet: true }); // the beat's row goes with the link
     return this.onlineAccount().leave();
+  }
+
+  /**
+   * This device's online status beat (plan 39, 3.3; src/onlineFriends.js), once per page: started by
+   * the 🌐 window once linked, kept through an online race, stopped on every way out of online mode;
+   * pagehide sends its online_beat(false) as a keepalive request, pageshow (the back-forward cache) beats again.
+   */
+  onlineStatusBeat() {
+    if (this.onlineStatusBeatRef) return this.onlineStatusBeatRef;
+    this.onlineAccount();
+    const net = this.onlineNet;
+    const beat = createStatusBeat({ rpc: (fn, args) => net.rpc(fn, args), beacon: (fn, args) => net.beacon?.(fn, args) ?? false, beatMs: T.online.status.beatMs });
+    globalThis.addEventListener?.('pagehide', () => beat.hide());
+    globalThis.addEventListener?.('pageshow', (e) => {
+      if (e?.persisted) beat.show();
+    });
+    this.onlineStatusBeatRef = beat;
+    return beat;
   }
 
   /**

@@ -44,7 +44,7 @@ export function h(tag, attrs = {}, ...children) {
 
 /** The sign-in side's view state. */
 export function createAccountState() {
-  return { view: 'linking', nameDraft: '', typed: '', rows: [], history: null, name: '', trusted: false, demoted: false, blocked: false, code: '', expiresAt: 0, removeArmed: null, removeArmedAt: 0, busy: false };
+  return { view: 'linking', nameDraft: '', typed: '', rows: [], history: null, name: '', trusted: false, demoted: false, blocked: false, code: '', expiresAt: 0, removeArmed: null, removeArmedAt: 0, busy: false, friends: null, badge: 0, friendOpen: null, friendArmed: null, friendArmedAt: 0, blockedOpen: false };
 }
 
 const mmss = (ms) => {
@@ -217,6 +217,7 @@ async function onPair(ui, st, account) {
     return;
   }
   Object.assign(st, { trusted: true, demoted: false });
+  ui.onPaired?.();
   await openDevices(ui, st, account);
   ui.setStatus(ui.tr('onlinePairedOk'), 'ok');
 }

@@ -402,6 +402,14 @@ export const TUNING = {
       slowPollMs: 15000, // ms between the later asks
       waitMs: 100000, // ms asking before "not saved yet": the other device's whole resend window (retryMs, a timed-out try before each, a poll of skew; a test ties them) (2.7, AUD-109). A waiting, unpaired device never reports (M1 rule 2)
     },
+    // Friends and online status (plan 39, 3.3; item 58's "For 3.3"): this device's beat while 🌐 is
+    // open or a race runs, and the Friends screen's dots.
+    status: {
+      beatMs: 20000, // ms between online_beat(true) calls; under half of the schema's c_fresh (60 s), so one lost beat never reads offline (a test ties them)
+      pollMs: 10000, // ms between friend_statuses() reads while the Friends screen shows: a friend's dot changes within about this long
+      badgeMs: 30000, // ms between friend_list() reads for the Friends button's badge while the online home shows
+      opponents: 5, // recent opponents listed on the Friends screen (distinct players from online_history, not friends yet)
+    },
     inventoryY0: 268, // px: the purse and bean rows' first centre in an online race, below the opponent's pill (its top 82, bottom 228 with the slow / lost word), not over it
     ghost: {
       maxExtrapolateMs: 1000, // ms past the last message the ghost keeps moving; then it holds until the next one

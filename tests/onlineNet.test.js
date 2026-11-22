@@ -273,13 +273,21 @@ test('the net knobs: timeouts, a refresh margin inside the token life, rising ba
   assert.equal(keys.filter((k) => k === LEADERBOARD.onlineSessionKey).length, 1, 'its own storage key');
 });
 
-test('no file in src/ names the Authorization header or a Bearer token: only supabase-js, inside onlineNet, sets it', () => {
+test('no file in src/ names the Authorization header or a Bearer token: only supabase-js, inside onlineNet, sets it, and onlineNet\'s beacon (3.3: pagehide\'s keepalive, online functions only)', () => {
   const walk = (d) => readdirSync(d).flatMap((n) => (statSync(join(d, n)).isDirectory() ? walk(join(d, n)) : [join(d, n)]));
   const code = (s) => s.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1');
+  const TOKEN = /\bAuthorization\b|\bBearer\b/i;
   const hits = walk(join(ROOT, 'src'))
     .filter((f) => f.endsWith('.js'))
-    .filter((f) => /\bAuthorization\b|\bBearer\b/i.test(code(readFileSync(f, 'utf8'))));
-  assert.deepEqual(hits, []);
+    .filter((f) => TOKEN.test(code(readFileSync(f, 'utf8'))));
+  assert.deepEqual(hits.map((f) => f.slice(ROOT.length).replace(/^\/+/, '')), ['src/onlineNet.js']);
+  // In onlineNet, the one place is beacon(), which refuses anything but ONLINE_RPCS (its own test below).
+  const net = code(read('src/onlineNet.js'));
+  const start = net.indexOf('function beacon(');
+  const end = net.indexOf('\n  }\n', start);
+  assert.ok(start > 0 && end > start);
+  assert.equal(TOKEN.test(net.slice(0, start) + net.slice(end)), false, 'nowhere else in onlineNet');
+  assert.match(net.slice(start, end), /ONLINE_RPCS\.includes\(fn\)/);
 });
 
 // --- sign-in -------------------------------------------------------------------------------------
@@ -987,4 +995,20 @@ test("signOut (Clear, Load another code): this device's session is forgotten her
   assert.equal(ch.removed, true);
   assert.deepEqual(s.client().calls.find((c) => c[0] === 'signOut'), ['signOut', { scope: 'local' }]);
   assert.deepEqual(await s.net.rpc('room_state', { p_code: CODE }), { ok: false, error: 'signed out' });
+});
+
+test('3.3 beacon: an online function as a keepalive POST with the session token (pagehide\'s online_beat(false)); nothing before a sign-in or for any other function', async () => {
+  const sent = [];
+  const s = setup({ fetch: (url, init) => (sent.push({ url, init }), Promise.resolve({ ok: true })) });
+  assert.equal(s.net.beacon('online_beat', { p_here: false }), false, 'signed out: nothing to send it with');
+  assert.equal((await s.net.signIn()).ok, true);
+  assert.equal(s.net.beacon('submit_score', {}), false, 'only the online functions carry the token');
+  assert.equal(s.net.beacon('online_beat', { p_here: false }), true);
+  assert.equal(sent.length, 1);
+  assert.equal(sent[0].url, 'https://abcdefghijklmnop.supabase.co/rest/v1/rpc/online_beat');
+  assert.equal(sent[0].init.method, 'POST');
+  assert.equal(sent[0].init.keepalive, true);
+  assert.equal(sent[0].init.headers.Authorization, 'Bearer tok-1');
+  assert.equal(sent[0].init.headers.apikey, CONFIG.publishableKey);
+  assert.deepEqual(JSON.parse(sent[0].init.body), { p_here: false });
 });

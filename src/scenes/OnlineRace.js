@@ -6,6 +6,7 @@ import { t, levelLabel } from '../i18n.js';
 import { raceOutcome } from '../tournament.js';
 import { ONLINE_HOST_KEY, RESUME_VERSION, countdownStep, createFieldFit, createRaceFeed, createRacePause, createRaceReferee, createRaceReporter, createWakeLock, levelSnap, localPhase, pauseOverlay, raceNetStats, raceReport, raceRoomItem, raceStartPlan, reportLine, rewindOnHeard, startSnap } from '../onlineRace.js';
 import { racePhase } from '../online.js';
+import { createOnlineFriends } from '../onlineFriends.js';
 import { sfx, unlock } from '../sound.js';
 import { createButton } from '../ui/button.js';
 
@@ -224,6 +225,7 @@ export class OnlineRace extends Phaser.Scene {
     this.tapFrame = -1; // the frame a tap pressed one of this scene's buttons: the break does not take it as a ready tap
     this.result = null; // the results panel's parts, once it shows
     this.reporter = null; // 2.5: this side's finish_match report, from the race's end
+    this.friendOffer = null; // 3.3: the results panel's Add as friend, once the race is saved: { phase, peer }
     this.peerLeft = false; // the other player left the room after the race
     // 2.7, AUD-110: the transport's numbers at this round's start, kept through a restart inside the
     // round (a re-fit, a rewind) and taken again by a rematch's round, so the report is this race's own.
@@ -316,6 +318,7 @@ export class OnlineRace extends Phaser.Scene {
     try {
       this.net?.close?.();
     } catch {}
+    this.statusBeat()?.stop({ quiet: true }); // 3.3: this device races on in the other page, which beats for it
     this.scene.stop('Play');
     this.scale.setGameSize(fieldWidth(globalThis.innerWidth ?? 720, globalThis.innerHeight ?? 1280, FIELD), GAME_HEIGHT);
     this.registry?.set?.('raceSteppedAside', true);
@@ -500,6 +503,10 @@ export class OnlineRace extends Phaser.Scene {
       return;
     }
     if (!this.panelLive()) return;
+    if (this.result.friend?.visible && overHit(pointer.x - (this.shiftX ?? 0), pointer.y, { share: this.result.friendBox })) {
+      this.tapAddFriend();
+      return;
+    }
     const hit = overHit(pointer.x - (this.shiftX ?? 0), pointer.y, this.result.boxes);
     if (hit === 'share') this.toggleRematch();
     else if (hit === 'home') this.leave();
@@ -554,8 +561,12 @@ export class OnlineRace extends Phaser.Scene {
     const boxes = overButtonsLayout(cx, cy, T, { share: !this.abandoned }); // abandoned: Leave alone, no rematch
     const rematch = this.abandoned ? null : createButton(this, boxes.share, t(this.locale, 'onlineRematch'), { ...STYLE, fontSize: '40px' }, { depth: 71 });
     createButton(this, boxes.home, t(this.locale, 'onlineLeave'), { ...STYLE, fontSize: '40px' }, { depth: 71 });
-    const status = this.add.text(cx, cy + 345, '', { ...STYLE, fontSize: '30px', color: GREY, strokeThickness: 6, wordWrap: { width: pw - 60, useAdvancedWrap: true } }).setOrigin(0.5).setDepth(71);
-    this.result = { boxes, rematch, status, saved, openedAt: this.game.loop.time, shown: null, savedShown: null };
+    const status = this.add.text(cx, cy + 420, '', { ...STYLE, fontSize: '26px', color: GREY, strokeThickness: 6, wordWrap: { width: pw - 60, useAdvancedWrap: true } }).setOrigin(0.5).setDepth(71);
+    // 3.3: Add <name> as a friend, once the race is saved (the server's eligibility: an agreed race).
+    const friendBox = { id: 'friend', x: cx, y: cy + 366, width: pw - 120, height: 52 }; // clear of Rematch | Leave (Preview G, Michael 22 Nov)
+    const friend = createButton(this, friendBox, '', { ...STYLE, fontSize: '28px', strokeThickness: 6 }, { depth: 71, fillAlpha: 0.85 }).setVisible(false);
+    const friendLine = this.add.text(cx, cy + 366, '', { ...STYLE, fontSize: '26px', color: GREY, strokeThickness: 6, wordWrap: { width: pw - 60, useAdvancedWrap: true } }).setOrigin(0.5).setDepth(71);
+    this.result = { boxes, rematch, status, saved, friend, friendBox, friendLine, friendShown: null, openedAt: this.game.loop.time, shown: null, savedShown: null };
     this.tweens.add({ targets: panel, scale: { from: 0.8, to: 1 }, duration: T.over.panelInMs, ease: 'Back.easeOut' });
     this.refreshResult();
   }
@@ -571,6 +582,8 @@ export class OnlineRace extends Phaser.Scene {
       r.savedShown = savedKey;
       r.saved.setText(save ? t(this.locale, save.key).replace('{name}', this.plan.names[1]) : '').setColor(save?.kind === 'ok' ? GREEN : save?.kind === 'no' ? '#ff8da8' : GOLD);
     }
+    if (save?.key === 'onlineSaved' || save?.key === 'onlineSavedNotCounted') this.loadFriendOffer();
+    this.drawFriendOffer();
     const want = this.referee?.rematch() ?? { mine: false, theirs: false };
     const key = this.peerLeft || this.abandoned ? 'left' : want.mine ? 'mine' : want.theirs ? 'theirs' : 'none';
     if (r.shown === key) return;
@@ -579,6 +592,60 @@ export class OnlineRace extends Phaser.Scene {
     const line = { left: 'onlinePeerLeft', mine: 'versusWaiting', theirs: 'onlineRematchAsked', none: null }[key];
     r.status.setText(line ? t(this.locale, line).replace('{name}', them) : '').setColor(key === 'theirs' ? GOLD : key === 'left' ? '#ff8da8' : GREY);
     r.rematch?.setText(key === 'mine' ? `${t(this.locale, 'onlineRematch')} ✓` : t(this.locale, 'onlineRematch')).setAlpha(key === 'left' ? 0.4 : 1).pulse(key === 'theirs');
+  }
+
+  /**
+   * 3.3: the results panel's friend offer, read once the race is saved: friend_list and
+   * online_history give the opponent's handle and what they are to this player. Nothing shows for a
+   * blocked player, a race with no handle (item 59) or a failed read.
+   */
+  loadFriendOffer() {
+    if (this.friendOffer || typeof this.net?.rpc !== 'function') return;
+    const offer = { phase: 'loading', peer: null, key: null };
+    this.friendOffer = offer;
+    this.friends ??= createOnlineFriends({ rpc: (fn, args) => this.net.rpc(fn, args) });
+    this.friends
+      .offer(this.plan.names[1])
+      .then((r) => {
+        if (this.friendOffer !== offer) return;
+        if (!r.ok || !r.peer) offer.phase = 'none';
+        else offer.phase = { none: 'add', incoming: 'add', asked: 'asked', friend: 'friend', blocked: 'none' }[r.relation] ?? 'none';
+        offer.peer = r.peer ?? null;
+      })
+      .catch(() => {
+        if (this.friendOffer === offer) offer.phase = 'none';
+      });
+  }
+
+  /** The offer's button or its line, redrawn when its phase changes. */
+  drawFriendOffer() {
+    const r = this.result;
+    const o = this.friendOffer;
+    if (!r?.friend) return;
+    const key = o ? `${o.phase}:${o.key ?? ''}` : '';
+    if (r.friendShown === key) return;
+    r.friendShown = key;
+    const them = this.plan.names[1];
+    const button = o?.phase === 'add' || o?.phase === 'sending';
+    r.friend.setVisible(button);
+    if (button) r.friend.setText(t(this.locale, 'friendResultAdd').replace('{name}', them)).setAlpha(o.phase === 'sending' ? 0.5 : 1);
+    const line = { asked: 'friendAddedSent', friend: 'friendResultIsFriend', now: 'friendNowFriends', error: o?.key }[o?.phase] ?? null;
+    r.friendLine.setText(line ? t(this.locale, line).replace('{name}', them) : '').setColor(o?.phase === 'error' ? '#ff8da8' : o?.phase === 'now' || o?.phase === 'friend' ? GREEN : GREY);
+  }
+
+  /** The offer's tap: the ask (a crossed one accepts at once). */
+  tapAddFriend() {
+    const o = this.friendOffer;
+    if (o?.phase !== 'add' || !o.peer) return;
+    o.phase = 'sending';
+    this.friends.ask(o.peer).then((r) => {
+      if (this.friendOffer !== o) return;
+      if (r.ok) o.phase = r.status === 'accepted' ? 'now' : 'asked';
+      else {
+        o.phase = 'error';
+        o.key = r.errorKey;
+      }
+    });
   }
 
   /** One transport item: the ghost, the referee, and the room's confirmed race status for the lobby. */
@@ -1081,10 +1148,16 @@ export class OnlineRace extends Phaser.Scene {
     if (this.panelLive()) this.leave();
   }
 
+  /** 3.3: the page's status beat (Play.onlineStatusBeat), if this page has one; never made here. */
+  statusBeat() {
+    return this.scene?.get?.('Play')?.onlineStatusBeatRef ?? null;
+  }
+
   /** Back to single player: the room left, the transport closed, the canvas re-fitted, Play plain. */
   leave() {
     this.match.status = 'left';
     this.wake?.want(false);
+    this.statusBeat()?.stop(); // 3.3: out of online mode: friends see offline at once
     this.forgetRecord();
     const { lobby, net } = this;
     Promise.resolve(lobby?.leave())

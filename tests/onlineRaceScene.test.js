@@ -1441,3 +1441,79 @@ test("2.5 the results panel's saved line follows the report: saving, then saved 
   left.s.refreshResult();
   assert.equal(line.text, 'Not saved: the race was left before the end');
 });
+
+// --- 3.3: Add as a friend on the results panel (Preview G), and the status beat's stops -----------
+
+const PEER_JOLLY = 'ab'.repeat(16);
+
+/** overRace with 3.3's panel parts and an rpc on the transport: a saved race's report state, friend_list as given. */
+function friendRace(list = {}, { report = { phase: 'done', status: 'agreed', counted: true } } = {}) {
+  const k = overRace();
+  const { s, net } = k;
+  net.rpcs = [];
+  net.rpc = async (fn, args) => {
+    net.rpcs.push([fn, args]);
+    if (fn === 'friend_list') return { ok: true, data: list };
+    if (fn === 'online_history') return { ok: true, data: { recent: [{ name: 'Jolly', peer: PEER_JOLLY, at: 5 }, { name: 'Jolly', peer: null, at: 9 }] } };
+    if (fn === 'send_friend_request') return { ok: true, data: { ok: true, status: 'pending' } };
+    return { ok: true, data: null };
+  };
+  s.reporter = { tick() {}, state: () => report };
+  Object.assign(s.result, { saved: fakeText(), savedShown: null, friend: fakeButton(), friendBox: { id: 'friend', x: 360, y: 1006, width: 520, height: 52 }, friendLine: fakeText(), friendShown: null });
+  return k;
+}
+const settle = async () => {
+  for (let i = 0; i < 4; i += 1) await new Promise((r) => setTimeout(r, 0));
+};
+
+test('3.3 a saved race offers "Add <name> as a friend"; a tap after the lockout sends the ask by the race\'s handle and says it went', async () => {
+  const k = friendRace();
+  const { s, net, loop } = k;
+  s.refreshResult();
+  await settle();
+  s.refreshResult();
+  assert.deepEqual(net.rpcs.map((c) => c[0]).sort(), ['friend_list', 'online_history']);
+  assert.equal(s.result.friend.visible, true);
+  assert.equal(s.result.friend.label, 'Add Jolly as a friend');
+  loop.time = T.retryLockoutMs;
+  s.onPointer(tap(s.result.friendBox));
+  await settle();
+  s.refreshResult();
+  assert.deepEqual(net.rpcs.filter((c) => c[0] === 'send_friend_request').map((c) => c[1]), [{ p_peer: PEER_JOLLY }]);
+  assert.equal(s.result.friend.visible, false);
+  assert.equal(s.result.friendLine.text, 'Friend request sent to Jolly');
+  assert.equal(sentOf(net, 'rematch').length, 0, 'not a Rematch tap');
+});
+
+test('3.3 no offer before the race is saved (nothing read), nor for a blocked player; a friend already reads "<name> is your friend"', async () => {
+  const waiting = friendRace({}, { report: { phase: 'waiting', status: 'playing' } });
+  waiting.s.refreshResult();
+  await settle();
+  assert.equal(waiting.net.rpcs.length, 0);
+  assert.equal(waiting.s.result.friend.visible, false);
+  const blocked = friendRace({ blocked: [{ peer: PEER_JOLLY, name: 'Jolly' }] });
+  blocked.s.refreshResult();
+  await settle();
+  blocked.s.refreshResult();
+  assert.equal(blocked.s.result.friend.visible, false);
+  assert.equal(blocked.s.result.friendLine.text, '');
+  const friend = friendRace({ friends: [{ peer: PEER_JOLLY, name: 'Jolly' }] });
+  friend.s.refreshResult();
+  await settle();
+  friend.s.refreshResult();
+  assert.equal(friend.s.result.friend.visible, false);
+  assert.equal(friend.s.result.friendLine.text, 'Jolly is your friend');
+});
+
+test('3.3 Leave stops the page\'s status beat (friends see offline at once); stepping aside stops it quietly (the other page races on)', () => {
+  const stops = [];
+  const k = overRace();
+  k.half.onlineStatusBeatRef = { stop: (o) => stops.push(o?.quiet === true ? 'quiet' : 'offline') };
+  k.loop.time = 10_000;
+  k.s.onPointer(tap(k.s.result.boxes.home));
+  assert.deepEqual(stops, ['offline']);
+  const a = drawnRace();
+  a.half.onlineStatusBeatRef = { stop: (o) => stops.push(o?.quiet === true ? 'quiet' : 'offline') };
+  a.s.stepAside();
+  assert.deepEqual(stops, ['offline', 'quiet']);
+});

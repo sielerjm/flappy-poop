@@ -6,7 +6,7 @@
 // this file draws its state and turns taps into its calls. The keypad is the sign-in side's
 // (src/ui/onlineAccountViews.js), so the pairing code and the room code type the same way.
 //
-// `ui` = { tr, me, setStatus(text, kind), rerender, homeExtras() → { notes, devices }, share(text, code) }:
+// `ui` = { tr, me, setStatus(text, kind), rerender, homeExtras() → { notes, devices, friends } (3.3: the 🤝 Friends button), share(text, code) }:
 // share with a text opens the share sheet (falling back to a copy), with null it copies the code.
 
 import { SHARE } from '../config.js';
@@ -168,13 +168,14 @@ export function lobbyBody(ui, lobby) {
       ];
     }
     default: {
-      const { notes = [], devices = null } = ui.homeExtras?.() ?? {};
+      const { notes = [], devices = null, friends = null } = ui.homeExtras?.() ?? {};
       return [
         h('p', { class: 'lead' }, tr('onlineLead')),
         ...notes,
         slot('tour-on-me', ui.me, tr('tournamentHostTag')),
         slot('tour-on-them', '', '', tr('onlineOpponentNone')),
         h('div', { class: 'actions' }, button('tour-join', tr('onlineJoin'), 'outline', () => redraw(lobby.openJoin())), button('tour-create', tr('onlineCreate'), '', () => redraw(lobby.create()), true)),
+        friends,
         h('p', { class: 'note' }, tr('onlineNote')),
         devices,
       ].filter(Boolean);

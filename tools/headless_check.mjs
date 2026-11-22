@@ -91,6 +91,7 @@ export const SECTIONS = [
   { name: 'resync', needs: [], about: "the resync (plan 35, 1.4), the live board blocked: two online events in a row sync once and the next one after it settles syncs again; a show after a 1 s hide syncs nothing, after a 31 s one it syncs; a restart keeps the one guard and leaves one online listener" },
   { name: 'online-race', needs: [], about: "the online race (plan 39, 1.7a-1.8) against a scripted guest in the page (its own referee and feed, a 40 ms link; no network): the scene and its Play, Space flapping the one half, the purse under the opponent's pill and a long name fitted to it, the host taking level 1's line, the wait timer and Keep waiting, the shared count and GO, the final line to the guest, one outcome on both, the results panel, Rematch's states and round 2, then Leave from the wait offer back to single player" },
   { name: 'online-reload', needs: [], about: "reload resume (plan 39, 2.3, D4) against a scripted guest in the page (a 40 ms link; no network): the race into level 2 with its level start kept in the tab's record; the guest's reload restarts this race at level 2's start under the overlay; then a real page reload: a stand-in transport under Play, the 🌐 window rejoins (room_state, the channel as the host, nothing left), the race back rewound, both Ready, one GO, level 2 from its first pair with the kept score, purse, beans and level wins, the race to its end and the record gone; 2.3b: a relaunch (a new tab id, the record's beat stale) rejoins and takes the record over; the racing page whose record another page takes steps aside (the transport closed, no leave_room, Play plain, the 🌐 window's line) and, once that page stops beating, looks again and rejoins; a fresh page beside a live beat offers nothing, rejoins nothing, leaves nothing, and its 🌐 window says the race runs in another window" },
+  { name: 'online-friends', needs: [], about: "friends and online status (plan 39, 3.3, Preview G), on a stand-in transport under Play (no network): the 🌐 window beats once linked; the online home's 🤝 Friends with its badge; the Friends screen's order (a request, friends online → in a game → offline with dot and word, a request sent, a recent opponent, Blocked closed); Accept, Add friend, ⋯ Block asked twice, Back with the badge read again; ✕ out of 🌐 says offline once" },
 ];
 
 /** What a section needs: its own list, or (omitted) every section before it. */
@@ -7523,6 +7524,89 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         if (beatScriptId) await cdp.send('Page.removeScriptToEvaluateOnNewDocument', { identifier: beatScriptId }).catch(() => null);
         await evaluate(`(clearInterval(globalThis.__rl?.bot?.timer), clearInterval(globalThis.__other), localStorage.removeItem('${KEY}'), localStorage.removeItem('flappyPoop.onlineRace'), true)`).catch(() => null);
       }
+    });
+
+    await section('online-friends', async () => {
+      // Friends and online status (plan 39, 3.3), in the real page over Play (a 720 phone field) with a
+      // stand-in account and transport that answers the Tier 3 functions: the 🌐 window, the 🤝 Friends
+      // button, the screen and its actions, and the beat's calls (online_beat true once linked, false on ✕).
+      await cdp.send('Network.enable');
+      await cdp.send('Network.setBlockedURLs', { urls: ['*supabase.co*'] });
+      await cdp.send('Emulation.setDeviceMetricsOverride', { width: 720, height: 1280, deviceScaleFactor: 1, mobile: false });
+      await cdp.send('Page.navigate', { url: `${url}/?r=${Date.now()}` });
+      let sp = null;
+      for (let i = 0; i < 120 && !sp?.enabled; i += 1) {
+        await sleep(500);
+        sp = await splashNow().catch(() => null);
+      }
+      if (sp?.enabled) {
+        await splashKey('keydown', ' ');
+        await splashKey('keyup', ' ');
+      }
+      for (let i = 0; i < 120 && (await playState().catch(() => null)) !== 'ready'; i += 1) await sleep(500);
+      const ex0 = exceptions.length;
+      const until = async (expr, ms = 5000) => {
+        const end = Date.now() + ms;
+        while (Date.now() < end) {
+          if (await evaluate(expr)) return true;
+          await sleep(50);
+        }
+        return false;
+      };
+      const text = (id) => evaluate(`document.getElementById('${id}')?.textContent ?? null`);
+      const click = (id) => evaluate(`(document.getElementById('${id}')?.click(), Boolean(document.getElementById('${id}')))`);
+      const calls = () => evaluate(`JSON.stringify(__fr.calls)`).then(JSON.parse);
+      await evaluate(`(() => {
+        const P = (n) => n.toString(16).padStart(2, '0').repeat(16);
+        let list = { friends: [{ peer: P(1), name: 'zedFriend' }, { peer: P(2), name: 'AmyFriend' }, { peer: P(3), name: 'bobFriend' }], incoming: [{ peer: P(4), name: 'AskedMe', at: Date.now() }], outgoing: [{ peer: P(5), name: 'IAsked', at: Date.now() }], blocked: [{ peer: P(6), name: 'Blocked6' }] };
+        const states = { friends: [{ peer: P(3), state: 'online', name: 'bobFriend' }, { peer: P(1), state: 'in_game', name: 'zedFriend' }, { peer: P(2), state: 'offline', name: 'AmyFriend' }] };
+        const history = { rival: null, recent: [{ name: 'Opp7', peer: P(7), at: Date.now(), won: true, mine: 3, theirs: 1 }, { name: 'zedFriend', peer: P(1), at: Date.now(), won: false, mine: 1, theirs: 2 }] };
+        const calls = [];
+        const net = { warm: async () => ({ ok: true }), serverNow: () => Date.now(), pump() {}, take: () => [], send: () => false, peer: () => null, channelState: () => 'none', close() {}, closeRoom() {}, beacon: () => true, async openRoom() { return { ok: true }; },
+          async rpc(fn, args) {
+            calls.push(fn === 'online_beat' ? 'online_beat:' + args.p_here : fn);
+            if (fn === 'friend_list') return { ok: true, data: list };
+            if (fn === 'friend_statuses') return { ok: true, data: states };
+            if (fn === 'online_history') return { ok: true, data: history };
+            if (fn === 'respond_friend_request') { const o = list.incoming.find((x) => x.peer === args.p_peer); list = { ...list, incoming: [], friends: [...list.friends, { peer: o.peer, name: o.name }] }; return { ok: true, data: { ok: true, status: 'accepted' } }; }
+            if (fn === 'send_friend_request') { list = { ...list, outgoing: [...list.outgoing, { peer: args.p_peer, name: 'Opp7', at: Date.now() }] }; return { ok: true, data: { ok: true, status: 'pending' } }; }
+            if (fn === 'block_user') { const f = list.friends.find((x) => x.peer === args.p_peer); list = { ...list, friends: list.friends.filter((x) => x !== f), blocked: [...list.blocked, { peer: f.peer, name: f.name }] }; return { ok: true, data: { ok: true } }; }
+            return { ok: true, data: null };
+          } };
+        const account = { enter: async () => ({ ok: true, view: 'home', name: 'Smoke', trusted: true, demoted: false, blocked: false }), devices: async () => ({ ok: true, rows: [] }), status: () => ({ linked: true, trusted: true, name: 'Smoke' }) };
+        const p = __flappy.scene.getScene('Play');
+        p.onlineNet = net;
+        p.onlineAccount = () => account;
+        p.onlineStatusBeatRef = null;
+        globalThis.__fr = { calls };
+        p.openVersusWindow();
+        return true;
+      })()`);
+      ok(await until(`Boolean(document.getElementById('tour-friends'))`), 'the online home has 🤝 Friends');
+      ok(await until(`document.getElementById('tour-friends-badge')?.textContent === '1'`), 'its badge: one request waiting');
+      ok((await calls()).includes('online_beat:true'), 'linked: this device beats (online_beat true)');
+      await click('tour-friends');
+      ok(await until(`Boolean(document.getElementById('tour-fr-back'))`), 'the Friends screen');
+      const rows = await evaluate(`[0, 1, 2].map((i) => document.getElementById('tour-fr-' + i)?.textContent ?? '')`);
+      ok(rows[0].startsWith('🟢 bobFriend') && rows[0].includes('Online') && rows[1].startsWith('🟡 zedFriend') && rows[1].includes('In a game') && rows[2].startsWith('⚪ AmyFriend') && rows[2].includes('Offline'), `friends online → in a game → offline, dot and word (${rows.join(' | ')})`);
+      ok((await text('tour-fr-in-0'))?.includes('AskedMe') && (await text('tour-fr-out-0'))?.includes('IAsked') && (await text('tour-fr-op-0'))?.includes('Opp7') && (await text('tour-fr-op-1')) === null, 'a request to answer, a request sent, one recent opponent (a friend is not offered)');
+      ok((await text('tour-fr-bl-0')) === null && (await text('tour-fr-blocked'))?.includes('Blocked (1)'), 'Blocked (1), closed');
+      await click('tour-fr-yes-0');
+      ok(await until(`document.getElementById('tour-status')?.textContent === 'You and AskedMe are friends now'`), 'Accept: friends now');
+      await click('tour-fr-add-0');
+      ok(await until(`document.getElementById('tour-status')?.textContent === 'Friend request sent to Opp7'`), 'Add friend: the request went');
+      await click('tour-fr-more-btn-0');
+      ok(await until(`Boolean(document.getElementById('tour-fr-block-0'))`), '⋯ shows Remove and Block');
+      await click('tour-fr-block-0');
+      ok(!(await calls()).includes('block_user') && (await text('tour-status'))?.startsWith('Tap Block again'), 'Block asks first');
+      await click('tour-fr-block-0');
+      ok(await until(`document.getElementById('tour-status')?.textContent === 'bobFriend is blocked'`), 'a second tap blocks');
+      await click('tour-fr-back');
+      ok(await until(`Boolean(document.getElementById('tour-create')) && !document.getElementById('tour-friends-badge')`), 'Back: the online home, no request waiting');
+      await click('tour-close');
+      ok(await until(`__fr.calls.includes('online_beat:false')`), '✕ out of 🌐: online_beat false');
+      ok((await calls()).filter((c) => c === 'online_beat:false').length === 1, 'once');
+      ok(exceptions.length === ex0, exceptions.length > ex0 ? `page exceptions: ${exceptions.slice(ex0).join(' | ')}` : 'no page exceptions');
     });
 
     const f2 = await frame();
