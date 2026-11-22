@@ -254,4 +254,9 @@ test('the beat starts only from the 🌐 window (presence only while in online m
     .filter((f) => /onlineStatusBeat(\?\.)?\(\)/.test(readFileSync(f, 'utf8').replace(/^\s*\/\/.*$/gm, '').replace(/onlineStatusBeat\(\) \{/, '')))
     .map((f) => f.pathname.split('/src/')[1]);
   assert.deepEqual(callers, ['ui/tournamentPanel.js']);
+  // T3-review AUD-121: nor a start() reached another way (OnlineRace's statusBeat(), Play's onlineStatusBeatRef).
+  const starters = walk(dir)
+    .filter((f) => /(statusBeat\(\)|onlineStatusBeatRef|onlineStatusBeat\(\))\s*(\?\.|\.)\s*start\(/.test(readFileSync(f, 'utf8').replace(/^\s*\/\/.*$/gm, '')))
+    .map((f) => f.pathname.split('/src/')[1]);
+  assert.deepEqual(starters, ['ui/tournamentPanel.js'], 'only the 🌐 window starts the beat');
 });
