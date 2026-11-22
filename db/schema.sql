@@ -181,6 +181,10 @@
 --     select id, status, host_stats, guest_stats from public.matches order by id desc limit 20;
 --   friends (plan 39, 3.1), owner only: how many, and who blocked whom (by id):
 --     select status, count(*) from public.friendships group by 1; select * from public.blocks;
+--   one player's friend rows, e.g. a friend planted on an owner's id by M1's accepted residual (3.2r:
+--     someone who linked first, or while the owner was away 7 days, kept trust in a merge); the owner
+--     can also Remove or Block it from their Friends screen:
+--     select * from public.friendships where '<player id>' in (a_player, b_player);
 --   devices in online mode now (plan 39, 3.2), owner only:
 --     select count(*) from public.online_beats where at > now() - interval '1 minute';
 --   undo online status (plan 39, 3.2), before the friends' undo: drop function public.friend_statuses(),
@@ -189,6 +193,7 @@
 --     public.send_friend_request(text), public.respond_friend_request(text, boolean),
 --     public.remove_friend(text), public.block_user(text), public.unblock_user(text),
 --     public.online_friend_start(text), public.online_trusted_me(), public.online_peer_find(text, text),
+--     public.online_peer_shown(text, text),
 --     public.friend_eligible(text, text), public.online_fold_friends(text, text, text),
 --     public.online_peer(text, text); restore fold_player, link_online_player, online_cleanup,
 --     online_races and online_history from git (plan 39, 2.7) and run this file; then
@@ -3674,8 +3679,11 @@ begin
     end if;
     insert into public.online_players (uid, player_id, trusted) values (v_uid, v_id, v_trusted);
   end if;
-  if v_trusted then -- the player's first trust, kept for good (merge seniority, AUD-103)
-    insert into public.online_trust (player_id, since) values (v_id, now()) on conflict (player_id) do nothing;
+  if v_trusted then -- the player's first trust (merge seniority, AUD-103), and the player seen now (3.2r)
+    insert into public.online_trust (player_id, since) values (v_id, now())
+    on conflict (player_id) do update set seen_at = now();
+  else
+    update public.online_trust t set seen_at = now() where t.player_id = v_id;
   end if;
 
   if v_trusted or not exists (select 1 from public.online_profiles p where p.player_id = v_id) then
@@ -4033,11 +4041,15 @@ on conflict (id) do nothing;
 -- kept when devices go (a Clear, a removal, the 7-day relink), so merge seniority (fold_player) is
 -- the player's age online, not their newest device's. Filled once from the devices trusted at the
 -- paste (their first link; a player who had cleared and come back before it counts from then).
--- Readable by no role.
+-- seen_at: the player's last link by any device (3.2r). A row goes 90 days after it once nothing is left
+-- (online_cleanup: no device, agreed race, friendship or block), so one device linking made-up ids in
+-- a loop leaves nothing for good; a player with races or friends keeps theirs. Readable by no role.
 create table if not exists public.online_trust (
   player_id text primary key check (player_id ~ '^[A-Za-z0-9_-]{22}$'),
-  since     timestamptz not null
+  since     timestamptz not null,
+  seen_at   timestamptz not null default now()
 );
+alter table public.online_trust add column if not exists seen_at timestamptz not null default now(); -- a 3.1 paste
 alter table public.online_trust enable row level security;
 revoke all on public.online_trust from public, anon, authenticated;
 insert into public.online_trust (player_id, since)
@@ -4129,6 +4141,21 @@ as $$
   limit 1;
 $$;
 revoke execute on function public.online_peer_find(text, text) from public, anon, authenticated;
+
+-- The handle a list shows p_me for p_other, or null when online_peer_find would find nobody by it, so no
+-- button hangs on a handle nothing takes (3.2r): a race a merge left under an old id shows under the
+-- kept player's name with no handle, until the two race under their current ids. Internal.
+create or replace function public.online_peer_shown(p_me text, p_other text)
+returns text
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select case when public.online_peer_find(p_me, h.peer) = p_other then h.peer end
+    from (select public.online_peer(p_me, p_other) as peer) h;
+$$;
+revoke execute on function public.online_peer_shown(text, text) from public, anon, authenticated;
 
 -- May p_me ask p_other to be friends (3.1)? Only when they raced: an agreed race stored under both ids
 -- (both devices trusted and reporting the same; a race a merge left under an old id does not count, so
@@ -4284,6 +4311,18 @@ begin
   delete from public.online_profiles p
    where p.updated_at < now() - interval '90 days'
      and not exists (select 1 from public.online_players o where o.player_id = p.player_id);
+  -- A first trust with nothing left, 90 days after the player's last link (3.2r), oldest first. A player
+  -- back after 90 days who links in the same instant may lose it: their seniority starts again (M1's
+  -- accepted residual covers a player away that long).
+  delete from public.online_trust t where t.player_id in (
+    select x.player_id from public.online_trust x
+     where x.seen_at < now() - interval '90 days'
+       and not exists (select 1 from public.online_players o where o.player_id = x.player_id)
+       and not exists (select 1 from public.matches m where m.status = 'agreed' and x.player_id in (m.host_player, m.guest_player))
+       and not exists (select 1 from public.friendships f where x.player_id in (f.a_player, f.b_player))
+       and not exists (select 1 from public.blocks b where x.player_id in (b.blocker, b.blocked))
+     order by x.seen_at
+     limit 100);
 end;
 $$;
 
@@ -4938,7 +4977,7 @@ begin
     raise exception 'not trusted';
   end if;
   select jsonb_build_object('name', y.oname, 'meetings', y.meetings, 'losses', y.losses,
-                            'peer', public.online_peer(v_me.player_id, y.opp)) into v_rival
+                            'peer', public.online_peer_shown(v_me.player_id, y.opp)) into v_rival
     from (
       select r.opp, min(r.oname) as oname, count(*)::int as meetings, count(*) filter (where r.won = false)::int as losses
         from public.online_races(v_me.player_id) r
@@ -4946,7 +4985,7 @@ begin
     ) y
    order by y.losses desc, y.meetings desc, y.oname asc
    limit 1;
-  select coalesce(jsonb_agg(jsonb_build_object('name', z.oname, 'peer', public.online_peer(v_me.player_id, z.opp),
+  select coalesce(jsonb_agg(jsonb_build_object('name', z.oname, 'peer', public.online_peer_shown(v_me.player_id, z.opp),
                                                'won', z.won, 'mine', z.mine, 'theirs', z.theirs,
                                                'at', floor(extract(epoch from z.at) * 1000)::bigint)
                             order by z.at desc, z.mid desc), '[]'::jsonb) into v_recent
@@ -5464,7 +5503,7 @@ returns text
 language sql
 immutable
 as $$
-  select 'a5c4e963cdde0a22'::text; -- schema stamp
+  select '01d82a56b7effb33'::text; -- schema stamp
 $$;
 revoke execute on function public.schema_version() from public, authenticated;
 grant  execute on function public.schema_version() to anon;

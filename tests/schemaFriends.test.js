@@ -569,3 +569,77 @@ test('the upgrade from the live schema: first trust filled in from the trusted d
   assert.deepEqual(await call(db, a, 'send_friend_request', [peer]), { ok: true, status: 'pending' });
   assert.deepEqual(names((await friends(db, b)).incoming), ['UpA']);
 });
+
+// ---------------------------------------------------------------------------
+// 3.2r's fixes (plan 39, 3.2c).
+
+test('a race a merge left under an old id shows with no handle, since nothing could take it; a race under current ids keeps its handle', async () => {
+  const db = await freshDb();
+  const kim = await device(db, 'Kim');
+  const amy = await device(db, 'Amy');
+  const tab = await device(db, 'KimTab'); // the same person's second id, linked after Kim's
+  await raced(db, tab, amy, [60, 30]);
+  await anonCall(db, 'select public.merge_players($1, $2)', [kim.player, tab.player]); // both recent: Kim, first trusted, keeps trust
+  let h = await call(db, amy, 'online_history');
+  assert.deepEqual(h.recent.map((r) => [r.name, r.peer]), [['Kim', null]], 'shown under the kept name, with no handle');
+  assert.deepEqual([h.rival.name, h.rival.peer], ['Kim', null], 'the rival line too');
+  assert.deepEqual(await call(db, amy, 'block_user', [await peerOf(db, amy, kim)]), { ok: false, error: 'no peer' }, 'the handle it would have had names nobody');
+  await raced(db, kim, amy, [40, 50]);
+  h = await call(db, amy, 'online_history');
+  const peer = await peerOf(db, amy, kim);
+  assert.deepEqual(h.recent.map((r) => [r.name, r.peer]), [['Kim', peer], ['Kim', peer]], 'a race under both current ids: the handle works for both rows');
+  assert.equal(h.rival.peer, peer);
+  assert.deepEqual(await call(db, amy, 'send_friend_request', [peer]), { ok: true, status: 'pending' });
+});
+
+test('housekeeping drops a first trust 90 days after its player\'s last link, once nothing is left: no device, agreed race, friendship or block', async () => {
+  const db = await freshDb();
+  const held = await device(db, 'Held'); // first: a link runs the housekeeping
+  const trust = (tag, days) => db.query(`insert into public.online_trust (player_id, since, seen_at)
+    values ($1, now() - interval '400 days', now() - make_interval(days => $2))
+    on conflict (player_id) do update set seen_at = excluded.seen_at`, [id(tag), days]);
+  for (const tag of ['Gone', 'Disputed', 'Racer', 'Friend', 'Blocker', 'Blocked', 'Held']) await trust(tag, 91);
+  await trust('Recent', 89);
+  await raceRow(db, id('Racer'), id('Other1'));
+  await raceRow(db, id('Disputed'), id('Other2'), 'disputed');
+  await db.query("insert into public.friendships (a_player, b_player, asker, status) values ($1, $2, $1, 'pending')", [id('Friend'), id('ZOther3')]);
+  await db.query('insert into public.blocks (blocker, blocked) values ($1, $2)', [id('Blocker'), id('Blocked')]);
+  await db.query('select public.online_cleanup()');
+  const left = (await db.query('select player_id from public.online_trust order by 1')).rows.map((r) => r.player_id.replace(/_+$/, ''));
+  assert.deepEqual(left, ['Blocked', 'Blocker', 'Friend', 'Held', 'Racer', 'Recent'], 'Gone and Disputed (no agreed race) go; the rest stay');
+  assert.ok(held, 'a device keeps its player\'s row');
+  // One device linking one made-up id after another: one trust row each, until housekeeping.
+  const loop = await addUser(db);
+  for (const tag of ['Fake1', 'Fake2', 'Fake3', 'Fake4']) assert.equal((await link(db, loop, id(tag), tag)).trusted, true);
+  assert.equal((await db.query("select count(*)::int as n from public.online_trust where player_id like 'Fake%'")).rows[0].n, 4);
+  await db.query("update public.online_trust set seen_at = now() - interval '91 days' where player_id like 'Fake%'");
+  await db.query('select public.online_cleanup()');
+  assert.deepEqual((await db.query("select player_id from public.online_trust where player_id like 'Fake%'")).rows, [{ player_id: id('Fake4') }], 'only the one the device sits on');
+});
+
+test('every link marks its player seen, a waiting device\'s too, so a player who comes back keeps their first trust', async () => {
+  const db = await freshDb();
+  const o = await device(db, 'Back');
+  const seen = () => db.query("select seen_at > now() - interval '1 minute' as fresh, since < now() - interval '1 day' as old from public.online_trust where player_id = $1", [o.player]).then((r) => r.rows[0]);
+  await db.query("update public.online_trust set since = now() - interval '300 days', seen_at = now() - interval '91 days' where player_id = $1", [o.player]);
+  await link(db, o.uid, o.player, 'Back');
+  assert.deepEqual(await seen(), { fresh: true, old: true }, 'a trusted device\'s relink: seen now, first trust unchanged');
+  await db.query("update public.online_trust set seen_at = now() - interval '91 days' where player_id = $1", [o.player]);
+  const waiting = await addUser(db);
+  assert.equal((await link(db, waiting, o.player, 'Back')).trusted, false);
+  assert.deepEqual(await seen(), { fresh: true, old: true }, 'a waiting device\'s link');
+  await call(db, o, 'unlink_online_player');
+  await call(db, { uid: waiting }, 'unlink_online_player');
+  await db.query('select public.online_cleanup()');
+  assert.deepEqual(await seen(), { fresh: true, old: true }, 'no device left, but seen today: kept');
+});
+
+test('the paste over 3.1 on the test project adds the trust rows\' last-seen time and keeps every row', async () => {
+  const db = await freshDb();
+  const a = await device(db, 'Tp1');
+  await db.exec('alter table public.online_trust drop column seen_at'); // 3.1's table, as a 3.1 paste left it
+  const before = (await db.query('select player_id, since from public.online_trust')).rows;
+  await db.exec(SQL);
+  assert.deepEqual((await db.query('select player_id, since from public.online_trust')).rows, before);
+  assert.equal((await db.query("select seen_at > now() - interval '1 minute' as x from public.online_trust where player_id = $1", [a.player])).rows[0].x, true, 'counted from the paste');
+});
