@@ -4,7 +4,7 @@
 // opponents, Blocked), Accept / Add friend / Remove / Block (asked twice) / Unblock, the dots' poll,
 // and this device's status beat: on once linked, off on every way out of online mode but the race's
 // hand-off (item 58's "For 3.3").
-import { test } from 'node:test';
+import { afterEach, test } from 'node:test';
 import assert from 'node:assert/strict';
 import { fakeGame, installPanelDom, textOf } from './support/panelDom.js';
 import { TUNING } from '../src/config.js';
@@ -31,6 +31,9 @@ const HISTORY = { rival: null, recent: [{ name: 'Opp7', peer: P(7), at: Date.now
 
 function setup({ trusted = true, answers = {}, versus = null, active = false } = {}) {
   const calls = [];
+  const hold = new Set(); // rpc or account call names whose answers wait (a slow network): release(name)
+  const held = {};
+  const later = (name, answer) => (hold.has(name) ? new Promise((res) => (held[name] ??= []).push(() => res(answer()))) : answer());
   let list = structuredClone(LIST);
   const base = {
     friend_list: () => ({ ok: true, data: list }),
@@ -71,7 +74,7 @@ function setup({ trusted = true, answers = {}, versus = null, active = false } =
       calls.push(['rpc', fn, args]);
       if (!trusted && fn !== 'leave_room') return { ok: false, error: 'not trusted' };
       const a = base[fn];
-      return typeof a === 'function' ? a(args) : (a ?? { ok: true, data: null });
+      return later(fn, () => (typeof a === 'function' ? a(args) : (a ?? { ok: true, data: null })));
     },
     async openRoom() {
       return { ok: true };
@@ -80,7 +83,14 @@ function setup({ trusted = true, answers = {}, versus = null, active = false } =
     closeRoom: () => {},
   };
   let gate = null; // set: the link waits for it (a slow network)
-  const account = { enter: async () => (gate && (await gate.p), { ok: true, view: 'home', name: 'PlopMaster', trusted, demoted: false, blocked: false }), devices: async () => ({ ok: true, rows: [] }), status: () => ({ linked: true, trusted, name: 'PlopMaster' }) };
+  const account = {
+    calls: [],
+    enter: async () => (gate && (await gate.p), { ok: true, view: 'home', name: 'PlopMaster', trusted, demoted: false, blocked: false }),
+    devices: async () => (account.calls.push('devices'), later('devices', () => (trusted ? { ok: true, rows: [] } : { ok: false, pending: true }))),
+    races: async () => (account.calls.push('races'), later('races', () => (trusted ? { ok: true, rival: null, recent: [] } : { ok: false, pending: true }))),
+    pair: async () => (account.calls.push('pair'), later('pair', () => ({ ok: true }))),
+    status: () => ({ linked: true, trusted, name: 'PlopMaster' }),
+  };
   const ticks = [];
   const timers = { setInterval: (fn, ms) => (ticks.push({ fn, ms }), ticks.length), clearInterval: (h) => ticks[h - 1] && (ticks[h - 1].dead = true), setTimeout: () => 0, clearTimeout: () => {} };
   let beat = null;
@@ -89,6 +99,9 @@ function setup({ trusted = true, answers = {}, versus = null, active = false } =
     onlineAccount: () => account,
     onlineNet: net,
     onlineTestProject: () => false,
+    get onlineStatusBeatRef() {
+      return beat; // as Play's: the beat once built, else null
+    },
     onlineStatusBeat: () => (beat ??= createStatusBeat({ rpc: (fn, a) => net.rpc(fn, a), timers, beatMs: TUNING.online.status.beatMs })),
   };
   const game = fakeGame({ play, versus, active });
@@ -102,7 +115,11 @@ function setup({ trusted = true, answers = {}, versus = null, active = false } =
     return () => ((gate = null), r());
   };
   const live = () => ticks.filter((x) => !x.dead);
-  return { net, calls, play, game, timers, pollTicks, beats, holdLink, live, open: () => openTournamentPanel({ game, locale: 'en', play, timers }), setList: (l) => (list = l) };
+  const release = (name) => {
+    hold.delete(name);
+    (held[name] ?? []).splice(0).forEach((f) => f());
+  };
+  return { net, calls, play, game, timers, pollTicks, beats, holdLink, live, hold, release, account, open: () => openTournamentPanel({ game, locale: 'en', play, timers }), setList: (l) => (list = l), getList: () => list };
 }
 
 test('the online home has 🤝 Friends with a badge of the asks waiting for an answer; nothing about friends is read before 🌐 links', async () => {
@@ -318,4 +335,161 @@ test("T3-review AUD-114: a page showing \"race in another window\" does not beat
       closeTournamentPanel();
     }
   }
+});
+
+// --- 3.6: T3-review AUD-115, AUD-116, AUD-122 (repros in .claude/audits/2026-11-22/repro/friendsStale.test.mjs) ---
+
+afterEach(() => closeTournamentPanel()); // a failed test still closes its panel
+
+const ROOM = { create_room: { ok: true, data: { ok: true, code: '482913', status: 'open' } } };
+
+test('AUD-115: an Accept answered after Back + Create leaves the host on its room screen (not pulled onto Friends)', async () => {
+  const k = setup({ answers: ROOM });
+  k.open();
+  await flush();
+  el('tour-friends').click();
+  await flush();
+  k.hold.add('respond_friend_request');
+  el('tour-fr-yes-0').click();
+  await flush();
+  el('tour-fr-back').click();
+  await flush();
+  el('tour-create').click();
+  await flush();
+  assert.equal(el('tour-create'), null, 'the host screen');
+  const room = textOf(el('tour-body'));
+  k.release('respond_friend_request');
+  await flush();
+  assert.equal(el('tour-fr-back'), null, 'still the room screen');
+  assert.equal(textOf(el('tour-body')), room);
+  closeTournamentPanel();
+});
+
+test("AUD-115: the Friends button's load answered after Create does not cover the room screen", async () => {
+  const k = setup({ answers: ROOM });
+  k.open();
+  await flush();
+  k.hold.add('friend_list');
+  el('tour-friends').click();
+  await flush();
+  el('tour-create').click();
+  await flush();
+  assert.equal(el('tour-create'), null, 'the host screen');
+  k.release('friend_list');
+  await flush();
+  assert.equal(el('tour-fr-back'), null, 'still the room screen');
+  closeTournamentPanel();
+});
+
+test('AUD-115: over Versus, a Friends load answered after 🌐 off and a local Start leaves the seeding view alone', async () => {
+  const k = setup({ versus: { leave: () => {}, restartWith: () => {} }, active: true });
+  k.open();
+  await flush();
+  el('tour-online').click();
+  await flush();
+  k.hold.add('friend_list');
+  el('tour-friends').click();
+  await flush();
+  el('tour-online').click(); // 🌐 off: the local lobby
+  await flush();
+  el('tour-start').click();
+  await flush();
+  const seeding = textOf(el('tour-body'));
+  k.release('friend_list');
+  await flush();
+  assert.equal(textOf(el('tour-body')), seeding, 'the seeding view untouched');
+  closeTournamentPanel();
+});
+
+test('AUD-115 (the same pattern): 🏁 Recent races and 📱 Devices answered after Create, and a pairing answered after Back, draw nothing', async () => {
+  for (const [name, open] of [['races', 'tour-races'], ['devices', 'tour-devices']]) {
+    const k = setup({ answers: ROOM });
+    k.open();
+    await flush();
+    k.hold.add(name);
+    el(open).click();
+    await flush();
+    el('tour-create').click();
+    await flush();
+    const room = textOf(el('tour-body'));
+    k.release(name);
+    await flush();
+    assert.equal(el('tour-races-back') ?? el('tour-dev-back'), null, `${name}: still the room screen`);
+    assert.equal(textOf(el('tour-body')), room, name);
+    closeTournamentPanel();
+  }
+  const k = setup({ trusted: false });
+  k.open();
+  await flush();
+  el('tour-devices').click();
+  await flush();
+  for (const d of '123456') el(`tour-key-${d}`).click();
+  k.hold.add('pair');
+  el('tour-key-go').click();
+  await flush();
+  el('tour-dev-back').click();
+  await flush();
+  assert.ok(el('tour-devices'), 'the online home');
+  const home = textOf(el('tour-body'));
+  k.release('pair');
+  await flush();
+  assert.equal(el('tour-dev-back'), null, 'not pulled onto 📱 Devices');
+  assert.equal(textOf(el('tour-body')), home);
+  closeTournamentPanel();
+});
+
+test('AUD-116: Accept on an ask that is gone says so and reads the lists again (the gone row and the badge go)', async () => {
+  const k = setup({ answers: { respond_friend_request: { ok: true, data: { ok: false, error: 'no request' } } } });
+  k.open();
+  await flush();
+  el('tour-friends').click();
+  await flush();
+  assert.ok(el('tour-fr-in-0'));
+  k.setList({ ...k.getList(), incoming: [] }); // the asker took it back meanwhile
+  el('tour-fr-yes-0').click();
+  await flush();
+  assert.equal(el('tour-fr-in-0'), null, 'the lists read again');
+  assert.equal(el('tour-status').textContent, t('en', 'friendNoRequest'));
+  closeTournamentPanel();
+});
+
+test('AUD-122: closing a panel over Versus with 🌐 never on never builds the status beat (nor the online client)', async () => {
+  const k = setup({ versus: { leave: () => {}, restartWith: () => {} }, active: true });
+  let beats = 0;
+  let accounts = 0;
+  const beat = k.play.onlineStatusBeat;
+  const account = k.play.onlineAccount;
+  k.play.onlineStatusBeat = () => ((beats += 1), beat());
+  k.play.onlineAccount = () => ((accounts += 1), account());
+  k.open();
+  await flush();
+  assert.ok(el('tour-start'));
+  el('tour-close').click();
+  await flush();
+  assert.equal(beats, 0, 'the beat is never asked for outside online mode');
+  assert.equal(accounts, 0);
+  assert.equal(k.calls.length, 0, 'nothing sent');
+});
+
+test('3.6: a pairing answered after 🌐 was switched off pairs the device but starts no beat (presence only in online mode)', async () => {
+  const k = setup({ trusted: false, versus: { leave: () => {}, restartWith: () => {} }, active: true });
+  k.open();
+  await flush();
+  el('tour-online').click();
+  await flush();
+  el('tour-devices').click();
+  await flush();
+  for (const d of '123456') el(`tour-key-${d}`).click();
+  k.hold.add('pair');
+  el('tour-key-go').click();
+  await flush();
+  el('tour-online').click(); // 🌐 off while the pairing is in flight
+  await flush();
+  assert.ok(el('tour-start'), 'the local lobby');
+  const before = k.beats().length; // the link's one refused beat (a waiting device's beat stops itself)
+  k.release('pair');
+  await flush();
+  assert.deepEqual(k.beats().slice(before), [], 'no beat after the late pairing');
+  assert.equal(k.live().length, 0, 'no online timer');
+  assert.ok(el('tour-start'), 'still the local lobby');
 });

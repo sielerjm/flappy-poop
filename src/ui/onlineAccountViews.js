@@ -137,7 +137,9 @@ async function onClaim(ui, st, account, value) {
 async function openDevices(ui, st, account) {
   st.typed = '';
   st.removeArmed = null;
+  const still = ui.mark?.() ?? (() => true);
   const r = await account.devices();
+  if (!still()) return; // a late answer draws nothing (3.6, AUD-115)
   if (r.ok) {
     st.rows = r.rows;
     st.trusted = true;
@@ -153,7 +155,9 @@ async function openDevices(ui, st, account) {
 }
 
 async function openRaces(ui, st, account) {
+  const still = ui.mark?.() ?? (() => true);
   const r = await account.races();
+  if (!still()) return; // a late answer draws nothing (3.6, AUD-115)
   if (r.ok) {
     st.history = { rival: r.rival, recent: r.recent };
     st.trusted = true;
@@ -209,15 +213,17 @@ async function onPairCode(ui, st, account) {
 }
 
 async function onPair(ui, st, account) {
+  const still = ui.mark?.() ?? (() => true);
   const r = await account.pair(st.typed);
   st.typed = '';
+  if (r.ok) Object.assign(st, { trusted: true, demoted: false }); // paired, wherever the player is now
+  if (r.ok) ui.onPaired?.();
+  if (!still()) return; // a late answer draws nothing (3.6, AUD-115)
   if (!r.ok) {
     ui.rerender();
     ui.setStatus(ui.tr(r.errorKey).replace('{n}', String(r.left ?? '')), 'error');
     return;
   }
-  Object.assign(st, { trusted: true, demoted: false });
-  ui.onPaired?.();
   await openDevices(ui, st, account);
   ui.setStatus(ui.tr('onlinePairedOk'), 'ok');
 }

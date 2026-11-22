@@ -748,16 +748,26 @@ export function tournamentPadAction(action) {
 // ---------------------------------------------------------------------------
 // 🌐 online (plan 39, 1.6c)
 
+/** Which online screen shows: the account view and the lobby's screen (3.6, AUD-115). */
+const screenKey = (o) => `${o.st.view}|${o.lobby?.state?.screen ?? ''}`;
+
 /** What the sign-in screens need from the panel (onlineAccountViews.js's `ui`). */
 function accountUi() {
   return {
     tr,
     rerender: () => renderLobby(),
+    // 3.6 (T3-review AUD-115): taken as a call goes out; true while the same 🌐 session is on and the
+    // same screen shows, so a late answer never draws over a screen the player has moved to.
+    mark: () => {
+      const o = online;
+      const at = o ? screenKey(o) : null;
+      return () => Boolean(o) && online === o && o.on && !view && screenKey(o) === at;
+    },
     setStatus,
     now: () => Date.now(),
     confirmMs: T.saveClearConfirmMs,
     onLinked: (r) => startLobby(r),
-    onPaired: () => statusBeat()?.start(), // 3.3: a device just paired starts beating (a waiting one's beat stops itself)
+    onPaired: () => online?.on && statusBeat()?.start(), // 3.3: a device just paired starts beating (a waiting one's beat stops itself); never with 🌐 off (3.6)
   };
 }
 
@@ -1040,7 +1050,7 @@ function stopOnline() {
   o.poll = null;
   if (o.look) ctx?.timers?.clearTimeout?.(o.look);
   o.look = null;
-  if (!o.handed) statusBeat()?.stop(); // 3.3: out of online mode: friends see offline at once
+  if (!o.handed) ctx?.play?.onlineStatusBeatRef?.stop(); // 3.3: out of online mode: friends see offline at once; only a beat that exists (AUD-122)
   const lobby = o.lobby;
   o.lobby = null;
   Promise.resolve(lobby?.leave())

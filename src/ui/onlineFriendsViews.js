@@ -54,9 +54,14 @@ export async function refreshBadge(st, friends) {
   return changed;
 }
 
-/** Open the screen: one load of the lists, the dots and the recent opponents. */
+/**
+ * Open the screen: one load of the lists, the dots and the recent opponents. True when drawn; an
+ * answer after the player moved to another screen draws nothing (3.6, AUD-115).
+ */
 export async function openFriends(ui, st, friends, { keepStatus = false } = {}) {
+  const still = ui.mark?.() ?? (() => true);
   const r = await friends.load();
+  if (!still()) return false;
   if (r.ok) {
     st.friends = r;
     st.trusted = true;
@@ -66,7 +71,7 @@ export async function openFriends(ui, st, friends, { keepStatus = false } = {}) 
     st.friends = null;
   } else {
     ui.setStatus(ui.tr(r.errorKey), 'error');
-    return;
+    return false;
   }
   st.view = 'friends';
   if (!keepStatus) {
@@ -75,6 +80,7 @@ export async function openFriends(ui, st, friends, { keepStatus = false } = {}) 
     ui.setStatus('');
   }
   ui.rerender();
+  return true;
 }
 
 /** The screen's poll: the dots again, redrawn only when one changed. */
@@ -100,8 +106,10 @@ export async function pollFriends(ui, st, friends) {
 async function run(ui, st, friends, call, okKey, name) {
   if (st.busy) return;
   st.busy = true;
+  const still = ui.mark?.() ?? (() => true);
   const r = await call();
   st.busy = false;
+  if (!still()) return; // the player left this screen meanwhile: nothing drawn (AUD-115)
   st.friendArmed = null;
   st.friendOpen = null;
   if (!r.ok) {
@@ -111,8 +119,12 @@ async function run(ui, st, friends, call, okKey, name) {
       ui.rerender();
       return;
     }
+    // A refusal ('no request', 'no peer': the ask or the player is gone) reads the lists again (AUD-116).
+    if (!(await openFriends(ui, st, friends, { keepStatus: true }))) {
+      if (!still()) return;
+      ui.rerender();
+    }
     ui.setStatus(ui.tr(r.errorKey).replace('{name}', name), 'error');
-    ui.rerender();
     return;
   }
   const key = typeof okKey === 'function' ? okKey(r) : okKey;

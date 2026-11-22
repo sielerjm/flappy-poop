@@ -7141,10 +7141,16 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         const toHost = (event, payload) => setTimeout(() => { if (inboxA.take(event, payload)) q.push({ kind: 'peer', event, msg: payload, at: payload.t }); }, LAT);
         const sendBot = (event, fields) => { const m = sendB(event, fields); if (!m) return false; if (event !== 'pos' && event !== 'flap') log.push('B> ' + event + ' ' + JSON.stringify(fields)); toHost(event, m.payload); return true; };
         const reports = [];
+        const friendCalls = [];
         const counts = { sent: 3 }; // the lobby's sends before the race (2.7, AUD-110: the report counts only the race's own)
         const net = { serverNow: now, pump() {}, take: () => q.splice(0), peer: () => ({ name: 'JollyPlunger042', width: 720 }), close() { log.push('close'); },
           stats: () => ({ sent: counts.sent, received: 9, rttMs: 40.4, rttMinMs: null }),
-          async rpc(fn, args) { reports.push([fn, args]); return { ok: true, data: { ok: true, status: reports.length === 1 ? 'playing' : 'agreed', counted: reports.length > 1 } }; },
+          async rpc(fn, args) {
+            // 3.6 (AUD-118): the results panel's friend offer reads the lists and the race's handle; kept out of the reports.
+            if (fn === 'friend_list') return (friendCalls.push([fn, args]), { ok: true, data: { friends: [], incoming: [], outgoing: [], blocked: [] } });
+            if (fn === 'online_history') return (friendCalls.push([fn, args]), { ok: true, data: { rival: null, recent: [{ name: 'JollyPlunger042', peer: 'ab'.repeat(16), at: now(), won: true, mine: 1, theirs: 0 }] } });
+            if (fn === 'send_friend_request') return (friendCalls.push([fn, args]), { ok: true, data: { ok: true, status: 'pending' } });
+            reports.push([fn, args]); return { ok: true, data: { ok: true, status: reports.length === 1 ? 'playing' : 'agreed', counted: reports.length > 1 } }; },
           send(event, fields) { const m = sendA(event, fields); if (!m) return false; counts.sent += 1; if (event !== 'pos' && event !== 'flap') log.push('A> ' + event + ' ' + JSON.stringify(fields)); toBot(event, m.payload); return true; } };
         const room = { phase: 'playing', role: 'host', code: '482913', hostName: 'Smoke', guestName: 'JollyPlunger042', seed: 4242, startMs: now() + 3500, round: 1 };
         bot.reset = (since) => {
@@ -7174,7 +7180,7 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
           bot.feed.tick({ ...h, ended: h.ended && ref.settled(h.level) });
         }, 16);
         const plan = R.raceStartPlan(room, { mine: 720, theirs: 720 });
-        globalThis.__race = { net, lobby, bot, log, room, plan, L, T, reports, counts };
+        globalThis.__race = { net, lobby, bot, log, room, plan, L, T, reports, counts, friendCalls };
         ${P}.scene.start('OnlineRace', { net, lobby, plan });
         return true;
       })()`);
@@ -7226,6 +7232,11 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
         const rep = await evaluate(`JSON.stringify({ r: __race.reports[0], slots: ${OR}.finalSlots.map((s) => [s.score, s.deaths, s.levelWins, s.finalFirst]), sentInAll: __race.counts.sent })`).then(JSON.parse);
         ok(rep.r[0] === 'finish_match' && rep.r[1].p_code === '482913' && rep.r[1].p_round === 1 && JSON.stringify(rep.r[1].p_result.slots.map((s) => [s.score, s.deaths, s.levelWins, s.finalFirst])) === JSON.stringify(rep.slots) && rep.r[1].p_result.stats.rttMs === 40 && rep.r[1].p_result.stats.sent >= 1 && rep.r[1].p_result.stats.sent <= rep.sentInAll - 3 && !('rttMinMs' in rep.r[1].p_result.stats), `finish_match as the host (its telemetry this race's own, an unmeasured RTT left out): ${JSON.stringify(rep.r[1])}`);
         await sleep(TT.retryLockoutMs + 50);
+        // 3.6 (AUD-118): the real Add as a friend button and its hit box, once the race is saved.
+        ok(await until(`${OR}.result.friend.visible && ${OR}.result.friend.getText() === 'Add JollyPlunger042 as a friend'`, 3000), `the saved race offers "Add JollyPlunger042 as a friend": visible ${await evaluate(`${OR}.result.friend.visible`)}, "${await evaluate(`${OR}.result.friend.getText()`)}", offer ${await evaluate(`${OR}.friendOffer?.phase`)}`);
+        await evaluate(`(() => { const r = ${OR}; const b = r.result.friendBox; r.onPointer({ x: b.x + (r.shiftX ?? 0), y: b.y }); return true; })()`);
+        ok(await until(`__race.friendCalls.some((c) => c[0] === 'send_friend_request' && c[1]?.p_peer === 'ab'.repeat(16))`, 2000), `a tap on it sends send_friend_request by the race's handle: ${await evaluate(`JSON.stringify(__race.friendCalls.map((c) => c[0]))`)}`);
+        ok(await until(`${OR}.result.friendLine.text === 'Friend request sent to JollyPlunger042' && !${OR}.result.friend.visible`, 2000), `the line reads "${await evaluate(`${OR}.result.friendLine.text`)}" and the button goes`);
         const panelTap = (which) => evaluate(`(() => { const r = ${OR}; const b = r.result.boxes.${which}; r.onPointer({ x: b.x, y: b.y }); return true; })()`);
         await panelTap('share');
         ok(await until(`${OR}.result.status.text === 'Waiting for JollyPlunger042…' && ${OR}.result.rematch.getText() === 'Rematch ✓'`, 1000), `Rematch: "${await evaluate(`${OR}.result.rematch.getText()`)}", "${await evaluate(`${OR}.result.status.text`)}"`);
