@@ -1378,7 +1378,8 @@ src/
                             trust keys (DEV_PROJECT_KEY). ONLINE_RPCS includes finish_match
                             and online_history, plus friend_list, send_friend_request,
                             respond_friend_request, remove_friend, block_user and
-                            unblock_user (3.1), online_beat and friend_statuses (3.2); the server's plain messages include
+                            unblock_user (3.1), online_beat and friend_statuses (3.2), send_invite, invite_list,
+                            accept_invite, decline_invite and cancel_invite (4.1); the server's plain messages include
                             'online closed', 'no match', 'bad result' and 'bad peer'.
                             beacon(fn, args) (3.3): an online function as a keepalive POST to the Data API with
                             the session's token, never awaited, false when nothing can send it; ONLINE_RPCS
@@ -3002,10 +3003,42 @@ db/schema.sql               Supabase schema: scores table (player_id = save-code
                             Internal online_state: in_game = a trusted device with a beat
                             under 60 s old in a room 'playing', online = such a beat, else
                             offline. No shared channel (it would list everyone online).
+                            Invites (4.1, tests/schemaInvites.test.js): the invites table (id, from_uid the
+                            sending device and its room's host, from_player, to_player, room_code, status
+                            pending | accepted | declined | cancelled, sent_at, expires_at; 'expired' is never
+                            stored; from_uid goes null when the device's user is deleted, so the rows still
+                            count for the caps), readable by no role. For a paired device only (authenticated; 'not
+                            signed in', 'not linked', 'not trusted'). send_invite(p_peer) -> { ok, invite,
+                            code, sent_at, expires_at } or { ok: false, error: 'unavailable' | 'rate limited' }
+                            (raises 'bad peer', 'in a race', 'online closed', 'busy'); invite_list() ->
+                            { incoming, outgoing, topic } (peer, name, sent_at, expires_at, outgoing adds
+                            status; topic is the player's own Realtime topic);
+                            accept_invite(p_invite) -> { ok, code, status: 'ready', host_name } or
+                            { ok: false, error: 'expired' }; decline_invite and cancel_invite -> { ok: true }
+                            whatever the id. Times in ms, no ids. Who: an accepted friend, no hide, no block,
+                            reading 'online' in online_state; anything else is the same 'unavailable'. Caps:
+                            5 a minute and 100 a day per player, 10 an hour to one friend. The invite belongs
+                            to the sending device's room (its open one, kept on a resend, else one made with
+                            source 'invite'); one live invite per sending device and per pair. Live is read
+                            every time (online_invite_live): pending, before expires_at (INVITE_TTL, 2 minutes,
+                            stored on the row, one server constant c_ttl, no client mirror), its room open
+                            under that device, the device beating within 60 s, the two still friends; so an
+                            unfriend, block, merge or lost beat ends it at once and reads 'expired'. Accept
+                            seats the friend's device and the room goes straight to 'ready' (no code, no join
+                            cap, no Let in). Delivery on the player's own topic (online_user_topic: 'user:'
+                            and 32 hex of sha256 of the pepper and the resolved player id, never the id, so a
+                            device whose save holds a merged-away id still hears its player's invites; given
+                            only by invite_list): online_can lets that player's paired devices read it and
+                            nobody write it (only the server's realtime.send), so a waiting device reads
+                            nothing. Events: `invite` to the friend; `invite_update`
+                            { invite, status } to both players on accept, decline or cancel. online_unseat
+                            (every leave path) and join_room (a code guest taking the seat) end the device's
+                            invites and tell both players. Nothing is sent on expiry. online_cleanup drops
+                            invites 2 days old. rooms.source takes 'invite'.
                             PL/pgSQL gotcha: a bare CASE inside
                             `IF … THEN` ends the condition at its THEN; parenthesise.
 
-tests/                      node --test (schema.test.js, schemaOnline.test.js, schemaFriends.test.js, schemaStatus.test.js, pilot.test.js,
+tests/                      node --test (schema.test.js, schemaOnline.test.js, schemaFriends.test.js, schemaStatus.test.js, schemaInvites.test.js, pilot.test.js,
                             eduBoardSync.test.js and schemaCheck.test.js need `npm install`: PGlite). Each file is self-describing:
   field.test.js             fieldWidth (phone, desktop, 2:1 cap, bad input, even),
                             uiColumn, poopX, the x0 shift of trayLayout /
@@ -3296,11 +3329,17 @@ tests/                      node --test (schema.test.js, schemaOnline.test.js, s
   schemaStatus.test.js      Plan 39, 3.2 in PGlite: online_beat (trusted only, 5 s write gap,
                             a leave deletes), friend_statuses (states, order, friends only, no
                             ids), in_game from a room 'playing', the 60 s fresh window
+  schemaInvites.test.js     Plan 39, 4.1 in PGlite: send_invite (who may be invited, the caps, one live
+                            invite per device and pair, a resend keeps the room), accept (ready, no code),
+                            decline and cancel, expiry read live (TTL, room, beat, friendship), the
+                            player's own topic (a handle, its policy, a merged-away id), online_unseat and
+                            join_room ending invites, the caps surviving an unlink, the two-day cleanup,
+                            the undo line's restore list, no role reads the table
   runLog.test.js            submit_runs and run_log in PGlite as anon: owner-only, rejects
                             counted, a resend stored once, 5 s pacing, 90-day purge, the
                             merge; plan 39: mode 'race' accepted and treated like single
   onlineLiveCheck.test.js   tools/online_live_check.mjs: the target guard, the arguments,
-                            how a channel answer is read and its 13 steps
+                            how a channel answer is read and its 14 steps
   online.test.js            src/online.js: the protocol and its validation, stale and
                             reordered messages, the derived version, codes, the clock,
                             the ghost against a 60 Hz sender over every netsim profile
@@ -3697,8 +3736,8 @@ tools/
                             file (plan 39, 1.6c); the repo never holds a project's URL or key.
   online_live_check.mjs     The live check of the online schema (plan 39): --env <file> for a test
                             project, --live for the live project after the paste. Four anonymous
-                            sessions, thirteen PASS/FAIL lines (line 12: friends and status; a test
-                            project expects 12 of 13, live 13 of 13); each session unlinks itself; never a
+                            sessions, fourteen PASS/FAIL lines (line 12: friends and status; line 13:
+                            invites; line 14: teardown; a test project expects 13 of 14, live 14 of 14); each session unlinks itself; never a
                             secret key. tests/onlineLiveCheck.test.js covers it.
   headless_check.mjs        npm run smoke [url] [--list] [--only=a,b]: the checks run in
                             named sections (SECTIONS, in run order, each printing its check
@@ -4173,7 +4212,7 @@ Commits follow `type(scope): summary` (`feat`, `fix`, `docs`, `chore`, `test`, `
   `grant  execute … to authenticated;` pair), is `security definer` with `set search_path = ''` and
   qualified names, checks `auth.uid()` first, and is listed in the header's `--   * online name(...)`
   list (tests/schema.test.js checks the anon and online lists against the grant lines;
-  tests/schemaOnline.test.js checks the privileges; `finish_match` and `online_history` follow this rule; no online function may take a name or search to find a player, which tests/schemaFriends.test.js guards; friend functions and online_beat are for a trusted device (tests/schemaStatus.test.js) and their tables are readable by no role). A failure the server counts is returned as
+  tests/schemaOnline.test.js checks the privileges; `finish_match` and `online_history` follow this rule; no online function may take a name or search to find a player, which tests/schemaFriends.test.js guards; friend functions and online_beat are for a trusted device (tests/schemaStatus.test.js) and their tables are readable by no role; so are the invite functions and their table (tests/schemaInvites.test.js)). A failure the server counts is returned as
   `{ ok: false, error }`, because a raise would roll the count back. The game's anon functions stay
   revoked from authenticated (a session token sent to one is refused).
 - New achievement → one `ACHIEVEMENTS` entry in `src/achievements.js` (a new,
