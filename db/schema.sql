@@ -187,6 +187,12 @@
 --     select * from public.friendships where '<player id>' in (a_player, b_player);
 --   devices in online mode now (plan 39, 3.2), owner only:
 --     select count(*) from public.online_beats where at > now() - interval '1 minute';
+--   online races with a waiting seat (plan 39, 3.7), owner only: saved and counted, never a friendship:
+--     select count(*) from public.matches where status = 'agreed' and not (host_trusted and guest_trusted);
+--   undo the narrowed pairing (plan 39, 3.7), before online status's undo: restore finish_match,
+--     online_peer_find, online_peer_shown, friend_eligible and online_races from git (plan 39, 3.2c,
+--     4b9e28b) and run this file (without 3.7's do block); then
+--     alter table public.matches drop column host_trusted, drop column guest_trusted.
 --   undo online status (plan 39, 3.2), before the friends' undo: drop function public.friend_statuses(),
 --     public.online_beat(boolean), public.online_state(text); drop table public.online_beats.
 --   undo friends (plan 39, 3.1), before the boards' races' undo: drop function public.friend_list(),
@@ -3977,9 +3983,9 @@ create index if not exists join_attempts_ip on public.join_attempts (ip_hash, at
 -- One row per race (plan 39, 2.4a), minted when the host starts it (set_room_status 'playing'): the
 -- room's code and round, the seed and GO the server minted, both seats' devices and (resolved)
 -- players. A rematch overwrites the room's seed and GO, so each race is checked against its own row
--- (rooms.match_id points at the race running). Each seated, trusted device reports the race's final
--- numbers for both seats (finish_match): agreed, disputed or refused, or abandoned on a leave
--- mid-race. counted: an agreed race between two players, within the caps, which the boards and the
+-- (rooms.match_id points at the race running). Each seated device, paired or waiting (3.7, item 61),
+-- reports the race's final numbers for both seats (finish_match): agreed, disputed or refused, or
+-- abandoned on a leave mid-race. counted: an agreed race between two players, within the caps, which the boards and the
 -- owner's online rival line read. host_stats / guest_stats: each device's numbers-only telemetry
 -- (round trips, messages, reconnects, pauses), for the owner's eyes in the SQL editor. Kept: it is the
 -- players' online history. A device's row going (auth.users) leaves the race with its players.
@@ -4014,6 +4020,23 @@ create index if not exists matches_host on public.matches (host_player, finished
 create index if not exists matches_guest on public.matches (guest_player, finished_at);
 create index if not exists matches_playing on public.matches (started_at) where status = 'playing';
 alter table public.rooms add column if not exists match_id bigint;  -- the race running (no FK: races outlive rooms)
+-- Each seat's trust as its report landed (plan 39, 3.7, item 61): true from a paired device, false from
+-- a waiting one, null until that seat reports. Only a race with both seats true makes two players
+-- eligible to be friends (friend_eligible) or gives a handle (online_peer_find), so a stolen id racing
+-- an accomplice from a waiting device saves a race but reaches nobody. A pairing, a demotion or a
+-- removal after the report changes nothing; a merge moves the race with both as they are. Added once:
+-- every report before 3.7 came from a paired device (finish_match refused a waiting one), so a seat
+-- that had reported is true and one that had not waits for its report. A re-paste changes nothing.
+do $$
+begin
+  if not exists (select 1 from information_schema.columns
+                  where table_schema = 'public' and table_name = 'matches' and column_name = 'host_trusted') then
+    alter table public.matches add column host_trusted boolean, add column guest_trusted boolean;
+    update public.matches set host_trusted = case when host_report is not null then true end,
+                              guest_trusted = case when guest_report is not null then true end;
+  end if;
+end;
+$$;
 
 -- Online play's switch (one row; plan 39, 2.4a). open false: no room is made, joined or started
 -- (create_room, join_room and set_room_status 'playing' raise 'online closed'); a race already
@@ -4119,8 +4142,9 @@ $$;
 revoke execute on function public.online_peer(text, text) from public, anon, authenticated;
 
 -- The player a viewer's peer handle names, or null: only someone the viewer raced (an agreed race under
--- both ids), befriended, asked or was asked by, or blocked, and never an id a merge folded away. So a
--- handle, whoever holds it, reaches nobody else. Internal.
+-- both ids, from two paired devices: 3.7, as friend_eligible), befriended, asked or was asked by, or
+-- blocked, and never an id a merge folded away. So a handle, whoever holds it, reaches nobody else,
+-- and a race with a waiting seat gives none. Internal.
 create or replace function public.online_peer_find(p_me text, p_peer text)
 returns text
 language sql
@@ -4130,7 +4154,8 @@ set search_path = ''
 as $$
   select c.other from (
     select case when m.host_player = p_me then m.guest_player else m.host_player end as other
-      from public.matches m where m.status = 'agreed' and p_me in (m.host_player, m.guest_player)
+      from public.matches m where m.status = 'agreed' and m.host_trusted and m.guest_trusted
+                                and p_me in (m.host_player, m.guest_player)
     union
     select case when f.a_player = p_me then f.b_player else f.a_player end
       from public.friendships f where p_me in (f.a_player, f.b_player)
@@ -4144,7 +4169,8 @@ revoke execute on function public.online_peer_find(text, text) from public, anon
 
 -- The handle a list shows p_me for p_other, or null when online_peer_find would find nobody by it, so no
 -- button hangs on a handle nothing takes (3.2r): a race a merge left under an old id shows under the
--- kept player's name with no handle, until the two race under their current ids. Internal.
+-- kept player's name with no handle, until the two race under their current ids; so does a race with a
+-- waiting seat (3.7), until the two race from paired devices. Internal.
 create or replace function public.online_peer_shown(p_me text, p_other text)
 returns text
 language sql
@@ -4158,9 +4184,10 @@ $$;
 revoke execute on function public.online_peer_shown(text, text) from public, anon, authenticated;
 
 -- May p_me ask p_other to be friends (3.1)? Only when they raced: an agreed race stored under both ids
--- (both devices trusted and reporting the same; a race a merge left under an old id does not count, so
--- a made-up player merged with a stolen id makes nobody eligible), neither id folded away, neither
--- hidden (plan 30), and no block either way. Internal.
+-- with both seats paired as they reported (3.7: a waiting device's race is saved but makes nobody
+-- eligible, so a stolen id racing an accomplice cannot reach the owner with an ask; a race a merge
+-- left under an old id does not count either, so a made-up player merged with a stolen id makes
+-- nobody eligible), neither id folded away, neither hidden (plan 30), and no block either way. Internal.
 create or replace function public.friend_eligible(p_me text, p_other text)
 returns boolean
 language sql
@@ -4171,7 +4198,7 @@ as $$
   select p_me <> p_other
      and public.resolve_player(p_me) = p_me and public.resolve_player(p_other) = p_other
      and not public.player_hidden(p_me) and not public.player_hidden(p_other)
-     and exists (select 1 from public.matches m where m.status = 'agreed'
+     and exists (select 1 from public.matches m where m.status = 'agreed' and m.host_trusted and m.guest_trusted
                   and ((m.host_player = p_me and m.guest_player = p_other) or (m.host_player = p_other and m.guest_player = p_me)))
      and not exists (select 1 from public.blocks b
                       where (b.blocker = p_me and b.blocked = p_other) or (b.blocker = p_other and b.blocked = p_me));
@@ -4687,10 +4714,12 @@ $$;
 -- order: score, deaths, level wins, the final line, else a draw) and different ones dispute. An
 -- agreed race counts unless one player sat on both seats, the pair has c_pair_day counted races in
 -- 24 hours, or either player has c_player_day; a counted race goes on the 🏅 and 🏆 boards
--- (online_count_race, 2.4b). Returns { ok: true, status, counted }. Raises 'not
--- signed in', 'not linked', 'not trusted' (a pending device: match history is private, M1), 'no
--- match' (this device sat in no race of that code and round, or has moved to another player since),
--- 'bad result'.
+-- (online_count_race, 2.4b). A waiting device's report is taken like a paired one's (3.7, item 61:
+-- pairing guards only what a stolen id would show of other people); each seat's trust is kept with
+-- its report (host_trusted, guest_trusted), and only a race with both paired makes two players
+-- eligible to be friends. Returns { ok: true, status, counted }. Raises 'not signed in', 'not
+-- linked', 'no match' (this device sat in no race of that code and round, or has moved to another
+-- player since), 'bad result'.
 create or replace function public.finish_match(p_code text, p_round int, p_result jsonb)
 returns jsonb
 language plpgsql
@@ -4723,9 +4752,6 @@ begin
   v_me := public.online_me();
   if v_me.uid is null then
     raise exception 'not linked';
-  end if;
-  if not v_me.trusted then
-    raise exception 'not trusted';
   end if;
   select * into v_m from public.matches m
    where m.room_code = p_code and m.round = p_round and v_uid in (m.host_uid, m.guest_uid)
@@ -4775,12 +4801,14 @@ begin
        or (v_slots -> 1 ->> 'score')::int > c_score_base + c_score_rate * v_secs then
       v_m.status := 'refused';
     end if;
-    if v_host then
+    if v_host then -- this device's trust as it reports, read after the locks (3.7)
       v_m.host_report := v_slots;
       v_m.host_stats := v_stats;
+      v_m.host_trusted := v_me.trusted;
     else
       v_m.guest_report := v_slots;
       v_m.guest_stats := v_stats;
+      v_m.guest_trusted := v_me.trusted;
     end if;
     if v_m.status = 'playing' and v_m.host_report is not null and v_m.guest_report is not null then
       if v_m.host_report = v_m.guest_report then
@@ -4819,7 +4847,8 @@ begin
     update public.matches m
        set status = v_m.status, host_report = v_m.host_report, guest_report = v_m.guest_report,
            host_stats = v_m.host_stats, guest_stats = v_m.guest_stats, winner_seat = v_m.winner_seat,
-           decided_by = v_m.decided_by, counted = v_m.counted, finished_at = v_m.finished_at
+           decided_by = v_m.decided_by, counted = v_m.counted, finished_at = v_m.finished_at,
+           host_trusted = v_m.host_trusted, guest_trusted = v_m.guest_trusted
      where m.id = v_m.id;
     if v_m.counted then
       perform public.online_count_race(v_m.id);
@@ -4921,7 +4950,8 @@ revoke execute on function public.online_shown_name(text) from public, anon, aut
 -- id and shown name (online, else the board's), won (null: a draw), both scores, when. A race whose two
 -- ids are now one player (a merge), a hidden opponent (plan 30), and an opponent blocked either way
 -- (3.1) are left out. Only races stored under the player's own id: a merge leaves a side that lost
--- trust behind (fold_player). Internal: online_history.
+-- trust behind (fold_player). A race with a waiting seat counts here as any other (3.7, item 61): it
+-- is the player's race, shown only to a paired device. Internal: online_history.
 create or replace function public.online_races(p_player text)
 returns table (opp text, oname text, won boolean, mine int, theirs int, at timestamptz, mid bigint)
 language sql
@@ -5503,7 +5533,7 @@ returns text
 language sql
 immutable
 as $$
-  select '01d82a56b7effb33'::text; -- schema stamp
+  select 'cc8984adbf659cff'::text; -- schema stamp
 $$;
 revoke execute on function public.schema_version() from public, authenticated;
 grant  execute on function public.schema_version() to anon;

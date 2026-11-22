@@ -95,11 +95,11 @@ async function raced(db, host, guest, scores = [50, 40]) {
   await call(db, host, 'leave_room', [code]);
   return code;
 }
-/** A race row as finish_match leaves it (status agreed unless told), written as the owner: eligibility in bulk. */
-const raceRow = (db, a, b, status = 'agreed') => db.query(`insert into public.matches
-  (room_code, round, seed, started_at, host_player, guest_player, status, host_report, guest_report, finished_at)
-  values ('123456', 1, 1, now() - interval '10 minutes', $1, $2, $3, '[{"score":1},{"score":2}]', '[{"score":1},{"score":2}]', now())`,
-  [a.player ?? a, b.player ?? b, status]);
+/** A race row as finish_match leaves it (status agreed unless told; both seats paired unless told), written as the owner: eligibility in bulk. */
+const raceRow = (db, a, b, status = 'agreed', trusted = [true, true]) => db.query(`insert into public.matches
+  (room_code, round, seed, started_at, host_player, guest_player, status, host_report, guest_report, finished_at, host_trusted, guest_trusted)
+  values ('123456', 1, 1, now() - interval '10 minutes', $1, $2, $3, '[{"score":1},{"score":2}]', '[{"score":1},{"score":2}]', now(), $4, $5)`,
+  [a.player ?? a, b.player ?? b, status, trusted[0], trusted[1]]);
 /** The peer handle `viewer` has for `other`, as the server makes it (internal, so asked as the owner). */
 const peerOf = (db, viewer, other) => db.query('select public.online_peer($1, $2) as p', [viewer.player ?? viewer, other.player ?? other]).then((r) => r.rows[0].p);
 const friends = (db, d) => call(db, d, 'friend_list');
@@ -252,19 +252,23 @@ test('only an agreed race makes two players eligible: not a disputed, refused, a
     await raceRow(db, b, a, 'agreed');
     assert.deepEqual(await ask(db, a, b), { ok: true, status: 'pending' }, `${status}, then an agreed race`);
   }
-  // A pending device can race by code (Tier 1) but never report, so its race is never agreed (2.4r).
+  // A pending device races by code and its report is taken (item 61), so its race is agreed, and
+  // still makes nobody friends: a stolen id racing an accomplice cannot reach the owner with an ask.
   const owner = await device(db, 'Gus');
   const thief = await addUser(db);
   await link(db, thief, owner.player, 'Gus');
   const host = await device(db, 'Hal');
-  await db.query("update public.rooms set created_at = created_at - interval '1 minute'");
-  const { code } = await call(db, host, 'create_room');
-  await call(db, thief, 'join_room', [code]);
-  await call(db, host, 'answer_guest', [code, true]);
-  await call(db, host, 'set_room_status', [code, 'playing']);
-  await assert.rejects(finish(db, thief, code, 1, [slot(1), slot(2)]), /not trusted/);
+  await raced(db, host, thief);
   assert.deepEqual(await ask(db, host, owner), NOT_ELIGIBLE, 'a race a pending device sat in makes nobody friends');
   assert.deepEqual(await ask(db, owner, host), NOT_ELIGIBLE);
+  for (const seats of [[true, false], [false, true], [false, false], [null, true]]) {
+    const c = await device(db, `C${seats.join('')}`);
+    await raceRow(db, a, c, 'agreed', seats);
+    assert.deepEqual(await ask(db, a, c), NOT_ELIGIBLE, `seats ${seats}`);
+    // A stray ask from c (written as the owner) lets a's handle find c; eligibility alone must refuse.
+    await db.query('insert into public.friendships (a_player, b_player, asker) select least($1, $2), greatest($1, $2), $2', [a.player, c.player]);
+    assert.deepEqual(await ask(db, a, c), NOT_ELIGIBLE, `seats ${seats}, the handle found`);
+  }
 });
 
 test('the race is checked at every ask, not only when the handle is found: an ask with no agreed race behind it cannot be taken up', async () => {
@@ -642,4 +646,93 @@ test('the paste over 3.1 on the test project adds the trust rows\' last-seen tim
   await db.exec(SQL);
   assert.deepEqual((await db.query('select player_id, since from public.online_trust')).rows, before);
   assert.equal((await db.query("select seen_at > now() - interval '1 minute' as x from public.online_trust where player_id = $1", [a.player])).rows[0].x, true, 'counted from the paste');
+});
+
+// ---------------------------------------------------------------------------
+// 3.7 (item 61): a waiting device's race is saved, and makes nobody friends.
+
+/** A device waiting to be paired with `owner`'s player (it links after the owner's first device). */
+async function waiting(db, owner) {
+  const uid = await addUser(db);
+  assert.equal((await link(db, uid, owner.player, owner.name)).trusted, false);
+  return { uid, player: owner.player, name: owner.name };
+}
+const seats = (db) => db.query('select id, host_player, guest_player, host_trusted, guest_trusted from public.matches order by id').then((r) => r.rows);
+
+test('a race with a waiting seat shows on both sides with no handle: no ask, no block, either way, until the two race from paired devices', async () => {
+  const db = await freshDb();
+  const gus = await device(db, 'Gus');
+  const hal = await device(db, 'Hal');
+  await raced(db, hal, await waiting(db, gus), [30, 60]);
+  assert.deepEqual(await ask(db, hal, gus), NOT_ELIGIBLE);
+  assert.deepEqual(await ask(db, gus, hal), NOT_ELIGIBLE, 'nor from the player\'s paired device');
+  let h = await call(db, hal, 'online_history');
+  assert.deepEqual(h.recent.map((r) => [r.name, r.peer]), [['Gus', null]], 'the opponent sees the race, with no handle');
+  assert.deepEqual([h.rival.name, h.rival.peer], ['Gus', null]);
+  h = await call(db, gus, 'online_history');
+  assert.deepEqual(h.recent.map((r) => [r.name, r.peer]), [['Hal', null]], 'the player\'s paired device sees it too, with no handle');
+  assert.deepEqual([h.rival.name, h.rival.peer], ['Hal', null]);
+  assert.deepEqual(await call(db, hal, 'block_user', [await peerOf(db, hal, gus)]), { ok: false, error: 'no peer' }, 'the handle it would have had names nobody');
+  assert.deepEqual(await call(db, gus, 'block_user', [await peerOf(db, gus, hal)]), { ok: false, error: 'no peer' });
+  await raced(db, gus, hal, [50, 40]);
+  const peer = await peerOf(db, hal, gus);
+  h = await call(db, hal, 'online_history');
+  assert.deepEqual(h.recent.map((r) => [r.name, r.peer]), [['Gus', peer], ['Gus', peer]], 'a race from paired devices: the handle works for both rows');
+  assert.deepEqual(await ask(db, hal, gus), { ok: true, status: 'pending' });
+});
+
+test('a merge carries each seat\'s trust with the race: a waiting seat\'s race moved to the kept player still makes nobody friends', async () => {
+  const db = await freshDb();
+  const kim = await device(db, 'Kim');
+  const amy = await device(db, 'Amy');
+  const tab = await device(db, 'KimTab'); // the same person's second id
+  await raced(db, amy, await waiting(db, tab));
+  await db.query("update public.online_players set seen_at = now() - interval '8 days'"); // nobody recent: nobody loses trust
+  const before = (await seats(db)).map((m) => [m.id, m.host_trusted, m.guest_trusted]);
+  await anonCall(db, 'select public.merge_players($1, $2)', [kim.player, tab.player]);
+  const after = await seats(db);
+  assert.equal(after[0].guest_player, kim.player, 'the race moved to the kept player');
+  assert.deepEqual(after.map((m) => [m.id, m.host_trusted, m.guest_trusted]), before, 'each seat\'s trust as it was');
+  assert.deepEqual(await ask(db, amy, kim), NOT_ELIGIBLE);
+  assert.deepEqual((await call(db, amy, 'online_history')).recent.map((r) => [r.name, r.peer]), [['Kim', null]]);
+  // A merge that swaps the two ids' races (the kept side loses trust) keeps each seat's trust too.
+  const zed = await device(db, 'Zed');
+  const old = await device(db, 'Old');
+  await raced(db, zed, await waiting(db, old));
+  const fresh = await device(db, 'Fresh');
+  await db.query("update public.online_players set seen_at = now() - interval '8 days' where player_id = $1", [old.player]);
+  const mid = (await seats(db)).find((m) => m.host_player === zed.player);
+  await anonCall(db, 'select public.merge_players($1, $2)', [old.player, fresh.player]); // only Fresh is recent: Old's devices drop
+  const moved = (await seats(db)).find((m) => m.id === mid.id);
+  assert.deepEqual([moved.guest_player, moved.host_trusted, moved.guest_trusted], [fresh.player, true, false], 'the race stays with the folded-away side, its seats as they were');
+});
+
+test('the upgrade from the live schema: every seat that had reported counts as paired (finish_match took no other), an unreported seat waits for its report, and a re-paste changes nothing', async () => {
+  const db = new PGlite();
+  await db.exec(SUPABASE_PREAMBLE);
+  await db.exec(FIXTURE);
+  const a = await device(db, 'Ua');
+  const b = await device(db, 'Ub');
+  await raced(db, a, b);
+  const c = await device(db, 'Uc');
+  const d = await device(db, 'Ud');
+  await db.query("update public.rooms set created_at = created_at - interval '1 minute'");
+  const { code } = await call(db, c, 'create_room');
+  await call(db, d, 'join_room', [code]);
+  await call(db, c, 'answer_guest', [code, true]);
+  await call(db, c, 'set_room_status', [code, 'playing']);
+  await db.query(`update public.matches set started_at = now() - interval '400 seconds'
+    where id = (select r.match_id from public.rooms r where r.code = $1)`, [code]);
+  await finish(db, c, code, 1, [slot(5), slot(6)]); // reported by one seat across the paste
+  await db.exec(SQL);
+  let rows = await seats(db);
+  assert.deepEqual(rows.map((m) => [m.host_trusted, m.guest_trusted]), [[true, true], [true, null]]);
+  assert.equal((await finish(db, d, code, 1, [slot(5), slot(6)])).status, 'agreed');
+  await raced(db, a, await waiting(db, b)); // a waiting seat's false must survive a re-paste
+  rows = await seats(db);
+  assert.deepEqual(rows.map((m) => [m.host_trusted, m.guest_trusted]), [[true, true], [true, true], [true, false]]);
+  await db.exec(SQL);
+  assert.deepEqual(await seats(db), rows, 're-pasted: the same');
+  assert.deepEqual(await ask(db, a, b), { ok: true, status: 'pending' }, 'friends over a race from before the paste');
+  assert.deepEqual(await ask(db, c, d), { ok: true, status: 'pending' });
 });

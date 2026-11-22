@@ -81,8 +81,8 @@ const call = (db, d, fn, args = []) => {
 };
 /** An agreed race between two players, written as the owner: eligibility (3.1). */
 const raceRow = (db, a, b) => db.query(`insert into public.matches
-  (room_code, round, seed, started_at, host_player, guest_player, status, host_report, guest_report, finished_at)
-  values ('123456', 1, 1, now() - interval '10 minutes', $1, $2, 'agreed', '[{"score":1},{"score":2}]', '[{"score":1},{"score":2}]', now())`,
+  (room_code, round, seed, started_at, host_player, guest_player, status, host_report, guest_report, finished_at, host_trusted, guest_trusted)
+  values ('123456', 1, 1, now() - interval '10 minutes', $1, $2, 'agreed', '[{"score":1},{"score":2}]', '[{"score":1},{"score":2}]', now(), true, true)`,
   [a.player, b.player]);
 const peerOf = (db, viewer, other) => db.query('select public.online_peer($1, $2) as p', [viewer.player, other.player]).then((r) => r.rows[0].p);
 const ask = async (db, from, to) => call(db, from, 'send_friend_request', [await peerOf(db, from, to)]);
