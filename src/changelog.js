@@ -8,6 +8,22 @@ import { LOCALES } from './i18n.js';
 
 export const CHANGELOG = [
   {
+    version: '0.27.0',
+    date: '22 Nov 2026',
+    notes: {
+      en: [
+        '🌐 Friends: after a saved online race, add the other player as a friend from the results screen or from Recent opponents in 🤝 Friends. Friends come only from races you finished together: there is no search.',
+        '🤝 Friends shows who is online, in a game or offline, with a dot and a word. Only your friends see your status, and only while you are in 🌐 online. A badge on the button counts friend requests waiting for you.',
+        'Accept or decline requests, take back your own, remove a friend, or block a player: blocking ends the friendship, stops their requests, and takes your races out of each other\'s lists. You can unblock under Blocked.',
+      ],
+      'zh-Hans': [
+        '🌐 好友：一场在线比赛保存后，可以在结果画面，或在 🤝 好友的“最近的对手”里，把对方加为好友。好友只能来自你们一起完成的比赛：没有搜索功能。',
+        '🤝 好友会用圆点加文字显示谁在线、在比赛中或离线。只有你的好友能看到你的状态，而且只在你打开 🌐 在线时。按钮上的数字是等你回复的好友请求。',
+        '可以接受或拒绝请求、撤回自己的请求、删除好友，或屏蔽玩家：屏蔽会结束好友关系、阻止对方再发请求，并把你们的比赛从彼此的列表中移除。在“已屏蔽”里可以取消屏蔽。',
+      ],
+    },
+  },
+  {
     version: '0.26.0',
     date: '21 Nov 2026',
     notes: {
