@@ -97,6 +97,8 @@ const ONLINE_FNS = {
   remove_friend: 'text',
   block_user: 'text',
   unblock_user: 'text',
+  online_beat: 'boolean',
+  friend_statuses: '',
 };
 
 // ---------------------------------------------------------------------------

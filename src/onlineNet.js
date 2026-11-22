@@ -68,6 +68,8 @@ export const ONLINE_RPCS = Object.freeze([
   'remove_friend',
   'block_user',
   'unblock_user',
+  'online_beat',
+  'friend_statuses',
 ]);
 
 const SEATS = ['host', 'guest'];

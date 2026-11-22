@@ -72,6 +72,10 @@
 --   * online remove_friend(...)        end a friendship, take back an ask, or turn one down
 --   * online block_user(...)           block a player raced or befriended: no friendship, no asks either way
 --   * online unblock_user(...)         lift one's own block
+--   * online online_beat(...)          this device's heartbeat while its player is in online mode (3.2),
+--                                      or word that it left; a trusted device only
+--   * online friend_statuses()         the player's friends, each online, in a game or offline (from their
+--                                      devices' heartbeats; no shared channel), for a trusted device
 --   Apply this file before pushing a client that calls them.
 -- A player has up to two rows: their best on the toilet and their best off it
 -- (primary key player_id + toilet, since 2026-11-04).
@@ -81,8 +85,8 @@
 -- player_achievements, player_meta, education_settings, education_public, research_participants
 -- or research_responses (nor the research_* views), run_log, run_rejects, held_scores,
 -- score_steps, board_settings, online_profiles, online_players, online_pairings, rooms,
--- join_attempts, online_secret, matches, online_settings, online_trust, friendships, blocks or
--- friend_asks (authenticated has nothing on any table either). Profiles are public
+-- join_attempts, online_secret, matches, online_settings, online_trust, friendships, blocks,
+-- friend_asks or online_beats (authenticated has nothing on any table either). Profiles are public
 -- (2026-11-11): player_stats returns anyone's stats, counters, achievements and biggest rival, by
 -- the name a board shows; and, only for a player who shares them, their education grade (2026-11-13).
 --
@@ -177,6 +181,10 @@
 --     select id, status, host_stats, guest_stats from public.matches order by id desc limit 20;
 --   friends (plan 39, 3.1), owner only: how many, and who blocked whom (by id):
 --     select status, count(*) from public.friendships group by 1; select * from public.blocks;
+--   devices in online mode now (plan 39, 3.2), owner only:
+--     select count(*) from public.online_beats where at > now() - interval '1 minute';
+--   undo online status (plan 39, 3.2), before the friends' undo: drop function public.friend_statuses(),
+--     public.online_beat(boolean), public.online_state(text); drop table public.online_beats.
 --   undo friends (plan 39, 3.1), before the boards' races' undo: drop function public.friend_list(),
 --     public.send_friend_request(text), public.respond_friend_request(text, boolean),
 --     public.remove_friend(text), public.block_user(text), public.unblock_user(text),
@@ -5263,6 +5271,107 @@ end;
 $$;
 revoke execute on function public.online_fold_friends(text, text, text) from public, anon, authenticated;
 
+-- Online status (plan 39, 3.2). A friend's dot: online (in online mode: the 🌐 window), in a game (in
+-- an online race, paused or not) or offline (anything else: solo, split screen, other menus, the app
+-- closed, no connection). No shared presence channel: any anonymous account could list every online
+-- device there (the Design rules). So each trusted device beats while its player is in online mode, a
+-- row read through friend_statuses by the player's friends and nobody else.
+-- One row per device, not per player: two devices of one player never overwrite each other's beat, a
+-- device that drops to pending stops counting at once (trust is read when the state is), and the row
+-- goes with the device's link (unlinked, removed, reset, a stale anonymous user), which a merge moves
+-- with its trust (fold_player), so nothing here needs housekeeping or a merge rule. Readable by no role.
+create table if not exists public.online_beats (
+  uid uuid primary key references public.online_players (uid) on delete cascade,
+  at  timestamptz not null default now()
+);
+alter table public.online_beats enable row level security;
+revoke all on public.online_beats from public, anon, authenticated;
+
+-- A player's state, from their trusted devices' beats: 'in_game' when one that beat within c_fresh sits
+-- in a running race (a room 'playing': its pauses too, and a room still being set up is not one),
+-- 'online' when one beat within c_fresh, else 'offline'. A device stops beating when its player leaves
+-- online mode, and says so (online_beat(false)), so its friends see it go at once; a closed app or a
+-- lost connection goes after c_fresh. Internal: friend_statuses, and invites (Tier 4: both online).
+create or replace function public.online_state(p_player text)
+returns text
+language plpgsql
+stable
+security definer
+set search_path = ''
+as $$
+declare
+  c_fresh constant interval := interval '60 seconds';
+begin
+  if exists (select 1 from public.online_players o
+               join public.online_beats b on b.uid = o.uid
+              where o.player_id = p_player and o.trusted and b.at > now() - c_fresh
+                and exists (select 1 from public.rooms r
+                             where r.status = 'playing' and (r.host_uid = o.uid or r.guest_uid = o.uid))) then
+    return 'in_game';
+  end if;
+  if exists (select 1 from public.online_players o
+               join public.online_beats b on b.uid = o.uid
+              where o.player_id = p_player and o.trusted and b.at > now() - c_fresh) then
+    return 'online';
+  end if;
+  return 'offline';
+end;
+$$;
+revoke execute on function public.online_state(text) from public, anon, authenticated;
+
+-- This device's heartbeat while its player is in online mode (the 🌐 window or an online race):
+-- { ok: true }. p_here false (or null) says the device left online mode: its beat goes, so its friends
+-- see it offline at once. A trusted device only (M1 rule 2): a pending device, which may be someone
+-- else's, never shows its player online. A beat within c_gap of the last writes nothing, so a client
+-- that beats too often costs no more writes than one beat each c_gap.
+create or replace function public.online_beat(p_here boolean)
+returns jsonb
+language plpgsql
+volatile
+security definer
+set search_path = ''
+as $$
+declare
+  c_gap constant interval := interval '5 seconds';
+  v_me public.online_players := public.online_trusted_me();
+begin
+  if p_here then
+    insert into public.online_beats as b (uid, at) values (v_me.uid, now())
+    on conflict (uid) do update set at = excluded.at where b.at < now() - c_gap;
+  else
+    delete from public.online_beats b where b.uid = v_me.uid;
+  end if;
+  return jsonb_build_object('ok', true);
+end;
+$$;
+
+-- The player's friends with each one's state, for a trusted device: { friends: [{ peer, name, state }] },
+-- state 'online' | 'in_game' | 'offline' (online_state), sorted online, in a game, offline, then by name.
+-- The friends are friend_list's: accepted only, a hidden player (plan 30) and an id a merge folded away
+-- left out; a block ends the friendship, so it ends the state too. No ids. No function gives anyone
+-- else's state: a stranger, an ask either way and a blocked player read nothing.
+create or replace function public.friend_statuses()
+returns jsonb
+language plpgsql
+stable
+security definer
+set search_path = ''
+as $$
+declare
+  v_id text := (public.online_trusted_me()).player_id;
+begin
+  return jsonb_build_object('friends', coalesce((
+    select jsonb_agg(jsonb_build_object('peer', y.peer, 'name', y.name, 'state', y.state)
+                     order by array_position(array['online', 'in_game', 'offline'], y.state), lower(y.name), y.peer)
+      from (select public.online_peer(v_id, x.other) as peer, public.online_shown_name(x.other) as name,
+                   public.online_state(x.other) as state
+              from (select case when f.a_player = v_id then f.b_player else f.a_player end as other
+                      from public.friendships f
+                     where v_id in (f.a_player, f.b_player) and f.status = 'accepted') x
+             where public.resolve_player(x.other) = x.other and not public.player_hidden(x.other)) y), '[]'::jsonb));
+end;
+$$;
+
 -- The Realtime policies' check (granted to authenticated, because a policy runs it as the device
 -- asking): may this device read (p_write false) or write a channel topic? room:<code>: its two seated
 -- devices, each still linked as the player it sat down as. Every other topic: nobody (user:<player id>
@@ -5340,6 +5449,10 @@ revoke execute on function public.block_user(text) from public, anon;
 grant  execute on function public.block_user(text) to authenticated;
 revoke execute on function public.unblock_user(text) from public, anon;
 grant  execute on function public.unblock_user(text) to authenticated;
+revoke execute on function public.online_beat(boolean) from public, anon;
+grant  execute on function public.online_beat(boolean) to authenticated;
+revoke execute on function public.friend_statuses() from public, anon;
+grant  execute on function public.friend_statuses() to authenticated;
 
 -- Which version of this file the database last ran: a short SHA-256 of the file with the value
 -- below blanked (tools/schema_check.mjs). `npm run schema:stamp` rewrites it after an edit, and
@@ -5351,7 +5464,7 @@ returns text
 language sql
 immutable
 as $$
-  select 'e7e46d7f636eb99a'::text; -- schema stamp
+  select 'a5c4e963cdde0a22'::text; -- schema stamp
 $$;
 revoke execute on function public.schema_version() from public, authenticated;
 grant  execute on function public.schema_version() to anon;
