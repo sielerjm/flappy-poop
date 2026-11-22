@@ -855,6 +855,9 @@ function startOnline() {
     return;
   }
   const net = o.net;
+  // T4-review AUD-127: this window's hold on the shared transport; its release closes it only if no later
+  // window (or race) took one meanwhile (stopOnline's close waits for leave_room's answer).
+  o.release = net.lease?.() ?? null;
   o.friends = createOnlineFriends({ rpc: (fn, args) => net.rpc(fn, args), max: T.online.status.opponents });
   o.invites = createInvites({ rpc: (fn, args) => net.rpc(fn, args), now: () => net.serverNow() });
   o.net.warm?.().catch?.(() => {});
@@ -887,7 +890,9 @@ function startLobby(r) {
   // this page's ✕ or pagehide would delete its row. lookAgain starts it once the race is claimed here.
   if (!live) statusBeat()?.start();
   updateBadge(o);
-  loadInvites(o); // 4.2: the missed-broadcast read on entering online mode, then the player's topic
+  // 4.2: the missed-broadcast read on entering online mode, then the player's topic. T4-review AUD-131:
+  // not while a reload rejoins its race (no invites in a race); rejoinRace reads them if it is over.
+  if (!record || live) loadInvites(o);
   if (live) {
     o.lobby.notice?.('onlineRaceElsewhere');
     o.look = ctx.timers.setTimeout?.(() => lookAgain(o), T.online.resume.staleMs) ?? null;
@@ -926,7 +931,10 @@ function lookAgain(o) {
   const phase = o.lobby.state.room.phase;
   if (phase !== 'idle' && phase !== 'closed') return;
   const record = raceResume()?.claim?.() ?? null; // null while the other page still beats, or with no record
-  if (!record) return;
+  if (!record) {
+    o.join = null; // T4-review AUD-128: a share link opened meanwhile is not kept for a later Retry
+    return;
+  }
   statusBeat()?.start(); // AUD-114: this page races now
   rejoinRace(o, record);
   if (o.st.view !== 'home' || view) return;
@@ -945,6 +953,15 @@ function rejoinRace(o, record) {
   o.lobby.rejoin(record).then((res) => {
     if (online !== o || res?.ok) return;
     o.resume = null; // over: the lobby's memory clear also cleared the record (raceMemory)
+    if (!o.lobby || res?.error === 'you left') return;
+    loadInvites(o); // T4-review AUD-131: on the online home now, so its invites
+    // T4-review AUD-128: a share link opened on this page is joined once its stale race is found over;
+    // a race that could not be reached may still run, so the link is dropped (never kept for a Retry).
+    if (res?.over && o.join) {
+      joinFromLink(o);
+      return;
+    }
+    o.join = null;
     if (o.st.view !== 'home') return;
     renderLobby();
     const m = lobbyMessage(lobbyUi(), o.lobby);
@@ -1006,8 +1023,9 @@ async function sendInvite(o, x, { resend = false } = {}) {
   const from = o.st.view;
   o.st.view = 'home';
   setStatus('');
+  const call = o.lobby.invite(x.peer, x.name); // T4-review AUD-124: its Connecting is set first, then drawn
   renderLobby();
-  const res = await o.lobby.invite(x.peer, x.name);
+  const res = await call;
   if (online !== o || !o.on || res.error === 'you left') return;
   if (!res.ok && !resend && from === 'friends') o.st.view = 'friends';
   renderLobby();
@@ -1023,8 +1041,9 @@ async function acceptInvite(o, inv) {
   if (!o?.lobby || !o.invites || online !== o || !o.on) return;
   o.st.view = 'home';
   setStatus('');
+  const call = o.lobby.acceptInvite(() => o.invites.accept(inv.invite)); // T4-review AUD-124: Connecting drawn
   renderLobby();
-  const res = await o.lobby.acceptInvite(() => o.invites.accept(inv.invite));
+  const res = await call;
   if (online !== o || !o.on || res.error === 'you left') return;
   if (res.ok) {
     renderLobby();
@@ -1058,7 +1077,11 @@ function pollOnline(o) {
   o.ticks += 1;
   // 3.3: the Friends screen's dots every status.pollMs; the home's badge every status.badgeMs.
   if (o.on && !view && o.st.view === 'friends' && o.ticks % Math.round(T.online.status.pollMs / ONLINE_POLL_MS) === 0) pollFriends(accountUi(), o.st, o.friends).catch(() => {});
-  if (o.on && !view && o.st.view === 'home' && o.ticks % Math.round(T.online.status.badgeMs / ONLINE_POLL_MS) === 0) updateBadge(o);
+  if (o.on && !view && o.st.view === 'home' && o.ticks % Math.round(T.online.status.badgeMs / ONLINE_POLL_MS) === 0) {
+    updateBadge(o);
+    // T4-review AUD-130: a topic that closed (refused, or closed by the server) is read again here, where a player waits for ✉️.
+    if (o.net?.topicState?.() === 'none' && o.lobby?.state.screen === 'home') loadInvites(o);
+  }
   // 4.2: an invite past its time drops by itself (no message); the rings tick in place once a second.
   if (o.on && !view && o.ticks % Math.round(1000 / ONLINE_POLL_MS) === 0 && o.invites) {
     if (o.invites.prune()) redrawInvites(o);
@@ -1137,6 +1160,7 @@ function handOffRace(o) {
   o.lobby = null; // closing must not leave the room or close the transport: the race has them
   net.closeTopic?.(); // 4.2: no invites in a race (the player reads 🟡 In a game); the next 🌐 entry reads them again
   o.net = null;
+  o.release = null; // T4-review AUD-127: the race takes its own lease; this window's must not close its transport
   o.handed = true; // 3.3: the race keeps this device's status beat (it reads in a game now)
   // Over a running Versus (wide screens: 👥 starts split screen, 🌐 is switched on in its lobby):
   // its match left and both its scenes stopped, so only the race draws. Not Versus.leave(): that
@@ -1164,9 +1188,15 @@ function stopOnline() {
   if (!o.handed) ctx?.play?.onlineStatusBeatRef?.stop(); // 3.3: out of online mode: friends see offline at once; only a beat that exists (AUD-122)
   const lobby = o.lobby;
   o.lobby = null;
+  // T4-review AUD-127: out of online mode the player's topic closes now, not when leave_room answers;
+  // the transport's close waits for it, through this window's lease (a window opened meanwhile keeps it).
+  const net = o.net;
+  const release = o.release ?? (() => net?.close?.());
+  o.release = null;
+  net?.closeTopic?.();
   Promise.resolve(lobby?.leave())
     .catch(() => {})
-    .finally(() => o.net?.close?.());
+    .finally(release);
   o.st = createAccountState();
 }
 
@@ -1304,7 +1334,7 @@ export function openTournamentPanel(options) {
   ctx.timers = options.timers ?? globalThis;
   if (!online && !tournamentState(ctx.game) && !view) {
     const forced = !versus(ctx.game); // over Play: no split screen to race on here
-    online = { on: forced, forced, st: createAccountState(), account: null, net: null, friends: null, lobby: null, poll: null, ticks: 0, resume: null, look: null, handed: false, join: parseCode(options.join) };
+    online = { on: forced, forced, st: createAccountState(), account: null, net: null, friends: null, lobby: null, poll: null, ticks: 0, resume: null, look: null, handed: false, join: parseCode(options.join), release: null };
     if (forced) startOnline();
   }
   if (!tournamentState(ctx.game) && players.length < T.tournament.minPlayers) {

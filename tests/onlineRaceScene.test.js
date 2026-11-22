@@ -35,7 +35,16 @@ function fakeNet({ peerWidth = 720 } = {}) {
     take: () => q.splice(0),
     pump() {},
     peer: () => ({ name: 'Jolly', width: peerWidth }),
-    close() {},
+    closes: 0,
+    close() {
+      this.closes += 1;
+    },
+    leases: 0,
+    released: [],
+    lease() {
+      const at = (this.leases += 1);
+      return () => this.released.push(at);
+    },
   };
 }
 
@@ -1578,4 +1587,18 @@ test('AUD-117 every refused ask on the results panel says something: not eligibl
     assert.doesNotMatch(s.result.friendLine.text, /undefined/, label);
     if (want) assert.equal(s.result.friendLine.text, want, label);
   }
+});
+
+test("T4-review AUD-127: Leave closes the transport through the race's own lease (taken at initRace), so a 🌐 window opened just after keeps it", async () => {
+  const { s, net } = raceScene();
+  const started = [];
+  s.scene.start = (k) => started.push(k);
+  s.scale = { setGameSize() {} };
+  assert.equal(net.leases, 1, 'the race took a lease');
+  s.leave();
+  await new Promise((r) => setTimeout(r, 0));
+  await new Promise((r) => setTimeout(r, 0));
+  assert.deepEqual(net.released, [1], 'released, which closes only if no later lease is out');
+  assert.equal(net.closes, 0, 'never close() past the lease');
+  assert.deepEqual(started, ['Play']);
 });

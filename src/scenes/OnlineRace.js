@@ -181,6 +181,9 @@ export class OnlineRace extends Phaser.Scene {
    */
   initRace(data) {
     this.net = data.net;
+    // T4-review AUD-127: the race's hold on the shared transport; Leave's late close is skipped if a 🌐
+    // window opened after it took one (onlineNet.lease).
+    this.release = this.net?.lease?.() ?? null;
     this.lobby = data.lobby ?? null;
     this.plan = data.plan;
     this.store = data.store ?? null; // the tab's resume record (2.3)
@@ -1162,9 +1165,11 @@ export class OnlineRace extends Phaser.Scene {
     this.statusBeat()?.stop(); // 3.3: out of online mode: friends see offline at once
     this.forgetRecord();
     const { lobby, net } = this;
+    const release = this.release ?? (() => net?.close?.());
+    this.release = null;
     Promise.resolve(lobby?.leave())
       .catch(() => {})
-      .finally(() => net?.close?.());
+      .finally(release);
     this.scene.stop('Play');
     const W = fieldWidth(globalThis.innerWidth, globalThis.innerHeight, FIELD);
     this.scale.setGameSize(W, GAME_HEIGHT);

@@ -15,7 +15,7 @@ const flush = async () => {
   for (let i = 0; i < 6; i += 1) await new Promise((r) => setTimeout(r, 0));
 };
 
-function setup({ enter = null, answers = {} } = {}) {
+function setup({ enter = null, answers = {}, store = null, versus = null } = {}) {
   const calls = [];
   const base = {
     join_room: { ok: true, data: { ok: true, code: '482913', status: 'asked', host_name: 'Ana' } },
@@ -49,11 +49,12 @@ function setup({ enter = null, answers = {} } = {}) {
     devices: async () => ({ ok: true, rows: [] }),
     status: () => ({ linked: true, trusted: true, name: 'PlopMaster' }),
   };
-  const timers = { setInterval: () => 1, clearInterval: () => {}, setTimeout: () => 0, clearTimeout: () => {} };
-  const play = { getSaveState: () => ({ name: 'PlopMaster', id: 'p1' }), onlineAccount: () => account, onlineNet: net, onlineTestProject: () => false, onlineStatusBeat: () => null };
-  const game = fakeGame({ play });
+  const timeouts = [];
+  const timers = { setInterval: () => 1, clearInterval: () => {}, setTimeout: (fn) => timeouts.push(fn), clearTimeout: () => {} };
+  const play = { getSaveState: () => ({ name: 'PlopMaster', id: 'p1' }), onlineAccount: () => account, onlineNet: net, onlineTestProject: () => false, onlineStatusBeat: () => null, raceResumeStore: () => store };
+  const game = fakeGame(versus ? { play, versus, active: true } : { play });
   const joins = () => calls.filter((c) => c[1] === 'join_room').map((c) => c[2]);
-  return { net, calls, joins, account, open: (join) => openTournamentPanel({ game, locale: 'en', play, timers, join }) };
+  return { net, calls, joins, account, timeouts, open: (join) => openTournamentPanel({ game, locale: 'en', play, timers, join }) };
 }
 
 test('a link opens the 🌐 window and joins its code once this device is linked: knocking on the host, the channel as the guest', async () => {
@@ -147,4 +148,63 @@ test("Play.openPendingJoin: main.js's code opens the 🌐 window with it, once, 
   assert.deepEqual([opened, s.registry.get('pendingJoin') ?? null], [['482913'], null], 'then opened once, and gone');
   s.openPendingJoin();
   assert.equal(opened.length, 1);
+});
+
+test('T4-review AUD-128: a link opened on a page whose resume record names a race that is over joins the link once; a race that cannot be reached drops the link (never kept for a later Retry)', async () => {
+  let rec = { code: '111222', seat: 'host', level: 1 };
+  const store = { get: () => rec, owner: () => null, claim: () => rec, clear: () => (rec = null), set: () => {} };
+  const k = setup({ store, answers: { room_state: { ok: true, data: { ok: false, error: 'no room' } } } });
+  k.open('482913');
+  await flush();
+  assert.equal(k.calls.filter((c) => c[1] === 'room_state').length, 1, 'the stale race looked at first');
+  assert.deepEqual(k.joins(), [{ p_code: '482913' }], 'then the link the player opened');
+  closeTournamentPanel();
+
+  rec = { code: '111222', seat: 'host', level: 1 };
+  const j = setup({ store, answers: { room_state: { ok: false, error: 'offline' } } });
+  j.open('482913');
+  await flush();
+  assert.equal(j.joins().length, 0, 'not while the race may still be running');
+  closeTournamentPanel();
+});
+
+test('T4-review AUD-128: a link dropped because its stale race could not be reached is not joined by a later lobby start in the same window (🌐 off and on over Versus)', async () => {
+  let rec = { code: '111222', seat: 'host', level: 1 };
+  const store = { get: () => rec, owner: () => null, claim: () => rec, clear: () => (rec = null), set: () => {} };
+  const k = setup({ store, versus: { leave: () => {}, restartWith: () => {} }, answers: { room_state: { ok: false, error: 'offline' } } });
+  k.open('482913');
+  await flush();
+  el('tour-online').click(); // 🌐 on: the record's race cannot be reached
+  await flush();
+  assert.equal(k.calls.filter((c) => c[1] === 'room_state').length, 1);
+  assert.equal(k.joins().length, 0);
+  rec = null; // that race is gone meanwhile
+  el('tour-online').click(); // off
+  await flush();
+  el('tour-online').click(); // on again
+  await flush();
+  assert.equal(k.joins().length, 0, 'the dropped link stays dropped');
+  closeTournamentPanel();
+});
+
+test("T4-review AUD-128: a link opened while another window races is dropped when the look-again finds that race still running (not joined by a later lobby start)", async () => {
+  let rec = { code: '111222', seat: 'host', level: 1 };
+  let owner = 'live';
+  const store = { get: () => rec, owner: () => owner, claim: () => (owner === 'live' ? null : rec), clear: () => (rec = null), set: () => {} };
+  const k = setup({ store, versus: { leave: () => {}, restartWith: () => {} } });
+  k.open('482913');
+  await flush();
+  el('tour-online').click(); // 🌐 on: "Your race is running in another window"
+  await flush();
+  assert.equal(k.joins().length, 0);
+  k.timeouts.splice(0).forEach((fn) => fn()); // the look-again: that page still beats
+  await flush();
+  rec = null; // its race ends meanwhile
+  owner = null;
+  el('tour-online').click(); // off
+  await flush();
+  el('tour-online').click(); // on again
+  await flush();
+  assert.equal(k.joins().length, 0, 'the dropped link stays dropped');
+  closeTournamentPanel();
 });

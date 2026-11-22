@@ -416,14 +416,16 @@ export function createOnlineLobby({ net, name, width, mine = { protocol: protoco
     const r = state.room;
     const idle = r.phase === 'idle' || r.phase === 'closed';
     if (!idle && !(r.role === 'host' && r.phase === 'open')) return { ok: false, error: 'busy room', errorKey: 'onlineErrGeneric' };
-    if (idle && (staleLeave || memory?.get?.())) await staleLeft();
-    const gen = generation;
     const screen = state.screen;
-    if (idle) state.screen = 'busy';
-    const res = await net.rpc('send_invite', { p_peer: peer });
+    if (idle) state.screen = 'busy'; // T4-review AUD-124: Connecting at once, a remembered stale leave included
+    const gen = generation;
+    if (idle && (staleLeave || memory?.get?.())) await staleLeft();
+    const res = gen === generation ? await net.rpc('send_invite', { p_peer: peer }) : null;
     if (gen !== generation) {
       const code = parseCode(res?.data?.code);
-      if (idle && res?.ok && code) track(net.rpc('leave_room', { p_code: code })); // cancelled while it ran
+      // Cancelled while it ran: the room the answer names is left, unless it is the one leave() already
+      // left (AUD-129: a Resend's leave_room can land first, and send_invite then makes a new room).
+      if (res?.ok && code && (idle || code !== r.code)) track(net.rpc('leave_room', { p_code: code }));
       return { ok: false, error: 'you left' };
     }
     const d = res?.ok ? res.data ?? {} : { ok: false, error: res?.error ?? 'error' };
@@ -480,12 +482,18 @@ export function createOnlineLobby({ net, name, width, mine = { protocol: protoco
    */
   async function acceptInvite(accept) {
     if (state.room.phase !== 'idle' && state.room.phase !== 'closed') return { ok: false, error: 'busy room', errorKey: 'onlineErrGeneric' };
-    if (staleLeave || memory?.get?.()) await staleLeft();
-    state.screen = 'busy';
+    state.screen = 'busy'; // T4-review AUD-124: Connecting at once, a remembered stale leave included
     state.message = null;
     const gen = generation;
-    const res = await accept();
-    if (gen !== generation) return { ok: false, error: 'you left' };
+    if (staleLeave || memory?.get?.()) await staleLeft();
+    const res = gen === generation ? await accept() : null;
+    if (gen !== generation) {
+      // AUD-126: backed out while it ran (✕, 🌐 off): the room was still idle, so leave() sent nothing;
+      // the seat the server gave is left here, as create() and invite() do.
+      const code = parseCode(res?.code);
+      if (res?.ok && code) track(net.rpc('leave_room', { p_code: code }));
+      return { ok: false, error: 'you left' };
+    }
     if (!res?.ok) {
       state.screen = 'home';
       return res ?? { ok: false, error: 'error', errorKey: 'onlineErrGeneric' };

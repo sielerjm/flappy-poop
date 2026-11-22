@@ -102,7 +102,7 @@ function setup({ trusted = true, incoming = [INVITE()], answers = {}, list = LIS
   };
   const rpcs = (fn) => calls.filter((c) => c[0] === 'rpc' && c[1] === fn);
   return {
-    net, calls, rpcs, q, pollTicks,
+    net, calls, rpcs, q, pollTicks, play,
     advance: (ms) => (clock += ms),
     setIncoming: (x) => (inc = x),
     open: () => openTournamentPanel({ game, locale: 'en', play, timers }),
@@ -338,4 +338,137 @@ test('every Friends read takes invite_list with it (entering Friends, and after 
   assert.equal(k.rpcs('block_user').length, 1);
   assert.equal(k.rpcs('invite_list').length, before + 2);
   closeTournamentPanel();
+});
+
+// --- T4-review (22 Nov): the stage review's and the audit's fixes, each seen red first ---------------
+
+const later = () => {
+  let release;
+  const p = new Promise((r) => (release = r));
+  return { p, release: (v) => release(v) };
+};
+
+test('T4-review AUD-124: Invite and the ✉️ show Connecting while send_invite and accept_invite run (the online home is not left on screen to tap)', async () => {
+  const send = later();
+  const k = setup({ incoming: [], answers: { send_invite: () => send.p } });
+  k.open();
+  await flush();
+  await k.friends();
+  el('tour-fr-invite-0').click();
+  await flush();
+  assert.ok(el('tour-linking'), 'Connecting');
+  assert.equal(el('tour-create'), null);
+  assert.equal(el('tour-friends'), null);
+  send.release({ ok: true, data: { ok: true, invite: U(100), code: '615204', sent_at: T0, expires_at: T0 + 120_000 } });
+  await flush();
+  assert.ok(el('tour-code'), 'then the room screen');
+  closeTournamentPanel();
+
+  const accept = later();
+  const j = setup({ answers: { accept_invite: () => accept.p } });
+  j.open();
+  await flush();
+  await j.friends();
+  el('tour-fr-inv-0').click();
+  await flush();
+  assert.ok(el('tour-linking'), 'Connecting');
+  assert.equal(el('tour-create'), null);
+  accept.release({ ok: true, data: { ok: true, code: '482913', status: 'ready', host_name: 'SirFlushALot' } });
+  await flush();
+  assert.ok(el('tour-ready'), 'then the ready screen');
+  closeTournamentPanel();
+});
+
+test("T4-review AUD-127: leaving 🌐 closes the topic at once, not when leave_room answers; the transport's close goes through its lease, so a window opened meanwhile keeps it", async () => {
+  const leaves = [];
+  const k = setup({ incoming: [], answers: { leave_room: () => new Promise((r) => leaves.push(r)) } });
+  let leases = 0;
+  const released = [];
+  k.net.lease = () => {
+    const at = (leases += 1);
+    return () => released.push(at);
+  };
+  k.open();
+  await flush();
+  await k.friends();
+  await el('tour-fr-invite-0').click();
+  await flush();
+  assert.ok(el('tour-code'), 'hosting the invite\'s room');
+  const before = k.calls.length;
+  closeTournamentPanel();
+  assert.ok(k.calls.slice(before).some((c) => c[0] === 'closeTopic'), 'the topic closed with the window');
+  k.open();
+  await flush();
+  leaves.forEach((r) => r({ ok: true, data: null }));
+  await flush();
+  assert.deepEqual(released, [1], "the first window's lease released (onlineNet skips its close: a later lease is out)");
+  assert.equal(k.calls.filter((c) => c[0] === 'close').length, 0, 'close() is never called past the lease');
+  closeTournamentPanel();
+});
+
+test("T4-review AUD-130: a topic that closed (refused, or closed by the server) is read again on the home's badge tick", async () => {
+  const k = setup({ incoming: [] });
+  let state = 'joined';
+  k.net.topicState = () => state;
+  k.open();
+  await flush();
+  const badge = TUNING.online.status.badgeMs / POLL_MS;
+  k.pollTicks(badge);
+  await flush();
+  assert.equal(k.rpcs('invite_list').length, 1, 'not while the topic is joined');
+  state = 'none';
+  k.pollTicks(badge);
+  await flush();
+  assert.equal(k.rpcs('invite_list').length, 2, 'read again');
+  assert.equal(k.calls.filter((c) => c[0] === 'openTopic').length, 2, 'and the topic it names');
+  closeTournamentPanel();
+});
+
+test('T4-review AUD-131: a reload into a running race reads no invites and opens no topic before the hand-off; a race found over reads them on the home', async () => {
+  const ROOM = { ok: true, code: '482913', status: 'playing', seat: 'guest', host_name: 'Host', guest_name: 'PlopMaster', seed: 7, start_ms: T0 + 3000, round: 1, server_ms: T0 };
+  let rec = { code: '482913', seat: 'guest', level: 1 };
+  const store = { get: () => rec, owner: () => 'mine', claim: () => rec, set() {}, clear: () => (rec = null) };
+  const k = setup({ answers: { room_state: { ok: true, data: ROOM } } });
+  k.play.raceResumeStore = () => store;
+  k.open();
+  await flush();
+  assert.equal(k.rpcs('room_state').length, 1, 'the race rejoined');
+  assert.equal(k.rpcs('invite_list').length, 0, 'no invite_list while rejoining a running race');
+  assert.equal(k.calls.filter((c) => c[0] === 'openTopic').length, 0, 'no topic');
+  closeTournamentPanel();
+
+  rec = { code: '482913', seat: 'guest', level: 1 };
+  const j = setup({ answers: { room_state: { ok: true, data: { ok: false, error: 'no room' } } } });
+  j.play.raceResumeStore = () => store;
+  j.open();
+  await flush();
+  assert.equal(j.rpcs('invite_list').length, 1, 'over: the invites read on the online home');
+  assert.deepEqual(j.calls.filter((c) => c[0] === 'openTopic'), [['openTopic', TOPIC]]);
+  closeTournamentPanel();
+});
+
+test("T4-review AUD-132: the race's hand-off closes the player's topic (no invites in a race)", async () => {
+  const playing = { ok: true, code: '482913', status: 'playing', seat: 'host', host_name: 'PlopMaster', guest_name: 'bobFriend', seed: 4242, start_ms: T0 + 4000, round: 1 };
+  const k = setup({ incoming: [], answers: { create_room: { ok: true, data: { ok: true, code: '482913', status: 'open' } }, set_room_status: { ok: true, data: playing } } });
+  const started = [];
+  k.play.scene = { start: (key, data) => started.push([key, data]) };
+  const released = [];
+  k.net.lease = () => () => released.push('window');
+  k.open();
+  await flush();
+  await el('tour-create').click();
+  await flush();
+  k.q.push({ kind: 'room', hint: 'answer', action: { type: 'status', room: { ...playing, status: 'ready', seed: null, start_ms: null, round: 0 }, at: T0 } });
+  k.pollTicks(1);
+  el('tour-ready').click();
+  k.q.push({ kind: 'peer', event: 'ready', msg: { seq: 1, t: T0, sid: 'peer1', level: 1, ready: true }, at: T0 });
+  k.pollTicks(1);
+  await flush();
+  const before = k.calls.length;
+  k.pollTicks(1);
+  assert.equal(started.length, 1, 'handed off');
+  assert.ok(k.calls.slice(before).some((c) => c[0] === 'closeTopic'), 'the topic closed at the hand-off');
+  await flush();
+  assert.deepEqual(released, [], "the window's lease is not released at the hand-off: the race has the transport");
+  assert.equal(k.calls.filter((c) => c[0] === 'close').length, 0);
 });

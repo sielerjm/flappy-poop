@@ -795,6 +795,20 @@ export function createOnlineNet({
     return r;
   }
 
+  /**
+   * T4-review AUD-127: one transport serves every 🌐 window and race of the page, and their closes wait
+   * for leave_room's answer. lease() is taken by each user; its release closes the transport only if no
+   * later lease was taken meanwhile, so a window opened in that gap keeps its room, topic and ticker.
+   */
+  let leases = 0;
+  function lease() {
+    leases += 1;
+    const at = leases;
+    return () => {
+      if (leases === at) close();
+    };
+  }
+
   function close() {
     closeRoom();
     closeTopic();
@@ -859,6 +873,7 @@ export function createOnlineNet({
     openTopic,
     closeTopic,
     topicState: () => (user ? (user.joined ? 'joined' : 'joining') : 'none'),
+    lease,
     close,
     signOut,
     stats: () => ({ ...stats }),

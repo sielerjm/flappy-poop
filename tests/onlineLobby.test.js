@@ -887,6 +887,64 @@ test('4.2 acceptInvite refused: home again with the answer handed back (the pane
   assert.equal(busy.state.room.code, '482913');
 });
 
+test('T4-review AUD-126: an accept the player backs out of (✕ or 🌐 off while accept_invite runs) leaves the seat it was given', async () => {
+  const net = fakeNet();
+  const lobby = lobbyOn(net);
+  let release;
+  const p = lobby.acceptInvite(() => new Promise((r) => (release = () => r({ ok: true, code: '482913', status: 'ready', hostName: 'SirFlushALot' }))));
+  await new Promise((r) => setTimeout(r, 0));
+  await lobby.leave(); // the room is still idle here, so leave() itself sends nothing
+  release();
+  assert.equal((await p).error, 'you left');
+  await lobby.settled();
+  assert.deepEqual(rpcs(net, 'leave_room').map((c) => c[2]), [{ p_code: '482913' }]);
+  assert.equal(opens(net).length, 0);
+  assert.equal(lobby.state.screen, 'home');
+});
+
+test('T4-review AUD-129: Cancel while a Resend is out, the server having made a new room (leave_room landed first): that new room is left too', async () => {
+  let n = 0;
+  let release = null;
+  const net = fakeNet({
+    send_invite: () => {
+      n += 1;
+      const t = net.serverNow();
+      if (n === 1) return { ok: true, data: { ok: true, invite: UID(1), code: '615204', sent_at: t, expires_at: t + 120_000 } };
+      return new Promise((r) => (release = () => r({ ok: true, data: { ok: true, invite: UID(2), code: '903117', sent_at: t, expires_at: t + 120_000 } })));
+    },
+  });
+  const lobby = lobbyOn(net);
+  await lobby.invite(PEER, 'bobFriend');
+  net.advance(121_000);
+  lobby.poll();
+  assert.equal(lobby.state.invite.status, 'expired');
+  const p = lobby.invite(PEER, 'bobFriend'); // Resend
+  await new Promise((r) => setTimeout(r, 0));
+  await lobby.leave(); // Cancel
+  release();
+  await p;
+  await lobby.settled();
+  assert.deepEqual(rpcs(net, 'leave_room').map((c) => c[2].p_code).sort(), ['615204', '903117']);
+});
+
+test('T4-review AUD-124: Invite and an accept show Connecting at once, even while a remembered stale room is still being left', async () => {
+  let releaseLeave;
+  const answers = { leave_room: () => new Promise((r) => (releaseLeave = () => r({ ok: true, data: null }))) };
+  const memory = { get: () => '111111', set() {}, clear() {} };
+  const a = fakeNet(answers);
+  const sender = lobbyOn(a, { memory });
+  const p = sender.invite(PEER, 'bobFriend');
+  assert.equal(sender.state.screen, 'busy', 'Connecting while the stale leave and send_invite run');
+  releaseLeave();
+  await p;
+  const b = fakeNet(answers);
+  const guest = lobbyOn(b, { memory });
+  const q = guest.acceptInvite(async () => ({ ok: true, code: '482913', status: 'ready', hostName: 'SirFlushALot' }));
+  assert.equal(guest.state.screen, 'busy', 'Connecting while the stale leave and accept_invite run');
+  releaseLeave();
+  await q;
+});
+
 // --- 4.3: the share link (?join=<code>) -----------------------------------------------------------
 
 test('4.3 joinCode from a link: the code is joined at once (knocking on the host); a typed code is left as it was', async () => {

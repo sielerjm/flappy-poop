@@ -1144,3 +1144,14 @@ test('4.2 closeTopic while its join waits for a refresh: nothing opens', async (
   await p;
   assert.equal(s.client().channels.filter((c) => c.topic === TOPIC).length, 0);
 });
+
+test('T4-review AUD-127: lease() → release(): the transport closes only if no later lease was taken (a 🌐 window opened while an earlier one, or a race, still waited for leave_room)', async () => {
+  const s = setup();
+  const { ch } = await joined(s);
+  const first = s.net.lease();
+  const second = s.net.lease();
+  first();
+  assert.notEqual(ch.removed, true, 'a later lease keeps it open');
+  second();
+  assert.equal(ch.removed, true, 'the latest one closes it');
+});
