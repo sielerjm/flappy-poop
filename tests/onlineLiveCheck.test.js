@@ -62,10 +62,11 @@ test('the run proves finding 20 (a session refused by the game\'s anon functions
   assert.ok((SOURCE.match(/TEARDOWN_SQL/g) ?? []).length >= 4, 'printed on leftovers, a crash and Ctrl-C');
 });
 
-test('the report: twelve numbered steps, one PASS or FAIL line each; the teardown SQL deletes only the check\'s own users', () => {
-  assert.deepEqual(STEPS.map(([n]) => n), ['01', '02', '03', '04', '05', '06', '07', '08', '09', '10', '11', '12']);
+test('the report: thirteen numbered steps, one PASS or FAIL line each; the teardown SQL deletes only the check\'s own users', () => {
+  assert.deepEqual(STEPS.map(([n]) => n), ['01', '02', '03', '04', '05', '06', '07', '08', '09', '10', '11', '12', '13']);
   assert.equal(reportLine(STEPS[0], { ok: true, note: '401 42501' }), 'PASS 01 anon cannot call online functions: 401 42501');
-  assert.equal(reportLine(STEPS[11], { ok: false }), `FAIL 12 ${STEPS[11][1]}`);
+  assert.equal(reportLine(STEPS[12], { ok: false }), `FAIL 13 ${STEPS[12][1]}`);
+  assert.match(STEPS[12][1], /^teardown/, 'the teardown stays last: it unlinks every session');
   assert.equal(TEARDOWN_SQL, "delete from auth.users where raw_user_meta_data ->> 'online_check' = '39';");
   assert.match(SOURCE, /signInAnonymously\(\{ options: \{ data: \{ online_check: '39' \} \} \}\)/, 'every user it makes carries the tag the teardown matches');
 });
@@ -74,4 +75,20 @@ test('it runs only when called, and keeps no session on disk', () => {
   assert.match(SOURCE, /if \(process\.argv\[1\] && import\.meta\.url === /);
   assert.match(SOURCE, /persistSession: false/);
   assert.doesNotMatch(SOURCE, /[a-z0-9]{20}\.supabase\.co/, 'no project URL is written in it');
+});
+
+// Plan 39, 3.5 (T3-review AUD-120, 3.2r note e): the friend and status functions on a real project,
+// where PGlite cannot reach (PostgREST's schema cache and grants, the beacon's keepalive POST and its
+// CORS preflight). Runs before the teardown, from C (paired, in no room).
+test('step 12 checks the friend and status functions on a real project before the teardown', () => {
+  assert.match(STEPS[11][1], /friend/);
+  assert.match(SOURCE, /rpc\(anon, 'friend_list'\)/, 'anon is refused on friend_list');
+  assert.match(SOURCE, /rpc\(anon, 'online_beat', \{ p_here: true \}\)/, 'anon is refused on online_beat');
+  assert.match(SOURCE, /must\(S\.C, 'online_beat', \{ p_here: true \}\)/, 'a paired device beats');
+  assert.match(SOURCE, /must\(S\.C, 'friend_statuses'\)/, 'and reads its friends\' states (none)');
+  assert.match(SOURCE, /\/rest\/v1\/rpc\/online_beat`/, 'the beacon-shaped raw POST');
+  assert.match(SOURCE, /keepalive: true/);
+  assert.match(SOURCE, /method: 'OPTIONS'/, 'the preflight a browser sends before the beacon');
+  const at = (re) => SOURCE.search(re);
+  assert.ok(at(/await step\(12,/) > at(/await step\(11,/) && at(/await step\(13,/) > at(/await step\(12,/), 'steps run in order, the teardown last');
 });

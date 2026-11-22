@@ -2,7 +2,8 @@
 // Supabase project after db/schema.sql is pasted there. Four anonymous sessions on this machine (A,
 // A2, B and C) link to throwaway players, race-by-code through a room, and prove that the channel
 // policies admit the two seated devices and refuse everyone else, that public channels are off, that
-// a decline moves the room, that the join cap bites, and that removing a device ends its session.
+// a decline moves the room, that the join cap bites, that removing a device ends its session, and
+// that the friend and status functions answer a paired device and refuse anon (plan 39, 3.5).
 // Each session unlinks itself at the end, which deletes its anonymous user, so nothing is left behind
 // but its join attempts (an IP hash, gone within the hour); when that cannot happen (a failed step, a
 // crash, Ctrl-C), the check prints the SQL that removes exactly its users (tagged
@@ -45,7 +46,8 @@ export const STEPS = [
   ['09', 'the race starts: both devices get the same seed and GO time'],
   ['10', 'the join cap: the 6th wrong code is rate limited'],
   ['11', 'removing a device ends its session'],
-  ['12', 'teardown: every session unlinked, every refresh refused'],
+  ['12', 'friends and status: anon refused, a paired device beats and reads its friends, the beacon\'s POST is taken'],
+  ['13', 'teardown: every session unlinked, every refresh refused'],
 ];
 
 /** --help, --live or --env <file>; exactly one of the last two. */
@@ -350,8 +352,28 @@ async function run(t, print) {
     return { ok: Boolean(after.error) && refused, note: `A2 ${after.error ? after.error.message : 'still answered'}, refresh ${refused ? 'refused' : 'still works'}` };
   });
 
-  let leftBehind = false;
+  // 3.5 (AUD-120): what PGlite cannot reach for the friend and status functions: PostgREST's schema
+  // cache and grants on a real project, and the beacon (onlineNet.beacon: pagehide's keepalive POST of
+  // online_beat(false) with the Bearer token) with the CORS preflight a browser sends before it.
   await step(12, async () => {
+    const anon = { name: 'anon', c: makeClient(t) };
+    const refused = (r) => Boolean(r.error) && (r.status === 401 || r.error.code === '42501');
+    const list = await rpc(anon, 'friend_list');
+    const beatAnon = await rpc(anon, 'online_beat', { p_here: true });
+    const beat = await must(S.C, 'online_beat', { p_here: true });
+    const states = await must(S.C, 'friend_statuses');
+    const endpoint = `${t.url}/rest/v1/rpc/online_beat`;
+    const pre = await fetch(endpoint, { method: 'OPTIONS', headers: { Origin: 'https://example.org', 'Access-Control-Request-Method': 'POST', 'Access-Control-Request-Headers': 'apikey,authorization,content-type' } });
+    const allowed = (pre.headers.get('access-control-allow-headers') ?? '').toLowerCase();
+    const preOk = pre.ok && Boolean(pre.headers.get('access-control-allow-origin')) && (allowed === '*' || ['apikey', 'authorization', 'content-type'].every((x) => allowed.includes(x)));
+    const post = await fetch(endpoint, { method: 'POST', keepalive: true, headers: { apikey: t.key, Authorization: `Bearer ${S.C.session.access_token}`, 'Content-Type': 'application/json' }, body: JSON.stringify({ p_here: false }) });
+    const body = await post.json().catch(() => null);
+    const ok = refused(list) && refused(beatAnon) && beat?.ok === true && Array.isArray(states?.friends) && states.friends.length === 0 && preOk && post.ok && body?.ok === true;
+    return { ok, note: `anon friend_list ${list.error ? `${list.status} ${list.error.code}` : 'answered'}, anon online_beat ${beatAnon.error ? `${beatAnon.status} ${beatAnon.error.code}` : 'answered'}; C beat ${beat?.ok}, friends ${Array.isArray(states?.friends) ? states.friends.length : 'none'}; preflight ${pre.status}${preOk ? '' : ` (allow-headers '${allowed}')`}, beacon ${post.status} ${body?.ok === true ? 'ok' : JSON.stringify(body)?.slice(0, 60)}` };
+  });
+
+  let leftBehind = false;
+  await step(13, async () => {
     await rpc(S.A, 'leave_room', { p_code: S.room });
     const notes = [];
     for (const u of users) {
