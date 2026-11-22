@@ -1414,6 +1414,9 @@ src/
                             (every join, a rejoin too, queues 'joined': the panel reads invite_list
                             again); closeTopic() and topicState() ('none' / 'joining' / 'joined').
                             close() closes it, and so does the race's hand-off.
+                            T4-review AUD-127: lease() (each 🌐 window at startOnline, each race at
+                            initRace takes one) returns a release that closes the transport only if no
+                            later lease was taken, so a window opened while leave_room answers keeps it.
                             tests/onlineNet.test.js, tests/onlineDevProject.test.js.
   onlineAccount.js          Online race (🌐, plan 39, 1.6a) the sign-in side on top of
                             createOnlineNet, NO Phaser/DOM: enter (sign in, link the
@@ -1468,6 +1471,10 @@ src/
                             { invite, peer, name, sentAt, expiresAt, status }. 4.3: joinCode(code,
                             { link }) joins a share link's code; a room gone reads
                             'onlineLinkExpired', the code kept on the join screen.
+                            T4-review AUD-124: invite and acceptInvite set Connecting (screen 'busy')
+                            before a remembered stale leave. AUD-126: a cancelled accept leaves the
+                            seat it was given. AUD-129: a cancelled Resend leaves a room the late
+                            answer made, unless it is the one leave() already left.
                             tests/onlineLobby.test.js, tests/onlineJoinLink.test.js.
   onlineFriends.js          Online race (🌐, plan 39, 3.3) friends, NO Phaser/DOM: createOnlineFriends
                             ({ rpc, max }) over friend_list, friend_statuses and online_history:
@@ -1899,6 +1906,14 @@ src/
                             4.2: loadInvites (invite_list on entering 🌐, on Friends and when the
                             topic joins again, then net.openTopic), onUserItem, sendInvite,
                             acceptInvite, declineInvite; closeTopic at the race hand-off.
+                            T4-review: stopOnline closes the topic at once (AUD-127) and the transport
+                            through the window's lease (startOnline takes it; the hand-off clears it);
+                            sendInvite and acceptInvite draw Connecting after the call starts (AUD-124);
+                            the home's badge tick reads invite_list again when topicState() is 'none'
+                            (AUD-130); none is read while a resume record is rejoined, and rejoinRace
+                            reads it when the race is over (AUD-131); a ?join= code is joined once a
+                            stale race is found over, dropped if it could not be reached or another
+                            window still races (AUD-128).
                             4.3: openTournamentPanel's `join` option (a share link's code) is kept
                             through the sign-in, a name chosen first and a Retry, and joined once
                             linked (joinFromLink); Share without a share sheet copies its text
@@ -2536,6 +2551,8 @@ src/
                             (saved); on a waiting device (its friend reads 'not trusted', or a refused tap says so) the line friendResultPair (3.8: "Pair this device to add friends..."); hidden for a blocked player or a null peer. The beat
                             is kept through the hand-off from the 🌐 window; stepAside() stops
                             it quietly (the other page beats), Leave after a race stops it.
+                            T4-review AUD-127: initRace takes a lease on the transport; Leave's late
+                            close goes through it.
                             tests/onlineRaceScene.test.js.
     Over.js                 Game-over panel (score, run summary of fiber / probiotic / postbiotic over bacteria / bean / mystery box (mystery-icon.png) over ‼️ long falls / 😢 close calls (data.falls / closeCalls; ×– for a stored Daily result), pipes crossed, then Share | Home on one row from overButtonsLayout and, on a normal or test run, a glowing Play again under them, the panel lifted over.againLiftPx so it clears the ⏸) with a
                             tap lockout (openedAt = game.loop.time: a relaunched
@@ -4226,8 +4243,8 @@ Commits follow `type(scope): summary` (`feat`, `fix`, `docs`, `chore`, `test`, `
   Invites (4.2, `src/onlineInvites.js`) show only in online mode, as the beat does. Every time comes
   from the server's `sent_at` / `expires_at` (no client INVITE_TTL), and the player's topic only from
   `invite_list`'s `topic`, never built from the save's id (`tests/onlineInvites.test.js`,
-  `tests/onlineInvitesPanel.test.js`); `onlineNet.closeTopic()` runs with `close()` and at the race's
-  hand-off. Invite and Resend are offered only when `lobby.canInvite()` holds. A share link (4.3) is
+  `tests/onlineInvitesPanel.test.js`); `onlineNet.closeTopic()` runs with `close()`, when the player leaves online mode (at once, not
+  when `leave_room` answers; T4-review AUD-127) and at the race's hand-off. Invite and Resend are offered only when `lobby.canInvite()` holds. A share link (4.3) is
   `?join=<code>`, read once in `main.js` and taken out of the address (`tests/onlineJoinLink.test.js`);
   it makes no server call of its own, so a closed room reads 'onlineLinkExpired'. The 14 strings of 4.2
   and 4.3 (`friendInvite` to `inviteGone`, `onlineLinkExpired`, `onlineLinkCopied`) carry rows in
