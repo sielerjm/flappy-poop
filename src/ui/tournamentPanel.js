@@ -577,7 +577,7 @@ function onRace(detail) {
   const play = game.scene.getScene('Play');
   let next = state;
   if (state.matchId) {
-    queueRacePosts(state, detail.slots, play);
+    queueRacePosts(state, detail.slots, play, detail.runs);
     recordResult(state.tour, state.matchId, detail.outcome.winner, { by: detail.outcome.by, slots: detail.slots });
     next = { ...state, matchId: null };
     if (placings(state.tour) && !state.posted) next = { ...next, ...queueFinished(state.tour, play) };
@@ -592,14 +592,11 @@ function onRace(detail) {
 
 /**
  * Plan 39, 2.5 (item 42(c)): each racer of this race with a player id posts their race score to 🏆
- * (Play.racePostQueue → submit_score at the next sync, the board's own rules); guests post nothing.
+ * (Play.racePostQueue → submit_score at the next sync, the board's own rules), with their half's run
+ * queued first (2.8, Play.queueRacePosts); guests post nothing.
  */
-function queueRacePosts(state, slots, play) {
-  const q = play?.racePostQueue;
-  if (!q) return;
-  let added = false;
-  for (const p of racePosts(state.tour, state.matchId, slots)) added = Boolean(q.add({ ...p, id: newId() })) || added;
-  if (added) Promise.resolve(play.syncLeaderboard?.()).catch(() => {});
+function queueRacePosts(state, slots, play, runs = null) {
+  play?.queueRacePosts?.(racePosts(state.tour, state.matchId, slots, runs));
 }
 
 /**

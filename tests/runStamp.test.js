@@ -86,10 +86,12 @@ test('queueRunSummary queues the row under the player id once; nothing when no s
   assert.deepEqual(off.runQueue.load(), []);
 });
 
-test('start() keeps a summary for single-player and Daily runs only', () => {
+test('start() keeps a summary for single-player and Daily runs and a split-screen race\'s half (runSummaryMode, tests/raceRun.test.js), off the toilet in a race', () => {
   const body = PLAY.slice(PLAY.indexOf('  start() {'), PLAY.indexOf('  runSession() {'));
-  assert.match(body, /this\.runStatsOn = !this\.match && !this\.runIsTest && !this\.runIsEducation;/);
+  assert.match(body, /const summary = this\.runSummaryMode\(daily\);\s+this\.runStatsOn = summary !== null;/);
   assert.match(body, /if \(this\.runStatsOn\) this\.statCall\('begin', \{/);
+  assert.match(body, /mode: summary,/);
+  assert.match(body, /toilet: summary === 'race' \? false : this\.toilet,/);
   const endRun = PLAY.slice(PLAY.indexOf('  endRun({ report = true } = {}) {'), PLAY.indexOf('  endRun({ report = true } = {}) {') + 4000);
   const at = endRun.indexOf('this.queueRunSummary();');
   assert.ok(at > endRun.indexOf('if (this.runIsEducation) {') && at > endRun.indexOf('if (this.runIsTest) return;') && at < endRun.indexOf('if (this.runIsDaily) {'), 'queued after the match, test and education returns, before the Daily and single-player records');
@@ -117,11 +119,15 @@ test('every doFlap( call in src/ is the tap\'s flap or marked as the game\'s own
 
 test('every input listener that can flap carries the press stamp', () => {
   const create = PLAY.slice(PLAY.indexOf("this.input.on('pointerdown'"), PLAY.indexOf('this.onHidden = () =>'));
-  assert.match(create, /this\.input\.on\('pointerdown', \(pointer\) => \{[\s\S]*?withInput\(pointer\.event, kind,/);
-  assert.match(create, /const flapKey = \(event\) => \{[\s\S]*?withInput\(event, 'key',/);
-  assert.match(create, /keys\?\.on\('keydown-SPACE', flapKey\);/);
-  assert.match(create, /keys\?\.on\('keydown-UP', flapKey\);/);
+  const method = (name) => PLAY.slice(PLAY.indexOf(`  ${name}(`), PLAY.indexOf('\n  }\n', PLAY.indexOf(`  ${name}(`)));
+  // The listeners hand each press to a method (plan 39, 2.8: the press counts in the half it belongs to); the methods set the stamp.
+  assert.match(create, /this\.input\.on\('pointerdown', \(pointer\) => this\.onPointerDown\(pointer\)\);/);
+  assert.match(method('onPointerDown'), /withInput\(pointer\.event, kind,/);
+  assert.match(create, /keys\?\.on\('keydown-SPACE', \(event\) => this\.onFlapKey\(event\)\);/);
+  assert.match(create, /keys\?\.on\('keydown-UP', \(event\) => this\.onFlapKey\(event\)\);/);
+  assert.match(method('onFlapKey'), /withInput\(event, 'key',/);
   assert.match(create, /keys\?\.on\('keydown', \(event\) => withInput\(event, 'key', \(\) => this\.onVersusKey\(event\?\.code\)\)\)/);
-  assert.match(create, /bindPad\(this, \(action, padIndex\) => \{[\s\S]*?withInput\(null, 'pad', \(\) => this\.onPadAction\(action, padIndex\)\)/);
+  assert.match(create, /bindPad\(this, \(action, padIndex\) => this\.onPadPress\(action, padIndex\), T\)/);
+  assert.match(method('onPadPress'), /withInput\(null, 'pad', \(\) => this\.onPadAction\(action, padIndex\)\)/);
   assert.doesNotMatch(PLAY, /export\s+(const|let)\s+STAMP|export\s+function\s+withInput/, 'the stamp and its setter stay inside Play.js');
 });

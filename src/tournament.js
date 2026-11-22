@@ -265,15 +265,16 @@ export function tournamentPayload(tour, id, levelPipes = TUNING.tournament.level
 /**
  * A split-screen race's 🏆 posts (plan 39, 2.5, item 42(c)): one per racer with a player id (a pasted
  * code or the host's own player), side a's first, each { playerId, name, score, level } from that
- * side's slot; guests and a zero score post nothing.
+ * side's slot, and `run`, that side's race summary (plan 39, 2.8), when `runs` holds one; guests and a
+ * zero score post nothing (a guest's run goes nowhere).
  */
-export function racePosts(tour, matchId, slots) {
+export function racePosts(tour, matchId, slots, runs = null) {
   const m = tour?.matches?.find((x) => x.id === matchId);
   if (!m) return [];
   return matchPlayers(tour, m)
-    .map((i, side) => [tour.players[i], slots?.[side]])
+    .map((i, side) => [tour.players[i], slots?.[side], runs?.[side] ?? null])
     .filter(([p, s]) => linked(p) && Math.floor(s?.score ?? 0) > 0)
-    .map(([p, s]) => ({ playerId: p.playerId, name: p.name, score: Math.floor(s.score), level: Math.max(1, Math.floor(s.level ?? 1)) }));
+    .map(([p, s, run]) => ({ playerId: p.playerId, name: p.name, score: Math.floor(s.score), level: Math.max(1, Math.floor(s.level ?? 1)), ...(run ? { run } : {}) }));
 }
 
 // ---------------------------------------------------------------------------
