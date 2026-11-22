@@ -6616,8 +6616,11 @@ export async function run(url = DEFAULT_URL, { only = null } = {}) {
           `each press counts in its own half: player 1 ${k1?.press_key} keys + ${k1?.press_mouse} click (${k1?.downs} down, ${k1?.ups} up), player 2 ${k2?.press_key} keys + ${k2?.press_mouse} click (${k2?.downs} down, ${k2?.ups} up)`);
         ok(k1 && k2 && k1.flaps_internal === 1 && k1.flaps_pressed >= 3 && k1.flaps_trusted === k1.flaps_pressed && k1.flaps_fresh >= 2 && k2.flaps_internal === 1 && k2.flaps_pressed >= 4 && k2.flaps_trusted === k2.flaps_pressed && k2.flaps_fresh >= 3,
           `and each half's flaps are its own real presses (player 1: ${k1 ? flapsOf(k1) : 'none'}; player 2: ${k2 ? flapsOf(k2) : 'none'})`);
+        // 👥 off before leaving (Play restarts reading it), so the next sections start a 📚 run as before; then the boot viewport.
+        await evaluate(`__flappy.registry.set('versus', false), true`);
         await leaveVersus();
-        await cdp.send('Emulation.setDeviceMetricsOverride', { width: 720, height: 1280, deviceScaleFactor: 1, mobile: false }); // the boot viewport
+        await cdp.send('Emulation.setDeviceMetricsOverride', { width: 720, height: 1280, deviceScaleFactor: 1, mobile: false });
+        for (let i = 0; i < 60 && !(await evaluate(`__flappy.scale.width === 720 && ${P}.state === 'ready' && !${P}.versusOn`)); i += 1) await sleep(100);
       }
     });
 
