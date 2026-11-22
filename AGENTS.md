@@ -285,8 +285,8 @@ is queued once (`queueFinished`: `tournamentPayload(tour, newId())` with the hos
 **Two players** (plan 39, 2.4b, 2.5): `submit_tournament` accepts 2 players, who race a lone final, gold and
 silver (a draw earns none); the client's `minPostPlayers` is 2, so they post like any other tournament
 (`posted: 'two'` and `tournamentSaveTwo` are gone). **Race scores to 🏆** (2.5, Michael's call 8): every
-split-screen race queues each linked racer's score, with no run summary behind it (`racePosts` in
-src/tournament.js; `tournamentPanel.queueRacePosts` from `onRace`; `createRacePostQueue` in
+split-screen race queues each linked racer's score with that racer's half's run summary behind it (2.8: `racePosts(tour, matchId, slots, runs)` in
+src/tournament.js gives each entry its `run`; `Versus.continueTournament` hands `runs` beside the slots; `Play.queueRacePosts` queues the run first under the racer's id, `queueRaceRun`, then the post naming it by `runId`; tests/raceRun.test.js; see Run summaries below; `tournamentPanel.queueRacePosts` from `onRace`; `createRacePostQueue` in
 src/leaderboard.js over `LEADERBOARD.racePostsKey` 'flappyPoop.racePosts'; `Play.racePostQueue` is
 drained in `syncLeaderboard` right after the tournament queue through `Play.postRace` (2.7, AUD-106): under
 the board's current name for that player, read just before the post (`fetchBoardName` in src/leaderboard.js:
@@ -377,8 +377,7 @@ profile (no ids): single-player numbers (bestScore = the best score-board row), 
 biggest rival (self-races ignored), counters, achievements. The game claims, the server checks the
 id format and a quest's window (+2 days' grace): accepted risk ACC-001 like scores.
 
-**Run summaries** (plan 30): every single-player and Daily run (never a test run, an education run or
-a split-screen match half) keeps a summary, as numbers, in `src/runStats.js` (`createRunStats`: preallocated, no
+**Run summaries** (plan 30): every single-player and Daily run (never a test run or an education run) keeps a summary, as numbers, in `src/runStats.js` (`createRunStats`: preallocated, no
 allocation per frame, flap or press). Play feeds it through `statCall` (the first error switches it
 off for the rest of the run): `start` (begin), `update` (frame), `doFlap` (each flap, with what stood
 behind it: the module-private press stamp set by the input listeners through `withInput`, read with
@@ -396,6 +395,7 @@ or 🌞 post whose run is still queued after a paced send waits (`postWaits`, `w
 per racer of a counted online race (`online_count_race`, from the agreed numbers; it replaces a row a
 device wrote first under that run id). `post_must_hold`, `post_run`, `hold_run` and `release_run`
 treat `race` like `single`; `streak_days` still counts `single` only.
+**Race halves** (plan 39, 2.8): a split-screen race's half keeps a summary of mode `race` (`Play.runSummaryMode`; off the toilet), never an online race's half, a test run, an education run or a guest's half. `Play.endRun` closes it at the finish line (`endRunSummary`) onto its slot's `run`; `Play.queueRacePosts` queues each linked racer's run under that racer's id (`queueRaceRun`, kept in the run queue while its post waits: `runBehindUnposted`) and then the post naming it (`runId`, kept by `normalizeRacePost`). `syncLeaderboard` runs `drainRuns` once before the race post drain while any race post waits (`submit_runs` takes one batch per player per 5 s, so never twice); `postRace` waits for its run like a 🏆 post (`postWaits` 'r:<id>', up to `runWaitSyncs`). Each press counts in the half it belongs to: `onPointerDown` / `onPointerUp` (`localPointer`, the pointer's `downX`), `onFlapKey` / `onFlapKeyUp` (single player only), `versusInput` (a key group's flap key, a pad's A or RT), `onVersusKeyUp`, `onPadPress`.
 
 **Loading splash** (2026-11-12, v0.15.0, plan `.claude/plans/Archive/01-loading-screen.plan.md`): the page's front
 door on every load, phone and desktop. `index.html`'s `#splash` (cream, the bobbing `poop.png` inside a
@@ -3224,6 +3224,9 @@ tests/                      node --test (schema.test.js, schemaOnline.test.js, p
                             (2.5); the onlineAccount races() / historyRows view
   racePosts.test.js         tournament.js racePosts, leaderboard.js createRacePostQueue and
                             the drain order after the tournament queue (2.5)
+  raceRun.test.js           a split-screen race's half summary (mode race), its run queued
+                            under the racer's id before its post, the early drainRuns, postRace's
+                            wait (plan 39, 2.8)
   racePostName.test.js      Play.postRace end to end on PGlite: a race post never changes a
                             player's board name (an old pasted code, a kept roster after a
                             rename, require_run's held post) (2.7, AUD-106)
@@ -3696,7 +3699,7 @@ tools/
                             a result panel recording the race, Continue to the
                             podium and the 🏅 queue / post, Continue straight into
                             the next race, Abandon to the lobby, a 2-player Final
-                            with no 🥉 and nothing saved, an all-guest one). The
+                            with no 🥉 and nothing saved, an all-guest one; each 🏆 post is backed by its half's run, 2.8). The
                             viewport is pinned to 720x1280 before load
                             (Emulation.setDeviceMetricsOverride) so the rest is
                             the phone field; tapAt maps through the live
@@ -3728,7 +3731,8 @@ tools/
                             and invite-link (a page loaded with ?invite= opens the
                             panel with the code, the address cleaned, the code filled again
                             when the panel reopens after a close), run-stats
-                            (plan 30), streaks (plan 34: a day counted by a run and
+                            (plan 30; part 4, 2.8: a split-screen race through Chrome's own input,
+                            a race summary per half, each press in its own half's), streaks (plan 34: a day counted by a run and
                             by a Daily, the 🌞 / 📚 numbers, the profile rows, Clear)
                             and education-superq (plan 34: the bubble between two
                             equal still pairs, its float, flown past, the hold, the
