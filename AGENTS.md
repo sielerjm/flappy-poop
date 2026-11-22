@@ -300,7 +300,7 @@ transport counter less its value at the round's start, kept through a re-fit or 
 in a rematch's round; the RTT keys as measured, an unmeasured key left out); `createRaceReporter`: one call
 at a time, asks again every `TUNING.online.report.pollMs` while the answer is 'playing', `polls` times, then
 every `slowPollMs`, until `waitMs` (the other device's whole resend window, tied by a test, AUD-109), then 'late'; a lost answer is
-resent after each `retryMs`; 'no match' once; 'not trusted' is pending; `reportLine` maps the state to the
+resent after each `retryMs`; 'no match' once; 'not trusted' is pending (the server no longer raises it, 3.7: a waiting device races by code and its races are saved and counted on the boards; friends, 🏁 Recent races, 📱 Devices, history and status stay for paired devices); `reportLine` maps the state to the
 results panel's line). `OnlineRace.startReport` / `refreshResult` drive it; a race left mid-way
 (abandoned) is never reported. The 🌐 window's **🏁 Recent races** (beside 📱 Devices; paired devices only,
 not on the Profile) comes from `onlineAccount.races()` (`online_history`, `historyRows`; the
@@ -2928,9 +2928,11 @@ db/schema.sql               Supabase schema: scores table (player_id = save-code
                             of Tier 2's client): `matches` (one row per race, minted by
                             set_room_status('playing'); rooms.match_id points at the race
                             running; readable by no role, kept as the players' history).
-                            finish_match(code, round, result): trusted devices only (a
-                            pending one: 'not trusted'); each seated device reports both
-                            seats' numbers; the race ends agreed (equal reports), disputed
+                            finish_match(code, round, result): any seated device, paired
+                            or waiting (3.7: no 'not trusted'); each reports both seats'
+                            numbers and its trust as reported lands in matches.host_trusted
+                            / guest_trusted (true paired, false waiting, null unreported;
+                            later pairing, demotion or removal changes nothing); the race ends agreed (equal reports), disputed
                             (different), refused (shorter than 180 s from GO, c_min_race_s,
                             or a score above 200 + 4 a second) or abandoned (a leave or
                             an abandon before any seat reported, or still playing 6 h
@@ -2941,7 +2943,7 @@ db/schema.sql               Supabase schema: scores table (player_id = save-code
                             (online_count_race, board_post) and run_log mode 'race'. Each
                             seat's numbers-only telemetry is kept (host_stats / guest_stats,
                             a key list, owner's eyes). online_history(): the owner's online
-                            rival line and last races, trusted devices only, no ids
+                            rival line and last races, paired devices only, no ids
                             (online_races is its internal helper; the public profile's rival
                             counts split-screen races only). Off switch: online_settings
                             (one row), admin_set_online_open(bool), owner only; closed means
@@ -2960,12 +2962,14 @@ db/schema.sql               Supabase schema: scores table (player_id = save-code
                             on resolved player ids. A device names another player only by a
                             peer handle (online_peer: per viewer, from the pepper; no player
                             id leaves the server), found only among the viewer's agreed-race
-                            opponents, friendship rows and own blocks (online_peer_find). No
+                            opponents (both seats paired as reported, 3.7), friendship rows and own blocks (online_peer_find). No
                             online function may find a player by a name or search (the guard
                             test). friend_list, send_friend_request, respond_friend_request,
                             remove_friend, block_user, unblock_user: trusted device only
                             ('bad peer' for a malformed handle). Eligible = an agreed race
-                            under both current ids, no block either way, neither hidden
+                            with both seats paired as reported (host_trusted and
+                            guest_trusted, 3.7; a waiting device's race is saved and
+                            counted, never a friendship) under both current ids, no block either way, neither hidden
                             (friend_eligible, at every ask). A merge moves friend data
                             following trust, as it moves races (online_fold_friends), and
                             the online name follows trust. A made-up player merged with a
@@ -2982,7 +2986,7 @@ db/schema.sql               Supabase schema: scores table (player_id = save-code
                             online_history() adds `peer` to the rival line and each race;
                             it is null on a race a merge left under an old opponent id
                             (online_peer_shown: the handle only when online_peer_find finds
-                            that player), so the client shows no Add friend or Block there.
+                            that player), and on a race with a waiting seat (3.7), so the client shows no Add friend or Block there.
                             Status (3.2, tests/schemaStatus.test.js): online_beats, one row
                             per device (uid, at), readable by no role, gone with the device's
                             link. online_beat(p_here): a trusted device's heartbeat, nothing
@@ -3274,11 +3278,12 @@ tests/                      node --test (schema.test.js, schemaOnline.test.js, s
                             pairing, the name claim both ways, rooms, caps, the channel
                             policies, housekeeping; plan 39, 2.4: matches, finish_match
                             (agreed / disputed / refused / abandoned, the bounds and caps,
-                            telemetry), online_history, the off switch, rematch pacing,
+                            telemetry; 3.7: a waiting device's report, each seat's trust
+                            as reported), online_history, the off switch, rematch pacing,
                             races following trust in a merge, the fourth waiting device
                             (2.4e), the boards' posts and race runs
   schemaFriends.test.js     Plan 39, 3.1 in PGlite: friends, blocks, peer handles (per viewer,
-                            no ids out), eligibility, merges of friend data following trust,
+                            no ids out), eligibility (3.7: both seats paired as reported), merges of friend data following trust,
                             AUD-103 seniority (online_trust.since), the upgrade backfill, the
                             guard against finding a player by a name or search, a dead handle
                             (null peer), the 90-day trust cleanup, the 3.1-paste upgrade
