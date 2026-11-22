@@ -11,6 +11,7 @@ import { absorb, fakeStorage, playScene, registry } from './support/scenes.js';
 import { LEADERBOARD, TUNING as T } from '../src/config.js';
 import { createResumeStore, resumeKey } from '../src/onlineRace.js';
 import { raceOutcome } from '../src/tournament.js';
+import { catalogFor } from '../src/i18n.js';
 
 const { OnlineRace } = await import('../src/scenes/OnlineRace.js');
 
@@ -1516,4 +1517,65 @@ test('3.3 Leave stops the page\'s status beat (friends see offline at once); ste
   a.half.onlineStatusBeatRef = { stop: (o) => stops.push(o?.quiet === true ? 'quiet' : 'offline') };
   a.s.stepAside();
   assert.deepEqual(stops, ['offline', 'quiet']);
+});
+
+// --- 3.8: a device waiting to pair after the narrowed pairing (item 61, Preview H accepted 22 Nov) -----
+
+/** friendRace with its transport answering `answers[fn]` first (the rest as friendRace's). */
+function friendRaceWith(answers, list = {}) {
+  const k = friendRace(list);
+  const inner = k.net.rpc;
+  k.net.rpc = async (fn, args) => {
+    if (fn in answers) {
+      k.net.rpcs.push([fn, args]);
+      return answers[fn];
+    }
+    return inner(fn, args);
+  };
+  return k;
+}
+const NOT_TRUSTED = { ok: false, error: 'not trusted' };
+const PAIR_LINE = 'Pair this device to add friends from your next races';
+
+test('3.8 a waiting device: its saved race shows no Add button but "Pair this device to add friends from your next races" (AUD-117: never an empty line)', async () => {
+  const { s } = friendRaceWith({ friend_list: NOT_TRUSTED, online_history: NOT_TRUSTED });
+  s.refreshResult();
+  await settle();
+  s.refreshResult();
+  assert.equal(s.result.friend.visible, false);
+  assert.equal(s.result.friendLine.text, PAIR_LINE);
+  for (const loc of ['en', 'zh-Hans']) assert.ok(catalogFor(loc).friendResultPair, `${loc} friendResultPair`);
+});
+
+test('3.8 a paired device whose opponent raced from a waiting device: the race has no handle, so no button and no line', async () => {
+  const { s } = friendRaceWith({ online_history: { ok: true, data: { recent: [{ name: 'Jolly', peer: null, at: 9 }] } } });
+  s.refreshResult();
+  await settle();
+  s.refreshResult();
+  assert.equal(s.result.friend.visible, false);
+  assert.equal(s.result.friendLine.text, '');
+});
+
+test('AUD-117 every refused ask on the results panel says something: not eligible, rate limited, not trusted (the pair line), offline', async () => {
+  const cases = [
+    [{ ok: true, data: { ok: false, error: 'not eligible' } }, null],
+    [{ ok: true, data: { ok: false, error: 'rate limited' } }, null],
+    [NOT_TRUSTED, PAIR_LINE],
+    [{ ok: false, error: 'offline' }, null],
+  ];
+  for (const [answer, want] of cases) {
+    const { s } = friendRaceWith({ send_friend_request: answer });
+    s.refreshResult();
+    await settle();
+    s.refreshResult();
+    assert.equal(s.result.friend.visible, true, 'the offer shows');
+    s.tapAddFriend();
+    await settle();
+    s.refreshResult();
+    const label = JSON.stringify(answer);
+    assert.equal(s.result.friend.visible, false, `${label}: the button goes`);
+    assert.notEqual(s.result.friendLine.text, '', `${label}: a line`);
+    assert.doesNotMatch(s.result.friendLine.text, /undefined/, label);
+    if (want) assert.equal(s.result.friendLine.text, want, label);
+  }
 });

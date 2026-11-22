@@ -15,11 +15,13 @@ export const CHANGELOG = [
         '🌐 Friends: after a saved online race, add the other player as a friend from the results screen or from Recent opponents in 🤝 Friends. Friends come only from races you finished together: there is no search.',
         '🤝 Friends shows who is online, in a game or offline, with a dot and a word. Only your friends see your status, and only while you are in 🌐 online. A badge on the button counts friend requests waiting for you.',
         'Accept or decline requests, take back your own, remove a friend, or block a player: blocking ends the friendship, stops their requests, and takes your races out of each other\'s lists. You can unblock under Blocked.',
+        'A device that is not paired yet now races and has its races saved like any other. Pair it in 📱 Devices to see 🤝 Friends and 🏁 Recent races; only a race between two paired devices lets you add each other as friends.',
       ],
       'zh-Hans': [
         '🌐 好友：一场在线比赛保存后，可以在结果画面，或在 🤝 好友的“最近的对手”里，把对方加为好友。好友只能来自你们一起完成的比赛：没有搜索功能。',
         '🤝 好友会用圆点加文字显示谁在线、在比赛中或离线。只有你的好友能看到你的状态，而且只在你打开 🌐 在线时。按钮上的数字是等你回复的好友请求。',
         '可以接受或拒绝请求、撤回自己的请求、删除好友，或屏蔽玩家：屏蔽会结束好友关系、阻止对方再发请求，并把你们的比赛从彼此的列表中移除。在“已屏蔽”里可以取消屏蔽。',
+        '还没配对的设备现在也能比赛，比赛也会像其他设备一样保存。在 📱 设备里配对后，才能看到 🤝 好友和 🏁 最近比赛；只有两台已配对设备之间的比赛，才能让你们互加好友。',
       ],
     },
   },

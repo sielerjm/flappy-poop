@@ -165,12 +165,13 @@ test("2.7, AUD-109: a race the other device reports only on its last resend (eve
   assert.deepEqual([host.state().phase, host.state().status, host.state().counted], ['done', 'agreed', true], 'the host says saved too');
 });
 
-test("the reporter: a waiting device ('not trusted') is pending at once, never resent", async () => {
+test("the reporter (3.8): no 'pending' phase; a 'not trusted' answer (the server no longer gives one, 3.7) fails like any refusal, never resent", async () => {
   const { r, calls, step } = rig([{ ok: false, error: 'not trusted' }]);
   await step();
   await step(60000);
   assert.equal(calls.length, 1);
-  assert.equal(r.state().phase, 'pending');
+  assert.equal(r.state().phase, 'failed');
+  assert.equal(r.state().error, 'not trusted');
 });
 
 test('the reporter: a lost answer (offline, an error, a deadlock) goes again after each retryMs, then fails', async () => {
@@ -223,11 +224,11 @@ test("the results panel's line for each answer (Preview F, F1-F2), every key in 
     [{ phase: 'done', status: 'refused' }, 'onlineSaveRefused', 'no'],
     [{ phase: 'done', status: 'abandoned' }, 'onlineSaveLeft', 'no'],
     [{ phase: 'late', status: 'playing' }, 'onlineSaveLate', 'no'],
-    [{ phase: 'pending' }, 'onlineSavePending', 'no'],
     [{ phase: 'failed' }, 'onlineSaveFailed', 'no'],
   ];
   for (const [state, key, kind] of cases) assert.deepEqual(reportLine(state), { key, kind }, key);
   assert.equal(reportLine(null), null, 'no report: no line');
   assert.deepEqual(reportLine(null, { abandoned: true }), { key: 'onlineSaveLeft', kind: 'no' }, 'a race left mid-way is never reported, and says so');
   for (const loc of ['en', 'zh-Hans']) for (const [, key] of cases) assert.ok(catalogFor(loc)[key], `${loc} ${key}`);
+  for (const loc of ['en', 'zh-Hans']) assert.equal(catalogFor(loc).onlineSavePending, undefined, `${loc}: the waiting device's "not saved" line is gone (3.8)`);
 });

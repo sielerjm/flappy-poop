@@ -572,7 +572,6 @@ The winners take the podium 🥇 🥈 (and 🥉 from 3 players). With 3 or more 
 | onlineDisabled | Online races are switched off right now. Try again later. | 在线比赛暂时关闭，请稍后再试。 |
 | onlineTooManyWaiting | Your player already has 3 devices waiting to be paired, and all 3 are in a race. Try again once a race ends. (plan 39, 2.5: since 2.4e a fourth waiting device replaces the oldest, so this only comes when all three are racing) | 你的玩家已有3台设备在等待配对，而且都在比赛中。请等一场比赛结束后再试。 |
 | onlineStorageBlocked | This browser blocks storage, so online play only lasts until you close this page. | 这个浏览器禁止存储，所以在线游戏只能持续到你关闭本页面。 |
-| onlinePendingHome | This device isn't paired with your other devices yet. You can race by code; pair it in Devices. | 这台设备还没有和你的其他设备配对。你仍可以用房间码比赛；请在“设备”里配对。 |
 | onlineDevices | 📱 Devices | 📱 设备 |
 | onlineRaces | 🏁 Recent races (plan 39, 2.5: the 🌐 window's button beside 📱 Devices; your own saved online races) | 🏁 最近比赛 |
 | onlineRacesLead | Your last online races (the Recent races view's heading) | 你最近的在线比赛 |
@@ -621,6 +620,7 @@ The winners take the podium 🥇 🥈 (and 🥉 from 3 players). With 3 or more 
 | friendNoPeer | That player can't be found any more. (the player is gone (their device was removed, or two of their players were merged)) | 找不到这位玩家了。 |
 | friendResultAdd | Add {name} as a friend (button on the online results panel after a saved race; {name} is the opponent) | 加 {name} 为好友 |
 | friendResultIsFriend | {name} is your friend (the results panel when the opponent is already a friend; {name} is the opponent) | {name} 是你的好友 |
+| friendResultPair | Pair this device to add friends from your next races (the results panel's friend line on a device waiting to pair: its race is saved, but only a race between two paired devices lets the players become friends, so pairing helps the next races, not this one) | 配对这台设备后，可以从之后的比赛中加好友 |
 | onlineDevicesLead | Devices that use your player online | 在线使用你玩家的设备 |
 | onlineThisDevice | This device | 这台设备 |
 | onlineOtherDevice | Device {n} | 设备 {n} |
@@ -724,7 +724,6 @@ The winners take the podium 🥇 🥈 (and 🥉 from 3 players). With 3 or more 
 | onlineSaveDisputed | Not saved: your two games saw different results | 未保存：两边的游戏看到的结果不一样 |
 | onlineSaveRefused | Not saved: this race could not be checked (too short, or a score too high for its time) | 未保存：这场比赛无法核对 |
 | onlineSaveLate | Not saved: {name}'s game did not report the race (after 30 s of waiting; a device that is not paired never reports) | 未保存：{name}的游戏没有提交这场比赛 |
-| onlineSavePending | Not saved: pair this device in 📱 Devices to save races | 未保存：在 📱 设备里配对这台设备后，比赛才会保存 |
 | onlineSaveFailed | Couldn't save the race. Check your connection. (every resend lost, about a minute) | 比赛没能保存，请检查网络。 |
 | onlineSaveLeft | Not saved: the race was left before the end (someone left mid-race: no winner, nothing saved) | 未保存：比赛没打完就有人离开了 |
 | onlineDevOnLive | (Dev: this device is on the live project. A 🧪 test device cannot see its rooms.) (plan 39, item 43: added after onlineErrNoRoom on a developer's own machine only; players never see it) | （开发：本设备连接的是正式项目，🧪 测试设备看不到这里的房间。） |

@@ -227,11 +227,13 @@ export function pairCodeLeft(ui, st) {
   return ui.tr('onlinePairCodeExpires').replace('{time}', mmss(st.expiresAt - ui.now()));
 }
 
-/** The online home's notes: waiting to pair, a demotion (M1 rule 5), blocked storage. */
+/**
+ * The online home's notes: a demotion (M1 rule 5) and blocked storage. A device waiting to pair gets no
+ * note here (plan 39, 3.8: it races and its races are saved); the prompt shows where a gated screen opens.
+ */
 export function accountNotes(ui, st) {
   const out = [];
   if (st.demoted) out.push(h('p', { class: 'hint warn', id: 'tour-demoted' }, ui.tr('onlineDemoted')));
-  else if (!st.trusted) out.push(h('p', { class: 'hint warn', id: 'tour-pending' }, ui.tr('onlinePendingHome')));
   if (st.blocked) out.push(h('p', { class: 'note warn', id: 'tour-blocked' }, ui.tr('onlineStorageBlocked')));
   return out;
 }

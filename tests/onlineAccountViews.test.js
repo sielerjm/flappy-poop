@@ -4,7 +4,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { El, installDom } from './support/dom.js';
-import { t } from '../src/i18n.js';
+import { catalogFor, t } from '../src/i18n.js';
 import { accountBody, accountNotes, createAccountState, devicesButton, enterOnline, keypad, pairCodeLeft } from '../src/ui/onlineAccountViews.js';
 
 installDom();
@@ -87,11 +87,13 @@ test('the name field: Save claims what was typed; a refusal keeps the field, a l
   assert.equal(k.ui.linked.name, 'FreshPoop');
 });
 
-test('home notes: waiting to pair, a demotion instead, blocked storage', () => {
+test('home notes: a demotion, blocked storage; a device waiting to pair gets none (3.8: it races and its races are saved)', () => {
   const k = harness();
   const ids = (st) => accountNotes(k.ui, { ...createAccountState(), ...st }).map((e) => e.id);
   assert.deepEqual(ids({ trusted: true }), []);
-  assert.deepEqual(ids({ trusted: false }), ['tour-pending']);
+  assert.deepEqual(ids({ trusted: false }), []);
+  assert.equal(catalogFor('en').onlinePendingHome, undefined, 'its string is gone');
+  assert.equal(catalogFor('zh-Hans').onlinePendingHome, undefined);
   assert.deepEqual(ids({ trusted: false, demoted: true }), ['tour-demoted']);
   assert.deepEqual(ids({ trusted: true, blocked: true }), ['tour-blocked']);
 });

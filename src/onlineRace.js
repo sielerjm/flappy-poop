@@ -1162,8 +1162,8 @@ const RESEND = new Set(['offline', 'error', 'timeout']);
  * phase 'saving' (sent or about to be), 'waiting' (this side's report is in, the other's is not:
  * asked again every pollMs `polls` times, then every slowPollMs, until waitMs has passed: the
  * other device's whole resend window, 2.7, AUD-109), 'done' (status agreed / disputed / refused /
- * abandoned, counted), 'late' (the other never reported in time), 'pending' (a waiting device:
- * 'not trusted'), 'failed' (anything else, or every resend lost).
+ * abandoned, counted), 'late' (the other never reported in time), 'failed' (anything else, or every
+ * resend lost). A device waiting to pair reports like a paired one (plan 39, 3.7).
  * Resends: a lost answer (offline, a 5xx, a deadlock) after each retryMs; 'no match' once (a merge
  * running at that moment, 2.4r).
  */
@@ -1196,7 +1196,6 @@ export function createRaceReporter({ rpc, code, round, result, now, t = TUNING }
       return Object.assign(st, { phase: 'done', status, counted: res.data?.counted === true });
     }
     const error = res?.error ?? 'error';
-    if (error === 'not trusted') return Object.assign(st, { phase: 'pending', error });
     if (error === 'no match' && noMatch++ === 0) return lost(error);
     if (RESEND.has(error) || /deadlock/i.test(error)) return lost(error);
     Object.assign(st, { phase: 'failed', error });
@@ -1223,7 +1222,6 @@ export function reportLine(state, { abandoned = false } = {}) {
   if (state.phase === 'saving') return { key: 'onlineSaving', kind: 'wait' };
   if (state.phase === 'waiting') return { key: 'onlineSaveWaiting', kind: 'wait' };
   if (state.phase === 'late') return { key: 'onlineSaveLate', kind: 'no' };
-  if (state.phase === 'pending') return { key: 'onlineSavePending', kind: 'no' };
   if (state.phase === 'failed') return { key: 'onlineSaveFailed', kind: 'no' };
   if (state.status === 'agreed') return state.counted ? { key: 'onlineSaved', kind: 'ok' } : { key: 'onlineSavedNotCounted', kind: 'wait' };
   if (state.status === 'disputed') return { key: 'onlineSaveDisputed', kind: 'no' };

@@ -608,7 +608,8 @@ export class OnlineRace extends Phaser.Scene {
       .offer(this.plan.names[1])
       .then((r) => {
         if (this.friendOffer !== offer) return;
-        if (!r.ok || !r.peer) offer.phase = 'none';
+        if (!r.ok && r.pending) offer.phase = 'pair'; // a device waiting to pair (3.8, AUD-117)
+        else if (!r.ok || !r.peer) offer.phase = 'none';
         else offer.phase = { none: 'add', incoming: 'add', asked: 'asked', friend: 'friend', blocked: 'none' }[r.relation] ?? 'none';
         offer.peer = r.peer ?? null;
       })
@@ -629,7 +630,7 @@ export class OnlineRace extends Phaser.Scene {
     const button = o?.phase === 'add' || o?.phase === 'sending';
     r.friend.setVisible(button);
     if (button) r.friend.setText(t(this.locale, 'friendResultAdd').replace('{name}', them)).setAlpha(o.phase === 'sending' ? 0.5 : 1);
-    const line = { asked: 'friendAddedSent', friend: 'friendResultIsFriend', now: 'friendNowFriends', error: o?.key }[o?.phase] ?? null;
+    const line = { asked: 'friendAddedSent', friend: 'friendResultIsFriend', now: 'friendNowFriends', pair: 'friendResultPair', error: o?.key }[o?.phase] ?? null;
     r.friendLine.setText(line ? t(this.locale, line).replace('{name}', them) : '').setColor(o?.phase === 'error' ? '#ff8da8' : o?.phase === 'now' || o?.phase === 'friend' ? GREEN : GREY);
   }
 
@@ -641,6 +642,7 @@ export class OnlineRace extends Phaser.Scene {
     this.friends.ask(o.peer).then((r) => {
       if (this.friendOffer !== o) return;
       if (r.ok) o.phase = r.status === 'accepted' ? 'now' : 'asked';
+      else if (r.pending) o.phase = 'pair';
       else {
         o.phase = 'error';
         o.key = r.errorKey;
