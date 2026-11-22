@@ -1375,8 +1375,10 @@ test('a device cannot write a race\'s run first to hold its post: the server\'s 
   const now = Date.now();
   await anonCall(db, 'select public.submit_runs($1, $2::bigint, $3::jsonb)', [r.guest.player, now, JSON.stringify([{
     run_id: runId, session: 'sessionAB12', mode: 'race', score: 1, level: 1, toilet: false, won: false,
-    started_at: now - 60000, ended_at: now - 1000, length_ms: 59000, paused_ms: 0, version: '0.25.0', data: {},
+    started_at: now - 60000, ended_at: now - 1000, length_ms: 59000, paused_ms: 0, version: '0.25.0', data: { pipes: 1 },
   }])]);
+  const first = (await db.query('select version from public.run_log where run_id = $1', [runId])).rows;
+  assert.deepEqual(first, [{ version: '0.25.0' }], 'the device\'s row is stored first');
   await both(db, r, 1, [slot(70), slot(20)]);
   const run = (await db.query('select score, level, version from public.run_log where run_id = $1', [runId])).rows[0];
   assert.deepEqual(run, { score: 20, level: constant('c_race_level'), version: 'server' });

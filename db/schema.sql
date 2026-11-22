@@ -195,6 +195,8 @@
 --     public.online_random(bigint); restore name_blocked and fold_player from git and run this file;
 --     then drop table public.online_pairings, public.online_players, public.online_profiles.
 --   undo the stamp: drop function public.schema_version();
+--   undo a run row's limits: restore run_row_problem from git and run this file; then
+--     drop function public.run_limits().
 --   undo the board pages (plan 28, 5.2): drop function public.score_board(text, int, int),
 --     public.daily_board(text, date, int, int), public.tournament_board(text, int, int),
 --     public.education_board(text, int, int); then restore the four from git (without p_offset)
@@ -2895,8 +2897,32 @@ as $$
 $$;
 revoke execute on function public.run_data_keys() from public, anon, authenticated;
 
+-- A single or race run row's hard limits, the game's own numbers (tests/runLimits.test.js computes each
+-- from TUNING). single_ends / race_ends: the pairs passed by the end of each level (levels.pipes;
+-- tournament.levelPipes for a race). per_pair: a pair and the fiber after it, both at the postbiotic
+-- multiplier; per_buy: a fiber from the shop or a box at the multiplier (and one more found); level_bonus:
+-- a race's points for the first over a line; pair_ms: half the fastest a pair can pass (a super fart).
+-- Internal.
+create or replace function public.run_limits()
+returns jsonb
+language sql
+immutable
+as $$
+  select jsonb_build_object(
+    'single_ends', jsonb_build_array(10, 35, 85, 135, 185, 235, 285),
+    'race_ends', jsonb_build_array(10, 35, 70, 105, 140, 175, 225),
+    'per_pair', 8,
+    'per_buy', 6,
+    'level_bonus', 25,
+    'pair_ms', 100
+  );
+$$;
+revoke execute on function public.run_limits() from public, anon, authenticated;
+
 -- Why a run row cannot be stored, or null when it can. p_sent is the device's clock when the batch
--- was sent (epoch ms). Internal.
+-- was sent (epoch ms). A single or race row also keeps to run_limits(): its pairs a whole number inside
+-- the level it ended on (it flew every pair of the levels before), its score at most what those pairs and
+-- its shop buys carry (+ a race's line bonuses), and its length at least pair_ms a pair. Internal.
 create or replace function public.run_row_problem(e jsonb, p_sent bigint)
 returns text
 language plpgsql
@@ -2910,6 +2936,11 @@ declare
   f record;
   x jsonb;
   v_num text;
+  v_lim jsonb;
+  v_ends jsonb;
+  v_pipes int;
+  v_level int;
+  v_buys int;
 begin
   if jsonb_typeof(e) is distinct from 'object' then
     return 'shape';
@@ -3010,6 +3041,27 @@ begin
         return 'data value';
       end if;
     end loop;
+  end if;
+  if v_mode in ('single', 'race') then
+    v_lim := public.run_limits();
+    if jsonb_typeof(e -> 'data' -> 'pipes') is distinct from 'number' or (e -> 'data' ->> 'pipes') !~ '^\d{1,4}$' then
+      return 'pipes';
+    end if;
+    v_pipes := (e -> 'data' ->> 'pipes')::int;
+    v_level := (e ->> 'level')::int;
+    v_ends := v_lim -> (case when v_mode = 'race' then 'race_ends' else 'single_ends' end);
+    if v_pipes > (v_ends ->> (v_level - 1))::int or (v_level > 1 and v_pipes < (v_ends ->> (v_level - 2))::int) then
+      return 'course';
+    end if;
+    v_buys := case when jsonb_typeof(e -> 'data' -> 'shop_buys') = 'number' and (e -> 'data' ->> 'shop_buys') ~ '^\d{1,6}$'
+                   then (e -> 'data' ->> 'shop_buys')::int else 0 end;
+    if (e ->> 'score')::int > (v_lim ->> 'per_pair')::int * v_pipes + (v_lim ->> 'per_buy')::int * (1 + v_buys)
+                              + (case when v_mode = 'race' then (v_lim ->> 'level_bonus')::int * v_level else 0 end) then
+      return 'points';
+    end if;
+    if (e ->> 'length_ms')::bigint < (v_lim ->> 'pair_ms')::bigint * v_pipes then
+      return 'pace';
+    end if;
   end if;
   return null;
 exception when others then
@@ -4837,7 +4889,7 @@ returns text
 language sql
 immutable
 as $$
-  select 'd3591e797a3428a9'::text; -- schema stamp
+  select 'b15eb4bda85ff098'::text; -- schema stamp
 $$;
 revoke execute on function public.schema_version() from public, authenticated;
 grant  execute on function public.schema_version() to anon;

@@ -3815,7 +3815,7 @@ Commits follow `type(scope): summary` (`feat`, `fix`, `docs`, `chore`, `test`, `
   grants, so a call never finds two; plan 28 5.2's board pages did this), run it by hand in the Supabase
   SQL editor before `npm run push` (which checks), keep `LEADERBOARD.maxScore` and
   the schema's score cap in step, and `TUNING.levels.lastLevel` and the 🏆 level cap
-  (1 to 7) too (tests/leaderboard.test.js checks both). An **online** function (plan 39) is
+  (1 to 7) too (tests/leaderboard.test.js checks both), and `run_limits()` (a run row's hard limits: pairs per level, points a pair and a shop buy, a race's line bonus, the fastest pace) with `TUNING` (tests/runLimits.test.js). An **online** function (plan 39) is
   granted to `authenticated` and revoked from `public, anon` (one `revoke … from public, anon;` plus
   `grant  execute … to authenticated;` pair), is `security definer` with `set search_path = ''` and
   qualified names, checks `auth.uid()` first, and is listed in the header's `--   * online name(...)`
