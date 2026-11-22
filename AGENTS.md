@@ -419,6 +419,8 @@ drives the ring (`load.on('progress', setSplashProgress)`) and its `create()` ha
 stops in a hidden tab) Continue lights up and glows, and **Play starts only on its
 release** (click, Enter / Space up, the pad's A up), since Play's keydown-SPACE flap repeats while held
 and the pad plugin reports a held button. Any error in the splash removes it and starts the game.
+Held-key flaps stay in split screen and single player; an **online race drops a key's auto-repeat** (flap, Ready, P
+and Esc: Play's `onlineRepeat(event)`, plan 39 5.2b, AUD-149 / AUD-144), tests/raceRun.test.js, tests/runStamp.test.js.
 
 **Education mode** (📚, 2026-11-13, v0.16.1, plan `.claude/plans/21-education.plan.md`: the tester
 build, its playtest polish and Stage 3, "tester-complete"; the old plans 22 and 23 are merged into
@@ -1387,7 +1389,10 @@ src/
                             private channel room:<code> after a refresh; send() only
                             while joined; take() returns what arrived (peer, room,
                             presence, channel); error, cap and rejoin rules follow the
-                            0.3 spike. close() keeps the session, signOut() is local.
+                            0.3 spike. close() keeps the session, signOut() is local. close() counts
+                            calls: a first load or sign-in still out at a close starts no ticker,
+                            socket or clock (AUD-145). signIn({ create: false }) reuses a
+                            stored session only (Clear and Load; AUD-146).
                             ?netsim delays and drops received messages. Per-frame calls
                             are synchronous. Knobs in TUNING.online.net. Callers: the
                             sign-in side, src/onlineAccount.js, and the lobby,
@@ -1425,7 +1430,9 @@ src/
                             each as { ok, … } or { ok: false, errorKey } (an i18n key
                             the screens show; item 35's sign-in errors incl. rate
                             limited); races() (2.5: online_history → historyRows, the
-                            🏁 Recent races). tests/onlineAccount.test.js.
+                            🏁 Recent races). leave() signs in with create: false, so a
+                            dead stored session is not replaced by a new user only to sign out.
+                            tests/onlineAccount.test.js.
   onlineLobby.js            Online race (🌐, plan 39, 1.6c) the lobby controller, NO
                             Phaser/DOM: createOnlineLobby({ net, name, width, onBothReady })
                             runs one room from Create / Join to both Ready over roomStep,
@@ -1437,7 +1444,10 @@ src/
                             polls poll(). roomItem(item) feeds a room item in; finish() and
                             rematch() are host only (set_room_status 'finished', then
                             'playing' again with a new seed, round + 1); start() shares
-                            its code with rematch. Item 46: createOnlineLobby({ memory })
+                            its code with rematch. A refused Start reads onlineErrTooSoon
+                            (the server's race-a-minute pacing), a paced link onlineLinkLimited.
+                            The join keypad (ui/tournamentPanel.js keypadKey) drops a repeated Enter (one join, AUD-142);
+                            digits and Backspace still repeat. Item 46: createOnlineLobby({ memory })
                             (get / set / clear of the race's room code, the panel's
                             raceMemory over LEADERBOARD.onlineRaceKey): remember() at the
                             hand-off, and a code still there at creation, or before a
@@ -1495,7 +1505,10 @@ src/
                             Phaser/DOM/timers: raceStartPlan (room → seed, names, seat,
                             agreed width, round), countdownStep, localPhase, linkQuality,
                             createRaceFeed({ now, send, since }) (what goes on the wire from
-                            the local half and the other seat rebuilt from what arrives;
+                            the local half and the other seat rebuilt from what arrives; at most one
+                            `flap` per TUNING.online.flapMinMs (200 ms): faster taps fold
+                            into one sent at the window's end with the poop's state then,
+                            dropped if the run is not flying (AUD-144);
                             `since` drops messages stamped before this round's GO; the
                             run's end is fixed once (doneFixed()), its pos and done go
                             each frame until the transport takes done (doneSent(),
@@ -1508,7 +1521,9 @@ src/
                             tie; it goes again at once after a refused send and every
                             TUNING.online.race.claimResendMs until the line settles
                             (verdictWaitMs); the host answers a repeat with its verdict,
-                            and a guest that knows the verdict claims nothing; the host takes its own line after
+                            at most once per half a claimResendMs (AUD-147), and a guest that
+                            knows the verdict claims nothing; the host answers a guest's pause
+                            word with a resume at most once per half a heartbeatMs; the host takes its own line after
                             TUNING.online.race.firstGraceMs with no earlier claim), one
                             `first` per line; `ready` marks keyed by the level they start,
                             resent every readyResendMs; both ready and the host in its break
@@ -1521,7 +1536,12 @@ src/
                             (a standing ask repeats every readyResendMs).
                             createFieldFit({ mine, theirs, heard, now, send, until })
                             (item 14, AUD-097): from the race's start to its GO each
-                            side sends `width` every widthResendMs; the newest heard
+                            side sends `width` (with `heard`: whether it has the other's) every
+                            widthResendMs only until it hears the other's, then goes quiet and
+                            answers only a width whose `heard` is false, at most one per
+                            widthResendMs (AUD-143: a rewound race waiting for Ready sends
+                            none; a width carried over a restart sets the field but does not
+                            count as heard); the newest heard
                             replaces the presence width; agreedWidth of the two is
                             fieldW(); receive() is true when it moved; peer() the
                             newest heard; nothing is sent from GO on.
@@ -3030,7 +3050,18 @@ db/schema.sql               Supabase schema: scores table (player_id = save-code
                             (one row), admin_set_online_open(bool), owner only; closed means
                             'online closed' on the room functions, a race running keeps going.
                             Rematch pacing: set_room_status('playing') waits 60 s from the
-                            last GO ('rate limited'). Races follow trust in a merge: a side
+                            last GO ('rate limited'), and (5.2b, AUD-137) a host device
+                            starts one race a minute across rooms (index matches_host_uid);
+                            housekeeping deletes refused, disputed and abandoned races 30
+                            days old, agreed ones stay. Item 68 pacing (5.2b): join_room
+                            paces seated joins, c_device_oks a device and c_ip_oks an IP in
+                            10 minutes (AUD-136); answer_guest refuses a decline within 2 s
+                            of its code's minting ('rate limited'); link_online_player
+                            paces links of a player the device was not linked to, c_links
+                            (10) an hour, in online_links (RLS on, no grant, kept an hour;
+                            a refresh of its own player never; AUD-138); server_now is
+                            security definer, and a test holds every online function to
+                            definer with search_path = '' (AUD-141). Races follow trust in a merge: a side
                             that loses trust in fold_player leaves its races under the id
                             folded away; when nobody loses trust every race moves; seat, self-
                             race and history checks compare resolved ids. M1 rule 6 (2.4e): a
@@ -3394,7 +3425,9 @@ tests/                      node --test (schema.test.js, schemaOnline.test.js, s
                             telemetry; 3.7: a waiting device's report, each seat's trust
                             as reported), online_history, the off switch, rematch pacing,
                             races following trust in a merge, the fourth waiting device
-                            (2.4e), the boards' posts and race runs
+                            (2.4e), the boards' posts and race runs; 5.2b: the pacing of
+                            join_room, answer_guest, set_room_status and link_online_player,
+                            the 30-day race cleanup, every online function definer
   schemaFriends.test.js     Plan 39, 3.1 in PGlite: friends, blocks, peer handles (per viewer,
                             no ids out), eligibility (3.7: both seats paired as reported), merges of friend data following trust,
                             AUD-103 seniority (online_trust.since), the upgrade backfill, the
@@ -3417,11 +3450,12 @@ tests/                      node --test (schema.test.js, schemaOnline.test.js, s
   online.test.js            src/online.js: the protocol and its validation, stale and
                             reordered messages, the derived version, codes, the clock,
                             the ghost against a 60 Hz sender over every netsim profile
-                            (and 2 Hz vs 5 Hz keyframes, item 25), the field width pairs,
+                            (and 2 Hz vs 5 Hz keyframes, item 25), the field width pairs (5.2b: quiet once heard),
                             the room state machine
   onlineNet.test.js         src/onlineNet.js: a fake client on a virtual clock (sign-in,
                             stored and dead sessions, RPC errors, the clock, join, caps,
-                            rejoin, presence limits, verified room events), and the real
+                            rejoin, presence limits, verified room events; 5.2b: a close while the first
+                            load is out, signIn({ create: false })), and the real
                             vendored bundle on a fake fetch (online RPCs carry the Bearer
                             token; leaderboard, daily and tournament calls never do)
   onlineFriends.test.js     src/onlineFriends.js: the lists and their sort, the opponents (a
@@ -3471,7 +3505,8 @@ tests/                      node --test (schema.test.js, schemaOnline.test.js, s
                             linger; both seats, two sequences, plus two controls (2.7, AUD-107)
   onlineRace.test.js        src/onlineRace.js: start plan, countdown, the feed, the referee
                             (first on server time, the ready count, a ready taken back,
-                            the rematch ask, the held referee), raceRoomItem; two simulated peers racing
+                            the rematch ask, the held referee; 5.2b AUD-143, AUD-144, AUD-147: the flap ceiling,
+                            the answer rules, the quiet width), raceRoomItem; two simulated peers racing
                             through a level break to the end; pauseOverlay, createWakeLock, the
                             feed's hold / release / again
   onlinePause.test.js       src/onlineRace.js's createRacePause: two devices with the real
@@ -3819,7 +3854,10 @@ tools/
   online_test_link.mjs      Prints the ?onlinetest phone link for a test project from an env
                             file (plan 39, 1.6c); the repo never holds a project's URL or key.
   online_live_check.mjs     The live check of the online schema (plan 39): --env <file> for a test
-                            project, --live for the live project after the paste. Four anonymous
+                            project, --live for the live project after the paste. Throwaway ids start
+                            CHECK_ID_PREFIX ('chk39'); TEARDOWN_SQL also deletes their matches,
+                            online_trust and online_profiles rows and is printed at every end,
+                            a pass included (AUD-140). Four anonymous
                             sessions, fourteen PASS/FAIL lines (line 12: friends and status; line 13:
                             invites; line 14: teardown; a test project expects 13 of 14, live 14 of 14); each session unlinks itself; never a
                             secret key. tests/onlineLiveCheck.test.js covers it.
@@ -3840,7 +3878,9 @@ tools/
                             not start a run. It launches headless Chrome (CHROME env
                             overrides the path), drives the running game over the
                             DevTools protocol through globalThis.__flappy (opted in
-                            before load, so any --url works), and fails
+                            before load, so any --url works; waitOver() waits for the Over
+                            scene, the game-clock delay then a poll of 5 s at most, instead
+                            of a fixed time after a death: AUD-148), and fails
                             on a page exception, a stalled __flappy.loop.frame, or an
                             overlay that does not open / close. Covers every overlay in
                             OVERLAYS (tests/tools.test.js keeps that list equal to
