@@ -1376,8 +1376,10 @@ src/
                             <code>` stored in this browser (encodeDevProject /
                             devProjectFrom; `=off` forgets it) under its own session and
                             trust keys (DEV_PROJECT_KEY). ONLINE_RPCS includes finish_match
-                            and online_history; the server's plain messages include
-                            'online closed', 'no match' and 'bad result'.
+                            and online_history, plus friend_list, send_friend_request,
+                            respond_friend_request, remove_friend, block_user and
+                            unblock_user (3.1); the server's plain messages include
+                            'online closed', 'no match', 'bad result' and 'bad peer'.
                             tests/onlineNet.test.js, tests/onlineDevProject.test.js.
   onlineAccount.js          Online race (🌐, plan 39, 1.6a) the sign-in side on top of
                             createOnlineNet, NO Phaser/DOM: enter (sign in, link the
@@ -2910,10 +2912,26 @@ db/schema.sql               Supabase schema: scores table (player_id = save-code
                             (removed as Remove removes one), never a paired device or one
                             seated in a race; 'too many devices waiting' now means all three
                             are racing. tests/schemaOnline.test.js.
+                            Friends (3.1, tests/schemaFriends.test.js): tables friendships,
+                            blocks, friend_asks and online_trust, readable by no role, keyed
+                            on resolved player ids. A device names another player only by a
+                            peer handle (online_peer: per viewer, from the pepper; no player
+                            id leaves the server), found only among the viewer's agreed-race
+                            opponents, friendship rows and own blocks (online_peer_find). No
+                            online function may find a player by a name or search (the guard
+                            test). friend_list, send_friend_request, respond_friend_request,
+                            remove_friend, block_user, unblock_user: trusted device only
+                            ('bad peer' for a malformed handle). Eligible = an agreed race
+                            under both current ids, no block either way, neither hidden
+                            (friend_eligible, at every ask). A merge moves friend data
+                            following trust, as it moves races (online_fold_friends), and
+                            the online name follows trust. Merge seniority is
+                            online_trust.since (the first trusted link, kept through a Clear).
+                            online_history() adds `peer` to the rival line and each race.
                             PL/pgSQL gotcha: a bare CASE inside
                             `IF … THEN` ends the condition at its THEN; parenthesise.
 
-tests/                      node --test (schema.test.js, schemaOnline.test.js, pilot.test.js,
+tests/                      node --test (schema.test.js, schemaOnline.test.js, schemaFriends.test.js, pilot.test.js,
                             eduBoardSync.test.js and schemaCheck.test.js need `npm install`: PGlite). Each file is self-describing:
   field.test.js             fieldWidth (phone, desktop, 2:1 cap, bad input, even),
                             uiColumn, poopX, the x0 shift of trayLayout /
@@ -3195,6 +3213,10 @@ tests/                      node --test (schema.test.js, schemaOnline.test.js, p
                             telemetry), online_history, the off switch, rematch pacing,
                             races following trust in a merge, the fourth waiting device
                             (2.4e), the boards' posts and race runs
+  schemaFriends.test.js     Plan 39, 3.1 in PGlite: friends, blocks, peer handles (per viewer,
+                            no ids out), eligibility, merges of friend data following trust,
+                            AUD-103 seniority (online_trust.since), the upgrade backfill, the
+                            guard against finding a player by a name or search
   runLog.test.js            submit_runs and run_log in PGlite as anon: owner-only, rejects
                             counted, a resend stored once, 5 s pacing, 90-day purge, the
                             merge; plan 39: mode 'race' accepted and treated like single
@@ -3982,7 +4004,8 @@ Commits follow `type(scope): summary` (`feat`, `fix`, `docs`, `chore`, `test`, `
   A new client event goes in `ONLINE_EVENTS` (which moves `protocolVersion`, so
   older clients are told to update) and never reuses a server event name.
   A new online function goes in `ONLINE_RPCS` as well as the schema header
-  (`tests/onlineNet.test.js` keeps them equal). The server's event names on
+  (`tests/onlineNet.test.js` keeps them equal). Friends (3.1) name another player only by
+  a peer handle (`peer` in `online_history()` and `friend_list()`), never an id or a name. The server's event names on
   `room:<code>` are hints: the transport confirms them with `room_state`, since a
   seated peer can broadcast those names too.
   The sign-in side (enter, claim, devices, pairing, leave) lives in
@@ -4050,7 +4073,7 @@ Commits follow `type(scope): summary` (`feat`, `fix`, `docs`, `chore`, `test`, `
   `grant  execute … to authenticated;` pair), is `security definer` with `set search_path = ''` and
   qualified names, checks `auth.uid()` first, and is listed in the header's `--   * online name(...)`
   list (tests/schema.test.js checks the anon and online lists against the grant lines;
-  tests/schemaOnline.test.js checks the privileges; `finish_match` and `online_history` follow this rule). A failure the server counts is returned as
+  tests/schemaOnline.test.js checks the privileges; `finish_match` and `online_history` follow this rule; no online function may take a name or search to find a player, which tests/schemaFriends.test.js guards; friend functions are for a trusted device and their tables are readable by no role). A failure the server counts is returned as
   `{ ok: false, error }`, because a raise would roll the count back. The game's anon functions stay
   revoked from authenticated (a session token sent to one is refused).
 - New achievement → one `ACHIEVEMENTS` entry in `src/achievements.js` (a new,
