@@ -613,8 +613,8 @@ test('raceRoomItem: only the room\'s confirmed status for a race or its end reac
  * line of each level at `lines[level - 1]`, waits in its break and taps ready `tapAfter` ms after the
  * beat, ends at the last line; the referee's effects applied as OnlineRace applies them.
  */
-function simHalf(i, d, { speeds, lines, tapAfter }) {
-  const h = { ...half({ distance: 0, speed: speeds[0] }), arrivedAt: null, tapped: false, begins: [], doneSent: false };
+function simHalf(i, d, { speeds, lines, tapAfter, flapEveryMs = 0 }) {
+  const h = { ...half({ distance: 0, speed: speeds[0] }), arrivedAt: null, tapped: false, begins: [], doneSent: false, flaps: 0, flapClock: 0 };
   const last = lines.length;
   return {
     h,
@@ -622,6 +622,11 @@ function simHalf(i, d, { speeds, lines, tapAfter }) {
       const ref = d.refs[i];
       if (h.state === 'playing') {
         h.distance += h.speed * (dt / 1000);
+        // 5.1's quota test: a tap every flapEveryMs mid-run (0: none), which the feed sends as a flap.
+        if (flapEveryMs && (h.flapClock += dt) >= flapEveryMs) {
+          h.flapClock -= flapEveryMs;
+          h.flaps += 1;
+        }
         h.pipesPassed = Math.floor(h.distance / 300);
         h.score = h.pipesPassed;
         if (h.distance >= lines[h.level - 1]) {
@@ -978,4 +983,35 @@ test('the field fit: never wider than this side; its own width before it hears a
   assert.equal(fit.receive(w(1000, 40, 1)), false, 'older: ignored');
   assert.equal(fit.fieldW(), 800);
   assert.equal(fit.receive({ kind: 'peer', event: 'pos', msg: { seq: 3, t: 60, sid: 'x' } }), false, 'not a width');
+});
+
+// --- 5.1: the quota (Appendix A's cost notes; the Verification section's "record the real number in 5.1") ---
+
+// 0.3 measured the Realtime bill on the test project: each broadcast is 1 sent + 1 received, and its
+// 5 Hz keyframes + flaps came to 1,541 billed messages per match-minute (39-logs/0.3-spike.md), so
+// about 1.4 taps a second. The shipped protocol (2 Hz keyframes, item 34) over a whole race, every
+// message the feed and the referee send counted: well under 0.3's figure, and a match-minute bill
+// that leaves Free's 2 M a month at least 2,000 match-minutes. Measured 22 Nov: 781 billed per
+// match-minute (pos 240, flap 170, control 11 over 1.08 min), about 2,560 match-minutes on Free.
+// Real races' own numbers: matches.host_stats / guest_stats (sent, received) on the test project.
+test('5.1 quota: a minute-long race at about 1.4 taps a second bills at most 1,000 messages per match-minute (0.3 measured 1,541 at 5 Hz); keyframes stay at 2 Hz', () => {
+  const tap = 700; // ms between taps: 0.3's 1,541 at 5 Hz less its keyframes is about 1.4 taps a second
+  const { d, halves } = raceToEnd({
+    host: { speeds: [300, 300], lines: [9000, 18000], tapAfter: 300, flapEveryMs: tap },
+    guest: { speeds: [295, 305], lines: [9000, 18000], tapAfter: 600, flapEveryMs: tap },
+  });
+  assert.ok(halves.every((s) => s.h.doneSent), 'both ended');
+  const all = [...d.sent[0], ...d.sent[1]];
+  const span = Math.max(...all.map((m) => m.t)) - Math.min(...all.map((m) => m.t));
+  const minutes = span / 60_000;
+  assert.ok(minutes > 0.9 && minutes < 1.3, `about a minute (${minutes.toFixed(2)})`);
+  const billedPerMin = (all.length * 2) / minutes; // each broadcast: 1 sent + 1 received
+  const byEvent = Object.fromEntries([...new Set(all.map((m) => m.event))].map((e) => [e, all.filter((m) => m.event === e).length]));
+  assert.ok(billedPerMin <= 1000, `billed per match-minute ${billedPerMin.toFixed(0)} (${JSON.stringify(byEvent)})`);
+  for (const i of [0, 1]) {
+    const pos = d.events(i, 'pos').length / minutes / 60;
+    assert.ok(pos <= 1000 / T.online.keyframeMs + 0.2, `device ${i}: ${pos.toFixed(2)} pos a second, the 2 Hz keyframes`);
+    assert.ok(d.events(i, 'flap').length >= 60, `device ${i}: the taps went as flaps (${d.events(i, 'flap').length})`);
+  }
+  assert.ok(2_000_000 / billedPerMin >= 2000, `Free's 2 M a month: ${Math.floor(2_000_000 / billedPerMin)} match-minutes`);
 });

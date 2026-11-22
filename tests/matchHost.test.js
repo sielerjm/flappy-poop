@@ -8,7 +8,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { El, installDom } from './support/dom.js';
-import { playScene, registry } from './support/scenes.js';
+import { absorb, playScene, registry } from './support/scenes.js';
 import { FIELD, TUNING as T } from '../src/config.js';
 
 const body = installDom();
@@ -234,6 +234,23 @@ test('launch with 👥 on: the split screen where two halves fit (the Versus sce
   assert.equal(isTournamentPanelOpen(), false);
   assert.equal(started.length, 1, '✕ leaves this Play as it is');
   closeTournamentPanel();
+});
+
+// 5.1 (Appendix A: "🌐 only appears when two-player is on; local split-screen unchanged with 🌐 off"):
+// 🌐 lives in the tournament window, and with 👥 off Play never opens it, wide or phone: the tap
+// starts a one-player run, as it always has (no Versus, no window, nothing online).
+test('5.1 launch with 👥 off: a one-player run at every size, never the Versus scene nor the window that holds 🌐', () => {
+  for (const fits of [true, false]) {
+    const started = [];
+    const game = fakeGame({ versus: { leave() {} }, active: false });
+    const s = playScene({ launching: false, state: 'ready', versusOn: false, match: null, focus: { hide() {} }, scene: { start: (k, d) => started.push([k, d]) }, game, locale: 'en', isTestMode: () => false, getSaveState: () => ({ name: '' }), educationOn: false, bob: absorb(), poop: {}, tweens: absorb(), setReadyUiVisible() {}, setPoopTexture() {} });
+    s.splitFits = () => fits;
+    s.versusOffered = () => true;
+    s.launch();
+    assert.deepEqual(started, [], `${fits ? 'wide' : 'phone'}: no Versus`);
+    assert.equal(isTournamentPanelOpen(), false, `${fits ? 'wide' : 'phone'}: no window, so no 🌐`);
+    assert.equal(s.launching, true, `${fits ? 'wide' : 'phone'}: the run starts`);
+  }
 });
 
 // Plan 39, 1.7c (item 45's finding): Play steps the level on before it asks its host who was first, so

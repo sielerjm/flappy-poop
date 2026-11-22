@@ -11,7 +11,7 @@ import { absorb, fakeStorage, playScene, registry } from './support/scenes.js';
 import { LEADERBOARD, TUNING as T } from '../src/config.js';
 import { createResumeStore, resumeKey } from '../src/onlineRace.js';
 import { raceOutcome } from '../src/tournament.js';
-import { catalogFor } from '../src/i18n.js';
+import { catalogFor, t } from '../src/i18n.js';
 
 const { OnlineRace } = await import('../src/scenes/OnlineRace.js');
 
@@ -526,6 +526,45 @@ function overRace(opts) {
   s.result = { boxes: { share: { id: 'share', x: 220, y: 890, width: 240, height: 88 }, home: { id: 'home', x: 500, y: 890, width: 240, height: 88 } }, rematch: fakeButton(), status: fakeText(), openedAt: 0, shown: null };
   return k;
 }
+
+// 5.1 (Appendix A: "Correct winner, including tie"): equal points go down the split-screen rules
+// (D3: fewer crashes, more 🏁, first out), each device seeing itself as slot 0, so the two agree; the
+// panel heads with the winner and names the tiebreak; all equal (no first out, e.g. both runs
+// reported without a final line) is a draw on both.
+test('5.1 a tie on points: crashes, then 🏁, then first out decide it the same way on both devices, the panel names the tiebreak; all equal is a Draw on both', () => {
+  const base = { ended: true, score: 30, deaths: 1, levelWins: 2, finalFirst: false };
+  const cases = [
+    ['deaths', { ...base }, { ...base, deaths: 2, finalFirst: true }, 0, 'tournamentByDeaths'],
+    ['levelWins', { ...base, levelWins: 3 }, { ...base, finalFirst: true }, 0, 'tournamentByLevelWins'],
+    ['finalFirst', { ...base }, { ...base, finalFirst: true }, 1, 'tournamentByFinalFirst'],
+    ['draw', { ...base }, { ...base }, null, null],
+  ];
+  for (const [by, a, b, winner, line] of cases) {
+    const seen = [];
+    for (const [seat, mine, theirs] of [['host', a, b], ['guest', b, a]]) {
+      const k = drawnRace({ seat });
+      const { s, timers } = k;
+      const texts = [];
+      const add = absorb();
+      s.add = new Proxy(add, { get: (_t, key) => (key === 'text' ? (_x, _y, str) => (texts.push(str), absorb()) : add[key]) });
+      Object.assign(s.match.slots[0], mine);
+      Object.assign(s.match.slots[1], theirs);
+      s.feed.doneSent = () => true;
+      s.checkOver();
+      assert.equal(s.match.status, 'over', `${by} ${seat}`);
+      assert.equal(s.outcome.by, by, `${by} ${seat}`);
+      seen.push(s.outcome.winner);
+      timers.find((x) => x.ms === T.deathToOverMs).fn();
+      const [, them] = s.plan.names;
+      const head = s.outcome.winner == null ? t('en', 'versusDraw') : s.outcome.winner === 0 ? t('en', 'onlineYouWin') : t('en', 'versusWins').replace('{name}', them);
+      assert.ok(texts.includes(head), `${by} ${seat}: the panel heads "${head}" (${JSON.stringify(texts.slice(0, 3))})`);
+      if (line) assert.ok(texts.includes(t('en', line)), `${by} ${seat}: the tiebreak named`);
+      else assert.ok(!['tournamentByDeaths', 'tournamentByLevelWins', 'tournamentByFinalFirst'].some((key) => texts.includes(t('en', key))), `${by} ${seat}: no tiebreak line on a draw`);
+    }
+    assert.equal(seen[0], winner, `${by}: the host's verdict`);
+    assert.equal(seen[1], winner == null ? null : 1 - winner, `${by}: the guest names the same player`);
+  }
+});
 
 test('the panel\'s Rematch: after the tap lockout it asks (Rematch ✓, "Waiting for <name>…"), again takes it back; the other asking first is gold and breathes', () => {
   const k = overRace();

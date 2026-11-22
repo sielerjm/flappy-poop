@@ -6,13 +6,14 @@
 // (the ready screen as the guest, or "That invite has ended."), and nothing outside online mode.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { readdirSync, readFileSync } from 'node:fs';
 import { fakeGame, installPanelDom, textOf } from './support/panelDom.js';
 import { TUNING } from '../src/config.js';
 import { t } from '../src/i18n.js';
 import { createStatusBeat } from '../src/onlineFriends.js';
 
 const body = installPanelDom();
-const { openTournamentPanel, closeTournamentPanel } = await import('../src/ui/tournamentPanel.js');
+const { openTournamentPanel, closeTournamentPanel, isTournamentPanelOpen } = await import('../src/ui/tournamentPanel.js');
 const el = (id) => body.find(id);
 const flush = async () => {
   for (let i = 0; i < 6; i += 1) await new Promise((r) => setTimeout(r, 0));
@@ -123,6 +124,41 @@ test('nothing about invites is read before 🌐 links; once linked: invite_list,
   closeTournamentPanel();
   await flush();
   assert.ok(k.calls.some((c) => c[0] === 'close'), 'leaving 🌐 closes the transport, the topic with it');
+});
+
+// 5.1 (Appendix A: "No invite banners, badges or notifications outside online mode"): invites are
+// read and drawn only by the 🌐 window; once it closes nothing keeps reading them or listening on
+// the topic, so no ✉️ can reach the home, a run or any other screen.
+test('5.1 out of 🌐 nothing about invites runs: closing the window stops every tick, the topic and transport close, and no invite_list is read again', async () => {
+  const k = setup();
+  k.open();
+  await flush();
+  k.pollTicks(3);
+  await flush();
+  const read = k.rpcs('invite_list').length;
+  assert.ok(read >= 1);
+  closeTournamentPanel();
+  await flush();
+  assert.ok(k.calls.some((c) => c[0] === 'close'), 'the transport, the topic with it');
+  k.advance(10 * 60_000);
+  k.pollTicks(50);
+  await flush();
+  assert.equal(k.rpcs('invite_list').length, read, 'no read once out of 🌐');
+  assert.equal(isTournamentPanelOpen(), false, 'the window, the only place a ✉️ is drawn, is hidden');
+  assert.equal(el('tournament-panel').hidden, true);
+});
+
+test('5.1 only the 🌐 window\'s modules name invites: no scene and no other panel reads invite_list, imports the invites module or draws ✉️', () => {
+  const online = new Set(['ui/tournamentPanel.js', 'ui/onlineFriendsViews.js', 'ui/onlineLobbyViews.js', 'onlineInvites.js', 'onlineLobby.js', 'onlineNet.js']);
+  const text = new Set(['i18n.js', 'changelog.js']); // the words themselves
+  const root = new URL('../src/', import.meta.url);
+  const files = readdirSync(root, { recursive: true }).filter((f) => f.endsWith('.js'));
+  assert.ok(files.includes('scenes/Play.js') && files.includes('ui/tournamentPanel.js'), 'the walk sees the scenes and the panels');
+  for (const f of files) {
+    if (online.has(f) || text.has(f)) continue;
+    const src = readFileSync(new URL(f, root), 'utf8');
+    for (const needle of ['invite_list', 'onlineInvites', 'createInvites', '✉️', 'openTopic']) assert.ok(!src.includes(needle), `${f} names ${needle}`);
+  }
 });
 
 test('a device waiting to pair: invite_list refused, no topic, no ✉️', async () => {
