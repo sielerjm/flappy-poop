@@ -1,7 +1,8 @@
 // db/schema.sql's invites (plan 39, 4.1) run in PGlite. A paired device invites a friend in online mode
 // (send_invite, by the peer handle its lists gave it) into its own open room; the friend's paired devices
-// see it (invite_list, and an 'invite' event the server sends on the player's own private topic
-// user:<player id>, which nobody else reads and nobody writes) and take the guest's seat with one tap
+// see it (invite_list, and an 'invite' event the server sends on the player's own private topic,
+// user:<handle>, a name only its paired devices are given and only they read, which nobody writes) and
+// take the guest's seat with one tap
 // (accept_invite: no code, no Let in, no join cap), or decline it; the sender cancels it. An invite lives
 // INVITE_TTL (2 minutes, stored on the row) and only while its room is open under the device that sent
 // it, that device is in online mode and the two are still friends; anything else reads 'expired', on
@@ -132,6 +133,9 @@ const invite = async (db, from, to) => call(db, from, 'send_invite', [await peer
 const invites = (db, d) => call(db, d, 'invite_list');
 const accept = (db, d, inv) => call(db, d, 'accept_invite', [inv]);
 const msgs = (db, topic) => db.query('select event, payload, private from realtime.messages where topic = $1 order by seq', [topic]).then((r) => r.rows);
+/** The player's own topic, as invite_list gives it to their paired devices (4.1r: a handle, not the id). */
+const topicOf = (db, d) => db.query('select public.online_user_topic($1) as t', [d.player]).then((r) => r.rows[0].t);
+const userMsgs = async (db, d) => msgs(db, await topicOf(db, d));
 const clearMsgs = (db) => db.query('delete from realtime.messages');
 const inviteRow = (db, inv) => db.query('select * from public.invites where id = $1', [inv]).then((r) => r.rows[0] ?? null);
 const roomRow = (db, code) => db.query('select * from public.rooms where code = $1', [code]).then((r) => r.rows[0] ?? null);
@@ -166,7 +170,8 @@ test('invites are readable and writable by no role; only a paired device may cal
     const r = (await db.query(`select has_table_privilege($1, 'public.invites', 'select') or has_table_privilege($1, 'public.invites', 'insert')
       or has_table_privilege($1, 'public.invites', 'update') or has_table_privilege($1, 'public.invites', 'delete') as any`, [role])).rows[0].any;
     assert.equal(r, false, `${role} has nothing on invites`);
-    for (const fn of ['public.online_invite_live(public.invites)', 'public.online_invites_end(uuid)', 'public.online_invite_json(public.invites, text)']) {
+    for (const fn of ['public.online_invite_live(public.invites)', 'public.online_invites_end(uuid)', 'public.online_invite_json(public.invites, text)',
+      'public.online_user_topic(text)', 'public.online_invite_told(uuid, text, text, text)', 'public.online_invite_friends(text, text)']) {
       const x = (await db.query('select has_function_privilege($1, $2, \'execute\') as x', [role, fn])).rows[0].x;
       assert.equal(x, false, `${role} cannot call ${fn}`);
     }
@@ -181,7 +186,7 @@ test('invites are readable and writable by no role; only a paired device may cal
     await assert.rejects(as(db, pending.uid, `select public.${fn}(${ph})`, args), /not trusted/, `${fn}: a pending device (M1 rule 2: invites are private)`);
     await assert.rejects(anonCall(db, `select public.${fn}(${ph})`, args), /permission denied/, `${fn}: anon`);
   }
-  assert.deepEqual(await invites(db, owner), { incoming: [], outgoing: [] });
+  assert.deepEqual(await invites(db, owner), { incoming: [], outgoing: [], topic: await topicOf(db, owner) });
   const sig = (await db.query(`select p.proname as name, pg_get_function_identity_arguments(p.oid) as args from pg_proc p
     join pg_namespace n on n.oid = p.pronamespace where n.nspname = 'public' and p.proname like '%invite%' order by 1`)).rows
     .filter((f) => !f.name.startsWith('online_invite') && f.name !== 'admin_set_invite') // plan 28's education invite is another thing
@@ -198,6 +203,24 @@ test('INVITE_TTL is send_invite\'s one constant, 2 minutes, carried on every row
   const fresh = [...SQL.matchAll(/c_fresh\s+constant interval := interval '(\d+) seconds';/g)].map((m) => Number(m[1]));
   assert.equal(fresh.length, 2, 'online_state and online_invite_live');
   assert.equal(fresh[0], fresh[1]);
+});
+
+test('the header\'s undo line for invites restores every function that still uses what it drops (4.1r: join_room was missing)', () => {
+  const undo = SQL.match(/^--   undo invites \(plan 39, 4\.1\)[\s\S]*?(?=\n--   [a-z])/m)?.[0];
+  assert.ok(undo, 'the undo line');
+  const flat = undo.replace(/\n--\s+/g, ' ');
+  const [dropping, rest] = flat.split(/;\s*restore\s+/);
+  const [restoreList, after] = rest.split(/\s+from git/);
+  const restored = new Set(restoreList.match(/[a-z_]+/g).filter((w) => w !== 'and'));
+  const dropped = new Set([...`${dropping} ${after}`.matchAll(/public\.([a-z_]+)\(/g)].map((m) => m[1]));
+  const users = [];
+  for (const m of SQL.matchAll(/^create or replace function public\.([a-z_]+)\([\s\S]*?^\$\$;/gm)) {
+    const [body, name] = [m[0], m[1]];
+    if (dropped.has(name)) continue;
+    if ([...dropped].some((f) => body.includes(`public.${f}(`)) || /public\.invites\b/.test(body)) users.push(name);
+  }
+  assert.deepEqual(users.sort(), ['join_room', 'online_can', 'online_cleanup', 'online_unseat']);
+  for (const name of users) assert.ok(restored.has(name), `${name} is restored before what it calls is dropped`);
 });
 
 // ---------------------------------------------------------------------------
@@ -223,11 +246,13 @@ test('a paired device invites an online friend into its own open room: the frien
   const row = await inviteRow(db, sent.invite);
   assert.deepEqual([row.from_uid, row.from_player, row.to_player, row.room_code, row.status], [a.uid, a.player, b.player, sent.code, 'pending']);
   const shown = { invite: sent.invite, peer: await peerOf(db, b, a), name: 'IvA', sent_at: sent.sent_at, expires_at: sent.expires_at };
-  assert.deepEqual(await msgs(db, `user:${b.player}`), [{ event: 'invite', private: true, payload: shown }], 'the friend\'s topic, from the server');
-  assert.deepEqual(await msgs(db, `user:${a.player}`), [], 'the sender is told nothing on its own');
-  for (const d of [b, b2]) assert.deepEqual(await invites(db, d), { incoming: [shown], outgoing: [] }, 'each paired device of the friend lists it');
-  assert.deepEqual(await invites(db, a), { incoming: [], outgoing: [{ invite: sent.invite, peer: await peerOf(db, a, b), name: 'IvB', status: 'pending', sent_at: sent.sent_at, expires_at: sent.expires_at }] });
-  const seen = JSON.stringify([sent, await msgs(db, `user:${b.player}`), await invites(db, a), await invites(db, b)]);
+  assert.deepEqual(await userMsgs(db, b), [{ event: 'invite', private: true, payload: shown }], 'the friend\'s topic, from the server');
+  assert.deepEqual(await userMsgs(db, a), [], 'the sender is told nothing on its own');
+  for (const d of [b, b2]) assert.deepEqual(await invites(db, d), { incoming: [shown], outgoing: [], topic: await topicOf(db, b) }, 'each paired device of the friend lists it, and is given its topic');
+  assert.deepEqual(await invites(db, a), { incoming: [], outgoing: [{ invite: sent.invite, peer: await peerOf(db, a, b), name: 'IvB', status: 'pending', sent_at: sent.sent_at, expires_at: sent.expires_at }], topic: await topicOf(db, a) });
+  assert.match(await topicOf(db, b), /^user:[0-9a-f]{32}$/);
+  assert.notEqual(await topicOf(db, a), await topicOf(db, b));
+  const seen = JSON.stringify([sent, await userMsgs(db, b), await invites(db, a), await invites(db, b)]);
   for (const p of [a.player, b.player]) assert.ok(!seen.includes(p), 'no player id leaves the server');
 });
 
@@ -337,8 +362,8 @@ test('one live invite per sending device and per pair: a resend, another friend 
   assert.notEqual(again.invite, first.invite);
   assert.equal((await inviteRow(db, first.invite)).status, 'cancelled');
   const shown = { invite: again.invite, peer: await peerOf(db, b, a), name: 'OnA', sent_at: again.sent_at, expires_at: again.expires_at };
-  assert.deepEqual(await msgs(db, `user:${b.player}`), [update(first.invite, 'cancelled'), { event: 'invite', private: true, payload: shown }]);
-  assert.deepEqual(await msgs(db, `user:${a.player}`), [update(first.invite, 'cancelled')]);
+  assert.deepEqual(await userMsgs(db, b), [update(first.invite, 'cancelled'), { event: 'invite', private: true, payload: shown }]);
+  assert.deepEqual(await userMsgs(db, a), [update(first.invite, 'cancelled')]);
   assert.deepEqual((await invites(db, b)).incoming, [shown]);
 
   const toC = await invite(db, a, c);
@@ -420,6 +445,17 @@ test('invites are capped: c_minute a minute and c_day a day per player, c_pair_h
   assert.equal((await invite(db, a, b)).ok, true, 'an hour later');
 
   await fresh();
+  for (let i = 0; i < cap('c_minute'); i += 1) assert.equal((await invite(db, a, i % 2 ? b : c)).ok, true);
+  assert.deepEqual(await invite(db, a, b), { ok: false, error: 'rate limited' });
+  await call(db, a, 'unlink_online_player'); // its anonymous user goes; a new one links as the same player
+  const again = await addUser(db);
+  await link(db, again, a.player, a.name);
+  assert.equal((await db.query('select trusted from public.online_players where uid = $1', [again])).rows[0].trusted, true, 'its only device: trusted at once');
+  assert.deepEqual(await call(db, again, 'send_invite', [await peerOf(db, a, b)]), { ok: false, error: 'rate limited' },
+    'a device that unlinks and links again starts no new count (4.1r should-fix 1)');
+  a.uid = again;
+
+  await fresh();
   await plant(c, cap('c_day') - 1, 2 * 3600);
   assert.equal((await invite(db, a, b)).ok, true, 'the last of the day');
   await db.query("update public.invites set sent_at = now() - interval '2 minutes' where to_player = $1", [b.player]);
@@ -477,8 +513,8 @@ test('the sending device leaving its room (leave_room, create_room, or any way o
   await clearMsgs(db);
   await call(db, a, 'leave_room', [sent.code]);
   assert.equal((await inviteRow(db, sent.invite)).status, 'cancelled');
-  assert.deepEqual(await msgs(db, `user:${b.player}`), [update(sent.invite, 'cancelled')]);
-  assert.deepEqual(await msgs(db, `user:${a.player}`), [update(sent.invite, 'cancelled')]);
+  assert.deepEqual(await userMsgs(db, b), [update(sent.invite, 'cancelled')]);
+  assert.deepEqual(await userMsgs(db, a), [update(sent.invite, 'cancelled')]);
   assert.deepEqual((await invites(db, a)).outgoing.map((i) => i.status), ['cancelled']);
 
   const next = await invite(db, a, b);
@@ -486,14 +522,14 @@ test('the sending device leaving its room (leave_room, create_room, or any way o
   await clearMsgs(db);
   await call(db, a, 'create_room');
   assert.equal((await inviteRow(db, next.invite)).status, 'cancelled', 'a new room by code: the old one goes, and its invite');
-  assert.deepEqual(await msgs(db, `user:${b.player}`), [update(next.invite, 'cancelled')]);
+  assert.deepEqual(await userMsgs(db, b), [update(next.invite, 'cancelled')]);
 
   const taken = await invite(db, a, b);
   const x = await device(db, 'LeX');
   await clearMsgs(db);
   assert.equal((await call(db, x, 'join_room', [taken.code])).status, 'asked', 'someone with the code takes the seat first');
   assert.equal((await inviteRow(db, taken.invite)).status, 'cancelled', 'the room\'s one seat is gone, and the invite with it');
-  assert.deepEqual(await msgs(db, `user:${b.player}`), [update(taken.invite, 'cancelled')], 'the friend\'s ✉️ goes at once');
+  assert.deepEqual(await userMsgs(db, b), [update(taken.invite, 'cancelled')], 'the friend\'s ✉️ goes at once');
   assert.deepEqual(await accept(db, b, taken.invite), EXPIRED);
   await call(db, a, 'leave_room', [taken.code]);
 
@@ -502,7 +538,8 @@ test('the sending device leaving its room (leave_room, create_room, or any way o
   await clearMsgs(db);
   await call(db, a, 'unlink_online_player'); // online_unseat runs here too
   assert.equal(await count(db, "realtime.messages where topic like 'user:%'"), 0, 'an expired invite is not told again');
-  assert.equal(await inviteRow(db, old.invite), null, 'and the device\'s invites go with its anonymous user');
+  const kept = await inviteRow(db, old.invite);
+  assert.deepEqual([kept.from_uid, kept.from_player], [null, a.player], 'its invites stay for the caps, under the player, the device gone (4.1r)');
 });
 
 // ---------------------------------------------------------------------------
@@ -539,9 +576,9 @@ test('accept_invite seats the friend\'s device as the guest, the room ready at o
   assert.equal((await inviteRow(db, bToC.invite)).status, 'cancelled', 'the accepting device\'s own room went, and its invite with it');
   assert.equal(await roomRow(db, own), null);
   assert.deepEqual(await msgs(db, `room:${own}`), [{ event: 'left', private: true, payload: { seat: 'host' } }]);
-  assert.deepEqual(await msgs(db, `user:${c.player}`), [update(bToC.invite, 'cancelled')]);
-  assert.deepEqual(await msgs(db, `user:${a.player}`), [update(sent.invite, 'accepted')]);
-  assert.deepEqual(await msgs(db, `user:${b.player}`), [update(bToC.invite, 'cancelled'), update(sent.invite, 'accepted')], 'the friend\'s other devices drop it too');
+  assert.deepEqual(await userMsgs(db, c), [update(bToC.invite, 'cancelled')]);
+  assert.deepEqual(await userMsgs(db, a), [update(sent.invite, 'accepted')]);
+  assert.deepEqual(await userMsgs(db, b), [update(bToC.invite, 'cancelled'), update(sent.invite, 'accepted')], 'the friend\'s other devices drop it too');
   assert.equal(await count(db, 'public.join_attempts'), tries, 'no join attempt counted: nothing was guessed');
   assert.deepEqual((await invites(db, b2)).incoming, []);
   assert.deepEqual((await invites(db, a)).outgoing.map((i) => i.status), ['accepted']);
@@ -588,8 +625,8 @@ test('decline_invite: the sender is told and its room stays open; only the frien
   await clearMsgs(db);
   assert.deepEqual(await call(db, b, 'decline_invite', [sent.invite]), { ok: true });
   assert.equal((await inviteRow(db, sent.invite)).status, 'declined');
-  assert.deepEqual(await msgs(db, `user:${a.player}`), [update(sent.invite, 'declined')], 'the sender: "<name> can\'t play right now"');
-  assert.deepEqual(await msgs(db, `user:${b.player}`), [update(sent.invite, 'declined')]);
+  assert.deepEqual(await userMsgs(db, a), [update(sent.invite, 'declined')], 'the sender: "<name> can\'t play right now"');
+  assert.deepEqual(await userMsgs(db, b), [update(sent.invite, 'declined')]);
   assert.equal((await roomRow(db, sent.code)).status, 'open', 'the room stays: invite someone else, or resend');
   assert.deepEqual((await invites(db, a)).outgoing.map((i) => i.status), ['declined']);
   assert.deepEqual(await accept(db, b, sent.invite), EXPIRED);
@@ -614,8 +651,8 @@ test('cancel_invite: any paired device of the sender; the friend is told; anothe
   assert.equal((await inviteRow(db, sent.invite)).status, 'pending', 'the friend does not cancel; it declines');
   assert.deepEqual(await call(db, a2, 'cancel_invite', [sent.invite]), { ok: true });
   assert.equal((await inviteRow(db, sent.invite)).status, 'cancelled');
-  assert.deepEqual(await msgs(db, `user:${b.player}`), [update(sent.invite, 'cancelled')]);
-  assert.deepEqual(await msgs(db, `user:${a.player}`), [update(sent.invite, 'cancelled')]);
+  assert.deepEqual(await userMsgs(db, b), [update(sent.invite, 'cancelled')]);
+  assert.deepEqual(await userMsgs(db, a), [update(sent.invite, 'cancelled')]);
   assert.deepEqual((await invites(db, b)).incoming, []);
   assert.equal((await roomRow(db, sent.code)).status, 'open');
   assert.deepEqual(await call(db, a, 'cancel_invite', [NIL]), { ok: true });
@@ -634,14 +671,15 @@ test('cancel_invite: any paired device of the sender; the friend is told; anothe
 // ---------------------------------------------------------------------------
 // The player's own topic.
 
-test('user:<player id> is read by that player\'s paired devices only and written by nobody: the server alone sends there', async () => {
+test('the player\'s own topic is read by that player\'s paired devices only and written by nobody: the server alone sends there', async () => {
   const db = await freshDb();
   const a = await device(db, 'TpA');
   const a2 = await second(db, a);
   const pending = await waiting(db, a);
   const b = await device(db, 'TpB');
   const unlinked = await addUser(db);
-  const topic = `user:${a.player}`;
+  const topic = await topicOf(db, a);
+  assert.equal((await invites(db, a)).topic, topic, 'a paired device is given it by invite_list');
   for (const d of [a, a2]) {
     assert.equal(await canRead(db, d.uid, topic), true, 'a paired device of the player reads it');
     for (const ext of ['broadcast', 'presence']) assert.equal(await canWrite(db, d.uid, topic, ext), false, `but writes no ${ext} there`);
@@ -651,12 +689,32 @@ test('user:<player id> is read by that player\'s paired devices only and written
     assert.equal(await canRead(db, uid, topic), false, `${who} reads nothing`);
     assert.equal(await canWrite(db, uid, topic), false, `${who} writes nothing`);
   }
-  for (const t of [`user:${a.player}x`, `user:${a.player.slice(1)}`, 'user:', `user:${b.player}`]) {
-    assert.equal(await canRead(db, a.uid, t), false, `nobody else's: ${t}`);
+  for (const t of [`${topic}0`, topic.slice(0, -1), 'user:', await topicOf(db, b), `user:${a.player}`]) {
+    assert.equal(await canRead(db, a.uid, t), false, `nobody else's, and never the bare id: ${t}`);
   }
   await assert.rejects(anonCall(db, "insert into realtime.messages (topic, extension, event, payload) values ($1, 'broadcast', 'invite', '{}')", [topic]), /row-level security/, 'anon: no policy');
   await db.query('update public.online_players set trusted = false where uid = $1', [a2.uid]);
   assert.equal(await canRead(db, a2.uid, topic), false, 'a device that drops to pending, at its next join or token refresh (finding 19)');
+});
+
+test('a device whose save holds an id a merge folded away is given its player\'s topic and hears its invites there (4.1r should-fix 2)', async () => {
+  const db = await freshDb();
+  const k = await device(db, 'AlK');
+  const m = await device(db, 'AlM');
+  await anonCall(db, 'select public.merge_players($1, $2)', [k.player, m.player]); // m's id is folded into k's
+  await db.query('update public.online_players set trusted = true where uid = $1', [m.uid]); // as if paired
+  const kept = { uid: m.uid, player: k.player, name: k.name };
+  assert.equal((await invites(db, m)).topic, await topicOf(db, k), 'the kept player\'s topic, though its save still says the old id');
+  assert.equal(await canRead(db, m.uid, await topicOf(db, k)), true);
+  assert.equal(await canRead(db, m.uid, await topicOf(db, m)), false, 'not the old id\'s');
+  const f = await device(db, 'AlF');
+  await befriend(db, f, kept);
+  await beat(db, kept);
+  await clearMsgs(db);
+  const sent = await invite(db, f, kept);
+  assert.equal(sent.ok, true);
+  assert.equal((await userMsgs(db, k)).length, 1, 'the event lands on the topic the device was given');
+  assert.equal((await accept(db, m, sent.invite)).ok, true);
 });
 
 // ---------------------------------------------------------------------------

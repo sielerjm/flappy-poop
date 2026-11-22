@@ -102,9 +102,9 @@ test('step 13 checks the invite functions and the player\'s own topic on a real 
   assert.match(SOURCE, /rpc\(anon, 'send_invite', \{ p_peer: '0'\.repeat\(32\) \}\)/, 'and on send_invite');
   assert.match(SOURCE, /must\(S\.C, 'invite_list'\)/, 'a paired device lists its invites (none)');
   assert.match(SOURCE, /must\(S\.C, 'send_invite', \{ p_peer: 'f'\.repeat\(32\) \}\)/, 'a handle that names nobody is unavailable');
-  assert.match(SOURCE, /S\.PC = playerId\(\)/, 'C\'s player id is kept for its topic');
-  assert.match(SOURCE, /join\(S\.C, `user:\$\{S\.PC\}`\)/, 'C joins its own player\'s topic');
-  assert.match(SOURCE, /join\(S\.B, `user:\$\{S\.PC\}`\)/, 'another player\'s device is refused there');
+  assert.match(SOURCE, /\/\^user:\[0-9a-f\]\{32\}\$\/\.test\(list\.topic\)/, 'invite_list gives C its topic, a handle (4.1r)');
+  assert.match(SOURCE, /join\(S\.C, list\.topic\)/, 'C joins its own player\'s topic');
+  assert.match(SOURCE, /join\(S\.B, list\.topic\)/, 'another player\'s device is refused there');
   const at = (re) => SOURCE.search(re);
   assert.ok(at(/await step\(13,/) > at(/await step\(12,/) && at(/await step\(14,/) > at(/await step\(13,/), 'before the teardown');
 });

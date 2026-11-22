@@ -203,8 +203,10 @@
 --     public.invite_list(), public.accept_invite(uuid), public.decline_invite(uuid),
 --     public.cancel_invite(uuid), public.online_invite_live(public.invites),
 --     public.online_invite_json(public.invites, text), public.online_invite_friends(text, text); restore
---     online_unseat, online_cleanup and online_can from git (plan 39, 3.7r, 20161aa) and run this file;
---     then drop function public.online_invites_end(uuid), public.online_invite_told(uuid, text, text, text);
+--     online_unseat, join_room, online_cleanup and online_can from git (plan 39, 3.7r, 20161aa) and run this
+--     file (4.1r: join_room calls online_invites_end, so it goes back before that is dropped); then drop
+--     function public.online_invites_end(uuid), public.online_invite_told(uuid, text, text, text),
+--     public.online_user_topic(text);
 --     drop table public.invites; delete from public.rooms where source = 'invite';
 --     alter table public.rooms drop constraint rooms_source_check,
 --       add constraint rooms_source_check check (source in ('code')).
@@ -4293,11 +4295,13 @@ $$;
 -- device that sent it, that device beats (online mode) and the two are still friends, neither hidden nor
 -- merged away (online_invite_live, read every time: no pg_cron, and 'expired' is never stored). One live
 -- invite per sending device and per pair. Keyed on resolved player ids; the room by its code. Kept two
--- days for the caps (online_cleanup). Readable by no role. Defined here because online_unseat and
--- online_cleanup use it; its functions come after online status.
+-- days for the caps (online_cleanup), whatever becomes of the device: its anonymous user's deletion (an
+-- unlink, a removal) only clears from_uid, so unlinking and linking again starts no new count (4.1r).
+-- Readable by no role. Defined here because online_unseat and online_cleanup use it; its functions come
+-- after online status.
 create table if not exists public.invites (
   id          uuid primary key default gen_random_uuid(),
-  from_uid    uuid not null references auth.users (id) on delete cascade, -- the sending device: its room's host
+  from_uid    uuid references auth.users (id) on delete set null, -- the sending device, its room's host; null once it is gone
   from_player text not null check (from_player ~ '^[A-Za-z0-9_-]{22}$'),
   to_player   text not null check (to_player ~ '^[A-Za-z0-9_-]{22}$'),
   room_code   text not null check (room_code ~ '^[1-9][0-9]{5}$'),
@@ -4311,8 +4315,25 @@ create index if not exists invites_to on public.invites (to_player, sent_at);
 create index if not exists invites_from on public.invites (from_player, sent_at);
 create index if not exists invites_device on public.invites (from_uid) where status = 'pending';
 
+-- A player's own Realtime topic (4.1): 'user:' and 32 hex characters of sha256 of the pepper and the
+-- player's resolved id, given to their paired devices by invite_list. Named by the server, not by the id
+-- the device holds: a device whose save still holds an id a merge folded away hears its player's invites
+-- all the same (4.1r), and the name carries no player id (a save code's identity, ACC-001). Only that
+-- player's paired devices may read it, and nobody write it (online_can). Internal.
+create or replace function public.online_user_topic(p_player text)
+returns text
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select 'user:' || left(encode(sha256(convert_to(s.pepper || ':user:' || p_player, 'UTF8')), 'hex'), 32)
+    from public.online_secret s where s.id = 1;
+$$;
+revoke execute on function public.online_user_topic(text) from public, anon, authenticated;
+
 -- Tell both players an invite changed ('invite_update' { invite, status } on each one's own topic,
--- user:<player id>, which only that player's paired devices read: online_can), so the friend's ✉️ and
+-- online_user_topic, which only that player's paired devices read: online_can), so the friend's ✉️ and
 -- the sender's wait follow at once. Internal.
 create or replace function public.online_invite_told(p_invite uuid, p_status text, p_from text, p_to text)
 returns void
@@ -4322,8 +4343,8 @@ security definer
 set search_path = ''
 as $$
 begin
-  perform realtime.send(jsonb_build_object('invite', p_invite, 'status', p_status), 'invite_update', 'user:' || p_to, true);
-  perform realtime.send(jsonb_build_object('invite', p_invite, 'status', p_status), 'invite_update', 'user:' || p_from, true);
+  perform realtime.send(jsonb_build_object('invite', p_invite, 'status', p_status), 'invite_update', public.online_user_topic(p_to), true);
+  perform realtime.send(jsonb_build_object('invite', p_invite, 'status', p_status), 'invite_update', public.online_user_topic(p_from), true);
 end;
 $$;
 revoke execute on function public.online_invite_told(uuid, text, text, text) from public, anon, authenticated;
@@ -5545,7 +5566,7 @@ $$;
 -- Invites (plan 39, 4.1; the table is with the rooms). Only between accepted friends, both in online mode
 -- (the outline's "both online": 🟢 means "can be invited now"), each named by a peer handle, never an id.
 -- Every function is for a trusted device (M1 rule 2: invites are private, item 61) and keyed on resolved
--- player ids. The server tells the players on their own topics, user:<player id> ('invite' to the friend
+-- player ids. The server tells the players on their own topics (online_user_topic: 'invite' to the friend
 -- when one is sent; 'invite_update' { invite, status } to both when one is accepted, declined or
 -- cancelled), which only that player's paired devices read and nobody writes (online_can). An invite past
 -- its time is told to nobody: both sides count down from its expires_at.
@@ -5619,8 +5640,8 @@ revoke execute on function public.online_invite_json(public.invites, text) from 
 -- Invite a friend (by the handle friend_list or friend_statuses gave) into this device's own room: its
 -- open room when it hosts one (the code stays, so a Resend keeps the host on its channel; its 15 minutes
 -- start again), else a new one ('invite'; create_room's rules: one per 2 seconds, housekeeping, the
--- device's other seat goes). The friend's paired devices are told at once ('invite' on user:<their id>,
--- as invite_list shows it) and list it. { ok: true, invite, code, sent_at, expires_at } (ms; expires_at
+-- device's other seat goes). The friend's paired devices are told at once ('invite' on their player's
+-- topic, online_user_topic, as invite_list shows it) and list it. { ok: true, invite, code, sent_at, expires_at } (ms; expires_at
 -- is sent_at + c_ttl, INVITE_TTL), { ok: false, error: 'unavailable' } (the handle names no accepted
 -- friend, or the friend is not in online mode now or is in a game, or either is hidden: never which),
 -- { ok: false, error: 'rate limited' } (c_minute invites a minute or c_day a day from this player,
@@ -5702,13 +5723,15 @@ begin
   insert into public.invites (from_uid, from_player, to_player, room_code, expires_at)
   values (v_me.uid, s.me, s.other, v_code, now() + c_ttl)
   returning * into v_inv;
-  perform realtime.send(public.online_invite_json(v_inv, s.other), 'invite', 'user:' || s.other, true);
+  perform realtime.send(public.online_invite_json(v_inv, s.other), 'invite', public.online_user_topic(s.other), true);
   return (public.online_invite_json(v_inv, s.me) - 'peer' - 'name') || jsonb_build_object('ok', true, 'code', v_code);
 end;
 $$;
 
 -- The player's invites, for a trusted device: { incoming: [{ invite, peer, name, sent_at, expires_at }],
--- outgoing: [{ invite, peer, name, status, sent_at, expires_at }] } (ms, newest first). Incoming: the live
+-- outgoing: [{ invite, peer, name, status, sent_at, expires_at }], topic } (ms, newest first; topic is
+-- the player's own Realtime topic, online_user_topic, the one the device subscribes to for 'invite' and
+-- 'invite_update' while in online mode). Incoming: the live
 -- ones (online_invite_live), what a missed 'invite' event would have shown; read on entering online mode.
 -- Outgoing: this player's from the last c_recent (up to 20), from any of its devices, each 'pending'
 -- (live), 'accepted', 'declined', 'cancelled' or 'expired' (anything else: past its time, its room gone
@@ -5738,7 +5761,8 @@ begin
                                    where x.from_player = v_id and x.sent_at > now() - c_recent
                                      and public.resolve_player(x.to_player) = x.to_player and not public.player_hidden(x.to_player)
                                    order by x.sent_at desc, x.id
-                                   limit 20) i), '[]'::jsonb));
+                                   limit 20) i), '[]'::jsonb),
+    'topic', public.online_user_topic(v_id));
 end;
 $$;
 
@@ -5844,10 +5868,11 @@ $$;
 
 -- The Realtime policies' check (granted to authenticated, because a policy runs it as the device
 -- asking): may this device read (p_write false) or write a channel topic? room:<code>: its two seated
--- devices, each still linked as the player it sat down as. user:<player id> (invites, 4.1): read by that
--- player's paired devices only (M1 rule 2: a waiting device, which may be someone else's, reads nothing
--- private) and written by nobody: only the server sends there (realtime.send runs as the definer), so
--- what arrives there is the server's word. Every other topic: nobody. Answers only about the caller.
+-- devices, each still linked as the player it sat down as. A player's own topic (invites, 4.1:
+-- online_user_topic, 'user:' and a handle, never the id): read by that player's paired devices only (M1
+-- rule 2: a waiting device, which may be someone else's, reads nothing private) and written by nobody:
+-- only the server sends there (realtime.send runs as the definer), so what arrives there is the server's
+-- word. Every other topic: nobody. Answers only about the caller.
 create or replace function public.online_can(p_topic text, p_write boolean)
 returns boolean
 language sql
@@ -5862,9 +5887,9 @@ as $$
        where r.code = substr(p_topic, 6)
          and ((r.host_uid = o.uid and r.host_player = o.player_id)
               or (r.guest_uid = o.uid and r.guest_player = o.player_id)))
-    when p_topic ~ '^user:[A-Za-z0-9_-]{22}$' then not coalesce(p_write, true) and exists (
+    when p_topic ~ '^user:[0-9a-f]{32}$' then not coalesce(p_write, true) and exists (
       select 1 from public.online_players o
-       where o.uid = auth.uid() and o.player_id = substr(p_topic, 6) and o.trusted)
+       where o.uid = auth.uid() and o.trusted and public.online_user_topic(o.player_id) = p_topic)
     else false
   end;
 $$;
@@ -5949,7 +5974,7 @@ returns text
 language sql
 immutable
 as $$
-  select '24b427e149605f92'::text; -- schema stamp
+  select '58b15ec3afc7a73b'::text; -- schema stamp
 $$;
 revoke execute on function public.schema_version() from public, authenticated;
 grant  execute on function public.schema_version() to anon;
