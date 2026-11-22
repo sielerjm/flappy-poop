@@ -300,7 +300,7 @@ transport counter less its value at the round's start, kept through a re-fit or 
 in a rematch's round; the RTT keys as measured, an unmeasured key left out); `createRaceReporter`: one call
 at a time, asks again every `TUNING.online.report.pollMs` while the answer is 'playing', `polls` times, then
 every `slowPollMs`, until `waitMs` (the other device's whole resend window, tied by a test, AUD-109), then 'late'; a lost answer is
-resent after each `retryMs`; 'no match' once; 'not trusted' is pending (the server no longer raises it, 3.7: a waiting device races by code and its races are saved and counted on the boards; friends, 🏁 Recent races, 📱 Devices, history and status stay for paired devices); `reportLine` maps the state to the
+resent after each `retryMs`; 'no match' once; no 'pending' phase (3.8: the server no longer raises 'not trusted', 3.7, so a waiting device races by code and its races are saved and counted on the boards; an old 'not trusted' answer fails like any refusal; friends, 🏁 Recent races, 📱 Devices, history and status stay for paired devices); `reportLine` maps the state to the
 results panel's line). `OnlineRace.startReport` / `refreshResult` drive it; a race left mid-way
 (abandoned) is never reported. The 🌐 window's **🏁 Recent races** (beside 📱 Devices; paired devices only,
 not on the Profile) comes from `onlineAccount.races()` (`online_history`, `historyRows`; the
@@ -1874,8 +1874,9 @@ src/
                             item 46's code while the record is live, so a Create or
                             Join there never leaves the other page's race.
                             3.3: the online home gains 🤝 Friends (onlineFriendsViews); once linked, and
-                            after pairing (onPaired), Play.onlineStatusBeat() starts; leaving online
-                            mode stops it (online_beat(false)) unless the race took over (o.handed).
+                            after pairing (onPaired, only with 🌐 on, 3.6), Play.onlineStatusBeat() starts; leaving online
+                            mode stops it (online_beat(false)) unless the race took over (o.handed);
+                            stopOnline stops ctx.play.onlineStatusBeatRef, a beat that exists (AUD-122), and builds none.
                             T3-review: a link answering after 🌐 was switched off starts nothing (AUD-113);
                             a window showing the race another page runs does not beat (that page does: one
                             device, one row), and starts when lookAgain claims the race (AUD-114).
@@ -1911,6 +1912,11 @@ src/
                             dot and a word, requests sent (Take back), Recent opponents
                             (only a ⋯), Blocked (Unblock); a row's ⋯ holds Remove, Block
                             and, on an opponent, Add friend; Remove and Block ask twice.
+                            3.6: tournamentPanel's accountUi() has mark(), a guard taken when a call goes
+                            out (same online object, still on, no help/peek view, same screen key
+                            `${st.view}|${lobby screen}`); openFriends, run(), openDevices, openRaces
+                            and onPair draw only while it holds; openFriends returns true when it drew;
+                            a refused Friends action reads the lists again before its error line (AUD-116).
                             pollFriends and refreshBadge are the panel's timers' reads.
                             Plain DOM over onlineFriends. tests/onlineFriendsPanel.test.js.
     savePanel.js            Plain DOM panel over the canvas (a three-step intro,
@@ -2473,7 +2479,7 @@ src/
                             drawFriendOffer, tapAddFriend: a button "Add <name> as a friend"
                             under Rematch | Leave, tap or click only; a line once asked, made
                             friends or already friends), read once the report is agreed
-                            (saved); hidden for a blocked player or a null peer. The beat
+                            (saved); on a waiting device (its friend reads 'not trusted', or a refused tap says so) the line friendResultPair (3.8: "Pair this device to add friends..."); hidden for a blocked player or a null peer. The beat
                             is kept through the hand-off from the 🌐 window; stepAside() stops
                             it quietly (the other page beats), Leave after a race stops it.
                             tests/onlineRaceScene.test.js.
@@ -3293,8 +3299,8 @@ tests/                      node --test (schema.test.js, schemaOnline.test.js, s
   runLog.test.js            submit_runs and run_log in PGlite as anon: owner-only, rejects
                             counted, a resend stored once, 5 s pacing, 90-day purge, the
                             merge; plan 39: mode 'race' accepted and treated like single
-  onlineLiveCheck.test.js   tools/online_live_check.mjs: the target guard, the arguments and
-                            how a channel answer is read
+  onlineLiveCheck.test.js   tools/online_live_check.mjs: the target guard, the arguments,
+                            how a channel answer is read and its 13 steps
   online.test.js            src/online.js: the protocol and its validation, stale and
                             reordered messages, the derived version, codes, the clock,
                             the ghost against a 60 Hz sender over every netsim profile
@@ -3314,7 +3320,9 @@ tests/                      node --test (schema.test.js, schemaOnline.test.js, s
                             section, ⋯ with Remove / Block asking twice, polls, an
                             opponent's row with only its ⋯ (Add friend inside), the not-paired screen, the beat (on at
                             link; off on ✕; a waiting device's stops itself; kept through the
-                            race hand-off)
+                            race hand-off), and 3.6's hold/release harness: a call that
+                            answers after the screen changed draws nothing, a refused action
+                            reads the lists again, onPaired beats only with 🌐 on (18 tests)
   onlineAccount.test.js     src/onlineAccount.js: enter / claim / devices / remove /
                             pairCode / pair / leave on a fake net, every error key
   onlineAccountViews.test.js src/ui/onlineAccountViews.js: each screen, its errors and
@@ -3686,7 +3694,8 @@ tools/
                             file (plan 39, 1.6c); the repo never holds a project's URL or key.
   online_live_check.mjs     The live check of the online schema (plan 39): --env <file> for a test
                             project, --live for the live project after the paste. Four anonymous
-                            sessions, twelve PASS/FAIL lines; each session unlinks itself; never a
+                            sessions, thirteen PASS/FAIL lines (line 12: friends and status; a test
+                            project expects 12 of 13, live 13 of 13); each session unlinks itself; never a
                             secret key. tests/onlineLiveCheck.test.js covers it.
   headless_check.mjs        npm run smoke [url] [--list] [--only=a,b]: the checks run in
                             named sections (SECTIONS, in run order, each printing its check
@@ -3862,7 +3871,8 @@ tools/
                             link: the purse under the opponent's pill, the wait timer and
                             Keep waiting, the shared count and GO, one outcome on both, the
                             results panel, Rematch's states and round 2, Leave back to
-                            single player.
+                            single player; 31 checks, the last three on the results panel's real Add as a
+                            friend button (3.6).
                             Plan 39's online-reload: the guest's reload restarts the race at
                             level 2's start; then a real page reload with a stand-in
                             transport: the 🌐 window rejoins, the race is back rewound, both
@@ -3874,7 +3884,7 @@ tools/
                             transport closed, no leave_room).
                             Plan 39's online-friends (3.3, 17 checks): the 🌐 home's 🤝 Friends and its
                             badge, the Friends screen's sections and ⋯, Add friend, and the beat on a stand-in
-                            transport. The results panel's offer is not checked in a real page (AUD-118).
+                            transport.
                             Zero dependencies (fetch + WebSocket).
 
 docs/                       Living specs kept with the code: save-code-spec.md (the
@@ -4091,7 +4101,7 @@ Commits follow `type(scope): summary` (`feat`, `fix`, `docs`, `chore`, `test`, `
   older clients are told to update) and never reuses a server event name.
   A new online function goes in `ONLINE_RPCS` as well as the schema header
   (`tests/onlineNet.test.js` keeps them equal). Friends (3.1) name another player only by
-  a peer handle (`peer` in `online_history()` and `friend_list()`), never an id or a name. The client (3.3) lives in `src/onlineFriends.js` and `src/ui/onlineFriendsViews.js` (`TUNING.online.status`: `beatMs` 20 s, tied below half of the schema's `c_fresh` by a test; `pollMs` 10 s; `badgeMs` 30 s; `opponents` 5). The status beat (`Play.onlineStatusBeat()`, once per page; pagehide sends `online_beat(false)` through `onlineNet.beacon`, pageshow beats again) starts on link in the 🌐 window and after pairing, and stops with `online_beat(false)` on 🌐 off, ✕ and Leave after a race; it is quiet on stepping aside and on Clear / Load and is kept through the race hand-off. It never runs outside online mode: `tests/onlineFriends.test.js` checks that `tournamentPanel.js` is the only caller. The results panel offers Add as a friend only once the report is agreed. The 38 friend strings (`friendsButton` to `friendResultIsFriend`) carry rows in `TRANSLATION_NOTES.md`. The server's event names on
+  a peer handle (`peer` in `online_history()` and `friend_list()`), never an id or a name. The client (3.3) lives in `src/onlineFriends.js` and `src/ui/onlineFriendsViews.js` (`TUNING.online.status`: `beatMs` 20 s, tied below half of the schema's `c_fresh` by a test; `pollMs` 10 s; `badgeMs` 30 s; `opponents` 5). The status beat (`Play.onlineStatusBeat()`, once per page; pagehide sends `online_beat(false)` through `onlineNet.beacon`, pageshow beats again) starts on link in the 🌐 window and after pairing, and stops with `online_beat(false)` on 🌐 off, ✕ and Leave after a race; it is quiet on stepping aside and on Clear / Load and is kept through the race hand-off. It never runs outside online mode: `tests/onlineFriends.test.js` checks that `tournamentPanel.js` is the only caller. The results panel offers Add as a friend only once the report is agreed. The 39 friend strings (`friendsButton` to `friendResultPair`) carry rows in `TRANSLATION_NOTES.md`. The server's event names on
   `room:<code>` are hints: the transport confirms them with `room_state`, since a
   seated peer can broadcast those names too.
   The sign-in side (enter, claim, devices, pairing, leave) lives in

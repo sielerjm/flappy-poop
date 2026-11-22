@@ -1,6 +1,6 @@
 // The online race's sign-in screens (plan 39, 1.6a, as accepted in Preview B, item 37), drawn inside
 // the 🌐 window of the tournament panel (1.6c mounts them): no username yet (the name field), the
-// Connecting state, the notes on the online home (a device waiting to pair, a demotion, blocked
+// Connecting state, the notes on the online home (a demotion, blocked
 // storage), 📱 Devices on a paired device (the list, Remove asked twice, Pair a new device and its
 // code) and on a waiting device (the pairing keypad, Remove this device). The decisions are in
 // src/onlineAccount.js; this file only draws them and turns taps into its calls.
