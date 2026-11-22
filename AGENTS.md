@@ -1378,7 +1378,7 @@ src/
                             trust keys (DEV_PROJECT_KEY). ONLINE_RPCS includes finish_match
                             and online_history, plus friend_list, send_friend_request,
                             respond_friend_request, remove_friend, block_user and
-                            unblock_user (3.1); the server's plain messages include
+                            unblock_user (3.1), online_beat and friend_statuses (3.2); the server's plain messages include
                             'online closed', 'no match', 'bad result' and 'bad peer'.
                             tests/onlineNet.test.js, tests/onlineDevProject.test.js.
   onlineAccount.js          Online race (🌐, plan 39, 1.6a) the sign-in side on top of
@@ -2928,10 +2928,19 @@ db/schema.sql               Supabase schema: scores table (player_id = save-code
                             the online name follows trust. Merge seniority is
                             online_trust.since (the first trusted link, kept through a Clear).
                             online_history() adds `peer` to the rival line and each race.
+                            Status (3.2, tests/schemaStatus.test.js): online_beats, one row
+                            per device (uid, at), readable by no role, gone with the device's
+                            link. online_beat(p_here): a trusted device's heartbeat, nothing
+                            written within 5 s of the last; false deletes it (a leave).
+                            friend_statuses(): { friends: [{ peer, name, state }] }, state
+                            online | in_game | offline, friends as friend_list, no ids.
+                            Internal online_state: in_game = a trusted device with a beat
+                            under 60 s old in a room 'playing', online = such a beat, else
+                            offline. No shared channel (it would list everyone online).
                             PL/pgSQL gotcha: a bare CASE inside
                             `IF … THEN` ends the condition at its THEN; parenthesise.
 
-tests/                      node --test (schema.test.js, schemaOnline.test.js, schemaFriends.test.js, pilot.test.js,
+tests/                      node --test (schema.test.js, schemaOnline.test.js, schemaFriends.test.js, schemaStatus.test.js, pilot.test.js,
                             eduBoardSync.test.js and schemaCheck.test.js need `npm install`: PGlite). Each file is self-describing:
   field.test.js             fieldWidth (phone, desktop, 2:1 cap, bad input, even),
                             uiColumn, poopX, the x0 shift of trayLayout /
@@ -3217,6 +3226,9 @@ tests/                      node --test (schema.test.js, schemaOnline.test.js, s
                             no ids out), eligibility, merges of friend data following trust,
                             AUD-103 seniority (online_trust.since), the upgrade backfill, the
                             guard against finding a player by a name or search
+  schemaStatus.test.js      Plan 39, 3.2 in PGlite: online_beat (trusted only, 5 s write gap,
+                            a leave deletes), friend_statuses (states, order, friends only, no
+                            ids), in_game from a room 'playing', the 60 s fresh window
   runLog.test.js            submit_runs and run_log in PGlite as anon: owner-only, rejects
                             counted, a resend stored once, 5 s pacing, 90-day purge, the
                             merge; plan 39: mode 'race' accepted and treated like single
@@ -4073,7 +4085,7 @@ Commits follow `type(scope): summary` (`feat`, `fix`, `docs`, `chore`, `test`, `
   `grant  execute … to authenticated;` pair), is `security definer` with `set search_path = ''` and
   qualified names, checks `auth.uid()` first, and is listed in the header's `--   * online name(...)`
   list (tests/schema.test.js checks the anon and online lists against the grant lines;
-  tests/schemaOnline.test.js checks the privileges; `finish_match` and `online_history` follow this rule; no online function may take a name or search to find a player, which tests/schemaFriends.test.js guards; friend functions are for a trusted device and their tables are readable by no role). A failure the server counts is returned as
+  tests/schemaOnline.test.js checks the privileges; `finish_match` and `online_history` follow this rule; no online function may take a name or search to find a player, which tests/schemaFriends.test.js guards; friend functions and online_beat are for a trusted device (tests/schemaStatus.test.js) and their tables are readable by no role). A failure the server counts is returned as
   `{ ok: false, error }`, because a raise would roll the count back. The game's anon functions stay
   revoked from authenticated (a session token sent to one is refused).
 - New achievement → one `ACHIEVEMENTS` entry in `src/achievements.js` (a new,
